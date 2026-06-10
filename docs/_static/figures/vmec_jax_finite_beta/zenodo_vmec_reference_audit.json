@@ -1,0 +1,2193 @@
+{
+  "cases": [
+    {
+      "candidate": null,
+      "candidate_h5": null,
+      "case_index": 0,
+      "parity": null,
+      "reference": {
+        "dataset_count": 195,
+        "exists": true,
+        "numeric_dataset_count": 194,
+        "path": "/Users/rogeriojorge/local/20220708-01-zenodo_for_QS_optimization_with_self_consistent_bootstrap_current/calculations/20211226-01-sfincs_for_precise_QS_for_Redl_benchmark/20211226-01-012_QA_Ntheta25_Nzeta39_Nxi60_Nx7_manySurfaces/psiN_0.05/sfincsOutput.h5",
+        "selected_datasets": {
+          "FSABFlow": {
+            "dtype": "float64",
+            "exists": true,
+            "numeric": true,
+            "shape": [
+              2,
+              1
+            ]
+          },
+          "FSABjHat": {
+            "dtype": "float64",
+            "exists": true,
+            "numeric": true,
+            "shape": [
+              1
+            ],
+            "value": -0.4293665870561747
+          },
+          "FSABjHatOverRootFSAB2": {
+            "dtype": "float64",
+            "exists": true,
+            "numeric": true,
+            "shape": [
+              1
+            ],
+            "value": -0.07271788505660541
+          },
+          "NIterations": {
+            "dtype": "int32",
+            "exists": true,
+            "numeric": true,
+            "shape": [],
+            "value": 1
+          },
+          "heatFlux_vm_psiHat": {
+            "dtype": "float64",
+            "exists": true,
+            "numeric": true,
+            "shape": [
+              2,
+              1
+            ]
+          },
+          "heatFlux_vm_psiN": {
+            "dtype": "float64",
+            "exists": true,
+            "numeric": true,
+            "shape": [
+              2,
+              1
+            ]
+          },
+          "particleFlux_vm_psiHat": {
+            "dtype": "float64",
+            "exists": true,
+            "numeric": true,
+            "shape": [
+              2,
+              1
+            ]
+          },
+          "particleFlux_vm_psiN": {
+            "dtype": "float64",
+            "exists": true,
+            "numeric": true,
+            "shape": [
+              2,
+              1
+            ]
+          }
+        },
+        "size_bytes": 852284
+      },
+      "reference_h5": "/Users/rogeriojorge/local/20220708-01-zenodo_for_QS_optimization_with_self_consistent_bootstrap_current/calculations/20211226-01-sfincs_for_precise_QS_for_Redl_benchmark/20211226-01-012_QA_Ntheta25_Nzeta39_Nxi60_Nx7_manySurfaces/psiN_0.05/sfincsOutput.h5",
+      "selection": {
+        "case": "20211226-01-012_QA_Ntheta25_Nzeta39_Nxi60_Nx7_manySurfaces",
+        "collision_operator": 0,
+        "er": 0.001,
+        "family": "qa",
+        "fortran_output": "calculations/20211226-01-sfincs_for_precise_QS_for_Redl_benchmark/20211226-01-012_QA_Ntheta25_Nzeta39_Nxi60_Nx7_manySurfaces/psiN_0.05/sfincsOutput.h5",
+        "geometry_scheme": 5,
+        "grid_size": 409500,
+        "input": "calculations/20211226-01-sfincs_for_precise_QS_for_Redl_benchmark/20211226-01-012_QA_Ntheta25_Nzeta39_Nxi60_Nx7_manySurfaces/psiN_0.05/input.namelist",
+        "nu_n": 0.00831565,
+        "resolution": {
+          "Ntheta": 25,
+          "Nx": 7,
+          "Nxi": 60,
+          "Nzeta": 39,
+          "label": "25x39x60x7"
+        },
+        "rung": "low",
+        "solver_tolerance": 1e-05,
+        "surface_role": "inner_edge",
+        "surface_s": 0.05,
+        "target_surface_s": 0.05
+      },
+      "status": "reference_ok",
+      "timing": {
+        "elapsed_s": 0.009826,
+        "maxrss_mb": 128.15625,
+        "phase_count": 1,
+        "phases": [
+          {
+            "elapsed_s": 0.009801,
+            "maxrss_mb": 128.15625,
+            "metadata": {
+              "case_index": 0
+            },
+            "name": "reference_h5_audit",
+            "status": "ok"
+          }
+        ]
+      }
+    },
+    {
+      "candidate": null,
+      "candidate_h5": null,
+      "case_index": 1,
+      "parity": null,
+      "reference": {
+        "dataset_count": 195,
+        "exists": true,
+        "numeric_dataset_count": 194,
+        "path": "/Users/rogeriojorge/local/20220708-01-zenodo_for_QS_optimization_with_self_consistent_bootstrap_current/calculations/20211226-01-sfincs_for_precise_QS_for_Redl_benchmark/20211226-01-012_QA_Ntheta25_Nzeta39_Nxi60_Nx7_manySurfaces/psiN_0.5/sfincsOutput.h5",
+        "selected_datasets": {
+          "FSABFlow": {
+            "dtype": "float64",
+            "exists": true,
+            "numeric": true,
+            "shape": [
+              2,
+              1
+            ]
+          },
+          "FSABjHat": {
+            "dtype": "float64",
+            "exists": true,
+            "numeric": true,
+            "shape": [
+              1
+            ],
+            "value": -1.0565301395114433
+          },
+          "FSABjHatOverRootFSAB2": {
+            "dtype": "float64",
+            "exists": true,
+            "numeric": true,
+            "shape": [
+              1
+            ],
+            "value": -0.1801481059672571
+          },
+          "NIterations": {
+            "dtype": "int32",
+            "exists": true,
+            "numeric": true,
+            "shape": [],
+            "value": 1
+          },
+          "heatFlux_vm_psiHat": {
+            "dtype": "float64",
+            "exists": true,
+            "numeric": true,
+            "shape": [
+              2,
+              1
+            ]
+          },
+          "heatFlux_vm_psiN": {
+            "dtype": "float64",
+            "exists": true,
+            "numeric": true,
+            "shape": [
+              2,
+              1
+            ]
+          },
+          "particleFlux_vm_psiHat": {
+            "dtype": "float64",
+            "exists": true,
+            "numeric": true,
+            "shape": [
+              2,
+              1
+            ]
+          },
+          "particleFlux_vm_psiN": {
+            "dtype": "float64",
+            "exists": true,
+            "numeric": true,
+            "shape": [
+              2,
+              1
+            ]
+          }
+        },
+        "size_bytes": 852260
+      },
+      "reference_h5": "/Users/rogeriojorge/local/20220708-01-zenodo_for_QS_optimization_with_self_consistent_bootstrap_current/calculations/20211226-01-sfincs_for_precise_QS_for_Redl_benchmark/20211226-01-012_QA_Ntheta25_Nzeta39_Nxi60_Nx7_manySurfaces/psiN_0.5/sfincsOutput.h5",
+      "selection": {
+        "case": "20211226-01-012_QA_Ntheta25_Nzeta39_Nxi60_Nx7_manySurfaces",
+        "collision_operator": 0,
+        "er": 0.001,
+        "family": "qa",
+        "fortran_output": "calculations/20211226-01-sfincs_for_precise_QS_for_Redl_benchmark/20211226-01-012_QA_Ntheta25_Nzeta39_Nxi60_Nx7_manySurfaces/psiN_0.5/sfincsOutput.h5",
+        "geometry_scheme": 5,
+        "grid_size": 409500,
+        "input": "calculations/20211226-01-sfincs_for_precise_QS_for_Redl_benchmark/20211226-01-012_QA_Ntheta25_Nzeta39_Nxi60_Nx7_manySurfaces/psiN_0.5/input.namelist",
+        "nu_n": 0.00831565,
+        "resolution": {
+          "Ntheta": 25,
+          "Nx": 7,
+          "Nxi": 60,
+          "Nzeta": 39,
+          "label": "25x39x60x7"
+        },
+        "rung": "low",
+        "solver_tolerance": 1e-05,
+        "surface_role": "central",
+        "surface_s": 0.5,
+        "target_surface_s": 0.5
+      },
+      "status": "reference_ok",
+      "timing": {
+        "elapsed_s": 0.006037,
+        "maxrss_mb": 129.875,
+        "phase_count": 1,
+        "phases": [
+          {
+            "elapsed_s": 0.006009,
+            "maxrss_mb": 129.875,
+            "metadata": {
+              "case_index": 1
+            },
+            "name": "reference_h5_audit",
+            "status": "ok"
+          }
+        ]
+      }
+    },
+    {
+      "candidate": null,
+      "candidate_h5": null,
+      "case_index": 2,
+      "parity": null,
+      "reference": {
+        "dataset_count": 195,
+        "exists": true,
+        "numeric_dataset_count": 194,
+        "path": "/Users/rogeriojorge/local/20220708-01-zenodo_for_QS_optimization_with_self_consistent_bootstrap_current/calculations/20211226-01-sfincs_for_precise_QS_for_Redl_benchmark/20211226-01-012_QA_Ntheta25_Nzeta39_Nxi60_Nx7_manySurfaces/psiN_0.95/sfincsOutput.h5",
+        "selected_datasets": {
+          "FSABFlow": {
+            "dtype": "float64",
+            "exists": true,
+            "numeric": true,
+            "shape": [
+              2,
+              1
+            ]
+          },
+          "FSABjHat": {
+            "dtype": "float64",
+            "exists": true,
+            "numeric": true,
+            "shape": [
+              1
+            ],
+            "value": -0.07700230225786697
+          },
+          "FSABjHatOverRootFSAB2": {
+            "dtype": "float64",
+            "exists": true,
+            "numeric": true,
+            "shape": [
+              1
+            ],
+            "value": -0.013219305115931569
+          },
+          "NIterations": {
+            "dtype": "int32",
+            "exists": true,
+            "numeric": true,
+            "shape": [],
+            "value": 1
+          },
+          "heatFlux_vm_psiHat": {
+            "dtype": "float64",
+            "exists": true,
+            "numeric": true,
+            "shape": [
+              2,
+              1
+            ]
+          },
+          "heatFlux_vm_psiN": {
+            "dtype": "float64",
+            "exists": true,
+            "numeric": true,
+            "shape": [
+              2,
+              1
+            ]
+          },
+          "particleFlux_vm_psiHat": {
+            "dtype": "float64",
+            "exists": true,
+            "numeric": true,
+            "shape": [
+              2,
+              1
+            ]
+          },
+          "particleFlux_vm_psiN": {
+            "dtype": "float64",
+            "exists": true,
+            "numeric": true,
+            "shape": [
+              2,
+              1
+            ]
+          }
+        },
+        "size_bytes": 852316
+      },
+      "reference_h5": "/Users/rogeriojorge/local/20220708-01-zenodo_for_QS_optimization_with_self_consistent_bootstrap_current/calculations/20211226-01-sfincs_for_precise_QS_for_Redl_benchmark/20211226-01-012_QA_Ntheta25_Nzeta39_Nxi60_Nx7_manySurfaces/psiN_0.95/sfincsOutput.h5",
+      "selection": {
+        "case": "20211226-01-012_QA_Ntheta25_Nzeta39_Nxi60_Nx7_manySurfaces",
+        "collision_operator": 0,
+        "er": 0.001,
+        "family": "qa",
+        "fortran_output": "calculations/20211226-01-sfincs_for_precise_QS_for_Redl_benchmark/20211226-01-012_QA_Ntheta25_Nzeta39_Nxi60_Nx7_manySurfaces/psiN_0.95/sfincsOutput.h5",
+        "geometry_scheme": 5,
+        "grid_size": 409500,
+        "input": "calculations/20211226-01-sfincs_for_precise_QS_for_Redl_benchmark/20211226-01-012_QA_Ntheta25_Nzeta39_Nxi60_Nx7_manySurfaces/psiN_0.95/input.namelist",
+        "nu_n": 0.00831565,
+        "resolution": {
+          "Ntheta": 25,
+          "Nx": 7,
+          "Nxi": 60,
+          "Nzeta": 39,
+          "label": "25x39x60x7"
+        },
+        "rung": "low",
+        "solver_tolerance": 1e-05,
+        "surface_role": "outer_edge",
+        "surface_s": 0.95,
+        "target_surface_s": 0.95
+      },
+      "status": "reference_ok",
+      "timing": {
+        "elapsed_s": 0.007236,
+        "maxrss_mb": 131.90625,
+        "phase_count": 1,
+        "phases": [
+          {
+            "elapsed_s": 0.00721,
+            "maxrss_mb": 131.90625,
+            "metadata": {
+              "case_index": 2
+            },
+            "name": "reference_h5_audit",
+            "status": "ok"
+          }
+        ]
+      }
+    },
+    {
+      "candidate": null,
+      "candidate_h5": null,
+      "case_index": 3,
+      "parity": null,
+      "reference": {
+        "dataset_count": 196,
+        "exists": true,
+        "numeric_dataset_count": 195,
+        "path": "/Users/rogeriojorge/local/20220708-01-zenodo_for_QS_optimization_with_self_consistent_bootstrap_current/calculations/20220502_QA_Stefan_calculations/sfincs_beta0p025_iota0p42/01/sfincsOutput.h5",
+        "selected_datasets": {
+          "FSABFlow": {
+            "dtype": "float64",
+            "exists": true,
+            "numeric": true,
+            "shape": [
+              2,
+              1
+            ]
+          },
+          "FSABjHat": {
+            "dtype": "float64",
+            "exists": true,
+            "numeric": true,
+            "shape": [
+              1
+            ],
+            "value": -0.20595837009518547
+          },
+          "FSABjHatOverRootFSAB2": {
+            "dtype": "float64",
+            "exists": true,
+            "numeric": true,
+            "shape": [
+              1
+            ],
+            "value": -0.03604512920618458
+          },
+          "NIterations": {
+            "dtype": "int32",
+            "exists": true,
+            "numeric": true,
+            "shape": [],
+            "value": 1
+          },
+          "heatFlux_vm_psiHat": {
+            "dtype": "float64",
+            "exists": true,
+            "numeric": true,
+            "shape": [
+              2,
+              1
+            ]
+          },
+          "heatFlux_vm_psiN": {
+            "dtype": "float64",
+            "exists": true,
+            "numeric": true,
+            "shape": [
+              2,
+              1
+            ]
+          },
+          "particleFlux_vm_psiHat": {
+            "dtype": "float64",
+            "exists": true,
+            "numeric": true,
+            "shape": [
+              2,
+              1
+            ]
+          },
+          "particleFlux_vm_psiN": {
+            "dtype": "float64",
+            "exists": true,
+            "numeric": true,
+            "shape": [
+              2,
+              1
+            ]
+          }
+        },
+        "size_bytes": 1681685
+      },
+      "reference_h5": "/Users/rogeriojorge/local/20220708-01-zenodo_for_QS_optimization_with_self_consistent_bootstrap_current/calculations/20220502_QA_Stefan_calculations/sfincs_beta0p025_iota0p42/01/sfincsOutput.h5",
+      "selection": {
+        "case": "sfincs_beta0p025_iota0p42",
+        "collision_operator": 0,
+        "er": null,
+        "family": "qa",
+        "fortran_output": "calculations/20220502_QA_Stefan_calculations/sfincs_beta0p025_iota0p42/01/sfincsOutput.h5",
+        "geometry_scheme": 5,
+        "grid_size": 824670,
+        "input": "calculations/20220502_QA_Stefan_calculations/sfincs_beta0p025_iota0p42/01/input.namelist",
+        "nu_n": -1.0,
+        "resolution": {
+          "Ntheta": 51,
+          "Nx": 6,
+          "Nxi": 55,
+          "Nzeta": 49,
+          "label": "51x49x55x6"
+        },
+        "rung": "intermediate",
+        "solver_tolerance": 1e-06,
+        "surface_role": "inner_edge",
+        "surface_s": 0.05,
+        "target_surface_s": 0.05
+      },
+      "status": "reference_ok",
+      "timing": {
+        "elapsed_s": 0.008311,
+        "maxrss_mb": 132.21875,
+        "phase_count": 1,
+        "phases": [
+          {
+            "elapsed_s": 0.008286,
+            "maxrss_mb": 132.21875,
+            "metadata": {
+              "case_index": 3
+            },
+            "name": "reference_h5_audit",
+            "status": "ok"
+          }
+        ]
+      }
+    },
+    {
+      "candidate": null,
+      "candidate_h5": null,
+      "case_index": 4,
+      "parity": null,
+      "reference": {
+        "dataset_count": 196,
+        "exists": true,
+        "numeric_dataset_count": 195,
+        "path": "/Users/rogeriojorge/local/20220708-01-zenodo_for_QS_optimization_with_self_consistent_bootstrap_current/calculations/20220502_QA_Stefan_calculations/sfincs_beta0p025_iota0p42/19/sfincsOutput.h5",
+        "selected_datasets": {
+          "FSABFlow": {
+            "dtype": "float64",
+            "exists": true,
+            "numeric": true,
+            "shape": [
+              2,
+              1
+            ]
+          },
+          "FSABjHat": {
+            "dtype": "float64",
+            "exists": true,
+            "numeric": true,
+            "shape": [
+              1
+            ],
+            "value": -0.3463601261208843
+          },
+          "FSABjHatOverRootFSAB2": {
+            "dtype": "float64",
+            "exists": true,
+            "numeric": true,
+            "shape": [
+              1
+            ],
+            "value": -0.05902875263875101
+          },
+          "NIterations": {
+            "dtype": "int32",
+            "exists": true,
+            "numeric": true,
+            "shape": [],
+            "value": 1
+          },
+          "heatFlux_vm_psiHat": {
+            "dtype": "float64",
+            "exists": true,
+            "numeric": true,
+            "shape": [
+              2,
+              1
+            ]
+          },
+          "heatFlux_vm_psiN": {
+            "dtype": "float64",
+            "exists": true,
+            "numeric": true,
+            "shape": [
+              2,
+              1
+            ]
+          },
+          "particleFlux_vm_psiHat": {
+            "dtype": "float64",
+            "exists": true,
+            "numeric": true,
+            "shape": [
+              2,
+              1
+            ]
+          },
+          "particleFlux_vm_psiN": {
+            "dtype": "float64",
+            "exists": true,
+            "numeric": true,
+            "shape": [
+              2,
+              1
+            ]
+          }
+        },
+        "size_bytes": 1681680
+      },
+      "reference_h5": "/Users/rogeriojorge/local/20220708-01-zenodo_for_QS_optimization_with_self_consistent_bootstrap_current/calculations/20220502_QA_Stefan_calculations/sfincs_beta0p025_iota0p42/19/sfincsOutput.h5",
+      "selection": {
+        "case": "sfincs_beta0p025_iota0p42",
+        "collision_operator": 0,
+        "er": null,
+        "family": "qa",
+        "fortran_output": "calculations/20220502_QA_Stefan_calculations/sfincs_beta0p025_iota0p42/19/sfincsOutput.h5",
+        "geometry_scheme": 5,
+        "grid_size": 824670,
+        "input": "calculations/20220502_QA_Stefan_calculations/sfincs_beta0p025_iota0p42/19/input.namelist",
+        "nu_n": -1.0,
+        "resolution": {
+          "Ntheta": 51,
+          "Nx": 6,
+          "Nxi": 55,
+          "Nzeta": 49,
+          "label": "51x49x55x6"
+        },
+        "rung": "intermediate",
+        "solver_tolerance": 1e-06,
+        "surface_role": "central",
+        "surface_s": 0.5,
+        "target_surface_s": 0.5
+      },
+      "status": "reference_ok",
+      "timing": {
+        "elapsed_s": 0.008368,
+        "maxrss_mb": 133.21875,
+        "phase_count": 1,
+        "phases": [
+          {
+            "elapsed_s": 0.008345,
+            "maxrss_mb": 133.21875,
+            "metadata": {
+              "case_index": 4
+            },
+            "name": "reference_h5_audit",
+            "status": "ok"
+          }
+        ]
+      }
+    },
+    {
+      "candidate": null,
+      "candidate_h5": null,
+      "case_index": 5,
+      "parity": null,
+      "reference": {
+        "dataset_count": 196,
+        "exists": true,
+        "numeric_dataset_count": 195,
+        "path": "/Users/rogeriojorge/local/20220708-01-zenodo_for_QS_optimization_with_self_consistent_bootstrap_current/calculations/20220502_QA_Stefan_calculations/sfincs_beta0p025_iota0p42/37/sfincsOutput.h5",
+        "selected_datasets": {
+          "FSABFlow": {
+            "dtype": "float64",
+            "exists": true,
+            "numeric": true,
+            "shape": [
+              2,
+              1
+            ]
+          },
+          "FSABjHat": {
+            "dtype": "float64",
+            "exists": true,
+            "numeric": true,
+            "shape": [
+              1
+            ],
+            "value": -0.03097124651729638
+          },
+          "FSABjHatOverRootFSAB2": {
+            "dtype": "float64",
+            "exists": true,
+            "numeric": true,
+            "shape": [
+              1
+            ],
+            "value": -0.0051587079738580725
+          },
+          "NIterations": {
+            "dtype": "int32",
+            "exists": true,
+            "numeric": true,
+            "shape": [],
+            "value": 1
+          },
+          "heatFlux_vm_psiHat": {
+            "dtype": "float64",
+            "exists": true,
+            "numeric": true,
+            "shape": [
+              2,
+              1
+            ]
+          },
+          "heatFlux_vm_psiN": {
+            "dtype": "float64",
+            "exists": true,
+            "numeric": true,
+            "shape": [
+              2,
+              1
+            ]
+          },
+          "particleFlux_vm_psiHat": {
+            "dtype": "float64",
+            "exists": true,
+            "numeric": true,
+            "shape": [
+              2,
+              1
+            ]
+          },
+          "particleFlux_vm_psiN": {
+            "dtype": "float64",
+            "exists": true,
+            "numeric": true,
+            "shape": [
+              2,
+              1
+            ]
+          }
+        },
+        "size_bytes": 1681697
+      },
+      "reference_h5": "/Users/rogeriojorge/local/20220708-01-zenodo_for_QS_optimization_with_self_consistent_bootstrap_current/calculations/20220502_QA_Stefan_calculations/sfincs_beta0p025_iota0p42/37/sfincsOutput.h5",
+      "selection": {
+        "case": "sfincs_beta0p025_iota0p42",
+        "collision_operator": 0,
+        "er": null,
+        "family": "qa",
+        "fortran_output": "calculations/20220502_QA_Stefan_calculations/sfincs_beta0p025_iota0p42/37/sfincsOutput.h5",
+        "geometry_scheme": 5,
+        "grid_size": 824670,
+        "input": "calculations/20220502_QA_Stefan_calculations/sfincs_beta0p025_iota0p42/37/input.namelist",
+        "nu_n": -1.0,
+        "resolution": {
+          "Ntheta": 51,
+          "Nx": 6,
+          "Nxi": 55,
+          "Nzeta": 49,
+          "label": "51x49x55x6"
+        },
+        "rung": "intermediate",
+        "solver_tolerance": 1e-06,
+        "surface_role": "outer_edge",
+        "surface_s": 0.9500000000000001,
+        "target_surface_s": 0.95
+      },
+      "status": "reference_ok",
+      "timing": {
+        "elapsed_s": 0.008044,
+        "maxrss_mb": 133.328125,
+        "phase_count": 1,
+        "phases": [
+          {
+            "elapsed_s": 0.00802,
+            "maxrss_mb": 133.328125,
+            "metadata": {
+              "case_index": 5
+            },
+            "name": "reference_h5_audit",
+            "status": "ok"
+          }
+        ]
+      }
+    },
+    {
+      "candidate": null,
+      "candidate_h5": null,
+      "case_index": 6,
+      "parity": null,
+      "reference": {
+        "dataset_count": 195,
+        "exists": true,
+        "numeric_dataset_count": 194,
+        "path": "/Users/rogeriojorge/local/20220708-01-zenodo_for_QS_optimization_with_self_consistent_bootstrap_current/calculations/20220218-01-more_QS_finite_beta_optimization/20220218-01-024_sfincs_for_QA_beta0p025_iota0p42_dreopt_HIGHERRES_2022-04-15/psiN_0.14/sfincsOutput.h5",
+        "selected_datasets": {
+          "FSABFlow": {
+            "dtype": "float64",
+            "exists": true,
+            "numeric": true,
+            "shape": [
+              3,
+              1
+            ]
+          },
+          "FSABjHat": {
+            "dtype": "float64",
+            "exists": true,
+            "numeric": true,
+            "shape": [
+              1
+            ],
+            "value": -0.2681607585028717
+          },
+          "FSABjHatOverRootFSAB2": {
+            "dtype": "float64",
+            "exists": true,
+            "numeric": true,
+            "shape": [
+              1
+            ],
+            "value": -0.046622942143809167
+          },
+          "NIterations": {
+            "dtype": "int32",
+            "exists": true,
+            "numeric": true,
+            "shape": [],
+            "value": 1
+          },
+          "heatFlux_vm_psiHat": {
+            "dtype": "float64",
+            "exists": true,
+            "numeric": true,
+            "shape": [
+              3,
+              1
+            ]
+          },
+          "heatFlux_vm_psiN": {
+            "dtype": "float64",
+            "exists": true,
+            "numeric": true,
+            "shape": [
+              3,
+              1
+            ]
+          },
+          "particleFlux_vm_psiHat": {
+            "dtype": "float64",
+            "exists": true,
+            "numeric": true,
+            "shape": [
+              3,
+              1
+            ]
+          },
+          "particleFlux_vm_psiN": {
+            "dtype": "float64",
+            "exists": true,
+            "numeric": true,
+            "shape": [
+              3,
+              1
+            ]
+          }
+        },
+        "size_bytes": 2192728
+      },
+      "reference_h5": "/Users/rogeriojorge/local/20220708-01-zenodo_for_QS_optimization_with_self_consistent_bootstrap_current/calculations/20220218-01-more_QS_finite_beta_optimization/20220218-01-024_sfincs_for_QA_beta0p025_iota0p42_dreopt_HIGHERRES_2022-04-15/psiN_0.14/sfincsOutput.h5",
+      "selection": {
+        "case": "20220218-01-024_sfincs_for_QA_beta0p025_iota0p42_dreopt_HIGHERRES_2022-04-15",
+        "collision_operator": 0,
+        "er": 0.001,
+        "family": "qa",
+        "fortran_output": "calculations/20220218-01-more_QS_finite_beta_optimization/20220218-01-024_sfincs_for_QA_beta0p025_iota0p42_dreopt_HIGHERRES_2022-04-15/psiN_0.14/sfincsOutput.h5",
+        "geometry_scheme": 5,
+        "grid_size": 857010,
+        "input": "calculations/20220218-01-more_QS_finite_beta_optimization/20220218-01-024_sfincs_for_QA_beta0p025_iota0p42_dreopt_HIGHERRES_2022-04-15/psiN_0.14/input.namelist",
+        "nu_n": 0.00831565,
+        "resolution": {
+          "Ntheta": 53,
+          "Nx": 6,
+          "Nxi": 55,
+          "Nzeta": 49,
+          "label": "53x49x55x6"
+        },
+        "rung": "production",
+        "solver_tolerance": 1e-05,
+        "surface_role": "inner_edge",
+        "surface_s": 0.13999999999999999,
+        "target_surface_s": 0.05
+      },
+      "status": "reference_ok",
+      "timing": {
+        "elapsed_s": 0.008688,
+        "maxrss_mb": 134.015625,
+        "phase_count": 1,
+        "phases": [
+          {
+            "elapsed_s": 0.008664,
+            "maxrss_mb": 134.015625,
+            "metadata": {
+              "case_index": 6
+            },
+            "name": "reference_h5_audit",
+            "status": "ok"
+          }
+        ]
+      }
+    },
+    {
+      "candidate": null,
+      "candidate_h5": null,
+      "case_index": 7,
+      "parity": null,
+      "reference": {
+        "dataset_count": 195,
+        "exists": true,
+        "numeric_dataset_count": 194,
+        "path": "/Users/rogeriojorge/local/20220708-01-zenodo_for_QS_optimization_with_self_consistent_bootstrap_current/calculations/20220218-01-more_QS_finite_beta_optimization/20220218-01-024_sfincs_for_QA_beta0p025_iota0p42_dreopt_HIGHERRES_2022-04-15/psiN_0.5/sfincsOutput.h5",
+        "selected_datasets": {
+          "FSABFlow": {
+            "dtype": "float64",
+            "exists": true,
+            "numeric": true,
+            "shape": [
+              3,
+              1
+            ]
+          },
+          "FSABjHat": {
+            "dtype": "float64",
+            "exists": true,
+            "numeric": true,
+            "shape": [
+              1
+            ],
+            "value": -0.3526250176896855
+          },
+          "FSABjHatOverRootFSAB2": {
+            "dtype": "float64",
+            "exists": true,
+            "numeric": true,
+            "shape": [
+              1
+            ],
+            "value": -0.060106794618430125
+          },
+          "NIterations": {
+            "dtype": "int32",
+            "exists": true,
+            "numeric": true,
+            "shape": [],
+            "value": 1
+          },
+          "heatFlux_vm_psiHat": {
+            "dtype": "float64",
+            "exists": true,
+            "numeric": true,
+            "shape": [
+              3,
+              1
+            ]
+          },
+          "heatFlux_vm_psiN": {
+            "dtype": "float64",
+            "exists": true,
+            "numeric": true,
+            "shape": [
+              3,
+              1
+            ]
+          },
+          "particleFlux_vm_psiHat": {
+            "dtype": "float64",
+            "exists": true,
+            "numeric": true,
+            "shape": [
+              3,
+              1
+            ]
+          },
+          "particleFlux_vm_psiN": {
+            "dtype": "float64",
+            "exists": true,
+            "numeric": true,
+            "shape": [
+              3,
+              1
+            ]
+          }
+        },
+        "size_bytes": 2192648
+      },
+      "reference_h5": "/Users/rogeriojorge/local/20220708-01-zenodo_for_QS_optimization_with_self_consistent_bootstrap_current/calculations/20220218-01-more_QS_finite_beta_optimization/20220218-01-024_sfincs_for_QA_beta0p025_iota0p42_dreopt_HIGHERRES_2022-04-15/psiN_0.5/sfincsOutput.h5",
+      "selection": {
+        "case": "20220218-01-024_sfincs_for_QA_beta0p025_iota0p42_dreopt_HIGHERRES_2022-04-15",
+        "collision_operator": 0,
+        "er": 0.001,
+        "family": "qa",
+        "fortran_output": "calculations/20220218-01-more_QS_finite_beta_optimization/20220218-01-024_sfincs_for_QA_beta0p025_iota0p42_dreopt_HIGHERRES_2022-04-15/psiN_0.5/sfincsOutput.h5",
+        "geometry_scheme": 5,
+        "grid_size": 857010,
+        "input": "calculations/20220218-01-more_QS_finite_beta_optimization/20220218-01-024_sfincs_for_QA_beta0p025_iota0p42_dreopt_HIGHERRES_2022-04-15/psiN_0.5/input.namelist",
+        "nu_n": 0.00831565,
+        "resolution": {
+          "Ntheta": 53,
+          "Nx": 6,
+          "Nxi": 55,
+          "Nzeta": 49,
+          "label": "53x49x55x6"
+        },
+        "rung": "production",
+        "solver_tolerance": 1e-05,
+        "surface_role": "central",
+        "surface_s": 0.5,
+        "target_surface_s": 0.5
+      },
+      "status": "reference_ok",
+      "timing": {
+        "elapsed_s": 0.008794,
+        "maxrss_mb": 134.375,
+        "phase_count": 1,
+        "phases": [
+          {
+            "elapsed_s": 0.008764,
+            "maxrss_mb": 134.375,
+            "metadata": {
+              "case_index": 7
+            },
+            "name": "reference_h5_audit",
+            "status": "ok"
+          }
+        ]
+      }
+    },
+    {
+      "candidate": null,
+      "candidate_h5": null,
+      "case_index": 8,
+      "parity": null,
+      "reference": {
+        "dataset_count": 195,
+        "exists": true,
+        "numeric_dataset_count": 194,
+        "path": "/Users/rogeriojorge/local/20220708-01-zenodo_for_QS_optimization_with_self_consistent_bootstrap_current/calculations/20220218-01-more_QS_finite_beta_optimization/20220218-01-024_sfincs_for_QA_beta0p025_iota0p42_dreopt_HIGHERRES_2022-04-15/psiN_0.56/sfincsOutput.h5",
+        "selected_datasets": {
+          "FSABFlow": {
+            "dtype": "float64",
+            "exists": true,
+            "numeric": true,
+            "shape": [
+              3,
+              1
+            ]
+          },
+          "FSABjHat": {
+            "dtype": "float64",
+            "exists": true,
+            "numeric": true,
+            "shape": [
+              1
+            ],
+            "value": -0.35698209034219563
+          },
+          "FSABjHatOverRootFSAB2": {
+            "dtype": "float64",
+            "exists": true,
+            "numeric": true,
+            "shape": [
+              1
+            ],
+            "value": -0.060647166603215306
+          },
+          "NIterations": {
+            "dtype": "int32",
+            "exists": true,
+            "numeric": true,
+            "shape": [],
+            "value": 1
+          },
+          "heatFlux_vm_psiHat": {
+            "dtype": "float64",
+            "exists": true,
+            "numeric": true,
+            "shape": [
+              3,
+              1
+            ]
+          },
+          "heatFlux_vm_psiN": {
+            "dtype": "float64",
+            "exists": true,
+            "numeric": true,
+            "shape": [
+              3,
+              1
+            ]
+          },
+          "particleFlux_vm_psiHat": {
+            "dtype": "float64",
+            "exists": true,
+            "numeric": true,
+            "shape": [
+              3,
+              1
+            ]
+          },
+          "particleFlux_vm_psiN": {
+            "dtype": "float64",
+            "exists": true,
+            "numeric": true,
+            "shape": [
+              3,
+              1
+            ]
+          }
+        },
+        "size_bytes": 2192704
+      },
+      "reference_h5": "/Users/rogeriojorge/local/20220708-01-zenodo_for_QS_optimization_with_self_consistent_bootstrap_current/calculations/20220218-01-more_QS_finite_beta_optimization/20220218-01-024_sfincs_for_QA_beta0p025_iota0p42_dreopt_HIGHERRES_2022-04-15/psiN_0.56/sfincsOutput.h5",
+      "selection": {
+        "case": "20220218-01-024_sfincs_for_QA_beta0p025_iota0p42_dreopt_HIGHERRES_2022-04-15",
+        "collision_operator": 0,
+        "er": 0.001,
+        "family": "qa",
+        "fortran_output": "calculations/20220218-01-more_QS_finite_beta_optimization/20220218-01-024_sfincs_for_QA_beta0p025_iota0p42_dreopt_HIGHERRES_2022-04-15/psiN_0.56/sfincsOutput.h5",
+        "geometry_scheme": 5,
+        "grid_size": 857010,
+        "input": "calculations/20220218-01-more_QS_finite_beta_optimization/20220218-01-024_sfincs_for_QA_beta0p025_iota0p42_dreopt_HIGHERRES_2022-04-15/psiN_0.56/input.namelist",
+        "nu_n": 0.00831565,
+        "resolution": {
+          "Ntheta": 53,
+          "Nx": 6,
+          "Nxi": 55,
+          "Nzeta": 49,
+          "label": "53x49x55x6"
+        },
+        "rung": "production",
+        "solver_tolerance": 1e-05,
+        "surface_role": "outer_edge",
+        "surface_s": 0.56,
+        "target_surface_s": 0.95
+      },
+      "status": "reference_ok",
+      "timing": {
+        "elapsed_s": 0.008225,
+        "maxrss_mb": 134.53125,
+        "phase_count": 1,
+        "phases": [
+          {
+            "elapsed_s": 0.008192,
+            "maxrss_mb": 134.53125,
+            "metadata": {
+              "case_index": 8
+            },
+            "name": "reference_h5_audit",
+            "status": "ok"
+          }
+        ]
+      }
+    },
+    {
+      "candidate": null,
+      "candidate_h5": null,
+      "case_index": 9,
+      "parity": null,
+      "reference": {
+        "dataset_count": 195,
+        "exists": true,
+        "numeric_dataset_count": 194,
+        "path": "/Users/rogeriojorge/local/20220708-01-zenodo_for_QS_optimization_with_self_consistent_bootstrap_current/calculations/20211226-01-sfincs_for_precise_QS_for_Redl_benchmark/20211226-01-019_QH_Ntheta25_Nzeta39_Nxi60_Nx7_manySurfaces/psiN_0.05/sfincsOutput.h5",
+        "selected_datasets": {
+          "FSABFlow": {
+            "dtype": "float64",
+            "exists": true,
+            "numeric": true,
+            "shape": [
+              2,
+              1
+            ]
+          },
+          "FSABjHat": {
+            "dtype": "float64",
+            "exists": true,
+            "numeric": true,
+            "shape": [
+              1
+            ],
+            "value": -0.1892722431866981
+          },
+          "FSABjHatOverRootFSAB2": {
+            "dtype": "float64",
+            "exists": true,
+            "numeric": true,
+            "shape": [
+              1
+            ],
+            "value": -0.032178922466216744
+          },
+          "NIterations": {
+            "dtype": "int32",
+            "exists": true,
+            "numeric": true,
+            "shape": [],
+            "value": 1
+          },
+          "heatFlux_vm_psiHat": {
+            "dtype": "float64",
+            "exists": true,
+            "numeric": true,
+            "shape": [
+              2,
+              1
+            ]
+          },
+          "heatFlux_vm_psiN": {
+            "dtype": "float64",
+            "exists": true,
+            "numeric": true,
+            "shape": [
+              2,
+              1
+            ]
+          },
+          "particleFlux_vm_psiHat": {
+            "dtype": "float64",
+            "exists": true,
+            "numeric": true,
+            "shape": [
+              2,
+              1
+            ]
+          },
+          "particleFlux_vm_psiN": {
+            "dtype": "float64",
+            "exists": true,
+            "numeric": true,
+            "shape": [
+              2,
+              1
+            ]
+          }
+        },
+        "size_bytes": 852288
+      },
+      "reference_h5": "/Users/rogeriojorge/local/20220708-01-zenodo_for_QS_optimization_with_self_consistent_bootstrap_current/calculations/20211226-01-sfincs_for_precise_QS_for_Redl_benchmark/20211226-01-019_QH_Ntheta25_Nzeta39_Nxi60_Nx7_manySurfaces/psiN_0.05/sfincsOutput.h5",
+      "selection": {
+        "case": "20211226-01-019_QH_Ntheta25_Nzeta39_Nxi60_Nx7_manySurfaces",
+        "collision_operator": 0,
+        "er": 0.001,
+        "family": "qh",
+        "fortran_output": "calculations/20211226-01-sfincs_for_precise_QS_for_Redl_benchmark/20211226-01-019_QH_Ntheta25_Nzeta39_Nxi60_Nx7_manySurfaces/psiN_0.05/sfincsOutput.h5",
+        "geometry_scheme": 5,
+        "grid_size": 409500,
+        "input": "calculations/20211226-01-sfincs_for_precise_QS_for_Redl_benchmark/20211226-01-019_QH_Ntheta25_Nzeta39_Nxi60_Nx7_manySurfaces/psiN_0.05/input.namelist",
+        "nu_n": 0.00831565,
+        "resolution": {
+          "Ntheta": 25,
+          "Nx": 7,
+          "Nxi": 60,
+          "Nzeta": 39,
+          "label": "25x39x60x7"
+        },
+        "rung": "low",
+        "solver_tolerance": 1e-05,
+        "surface_role": "inner_edge",
+        "surface_s": 0.05,
+        "target_surface_s": 0.05
+      },
+      "status": "reference_ok",
+      "timing": {
+        "elapsed_s": 0.008504,
+        "maxrss_mb": 136.109375,
+        "phase_count": 1,
+        "phases": [
+          {
+            "elapsed_s": 0.008475,
+            "maxrss_mb": 136.109375,
+            "metadata": {
+              "case_index": 9
+            },
+            "name": "reference_h5_audit",
+            "status": "ok"
+          }
+        ]
+      }
+    },
+    {
+      "candidate": null,
+      "candidate_h5": null,
+      "case_index": 10,
+      "parity": null,
+      "reference": {
+        "dataset_count": 195,
+        "exists": true,
+        "numeric_dataset_count": 194,
+        "path": "/Users/rogeriojorge/local/20220708-01-zenodo_for_QS_optimization_with_self_consistent_bootstrap_current/calculations/20211226-01-sfincs_for_precise_QS_for_Redl_benchmark/20211226-01-019_QH_Ntheta25_Nzeta39_Nxi60_Nx7_manySurfaces/psiN_0.5/sfincsOutput.h5",
+        "selected_datasets": {
+          "FSABFlow": {
+            "dtype": "float64",
+            "exists": true,
+            "numeric": true,
+            "shape": [
+              2,
+              1
+            ]
+          },
+          "FSABjHat": {
+            "dtype": "float64",
+            "exists": true,
+            "numeric": true,
+            "shape": [
+              1
+            ],
+            "value": -0.4621037998604974
+          },
+          "FSABjHatOverRootFSAB2": {
+            "dtype": "float64",
+            "exists": true,
+            "numeric": true,
+            "shape": [
+              1
+            ],
+            "value": -0.07878989023192483
+          },
+          "NIterations": {
+            "dtype": "int32",
+            "exists": true,
+            "numeric": true,
+            "shape": [],
+            "value": 1
+          },
+          "heatFlux_vm_psiHat": {
+            "dtype": "float64",
+            "exists": true,
+            "numeric": true,
+            "shape": [
+              2,
+              1
+            ]
+          },
+          "heatFlux_vm_psiN": {
+            "dtype": "float64",
+            "exists": true,
+            "numeric": true,
+            "shape": [
+              2,
+              1
+            ]
+          },
+          "particleFlux_vm_psiHat": {
+            "dtype": "float64",
+            "exists": true,
+            "numeric": true,
+            "shape": [
+              2,
+              1
+            ]
+          },
+          "particleFlux_vm_psiN": {
+            "dtype": "float64",
+            "exists": true,
+            "numeric": true,
+            "shape": [
+              2,
+              1
+            ]
+          }
+        },
+        "size_bytes": 852260
+      },
+      "reference_h5": "/Users/rogeriojorge/local/20220708-01-zenodo_for_QS_optimization_with_self_consistent_bootstrap_current/calculations/20211226-01-sfincs_for_precise_QS_for_Redl_benchmark/20211226-01-019_QH_Ntheta25_Nzeta39_Nxi60_Nx7_manySurfaces/psiN_0.5/sfincsOutput.h5",
+      "selection": {
+        "case": "20211226-01-019_QH_Ntheta25_Nzeta39_Nxi60_Nx7_manySurfaces",
+        "collision_operator": 0,
+        "er": 0.001,
+        "family": "qh",
+        "fortran_output": "calculations/20211226-01-sfincs_for_precise_QS_for_Redl_benchmark/20211226-01-019_QH_Ntheta25_Nzeta39_Nxi60_Nx7_manySurfaces/psiN_0.5/sfincsOutput.h5",
+        "geometry_scheme": 5,
+        "grid_size": 409500,
+        "input": "calculations/20211226-01-sfincs_for_precise_QS_for_Redl_benchmark/20211226-01-019_QH_Ntheta25_Nzeta39_Nxi60_Nx7_manySurfaces/psiN_0.5/input.namelist",
+        "nu_n": 0.00831565,
+        "resolution": {
+          "Ntheta": 25,
+          "Nx": 7,
+          "Nxi": 60,
+          "Nzeta": 39,
+          "label": "25x39x60x7"
+        },
+        "rung": "low",
+        "solver_tolerance": 1e-05,
+        "surface_role": "central",
+        "surface_s": 0.5,
+        "target_surface_s": 0.5
+      },
+      "status": "reference_ok",
+      "timing": {
+        "elapsed_s": 0.008296,
+        "maxrss_mb": 136.1875,
+        "phase_count": 1,
+        "phases": [
+          {
+            "elapsed_s": 0.008266,
+            "maxrss_mb": 136.1875,
+            "metadata": {
+              "case_index": 10
+            },
+            "name": "reference_h5_audit",
+            "status": "ok"
+          }
+        ]
+      }
+    },
+    {
+      "candidate": null,
+      "candidate_h5": null,
+      "case_index": 11,
+      "parity": null,
+      "reference": {
+        "dataset_count": 195,
+        "exists": true,
+        "numeric_dataset_count": 194,
+        "path": "/Users/rogeriojorge/local/20220708-01-zenodo_for_QS_optimization_with_self_consistent_bootstrap_current/calculations/20211226-01-sfincs_for_precise_QS_for_Redl_benchmark/20211226-01-019_QH_Ntheta25_Nzeta39_Nxi60_Nx7_manySurfaces/psiN_0.95/sfincsOutput.h5",
+        "selected_datasets": {
+          "FSABFlow": {
+            "dtype": "float64",
+            "exists": true,
+            "numeric": true,
+            "shape": [
+              2,
+              1
+            ]
+          },
+          "FSABjHat": {
+            "dtype": "float64",
+            "exists": true,
+            "numeric": true,
+            "shape": [
+              1
+            ],
+            "value": -0.13006831577916603
+          },
+          "FSABjHatOverRootFSAB2": {
+            "dtype": "float64",
+            "exists": true,
+            "numeric": true,
+            "shape": [
+              1
+            ],
+            "value": -0.022247743305114455
+          },
+          "NIterations": {
+            "dtype": "int32",
+            "exists": true,
+            "numeric": true,
+            "shape": [],
+            "value": 1
+          },
+          "heatFlux_vm_psiHat": {
+            "dtype": "float64",
+            "exists": true,
+            "numeric": true,
+            "shape": [
+              2,
+              1
+            ]
+          },
+          "heatFlux_vm_psiN": {
+            "dtype": "float64",
+            "exists": true,
+            "numeric": true,
+            "shape": [
+              2,
+              1
+            ]
+          },
+          "particleFlux_vm_psiHat": {
+            "dtype": "float64",
+            "exists": true,
+            "numeric": true,
+            "shape": [
+              2,
+              1
+            ]
+          },
+          "particleFlux_vm_psiN": {
+            "dtype": "float64",
+            "exists": true,
+            "numeric": true,
+            "shape": [
+              2,
+              1
+            ]
+          }
+        },
+        "size_bytes": 852316
+      },
+      "reference_h5": "/Users/rogeriojorge/local/20220708-01-zenodo_for_QS_optimization_with_self_consistent_bootstrap_current/calculations/20211226-01-sfincs_for_precise_QS_for_Redl_benchmark/20211226-01-019_QH_Ntheta25_Nzeta39_Nxi60_Nx7_manySurfaces/psiN_0.95/sfincsOutput.h5",
+      "selection": {
+        "case": "20211226-01-019_QH_Ntheta25_Nzeta39_Nxi60_Nx7_manySurfaces",
+        "collision_operator": 0,
+        "er": 0.001,
+        "family": "qh",
+        "fortran_output": "calculations/20211226-01-sfincs_for_precise_QS_for_Redl_benchmark/20211226-01-019_QH_Ntheta25_Nzeta39_Nxi60_Nx7_manySurfaces/psiN_0.95/sfincsOutput.h5",
+        "geometry_scheme": 5,
+        "grid_size": 409500,
+        "input": "calculations/20211226-01-sfincs_for_precise_QS_for_Redl_benchmark/20211226-01-019_QH_Ntheta25_Nzeta39_Nxi60_Nx7_manySurfaces/psiN_0.95/input.namelist",
+        "nu_n": 0.00831565,
+        "resolution": {
+          "Ntheta": 25,
+          "Nx": 7,
+          "Nxi": 60,
+          "Nzeta": 39,
+          "label": "25x39x60x7"
+        },
+        "rung": "low",
+        "solver_tolerance": 1e-05,
+        "surface_role": "outer_edge",
+        "surface_s": 0.95,
+        "target_surface_s": 0.95
+      },
+      "status": "reference_ok",
+      "timing": {
+        "elapsed_s": 0.007838,
+        "maxrss_mb": 136.203125,
+        "phase_count": 1,
+        "phases": [
+          {
+            "elapsed_s": 0.007811,
+            "maxrss_mb": 136.203125,
+            "metadata": {
+              "case_index": 11
+            },
+            "name": "reference_h5_audit",
+            "status": "ok"
+          }
+        ]
+      }
+    },
+    {
+      "candidate": null,
+      "candidate_h5": null,
+      "case_index": 12,
+      "parity": null,
+      "reference": {
+        "dataset_count": 195,
+        "exists": true,
+        "numeric_dataset_count": 194,
+        "path": "/Users/rogeriojorge/local/20220708-01-zenodo_for_QS_optimization_with_self_consistent_bootstrap_current/calculations/20220102-01-simsoptSelfConsistentBootstrapProfile/20220102-01-053_iteratingVmecAndSfincsForBestFrom048/002_sfincs/psiN_0.06/sfincsOutput.h5",
+        "selected_datasets": {
+          "FSABFlow": {
+            "dtype": "float64",
+            "exists": true,
+            "numeric": true,
+            "shape": [
+              3,
+              1
+            ]
+          },
+          "FSABjHat": {
+            "dtype": "float64",
+            "exists": true,
+            "numeric": true,
+            "shape": [
+              1
+            ],
+            "value": -0.1255608329927451
+          },
+          "FSABjHatOverRootFSAB2": {
+            "dtype": "float64",
+            "exists": true,
+            "numeric": true,
+            "shape": [
+              1
+            ],
+            "value": -0.02200541855546274
+          },
+          "NIterations": {
+            "dtype": "int32",
+            "exists": true,
+            "numeric": true,
+            "shape": [],
+            "value": 1
+          },
+          "heatFlux_vm_psiHat": {
+            "dtype": "float64",
+            "exists": true,
+            "numeric": true,
+            "shape": [
+              3,
+              1
+            ]
+          },
+          "heatFlux_vm_psiN": {
+            "dtype": "float64",
+            "exists": true,
+            "numeric": true,
+            "shape": [
+              3,
+              1
+            ]
+          },
+          "particleFlux_vm_psiHat": {
+            "dtype": "float64",
+            "exists": true,
+            "numeric": true,
+            "shape": [
+              3,
+              1
+            ]
+          },
+          "particleFlux_vm_psiN": {
+            "dtype": "float64",
+            "exists": true,
+            "numeric": true,
+            "shape": [
+              3,
+              1
+            ]
+          }
+        },
+        "size_bytes": 1192829
+      },
+      "reference_h5": "/Users/rogeriojorge/local/20220708-01-zenodo_for_QS_optimization_with_self_consistent_bootstrap_current/calculations/20220102-01-simsoptSelfConsistentBootstrapProfile/20220102-01-053_iteratingVmecAndSfincsForBestFrom048/002_sfincs/psiN_0.06/sfincsOutput.h5",
+      "selection": {
+        "case": "002_sfincs",
+        "collision_operator": 0,
+        "er": 0.001,
+        "family": "qh",
+        "fortran_output": "calculations/20220102-01-simsoptSelfConsistentBootstrapProfile/20220102-01-053_iteratingVmecAndSfincsForBestFrom048/002_sfincs/psiN_0.06/sfincsOutput.h5",
+        "geometry_scheme": 5,
+        "grid_size": 803985,
+        "input": "calculations/20220102-01-simsoptSelfConsistentBootstrapProfile/20220102-01-053_iteratingVmecAndSfincsForBestFrom048/002_sfincs/psiN_0.06/input.namelist",
+        "nu_n": -0.000490024,
+        "resolution": {
+          "Ntheta": 31,
+          "Nx": 7,
+          "Nxi": 95,
+          "Nzeta": 39,
+          "label": "31x39x95x7"
+        },
+        "rung": "intermediate",
+        "solver_tolerance": 1e-05,
+        "surface_role": "inner_edge",
+        "surface_s": 0.06,
+        "target_surface_s": 0.05
+      },
+      "status": "reference_ok",
+      "timing": {
+        "elapsed_s": 0.008608,
+        "maxrss_mb": 136.203125,
+        "phase_count": 1,
+        "phases": [
+          {
+            "elapsed_s": 0.008581,
+            "maxrss_mb": 136.203125,
+            "metadata": {
+              "case_index": 12
+            },
+            "name": "reference_h5_audit",
+            "status": "ok"
+          }
+        ]
+      }
+    },
+    {
+      "candidate": null,
+      "candidate_h5": null,
+      "case_index": 13,
+      "parity": null,
+      "reference": {
+        "dataset_count": 195,
+        "exists": true,
+        "numeric_dataset_count": 194,
+        "path": "/Users/rogeriojorge/local/20220708-01-zenodo_for_QS_optimization_with_self_consistent_bootstrap_current/calculations/20220102-01-simsoptSelfConsistentBootstrapProfile/20220102-01-053_iteratingVmecAndSfincsForBestFrom048/002_sfincs/psiN_0.5/sfincsOutput.h5",
+        "selected_datasets": {
+          "FSABFlow": {
+            "dtype": "float64",
+            "exists": true,
+            "numeric": true,
+            "shape": [
+              3,
+              1
+            ]
+          },
+          "FSABjHat": {
+            "dtype": "float64",
+            "exists": true,
+            "numeric": true,
+            "shape": [
+              1
+            ],
+            "value": -0.311107811485743
+          },
+          "FSABjHatOverRootFSAB2": {
+            "dtype": "float64",
+            "exists": true,
+            "numeric": true,
+            "shape": [
+              1
+            ],
+            "value": -0.05306185733317167
+          },
+          "NIterations": {
+            "dtype": "int32",
+            "exists": true,
+            "numeric": true,
+            "shape": [],
+            "value": 1
+          },
+          "heatFlux_vm_psiHat": {
+            "dtype": "float64",
+            "exists": true,
+            "numeric": true,
+            "shape": [
+              3,
+              1
+            ]
+          },
+          "heatFlux_vm_psiN": {
+            "dtype": "float64",
+            "exists": true,
+            "numeric": true,
+            "shape": [
+              3,
+              1
+            ]
+          },
+          "particleFlux_vm_psiHat": {
+            "dtype": "float64",
+            "exists": true,
+            "numeric": true,
+            "shape": [
+              3,
+              1
+            ]
+          },
+          "particleFlux_vm_psiN": {
+            "dtype": "float64",
+            "exists": true,
+            "numeric": true,
+            "shape": [
+              3,
+              1
+            ]
+          }
+        },
+        "size_bytes": 1192805
+      },
+      "reference_h5": "/Users/rogeriojorge/local/20220708-01-zenodo_for_QS_optimization_with_self_consistent_bootstrap_current/calculations/20220102-01-simsoptSelfConsistentBootstrapProfile/20220102-01-053_iteratingVmecAndSfincsForBestFrom048/002_sfincs/psiN_0.5/sfincsOutput.h5",
+      "selection": {
+        "case": "002_sfincs",
+        "collision_operator": 0,
+        "er": 0.001,
+        "family": "qh",
+        "fortran_output": "calculations/20220102-01-simsoptSelfConsistentBootstrapProfile/20220102-01-053_iteratingVmecAndSfincsForBestFrom048/002_sfincs/psiN_0.5/sfincsOutput.h5",
+        "geometry_scheme": 5,
+        "grid_size": 803985,
+        "input": "calculations/20220102-01-simsoptSelfConsistentBootstrapProfile/20220102-01-053_iteratingVmecAndSfincsForBestFrom048/002_sfincs/psiN_0.5/input.namelist",
+        "nu_n": -0.000490024,
+        "resolution": {
+          "Ntheta": 31,
+          "Nx": 7,
+          "Nxi": 95,
+          "Nzeta": 39,
+          "label": "31x39x95x7"
+        },
+        "rung": "intermediate",
+        "solver_tolerance": 1e-05,
+        "surface_role": "central",
+        "surface_s": 0.5,
+        "target_surface_s": 0.5
+      },
+      "status": "reference_ok",
+      "timing": {
+        "elapsed_s": 0.007475,
+        "maxrss_mb": 136.21875,
+        "phase_count": 1,
+        "phases": [
+          {
+            "elapsed_s": 0.007444,
+            "maxrss_mb": 136.21875,
+            "metadata": {
+              "case_index": 13
+            },
+            "name": "reference_h5_audit",
+            "status": "ok"
+          }
+        ]
+      }
+    },
+    {
+      "candidate": null,
+      "candidate_h5": null,
+      "case_index": 14,
+      "parity": null,
+      "reference": {
+        "dataset_count": 195,
+        "exists": true,
+        "numeric_dataset_count": 194,
+        "path": "/Users/rogeriojorge/local/20220708-01-zenodo_for_QS_optimization_with_self_consistent_bootstrap_current/calculations/20220102-01-simsoptSelfConsistentBootstrapProfile/20220102-01-053_iteratingVmecAndSfincsForBestFrom048/002_sfincs/psiN_0.94/sfincsOutput.h5",
+        "selected_datasets": {
+          "FSABFlow": {
+            "dtype": "float64",
+            "exists": true,
+            "numeric": true,
+            "shape": [
+              3,
+              1
+            ]
+          },
+          "FSABjHat": {
+            "dtype": "float64",
+            "exists": true,
+            "numeric": true,
+            "shape": [
+              1
+            ],
+            "value": -0.15239759669658004
+          },
+          "FSABjHatOverRootFSAB2": {
+            "dtype": "float64",
+            "exists": true,
+            "numeric": true,
+            "shape": [
+              1
+            ],
+            "value": -0.025299999971952262
+          },
+          "NIterations": {
+            "dtype": "int32",
+            "exists": true,
+            "numeric": true,
+            "shape": [],
+            "value": 1
+          },
+          "heatFlux_vm_psiHat": {
+            "dtype": "float64",
+            "exists": true,
+            "numeric": true,
+            "shape": [
+              3,
+              1
+            ]
+          },
+          "heatFlux_vm_psiN": {
+            "dtype": "float64",
+            "exists": true,
+            "numeric": true,
+            "shape": [
+              3,
+              1
+            ]
+          },
+          "particleFlux_vm_psiHat": {
+            "dtype": "float64",
+            "exists": true,
+            "numeric": true,
+            "shape": [
+              3,
+              1
+            ]
+          },
+          "particleFlux_vm_psiN": {
+            "dtype": "float64",
+            "exists": true,
+            "numeric": true,
+            "shape": [
+              3,
+              1
+            ]
+          }
+        },
+        "size_bytes": 1192892
+      },
+      "reference_h5": "/Users/rogeriojorge/local/20220708-01-zenodo_for_QS_optimization_with_self_consistent_bootstrap_current/calculations/20220102-01-simsoptSelfConsistentBootstrapProfile/20220102-01-053_iteratingVmecAndSfincsForBestFrom048/002_sfincs/psiN_0.94/sfincsOutput.h5",
+      "selection": {
+        "case": "002_sfincs",
+        "collision_operator": 0,
+        "er": 0.001,
+        "family": "qh",
+        "fortran_output": "calculations/20220102-01-simsoptSelfConsistentBootstrapProfile/20220102-01-053_iteratingVmecAndSfincsForBestFrom048/002_sfincs/psiN_0.94/sfincsOutput.h5",
+        "geometry_scheme": 5,
+        "grid_size": 803985,
+        "input": "calculations/20220102-01-simsoptSelfConsistentBootstrapProfile/20220102-01-053_iteratingVmecAndSfincsForBestFrom048/002_sfincs/psiN_0.94/input.namelist",
+        "nu_n": -0.000490024,
+        "resolution": {
+          "Ntheta": 31,
+          "Nx": 7,
+          "Nxi": 95,
+          "Nzeta": 39,
+          "label": "31x39x95x7"
+        },
+        "rung": "intermediate",
+        "solver_tolerance": 1e-05,
+        "surface_role": "outer_edge",
+        "surface_s": 0.9400000000000001,
+        "target_surface_s": 0.95
+      },
+      "status": "reference_ok",
+      "timing": {
+        "elapsed_s": 0.007694,
+        "maxrss_mb": 136.21875,
+        "phase_count": 1,
+        "phases": [
+          {
+            "elapsed_s": 0.007671,
+            "maxrss_mb": 136.21875,
+            "metadata": {
+              "case_index": 14
+            },
+            "name": "reference_h5_audit",
+            "status": "ok"
+          }
+        ]
+      }
+    },
+    {
+      "candidate": null,
+      "candidate_h5": null,
+      "case_index": 15,
+      "parity": null,
+      "reference": {
+        "dataset_count": 195,
+        "exists": true,
+        "numeric_dataset_count": 194,
+        "path": "/Users/rogeriojorge/local/20220708-01-zenodo_for_QS_optimization_with_self_consistent_bootstrap_current/calculations/20220218-01-more_QS_finite_beta_optimization/20220218-01-022_QH_A6.5_n0_2.2_T0_10_sfincsFor021/002_high_res/psiN_0.7/sfincsOutput.h5",
+        "selected_datasets": {
+          "FSABFlow": {
+            "dtype": "float64",
+            "exists": true,
+            "numeric": true,
+            "shape": [
+              3,
+              1
+            ]
+          },
+          "FSABjHat": {
+            "dtype": "float64",
+            "exists": true,
+            "numeric": true,
+            "shape": [
+              1
+            ],
+            "value": -0.20445938998971624
+          },
+          "FSABjHatOverRootFSAB2": {
+            "dtype": "float64",
+            "exists": true,
+            "numeric": true,
+            "shape": [
+              1
+            ],
+            "value": -0.03465710966588015
+          },
+          "NIterations": {
+            "dtype": "int32",
+            "exists": true,
+            "numeric": true,
+            "shape": [],
+            "value": 1
+          },
+          "heatFlux_vm_psiHat": {
+            "dtype": "float64",
+            "exists": true,
+            "numeric": true,
+            "shape": [
+              3,
+              1
+            ]
+          },
+          "heatFlux_vm_psiN": {
+            "dtype": "float64",
+            "exists": true,
+            "numeric": true,
+            "shape": [
+              3,
+              1
+            ]
+          },
+          "particleFlux_vm_psiHat": {
+            "dtype": "float64",
+            "exists": true,
+            "numeric": true,
+            "shape": [
+              3,
+              1
+            ]
+          },
+          "particleFlux_vm_psiN": {
+            "dtype": "float64",
+            "exists": true,
+            "numeric": true,
+            "shape": [
+              3,
+              1
+            ]
+          }
+        },
+        "size_bytes": 1249279
+      },
+      "reference_h5": "/Users/rogeriojorge/local/20220708-01-zenodo_for_QS_optimization_with_self_consistent_bootstrap_current/calculations/20220218-01-more_QS_finite_beta_optimization/20220218-01-022_QH_A6.5_n0_2.2_T0_10_sfincsFor021/002_high_res/psiN_0.7/sfincsOutput.h5",
+      "selection": {
+        "case": "002_high_res",
+        "collision_operator": 0,
+        "er": 0.001,
+        "family": "qh",
+        "fortran_output": "calculations/20220218-01-more_QS_finite_beta_optimization/20220218-01-022_QH_A6.5_n0_2.2_T0_10_sfincsFor021/002_high_res/psiN_0.7/sfincsOutput.h5",
+        "geometry_scheme": 5,
+        "grid_size": 855855,
+        "input": "calculations/20220218-01-more_QS_finite_beta_optimization/20220218-01-022_QH_A6.5_n0_2.2_T0_10_sfincsFor021/002_high_res/psiN_0.7/input.namelist",
+        "nu_n": -0.000490024,
+        "resolution": {
+          "Ntheta": 33,
+          "Nx": 7,
+          "Nxi": 95,
+          "Nzeta": 39,
+          "label": "33x39x95x7"
+        },
+        "rung": "production",
+        "solver_tolerance": 1e-05,
+        "surface_role": "inner_edge",
+        "surface_s": 0.7000000000000001,
+        "target_surface_s": 0.05
+      },
+      "status": "reference_ok",
+      "timing": {
+        "elapsed_s": 0.008173,
+        "maxrss_mb": 136.21875,
+        "phase_count": 1,
+        "phases": [
+          {
+            "elapsed_s": 0.008145,
+            "maxrss_mb": 136.21875,
+            "metadata": {
+              "case_index": 15
+            },
+            "name": "reference_h5_audit",
+            "status": "ok"
+          }
+        ]
+      }
+    },
+    {
+      "candidate": null,
+      "candidate_h5": null,
+      "case_index": 16,
+      "parity": null,
+      "reference": {
+        "dataset_count": 195,
+        "exists": true,
+        "numeric_dataset_count": 194,
+        "path": "/Users/rogeriojorge/local/20220708-01-zenodo_for_QS_optimization_with_self_consistent_bootstrap_current/calculations/20220218-01-more_QS_finite_beta_optimization/20220218-01-022_QH_A6.5_n0_2.2_T0_10_sfincsFor021/002_high_res/psiN_0.72/sfincsOutput.h5",
+        "selected_datasets": {
+          "FSABFlow": {
+            "dtype": "float64",
+            "exists": true,
+            "numeric": true,
+            "shape": [
+              3,
+              1
+            ]
+          },
+          "FSABjHat": {
+            "dtype": "float64",
+            "exists": true,
+            "numeric": true,
+            "shape": [
+              1
+            ],
+            "value": -0.20387047866739672
+          },
+          "FSABjHatOverRootFSAB2": {
+            "dtype": "float64",
+            "exists": true,
+            "numeric": true,
+            "shape": [
+              1
+            ],
+            "value": -0.034535330123960456
+          },
+          "NIterations": {
+            "dtype": "int32",
+            "exists": true,
+            "numeric": true,
+            "shape": [],
+            "value": 1
+          },
+          "heatFlux_vm_psiHat": {
+            "dtype": "float64",
+            "exists": true,
+            "numeric": true,
+            "shape": [
+              3,
+              1
+            ]
+          },
+          "heatFlux_vm_psiN": {
+            "dtype": "float64",
+            "exists": true,
+            "numeric": true,
+            "shape": [
+              3,
+              1
+            ]
+          },
+          "particleFlux_vm_psiHat": {
+            "dtype": "float64",
+            "exists": true,
+            "numeric": true,
+            "shape": [
+              3,
+              1
+            ]
+          },
+          "particleFlux_vm_psiN": {
+            "dtype": "float64",
+            "exists": true,
+            "numeric": true,
+            "shape": [
+              3,
+              1
+            ]
+          }
+        },
+        "size_bytes": 1249301
+      },
+      "reference_h5": "/Users/rogeriojorge/local/20220708-01-zenodo_for_QS_optimization_with_self_consistent_bootstrap_current/calculations/20220218-01-more_QS_finite_beta_optimization/20220218-01-022_QH_A6.5_n0_2.2_T0_10_sfincsFor021/002_high_res/psiN_0.72/sfincsOutput.h5",
+      "selection": {
+        "case": "002_high_res",
+        "collision_operator": 0,
+        "er": 0.001,
+        "family": "qh",
+        "fortran_output": "calculations/20220218-01-more_QS_finite_beta_optimization/20220218-01-022_QH_A6.5_n0_2.2_T0_10_sfincsFor021/002_high_res/psiN_0.72/sfincsOutput.h5",
+        "geometry_scheme": 5,
+        "grid_size": 855855,
+        "input": "calculations/20220218-01-more_QS_finite_beta_optimization/20220218-01-022_QH_A6.5_n0_2.2_T0_10_sfincsFor021/002_high_res/psiN_0.72/input.namelist",
+        "nu_n": -0.000490024,
+        "resolution": {
+          "Ntheta": 33,
+          "Nx": 7,
+          "Nxi": 95,
+          "Nzeta": 39,
+          "label": "33x39x95x7"
+        },
+        "rung": "production",
+        "solver_tolerance": 1e-05,
+        "surface_role": "outer_edge",
+        "surface_s": 0.72,
+        "target_surface_s": 0.95
+      },
+      "status": "reference_ok",
+      "timing": {
+        "elapsed_s": 0.008505,
+        "maxrss_mb": 136.25,
+        "phase_count": 1,
+        "phases": [
+          {
+            "elapsed_s": 0.008477,
+            "maxrss_mb": 136.25,
+            "metadata": {
+              "case_index": 16
+            },
+            "name": "reference_h5_audit",
+            "status": "ok"
+          }
+        ]
+      }
+    }
+  ],
+  "keys": [
+    "FSABjHat",
+    "FSABjHatOverRootFSAB2",
+    "NIterations",
+    "FSABFlow",
+    "particleFlux_vm_psiHat",
+    "heatFlux_vm_psiHat",
+    "particleFlux_vm_psiN",
+    "heatFlux_vm_psiN"
+  ],
+  "mode": "reference-only",
+  "schema_version": 1,
+  "selected_count": 17,
+  "selection_path": "docs/_static/figures/vmec_jax_finite_beta/zenodo_vmec_benchmark_selection.json",
+  "selection_summary": {
+    "counts_by_family": {
+      "qa": 9,
+      "qh": 8
+    },
+    "counts_by_rung": {
+      "intermediate": 6,
+      "low": 6,
+      "production": 5
+    },
+    "source_manifest_input_count": 359,
+    "source_manifest_with_fortran_output_count": 313
+  },
+  "status_counts": {
+    "reference_ok": 17
+  },
+  "timing": {
+    "elapsed_s": 0.139008,
+    "maxrss_mb": 136.25,
+    "phase_count": 1,
+    "phases": [
+      {
+        "elapsed_s": 0.000101,
+        "maxrss_mb": 124.015625,
+        "metadata": {
+          "selection_path": "docs/_static/figures/vmec_jax_finite_beta/zenodo_vmec_benchmark_selection.json"
+        },
+        "name": "load_selection",
+        "status": "ok"
+      }
+    ]
+  },
+  "zenodo_root": "/Users/rogeriojorge/local/20220708-01-zenodo_for_QS_optimization_with_self_consistent_bootstrap_current"
+}

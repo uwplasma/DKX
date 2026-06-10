@@ -169,7 +169,10 @@ def _ensure_surface(values: list[float], r_n: float) -> list[float]:
 
 def _require_vmec_jax():
     candidates: list[Path] = []
-    env_path = os.environ.get("SFINCS_JAX_VMEC_JAX_PATH", "").strip()
+    env_path = (
+        os.environ.get("SFINCS_JAX_VMEC_JAX_ROOT", "").strip()
+        or os.environ.get("SFINCS_JAX_VMEC_JAX_PATH", "").strip()
+    )
     if env_path:
         candidates.append(Path(env_path).expanduser())
     candidates.extend(
@@ -189,7 +192,7 @@ def _require_vmec_jax():
     except ImportError as exc:  # pragma: no cover - optional dependency
         raise SystemExit(
             "This example requires vmec_jax. Install it with `pip install vmec-jax` "
-            "or `pip install -e /path/to/vmec_jax`."
+            "or set SFINCS_JAX_VMEC_JAX_ROOT=/path/to/vmec_jax."
         ) from exc
     return vj
 

@@ -366,7 +366,7 @@ def rhs1_tokamak_pas_noer_sparse_pc_auto_allowed(
         return False
 
     min_size = _env_int("SFINCS_JAX_RHSMODE1_TOKAMAK_PAS_NOER_SPARSE_PC_MIN", 5_000)
-    max_size = _env_int("SFINCS_JAX_RHSMODE1_TOKAMAK_PAS_NOER_SPARSE_PC_MAX", 60_000)
+    max_size = _env_int("SFINCS_JAX_RHSMODE1_TOKAMAK_PAS_NOER_SPARSE_PC_MAX", 750_000)
     if env is True:
         min_size = 0
     if int(max_size) > 0 and int(active_size) > int(max_size):
@@ -604,6 +604,68 @@ def rhs1_fp_3d_xblock_sparse_pc_auto_allowed(
         return False
     if int(max_nxi) > 0 and n_xi > int(max_nxi):
         return False
+    if int(max_size) > 0 and int(active_size) > int(max_size):
+        return False
+    return int(active_size) >= max(0, int(min_size))
+
+
+def rhs1_structured_full_csr_auto_allowed(
+    *,
+    op: Any,
+    active_size: int,
+    use_implicit: bool,
+    solve_method_kind: str,
+    backend: str,
+    eparallel_abs: float = 0.0,
+) -> bool:
+    """Return whether ``auto`` should try the no-probe full-CSR host lane.
+
+    This is intentionally a non-differentiable CLI/output opt-in policy. The
+    assembled full-CSR path preserves the production matrix-vector product, but
+    Zenodo QA/QH finite-beta probes showed that it can spend minutes before
+    falling back when the current x-block Schur preconditioner is insufficient.
+    Therefore the public ``auto`` default does not try this route unless
+    ``SFINCS_JAX_RHS1_STRUCTURED_CSR_AUTO=1`` is set by an expert benchmark.
+    The actual CSR/factor memory gates still live in the structured solve
+    itself; this helper only decides whether an opted-in ``auto`` run is allowed
+    to try that route before falling back. Keep a finite default size ceiling
+    because production QH finite-beta audits showed that full-CSR assembly can
+    exceed 50 GB before the memory gate is reached; experts can set
+    ``SFINCS_JAX_RHS1_STRUCTURED_CSR_AUTO_MAX_SIZE=0`` for deliberate large
+    benchmarks.
+    """
+
+    env = _env_bool("SFINCS_JAX_RHS1_STRUCTURED_CSR_AUTO")
+    if env is not True:
+        return False
+    if bool(use_implicit):
+        return False
+    if str(backend).strip().lower() not in {"cpu", "gpu", "cuda"}:
+        return False
+    if str(solve_method_kind).strip().lower().replace("-", "_") not in {"auto", "default"}:
+        return False
+    if int(op.rhs_mode) != 1 or bool(op.include_phi1):
+        return False
+    if int(op.constraint_scheme) not in {1, 2}:
+        return False
+    if op.fblock.fp is None or op.fblock.pas is not None:
+        return False
+    n_species = int(getattr(op, "n_species", 1))
+    if n_species > 2:
+        return False
+    if int(getattr(op, "n_zeta", 1)) <= 1:
+        return False
+    if bool(getattr(op, "point_at_x0", False)):
+        return False
+    if abs(float(eparallel_abs)) > 0.0:
+        return False
+
+    min_nxi = _env_int("SFINCS_JAX_RHS1_STRUCTURED_CSR_AUTO_MIN_NXI", 12)
+    if int(getattr(op, "n_xi", max(0, int(min_nxi)))) < max(0, int(min_nxi)):
+        return False
+
+    min_size = _env_int("SFINCS_JAX_RHS1_STRUCTURED_CSR_AUTO_MIN_SIZE", 10_000)
+    max_size = _env_int("SFINCS_JAX_RHS1_STRUCTURED_CSR_AUTO_MAX_SIZE", 100_000)
     if int(max_size) > 0 and int(active_size) > int(max_size):
         return False
     return int(active_size) >= max(0, int(min_size))

@@ -82,9 +82,11 @@ production-resolution input tier:
 By default this writes ``benchmarks/production_resolution_inputs_2026-05-04``
 from the public SFINCS_JAX example decks only. It enforces at least
 ``25 x 51 x 4 x 100`` (``Ntheta x Nzeta x Nx x Nxi``) on 3D grids and
-``25 x 1 x 4 x 100`` on tokamak grids,
-and the manifest records a ``10 s`` minimum SFINCS Fortran v3 runtime target
-for public production timing rows.
+``33 x 1 x 12 x 140`` on tokamak grids. RHSMode=1 PAS/no-``E_r`` tokamak rows
+are raised further to the calibrated ``89 x 1 x 24 x 300`` floor because the
+smaller tokamak floor leaves those references below the public timing window.
+The manifest records a ``10 s`` minimum SFINCS Fortran v3 runtime target for
+public production timing rows.
 Additional local decks can be added without changing the public manifest:
 
 .. code-block:: bash
@@ -123,6 +125,56 @@ The scaled-suite runner also understands these manifest recommendations. When
 ``--fortran-min-runtime-s`` is a floor. It does not cap valid slower
 production references. Add ``--fortran-max-runtime-s`` only when an explicitly
 budgeted campaign should downscale cases above a known wall-clock ceiling.
+Rows whose measured Fortran runtime remains below the public ``10 s`` floor are
+kept as validation/regression evidence and are filtered out of README-facing
+performance plots.
+
+If the reduced upstream-suite runner is used for a production input tree, pass
+``--production-inputs``. That disables reduced CI seed substitution and fixture
+promotion, so the runner cannot silently replace a generated production
+``input.namelist`` with ``tests/reduced_inputs/<case>.input.namelist``.
+
+The latest local CPU raised-floor no-``E_r`` shard is
+``tests/production_resolution_suite_cpu_2026-06-08_noer_floor89_refreshed``.
+It gives both one-species PAS/no-``E_r`` rows strict parity at the checked-in
+``89 x 1 x 24 x 300`` floor with no missing output keys:
+``tokamak_1species_PASCollisions_noEr`` runs in ``10.38 s`` JAX CPU versus
+``17.44 s`` SFINCS Fortran v3, and
+``tokamak_1species_PASCollisions_noEr_Nx1`` runs in ``8.53 s`` JAX CPU versus
+``17.54 s`` SFINCS Fortran v3. The earlier
+``tests/production_resolution_suite_cpu_2026-06-08_caseaware_floor`` shard gives
+the bounded PAS/with-``E_r`` CPU rows strict parity at
+``33 x 1 x 12 x 140``. The faster ``office`` host showed that the intermediate
+``53 x 1 x 16 x 190`` PAS/no-``E_r`` floor was still too small for public
+GPU-host benchmarks, so the checked-in manifest now uses
+``89 x 1 x 24 x 300`` for PAS/no-``E_r`` tokamak rows. The refreshed ``office``
+GPU shards
+``tests/production_resolution_suite_gpu_2026-06-08_noer_floor89_refreshed_one``
+and
+``tests/production_resolution_suite_gpu_2026-06-08_noer_floor89_refreshed_nx1``
+are practical-parity clean at that floor with automatic ``sparse_pc_gmres``.
+The bounded PAS/with-``E_r`` ``office`` GPU shard
+``tests/production_resolution_suite_gpu_2026-06-08_wither_floor33_refreshed_clean``
+is strict-clean at ``33 x 1 x 12 x 140`` for both one- and two-species rows.
+The first refreshed remote-only 3D production row,
+``tests/production_resolution_suite_gpu_2026-06-08_3d_pas_probe_mono_geom11_tzfft_first_trace``,
+is strict-clean at the ``25 x 51 x 4 x 100`` manifest floor. In that run
+``monoenergetic_geometryScheme11`` uses the bounded structured ``tzfft`` first
+attempt, reaches true residuals ``5.3e-18`` and ``1.1e-13``, and matches the
+Fortran v3 reference with ``0/210`` strict mismatches and no missing output keys.
+On the contended ``office`` host it took ``13.6 s`` wall and
+``1.08 GB`` process RSS / ``0.52 GB`` incremental RSS, versus ``188.5 s`` and
+``3.26 GB`` for SFINCS Fortran v3/MUMPS. The earlier sparse-pattern host-LU
+route remains the strict-residual rescue if the structured attempt fails, but it
+is no longer the default performance path for this mono/PAS production row.
+The public README plot should be regenerated only after the remaining CPU and
+GPU production rows are collected from the checked-in manifest floor.
+
+For local SFINCS Fortran v3 references, use
+``scripts/sfincs_fortran_mpi_wrapper.sh`` when a wrapper is needed. It defaults
+to one MPI rank so parity/reference runs avoid concurrent HDF5 output writes on
+workstations. Set ``SFINCS_FORTRAN_MPI_NP`` explicitly for Fortran MPI scaling
+studies.
 
 Raise the guard only on an explicitly budgeted remote or cluster lane:
 ``--max-run-recommendation bounded_remote``,
@@ -641,8 +693,18 @@ summary. For current release claims, use the full example-suite artifacts listed
 - **Update**: the new **dense batch fallback** now solves all RHS in one dense
   factorization once a dense fallback is triggered, reducing this case to
   ~5.1 s on the same input (single-device, cold start).
-- Next optimization target: a stronger transport preconditioner to avoid dense
-  fallbacks entirely on W7‑X geometryScheme=11 cases.
+- **Production-floor update**: the ``fp_fortran_reduced_lu``
+  preconditioner now emits the reduced FP transport ``Pmat`` directly from
+  structured terms instead of pattern-color probing. On the ``25 x 51 x 100 x 6``
+  geometry-scheme-11 production deck, CSR materialization dropped from the
+  previous ``~288 s`` colored-probe setup to ``~8.7 s``. The remaining
+  production blocker is the first-RHS Krylov phase for lower-memory native
+  variants. The exact direct-LU route is promoted into ``auto`` for eligible
+  non-Phi1 RHSMode=2/3 full-FP transport because bounded true-residual gates now
+  pass; lower-memory symbolic/native replacements remain gated.
+- Next optimization target: a stronger transport preconditioner/coarse
+  correction to avoid dense fallbacks on small W7‑X geometryScheme=11 cases and
+  to close the production-floor Krylov gate.
 
 Krylov solver strategy (memory + recycling)
 -------------------------------------------

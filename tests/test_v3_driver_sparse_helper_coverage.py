@@ -15,6 +15,18 @@ class _HalfSolve:
         return 0.5 * np.asarray(rhs, dtype=np.float64)
 
 
+class _FakeNamelist:
+    def __init__(self) -> None:
+        self._groups = {
+            "geometryParameters": {"geometryScheme": 1},
+            "physicsParameters": {},
+            "preconditionerOptions": {},
+        }
+
+    def group(self, name: str) -> dict[str, object]:
+        return self._groups.setdefault(name, {})
+
+
 def test_rhsmode1_xblock_sparse_lu_default_max_targets_full_fp_host_path() -> None:
     full_fp_op = SimpleNamespace(fblock=SimpleNamespace(fp=object(), pas=None))
     pas_op = SimpleNamespace(fblock=SimpleNamespace(fp=None, pas=object()))
@@ -246,13 +258,21 @@ def test_build_host_sparse_direct_factor_from_matvec_falls_back_on_invalid_env(m
     assert kwargs["drop_tol"] == pytest.approx(0.0)
     assert kwargs["prefer_sparse_on_gpu"] is True
     assert kwargs["allow_operator_only"] is False
-    assert messages == [
-        (
-            1,
-            "explicit_sparse: storage=csr reason=fallback factor_kind=lu "
-            "factor_dtype=float64 permc=COLAMD diag_pivot=1",
-        )
-    ]
+    assert messages[0][0] == 1
+    assert messages[0][1].startswith(
+        "explicit_sparse: storage=csr reason=fallback factor_kind=lu "
+        "factor_dtype=float64 permc=COLAMD diag_pivot=1"
+    )
+    assert "operator_nnz=None operator_csr_mb=unknown" in messages[0][1]
+    assert messages[1] == (
+        1,
+        "explicit_sparse: factorization start factor_kind=lu permc=COLAMD shape=(2, 2)",
+    )
+    assert messages[2] == (
+        1,
+        "explicit_sparse: factorization complete factor_kind=lu elapsed_s=0.000 "
+        "factor_nnz=None factor_mb=unknown",
+    )
 
 
 def test_build_host_sparse_direct_factor_from_matvec_respects_env_overrides(monkeypatch) -> None:
@@ -322,4 +342,154 @@ def test_build_host_sparse_direct_factor_from_matvec_can_use_pattern_probe(monke
     assert kwargs["dtype"] == np.dtype(np.float64)
     assert kwargs["backend"] == "cpu"
     assert kwargs["allow_operator_only"] is False
+    assert kwargs["color_batch"] == 1
+    assert callable(kwargs["matmat"])
     assert seen["factor_kwargs"]["permc_spec"] == "MMD_ATA"
+
+
+def test_build_host_sparse_direct_factor_from_matvec_default_ilu_and_env_override(monkeypatch) -> None:
+    seen_kinds: list[str] = []
+
+    monkeypatch.setattr(
+        v3_driver,
+        "build_operator_from_matvec",
+        lambda _matvec, **_kwargs: SimpleNamespace(metadata=SimpleNamespace(storage_kind="csr", reason="fake")),
+    )
+
+    def fake_factorize_host_sparse_operator(bundle, *, kind, **kwargs):
+        seen_kinds.append(kind)
+        return SimpleNamespace(bundle=bundle, kind=kind, kwargs=kwargs)
+
+    monkeypatch.setattr(v3_driver, "factorize_host_sparse_operator", fake_factorize_host_sparse_operator)
+    monkeypatch.setattr("sfincs_jax.v3_driver.jax.default_backend", lambda: "cpu")
+    monkeypatch.delenv("SFINCS_JAX_EXPLICIT_SPARSE_FACTOR_KIND", raising=False)
+
+    v3_driver._build_host_sparse_direct_factor_from_matvec(
+        matvec=lambda x: x,
+        n=2,
+        dtype=jnp.float64,
+        factor_dtype=np.dtype(np.float64),
+        default_factor_kind="ilu",
+    )
+
+    monkeypatch.setenv("SFINCS_JAX_EXPLICIT_SPARSE_FACTOR_KIND", "lu")
+    v3_driver._build_host_sparse_direct_factor_from_matvec(
+        matvec=lambda x: x,
+        n=2,
+        dtype=jnp.float64,
+        factor_dtype=np.dtype(np.float64),
+        default_factor_kind="ilu",
+    )
+
+    monkeypatch.setenv("SFINCS_JAX_EXPLICIT_SPARSE_FACTOR_KIND", "jacobi")
+    v3_driver._build_host_sparse_direct_factor_from_matvec(
+        matvec=lambda x: x,
+        n=2,
+        dtype=jnp.float64,
+        factor_dtype=np.dtype(np.float64),
+        default_factor_kind="ilu",
+    )
+
+    assert seen_kinds == ["ilu", "lu", "jacobi"]
+
+
+def test_large_fortran_reduced_sparse_pc_defaults_to_ilu_but_env_override_wins(monkeypatch) -> None:
+    size = 100_000
+    op = SimpleNamespace(
+        total_size=size,
+        rhs_mode=1,
+        include_phi1=False,
+        constraint_scheme=1,
+        phi1_size=0,
+        n_xi=4,
+        n_zeta=1,
+        n_species=1,
+        fblock=SimpleNamespace(
+            fp=object(),
+            pas=None,
+            collisionless=SimpleNamespace(n_xi_for_x=np.asarray([4, 4], dtype=np.int32)),
+        ),
+    )
+    factor_defaults: list[str] = []
+    color_batch_defaults: list[int] = []
+
+    monkeypatch.setattr(v3_driver, "rhs_v3_full_system", lambda _op: jnp.zeros((size,), dtype=jnp.float64))
+    monkeypatch.setattr(
+        v3_driver,
+        "build_rhs1_active_dof_state",
+        lambda **kwargs: SimpleNamespace(
+            active_idx_jnp=None,
+            full_to_active_jnp=None,
+            active_size=int(kwargs["op"].total_size),
+        ),
+    )
+    monkeypatch.setattr(
+        v3_driver,
+        "_build_rhsmode1_preconditioner_operator_fortran_reduced",
+        lambda op_arg, **_kwargs: op_arg,
+    )
+    monkeypatch.setattr(
+        v3_driver,
+        "v3_full_system_fortran_reduced_preconditioner_sparsity_pattern",
+        lambda *_args, **_kwargs: sparse.eye(1, format="csr"),
+    )
+    monkeypatch.setattr(
+        v3_driver,
+        "summarize_v3_sparse_pattern",
+        lambda _op, _pattern: SimpleNamespace(nnz=1, avg_row_nnz=1.0, max_row_nnz=1),
+    )
+    monkeypatch.setattr(
+        v3_driver,
+        "apply_v3_full_system_operator_cached",
+        lambda _op, x: jnp.zeros_like(x),
+    )
+
+    def fake_build_host_sparse_direct_factor_from_matvec(**kwargs):
+        factor_defaults.append(kwargs["default_factor_kind"])
+        color_batch_defaults.append(kwargs["default_pattern_color_batch"])
+        return (
+            SimpleNamespace(metadata=SimpleNamespace(storage_kind="csr", reason="fake")),
+            SimpleNamespace(
+                solve=lambda rhs: np.asarray(rhs, dtype=np.float64),
+                factor_nbytes_estimate=None,
+                factor_nnz_estimate=None,
+            ),
+        )
+
+    def fake_gmres_solve_with_history_scipy(**kwargs):
+        return np.zeros_like(np.asarray(kwargs["b"], dtype=np.float64)), 0.0, [0.0]
+
+    monkeypatch.setattr(
+        v3_driver,
+        "_build_host_sparse_direct_factor_from_matvec",
+        fake_build_host_sparse_direct_factor_from_matvec,
+    )
+    monkeypatch.setattr(v3_driver, "gmres_solve_with_history_scipy", fake_gmres_solve_with_history_scipy)
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_PC_BACKEND", "global")
+    monkeypatch.delenv("SFINCS_JAX_EXPLICIT_SPARSE_FACTOR_KIND", raising=False)
+
+    default_result = v3_driver.solve_v3_full_system_linear_gmres(
+        nml=_FakeNamelist(),
+        op=op,
+        solve_method="fortran_reduced_pc_gmres",
+        restart=2,
+        maxiter=2,
+    )
+
+    monkeypatch.setenv("SFINCS_JAX_EXPLICIT_SPARSE_FACTOR_KIND", "lu")
+    override_result = v3_driver.solve_v3_full_system_linear_gmres(
+        nml=_FakeNamelist(),
+        op=op,
+        solve_method="fortran_reduced_pc_gmres",
+        restart=2,
+        maxiter=2,
+    )
+
+    assert factor_defaults == ["ilu", "ilu"]
+    assert color_batch_defaults == [16, 16]
+    assert default_result.metadata["sparse_pc_default_factorization"] == "ilu"
+    assert default_result.metadata["sparse_pc_factorization"] == "ilu"
+    assert default_result.metadata["sparse_pc_default_pattern_color_batch"] == 16
+    assert default_result.metadata["sparse_pc_linear_size"] == size
+    assert override_result.metadata["sparse_pc_default_factorization"] == "ilu"
+    assert override_result.metadata["sparse_pc_factorization"] == "lu"

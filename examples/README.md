@@ -40,7 +40,7 @@ The finite-beta VMEC-JAX example requires an importable `vmec_jax` installation.
 If you have a source checkout, point the example at it with:
 
 ```bash
-export SFINCS_JAX_VMEC_JAX_PATH=/path/to/vmec_jax
+export SFINCS_JAX_VMEC_JAX_ROOT=/path/to/vmec_jax
 ```
 
 ### Running

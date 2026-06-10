@@ -59,7 +59,7 @@ The radial-profile x-axis is normalized toroidal flux,
 
 .. code-block:: bash
 
-   export SFINCS_JAX_VMEC_JAX_PATH=/path/to/vmec_jax  # optional for source checkouts
+   export SFINCS_JAX_VMEC_JAX_ROOT=/path/to/vmec_jax  # optional for source checkouts
    python examples/vmec_jax_finite_beta/finite_beta_vmec_to_sfincs.py
 
 .. figure:: _static/figures/finite_beta_vmec_jax_sfincs_bootstrap_er.png
@@ -128,101 +128,303 @@ and bootstrap current:
    is an explicit resolution audit rather than a claim of asymptotic
    kinetic-space convergence.
 
-Landreman-Paul QA bootstrap-current comparison against Redl
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+SFINCS_JAX / Redl bootstrap-current comparison
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-The finite-beta directory also includes a standalone diagnostic script for the
-reactor-scale Landreman-Paul QA example.  It is not an optimizer.  It evaluates
-the Redl bootstrap-current formula through ``vmec_jax``, writes the profile
-contract used for the comparison, and can optionally run ``sfincs_jax`` at the
-same flux surfaces.  The equilibrium is the reactor-scale version of the
-Landreman-Paul precise-quasisymmetry QA configuration
-(``Phys. Rev. Lett. 128, 035001 (2022)``,
-`doi:10.1103/PhysRevLett.128.035001 <https://doi.org/10.1103/PhysRevLett.128.035001>`_).
+The finite-beta directory includes a standalone diagnostic script for the QA and
+QH SFINCS/Redl benchmarks used in the Zenodo artifact associated with
+arXiv:2205.02914.  The script evaluates the Redl analytic formula on the
+archived VMEC ``wout_new_QA_aScaling.nc`` and ``wout_new_QH_aScaling.nc`` files
+and overlays ``sfincs_jax`` RHSMode=1 kinetic solves.  Use ``--jax-vs-redl`` for
+the first-run path: it
+plots only ``sfincs_jax`` and Redl, and does not load or require a SFINCS
+Fortran v3 executable or archived ``psiN_*/sfincsOutput.h5`` files.  If those
+archived SFINCS Fortran v3 outputs are present in the Zenodo tree, the script
+can also overlay them as a reference curve without installing or running the
+Fortran executable.  It intentionally makes one plot only: ``sfincs_jax``, Redl,
+and optionally SFINCS Fortran v3, with no NTX or NEOPAX data.
 
-Run a fast Redl-only plot:
-
-.. code-block:: bash
-
-   python examples/vmec_jax_finite_beta/compare_landreman_paul_qa_bootstrap_redl.py --skip-sfincs
-
-Run the bounded seven-surface kinetic comparison used for the checked
-documentation figure, including numerical error bars from one real-space
-refinement and one velocity-space refinement:
+Run a quick QA ``sfincs_jax``-versus-Redl diagnostic with no Fortran v3
+dependency:
 
 .. code-block:: bash
 
-   python examples/vmec_jax_finite_beta/compare_landreman_paul_qa_bootstrap_redl.py \
-     --run-sfincs --with-errorbars \
-     --r-n-values 0.2,0.3,0.4,0.5,0.6,0.7,0.8 \
-     --n-lambda 16 \
-     --ntheta 13 --nzeta 13 --nxi 13 --nl 13 --nx 13 \
+   JAX_ENABLE_X64=1 \
+   python examples/vmec_jax_finite_beta/compare_qs_paper_sfincs_jax_redl.py \
+     --case QA \
+     --quick \
+     --jax-vs-redl \
+     --solve-method auto \
+     --stem qs_paper_qa_jax_redl_quick
+
+For the quasi-helical benchmark, switch the case and stem:
+
+.. code-block:: bash
+
+   JAX_ENABLE_X64=1 \
+   python examples/vmec_jax_finite_beta/compare_qs_paper_sfincs_jax_redl.py \
+     --case QH \
+     --quick \
+     --jax-vs-redl \
+     --solve-method auto \
+     --stem qs_paper_qh_jax_redl_quick
+
+This no-Fortran mode still uses the Zenodo input decks and VMEC ``wout`` file,
+and still requires ``vmec_jax`` for the Redl algebra; it simply skips every
+SFINCS Fortran v3 output overlay and metric.
+
+Run the checked 11-surface educational diagnostic used for the same-resolution
+QA figure:
+
+.. code-block:: bash
+
+   JAX_ENABLE_X64=1 \
+   python examples/vmec_jax_finite_beta/compare_qs_paper_sfincs_jax_redl.py \
+     --case QA \
+     --stem qs_paper_qa_same_resolution_11surface \
+     --s-values 0.1,0.15,0.25,0.3,0.45,0.5,0.6,0.7,0.75,0.85,0.9 \
+     --ntheta 13 --nzeta 13 --nxi 21 --nx 5 \
+     --with-errorbars \
      --real-ntheta 15 --real-nzeta 15 \
-     --velocity-nxi 15 --velocity-nl 14 --velocity-nx 14 \
-     --solver-tolerance 1e-6
+     --velocity-nxi 25 --velocity-nx 6 \
+     --fortran-case-root outputs/qs_paper_fortran_reduced_resolution/QA_Ntheta13_Nzeta13_Nxi21_Nx5 \
+     --fortran-errorbar-json docs/_static/figures/vmec_jax_finite_beta/qs_paper_qa_same_resolution_11surface_fortran_errorbars.json \
+     --require-same-resolution \
+     --solver-tolerance 1e-6 \
+     --solve-method auto
 
-.. figure:: _static/figures/vmec_jax_finite_beta/landreman_paul_qa_bootstrap_redl_comparison.png
-   :alt: Landreman-Paul QA bootstrap-current comparison between sfincs_jax and the Redl analytic fit.
+Use ``--case QH --stem qs_paper_qh_same_resolution_11surface``,
+``--fortran-case-root outputs/qs_paper_fortran_reduced_resolution/QH_Ntheta13_Nzeta13_Nxi21_Nx5``,
+and the QH Fortran-errorbar JSON sidecar for the quasi-helical configuration.
+If those local reduced-resolution Fortran sidecars are not present, add
+``--hide-fortran`` to generate a pure ``sfincs_jax``/Redl educational plot.
+Add ``--quick`` for a three-surface smoke plot, or increase the surface list to
+rerun a denser radial diagnostic.
+
+Add ``--jax-vs-redl`` (alias ``--hide-fortran``) for a pure ``sfincs_jax``
+versus Redl plot. The default ``--s-values all`` evaluates all 39 archived
+surfaces; increase the grid beyond ``13 x 13 x 21 x 5`` for production accuracy
+studies.
+
+For an apples-to-apples SFINCS_JAX/SFINCS Fortran v3 figure, use the
+same-resolution gate:
+
+.. code-block:: bash
+
+   JAX_ENABLE_X64=1 \
+   python examples/vmec_jax_finite_beta/compare_qs_paper_sfincs_jax_redl.py \
+     --case QA --s-values 0.5 \
+     --match-fortran-resolution \
+     --require-same-resolution \
+     --verbose-sfincs \
+     --solver-tolerance 1e-6 \
+     --solve-method auto
+
+The gate reads the archived Fortran grid and sets the JAX grid to matching
+``Ntheta,Nzeta,Nxi,Nx`` values before running. If the plotted JAX and Fortran
+surfaces do not have the same grid, the script fails before writing a public
+figure. JAX error bars come from ``--with-errorbars`` refinement probes. Fortran
+error bars are plotted only from an explicit ``--fortran-errorbar-json`` sidecar;
+the archived Zenodo outputs contain one Fortran solve per surface, so they do
+not by themselves define a convergence uncertainty.
+Use ``--verbose-sfincs`` or set ``SFINCS_JAX_EXAMPLE_VERBOSE=1`` for
+production-grid reruns so the script forwards phase, preconditioner, and Krylov
+progress messages while setup is running.
+
+The current apples-to-apples QA/QH documentation check reruns SFINCS Fortran v3
+at the same ``13 x 13 x 21 x 5`` grid used by the fast JAX documentation solve
+on 11 surfaces, ``s = 0.10, 0.15, 0.25, 0.30, 0.45, 0.50, 0.60, 0.70, 0.75,
+0.85, 0.90``. JAX
+refinement bars come from independent ``15 x 15 x 21 x 5`` real-space and
+``13 x 13 x 25 x 6`` velocity-space probes. Fortran bars are one-sided
+refinement deltas against the archived ``25 x 39 x 60 x 7`` Fortran v3 outputs.
+On this same-resolution 11-surface gate, the maximum JAX-vs-Fortran
+difference is ``1.21e-3`` for QA and ``3.54e-3`` for QH. The largest JAX
+refinement bar is ``4.21%`` for QA and ``24.43%`` for QH, so QH is still a
+reduced-grid convergence stress test rather than a production-resolution claim.
+
+For this benchmark script, ``--solve-method auto`` is run in the
+runtime/non-autodiff lane: the script sets ``SFINCS_JAX_IMPLICIT_SOLVE=0`` and
+uses the residual-clean ``fortran_reduced_pc_gmres`` host route automatically
+for eligible finite-beta/full-FP points, with a guarded native-stack attempt and
+robust active-LU fallback. A no-probe
+full-CSR host lane with
+``xblock_tz_low_l_schur`` is available for explicit non-differentiable
+structured-CSR benchmarks, but it is not part of the public default after early
+Zenodo QA/QH Krylov preconditioner probes showed multi-minute unsuccessful
+trials on medium finite-beta profile-current decks. A newer active projected
+direct mode solves the residual-clean host diagnostic system without the
+matrix-free pattern probe; low-resolution QA/QH bootstrap-current agreement must
+still be treated as a convergence study, not as a production parity claim. The
+script refuses to write nonconverged production-sized diagnostics and will also
+reject sparse builds that exceed the configured memory budget.
+
+Builds that include the no-probe full-CSR lane can still force the host-only,
+non-autodiff structured solve explicitly with ``--solve-method structured_csr``
+or ``--solve-method host_structured_csr`` for reproducibility/debugging.  The
+current residual-clean finite-beta QA/QH diagnostic route uses
+``fortran_reduced_pc_gmres`` with direct-tail active-auto preconditioning. The
+auto ladder first tries the lower-memory
+``active_fortran_v3_reduced_native_stack`` candidate, requires it to pass a
+true-residual preflight, and falls back to the robust
+``active_fortran_v3_reduced_lu`` reference route when that preflight fails. On
+the full archived ``25 x 39 x 60 x 7`` QA surface, this hands-off route rejected
+native stack and then converged with active LU to residual ``7.27e-16`` in
+``354.6 s`` wall in the latest guarded audit. Other combined multiline, scaled-ILU, and sparse-coarse
+preconditioners remain implemented and tested research candidates, but they are
+not public defaults until they pass the same true-residual gate. Physical RHSMode=1
+``host_structured_csr`` output remains available for explicit structured-CSR
+experiments; the environment variables below make that older route explicit and
+also override shifted benchmark defaults:
+
+.. code-block:: bash
+
+   SFINCS_JAX_RHS1_FULL_CSR_KRYLOV=direct \
+   SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_DOF=1 \
+   SFINCS_JAX_RHS1_FULL_CSR_MAX_MB=1024 \
+   python examples/vmec_jax_finite_beta/compare_qs_paper_sfincs_jax_redl.py \
+     --quick \
+     --solve-method host_structured_csr
+
+``SFINCS_JAX_RHS1_FULL_CSR_MAX_MB`` is the assembled-matrix cap: an over-budget
+CSR build is rejected before solving instead of silently falling back to a dense
+probe. ``SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_DOF=1`` projects to the active
+transport unknowns before the host solve and expands back to the full output
+vector. Krylov experiments can still use
+``SFINCS_JAX_RHS1_FULL_CSR_PRECONDITIONER``,
+``SFINCS_JAX_RHS1_FULL_CSR_PRECONDITIONER_MAX_MB``, and
+``SFINCS_JAX_RHS1_FULL_CSR_XBLOCK_LMAX`` to control the x-block/coarse residual
+preconditioner candidates, but those candidates are not yet the promoted
+finite-beta QA/QH parity path.
+For a lower-memory iterative comparison, use
+``SFINCS_JAX_RHS1_FULL_CSR_KRYLOV=gmres`` or ``lgmres`` with
+``SFINCS_JAX_RHS1_FULL_CSR_PRECONDITIONER=active_low_l_schur``. This projected
+field-split candidate uses a sparse exact Schur residual equation over the
+full-angle low-pitch active variables and the global tail. The low-pitch cutoff
+is controlled by
+``SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_LOW_L_SCHUR_LMAX``, and the sparse factor is
+bounded by ``SFINCS_JAX_RHS1_FULL_CSR_PRECONDITIONER_MAX_MB``. The older
+``active_coarse`` candidate remains available; it uses low-``l``/angular/tail
+modal coarse residual modes. Its default coarse equation is Galerkin; set
+``SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_COARSE_SOLVER=least_squares`` or use
+``active_coarse_ls`` for the residual-minimizing comparison. Explicit
+``active_overlap_schwarz`` builds a restricted additive-Schwarz residual
+correction over overlapping speed-space patches; control its pitch cutoff and
+overlap with ``SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_SCHWARZ_LMAX`` and
+``SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_SCHWARZ_RADIUS``. The combined
+``active_schwarz_low_l_schur`` path uses that Schwarz correction as the base for
+the low-pitch Schur residual equation. Explicit ``active_xblock`` and
+``active_xblock_low_l_schur`` probes factor active sparse blocks at fixed
+species and speed index; control their cutoff with
+``SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_XBLOCK_LMAX``. These are retained as
+benchmark/debug routes after the first QA gate showed they are not yet a
+promotion path. Generic
+``SFINCS_JAX_RHS1_FULL_CSR_PRECONDITIONER=active_ilu`` is also available and tuned
+with ``SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_ILU_DROP_TOL`` and
+``SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_ILU_FILL_FACTOR``. Treat it as a benchmark
+candidate: physical finite-beta bootstrap-current outputs should remain on the
+current active-auto host route unless active low-L/xblock/coarse/ILU satisfies
+the true-residual gate for that case.
+
+.. figure:: _static/figures/vmec_jax_finite_beta/qs_paper_qa_same_resolution_11surface.png
+   :alt: Same-resolution SFINCS_JAX and SFINCS Fortran v3 QA bootstrap-current comparison against the Redl analytic formula.
    :width: 100%
 
-   Fast Landreman-Paul QA bootstrap-current diagnostic.  The left panel compares
-   the Redl analytic fit against bounded ``sfincs_jax`` RHSMode=1 kinetic
-   solves for the same profile contract and nearest VMEC surfaces.  The plotted
-   ``sfincs_jax`` line uses a ``13 x 13 x 13 x 13 x 13`` baseline
-   ``Ntheta x Nzeta x Nxi x NL x Nx`` grid.  The error bars are the pointwise
-   maximum change in the current after separately refining to
-   ``15 x 15 x 13 x 13 x 13`` in real space and
-   ``13 x 13 x 15 x 14 x 14`` in velocity
-   space.  The right panel shows the relative difference with the same numerical
-   bars propagated against the Redl scale.  This figure is a quick normalization
-   and trend check with an explicit resolution audit; it is not a
-   production-resolution kinetic convergence claim.
+   Same-resolution 11-surface QA bootstrap-current gate.  The black curve is
+   a local SFINCS Fortran v3 rerun at ``13 x 13 x 21 x 5``.  The red markers are
+   SFINCS_JAX at the same grid, with refinement bars from independent
+   real-space and velocity-space probes.  Fortran bars are refinement deltas
+   from the archived ``25 x 39 x 60 x 7`` Fortran outputs.  The maximum
+   JAX-vs-Fortran difference on the 11 surfaces is ``1.21e-3``.
 
-The plotted quantity is
+.. figure:: _static/figures/vmec_jax_finite_beta/qs_paper_qh_same_resolution_11surface.png
+   :alt: Same-resolution SFINCS_JAX and SFINCS Fortran v3 QH bootstrap-current comparison against the Redl analytic formula.
+   :width: 100%
+
+   Same-resolution 11-surface QH bootstrap-current gate.  The maximum
+   JAX-vs-Fortran difference is ``3.54e-3``; the larger visible red bars at low
+   radius are JAX velocity-space refinement deltas, not a Fortran/JAX
+   normalization mismatch.
+
+.. figure:: _static/figures/vmec_jax_finite_beta/qs_paper_sfincs_jax_redl_comparison.png
+   :alt: SFINCS_JAX and SFINCS Fortran v3 bootstrap-current comparison against the Redl analytic formula.
+   :width: 100%
+
+   Paper-backed QA bootstrap-current mixed-grid diagnostic.  The Redl curve uses the
+   archived VMEC equilibrium and the same polynomial profile contract used in
+   the original SFINCS/Redl comparison.  The black curve is the archived
+   SFINCS Fortran v3 output at the paper resolution ``25 x 39 x 60 x 7``.
+   The red markers are the current ``sfincs_jax`` benchmark ``auto`` policy at
+   ``13 x 13 x 21 x 5`` on the same 39 archived radial surfaces.  All solves
+   selected ``fortran_reduced_pc_gmres`` and reached the true-residual target.
+   The right panels compare the total solve wall time over all plotted radii and
+   the peak solver-memory metric over those radii.  QA completed in ``232.5 s``
+   with ``109 MB`` JAX solver-memory estimate, versus ``696.1 s`` and
+   ``12.96 GB`` effective total MUMPS factor memory for the archived Fortran v3
+   run.  Max differences are ``23.95%`` versus Redl and ``6.94%`` versus
+   Fortran, so this is a useful reduced-grid diagnostic while the full
+   same-resolution production parity claim remains a separate gate.
+
+.. figure:: _static/figures/vmec_jax_finite_beta/qs_paper_qh_sfincs_jax_redl_comparison.png
+   :alt: SFINCS_JAX and SFINCS Fortran v3 QH bootstrap-current comparison against the Redl analytic formula.
+   :width: 100%
+
+   Paper-backed QH bootstrap-current diagnostic with the same whole-radius
+   plotting contract.  The QH run is also residual-clean under ``auto`` /
+   ``fortran_reduced_pc_gmres``.  The JAX scan completed in ``261.1 s`` with
+   ``109 MB`` JAX solver-memory estimate, versus ``655.5 s`` and ``12.80 GB``
+   effective total MUMPS factor memory for the archived Fortran v3 run.  Max
+   differences are ``15.31%`` versus Redl and ``18.77%`` versus Fortran on the
+   reduced JAX grid.  This keeps the QH production-resolution convergence lane
+   open; current term-level audits point away from a simple stale-radius
+   geometry, radial-gradient conversion, or current-assembly normalization bug,
+   but the production-resolution convergence gate remains the acceptance
+   criterion.
+
+The plotted quantity is the flux-surface-averaged bootstrap current projected
+along the magnetic field,
 
 .. math::
 
-   \frac{\langle J\cdot B\rangle}{\sqrt{\langle B^2\rangle}},
+   \langle J\cdot B\rangle .
 
-where ``<...>`` denotes a flux-surface average on
-:math:`s=\psi_N=r_N^2`.  ``sfincs_jax`` reports the dimensionless current
-diagnostic
+``sfincs_jax`` reports the dimensionless diagnostic
 
 .. math::
 
-   \widehat{J}_{\parallel}
-   = \mathrm{FSABjHatOverRootFSAB2}
-   = \frac{\mathrm{FSABjHat}}{\sqrt{\mathrm{FSABHat2}}},
-   \qquad
-   \mathrm{FSABjHat}=\sum_s Z_s\,\mathrm{FSABFlow}_s .
+   \widehat{J}
+   = \mathrm{FSABjHat}
+   = \sum_s Z_s\,\mathrm{FSABFlow}_s .
 
-The SI value plotted by the comparison script is
+For this archived benchmark the SI conversion used by the original SFINCS
+post-processing script is
 
 .. math::
 
-   \left(\frac{\langle J\cdot B\rangle}{\sqrt{\langle B^2\rangle}}\right)_{\rm SFINCS}
+   \langle J\cdot B\rangle_{\rm SFINCS}
    =
-   \widehat{J}_{\parallel}\,
-   e\,\bar n\,\sqrt{\frac{2\bar T}{\bar m}},
+   \widehat{J}\,
+   \left(437695\right)\left(10^{20}\right)e .
 
-with defaults :math:`\bar n=10^{20}\,\mathrm{m}^{-3}`,
-:math:`\bar T=1\,\mathrm{keV}`, and :math:`\bar m=m_p`.  These are the same
-normalization factors recorded in the JSON output.
+The archived SFINCS Fortran v3 and generated ``sfincs_jax`` outputs both use
+``FSABjHat`` and the same conversion factor.  This makes the plotted Fortran and
+JAX points a direct output-normalization check, not an extra model fit.
 
 The Redl side follows the Sauter-like analytic bootstrap-current structure of
 Redl et al. (``Phys. Plasmas 28, 022502 (2021)``,
-`doi:10.1063/5.0012664 <https://doi.org/10.1063/5.0012664>`_), using
-the trapped-particle fraction, collisionalities, and :math:`Z_{\rm eff}` as the
-fit variables.  The profile contract is polynomial in :math:`s`:
+`doi:10.1063/5.0012664 <https://doi.org/10.1063/5.0012664>`_), using the
+trapped-particle fraction, local collisionalities, and :math:`Z_{\rm eff}` as
+fit variables.  The profile contract is exactly the one in the paper benchmark:
 
 .. math::
 
-   n_e(s)=\sum_k a_k s^k,\qquad
-   T_e(s)=\sum_k b_k s^k,\qquad
-   T_i(s)=\sum_k c_k s^k .
+   n_e(s)=4.13\times 10^{20}(1-s^5)\ {\rm m}^{-3},
+   \qquad
+   T_e(s)=T_i(s)=12\,{\rm keV}\,(1-s),
+   \qquad
+   Z_{\rm eff}=1 .
 
-``vmec_jax`` computes the geometric inputs from the VMEC state.  The effective
-trapped fraction used by the script is
+The effective trapped fraction is
 
 .. math::
 
@@ -246,41 +448,27 @@ and the Redl current is assembled as
    +p_i(L_{31}+\alpha L_{34})\frac{d\ln T_i}{ds}
    \right],
 
-where :math:`N=N_{\rm fp}\,\mathrm{helicity\_n}` and this QA example uses
-``helicity_n = 0``.  The fitted functions
-:math:`L_{31}`, :math:`L_{32}`, :math:`L_{34}`, and :math:`\alpha` are the
-Redl/Sauter bootstrap coefficients; the source implementation is intentionally
-kept in ``vmec_jax.redl_bootstrap.redl_bootstrap_jdotb`` so the same algebra can
-be reused by optimization diagnostics and this ``sfincs_jax`` validation script.
+where :math:`s=\psi_N` and
+:math:`N=N_{\rm fp}\,\mathrm{helicity\_n}`. The QA benchmark uses
+``helicity_n = 0`` with ``wout_new_QA_aScaling.nc``; the QH benchmark uses
+``helicity_n = -1`` with ``wout_new_QH_aScaling.nc``. The fitted functions
+:math:`L_{31}`,
+:math:`L_{32}`, :math:`L_{34}`, and :math:`\alpha` are the Redl/Sauter
+bootstrap coefficients implemented in
+``vmec_jax.redl_bootstrap.redl_bootstrap_jdotb`` and used here only for the
+analytic Redl curve.
 
-To make the two paths comparable, the generated SFINCS namelists use
-``inputRadialCoordinateForGradients = 1`` and write
-``dNHatdpsiNs`` / ``dTHatdpsiNs`` so the thermodynamic gradients are derivatives
-with respect to the same :math:`s=\psi_N` used by the Redl formula.  The script
-then reads ``FSABjHatOverRootFSAB2`` from each ``sfincsOutput.h5`` file and
-compares it to
-:math:`\langle J\cdot B\rangle_{\rm Redl}/\sqrt{\langle B^2\rangle}`.
-When ``--with-errorbars`` is enabled, the JSON output also stores the baseline,
-real-space-refined, and velocity-space-refined rows; the plotted error bars are
-the pointwise maximum of those two refinement deltas.  The checked figure has
-seven compared surfaces, maximum relative Redl difference ``0.484``, and maximum
-numerical bar divided by the baseline ``sfincs_jax`` current ``0.110``.  The
-larger baseline reduces the refinement-bar size relative to the lower-resolution
-README artifact, but it also shows a larger difference between this profile
-contract's kinetic current and the Redl fit; this remains a bounded
-normalization/trend diagnostic rather than a Redl-parity claim.
-
-The script defaults to
-``wout_LandremanPaul2021_QA_reactorScale_lowres_reference.nc`` because SFINCS
-radial-coordinate conversions need a positive VMEC ``Aminor_p``.  Redl-only
-plotting can be used with unscaled VMEC artifacts, but the kinetic comparison
-requires a physically scaled ``wout``.
+This check also exercises SFINCS v3 radial-coordinate compatibility:
+the archived inputs specify ``inputRadialCoordinate = 1`` and ``psiN_wish``,
+so ``sfincs_jax`` must select the VMEC surface from :math:`s=\psi_N` rather
+than assuming an ``rN_wish`` input.  The associated unit tests cover this
+``psiN_wish`` path and the ``Er`` to ``dPhiHat/dpsiHat`` conversion.
 
 Main references for this diagnostic are Redl et al. 2021 for the analytic
 bootstrap fit, Sauter et al. 1999/2002 for the original tokamak fit structure,
-Landreman et al. 2014 for the SFINCS kinetic model, and Landreman & Paul 2022
-for the QA equilibrium family.  See :doc:`references` for the full citation
-list and links.
+Landreman et al. 2014 for the SFINCS kinetic model, and the arXiv:2205.02914
+Zenodo benchmark artifact for the QA/QH comparison data.  See
+:doc:`references` for the full citation list and links.
 
 Plotting a generated or frozen output file:
 

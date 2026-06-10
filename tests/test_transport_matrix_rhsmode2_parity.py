@@ -21,13 +21,22 @@ from sfincs_jax.v3_system import (
 )
 
 
+RHS_MODE2_TRANSPORT_BASES = (
+    "transportMatrix_PAS_tiny_rhsMode2_scheme2",
+    "transportMatrix_PAS_tiny_rhsMode2_scheme11",
+    "transportMatrix_PAS_tiny_rhsMode2_scheme5_filtered",
+)
+
+
+def _rhsmode2_reciprocity_tolerance(base: str) -> float:
+    # The filtered VMEC fixture is intentionally low resolution; keep its
+    # geometry-reader tolerance looser than the direct-geometry fixtures.
+    return 3e-2 if base.endswith("scheme5_filtered") else 3e-3
+
+
 @pytest.mark.parametrize(
     "base",
-    (
-        "transportMatrix_PAS_tiny_rhsMode2_scheme2",
-        "transportMatrix_PAS_tiny_rhsMode2_scheme11",
-        "transportMatrix_PAS_tiny_rhsMode2_scheme5_filtered",
-    ),
+    RHS_MODE2_TRANSPORT_BASES,
 )
 def test_transport_matrix_rhsmode2_matches_fortran_output(base: str) -> None:
     here = Path(__file__).parent
@@ -169,3 +178,20 @@ def test_transport_matrix_rhsmode2_fortran_statevector_solves_physical_rhs(which
 
     # These vectors come from PETSc solves with a finite tolerance; allow a modest absolute tolerance.
     np.testing.assert_allclose(ax, np.asarray(rhs), rtol=0, atol=5e-8)
+
+
+@pytest.mark.parametrize("base", RHS_MODE2_TRANSPORT_BASES)
+def test_transport_matrix_rhsmode2_onsager_reciprocity_after_fortran_transpose(base: str) -> None:
+    """RHSMode=2 transport matrices should preserve reciprocal pairs."""
+
+    out_path = Path(__file__).parent / "ref" / f"{base}.sfincsOutput.h5"
+    out = read_sfincs_h5(out_path)
+
+    tm_math = np.asarray(out["transportMatrix"], dtype=np.float64).T
+    assert tm_math.shape == (3, 3)
+    tolerance = _rhsmode2_reciprocity_tolerance(base)
+    for row, col in ((0, 1), (0, 2), (1, 2)):
+        lhs = float(tm_math[row, col])
+        rhs = float(tm_math[col, row])
+        rel_asymmetry = abs(lhs - rhs) / max(abs(lhs), abs(rhs), np.finfo(np.float64).tiny)
+        assert rel_asymmetry <= tolerance

@@ -4,6 +4,26 @@ Release notes
 Unreleased
 ----------
 
+- No pending changes.
+
+v1.1.5
+------
+
+This patch release promotes the current residual-clean RHSMode=2/3 full-FP
+transport preconditioner into ``auto``, refreshes the QA/QH bootstrap-current
+documentation artifacts, and keeps production-resolution research lanes scoped
+to their checked evidence.
+
+Highlights
+~~~~~~~~~~
+
+- Promoted the residual-clean RHSMode=2/3 full-FP direct-Pmat LU
+  preconditioner into ``auto`` for eligible non-Phi1 transport-matrix runs.
+  ``auto`` now tries this PETSc-like route by default with strict residual
+  admission and memory caps; set
+  ``SFINCS_JAX_TRANSPORT_FP_FORTRAN_REDUCED_LU_AUTO=0`` to disable it for a
+  benchmark campaign. Lower-memory symbolic/native replacements remain gated
+  until production-floor CPU/GPU evidence passes.
 - Fixed a multi-device RHSMode=1 transformed-matvec bug found by the next QI
   ``nfp=2`` kinetic single-point probe. Preconditioner submatrix setup and
   custom-linear-solve matvecs now avoid entering ``jax.set_mesh``/``pjit`` from

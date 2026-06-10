@@ -16,6 +16,7 @@ from jax import config as _jax_config
 _jax_config.update("jax_enable_x64", True)
 
 from collections.abc import Callable, Sequence
+from typing import Any
 import os
 import concurrent.futures
 from pathlib import Path
@@ -54,7 +55,18 @@ from .solver import (
 from .implicit_solve import linear_custom_solve, linear_custom_solve_with_residual
 from .structured_velocity import factor_block_tridiagonal
 from .pas_smoother import adaptive_pas_smoother
-from .explicit_sparse import build_operator_from_matvec, build_operator_from_pattern, factorize_host_sparse_operator
+from .explicit_sparse import (
+    SparseDecision,
+    SparseOperatorBundle,
+    admit_sparse_factor_against_operator,
+    analyze_sparse_symbolic_structure,
+    build_operator_from_matvec,
+    build_operator_from_pattern,
+    estimate_csr_nbytes,
+    estimate_dense_nbytes,
+    factorize_host_sparse_operator,
+    wrap_sparse_factor_with_coarse_correction,
+)
 from .rhs1_device_operator import device_csr_from_matrix, validate_device_csr_matvec
 from .rhs1_qi_coarse import (
     RHS1QICoarseBasis,
@@ -97,6 +109,13 @@ from .rhs1_pas_policy import (
 from .rhs1_preconditioner_dispatch import (
     RHS1PreconditionerDispatchBuilders,
     build_rhs1_preconditioner_from_kind as _dispatch_rhs1_preconditioner_from_kind,
+)
+from .rhs1_fblock_assembly import select_structured_rhs1_fblock_csr_operator, select_structured_rhs1_fblock_operator
+from .rhs1_full_assembly import (
+    build_active_projected_rhs1_full_csr_preconditioner,
+    select_active_fortran_v3_reduced_support_mode_preconditioner,
+    select_structured_rhs1_full_csr_operator,
+    solve_structured_rhs1_full_csr,
 )
 from .rhs1_preconditioner_auto_policy import (
     canonical_rhs1_preconditioner_kind as _canonical_rhs1_preconditioner_kind,
@@ -172,6 +191,13 @@ from .rhs1_active_projection import (
     project_pas_constraint_f,
     reduce_full_with_indices,
 )
+from .rhs1_block_operator import (
+    RHS1ActiveBlockLayout,
+    RHS1ActiveFieldSplitOrdering,
+    RHS1BlockLayout,
+    RHS1MatrixFreeGalerkinResidualCorrection,
+    RHS1MatrixFreeLeastSquaresResidualCorrection,
+)
 from .rhs1_residual import (
     l2_norm_float as rhs1_l2_norm_float,
     residual_converged as rhs1_residual_converged,
@@ -201,8 +227,10 @@ from .rhs1_large_cpu_policy import (
 )
 from .rhs1_post_xblock_policy import (
     rhs1_fast_post_xblock_polish_allowed as _rhs1_fast_post_xblock_polish_allowed_impl,
+    rhs1_fp_xblock_global_correction_allowed as _rhs1_fp_xblock_global_correction_allowed_impl,
     rhs1_fp_targeted_polish_allowed as _rhs1_fp_targeted_polish_allowed_impl,
     rhs1_scipy_rescue_abs_floor_after_xblock as _rhs1_scipy_rescue_abs_floor_after_xblock_impl,
+    rhs1_scipy_rescue_active_size_allowed as _rhs1_scipy_rescue_active_size_allowed_impl,
     rhs1_skip_global_sparse_after_xblock_allowed as _rhs1_skip_global_sparse_after_xblock_allowed_impl,
 )
 from .rhs1_acceptance_policy import (
@@ -231,6 +259,7 @@ from .rhs1_host_policy import (
     rhs1_host_sparse_direct_allowed as _rhs1_host_sparse_direct_allowed_impl,
     rhs1_host_sparse_skip_dense_ratio as _rhs1_host_sparse_skip_dense_ratio_impl,
     rhs1_sparse_operator_preconditioned_rescue_allowed as _rhs1_sparse_operator_preconditioned_rescue_allowed_impl,
+    rhs1_structured_full_csr_auto_allowed as _rhs1_structured_full_csr_auto_allowed_impl,
 )
 from .host_refinement import (
     host_direct_solve_with_refinement as _host_direct_solve_with_refinement_impl,
@@ -251,6 +280,8 @@ from .transport_policy import (
     transport_sparse_factor_dtype as _transport_sparse_factor_dtype_impl,
     transport_tzfft_accelerator_auto_allowed as _transport_tzfft_accelerator_auto_allowed_impl,
     transport_tzfft_backend_allowed as _transport_tzfft_backend_allowed_impl,
+    transport_tzfft_first_attempt_budget as _transport_tzfft_first_attempt_budget_impl,
+    transport_tzfft_structured_first_attempt_allowed as _transport_tzfft_structured_first_attempt_allowed_impl,
 )
 from .transport_preconditioner_dispatch import (
     TransportPreconditionerContext,
@@ -258,9 +289,16 @@ from .transport_preconditioner_dispatch import (
     build_transport_preconditioner_from_kind,
     build_transport_strong_preconditioner_from_kind,
     normalize_transport_preconditioner_kind,
+    resolve_transport_precondition_side_for_kind,
     resolve_transport_preconditioner_choice,
     transport_dd_config_from_env,
     transport_sparse_jax_config_from_env,
+)
+from .transport_active_factor import (
+    admit_active_block_schur_factor,
+    build_active_block_ordering,
+    build_active_block_schur_factor,
+    deterministic_probe_matrix,
 )
 from .transport_solve_policy import (
     build_transport_active_dof_state,
@@ -358,6 +396,8 @@ from .v3_sparse_pattern import (
     summarize_v3_sparse_pattern,
     v3_full_system_conservative_sparsity_pattern,
     v3_full_system_conservative_sparsity_pattern_for_indices,
+    v3_full_system_fortran_reduced_preconditioner_sparsity_pattern,
+    v3_full_system_fortran_reduced_preconditioner_sparsity_pattern_for_indices,
 )
 from .profiling import _rss_mb, maybe_profiler
 
@@ -378,6 +418,18 @@ _SPARSE_HOST_PC_GMRES_SOLVE_METHODS = frozenset(
         "host_sparse_pc_gmres",
         "petsc_host",
         "petsc_host_gmres",
+        "fortran_reduced_pc_gmres",
+        "fortran_reduced_sparse_pc_gmres",
+        "fortran_like_pc_gmres",
+        "petsc_like_pc_gmres",
+    }
+)
+_SPARSE_HOST_FORTRAN_REDUCED_PC_GMRES_SOLVE_METHODS = frozenset(
+    {
+        "fortran_reduced_pc_gmres",
+        "fortran_reduced_sparse_pc_gmres",
+        "fortran_like_pc_gmres",
+        "petsc_like_pc_gmres",
     }
 )
 _SPARSE_HOST_XBLOCK_PC_GMRES_SOLVE_METHODS = frozenset(
@@ -386,6 +438,17 @@ _SPARSE_HOST_XBLOCK_PC_GMRES_SOLVE_METHODS = frozenset(
         "sparse_xblock_pc_gmres",
         "xblock_host_pc_gmres",
         "host_xblock_pc_gmres",
+    }
+)
+_STRUCTURED_FULL_CSR_HOST_SOLVE_METHODS = frozenset(
+    {
+        "structured_csr",
+        "structured_full_csr",
+        "host_structured_csr",
+        "host_full_csr",
+        "no_probe_csr",
+        "full_csr_host_gmres",
+        "structured_full_csr_host_gmres",
     }
 )
 _SPARSE_HOST_MINIMUM_NORM_SOLVE_METHODS = frozenset(
@@ -684,6 +747,24 @@ def _transport_tzfft_accelerator_auto_allowed(op: V3FullSystemOperator) -> bool:
     return _transport_tzfft_accelerator_auto_allowed_impl(op, backend=jax.default_backend())
 
 
+def _transport_tzfft_structured_first_attempt_allowed(
+    op: V3FullSystemOperator,
+    *,
+    size: int,
+    use_implicit: bool,
+) -> bool:
+    return _transport_tzfft_structured_first_attempt_allowed_impl(
+        op,
+        size=size,
+        use_implicit=use_implicit,
+        backend=jax.default_backend(),
+    )
+
+
+def _transport_tzfft_first_attempt_budget(*, restart: int, maxiter: int | None) -> tuple[str, int, int]:
+    return _transport_tzfft_first_attempt_budget_impl(restart=restart, maxiter=maxiter)
+
+
 def _rhsmode1_host_dense_fallback_allowed() -> bool:
     return _rhs1_host_dense_fallback_allowed_impl(backend=jax.default_backend())
 
@@ -854,15 +935,44 @@ def _build_host_sparse_direct_factor_from_matvec(
     dtype: jnp.dtype,
     factor_dtype: np.dtype,
     pattern=None,
+    operator_bundle_override: SparseOperatorBundle | None = None,
     emit: Callable[[int, str], None] | None = None,
     default_diag_pivot_thresh: float = 1.0,
     default_permc_spec: str = "COLAMD",
+    default_factor_kind: str = "lu",
+    default_ilu_fill_factor: float = 10.0,
+    default_ilu_drop_tol: float = 1.0e-4,
+    default_pattern_color_batch: int = 1,
+    default_symbolic_ordering_kind: str = "rcm",
+    default_symbolic_block_size: int = 4096,
+    default_symbolic_block_overlap: int = 0,
+    default_symbolic_coarse_max_cols: int = 256,
+    default_symbolic_coarse_probe_cols: int = 4,
+    default_symbolic_coarse_damping: float = 1.0,
+    default_symbolic_coarse_regularization_rel: float = 1.0e-10,
+    default_symbolic_schur_max_separator_cols: int = 256,
+    default_symbolic_schur_tail_size: int = 0,
+    default_symbolic_schur_boundary_width: int = 1,
+    default_symbolic_schur_high_degree_cols: int = 64,
+    default_symbolic_schur_regularization_rel: float = 1.0e-12,
+    default_symbolic_max_permutation_size: int = 250_000,
 ):
     factor_dtype_np = np.dtype(factor_dtype)
     block_cols_env = os.environ.get("SFINCS_JAX_EXPLICIT_SPARSE_BLOCK_COLS", "").strip()
     dense_max_env = os.environ.get("SFINCS_JAX_EXPLICIT_SPARSE_DENSE_MAX_MB", "").strip()
     csr_max_env = os.environ.get("SFINCS_JAX_EXPLICIT_SPARSE_CSR_MAX_MB", "").strip()
     drop_tol_env = os.environ.get("SFINCS_JAX_EXPLICIT_SPARSE_DROP_TOL", "").strip()
+    color_batch_env = os.environ.get("SFINCS_JAX_EXPLICIT_SPARSE_PATTERN_COLOR_BATCH", "").strip()
+    symbolic_overlap_env = os.environ.get("SFINCS_JAX_EXPLICIT_SPARSE_SYMBOLIC_BLOCK_OVERLAP", "").strip()
+    symbolic_coarse_cols_env = os.environ.get("SFINCS_JAX_EXPLICIT_SPARSE_SYMBOLIC_COARSE_MAX_COLS", "").strip()
+    symbolic_coarse_probe_cols_env = os.environ.get("SFINCS_JAX_EXPLICIT_SPARSE_SYMBOLIC_COARSE_PROBE_COLS", "").strip()
+    symbolic_coarse_damping_env = os.environ.get("SFINCS_JAX_EXPLICIT_SPARSE_SYMBOLIC_COARSE_DAMPING", "").strip()
+    symbolic_coarse_reg_env = os.environ.get("SFINCS_JAX_EXPLICIT_SPARSE_SYMBOLIC_COARSE_REG_REL", "").strip()
+    symbolic_schur_max_separator_env = os.environ.get("SFINCS_JAX_EXPLICIT_SPARSE_SYMBOLIC_SCHUR_MAX_SEPARATOR_COLS", "").strip()
+    symbolic_schur_tail_env = os.environ.get("SFINCS_JAX_EXPLICIT_SPARSE_SYMBOLIC_SCHUR_TAIL_SIZE", "").strip()
+    symbolic_schur_boundary_env = os.environ.get("SFINCS_JAX_EXPLICIT_SPARSE_SYMBOLIC_SCHUR_BOUNDARY_WIDTH", "").strip()
+    symbolic_schur_high_degree_env = os.environ.get("SFINCS_JAX_EXPLICIT_SPARSE_SYMBOLIC_SCHUR_HIGH_DEGREE_COLS", "").strip()
+    symbolic_schur_reg_env = os.environ.get("SFINCS_JAX_EXPLICIT_SPARSE_SYMBOLIC_SCHUR_REG_REL", "").strip()
     try:
         block_cols = int(block_cols_env) if block_cols_env else 32
     except ValueError:
@@ -879,8 +989,136 @@ def _build_host_sparse_direct_factor_from_matvec(
         drop_tol = float(drop_tol_env) if drop_tol_env else 0.0
     except ValueError:
         drop_tol = 0.0
+    try:
+        pattern_color_batch = int(color_batch_env) if color_batch_env else int(default_pattern_color_batch)
+    except ValueError:
+        pattern_color_batch = int(default_pattern_color_batch)
+    pattern_color_batch = max(1, int(pattern_color_batch))
+    try:
+        symbolic_block_overlap = int(symbolic_overlap_env) if symbolic_overlap_env else int(default_symbolic_block_overlap)
+    except ValueError:
+        symbolic_block_overlap = int(default_symbolic_block_overlap)
+    symbolic_block_overlap = max(0, int(symbolic_block_overlap))
+    try:
+        symbolic_coarse_max_cols = (
+            int(symbolic_coarse_cols_env)
+            if symbolic_coarse_cols_env
+            else int(default_symbolic_coarse_max_cols)
+        )
+    except ValueError:
+        symbolic_coarse_max_cols = int(default_symbolic_coarse_max_cols)
+    symbolic_coarse_max_cols = max(1, int(symbolic_coarse_max_cols))
+    try:
+        symbolic_coarse_probe_cols = (
+            int(symbolic_coarse_probe_cols_env)
+            if symbolic_coarse_probe_cols_env
+            else int(default_symbolic_coarse_probe_cols)
+        )
+    except ValueError:
+        symbolic_coarse_probe_cols = int(default_symbolic_coarse_probe_cols)
+    symbolic_coarse_probe_cols = max(0, int(symbolic_coarse_probe_cols))
+    try:
+        symbolic_coarse_damping = (
+            float(symbolic_coarse_damping_env)
+            if symbolic_coarse_damping_env
+            else float(default_symbolic_coarse_damping)
+        )
+    except ValueError:
+        symbolic_coarse_damping = float(default_symbolic_coarse_damping)
+    symbolic_coarse_damping = max(0.0, float(symbolic_coarse_damping))
+    try:
+        symbolic_coarse_regularization_rel = (
+            float(symbolic_coarse_reg_env)
+            if symbolic_coarse_reg_env
+            else float(default_symbolic_coarse_regularization_rel)
+        )
+    except ValueError:
+        symbolic_coarse_regularization_rel = float(default_symbolic_coarse_regularization_rel)
+    symbolic_coarse_regularization_rel = max(0.0, float(symbolic_coarse_regularization_rel))
+    try:
+        symbolic_schur_max_separator_cols = (
+            int(symbolic_schur_max_separator_env)
+            if symbolic_schur_max_separator_env
+            else int(default_symbolic_schur_max_separator_cols)
+        )
+    except ValueError:
+        symbolic_schur_max_separator_cols = int(default_symbolic_schur_max_separator_cols)
+    symbolic_schur_max_separator_cols = max(0, int(symbolic_schur_max_separator_cols))
+    try:
+        symbolic_schur_tail_size = (
+            int(symbolic_schur_tail_env) if symbolic_schur_tail_env else int(default_symbolic_schur_tail_size)
+        )
+    except ValueError:
+        symbolic_schur_tail_size = int(default_symbolic_schur_tail_size)
+    symbolic_schur_tail_size = max(0, int(symbolic_schur_tail_size))
+    try:
+        symbolic_schur_boundary_width = (
+            int(symbolic_schur_boundary_env)
+            if symbolic_schur_boundary_env
+            else int(default_symbolic_schur_boundary_width)
+        )
+    except ValueError:
+        symbolic_schur_boundary_width = int(default_symbolic_schur_boundary_width)
+    symbolic_schur_boundary_width = max(0, int(symbolic_schur_boundary_width))
+    try:
+        symbolic_schur_high_degree_cols = (
+            int(symbolic_schur_high_degree_env)
+            if symbolic_schur_high_degree_env
+            else int(default_symbolic_schur_high_degree_cols)
+        )
+    except ValueError:
+        symbolic_schur_high_degree_cols = int(default_symbolic_schur_high_degree_cols)
+    symbolic_schur_high_degree_cols = max(0, int(symbolic_schur_high_degree_cols))
+    try:
+        symbolic_schur_regularization_rel = (
+            float(symbolic_schur_reg_env)
+            if symbolic_schur_reg_env
+            else float(default_symbolic_schur_regularization_rel)
+        )
+    except ValueError:
+        symbolic_schur_regularization_rel = float(default_symbolic_schur_regularization_rel)
+    symbolic_schur_regularization_rel = max(0.0, float(symbolic_schur_regularization_rel))
     factor_kind_env = os.environ.get("SFINCS_JAX_EXPLICIT_SPARSE_FACTOR_KIND", "").strip().lower()
-    factor_kind = "ilu" if factor_kind_env in {"ilu", "spilu"} else "lu"
+    default_factor_kind_norm = str(default_factor_kind).strip().lower()
+    if factor_kind_env in {"jacobi", "diagonal", "diag", "none"}:
+        factor_kind = "jacobi"
+    elif factor_kind_env in {
+        "symbolic_block_schur_lu",
+        "block_schur_lu",
+        "native_block_schur_lu",
+        "symbolic_schur_lu",
+    }:
+        factor_kind = "symbolic_block_schur_lu"
+    elif factor_kind_env in {"symbolic_block_lu_coarse", "block_lu_coarse", "native_block_lu_coarse", "symbolic_lu_coarse"}:
+        factor_kind = "symbolic_block_lu_coarse"
+    elif factor_kind_env in {"symbolic_block_lu", "block_lu", "native_block_lu", "symbolic_lu"}:
+        factor_kind = "symbolic_block_lu"
+    elif factor_kind_env in {"ilu", "spilu"}:
+        factor_kind = "ilu"
+    elif factor_kind_env in {"lu", "splu"}:
+        factor_kind = "lu"
+    elif default_factor_kind_norm in {"jacobi", "diagonal", "diag", "none"}:
+        factor_kind = "jacobi"
+    elif default_factor_kind_norm in {
+        "symbolic_block_schur_lu",
+        "block_schur_lu",
+        "native_block_schur_lu",
+        "symbolic_schur_lu",
+    }:
+        factor_kind = "symbolic_block_schur_lu"
+    elif default_factor_kind_norm in {
+        "symbolic_block_lu_coarse",
+        "block_lu_coarse",
+        "native_block_lu_coarse",
+        "symbolic_lu_coarse",
+    }:
+        factor_kind = "symbolic_block_lu_coarse"
+    elif default_factor_kind_norm in {"symbolic_block_lu", "block_lu", "native_block_lu", "symbolic_lu"}:
+        factor_kind = "symbolic_block_lu"
+    elif default_factor_kind_norm in {"ilu", "spilu"}:
+        factor_kind = "ilu"
+    else:
+        factor_kind = "lu"
     ilu_fill_env = os.environ.get("SFINCS_JAX_EXPLICIT_SPARSE_ILU_FILL_FACTOR", "").strip()
     ilu_drop_env = os.environ.get("SFINCS_JAX_EXPLICIT_SPARSE_ILU_DROP_TOL", "").strip()
     default_permc_spec_use = str(default_permc_spec).strip().upper()
@@ -889,13 +1127,13 @@ def _build_host_sparse_direct_factor_from_matvec(
     permc_env = os.environ.get("SFINCS_JAX_EXPLICIT_SPARSE_PERMC_SPEC", "").strip().upper()
     pivot_env = os.environ.get("SFINCS_JAX_EXPLICIT_SPARSE_DIAG_PIVOT_THRESH", "").strip()
     try:
-        ilu_fill_factor = float(ilu_fill_env) if ilu_fill_env else 10.0
+        ilu_fill_factor = float(ilu_fill_env) if ilu_fill_env else float(default_ilu_fill_factor)
     except ValueError:
-        ilu_fill_factor = 10.0
+        ilu_fill_factor = float(default_ilu_fill_factor)
     try:
-        ilu_drop_tol = float(ilu_drop_env) if ilu_drop_env else 1.0e-4
+        ilu_drop_tol = float(ilu_drop_env) if ilu_drop_env else float(default_ilu_drop_tol)
     except ValueError:
-        ilu_drop_tol = 1.0e-4
+        ilu_drop_tol = float(default_ilu_drop_tol)
     if permc_env not in {"NATURAL", "MMD_ATA", "MMD_AT_PLUS_A", "COLAMD"}:
         permc_env = default_permc_spec_use
     try:
@@ -911,7 +1149,22 @@ def _build_host_sparse_direct_factor_from_matvec(
         out = jax.vmap(matvec, in_axes=1, out_axes=1)(cols)
         return np.asarray(out, dtype=np.float64)
 
-    if pattern is None:
+    log_operator_phase = int(n) >= 10_000 or pattern is not None or operator_bundle_override is not None
+    operator_build_timer = Timer()
+    if emit is not None and log_operator_phase:
+        operator_source = (
+            "override"
+            if operator_bundle_override is not None
+            else ("pattern" if pattern is not None else "matvec")
+        )
+        emit(
+            1,
+            "explicit_sparse: operator assembly start "
+            f"source={operator_source} n={int(n)} factor_dtype={factor_dtype_np.name}",
+        )
+    if operator_bundle_override is not None:
+        operator_bundle = operator_bundle_override
+    elif pattern is None:
         operator_bundle = build_operator_from_matvec(
             _matvec_np,
             n=int(n),
@@ -934,25 +1187,3234 @@ def _build_host_sparse_direct_factor_from_matvec(
             csr_max_mb=float(csr_max_mb),
             drop_tol=float(drop_tol),
             allow_operator_only=False,
+            color_batch=int(pattern_color_batch),
+            matmat=_matmat_np,
+            progress_callback=(
+                None
+                if emit is None
+                else lambda message: emit(1, f"explicit_sparse: {message}")
+            ),
         )
     if emit is not None:
+        operator_metadata = getattr(operator_bundle, "metadata", None)
+        operator_nnz = getattr(operator_metadata, "nnz_estimate", None)
+        operator_csr_nbytes = getattr(operator_metadata, "csr_nbytes_estimate", None)
+        operator_csr_mb = None if operator_csr_nbytes is None else float(operator_csr_nbytes) / 1.0e6
+        operator_csr_mb_text = "unknown" if operator_csr_mb is None else f"{operator_csr_mb:.3f}"
+        operator_shape = getattr(operator_metadata, "shape", (int(n), int(n)))
+        if log_operator_phase:
+            emit(
+                1,
+                "explicit_sparse: operator assembly complete "
+                f"elapsed_s={operator_build_timer.elapsed_s():.3f} "
+                f"shape={operator_shape} operator_nnz={operator_nnz} operator_csr_mb={operator_csr_mb_text}",
+            )
         emit(
             1,
             "explicit_sparse: "
-            f"storage={operator_bundle.metadata.storage_kind} "
-            f"reason={operator_bundle.metadata.reason} factor_kind={factor_kind} "
+            f"storage={getattr(operator_metadata, 'storage_kind', 'unknown')} "
+            f"reason={getattr(operator_metadata, 'reason', 'unknown')} factor_kind={factor_kind} "
             f"factor_dtype={factor_dtype_np.name} "
-            f"permc={permc_env} diag_pivot={float(diag_pivot_thresh):.3g}",
+            f"permc={permc_env} diag_pivot={float(diag_pivot_thresh):.3g} "
+            f"operator_nnz={operator_nnz} operator_csr_mb={operator_csr_mb_text}",
         )
-    factor_bundle = factorize_host_sparse_operator(
-        operator_bundle,
-        kind=factor_kind,
-        fill_factor=float(ilu_fill_factor),
-        drop_tol=float(ilu_drop_tol),
-        permc_spec=permc_env,
-        diag_pivot_thresh=float(diag_pivot_thresh),
-    )
+        emit(
+            1,
+            "explicit_sparse: factorization start "
+            f"factor_kind={factor_kind} permc={permc_env} "
+            f"shape={operator_shape}",
+        )
+    factor_timer = Timer()
+    try:
+        factor_bundle = factorize_host_sparse_operator(
+            operator_bundle,
+            kind=factor_kind,
+            fill_factor=float(ilu_fill_factor),
+            drop_tol=float(ilu_drop_tol),
+            permc_spec=permc_env,
+            diag_pivot_thresh=float(diag_pivot_thresh),
+            symbolic_ordering_kind=str(default_symbolic_ordering_kind),
+            symbolic_block_size=int(default_symbolic_block_size),
+            symbolic_block_overlap=int(symbolic_block_overlap),
+            symbolic_coarse_max_cols=int(symbolic_coarse_max_cols),
+            symbolic_coarse_probe_cols=int(symbolic_coarse_probe_cols),
+            symbolic_coarse_damping=float(symbolic_coarse_damping),
+            symbolic_coarse_regularization_rel=float(symbolic_coarse_regularization_rel),
+            symbolic_schur_max_separator_cols=int(symbolic_schur_max_separator_cols),
+            symbolic_schur_tail_size=int(symbolic_schur_tail_size),
+            symbolic_schur_boundary_width=int(symbolic_schur_boundary_width),
+            symbolic_schur_high_degree_cols=int(symbolic_schur_high_degree_cols),
+            symbolic_schur_regularization_rel=float(symbolic_schur_regularization_rel),
+            symbolic_max_permutation_size=int(default_symbolic_max_permutation_size),
+        )
+    except Exception as exc:
+        if emit is not None:
+            emit(
+                1,
+                "explicit_sparse: factorization failed "
+                f"factor_kind={factor_kind} elapsed_s={factor_timer.elapsed_s():.3f} "
+                f"({type(exc).__name__}: {exc})",
+            )
+        raise
+    if emit is not None:
+        factor_nbytes = getattr(factor_bundle, "factor_nbytes_estimate", None)
+        factor_nnz = getattr(factor_bundle, "factor_nnz_estimate", None)
+        factor_elapsed_s = getattr(factor_bundle, "factor_s", None)
+        if factor_elapsed_s is None:
+            factor_elapsed_s = factor_timer.elapsed_s()
+        factor_mb = None if factor_nbytes is None else float(factor_nbytes) / 1.0e6
+        factor_mb_text = "unknown" if factor_mb is None else f"{factor_mb:.3f}"
+        emit(
+            1,
+            "explicit_sparse: factorization complete "
+            f"factor_kind={factor_bundle.kind} elapsed_s={float(factor_elapsed_s or 0.0):.3f} "
+            f"factor_nnz={factor_nnz} factor_mb={factor_mb_text}",
+        )
     return operator_bundle, factor_bundle
+
+
+@dataclass(frozen=True)
+class _StructuredHostSparsePreconditionerBundle:
+    """Adapter exposing structured CSR preconditioners through the factor API."""
+
+    preconditioner: object
+    operator: SparseOperatorBundle
+    kind: str
+    factor_nbytes_estimate: int | None = None
+    factor_nnz_estimate: int | None = None
+    factor_s: float | None = None
+
+    def solve(self, rhs) -> np.ndarray:
+        preconditioner_operator = getattr(self.preconditioner, "operator", None)
+        if preconditioner_operator is None:
+            raise RuntimeError(f"structured host preconditioner {self.kind!r} was not selected")
+        return np.asarray(preconditioner_operator.matvec(np.asarray(rhs, dtype=np.float64).reshape((-1,))))
+
+
+_DIRECT_TAIL_STRUCTURED_PC_CACHE: dict[tuple[object, ...], object] = {}
+
+
+def _hash_numpy_array_for_cache(array: Any) -> str:
+    arr = np.ascontiguousarray(np.asarray(array))
+    digest = hashlib.blake2b(digest_size=16)
+    digest.update(str(arr.dtype).encode("ascii", errors="ignore"))
+    digest.update(np.asarray(arr.shape, dtype=np.int64).tobytes())
+    digest.update(arr.view(np.uint8))
+    return digest.hexdigest()
+
+
+def _direct_tail_structured_pc_cache_key(
+    *,
+    matrix: Any,
+    layout: RHS1BlockLayout,
+    active_indices: np.ndarray | None,
+    kind: str,
+    max_factor_nbytes: int,
+    regularization: float,
+    support_modes: tuple[int, int, int, int] | None = None,
+) -> tuple[object, ...]:
+    """Return a robust cache key for an active direct-tail preconditioner."""
+
+    matrix_csr = matrix.tocsr()
+    env_signature = tuple(
+        sorted(
+            (str(key), str(value))
+            for key, value in os.environ.items()
+            if str(key).startswith("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_")
+        )
+    )
+    active_digest = "all" if active_indices is None else _hash_numpy_array_for_cache(np.asarray(active_indices))
+    return (
+        "direct_tail_structured_pc_v1",
+        tuple(int(v) for v in matrix_csr.shape),
+        int(matrix_csr.nnz),
+        _hash_numpy_array_for_cache(matrix_csr.indptr),
+        _hash_numpy_array_for_cache(matrix_csr.indices),
+        _hash_numpy_array_for_cache(matrix_csr.data),
+        active_digest,
+        tuple(sorted(layout.to_dict().items())),
+        str(kind).strip().lower().replace("-", "_"),
+        None if support_modes is None else tuple(int(v) for v in support_modes),
+        int(max_factor_nbytes),
+        float(regularization),
+        env_signature,
+    )
+
+
+def _direct_tail_structured_pc_with_cache_metadata(
+    preconditioner: object,
+    *,
+    cache_hit: bool,
+    cache_key: tuple[object, ...],
+):
+    metadata = dict(getattr(preconditioner, "metadata", None) or {})
+    metadata["direct_tail_structured_pc_cache_hit"] = bool(cache_hit)
+    metadata["direct_tail_structured_pc_cache_key_digest"] = hashlib.blake2b(
+        repr(cache_key).encode("utf-8"),
+        digest_size=12,
+    ).hexdigest()
+    if bool(cache_hit):
+        metadata["direct_tail_structured_pc_cached_setup_s"] = float(getattr(preconditioner, "setup_s", 0.0) or 0.0)
+        return replace(preconditioner, setup_s=0.0, metadata=metadata)
+    return replace(preconditioner, metadata=metadata)
+
+
+def _rhsmode1_fortran_reduced_direct_tail_pc_default_max_mb(
+    *,
+    requested_kind: str | None,
+    active_size: int,
+) -> float:
+    """Return the default direct-tail structured-PC memory cap in MiB.
+
+    Exact active LU needs a larger cap than the old fixed 512 MiB to cover
+    realistic mid-grid QA/QH bootstrap-current runs, but the default must still
+    fail fast before trying workstation-hostile factors. Users can
+    override this policy with
+    ``SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_PC_MAX_MB``.
+    """
+
+    base_mb = _rhs1_float_env(
+        "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_PC_AUTO_BASE_MB",
+        default=512.0,
+        minimum=0.0,
+    )
+    auto_max_mb = _rhs1_float_env(
+        "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_PC_AUTO_MAX_MB",
+        default=4096.0,
+        minimum=0.0,
+    )
+    slope_mb_per_unknown = _rhs1_float_env(
+        "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_PC_AUTO_MB_PER_UNKNOWN",
+        default=1.6e-2,
+        minimum=0.0,
+    )
+    requested = str(requested_kind or "").strip().lower().replace("-", "_")
+    if requested in {"auto", "active_auto", "structured", "structured_auto"}:
+        requested = "active_fortran_v3_reduced_lu"
+    if requested != "active_fortran_v3_reduced_lu":
+        return float(base_mb)
+    active_n = max(0, int(active_size))
+    adaptive_mb = max(float(base_mb), float(base_mb) + float(slope_mb_per_unknown) * float(active_n))
+    production_min_active = _rhs1_int_env(
+        "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_PC_AUTO_PRODUCTION_MIN_ACTIVE",
+        default=400_000,
+        minimum=1,
+    )
+    if active_n >= int(production_min_active):
+        production_max_mb = _rhs1_float_env(
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_PC_AUTO_PRODUCTION_MAX_MB",
+            default=16_384.0,
+            minimum=0.0,
+        )
+        production_slope_mb_per_unknown = _rhs1_float_env(
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_PC_AUTO_PRODUCTION_MB_PER_UNKNOWN",
+            default=2.8e-2,
+            minimum=0.0,
+        )
+        adaptive_mb = max(
+            float(adaptive_mb),
+            float(base_mb) + float(production_slope_mb_per_unknown) * float(active_n),
+        )
+        if float(production_max_mb) > 0.0:
+            auto_max_mb = max(float(auto_max_mb), float(production_max_mb))
+    if float(auto_max_mb) > 0.0:
+        adaptive_mb = min(float(adaptive_mb), max(float(base_mb), float(auto_max_mb)))
+    return float(adaptive_mb)
+
+
+@dataclass(frozen=True)
+class _ResidualCoarseHostSparsePreconditionerBundle:
+    """Low-rank residual coarse correction around an existing host factor."""
+
+    base_factor: object
+    operator: SparseOperatorBundle
+    z_basis: np.ndarray
+    az_basis: np.ndarray
+    coarse_inverse: np.ndarray
+    kind: str
+    factor_nbytes_estimate: int | None = None
+    factor_nnz_estimate: int | None = None
+    factor_s: float | None = None
+    metadata: dict[str, object] | None = None
+
+    def solve(self, rhs) -> np.ndarray:
+        arr = np.asarray(rhs, dtype=np.float64).reshape((-1,))
+        y_base = np.asarray(self.base_factor.solve(arr), dtype=np.float64).reshape((-1,))
+        residual = arr - np.asarray(self.operator.matvec(y_base), dtype=np.float64).reshape((-1,))
+        coarse_rhs = np.asarray(self.az_basis.T @ residual, dtype=np.float64).reshape((-1,))
+        coeff = np.asarray(self.coarse_inverse @ coarse_rhs, dtype=np.float64).reshape((-1,))
+        return y_base + np.asarray(self.z_basis @ coeff, dtype=np.float64).reshape((-1,))
+
+
+@dataclass(frozen=True)
+class _ResidualWindowHostSparsePreconditionerBundle:
+    """Residual-localized active kinetic window correction around a base factor."""
+
+    base_factor: object
+    operator: SparseOperatorBundle
+    window_positions: tuple[np.ndarray, ...]
+    window_factors: tuple[object, ...]
+    kind: str
+    coefficient_mode: str = "additive"
+    regularization: float = 1.0e-12
+    factor_nbytes_estimate: int | None = None
+    factor_nnz_estimate: int | None = None
+    factor_s: float | None = None
+    metadata: dict[str, object] | None = None
+
+    def solve(self, rhs) -> np.ndarray:
+        arr = np.asarray(rhs, dtype=np.float64).reshape((-1,))
+        out = np.asarray(self.base_factor.solve(arr), dtype=np.float64).reshape((-1,))
+        residual = arr - np.asarray(self.operator.matvec(out), dtype=np.float64).reshape((-1,))
+        correction_columns: list[np.ndarray] = []
+        for positions, factor in zip(self.window_positions, self.window_factors, strict=True):
+            correction = np.asarray(factor.solve(residual[positions]), dtype=np.float64).reshape((-1,))
+            column = np.zeros_like(out)
+            column[positions] = correction
+            correction_columns.append(column)
+        if not correction_columns:
+            return out
+        if str(self.coefficient_mode).strip().lower().replace("-", "_") in {
+            "least_squares",
+            "normal",
+            "normal_equations",
+        }:
+            z_basis = np.column_stack(correction_columns)
+            az_basis = np.column_stack(
+                [np.asarray(self.operator.matvec(z_basis[:, i]), dtype=np.float64).reshape((-1,)) for i in range(z_basis.shape[1])]
+            )
+            normal = np.asarray(az_basis.T @ az_basis, dtype=np.float64)
+            rhs = np.asarray(az_basis.T @ residual, dtype=np.float64).reshape((-1,))
+            normal_scale = max(float(np.linalg.norm(normal, ord=np.inf)) if normal.size else 0.0, 1.0)
+            reg = max(float(abs(self.regularization)), 1.0e-14) * normal_scale
+            try:
+                coeff = np.linalg.solve(normal + reg * np.eye(normal.shape[0], dtype=np.float64), rhs)
+            except Exception:  # noqa: BLE001
+                coeff = np.linalg.pinv(normal, rcond=max(float(abs(self.regularization)), 1.0e-14)) @ rhs
+            return out + np.asarray(z_basis @ coeff, dtype=np.float64).reshape((-1,))
+        for column in correction_columns:
+            out += column
+        return out
+
+
+@dataclass(frozen=True)
+class _TrueOperatorWindowLSQPreconditionerBundle:
+    """Residual-window correction using columns of the true active operator."""
+
+    base_factor: object
+    true_matvec: Callable[[np.ndarray], np.ndarray]
+    window_positions: np.ndarray
+    a_window: object
+    inv_column_scale: np.ndarray
+    solve_normal: Callable[[np.ndarray], np.ndarray]
+    kind: str
+    regularization: float = 1.0e-12
+    damping: bool = False
+    beta_max: float = 10.0
+    factor_nbytes_estimate: int | None = None
+    factor_nnz_estimate: int | None = None
+    factor_s: float | None = None
+    metadata: dict[str, object] | None = None
+
+    def solve(self, rhs) -> np.ndarray:
+        arr = np.asarray(rhs, dtype=np.float64).reshape((-1,))
+        y_base = np.asarray(self.base_factor.solve(arr), dtype=np.float64).reshape((-1,))
+        residual = arr - np.asarray(self.true_matvec(y_base), dtype=np.float64).reshape((-1,))
+        a_scaled_t_residual = np.asarray(self.a_window.T @ residual, dtype=np.float64).reshape((-1,))
+        scaled_delta = np.asarray(self.solve_normal(a_scaled_t_residual), dtype=np.float64).reshape((-1,))
+        delta = np.asarray(self.inv_column_scale * scaled_delta, dtype=np.float64).reshape((-1,))
+        out = y_base.copy()
+        out[np.asarray(self.window_positions, dtype=np.int64)] += delta
+        if bool(self.damping):
+            a_out = np.asarray(self.true_matvec(out), dtype=np.float64).reshape((-1,))
+            denom = float(np.dot(a_out, a_out))
+            if np.isfinite(denom) and denom > 0.0:
+                beta = float(np.dot(a_out, arr) / denom)
+                if float(self.beta_max) > 0.0:
+                    beta = float(np.clip(beta, -float(self.beta_max), float(self.beta_max)))
+            else:
+                beta = 0.0
+            out = float(beta) * out
+        return out
+
+
+@dataclass(frozen=True)
+class _TrueOperatorActiveSubmatrixPreconditionerBundle:
+    """Additive active-block correction using the true local operator block."""
+
+    base_factor: object
+    true_matvec: Callable[[np.ndarray], np.ndarray]
+    block_positions: np.ndarray
+    a_window: object
+    solve_block: Callable[[np.ndarray], np.ndarray]
+    kind: str
+    damping: bool = True
+    alpha_clip: float = 10.0
+    factor_nbytes_estimate: int | None = None
+    factor_nnz_estimate: int | None = None
+    factor_s: float | None = None
+    metadata: dict[str, object] | None = None
+
+    def solve(self, rhs) -> np.ndarray:
+        arr = np.asarray(rhs, dtype=np.float64).reshape((-1,))
+        y_base = np.asarray(self.base_factor.solve(arr), dtype=np.float64).reshape((-1,))
+        residual = arr - np.asarray(self.true_matvec(y_base), dtype=np.float64).reshape((-1,))
+        positions = np.asarray(self.block_positions, dtype=np.int64)
+        delta = np.asarray(self.solve_block(residual[positions]), dtype=np.float64).reshape((-1,))
+        alpha = 1.0
+        if bool(self.damping):
+            a_delta = np.asarray(self.a_window @ delta, dtype=np.float64).reshape((-1,))
+            denom = float(np.dot(a_delta, a_delta))
+            if np.isfinite(denom) and denom > 1.0e-300:
+                alpha = float(np.dot(a_delta, residual) / denom)
+                clip = max(0.0, float(self.alpha_clip))
+                if clip > 0.0:
+                    alpha = float(np.clip(alpha, -clip, clip))
+            else:
+                alpha = 0.0
+        out = y_base.copy()
+        out[positions] += float(alpha) * delta
+        return out
+
+
+class _ReusableTrueActionColumnCache:
+    """Bounded one-hot true-operator action cache for active-block builders."""
+
+    def __init__(
+        self,
+        *,
+        true_matvec: Callable[[np.ndarray], np.ndarray],
+        true_matmat: Callable[[np.ndarray], np.ndarray] | None,
+        n: int,
+        max_nbytes: int,
+        enabled: bool = True,
+    ) -> None:
+        self._true_matvec = true_matvec
+        self._true_matmat = true_matmat
+        self._n = int(n)
+        self._max_nbytes = max(0, int(max_nbytes))
+        self._enabled = bool(enabled)
+        self._columns: dict[int, np.ndarray] = {}
+        self.hits = 0
+        self.misses = 0
+        self.batches = 0
+        self.bypass_calls = 0
+        self.stored_nbytes = 0
+
+    def matvec(self, vec: np.ndarray) -> np.ndarray:
+        return np.asarray(self._true_matvec(np.asarray(vec, dtype=np.float64)), dtype=np.float64).reshape((-1,))
+
+    def _uncached_matmat(self, mat: np.ndarray) -> np.ndarray:
+        arr = np.asarray(mat, dtype=np.float64)
+        if self._true_matmat is not None and arr.ndim == 2 and arr.shape[1] > 1:
+            return np.asarray(self._true_matmat(arr), dtype=np.float64)
+        return np.column_stack([self.matvec(arr[:, j]) for j in range(arr.shape[1])])
+
+    @staticmethod
+    def _one_hot_positions(arr: np.ndarray) -> tuple[int, ...] | None:
+        if arr.ndim != 2:
+            return None
+        positions: list[int] = []
+        for col in range(int(arr.shape[1])):
+            nz = np.flatnonzero(arr[:, col] != 0.0)
+            if nz.size != 1:
+                return None
+            pos = int(nz[0])
+            if float(arr[pos, col]) != 1.0:
+                return None
+            positions.append(pos)
+        return tuple(positions)
+
+    def matmat(self, mat: np.ndarray) -> np.ndarray:
+        arr = np.asarray(mat, dtype=np.float64)
+        if arr.ndim != 2 or arr.shape[0] != self._n:
+            self.bypass_calls += 1
+            return self._uncached_matmat(arr)
+        positions = self._one_hot_positions(arr)
+        if not self._enabled or positions is None:
+            self.bypass_calls += 1
+            return self._uncached_matmat(arr)
+
+        out = np.empty((self._n, int(arr.shape[1])), dtype=np.float64)
+        missing_positions: list[int] = []
+        missing_columns: list[int] = []
+        for col, pos in enumerate(positions):
+            cached = self._columns.get(int(pos))
+            if cached is None:
+                missing_positions.append(int(pos))
+                missing_columns.append(int(col))
+                continue
+            out[:, col] = cached
+            self.hits += 1
+        if missing_positions:
+            basis = np.zeros((self._n, len(missing_positions)), dtype=np.float64)
+            basis[np.asarray(missing_positions, dtype=np.int64), np.arange(len(missing_positions))] = 1.0
+            y_missing = np.asarray(self._uncached_matmat(basis), dtype=np.float64)
+            if y_missing.shape != (self._n, len(missing_positions)):
+                self.bypass_calls += 1
+                return self._uncached_matmat(arr)
+            self.batches += 1
+            for local_col, (global_col, pos) in enumerate(zip(missing_columns, missing_positions, strict=True)):
+                column = np.asarray(y_missing[:, local_col], dtype=np.float64).reshape((-1,))
+                out[:, global_col] = column
+                self.misses += 1
+                next_nbytes = int(self.stored_nbytes + column.nbytes)
+                if self._max_nbytes <= 0 or next_nbytes <= self._max_nbytes:
+                    self._columns[int(pos)] = column.copy()
+                    self.stored_nbytes = next_nbytes
+        return out
+
+    def metadata(self) -> dict[str, object]:
+        return {
+            "enabled": bool(self._enabled),
+            "max_nbytes": int(self._max_nbytes),
+            "stored_columns": int(len(self._columns)),
+            "stored_nbytes": int(self.stored_nbytes),
+            "hits": int(self.hits),
+            "misses": int(self.misses),
+            "batches": int(self.batches),
+            "bypass_calls": int(self.bypass_calls),
+        }
+
+
+@dataclass(frozen=True)
+class _TrueOperatorCoupledCoarseLSQPreconditionerBundle:
+    """Coupled true-operator coarse correction around an existing host factor."""
+
+    base_factor: object
+    true_matvec: Callable[[np.ndarray], np.ndarray]
+    z_basis: object
+    a_basis: object
+    inv_column_scale: np.ndarray
+    solve_normal: Callable[[np.ndarray], np.ndarray]
+    kind: str
+    regularization: float = 1.0e-12
+    damping: bool = False
+    beta_max: float = 10.0
+    factor_nbytes_estimate: int | None = None
+    factor_nnz_estimate: int | None = None
+    factor_s: float | None = None
+    metadata: dict[str, object] | None = None
+
+    def solve(self, rhs) -> np.ndarray:
+        arr = np.asarray(rhs, dtype=np.float64).reshape((-1,))
+        y_base = np.asarray(self.base_factor.solve(arr), dtype=np.float64).reshape((-1,))
+        residual = arr - np.asarray(self.true_matvec(y_base), dtype=np.float64).reshape((-1,))
+        a_scaled_t_residual = np.asarray(self.a_basis.T @ residual, dtype=np.float64).reshape((-1,))
+        scaled_coeff = np.asarray(self.solve_normal(a_scaled_t_residual), dtype=np.float64).reshape((-1,))
+        coeff = np.asarray(self.inv_column_scale * scaled_coeff, dtype=np.float64).reshape((-1,))
+        out = y_base + np.asarray(self.z_basis @ coeff, dtype=np.float64).reshape((-1,))
+        if bool(self.damping):
+            a_out = np.asarray(self.true_matvec(out), dtype=np.float64).reshape((-1,))
+            denom = float(np.dot(a_out, a_out))
+            if np.isfinite(denom) and denom > 0.0:
+                beta = float(np.dot(a_out, arr) / denom)
+                if float(self.beta_max) > 0.0:
+                    beta = float(np.clip(beta, -float(self.beta_max), float(self.beta_max)))
+            else:
+                beta = 0.0
+            out = float(beta) * out
+        return out
+
+
+def _sparse_factor_nbytes_estimate(factor: object) -> int:
+    total = 0
+    for attr in ("L", "U"):
+        matrix = getattr(factor, attr, None)
+        if matrix is None:
+            continue
+        total += int(getattr(matrix, "data", np.asarray([])).nbytes)
+        total += int(getattr(matrix, "indices", np.asarray([])).nbytes)
+        total += int(getattr(matrix, "indptr", np.asarray([])).nbytes)
+    return int(total)
+
+
+def _rhs1_additive_rescue_nbytes(factor_bundle: object, max_additional_mb: float) -> int:
+    """Return a total preconditioner budget from an additive rescue cap.
+
+    RHSMode=1 true-operator rescue builders record total storage, including
+    the already-built base factor. Environment caps for rescue layers are
+    interpreted as additional storage budgets so a small coarse correction can
+    still be evaluated on top of a multi-GB base preconditioner.
+    """
+
+    add_nbytes = int(max(0.0, float(max_additional_mb)) * 1024.0 * 1024.0)
+    if add_nbytes <= 0:
+        return 0
+    base_nbytes = int(getattr(factor_bundle, "factor_nbytes_estimate", 0) or 0)
+    return int(base_nbytes + add_nbytes)
+
+
+def _expand_sparse_graph_positions(
+    matrix_csr: Any,
+    positions: np.ndarray,
+    *,
+    depth: int,
+    max_size: int,
+) -> np.ndarray | None:
+    """Expand active positions by sparse row/column adjacency with a hard cap."""
+
+    if int(depth) <= 0:
+        return np.unique(np.asarray(positions, dtype=np.int64))
+    selected = set(int(v) for v in np.asarray(positions, dtype=np.int64).reshape((-1,)))
+    frontier = np.asarray(sorted(selected), dtype=np.int64)
+    matrix_csc = matrix_csr.tocsc()
+    n = int(matrix_csr.shape[0])
+    for _ in range(int(depth)):
+        if frontier.size == 0:
+            break
+        neighbors: set[int] = set()
+        for row in frontier:
+            if int(row) < 0 or int(row) >= n:
+                continue
+            row_start = int(matrix_csr.indptr[int(row)])
+            row_stop = int(matrix_csr.indptr[int(row) + 1])
+            neighbors.update(int(v) for v in matrix_csr.indices[row_start:row_stop])
+            col_start = int(matrix_csc.indptr[int(row)])
+            col_stop = int(matrix_csc.indptr[int(row) + 1])
+            neighbors.update(int(v) for v in matrix_csc.indices[col_start:col_stop])
+        neighbors.difference_update(selected)
+        if not neighbors:
+            break
+        selected.update(neighbors)
+        if len(selected) > int(max_size):
+            return None
+        frontier = np.asarray(sorted(neighbors), dtype=np.int64)
+    return np.asarray(sorted(selected), dtype=np.int64)
+
+
+def _parse_true_operator_window_specs(spec: str, *, layout: RHS1BlockLayout) -> tuple[tuple[int, int, int], ...]:
+    """Parse comma-separated ``species:x:ell`` residual-window targets."""
+
+    triples: list[tuple[int, int, int]] = []
+    for raw_item in str(spec).replace(";", ",").split(","):
+        item = raw_item.strip()
+        if not item:
+            continue
+        parts = item.replace("/", ":").split(":")
+        if len(parts) != 3:
+            continue
+        try:
+            species, x_index, ell = (int(part.strip()) for part in parts)
+        except ValueError:
+            continue
+        if not (
+            0 <= int(species) < int(layout.n_species)
+            and 0 <= int(x_index) < int(layout.n_x)
+            and 0 <= int(ell) < int(layout.n_xi)
+        ):
+            continue
+        triples.append((int(species), int(x_index), int(ell)))
+    return tuple(dict.fromkeys(triples))
+
+
+def _true_operator_window_positions_from_residual(
+    *,
+    residual: np.ndarray,
+    layout: RHS1BlockLayout,
+    active_indices: np.ndarray | None,
+    max_windows: int,
+    x_radius: int,
+    ell_radius: int,
+    include_tail: bool,
+    explicit_specs: tuple[tuple[int, int, int], ...] = (),
+) -> tuple[np.ndarray, tuple[dict[str, object], ...]]:
+    """Select active positions for true-operator residual-window probing."""
+
+    residual_np = np.asarray(residual, dtype=np.float64).reshape((-1,))
+    if active_indices is None:
+        active_np = np.arange(int(layout.total_size), dtype=np.int64)
+    else:
+        active_np = np.asarray(active_indices, dtype=np.int64).reshape((-1,))
+    if residual_np.shape != active_np.shape:
+        return np.zeros((0,), dtype=np.int64), ()
+    kinetic_mask = active_np < int(layout.f_size)
+    if not bool(np.any(kinetic_mask)):
+        return np.zeros((0,), dtype=np.int64), ()
+    kinetic_full = active_np[kinetic_mask]
+    kinetic_positions = np.flatnonzero(kinetic_mask)
+    decoded = layout.decode_kinetic_indices(kinetic_full)
+    specs: list[tuple[int, int, int]] = list(explicit_specs)
+    if not specs:
+        kinetic_square = np.square(residual_np[kinetic_positions])
+        combo_index = (decoded.species * int(layout.n_x) + decoded.x) * int(layout.n_xi) + decoded.ell
+        combo_energy = np.bincount(
+            combo_index,
+            weights=kinetic_square,
+            minlength=int(layout.n_species * layout.n_x * layout.n_xi),
+        )
+        top_combo = np.argsort(combo_energy)[::-1]
+        top_combo = top_combo[combo_energy[top_combo] > 0.0][: max(1, int(max_windows))]
+        for combo in top_combo:
+            ell = int(combo % int(layout.n_xi))
+            sx = int(combo // int(layout.n_xi))
+            x_index = int(sx % int(layout.n_x))
+            species = int(sx // int(layout.n_x))
+            specs.append((species, x_index, ell))
+    if not specs:
+        return np.zeros((0,), dtype=np.int64), ()
+
+    selected_positions: list[np.ndarray] = []
+    metadata: list[dict[str, object]] = []
+    used: set[int] = set()
+    total_energy = float(np.sum(np.square(residual_np)))
+    for species, x_center, ell_center in specs[: max(1, int(max_windows))]:
+        x_lo = max(0, int(x_center) - max(0, int(x_radius)))
+        x_hi = min(int(layout.n_x) - 1, int(x_center) + max(0, int(x_radius)))
+        ell_lo = max(0, int(ell_center) - max(0, int(ell_radius)))
+        ell_hi = min(int(layout.n_xi) - 1, int(ell_center) + max(0, int(ell_radius)))
+        mask = (
+            (decoded.species == int(species))
+            & (decoded.x >= int(x_lo))
+            & (decoded.x <= int(x_hi))
+            & (decoded.ell >= int(ell_lo))
+            & (decoded.ell <= int(ell_hi))
+        )
+        positions = kinetic_positions[mask]
+        if positions.size == 0:
+            continue
+        positions = np.asarray([int(pos) for pos in positions if int(pos) not in used], dtype=np.int64)
+        if positions.size == 0:
+            continue
+        used.update(int(pos) for pos in positions)
+        selected_positions.append(positions)
+        energy = float(np.sum(np.square(residual_np[positions])))
+        metadata.append(
+            {
+                "species": int(species),
+                "x_center": int(x_center),
+                "ell_center": int(ell_center),
+                "x_range": (int(x_lo), int(x_hi)),
+                "ell_range": (int(ell_lo), int(ell_hi)),
+                "size": int(positions.size),
+                "residual_energy_fraction": float(energy / total_energy) if total_energy > 0.0 else 0.0,
+            }
+        )
+    if not selected_positions:
+        return np.zeros((0,), dtype=np.int64), tuple(metadata)
+    positions_out = np.unique(np.concatenate(selected_positions).astype(np.int64, copy=False))
+    if bool(include_tail):
+        tail_positions = np.flatnonzero(active_np >= int(layout.f_size)).astype(np.int64, copy=False)
+        if tail_positions.size:
+            positions_out = np.unique(np.concatenate((positions_out, tail_positions)).astype(np.int64, copy=False))
+    return positions_out, tuple(metadata)
+
+
+def _try_build_true_operator_residual_window_lsq_preconditioner(
+    *,
+    true_matvec: Callable[[np.ndarray], np.ndarray],
+    true_matmat: Callable[[np.ndarray], np.ndarray] | None,
+    factor_bundle: object,
+    residual: np.ndarray,
+    layout: RHS1BlockLayout,
+    active_indices: np.ndarray | None,
+    max_windows: int,
+    x_radius: int,
+    ell_radius: int,
+    max_nbytes: int,
+    regularization: float,
+    max_window_size: int,
+    column_batch: int,
+    drop_tol: float,
+    include_tail: bool,
+    explicit_specs: tuple[tuple[int, int, int], ...] = (),
+    damping: bool = False,
+    beta_max: float = 10.0,
+    emit: Callable[[int, str], None] | None = None,
+) -> _TrueOperatorWindowLSQPreconditionerBundle | None:
+    """Build a bounded LSQ correction from columns of the true active operator."""
+
+    import scipy.sparse as sp  # noqa: PLC0415
+    from scipy.linalg import cho_factor, cho_solve, lu_factor, lu_solve  # noqa: PLC0415
+
+    t0 = time.perf_counter()
+    residual_np = np.asarray(residual, dtype=np.float64).reshape((-1,))
+    n = int(residual_np.size)
+    positions, window_metadata = _true_operator_window_positions_from_residual(
+        residual=residual_np,
+        layout=layout,
+        active_indices=active_indices,
+        max_windows=int(max_windows),
+        x_radius=int(x_radius),
+        ell_radius=int(ell_radius),
+        include_tail=bool(include_tail),
+        explicit_specs=tuple(explicit_specs),
+    )
+    if positions.size == 0:
+        return None
+    if positions.size > int(max_window_size):
+        if emit is not None:
+            emit(
+                1,
+                "solve_v3_full_system_linear_gmres: true residual window skipped "
+                f"window_size={int(positions.size)} max_window_size={int(max_window_size)}",
+            )
+        return None
+
+    batch = max(1, int(column_batch))
+    rows: list[np.ndarray] = []
+    cols: list[np.ndarray] = []
+    data: list[np.ndarray] = []
+    nnz_total = 0
+    max_nbytes_use = max(0, int(max_nbytes))
+    drop = max(0.0, float(drop_tol))
+    for start in range(0, int(positions.size), int(batch)):
+        stop = min(int(positions.size), int(start) + int(batch))
+        pos_batch = np.asarray(positions[start:stop], dtype=np.int64)
+        matmat_batch = int(batch) if true_matmat is not None and int(batch) > 1 else int(pos_batch.size)
+        transient_estimated = int(2 * n * max(1, int(matmat_batch)) * np.dtype(np.float64).itemsize)
+        estimated_before_batch = int(nnz_total * (np.dtype(np.float64).itemsize + np.dtype(np.int32).itemsize))
+        estimated_before_batch += int((positions.size + 1) * np.dtype(np.int32).itemsize)
+        estimated_before_batch += int(2 * positions.size * positions.size * np.dtype(np.float64).itemsize)
+        estimated_before_batch += int(n * np.dtype(np.float64).itemsize)
+        estimated_before_batch += int(transient_estimated)
+        if max_nbytes_use > 0 and estimated_before_batch > max_nbytes_use:
+            if emit is not None:
+                emit(
+                    1,
+                    "solve_v3_full_system_linear_gmres: true residual window budget exceeded "
+                    f"estimated_bytes={int(estimated_before_batch)} max_bytes={int(max_nbytes_use)} "
+                    f"columns_done={int(start)}/{int(positions.size)}",
+                )
+            return None
+        basis = np.zeros((n, int(matmat_batch)), dtype=np.float64)
+        basis[pos_batch, np.arange(int(pos_batch.size), dtype=np.int64)] = 1.0
+        if true_matmat is not None and int(matmat_batch) > 1:
+            y_batch = np.asarray(true_matmat(basis), dtype=np.float64)[:, : int(pos_batch.size)]
+        else:
+            y_batch = np.column_stack(
+                [
+                    np.asarray(true_matvec(basis[:, j]), dtype=np.float64).reshape((-1,))
+                    for j in range(int(pos_batch.size))
+                ]
+            )
+        if y_batch.shape != (n, int(pos_batch.size)):
+            return None
+        for local_col in range(int(pos_batch.size)):
+            y_col = y_batch[:, local_col]
+            keep = np.flatnonzero(np.isfinite(y_col) & (np.abs(y_col) > drop))
+            if keep.size == 0:
+                continue
+            rows.append(keep.astype(np.int32, copy=False))
+            cols.append(np.full((int(keep.size),), int(start + local_col), dtype=np.int32))
+            data.append(np.asarray(y_col[keep], dtype=np.float64))
+            nnz_total += int(keep.size)
+        estimated = int(nnz_total * (np.dtype(np.float64).itemsize + np.dtype(np.int32).itemsize))
+        estimated += int((positions.size + 1) * np.dtype(np.int32).itemsize)
+        estimated += int(2 * positions.size * positions.size * np.dtype(np.float64).itemsize)
+        estimated += int(n * np.dtype(np.float64).itemsize)
+        estimated += int(transient_estimated)
+        if max_nbytes_use > 0 and estimated > max_nbytes_use:
+            if emit is not None:
+                emit(
+                    1,
+                    "solve_v3_full_system_linear_gmres: true residual window budget exceeded "
+                    f"estimated_bytes={int(estimated)} max_bytes={int(max_nbytes_use)} "
+                    f"columns_done={int(stop)}/{int(positions.size)}",
+                )
+            return None
+    if not data:
+        return None
+    a_window = sp.csc_matrix(
+        (np.concatenate(data), (np.concatenate(rows), np.concatenate(cols))),
+        shape=(n, int(positions.size)),
+        dtype=np.float64,
+    )
+    a_window.sum_duplicates()
+    a_window.eliminate_zeros()
+    col_norms = np.sqrt(np.asarray(a_window.power(2).sum(axis=0), dtype=np.float64).reshape((-1,)))
+    norm_floor = max(float(abs(regularization)), np.finfo(np.float64).eps)
+    inv_col_scale = np.zeros_like(col_norms)
+    good = np.isfinite(col_norms) & (col_norms > norm_floor)
+    inv_col_scale[good] = 1.0 / col_norms[good]
+    if not np.any(good):
+        return None
+    a_scaled = a_window @ sp.diags(inv_col_scale, format="csc")
+    normal = np.asarray((a_scaled.T @ a_scaled).toarray(), dtype=np.float64)
+    normal_scale = max(float(np.linalg.norm(normal, ord=np.inf)) if normal.size else 0.0, 1.0)
+    normal_regularization = max(float(abs(regularization)), 1.0e-14) * normal_scale
+    normal = normal + normal_regularization * np.eye(int(positions.size), dtype=np.float64)
+    solver_kind = "cholesky"
+    try:
+        factor = cho_factor(normal, lower=True, check_finite=False)
+
+        def solve_normal(rhs: np.ndarray) -> np.ndarray:
+            return np.asarray(cho_solve(factor, rhs, check_finite=False), dtype=np.float64).reshape((-1,))
+
+    except Exception:  # noqa: BLE001
+        solver_kind = "lu"
+        lu, piv = lu_factor(normal, check_finite=False)
+
+        def solve_normal(rhs: np.ndarray) -> np.ndarray:
+            return np.asarray(lu_solve((lu, piv), rhs, check_finite=False), dtype=np.float64).reshape((-1,))
+
+    a_window_nbytes = int(a_window.data.nbytes + a_window.indices.nbytes + a_window.indptr.nbytes)
+    normal_nbytes = int(normal.nbytes)
+    factor_nbytes = int(
+        a_window_nbytes
+        + 2 * normal_nbytes
+        + inv_col_scale.nbytes
+        + int(getattr(factor_bundle, "factor_nbytes_estimate", 0) or 0)
+    )
+    if max_nbytes_use > 0 and factor_nbytes > max_nbytes_use:
+        return None
+    condition_estimate = None
+    if int(positions.size) <= 256:
+        condition_estimate = float(np.linalg.cond(normal))
+    metadata = {
+        "window_size": int(positions.size),
+        "windows": tuple(window_metadata),
+        "x_radius": int(x_radius),
+        "ell_radius": int(ell_radius),
+        "include_tail": bool(include_tail),
+        "column_batch": int(batch),
+        "drop_tol": float(drop),
+        "a_window_nnz": int(a_window.nnz),
+        "a_window_nbytes_actual": int(a_window_nbytes),
+        "normal_nbytes": int(normal_nbytes),
+        "normal_regularization": float(normal_regularization),
+        "normal_solver": str(solver_kind),
+        "normal_condition_estimate": condition_estimate,
+        "factor_nbytes_estimate": int(factor_nbytes),
+        "nonzero_column_count": int(np.count_nonzero(good)),
+        "zero_or_invalid_column_count": int(positions.size - np.count_nonzero(good)),
+        "damping": bool(damping),
+        "beta_max": float(beta_max),
+        "setup_s": float(max(0.0, time.perf_counter() - t0)),
+    }
+    if emit is not None:
+        first = window_metadata[0] if window_metadata else {}
+        emit(
+            1,
+            "solve_v3_full_system_linear_gmres: true residual window built "
+            f"window_size={int(positions.size)} nnz={int(a_window.nnz)} "
+            f"setup_s={metadata['setup_s']:.3f} bytes={int(factor_nbytes)} "
+            f"first=s{first.get('species', 'na')}/x{first.get('x_center', 'na')}/ell{first.get('ell_center', 'na')}",
+        )
+    return _TrueOperatorWindowLSQPreconditionerBundle(
+        base_factor=factor_bundle,
+        true_matvec=lambda x: np.asarray(true_matvec(np.asarray(x, dtype=np.float64)), dtype=np.float64).reshape((-1,)),
+        window_positions=np.asarray(positions, dtype=np.int64),
+        a_window=a_scaled,
+        inv_column_scale=np.asarray(inv_col_scale, dtype=np.float64),
+        solve_normal=solve_normal,
+        kind=f"{getattr(factor_bundle, 'kind', 'host')}_true_residual_window_lsq",
+        regularization=float(regularization),
+        damping=bool(damping),
+        beta_max=float(beta_max),
+        factor_nbytes_estimate=int(factor_nbytes),
+        factor_nnz_estimate=int(a_window.nnz),
+        factor_s=float(max(0.0, time.perf_counter() - t0)),
+        metadata=metadata,
+    )
+
+
+def _try_build_true_operator_active_block_lsq_preconditioner(
+    *,
+    true_matvec: Callable[[np.ndarray], np.ndarray],
+    true_matmat: Callable[[np.ndarray], np.ndarray] | None,
+    factor_bundle: object,
+    residual: np.ndarray,
+    layout: RHS1BlockLayout,
+    active_indices: np.ndarray | None,
+    x_count: int,
+    ell_count: int,
+    max_nbytes: int,
+    regularization: float,
+    max_block_size: int,
+    column_batch: int,
+    drop_tol: float,
+    include_tail: bool,
+    max_tail: int,
+    species_count: int | None = None,
+    theta_stride: int = 1,
+    zeta_stride: int = 1,
+    damping: bool = False,
+    beta_max: float = 10.0,
+    emit: Callable[[int, str], None] | None = None,
+) -> _TrueOperatorWindowLSQPreconditionerBundle | None:
+    """Build a deterministic true-operator LSQ correction over an active kinetic block.
+
+    Unlike the residual-window builder, this selects the same symbolic
+    low-speed/low-pitch block used by the native active coupled factor and then
+    forms columns of the *true* active operator.  It directly targets the
+    remaining mismatch between the fast ``whichMatrix=0`` preconditioner and
+    the true RHSMode=1 operator while preserving bounded setup and memory.
+    """
+
+    import scipy.sparse as sp  # noqa: PLC0415
+    from scipy.linalg import cho_factor, cho_solve, lu_factor, lu_solve  # noqa: PLC0415
+
+    t0 = time.perf_counter()
+    residual_np = np.asarray(residual, dtype=np.float64).reshape((-1,))
+    n = int(residual_np.size)
+    active_np = (
+        np.arange(int(layout.total_size), dtype=np.int64)
+        if active_indices is None
+        else np.asarray(active_indices, dtype=np.int64).reshape((-1,))
+    )
+    if active_np.shape != (n,):
+        if emit is not None:
+            emit(
+                1,
+                "solve_v3_full_system_linear_gmres: true active block skipped "
+                f"active_shape_mismatch active={tuple(active_np.shape)} residual={(n,)}",
+            )
+        return None
+    try:
+        ordering = RHS1ActiveFieldSplitOrdering.from_layout(layout, active_np)
+    except ValueError as exc:
+        if emit is not None:
+            emit(
+                1,
+                "solve_v3_full_system_linear_gmres: true active block skipped "
+                f"invalid_ordering={type(exc).__name__}: {exc}",
+            )
+        return None
+
+    max_block_size_use = max(1, int(max_block_size))
+    kinetic_positions = ordering.dominant_kinetic_positions(
+        x_count=max(0, int(x_count)),
+        ell_count=max(0, int(ell_count)),
+        species_count=species_count,
+        theta_stride=max(1, int(theta_stride)),
+        zeta_stride=max(1, int(zeta_stride)),
+        max_positions=max_block_size_use,
+    )
+    positions = kinetic_positions.astype(np.int64, copy=False)
+    tail_selected = 0
+    if bool(include_tail) and positions.size < max_block_size_use and int(max_tail) > 0:
+        tail_candidates = np.concatenate(
+            (
+                ordering.phi1_positions.astype(np.int64, copy=False),
+                ordering.extra_positions.astype(np.int64, copy=False),
+            )
+        )
+        if tail_candidates.size:
+            take = min(int(max_tail), max_block_size_use - int(positions.size))
+            tail_selected = int(min(int(tail_candidates.size), int(take)))
+            positions = np.concatenate((positions, tail_candidates[:tail_selected])).astype(np.int64, copy=False)
+    if positions.size:
+        _, first = np.unique(positions, return_index=True)
+        positions = positions[np.sort(first)].astype(np.int64, copy=False)
+    if positions.size == 0:
+        return None
+    if positions.size > max_block_size_use:
+        if emit is not None:
+            emit(
+                1,
+                "solve_v3_full_system_linear_gmres: true active block skipped "
+                f"block_size={int(positions.size)} max_block_size={int(max_block_size_use)}",
+            )
+        return None
+
+    batch = max(1, int(column_batch))
+    max_nbytes_use = max(0, int(max_nbytes))
+    drop = max(0.0, float(drop_tol))
+    rows: list[np.ndarray] = []
+    cols: list[np.ndarray] = []
+    data: list[np.ndarray] = []
+    nnz_total = 0
+    for start in range(0, int(positions.size), int(batch)):
+        stop = min(int(positions.size), int(start) + int(batch))
+        pos_batch = np.asarray(positions[start:stop], dtype=np.int64)
+        ncols = int(pos_batch.size)
+        transient_estimated = int(2 * n * ncols * np.dtype(np.float64).itemsize)
+        estimated_before = int(nnz_total * (np.dtype(np.float64).itemsize + np.dtype(np.int32).itemsize))
+        estimated_before += int((positions.size + 1) * np.dtype(np.int32).itemsize)
+        estimated_before += int(2 * positions.size * positions.size * np.dtype(np.float64).itemsize)
+        estimated_before += int(transient_estimated)
+        if max_nbytes_use > 0 and estimated_before > max_nbytes_use:
+            if emit is not None:
+                emit(
+                    1,
+                    "solve_v3_full_system_linear_gmres: true active block budget exceeded "
+                    f"estimated_bytes={int(estimated_before)} max_bytes={int(max_nbytes_use)} "
+                    f"columns_done={int(start)}/{int(positions.size)}",
+                )
+            return None
+        basis = np.zeros((n, ncols), dtype=np.float64)
+        basis[pos_batch, np.arange(ncols, dtype=np.int64)] = 1.0
+        if true_matmat is not None and ncols > 1:
+            y_batch = np.asarray(true_matmat(basis), dtype=np.float64)
+        else:
+            y_batch = np.column_stack(
+                [np.asarray(true_matvec(basis[:, j]), dtype=np.float64).reshape((-1,)) for j in range(ncols)]
+            )
+        if y_batch.shape != (n, ncols):
+            return None
+        for local_col in range(ncols):
+            y_col = y_batch[:, local_col]
+            keep = np.flatnonzero(np.isfinite(y_col) & (np.abs(y_col) > drop))
+            if keep.size == 0:
+                continue
+            rows.append(keep.astype(np.int32, copy=False))
+            cols.append(np.full((int(keep.size),), int(start + local_col), dtype=np.int32))
+            data.append(np.asarray(y_col[keep], dtype=np.float64))
+            nnz_total += int(keep.size)
+    if not data:
+        return None
+
+    a_window = sp.csc_matrix(
+        (np.concatenate(data), (np.concatenate(rows), np.concatenate(cols))),
+        shape=(n, int(positions.size)),
+        dtype=np.float64,
+    )
+    a_window.sum_duplicates()
+    a_window.eliminate_zeros()
+    col_norms = np.sqrt(np.asarray(a_window.power(2).sum(axis=0), dtype=np.float64).reshape((-1,)))
+    norm_floor = max(float(abs(regularization)), np.finfo(np.float64).eps)
+    good = np.isfinite(col_norms) & (col_norms > norm_floor)
+    if not np.any(good):
+        return None
+    inv_col_scale = np.zeros_like(col_norms)
+    inv_col_scale[good] = 1.0 / col_norms[good]
+    a_scaled = a_window @ sp.diags(inv_col_scale, format="csc")
+    normal = np.asarray((a_scaled.T @ a_scaled).toarray(), dtype=np.float64)
+    normal_scale = max(float(np.linalg.norm(normal, ord=np.inf)) if normal.size else 0.0, 1.0)
+    normal_regularization = max(float(abs(regularization)), 1.0e-14) * normal_scale
+    normal = normal + normal_regularization * np.eye(int(positions.size), dtype=np.float64)
+    solver_kind = "cholesky"
+    try:
+        factor = cho_factor(normal, lower=True, check_finite=False)
+
+        def solve_normal(rhs: np.ndarray) -> np.ndarray:
+            return np.asarray(cho_solve(factor, rhs, check_finite=False), dtype=np.float64).reshape((-1,))
+
+    except Exception:  # noqa: BLE001
+        solver_kind = "lu"
+        lu, piv = lu_factor(normal, check_finite=False)
+
+        def solve_normal(rhs: np.ndarray) -> np.ndarray:
+            return np.asarray(lu_solve((lu, piv), rhs, check_finite=False), dtype=np.float64).reshape((-1,))
+
+    a_window_nbytes = int(a_window.data.nbytes + a_window.indices.nbytes + a_window.indptr.nbytes)
+    normal_nbytes = int(normal.nbytes)
+    factor_nbytes = int(
+        a_window_nbytes
+        + 2 * normal_nbytes
+        + inv_col_scale.nbytes
+        + int(getattr(factor_bundle, "factor_nbytes_estimate", 0) or 0)
+    )
+    if max_nbytes_use > 0 and factor_nbytes > max_nbytes_use:
+        if emit is not None:
+            emit(
+                1,
+                "solve_v3_full_system_linear_gmres: true active block skipped final_budget "
+                f"bytes={int(factor_nbytes)} max_bytes={int(max_nbytes_use)} block_size={int(positions.size)}",
+            )
+        return None
+    metadata = {
+        "block_size": int(positions.size),
+        "kinetic_selected": int(kinetic_positions.size),
+        "tail_selected": int(tail_selected),
+        "x_count": int(x_count),
+        "ell_count": int(ell_count),
+        "species_count": None if species_count is None else int(species_count),
+        "theta_stride": int(max(1, int(theta_stride))),
+        "zeta_stride": int(max(1, int(zeta_stride))),
+        "include_tail": bool(include_tail),
+        "max_tail": int(max_tail),
+        "column_batch": int(batch),
+        "drop_tol": float(drop),
+        "a_window_nnz": int(a_window.nnz),
+        "a_window_nbytes_actual": int(a_window_nbytes),
+        "normal_nbytes": int(normal_nbytes),
+        "normal_regularization": float(normal_regularization),
+        "normal_solver": str(solver_kind),
+        "factor_nbytes_estimate": int(factor_nbytes),
+        "nonzero_column_count": int(np.count_nonzero(good)),
+        "zero_or_invalid_column_count": int(positions.size - np.count_nonzero(good)),
+        "damping": bool(damping),
+        "beta_max": float(beta_max),
+        "symbolic_ordering": ordering.to_dict(),
+        "setup_s": float(max(0.0, time.perf_counter() - t0)),
+    }
+    if emit is not None:
+        emit(
+            1,
+            "solve_v3_full_system_linear_gmres: true active block built "
+            f"block_size={int(positions.size)} kinetic={int(kinetic_positions.size)} "
+            f"tail={int(tail_selected)} nnz={int(a_window.nnz)} "
+            f"setup_s={metadata['setup_s']:.3f} bytes={int(factor_nbytes)}",
+        )
+    return _TrueOperatorWindowLSQPreconditionerBundle(
+        base_factor=factor_bundle,
+        true_matvec=lambda x: np.asarray(true_matvec(np.asarray(x, dtype=np.float64)), dtype=np.float64).reshape((-1,)),
+        window_positions=np.asarray(positions, dtype=np.int64),
+        a_window=a_scaled,
+        inv_column_scale=np.asarray(inv_col_scale, dtype=np.float64),
+        solve_normal=solve_normal,
+        kind=f"{getattr(factor_bundle, 'kind', 'host')}_true_active_block_lsq",
+        regularization=float(regularization),
+        damping=bool(damping),
+        beta_max=float(beta_max),
+        factor_nbytes_estimate=int(factor_nbytes),
+        factor_nnz_estimate=int(a_window.nnz),
+        factor_s=float(max(0.0, time.perf_counter() - t0)),
+        metadata=metadata,
+    )
+
+
+def _try_build_true_operator_active_residual_block_lsq_preconditioner(
+    *,
+    true_matvec: Callable[[np.ndarray], np.ndarray],
+    true_matmat: Callable[[np.ndarray], np.ndarray] | None,
+    factor_bundle: object,
+    residual: np.ndarray,
+    layout: RHS1BlockLayout,
+    active_indices: np.ndarray | None,
+    max_nbytes: int,
+    regularization: float,
+    max_block_size: int,
+    column_batch: int,
+    drop_tol: float,
+    include_tail: bool,
+    max_tail: int,
+    kinetic_only: bool = True,
+    damping: bool = False,
+    beta_max: float = 10.0,
+    emit: Callable[[int, str], None] | None = None,
+) -> _TrueOperatorWindowLSQPreconditionerBundle | None:
+    """Build a true-operator LSQ correction on dominant residual components.
+
+    This is the residual-adaptive counterpart to the deterministic low-x/low-ell
+    active block.  It selects the largest remaining residual entries in the
+    active vector, forms the exact true-operator columns ``A[:, W]``, and solves
+    a bounded normal equation for the correction on ``W``.  The caller still
+    performs the measured true-residual acceptance test.
+    """
+
+    import scipy.sparse as sp  # noqa: PLC0415
+    from scipy.linalg import cho_factor, cho_solve, lu_factor, lu_solve  # noqa: PLC0415
+
+    t0 = time.perf_counter()
+    residual_np = np.asarray(residual, dtype=np.float64).reshape((-1,))
+    n = int(residual_np.size)
+    active_np = (
+        np.arange(int(layout.total_size), dtype=np.int64)
+        if active_indices is None
+        else np.asarray(active_indices, dtype=np.int64).reshape((-1,))
+    )
+    if active_np.shape != (n,):
+        if emit is not None:
+            emit(
+                1,
+                "solve_v3_full_system_linear_gmres: true active residual block skipped "
+                f"active_shape_mismatch active={tuple(active_np.shape)} residual={(n,)}",
+            )
+        return None
+
+    max_block_size_use = max(1, int(max_block_size))
+    residual_abs = np.abs(residual_np)
+    finite = np.isfinite(residual_abs)
+    kinetic_mask = active_np < int(layout.f_size)
+    base_mask = finite & kinetic_mask if bool(kinetic_only) else finite
+    if bool(include_tail) and bool(kinetic_only):
+        tail_mask = finite & ~kinetic_mask
+    else:
+        tail_mask = np.zeros_like(finite, dtype=bool)
+
+    tail_selected = 0
+    tail_positions = np.zeros((0,), dtype=np.int64)
+    if bool(include_tail) and int(max_tail) > 0 and np.any(tail_mask):
+        tail_candidates = np.flatnonzero(tail_mask).astype(np.int64, copy=False)
+        tail_order = np.argsort(residual_abs[tail_candidates])[::-1]
+        tail_take = min(int(max_tail), max_block_size_use, int(tail_candidates.size))
+        tail_positions = tail_candidates[tail_order[:tail_take]].astype(np.int64, copy=False)
+        tail_selected = int(tail_positions.size)
+
+    kinetic_capacity = max(0, max_block_size_use - int(tail_positions.size))
+    if not np.any(base_mask) or kinetic_capacity == 0:
+        selected = tail_positions
+    else:
+        candidates = np.flatnonzero(base_mask).astype(np.int64, copy=False)
+        order = np.argsort(residual_abs[candidates])[::-1]
+        selected = candidates[order[:kinetic_capacity]].astype(np.int64, copy=False)
+        if tail_positions.size:
+            selected = np.concatenate((selected, tail_positions)).astype(np.int64, copy=False)
+    if selected.size:
+        _, first = np.unique(selected, return_index=True)
+        positions = selected[np.sort(first)].astype(np.int64, copy=False)
+    else:
+        positions = np.zeros((0,), dtype=np.int64)
+    if positions.size == 0:
+        return None
+    if positions.size > max_block_size_use:
+        return None
+
+    batch = max(1, int(column_batch))
+    max_nbytes_use = max(0, int(max_nbytes))
+    drop = max(0.0, float(drop_tol))
+    rows: list[np.ndarray] = []
+    cols: list[np.ndarray] = []
+    data: list[np.ndarray] = []
+    nnz_total = 0
+    for start in range(0, int(positions.size), int(batch)):
+        stop = min(int(positions.size), int(start) + int(batch))
+        pos_batch = np.asarray(positions[start:stop], dtype=np.int64)
+        ncols = int(pos_batch.size)
+        transient_estimated = int(2 * n * ncols * np.dtype(np.float64).itemsize)
+        estimated_before = int(nnz_total * (np.dtype(np.float64).itemsize + np.dtype(np.int32).itemsize))
+        estimated_before += int((positions.size + 1) * np.dtype(np.int32).itemsize)
+        estimated_before += int(2 * positions.size * positions.size * np.dtype(np.float64).itemsize)
+        estimated_before += int(transient_estimated)
+        if max_nbytes_use > 0 and estimated_before > max_nbytes_use:
+            if emit is not None:
+                emit(
+                    1,
+                    "solve_v3_full_system_linear_gmres: true active residual block budget exceeded "
+                    f"estimated_bytes={int(estimated_before)} max_bytes={int(max_nbytes_use)} "
+                    f"columns_done={int(start)}/{int(positions.size)}",
+                )
+            return None
+        basis = np.zeros((n, ncols), dtype=np.float64)
+        basis[pos_batch, np.arange(ncols, dtype=np.int64)] = 1.0
+        if true_matmat is not None and ncols > 1:
+            y_batch = np.asarray(true_matmat(basis), dtype=np.float64)
+        else:
+            y_batch = np.column_stack(
+                [np.asarray(true_matvec(basis[:, j]), dtype=np.float64).reshape((-1,)) for j in range(ncols)]
+            )
+        if y_batch.shape != (n, ncols):
+            return None
+        for local_col in range(ncols):
+            y_col = y_batch[:, local_col]
+            keep = np.flatnonzero(np.isfinite(y_col) & (np.abs(y_col) > drop))
+            if keep.size == 0:
+                continue
+            rows.append(keep.astype(np.int32, copy=False))
+            cols.append(np.full((int(keep.size),), int(start + local_col), dtype=np.int32))
+            data.append(np.asarray(y_col[keep], dtype=np.float64))
+            nnz_total += int(keep.size)
+    if not data:
+        return None
+
+    a_window = sp.csc_matrix(
+        (np.concatenate(data), (np.concatenate(rows), np.concatenate(cols))),
+        shape=(n, int(positions.size)),
+        dtype=np.float64,
+    )
+    a_window.sum_duplicates()
+    a_window.eliminate_zeros()
+    col_norms = np.sqrt(np.asarray(a_window.power(2).sum(axis=0), dtype=np.float64).reshape((-1,)))
+    norm_floor = max(float(abs(regularization)), np.finfo(np.float64).eps)
+    good = np.isfinite(col_norms) & (col_norms > norm_floor)
+    if not np.any(good):
+        return None
+    inv_col_scale = np.zeros_like(col_norms)
+    inv_col_scale[good] = 1.0 / col_norms[good]
+    a_scaled = a_window @ sp.diags(inv_col_scale, format="csc")
+    normal = np.asarray((a_scaled.T @ a_scaled).toarray(), dtype=np.float64)
+    normal_scale = max(float(np.linalg.norm(normal, ord=np.inf)) if normal.size else 0.0, 1.0)
+    normal_regularization = max(float(abs(regularization)), 1.0e-14) * normal_scale
+    normal = normal + normal_regularization * np.eye(int(positions.size), dtype=np.float64)
+    solver_kind = "cholesky"
+    try:
+        factor = cho_factor(normal, lower=True, check_finite=False)
+
+        def solve_normal(rhs: np.ndarray) -> np.ndarray:
+            return np.asarray(cho_solve(factor, rhs, check_finite=False), dtype=np.float64).reshape((-1,))
+
+    except Exception:  # noqa: BLE001
+        solver_kind = "lu"
+        lu, piv = lu_factor(normal, check_finite=False)
+
+        def solve_normal(rhs: np.ndarray) -> np.ndarray:
+            return np.asarray(lu_solve((lu, piv), rhs, check_finite=False), dtype=np.float64).reshape((-1,))
+
+    a_window_nbytes = int(a_window.data.nbytes + a_window.indices.nbytes + a_window.indptr.nbytes)
+    normal_nbytes = int(normal.nbytes)
+    factor_nbytes = int(
+        a_window_nbytes
+        + 2 * normal_nbytes
+        + inv_col_scale.nbytes
+        + int(getattr(factor_bundle, "factor_nbytes_estimate", 0) or 0)
+    )
+    if max_nbytes_use > 0 and factor_nbytes > max_nbytes_use:
+        if emit is not None:
+            emit(
+                1,
+                "solve_v3_full_system_linear_gmres: true active residual block skipped final_budget "
+                f"bytes={int(factor_nbytes)} max_bytes={int(max_nbytes_use)} block_size={int(positions.size)}",
+            )
+        return None
+
+    total_energy = float(np.sum(np.square(residual_np[np.isfinite(residual_np)])))
+    selected_energy = float(np.sum(np.square(residual_np[positions])))
+    metadata = {
+        "block_size": int(positions.size),
+        "kinetic_selected": int(np.count_nonzero(active_np[positions] < int(layout.f_size))),
+        "tail_selected": int(tail_selected),
+        "kinetic_only": bool(kinetic_only),
+        "include_tail": bool(include_tail),
+        "max_tail": int(max_tail),
+        "column_batch": int(batch),
+        "drop_tol": float(drop),
+        "a_window_nnz": int(a_window.nnz),
+        "a_window_nbytes_actual": int(a_window_nbytes),
+        "normal_nbytes": int(normal_nbytes),
+        "normal_regularization": float(normal_regularization),
+        "normal_solver": str(solver_kind),
+        "factor_nbytes_estimate": int(factor_nbytes),
+        "nonzero_column_count": int(np.count_nonzero(good)),
+        "zero_or_invalid_column_count": int(positions.size - np.count_nonzero(good)),
+        "residual_energy_fraction": float(selected_energy / total_energy) if total_energy > 0.0 else 0.0,
+        "max_residual_abs_selected": float(np.max(residual_abs[positions])) if positions.size else 0.0,
+        "damping": bool(damping),
+        "beta_max": float(beta_max),
+        "selection": "top_residual_active_positions",
+        "setup_s": float(max(0.0, time.perf_counter() - t0)),
+    }
+    if emit is not None:
+        emit(
+            1,
+            "solve_v3_full_system_linear_gmres: true active residual block built "
+            f"block_size={int(positions.size)} kinetic={metadata['kinetic_selected']} "
+            f"tail={int(tail_selected)} energy={metadata['residual_energy_fraction']:.3e} "
+            f"nnz={int(a_window.nnz)} setup_s={metadata['setup_s']:.3f} bytes={int(factor_nbytes)}",
+        )
+    return _TrueOperatorWindowLSQPreconditionerBundle(
+        base_factor=factor_bundle,
+        true_matvec=lambda x: np.asarray(true_matvec(np.asarray(x, dtype=np.float64)), dtype=np.float64).reshape((-1,)),
+        window_positions=np.asarray(positions, dtype=np.int64),
+        a_window=a_scaled,
+        inv_column_scale=np.asarray(inv_col_scale, dtype=np.float64),
+        solve_normal=solve_normal,
+        kind=f"{getattr(factor_bundle, 'kind', 'host')}_true_active_residual_block_lsq",
+        regularization=float(regularization),
+        damping=bool(damping),
+        beta_max=float(beta_max),
+        factor_nbytes_estimate=int(factor_nbytes),
+        factor_nnz_estimate=int(a_window.nnz),
+        factor_s=float(max(0.0, time.perf_counter() - t0)),
+        metadata=metadata,
+    )
+
+
+def _try_build_true_operator_active_submatrix_preconditioner(
+    *,
+    true_matvec: Callable[[np.ndarray], np.ndarray],
+    true_matmat: Callable[[np.ndarray], np.ndarray] | None,
+    factor_bundle: object,
+    residual: np.ndarray,
+    layout: RHS1BlockLayout,
+    active_indices: np.ndarray | None,
+    x_count: int,
+    ell_count: int,
+    max_nbytes: int,
+    regularization: float,
+    max_block_size: int,
+    column_batch: int,
+    drop_tol: float,
+    include_tail: bool,
+    max_tail: int,
+    species_count: int | None = None,
+    theta_stride: int = 1,
+    zeta_stride: int = 1,
+    damping: bool = True,
+    alpha_clip: float = 10.0,
+    emit: Callable[[int, str], None] | None = None,
+) -> _TrueOperatorActiveSubmatrixPreconditionerBundle | None:
+    """Build a true local active-block factor ``A[W,W]``.
+
+    The LSQ active-block path uses full columns ``A[:, W]`` as a coarse
+    correction.  This builder instead factors the local block rows and columns
+    directly, which is closer to an additive-Schwarz block solve and retains
+    the true finite-beta/field-split couplings inside the selected active
+    kinetic block.
+    """
+
+    import scipy.sparse as sp  # noqa: PLC0415
+    from scipy.sparse.linalg import splu, spilu  # noqa: PLC0415
+
+    t0 = time.perf_counter()
+    residual_np = np.asarray(residual, dtype=np.float64).reshape((-1,))
+    n = int(residual_np.size)
+    active_np = (
+        np.arange(int(layout.total_size), dtype=np.int64)
+        if active_indices is None
+        else np.asarray(active_indices, dtype=np.int64).reshape((-1,))
+    )
+    if active_np.shape != (n,):
+        if emit is not None:
+            emit(
+                1,
+                "solve_v3_full_system_linear_gmres: true active submatrix skipped "
+                f"active_shape_mismatch active={tuple(active_np.shape)} residual={(n,)}",
+            )
+        return None
+    try:
+        ordering = RHS1ActiveFieldSplitOrdering.from_layout(layout, active_np)
+    except ValueError as exc:
+        if emit is not None:
+            emit(
+                1,
+                "solve_v3_full_system_linear_gmres: true active submatrix skipped "
+                f"invalid_ordering={type(exc).__name__}: {exc}",
+            )
+        return None
+
+    max_block_size_use = max(1, int(max_block_size))
+    kinetic_positions = ordering.dominant_kinetic_positions(
+        x_count=max(0, int(x_count)),
+        ell_count=max(0, int(ell_count)),
+        species_count=species_count,
+        theta_stride=max(1, int(theta_stride)),
+        zeta_stride=max(1, int(zeta_stride)),
+        max_positions=max_block_size_use,
+    )
+    positions = kinetic_positions.astype(np.int64, copy=False)
+    tail_selected = 0
+    if bool(include_tail) and positions.size < max_block_size_use and int(max_tail) > 0:
+        tail_candidates = np.concatenate(
+            (
+                ordering.phi1_positions.astype(np.int64, copy=False),
+                ordering.extra_positions.astype(np.int64, copy=False),
+            )
+        )
+        if tail_candidates.size:
+            take = min(int(max_tail), max_block_size_use - int(positions.size))
+            tail_selected = int(min(int(tail_candidates.size), int(take)))
+            positions = np.concatenate((positions, tail_candidates[:tail_selected])).astype(np.int64, copy=False)
+    if positions.size:
+        _, first = np.unique(positions, return_index=True)
+        positions = positions[np.sort(first)].astype(np.int64, copy=False)
+    if positions.size == 0 or positions.size > max_block_size_use:
+        return None
+
+    batch = max(1, int(column_batch))
+    max_nbytes_use = max(0, int(max_nbytes))
+    drop = max(0.0, float(drop_tol))
+    rows: list[np.ndarray] = []
+    cols: list[np.ndarray] = []
+    data: list[np.ndarray] = []
+    nnz_total = 0
+    for start in range(0, int(positions.size), int(batch)):
+        stop = min(int(positions.size), int(start) + int(batch))
+        pos_batch = np.asarray(positions[start:stop], dtype=np.int64)
+        ncols = int(pos_batch.size)
+        transient_estimated = int(2 * n * ncols * np.dtype(np.float64).itemsize)
+        estimated_before = int(nnz_total * (np.dtype(np.float64).itemsize + np.dtype(np.int32).itemsize))
+        estimated_before += int((positions.size + 1) * np.dtype(np.int32).itemsize)
+        estimated_before += int(positions.size * positions.size * np.dtype(np.float64).itemsize)
+        estimated_before += int(transient_estimated)
+        if max_nbytes_use > 0 and estimated_before > max_nbytes_use:
+            if emit is not None:
+                emit(
+                    1,
+                    "solve_v3_full_system_linear_gmres: true active submatrix budget exceeded "
+                    f"estimated_bytes={int(estimated_before)} max_bytes={int(max_nbytes_use)} "
+                    f"columns_done={int(start)}/{int(positions.size)}",
+                )
+            return None
+        basis = np.zeros((n, ncols), dtype=np.float64)
+        basis[pos_batch, np.arange(ncols, dtype=np.int64)] = 1.0
+        if true_matmat is not None and ncols > 1:
+            y_batch = np.asarray(true_matmat(basis), dtype=np.float64)
+        else:
+            y_batch = np.column_stack(
+                [np.asarray(true_matvec(basis[:, j]), dtype=np.float64).reshape((-1,)) for j in range(ncols)]
+            )
+        if y_batch.shape != (n, ncols):
+            return None
+        for local_col in range(ncols):
+            y_col = y_batch[:, local_col]
+            keep = np.flatnonzero(np.isfinite(y_col) & (np.abs(y_col) > drop))
+            if keep.size == 0:
+                continue
+            rows.append(keep.astype(np.int32, copy=False))
+            cols.append(np.full((int(keep.size),), int(start + local_col), dtype=np.int32))
+            data.append(np.asarray(y_col[keep], dtype=np.float64))
+            nnz_total += int(keep.size)
+    if not data:
+        return None
+
+    a_window = sp.csc_matrix(
+        (np.concatenate(data), (np.concatenate(rows), np.concatenate(cols))),
+        shape=(n, int(positions.size)),
+        dtype=np.float64,
+    )
+    a_window.sum_duplicates()
+    a_window.eliminate_zeros()
+    a_block = a_window[positions, :].tocsc()
+    a_block.sum_duplicates()
+    a_block.eliminate_zeros()
+    if a_block.shape != (int(positions.size), int(positions.size)) or a_block.nnz == 0:
+        return None
+
+    row_norms = np.sqrt(np.asarray(a_block.power(2).sum(axis=1), dtype=np.float64).reshape((-1,)))
+    col_norms = np.sqrt(np.asarray(a_block.power(2).sum(axis=0), dtype=np.float64).reshape((-1,)))
+    norm_floor = max(float(abs(regularization)), np.finfo(np.float64).eps)
+    inv_row_scale = np.ones_like(row_norms)
+    inv_col_scale = np.ones_like(col_norms)
+    good_rows = np.isfinite(row_norms) & (row_norms > norm_floor)
+    good_cols = np.isfinite(col_norms) & (col_norms > norm_floor)
+    inv_row_scale[good_rows] = 1.0 / row_norms[good_rows]
+    inv_col_scale[good_cols] = 1.0 / col_norms[good_cols]
+    a_scaled = sp.diags(inv_row_scale, format="csc") @ a_block @ sp.diags(inv_col_scale, format="csc")
+    scale = max(float(np.max(np.abs(a_scaled.data))) if a_scaled.nnz else 0.0, 1.0)
+    reg = max(float(abs(regularization)), 1.0e-14) * scale
+    if reg > 0.0:
+        a_scaled = (a_scaled + reg * sp.eye(int(positions.size), format="csc", dtype=np.float64)).tocsc()
+
+    solver_kind = "splu"
+    try:
+        lu = splu(a_scaled, permc_spec="COLAMD", diag_pivot_thresh=0.0)
+    except Exception:  # noqa: BLE001
+        solver_kind = "spilu"
+        lu = spilu(a_scaled, drop_tol=max(float(regularization), 1.0e-12), fill_factor=20.0)
+
+    def solve_block(rhs_block: np.ndarray) -> np.ndarray:
+        rhs_np = np.asarray(rhs_block, dtype=np.float64).reshape((-1,))
+        y_scaled = np.asarray(lu.solve(inv_row_scale * rhs_np), dtype=np.float64).reshape((-1,))
+        return np.asarray(inv_col_scale * y_scaled, dtype=np.float64).reshape((-1,))
+
+    a_window_nbytes = int(a_window.data.nbytes + a_window.indices.nbytes + a_window.indptr.nbytes)
+    a_block_nbytes = int(a_block.data.nbytes + a_block.indices.nbytes + a_block.indptr.nbytes)
+    lu_nnz = int(getattr(lu, "L").nnz + getattr(lu, "U").nnz)
+    factor_nbytes = int(
+        a_window_nbytes
+        + a_block_nbytes
+        + lu_nnz * (np.dtype(np.float64).itemsize + np.dtype(np.int32).itemsize)
+        + inv_row_scale.nbytes
+        + inv_col_scale.nbytes
+        + int(getattr(factor_bundle, "factor_nbytes_estimate", 0) or 0)
+    )
+    if max_nbytes_use > 0 and factor_nbytes > max_nbytes_use:
+        if emit is not None:
+            emit(
+                1,
+                "solve_v3_full_system_linear_gmres: true active submatrix skipped final_budget "
+                f"bytes={int(factor_nbytes)} max_bytes={int(max_nbytes_use)} block_size={int(positions.size)}",
+            )
+        return None
+
+    metadata = {
+        "block_size": int(positions.size),
+        "kinetic_selected": int(kinetic_positions.size),
+        "tail_selected": int(tail_selected),
+        "x_count": int(x_count),
+        "ell_count": int(ell_count),
+        "species_count": None if species_count is None else int(species_count),
+        "theta_stride": int(max(1, int(theta_stride))),
+        "zeta_stride": int(max(1, int(zeta_stride))),
+        "include_tail": bool(include_tail),
+        "max_tail": int(max_tail),
+        "column_batch": int(batch),
+        "drop_tol": float(drop),
+        "a_window_nnz": int(a_window.nnz),
+        "a_block_nnz": int(a_block.nnz),
+        "lu_nnz": int(lu_nnz),
+        "a_window_nbytes_actual": int(a_window_nbytes),
+        "a_block_nbytes_actual": int(a_block_nbytes),
+        "local_regularization": float(reg),
+        "local_solver": str(solver_kind),
+        "factor_nbytes_estimate": int(factor_nbytes),
+        "damping": bool(damping),
+        "alpha_clip": float(alpha_clip),
+        "symbolic_ordering": ordering.to_dict(),
+        "setup_s": float(max(0.0, time.perf_counter() - t0)),
+    }
+    if emit is not None:
+        emit(
+            1,
+            "solve_v3_full_system_linear_gmres: true active submatrix built "
+            f"block_size={int(positions.size)} kinetic={int(kinetic_positions.size)} "
+            f"tail={int(tail_selected)} block_nnz={int(a_block.nnz)} lu_nnz={int(lu_nnz)} "
+            f"setup_s={metadata['setup_s']:.3f} bytes={int(factor_nbytes)}",
+        )
+    return _TrueOperatorActiveSubmatrixPreconditionerBundle(
+        base_factor=factor_bundle,
+        true_matvec=lambda x: np.asarray(true_matvec(np.asarray(x, dtype=np.float64)), dtype=np.float64).reshape((-1,)),
+        block_positions=np.asarray(positions, dtype=np.int64),
+        a_window=a_window,
+        solve_block=solve_block,
+        kind=f"{getattr(factor_bundle, 'kind', 'host')}_true_active_submatrix",
+        damping=bool(damping),
+        alpha_clip=float(alpha_clip),
+        factor_nbytes_estimate=int(factor_nbytes),
+        factor_nnz_estimate=int(a_block.nnz),
+        factor_s=float(max(0.0, time.perf_counter() - t0)),
+        metadata=metadata,
+    )
+
+
+def _try_build_true_operator_coupled_coarse_lsq_preconditioner(
+    *,
+    true_matvec: Callable[[np.ndarray], np.ndarray],
+    true_matmat: Callable[[np.ndarray], np.ndarray] | None,
+    factor_bundle: object,
+    residual: np.ndarray,
+    op: V3FullSystemOperator,
+    layout: RHS1BlockLayout,
+    active_indices: np.ndarray | None,
+    max_windows: int,
+    x_radius: int,
+    ell_radius: int,
+    max_nbytes: int,
+    regularization: float,
+    max_coarse_size: int,
+    column_batch: int,
+    drop_tol: float,
+    low_lmax: int,
+    profile_moment_count: int,
+    angular_lmax: int,
+    angular_mode_max: int,
+    max_tail_units: int,
+    include_tail: bool,
+    include_constraint_sources: bool,
+    include_fsavg: bool,
+    include_window_residual: bool,
+    include_profile_moments: bool,
+    include_angular_residual: bool,
+    include_angular_basis: bool,
+    include_preconditioned_loads: bool,
+    preconditioned_load_max_columns: int,
+    preconditioned_load_max_nnz: int,
+    preconditioned_load_drop_tol: float,
+    damping: bool = False,
+    beta_max: float = 10.0,
+    emit: Callable[[int, str], None] | None = None,
+) -> _TrueOperatorCoupledCoarseLSQPreconditionerBundle | None:
+    """Build a coupled true-operator coarse residual correction.
+
+    The basis is deliberately small and physics-structured: it combines the
+    global tail/source unknowns, source-moment directions used by
+    constraintScheme=1/2, velocity/profile moments, low-L flux-surface-averaged
+    residual moments, low Fourier angular residual projections, and the dominant
+    kinetic residual window.  Optionally it also applies the existing active
+    preconditioner to these physics/load directions, yielding solution-space
+    response columns closer to a field-split Schur correction.  The coarse
+    equation uses columns of the *true* active operator, not the reduced
+    preconditioner matrix.
+    """
+
+    import scipy.sparse as sp  # noqa: PLC0415
+    from scipy.linalg import cho_factor, cho_solve, lu_factor, lu_solve  # noqa: PLC0415
+
+    t0 = time.perf_counter()
+    residual_np = np.asarray(residual, dtype=np.float64).reshape((-1,))
+    n = int(residual_np.size)
+    if active_indices is None:
+        active_np = np.arange(int(layout.total_size), dtype=np.int64)
+    else:
+        active_np = np.asarray(active_indices, dtype=np.int64).reshape((-1,))
+    if active_np.shape != (n,):
+        if emit is not None:
+            emit(
+                1,
+                "solve_v3_full_system_linear_gmres: true coupled coarse skipped "
+                f"active_shape_mismatch active={tuple(active_np.shape)} residual={(n,)}",
+            )
+        return None
+    max_cols = max(1, int(max_coarse_size))
+    max_nbytes_use = max(0, int(max_nbytes))
+    drop = max(0.0, float(drop_tol))
+
+    col_rows: list[np.ndarray] = []
+    col_data: list[np.ndarray] = []
+    names: list[str] = []
+
+    def _add_active_column(name: str, positions: Any, values: Any) -> None:
+        if len(names) >= max_cols:
+            return
+        pos = np.asarray(positions, dtype=np.int64).reshape((-1,))
+        val = np.asarray(values, dtype=np.float64).reshape((-1,))
+        if pos.shape != val.shape or pos.size == 0:
+            return
+        valid = (pos >= 0) & (pos < n) & np.isfinite(val) & (np.abs(val) > 0.0)
+        if not np.any(valid):
+            return
+        pos = pos[valid]
+        val = val[valid]
+        order = np.argsort(pos)
+        pos = pos[order]
+        val = val[order]
+        unique, inverse = np.unique(pos, return_inverse=True)
+        if unique.size != pos.size:
+            summed = np.zeros((int(unique.size),), dtype=np.float64)
+            np.add.at(summed, inverse, val)
+            pos = unique
+            val = summed
+        norm = float(np.linalg.norm(val))
+        if not (np.isfinite(norm) and norm > 0.0):
+            return
+        col_rows.append(pos.astype(np.int32, copy=False))
+        col_data.append(val.astype(np.float64, copy=False))
+        names.append(str(name))
+
+    def _add_full_column(name: str, full: Any) -> None:
+        if len(names) >= max_cols:
+            return
+        vec = np.asarray(full, dtype=np.float64).reshape((-1,))
+        if vec.shape != (int(layout.total_size),):
+            return
+        active_values = vec[active_np]
+        keep = np.flatnonzero(np.isfinite(active_values) & (np.abs(active_values) > 0.0))
+        if keep.size == 0:
+            return
+        _add_active_column(name, keep, active_values[keep])
+
+    def _apply_base_preconditioner_response(load: np.ndarray) -> np.ndarray | None:
+        load_np = np.asarray(load, dtype=np.float64).reshape((-1,))
+        if load_np.shape != (n,):
+            return None
+        try:
+            solve = getattr(factor_bundle, "solve", None)
+            if solve is not None:
+                response = np.asarray(solve(load_np), dtype=np.float64).reshape((-1,))
+                if response.shape == (n,):
+                    return response
+        except Exception:
+            pass
+        try:
+            operator = getattr(factor_bundle, "operator", None)
+            matvec = getattr(operator, "matvec", None)
+            if matvec is not None:
+                response = np.asarray(matvec(load_np), dtype=np.float64).reshape((-1,))
+                if response.shape == (n,):
+                    return response
+            if callable(operator):
+                response = np.asarray(operator(load_np), dtype=np.float64).reshape((-1,))
+                if response.shape == (n,):
+                    return response
+        except Exception:
+            pass
+        return None
+
+    kinetic_mask = active_np < int(layout.f_size)
+    kinetic_positions = np.flatnonzero(kinetic_mask).astype(np.int64, copy=False)
+    decoded = None
+    if kinetic_positions.size:
+        decoded = layout.decode_kinetic_indices(active_np[kinetic_mask])
+
+    def _add_decoded_kinetic_column(name: str, mask: np.ndarray, values: np.ndarray) -> None:
+        if decoded is None or kinetic_positions.size == 0:
+            return
+        mask_np = np.asarray(mask, dtype=bool).reshape((-1,))
+        if mask_np.shape != kinetic_positions.shape:
+            return
+        local = kinetic_positions[mask_np]
+        if local.size == 0:
+            return
+        values_np = np.asarray(values, dtype=np.float64).reshape((-1,))
+        if values_np.shape != kinetic_positions.shape:
+            return
+        _add_active_column(name, local, values_np[mask_np])
+
+    positions, window_metadata = _true_operator_window_positions_from_residual(
+        residual=residual_np,
+        layout=layout,
+        active_indices=active_np,
+        max_windows=int(max_windows),
+        x_radius=int(x_radius),
+        ell_radius=int(ell_radius),
+        include_tail=False,
+        explicit_specs=(),
+    )
+    if bool(include_window_residual) and positions.size:
+        _add_active_column("dominant_kinetic_residual_window", positions, residual_np[positions])
+        if decoded is not None:
+            for i_window, meta in enumerate(window_metadata):
+                if len(names) >= max_cols:
+                    break
+                try:
+                    species = int(meta.get("species", -1))
+                    x_lo, x_hi = tuple(int(v) for v in meta.get("x_range", (-1, -1)))
+                    ell_lo, ell_hi = tuple(int(v) for v in meta.get("ell_range", (-1, -1)))
+                    x_center = int(meta.get("x_center", x_lo))
+                    ell_center = int(meta.get("ell_center", ell_lo))
+                except Exception:
+                    continue
+                mask = (
+                    (decoded.species == int(species))
+                    & (decoded.x >= int(x_lo))
+                    & (decoded.x <= int(x_hi))
+                    & (decoded.ell >= int(ell_lo))
+                    & (decoded.ell <= int(ell_hi))
+                )
+                values = residual_np[kinetic_positions]
+                _add_decoded_kinetic_column(
+                    f"dominant_kinetic_residual_window_{i_window}_s{species}_x{x_center}_l{ell_center}",
+                    mask,
+                    values,
+                )
+
+    tail_positions = np.flatnonzero(active_np >= int(layout.f_size)).astype(np.int64, copy=False)
+    if bool(include_tail) and tail_positions.size:
+        _add_active_column("tail_residual", tail_positions, residual_np[tail_positions])
+        if int(tail_positions.size) <= int(max_tail_units):
+            for local_pos in tail_positions:
+                _add_active_column(f"tail_unit_{int(active_np[int(local_pos)] - int(layout.f_size))}", [local_pos], [1.0])
+
+    if bool(include_constraint_sources):
+        if int(op.constraint_scheme) == 1:
+            ix0 = _ix_min(bool(op.point_at_x0))
+            source_basis = _source_basis_constraint_scheme_1(op.x)
+            for species in range(int(op.n_species)):
+                for basis_index, basis in enumerate(source_basis):
+                    if len(names) >= max_cols:
+                        break
+                    f_dir = jnp.zeros(op.fblock.f_shape, dtype=jnp.float64)
+                    f_dir = f_dir.at[species, ix0:, 0, :, :].set(basis[ix0:, None, None])
+                    full = jnp.concatenate(
+                        [f_dir.reshape((-1,)), jnp.zeros((int(layout.total_size) - int(layout.f_size),), dtype=jnp.float64)]
+                    )
+                    _add_full_column(f"constraint1_source_s{species}_{basis_index}", full)
+        elif int(op.constraint_scheme) == 2:
+            try:
+                f_res = jnp.zeros(op.fblock.f_shape, dtype=jnp.float64)
+                kinetic_mask = active_np < int(layout.f_size)
+                if np.any(kinetic_mask):
+                    f_res = f_res.reshape((-1,)).at[jnp.asarray(active_np[kinetic_mask], dtype=jnp.int32)].set(
+                        jnp.asarray(residual_np[np.flatnonzero(kinetic_mask)], dtype=jnp.float64)
+                    )
+                    f_res = f_res.reshape(op.fblock.f_shape)
+                    src = _constraint_scheme2_source_from_f(op, f_res)
+                    full = jnp.concatenate(
+                        [
+                            _constraint_scheme2_inject_source(op, src),
+                            jnp.zeros((int(layout.total_size) - int(layout.f_size),), dtype=jnp.float64),
+                        ]
+                    )
+                    _add_full_column("constraint2_source_residual", full)
+            except Exception:
+                pass
+
+    factor_np = None
+    f_res_np = None
+    if kinetic_positions.size:
+        f_res_np = np.zeros(tuple(int(v) for v in op.fblock.f_shape), dtype=np.float64)
+        f_res_np.reshape((-1,))[active_np[kinetic_mask]] = residual_np[np.flatnonzero(kinetic_mask)]
+        factor_np = np.asarray(
+            jax.device_get(_fs_average_factor(op.theta_weights, op.zeta_weights, op.d_hat)),
+            dtype=np.float64,
+        )
+
+    if bool(include_profile_moments) and kinetic_positions.size and decoded is not None:
+        x_np = np.asarray(jax.device_get(op.x), dtype=np.float64).reshape((-1,))
+        xw_np = np.asarray(jax.device_get(op.x_weights), dtype=np.float64).reshape((-1,))
+        if x_np.size == int(layout.n_x) and xw_np.size == int(layout.n_x):
+            moment_specs: list[tuple[str, int, np.ndarray]] = [
+                ("density_moment", 0, (x_np**2) * xw_np),
+                ("pressure_moment", 0, (x_np**4) * xw_np),
+                ("flow_current_moment", min(1, int(layout.n_xi) - 1), (x_np**3) * xw_np),
+                ("heat_flow_moment", min(1, int(layout.n_xi) - 1), (x_np**5) * xw_np),
+            ]
+            if factor_np is not None:
+                angular_values = np.asarray(factor_np[decoded.theta, decoded.zeta], dtype=np.float64)
+                angular_norm = float(np.linalg.norm(angular_values))
+                if np.isfinite(angular_norm) and angular_norm > 0.0:
+                    angular_values = angular_values / float(angular_norm)
+                else:
+                    angular_values = np.full(
+                        kinetic_positions.shape,
+                        float(max(1, int(layout.n_theta) * int(layout.n_zeta))) ** -0.5,
+                        dtype=np.float64,
+                    )
+            else:
+                angular_values = np.full(
+                    kinetic_positions.shape,
+                    float(max(1, int(layout.n_theta) * int(layout.n_zeta))) ** -0.5,
+                    dtype=np.float64,
+                )
+            for moment_name, ell, weights in moment_specs[: max(0, int(profile_moment_count))]:
+                if len(names) >= max_cols:
+                    break
+                if int(ell) < 0 or int(ell) >= int(layout.n_xi):
+                    continue
+                for species in range(int(layout.n_species)):
+                    if len(names) >= max_cols:
+                        break
+                    mask = (decoded.species == int(species)) & (decoded.ell == int(ell))
+                    values = np.asarray(weights[decoded.x], dtype=np.float64) * angular_values
+                    _add_decoded_kinetic_column(f"profile_{moment_name}_s{species}_l{int(ell)}", mask, values)
+
+    if bool(include_fsavg):
+        if f_res_np is not None and factor_np is not None:
+            f_res_np = np.zeros(tuple(int(v) for v in op.fblock.f_shape), dtype=np.float64)
+            f_res_np.reshape((-1,))[active_np[kinetic_mask]] = residual_np[np.flatnonzero(kinetic_mask)]
+            lmax_use = max(0, min(int(low_lmax), int(layout.n_xi) - 1))
+            for ell in range(lmax_use + 1):
+                for species in range(int(layout.n_species)):
+                    if len(names) >= max_cols:
+                        break
+                    avg = np.einsum("tz,xtz->x", factor_np, f_res_np[species, :, ell, :, :])
+                    f_dir_np = np.zeros_like(f_res_np)
+                    f_dir_np[species, :, ell, :, :] = avg[:, None, None]
+                    full_np = np.concatenate(
+                        [
+                            f_dir_np.reshape((-1,)),
+                            np.zeros((int(layout.total_size) - int(layout.f_size),), dtype=np.float64),
+                        ]
+                    )
+                    _add_full_column(f"fsavg_residual_s{species}_l{ell}", full_np)
+
+    if (
+        (bool(include_angular_residual) or bool(include_angular_basis))
+        and f_res_np is not None
+        and factor_np is not None
+        and decoded is not None
+        and int(layout.n_theta) > 1
+        and int(layout.n_zeta) > 1
+    ):
+        theta = np.arange(int(layout.n_theta), dtype=np.float64)
+        zeta = np.arange(int(layout.n_zeta), dtype=np.float64)
+        two_pi = float(2.0 * np.pi)
+        all_mode_pairs = (
+            (1, 0),
+            (0, 1),
+            (1, 1),
+            (1, -1),
+            (2, 0),
+            (0, 2),
+            (2, 1),
+            (1, 2),
+            (2, -1),
+            (1, -2),
+            (2, 2),
+            (2, -2),
+            (3, 0),
+            (0, 3),
+            (3, 1),
+            (1, 3),
+            (3, -1),
+            (1, -3),
+        )
+        max_mode = max(0, int(angular_mode_max))
+        mode_pairs = tuple(
+            pair for pair in all_mode_pairs if max(abs(int(pair[0])), abs(int(pair[1]))) <= int(max_mode)
+        )
+        lmax_use = max(0, min(int(angular_lmax), int(layout.n_xi) - 1))
+        for ell in range(lmax_use + 1):
+            for m_mode, n_mode in mode_pairs:
+                if len(names) >= max_cols:
+                    break
+                phase = two_pi * (
+                    float(m_mode) * theta[:, None] / float(max(1, int(layout.n_theta)))
+                    + float(n_mode) * zeta[None, :] / float(max(1, int(layout.n_zeta)))
+                )
+                for parity, pattern in (("cos", np.cos(phase)), ("sin", np.sin(phase))):
+                    if len(names) >= max_cols:
+                        break
+                    weighted_pattern = factor_np * pattern
+                    denom = float(np.sum(weighted_pattern * pattern))
+                    if not (np.isfinite(denom) and abs(denom) > 0.0):
+                        denom = float(np.sum(pattern * pattern))
+                    if not (np.isfinite(denom) and abs(denom) > 0.0):
+                        continue
+                    pattern_values = pattern[decoded.theta, decoded.zeta]
+                    if bool(include_angular_residual):
+                        for species in range(int(layout.n_species)):
+                            if len(names) >= max_cols:
+                                break
+                            coeff = np.einsum(
+                                "tz,xtz->x",
+                                weighted_pattern,
+                                f_res_np[species, :, ell, :, :],
+                            ) / float(denom)
+                            mask = (decoded.species == int(species)) & (decoded.ell == int(ell))
+                            values = np.asarray(coeff[decoded.x], dtype=np.float64) * pattern_values
+                            _add_decoded_kinetic_column(
+                                f"angular_residual_s{species}_l{ell}_m{m_mode}_n{n_mode}_{parity}",
+                                mask,
+                                values,
+                            )
+                    if bool(include_angular_basis):
+                        pattern_norm = float(np.linalg.norm(pattern))
+                        if not (np.isfinite(pattern_norm) and pattern_norm > 0.0):
+                            continue
+                        unit_pattern_values = pattern_values / float(pattern_norm)
+                        for species in range(int(layout.n_species)):
+                            if len(names) >= max_cols:
+                                break
+                            mask = (decoded.species == int(species)) & (decoded.ell == int(ell))
+                            _add_decoded_kinetic_column(
+                                f"angular_basis_s{species}_l{ell}_m{m_mode}_n{n_mode}_{parity}",
+                                mask,
+                                unit_pattern_values,
+                            )
+
+    if not names:
+        if emit is not None:
+            emit(1, "solve_v3_full_system_linear_gmres: true coupled coarse skipped empty_basis")
+        return None
+    rows = np.concatenate(col_rows)
+    cols = np.concatenate(
+        [np.full((int(row.size),), int(i), dtype=np.int32) for i, row in enumerate(col_rows)]
+    )
+    data = np.concatenate(col_data)
+    z_basis = sp.csc_matrix((data, (rows, cols)), shape=(n, int(len(names))), dtype=np.float64)
+    z_basis.sum_duplicates()
+    z_basis.eliminate_zeros()
+    preconditioned_load_column_count = 0
+    preconditioned_load_nnz = 0
+    if bool(include_preconditioned_loads) and int(z_basis.shape[1]) > 0 and len(names) < max_cols:
+        max_pre_cols = max(0, min(int(preconditioned_load_max_columns), int(z_basis.shape[1])))
+        max_pre_nnz = max(0, int(preconditioned_load_max_nnz))
+        pre_drop = max(0.0, float(preconditioned_load_drop_tol))
+        extra_rows: list[np.ndarray] = []
+        extra_cols: list[np.ndarray] = []
+        extra_data: list[np.ndarray] = []
+        extra_names: list[str] = []
+        for source_col in range(max_pre_cols):
+            if len(names) + len(extra_names) >= max_cols:
+                break
+            try:
+                load = np.asarray(z_basis[:, source_col].toarray(), dtype=np.float64).reshape((-1,))
+                response = _apply_base_preconditioner_response(load)
+            except Exception:
+                continue
+            if response is None:
+                continue
+            if response.shape != (n,):
+                continue
+            keep = np.flatnonzero(np.isfinite(response) & (np.abs(response) > float(pre_drop)))
+            if keep.size == 0:
+                continue
+            if max_pre_nnz > 0 and keep.size > max_pre_nnz:
+                local_order = np.argpartition(np.abs(response[keep]), -int(max_pre_nnz))[-int(max_pre_nnz) :]
+                keep = np.sort(keep[local_order])
+            values = response[keep]
+            norm = float(np.linalg.norm(values))
+            if not (np.isfinite(norm) and norm > 0.0):
+                continue
+            col_index = int(len(extra_names))
+            extra_rows.append(keep.astype(np.int32, copy=False))
+            extra_cols.append(np.full((int(keep.size),), col_index, dtype=np.int32))
+            extra_data.append(np.asarray(values, dtype=np.float64))
+            extra_names.append(f"preconditioned_{names[source_col]}")
+            preconditioned_load_nnz += int(keep.size)
+        if extra_data:
+            extra_basis = sp.csc_matrix(
+                (np.concatenate(extra_data), (np.concatenate(extra_rows), np.concatenate(extra_cols))),
+                shape=(n, int(len(extra_names))),
+                dtype=np.float64,
+            )
+            extra_basis.sum_duplicates()
+            extra_basis.eliminate_zeros()
+            z_basis = sp.hstack([z_basis, extra_basis], format="csc")
+            names.extend(extra_names)
+            preconditioned_load_column_count = int(extra_basis.shape[1])
+    z_col_norms = np.sqrt(np.asarray(z_basis.power(2).sum(axis=0), dtype=np.float64).reshape((-1,)))
+    valid_z = np.flatnonzero(np.isfinite(z_col_norms) & (z_col_norms > 0.0))
+    if valid_z.size == 0:
+        return None
+    if valid_z.size != z_basis.shape[1]:
+        z_basis = z_basis[:, valid_z].tocsc()
+        names = [names[int(i)] for i in valid_z]
+
+    batch = max(1, int(column_batch))
+    az_rows: list[np.ndarray] = []
+    az_cols: list[np.ndarray] = []
+    az_data: list[np.ndarray] = []
+    nnz_total = 0
+    for start in range(0, int(z_basis.shape[1]), int(batch)):
+        stop = min(int(z_basis.shape[1]), int(start) + int(batch))
+        z_batch = np.asarray(z_basis[:, start:stop].toarray(), dtype=np.float64)
+        transient_estimated = int(2 * n * int(z_batch.shape[1]) * np.dtype(np.float64).itemsize)
+        estimated_before = int((z_basis.nnz + nnz_total) * (np.dtype(np.float64).itemsize + np.dtype(np.int32).itemsize))
+        estimated_before += int((z_basis.shape[1] + 1) * np.dtype(np.int32).itemsize)
+        estimated_before += int(2 * z_basis.shape[1] * z_basis.shape[1] * np.dtype(np.float64).itemsize)
+        estimated_before += int(transient_estimated)
+        if max_nbytes_use > 0 and estimated_before > max_nbytes_use:
+            if emit is not None:
+                emit(
+                    1,
+                    "solve_v3_full_system_linear_gmres: true coupled coarse skipped budget_pre_matvec "
+                    f"estimated_bytes={int(estimated_before)} max_bytes={int(max_nbytes_use)} "
+                    f"columns_done={int(start)}/{int(z_basis.shape[1])}",
+                )
+            return None
+        if true_matmat is not None and z_batch.shape[1] > 1:
+            y_batch = np.asarray(true_matmat(z_batch), dtype=np.float64)
+        else:
+            y_batch = np.column_stack(
+                [
+                    np.asarray(true_matvec(z_batch[:, j]), dtype=np.float64).reshape((-1,))
+                    for j in range(int(z_batch.shape[1]))
+                ]
+            )
+        if y_batch.shape != z_batch.shape:
+            if emit is not None:
+                emit(
+                    1,
+                    "solve_v3_full_system_linear_gmres: true coupled coarse skipped matmat_shape_mismatch "
+                    f"got={tuple(int(v) for v in y_batch.shape)} expected={tuple(int(v) for v in z_batch.shape)}",
+                )
+            return None
+        for local_col in range(int(y_batch.shape[1])):
+            y_col = y_batch[:, local_col]
+            keep = np.flatnonzero(np.isfinite(y_col) & (np.abs(y_col) > drop))
+            if keep.size == 0:
+                continue
+            az_rows.append(keep.astype(np.int32, copy=False))
+            az_cols.append(np.full((int(keep.size),), int(start + local_col), dtype=np.int32))
+            az_data.append(np.asarray(y_col[keep], dtype=np.float64))
+            nnz_total += int(keep.size)
+    if not az_data:
+        if emit is not None:
+            emit(1, "solve_v3_full_system_linear_gmres: true coupled coarse skipped empty_operator_columns")
+        return None
+    a_basis = sp.csc_matrix(
+        (np.concatenate(az_data), (np.concatenate(az_rows), np.concatenate(az_cols))),
+        shape=(n, int(z_basis.shape[1])),
+        dtype=np.float64,
+    )
+    a_basis.sum_duplicates()
+    a_basis.eliminate_zeros()
+    col_norms = np.sqrt(np.asarray(a_basis.power(2).sum(axis=0), dtype=np.float64).reshape((-1,)))
+    norm_floor = max(float(abs(regularization)), np.finfo(np.float64).eps)
+    good = np.isfinite(col_norms) & (col_norms > norm_floor)
+    if not np.any(good):
+        if emit is not None:
+            emit(1, "solve_v3_full_system_linear_gmres: true coupled coarse skipped zero_operator_columns")
+        return None
+    if np.count_nonzero(good) != a_basis.shape[1]:
+        keep = np.flatnonzero(good)
+        a_basis = a_basis[:, keep].tocsc()
+        z_basis = z_basis[:, keep].tocsc()
+        col_norms = col_norms[keep]
+        names = [names[int(i)] for i in keep]
+    inv_col_scale = np.zeros_like(col_norms)
+    inv_col_scale[:] = 1.0 / col_norms
+    a_scaled = a_basis @ sp.diags(inv_col_scale, format="csc")
+    normal = np.asarray((a_scaled.T @ a_scaled).toarray(), dtype=np.float64)
+    normal_scale = max(float(np.linalg.norm(normal, ord=np.inf)) if normal.size else 0.0, 1.0)
+    normal_regularization = max(float(abs(regularization)), 1.0e-14) * normal_scale
+    normal = normal + normal_regularization * np.eye(int(a_scaled.shape[1]), dtype=np.float64)
+    solver_kind = "cholesky"
+    try:
+        factor = cho_factor(normal, lower=True, check_finite=False)
+
+        def solve_normal(rhs: np.ndarray) -> np.ndarray:
+            return np.asarray(cho_solve(factor, rhs, check_finite=False), dtype=np.float64).reshape((-1,))
+
+    except Exception:  # noqa: BLE001
+        solver_kind = "lu"
+        lu, piv = lu_factor(normal, check_finite=False)
+
+        def solve_normal(rhs: np.ndarray) -> np.ndarray:
+            return np.asarray(lu_solve((lu, piv), rhs, check_finite=False), dtype=np.float64).reshape((-1,))
+
+    z_nbytes = int(z_basis.data.nbytes + z_basis.indices.nbytes + z_basis.indptr.nbytes)
+    a_nbytes = int(a_basis.data.nbytes + a_basis.indices.nbytes + a_basis.indptr.nbytes)
+    normal_nbytes = int(normal.nbytes)
+    factor_nbytes = int(
+        z_nbytes
+        + a_nbytes
+        + 2 * normal_nbytes
+        + inv_col_scale.nbytes
+        + int(getattr(factor_bundle, "factor_nbytes_estimate", 0) or 0)
+    )
+    if max_nbytes_use > 0 and factor_nbytes > max_nbytes_use:
+        if emit is not None:
+            emit(
+                1,
+                "solve_v3_full_system_linear_gmres: true coupled coarse skipped final_budget "
+                f"bytes={int(factor_nbytes)} max_bytes={int(max_nbytes_use)} coarse_size={int(z_basis.shape[1])}",
+            )
+        return None
+    condition_estimate = None
+    if int(normal.shape[0]) <= 256:
+        condition_estimate = float(np.linalg.cond(normal))
+    metadata = {
+        "coarse_size": int(z_basis.shape[1]),
+        "basis_names": tuple(str(name) for name in names),
+        "dominant_windows": tuple(window_metadata),
+        "window_count": int(len(window_metadata)),
+        "x_radius": int(x_radius),
+        "ell_radius": int(ell_radius),
+        "low_lmax": int(low_lmax),
+        "profile_moment_count": int(profile_moment_count),
+        "angular_lmax": int(angular_lmax),
+        "angular_mode_max": int(angular_mode_max),
+        "tail_included": bool(include_tail),
+        "constraint_sources_included": bool(include_constraint_sources),
+        "fsavg_included": bool(include_fsavg),
+        "window_residual_included": bool(include_window_residual),
+        "profile_moments_included": bool(include_profile_moments),
+        "angular_residual_included": bool(include_angular_residual),
+        "angular_basis_included": bool(include_angular_basis),
+        "preconditioned_loads_included": bool(include_preconditioned_loads),
+        "preconditioned_load_column_count": int(preconditioned_load_column_count),
+        "preconditioned_load_nnz": int(preconditioned_load_nnz),
+        "preconditioned_load_max_columns": int(preconditioned_load_max_columns),
+        "preconditioned_load_max_nnz": int(preconditioned_load_max_nnz),
+        "preconditioned_load_drop_tol": float(preconditioned_load_drop_tol),
+        "column_batch": int(batch),
+        "drop_tol": float(drop),
+        "z_basis_nnz": int(z_basis.nnz),
+        "a_basis_nnz": int(a_basis.nnz),
+        "z_basis_nbytes_actual": int(z_nbytes),
+        "a_basis_nbytes_actual": int(a_nbytes),
+        "normal_nbytes": int(normal_nbytes),
+        "normal_regularization": float(normal_regularization),
+        "normal_solver": str(solver_kind),
+        "normal_condition_estimate": condition_estimate,
+        "factor_nbytes_estimate": int(factor_nbytes),
+        "damping": bool(damping),
+        "beta_max": float(beta_max),
+        "setup_s": float(max(0.0, time.perf_counter() - t0)),
+    }
+    if emit is not None:
+        emit(
+            1,
+            "solve_v3_full_system_linear_gmres: true coupled coarse built "
+            f"coarse_size={int(z_basis.shape[1])} z_nnz={int(z_basis.nnz)} "
+            f"a_nnz={int(a_basis.nnz)} setup_s={metadata['setup_s']:.3f} "
+            f"bytes={int(factor_nbytes)}",
+        )
+    return _TrueOperatorCoupledCoarseLSQPreconditionerBundle(
+        base_factor=factor_bundle,
+        true_matvec=lambda x: np.asarray(true_matvec(np.asarray(x, dtype=np.float64)), dtype=np.float64).reshape((-1,)),
+        z_basis=z_basis,
+        a_basis=a_scaled,
+        inv_column_scale=np.asarray(inv_col_scale, dtype=np.float64),
+        solve_normal=solve_normal,
+        kind=f"{getattr(factor_bundle, 'kind', 'host')}_true_coupled_coarse_lsq",
+        regularization=float(regularization),
+        damping=bool(damping),
+        beta_max=float(beta_max),
+        factor_nbytes_estimate=int(factor_nbytes),
+        factor_nnz_estimate=int(a_basis.nnz + z_basis.nnz),
+        factor_s=float(max(0.0, time.perf_counter() - t0)),
+        metadata=metadata,
+    )
+
+
+def _try_build_residual_window_host_sparse_preconditioner(
+    *,
+    operator_bundle: SparseOperatorBundle,
+    factor_bundle: object,
+    residual: np.ndarray,
+    layout: RHS1BlockLayout,
+    active_indices: np.ndarray | None,
+    max_windows: int,
+    x_radius: int,
+    ell_radius: int,
+    max_nbytes: int,
+    regularization: float,
+    coefficient_mode: str,
+    combine_mode: str,
+    interface_depth: int,
+    max_window_size: int,
+    emit: Callable[[int, str], None] | None = None,
+) -> _ResidualWindowHostSparsePreconditionerBundle | None:
+    """Build a small kinetic-window Schur correction from failed residual energy."""
+
+    import scipy.sparse as sp  # noqa: PLC0415
+    from scipy.sparse.linalg import splu  # noqa: PLC0415
+
+    t0 = time.perf_counter()
+    matrix = operator_bundle.matrix
+    if matrix is None or not hasattr(matrix, "tocsr"):
+        return None
+    matrix_csr = matrix.tocsr()
+    residual_np = np.asarray(residual, dtype=np.float64).reshape((-1,))
+    if active_indices is None:
+        active_np = np.arange(int(layout.total_size), dtype=np.int64)
+    else:
+        active_np = np.asarray(active_indices, dtype=np.int64).reshape((-1,))
+    if residual_np.shape != active_np.shape or matrix_csr.shape[0] != residual_np.size:
+        return None
+    kinetic_mask = active_np < int(layout.f_size)
+    if not bool(np.any(kinetic_mask)):
+        return None
+    kinetic_full = active_np[kinetic_mask]
+    kinetic_positions = np.flatnonzero(kinetic_mask)
+    kinetic_square = np.square(residual_np[kinetic_positions])
+    decoded = layout.decode_kinetic_indices(kinetic_full)
+    combo_index = (decoded.species * int(layout.n_x) + decoded.x) * int(layout.n_xi) + decoded.ell
+    combo_energy = np.bincount(
+        combo_index,
+        weights=kinetic_square,
+        minlength=int(layout.n_species * layout.n_x * layout.n_xi),
+    )
+    top_combo = np.argsort(combo_energy)[::-1]
+    top_combo = top_combo[combo_energy[top_combo] > 0.0][: max(1, int(max_windows))]
+    if top_combo.size == 0:
+        return None
+
+    window_positions: list[np.ndarray] = []
+    window_metadata: list[dict[str, object]] = []
+    used_positions: set[int] = set()
+    for combo in top_combo:
+        ell = int(combo % int(layout.n_xi))
+        sx = int(combo // int(layout.n_xi))
+        x = int(sx % int(layout.n_x))
+        species = int(sx // int(layout.n_x))
+        x_lo = max(0, x - max(0, int(x_radius)))
+        x_hi = min(int(layout.n_x) - 1, x + max(0, int(x_radius)))
+        ell_lo = max(0, ell - max(0, int(ell_radius)))
+        ell_hi = min(int(layout.n_xi) - 1, ell + max(0, int(ell_radius)))
+        window_mask = (
+            (decoded.species == species)
+            & (decoded.x >= x_lo)
+            & (decoded.x <= x_hi)
+            & (decoded.ell >= ell_lo)
+            & (decoded.ell <= ell_hi)
+        )
+        positions = kinetic_positions[window_mask]
+        if positions.size == 0:
+            continue
+        positions = np.asarray([int(pos) for pos in positions if int(pos) not in used_positions], dtype=np.int64)
+        if positions.size == 0:
+            continue
+        used_positions.update(int(pos) for pos in positions)
+        window_positions.append(positions)
+        window_energy = float(np.sum(np.square(residual_np[positions])))
+        window_metadata.append(
+            {
+                "species": int(species),
+                "x_center": int(x),
+                "ell_center": int(ell),
+                "x_range": (int(x_lo), int(x_hi)),
+                "ell_range": (int(ell_lo), int(ell_hi)),
+                "size": int(positions.size),
+                "residual_energy_fraction": (
+                    float(window_energy / float(np.sum(np.square(residual_np))))
+                    if float(np.sum(np.square(residual_np))) > 0.0
+                    else 0.0
+                ),
+            }
+        )
+    if not window_positions:
+        return None
+    combine_mode_norm = str(combine_mode).strip().lower().replace("-", "_")
+    if combine_mode_norm in {"union", "coupled", "interface", "graph_interface"}:
+        union_positions = np.unique(np.concatenate(window_positions).astype(np.int64, copy=False))
+        if int(max_window_size) > 0 and union_positions.size > int(max_window_size):
+            return None
+        if combine_mode_norm in {"interface", "graph_interface"} or int(interface_depth) > 0:
+            expanded = _expand_sparse_graph_positions(
+                matrix_csr,
+                union_positions,
+                depth=max(0, int(interface_depth)),
+                max_size=int(max_window_size) if int(max_window_size) > 0 else int(matrix_csr.shape[0]),
+            )
+            if expanded is None:
+                return None
+            union_positions = expanded
+        if int(max_window_size) > 0 and union_positions.size > int(max_window_size):
+            return None
+        window_positions = [union_positions]
+
+    base_nbytes = int(getattr(factor_bundle, "factor_nbytes_estimate", 0) or 0)
+    actual_total = int(base_nbytes)
+    factors: list[object] = []
+    factor_nnz_total = 0
+    for positions in window_positions:
+        submatrix = matrix_csr[positions[:, None], positions].tocsc()
+        sub_scale = max(float(np.max(np.abs(submatrix.data))) if submatrix.nnz else 0.0, 1.0)
+        diagonal_shift = max(float(abs(regularization)), 1.0e-14) * sub_scale
+        if diagonal_shift > 0.0:
+            submatrix = submatrix + diagonal_shift * sp.eye(submatrix.shape[0], dtype=np.float64, format="csc")
+        matrix_nbytes = int(submatrix.data.nbytes + submatrix.indices.nbytes + submatrix.indptr.nbytes)
+        if actual_total + matrix_nbytes > int(max_nbytes):
+            return None
+        try:
+            factor = splu(submatrix, permc_spec="COLAMD", diag_pivot_thresh=0.0)
+        except Exception:  # noqa: BLE001
+            return None
+        factor_nbytes = _sparse_factor_nbytes_estimate(factor)
+        actual_total += int(factor_nbytes)
+        factor_nnz_total += int(factor.L.nnz + factor.U.nnz)
+        if actual_total > int(max_nbytes):
+            return None
+        factors.append(factor)
+
+    metadata = {
+        "window_count": int(len(window_positions)),
+        "windows": tuple(window_metadata),
+        "x_radius": int(x_radius),
+        "ell_radius": int(ell_radius),
+        "coefficient_mode": str(coefficient_mode),
+        "combine_mode": str(combine_mode_norm),
+        "interface_depth": int(interface_depth),
+        "max_window_size": int(max_window_size),
+        "factor_nbytes_estimate": int(actual_total),
+        "base_factor_nbytes_estimate": int(base_nbytes),
+        "factor_nnz_estimate": int(factor_nnz_total),
+        "setup_s": float(max(0.0, time.perf_counter() - t0)),
+    }
+    if emit is not None:
+        first = window_metadata[0]
+        emit(
+            1,
+            "solve_v3_full_system_linear_gmres: residual window built "
+            f"windows={int(len(window_positions))} setup_s={metadata['setup_s']:.3f} "
+            f"bytes={int(actual_total)} first=s{first['species']}/x{first['x_center']}/ell{first['ell_center']}",
+        )
+    return _ResidualWindowHostSparsePreconditionerBundle(
+        base_factor=factor_bundle,
+        operator=operator_bundle,
+        window_positions=tuple(np.asarray(pos, dtype=np.int64) for pos in window_positions),
+        window_factors=tuple(factors),
+        kind=f"{getattr(factor_bundle, 'kind', 'host')}_residual_window",
+        coefficient_mode=str(coefficient_mode),
+        regularization=float(regularization),
+        factor_nbytes_estimate=int(actual_total),
+        factor_nnz_estimate=int(factor_nnz_total),
+        factor_s=float(max(0.0, time.perf_counter() - t0)),
+        metadata=metadata,
+    )
+
+
+def _try_build_residual_coarse_host_sparse_preconditioner(
+    *,
+    operator_bundle: SparseOperatorBundle,
+    factor_bundle: object,
+    residual: np.ndarray,
+    max_rank: int,
+    max_nbytes: int,
+    regularization: float,
+    emit: Callable[[int, str], None] | None = None,
+) -> _ResidualCoarseHostSparsePreconditionerBundle | None:
+    """Build a small adaptive coarse residual equation from a failed preflight."""
+
+    t0 = time.perf_counter()
+    residual_np = np.asarray(residual, dtype=np.float64).reshape((-1,))
+    n = int(residual_np.size)
+    rank_limit = max(1, int(max_rank))
+    z_cols: list[np.ndarray] = []
+    az_cols: list[np.ndarray] = []
+    work = residual_np.copy()
+    for _ in range(rank_limit):
+        try:
+            z = np.asarray(factor_bundle.solve(work), dtype=np.float64).reshape((-1,))
+        except Exception:  # noqa: BLE001
+            return None
+        if z.shape != (n,) or not np.all(np.isfinite(z)):
+            return None
+        for prev in z_cols:
+            z = z - float(np.dot(prev, z)) * prev
+        z_norm = float(np.linalg.norm(z))
+        if (not np.isfinite(z_norm)) or z_norm <= 1.0e-14:
+            break
+        z = z / z_norm
+        az = np.asarray(operator_bundle.matvec(z), dtype=np.float64).reshape((-1,))
+        if az.shape != (n,) or not np.all(np.isfinite(az)):
+            return None
+        az_norm_sq = float(np.dot(az, az))
+        if (not np.isfinite(az_norm_sq)) or az_norm_sq <= 1.0e-28:
+            break
+        z_cols.append(z)
+        az_cols.append(az)
+        alpha = float(np.dot(az, work)) / az_norm_sq
+        work = work - alpha * az
+        if float(np.linalg.norm(work)) >= float(np.linalg.norm(residual_np)):
+            # Keep the basis already collected, but stop adding directions that
+            # do not make the local residual equation easier.
+            break
+
+    if not z_cols:
+        return None
+    z_basis = np.column_stack(z_cols).astype(np.float64, copy=False)
+    az_basis = np.column_stack(az_cols).astype(np.float64, copy=False)
+    rank = int(z_basis.shape[1])
+    normal = np.asarray(az_basis.T @ az_basis, dtype=np.float64)
+    normal_scale = max(float(np.linalg.norm(normal, ord=np.inf)) if normal.size else 0.0, 1.0)
+    reg = max(float(abs(regularization)), 1.0e-14) * normal_scale
+    normal = normal + reg * np.eye(rank, dtype=np.float64)
+    try:
+        coarse_inverse = np.linalg.inv(normal)
+        solver_kind = "inverse"
+    except Exception:  # noqa: BLE001
+        coarse_inverse = np.linalg.pinv(normal, rcond=max(float(abs(regularization)), 1.0e-14))
+        solver_kind = "pinv"
+    base_nbytes = int(getattr(factor_bundle, "factor_nbytes_estimate", 0) or 0)
+    nbytes = int(base_nbytes + z_basis.nbytes + az_basis.nbytes + coarse_inverse.nbytes)
+    if nbytes > int(max_nbytes):
+        if emit is not None:
+            emit(
+                1,
+                "solve_v3_full_system_linear_gmres: residual coarse rejected by budget "
+                f"bytes={int(nbytes)}>{int(max_nbytes)} rank={int(rank)}",
+            )
+        return None
+    metadata = {
+        "rank": int(rank),
+        "regularization": float(reg),
+        "coarse_solver": str(solver_kind),
+        "factor_nbytes_estimate": int(nbytes),
+        "base_factor_nbytes_estimate": int(base_nbytes),
+        "z_basis_nbytes": int(z_basis.nbytes),
+        "az_basis_nbytes": int(az_basis.nbytes),
+        "setup_s": float(max(0.0, time.perf_counter() - t0)),
+    }
+    if emit is not None:
+        emit(
+            1,
+            "solve_v3_full_system_linear_gmres: residual coarse built "
+            f"rank={int(rank)} setup_s={metadata['setup_s']:.3f} bytes={int(nbytes)}",
+        )
+    return _ResidualCoarseHostSparsePreconditionerBundle(
+        base_factor=factor_bundle,
+        operator=operator_bundle,
+        z_basis=z_basis,
+        az_basis=az_basis,
+        coarse_inverse=coarse_inverse,
+        kind=f"{getattr(factor_bundle, 'kind', 'host')}_residual_coarse",
+        factor_nbytes_estimate=int(nbytes),
+        factor_nnz_estimate=getattr(factor_bundle, "factor_nnz_estimate", None),
+        factor_s=float(max(0.0, time.perf_counter() - t0)),
+        metadata=metadata,
+    )
+
+
+def _rhs1_active_reduced_residual_diagnostics(
+    *,
+    residual: Any,
+    layout: RHS1BlockLayout,
+    active_indices: np.ndarray | None,
+    top_k: int = 6,
+) -> dict[str, object]:
+    """Summarize where an active reduced RHSMode=1 residual lives."""
+
+    residual_np = np.asarray(jax.device_get(residual), dtype=np.float64).reshape((-1,))
+    if active_indices is None:
+        full_indices = np.arange(int(layout.total_size), dtype=np.int64)
+    else:
+        full_indices = np.asarray(active_indices, dtype=np.int64).reshape((-1,))
+    if full_indices.shape != residual_np.shape:
+        return {
+            "selected": False,
+            "reason": "shape_mismatch",
+            "residual_shape": tuple(int(v) for v in residual_np.shape),
+            "active_index_shape": tuple(int(v) for v in full_indices.shape),
+        }
+    square = np.square(residual_np)
+    total_energy = float(np.sum(square))
+    total_norm = float(np.sqrt(max(total_energy, 0.0)))
+
+    def _energy_summary(mask: np.ndarray) -> dict[str, float]:
+        energy = float(np.sum(square[mask])) if bool(np.any(mask)) else 0.0
+        return {
+            "norm": float(np.sqrt(max(energy, 0.0))),
+            "energy_fraction": float(energy / total_energy) if total_energy > 0.0 else 0.0,
+        }
+
+    def _top_entries(values: np.ndarray, *, labels: list[str] | None = None) -> list[dict[str, object]]:
+        values_np = np.asarray(values, dtype=np.float64).reshape((-1,))
+        if values_np.size == 0:
+            return []
+        order = np.argsort(values_np)[::-1][: max(1, int(top_k))]
+        out: list[dict[str, object]] = []
+        for idx in order:
+            energy = float(values_np[int(idx)])
+            if energy <= 0.0:
+                continue
+            out.append(
+                {
+                    "index": int(idx),
+                    "label": str(labels[int(idx)]) if labels is not None and int(idx) < len(labels) else str(idx),
+                    "norm": float(np.sqrt(max(energy, 0.0))),
+                    "energy_fraction": float(energy / total_energy) if total_energy > 0.0 else 0.0,
+                }
+            )
+        return out
+
+    kinetic_mask = full_indices < int(layout.f_size)
+    phi1_start = int(layout.f_size)
+    extra_start = int(layout.f_size + layout.phi1_size)
+    phi1_mask = (full_indices >= phi1_start) & (full_indices < extra_start)
+    extra_mask = full_indices >= extra_start
+    diagnostics: dict[str, object] = {
+        "selected": True,
+        "total_norm": float(total_norm),
+        "component_norms": {
+            "kinetic": _energy_summary(kinetic_mask),
+            "phi1": _energy_summary(phi1_mask),
+            "extra": _energy_summary(extra_mask),
+        },
+        "max_abs": float(np.max(np.abs(residual_np))) if residual_np.size else 0.0,
+    }
+    if bool(np.any(kinetic_mask)):
+        kinetic_full = full_indices[kinetic_mask]
+        kinetic_square = square[kinetic_mask]
+        decoded = layout.decode_kinetic_indices(kinetic_full)
+        species_energy = np.bincount(decoded.species, weights=kinetic_square, minlength=int(layout.n_species))
+        x_energy = np.bincount(decoded.x, weights=kinetic_square, minlength=int(layout.n_x))
+        ell_energy = np.bincount(decoded.ell, weights=kinetic_square, minlength=int(layout.n_xi))
+        sx_index = decoded.species * int(layout.n_x) + decoded.x
+        sx_energy = np.bincount(
+            sx_index,
+            weights=kinetic_square,
+            minlength=int(layout.n_species * layout.n_x),
+        )
+        sx_labels = [
+            f"s={int(species)},x={int(x)}"
+            for species in range(int(layout.n_species))
+            for x in range(int(layout.n_x))
+        ]
+        diagnostics["top_species"] = _top_entries(species_energy)
+        diagnostics["top_x"] = _top_entries(x_energy)
+        diagnostics["top_ell"] = _top_entries(ell_energy)
+        diagnostics["top_species_x"] = _top_entries(sx_energy, labels=sx_labels)
+    if bool(np.any(extra_mask)):
+        diagnostics["extra_values"] = [
+            float(v) for v in residual_np[extra_mask][: max(0, min(int(top_k), int(np.count_nonzero(extra_mask))))]
+        ]
+    return diagnostics
+
+
+def _try_build_fortran_reduced_constraint1_direct_tail_bundle(
+    *,
+    op: V3FullSystemOperator,
+    op_pc: V3FullSystemOperator,
+    pattern,
+    active_indices: np.ndarray | None,
+    reduce_full: Callable[[jnp.ndarray], jnp.ndarray],
+    expand_reduced: Callable[[jnp.ndarray], jnp.ndarray],
+    pc_shift: float,
+    dtype: jnp.dtype,
+    factor_dtype: np.dtype,
+    csr_max_mb: float,
+    drop_tol: float,
+    color_batch: int,
+    emit: Callable[[int, str], None] | None = None,
+) -> SparseOperatorBundle | None:
+    """Materialize RHSMode=1 constraintScheme=1 tails without probing dense rows.
+
+    Constraint rows couple to every active ``L=0`` angular point, so including
+    them in the coloring pattern forces thousands of probe colors. The kinetic
+    block is still probed, but the source columns and moment rows are inserted
+    from the same formulas used by the matrix-free operator.
+    """
+
+    if int(op.rhs_mode) != 1 or int(op.constraint_scheme) != 1 or int(op.phi1_size) != 0:
+        return None
+    extra_size = int(op.extra_size)
+    if extra_size != 2 * int(op.n_species) or extra_size <= 0:
+        return None
+
+    import scipy.sparse as sp  # noqa: PLC0415
+    from scipy.sparse.linalg import LinearOperator  # noqa: PLC0415
+
+    pattern_csr = pattern.tocsr()
+    n_reduced = int(pattern_csr.shape[0])
+    if pattern_csr.shape[0] != pattern_csr.shape[1] or n_reduced <= extra_size:
+        return None
+    layout = RHS1BlockLayout.from_operator(op)
+    if active_indices is None:
+        active_idx_np = np.arange(int(layout.total_size), dtype=np.int32)
+    else:
+        active_idx_np = np.asarray(active_indices, dtype=np.int32).reshape((-1,))
+    if int(active_idx_np.size) != n_reduced:
+        return None
+    active_layout = RHS1ActiveBlockLayout.from_layout(layout, active_idx_np)
+    if (
+        int(active_layout.extra_count) != int(extra_size)
+        or int(active_layout.phi1_count) != 0
+        or not bool(active_layout.has_contiguous_extra_tail)
+    ):
+        return None
+    f_count = int(active_layout.kinetic_count)
+    f_active = np.asarray(active_layout.active_kinetic_indices(), dtype=np.int64)
+    if np.any(f_active >= int(op.f_size)):
+        return None
+    color_batch_requested = max(1, int(color_batch))
+    assembly_mode = (
+        os.environ.get("SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_ASSEMBLY", "auto")
+        .strip()
+        .lower()
+        .replace("-", "_")
+    )
+    if assembly_mode == "":
+        assembly_mode = "auto"
+    whichmatrix0_modes = {
+        "whichmatrix0",
+        "which_matrix0",
+        "direct_whichmatrix0",
+        "active_whichmatrix0",
+        "term",
+        "term_level",
+        "term_level_whichmatrix0",
+        "fortran_v3",
+        "fortran_v3_whichmatrix0",
+    }
+    pattern_only_modes = {"pattern", "probe", "pattern_probe", "color_probe"}
+
+    structured_first_env = os.environ.get(
+        "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_STRUCTURED_CSR",
+        "1",
+    ).strip().lower()
+    if structured_first_env not in {"0", "false", "no", "off"} and assembly_mode not in (
+        whichmatrix0_modes | pattern_only_modes
+    ):
+        structured_bundle = _try_build_structured_rhs1_full_csr_operator_bundle(
+            op=op_pc,
+            active_indices=active_idx_np,
+            csr_max_mb=float(csr_max_mb),
+            drop_tol=float(drop_tol),
+            emit=emit,
+        )
+        if structured_bundle is not None and structured_bundle.matrix is not None:
+            matrix = structured_bundle.matrix.tocsr().astype(np.dtype(factor_dtype), copy=False)
+            if float(pc_shift) != 0.0:
+                matrix = (
+                    matrix
+                    + sp.eye(int(matrix.shape[0]), format="csr", dtype=np.dtype(factor_dtype))
+                    * np.asarray(float(pc_shift), dtype=np.dtype(factor_dtype))
+                ).tocsr()
+                matrix.sum_duplicates()
+                matrix.eliminate_zeros()
+            decision = SparseDecision(
+                storage_kind="csr",
+                reason=(
+                    "fortran-reduced constraintScheme=1 structured direct-tail CSR "
+                    "(term-separated f-block; no kinetic probing)"
+                ),
+                backend=jax.default_backend(),
+                shape=tuple(int(v) for v in matrix.shape),
+                dense_nbytes=estimate_dense_nbytes(tuple(int(v) for v in matrix.shape), matrix.dtype),
+                csr_nbytes_estimate=estimate_csr_nbytes(
+                    tuple(int(v) for v in matrix.shape),
+                    int(matrix.nnz),
+                    data_dtype=matrix.dtype,
+                    index_dtype=matrix.indices.dtype,
+                ),
+                nnz_estimate=int(matrix.nnz),
+                block_cols=0,
+                drop_tol=float(drop_tol),
+            )
+            operator = LinearOperator(
+                matrix.shape,
+                matvec=lambda x: np.asarray(matrix @ np.asarray(x, dtype=matrix.dtype)),
+                dtype=matrix.dtype,
+            )
+            if emit is not None:
+                emit(
+                    1,
+                    "solve_v3_full_system_linear_gmres: fortran_reduced direct-tail "
+                    f"structured csr built nnz={int(matrix.nnz)} "
+                    f"csr_mb={float(decision.csr_nbytes_estimate) / 1.0e6:.3f}",
+            )
+            return SparseOperatorBundle(matrix=matrix, operator=operator, metadata=decision)
+
+    k_ff = None
+    kinetic_block_cols = 0
+    kinetic_reason = ""
+    active_term_auto_max_size = _rhs1_int_env(
+        "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_WHICHMATRIX0_ACTIVE_TERM_AUTO_MAX_SIZE",
+        default=100_000,
+        minimum=1,
+    )
+    active_term_allowed = bool(
+        assembly_mode in whichmatrix0_modes
+        or (
+            assembly_mode == "auto"
+            and active_indices is not None
+            and int(n_reduced) <= int(active_term_auto_max_size)
+        )
+    )
+    if bool(active_term_allowed) and assembly_mode not in pattern_only_modes:
+        fblock_max_mb_env = os.environ.get(
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_WHICHMATRIX0_FBLOCK_MAX_MB",
+            "",
+        ).strip()
+        try:
+            fblock_max_mb = float(fblock_max_mb_env) if fblock_max_mb_env else 0.0
+        except ValueError:
+            fblock_max_mb = 0.0
+        fblock_max_nbytes = None
+        if float(fblock_max_mb) > 0.0:
+            fblock_max_nbytes = int(float(fblock_max_mb) * 1.0e6)
+        if emit is not None:
+            emit(
+                1,
+                "solve_v3_full_system_linear_gmres: fortran_reduced direct-tail "
+                "whichMatrix=0 active term assembly start "
+                f"f_active={int(f_count)} full_f={int(op.f_size)} "
+                f"max_fblock_mb={'none' if fblock_max_nbytes is None else f'{float(fblock_max_mb):.3g}'}",
+            )
+        fblock_selection = select_structured_rhs1_fblock_operator(
+            op_pc.fblock,
+            include_identity_shift=True,
+            phi1_hat_base=getattr(op_pc, "phi1_hat_base", None),
+            drop_tol=float(drop_tol),
+            require_complete=True,
+        )
+        if bool(fblock_selection.selected):
+            fblock_operator = fblock_selection.assembly.operator
+            fblock_block_size = int(fblock_operator.block_size)
+            active_blocks: np.ndarray | None = None
+            if fblock_block_size > 0 and f_count % fblock_block_size == 0:
+                f_active_blocks = f_active.reshape((-1, fblock_block_size))
+                first_indices = f_active_blocks[:, 0]
+                expected = first_indices[:, None] + np.arange(fblock_block_size, dtype=np.int64)[None, :]
+                if np.array_equal(f_active_blocks, expected) and np.all(first_indices % fblock_block_size == 0):
+                    active_blocks = (first_indices // fblock_block_size).astype(np.int64, copy=False)
+            if active_blocks is None:
+                if emit is not None:
+                    emit(
+                        1,
+                        "solve_v3_full_system_linear_gmres: fortran_reduced direct-tail "
+                        "whichMatrix=0 active term assembly not selected "
+                        "reason=active_indices_do_not_form_complete_fblock_blocks",
+                    )
+            else:
+                projected_operator = fblock_operator.project_block_indices(active_blocks)
+                projected_nnz_bound = int(projected_operator.nnz_blocks) * fblock_block_size * fblock_block_size
+                projected_csr_bound = estimate_csr_nbytes(
+                    tuple(int(v) for v in projected_operator.shape),
+                    int(projected_nnz_bound),
+                    data_dtype=np.dtype(factor_dtype),
+                )
+                if fblock_max_nbytes is not None and int(projected_csr_bound) > int(fblock_max_nbytes):
+                    if emit is not None:
+                        emit(
+                            1,
+                            "solve_v3_full_system_linear_gmres: fortran_reduced direct-tail "
+                            "whichMatrix=0 active term assembly not selected "
+                            f"reason=projected_csr_budget_exceeded:{int(projected_csr_bound)}>{int(fblock_max_nbytes)}",
+                        )
+                else:
+                    k_ff = projected_operator.to_scipy_csr_matrix().astype(np.dtype(factor_dtype), copy=False)
+                    if float(pc_shift) != 0.0:
+                        k_ff = (
+                            k_ff
+                            + sp.eye(int(k_ff.shape[0]), format="csr", dtype=np.dtype(factor_dtype))
+                            * np.asarray(float(pc_shift), dtype=np.dtype(factor_dtype))
+                        ).tocsr()
+                        k_ff.sum_duplicates()
+                        k_ff.eliminate_zeros()
+                    kinetic_reason = (
+                        "fortran-reduced constraintScheme=1 whichMatrix=0 active term-level "
+                        "direct-tail CSR (active block-projected structured f-block; no kinetic probing)"
+                    )
+                    if emit is not None:
+                        emit(
+                            1,
+                            "solve_v3_full_system_linear_gmres: fortran_reduced direct-tail "
+                            "whichMatrix=0 active term CSR built "
+                            f"kinetic_nnz={int(k_ff.nnz)} active_blocks={int(active_blocks.size)} "
+                            f"projected_block_nnz={int(projected_operator.nnz_blocks)}",
+                        )
+        elif emit is not None:
+            emit(
+                1,
+                "solve_v3_full_system_linear_gmres: fortran_reduced direct-tail "
+                "whichMatrix=0 active term assembly not selected "
+                f"reason={fblock_selection.reason}",
+            )
+
+    if k_ff is None:
+        pattern_ff = pattern_csr[:f_count, :f_count].tocsr()
+        if emit is not None:
+            emit(
+                1,
+                "solve_v3_full_system_linear_gmres: fortran_reduced direct-tail materialization "
+                f"kinetic_pattern_nnz={int(pattern_ff.nnz)} f_size={int(f_count)} extra={int(extra_size)}",
+            )
+
+        def _matvec_ff(x_np: np.ndarray) -> np.ndarray:
+            x_red = np.zeros((n_reduced,), dtype=np.float64)
+            x_red[:f_count] = np.asarray(x_np, dtype=np.float64).reshape((f_count,))
+            x_full = expand_reduced(jnp.asarray(x_red, dtype=dtype))
+            y_full = apply_v3_full_system_operator_cached(op_pc, x_full)
+            if float(pc_shift) != 0.0:
+                y_full = y_full + jnp.asarray(float(pc_shift), dtype=dtype) * x_full
+            y_red = reduce_full(y_full)
+            return np.asarray(y_red[:f_count], dtype=np.float64)
+
+        def _matmat_ff(x_np: np.ndarray) -> np.ndarray:
+            seeds = np.asarray(x_np, dtype=np.float64)
+            if seeds.ndim != 2 or seeds.shape[0] != f_count:
+                raise ValueError(f"matmat seed shape {seeds.shape}; expected ({f_count}, n_batch)")
+            batch = int(seeds.shape[1])
+            if batch == 0:
+                return np.zeros((f_count, 0), dtype=np.float64)
+            try:
+                x_red = jnp.zeros((n_reduced, batch), dtype=dtype)
+                x_red = x_red.at[:f_count, :].set(jnp.asarray(seeds, dtype=dtype))
+
+                def _mv_col(col_red: jnp.ndarray) -> jnp.ndarray:
+                    x_full = expand_reduced(col_red)
+                    y_full = apply_v3_full_system_operator_cached(op_pc, x_full)
+                    if float(pc_shift) != 0.0:
+                        y_full = y_full + jnp.asarray(float(pc_shift), dtype=dtype) * x_full
+                    return reduce_full(y_full)[:f_count]
+
+                return np.asarray(jax.device_get(jax.vmap(_mv_col, in_axes=1, out_axes=1)(x_red)), dtype=np.float64)
+            except Exception:  # noqa: BLE001
+                return np.column_stack([_matvec_ff(seeds[:, j]) for j in range(batch)])
+
+        pattern_matmat_enabled = _rhs1_bool_env(
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_PATTERN_MATMAT",
+            default=bool(assembly_mode in whichmatrix0_modes and color_batch_requested > 1),
+        )
+        ff_bundle = build_operator_from_pattern(
+            _matvec_ff,
+            pattern=pattern_ff,
+            dtype=np.dtype(factor_dtype),
+            backend=jax.default_backend(),
+            csr_max_mb=float(csr_max_mb),
+            drop_tol=float(drop_tol),
+            allow_operator_only=False,
+            color_batch=int(color_batch_requested) if bool(pattern_matmat_enabled) else 1,
+            matmat=_matmat_ff if bool(pattern_matmat_enabled) else None,
+            progress_callback=(
+                None
+                if emit is None
+                else lambda message: emit(1, f"explicit_sparse direct-tail kinetic: {message}")
+            ),
+        )
+        if ff_bundle.matrix is None:
+            return None
+        k_ff = ff_bundle.matrix.tocsr()
+        kinetic_block_cols = int(ff_bundle.metadata.block_cols)
+        kinetic_reason = (
+            "fortran-reduced constraintScheme=1 direct-tail materialization "
+            f"({kinetic_block_cols} kinetic colors; requested_color_batch={color_batch_requested}; "
+            f"batched_matmat={bool(pattern_matmat_enabled)})"
+        )
+
+    b_rows: list[np.ndarray] = []
+    b_cols: list[np.ndarray] = []
+    b_data: list[np.ndarray] = []
+    for j in range(extra_size):
+        src = np.zeros((int(op.n_species), 2), dtype=np.float64)
+        src.reshape((-1,))[j] = 1.0
+        f_src = np.asarray(
+            _constraint_scheme1_inject_source(op, jnp.asarray(src, dtype=jnp.float64)),
+            dtype=np.float64,
+        ).reshape((-1,))
+        vals = f_src[f_active]
+        keep = np.abs(vals) > max(float(drop_tol), 0.0) if float(drop_tol) > 0.0 else vals != 0.0
+        if np.any(keep):
+            row_idx = np.flatnonzero(keep).astype(np.int32)
+            b_rows.append(row_idx)
+            b_cols.append(np.full((int(row_idx.size),), int(j), dtype=np.int32))
+            b_data.append(np.asarray(vals[keep], dtype=np.dtype(factor_dtype)))
+    if b_data:
+        b_mat = sp.coo_matrix(
+            (np.concatenate(b_data), (np.concatenate(b_rows), np.concatenate(b_cols))),
+            shape=(f_count, extra_size),
+            dtype=np.dtype(factor_dtype),
+        ).tocsr()
+    else:
+        b_mat = sp.csr_matrix((f_count, extra_size), dtype=np.dtype(factor_dtype))
+
+    kinetic_indices = layout.decode_kinetic_indices(f_active)
+    zeta = kinetic_indices.zeta
+    theta = kinetic_indices.theta
+    ell = kinetic_indices.ell
+    ix = kinetic_indices.x
+    species = kinetic_indices.species
+    l0 = ell == 0
+    fs_factor = np.asarray(_fs_average_factor(op.theta_weights, op.zeta_weights, op.d_hat), dtype=np.float64)
+    x_np = np.asarray(op.x, dtype=np.float64)
+    xw_np = np.asarray(op.x_weights, dtype=np.float64)
+    w2 = x_np * x_np * xw_np
+    w4 = x_np * x_np * x_np * x_np * xw_np
+    c_rows: list[np.ndarray] = []
+    c_cols: list[np.ndarray] = []
+    c_data: list[np.ndarray] = []
+    reduced_cols = np.arange(f_count, dtype=np.int32)
+    for s in range(int(op.n_species)):
+        mask = l0 & (species == int(s))
+        if not np.any(mask):
+            continue
+        cols_use = reduced_cols[mask]
+        vals_density = w2[ix[mask]] * fs_factor[theta[mask], zeta[mask]]
+        vals_pressure = w4[ix[mask]] * fs_factor[theta[mask], zeta[mask]]
+        c_rows.append(np.full((int(cols_use.size),), 2 * int(s), dtype=np.int32))
+        c_cols.append(cols_use)
+        c_data.append(np.asarray(vals_density, dtype=np.dtype(factor_dtype)))
+        c_rows.append(np.full((int(cols_use.size),), 2 * int(s) + 1, dtype=np.int32))
+        c_cols.append(cols_use)
+        c_data.append(np.asarray(vals_pressure, dtype=np.dtype(factor_dtype)))
+    if c_data:
+        c_mat = sp.coo_matrix(
+            (np.concatenate(c_data), (np.concatenate(c_rows), np.concatenate(c_cols))),
+            shape=(extra_size, f_count),
+            dtype=np.dtype(factor_dtype),
+        ).tocsr()
+    else:
+        c_mat = sp.csr_matrix((extra_size, f_count), dtype=np.dtype(factor_dtype))
+
+    if float(pc_shift) != 0.0:
+        d_mat = sp.eye(extra_size, format="csr", dtype=np.dtype(factor_dtype)) * np.asarray(
+            float(pc_shift),
+            dtype=np.dtype(factor_dtype),
+        )
+    else:
+        d_mat = sp.csr_matrix((extra_size, extra_size), dtype=np.dtype(factor_dtype))
+
+    matrix = sp.bmat([[k_ff, b_mat], [c_mat, d_mat]], format="csr", dtype=np.dtype(factor_dtype))
+    matrix.sum_duplicates()
+    matrix.eliminate_zeros()
+    decision = SparseDecision(
+        storage_kind="csr",
+        reason=kinetic_reason,
+        backend=jax.default_backend(),
+        shape=(n_reduced, n_reduced),
+        dense_nbytes=estimate_dense_nbytes((n_reduced, n_reduced), np.dtype(factor_dtype)),
+        csr_nbytes_estimate=estimate_csr_nbytes(
+            (n_reduced, n_reduced),
+            int(matrix.nnz),
+            data_dtype=np.dtype(factor_dtype),
+        ),
+        nnz_estimate=int(matrix.nnz),
+        block_cols=int(kinetic_block_cols),
+        drop_tol=float(drop_tol),
+    )
+    operator = LinearOperator(
+        matrix.shape,
+        matvec=lambda x: np.asarray(matrix @ np.asarray(x, dtype=np.dtype(factor_dtype))),
+        dtype=np.dtype(factor_dtype),
+    )
+    if emit is not None:
+        emit(
+            1,
+            "solve_v3_full_system_linear_gmres: fortran_reduced direct-tail materialization "
+            f"csr built nnz={int(matrix.nnz)} kinetic_nnz={int(k_ff.nnz)} "
+            f"source_nnz={int(b_mat.nnz)} moment_nnz={int(c_mat.nnz)}",
+        )
+    return SparseOperatorBundle(matrix=matrix, operator=operator, metadata=decision)
+
+
+def _try_build_structured_rhs1_full_csr_operator_bundle(
+    *,
+    op: V3FullSystemOperator,
+    active_indices: np.ndarray | None,
+    csr_max_mb: float,
+    drop_tol: float,
+    emit: Callable[[int, str], None] | None = None,
+) -> SparseOperatorBundle | None:
+    """Build a no-probe RHSMode=1 CSR operator for supported full systems.
+
+    This is a runtime/non-autodiff path. It replaces expensive full-column or
+    pattern-color probing with analytic f-block assembly plus analytic global
+    constraint/Phi1 couplings. Unsupported cases return ``None`` so the caller
+    can keep the established matrix-free/probed sparse path.
+    """
+
+    if int(op.rhs_mode) != 1:
+        return None
+
+    from scipy.sparse.linalg import LinearOperator  # noqa: PLC0415
+
+    max_csr_nbytes = int(max(0.0, float(csr_max_mb)) * 1.0e6)
+    if active_indices is not None:
+        active = np.asarray(active_indices, dtype=np.int32).reshape((-1,))
+        projects_active_subset = active.size != int(op.total_size) or not np.array_equal(
+            active,
+            np.arange(int(op.total_size), dtype=np.int32),
+        )
+        if bool(projects_active_subset) and not _rhs1_bool_env(
+            "SFINCS_JAX_RHSMODE1_STRUCTURED_FULL_CSR_ALLOW_PROJECT_AFTER_BUILD",
+            default=False,
+        ):
+            max_project_full_size = _rhs1_int_env(
+                "SFINCS_JAX_RHSMODE1_STRUCTURED_FULL_CSR_PROJECT_AFTER_BUILD_MAX_SIZE",
+                default=200_000,
+                minimum=1,
+            )
+            if int(op.total_size) > int(max_project_full_size):
+                if emit is not None:
+                    emit(
+                        1,
+                        "structured_full_csr: skipped full build before active projection "
+                        f"full_size={int(op.total_size)} active_size={int(active.size)} "
+                        f"max_full_size={int(max_project_full_size)}",
+                    )
+                return None
+    # The direct-tail path exists to avoid the conservative product-pattern
+    # estimate used by sparse probing.  That estimate can reject compact
+    # term-separated RHSMode=1 matrices before assembly, so enforce the memory
+    # budget below on the actual active CSR matrix instead.
+    assembly_timer = Timer()
+    if emit is not None:
+        active_text = (
+            "full"
+            if active_indices is None
+            else f"active_size={int(np.asarray(active_indices).size)}/{int(op.total_size)}"
+        )
+        emit(
+            1,
+            "structured_full_csr: assembly start "
+            f"total_size={int(op.total_size)} {active_text} drop_tol={float(drop_tol):.3e}",
+        )
+    selected = select_structured_rhs1_full_csr_operator(
+        op,
+        drop_tol=float(drop_tol),
+        max_csr_nbytes=None,
+    )
+    if not bool(selected.selected) or selected.matrix is None:
+        if emit is not None:
+            emit(
+                1,
+                "structured_full_csr: assembly not selected "
+                f"elapsed_s={assembly_timer.elapsed_s():.3f} reason={selected.reason}",
+            )
+        return None
+
+    matrix = selected.matrix.tocsr()
+    if active_indices is not None:
+        active = np.asarray(active_indices, dtype=np.int32).reshape((-1,))
+        if active.size != int(op.total_size) or not np.array_equal(active, np.arange(int(op.total_size), dtype=np.int32)):
+            matrix = matrix[active][:, active].tocsr()
+    if float(drop_tol) > 0.0 and matrix.nnz:
+        matrix = matrix.copy()
+        matrix.data[np.abs(matrix.data) <= float(drop_tol)] = 0.0
+        matrix.eliminate_zeros()
+
+    actual_csr_nbytes = estimate_csr_nbytes(
+        tuple(int(v) for v in matrix.shape),
+        int(matrix.nnz),
+        data_dtype=matrix.dtype,
+        index_dtype=matrix.indices.dtype,
+    )
+    if max_csr_nbytes > 0 and int(actual_csr_nbytes) > int(max_csr_nbytes):
+        if emit is not None:
+            emit(
+                1,
+                "structured_full_csr: rejected actual CSR budget "
+                f"shape={tuple(int(v) for v in matrix.shape)} nnz={int(matrix.nnz)} "
+                f"elapsed_s={assembly_timer.elapsed_s():.3f} "
+                f"csr_mb={float(actual_csr_nbytes) / 1.0e6:.3f} "
+                f"max_mb={float(max_csr_nbytes) / 1.0e6:.3f}",
+            )
+        return None
+
+    decision = SparseDecision(
+        storage_kind="csr",
+        reason="structured RHSMode=1 full CSR assembly (no matrix probing)",
+        backend=jax.default_backend(),
+        shape=tuple(int(v) for v in matrix.shape),
+        dense_nbytes=estimate_dense_nbytes(tuple(int(v) for v in matrix.shape), matrix.dtype),
+        csr_nbytes_estimate=int(actual_csr_nbytes),
+        nnz_estimate=int(matrix.nnz),
+        block_cols=0,
+        drop_tol=float(drop_tol),
+    )
+
+    operator = LinearOperator(
+        matrix.shape,
+        matvec=lambda x: np.asarray(matrix @ np.asarray(x, dtype=matrix.dtype)),
+        dtype=matrix.dtype,
+    )
+    if emit is not None:
+        meta = selected.metadata
+        emit(
+            1,
+            "structured_full_csr: assembly complete "
+            f"elapsed_s={assembly_timer.elapsed_s():.3f} "
+            f"shape={tuple(int(v) for v in matrix.shape)} nnz={int(matrix.nnz)}",
+        )
+        emit(
+            1,
+            "structured_full_csr: selected "
+            f"shape={tuple(int(v) for v in matrix.shape)} nnz={int(matrix.nnz)} "
+            f"csr_mb={float(decision.csr_nbytes_estimate) / 1.0e6:.3f} "
+            f"tail_nnz={int(meta.get('tail_nnz', 0) or 0)} "
+            f"fblock_mb={float(meta.get('fblock_csr_nbytes_actual', 0) or 0) / 1.0e6:.3f}",
+        )
+    return SparseOperatorBundle(matrix=matrix, operator=operator, metadata=decision)
 
 
 def _rhsmode1_explicit_sparse_pattern_probe_enabled() -> bool:
@@ -1362,6 +4824,30 @@ def _rhsmode1_skip_global_sparse_after_xblock_allowed(
     )
 
 
+def _rhsmode1_fp_xblock_global_correction_allowed(
+    *,
+    op: V3FullSystemOperator,
+    active_size: int,
+    residual_norm: float,
+    target: float,
+    used_large_cpu_xblock_shortcut: bool,
+    used_explicit_fp_xblock_seed: bool,
+    sparse_xblock_candidate_accepted: bool,
+    use_implicit: bool,
+) -> bool:
+    return _rhs1_fp_xblock_global_correction_allowed_impl(
+        op=op,
+        active_size=int(active_size),
+        residual_norm=float(residual_norm),
+        target=float(target),
+        used_large_cpu_xblock_shortcut=bool(used_large_cpu_xblock_shortcut),
+        used_explicit_fp_xblock_seed=bool(used_explicit_fp_xblock_seed),
+        sparse_xblock_candidate_accepted=bool(sparse_xblock_candidate_accepted),
+        use_implicit=bool(use_implicit),
+        backend=jax.default_backend(),
+    )
+
+
 def _rhsmode1_scipy_rescue_abs_floor_after_xblock(
     *,
     op: V3FullSystemOperator,
@@ -1371,6 +4857,24 @@ def _rhsmode1_scipy_rescue_abs_floor_after_xblock(
     use_implicit: bool,
 ) -> float:
     return _rhs1_scipy_rescue_abs_floor_after_xblock_impl(
+        op=op,
+        active_size=int(active_size),
+        used_large_cpu_xblock_shortcut=bool(used_large_cpu_xblock_shortcut),
+        used_explicit_fp_xblock_seed=bool(used_explicit_fp_xblock_seed),
+        use_implicit=bool(use_implicit),
+        backend=jax.default_backend(),
+    )
+
+
+def _rhsmode1_scipy_rescue_active_size_allowed(
+    *,
+    op: V3FullSystemOperator,
+    active_size: int,
+    used_large_cpu_xblock_shortcut: bool,
+    used_explicit_fp_xblock_seed: bool,
+    use_implicit: bool,
+) -> bool:
+    return _rhs1_scipy_rescue_active_size_allowed_impl(
         op=op,
         active_size=int(active_size),
         used_large_cpu_xblock_shortcut=bool(used_large_cpu_xblock_shortcut),
@@ -1514,6 +5018,14 @@ def _transport_sparse_direct_use_explicit_helper(*, size: int) -> bool:
         size=size,
         backend=jax.default_backend(),
     )
+
+
+def _transport_host_gmres_progress_every() -> int:
+    env = os.environ.get("SFINCS_JAX_TRANSPORT_HOST_GMRES_PROGRESS_EVERY", "").strip()
+    try:
+        return max(0, int(env)) if env else 10
+    except ValueError:
+        return 10
 
 
 def _host_scipy_krylov_requested(solve_method: str | None) -> bool:
@@ -1723,6 +5235,46 @@ _RHSMODE1_PRECOND_ILU_CACHE: dict[tuple[object, ...], _RHSMode1ILUBlockPrecondCa
 
 
 @dataclass(frozen=True)
+class _RHSMode1StructuredFBlockPrecondCache:
+    """Cached structured f-block factor/coarse data for same-shape solves."""
+
+    operator: object
+    metadata: dict[str, object]
+    factor: object | None = None
+    coarse: object | None = None
+    base_preconditioner: Callable[[jnp.ndarray], jnp.ndarray] | None = None
+
+
+_RHSMODE1_STRUCTURED_FBLOCK_PRECOND_CACHE: dict[tuple[object, ...], _RHSMode1StructuredFBlockPrecondCache] = {}
+
+
+@dataclass(frozen=True)
+class _RHS1FullSystemMatrixFreeOperatorAdapter:
+    """Duck-typed adapter used by Galerkin corrections on the full system."""
+
+    op: V3FullSystemOperator
+
+    @property
+    def shape(self) -> tuple[int, int]:
+        size = int(self.op.total_size)
+        return (size, size)
+
+    @property
+    def blocks(self) -> jnp.ndarray:
+        return jnp.zeros((1,), dtype=jnp.float64)
+
+    def matmat(self, matrix: jnp.ndarray) -> jnp.ndarray:
+        mat = jnp.asarray(matrix, dtype=jnp.float64)
+        if mat.ndim != 2 or int(mat.shape[0]) != int(self.op.total_size):
+            raise ValueError(f"matrix must have shape ({int(self.op.total_size)}, ncols)")
+        return jax.vmap(
+            lambda column: apply_v3_full_system_operator_cached(self.op, column),
+            in_axes=1,
+            out_axes=1,
+        )(mat)
+
+
+@dataclass(frozen=True)
 class _RHSMode1SparseXBlockPrecondCache:
     """Sparse per-(species,x) block-Jacobi preconditioner cache for FP-like RHSMode=1 operators."""
 
@@ -1779,6 +5331,7 @@ class _RHSMode1SparseXBlockHostPrecondCache:
 
     block_slices: tuple[tuple[int, int], ...]
     block_factors: tuple[object | None, ...]
+    block_diag_inv: tuple[np.ndarray | None, ...]
     extra_idx_np: np.ndarray
     extra_inv_np: np.ndarray | None
 
@@ -1910,6 +5463,10 @@ def _build_sparse_ilu_from_matvec(
     row_nnz_cap: int | None = None,
     emit: Callable[[int, str], None] | None = None,
 ) -> tuple[object, object, object | None, np.ndarray | None, np.ndarray | None, np.ndarray | None, bool]:
+    factorization_use = str(factorization).strip().lower()
+    exact_lu = factorization_use == "lu"
+    log_tag = "sparse_lu" if exact_lu else "sparse_ilu"
+
     cached = _RHSMODE1_SPARSE_ILU_CACHE.get(cache_key)
     if cached is not None:
         if build_ilu and cached.ilu is not None:
@@ -2063,6 +5620,8 @@ def _build_sparse_ilu_from_matvec(
                     upper_diag=upper_diag_jnp,
                 )
                 cached = _RHSMODE1_SPARSE_ILU_CACHE[cache_key]
+        if emit is not None:
+            emit(1, f"{log_tag}: factorization cache hit n={int(n)}")
         return (
             cached.a_csr_full,
             cached.a_csr_drop,
@@ -2073,10 +5632,8 @@ def _build_sparse_ilu_from_matvec(
             cached.l_unit_diag,
         )
 
-    factorization_use = str(factorization).strip().lower()
-    exact_lu = factorization_use == "lu"
-    log_tag = "sparse_lu" if exact_lu else "sparse_ilu"
     factor_dtype_use = np.dtype(np.float64 if factor_dtype is None else factor_dtype)
+    setup_timer = Timer()
 
     sparse_block_env = os.environ.get("SFINCS_JAX_RHSMODE1_SPARSE_ASSEMBLE_BLOCK", "").strip()
     sparse_block_min_env = os.environ.get("SFINCS_JAX_RHSMODE1_SPARSE_ASSEMBLE_BLOCK_MIN", "").strip()
@@ -2098,9 +5655,14 @@ def _build_sparse_ilu_from_matvec(
     import scipy.sparse as sp  # noqa: PLC0415
     from scipy.sparse.linalg import spilu, splu  # noqa: PLC0415
 
+    assembly_timer = Timer()
     if sparse_block > 0:
         if emit is not None:
-            emit(1, f"{log_tag}: assembling sparse operator in column blocks (n={n} block={int(sparse_block)})")
+            emit(
+                1,
+                f"{log_tag}: operator assembly start mode=column_blocks "
+                f"n={int(n)} block={int(sparse_block)} factor_dtype={factor_dtype_use.name}",
+            )
 
         jit_env = os.environ.get("SFINCS_JAX_DENSE_ASSEMBLE_JIT", "").strip().lower()
         if jit_env:
@@ -2143,7 +5705,11 @@ def _build_sparse_ilu_from_matvec(
         a_csr_full.eliminate_zeros()
     else:
         if emit is not None:
-            emit(1, f"{log_tag}: assembling dense operator (n={n})")
+            emit(
+                1,
+                f"{log_tag}: operator assembly start mode=dense n={int(n)} "
+                f"factor_dtype={factor_dtype_use.name}",
+            )
         a_dense = assemble_dense_matrix_from_matvec(matvec=matvec, n=int(n), dtype=dtype)
         a_np_full = np.array(a_dense, dtype=factor_dtype_use, copy=True)
         if struct_tol > 0.0 and a_np_full.size:
@@ -2151,6 +5717,13 @@ def _build_sparse_ilu_from_matvec(
         max_abs = float(np.max(np.abs(a_np_full))) if a_np_full.size else 0.0
         a_csr_full = sp.csr_matrix(a_np_full)
         a_csr_full.eliminate_zeros()
+    if emit is not None:
+        nnz_full = int(a_csr_full.nnz)
+        emit(
+            1,
+            f"{log_tag}: operator assembly complete elapsed_s={assembly_timer.elapsed_s():.3f} "
+            f"nnz={nnz_full} density={nnz_full / max(1, int(n) * int(n)):.3e}",
+        )
 
     thresh0 = 0.0 if exact_lu else max(float(drop_tol), float(drop_rel) * max_abs)
     reg_env = os.environ.get("SFINCS_JAX_RHSMODE1_SPARSE_ILU_REG", "").strip()
@@ -2219,6 +5792,15 @@ def _build_sparse_ilu_from_matvec(
             emit(1, f"{log_tag}: nnz={nnz} ({nnz / max(1, n * n):.3e} density)")
         if not build_ilu:
             break
+        attempt_timer = Timer()
+        if emit is not None:
+            emit(
+                1,
+                f"{log_tag}: factorization start "
+                f"attempt={attempt + 1}/{int(attempts)} shape={a_csr_drop.shape} "
+                f"nnz={int(a_csr_drop.nnz)} drop_tol={ilu_drop_tol_eff:.1e} "
+                f"fill={fill_factor_eff:.1f}",
+            )
         try:
             if exact_lu:
                 ilu = splu(a_csr_drop.tocsc(), permc_spec="COLAMD")
@@ -2228,6 +5810,14 @@ def _build_sparse_ilu_from_matvec(
                     drop_tol=float(ilu_drop_tol_eff),
                     fill_factor=float(fill_factor_eff),
                     permc_spec="COLAMD",
+                )
+            if emit is not None:
+                factor_nnz = int(getattr(ilu.L, "nnz", 0) + getattr(ilu.U, "nnz", 0))
+                emit(
+                    1,
+                    f"{log_tag}: factorization complete "
+                    f"attempt={attempt + 1}/{int(attempts)} elapsed_s={attempt_timer.elapsed_s():.3f} "
+                    f"factor_nnz={int(factor_nnz)}",
                 )
             last_exc = None
             break
@@ -2239,6 +5829,7 @@ def _build_sparse_ilu_from_matvec(
                     1,
                     f"{log_tag}: factorization failed "
                     f"(attempt={attempt + 1}/{int(attempts)} "
+                    f"elapsed_s={attempt_timer.elapsed_s():.3f} "
                     f"thresh={thresh:.3e} drop_tol={ilu_drop_tol_eff:.1e} fill={fill_factor_eff:.1f}) "
                     f"({type(exc).__name__}: {exc})",
                 )
@@ -2406,6 +5997,13 @@ def _build_sparse_ilu_from_matvec(
         upper_val=upper_val_jnp,
         upper_diag=upper_diag_jnp,
     )
+    if emit is not None:
+        factor_nnz = None if ilu is None else int(getattr(ilu.L, "nnz", 0) + getattr(ilu.U, "nnz", 0))
+        emit(
+            1,
+            f"{log_tag}: setup complete elapsed_s={setup_timer.elapsed_s():.3f} "
+            f"operator_nnz={int(a_csr_full.nnz)} factor_nnz={factor_nnz}",
+        )
     return a_csr_full, a_csr_drop, ilu, a_dense, l_dense, u_dense, l_unit_diag
 
 
@@ -2420,17 +6018,20 @@ def _factorize_sparse_matrix_csr_host(
     factorization: str = "ilu",
     emit: Callable[[int, str], None] | None = None,
 ) -> tuple[object, object, object]:
+    factorization_use = str(factorization).strip().lower()
+    exact_lu = factorization_use == "lu"
+    log_tag = "sparse_lu" if exact_lu else "sparse_ilu"
+
     cached = _RHSMODE1_SPARSE_ILU_CACHE.get(cache_key)
     if cached is not None and cached.ilu is not None:
+        if emit is not None:
+            emit(1, f"{log_tag}: factorization cache hit n={int(cached.a_csr_full.shape[0])}")
         return cached.a_csr_full, cached.a_csr_drop, cached.ilu
 
     import scipy.sparse as sp  # noqa: PLC0415
     from scipy.sparse.linalg import spilu, splu  # noqa: PLC0415
 
-    factorization_use = str(factorization).strip().lower()
-    exact_lu = factorization_use == "lu"
-    log_tag = "sparse_lu" if exact_lu else "sparse_ilu"
-
+    setup_timer = Timer()
     a_csr_full = a_csr_full.tocsr()
     a_csr_full.eliminate_zeros()
     max_abs = float(np.max(np.abs(a_csr_full.data))) if int(a_csr_full.nnz) > 0 else 0.0
@@ -2481,6 +6082,15 @@ def _factorize_sparse_matrix_csr_host(
             nnz = int(a_csr_drop.nnz)
             n = int(a_csr_drop.shape[0])
             emit(1, f"{log_tag}: nnz={nnz} ({nnz / max(1, n * n):.3e} density)")
+        attempt_timer = Timer()
+        if emit is not None:
+            emit(
+                1,
+                f"{log_tag}: factorization start "
+                f"attempt={attempt + 1}/{int(attempts)} shape={a_csr_drop.shape} "
+                f"nnz={int(a_csr_drop.nnz)} drop_tol={ilu_drop_tol_eff:.1e} "
+                f"fill={fill_factor_eff:.1f}",
+            )
         try:
             if exact_lu:
                 ilu = splu(a_csr_drop.tocsc(), permc_spec="COLAMD")
@@ -2490,6 +6100,14 @@ def _factorize_sparse_matrix_csr_host(
                     drop_tol=float(ilu_drop_tol_eff),
                     fill_factor=float(fill_factor_eff),
                     permc_spec="COLAMD",
+                )
+            if emit is not None:
+                factor_nnz = int(getattr(ilu.L, "nnz", 0) + getattr(ilu.U, "nnz", 0))
+                emit(
+                    1,
+                    f"{log_tag}: factorization complete "
+                    f"attempt={attempt + 1}/{int(attempts)} elapsed_s={attempt_timer.elapsed_s():.3f} "
+                    f"factor_nnz={int(factor_nnz)}",
                 )
             last_exc = None
             break
@@ -2501,6 +6119,7 @@ def _factorize_sparse_matrix_csr_host(
                     1,
                     f"{log_tag}: factorization failed "
                     f"(attempt={attempt + 1}/{int(attempts)} "
+                    f"elapsed_s={attempt_timer.elapsed_s():.3f} "
                     f"thresh={thresh:.3e} drop_tol={ilu_drop_tol_eff:.1e} fill={fill_factor_eff:.1f}) "
                     f"({type(exc).__name__}: {exc})",
                 )
@@ -2544,6 +6163,13 @@ def _factorize_sparse_matrix_csr_host(
     )
     cached = _RHSMODE1_SPARSE_ILU_CACHE[cache_key]
     assert cached.ilu is not None
+    if emit is not None:
+        factor_nnz = int(getattr(cached.ilu.L, "nnz", 0) + getattr(cached.ilu.U, "nnz", 0))
+        emit(
+            1,
+            f"{log_tag}: setup complete elapsed_s={setup_timer.elapsed_s():.3f} "
+            f"operator_nnz={int(cached.a_csr_full.nnz)} factor_nnz={int(factor_nnz)}",
+        )
     return cached.a_csr_full, cached.a_csr_drop, cached.ilu
 
 
@@ -2957,6 +6583,103 @@ def _assemble_rhsmode1_fp_xblock_tz_sparse_matrix(
     return a
 
 
+def _safe_inverse_diagonal_np(diagonal: np.ndarray, *, floor: float) -> np.ndarray | None:
+    """Return a finite inverse diagonal or ``None`` if the diagonal is unusable."""
+
+    diag = np.asarray(diagonal, dtype=np.float64).reshape((-1,))
+    if diag.size == 0 or not np.all(np.isfinite(diag)):
+        return None
+    floor_use = max(0.0, float(floor))
+    if floor_use > 0.0:
+        sign = np.where(diag < 0.0, -1.0, 1.0)
+        diag = np.where(np.abs(diag) > floor_use, diag, sign * floor_use)
+    elif np.any(diag == 0.0):
+        return None
+    inv = 1.0 / diag
+    if not np.all(np.isfinite(inv)):
+        return None
+    return np.asarray(inv, dtype=np.float64)
+
+
+def _rhsmode1_fp_xblock_tz_sparse_diagonal(
+    *,
+    op: V3FullSystemOperator,
+    species: int,
+    ix: int,
+    preconditioner_xi: int,
+    host_cache: _RHSMode1FPXBlockAssembledHostCache | None = None,
+) -> np.ndarray:
+    """Assemble only the diagonal of an explicit FP x-block preconditioner.
+
+    The high-x VMEC production blocks can be too large or too ill-conditioned
+    for robust local sparse factorization. A diagonal fallback is much weaker
+    than LU/ILU but is bounded in memory and better than the previous identity
+    fallback for skipped blocks.
+    """
+
+    if op.fblock.fp is None:
+        raise ValueError("assembled FP x-block diagonal requires an FP operator")
+    if int(preconditioner_xi) != 1:
+        raise ValueError("assembled FP x-block diagonal currently requires preconditioner_xi=1")
+    if bool(op.point_at_x0):
+        raise ValueError("assembled FP x-block diagonal currently requires pointAtX0=false")
+
+    colless = op.fblock.collisionless
+    host = host_cache if host_cache is not None else _get_rhsmode1_fp_xblock_assembled_host_cache(op=op)
+    n_theta = int(op.n_theta)
+    n_zeta = int(op.n_zeta)
+    n_tz = int(n_theta * n_zeta)
+    n_lx = int(np.asarray(colless.n_xi_for_x, dtype=np.int32)[int(ix)])
+    if n_lx <= 0:
+        return np.zeros((0,), dtype=np.float64)
+
+    def _matrix_diag(matrix: object) -> np.ndarray:
+        if hasattr(matrix, "diagonal"):
+            return np.asarray(matrix.diagonal(), dtype=np.float64).reshape((-1,))
+        return np.asarray(np.diag(np.asarray(matrix, dtype=np.float64)), dtype=np.float64).reshape((-1,))
+
+    x_val = float(host.x[int(ix)])
+    l = np.arange(n_lx, dtype=np.float64)
+    diag = np.repeat(
+        float(host.identity_shift) + host.fp_diag_sxl[int(species), int(ix), :n_lx],
+        n_tz,
+    ).astype(np.float64, copy=False)
+
+    if host.exb_op_tz is not None:
+        diag += np.tile(_matrix_diag(host.exb_op_tz), n_lx)
+
+    denom = (2.0 * l + 3.0) * (2.0 * l - 1.0)
+    if host.mag_theta_m1_tz_by_species is not None and host.mag_theta_m2_tz_by_species is not None:
+        m1_diag = _matrix_diag(host.mag_theta_m1_tz_by_species[int(species)])
+        m2_diag = _matrix_diag(host.mag_theta_m2_tz_by_species[int(species)])
+        c1 = 2.0 * (3.0 * l * l + 3.0 * l - 2.0) / denom
+        c2 = (2.0 * l * l + 2.0 * l - 1.0) / denom
+        diag += np.repeat((x_val * x_val) * c1, n_tz) * np.tile(m1_diag, n_lx)
+        diag += np.repeat((x_val * x_val) * c2, n_tz) * np.tile(m2_diag, n_lx)
+
+    if host.mag_zeta_m1_tz_by_species is not None and host.mag_zeta_m2_tz_by_species is not None:
+        m1_diag = _matrix_diag(host.mag_zeta_m1_tz_by_species[int(species)])
+        m2_diag = _matrix_diag(host.mag_zeta_m2_tz_by_species[int(species)])
+        c1 = 2.0 * (3.0 * l * l + 3.0 * l - 2.0) / denom
+        c2 = (2.0 * l * l + 2.0 * l - 1.0) / denom
+        diag += np.repeat((x_val * x_val) * c1, n_tz) * np.tile(m1_diag, n_lx)
+        diag += np.repeat((x_val * x_val) * c2, n_tz) * np.tile(m2_diag, n_lx)
+
+    diag_c = np.where(l > 0, (l + 1.0) * l / denom, 0.0)
+    if host.mag_xidot_factor_flat is not None:
+        diag += np.repeat(x_val * x_val * diag_c, n_tz) * np.tile(host.mag_xidot_factor_flat, n_lx)
+    if host.er_xidot_factor_flat is not None:
+        diag += np.repeat(x_val * x_val * diag_c, n_tz) * np.tile(host.er_xidot_factor_flat, n_lx)
+
+    if host.er_xdot_factor_flat is not None and host.ddx_plus_diag is not None and host.ddx_minus_diag is not None:
+        use_plus = host.er_xdot_factor_flat > 0.0
+        xdiag = x_val * np.where(use_plus, host.ddx_plus_diag[int(ix)], host.ddx_minus_diag[int(ix)])
+        diag_coef = 2.0 * (3.0 * l * l + 3.0 * l - 2.0) / denom
+        diag += np.repeat(diag_coef, n_tz) * np.tile(xdiag * host.er_xdot_factor_flat, n_lx)
+
+    return np.asarray(diag, dtype=np.float64)
+
+
 def _build_sparse_jax_preconditioner_from_matvec(
     *,
     matvec: Callable[[jnp.ndarray], jnp.ndarray],
@@ -3075,6 +6798,93 @@ class _TransportFpTzFftPrecondCache:
 
 
 @dataclass(frozen=True)
+class _TransportFpTzFftLinePrecondCache:
+    """Block-Thomas FP transport factors in Fourier space.
+
+    The old ``fp_tzfft`` candidate stored a dense inverse over all
+    ``(L, species, x)`` unknowns for every Fourier mode.  This cache stores only
+    effective diagonal block inverses over ``(species, x)`` for each Legendre
+    row, plus diagonal streaming links.  It captures the same block-tridiagonal
+    residual equation with much lower memory.
+    """
+
+    inv_eff: jnp.ndarray  # (T,Z,L,S*X,S*X) complex effective diagonal inverses
+    lower_diag: jnp.ndarray  # (T,Z,L,S*X) complex lower L-link diagonal
+    super_diag: jnp.ndarray  # (T,Z,L,S*X) complex upper L-link diagonal
+    n_block: int
+
+
+@dataclass(frozen=True)
+class _TransportFpTzFftLineSchurPrecondCache:
+    """Small true-action Schur correction on top of FP Fourier line factors."""
+
+    basis: jnp.ndarray  # (N,K) normalized solution-space coarse columns
+    action: jnp.ndarray  # (R,K) restricted true action R @ A @ basis
+    normal_inv: jnp.ndarray  # (K,R) pseudoinverse of the restricted Schur/coarse action
+    restrict_basis: jnp.ndarray | None  # (N,R) optional Galerkin/test basis; None means tail rows
+    damping: float
+    tail0: int
+    n_columns: int
+    restriction_kind: str
+    basis_labels: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class _TransportFpLocalGeomLinePrecondCache:
+    """Block-Thomas FP transport factors with local non-averaged geometry."""
+
+    inv_eff: jnp.ndarray  # (T,Z,L,S*X,S*X) effective diagonal inverses
+    lower_diag: jnp.ndarray  # (T,Z,L,S*X) lower L-link diagonal
+    super_diag: jnp.ndarray  # (T,Z,L,S*X) upper L-link diagonal
+    n_block: int
+
+
+@dataclass(frozen=True)
+class _TransportFpStructuredFBlockLuPrecondCache:
+    """Host kinetic f-block sparse factor retaining full migrated couplings."""
+
+    factor_bundle: object
+    f_size: int
+    metadata: dict[str, object]
+
+
+@dataclass(frozen=True)
+class _TransportFpFortranReducedLuPrecondCache:
+    """Host sparse factor for a global Fortran-v3-style reduced transport Pmat."""
+
+    factor_bundle: object
+    linear_size: int
+    metadata: dict[str, object]
+
+
+@dataclass(frozen=True)
+class _TransportFpDirectActiveBlockSchurPrecondCache:
+    """Bounded-memory block inverse plus tail Schur factor for active FP transport."""
+
+    block_inverse: object
+    block_size: int
+    kinetic_size: int
+    tail_size: int
+    c_tail: object | None
+    mb_tail: np.ndarray | None
+    schur_inverse: np.ndarray | None
+    metadata: dict[str, object]
+    factor: object | None = None
+
+
+@dataclass(frozen=True)
+class _TransportFpXBlockTzLuPrecondCache:
+    """Per-(species,x) sparse factors over coupled (ell,theta,zeta) blocks."""
+
+    factors: tuple[tuple[object | None, ...], ...]
+    diag_inverses: tuple[tuple[np.ndarray | None, ...], ...]
+    nxi_for_x: tuple[int, ...]
+    factor_nbytes_estimate: int
+    factor_nnz_estimate: int
+    metadata: dict[str, object]
+
+
+@dataclass(frozen=True)
 class _SparseJaxPrecondCache:
     a_sp: object
     d_inv: jnp.ndarray
@@ -3146,6 +6956,30 @@ _TRANSPORT_XBLOCK_PRECOND_CACHE: dict[tuple[object, ...], _TransportXBlockPrecon
 _TRANSPORT_SXBLOCK_PRECOND_CACHE: dict[tuple[object, ...], _TransportXBlockPrecondCache] = {}
 _TRANSPORT_TZFFT_PRECOND_CACHE: dict[tuple[object, ...], _TransportTzFftPrecondCache] = {}
 _TRANSPORT_FP_TZFFT_PRECOND_CACHE: dict[tuple[object, ...], _TransportFpTzFftPrecondCache] = {}
+_TRANSPORT_FP_TZFFT_LINE_PRECOND_CACHE: dict[
+    tuple[object, ...], _TransportFpTzFftLinePrecondCache
+] = {}
+_TRANSPORT_FP_TZFFT_LINE_SCHUR_PRECOND_CACHE: dict[
+    tuple[object, ...], _TransportFpTzFftLineSchurPrecondCache
+] = {}
+_TRANSPORT_FP_LOCAL_GEOM_LINE_PRECOND_CACHE: dict[
+    tuple[object, ...], _TransportFpLocalGeomLinePrecondCache
+] = {}
+_TRANSPORT_FP_STRUCTURED_FBLOCK_LU_PRECOND_CACHE: dict[
+    tuple[object, ...], _TransportFpStructuredFBlockLuPrecondCache
+] = {}
+_TRANSPORT_FP_FORTRAN_REDUCED_LU_PRECOND_CACHE: dict[
+    tuple[object, ...], _TransportFpFortranReducedLuPrecondCache
+] = {}
+_TRANSPORT_FP_DIRECT_ACTIVE_BLOCK_SCHUR_PRECOND_CACHE: dict[
+    tuple[object, ...], _TransportFpDirectActiveBlockSchurPrecondCache
+] = {}
+_TRANSPORT_FP_XBLOCK_TZ_LU_PRECOND_CACHE: dict[
+    tuple[object, ...], _TransportFpXBlockTzLuPrecondCache
+] = {}
+_TRANSPORT_FP_XBLOCK_TZ_LU_SCHUR_PRECOND_CACHE: dict[
+    tuple[object, ...], _TransportFpTzFftLineSchurPrecondCache
+] = {}
 _RHSMODE23_PRECOND_CACHE: dict[tuple[object, ...], _RHSMode1PrecondCache] = {}
 _RHSMODE1_SPARSE_JAX_CACHE: dict[tuple[object, ...], _SparseJaxPrecondCache] = {}
 _RHSMODE1_PAS_TOKAMAK_THETA_CACHE: dict[tuple[object, ...], _PasTokamakThetaPrecondCache] = {}
@@ -3387,6 +7221,22 @@ def _rhsmode1_precond_cache_key(op: V3FullSystemOperator, kind: str) -> tuple[ob
         _hash_array(op.x),
         _hash_array(op.x_weights),
         tuple(nxi_for_x.tolist()),
+    )
+
+
+def _rhsmode1_structured_fblock_cache_key(
+    op: V3FullSystemOperator,
+    kind: str,
+    *,
+    params: tuple[object, ...] = (),
+) -> tuple[object, ...]:
+    phi1_hash = None
+    if getattr(op, "phi1_hat_base", None) is not None:
+        phi1_hash = _hash_array(op.phi1_hat_base)
+    return (
+        *_rhsmode1_precond_cache_key(op, f"structured_fblock_{kind}"),
+        phi1_hash,
+        *tuple(params),
     )
 
 
@@ -5948,6 +9798,100 @@ def _build_rhsmode1_preconditioner_operator_point(op: V3FullSystemOperator) -> V
     return replace(op, fblock=fblock_pc)
 
 
+def _build_rhsmode1_preconditioner_operator_fortran_reduced(
+    op: V3FullSystemOperator,
+    *,
+    preconditioner_x: int = 1,
+    preconditioner_xi: int = 1,
+    preconditioner_species: int = 1,
+    preconditioner_x_min_l: int = 0,
+) -> V3FullSystemOperator:
+    """Return a Fortran-v3-style reduced global RHSMode=1 preconditioner operator.
+
+    SFINCS Fortran v3's default PETSc preconditioner is not a local point
+    smoother: it keeps the angular streaming/drift derivatives and the global
+    source/constraint rows, while simplifying selected radial, pitch-angle, and
+    species couplings. This function provides the first SFINCS-JAX operator
+    shaping for that route. It intentionally preserves theta/zeta coupling and
+    only applies the x-diagonal simplification to terms that expose radial
+    derivative matrices directly in the current JAX operator tree.
+
+    ``preconditioner_species`` and ``preconditioner_x`` are applied to the full
+    Fokker-Planck collision tensor when it is available. ``preconditioner_x_min_l``
+    follows the Fortran rule: radial simplification is only applied to rows with
+    Legendre index ``L >= preconditioner_x_min_L``. ``preconditioner_xi`` follows
+    v3's matrix-0 rule by dropping the collisionless ``L±2`` pitch couplings
+    while preserving diagonal-in-``L`` drift/Er terms and streaming ``L±1`` terms.
+    """
+    if int(op.rhs_mode) != 1:
+        return op
+
+    fblock = op.fblock
+    fp = fblock.fp
+    if fp is not None and hasattr(fp, "mat"):
+        mat = jnp.asarray(fp.mat)
+        if int(preconditioner_species) > 0 and mat.ndim == 5:
+            species_eye = jnp.eye(int(op.n_species), dtype=mat.dtype)
+            mat = mat * species_eye[:, :, None, None, None]
+        if int(preconditioner_x) > 0 and mat.ndim == 5:
+            n_x = int(op.n_x)
+            row = jnp.arange(n_x)[:, None]
+            col = jnp.arange(n_x)[None, :]
+            if int(preconditioner_x) == 1:
+                x_mask = row == col
+            elif int(preconditioner_x) == 2:
+                x_mask = col >= row
+            elif int(preconditioner_x) in {3, 5}:
+                x_mask = jnp.abs(row - col) <= 1
+            elif int(preconditioner_x) == 4:
+                x_mask = (col == row) | (col == row + 1)
+            else:
+                x_mask = row == col
+            if int(preconditioner_x_min_l) > 0:
+                ell = jnp.arange(int(mat.shape[2]), dtype=jnp.int32)
+                l_gate = ell >= int(preconditioner_x_min_l)
+                x_mask = jnp.where(l_gate[:, None, None], x_mask[None, :, :], True)
+                mat = mat * x_mask[None, None, :, :, :]
+            else:
+                mat = mat * x_mask[None, None, None, :, :]
+        fp = replace(fp, mat=mat)
+
+    drop_l2 = int(preconditioner_xi) > 0
+
+    def _maybe_drop_l2(term):
+        if term is None or not drop_l2 or not hasattr(term, "drop_l2_couplings"):
+            return term
+        return replace(term, drop_l2_couplings=True)
+
+    term_replacements = {
+        "fp": fp,
+    }
+    for name in ("magdrift_theta", "magdrift_zeta", "magdrift_xidot", "er_xidot"):
+        if hasattr(fblock, name):
+            term_replacements[name] = _maybe_drop_l2(getattr(fblock, name))
+
+    er_xdot = getattr(fblock, "er_xdot", None)
+    if er_xdot is not None:
+        replacements = {}
+        if int(preconditioner_x) > 0 and int(preconditioner_x_min_l) <= 0:
+            replacements["ddx_plus"] = _diag_only(er_xdot.ddx_plus)
+            replacements["ddx_minus"] = _diag_only(er_xdot.ddx_minus)
+        if drop_l2 and hasattr(er_xdot, "drop_l2_couplings"):
+            replacements["drop_l2_couplings"] = True
+        if replacements:
+            er_xdot = replace(er_xdot, **replacements)
+    if hasattr(fblock, "er_xdot"):
+        term_replacements["er_xdot"] = er_xdot
+
+    fblock_pc = replace(
+        fblock,
+        # Keep collisionless ddtheta/ddzeta, ExB, magnetic-drift theta/zeta,
+        # collisions, source rows, and constraint rows globally coupled.
+        **term_replacements,
+    )
+    return replace(op, fblock=fblock_pc)
+
+
 def _build_transport_preconditioner_operator_point(op: V3FullSystemOperator) -> V3FullSystemOperator:
     """Return a simplified transport operator for point-block preconditioning.
 
@@ -5990,6 +9934,42 @@ def _build_transport_preconditioner_operator_point(op: V3FullSystemOperator) -> 
         magdrift_zeta=mag_zeta,
     )
     return replace(op, fblock=fblock_pc)
+
+
+def _build_transport_preconditioner_operator_fortran_reduced(
+    op: V3FullSystemOperator,
+    *,
+    preconditioner_x: int = 1,
+    preconditioner_xi: int = 1,
+    preconditioner_species: int = 1,
+    preconditioner_x_min_l: int = 0,
+    keep_theta_zeta: bool = True,
+) -> V3FullSystemOperator:
+    """Return a Fortran-v3-style reduced transport preconditioner operator.
+
+    SFINCS Fortran v3 uses the true matrix as ``Amat`` and a distinct
+    ``whichMatrix=0`` reduced matrix as ``Pmat`` for PETSc.  This transport
+    helper applies the same x/species/pitch simplifications as the RHSMode=1
+    reduced operator but works for RHSMode=2/3.  By default it keeps theta/zeta
+    derivative couplings, matching the Fortran v3 defaults
+    ``preconditioner_theta=0`` and ``preconditioner_zeta=0``.  Set
+    ``keep_theta_zeta=False`` only for a smaller diagnostic Pmat that explicitly
+    drops the angular streaming/drift graph.
+    """
+
+    rhs_mode_original = int(op.rhs_mode)
+    op_rhs1 = replace(op, rhs_mode=1)
+    op_pc = _build_rhsmode1_preconditioner_operator_fortran_reduced(
+        op_rhs1,
+        preconditioner_x=int(preconditioner_x),
+        preconditioner_xi=int(preconditioner_xi),
+        preconditioner_species=int(preconditioner_species),
+        preconditioner_x_min_l=int(preconditioner_x_min_l),
+    )
+    op_pc = replace(op_pc, rhs_mode=rhs_mode_original)
+    if not bool(keep_theta_zeta):
+        op_pc = _build_transport_preconditioner_operator_point(op_pc)
+    return op_pc
 
 
 def _build_rhsmode1_preconditioner_operator_theta_line(op: V3FullSystemOperator) -> V3FullSystemOperator:
@@ -6899,6 +10879,3054 @@ def _build_rhsmode23_fp_tzfft_preconditioner(
         tail = r_full[op.f_size :]
         z_full = jnp.concatenate([z_f.reshape((-1,)), tail], axis=0)
         return jnp.asarray(z_full, dtype=jnp.float64)
+
+    if reduce_full is None or expand_reduced is None:
+        return _apply_full
+
+    def _apply_reduced(r_reduced: jnp.ndarray) -> jnp.ndarray:
+        z_full = _apply_full(expand_reduced(r_reduced))
+        return reduce_full(z_full)
+
+    return _apply_reduced
+
+
+def _build_rhsmode23_fp_tzfft_line_preconditioner(
+    *,
+    op: V3FullSystemOperator,
+    reduce_full: Callable[[jnp.ndarray], jnp.ndarray] | None = None,
+    expand_reduced: Callable[[jnp.ndarray], jnp.ndarray] | None = None,
+) -> Callable[[jnp.ndarray], jnp.ndarray]:
+    """Bounded FP transport preconditioner using Fourier block-Thomas factors.
+
+    This is the production-sized replacement for the dense ``fp_tzfft`` inverse
+    table.  The approximation keeps the full FP block over ``(species, x)`` for
+    each Legendre row and a flux-surface-averaged streaming/mirror symbol in
+    Fourier space.  The Legendre coupling is block-tridiagonal, so setup stores
+    only effective ``(species*x)`` block inverses instead of one dense inverse
+    over all ``L*species*x`` unknowns per Fourier mode.
+    """
+    if op.fblock.fp is None:
+        return _build_rhsmode23_tzfft_preconditioner(
+            op=op, reduce_full=reduce_full, expand_reduced=expand_reduced
+        )
+
+    n_species = int(op.n_species)
+    n_x = int(op.n_x)
+    n_l = int(op.n_xi)
+    n_theta = int(op.n_theta)
+    n_zeta = int(op.n_zeta)
+    n_block = int(n_species * n_x)
+    n_tz = int(n_theta * n_zeta)
+    if n_block <= 0 or n_l <= 0 or n_tz <= 0:
+        return _build_rhsmode23_sxblock_preconditioner(
+            op=op, reduce_full=reduce_full, expand_reduced=expand_reduced
+        )
+
+    precond_dtype = _precond_dtype(int(n_tz * n_l * n_block * n_block))
+    dtype_env = os.environ.get("SFINCS_JAX_TRANSPORT_FP_TZFFT_LINE_DTYPE", "").strip().lower()
+    if dtype_env == "float64":
+        precond_dtype = jnp.float64
+    elif dtype_env == "float32":
+        precond_dtype = jnp.float32
+    complex_dtype = jnp.complex64 if precond_dtype == jnp.float32 else jnp.complex128
+    complex_np = np.complex64 if complex_dtype == jnp.complex64 else np.complex128
+    bytes_per_complex = np.dtype(complex_np).itemsize
+    est_mb = float(n_tz * n_l * (n_block * n_block + 2 * n_block)) * float(bytes_per_complex) / 1.0e6
+    max_env = os.environ.get("SFINCS_JAX_TRANSPORT_FP_TZFFT_LINE_MAX_MB", "").strip()
+    try:
+        max_mb = float(max_env) if max_env else 2048.0
+    except ValueError:
+        max_mb = 2048.0
+    if max_mb > 0.0 and est_mb > float(max_mb):
+        return _build_rhsmode23_sxblock_preconditioner(
+            op=op, reduce_full=reduce_full, expand_reduced=expand_reduced
+        )
+
+    reg_env = os.environ.get("SFINCS_JAX_TRANSPORT_FP_TZFFT_LINE_REG", "").strip()
+    try:
+        reg = float(reg_env) if reg_env else 1.0e-10
+    except ValueError:
+        reg = 1.0e-10
+    pinv_env = os.environ.get("SFINCS_JAX_TRANSPORT_FP_TZFFT_LINE_PINV_RCOND", "").strip()
+    try:
+        pinv_rcond = float(pinv_env) if pinv_env else 1.0e-12
+    except ValueError:
+        pinv_rcond = 1.0e-12
+
+    cache_key = (
+        *_transport_precond_cache_key(op, f"fp_tzfft_line_{complex_dtype}_{float(reg):.3e}"),
+        _hash_array(op.b_hat_sup_theta),
+        _hash_array(op.b_hat_sup_zeta),
+        _hash_array(op.db_hat_dtheta),
+        _hash_array(op.db_hat_dzeta),
+        _hash_array(op.x),
+        _hash_array(op.t_hat),
+        _hash_array(op.m_hat),
+        float(est_mb),
+    )
+    cached = _TRANSPORT_FP_TZFFT_LINE_PRECOND_CACHE.get(cache_key)
+    if cached is None:
+        cl = op.fblock.collisionless
+        fp = op.fblock.fp
+        assert cl is not None
+        assert fp is not None
+
+        ddtheta0 = np.asarray(cl.ddtheta[:, 0], dtype=complex_np)
+        ddzeta0 = np.asarray(cl.ddzeta[:, 0], dtype=complex_np)
+        eig_theta = np.fft.fft(ddtheta0)
+        eig_zeta = np.fft.fft(ddzeta0)
+
+        factor = np.asarray(_fs_average_factor(op.theta_weights, op.zeta_weights, op.d_hat), dtype=np.float64)
+        wsum = float(np.sum(factor))
+        if wsum == 0.0:
+            wsum = 1.0
+        b_hat = np.asarray(op.b_hat, dtype=np.float64)
+        b_sup_theta = np.asarray(op.b_hat_sup_theta, dtype=np.float64)
+        b_sup_zeta = np.asarray(op.b_hat_sup_zeta, dtype=np.float64)
+        db_dtheta = np.asarray(op.db_hat_dtheta, dtype=np.float64)
+        db_dzeta = np.asarray(op.db_hat_dzeta, dtype=np.float64)
+        v_theta = float(np.sum(factor * (b_sup_theta / b_hat)) / wsum)
+        v_zeta = float(np.sum(factor * (b_sup_zeta / b_hat)) / wsum)
+        mirror_geom = b_sup_theta * db_dtheta + b_sup_zeta * db_dzeta
+        mirror_base = float(np.sum(factor * (mirror_geom / (2.0 * (b_hat**2)))) / wsum)
+
+        sqrt_t_over_m = np.sqrt(np.asarray(op.t_hat, dtype=np.float64) / np.asarray(op.m_hat, dtype=np.float64))
+        v_theta_s = sqrt_t_over_m * v_theta
+        v_zeta_s = sqrt_t_over_m * v_zeta
+        mirror_factor_s = -sqrt_t_over_m * mirror_base
+        d_symbol = (
+            v_theta_s[:, None, None] * eig_theta[None, :, None]
+            + v_zeta_s[:, None, None] * eig_zeta[None, None, :]
+        ).astype(complex_np, copy=False)  # (S,T,Z)
+
+        exb_symbol = np.zeros((n_theta, n_zeta), dtype=complex_np)
+        if op.fblock.exb_theta is not None or op.fblock.exb_zeta is not None:
+            if op.fblock.exb_theta is not None:
+                exb_theta = op.fblock.exb_theta
+                if getattr(exb_theta, "use_dkes_exb_drift", False):
+                    denom = float(np.asarray(exb_theta.fsab_hat2, dtype=np.float64).reshape(()))
+                    coef = np.asarray(exb_theta.d_hat * exb_theta.b_hat_sub_zeta, dtype=np.float64) / denom
+                else:
+                    coef = np.asarray(exb_theta.d_hat * exb_theta.b_hat_sub_zeta, dtype=np.float64) / (
+                        np.asarray(exb_theta.b_hat, dtype=np.float64) ** 2
+                    )
+                coef_avg = float(np.sum(factor * coef) / wsum)
+                exb_factor = (
+                    float(np.asarray(exb_theta.alpha, dtype=np.float64).reshape(()))
+                    * float(np.asarray(exb_theta.delta, dtype=np.float64).reshape(()))
+                    * 0.5
+                    * float(np.asarray(exb_theta.dphi_hat_dpsi_hat, dtype=np.float64).reshape(()))
+                )
+                exb_symbol += (exb_factor * coef_avg * eig_theta)[:, None]
+            if op.fblock.exb_zeta is not None:
+                exb_zeta = op.fblock.exb_zeta
+                if getattr(exb_zeta, "use_dkes_exb_drift", False):
+                    denom = float(np.asarray(exb_zeta.fsab_hat2, dtype=np.float64).reshape(()))
+                    coef = np.asarray(exb_zeta.d_hat * exb_zeta.b_hat_sub_theta, dtype=np.float64) / denom
+                else:
+                    coef = np.asarray(exb_zeta.d_hat * exb_zeta.b_hat_sub_theta, dtype=np.float64) / (
+                        np.asarray(exb_zeta.b_hat, dtype=np.float64) ** 2
+                    )
+                coef_avg = float(np.sum(factor * coef) / wsum)
+                exb_factor = (
+                    -float(np.asarray(exb_zeta.alpha, dtype=np.float64).reshape(()))
+                    * float(np.asarray(exb_zeta.delta, dtype=np.float64).reshape(()))
+                    * 0.5
+                    * float(np.asarray(exb_zeta.dphi_hat_dpsi_hat, dtype=np.float64).reshape(()))
+                )
+                exb_symbol += (exb_factor * coef_avg * eig_zeta)[None, :]
+
+        mat_fp = np.asarray(fp.mat, dtype=np.float64)  # (S,S,L,X,X)
+        identity_shift = float(op.fblock.identity_shift)
+        pas_diag = None
+        if op.fblock.pas is not None:
+            pas = op.fblock.pas
+            l_arr_pas = np.arange(n_l, dtype=np.float64)
+            factor_l = 0.5 * (l_arr_pas * (l_arr_pas + 1.0) + 2.0 * float(pas.krook))
+            pas_diag = float(pas.nu_n) * np.asarray(pas.nu_d_hat, dtype=np.float64)[:, :, None] * factor_l[None, None, :]
+
+        nxi_for_x = np.asarray(op.fblock.collisionless.n_xi_for_x, dtype=np.int32)
+        active = np.arange(n_l, dtype=np.int32)[None, :] < nxi_for_x[:, None]  # (X,L)
+        x_arr = np.asarray(cl.x, dtype=np.float64)
+        l_arr = np.arange(n_l, dtype=np.float64)
+        coef_plus = x_arr[:, None] * (l_arr[None, :] + 1.0) / (2.0 * l_arr[None, :] + 3.0)
+        coef_minus = np.where(l_arr[None, :] > 0, x_arr[:, None] * l_arr[None, :] / (2.0 * l_arr[None, :] - 1.0), 0.0)
+        coef_mirror_plus = x_arr[:, None] * (l_arr[None, :] + 1.0) * (l_arr[None, :] + 2.0) / (
+            2.0 * l_arr[None, :] + 3.0
+        )
+        coef_mirror_minus = np.where(
+            l_arr[None, :] > 1,
+            -x_arr[:, None] * l_arr[None, :] * (l_arr[None, :] - 1.0) / (2.0 * l_arr[None, :] - 1.0),
+            0.0,
+        )
+
+        base_blocks = np.zeros((n_l, n_block, n_block), dtype=np.float64)
+        for il in range(n_l):
+            a_l = np.array(mat_fp[:, :, il, :, :], dtype=np.float64, copy=True)
+            a_l = a_l.transpose(0, 2, 1, 3).reshape((n_block, n_block))
+            diag_add = np.full((n_block,), identity_shift + float(reg), dtype=np.float64)
+            if pas_diag is not None:
+                diag_add += pas_diag[:, :, il].reshape((n_block,))
+            a_l[np.arange(n_block), np.arange(n_block)] += diag_add
+            inactive_x = np.where(~active[:, il])[0]
+            for ix in inactive_x:
+                for s in range(n_species):
+                    p = int(s * n_x + int(ix))
+                    a_l[p, :] = 0.0
+                    a_l[:, p] = 0.0
+                    a_l[p, p] = 1.0
+            base_blocks[il, :, :] = a_l
+
+        mode_count = int(n_tz)
+        d_symbol_flat = d_symbol.reshape((n_species, mode_count))
+        exb_flat = exb_symbol.reshape((mode_count,))
+        lower_flat = np.zeros((mode_count, n_l, n_block), dtype=complex_np)
+        super_flat = np.zeros((mode_count, n_l, n_block), dtype=complex_np)
+        for s in range(n_species):
+            symbol_s = d_symbol_flat[s, :]
+            mirror_s = complex_np(mirror_factor_s[s])
+            for ix in range(n_x):
+                p = int(s * n_x + ix)
+                if n_l > 1:
+                    link_plus = active[ix, :-1] & active[ix, 1:]
+                    vals_super = (
+                        coef_plus[ix, :-1][None, :] * symbol_s[:, None]
+                        + coef_mirror_plus[ix, :-1][None, :] * mirror_s
+                    )
+                    super_flat[:, :-1, p] = np.where(link_plus[None, :], vals_super, 0.0)
+                    vals_lower = (
+                        coef_minus[ix, 1:][None, :] * symbol_s[:, None]
+                        + coef_mirror_minus[ix, 1:][None, :] * mirror_s
+                    )
+                    lower_flat[:, 1:, p] = np.where(link_plus[None, :], vals_lower, 0.0)
+
+        eye_block = np.eye(n_block, dtype=complex_np)
+        diag_idx = np.arange(n_block, dtype=np.intp)
+        inv_eff = np.empty((mode_count, n_l, n_block, n_block), dtype=complex_np)
+        prev_g = np.zeros((mode_count, n_block, n_block), dtype=complex_np)
+
+        def _invert_stack(a_stack: np.ndarray) -> np.ndarray:
+            try:
+                return np.linalg.inv(a_stack)
+            except np.linalg.LinAlgError:
+                out = np.empty_like(a_stack)
+                for i_mode in range(int(a_stack.shape[0])):
+                    try:
+                        out[i_mode, :, :] = np.linalg.inv(a_stack[i_mode, :, :])
+                    except np.linalg.LinAlgError:
+                        out[i_mode, :, :] = np.linalg.pinv(a_stack[i_mode, :, :], rcond=pinv_rcond)
+                return out
+
+        for il in range(n_l):
+            d_eff = np.broadcast_to(base_blocks[il, :, :].astype(complex_np), (mode_count, n_block, n_block)).copy()
+            if np.any(exb_flat != 0.0):
+                active_n = np.zeros((n_block,), dtype=np.float64)
+                for s in range(n_species):
+                    for ix in range(n_x):
+                        active_n[int(s * n_x + ix)] = 1.0 if bool(active[ix, il]) else 0.0
+                d_eff[:, diag_idx, diag_idx] += exb_flat[:, None] * active_n[None, :]
+            if il > 0:
+                d_eff -= lower_flat[:, il, :, None] * prev_g
+            inv_l = _invert_stack(d_eff)
+            if not np.all(np.isfinite(inv_l)):
+                bad = ~np.isfinite(inv_l).reshape((mode_count, -1)).all(axis=1)
+                for i_mode in np.where(bad)[0]:
+                    inv_l[i_mode, :, :] = np.linalg.pinv(d_eff[i_mode, :, :], rcond=pinv_rcond)
+            inv_eff[:, il, :, :] = inv_l.astype(complex_np, copy=False)
+            if il + 1 < n_l:
+                prev_g = inv_l * super_flat[:, il, None, :]
+            else:
+                prev_g = np.zeros_like(prev_g)
+
+        cached = _TransportFpTzFftLinePrecondCache(
+            inv_eff=jnp.asarray(inv_eff.reshape((n_theta, n_zeta, n_l, n_block, n_block)), dtype=complex_dtype),
+            lower_diag=jnp.asarray(lower_flat.reshape((n_theta, n_zeta, n_l, n_block)), dtype=complex_dtype),
+            super_diag=jnp.asarray(super_flat.reshape((n_theta, n_zeta, n_l, n_block)), dtype=complex_dtype),
+            n_block=int(n_block),
+        )
+        _TRANSPORT_FP_TZFFT_LINE_PRECOND_CACHE[cache_key] = cached
+
+    inv_eff = cached.inv_eff
+    lower_diag = cached.lower_diag
+    super_diag = cached.super_diag
+    n_block_cached = int(cached.n_block)
+
+    def _apply_full(r_full: jnp.ndarray) -> jnp.ndarray:
+        r_full = jnp.asarray(r_full, dtype=jnp.float64)
+        f = r_full[: op.f_size].reshape(op.fblock.f_shape)  # (S,X,L,T,Z)
+        f_hat = jnp.fft.fftn(f.astype(complex_dtype), axes=(-2, -1))
+        rhs_modes = jnp.transpose(f_hat, (3, 4, 2, 0, 1)).reshape(
+            (n_theta, n_zeta, n_l, n_block_cached)
+        )
+        rhs_ltz = jnp.transpose(rhs_modes, (2, 0, 1, 3))  # (L,T,Z,N)
+        inv_ltz = jnp.transpose(inv_eff, (2, 0, 1, 3, 4))  # (L,T,Z,N,N)
+        lower_ltz = jnp.transpose(lower_diag, (2, 0, 1, 3))  # (L,T,Z,N)
+        super_ltz = jnp.transpose(super_diag, (2, 0, 1, 3))  # (L,T,Z,N)
+
+        def _forward(prev: jnp.ndarray, data: tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray]):
+            inv_l, lower_l, rhs_l = data
+            rhs_eff = rhs_l - lower_l * prev
+            y_l = jnp.einsum("tzij,tzj->tzi", inv_l, rhs_eff)
+            return y_l, y_l
+
+        zero_mode = jnp.zeros((n_theta, n_zeta, n_block_cached), dtype=complex_dtype)
+        _, y_ltz = jax.lax.scan(_forward, zero_mode, (inv_ltz, lower_ltz, rhs_ltz))
+
+        def _backward(next_x: jnp.ndarray, data: tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray]):
+            y_l, inv_l, super_l = data
+            corr = jnp.einsum("tzij,tzj->tzi", inv_l, super_l * next_x)
+            x_l = y_l - corr
+            return x_l, x_l
+
+        if n_l > 1:
+            _, x_rev = jax.lax.scan(
+                _backward,
+                y_ltz[-1],
+                (
+                    jnp.flip(y_ltz[:-1], axis=0),
+                    jnp.flip(inv_ltz[:-1], axis=0),
+                    jnp.flip(super_ltz[:-1], axis=0),
+                ),
+            )
+            x_ltz = jnp.concatenate([jnp.flip(x_rev, axis=0), y_ltz[-1][None, ...]], axis=0)
+        else:
+            x_ltz = y_ltz
+
+        sol_modes = jnp.transpose(x_ltz, (1, 2, 0, 3)).reshape(
+            (n_theta, n_zeta, n_l, n_species, n_x)
+        )
+        sol_f = jnp.transpose(sol_modes, (3, 4, 2, 0, 1))  # (S,X,L,T,Z)
+        z_f = jnp.fft.ifftn(sol_f, axes=(-2, -1)).real.astype(jnp.float64)
+        tail = r_full[op.f_size :]
+        z_full = jnp.concatenate([z_f.reshape((-1,)), tail], axis=0)
+        return jnp.asarray(z_full, dtype=jnp.float64)
+
+    if reduce_full is None or expand_reduced is None:
+        return _apply_full
+
+    def _apply_reduced(r_reduced: jnp.ndarray) -> jnp.ndarray:
+        z_full = _apply_full(expand_reduced(r_reduced))
+        return reduce_full(z_full)
+
+    return _apply_reduced
+
+
+def _build_rhsmode23_fp_tzfft_line_schur_preconditioner(
+    *,
+    op: V3FullSystemOperator,
+    reduce_full: Callable[[jnp.ndarray], jnp.ndarray] | None = None,
+    expand_reduced: Callable[[jnp.ndarray], jnp.ndarray] | None = None,
+) -> Callable[[jnp.ndarray], jnp.ndarray]:
+    """FP Fourier line factor plus a small true-action Schur residual equation.
+
+    The line factor handles the stiff local FP/streaming residual equation.  It
+    does not by itself invert the global source/constraint tail coupling.  This
+    wrapper builds a bounded coarse space containing tail/source response columns
+    and low-order source-moment directions, then solves a tiny least-squares
+    residual equation using columns of the *true* full operator.
+    """
+    base_full = _build_rhsmode23_fp_tzfft_line_preconditioner(op=op)
+    if op.fblock.fp is None or bool(op.include_phi1) or int(op.extra_size) <= 0:
+        if reduce_full is None or expand_reduced is None:
+            return base_full
+
+        def _base_reduced(r_reduced: jnp.ndarray) -> jnp.ndarray:
+            return reduce_full(base_full(expand_reduced(r_reduced)))
+
+        return _base_reduced
+
+    max_cols_env = os.environ.get("SFINCS_JAX_TRANSPORT_FP_TZFFT_LINE_SCHUR_MAX_COLS", "").strip()
+    max_mb_env = os.environ.get("SFINCS_JAX_TRANSPORT_FP_TZFFT_LINE_SCHUR_MAX_MB", "").strip()
+    reg_env = os.environ.get("SFINCS_JAX_TRANSPORT_FP_TZFFT_LINE_SCHUR_REG", "").strip()
+    damping_env = os.environ.get("SFINCS_JAX_TRANSPORT_FP_TZFFT_LINE_SCHUR_DAMPING", "").strip()
+    corr_rel_env = os.environ.get("SFINCS_JAX_TRANSPORT_FP_TZFFT_LINE_SCHUR_CORRECTION_REL_MAX", "").strip()
+    restriction_env = os.environ.get("SFINCS_JAX_TRANSPORT_FP_TZFFT_LINE_SCHUR_RESTRICTION", "").strip().lower()
+    dtype_env = os.environ.get("SFINCS_JAX_TRANSPORT_FP_TZFFT_LINE_SCHUR_DTYPE", "").strip().lower()
+    try:
+        max_cols = int(max_cols_env) if max_cols_env else 32
+    except ValueError:
+        max_cols = 32
+    try:
+        max_mb = float(max_mb_env) if max_mb_env else 512.0
+    except ValueError:
+        max_mb = 512.0
+    try:
+        reg = float(reg_env) if reg_env else 3.0e-13
+    except ValueError:
+        reg = 3.0e-13
+    try:
+        damping = float(damping_env) if damping_env else 1.0
+    except ValueError:
+        damping = 1.0
+    try:
+        correction_rel_max = float(corr_rel_env) if corr_rel_env else 10.0
+    except ValueError:
+        correction_rel_max = 10.0
+    coarse_dtype = jnp.float32 if dtype_env == "float32" else jnp.float64
+    dtype_np = np.float32 if coarse_dtype == jnp.float32 else np.float64
+    restriction_kind = restriction_env if restriction_env in {"tail", "galerkin", "tail_galerkin"} else "tail"
+    max_cols = max(0, int(max_cols))
+    if max_cols <= 0:
+        if reduce_full is None or expand_reduced is None:
+            return base_full
+
+        def _base_reduced(r_reduced: jnp.ndarray) -> jnp.ndarray:
+            return reduce_full(base_full(expand_reduced(r_reduced)))
+
+        return _base_reduced
+
+    n_total = int(op.total_size)
+    bytes_per = np.dtype(dtype_np).itemsize
+    est_mb = float(2 * n_total * max_cols * bytes_per + max_cols * max_cols * bytes_per) / 1.0e6
+    if float(max_mb) > 0.0 and est_mb > float(max_mb):
+        if reduce_full is None or expand_reduced is None:
+            return base_full
+
+        def _base_reduced(r_reduced: jnp.ndarray) -> jnp.ndarray:
+            return reduce_full(base_full(expand_reduced(r_reduced)))
+
+        return _base_reduced
+
+    cache_key = (
+        *_transport_precond_cache_key(
+            op,
+            f"fp_tzfft_line_schur_{coarse_dtype}_{int(max_cols)}_"
+            f"{float(reg):.3e}_{float(damping):.3e}_{float(correction_rel_max):.3e}_{restriction_kind}",
+        ),
+        _hash_array(op.x),
+        _hash_array(op.x_weights),
+        _hash_array(op.theta_weights),
+        _hash_array(op.zeta_weights),
+        _hash_array(op.d_hat),
+        int(op.extra_size),
+    )
+    cached = _TRANSPORT_FP_TZFFT_LINE_SCHUR_PRECOND_CACHE.get(cache_key)
+    if cached is None:
+        columns: list[np.ndarray] = []
+        labels: list[str] = []
+
+        def _add_column(label: str, vec: np.ndarray) -> None:
+            if len(columns) >= int(max_cols):
+                return
+            arr = np.asarray(vec, dtype=np.float64).reshape((-1,))
+            if arr.shape != (n_total,):
+                return
+            finite = np.isfinite(arr)
+            if not np.all(finite):
+                arr = np.where(finite, arr, 0.0)
+            norm = float(np.linalg.norm(arr))
+            if not (np.isfinite(norm) and norm > 0.0):
+                return
+            columns.append((arr / norm).astype(dtype_np, copy=False))
+            labels.append(str(label))
+
+        def _true_action(vec: np.ndarray) -> np.ndarray:
+            return np.asarray(
+                jax.device_get(apply_v3_full_system_operator_cached(op, jnp.asarray(vec, dtype=jnp.float64))),
+                dtype=np.float64,
+            ).reshape((-1,))
+
+        def _base_response(load: np.ndarray) -> np.ndarray:
+            return np.asarray(jax.device_get(base_full(jnp.asarray(load, dtype=jnp.float64))), dtype=np.float64).reshape((-1,))
+
+        tail0 = int(op.f_size + op.phi1_size)
+        for i_extra in range(int(op.extra_size)):
+            if len(columns) >= int(max_cols):
+                break
+            unit = np.zeros((n_total,), dtype=np.float64)
+            unit[tail0 + int(i_extra)] = 1.0
+            source_col = _true_action(unit)
+            response = _base_response(source_col)
+            _add_column(f"tail_schur_response_{i_extra}", unit - response)
+            _add_column(f"tail_unit_{i_extra}", unit)
+
+        factor = np.asarray(jax.device_get(_fs_average_factor(op.theta_weights, op.zeta_weights, op.d_hat)), dtype=np.float64)
+        factor_norm = float(np.linalg.norm(factor))
+        if np.isfinite(factor_norm) and factor_norm > 0.0:
+            fs_pattern = factor / factor_norm
+        else:
+            fs_pattern = np.full((int(op.n_theta), int(op.n_zeta)), 1.0 / np.sqrt(max(1, int(op.n_theta) * int(op.n_zeta))))
+        x = np.asarray(jax.device_get(op.x), dtype=np.float64)
+        xw = np.asarray(jax.device_get(op.x_weights), dtype=np.float64)
+        moment_specs = [
+            ("density", 0, (x**2) * xw),
+            ("pressure", 0, (x**4) * xw),
+            ("flow", min(1, int(op.n_xi) - 1), (x**3) * xw),
+            ("heat_flow", min(1, int(op.n_xi) - 1), (x**5) * xw),
+        ]
+        if int(op.constraint_scheme) == 2:
+            for species in range(int(op.n_species)):
+                for name, ell, weights in moment_specs:
+                    if len(columns) >= int(max_cols):
+                        break
+                    f_dir = np.zeros(tuple(int(v) for v in op.fblock.f_shape), dtype=np.float64)
+                    f_dir[species, :, int(ell), :, :] = weights[:, None, None] * fs_pattern[None, :, :]
+                    full = np.concatenate([f_dir.reshape((-1,)), np.zeros((n_total - int(op.f_size),), dtype=np.float64)])
+                    _add_column(f"constraint2_{name}_moment_s{species}_l{int(ell)}", full)
+        elif int(op.constraint_scheme) == 1:
+            xpart1, xpart2 = _source_basis_constraint_scheme_1(op.x)
+            xparts = [
+                ("particle_source_shape", np.asarray(jax.device_get(xpart1), dtype=np.float64)),
+                ("energy_source_shape", np.asarray(jax.device_get(xpart2), dtype=np.float64)),
+            ]
+            ix0 = _ix_min(bool(op.point_at_x0))
+            for species in range(int(op.n_species)):
+                for name, weights in xparts:
+                    if len(columns) >= int(max_cols):
+                        break
+                    f_dir = np.zeros(tuple(int(v) for v in op.fblock.f_shape), dtype=np.float64)
+                    f_dir[species, ix0:, 0, :, :] = weights[ix0:, None, None] * fs_pattern[None, :, :]
+                    full = np.concatenate([f_dir.reshape((-1,)), np.zeros((n_total - int(op.f_size),), dtype=np.float64)])
+                    _add_column(f"constraint1_{name}_s{species}", full)
+
+        if not columns:
+            if reduce_full is None or expand_reduced is None:
+                return base_full
+
+            def _base_reduced(r_reduced: jnp.ndarray) -> jnp.ndarray:
+                return reduce_full(base_full(expand_reduced(r_reduced)))
+
+            return _base_reduced
+
+        basis_np = np.column_stack(columns).astype(dtype_np, copy=False)
+        action_columns = [_true_action(basis_np[:, i]) for i in range(int(basis_np.shape[1]))]
+        action_full_np = np.column_stack(action_columns)
+        restrict_np: np.ndarray | None
+        if restriction_kind == "tail":
+            restrict_np = None
+            action_np = np.asarray(action_full_np[tail0:, :], dtype=dtype_np)
+        else:
+            restrict_parts: list[np.ndarray] = []
+            if restriction_kind == "tail_galerkin":
+                for i_extra in range(int(op.extra_size)):
+                    unit = np.zeros((n_total,), dtype=dtype_np)
+                    unit[tail0 + int(i_extra)] = 1.0
+                    restrict_parts.append(unit)
+            restrict_parts.extend([basis_np[:, i].astype(dtype_np, copy=False) for i in range(int(basis_np.shape[1]))])
+            restrict_np = np.column_stack(restrict_parts).astype(dtype_np, copy=False)
+            action_np = np.asarray(restrict_np.T @ action_full_np, dtype=dtype_np)
+        try:
+            normal_inv = np.linalg.pinv(action_np, rcond=max(float(abs(reg)), 1.0e-14))
+        except np.linalg.LinAlgError:
+            normal = np.asarray(action_np.T @ action_np, dtype=np.float64)
+            scale = max(float(np.linalg.norm(normal, ord=np.inf)) if normal.size else 0.0, 1.0)
+            normal_reg = normal + max(float(abs(reg)), 1.0e-14) * scale * np.eye(int(normal.shape[0]), dtype=np.float64)
+            normal_inv = np.linalg.solve(normal_reg, action_np.T)
+        cached = _TransportFpTzFftLineSchurPrecondCache(
+            basis=jnp.asarray(basis_np, dtype=coarse_dtype),
+            action=jnp.asarray(action_np, dtype=coarse_dtype),
+            normal_inv=jnp.asarray(normal_inv.astype(dtype_np, copy=False), dtype=coarse_dtype),
+            restrict_basis=None if restrict_np is None else jnp.asarray(restrict_np, dtype=coarse_dtype),
+            damping=float(damping),
+            tail0=int(tail0),
+            n_columns=int(basis_np.shape[1]),
+            restriction_kind=str(restriction_kind),
+            basis_labels=tuple(labels),
+        )
+        _TRANSPORT_FP_TZFFT_LINE_SCHUR_PRECOND_CACHE[cache_key] = cached
+
+    basis = cached.basis
+    action = cached.action
+    normal_inv = cached.normal_inv
+    restrict_basis = cached.restrict_basis
+    damping_use = float(cached.damping)
+    tail0_use = int(cached.tail0)
+
+    def _apply_full(r_full: jnp.ndarray) -> jnp.ndarray:
+        r_full = jnp.asarray(r_full, dtype=jnp.float64)
+        y_base = base_full(r_full)
+        residual = r_full - apply_v3_full_system_operator_cached(op, y_base)
+        if restrict_basis is None:
+            residual_c = jnp.asarray(residual[tail0_use:], dtype=action.dtype)
+        else:
+            residual_c = jnp.asarray(restrict_basis.T @ residual, dtype=action.dtype)
+        coeff = normal_inv @ residual_c
+        coeff = jnp.where(jnp.isfinite(coeff), coeff, jnp.zeros_like(coeff))
+        correction = jnp.asarray(basis @ coeff, dtype=jnp.float64)
+        correction = jnp.where(jnp.isfinite(correction), correction, jnp.zeros_like(correction))
+        if float(correction_rel_max) > 0.0:
+            corr_norm = jnp.linalg.norm(correction)
+            ref_norm = jnp.maximum(jnp.maximum(jnp.linalg.norm(y_base), jnp.linalg.norm(r_full)), 1.0)
+            limit = jnp.asarray(float(correction_rel_max), dtype=jnp.float64) * ref_norm
+            scale = jnp.where(corr_norm > limit, limit / jnp.maximum(corr_norm, jnp.finfo(jnp.float64).tiny), 1.0)
+        else:
+            scale = jnp.asarray(1.0, dtype=jnp.float64)
+        out = y_base + float(damping_use) * scale * correction
+        return jnp.where(jnp.isfinite(out), out, y_base)
+
+    if reduce_full is None or expand_reduced is None:
+        return _apply_full
+
+    def _apply_reduced(r_reduced: jnp.ndarray) -> jnp.ndarray:
+        z_full = _apply_full(expand_reduced(r_reduced))
+        return reduce_full(z_full)
+
+    return _apply_reduced
+
+
+def _build_rhsmode23_fp_local_geom_line_preconditioner(
+    *,
+    op: V3FullSystemOperator,
+    reduce_full: Callable[[jnp.ndarray], jnp.ndarray] | None = None,
+    expand_reduced: Callable[[jnp.ndarray], jnp.ndarray] | None = None,
+) -> Callable[[jnp.ndarray], jnp.ndarray]:
+    """FP line factor retaining local mirror geometry at each angular grid point.
+
+    Unlike ``fp_tzfft_line``, this candidate does not flux-surface-average the
+    mirror geometry before setup.  It is block diagonal in ``(theta,zeta)`` and
+    block-tridiagonal in Legendre index with dense ``(species,x)`` blocks.
+    """
+    if op.fblock.fp is None:
+        return _build_rhsmode23_tzfft_preconditioner(
+            op=op, reduce_full=reduce_full, expand_reduced=expand_reduced
+        )
+
+    n_species = int(op.n_species)
+    n_x = int(op.n_x)
+    n_l = int(op.n_xi)
+    n_theta = int(op.n_theta)
+    n_zeta = int(op.n_zeta)
+    n_block = int(n_species * n_x)
+    n_tz = int(n_theta * n_zeta)
+    if n_block <= 0 or n_l <= 0 or n_tz <= 0:
+        return _build_rhsmode23_sxblock_preconditioner(
+            op=op, reduce_full=reduce_full, expand_reduced=expand_reduced
+        )
+
+    dtype_env = os.environ.get("SFINCS_JAX_TRANSPORT_FP_LOCAL_GEOM_LINE_DTYPE", "").strip().lower()
+    precond_dtype = _precond_dtype(int(n_tz * n_l * n_block * n_block))
+    if dtype_env == "float64":
+        precond_dtype = jnp.float64
+    elif dtype_env == "float32":
+        precond_dtype = jnp.float32
+    dtype_np = np.float32 if precond_dtype == jnp.float32 else np.float64
+    bytes_per = np.dtype(dtype_np).itemsize
+    est_mb = float(n_tz * n_l * (n_block * n_block + 2 * n_block)) * float(bytes_per) / 1.0e6
+    max_env = os.environ.get("SFINCS_JAX_TRANSPORT_FP_LOCAL_GEOM_LINE_MAX_MB", "").strip()
+    try:
+        max_mb = float(max_env) if max_env else 2048.0
+    except ValueError:
+        max_mb = 2048.0
+    if max_mb > 0.0 and est_mb > float(max_mb):
+        return _build_rhsmode23_sxblock_preconditioner(
+            op=op, reduce_full=reduce_full, expand_reduced=expand_reduced
+        )
+
+    reg_env = os.environ.get("SFINCS_JAX_TRANSPORT_FP_LOCAL_GEOM_LINE_REG", "").strip()
+    try:
+        reg = float(reg_env) if reg_env else 1.0e-10
+    except ValueError:
+        reg = 1.0e-10
+    pinv_env = os.environ.get("SFINCS_JAX_TRANSPORT_FP_LOCAL_GEOM_LINE_PINV_RCOND", "").strip()
+    try:
+        pinv_rcond = float(pinv_env) if pinv_env else 1.0e-12
+    except ValueError:
+        pinv_rcond = 1.0e-12
+
+    cache_key = (
+        *_transport_precond_cache_key(op, f"fp_local_geom_line_{precond_dtype}_{float(reg):.3e}"),
+        _hash_array(op.b_hat),
+        _hash_array(op.b_hat_sup_theta),
+        _hash_array(op.b_hat_sup_zeta),
+        _hash_array(op.db_hat_dtheta),
+        _hash_array(op.db_hat_dzeta),
+        _hash_array(op.x),
+        _hash_array(op.t_hat),
+        _hash_array(op.m_hat),
+        float(est_mb),
+    )
+    cached = _TRANSPORT_FP_LOCAL_GEOM_LINE_PRECOND_CACHE.get(cache_key)
+    if cached is None:
+        cl = op.fblock.collisionless
+        fp = op.fblock.fp
+        assert cl is not None
+        assert fp is not None
+
+        mat_fp = np.asarray(fp.mat, dtype=np.float64)  # (S,S,L,X,X)
+        identity_shift = float(op.fblock.identity_shift)
+        pas_diag = None
+        if op.fblock.pas is not None:
+            pas = op.fblock.pas
+            l_arr_pas = np.arange(n_l, dtype=np.float64)
+            factor_l = 0.5 * (l_arr_pas * (l_arr_pas + 1.0) + 2.0 * float(pas.krook))
+            pas_diag = float(pas.nu_n) * np.asarray(pas.nu_d_hat, dtype=np.float64)[:, :, None] * factor_l[None, None, :]
+
+        nxi_for_x = np.asarray(op.fblock.collisionless.n_xi_for_x, dtype=np.int32)
+        active = np.arange(n_l, dtype=np.int32)[None, :] < nxi_for_x[:, None]  # (X,L)
+        x_arr = np.asarray(cl.x, dtype=np.float64)
+        l_arr = np.arange(n_l, dtype=np.float64)
+        coef_mirror_plus = x_arr[:, None] * (l_arr[None, :] + 1.0) * (l_arr[None, :] + 2.0) / (
+            2.0 * l_arr[None, :] + 3.0
+        )
+        coef_mirror_minus = np.where(
+            l_arr[None, :] > 1,
+            -x_arr[:, None] * l_arr[None, :] * (l_arr[None, :] - 1.0) / (2.0 * l_arr[None, :] - 1.0),
+            0.0,
+        )
+
+        b_hat = np.asarray(op.b_hat, dtype=np.float64)
+        b_sup_theta = np.asarray(op.b_hat_sup_theta, dtype=np.float64)
+        b_sup_zeta = np.asarray(op.b_hat_sup_zeta, dtype=np.float64)
+        db_dtheta = np.asarray(op.db_hat_dtheta, dtype=np.float64)
+        db_dzeta = np.asarray(op.db_hat_dzeta, dtype=np.float64)
+        sqrt_t_over_m = np.sqrt(np.asarray(op.t_hat, dtype=np.float64) / np.asarray(op.m_hat, dtype=np.float64))
+        mirror_geom = (b_sup_theta * db_dtheta + b_sup_zeta * db_dzeta) / (2.0 * (b_hat**2))
+        mirror_factor = (-sqrt_t_over_m[:, None, None] * mirror_geom[None, :, :]).reshape((n_species, n_tz))
+
+        base_blocks = np.zeros((n_l, n_block, n_block), dtype=np.float64)
+        for il in range(n_l):
+            a_l = np.array(mat_fp[:, :, il, :, :], dtype=np.float64, copy=True)
+            a_l = a_l.transpose(0, 2, 1, 3).reshape((n_block, n_block))
+            diag_add = np.full((n_block,), identity_shift + float(reg), dtype=np.float64)
+            if pas_diag is not None:
+                diag_add += pas_diag[:, :, il].reshape((n_block,))
+            a_l[np.arange(n_block), np.arange(n_block)] += diag_add
+            inactive_x = np.where(~active[:, il])[0]
+            for ix in inactive_x:
+                for s in range(n_species):
+                    p = int(s * n_x + int(ix))
+                    a_l[p, :] = 0.0
+                    a_l[:, p] = 0.0
+                    a_l[p, p] = 1.0
+            base_blocks[il, :, :] = a_l
+
+        lower_flat = np.zeros((n_tz, n_l, n_block), dtype=np.float64)
+        super_flat = np.zeros((n_tz, n_l, n_block), dtype=np.float64)
+        for s in range(n_species):
+            mirror_s = mirror_factor[s, :]
+            for ix in range(n_x):
+                p = int(s * n_x + ix)
+                if n_l > 1:
+                    link_plus = active[ix, :-1] & active[ix, 1:]
+                    vals_super = coef_mirror_plus[ix, :-1][None, :] * mirror_s[:, None]
+                    vals_lower = coef_mirror_minus[ix, 1:][None, :] * mirror_s[:, None]
+                    super_flat[:, :-1, p] = np.where(link_plus[None, :], vals_super, 0.0)
+                    lower_flat[:, 1:, p] = np.where(link_plus[None, :], vals_lower, 0.0)
+
+        inv_eff = np.empty((n_tz, n_l, n_block, n_block), dtype=dtype_np)
+        prev_g = np.zeros((n_tz, n_block, n_block), dtype=np.float64)
+
+        def _invert_stack(a_stack: np.ndarray) -> np.ndarray:
+            try:
+                return np.linalg.inv(a_stack)
+            except np.linalg.LinAlgError:
+                out = np.empty_like(a_stack)
+                for i_mode in range(int(a_stack.shape[0])):
+                    try:
+                        out[i_mode, :, :] = np.linalg.inv(a_stack[i_mode, :, :])
+                    except np.linalg.LinAlgError:
+                        out[i_mode, :, :] = np.linalg.pinv(a_stack[i_mode, :, :], rcond=pinv_rcond)
+                return out
+
+        for il in range(n_l):
+            d_eff = np.broadcast_to(base_blocks[il, :, :], (n_tz, n_block, n_block)).copy()
+            if il > 0:
+                d_eff -= lower_flat[:, il, :, None] * prev_g
+            inv_l = _invert_stack(d_eff)
+            if not np.all(np.isfinite(inv_l)):
+                bad = ~np.isfinite(inv_l).reshape((n_tz, -1)).all(axis=1)
+                for i_mode in np.where(bad)[0]:
+                    inv_l[i_mode, :, :] = np.linalg.pinv(d_eff[i_mode, :, :], rcond=pinv_rcond)
+            inv_eff[:, il, :, :] = inv_l.astype(dtype_np, copy=False)
+            if il + 1 < n_l:
+                prev_g = inv_l * super_flat[:, il, None, :]
+            else:
+                prev_g = np.zeros_like(prev_g)
+
+        cached = _TransportFpLocalGeomLinePrecondCache(
+            inv_eff=jnp.asarray(inv_eff.reshape((n_theta, n_zeta, n_l, n_block, n_block)), dtype=precond_dtype),
+            lower_diag=jnp.asarray(lower_flat.reshape((n_theta, n_zeta, n_l, n_block)), dtype=precond_dtype),
+            super_diag=jnp.asarray(super_flat.reshape((n_theta, n_zeta, n_l, n_block)), dtype=precond_dtype),
+            n_block=int(n_block),
+        )
+        _TRANSPORT_FP_LOCAL_GEOM_LINE_PRECOND_CACHE[cache_key] = cached
+
+    inv_eff = cached.inv_eff
+    lower_diag = cached.lower_diag
+    super_diag = cached.super_diag
+    n_block_cached = int(cached.n_block)
+
+    def _apply_full(r_full: jnp.ndarray) -> jnp.ndarray:
+        r_full = jnp.asarray(r_full, dtype=jnp.float64)
+        f = r_full[: op.f_size].reshape(op.fblock.f_shape)  # (S,X,L,T,Z)
+        rhs_tzl = jnp.transpose(f.astype(precond_dtype), (3, 4, 2, 0, 1)).reshape(
+            (n_theta, n_zeta, n_l, n_block_cached)
+        )
+        rhs_ltz = jnp.transpose(rhs_tzl, (2, 0, 1, 3))
+        inv_ltz = jnp.transpose(inv_eff, (2, 0, 1, 3, 4))
+        lower_ltz = jnp.transpose(lower_diag, (2, 0, 1, 3))
+        super_ltz = jnp.transpose(super_diag, (2, 0, 1, 3))
+
+        def _forward(prev: jnp.ndarray, data: tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray]):
+            inv_l, lower_l, rhs_l = data
+            rhs_eff = rhs_l - lower_l * prev
+            y_l = jnp.einsum("tzij,tzj->tzi", inv_l, rhs_eff)
+            return y_l, y_l
+
+        zero_mode = jnp.zeros((n_theta, n_zeta, n_block_cached), dtype=precond_dtype)
+        _, y_ltz = jax.lax.scan(_forward, zero_mode, (inv_ltz, lower_ltz, rhs_ltz))
+
+        def _backward(next_x: jnp.ndarray, data: tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray]):
+            y_l, inv_l, super_l = data
+            corr = jnp.einsum("tzij,tzj->tzi", inv_l, super_l * next_x)
+            x_l = y_l - corr
+            return x_l, x_l
+
+        if n_l > 1:
+            _, x_rev = jax.lax.scan(
+                _backward,
+                y_ltz[-1],
+                (
+                    jnp.flip(y_ltz[:-1], axis=0),
+                    jnp.flip(inv_ltz[:-1], axis=0),
+                    jnp.flip(super_ltz[:-1], axis=0),
+                ),
+            )
+            x_ltz = jnp.concatenate([jnp.flip(x_rev, axis=0), y_ltz[-1][None, ...]], axis=0)
+        else:
+            x_ltz = y_ltz
+        sol_tzl = jnp.transpose(x_ltz, (1, 2, 0, 3)).reshape((n_theta, n_zeta, n_l, n_species, n_x))
+        sol_f = jnp.transpose(sol_tzl, (3, 4, 2, 0, 1))
+        z_f = sol_f.astype(jnp.float64)
+        tail = r_full[op.f_size :]
+        return jnp.concatenate([z_f.reshape((-1,)), tail], axis=0)
+
+    if reduce_full is None or expand_reduced is None:
+        return _apply_full
+
+    def _apply_reduced(r_reduced: jnp.ndarray) -> jnp.ndarray:
+        z_full = _apply_full(expand_reduced(r_reduced))
+        return reduce_full(z_full)
+
+    return _apply_reduced
+
+
+def _build_rhsmode23_fp_xblock_tz_lu_preconditioner(
+    *,
+    op: V3FullSystemOperator,
+    reduce_full: Callable[[jnp.ndarray], jnp.ndarray] | None = None,
+    expand_reduced: Callable[[jnp.ndarray], jnp.ndarray] | None = None,
+) -> Callable[[jnp.ndarray], jnp.ndarray]:
+    """Lower-memory FP transport factor over coupled ``(ell,theta,zeta)`` x-blocks.
+
+    Each local factor retains the non-averaged collisionless streaming/mirror
+    geometry and selected drift terms for one ``(species, x)`` block. This is
+    much smaller than the exact kinetic f-block factor because it avoids global
+    species/x fill while preserving the angular coupling missing from the
+    Fourier-averaged line candidates.
+    """
+    if op.fblock.fp is None:
+        return _build_rhsmode23_tzfft_preconditioner(
+            op=op, reduce_full=reduce_full, expand_reduced=expand_reduced
+        )
+    if bool(op.point_at_x0):
+        return _build_rhsmode23_fp_tzfft_line_preconditioner(
+            op=op, reduce_full=reduce_full, expand_reduced=expand_reduced
+        )
+
+    max_mb_env = os.environ.get("SFINCS_JAX_TRANSPORT_FP_XBLOCK_TZ_LU_MAX_MB", "").strip()
+    factor_max_mb_env = os.environ.get("SFINCS_JAX_TRANSPORT_FP_XBLOCK_TZ_LU_FACTOR_MAX_MB", "").strip()
+    reg_env = os.environ.get("SFINCS_JAX_TRANSPORT_FP_XBLOCK_TZ_LU_REG", "").strip()
+    kind_env = os.environ.get("SFINCS_JAX_TRANSPORT_FP_XBLOCK_TZ_LU_FACTOR", "").strip().lower()
+    drop_env = os.environ.get("SFINCS_JAX_TRANSPORT_FP_XBLOCK_TZ_LU_DROP_TOL", "").strip()
+    fill_env = os.environ.get("SFINCS_JAX_TRANSPORT_FP_XBLOCK_TZ_LU_FILL_FACTOR", "").strip()
+    permc_spec = os.environ.get("SFINCS_JAX_TRANSPORT_FP_XBLOCK_TZ_LU_PERMC_SPEC", "").strip() or "COLAMD"
+    pivot_env = os.environ.get("SFINCS_JAX_TRANSPORT_FP_XBLOCK_TZ_LU_DIAG_PIVOT_THRESH", "").strip()
+    try:
+        max_mb = float(max_mb_env) if max_mb_env else 2048.0
+    except ValueError:
+        max_mb = 2048.0
+    try:
+        factor_max_mb = float(factor_max_mb_env) if factor_max_mb_env else 4096.0
+    except ValueError:
+        factor_max_mb = 4096.0
+    try:
+        reg = float(reg_env) if reg_env else 3.0e-13
+    except ValueError:
+        reg = 3.0e-13
+    try:
+        drop_tol = float(drop_env) if drop_env else 0.0
+    except ValueError:
+        drop_tol = 0.0
+    factor_kind = kind_env if kind_env in {"lu", "ilu", "jacobi"} else "lu"
+    try:
+        fill_factor = float(fill_env) if fill_env else 10.0
+    except ValueError:
+        fill_factor = 10.0
+    try:
+        diag_pivot_thresh = float(pivot_env) if pivot_env else 1.0
+    except ValueError:
+        diag_pivot_thresh = 1.0
+    max_nbytes = None if float(max_mb) <= 0.0 else int(float(max_mb) * 1.0e6)
+    factor_max_nbytes = None if float(factor_max_mb) <= 0.0 else int(float(factor_max_mb) * 1.0e6)
+
+    cache_key = (
+        *_transport_precond_cache_key(
+            op,
+            "fp_xblock_tz_lu_"
+            f"{factor_kind}_{float(drop_tol):.3e}_{float(reg):.3e}_{float(fill_factor):.3e}_"
+            f"{permc_spec}_{float(diag_pivot_thresh):.3e}",
+        ),
+        int(max_nbytes or 0),
+        int(factor_max_nbytes or 0),
+    )
+    cached = _TRANSPORT_FP_XBLOCK_TZ_LU_PRECOND_CACHE.get(cache_key)
+    if cached is None:
+        import scipy.sparse as sp  # noqa: PLC0415
+
+        host_cache = _get_rhsmode1_fp_xblock_assembled_host_cache(op=op)
+        n_species = int(op.n_species)
+        n_x = int(op.n_x)
+        n_l = int(op.n_xi)
+        n_tz = int(op.n_theta) * int(op.n_zeta)
+        nxi_for_x = tuple(int(v) for v in np.asarray(op.fblock.collisionless.n_xi_for_x, dtype=np.int32))
+        factors_out: list[tuple[object | None, ...]] = []
+        diag_out: list[tuple[np.ndarray | None, ...]] = []
+        total_matrix_nbytes = 0
+        total_factor_nbytes = 0
+        total_factor_nnz = 0
+        block_failures = 0
+        block_diagonal_fallbacks = 0
+        for species in range(n_species):
+            factors_s: list[object | None] = []
+            diag_s: list[np.ndarray | None] = []
+            for ix in range(n_x):
+                n_lx = int(nxi_for_x[int(ix)])
+                if n_lx <= 0:
+                    factors_s.append(None)
+                    diag_s.append(None)
+                    continue
+                try:
+                    matrix = _assemble_rhsmode1_fp_xblock_tz_sparse_matrix(
+                        op=op,
+                        species=int(species),
+                        ix=int(ix),
+                        preconditioner_xi=1,
+                        host_cache=host_cache,
+                    ).tocsr()
+                    if float(reg) > 0.0:
+                        max_abs = float(np.max(np.abs(matrix.data))) if int(matrix.nnz) else 0.0
+                        diagonal_shift = max(1.0e-14, float(reg) * max(1.0, max_abs))
+                        matrix = (matrix + diagonal_shift * sp.eye(matrix.shape[0], dtype=matrix.dtype, format="csr")).tocsr()
+                    matrix_nbytes = int(matrix.data.nbytes + matrix.indices.nbytes + matrix.indptr.nbytes)
+                    total_matrix_nbytes += matrix_nbytes
+                    if max_nbytes is not None and total_matrix_nbytes > int(max_nbytes):
+                        return _build_rhsmode23_fp_tzfft_line_preconditioner(
+                            op=op, reduce_full=reduce_full, expand_reduced=expand_reduced
+                        )
+                    factor_bundle = factorize_host_sparse_operator(
+                        matrix,
+                        kind=factor_kind,
+                        drop_tol=float(drop_tol) if float(drop_tol) > 0.0 else 1.0e-8,
+                        fill_factor=float(fill_factor),
+                        permc_spec=str(permc_spec),
+                        diag_pivot_thresh=float(diag_pivot_thresh),
+                    )
+                    if factor_bundle.factor_nbytes_estimate is not None:
+                        total_factor_nbytes += int(factor_bundle.factor_nbytes_estimate)
+                    if factor_bundle.factor_nnz_estimate is not None:
+                        total_factor_nnz += int(factor_bundle.factor_nnz_estimate)
+                    if factor_max_nbytes is not None and total_factor_nbytes > int(factor_max_nbytes):
+                        return _build_rhsmode23_fp_tzfft_line_preconditioner(
+                            op=op, reduce_full=reduce_full, expand_reduced=expand_reduced
+                        )
+                    factors_s.append(factor_bundle)
+                    diag_s.append(None)
+                except Exception:
+                    block_failures += 1
+                    diag = _rhsmode1_fp_xblock_tz_sparse_diagonal(
+                        op=op,
+                        species=int(species),
+                        ix=int(ix),
+                        preconditioner_xi=1,
+                        host_cache=host_cache,
+                    )
+                    inv_diag = _safe_inverse_diagonal_np(diag + float(reg), floor=1.0e-14)
+                    if inv_diag is None or inv_diag.size != int(n_lx * n_tz):
+                        factors_s.append(None)
+                        diag_s.append(None)
+                    else:
+                        block_diagonal_fallbacks += 1
+                        factors_s.append(None)
+                        diag_s.append(np.asarray(inv_diag, dtype=np.float64))
+            factors_out.append(tuple(factors_s))
+            diag_out.append(tuple(diag_s))
+        metadata = {
+            "kind": "fp_xblock_tz_lu",
+            "factor_kind": str(factor_kind),
+            "matrix_nbytes_estimate": int(total_matrix_nbytes),
+            "factor_nbytes_estimate": int(total_factor_nbytes),
+            "factor_nnz_estimate": int(total_factor_nnz),
+            "block_failures": int(block_failures),
+            "block_diagonal_fallbacks": int(block_diagonal_fallbacks),
+            "n_species": int(n_species),
+            "n_x": int(n_x),
+            "n_xi": int(n_l),
+            "n_tz": int(n_tz),
+        }
+        cached = _TransportFpXBlockTzLuPrecondCache(
+            factors=tuple(factors_out),
+            diag_inverses=tuple(diag_out),
+            nxi_for_x=tuple(int(v) for v in nxi_for_x),
+            factor_nbytes_estimate=int(total_factor_nbytes),
+            factor_nnz_estimate=int(total_factor_nnz),
+            metadata=metadata,
+        )
+        _TRANSPORT_FP_XBLOCK_TZ_LU_PRECOND_CACHE[cache_key] = cached
+
+    factors = cached.factors
+    diag_inverses = cached.diag_inverses
+    nxi_for_x = tuple(int(v) for v in cached.nxi_for_x)
+    n_species = int(op.n_species)
+    n_x = int(op.n_x)
+    n_l = int(op.n_xi)
+    n_theta = int(op.n_theta)
+    n_zeta = int(op.n_zeta)
+    n_tz = int(n_theta * n_zeta)
+
+    def _solve_f_host(rhs_f_host: np.ndarray) -> np.ndarray:
+        rhs_f = np.asarray(rhs_f_host, dtype=np.float64).reshape((n_species, n_x, n_l, n_theta, n_zeta))
+        out = np.zeros_like(rhs_f)
+        for species in range(n_species):
+            for ix in range(n_x):
+                n_lx = int(nxi_for_x[int(ix)])
+                if n_lx <= 0:
+                    continue
+                rhs_block = rhs_f[species, ix, :n_lx, :, :].reshape((n_lx * n_tz,))
+                factor_bundle = factors[species][ix]
+                inv_diag = diag_inverses[species][ix]
+                if factor_bundle is not None:
+                    try:
+                        sol = np.asarray(factor_bundle.solve(rhs_block), dtype=np.float64).reshape((n_lx * n_tz,))
+                    except Exception:
+                        sol = rhs_block
+                elif inv_diag is not None:
+                    sol = rhs_block * np.asarray(inv_diag, dtype=np.float64).reshape((n_lx * n_tz,))
+                else:
+                    sol = rhs_block
+                finite = np.isfinite(sol)
+                if not np.all(finite):
+                    sol = np.where(finite, sol, 0.0)
+                out[species, ix, :n_lx, :, :] = sol.reshape((n_lx, n_theta, n_zeta))
+                if n_lx < n_l:
+                    out[species, ix, n_lx:, :, :] = rhs_f[species, ix, n_lx:, :, :]
+        return out.reshape((int(op.f_size),)).astype(np.float64, copy=False)
+
+    def _apply_full(r_full: jnp.ndarray) -> jnp.ndarray:
+        r_full = jnp.asarray(r_full, dtype=jnp.float64)
+        z_f = jax.pure_callback(
+            _solve_f_host,
+            jax.ShapeDtypeStruct((int(op.f_size),), jnp.float64),
+            r_full[: int(op.f_size)],
+        )
+        return jnp.concatenate([z_f, r_full[int(op.f_size) :]], axis=0)
+
+    if reduce_full is None or expand_reduced is None:
+        return _apply_full
+
+    def _apply_reduced(r_reduced: jnp.ndarray) -> jnp.ndarray:
+        z_full = _apply_full(expand_reduced(r_reduced))
+        return reduce_full(z_full)
+
+    return _apply_reduced
+
+
+def _build_rhsmode23_fp_xblock_tz_lu_schur_preconditioner(
+    *,
+    op: V3FullSystemOperator,
+    reduce_full: Callable[[jnp.ndarray], jnp.ndarray] | None = None,
+    expand_reduced: Callable[[jnp.ndarray], jnp.ndarray] | None = None,
+) -> Callable[[jnp.ndarray], jnp.ndarray]:
+    """Tail/source Schur correction on top of the FP x-block angular factor."""
+    base_full = _build_rhsmode23_fp_xblock_tz_lu_preconditioner(op=op)
+    if op.fblock.fp is None or bool(op.include_phi1) or int(op.extra_size) <= 0:
+        if reduce_full is None or expand_reduced is None:
+            return base_full
+
+        def _base_reduced(r_reduced: jnp.ndarray) -> jnp.ndarray:
+            return reduce_full(base_full(expand_reduced(r_reduced)))
+
+        return _base_reduced
+
+    prefix = "SFINCS_JAX_TRANSPORT_FP_XBLOCK_TZ_LU_SCHUR"
+    max_cols_env = os.environ.get(f"{prefix}_MAX_COLS", "").strip()
+    max_mb_env = os.environ.get(f"{prefix}_MAX_MB", "").strip()
+    reg_env = os.environ.get(f"{prefix}_REG", "").strip()
+    damping_env = os.environ.get(f"{prefix}_DAMPING", "").strip()
+    corr_rel_env = os.environ.get(f"{prefix}_CORRECTION_REL_MAX", "").strip()
+    restriction_env = os.environ.get(f"{prefix}_RESTRICTION", "").strip().lower()
+    dtype_env = os.environ.get(f"{prefix}_DTYPE", "").strip().lower()
+    kinetic_residual_env = os.environ.get(f"{prefix}_KINETIC_RESIDUAL", "").strip().lower()
+    rhs_residual_env = os.environ.get(f"{prefix}_RHS_RESIDUAL", "").strip().lower()
+    try:
+        max_cols = int(max_cols_env) if max_cols_env else 32
+    except ValueError:
+        max_cols = 32
+    try:
+        max_mb = float(max_mb_env) if max_mb_env else 512.0
+    except ValueError:
+        max_mb = 512.0
+    try:
+        reg = float(reg_env) if reg_env else 3.0e-13
+    except ValueError:
+        reg = 3.0e-13
+    try:
+        damping = float(damping_env) if damping_env else 1.0
+    except ValueError:
+        damping = 1.0
+    try:
+        correction_rel_max = float(corr_rel_env) if corr_rel_env else 10.0
+    except ValueError:
+        correction_rel_max = 10.0
+    coarse_dtype = jnp.float32 if dtype_env == "float32" else jnp.float64
+    dtype_np = np.float32 if coarse_dtype == jnp.float32 else np.float64
+    restriction_kind = (
+        restriction_env if restriction_env in {"tail", "galerkin", "tail_galerkin"} else "tail_galerkin"
+    )
+    kinetic_residual_enabled = kinetic_residual_env in {"1", "true", "yes", "on"}
+    rhs_residual_enabled = rhs_residual_env in {"1", "true", "yes", "on"}
+    max_cols = max(0, int(max_cols))
+    if max_cols <= 0:
+        if reduce_full is None or expand_reduced is None:
+            return base_full
+
+        def _base_reduced(r_reduced: jnp.ndarray) -> jnp.ndarray:
+            return reduce_full(base_full(expand_reduced(r_reduced)))
+
+        return _base_reduced
+
+    n_total = int(op.total_size)
+    bytes_per = np.dtype(dtype_np).itemsize
+    restriction_factor = 2 if restriction_kind == "tail" else 3
+    est_mb = float(restriction_factor * n_total * max_cols * bytes_per + max_cols * max_cols * bytes_per) / 1.0e6
+    if float(max_mb) > 0.0 and est_mb > float(max_mb):
+        if reduce_full is None or expand_reduced is None:
+            return base_full
+
+        def _base_reduced(r_reduced: jnp.ndarray) -> jnp.ndarray:
+            return reduce_full(base_full(expand_reduced(r_reduced)))
+
+        return _base_reduced
+
+    cache_key = (
+        *_transport_precond_cache_key(
+            op,
+            f"fp_xblock_tz_lu_schur_{coarse_dtype}_{int(max_cols)}_"
+            f"{float(reg):.3e}_{float(damping):.3e}_{float(correction_rel_max):.3e}_"
+            f"{restriction_kind}_{int(kinetic_residual_enabled)}_{int(rhs_residual_enabled)}",
+        ),
+        _hash_array(op.x),
+        _hash_array(op.x_weights),
+        _hash_array(op.theta_weights),
+        _hash_array(op.zeta_weights),
+        _hash_array(op.d_hat),
+        int(op.extra_size),
+    )
+    cached = _TRANSPORT_FP_XBLOCK_TZ_LU_SCHUR_PRECOND_CACHE.get(cache_key)
+    if cached is None:
+        columns: list[np.ndarray] = []
+        labels: list[str] = []
+
+        def _add_column(label: str, vec: np.ndarray) -> bool:
+            if len(columns) >= int(max_cols):
+                return False
+            arr = np.asarray(vec, dtype=np.float64).reshape((-1,))
+            if arr.shape != (n_total,):
+                return False
+            finite = np.isfinite(arr)
+            if not np.all(finite):
+                arr = np.where(finite, arr, 0.0)
+            norm = float(np.linalg.norm(arr))
+            if not (np.isfinite(norm) and norm > 0.0):
+                return False
+            columns.append((arr / norm).astype(dtype_np, copy=False))
+            labels.append(str(label))
+            return True
+
+        def _true_action(vec: np.ndarray) -> np.ndarray:
+            return np.asarray(
+                jax.device_get(apply_v3_full_system_operator_cached(op, jnp.asarray(vec, dtype=jnp.float64))),
+                dtype=np.float64,
+            ).reshape((-1,))
+
+        def _base_response(load: np.ndarray) -> np.ndarray:
+            return np.asarray(jax.device_get(base_full(jnp.asarray(load, dtype=jnp.float64))), dtype=np.float64).reshape((-1,))
+
+        def _add_kinetic_moment_column(label: str, full: np.ndarray) -> None:
+            added = _add_column(label, full)
+            if not (added and kinetic_residual_enabled and len(columns) < int(max_cols)):
+                return
+            # Add the solution-space error left after one x-block inverse,
+            # so the coarse equation sees the dominant kinetic residual rather
+            # than only source/tail defects.
+            action = _true_action(full)
+            response = _base_response(action)
+            _add_column(f"{label}_xblock_residual_error", full - response)
+
+        tail0 = int(op.f_size + op.phi1_size)
+        for i_extra in range(int(op.extra_size)):
+            if len(columns) >= int(max_cols):
+                break
+            unit = np.zeros((n_total,), dtype=np.float64)
+            unit[tail0 + int(i_extra)] = 1.0
+            source_col = _true_action(unit)
+            response = _base_response(source_col)
+            _add_column(f"xblock_tail_response_{i_extra}", unit - response)
+            _add_column(f"xblock_tail_unit_{i_extra}", unit)
+
+        if rhs_residual_enabled:
+            try:
+                n_transport_rhs = transport_matrix_size_from_rhs_mode(int(op.rhs_mode))
+            except ValueError:
+                n_transport_rhs = 0
+            for which_rhs in range(1, int(n_transport_rhs) + 1):
+                if len(columns) >= int(max_cols):
+                    break
+                try:
+                    op_rhs = with_transport_rhs_settings(op, which_rhs=int(which_rhs))
+                    rhs_vec = np.asarray(jax.device_get(rhs_v3_full_system(op_rhs)), dtype=np.float64).reshape((-1,))
+                    base_solution = _base_response(rhs_vec)
+                    residual = rhs_vec - _true_action(base_solution)
+                    correction = _base_response(residual)
+                    _add_column(f"xblock_rhs{which_rhs}_residual_correction", correction)
+                except Exception:
+                    continue
+
+        factor = np.asarray(
+            jax.device_get(_fs_average_factor(op.theta_weights, op.zeta_weights, op.d_hat)),
+            dtype=np.float64,
+        )
+        factor_norm = float(np.linalg.norm(factor))
+        if np.isfinite(factor_norm) and factor_norm > 0.0:
+            fs_pattern = factor / factor_norm
+        else:
+            fs_pattern = np.full(
+                (int(op.n_theta), int(op.n_zeta)),
+                1.0 / np.sqrt(max(1, int(op.n_theta) * int(op.n_zeta))),
+            )
+        x = np.asarray(jax.device_get(op.x), dtype=np.float64)
+        xw = np.asarray(jax.device_get(op.x_weights), dtype=np.float64)
+        moment_specs = [
+            ("density", 0, (x**2) * xw),
+            ("pressure", 0, (x**4) * xw),
+            ("flow", min(1, int(op.n_xi) - 1), (x**3) * xw),
+            ("heat_flow", min(1, int(op.n_xi) - 1), (x**5) * xw),
+        ]
+        if int(op.constraint_scheme) == 2:
+            for species in range(int(op.n_species)):
+                for name, ell, weights in moment_specs:
+                    if len(columns) >= int(max_cols):
+                        break
+                    f_dir = np.zeros(tuple(int(v) for v in op.fblock.f_shape), dtype=np.float64)
+                    f_dir[species, :, int(ell), :, :] = weights[:, None, None] * fs_pattern[None, :, :]
+                    full = np.concatenate([f_dir.reshape((-1,)), np.zeros((n_total - int(op.f_size),), dtype=np.float64)])
+                    _add_kinetic_moment_column(f"xblock_constraint2_{name}_moment_s{species}_l{int(ell)}", full)
+        elif int(op.constraint_scheme) == 1:
+            xpart1, xpart2 = _source_basis_constraint_scheme_1(op.x)
+            xparts = [
+                ("particle_source_shape", np.asarray(jax.device_get(xpart1), dtype=np.float64)),
+                ("energy_source_shape", np.asarray(jax.device_get(xpart2), dtype=np.float64)),
+            ]
+            ix0 = _ix_min(bool(op.point_at_x0))
+            for species in range(int(op.n_species)):
+                for name, weights in xparts:
+                    if len(columns) >= int(max_cols):
+                        break
+                    f_dir = np.zeros(tuple(int(v) for v in op.fblock.f_shape), dtype=np.float64)
+                    f_dir[species, ix0:, 0, :, :] = weights[ix0:, None, None] * fs_pattern[None, :, :]
+                    full = np.concatenate([f_dir.reshape((-1,)), np.zeros((n_total - int(op.f_size),), dtype=np.float64)])
+                    _add_kinetic_moment_column(f"xblock_constraint1_{name}_s{species}", full)
+
+        if not columns:
+            if reduce_full is None or expand_reduced is None:
+                return base_full
+
+            def _base_reduced(r_reduced: jnp.ndarray) -> jnp.ndarray:
+                return reduce_full(base_full(expand_reduced(r_reduced)))
+
+            return _base_reduced
+
+        basis_np = np.column_stack(columns).astype(dtype_np, copy=False)
+        action_columns = [_true_action(basis_np[:, i]) for i in range(int(basis_np.shape[1]))]
+        action_full_np = np.column_stack(action_columns)
+        restrict_np: np.ndarray | None
+        if restriction_kind == "tail":
+            restrict_np = None
+            action_np = np.asarray(action_full_np[tail0:, :], dtype=dtype_np)
+        else:
+            restrict_parts: list[np.ndarray] = []
+            if restriction_kind == "tail_galerkin":
+                for i_extra in range(int(op.extra_size)):
+                    unit = np.zeros((n_total,), dtype=dtype_np)
+                    unit[tail0 + int(i_extra)] = 1.0
+                    restrict_parts.append(unit)
+            restrict_parts.extend([basis_np[:, i].astype(dtype_np, copy=False) for i in range(int(basis_np.shape[1]))])
+            restrict_np = np.column_stack(restrict_parts).astype(dtype_np, copy=False)
+            action_np = np.asarray(restrict_np.T @ action_full_np, dtype=dtype_np)
+        try:
+            normal_inv = np.linalg.pinv(action_np, rcond=max(float(abs(reg)), 1.0e-14))
+        except np.linalg.LinAlgError:
+            normal = np.asarray(action_np.T @ action_np, dtype=np.float64)
+            scale = max(float(np.linalg.norm(normal, ord=np.inf)) if normal.size else 0.0, 1.0)
+            normal_reg = normal + max(float(abs(reg)), 1.0e-14) * scale * np.eye(int(normal.shape[0]), dtype=np.float64)
+            normal_inv = np.linalg.solve(normal_reg, action_np.T)
+        cached = _TransportFpTzFftLineSchurPrecondCache(
+            basis=jnp.asarray(basis_np, dtype=coarse_dtype),
+            action=jnp.asarray(action_np, dtype=coarse_dtype),
+            normal_inv=jnp.asarray(normal_inv.astype(dtype_np, copy=False), dtype=coarse_dtype),
+            restrict_basis=None if restrict_np is None else jnp.asarray(restrict_np, dtype=coarse_dtype),
+            damping=float(damping),
+            tail0=int(tail0),
+            n_columns=int(basis_np.shape[1]),
+            restriction_kind=str(restriction_kind),
+            basis_labels=tuple(labels),
+        )
+        _TRANSPORT_FP_XBLOCK_TZ_LU_SCHUR_PRECOND_CACHE[cache_key] = cached
+
+    basis = cached.basis
+    action = cached.action
+    normal_inv = cached.normal_inv
+    restrict_basis = cached.restrict_basis
+    damping_use = float(cached.damping)
+    tail0_use = int(cached.tail0)
+
+    def _apply_full(r_full: jnp.ndarray) -> jnp.ndarray:
+        r_full = jnp.asarray(r_full, dtype=jnp.float64)
+        y_base = base_full(r_full)
+        residual = r_full - apply_v3_full_system_operator_cached(op, y_base)
+        if restrict_basis is None:
+            residual_c = jnp.asarray(residual[tail0_use:], dtype=action.dtype)
+        else:
+            residual_c = jnp.asarray(restrict_basis.T @ residual, dtype=action.dtype)
+        coeff = normal_inv @ residual_c
+        coeff = jnp.where(jnp.isfinite(coeff), coeff, jnp.zeros_like(coeff))
+        correction = jnp.asarray(basis @ coeff, dtype=jnp.float64)
+        correction = jnp.where(jnp.isfinite(correction), correction, jnp.zeros_like(correction))
+        if float(correction_rel_max) > 0.0:
+            corr_norm = jnp.linalg.norm(correction)
+            ref_norm = jnp.maximum(jnp.maximum(jnp.linalg.norm(y_base), jnp.linalg.norm(r_full)), 1.0)
+            limit = jnp.asarray(float(correction_rel_max), dtype=jnp.float64) * ref_norm
+            scale = jnp.where(corr_norm > limit, limit / jnp.maximum(corr_norm, jnp.finfo(jnp.float64).tiny), 1.0)
+        else:
+            scale = jnp.asarray(1.0, dtype=jnp.float64)
+        out = y_base + float(damping_use) * scale * correction
+        return jnp.where(jnp.isfinite(out), out, y_base)
+
+    if reduce_full is None or expand_reduced is None:
+        return _apply_full
+
+    def _apply_reduced(r_reduced: jnp.ndarray) -> jnp.ndarray:
+        z_full = _apply_full(expand_reduced(r_reduced))
+        return reduce_full(z_full)
+
+    return _apply_reduced
+
+
+def _build_rhsmode23_direct_pmat_physics_coarse_basis(
+    *,
+    op: V3FullSystemOperator,
+    active_indices: np.ndarray,
+    max_cols: int,
+    base_factor_bundle: object | None = None,
+) -> tuple[object | None, tuple[str, ...]]:
+    """Build physics moment/source columns in active direct-Pmat coordinates."""
+
+    try:
+        import scipy.sparse as sp  # noqa: PLC0415
+    except Exception:
+        return None, ()
+
+    active_np = np.asarray(active_indices, dtype=np.int64).reshape((-1,))
+    if active_np.size == 0:
+        return None, ()
+    n_active = int(active_np.size)
+    n_total = int(op.total_size)
+    full_to_active = np.full((n_total,), -1, dtype=np.int64)
+    full_to_active[active_np] = np.arange(n_active, dtype=np.int64)
+    max_cols_use = max(1, int(max_cols))
+    col_rows: list[np.ndarray] = []
+    col_data: list[np.ndarray] = []
+    names: list[str] = []
+
+    f_active_mask = active_np < int(op.f_size)
+    f_active_pos = np.flatnonzero(f_active_mask).astype(np.int64, copy=False)
+    f_linear = active_np[f_active_mask]
+    if f_linear.size:
+        zeta_idx = (f_linear % int(op.n_zeta)).astype(np.int64, copy=False)
+        tmp = f_linear // int(op.n_zeta)
+        theta_idx = (tmp % int(op.n_theta)).astype(np.int64, copy=False)
+        tmp = tmp // int(op.n_theta)
+        ell_idx = (tmp % int(op.n_xi)).astype(np.int64, copy=False)
+        tmp = tmp // int(op.n_xi)
+        x_idx = (tmp % int(op.n_x)).astype(np.int64, copy=False)
+        species_idx = (tmp // int(op.n_x)).astype(np.int64, copy=False)
+    else:
+        zeta_idx = np.asarray([], dtype=np.int64)
+        theta_idx = np.asarray([], dtype=np.int64)
+        ell_idx = np.asarray([], dtype=np.int64)
+        x_idx = np.asarray([], dtype=np.int64)
+        species_idx = np.asarray([], dtype=np.int64)
+
+    def _add_active_column(name: str, active_values: np.ndarray) -> None:
+        if len(names) >= max_cols_use:
+            return
+        values = np.asarray(active_values, dtype=np.float64).reshape((n_active,))
+        keep = np.flatnonzero(np.isfinite(values) & (np.abs(values) > 0.0))
+        if keep.size == 0:
+            return
+        vals = values[keep]
+        norm = float(np.linalg.norm(vals))
+        if not (np.isfinite(norm) and norm > 0.0):
+            return
+        col_rows.append(keep.astype(np.int64, copy=False))
+        col_data.append((vals / norm).astype(np.float64, copy=False))
+        names.append(str(name))
+
+    def _add_full_column(name: str, full: np.ndarray) -> None:
+        if len(names) >= max_cols_use:
+            return
+        vec = np.asarray(full, dtype=np.float64).reshape((-1,))
+        if vec.shape != (n_total,):
+            return
+        values = vec[active_np]
+        keep = np.flatnonzero(np.isfinite(values) & (np.abs(values) > 0.0))
+        if keep.size == 0:
+            return
+        vals = values[keep]
+        norm = float(np.linalg.norm(vals))
+        if not (np.isfinite(norm) and norm > 0.0):
+            return
+        col_rows.append(keep.astype(np.int64, copy=False))
+        col_data.append((vals / norm).astype(np.float64, copy=False))
+        names.append(str(name))
+
+    def _add_f_fsavg_column(
+        name: str,
+        *,
+        species: int,
+        ell: int,
+        x_weights: np.ndarray,
+        fs_pattern: np.ndarray,
+    ) -> None:
+        if len(names) >= max_cols_use or f_active_pos.size == 0:
+            return
+        weights = np.asarray(x_weights, dtype=np.float64).reshape((int(op.n_x),))
+        mask = (species_idx == int(species)) & (ell_idx == int(ell))
+        if not np.any(mask):
+            return
+        values = np.zeros((n_active,), dtype=np.float64)
+        local_pos = f_active_pos[mask]
+        values[local_pos] = weights[x_idx[mask]] * fs_pattern[theta_idx[mask], zeta_idx[mask]]
+        _add_active_column(name, values)
+
+    def _add_tail_unit(name: str, full_index: int) -> None:
+        if len(names) >= max_cols_use:
+            return
+        pos = full_to_active[int(full_index)] if 0 <= int(full_index) < n_total else -1
+        if pos < 0:
+            return
+        col_rows.append(np.asarray([int(pos)], dtype=np.int64))
+        col_data.append(np.asarray([1.0], dtype=np.float64))
+        names.append(str(name))
+
+    tail0 = int(op.f_size + op.phi1_size)
+    for i_extra in range(int(op.extra_size)):
+        _add_tail_unit(f"direct_pmat_tail_unit_{i_extra}", tail0 + int(i_extra))
+
+    factor = np.asarray(
+        jax.device_get(_fs_average_factor(op.theta_weights, op.zeta_weights, op.d_hat)),
+        dtype=np.float64,
+    )
+    factor_norm = float(np.linalg.norm(factor))
+    if np.isfinite(factor_norm) and factor_norm > 0.0:
+        fs_pattern = factor / factor_norm
+    else:
+        fs_pattern = np.full(
+            (int(op.n_theta), int(op.n_zeta)),
+            1.0 / np.sqrt(max(1, int(op.n_theta) * int(op.n_zeta))),
+            dtype=np.float64,
+        )
+
+    if int(op.constraint_scheme) == 1:
+        try:
+            xpart1, xpart2 = _source_basis_constraint_scheme_1(op.x)
+            x = np.asarray(jax.device_get(op.x), dtype=np.float64)
+            xw = np.asarray(jax.device_get(op.x_weights), dtype=np.float64)
+            xparts = (
+                ("particle_source_shape", np.asarray(jax.device_get(xpart1), dtype=np.float64)),
+                ("energy_source_shape", np.asarray(jax.device_get(xpart2), dtype=np.float64)),
+            )
+            ix0 = _ix_min(bool(op.point_at_x0))
+            for species in range(int(op.n_species)):
+                for name, weights in xparts:
+                    if len(names) >= max_cols_use:
+                        break
+                    _add_f_fsavg_column(
+                        f"direct_pmat_constraint1_{name}_s{species}",
+                        species=species,
+                        ell=0,
+                        x_weights=weights,
+                        fs_pattern=fs_pattern,
+                    )
+                # The exact Fortran Pmat couples the source amplitudes to the
+                # L=0 kinetic equations at every retained speed.  Per-speed
+                # FS-average columns give the coarse equation a bounded way to
+                # represent that Schur complement instead of relying only on
+                # two global source shapes.
+                for ix in range(ix0, int(op.n_x)):
+                    if len(names) >= max_cols_use:
+                        break
+                    unit_x = np.zeros((int(op.n_x),), dtype=np.float64)
+                    unit_x[ix] = 1.0
+                    _add_f_fsavg_column(
+                        f"direct_pmat_constraint1_l0_fsavg_s{species}_x{ix}",
+                        species=species,
+                        ell=0,
+                        x_weights=unit_x,
+                        fs_pattern=fs_pattern,
+                    )
+                moment_specs = [
+                    ("density_moment", 0, (x**2) * xw),
+                    ("pressure_moment", 0, (x**4) * xw),
+                ]
+                if int(op.n_xi) > 1:
+                    moment_specs.extend(
+                        [
+                            ("flow_moment", 1, (x**3) * xw),
+                            ("heat_flow_moment", 1, (x**5) * xw),
+                        ]
+                    )
+                for name, ell, weights in moment_specs:
+                    if len(names) >= max_cols_use:
+                        break
+                    _add_f_fsavg_column(
+                        f"direct_pmat_constraint1_{name}_s{species}_l{int(ell)}",
+                        species=species,
+                        ell=int(ell),
+                        x_weights=weights,
+                        fs_pattern=fs_pattern,
+                    )
+        except Exception:
+            pass
+    elif int(op.constraint_scheme) == 2:
+        x = np.asarray(jax.device_get(op.x), dtype=np.float64)
+        xw = np.asarray(jax.device_get(op.x_weights), dtype=np.float64)
+        moment_specs = [
+            ("density", 0, (x**2) * xw),
+            ("pressure", 0, (x**4) * xw),
+            ("flow", min(1, int(op.n_xi) - 1), (x**3) * xw),
+            ("heat_flow", min(1, int(op.n_xi) - 1), (x**5) * xw),
+        ]
+        for species in range(int(op.n_species)):
+            ix0 = _ix_min(bool(op.point_at_x0))
+            for ix in range(ix0, int(op.n_x)):
+                if len(names) >= max_cols_use:
+                    break
+                unit_x = np.zeros((int(op.n_x),), dtype=np.float64)
+                unit_x[ix] = 1.0
+                _add_f_fsavg_column(
+                    f"direct_pmat_constraint2_l0_source_s{species}_x{ix}",
+                    species=species,
+                    ell=0,
+                    x_weights=unit_x,
+                    fs_pattern=fs_pattern,
+                )
+            for name, ell, weights in moment_specs:
+                if len(names) >= max_cols_use:
+                    break
+                _add_f_fsavg_column(
+                    f"direct_pmat_constraint2_{name}_moment_s{species}_l{int(ell)}",
+                    species=species,
+                    ell=int(ell),
+                    x_weights=weights,
+                    fs_pattern=fs_pattern,
+                )
+
+    matrix = None
+    if base_factor_bundle is not None:
+        try:
+            matrix = getattr(getattr(base_factor_bundle, "operator", None), "matrix", None)
+        except Exception:
+            matrix = None
+    if matrix is not None and len(names) < max_cols_use:
+        try:
+            matrix_csr = matrix.tocsr() if sp.issparse(matrix) else sp.csr_matrix(np.asarray(matrix))
+            tail_positions = np.asarray(
+                [
+                    int(full_to_active[full_idx])
+                    for full_idx in range(tail0, n_total)
+                    if int(full_to_active[full_idx]) >= 0
+                ],
+                dtype=np.int64,
+            )
+            for local_tail, tail_pos in enumerate(tail_positions):
+                if len(names) >= max_cols_use:
+                    break
+                source_rhs = np.asarray(matrix_csr[:, int(tail_pos)].toarray()).reshape((n_active,))
+                if tail_positions.size:
+                    source_rhs[tail_positions] = 0.0
+                try:
+                    response = np.asarray(base_factor_bundle.solve(source_rhs), dtype=np.float64).reshape((n_active,))
+                except Exception:
+                    response = np.zeros((n_active,), dtype=np.float64)
+                mode = -response
+                mode[int(tail_pos)] += 1.0
+                _add_active_column(f"direct_pmat_tail_schur_response_{int(local_tail)}", mode)
+        except Exception:
+            pass
+
+    if not names:
+        return None, ()
+    rows = np.concatenate(col_rows)
+    cols = np.concatenate(
+        [np.full((int(row.size),), int(i), dtype=np.int64) for i, row in enumerate(col_rows)]
+    )
+    data = np.concatenate(col_data)
+    basis = sp.coo_matrix((data, (rows, cols)), shape=(n_active, len(names)), dtype=np.float64).tocsr()
+    basis.sum_duplicates()
+    basis.eliminate_zeros()
+    return basis, tuple(names)
+
+
+def _try_build_rhsmode23_fp_fortran_reduced_direct_pmat_bundle(
+    *,
+    op_pc: V3FullSystemOperator,
+    active_indices: np.ndarray | None,
+    factor_dtype: np.dtype,
+    pc_shift: float,
+    emit: Callable[[int, str], None] | None = None,
+) -> tuple[SparseOperatorBundle, dict[str, object]] | None:
+    """Build a reduced Fortran-style transport ``Pmat`` directly from terms.
+
+    This avoids the pattern-color probe path for production FP transport
+    preconditioners.  It is deliberately fail-closed and only handles non-Phi1
+    RHSMode=2/3 systems whose active kinetic set preserves complete zeta
+    blocks plus the complete source/constraint tail.
+    """
+
+    if int(op_pc.rhs_mode) not in {2, 3} or op_pc.fblock.fp is None:
+        return None
+    if bool(op_pc.include_phi1) or bool(op_pc.include_phi1_in_kinetic):
+        return None
+    if int(op_pc.constraint_scheme) not in {0, 1, 2}:
+        return None
+
+    try:
+        import scipy.sparse as sp  # noqa: PLC0415
+        from scipy.sparse.linalg import LinearOperator  # noqa: PLC0415
+    except Exception:
+        return None
+
+    build_timer = Timer()
+    dtype_np = np.dtype(factor_dtype)
+    total_size = int(op_pc.total_size)
+    f_size = int(op_pc.f_size)
+    phi1_size = int(op_pc.phi1_size)
+    extra_start = f_size + phi1_size
+    n_zeta = int(op_pc.n_zeta)
+    n_theta = int(op_pc.n_theta)
+    n_xi = int(op_pc.n_xi)
+    n_x = int(op_pc.n_x)
+    n_species = int(op_pc.n_species)
+
+    if active_indices is None:
+        active = np.arange(total_size, dtype=np.int64)
+    else:
+        active = np.asarray(active_indices, dtype=np.int64).reshape((-1,))
+    if active.size == 0 or np.any(active < 0) or np.any(active >= total_size):
+        return None
+    if np.unique(active).size != active.size:
+        return None
+
+    f_active = active[active < f_size]
+    tail_active = active[active >= f_size]
+    expected_tail = np.arange(extra_start, total_size, dtype=np.int64)
+    if phi1_size != 0 or not np.array_equal(tail_active, expected_tail):
+        return None
+    if f_active.size == 0 or int(f_active.size) % n_zeta != 0:
+        return None
+
+    f_blocks = f_active.reshape((-1, n_zeta))
+    first = f_blocks[:, 0]
+    if np.any(first % n_zeta != 0):
+        return None
+    expected_blocks = first[:, None] + np.arange(n_zeta, dtype=np.int64)[None, :]
+    if not np.array_equal(f_blocks, expected_blocks):
+        return None
+    active_blocks = (first // n_zeta).astype(np.int64, copy=False)
+
+    try:
+        fblock_selection = select_structured_rhs1_fblock_operator(
+            op_pc.fblock,
+            include_identity_shift=True,
+            require_complete=True,
+        )
+        if not bool(fblock_selection.selected):
+            return None
+        projected_fblock = fblock_selection.assembly.operator.project_block_indices(active_blocks)
+        k_ff = projected_fblock.to_scipy_csr_matrix().astype(dtype_np, copy=False)
+    except Exception as exc:  # noqa: BLE001
+        if emit is not None:
+            emit(
+                1,
+                "solve_v3_transport_matrix_linear_gmres: direct reduced Pmat unavailable "
+                f"({type(exc).__name__}: {exc})",
+            )
+        return None
+
+    active_size = int(active.size)
+    kinetic_size = int(f_active.size)
+    tail_size = int(tail_active.size)
+    full_to_active = np.full((total_size,), -1, dtype=np.int64)
+    full_to_active[active] = np.arange(active_size, dtype=np.int64)
+
+    def _f_index(species: int, ix: int, ell: int, theta: int, zeta: int) -> int:
+        return int(((((species * n_x) + ix) * n_xi + ell) * n_theta + theta) * n_zeta + zeta)
+
+    def _extra_index(offset: int) -> int:
+        return int(extra_start + offset)
+
+    def _active_position(full_index: int) -> int:
+        if full_index < 0 or full_index >= total_size:
+            return -1
+        return int(full_to_active[int(full_index)])
+
+    b_rows: list[int] = []
+    b_cols: list[int] = []
+    b_data: list[float] = []
+    c_rows: list[int] = []
+    c_cols: list[int] = []
+    c_data: list[float] = []
+    d_rows: list[int] = []
+    d_cols: list[int] = []
+    d_data: list[float] = []
+
+    def _append_b(row_full: int, extra_offset: int, value: float) -> None:
+        row = _active_position(row_full)
+        col = _active_position(_extra_index(extra_offset))
+        if row >= 0 and 0 <= col - kinetic_size < tail_size:
+            b_rows.append(row)
+            b_cols.append(col - kinetic_size)
+            b_data.append(float(value))
+
+    def _append_c(extra_offset: int, col_full: int, value: float) -> None:
+        row = _active_position(_extra_index(extra_offset))
+        col = _active_position(col_full)
+        if col >= 0 and 0 <= row - kinetic_size < tail_size:
+            c_rows.append(row - kinetic_size)
+            c_cols.append(col)
+            c_data.append(float(value))
+
+    def _append_d(row_extra_offset: int, col_extra_offset: int, value: float) -> None:
+        row = _active_position(_extra_index(row_extra_offset))
+        col = _active_position(_extra_index(col_extra_offset))
+        if 0 <= row - kinetic_size < tail_size and 0 <= col - kinetic_size < tail_size:
+            d_rows.append(row - kinetic_size)
+            d_cols.append(col - kinetic_size)
+            d_data.append(float(value))
+
+    ix0 = _ix_min(bool(op_pc.point_at_x0))
+    factor = np.asarray(
+        jax.device_get(_fs_average_factor(op_pc.theta_weights, op_pc.zeta_weights, op_pc.d_hat)),
+        dtype=np.float64,
+    )
+
+    if int(op_pc.constraint_scheme) == 2:
+        for species in range(n_species):
+            for ix in range(ix0, n_x):
+                extra_offset = species * n_x + ix
+                for theta in range(n_theta):
+                    for zeta in range(n_zeta):
+                        _append_b(_f_index(species, ix, 0, theta, zeta), extra_offset, 1.0)
+            for ix in range(n_x):
+                extra_offset = species * n_x + ix
+                if bool(op_pc.point_at_x0) and ix == 0:
+                    _append_d(extra_offset, extra_offset, 1.0)
+                    continue
+                for theta in range(n_theta):
+                    for zeta in range(n_zeta):
+                        _append_c(extra_offset, _f_index(species, ix, 0, theta, zeta), factor[theta, zeta])
+    elif int(op_pc.constraint_scheme) == 1:
+        xpart1_j, xpart2_j = _source_basis_constraint_scheme_1(op_pc.x)
+        xpart1 = np.asarray(jax.device_get(xpart1_j), dtype=np.float64)
+        xpart2 = np.asarray(jax.device_get(xpart2_j), dtype=np.float64)
+        x = np.asarray(jax.device_get(op_pc.x), dtype=np.float64)
+        x_weights = np.asarray(jax.device_get(op_pc.x_weights), dtype=np.float64)
+        w2 = (x * x) * x_weights
+        w4 = (x * x * x * x) * x_weights
+        for species in range(n_species):
+            dens_offset = 2 * species
+            pres_offset = dens_offset + 1
+            for ix in range(ix0, n_x):
+                for theta in range(n_theta):
+                    for zeta in range(n_zeta):
+                        row = _f_index(species, ix, 0, theta, zeta)
+                        _append_b(row, dens_offset, xpart1[ix])
+                        _append_b(row, pres_offset, xpart2[ix])
+            for ix in range(n_x):
+                for theta in range(n_theta):
+                    for zeta in range(n_zeta):
+                        col = _f_index(species, ix, 0, theta, zeta)
+                        avg = factor[theta, zeta]
+                        _append_c(dens_offset, col, w2[ix] * avg)
+                        _append_c(pres_offset, col, w4[ix] * avg)
+
+    def _coo(
+        rows: list[int],
+        cols: list[int],
+        data: list[float],
+        shape: tuple[int, int],
+    ):
+        if not data:
+            return sp.csr_matrix(shape, dtype=dtype_np)
+        matrix = sp.coo_matrix(
+            (
+                np.asarray(data, dtype=dtype_np),
+                (np.asarray(rows, dtype=np.int64), np.asarray(cols, dtype=np.int64)),
+            ),
+            shape=shape,
+            dtype=dtype_np,
+        )
+        matrix.sum_duplicates()
+        return matrix.tocsr()
+
+    if tail_size:
+        b_mat = _coo(b_rows, b_cols, b_data, (kinetic_size, tail_size))
+        c_mat = _coo(c_rows, c_cols, c_data, (tail_size, kinetic_size))
+        d_mat = _coo(d_rows, d_cols, d_data, (tail_size, tail_size))
+        matrix = sp.bmat([[k_ff, b_mat], [c_mat, d_mat]], format="csr", dtype=dtype_np)
+    else:
+        b_mat = sp.csr_matrix((kinetic_size, 0), dtype=dtype_np)
+        c_mat = sp.csr_matrix((0, kinetic_size), dtype=dtype_np)
+        d_mat = sp.csr_matrix((0, 0), dtype=dtype_np)
+        matrix = k_ff.tocsr()
+    if float(pc_shift) != 0.0:
+        matrix = matrix + float(pc_shift) * sp.eye(active_size, format="csr", dtype=dtype_np)
+    matrix.sum_duplicates()
+    matrix.eliminate_zeros()
+
+    decision = SparseDecision(
+        storage_kind="csr",
+        reason="direct term-level reduced Fortran Pmat emission",
+        backend=jax.default_backend(),
+        shape=(active_size, active_size),
+        dense_nbytes=estimate_dense_nbytes((active_size, active_size), dtype_np),
+        csr_nbytes_estimate=estimate_csr_nbytes((active_size, active_size), int(matrix.nnz), data_dtype=dtype_np),
+        nnz_estimate=int(matrix.nnz),
+        block_cols=None,
+        drop_tol=0.0,
+    )
+
+    def _matvec(x_vec: np.ndarray) -> np.ndarray:
+        return np.asarray(matrix @ np.asarray(x_vec, dtype=dtype_np).reshape((active_size,)), dtype=dtype_np)
+
+    bundle = SparseOperatorBundle(
+        matrix=matrix,
+        operator=LinearOperator((active_size, active_size), matvec=_matvec, dtype=dtype_np),
+        metadata=decision,
+    )
+    metadata = {
+        "direct_pmat": True,
+        "direct_pmat_reason": "term_level_reduced_fortran_pmat",
+        "direct_pmat_build_s": float(build_timer.elapsed_s()),
+        "direct_pmat_active_size": int(active_size),
+        "direct_pmat_kinetic_size": int(kinetic_size),
+        "direct_pmat_tail_size": int(tail_size),
+        "direct_pmat_nnz": int(matrix.nnz),
+        "direct_pmat_csr_nbytes_estimate": int(decision.csr_nbytes_estimate),
+        "direct_pmat_kinetic_nnz": int(k_ff.nnz),
+        "direct_pmat_source_nnz": int(b_mat.nnz),
+        "direct_pmat_constraint_nnz": int(c_mat.nnz),
+        "direct_pmat_tail_nnz": int(d_mat.nnz),
+        "direct_pmat_included_terms": tuple(str(v) for v in fblock_selection.assembly.included_terms),
+    }
+    if emit is not None:
+        emit(
+            1,
+            "solve_v3_transport_matrix_linear_gmres: direct reduced Pmat selected "
+            f"active={active_size} nnz={int(matrix.nnz)} "
+            f"csr_mb={float(decision.csr_nbytes_estimate) / 1.0e6:.3f} "
+            f"build_s={float(metadata['direct_pmat_build_s']):.3f}",
+        )
+    return bundle, metadata
+
+
+def _try_build_rhsmode23_fp_direct_active_operator_bundle(
+    *,
+    op: V3FullSystemOperator,
+    active_indices: np.ndarray | None,
+    factor_dtype: np.dtype,
+    emit: Callable[[int, str], None] | None = None,
+) -> tuple[SparseOperatorBundle, dict[str, object]] | None:
+    """Build the active true RHSMode=2/3 FP operator directly from terms.
+
+    This is the exact-operator counterpart to the reduced Fortran ``Pmat``
+    emitter above.  It targets non-differentiable production transport solves:
+    the Krylov/factor path applies the same active operator used by the
+    matrix-free residual gate, but avoids generic sparse pattern coloring.
+    """
+
+    result = _try_build_rhsmode23_fp_fortran_reduced_direct_pmat_bundle(
+        op_pc=op,
+        active_indices=active_indices,
+        factor_dtype=factor_dtype,
+        pc_shift=0.0,
+        emit=None,
+    )
+    if result is None:
+        return None
+    bundle, metadata = result
+    decision = bundle.metadata
+    bundle = SparseOperatorBundle(
+        matrix=bundle.matrix,
+        operator=bundle.operator,
+        metadata=SparseDecision(
+            storage_kind=decision.storage_kind,
+            reason="direct term-level active true FP operator emission",
+            backend=decision.backend,
+            shape=decision.shape,
+            dense_nbytes=decision.dense_nbytes,
+            csr_nbytes_estimate=decision.csr_nbytes_estimate,
+            nnz_estimate=decision.nnz_estimate,
+            block_cols=decision.block_cols,
+            drop_tol=decision.drop_tol,
+        ),
+    )
+    metadata = dict(metadata)
+    metadata.update(
+        {
+            "direct_true_operator": True,
+            "direct_true_operator_reason": "term_level_active_fp_operator",
+            "direct_true_operator_build_s": float(metadata.get("direct_pmat_build_s", 0.0)),
+            "direct_true_operator_active_size": int(
+                metadata.get(
+                    "direct_pmat_active_size",
+                    0 if bundle.matrix is None else int(bundle.matrix.shape[0]),
+                )
+            ),
+            "direct_true_operator_nnz": int(metadata.get("direct_pmat_nnz", 0)),
+            "direct_true_operator_csr_nbytes_estimate": int(metadata.get("direct_pmat_csr_nbytes_estimate", 0)),
+        }
+    )
+    if emit is not None:
+        emit(
+            1,
+            "solve_v3_transport_matrix_linear_gmres: direct active true FP operator selected "
+            f"active={int(metadata['direct_true_operator_active_size'])} "
+            f"nnz={int(metadata['direct_true_operator_nnz'])} "
+            f"csr_mb={float(metadata['direct_true_operator_csr_nbytes_estimate']) / 1.0e6:.3f} "
+            f"build_s={float(metadata['direct_true_operator_build_s']):.3f}",
+        )
+    return bundle, metadata
+
+
+def _build_rhsmode23_fp_direct_active_block_schur_preconditioner(
+    *,
+    op: V3FullSystemOperator,
+    reduce_full: Callable[[jnp.ndarray], jnp.ndarray] | None = None,
+    expand_reduced: Callable[[jnp.ndarray], jnp.ndarray] | None = None,
+    active_indices_np: np.ndarray | None = None,
+    emit: Callable[[int, str], None] | None = None,
+) -> Callable[[jnp.ndarray], jnp.ndarray]:
+    """Block-Schur preconditioner assembled from the exact active FP operator.
+
+    The production FP transport systems are too large for a global active LU on
+    many CPUs/GPUs.  This path keeps the exact term-level active operator, but
+    factors independent zeta-line kinetic blocks and closes the retained
+    source/constraint tail with a dense Schur complement.  It is intentionally
+    opt-in until production residual and memory gates justify auto-promotion.
+    """
+
+    if int(op.rhs_mode) not in {2, 3} or op.fblock.fp is None:
+        return _build_rhsmode23_sxblock_preconditioner(
+            op=op,
+            reduce_full=reduce_full,
+            expand_reduced=expand_reduced,
+        )
+    if reduce_full is None or expand_reduced is None or active_indices_np is None:
+        return _build_rhsmode23_sxblock_preconditioner(
+            op=op,
+            reduce_full=reduce_full,
+            expand_reduced=expand_reduced,
+        )
+
+    prefix = "SFINCS_JAX_TRANSPORT_FP_DIRECT_ACTIVE_BLOCK_SCHUR"
+    dtype_env = os.environ.get(f"{prefix}_FACTOR_DTYPE", "").strip().lower()
+    max_mb_env = os.environ.get(f"{prefix}_MAX_MB", "").strip()
+    max_block_env = os.environ.get(f"{prefix}_MAX_BLOCK", "").strip()
+    reg_env = os.environ.get(f"{prefix}_REG", "").strip()
+    tail_max_env = os.environ.get(f"{prefix}_TAIL_MAX", "").strip()
+    block_kind_env = os.environ.get(f"{prefix}_BLOCK_KIND", "").strip().lower()
+    ell_block_env = os.environ.get(f"{prefix}_ELL_BLOCK", "").strip()
+    admission_env = os.environ.get(f"{prefix}_ADMISSION", "").strip().lower()
+    admission_rel_env = os.environ.get(f"{prefix}_ADMISSION_MAX_REL", "").strip()
+    admission_improvement_env = os.environ.get(f"{prefix}_ADMISSION_MIN_IMPROVEMENT", "").strip()
+    admission_probes_env = os.environ.get(f"{prefix}_ADMISSION_PROBES", "").strip()
+    try:
+        max_mb = float(max_mb_env) if max_mb_env else 2048.0
+    except ValueError:
+        max_mb = 2048.0
+    try:
+        max_block = int(max_block_env) if max_block_env else 64
+    except ValueError:
+        max_block = 64
+    try:
+        reg = float(reg_env) if reg_env else 1.0e-12
+    except ValueError:
+        reg = 1.0e-12
+    try:
+        tail_max = int(tail_max_env) if tail_max_env else 256
+    except ValueError:
+        tail_max = 256
+    try:
+        ell_block = int(ell_block_env) if ell_block_env else 1
+    except ValueError:
+        ell_block = 1
+    try:
+        admission_max_rel = float(admission_rel_env) if admission_rel_env else 1.0e-2
+    except ValueError:
+        admission_max_rel = 1.0e-2
+    try:
+        admission_min_improvement = float(admission_improvement_env) if admission_improvement_env else 10.0
+    except ValueError:
+        admission_min_improvement = 10.0
+    try:
+        admission_probe_count = int(admission_probes_env) if admission_probes_env else 4
+    except ValueError:
+        admission_probe_count = 4
+    block_kind = block_kind_env if block_kind_env else "zeta_line"
+    admission_enabled = admission_env not in {"0", "false", "no", "off"}
+    factor_dtype = np.dtype(np.float32) if dtype_env in {"float32", "fp32", "32"} else np.dtype(np.float64)
+    active_indices_use = np.asarray(active_indices_np, dtype=np.int64).reshape((-1,))
+    if active_indices_use.size <= 0:
+        return _build_rhsmode23_sxblock_preconditioner(
+            op=op,
+            reduce_full=reduce_full,
+            expand_reduced=expand_reduced,
+        )
+    active_hash = _hash_numpy_array_for_cache(active_indices_use)
+    cache_key = (
+        *_transport_precond_cache_key(
+            op,
+            "fp_direct_active_block_schur_"
+            f"{block_kind}_{int(ell_block)}_{factor_dtype.name}_{float(reg):.3e}_"
+            f"{int(max_block)}_{int(tail_max)}_{int(admission_enabled)}_"
+            f"{float(admission_max_rel):.3e}_{float(admission_min_improvement):.3e}_"
+            f"{int(admission_probe_count)}",
+        ),
+        str(active_hash),
+        int(active_indices_use.size),
+        int(float(max_mb) * 1.0e6) if float(max_mb) > 0.0 else 0,
+    )
+    cached = _TRANSPORT_FP_DIRECT_ACTIVE_BLOCK_SCHUR_PRECOND_CACHE.get(cache_key)
+    if cached is None:
+        try:
+            direct_result = _try_build_rhsmode23_fp_direct_active_operator_bundle(
+                op=op,
+                active_indices=active_indices_use,
+                factor_dtype=factor_dtype,
+                emit=emit,
+            )
+            if direct_result is None:
+                raise RuntimeError("direct active true operator unavailable")
+            operator_bundle, direct_metadata = direct_result
+            matrix = operator_bundle.matrix
+            if matrix is None:
+                raise RuntimeError("direct active true operator has no materialized CSR matrix")
+            matrix = matrix.tocsr().astype(factor_dtype, copy=False)
+            kinetic_size = int(direct_metadata.get("direct_pmat_kinetic_size", 0))
+            tail_size = int(direct_metadata.get("direct_pmat_tail_size", 0))
+            active_size = int(matrix.shape[0])
+            if kinetic_size <= 0 or kinetic_size > active_size:
+                raise RuntimeError("invalid direct active kinetic size")
+            if tail_size < 0 or kinetic_size + tail_size != active_size:
+                raise RuntimeError("invalid direct active tail size")
+            if tail_size > int(tail_max):
+                raise RuntimeError(f"tail size {tail_size} exceeds tail_max={int(tail_max)}")
+
+            build_timer = Timer()
+            ordering = build_active_block_ordering(
+                kinetic_size=int(kinetic_size),
+                tail_size=int(tail_size),
+                n_theta=int(op.n_theta),
+                n_zeta=int(op.n_zeta),
+                block_kind=str(block_kind),
+                ell_block=int(ell_block),
+                max_block_size=int(max_block),
+            )
+            factor = build_active_block_schur_factor(
+                matrix,
+                ordering,
+                dtype=factor_dtype,
+                reg=float(reg),
+                max_mb=float(max_mb),
+            )
+            admission = None
+            if bool(admission_enabled):
+                probes = deterministic_probe_matrix(
+                    active_size=int(active_size),
+                    kinetic_size=int(kinetic_size),
+                    tail_size=int(tail_size),
+                    count=max(1, int(admission_probe_count)),
+                )
+                admission = admit_active_block_schur_factor(
+                    matrix,
+                    factor,
+                    probes,
+                    max_relative_residual=float(admission_max_rel),
+                    min_improvement_vs_identity=float(admission_min_improvement),
+                )
+                if not bool(admission.accepted):
+                    raise RuntimeError(
+                        "admission rejected direct active block-Schur "
+                        f"(block_kind={factor.ordering.block_kind}, blocks={len(factor.ordering.blocks)}, "
+                        f"reason={admission.reason}, max_rel={admission.max_relative_residual:.3e}, "
+                        f"min_improvement={admission.min_improvement_vs_identity:.3e})"
+                    )
+
+            factor_metadata = dict(factor.metadata)
+            metadata = {
+                "kind": "fp_direct_active_block_schur",
+                "factor_dtype": str(factor_dtype.name),
+                "axis": str(factor_metadata.get("block_kind", block_kind)),
+                "block_kind": str(factor_metadata.get("block_kind", block_kind)),
+                "block_size": int(factor_metadata.get("block_size_max", 0)),
+                "block_count": int(factor_metadata.get("block_count", 0)),
+                "kinetic_size": int(kinetic_size),
+                "tail_size": int(tail_size),
+                "reg": float(reg),
+                "matrix_nbytes_estimate": int(factor_metadata.get("matrix_nbytes_estimate", 0)),
+                "block_inverse_nbytes_estimate": int(factor_metadata.get("inverse_nbytes_estimate", 0)),
+                "tail_dense_nbytes_estimate": int(factor_metadata.get("tail_nbytes_estimate", 0)),
+                "total_nbytes_estimate": int(factor_metadata.get("total_nbytes_estimate", 0)),
+                "setup_s": float(build_timer.elapsed_s()),
+                "schur_reason": "dense_schur" if int(tail_size) > 0 else "none",
+                "admission_enabled": bool(admission_enabled),
+                "admission_accepted": None if admission is None else bool(admission.accepted),
+                "admission_reason": None if admission is None else str(admission.reason),
+                "admission_max_relative_residual": None
+                if admission is None
+                else float(admission.max_relative_residual),
+                "admission_median_relative_residual": None
+                if admission is None
+                else float(admission.median_relative_residual),
+                "admission_min_improvement_vs_identity": None
+                if admission is None
+                else float(admission.min_improvement_vs_identity),
+                "admission_probe_count": None if admission is None else int(admission.probe_count),
+            }
+            metadata.update(direct_metadata)
+            cached = _TransportFpDirectActiveBlockSchurPrecondCache(
+                block_inverse=(),
+                block_size=int(factor.ordering.block_size_max),
+                kinetic_size=int(kinetic_size),
+                tail_size=int(tail_size),
+                c_tail=factor.c_tail,
+                mb_tail=None if factor.mb_tail is None else np.asarray(factor.mb_tail, dtype=factor_dtype),
+                schur_inverse=None if factor.schur_inverse is None else np.asarray(factor.schur_inverse, dtype=factor_dtype),
+                metadata=metadata,
+                factor=factor,
+            )
+            _TRANSPORT_FP_DIRECT_ACTIVE_BLOCK_SCHUR_PRECOND_CACHE[cache_key] = cached
+            if emit is not None:
+                emit(
+                    1,
+                    "solve_v3_transport_matrix_linear_gmres: fp_direct_active_block_schur selected "
+                    f"active={active_size} kinetic={kinetic_size} tail={tail_size} "
+                    f"blocks={int(metadata['block_count'])}x<= {int(metadata['block_size'])} "
+                    f"setup_s={float(metadata['setup_s']):.3f} "
+                    f"est_mb={float(metadata['total_nbytes_estimate']) / 1.0e6:.3f}",
+                )
+        except Exception as exc:  # noqa: BLE001
+            if emit is not None:
+                emit(
+                    1,
+                    "solve_v3_transport_matrix_linear_gmres: fp_direct_active_block_schur unavailable; "
+                    f"using sxblock ({type(exc).__name__}: {exc})",
+                )
+            return _build_rhsmode23_sxblock_preconditioner(
+                op=op,
+                reduce_full=reduce_full,
+                expand_reduced=expand_reduced,
+            )
+
+    block_inverse = cached.block_inverse
+    block_size = int(cached.block_size)
+    kinetic_size = int(cached.kinetic_size)
+    tail_size = int(cached.tail_size)
+    n_blocks = int(kinetic_size // block_size)
+    c_tail = cached.c_tail
+    mb_tail = cached.mb_tail
+    schur_inverse = cached.schur_inverse
+    factor_obj = getattr(cached, "factor", None)
+    if factor_obj is not None:
+        factor_dtype_use = np.dtype(getattr(factor_obj, "dtype", np.float64))
+    else:
+        factor_dtype_use = np.dtype(getattr(block_inverse, "dtype", np.float64))
+    active_size_use = int(kinetic_size + tail_size)
+
+    def _apply_host(rhs_host: np.ndarray) -> np.ndarray:
+        if factor_obj is not None:
+            return np.asarray(factor_obj.apply(rhs_host), dtype=np.float64)
+        rhs_np = np.asarray(rhs_host, dtype=factor_dtype_use).reshape((active_size_use,))
+        rhs_k = rhs_np[:kinetic_size]
+        rhs_blocks = rhs_k.reshape((n_blocks, block_size, 1))
+        y_k = np.einsum("bij,bjk->bik", block_inverse, rhs_blocks, optimize=True).reshape((kinetic_size,))
+        if tail_size > 0 and c_tail is not None and mb_tail is not None and schur_inverse is not None:
+            rhs_t = rhs_np[kinetic_size:]
+            tail_residual = np.asarray(rhs_t - c_tail @ y_k, dtype=factor_dtype_use).reshape((tail_size,))
+            y_t = np.asarray(schur_inverse @ tail_residual, dtype=factor_dtype_use).reshape((tail_size,))
+            y_k = np.asarray(y_k - mb_tail @ y_t, dtype=factor_dtype_use).reshape((kinetic_size,))
+            out = np.concatenate([y_k, y_t], axis=0)
+        else:
+            out = np.concatenate([y_k, rhs_np[kinetic_size:]], axis=0)
+        finite = np.isfinite(out)
+        if not np.all(finite):
+            out = np.where(finite, out, 0.0)
+        return np.asarray(out, dtype=np.float64)
+
+    def _apply_reduced(v: jnp.ndarray) -> jnp.ndarray:
+        v = jnp.asarray(v, dtype=jnp.float64)
+        return jax.pure_callback(
+            _apply_host,
+            jax.ShapeDtypeStruct((active_size_use,), jnp.float64),
+            v,
+        )
+
+    try:
+        setattr(_apply_reduced, "_sfincs_jax_transport_fp_direct_active_block_schur_metadata", dict(cached.metadata))
+    except Exception:
+        pass
+    return _apply_reduced
+
+
+def _build_rhsmode23_fp_fortran_reduced_lu_preconditioner(
+    *,
+    op: V3FullSystemOperator,
+    reduce_full: Callable[[jnp.ndarray], jnp.ndarray] | None = None,
+    expand_reduced: Callable[[jnp.ndarray], jnp.ndarray] | None = None,
+    active_indices_np: np.ndarray | None = None,
+    emit: Callable[[int, str], None] | None = None,
+) -> Callable[[jnp.ndarray], jnp.ndarray]:
+    """Global reduced sparse-factor transport preconditioner.
+
+    This is the closest SFINCS-JAX transport analogue to the Fortran v3
+    PETSc setup: GMRES still applies the true operator, while this builder
+    materializes and factors a separate reduced ``Pmat``.  It is intentionally
+    opt-in until production-size residual gates prove that the setup cost and
+    memory footprint are justified.
+    """
+
+    if int(op.rhs_mode) not in {2, 3} or op.fblock.fp is None:
+        return _build_rhsmode23_sxblock_preconditioner(
+            op=op,
+            reduce_full=reduce_full,
+            expand_reduced=expand_reduced,
+        )
+
+    use_reduced = reduce_full is not None and expand_reduced is not None
+    if use_reduced and active_indices_np is None:
+        return _build_rhsmode23_sxblock_preconditioner(
+            op=op,
+            reduce_full=reduce_full,
+            expand_reduced=expand_reduced,
+        )
+
+    def _int_env(name: str, default: int, *, minimum: int = 0) -> int:
+        value = os.environ.get(name, "").strip()
+        try:
+            parsed = int(value) if value else int(default)
+        except ValueError:
+            parsed = int(default)
+        return max(int(minimum), int(parsed))
+
+    def _float_env(name: str, default: float, *, minimum: float = 0.0) -> float:
+        value = os.environ.get(name, "").strip()
+        try:
+            parsed = float(value) if value else float(default)
+        except ValueError:
+            parsed = float(default)
+        return max(float(minimum), float(parsed))
+
+    def _bool_env(name: str, default: bool) -> bool:
+        value = os.environ.get(name, "").strip().lower()
+        if value in {"1", "true", "yes", "on"}:
+            return True
+        if value in {"0", "false", "no", "off"}:
+            return False
+        return bool(default)
+
+    # Fortran v3 defaults reduce x and xi couplings, but keep the full
+    # theta/zeta derivative matrices (preconditioner_theta/zeta=0).  That exact
+    # Pmat is available via env overrides, but this opt-in transport candidate
+    # defaults to the stronger x/xi-coupled variant because the default-reduced
+    # Pmat is too slow for the current FP geometry-rich residual gates.
+    preconditioner_x = _int_env("SFINCS_JAX_TRANSPORT_FP_FORTRAN_REDUCED_LU_PRECONDITIONER_X", 0)
+    preconditioner_xi = _int_env("SFINCS_JAX_TRANSPORT_FP_FORTRAN_REDUCED_LU_PRECONDITIONER_XI", 0)
+    preconditioner_species = _int_env("SFINCS_JAX_TRANSPORT_FP_FORTRAN_REDUCED_LU_PRECONDITIONER_SPECIES", 1)
+    preconditioner_x_min_l = _int_env("SFINCS_JAX_TRANSPORT_FP_FORTRAN_REDUCED_LU_PRECONDITIONER_X_MIN_L", 0)
+    keep_theta_zeta = _bool_env("SFINCS_JAX_TRANSPORT_FP_FORTRAN_REDUCED_LU_KEEPS_THETA_ZETA", True)
+    pc_shift = _float_env("SFINCS_JAX_TRANSPORT_FP_FORTRAN_REDUCED_LU_SHIFT", 1.0e-10)
+    max_factor_mb = _float_env("SFINCS_JAX_TRANSPORT_FP_FORTRAN_REDUCED_LU_FACTOR_MAX_MB", 4096.0)
+    direct_pmat_enabled = _bool_env("SFINCS_JAX_TRANSPORT_FP_FORTRAN_REDUCED_LU_DIRECT", True)
+    symbolic_ordering = (
+        os.environ.get("SFINCS_JAX_TRANSPORT_FP_FORTRAN_REDUCED_LU_SYMBOLIC_ORDERING", "").strip().lower()
+        or "rcm"
+    )
+    symbolic_block_size = _int_env("SFINCS_JAX_TRANSPORT_FP_FORTRAN_REDUCED_LU_SYMBOLIC_BLOCK_SIZE", 4096, minimum=1)
+    symbolic_block_overlap = _int_env(
+        "SFINCS_JAX_TRANSPORT_FP_FORTRAN_REDUCED_LU_SYMBOLIC_BLOCK_OVERLAP",
+        0,
+        minimum=0,
+    )
+    symbolic_coarse_max_cols = _int_env(
+        "SFINCS_JAX_TRANSPORT_FP_FORTRAN_REDUCED_LU_SYMBOLIC_COARSE_MAX_COLS",
+        256,
+        minimum=1,
+    )
+    symbolic_coarse_probe_cols = _int_env(
+        "SFINCS_JAX_TRANSPORT_FP_FORTRAN_REDUCED_LU_SYMBOLIC_COARSE_PROBE_COLS",
+        4,
+        minimum=0,
+    )
+    symbolic_coarse_damping = _float_env(
+        "SFINCS_JAX_TRANSPORT_FP_FORTRAN_REDUCED_LU_SYMBOLIC_COARSE_DAMPING",
+        1.0,
+        minimum=0.0,
+    )
+    symbolic_coarse_regularization_rel = _float_env(
+        "SFINCS_JAX_TRANSPORT_FP_FORTRAN_REDUCED_LU_SYMBOLIC_COARSE_REG_REL",
+        1.0e-10,
+        minimum=0.0,
+    )
+    symbolic_physics_coarse_enabled = _bool_env(
+        "SFINCS_JAX_TRANSPORT_FP_FORTRAN_REDUCED_LU_SYMBOLIC_PHYSICS_COARSE",
+        True,
+    )
+    symbolic_physics_coarse_max_cols = _int_env(
+        "SFINCS_JAX_TRANSPORT_FP_FORTRAN_REDUCED_LU_SYMBOLIC_PHYSICS_COARSE_MAX_COLS",
+        32,
+        minimum=1,
+    )
+    symbolic_schur_max_separator_cols = _int_env(
+        "SFINCS_JAX_TRANSPORT_FP_FORTRAN_REDUCED_LU_SYMBOLIC_SCHUR_MAX_SEPARATOR_COLS",
+        256,
+        minimum=0,
+    )
+    symbolic_schur_boundary_width = _int_env(
+        "SFINCS_JAX_TRANSPORT_FP_FORTRAN_REDUCED_LU_SYMBOLIC_SCHUR_BOUNDARY_WIDTH",
+        1,
+        minimum=0,
+    )
+    symbolic_schur_high_degree_cols = _int_env(
+        "SFINCS_JAX_TRANSPORT_FP_FORTRAN_REDUCED_LU_SYMBOLIC_SCHUR_HIGH_DEGREE_COLS",
+        64,
+        minimum=0,
+    )
+    symbolic_schur_regularization_rel = _float_env(
+        "SFINCS_JAX_TRANSPORT_FP_FORTRAN_REDUCED_LU_SYMBOLIC_SCHUR_REG_REL",
+        1.0e-12,
+        minimum=0.0,
+    )
+    symbolic_max_permutation_size = _int_env(
+        "SFINCS_JAX_TRANSPORT_FP_FORTRAN_REDUCED_LU_SYMBOLIC_MAX_PERMUTATION_SIZE",
+        250_000,
+        minimum=0,
+    )
+    symbolic_admission_enabled = _bool_env(
+        "SFINCS_JAX_TRANSPORT_FP_FORTRAN_REDUCED_LU_SYMBOLIC_ADMISSION",
+        True,
+    )
+    symbolic_admission_max_rel = _float_env(
+        "SFINCS_JAX_TRANSPORT_FP_FORTRAN_REDUCED_LU_SYMBOLIC_ADMISSION_MAX_REL",
+        1.0e-2,
+        minimum=0.0,
+    )
+    symbolic_admission_min_improvement = _float_env(
+        "SFINCS_JAX_TRANSPORT_FP_FORTRAN_REDUCED_LU_SYMBOLIC_ADMISSION_MIN_IMPROVEMENT",
+        10.0,
+        minimum=0.0,
+    )
+    symbolic_admission_probes = _int_env(
+        "SFINCS_JAX_TRANSPORT_FP_FORTRAN_REDUCED_LU_SYMBOLIC_ADMISSION_PROBES",
+        4,
+        minimum=1,
+    )
+    symbolic_admission_rescue_lu = _bool_env(
+        "SFINCS_JAX_TRANSPORT_FP_FORTRAN_REDUCED_LU_SYMBOLIC_ADMISSION_RESCUE_LU",
+        True,
+    )
+    symbolic_admission_rescue_lu_max_mb = _float_env(
+        "SFINCS_JAX_TRANSPORT_FP_FORTRAN_REDUCED_LU_SYMBOLIC_ADMISSION_RESCUE_LU_MAX_MB",
+        max_factor_mb,
+        minimum=0.0,
+    )
+    factor_dtype_env = os.environ.get("SFINCS_JAX_TRANSPORT_FP_FORTRAN_REDUCED_LU_FACTOR_DTYPE", "").strip().lower()
+    factor_dtype = np.dtype(np.float32) if factor_dtype_env in {"float32", "fp32", "32"} else np.dtype(np.float64)
+    factor_kind_env = os.environ.get("SFINCS_JAX_TRANSPORT_FP_FORTRAN_REDUCED_LU_FACTOR", "").strip().lower()
+
+    active_hash = "full"
+    active_indices_use: np.ndarray | None = None
+    if use_reduced:
+        active_indices_use = np.asarray(active_indices_np, dtype=np.int32).reshape((-1,))
+        active_hash = _hash_numpy_array_for_cache(active_indices_use)
+        linear_size = int(active_indices_use.size)
+    else:
+        linear_size = int(op.total_size)
+    default_factor_kind = (
+        factor_kind_env
+        if factor_kind_env
+        in {
+            "lu",
+            "ilu",
+            "jacobi",
+            "spilu",
+            "diag",
+            "diagonal",
+            "none",
+            "symbolic_block_lu",
+            "block_lu",
+            "native_block_lu",
+            "symbolic_lu",
+            "symbolic_block_schur_lu",
+            "block_schur_lu",
+            "native_block_schur_lu",
+            "symbolic_schur_lu",
+            "symbolic_block_lu_coarse",
+            "block_lu_coarse",
+            "native_block_lu_coarse",
+            "symbolic_lu_coarse",
+        }
+        else "lu"
+    )
+    if default_factor_kind in {"spilu"}:
+        default_factor_kind = "ilu"
+    elif default_factor_kind in {"diag", "diagonal", "none"}:
+        default_factor_kind = "jacobi"
+    elif default_factor_kind in {"block_schur_lu", "native_block_schur_lu", "symbolic_schur_lu"}:
+        default_factor_kind = "symbolic_block_schur_lu"
+    elif default_factor_kind in {"block_lu_coarse", "native_block_lu_coarse", "symbolic_lu_coarse"}:
+        default_factor_kind = "symbolic_block_lu_coarse"
+    elif default_factor_kind in {"block_lu", "native_block_lu", "symbolic_lu"}:
+        default_factor_kind = "symbolic_block_lu"
+
+    op_pc = _build_transport_preconditioner_operator_fortran_reduced(
+        op,
+        preconditioner_x=int(preconditioner_x),
+        preconditioner_xi=int(preconditioner_xi),
+        preconditioner_species=int(preconditioner_species),
+        preconditioner_x_min_l=int(preconditioner_x_min_l),
+        keep_theta_zeta=bool(keep_theta_zeta),
+    )
+    cache_key = (
+        *_transport_precond_cache_key(
+            op,
+            "fp_fortran_reduced_lu_"
+            f"{default_factor_kind}_{factor_dtype.name}_{float(pc_shift):.3e}_"
+            f"{int(preconditioner_x)}_{int(preconditioner_xi)}_{int(preconditioner_species)}_"
+            f"{int(preconditioner_x_min_l)}_{int(keep_theta_zeta)}_direct{int(direct_pmat_enabled)}_"
+            f"symbolic{str(symbolic_ordering)}_{int(symbolic_block_size)}_{int(symbolic_block_overlap)}_"
+            f"coarse{int(symbolic_coarse_max_cols)}_probes{int(symbolic_coarse_probe_cols)}_"
+            f"damp{float(symbolic_coarse_damping):.3e}_{float(symbolic_coarse_regularization_rel):.3e}_"
+            f"phys{int(symbolic_physics_coarse_enabled)}_{int(symbolic_physics_coarse_max_cols)}_"
+            f"schur{int(symbolic_schur_max_separator_cols)}_{int(symbolic_schur_boundary_width)}_"
+            f"{int(symbolic_schur_high_degree_cols)}_{float(symbolic_schur_regularization_rel):.3e}_"
+            f"{int(symbolic_max_permutation_size)}_"
+            f"adm{int(symbolic_admission_enabled)}_{float(symbolic_admission_max_rel):.3e}_"
+            f"{float(symbolic_admission_min_improvement):.3e}_{int(symbolic_admission_probes)}_"
+            f"rescue{int(symbolic_admission_rescue_lu)}_{float(symbolic_admission_rescue_lu_max_mb):.3e}",
+        ),
+        str(active_hash),
+        int(linear_size),
+    )
+    cached = _TRANSPORT_FP_FORTRAN_REDUCED_LU_PRECOND_CACHE.get(cache_key)
+    if cached is None:
+        try:
+            direct_operator_bundle: SparseOperatorBundle | None = None
+            direct_metadata: dict[str, object] = {}
+            if bool(direct_pmat_enabled):
+                direct_result = _try_build_rhsmode23_fp_fortran_reduced_direct_pmat_bundle(
+                    op_pc=op_pc,
+                    active_indices=active_indices_use,
+                    factor_dtype=factor_dtype,
+                    pc_shift=float(pc_shift),
+                    emit=emit,
+                )
+                if direct_result is not None:
+                    direct_operator_bundle, direct_metadata = direct_result
+
+            def _expand(x: jnp.ndarray) -> jnp.ndarray:
+                if expand_reduced is None:
+                    return x
+                return expand_reduced(x)
+
+            def _reduce(y: jnp.ndarray) -> jnp.ndarray:
+                if reduce_full is None:
+                    return y
+                return reduce_full(y)
+
+            def _pc_matvec(x_vec: jnp.ndarray) -> jnp.ndarray:
+                x_full = _expand(jnp.asarray(x_vec, dtype=jnp.float64))
+                y_full = apply_v3_full_system_operator_cached(op_pc, x_full)
+                if float(pc_shift) != 0.0:
+                    y_full = y_full + jnp.asarray(float(pc_shift), dtype=jnp.float64) * x_full
+                return _reduce(y_full)
+
+            _operator_bundle = None
+            factor_bundle = None
+            if direct_operator_bundle is not None:
+                try:
+                    _operator_bundle, factor_bundle = _build_host_sparse_direct_factor_from_matvec(
+                        matvec=_pc_matvec,
+                        n=int(linear_size),
+                        dtype=jnp.float64,
+                        factor_dtype=factor_dtype,
+                        pattern=None,
+                        operator_bundle_override=direct_operator_bundle,
+                        emit=emit,
+                        default_factor_kind=str(default_factor_kind),
+                        default_ilu_fill_factor=4.0,
+                        default_ilu_drop_tol=1.0e-4,
+                        default_permc_spec="MMD_AT_PLUS_A",
+                        default_diag_pivot_thresh=0.0,
+                        default_pattern_color_batch=8,
+                        default_symbolic_ordering_kind=str(symbolic_ordering),
+                        default_symbolic_block_size=int(symbolic_block_size),
+                        default_symbolic_block_overlap=int(symbolic_block_overlap),
+                        default_symbolic_coarse_max_cols=int(symbolic_coarse_max_cols),
+                        default_symbolic_coarse_probe_cols=int(symbolic_coarse_probe_cols),
+                        default_symbolic_coarse_damping=float(symbolic_coarse_damping),
+                        default_symbolic_coarse_regularization_rel=float(symbolic_coarse_regularization_rel),
+                        default_symbolic_schur_max_separator_cols=int(symbolic_schur_max_separator_cols),
+                        default_symbolic_schur_tail_size=int(direct_metadata.get("direct_pmat_tail_size", 0)),
+                        default_symbolic_schur_boundary_width=int(symbolic_schur_boundary_width),
+                        default_symbolic_schur_high_degree_cols=int(symbolic_schur_high_degree_cols),
+                        default_symbolic_schur_regularization_rel=float(symbolic_schur_regularization_rel),
+                        default_symbolic_max_permutation_size=int(symbolic_max_permutation_size),
+                    )
+                except Exception as exc:  # noqa: BLE001
+                    if emit is not None:
+                        emit(
+                            1,
+                            "solve_v3_transport_matrix_linear_gmres: direct reduced Pmat factorization failed; "
+                            f"falling back to pattern probe ({type(exc).__name__}: {exc})",
+                        )
+                    direct_operator_bundle = None
+                    direct_metadata = {}
+
+            if factor_bundle is None:
+                if active_indices_use is None:
+                    pattern = v3_full_system_fortran_reduced_preconditioner_sparsity_pattern(
+                        op_pc,
+                        preconditioner_x=int(preconditioner_x),
+                        preconditioner_xi=int(preconditioner_xi),
+                        preconditioner_species=int(preconditioner_species),
+                        preconditioner_x_min_l=int(preconditioner_x_min_l),
+                    )
+                else:
+                    pattern = v3_full_system_fortran_reduced_preconditioner_sparsity_pattern_for_indices(
+                        op_pc,
+                        active_indices_use,
+                        preconditioner_x=int(preconditioner_x),
+                        preconditioner_xi=int(preconditioner_xi),
+                        preconditioner_species=int(preconditioner_species),
+                        preconditioner_x_min_l=int(preconditioner_x_min_l),
+                    )
+                if emit is not None:
+                    summary = summarize_v3_sparse_pattern(op_pc, pattern)
+                    emit(
+                        1,
+                        "solve_v3_transport_matrix_linear_gmres: fp_fortran_reduced_lu Pmat pattern "
+                        f"scope={'active' if active_indices_use is not None else 'full'} "
+                        f"shape={summary.shape} nnz={summary.nnz} avg_row_nnz={summary.avg_row_nnz:.3g}",
+                    )
+
+                _operator_bundle, factor_bundle = _build_host_sparse_direct_factor_from_matvec(
+                    matvec=_pc_matvec,
+                    n=int(linear_size),
+                    dtype=jnp.float64,
+                    factor_dtype=factor_dtype,
+                    pattern=pattern,
+                    operator_bundle_override=None,
+                    emit=emit,
+                    default_factor_kind=str(default_factor_kind),
+                    default_ilu_fill_factor=4.0,
+                    default_ilu_drop_tol=1.0e-4,
+                    default_permc_spec="MMD_AT_PLUS_A",
+                    default_diag_pivot_thresh=0.0,
+                    default_pattern_color_batch=8,
+                    default_symbolic_ordering_kind=str(symbolic_ordering),
+                    default_symbolic_block_size=int(symbolic_block_size),
+                    default_symbolic_block_overlap=int(symbolic_block_overlap),
+                    default_symbolic_coarse_max_cols=int(symbolic_coarse_max_cols),
+                    default_symbolic_coarse_probe_cols=int(symbolic_coarse_probe_cols),
+                    default_symbolic_coarse_damping=float(symbolic_coarse_damping),
+                    default_symbolic_coarse_regularization_rel=float(symbolic_coarse_regularization_rel),
+                    default_symbolic_schur_max_separator_cols=int(symbolic_schur_max_separator_cols),
+                    default_symbolic_schur_tail_size=0,
+                    default_symbolic_schur_boundary_width=int(symbolic_schur_boundary_width),
+                    default_symbolic_schur_high_degree_cols=int(symbolic_schur_high_degree_cols),
+                    default_symbolic_schur_regularization_rel=float(symbolic_schur_regularization_rel),
+                    default_symbolic_max_permutation_size=int(symbolic_max_permutation_size),
+                )
+        except Exception as exc:  # noqa: BLE001
+            if emit is not None:
+                emit(
+                    1,
+                    "solve_v3_transport_matrix_linear_gmres: fp_fortran_reduced_lu disabled after "
+                    f"{type(exc).__name__}: {exc}",
+                )
+            return _build_rhsmode23_sxblock_preconditioner(
+                op=op,
+                reduce_full=reduce_full,
+                expand_reduced=expand_reduced,
+            )
+
+        physics_coarse_metadata: dict[str, object] = {}
+        if (
+            str(getattr(factor_bundle, "kind", "")) == "symbolic_block_lu_coarse"
+            and bool(symbolic_physics_coarse_enabled)
+            and active_indices_use is not None
+            and direct_operator_bundle is not None
+        ):
+            try:
+                physics_basis, physics_names = _build_rhsmode23_direct_pmat_physics_coarse_basis(
+                    op=op_pc,
+                    active_indices=active_indices_use,
+                    max_cols=int(symbolic_physics_coarse_max_cols),
+                    base_factor_bundle=factor_bundle,
+                )
+                if physics_basis is not None and int(getattr(physics_basis, "shape", (0, 0))[1]) > 0:
+                    factor_bundle = wrap_sparse_factor_with_coarse_correction(
+                        factor_bundle,
+                        physics_basis,
+                        damping=float(symbolic_coarse_damping),
+                        regularization_rel=float(symbolic_coarse_regularization_rel),
+                    )
+                    physics_coarse_metadata = {
+                        "symbolic_physics_coarse": True,
+                        "symbolic_physics_coarse_cols": int(physics_basis.shape[1]),
+                        "symbolic_physics_coarse_nnz": int(physics_basis.nnz),
+                        "symbolic_physics_coarse_labels": tuple(str(v) for v in physics_names),
+                    }
+                    if emit is not None:
+                        emit(
+                            1,
+                            "solve_v3_transport_matrix_linear_gmres: fp_fortran_reduced_lu "
+                            f"physics coarse basis cols={int(physics_basis.shape[1])} "
+                            f"nnz={int(physics_basis.nnz)}",
+                        )
+            except Exception as exc:  # noqa: BLE001
+                physics_coarse_metadata = {
+                    "symbolic_physics_coarse": False,
+                    "symbolic_physics_coarse_error": f"{type(exc).__name__}: {exc}",
+                }
+                if emit is not None:
+                    emit(
+                        1,
+                        "solve_v3_transport_matrix_linear_gmres: fp_fortran_reduced_lu "
+                        f"physics coarse disabled ({type(exc).__name__}: {exc})",
+                    )
+
+        factor_nbytes = getattr(factor_bundle, "factor_nbytes_estimate", None)
+        if (
+            float(max_factor_mb) > 0.0
+            and factor_nbytes is not None
+            and int(factor_nbytes) > int(float(max_factor_mb) * 1.0e6)
+        ):
+            if emit is not None:
+                emit(
+                    1,
+                    "solve_v3_transport_matrix_linear_gmres: fp_fortran_reduced_lu factor rejected by budget "
+                    f"factor_mb={float(factor_nbytes) / 1.0e6:.3f} max_mb={float(max_factor_mb):.3f}",
+                )
+            return _build_rhsmode23_sxblock_preconditioner(
+                op=op,
+                reduce_full=reduce_full,
+                expand_reduced=expand_reduced,
+            )
+        symbolic_metadata: dict[str, object] = {}
+        factor_operator = getattr(factor_bundle, "operator", None)
+        factor_matrix = None if factor_operator is None else getattr(factor_operator, "matrix", None)
+        factor_kind_for_admission = str(getattr(factor_bundle, "kind", ""))
+        if factor_kind_for_admission in {
+            "symbolic_block_lu",
+            "symbolic_block_lu_coarse",
+            "symbolic_block_schur_lu",
+        } and bool(symbolic_admission_enabled):
+            admission = admit_sparse_factor_against_operator(
+                factor_operator if factor_operator is not None else factor_matrix,
+                factor_bundle,
+                probe_count=int(symbolic_admission_probes),
+                max_relative_residual=float(symbolic_admission_max_rel),
+                min_improvement_vs_identity=float(symbolic_admission_min_improvement),
+            )
+            admission_metadata = admission.to_dict()
+            symbolic_metadata["symbolic_admission"] = admission_metadata
+            if emit is not None:
+                admission_label = factor_kind_for_admission
+                emit(
+                    1,
+                    f"solve_v3_transport_matrix_linear_gmres: fp_fortran_reduced_lu {admission_label} admission "
+                    f"{'accepted' if admission.accepted else 'rejected'} "
+                    f"max_rel={float(admission.max_relative_residual):.3e} "
+                    f"median_rel={float(admission.median_relative_residual):.3e} "
+                    f"min_improvement={float(admission.min_improvement_vs_identity):.3e} "
+                    f"probes={int(admission.probe_count)}",
+                )
+            if not bool(admission.accepted):
+                rescue_bundle = None
+                rescue_metadata: dict[str, object] = {}
+                if (
+                    bool(symbolic_admission_rescue_lu)
+                    and factor_operator is not None
+                    and getattr(factor_operator, "matrix", None) is not None
+                ):
+                    try:
+                        rescue_candidate = factorize_host_sparse_operator(
+                            factor_operator,
+                            kind="lu",
+                            permc_spec="MMD_AT_PLUS_A",
+                            diag_pivot_thresh=0.0,
+                        )
+                        rescue_nbytes = getattr(rescue_candidate, "factor_nbytes_estimate", None)
+                        rescue_budget_ok = (
+                            float(symbolic_admission_rescue_lu_max_mb) <= 0.0
+                            or rescue_nbytes is None
+                            or int(rescue_nbytes) <= int(float(symbolic_admission_rescue_lu_max_mb) * 1.0e6)
+                        )
+                        if rescue_budget_ok:
+                            rescue_admission = admit_sparse_factor_against_operator(
+                                factor_operator,
+                                rescue_candidate,
+                                probe_count=int(symbolic_admission_probes),
+                                max_relative_residual=float(symbolic_admission_max_rel),
+                                min_improvement_vs_identity=float(symbolic_admission_min_improvement),
+                            )
+                            rescue_metadata = {
+                                "symbolic_admission_rescue_lu": True,
+                                "symbolic_admission_rescue_lu_factor_nbytes_estimate": (
+                                    None if rescue_nbytes is None else int(rescue_nbytes)
+                                ),
+                                "symbolic_admission_rescue_lu_factor_nnz_estimate": (
+                                    None
+                                    if getattr(rescue_candidate, "factor_nnz_estimate", None) is None
+                                    else int(rescue_candidate.factor_nnz_estimate)
+                                ),
+                                "symbolic_admission_rescue_lu_factor_s": (
+                                    None
+                                    if getattr(rescue_candidate, "factor_s", None) is None
+                                    else float(rescue_candidate.factor_s)
+                                ),
+                                "symbolic_admission_rescue_lu_admission": rescue_admission.to_dict(),
+                            }
+                            if emit is not None:
+                                emit(
+                                    1,
+                                    "solve_v3_transport_matrix_linear_gmres: fp_fortran_reduced_lu "
+                                    "symbolic admission rescue lu "
+                                    f"{'accepted' if rescue_admission.accepted else 'rejected'} "
+                                    f"max_rel={float(rescue_admission.max_relative_residual):.3e} "
+                                    f"factor_mb={float(rescue_nbytes or 0) / 1.0e6:.3f}",
+                                )
+                            if bool(rescue_admission.accepted):
+                                rescue_bundle = rescue_candidate
+                        else:
+                            rescue_metadata = {
+                                "symbolic_admission_rescue_lu": False,
+                                "symbolic_admission_rescue_lu_reason": "factor_budget",
+                                "symbolic_admission_rescue_lu_factor_nbytes_estimate": (
+                                    None if rescue_nbytes is None else int(rescue_nbytes)
+                                ),
+                                "symbolic_admission_rescue_lu_max_mb": float(symbolic_admission_rescue_lu_max_mb),
+                            }
+                    except Exception as exc:  # noqa: BLE001
+                        rescue_metadata = {
+                            "symbolic_admission_rescue_lu": False,
+                            "symbolic_admission_rescue_lu_error": f"{type(exc).__name__}: {exc}",
+                        }
+                        if emit is not None:
+                            emit(
+                                1,
+                                "solve_v3_transport_matrix_linear_gmres: fp_fortran_reduced_lu "
+                                f"symbolic admission rescue lu failed ({type(exc).__name__}: {exc})",
+                            )
+                symbolic_metadata.update(rescue_metadata)
+                if rescue_bundle is None:
+                    return _build_rhsmode23_sxblock_preconditioner(
+                        op=op,
+                        reduce_full=reduce_full,
+                        expand_reduced=expand_reduced,
+                    )
+                factor_bundle = rescue_bundle
+                factor_nbytes = getattr(factor_bundle, "factor_nbytes_estimate", None)
+                factor_kind_for_admission = str(getattr(factor_bundle, "kind", ""))
+        if factor_matrix is not None:
+            try:
+                symbolic_analysis = getattr(getattr(factor_bundle, "factor", None), "analysis", None)
+                if symbolic_analysis is None:
+                    symbolic_analysis = analyze_sparse_symbolic_structure(
+                        factor_matrix,
+                        ordering_kind=str(symbolic_ordering),
+                        block_size_target=int(symbolic_block_size),
+                        max_permutation_size=int(symbolic_max_permutation_size),
+                    )
+                symbolic_metadata.update({
+                    "symbolic": symbolic_analysis.to_dict(),
+                    "symbolic_cache_key": symbolic_analysis.cache_key(),
+                    "symbolic_factor_coarse_size": int(getattr(getattr(factor_bundle, "factor", None), "coarse_size", 0)),
+                    "symbolic_factor_overlap_size": int(getattr(getattr(factor_bundle, "factor", None), "overlap_size", 0)),
+                })
+                if emit is not None:
+                    emit(
+                        1,
+                        "solve_v3_transport_matrix_linear_gmres: fp_fortran_reduced_lu symbolic analysis "
+                        f"ordering={symbolic_analysis.ordering_kind} "
+                        f"pattern_hash={symbolic_analysis.pattern_hash[:12]} "
+                        f"nnz={int(symbolic_analysis.nnz)} "
+                        f"bandwidth={int(symbolic_analysis.bandwidth)}->{int(symbolic_analysis.permuted_bandwidth)} "
+                        f"profile={int(symbolic_analysis.profile)}->{int(symbolic_analysis.permuted_profile)} "
+                        f"blocks={int(symbolic_analysis.block_count)}x<= {int(symbolic_analysis.block_size_max)}",
+                    )
+            except Exception as exc:  # noqa: BLE001
+                symbolic_metadata = {
+                    "symbolic_error": f"{type(exc).__name__}: {exc}",
+                    "symbolic_ordering": str(symbolic_ordering),
+                    "symbolic_block_size": int(symbolic_block_size),
+                    "symbolic_max_permutation_size": int(symbolic_max_permutation_size),
+                    "symbolic_block_overlap": int(symbolic_block_overlap),
+                    "symbolic_coarse_max_cols": int(symbolic_coarse_max_cols),
+                    "symbolic_coarse_probe_cols": int(symbolic_coarse_probe_cols),
+                    "symbolic_coarse_damping": float(symbolic_coarse_damping),
+                    "symbolic_coarse_regularization_rel": float(symbolic_coarse_regularization_rel),
+                }
+
+        metadata = {
+            "factor_kind": str(factor_bundle.kind),
+            "factor_dtype": str(factor_dtype.name),
+            "factor_nbytes_estimate": None if factor_nbytes is None else int(factor_nbytes),
+            "factor_nnz_estimate": None
+            if getattr(factor_bundle, "factor_nnz_estimate", None) is None
+            else int(factor_bundle.factor_nnz_estimate),
+            "factor_s": None if getattr(factor_bundle, "factor_s", None) is None else float(factor_bundle.factor_s),
+            "linear_size": int(linear_size),
+            "active_dof": bool(active_indices_use is not None),
+            "preconditioner_x": int(preconditioner_x),
+            "preconditioner_xi": int(preconditioner_xi),
+            "preconditioner_species": int(preconditioner_species),
+            "preconditioner_x_min_l": int(preconditioner_x_min_l),
+            "keeps_theta_zeta": bool(keep_theta_zeta),
+            "shift": float(pc_shift),
+            "direct_pmat_enabled": bool(direct_pmat_enabled),
+            "symbolic_ordering": str(symbolic_ordering),
+            "symbolic_block_size": int(symbolic_block_size),
+            "symbolic_block_overlap": int(symbolic_block_overlap),
+            "symbolic_coarse_max_cols": int(symbolic_coarse_max_cols),
+            "symbolic_coarse_probe_cols": int(symbolic_coarse_probe_cols),
+            "symbolic_coarse_damping": float(symbolic_coarse_damping),
+            "symbolic_coarse_regularization_rel": float(symbolic_coarse_regularization_rel),
+            "symbolic_physics_coarse_enabled": bool(symbolic_physics_coarse_enabled),
+            "symbolic_physics_coarse_max_cols": int(symbolic_physics_coarse_max_cols),
+            "symbolic_schur_max_separator_cols": int(symbolic_schur_max_separator_cols),
+            "symbolic_schur_boundary_width": int(symbolic_schur_boundary_width),
+            "symbolic_schur_high_degree_cols": int(symbolic_schur_high_degree_cols),
+            "symbolic_schur_regularization_rel": float(symbolic_schur_regularization_rel),
+            "symbolic_max_permutation_size": int(symbolic_max_permutation_size),
+            "symbolic_admission_enabled": bool(symbolic_admission_enabled),
+            "symbolic_admission_max_rel": float(symbolic_admission_max_rel),
+            "symbolic_admission_min_improvement": float(symbolic_admission_min_improvement),
+            "symbolic_admission_probes": int(symbolic_admission_probes),
+            "symbolic_admission_rescue_lu_enabled": bool(symbolic_admission_rescue_lu),
+            "symbolic_admission_rescue_lu_max_mb": float(symbolic_admission_rescue_lu_max_mb),
+        }
+        metadata.update(direct_metadata)
+        metadata.update(symbolic_metadata)
+        metadata.update(physics_coarse_metadata)
+        cached = _TransportFpFortranReducedLuPrecondCache(
+            factor_bundle=factor_bundle,
+            linear_size=int(linear_size),
+            metadata=metadata,
+        )
+        _TRANSPORT_FP_FORTRAN_REDUCED_LU_PRECOND_CACHE[cache_key] = cached
+
+    factor_bundle = cached.factor_bundle
+    linear_size_use = int(cached.linear_size)
+
+    def _solve_host(rhs_host: np.ndarray) -> np.ndarray:
+        rhs_np = np.asarray(rhs_host, dtype=np.float64).reshape((linear_size_use,))
+        try:
+            sol = np.asarray(factor_bundle.solve(rhs_np), dtype=np.float64).reshape((linear_size_use,))
+        except Exception:
+            sol = rhs_np
+        finite = np.isfinite(sol)
+        if not np.all(finite):
+            sol = np.where(finite, sol, 0.0)
+        return sol.astype(np.float64, copy=False)
+
+    def _apply(v: jnp.ndarray) -> jnp.ndarray:
+        v = jnp.asarray(v, dtype=jnp.float64)
+        return jax.pure_callback(
+            _solve_host,
+            jax.ShapeDtypeStruct((linear_size_use,), jnp.float64),
+            v,
+        )
+
+    try:
+        setattr(_apply, "_sfincs_jax_transport_fp_fortran_reduced_lu_metadata", dict(cached.metadata))
+    except Exception:
+        pass
+    return _apply
+
+
+def _build_rhsmode23_fp_structured_fblock_lu_preconditioner(
+    *,
+    op: V3FullSystemOperator,
+    reduce_full: Callable[[jnp.ndarray], jnp.ndarray] | None = None,
+    expand_reduced: Callable[[jnp.ndarray], jnp.ndarray] | None = None,
+) -> Callable[[jnp.ndarray], jnp.ndarray]:
+    """Host sparse kinetic f-block factor retaining full migrated FP couplings.
+
+    This opt-in diagnostic preconditioner uses the structured f-block assembly
+    to retain the non-averaged collisionless streaming/mirror geometry and FP
+    collision couplings in the kinetic block. It does not factor the global
+    source/constraint tail, so transport solves must still pass the unchanged
+    true-residual gate before acceptance.
+    """
+    if op.fblock.fp is None:
+        return _build_rhsmode23_tzfft_preconditioner(
+            op=op, reduce_full=reduce_full, expand_reduced=expand_reduced
+        )
+
+    max_mb_env = os.environ.get("SFINCS_JAX_TRANSPORT_FP_STRUCTURED_FBLOCK_LU_MAX_MB", "").strip()
+    factor_max_mb_env = os.environ.get("SFINCS_JAX_TRANSPORT_FP_STRUCTURED_FBLOCK_LU_FACTOR_MAX_MB", "").strip()
+    drop_env = os.environ.get("SFINCS_JAX_TRANSPORT_FP_STRUCTURED_FBLOCK_LU_DROP_TOL", "").strip()
+    reg_env = os.environ.get("SFINCS_JAX_TRANSPORT_FP_STRUCTURED_FBLOCK_LU_REG", "").strip()
+    kind_env = os.environ.get("SFINCS_JAX_TRANSPORT_FP_STRUCTURED_FBLOCK_LU_FACTOR", "").strip().lower()
+    fill_env = os.environ.get("SFINCS_JAX_TRANSPORT_FP_STRUCTURED_FBLOCK_LU_FILL_FACTOR", "").strip()
+    permc_spec = os.environ.get("SFINCS_JAX_TRANSPORT_FP_STRUCTURED_FBLOCK_LU_PERMC_SPEC", "").strip() or "COLAMD"
+    pivot_env = os.environ.get("SFINCS_JAX_TRANSPORT_FP_STRUCTURED_FBLOCK_LU_DIAG_PIVOT_THRESH", "").strip()
+    try:
+        max_mb = float(max_mb_env) if max_mb_env else 2048.0
+    except ValueError:
+        max_mb = 2048.0
+    try:
+        factor_max_mb = float(factor_max_mb_env) if factor_max_mb_env else 8192.0
+    except ValueError:
+        factor_max_mb = 8192.0
+    try:
+        drop_tol = float(drop_env) if drop_env else 0.0
+    except ValueError:
+        drop_tol = 0.0
+    try:
+        reg = float(reg_env) if reg_env else 1.0e-10
+    except ValueError:
+        reg = 1.0e-10
+    factor_kind = kind_env if kind_env in {"lu", "ilu", "jacobi"} else "lu"
+    try:
+        fill_factor = float(fill_env) if fill_env else 10.0
+    except ValueError:
+        fill_factor = 10.0
+    try:
+        diag_pivot_thresh = float(pivot_env) if pivot_env else 1.0
+    except ValueError:
+        diag_pivot_thresh = 1.0
+
+    max_csr_nbytes = None if float(max_mb) <= 0.0 else int(float(max_mb) * 1.0e6)
+    factor_max_nbytes = None if float(factor_max_mb) <= 0.0 else int(float(factor_max_mb) * 1.0e6)
+    cache_key = (
+        *_transport_precond_cache_key(
+            op,
+            "fp_structured_fblock_lu_"
+            f"{factor_kind}_{float(drop_tol):.3e}_{float(reg):.3e}_{float(fill_factor):.3e}_"
+            f"{permc_spec}_{float(diag_pivot_thresh):.3e}",
+        ),
+        int(max_csr_nbytes or 0),
+        int(factor_max_nbytes or 0),
+    )
+    cached = _TRANSPORT_FP_STRUCTURED_FBLOCK_LU_PRECOND_CACHE.get(cache_key)
+    if cached is None:
+        try:
+            selection = select_structured_rhs1_fblock_csr_operator(
+                op.fblock,
+                include_identity_shift=True,
+                drop_tol=float(drop_tol),
+                require_complete=True,
+                max_csr_nbytes=max_csr_nbytes,
+                use_cache=True,
+            )
+            if not bool(selection.selected) or selection.matrix is None:
+                return _build_rhsmode23_sxblock_preconditioner(
+                    op=op, reduce_full=reduce_full, expand_reduced=expand_reduced
+                )
+            matrix = selection.matrix
+            if float(reg) > 0.0:
+                import scipy.sparse as sp  # noqa: PLC0415
+
+                max_abs = float(np.max(np.abs(matrix.data))) if int(matrix.nnz) else 0.0
+                diagonal_shift = max(1.0e-14, float(reg) * max(1.0, max_abs))
+                matrix = (matrix + diagonal_shift * sp.eye(matrix.shape[0], dtype=matrix.dtype, format="csr")).tocsr()
+            factor_bundle = factorize_host_sparse_operator(
+                matrix,
+                kind=factor_kind,
+                drop_tol=float(drop_tol) if float(drop_tol) > 0.0 else 1.0e-8,
+                fill_factor=float(fill_factor),
+                permc_spec=str(permc_spec),
+                diag_pivot_thresh=float(diag_pivot_thresh),
+            )
+        except Exception:
+            return _build_rhsmode23_sxblock_preconditioner(
+                op=op, reduce_full=reduce_full, expand_reduced=expand_reduced
+            )
+
+        factor_nbytes = factor_bundle.factor_nbytes_estimate
+        if (
+            factor_max_nbytes is not None
+            and factor_nbytes is not None
+            and int(factor_nbytes) > int(factor_max_nbytes)
+        ):
+            return _build_rhsmode23_sxblock_preconditioner(
+                op=op, reduce_full=reduce_full, expand_reduced=expand_reduced
+            )
+        metadata = {
+            "selection": selection.to_dict(),
+            "factor_kind": str(factor_kind),
+            "reg": float(reg),
+            "factor_nbytes_estimate": None if factor_nbytes is None else int(factor_nbytes),
+            "factor_nnz_estimate": None
+            if factor_bundle.factor_nnz_estimate is None
+            else int(factor_bundle.factor_nnz_estimate),
+            "factor_s": None if factor_bundle.factor_s is None else float(factor_bundle.factor_s),
+        }
+        cached = _TransportFpStructuredFBlockLuPrecondCache(
+            factor_bundle=factor_bundle,
+            f_size=int(op.f_size),
+            metadata=metadata,
+        )
+        _TRANSPORT_FP_STRUCTURED_FBLOCK_LU_PRECOND_CACHE[cache_key] = cached
+
+    factor_bundle = cached.factor_bundle
+    f_size = int(cached.f_size)
+
+    def _solve_f_host(rhs_host: np.ndarray) -> np.ndarray:
+        rhs_np = np.asarray(rhs_host, dtype=np.float64).reshape((f_size,))
+        try:
+            sol = np.asarray(factor_bundle.solve(rhs_np), dtype=np.float64).reshape((f_size,))
+        except Exception:
+            sol = rhs_np
+        finite = np.isfinite(sol)
+        if not np.all(finite):
+            sol = np.where(finite, sol, 0.0)
+        return sol.astype(np.float64, copy=False)
+
+    def _apply_full(r_full: jnp.ndarray) -> jnp.ndarray:
+        r_full = jnp.asarray(r_full, dtype=jnp.float64)
+        z_f = jax.pure_callback(
+            _solve_f_host,
+            jax.ShapeDtypeStruct((f_size,), jnp.float64),
+            r_full[:f_size],
+        )
+        tail = r_full[f_size:]
+        return jnp.concatenate([z_f, tail], axis=0)
 
     if reduce_full is None or expand_reduced is None:
         return _apply_full
@@ -11281,6 +18309,15 @@ def _build_rhsmode1_xblock_tz_sparse_preconditioner(
         "SFINCS_JAX_RHSMODE1_XBLOCK_SPARSE_HOST_BLOCK_MAX",
         "",
     ).strip()
+    skipped_diag_fallback = _rhs1_bool_env(
+        "SFINCS_JAX_RHSMODE1_XBLOCK_SPARSE_HOST_SKIPPED_DIAG_FALLBACK",
+        default=False,
+    )
+    skipped_diag_floor = _rhs1_float_env(
+        "SFINCS_JAX_RHSMODE1_XBLOCK_SPARSE_HOST_SKIPPED_DIAG_FLOOR",
+        default=1.0e-10,
+        minimum=0.0,
+    )
     lower_fill_mode, lower_fill_ignored_env = _rhs1_xblock_policy.rhs1_xblock_lower_fill_mode(lower_fill_env)
 
     def _local_factor_candidate(block_size: int) -> _rhs1_xblock_policy.RHS1XBlockLocalSolveCandidate:
@@ -11326,6 +18363,8 @@ def _build_rhsmode1_xblock_tz_sparse_preconditioner(
         lower_fill_compact_row_cap_env,
         lower_fill_max_block_env,
         host_block_max_env if not build_jax_factors else "",
+        bool(skipped_diag_fallback) if not build_jax_factors else False,
+        float(skipped_diag_floor) if not build_jax_factors else 0.0,
     )
 
     if build_jax_factors:
@@ -11809,6 +18848,38 @@ def _build_rhsmode1_xblock_tz_sparse_preconditioner(
         else:
             block_slices: list[tuple[int, int]] = []
             block_factors: list[object | None] = []
+            block_diag_inv: list[np.ndarray | None] = []
+
+            def _maybe_skipped_diag_inv(*, species: int, ix: int, block_size: int) -> np.ndarray | None:
+                if (not bool(skipped_diag_fallback)) or (not bool(assembled_host_fp)) or block_size <= 0:
+                    return None
+                try:
+                    diag = _rhsmode1_fp_xblock_tz_sparse_diagonal(
+                        op=op,
+                        species=int(species),
+                        ix=int(ix),
+                        preconditioner_xi=preconditioner_xi,
+                        host_cache=assembled_host_cache,
+                    )
+                    diag_inv = _safe_inverse_diagonal_np(diag, floor=float(skipped_diag_floor))
+                    if diag_inv is not None and int(diag_inv.size) == int(block_size):
+                        if emit is not None:
+                            emit(
+                                1,
+                                "xblock_sparse_host: using diagonal fallback for skipped/rejected block "
+                                f"(species={int(species)} x={int(ix)} size={int(block_size)})",
+                            )
+                        return diag_inv
+                except Exception as exc:  # noqa: BLE001
+                    if emit is not None:
+                        emit(
+                            1,
+                            "xblock_sparse_host: diagonal fallback unavailable for block "
+                            f"(species={int(species)} x={int(ix)} size={int(block_size)}) "
+                            f"({type(exc).__name__}: {exc})",
+                        )
+                return None
+
             for s in range(n_species):
                 for ix in range(n_x):
                     n_lx = int(nxi_for_x[ix])
@@ -11835,6 +18906,9 @@ def _build_rhsmode1_xblock_tz_sparse_preconditioner(
                             )
                         block_slices.append((start, block_size))
                         block_factors.append(None)
+                        block_diag_inv.append(
+                            _maybe_skipped_diag_inv(species=int(s), ix=int(ix), block_size=int(block_size))
+                        )
                         continue
 
                     def _mv_block(v_block: jnp.ndarray, *, _block_slice=block_slice) -> jnp.ndarray:
@@ -11918,10 +18992,15 @@ def _build_rhsmode1_xblock_tz_sparse_preconditioner(
                                     1,
                                     "xblock_sparse_host: rejecting unstable block factor "
                                     f"(species={int(s)} x={int(ix)} size={int(block_size)})",
-                                )
+                            )
                             host_factor = None
                     block_slices.append((start, block_size))
                     block_factors.append(host_factor)
+                    block_diag_inv.append(
+                        None
+                        if host_factor is not None
+                        else _maybe_skipped_diag_inv(species=int(s), ix=int(ix), block_size=int(block_size))
+                    )
 
             extra_inv_np: np.ndarray | None = None
             if extra_size > 0:
@@ -11945,6 +19024,7 @@ def _build_rhsmode1_xblock_tz_sparse_preconditioner(
             cached = _RHSMode1SparseXBlockHostPrecondCache(
                 block_slices=tuple(block_slices),
                 block_factors=tuple(block_factors),
+                block_diag_inv=tuple(block_diag_inv),
                 extra_idx_np=extra_idx_np,
                 extra_inv_np=extra_inv_np,
             )
@@ -12156,11 +19236,19 @@ def _build_rhsmode1_xblock_tz_sparse_preconditioner(
         def _apply_full(r_full: jnp.ndarray) -> jnp.ndarray:
             r_np = np.asarray(r_full, dtype=np.float64).reshape((-1,))
             z_np = np.array(r_np, copy=True)
-            for (start, block_size), fac in zip(cached.block_slices, cached.block_factors, strict=True):
-                if fac is None or block_size <= 0:
+            for (start, block_size), fac, diag_inv in zip(
+                cached.block_slices,
+                cached.block_factors,
+                cached.block_diag_inv,
+                strict=True,
+            ):
+                if block_size <= 0:
                     continue
                 sl = slice(int(start), int(start + block_size))
-                z_np[sl] = np.asarray(fac.solve(r_np[sl]), dtype=np.float64)
+                if fac is not None:
+                    z_np[sl] = np.asarray(fac.solve(r_np[sl]), dtype=np.float64)
+                elif diag_inv is not None:
+                    z_np[sl] = np.asarray(diag_inv, dtype=np.float64) * r_np[sl]
             if cached.extra_inv_np is not None and cached.extra_idx_np.size:
                 z_np[cached.extra_idx_np] = cached.extra_inv_np @ r_np[cached.extra_idx_np]
             return jnp.asarray(z_np, dtype=jnp.float64)
@@ -13405,6 +20493,1468 @@ def _build_rhsmode1_zeta_line_preconditioner(
     return _apply_reduced
 
 
+def _build_rhsmode1_structured_fblock_jacobi_preconditioner(
+    *,
+    op: V3FullSystemOperator,
+    reduce_full: Callable[[jnp.ndarray], jnp.ndarray] | None = None,
+    expand_reduced: Callable[[jnp.ndarray], jnp.ndarray] | None = None,
+) -> Callable[[jnp.ndarray], jnp.ndarray]:
+    """Build an opt-in block-Jacobi preconditioner from the structured f-block.
+
+    This is a default-off integration path for the JAX-native block-COO
+    assembly. It only uses the structured operator when all f-block terms are
+    covered; otherwise selection fails before Krylov starts.
+    """
+
+    phi1_base = op.phi1_hat_base if getattr(op.fblock, "fp_phi1", None) is not None else None
+    selection = select_structured_rhs1_fblock_operator(op.fblock, phi1_hat_base=phi1_base)
+    if not bool(selection.selected):
+        raise NotImplementedError(f"structured f-block preconditioner unavailable: {selection.reason}")
+
+    regularization = _rhs1_float_env(
+        "SFINCS_JAX_RHSMODE1_STRUCTURED_FBLOCK_JACOBI_REG",
+        default=1.0e-10,
+        minimum=0.0,
+    )
+    damping = _rhs1_float_env(
+        "SFINCS_JAX_RHSMODE1_STRUCTURED_FBLOCK_JACOBI_DAMPING",
+        default=1.0,
+        minimum=0.0,
+    )
+    factor = selection.assembly.operator.block_jacobi_factor(
+        regularization=float(regularization),
+        damping=float(damping),
+    )
+    metadata = selection.to_dict()
+    metadata["factor"] = factor.to_dict()
+    metadata["regularization"] = float(regularization)
+    metadata["damping"] = float(damping)
+
+    f_size = int(op.f_size)
+
+    def _apply_full_unchecked(r_full: jnp.ndarray) -> jnp.ndarray:
+        r_full = jnp.asarray(r_full, dtype=jnp.float64)
+        z_f = factor.apply(r_full[:f_size])
+        return jnp.concatenate([z_f, r_full[f_size:]], axis=0)
+
+    apply_full = _safe_preconditioner(_apply_full_unchecked)
+    setattr(apply_full, "_sfincs_jax_structured_fblock_metadata", metadata)
+
+    if reduce_full is None or expand_reduced is None:
+        return apply_full
+
+    def _apply_reduced(r_reduced: jnp.ndarray) -> jnp.ndarray:
+        z_full = apply_full(expand_reduced(r_reduced))
+        return reduce_full(z_full)
+
+    setattr(_apply_reduced, "_sfincs_jax_structured_fblock_metadata", metadata)
+    return _apply_reduced
+
+
+def _build_rhsmode1_structured_fblock_angular_jacobi_preconditioner(
+    *,
+    op: V3FullSystemOperator,
+    reduce_full: Callable[[jnp.ndarray], jnp.ndarray] | None = None,
+    expand_reduced: Callable[[jnp.ndarray], jnp.ndarray] | None = None,
+) -> Callable[[jnp.ndarray], jnp.ndarray]:
+    """Build an opt-in angular-line preconditioner from the structured f-block.
+
+    Blocks are grouped over theta for each fixed ``(species, x, L)`` while each
+    scalar block already contains all zeta couplings.  This captures the full
+    local angular surface coupling without dense probing or host sparse assembly.
+    """
+
+    phi1_base = op.phi1_hat_base if getattr(op.fblock, "fp_phi1", None) is not None else None
+    selection = select_structured_rhs1_fblock_operator(op.fblock, phi1_hat_base=phi1_base)
+    if not bool(selection.selected):
+        raise NotImplementedError(f"structured f-block angular preconditioner unavailable: {selection.reason}")
+
+    regularization = _rhs1_float_env(
+        "SFINCS_JAX_RHSMODE1_STRUCTURED_FBLOCK_ANGULAR_JACOBI_REG",
+        default=1.0e-10,
+        minimum=0.0,
+    )
+    damping = _rhs1_float_env(
+        "SFINCS_JAX_RHSMODE1_STRUCTURED_FBLOCK_ANGULAR_JACOBI_DAMPING",
+        default=1.0,
+        minimum=0.0,
+    )
+    factor = selection.assembly.operator.line_jacobi_factor(
+        blocks_per_line=int(op.n_theta),
+        regularization=float(regularization),
+        damping=float(damping),
+    )
+    metadata = selection.to_dict()
+    metadata["factor"] = factor.to_dict()
+    metadata["regularization"] = float(regularization)
+    metadata["damping"] = float(damping)
+    metadata["line_kind"] = "fixed_species_x_l_angular"
+    metadata["blocks_per_line"] = int(op.n_theta)
+
+    f_size = int(op.f_size)
+
+    def _apply_full_unchecked(r_full: jnp.ndarray) -> jnp.ndarray:
+        r_full = jnp.asarray(r_full, dtype=jnp.float64)
+        z_f = factor.apply(r_full[:f_size])
+        return jnp.concatenate([z_f, r_full[f_size:]], axis=0)
+
+    apply_full = _safe_preconditioner(_apply_full_unchecked)
+    setattr(apply_full, "_sfincs_jax_structured_fblock_metadata", metadata)
+
+    if reduce_full is None or expand_reduced is None:
+        return apply_full
+
+    def _apply_reduced(r_reduced: jnp.ndarray) -> jnp.ndarray:
+        z_full = apply_full(expand_reduced(r_reduced))
+        return reduce_full(z_full)
+
+    setattr(_apply_reduced, "_sfincs_jax_structured_fblock_metadata", metadata)
+    return _apply_reduced
+
+
+def _build_rhsmode1_structured_fblock_xi_angular_jacobi_preconditioner(
+    *,
+    op: V3FullSystemOperator,
+    reduce_full: Callable[[jnp.ndarray], jnp.ndarray] | None = None,
+    expand_reduced: Callable[[jnp.ndarray], jnp.ndarray] | None = None,
+) -> Callable[[jnp.ndarray], jnp.ndarray]:
+    """Build a guarded fixed-``(species,x)`` velocity-angular preconditioner.
+
+    The grouped block contains all pitch/Legendre and angular degrees of
+    freedom for one species and one radial grid point.  This is stronger than
+    point or angular-line Jacobi for PAS/collisionless coupling, but it is
+    explicitly guarded because the grouped block scales as
+    ``Nxi * Ntheta * Nzeta``.
+    """
+
+    blocks_per_line = int(op.n_xi) * int(op.n_theta)
+    scalar_block_size = blocks_per_line * int(op.n_zeta)
+    max_block_size = _rhs1_int_env(
+        "SFINCS_JAX_RHSMODE1_STRUCTURED_FBLOCK_XI_ANGULAR_MAX_BLOCK_SIZE",
+        default=5000,
+        minimum=1,
+    )
+    if int(scalar_block_size) > int(max_block_size):
+        raise MemoryError(
+            "structured f-block xi-angular preconditioner block too large: "
+            f"{int(scalar_block_size)} > {int(max_block_size)}; raise "
+            "SFINCS_JAX_RHSMODE1_STRUCTURED_FBLOCK_XI_ANGULAR_MAX_BLOCK_SIZE to override"
+        )
+
+    phi1_base = op.phi1_hat_base if getattr(op.fblock, "fp_phi1", None) is not None else None
+    selection = select_structured_rhs1_fblock_operator(op.fblock, phi1_hat_base=phi1_base)
+    if not bool(selection.selected):
+        raise NotImplementedError(f"structured f-block xi-angular preconditioner unavailable: {selection.reason}")
+
+    regularization = _rhs1_float_env(
+        "SFINCS_JAX_RHSMODE1_STRUCTURED_FBLOCK_XI_ANGULAR_JACOBI_REG",
+        default=1.0e-10,
+        minimum=0.0,
+    )
+    damping = _rhs1_float_env(
+        "SFINCS_JAX_RHSMODE1_STRUCTURED_FBLOCK_XI_ANGULAR_JACOBI_DAMPING",
+        default=1.0,
+        minimum=0.0,
+    )
+    factor = selection.assembly.operator.line_jacobi_factor(
+        blocks_per_line=blocks_per_line,
+        regularization=float(regularization),
+        damping=float(damping),
+    )
+    metadata = selection.to_dict()
+    metadata["factor"] = factor.to_dict()
+    metadata["regularization"] = float(regularization)
+    metadata["damping"] = float(damping)
+    metadata["line_kind"] = "fixed_species_x_velocity_angular"
+    metadata["blocks_per_line"] = int(blocks_per_line)
+    metadata["scalar_block_size"] = int(scalar_block_size)
+    metadata["max_block_size"] = int(max_block_size)
+
+    f_size = int(op.f_size)
+
+    def _apply_full_unchecked(r_full: jnp.ndarray) -> jnp.ndarray:
+        r_full = jnp.asarray(r_full, dtype=jnp.float64)
+        z_f = factor.apply(r_full[:f_size])
+        return jnp.concatenate([z_f, r_full[f_size:]], axis=0)
+
+    apply_full = _safe_preconditioner(_apply_full_unchecked)
+    setattr(apply_full, "_sfincs_jax_structured_fblock_metadata", metadata)
+
+    if reduce_full is None or expand_reduced is None:
+        return apply_full
+
+    def _apply_reduced(r_reduced: jnp.ndarray) -> jnp.ndarray:
+        z_full = apply_full(expand_reduced(r_reduced))
+        return reduce_full(z_full)
+
+    setattr(_apply_reduced, "_sfincs_jax_structured_fblock_metadata", metadata)
+    return _apply_reduced
+
+
+def _build_rhsmode1_structured_fblock_fp_radial_jacobi_preconditioner(
+    *,
+    op: V3FullSystemOperator,
+    reduce_full: Callable[[jnp.ndarray], jnp.ndarray] | None = None,
+    expand_reduced: Callable[[jnp.ndarray], jnp.ndarray] | None = None,
+) -> Callable[[jnp.ndarray], jnp.ndarray]:
+    """Build a guarded FP-aware species/radial grouped preconditioner.
+
+    The full-Fokker-Planck collision operator is dense in species and radial
+    ``x`` for each fixed Legendre index and angular point.  This factor groups
+    those non-contiguous blocks directly from the structured block-COO operator,
+    capturing the missing FP coupling without a global sparse factor.
+    """
+
+    if getattr(op.fblock, "fp", None) is None and getattr(op.fblock, "fp_phi1", None) is None:
+        raise NotImplementedError("structured f-block FP-radial preconditioner requires an FP collision term")
+
+    n_species = int(op.n_species)
+    n_x = int(op.n_x)
+    n_xi = int(op.n_xi)
+    n_theta = int(op.n_theta)
+    n_zeta = int(op.n_zeta)
+    blocks_per_group = n_species * n_x
+    scalar_block_size = blocks_per_group * n_zeta
+    n_groups = n_xi * n_theta
+    max_block_size = _rhs1_int_env(
+        "SFINCS_JAX_RHSMODE1_STRUCTURED_FBLOCK_FP_RADIAL_MAX_BLOCK_SIZE",
+        default=2500,
+        minimum=1,
+    )
+    if int(scalar_block_size) > int(max_block_size):
+        raise MemoryError(
+            "structured f-block FP-radial preconditioner block too large: "
+            f"{int(scalar_block_size)} > {int(max_block_size)}; raise "
+            "SFINCS_JAX_RHSMODE1_STRUCTURED_FBLOCK_FP_RADIAL_MAX_BLOCK_SIZE to override"
+        )
+
+    estimated_factor_nbytes = int(n_groups * scalar_block_size * scalar_block_size * np.dtype(np.float64).itemsize)
+    max_factor_nbytes = _rhs1_int_env(
+        "SFINCS_JAX_RHSMODE1_STRUCTURED_FBLOCK_FP_RADIAL_MAX_FACTOR_NBYTES",
+        default=256 * 1024 * 1024,
+        minimum=1,
+    )
+    if estimated_factor_nbytes > int(max_factor_nbytes):
+        raise MemoryError(
+            "structured f-block FP-radial preconditioner factor too large: "
+            f"{estimated_factor_nbytes} > {int(max_factor_nbytes)} bytes; raise "
+            "SFINCS_JAX_RHSMODE1_STRUCTURED_FBLOCK_FP_RADIAL_MAX_FACTOR_NBYTES to override"
+        )
+
+    regularization = _rhs1_float_env(
+        "SFINCS_JAX_RHSMODE1_STRUCTURED_FBLOCK_FP_RADIAL_JACOBI_REG",
+        default=1.0e-10,
+        minimum=0.0,
+    )
+    damping = _rhs1_float_env(
+        "SFINCS_JAX_RHSMODE1_STRUCTURED_FBLOCK_FP_RADIAL_JACOBI_DAMPING",
+        default=1.0,
+        minimum=0.0,
+    )
+    cache_key = _rhsmode1_structured_fblock_cache_key(
+        op,
+        "fp_radial_jacobi",
+        params=(
+            int(max_block_size),
+            int(max_factor_nbytes),
+            float(regularization),
+            float(damping),
+        ),
+    )
+    cached = _RHSMODE1_STRUCTURED_FBLOCK_PRECOND_CACHE.get(cache_key)
+    cache_hit = cached is not None
+    if cached is None:
+        phi1_base = op.phi1_hat_base if getattr(op.fblock, "fp_phi1", None) is not None else None
+        selection = select_structured_rhs1_fblock_operator(op.fblock, phi1_hat_base=phi1_base)
+        if not bool(selection.selected):
+            raise NotImplementedError(f"structured f-block FP-radial preconditioner unavailable: {selection.reason}")
+
+        groups = np.empty((n_groups, blocks_per_group), dtype=np.int32)
+        group_id = 0
+        for ell in range(n_xi):
+            for theta in range(n_theta):
+                offset = 0
+                for species in range(n_species):
+                    for x_index in range(n_x):
+                        groups[group_id, offset] = (((species * n_x + x_index) * n_xi + ell) * n_theta + theta)
+                        offset += 1
+                group_id += 1
+
+        factor = selection.assembly.operator.grouped_jacobi_factor(
+            block_groups=groups,
+            regularization=float(regularization),
+            damping=float(damping),
+        )
+        metadata = selection.to_dict()
+        metadata["factor"] = factor.to_dict()
+        metadata["regularization"] = float(regularization)
+        metadata["damping"] = float(damping)
+        metadata["line_kind"] = "fixed_l_theta_species_x_zeta"
+        metadata["blocks_per_group"] = int(blocks_per_group)
+        metadata["n_groups"] = int(n_groups)
+        metadata["scalar_block_size"] = int(scalar_block_size)
+        metadata["max_block_size"] = int(max_block_size)
+        metadata["estimated_factor_nbytes"] = int(estimated_factor_nbytes)
+        metadata["max_factor_nbytes"] = int(max_factor_nbytes)
+        cached = _RHSMode1StructuredFBlockPrecondCache(
+            operator=selection.assembly.operator,
+            factor=factor,
+            metadata=metadata,
+        )
+        _RHSMODE1_STRUCTURED_FBLOCK_PRECOND_CACHE[cache_key] = cached
+    if cached.factor is None:
+        raise RuntimeError("structured f-block FP-radial cache is missing factor")
+    factor = cached.factor
+    metadata = dict(cached.metadata)
+    metadata["cache_hit"] = bool(cache_hit)
+
+    f_size = int(op.f_size)
+
+    def _apply_full_unchecked(r_full: jnp.ndarray) -> jnp.ndarray:
+        r_full = jnp.asarray(r_full, dtype=jnp.float64)
+        z_f = factor.apply(r_full[:f_size])
+        return jnp.concatenate([z_f, r_full[f_size:]], axis=0)
+
+    apply_full = _safe_preconditioner(_apply_full_unchecked)
+    setattr(apply_full, "_sfincs_jax_structured_fblock_metadata", metadata)
+
+    if reduce_full is None or expand_reduced is None:
+        return apply_full
+
+    def _apply_reduced(r_reduced: jnp.ndarray) -> jnp.ndarray:
+        z_full = apply_full(expand_reduced(r_reduced))
+        return reduce_full(z_full)
+
+    setattr(_apply_reduced, "_sfincs_jax_structured_fblock_metadata", metadata)
+    return _apply_reduced
+
+
+def _rhs1_lowmode_angular_features(
+    *,
+    n_theta: int,
+    n_zeta: int,
+    theta_modes: int,
+    zeta_modes: int,
+) -> np.ndarray:
+    """Return normalized low angular feature fields with shape ``(F,T,Z)``."""
+
+    theta = 2.0 * np.pi * np.arange(n_theta, dtype=np.float64) / max(n_theta, 1)
+    zeta = 2.0 * np.pi * np.arange(n_zeta, dtype=np.float64) / max(n_zeta, 1)
+    theta_grid = theta[:, None]
+    zeta_grid = zeta[None, :]
+
+    feature_fields: list[np.ndarray] = [np.ones((n_theta, n_zeta), dtype=np.float64)]
+    for mode in range(1, int(theta_modes) + 1):
+        feature_fields.append(np.cos(float(mode) * theta_grid) * np.ones((1, n_zeta), dtype=np.float64))
+        feature_fields.append(np.sin(float(mode) * theta_grid) * np.ones((1, n_zeta), dtype=np.float64))
+    for mode in range(1, int(zeta_modes) + 1):
+        feature_fields.append(np.ones((n_theta, 1), dtype=np.float64) * np.cos(float(mode) * zeta_grid))
+        feature_fields.append(np.ones((n_theta, 1), dtype=np.float64) * np.sin(float(mode) * zeta_grid))
+
+    usable_features: list[np.ndarray] = []
+    for field in feature_fields:
+        norm = float(np.linalg.norm(field.reshape((-1,))))
+        if norm > 0.0:
+            usable_features.append(field / norm)
+    if not usable_features:
+        raise ValueError("at least one nonzero low angular feature is required")
+    return np.stack(usable_features, axis=0)
+
+
+def _rhs1_cap_lowmode_features(
+    *,
+    features: np.ndarray,
+    n_species: int,
+    n_x: int,
+    n_xi: int,
+    max_coarse_size: int,
+) -> tuple[np.ndarray, dict[str, int | bool]]:
+    """Trim optional low-mode features to keep the coarse solve bounded."""
+
+    stride = int(n_species) * int(n_x) * int(n_xi)
+    if stride <= 0:
+        raise ValueError("low-mode coarse stride must be positive")
+    requested_features = int(features.shape[0])
+    max_features = int(max_coarse_size) // stride
+    if max_features < 1:
+        raise MemoryError(
+            "structured f-block FP low-mode Schur coarse space too large: "
+            f"minimum {stride} > {int(max_coarse_size)}; raise "
+            "SFINCS_JAX_RHSMODE1_STRUCTURED_FBLOCK_FP_LOWMODE_MAX_COARSE to override"
+        )
+    retained_features = max(1, min(requested_features, max_features))
+    capped = np.asarray(features[:retained_features], dtype=np.float64)
+    return capped, {
+        "requested_features": requested_features,
+        "retained_features": retained_features,
+        "truncated_features": bool(retained_features < requested_features),
+        "coarse_stride": stride,
+        "requested_coarse_size": int(stride * requested_features),
+        "retained_coarse_size": int(stride * retained_features),
+    }
+
+
+def _build_rhs1_lowmode_angular_basis(
+    *,
+    op: V3FullSystemOperator,
+    theta_modes: int,
+    zeta_modes: int,
+    max_coarse_size: int,
+    max_basis_nbytes: int,
+) -> jnp.ndarray:
+    """Build normalized low angular modes for small reference tests."""
+
+    n_species = int(op.n_species)
+    n_x = int(op.n_x)
+    n_xi = int(op.n_xi)
+    n_theta = int(op.n_theta)
+    n_zeta = int(op.n_zeta)
+    features_requested = _rhs1_lowmode_angular_features(
+        n_theta=n_theta,
+        n_zeta=n_zeta,
+        theta_modes=int(theta_modes),
+        zeta_modes=int(zeta_modes),
+    )
+    features, _ = _rhs1_cap_lowmode_features(
+        features=features_requested,
+        n_species=n_species,
+        n_x=n_x,
+        n_xi=n_xi,
+        max_coarse_size=int(max_coarse_size),
+    )
+    usable_features = [features[i] for i in range(int(features.shape[0]))]
+    n_features = len(usable_features)
+    n_coarse = n_species * n_x * n_xi * n_features
+    basis_nbytes = int(op.f_size) * int(n_coarse) * np.dtype(np.float64).itemsize
+    if basis_nbytes > int(max_basis_nbytes):
+        raise MemoryError(
+            "structured f-block FP low-mode Schur basis too large: "
+            f"{basis_nbytes} > {int(max_basis_nbytes)} bytes; raise "
+            "SFINCS_JAX_RHSMODE1_STRUCTURED_FBLOCK_FP_LOWMODE_MAX_BASIS_NBYTES to override"
+        )
+
+    basis = np.zeros((int(op.f_size), int(n_coarse)), dtype=np.float64)
+    column = 0
+    for species in range(n_species):
+        for x_index in range(n_x):
+            for ell in range(n_xi):
+                base = ((species * n_x + x_index) * n_xi + ell) * n_theta * n_zeta
+                for field in usable_features:
+                    basis[base : base + n_theta * n_zeta, column] = field.reshape((-1,))
+                    column += 1
+    return jnp.asarray(basis)
+
+
+def _build_rhs1_lowmode_angular_matrix_free_correction(
+    *,
+    op: V3FullSystemOperator,
+    operator,
+    theta_modes: int,
+    zeta_modes: int,
+    max_coarse_size: int,
+    max_basis_batch_nbytes: int,
+    basis_batch_size: int,
+    regularization: float,
+    damping: float,
+) -> tuple[RHS1MatrixFreeGalerkinResidualCorrection, dict[str, int | bool]]:
+    """Build the low-mode Galerkin correction without storing ``N_f x N_c``."""
+
+    n_species = int(op.n_species)
+    n_x = int(op.n_x)
+    n_xi = int(op.n_xi)
+    n_theta = int(op.n_theta)
+    n_zeta = int(op.n_zeta)
+    features_requested = _rhs1_lowmode_angular_features(
+        n_theta=n_theta,
+        n_zeta=n_zeta,
+        theta_modes=int(theta_modes),
+        zeta_modes=int(zeta_modes),
+    )
+    capped_features, feature_metadata = _rhs1_cap_lowmode_features(
+        features=features_requested,
+        n_species=n_species,
+        n_x=n_x,
+        n_xi=n_xi,
+        max_coarse_size=int(max_coarse_size),
+    )
+    features = jnp.asarray(capped_features, dtype=jnp.float64)
+    n_features = int(features.shape[0])
+    n_coarse = n_species * n_x * n_xi * n_features
+
+    def _restrict(vector: jnp.ndarray) -> jnp.ndarray:
+        arr = jnp.asarray(vector, dtype=jnp.float64)
+        if arr.ndim == 1:
+            f = arr.reshape((n_species, n_x, n_xi, n_theta, n_zeta))
+            return jnp.einsum("sxltz,ftz->sxlf", f, features).reshape((n_coarse,))
+        if arr.ndim == 2:
+            f = arr.reshape((n_species, n_x, n_xi, n_theta, n_zeta, int(arr.shape[1])))
+            return jnp.einsum("sxltzb,ftz->sxlfb", f, features).reshape((n_coarse, int(arr.shape[1])))
+        raise ValueError("low-mode restriction expects a vector or column matrix")
+
+    def _prolong(coefficients: jnp.ndarray) -> jnp.ndarray:
+        coeff = jnp.asarray(coefficients, dtype=jnp.float64)
+        if coeff.ndim == 1:
+            c = coeff.reshape((n_species, n_x, n_xi, n_features))
+            return jnp.einsum("sxlf,ftz->sxltz", c, features).reshape((int(op.f_size),))
+        if coeff.ndim == 2:
+            c = coeff.reshape((n_species, n_x, n_xi, n_features, int(coeff.shape[1])))
+            return jnp.einsum("sxlfb,ftz->sxltzb", c, features).reshape((int(op.f_size), int(coeff.shape[1])))
+        raise ValueError("low-mode prolongation expects a vector or column matrix")
+
+    correction = RHS1MatrixFreeGalerkinResidualCorrection.from_callbacks(
+        operator=operator,
+        restrict_fn=_restrict,
+        prolong_fn=_prolong,
+        n_coarse=int(n_coarse),
+        regularization=float(regularization),
+        damping=float(damping),
+        basis_batch_size=int(basis_batch_size),
+        max_coarse_size=int(max_coarse_size),
+        max_basis_batch_nbytes=int(max_basis_batch_nbytes),
+    )
+    return correction, feature_metadata
+
+
+def _rhs1_polynomial_moment_features(*, n_points: int, n_moments: int) -> np.ndarray:
+    """Return small orthonormal polynomial moments on a discrete grid."""
+
+    count = max(1, min(int(n_moments), int(n_points)))
+    if int(n_points) <= 0:
+        raise ValueError("moment feature grid must be nonempty")
+    grid = np.linspace(-1.0, 1.0, int(n_points), dtype=np.float64) if int(n_points) > 1 else np.zeros((1,))
+    candidates = [np.ones((int(n_points),), dtype=np.float64)]
+    for power in range(1, count + 3):
+        candidates.append(np.asarray(grid**power, dtype=np.float64))
+
+    features: list[np.ndarray] = []
+    for candidate in candidates:
+        vec = np.asarray(candidate, dtype=np.float64)
+        for existing in features:
+            vec = vec - float(np.dot(existing, vec)) * existing
+        norm = float(np.linalg.norm(vec))
+        if norm > 1.0e-14:
+            features.append(vec / norm)
+        if len(features) >= count:
+            break
+    if len(features) < count:
+        raise ValueError("could not build requested polynomial moment features")
+    return np.stack(features, axis=0)
+
+
+def _rhs1_low_legendre_index_features(*, n_xi: int, n_moments: int) -> np.ndarray:
+    """Return low-L selector moments for the pitch/Legendre axis."""
+
+    count = max(1, min(int(n_moments), int(n_xi)))
+    features = np.zeros((count, int(n_xi)), dtype=np.float64)
+    for ell in range(count):
+        features[ell, ell] = 1.0
+    return features
+
+
+def _build_rhs1_moment_angular_matrix_free_correction(
+    *,
+    op: V3FullSystemOperator,
+    operator,
+    theta_modes: int,
+    zeta_modes: int,
+    x_moments: int,
+    xi_moments: int,
+    max_coarse_size: int,
+    max_basis_batch_nbytes: int,
+    basis_batch_size: int,
+    regularization: float,
+    damping: float,
+) -> tuple[RHS1MatrixFreeGalerkinResidualCorrection, dict[str, int | bool]]:
+    """Build a compact physics-moment Galerkin correction.
+
+    This coarse space uses low speed-grid polynomial moments and low
+    pitch/Legendre moments rather than one coarse variable for every ``(x, L)``.
+    It is intended to capture distribution-function moment errors at much lower
+    setup/application cost than the full low-mode angular Schur correction.
+    """
+
+    n_species = int(op.n_species)
+    n_x = int(op.n_x)
+    n_xi = int(op.n_xi)
+    n_theta = int(op.n_theta)
+    n_zeta = int(op.n_zeta)
+    x_features_np = _rhs1_polynomial_moment_features(n_points=n_x, n_moments=int(x_moments))
+    xi_features_np = _rhs1_low_legendre_index_features(n_xi=n_xi, n_moments=int(xi_moments))
+    features_requested = _rhs1_lowmode_angular_features(
+        n_theta=n_theta,
+        n_zeta=n_zeta,
+        theta_modes=int(theta_modes),
+        zeta_modes=int(zeta_modes),
+    )
+    capped_features, feature_metadata = _rhs1_cap_lowmode_features(
+        features=features_requested,
+        n_species=n_species,
+        n_x=int(x_features_np.shape[0]),
+        n_xi=int(xi_features_np.shape[0]),
+        max_coarse_size=int(max_coarse_size),
+    )
+    x_features = jnp.asarray(x_features_np, dtype=jnp.float64)
+    xi_features = jnp.asarray(xi_features_np, dtype=jnp.float64)
+    angular_features = jnp.asarray(capped_features, dtype=jnp.float64)
+    n_x_features = int(x_features.shape[0])
+    n_xi_features = int(xi_features.shape[0])
+    n_angular_features = int(angular_features.shape[0])
+    n_coarse = n_species * n_x_features * n_xi_features * n_angular_features
+
+    def _restrict(vector: jnp.ndarray) -> jnp.ndarray:
+        arr = jnp.asarray(vector, dtype=jnp.float64)
+        if arr.ndim == 1:
+            f = arr.reshape((n_species, n_x, n_xi, n_theta, n_zeta))
+            return jnp.einsum(
+                "sxltz,px,ql,ftz->spqf",
+                f,
+                x_features,
+                xi_features,
+                angular_features,
+            ).reshape((n_coarse,))
+        if arr.ndim == 2:
+            f = arr.reshape((n_species, n_x, n_xi, n_theta, n_zeta, int(arr.shape[1])))
+            return jnp.einsum(
+                "sxltzb,px,ql,ftz->spqfb",
+                f,
+                x_features,
+                xi_features,
+                angular_features,
+            ).reshape((n_coarse, int(arr.shape[1])))
+        raise ValueError("moment-space restriction expects a vector or column matrix")
+
+    def _prolong(coefficients: jnp.ndarray) -> jnp.ndarray:
+        coeff = jnp.asarray(coefficients, dtype=jnp.float64)
+        if coeff.ndim == 1:
+            c = coeff.reshape((n_species, n_x_features, n_xi_features, n_angular_features))
+            return jnp.einsum(
+                "spqf,px,ql,ftz->sxltz",
+                c,
+                x_features,
+                xi_features,
+                angular_features,
+            ).reshape((int(op.f_size),))
+        if coeff.ndim == 2:
+            c = coeff.reshape(
+                (n_species, n_x_features, n_xi_features, n_angular_features, int(coeff.shape[1]))
+            )
+            return jnp.einsum(
+                "spqfb,px,ql,ftz->sxltzb",
+                c,
+                x_features,
+                xi_features,
+                angular_features,
+            ).reshape((int(op.f_size), int(coeff.shape[1])))
+        raise ValueError("moment-space prolongation expects a vector or column matrix")
+
+    correction = RHS1MatrixFreeGalerkinResidualCorrection.from_callbacks(
+        operator=operator,
+        restrict_fn=_restrict,
+        prolong_fn=_prolong,
+        n_coarse=int(n_coarse),
+        regularization=float(regularization),
+        damping=float(damping),
+        basis_batch_size=int(basis_batch_size),
+        max_coarse_size=int(max_coarse_size),
+        max_basis_batch_nbytes=int(max_basis_batch_nbytes),
+    )
+    moment_metadata = {
+        **feature_metadata,
+        "x_moments_requested": int(x_moments),
+        "x_moments_retained": int(n_x_features),
+        "xi_moments_requested": int(xi_moments),
+        "xi_moments_retained": int(n_xi_features),
+    }
+    return correction, moment_metadata
+
+
+def _build_rhs1_coupled_moment_matrix_free_correction(
+    *,
+    op: V3FullSystemOperator,
+    theta_modes: int,
+    zeta_modes: int,
+    x_moments: int,
+    xi_moments: int,
+    max_tail_size: int,
+    max_coarse_size: int,
+    max_basis_batch_nbytes: int,
+    basis_batch_size: int,
+    regularization: float,
+    damping: float,
+) -> tuple[RHS1MatrixFreeGalerkinResidualCorrection, dict[str, int | bool | str]]:
+    """Build a coupled f/tail moment residual equation for the full system."""
+
+    n_species = int(op.n_species)
+    n_x = int(op.n_x)
+    n_xi = int(op.n_xi)
+    n_theta = int(op.n_theta)
+    n_zeta = int(op.n_zeta)
+    f_size = int(op.f_size)
+    total_size = int(op.total_size)
+    phi1_size = int(op.phi1_size)
+    extra_size = int(op.extra_size)
+    tail_size = total_size - f_size
+    x_features_np = _rhs1_polynomial_moment_features(n_points=n_x, n_moments=int(x_moments))
+    xi_features_np = _rhs1_low_legendre_index_features(n_xi=n_xi, n_moments=int(xi_moments))
+    features_requested = _rhs1_lowmode_angular_features(
+        n_theta=n_theta,
+        n_zeta=n_zeta,
+        theta_modes=int(theta_modes),
+        zeta_modes=int(zeta_modes),
+    )
+
+    if tail_size <= int(max_tail_size):
+        tail_indices_np = np.arange(f_size, total_size, dtype=np.int32)
+        tail_policy = "all_tail"
+    elif extra_size > 0:
+        tail_indices_np = np.arange(f_size + phi1_size, total_size, dtype=np.int32)
+        tail_policy = "constraints_only"
+    else:
+        tail_indices_np = np.zeros((0,), dtype=np.int32)
+        tail_policy = "none"
+    tail_count = int(tail_indices_np.size)
+    moment_stride = n_species * int(x_features_np.shape[0]) * int(xi_features_np.shape[0])
+    angular_max = max(1, int(max_coarse_size) - tail_count)
+    capped_features, feature_metadata = _rhs1_cap_lowmode_features(
+        features=features_requested,
+        n_species=n_species,
+        n_x=int(x_features_np.shape[0]),
+        n_xi=int(xi_features_np.shape[0]),
+        max_coarse_size=int(angular_max),
+    )
+    x_features = jnp.asarray(x_features_np, dtype=jnp.float64)
+    xi_features = jnp.asarray(xi_features_np, dtype=jnp.float64)
+    angular_features = jnp.asarray(capped_features, dtype=jnp.float64)
+    tail_indices = jnp.asarray(tail_indices_np, dtype=jnp.int32)
+    n_x_features = int(x_features.shape[0])
+    n_xi_features = int(xi_features.shape[0])
+    n_angular_features = int(angular_features.shape[0])
+    n_f_coarse = n_species * n_x_features * n_xi_features * n_angular_features
+    n_coarse = int(n_f_coarse + tail_count)
+    if n_coarse > int(max_coarse_size):
+        raise MemoryError(
+            "structured f-block coupled moment Schur coarse space too large: "
+            f"{n_coarse} > {int(max_coarse_size)}; reduce moments or raise "
+            "SFINCS_JAX_RHSMODE1_STRUCTURED_FBLOCK_FP_COUPLED_MAX_COARSE"
+        )
+
+    def _restrict(vector: jnp.ndarray) -> jnp.ndarray:
+        arr = jnp.asarray(vector, dtype=jnp.float64)
+        if arr.ndim == 1:
+            f = arr[:f_size].reshape((n_species, n_x, n_xi, n_theta, n_zeta))
+            moments = jnp.einsum(
+                "sxltz,px,ql,ftz->spqf",
+                f,
+                x_features,
+                xi_features,
+                angular_features,
+            ).reshape((n_f_coarse,))
+            tail = arr[tail_indices] if tail_count > 0 else jnp.zeros((0,), dtype=jnp.float64)
+            return jnp.concatenate([moments, tail], axis=0)
+        if arr.ndim == 2:
+            f = arr[:f_size, :].reshape((n_species, n_x, n_xi, n_theta, n_zeta, int(arr.shape[1])))
+            moments = jnp.einsum(
+                "sxltzb,px,ql,ftz->spqfb",
+                f,
+                x_features,
+                xi_features,
+                angular_features,
+            ).reshape((n_f_coarse, int(arr.shape[1])))
+            tail = arr[tail_indices, :] if tail_count > 0 else jnp.zeros((0, int(arr.shape[1])), dtype=jnp.float64)
+            return jnp.concatenate([moments, tail], axis=0)
+        raise ValueError("coupled moment restriction expects a vector or column matrix")
+
+    def _prolong(coefficients: jnp.ndarray) -> jnp.ndarray:
+        coeff = jnp.asarray(coefficients, dtype=jnp.float64)
+        if coeff.ndim == 1:
+            moment_coeff = coeff[:n_f_coarse].reshape(
+                (n_species, n_x_features, n_xi_features, n_angular_features)
+            )
+            f = jnp.einsum(
+                "spqf,px,ql,ftz->sxltz",
+                moment_coeff,
+                x_features,
+                xi_features,
+                angular_features,
+            ).reshape((f_size,))
+            out = jnp.concatenate([f, jnp.zeros((tail_size,), dtype=jnp.float64)], axis=0)
+            if tail_count > 0:
+                out = out.at[tail_indices].set(coeff[n_f_coarse:], unique_indices=True)
+            return out
+        if coeff.ndim == 2:
+            n_cols = int(coeff.shape[1])
+            moment_coeff = coeff[:n_f_coarse, :].reshape(
+                (n_species, n_x_features, n_xi_features, n_angular_features, n_cols)
+            )
+            f = jnp.einsum(
+                "spqfb,px,ql,ftz->sxltzb",
+                moment_coeff,
+                x_features,
+                xi_features,
+                angular_features,
+            ).reshape((f_size, n_cols))
+            out = jnp.concatenate([f, jnp.zeros((tail_size, n_cols), dtype=jnp.float64)], axis=0)
+            if tail_count > 0:
+                out = out.at[tail_indices, :].set(coeff[n_f_coarse:, :], unique_indices=True)
+            return out
+        raise ValueError("coupled moment prolongation expects a vector or column matrix")
+
+    correction = RHS1MatrixFreeGalerkinResidualCorrection.from_callbacks(
+        operator=_RHS1FullSystemMatrixFreeOperatorAdapter(op),
+        restrict_fn=_restrict,
+        prolong_fn=_prolong,
+        n_coarse=int(n_coarse),
+        regularization=float(regularization),
+        damping=float(damping),
+        basis_batch_size=int(basis_batch_size),
+        max_coarse_size=int(max_coarse_size),
+        max_basis_batch_nbytes=int(max_basis_batch_nbytes),
+    )
+    metadata: dict[str, int | bool | str] = {
+        **feature_metadata,
+        "x_moments_requested": int(x_moments),
+        "x_moments_retained": int(n_x_features),
+        "xi_moments_requested": int(xi_moments),
+        "xi_moments_retained": int(n_xi_features),
+        "f_coarse_size": int(n_f_coarse),
+        "tail_size": int(tail_size),
+        "tail_count": int(tail_count),
+        "tail_policy": tail_policy,
+        "max_tail_size": int(max_tail_size),
+        "moment_stride": int(moment_stride),
+    }
+    return correction, metadata
+
+
+def _build_rhs1_tail_matrix_free_correction(
+    *,
+    op: V3FullSystemOperator,
+    max_tail_size: int,
+    max_coarse_size: int,
+    max_basis_batch_nbytes: int,
+    max_action_nbytes: int,
+    basis_batch_size: int,
+    regularization: float,
+    damping: float,
+) -> tuple[RHS1MatrixFreeLeastSquaresResidualCorrection, dict[str, int | str]]:
+    """Build a full-system residual equation that only prolongs tail variables.
+
+    This is a safer companion to the coupled moment Schur candidate: it sees the
+    same full RHSMode=1 operator but refuses to overwrite the FP-radial f-block
+    correction.  It is useful for measuring whether the remaining residual lives
+    primarily in Phi1/constraint/profile-current variables.
+    """
+
+    f_size = int(op.f_size)
+    total_size = int(op.total_size)
+    phi1_size = int(op.phi1_size)
+    extra_size = int(op.extra_size)
+    tail_size = total_size - f_size
+    if tail_size <= int(max_tail_size):
+        tail_indices_np = np.arange(f_size, total_size, dtype=np.int32)
+        tail_policy = "all_tail"
+    elif extra_size > 0:
+        tail_indices_np = np.arange(f_size + phi1_size, total_size, dtype=np.int32)
+        tail_policy = "constraints_only"
+    else:
+        tail_indices_np = np.zeros((0,), dtype=np.int32)
+        tail_policy = "none"
+    tail_count = int(tail_indices_np.size)
+    if tail_count <= 0:
+        raise NotImplementedError("tail-coupled Schur correction requires non-f tail variables")
+    if tail_count > int(max_coarse_size):
+        raise MemoryError(
+            "structured f-block tail-coupled Schur coarse space too large: "
+            f"{tail_count} > {int(max_coarse_size)}; raise "
+            "SFINCS_JAX_RHSMODE1_STRUCTURED_FBLOCK_FP_TAIL_COUPLED_MAX_COARSE "
+            "or reduce selected tail variables"
+        )
+    tail_indices = jnp.asarray(tail_indices_np, dtype=jnp.int32)
+
+    def _prolong(coefficients: jnp.ndarray) -> jnp.ndarray:
+        coeff = jnp.asarray(coefficients, dtype=jnp.float64)
+        if coeff.ndim == 1:
+            out = jnp.zeros((total_size,), dtype=jnp.float64)
+            return out.at[tail_indices].set(coeff, unique_indices=True)
+        if coeff.ndim == 2:
+            out = jnp.zeros((total_size, int(coeff.shape[1])), dtype=jnp.float64)
+            return out.at[tail_indices, :].set(coeff, unique_indices=True)
+        raise ValueError("tail-coupled prolongation expects a vector or column matrix")
+
+    correction = RHS1MatrixFreeLeastSquaresResidualCorrection.from_callbacks(
+        operator=_RHS1FullSystemMatrixFreeOperatorAdapter(op),
+        prolong_fn=_prolong,
+        n_coarse=int(tail_count),
+        regularization=float(regularization),
+        damping=float(damping),
+        basis_batch_size=int(basis_batch_size),
+        max_coarse_size=int(max_coarse_size),
+        max_basis_batch_nbytes=int(max_basis_batch_nbytes),
+        max_action_nbytes=int(max_action_nbytes),
+    )
+    metadata: dict[str, int | str] = {
+        "tail_size": int(tail_size),
+        "tail_count": int(tail_count),
+        "tail_policy": tail_policy,
+        "max_tail_size": int(max_tail_size),
+        "max_action_nbytes": int(max_action_nbytes),
+    }
+    return correction, metadata
+
+
+def _build_rhsmode1_structured_fblock_fp_lowmode_schur_preconditioner(
+    *,
+    op: V3FullSystemOperator,
+    reduce_full: Callable[[jnp.ndarray], jnp.ndarray] | None = None,
+    expand_reduced: Callable[[jnp.ndarray], jnp.ndarray] | None = None,
+) -> Callable[[jnp.ndarray], jnp.ndarray]:
+    """Build an explicit FP-radial plus low-angular Galerkin correction."""
+
+    if getattr(op.fblock, "fp", None) is None and getattr(op.fblock, "fp_phi1", None) is None:
+        raise NotImplementedError("structured f-block FP low-mode Schur preconditioner requires an FP collision term")
+
+    theta_modes = _rhs1_int_env(
+        "SFINCS_JAX_RHSMODE1_STRUCTURED_FBLOCK_FP_LOWMODE_THETA",
+        default=1,
+        minimum=0,
+    )
+    zeta_modes = _rhs1_int_env(
+        "SFINCS_JAX_RHSMODE1_STRUCTURED_FBLOCK_FP_LOWMODE_ZETA",
+        default=1,
+        minimum=0,
+    )
+    max_coarse_size = _rhs1_int_env(
+        "SFINCS_JAX_RHSMODE1_STRUCTURED_FBLOCK_FP_LOWMODE_MAX_COARSE",
+        default=800,
+        minimum=1,
+    )
+    max_basis_nbytes = _rhs1_int_env(
+        "SFINCS_JAX_RHSMODE1_STRUCTURED_FBLOCK_FP_LOWMODE_MAX_BASIS_NBYTES",
+        default=128 * 1024 * 1024,
+        minimum=1,
+    )
+    basis_batch_size = _rhs1_int_env(
+        "SFINCS_JAX_RHSMODE1_STRUCTURED_FBLOCK_FP_LOWMODE_BASIS_BATCH",
+        default=32,
+        minimum=1,
+    )
+    regularization = _rhs1_float_env(
+        "SFINCS_JAX_RHSMODE1_STRUCTURED_FBLOCK_FP_LOWMODE_SCHUR_REG",
+        default=1.0e-10,
+        minimum=0.0,
+    )
+    damping = _rhs1_float_env(
+        "SFINCS_JAX_RHSMODE1_STRUCTURED_FBLOCK_FP_LOWMODE_SCHUR_DAMPING",
+        default=1.0,
+        minimum=0.0,
+    )
+    cache_key = _rhsmode1_structured_fblock_cache_key(
+        op,
+        "fp_lowmode_schur",
+        params=(
+            int(theta_modes),
+            int(zeta_modes),
+            int(max_coarse_size),
+            int(max_basis_nbytes),
+            int(basis_batch_size),
+            float(regularization),
+            float(damping),
+        ),
+    )
+    cached = _RHSMODE1_STRUCTURED_FBLOCK_PRECOND_CACHE.get(cache_key)
+    cache_hit = cached is not None
+    if cached is None:
+        base_preconditioner = _build_rhsmode1_structured_fblock_fp_radial_jacobi_preconditioner(op=op)
+        base_metadata = getattr(base_preconditioner, "_sfincs_jax_structured_fblock_metadata", {})
+        phi1_base = op.phi1_hat_base if getattr(op.fblock, "fp_phi1", None) is not None else None
+        selection = select_structured_rhs1_fblock_operator(op.fblock, phi1_hat_base=phi1_base)
+        if not bool(selection.selected):
+            raise NotImplementedError(
+                f"structured f-block FP low-mode Schur preconditioner unavailable: {selection.reason}"
+            )
+        coarse, feature_metadata = _build_rhs1_lowmode_angular_matrix_free_correction(
+            op=op,
+            operator=selection.assembly.operator,
+            theta_modes=int(theta_modes),
+            zeta_modes=int(zeta_modes),
+            max_coarse_size=int(max_coarse_size),
+            max_basis_batch_nbytes=int(max_basis_nbytes),
+            basis_batch_size=int(basis_batch_size),
+            regularization=float(regularization),
+            damping=float(damping),
+        )
+        metadata = selection.to_dict()
+        metadata["base_preconditioner"] = base_metadata
+        metadata["coarse"] = coarse.to_dict()
+        metadata["coarse_feature_selection"] = feature_metadata
+        metadata["line_kind"] = "fp_radial_plus_low_angular_galerkin"
+        metadata["theta_modes"] = int(theta_modes)
+        metadata["zeta_modes"] = int(zeta_modes)
+        metadata["max_coarse_size"] = int(max_coarse_size)
+        metadata["max_basis_batch_nbytes"] = int(max_basis_nbytes)
+        metadata["basis_batch_size"] = int(basis_batch_size)
+        metadata["regularization"] = float(regularization)
+        metadata["damping"] = float(damping)
+        cached = _RHSMode1StructuredFBlockPrecondCache(
+            operator=selection.assembly.operator,
+            coarse=coarse,
+            base_preconditioner=base_preconditioner,
+            metadata=metadata,
+        )
+        _RHSMODE1_STRUCTURED_FBLOCK_PRECOND_CACHE[cache_key] = cached
+    if cached.base_preconditioner is None or cached.coarse is None:
+        raise RuntimeError("structured f-block FP low-mode cache is incomplete")
+    base_preconditioner = cached.base_preconditioner
+    coarse = cached.coarse
+    operator = cached.operator
+    metadata = dict(cached.metadata)
+    metadata["cache_hit"] = bool(cache_hit)
+
+    f_size = int(op.f_size)
+
+    def _apply_full_unchecked(r_full: jnp.ndarray) -> jnp.ndarray:
+        r_full = jnp.asarray(r_full, dtype=jnp.float64)
+        z0_full = base_preconditioner(r_full)
+        residual_f = r_full[:f_size] - operator.matvec(z0_full[:f_size])
+        z_f = z0_full[:f_size] + coarse.apply(residual_f)
+        return jnp.concatenate([z_f, z0_full[f_size:]], axis=0)
+
+    apply_full = _safe_preconditioner(_apply_full_unchecked)
+    setattr(apply_full, "_sfincs_jax_structured_fblock_metadata", metadata)
+
+    if reduce_full is None or expand_reduced is None:
+        return apply_full
+
+    def _apply_reduced(r_reduced: jnp.ndarray) -> jnp.ndarray:
+        z_full = apply_full(expand_reduced(r_reduced))
+        return reduce_full(z_full)
+
+    setattr(_apply_reduced, "_sfincs_jax_structured_fblock_metadata", metadata)
+    return _apply_reduced
+
+
+def _build_rhsmode1_structured_fblock_fp_moment_schur_preconditioner(
+    *,
+    op: V3FullSystemOperator,
+    reduce_full: Callable[[jnp.ndarray], jnp.ndarray] | None = None,
+    expand_reduced: Callable[[jnp.ndarray], jnp.ndarray] | None = None,
+) -> Callable[[jnp.ndarray], jnp.ndarray]:
+    """Build an explicit FP-radial plus compact moment-space correction."""
+
+    if getattr(op.fblock, "fp", None) is None and getattr(op.fblock, "fp_phi1", None) is None:
+        raise NotImplementedError("structured f-block FP moment Schur preconditioner requires an FP collision term")
+
+    theta_modes = _rhs1_int_env(
+        "SFINCS_JAX_RHSMODE1_STRUCTURED_FBLOCK_FP_MOMENT_THETA",
+        default=1,
+        minimum=0,
+    )
+    zeta_modes = _rhs1_int_env(
+        "SFINCS_JAX_RHSMODE1_STRUCTURED_FBLOCK_FP_MOMENT_ZETA",
+        default=1,
+        minimum=0,
+    )
+    x_moments = _rhs1_int_env(
+        "SFINCS_JAX_RHSMODE1_STRUCTURED_FBLOCK_FP_MOMENT_X",
+        default=2,
+        minimum=1,
+    )
+    xi_moments = _rhs1_int_env(
+        "SFINCS_JAX_RHSMODE1_STRUCTURED_FBLOCK_FP_MOMENT_XI",
+        default=2,
+        minimum=1,
+    )
+    max_coarse_size = _rhs1_int_env(
+        "SFINCS_JAX_RHSMODE1_STRUCTURED_FBLOCK_FP_MOMENT_MAX_COARSE",
+        default=256,
+        minimum=1,
+    )
+    max_basis_nbytes = _rhs1_int_env(
+        "SFINCS_JAX_RHSMODE1_STRUCTURED_FBLOCK_FP_MOMENT_MAX_BASIS_NBYTES",
+        default=32 * 1024 * 1024,
+        minimum=1,
+    )
+    basis_batch_size = _rhs1_int_env(
+        "SFINCS_JAX_RHSMODE1_STRUCTURED_FBLOCK_FP_MOMENT_BASIS_BATCH",
+        default=32,
+        minimum=1,
+    )
+    regularization = _rhs1_float_env(
+        "SFINCS_JAX_RHSMODE1_STRUCTURED_FBLOCK_FP_MOMENT_SCHUR_REG",
+        default=1.0e-10,
+        minimum=0.0,
+    )
+    damping = _rhs1_float_env(
+        "SFINCS_JAX_RHSMODE1_STRUCTURED_FBLOCK_FP_MOMENT_SCHUR_DAMPING",
+        default=1.0,
+        minimum=0.0,
+    )
+    cache_key = _rhsmode1_structured_fblock_cache_key(
+        op,
+        "fp_moment_schur",
+        params=(
+            int(theta_modes),
+            int(zeta_modes),
+            int(x_moments),
+            int(xi_moments),
+            int(max_coarse_size),
+            int(max_basis_nbytes),
+            int(basis_batch_size),
+            float(regularization),
+            float(damping),
+        ),
+    )
+    cached = _RHSMODE1_STRUCTURED_FBLOCK_PRECOND_CACHE.get(cache_key)
+    cache_hit = cached is not None
+    if cached is None:
+        base_preconditioner = _build_rhsmode1_structured_fblock_fp_radial_jacobi_preconditioner(op=op)
+        base_metadata = getattr(base_preconditioner, "_sfincs_jax_structured_fblock_metadata", {})
+        phi1_base = op.phi1_hat_base if getattr(op.fblock, "fp_phi1", None) is not None else None
+        selection = select_structured_rhs1_fblock_operator(op.fblock, phi1_hat_base=phi1_base)
+        if not bool(selection.selected):
+            raise NotImplementedError(
+                f"structured f-block FP moment Schur preconditioner unavailable: {selection.reason}"
+            )
+        coarse, moment_metadata = _build_rhs1_moment_angular_matrix_free_correction(
+            op=op,
+            operator=selection.assembly.operator,
+            theta_modes=int(theta_modes),
+            zeta_modes=int(zeta_modes),
+            x_moments=int(x_moments),
+            xi_moments=int(xi_moments),
+            max_coarse_size=int(max_coarse_size),
+            max_basis_batch_nbytes=int(max_basis_nbytes),
+            basis_batch_size=int(basis_batch_size),
+            regularization=float(regularization),
+            damping=float(damping),
+        )
+
+        metadata = selection.to_dict()
+        metadata["base_preconditioner"] = base_metadata
+        metadata["coarse"] = coarse.to_dict()
+        metadata["coarse_moment_selection"] = moment_metadata
+        metadata["line_kind"] = "fp_radial_plus_low_x_xi_angular_moment_galerkin"
+        metadata["theta_modes"] = int(theta_modes)
+        metadata["zeta_modes"] = int(zeta_modes)
+        metadata["x_moments"] = int(x_moments)
+        metadata["xi_moments"] = int(xi_moments)
+        metadata["max_coarse_size"] = int(max_coarse_size)
+        metadata["max_basis_batch_nbytes"] = int(max_basis_nbytes)
+        metadata["basis_batch_size"] = int(basis_batch_size)
+        metadata["regularization"] = float(regularization)
+        metadata["damping"] = float(damping)
+        cached = _RHSMode1StructuredFBlockPrecondCache(
+            operator=selection.assembly.operator,
+            coarse=coarse,
+            base_preconditioner=base_preconditioner,
+            metadata=metadata,
+        )
+        _RHSMODE1_STRUCTURED_FBLOCK_PRECOND_CACHE[cache_key] = cached
+    if cached.base_preconditioner is None or cached.coarse is None:
+        raise RuntimeError("structured f-block FP moment cache is incomplete")
+    base_preconditioner = cached.base_preconditioner
+    coarse = cached.coarse
+    operator = cached.operator
+    metadata = dict(cached.metadata)
+    metadata["cache_hit"] = bool(cache_hit)
+
+    f_size = int(op.f_size)
+
+    def _apply_full_unchecked(r_full: jnp.ndarray) -> jnp.ndarray:
+        r_full = jnp.asarray(r_full, dtype=jnp.float64)
+        z0_full = base_preconditioner(r_full)
+        residual_f = r_full[:f_size] - operator.matvec(z0_full[:f_size])
+        z_f = z0_full[:f_size] + coarse.apply(residual_f)
+        return jnp.concatenate([z_f, z0_full[f_size:]], axis=0)
+
+    apply_full = _safe_preconditioner(_apply_full_unchecked)
+    setattr(apply_full, "_sfincs_jax_structured_fblock_metadata", metadata)
+
+    if reduce_full is None or expand_reduced is None:
+        return apply_full
+
+    def _apply_reduced(r_reduced: jnp.ndarray) -> jnp.ndarray:
+        z_full = apply_full(expand_reduced(r_reduced))
+        return reduce_full(z_full)
+
+    setattr(_apply_reduced, "_sfincs_jax_structured_fblock_metadata", metadata)
+    return _apply_reduced
+
+
+def _build_rhsmode1_structured_fblock_fp_coupled_moment_schur_preconditioner(
+    *,
+    op: V3FullSystemOperator,
+    reduce_full: Callable[[jnp.ndarray], jnp.ndarray] | None = None,
+    expand_reduced: Callable[[jnp.ndarray], jnp.ndarray] | None = None,
+) -> Callable[[jnp.ndarray], jnp.ndarray]:
+    """Build an FP-radial base plus coupled full-system moment correction."""
+
+    if getattr(op.fblock, "fp", None) is None and getattr(op.fblock, "fp_phi1", None) is None:
+        raise NotImplementedError(
+            "structured f-block FP coupled moment Schur preconditioner requires an FP collision term"
+        )
+
+    theta_modes = _rhs1_int_env(
+        "SFINCS_JAX_RHSMODE1_STRUCTURED_FBLOCK_FP_COUPLED_THETA",
+        default=1,
+        minimum=0,
+    )
+    zeta_modes = _rhs1_int_env(
+        "SFINCS_JAX_RHSMODE1_STRUCTURED_FBLOCK_FP_COUPLED_ZETA",
+        default=1,
+        minimum=0,
+    )
+    x_moments = _rhs1_int_env(
+        "SFINCS_JAX_RHSMODE1_STRUCTURED_FBLOCK_FP_COUPLED_X",
+        default=2,
+        minimum=1,
+    )
+    xi_moments = _rhs1_int_env(
+        "SFINCS_JAX_RHSMODE1_STRUCTURED_FBLOCK_FP_COUPLED_XI",
+        default=2,
+        minimum=1,
+    )
+    max_tail_size = _rhs1_int_env(
+        "SFINCS_JAX_RHSMODE1_STRUCTURED_FBLOCK_FP_COUPLED_MAX_TAIL",
+        default=256,
+        minimum=0,
+    )
+    max_coarse_size = _rhs1_int_env(
+        "SFINCS_JAX_RHSMODE1_STRUCTURED_FBLOCK_FP_COUPLED_MAX_COARSE",
+        default=512,
+        minimum=1,
+    )
+    max_basis_nbytes = _rhs1_int_env(
+        "SFINCS_JAX_RHSMODE1_STRUCTURED_FBLOCK_FP_COUPLED_MAX_BASIS_NBYTES",
+        default=64 * 1024 * 1024,
+        minimum=1,
+    )
+    basis_batch_size = _rhs1_int_env(
+        "SFINCS_JAX_RHSMODE1_STRUCTURED_FBLOCK_FP_COUPLED_BASIS_BATCH",
+        default=32,
+        minimum=1,
+    )
+    regularization = _rhs1_float_env(
+        "SFINCS_JAX_RHSMODE1_STRUCTURED_FBLOCK_FP_COUPLED_SCHUR_REG",
+        default=1.0e-10,
+        minimum=0.0,
+    )
+    damping = _rhs1_float_env(
+        "SFINCS_JAX_RHSMODE1_STRUCTURED_FBLOCK_FP_COUPLED_SCHUR_DAMPING",
+        default=1.0,
+        minimum=0.0,
+    )
+    cache_key = _rhsmode1_structured_fblock_cache_key(
+        op,
+        "fp_coupled_moment_schur",
+        params=(
+            int(theta_modes),
+            int(zeta_modes),
+            int(x_moments),
+            int(xi_moments),
+            int(max_tail_size),
+            int(max_coarse_size),
+            int(max_basis_nbytes),
+            int(basis_batch_size),
+            float(regularization),
+            float(damping),
+        ),
+    )
+    cached = _RHSMODE1_STRUCTURED_FBLOCK_PRECOND_CACHE.get(cache_key)
+    cache_hit = cached is not None
+    if cached is None:
+        base_preconditioner = _build_rhsmode1_structured_fblock_fp_radial_jacobi_preconditioner(op=op)
+        base_metadata = getattr(base_preconditioner, "_sfincs_jax_structured_fblock_metadata", {})
+        coarse, coupled_metadata = _build_rhs1_coupled_moment_matrix_free_correction(
+            op=op,
+            theta_modes=int(theta_modes),
+            zeta_modes=int(zeta_modes),
+            x_moments=int(x_moments),
+            xi_moments=int(xi_moments),
+            max_tail_size=int(max_tail_size),
+            max_coarse_size=int(max_coarse_size),
+            max_basis_batch_nbytes=int(max_basis_nbytes),
+            basis_batch_size=int(basis_batch_size),
+            regularization=float(regularization),
+            damping=float(damping),
+        )
+        metadata = {
+            "selected": True,
+            "reason": "complete",
+            "base_preconditioner": base_metadata,
+            "coarse": coarse.to_dict(),
+            "coarse_coupled_selection": coupled_metadata,
+            "line_kind": "fp_radial_plus_coupled_tail_moment_galerkin",
+            "theta_modes": int(theta_modes),
+            "zeta_modes": int(zeta_modes),
+            "x_moments": int(x_moments),
+            "xi_moments": int(xi_moments),
+            "max_tail_size": int(max_tail_size),
+            "max_coarse_size": int(max_coarse_size),
+            "max_basis_batch_nbytes": int(max_basis_nbytes),
+            "basis_batch_size": int(basis_batch_size),
+            "regularization": float(regularization),
+            "damping": float(damping),
+        }
+        cached = _RHSMode1StructuredFBlockPrecondCache(
+            operator=_RHS1FullSystemMatrixFreeOperatorAdapter(op),
+            coarse=coarse,
+            base_preconditioner=base_preconditioner,
+            metadata=metadata,
+        )
+        _RHSMODE1_STRUCTURED_FBLOCK_PRECOND_CACHE[cache_key] = cached
+    if cached.base_preconditioner is None or cached.coarse is None:
+        raise RuntimeError("structured f-block FP coupled moment cache is incomplete")
+    base_preconditioner = cached.base_preconditioner
+    coarse = cached.coarse
+    metadata = dict(cached.metadata)
+    metadata["cache_hit"] = bool(cache_hit)
+
+    def _apply_full_unchecked(r_full: jnp.ndarray) -> jnp.ndarray:
+        r_full = jnp.asarray(r_full, dtype=jnp.float64)
+        z0_full = base_preconditioner(r_full)
+        residual_full = r_full - apply_v3_full_system_operator_cached(op, z0_full)
+        return z0_full + coarse.apply(residual_full)
+
+    apply_full = _safe_preconditioner(_apply_full_unchecked)
+    setattr(apply_full, "_sfincs_jax_structured_fblock_metadata", metadata)
+
+    if reduce_full is None or expand_reduced is None:
+        return apply_full
+
+    def _apply_reduced(r_reduced: jnp.ndarray) -> jnp.ndarray:
+        z_full = apply_full(expand_reduced(r_reduced))
+        return reduce_full(z_full)
+
+    setattr(_apply_reduced, "_sfincs_jax_structured_fblock_metadata", metadata)
+    return _apply_reduced
+
+
+def _build_rhsmode1_structured_fblock_fp_tail_coupled_schur_preconditioner(
+    *,
+    op: V3FullSystemOperator,
+    reduce_full: Callable[[jnp.ndarray], jnp.ndarray] | None = None,
+    expand_reduced: Callable[[jnp.ndarray], jnp.ndarray] | None = None,
+) -> Callable[[jnp.ndarray], jnp.ndarray]:
+    """Build an FP-radial base plus tail-only full-system residual correction."""
+
+    if getattr(op.fblock, "fp", None) is None and getattr(op.fblock, "fp_phi1", None) is None:
+        raise NotImplementedError(
+            "structured f-block FP tail-coupled Schur preconditioner requires an FP collision term"
+        )
+
+    max_tail_size = _rhs1_int_env(
+        "SFINCS_JAX_RHSMODE1_STRUCTURED_FBLOCK_FP_TAIL_COUPLED_MAX_TAIL",
+        default=256,
+        minimum=0,
+    )
+    max_coarse_size = _rhs1_int_env(
+        "SFINCS_JAX_RHSMODE1_STRUCTURED_FBLOCK_FP_TAIL_COUPLED_MAX_COARSE",
+        default=512,
+        minimum=1,
+    )
+    max_basis_nbytes = _rhs1_int_env(
+        "SFINCS_JAX_RHSMODE1_STRUCTURED_FBLOCK_FP_TAIL_COUPLED_MAX_BASIS_NBYTES",
+        default=64 * 1024 * 1024,
+        minimum=1,
+    )
+    max_action_nbytes = _rhs1_int_env(
+        "SFINCS_JAX_RHSMODE1_STRUCTURED_FBLOCK_FP_TAIL_COUPLED_MAX_ACTION_NBYTES",
+        default=64 * 1024 * 1024,
+        minimum=1,
+    )
+    basis_batch_size = _rhs1_int_env(
+        "SFINCS_JAX_RHSMODE1_STRUCTURED_FBLOCK_FP_TAIL_COUPLED_BASIS_BATCH",
+        default=32,
+        minimum=1,
+    )
+    regularization = _rhs1_float_env(
+        "SFINCS_JAX_RHSMODE1_STRUCTURED_FBLOCK_FP_TAIL_COUPLED_SCHUR_REG",
+        default=1.0e-8,
+        minimum=0.0,
+    )
+    damping = _rhs1_float_env(
+        "SFINCS_JAX_RHSMODE1_STRUCTURED_FBLOCK_FP_TAIL_COUPLED_SCHUR_DAMPING",
+        default=1.0,
+        minimum=0.0,
+    )
+    cache_key = _rhsmode1_structured_fblock_cache_key(
+        op,
+        "fp_tail_coupled_schur",
+        params=(
+            int(max_tail_size),
+            int(max_coarse_size),
+            int(max_basis_nbytes),
+            int(max_action_nbytes),
+            int(basis_batch_size),
+            float(regularization),
+            float(damping),
+        ),
+    )
+    cached = _RHSMODE1_STRUCTURED_FBLOCK_PRECOND_CACHE.get(cache_key)
+    cache_hit = cached is not None
+    if cached is None:
+        base_preconditioner = _build_rhsmode1_structured_fblock_fp_radial_jacobi_preconditioner(op=op)
+        base_metadata = getattr(base_preconditioner, "_sfincs_jax_structured_fblock_metadata", {})
+        coarse, tail_metadata = _build_rhs1_tail_matrix_free_correction(
+            op=op,
+            max_tail_size=int(max_tail_size),
+            max_coarse_size=int(max_coarse_size),
+            max_basis_batch_nbytes=int(max_basis_nbytes),
+            max_action_nbytes=int(max_action_nbytes),
+            basis_batch_size=int(basis_batch_size),
+            regularization=float(regularization),
+            damping=float(damping),
+        )
+        metadata = {
+            "selected": True,
+            "reason": "complete",
+            "base_preconditioner": base_metadata,
+            "coarse": coarse.to_dict(),
+            "coarse_tail_selection": tail_metadata,
+            "line_kind": "fp_radial_plus_tail_coupled_minres",
+            "max_tail_size": int(max_tail_size),
+            "max_coarse_size": int(max_coarse_size),
+            "max_basis_batch_nbytes": int(max_basis_nbytes),
+            "max_action_nbytes": int(max_action_nbytes),
+            "basis_batch_size": int(basis_batch_size),
+            "regularization": float(regularization),
+            "damping": float(damping),
+        }
+        cached = _RHSMode1StructuredFBlockPrecondCache(
+            operator=_RHS1FullSystemMatrixFreeOperatorAdapter(op),
+            coarse=coarse,
+            base_preconditioner=base_preconditioner,
+            metadata=metadata,
+        )
+        _RHSMODE1_STRUCTURED_FBLOCK_PRECOND_CACHE[cache_key] = cached
+    if cached.base_preconditioner is None or cached.coarse is None:
+        raise RuntimeError("structured f-block FP tail-coupled cache is incomplete")
+    base_preconditioner = cached.base_preconditioner
+    coarse = cached.coarse
+    metadata = dict(cached.metadata)
+    metadata["cache_hit"] = bool(cache_hit)
+
+    def _apply_full_unchecked(r_full: jnp.ndarray) -> jnp.ndarray:
+        r_full = jnp.asarray(r_full, dtype=jnp.float64)
+        z0_full = base_preconditioner(r_full)
+        residual_full = r_full - apply_v3_full_system_operator_cached(op, z0_full)
+        return z0_full + coarse.apply(residual_full)
+
+    apply_full = _safe_preconditioner(_apply_full_unchecked)
+    setattr(apply_full, "_sfincs_jax_structured_fblock_metadata", metadata)
+
+    if reduce_full is None or expand_reduced is None:
+        return apply_full
+
+    def _apply_reduced(r_reduced: jnp.ndarray) -> jnp.ndarray:
+        z_full = apply_full(expand_reduced(r_reduced))
+        return reduce_full(z_full)
+
+    setattr(_apply_reduced, "_sfincs_jax_structured_fblock_metadata", metadata)
+    return _apply_reduced
+
+
 def _build_rhs1_preconditioner_from_kind(
     *,
     op: V3FullSystemOperator,
@@ -13457,6 +22007,14 @@ def _build_rhs1_preconditioner_from_kind(
             zeta_schwarz_builder=_build_rhsmode1_zeta_schwarz_preconditioner,
             schur_builder=_build_rhsmode1_schur_preconditioner,
             collision_builder=_build_rhsmode1_collision_preconditioner,
+            structured_fblock_jacobi_builder=_build_rhsmode1_structured_fblock_jacobi_preconditioner,
+            structured_fblock_angular_jacobi_builder=_build_rhsmode1_structured_fblock_angular_jacobi_preconditioner,
+            structured_fblock_xi_angular_jacobi_builder=_build_rhsmode1_structured_fblock_xi_angular_jacobi_preconditioner,
+            structured_fblock_fp_radial_jacobi_builder=_build_rhsmode1_structured_fblock_fp_radial_jacobi_preconditioner,
+            structured_fblock_fp_lowmode_schur_builder=_build_rhsmode1_structured_fblock_fp_lowmode_schur_preconditioner,
+            structured_fblock_fp_moment_schur_builder=_build_rhsmode1_structured_fblock_fp_moment_schur_preconditioner,
+            structured_fblock_fp_coupled_moment_schur_builder=_build_rhsmode1_structured_fblock_fp_coupled_moment_schur_preconditioner,
+            structured_fblock_fp_tail_coupled_schur_builder=_build_rhsmode1_structured_fblock_fp_tail_coupled_schur_preconditioner,
             block_builder=_build_rhsmode1_block_preconditioner,
             compose_preconditioners=_compose_preconditioners,
         ),
@@ -13501,6 +22059,104 @@ def _build_rhs1_strong_preconditioner_full_from_kind(
         dd_overlap_zeta=dd_overlap_zeta,
         adi_sweeps=adi_sweeps,
         dispatch_builder=_build_rhs1_preconditioner_from_kind,
+    )
+
+
+def solve_v3_full_system_structured_csr(
+    *,
+    nml: Namelist,
+    which_rhs: int | None = None,
+    op: V3FullSystemOperator | None = None,
+    x0: jnp.ndarray | None = None,
+    tol: float = 1.0e-10,
+    atol: float = 0.0,
+    restart: int = 80,
+    maxiter: int | None = 400,
+    identity_shift: float = 0.0,
+    phi1_hat_base: jnp.ndarray | None = None,
+    max_csr_nbytes: int | None = None,
+    method: str = "gmres",
+    preconditioner: str | None = "auto",
+    preconditioner_max_schur_size: int = 2048,
+    preconditioner_max_block_inverse_nbytes: int = 64 * 1024 * 1024,
+    active_dof: bool = False,
+    emit: Callable[[int, str], None] | None = None,
+) -> V3LinearSolveResult:
+    """Solve a supported RHSMode=1 system with explicit host CSR Krylov.
+
+    This is an opt-in, non-autodiff route for CLI/runtime studies. It assembles
+    the supported full-system CSR operator without probing, runs SciPy Krylov on
+    the host CSR matrix, and returns the standard v3 solve-result wrapper.
+    """
+
+    if op is None:
+        op = full_system_operator_from_namelist(nml=nml, identity_shift=identity_shift, phi1_hat_base=phi1_hat_base)
+    if which_rhs is not None:
+        op = with_transport_rhs_settings(op, which_rhs=int(which_rhs))
+    rhs = rhs_v3_full_system(op)
+    active_indices = _transport_active_dof_indices(op) if bool(active_dof) else None
+    if emit is not None:
+        active_msg = (
+            f" active_size={int(active_indices.size)}/{int(op.total_size)}"
+            if active_indices is not None
+            else " full_size"
+        )
+        emit(
+            0,
+            "solve_v3_full_system_structured_csr: assembling no-probe host CSR "
+            f"(size={int(op.total_size)}{active_msg} method={method} preconditioner={preconditioner})",
+        )
+    result = solve_structured_rhs1_full_csr(
+        op,
+        rhs,
+        x0=x0,
+        tol=tol,
+        atol=atol,
+        restart=restart,
+        maxiter=maxiter,
+        method=method,
+        preconditioner=preconditioner,
+        preconditioner_max_schur_size=preconditioner_max_schur_size,
+        preconditioner_max_block_inverse_nbytes=preconditioner_max_block_inverse_nbytes,
+        max_csr_nbytes=max_csr_nbytes,
+        active_indices=active_indices,
+    )
+    if emit is not None:
+        emit(
+            0,
+            "solve_v3_full_system_structured_csr: "
+            f"converged={bool(result.converged)} residual={float(result.residual_norm):.3e} "
+            f"solve_s={float(result.solve_s):.3f}",
+        )
+        pc_summary = dict(result.metadata.get("preconditioner", {}) or {})
+        pc_metadata = dict(pc_summary.get("metadata", {}) or {})
+        factor_nbytes = pc_metadata.get("factor_nbytes_actual")
+        if factor_nbytes is None:
+            factor_nbytes = pc_metadata.get("factor_nbytes_estimate")
+        if pc_summary:
+            emit(
+                0,
+                "solve_v3_full_system_structured_csr: "
+                f"pc_kind={pc_summary.get('kind', 'unknown')} "
+                f"pc_selected={bool(pc_summary.get('selected', False))} "
+                f"pc_reason={pc_summary.get('reason', 'unknown')} "
+                f"pc_setup_s={float(pc_summary.get('setup_s', 0.0) or 0.0):.3f} "
+                f"pc_factor_nbytes={factor_nbytes if factor_nbytes is not None else 'na'} "
+                f"pc_permc={pc_metadata.get('permc_spec', 'na')} "
+                f"pc_superlu_permc={pc_metadata.get('superlu_permc_spec', 'na')}",
+            )
+    return V3LinearSolveResult(
+        op=op,
+        rhs=rhs,
+        gmres=GMRESSolveResult(
+            x=jnp.asarray(result.x, dtype=jnp.float64),
+            residual_norm=jnp.asarray(result.residual_norm, dtype=jnp.float64),
+        ),
+        metadata={
+            "solver_path": "structured_full_csr_host_gmres",
+            "structured_full_csr": result.to_dict(),
+            "active_dof": bool(active_dof),
+        },
     )
 
 
@@ -13697,6 +22353,280 @@ def solve_v3_full_system_linear_gmres(
         solve_method_kind_requested in _SPARSE_HOST_XBLOCK_PC_GMRES_SOLVE_METHODS
         and _rhs1_bool_env("SFINCS_JAX_RHSMODE1_XBLOCK_ACTIVE_DOF", default=False)
     )
+    structured_full_csr_explicit_requested = solve_method_kind_requested in _STRUCTURED_FULL_CSR_HOST_SOLVE_METHODS
+    fortran_reduced_auto_env = os.environ.get("SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_PC_AUTO", "").strip().lower()
+    fortran_reduced_auto_enabled = fortran_reduced_auto_env not in {"0", "false", "no", "off"}
+    try:
+        fortran_reduced_auto_min_size = int(
+            os.environ.get("SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_PC_AUTO_MIN_SIZE", "").strip() or 10_000
+        )
+    except ValueError:
+        fortran_reduced_auto_min_size = 10_000
+    fortran_reduced_auto_min_size = max(1, int(fortran_reduced_auto_min_size))
+    fortran_reduced_auto_size = int(op.total_size)
+    fortran_reduced_pc_auto_requested = bool(
+        fortran_reduced_auto_enabled
+        and solve_method_kind_requested in {"auto", "default"}
+        and not bool(_resolve_use_implicit(differentiable=differentiable))
+        and int(op.rhs_mode) == 1
+        and (not bool(op.include_phi1))
+        and int(op.constraint_scheme) == 1
+        and op.fblock.fp is not None
+        and op.fblock.pas is None
+        and abs(float(identity_shift)) == 0.0
+        and int(fortran_reduced_auto_size) >= int(fortran_reduced_auto_min_size)
+    )
+    if fortran_reduced_pc_auto_requested:
+        if emit is not None:
+            emit(
+                0,
+                "solve_v3_full_system_linear_gmres: auto selecting Fortran-reduced "
+                "sparse-PC GMRES for large RHSMode=1 full-FP solve "
+                f"(system_size={int(fortran_reduced_auto_size)} >= {int(fortran_reduced_auto_min_size)})",
+            )
+        auto_fortran_reduced_result = solve_v3_full_system_linear_gmres(
+            nml=nml,
+            which_rhs=which_rhs,
+            op=op,
+            x0=x0,
+            tol=tol,
+            atol=atol,
+            restart=restart,
+            maxiter=maxiter,
+            solve_method="fortran_reduced_pc_gmres",
+            identity_shift=identity_shift,
+            phi1_hat_base=phi1_hat_base,
+            differentiable=False,
+            emit=emit,
+            recycle_basis=recycle_basis,
+        )
+        metadata = dict(getattr(auto_fortran_reduced_result, "metadata", None) or {})
+        metadata.update(
+            {
+                "solve_method_requested": str(solve_method),
+                "requested_solve_method": str(solve_method),
+                "auto_solver_selected": True,
+                "auto_solver_policy": "fortran_reduced_pc_gmres",
+                "auto_solver_size": int(fortran_reduced_auto_size),
+                "auto_solver_min_size": int(fortran_reduced_auto_min_size),
+            }
+        )
+        return replace(auto_fortran_reduced_result, metadata=metadata)
+    structured_full_csr_auto_requested = False
+    if not structured_full_csr_explicit_requested:
+        phys_params_for_structured = nml.group("physicsParameters")
+
+        def _structured_abs_float(key: str) -> float:
+            value = phys_params_for_structured.get(key, phys_params_for_structured.get(key.upper(), None))
+            try:
+                return abs(float(value)) if value is not None else 0.0
+            except (TypeError, ValueError):
+                return 0.0
+
+        structured_eparallel_abs = max(
+            _structured_abs_float("EParallelHat"),
+            _structured_abs_float("eParallelHat"),
+            _structured_abs_float("EPARALLELHAT"),
+        )
+        structured_sharded_axis = _matvec_shard_axis(op)
+        structured_sharded_multidevice = (
+            structured_sharded_axis in {"theta", "zeta"} and jax.device_count() > 1
+        )
+        structured_full_csr_auto_requested = bool(
+            (not _rhs1_bool_env("SFINCS_JAX_RHSMODE1_FORCE_KRYLOV", default=False))
+            and (not structured_sharded_multidevice)
+            and _rhs1_structured_full_csr_auto_allowed_impl(
+                op=op,
+                active_size=int(op.total_size),
+                use_implicit=bool(_resolve_use_implicit(differentiable=differentiable)),
+                solve_method_kind=solve_method_kind_requested,
+                backend=str(jax.default_backend()),
+                eparallel_abs=float(structured_eparallel_abs),
+            )
+        )
+    if structured_full_csr_auto_requested:
+        if emit is not None:
+            emit(
+                0,
+                "solve_v3_full_system_linear_gmres: auto trying structured full CSR host solve",
+            )
+        try:
+            auto_structured_result = solve_v3_full_system_linear_gmres(
+                nml=nml,
+                which_rhs=which_rhs,
+                op=op,
+                x0=x0,
+                tol=tol,
+                atol=atol,
+                restart=restart,
+                maxiter=maxiter,
+                solve_method="structured_full_csr",
+                identity_shift=identity_shift,
+                phi1_hat_base=phi1_hat_base,
+                differentiable=False,
+                emit=emit,
+                recycle_basis=recycle_basis,
+            )
+        except RuntimeError as exc:
+            if emit is not None:
+                emit(
+                    1,
+                    "solve_v3_full_system_linear_gmres: auto structured full CSR skipped "
+                    f"({exc}); falling back to matrix-free policy",
+                )
+        else:
+            metadata = dict(getattr(auto_structured_result, "metadata", None) or {})
+            accepted = bool(metadata.get("accepted_converged", False))
+            if accepted:
+                metadata.update(
+                    {
+                        "solve_method_requested": str(solve_method),
+                        "requested_solve_method": str(solve_method),
+                        "auto_solver_selected": True,
+                        "auto_solver_policy": "structured_full_csr",
+                    }
+                )
+                return replace(auto_structured_result, metadata=metadata)
+            if emit is not None:
+                residual = metadata.get("reported_residual_norm", auto_structured_result.gmres.residual_norm)
+                emit(
+                    1,
+                    "solve_v3_full_system_linear_gmres: auto structured full CSR did not converge "
+                    f"(residual={float(residual):.3e}); falling back to matrix-free policy",
+                )
+    structured_full_csr_requested = bool(structured_full_csr_explicit_requested)
+    if structured_full_csr_requested:
+        if differentiable is True:
+            raise ValueError(
+                "solve_method='structured_csr' is host-only/non-differentiable; "
+                "use differentiable=False or choose a JAX-native solve method."
+            )
+        if int(op.rhs_mode) != 1:
+            raise ValueError("solve_method='structured_csr' is only implemented for RHSMode=1 full-system solves.")
+
+        def _env_int_local(name: str, default: int) -> int:
+            try:
+                return int(os.environ.get(name, "").strip() or int(default))
+            except ValueError:
+                return int(default)
+
+        def _env_float_local(name: str, default: float) -> float:
+            try:
+                return float(os.environ.get(name, "").strip() or float(default))
+            except ValueError:
+                return float(default)
+
+        csr_max_mb = _env_float_local("SFINCS_JAX_RHS1_FULL_CSR_MAX_MB", 1024.0)
+        pc_max_mb = _env_float_local("SFINCS_JAX_RHS1_FULL_CSR_PRECONDITIONER_MAX_MB", 128.0)
+        pc_kind = os.environ.get("SFINCS_JAX_RHS1_FULL_CSR_PRECONDITIONER", "auto").strip() or "auto"
+        pc_schur_max = _env_int_local("SFINCS_JAX_RHS1_FULL_CSR_PRECONDITIONER_MAX_SCHUR_SIZE", 2048)
+        structured_krylov_env = os.environ.get("SFINCS_JAX_RHS1_FULL_CSR_KRYLOV", "").strip().lower()
+        structured_krylov_default = "direct" if abs(float(identity_shift)) <= 0.0 else "gmres"
+        structured_krylov = structured_krylov_env or structured_krylov_default
+        active_dof_env = os.environ.get("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_DOF", "").strip().lower()
+        if active_dof_env in {"1", "true", "yes", "on", "active"}:
+            structured_active_dof = True
+        elif active_dof_env in {"0", "false", "no", "off", "full"}:
+            structured_active_dof = False
+        else:
+            structured_active_dof = structured_krylov in {"direct", "splu", "sparse_direct"}
+        if emit is not None:
+            emit(
+                0,
+                "solve_v3_full_system_linear_gmres: using structured full CSR host solve "
+                f"(preconditioner={pc_kind} csr_max_mb={csr_max_mb:.3g} pc_max_mb={pc_max_mb:.3g} "
+                f"active_dof={structured_active_dof})",
+            )
+        structured_result = solve_v3_full_system_structured_csr(
+            nml=nml,
+            which_rhs=None,
+            op=op,
+            x0=x0,
+            tol=tol,
+            atol=atol,
+            restart=restart,
+            maxiter=maxiter,
+            identity_shift=identity_shift,
+            phi1_hat_base=phi1_hat_base,
+            max_csr_nbytes=int(max(0.0, float(csr_max_mb)) * 1024.0 * 1024.0),
+            method=structured_krylov,
+            preconditioner=pc_kind,
+            preconditioner_max_schur_size=max(1, int(pc_schur_max)),
+            preconditioner_max_block_inverse_nbytes=int(max(0.0, float(pc_max_mb)) * 1024.0 * 1024.0),
+            active_dof=bool(structured_active_dof),
+            emit=emit,
+        )
+        structured_metadata = dict(structured_result.metadata or {})
+        structured_csr_metadata = structured_metadata.get("structured_full_csr", {})
+        if not isinstance(structured_csr_metadata, dict):
+            structured_csr_metadata = {}
+        structured_solve_metadata = structured_csr_metadata.get("metadata", {})
+        if not isinstance(structured_solve_metadata, dict):
+            structured_solve_metadata = {}
+        structured_selection = structured_csr_metadata.get("selection", {})
+        if not isinstance(structured_selection, dict):
+            structured_selection = {}
+        structured_selection_metadata = structured_selection.get("metadata", {})
+        if not isinstance(structured_selection_metadata, dict):
+            structured_selection_metadata = {}
+        structured_preconditioner = structured_solve_metadata.get("preconditioner", {})
+        if not isinstance(structured_preconditioner, dict):
+            structured_preconditioner = {}
+        structured_preconditioner_metadata = structured_preconditioner.get("metadata", {})
+        if not isinstance(structured_preconditioner_metadata, dict):
+            structured_preconditioner_metadata = {}
+        residual_norm_structured = float(structured_csr_metadata.get("residual_norm", structured_result.gmres.residual_norm))
+        target_structured = float(structured_solve_metadata.get("target", max(float(atol), float(tol) * float(rhs_norm))))
+        converged_structured = bool(structured_csr_metadata.get("converged", residual_norm_structured <= target_structured))
+        setup_s_structured = float(structured_preconditioner.get("setup_s", 0.0) or 0.0)
+        solve_s_structured = float(structured_csr_metadata.get("solve_s", 0.0) or 0.0)
+        direct_factor_s = structured_solve_metadata.get("factor_s", None)
+        direct_factor_nbytes = structured_solve_metadata.get("factor_nbytes_actual", None)
+        factor_nbytes = structured_preconditioner_metadata.get(
+            "factor_nbytes_actual",
+            structured_preconditioner_metadata.get("block_inverse_nbytes_actual", direct_factor_nbytes),
+        )
+        structured_metadata.update(
+            {
+                "solver_path": "structured_full_csr_host_gmres",
+                "solver_kind": "structured_full_csr",
+                "solve_method_requested": str(solve_method),
+                "requested_solve_method": str(solve_method),
+                "differentiable": False,
+                "residual_kind": "true_residual",
+                "accepted_converged": bool(converged_structured),
+                "acceptance_criterion": "true_residual",
+                "reported_residual_norm": float(residual_norm_structured),
+                "iterations": len(tuple(structured_csr_metadata.get("residual_history", ()) or ())),
+                "info_code": int(structured_csr_metadata.get("info", 0)),
+                "setup_s": setup_s_structured,
+                "solve_s": solve_s_structured,
+                "elapsed_s": setup_s_structured + solve_s_structured,
+                "csr_nnz": int(structured_selection_metadata.get("nnz", structured_solve_metadata.get("matrix_nnz", 0)) or 0),
+                "csr_operator_nbytes": int(structured_selection_metadata.get("csr_nbytes_actual", 0) or 0),
+                "preconditioner_kind": str(structured_preconditioner.get("kind", pc_kind)),
+                "sparse_pc_factor_nbytes_estimate": None if factor_nbytes is None else int(factor_nbytes),
+                "direct_factor_s": None if direct_factor_s is None else float(direct_factor_s),
+                "direct_factor_nbytes_actual": None if direct_factor_nbytes is None else int(direct_factor_nbytes),
+                "structured_active_dof": bool(structured_solve_metadata.get("active_dof", False)),
+                "structured_active_size": int(structured_solve_metadata.get("active_size", 0) or 0),
+                "structured_full_size": int(structured_solve_metadata.get("full_size", 0) or 0),
+                "structured_full_csr_env": {
+                    "csr_max_mb": float(csr_max_mb),
+                    "preconditioner": str(pc_kind),
+                    "preconditioner_max_mb": float(pc_max_mb),
+                    "preconditioner_max_schur_size": int(pc_schur_max),
+                    "krylov": str(structured_krylov),
+                    "active_dof": bool(structured_active_dof),
+                },
+            }
+        )
+        return V3LinearSolveResult(
+            op=structured_result.op,
+            rhs=structured_result.rhs,
+            gmres=structured_result.gmres,
+            metadata=structured_metadata,
+        )
 
     recycle_k_env = os.environ.get("SFINCS_JAX_RHSMODE1_RECYCLE_K", "").strip()
     try:
@@ -13852,6 +22782,7 @@ def solve_v3_full_system_linear_gmres(
 
     preconditioner_species = _precond_opt_int("PRECONDITIONER_SPECIES", 1)
     preconditioner_x = _precond_opt_int("PRECONDITIONER_X", 1)
+    preconditioner_x_min_l = _precond_opt_int("PRECONDITIONER_X_MIN_L", 0)
     preconditioner_xi = _precond_opt_int("PRECONDITIONER_XI", 1)
     full_precond_requested = (
         preconditioner_species == 0 and preconditioner_x == 0 and preconditioner_xi == 0
@@ -13892,6 +22823,25 @@ def solve_v3_full_system_linear_gmres(
     active_size = int(op.total_size)
     pas_tz_guarded_correction_metadata: dict[str, object] = {}
     rhsmode1_general_metadata: dict[str, object] = {}
+
+    def _record_structured_fblock_preconditioner_metadata(precond: Callable[[jnp.ndarray], jnp.ndarray]) -> None:
+        metadata = getattr(precond, "_sfincs_jax_structured_fblock_metadata", None)
+        if not isinstance(metadata, dict):
+            return
+        assembly = metadata.get("assembly", {})
+        if not isinstance(assembly, dict):
+            assembly = {}
+        rhsmode1_general_metadata.update(
+            {
+                "structured_fblock_preconditioner_enabled": True,
+                "structured_fblock_preconditioner_selected": bool(metadata.get("selected", False)),
+                "structured_fblock_preconditioner_reason": str(metadata.get("reason", "")),
+                "structured_fblock_preconditioner_nnz_blocks": int(assembly.get("nnz_blocks", 0) or 0),
+                "structured_fblock_preconditioner_data_nbytes": int(assembly.get("data_nbytes", 0) or 0),
+                "structured_fblock_preconditioner_metadata": metadata,
+            }
+        )
+
     cpu_large_xblock_shortcut = False
     explicit_fp_xblock_seed_used = False
     active_dof_state = build_rhs1_active_dof_state(
@@ -14002,6 +22952,12 @@ def solve_v3_full_system_linear_gmres(
         )
     except ValueError:
         pas_large_fastpath_min = 80000
+    try:
+        pas_large_fastpath_max = int(
+            os.environ.get("SFINCS_JAX_PAS_LARGE_BICGSTAB_FASTPATH_MAX", "").strip() or 300_000
+        )
+    except ValueError:
+        pas_large_fastpath_max = 300_000
     pas_large_fastpath_auto = pas_large_fastpath_env in {"", "auto"}
     pas_large_fastpath_on = pas_large_fastpath_env in {"1", "true", "yes", "on"}
     pas_large_fastpath_off = pas_large_fastpath_env in {"0", "false", "no", "off"}
@@ -14013,6 +22969,7 @@ def solve_v3_full_system_linear_gmres(
         and int(op.n_species) == 1
         and int(op.n_zeta) == 1
         and int(active_size) >= max(1, int(pas_large_fastpath_min))
+        and (int(pas_large_fastpath_max) <= 0 or int(active_size) <= int(pas_large_fastpath_max))
     )
 
     if int(op.rhs_mode) == 1 and str(solve_method).strip().lower() in {"auto", "default"}:
@@ -14171,6 +23128,9 @@ def solve_v3_full_system_linear_gmres(
         )
         tokamak_fp_pc = bool(tokamak_fp_er_pc or tokamak_fp_noer_pc)
         xblock_sparse_pc = solve_method_kind_explicit in _SPARSE_HOST_XBLOCK_PC_GMRES_SOLVE_METHODS
+        fortran_reduced_sparse_pc = (
+            solve_method_kind_explicit in _SPARSE_HOST_FORTRAN_REDUCED_PC_GMRES_SOLVE_METHODS
+        )
         sparse_pc_active_env = os.environ.get("SFINCS_JAX_RHSMODE1_SPARSE_PC_ACTIVE_DOF", "").strip().lower()
         sparse_pc_active_forced_on = sparse_pc_active_env in {"1", "true", "t", "yes", "on", ".true.", ".t."}
         sparse_pc_active_forced_off = sparse_pc_active_env in {"0", "false", "f", "no", "off", ".false.", ".f."}
@@ -14184,7 +23144,7 @@ def solve_v3_full_system_linear_gmres(
                 sparse_pc_active_forced_on
                 or (
                     sparse_pc_active_auto
-                    and (tokamak_pas_er_pc or tokamak_pas_noer_pc)
+                    and (tokamak_pas_er_pc or tokamak_pas_noer_pc or fortran_reduced_sparse_pc)
                 )
             )
             and (not sparse_pc_active_forced_off)
@@ -19401,6 +28361,18 @@ def solve_v3_full_system_linear_gmres(
                         f"ratio={float(ratio):.6e} elapsed_s={sparse_timer.elapsed_s():.3f}",
                     )
 
+            def _host_krylov_progress_callback(iteration: int, residual_norm: float) -> None:
+                if emit is None or progress_every <= 0:
+                    return
+                if int(iteration) % int(progress_every) != 0:
+                    return
+                emit(
+                    1,
+                    "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
+                    f"iters={int(iteration)} ksp_residual={float(residual_norm):.6e} "
+                    f"elapsed_s={sparse_timer.elapsed_s():.3f}",
+                )
+
             device_krylov_iterations: int | None = None
             device_krylov_estimated_matvecs: int | None = None
             if xblock_krylov_method == "lgmres":
@@ -19569,6 +28541,7 @@ def solve_v3_full_system_linear_gmres(
                     restart=pc_restart,
                     maxiter=pc_maxiter,
                     precondition_side=precondition_side,
+                    progress_callback=_host_krylov_progress_callback,
                 )
             solve_s = (sparse_timer.elapsed_s() - solve_start_s) + float(xblock_side_probe_s) + float(probe_coarse_s)
             x_solution_np = np.asarray(x_np, dtype=np.float64)
@@ -19648,6 +28621,7 @@ def solve_v3_full_system_linear_gmres(
                     restart=pc_restart,
                     maxiter=pc_maxiter,
                     precondition_side=precondition_side,
+                    progress_callback=_host_krylov_progress_callback,
                 )
                 solve_s += sparse_timer.elapsed_s() - fallback_start_s
                 xblock_krylov_method = "gmres"
@@ -21112,34 +30086,916 @@ def solve_v3_full_system_linear_gmres(
             assert sparse_pc_full_to_active_jnp is not None
             return expand_reduced_with_map(v_vec, sparse_pc_full_to_active_jnp)
 
+        if fortran_reduced_sparse_pc:
+            op_pc = _build_rhsmode1_preconditioner_operator_fortran_reduced(
+                op,
+                preconditioner_x=preconditioner_x,
+                preconditioner_xi=preconditioner_xi,
+                preconditioner_species=preconditioner_species,
+                preconditioner_x_min_l=preconditioner_x_min_l,
+            )
+            sparse_pc_preconditioner_operator = "fortran_reduced_global"
+            pattern_source_op = op_pc
+            if emit is not None:
+                emit(
+                    1,
+                    "solve_v3_full_system_linear_gmres: fortran_reduced_pc_gmres "
+                    "using global angular-coupled RHSMode=1 preconditioner operator "
+                    f"(preconditioner_x={int(preconditioner_x)} "
+                    f"preconditioner_x_min_L={int(preconditioner_x_min_l)} "
+                    f"preconditioner_xi={int(preconditioner_xi)} "
+                    f"preconditioner_species={int(preconditioner_species)})",
+                )
+        else:
+            op_pc = _build_rhsmode1_preconditioner_operator_point(op)
+            sparse_pc_preconditioner_operator = "point"
+            pattern_source_op = op
+
+        fortran_reduced_backend_raw = (
+            os.environ.get("SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_PC_BACKEND", "")
+            .strip()
+            .lower()
+            .replace("-", "_")
+        )
+        fortran_reduced_xblock_min_env = (
+            os.environ.get("SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_XBLOCK_MIN_SIZE", "").strip()
+        )
+        try:
+            fortran_reduced_xblock_min_size = (
+                int(fortran_reduced_xblock_min_env) if fortran_reduced_xblock_min_env else 100000
+            )
+        except ValueError:
+            fortran_reduced_xblock_min_size = 100000
+        fortran_reduced_xblock_min_size = max(1, int(fortran_reduced_xblock_min_size))
+        fortran_reduced_backend_ignored_env = False
+        direct_tail_pc_env_for_backend = (
+            os.environ.get("SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_PRECONDITIONER", "")
+            .strip()
+            .lower()
+            .replace("-", "_")
+        )
+        direct_tail_pc_explicit_for_backend = direct_tail_pc_env_for_backend not in {
+            "",
+            "auto",
+            "active_auto",
+            "structured",
+            "factor",
+            "host_factor",
+            "legacy",
+            "default",
+        }
+        direct_tail_structured_pc_required_for_backend = _rhs1_bool_env(
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_STRUCTURED_PC_REQUIRED",
+            default=bool(direct_tail_pc_explicit_for_backend),
+        )
+        direct_tail_default_for_backend = bool(
+            fortran_reduced_sparse_pc
+            and int(sparse_pc_linear_size) >= 100000
+            and int(op.rhs_mode) == 1
+            and int(op.constraint_scheme) == 1
+            and int(op.phi1_size) == 0
+        )
+        direct_tail_enabled_for_backend = _rhs1_bool_env(
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_CONSTRAINT_TAIL",
+            default=direct_tail_default_for_backend,
+        )
+        direct_tail_structured_pc_forces_global_backend = bool(
+            fortran_reduced_sparse_pc
+            and direct_tail_enabled_for_backend
+            and direct_tail_structured_pc_required_for_backend
+            and (
+                direct_tail_pc_explicit_for_backend
+                or direct_tail_pc_env_for_backend in {"auto", "active_auto", "structured"}
+                or direct_tail_default_for_backend
+            )
+            and int(op.rhs_mode) == 1
+            and int(op.constraint_scheme) == 1
+            and int(op.phi1_size) == 0
+        )
+        direct_tail_auto_forces_global_backend = _rhs1_bool_env(
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_AUTO_FORCES_GLOBAL",
+            default=True,
+        )
+        direct_tail_auto_structured_pc_forces_global_backend = bool(
+            fortran_reduced_sparse_pc
+            and direct_tail_enabled_for_backend
+            and bool(direct_tail_auto_forces_global_backend)
+            and (
+                direct_tail_pc_env_for_backend in {"", "auto", "active_auto", "structured"}
+                or direct_tail_default_for_backend
+            )
+            and int(op.rhs_mode) == 1
+            and int(op.constraint_scheme) == 1
+            and int(op.phi1_size) == 0
+        )
+        if fortran_reduced_backend_raw in {"xblock", "x_block", "local_xblock", "block", "blocked"}:
+            fortran_reduced_sparse_pc_backend = "xblock"
+            fortran_reduced_sparse_pc_backend_reason = "env"
+        elif fortran_reduced_backend_raw in {"global", "monolithic", "csr", "full"}:
+            fortran_reduced_sparse_pc_backend = "global"
+            fortran_reduced_sparse_pc_backend_reason = "env"
+        else:
+            fortran_reduced_backend_ignored_env = bool(fortran_reduced_backend_raw not in {"", "auto"})
+            if direct_tail_structured_pc_forces_global_backend:
+                fortran_reduced_sparse_pc_backend = "global"
+                fortran_reduced_sparse_pc_backend_reason = "required_direct_tail_structured_pc"
+            elif direct_tail_auto_structured_pc_forces_global_backend:
+                fortran_reduced_sparse_pc_backend = "global"
+                fortran_reduced_sparse_pc_backend_reason = "auto_direct_tail_structured_pc"
+            else:
+                auto_xblock_backend = bool(
+                    fortran_reduced_sparse_pc
+                    and int(sparse_pc_linear_size) >= int(fortran_reduced_xblock_min_size)
+                    and int(op.rhs_mode) == 1
+                    and (not bool(op.include_phi1))
+                    and op.fblock.fp is not None
+                    and op.fblock.pas is None
+                )
+                fortran_reduced_sparse_pc_backend = "xblock" if auto_xblock_backend else "global"
+                fortran_reduced_sparse_pc_backend_reason = (
+                    f"auto_large_full_fp_size>={int(fortran_reduced_xblock_min_size)}"
+                    if auto_xblock_backend
+                    else "auto_global"
+                )
+        if fortran_reduced_backend_ignored_env and emit is not None:
+            emit(
+                1,
+                "solve_v3_full_system_linear_gmres: ignoring unknown "
+                "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_PC_BACKEND="
+                f"{fortran_reduced_backend_raw!r}; using {fortran_reduced_sparse_pc_backend}",
+            )
+
+        if bool(fortran_reduced_sparse_pc) and str(fortran_reduced_sparse_pc_backend) == "xblock":
+            if op_pc.fblock.fp is None or op_pc.fblock.pas is not None:
+                raise NotImplementedError(
+                    "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_PC_BACKEND=xblock currently targets "
+                    "full-FP RHSMode=1 systems."
+                )
+
+            def _env_float_with_fallback(names: tuple[str, ...], default: float) -> float:
+                for name in names:
+                    raw = os.environ.get(name, "").strip()
+                    if not raw:
+                        continue
+                    try:
+                        return float(raw)
+                    except ValueError:
+                        return float(default)
+                return float(default)
+
+            xblock_drop_tol = _env_float_with_fallback(
+                (
+                    "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_XBLOCK_PC_DROP_TOL",
+                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_DROP_TOL",
+                ),
+                0.0,
+            )
+            xblock_drop_rel = _env_float_with_fallback(
+                (
+                    "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_XBLOCK_PC_DROP_REL",
+                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_DROP_REL",
+                ),
+                1.0e-8,
+            )
+            xblock_ilu_drop_tol = _env_float_with_fallback(
+                (
+                    "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_XBLOCK_PC_ILU_DROP_TOL",
+                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_ILU_DROP_TOL",
+                ),
+                1.0e-4,
+            )
+            xblock_fill_factor = _env_float_with_fallback(
+                (
+                    "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_XBLOCK_PC_FILL_FACTOR",
+                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_FILL_FACTOR",
+                ),
+                10.0,
+            )
+            xblock_preconditioner_xi = int(preconditioner_xi)
+            promote_xi_raw = (
+                os.environ.get("SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_XBLOCK_PROMOTE_XI", "1")
+                .strip()
+                .lower()
+            )
+            promote_xi = promote_xi_raw not in {"0", "false", "f", "no", "off", ".false.", ".f."}
+            if xblock_preconditioner_xi == 0 and bool(promote_xi):
+                xblock_preconditioner_xi = 1
+                if emit is not None:
+                    emit(
+                        1,
+                        "solve_v3_full_system_linear_gmres: fortran_reduced_pc_gmres "
+                        "promoting x-block backend preconditioner_xi 0 -> 1 for stronger FP block factors",
+                    )
+            force_assembled_host_fp = _rhsmode1_fp_xblock_assembled_host_allowed(
+                op=op_pc,
+                preconditioner_species=preconditioner_species,
+                preconditioner_xi=xblock_preconditioner_xi,
+                use_implicit=False,
+                active_size=int(sparse_pc_linear_size),
+            )
+            if emit is not None:
+                emit(
+                    1,
+                    "solve_v3_full_system_linear_gmres: fortran_reduced_pc_gmres "
+                    "using x-block backend instead of monolithic CSR factor "
+                    f"(reason={fortran_reduced_sparse_pc_backend_reason} "
+                    f"size={int(sparse_pc_linear_size)} "
+                    f"preconditioner_xi={int(xblock_preconditioner_xi)} "
+                    f"assembled_host_fp={bool(force_assembled_host_fp)})",
+                )
+            factor_start_s = sparse_timer.elapsed_s()
+            precond_xblock = _build_rhsmode1_xblock_tz_sparse_preconditioner(
+                op=op_pc,
+                reduce_full=_sparse_pc_reduce_full,
+                expand_reduced=_sparse_pc_expand_reduced,
+                build_jax_factors=False,
+                preconditioner_species=preconditioner_species,
+                preconditioner_xi=xblock_preconditioner_xi,
+                drop_tol=float(xblock_drop_tol),
+                drop_rel=float(xblock_drop_rel),
+                ilu_drop_tol=float(xblock_ilu_drop_tol),
+                fill_factor=float(xblock_fill_factor),
+                force_assembled_host_fp=bool(force_assembled_host_fp),
+                emit=emit,
+            )
+            pc_factor_s = sparse_timer.elapsed_s() - factor_start_s
+            setup_s = sparse_timer.elapsed_s()
+
+            side_env = os.environ.get("SFINCS_JAX_GMRES_PRECONDITION_SIDE", "").strip().lower()
+            precondition_side = side_env if side_env in {"left", "right", "none"} else "left"
+            pc_form = os.environ.get("SFINCS_JAX_RHSMODE1_SPARSE_PC_FORM", "").strip().lower()
+            if pc_form not in {"", "scipy_left", "scipy", "explicit_left", "petsc_left"}:
+                pc_form = ""
+            pc_form = pc_form or "scipy_left"
+            xblock_krylov_method = (
+                os.environ.get("SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_XBLOCK_KRYLOV", "gmres")
+                .strip()
+                .lower()
+                .replace("-", "_")
+            )
+            if xblock_krylov_method in {"lgmres_scipy"}:
+                xblock_krylov_method = "lgmres"
+            elif xblock_krylov_method in {"gcrot", "gcrotmk_scipy"}:
+                xblock_krylov_method = "gcrotmk"
+            elif xblock_krylov_method in {"bicgstab_scipy", "bi_cgstab"}:
+                xblock_krylov_method = "bicgstab"
+            elif xblock_krylov_method not in {"gmres", "lgmres", "gcrotmk", "bicgstab"}:
+                if emit is not None:
+                    emit(
+                        1,
+                        "solve_v3_full_system_linear_gmres: fortran_reduced_pc_gmres xblock "
+                        "ignoring unknown SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_XBLOCK_KRYLOV="
+                        f"{xblock_krylov_method!r}; using gmres",
+                    )
+                xblock_krylov_method = "gmres"
+            progress_every_env = os.environ.get("SFINCS_JAX_SPARSE_PC_PROGRESS_EVERY", "").strip()
+            try:
+                progress_every = int(progress_every_env) if progress_every_env else 25
+            except ValueError:
+                progress_every = 25
+            progress_every = max(0, int(progress_every))
+            mv_count = 0
+
+            def _mv_true_no_count(v: jnp.ndarray) -> jnp.ndarray:
+                x_full = _sparse_pc_expand_reduced(jnp.asarray(v, dtype=rhs.dtype))
+                y_full = apply_v3_full_system_operator_cached(op, x_full)
+                return _sparse_pc_reduce_full(y_full)
+
+            def _mv_true(v: jnp.ndarray) -> jnp.ndarray:
+                nonlocal mv_count
+                mv_count += 1
+                if emit is not None and progress_every > 0 and mv_count % progress_every == 0:
+                    emit(
+                        1,
+                        "solve_v3_full_system_linear_gmres: fortran_reduced_pc_gmres xblock "
+                        f"matvecs={int(mv_count)} elapsed_s={sparse_timer.elapsed_s():.3f}",
+                    )
+                return _mv_true_no_count(v)
+
+            def _precond_xblock(v: jnp.ndarray) -> jnp.ndarray:
+                return jnp.asarray(precond_xblock(jnp.asarray(v, dtype=rhs.dtype)), dtype=jnp.float64)
+
+            precond_xblock_krylov = _precond_xblock
+            moment_schur_enabled = _rhs1_bool_env(
+                "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_XBLOCK_MOMENT_SCHUR",
+                default=False,
+            )
+            moment_schur_built = False
+            moment_schur_used = False
+            moment_schur_reason: str | None = None
+            moment_schur_metadata: dict[str, object] = {}
+            moment_schur_stats = {"applies": 0, "base_applies": 0}
+            moment_schur_probe_residual_before: float | None = None
+            moment_schur_probe_residual_after: float | None = None
+            moment_schur_probe_improvement_ratio: float | None = None
+            if bool(moment_schur_enabled) and precondition_side != "none":
+                moment_schur_start_s = sparse_timer.elapsed_s()
+                moment_schur_rcond = _rhs1_float_env(
+                    "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_XBLOCK_MOMENT_SCHUR_RCOND",
+                    default=_rhs1_float_env(
+                        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_MOMENT_SCHUR_RCOND",
+                        default=1.0e-12,
+                        minimum=0.0,
+                    ),
+                    minimum=0.0,
+                )
+                moment_schur_probe_enabled = _rhs1_bool_env(
+                    "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_XBLOCK_MOMENT_SCHUR_PROBE",
+                    default=False,
+                )
+                moment_schur_probe_min_improvement = _rhs1_float_env(
+                    "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_XBLOCK_MOMENT_SCHUR_MIN_IMPROVEMENT",
+                    default=0.0,
+                    minimum=0.0,
+                )
+                if emit is not None:
+                    emit(
+                        0,
+                        "solve_v3_full_system_linear_gmres: fortran_reduced_pc_gmres xblock "
+                        "constraint1 moment-Schur build start",
+                    )
+                try:
+                    base_precond_before_moment_schur = precond_xblock_krylov
+                    moment_schur_candidate, moment_schur_metadata, moment_schur_stats = (
+                        _build_rhs1_xblock_constraint1_moment_schur_preconditioner(
+                            op=op,
+                            base_preconditioner=base_precond_before_moment_schur,
+                            reduce_full=_sparse_pc_reduce_full if sparse_pc_use_active_dof else None,
+                            expand_reduced=_sparse_pc_expand_reduced if sparse_pc_use_active_dof else None,
+                            rcond=moment_schur_rcond,
+                            emit=emit,
+                        )
+                    )
+                    moment_schur_built = True
+                    moment_schur_used = True
+                    moment_schur_reason = "built"
+                    if bool(moment_schur_probe_enabled):
+                        seed_candidate = jnp.asarray(
+                            moment_schur_candidate(sparse_pc_rhs),
+                            dtype=jnp.float64,
+                        )
+                        seed_residual = sparse_pc_rhs - jnp.asarray(
+                            _mv_true_no_count(seed_candidate),
+                            dtype=jnp.float64,
+                        )
+                        moment_schur_probe_residual_after = float(jnp.linalg.norm(seed_residual))
+                        moment_schur_probe_residual_before = float(jnp.linalg.norm(sparse_pc_rhs))
+                        if moment_schur_probe_residual_before > 0.0:
+                            moment_schur_probe_improvement_ratio = (
+                                moment_schur_probe_residual_after / moment_schur_probe_residual_before
+                            )
+                            required = float(moment_schur_probe_residual_before) * max(
+                                0.0,
+                                1.0 - float(moment_schur_probe_min_improvement),
+                            )
+                            moment_schur_used = bool(
+                                np.isfinite(float(moment_schur_probe_residual_after))
+                                and float(moment_schur_probe_residual_after) < float(required)
+                            )
+                        else:
+                            moment_schur_probe_improvement_ratio = (
+                                0.0 if moment_schur_probe_residual_after == 0.0 else float("inf")
+                            )
+                            moment_schur_used = bool(
+                                np.isfinite(float(moment_schur_probe_residual_after))
+                                and float(moment_schur_probe_residual_after) <= 0.0
+                            )
+                        moment_schur_reason = (
+                            "probe_reduced" if bool(moment_schur_used) else "probe_not_reduced"
+                        )
+                        if emit is not None:
+                            emit(
+                                0 if bool(moment_schur_used) else 1,
+                                "solve_v3_full_system_linear_gmres: fortran_reduced_pc_gmres xblock "
+                                "constraint1 moment-Schur "
+                                f"{'accepted' if bool(moment_schur_used) else 'rejected'} "
+                                f"seed residual {moment_schur_probe_residual_before:.6e} "
+                                f"-> {moment_schur_probe_residual_after:.6e} "
+                                f"(ratio={float(moment_schur_probe_improvement_ratio):.6e})",
+                            )
+                    precond_xblock_krylov = (
+                        moment_schur_candidate if bool(moment_schur_used) else base_precond_before_moment_schur
+                    )
+                    moment_schur_metadata["setup_s"] = float(sparse_timer.elapsed_s() - moment_schur_start_s)
+                    pc_factor_s += float(moment_schur_metadata["setup_s"])
+                except Exception as exc:  # noqa: BLE001
+                    moment_schur_used = False
+                    moment_schur_reason = f"{type(exc).__name__}: {exc}"
+                    moment_schur_metadata = {
+                        "error": f"{type(exc).__name__}: {exc}",
+                        "setup_s": float(sparse_timer.elapsed_s() - moment_schur_start_s),
+                    }
+                    if emit is not None:
+                        emit(
+                            1,
+                            "solve_v3_full_system_linear_gmres: fortran_reduced_pc_gmres xblock "
+                            f"constraint1 moment-Schur disabled after build failure ({type(exc).__name__}: {exc})",
+                        )
+
+            global_coupling_enabled = _rhs1_bool_env(
+                "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_XBLOCK_GLOBAL_COUPLING",
+                default=False,
+            )
+            global_coupling_built = False
+            global_coupling_metadata: dict[str, object] = {}
+            global_coupling_stats = {"applies": 0, "coarse_applies": 0}
+            if bool(global_coupling_enabled) and precondition_side != "none":
+                global_coupling_start_s = sparse_timer.elapsed_s()
+                global_coupling_mode = os.environ.get(
+                    "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_XBLOCK_GLOBAL_COUPLING_MODE",
+                    os.environ.get("SFINCS_JAX_RHSMODE1_XBLOCK_PC_GLOBAL_COUPLING_MODE", "additive"),
+                ).strip()
+                global_coupling_max_directions = _rhs1_int_env(
+                    "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_XBLOCK_GLOBAL_COUPLING_MAX_DIRECTIONS",
+                    default=96,
+                    minimum=1,
+                )
+                global_coupling_fsavg_lmax = _rhs1_int_env(
+                    "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_XBLOCK_GLOBAL_COUPLING_FSAVG_LMAX",
+                    default=12,
+                    minimum=0,
+                )
+                global_coupling_angular_lmax = _rhs1_int_env(
+                    "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_XBLOCK_GLOBAL_COUPLING_ANGULAR_LMAX",
+                    default=2,
+                    minimum=0,
+                )
+                global_coupling_max_extra_units = _rhs1_int_env(
+                    "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_XBLOCK_GLOBAL_COUPLING_MAX_EXTRA_UNITS",
+                    default=8,
+                    minimum=0,
+                )
+                global_coupling_rcond = _rhs1_float_env(
+                    "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_XBLOCK_GLOBAL_COUPLING_RCOND",
+                    default=1.0e-11,
+                    minimum=0.0,
+                )
+                global_coupling_include_rhs = _rhs1_bool_env(
+                    "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_XBLOCK_GLOBAL_COUPLING_INCLUDE_RHS",
+                    default=True,
+                )
+                global_coupling_setup_max_s = _rhs1_float_env(
+                    "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_XBLOCK_GLOBAL_COUPLING_SETUP_MAX_S",
+                    default=0.0,
+                    minimum=0.0,
+                )
+                if emit is not None:
+                    emit(
+                        0,
+                        "solve_v3_full_system_linear_gmres: fortran_reduced_pc_gmres xblock "
+                        "global-coupling build start",
+                    )
+                try:
+                    precond_xblock_krylov, global_coupling_metadata, global_coupling_stats = (
+                        _build_rhs1_xblock_smoothed_global_coupling_preconditioner(
+                            op=op,
+                            rhs=rhs,
+                            matvec=_mv_true_no_count,
+                            base_preconditioner=precond_xblock_krylov,
+                            direction_projector=_sparse_pc_reduce_full if sparse_pc_use_active_dof else None,
+                            expected_size=int(sparse_pc_linear_size),
+                            mode=global_coupling_mode,
+                            fsavg_lmax=global_coupling_fsavg_lmax,
+                            angular_lmax=global_coupling_angular_lmax,
+                            max_extra_units=global_coupling_max_extra_units,
+                            max_directions=global_coupling_max_directions,
+                            rcond=global_coupling_rcond,
+                            include_rhs=global_coupling_include_rhs,
+                            max_setup_s=global_coupling_setup_max_s,
+                            emit=emit,
+                        )
+                    )
+                    global_coupling_built = True
+                    global_coupling_metadata["setup_s"] = float(sparse_timer.elapsed_s() - global_coupling_start_s)
+                    pc_factor_s += float(global_coupling_metadata["setup_s"])
+                except Exception as exc:  # noqa: BLE001
+                    global_coupling_metadata = {
+                        "error": f"{type(exc).__name__}: {exc}",
+                        "setup_s": float(sparse_timer.elapsed_s() - global_coupling_start_s),
+                    }
+                    if emit is not None:
+                        emit(
+                            1,
+                            "solve_v3_full_system_linear_gmres: fortran_reduced_pc_gmres xblock "
+                            f"global-coupling disabled after build failure ({type(exc).__name__}: {exc})",
+                        )
+
+            x0_sparse = None
+            if x0 is not None:
+                x0_arr = jnp.asarray(x0, dtype=jnp.float64)
+                if x0_arr.shape == sparse_pc_rhs.shape:
+                    x0_sparse = x0_arr
+                elif x0_arr.shape == rhs.shape:
+                    x0_sparse = _sparse_pc_reduce_full(x0_arr)
+                elif emit is not None:
+                    emit(
+                        1,
+                        "solve_v3_full_system_linear_gmres: fortran_reduced_pc_gmres xblock "
+                        f"ignoring incompatible x0 shape={tuple(x0_arr.shape)} "
+                        f"expected={tuple(sparse_pc_rhs.shape)} or {tuple(rhs.shape)}",
+                    )
+
+            sparse_pc_rhs_norm = rhs1_l2_norm_float(sparse_pc_rhs)
+            target = rhs1_residual_target(
+                atol=float(atol),
+                tol=float(tol),
+                rhs_norm=float(sparse_pc_rhs_norm),
+            )
+            seed_env = (
+                os.environ.get("SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_XBLOCK_INITIAL_SEED", "1")
+                .strip()
+                .lower()
+            )
+            seed_enabled = seed_env not in {"0", "false", "f", "no", "off", ".false.", ".f."}
+            seed_residual_norm: float | None = None
+            seed_improvement_ratio: float | None = None
+            seed_refines_performed = 0
+            seed_refine_steps_env = (
+                os.environ.get("SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_XBLOCK_SEED_REFINES", "").strip()
+            )
+            try:
+                seed_refine_steps = int(seed_refine_steps_env) if seed_refine_steps_env else 2
+            except ValueError:
+                seed_refine_steps = 2
+            seed_refine_steps = max(0, int(seed_refine_steps))
+            seed_accept_ratio_env = (
+                os.environ.get("SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_XBLOCK_SEED_ACCEPT_RATIO", "").strip()
+            )
+            try:
+                seed_accept_ratio = float(seed_accept_ratio_env) if seed_accept_ratio_env else 1.0
+            except ValueError:
+                seed_accept_ratio = 1.0
+            seed_accept_ratio = max(0.0, float(seed_accept_ratio))
+            seed_used = False
+            if bool(seed_enabled) and x0_sparse is None:
+                seed_start_s = sparse_timer.elapsed_s()
+                x_seed = jnp.asarray(precond_xblock_krylov(sparse_pc_rhs), dtype=jnp.float64)
+                residual_vec_seed = sparse_pc_rhs - _mv_true_no_count(x_seed)
+                seed_residual_norm = float(jnp.linalg.norm(residual_vec_seed))
+                if np.isfinite(seed_residual_norm) and seed_residual_norm > 0.0:
+                    seed_improvement_ratio = float(sparse_pc_rhs_norm) / float(seed_residual_norm)
+                elif np.isfinite(seed_residual_norm):
+                    seed_improvement_ratio = float("inf")
+                for refine_index in range(int(seed_refine_steps)):
+                    if not np.isfinite(seed_residual_norm) or seed_residual_norm == 0.0:
+                        break
+                    dx_seed = jnp.asarray(precond_xblock_krylov(residual_vec_seed), dtype=jnp.float64)
+                    x_next = x_seed + dx_seed
+                    residual_vec_next = sparse_pc_rhs - _mv_true_no_count(x_next)
+                    residual_norm_next = float(jnp.linalg.norm(residual_vec_next))
+                    if not np.isfinite(residual_norm_next) or residual_norm_next >= float(seed_residual_norm):
+                        break
+                    x_seed = x_next
+                    residual_vec_seed = residual_vec_next
+                    seed_residual_norm = float(residual_norm_next)
+                    seed_refines_performed = int(refine_index) + 1
+                    if seed_residual_norm > 0.0:
+                        seed_improvement_ratio = float(sparse_pc_rhs_norm) / float(seed_residual_norm)
+                    else:
+                        seed_improvement_ratio = float("inf")
+                if np.isfinite(seed_residual_norm) and seed_residual_norm <= (
+                    float(sparse_pc_rhs_norm) * max(float(seed_accept_ratio), 1.0e-300)
+                ):
+                    x0_sparse = x_seed
+                    seed_used = True
+                if emit is not None:
+                    emit(
+                        1,
+                        "solve_v3_full_system_linear_gmres: fortran_reduced_pc_gmres xblock "
+                        "initial seed "
+                        f"residual={float(seed_residual_norm):.6e} "
+                        f"rhs_norm={float(sparse_pc_rhs_norm):.6e} "
+                        f"improvement={float(seed_improvement_ratio or 0.0):.6e} "
+                        f"refines={int(seed_refines_performed)}/{int(seed_refine_steps)} "
+                        f"accepted={bool(seed_used)} elapsed_s={sparse_timer.elapsed_s() - seed_start_s:.3f}",
+                    )
+            if emit is not None:
+                emit(
+                    0,
+                    "solve_v3_full_system_linear_gmres: fortran_reduced_pc_gmres xblock solve start "
+                    f"method={xblock_krylov_method} form={pc_form} "
+                    f"restart={int(pc_restart)} maxiter={int(pc_maxiter)} "
+                    f"precondition_side={precondition_side}",
+                )
+            solve_start_s = sparse_timer.elapsed_s()
+
+            def _xblock_krylov_progress_callback(iteration: int, residual_norm: float) -> None:
+                if emit is None or progress_every <= 0:
+                    return
+                if int(iteration) % int(progress_every) != 0:
+                    return
+                emit(
+                    1,
+                    "solve_v3_full_system_linear_gmres: fortran_reduced_pc_gmres xblock "
+                    f"iters={int(iteration)} ksp_residual={float(residual_norm):.6e} "
+                    f"elapsed_s={sparse_timer.elapsed_s():.3f}",
+                )
+
+            rn_pc = float("nan")
+            if xblock_krylov_method == "lgmres":
+                x_np, residual_norm_sparse_pc, history = lgmres_solve_with_history_scipy(
+                    matvec=_mv_true,
+                    b=sparse_pc_rhs,
+                    preconditioner=precond_xblock_krylov if precondition_side != "none" else None,
+                    x0=x0_sparse,
+                    tol=tol,
+                    atol=atol,
+                    restart=pc_restart,
+                    maxiter=pc_maxiter,
+                    precondition_side=precondition_side,
+                )
+            elif xblock_krylov_method == "gcrotmk":
+                x_np, residual_norm_sparse_pc, history = gcrotmk_solve_with_history_scipy(
+                    matvec=_mv_true,
+                    b=sparse_pc_rhs,
+                    preconditioner=precond_xblock_krylov if precondition_side != "none" else None,
+                    x0=x0_sparse,
+                    tol=tol,
+                    atol=atol,
+                    restart=pc_restart,
+                    maxiter=pc_maxiter,
+                    precondition_side=precondition_side,
+                )
+            elif xblock_krylov_method == "bicgstab":
+                x_np, residual_norm_sparse_pc, history = bicgstab_solve_with_history_scipy(
+                    matvec=_mv_true,
+                    b=sparse_pc_rhs,
+                    preconditioner=precond_xblock_krylov if precondition_side != "none" else None,
+                    x0=x0_sparse,
+                    tol=tol,
+                    atol=atol,
+                    maxiter=pc_maxiter,
+                    precondition_side=precondition_side,
+                )
+            elif pc_form in {"explicit_left", "petsc_left"}:
+                x_np, residual_norm_sparse_pc, rn_pc, history = explicit_left_preconditioned_gmres_scipy(
+                    matvec=_mv_true,
+                    b=sparse_pc_rhs,
+                    preconditioner=precond_xblock_krylov,
+                    x0=x0_sparse,
+                    tol=tol,
+                    atol=atol,
+                    restart=pc_restart,
+                    maxiter=pc_maxiter,
+                    progress_callback=_xblock_krylov_progress_callback,
+                )
+            else:
+                x_np, residual_norm_sparse_pc, history = gmres_solve_with_history_scipy(
+                    matvec=_mv_true,
+                    b=sparse_pc_rhs,
+                    preconditioner=precond_xblock_krylov if precondition_side != "none" else None,
+                    x0=x0_sparse,
+                    tol=tol,
+                    atol=atol,
+                    restart=pc_restart,
+                    maxiter=pc_maxiter,
+                    precondition_side=precondition_side,
+                    progress_callback=_xblock_krylov_progress_callback,
+                )
+            solve_s = sparse_timer.elapsed_s() - solve_start_s
+            try:
+                residual_true = np.asarray(sparse_pc_rhs, dtype=np.float64) - np.asarray(
+                    jax.device_get(_mv_true(jnp.asarray(x_np, dtype=jnp.float64))),
+                    dtype=np.float64,
+                )
+                residual_norm_sparse_pc = float(np.linalg.norm(residual_true))
+            except Exception:
+                residual_norm_sparse_pc = float(residual_norm_sparse_pc)
+            if emit is not None:
+                pc_suffix = f" preconditioned_residual={float(rn_pc):.6e}" if np.isfinite(rn_pc) else ""
+                if history:
+                    pc_suffix = f"{pc_suffix} ksp_residual={float(history[-1]):.6e}"
+                emit(
+                    0,
+                    "solve_v3_full_system_linear_gmres: fortran_reduced_pc_gmres xblock complete "
+                    f"elapsed_s={sparse_timer.elapsed_s():.3f} iters={len(history or [])} "
+                    f"matvecs={int(mv_count)} residual={float(residual_norm_sparse_pc):.6e} "
+                    f"target={float(target):.6e}{pc_suffix}",
+                )
+            return V3LinearSolveResult(
+                op=op,
+                rhs=rhs,
+                gmres=GMRESSolveResult(
+                    x=_sparse_pc_expand_reduced(jnp.asarray(x_np, dtype=jnp.float64)),
+                    residual_norm=jnp.asarray(residual_norm_sparse_pc, dtype=jnp.float64),
+                ),
+                metadata={
+                    "solver_kind": "fortran_reduced_pc_gmres",
+                    "residual_kind": "true_residual",
+                    "accepted_converged": rhs1_residual_converged(
+                        float(residual_norm_sparse_pc),
+                        rhs1_residual_target(
+                            atol=float(atol),
+                            tol=float(tol),
+                            rhs_norm=float(rhs_norm),
+                        ),
+                    ),
+                    "acceptance_criterion": "true_residual",
+                    "iterations": int(len(history or [])),
+                    "matvecs": int(mv_count),
+                    "gmres_restart": int(pc_restart),
+                    "gmres_maxiter": int(pc_maxiter),
+                    "sparse_pc_backend": "xblock",
+                    "sparse_pc_backend_reason": str(fortran_reduced_sparse_pc_backend_reason),
+                    "sparse_pc_xblock_min_size": int(fortran_reduced_xblock_min_size),
+                    "sparse_pc_preconditioner_operator": "fortran_reduced_xblock",
+                    "sparse_pc_factorization": "xblock_host_sparse",
+                    "sparse_pc_default_factorization": "xblock_host_sparse",
+                    "sparse_pc_fortran_reduced": True,
+                    "sparse_pc_fortran_reduced_keeps_theta_zeta": True,
+                    "sparse_pc_fortran_reduced_preconditioner_x": int(preconditioner_x),
+                    "sparse_pc_fortran_reduced_preconditioner_x_min_L": int(preconditioner_x_min_l),
+                    "sparse_pc_fortran_reduced_preconditioner_xi": int(preconditioner_xi),
+                    "sparse_pc_fortran_reduced_preconditioner_species": int(preconditioner_species),
+                    "sparse_pc_xblock_preconditioner_xi": int(xblock_preconditioner_xi),
+                    "sparse_pc_xblock_assembled_host_fp": bool(force_assembled_host_fp),
+                    "sparse_pc_xblock_krylov_method": str(xblock_krylov_method),
+                    "sparse_pc_xblock_initial_seed_enabled": bool(seed_enabled),
+                    "sparse_pc_xblock_initial_seed_used": bool(seed_used),
+                    "sparse_pc_xblock_initial_seed_residual_norm": seed_residual_norm,
+                    "sparse_pc_xblock_initial_seed_improvement_ratio": seed_improvement_ratio,
+                    "sparse_pc_xblock_initial_seed_accept_ratio": float(seed_accept_ratio),
+                    "sparse_pc_xblock_initial_seed_refine_steps": int(seed_refine_steps),
+                    "sparse_pc_xblock_initial_seed_refines_performed": int(seed_refines_performed),
+                    "sparse_pc_xblock_moment_schur_enabled": bool(moment_schur_enabled),
+                    "sparse_pc_xblock_moment_schur_built": bool(moment_schur_built),
+                    "sparse_pc_xblock_moment_schur_used": bool(moment_schur_used),
+                    "sparse_pc_xblock_moment_schur_reason": moment_schur_reason,
+                    "sparse_pc_xblock_moment_schur_mode": moment_schur_metadata.get("mode"),
+                    "sparse_pc_xblock_moment_schur_rank": moment_schur_metadata.get("rank"),
+                    "sparse_pc_xblock_moment_schur_extra_size": moment_schur_metadata.get("extra_size"),
+                    "sparse_pc_xblock_moment_schur_setup_s": moment_schur_metadata.get("setup_s"),
+                    "sparse_pc_xblock_moment_schur_expected_size": moment_schur_metadata.get("expected_size"),
+                    "sparse_pc_xblock_moment_schur_rcond": moment_schur_metadata.get("rcond"),
+                    "sparse_pc_xblock_moment_schur_singular_value_proxy": moment_schur_metadata.get(
+                        "singular_value_proxy",
+                        (),
+                    ),
+                    "sparse_pc_xblock_moment_schur_device_resident": bool(
+                        moment_schur_metadata.get("device_resident", False)
+                    ),
+                    "sparse_pc_xblock_moment_schur_probe_residual_before": moment_schur_probe_residual_before,
+                    "sparse_pc_xblock_moment_schur_probe_residual_after": moment_schur_probe_residual_after,
+                    "sparse_pc_xblock_moment_schur_probe_improvement_ratio": (
+                        moment_schur_probe_improvement_ratio
+                    ),
+                    "sparse_pc_xblock_moment_schur_error": moment_schur_metadata.get("error"),
+                    "sparse_pc_xblock_moment_schur_applies": int(moment_schur_stats.get("applies", 0)),
+                    "sparse_pc_xblock_moment_schur_base_applies": int(
+                        moment_schur_stats.get("base_applies", 0)
+                    ),
+                    "sparse_pc_xblock_global_coupling_enabled": bool(global_coupling_enabled),
+                    "sparse_pc_xblock_global_coupling_built": bool(global_coupling_built),
+                    "sparse_pc_xblock_global_coupling_mode": global_coupling_metadata.get("mode"),
+                    "sparse_pc_xblock_global_coupling_load_basis_size": global_coupling_metadata.get(
+                        "load_basis_size"
+                    ),
+                    "sparse_pc_xblock_global_coupling_basis_size": global_coupling_metadata.get("basis_size"),
+                    "sparse_pc_xblock_global_coupling_rank": global_coupling_metadata.get("rank"),
+                    "sparse_pc_xblock_global_coupling_setup_s": global_coupling_metadata.get("setup_s"),
+                    "sparse_pc_xblock_global_coupling_setup_budget_s": global_coupling_metadata.get(
+                        "setup_budget_s"
+                    ),
+                    "sparse_pc_xblock_global_coupling_setup_budget_reached": bool(
+                        global_coupling_metadata.get("setup_budget_reached", False)
+                    ),
+                    "sparse_pc_xblock_global_coupling_rcond": global_coupling_metadata.get("rcond"),
+                    "sparse_pc_xblock_global_coupling_smoother": global_coupling_metadata.get("smoother"),
+                    "sparse_pc_xblock_global_coupling_basis_names": global_coupling_metadata.get(
+                        "basis_names",
+                        (),
+                    ),
+                    "sparse_pc_xblock_global_coupling_error": global_coupling_metadata.get("error"),
+                    "sparse_pc_xblock_global_coupling_applies": int(global_coupling_stats.get("applies", 0)),
+                    "sparse_pc_xblock_global_coupling_coarse_applies": int(
+                        global_coupling_stats.get("coarse_applies", 0)
+                    ),
+                    "sparse_pc_xblock_drop_tol": float(xblock_drop_tol),
+                    "sparse_pc_xblock_drop_rel": float(xblock_drop_rel),
+                    "sparse_pc_xblock_ilu_drop_tol": float(xblock_ilu_drop_tol),
+                    "sparse_pc_xblock_fill_factor": float(xblock_fill_factor),
+                    "sparse_pc_active_dof": bool(sparse_pc_use_active_dof),
+                    "sparse_pc_linear_size": int(sparse_pc_linear_size),
+                    "sparse_pc_full_size": int(op.total_size),
+                    "sparse_pc_fp_dense_velocity_block": (
+                        None
+                        if sparse_pc_fp_dense_velocity_block is None
+                        else bool(sparse_pc_fp_dense_velocity_block)
+                    ),
+                    "setup_s": float(setup_s),
+                    "solve_s": float(solve_s),
+                    "elapsed_s": float(sparse_timer.elapsed_s()),
+                    "sparse_pattern_nnz": 0,
+                    "sparse_pattern_avg_row_nnz": 0.0,
+                    "sparse_pattern_max_row_nnz": 0,
+                    "sparse_pattern_scope": "fortran_reduced_xblock_no_global_pattern",
+                    "sparse_pattern_build_s": 0.0,
+                    "sparse_pc_factor_s": float(pc_factor_s),
+                    "sparse_pc_factor_elapsed_s": float(pc_factor_s),
+                    "sparse_pc_factor_nbytes_estimate": None,
+                    "sparse_pc_factor_nnz_estimate": None,
+                    "sparse_pc_residual_target": float(target),
+                    "sparse_pc_residual_ratio_to_target": (
+                        float(residual_norm_sparse_pc) / float(target)
+                        if float(target) > 0.0
+                        else float("inf")
+                    ),
+                    "sparse_pc_factor_quality_rejected": not rhs1_residual_converged(
+                        float(residual_norm_sparse_pc),
+                        float(target),
+                    ),
+                },
+            )
+
         pattern_start_s = sparse_timer.elapsed_s()
         if emit is not None:
             emit(1, "solve_v3_full_system_linear_gmres: sparse_pc_gmres building conservative pattern")
-        pattern_full = v3_full_system_conservative_sparsity_pattern(
-            op,
-            fp_dense_velocity_block=sparse_pc_fp_dense_velocity_block,
-        )
-        if sparse_pc_use_active_dof:
+        if fortran_reduced_sparse_pc:
+            if sparse_pc_use_active_dof:
+                assert sparse_pc_active_idx_np is not None
+                pattern = v3_full_system_fortran_reduced_preconditioner_sparsity_pattern_for_indices(
+                    pattern_source_op,
+                    np.asarray(sparse_pc_active_idx_np, dtype=np.int32),
+                    preconditioner_x=int(preconditioner_x),
+                    preconditioner_xi=int(preconditioner_xi),
+                    preconditioner_species=int(preconditioner_species),
+                    preconditioner_x_min_l=int(preconditioner_x_min_l),
+                )
+                sparse_pattern_scope = "fortran_reduced_active_dof"
+            else:
+                pattern = v3_full_system_fortran_reduced_preconditioner_sparsity_pattern(
+                    pattern_source_op,
+                    preconditioner_x=int(preconditioner_x),
+                    preconditioner_xi=int(preconditioner_xi),
+                    preconditioner_species=int(preconditioner_species),
+                    preconditioner_x_min_l=int(preconditioner_x_min_l),
+                )
+                sparse_pattern_scope = "fortran_reduced_full"
+        elif sparse_pc_use_active_dof:
             assert sparse_pc_active_idx_np is not None
-            pattern = pattern_full[np.asarray(sparse_pc_active_idx_np), :][:, np.asarray(sparse_pc_active_idx_np)].tocsr()
+            pattern = v3_full_system_conservative_sparsity_pattern_for_indices(
+                pattern_source_op,
+                np.asarray(sparse_pc_active_idx_np, dtype=np.int32),
+                fp_dense_velocity_block=sparse_pc_fp_dense_velocity_block,
+            )
+            sparse_pattern_scope = "active_dof"
         else:
-            pattern = pattern_full
+            pattern = v3_full_system_conservative_sparsity_pattern(
+                pattern_source_op,
+                fp_dense_velocity_block=sparse_pc_fp_dense_velocity_block,
+            )
+            sparse_pattern_scope = "full"
         pattern_build_s = sparse_timer.elapsed_s() - pattern_start_s
         summary = summarize_v3_sparse_pattern(op, pattern)
         if emit is not None:
             emit(
                 1,
                 "solve_v3_full_system_linear_gmres: sparse_pc_gmres pattern "
-                f"nnz={summary.nnz} avg_row_nnz={summary.avg_row_nnz:.3g} max_row_nnz={summary.max_row_nnz}",
+                f"scope={sparse_pattern_scope} nnz={summary.nnz} "
+                f"avg_row_nnz={summary.avg_row_nnz:.3g} max_row_nnz={summary.max_row_nnz}",
             )
-        op_pc = _build_rhsmode1_preconditioner_operator_point(op)
         pc_shift_env = os.environ.get("SFINCS_JAX_RHSMODE1_SPARSE_PC_SHIFT", "").strip()
         try:
-            pc_shift = float(pc_shift_env) if pc_shift_env else (1.0e-8 if (constrained_pas_pc or tokamak_fp_pc) else 0.0)
+            pc_shift = (
+                float(pc_shift_env)
+                if pc_shift_env
+                else (1.0e-8 if (constrained_pas_pc or tokamak_fp_pc or fortran_reduced_sparse_pc) else 0.0)
+            )
         except ValueError:
-            pc_shift = 1.0e-8 if (constrained_pas_pc or tokamak_fp_pc) else 0.0
+            pc_shift = 1.0e-8 if (constrained_pas_pc or tokamak_fp_pc or fortran_reduced_sparse_pc) else 0.0
         factor_kind_env = os.environ.get("SFINCS_JAX_EXPLICIT_SPARSE_FACTOR_KIND", "").strip().lower()
-        sparse_pc_factorization = "ilu" if factor_kind_env in {"ilu", "spilu"} else "lu"
+        sparse_pc_default_factor_kind = (
+            "ilu"
+            if bool(fortran_reduced_sparse_pc) and int(sparse_pc_linear_size) >= 100000
+            else "lu"
+        )
+        if factor_kind_env in {"jacobi", "diagonal", "diag", "none"}:
+            sparse_pc_factorization = "jacobi"
+        elif factor_kind_env in {"ilu", "spilu"}:
+            sparse_pc_factorization = "ilu"
+        elif factor_kind_env in {"lu", "splu"}:
+            sparse_pc_factorization = "lu"
+        elif sparse_pc_default_factor_kind == "jacobi":
+            sparse_pc_factorization = "jacobi"
+        elif sparse_pc_default_factor_kind == "ilu":
+            sparse_pc_factorization = "ilu"
+        else:
+            sparse_pc_factorization = "lu"
+        sparse_pc_default_ilu_fill_factor = (
+            2.0
+            if bool(fortran_reduced_sparse_pc) and int(sparse_pc_linear_size) >= 100000
+            else 10.0
+        )
+        sparse_pc_default_ilu_drop_tol = (
+            1.0e-3
+            if bool(fortran_reduced_sparse_pc) and int(sparse_pc_linear_size) >= 100000
+            else 1.0e-4
+        )
+        sparse_pc_default_pattern_color_batch = (
+            16
+            if bool(fortran_reduced_sparse_pc) and int(sparse_pc_linear_size) >= 100000
+            else 1
+        )
         sparse_pc_dtype_env = os.environ.get("SFINCS_JAX_RHSMODE1_SPARSE_PC_FACTOR_DTYPE", "").strip().lower()
         if sparse_pc_dtype_env in {"float32", "fp32", "32"}:
             sparse_pc_factor_dtype_initial = np.dtype(np.float32)
@@ -21229,20 +31085,363 @@ def solve_v3_full_system_linear_gmres(
                 1,
                 "solve_v3_full_system_linear_gmres: sparse_pc_gmres factoring RHSMode=1 preconditioner"
                 f"{shift_note} factor_dtype={sparse_pc_factor_dtype_initial.name} "
-                f"permc={sparse_pc_permc_spec}",
+                f"factor_kind={sparse_pc_factorization} permc={sparse_pc_permc_spec}",
             )
-        factor_start_s = sparse_timer.elapsed_s()
-        _operator_bundle_pc, factor_bundle_pc = _build_host_sparse_direct_factor_from_matvec(
-            matvec=_sparse_pc_factor_mv,
-            n=int(sparse_pc_linear_size),
-            dtype=rhs.dtype,
-            factor_dtype=sparse_pc_factor_dtype_initial,
-            pattern=pattern,
-            emit=emit,
-            default_diag_pivot_thresh=0.0 if (constrained_pas_pc or tokamak_fp_pc) else 1.0,
-            default_permc_spec=sparse_pc_default_permc_spec,
+        direct_tail_default = bool(
+            fortran_reduced_sparse_pc
+            and int(sparse_pc_linear_size) >= 100000
+            and int(op.rhs_mode) == 1
+            and int(op.constraint_scheme) == 1
+            and int(op.phi1_size) == 0
         )
+        direct_tail_enabled = _rhs1_bool_env(
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_CONSTRAINT_TAIL",
+            default=direct_tail_default,
+        )
+        direct_tail_built = False
+        direct_tail_error: str | None = None
+        direct_tail_operator_bundle: SparseOperatorBundle | None = None
+        direct_tail_structured_pc_requested: str | None = None
+        direct_tail_structured_pc_selected = False
+        direct_tail_structured_pc_reason: str | None = None
+        direct_tail_structured_pc_metadata: dict[str, object] | None = None
+        direct_tail_structured_pc_error: str | None = None
+        if bool(direct_tail_enabled):
+            direct_tail_start_s = sparse_timer.elapsed_s()
+            csr_max_env_direct = os.environ.get("SFINCS_JAX_EXPLICIT_SPARSE_CSR_MAX_MB", "").strip()
+            drop_tol_env_direct = os.environ.get("SFINCS_JAX_EXPLICIT_SPARSE_DROP_TOL", "").strip()
+            color_batch_env_direct = os.environ.get("SFINCS_JAX_EXPLICIT_SPARSE_PATTERN_COLOR_BATCH", "").strip()
+            try:
+                csr_max_mb_direct = float(csr_max_env_direct) if csr_max_env_direct else 512.0
+            except ValueError:
+                csr_max_mb_direct = 512.0
+            try:
+                drop_tol_direct = float(drop_tol_env_direct) if drop_tol_env_direct else 0.0
+            except ValueError:
+                drop_tol_direct = 0.0
+            try:
+                color_batch_direct = (
+                    int(color_batch_env_direct)
+                    if color_batch_env_direct
+                    else int(sparse_pc_default_pattern_color_batch)
+                )
+            except ValueError:
+                color_batch_direct = int(sparse_pc_default_pattern_color_batch)
+            if emit is not None:
+                emit(
+                    1,
+                    "solve_v3_full_system_linear_gmres: fortran_reduced direct-tail "
+                    "materialization start "
+                    f"size={int(sparse_pc_linear_size)} "
+                    f"csr_max_mb={float(csr_max_mb_direct):.3g} "
+                    f"drop_tol={float(drop_tol_direct):.3e} "
+                    f"color_batch={int(color_batch_direct)}",
+                )
+            try:
+                direct_tail_operator_bundle = _try_build_fortran_reduced_constraint1_direct_tail_bundle(
+                    op=op,
+                    op_pc=op_pc,
+                    pattern=pattern,
+                    active_indices=sparse_pc_active_idx_np if sparse_pc_use_active_dof else None,
+                    reduce_full=_sparse_pc_reduce_full,
+                    expand_reduced=_sparse_pc_expand_reduced,
+                    pc_shift=float(pc_shift),
+                    dtype=rhs.dtype,
+                    factor_dtype=sparse_pc_factor_dtype_initial,
+                    csr_max_mb=float(csr_max_mb_direct),
+                    drop_tol=float(drop_tol_direct),
+                    color_batch=int(color_batch_direct),
+                    emit=emit,
+                )
+                direct_tail_built = direct_tail_operator_bundle is not None
+                if emit is not None and direct_tail_built:
+                    emit(
+                        1,
+                        "solve_v3_full_system_linear_gmres: fortran_reduced direct-tail "
+                        f"materialization complete elapsed_s={sparse_timer.elapsed_s() - direct_tail_start_s:.3f}",
+                    )
+                elif emit is not None:
+                    emit(
+                        1,
+                        "solve_v3_full_system_linear_gmres: fortran_reduced direct-tail "
+                        f"materialization not selected elapsed_s={sparse_timer.elapsed_s() - direct_tail_start_s:.3f}",
+                    )
+            except Exception as exc:  # noqa: BLE001
+                direct_tail_operator_bundle = None
+                direct_tail_error = f"{type(exc).__name__}: {exc}"
+                if emit is not None:
+                    emit(
+                        1,
+                        "solve_v3_full_system_linear_gmres: fortran_reduced direct-tail "
+                        "materialization disabled after failure "
+                        f"elapsed_s={sparse_timer.elapsed_s() - direct_tail_start_s:.3f} "
+                        f"({direct_tail_error})",
+                    )
+        factor_start_s = sparse_timer.elapsed_s()
+        direct_tail_pc_env = (
+            os.environ.get("SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_PRECONDITIONER", "")
+            .strip()
+            .lower()
+            .replace("-", "_")
+        )
+        direct_tail_pc_auto_default = bool(
+            direct_tail_pc_env == ""
+            and direct_tail_operator_bundle is not None
+            and int(sparse_pc_linear_size) >= 100_000
+        )
+        if direct_tail_pc_env in {"", "factor", "host_factor", "legacy", "default"}:
+            direct_tail_structured_pc_requested = "auto" if bool(direct_tail_pc_auto_default) else None
+        elif direct_tail_pc_env in {"auto", "active_auto", "structured"}:
+            direct_tail_structured_pc_requested = "auto"
+        else:
+            direct_tail_structured_pc_requested = direct_tail_pc_env
+        direct_tail_structured_pc_required = _rhs1_bool_env(
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_STRUCTURED_PC_REQUIRED",
+            default=bool(
+                direct_tail_structured_pc_requested is not None
+                and direct_tail_pc_env not in {"auto", "active_auto", "structured"}
+            ),
+        )
+        if emit is not None:
+            emit(
+                1,
+                "solve_v3_full_system_linear_gmres: sparse_pc_gmres factor setup start "
+                f"size={int(sparse_pc_linear_size)} "
+                f"factor_dtype={sparse_pc_factor_dtype_initial.name} "
+                f"factor_kind={sparse_pc_factorization} direct_tail_built={bool(direct_tail_built)} "
+                f"structured_pc_requested={direct_tail_structured_pc_requested}",
+            )
+        structured_pc_ready = False
+        direct_tail_structured_layout: RHS1BlockLayout | None = None
+        direct_tail_structured_active_indices: np.ndarray | None = None
+        direct_tail_structured_max_nbytes: int | None = None
+        direct_tail_support_mode_preflight_requested = False
+        direct_tail_support_mode_preflight_selected = False
+        direct_tail_support_mode_preflight_metadata: dict[str, object] | None = None
+        direct_tail_support_mode_preflight_error: str | None = None
+        direct_tail_structured_pc_max_mb_auto = False
+        if direct_tail_operator_bundle is not None and direct_tail_structured_pc_requested is not None:
+            pc_max_mb_env = os.environ.get(
+                "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_PC_MAX_MB",
+                "",
+            ).strip()
+            if pc_max_mb_env:
+                pc_max_mb = _rhs1_float_env(
+                    "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_PC_MAX_MB",
+                    default=512.0,
+                )
+            else:
+                direct_tail_structured_pc_max_mb_auto = True
+                pc_max_mb = _rhsmode1_fortran_reduced_direct_tail_pc_default_max_mb(
+                    requested_kind=direct_tail_structured_pc_requested,
+                    active_size=int(sparse_pc_linear_size),
+                )
+            pc_reg = _rhs1_float_env(
+                "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_PC_REGULARIZATION",
+                default=1.0e-12,
+            )
+            direct_tail_structured_pc_start_s = sparse_timer.elapsed_s()
+            if emit is not None:
+                emit(
+                    1,
+                    "solve_v3_full_system_linear_gmres: fortran_reduced direct-tail "
+                    "structured preconditioner setup start "
+                    f"kind={direct_tail_structured_pc_requested} "
+                    f"active_size={int(sparse_pc_linear_size)} "
+                    f"max_mb={float(pc_max_mb):.3g} "
+                    f"max_mb_auto={bool(direct_tail_structured_pc_max_mb_auto)} "
+                    f"reg={float(pc_reg):.3e}",
+                )
+            try:
+                direct_tail_structured_layout = RHS1BlockLayout.from_operator(op_pc)
+                direct_tail_structured_max_nbytes = int(max(0.0, float(pc_max_mb)) * 1024.0 * 1024.0)
+                direct_tail_structured_active_indices = (
+                    sparse_pc_active_idx_np if sparse_pc_use_active_dof else None
+                )
+                direct_tail_structured_pc_cache_enabled = _rhs1_bool_env(
+                    "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_PC_CACHE",
+                    default=True,
+                )
+                direct_tail_structured_pc_cache_key = None
+                direct_tail_structured_pc_cache_hit = False
+                if bool(direct_tail_structured_pc_cache_enabled):
+                    direct_tail_structured_pc_cache_key = _direct_tail_structured_pc_cache_key(
+                        matrix=direct_tail_operator_bundle.matrix,
+                        layout=direct_tail_structured_layout,
+                        active_indices=direct_tail_structured_active_indices,
+                        kind=str(direct_tail_structured_pc_requested),
+                        max_factor_nbytes=int(direct_tail_structured_max_nbytes),
+                        regularization=float(pc_reg),
+                        support_modes=(
+                            int(preconditioner_x),
+                            int(preconditioner_xi),
+                            int(preconditioner_species),
+                            int(preconditioner_x_min_l),
+                        ),
+                    )
+                    cached_direct_tail_pc = _DIRECT_TAIL_STRUCTURED_PC_CACHE.get(
+                        direct_tail_structured_pc_cache_key
+                    )
+                    if cached_direct_tail_pc is not None:
+                        direct_tail_structured_pc_cache_hit = True
+                        if emit is not None:
+                            emit(
+                                1,
+                                "solve_v3_full_system_linear_gmres: fortran_reduced direct-tail "
+                                "structured preconditioner cache hit "
+                                f"elapsed_s={sparse_timer.elapsed_s() - direct_tail_structured_pc_start_s:.3f}",
+                            )
+                        direct_tail_structured_pc = _direct_tail_structured_pc_with_cache_metadata(
+                            cached_direct_tail_pc,
+                            cache_hit=True,
+                            cache_key=direct_tail_structured_pc_cache_key,
+                        )
+                    else:
+                        direct_tail_structured_pc = build_active_projected_rhs1_full_csr_preconditioner(
+                            matrix=direct_tail_operator_bundle.matrix,
+                            layout=direct_tail_structured_layout,
+                            active_indices=direct_tail_structured_active_indices,
+                            kind=str(direct_tail_structured_pc_requested),
+                            max_factor_nbytes=int(direct_tail_structured_max_nbytes),
+                            regularization=float(pc_reg),
+                            preconditioner_x=int(preconditioner_x),
+                            preconditioner_xi=int(preconditioner_xi),
+                            preconditioner_species=int(preconditioner_species),
+                            preconditioner_x_min_l=int(preconditioner_x_min_l),
+                        )
+                        direct_tail_structured_pc = _direct_tail_structured_pc_with_cache_metadata(
+                            direct_tail_structured_pc,
+                            cache_hit=False,
+                            cache_key=direct_tail_structured_pc_cache_key,
+                        )
+                        _DIRECT_TAIL_STRUCTURED_PC_CACHE[direct_tail_structured_pc_cache_key] = (
+                            direct_tail_structured_pc
+                        )
+                else:
+                    direct_tail_structured_pc = build_active_projected_rhs1_full_csr_preconditioner(
+                        matrix=direct_tail_operator_bundle.matrix,
+                        layout=direct_tail_structured_layout,
+                        active_indices=direct_tail_structured_active_indices,
+                        kind=str(direct_tail_structured_pc_requested),
+                        max_factor_nbytes=int(direct_tail_structured_max_nbytes),
+                        regularization=float(pc_reg),
+                        preconditioner_x=int(preconditioner_x),
+                        preconditioner_xi=int(preconditioner_xi),
+                        preconditioner_species=int(preconditioner_species),
+                        preconditioner_x_min_l=int(preconditioner_x_min_l),
+                    )
+                    direct_tail_structured_pc = _direct_tail_structured_pc_with_cache_metadata(
+                        direct_tail_structured_pc,
+                        cache_hit=False,
+                        cache_key=(
+                            "direct_tail_structured_pc_cache_disabled",
+                            str(direct_tail_structured_pc_requested),
+                            (
+                                int(preconditioner_x),
+                                int(preconditioner_xi),
+                                int(preconditioner_species),
+                                int(preconditioner_x_min_l),
+                            ),
+                        ),
+                    )
+                direct_tail_structured_pc_selected = bool(direct_tail_structured_pc.selected)
+                direct_tail_structured_pc_reason = str(direct_tail_structured_pc.reason)
+                direct_tail_structured_pc_metadata = direct_tail_structured_pc.to_dict()
+                if bool(direct_tail_structured_pc.selected) and direct_tail_structured_pc.operator is not None:
+                    factor_nbytes = direct_tail_structured_pc.metadata.get("factor_nbytes_actual")
+                    if factor_nbytes is None:
+                        factor_nbytes = direct_tail_structured_pc.metadata.get("factor_nbytes_estimate")
+                    factor_bundle_pc = _StructuredHostSparsePreconditionerBundle(
+                        preconditioner=direct_tail_structured_pc,
+                        operator=direct_tail_operator_bundle,
+                        kind=str(direct_tail_structured_pc.kind),
+                        factor_nbytes_estimate=None if factor_nbytes is None else int(factor_nbytes),
+                        factor_nnz_estimate=None,
+                        factor_s=float(direct_tail_structured_pc.setup_s),
+                    )
+                    _operator_bundle_pc = direct_tail_operator_bundle
+                    structured_pc_ready = True
+                    if emit is not None:
+                        factor_permc = direct_tail_structured_pc.metadata.get("permc_spec", "na")
+                        factor_superlu_permc = direct_tail_structured_pc.metadata.get("superlu_permc_spec", "na")
+                        emit(
+                            1,
+                            "solve_v3_full_system_linear_gmres: fortran_reduced direct-tail "
+                            f"structured preconditioner selected kind={direct_tail_structured_pc.kind} "
+                            f"setup_s={float(direct_tail_structured_pc.setup_s):.3f} "
+                            f"elapsed_s={sparse_timer.elapsed_s() - direct_tail_structured_pc_start_s:.3f} "
+                            f"reason={direct_tail_structured_pc.reason} "
+                            f"cache_hit={bool(direct_tail_structured_pc_cache_hit)} "
+                            f"factor_nbytes={factor_nbytes if factor_nbytes is not None else 'na'} "
+                            f"permc={factor_permc} superlu_permc={factor_superlu_permc}",
+                        )
+                elif emit is not None:
+                    tail_action = (
+                        "required path will fail fast"
+                        if bool(direct_tail_structured_pc_required)
+                        else "falling back to host factorization"
+                    )
+                    emit(
+                        1,
+                        "solve_v3_full_system_linear_gmres: fortran_reduced direct-tail "
+                        "structured preconditioner not selected "
+                        f"kind={direct_tail_structured_pc_requested} reason={direct_tail_structured_pc.reason}; "
+                        f"elapsed_s={sparse_timer.elapsed_s() - direct_tail_structured_pc_start_s:.3f}; "
+                        f"{tail_action}",
+                    )
+            except Exception as exc:  # noqa: BLE001
+                direct_tail_structured_pc_error = f"{type(exc).__name__}: {exc}"
+                direct_tail_structured_pc_selected = False
+                direct_tail_structured_pc_reason = "structured_pc_exception"
+                if emit is not None:
+                    tail_action = (
+                        "required path will fail fast"
+                        if bool(direct_tail_structured_pc_required)
+                        else "falling back to host factorization"
+                    )
+                    emit(
+                        1,
+                        "solve_v3_full_system_linear_gmres: fortran_reduced direct-tail "
+                        "structured preconditioner failed "
+                        f"elapsed_s={sparse_timer.elapsed_s() - direct_tail_structured_pc_start_s:.3f} "
+                        f"({direct_tail_structured_pc_error}); {tail_action}",
+                    )
+        if (
+            direct_tail_structured_pc_requested is not None
+            and bool(direct_tail_structured_pc_required)
+            and not bool(structured_pc_ready)
+        ):
+            raise RuntimeError(
+                "direct-tail structured preconditioner was explicitly requested but not selected: "
+                f"kind={direct_tail_structured_pc_requested} "
+                f"reason={direct_tail_structured_pc_reason} "
+                f"error={direct_tail_structured_pc_error} "
+                f"direct_tail_built={bool(direct_tail_built)}"
+            )
+        if not structured_pc_ready:
+            _operator_bundle_pc, factor_bundle_pc = _build_host_sparse_direct_factor_from_matvec(
+                matvec=_sparse_pc_factor_mv,
+                n=int(sparse_pc_linear_size),
+                dtype=rhs.dtype,
+                factor_dtype=sparse_pc_factor_dtype_initial,
+                pattern=pattern,
+                operator_bundle_override=direct_tail_operator_bundle,
+                emit=emit,
+                default_diag_pivot_thresh=0.0 if (constrained_pas_pc or tokamak_fp_pc or fortran_reduced_sparse_pc) else 1.0,
+                default_permc_spec=sparse_pc_default_permc_spec,
+                default_factor_kind=sparse_pc_default_factor_kind,
+                default_ilu_fill_factor=float(sparse_pc_default_ilu_fill_factor),
+                default_ilu_drop_tol=float(sparse_pc_default_ilu_drop_tol),
+                default_pattern_color_batch=int(sparse_pc_default_pattern_color_batch),
+            )
         pc_factor_s = sparse_timer.elapsed_s() - factor_start_s
+        if emit is not None:
+            emit(
+                1,
+                "solve_v3_full_system_linear_gmres: sparse_pc_gmres factor setup complete "
+                f"elapsed_s={float(pc_factor_s):.3f} structured_pc_ready={bool(structured_pc_ready)} "
+                f"direct_tail_built={bool(direct_tail_built)}",
+            )
         setup_s = sparse_timer.elapsed_s()
 
         side_env = os.environ.get("SFINCS_JAX_GMRES_PRECONDITION_SIDE", "").strip().lower()
@@ -21259,6 +31458,18 @@ def solve_v3_full_system_linear_gmres(
         progress_every = max(0, int(progress_every))
         mv_count = 0
 
+        def _mv_true_no_count(v: jnp.ndarray) -> jnp.ndarray:
+            x_full = _sparse_pc_expand_reduced(jnp.asarray(v, dtype=rhs.dtype))
+            y_full = apply_v3_full_system_operator_cached(op, x_full)
+            return _sparse_pc_reduce_full(y_full)
+
+        def _mv_true_matmat(cols: np.ndarray) -> np.ndarray:
+            cols_np = np.asarray(cols, dtype=np.float64)
+            if cols_np.ndim != 2:
+                raise ValueError("true matmat columns must be a rank-2 array")
+            out = jax.vmap(_mv_true_no_count, in_axes=1, out_axes=1)(jnp.asarray(cols_np, dtype=rhs.dtype))
+            return np.asarray(out, dtype=np.float64)
+
         def _mv_true(v: jnp.ndarray) -> jnp.ndarray:
             nonlocal mv_count
             mv_count += 1
@@ -21268,9 +31479,7 @@ def solve_v3_full_system_linear_gmres(
                     "solve_v3_full_system_linear_gmres: sparse_pc_gmres "
                     f"matvecs={int(mv_count)} elapsed_s={sparse_timer.elapsed_s():.3f}",
                 )
-            x_full = _sparse_pc_expand_reduced(jnp.asarray(v, dtype=rhs.dtype))
-            y_full = apply_v3_full_system_operator_cached(op, x_full)
-            return _sparse_pc_reduce_full(y_full)
+            return _mv_true_no_count(v)
 
         def _precond_sparse(v: jnp.ndarray) -> jnp.ndarray:
             v_np = np.asarray(v, dtype=np.float64).reshape((-1,))
@@ -21297,6 +31506,2141 @@ def solve_v3_full_system_linear_gmres(
             tol=float(tol),
             rhs_norm=float(sparse_pc_rhs_norm),
         )
+        direct_tail_support_mode_preflight_requested = _rhs1_bool_env(
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_SUPPORT_MODE_PREFLIGHT",
+            default=False,
+        )
+        if bool(direct_tail_support_mode_preflight_requested):
+            factor_kind_for_support = str(getattr(factor_bundle_pc, "kind", "")).strip().lower().replace("-", "_")
+            if (
+                bool(structured_pc_ready)
+                and factor_kind_for_support
+                in {"active_fortran_v3_reduced_lu", "active_fortran_v3_reduced_ilu"}
+                and direct_tail_operator_bundle is not None
+                and direct_tail_structured_layout is not None
+                and direct_tail_structured_max_nbytes is not None
+            ):
+                support_candidates = os.environ.get(
+                    "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_SUPPORT_MODE_CANDIDATES",
+                    "current,x0,xmin_l2,species0",
+                ).strip()
+                support_max_candidates = _rhs1_int_env(
+                    "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_SUPPORT_MODE_MAX_CANDIDATES",
+                    default=4,
+                    minimum=1,
+                )
+                support_min_improvement = _rhs1_float_env(
+                    "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_SUPPORT_MODE_MIN_IMPROVEMENT",
+                    default=1.05,
+                    minimum=1.0,
+                )
+
+                def _support_true_matvec(v_np: np.ndarray) -> np.ndarray:
+                    return np.asarray(
+                        jax.device_get(_mv_true_no_count(jnp.asarray(v_np, dtype=rhs.dtype))),
+                        dtype=np.float64,
+                    ).reshape((-1,))
+
+                try:
+                    support_pc, support_metadata = (
+                        select_active_fortran_v3_reduced_support_mode_preconditioner(
+                            matrix=direct_tail_operator_bundle.matrix,
+                            layout=direct_tail_structured_layout,
+                            active_indices=direct_tail_structured_active_indices,
+                            requested_kind=factor_kind_for_support,
+                            regularization=float(pc_reg),
+                            max_factor_nbytes=int(direct_tail_structured_max_nbytes),
+                            rhs=np.asarray(sparse_pc_rhs, dtype=np.float64),
+                            true_matvec=_support_true_matvec,
+                            candidates=support_candidates or "current",
+                            max_candidates=int(support_max_candidates),
+                            min_improvement_ratio=float(support_min_improvement),
+                            preconditioner_x=int(preconditioner_x),
+                            preconditioner_xi=int(preconditioner_xi),
+                            preconditioner_species=int(preconditioner_species),
+                            preconditioner_x_min_l=int(preconditioner_x_min_l),
+                        )
+                    )
+                    direct_tail_support_mode_preflight_metadata = support_metadata
+                    if bool(support_pc.selected) and support_pc.operator is not None:
+                        support_factor_nbytes = support_pc.metadata.get("factor_nbytes_actual")
+                        if support_factor_nbytes is None:
+                            support_factor_nbytes = support_pc.metadata.get("factor_nbytes_estimate")
+                        factor_bundle_pc = _StructuredHostSparsePreconditionerBundle(
+                            preconditioner=support_pc,
+                            operator=direct_tail_operator_bundle,
+                            kind=str(support_pc.kind),
+                            factor_nbytes_estimate=(
+                                None if support_factor_nbytes is None else int(support_factor_nbytes)
+                            ),
+                            factor_nnz_estimate=None,
+                            factor_s=float(support_pc.setup_s),
+                        )
+                        direct_tail_structured_pc_selected = True
+                        direct_tail_structured_pc_reason = str(support_pc.reason)
+                        direct_tail_structured_pc_metadata = support_pc.to_dict()
+                        direct_tail_support_mode_preflight_selected = True
+                        if emit is not None:
+                            selected_candidate = support_metadata.get("selected_candidate")
+                            baseline_after = support_metadata.get("baseline_residual_after")
+                            best_after = support_metadata.get("best_residual_after")
+                            emit(
+                                1,
+                                "solve_v3_full_system_linear_gmres: fortran_reduced direct-tail "
+                                "support-mode preflight selected "
+                                f"candidate={selected_candidate} "
+                                f"baseline_residual={float(baseline_after or float('nan')):.6e} "
+                                f"best_residual={float(best_after or float('nan')):.6e} "
+                                f"accepted_nonbaseline={bool(support_metadata.get('accepted_nonbaseline', False))}",
+                            )
+                except Exception as exc:  # noqa: BLE001
+                    direct_tail_support_mode_preflight_error = f"{type(exc).__name__}: {exc}"
+                    if emit is not None:
+                        emit(
+                            1,
+                            "solve_v3_full_system_linear_gmres: fortran_reduced direct-tail "
+                            f"support-mode preflight failed ({direct_tail_support_mode_preflight_error}); "
+                            "continuing with existing structured preconditioner",
+                        )
+            else:
+                direct_tail_support_mode_preflight_metadata = {
+                    "selected": False,
+                    "reason": "support_mode_preflight_not_applicable",
+                    "structured_pc_ready": bool(structured_pc_ready),
+                    "factor_kind": str(factor_kind_for_support),
+                }
+        factor_preflight_enabled = _rhs1_bool_env(
+            "SFINCS_JAX_RHSMODE1_SPARSE_PC_FACTOR_PREFLIGHT",
+            default=bool(fortran_reduced_sparse_pc),
+        )
+        factor_preflight_required = _rhs1_bool_env(
+            "SFINCS_JAX_RHSMODE1_SPARSE_PC_FACTOR_PREFLIGHT_REQUIRED",
+            default=False,
+        )
+        factor_preflight_seed_enabled = _rhs1_bool_env(
+            "SFINCS_JAX_RHSMODE1_SPARSE_PC_FACTOR_PREFLIGHT_SEED",
+            default=True,
+        )
+        structured_pc_preflight_required_min_size = _rhs1_int_env(
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_STRUCTURED_PC_PREFLIGHT_REQUIRED_MIN_SIZE",
+            default=100_000,
+            minimum=1,
+        )
+        direct_tail_structured_pc_requires_preflight = False
+        direct_tail_structured_pc_kind_for_preflight = ""
+        if bool(structured_pc_ready) and isinstance(direct_tail_structured_pc_metadata, dict):
+            direct_tail_structured_pc_kind_for_preflight = (
+                str(direct_tail_structured_pc_metadata.get("kind", ""))
+                .strip()
+                .lower()
+                .replace("-", "_")
+            )
+            structured_pc_metadata_inner = direct_tail_structured_pc_metadata.get("metadata")
+            if isinstance(structured_pc_metadata_inner, dict):
+                direct_tail_structured_pc_requires_preflight = bool(
+                    structured_pc_metadata_inner.get("requires_preflight", False)
+                )
+                if not direct_tail_structured_pc_kind_for_preflight:
+                    direct_tail_structured_pc_kind_for_preflight = (
+                        str(structured_pc_metadata_inner.get("requested_kind", ""))
+                        .strip()
+                        .lower()
+                        .replace("-", "_")
+                    )
+        direct_tail_structured_pc_size_requires_preflight = bool(
+            structured_pc_ready
+            and int(sparse_pc_linear_size) >= int(structured_pc_preflight_required_min_size)
+            and direct_tail_structured_pc_kind_for_preflight != "active_fortran_v3_reduced_lu"
+        )
+        structured_pc_preflight_required = _rhs1_bool_env(
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_STRUCTURED_PC_PREFLIGHT_REQUIRED",
+            default=bool(
+                structured_pc_ready
+                and (
+                    bool(direct_tail_structured_pc_requires_preflight)
+                    or bool(direct_tail_structured_pc_size_requires_preflight)
+                )
+            ),
+        )
+        factor_preflight_max_target_ratio = _rhs1_float_env(
+            "SFINCS_JAX_RHSMODE1_SPARSE_PC_FACTOR_PREFLIGHT_MAX_TARGET_RATIO",
+            default=1.0e6,
+            minimum=1.0,
+        )
+        factor_preflight_residual_before: float | None = None
+        factor_preflight_residual_after: float | None = None
+        factor_preflight_improvement_ratio: float | None = None
+        factor_preflight_target_ratio: float | None = None
+        factor_preflight_residual_diagnostics: dict[str, object] | None = None
+        factor_preflight_seed_used = False
+        factor_preflight_passed: bool | None = None
+        factor_preflight_error: str | None = None
+        direct_tail_residual_coarse_requested = _rhs1_bool_env(
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_RESIDUAL_COARSE",
+            default=False,
+        )
+        direct_tail_residual_coarse_selected = False
+        direct_tail_residual_coarse_metadata: dict[str, object] | None = None
+        direct_tail_residual_coarse_error: str | None = None
+        direct_tail_residual_coarse_residual_after: float | None = None
+        direct_tail_residual_coarse_rank = _rhs1_int_env(
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_RESIDUAL_COARSE_RANK",
+            default=4,
+            minimum=1,
+        )
+        direct_tail_residual_coarse_max_mb = _rhs1_float_env(
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_RESIDUAL_COARSE_MAX_MB",
+            default=512.0,
+            minimum=0.0,
+        )
+        direct_tail_residual_coarse_regularization = _rhs1_float_env(
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_RESIDUAL_COARSE_REGULARIZATION",
+            default=1.0e-12,
+            minimum=0.0,
+        )
+        direct_tail_residual_window_requested = _rhs1_bool_env(
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_RESIDUAL_WINDOW",
+            default=False,
+        )
+        direct_tail_true_window_requested = _rhs1_bool_env(
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_WINDOW",
+            default=False,
+        )
+        direct_tail_true_coupled_coarse_explicit_requested = _rhs1_bool_env(
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_COUPLED_COARSE",
+            default=False,
+        )
+        direct_tail_true_coupled_coarse_auto_enabled = _rhs1_bool_env(
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_COUPLED_COARSE_AUTO",
+            default=True,
+        )
+        direct_tail_true_coupled_coarse_auto_native_enabled = _rhs1_bool_env(
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_COUPLED_AUTO_NATIVE",
+            default=False,
+        )
+        direct_tail_true_coupled_coarse_auto_target_ratio = _rhs1_float_env(
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_COUPLED_AUTO_TARGET_RATIO",
+            default=10.0,
+            minimum=1.0,
+        )
+        direct_tail_true_coupled_coarse_auto_min_size = _rhs1_int_env(
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_COUPLED_AUTO_MIN_SIZE",
+            default=300_000,
+            minimum=1,
+        )
+        direct_tail_true_coupled_coarse_requested = bool(direct_tail_true_coupled_coarse_explicit_requested)
+        direct_tail_true_coupled_coarse_auto_selected = False
+        direct_tail_true_coupled_coarse_selected = False
+        direct_tail_true_coupled_coarse_metadata: dict[str, object] | None = None
+        direct_tail_true_coupled_coarse_error: str | None = None
+        direct_tail_true_coupled_coarse_residual_after: float | None = None
+        direct_tail_true_window_selected = False
+        direct_tail_true_window_metadata: dict[str, object] | None = None
+        direct_tail_true_window_error: str | None = None
+        direct_tail_true_window_residual_after: float | None = None
+        direct_tail_residual_window_selected = False
+        direct_tail_residual_window_metadata: dict[str, object] | None = None
+        direct_tail_residual_window_error: str | None = None
+        direct_tail_residual_window_residual_after: float | None = None
+        direct_tail_residual_window_max_windows = _rhs1_int_env(
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_RESIDUAL_WINDOW_MAX_WINDOWS",
+            default=2,
+            minimum=1,
+        )
+        direct_tail_residual_window_x_radius = _rhs1_int_env(
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_RESIDUAL_WINDOW_X_RADIUS",
+            default=0,
+            minimum=0,
+        )
+        direct_tail_residual_window_ell_radius = _rhs1_int_env(
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_RESIDUAL_WINDOW_ELL_RADIUS",
+            default=1,
+            minimum=0,
+        )
+        direct_tail_residual_window_max_mb = _rhs1_float_env(
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_RESIDUAL_WINDOW_MAX_MB",
+            default=512.0,
+            minimum=0.0,
+        )
+        direct_tail_residual_window_regularization = _rhs1_float_env(
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_RESIDUAL_WINDOW_REGULARIZATION",
+            default=1.0e-12,
+            minimum=0.0,
+        )
+        direct_tail_residual_window_coefficient_mode = (
+            os.environ.get(
+                "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_RESIDUAL_WINDOW_COEFFICIENTS",
+                "additive",
+            )
+            .strip()
+            .lower()
+            .replace("-", "_")
+        )
+        if direct_tail_residual_window_coefficient_mode not in {
+            "additive",
+            "least_squares",
+            "normal",
+            "normal_equations",
+        }:
+            direct_tail_residual_window_coefficient_mode = "additive"
+        direct_tail_residual_window_combine_mode = (
+            os.environ.get(
+                "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_RESIDUAL_WINDOW_COMBINE",
+                "independent",
+            )
+            .strip()
+            .lower()
+            .replace("-", "_")
+        )
+        if direct_tail_residual_window_combine_mode not in {
+            "independent",
+            "union",
+            "coupled",
+            "interface",
+            "graph_interface",
+        }:
+            direct_tail_residual_window_combine_mode = "independent"
+        direct_tail_residual_window_interface_depth = _rhs1_int_env(
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_RESIDUAL_WINDOW_INTERFACE_DEPTH",
+            default=0,
+            minimum=0,
+        )
+        direct_tail_residual_window_max_size = _rhs1_int_env(
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_RESIDUAL_WINDOW_MAX_SIZE",
+            default=100_000,
+            minimum=1,
+        )
+        direct_tail_true_window_max_windows = _rhs1_int_env(
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_WINDOW_MAX_WINDOWS",
+            default=1,
+            minimum=1,
+        )
+        direct_tail_true_window_x_radius = _rhs1_int_env(
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_WINDOW_X_RADIUS",
+            default=0,
+            minimum=0,
+        )
+        direct_tail_true_window_ell_radius = _rhs1_int_env(
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_WINDOW_ELL_RADIUS",
+            default=1,
+            minimum=0,
+        )
+        direct_tail_true_window_max_mb = _rhs1_float_env(
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_WINDOW_MAX_MB",
+            default=512.0,
+            minimum=0.0,
+        )
+        direct_tail_true_window_regularization = _rhs1_float_env(
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_WINDOW_REGULARIZATION",
+            default=1.0e-12,
+            minimum=0.0,
+        )
+        direct_tail_true_window_max_size = _rhs1_int_env(
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_WINDOW_MAX_SIZE",
+            default=4096,
+            minimum=1,
+        )
+        direct_tail_true_window_column_batch = _rhs1_int_env(
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_WINDOW_COLUMN_BATCH",
+            default=4,
+            minimum=1,
+        )
+        direct_tail_true_window_drop_tol = _rhs1_float_env(
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_WINDOW_DROP_TOL",
+            default=1.0e-14,
+            minimum=0.0,
+        )
+        direct_tail_true_window_include_tail = _rhs1_bool_env(
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_WINDOW_INCLUDE_TAIL",
+            default=True,
+        )
+        direct_tail_true_window_damping = _rhs1_bool_env(
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_WINDOW_DAMPING",
+            default=False,
+        )
+        direct_tail_true_window_beta_max = _rhs1_float_env(
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_WINDOW_BETA_MAX",
+            default=10.0,
+            minimum=0.0,
+        )
+        direct_tail_true_window_specs_env = (
+            os.environ.get("SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_WINDOW_SPECS", "").strip()
+            or os.environ.get("SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_WINDOW_SPEC", "").strip()
+        )
+        direct_tail_true_window_specs = ()
+        if direct_tail_true_window_specs_env:
+            try:
+                direct_tail_true_window_specs = _parse_true_operator_window_specs(
+                    direct_tail_true_window_specs_env,
+                    layout=RHS1BlockLayout.from_operator(op),
+                )
+            except (AttributeError, TypeError, ValueError) as exc:
+                if emit is not None:
+                    emit(
+                        1,
+                        "fortran_reduced_direct_tail_true_window: "
+                        f"skipped explicit specs ({type(exc).__name__}: {exc})",
+                    )
+        direct_tail_true_active_block_requested = _rhs1_bool_env(
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_ACTIVE_BLOCK",
+            default=False,
+        )
+        direct_tail_true_active_residual_block_requested = _rhs1_bool_env(
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_ACTIVE_RESIDUAL_BLOCK",
+            default=False,
+        )
+        direct_tail_true_active_submatrix_requested = _rhs1_bool_env(
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_ACTIVE_SUBMATRIX",
+            default=False,
+        )
+        direct_tail_true_active_submatrix_selected = False
+        direct_tail_true_active_submatrix_metadata: dict[str, object] | None = None
+        direct_tail_true_active_submatrix_error: str | None = None
+        direct_tail_true_active_submatrix_residual_after: float | None = None
+        direct_tail_true_active_block_selected = False
+        direct_tail_true_active_block_metadata: dict[str, object] | None = None
+        direct_tail_true_active_block_error: str | None = None
+        direct_tail_true_active_block_residual_after: float | None = None
+        direct_tail_true_active_residual_block_selected = False
+        direct_tail_true_active_residual_block_metadata: dict[str, object] | None = None
+        direct_tail_true_active_residual_block_error: str | None = None
+        direct_tail_true_active_residual_block_residual_after: float | None = None
+        direct_tail_true_active_column_cache_requested = _rhs1_bool_env(
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_ACTIVE_COLUMN_CACHE",
+            default=True,
+        )
+        direct_tail_true_active_column_cache_max_mb = _rhs1_float_env(
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_ACTIVE_COLUMN_CACHE_MAX_MB",
+            default=512.0,
+            minimum=0.0,
+        )
+        direct_tail_true_active_column_cache_metadata: dict[str, object] | None = None
+        direct_tail_true_active_block_x_count = _rhs1_int_env(
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_ACTIVE_BLOCK_X_COUNT",
+            default=1,
+            minimum=0,
+        )
+        direct_tail_true_active_block_ell_count = _rhs1_int_env(
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_ACTIVE_BLOCK_ELL_COUNT",
+            default=8,
+            minimum=0,
+        )
+        species_count_env = os.environ.get(
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_ACTIVE_BLOCK_SPECIES_COUNT",
+            "",
+        ).strip()
+        direct_tail_true_active_block_species_count: int | None = None
+        if species_count_env:
+            try:
+                direct_tail_true_active_block_species_count = max(0, int(species_count_env))
+            except ValueError:
+                direct_tail_true_active_block_species_count = None
+        direct_tail_true_active_block_theta_stride = _rhs1_int_env(
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_ACTIVE_BLOCK_THETA_STRIDE",
+            default=1,
+            minimum=1,
+        )
+        direct_tail_true_active_block_zeta_stride = _rhs1_int_env(
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_ACTIVE_BLOCK_ZETA_STRIDE",
+            default=1,
+            minimum=1,
+        )
+        direct_tail_true_active_block_max_mb = _rhs1_float_env(
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_ACTIVE_BLOCK_MAX_MB",
+            default=1024.0,
+            minimum=0.0,
+        )
+        direct_tail_true_active_block_regularization = _rhs1_float_env(
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_ACTIVE_BLOCK_REGULARIZATION",
+            default=1.0e-12,
+            minimum=0.0,
+        )
+        direct_tail_true_active_block_max_size = _rhs1_int_env(
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_ACTIVE_BLOCK_MAX_SIZE",
+            default=4096,
+            minimum=1,
+        )
+        direct_tail_true_active_block_column_batch = _rhs1_int_env(
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_ACTIVE_BLOCK_COLUMN_BATCH",
+            default=8,
+            minimum=1,
+        )
+        direct_tail_true_active_block_drop_tol = _rhs1_float_env(
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_ACTIVE_BLOCK_DROP_TOL",
+            default=1.0e-14,
+            minimum=0.0,
+        )
+        direct_tail_true_active_block_include_tail = _rhs1_bool_env(
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_ACTIVE_BLOCK_INCLUDE_TAIL",
+            default=True,
+        )
+        direct_tail_true_active_block_max_tail = _rhs1_int_env(
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_ACTIVE_BLOCK_MAX_TAIL",
+            default=512,
+            minimum=0,
+        )
+        direct_tail_true_active_block_damping = _rhs1_bool_env(
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_ACTIVE_BLOCK_DAMPING",
+            default=False,
+        )
+        direct_tail_true_active_block_beta_max = _rhs1_float_env(
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_ACTIVE_BLOCK_BETA_MAX",
+            default=10.0,
+            minimum=0.0,
+        )
+        direct_tail_true_active_residual_block_max_mb = _rhs1_float_env(
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_ACTIVE_RESIDUAL_BLOCK_MAX_MB",
+            default=float(direct_tail_true_active_block_max_mb),
+            minimum=0.0,
+        )
+        direct_tail_true_active_residual_block_regularization = _rhs1_float_env(
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_ACTIVE_RESIDUAL_BLOCK_REGULARIZATION",
+            default=float(direct_tail_true_active_block_regularization),
+            minimum=0.0,
+        )
+        direct_tail_true_active_residual_block_max_size = _rhs1_int_env(
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_ACTIVE_RESIDUAL_BLOCK_MAX_SIZE",
+            default=int(direct_tail_true_active_block_max_size),
+            minimum=1,
+        )
+        direct_tail_true_active_residual_block_column_batch = _rhs1_int_env(
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_ACTIVE_RESIDUAL_BLOCK_COLUMN_BATCH",
+            default=int(direct_tail_true_active_block_column_batch),
+            minimum=1,
+        )
+        direct_tail_true_active_residual_block_drop_tol = _rhs1_float_env(
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_ACTIVE_RESIDUAL_BLOCK_DROP_TOL",
+            default=float(direct_tail_true_active_block_drop_tol),
+            minimum=0.0,
+        )
+        direct_tail_true_active_residual_block_include_tail = _rhs1_bool_env(
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_ACTIVE_RESIDUAL_BLOCK_INCLUDE_TAIL",
+            default=bool(direct_tail_true_active_block_include_tail),
+        )
+        direct_tail_true_active_residual_block_max_tail = _rhs1_int_env(
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_ACTIVE_RESIDUAL_BLOCK_MAX_TAIL",
+            default=int(direct_tail_true_active_block_max_tail),
+            minimum=0,
+        )
+        direct_tail_true_active_residual_block_kinetic_only = _rhs1_bool_env(
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_ACTIVE_RESIDUAL_BLOCK_KINETIC_ONLY",
+            default=True,
+        )
+        direct_tail_true_active_residual_block_damping = _rhs1_bool_env(
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_ACTIVE_RESIDUAL_BLOCK_DAMPING",
+            default=bool(direct_tail_true_active_block_damping),
+        )
+        direct_tail_true_active_residual_block_beta_max = _rhs1_float_env(
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_ACTIVE_RESIDUAL_BLOCK_BETA_MAX",
+            default=float(direct_tail_true_active_block_beta_max),
+            minimum=0.0,
+        )
+        direct_tail_true_active_residual_block_min_improvement = _rhs1_float_env(
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_ACTIVE_RESIDUAL_BLOCK_MIN_IMPROVEMENT",
+            default=1.0e-6,
+            minimum=0.0,
+        )
+        direct_tail_true_active_residual_block_accept_base_improvement = _rhs1_bool_env(
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_ACTIVE_RESIDUAL_BLOCK_ACCEPT_BASE_IMPROVEMENT",
+            default=False,
+        )
+        direct_tail_true_active_residual_block_base_improvement_override_used = False
+        direct_tail_true_active_submatrix_damping = _rhs1_bool_env(
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_ACTIVE_SUBMATRIX_DAMPING",
+            default=True,
+        )
+        direct_tail_true_active_submatrix_alpha_clip = _rhs1_float_env(
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_ACTIVE_SUBMATRIX_ALPHA_CLIP",
+            default=10.0,
+            minimum=0.0,
+        )
+        direct_tail_true_active_submatrix_min_improvement = _rhs1_float_env(
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_ACTIVE_SUBMATRIX_MIN_IMPROVEMENT",
+            default=1.0e-6,
+            minimum=0.0,
+        )
+        direct_tail_true_coupled_coarse_max_windows = _rhs1_int_env(
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_COUPLED_MAX_WINDOWS",
+            default=2,
+            minimum=1,
+        )
+        direct_tail_true_coupled_coarse_x_radius = _rhs1_int_env(
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_COUPLED_X_RADIUS",
+            default=0,
+            minimum=0,
+        )
+        direct_tail_true_coupled_coarse_ell_radius = _rhs1_int_env(
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_COUPLED_ELL_RADIUS",
+            default=1,
+            minimum=0,
+        )
+        direct_tail_true_coupled_coarse_max_mb = _rhs1_float_env(
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_COUPLED_MAX_MB",
+            default=512.0,
+            minimum=0.0,
+        )
+        direct_tail_true_coupled_coarse_regularization = _rhs1_float_env(
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_COUPLED_REGULARIZATION",
+            default=1.0e-12,
+            minimum=0.0,
+        )
+        direct_tail_true_coupled_coarse_max_size = _rhs1_int_env(
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_COUPLED_MAX_SIZE",
+            default=64,
+            minimum=1,
+        )
+        direct_tail_true_coupled_coarse_column_batch = _rhs1_int_env(
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_COUPLED_COLUMN_BATCH",
+            default=4,
+            minimum=1,
+        )
+        direct_tail_true_coupled_coarse_drop_tol = _rhs1_float_env(
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_COUPLED_DROP_TOL",
+            default=1.0e-14,
+            minimum=0.0,
+        )
+        direct_tail_true_coupled_coarse_low_lmax = _rhs1_int_env(
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_COUPLED_LOW_LMAX",
+            default=3,
+            minimum=0,
+        )
+        direct_tail_true_coupled_coarse_profile_moment_count = _rhs1_int_env(
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_COUPLED_PROFILE_MOMENT_COUNT",
+            default=4,
+            minimum=0,
+        )
+        direct_tail_true_coupled_coarse_angular_lmax = _rhs1_int_env(
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_COUPLED_ANGULAR_LMAX",
+            default=2,
+            minimum=0,
+        )
+        direct_tail_true_coupled_coarse_angular_mode_max = _rhs1_int_env(
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_COUPLED_ANGULAR_MODE_MAX",
+            default=1,
+            minimum=0,
+        )
+        direct_tail_true_coupled_coarse_max_tail_units = _rhs1_int_env(
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_COUPLED_MAX_TAIL_UNITS",
+            default=16,
+            minimum=0,
+        )
+        direct_tail_true_coupled_coarse_include_tail = _rhs1_bool_env(
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_COUPLED_INCLUDE_TAIL",
+            default=True,
+        )
+        direct_tail_true_coupled_coarse_include_constraint_sources = _rhs1_bool_env(
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_COUPLED_INCLUDE_CONSTRAINT_SOURCES",
+            default=True,
+        )
+        direct_tail_true_coupled_coarse_include_fsavg = _rhs1_bool_env(
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_COUPLED_INCLUDE_FSAVG",
+            default=True,
+        )
+        direct_tail_true_coupled_coarse_include_window_residual = _rhs1_bool_env(
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_COUPLED_INCLUDE_WINDOW_RESIDUAL",
+            default=True,
+        )
+        direct_tail_true_coupled_coarse_include_profile_moments = _rhs1_bool_env(
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_COUPLED_INCLUDE_PROFILE_MOMENTS",
+            default=True,
+        )
+        direct_tail_true_coupled_coarse_include_angular_residual = _rhs1_bool_env(
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_COUPLED_INCLUDE_ANGULAR_RESIDUAL",
+            default=True,
+        )
+        direct_tail_true_coupled_coarse_include_angular_basis = _rhs1_bool_env(
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_COUPLED_INCLUDE_ANGULAR_BASIS",
+            default=False,
+        )
+        direct_tail_true_coupled_coarse_include_preconditioned_loads = _rhs1_bool_env(
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_COUPLED_INCLUDE_PRECONDITIONED_LOADS",
+            default=False,
+        )
+        direct_tail_true_coupled_coarse_preconditioned_load_max_columns = _rhs1_int_env(
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_COUPLED_PRECONDITIONED_LOAD_MAX_COLUMNS",
+            default=16,
+            minimum=0,
+        )
+        direct_tail_true_coupled_coarse_preconditioned_load_max_nnz = _rhs1_int_env(
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_COUPLED_PRECONDITIONED_LOAD_MAX_NNZ",
+            default=50_000,
+            minimum=0,
+        )
+        direct_tail_true_coupled_coarse_preconditioned_load_drop_tol = _rhs1_float_env(
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_COUPLED_PRECONDITIONED_LOAD_DROP_TOL",
+            default=1.0e-12,
+            minimum=0.0,
+        )
+        direct_tail_true_coupled_coarse_damping = _rhs1_bool_env(
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_COUPLED_DAMPING",
+            default=False,
+        )
+        direct_tail_true_coupled_coarse_beta_max = _rhs1_float_env(
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_COUPLED_BETA_MAX",
+            default=10.0,
+            minimum=0.0,
+        )
+        direct_tail_true_coupled_coarse_accept_base_improvement = _rhs1_bool_env(
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_COUPLED_ACCEPT_BASE_IMPROVEMENT",
+            default=False,
+        )
+        direct_tail_true_coupled_coarse_base_improvement_override_used = False
+
+        if bool(factor_preflight_enabled) and x0_sparse is None:
+            try:
+                factor_preflight_residual_before = float(sparse_pc_rhs_norm)
+                x_seed_sparse = jnp.asarray(_precond_sparse(sparse_pc_rhs), dtype=jnp.float64)
+                residual_vec_seed = sparse_pc_rhs - jnp.asarray(_mv_true(x_seed_sparse), dtype=jnp.float64)
+                residual_vec_current = residual_vec_seed
+                factor_preflight_residual_after = float(jnp.linalg.norm(residual_vec_seed))
+                factor_preflight_residual_diagnostics = _rhs1_active_reduced_residual_diagnostics(
+                    residual=residual_vec_seed,
+                    layout=RHS1BlockLayout.from_operator(op),
+                    active_indices=sparse_pc_active_idx_np if sparse_pc_use_active_dof else None,
+                )
+                if (
+                    factor_preflight_residual_before is not None
+                    and float(factor_preflight_residual_before) > 0.0
+                    and np.isfinite(float(factor_preflight_residual_after))
+                ):
+                    factor_preflight_improvement_ratio = (
+                        float(factor_preflight_residual_before)
+                        / max(float(factor_preflight_residual_after), 1.0e-300)
+                    )
+                if float(target) > 0.0:
+                    factor_preflight_target_ratio = (
+                        float(factor_preflight_residual_after) / float(target)
+                        if np.isfinite(float(factor_preflight_residual_after))
+                        else float("inf")
+                    )
+                factor_preflight_passed = bool(
+                    np.isfinite(float(factor_preflight_residual_after))
+                    and float(factor_preflight_residual_after) < float(factor_preflight_residual_before)
+                    and (
+                        factor_preflight_target_ratio is None
+                        or float(factor_preflight_target_ratio) <= float(factor_preflight_max_target_ratio)
+                    )
+                )
+                if (
+                    bool(factor_preflight_seed_enabled)
+                    and np.isfinite(float(factor_preflight_residual_after))
+                    and float(factor_preflight_residual_after) < float(factor_preflight_residual_before)
+                ):
+                    x0_sparse = x_seed_sparse
+                    factor_preflight_seed_used = True
+                if emit is not None:
+                    emit(
+                        1,
+                        "solve_v3_full_system_linear_gmres: sparse_pc_gmres factor preflight "
+                        f"residual={float(factor_preflight_residual_before):.6e}"
+                        f"->{float(factor_preflight_residual_after):.6e} "
+                        f"improvement={float(factor_preflight_improvement_ratio or 0.0):.6e} "
+                        f"target_ratio={float(factor_preflight_target_ratio or float('inf')):.6e} "
+                        f"seed_used={bool(factor_preflight_seed_used)} "
+                        f"passed={bool(factor_preflight_passed)}",
+                    )
+                    if isinstance(factor_preflight_residual_diagnostics, dict) and factor_preflight_residual_diagnostics.get(
+                        "selected"
+                    ):
+                        component_norms = factor_preflight_residual_diagnostics.get("component_norms", {})
+                        kinetic_fraction = (
+                            component_norms.get("kinetic", {}).get("energy_fraction", 0.0)
+                            if isinstance(component_norms, dict)
+                            else 0.0
+                        )
+                        extra_fraction = (
+                            component_norms.get("extra", {}).get("energy_fraction", 0.0)
+                            if isinstance(component_norms, dict)
+                            else 0.0
+                        )
+                        top_sx = factor_preflight_residual_diagnostics.get("top_species_x", [])
+                        top_sx_label = top_sx[0].get("label") if isinstance(top_sx, list) and top_sx else "none"
+                        top_sx_fraction = (
+                            top_sx[0].get("energy_fraction", 0.0)
+                            if isinstance(top_sx, list) and top_sx
+                            else 0.0
+                        )
+                        top_x = factor_preflight_residual_diagnostics.get("top_x", [])
+                        top_x_label = top_x[0].get("label") if isinstance(top_x, list) and top_x else "none"
+                        top_x_fraction = (
+                            top_x[0].get("energy_fraction", 0.0)
+                            if isinstance(top_x, list) and top_x
+                            else 0.0
+                        )
+                        top_ell = factor_preflight_residual_diagnostics.get("top_ell", [])
+                        top_ell_label = top_ell[0].get("label") if isinstance(top_ell, list) and top_ell else "none"
+                        top_ell_fraction = (
+                            top_ell[0].get("energy_fraction", 0.0)
+                            if isinstance(top_ell, list) and top_ell
+                            else 0.0
+                        )
+                        emit(
+                            1,
+                            "solve_v3_full_system_linear_gmres: sparse_pc_gmres preflight residual diagnostics "
+                            f"kinetic_energy_fraction={float(kinetic_fraction):.6e} "
+                            f"extra_energy_fraction={float(extra_fraction):.6e} "
+                            f"top_species_x={top_sx_label} "
+                            f"top_species_x_fraction={float(top_sx_fraction):.6e} "
+                            f"top_x={top_x_label} top_x_fraction={float(top_x_fraction):.6e} "
+                            f"top_ell={top_ell_label} top_ell_fraction={float(top_ell_fraction):.6e}",
+                        )
+                true_coupled_factor_kind = str(getattr(factor_bundle_pc, "kind", "")).strip().lower().replace("-", "_")
+                true_coupled_auto_reference_kind = true_coupled_factor_kind in {
+                    "active_fortran_v3_reduced_lu",
+                }
+                true_coupled_auto_native_kind = true_coupled_factor_kind in {
+                    "active_fortran_v3_reduced_native_stack",
+                    "active_v3_reduced_native_stack",
+                    "fortran_v3_reduced_native_stack",
+                    "active_bounded_native_stack",
+                    "active_native_stack",
+                }
+                direct_tail_true_coupled_coarse_auto_selected = bool(
+                    direct_tail_true_coupled_coarse_auto_enabled
+                    and (
+                        bool(true_coupled_auto_reference_kind)
+                        or (
+                            bool(direct_tail_true_coupled_coarse_auto_native_enabled)
+                            and bool(true_coupled_auto_native_kind)
+                        )
+                    )
+                    and int(sparse_pc_linear_size) >= int(direct_tail_true_coupled_coarse_auto_min_size)
+                    and factor_preflight_target_ratio is not None
+                    and np.isfinite(float(factor_preflight_target_ratio))
+                    and float(factor_preflight_target_ratio)
+                    > float(direct_tail_true_coupled_coarse_auto_target_ratio)
+                    and factor_preflight_residual_after is not None
+                    and np.isfinite(float(factor_preflight_residual_after))
+                )
+                direct_tail_true_coupled_coarse_requested = bool(
+                    direct_tail_true_coupled_coarse_explicit_requested
+                    or direct_tail_true_coupled_coarse_auto_selected
+                )
+                if (
+                    bool(direct_tail_true_coupled_coarse_requested)
+                    and (
+                        factor_preflight_passed is False
+                        or bool(direct_tail_true_coupled_coarse_auto_selected)
+                    )
+                    and factor_preflight_residual_after is not None
+                    and np.isfinite(float(factor_preflight_residual_after))
+                ):
+                    try:
+                        true_coupled_bundle = _try_build_true_operator_coupled_coarse_lsq_preconditioner(
+                            true_matvec=lambda vec: np.asarray(
+                                jax.device_get(_mv_true_no_count(jnp.asarray(vec, dtype=jnp.float64))),
+                                dtype=np.float64,
+                            ),
+                            true_matmat=lambda mat: np.asarray(_mv_true_matmat(np.asarray(mat, dtype=np.float64))),
+                            factor_bundle=factor_bundle_pc,
+                            residual=np.asarray(jax.device_get(residual_vec_current), dtype=np.float64),
+                            op=op,
+                            layout=RHS1BlockLayout.from_operator(op),
+                            active_indices=sparse_pc_active_idx_np if sparse_pc_use_active_dof else None,
+                            max_windows=int(direct_tail_true_coupled_coarse_max_windows),
+                            x_radius=int(direct_tail_true_coupled_coarse_x_radius),
+                            ell_radius=int(direct_tail_true_coupled_coarse_ell_radius),
+                            max_nbytes=_rhs1_additive_rescue_nbytes(
+                                factor_bundle_pc,
+                                direct_tail_true_coupled_coarse_max_mb
+                            ),
+                            regularization=float(direct_tail_true_coupled_coarse_regularization),
+                            max_coarse_size=int(direct_tail_true_coupled_coarse_max_size),
+                            column_batch=int(direct_tail_true_coupled_coarse_column_batch),
+                            drop_tol=float(direct_tail_true_coupled_coarse_drop_tol),
+                            low_lmax=int(direct_tail_true_coupled_coarse_low_lmax),
+                            profile_moment_count=int(direct_tail_true_coupled_coarse_profile_moment_count),
+                            angular_lmax=int(direct_tail_true_coupled_coarse_angular_lmax),
+                            angular_mode_max=int(direct_tail_true_coupled_coarse_angular_mode_max),
+                            max_tail_units=int(direct_tail_true_coupled_coarse_max_tail_units),
+                            include_tail=bool(direct_tail_true_coupled_coarse_include_tail),
+                            include_constraint_sources=bool(
+                                direct_tail_true_coupled_coarse_include_constraint_sources
+                            ),
+                            include_fsavg=bool(direct_tail_true_coupled_coarse_include_fsavg),
+                            include_window_residual=bool(direct_tail_true_coupled_coarse_include_window_residual),
+                            include_profile_moments=bool(
+                                direct_tail_true_coupled_coarse_include_profile_moments
+                            ),
+                            include_angular_residual=bool(
+                                direct_tail_true_coupled_coarse_include_angular_residual
+                            ),
+                            include_angular_basis=bool(direct_tail_true_coupled_coarse_include_angular_basis),
+                            include_preconditioned_loads=bool(
+                                direct_tail_true_coupled_coarse_include_preconditioned_loads
+                            ),
+                            preconditioned_load_max_columns=int(
+                                direct_tail_true_coupled_coarse_preconditioned_load_max_columns
+                            ),
+                            preconditioned_load_max_nnz=int(
+                                direct_tail_true_coupled_coarse_preconditioned_load_max_nnz
+                            ),
+                            preconditioned_load_drop_tol=float(
+                                direct_tail_true_coupled_coarse_preconditioned_load_drop_tol
+                            ),
+                            damping=bool(direct_tail_true_coupled_coarse_damping),
+                            beta_max=float(direct_tail_true_coupled_coarse_beta_max),
+                            emit=emit,
+                        )
+                        if true_coupled_bundle is None:
+                            direct_tail_true_coupled_coarse_error = "builder_returned_none"
+                        else:
+                            x_true_coupled_sparse = jnp.asarray(
+                                true_coupled_bundle.solve(np.asarray(sparse_pc_rhs, dtype=np.float64)),
+                                dtype=jnp.float64,
+                            )
+                            residual_vec_true_coupled = sparse_pc_rhs - jnp.asarray(
+                                _mv_true_no_count(x_true_coupled_sparse),
+                                dtype=jnp.float64,
+                            )
+                            direct_tail_true_coupled_coarse_residual_after = float(
+                                jnp.linalg.norm(residual_vec_true_coupled)
+                            )
+                            true_coupled_diagnostics = _rhs1_active_reduced_residual_diagnostics(
+                                residual=residual_vec_true_coupled,
+                                layout=RHS1BlockLayout.from_operator(op),
+                                active_indices=sparse_pc_active_idx_np if sparse_pc_use_active_dof else None,
+                            )
+                            direct_tail_true_coupled_coarse_metadata = dict(true_coupled_bundle.metadata or {})
+                            direct_tail_true_coupled_coarse_metadata["residual_after"] = float(
+                                direct_tail_true_coupled_coarse_residual_after
+                            )
+                            direct_tail_true_coupled_coarse_metadata["base_residual_after"] = float(
+                                factor_preflight_residual_after
+                            )
+                            strict_true_coupled_accept = bool(
+                                np.isfinite(float(direct_tail_true_coupled_coarse_residual_after))
+                                and float(direct_tail_true_coupled_coarse_residual_after)
+                                < float(factor_preflight_residual_after)
+                                and factor_preflight_residual_before is not None
+                                and float(direct_tail_true_coupled_coarse_residual_after)
+                                < float(factor_preflight_residual_before)
+                            )
+                            base_improvement_accept = bool(
+                                direct_tail_true_coupled_coarse_accept_base_improvement
+                                and np.isfinite(float(direct_tail_true_coupled_coarse_residual_after))
+                                and float(direct_tail_true_coupled_coarse_residual_after)
+                                < float(factor_preflight_residual_after)
+                            )
+                            if strict_true_coupled_accept or base_improvement_accept:
+                                direct_tail_true_coupled_coarse_selected = True
+                                direct_tail_true_coupled_coarse_base_improvement_override_used = bool(
+                                    base_improvement_accept
+                                )
+                                factor_bundle_pc = true_coupled_bundle
+                                pc_factor_s += float(true_coupled_bundle.factor_s or 0.0)
+                                setup_s = sparse_timer.elapsed_s()
+                                factor_preflight_residual_after = float(
+                                    direct_tail_true_coupled_coarse_residual_after
+                                )
+                                residual_vec_current = residual_vec_true_coupled
+                                factor_preflight_residual_diagnostics = true_coupled_diagnostics
+                                if (
+                                    factor_preflight_residual_before is not None
+                                    and float(factor_preflight_residual_before) > 0.0
+                                ):
+                                    factor_preflight_improvement_ratio = (
+                                        float(factor_preflight_residual_before)
+                                        / max(float(factor_preflight_residual_after), 1.0e-300)
+                                    )
+                                if float(target) > 0.0:
+                                    factor_preflight_target_ratio = (
+                                        float(factor_preflight_residual_after) / float(target)
+                                        if np.isfinite(float(factor_preflight_residual_after))
+                                        else float("inf")
+                                    )
+                                factor_preflight_passed = bool(
+                                    np.isfinite(float(factor_preflight_residual_after))
+                                    and float(factor_preflight_residual_after)
+                                    < float(factor_preflight_residual_before)
+                                    and (
+                                        factor_preflight_target_ratio is None
+                                        or float(factor_preflight_target_ratio)
+                                        <= float(factor_preflight_max_target_ratio)
+                                    )
+                                )
+                                if bool(direct_tail_true_coupled_coarse_base_improvement_override_used):
+                                    factor_preflight_passed = True
+                                if (
+                                    bool(factor_preflight_seed_enabled)
+                                    and np.isfinite(float(factor_preflight_residual_after))
+                                    and float(factor_preflight_residual_after)
+                                    < float(factor_preflight_residual_before)
+                                ):
+                                    x0_sparse = x_true_coupled_sparse
+                                    factor_preflight_seed_used = True
+                                if emit is not None:
+                                    emit(
+                                        1,
+                                        "solve_v3_full_system_linear_gmres: true coupled coarse accepted "
+                                        f"coarse_size={direct_tail_true_coupled_coarse_metadata.get('coarse_size')} "
+                                        f"residual={direct_tail_true_coupled_coarse_metadata['base_residual_after']:.6e}"
+                                        f"->{float(factor_preflight_residual_after):.6e} "
+                                        f"passed={bool(factor_preflight_passed)} "
+                                        f"base_improvement_override={bool(direct_tail_true_coupled_coarse_base_improvement_override_used)}",
+                                    )
+                            elif emit is not None:
+                                emit(
+                                    1,
+                                    "solve_v3_full_system_linear_gmres: true coupled coarse rejected "
+                                    f"residual={float(factor_preflight_residual_after):.6e}"
+                                    f"->{float(direct_tail_true_coupled_coarse_residual_after):.6e}",
+                                )
+                    except Exception as exc:  # noqa: BLE001
+                        direct_tail_true_coupled_coarse_error = f"{type(exc).__name__}: {exc}"
+                        if emit is not None:
+                            emit(
+                                1,
+                                "solve_v3_full_system_linear_gmres: true coupled coarse failed "
+                                f"({direct_tail_true_coupled_coarse_error})",
+                            )
+
+                def _direct_tail_rescue_needed_after_preflight() -> bool:
+                    if factor_preflight_passed is False:
+                        return True
+                    if not bool(direct_tail_true_coupled_coarse_base_improvement_override_used):
+                        return False
+                    continue_after_override = _rhs1_bool_env(
+                        "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_RESCUE_AFTER_BASE_IMPROVEMENT",
+                        default=True,
+                    )
+                    if not bool(continue_after_override):
+                        return False
+                    if factor_preflight_target_ratio is None:
+                        return True
+                    try:
+                        return float(factor_preflight_target_ratio) > float(factor_preflight_max_target_ratio)
+                    except (TypeError, ValueError):
+                        return True
+
+                direct_tail_true_active_column_cache: _ReusableTrueActionColumnCache | None = None
+                if (
+                    bool(direct_tail_true_active_submatrix_requested)
+                    or bool(direct_tail_true_active_block_requested)
+                    or bool(direct_tail_true_active_residual_block_requested)
+                    or bool(direct_tail_true_window_requested)
+                ):
+                    direct_tail_true_active_column_cache = _ReusableTrueActionColumnCache(
+                        true_matvec=lambda vec: np.asarray(
+                            jax.device_get(_mv_true_no_count(jnp.asarray(vec, dtype=jnp.float64))),
+                            dtype=np.float64,
+                        ).reshape((-1,)),
+                        true_matmat=lambda mat: np.asarray(_mv_true_matmat(np.asarray(mat, dtype=np.float64))),
+                        n=int(sparse_pc_linear_size),
+                        max_nbytes=int(
+                            max(0.0, float(direct_tail_true_active_column_cache_max_mb)) * 1024.0 * 1024.0
+                        ),
+                        enabled=bool(direct_tail_true_active_column_cache_requested),
+                    )
+
+                def _true_active_cached_matvec(vec: np.ndarray) -> np.ndarray:
+                    if direct_tail_true_active_column_cache is not None:
+                        return direct_tail_true_active_column_cache.matvec(vec)
+                    return np.asarray(
+                        jax.device_get(_mv_true_no_count(jnp.asarray(vec, dtype=jnp.float64))),
+                        dtype=np.float64,
+                    ).reshape((-1,))
+
+                def _true_active_cached_matmat(mat: np.ndarray) -> np.ndarray:
+                    if direct_tail_true_active_column_cache is not None:
+                        return direct_tail_true_active_column_cache.matmat(mat)
+                    return np.asarray(_mv_true_matmat(np.asarray(mat, dtype=np.float64)))
+
+                if (
+                    bool(direct_tail_true_active_submatrix_requested)
+                    and _direct_tail_rescue_needed_after_preflight()
+                    and factor_preflight_residual_after is not None
+                    and np.isfinite(float(factor_preflight_residual_after))
+                ):
+                    try:
+                        true_active_submatrix_bundle = _try_build_true_operator_active_submatrix_preconditioner(
+                            true_matvec=_true_active_cached_matvec,
+                            true_matmat=_true_active_cached_matmat,
+                            factor_bundle=factor_bundle_pc,
+                            residual=np.asarray(jax.device_get(residual_vec_current), dtype=np.float64),
+                            layout=RHS1BlockLayout.from_operator(op),
+                            active_indices=sparse_pc_active_idx_np if sparse_pc_use_active_dof else None,
+                            x_count=int(direct_tail_true_active_block_x_count),
+                            ell_count=int(direct_tail_true_active_block_ell_count),
+                            species_count=direct_tail_true_active_block_species_count,
+                            theta_stride=int(direct_tail_true_active_block_theta_stride),
+                            zeta_stride=int(direct_tail_true_active_block_zeta_stride),
+                            max_nbytes=_rhs1_additive_rescue_nbytes(
+                                factor_bundle_pc,
+                                direct_tail_true_active_block_max_mb
+                            ),
+                            regularization=float(direct_tail_true_active_block_regularization),
+                            max_block_size=int(direct_tail_true_active_block_max_size),
+                            column_batch=int(direct_tail_true_active_block_column_batch),
+                            drop_tol=float(direct_tail_true_active_block_drop_tol),
+                            include_tail=bool(direct_tail_true_active_block_include_tail),
+                            max_tail=int(direct_tail_true_active_block_max_tail),
+                            damping=bool(direct_tail_true_active_submatrix_damping),
+                            alpha_clip=float(direct_tail_true_active_submatrix_alpha_clip),
+                            emit=emit,
+                        )
+                        if true_active_submatrix_bundle is None:
+                            direct_tail_true_active_submatrix_error = "builder_returned_none"
+                        else:
+                            x_true_active_submatrix_sparse = jnp.asarray(
+                                true_active_submatrix_bundle.solve(np.asarray(sparse_pc_rhs, dtype=np.float64)),
+                                dtype=jnp.float64,
+                            )
+                            residual_vec_true_active_submatrix = sparse_pc_rhs - jnp.asarray(
+                                _mv_true_no_count(x_true_active_submatrix_sparse),
+                                dtype=jnp.float64,
+                            )
+                            direct_tail_true_active_submatrix_residual_after = float(
+                                jnp.linalg.norm(residual_vec_true_active_submatrix)
+                            )
+                            true_active_submatrix_diagnostics = _rhs1_active_reduced_residual_diagnostics(
+                                residual=residual_vec_true_active_submatrix,
+                                layout=RHS1BlockLayout.from_operator(op),
+                                active_indices=sparse_pc_active_idx_np if sparse_pc_use_active_dof else None,
+                            )
+                            direct_tail_true_active_submatrix_metadata = dict(
+                                true_active_submatrix_bundle.metadata or {}
+                            )
+                            direct_tail_true_active_submatrix_metadata["residual_after"] = float(
+                                direct_tail_true_active_submatrix_residual_after
+                            )
+                            direct_tail_true_active_submatrix_metadata["base_residual_after"] = float(
+                                factor_preflight_residual_after
+                            )
+                            if (
+                                np.isfinite(float(direct_tail_true_active_submatrix_residual_after))
+                                and float(direct_tail_true_active_submatrix_residual_after)
+                                < float(factor_preflight_residual_after)
+                                * (1.0 - float(direct_tail_true_active_submatrix_min_improvement))
+                            ):
+                                direct_tail_true_active_submatrix_selected = True
+                                factor_bundle_pc = true_active_submatrix_bundle
+                                pc_factor_s += float(true_active_submatrix_bundle.factor_s or 0.0)
+                                setup_s = sparse_timer.elapsed_s()
+                                factor_preflight_residual_after = float(
+                                    direct_tail_true_active_submatrix_residual_after
+                                )
+                                residual_vec_current = residual_vec_true_active_submatrix
+                                factor_preflight_residual_diagnostics = true_active_submatrix_diagnostics
+                                if (
+                                    factor_preflight_residual_before is not None
+                                    and float(factor_preflight_residual_before) > 0.0
+                                ):
+                                    factor_preflight_improvement_ratio = (
+                                        float(factor_preflight_residual_before)
+                                        / max(float(factor_preflight_residual_after), 1.0e-300)
+                                    )
+                                if float(target) > 0.0:
+                                    factor_preflight_target_ratio = (
+                                        float(factor_preflight_residual_after) / float(target)
+                                        if np.isfinite(float(factor_preflight_residual_after))
+                                        else float("inf")
+                                    )
+                                factor_preflight_passed = bool(
+                                    np.isfinite(float(factor_preflight_residual_after))
+                                    and factor_preflight_residual_before is not None
+                                    and float(factor_preflight_residual_after)
+                                    < float(factor_preflight_residual_before)
+                                    and (
+                                        factor_preflight_target_ratio is None
+                                        or float(factor_preflight_target_ratio)
+                                        <= float(factor_preflight_max_target_ratio)
+                                    )
+                                )
+                                if (
+                                    bool(factor_preflight_seed_enabled)
+                                    and factor_preflight_residual_before is not None
+                                    and np.isfinite(float(factor_preflight_residual_after))
+                                    and float(factor_preflight_residual_after)
+                                    < float(factor_preflight_residual_before)
+                                ):
+                                    x0_sparse = x_true_active_submatrix_sparse
+                                    factor_preflight_seed_used = True
+                                if emit is not None:
+                                    emit(
+                                        1,
+                                        "solve_v3_full_system_linear_gmres: true active submatrix accepted "
+                                        f"block_size={direct_tail_true_active_submatrix_metadata.get('block_size')} "
+                                        f"residual={direct_tail_true_active_submatrix_metadata['base_residual_after']:.6e}"
+                                        f"->{float(factor_preflight_residual_after):.6e} "
+                                        f"passed={bool(factor_preflight_passed)}",
+                                    )
+                            elif emit is not None:
+                                emit(
+                                    1,
+                                    "solve_v3_full_system_linear_gmres: true active submatrix rejected "
+                                    f"residual={float(factor_preflight_residual_after):.6e}"
+                                    f"->{float(direct_tail_true_active_submatrix_residual_after):.6e}",
+                                )
+                    except Exception as exc:  # noqa: BLE001
+                        direct_tail_true_active_submatrix_error = f"{type(exc).__name__}: {exc}"
+                        if emit is not None:
+                            emit(
+                                1,
+                                "solve_v3_full_system_linear_gmres: true active submatrix failed "
+                                f"({direct_tail_true_active_submatrix_error})",
+                            )
+
+                if (
+                    bool(direct_tail_true_active_block_requested)
+                    and _direct_tail_rescue_needed_after_preflight()
+                    and factor_preflight_residual_after is not None
+                    and np.isfinite(float(factor_preflight_residual_after))
+                ):
+                    try:
+                        true_active_block_bundle = _try_build_true_operator_active_block_lsq_preconditioner(
+                            true_matvec=_true_active_cached_matvec,
+                            true_matmat=_true_active_cached_matmat,
+                            factor_bundle=factor_bundle_pc,
+                            residual=np.asarray(jax.device_get(residual_vec_current), dtype=np.float64),
+                            layout=RHS1BlockLayout.from_operator(op),
+                            active_indices=sparse_pc_active_idx_np if sparse_pc_use_active_dof else None,
+                            x_count=int(direct_tail_true_active_block_x_count),
+                            ell_count=int(direct_tail_true_active_block_ell_count),
+                            species_count=direct_tail_true_active_block_species_count,
+                            theta_stride=int(direct_tail_true_active_block_theta_stride),
+                            zeta_stride=int(direct_tail_true_active_block_zeta_stride),
+                            max_nbytes=_rhs1_additive_rescue_nbytes(
+                                factor_bundle_pc,
+                                direct_tail_true_active_block_max_mb
+                            ),
+                            regularization=float(direct_tail_true_active_block_regularization),
+                            max_block_size=int(direct_tail_true_active_block_max_size),
+                            column_batch=int(direct_tail_true_active_block_column_batch),
+                            drop_tol=float(direct_tail_true_active_block_drop_tol),
+                            include_tail=bool(direct_tail_true_active_block_include_tail),
+                            max_tail=int(direct_tail_true_active_block_max_tail),
+                            damping=bool(direct_tail_true_active_block_damping),
+                            beta_max=float(direct_tail_true_active_block_beta_max),
+                            emit=emit,
+                        )
+                        if true_active_block_bundle is None:
+                            direct_tail_true_active_block_error = "builder_returned_none"
+                        else:
+                            x_true_active_block_sparse = jnp.asarray(
+                                true_active_block_bundle.solve(np.asarray(sparse_pc_rhs, dtype=np.float64)),
+                                dtype=jnp.float64,
+                            )
+                            residual_vec_true_active_block = sparse_pc_rhs - jnp.asarray(
+                                _mv_true_no_count(x_true_active_block_sparse),
+                                dtype=jnp.float64,
+                            )
+                            direct_tail_true_active_block_residual_after = float(
+                                jnp.linalg.norm(residual_vec_true_active_block)
+                            )
+                            true_active_block_diagnostics = _rhs1_active_reduced_residual_diagnostics(
+                                residual=residual_vec_true_active_block,
+                                layout=RHS1BlockLayout.from_operator(op),
+                                active_indices=sparse_pc_active_idx_np if sparse_pc_use_active_dof else None,
+                            )
+                            direct_tail_true_active_block_metadata = dict(true_active_block_bundle.metadata or {})
+                            direct_tail_true_active_block_metadata["residual_after"] = float(
+                                direct_tail_true_active_block_residual_after
+                            )
+                            direct_tail_true_active_block_metadata["base_residual_after"] = float(
+                                factor_preflight_residual_after
+                            )
+                            if (
+                                np.isfinite(float(direct_tail_true_active_block_residual_after))
+                                and float(direct_tail_true_active_block_residual_after)
+                                < float(factor_preflight_residual_after)
+                            ):
+                                direct_tail_true_active_block_selected = True
+                                factor_bundle_pc = true_active_block_bundle
+                                pc_factor_s += float(true_active_block_bundle.factor_s or 0.0)
+                                setup_s = sparse_timer.elapsed_s()
+                                factor_preflight_residual_after = float(direct_tail_true_active_block_residual_after)
+                                residual_vec_current = residual_vec_true_active_block
+                                factor_preflight_residual_diagnostics = true_active_block_diagnostics
+                                if (
+                                    factor_preflight_residual_before is not None
+                                    and float(factor_preflight_residual_before) > 0.0
+                                ):
+                                    factor_preflight_improvement_ratio = (
+                                        float(factor_preflight_residual_before)
+                                        / max(float(factor_preflight_residual_after), 1.0e-300)
+                                    )
+                                if float(target) > 0.0:
+                                    factor_preflight_target_ratio = (
+                                        float(factor_preflight_residual_after) / float(target)
+                                        if np.isfinite(float(factor_preflight_residual_after))
+                                        else float("inf")
+                                    )
+                                factor_preflight_passed = bool(
+                                    np.isfinite(float(factor_preflight_residual_after))
+                                    and factor_preflight_residual_before is not None
+                                    and float(factor_preflight_residual_after)
+                                    < float(factor_preflight_residual_before)
+                                    and (
+                                        factor_preflight_target_ratio is None
+                                        or float(factor_preflight_target_ratio)
+                                        <= float(factor_preflight_max_target_ratio)
+                                    )
+                                )
+                                if (
+                                    bool(factor_preflight_seed_enabled)
+                                    and factor_preflight_residual_before is not None
+                                    and np.isfinite(float(factor_preflight_residual_after))
+                                    and float(factor_preflight_residual_after)
+                                    < float(factor_preflight_residual_before)
+                                ):
+                                    x0_sparse = x_true_active_block_sparse
+                                    factor_preflight_seed_used = True
+                                if emit is not None:
+                                    emit(
+                                        1,
+                                        "solve_v3_full_system_linear_gmres: true active block accepted "
+                                        f"block_size={direct_tail_true_active_block_metadata.get('block_size')} "
+                                        f"residual={direct_tail_true_active_block_metadata['base_residual_after']:.6e}"
+                                        f"->{float(factor_preflight_residual_after):.6e} "
+                                        f"passed={bool(factor_preflight_passed)}",
+                                    )
+                            elif emit is not None:
+                                emit(
+                                    1,
+                                    "solve_v3_full_system_linear_gmres: true active block rejected "
+                                    f"residual={float(factor_preflight_residual_after):.6e}"
+                                    f"->{float(direct_tail_true_active_block_residual_after):.6e}",
+                                )
+                    except Exception as exc:  # noqa: BLE001
+                        direct_tail_true_active_block_error = f"{type(exc).__name__}: {exc}"
+                        if emit is not None:
+                            emit(
+                                1,
+                                "solve_v3_full_system_linear_gmres: true active block failed "
+                                f"({direct_tail_true_active_block_error})",
+                            )
+
+                if (
+                    bool(direct_tail_true_active_residual_block_requested)
+                    and _direct_tail_rescue_needed_after_preflight()
+                    and factor_preflight_residual_after is not None
+                    and np.isfinite(float(factor_preflight_residual_after))
+                ):
+                    try:
+                        true_active_residual_block_bundle = (
+                            _try_build_true_operator_active_residual_block_lsq_preconditioner(
+                                true_matvec=_true_active_cached_matvec,
+                                true_matmat=_true_active_cached_matmat,
+                                factor_bundle=factor_bundle_pc,
+                                residual=np.asarray(jax.device_get(residual_vec_current), dtype=np.float64),
+                                layout=RHS1BlockLayout.from_operator(op),
+                                active_indices=sparse_pc_active_idx_np if sparse_pc_use_active_dof else None,
+                                max_nbytes=_rhs1_additive_rescue_nbytes(
+                                    factor_bundle_pc,
+                                    direct_tail_true_active_residual_block_max_mb
+                                ),
+                                regularization=float(direct_tail_true_active_residual_block_regularization),
+                                max_block_size=int(direct_tail_true_active_residual_block_max_size),
+                                column_batch=int(direct_tail_true_active_residual_block_column_batch),
+                                drop_tol=float(direct_tail_true_active_residual_block_drop_tol),
+                                include_tail=bool(direct_tail_true_active_residual_block_include_tail),
+                                max_tail=int(direct_tail_true_active_residual_block_max_tail),
+                                kinetic_only=bool(direct_tail_true_active_residual_block_kinetic_only),
+                                damping=bool(direct_tail_true_active_residual_block_damping),
+                                beta_max=float(direct_tail_true_active_residual_block_beta_max),
+                                emit=emit,
+                            )
+                        )
+                        if true_active_residual_block_bundle is None:
+                            direct_tail_true_active_residual_block_error = "builder_returned_none"
+                        else:
+                            x_true_active_residual_block_sparse = jnp.asarray(
+                                true_active_residual_block_bundle.solve(np.asarray(sparse_pc_rhs, dtype=np.float64)),
+                                dtype=jnp.float64,
+                            )
+                            residual_vec_true_active_residual_block = sparse_pc_rhs - jnp.asarray(
+                                _mv_true_no_count(x_true_active_residual_block_sparse),
+                                dtype=jnp.float64,
+                            )
+                            direct_tail_true_active_residual_block_residual_after = float(
+                                jnp.linalg.norm(residual_vec_true_active_residual_block)
+                            )
+                            true_active_residual_block_diagnostics = _rhs1_active_reduced_residual_diagnostics(
+                                residual=residual_vec_true_active_residual_block,
+                                layout=RHS1BlockLayout.from_operator(op),
+                                active_indices=sparse_pc_active_idx_np if sparse_pc_use_active_dof else None,
+                            )
+                            direct_tail_true_active_residual_block_metadata = dict(
+                                true_active_residual_block_bundle.metadata or {}
+                            )
+                            direct_tail_true_active_residual_block_metadata["residual_after"] = float(
+                                direct_tail_true_active_residual_block_residual_after
+                            )
+                            direct_tail_true_active_residual_block_metadata["base_residual_after"] = float(
+                                factor_preflight_residual_after
+                            )
+                            residual_block_improves_current = (
+                                np.isfinite(float(direct_tail_true_active_residual_block_residual_after))
+                                and float(direct_tail_true_active_residual_block_residual_after)
+                                < float(factor_preflight_residual_after)
+                                * (1.0 - float(direct_tail_true_active_residual_block_min_improvement))
+                            )
+                            residual_block_improves_original = (
+                                factor_preflight_residual_before is None
+                                or (
+                                    np.isfinite(float(direct_tail_true_active_residual_block_residual_after))
+                                    and float(direct_tail_true_active_residual_block_residual_after)
+                                    < float(factor_preflight_residual_before)
+                                )
+                            )
+                            if (
+                                bool(residual_block_improves_current)
+                                and not bool(residual_block_improves_original)
+                                and bool(direct_tail_true_active_residual_block_accept_base_improvement)
+                            ):
+                                direct_tail_true_active_residual_block_base_improvement_override_used = True
+                            direct_tail_true_active_residual_block_metadata[
+                                "accept_base_improvement"
+                            ] = bool(direct_tail_true_active_residual_block_accept_base_improvement)
+                            direct_tail_true_active_residual_block_metadata[
+                                "base_improvement_override_used"
+                            ] = bool(direct_tail_true_active_residual_block_base_improvement_override_used)
+                            direct_tail_true_active_residual_block_metadata[
+                                "improves_current_residual"
+                            ] = bool(residual_block_improves_current)
+                            direct_tail_true_active_residual_block_metadata[
+                                "improves_original_residual"
+                            ] = bool(residual_block_improves_original)
+                            if (
+                                bool(residual_block_improves_current)
+                                and (
+                                    bool(residual_block_improves_original)
+                                    or bool(direct_tail_true_active_residual_block_base_improvement_override_used)
+                                )
+                            ):
+                                direct_tail_true_active_residual_block_selected = True
+                                factor_bundle_pc = true_active_residual_block_bundle
+                                pc_factor_s += float(true_active_residual_block_bundle.factor_s or 0.0)
+                                setup_s = sparse_timer.elapsed_s()
+                                factor_preflight_residual_after = float(
+                                    direct_tail_true_active_residual_block_residual_after
+                                )
+                                residual_vec_current = residual_vec_true_active_residual_block
+                                factor_preflight_residual_diagnostics = true_active_residual_block_diagnostics
+                                if (
+                                    factor_preflight_residual_before is not None
+                                    and float(factor_preflight_residual_before) > 0.0
+                                ):
+                                    factor_preflight_improvement_ratio = (
+                                        float(factor_preflight_residual_before)
+                                        / max(float(factor_preflight_residual_after), 1.0e-300)
+                                    )
+                                if float(target) > 0.0:
+                                    factor_preflight_target_ratio = (
+                                        float(factor_preflight_residual_after) / float(target)
+                                        if np.isfinite(float(factor_preflight_residual_after))
+                                        else float("inf")
+                                    )
+                                factor_preflight_passed = bool(
+                                    np.isfinite(float(factor_preflight_residual_after))
+                                    and factor_preflight_residual_before is not None
+                                    and float(factor_preflight_residual_after)
+                                    < float(factor_preflight_residual_before)
+                                    and (
+                                        factor_preflight_target_ratio is None
+                                        or float(factor_preflight_target_ratio)
+                                        <= float(factor_preflight_max_target_ratio)
+                                    )
+                                )
+                                if (
+                                    bool(factor_preflight_seed_enabled)
+                                    and factor_preflight_residual_before is not None
+                                    and np.isfinite(float(factor_preflight_residual_after))
+                                    and float(factor_preflight_residual_after)
+                                    < float(factor_preflight_residual_before)
+                                ):
+                                    x0_sparse = x_true_active_residual_block_sparse
+                                    factor_preflight_seed_used = True
+                                if emit is not None:
+                                    emit(
+                                        1,
+                                        "solve_v3_full_system_linear_gmres: true active residual block accepted "
+                                        f"block_size={direct_tail_true_active_residual_block_metadata.get('block_size')} "
+                                        f"residual={direct_tail_true_active_residual_block_metadata['base_residual_after']:.6e}"
+                                        f"->{float(factor_preflight_residual_after):.6e} "
+                                        f"passed={bool(factor_preflight_passed)} "
+                                        "base_improvement_override="
+                                        f"{bool(direct_tail_true_active_residual_block_base_improvement_override_used)}",
+                                    )
+                            elif emit is not None:
+                                emit(
+                                    1,
+                                    "solve_v3_full_system_linear_gmres: true active residual block rejected "
+                                    f"residual={float(factor_preflight_residual_after):.6e}"
+                                    f"->{float(direct_tail_true_active_residual_block_residual_after):.6e} "
+                                    f"improves_original={bool(residual_block_improves_original)}",
+                                )
+                    except Exception as exc:  # noqa: BLE001
+                        direct_tail_true_active_residual_block_error = f"{type(exc).__name__}: {exc}"
+                        if emit is not None:
+                            emit(
+                                1,
+                                "solve_v3_full_system_linear_gmres: true active residual block failed "
+                                f"({direct_tail_true_active_residual_block_error})",
+                            )
+
+                if (
+                    bool(direct_tail_true_window_requested)
+                    and _direct_tail_rescue_needed_after_preflight()
+                    and factor_preflight_residual_after is not None
+                    and np.isfinite(float(factor_preflight_residual_after))
+                ):
+                    try:
+                        true_window_bundle = _try_build_true_operator_residual_window_lsq_preconditioner(
+                            true_matvec=_true_active_cached_matvec,
+                            true_matmat=_true_active_cached_matmat,
+                            factor_bundle=factor_bundle_pc,
+                            residual=np.asarray(jax.device_get(residual_vec_current), dtype=np.float64),
+                            layout=RHS1BlockLayout.from_operator(op),
+                            active_indices=sparse_pc_active_idx_np if sparse_pc_use_active_dof else None,
+                            max_windows=int(direct_tail_true_window_max_windows),
+                            x_radius=int(direct_tail_true_window_x_radius),
+                            ell_radius=int(direct_tail_true_window_ell_radius),
+                            max_nbytes=_rhs1_additive_rescue_nbytes(factor_bundle_pc, direct_tail_true_window_max_mb),
+                            regularization=float(direct_tail_true_window_regularization),
+                            max_window_size=int(direct_tail_true_window_max_size),
+                            column_batch=int(direct_tail_true_window_column_batch),
+                            drop_tol=float(direct_tail_true_window_drop_tol),
+                            include_tail=bool(direct_tail_true_window_include_tail),
+                            explicit_specs=tuple(direct_tail_true_window_specs),
+                            damping=bool(direct_tail_true_window_damping),
+                            beta_max=float(direct_tail_true_window_beta_max),
+                            emit=emit,
+                        )
+                        if true_window_bundle is None:
+                            direct_tail_true_window_error = "builder_returned_none"
+                        else:
+                            x_true_window_sparse = jnp.asarray(
+                                true_window_bundle.solve(np.asarray(sparse_pc_rhs, dtype=np.float64)),
+                                dtype=jnp.float64,
+                            )
+                            residual_vec_true_window = sparse_pc_rhs - jnp.asarray(
+                                _mv_true_no_count(x_true_window_sparse),
+                                dtype=jnp.float64,
+                            )
+                            direct_tail_true_window_residual_after = float(jnp.linalg.norm(residual_vec_true_window))
+                            true_window_diagnostics = _rhs1_active_reduced_residual_diagnostics(
+                                residual=residual_vec_true_window,
+                                layout=RHS1BlockLayout.from_operator(op),
+                                active_indices=sparse_pc_active_idx_np if sparse_pc_use_active_dof else None,
+                            )
+                            direct_tail_true_window_metadata = dict(true_window_bundle.metadata or {})
+                            direct_tail_true_window_metadata["residual_after"] = float(
+                                direct_tail_true_window_residual_after
+                            )
+                            direct_tail_true_window_metadata["base_residual_after"] = float(
+                                factor_preflight_residual_after
+                            )
+                            if (
+                                np.isfinite(float(direct_tail_true_window_residual_after))
+                                and float(direct_tail_true_window_residual_after)
+                                < float(factor_preflight_residual_after)
+                                and factor_preflight_residual_before is not None
+                                and float(direct_tail_true_window_residual_after)
+                                < float(factor_preflight_residual_before)
+                            ):
+                                direct_tail_true_window_selected = True
+                                factor_bundle_pc = true_window_bundle
+                                pc_factor_s += float(true_window_bundle.factor_s or 0.0)
+                                setup_s = sparse_timer.elapsed_s()
+                                factor_preflight_residual_after = float(direct_tail_true_window_residual_after)
+                                residual_vec_current = residual_vec_true_window
+                                factor_preflight_residual_diagnostics = true_window_diagnostics
+                                if (
+                                    factor_preflight_residual_before is not None
+                                    and float(factor_preflight_residual_before) > 0.0
+                                ):
+                                    factor_preflight_improvement_ratio = (
+                                        float(factor_preflight_residual_before)
+                                        / max(float(factor_preflight_residual_after), 1.0e-300)
+                                    )
+                                if float(target) > 0.0:
+                                    factor_preflight_target_ratio = (
+                                        float(factor_preflight_residual_after) / float(target)
+                                        if np.isfinite(float(factor_preflight_residual_after))
+                                        else float("inf")
+                                    )
+                                factor_preflight_passed = bool(
+                                    np.isfinite(float(factor_preflight_residual_after))
+                                    and float(factor_preflight_residual_after)
+                                    < float(factor_preflight_residual_before)
+                                    and (
+                                        factor_preflight_target_ratio is None
+                                        or float(factor_preflight_target_ratio)
+                                        <= float(factor_preflight_max_target_ratio)
+                                    )
+                                )
+                                if (
+                                    bool(factor_preflight_seed_enabled)
+                                    and np.isfinite(float(factor_preflight_residual_after))
+                                    and float(factor_preflight_residual_after)
+                                    < float(factor_preflight_residual_before)
+                                ):
+                                    x0_sparse = x_true_window_sparse
+                                    factor_preflight_seed_used = True
+                                if emit is not None:
+                                    emit(
+                                        1,
+                                        "solve_v3_full_system_linear_gmres: true residual window accepted "
+                                        f"window_size={direct_tail_true_window_metadata.get('window_size')} "
+                                        f"residual={direct_tail_true_window_metadata['base_residual_after']:.6e}"
+                                        f"->{float(factor_preflight_residual_after):.6e} "
+                                        f"passed={bool(factor_preflight_passed)}",
+                                    )
+                            elif emit is not None:
+                                emit(
+                                    1,
+                                    "solve_v3_full_system_linear_gmres: true residual window rejected "
+                                    f"residual={float(factor_preflight_residual_after):.6e}"
+                                    f"->{float(direct_tail_true_window_residual_after):.6e}",
+                                )
+                    except Exception as exc:  # noqa: BLE001
+                        direct_tail_true_window_error = f"{type(exc).__name__}: {exc}"
+                        if emit is not None:
+                            emit(
+                                1,
+                                "solve_v3_full_system_linear_gmres: true residual window failed "
+                                f"({direct_tail_true_window_error})",
+                            )
+                if (
+                    bool(direct_tail_residual_coarse_requested)
+                    and bool(structured_pc_ready)
+                    and _direct_tail_rescue_needed_after_preflight()
+                    and factor_preflight_residual_after is not None
+                    and np.isfinite(float(factor_preflight_residual_after))
+                ):
+                    try:
+                        residual_coarse_bundle = _try_build_residual_coarse_host_sparse_preconditioner(
+                            operator_bundle=_operator_bundle_pc,
+                            factor_bundle=factor_bundle_pc,
+                            residual=np.asarray(jax.device_get(residual_vec_current), dtype=np.float64),
+                            max_rank=int(direct_tail_residual_coarse_rank),
+                            max_nbytes=_rhs1_additive_rescue_nbytes(
+                                factor_bundle_pc, direct_tail_residual_coarse_max_mb
+                            ),
+                            regularization=float(direct_tail_residual_coarse_regularization),
+                            emit=emit,
+                        )
+                        if residual_coarse_bundle is None:
+                            direct_tail_residual_coarse_error = "builder_returned_none"
+                        else:
+                            x_rescue_sparse = jnp.asarray(
+                                residual_coarse_bundle.solve(np.asarray(sparse_pc_rhs, dtype=np.float64)),
+                                dtype=jnp.float64,
+                            )
+                            residual_vec_rescue = sparse_pc_rhs - jnp.asarray(
+                                _mv_true(x_rescue_sparse),
+                                dtype=jnp.float64,
+                            )
+                            direct_tail_residual_coarse_residual_after = float(jnp.linalg.norm(residual_vec_rescue))
+                            rescue_diagnostics = _rhs1_active_reduced_residual_diagnostics(
+                                residual=residual_vec_rescue,
+                                layout=RHS1BlockLayout.from_operator(op),
+                                active_indices=sparse_pc_active_idx_np if sparse_pc_use_active_dof else None,
+                            )
+                            direct_tail_residual_coarse_metadata = dict(residual_coarse_bundle.metadata or {})
+                            direct_tail_residual_coarse_metadata["residual_after"] = float(
+                                direct_tail_residual_coarse_residual_after
+                            )
+                            direct_tail_residual_coarse_metadata["base_residual_after"] = float(
+                                factor_preflight_residual_after
+                            )
+                            if (
+                                np.isfinite(float(direct_tail_residual_coarse_residual_after))
+                                and float(direct_tail_residual_coarse_residual_after)
+                                < float(factor_preflight_residual_after)
+                                and factor_preflight_residual_before is not None
+                                and float(direct_tail_residual_coarse_residual_after)
+                                < float(factor_preflight_residual_before)
+                            ):
+                                direct_tail_residual_coarse_selected = True
+                                factor_bundle_pc = residual_coarse_bundle
+                                pc_factor_s += float(residual_coarse_bundle.factor_s or 0.0)
+                                setup_s = sparse_timer.elapsed_s()
+                                factor_preflight_residual_after = float(direct_tail_residual_coarse_residual_after)
+                                residual_vec_current = residual_vec_rescue
+                                factor_preflight_residual_diagnostics = rescue_diagnostics
+                                if (
+                                    factor_preflight_residual_before is not None
+                                    and float(factor_preflight_residual_before) > 0.0
+                                ):
+                                    factor_preflight_improvement_ratio = (
+                                        float(factor_preflight_residual_before)
+                                        / max(float(factor_preflight_residual_after), 1.0e-300)
+                                    )
+                                if float(target) > 0.0:
+                                    factor_preflight_target_ratio = (
+                                        float(factor_preflight_residual_after) / float(target)
+                                        if np.isfinite(float(factor_preflight_residual_after))
+                                        else float("inf")
+                                    )
+                                factor_preflight_passed = bool(
+                                    np.isfinite(float(factor_preflight_residual_after))
+                                    and float(factor_preflight_residual_after)
+                                    < float(factor_preflight_residual_before)
+                                    and (
+                                        factor_preflight_target_ratio is None
+                                        or float(factor_preflight_target_ratio)
+                                        <= float(factor_preflight_max_target_ratio)
+                                    )
+                                )
+                                if (
+                                    bool(factor_preflight_seed_enabled)
+                                    and np.isfinite(float(factor_preflight_residual_after))
+                                    and float(factor_preflight_residual_after)
+                                    < float(factor_preflight_residual_before)
+                                ):
+                                    x0_sparse = x_rescue_sparse
+                                    factor_preflight_seed_used = True
+                                if emit is not None:
+                                    emit(
+                                        1,
+                                        "solve_v3_full_system_linear_gmres: residual coarse accepted "
+                                        f"rank={direct_tail_residual_coarse_metadata.get('rank')} "
+                                        f"residual={direct_tail_residual_coarse_metadata['base_residual_after']:.6e}"
+                                        f"->{float(factor_preflight_residual_after):.6e} "
+                                        f"passed={bool(factor_preflight_passed)}",
+                                    )
+                            elif emit is not None:
+                                emit(
+                                    1,
+                                    "solve_v3_full_system_linear_gmres: residual coarse rejected "
+                                    f"residual={float(factor_preflight_residual_after):.6e}"
+                                    f"->{float(direct_tail_residual_coarse_residual_after):.6e}",
+                                )
+                    except Exception as exc:  # noqa: BLE001
+                        direct_tail_residual_coarse_error = f"{type(exc).__name__}: {exc}"
+                        if emit is not None:
+                            emit(
+                                1,
+                                "solve_v3_full_system_linear_gmres: residual coarse failed "
+                                f"({direct_tail_residual_coarse_error})",
+                            )
+                if (
+                    bool(direct_tail_residual_window_requested)
+                    and bool(structured_pc_ready)
+                    and _direct_tail_rescue_needed_after_preflight()
+                    and factor_preflight_residual_after is not None
+                    and np.isfinite(float(factor_preflight_residual_after))
+                ):
+                    try:
+                        residual_window_bundle = _try_build_residual_window_host_sparse_preconditioner(
+                            operator_bundle=_operator_bundle_pc,
+                            factor_bundle=factor_bundle_pc,
+                            residual=np.asarray(jax.device_get(residual_vec_current), dtype=np.float64),
+                            layout=RHS1BlockLayout.from_operator(op),
+                            active_indices=sparse_pc_active_idx_np if sparse_pc_use_active_dof else None,
+                            max_windows=int(direct_tail_residual_window_max_windows),
+                            x_radius=int(direct_tail_residual_window_x_radius),
+                            ell_radius=int(direct_tail_residual_window_ell_radius),
+                            max_nbytes=_rhs1_additive_rescue_nbytes(
+                                factor_bundle_pc, direct_tail_residual_window_max_mb
+                            ),
+                            regularization=float(direct_tail_residual_window_regularization),
+                            coefficient_mode=str(direct_tail_residual_window_coefficient_mode),
+                            combine_mode=str(direct_tail_residual_window_combine_mode),
+                            interface_depth=int(direct_tail_residual_window_interface_depth),
+                            max_window_size=int(direct_tail_residual_window_max_size),
+                            emit=emit,
+                        )
+                        if residual_window_bundle is None:
+                            direct_tail_residual_window_error = "builder_returned_none"
+                        else:
+                            x_window_sparse = jnp.asarray(
+                                residual_window_bundle.solve(np.asarray(sparse_pc_rhs, dtype=np.float64)),
+                                dtype=jnp.float64,
+                            )
+                            residual_vec_window = sparse_pc_rhs - jnp.asarray(
+                                _mv_true(x_window_sparse),
+                                dtype=jnp.float64,
+                            )
+                            direct_tail_residual_window_residual_after = float(jnp.linalg.norm(residual_vec_window))
+                            window_diagnostics = _rhs1_active_reduced_residual_diagnostics(
+                                residual=residual_vec_window,
+                                layout=RHS1BlockLayout.from_operator(op),
+                                active_indices=sparse_pc_active_idx_np if sparse_pc_use_active_dof else None,
+                            )
+                            direct_tail_residual_window_metadata = dict(residual_window_bundle.metadata or {})
+                            direct_tail_residual_window_metadata["residual_after"] = float(
+                                direct_tail_residual_window_residual_after
+                            )
+                            direct_tail_residual_window_metadata["base_residual_after"] = float(
+                                factor_preflight_residual_after
+                            )
+                            if (
+                                np.isfinite(float(direct_tail_residual_window_residual_after))
+                                and float(direct_tail_residual_window_residual_after)
+                                < float(factor_preflight_residual_after)
+                                and factor_preflight_residual_before is not None
+                                and float(direct_tail_residual_window_residual_after)
+                                < float(factor_preflight_residual_before)
+                            ):
+                                direct_tail_residual_window_selected = True
+                                factor_bundle_pc = residual_window_bundle
+                                pc_factor_s += float(residual_window_bundle.factor_s or 0.0)
+                                setup_s = sparse_timer.elapsed_s()
+                                factor_preflight_residual_after = float(direct_tail_residual_window_residual_after)
+                                residual_vec_current = residual_vec_window
+                                factor_preflight_residual_diagnostics = window_diagnostics
+                                if (
+                                    factor_preflight_residual_before is not None
+                                    and float(factor_preflight_residual_before) > 0.0
+                                ):
+                                    factor_preflight_improvement_ratio = (
+                                        float(factor_preflight_residual_before)
+                                        / max(float(factor_preflight_residual_after), 1.0e-300)
+                                    )
+                                if float(target) > 0.0:
+                                    factor_preflight_target_ratio = (
+                                        float(factor_preflight_residual_after) / float(target)
+                                        if np.isfinite(float(factor_preflight_residual_after))
+                                        else float("inf")
+                                    )
+                                factor_preflight_passed = bool(
+                                    np.isfinite(float(factor_preflight_residual_after))
+                                    and float(factor_preflight_residual_after)
+                                    < float(factor_preflight_residual_before)
+                                    and (
+                                        factor_preflight_target_ratio is None
+                                        or float(factor_preflight_target_ratio)
+                                        <= float(factor_preflight_max_target_ratio)
+                                    )
+                                )
+                                if (
+                                    bool(factor_preflight_seed_enabled)
+                                    and np.isfinite(float(factor_preflight_residual_after))
+                                    and float(factor_preflight_residual_after)
+                                    < float(factor_preflight_residual_before)
+                                ):
+                                    x0_sparse = x_window_sparse
+                                    factor_preflight_seed_used = True
+                                if emit is not None:
+                                    emit(
+                                        1,
+                                        "solve_v3_full_system_linear_gmres: residual window accepted "
+                                        f"windows={direct_tail_residual_window_metadata.get('window_count')} "
+                                        f"residual={direct_tail_residual_window_metadata['base_residual_after']:.6e}"
+                                        f"->{float(factor_preflight_residual_after):.6e} "
+                                        f"passed={bool(factor_preflight_passed)}",
+                                    )
+                            elif emit is not None:
+                                emit(
+                                    1,
+                                    "solve_v3_full_system_linear_gmres: residual window rejected "
+                                    f"residual={float(factor_preflight_residual_after):.6e}"
+                                    f"->{float(direct_tail_residual_window_residual_after):.6e}",
+                                )
+                    except Exception as exc:  # noqa: BLE001
+                        direct_tail_residual_window_error = f"{type(exc).__name__}: {exc}"
+                        if emit is not None:
+                            emit(
+                                1,
+                                "solve_v3_full_system_linear_gmres: residual window failed "
+                                f"({direct_tail_residual_window_error})",
+                            )
+                if direct_tail_true_active_column_cache is not None:
+                    direct_tail_true_active_column_cache_metadata = (
+                        direct_tail_true_active_column_cache.metadata()
+                    )
+                    if emit is not None:
+                        emit(
+                            1,
+                            "solve_v3_full_system_linear_gmres: true active column cache "
+                            f"hits={direct_tail_true_active_column_cache_metadata['hits']} "
+                            f"misses={direct_tail_true_active_column_cache_metadata['misses']} "
+                            f"stored_columns={direct_tail_true_active_column_cache_metadata['stored_columns']} "
+                            f"stored_mb={float(direct_tail_true_active_column_cache_metadata['stored_nbytes']) / 1.0e6:.3f}",
+                        )
+            except Exception as exc:  # noqa: BLE001
+                factor_preflight_passed = False
+                factor_preflight_error = f"{type(exc).__name__}: {exc}"
+                if emit is not None:
+                    emit(
+                        1,
+                        "solve_v3_full_system_linear_gmres: sparse_pc_gmres factor preflight failed "
+                        f"({factor_preflight_error})",
+                    )
+            if bool(factor_preflight_required) and not bool(factor_preflight_passed):
+                raise RuntimeError(
+                    "sparse_pc_gmres factor preflight failed: "
+                    f"residual_after={factor_preflight_residual_after} "
+                    f"target={float(target):.6e} "
+                    f"target_ratio={factor_preflight_target_ratio} "
+                    f"max_target_ratio={float(factor_preflight_max_target_ratio):.6e} "
+                    f"error={factor_preflight_error}"
+                )
+            auto_preflight_retry_selected = False
+            auto_preflight_retry_attempts: list[dict[str, object]] = []
+            auto_preflight_retry_enabled = _rhs1_bool_env(
+                "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_AUTO_PREFLIGHT_RETRY",
+                default=True,
+            )
+            if (
+                bool(auto_preflight_retry_enabled)
+                and bool(structured_pc_ready)
+                and bool(structured_pc_preflight_required)
+                and factor_preflight_passed is False
+                and str(direct_tail_structured_pc_requested or "").strip().lower().replace("-", "_")
+                in {"auto", "active_auto", "structured", "structured_auto"}
+                and direct_tail_operator_bundle is not None
+                and direct_tail_structured_layout is not None
+                and direct_tail_structured_max_nbytes is not None
+                and isinstance(direct_tail_structured_pc_metadata, dict)
+            ):
+                metadata_inner = direct_tail_structured_pc_metadata.get("metadata")
+                if isinstance(metadata_inner, dict):
+                    auto_candidates_raw = metadata_inner.get("auto_candidates", ())
+                    rejected_raw = metadata_inner.get("auto_rejected_candidates", ())
+                    selected_auto_kind = (
+                        str(metadata_inner.get("auto_selected_kind", getattr(factor_bundle_pc, "kind", "")))
+                        .strip()
+                        .lower()
+                        .replace("-", "_")
+                    )
+                else:
+                    auto_candidates_raw = ()
+                    rejected_raw = ()
+                    selected_auto_kind = str(getattr(factor_bundle_pc, "kind", "")).strip().lower().replace("-", "_")
+                auto_candidates = [
+                    str(candidate).strip().lower().replace("-", "_")
+                    for candidate in auto_candidates_raw
+                    if str(candidate).strip()
+                ]
+                rejected_kinds = set()
+                if isinstance(rejected_raw, (tuple, list)):
+                    for entry in rejected_raw:
+                        if isinstance(entry, dict):
+                            rejected_kinds.add(str(entry.get("kind", "")).strip().lower().replace("-", "_"))
+                try:
+                    selected_index = auto_candidates.index(selected_auto_kind)
+                    retry_candidates = auto_candidates[selected_index + 1 :]
+                except ValueError:
+                    retry_candidates = auto_candidates
+                retry_candidates = [
+                    candidate
+                    for candidate in retry_candidates
+                    if candidate
+                    and candidate not in rejected_kinds
+                    and candidate not in {"auto", "active_auto", "structured", "structured_auto"}
+                ]
+                if int(sparse_pc_linear_size) >= int(structured_pc_preflight_required_min_size):
+                    retry_skip_large_env = os.environ.get(
+                        "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_AUTO_PREFLIGHT_SKIP_LARGE",
+                        "active_spilu,active_ilu,active_global_sparse_ilu,jacobi,diagonal",
+                    )
+                    retry_skip_large = {
+                        item.strip().lower().replace("-", "_")
+                        for item in retry_skip_large_env.split(",")
+                        if item.strip()
+                    }
+                    retry_candidates = [candidate for candidate in retry_candidates if candidate not in retry_skip_large]
+                max_retry_candidates = _rhs1_int_env(
+                    "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_AUTO_PREFLIGHT_MAX_CANDIDATES",
+                    default=2,
+                    minimum=1,
+                )
+                for retry_candidate in retry_candidates[: int(max_retry_candidates)]:
+                    retry_start_s = sparse_timer.elapsed_s()
+                    try:
+                        retry_pc = build_active_projected_rhs1_full_csr_preconditioner(
+                            matrix=direct_tail_operator_bundle.matrix,
+                            layout=direct_tail_structured_layout,
+                            active_indices=direct_tail_structured_active_indices,
+                            kind=str(retry_candidate),
+                            max_factor_nbytes=int(direct_tail_structured_max_nbytes),
+                            regularization=float(pc_reg),
+                            preconditioner_x=int(preconditioner_x),
+                            preconditioner_xi=int(preconditioner_xi),
+                            preconditioner_species=int(preconditioner_species),
+                            preconditioner_x_min_l=int(preconditioner_x_min_l),
+                        )
+                    except Exception as exc:  # noqa: BLE001
+                        auto_preflight_retry_attempts.append(
+                            {
+                                "kind": str(retry_candidate),
+                                "selected": False,
+                                "reason": "exception",
+                                "error": f"{type(exc).__name__}: {exc}",
+                                "setup_s": float(sparse_timer.elapsed_s() - retry_start_s),
+                            }
+                        )
+                        continue
+                    retry_entry: dict[str, object] = {
+                        "kind": str(retry_candidate),
+                        "selected": bool(retry_pc.selected),
+                        "reason": str(retry_pc.reason),
+                        "setup_s": float(retry_pc.setup_s),
+                    }
+                    if not bool(retry_pc.selected) or retry_pc.operator is None:
+                        retry_entry["metadata"] = dict(retry_pc.metadata)
+                        auto_preflight_retry_attempts.append(retry_entry)
+                        continue
+                    retry_factor_nbytes = retry_pc.metadata.get("factor_nbytes_actual")
+                    if retry_factor_nbytes is None:
+                        retry_factor_nbytes = retry_pc.metadata.get("factor_nbytes_estimate")
+                    retry_bundle = _StructuredHostSparsePreconditionerBundle(
+                        preconditioner=retry_pc,
+                        operator=direct_tail_operator_bundle,
+                        kind=str(retry_pc.kind),
+                        factor_nbytes_estimate=None if retry_factor_nbytes is None else int(retry_factor_nbytes),
+                        factor_nnz_estimate=None,
+                        factor_s=float(retry_pc.setup_s),
+                    )
+                    try:
+                        retry_x = jnp.asarray(
+                            retry_bundle.solve(np.asarray(sparse_pc_rhs, dtype=np.float64)),
+                            dtype=jnp.float64,
+                        )
+                        retry_residual_vec = sparse_pc_rhs - jnp.asarray(_mv_true_no_count(retry_x), dtype=jnp.float64)
+                        retry_residual = float(jnp.linalg.norm(retry_residual_vec))
+                    except Exception as exc:  # noqa: BLE001
+                        retry_entry.update(
+                            {
+                                "preflight_error": f"{type(exc).__name__}: {exc}",
+                                "preflight_passed": False,
+                            }
+                        )
+                        auto_preflight_retry_attempts.append(retry_entry)
+                        continue
+                    retry_target_ratio = (
+                        float(retry_residual) / float(target)
+                        if float(target) > 0.0 and np.isfinite(float(retry_residual))
+                        else float("inf")
+                    )
+                    retry_kind = str(retry_pc.kind).strip().lower().replace("-", "_")
+                    retry_metadata = retry_pc.metadata if isinstance(retry_pc.metadata, dict) else {}
+                    retry_requires_preflight = bool(retry_metadata.get("requires_preflight", False))
+                    retry_size_requires_preflight = bool(
+                        int(sparse_pc_linear_size) >= int(structured_pc_preflight_required_min_size)
+                        and retry_kind != "active_fortran_v3_reduced_lu"
+                    )
+                    retry_preflight_required = bool(retry_requires_preflight or retry_size_requires_preflight)
+                    retry_preflight_passed = bool(
+                        np.isfinite(float(retry_residual))
+                        and factor_preflight_residual_before is not None
+                        and float(retry_residual) < float(factor_preflight_residual_before)
+                        and float(retry_target_ratio) <= float(factor_preflight_max_target_ratio)
+                    )
+                    retry_passed = bool((not retry_preflight_required) or retry_preflight_passed)
+                    retry_entry.update(
+                        {
+                            "selected_kind": str(retry_pc.kind),
+                            "preflight_required": bool(retry_preflight_required),
+                            "preflight_requires_metadata": bool(retry_requires_preflight),
+                            "preflight_requires_size": bool(retry_size_requires_preflight),
+                            "preflight_residual_after": float(retry_residual),
+                            "preflight_target_ratio": float(retry_target_ratio),
+                            "preflight_passed": bool(retry_preflight_passed),
+                            "preflight_policy_passed": bool(retry_passed),
+                            "factor_nbytes_estimate": (
+                                None if retry_factor_nbytes is None else int(retry_factor_nbytes)
+                            ),
+                        }
+                    )
+                    auto_preflight_retry_attempts.append(retry_entry)
+                    if emit is not None:
+                        emit(
+                            1,
+                            "solve_v3_full_system_linear_gmres: auto preflight retry "
+                            f"kind={retry_candidate} residual={float(retry_residual):.6e} "
+                            f"target_ratio={float(retry_target_ratio):.6e} "
+                            f"required={bool(retry_preflight_required)} "
+                            f"passed={bool(retry_preflight_passed)} "
+                            f"policy_passed={bool(retry_passed)}",
+                        )
+                    if bool(retry_passed):
+                        factor_bundle_pc = retry_bundle
+                        direct_tail_structured_pc_selected = True
+                        direct_tail_structured_pc_reason = (
+                            f"auto_preflight_selected:{retry_pc.reason}"
+                            if bool(retry_preflight_required)
+                            else f"auto_retry_selected_no_required_preflight:{retry_pc.reason}"
+                        )
+                        direct_tail_structured_pc_metadata = retry_pc.to_dict()
+                        _operator_bundle_pc = direct_tail_operator_bundle
+                        pc_factor_s += float(retry_pc.setup_s)
+                        setup_s = sparse_timer.elapsed_s()
+                        residual_vec_current = retry_residual_vec
+                        factor_preflight_residual_after = float(retry_residual)
+                        factor_preflight_residual_diagnostics = _rhs1_active_reduced_residual_diagnostics(
+                            residual=retry_residual_vec,
+                            layout=RHS1BlockLayout.from_operator(op),
+                            active_indices=sparse_pc_active_idx_np if sparse_pc_use_active_dof else None,
+                        )
+                        if factor_preflight_residual_before is not None and float(factor_preflight_residual_before) > 0.0:
+                            factor_preflight_improvement_ratio = float(factor_preflight_residual_before) / max(
+                                float(factor_preflight_residual_after),
+                                1.0e-300,
+                            )
+                        factor_preflight_target_ratio = float(retry_target_ratio)
+                        factor_preflight_passed = True
+                        if bool(factor_preflight_seed_enabled):
+                            x0_sparse = retry_x
+                            factor_preflight_seed_used = True
+                        auto_preflight_retry_selected = True
+                        if emit is not None:
+                            emit(
+                                1,
+                                "solve_v3_full_system_linear_gmres: auto preflight retry accepted "
+                                f"kind={retry_candidate} required={bool(retry_preflight_required)}",
+                            )
+                        break
+            if auto_preflight_retry_attempts:
+                if isinstance(direct_tail_structured_pc_metadata, dict):
+                    metadata_inner = direct_tail_structured_pc_metadata.setdefault("metadata", {})
+                    if isinstance(metadata_inner, dict):
+                        metadata_inner["auto_preflight_retry_enabled"] = bool(auto_preflight_retry_enabled)
+                        metadata_inner["auto_preflight_retry_selected"] = bool(auto_preflight_retry_selected)
+                        metadata_inner["auto_preflight_retry_attempts"] = tuple(
+                            dict(entry) for entry in auto_preflight_retry_attempts
+                        )
+            if bool(structured_pc_ready) and bool(structured_pc_preflight_required) and factor_preflight_passed is False:
+                raise RuntimeError(
+                    "direct-tail structured preconditioner preflight failed: "
+                    f"kind={getattr(factor_bundle_pc, 'kind', 'unknown')} "
+                    f"residual_before={factor_preflight_residual_before} "
+                    f"residual_after={factor_preflight_residual_after} "
+                    f"target={float(target):.6e} "
+                    f"target_ratio={factor_preflight_target_ratio} "
+                    f"max_target_ratio={float(factor_preflight_max_target_ratio):.6e} "
+                    f"error={factor_preflight_error}"
+                )
+
+        sparse_pc_stagnation_abort = _rhs1_bool_env(
+            "SFINCS_JAX_RHSMODE1_SPARSE_PC_STAGNATION_ABORT",
+            default=False,
+        )
+        sparse_pc_stagnation_min_iter = _rhs1_int_env(
+            "SFINCS_JAX_RHSMODE1_SPARSE_PC_STAGNATION_MIN_ITER",
+            default=500,
+            minimum=1,
+        )
+        sparse_pc_stagnation_window = _rhs1_int_env(
+            "SFINCS_JAX_RHSMODE1_SPARSE_PC_STAGNATION_WINDOW",
+            default=500,
+            minimum=1,
+        )
+        sparse_pc_stagnation_rel_improvement = _rhs1_float_env(
+            "SFINCS_JAX_RHSMODE1_SPARSE_PC_STAGNATION_REL_IMPROVEMENT",
+            default=1.0e-3,
+            minimum=0.0,
+        )
+        sparse_pc_post_minres_steps = _rhs1_int_env(
+            "SFINCS_JAX_RHSMODE1_SPARSE_PC_POST_MINRES_STEPS",
+            default=0,
+            minimum=0,
+        )
+        sparse_pc_post_minres_alpha_clip = _rhs1_float_env(
+            "SFINCS_JAX_RHSMODE1_SPARSE_PC_POST_MINRES_ALPHA_CLIP",
+            default=10.0,
+            minimum=0.0,
+        )
+        sparse_pc_post_minres_min_improvement = _rhs1_float_env(
+            "SFINCS_JAX_RHSMODE1_SPARSE_PC_POST_MINRES_MIN_IMPROVEMENT",
+            default=0.0,
+            minimum=0.0,
+        )
 
         def _run_sparse_pc_gmres_once(x0_arg, *, maxiter_arg: int):
             if emit is not None:
@@ -21309,6 +33653,44 @@ def solve_v3_full_system_linear_gmres(
                 )
             rn_pc_local = float("nan")
             solve_start_s_local = sparse_timer.elapsed_s()
+            stagnation_best = float("inf")
+            stagnation_best_iter = 0
+
+            def _sparse_pc_krylov_progress_callback(iteration: int, residual_norm: float) -> None:
+                nonlocal stagnation_best, stagnation_best_iter
+                iteration_i = int(iteration)
+                residual_f = float(residual_norm)
+                if np.isfinite(residual_f) and (
+                    not np.isfinite(stagnation_best)
+                    or residual_f
+                    < stagnation_best * (1.0 - float(sparse_pc_stagnation_rel_improvement))
+                ):
+                    stagnation_best = float(residual_f)
+                    stagnation_best_iter = int(iteration_i)
+                if (
+                    bool(sparse_pc_stagnation_abort)
+                    and iteration_i >= int(sparse_pc_stagnation_min_iter)
+                    and iteration_i - int(stagnation_best_iter) >= int(sparse_pc_stagnation_window)
+                ):
+                    raise RuntimeError(
+                        "sparse_pc_gmres stagnation detected: "
+                        f"iters={iteration_i} best_iter={int(stagnation_best_iter)} "
+                        f"best_ksp_residual={float(stagnation_best):.6e} "
+                        f"current_ksp_residual={residual_f:.6e} "
+                        f"window={int(sparse_pc_stagnation_window)} "
+                        f"rel_improvement={float(sparse_pc_stagnation_rel_improvement):.3e}"
+                    )
+                if emit is None or progress_every <= 0:
+                    return
+                if iteration_i % int(progress_every) != 0:
+                    return
+                emit(
+                    1,
+                    "solve_v3_full_system_linear_gmres: sparse_pc_gmres "
+                    f"iters={iteration_i} ksp_residual={residual_f:.6e} "
+                    f"elapsed_s={sparse_timer.elapsed_s():.3f}",
+                )
+
             if pc_form in {"explicit_left", "petsc_left"}:
                 x_np_local, residual_norm_local, rn_pc_local, history_local = explicit_left_preconditioned_gmres_scipy(
                     matvec=_mv_true,
@@ -21319,6 +33701,7 @@ def solve_v3_full_system_linear_gmres(
                     atol=atol,
                     restart=pc_restart,
                     maxiter=maxiter_arg,
+                    progress_callback=_sparse_pc_krylov_progress_callback,
                 )
             else:
                 x_np_local, residual_norm_local, history_local = gmres_solve_with_history_scipy(
@@ -21331,6 +33714,7 @@ def solve_v3_full_system_linear_gmres(
                     restart=pc_restart,
                     maxiter=maxiter_arg,
                     precondition_side=precondition_side,
+                    progress_callback=_sparse_pc_krylov_progress_callback,
                 )
             solve_s_local = sparse_timer.elapsed_s() - solve_start_s_local
             try:
@@ -21368,8 +33752,12 @@ def solve_v3_full_system_linear_gmres(
                 factor_dtype=sparse_pc_factor_dtype_used,
                 pattern=pattern,
                 emit=emit,
-                default_diag_pivot_thresh=0.0 if (constrained_pas_pc or tokamak_fp_pc) else 1.0,
+                default_diag_pivot_thresh=0.0 if (constrained_pas_pc or tokamak_fp_pc or fortran_reduced_sparse_pc) else 1.0,
                 default_permc_spec=sparse_pc_default_permc_spec,
+                default_factor_kind=sparse_pc_default_factor_kind,
+                default_ilu_fill_factor=float(sparse_pc_default_ilu_fill_factor),
+                default_ilu_drop_tol=float(sparse_pc_default_ilu_drop_tol),
+                default_pattern_color_batch=int(sparse_pc_default_pattern_color_batch),
             )
             pc_factor_s += sparse_timer.elapsed_s() - retry_factor_start_s
             setup_s = sparse_timer.elapsed_s()
@@ -21379,6 +33767,75 @@ def solve_v3_full_system_linear_gmres(
                 maxiter_arg=int(pc_maxiter),
             )
             solve_s += solve_s_retry
+        sparse_pc_post_minres_history: tuple[float, ...] = ()
+        sparse_pc_post_minres_alphas: tuple[float, ...] = ()
+        sparse_pc_post_minres_residual_before: float | None = None
+        sparse_pc_post_minres_residual_after: float | None = None
+        sparse_pc_post_minres_error: str | None = None
+        if (
+            int(sparse_pc_post_minres_steps) > 0
+            and np.isfinite(float(residual_norm_sparse_pc))
+            and float(residual_norm_sparse_pc) > float(target)
+        ):
+            sparse_pc_post_minres_residual_before = float(residual_norm_sparse_pc)
+            post_minres_start_s = sparse_timer.elapsed_s()
+            try:
+                x_post_minres, residual_post_minres, post_minres_history, post_minres_alphas = (
+                    _apply_preconditioned_minres_correction(
+                        matvec=_mv_true,
+                        rhs=sparse_pc_rhs,
+                        x0=jnp.asarray(x_np, dtype=jnp.float64),
+                        preconditioner=_precond_sparse,
+                        steps=int(sparse_pc_post_minres_steps),
+                        alpha_clip=float(sparse_pc_post_minres_alpha_clip),
+                        min_improvement=float(sparse_pc_post_minres_min_improvement),
+                    )
+                )
+                sparse_pc_post_minres_history = tuple(float(v) for v in post_minres_history)
+                sparse_pc_post_minres_alphas = tuple(float(v) for v in post_minres_alphas)
+                sparse_pc_post_minres_residual_after = float(jnp.linalg.norm(residual_post_minres))
+                if (
+                    np.isfinite(float(sparse_pc_post_minres_residual_after))
+                    and float(sparse_pc_post_minres_residual_after) < float(residual_norm_sparse_pc)
+                ):
+                    x_np = np.asarray(x_post_minres, dtype=np.float64)
+                    residual_norm_sparse_pc = float(sparse_pc_post_minres_residual_after)
+                    if pc_form in {"explicit_left", "petsc_left"}:
+                        try:
+                            residual_pc = _precond_sparse(
+                                sparse_pc_rhs - _mv_true(jnp.asarray(x_np, dtype=jnp.float64))
+                            )
+                            rn_pc = float(jnp.linalg.norm(residual_pc))
+                        except Exception:
+                            pass
+                    if emit is not None:
+                        emit(
+                            0,
+                            "solve_v3_full_system_linear_gmres: sparse_pc_gmres post-minres "
+                            f"improved residual {sparse_pc_post_minres_residual_before:.6e} "
+                            f"-> {sparse_pc_post_minres_residual_after:.6e} "
+                            f"(accepted_steps={len(sparse_pc_post_minres_alphas)})",
+                        )
+                elif emit is not None:
+                    after = (
+                        float(sparse_pc_post_minres_residual_after)
+                        if sparse_pc_post_minres_residual_after is not None
+                        else float("nan")
+                    )
+                    emit(
+                        1,
+                        "solve_v3_full_system_linear_gmres: sparse_pc_gmres post-minres "
+                        f"rejected residual {sparse_pc_post_minres_residual_before:.6e} -> {after:.6e}",
+                    )
+            except Exception as exc:  # noqa: BLE001
+                sparse_pc_post_minres_error = f"{type(exc).__name__}: {exc}"
+                if emit is not None:
+                    emit(
+                        1,
+                        "solve_v3_full_system_linear_gmres: sparse_pc_gmres post-minres failed "
+                        f"({sparse_pc_post_minres_error})",
+                    )
+            solve_s += sparse_timer.elapsed_s() - post_minres_start_s
         if emit is not None:
             pc_suffix = f" preconditioned_residual={float(rn_pc):.6e}" if np.isfinite(rn_pc) else ""
             if history:
@@ -21390,6 +33847,13 @@ def solve_v3_full_system_linear_gmres(
                 f"matvecs={int(mv_count)} residual={float(residual_norm_sparse_pc):.6e} "
                 f"target={float(target):.6e}{pc_suffix}",
             )
+        operator_metadata_pc = getattr(_operator_bundle_pc, "metadata", None)
+        sparse_pc_operator_nnz_estimate = getattr(operator_metadata_pc, "nnz_estimate", None)
+        sparse_pc_operator_csr_nbytes_estimate = getattr(
+            operator_metadata_pc,
+            "csr_nbytes_estimate",
+            None,
+        )
         return V3LinearSolveResult(
             op=op,
             rhs=rhs,
@@ -21398,7 +33862,9 @@ def solve_v3_full_system_linear_gmres(
                 residual_norm=jnp.asarray(residual_norm_sparse_pc, dtype=jnp.float64),
             ),
             metadata={
-                "solver_kind": "sparse_pc_gmres",
+                "solver_kind": (
+                    "fortran_reduced_pc_gmres" if bool(fortran_reduced_sparse_pc) else "sparse_pc_gmres"
+                ),
                 "residual_kind": "true_residual",
                 "accepted_converged": rhs1_residual_converged(
                     float(residual_norm_sparse_pc),
@@ -21414,10 +33880,418 @@ def solve_v3_full_system_linear_gmres(
                 "gmres_restart": int(pc_restart),
                 "gmres_maxiter": int(pc_maxiter),
                 "sparse_pc_first_attempt_maxiter": int(sparse_pc_first_attempt_maxiter),
+                "sparse_pc_post_minres_steps_requested": int(sparse_pc_post_minres_steps),
+                "sparse_pc_post_minres_steps_accepted": int(len(sparse_pc_post_minres_alphas)),
+                "sparse_pc_post_minres_alpha_clip": float(sparse_pc_post_minres_alpha_clip),
+                "sparse_pc_post_minres_min_improvement": float(sparse_pc_post_minres_min_improvement),
+                "sparse_pc_post_minres_residual_before": sparse_pc_post_minres_residual_before,
+                "sparse_pc_post_minres_residual_after": sparse_pc_post_minres_residual_after,
+                "sparse_pc_post_minres_history": tuple(float(v) for v in sparse_pc_post_minres_history),
+                "sparse_pc_post_minres_alphas": tuple(float(v) for v in sparse_pc_post_minres_alphas),
+                "sparse_pc_post_minres_error": sparse_pc_post_minres_error,
                 "sparse_pc_shift": float(pc_shift),
                 "sparse_pc_factor_dtype": np.dtype(sparse_pc_factor_dtype_used).name,
                 "sparse_pc_initial_factor_dtype": np.dtype(sparse_pc_factor_dtype_initial).name,
                 "sparse_pc_factor_dtype_retry": sparse_pc_factor_dtype_retry,
+                "sparse_pc_factor_preflight_enabled": bool(factor_preflight_enabled),
+                "sparse_pc_factor_preflight_required": bool(factor_preflight_required),
+                "sparse_pc_factor_preflight_seed_enabled": bool(factor_preflight_seed_enabled),
+                "sparse_pc_direct_tail_structured_pc_preflight_required": bool(
+                    structured_pc_preflight_required
+                ),
+                "sparse_pc_direct_tail_structured_pc_preflight_required_min_size": int(
+                    structured_pc_preflight_required_min_size
+                ),
+                "sparse_pc_factor_preflight_seed_used": bool(factor_preflight_seed_used),
+                "sparse_pc_factor_preflight_passed": factor_preflight_passed,
+                "sparse_pc_factor_preflight_error": factor_preflight_error,
+                "sparse_pc_factor_preflight_residual_before": factor_preflight_residual_before,
+                "sparse_pc_factor_preflight_residual_after": factor_preflight_residual_after,
+                "sparse_pc_factor_preflight_improvement_ratio": factor_preflight_improvement_ratio,
+                "sparse_pc_factor_preflight_target_ratio": factor_preflight_target_ratio,
+                "sparse_pc_factor_preflight_max_target_ratio": float(factor_preflight_max_target_ratio),
+                "sparse_pc_factor_preflight_residual_diagnostics": factor_preflight_residual_diagnostics,
+                "sparse_pc_direct_tail_residual_coarse_requested": bool(direct_tail_residual_coarse_requested),
+                "sparse_pc_direct_tail_residual_coarse_selected": bool(direct_tail_residual_coarse_selected),
+                "sparse_pc_direct_tail_residual_coarse_rank": int(direct_tail_residual_coarse_rank),
+                "sparse_pc_direct_tail_residual_coarse_max_mb": float(direct_tail_residual_coarse_max_mb),
+                "sparse_pc_direct_tail_residual_coarse_regularization": float(
+                    direct_tail_residual_coarse_regularization
+                ),
+                "sparse_pc_direct_tail_residual_coarse_residual_after": direct_tail_residual_coarse_residual_after,
+                "sparse_pc_direct_tail_residual_coarse_error": direct_tail_residual_coarse_error,
+                "sparse_pc_direct_tail_residual_coarse_metadata": direct_tail_residual_coarse_metadata,
+                "sparse_pc_direct_tail_true_coupled_coarse_requested": bool(
+                    direct_tail_true_coupled_coarse_requested
+                ),
+                "sparse_pc_direct_tail_true_coupled_coarse_explicit_requested": bool(
+                    direct_tail_true_coupled_coarse_explicit_requested
+                ),
+                "sparse_pc_direct_tail_true_coupled_coarse_auto_enabled": bool(
+                    direct_tail_true_coupled_coarse_auto_enabled
+                ),
+                "sparse_pc_direct_tail_true_coupled_coarse_auto_native_enabled": bool(
+                    direct_tail_true_coupled_coarse_auto_native_enabled
+                ),
+                "sparse_pc_direct_tail_true_coupled_coarse_auto_selected": bool(
+                    direct_tail_true_coupled_coarse_auto_selected
+                ),
+                "sparse_pc_direct_tail_true_coupled_coarse_auto_target_ratio": float(
+                    direct_tail_true_coupled_coarse_auto_target_ratio
+                ),
+                "sparse_pc_direct_tail_true_coupled_coarse_auto_min_size": int(
+                    direct_tail_true_coupled_coarse_auto_min_size
+                ),
+                "sparse_pc_direct_tail_true_coupled_coarse_selected": bool(
+                    direct_tail_true_coupled_coarse_selected
+                ),
+                "sparse_pc_direct_tail_true_coupled_coarse_max_windows": int(
+                    direct_tail_true_coupled_coarse_max_windows
+                ),
+                "sparse_pc_direct_tail_true_coupled_coarse_x_radius": int(
+                    direct_tail_true_coupled_coarse_x_radius
+                ),
+                "sparse_pc_direct_tail_true_coupled_coarse_ell_radius": int(
+                    direct_tail_true_coupled_coarse_ell_radius
+                ),
+                "sparse_pc_direct_tail_true_coupled_coarse_max_mb": float(
+                    direct_tail_true_coupled_coarse_max_mb
+                ),
+                "sparse_pc_direct_tail_true_coupled_coarse_regularization": float(
+                    direct_tail_true_coupled_coarse_regularization
+                ),
+                "sparse_pc_direct_tail_true_coupled_coarse_max_size": int(
+                    direct_tail_true_coupled_coarse_max_size
+                ),
+                "sparse_pc_direct_tail_true_coupled_coarse_column_batch": int(
+                    direct_tail_true_coupled_coarse_column_batch
+                ),
+                "sparse_pc_direct_tail_true_coupled_coarse_drop_tol": float(
+                    direct_tail_true_coupled_coarse_drop_tol
+                ),
+                "sparse_pc_direct_tail_true_coupled_coarse_low_lmax": int(
+                    direct_tail_true_coupled_coarse_low_lmax
+                ),
+                "sparse_pc_direct_tail_true_coupled_coarse_profile_moment_count": int(
+                    direct_tail_true_coupled_coarse_profile_moment_count
+                ),
+                "sparse_pc_direct_tail_true_coupled_coarse_angular_lmax": int(
+                    direct_tail_true_coupled_coarse_angular_lmax
+                ),
+                "sparse_pc_direct_tail_true_coupled_coarse_angular_mode_max": int(
+                    direct_tail_true_coupled_coarse_angular_mode_max
+                ),
+                "sparse_pc_direct_tail_true_coupled_coarse_max_tail_units": int(
+                    direct_tail_true_coupled_coarse_max_tail_units
+                ),
+                "sparse_pc_direct_tail_true_coupled_coarse_include_tail": bool(
+                    direct_tail_true_coupled_coarse_include_tail
+                ),
+                "sparse_pc_direct_tail_true_coupled_coarse_include_constraint_sources": bool(
+                    direct_tail_true_coupled_coarse_include_constraint_sources
+                ),
+                "sparse_pc_direct_tail_true_coupled_coarse_include_fsavg": bool(
+                    direct_tail_true_coupled_coarse_include_fsavg
+                ),
+                "sparse_pc_direct_tail_true_coupled_coarse_include_window_residual": bool(
+                    direct_tail_true_coupled_coarse_include_window_residual
+                ),
+                "sparse_pc_direct_tail_true_coupled_coarse_include_profile_moments": bool(
+                    direct_tail_true_coupled_coarse_include_profile_moments
+                ),
+                "sparse_pc_direct_tail_true_coupled_coarse_include_angular_residual": bool(
+                    direct_tail_true_coupled_coarse_include_angular_residual
+                ),
+                "sparse_pc_direct_tail_true_coupled_coarse_include_angular_basis": bool(
+                    direct_tail_true_coupled_coarse_include_angular_basis
+                ),
+                "sparse_pc_direct_tail_true_coupled_coarse_include_preconditioned_loads": bool(
+                    direct_tail_true_coupled_coarse_include_preconditioned_loads
+                ),
+                "sparse_pc_direct_tail_true_coupled_coarse_preconditioned_load_max_columns": int(
+                    direct_tail_true_coupled_coarse_preconditioned_load_max_columns
+                ),
+                "sparse_pc_direct_tail_true_coupled_coarse_preconditioned_load_max_nnz": int(
+                    direct_tail_true_coupled_coarse_preconditioned_load_max_nnz
+                ),
+                "sparse_pc_direct_tail_true_coupled_coarse_preconditioned_load_drop_tol": float(
+                    direct_tail_true_coupled_coarse_preconditioned_load_drop_tol
+                ),
+                "sparse_pc_direct_tail_true_coupled_coarse_damping": bool(
+                    direct_tail_true_coupled_coarse_damping
+                ),
+                "sparse_pc_direct_tail_true_coupled_coarse_beta_max": float(
+                    direct_tail_true_coupled_coarse_beta_max
+                ),
+                "sparse_pc_direct_tail_true_coupled_coarse_accept_base_improvement": bool(
+                    direct_tail_true_coupled_coarse_accept_base_improvement
+                ),
+                "sparse_pc_direct_tail_true_coupled_coarse_base_improvement_override_used": bool(
+                    direct_tail_true_coupled_coarse_base_improvement_override_used
+                ),
+                "sparse_pc_direct_tail_true_coupled_coarse_residual_after": (
+                    direct_tail_true_coupled_coarse_residual_after
+                ),
+                "sparse_pc_direct_tail_true_coupled_coarse_error": direct_tail_true_coupled_coarse_error,
+                "sparse_pc_direct_tail_true_coupled_coarse_metadata": (
+                    direct_tail_true_coupled_coarse_metadata
+                ),
+                "sparse_pc_direct_tail_true_active_submatrix_requested": bool(
+                    direct_tail_true_active_submatrix_requested
+                ),
+                "sparse_pc_direct_tail_true_active_submatrix_selected": bool(
+                    direct_tail_true_active_submatrix_selected
+                ),
+                "sparse_pc_direct_tail_true_active_submatrix_damping": bool(
+                    direct_tail_true_active_submatrix_damping
+                ),
+                "sparse_pc_direct_tail_true_active_submatrix_alpha_clip": float(
+                    direct_tail_true_active_submatrix_alpha_clip
+                ),
+                "sparse_pc_direct_tail_true_active_submatrix_min_improvement": float(
+                    direct_tail_true_active_submatrix_min_improvement
+                ),
+                "sparse_pc_direct_tail_true_active_submatrix_residual_after": (
+                    direct_tail_true_active_submatrix_residual_after
+                ),
+                "sparse_pc_direct_tail_true_active_submatrix_error": (
+                    direct_tail_true_active_submatrix_error
+                ),
+                "sparse_pc_direct_tail_true_active_submatrix_metadata": (
+                    direct_tail_true_active_submatrix_metadata
+                ),
+                "sparse_pc_direct_tail_true_active_column_cache_requested": bool(
+                    direct_tail_true_active_column_cache_requested
+                ),
+                "sparse_pc_direct_tail_true_active_column_cache_max_mb": float(
+                    direct_tail_true_active_column_cache_max_mb
+                ),
+                "sparse_pc_direct_tail_true_active_column_cache_metadata": (
+                    direct_tail_true_active_column_cache_metadata
+                ),
+                "sparse_pc_direct_tail_true_active_block_requested": bool(
+                    direct_tail_true_active_block_requested
+                ),
+                "sparse_pc_direct_tail_true_active_block_selected": bool(
+                    direct_tail_true_active_block_selected
+                ),
+                "sparse_pc_direct_tail_true_active_block_x_count": int(
+                    direct_tail_true_active_block_x_count
+                ),
+                "sparse_pc_direct_tail_true_active_block_ell_count": int(
+                    direct_tail_true_active_block_ell_count
+                ),
+                "sparse_pc_direct_tail_true_active_block_species_count": (
+                    None
+                    if direct_tail_true_active_block_species_count is None
+                    else int(direct_tail_true_active_block_species_count)
+                ),
+                "sparse_pc_direct_tail_true_active_block_theta_stride": int(
+                    direct_tail_true_active_block_theta_stride
+                ),
+                "sparse_pc_direct_tail_true_active_block_zeta_stride": int(
+                    direct_tail_true_active_block_zeta_stride
+                ),
+                "sparse_pc_direct_tail_true_active_block_max_mb": float(
+                    direct_tail_true_active_block_max_mb
+                ),
+                "sparse_pc_direct_tail_true_active_block_regularization": float(
+                    direct_tail_true_active_block_regularization
+                ),
+                "sparse_pc_direct_tail_true_active_block_max_size": int(
+                    direct_tail_true_active_block_max_size
+                ),
+                "sparse_pc_direct_tail_true_active_block_column_batch": int(
+                    direct_tail_true_active_block_column_batch
+                ),
+                "sparse_pc_direct_tail_true_active_block_drop_tol": float(
+                    direct_tail_true_active_block_drop_tol
+                ),
+                "sparse_pc_direct_tail_true_active_block_include_tail": bool(
+                    direct_tail_true_active_block_include_tail
+                ),
+                "sparse_pc_direct_tail_true_active_block_max_tail": int(
+                    direct_tail_true_active_block_max_tail
+                ),
+                "sparse_pc_direct_tail_true_active_block_damping": bool(
+                    direct_tail_true_active_block_damping
+                ),
+                "sparse_pc_direct_tail_true_active_block_beta_max": float(
+                    direct_tail_true_active_block_beta_max
+                ),
+                "sparse_pc_direct_tail_true_active_block_residual_after": (
+                    direct_tail_true_active_block_residual_after
+                ),
+                "sparse_pc_direct_tail_true_active_block_error": direct_tail_true_active_block_error,
+                "sparse_pc_direct_tail_true_active_block_metadata": (
+                    direct_tail_true_active_block_metadata
+                ),
+                "sparse_pc_direct_tail_true_active_residual_block_requested": bool(
+                    direct_tail_true_active_residual_block_requested
+                ),
+                "sparse_pc_direct_tail_true_active_residual_block_selected": bool(
+                    direct_tail_true_active_residual_block_selected
+                ),
+                "sparse_pc_direct_tail_true_active_residual_block_max_mb": float(
+                    direct_tail_true_active_residual_block_max_mb
+                ),
+                "sparse_pc_direct_tail_true_active_residual_block_regularization": float(
+                    direct_tail_true_active_residual_block_regularization
+                ),
+                "sparse_pc_direct_tail_true_active_residual_block_max_size": int(
+                    direct_tail_true_active_residual_block_max_size
+                ),
+                "sparse_pc_direct_tail_true_active_residual_block_column_batch": int(
+                    direct_tail_true_active_residual_block_column_batch
+                ),
+                "sparse_pc_direct_tail_true_active_residual_block_drop_tol": float(
+                    direct_tail_true_active_residual_block_drop_tol
+                ),
+                "sparse_pc_direct_tail_true_active_residual_block_include_tail": bool(
+                    direct_tail_true_active_residual_block_include_tail
+                ),
+                "sparse_pc_direct_tail_true_active_residual_block_max_tail": int(
+                    direct_tail_true_active_residual_block_max_tail
+                ),
+                "sparse_pc_direct_tail_true_active_residual_block_kinetic_only": bool(
+                    direct_tail_true_active_residual_block_kinetic_only
+                ),
+                "sparse_pc_direct_tail_true_active_residual_block_damping": bool(
+                    direct_tail_true_active_residual_block_damping
+                ),
+                "sparse_pc_direct_tail_true_active_residual_block_beta_max": float(
+                    direct_tail_true_active_residual_block_beta_max
+                ),
+                "sparse_pc_direct_tail_true_active_residual_block_min_improvement": float(
+                    direct_tail_true_active_residual_block_min_improvement
+                ),
+                "sparse_pc_direct_tail_true_active_residual_block_accept_base_improvement": bool(
+                    direct_tail_true_active_residual_block_accept_base_improvement
+                ),
+                "sparse_pc_direct_tail_true_active_residual_block_base_improvement_override_used": bool(
+                    direct_tail_true_active_residual_block_base_improvement_override_used
+                ),
+                "sparse_pc_direct_tail_true_active_residual_block_residual_after": (
+                    direct_tail_true_active_residual_block_residual_after
+                ),
+                "sparse_pc_direct_tail_true_active_residual_block_error": (
+                    direct_tail_true_active_residual_block_error
+                ),
+                "sparse_pc_direct_tail_true_active_residual_block_metadata": (
+                    direct_tail_true_active_residual_block_metadata
+                ),
+                "sparse_pc_direct_tail_true_window_requested": bool(direct_tail_true_window_requested),
+                "sparse_pc_direct_tail_true_window_selected": bool(direct_tail_true_window_selected),
+                "sparse_pc_direct_tail_true_window_max_windows": int(direct_tail_true_window_max_windows),
+                "sparse_pc_direct_tail_true_window_x_radius": int(direct_tail_true_window_x_radius),
+                "sparse_pc_direct_tail_true_window_ell_radius": int(direct_tail_true_window_ell_radius),
+                "sparse_pc_direct_tail_true_window_max_mb": float(direct_tail_true_window_max_mb),
+                "sparse_pc_direct_tail_true_window_regularization": float(
+                    direct_tail_true_window_regularization
+                ),
+                "sparse_pc_direct_tail_true_window_max_size": int(direct_tail_true_window_max_size),
+                "sparse_pc_direct_tail_true_window_column_batch": int(direct_tail_true_window_column_batch),
+                "sparse_pc_direct_tail_true_window_drop_tol": float(direct_tail_true_window_drop_tol),
+                "sparse_pc_direct_tail_true_window_include_tail": bool(direct_tail_true_window_include_tail),
+                "sparse_pc_direct_tail_true_window_damping": bool(direct_tail_true_window_damping),
+                "sparse_pc_direct_tail_true_window_beta_max": float(direct_tail_true_window_beta_max),
+                "sparse_pc_direct_tail_true_window_specs": tuple(
+                    tuple(int(v) for v in spec) for spec in direct_tail_true_window_specs
+                ),
+                "sparse_pc_direct_tail_true_window_residual_after": direct_tail_true_window_residual_after,
+                "sparse_pc_direct_tail_true_window_error": direct_tail_true_window_error,
+                "sparse_pc_direct_tail_true_window_metadata": direct_tail_true_window_metadata,
+                "sparse_pc_direct_tail_residual_window_requested": bool(direct_tail_residual_window_requested),
+                "sparse_pc_direct_tail_residual_window_selected": bool(direct_tail_residual_window_selected),
+                "sparse_pc_direct_tail_residual_window_max_windows": int(direct_tail_residual_window_max_windows),
+                "sparse_pc_direct_tail_residual_window_x_radius": int(direct_tail_residual_window_x_radius),
+                "sparse_pc_direct_tail_residual_window_ell_radius": int(direct_tail_residual_window_ell_radius),
+                "sparse_pc_direct_tail_residual_window_max_mb": float(direct_tail_residual_window_max_mb),
+                "sparse_pc_direct_tail_residual_window_regularization": float(
+                    direct_tail_residual_window_regularization
+                ),
+                "sparse_pc_direct_tail_residual_window_coefficient_mode": str(
+                    direct_tail_residual_window_coefficient_mode
+                ),
+                "sparse_pc_direct_tail_residual_window_combine_mode": str(
+                    direct_tail_residual_window_combine_mode
+                ),
+                "sparse_pc_direct_tail_residual_window_interface_depth": int(
+                    direct_tail_residual_window_interface_depth
+                ),
+                "sparse_pc_direct_tail_residual_window_max_size": int(direct_tail_residual_window_max_size),
+                "sparse_pc_direct_tail_residual_window_residual_after": direct_tail_residual_window_residual_after,
+                "sparse_pc_direct_tail_residual_window_error": direct_tail_residual_window_error,
+                "sparse_pc_direct_tail_residual_window_metadata": direct_tail_residual_window_metadata,
+                "sparse_pc_backend": (
+                    str(fortran_reduced_sparse_pc_backend) if bool(fortran_reduced_sparse_pc) else "global"
+                ),
+                "sparse_pc_backend_reason": (
+                    str(fortran_reduced_sparse_pc_backend_reason) if bool(fortran_reduced_sparse_pc) else "not_fortran_reduced"
+                ),
+                "sparse_pc_xblock_min_size": (
+                    int(fortran_reduced_xblock_min_size) if bool(fortran_reduced_sparse_pc) else None
+                ),
+                "sparse_pc_preconditioner_operator": sparse_pc_preconditioner_operator,
+                "sparse_pc_factorization": sparse_pc_factorization,
+                "sparse_pc_default_factorization": sparse_pc_default_factor_kind,
+                "sparse_pc_default_ilu_fill_factor": float(sparse_pc_default_ilu_fill_factor),
+                "sparse_pc_default_ilu_drop_tol": float(sparse_pc_default_ilu_drop_tol),
+                "sparse_pc_default_pattern_color_batch": int(sparse_pc_default_pattern_color_batch),
+                "sparse_pc_fortran_reduced_direct_tail_enabled": bool(direct_tail_enabled),
+                "sparse_pc_fortran_reduced_direct_tail_built": bool(direct_tail_built),
+                "sparse_pc_fortran_reduced_direct_tail_error": direct_tail_error,
+                "sparse_pc_fortran_reduced_direct_tail_operator_reason": (
+                    None
+                    if direct_tail_operator_bundle is None
+                    else str(direct_tail_operator_bundle.metadata.reason)
+                ),
+                "sparse_pc_fortran_reduced_direct_tail_nnz": (
+                    None
+                    if direct_tail_operator_bundle is None
+                    else direct_tail_operator_bundle.metadata.nnz_estimate
+                ),
+                "sparse_pc_fortran_reduced_direct_tail_csr_nbytes_estimate": (
+                    None
+                    if direct_tail_operator_bundle is None
+                    else int(direct_tail_operator_bundle.metadata.csr_nbytes_estimate)
+                ),
+                "sparse_pc_fortran_reduced_direct_tail_structured_pc_requested": direct_tail_structured_pc_requested,
+                "sparse_pc_fortran_reduced_direct_tail_structured_pc_required": bool(
+                    direct_tail_structured_pc_required
+                ),
+                "sparse_pc_fortran_reduced_direct_tail_structured_pc_selected": bool(
+                    direct_tail_structured_pc_selected
+                ),
+                "sparse_pc_fortran_reduced_direct_tail_structured_pc_reason": direct_tail_structured_pc_reason,
+                "sparse_pc_fortran_reduced_direct_tail_structured_pc_error": direct_tail_structured_pc_error,
+                "sparse_pc_fortran_reduced_direct_tail_structured_pc_max_mb": (
+                    None
+                    if direct_tail_structured_max_nbytes is None
+                    else float(direct_tail_structured_max_nbytes) / (1024.0 * 1024.0)
+                ),
+                "sparse_pc_fortran_reduced_direct_tail_structured_pc_max_mb_auto": bool(
+                    direct_tail_structured_pc_max_mb_auto
+                ),
+                "sparse_pc_fortran_reduced_direct_tail_structured_pc_metadata": direct_tail_structured_pc_metadata,
+                "sparse_pc_fortran_reduced_direct_tail_support_mode_preflight_requested": bool(
+                    direct_tail_support_mode_preflight_requested
+                ),
+                "sparse_pc_fortran_reduced_direct_tail_support_mode_preflight_selected": bool(
+                    direct_tail_support_mode_preflight_selected
+                ),
+                "sparse_pc_fortran_reduced_direct_tail_support_mode_preflight_error": (
+                    direct_tail_support_mode_preflight_error
+                ),
+                "sparse_pc_fortran_reduced_direct_tail_support_mode_preflight_metadata": (
+                    direct_tail_support_mode_preflight_metadata
+                ),
+                "sparse_pc_fortran_reduced": bool(fortran_reduced_sparse_pc),
+                "sparse_pc_fortran_reduced_keeps_theta_zeta": bool(fortran_reduced_sparse_pc),
+                "sparse_pc_fortran_reduced_preconditioner_x": int(preconditioner_x),
+                "sparse_pc_fortran_reduced_preconditioner_x_min_L": int(preconditioner_x_min_l),
+                "sparse_pc_fortran_reduced_preconditioner_xi": int(preconditioner_xi),
+                "sparse_pc_fortran_reduced_preconditioner_species": int(preconditioner_species),
                 "sparse_pc_permc_spec": sparse_pc_permc_spec,
                 "sparse_pc_default_permc_spec": sparse_pc_default_permc_spec,
                 "sparse_pc_active_dof": bool(sparse_pc_use_active_dof),
@@ -21434,8 +34308,14 @@ def solve_v3_full_system_linear_gmres(
                 "sparse_pattern_nnz": int(summary.nnz),
                 "sparse_pattern_avg_row_nnz": float(summary.avg_row_nnz),
                 "sparse_pattern_max_row_nnz": int(summary.max_row_nnz),
+                "sparse_pattern_scope": sparse_pattern_scope,
                 "sparse_pattern_build_s": float(pattern_build_s),
                 "sparse_pc_factor_s": float(pc_factor_s),
+                "sparse_pc_factor_elapsed_s": (
+                    None
+                    if getattr(factor_bundle_pc, "factor_s", None) is None
+                    else float(getattr(factor_bundle_pc, "factor_s"))
+                ),
                 "sparse_pc_factor_nbytes_estimate": (
                     None
                     if getattr(factor_bundle_pc, "factor_nbytes_estimate", None) is None
@@ -21445,6 +34325,22 @@ def solve_v3_full_system_linear_gmres(
                     None
                     if getattr(factor_bundle_pc, "factor_nnz_estimate", None) is None
                     else int(getattr(factor_bundle_pc, "factor_nnz_estimate"))
+                ),
+                "sparse_pc_operator_nnz_estimate": sparse_pc_operator_nnz_estimate,
+                "sparse_pc_operator_csr_nbytes_estimate": (
+                    None
+                    if sparse_pc_operator_csr_nbytes_estimate is None
+                    else int(sparse_pc_operator_csr_nbytes_estimate)
+                ),
+                "sparse_pc_residual_target": float(target),
+                "sparse_pc_residual_ratio_to_target": (
+                    float(residual_norm_sparse_pc) / float(target)
+                    if float(target) > 0.0
+                    else float("inf")
+                ),
+                "sparse_pc_factor_quality_rejected": not rhs1_residual_converged(
+                    float(residual_norm_sparse_pc),
+                    float(target),
                 ),
             },
         )
@@ -22680,10 +35576,11 @@ def solve_v3_full_system_linear_gmres(
                 "solve_v3_full_system_linear_gmres: large FP auto-tune "
                 f"(precond=xmg restart={int(restart)} maxiter={int(maxiter)})",
             )
+    structured_fblock_precond_requested = str(rhs1_precond_kind or "").startswith("structured_fblock_")
     rhs1_precond_enabled = (
         rhs1_precond_kind is not None
         and int(op.rhs_mode) == 1
-        and (not bool(op.include_phi1))
+        and ((not bool(op.include_phi1)) or bool(structured_fblock_precond_requested))
     )
     _set_precond_policy_hints(
         geom_scheme=geom_scheme,
@@ -23812,6 +36709,7 @@ def solve_v3_full_system_linear_gmres(
                 adi_sweeps=max(1, sweeps),
                 emit=emit,
             )
+            _record_structured_fblock_preconditioner_metadata(precond)
             rhs1_pas_tz_guarded_fallback = bool(getattr(precond, "_sfincs_jax_pas_tz_guarded_fallback", False))
             if rhs1_pas_tz_guarded_fallback:
                 rhs1_pas_tz_guarded_axis = str(getattr(precond, "_sfincs_jax_pas_tz_guarded_axis", "unknown"))
@@ -26732,6 +39630,42 @@ def solve_v3_full_system_linear_gmres(
         explicit_fp_xblock_seed_used = False
         explicit_fp_xblock_seed_residual = float("inf")
         explicit_fp_xblock_seed_improvement_ratio = 1.0
+        sparse_xblock_rescue_attempted = False
+        sparse_xblock_rescue_built = False
+        sparse_xblock_rescue_error: str | None = None
+        sparse_xblock_rescue_assembled_host_fp = False
+        sparse_xblock_rescue_preconditioner_xi: int | None = None
+        sparse_xblock_rescue_seed_residual: float | None = None
+        sparse_xblock_rescue_seed_improvement_ratio: float | None = None
+        sparse_xblock_rescue_seed_accept_ratio: float | None = None
+        sparse_xblock_rescue_seed_refine_steps: int | None = None
+        sparse_xblock_rescue_seed_refines_performed: int | None = None
+        sparse_xblock_rescue_candidate_residual: float | None = None
+        sparse_xblock_rescue_candidate_accepted = False
+        sparse_xblock_rescue_reason = "not_needed" if float(res_reduced.residual_norm) <= target_reduced else "inactive"
+        fp_xblock_global_correction_allowed = False
+        fp_xblock_global_correction_attempted = False
+        fp_xblock_global_correction_accepted = False
+        fp_xblock_global_correction_reason = "not_evaluated"
+        fp_xblock_global_correction_error: str | None = None
+        fp_xblock_global_correction_preconditioner: str | None = None
+        fp_xblock_global_correction_steps: int | None = None
+        fp_xblock_global_correction_accepted_steps: int | None = None
+        fp_xblock_global_correction_residual_before: float | None = None
+        fp_xblock_global_correction_residual_after: float | None = None
+        fp_xblock_global_correction_improvement_ratio: float | None = None
+        fp_xblock_global_correction_elapsed_s: float | None = None
+        fp_xblock_highx_residual_correction_allowed = False
+        fp_xblock_highx_residual_correction_attempted = False
+        fp_xblock_highx_residual_correction_accepted = False
+        fp_xblock_highx_residual_correction_reason = "not_evaluated"
+        fp_xblock_highx_residual_correction_error: str | None = None
+        fp_xblock_highx_residual_correction_residual_before: float | None = None
+        fp_xblock_highx_residual_correction_residual_after: float | None = None
+        fp_xblock_highx_residual_correction_improvement_ratio: float | None = None
+        fp_xblock_highx_residual_correction_elapsed_s: float | None = None
+        fp_xblock_highx_residual_correction_direction_count: int | None = None
+        fp_xblock_highx_residual_correction_direction_names: tuple[str, ...] = ()
         pre_sparse_qi_device_enabled = bool(
             int(op.rhs_mode) == 1
             and _rhs1_bool_env(
@@ -27645,8 +40579,11 @@ def solve_v3_full_system_linear_gmres(
                 "solve_v3_full_system_linear_gmres: GPU sparse fallback skipped after "
                 f"{rhs1_precond_kind} accept (residual={float(res_reduced.residual_norm):.3e})",
             )
+        skip_global_sparse_after_xblock = False
         if sparse_enabled and float(res_reduced.residual_norm) > target_reduced:
             if sparse_xblock_rescue_active:
+                sparse_xblock_rescue_attempted = True
+                sparse_xblock_rescue_reason = "started"
                 try:
                     if emit is not None:
                         emit(
@@ -27675,6 +40612,8 @@ def solve_v3_full_system_linear_gmres(
                         use_implicit=bool(use_implicit),
                         active_size=int(active_size),
                     )
+                    sparse_xblock_rescue_assembled_host_fp = bool(assembled_host_fp)
+                    sparse_xblock_rescue_preconditioner_xi = int(sparse_xblock_preconditioner_xi)
                     _mark("rhs1_sparse_precond_build_start")
                     precond_sparse_xblock = _build_rhsmode1_xblock_tz_sparse_preconditioner(
                         op=op,
@@ -27691,6 +40630,7 @@ def solve_v3_full_system_linear_gmres(
                         emit=emit,
                     )
                     precond_sparse_xblock_current = precond_sparse_xblock
+                    sparse_xblock_rescue_built = True
                     _mark("rhs1_sparse_precond_build_done")
                     _mark("rhs1_sparse_precond_solve_start")
                     if use_implicit:
@@ -27719,6 +40659,7 @@ def solve_v3_full_system_linear_gmres(
                                 env_name="SFINCS_JAX_RHSMODE1_FP_XBLOCK_ACCEPT_RATIO",
                                 default=10.0,
                             )
+                            sparse_xblock_rescue_seed_accept_ratio = float(accept_ratio)
                             polish_enabled = rhs1_polish_enabled(
                                 env_name="SFINCS_JAX_RHSMODE1_FP_XBLOCK_POLISH",
                             )
@@ -27744,12 +40685,17 @@ def solve_v3_full_system_linear_gmres(
                             residual_vec_sparse_xblock = rhs_reduced - mv_reduced(x_trial)
                             residual_norm_sparse_xblock = float(jnp.linalg.norm(residual_vec_sparse_xblock))
                             explicit_fp_xblock_seed_residual = float(residual_norm_sparse_xblock)
+                            sparse_xblock_rescue_seed_residual = float(residual_norm_sparse_xblock)
                             if np.isfinite(residual_norm_sparse_xblock) and residual_norm_sparse_xblock > 0.0:
                                 explicit_fp_xblock_seed_improvement_ratio = float(base_residual_norm) / float(
                                     residual_norm_sparse_xblock
                                 )
+                                sparse_xblock_rescue_seed_improvement_ratio = float(
+                                    explicit_fp_xblock_seed_improvement_ratio
+                                )
                             elif np.isfinite(residual_norm_sparse_xblock):
                                 explicit_fp_xblock_seed_improvement_ratio = float("inf")
+                                sparse_xblock_rescue_seed_improvement_ratio = float("inf")
                             if emit is not None:
                                 emit(
                                     0,
@@ -27770,6 +40716,8 @@ def solve_v3_full_system_linear_gmres(
                                 residual_vec_sparse_xblock = residual_vec_next
                                 residual_norm_sparse_xblock = residual_norm_next
                                 performed_refines = int(refine_index) + 1
+                            sparse_xblock_rescue_seed_refine_steps = int(refine_steps)
+                            sparse_xblock_rescue_seed_refines_performed = int(performed_refines)
                             if emit is not None and int(refine_steps) > 0:
                                 emit(
                                     1,
@@ -27781,6 +40729,7 @@ def solve_v3_full_system_linear_gmres(
                                 np.isfinite(residual_norm_sparse_xblock)
                                 and residual_norm_sparse_xblock <= max(float(target_reduced), base_residual_norm * accept_ratio)
                             ):
+                                sparse_xblock_rescue_reason = "seed_accepted"
                                 if polish_enabled and residual_norm_sparse_xblock > float(target_reduced):
                                     polish_precond = precond_sparse_xblock if precond_sparse_xblock is not None else ksp_precond
                                     if emit is not None:
@@ -27819,6 +40768,7 @@ def solve_v3_full_system_linear_gmres(
                                     residual_norm=jnp.asarray(residual_norm_sparse_xblock, dtype=jnp.float64),
                                 )
                             elif emit is not None:
+                                sparse_xblock_rescue_reason = "seed_rejected_accept_gate"
                                 emit(
                                     0,
                                     "solve_v3_full_system_linear_gmres: explicit FP x-block seed rejected "
@@ -27843,8 +40793,14 @@ def solve_v3_full_system_linear_gmres(
                                 x=x_sparse_xblock,
                                 residual_norm=jnp.asarray(jnp.linalg.norm(residual_vec_sparse_xblock), dtype=jnp.float64),
                             )
+                            sparse_xblock_rescue_candidate_residual = float(res_sparse_xblock.residual_norm)
+                            sparse_xblock_rescue_reason = "gmres_candidate"
                     _mark("rhs1_sparse_precond_solve_done")
                     if res_sparse_xblock is not None and float(res_sparse_xblock.residual_norm) < float(res_reduced.residual_norm):
+                        sparse_xblock_rescue_candidate_accepted = True
+                        sparse_xblock_rescue_candidate_residual = float(res_sparse_xblock.residual_norm)
+                        if sparse_xblock_rescue_reason == "gmres_candidate":
+                            sparse_xblock_rescue_reason = "gmres_candidate_improved"
                         res_reduced = res_sparse_xblock
                         explicit_fp_xblock_seed_used = bool(assembled_host_fp and (not bool(use_implicit)))
                         if assembled_host_fp:
@@ -27859,8 +40815,402 @@ def solve_v3_full_system_linear_gmres(
                             ksp_precond_side = gmres_precond_side
                             ksp_solver_kind = _solver_kind("incremental")[0]
                 except Exception as exc:  # noqa: BLE001
+                    sparse_xblock_rescue_error = f"{type(exc).__name__}: {exc}"
+                    sparse_xblock_rescue_reason = "exception"
                     if emit is not None:
                         emit(1, f"xblock_sparse: failed ({type(exc).__name__}: {exc})")
+            else:
+                sparse_xblock_rescue_reason = "inactive_by_policy"
+            rhsmode1_general_metadata.update(
+                {
+                    "sparse_xblock_rescue_active": bool(sparse_xblock_rescue_active),
+                    "sparse_xblock_rescue_attempted": bool(sparse_xblock_rescue_attempted),
+                    "sparse_xblock_rescue_built": bool(sparse_xblock_rescue_built),
+                    "sparse_xblock_rescue_error": sparse_xblock_rescue_error,
+                    "sparse_xblock_rescue_reason": str(sparse_xblock_rescue_reason),
+                    "sparse_xblock_rescue_assembled_host_fp": bool(sparse_xblock_rescue_assembled_host_fp),
+                    "sparse_xblock_rescue_preconditioner_xi": sparse_xblock_rescue_preconditioner_xi,
+                    "sparse_xblock_rescue_seed_residual": sparse_xblock_rescue_seed_residual,
+                    "sparse_xblock_rescue_seed_improvement_ratio": sparse_xblock_rescue_seed_improvement_ratio,
+                    "sparse_xblock_rescue_seed_accept_ratio": sparse_xblock_rescue_seed_accept_ratio,
+                    "sparse_xblock_rescue_seed_refine_steps": sparse_xblock_rescue_seed_refine_steps,
+                    "sparse_xblock_rescue_seed_refines_performed": sparse_xblock_rescue_seed_refines_performed,
+                    "sparse_xblock_rescue_candidate_residual": sparse_xblock_rescue_candidate_residual,
+                    "sparse_xblock_rescue_candidate_accepted": bool(sparse_xblock_rescue_candidate_accepted),
+                }
+            )
+            fp_xblock_global_correction_allowed = _rhsmode1_fp_xblock_global_correction_allowed(
+                op=op,
+                active_size=int(active_size),
+                residual_norm=float(res_reduced.residual_norm),
+                target=float(target_reduced),
+                used_large_cpu_xblock_shortcut=bool(cpu_large_xblock_shortcut),
+                used_explicit_fp_xblock_seed=bool(explicit_fp_xblock_seed_used),
+                sparse_xblock_candidate_accepted=bool(sparse_xblock_rescue_candidate_accepted),
+                use_implicit=bool(use_implicit),
+            )
+            if fp_xblock_global_correction_allowed:
+                fp_xblock_global_correction_attempted = True
+                fp_xblock_global_correction_reason = "started"
+                correction_precond = precond_sparse_xblock_current or preconditioner_reduced
+                fp_xblock_global_correction_preconditioner = (
+                    "sparse_xblock" if precond_sparse_xblock_current is not None else "base"
+                )
+                if correction_precond is None:
+                    fp_xblock_global_correction_reason = "missing_preconditioner"
+                else:
+                    correction_steps = _rhs1_int_env(
+                        "SFINCS_JAX_RHSMODE1_FP_XBLOCK_GLOBAL_CORRECTION_STEPS",
+                        default=3,
+                        minimum=1,
+                    )
+                    correction_alpha_clip = _rhs1_float_env(
+                        "SFINCS_JAX_RHSMODE1_FP_XBLOCK_GLOBAL_CORRECTION_ALPHA_CLIP",
+                        default=10.0,
+                        minimum=0.0,
+                    )
+                    correction_min_improvement = _rhs1_float_env(
+                        "SFINCS_JAX_RHSMODE1_FP_XBLOCK_GLOBAL_CORRECTION_MIN_IMPROVEMENT",
+                        default=0.0,
+                        minimum=0.0,
+                    )
+                    correction_precond_clip = _rhs1_float_env(
+                        "SFINCS_JAX_RHSMODE1_FP_XBLOCK_GLOBAL_CORRECTION_PRECONDITIONER_CLIP",
+                        default=1.0e100,
+                        minimum=0.0,
+                    )
+                    fp_xblock_global_correction_steps = int(correction_steps)
+                    fp_xblock_global_correction_residual_before = float(res_reduced.residual_norm)
+                    correction_start_s = float(t.elapsed_s())
+                    _mark("rhs1_fp_xblock_global_correction_start")
+                    if emit is not None:
+                        emit(
+                            1,
+                            "solve_v3_full_system_linear_gmres: FP x-block global correction "
+                            f"(steps={int(correction_steps)} "
+                            f"preconditioner={fp_xblock_global_correction_preconditioner} "
+                            f"residual={float(res_reduced.residual_norm):.6e})",
+                        )
+                    try:
+                        x_corr, residual_corr, correction_history, correction_alphas = (
+                            _apply_preconditioned_minres_correction(
+                                matvec=mv_reduced,
+                                rhs=rhs_reduced,
+                                x0=res_reduced.x,
+                                preconditioner=_safe_preconditioner(
+                                    correction_precond,
+                                    clip=float(correction_precond_clip),
+                                ),
+                                steps=int(correction_steps),
+                                alpha_clip=float(correction_alpha_clip),
+                                min_improvement=float(correction_min_improvement),
+                            )
+                        )
+                        fp_xblock_global_correction_elapsed_s = float(t.elapsed_s() - correction_start_s)
+                        fp_xblock_global_correction_accepted_steps = int(len(correction_alphas))
+                        if correction_history:
+                            fp_xblock_global_correction_residual_after = float(correction_history[-1])
+                        if (
+                            correction_history
+                            and np.isfinite(float(correction_history[-1]))
+                            and float(correction_history[-1]) < float(res_reduced.residual_norm)
+                        ):
+                            before = float(res_reduced.residual_norm)
+                            after = float(correction_history[-1])
+                            fp_xblock_global_correction_accepted = True
+                            fp_xblock_global_correction_reason = "accepted"
+                            fp_xblock_global_correction_improvement_ratio = float(before) / max(after, 1.0e-300)
+                            residual_vec = residual_corr
+                            res_reduced = GMRESSolveResult(
+                                x=jnp.asarray(x_corr, dtype=jnp.float64),
+                                residual_norm=jnp.asarray(after, dtype=jnp.float64),
+                            )
+                            ksp_x0 = res_reduced.x
+                            if emit is not None:
+                                emit(
+                                    1,
+                                    "solve_v3_full_system_linear_gmres: FP x-block global correction accepted "
+                                    f"{before:.3e}->{after:.3e} "
+                                    f"steps={int(len(correction_alphas))}",
+                                )
+                        else:
+                            fp_xblock_global_correction_reason = "no_improvement"
+                        _mark("rhs1_fp_xblock_global_correction_done")
+                    except Exception as exc:  # noqa: BLE001
+                        fp_xblock_global_correction_error = f"{type(exc).__name__}: {exc}"
+                        fp_xblock_global_correction_reason = "exception"
+                        fp_xblock_global_correction_elapsed_s = float(t.elapsed_s() - correction_start_s)
+                        _mark("rhs1_fp_xblock_global_correction_failed")
+                        if emit is not None:
+                            emit(
+                                1,
+                                "solve_v3_full_system_linear_gmres: FP x-block global correction failed "
+                                f"({type(exc).__name__}: {exc})",
+                            )
+            else:
+                correction_env = os.environ.get("SFINCS_JAX_RHSMODE1_FP_XBLOCK_GLOBAL_CORRECTION", "").strip().lower()
+                fp_xblock_global_correction_reason = (
+                    "disabled" if correction_env not in {"1", "true", "yes", "on"} else "policy_guard"
+                )
+            rhsmode1_general_metadata.update(
+                {
+                    "fp_xblock_global_correction_allowed": bool(fp_xblock_global_correction_allowed),
+                    "fp_xblock_global_correction_attempted": bool(fp_xblock_global_correction_attempted),
+                    "fp_xblock_global_correction_accepted": bool(fp_xblock_global_correction_accepted),
+                    "fp_xblock_global_correction_reason": str(fp_xblock_global_correction_reason),
+                    "fp_xblock_global_correction_error": fp_xblock_global_correction_error,
+                    "fp_xblock_global_correction_preconditioner": fp_xblock_global_correction_preconditioner,
+                    "fp_xblock_global_correction_steps": fp_xblock_global_correction_steps,
+                    "fp_xblock_global_correction_accepted_steps": fp_xblock_global_correction_accepted_steps,
+                    "fp_xblock_global_correction_residual_before": fp_xblock_global_correction_residual_before,
+                    "fp_xblock_global_correction_residual_after": fp_xblock_global_correction_residual_after,
+                    "fp_xblock_global_correction_improvement_ratio": fp_xblock_global_correction_improvement_ratio,
+                    "fp_xblock_global_correction_elapsed_s": fp_xblock_global_correction_elapsed_s,
+                }
+            )
+            highx_env = os.environ.get("SFINCS_JAX_RHSMODE1_FP_XBLOCK_HIGHX_RESIDUAL_CORRECTION", "").strip().lower()
+            highx_enabled = highx_env in {"1", "true", "yes", "on"}
+            highx_active_max = _rhs1_int_env(
+                "SFINCS_JAX_RHSMODE1_FP_XBLOCK_HIGHX_RESIDUAL_CORRECTION_MAX",
+                default=600000,
+                minimum=0,
+            )
+            fp_xblock_highx_residual_correction_allowed = bool(
+                highx_enabled
+                and (not bool(use_implicit))
+                and jax.default_backend() == "cpu"
+                and int(op.rhs_mode) == 1
+                and (not bool(op.include_phi1))
+                and op.fblock.fp is not None
+                and op.fblock.pas is None
+                and bool(cpu_large_xblock_shortcut)
+                and bool(explicit_fp_xblock_seed_used)
+                and bool(sparse_xblock_rescue_candidate_accepted)
+                and float(res_reduced.residual_norm) > float(target_reduced)
+                and (int(highx_active_max) <= 0 or int(active_size) <= int(highx_active_max))
+                and reduce_full is not None
+                and expand_reduced is not None
+            )
+            if fp_xblock_highx_residual_correction_allowed:
+                fp_xblock_highx_residual_correction_attempted = True
+                fp_xblock_highx_residual_correction_reason = "started"
+                highx_start_s = float(t.elapsed_s())
+                _mark("rhs1_fp_xblock_highx_residual_correction_start")
+                try:
+                    highx_host_block_max_env = os.environ.get(
+                        "SFINCS_JAX_RHSMODE1_XBLOCK_SPARSE_HOST_BLOCK_MAX",
+                        "",
+                    ).strip()
+                    highx_include_factored = _rhs1_bool_env(
+                        "SFINCS_JAX_RHSMODE1_FP_XBLOCK_HIGHX_RESIDUAL_CORRECTION_INCLUDE_FACTORED",
+                        default=False,
+                    )
+                    highx_slices: list[tuple[str, int, int]] = []
+                    nxi_for_x_highx = np.asarray(op.fblock.collisionless.n_xi_for_x, dtype=np.int32)
+                    for s_highx in range(int(op.n_species)):
+                        for ix_highx in range(int(op.n_x)):
+                            n_lx_highx = int(nxi_for_x_highx[int(ix_highx)])
+                            block_size_highx = int(n_lx_highx * int(op.n_theta) * int(op.n_zeta))
+                            if block_size_highx <= 0:
+                                continue
+                            block_factor_allowed = _rhs1_xblock_sparse_host_policy.rhs1_xblock_sparse_host_block_factor_allowed(
+                                block_size=int(block_size_highx),
+                                max_block_size_env_value=highx_host_block_max_env,
+                            )
+                            if block_factor_allowed and not bool(highx_include_factored):
+                                continue
+                            start_highx = int(
+                                (int(s_highx) * int(op.n_x) + int(ix_highx))
+                                * int(op.n_xi)
+                                * int(op.n_theta)
+                                * int(op.n_zeta)
+                            )
+                            highx_slices.append(
+                                (
+                                    f"s{int(s_highx)}_x{int(ix_highx)}",
+                                    int(start_highx),
+                                    int(block_size_highx),
+                                )
+                            )
+                    max_blocks = _rhs1_int_env(
+                        "SFINCS_JAX_RHSMODE1_FP_XBLOCK_HIGHX_RESIDUAL_CORRECTION_MAX_BLOCKS",
+                        default=16,
+                        minimum=1,
+                    )
+                    highx_slices = highx_slices[: int(max_blocks)]
+                    if not highx_slices:
+                        fp_xblock_highx_residual_correction_reason = "no_skipped_blocks"
+                    else:
+                        highx_steps = _rhs1_int_env(
+                            "SFINCS_JAX_RHSMODE1_FP_XBLOCK_HIGHX_RESIDUAL_CORRECTION_STEPS",
+                            default=1,
+                            minimum=1,
+                        )
+                        highx_max_directions = _rhs1_int_env(
+                            "SFINCS_JAX_RHSMODE1_FP_XBLOCK_HIGHX_RESIDUAL_CORRECTION_MAX_DIRECTIONS",
+                            default=12,
+                            minimum=1,
+                        )
+                        highx_alpha_clip = _rhs1_float_env(
+                            "SFINCS_JAX_RHSMODE1_FP_XBLOCK_HIGHX_RESIDUAL_CORRECTION_ALPHA_CLIP",
+                            default=0.0,
+                            minimum=0.0,
+                        )
+                        highx_rcond = _rhs1_float_env(
+                            "SFINCS_JAX_RHSMODE1_FP_XBLOCK_HIGHX_RESIDUAL_CORRECTION_RCOND",
+                            default=1.0e-12,
+                            minimum=0.0,
+                        )
+                        highx_min_improvement = _rhs1_float_env(
+                            "SFINCS_JAX_RHSMODE1_FP_XBLOCK_HIGHX_RESIDUAL_CORRECTION_MIN_IMPROVEMENT",
+                            default=0.0,
+                            minimum=0.0,
+                        )
+                        highx_include_all = _rhs1_bool_env(
+                            "SFINCS_JAX_RHSMODE1_FP_XBLOCK_HIGHX_RESIDUAL_CORRECTION_INCLUDE_ALL",
+                            default=True,
+                        )
+                        highx_include_raw = _rhs1_bool_env(
+                            "SFINCS_JAX_RHSMODE1_FP_XBLOCK_HIGHX_RESIDUAL_CORRECTION_INCLUDE_RAW",
+                            default=False,
+                        )
+                        fp_xblock_highx_residual_correction_residual_before = float(res_reduced.residual_norm)
+
+                        def _highx_direction_builder(residual_reduced: jnp.ndarray) -> Sequence[tuple[str, jnp.ndarray]]:
+                            residual_full_np = np.asarray(
+                                jax.device_get(expand_reduced(jnp.asarray(residual_reduced, dtype=jnp.float64))),
+                                dtype=np.float64,
+                            ).reshape((-1,))
+                            directions: list[tuple[str, jnp.ndarray]] = []
+                            if bool(highx_include_raw):
+                                directions.append(
+                                    (
+                                        "raw_residual",
+                                        jnp.asarray(residual_reduced, dtype=jnp.float64),
+                                    )
+                                )
+
+                            def _direction_for(blocks: Sequence[tuple[str, int, int]], name: str) -> jnp.ndarray | None:
+                                full_np = np.zeros((int(op.total_size),), dtype=np.float64)
+                                for _label, start, block_size in blocks:
+                                    sl = slice(int(start), int(start + block_size))
+                                    full_np[sl] = residual_full_np[sl]
+                                if not np.any(np.isfinite(full_np) & (full_np != 0.0)):
+                                    return None
+                                return reduce_full(jnp.asarray(full_np, dtype=jnp.float64))
+
+                            if bool(highx_include_all):
+                                all_direction = _direction_for(highx_slices, "highx_all")
+                                if all_direction is not None:
+                                    directions.append(("highx_all", all_direction))
+                            for label, start, block_size in highx_slices:
+                                direction = _direction_for(((label, start, block_size),), f"highx_{label}")
+                                if direction is not None:
+                                    directions.append((f"highx_{label}", direction))
+                            return tuple(directions)
+
+                        if emit is not None:
+                            emit(
+                                1,
+                                "solve_v3_full_system_linear_gmres: FP high-x residual-equation correction "
+                                f"(blocks={len(highx_slices)} directions<={int(highx_max_directions)} "
+                                f"residual={float(res_reduced.residual_norm):.6e})",
+                            )
+                        x_highx, residual_highx, highx_history, highx_counts, highx_names = (
+                            _apply_subspace_minres_correction(
+                                matvec=mv_reduced,
+                                rhs=rhs_reduced,
+                                x0=res_reduced.x,
+                                direction_builder=_highx_direction_builder,
+                                steps=int(highx_steps),
+                                max_directions=int(highx_max_directions),
+                                alpha_clip=float(highx_alpha_clip),
+                                rcond=float(highx_rcond),
+                                min_improvement=float(highx_min_improvement),
+                            )
+                        )
+                        fp_xblock_highx_residual_correction_elapsed_s = float(t.elapsed_s() - highx_start_s)
+                        fp_xblock_highx_residual_correction_direction_count = int(sum(highx_counts))
+                        fp_xblock_highx_residual_correction_direction_names = tuple(highx_names)
+                        if highx_history:
+                            fp_xblock_highx_residual_correction_residual_after = float(highx_history[-1])
+                        if (
+                            highx_history
+                            and np.isfinite(float(highx_history[-1]))
+                            and float(highx_history[-1]) < float(res_reduced.residual_norm)
+                        ):
+                            highx_before = float(res_reduced.residual_norm)
+                            highx_after = float(highx_history[-1])
+                            fp_xblock_highx_residual_correction_accepted = True
+                            fp_xblock_highx_residual_correction_reason = "accepted"
+                            fp_xblock_highx_residual_correction_improvement_ratio = highx_before / max(
+                                highx_after,
+                                1.0e-300,
+                            )
+                            residual_vec = residual_highx
+                            res_reduced = GMRESSolveResult(
+                                x=jnp.asarray(x_highx, dtype=jnp.float64),
+                                residual_norm=jnp.asarray(highx_after, dtype=jnp.float64),
+                            )
+                            ksp_x0 = res_reduced.x
+                            if emit is not None:
+                                emit(
+                                    1,
+                                    "solve_v3_full_system_linear_gmres: FP high-x residual-equation correction "
+                                    f"accepted {highx_before:.3e}->{highx_after:.3e} "
+                                    f"directions={int(sum(highx_counts))}",
+                                )
+                        elif fp_xblock_highx_residual_correction_reason == "started":
+                            fp_xblock_highx_residual_correction_reason = "no_improvement"
+                    _mark("rhs1_fp_xblock_highx_residual_correction_done")
+                except Exception as exc:  # noqa: BLE001
+                    fp_xblock_highx_residual_correction_error = f"{type(exc).__name__}: {exc}"
+                    fp_xblock_highx_residual_correction_reason = "exception"
+                    fp_xblock_highx_residual_correction_elapsed_s = float(t.elapsed_s() - highx_start_s)
+                    _mark("rhs1_fp_xblock_highx_residual_correction_failed")
+                    if emit is not None:
+                        emit(
+                            1,
+                            "solve_v3_full_system_linear_gmres: FP high-x residual-equation correction failed "
+                            f"({type(exc).__name__}: {exc})",
+                        )
+            else:
+                fp_xblock_highx_residual_correction_reason = (
+                    "disabled" if not highx_enabled else "policy_guard"
+                )
+            rhsmode1_general_metadata.update(
+                {
+                    "fp_xblock_highx_residual_correction_allowed": bool(
+                        fp_xblock_highx_residual_correction_allowed
+                    ),
+                    "fp_xblock_highx_residual_correction_attempted": bool(
+                        fp_xblock_highx_residual_correction_attempted
+                    ),
+                    "fp_xblock_highx_residual_correction_accepted": bool(
+                        fp_xblock_highx_residual_correction_accepted
+                    ),
+                    "fp_xblock_highx_residual_correction_reason": str(
+                        fp_xblock_highx_residual_correction_reason
+                    ),
+                    "fp_xblock_highx_residual_correction_error": fp_xblock_highx_residual_correction_error,
+                    "fp_xblock_highx_residual_correction_residual_before": (
+                        fp_xblock_highx_residual_correction_residual_before
+                    ),
+                    "fp_xblock_highx_residual_correction_residual_after": (
+                        fp_xblock_highx_residual_correction_residual_after
+                    ),
+                    "fp_xblock_highx_residual_correction_improvement_ratio": (
+                        fp_xblock_highx_residual_correction_improvement_ratio
+                    ),
+                    "fp_xblock_highx_residual_correction_elapsed_s": fp_xblock_highx_residual_correction_elapsed_s,
+                    "fp_xblock_highx_residual_correction_direction_count": (
+                        fp_xblock_highx_residual_correction_direction_count
+                    ),
+                    "fp_xblock_highx_residual_correction_direction_names": tuple(
+                        fp_xblock_highx_residual_correction_direction_names
+                    ),
+                }
+            )
             skip_global_sparse_after_xblock = _rhsmode1_skip_global_sparse_after_xblock_allowed(
                 op=op,
                 active_size=int(active_size),
@@ -27869,7 +41219,7 @@ def solve_v3_full_system_linear_gmres(
                 used_large_cpu_xblock_shortcut=bool(cpu_large_xblock_shortcut),
                 used_explicit_fp_xblock_seed=bool(explicit_fp_xblock_seed_used),
                 use_implicit=bool(use_implicit),
-                )
+            )
             if (
                 large_cpu_sparse_rescue_active
                 and (not sparse_exact_lu)
@@ -29264,6 +42614,69 @@ def solve_v3_full_system_linear_gmres(
                                 f"{float(res_reduced.residual_norm):.3e} -> {float(res_bi.residual_norm):.3e}",
                             )
                         res_reduced = res_bi
+        if not bool(sparse_enabled):
+            sparse_xblock_rescue_reason = "sparse_disabled"
+        elif float(res_reduced.residual_norm) <= float(target_reduced) and not bool(sparse_xblock_rescue_attempted):
+            sparse_xblock_rescue_reason = "not_needed"
+        rhsmode1_general_metadata.update(
+            {
+                "sparse_xblock_rescue_active": bool(sparse_xblock_rescue_active),
+                "sparse_xblock_rescue_attempted": bool(sparse_xblock_rescue_attempted),
+                "sparse_xblock_rescue_built": bool(sparse_xblock_rescue_built),
+                "sparse_xblock_rescue_error": sparse_xblock_rescue_error,
+                "sparse_xblock_rescue_reason": str(sparse_xblock_rescue_reason),
+                "sparse_xblock_rescue_assembled_host_fp": bool(sparse_xblock_rescue_assembled_host_fp),
+                "sparse_xblock_rescue_preconditioner_xi": sparse_xblock_rescue_preconditioner_xi,
+                "sparse_xblock_rescue_seed_residual": sparse_xblock_rescue_seed_residual,
+                "sparse_xblock_rescue_seed_improvement_ratio": sparse_xblock_rescue_seed_improvement_ratio,
+                "sparse_xblock_rescue_seed_accept_ratio": sparse_xblock_rescue_seed_accept_ratio,
+                "sparse_xblock_rescue_seed_refine_steps": sparse_xblock_rescue_seed_refine_steps,
+                "sparse_xblock_rescue_seed_refines_performed": sparse_xblock_rescue_seed_refines_performed,
+                "sparse_xblock_rescue_candidate_residual": sparse_xblock_rescue_candidate_residual,
+                "sparse_xblock_rescue_candidate_accepted": bool(sparse_xblock_rescue_candidate_accepted),
+                "fp_xblock_global_correction_allowed": bool(fp_xblock_global_correction_allowed),
+                "fp_xblock_global_correction_attempted": bool(fp_xblock_global_correction_attempted),
+                "fp_xblock_global_correction_accepted": bool(fp_xblock_global_correction_accepted),
+                "fp_xblock_global_correction_reason": str(fp_xblock_global_correction_reason),
+                "fp_xblock_global_correction_error": fp_xblock_global_correction_error,
+                "fp_xblock_global_correction_preconditioner": fp_xblock_global_correction_preconditioner,
+                "fp_xblock_global_correction_steps": fp_xblock_global_correction_steps,
+                "fp_xblock_global_correction_accepted_steps": fp_xblock_global_correction_accepted_steps,
+                "fp_xblock_global_correction_residual_before": fp_xblock_global_correction_residual_before,
+                "fp_xblock_global_correction_residual_after": fp_xblock_global_correction_residual_after,
+                "fp_xblock_global_correction_improvement_ratio": fp_xblock_global_correction_improvement_ratio,
+                "fp_xblock_global_correction_elapsed_s": fp_xblock_global_correction_elapsed_s,
+                "fp_xblock_highx_residual_correction_allowed": bool(
+                    fp_xblock_highx_residual_correction_allowed
+                ),
+                "fp_xblock_highx_residual_correction_attempted": bool(
+                    fp_xblock_highx_residual_correction_attempted
+                ),
+                "fp_xblock_highx_residual_correction_accepted": bool(
+                    fp_xblock_highx_residual_correction_accepted
+                ),
+                "fp_xblock_highx_residual_correction_reason": str(
+                    fp_xblock_highx_residual_correction_reason
+                ),
+                "fp_xblock_highx_residual_correction_error": fp_xblock_highx_residual_correction_error,
+                "fp_xblock_highx_residual_correction_residual_before": (
+                    fp_xblock_highx_residual_correction_residual_before
+                ),
+                "fp_xblock_highx_residual_correction_residual_after": (
+                    fp_xblock_highx_residual_correction_residual_after
+                ),
+                "fp_xblock_highx_residual_correction_improvement_ratio": (
+                    fp_xblock_highx_residual_correction_improvement_ratio
+                ),
+                "fp_xblock_highx_residual_correction_elapsed_s": fp_xblock_highx_residual_correction_elapsed_s,
+                "fp_xblock_highx_residual_correction_direction_count": (
+                    fp_xblock_highx_residual_correction_direction_count
+                ),
+                "fp_xblock_highx_residual_correction_direction_names": tuple(
+                    fp_xblock_highx_residual_correction_direction_names
+                ),
+            }
+        )
         # As a last resort on CPU, retry the reduced solve using SciPy GMRES.
         #
         # JAX's gmres can stagnate or return a poor solution for some FP operators on CPU,
@@ -29297,7 +42710,36 @@ def solve_v3_full_system_linear_gmres(
                     float(target_reduced) * float(rescue_ratio),
                     float(rescue_abs_floor),
                 )
-                if float(res_reduced.residual_norm) > float(rescue_threshold):
+                scipy_rescue_size_allowed = _rhsmode1_scipy_rescue_active_size_allowed(
+                    op=op,
+                    active_size=int(active_size),
+                    used_large_cpu_xblock_shortcut=bool(cpu_large_xblock_shortcut),
+                    used_explicit_fp_xblock_seed=bool(explicit_fp_xblock_seed_used),
+                    use_implicit=bool(use_implicit),
+                )
+                if (not scipy_rescue_size_allowed) and float(res_reduced.residual_norm) > float(rescue_threshold):
+                    _mark("rhs1_scipy_rescue_skipped")
+                    rhsmode1_general_metadata.update(
+                        {
+                            "scipy_rescue_attempted": False,
+                            "scipy_rescue_skipped": True,
+                            "scipy_rescue_skip_reason": "active_size_cap",
+                            "scipy_rescue_initial_residual": float(res_reduced.residual_norm),
+                            "scipy_rescue_target": float(target_reduced),
+                            "scipy_rescue_threshold": float(rescue_threshold),
+                            "scipy_rescue_active_size": int(active_size),
+                            "scipy_rescue_used_large_cpu_xblock_shortcut": bool(cpu_large_xblock_shortcut),
+                            "scipy_rescue_used_explicit_fp_xblock_seed": bool(explicit_fp_xblock_seed_used),
+                        }
+                    )
+                    if emit is not None:
+                        emit(
+                            1,
+                            "solve_v3_full_system_linear_gmres: skipping SciPy rescue "
+                            f"(active_size={int(active_size)} exceeds default rescue cap; "
+                            "set SFINCS_JAX_RHSMODE1_SCIPY_GMRES_RESCUE_MAX_ACTIVE=0 to force)",
+                        )
+                elif float(res_reduced.residual_norm) > float(rescue_threshold):
                     scipy_restart_env = os.environ.get("SFINCS_JAX_RHSMODE1_SCIPY_GMRES_RESCUE_RESTART", "").strip()
                     scipy_maxiter_env = os.environ.get("SFINCS_JAX_RHSMODE1_SCIPY_GMRES_RESCUE_MAXITER", "").strip()
                     scipy_strong_env = os.environ.get("SFINCS_JAX_RHSMODE1_SCIPY_GMRES_RESCUE_USE_STRONG", "").strip().lower()
@@ -29322,6 +42764,22 @@ def solve_v3_full_system_linear_gmres(
                     if rescue_method not in {"gmres", "bicgstab"}:
                         rescue_method = "bicgstab" if rescue_preconditioner is strong_preconditioner_reduced else "gmres"
                     try:
+                        scipy_rescue_start_s = float(t.elapsed_s())
+                        scipy_rescue_initial_residual = float(res_reduced.residual_norm)
+                        _mark("rhs1_scipy_rescue_start")
+                        rhsmode1_general_metadata.update(
+                            {
+                                "scipy_rescue_attempted": True,
+                                "scipy_rescue_method": str(rescue_method),
+                                "scipy_rescue_preconditioner": str(rescue_precond_name),
+                                "scipy_rescue_restart": int(scipy_restart),
+                                "scipy_rescue_maxiter": int(scipy_maxiter),
+                                "scipy_rescue_initial_residual": float(scipy_rescue_initial_residual),
+                                "scipy_rescue_target": float(target_reduced),
+                                "scipy_rescue_threshold": float(rescue_threshold),
+                                "scipy_rescue_start_s": float(scipy_rescue_start_s),
+                            }
+                        )
                         if emit is not None:
                             emit(
                                 1,
@@ -29343,6 +42801,7 @@ def solve_v3_full_system_linear_gmres(
                                 maxiter=int(scipy_maxiter),
                                 precondition_side=gmres_precond_side,
                             )
+                            scipy_history_len = len(_history or [])
                         elif rescue_preconditioner is not None and side == "left":
                             x_np, rn_scipy, rn_pc_scipy, _history = explicit_left_preconditioned_gmres_scipy(
                                 matvec=mv_reduced,
@@ -29354,6 +42813,7 @@ def solve_v3_full_system_linear_gmres(
                                 restart=int(scipy_restart),
                                 maxiter=int(scipy_maxiter),
                             )
+                            scipy_history_len = len(_history or [])
                             if emit is not None:
                                 emit(
                                     1,
@@ -29372,9 +42832,24 @@ def solve_v3_full_system_linear_gmres(
                                 maxiter=int(scipy_maxiter),
                                 precondition_side=gmres_precond_side,
                             )
+                            scipy_history_len = len(_history or [])
                         x_scipy = jnp.asarray(x_np, dtype=jnp.float64)
                         r_scipy = rhs_reduced - mv_reduced(x_scipy)
                         res_scipy = GMRESSolveResult(x=x_scipy, residual_norm=jnp.linalg.norm(r_scipy))
+                        scipy_rescue_elapsed_s = float(t.elapsed_s() - scipy_rescue_start_s)
+                        scipy_rescue_final_residual = float(res_scipy.residual_norm)
+                        _mark("rhs1_scipy_rescue_done")
+                        rhsmode1_general_metadata.update(
+                            {
+                                "scipy_rescue_elapsed_s": float(scipy_rescue_elapsed_s),
+                                "scipy_rescue_final_residual": float(scipy_rescue_final_residual),
+                                "scipy_rescue_reported_residual": float(rn_scipy),
+                                "scipy_rescue_history_len": int(scipy_history_len),
+                                "scipy_rescue_improved": bool(
+                                    scipy_rescue_final_residual < scipy_rescue_initial_residual
+                                ),
+                            }
+                        )
                         if float(res_scipy.residual_norm) < float(res_reduced.residual_norm):
                             if emit is not None:
                                 emit(
@@ -29384,6 +42859,13 @@ def solve_v3_full_system_linear_gmres(
                                 )
                             res_reduced = res_scipy
                     except Exception as exc:  # noqa: BLE001
+                        _mark("rhs1_scipy_rescue_failed")
+                        rhsmode1_general_metadata.update(
+                            {
+                                "scipy_rescue_failed": True,
+                                "scipy_rescue_error": f"{type(exc).__name__}: {exc}",
+                            }
+                        )
                         if emit is not None:
                             emit(1, f"solve_v3_full_system_linear_gmres: SciPy rescue failed ({type(exc).__name__}: {exc})")
                 elif emit is not None and float(rescue_abs_floor) > 0.0:
@@ -29585,6 +43067,7 @@ def solve_v3_full_system_linear_gmres(
                     adi_sweeps=max(1, sweeps),
                     emit=emit,
                 )
+                _record_structured_fblock_preconditioner_metadata(precond)
                 _mark("rhs1_precond_build_done")
                 return precond
 
@@ -31638,6 +45121,8 @@ class V3TransportMatrixSolveResult:
     use_active_dof_mode: bool | None = None
     solver_kinds_by_rhs: dict[int, str] | None = None
     solve_methods_by_rhs: dict[int, str] | None = None
+    preconditioner_kind: str | None = None
+    strong_preconditioner_kind: str | None = None
 
 
 def _rewrite_xla_flags(flags: str, *, cpu_threads: int | None, host_devices: int | None) -> str:
@@ -32654,6 +46139,7 @@ def solve_v3_transport_matrix_linear_gmres(
         use_active_dof_mode=bool(use_active_dof_mode),
         reduce_full=reduce_full,
         expand_reduced=expand_reduced,
+        active_indices_np=active_idx_np,
         emit=emit,
     )
     transport_precond_builders = TransportPreconditionerDispatchBuilders(
@@ -32671,8 +46157,37 @@ def solve_v3_transport_matrix_linear_gmres(
         apply_operator_cached=apply_v3_full_system_operator_cached,
         precond_dtype=_precond_dtype,
         fp_tzfft_builder=_build_rhsmode23_fp_tzfft_preconditioner,
+        fp_tzfft_line_builder=_build_rhsmode23_fp_tzfft_line_preconditioner,
+        fp_tzfft_line_schur_builder=_build_rhsmode23_fp_tzfft_line_schur_preconditioner,
+        fp_local_geom_line_builder=_build_rhsmode23_fp_local_geom_line_preconditioner,
+        fp_xblock_tz_lu_builder=_build_rhsmode23_fp_xblock_tz_lu_preconditioner,
+        fp_xblock_tz_lu_schur_builder=_build_rhsmode23_fp_xblock_tz_lu_schur_preconditioner,
+        fp_structured_fblock_lu_builder=_build_rhsmode23_fp_structured_fblock_lu_preconditioner,
+        fp_fortran_reduced_lu_builder=_build_rhsmode23_fp_fortran_reduced_lu_preconditioner,
+        fp_direct_active_block_schur_builder=_build_rhsmode23_fp_direct_active_block_schur_preconditioner,
     )
-    tzfft_backend_allowed = _transport_tzfft_backend_allowed() or _transport_tzfft_accelerator_auto_allowed(op0)
+    structured_tzfft_size = int(active_size) if use_active_dof_mode else int(op0.total_size)
+    structured_tzfft_first_auto = _transport_tzfft_structured_first_attempt_allowed(
+        op0,
+        size=int(structured_tzfft_size),
+        use_implicit=bool(use_implicit),
+    )
+    tzfft_backend_allowed = (
+        _transport_tzfft_backend_allowed()
+        or _transport_tzfft_accelerator_auto_allowed(op0)
+        or bool(structured_tzfft_first_auto)
+    )
+    if structured_tzfft_first_auto and emit is not None:
+        method_tz, restart_tz, maxiter_tz = _transport_tzfft_first_attempt_budget(
+            restart=int(gmres_restart),
+            maxiter=maxiter,
+        )
+        emit(
+            1,
+            "solve_v3_transport_matrix_linear_gmres: structured tzfft first attempt enabled "
+            f"(size={int(structured_tzfft_size)} method={method_tz} "
+            f"restart={int(restart_tz)} maxiter={int(maxiter_tz)})",
+        )
     if transport_precond_kind is not None and int(rhs_mode) in {2, 3}:
         precond_kind_used, strong_precond_kind = resolve_transport_preconditioner_choice(
             op=op0,
@@ -32685,6 +46200,16 @@ def solve_v3_transport_matrix_linear_gmres(
             backend=jax.default_backend(),
             emit=emit,
         )
+        transport_precondition_side, side_changed = resolve_transport_precondition_side_for_kind(
+            kind=precond_kind_used,
+            requested_side=transport_precondition_side,
+        )
+        if side_changed and emit is not None:
+            emit(
+                1,
+                "solve_v3_transport_matrix_linear_gmres: FP line-factor preconditioner uses left "
+                "preconditioning; overriding requested right preconditioning",
+            )
         if precond_kind_used is not None:
             preconditioner_full = build_transport_preconditioner_from_kind(
                 kind=precond_kind_used,
@@ -32759,6 +46284,61 @@ def solve_v3_transport_matrix_linear_gmres(
     # RHSMode=2/3 transport reuses the same active operator for multiple drives,
     # so keep sparse-helper factors scoped to this solve and reuse them across RHS.
     transport_sparse_direct_factor_cache: dict[tuple[object, ...], tuple[object, object, str, str]] = {}
+    transport_sparse_direct_pattern_cache: dict[tuple[object, ...], object] = {}
+
+    def _transport_sparse_direct_pattern_for_solve(*, n: int, active_indices_np: np.ndarray | None):
+        raw = os.environ.get("SFINCS_JAX_TRANSPORT_SPARSE_PATTERN", "").strip().lower()
+        if raw in {"0", "false", "no", "off", "dense", "matvec"}:
+            return None
+        force_pattern = raw in {"1", "true", "yes", "on", "pattern", "probe", "color_probe"}
+        mono_pas_transport = (
+            int(op0.rhs_mode) == 3
+            and not bool(op0.include_phi1)
+            and getattr(op0.fblock, "fp", None) is None
+            and int(getattr(op0, "n_x", 0) or 0) <= 2
+        )
+        if not (force_pattern or mono_pas_transport):
+            return None
+        active_key = "full" if active_indices_np is None else _hash_numpy_array_for_cache(active_indices_np)
+        cache_key = ("transport_sparse_pattern", int(n), active_key)
+        cached_pattern = transport_sparse_direct_pattern_cache.get(cache_key)
+        if cached_pattern is not None:
+            return cached_pattern
+        if active_indices_np is None:
+            if int(n) != int(op0.total_size):
+                return None
+            pattern = v3_full_system_conservative_sparsity_pattern(op0)
+        else:
+            active_np = np.asarray(active_indices_np, dtype=np.int32).reshape((-1,))
+            if int(n) != int(active_np.size):
+                return None
+            pattern = v3_full_system_conservative_sparsity_pattern_for_indices(op0, active_np)
+        summary = summarize_v3_sparse_pattern(op0, pattern)
+        csr_estimate_mb = float(estimate_csr_nbytes(summary.shape, summary.nnz)) / 1.0e6
+        max_mb_env = os.environ.get("SFINCS_JAX_TRANSPORT_SPARSE_PATTERN_CSR_MAX_MB", "").strip()
+        try:
+            max_mb = float(max_mb_env) if max_mb_env else 512.0
+        except ValueError:
+            max_mb = 512.0
+        if csr_estimate_mb > max(0.0, float(max_mb)):
+            message = (
+                "transport sparse-pattern assembly exceeds CSR budget "
+                f"({csr_estimate_mb:.3f} MB > {float(max_mb):.3f} MB, nnz={summary.nnz})"
+            )
+            if force_pattern:
+                raise MemoryError(message)
+            if emit is not None:
+                emit(1, f"solve_v3_transport_matrix_linear_gmres: {message}; using matvec probing")
+            return None
+        transport_sparse_direct_pattern_cache[cache_key] = pattern
+        if emit is not None:
+            emit(
+                1,
+                "solve_v3_transport_matrix_linear_gmres: transport sparse pattern selected "
+                f"shape={summary.shape} nnz={summary.nnz} avg_row_nnz={summary.avg_row_nnz:.3f} "
+                f"max_row_nnz={summary.max_row_nnz} csr_estimate_mb={csr_estimate_mb:.3f}",
+            )
+        return pattern
 
     def _transport_sparse_direct_solve(
         *,
@@ -32767,6 +46347,7 @@ def solve_v3_transport_matrix_linear_gmres(
         n: int,
         dtype: jnp.dtype,
         cache_key: tuple[object, ...],
+        active_indices_np: np.ndarray | None,
         tol_val: float,
         atol_val: float,
         restart_val: int,
@@ -32774,7 +46355,153 @@ def solve_v3_transport_matrix_linear_gmres(
         precondition_side_val: str,
     ) -> GMRESSolveResult:
         def _solve_with_factor_dtype(factor_dtype_use: np.dtype) -> tuple[np.ndarray, float, object]:
-            if _transport_sparse_direct_use_explicit_helper(size=int(n)):
+            direct_true_enabled_env = os.environ.get(
+                "SFINCS_JAX_TRANSPORT_FP_DIRECT_ACTIVE_OPERATOR",
+                "",
+            ).strip().lower()
+            direct_true_enabled = direct_true_enabled_env not in {"0", "false", "no", "off"}
+            direct_true_attempted = False
+            if (
+                bool(direct_true_enabled)
+                and int(op0.rhs_mode) in {2, 3}
+                and getattr(op0.fblock, "fp", None) is not None
+                and not bool(op0.include_phi1)
+                and active_indices_np is not None
+                and int(n) == int(np.asarray(active_indices_np).size)
+            ):
+                factor_kind_env = os.environ.get(
+                    "SFINCS_JAX_TRANSPORT_FP_DIRECT_ACTIVE_OPERATOR_FACTOR",
+                    "",
+                ).strip().lower()
+                if factor_kind_env in {"lu", "exact"}:
+                    direct_factor_kind = "lu"
+                elif factor_kind_env in {"ilu", "spilu", "incomplete"}:
+                    direct_factor_kind = "ilu"
+                else:
+                    direct_factor_kind = "lu" if int(n) <= 50_000 else "ilu"
+                fill_env = os.environ.get(
+                    "SFINCS_JAX_TRANSPORT_FP_DIRECT_ACTIVE_OPERATOR_ILU_FILL",
+                    "",
+                ).strip()
+                drop_env = os.environ.get(
+                    "SFINCS_JAX_TRANSPORT_FP_DIRECT_ACTIVE_OPERATOR_ILU_DROP_TOL",
+                    "",
+                ).strip()
+                try:
+                    direct_ilu_fill = float(fill_env) if fill_env else 6.0
+                except ValueError:
+                    direct_ilu_fill = 6.0
+                try:
+                    direct_ilu_drop = float(drop_env) if drop_env else 1.0e-4
+                except ValueError:
+                    direct_ilu_drop = 1.0e-4
+                active_hash_direct = _hash_numpy_array_for_cache(np.asarray(active_indices_np, dtype=np.int64))
+                factor_cache_key = (
+                    *_sparse_factor_cache_key(cache_key, factor_dtype_use),
+                    "direct_active_true_fp_operator",
+                    str(jax.default_backend()),
+                    str(active_hash_direct),
+                    str(direct_factor_kind),
+                    float(direct_ilu_fill),
+                    float(direct_ilu_drop),
+                )
+                cached_factor = transport_sparse_direct_factor_cache.get(factor_cache_key)
+                if cached_factor is not None:
+                    a_csr_full, ilu, storage_kind, reason = cached_factor
+                    direct_true_attempted = True
+                    if emit is not None:
+                        emit(
+                            1,
+                            "solve_v3_transport_matrix_linear_gmres: reusing direct active true FP operator "
+                            f"storage={storage_kind} reason={reason}",
+                        )
+                else:
+                    direct_result = _try_build_rhsmode23_fp_direct_active_operator_bundle(
+                        op=op0,
+                        active_indices=np.asarray(active_indices_np, dtype=np.int64),
+                        factor_dtype=factor_dtype_use,
+                        emit=emit,
+                    )
+                    if direct_result is not None:
+                        direct_true_attempted = True
+                        operator_bundle, _direct_metadata = direct_result
+                        factor_bundle = factorize_host_sparse_operator(
+                            operator_bundle,
+                            kind=direct_factor_kind,
+                            drop_tol=float(direct_ilu_drop) if direct_factor_kind == "ilu" else 0.0,
+                            fill_factor=float(direct_ilu_fill) if direct_factor_kind == "ilu" else 1.0,
+                            permc_spec="MMD_AT_PLUS_A",
+                            diag_pivot_thresh=0.0,
+                        )
+                        a_csr_full = factor_bundle.operator.matrix
+                        ilu = factor_bundle.factor
+                        transport_sparse_direct_factor_cache[factor_cache_key] = (
+                            a_csr_full,
+                            ilu,
+                            str(operator_bundle.metadata.storage_kind),
+                            str(operator_bundle.metadata.reason),
+                        )
+                        if emit is not None:
+                            emit(
+                                1,
+                                "solve_v3_transport_matrix_linear_gmres: direct active true FP operator "
+                                f"factorization complete factor_kind={factor_bundle.kind} "
+                                f"factor_s={float(factor_bundle.factor_s or 0.0):.3f} "
+                                f"factor_mb={float(factor_bundle.factor_nbytes_estimate or 0) / 1.0e6:.3f}",
+                            )
+            if not direct_true_attempted:
+                pattern = _transport_sparse_direct_pattern_for_solve(
+                    n=int(n),
+                    active_indices_np=active_indices_np,
+                )
+            else:
+                pattern = None
+            if (not direct_true_attempted) and pattern is not None:
+                color_batch_env = os.environ.get("SFINCS_JAX_TRANSPORT_SPARSE_PATTERN_COLOR_BATCH", "").strip()
+                try:
+                    color_batch = int(color_batch_env) if color_batch_env else 8
+                except ValueError:
+                    color_batch = 8
+                color_batch = max(1, int(color_batch))
+                factor_cache_key = (
+                    *_sparse_factor_cache_key(cache_key, factor_dtype_use),
+                    "pattern_probe",
+                    int(getattr(pattern, "nnz", 0)),
+                    int(color_batch),
+                    str(jax.default_backend()),
+                )
+                cached_factor = transport_sparse_direct_factor_cache.get(factor_cache_key)
+                if cached_factor is not None:
+                    a_csr_full, ilu, storage_kind, reason = cached_factor
+                    if emit is not None:
+                        emit(
+                            1,
+                            "solve_v3_transport_matrix_linear_gmres: reusing pattern sparse helper "
+                            f"storage={storage_kind} reason={reason}",
+                        )
+                else:
+                    operator_bundle, factor_bundle = _build_host_sparse_direct_factor_from_matvec(
+                        matvec=matvec_fn,
+                        n=int(n),
+                        dtype=dtype,
+                        factor_dtype=factor_dtype_use,
+                        pattern=pattern,
+                        emit=emit,
+                        default_factor_kind="lu",
+                        default_pattern_color_batch=int(color_batch),
+                    )
+                    a_csr_full = factor_bundle.operator.matrix
+                    ilu = factor_bundle.factor
+                    metadata = getattr(operator_bundle, "metadata", None)
+                    storage_kind = str(getattr(metadata, "storage_kind", "unknown"))
+                    reason = str(getattr(metadata, "reason", "unknown"))
+                    transport_sparse_direct_factor_cache[factor_cache_key] = (
+                        a_csr_full,
+                        ilu,
+                        storage_kind,
+                        reason,
+                    )
+            elif (not direct_true_attempted) and _transport_sparse_direct_use_explicit_helper(size=int(n)):
                 block_cols_env = os.environ.get("SFINCS_JAX_TRANSPORT_SPARSE_HELPER_BLOCK_COLS", "").strip()
                 dense_max_env = os.environ.get("SFINCS_JAX_TRANSPORT_SPARSE_HELPER_DENSE_MAX_MB", "").strip()
                 csr_max_env = os.environ.get("SFINCS_JAX_TRANSPORT_SPARSE_HELPER_CSR_MAX_MB", "").strip()
@@ -32858,7 +46585,7 @@ def solve_v3_transport_matrix_linear_gmres(
                         str(operator_bundle.metadata.storage_kind),
                         str(operator_bundle.metadata.reason),
                     )
-            else:
+            elif not direct_true_attempted:
                 cache_key_use = _sparse_factor_cache_key(cache_key, factor_dtype_use)
                 a_csr_full, _a_csr_drop, ilu, _a_dense, _l_dense, _u_dense, _l_unit = _build_sparse_ilu_from_matvec(
                     matvec=matvec_fn,
@@ -33697,6 +47424,34 @@ def solve_v3_transport_matrix_linear_gmres(
                 preconditioner_used = preconditioner_use
                 x0_used = x0_reduced
                 dense_used = False
+                structured_tzfft_first_attempt = False
+                initial_solve_method_rhs = solve_method_rhs
+                initial_restart_used = _restart_for_method(solve_method_rhs)
+                initial_maxiter = maxiter
+                if (
+                    structured_tzfft_first_auto
+                    and precond_kind_used == "tzfft"
+                    and preconditioner_use is not None
+                    and str(solve_method_rhs).strip().lower()
+                    in {"auto", "default", "batched", "bicgstab", "bicgstab_jax", "incremental"}
+                ):
+                    structured_tzfft_first_attempt = True
+                    initial_solve_method_rhs, initial_restart_used, initial_maxiter = (
+                        _transport_tzfft_first_attempt_budget(
+                            restart=int(gmres_restart),
+                            maxiter=maxiter,
+                        )
+                    )
+                    solver_kind_used = "gmres"
+                    solve_method_used = initial_solve_method_rhs
+                    restart_used = int(initial_restart_used)
+                    if emit is not None:
+                        emit(
+                            1,
+                            "solve_v3_transport_matrix_linear_gmres: structured tzfft first attempt "
+                            f"whichRHS={int(which_rhs)} size={int(active_size)} "
+                            f"restart={int(initial_restart_used)} maxiter={int(initial_maxiter)}",
+                        )
                 target_rhs = max(float(atol), float(tol_rhs) * float(jnp.linalg.norm(rhs_reduced)))
                 host_gmres_first_attempt = _transport_host_gmres_first_attempt_allowed(
                     op=op0,
@@ -33724,13 +47479,16 @@ def solve_v3_transport_matrix_linear_gmres(
                             preconditioner_fn=preconditioner_use,
                             tol_val=tol_rhs,
                             atol_val=atol,
-                            restart_val=_restart_for_method(solve_method_rhs),
-                            maxiter_val=maxiter,
+                            restart_val=initial_restart_used,
+                            maxiter_val=initial_maxiter,
                             precondition_side_val=transport_precondition_side,
+                            emit=emit,
+                            which_rhs=int(which_rhs),
+                            progress_every=_transport_host_gmres_progress_every(),
                         )
                         solver_kind_used = "gmres_scipy"
                         solve_method_used = "incremental"
-                        restart_used = _restart_for_method(solve_method_rhs)
+                        restart_used = initial_restart_used
                     except Exception as exc:  # noqa: BLE001
                         if emit is not None:
                             emit(
@@ -33744,9 +47502,9 @@ def solve_v3_transport_matrix_linear_gmres(
                             x0_vec=x0_reduced,
                             tol_val=tol_rhs,
                             atol_val=atol,
-                            restart_val=_restart_for_method(solve_method_rhs),
-                            maxiter_val=maxiter,
-                            solve_method_val=solve_method_rhs,
+                            restart_val=initial_restart_used,
+                            maxiter_val=initial_maxiter,
+                            solve_method_val=initial_solve_method_rhs,
                             preconditioner_val=preconditioner_use,
                             precondition_side_val=transport_precondition_side,
                         )
@@ -33765,10 +47523,11 @@ def solve_v3_transport_matrix_linear_gmres(
                             n=int(active_size),
                             dtype=rhs_reduced.dtype,
                             cache_key=("transport_sparse_lu", sig, int(active_size), "active"),
+                            active_indices_np=active_idx_np,
                             tol_val=tol_rhs,
                             atol_val=atol,
-                            restart_val=_restart_for_method(solve_method_rhs),
-                            maxiter_val=maxiter,
+                            restart_val=initial_restart_used,
+                            maxiter_val=initial_maxiter,
                             precondition_side_val=transport_precondition_side,
                         )
                         solver_kind_used = "sparse_lu"
@@ -33789,9 +47548,9 @@ def solve_v3_transport_matrix_linear_gmres(
                             x0_vec=x0_reduced,
                             tol_val=tol_rhs,
                             atol_val=atol,
-                            restart_val=_restart_for_method(solve_method_rhs),
-                            maxiter_val=maxiter,
-                            solve_method_val=solve_method_rhs,
+                            restart_val=initial_restart_used,
+                            maxiter_val=initial_maxiter,
+                            solve_method_val=initial_solve_method_rhs,
                             preconditioner_val=preconditioner_use,
                             precondition_side_val=transport_precondition_side,
                         )
@@ -33802,13 +47561,13 @@ def solve_v3_transport_matrix_linear_gmres(
                         x0_vec=x0_reduced,
                         tol_val=tol_rhs,
                         atol_val=atol,
-                        restart_val=_restart_for_method(solve_method_rhs),
-                        maxiter_val=maxiter,
-                        solve_method_val=solve_method_rhs,
+                        restart_val=initial_restart_used,
+                        maxiter_val=initial_maxiter,
+                        solve_method_val=initial_solve_method_rhs,
                         preconditioner_val=preconditioner_use,
                         precondition_side_val=transport_precondition_side,
                     )
-                solver_kind = _solver_kind(solve_method_rhs)[0]
+                solver_kind = _solver_kind(initial_solve_method_rhs)[0]
                 if solver_kind == "bicgstab" and (not _gmres_result_is_finite(res_reduced) or float(res_reduced.residual_norm) > target_rhs):
                     if emit is not None:
                         emit(
@@ -33838,6 +47597,14 @@ def solve_v3_transport_matrix_linear_gmres(
                     target=float(target_rhs),
                     use_implicit=bool(use_implicit),
                 )
+                if structured_tzfft_first_attempt and _needs_retry(res_reduced, target_rhs):
+                    sparse_direct_rescue = sparse_direct_rescue or _transport_sparse_direct_rescue_allowed(
+                        op=op0,
+                        size=int(active_size),
+                        residual_norm=float("nan"),
+                        target=float(target_rhs),
+                        use_implicit=bool(use_implicit),
+                    )
                 sparse_direct_rescue_first = _transport_sparse_direct_rescue_first(
                     sparse_direct_rescue=sparse_direct_rescue,
                 )
@@ -33913,6 +47680,7 @@ def solve_v3_transport_matrix_linear_gmres(
                             n=int(active_size),
                             dtype=rhs_reduced.dtype,
                             cache_key=("transport_sparse_lu", sig, int(active_size), "active"),
+                            active_indices_np=active_idx_np,
                             tol_val=tol_rhs,
                             atol_val=atol,
                             restart_val=_restart_for_method(solve_method_rhs),
@@ -34126,6 +47894,34 @@ def solve_v3_transport_matrix_linear_gmres(
                 preconditioner_used = preconditioner_use
                 x0_used = x0_full
                 dense_used = False
+                structured_tzfft_first_attempt = False
+                initial_solve_method_rhs = solve_method_rhs
+                initial_restart_used = _restart_for_method(solve_method_rhs)
+                initial_maxiter = maxiter
+                if (
+                    structured_tzfft_first_auto
+                    and precond_kind_used == "tzfft"
+                    and preconditioner_use is not None
+                    and str(solve_method_rhs).strip().lower()
+                    in {"auto", "default", "batched", "bicgstab", "bicgstab_jax", "incremental"}
+                ):
+                    structured_tzfft_first_attempt = True
+                    initial_solve_method_rhs, initial_restart_used, initial_maxiter = (
+                        _transport_tzfft_first_attempt_budget(
+                            restart=int(gmres_restart),
+                            maxiter=maxiter,
+                        )
+                    )
+                    solver_kind_used = "gmres"
+                    solve_method_used = initial_solve_method_rhs
+                    restart_used = int(initial_restart_used)
+                    if emit is not None:
+                        emit(
+                            1,
+                            "solve_v3_transport_matrix_linear_gmres: structured tzfft first attempt "
+                            f"whichRHS={int(which_rhs)} size={int(op0.total_size)} "
+                            f"restart={int(initial_restart_used)} maxiter={int(initial_maxiter)}",
+                        )
                 target_rhs = max(float(atol), float(tol_rhs) * float(jnp.linalg.norm(rhs)))
                 host_gmres_first_attempt = _transport_host_gmres_first_attempt_allowed(
                     op=op0,
@@ -34153,13 +47949,16 @@ def solve_v3_transport_matrix_linear_gmres(
                             preconditioner_fn=preconditioner_use,
                             tol_val=tol_rhs,
                             atol_val=atol,
-                            restart_val=_restart_for_method(solve_method_rhs),
-                            maxiter_val=maxiter,
+                            restart_val=initial_restart_used,
+                            maxiter_val=initial_maxiter,
                             precondition_side_val=transport_precondition_side,
+                            emit=emit,
+                            which_rhs=int(which_rhs),
+                            progress_every=_transport_host_gmres_progress_every(),
                         )
                         solver_kind_used = "gmres_scipy"
                         solve_method_used = "incremental"
-                        restart_used = _restart_for_method(solve_method_rhs)
+                        restart_used = initial_restart_used
                     except Exception as exc:  # noqa: BLE001
                         if emit is not None:
                             emit(
@@ -34173,9 +47972,9 @@ def solve_v3_transport_matrix_linear_gmres(
                             x0_vec=x0_full,
                             tol_val=tol_rhs,
                             atol_val=atol,
-                            restart_val=_restart_for_method(solve_method_rhs),
-                            maxiter_val=maxiter,
-                            solve_method_val=solve_method_rhs,
+                            restart_val=initial_restart_used,
+                            maxiter_val=initial_maxiter,
+                            solve_method_val=initial_solve_method_rhs,
                             preconditioner_val=preconditioner_use,
                             precondition_side_val=transport_precondition_side,
                         )
@@ -34194,10 +47993,11 @@ def solve_v3_transport_matrix_linear_gmres(
                             n=int(op0.total_size),
                             dtype=rhs.dtype,
                             cache_key=("transport_sparse_lu", sig, int(op0.total_size), "full"),
+                            active_indices_np=None,
                             tol_val=tol_rhs,
                             atol_val=atol,
-                            restart_val=_restart_for_method(solve_method_rhs),
-                            maxiter_val=maxiter,
+                            restart_val=initial_restart_used,
+                            maxiter_val=initial_maxiter,
                             precondition_side_val=transport_precondition_side,
                         )
                         residual_vec = None
@@ -34219,9 +48019,9 @@ def solve_v3_transport_matrix_linear_gmres(
                             x0_vec=x0_full,
                             tol_val=tol_rhs,
                             atol_val=atol,
-                            restart_val=_restart_for_method(solve_method_rhs),
-                            maxiter_val=maxiter,
-                            solve_method_val=solve_method_rhs,
+                            restart_val=initial_restart_used,
+                            maxiter_val=initial_maxiter,
+                            solve_method_val=initial_solve_method_rhs,
                             preconditioner_val=preconditioner_use,
                             precondition_side_val=transport_precondition_side,
                         )
@@ -34232,13 +48032,13 @@ def solve_v3_transport_matrix_linear_gmres(
                         x0_vec=x0_full,
                         tol_val=tol_rhs,
                         atol_val=atol,
-                        restart_val=_restart_for_method(solve_method_rhs),
-                        maxiter_val=maxiter,
-                        solve_method_val=solve_method_rhs,
+                        restart_val=initial_restart_used,
+                        maxiter_val=initial_maxiter,
+                        solve_method_val=initial_solve_method_rhs,
                         preconditioner_val=preconditioner_use,
                         precondition_side_val=transport_precondition_side,
                     )
-                solver_kind = _solver_kind(solve_method_rhs)[0]
+                solver_kind = _solver_kind(initial_solve_method_rhs)[0]
                 if solver_kind == "bicgstab" and (not _gmres_result_is_finite(res) or float(res.residual_norm) > target_rhs):
                     if emit is not None:
                         emit(
@@ -34268,6 +48068,14 @@ def solve_v3_transport_matrix_linear_gmres(
                     target=float(target_rhs),
                     use_implicit=bool(use_implicit),
                 )
+                if structured_tzfft_first_attempt and _needs_retry(res, target_rhs):
+                    sparse_direct_rescue = sparse_direct_rescue or _transport_sparse_direct_rescue_allowed(
+                        op=op0,
+                        size=int(op0.total_size),
+                        residual_norm=float("nan"),
+                        target=float(target_rhs),
+                        use_implicit=bool(use_implicit),
+                    )
                 sparse_direct_rescue_first = _transport_sparse_direct_rescue_first(
                     sparse_direct_rescue=sparse_direct_rescue,
                 )
@@ -34345,6 +48153,7 @@ def solve_v3_transport_matrix_linear_gmres(
                             n=int(op0.total_size),
                             dtype=rhs.dtype,
                             cache_key=("transport_sparse_lu", sig, int(op0.total_size), "full"),
+                            active_indices_np=None,
                             tol_val=tol_rhs,
                             atol_val=atol,
                             restart_val=_restart_for_method(solve_method_rhs),
@@ -34740,4 +48549,6 @@ def solve_v3_transport_matrix_linear_gmres(
         use_active_dof_mode=bool(use_active_dof_mode),
         solver_kinds_by_rhs=solver_kinds_by_rhs,
         solve_methods_by_rhs=solve_methods_by_rhs,
+        preconditioner_kind=precond_kind_used,
+        strong_preconditioner_kind=strong_precond_kind,
     )

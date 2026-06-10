@@ -37,6 +37,37 @@ from run_reduced_upstream_suite import _solver_tolerance_from_namelist  # noqa: 
 import run_reduced_upstream_suite as reduced_suite  # noqa: E402
 
 
+def test_reduced_suite_can_disable_reduced_seed_for_production_inputs(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    case = "transportMatrix_geometryScheme11"
+    production_input = tmp_path / "benchmarks" / case / "input.namelist"
+    production_input.parent.mkdir(parents=True)
+    production_input.write_text("&resolutionParameters\n  NTHETA = 25\n/\n", encoding="utf-8")
+    reduced_seed = tmp_path / "tests" / "reduced_inputs" / f"{case}.input.namelist"
+    reduced_seed.parent.mkdir(parents=True)
+    reduced_seed.write_text("&resolutionParameters\n  NTHETA = 5\n/\n", encoding="utf-8")
+    monkeypatch.setattr(reduced_suite, "REPO_ROOT", tmp_path)
+
+    selected, use_seed, seed_path = reduced_suite._select_case_input(
+        case=case,
+        input_path=production_input,
+        use_reduced_seeds=True,
+    )
+    assert selected == reduced_seed
+    assert use_seed is True
+    assert seed_path == reduced_seed
+
+    selected, use_seed, seed_path = reduced_suite._select_case_input(
+        case=case,
+        input_path=production_input,
+        use_reduced_seeds=False,
+    )
+    assert selected == production_input
+    assert use_seed is False
+    assert seed_path == reduced_seed
+
+
 def test_solver_trace_parser_prefers_realized_solver_metadata(tmp_path: Path) -> None:
     output_path = tmp_path / "sfincsOutput_jax.h5"
     trace_path = tmp_path / "sfincsOutput_jax.solver_trace.repeat2.json"
@@ -63,6 +94,33 @@ def test_solver_trace_parser_prefers_realized_solver_metadata(tmp_path: Path) ->
 
     assert iters == [17]
     assert kinds == ["xblock_sparse_pc_gmres"]
+
+
+def test_solver_trace_parser_prefers_transport_rhs_solver_maps(tmp_path: Path) -> None:
+    output_path = tmp_path / "sfincsOutput_jax.h5"
+    trace_path = tmp_path / "sfincsOutput_jax.solver_trace.repeat1.json"
+    trace_path.write_text(
+        json.dumps(
+            {
+                "backend": "gpu",
+                "rhs_mode": 3,
+                "selected_path": "transport_matrix",
+                "solve_method": "auto",
+                "matvec_count": None,
+                "metadata": {
+                    "solver_kinds_by_rhs": {"1": "gmres", "2": "gmres"},
+                    "solve_methods_by_rhs": {"1": "incremental", "2": "incremental"},
+                    "preconditioner_kind": "tzfft",
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    iters, kinds = reduced_suite._parse_solver_trace_solver_stats(output_path)
+
+    assert iters == []
+    assert kinds == ["gmres+tzfft"]
 
 
 def test_stage_reference_fortran_artifacts_uses_last_success(tmp_path: Path) -> None:

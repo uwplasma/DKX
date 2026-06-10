@@ -167,9 +167,82 @@ def rhs1_scipy_rescue_abs_floor_after_xblock(
     return 1.0e-9
 
 
+def rhs1_scipy_rescue_active_size_allowed(
+    *,
+    op: Any,
+    active_size: int,
+    used_large_cpu_xblock_shortcut: bool,
+    used_explicit_fp_xblock_seed: bool,
+    use_implicit: bool,
+    backend: str,
+) -> bool:
+    """Return whether CPU SciPy rescue may run for this active-system size.
+
+    Production-resolution explicit FP VMEC systems can reach the SciPy rescue
+    branch with a very poor seed and then spend minutes in host Krylov without
+    producing output.  Keep that rescue for moderate systems and for successful
+    x-block-seed follow-up, but make the no-seed large-CPU shortcut fail fast by
+    default.  A non-positive max-active override restores the historical
+    unbounded behavior.
+    """
+    if not bool(used_large_cpu_xblock_shortcut):
+        return True
+    if bool(used_explicit_fp_xblock_seed):
+        return True
+    if not _is_explicit_cpu_rhs1_fp_only(op=op, use_implicit=use_implicit, backend=backend):
+        return True
+    max_active = _env_int("SFINCS_JAX_RHSMODE1_SCIPY_GMRES_RESCUE_MAX_ACTIVE", 250000)
+    if int(max_active) <= 0:
+        return True
+    return int(active_size) <= int(max_active)
+
+
+def rhs1_fp_xblock_global_correction_allowed(
+    *,
+    op: Any,
+    active_size: int,
+    residual_norm: float,
+    target: float,
+    used_large_cpu_xblock_shortcut: bool,
+    used_explicit_fp_xblock_seed: bool,
+    sparse_xblock_candidate_accepted: bool,
+    use_implicit: bool,
+    backend: str,
+) -> bool:
+    """Return whether a bounded residual-equation correction may follow x-block.
+
+    This is an opt-in diagnostic path for production-resolution explicit FP
+    cases. It reuses the accepted x-block seed and an existing matrix-free
+    preconditioner, so it avoids the unbounded host SciPy rescue and avoids
+    factorizing the high-x local blocks that were unstable in VMEC finite-beta
+    production probes.
+    """
+    env = _env_token("SFINCS_JAX_RHSMODE1_FP_XBLOCK_GLOBAL_CORRECTION")
+    if env not in _TRUE_VALUES:
+        return False
+    if not bool(used_large_cpu_xblock_shortcut):
+        return False
+    if not bool(used_explicit_fp_xblock_seed) or not bool(sparse_xblock_candidate_accepted):
+        return False
+    if not _is_explicit_cpu_rhs1_fp_only(op=op, use_implicit=use_implicit, backend=backend):
+        return False
+    if float(residual_norm) <= float(target):
+        return False
+
+    active_min = _env_int("SFINCS_JAX_RHSMODE1_FP_XBLOCK_GLOBAL_CORRECTION_MIN", 12000)
+    if int(active_size) < max(1, int(active_min)):
+        return False
+    active_max = _env_int("SFINCS_JAX_RHSMODE1_FP_XBLOCK_GLOBAL_CORRECTION_MAX", 600000)
+    if int(active_max) > 0 and int(active_size) > int(active_max):
+        return False
+    return True
+
+
 __all__ = [
     "rhs1_fast_post_xblock_polish_allowed",
+    "rhs1_fp_xblock_global_correction_allowed",
     "rhs1_fp_targeted_polish_allowed",
     "rhs1_scipy_rescue_abs_floor_after_xblock",
+    "rhs1_scipy_rescue_active_size_allowed",
     "rhs1_skip_global_sparse_after_xblock_allowed",
 ]

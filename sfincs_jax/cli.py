@@ -473,6 +473,8 @@ def _cmd_scan_er(args: argparse.Namespace) -> int:
         compute_transport_matrix=bool(args.compute_transport_matrix),
         compute_solution=bool(getattr(args, "compute_solution", False)),
         skip_existing=bool(getattr(args, "skip_existing", False)),
+        solve_method=str(getattr(args, "solve_method", "auto")),
+        differentiable=False,
         jobs=int(args.jobs) if getattr(args, "jobs", None) is not None else None,
         index=int(args.index) if getattr(args, "index", None) is not None else None,
         stride=int(args.stride) if getattr(args, "stride", None) is not None else None,
@@ -861,6 +863,11 @@ def main(argv: list[str] | None = None) -> int:
     p_scan.add_argument("--jobs", type=int, default=1, help="Parallel worker processes for scan points.")
     p_scan.add_argument("--index", type=int, default=None, help="Optional job-array index (0-based).")
     p_scan.add_argument("--stride", type=int, default=1, help="Stride for job-array slicing.")
+    p_scan.add_argument(
+        "--solve-method",
+        default="auto",
+        help="Advanced RHSMode=1 solution solve override for --compute-solution scan points.",
+    )
     p_scan.set_defaults(func=_cmd_scan_er)
 
     p_ambi = sub.add_parser(

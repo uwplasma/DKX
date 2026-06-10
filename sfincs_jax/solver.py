@@ -256,6 +256,7 @@ def gmres_solve_with_history_scipy(
     restart: int = 50,
     maxiter: int | None = None,
     precondition_side: str = "left",
+    progress_callback=None,
 ) -> tuple[np.ndarray, float, list[float]]:
     """Run SciPy GMRES to collect residual history for Fortran-style logging.
 
@@ -302,9 +303,12 @@ def gmres_solve_with_history_scipy(
     def _cb(arg):
         # SciPy passes residual norm when callback_type='pr_norm'.
         if np.isscalar(arg):
-            history.append(float(arg))
+            residual = float(arg)
         else:
-            history.append(float(np.linalg.norm(arg)))
+            residual = float(np.linalg.norm(arg))
+        history.append(residual)
+        if progress_callback is not None:
+            progress_callback(len(history), residual)
 
     x_np, info = _scipy_gmres(
         A,
@@ -530,6 +534,7 @@ def explicit_left_preconditioned_gmres_scipy(
     atol: float = 0.0,
     restart: int = 50,
     maxiter: int | None = None,
+    progress_callback=None,
 ) -> tuple[np.ndarray, float, float, list[float]]:
     """Run SciPy GMRES on the explicit left-preconditioned system M^{-1} A x = M^{-1} b."""
     b_np = np.array(b, dtype=np.float64, copy=True).reshape((-1,))
@@ -558,9 +563,12 @@ def explicit_left_preconditioned_gmres_scipy(
 
     def _cb(arg):
         if np.isscalar(arg):
-            history.append(float(arg))
+            residual = float(arg)
         else:
-            history.append(float(np.linalg.norm(arg)))
+            residual = float(np.linalg.norm(arg))
+        history.append(residual)
+        if progress_callback is not None:
+            progress_callback(len(history), residual)
 
     x_np, info = _scipy_gmres(
         a_pc,

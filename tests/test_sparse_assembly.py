@@ -7,6 +7,7 @@ from sfincs_jax.v3_driver import (
     _assemble_selected_theta_tz_operator,
     _assemble_selected_zeta_tz_operator,
     _build_sparse_ilu_from_matvec,
+    _safe_inverse_diagonal_np,
 )
 
 
@@ -52,6 +53,14 @@ def test_chunked_sparse_assembly_matches_dense_operator(monkeypatch) -> None:
     assert l_dense is None
     assert u_dense is None
     assert l_unit_diag is True
+
+
+def test_safe_inverse_diagonal_uses_floor_and_rejects_nonfinite() -> None:
+    inv = _safe_inverse_diagonal_np(np.asarray([2.0, 0.0, -1.0e-12]), floor=1.0e-6)
+    assert inv is not None
+    np.testing.assert_allclose(inv, np.asarray([0.5, 1.0e6, -1.0e6]))
+    assert _safe_inverse_diagonal_np(np.asarray([1.0, np.nan]), floor=1.0e-6) is None
+    assert _safe_inverse_diagonal_np(np.asarray([1.0, 0.0]), floor=0.0) is None
 
 
 def test_chunked_sparse_assembly_applies_fortran_structural_threshold(monkeypatch) -> None:

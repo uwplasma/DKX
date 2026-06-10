@@ -9,18 +9,18 @@ from pathlib import Path
 
 from jax import config as _jax_config
 _jax_config.update("jax_enable_x64", True)
-import jax.numpy as jnp
-import numpy as np
+import jax.numpy as jnp  # noqa: E402
+import numpy as np  # noqa: E402
 
-from .geometry import BoozerGeometry, boozer_geometry_from_bc_file, boozer_geometry_scheme4
-from .input_compat import effective_equilibrium_file, effective_r_n_wish
-from .grids import uniform_diff_matrices
-from .namelist import Namelist
-from .paths import resolve_existing_path
-from .vmec_geometry import vmec_geometry_from_wout_file
-from .vmec_wout import read_vmec_wout
-from .xgrid import XGrid, make_x_grid, make_x_polynomial_diff_matrices
-from .adaptive_maps import (
+from .geometry import BoozerGeometry, boozer_geometry_from_bc_file, boozer_geometry_scheme4  # noqa: E402
+from .input_compat import effective_equilibrium_file, effective_psi_n_wish  # noqa: E402
+from .grids import uniform_diff_matrices  # noqa: E402
+from .namelist import Namelist  # noqa: E402
+from .paths import resolve_existing_path  # noqa: E402
+from .vmec_geometry import vmec_geometry_from_wout_file  # noqa: E402
+from .vmec_wout import read_vmec_wout  # noqa: E402
+from .xgrid import XGrid, make_x_grid, make_x_polynomial_diff_matrices  # noqa: E402
+from .adaptive_maps import (  # noqa: E402
     AffineXMap,
     RationalTailXMap,
     SoftplusCellXMap,
@@ -122,6 +122,7 @@ def _equilibrium_file_key(*, nml: Namelist, geometry_scheme: int, geom_group: di
 
 _GRIDS_CACHE: dict[tuple[object, ...], V3Grids] = {}
 _GEOMETRY_CACHE: dict[tuple[object, ...], BoozerGeometry] = {}
+_GEOMETRY_CACHE_VERSION = 2
 
 _GEOMETRY_CACHE_FIELDS = (
     "b_hat",
@@ -184,7 +185,7 @@ def _geometry_cache_path(cache_key: tuple[object, ...]) -> Path | None:
 
 def _geometry_to_cache_payload(geom: BoozerGeometry, cache_key: tuple[object, ...]) -> dict[str, np.ndarray]:
     payload: dict[str, np.ndarray] = {
-        "cache_version": np.asarray(1, dtype=np.int32),
+        "cache_version": np.asarray(_GEOMETRY_CACHE_VERSION, dtype=np.int32),
         "cache_key": np.asarray(repr(cache_key)),
         "n_periods": np.asarray(int(geom.n_periods), dtype=np.int32),
         "b0_over_bbar": np.asarray(float(geom.b0_over_bbar), dtype=np.float64),
@@ -198,7 +199,7 @@ def _geometry_to_cache_payload(geom: BoozerGeometry, cache_key: tuple[object, ..
 
 
 def _geometry_from_cache_payload(data: dict[str, np.ndarray]) -> BoozerGeometry | None:
-    if int(np.asarray(data.get("cache_version", 0)).reshape(())) != 1:
+    if int(np.asarray(data.get("cache_version", 0)).reshape(())) != _GEOMETRY_CACHE_VERSION:
         return None
     try:
         geom_kwargs = {
@@ -633,7 +634,12 @@ def geometry_from_namelist(*, nml: Namelist, grids: V3Grids) -> BoozerGeometry:
                 "helicity_n",
                 "helicity_antisymm_l",
                 "helicity_antisymm_n",
+                "INPUTRADIALCOORDINATE",
+                "PSIHAT_WISH",
+                "PSIN_WISH",
+                "RHAT_WISH",
                 "RN_WISH",
+                "NORMRADIUS_WISH",
                 "VMECRadialOption",
                 "VMEC_NYQUIST_OPTION",
                 "MIN_BMN_TO_LOAD",
@@ -697,7 +703,8 @@ def geometry_from_namelist(*, nml: Namelist, grids: V3Grids) -> BoozerGeometry:
         extra = (repo_root / "tests" / "ref", repo_root / "sfincs_jax" / "data" / "equilibria")
         p = resolve_existing_path(str(equilibrium_file), base_dir=base_dir, extra_search_dirs=extra).path
 
-        r_n_wish = effective_r_n_wish(geom_params=geom, default=0.5)
+        psi_n_wish = effective_psi_n_wish(geom_params=geom, default_r_n=0.5)
+        r_n_wish = math.sqrt(float(psi_n_wish))
         vmecradial_option = int(_get_int(geom, "VMECRadialOption", 1))
         geom_out = boozer_geometry_from_bc_file(
             path=str(p),
@@ -720,8 +727,7 @@ def geometry_from_namelist(*, nml: Namelist, grids: V3Grids) -> BoozerGeometry:
         extra = (repo_root / "tests" / "ref", repo_root / "sfincs_jax" / "data" / "equilibria")
         p = _resolve_vmec_equilibrium_file(str(equilibrium_file), base_dir=base_dir, extra_search_dirs=extra)
 
-        r_n_wish = effective_r_n_wish(geom_params=geom, default=0.5)
-        psi_n_wish = float(r_n_wish) * float(r_n_wish)
+        psi_n_wish = effective_psi_n_wish(geom_params=geom, default_r_n=0.5)
         vmecradial_option = int(_get_int(geom, "VMECRadialOption", 1))
         vmec_nyq_opt = int(geom.get("VMEC_NYQUIST_OPTION", 1))
         min_bmn_to_load = float(geom.get("MIN_BMN_TO_LOAD", 0.0))

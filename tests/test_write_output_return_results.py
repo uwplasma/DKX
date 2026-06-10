@@ -3,10 +3,10 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from sfincs_jax.io import _output_geom_cache_key, read_sfincs_h5, write_sfincs_jax_output_h5
+from sfincs_jax.io import _OUTPUT_GEOM_CACHE, _output_geom_cache_key, read_sfincs_h5, write_sfincs_jax_output_h5
 from sfincs_jax.namelist import read_sfincs_input
 from sfincs_jax.paths import resolve_existing_path
-from sfincs_jax.v3 import _equilibrium_file_key, grids_from_namelist
+from sfincs_jax.v3 import _GEOMETRY_CACHE, _equilibrium_file_key, grids_from_namelist
 
 
 def _w7x_wout() -> Path:
@@ -111,3 +111,46 @@ def test_output_geom_cache_key_tracks_classical_flux_inputs_not_dkes_flag(tmp_pa
 
     assert key_base != key_species
     assert key_base == key_irrelevant
+
+
+def test_vmec_geometry_cache_tracks_explicit_psi_n_surface(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A VMEC geometry cache hit must not reuse one surface for another.
+
+    The QS-paper QH audit exposed this failure mode: two decks can share the
+    same VMEC file and angular grid but differ only by ``psiN_wish``.  Fortran v3
+    rebuilds/interpolates geometry at the requested surface, so the cache key
+    must include the explicit radial coordinate contract.
+    """
+
+    monkeypatch.setenv("SFINCS_JAX_GEOMETRY_CACHE", "1")
+    monkeypatch.setenv("SFINCS_JAX_GEOMETRY_CACHE_PERSIST", "0")
+    monkeypatch.setenv("SFINCS_JAX_OUTPUT_CACHE", "0")
+    _GEOMETRY_CACHE.clear()
+    _OUTPUT_GEOM_CACHE.clear()
+
+    source_input = Path(__file__).parent / "ref" / "output_scheme5_1species_tiny.input.namelist"
+    source_text = source_input.read_text(encoding="utf-8")
+
+    def write_surface(name: str, psi_n: float) -> Path:
+        text = source_text.replace("inputRadialCoordinate = 3", "inputRadialCoordinate = 1")
+        text = text.replace("rN_wish = 0.5d+0", f"psiN_wish = {psi_n:.16g}")
+        input_path = tmp_path / f"{name}.namelist"
+        output_path = tmp_path / f"{name}.h5"
+        input_path.write_text(text, encoding="utf-8")
+        write_sfincs_jax_output_h5(
+            input_namelist=input_path,
+            output_path=output_path,
+            wout_path=_w7x_wout(),
+            overwrite=True,
+            compute_solution=False,
+            verbose=False,
+        )
+        return output_path
+
+    out_025 = read_sfincs_h5(write_surface("psiN_025", 0.25))
+    out_070 = read_sfincs_h5(write_surface("psiN_070", 0.70))
+
+    assert np.isclose(float(np.asarray(out_025["psiN"]).reshape(())), 0.25)
+    assert np.isclose(float(np.asarray(out_070["psiN"]).reshape(())), 0.70)
+    assert not np.allclose(out_025["BHat"], out_070["BHat"], rtol=0.0, atol=1.0e-12)
+    assert not np.isclose(float(out_025["FSABHat2"]), float(out_070["FSABHat2"]), rtol=0.0, atol=1.0e-10)

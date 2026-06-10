@@ -329,6 +329,24 @@ def _runtime_metric_for_basis(
     return max(runtimes)
 
 
+def _select_case_input(
+    *,
+    case: str,
+    input_path: Path,
+    use_reduced_seeds: bool,
+) -> tuple[Path, bool, Path]:
+    """Select the actual input deck for a suite row.
+
+    Reduced seeds are useful for CI and parity-smoke campaigns, but production
+    benchmark gates must use the manifest deck exactly. Returning the seed path
+    even when it is not selected lets callers report or test the decision.
+    """
+    reduced_seed = REPO_ROOT / "tests" / "reduced_inputs" / f"{case}.input.namelist"
+    if use_reduced_seeds and reduced_seed.exists():
+        return reduced_seed, True, reduced_seed
+    return input_path, False, reduced_seed
+
+
 PRINT_SIGNALS: dict[str, tuple[str, str]] = {
     # These patterns are intentionally aligned with upstream v3 stdout so we can
     # track how close `sfincs_jax` is to being a drop-in replacement.
@@ -837,6 +855,14 @@ def _parse_solver_trace_solver_stats(output_path: Path) -> tuple[list[int], list
         method = data.get("solve_method") or data.get("selected_path")
         metadata = data.get("metadata")
         solver_metadata = metadata.get("solver_metadata") if isinstance(metadata, dict) else None
+        if isinstance(metadata, dict):
+            solver_kinds_by_rhs = metadata.get("solver_kinds_by_rhs")
+            if isinstance(solver_kinds_by_rhs, dict) and solver_kinds_by_rhs:
+                methods = sorted({str(value).lower() for value in solver_kinds_by_rhs.values()})
+                preconditioner_kind = metadata.get("preconditioner_kind")
+                if preconditioner_kind is not None:
+                    methods = [f"{method}+{str(preconditioner_kind).lower()}" for method in methods]
+                return [], methods
         if isinstance(solver_metadata, dict):
             realized_method = (
                 solver_metadata.get("solver_kind")
@@ -2490,6 +2516,27 @@ def main() -> int:
         help="Do not merge with existing suite_report.json; overwrite report with this run only.",
     )
     parser.add_argument(
+        "--no-reduced-seeds",
+        action="store_true",
+        help=(
+            "Use the matched input.namelist exactly instead of replacing it with "
+            "tests/reduced_inputs/<case>.input.namelist when that CI seed exists."
+        ),
+    )
+    parser.add_argument(
+        "--no-promote-reduced-fixtures",
+        action="store_true",
+        help="Do not save passing case inputs back into tests/reduced_inputs.",
+    )
+    parser.add_argument(
+        "--production-inputs",
+        action="store_true",
+        help=(
+            "Production benchmark mode: equivalent to --no-reduced-seeds and "
+            "--no-promote-reduced-fixtures."
+        ),
+    )
+    parser.add_argument(
         "--jax-cache-dir",
         type=Path,
         default=None,
@@ -2535,6 +2582,8 @@ def main() -> int:
         ),
     )
     args = parser.parse_args()
+    use_reduced_seeds = not bool(args.no_reduced_seeds or args.production_inputs)
+    promote_reduced_fixtures = not bool(args.no_promote_reduced_fixtures or args.production_inputs)
 
     examples_root = Path(args.examples_root)
     out_root = Path(args.out_root)
@@ -2570,6 +2619,9 @@ def main() -> int:
         "jax_repeats": int(args.jax_repeats),
         "jax_profile_marks": str(args.jax_profile_marks),
         "jobs": int(args.jobs),
+        "use_reduced_seeds": bool(use_reduced_seeds),
+        "promote_reduced_fixtures": bool(promote_reduced_fixtures),
+        "production_inputs": bool(args.production_inputs),
         "fortran_exe": _repo_rel(fortran_exe),
         "fortran_executable": _executable_metadata(fortran_exe),
         "cases": [
@@ -2602,7 +2654,11 @@ def main() -> int:
             ):
                 if getattr(result, attr) is None and getattr(prev, attr) is not None:
                     setattr(result, attr, getattr(prev, attr))
-        if result.status in {"parity_ok", "parity_mismatch"} and result.n_common_keys > 0:
+        if (
+            promote_reduced_fixtures
+            and result.status in {"parity_ok", "parity_mismatch"}
+            and result.n_common_keys > 0
+        ):
             reduced_fixture = REPO_ROOT / "tests" / "reduced_inputs" / f"{result.case}.input.namelist"
             reduced_fixture.parent.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(Path(result.input_path), reduced_fixture)
@@ -2622,10 +2678,12 @@ def main() -> int:
         for index, input_path in enumerate(inputs, start=1):
             case = input_path.parent.name
             print(f"[{index}/{len(inputs)}] {case}")
-            reduced_seed = REPO_ROOT / "tests" / "reduced_inputs" / f"{case}.input.namelist"
-            case_input = reduced_seed if reduced_seed.exists() else input_path
-            use_seed_resolution = case_input == reduced_seed
-            if case_input == reduced_seed:
+            case_input, use_seed_resolution, reduced_seed = _select_case_input(
+                case=case,
+                input_path=input_path,
+                use_reduced_seeds=use_reduced_seeds,
+            )
+            if use_seed_resolution:
                 print(f"  using reduced seed -> {reduced_seed}")
             case_out = out_root / case
             result = _run_case(
@@ -2656,10 +2714,12 @@ def main() -> int:
             for index, input_path in enumerate(inputs, start=1):
                 case = input_path.parent.name
                 print(f"[{index}/{len(inputs)}] {case}")
-                reduced_seed = REPO_ROOT / "tests" / "reduced_inputs" / f"{case}.input.namelist"
-                case_input = reduced_seed if reduced_seed.exists() else input_path
-                use_seed_resolution = case_input == reduced_seed
-                if case_input == reduced_seed:
+                case_input, use_seed_resolution, reduced_seed = _select_case_input(
+                    case=case,
+                    input_path=input_path,
+                    use_reduced_seeds=use_reduced_seeds,
+                )
+                if use_seed_resolution:
                     print(f"  using reduced seed -> {reduced_seed}")
                 case_out = out_root / case
                 futures.append(

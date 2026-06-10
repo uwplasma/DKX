@@ -4,8 +4,10 @@ from types import SimpleNamespace
 
 from sfincs_jax.rhs1_post_xblock_policy import (
     rhs1_fast_post_xblock_polish_allowed,
+    rhs1_fp_xblock_global_correction_allowed,
     rhs1_fp_targeted_polish_allowed,
     rhs1_scipy_rescue_abs_floor_after_xblock,
+    rhs1_scipy_rescue_active_size_allowed,
     rhs1_skip_global_sparse_after_xblock_allowed,
 )
 
@@ -183,3 +185,71 @@ def test_scipy_rescue_abs_floor_after_xblock_respects_guards_and_override(monkey
     assert rhs1_scipy_rescue_abs_floor_after_xblock(**{**kwargs, "backend": "gpu"}) == 0.0
     monkeypatch.setenv("SFINCS_JAX_RHSMODE1_SCIPY_GMRES_RESCUE_ABS", "2e-10")
     assert rhs1_scipy_rescue_abs_floor_after_xblock(**{**kwargs, "backend": "gpu"}) == 2.0e-10
+
+
+def test_scipy_rescue_active_size_cap_blocks_no_seed_large_cpu_fp(monkeypatch) -> None:
+    monkeypatch.delenv("SFINCS_JAX_RHSMODE1_SCIPY_GMRES_RESCUE_MAX_ACTIVE", raising=False)
+    kwargs = dict(
+        op=_op(),
+        active_size=507004,
+        used_large_cpu_xblock_shortcut=True,
+        used_explicit_fp_xblock_seed=False,
+        use_implicit=False,
+        backend="cpu",
+    )
+
+    assert not rhs1_scipy_rescue_active_size_allowed(**kwargs)
+    assert rhs1_scipy_rescue_active_size_allowed(**{**kwargs, "active_size": 120000})
+    assert rhs1_scipy_rescue_active_size_allowed(
+        **{**kwargs, "used_explicit_fp_xblock_seed": True},
+    )
+    assert rhs1_scipy_rescue_active_size_allowed(
+        **{**kwargs, "used_large_cpu_xblock_shortcut": False},
+    )
+    assert rhs1_scipy_rescue_active_size_allowed(**{**kwargs, "use_implicit": True})
+    assert rhs1_scipy_rescue_active_size_allowed(**{**kwargs, "backend": "gpu"})
+    assert rhs1_scipy_rescue_active_size_allowed(**{**kwargs, "op": _op(has_pas=True)})
+
+
+def test_scipy_rescue_active_size_cap_can_be_disabled(monkeypatch) -> None:
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_SCIPY_GMRES_RESCUE_MAX_ACTIVE", "0")
+
+    assert rhs1_scipy_rescue_active_size_allowed(
+        op=_op(),
+        active_size=507004,
+        used_large_cpu_xblock_shortcut=True,
+        used_explicit_fp_xblock_seed=False,
+        use_implicit=False,
+        backend="cpu",
+    )
+
+
+def test_fp_xblock_global_correction_is_opt_in_and_bounded(monkeypatch) -> None:
+    monkeypatch.delenv("SFINCS_JAX_RHSMODE1_FP_XBLOCK_GLOBAL_CORRECTION", raising=False)
+    kwargs = dict(
+        op=_op(),
+        active_size=507004,
+        residual_norm=4.96e-5,
+        target=4.77e-10,
+        used_large_cpu_xblock_shortcut=True,
+        used_explicit_fp_xblock_seed=True,
+        sparse_xblock_candidate_accepted=True,
+        use_implicit=False,
+        backend="cpu",
+    )
+
+    assert not rhs1_fp_xblock_global_correction_allowed(**kwargs)
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_FP_XBLOCK_GLOBAL_CORRECTION", "1")
+    assert rhs1_fp_xblock_global_correction_allowed(**kwargs)
+    assert not rhs1_fp_xblock_global_correction_allowed(**{**kwargs, "residual_norm": 1.0e-11})
+    assert not rhs1_fp_xblock_global_correction_allowed(
+        **{**kwargs, "used_explicit_fp_xblock_seed": False},
+    )
+    assert not rhs1_fp_xblock_global_correction_allowed(
+        **{**kwargs, "sparse_xblock_candidate_accepted": False},
+    )
+    assert not rhs1_fp_xblock_global_correction_allowed(**{**kwargs, "active_size": 8000})
+    assert not rhs1_fp_xblock_global_correction_allowed(**{**kwargs, "active_size": 700000})
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_FP_XBLOCK_GLOBAL_CORRECTION_MAX", "0")
+    assert rhs1_fp_xblock_global_correction_allowed(**{**kwargs, "active_size": 700000})
+    assert not rhs1_fp_xblock_global_correction_allowed(**{**kwargs, "backend": "gpu"})

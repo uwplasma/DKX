@@ -27,6 +27,7 @@ class TransportPreconditionerContext:
     use_active_dof_mode: bool
     reduce_full: Callable[[Any], Any] | None = None
     expand_reduced: Callable[[Any], Any] | None = None
+    active_indices_np: Any | None = None
     emit: Callable[[int, str], None] | None = None
 
 
@@ -46,6 +47,14 @@ class TransportPreconditionerDispatchBuilders:
     apply_operator_cached: Callable[[Any, jnp.ndarray], jnp.ndarray]
     precond_dtype: Callable[[int], jnp.dtype]
     fp_tzfft_builder: Builder | None = None
+    fp_tzfft_line_builder: Builder | None = None
+    fp_tzfft_line_schur_builder: Builder | None = None
+    fp_local_geom_line_builder: Builder | None = None
+    fp_xblock_tz_lu_builder: Builder | None = None
+    fp_xblock_tz_lu_schur_builder: Builder | None = None
+    fp_structured_fblock_lu_builder: Builder | None = None
+    fp_fortran_reduced_lu_builder: Builder | None = None
+    fp_direct_active_block_schur_builder: Builder | None = None
 
 
 @dataclass(frozen=True)
@@ -93,6 +102,42 @@ def normalize_transport_preconditioner_kind(*, env_value: str) -> str | None:
         "schwarz_zeta",
         "tzfft",
         "fp_tzfft",
+        "fp_tzfft_line",
+        "fp_tzfft_line_schur",
+        "fp_tzfft_schur",
+        "fp_streaming_line_schur",
+        "fp_block_thomas_schur",
+        "fp_line_schur",
+        "fp_local_geom_line",
+        "fp_geom_line",
+        "fp_local_line",
+        "fp_nonavg_line",
+        "fp_xblock_tz_lu",
+        "fp_xblock_tz_lu_schur",
+        "fp_xblock_schur",
+        "fp_xblock_lu_schur",
+        "fp_tz_xblock_lu_schur",
+        "fp_angular_xblock_lu_schur",
+        "fp_xblock_lu",
+        "fp_tz_xblock_lu",
+        "fp_angular_xblock_lu",
+        "fp_structured_fblock_lu",
+        "fp_fblock_lu",
+        "fp_full_fblock_lu",
+        "fp_kinetic_lu",
+        "fp_fortran_reduced_lu",
+        "fp_global_fortran_reduced_lu",
+        "fp_petsc_like_lu",
+        "fp_reduced_pmat_lu",
+        "fp_direct_active_block_schur",
+        "fp_direct_active_block_lu",
+        "fp_active_true_block_schur",
+        "fp_active_true_block",
+        "fp_true_block_schur",
+        "fp_true_block_lu",
+        "fp_streaming_line",
+        "fp_block_thomas",
+        "fp_line",
         "fp_streaming_fft",
         "streaming_fft",
         "stream_fft",
@@ -102,6 +147,28 @@ def normalize_transport_preconditioner_kind(*, env_value: str) -> str | None:
             return "tzfft"
         if env in {"fp_streaming_fft"}:
             return "fp_tzfft"
+        if env in {"fp_tzfft_schur", "fp_streaming_line_schur", "fp_block_thomas_schur", "fp_line_schur"}:
+            return "fp_tzfft_line_schur"
+        if env in {"fp_geom_line", "fp_local_line", "fp_nonavg_line"}:
+            return "fp_local_geom_line"
+        if env in {"fp_xblock_schur", "fp_xblock_lu_schur", "fp_tz_xblock_lu_schur", "fp_angular_xblock_lu_schur"}:
+            return "fp_xblock_tz_lu_schur"
+        if env in {"fp_xblock_lu", "fp_tz_xblock_lu", "fp_angular_xblock_lu"}:
+            return "fp_xblock_tz_lu"
+        if env in {"fp_fblock_lu", "fp_full_fblock_lu", "fp_kinetic_lu"}:
+            return "fp_structured_fblock_lu"
+        if env in {"fp_global_fortran_reduced_lu", "fp_petsc_like_lu", "fp_reduced_pmat_lu"}:
+            return "fp_fortran_reduced_lu"
+        if env in {
+            "fp_direct_active_block_lu",
+            "fp_active_true_block_schur",
+            "fp_active_true_block",
+            "fp_true_block_schur",
+            "fp_true_block_lu",
+        }:
+            return "fp_direct_active_block_schur"
+        if env in {"fp_streaming_line", "fp_block_thomas", "fp_line"}:
+            return "fp_tzfft_line"
         if env in {"theta_block", "dd_theta", "dd_t"}:
             return "theta_dd"
         if env in {"theta_schwarz", "schwarz_theta"}:
@@ -212,18 +279,170 @@ def auto_transport_preconditioner_choice(
     precond_kind: str
     strong_precond_kind: str | None = None
     if op.fblock.fp is not None:
-        if n_block <= sxblock_max:
+        fp_fortran_env = os.environ.get("SFINCS_JAX_TRANSPORT_FP_FORTRAN_REDUCED_LU_AUTO", "").strip().lower()
+        fp_fortran_disabled = fp_fortran_env in {"0", "false", "no", "off"}
+        fp_fortran_forced = fp_fortran_env in {"1", "true", "yes", "on"}
+        fp_fortran_min_env = os.environ.get("SFINCS_JAX_TRANSPORT_FP_FORTRAN_REDUCED_LU_AUTO_MIN", "").strip()
+        try:
+            fp_fortran_min = int(fp_fortran_min_env) if fp_fortran_min_env else 0
+        except ValueError:
+            fp_fortran_min = 0
+        fp_fblock_env = os.environ.get("SFINCS_JAX_TRANSPORT_FP_STRUCTURED_FBLOCK_LU_AUTO", "").strip().lower()
+        fp_fblock_disabled = fp_fblock_env in {"", "0", "false", "no", "off"}
+        fp_fblock_forced = fp_fblock_env in {"1", "true", "yes", "on"}
+        fp_fblock_min_env = os.environ.get("SFINCS_JAX_TRANSPORT_FP_STRUCTURED_FBLOCK_LU_AUTO_MIN", "").strip()
+        try:
+            fp_fblock_min = int(fp_fblock_min_env) if fp_fblock_min_env else 50000
+        except ValueError:
+            fp_fblock_min = 50000
+        fp_xblock_env = os.environ.get("SFINCS_JAX_TRANSPORT_FP_XBLOCK_TZ_LU_AUTO", "").strip().lower()
+        fp_xblock_disabled = fp_xblock_env in {"", "0", "false", "no", "off"}
+        fp_xblock_forced = fp_xblock_env in {"1", "true", "yes", "on"}
+        fp_xblock_min_env = os.environ.get("SFINCS_JAX_TRANSPORT_FP_XBLOCK_TZ_LU_AUTO_MIN", "").strip()
+        try:
+            fp_xblock_min = int(fp_xblock_min_env) if fp_xblock_min_env else 50000
+        except ValueError:
+            fp_xblock_min = 50000
+        fp_xblock_schur_env = os.environ.get("SFINCS_JAX_TRANSPORT_FP_XBLOCK_TZ_LU_SCHUR_AUTO", "").strip().lower()
+        fp_xblock_schur_disabled = fp_xblock_schur_env in {"", "0", "false", "no", "off"}
+        fp_xblock_schur_forced = fp_xblock_schur_env in {"1", "true", "yes", "on"}
+        fp_xblock_schur_min_env = os.environ.get("SFINCS_JAX_TRANSPORT_FP_XBLOCK_TZ_LU_SCHUR_AUTO_MIN", "").strip()
+        try:
+            fp_xblock_schur_min = int(fp_xblock_schur_min_env) if fp_xblock_schur_min_env else 50000
+        except ValueError:
+            fp_xblock_schur_min = 50000
+        fp_geom_env = os.environ.get("SFINCS_JAX_TRANSPORT_FP_LOCAL_GEOM_LINE_AUTO", "").strip().lower()
+        fp_geom_disabled = fp_geom_env in {"", "0", "false", "no", "off"}
+        fp_geom_forced = fp_geom_env in {"1", "true", "yes", "on"}
+        fp_geom_min_env = os.environ.get("SFINCS_JAX_TRANSPORT_FP_LOCAL_GEOM_LINE_AUTO_MIN", "").strip()
+        try:
+            fp_geom_min = int(fp_geom_min_env) if fp_geom_min_env else 50000
+        except ValueError:
+            fp_geom_min = 50000
+        fp_schur_env = os.environ.get("SFINCS_JAX_TRANSPORT_FP_TZFFT_LINE_SCHUR_AUTO", "").strip().lower()
+        fp_schur_disabled = fp_schur_env in {"", "0", "false", "no", "off"}
+        fp_schur_forced = fp_schur_env in {"1", "true", "yes", "on"}
+        fp_schur_min_env = os.environ.get("SFINCS_JAX_TRANSPORT_FP_TZFFT_LINE_SCHUR_AUTO_MIN", "").strip()
+        try:
+            fp_schur_min = int(fp_schur_min_env) if fp_schur_min_env else 50000
+        except ValueError:
+            fp_schur_min = 50000
+        fp_line_env = os.environ.get("SFINCS_JAX_TRANSPORT_FP_TZFFT_LINE_AUTO", "").strip().lower()
+        fp_line_disabled = fp_line_env in {"", "0", "false", "no", "off"}
+        fp_line_forced = fp_line_env in {"1", "true", "yes", "on"}
+        fp_line_min_env = os.environ.get("SFINCS_JAX_TRANSPORT_FP_TZFFT_LINE_AUTO_MIN", "").strip()
+        try:
+            fp_line_min = int(fp_line_min_env) if fp_line_min_env else 50000
+        except ValueError:
+            fp_line_min = 50000
+        fp_line_candidate = bool(
+            (not fp_line_disabled)
+            and int(getattr(op, "rhs_mode", 0) or 0) in {2, 3}
+            and not bool(getattr(op, "include_phi1", False))
+            and int(getattr(op, "n_theta", 0) or 0) * int(getattr(op, "n_zeta", 0) or 0) >= 64
+            and (fp_line_forced or int(getattr(op, "total_size", 0) or 0) >= max(1, int(fp_line_min)))
+        )
+        fp_schur_candidate = bool(
+            (not fp_schur_disabled)
+            and int(getattr(op, "rhs_mode", 0) or 0) in {2, 3}
+            and not bool(getattr(op, "include_phi1", False))
+            and int(getattr(op, "n_theta", 0) or 0) * int(getattr(op, "n_zeta", 0) or 0) >= 64
+            and (fp_schur_forced or int(getattr(op, "total_size", 0) or 0) >= max(1, int(fp_schur_min)))
+        )
+        fp_geom_candidate = bool(
+            (not fp_geom_disabled)
+            and int(getattr(op, "rhs_mode", 0) or 0) in {2, 3}
+            and not bool(getattr(op, "include_phi1", False))
+            and int(getattr(op, "n_theta", 0) or 0) * int(getattr(op, "n_zeta", 0) or 0) >= 64
+            and (fp_geom_forced or int(getattr(op, "total_size", 0) or 0) >= max(1, int(fp_geom_min)))
+        )
+        fp_fblock_candidate = bool(
+            (not fp_fblock_disabled)
+            and int(getattr(op, "rhs_mode", 0) or 0) in {2, 3}
+            and not bool(getattr(op, "include_phi1", False))
+            and (fp_fblock_forced or int(getattr(op, "total_size", 0) or 0) >= max(1, int(fp_fblock_min)))
+        )
+        fp_xblock_candidate = bool(
+            (not fp_xblock_disabled)
+            and int(getattr(op, "rhs_mode", 0) or 0) in {2, 3}
+            and not bool(getattr(op, "include_phi1", False))
+            and int(getattr(op, "n_theta", 0) or 0) * int(getattr(op, "n_zeta", 0) or 0) >= 64
+            and (fp_xblock_forced or int(getattr(op, "total_size", 0) or 0) >= max(1, int(fp_xblock_min)))
+        )
+        fp_xblock_schur_candidate = bool(
+            (not fp_xblock_schur_disabled)
+            and int(getattr(op, "rhs_mode", 0) or 0) in {2, 3}
+            and not bool(getattr(op, "include_phi1", False))
+            and int(getattr(op, "n_theta", 0) or 0) * int(getattr(op, "n_zeta", 0) or 0) >= 64
+            and (
+                fp_xblock_schur_forced
+                or int(getattr(op, "total_size", 0) or 0) >= max(1, int(fp_xblock_schur_min))
+            )
+        )
+        other_fp_forced = any(
+            (
+                fp_line_forced,
+                fp_schur_forced,
+                fp_geom_forced,
+                fp_fblock_forced,
+                fp_xblock_forced,
+                fp_xblock_schur_forced,
+            )
+        )
+        fp_fortran_candidate = bool(
+            (not fp_fortran_disabled)
+            and int(getattr(op, "rhs_mode", 0) or 0) in {2, 3}
+            and not bool(getattr(op, "include_phi1", False))
+            and (
+                fp_fortran_forced
+                or (
+                    (not other_fp_forced)
+                    and int(getattr(op, "total_size", 0) or 0) >= max(1, int(fp_fortran_min))
+                )
+            )
+        )
+        if fp_fortran_candidate:
+            precond_kind = "fp_fortran_reduced_lu"
+            strong_precond_kind = "fp_fortran_reduced_lu"
+        elif fp_xblock_schur_candidate:
+            precond_kind = "fp_xblock_tz_lu_schur"
+            strong_precond_kind = "fp_xblock_tz_lu_schur"
+        elif fp_xblock_candidate:
+            precond_kind = "fp_xblock_tz_lu"
+            strong_precond_kind = "fp_xblock_tz_lu"
+        elif fp_fblock_candidate:
+            precond_kind = "fp_structured_fblock_lu"
+            strong_precond_kind = "fp_structured_fblock_lu"
+        elif fp_geom_candidate:
+            precond_kind = "fp_local_geom_line"
+            strong_precond_kind = "fp_local_geom_line"
+        elif fp_schur_candidate:
+            precond_kind = "fp_tzfft_line_schur"
+            strong_precond_kind = "fp_tzfft_line_schur"
+        elif fp_line_candidate:
+            precond_kind = "fp_tzfft_line"
+            strong_precond_kind = "fp_tzfft_line"
+        elif n_block <= sxblock_max:
             precond_kind = "sxblock"
         elif int(op.total_size) <= block_max and str(default_solver_kind) != "bicgstab":
             precond_kind = "sxblock"
         else:
             precond_kind = "collision"
-        if n_block <= sxblock_max:
-            strong_precond_kind = "sxblock"
-        elif int(op.total_size) <= block_max:
-            strong_precond_kind = "block"
-        else:
-            strong_precond_kind = "xmg"
+        if (
+            not fp_line_candidate
+            and not fp_schur_candidate
+            and not fp_geom_candidate
+            and not fp_fblock_candidate
+            and not fp_xblock_candidate
+            and not fp_xblock_schur_candidate
+            and not fp_fortran_candidate
+        ):
+            if n_block <= sxblock_max:
+                strong_precond_kind = "sxblock"
+            elif int(op.total_size) <= block_max:
+                strong_precond_kind = "block"
+            else:
+                strong_precond_kind = "xmg"
     else:
         no_fp = op.fblock.fp is None
         small_x = int(op.n_x) <= 2
@@ -288,6 +507,39 @@ def resolve_transport_preconditioner_choice(
     return precond_kind, strong_precond_kind
 
 
+def resolve_transport_precondition_side_for_kind(
+    *,
+    kind: str | None,
+    requested_side: str,
+) -> tuple[str, bool]:
+    """Return a preconditioner-side choice that is valid for the selected kind.
+
+    The FP Fourier line factor uses a forward/backward block-Thomas scan.  It is
+    intended as a left preconditioner; current JAX transpose rules for the scan
+    path make user-forced right preconditioning fragile on some backends.
+    Keeping the guard here makes the solver policy explicit and testable.
+    """
+    side = str(requested_side).strip().lower()
+    if side not in {"left", "right", "none"}:
+        side = "left"
+    if (
+        kind
+        in {
+            "fp_tzfft_line",
+            "fp_tzfft_line_schur",
+            "fp_local_geom_line",
+            "fp_xblock_tz_lu",
+            "fp_xblock_tz_lu_schur",
+            "fp_structured_fblock_lu",
+            "fp_fortran_reduced_lu",
+            "fp_direct_active_block_schur",
+        }
+        and side == "right"
+    ):
+        return "left", True
+    return side, False
+
+
 def build_transport_preconditioner_from_kind(
     *,
     kind: str,
@@ -340,6 +592,100 @@ def build_transport_preconditioner_from_kind(
         if fp_tzfft_builder is None:
             return builders.tzfft_builder(op=context.op, reduce_full=reduce_full, expand_reduced=expand_reduced)
         return fp_tzfft_builder(op=context.op, reduce_full=reduce_full, expand_reduced=expand_reduced)
+    if kind == "fp_tzfft_line":
+        fp_tzfft_line_builder = getattr(builders, "fp_tzfft_line_builder", None)
+        if fp_tzfft_line_builder is None:
+            fp_tzfft_builder = getattr(builders, "fp_tzfft_builder", None)
+            if fp_tzfft_builder is not None:
+                return fp_tzfft_builder(op=context.op, reduce_full=reduce_full, expand_reduced=expand_reduced)
+            return builders.sxblock_builder(op=context.op, reduce_full=reduce_full, expand_reduced=expand_reduced)
+        return fp_tzfft_line_builder(op=context.op, reduce_full=reduce_full, expand_reduced=expand_reduced)
+    if kind == "fp_tzfft_line_schur":
+        fp_tzfft_line_schur_builder = getattr(builders, "fp_tzfft_line_schur_builder", None)
+        if fp_tzfft_line_schur_builder is not None:
+            return fp_tzfft_line_schur_builder(op=context.op, reduce_full=reduce_full, expand_reduced=expand_reduced)
+        fp_tzfft_line_builder = getattr(builders, "fp_tzfft_line_builder", None)
+        if fp_tzfft_line_builder is not None:
+            return fp_tzfft_line_builder(op=context.op, reduce_full=reduce_full, expand_reduced=expand_reduced)
+        fp_tzfft_builder = getattr(builders, "fp_tzfft_builder", None)
+        if fp_tzfft_builder is not None:
+            return fp_tzfft_builder(op=context.op, reduce_full=reduce_full, expand_reduced=expand_reduced)
+        return builders.sxblock_builder(op=context.op, reduce_full=reduce_full, expand_reduced=expand_reduced)
+    if kind == "fp_local_geom_line":
+        fp_local_geom_line_builder = getattr(builders, "fp_local_geom_line_builder", None)
+        if fp_local_geom_line_builder is not None:
+            return fp_local_geom_line_builder(op=context.op, reduce_full=reduce_full, expand_reduced=expand_reduced)
+        fp_tzfft_line_builder = getattr(builders, "fp_tzfft_line_builder", None)
+        if fp_tzfft_line_builder is not None:
+            return fp_tzfft_line_builder(op=context.op, reduce_full=reduce_full, expand_reduced=expand_reduced)
+        return builders.sxblock_builder(op=context.op, reduce_full=reduce_full, expand_reduced=expand_reduced)
+    if kind == "fp_xblock_tz_lu":
+        fp_xblock_tz_lu_builder = getattr(builders, "fp_xblock_tz_lu_builder", None)
+        if fp_xblock_tz_lu_builder is not None:
+            return fp_xblock_tz_lu_builder(
+                op=context.op,
+                reduce_full=reduce_full,
+                expand_reduced=expand_reduced,
+            )
+        fp_tzfft_line_builder = getattr(builders, "fp_tzfft_line_builder", None)
+        if fp_tzfft_line_builder is not None:
+            return fp_tzfft_line_builder(op=context.op, reduce_full=reduce_full, expand_reduced=expand_reduced)
+        return builders.sxblock_builder(op=context.op, reduce_full=reduce_full, expand_reduced=expand_reduced)
+    if kind == "fp_xblock_tz_lu_schur":
+        fp_xblock_tz_lu_schur_builder = getattr(builders, "fp_xblock_tz_lu_schur_builder", None)
+        if fp_xblock_tz_lu_schur_builder is not None:
+            return fp_xblock_tz_lu_schur_builder(
+                op=context.op,
+                reduce_full=reduce_full,
+                expand_reduced=expand_reduced,
+            )
+        fp_xblock_tz_lu_builder = getattr(builders, "fp_xblock_tz_lu_builder", None)
+        if fp_xblock_tz_lu_builder is not None:
+            return fp_xblock_tz_lu_builder(op=context.op, reduce_full=reduce_full, expand_reduced=expand_reduced)
+        return builders.sxblock_builder(op=context.op, reduce_full=reduce_full, expand_reduced=expand_reduced)
+    if kind == "fp_structured_fblock_lu":
+        fp_structured_fblock_lu_builder = getattr(builders, "fp_structured_fblock_lu_builder", None)
+        if fp_structured_fblock_lu_builder is not None:
+            return fp_structured_fblock_lu_builder(
+                op=context.op,
+                reduce_full=reduce_full,
+                expand_reduced=expand_reduced,
+            )
+        return builders.sxblock_builder(op=context.op, reduce_full=reduce_full, expand_reduced=expand_reduced)
+    if kind == "fp_fortran_reduced_lu":
+        fp_fortran_reduced_lu_builder = getattr(builders, "fp_fortran_reduced_lu_builder", None)
+        if fp_fortran_reduced_lu_builder is not None:
+            if bool(context.use_active_dof_mode) and not use_reduced:
+                return builders.sxblock_builder(
+                    op=context.op,
+                    reduce_full=reduce_full,
+                    expand_reduced=expand_reduced,
+                )
+            return fp_fortran_reduced_lu_builder(
+                op=context.op,
+                reduce_full=reduce_full,
+                expand_reduced=expand_reduced,
+                active_indices_np=context.active_indices_np if use_reduced else None,
+                emit=context.emit,
+            )
+        return builders.sxblock_builder(op=context.op, reduce_full=reduce_full, expand_reduced=expand_reduced)
+    if kind == "fp_direct_active_block_schur":
+        fp_direct_active_block_schur_builder = getattr(builders, "fp_direct_active_block_schur_builder", None)
+        if fp_direct_active_block_schur_builder is not None:
+            if bool(context.use_active_dof_mode) and not use_reduced:
+                return builders.sxblock_builder(
+                    op=context.op,
+                    reduce_full=reduce_full,
+                    expand_reduced=expand_reduced,
+                )
+            return fp_direct_active_block_schur_builder(
+                op=context.op,
+                reduce_full=reduce_full,
+                expand_reduced=expand_reduced,
+                active_indices_np=context.active_indices_np if use_reduced else None,
+                emit=context.emit,
+            )
+        return builders.sxblock_builder(op=context.op, reduce_full=reduce_full, expand_reduced=expand_reduced)
     if kind == "sparse_jax":
         precond_dtype = builders.precond_dtype(int(size_est))
         bytes_per = 4.0 if precond_dtype == jnp.float32 else 8.0
@@ -425,6 +771,7 @@ __all__ = [
     "build_transport_preconditioner_from_kind",
     "build_transport_strong_preconditioner_from_kind",
     "normalize_transport_preconditioner_kind",
+    "resolve_transport_precondition_side_for_kind",
     "resolve_transport_preconditioner_choice",
     "transport_dd_config_from_env",
     "transport_sparse_jax_config_from_env",

@@ -36,7 +36,7 @@ from .diagnostics import b0_over_bbar as b0_over_bbar_jax
 from .diagnostics import fsab_hat2 as fsab_hat2_jax
 from .diagnostics import g_hat_i_hat as g_hat_i_hat_jax
 from .geometry import BoozerGeometry
-from .input_compat import effective_equilibrium_file, effective_psi_a_hat, effective_r_n_wish
+from .input_compat import effective_equilibrium_file, effective_psi_a_hat, effective_psi_n_wish
 from .magnetic_drifts import (
     MagneticDriftThetaV3Operator,
     MagneticDriftXiDotV3Operator,
@@ -193,19 +193,25 @@ def _dphi_hat_dpsi_hat_from_er(*, nml: Namelist, er: float) -> float:
     phys_params = nml.group("physicsParameters")
     geometry_scheme = _get_int(geom_params, "geometryScheme", -1)
 
-    input_radial = _get_int(geom_params, "inputRadialCoordinate", 3)
     input_radial_grad = _get_int(geom_params, "inputRadialCoordinateForGradients", 4)
-    if input_radial != 3 or input_radial_grad != 4:
+    if input_radial_grad != 4:
         raise NotImplementedError(
             "sfincs_jax currently only converts Er->dPhiHatdpsiHat for "
-            "inputRadialCoordinate=3 (rN) and inputRadialCoordinateForGradients=4 (rHat)."
+            "inputRadialCoordinateForGradients=4 (Er/rHat)."
         )
 
     if geometry_scheme == 1:
         # v3 defaults are in `globalVariables.F90`; allow the namelist to override them.
         psi_a_hat = effective_psi_a_hat(geom_params=geom_params, phys_params=phys_params, default=0.15596)
         a_hat = float(geom_params.get("AHAT", 0.5585))
-        r_n = effective_r_n_wish(geom_params=geom_params, default=0.5)
+        r_n = math.sqrt(
+            effective_psi_n_wish(
+                geom_params=geom_params,
+                default_r_n=0.5,
+                psi_a_hat=psi_a_hat,
+                a_hat=a_hat,
+            )
+        )
     elif geometry_scheme == 2:
         # v3 ignores *_wish and uses rN=0.5 for this simplified LHD model.
         a_hat = 0.5585
@@ -227,7 +233,8 @@ def _dphi_hat_dpsi_hat_from_er(*, nml: Namelist, er: float) -> float:
         header = read_boozer_bc_header(path=str(p), geometry_scheme=int(geometry_scheme))
         psi_a_hat = float(header.psi_a_hat)
         a_hat = float(header.a_hat)
-        r_n_wish = effective_r_n_wish(geom_params=geom_params, default=0.5)
+        psi_n_wish = effective_psi_n_wish(geom_params=geom_params, default_r_n=0.5)
+        r_n_wish = math.sqrt(float(psi_n_wish))
         vmecradial_option = _get_int(geom_params, "VMECRadialOption", _get_int(geom_params, "VMECRADIALOPTION", 1))
         r_n = selected_r_n_from_bc(
             path=str(p),
@@ -248,8 +255,12 @@ def _dphi_hat_dpsi_hat_from_er(*, nml: Namelist, er: float) -> float:
         psi_a_hat = float(psi_a_hat_from_wout(w))
         a_hat = float(w.aminor_p)
 
-        r_n_wish = effective_r_n_wish(geom_params=geom_params, default=0.5)
-        psi_n_wish = float(r_n_wish) * float(r_n_wish)
+        psi_n_wish = effective_psi_n_wish(
+            geom_params=geom_params,
+            default_r_n=0.5,
+            psi_a_hat=psi_a_hat,
+            a_hat=a_hat,
+        )
         vmecradial_option = _get_int(geom_params, "VMECRadialOption", _get_int(geom_params, "VMECRADIALOPTION", 1))
         interp = vmec_interpolation(w=w, psi_n_wish=psi_n_wish, vmec_radial_option=vmecradial_option)
         r_n = float(interp.psi_n) ** 0.5

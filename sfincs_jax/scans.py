@@ -135,6 +135,8 @@ def run_er_scan(
     compute_transport_matrix: bool = False,
     compute_solution: bool = False,
     skip_existing: bool = False,
+    solve_method: str = "auto",
+    differentiable: bool | None = False,
     jobs: int | None = None,
     index: int | None = None,
     stride: int | None = None,
@@ -236,6 +238,8 @@ def run_er_scan(
             compute_solution=bool(compute_solution),
             emit=emit,
             solver_trace_path=run_dir / "sfincsOutput.solver_trace.json",
+            solve_method=str(solve_method),
+            differentiable=differentiable,
         )
         return run_dir, out_path, float(time.perf_counter() - point_t0), False
 

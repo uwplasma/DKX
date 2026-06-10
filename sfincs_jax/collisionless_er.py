@@ -45,6 +45,7 @@ class ErXiDotV3Operator:
     force0_radial_current: jnp.ndarray  # scalar bool (stored as bool array)
 
     n_xi_for_x: jnp.ndarray  # (X,) int32
+    drop_l2_couplings: bool = False
 
     def tree_flatten(self):
         children = (
@@ -60,12 +61,12 @@ class ErXiDotV3Operator:
             self.force0_radial_current,
             self.n_xi_for_x,
         )
-        aux = None
+        aux = bool(self.drop_l2_couplings)
         return children, aux
 
     @classmethod
     def tree_unflatten(cls, aux, children):
-        del aux
+        drop_l2_couplings = False if aux is None else bool(aux)
         (
             alpha,
             delta,
@@ -91,6 +92,7 @@ class ErXiDotV3Operator:
             db_hat_dzeta=db_hat_dzeta,
             force0_radial_current=force0_radial_current,
             n_xi_for_x=n_xi_for_x,
+            drop_l2_couplings=drop_l2_couplings,
         )
 
 
@@ -125,24 +127,25 @@ def apply_er_xidot_v3(op: ErXiDotV3Operator, f: jnp.ndarray) -> jnp.ndarray:
     denom0 = (2.0 * l - 1.0) * (2.0 * l + 3.0)
     diag_coef = (l + 1.0) * l / denom0  # (L,)
 
-    # ±2 couplings:
-    sup2_coef = (l + 3.0) * (l + 2.0) * (l + 1.0) / ((2.0 * l + 5.0) * (2.0 * l + 3.0))
-    sub2_coef = -l * (l - 1.0) * (l - 2.0) / ((2.0 * l - 3.0) * (2.0 * l - 1.0))
-
     out = jnp.zeros_like(f, dtype=jnp.float64)
 
     # Diagonal in L:
     out = out + (factor[None, None, None, :, :] * diag_coef[None, None, :, None, None]) * f
 
-    # Super-super (L receives from L+2):
-    term_sup2 = sup2_coef[None, None, :-2, None, None] * f[:, :, 2:, :, :]
-    term_sup2 = jnp.pad(term_sup2, ((0, 0), (0, 0), (0, 2), (0, 0), (0, 0)))
-    out = out + factor[None, None, None, :, :] * term_sup2
+    if not op.drop_l2_couplings:
+        # ±2 couplings:
+        sup2_coef = (l + 3.0) * (l + 2.0) * (l + 1.0) / ((2.0 * l + 5.0) * (2.0 * l + 3.0))
+        sub2_coef = -l * (l - 1.0) * (l - 2.0) / ((2.0 * l - 3.0) * (2.0 * l - 1.0))
 
-    # Sub-sub (L receives from L-2):
-    term_sub2 = sub2_coef[None, None, 2:, None, None] * f[:, :, :-2, :, :]
-    term_sub2 = jnp.pad(term_sub2, ((0, 0), (0, 0), (2, 0), (0, 0), (0, 0)))
-    out = out + factor[None, None, None, :, :] * term_sub2
+        # Super-super (L receives from L+2):
+        term_sup2 = sup2_coef[None, None, :-2, None, None] * f[:, :, 2:, :, :]
+        term_sup2 = jnp.pad(term_sup2, ((0, 0), (0, 0), (0, 2), (0, 0), (0, 0)))
+        out = out + factor[None, None, None, :, :] * term_sup2
+
+        # Sub-sub (L receives from L-2):
+        term_sub2 = sub2_coef[None, None, 2:, None, None] * f[:, :, :-2, :, :]
+        term_sub2 = jnp.pad(term_sub2, ((0, 0), (0, 0), (2, 0), (0, 0), (0, 0)))
+        out = out + factor[None, None, None, :, :] * term_sub2
 
     # Mask invalid xi modes per x.
     mask = _mask_xi(op.n_xi_for_x.astype(jnp.int32), n_xi).astype(out.dtype)  # (X,L)
@@ -223,6 +226,7 @@ class ErXDotV3Operator:
     force0_radial_current: jnp.ndarray  # scalar bool
 
     n_xi_for_x: jnp.ndarray  # (X,) int32
+    drop_l2_couplings: bool = False
 
     def tree_flatten(self):
         children = (
@@ -241,12 +245,12 @@ class ErXDotV3Operator:
             self.force0_radial_current,
             self.n_xi_for_x,
         )
-        aux = None
+        aux = bool(self.drop_l2_couplings)
         return children, aux
 
     @classmethod
     def tree_unflatten(cls, aux, children):
-        del aux
+        drop_l2_couplings = False if aux is None else bool(aux)
         (
             alpha,
             delta,
@@ -278,6 +282,7 @@ class ErXDotV3Operator:
             db_hat_dzeta=db_hat_dzeta,
             force0_radial_current=force0_radial_current,
             n_xi_for_x=n_xi_for_x,
+            drop_l2_couplings=drop_l2_couplings,
         )
 
 
@@ -337,11 +342,11 @@ def apply_er_xdot_v3(op: ErXDotV3Operator, f: jnp.ndarray) -> jnp.ndarray:
     y = jnp.transpose(y, (0, 4, 1, 2, 3))  # (S,X,L,T,Z)
     out = y * diag_stuff_ltz[None, None, :, :, :]
 
-    # Off-by-2 terms (L±2):
-    off_stuff = (xdot_factor + xdot_factor2)  # (T,Z)
+    if (not op.drop_l2_couplings) and n_xi >= 3:
+        # Off-by-2 terms (L±2):
+        off_stuff = (xdot_factor + xdot_factor2)  # (T,Z)
 
-    # Super-super: rows L get columns ell=L+2
-    if n_xi >= 3:
+        # Super-super: rows L get columns ell=L+2
         l0 = l[:-2]
         sup_stuff = (l0 + 1.0) * (l0 + 2.0) / ((2.0 * l0 + 5.0) * (2.0 * l0 + 3.0))  # (L-2,)
         g_sup = f_sxltz[:, :, 2:, :, :]  # (S,X,L-2,T,Z) columns
@@ -356,8 +361,7 @@ def apply_er_xdot_v3(op: ErXDotV3Operator, f: jnp.ndarray) -> jnp.ndarray:
         coef = sup_coef[:, None, None] * off_stuff[None, :, :]  # (L,T,Z)
         out = out + y_sup * coef[None, None, :, :, :]
 
-    # Sub-sub: rows L get columns ell=L-2
-    if n_xi >= 3:
+        # Sub-sub: rows L get columns ell=L-2
         l2 = l[2:]
         sub_stuff = l2 * (l2 - 1.0) / ((2.0 * l2 - 3.0) * (2.0 * l2 - 1.0))  # (L-2,)
         g_sub = f_sxltz[:, :, :-2, :, :]  # columns ell=L-2

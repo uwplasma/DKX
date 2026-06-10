@@ -3,47 +3,9 @@
   "cases": [
     {
       "benchmark_resolution": {
-        "NTHETA": 25,
-        "NX": 4,
-        "NXI": 100,
-        "NZETA": 1
-      },
-      "case": "tokamak_1species_PASCollisions_noEr_Nx1",
-      "input": "inputs/tokamak_1species_PASCollisions_noEr_Nx1/input.namelist",
-      "kind": "tokamak",
-      "original_resolution": {
-        "NTHETA": 21,
-        "NX": 1,
-        "NXI": 31,
-        "NZETA": 1
-      },
-      "phase_points": 10000,
-      "resolution_policy": "preserve nominal grid, but enforce 3D >= 25x51x4x100 and tokamak >= 25x1x4x100; production timing rows target Fortran v3 >= 10 s",
-      "size_estimate": {
-        "collision_operator": 1,
-        "conservative_csr_nbytes_estimate": 14861220,
-        "conservative_sparse_nnz_estimate": 1235100,
-        "constraint_scheme": 2,
-        "dense_matrix_nbytes_estimate": 800640128,
-        "extra_unknowns_estimate": 4,
-        "f_unknowns_estimate": 10000,
-        "include_phi1": false,
-        "include_xdot": false,
-        "include_xdot_effective": false,
-        "include_xdot_requested": true,
-        "phi1_unknowns_estimate": 0,
-        "run_recommendation": "bounded_local_ok",
-        "species_count": 1,
-        "total_unknowns_estimate": 10004
-      },
-      "source_group": "examples",
-      "source_input": "/Users/rogeriojorge/local/tests/sfincs_jax/examples/sfincs_examples/tokamak_1species_PASCollisions_noEr_Nx1/input.namelist"
-    },
-    {
-      "benchmark_resolution": {
-        "NTHETA": 25,
-        "NX": 8,
-        "NXI": 100,
+        "NTHETA": 33,
+        "NX": 12,
+        "NXI": 140,
         "NZETA": 1
       },
       "case": "tokamak_1species_FPCollisions_noEr",
@@ -55,33 +17,33 @@
         "NXI": 31,
         "NZETA": 1
       },
-      "phase_points": 20000,
-      "resolution_policy": "preserve nominal grid, but enforce 3D >= 25x51x4x100 and tokamak >= 25x1x4x100; production timing rows target Fortran v3 >= 10 s",
+      "phase_points": 55440,
+      "resolution_policy": "preserve nominal grid, but enforce 3D >= 25x51x4x100 and tokamak >= 33x1x12x140 (RHSMode=1 PAS/no-Er tokamak >= 89x1x24x300); production timing rows target Fortran v3 >= 10 s",
       "size_estimate": {
         "collision_operator": 0,
-        "conservative_csr_nbytes_estimate": 4800080004,
-        "conservative_sparse_nnz_estimate": 400000000,
+        "conservative_csr_nbytes_estimate": 36883344964,
+        "conservative_sparse_nnz_estimate": 3073593600,
         "constraint_scheme": 0,
-        "dense_matrix_nbytes_estimate": 3200000000,
+        "dense_matrix_nbytes_estimate": 24588748800,
         "extra_unknowns_estimate": 0,
-        "f_unknowns_estimate": 20000,
+        "f_unknowns_estimate": 55440,
         "include_phi1": false,
         "include_xdot": false,
         "include_xdot_effective": false,
         "include_xdot_requested": true,
         "phi1_unknowns_estimate": 0,
-        "run_recommendation": "bounded_remote",
+        "run_recommendation": "remote_or_cluster_only",
         "species_count": 1,
-        "total_unknowns_estimate": 20000
+        "total_unknowns_estimate": 55440
       },
       "source_group": "examples",
       "source_input": "/Users/rogeriojorge/local/tests/sfincs_jax/examples/sfincs_examples/tokamak_1species_FPCollisions_noEr/input.namelist"
     },
     {
       "benchmark_resolution": {
-        "NTHETA": 25,
-        "NX": 8,
-        "NXI": 100,
+        "NTHETA": 33,
+        "NX": 12,
+        "NXI": 140,
         "NZETA": 1
       },
       "case": "tokamak_1species_FPCollisions_noEr_withPhi1InDKE",
@@ -93,33 +55,33 @@
         "NXI": 31,
         "NZETA": 1
       },
-      "phase_points": 20000,
-      "resolution_policy": "preserve nominal grid, but enforce 3D >= 25x51x4x100 and tokamak >= 25x1x4x100; production timing rows target Fortran v3 >= 10 s",
+      "phase_points": 55440,
+      "resolution_policy": "preserve nominal grid, but enforce 3D >= 25x51x4x100 and tokamak >= 33x1x12x140 (RHSMode=1 PAS/no-Er tokamak >= 89x1x24x300); production timing rows target Fortran v3 >= 10 s",
       "size_estimate": {
         "collision_operator": 0,
-        "conservative_csr_nbytes_estimate": 4800080712,
-        "conservative_sparse_nnz_estimate": 400000050,
+        "conservative_csr_nbytes_estimate": 36883345896,
+        "conservative_sparse_nnz_estimate": 3073593666,
         "constraint_scheme": 1,
-        "dense_matrix_nbytes_estimate": 3208645832,
+        "dense_matrix_nbytes_estimate": 24619805000,
         "extra_unknowns_estimate": 2,
-        "f_unknowns_estimate": 20000,
+        "f_unknowns_estimate": 55440,
         "include_phi1": true,
         "include_xdot": false,
         "include_xdot_effective": false,
         "include_xdot_requested": true,
-        "phi1_unknowns_estimate": 25,
-        "run_recommendation": "bounded_remote",
+        "phi1_unknowns_estimate": 33,
+        "run_recommendation": "remote_or_cluster_only",
         "species_count": 1,
-        "total_unknowns_estimate": 20027
+        "total_unknowns_estimate": 55475
       },
       "source_group": "examples",
       "source_input": "/Users/rogeriojorge/local/tests/sfincs_jax/examples/sfincs_examples/tokamak_1species_FPCollisions_noEr_withPhi1InDKE/input.namelist"
     },
     {
       "benchmark_resolution": {
-        "NTHETA": 25,
-        "NX": 8,
-        "NXI": 100,
+        "NTHETA": 33,
+        "NX": 12,
+        "NXI": 140,
         "NZETA": 1
       },
       "case": "tokamak_1species_FPCollisions_noEr_withQN",
@@ -131,33 +93,33 @@
         "NXI": 31,
         "NZETA": 1
       },
-      "phase_points": 20000,
-      "resolution_policy": "preserve nominal grid, but enforce 3D >= 25x51x4x100 and tokamak >= 25x1x4x100; production timing rows target Fortran v3 >= 10 s",
+      "phase_points": 55440,
+      "resolution_policy": "preserve nominal grid, but enforce 3D >= 25x51x4x100 and tokamak >= 33x1x12x140 (RHSMode=1 PAS/no-Er tokamak >= 89x1x24x300); production timing rows target Fortran v3 >= 10 s",
       "size_estimate": {
         "collision_operator": 0,
-        "conservative_csr_nbytes_estimate": 4800080712,
-        "conservative_sparse_nnz_estimate": 400000050,
+        "conservative_csr_nbytes_estimate": 36883345896,
+        "conservative_sparse_nnz_estimate": 3073593666,
         "constraint_scheme": 1,
-        "dense_matrix_nbytes_estimate": 3208645832,
+        "dense_matrix_nbytes_estimate": 24619805000,
         "extra_unknowns_estimate": 2,
-        "f_unknowns_estimate": 20000,
+        "f_unknowns_estimate": 55440,
         "include_phi1": true,
         "include_xdot": false,
         "include_xdot_effective": false,
         "include_xdot_requested": true,
-        "phi1_unknowns_estimate": 25,
-        "run_recommendation": "bounded_remote",
+        "phi1_unknowns_estimate": 33,
+        "run_recommendation": "remote_or_cluster_only",
         "species_count": 1,
-        "total_unknowns_estimate": 20027
+        "total_unknowns_estimate": 55475
       },
       "source_group": "examples",
       "source_input": "/Users/rogeriojorge/local/tests/sfincs_jax/examples/sfincs_examples/tokamak_1species_FPCollisions_noEr_withQN/input.namelist"
     },
     {
       "benchmark_resolution": {
-        "NTHETA": 25,
-        "NX": 8,
-        "NXI": 100,
+        "NTHETA": 33,
+        "NX": 12,
+        "NXI": 140,
         "NZETA": 1
       },
       "case": "tokamak_1species_FPCollisions_withEr_DKESTrajectories",
@@ -169,33 +131,33 @@
         "NXI": 31,
         "NZETA": 1
       },
-      "phase_points": 20000,
-      "resolution_policy": "preserve nominal grid, but enforce 3D >= 25x51x4x100 and tokamak >= 25x1x4x100; production timing rows target Fortran v3 >= 10 s",
+      "phase_points": 55440,
+      "resolution_policy": "preserve nominal grid, but enforce 3D >= 25x51x4x100 and tokamak >= 33x1x12x140 (RHSMode=1 PAS/no-Er tokamak >= 89x1x24x300); production timing rows target Fortran v3 >= 10 s",
       "size_estimate": {
         "collision_operator": 0,
-        "conservative_csr_nbytes_estimate": 4800080612,
-        "conservative_sparse_nnz_estimate": 400000050,
+        "conservative_csr_nbytes_estimate": 36883345764,
+        "conservative_sparse_nnz_estimate": 3073593666,
         "constraint_scheme": 1,
-        "dense_matrix_nbytes_estimate": 3200640032,
+        "dense_matrix_nbytes_estimate": 24590522912,
         "extra_unknowns_estimate": 2,
-        "f_unknowns_estimate": 20000,
+        "f_unknowns_estimate": 55440,
         "include_phi1": false,
         "include_xdot": false,
         "include_xdot_effective": false,
         "include_xdot_requested": false,
         "phi1_unknowns_estimate": 0,
-        "run_recommendation": "bounded_remote",
+        "run_recommendation": "remote_or_cluster_only",
         "species_count": 1,
-        "total_unknowns_estimate": 20002
+        "total_unknowns_estimate": 55442
       },
       "source_group": "examples",
       "source_input": "/Users/rogeriojorge/local/tests/sfincs_jax/examples/sfincs_examples/tokamak_1species_FPCollisions_withEr_DKESTrajectories/input.namelist"
     },
     {
       "benchmark_resolution": {
-        "NTHETA": 25,
-        "NX": 8,
-        "NXI": 100,
+        "NTHETA": 33,
+        "NX": 12,
+        "NXI": 140,
         "NZETA": 1
       },
       "case": "tokamak_1species_FPCollisions_withEr_fullTrajectories",
@@ -207,109 +169,33 @@
         "NXI": 31,
         "NZETA": 1
       },
-      "phase_points": 20000,
-      "resolution_policy": "preserve nominal grid, but enforce 3D >= 25x51x4x100 and tokamak >= 25x1x4x100; production timing rows target Fortran v3 >= 10 s",
+      "phase_points": 55440,
+      "resolution_policy": "preserve nominal grid, but enforce 3D >= 25x51x4x100 and tokamak >= 33x1x12x140 (RHSMode=1 PAS/no-Er tokamak >= 89x1x24x300); production timing rows target Fortran v3 >= 10 s",
       "size_estimate": {
         "collision_operator": 0,
-        "conservative_csr_nbytes_estimate": 4800080612,
-        "conservative_sparse_nnz_estimate": 400000050,
+        "conservative_csr_nbytes_estimate": 36883345764,
+        "conservative_sparse_nnz_estimate": 3073593666,
         "constraint_scheme": 1,
-        "dense_matrix_nbytes_estimate": 3200640032,
+        "dense_matrix_nbytes_estimate": 24590522912,
         "extra_unknowns_estimate": 2,
-        "f_unknowns_estimate": 20000,
+        "f_unknowns_estimate": 55440,
         "include_phi1": false,
         "include_xdot": true,
         "include_xdot_effective": true,
         "include_xdot_requested": true,
         "phi1_unknowns_estimate": 0,
-        "run_recommendation": "bounded_remote",
+        "run_recommendation": "remote_or_cluster_only",
         "species_count": 1,
-        "total_unknowns_estimate": 20002
+        "total_unknowns_estimate": 55442
       },
       "source_group": "examples",
       "source_input": "/Users/rogeriojorge/local/tests/sfincs_jax/examples/sfincs_examples/tokamak_1species_FPCollisions_withEr_fullTrajectories/input.namelist"
     },
     {
       "benchmark_resolution": {
-        "NTHETA": 25,
-        "NX": 8,
-        "NXI": 100,
-        "NZETA": 1
-      },
-      "case": "tokamak_1species_PASCollisions_noEr",
-      "input": "inputs/tokamak_1species_PASCollisions_noEr/input.namelist",
-      "kind": "tokamak",
-      "original_resolution": {
-        "NTHETA": 21,
-        "NX": 8,
-        "NXI": 31,
-        "NZETA": 1
-      },
-      "phase_points": 20000,
-      "resolution_policy": "preserve nominal grid, but enforce 3D >= 25x51x4x100 and tokamak >= 25x1x4x100; production timing rows target Fortran v3 >= 10 s",
-      "size_estimate": {
-        "collision_operator": 1,
-        "conservative_csr_nbytes_estimate": 29722436,
-        "conservative_sparse_nnz_estimate": 2470200,
-        "constraint_scheme": 2,
-        "dense_matrix_nbytes_estimate": 3202560512,
-        "extra_unknowns_estimate": 8,
-        "f_unknowns_estimate": 20000,
-        "include_phi1": false,
-        "include_xdot": false,
-        "include_xdot_effective": false,
-        "include_xdot_requested": true,
-        "phi1_unknowns_estimate": 0,
-        "run_recommendation": "bounded_local_ok",
-        "species_count": 1,
-        "total_unknowns_estimate": 20008
-      },
-      "source_group": "examples",
-      "source_input": "/Users/rogeriojorge/local/tests/sfincs_jax/examples/sfincs_examples/tokamak_1species_PASCollisions_noEr/input.namelist"
-    },
-    {
-      "benchmark_resolution": {
-        "NTHETA": 25,
-        "NX": 8,
-        "NXI": 100,
-        "NZETA": 1
-      },
-      "case": "tokamak_1species_PASCollisions_noEr_withQN",
-      "input": "inputs/tokamak_1species_PASCollisions_noEr_withQN/input.namelist",
-      "kind": "tokamak",
-      "original_resolution": {
-        "NTHETA": 21,
-        "NX": 8,
-        "NXI": 31,
-        "NZETA": 1
-      },
-      "phase_points": 20000,
-      "resolution_policy": "preserve nominal grid, but enforce 3D >= 25x51x4x100 and tokamak >= 25x1x4x100; production timing rows target Fortran v3 >= 10 s",
-      "size_estimate": {
-        "collision_operator": 1,
-        "conservative_csr_nbytes_estimate": 29722536,
-        "conservative_sparse_nnz_estimate": 2470200,
-        "constraint_scheme": 2,
-        "dense_matrix_nbytes_estimate": 3210568712,
-        "extra_unknowns_estimate": 8,
-        "f_unknowns_estimate": 20000,
-        "include_phi1": true,
-        "include_xdot": false,
-        "include_xdot_effective": false,
-        "include_xdot_requested": true,
-        "phi1_unknowns_estimate": 25,
-        "run_recommendation": "bounded_local_ok",
-        "species_count": 1,
-        "total_unknowns_estimate": 20033
-      },
-      "source_group": "examples",
-      "source_input": "/Users/rogeriojorge/local/tests/sfincs_jax/examples/sfincs_examples/tokamak_1species_PASCollisions_noEr_withQN/input.namelist"
-    },
-    {
-      "benchmark_resolution": {
-        "NTHETA": 25,
-        "NX": 8,
-        "NXI": 100,
+        "NTHETA": 33,
+        "NX": 12,
+        "NXI": 140,
         "NZETA": 1
       },
       "case": "tokamak_1species_PASCollisions_withEr_fullTrajectories",
@@ -321,16 +207,16 @@
         "NXI": 31,
         "NZETA": 1
       },
-      "phase_points": 20000,
-      "resolution_policy": "preserve nominal grid, but enforce 3D >= 25x51x4x100 and tokamak >= 25x1x4x100; production timing rows target Fortran v3 >= 10 s",
+      "phase_points": 55440,
+      "resolution_policy": "preserve nominal grid, but enforce 3D >= 25x51x4x100 and tokamak >= 33x1x12x140 (RHSMode=1 PAS/no-Er tokamak >= 89x1x24x300); production timing rows target Fortran v3 >= 10 s",
       "size_estimate": {
         "collision_operator": 1,
-        "conservative_csr_nbytes_estimate": 237202436,
-        "conservative_sparse_nnz_estimate": 19760200,
+        "conservative_csr_nbytes_estimate": 1306190212,
+        "conservative_sparse_nnz_estimate": 108830700,
         "constraint_scheme": 2,
-        "dense_matrix_nbytes_estimate": 3202560512,
-        "extra_unknowns_estimate": 8,
-        "f_unknowns_estimate": 20000,
+        "dense_matrix_nbytes_estimate": 24599394432,
+        "extra_unknowns_estimate": 12,
+        "f_unknowns_estimate": 55440,
         "include_phi1": false,
         "include_xdot": true,
         "include_xdot_effective": true,
@@ -338,54 +224,16 @@
         "phi1_unknowns_estimate": 0,
         "run_recommendation": "bounded_local_ok",
         "species_count": 1,
-        "total_unknowns_estimate": 20008
+        "total_unknowns_estimate": 55452
       },
       "source_group": "examples",
       "source_input": "/Users/rogeriojorge/local/tests/sfincs_jax/examples/sfincs_examples/tokamak_1species_PASCollisions_withEr_fullTrajectories/input.namelist"
     },
     {
       "benchmark_resolution": {
-        "NTHETA": 25,
-        "NX": 8,
-        "NXI": 100,
-        "NZETA": 1
-      },
-      "case": "tokamak_2species_PASCollisions_noEr",
-      "input": "inputs/tokamak_2species_PASCollisions_noEr/input.namelist",
-      "kind": "tokamak",
-      "original_resolution": {
-        "NTHETA": 21,
-        "NX": 8,
-        "NXI": 40,
-        "NZETA": 1
-      },
-      "phase_points": 20000,
-      "resolution_policy": "preserve nominal grid, but enforce 3D >= 25x51x4x100 and tokamak >= 25x1x4x100; production timing rows target Fortran v3 >= 10 s",
-      "size_estimate": {
-        "collision_operator": 1,
-        "conservative_csr_nbytes_estimate": 59444868,
-        "conservative_sparse_nnz_estimate": 4940400,
-        "constraint_scheme": 2,
-        "dense_matrix_nbytes_estimate": 12810242048,
-        "extra_unknowns_estimate": 16,
-        "f_unknowns_estimate": 40000,
-        "include_phi1": false,
-        "include_xdot": false,
-        "include_xdot_effective": false,
-        "include_xdot_requested": true,
-        "phi1_unknowns_estimate": 0,
-        "run_recommendation": "bounded_local_ok",
-        "species_count": 2,
-        "total_unknowns_estimate": 40016
-      },
-      "source_group": "examples",
-      "source_input": "/Users/rogeriojorge/local/tests/sfincs_jax/examples/sfincs_examples/tokamak_2species_PASCollisions_noEr/input.namelist"
-    },
-    {
-      "benchmark_resolution": {
-        "NTHETA": 25,
-        "NX": 8,
-        "NXI": 100,
+        "NTHETA": 33,
+        "NX": 12,
+        "NXI": 140,
         "NZETA": 1
       },
       "case": "tokamak_2species_PASCollisions_withEr_fullTrajectories",
@@ -397,24 +245,24 @@
         "NXI": 40,
         "NZETA": 1
       },
-      "phase_points": 20000,
-      "resolution_policy": "preserve nominal grid, but enforce 3D >= 25x51x4x100 and tokamak >= 25x1x4x100; production timing rows target Fortran v3 >= 10 s",
+      "phase_points": 55440,
+      "resolution_policy": "preserve nominal grid, but enforce 3D >= 25x51x4x100 and tokamak >= 33x1x12x140 (RHSMode=1 PAS/no-Er tokamak >= 89x1x24x300); production timing rows target Fortran v3 >= 10 s",
       "size_estimate": {
         "collision_operator": 1,
-        "conservative_csr_nbytes_estimate": 474404868,
-        "conservative_sparse_nnz_estimate": 39520400,
+        "conservative_csr_nbytes_estimate": 2612380420,
+        "conservative_sparse_nnz_estimate": 217661400,
         "constraint_scheme": 2,
-        "dense_matrix_nbytes_estimate": 12810242048,
-        "extra_unknowns_estimate": 16,
-        "f_unknowns_estimate": 40000,
+        "dense_matrix_nbytes_estimate": 98397577728,
+        "extra_unknowns_estimate": 24,
+        "f_unknowns_estimate": 110880,
         "include_phi1": false,
         "include_xdot": true,
         "include_xdot_effective": true,
         "include_xdot_requested": true,
         "phi1_unknowns_estimate": 0,
-        "run_recommendation": "bounded_local_ok",
+        "run_recommendation": "bounded_remote",
         "species_count": 2,
-        "total_unknowns_estimate": 40016
+        "total_unknowns_estimate": 110904
       },
       "source_group": "examples",
       "source_input": "/Users/rogeriojorge/local/tests/sfincs_jax/examples/sfincs_examples/tokamak_2species_PASCollisions_withEr_fullTrajectories/input.namelist"
@@ -436,7 +284,7 @@
         "NZETA": 17
       },
       "phase_points": 510000,
-      "resolution_policy": "preserve nominal grid, but enforce 3D >= 25x51x4x100 and tokamak >= 25x1x4x100; production timing rows target Fortran v3 >= 10 s",
+      "resolution_policy": "preserve nominal grid, but enforce 3D >= 25x51x4x100 and tokamak >= 33x1x12x140 (RHSMode=1 PAS/no-Er tokamak >= 89x1x24x300); production timing rows target Fortran v3 >= 10 s",
       "size_estimate": {
         "collision_operator": 0,
         "conservative_csr_nbytes_estimate": 1652406211828,
@@ -474,7 +322,7 @@
         "NZETA": 31
       },
       "phase_points": 510000,
-      "resolution_policy": "preserve nominal grid, but enforce 3D >= 25x51x4x100 and tokamak >= 25x1x4x100; production timing rows target Fortran v3 >= 10 s",
+      "resolution_policy": "preserve nominal grid, but enforce 3D >= 25x51x4x100 and tokamak >= 33x1x12x140 (RHSMode=1 PAS/no-Er tokamak >= 89x1x24x300); production timing rows target Fortran v3 >= 10 s",
       "size_estimate": {
         "collision_operator": 1,
         "conservative_csr_nbytes_estimate": 2269561220,
@@ -512,7 +360,7 @@
         "NZETA": 31
       },
       "phase_points": 510000,
-      "resolution_policy": "preserve nominal grid, but enforce 3D >= 25x51x4x100 and tokamak >= 25x1x4x100; production timing rows target Fortran v3 >= 10 s",
+      "resolution_policy": "preserve nominal grid, but enforce 3D >= 25x51x4x100 and tokamak >= 33x1x12x140 (RHSMode=1 PAS/no-Er tokamak >= 89x1x24x300); production timing rows target Fortran v3 >= 10 s",
       "size_estimate": {
         "collision_operator": 1,
         "conservative_csr_nbytes_estimate": 2269561220,
@@ -550,7 +398,7 @@
         "NZETA": 31
       },
       "phase_points": 510000,
-      "resolution_policy": "preserve nominal grid, but enforce 3D >= 25x51x4x100 and tokamak >= 25x1x4x100; production timing rows target Fortran v3 >= 10 s",
+      "resolution_policy": "preserve nominal grid, but enforce 3D >= 25x51x4x100 and tokamak >= 33x1x12x140 (RHSMode=1 PAS/no-Er tokamak >= 89x1x24x300); production timing rows target Fortran v3 >= 10 s",
       "size_estimate": {
         "collision_operator": 1,
         "conservative_csr_nbytes_estimate": 2269561220,
@@ -588,7 +436,7 @@
         "NZETA": 29
       },
       "phase_points": 550800,
-      "resolution_policy": "preserve nominal grid, but enforce 3D >= 25x51x4x100 and tokamak >= 25x1x4x100; production timing rows target Fortran v3 >= 10 s",
+      "resolution_policy": "preserve nominal grid, but enforce 3D >= 25x51x4x100 and tokamak >= 33x1x12x140 (RHSMode=1 PAS/no-Er tokamak >= 89x1x24x300); production timing rows target Fortran v3 >= 10 s",
       "size_estimate": {
         "collision_operator": 1,
         "conservative_csr_nbytes_estimate": 2516428964,
@@ -626,7 +474,7 @@
         "NZETA": 33
       },
       "phase_points": 637500,
-      "resolution_policy": "preserve nominal grid, but enforce 3D >= 25x51x4x100 and tokamak >= 25x1x4x100; production timing rows target Fortran v3 >= 10 s",
+      "resolution_policy": "preserve nominal grid, but enforce 3D >= 25x51x4x100 and tokamak >= 33x1x12x140 (RHSMode=1 PAS/no-Er tokamak >= 89x1x24x300); production timing rows target Fortran v3 >= 10 s",
       "size_estimate": {
         "collision_operator": 0,
         "conservative_csr_nbytes_estimate": 1147505161220,
@@ -664,7 +512,7 @@
         "NZETA": 23
       },
       "phase_points": 637500,
-      "resolution_policy": "preserve nominal grid, but enforce 3D >= 25x51x4x100 and tokamak >= 25x1x4x100; production timing rows target Fortran v3 >= 10 s",
+      "resolution_policy": "preserve nominal grid, but enforce 3D >= 25x51x4x100 and tokamak >= 33x1x12x140 (RHSMode=1 PAS/no-Er tokamak >= 89x1x24x300); production timing rows target Fortran v3 >= 10 s",
       "size_estimate": {
         "collision_operator": 1,
         "conservative_csr_nbytes_estimate": 2836951524,
@@ -702,7 +550,7 @@
         "NZETA": 23
       },
       "phase_points": 637500,
-      "resolution_policy": "preserve nominal grid, but enforce 3D >= 25x51x4x100 and tokamak >= 25x1x4x100; production timing rows target Fortran v3 >= 10 s",
+      "resolution_policy": "preserve nominal grid, but enforce 3D >= 25x51x4x100 and tokamak >= 33x1x12x140 (RHSMode=1 PAS/no-Er tokamak >= 89x1x24x300); production timing rows target Fortran v3 >= 10 s",
       "size_estimate": {
         "collision_operator": 1,
         "conservative_csr_nbytes_estimate": 5673903044,
@@ -740,7 +588,7 @@
         "NZETA": 19
       },
       "phase_points": 637500,
-      "resolution_policy": "preserve nominal grid, but enforce 3D >= 25x51x4x100 and tokamak >= 25x1x4x100; production timing rows target Fortran v3 >= 10 s",
+      "resolution_policy": "preserve nominal grid, but enforce 3D >= 25x51x4x100 and tokamak >= 33x1x12x140 (RHSMode=1 PAS/no-Er tokamak >= 89x1x24x300); production timing rows target Fortran v3 >= 10 s",
       "size_estimate": {
         "collision_operator": 0,
         "conservative_csr_nbytes_estimate": 1147505161220,
@@ -778,7 +626,7 @@
         "NZETA": 19
       },
       "phase_points": 637500,
-      "resolution_policy": "preserve nominal grid, but enforce 3D >= 25x51x4x100 and tokamak >= 25x1x4x100; production timing rows target Fortran v3 >= 10 s",
+      "resolution_policy": "preserve nominal grid, but enforce 3D >= 25x51x4x100 and tokamak >= 33x1x12x140 (RHSMode=1 PAS/no-Er tokamak >= 89x1x24x300); production timing rows target Fortran v3 >= 10 s",
       "size_estimate": {
         "collision_operator": 0,
         "conservative_csr_nbytes_estimate": 1147505166320,
@@ -816,7 +664,7 @@
         "NZETA": 19
       },
       "phase_points": 637500,
-      "resolution_policy": "preserve nominal grid, but enforce 3D >= 25x51x4x100 and tokamak >= 25x1x4x100; production timing rows target Fortran v3 >= 10 s",
+      "resolution_policy": "preserve nominal grid, but enforce 3D >= 25x51x4x100 and tokamak >= 33x1x12x140 (RHSMode=1 PAS/no-Er tokamak >= 89x1x24x300); production timing rows target Fortran v3 >= 10 s",
       "size_estimate": {
         "collision_operator": 0,
         "conservative_csr_nbytes_estimate": 1147505166320,
@@ -854,7 +702,7 @@
         "NZETA": 19
       },
       "phase_points": 637500,
-      "resolution_policy": "preserve nominal grid, but enforce 3D >= 25x51x4x100 and tokamak >= 25x1x4x100; production timing rows target Fortran v3 >= 10 s",
+      "resolution_policy": "preserve nominal grid, but enforce 3D >= 25x51x4x100 and tokamak >= 33x1x12x140 (RHSMode=1 PAS/no-Er tokamak >= 89x1x24x300); production timing rows target Fortran v3 >= 10 s",
       "size_estimate": {
         "collision_operator": 0,
         "conservative_csr_nbytes_estimate": 1147505161220,
@@ -892,7 +740,7 @@
         "NZETA": 19
       },
       "phase_points": 637500,
-      "resolution_policy": "preserve nominal grid, but enforce 3D >= 25x51x4x100 and tokamak >= 25x1x4x100; production timing rows target Fortran v3 >= 10 s",
+      "resolution_policy": "preserve nominal grid, but enforce 3D >= 25x51x4x100 and tokamak >= 33x1x12x140 (RHSMode=1 PAS/no-Er tokamak >= 89x1x24x300); production timing rows target Fortran v3 >= 10 s",
       "size_estimate": {
         "collision_operator": 0,
         "conservative_csr_nbytes_estimate": 1147505166320,
@@ -930,7 +778,7 @@
         "NZETA": 7
       },
       "phase_points": 637500,
-      "resolution_policy": "preserve nominal grid, but enforce 3D >= 25x51x4x100 and tokamak >= 25x1x4x100; production timing rows target Fortran v3 >= 10 s",
+      "resolution_policy": "preserve nominal grid, but enforce 3D >= 25x51x4x100 and tokamak >= 33x1x12x140 (RHSMode=1 PAS/no-Er tokamak >= 89x1x24x300); production timing rows target Fortran v3 >= 10 s",
       "size_estimate": {
         "collision_operator": 0,
         "conservative_csr_nbytes_estimate": 1147505161220,
@@ -968,7 +816,7 @@
         "NZETA": 7
       },
       "phase_points": 637500,
-      "resolution_policy": "preserve nominal grid, but enforce 3D >= 25x51x4x100 and tokamak >= 25x1x4x100; production timing rows target Fortran v3 >= 10 s",
+      "resolution_policy": "preserve nominal grid, but enforce 3D >= 25x51x4x100 and tokamak >= 33x1x12x140 (RHSMode=1 PAS/no-Er tokamak >= 89x1x24x300); production timing rows target Fortran v3 >= 10 s",
       "size_estimate": {
         "collision_operator": 0,
         "conservative_csr_nbytes_estimate": 1147505161220,
@@ -991,6 +839,158 @@
     },
     {
       "benchmark_resolution": {
+        "NTHETA": 89,
+        "NX": 24,
+        "NXI": 300,
+        "NZETA": 1
+      },
+      "case": "tokamak_1species_PASCollisions_noEr",
+      "input": "inputs/tokamak_1species_PASCollisions_noEr/input.namelist",
+      "kind": "tokamak",
+      "original_resolution": {
+        "NTHETA": 21,
+        "NX": 8,
+        "NXI": 31,
+        "NZETA": 1
+      },
+      "phase_points": 640800,
+      "resolution_policy": "preserve nominal grid, but enforce 3D >= 25x51x4x100 and tokamak >= 33x1x12x140 (RHSMode=1 PAS/no-Er tokamak >= 89x1x24x300); production timing rows target Fortran v3 >= 10 s",
+      "size_estimate": {
+        "collision_operator": 1,
+        "conservative_csr_nbytes_estimate": 3410773444,
+        "conservative_sparse_nnz_estimate": 284017512,
+        "constraint_scheme": 2,
+        "dense_matrix_nbytes_estimate": 3285243191808,
+        "extra_unknowns_estimate": 24,
+        "f_unknowns_estimate": 640800,
+        "include_phi1": false,
+        "include_xdot": false,
+        "include_xdot_effective": false,
+        "include_xdot_requested": true,
+        "phi1_unknowns_estimate": 0,
+        "run_recommendation": "remote_or_cluster_only",
+        "species_count": 1,
+        "total_unknowns_estimate": 640824
+      },
+      "source_group": "examples",
+      "source_input": "/Users/rogeriojorge/local/tests/sfincs_jax/examples/sfincs_examples/tokamak_1species_PASCollisions_noEr/input.namelist"
+    },
+    {
+      "benchmark_resolution": {
+        "NTHETA": 89,
+        "NX": 24,
+        "NXI": 300,
+        "NZETA": 1
+      },
+      "case": "tokamak_1species_PASCollisions_noEr_Nx1",
+      "input": "inputs/tokamak_1species_PASCollisions_noEr_Nx1/input.namelist",
+      "kind": "tokamak",
+      "original_resolution": {
+        "NTHETA": 21,
+        "NX": 1,
+        "NXI": 31,
+        "NZETA": 1
+      },
+      "phase_points": 640800,
+      "resolution_policy": "preserve nominal grid, but enforce 3D >= 25x51x4x100 and tokamak >= 33x1x12x140 (RHSMode=1 PAS/no-Er tokamak >= 89x1x24x300); production timing rows target Fortran v3 >= 10 s",
+      "size_estimate": {
+        "collision_operator": 1,
+        "conservative_csr_nbytes_estimate": 3410773444,
+        "conservative_sparse_nnz_estimate": 284017512,
+        "constraint_scheme": 2,
+        "dense_matrix_nbytes_estimate": 3285243191808,
+        "extra_unknowns_estimate": 24,
+        "f_unknowns_estimate": 640800,
+        "include_phi1": false,
+        "include_xdot": false,
+        "include_xdot_effective": false,
+        "include_xdot_requested": true,
+        "phi1_unknowns_estimate": 0,
+        "run_recommendation": "remote_or_cluster_only",
+        "species_count": 1,
+        "total_unknowns_estimate": 640824
+      },
+      "source_group": "examples",
+      "source_input": "/Users/rogeriojorge/local/tests/sfincs_jax/examples/sfincs_examples/tokamak_1species_PASCollisions_noEr_Nx1/input.namelist"
+    },
+    {
+      "benchmark_resolution": {
+        "NTHETA": 89,
+        "NX": 24,
+        "NXI": 300,
+        "NZETA": 1
+      },
+      "case": "tokamak_1species_PASCollisions_noEr_withQN",
+      "input": "inputs/tokamak_1species_PASCollisions_noEr_withQN/input.namelist",
+      "kind": "tokamak",
+      "original_resolution": {
+        "NTHETA": 21,
+        "NX": 8,
+        "NXI": 31,
+        "NZETA": 1
+      },
+      "phase_points": 640800,
+      "resolution_policy": "preserve nominal grid, but enforce 3D >= 25x51x4x100 and tokamak >= 33x1x12x140 (RHSMode=1 PAS/no-Er tokamak >= 89x1x24x300); production timing rows target Fortran v3 >= 10 s",
+      "size_estimate": {
+        "collision_operator": 1,
+        "conservative_csr_nbytes_estimate": 3410773800,
+        "conservative_sparse_nnz_estimate": 284017512,
+        "constraint_scheme": 2,
+        "dense_matrix_nbytes_estimate": 3286155788552,
+        "extra_unknowns_estimate": 24,
+        "f_unknowns_estimate": 640800,
+        "include_phi1": true,
+        "include_xdot": false,
+        "include_xdot_effective": false,
+        "include_xdot_requested": true,
+        "phi1_unknowns_estimate": 89,
+        "run_recommendation": "remote_or_cluster_only",
+        "species_count": 1,
+        "total_unknowns_estimate": 640913
+      },
+      "source_group": "examples",
+      "source_input": "/Users/rogeriojorge/local/tests/sfincs_jax/examples/sfincs_examples/tokamak_1species_PASCollisions_noEr_withQN/input.namelist"
+    },
+    {
+      "benchmark_resolution": {
+        "NTHETA": 89,
+        "NX": 24,
+        "NXI": 300,
+        "NZETA": 1
+      },
+      "case": "tokamak_2species_PASCollisions_noEr",
+      "input": "inputs/tokamak_2species_PASCollisions_noEr/input.namelist",
+      "kind": "tokamak",
+      "original_resolution": {
+        "NTHETA": 21,
+        "NX": 8,
+        "NXI": 40,
+        "NZETA": 1
+      },
+      "phase_points": 640800,
+      "resolution_policy": "preserve nominal grid, but enforce 3D >= 25x51x4x100 and tokamak >= 33x1x12x140 (RHSMode=1 PAS/no-Er tokamak >= 89x1x24x300); production timing rows target Fortran v3 >= 10 s",
+      "size_estimate": {
+        "collision_operator": 1,
+        "conservative_csr_nbytes_estimate": 6821546884,
+        "conservative_sparse_nnz_estimate": 568035024,
+        "constraint_scheme": 2,
+        "dense_matrix_nbytes_estimate": 13140972767232,
+        "extra_unknowns_estimate": 48,
+        "f_unknowns_estimate": 1281600,
+        "include_phi1": false,
+        "include_xdot": false,
+        "include_xdot_effective": false,
+        "include_xdot_requested": true,
+        "phi1_unknowns_estimate": 0,
+        "run_recommendation": "remote_or_cluster_only",
+        "species_count": 2,
+        "total_unknowns_estimate": 1281648
+      },
+      "source_group": "examples",
+      "source_input": "/Users/rogeriojorge/local/tests/sfincs_jax/examples/sfincs_examples/tokamak_2species_PASCollisions_noEr/input.namelist"
+    },
+    {
+      "benchmark_resolution": {
         "NTHETA": 25,
         "NX": 5,
         "NXI": 100,
@@ -1006,7 +1006,7 @@
         "NZETA": 59
       },
       "phase_points": 737500,
-      "resolution_policy": "preserve nominal grid, but enforce 3D >= 25x51x4x100 and tokamak >= 25x1x4x100; production timing rows target Fortran v3 >= 10 s",
+      "resolution_policy": "preserve nominal grid, but enforce 3D >= 25x51x4x100 and tokamak >= 33x1x12x140 (RHSMode=1 PAS/no-Er tokamak >= 89x1x24x300); production timing rows target Fortran v3 >= 10 s",
       "size_estimate": {
         "collision_operator": 0,
         "conservative_csr_nbytes_estimate": 1469105970820,
@@ -1044,7 +1044,7 @@
         "NZETA": 59
       },
       "phase_points": 737500,
-      "resolution_policy": "preserve nominal grid, but enforce 3D >= 25x51x4x100 and tokamak >= 25x1x4x100; production timing rows target Fortran v3 >= 10 s",
+      "resolution_policy": "preserve nominal grid, but enforce 3D >= 25x51x4x100 and tokamak >= 33x1x12x140 (RHSMode=1 PAS/no-Er tokamak >= 89x1x24x300); production timing rows target Fortran v3 >= 10 s",
       "size_estimate": {
         "collision_operator": 0,
         "conservative_csr_nbytes_estimate": 1469105970820,
@@ -1082,7 +1082,7 @@
         "NZETA": 59
       },
       "phase_points": 737500,
-      "resolution_policy": "preserve nominal grid, but enforce 3D >= 25x51x4x100 and tokamak >= 25x1x4x100; production timing rows target Fortran v3 >= 10 s",
+      "resolution_policy": "preserve nominal grid, but enforce 3D >= 25x51x4x100 and tokamak >= 33x1x12x140 (RHSMode=1 PAS/no-Er tokamak >= 89x1x24x300); production timing rows target Fortran v3 >= 10 s",
       "size_estimate": {
         "collision_operator": 1,
         "conservative_csr_nbytes_estimate": 7263431044,
@@ -1120,7 +1120,7 @@
         "NZETA": 59
       },
       "phase_points": 737500,
-      "resolution_policy": "preserve nominal grid, but enforce 3D >= 25x51x4x100 and tokamak >= 25x1x4x100; production timing rows target Fortran v3 >= 10 s",
+      "resolution_policy": "preserve nominal grid, but enforce 3D >= 25x51x4x100 and tokamak >= 33x1x12x140 (RHSMode=1 PAS/no-Er tokamak >= 89x1x24x300); production timing rows target Fortran v3 >= 10 s",
       "size_estimate": {
         "collision_operator": 1,
         "conservative_csr_nbytes_estimate": 36292847044,
@@ -1158,7 +1158,7 @@
         "NZETA": 31
       },
       "phase_points": 765000,
-      "resolution_policy": "preserve nominal grid, but enforce 3D >= 25x51x4x100 and tokamak >= 25x1x4x100; production timing rows target Fortran v3 >= 10 s",
+      "resolution_policy": "preserve nominal grid, but enforce 3D >= 25x51x4x100 and tokamak >= 33x1x12x140 (RHSMode=1 PAS/no-Er tokamak >= 89x1x24x300); production timing rows target Fortran v3 >= 10 s",
       "size_estimate": {
         "collision_operator": 0,
         "conservative_csr_nbytes_estimate": 413103090612,
@@ -1196,7 +1196,7 @@
         "NZETA": 55
       },
       "phase_points": 825000,
-      "resolution_policy": "preserve nominal grid, but enforce 3D >= 25x51x4x100 and tokamak >= 25x1x4x100; production timing rows target Fortran v3 >= 10 s",
+      "resolution_policy": "preserve nominal grid, but enforce 3D >= 25x51x4x100 and tokamak >= 33x1x12x140 (RHSMode=1 PAS/no-Er tokamak >= 89x1x24x300); production timing rows target Fortran v3 >= 10 s",
       "size_estimate": {
         "collision_operator": 0,
         "conservative_csr_nbytes_estimate": 1877046666020,
@@ -1234,7 +1234,7 @@
         "NZETA": 55
       },
       "phase_points": 825000,
-      "resolution_policy": "preserve nominal grid, but enforce 3D >= 25x51x4x100 and tokamak >= 25x1x4x100; production timing rows target Fortran v3 >= 10 s",
+      "resolution_policy": "preserve nominal grid, but enforce 3D >= 25x51x4x100 and tokamak >= 33x1x12x140 (RHSMode=1 PAS/no-Er tokamak >= 89x1x24x300); production timing rows target Fortran v3 >= 10 s",
       "size_estimate": {
         "collision_operator": 0,
         "conservative_csr_nbytes_estimate": 1877046666020,
@@ -1272,7 +1272,7 @@
         "NZETA": 51
       },
       "phase_points": 1020000,
-      "resolution_policy": "preserve nominal grid, but enforce 3D >= 25x51x4x100 and tokamak >= 25x1x4x100; production timing rows target Fortran v3 >= 10 s",
+      "resolution_policy": "preserve nominal grid, but enforce 3D >= 25x51x4x100 and tokamak >= 33x1x12x140 (RHSMode=1 PAS/no-Er tokamak >= 89x1x24x300); production timing rows target Fortran v3 >= 10 s",
       "size_estimate": {
         "collision_operator": 0,
         "conservative_csr_nbytes_estimate": 734404110612,
@@ -1310,7 +1310,7 @@
         "NZETA": 13
       },
       "phase_points": 1020000,
-      "resolution_policy": "preserve nominal grid, but enforce 3D >= 25x51x4x100 and tokamak >= 25x1x4x100; production timing rows target Fortran v3 >= 10 s",
+      "resolution_policy": "preserve nominal grid, but enforce 3D >= 25x51x4x100 and tokamak >= 33x1x12x140 (RHSMode=1 PAS/no-Er tokamak >= 89x1x24x300); production timing rows target Fortran v3 >= 10 s",
       "size_estimate": {
         "collision_operator": 0,
         "conservative_csr_nbytes_estimate": 734404110612,
@@ -1348,7 +1348,7 @@
         "NZETA": 115
       },
       "phase_points": 2141875,
-      "resolution_policy": "preserve nominal grid, but enforce 3D >= 25x51x4x100 and tokamak >= 25x1x4x100; production timing rows target Fortran v3 >= 10 s",
+      "resolution_policy": "preserve nominal grid, but enforce 3D >= 25x51x4x100 and tokamak >= 33x1x12x140 (RHSMode=1 PAS/no-Er tokamak >= 89x1x24x300); production timing rows target Fortran v3 >= 10 s",
       "size_estimate": {
         "collision_operator": 0,
         "conservative_csr_nbytes_estimate": 10646506823020,
@@ -1386,7 +1386,7 @@
         "NZETA": 115
       },
       "phase_points": 2141875,
-      "resolution_policy": "preserve nominal grid, but enforce 3D >= 25x51x4x100 and tokamak >= 25x1x4x100; production timing rows target Fortran v3 >= 10 s",
+      "resolution_policy": "preserve nominal grid, but enforce 3D >= 25x51x4x100 and tokamak >= 33x1x12x140 (RHSMode=1 PAS/no-Er tokamak >= 89x1x24x300); production timing rows target Fortran v3 >= 10 s",
       "size_estimate": {
         "collision_operator": 0,
         "conservative_csr_nbytes_estimate": 10646506823020,
@@ -1424,7 +1424,7 @@
         "NZETA": 115
       },
       "phase_points": 2141875,
-      "resolution_policy": "preserve nominal grid, but enforce 3D >= 25x51x4x100 and tokamak >= 25x1x4x100; production timing rows target Fortran v3 >= 10 s",
+      "resolution_policy": "preserve nominal grid, but enforce 3D >= 25x51x4x100 and tokamak >= 33x1x12x140 (RHSMode=1 PAS/no-Er tokamak >= 89x1x24x300); production timing rows target Fortran v3 >= 10 s",
       "size_estimate": {
         "collision_operator": 1,
         "conservative_csr_nbytes_estimate": 35456225044,
@@ -1462,7 +1462,7 @@
         "NZETA": 115
       },
       "phase_points": 2141875,
-      "resolution_policy": "preserve nominal grid, but enforce 3D >= 25x51x4x100 and tokamak >= 25x1x4x100; production timing rows target Fortran v3 >= 10 s",
+      "resolution_policy": "preserve nominal grid, but enforce 3D >= 25x51x4x100 and tokamak >= 33x1x12x140 (RHSMode=1 PAS/no-Er tokamak >= 89x1x24x300); production timing rows target Fortran v3 >= 10 s",
       "size_estimate": {
         "collision_operator": 1,
         "conservative_csr_nbytes_estimate": 177211205044,
@@ -1490,12 +1490,17 @@
     "NXI": 100,
     "NZETA": 51
   },
-  "minimum_tokamak_resolution": {
-    "NTHETA": 25,
-    "NX": 4,
-    "NXI": 100
+  "minimum_tokamak_pas_noer_resolution": {
+    "NTHETA": 89,
+    "NX": 24,
+    "NXI": 300
   },
-  "resolution_policy": "preserve nominal grid, but enforce 3D >= 25x51x4x100 and tokamak >= 25x1x4x100; production timing rows target Fortran v3 >= 10 s",
+  "minimum_tokamak_resolution": {
+    "NTHETA": 33,
+    "NX": 12,
+    "NXI": 140
+  },
+  "resolution_policy": "preserve nominal grid, but enforce 3D >= 25x51x4x100 and tokamak >= 33x1x12x140 (RHSMode=1 PAS/no-Er tokamak >= 89x1x24x300); production timing rows target Fortran v3 >= 10 s",
   "schema_version": 1,
   "target_fortran_min_runtime_s": 10.0
 }

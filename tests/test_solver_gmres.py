@@ -22,6 +22,7 @@ from sfincs_jax.solver import (
     fgmres_solve_with_residual,
     fgmres_solve_with_residual_jit,
     gcrotmk_solve_with_history_scipy,
+    gmres_solve_with_history_scipy,
     gmres_solve_jit,
     gmres_solve,
     gmres_solve_with_residual,
@@ -288,6 +289,56 @@ def test_fgmres_solve_with_residual_matches_numpy_for_nonsymmetric_matrix() -> N
     assert int(result.n_iterations) <= 80
     assert np.asarray(result.residual_history).ndim == 1
     assert float(np.asarray(result.residual_history)[-1]) == pytest.approx(float(result.residual_norm), rel=1.0e-10)
+
+
+def test_fgmres_true_residual_is_preconditioner_side_invariant() -> None:
+    """Converged FGMRES diagnostics must be physical, not preconditioned residuals."""
+
+    a = np.asarray(
+        [
+            [6.0, -1.0, 0.5, 0.0],
+            [1.5, 5.0, -0.25, 0.75],
+            [0.0, 0.5, 4.5, -1.0],
+            [0.25, 0.0, 1.0, 3.5],
+        ],
+        dtype=np.float64,
+    )
+    b = np.asarray([1.0, -2.0, 0.5, 3.0], dtype=np.float64)
+    x_ref = np.linalg.solve(a, b)
+    a_j = jnp.asarray(a)
+    b_j = jnp.asarray(b)
+    inv_diag = jnp.asarray(1.0 / np.diag(a), dtype=jnp.float64)
+
+    def mv(x):
+        return a_j @ x
+
+    def precond(x):
+        return inv_diag * x
+
+    results = {}
+    residuals = {}
+    for side, preconditioner in (("none", None), ("left", precond), ("right", precond)):
+        result, residual = fgmres_solve_with_residual(
+            matvec=mv,
+            b=b_j,
+            preconditioner=preconditioner,
+            tol=1.0e-12,
+            restart=4,
+            maxiter=8,
+            precondition_side=side,
+        )
+        results[side] = result
+        residuals[side] = residual
+
+    for side, result in results.items():
+        np.testing.assert_allclose(np.asarray(result.x), x_ref, rtol=1.0e-10, atol=1.0e-10)
+        np.testing.assert_allclose(np.asarray(residuals[side]), b - a @ np.asarray(result.x), rtol=1.0e-11, atol=1.0e-11)
+        assert bool(result.converged)
+        assert float(result.residual_norm) < 1.0e-10
+
+    np.testing.assert_allclose(np.asarray(results["left"].x), np.asarray(results["right"].x), rtol=1.0e-11, atol=1.0e-11)
+    np.testing.assert_allclose(np.asarray(residuals["left"]), np.asarray(residuals["none"]), rtol=1.0e-10, atol=1.0e-10)
+    np.testing.assert_allclose(np.asarray(residuals["right"]), np.asarray(residuals["none"]), rtol=1.0e-10, atol=1.0e-10)
 
 
 def test_fgmres_right_preconditioner_is_transpose_safe() -> None:
@@ -979,6 +1030,114 @@ def test_explicit_left_preconditioned_gmres_scipy_matches_numpy() -> None:
     assert rn_true < 1e-10
     assert rn_pc < 1e-10
     assert history
+
+
+def test_gmres_solve_with_history_scipy_progress_matches_history() -> None:
+    a = np.array(
+        [
+            [4.0, -1.0, 0.25],
+            [0.5, 3.0, -0.5],
+            [0.0, 0.75, 2.5],
+        ],
+        dtype=np.float64,
+    )
+    b = np.array([1.0, -2.0, 0.5], dtype=np.float64)
+    x_ref = np.linalg.solve(a, b)
+    a_j = jnp.asarray(a)
+    events: list[tuple[int, float]] = []
+
+    def mv(x):
+        return a_j @ x
+
+    x, rn, history = gmres_solve_with_history_scipy(
+        matvec=mv,
+        b=jnp.asarray(b),
+        tol=1.0e-12,
+        restart=3,
+        maxiter=8,
+        progress_callback=lambda iteration, residual: events.append((iteration, residual)),
+    )
+
+    np.testing.assert_allclose(x, x_ref, rtol=1.0e-10, atol=1.0e-10)
+    assert rn < 1.0e-10
+    assert events
+    assert [iteration for iteration, _residual in events] == list(range(1, len(history) + 1))
+    np.testing.assert_allclose([residual for _iteration, residual in events], history, rtol=0.0, atol=0.0)
+
+
+def test_gmres_solve_with_history_scipy_right_preconditioned_x0_is_physical() -> None:
+    a = np.array(
+        [
+            [4.0, -1.0, 0.25],
+            [1.5, 3.0, -0.5],
+            [0.0, 0.75, 2.5],
+        ],
+        dtype=np.float64,
+    )
+    b = np.array([1.0, -2.0, 0.5], dtype=np.float64)
+    x_ref = np.linalg.solve(a, b)
+    x0 = x_ref + np.array([0.25, -0.1, 0.05], dtype=np.float64)
+    inv_diag = 1.0 / np.diag(a)
+    a_j = jnp.asarray(a)
+
+    def mv(x):
+        return a_j @ x
+
+    def precond(x):
+        return jnp.asarray(inv_diag, dtype=jnp.float64) * x
+
+    x, rn, history = gmres_solve_with_history_scipy(
+        matvec=mv,
+        b=jnp.asarray(b),
+        preconditioner=precond,
+        x0=jnp.asarray(x0, dtype=jnp.float64),
+        tol=1.0e-12,
+        restart=3,
+        maxiter=8,
+        precondition_side="right",
+    )
+
+    np.testing.assert_allclose(x, x_ref, rtol=1.0e-10, atol=1.0e-10)
+    assert rn < 1.0e-10
+    assert history
+
+
+def test_explicit_left_preconditioned_gmres_scipy_progress_matches_history() -> None:
+    a = np.array(
+        [
+            [4.0, 1.0, 0.0],
+            [1.0, 3.0, -1.0],
+            [0.0, -1.0, 2.0],
+        ],
+        dtype=np.float64,
+    )
+    b = np.array([1.0, -2.0, 3.0], dtype=np.float64)
+    a_j = jnp.asarray(a)
+    inv_diag = 1.0 / np.diag(a)
+    events: list[tuple[int, float]] = []
+
+    def mv(x):
+        return a_j @ x
+
+    def precond(x):
+        return jnp.asarray(inv_diag, dtype=jnp.float64) * x
+
+    x, rn_true, rn_pc, history = explicit_left_preconditioned_gmres_scipy(
+        matvec=mv,
+        b=jnp.asarray(b),
+        preconditioner=precond,
+        tol=1.0e-12,
+        restart=6,
+        maxiter=20,
+        progress_callback=lambda iteration, residual: events.append((iteration, residual)),
+    )
+
+    np.testing.assert_allclose(a @ x, b, rtol=1.0e-10, atol=1.0e-10)
+    assert rn_true < 1.0e-10
+    assert rn_pc < 1.0e-10
+    assert events
+    assert [iteration for iteration, _residual in events] == list(range(1, len(history) + 1))
+    np.testing.assert_allclose([residual for _iteration, residual in events], history, rtol=0.0, atol=0.0)
 
 
 def test_explicit_left_preconditioned_gmres_scipy_zero_preconditioned_rhs_is_finite() -> None:

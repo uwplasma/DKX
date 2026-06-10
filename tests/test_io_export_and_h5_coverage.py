@@ -166,6 +166,10 @@ def test_rhsmode1_solver_diagnostics_are_output_visible() -> None:
         solver_metadata={
             "accepted_converged": True,
             "acceptance_criterion": "true_residual",
+            "solve_method_requested": "host_structured_csr",
+            "solver_path": "structured_full_csr_host_gmres",
+            "solver_kind": "structured_full_csr",
+            "preconditioner_kind": "xblock_tz_low_l_schur",
             "iterations": 7,
             "matvecs": 11,
             "setup_s": 0.25,
@@ -174,10 +178,12 @@ def test_rhsmode1_solver_diagnostics_are_output_visible() -> None:
             "sparse_pattern_nnz": 1234,
             "sparse_pattern_avg_row_nnz": 5.5,
             "sparse_pattern_max_row_nnz": 9,
+            "csr_nnz": 4321,
+            "csr_operator_nbytes": 876543,
             "sparse_pattern_build_s": 0.1,
             "sparse_pc_factor_s": 0.15,
-            "sparse_pc_factor_nbytes_estimate": 4567,
-            "sparse_pc_factor_nnz_estimate": 321,
+            "sparse_pc_factor_nbytes_estimate": None,
+            "sparse_pc_factor_nnz_estimate": None,
             "sparse_pc_xblock_preconditioner_xi": 1,
             "sparse_pc_xblock_assembled_host": True,
             "xblock_initial_seed_used": True,
@@ -197,6 +203,66 @@ def test_rhsmode1_solver_diagnostics_are_output_visible() -> None:
             "xblock_post_residual_equation_direction_count": 9,
             "xblock_post_residual_equation_residual_before": 1.5e-8,
             "xblock_post_residual_equation_residual_after": 9.0e-9,
+            "sparse_pc_fortran_reduced_direct_tail_support_mode_preflight_requested": True,
+            "sparse_pc_fortran_reduced_direct_tail_support_mode_preflight_selected": True,
+            "sparse_pc_fortran_reduced_direct_tail_structured_pc_max_mb": 1024.0,
+            "sparse_pc_fortran_reduced_direct_tail_structured_pc_max_mb_auto": True,
+            "sparse_pc_fortran_reduced_direct_tail_structured_pc_metadata": {
+                "selected": True,
+                "kind": "active_fortran_v3_reduced_lu",
+                "reason": "complete",
+                "setup_s": 0.4,
+                "metadata": {
+                    "factor_kind": "lu",
+                    "permc_spec": "NATURAL",
+                    "permc_spec_requested": "AUTO",
+                    "permc_spec_candidates": ("NATURAL", "COLAMD"),
+                    "permc_failures": (
+                        {
+                            "permc_spec": "MMD_ATA",
+                            "error_type": "RuntimeError",
+                            "error": "not selected",
+                        },
+                    ),
+                },
+            },
+            "sparse_pc_fortran_reduced_direct_tail_support_mode_preflight_metadata": {
+                "accepted_nonbaseline": True,
+                "selected_candidate": "x0",
+                "candidate_specs": ("current", "x0"),
+                "baseline_residual_after": 4.0e-4,
+                "best_residual_after": 2.0e-5,
+                "rhs_norm": 1.0,
+                "setup_s": 0.125,
+                "candidates": (
+                    {
+                        "label": "current",
+                        "selected": True,
+                        "residual_after": 4.0e-4,
+                        "factor_nbytes_actual": 2_000_000,
+                    },
+                    {
+                        "label": "x0",
+                        "selected": True,
+                        "residual_after": 2.0e-5,
+                        "factor_nbytes_actual": 8_000_000,
+                    },
+                ),
+            },
+            "sparse_pc_direct_tail_true_coupled_coarse_requested": True,
+            "sparse_pc_direct_tail_true_coupled_coarse_explicit_requested": False,
+            "sparse_pc_direct_tail_true_coupled_coarse_auto_enabled": True,
+            "sparse_pc_direct_tail_true_coupled_coarse_auto_selected": True,
+            "sparse_pc_direct_tail_true_coupled_coarse_auto_target_ratio": 10.0,
+            "sparse_pc_direct_tail_true_coupled_coarse_auto_min_size": 300_000,
+            "sparse_pc_direct_tail_true_coupled_coarse_selected": True,
+            "sparse_pc_direct_tail_true_coupled_coarse_residual_after": 7.5e-9,
+            "sparse_pc_direct_tail_true_coupled_coarse_metadata": {
+                "base_residual_after": 4.0e-7,
+                "coarse_size": 12,
+                "factor_nbytes_estimate": 4096,
+                "basis_names": ("tail_residual", "dominant_kinetic_residual_window"),
+            },
         },
     )
 
@@ -206,6 +272,10 @@ def test_rhsmode1_solver_diagnostics_are_output_visible() -> None:
     assert int(np.asarray(data["linearSolverConverged"])) == 1
     assert int(np.asarray(data["linearSolverAccepted"])) == 1
     assert data["linearSolverAcceptanceCriterion"] == "true_residual"
+    assert data["linearSolverRequestedMethod"] == "host_structured_csr"
+    assert data["linearSolverPath"] == "structured_full_csr_host_gmres"
+    assert data["linearSolverKind"] == "structured_full_csr"
+    assert data["linearSolverPreconditionerKind"] == "xblock_tz_low_l_schur"
     assert int(np.asarray(data["linearSolverIterations"])) == 7
     assert int(np.asarray(data["linearSolverMatvecs"])) == 11
     assert float(np.asarray(data["linearSolverSetupTime"])) == pytest.approx(0.25)
@@ -214,12 +284,20 @@ def test_rhsmode1_solver_diagnostics_are_output_visible() -> None:
     assert int(np.asarray(data["linearSolverSparsePatternNnz"])) == 1234
     assert float(np.asarray(data["linearSolverSparsePatternAvgRowNnz"])) == pytest.approx(5.5)
     assert int(np.asarray(data["linearSolverSparsePatternMaxRowNnz"])) == 9
+    assert int(np.asarray(data["linearSolverCsrNnz"])) == 4321
+    assert int(np.asarray(data["linearSolverCsrOperatorNbytes"])) == 876543
     assert float(np.asarray(data["linearSolverSparsePatternBuildTime"])) == pytest.approx(0.1)
     assert float(np.asarray(data["linearSolverSparsePCFactorTime"])) == pytest.approx(0.15)
-    assert int(np.asarray(data["linearSolverSparsePCFactorNbytesEstimate"])) == 4567
-    assert int(np.asarray(data["linearSolverSparsePCFactorNnzEstimate"])) == 321
+    assert "linearSolverSparsePCFactorNbytesEstimate" not in data
+    assert "linearSolverSparsePCFactorNnzEstimate" not in data
     assert int(np.asarray(data["linearSolverSparsePCXBlockPreconditionerXi"])) == 1
     assert int(np.asarray(data["linearSolverSparsePCXBlockAssembledHost"])) == 1
+    assert data["linearSolverSparsePCSelectedKind"] == "active_fortran_v3_reduced_lu"
+    assert data["linearSolverSparsePCFactorKind"] == "lu"
+    assert data["linearSolverSparsePCPermcSpec"] == "NATURAL"
+    assert data["linearSolverSparsePCPermcSpecRequested"] == "AUTO"
+    assert '"NATURAL"' in data["linearSolverSparsePCPermcSpecCandidatesJson"]
+    assert '"MMD_ATA"' in data["linearSolverSparsePCPermcFailuresJson"]
     assert int(np.asarray(data["linearSolverXBlockInitialSeedUsed"])) == 1
     assert float(np.asarray(data["linearSolverXBlockInitialSeedResidualNorm"])) == pytest.approx(3.0e-8)
     assert float(np.asarray(data["linearSolverXBlockInitialSeedResidualRatio"])) == pytest.approx(0.3)
@@ -237,6 +315,33 @@ def test_rhsmode1_solver_diagnostics_are_output_visible() -> None:
     assert int(np.asarray(data["linearSolverXBlockPostResidualEquationDirectionCount"])) == 9
     assert float(np.asarray(data["linearSolverXBlockPostResidualEquationResidualBefore"])) == pytest.approx(1.5e-8)
     assert float(np.asarray(data["linearSolverXBlockPostResidualEquationResidualAfter"])) == pytest.approx(9.0e-9)
+    assert int(np.asarray(data["linearSolverDirectTailSupportModePreflightRequested"])) == 1
+    assert int(np.asarray(data["linearSolverDirectTailSupportModePreflightSelected"])) == 1
+    assert int(np.asarray(data["linearSolverDirectTailSupportModeAcceptedNonbaseline"])) == 1
+    assert data["linearSolverDirectTailSupportModeSelectedCandidate"] == "x0"
+    assert int(np.asarray(data["linearSolverDirectTailSupportModeRequestedCandidateCount"])) == 2
+    assert int(np.asarray(data["linearSolverDirectTailSupportModeCandidateCount"])) == 2
+    assert float(np.asarray(data["linearSolverDirectTailSupportModeBaselineResidualAfter"])) == pytest.approx(4.0e-4)
+    assert float(np.asarray(data["linearSolverDirectTailSupportModeBestResidualAfter"])) == pytest.approx(2.0e-5)
+    assert float(np.asarray(data["linearSolverDirectTailSupportModeRhsNorm"])) == pytest.approx(1.0)
+    assert float(np.asarray(data["linearSolverDirectTailSupportModeSetupTime"])) == pytest.approx(0.125)
+    assert '"label": "x0"' in data["linearSolverDirectTailSupportModeCandidatesJson"]
+    assert float(np.asarray(data["linearSolverDirectTailStructuredPCMaxMB"])) == pytest.approx(1024.0)
+    assert int(np.asarray(data["linearSolverDirectTailStructuredPCMaxMBAuto"])) == 1
+    assert int(np.asarray(data["linearSolverDirectTailTrueCoupledCoarseRequested"])) == 1
+    assert int(np.asarray(data["linearSolverDirectTailTrueCoupledCoarseExplicitRequested"])) == -1
+    assert int(np.asarray(data["linearSolverDirectTailTrueCoupledCoarseAutoEnabled"])) == 1
+    assert int(np.asarray(data["linearSolverDirectTailTrueCoupledCoarseAutoSelected"])) == 1
+    assert int(np.asarray(data["linearSolverDirectTailTrueCoupledCoarseSelected"])) == 1
+    assert float(np.asarray(data["linearSolverDirectTailTrueCoupledCoarseAutoTargetRatio"])) == pytest.approx(10.0)
+    assert int(np.asarray(data["linearSolverDirectTailTrueCoupledCoarseAutoMinSize"])) == 300_000
+    assert float(np.asarray(data["linearSolverDirectTailTrueCoupledCoarseResidualAfter"])) == pytest.approx(7.5e-9)
+    assert float(np.asarray(data["linearSolverDirectTailTrueCoupledCoarseBaseResidualAfter"])) == pytest.approx(
+        4.0e-7
+    )
+    assert int(np.asarray(data["linearSolverDirectTailTrueCoupledCoarseSize"])) == 12
+    assert int(np.asarray(data["linearSolverDirectTailTrueCoupledCoarseNbytesEstimate"])) == 4096
+    assert "dominant_kinetic_residual_window" in data["linearSolverDirectTailTrueCoupledCoarseBasisJson"]
     assert float(np.asarray(data["linearSolverResidualTargetRatio"])) == pytest.approx(0.2)
 
 

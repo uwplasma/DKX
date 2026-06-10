@@ -429,10 +429,12 @@ Controls for the CPU 3D full-FP auto lane are
 ``SFINCS_JAX_RHSMODE1_FP3D_SPARSE_PC_MIN``, and
 ``SFINCS_JAX_RHSMODE1_FP3D_SPARSE_PC_MAX``.
 The production benchmark manifest now enforces at least ``25 x 51 x 4 x 100``
-(``Ntheta x Nzeta x Nx x Nxi``) for 3D cases and ``25 x 1 x 4 x 100`` for
-tokamak cases, with a ``10 s`` minimum SFINCS Fortran v3 timing target for
-public production rows. Performance claims for this lane should be regenerated
-from that manifest rather than from earlier lower-resolution bring-up probes. It is
+(``Ntheta x Nzeta x Nx x Nxi``) for 3D cases and ``33 x 1 x 12 x 140`` for
+tokamak cases. RHSMode=1 PAS/no-``E_r`` tokamak rows use the calibrated
+``89 x 1 x 24 x 300`` floor. The manifest also records a ``10 s`` minimum
+SFINCS Fortran v3 timing target for public production rows. Performance claims
+for this lane should be regenerated from that manifest rather than from earlier
+lower-resolution bring-up probes. It is
 available via:
 
 .. code-block:: bash
@@ -683,6 +685,515 @@ Controls:
 - ``SFINCS_JAX_TRANSPORT_FP_TZFFT_PINV_RCOND`` (pseudo-inverse cutoff; default
   ``1e-12``)
 
+**FP Fourier line preconditioner (bounded native candidate).**
+
+``SFINCS_JAX_TRANSPORT_PRECOND=fp_tzfft_line`` is a lower-memory native
+alternative to the dense ``fp_tzfft`` inverse table. Instead of storing one dense
+inverse over all :math:`(L,s,x)` unknowns for each Fourier mode, it keeps the
+full FP block over :math:`(s,x)` for each Legendre row and solves the
+block-tridiagonal Legendre residual equation with block Thomas factors:
+
+.. math::
+
+   A_l^\star = A_l - L_l (A_{l-1}^\star)^{-1} U_{l-1},
+   \qquad
+   M_{k_\theta,k_\zeta}^{-1} r
+   = \operatorname{Thomas}\{L_l,A_l,U_l\}_{l=0}^{N_\xi-1}.
+
+Here :math:`A_l` contains the FP species/speed block plus the identity and
+collision diagonal, while :math:`L_l` and :math:`U_l` are the
+flux-surface-averaged streaming/mirror links diagonalized in
+``(theta,zeta)`` Fourier space. Storage scales like
+``Ntheta * Nzeta * Nxi * (Nspecies * Nx)^2`` instead of
+``Ntheta * Nzeta * (Nxi * Nspecies * Nx)^2``, so the path avoids the full
+SuperLU-style factor fill and the dense ``fp_tzfft`` table.
+
+Current gate status: the factor is implemented and tested as a numerical
+preconditioner. On the small FP RHSMode=2 LHD fixture, one application reduces
+the true residual by more than ``1e6`` relative to ``sxblock``. On a bounded
+``13 x 17 x 30 x 4`` geometry-scheme-2 FP transport probe, however,
+``fp_tzfft_line`` and ``sxblock`` still missed the strict true-residual solve
+gate without sparse/direct rescue. Therefore ``auto`` does **not** select this
+path by default. The next required algorithmic step is a coupled
+constraint/source-moment Schur correction on top of the line factor.
+
+``SFINCS_JAX_TRANSPORT_PRECOND=fp_tzfft_line_schur`` adds that first coupled
+tail correction. It builds normalized source/constraint-tail response columns
+``Z`` and solves a compact tail-restricted true-action equation
+
+.. math::
+
+   (R A Z)c = R\,(r - A M_\mathrm{line}^{-1} r),
+   \qquad
+   M^{-1}r = M_\mathrm{line}^{-1}r + Zc,
+
+where ``R`` restricts to the source/constraint tail rows. This closes the
+source-tail residual in the small FP fixture, including synthetic unit tail
+loads, while keeping the acceptance criterion on the full true residual.
+However, bounded geometry-scheme-2 probes still retry without the preconditioner
+and land at the same kinetic residual as the line-only path. The Schur
+candidate is therefore retained as an opt-in diagnostic layer, not a production
+default.
+
+Diagnostic variants that restrict the residual to low-order Galerkin moment
+directions (``SFINCS_JAX_TRANSPORT_FP_TZFFT_LINE_SCHUR_RESTRICTION=galerkin``
+or ``tail_galerkin``) were also tested on bounded geometry-scheme-2 FP probes.
+They did not improve the strict true residual and still fell back to the
+no-preconditioner result. This points to the remaining bottleneck being the
+kinetic FP/streaming residual equation itself, not only the source/constraint
+tail coupling.
+
+``SFINCS_JAX_TRANSPORT_PRECOND=fp_local_geom_line`` is a second kinetic
+diagnostic candidate. It keeps the local, non-averaged mirror geometry in a
+real-space Legendre block-Thomas factor at each ``(theta,zeta)`` point. This
+was the expected next low-memory approximation after the flux-surface-averaged
+Fourier line factor. The checked tiny FP fixture, however, shows that this
+local-only factor amplifies the full kinetic residual and is not viable as a
+standalone or additive correction. It remains available only for diagnostic
+experiments.
+
+``SFINCS_JAX_TRANSPORT_PRECOND=fp_structured_fblock_lu`` is a stronger
+diagnostic baseline. It reuses the migrated structured f-block assembler and
+factors the kinetic FP block as a host sparse matrix, retaining the full
+non-averaged collisionless streaming/mirror geometry and FP collision couplings.
+The full transport residual gate remains unchanged because the factor leaves
+the source/constraint tail to the outer Krylov solve. On the tiny LHD FP
+fixture, a stabilized factor reduces the kinetic one-apply residual below
+``1e-8`` relative. On the bounded ``9 x 11 x 16 x 4`` geometry-scheme-2
+one-RHS probe, it reduces the solve residual from the no-preconditioner plateau
+(``4.68e-1`` relative) to ``1.32e-9`` relative in ``63.3 s``. The next
+``13 x 17 x 30 x 4`` rung did not complete within the bounded runtime budget,
+so this path is not promoted to ``auto`` or public benchmark plots. It is a
+useful correctness baseline for the lower-memory native coupled block factor
+that must replace the host exact factor before production-floor promotion.
+
+``SFINCS_JAX_TRANSPORT_PRECOND=fp_xblock_tz_lu`` is that lower-memory coupled
+block-factor candidate. It factors independent sparse blocks for each
+``(species,x)`` pair, retaining the non-averaged angular streaming/mirror
+geometry and selected drift terms over the coupled ``(L,theta,zeta)`` unknowns
+without forming the global kinetic f-block LU. On the bounded
+``13 x 17 x 30 x 4`` geometry-scheme-2 FP transport probe with sparse/direct
+and dense rescue disabled, the candidate passes a strict ``1e-10`` relative
+gate for RHS3 with ``REG=1e-13``:
+
+.. code-block:: text
+
+   whichRHS=3 residual=1.128017e-10
+   rhs_norm=1.339822e+00
+   relative_residual=8.419155e-11
+   elapsed=7.6 s
+
+The same regularization is not sufficient for RHS1 on the all-RHS gate, while
+``REG=3e-13`` is better for RHS1/RHS2 but misses RHS3. Therefore the path is
+implemented and test-covered, but not promoted to ``auto`` until the coupled
+source/tail/kinetic coarse correction closes all three RHS columns under one
+policy.
+
+``SFINCS_JAX_TRANSPORT_PRECOND=fp_xblock_tz_lu_schur`` adds that first
+source/tail closure. Unlike the older tail-only variant, the current default
+``SFINCS_JAX_TRANSPORT_FP_XBLOCK_TZ_LU_SCHUR_RESTRICTION=tail_galerkin`` solves
+a compact residual equation using both source/constraint tail rows and kinetic
+moment test directions:
+
+.. math::
+
+   (R A Z)c = R\,(r - A M_\mathrm{xblock}^{-1} r),
+   \qquad
+   M^{-1}r = M_\mathrm{xblock}^{-1}r + Zc.
+
+Here :math:`Z` contains normalized tail response and kinetic moment correction
+directions, and :math:`R` contains the selected tail/moment test rows. On the
+tiny FP fixture this reduces the tail residual from ``1.95e-12`` to
+``4.25e-15`` relative, confirming that the source/tail restriction is active.
+The diagnostic residual-coarse controls
+``SFINCS_JAX_TRANSPORT_FP_XBLOCK_TZ_LU_SCHUR_KINETIC_RESIDUAL=1`` and
+``SFINCS_JAX_TRANSPORT_FP_XBLOCK_TZ_LU_SCHUR_RHS_RESIDUAL=1`` add low-order
+kinetic residual-error directions and residual-correction columns built from
+the actual RHSMode=2/3 transport drives. With ``DAMPING=0.25`` they reduce the
+tiny-fixture one-apply full residual for all three transport RHS columns.
+However, the bounded ``13 x 17 x 30 x 4`` geometry-scheme-2 all-RHS gate still
+failed promotion: RHS1 took ``375.227 s``, the preconditioned branch produced a
+``nan`` residual and retried without the preconditioner, and the strict gate
+aborted at residual ``1.811554e-04`` with relative residual ``5.711080e-01``.
+The next production step is therefore a stronger kinetic residual equation
+inside the local x-block factor or a genuinely coupled coarse residual over the
+dominant kinetic subspace, not more tail-Schur damping.
+
+``SFINCS_JAX_TRANSPORT_PRECOND=fp_fortran_reduced_lu`` implements that stronger
+global route as a PETSc-like transport preconditioner. It is now the default
+``auto`` candidate for eligible non-Phi1 RHSMode=2/3 full-FP transport cases
+unless explicitly disabled. It keeps the true SFINCS-JAX matrix-free operator as
+:math:`A`, but materializes a separate reduced sparse :math:`P` and factors it
+once for all RHSMode=2/3 drives:
+
+.. math::
+
+   A x_i = b_i,\qquad M^{-1}r \approx P^{-1}r.
+
+This mirrors the Fortran v3 PETSc call pattern ``KSPSetOperators(A, P)``.  The
+Fortran source uses ``whichMatrix=1`` for the true Jacobian and ``whichMatrix=0``
+for the preconditioner matrix, then reuses one LU-factorized preconditioner
+across the transport RHS columns.  A fresh bounded profile of SFINCS Fortran v3
+on the same ``13 x 17 x 30 x 4`` geometry-scheme-2 input showed:
+
+- true matrix: ``14588 x 14588`` with ``288066`` nonzeros,
+- preconditioner matrix: ``263756`` nonzeros,
+- PETSc solver: GMRES with ``PCLU`` and MUMPS,
+- MUMPS factor entries: ``7204448``,
+- MUMPS effective factor memory: ``68 MB`` and allocated memory ``100 MB``,
+- PETSc ``PCSetUp``: ``0.187 s``, ``KSPSolve`` over three RHS columns:
+  ``0.539 s``, and process wall time: ``1.25 s`` with ``247 MB`` max RSS.
+
+A matching reduced geometry-scheme-11 Fortran v3 profile confirms the same
+algorithmic pattern on the 3D FP case: PETSc uses the true Jacobian
+(``59526`` nonzeros) for Krylov residuals and the smaller ``whichMatrix=0``
+preconditioner (``49320`` nonzeros) for ``PCLU``/MUMPS. MUMPS reported
+``N=2900``, ``NNZ=49320``, maximum frontal size ``419``, and the first
+transport RHS dropped from ``1.90e-4`` to ``1.58e-10`` in about 50 Krylov
+iterations. The measured solve phase was ``0.067 s`` and max RSS was about
+``130 MB``. This is the reference behavior the JAX-native production path is
+trying to reproduce: lower-NNZ reduced preconditioner, symbolic analysis reused
+across RHS columns, and strict residuals always evaluated with the true
+operator.
+
+The local Fortran source audit is also important for interpreting failed
+low-memory replacements: ``populateMatrix(..., whichMatrix=0)`` still retains
+the source and constraint couplings for ``constraintScheme=1`` and
+``constraintScheme=2``.  It does not merely factor independent kinetic blocks.
+For ``constraintScheme=1`` the particle/energy source amplitudes enter the
+L=0 kinetic rows and the density/pressure moment rows test flux-surface
+averages.  For ``constraintScheme=2`` each retained speed has a source/constraint
+row pair.  Robust Fortran runs therefore rely on a sparse factor of this coupled
+reduced matrix, with the true residual evaluated against ``whichMatrix=1``.
+
+The relevant external solver documentation supports the same decomposition:
+PETSc `KSPSetOperators <https://petsc.org/release/manualpages/KSP/KSPSetOperators/>`__
+accepts separate true and preconditioning matrices, PETSc
+`PCSetReusePreconditioner <https://petsc.org/main/manualpages/PC/PCSetReusePreconditioner/>`__
+documents explicit preconditioner reuse, the
+`MUMPS documentation <https://mumps-solver.org/index.php?page=doc>`__
+describes sparse direct analysis/factor/solve phases, and
+`SuperLU_DIST <https://github.com/xiaoyeli/superlu_dist>`__ documents
+distributed sparse LU and triangular solves. SFINCS-JAX uses these ideas as
+design targets, but does not require PETSc, MUMPS, or SuperLU_DIST at runtime.
+
+The SFINCS-JAX implementation exposes two useful variants:
+
+- Fortran-structural mode
+  ``PRECONDITIONER_X=1``, ``PRECONDITIONER_XI=1``,
+  ``KEEPS_THETA_ZETA=1``: materializes ``263754`` nonzeros, factors an
+  ``84.8 MB`` SuperLU factor, and passes the bounded gate at relative residuals
+  ``3.69e-10``, ``3.83e-10``, and ``4.56e-10`` in ``91.3 s``.  This is the
+  closest structural match to the Fortran v3 ``Pmat``, but the current JAX/Python
+  Krylov loop retries because the internal target is much tighter than the
+  Fortran input ``solverTolerance=1e-6``.
+- Direct term-level ``Pmat`` emission is enabled by default for this
+  path when the system is non-Phi1 RHSMode=2/3 FP transport and the active
+  unknowns preserve complete zeta blocks plus the complete source/constraint
+  tail. It emits the structured kinetic block and analytic source/moment rows
+  directly as CSR, avoiding the older pattern-color matrix-free probing step.
+  Set ``SFINCS_JAX_TRANSPORT_FP_FORTRAN_REDUCED_LU_DIRECT=0`` to force the
+  conservative pattern-probe fallback.
+- Strong coupled mode, the automatic default for this candidate:
+  ``PRECONDITIONER_X=0``, ``PRECONDITIONER_XI=0``,
+  ``KEEPS_THETA_ZETA=1``. With direct term-level Pmat emission, active-DOF
+  reduction, exact LU, and dense/sparse-direct rescue disabled, it passes both
+  bounded geometry-scheme-2 and geometry-scheme-11 all-RHS gates. The bounded
+  geometry-scheme-2 gate emits ``55704`` nonzeros, factors a ``13.984 MB``
+  SuperLU factor, and reaches max relative residual ``6.98e-11`` in
+  ``5.54 s``. The bounded geometry-scheme-11 gate emits ``59526`` nonzeros,
+  factors a ``16.976 MB`` SuperLU factor, and reaches max relative residual
+  ``5.07e-13`` in ``4.86 s``. RCM symbolic analysis reduces the geom2
+  bandwidth/profile from ``2531/2007237`` to ``638/1028290`` and the geom11
+  bandwidth/profile from ``2899/2149494`` to ``488/880579``. This closes the
+  bounded FP RHSMode=2/3 preconditioner gate, so the exact direct-LU variant is
+  promoted into ``auto`` with strict residual admission and memory caps. The
+  lower-memory symbolic/native variants remain diagnostic because
+  production-floor memory and Krylov gates are still being measured honestly.
+
+On the production-floor ``25 x 51 x 100`` FP transport decks, direct emission
+removes the setup bottleneck but does not yet close the full production solve
+gate.  The geometry-scheme-11 active structural CSR now emits in about ``8.7 s``
+instead of the previous ``287.6 s`` pattern-color materialization, with the same
+``8.68e6`` actual nonzeros and a ``~406 MB`` ILU factor estimate.  The first-RHS
+Krylov phase still needs a stronger lower-fill/coarse correction before this
+preconditioner can be promoted to ``auto``.
+
+The sparse-direct transport route also has a direct active true-operator
+emitter for non-Phi1 RHSMode=2/3 FP systems.  This emits the active operator
+used by the residual gate, not the reduced preconditioner matrix:
+
+.. math::
+
+   A_{\mathcal A\mathcal A} =
+   \begin{bmatrix}
+     K_{\mathcal A\mathcal A} & B_{\mathcal A t}\\
+     C_{t\mathcal A} & D_{tt}
+   \end{bmatrix}.
+
+Here :math:`\mathcal A` is the active kinetic set and :math:`t` is the
+source/constraint tail.  On the bounded geometry-scheme-11 gate
+(``13 x 17 x 30 x 4``), this direct true-operator path emitted ``288064``
+nonzeros in ``0.76 s``, factored an exact LU in ``2.70 s``, and reached true
+relative residual ``1.7e-10`` in ``7.3 s`` with ``1.88 GB`` max RSS.  On the
+production geometry-scheme-11 gate (``25 x 51 x 100 x 6``), direct true-operator
+emission stayed cheap (``10.12e6`` nonzeros, ``82.8 MB`` CSR estimate,
+``14.1-14.5 s`` build), but monolithic LU did not finish inside ``600 s`` and
+global ILU did not pass the true residual gate.  Therefore this exact emitter is
+infrastructure for the next block/reuse preconditioner, not a production default
+by itself.
+
+The direct-active true-operator emitter is also now paired with a reusable
+symbolic block/coarse factor layer in
+``sfincs_jax.transport_active_factor``. The layer separates symbolic block
+ordering over active kinetic unknowns, numerical block inverse plus
+source/constraint Schur construction, and setup-time true-residual admission
+against the same active operator used by the residual gate. This mirrors the
+separation between sparse-direct symbolic analysis, numeric factorization, and
+solver admission in PETSc/MUMPS/SuperLU_DIST, while keeping the implementation
+Python/JAX-native and dependency-light.
+
+The first direct-active block/reuse probe is available as an opt-in diagnostic:
+
+.. math::
+
+   S = D - C M_K^{-1} B,\qquad
+   M^{-1}r =
+   \begin{bmatrix}
+     M_K^{-1}r_K - M_K^{-1}B S^{-1}(r_t - C M_K^{-1}r_K)\\
+     S^{-1}(r_t - C M_K^{-1}r_K)
+   \end{bmatrix}.
+
+Here :math:`M_K^{-1}` is built from independent kinetic blocks of the same exact
+active operator and :math:`S` closes the retained source/constraint tail.
+Select it with
+``SFINCS_JAX_TRANSPORT_PRECOND=fp_direct_active_block_schur``. This path is
+test-covered and useful for residual-equation experiments, but it is **not** a
+production default. Setup admission now requires both a true residual below the
+configured gate and a material improvement over the identity preconditioner. On
+reduced geometry-scheme-11, both zeta-line and angular-plane symbolic layouts
+are rejected before Krylov with deterministic probe metrics
+``max_rel=2.05e3`` and ``min_improvement=8.14e-2``. The fallback dense rescue
+then solves the reduced fixture cleanly with relative residual ``4.1e-13``.
+This result is intentionally negative: simple local active blocks are too weak,
+so the next production architecture must retain more of the Fortran-style
+reduced preconditioner matrix and reuse symbolic sparse metadata, rather than
+factor independent local true-operator blocks.
+
+The stronger existing ``fp_xblock_tz_lu`` and ``fp_xblock_tz_lu_schur`` paths
+remain the current bounded RHSMode=2/3 FP candidates. On the reduced
+geometry-scheme-11 one-RHS gate they reached true residuals near ``1e-13`` in
+about ``2.1-2.3 s``. The production-floor ``25 x 51 x 100 x 6`` probe with
+``fp_xblock_tz_lu_schur`` completed setup but did not complete the first RHS
+within a 10-minute budget, so it also remains opt-in pending a stronger
+reusable block/coarse factor.
+
+Controls:
+
+- ``SFINCS_JAX_TRANSPORT_PRECOND=fp_tzfft_line`` (or aliases
+  ``fp_streaming_line``, ``fp_block_thomas``, ``fp_line``) forces the candidate.
+- ``SFINCS_JAX_TRANSPORT_FP_TZFFT_LINE_AUTO=1`` allows ``auto`` to try the
+  candidate for benchmark campaigns. It is disabled by default.
+- ``SFINCS_JAX_TRANSPORT_FP_TZFFT_LINE_AUTO_MIN`` controls the auto-size floor
+  when the candidate is explicitly enabled (default ``50000`` unknowns).
+- ``SFINCS_JAX_TRANSPORT_FP_TZFFT_LINE_MAX_MB`` caps the factor table memory
+  estimate (default ``2048`` MB).
+- ``SFINCS_JAX_TRANSPORT_FP_TZFFT_LINE_DTYPE`` can force ``float32`` or
+  ``float64`` factor storage.
+- The line factor is a left preconditioner. User-forced
+  ``SFINCS_JAX_TRANSPORT_PRECONDITION_SIDE=right`` is overridden to ``left`` for
+  this candidate so the JAX block-Thomas scan path is not used through an
+  unsupported transpose. Acceptance still uses the full operator residual.
+- ``SFINCS_JAX_TRANSPORT_FP_TZFFT_LINE_REG`` and
+  ``SFINCS_JAX_TRANSPORT_FP_TZFFT_LINE_PINV_RCOND`` control setup
+  regularization and pseudo-inverse fallback.
+- ``SFINCS_JAX_TRANSPORT_PRECOND=fp_fortran_reduced_lu`` forces the global
+  reduced sparse-factor transport preconditioner.  Aliases
+  ``fp_global_fortran_reduced_lu``, ``fp_petsc_like_lu``, and
+  ``fp_reduced_pmat_lu`` are accepted.
+- ``SFINCS_JAX_TRANSPORT_FP_FORTRAN_REDUCED_LU_AUTO`` controls ``auto``
+  selection for this candidate. It is enabled by default for eligible non-Phi1
+  RHSMode=2/3 FP transport cases; set it to ``0``, ``false``, ``no``, or ``off``
+  to disable. Explicitly forced FP candidates such as ``fp_tzfft_line`` still
+  override this default unless this variable is set to ``1`` explicitly.
+- ``SFINCS_JAX_TRANSPORT_FP_FORTRAN_REDUCED_LU_PRECONDITIONER_X``,
+  ``..._PRECONDITIONER_XI``, ``..._PRECONDITIONER_SPECIES``, and
+  ``..._PRECONDITIONER_X_MIN_L`` control the Fortran-style kinetic reduction.
+  The opt-in default uses ``X=0`` and ``XI=0`` for the stronger bounded gate;
+  set ``X=1`` and ``XI=1`` for the closest Fortran-structural ``Pmat``.
+- ``SFINCS_JAX_TRANSPORT_FP_FORTRAN_REDUCED_LU_KEEPS_THETA_ZETA`` defaults to
+  ``1``, matching Fortran v3 ``preconditioner_theta=0`` and
+  ``preconditioner_zeta=0``.  Setting it to ``0`` is a diagnostic angular-drop
+  mode and is not promoted.
+- ``SFINCS_JAX_TRANSPORT_FP_FORTRAN_REDUCED_LU_FACTOR``,
+  ``..._FACTOR_DTYPE``, ``..._FACTOR_MAX_MB``, and ``..._SHIFT`` control host
+  sparse factor kind, factor precision, factor memory guard, and diagonal shift.
+  Supported diagnostic factors are ``lu``, ``ilu``, ``jacobi``,
+  ``symbolic_block_lu``, ``symbolic_block_lu_coarse``, and
+  ``symbolic_block_schur_lu``.  The symbolic options are native lower-memory
+  block/coarse/Schur experiments and are not automatic defaults.
+- ``SFINCS_JAX_TRANSPORT_FP_FORTRAN_REDUCED_LU_SYMBOLIC_ORDERING`` controls the
+  reusable symbolic analysis ordering metadata. ``rcm`` is the default;
+  ``natural`` disables structural reordering in the analysis report.
+- ``SFINCS_JAX_TRANSPORT_FP_FORTRAN_REDUCED_LU_SYMBOLIC_BLOCK_SIZE`` controls
+  the bounded block plan recorded by the symbolic metadata and used by the
+  opt-in ``symbolic_block_lu`` numeric factor path.
+- ``SFINCS_JAX_TRANSPORT_FP_FORTRAN_REDUCED_LU_SYMBOLIC_BLOCK_OVERLAP``
+  extends each symbolic block by a fixed number of neighboring unknowns before
+  factorization and restricts the local solution back to the owned block. This
+  is an additive-Schwarz-style diagnostic for retaining boundary couplings.
+  The default is ``0``.
+- ``SFINCS_JAX_TRANSPORT_FP_FORTRAN_REDUCED_LU_SYMBOLIC_COARSE_MAX_COLS``,
+  ``..._SYMBOLIC_COARSE_PROBE_COLS``,
+  ``..._SYMBOLIC_COARSE_DAMPING``, and
+  ``..._SYMBOLIC_COARSE_REG_REL`` control the
+  ``symbolic_block_lu_coarse`` residual equation. The coarse basis contains
+  sparse block-indicator columns plus optional deterministic residual-derived
+  columns, then applies
+  ``z = M_0 r + omega B (B^T P B + lambda I)^{-1} B^T (r - P M_0 r)``.
+- ``SFINCS_JAX_TRANSPORT_FP_FORTRAN_REDUCED_LU_SYMBOLIC_PHYSICS_COARSE`` adds a
+  SFINCS-specific direct-Pmat coarse basis for this diagnostic factor.  The
+  basis includes source/constraint tail units, flux-surface-average source
+  shapes, per-speed L=0 constraint modes, low-order density/pressure/flow/heat
+  moments, and approximate tail-Schur response modes built from the actual
+  emitted direct ``Pmat`` columns and the local factor.  This is a guarded
+  experiment, not a default solver policy.
+- ``SFINCS_JAX_TRANSPORT_FP_FORTRAN_REDUCED_LU_SYMBOLIC_SCHUR_MAX_SEPARATOR_COLS``,
+  ``..._SYMBOLIC_SCHUR_BOUNDARY_WIDTH``,
+  ``..._SYMBOLIC_SCHUR_HIGH_DEGREE_COLS``, and
+  ``..._SYMBOLIC_SCHUR_REG_REL`` control the
+  ``symbolic_block_schur_lu`` candidate.  This candidate uses the reusable
+  symbolic ordering, selects source/constraint tail variables, high-degree graph
+  nodes, symbolic block boundaries, and actual cross-block nonzero endpoints as
+  separator candidates, eliminates local interior blocks, and solves the
+  retained separator Schur equation.  It is intended as a Python-native
+  analogue of sparse-direct analysis/factor/solve separation, but it still must
+  pass setup-time admission before Krylov can use it.
+- ``SFINCS_JAX_TRANSPORT_FP_FORTRAN_REDUCED_LU_SYMBOLIC_MAX_PERMUTATION_SIZE``
+  caps expensive structural permutations such as RCM. The default is
+  ``250000`` unknowns, so production-floor matrices report natural ordering
+  unless a benchmark campaign explicitly raises the cap.
+- ``SFINCS_JAX_TRANSPORT_FP_FORTRAN_REDUCED_LU_SYMBOLIC_ADMISSION`` defaults
+  to ``1`` for symbolic factors. It applies deterministic setup probes to the
+  actual emitted ``Pmat`` and rejects the factor unless
+  ``||P M^{-1} b - b|| / ||b||`` is small and improves over identity. The
+  thresholds are controlled by ``..._SYMBOLIC_ADMISSION_MAX_REL``,
+  ``..._SYMBOLIC_ADMISSION_MIN_IMPROVEMENT``, and
+  ``..._SYMBOLIC_ADMISSION_PROBES``.
+- ``SFINCS_JAX_TRANSPORT_FP_FORTRAN_REDUCED_LU_SYMBOLIC_ADMISSION_RESCUE_LU``
+  defaults to ``1``. If a symbolic factor fails setup admission, the same
+  emitted direct ``whichMatrix=0`` Pmat is factored with exact native host LU,
+  bounded by
+  ``SFINCS_JAX_TRANSPORT_FP_FORTRAN_REDUCED_LU_SYMBOLIC_ADMISSION_RESCUE_LU_MAX_MB``.
+  The rescue is accepted only if it passes the same deterministic true-residual
+  admission probes. This keeps the lane accurate instead of silently falling
+  back to a weak smoother. Exact ``lu`` is the promoted automatic factor kind for
+  this route because the current ``ilu`` and symbolic factors are not
+  residual-clean enough for public default use.
+- Current production evidence: ``symbolic_block_lu`` is guarded but not
+  production-ready. Reduced geometry-scheme-2 and geometry-scheme-11 gates
+  reject it by setup residual. Bounded overlap probes with overlap ``64`` and
+  ``256`` also reject by setup residual, so simple local overlap is not enough.
+  The residual-coarse variant with deterministic residual columns is also
+  rejected on reduced and production-floor geometry-scheme-2/11 gates. With a
+  relaxed 12 GB factor budget, production-floor geometry-scheme-11 reached
+  ``6.98 GB`` estimated factor storage but failed admission with
+  ``max_rel≈4.32e8``; geometry-scheme-2 reached ``9.80 GB`` estimated factor
+  storage and failed admission with ``max_rel≈4.07e8``. Keep both symbolic
+  paths opt-in until a physics/field-moment coarse variant passes strict
+  residual, runtime, and RSS gates.
+- A bounded physics-aware Schur-coarse retry on the reduced geometry-scheme-2
+  and geometry-scheme-11 FP decks built ``18`` and ``16`` SFINCS-specific
+  source/moment/tail-response columns, respectively, but still failed setup
+  admission before Krylov. Geometry-scheme-2 rejected with
+  ``max_rel=1.614e11`` and geometry-scheme-11 rejected with
+  ``max_rel=1.645e10``.  The exact direct-Pmat LU path was rechecked after the
+  same code change and remains residual-clean: geometry-scheme-2 all-RHS
+  ``max_rel=6.98e-11`` in ``4.10 s`` and geometry-scheme-11 all-RHS
+  ``max_rel=5.07e-13`` in ``4.32 s``.  Therefore this small coarse correction is
+  retained only as tested infrastructure; it is not a production replacement
+  for the Fortran/PETSc sparse factor.
+- A bounded native ``symbolic_block_schur_lu`` retry now uses actual graph
+  cross-block nonzeros to choose separator candidates.  It improved the reduced
+  setup residuals but remains non-promotable by itself: geometry-scheme-2 only
+  passed admission when the separator cap retained most of the active system
+  (``sep=2048``, ``max_rel=2.743e-5``, ``26.17 MB``), while
+  geometry-scheme-11 still failed all tested separator/block-size settings.
+  With the new admission rescue enabled, both reduced all-RHS gates are clean:
+  geometry-scheme-2 reaches relative residuals ``6.98e-11``, ``4.03e-11``, and
+  ``7.66e-13`` in ``3.26 s`` after exact-Pmat LU rescue
+  (``13.984 MB``), and geometry-scheme-11 reaches ``5.07e-13``,
+  ``4.00e-13``, and ``4.14e-13`` in ``3.21 s`` after exact-Pmat LU rescue
+  (``16.976 MB``).  This is the current residual-clean bounded path; a genuine
+  lower-memory production replacement still needs a stronger hierarchical
+  factor retaining dominant kinetic off-diagonal couplings directly.
+- ``SFINCS_JAX_TRANSPORT_PRECOND=fp_tzfft_line_schur`` (or
+  ``fp_line_schur``) forces the tail-Schur diagnostic candidate.
+- ``SFINCS_JAX_TRANSPORT_FP_TZFFT_LINE_SCHUR_AUTO=1`` allows ``auto`` to try
+  the Schur candidate in benchmark campaigns. It is disabled by default.
+- ``SFINCS_JAX_TRANSPORT_FP_TZFFT_LINE_SCHUR_MAX_COLS``, ``_MAX_MB``,
+  ``_DTYPE``, ``_REG``, ``_DAMPING``, and ``_CORRECTION_REL_MAX`` control the
+  compact Schur basis, storage cap, pseudoinverse cutoff, and finite-output
+  correction limiter.
+- ``SFINCS_JAX_TRANSPORT_FP_TZFFT_LINE_SCHUR_RESTRICTION`` can be ``tail``
+  (default), ``galerkin``, or ``tail_galerkin`` for diagnostic probes.
+- ``SFINCS_JAX_TRANSPORT_PRECOND=fp_local_geom_line`` (or ``fp_geom_line``)
+  forces the non-averaged local mirror-geometry diagnostic candidate.
+- ``SFINCS_JAX_TRANSPORT_FP_LOCAL_GEOM_LINE_AUTO=1`` allows ``auto`` to try
+  this candidate in benchmark campaigns. It is disabled by default.
+- ``SFINCS_JAX_TRANSPORT_FP_LOCAL_GEOM_LINE_MAX_MB``, ``_DTYPE``, ``_REG``, and
+  ``_PINV_RCOND`` control storage and setup.
+- ``SFINCS_JAX_TRANSPORT_PRECOND=fp_structured_fblock_lu`` (or
+  ``fp_fblock_lu``) forces the structured kinetic f-block factor diagnostic.
+- ``SFINCS_JAX_TRANSPORT_FP_STRUCTURED_FBLOCK_LU_AUTO=1`` allows ``auto`` to
+  try this candidate in benchmark campaigns. It is disabled by default.
+- ``SFINCS_JAX_TRANSPORT_FP_STRUCTURED_FBLOCK_LU_MAX_MB`` caps assembled CSR
+  storage, ``_FACTOR_MAX_MB`` caps post-factor storage, ``_REG`` controls
+  diagonal stabilization, and ``_FACTOR`` can be ``lu``, ``ilu``, or ``jacobi``
+  for diagnostics.
+- ``SFINCS_JAX_TRANSPORT_PRECOND=fp_xblock_tz_lu`` (or ``fp_xblock_lu`` /
+  ``fp_angular_xblock_lu``) forces the per-``(species,x)`` coupled
+  ``(L,theta,zeta)`` sparse factor.
+- ``SFINCS_JAX_TRANSPORT_FP_XBLOCK_TZ_LU_AUTO=1`` allows ``auto`` to try this
+  candidate in benchmark campaigns. It is disabled by default.
+- ``SFINCS_JAX_TRANSPORT_FP_XBLOCK_TZ_LU_MAX_MB`` caps local-block CSR storage,
+  ``_FACTOR_MAX_MB`` caps local-factor storage, ``_REG`` controls diagonal
+  stabilization, and ``_FACTOR`` can be ``lu``, ``ilu``, or ``jacobi``.
+- ``SFINCS_JAX_TRANSPORT_PRECOND=fp_xblock_tz_lu_schur`` (or
+  ``fp_xblock_schur`` / ``fp_xblock_lu_schur``) forces the source/tail Schur
+  overlay on top of ``fp_xblock_tz_lu``.
+- ``SFINCS_JAX_TRANSPORT_FP_XBLOCK_TZ_LU_SCHUR_AUTO=1`` allows ``auto`` to try
+  this Schur overlay in benchmark campaigns. It is disabled by default.
+- ``SFINCS_JAX_TRANSPORT_FP_XBLOCK_TZ_LU_SCHUR_MAX_COLS``, ``_MAX_MB``,
+  ``_DTYPE``, ``_REG``, ``_DAMPING``, ``_CORRECTION_REL_MAX``, and
+  ``_RESTRICTION`` control the compact residual equation. ``_RESTRICTION`` can
+  be ``tail``, ``galerkin``, or ``tail_galerkin``; ``tail_galerkin`` is the
+  default for this candidate. ``_KINETIC_RESIDUAL=1`` and ``_RHS_RESIDUAL=1``
+  enable the opt-in residual-coarse enrichment used in the bounded
+  non-promotion probe above.
+- ``SFINCS_JAX_TRANSPORT_PRECOND=fp_direct_active_block_schur`` forces the
+  experimental direct-active kinetic block plus tail-Schur
+  preconditioner. Aliases include ``fp_active_true_block`` and
+  ``fp_true_block_lu``.
+- ``SFINCS_JAX_TRANSPORT_FP_DIRECT_ACTIVE_BLOCK_SCHUR_MAX_MB`` caps the
+  estimated active-block inverse plus Schur storage (default ``2048`` MB).
+- ``SFINCS_JAX_TRANSPORT_FP_DIRECT_ACTIVE_BLOCK_SCHUR_BLOCK_KIND`` chooses the
+  symbolic kinetic layout. Supported diagnostic values are ``zeta_line``,
+  ``theta_line``, ``angular_plane``, and ``ell_band``.
+- ``SFINCS_JAX_TRANSPORT_FP_DIRECT_ACTIVE_BLOCK_SCHUR_ELL_BLOCK`` controls the
+  number of complete angular planes per ``ell_band`` block.
+- ``SFINCS_JAX_TRANSPORT_FP_DIRECT_ACTIVE_BLOCK_SCHUR_MAX_BLOCK`` caps each
+  dense symbolic block before factorization.
+- ``SFINCS_JAX_TRANSPORT_FP_DIRECT_ACTIVE_BLOCK_SCHUR_ADMISSION`` enables the
+  setup-time true-residual admission probe (default enabled).
+- ``SFINCS_JAX_TRANSPORT_FP_DIRECT_ACTIVE_BLOCK_SCHUR_ADMISSION_MAX_REL``,
+  ``..._ADMISSION_MIN_IMPROVEMENT``, and ``..._ADMISSION_PROBES`` control the
+  strict admission gate. A candidate must pass the true-residual gate and
+  improve materially over identity before it is used.
+- ``SFINCS_JAX_TRANSPORT_FP_DIRECT_ACTIVE_BLOCK_SCHUR_FACTOR_DTYPE`` selects
+  ``float64`` or ``float32`` block factors. ``float64`` is the default because
+  this path is currently an accuracy diagnostic.
+
 **JAX sparse Jacobi (optional).**
 
 ``SFINCS_JAX_TRANSPORT_PRECOND=sparse_jax`` builds a sparsified operator and applies
@@ -733,6 +1244,49 @@ Controls:
   materialization batch width;
 - ``SFINCS_JAX_TRANSPORT_SPARSE_HELPER_DENSE_MAX_MB`` and
   ``SFINCS_JAX_TRANSPORT_SPARSE_HELPER_CSR_MAX_MB`` control storage selection.
+- ``SFINCS_JAX_TRANSPORT_SPARSE_PATTERN`` controls the conservative
+  sparse-pattern materialization route. In ``auto`` mode, large RHSMode=3
+  monoenergetic PAS transport rows use a declared structural pattern instead of
+  probing a dense identity matrix.
+- ``SFINCS_JAX_TRANSPORT_SPARSE_PATTERN_CSR_MAX_MB`` and
+  ``SFINCS_JAX_TRANSPORT_SPARSE_PATTERN_COLOR_BATCH`` bound sparse-pattern CSR
+  storage and color-probe batching.
+- ``SFINCS_JAX_TRANSPORT_TZFFT_FIRST`` controls the bounded structured
+  ``tzfft`` first attempt. In ``auto`` mode this is enabled for explicit
+  RHSMode=2/3 mono/PAS transport rows on accelerators when the system size is
+  within the production cap.
+- ``SFINCS_JAX_TRANSPORT_TZFFT_FIRST_MIN`` /
+  ``SFINCS_JAX_TRANSPORT_TZFFT_FIRST_MAX`` bound that automatic structured
+  first attempt. The default maximum is ``160000`` active unknowns.
+- ``SFINCS_JAX_TRANSPORT_TZFFT_FIRST_RESTART`` /
+  ``SFINCS_JAX_TRANSPORT_TZFFT_FIRST_MAXITER`` bound the first Krylov probe
+  before sparse-pattern LU rescue is considered. Defaults are ``40`` and ``12``.
+- ``SFINCS_JAX_TRANSPORT_FP_DIRECT_ACTIVE_OPERATOR=0`` disables direct active
+  true-operator emission for FP transport sparse-direct paths.
+- ``SFINCS_JAX_TRANSPORT_FP_DIRECT_ACTIVE_OPERATOR_FACTOR={lu,ilu}`` overrides
+  the direct true-operator factor policy. The automatic policy uses exact LU
+  for small active systems and ILU for large diagnostics, but production
+  evidence so far keeps both global factors out of ``auto`` defaults.
+
+Measured production-floor evidence:
+
+- The ``monoenergetic_geometryScheme11`` row at
+  ``25 x 51 x 4 x 100`` previously failed on GPU by entering sparse direct
+  without a pattern and attempting a dense ``127501 x 127501`` materialization
+  (about ``121 GiB``), then falling back to matrix-free Krylov until timeout.
+- Sparse-pattern host LU fixed correctness first: the conservative pattern had
+  ``5.67M`` declared nonzeros; color probing built a true CSR with ``3.42M``
+  nonzeros in ``7.10 s`` and about ``41.5 MB`` operator storage. Exact LU gave
+  residuals ``1.8e-18`` and ``3.6e-15`` but took ``511.1 s`` wall and
+  ``25.96 GB`` process RSS, so it is retained as a rescue rather than a default
+  performance route.
+- The promoted default is now the bounded structured ``tzfft`` first attempt
+  with strict true-residual checking. On the same production row it reached
+  residuals ``5.3e-18`` and ``1.1e-13`` without invoking sparse LU, completed in
+  ``13.6 s`` wall and used ``1.08 GB`` process RSS /
+  ``0.52 GB`` incremental RSS. The matched Fortran v3/MUMPS reference took
+  ``188.5 s`` and ``3.26 GB`` RSS on the same host. If the structured solve
+  misses the true residual gate, the sparse-pattern LU rescue still runs.
 
 **Implementation.**
 
@@ -1453,16 +2007,29 @@ Controls:
 - ``SFINCS_JAX_RHSMODE1_TOKAMAK_PAS_NOER_SPARSE_PC`` (default: auto). On CPU/GPU,
   non-differentiable tokamak PAS no-Er RHSMode=1 runs in the measured
   production-floor window use the host sparse-PC GMRES route. This avoids the
-  matrix-free Krylov memory cliff for the audited two-species ``25 x 1 x 8 x
-  100`` row and the GPU runtime cliff for the one-species ``25 x 1 x 4 x 100``
-  row while preserving Fortran parity. The default route factors the active
+  matrix-free Krylov memory cliff for the historically audited two-species
+  ``25 x 1 x 8 x 100`` row and the lower-floor GPU runtime cliff for the
+  one-species ``25 x 1 x 4 x 100`` row while preserving Fortran parity. The
+  default route factors the active
   ``Nxi_for_x`` degrees of freedom rather than the padded full Legendre grid:
   the public two-species CPU row drops from about ``1.75 GB`` active RSS on the
   matrix-free path to about ``0.39 GB`` with sparse-PC GMRES, the two-species
   RTX A4000 row drops from about ``14.7 s`` to about ``5.2 s``, and the
   one-species ``Nx=4`` RTX A4000 row drops from about ``28.8 s`` to about
-  ``3.0 s``. Set this variable to ``0`` to force the older matrix-free path, or
-  to ``1`` to force the route while retaining the remaining guards.
+  ``3.0 s``. At the current raised public floor ``89 x 1 x 24 x 300``, local
+  CPU runs are strict-clean and faster than serial SFINCS Fortran v3:
+  ``tokamak_1species_PASCollisions_noEr`` takes ``10.38 s`` JAX CPU versus
+  ``17.44 s`` Fortran, and ``tokamak_1species_PASCollisions_noEr_Nx1`` takes
+  ``8.53 s`` JAX CPU versus ``17.54 s`` Fortran. The refreshed office GPU
+  shards select the same route automatically and are practical-parity clean:
+  ``tokamak_1species_PASCollisions_noEr`` takes ``19.47 s`` JAX GPU versus
+  ``15.92 s`` Fortran with ``4.19 GB`` JAX RSS, and
+  ``tokamak_1species_PASCollisions_noEr_Nx1`` takes ``19.22 s`` JAX GPU versus
+  ``13.86 s`` reused Fortran with ``4.14 GB`` JAX RSS. Strict GPU mode leaves
+  one per-``x`` flow diagnostic mismatch tied to Fortran residual/reference
+  sensitivity; integrated transport gates pass. Set this variable to ``0`` to
+  force the older matrix-free path, or to ``1`` to force the route while
+  retaining the remaining guards.
 - ``SFINCS_JAX_RHSMODE1_TOKAMAK_PAS_ER_SPARSE_PC`` (default: auto). On CPU/GPU,
   non-differentiable tokamak PAS+Er full-trajectory RHSMode=1 runs in the
   measured production-floor window use the host sparse-PC GMRES route. This
@@ -1480,8 +2047,16 @@ Controls:
   ``11.8 s`` logged / ``2.26 GB`` RSS to about ``9.7 s`` logged /
   ``1.59 GB`` active RSS on CPU. On the audited RTX A4000 row, the same active
   route is strict-clean and reduces the logged time from about ``25.0 s`` to
-  ``22.2 s`` with active RSS about ``2.12 GB``. All quoted rows have zero
-  practical and strict Fortran output mismatches. The one-species PAS+Er row
+  ``22.2 s`` with active RSS about ``2.12 GB``. At the current checked-in
+  tokamak floor ``33 x 1 x 12 x 140``, the refreshed office GPU shard is
+  strict-clean for both bounded PAS+Er rows:
+  ``tokamak_1species_PASCollisions_withEr_fullTrajectories`` takes ``19.24 s``
+  JAX GPU versus ``13.29 s`` Fortran with ``3.19 GB`` JAX RSS, and
+  ``tokamak_2species_PASCollisions_withEr_fullTrajectories`` takes ``33.97 s``
+  JAX GPU versus ``18.27 s`` Fortran with ``5.41 GB`` JAX RSS. The same
+  checked-in floor remains strict-clean on local CPU from the bounded CPU shard.
+  All quoted promoted rows have zero practical and strict Fortran output
+  mismatches. The one-species PAS+Er row
   additionally caps the default sparse-PC GMRES restart at ``40`` unless the
   user explicitly sets ``SFINCS_JAX_RHSMODE1_SPARSE_PC_GMRES_RESTART``; bounded
   CPU and RTX A4000 sweeps preserved output parity while slightly reducing
@@ -1517,6 +2092,44 @@ Controls:
   ``*_MIN``, ``*_MAX``, and ``*_MIN_NXI`` environment variables can widen or
   disable the gate for controlled profiling, but larger promotion requires fresh
   CPU/GPU seed-ladder evidence.
+- ``SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_PC_AUTO`` (default: enabled). For large
+  non-differentiable RHSMode=1 full-FP, no-``Phi1``, ``constraintScheme=1``
+  solves, public ``auto`` can choose ``fortran_reduced_pc_gmres``. This route
+  assembles a simplified global sparse preconditioner operator, analogous to
+  the SFINCS Fortran v3 preconditioner matrix, while accepting the solve only
+  against the full SFINCS-JAX true residual. On the bounded Zenodo QA/QH
+  ``s=0.5`` ``13 x 13 x 21 x 5`` gates, this reduced QA auto runtime from the
+  previous slow structured path (about ``169 s``) to ``3.82 s`` with residual
+  ``3.37e-13`` below target, and QH completed in ``4.21 s`` with residual
+  ``6.31e-13`` below target. Disable with ``0``/``false`` only when
+  reproducing older policy-ladder behavior.
+- For full-grid finite-beta QA/QH ``25 x 39 x 60 x 7`` RHSMode=1 diagnostics,
+  the robust non-autodiff reference route is the Fortran-reduced direct-tail
+  active LU preconditioner. This Fortran-reduced direct-tail active LU
+  preconditioner remains the high-memory fallback. The default ``auto`` route now reaches this
+  direct-tail ladder with no manual ``PC_BACKEND=global`` or
+  ``DIRECT_TAIL_PC_MAX_MB`` overrides. The checked QA/QH active size remains
+  ``507004`` unknowns, and ``auto`` assigns the same adaptive
+  ``14708.1 MiB`` cap used by the active-LU reference route: it first tries
+  ``active_fortran_v3_reduced_native_stack`` as the lower-memory production
+  candidate, requires a true-residual preflight for that candidate, and falls
+  back to ``active_fortran_v3_reduced_lu`` when the preflight fails. The checked
+  QA full-grid auto audit selected native stack in ``9.17 s`` with
+  ``5,090,357,984`` estimated factor bytes, rejected it because the one-apply
+  residual worsened, accepted active LU as the no-required-preflight fallback,
+  and converged to residual ``9.002525e-13`` in ``343.5 s`` wall with ``46``
+  GMRES iterations. Earlier checked QA/QH active-LU reference audits converged
+  to ``9.950981e-13`` and ``8.712742e-14`` residual with a
+  ``13,303,259,384`` byte active matrix. A stricter guarded rerun with
+  ``tol=1e-10`` converged to residual ``7.269598e-16`` in ``354.6 s`` wall
+  with ``67`` GMRES iterations and ``74`` matvecs. Native true-coupled rescue is
+  intentionally opt-in through
+  ``SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_COUPLED_AUTO_NATIVE``
+  because the checked full-grid native/coarse probes lower the bad one-apply
+  residual but still stall near the RHS norm under long Krylov runs. This route
+  is robust and parity-facing; the open performance lane is making the
+  lower-memory native block/coarse replacement pass the same true-residual gate
+  so active LU is no longer needed at full grid.
 - ``SFINCS_JAX_RHSMODE1_XBLOCK_SPARSE_LU_MAX`` (default: ``30000`` for
   non-differentiable full-FP host x-block factors; ``2000`` otherwise). Medium
   full-FP :math:`(x,\theta,\zeta,L)` blocks now use exact SuperLU instead of ILU

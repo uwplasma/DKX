@@ -29,8 +29,9 @@ def resolve_existing_path(
       2) Relative to `base_dir` (if provided).
       3) Relative to `Path.cwd()`.
       4) Directories listed in `env_search_var` (OS pathsep-separated). For each directory `d`,
-         we try both `d / p` and `d / p.name`.
-      5) Any `extra_search_dirs` (same `d / p` and `d / p.name` logic).
+         relative paths try both `d / p` and `d / p.name`; missing absolute paths try
+         `d / p.name` so copied decks with stale machine-local prefixes can be redirected.
+      5) Any `extra_search_dirs` (same basename fallback for missing absolute paths).
 
     Returns the resolved path and a record of all attempted candidate paths.
     """
@@ -68,21 +69,19 @@ def resolve_existing_path(
             if not d:
                 continue
             root = Path(_strip_quotes(d)).expanduser()
-            if p.is_absolute():
-                continue
-            found = _try((root / p).resolve())
-            if found is not None:
-                return ResolveResult(path=found, tried=tuple(tried))
+            if not p.is_absolute():
+                found = _try((root / p).resolve())
+                if found is not None:
+                    return ResolveResult(path=found, tried=tuple(tried))
             found = _try((root / p.name).resolve())
             if found is not None:
                 return ResolveResult(path=found, tried=tuple(tried))
 
     for root in extra_search_dirs:
-        if p.is_absolute():
-            continue
-        found = _try((root / p).resolve())
-        if found is not None:
-            return ResolveResult(path=found, tried=tuple(tried))
+        if not p.is_absolute():
+            found = _try((root / p).resolve())
+            if found is not None:
+                return ResolveResult(path=found, tried=tuple(tried))
         found = _try((root / p.name).resolve())
         if found is not None:
             return ResolveResult(path=found, tried=tuple(tried))

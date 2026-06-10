@@ -122,6 +122,77 @@ def transport_tzfft_accelerator_auto_allowed(op: Any, *, backend: str) -> bool:
     return total_size <= max(1, int(max_size))
 
 
+def transport_tzfft_structured_first_attempt_allowed(
+    op: Any,
+    *,
+    size: int,
+    use_implicit: bool,
+    backend: str,
+) -> bool:
+    """Return whether a bounded structured ``tzfft`` Krylov probe should run first.
+
+    This is the production-size counterpart to
+    :func:`transport_tzfft_accelerator_auto_allowed`. It intentionally stays
+    narrower: automatic promotion is only for explicit RHSMode=2/3 mono/PAS
+    transport rows where an exact sparse-pattern LU rescue is still available
+    if the true residual gate is not met.
+    """
+    env = _env_flag("SFINCS_JAX_TRANSPORT_TZFFT_FIRST")
+    if env is False:
+        return False
+    backend_norm = str(backend).strip().lower()
+    force = bool(env)
+    if (not force) and backend_norm not in {"gpu", "cuda"}:
+        return False
+    if bool(use_implicit) and not force:
+        return False
+    if bool(getattr(op, "include_phi1", False)):
+        return False
+    if int(getattr(op, "rhs_mode", 0) or 0) not in {2, 3}:
+        return False
+    if getattr(getattr(op, "fblock", None), "fp", None) is not None:
+        return False
+    if int(getattr(op, "n_x", 0) or 0) > 2:
+        return False
+    n_theta = int(getattr(op, "n_theta", 0) or 0)
+    n_zeta = int(getattr(op, "n_zeta", 0) or 0)
+    if n_theta <= 0 or n_zeta <= 0 or n_theta * n_zeta < 64:
+        return False
+    max_env = os.environ.get("SFINCS_JAX_TRANSPORT_TZFFT_FIRST_MAX", "").strip()
+    min_env = os.environ.get("SFINCS_JAX_TRANSPORT_TZFFT_FIRST_MIN", "").strip()
+    try:
+        max_size = int(max_env) if max_env else 160000
+    except ValueError:
+        max_size = 160000
+    try:
+        min_size = int(min_env) if min_env else 5000
+    except ValueError:
+        min_size = 5000
+    size_int = int(size)
+    return max(1, int(min_size)) <= size_int <= max(1, int(max_size))
+
+
+def transport_tzfft_first_attempt_budget(
+    *,
+    restart: int,
+    maxiter: int | None,
+) -> tuple[str, int, int]:
+    """Resolve the bounded first-pass structured Krylov budget."""
+    method_env = os.environ.get("SFINCS_JAX_TRANSPORT_TZFFT_FIRST_METHOD", "").strip().lower()
+    method = "incremental" if method_env in {"", "incremental", "gmres"} else "incremental"
+    restart_env = os.environ.get("SFINCS_JAX_TRANSPORT_TZFFT_FIRST_RESTART", "").strip()
+    maxiter_env = os.environ.get("SFINCS_JAX_TRANSPORT_TZFFT_FIRST_MAXITER", "").strip()
+    try:
+        restart_use = int(restart_env) if restart_env else min(max(5, int(restart)), 40)
+    except ValueError:
+        restart_use = min(max(5, int(restart)), 40)
+    try:
+        maxiter_use = int(maxiter_env) if maxiter_env else min(max(1, int(maxiter or 12)), 12)
+    except ValueError:
+        maxiter_use = min(max(1, int(maxiter or 12)), 12)
+    return method, max(5, int(restart_use)), max(1, int(maxiter_use))
+
+
 def transport_sparse_direct_rescue_allowed(
     *,
     op: Any,
@@ -138,17 +209,21 @@ def transport_sparse_direct_rescue_allowed(
         return False
     if int(op.rhs_mode) not in {2, 3} or bool(op.include_phi1):
         return False
-    mono_pas_cpu_priority = (
-        str(backend).strip().lower() == "cpu"
-        and int(op.rhs_mode) == 3
+    backend_norm = str(backend).strip().lower()
+    mono_pas_priority = (
+        int(op.rhs_mode) == 3
         and getattr(op.fblock, "fp", None) is None
         and int(getattr(op, "n_x", 0) or 0) <= 2
     )
+    mono_pas_cpu_priority = backend_norm == "cpu" and mono_pas_priority
+    mono_pas_accelerator_priority = backend_norm in {"gpu", "cuda"} and mono_pas_priority
     rescue_max_env = os.environ.get("SFINCS_JAX_TRANSPORT_SPARSE_DIRECT_MAX", "").strip()
     rescue_ratio_env = os.environ.get("SFINCS_JAX_TRANSPORT_SPARSE_DIRECT_RATIO", "").strip()
     try:
         if rescue_max_env:
             rescue_max = int(rescue_max_env)
+        elif mono_pas_accelerator_priority:
+            rescue_max = 160000
         elif mono_pas_cpu_priority:
             rescue_max = 80000
         else:
@@ -226,6 +301,13 @@ def transport_sparse_direct_first_attempt_allowed(
                 return True
         return True
     if backend_norm != "cpu":
+        if transport_tzfft_structured_first_attempt_allowed(
+            op,
+            size=size_int,
+            use_implicit=use_implicit,
+            backend=backend_norm,
+        ):
+            return False
         if transport_tzfft_accelerator_auto_allowed(op, backend=backend_norm):
             return False
         return transport_sparse_direct_rescue_allowed(
@@ -247,7 +329,8 @@ def transport_host_gmres_first_attempt_allowed(
     backend: str,
 ) -> bool:
     """Return whether CPU host-GMRES should be attempted before device GMRES."""
-    if _env_flag("SFINCS_JAX_TRANSPORT_HOST_GMRES_FIRST") is False:
+    env_flag = _env_flag("SFINCS_JAX_TRANSPORT_HOST_GMRES_FIRST")
+    if env_flag is False:
         return False
     if bool(use_implicit):
         return False
@@ -255,17 +338,31 @@ def transport_host_gmres_first_attempt_allowed(
         return False
     if int(op.rhs_mode) not in {2, 3} or bool(op.include_phi1):
         return False
+    force = bool(env_flag)
+    if int(op.rhs_mode) == 3:
+        max_env = os.environ.get("SFINCS_JAX_TRANSPORT_HOST_GMRES_FIRST_MAX", "").strip()
+        try:
+            max_size = int(max_env) if max_env else (int(size) if force else 80000)
+        except ValueError:
+            max_size = int(size) if force else 80000
+        if force:
+            return int(size) <= max(1, int(max_size))
+        if getattr(op.fblock, "fp", None) is not None:
+            return False
+        if int(getattr(op, "n_x", 0) or 0) > 2:
+            return False
+        return int(size) <= max(1, int(max_size))
+    if force:
+        max_env = os.environ.get("SFINCS_JAX_TRANSPORT_HOST_GMRES_FIRST_MAX", "").strip()
+        try:
+            max_size = int(max_env) if max_env else int(size)
+        except ValueError:
+            max_size = int(size)
+        return int(size) <= max(1, int(max_size))
     if getattr(op.fblock, "fp", None) is not None:
         return False
     if int(getattr(op, "n_x", 0) or 0) > 2:
         return False
-    if int(op.rhs_mode) == 3:
-        max_env = os.environ.get("SFINCS_JAX_TRANSPORT_HOST_GMRES_FIRST_MAX", "").strip()
-        try:
-            max_size = int(max_env) if max_env else 80000
-        except ValueError:
-            max_size = 80000
-        return int(size) <= max(1, int(max_size))
     if transport_sparse_direct_first_attempt_allowed(
         op=op,
         size=size,

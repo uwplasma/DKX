@@ -46,6 +46,14 @@ class RHS1PreconditionerDispatchBuilders:
     zeta_schwarz_builder: Builder
     schur_builder: Builder
     collision_builder: Builder
+    structured_fblock_jacobi_builder: Builder
+    structured_fblock_angular_jacobi_builder: Builder
+    structured_fblock_xi_angular_jacobi_builder: Builder
+    structured_fblock_fp_radial_jacobi_builder: Builder
+    structured_fblock_fp_lowmode_schur_builder: Builder
+    structured_fblock_fp_moment_schur_builder: Builder
+    structured_fblock_fp_coupled_moment_schur_builder: Builder
+    structured_fblock_fp_tail_coupled_schur_builder: Builder
     block_builder: Builder
     compose_preconditioners: Callable[[Preconditioner, Preconditioner], Preconditioner]
 
@@ -217,6 +225,38 @@ def build_rhs1_preconditioner_from_kind(
         )
     if rhs1_precond_kind == "collision":
         return builders.collision_builder(
+            op=op, reduce_full=reduce_full, expand_reduced=expand_reduced
+        )
+    if rhs1_precond_kind == "structured_fblock_jacobi":
+        return builders.structured_fblock_jacobi_builder(
+            op=op, reduce_full=reduce_full, expand_reduced=expand_reduced
+        )
+    if rhs1_precond_kind == "structured_fblock_angular_jacobi":
+        return builders.structured_fblock_angular_jacobi_builder(
+            op=op, reduce_full=reduce_full, expand_reduced=expand_reduced
+        )
+    if rhs1_precond_kind == "structured_fblock_xi_angular_jacobi":
+        return builders.structured_fblock_xi_angular_jacobi_builder(
+            op=op, reduce_full=reduce_full, expand_reduced=expand_reduced
+        )
+    if rhs1_precond_kind == "structured_fblock_fp_radial_jacobi":
+        return builders.structured_fblock_fp_radial_jacobi_builder(
+            op=op, reduce_full=reduce_full, expand_reduced=expand_reduced
+        )
+    if rhs1_precond_kind == "structured_fblock_fp_lowmode_schur":
+        return builders.structured_fblock_fp_lowmode_schur_builder(
+            op=op, reduce_full=reduce_full, expand_reduced=expand_reduced
+        )
+    if rhs1_precond_kind == "structured_fblock_fp_moment_schur":
+        return builders.structured_fblock_fp_moment_schur_builder(
+            op=op, reduce_full=reduce_full, expand_reduced=expand_reduced
+        )
+    if rhs1_precond_kind == "structured_fblock_fp_coupled_moment_schur":
+        return builders.structured_fblock_fp_coupled_moment_schur_builder(
+            op=op, reduce_full=reduce_full, expand_reduced=expand_reduced
+        )
+    if rhs1_precond_kind == "structured_fblock_fp_tail_coupled_schur":
+        return builders.structured_fblock_fp_tail_coupled_schur_builder(
             op=op, reduce_full=reduce_full, expand_reduced=expand_reduced
         )
     if rhs1_precond_kind == "adi":

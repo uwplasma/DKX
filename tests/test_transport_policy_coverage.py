@@ -272,6 +272,21 @@ def test_transport_sparse_direct_and_host_gmres_first_attempts(
         use_implicit=False,
         backend="cpu",
     )
+    monkeypatch.setenv("SFINCS_JAX_TRANSPORT_HOST_GMRES_FIRST", "1")
+    monkeypatch.delenv("SFINCS_JAX_TRANSPORT_HOST_GMRES_FIRST_MAX", raising=False)
+    assert transport_host_gmres_first_attempt_allowed(
+        op=_op(rhs_mode=2, has_fp=True, n_x=4, total_size=500_000),
+        size=500_000,
+        use_implicit=False,
+        backend="cpu",
+    )
+    monkeypatch.setenv("SFINCS_JAX_TRANSPORT_HOST_GMRES_FIRST_MAX", "499999")
+    assert not transport_host_gmres_first_attempt_allowed(
+        op=_op(rhs_mode=2, has_fp=True, n_x=4, total_size=500_000),
+        size=500_000,
+        use_implicit=False,
+        backend="cpu",
+    )
 
 
 def test_transport_sparse_and_host_gmres_reject_ineligible_shapes(

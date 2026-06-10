@@ -66,7 +66,7 @@ def test_dry_run_writes_bounded_candidate_summary(tmp_path: Path, capsys) -> Non
     assert "fp_tzfft" in capsys.readouterr().out
 
 
-def test_reduced_forced_sparse_helper_reuses_factor(tmp_path: Path, monkeypatch) -> None:
+def test_reduced_auto_uses_fortran_reduced_lu(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setenv("SFINCS_JAX_TRANSPORT_SPARSE_HELPER", "1")
     summary = tmp_path / "summary.json"
 
@@ -97,4 +97,5 @@ def test_reduced_forced_sparse_helper_reuses_factor(tmp_path: Path, monkeypatch)
     result = payload["results"][0]
     assert result["status"] == "ok"
     assert max(float(value) for value in result["relative_residuals_by_rhs"].values()) < 1.0e-10
-    assert any("reusing explicit sparse helper" in message for message in result["last_messages"])
+    assert any("direct reduced Pmat selected" in message for message in result["last_messages"])
+    assert any("preconditioner=fp_fortran_reduced_lu" in message for message in result["last_messages"])

@@ -15,13 +15,26 @@ from sfincs_jax.v3 import geometry_from_namelist, grids_from_namelist
 from sfincs_jax.v3_system import full_system_operator_from_namelist
 
 
+RHS_MODE3_MONOENERGETIC_BASES = (
+    "monoenergetic_PAS_tiny_scheme1",
+    "monoenergetic_PAS_tiny_scheme11",
+    "monoenergetic_PAS_tiny_scheme5_filtered",
+)
+
+
+def _scalar_h5(out: dict[str, object], key: str) -> float:
+    return float(np.asarray(out[key], dtype=np.float64).reshape(-1)[0])
+
+
+def _l12_l21_reciprocity_tolerance(base: str) -> float:
+    # The filtered VMEC fixture is intentionally low resolution and has a looser
+    # DKES-style reciprocity error than the direct geometry fixtures.
+    return 8e-2 if base.endswith("scheme5_filtered") else 3e-3
+
+
 @pytest.mark.parametrize(
     "base",
-    (
-        "monoenergetic_PAS_tiny_scheme1",
-        "monoenergetic_PAS_tiny_scheme11",
-        "monoenergetic_PAS_tiny_scheme5_filtered",
-    ),
+    RHS_MODE3_MONOENERGETIC_BASES,
 )
 def test_transport_matrix_rhsmode3_matches_fortran_output(base: str) -> None:
     here = Path(__file__).parent
@@ -99,3 +112,50 @@ def test_transport_matrix_rhsmode3_matches_fortran_output(base: str) -> None:
     np.testing.assert_allclose(hf * ddpsiN2ddpsiHat, np.asarray(out["heatFlux_vm_psiN"]), rtol=0, atol=5e-10)
     np.testing.assert_allclose(hf * ddrHat2ddpsiHat, np.asarray(out["heatFlux_vm_rHat"]), rtol=0, atol=5e-10)
     np.testing.assert_allclose(hf * ddrN2ddpsiHat, np.asarray(out["heatFlux_vm_rN"]), rtol=0, atol=5e-10)
+
+
+@pytest.mark.parametrize("base", RHS_MODE3_MONOENERGETIC_BASES)
+def test_rhsmode3_monoenergetic_fixture_normalization_and_reciprocity(base: str) -> None:
+    """Guard the v3 monoenergetic/DKES normalization contract without solving."""
+
+    out_path = Path(__file__).parent / "ref" / f"{base}.sfincsOutput.h5"
+    out = read_sfincs_h5(out_path)
+
+    if "Nx" in out:
+        assert int(np.asarray(out["Nx"]).reshape(-1)[0]) == 1
+    if "x" in out:
+        np.testing.assert_allclose(np.asarray(out["x"], dtype=np.float64), np.asarray([1.0]), rtol=0, atol=0)
+    if "Nxi_for_x_option" in out:
+        assert int(np.asarray(out["Nxi_for_x_option"]).reshape(-1)[0]) == 0
+
+    nu_fields = ("nuPrime", "B0OverBBar", "GHat", "IHat", "iota", "nu_n")
+    if all(key in out for key in nu_fields):
+        denom = _scalar_h5(out, "GHat") + _scalar_h5(out, "iota") * _scalar_h5(out, "IHat")
+        assert np.isfinite(denom)
+        assert abs(denom) > 1e-30
+        expected_nu_n = _scalar_h5(out, "nuPrime") * _scalar_h5(out, "B0OverBBar") / denom
+        np.testing.assert_allclose(_scalar_h5(out, "nu_n"), expected_nu_n, rtol=2e-14, atol=1e-14)
+
+    estar_fields = ("alpha", "Delta", "EStar", "iota", "B0OverBBar", "GHat", "dPhiHatdpsiHat")
+    if all(key in out for key in estar_fields):
+        g_hat = _scalar_h5(out, "GHat")
+        assert np.isfinite(g_hat)
+        assert abs(g_hat) > 1e-30
+        expected_dphi = (
+            2.0
+            / (_scalar_h5(out, "alpha") * _scalar_h5(out, "Delta"))
+            * _scalar_h5(out, "EStar")
+            * _scalar_h5(out, "iota")
+            * _scalar_h5(out, "B0OverBBar")
+            / g_hat
+        )
+        np.testing.assert_allclose(_scalar_h5(out, "dPhiHatdpsiHat"), expected_dphi, rtol=2e-14, atol=1e-13)
+
+    # Fortran HDF5 storage is column-major; transpose to mathematical row/column order before
+    # checking DKES/monoenergetic Onsager reciprocity between L12 and L21.
+    tm_math = np.asarray(out["transportMatrix"], dtype=np.float64).T
+    assert tm_math.shape == (2, 2)
+    l12 = float(tm_math[0, 1])
+    l21 = float(tm_math[1, 0])
+    rel_asymmetry = abs(l12 - l21) / max(abs(l12), abs(l21), np.finfo(np.float64).tiny)
+    assert rel_asymmetry <= _l12_l21_reciprocity_tolerance(base)

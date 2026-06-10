@@ -20,16 +20,19 @@ Value = Union[Scalar, List[Scalar]]
 
 
 def _strip_fortran_comments(line: str) -> str:
-    """Remove '!' comments, respecting single-quoted strings."""
+    """Remove '!' comments, respecting quoted strings."""
     out: List[str] = []
-    in_quote = False
+    quote_char: str | None = None
     i = 0
     while i < len(line):
         ch = line[i]
-        if ch == "'":
-            in_quote = not in_quote
+        if ch in {"'", '"'}:
+            if quote_char is None:
+                quote_char = ch
+            elif quote_char == ch:
+                quote_char = None
             out.append(ch)
-        elif ch == "!" and not in_quote:
+        elif ch == "!" and quote_char is None:
             break
         else:
             out.append(ch)
@@ -46,15 +49,18 @@ def _tokenize_value_chunk(chunk: str) -> List[str]:
     """Tokenize a value chunk into tokens, keeping quoted strings intact."""
     tokens: List[str] = []
     buf: List[str] = []
-    in_quote = False
+    quote_char: str | None = None
     chunk = chunk.strip()
     i = 0
     while i < len(chunk):
         ch = chunk[i]
-        if ch == "'":
-            in_quote = not in_quote
+        if ch in {"'", '"'}:
+            if quote_char is None:
+                quote_char = ch
+            elif quote_char == ch:
+                quote_char = None
             buf.append(ch)
-        elif not in_quote and ch in [",", "\n", "\t", " ", "\r"]:
+        elif quote_char is None and ch in [",", "\n", "\t", " ", "\r"]:
             if buf:
                 tok = "".join(buf).strip()
                 if tok:
@@ -77,7 +83,7 @@ _BOOL_FALSE = {"F", ".F.", ".FALSE.", "FALSE"}
 def _parse_scalar(tok: str) -> Scalar:
     tok = tok.strip()
     # strings
-    if len(tok) >= 2 and tok[0] == "'" and tok[-1] == "'":
+    if len(tok) >= 2 and tok[0] == tok[-1] and tok[0] in {"'", '"'}:
         return tok[1:-1]
     up = tok.upper()
     if up in _BOOL_TRUE:

@@ -186,27 +186,28 @@ def compare_sfincs_outputs(
     if geom_a in {1, 2, 4} and geom_b in {1, 2, 4}:
         # In v3 analytic geometry branches (schemes 1/2/4), `gpsiHatpsiHat` is not
         # consistently populated across Fortran builds. Some binaries leave this field
-        # as zeros while others emit nonzero values; downstream classical-flux diagnostics
-        # then differ only through this undefined quantity. Use conservative absolute
-        # floors so parity is not dominated by build-dependent undefined data.
+        # as zeros while others emit nonzero values. The classical flux diagnostics are
+        # computed directly from this field in `classicalTransport.F90`, so they inherit
+        # the same build-dependent reference state. Do not use these undefined analytic
+        # geometry fields as parity gates; keep true kinetic flux/current outputs gated.
         analytic_geom_tol = {
-            "gpsiHatpsiHat": {"atol": 1e1},
-            "classicalParticleFluxNoPhi1_psiHat": {"atol": 1e-6},
-            "classicalParticleFluxNoPhi1_psiN": {"atol": 1e-6},
-            "classicalParticleFluxNoPhi1_rHat": {"atol": 1e-6},
-            "classicalParticleFluxNoPhi1_rN": {"atol": 1e-6},
-            "classicalHeatFluxNoPhi1_psiHat": {"atol": 1e-6},
-            "classicalHeatFluxNoPhi1_psiN": {"atol": 1e-6},
-            "classicalHeatFluxNoPhi1_rHat": {"atol": 1e-6},
-            "classicalHeatFluxNoPhi1_rN": {"atol": 1e-6},
-            "classicalParticleFlux_psiHat": {"atol": 1e-6},
-            "classicalParticleFlux_psiN": {"atol": 1e-6},
-            "classicalParticleFlux_rHat": {"atol": 1e-6},
-            "classicalParticleFlux_rN": {"atol": 1e-6},
-            "classicalHeatFlux_psiHat": {"atol": 1e-6},
-            "classicalHeatFlux_psiN": {"atol": 1e-6},
-            "classicalHeatFlux_rHat": {"atol": 1e-6},
-            "classicalHeatFlux_rN": {"atol": 1e-6},
+            "gpsiHatpsiHat": {"ignore": True},
+            "classicalParticleFluxNoPhi1_psiHat": {"ignore": True},
+            "classicalParticleFluxNoPhi1_psiN": {"ignore": True},
+            "classicalParticleFluxNoPhi1_rHat": {"ignore": True},
+            "classicalParticleFluxNoPhi1_rN": {"ignore": True},
+            "classicalHeatFluxNoPhi1_psiHat": {"ignore": True},
+            "classicalHeatFluxNoPhi1_psiN": {"ignore": True},
+            "classicalHeatFluxNoPhi1_rHat": {"ignore": True},
+            "classicalHeatFluxNoPhi1_rN": {"ignore": True},
+            "classicalParticleFlux_psiHat": {"ignore": True},
+            "classicalParticleFlux_psiN": {"ignore": True},
+            "classicalParticleFlux_rHat": {"ignore": True},
+            "classicalParticleFlux_rN": {"ignore": True},
+            "classicalHeatFlux_psiHat": {"ignore": True},
+            "classicalHeatFlux_psiN": {"ignore": True},
+            "classicalHeatFlux_rHat": {"ignore": True},
+            "classicalHeatFlux_rN": {"ignore": True},
             "NTV": {"atol": 1e-6},
             "NTVBeforeSurfaceIntegral": {"atol": 1e-6},
         }
@@ -310,6 +311,12 @@ def compare_sfincs_outputs(
             # tight parity elsewhere. Allow a slightly higher absolute floor.
             local_tolerances["flow"] = {"atol": 5e-6}
             local_tolerances["MachUsingFSAThermalSpeed"] = {"atol": 5e-6}
+    if rhs_mode_a == 1 and rhs_mode_b == 1 and constraint_a == 2 and constraint_b == 2:
+        # PAS RHSMode=1 runs constrain per-x moments. Local current-density samples can
+        # cross zero, so CPU/GPU reduction order produces O(1e-8) absolute differences
+        # even when flux-surface-averaged flow/current gates agree. Keep this floor far
+        # below the integrated transport tolerances.
+        _merge_tolerance_floor(local_tolerances, "jHat", {"atol": 1.0e-7})
     if rhs_mode_a == 1 and rhs_mode_b == 1 and constraint_a == 1 and constraint_b == 1:
         use_dkes_a = _as_int(a.get("useDKESExBDrift"))
         use_dkes_b = _as_int(b.get("useDKESExBDrift"))

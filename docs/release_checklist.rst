@@ -236,8 +236,9 @@ full-suite solves:
 The manual GitHub workflow ``Production Benchmark Inputs`` should also pass
 before a release. It validates that the generated SFINCS_JAX-owned benchmark
 manifest still has 39 cases, uses the documented ``25 x 51 x 4 x 100`` 3D floor
-and ``25 x 1 x 4 x 100`` tokamak floor, and does not include downstream project
-decks.
+and ``33 x 1 x 12 x 140`` tokamak floor, applies the calibrated
+``89 x 1 x 24 x 300`` RHSMode=1 PAS/no-``E_r`` tokamak floor, and does not
+include downstream project decks.
 
 Packaging sanity check
 ----------------------

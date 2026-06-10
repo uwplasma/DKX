@@ -79,10 +79,72 @@ point the script at an unscaled wout with `Aminor_p = 0`, use `--skip-sfincs`
 for Redl-only plotting or provide a physically scaled wout before running the
 kinetic comparison.
 
+The QS-paper comparison script uses the arXiv:2205.02914 Zenodo benchmark decks
+to compare a whole-radius `sfincs_jax` RHSMode=1 scan with the Redl bootstrap
+formula. For a user-facing QA or QH `sfincs_jax` versus Redl plot that does not
+load or require SFINCS Fortran v3 outputs, use `--jax-vs-redl`:
+
+```bash
+python examples/vmec_jax_finite_beta/compare_qs_paper_sfincs_jax_redl.py \
+  --case QA \
+  --quick \
+  --jax-vs-redl \
+  --solve-method auto \
+  --stem qs_paper_qa_jax_redl_quick
+
+python examples/vmec_jax_finite_beta/compare_qs_paper_sfincs_jax_redl.py \
+  --case QH \
+  --quick \
+  --jax-vs-redl \
+  --solve-method auto \
+  --stem qs_paper_qh_jax_redl_quick
+```
+
+This mode still needs the Zenodo input decks and VMEC `wout` file, plus
+`vmec_jax` for the Redl algebra, but it does not need a SFINCS Fortran v3
+executable or archived `psiN_*/sfincsOutput.h5` files.
+
+If the archived SFINCS Fortran v3 `sfincsOutput.h5` files are present in the
+Zenodo tree, they can be overlaid as a reference curve without installing or
+running the Fortran executable. For this benchmark script, `auto` is run in the
+runtime/non-autodiff lane (`SFINCS_JAX_IMPLICIT_SOLVE=0`) with the direct-tail
+field-split Schur preconditioner and a bounded `2048 MB` preconditioner cap
+unless those environment variables are already set:
+
+```bash
+python examples/vmec_jax_finite_beta/compare_qs_paper_sfincs_jax_redl.py \
+  --case QA \
+  --s-values 0.1,0.15,0.25,0.3,0.45,0.5,0.6,0.7,0.75,0.85,0.9 \
+  --ntheta 13 --nzeta 13 --nxi 21 --nx 5 \
+  --with-errorbars \
+  --real-ntheta 15 --real-nzeta 15 \
+  --velocity-nxi 25 --velocity-nx 6 \
+  --solver-tolerance 1e-6 \
+  --solve-method auto
+```
+
+For a user-facing `sfincs_jax` versus Redl-only plot, add `--jax-vs-redl` (alias
+`--hide-fortran`). The bounded grid above is meant for education, workflow
+timing, and convergence triage; it is not a production parity grid. If you also
+have a same-resolution SFINCS Fortran v3 rerun, pass it with
+`--fortran-case-root` and keep `--require-same-resolution` so the script refuses
+mixed-grid comparisons. Use
+`--verbose-sfincs` or set `SFINCS_JAX_EXAMPLE_VERBOSE=1` for production-grid
+reruns so phase, preconditioner, and Krylov progress are printed while setup is
+running. Use
+`--case QH --stem qs_paper_qh_same_resolution_11surface` for the quasi-helical
+benchmark. Increase the resolution and inspect the JSON metrics before using
+either profile quantitatively. The `--with-errorbars` mode adds one real-space
+refinement and one velocity-space refinement and plots the pointwise maximum
+change as the numerical error bar. The generated JSON stores the
+`linearSolver*` diagnostics from each HDF5 file, including solver kind, true
+residual, target, iterations, setup time, solve time, and sparse factor
+estimates.
+
 If `vmec_jax` is installed from a source checkout, point the example at it:
 
 ```bash
-export SFINCS_JAX_VMEC_JAX_PATH=/path/to/vmec_jax
+export SFINCS_JAX_VMEC_JAX_ROOT=/path/to/vmec_jax
 ```
 
 Outputs are written under `examples/vmec_jax_finite_beta/output/` by default and

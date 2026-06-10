@@ -109,6 +109,7 @@ class MagneticDriftThetaV3Operator:
     ddtheta_plus_sparse_vals: jnp.ndarray | None = None
     ddtheta_minus_sparse_cols: jnp.ndarray | None = None
     ddtheta_minus_sparse_vals: jnp.ndarray | None = None
+    drop_l2_couplings: bool = False
 
     def tree_flatten(self):
         children = (
@@ -137,6 +138,7 @@ class MagneticDriftThetaV3Operator:
             self.ddtheta_plus_stencil_coeffs,
             self.ddtheta_minus_stencil_shifts,
             self.ddtheta_minus_stencil_coeffs,
+            bool(self.drop_l2_couplings),
         )
         return children, aux
 
@@ -168,13 +170,24 @@ class MagneticDriftThetaV3Operator:
             ddtheta_plus_stencil_coeffs = ()
             ddtheta_minus_stencil_shifts = ()
             ddtheta_minus_stencil_coeffs = ()
+            drop_l2_couplings = False
         else:
-            (
-                ddtheta_plus_stencil_shifts,
-                ddtheta_plus_stencil_coeffs,
-                ddtheta_minus_stencil_shifts,
-                ddtheta_minus_stencil_coeffs,
-            ) = aux
+            if len(aux) == 4:
+                (
+                    ddtheta_plus_stencil_shifts,
+                    ddtheta_plus_stencil_coeffs,
+                    ddtheta_minus_stencil_shifts,
+                    ddtheta_minus_stencil_coeffs,
+                ) = aux
+                drop_l2_couplings = False
+            else:
+                (
+                    ddtheta_plus_stencil_shifts,
+                    ddtheta_plus_stencil_coeffs,
+                    ddtheta_minus_stencil_shifts,
+                    ddtheta_minus_stencil_coeffs,
+                    drop_l2_couplings,
+                ) = aux
         return cls(
             delta=delta,
             t_hat=t_hat,
@@ -199,6 +212,7 @@ class MagneticDriftThetaV3Operator:
             ddtheta_plus_sparse_vals=ddtheta_plus_sparse_vals,
             ddtheta_minus_sparse_cols=ddtheta_minus_sparse_cols,
             ddtheta_minus_sparse_vals=ddtheta_minus_sparse_vals,
+            drop_l2_couplings=bool(drop_l2_couplings),
         )
 
 
@@ -233,6 +247,7 @@ class MagneticDriftZetaV3Operator:
     ddzeta_plus_sparse_vals: jnp.ndarray | None = None
     ddzeta_minus_sparse_cols: jnp.ndarray | None = None
     ddzeta_minus_sparse_vals: jnp.ndarray | None = None
+    drop_l2_couplings: bool = False
 
     def tree_flatten(self):
         children = (
@@ -261,6 +276,7 @@ class MagneticDriftZetaV3Operator:
             self.ddzeta_plus_stencil_coeffs,
             self.ddzeta_minus_stencil_shifts,
             self.ddzeta_minus_stencil_coeffs,
+            bool(self.drop_l2_couplings),
         )
         return children, aux
 
@@ -292,13 +308,24 @@ class MagneticDriftZetaV3Operator:
             ddzeta_plus_stencil_coeffs = ()
             ddzeta_minus_stencil_shifts = ()
             ddzeta_minus_stencil_coeffs = ()
+            drop_l2_couplings = False
         else:
-            (
-                ddzeta_plus_stencil_shifts,
-                ddzeta_plus_stencil_coeffs,
-                ddzeta_minus_stencil_shifts,
-                ddzeta_minus_stencil_coeffs,
-            ) = aux
+            if len(aux) == 4:
+                (
+                    ddzeta_plus_stencil_shifts,
+                    ddzeta_plus_stencil_coeffs,
+                    ddzeta_minus_stencil_shifts,
+                    ddzeta_minus_stencil_coeffs,
+                ) = aux
+                drop_l2_couplings = False
+            else:
+                (
+                    ddzeta_plus_stencil_shifts,
+                    ddzeta_plus_stencil_coeffs,
+                    ddzeta_minus_stencil_shifts,
+                    ddzeta_minus_stencil_coeffs,
+                    drop_l2_couplings,
+                ) = aux
         return cls(
             delta=delta,
             t_hat=t_hat,
@@ -323,6 +350,7 @@ class MagneticDriftZetaV3Operator:
             ddzeta_plus_sparse_vals=ddzeta_plus_sparse_vals,
             ddzeta_minus_sparse_cols=ddzeta_minus_sparse_cols,
             ddzeta_minus_sparse_vals=ddzeta_minus_sparse_vals,
+            drop_l2_couplings=bool(drop_l2_couplings),
         )
 
 
@@ -348,6 +376,7 @@ class MagneticDriftXiDotV3Operator:
     db_hat_sub_psi_dtheta: jnp.ndarray  # (Ntheta, Nzeta)
 
     n_xi_for_x: jnp.ndarray  # (Nx,) int32
+    drop_l2_couplings: bool = False
 
     def tree_flatten(self):
         children = (
@@ -365,12 +394,12 @@ class MagneticDriftXiDotV3Operator:
             self.db_hat_sub_psi_dtheta,
             self.n_xi_for_x,
         )
-        aux = None
+        aux = bool(self.drop_l2_couplings)
         return children, aux
 
     @classmethod
     def tree_unflatten(cls, aux, children):
-        del aux
+        drop_l2_couplings = False if aux is None else bool(aux)
         (
             delta,
             t_hat,
@@ -400,6 +429,7 @@ class MagneticDriftXiDotV3Operator:
             db_hat_sub_theta_dpsi_hat=db_hat_sub_theta_dpsi_hat,
             db_hat_sub_psi_dtheta=db_hat_sub_psi_dtheta,
             n_xi_for_x=n_xi_for_x,
+            drop_l2_couplings=drop_l2_couplings,
         )
 
 
@@ -594,18 +624,22 @@ def apply_magnetic_drift_theta_v3(
 
     diag_part = diag_l[None, None, :, :, :] * dtheta_f
 
-    c_plus = _offdiag2_coupling_plus(n_xi)
-    c_minus = _offdiag2_coupling_minus(n_xi)
+    if op.drop_l2_couplings:
+        parts = diag_part
+    else:
+        c_plus = _offdiag2_coupling_plus(n_xi)
+        c_minus = _offdiag2_coupling_minus(n_xi)
 
-    term_plus = c_plus[None, None, :-2, None, None] * dtheta_f[:, :, 2:, :, :]
-    term_plus = jnp.pad(term_plus, ((0, 0), (0, 0), (0, 2), (0, 0), (0, 0)))
+        term_plus = c_plus[None, None, :-2, None, None] * dtheta_f[:, :, 2:, :, :]
+        term_plus = jnp.pad(term_plus, ((0, 0), (0, 0), (0, 2), (0, 0), (0, 0)))
 
-    term_minus = c_minus[None, None, 2:, None, None] * dtheta_f[:, :, :-2, :, :]
-    term_minus = jnp.pad(term_minus, ((0, 0), (0, 0), (2, 0), (0, 0), (0, 0)))
+        term_minus = c_minus[None, None, 2:, None, None] * dtheta_f[:, :, :-2, :, :]
+        term_minus = jnp.pad(term_minus, ((0, 0), (0, 0), (2, 0), (0, 0), (0, 0)))
 
-    offdiag2_part = gf12[None, None, None, :, :] * (term_plus + term_minus)
+        offdiag2_part = gf12[None, None, None, :, :] * (term_plus + term_minus)
+        parts = diag_part + offdiag2_part
 
-    out = x2[None, :, None, None, None] * base[None, None, None, :, :] * (diag_part + offdiag2_part)
+    out = x2[None, :, None, None, None] * base[None, None, None, :, :] * parts
     mask = _mask_xi(op.n_xi_for_x.astype(jnp.int32), n_xi).astype(out.dtype)
     return out * mask[None, :, :, None, None]
 
@@ -796,18 +830,22 @@ def apply_magnetic_drift_zeta_v3(
     ).astype(jnp.float64)  # (L,T,Z)
     diag_part = diag_l[None, None, :, :, :] * dzeta_f
 
-    c_plus = _offdiag2_coupling_plus(n_xi)
-    c_minus = _offdiag2_coupling_minus(n_xi)
+    if op.drop_l2_couplings:
+        parts = diag_part
+    else:
+        c_plus = _offdiag2_coupling_plus(n_xi)
+        c_minus = _offdiag2_coupling_minus(n_xi)
 
-    term_plus = c_plus[None, None, :-2, None, None] * dzeta_f[:, :, 2:, :, :]
-    term_plus = jnp.pad(term_plus, ((0, 0), (0, 0), (0, 2), (0, 0), (0, 0)))
+        term_plus = c_plus[None, None, :-2, None, None] * dzeta_f[:, :, 2:, :, :]
+        term_plus = jnp.pad(term_plus, ((0, 0), (0, 0), (0, 2), (0, 0), (0, 0)))
 
-    term_minus = c_minus[None, None, 2:, None, None] * dzeta_f[:, :, :-2, :, :]
-    term_minus = jnp.pad(term_minus, ((0, 0), (0, 0), (2, 0), (0, 0), (0, 0)))
+        term_minus = c_minus[None, None, 2:, None, None] * dzeta_f[:, :, :-2, :, :]
+        term_minus = jnp.pad(term_minus, ((0, 0), (0, 0), (2, 0), (0, 0), (0, 0)))
 
-    offdiag2_part = gf12[None, None, None, :, :] * (term_plus + term_minus)
+        offdiag2_part = gf12[None, None, None, :, :] * (term_plus + term_minus)
+        parts = diag_part + offdiag2_part
 
-    out = x2[None, :, None, None, None] * base[None, None, None, :, :] * (diag_part + offdiag2_part)
+    out = x2[None, :, None, None, None] * base[None, None, None, :, :] * parts
     mask = _mask_xi(op.n_xi_for_x.astype(jnp.int32), n_xi).astype(out.dtype)
     return out * mask[None, :, :, None, None]
 
@@ -865,16 +903,20 @@ def apply_magnetic_drift_xidot_v3(op: MagneticDriftXiDotV3Operator, f: jnp.ndarr
     diag_c = _diag_l_coupling(n_xi)  # (L,)
     diag_part = diag_c[None, None, :, None, None] * f
 
-    c_plus = _xidot_offdiag2_coupling_plus(n_xi)
-    c_minus = _xidot_offdiag2_coupling_minus(n_xi)
+    if op.drop_l2_couplings:
+        parts = diag_part
+    else:
+        c_plus = _xidot_offdiag2_coupling_plus(n_xi)
+        c_minus = _xidot_offdiag2_coupling_minus(n_xi)
 
-    term_plus = c_plus[None, None, :-2, None, None] * f[:, :, 2:, :, :]
-    term_plus = jnp.pad(term_plus, ((0, 0), (0, 0), (0, 2), (0, 0), (0, 0)))
+        term_plus = c_plus[None, None, :-2, None, None] * f[:, :, 2:, :, :]
+        term_plus = jnp.pad(term_plus, ((0, 0), (0, 0), (0, 2), (0, 0), (0, 0)))
 
-    term_minus = c_minus[None, None, 2:, None, None] * f[:, :, :-2, :, :]
-    term_minus = jnp.pad(term_minus, ((0, 0), (0, 0), (2, 0), (0, 0), (0, 0)))
+        term_minus = c_minus[None, None, 2:, None, None] * f[:, :, :-2, :, :]
+        term_minus = jnp.pad(term_minus, ((0, 0), (0, 0), (2, 0), (0, 0), (0, 0)))
+        parts = diag_part + term_plus + term_minus
 
-    out = x2[None, :, None, None, None] * factor[None, None, None, :, :] * (diag_part + term_plus + term_minus)
+    out = x2[None, :, None, None, None] * factor[None, None, None, :, :] * parts
     mask = _mask_xi(op.n_xi_for_x.astype(jnp.int32), n_xi).astype(out.dtype)
     return out * mask[None, :, :, None, None]
 

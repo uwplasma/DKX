@@ -115,6 +115,46 @@ def effective_r_n_wish(*, geom_params: Mapping[str, Any], default: float = 0.5) 
     return float(value) if value is not None else float(default)
 
 
+def effective_psi_n_wish(
+    *,
+    geom_params: Mapping[str, Any],
+    default_r_n: float = 0.5,
+    psi_a_hat: float | None = None,
+    a_hat: float | None = None,
+) -> float:
+    """Return the requested normalized toroidal flux for v3 radial-coordinate inputs.
+
+    SFINCS v3 lets users select the input surface with ``inputRadialCoordinate``:
+    ``psiHat`` (0), ``psiN`` (1), ``rHat`` (2), or ``rN`` (3). Most examples use
+    ``rN``, but the Redl/SFINCS benchmark decks specify ``psiN_wish`` directly.
+    This helper centralizes the conversion so geometry selection and radial-gradient
+    normalization use the same surface.
+    """
+    input_radial_value = _group_get(geom_params, "inputRadialCoordinate")
+    input_radial = int(input_radial_value) if input_radial_value is not None else 3
+    if input_radial == 0:
+        value = _group_get(geom_params, "psiHat_wish")
+        if value is None:
+            return float(default_r_n) * float(default_r_n)
+        if psi_a_hat is None:
+            raise ValueError("psi_a_hat is required to convert psiHat_wish to psiN_wish.")
+        return float(value) / float(psi_a_hat)
+    if input_radial == 1:
+        value = _group_get(geom_params, "psiN_wish")
+        return float(value) if value is not None else float(default_r_n) * float(default_r_n)
+    if input_radial == 2:
+        value = _group_get(geom_params, "rHat_wish")
+        if value is None:
+            return float(default_r_n) * float(default_r_n)
+        if a_hat is None:
+            raise ValueError("a_hat is required to convert rHat_wish to psiN_wish.")
+        return (float(value) / float(a_hat)) ** 2
+    if input_radial == 3:
+        r_n = effective_r_n_wish(geom_params=geom_params, default=default_r_n)
+        return float(r_n) * float(r_n)
+    raise ValueError(f"Invalid inputRadialCoordinate={input_radial}.")
+
+
 def effective_psi_a_hat(
     *,
     geom_params: Mapping[str, Any],

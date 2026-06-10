@@ -57,6 +57,7 @@ from sfincs_jax.vmec_wout import read_vmec_wout  # noqa: E402
 ELEMENTARY_CHARGE = 1.602176634e-19
 ONE_KEV_J = 1.602176634e-16
 PROTON_MASS_KG = 1.67262192369e-27
+DEFAULT_ELECTRON_MHAT = 1.0 / 1836.15267343
 DEFAULT_R_N_VALUES = "0.20,0.30,0.40,0.50,0.60,0.70,0.80"
 DEFAULT_NE_COEFFS = "3.0e20,0.0,0.0,0.0,0.0,-2.97e20"
 DEFAULT_TE_COEFFS = "15.0e3,-14.85e3"
@@ -126,6 +127,20 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--zeff-coeffs", default="1.0", help="Zeff polynomial in s.")
     parser.add_argument("--helicity-n", type=int, default=0, help="Redl helicity_n. QA uses 0.")
     parser.add_argument("--n-lambda", type=int, default=32, help="Pitch integral quadrature for Redl trapped fraction.")
+    parser.add_argument(
+        "--collision-operator",
+        type=int,
+        choices=(0, 1),
+        default=0,
+        help="SFINCS-JAX collisionOperator: 0=full Fokker-Planck, 1=pitch-angle scattering.",
+    )
+    parser.add_argument("--ion-mhat", type=float, default=1.0, help="Ion mass normalized to SFINCS m_bar.")
+    parser.add_argument(
+        "--electron-mhat",
+        type=float,
+        default=DEFAULT_ELECTRON_MHAT,
+        help="Electron mass normalized to SFINCS m_bar.",
+    )
     parser.add_argument("--density-bar", type=float, default=1.0e20, help="SFINCS density normalization n_bar [m^-3].")
     parser.add_argument("--temperature-bar-kev", type=float, default=1.0, help="SFINCS temperature normalization [keV].")
     parser.add_argument("--mass-bar-kg", type=float, default=PROTON_MASS_KG, help="SFINCS reference mass [kg].")
@@ -286,9 +301,12 @@ def _sfincs_template(
     n_hat: float,
     t_i_hat: float,
     t_e_hat: float,
+    ion_mhat: float,
+    electron_mhat: float,
     dn_hat_dpsi_n: float,
     dt_i_hat_dpsi_n: float,
     dt_e_hat_dpsi_n: float,
+    collision_operator: int,
     ntheta: int,
     nzeta: int,
     nxi: int,
@@ -313,7 +331,7 @@ def _sfincs_template(
 
 &speciesParameters
   Zs = 1.0d+0 -1.0d+0
-  mHats = 1.0d+0 5.45509d-4
+  mHats = {float(ion_mhat):.16g} {float(electron_mhat):.16g}
   nHats = {float(n_hat):.16g} {float(n_hat):.16g}
   THats = {float(t_i_hat):.16g} {float(t_e_hat):.16g}
   dNHatdpsiNs = {float(dn_hat_dpsi_n):.16g} {float(dn_hat_dpsi_n):.16g}
@@ -325,7 +343,7 @@ def _sfincs_template(
   alpha = 1.0d+0
   nu_n = {float(nu_n):.16g}
   Er = {float(er):.16g}
-  collisionOperator = 0
+  collisionOperator = {int(collision_operator)}
   includeXDotTerm = .true.
   includeElectricFieldTermInXiDot = .true.
   useDKESExBDrift = .false.
@@ -395,9 +413,12 @@ def _run_or_read_sfincs(
                 n_hat=n_hat,
                 t_i_hat=t_i_hat,
                 t_e_hat=t_e_hat,
+                ion_mhat=float(args.ion_mhat),
+                electron_mhat=float(args.electron_mhat),
                 dn_hat_dpsi_n=dn_hat,
                 dt_i_hat_dpsi_n=dt_i_hat,
                 dt_e_hat_dpsi_n=dt_e_hat,
+                collision_operator=int(args.collision_operator),
                 ntheta=int(args.ntheta),
                 nzeta=int(args.nzeta),
                 nxi=int(args.nxi),
@@ -609,8 +630,11 @@ def _write_summary(
     payload = {
         "workflow": "landreman_paul_qa_sfincs_jax_redl_bootstrap_current_comparison",
         "claim_boundary": (
-            "This is a normalization and trend comparison between SFINCS-JAX and the Redl "
-            "bootstrap-current fit for one profile contract; it is not an optimization script."
+            "This diagnostic compares a SFINCS-JAX RHSMode=1 kinetic solve to the "
+            "Redl/Sauter analytic bootstrap-current fit. It is a normalization and trend "
+            "diagnostic, not a Redl-parity claim: SFINCS-JAX uses the supplied nu_n, "
+            "profile-gradient, and 3D drift-kinetic contract, while Redl uses local fitted "
+            "nu_* coefficients for tokamak/quasisymmetric geometry."
         ),
         "inputs": {
             "vmec_input": str(vmec_input),
@@ -623,6 +647,9 @@ def _write_summary(
             "te_coeffs": _parse_csv_floats(args.te_coeffs, name="--te-coeffs"),
             "ti_coeffs": _parse_csv_floats(args.ti_coeffs, name="--ti-coeffs") if args.ti_coeffs else None,
             "zeff_coeffs": _parse_csv_floats(args.zeff_coeffs, name="--zeff-coeffs"),
+            "collision_operator": int(args.collision_operator),
+            "ion_mhat": float(args.ion_mhat),
+            "electron_mhat": float(args.electron_mhat),
         },
         "normalization": {
             "sfincs_current_scale_A_per_m2": float(scale),
@@ -630,6 +657,20 @@ def _write_summary(
             "temperature_bar_keV": float(args.temperature_bar_kev),
             "mass_bar_kg": float(args.mass_bar_kg),
             "sfincs_si_formula": "FSABjHatOverRootFSAB2 * e * n_bar * sqrt(2*T_bar/m_bar)",
+            "redl_geometry_B_convention": (
+                "vmec_jax and SIMSOPT evaluate Redl trapped-particle geometry with the "
+                "physical |B| = sqrt(2*(bsq - p)) from VMEC half-mesh bsq = |B|^2/2 + p."
+            ),
+        },
+        "collisionality_contract": {
+            "sfincs_nu_n": float(args.nu_n),
+            "redl_nu_e_star": _jsonify_array(redl["nu_e_star"]),
+            "redl_nu_i_star": _jsonify_array(redl["nu_i_star"]),
+            "note": (
+                "RHSMode=1 SFINCS-JAX uses the input nu_n together with dimensional "
+                "species profiles and gradients; the Redl fit reports local fitted "
+                "electron/ion collisionalities nu_* on each selected surface."
+            ),
         },
         "redl": {
             "jdotb_redl": _jsonify_array(redl["jdotb_redl"]),
@@ -738,20 +779,23 @@ def _write_plot(*, payload: dict[str, Any], png_path: Path, pdf_path: Path) -> N
     else:
         axes[1].text(0.5, 0.5, "No SFINCS-JAX outputs loaded", ha="center", va="center", transform=axes[1].transAxes)
     axes[1].set_xlabel(r"$s=\psi_N$")
-    axes[1].set_ylabel("relative difference")
-    axes[1].set_title("SFINCS-JAX vs Redl")
+    axes[1].set_ylabel("relative difference vs Redl fit")
+    axes[1].set_title("Kinetic current vs Redl fit")
     stats = payload["comparison"]
     max_err = stats.get("max_errorbar_rel_to_sfincs")
     max_rel = stats.get("max_rel_diff")
+    max_abs = stats.get("max_abs_diff_A_per_m2")
     max_rel_text = "n/a" if max_rel is None else f"{float(max_rel):.3g}"
+    max_abs_text = "n/a" if max_abs is None else f"{float(max_abs):.3g}"
     max_err_text = "n/a" if max_err is None else f"{float(max_err):.3g}"
     note = (
         f"compared points: {stats['n_compared']}\n"
+        f"max abs diff: {max_abs_text} A m^-2\n"
         f"max rel diff: {max_rel_text}\n"
         f"max num. bar/SFINCS: {max_err_text}"
     )
     axes[1].text(0.03, 0.05, note, transform=axes[1].transAxes, ha="left", va="bottom", bbox={"facecolor": "white", "alpha": 0.82})
-    fig.suptitle("Landreman-Paul QA bootstrap current: sfincs_jax vs Redl", fontsize=13.5)
+    fig.suptitle("Landreman-Paul QA bootstrap current: kinetic solve and Redl fit", fontsize=13.5)
     png_path.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(png_path)
     fig.savefig(pdf_path)

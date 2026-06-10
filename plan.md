@@ -1,7 +1,2794 @@
 # SFINCS_JAX Master Handoff + Execution Plan
 
-Last updated: 2026-05-29 (Europe/Paris)
+Last updated: 2026-06-10 (America/Chicago)
 Owner: incoming agent
+
+## 2026-06-10 Addendum: native block-Schur factor plus exact-Pmat LU admission rescue
+
+### Implementation
+
+- Added ``symbolic_block_schur_lu`` to ``sfincs_jax.explicit_sparse`` as a
+  bounded native sparse-direct candidate:
+  - reusable symbolic ordering metadata is shared with the existing symbolic
+    block factors;
+  - source/constraint tail columns, high-degree graph nodes, symbolic block
+    boundaries, and actual cross-block nonzero endpoints are selected as Schur
+    separator candidates;
+  - local interior blocks are eliminated by sparse LU and the retained separator
+    is solved by an explicit dense/sparse Schur complement;
+  - deterministic setup-time true-residual admission gates the factor before it
+    can enter Krylov.
+- Fixed the Jacobi fallback factor to support multi-RHS solves.  This is needed
+  when local block fallback is applied to separator-column batches.
+- Wired ``symbolic_block_schur_lu`` into the RHSMode=2/3
+  ``fp_fortran_reduced_lu`` direct-Pmat path, including metadata and admission
+  controls.
+- Added a fail-closed admission rescue: when a symbolic factor fails the true
+  setup-residual gate, SFINCS-JAX can factor the same direct ``whichMatrix=0``
+  reduced Pmat with exact native host LU, subject to the configured factor
+  memory cap, and it accepts that rescue only if it passes the same deterministic
+  admission probes.  This mirrors the Fortran/PETSc behavior more closely than
+  falling back to a weak smoother.
+
+### Validation
+
+- Focused checks passed:
+  - ``python -m compileall -q sfincs_jax/explicit_sparse.py
+    sfincs_jax/v3_driver.py tests/test_fortran_reduced_preconditioner.py``;
+  - ``ruff check sfincs_jax/explicit_sparse.py sfincs_jax/v3_driver.py
+    tests/test_explicit_sparse.py tests/test_fortran_reduced_preconditioner.py
+    --select F821,F401,F811``;
+  - ``pytest -q tests/test_explicit_sparse.py
+    tests/test_fortran_reduced_preconditioner.py`` passed ``51`` tests.
+- New tests cover:
+  - multi-RHS Jacobi fallback application;
+  - exact block-Schur solves when off-block coupling is fully routed through the
+    separator;
+  - admission rejection when important interior coupling is dropped;
+  - transport metadata for the new symbolic block-Schur factor;
+  - exact direct-Pmat LU rescue after symbolic admission failure.
+
+### Bounded gate results
+
+- Separator/block-size sweep on reduced ``transportMatrix_geometryScheme2``:
+  - ``symbolic_block_schur_lu`` with block size ``512`` and separator cap
+    ``2048`` finally passed setup admission (``max_rel=2.743e-5``), but only by
+    retaining most of the active system in the separator and using ``26.17 MB``,
+    which is larger than exact LU for this case.
+- Separator/block-size sweep on reduced ``transportMatrix_geometryScheme11``:
+  - all tested symbolic block-Schur settings failed setup admission; best tested
+    residuals were still order-unity or worse.
+- Exact direct reduced-Pmat LU remains the useful Fortran/PETSc analogue on the
+  bounded gates:
+  - geometry-scheme-2: active size ``2532``, direct Pmat ``55704`` nnz, LU
+    factor ``13.984 MB``, setup admission ``max_rel=6.960e-4``;
+  - geometry-scheme-11: active size ``2900``, direct Pmat ``59526`` nnz, LU
+    factor ``16.976 MB``, setup admission ``max_rel=3.794e-4``.
+- All-RHS reduced solve gates with symbolic Schur first and exact-Pmat LU rescue
+  passed:
+  - geometry-scheme-2: residuals ``6.98e-11``, ``4.03e-11``, ``7.66e-13`` in
+    ``3.26 s``;
+  - geometry-scheme-11: residuals ``5.07e-13``, ``4.00e-13``, ``4.14e-13`` in
+    ``3.21 s``.
+
+### Decision
+
+- Keep ``symbolic_block_schur_lu`` as opt-in tested infrastructure, not as a
+  production replacement by itself.
+- Keep exact direct-Pmat LU rescue enabled for the opt-in
+  ``fp_fortran_reduced_lu`` lane because it is residual-clean, bounded, and much
+  closer to Fortran/PETSc behavior than falling back to weak smoothers.
+- The remaining lower-memory production replacement must retain dominant
+  off-diagonal kinetic couplings inside the numeric factor, not merely enlarge
+  a small separator.  The next implementation should target a real hierarchical
+  factor: nested-dissection-style separators plus larger supernodes or an
+  incomplete multifrontal factor with setup-time true-residual admission.
+
+### Progress
+
+- Lower-memory/faster RHSMode=2/3 FP production replacement: ``91%``.  The new
+  block-Schur candidate and exact-LU rescue are implemented and tested; the
+  lower-memory standalone factor is still not admissible on geom11.
+- Overall RHSMode=2/3 FP production solver lane: ``96%``.  Bounded all-RHS
+  gates are clean with exact direct-Pmat LU rescue.  Production-floor promotion
+  still needs honest CPU/GPU memory/runtime gates.
+- Documentation/testing for this lane: ``95%`` after this addendum and the new
+  focused tests.
+
+## 2026-06-10 Addendum: physics-aware direct-Pmat Schur coarse retry is tested but not promotable
+
+### Fortran v3 algorithmic audit
+
+- Re-read the local SFINCS Fortran v3 source in
+  ``/Users/rogeriojorge/local/sfincs/fortran/version3``:
+  - ``solver.F90`` sets PETSc ``KSPSetOperators(KSPInstance, matrix,
+    preconditionerMatrix, ...)`` with the true Jacobian from
+    ``populateMatrix(..., whichMatrix=1)`` and the reduced preconditioner from
+    ``populateMatrix(..., whichMatrix=0)``.
+  - It uses GMRES with restart ``2000`` and ``PCLU``; depending on the build,
+    the LU factor is PETSc built-in, MUMPS, or SuperLU_DIST.  The preconditioner
+    can be reused across solves.
+  - ``populateMatrix.F90`` keeps source/constraint rows in ``whichMatrix=0``.
+    For ``constraintScheme=1`` the particle/energy sources couple into the L=0
+    kinetic rows and the density/pressure constraint rows test FS-averaged
+    moments.  For ``constraintScheme=2`` each retained speed has a coupled
+    source/constraint row pair.
+  - The robust Fortran behavior is therefore not a small tail smoother; it is a
+    sparse LU factor of a coupled reduced matrix, with true residuals evaluated
+    by the full operator.
+
+### Implementation
+
+- Added ``wrap_sparse_factor_with_coarse_correction`` to
+  ``sfincs_jax.explicit_sparse``.  It wraps an existing sparse factor with a
+  caller-supplied sparse Galerkin residual correction:
+
+  ``z = M0 r + omega B (B^T P B + lambda I)^-1 B^T (r - P M0 r)``.
+
+- Added a SFINCS-specific direct-Pmat physics coarse basis for the
+  RHSMode=2/3 ``fp_fortran_reduced_lu`` symbolic/coarse diagnostic factor:
+  - source/constraint tail unit columns;
+  - constraintScheme=1 particle/energy source shapes;
+  - per-speed L=0 FS-average constraint/source columns;
+  - density, pressure, flow, and heat-flow low-order moment columns;
+  - approximate tail-Schur response modes computed from the actual emitted
+    direct ``Pmat`` columns and the current local factor.
+- The new basis is controlled by
+  ``SFINCS_JAX_TRANSPORT_FP_FORTRAN_REDUCED_LU_SYMBOLIC_PHYSICS_COARSE`` and
+  ``..._SYMBOLIC_PHYSICS_COARSE_MAX_COLS``.  It is still guarded by the
+  existing deterministic setup-admission gate and is not a default path.
+
+### Validation
+
+- Focused code checks passed:
+  - ``python -m compileall -q sfincs_jax/explicit_sparse.py
+    sfincs_jax/v3_driver.py tests/test_explicit_sparse.py
+    tests/test_fortran_reduced_preconditioner.py``;
+  - ``ruff check sfincs_jax/explicit_sparse.py sfincs_jax/v3_driver.py
+    tests/test_explicit_sparse.py tests/test_fortran_reduced_preconditioner.py
+    --select F821,F401,F811``;
+  - ``pytest -q tests/test_explicit_sparse.py
+    tests/test_fortran_reduced_preconditioner.py -k 'coarse_correction or
+    physics_coarse_basis or symbolic_block_lu_coarse or
+    symbolic_block_lu_admission or direct_reduced_pmat'`` passed with
+    ``7`` tests.
+- New tests cover:
+  - the generic supplied-mode coarse correction wrapper;
+  - the SFINCS direct-Pmat physics basis on the reduced geometry-scheme-11
+    transport fixture, including tail, source/moment, and tail-Schur-response
+    columns.
+
+### Bounded gate results
+
+- Forced ``symbolic_block_lu_coarse`` with the physics-aware basis on reduced
+  ``transportMatrix_geometryScheme2``:
+  - direct Pmat ``active=2532``, ``nnz=55704``;
+  - local symbolic/coarse factor ``4.117 MB``;
+  - physics coarse basis ``18`` columns and ``8146`` nonzeros;
+  - setup admission rejected with ``max_rel=1.614e11`` and
+    ``median_rel=3.938e10``.
+- Forced ``symbolic_block_lu_coarse`` with the physics-aware basis on reduced
+  ``transportMatrix_geometryScheme11``:
+  - direct Pmat ``active=2900``, ``nnz=59526``;
+  - local symbolic/coarse factor ``6.415 MB``;
+  - physics coarse basis ``16`` columns and ``8448`` nonzeros;
+  - setup admission rejected with ``max_rel=1.645e10`` and
+    ``median_rel=5.293e9``.
+- Rechecked the exact direct-Pmat LU path after these changes:
+  - reduced geometry-scheme-2 all-RHS: ``max_rel=6.98e-11`` in ``4.10 s``;
+  - reduced geometry-scheme-11 all-RHS: ``max_rel=5.07e-13`` in ``4.32 s``.
+
+### Decision
+
+- Do **not** promote the physics-aware symbolic/coarse factor.  It now captures
+  the correct source/moment/tail structures and is tested, but it fails
+  reduced setup-admission by many orders of magnitude.
+- Keep exact direct-Pmat LU as the residual-clean correctness reference for
+  RHSMode=2/3 FP reduced transport gates.
+- The next real production replacement cannot be another small smoother,
+  overlap, or low-rank coarse tweak.  It must implement a stronger native
+  sparse factor architecture closer to Fortran/PETSc/MUMPS/SuperLU_DIST:
+  reusable symbolic ordering, supernodal/multifrontal-style block factors or
+  nested-dissection block elimination over the coupled direct ``whichMatrix=0``
+  matrix, plus a true source/constraint Schur solve and setup-time true-residual
+  admission.
+
+### Progress
+
+- Lower-memory/faster RHSMode=2/3 FP production replacement: ``89%``.  The
+  direct ``Pmat`` emitter, symbolic metadata, local block factors, generic
+  residual coarse, and physics-aware source/moment/tail coarse are implemented
+  and tested; all lower-memory approximate factors remain non-promotable by
+  strict residual gates.
+- Overall RHSMode=2/3 FP production solver lane: ``95%``.  Exact reduced gates
+  are clean; production-grid promotion is blocked by native factor quality and
+  fill/memory, not by missing diagnostics.
+- Documentation/testing for this lane: ``93%``.  The docs and plan record the
+  Fortran algorithm, controls, gates, negative evidence, and next required
+  architecture.
+
+## 2026-06-09 Addendum: native reduced-Pmat symbolic block factor is guarded but not promotable
+
+### Implementation
+
+- Added a reusable sparse-factor setup admission layer in
+  ``sfincs_jax.explicit_sparse``:
+  - ``SparseFactorAdmission`` records accepted/rejected status, maximum and
+    median setup residual, identity-improvement ratio, probe count, and reason.
+  - ``deterministic_sparse_probe_matrix`` creates reproducible RHS probes for
+    setup gates.
+  - ``admit_sparse_factor_against_operator`` measures
+    ``||P M^{-1} b - b|| / ||b||`` against the actual materialized sparse
+    operator before an approximate native factor is allowed into Krylov.
+- Implemented the lower-memory native ``symbolic_block_lu`` factor in
+  ``factorize_host_sparse_operator``. It reuses
+  ``SparseSymbolicAnalysis`` metadata, applies the selected symbolic
+  permutation, factors bounded diagonal sparse blocks, and reports aggregate
+  factor storage.
+- Extended ``symbolic_block_lu`` with an optional overlapped-block mode. The
+  local factor can now include a fixed number of neighboring unknowns around
+  each owned block and restrict the local solve back to the owned region,
+  giving an additive-Schwarz-style diagnostic while keeping the same setup
+  admission gate.
+- Added ``symbolic_block_lu_coarse`` as the next coupled native factor
+  prototype. It keeps the bounded symbolic local factors, builds a sparse
+  Galerkin coarse basis from block indicators plus optional residual-derived
+  deterministic probe columns, and applies the residual correction
+  ``z = M0 r + damping * B (B^T P B + reg I)^{-1} B^T (r - P M0 r)``.
+- Wired ``symbolic_block_lu`` into the RHSMode=2/3
+  ``fp_fortran_reduced_lu`` path behind
+  ``SFINCS_JAX_TRANSPORT_FP_FORTRAN_REDUCED_LU_FACTOR=symbolic_block_lu``.
+- Added default-on setup admission for that candidate only:
+  - ``SFINCS_JAX_TRANSPORT_FP_FORTRAN_REDUCED_LU_SYMBOLIC_ADMISSION``;
+  - ``..._SYMBOLIC_ADMISSION_MAX_REL``;
+  - ``..._SYMBOLIC_ADMISSION_MIN_IMPROVEMENT``;
+  - ``..._SYMBOLIC_ADMISSION_PROBES``.
+- Added ``SFINCS_JAX_TRANSPORT_FP_FORTRAN_REDUCED_LU_SYMBOLIC_BLOCK_OVERLAP``
+  for the overlapped-block diagnostic. The default remains ``0``.
+- Added coarse controls for the residual-correction prototype:
+  - ``SFINCS_JAX_TRANSPORT_FP_FORTRAN_REDUCED_LU_SYMBOLIC_COARSE_MAX_COLS``;
+  - ``..._SYMBOLIC_COARSE_PROBE_COLS``;
+  - ``..._SYMBOLIC_COARSE_DAMPING``;
+  - ``..._SYMBOLIC_COARSE_REG_REL``.
+- If admission fails, the candidate fail-closes to the existing safe
+  ``sxblock`` fallback instead of entering Krylov and relying on dense rescue.
+
+### Validation
+
+- Focused checks passed after the implementation:
+  - ``python -m compileall -q sfincs_jax/explicit_sparse.py
+    sfincs_jax/v3_driver.py tests/test_explicit_sparse.py
+    tests/test_fortran_reduced_preconditioner.py``;
+  - ``ruff check sfincs_jax/explicit_sparse.py sfincs_jax/v3_driver.py
+    tests/test_explicit_sparse.py tests/test_fortran_reduced_preconditioner.py
+    --select F821,F401,F811``;
+  - ``pytest -q tests/test_explicit_sparse.py
+    tests/test_transport_active_factor.py
+    tests/test_fortran_reduced_preconditioner.py
+    tests/test_transport_preconditioner_dispatch.py -k 'symbolic or
+    active_block or direct_active or direct_reduced_pmat or
+    fortran_reduced_lu_attaches or block_schur or fp_direct_active or
+    normalize_transport_preconditioner_kind_maps_aliases or
+    resolve_transport_precondition_side_for_kind_keeps_fp_line_left_only'``
+    passed with ``17`` tests.
+- New unit tests verify that ``symbolic_block_lu``:
+  - solves an exactly block-diagonal sparse matrix;
+  - passes admission for that exact block-diagonal case;
+  - rejects a matrix with strong missing off-block couplings;
+  - recovers the exact solution on a coupled toy matrix when the overlap
+    covers the missing boundary coupling.
+  - improves a low-rank block-coupled toy matrix with the block/coarse residual
+    equation and passes a bounded setup-admission gate for that toy case.
+
+### Bounded CPU gates
+
+- Forced ``symbolic_block_lu`` on reduced
+  ``transportMatrix_geometryScheme2``:
+  - direct Pmat ``active=2532``, ``nnz=55704``;
+  - setup admission rejected before Krylov with ``max_rel=1.507e10``,
+    ``median_rel=2.800e9``, and ``min_improvement=1.704e-7``.
+- Forced ``symbolic_block_lu`` on reduced
+  ``transportMatrix_geometryScheme11``:
+  - direct Pmat ``active=2900``, ``nnz=59526``;
+  - setup admission rejected before Krylov with ``max_rel=1.236e10``,
+    ``median_rel=2.602e9``, and ``min_improvement=5.669e-9``.
+- Overlapped-block bounded probes:
+  - overlap ``64`` still rejected: geometry-scheme-2 ``max_rel=6.645e11`` and
+    geometry-scheme-11 ``max_rel=2.504e4``;
+  - overlap ``256`` improved but still rejected: geometry-scheme-2
+    ``max_rel=1.789e4`` and geometry-scheme-11 ``max_rel=4.778e3``.
+  - Conclusion: simple local additive-Schwarz overlap is not enough for this
+    FP transport lane; the next factor must retain stronger coupled kinetic
+    off-diagonal blocks and/or use a true coarse residual equation.
+- Residual-derived coarse probes:
+  - reduced geometry-scheme-2, block size ``512``, residual coarse columns
+    ``4``: rejected with ``max_rel=6.316e11``;
+  - reduced geometry-scheme-11, same setup: rejected with
+    ``max_rel=5.436e12``;
+  - damping ``0.1`` and coarse regularization ``1e-3`` still rejected:
+    geometry-scheme-2 ``max_rel=1.536e10`` and geometry-scheme-11
+    ``max_rel=4.097e11``.
+  - Conclusion: generic residual-probe coarse spaces are unstable/indefinite
+    for the reduced SFINCS FP transport matrices and are not sufficient for
+    production promotion.
+- Exact reduced-Pmat LU remains residual-clean after the admission changes:
+  - geometry-scheme-2 full three-RHS gate: max relative residual
+    ``6.98e-11`` in ``3.1 s``;
+  - geometry-scheme-11 full three-RHS gate: max relative residual
+    ``5.07e-13`` in ``2.9 s``.
+
+### Production-floor CPU setup evidence
+
+- Production-floor ``transportMatrix_geometryScheme2``
+  (``25 x 51 x 100 x 8``):
+  - direct reduced Pmat built in ``20.5 s`` with ``648977`` active unknowns,
+    ``15165133`` nonzeros, and ``184.6 MB`` CSR storage;
+  - native ``symbolic_block_lu`` estimated ``9753 MB`` factor storage and was
+    rejected by the ``4096 MB`` factor budget before promotion.
+- Production-floor ``transportMatrix_geometryScheme11``
+  (``25 x 51 x 100 x 6``) setup-only gate:
+  - direct reduced Pmat built in ``14.7 s`` with ``462827`` active unknowns,
+    ``10124069`` nonzeros, and ``123.3 MB`` CSR storage;
+  - native ``symbolic_block_lu`` factorization took ``102.5 s``, estimated
+    ``6952 MB`` factor storage, used natural ordering because the default RCM
+    cap is ``250000`` unknowns, and reached about ``14.7 GB`` max RSS;
+  - admission was skipped by the ``4096 MB`` factor budget.
+- Production-floor residual-coarse setup-only gate with relaxed ``12 GB``
+  factor budget, damping ``0.1``, and coarse regularization ``1e-3``:
+  - geometry-scheme-11: direct Pmat build ``14.7 s``, factorization
+    ``102.9 s``, estimated factor storage ``6982 MB``, coarse size ``117``,
+    admission rejected with ``max_rel=4.320e8``;
+  - geometry-scheme-2: direct Pmat build ``37.1 s``, factorization
+    ``145.8 s``, estimated factor storage ``9795 MB``, coarse size ``163``,
+    admission rejected with ``max_rel=4.073e8``;
+  - combined setup run reached about ``14.7 GB`` max RSS and ``35.3 GB`` peak
+    footprint. This is below the relaxed cap but not residual-admissible.
+
+### Decision
+
+- Do **not** promote ``symbolic_block_lu`` to ``auto``. It is now safe and
+  observable, but it is neither residual-clean on bounded gates nor
+  memory-competitive at the production floor.
+- Do **not** promote ``symbolic_block_lu_coarse`` to ``auto``. It is a genuine
+  coupled residual equation and is tested, but reduced and production-floor
+  admissions both fail by many orders of magnitude.
+- Do **not** run full production-floor geom2/geom11 solve gates with this
+  candidate. The setup gates already fail the admission/budget criteria that
+  must precede expensive solves.
+- Keep exact reduced-Pmat LU as a trusted bounded diagnostic and keep the
+  direct Pmat emitter/symbolic metadata as reusable infrastructure.
+- The next real algorithmic step is not smoother tuning and not generic
+  residual-probe coarse correction. It must be a physics-aware field/moment
+  split that retains dominant off-diagonal kinetic couplings directly and uses
+  source/constraint/profile Schur moments as the coarse residual equation.
+
+### Progress
+
+- Lower-memory/faster RHSMode=2/3 FP production replacement: ``88%``. The
+  direct Pmat emitter, symbolic metadata, native block factor, overlapped
+  factor, residual-coarse factor, and admission gate exist and are tested; the
+  remaining blocker is a physics-aware moment/field-split coarse factor.
+- Overall RHSMode=2/3 FP production solver lane: ``95%``. Bounded exact gates
+  are clean and production setup blockers are characterized under relaxed
+  memory; production-floor default promotion remains blocked by residual
+  admission, not by missing observability.
+- Documentation/testing lane for this solver work: ``91%``. User-facing docs
+  now describe the controls and the non-promotion decision; broader production
+  benchmark tables should not be regenerated until a candidate passes the
+  production-floor strict residual/runtime/RSS gate.
+
+## 2026-06-09 Addendum: direct active block-Schur probe and production decision
+
+### Implementation
+
+- Added opt-in ``SFINCS_JAX_TRANSPORT_PRECOND=fp_direct_active_block_schur``
+  with aliases ``fp_active_true_block``, ``fp_true_block_lu``, and related
+  direct-active names.
+- The builder reuses the exact direct active RHSMode=2/3 FP CSR operator,
+  factors independent zeta-line kinetic blocks, and closes the retained
+  source/constraint tail with a dense Schur complement:
+
+  ``S = D - C M_K^{-1} B``.
+
+- The path is deliberately opt-in and fail-closed. It requires active-DOF mode,
+  non-Phi1 FP transport, complete zeta blocks, and a small retained tail.
+
+### Validation
+
+- Added dispatch coverage for aliases, left-preconditioning side selection,
+  and active-only reduced builder routing.
+- Added a numerical regression that verifies the source/constraint tail Schur
+  complement closes the true active operator tail residual to ``1e-7`` relative
+  tolerance on the reduced geometry-scheme-11 FP deck.
+- Focused checks:
+
+  - ``ruff check sfincs_jax/v3_driver.py
+    sfincs_jax/transport_preconditioner_dispatch.py
+    tests/test_transport_preconditioner_dispatch.py
+    tests/test_fortran_reduced_preconditioner.py --select F821,F401,F811``
+    passed.
+  - ``git diff --check`` on the touched transport files passed.
+  - ``pytest -q tests/test_fortran_reduced_preconditioner.py
+    tests/test_transport_preconditioner_dispatch.py
+    tests/test_transport_sparse_direct.py tests/test_transport_host_gmres.py
+    tests/test_transport_policy_coverage.py -k 'fortran_reduced or
+    direct_active or direct_reduced_pmat or block_schur or
+    transport_preconditioner_from_kind_dispatches_fp_direct or
+    normalize_transport_preconditioner_kind_maps_aliases or
+    resolve_transport_precondition_side_for_kind_keeps_fp_line_left_only or
+    host_gmres or sparse_direct'`` passed with ``74`` tests.
+
+### Evidence and decision
+
+- The new direct-active zeta-line block-Schur path built quickly and used low
+  memory on the bounded geometry-scheme-11 deck, but the one-RHS solve ended at
+  residual ``8.58e-6`` and relative residual ``1.15e-1``. It is therefore not a
+  viable production preconditioner and must not be promoted to ``auto``.
+- Existing ``fp_xblock_tz_lu`` and ``fp_xblock_tz_lu_schur`` remain the
+  strongest bounded RHSMode=2/3 FP preconditioner candidates. On the reduced
+  geometry-scheme-11 one-RHS gate:
+
+  - ``fp_xblock_tz_lu`` reached residual ``9.75e-13`` in ``2.1 s``;
+  - ``fp_xblock_tz_lu_schur`` reached residual ``1.67e-13`` in ``2.3 s``;
+  - ``fp_fortran_reduced_lu`` reached residual ``2.02e-16`` in ``0.6 s`` solve
+    time, but with a larger factor/RSS footprint.
+
+- Production-floor ``transportMatrix_geometryScheme11``
+  (``25 x 51 x 100 x 6``, active size ``462827``) with
+  ``fp_xblock_tz_lu_schur`` completed setup and entered Krylov, but did not
+  complete the first RHS within the 10-minute budget and was terminated after
+  about 12 minutes. This is a failed production promotion gate.
+
+### Next step
+
+- Stop tuning line smoothers for this RHSMode=2/3 FP lane. The next real
+  implementation should be a reusable symbolic block ordering/factor metadata
+  layer for the direct active true operator, with larger coupled kinetic blocks
+  than zeta-lines but without global SuperLU fill. Candidate blocks should be
+  admitted only if a setup-time true residual probe shows material improvement
+  before the expensive production Krylov solve starts.
+
+## 2026-06-09 Addendum: direct active true-operator path and production factor gates
+
+### Implementation
+
+- Added progress plumbing for the CPU host SciPy GMRES transport path. Long
+  RHSMode=2/3 runs now report ``whichRHS``, callback iteration count, reported
+  residual, and elapsed solve time through the existing ``emit`` channel.
+- Made ``SFINCS_JAX_TRANSPORT_HOST_GMRES_FIRST=1`` a real force-on diagnostic
+  for explicit CPU RHSMode=2/3 systems, including FP systems. The default
+  remains conservative; ``off`` still disables the path.
+- Added direct term-level active true-operator emission for non-Phi1
+  RHSMode=2/3 FP sparse-direct transport solves. This builds the same active
+  operator used by the true residual gate without generic pattern coloring or
+  matvec probing.
+- Added ``SFINCS_JAX_TRANSPORT_FP_DIRECT_ACTIVE_OPERATOR=0`` as a kill switch
+  and ``SFINCS_JAX_TRANSPORT_FP_DIRECT_ACTIVE_OPERATOR_FACTOR={lu,ilu}`` plus
+  ILU fill/drop controls for direct true-operator factor experiments.
+
+### Validation
+
+- Added regression coverage that compares the direct active true-operator CSR
+  action against the matrix-free active operator on both reduced
+  ``transportMatrix_geometryScheme2`` and
+  ``transportMatrix_geometryScheme11`` FP decks.
+- Focused checks:
+
+  - ``python -m compileall -q sfincs_jax/v3_driver.py
+    sfincs_jax/transport_host_gmres.py sfincs_jax/transport_policy.py
+    tests/test_fortran_reduced_preconditioner.py
+    tests/test_transport_host_gmres.py tests/test_transport_policy_coverage.py``
+  - ``ruff check sfincs_jax/v3_driver.py sfincs_jax/transport_host_gmres.py
+    sfincs_jax/transport_policy.py tests/test_fortran_reduced_preconditioner.py
+    tests/test_transport_host_gmres.py tests/test_transport_policy_coverage.py
+    --select F821,F401,F811``
+  - ``pytest -q tests/test_fortran_reduced_preconditioner.py
+    tests/test_transport_host_gmres.py tests/test_transport_policy_coverage.py
+    tests/test_transport_sparse_direct.py tests/test_transport_preconditioner_dispatch.py
+    -k 'fortran_reduced or fp_fortran_reduced_lu or direct_active_true_operator
+    or direct_reduced_pmat or host_gmres or
+    transport_sparse_direct_and_host_gmres_first_attempts'`` passed with
+    ``25`` tests.
+
+### Bounded geom11 evidence
+
+- Bounded ``transportMatrix_geometryScheme11`` at ``13 x 17 x 30 x 4``, one
+  RHS, direct ``Pmat`` + forced host-GMRES:
+
+  - host-GMRES progress worked and showed the solve clearly;
+  - true residual was not competitive: final relative residual was about
+    ``1.9e-5`` for the bounded gate, worse than the existing JAX Krylov route.
+
+- Same bounded case with sparse-direct true operator before the new direct
+  true-operator fix used the generic helper and took about ``13-17 s`` with
+  ``4-5.3 GB`` RSS.
+- Same bounded case after the direct active true-operator fix:
+
+  - active true-operator CSR: ``14588`` active unknowns, ``288064`` nonzeros,
+    CSR estimate ``2.36 MB``, build ``0.76 s``;
+  - exact LU factor: ``2.70 s`` factor time, factor estimate ``273 MB``;
+  - one-RHS wall time ``7.30 s`` from Python, ``8.21 s`` by
+    ``/usr/bin/time -l``;
+  - true residual ``2.09e-14`` and relative residual ``1.7e-10``;
+  - max RSS ``1.88 GB`` and peak footprint ``1.12 GB``.
+
+### Production geom11 evidence
+
+- Production-floor ``transportMatrix_geometryScheme11`` at
+  ``25 x 51 x 100 x 6``, one RHS:
+
+  - direct active true-operator CSR: ``462827`` active unknowns,
+    ``10124067`` nonzeros, CSR estimate ``82.8 MB``, build ``14.1-14.5 s``;
+  - exact LU factor did not complete before the ``600 s`` alarm and reached
+    about ``10.5 GB`` RSS;
+  - direct true-operator ILU with float32 factors completed factorization in
+    ``146.1 s`` with factor estimate ``469 MB`` but produced a catastrophic
+    true residual (about ``5.7e14``);
+  - float64 ILU completed factorization in ``153.8 s`` with factor estimate
+    ``701.8 MB`` but did not recover the solve within the ``600 s`` cap;
+  - max RSS for the capped ILU run was about ``13.1 GB``.
+
+### Decision
+
+- Do **not** promote forced host-GMRES, direct ``Pmat`` GMRES, global exact LU,
+  or global ILU as production defaults for RHSMode=2/3 FP transport.
+- Keep direct active true-operator emission as an implemented/tested
+  infrastructure primitive because it removes matrix probing and is excellent
+  on bounded cases, but production grids need a block/reuse factor architecture
+  rather than monolithic SuperLU/ILU on the full active system.
+- Next required non-tuning algorithmic step: use the direct active true
+  operator to build reusable block factors over natural kinetic blocks
+  (species/x/ell/angular slabs) plus a coupled source/constraint Schur
+  complement, then use those blocks as a GMRES preconditioner with progress
+  callbacks and strict true-residual gates. This is the route most consistent
+  with the Fortran/PETSc design: separate true operator from preconditioner,
+  reuse symbolic structure, and avoid global fill.
+
+## 2026-06-09 Addendum: direct reduced-Pmat emission removes colored-probe setup blocker
+
+### Implementation
+
+- Added direct term-level RHSMode=2/3 FP ``Pmat`` emission for
+  ``SFINCS_JAX_TRANSPORT_PRECOND=fp_fortran_reduced_lu``. The new path builds a
+  CSR-backed ``SparseOperatorBundle`` from the structured f-block stencils and
+  analytic source/constraint tail instead of coloring the sparsity pattern and
+  probing the matrix-free operator thousands of times.
+- The implementation is fail-closed and currently scoped to non-Phi1
+  RHSMode=2/3 FP transport systems with active kinetic unknowns arranged as
+  complete zeta blocks plus the complete source/constraint tail. Unsupported
+  systems and direct-factorization failures fall back to the existing
+  pattern-probe route.
+- Added the kill switch
+  ``SFINCS_JAX_TRANSPORT_FP_FORTRAN_REDUCED_LU_DIRECT=0`` and included the
+  direct flag in the factor cache key so direct/non-direct metadata and factors
+  cannot collide.
+
+### Validation
+
+- Added a term-level regression that compares the direct emitted active CSR
+  action against the matrix-free Fortran-reduced preconditioner operator on
+  both ``transportMatrix_geometryScheme2`` and
+  ``transportMatrix_geometryScheme11`` reduced FP decks.
+- Checks run:
+
+  - ``python -m compileall -q sfincs_jax/v3_driver.py
+    tests/test_fortran_reduced_preconditioner.py``
+  - ``ruff check sfincs_jax/v3_driver.py
+    tests/test_fortran_reduced_preconditioner.py --select F821,F401,F811``
+  - ``pytest -q tests/test_fortran_reduced_preconditioner.py
+    -k direct_reduced_pmat -q`` passed with ``2`` tests.
+  - ``pytest -q tests/test_fortran_reduced_preconditioner.py
+    tests/test_transport_preconditioner_dispatch.py
+    tests/test_transport_sparse_direct.py
+    -k 'fortran_reduced or fp_fortran_reduced_lu or direct_reduced_pmat' -q``
+    passed with ``13`` tests.
+
+### Production-floor CPU evidence
+
+- Direct CSR emission on the ``2026-06-08`` production-floor decks:
+
+  - ``transportMatrix_geometryScheme2`` (``25 x 51 x 100 x 8``,
+    ``648977`` active unknowns): direct CSR build ``12.38-13.15 s``,
+    ``12176533`` actual nonzeros, CSR estimate ``148.7 MB``.
+  - ``transportMatrix_geometryScheme11`` (``25 x 51 x 100 x 6``,
+    ``462827`` active unknowns): direct CSR build ``8.71-8.77 s``,
+    ``8678219`` actual nonzeros, CSR estimate ``106.0 MB``.
+
+- Production setup/factor gates with structural
+  ``PRECONDITIONER_X=1``, ``PRECONDITIONER_XI=1``, keep theta/zeta, ILU:
+
+  - ``transportMatrix_geometryScheme11``: setup ``32.24 s`` total
+    (direct CSR ``8.72 s`` + ILU factor ``23.17 s``), factor ``33513109``
+    nonzeros, factor estimate ``405.9 MB``, max RSS ``12.7 GB`` and peak
+    footprint ``8.48 GB`` from ``/usr/bin/time -l``.
+  - ``transportMatrix_geometryScheme2``: setup ``46.82 s`` total
+    (direct CSR ``12.38 s`` + ILU factor ``33.97 s``), factor ``47023948``
+    nonzeros, factor estimate ``569.5 MB``, max RSS ``16.6 GB`` and peak
+    footprint ``11.7 GB``.
+
+- The previous office CPU ``transportMatrix_geometryScheme11`` structural ILU
+  gate spent ``287.6 s`` materializing the active CSR by pattern-color probing
+  before factorization. The direct emitter removes that setup blocker while
+  producing the same actual CSR nonzero count and factor size class.
+
+### Remaining blocker
+
+- A capped one-RHS production ``transportMatrix_geometryScheme11`` solve entered
+  the first Krylov phase after fast direct setup and ILU factorization, but did
+  not emit a residual/progress line for several minutes. This means the current
+  blocker has moved from CSR materialization to Krylov/preconditioner quality
+  and progress/timeout observability.
+- Keep ``fp_fortran_reduced_lu`` opt-in. Do not promote it to ``auto`` for
+  production-floor RHSMode=2/3 FP transport until the first-RHS Krylov phase
+  passes strict residual/runtime gates on geom2/geom11 and then on the broader
+  production suite.
+- Next required algorithmic step: add a stronger lower-fill kinetic block/coarse
+  correction or a true multi-RHS recycled Krylov path on top of the direct
+  ``Pmat`` infrastructure, with progress callbacks and timeout-safe residual
+  history during long production solves.
+
+## 2026-06-09 Addendum: production-floor transport gate blocks auto promotion
+
+### Production-floor CPU evidence
+
+- Production transport rows from
+  ``benchmarks/production_resolution_inputs_2026-06-08`` are much larger than
+  the bounded gate. ``transportMatrix_geometryScheme2`` is
+  ``25 x 51 x 100 x 8`` with ``1020002`` total unknowns and ``648977`` active
+  unknowns. ``transportMatrix_geometryScheme11`` is ``25 x 51 x 100 x 6`` with
+  ``765002`` total unknowns and ``462827`` active unknowns.
+- Preflighted active Fortran-reduced ``Pmat`` patterns:
+
+  - ``transportMatrix_geometryScheme2`` Fortran-structural mode
+    (``PRECONDITIONER_X=1``, ``PRECONDITIONER_XI=1``, keep theta/zeta):
+    ``17379525`` pattern nonzeros, CSR estimate ``211.2 MB``.
+  - ``transportMatrix_geometryScheme2`` stronger coupled mode
+    (``PRECONDITIONER_X=0``, ``PRECONDITIONER_XI=0``): ``161046525`` pattern
+    nonzeros, CSR estimate ``1935.2 MB`` before factor fill.
+  - ``transportMatrix_geometryScheme11`` Fortran-structural mode:
+    ``12389175`` pattern nonzeros, CSR estimate ``150.5 MB``.
+  - ``transportMatrix_geometryScheme11`` stronger coupled mode:
+    ``84406275`` pattern nonzeros, CSR estimate ``1014.7 MB`` before factor
+    fill.
+
+- Local CPU production ``transportMatrix_geometryScheme11`` structural ILU
+  attempt:
+
+  - materialized ``8678217`` actual CSR nonzeros (``106.0 MB``) from the
+    structural pattern in ``69.0 s``;
+  - built an ILU factor with ``33513109`` factor nonzeros (``405.9 MB``) in
+    ``21.8 s``;
+  - entered RHS1 Krylov but did not complete under the production decision cap
+    after more than ``10 min`` of active CPU work. Memory stayed finite
+    (roughly ``3-4 GB`` RSS), so this is a runtime/convergence failure, not an
+    OOM.
+
+- Local CPU production ``transportMatrix_geometryScheme11`` structural exact-LU
+  attempt:
+
+  - materialized the same ``8678217``-nonzero CSR in ``60.7 s`` with
+    ``SFINCS_JAX_EXPLICIT_SPARSE_PATTERN_COLOR_BATCH=16``;
+  - remained in host LU factorization beyond ``20 min`` with process RSS near
+    ``5-6 GB`` and never reached RHS1. This is too setup-heavy for automatic
+    production use.
+
+- Office CPU production ``transportMatrix_geometryScheme11`` structural ILU
+  rerun:
+
+  - materialized the active structural CSR in ``287.6 s`` and built the ILU
+    factor in ``52.9 s``;
+  - factor metadata: ``8678217`` operator nonzeros (``106.0 MB`` CSR) and
+    ``33513109`` factor nonzeros (``405.9 MB`` estimated factor storage);
+  - entered ``whichRHS=1/3`` but did not complete a first RHS residual or write
+    the output matrix before the ``900 s`` timeout. Observed process RSS was
+    about ``3.5 GB`` before termination. This is a fail-closed production gate:
+    memory is bounded, but setup plus first-RHS convergence/runtime is not
+    production-ready.
+
+### GPU status
+
+- ``office`` is reachable and exposes two RTX A4000 GPUs, but both devices were
+  occupied by existing Python jobs during this gate: about ``15.9 GB`` used and
+  ``100%`` utilization on each GPU. JAX CUDA initialization failed with
+  ``CUDA_ERROR_OUT_OF_MEMORY``. Do not mark the GPU production gate complete
+  from this attempt; rerun when those jobs finish.
+
+### Production benchmark-driver guard
+
+- Found and fixed a benchmark-runner hazard: ``scripts/run_reduced_upstream_suite.py``
+  previously replaced a matched production ``input.namelist`` with
+  ``tests/reduced_inputs/<case>.input.namelist`` whenever a reduced CI seed
+  existed. That is correct for CI smoke parity, but invalid for production
+  memory/runtime gates and README plots.
+- Added ``--production-inputs`` as a production benchmark mode equivalent to
+  ``--no-reduced-seeds --no-promote-reduced-fixtures``. This ensures
+  production suites use the manifest decks exactly and cannot overwrite
+  reduced CI fixtures with production inputs.
+- Added a focused regression test for the input-selection decision. Checks run:
+  ``python -m compileall -q scripts/run_reduced_upstream_suite.py tests/test_scaled_example_suite_reference.py``,
+  ``pytest -q tests/test_scaled_example_suite_reference.py -k reduced_seed -q``,
+  and ``ruff check scripts/run_reduced_upstream_suite.py tests/test_scaled_example_suite_reference.py --select F821,F401,F811``.
+
+### Decision
+
+- Keep ``fp_fortran_reduced_lu`` opt-in only. Do **not** promote it into
+  ``auto`` for production-floor RHSMode=2/3 FP transport rows.
+- The bounded residual-clean result remains useful as a correctness baseline,
+  but production promotion needs a lower-setup replacement: direct term-level
+  ``Pmat`` emission, reusable symbolic ordering, factor reuse across shapes, or
+  a genuinely lower-fill coupled block/coarse factor that avoids the current
+  pattern-color probing and slow host factor path.
+- README/runtime plots and public performance claims must not be regenerated
+  with this path as a promoted default until the production-floor CPU/GPU gates
+  pass.
+
+## 2026-06-09 Addendum: FP RHSMode=2/3 global reduced transport preconditioner
+
+### Implementation
+
+- Added opt-in ``SFINCS_JAX_TRANSPORT_PRECOND=fp_fortran_reduced_lu`` with
+  aliases ``fp_global_fortran_reduced_lu``, ``fp_petsc_like_lu``, and
+  ``fp_reduced_pmat_lu``.
+- Added a transport RHSMode=2/3 Fortran-reduced operator builder that applies
+  the same x/species/pitch reductions as the RHSMode=1 path while preserving
+  the transport operator and restoring the original RHSMode.
+- Corrected the Fortran-v3 angular-preconditioner interpretation:
+  ``preconditioner_theta=0`` and ``preconditioner_zeta=0`` keep the full
+  theta/zeta derivative matrices. Angular-drop is ``2`` in Fortran and is now
+  represented by explicit
+  ``SFINCS_JAX_TRANSPORT_FP_FORTRAN_REDUCED_LU_KEEPS_THETA_ZETA=0`` only.
+- Added an active-DOF-aware dispatch path so the heavy global reduced factor is
+  only built in the reduced active space. In active mode the full-space build
+  returns the cheap ``sxblock`` placeholder and the actual factor is built for
+  the reduced solve.
+- Added forced-auto benchmark hook
+  ``SFINCS_JAX_TRANSPORT_FP_FORTRAN_REDUCED_LU_AUTO=1``. It is disabled by
+  default until production-floor memory/runtime gates are completed.
+
+### Evidence
+
+- SFINCS Fortran v3 PETSc/MUMPS profile on the bounded
+  ``13 x 17 x 30 x 4`` geometry-scheme-2 transport input:
+  true matrix ``14588 x 14588`` with ``288066`` nonzeros, preconditioner matrix
+  ``263756`` nonzeros, MUMPS factor entries ``7204448``, effective factor memory
+  ``68 MB`` and allocated memory ``100 MB``. PETSc reported ``PCSetUp=0.187 s``,
+  ``KSPSolve=0.539 s`` over three RHS columns, process wall ``1.25 s``, and
+  max RSS about ``247 MB``.
+- The closest SFINCS-JAX Fortran-structural mode
+  (``PRECONDITIONER_X=1``, ``PRECONDITIONER_XI=1``,
+  ``KEEPS_THETA_ZETA=1``) materialized ``263754`` nonzeros and an ``84.8 MB``
+  SuperLU factor. It passed the bounded all-RHS gate at relative residuals
+  ``3.69e-10``, ``3.83e-10``, and ``4.56e-10`` in ``91.3 s``. This is a valid
+  lower-memory diagnostic but is not the fastest SFINCS-JAX path because the
+  internal target is much stricter than the Fortran input ``solverTolerance``.
+- The stronger coupled default for this opt-in candidate
+  (``PRECONDITIONER_X=0``, ``PRECONDITIONER_XI=0``,
+  ``KEEPS_THETA_ZETA=1``) now uses direct term-level Pmat emission plus active
+  reduction. With dense and sparse-direct rescue disabled, it passed bounded
+  geometry-scheme-2 all-RHS in ``5.54 s`` with max relative residual
+  ``6.98e-11``; the direct Pmat had ``55704`` nonzeros and the exact LU factor
+  estimate was ``13.984 MB``.
+- The same stronger coupled path passed bounded geometry-scheme-11 all-RHS in
+  ``4.86 s`` with max relative residual ``5.07e-13``; the direct Pmat had
+  ``59526`` nonzeros and the exact LU factor estimate was ``16.976 MB``.
+- The new symbolic metadata layer reports reusable structural keys and
+  ordering statistics. RCM reduced the bounded geom2 bandwidth/profile from
+  ``2531/2007237`` to ``638/1028290`` and bounded geom11 from
+  ``2899/2149494`` to ``488/880579``.
+- The angular-drop diagnostic mode reproduced the previous failure pattern:
+  RHS1 retried without the preconditioner and aborted at residual
+  ``1.811554e-04`` with relative residual ``5.711080e-01``. Do not promote or
+  use this mode except as a negative regression test.
+
+### Decision
+
+- The bounded FP RHSMode=2/3 production-preconditioner lane is now closed at
+  the bounded ``13 x 17 x 30 x 4`` gate for geometry schemes 2 and 11.
+- Do not promote ``fp_fortran_reduced_lu`` to public default yet. The next gate
+  is production-floor memory/runtime measurement; the stronger coupled LU can
+  be memory-heavy at ``25 x 51 x 100 x 4+`` and needs either measured viability
+  or a tighter term-level/batched assembly path before README performance
+  claims.
+- No more smoother/restart tuning is needed for this lane. The remaining
+  algorithmic work is production-floor scaling: avoid pattern-color probing
+  overhead and reduce fill by adding direct term-level transport ``Pmat``
+  emission plus reusable ordering/factor metadata.
+
+### Validation
+
+- ``python -m compileall -q sfincs_jax/v3_driver.py
+  sfincs_jax/transport_preconditioner_dispatch.py
+  tests/test_fortran_reduced_preconditioner.py
+  tests/test_transport_preconditioner_dispatch.py
+  tests/test_transport_sparse_direct.py`` passed.
+- ``ruff check sfincs_jax/v3_driver.py
+  sfincs_jax/transport_preconditioner_dispatch.py
+  tests/test_fortran_reduced_preconditioner.py
+  tests/test_transport_preconditioner_dispatch.py
+  tests/test_transport_sparse_direct.py --select F821,F401,F811`` passed.
+- ``pytest -q tests/test_fortran_reduced_preconditioner.py
+  tests/test_transport_preconditioner_dispatch.py tests/test_transport_sparse_direct.py
+  -k "fortran_reduced or fp_fortran_reduced_lu" -q`` passed with ``11`` tests.
+
+## 2026-06-08 Addendum: calibrated production benchmark floor
+
+### Implementation
+
+- Raised the SFINCS_JAX-owned production benchmark manifest policy from the old
+  tokamak validation floor to a calibrated production floor:
+  ``33 x 1 x 12 x 140`` for tokamak rows and ``89 x 1 x 24 x 300`` for
+  RHSMode=1 PAS/no-``E_r`` tokamak rows. The 3D floor remains
+  ``25 x 51 x 4 x 100``.
+- Added explicit generator options and manifest metadata for the
+  PAS/no-``E_r`` tokamak floor:
+  ``minimum_tokamak_pas_noer_resolution``.
+- Regenerated
+  ``benchmarks/production_resolution_inputs_2026-05-04/manifest.json`` from
+  the public SFINCS_JAX examples only. The regenerated manifest has ``39``
+  cases: ``1`` ``bounded_local_ok``, ``1`` ``bounded_remote``, and ``37``
+  ``remote_or_cluster_only``.
+- Added a regression test that verifies PAS/no-``E_r`` tokamak rows are raised
+  to ``89 x 1 x 24 x 300`` while tokamak PAS/with-``E_r`` rows remain at the
+  default ``33 x 1 x 12 x 140`` floor.
+- Fixed the default GPU solver policy at the raised PAS/no-``E_r`` floor:
+  ``sparse_pc_gmres`` now remains enabled through the ``469k`` active-DOF
+  one-species window, while the older PAS-large BiCGStab fastpath is capped
+  below this size so it cannot steal the production-floor row and stall.
+- Reclassified analytic-geometry ``gpsiHatpsiHat`` and the classical-flux
+  diagnostics derived from it as non-gating parity fields for geometry schemes
+  ``1/2/4``. SFINCS Fortran v3 initializes ``gpsipsi`` to zero for these
+  analytic branches, but some builds write nonzero/uninitialized HDF5 values;
+  true kinetic flux/current diagnostics remain gated.
+
+### Evidence
+
+- Serial SFINCS Fortran v3 calibration showed the old tokamak floor was too
+  small for public timing claims. The local ``53 x 1 x 16 x 190`` intermediate
+  PAS/no-``E_r`` floor was parity-clean, but the faster ``office`` benchmark
+  host still ran those rows in about ``4 s`` with suspect Fortran residuals.
+  The office-calibrated ``89 x 1 x 24 x 300`` floor gives about ``15 s`` wall
+  and ``13.3 s`` solve time for both one-species PAS/no-``E_r`` rows. At
+  ``33 x 1 x 12 x 140``, the with-``E_r`` full-trajectory rows already solve in
+  the tens of seconds, so applying the larger no-``E_r`` floor globally would
+  over-classify bounded rows as remote-only.
+- Local CPU raised-floor bounded suite:
+  ``tests/production_resolution_suite_cpu_2026-06-08_caseaware_floor``.
+  With serial SFINCS Fortran v3 references and no runtime downscaling, this
+  earlier shard used the intermediate PAS/no-``E_r`` ``53 x 1 x 16 x 190``
+  calibration plus the final PAS/with-``E_r`` floor:
+  ``4/5`` bounded rows are parity-clean with no missing output keys.
+  The four clean public-floor rows are:
+  ``tokamak_1species_PASCollisions_noEr``,
+  ``tokamak_1species_PASCollisions_noEr_Nx1``,
+  ``tokamak_1species_PASCollisions_withEr_fullTrajectories``, and
+  ``tokamak_2species_PASCollisions_withEr_fullTrajectories``.
+- Final local CPU PAS/no-``E_r`` floor shard:
+  ``tests/production_resolution_suite_cpu_2026-06-08_noer_floor89_refreshed``.
+  Both rows are strict ``parity_ok`` at the checked-in
+  ``89 x 1 x 24 x 300`` floor with ``missing_total=0``:
+  ``tokamak_1species_PASCollisions_noEr`` has JAX CPU ``10.376 s`` vs Fortran
+  ``17.436 s`` and JAX RSS ``5114 MB`` vs Fortran RSS ``2626 MB``;
+  ``tokamak_1species_PASCollisions_noEr_Nx1`` has JAX CPU ``8.528 s`` vs
+  Fortran ``17.539 s`` and JAX RSS ``4896 MB`` vs Fortran RSS ``2632 MB``.
+- Measured local CPU PAS/with-``E_r`` timings from
+  ``tests/production_resolution_suite_cpu_2026-06-08_caseaware_floor`` at the
+  checked-in ``33 x 1 x 12 x 140`` floor:
+  ``tokamak_1species_PASCollisions_withEr_fullTrajectories``:
+  Fortran ``23.808 s``, JAX CPU cold ``11.703 s``, Fortran RSS ``975 MB``,
+  JAX process RSS ``3302 MB``.
+  ``tokamak_2species_PASCollisions_withEr_fullTrajectories``:
+  Fortran ``48.722 s``, JAX CPU cold ``18.218 s``, Fortran RSS ``1371 MB``,
+  JAX process RSS ``5725 MB``.
+- ``tokamak_1species_PASCollisions_noEr_withQN`` remains a Fortran-reference
+  exclusion. SFINCS Fortran v3 diverges at the raised floor before a parity
+  comparison can be made. A raised-floor SFINCS_JAX-only QN probe entered the
+  expensive sparse-direct Newton linearization path for a ``113172`` active-DOF
+  system and was stopped after several minutes; this remains a nonlinear QN
+  operator-reuse/performance lane, not a README performance row.
+- Refreshed office GPU raised-floor shards at the checked-in
+  ``89 x 1 x 24 x 300`` PAS/no-``E_r`` floor:
+  ``tests/production_resolution_suite_gpu_2026-06-08_noer_floor89_refreshed_one``
+  and
+  ``tests/production_resolution_suite_gpu_2026-06-08_noer_floor89_refreshed_nx1``.
+  Both rows are practical ``parity_ok`` with no missing output keys and
+  ``sparse_pc_gmres`` selected automatically:
+  ``tokamak_1species_PASCollisions_noEr`` has JAX GPU ``19.467 s`` vs Fortran
+  ``15.925 s`` and JAX RSS ``4192 MB`` vs Fortran RSS ``2813 MB``;
+  ``tokamak_1species_PASCollisions_noEr_Nx1`` has JAX GPU ``19.224 s`` vs
+  reused Fortran ``13.862 s`` and JAX RSS ``4140 MB`` vs Fortran RSS
+  ``2809 MB``. Strict mode still records ``1/195`` mismatch
+  (``FSABFlow_vs_x``) for both rows, consistent with the Fortran residual
+  quality note and per-``x`` flow diagnostic sensitivity; integrated transport
+  gates pass.
+- Refreshed office GPU PAS/with-``E_r`` bounded shard:
+  ``tests/production_resolution_suite_gpu_2026-06-08_wither_floor33_refreshed_clean``.
+  Both rows are practical and strict ``parity_ok`` at the checked-in
+  ``33 x 1 x 12 x 140`` floor with ``missing_total=0``:
+  ``tokamak_1species_PASCollisions_withEr_fullTrajectories`` has JAX GPU cold
+  ``20.671 s`` / logged ``19.244 s`` vs Fortran ``13.288 s`` and JAX RSS
+  ``3185 MB`` vs Fortran RSS ``1016 MB``;
+  ``tokamak_2species_PASCollisions_withEr_fullTrajectories`` has JAX GPU cold
+  ``35.435 s`` / logged ``33.972 s`` vs Fortran ``18.274 s`` and JAX RSS
+  ``5410 MB`` vs Fortran RSS ``1450 MB``.
+- First refreshed remote-only 3D production-row shard:
+  ``tests/production_resolution_suite_gpu_2026-06-08_3d_pas_probe_mono_geom11_tzfft_first_trace``.
+  ``monoenergetic_geometryScheme11`` now completes at the checked-in
+  ``25 x 51 x 4 x 100`` floor with practical and strict ``parity_ok``,
+  strict ``0/210`` mismatches, printParity ``9/9``, and ``missing_total=0``.
+  The previous run
+  ``tests/production_resolution_suite_gpu_2026-06-08_3d_pas_probe_mono_geom11``
+  showed the real blocker: sparse direct was not eligible, matrix-free Krylov
+  timed out, and the initial sparse helper attempted a dense
+  ``127501 x 127501`` materialization (``121 GiB``). The intermediate
+  sparse-pattern exact-LU path fixed correctness but cost ``511.106 s`` and
+  ``25.96 GB`` process RSS, so it is retained as a strict rescue rather than
+  the default route.
+- Runtime/RSS status for that 3D row is now performance-positive with the
+  bounded structured ``tzfft`` first attempt: JAX GPU wall ``13.566 s``,
+  process RSS ``1.08 GB``, incremental RSS about ``0.52 GB``,
+  residuals ``5.32e-18`` and ``1.07e-13``. The matched SFINCS Fortran v3/MUMPS
+  reference on the same ``office`` run took ``188.541 s`` and ``3.26 GB`` RSS.
+  Negative exact-LU performance probes remain archived for diagnosis:
+  float32-factor, ``MMD_AT_PLUS_A``, and ``MMD_AT_PLUS_A`` with diagonal
+  pivoting disabled all failed to beat the promoted structured path.
+- Generated Fortran binary matrix dumps from the raised-floor suite were
+  pruned after extracting reports, leaving compact evidence only.
+
+### Validation
+
+- ``pytest -q tests/test_create_production_benchmark_inputs.py`` passed
+  (``8 passed``).
+- Focused solver-policy and comparator regression checks passed, including the
+  raised-floor sparse-PC policy window and the analytic-classical non-gating
+  reference test.
+- The raised-floor CPU suite completed with ``4`` parity-clean rows and
+  ``missing_total=0`` output-key coverage over the audited rows.
+- The refreshed raised-floor GPU no-``E_r`` shards completed with ``2/2``
+  practical parity-clean rows and ``missing_total=0`` output-key coverage.
+- The refreshed bounded GPU PAS/with-``E_r`` shard completed with ``2/2``
+  practical and strict parity-clean rows and ``missing_total=0`` output-key
+  coverage. A narrow comparator regression now covers the RHSMode=1
+  constraintScheme=2 local ``jHat`` near-zero floor while keeping
+  flux-surface-averaged current diagnostics gated.
+- The refreshed remote-only 3D ``monoenergetic_geometryScheme11`` shard
+  completed with practical and strict parity-clean output, no missing output
+  keys, and the new sparse-pattern regression test
+  ``test_transport_sparse_direct_can_use_pattern_probe_without_dense_identity``
+  validates the pattern-probed host-LU code path on a tiny RHSMode=2 fixture.
+
+### Decision
+
+- Use the calibrated case-aware production floor for future public runtime and
+  memory plots. Do not use the previous ``25 x 1 x 4 x 100`` tokamak validation
+  floor for README performance claims.
+- Do not regenerate the README runtime/memory plot from CPU-only or partial
+  data. The next required benchmark step is a merged CPU/GPU production-floor
+  suite from the checked-in manifest, including the remote-only 3D rows whose
+  public Fortran references satisfy the ``>=10 s`` floor.
+- Keep QN as a documented nonlinear reference/performance lane until either a
+  finite SFINCS Fortran v3 reference input is identified or the SFINCS_JAX
+  nonlinear sparse/operator-reuse path is fast enough to stand on its own.
+
+### Progress
+
+- Production benchmark floor lane: ``97%``. The generator, manifest, tests,
+  docs, final-floor CPU PAS/no-``E_r`` evidence, bounded CPU PAS/with-``E_r``
+  evidence, office floor calibration, refreshed GPU bounded evidence, and one
+  strict-clean remote-only 3D row are aligned. Remaining work is the merged full
+  production suite across the other remote-only 3D/FP rows, not the floor policy
+  itself.
+- README/runtime-memory publication lane: ``87%``. The old low-floor rows are
+  no longer acceptable for public claims. One remote-only 3D row now has
+  honest strict-clean production evidence but is slower/higher-RSS than
+  Fortran; the remaining requirement is the same-state full CPU/GPU suite at
+  the final checked-in manifest floor and plot regeneration.
+- Overall RHSMode=1 production solver lane: ``97%``. The robust default route
+  is now practical-parity-clean on the raised-floor PAS/no-``E_r`` GPU rows,
+  strict-clean on the final CPU PAS/no-``E_r`` rows, and strict-clean on the
+  bounded PAS/with-``E_r`` CPU/GPU rows; lower-memory full-grid replacement work
+  remains separate from the benchmark-floor policy.
+- RHSMode=2/3 3D transport structured-native lane: ``93%``. The dense-probing
+  timeout is fixed, the sparse-pattern host-LU route remains as strict rescue,
+  and the production ``monoenergetic_geometryScheme11`` floor now uses the
+  bounded structured ``tzfft`` first attempt successfully: ``0/210`` strict
+  mismatches, true residuals ``5.3e-18`` / ``1.1e-13``, ``13.6 s`` JAX GPU wall,
+  and ``1.08 GB`` process RSS versus ``188.5 s`` / ``3.26 GB`` Fortran v3/MUMPS
+  on the same ``office`` run. A bounded FP Fourier line-factor candidate is now
+  implemented and test-covered, but it remains opt-in because it does not yet
+  close the full constraint-coupled FP transport Krylov gate. Remaining work is
+  cross-case promotion across the other 3D RHSMode=2/3 rows and full
+  production-suite plot regeneration.
+
+## 2026-06-08 Addendum: RHSMode=2/3 structured transport promotion
+
+### Implementation
+
+- Added ``transport_tzfft_structured_first_attempt_allowed`` and
+  ``transport_tzfft_first_attempt_budget`` in ``sfincs_jax.transport_policy``.
+  The automatic gate is deliberately narrow: explicit RHSMode=2/3, no Phi1,
+  no full-FP collision block, ``Nx <= 2``, angular grid at least ``64`` points,
+  accelerator backend, non-implicit solve, and active size within
+  ``SFINCS_JAX_TRANSPORT_TZFFT_FIRST_MIN/MAX``.
+- Wired the gate into ``solve_v3_transport_matrix_linear_gmres``. Eligible
+  transport rows now build the JAX-native ``tzfft`` preconditioner and run a
+  bounded first GMRES attempt using
+  ``SFINCS_JAX_TRANSPORT_TZFFT_FIRST_RESTART/MAXITER`` defaults ``40`` / ``12``.
+- Preserved the strict true-residual rule: if the structured first attempt
+  misses the target, sparse-pattern host LU is forced as the correctness rescue
+  whenever it is within the sparse-direct cap.
+
+### Evidence
+
+- Remote command root:
+  ``tests/production_resolution_suite_gpu_2026-06-08_3d_pas_probe_mono_geom11_tzfft_first_trace``.
+- Case: ``monoenergetic_geometryScheme11`` at the checked-in production floor
+  ``25 x 51 x 4 x 100``.
+- Result: ``parity_ok``, ``0/210`` strict mismatches, ``9/9`` print-parity
+  signals, and no missing output keys.
+- Solver log: ``preconditioner=tzfft strong=tzfft``; both RHS solves used the
+  structured first attempt and did not invoke sparse LU.
+- Residuals: ``5.3157e-18`` and ``1.0684e-13``.
+- Runtime/RSS: JAX GPU ``13.57 s`` wall, ``1082 MB`` process
+  RSS and about ``520 MB`` incremental RSS. Matched Fortran v3/MUMPS reference:
+  ``188.54 s`` and ``3259 MB`` RSS on the same ``office`` run.
+- Focused validation:
+  ``python -m pytest tests/test_transport_matrix_rhsmode2_parity.py tests/test_transport_matrix_rhsmode3_parity.py tests/test_transport_sparse_direct.py tests/test_transport_policy_coverage.py -q``
+  passed with ``71 passed``. The previous GPU heuristic regression also passed
+  with the new narrow gate.
+
+## 2026-06-08 Addendum: RHSMode=2/3 FP native line-factor candidate
+
+### Implementation
+
+- Added the explicit transport preconditioner aliases ``fp_tzfft_line``,
+  ``fp_streaming_line``, ``fp_block_thomas``, and ``fp_line``.
+- Implemented ``_build_rhsmode23_fp_tzfft_line_preconditioner`` in
+  ``sfincs_jax.v3_driver``. The factor keeps full FP coupling in
+  ``(species, x)`` blocks for each Legendre row and solves the Fourier-space
+  Legendre residual equation with block-Thomas factors. Storage scales like
+  ``Ntheta * Nzeta * Nxi * (Nspecies * Nx)^2`` instead of the dense
+  ``fp_tzfft`` table scaling
+  ``Ntheta * Nzeta * (Nxi * Nspecies * Nx)^2``.
+- Kept the strict true-residual gate unchanged. The new line factor is a
+  preconditioner candidate; if the full operator residual does not pass, the
+  solve remains failed or falls through to an admitted rescue path. It does not
+  silently accept preconditioned residuals.
+- Kept ``auto`` conservative. ``fp_tzfft_line`` is opt-in by explicit
+  ``SFINCS_JAX_TRANSPORT_PRECOND=fp_tzfft_line`` or by benchmark-only
+  ``SFINCS_JAX_TRANSPORT_FP_TZFFT_LINE_AUTO=1``. Default ``auto`` still uses
+  the existing FP transport ladder until the coupled constraint/source-moment
+  correction passes production gates.
+- Added a policy guard for this candidate: if a user forces
+  ``SFINCS_JAX_TRANSPORT_PRECONDITION_SIDE=right`` with ``fp_tzfft_line``, the
+  transport solve switches back to ``left`` before Krylov. This avoids the
+  current JAX transpose failure in the block-Thomas scan apply path and keeps
+  the full true-residual gate as the acceptance criterion.
+- Added the first coupled source/constraint-tail correction as
+  ``SFINCS_JAX_TRANSPORT_PRECOND=fp_tzfft_line_schur``. It augments the line
+  factor with normalized tail/source response columns ``Z`` and solves the
+  compact true-action residual equation
+  ``R A Z c = R (r - A M_line^{-1} r)`` over the source/constraint tail rows.
+  The apply path includes finite coefficient cleanup and a correction-norm
+  limiter so arbitrary Krylov vectors fail closed instead of emitting invalid
+  corrections.
+
+### Evidence
+
+- Focused numerical unit gate:
+  ``tests/test_transport_sparse_direct.py::test_transport_fp_tzfft_line_reduces_one_apply_residual_vs_sxblock``.
+  On the small FP RHSMode=2 LHD fixture, one line-factor application lowers
+  the true residual by more than ``1e6`` relative to the existing ``sxblock``
+  preconditioner.
+- Bounded mid-grid probe:
+  geometry-scheme-2 RHSMode=2 FP input downscaled to
+  ``13 x 17 x 30 x 4`` with exact sparse-LU rescue disabled.
+  ``sxblock`` finished one RHS in ``64.5 s`` with true residual
+  ``1.81e-4`` (relative ``0.57``). ``fp_tzfft_line`` finished in ``41.5 s``
+  but diverged in the preconditioned GMRES phase and landed at the same
+  fallback residual after retry without preconditioner. Host LGMRES timed out
+  at ``180 s`` for both ``sxblock`` and ``fp_tzfft_line``.
+- ``fp_tzfft_line_schur`` source-tail evidence:
+  the tiny LHD FP RHSMode=2 fixture lowers the RHS tail residual from
+  ``2.91e-5`` relative with ``fp_tzfft_line`` to ``9.14e-11`` relative with the
+  Schur layer. Synthetic unit tail loads are solved to below ``1e-8`` tail
+  residual in the focused test
+  ``tests/test_transport_sparse_direct.py::test_transport_fp_tzfft_line_schur_reduces_line_tail_residual``.
+- ``fp_tzfft_line_schur`` bounded solve evidence:
+  on the same ``13 x 17 x 30 x 4`` geometry-scheme-2 one-RHS probe with
+  sparse/dense rescue disabled, the Schur preconditioned phase still reports an
+  invalid or too-large preconditioned residual and retries without the
+  preconditioner, landing at ``1.811504e-4`` true residual
+  (relative ``0.571092``) in ``125-133 s``. A smaller ``9 x 11 x 16 x 4``
+  damping sweep (``1.0, 0.3, 0.1, 0.03``) likewise retried without the
+  preconditioner and landed at the no-preconditioner residual
+  ``9.945676e-5`` (relative ``0.468468``).
+- Low-mode Galerkin restriction probe:
+  added ``SFINCS_JAX_TRANSPORT_FP_TZFFT_LINE_SCHUR_RESTRICTION`` with
+  ``tail`` (default), ``galerkin``, and ``tail_galerkin`` diagnostic modes. The
+  ``tail_galerkin`` mode on the bounded ``9 x 11 x 16 x 4`` geometry-scheme-2
+  one-RHS probe produced a huge preconditioned residual
+  (``5.485e108`` before retry) and landed at the same no-preconditioner
+  residual ``9.945676e-5`` (relative ``0.468468``). This closes the low-mode
+  correction attempt as diagnostic-only.
+- Non-averaged local-geometry kinetic factor:
+  added ``SFINCS_JAX_TRANSPORT_PRECOND=fp_local_geom_line`` with aliases
+  ``fp_geom_line``, ``fp_local_line``, and ``fp_nonavg_line``. The candidate
+  keeps the local mirror geometry
+  ``(b^theta dB/dtheta + b^zeta dB/dzeta)/(2 B^2)`` at each ``(theta,zeta)``
+  and solves real-space Legendre block-Thomas systems with dense
+  ``(species, x)`` blocks. Storage scales like
+  ``Ntheta * Nzeta * Nxi * (Nspecies * Nx)^2`` and remains bounded by
+  ``SFINCS_JAX_TRANSPORT_FP_LOCAL_GEOM_LINE_MAX_MB``.
+- ``fp_local_geom_line`` evidence:
+  on the tiny LHD FP RHSMode=2 fixture, the one-apply full residual was
+  ``2.956e10`` relative, worse than ``sxblock`` (``1.971e10``) and much worse
+  than ``fp_tzfft_line`` (``9.088e2``). Additive line-plus-local-geometry
+  residual corrections with damping values from ``1.0`` down to ``0.03`` and
+  negative damping probes amplified the residual to about ``1e12-1e14``.
+  This closes the local-only non-averaged mirror correction as a standalone or
+  additive production candidate.
+- Structured kinetic f-block factor:
+  added ``SFINCS_JAX_TRANSPORT_PRECOND=fp_structured_fblock_lu`` with aliases
+  ``fp_fblock_lu``, ``fp_full_fblock_lu``, and ``fp_kinetic_lu``. This
+  diagnostic candidate reuses the migrated structured f-block assembler and
+  factors the kinetic block as a bounded host sparse matrix. It retains the
+  full non-averaged collisionless streaming/mirror and FP collision couplings,
+  but leaves source/constraint tail closure to Krylov, so the existing full
+  true-residual gate remains the only acceptance criterion.
+- ``fp_structured_fblock_lu`` evidence:
+  with diagonal stabilization ``REG=1e-12``, the tiny LHD FP fixture reduces
+  the kinetic one-apply residual below ``1e-8`` relative and beats
+  ``fp_tzfft_line`` by more than ``1e6`` on the kinetic rows. On the bounded
+  ``9 x 11 x 16 x 4`` geometry-scheme-2 one-RHS probe with sparse/direct rescue
+  disabled, it moves the solve from the previous no-preconditioner plateau
+  ``9.945676e-5`` (relative ``0.468468``) to residual
+  ``2.799316e-13`` (relative ``1.318552e-9``) in ``63.3 s``. This is a real
+  residual improvement, but still misses the strict ``tol=1e-10`` absolute
+  target by about ``13x``. The next ``13 x 17 x 30 x 4`` rung did not produce
+  output before the bounded runtime budget and was terminated after about
+  ``4 min``. Therefore the exact host kinetic factor is a correctness baseline,
+  not a default or production-floor candidate.
+- Decision: keep the native line factor as an implemented, bounded candidate,
+  not as a public default. Keep ``fp_tzfft_line_schur`` as an opt-in diagnostic
+  for source/constraint-tail coupling, and keep ``fp_local_geom_line`` as an
+  opt-in diagnostic only. Keep ``fp_structured_fblock_lu`` as an opt-in
+  diagnostic baseline for validating lower-memory native factors. The next real
+  algorithmic step is not more tail-Schur damping or local mirror-only
+  correction; it is a reusable lower-memory coupled block factor that retains
+  dominant angular streaming couplings and non-averaged geometry without exact
+  host factor fill, then a rerun of ``transportMatrix_geometryScheme2`` and
+  ``transportMatrix_geometryScheme11`` at the production floor.
+- 2026-06-08 continuation: implemented the lower-memory
+  ``fp_xblock_tz_lu`` candidate and the ``fp_xblock_tz_lu_schur`` source/tail
+  overlay for FP RHSMode=2/3 transport. ``fp_xblock_tz_lu`` factors independent
+  per-``(species,x)`` sparse blocks over the coupled ``(L,theta,zeta)`` unknowns,
+  retaining non-averaged angular streaming/mirror geometry and selected drift
+  terms without building the global kinetic f-block LU. The Schur overlay now
+  supports a true ``tail_galerkin`` residual restriction over both tail rows and
+  kinetic moment test rows.
+- Bounded evidence: on the ``13 x 17 x 30 x 4`` geometry-scheme-2 FP transport
+  probe with sparse/direct and dense rescue disabled, ``fp_xblock_tz_lu`` passes
+  RHS3 at ``REG=1e-13`` with residual ``1.128017e-10``, RHS norm
+  ``1.339822``, relative residual ``8.419155e-11``, and wall time ``7.6 s``.
+  The same setting fails RHS1 on the all-RHS gate at relative residual
+  ``2.629832e-10`` after a long no-preconditioner retry. The prior
+  ``REG=3e-13`` all-RHS probe passed RHS1/RHS2 but failed RHS3 at relative
+  residual ``4.219e-10``. The coupled Schur overlay reduces the tiny-fixture
+  tail residual from ``1.95e-12`` to ``4.25e-15`` but did not complete the
+  bounded all-RHS gate within the runtime window.
+- 2026-06-08 residual-coarse continuation: added opt-in
+  ``SFINCS_JAX_TRANSPORT_FP_XBLOCK_TZ_LU_SCHUR_KINETIC_RESIDUAL=1`` and
+  ``SFINCS_JAX_TRANSPORT_FP_XBLOCK_TZ_LU_SCHUR_RHS_RESIDUAL=1`` columns. These
+  add low-order kinetic residual-error directions and residual-correction
+  columns derived from the actual RHSMode=2/3 transport drives. On the tiny FP
+  fixture with ``DAMPING=0.25`` the one-apply full residual decreases for all
+  three transport RHS columns relative to ``fp_xblock_tz_lu``. On the bounded
+  ``13 x 17 x 30 x 4`` geometry-scheme-2 all-RHS promotion gate, however, the
+  same policy with sparse/direct and dense rescue disabled failed RHS1 after
+  ``375.227 s``: the preconditioned branch produced a ``nan`` residual, retried
+  without the preconditioner, and aborted at residual ``1.811554e-04``,
+  RHS norm ``3.171999e-04``, relative residual ``5.711080e-01``. This is a
+  documented non-promotion result.
+- Decision: do not promote ``fp_xblock_tz_lu`` or
+  ``fp_xblock_tz_lu_schur`` to default/``auto`` yet, and do not run
+  production-floor ``transportMatrix_geometryScheme2`` or
+  ``transportMatrix_geometryScheme11`` from this candidate until the bounded
+  ``13 x 17 x 30 x 4`` all-RHS strict residual gate passes under one policy.
+  The next algorithmic step must retain/correct the dominant kinetic residual
+  subspace, not only source/tail moments.
+- Focused validation after the side guard:
+  ``python -m pytest tests/test_transport_preconditioner_dispatch.py -q``
+  passed with ``13 passed``; the broader transport regression command
+  ``python -m pytest tests/test_transport_sparse_direct.py tests/test_transport_matrix_rhsmode2_parity.py tests/test_transport_matrix_rhsmode3_parity.py tests/test_scaled_example_suite_reference.py::test_solver_trace_parser_prefers_transport_rhs_solver_maps tests/test_solver_trace_output_formats.py -q``
+  passed with ``68 passed``.
+- Full local validation after this pass:
+  ``python -m pytest -q`` passed with ``2362 passed in 549.34 s``. Docs also
+  built with ``python -m sphinx -b html docs /tmp/sfincs_jax_docs_build``.
+
+## 2026-06-07 Addendum: guarded native-rescue policy and full-grid QA rerun
+
+### Implementation
+
+- Kept the RHSMode=1 direct-tail rescue memory-budget fix: true-operator
+  rescue caps are now interpreted as additional correction memory on top of the
+  already-built base preconditioner. This lets a bounded coarse correction be
+  evaluated beside a multi-GB native factor instead of being rejected because
+  the total factor memory already exceeds the rescue cap.
+- Moved that budget rule into
+  ``sfincs_jax.v3_driver._rhs1_additive_rescue_nbytes`` and added a focused
+  regression test.
+- Guarded native-stack true-coupled auto rescue behind
+  ``SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_COUPLED_AUTO_NATIVE``.
+  The active-LU reference path still gets the existing automatic true-coupled
+  gate; native-stack auto rescue remains available for controlled experiments
+  but is not paid by default users.
+- Changed ``scripts/sfincs_fortran_mpi_wrapper.sh`` to default to one MPI rank.
+  This keeps local SFINCS Fortran v3 parity/reference runs from producing
+  concurrent HDF5 output writes unless MPI scaling is explicitly requested with
+  ``SFINCS_FORTRAN_MPI_NP``.
+
+### Evidence
+
+- Budget-fix probe:
+  ``outputs/rhs1_solver_stack_audit/fullgrid_qa_native_true_coupled_probe_after_budget_fix.json``.
+  The true-coupled correction now builds on top of the
+  ``active_fortran_v3_reduced_native_stack`` base:
+  ``coarse_size=100``, ``z_nnz=649966``, ``a_nnz=3016496``,
+  ``setup_s=4.894``, ``factor_nbytes=5134517136``. It improves the bad
+  one-apply residual from ``3.775297`` to ``0.7781838``.
+- Long native/coarse Krylov probe:
+  ``outputs/rhs1_solver_stack_audit/fullgrid_qa_native_true_coupled_gmres20_after_budget_fix.json``.
+  After ``1000`` Krylov iterations / ``1023`` matvecs, the solve remains at
+  residual ``1.614474e-04`` against target ``1.613966e-12``. This is a useful
+  diagnostic improvement but not a production replacement.
+- Combined true-coupled plus true active residual block probe:
+  ``outputs/rhs1_solver_stack_audit/fullgrid_qa_native_true_coupled_plus_residual_block_probe.json``.
+  The residual block lowers the corrected one-apply residual further
+  ``0.7781838 -> 0.6438570`` but still does not make the Krylov solve
+  residual-clean.
+- Low-memory alternatives:
+  ``active_filtered_sparse_factor`` is unstable on the full-grid QA probe
+  (one-apply residual ``1.652724e11`` and final residual ``2.228019e3``).
+  ``active_symbolic_coupled_schur`` is the best low-memory research candidate
+  so far (``20,662,196`` bytes, setup about ``0.6-0.8 s``), but its long run
+  stalls at residual ``1.867713e-04`` after ``1000`` Krylov iterations.
+- Guarded default-policy rerun:
+  ``outputs/rhs1_solver_stack_audit/fullgrid_qa_direct_tail_auto_after_true_coupled_native_guard.json``.
+  It selected native stack in ``9.195 s`` with ``5,090,357,984`` estimated
+  bytes, rejected it by true-residual preflight
+  ``1.613966e-04 -> 3.775297``, did not run native true-coupled rescue,
+  retried ``active_fortran_v3_reduced_lu``, and converged to residual
+  ``7.269598e-16`` below target ``1.613966e-14`` in ``354.6 s`` wall
+  (``67`` GMRES iterations, ``74`` matvecs). The generated state-vector scratch
+  arrays were removed; only compact JSON evidence remains.
+- Production-floor input generation:
+  ``benchmarks/production_resolution_inputs_2026-06-08/manifest.json``.
+  The manifest contains ``39`` cases: ``6`` ``bounded_local_ok``, ``5``
+  ``bounded_remote``, and ``28`` ``remote_or_cluster_only``. The largest HSX
+  rows are ``25 x 115 x 5 x 149``.
+- Bounded local CPU production-floor validation with ``SFINCS_FORTRAN_MPI_NP=4``
+  was rejected as a reference artifact. It showed false mismatches and HDF5
+  locking/name-collision diagnostics from concurrent Fortran HDF5 writes. The
+  heavy per-case output directory was removed after recording this conclusion.
+- Clean bounded local CPU production-floor validation with
+  ``SFINCS_FORTRAN_MPI_NP=1``:
+  ``tests/production_resolution_suite_cpu_2026-06-08_bounded_local_np1``.
+  It produced ``5/6`` parity-clean rows with no missing output keys and no
+  SFINCS_JAX mismatches. The only non-clean row is
+  ``tokamak_1species_PASCollisions_noEr_withQN``, where the SFINCS Fortran v3
+  reference diverged. The five clean rows still have measured Fortran runtimes
+  below the public ``10 s`` performance floor, so they are validation evidence
+  and not a replacement for the README runtime/memory plot. Per-case HDF5/log
+  directories were pruned after the run; the compact top-level reports remain.
+- Follow-up Fortran-only QN/PAS preconditioner sweep showed that
+  ``preconditioner_x=1``, ``preconditioner_xi=1``, ``preconditioner_species=1``,
+  and the combined setting do not fix the Fortran v3
+  ``SNES_DIVERGED_LINE_SEARCH`` on
+  ``tokamak_1species_PASCollisions_noEr_withQN`` at ``25 x 1 x 8 x 100``.
+  A SFINCS_JAX-only probe of the same input completed with Newton residual
+  ``9.20055e-10`` in about ``5 s``. Treat this row as a Fortran-reference
+  exclusion until a defensible Fortran v3 input variant is identified.
+
+### Validation
+
+- ``python -m py_compile sfincs_jax/v3_driver.py tests/test_v3_sparse_pattern.py``
+  passed.
+- ``ruff check sfincs_jax/v3_driver.py tests/test_v3_sparse_pattern.py --select F821,F401,F811``
+  passed.
+- ``pytest -q tests/test_v3_sparse_pattern.py::test_rhs1_additive_rescue_nbytes_treats_cap_as_incremental_budget tests/test_v3_sparse_pattern.py::test_fortran_reduced_pc_gmres_direct_tail_active_native_stack_production_alias_fails_fast tests/test_v3_sparse_pattern.py::test_fortran_reduced_direct_tail_auto_retries_active_lu_after_native_preflight_failure tests/test_v3_sparse_pattern.py::test_fortran_reduced_direct_tail_true_coupled_coarse_auto_promotes_active_lu``
+  passed (``4 passed``).
+- ``pytest -q tests/test_fortran_mpi_wrapper.py tests/test_v3_sparse_pattern.py::test_rhs1_additive_rescue_nbytes_treats_cap_as_incremental_budget tests/test_v3_sparse_pattern.py::test_fortran_reduced_pc_gmres_direct_tail_active_native_stack_production_alias_fails_fast tests/test_v3_sparse_pattern.py::test_fortran_reduced_direct_tail_auto_retries_active_lu_after_native_preflight_failure tests/test_v3_sparse_pattern.py::test_fortran_reduced_direct_tail_true_coupled_coarse_auto_promotes_active_lu``
+  passed (``7 passed``).
+
+### Decision
+
+- Promote the additive rescue-budget fix and the native true-coupled auto
+  guard. The former fixes a real memory-budget bug; the latter prevents a
+  measured non-clean research path from adding default setup cost.
+- Do not promote native true-coupled rescue, residual-block rescue, filtered
+  sparse factor, or symbolic-coupled-Schur as full-grid production defaults.
+  None passes the same residual-clean gate as active LU on the full-grid QA
+  stress case.
+- Do not regenerate the README runtime/memory plot yet. The required next
+  compute step remains a fresh CPU/GPU production-resolution suite whose cases
+  satisfy the production floor check; partial solver-stack probes are not an
+  honest replacement for that public benchmark.
+- Use serial SFINCS Fortran v3 references by default for parity and benchmark
+  data generation. MPI Fortran remains an explicit scaling lane, not the default
+  way to produce HDF5 reference outputs on a workstation.
+- Use the calibrated tokamak production benchmark floor before replacing public
+  runtime/memory plots. The old ``25 x 1 x 4 x 100`` validation floor is
+  parity-clean for five bounded rows but does not meet the measured ``>=10 s``
+  Fortran timing requirement.
+- Keep ``tokamak_1species_PASCollisions_noEr_withQN`` out of public
+  Fortran-comparison performance claims until the Fortran v3 reference is
+  finite. It can still be used as a SFINCS_JAX nonlinear-QN regression row.
+
+### Progress
+
+- Lower-memory/faster production replacement lane: ``86%``. The memory-budget
+  infrastructure and opt-in native/coarse diagnostics are now correct, but no
+  lower-memory candidate is residual-clean at full grid.
+- Overall RHSMode=1 production solver lane: ``95%``. The hands-off robust path
+  is residual-clean at the checked full-grid QA surface; the remaining blocker
+  is replacing the high-memory active-LU fallback with a lower-memory method
+  that passes the same gate.
+- README/runtime-memory publication lane: ``72%``. Text is corrected and the
+  bounded CPU validation shard is clean under serial Fortran references, but
+  the public plot/table must wait for a CPU/GPU production suite whose measured
+  Fortran rows satisfy the ``>=10 s`` floor.
+
+## 2026-06-07 Addendum: full-grid direct-tail auto route restored
+
+### Implementation
+
+- Added the production-named lower-memory direct-tail preconditioner
+  ``active_fortran_v3_reduced_native_stack`` in
+  ``sfincs_jax/rhs1_full_assembly.py``. It wraps the bounded native line /
+  optional Schwarz / coupled coarse stack, records
+  ``no_global_serial_sparse_factor=True``, and always requires a true-residual
+  preflight before it can be used as a production preconditioner.
+- Changed the large active ``auto`` candidate order to
+  ``active_fortran_v3_reduced_native_stack`` followed by
+  ``active_fortran_v3_reduced_lu``. This tries the lower-memory route first but
+  keeps the robust active-LU fallback available.
+- Fixed a full-grid solver-policy regression in ``sfincs_jax/v3_driver.py``:
+  direct-tail ``auto`` now forces the global direct-tail backend by default.
+  Before this fix, an unset backend could still auto-select the old x-block
+  route on ``25 x 39 x 60 x 7`` QA and stall near KSP residual ``2.135`` until
+  timeout.
+- Fixed the auto-preflight retry policy: if a preflight-required candidate
+  fails and the retry candidate is ``active_fortran_v3_reduced_lu``, the active
+  LU route is accepted as a no-required-preflight robust fallback. Its one-apply
+  residual remains recorded as a diagnostic, but it no longer vetoes the known
+  residual-clean GMRES route.
+
+### Evidence
+
+- Failed pre-fix QA full-grid auto audit:
+  ``outputs/rhs1_solver_stack_audit/fullgrid_qa_direct_tail_auto_native_then_lu.json``.
+  It timed out after ``540 s`` in the old x-block backend with KSP residual
+  still near ``2.135`` and no direct-tail preconditioner selected.
+- Intermediate post-backend-fix audit:
+  ``outputs/rhs1_solver_stack_audit/fullgrid_qa_direct_tail_auto_native_then_lu_after_backend_fix.json``.
+  It reached global direct-tail and selected native stack in ``10.031 s`` with
+  ``5,090,357,984`` estimated factor bytes, but native stack worsened the
+  one-apply residual from ``1.613966e-4`` to ``3.775297``. Active LU was built
+  but incorrectly rejected by the inherited preflight policy.
+- Final post-retry-fix QA full-grid auto audit:
+  ``outputs/rhs1_solver_stack_audit/fullgrid_qa_direct_tail_auto_native_then_lu_after_retry_fix.json``.
+  It selected native stack in ``9.173 s`` with ``5,090,357,984`` estimated
+  factor bytes, rejected it by preflight, accepted
+  ``active_fortran_v3_reduced_lu`` as the robust fallback, and converged with
+  ``46`` GMRES iterations / ``52`` matvecs to residual ``9.002525e-13`` below
+  target ``1.613966e-12`` in ``343.495 s`` wall.
+- Temporary ``stateVector.npy`` scratch output from the final audit was removed;
+  only compact audit JSON evidence remains.
+
+### Validation
+
+- ``pytest -q tests/test_rhs1_full_assembly.py::test_active_projected_auto_ladder_uses_large_default_candidates tests/test_rhs1_full_assembly.py::test_active_fortran_v3_reduced_native_stack_alias_uses_bounded_components``
+  passed.
+- ``pytest -q tests/test_v3_sparse_pattern.py::test_fortran_reduced_direct_tail_auto_retries_active_lu_after_native_preflight_failure tests/test_v3_sparse_pattern.py::test_fortran_reduced_direct_tail_auto_preconditioner_uses_active_ladder tests/test_v3_sparse_pattern.py::test_fortran_reduced_direct_tail_required_pc_forces_global_backend``
+  passed.
+- ``ruff check sfincs_jax/v3_driver.py sfincs_jax/rhs1_full_assembly.py tests/test_v3_sparse_pattern.py tests/test_rhs1_full_assembly.py``
+  passed.
+
+### Decisions
+
+- Promote the backend-selection and retry-policy fixes. They close the
+  "user should not need env vars" regression for the full-grid QA direct-tail
+  route.
+- Do not promote native stack as the full-grid default by itself. It is now a
+  first candidate in ``auto`` but remains residual-gated, and on the full-grid
+  QA audit it correctly fails preflight.
+- Keep ``active_fortran_v3_reduced_lu`` as the robust high-memory fallback until
+  the lower-memory native/block/coarse architecture passes the same true
+  residual gate.
+
+### Progress
+
+- Full-grid RHSMode=1 hands-off solver-policy lane: ``100%`` for the checked QA
+  surface; QH keeps the prior active-LU default audit until a matching full-grid
+  QH deck is regenerated in the current probe tree.
+- Lower-memory/faster production replacement lane: ``84%``. The candidate is
+  implemented, tested, and automatically tried, but not residual-clean at full
+  grid.
+- Overall RHSMode=1 production solver lane: ``94%``. The main remaining blocker
+  is a genuinely lower-memory residual-clean replacement for active LU.
+
+## 2026-06-07 Addendum: Fortran-v3 sparse-direct mimicry and full-grid QA/QH reference closure
+
+### Implementation
+
+- Added PETSc-style ``RCM`` ordering support to
+  ``active_fortran_v3_reduced_lu`` / ``active_fortran_v3_reduced_ilu`` in
+  ``sfincs_jax/rhs1_full_assembly.py``.
+  - SuperLU has no ``permc_spec=RCM``, so the implementation applies an
+    explicit symmetric reverse-Cuthill-McKee permutation and then factors with
+    SuperLU ``NATURAL`` ordering.
+  - The default remains the previously measured NATURAL-first ordering because
+    upper-midgrid and full-grid evidence below shows RCM is not faster for the
+    current active reduced matrix layout.
+  - Metadata now records ``permc_spec``, ``superlu_permc_spec``, and whether an
+    explicit symmetric ordering was applied.
+- Fixed equilibrium path resolution in ``sfincs_jax/paths.py`` so stale
+  absolute VMEC paths from copied SFINCS decks can be redirected through
+  ``SFINCS_JAX_EQUILIBRIA_DIRS`` by basename. This is necessary for Zenodo and
+  collaborator decks that contain machine-local paths such as ``/ptmp/...``.
+- Added ``scripts/audit_rhs1_solver_stack.py`` as a bounded RHSMode=1 QA/QH
+  solver-stack audit helper.
+  - It records command, environment, timeout status, setup/preflight/GMRES
+    lines, structured solve summaries, direct-tail preconditioner summaries,
+    residuals, and JSON output.
+  - It is intentionally a benchmark/profiling helper, not a production solver
+    code path.
+- Added direct-tail structured preconditioner logging in ``sfincs_jax/v3_driver.py``:
+  selected kind, setup time, elapsed time, factor bytes, ordering, and cache
+  status are now visible in terminal output and parsable by the audit helper.
+
+### Fortran v3 / PETSc behavior audited
+
+- SFINCS Fortran v3 solves RHSMode=1 through PETSc SNES/KSP even for linear
+  cases. The iterative branch assembles the true Jacobian ``whichMatrix=1`` and
+  a separate simplified preconditioner matrix ``whichMatrix=0``.
+- The Fortran default preconditioner knobs are
+  ``preconditioner_x=1``, ``preconditioner_x_min_L=0``,
+  ``preconditioner_theta=0``, ``preconditioner_zeta=0``,
+  ``preconditioner_xi=1``, and ``preconditioner_species=1``.
+- PETSc uses GMRES restart ``2000`` with ``PC=LU`` on the simplified
+  preconditioner. The serial PETSc sparse-direct fallback requests
+  ``MATORDERINGRCM``, nonzero-diagonal reordering at ``1e-12``, and zero-pivot
+  tolerance ``1e-200``. Parallel examples use MUMPS/SuperLU_DIST, often with
+  MUMPS/SCOTCH/parallel ordering flags.
+- The archived full-grid QA/QH Zenodo runs detect both MUMPS and SuperLU_DIST
+  but select MUMPS. Their ``-ksp_view`` contract is GMRES restart ``2000``,
+  relative tolerance ``1e-05``, absolute tolerance ``1e-50``, max iterations
+  ``10000``, left preconditioning, ``PC=LU``, factor package ``mumps``,
+  ``CNTL(1)=1e-06``, ``ICNTL(4)=2``, and ``ICNTL(14)=50``. Therefore the
+  production comparison target is MUMPS-LU-preconditioned GMRES, not the serial
+  PETSc RCM fallback.
+- SFINCS_JAX now has the corresponding ingredients:
+  true operator residual, Fortran-reduced active ``whichMatrix=0`` matrix,
+  exact LU on that matrix, GMRES over the true operator, explicit RCM
+  compatibility, and bounded direct-tail active assembly to avoid full host CSR
+  materialization.
+
+### Evidence
+
+- Upper-midgrid QA ``21 x 31 x 45 x 5`` with host structured CSR and exact
+  active LU:
+  - NATURAL ordering: residual ``3.711930e-13``, structured solve ``42.492 s``,
+    wall ``66.479 s``.
+  - RCM ordering: residual ``3.711353e-13``, structured solve ``45.699 s``,
+    wall ``70.851 s``.
+  - Decision: RCM is useful for PETSc-style audits, but it is not promoted to
+    default because NATURAL remains faster for the current reduced active
+    ordering.
+- Full-grid QA ``25 x 39 x 60 x 7`` at ``s=0.5`` using forced-global
+  direct-tail ``active_fortran_v3_reduced_lu`` with RCM:
+  - active size ``507004 / 819004``;
+  - direct-tail materialization ``6.626 s`` with ``13,483,256`` CSR nonzeros;
+  - exact reduced-LU setup ``279.469 s``;
+  - GMRES ``47`` iterations / ``52`` matvecs;
+  - residual ``9.951119e-13`` against target ``1.613966e-12``;
+  - wall ``336.051 s``.
+- Full-grid QH ``25 x 39 x 60 x 7`` at ``s=0.5`` using forced-global
+  direct-tail ``active_fortran_v3_reduced_lu`` with NATURAL:
+  - active size ``507004 / 819004``;
+  - direct-tail materialization ``6.496 s`` with ``13,483,256`` CSR nonzeros;
+  - exact reduced-LU setup ``258.817 s``;
+  - factor bytes ``13,303,259,384``;
+  - GMRES ``42`` iterations / ``48`` matvecs;
+  - residual ``8.712742e-14`` against target ``2.873075e-12``;
+  - wall ``311.329 s``.
+- Full-grid host structured CSR is not viable under a ``45 GB`` cap for this
+  run size: preflight estimates ``82,559,131,220`` bytes before factorization.
+  The viable reference path is direct-tail active assembly, not full host CSR.
+- A run that did not force
+  ``SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_PC_BACKEND=global`` auto-selected the
+  older xblock backend and timed out at ``420 s`` with KSP residual stuck near
+  ``2.135``. This is a solver-policy hazard for full-grid QA/QH: production
+  full-grid reference runs must force the global direct-tail backend until the
+  default policy is updated.
+- The default policy is now updated and rechecked without manual
+  ``PC_BACKEND=global`` or ``DIRECT_TAIL_PC_MAX_MB`` overrides:
+  - QA ``25 x 39 x 60 x 7``: active size ``507004 / 819004``, auto cap
+    ``14708.1 MiB``, direct-tail materialization ``6.169 s``, LU setup
+    ``280.962 s``, factor bytes ``13,303,259,384``, GMRES ``47`` iterations /
+    ``52`` matvecs, residual ``9.950981e-13`` against target ``1.613966e-12``,
+    wall ``336.525 s``.
+  - QH ``25 x 39 x 60 x 7``: active size ``507004 / 819004``, auto cap
+    ``14708.1 MiB``, direct-tail materialization ``6.291 s``, LU setup
+    ``278.103 s``, factor bytes ``13,303,259,384``, GMRES ``42`` iterations /
+    ``48`` matvecs, residual ``8.712742e-14`` against target ``2.873075e-12``,
+    wall ``347.266 s``.
+
+### Validation
+
+- ``ruff check sfincs_jax/rhs1_full_assembly.py tests/test_rhs1_full_assembly.py``
+  passed.
+- ``ruff check sfincs_jax/v3_driver.py scripts/audit_rhs1_solver_stack.py tests/test_audit_rhs1_solver_stack.py``
+  passed.
+- ``ruff check sfincs_jax/paths.py tests/test_helper_module_coverage.py`` passed.
+- ``python -m pytest tests/test_rhs1_full_assembly.py -k 'active_fortran_v3_reduced_lu_supports_petsc_style_rcm_ordering or active_fortran_v3_reduced_lu_defaults_to_natural_ordering or active_fortran_v3_reduced_lu_respects_explicit_ordering or active_fortran_v3_reduced_lu_falls_back_when_natural_fails or filtered_sparse_factor' -q``
+  passed.
+- ``python -m pytest tests/test_audit_rhs1_solver_stack.py -q`` passed.
+- ``python -m pytest tests/test_helper_module_coverage.py::test_indexing_and_paths_helpers -q``
+  passed.
+- ``python -m pytest tests/test_v3_sparse_pattern.py -k 'direct_tail_active_fortran_v3_reduced or direct_tail_auto_preconditioner or direct_tail_solves_tiny_rhs1_system' -q``
+  passed.
+- ``python -m pytest tests/test_v3_sparse_pattern.py::test_fortran_reduced_direct_tail_pc_default_cap_is_adaptive_for_active_lu tests/test_v3_sparse_pattern.py::test_fortran_reduced_direct_tail_required_pc_forces_global_backend -q``
+  passed.
+- CLI audit ``fullgrid_qa_direct_tail_auto_defaults`` passed without manual
+  backend/cap overrides.
+- CLI audit ``fullgrid_qh_direct_tail_auto_defaults`` passed without manual
+  backend/cap overrides.
+
+### Decision
+
+- Full-grid QA and QH are now demonstrated to work at ``25 x 39 x 60 x 7`` with
+  a high-memory exact reduced-LU reference path, and the explicit required
+  direct-tail active-LU request now reaches that path by default.
+- This is still not the final production-performance target: setup time is
+  ``~278-281 s`` and the LU factor is ``~13.3 GB``. The production lane remains
+  open for a
+  lower-memory, faster active-only sparse factor/coarse architecture that keeps
+  the true residual convergence of exact LU without its memory/runtime cost.
+- The next implementation should not tune xblock smoothers. It should implement
+  a real lower-memory replacement: active-only selected off-diagonal sparse
+  factorization, reusable symbolic ordering, block/line factors, additive
+  Schwarz patches, and a coupled current/constraint/profile Schur correction
+  whose setup is accepted only by true residual gates.
+- Policy hazard closed after the reference runs: a required direct-tail
+  structured preconditioner now forces the global Fortran-reduced backend
+  automatically when ``SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_PC_BACKEND`` is
+  unset/auto. This prevents production full-grid QA/QH decks from silently
+  falling into the older xblock backend when the user explicitly requested the
+  exact direct-tail active factor path. An explicit advanced
+  ``PC_BACKEND=xblock`` setting remains honored.
+- CLI-level regression evidence for the policy closure:
+  ``outputs/rhs1_solver_stack_audit/quick_required_direct_tail_policy.json`` ran
+  with ``SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_XBLOCK_MIN_SIZE=1``, required
+  ``active_fortran_v3_reduced_lu`` direct-tail PC, and no
+  ``PC_BACKEND=global`` override. It selected the global Fortran-reduced
+  operator, built direct-tail active LU in ``0.014 s`` with NATURAL ordering,
+  and converged to residual ``5.343124e-13`` in ``2.466 s`` wall.
+
+### Progress
+
+- Fortran v3/PETSc solver-contract audit: ``100%``.
+- RCM compatibility implementation: ``100%``.
+- Stale absolute equilibrium path redirection: ``100%``.
+- Bounded QA/QH solver-stack audit harness: ``100%``.
+- Full-grid QA/QH high-memory reference closure: ``100%``.
+- Explicit direct-tail solver-policy closure: ``100%``.
+- Full-grid QA/QH default high-memory route closure: ``100%``.
+- Full-grid QA/QH production-fast/lower-memory closure: ``82%``.
+- Overall RHSMode=1 production solver lane: ``92%``.
+
+## 2026-06-05 Addendum: true active-block LSQ and sparse-PC post-minres audit
+
+### Implementation
+
+- Added `_try_build_true_operator_active_block_lsq_preconditioner` in
+  `sfincs_jax/v3_driver.py`.
+  - It selects a deterministic active low-`x` / low-`ell` kinetic block using
+    `RHS1ActiveFieldSplitOrdering`, optionally appends Phi1/source/constraint
+    tail unknowns, and forms bounded batches of columns of the true RHSMode=1
+    operator.
+  - The correction solves a small normal equation for the true active operator,
+    then wraps the existing native active factor as a reusable host
+    preconditioner.
+  - New diagnostics record block size, kinetic/tail counts, column batch,
+    memory estimates, normal-equation solver, and residual before/after.
+- Wired the true active-block stage into the Fortran-reduced direct-tail
+  preflight sequence behind
+  `SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_ACTIVE_BLOCK=1`.
+- Added an opt-in generic sparse-PC post-Krylov minimal-residual correction:
+  `SFINCS_JAX_RHSMODE1_SPARSE_PC_POST_MINRES_STEPS`.
+  - It applies the selected sparse-PC preconditioner to the returned true
+    residual, chooses a scalar least-squares step, and accepts only measured
+    true-residual reductions.
+  - Metadata records requested/accepted steps, residual before/after, alphas,
+    and failures.
+- Added an opt-in true active-submatrix factor:
+  `SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_ACTIVE_SUBMATRIX=1`.
+  - It forms the selected true columns `A[:, W]`, factors the local block
+    `A[W, W]`, and uses it as a damped additive-Schwarz correction around the
+    existing active factor.
+  - It now requires a real relative preflight improvement
+    (`SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_ACTIVE_SUBMATRIX_MIN_IMPROVEMENT`,
+    default `1e-6`) before being selected, since roundoff-level acceptance can
+    worsen Krylov behavior.
+- Added a bounded reusable true-action column cache for the active-block
+  stages:
+  `SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_ACTIVE_COLUMN_CACHE=1`.
+  - It detects one-hot batched basis matrices used by true active submatrix and
+    true active LSQ builders, stores `A[:, W]` columns up to
+    `SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_ACTIVE_COLUMN_CACHE_MAX_MB`
+    (`512 MB` by default), and reuses them across stages in one solve.
+  - Metadata records hits, misses, batches, stored columns, stored bytes, and
+    bypass calls.
+
+### Validation
+
+- Focused checks passed:
+  - `python -m ruff check sfincs_jax/v3_driver.py tests/test_v3_sparse_pattern.py`
+  - `python -m pytest tests/test_v3_sparse_pattern.py::test_sparse_pc_post_minres_records_true_residual_improvement tests/test_v3_sparse_pattern.py::test_true_operator_active_block_lsq_solves_deterministic_active_block tests/test_v3_sparse_pattern.py::test_fortran_reduced_direct_tail_symbolic_schur_can_use_coupled_kinetic_base -q`
+    (`3 passed`)
+- New tests cover:
+  - deterministic true active-block LSQ closure on a small active RHSMode=1
+    block;
+  - deterministic true active-submatrix closure on a small active RHSMode=1
+    block;
+  - reusable batched true-action column caching, including a second-stage cache
+    hit for an already materialized one-hot column;
+  - sparse-PC post-minres driver wiring, including accepted-step metadata and
+    true-residual improvement.
+
+### Bounded QA probe results
+
+- QA `s=0.5`, `13 x 13 x 21 x 5`, active size `20622`, with explicit-left
+  sparse-PC, active coupled kinetic factor, true-coupled coarse, and true
+  active block:
+  - true-coupled coarse reduced the preflight residual
+    `2.975648e-04 -> 1.910393e-05`;
+  - true active block built a `1356`-unknown block (`1352` kinetic + `4` tail,
+    `54352` true-operator nonzeros, about `78.6 MB`) and reduced one-apply
+    residual only to `1.855493e-05`;
+  - no-abort explicit-left GMRES plateaued at KSP residual `~1.48e-08` for
+    more than `26k` iterations and hit the `300 s` cap without producing a
+    converged true residual;
+  - a practical capped run (`1600` iterations, `23.25 s`) finished with true
+    residual `5.217516e-05` versus target `5.938690e-13`;
+  - post-minres accepted four scalar correction steps but only improved
+    `5.217552e-05 -> 5.217516e-05`, so it is not a production fix.
+- QA true active-submatrix-only probe:
+  - built a `1356`-unknown local block (`34120` local true nonzeros,
+    `950761` LU nonzeros, about `61.0 MB`);
+  - preflight residual change was only roundoff-level
+    (`1.910393e-05 -> 1.910393e-05` when printed), so the path is now
+    fail-closed unless a real improvement threshold is met;
+  - capped explicit-left GMRES finished at `4.572209e-05` true residual,
+    slightly better than LSQ-only under the same cap but still not converged.
+- QA submatrix+LSQ composition did not help:
+  - capped explicit-left GMRES finished at `5.215564e-05`, similar to LSQ-only
+    and worse than submatrix-only.
+- QA reusable-column-cache probe:
+  - true active submatrix built `1356` columns and the following LSQ active
+    block reused all `1356` cached true-action columns;
+  - LSQ active-block setup dropped from about `1.15 s` in the uncached
+    submatrix+LSQ probe to `0.12 s`;
+  - cache metadata: `1356` hits, `1356` misses, `1356` stored columns,
+    `223.7 MB` stored;
+  - residual remained nonconverged (`5.235440e-05` after a short `160`
+    iteration cap), so this is a setup/runtime improvement, not a convergence
+    closure.
+- QH true active-submatrix-only probe:
+  - local submatrix again showed only roundoff-level one-apply improvement;
+  - capped explicit-left GMRES finished at `1.117955e-03`, worse than the QA
+    case and not production-viable.
+
+### Decision
+
+- Keep the true active-block LSQ, true active-submatrix, and post-minres hooks
+  as tested infrastructure and diagnostics.
+- Keep the reusable true-action column cache enabled for active-block probes
+  within its memory budget.  It materially reduces repeated setup when multiple
+  true active stages are requested.
+- Do not promote `explicit_left + true_active_block + post_minres` as a
+  QA/QH production default.  It lowers the preconditioned KSP norm but does not
+  reduce the true residual enough, and longer iteration budgets only waste
+  runtime.
+- Do not promote the true active-submatrix path as a production default.  It is
+  now fail-closed by default unless it provides a real preflight improvement.
+- The remaining production-resolution RHSMode=1 QA/QH blocker is a stronger
+  active operator factor/coarse architecture:
+  - retain more true finite-beta/field-split couplings directly in the bounded
+    active factor;
+  - use the Schur/coarse layer as a correction, not as the main rescue;
+  - keep the existing stagnation guard enabled for long probes so repeated
+    plateau runs fail fast with clear metadata.
+
+### Progress
+
+- True active-block LSQ infrastructure: `100%` implemented and focused-tested.
+- True active-submatrix infrastructure: `100%` implemented and focused-tested.
+- Reusable batched true-action column cache: `100%` implemented and
+  focused-tested.
+- Sparse-PC post-minres infrastructure: `100%` implemented and focused-tested.
+- True active-block production effectiveness: `45%`; useful diagnostics, not
+  convergence.
+- True active-submatrix production effectiveness: `40%`; useful bounded
+  additive-Schwarz infrastructure, but not a QA/QH closure.
+- QA/QH RHSMode=1 production closure: `73%`; the blocker is now clearly the
+  quality of the bounded active operator factor, not residual-window selection
+  or post-Krylov scalar correction.
+- Overall RHSMode=1 production solver lane: `87%`.
+
+## 2026-06-05 Addendum: active-only coupled kinetic factor and post-coarse rescue audit
+
+### Implementation
+
+- Added `active_coupled_kinetic_block` plus aliases
+  `active_dominant_kinetic_block`, `active_coupled_native_block`,
+  `active_coupled_kinetic`, and `active_native_coupled_kinetic` to
+  `build_active_projected_rhs1_full_csr_preconditioner`.
+- The new factor builds a memory-gated active-only sparse factor over a
+  dominant kinetic subspace instead of independent x-ell or angular lines:
+  - deterministic low-`x` / low-`ell` active kinetic selection from
+    `RHS1ActiveFieldSplitOrdering`;
+  - optional Phi1/source/constraint/profile tail inclusion;
+  - exact `splu` for bounded blocks and `spilu` for larger blocks;
+  - optional row/column equilibration, diagonal shift, damping, and zero/Jacobi
+    complement modes;
+  - metadata records selected block size, coverage, factor kind, scaling,
+    memory estimates, and whether the block covers the full active vector.
+- Wired the new factor into `active_symbolic_coupled_schur` through
+  `SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_SYMBOLIC_SCHUR_BASE=active_coupled_kinetic_block`.
+  This makes the Schur/coarse layer a correction on top of a coupled native
+  kinetic factor, not the main rescue.
+- Fixed a direct-tail policy issue: if true-coupled coarse was accepted only by
+  `SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_COUPLED_ACCEPT_BASE_IMPROVEMENT=1`,
+  later residual-targeted rescue stages were previously skipped even when the
+  target ratio was still far above the solve tolerance.  The new default
+  `SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_RESCUE_AFTER_BASE_IMPROVEMENT=1`
+  continues true-window/residual rescue after a base-improvement override when
+  the preflight target ratio is still too large.
+
+### Validation
+
+- Focused checks passed:
+  - `python -m ruff check sfincs_jax/rhs1_full_assembly.py sfincs_jax/v3_driver.py tests/test_rhs1_full_assembly.py tests/test_v3_sparse_pattern.py`
+  - `python -m pytest tests/test_rhs1_full_assembly.py -k 'coupled_kinetic or symbolic_coupled_schur or bounded_native_stack' -q`
+    (`4 passed`)
+  - `python -m pytest tests/test_v3_sparse_pattern.py::test_fortran_reduced_direct_tail_symbolic_schur_can_use_coupled_kinetic_base tests/test_v3_sparse_pattern.py::test_fortran_reduced_pc_gmres_direct_tail_active_symbolic_coupled_schur_solves_tiny_rhs1_system tests/test_v3_sparse_pattern.py::test_sparse_pc_gmres_stagnation_guard_aborts_mocked_krylov -q`
+    (`3 passed`)
+- New tests cover:
+  - exact residual closure when the active coupled factor spans the active
+    vector;
+  - `active_symbolic_coupled_schur` using the active coupled kinetic factor as
+    its base;
+  - direct-tail driver wiring with the coupled factor plus true-coupled
+    correction.
+
+### Bounded QA/QH probe results
+
+- Best QA `s=0.5`, `13 x 13 x 21 x 5`, active size `20622`:
+  - configuration: `active_symbolic_coupled_schur` with
+    `active_coupled_kinetic_block` base, `x_count=1`, `ell_count=8`,
+    `BASE=zero`, true-coupled coarse enabled;
+  - direct-tail active CSR materialization remained about `2.39 s`;
+  - preflight changed `5.938690e-05 -> 2.975648e-04`, then true-coupled coarse
+    reduced it to `2.055601e-05`;
+  - left-preconditioned GMRES reached a low plateau but did not converge:
+    stagnation guard stopped at iteration `2080`, best KSP residual
+    `2.467716e-06`;
+  - right preconditioning stalled much higher at about `6.14e-01`.
+- QA rejected variants:
+  - `ell_count=12`: plateau about `2.78e-05`;
+  - `x_count=2, ell_count=8`: plateau about `3.40e-05`;
+  - `x_count=5, ell_count=2`: plateau about `3.10e-04`;
+  - richer true-coupled angular basis (`coarse_size=758`) reduced one-apply
+    residual to `1.331823e-05` but worsened Krylov plateau to about `5.20e-05`;
+  - true residual window reduced one-apply residual
+    `1.910393e-05 -> 1.673974e-05` but worsened the Krylov plateau to about
+    `3.85e-05`.
+- Best QH `s=0.5`, `13 x 13 x 21 x 5` with the same QA best configuration:
+  - preflight changed `1.057163e-04 -> 2.493135e-04`, then true-coupled coarse
+    reduced it to `7.897277e-05`;
+  - GMRES reached a low plateau but did not converge: stagnation guard stopped
+    at iteration `11698`, best KSP residual `2.323410e-06`.
+
+### Decision
+
+- Keep the active-only coupled kinetic factor and rescue-after-override policy.
+  They are real infrastructure improvements and reduce the QA left-preconditioned
+  stagnation level from the earlier `O(10^3)` KSP residual to `O(10^-6)` on the
+  bounded mid-grid probe.
+- Do not promote this as the default QA/QH production solver yet.  It is still
+  not residual-clean at `13 x 13 x 21 x 5`, so it is not credible for
+  `25 x 39 x 60 x 7` production bootstrap-current parity.
+- Stop broad low-mode expansion for this lane.  The probe matrix shows that
+  adding more pitch/speed modes or richer generic angular coarse columns can
+  worsen Krylov even when the one-apply residual improves.
+- Next real algorithmic step: a true-operator active-block residual
+  preconditioner with reusable column batches and symbolic ordering.  It should
+  build a bounded factor/coarse equation from true active operator columns over
+  the residual-dominant kinetic subspace, then reuse that across QA/QH radial
+  points.  This is the path most consistent with the observed failure: the
+  `whichMatrix=0` preconditioner block is now good enough structurally, but its
+  mismatch to the true operator still controls convergence.
+
+### Progress
+
+- Active-only coupled kinetic factor infrastructure: `100%` implemented and
+  tested as an opt-in component.
+- Active coupled factor production effectiveness: `60%`; it produces a large
+  residual-plateau improvement but not convergence.
+- Rescue-after-override policy: `100%` implemented and focused-tested.
+- QA/QH RHSMode=1 production closure: `72%`; blocker is true-operator
+  active-block residual factorization, not matrix materialization.
+- Overall RHSMode=1 production solver lane: `86%`.
+
+## 2026-06-05 Addendum: active symbolic ordering, true-coupled Schur probe, and GMRES stagnation guard
+
+### Implementation
+
+- Added reusable `RHS1ActiveFieldSplitOrdering` metadata for RHSMode=1 active
+  vectors.  It maps full SFINCS ordering into active-vector positions for
+  kinetic, Phi1, and source/constraint/profile tail blocks, and exposes
+  deterministic dominant kinetic subsets for bounded coarse equations.
+- Added explicit direct-tail structured preconditioner aliases:
+  `active_symbolic_coupled_schur`, `active_coupled_symbolic_schur`,
+  `active_symbolic_field_split_schur`, `active_true_schur_residual`, and
+  `active_symbolic_kinetic_schur`.
+- Implemented the `active_symbolic_coupled_schur` candidate as a composed
+  active field-split path:
+  - native multiline field-split base by default;
+  - optional coarse-only/zero-base mode for complete small active spaces;
+  - symbolic dominant kinetic identity columns;
+  - optional Phi1/source/constraint/profile tail identity columns;
+  - moment/coarse columns only when the symbolic identity basis does not
+    already span the active vector;
+  - a true least-squares Schur residual equation against the assembled active
+    operator.
+- Tightened the existing true-operator coupled coarse wrapper so the explicit
+  `SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_COUPLED_ACCEPT_BASE_IMPROVEMENT=1`
+  option accepts a real true-operator residual reduction and lets Krylov finish,
+  instead of requiring one preconditioner application to satisfy the final
+  solve tolerance.
+- Added an opt-in sparse-PC GMRES stagnation guard:
+  `SFINCS_JAX_RHSMODE1_SPARSE_PC_STAGNATION_ABORT=1`, with configurable
+  minimum iteration, no-improvement window, and relative-improvement threshold.
+  This prevents long production stalls while preserving default behavior when
+  the guard is not enabled.
+
+### Validation
+
+- Focused checks passed:
+  - `python -m ruff check sfincs_jax/v3_driver.py sfincs_jax/rhs1_full_assembly.py sfincs_jax/rhs1_block_operator.py tests/test_rhs1_full_assembly.py tests/test_rhs1_block_operator.py tests/test_v3_sparse_pattern.py`
+  - `python -m pytest tests/test_rhs1_full_assembly.py::test_active_symbolic_coupled_schur_uses_symbolic_kinetic_and_tail_space tests/test_rhs1_block_operator.py -k 'active_field_split_ordering' -q`
+    (`2 passed`)
+  - `python -m pytest tests/test_rhs1_full_assembly.py -k 'symbolic_coupled_schur or bounded_native_stack' -q`
+    (`2 passed`)
+  - `python -m pytest tests/test_v3_sparse_pattern.py -k 'direct_tail and (symbolic_coupled_schur or bounded_native_stack or structured_pc_preflight_can_fail_fast or true_coupled_coarse)' -q`
+    (`4 passed`)
+- The direct-tail tiny RHSMode=1 integration test now exercises the real
+  composed path: symbolic active preconditioner, true-operator coupled coarse
+  residual reduction, and final GMRES convergence.
+
+### Bounded QA/QH probe results
+
+- QA `s=0.5`, `13 x 13 x 21 x 5`, active size `20622`:
+  - direct-tail `whichMatrix=0` active CSR materialization: `2.408 s`;
+  - symbolic structured setup: `0.248 s`;
+  - true-coupled coarse: `coarse_size=108`, setup `0.501 s`,
+    `z_nnz=149621`, `a_nnz=508286`, `~81.9 MB`;
+  - preflight residual changed `5.938690e-05 -> 5.442644e+00`, then
+    true-coupled coarse reduced it to `5.194108e-01`;
+  - left-preconditioned GMRES stagnated and the new guard stopped the run at
+    iteration `3357` with KSP residual near `3.426e3`.
+  - right-preconditioned GMRES was also tested and stagnated faster, stopping
+    at iteration `476` with KSP residual near `9.91e-01`.
+- QH `s=0.5`, `13 x 13 x 21 x 5`, active size `20622`:
+  - direct-tail `whichMatrix=0` active CSR materialization: `2.439 s`;
+  - symbolic structured setup: `0.247 s`;
+  - true-coupled coarse: `coarse_size=108`, setup `0.693 s`,
+    `z_nnz=155771`, `a_nnz=546840`, `~82.4 MB`;
+  - preflight residual changed `1.057163e-04 -> 5.256283e+01`, then
+    true-coupled coarse reduced it to `1.281761e+00`;
+  - left-preconditioned GMRES stagnated and the guard stopped the run at
+    iteration `4068` with KSP residual near `7.667e3`.
+
+### Decision
+
+- `active_symbolic_coupled_schur` is a useful tested component and a better
+  diagnostic platform than the previous bounded stack, but it is not yet a
+  QA/QH production full-grid solver.  It can reduce the true residual through
+  the coupled coarse wrapper, but the resulting preconditioned Krylov problem
+  still stagnates.
+- Keep the symbolic ordering, tail-aware identity basis, true-coupled
+  acceptance fix, and stagnation guard.  These are infrastructure improvements
+  and reduce wasted runtime.
+- Do not promote the symbolic-coupled path as a default for finite-beta QA/QH
+  bootstrap-current production.  The next real algorithmic step remains a
+  stronger active operator factorization: reusable symbolic block ordering plus
+  active-only field-split assembly that retains the dominant kinetic
+  off-diagonal couplings directly in the native factor, not only in a small
+  post-factor coarse correction.
+
+### Progress
+
+- Reusable symbolic block ordering: `100%` implemented and unit tested.
+- Active symbolic coupled Schur diagnostic path: `80%` implemented and tested,
+  `35%` production effectiveness on QA/QH.
+- Stagnation-safe sparse-PC runs: `85%` implemented for the host sparse-PC
+  lane, still needs policy documentation and a small dedicated regression.
+- QA/QH production-resolution RHSMode=1 closure: `65%`; the remaining blocker
+  is still a strong coupled active factor/preconditioner, not matrix assembly.
+- Overall RHSMode=1 production solver lane: `84%`.
+
+## 2026-06-05 Addendum: bounded native direct-tail stack and fail-closed preflight
+
+### Implementation
+
+- Added an explicit RHSMode=1 Fortran-reduced direct-tail structured
+  preconditioner family:
+  `active_bounded_native_stack`, `active_native_stack`,
+  `active_block_native_stack`, `active_multiline_native_stack`, and
+  `active_bounded_block_coarse`.
+- The stack is bounded and avoids monolithic serial sparse factor setup:
+  - direct term-level `whichMatrix=0` active CSR emission remains the operator
+    source;
+  - native `(x, ell)` line factors and angular-line factors provide the base
+    block triangular/angular-speed correction;
+  - optional additive-Schwarz patches are available under an explicit size and
+    memory gate;
+  - a compact coupled current/constraint/profile coarse residual equation is
+    built over the active projected operator, with optional adaptive residual
+    basis enrichment.
+- Fixed the adaptive residual-basis construction for the stack so adaptive
+  columns target the residual left by the composed line-plus-Schwarz operator
+  when Schwarz is active, not one component in isolation.
+- Hardened direct-tail structured preconditioner policy: explicitly requested
+  structured direct-tail preconditioners now require the one-step preflight
+  residual gate at every size. Auto-selected candidates still use the
+  production-size threshold. This prevents bad explicit candidates from entering
+  long GMRES stalls.
+
+### Validation
+
+- Focused checks passed:
+  - `python -m ruff check sfincs_jax/v3_driver.py sfincs_jax/rhs1_full_assembly.py tests/test_rhs1_full_assembly.py tests/test_v3_sparse_pattern.py`
+  - `python -m pytest tests/test_v3_sparse_pattern.py::test_fortran_reduced_pc_gmres_direct_tail_active_bounded_native_stack_fails_fast_when_preflight_worsens tests/test_v3_sparse_pattern.py::test_fortran_reduced_direct_tail_structured_pc_preflight_can_fail_fast tests/test_rhs1_full_assembly.py::test_active_bounded_native_stack_builds_line_patch_coarse_path -q`
+    (`3 passed`)
+- Bounded QS-paper QA `s=0.5`, `13 x 13 x 21 x 5`, explicit
+  `whichMatrix=0`, `active_bounded_native_stack`:
+  - direct-tail active CSR built in `2.329 s`;
+  - structured stack setup `0.132 s`;
+  - preflight rejected the candidate cleanly:
+    `5.938690e-05 -> 1.075546e+01`, target ratio `1.811083e+13`;
+  - the run exited in `5.7 s` with a recorded error instead of entering the
+    observed `70+ s` Krylov stall.
+- Matching QH `s=0.5`, `13 x 13 x 21 x 5`:
+  - direct-tail active CSR built in `2.452 s`;
+  - structured stack setup `0.135 s`;
+  - preflight rejected the candidate:
+    `1.057163e-04 -> 5.255312e+01`, target ratio `4.971147e+13`;
+  - the run exited in `5.6 s`.
+
+### Decision
+
+- Do not promote `active_bounded_native_stack` as a QA/QH production default.
+  It is now useful fail-closed infrastructure for direct-tail term-level
+  assembly, symbolic layout, line-factor composition, and coarse-equation
+  experiments, but it is not a contractive approximate inverse on the real
+  QA/QH bootstrap-current operator.
+- Keep the direct `whichMatrix=0` active CSR materializer and explicit
+  preflight guard. These are clear improvements: matrix construction is fast
+  and bounded, and bad solvers no longer waste minutes in GMRES.
+- Next real production solver work must replace the weak independent line
+  factors with a stronger coupled active operator infrastructure:
+  reusable symbolic block ordering, active-only field-split assembly that
+  keeps dominant kinetic couplings, native block/incomplete factors over that
+  ordering, and a true Schur residual equation over current, constraints,
+  profile moments, and the dominant kinetic residual subspace. More smoother,
+  damping, or restart tuning is explicitly not the next step.
+
+### Progress
+
+- Direct term-level `whichMatrix=0` active assembly: `95%`.
+- Bounded native stack infrastructure: `70%` implemented and tested, `35%`
+  production effectiveness.
+- QA/QH production-resolution RHSMode=1 closure: `63%`; the blocker is now a
+  mathematical preconditioner-quality issue, not matrix materialization or
+  unbounded setup.
+- Overall RHSMode=1 production solver lane: `82%`.
+
+## 2026-06-05 Addendum: production-grid QA/QH RHSMode=1 block/coarse probes
+
+### Implementation
+
+- Added explicit `active_xblock_ilu` and `active_xblock_ilu_low_l_schur`
+  aliases for the RHSMode=1 Fortran-reduced direct-tail structured
+  preconditioner path.
+- Hardened the active x-block and low-l Schur builders so they can operate on
+  either an explicit active index set or a full-index direct-tail matrix
+  (`active_indices=None`).
+- Added bounded-memory sparse-ILU local block factors with block-level fallback:
+  singular or over-budget blocks are skipped while the remaining local block
+  factors remain usable.
+- Added row/column equilibration and linear damping controls for the low-l
+  Schur residual equation, and a linear damping control plus optional zero-base
+  mode for the x-block residual correction. These are fixed linear
+  preconditioner controls, not nonlinear per-RHS smoother tuning.
+- Added regression coverage for the new bounded local-block path:
+  `test_active_xblock_ilu_preconditioner_builds_bounded_partial_blocks` and
+  `test_fortran_reduced_pc_gmres_direct_tail_active_xblock_ilu_low_l_schur_solves_tiny_rhs1_system`.
+
+### Validation
+
+- Focused checks passed:
+  - `python -m ruff check sfincs_jax/rhs1_full_assembly.py tests/test_rhs1_full_assembly.py tests/test_v3_sparse_pattern.py`
+  - `python -m pytest tests/test_rhs1_full_assembly.py::test_active_xblock_ilu_preconditioner_builds_bounded_partial_blocks tests/test_v3_sparse_pattern.py::test_fortran_reduced_pc_gmres_direct_tail_active_xblock_ilu_low_l_schur_solves_tiny_rhs1_system -q`
+  - `python -m pytest tests/test_rhs1_full_assembly.py tests/test_v3_sparse_pattern.py::test_fortran_reduced_pc_gmres_direct_tail_active_diagonal_schur_solves_tiny_rhs1_system tests/test_v3_sparse_pattern.py::test_fortran_reduced_pc_gmres_direct_tail_active_global_field_split_schur_solves_tiny_rhs1_system tests/test_v3_sparse_pattern.py::test_fortran_reduced_pc_gmres_direct_tail_active_fortran_v3_reduced_ilu_solves_tiny_rhs1_system tests/test_v3_sparse_pattern.py::test_fortran_reduced_pc_gmres_direct_tail_active_xblock_ilu_low_l_schur_solves_tiny_rhs1_system -q`
+    (`64 passed in 44.32 s`)
+
+### Full-grid QA probe results
+
+- Production-grid QA `s=0.5`, `25 x 39 x 60 x 7`, active size `507004`:
+  direct-tail matrix materialization remains fast and bounded:
+  `~6.7-7.1 s` to build the active CSR with `13,483,256` nnz after skipping
+  the full `819004`-unknown CSR.
+- Global Fortran-v3-reduced ILU remains the wrong production route in Python:
+  prior run stalled in monolithic setup; the new block/coarse route avoids
+  this setup bottleneck.
+- `active_xblock_ilu` with the original Jacobi base is unstable on the
+  full-grid QA residual:
+  - unshifted and lightly shifted local factors amplify the one-step residual
+    to `O(1e67)-O(1e100)`;
+  - a large diagonal shift makes the update finite but still worsens
+    `1.613966e-04 -> 1.169458e-02`.
+- Zero-base `active_xblock_ilu` is stable but nearly neutral:
+  `1.613966e-04 -> 1.613980e-04`.
+- Zero-base `active_xblock_ilu_low_l_schur` is the first finite,
+  contractive candidate:
+  `1.613966e-04 -> 1.591751e-04`, setup `~0.77 s`, but GMRES stagnates near
+  `9.13e-04` after `900+` iterations, so it is not production-convergent.
+- True-coupled residual coarse enrichment improves the preflight residual but
+  still does not close production:
+  - compact coarse (`coarse_size=77`): `1.591751e-04 -> 1.390747e-04`,
+    setup `2.906 s`, `~124 MB`;
+  - larger enriched coarse (`coarse_size=429`): `1.591751e-04 ->
+    1.238612e-04`, setup `15.420 s`, `~277 MB`.
+
+### Decision
+
+- Do not promote the local block-ILU/low-l Schur route as the default
+  production full-grid QA/QH solver. It is useful infrastructure because it
+  removes the monolithic setup failure and provides bounded diagnostics, but it
+  does not reduce the true residual enough to make Krylov converge.
+- The next production step is a direct term-level `whichMatrix=0` assembler and
+  reusable Python/JAX-native sparse factor/coarse infrastructure that more
+  closely reproduces the Fortran v3 PETSc/MUMPS split:
+  separate true operator and preconditioner operator, robust symbolic/numeric
+  sparse factor reuse, and a coupled moment/current/profile coarse equation
+  built from the direct preconditioner operator rather than from local
+  low-pitch blocks.
+- Keep the small and mid-grid QA/QH same-resolution bootstrap-current figures
+  as documented validation artifacts. Full-grid `25 x 39 x 60 x 7` QA/QH
+  remains an open production solver lane until the direct preconditioner
+  operator/factor path converges residual-cleanly and is benchmarked against
+  SFINCS Fortran v3 at the same radial points.
+
+## 2026-06-04 Addendum: true-operator residual-window correction and Fortran v3 profile
+
+### Implementation
+
+- Added an opt-in true-operator active residual-window correction for the
+  RHSMode=1 Fortran-reduced direct-tail path. The correction forms bounded
+  batched columns of the actual active operator, `A_true[:, W]`, solves a
+  regularized least-squares residual equation, and accepts the bundle only when
+  the one-step true residual decreases.
+- Kept this path off by default:
+  `SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_WINDOW=1` is required.
+  The installed preconditioner is linear by default; scalar damping is opt-in
+  because a damping coefficient depending on the right-hand side is not a valid
+  fixed Krylov preconditioner.
+- Hardened the implementation:
+  - explicit `species:x:ell` specs are no longer clamped to valid ranges;
+    invalid specs are skipped so typos do not silently target a different
+    residual window;
+  - both `_SPEC` and `_SPECS` environment spellings are accepted;
+  - dense basis/output batch memory is included in the memory gate and checked
+    before allocation;
+  - true-matmat probing uses fixed padded batch shapes to avoid final-batch JIT
+    shape churn;
+  - downstream residual-coarse rescue now receives the current residual after a
+    true-window attempt, not the stale original seed residual;
+  - automatic Fortran-reduced host sparse selection now requires the resolved
+    solve mode to be non-differentiable, so default autodiff calls do not enter
+    this host-only path.
+
+### Validation
+
+- Local focused checks passed:
+  - `python -m ruff check sfincs_jax/v3_driver.py tests/test_v3_sparse_pattern.py --extend-ignore E402,E741`
+  - `python -m pytest tests/test_v3_sparse_pattern.py::test_true_operator_residual_window_lsq_reduces_global_residual tests/test_v3_sparse_pattern.py::test_true_operator_residual_window_lsq_is_linear_without_damping tests/test_v3_sparse_pattern.py::test_true_operator_residual_window_specs_skip_invalid_indices tests/test_v3_sparse_pattern.py::test_true_operator_residual_window_lsq_supports_matvec_only_short_batches tests/test_v3_sparse_pattern.py::test_true_operator_residual_window_lsq_is_memory_gated tests/test_v3_sparse_pattern.py::test_auto_selects_fortran_reduced_pc_gmres_for_large_full_fp_rhs1 -q`
+    (`6 passed`)
+  - `python -m pytest tests/test_fortran_reduced_preconditioner.py tests/test_rhs1_collisionless_stencils.py tests/test_rhs1_collision_stencils.py tests/test_rhs1_full_assembly.py tests/test_v3_sparse_pattern.py -q`
+    (`174 passed`)
+- Office QH `psiN=0.5`, `25 x 39 x 60 x 7`, true-window probes:
+  - previous structured direct-tail candidate still gives a bad preflight
+    update: `2.873075e-04 -> 2.757689e-01`;
+  - `spec=0:0:4`, `ell_radius=1` built `2929` true columns in `45.189 s`
+    with peak RSS about `3.50 GB` and corrected
+    `2.757689e-01 -> 2.868878e-04`;
+  - `spec=0:0:1`, `ell_radius=1` built `2929` true columns in `39.940 s`
+    with peak RSS about `3.46 GB` and corrected
+    `2.757689e-01 -> 2.853031e-04`;
+  - both corrections are real true-operator residual reductions relative to
+    the bad structured-preconditioner seed, but neither gets below the
+    original RHS residual scale or the preflight target. They are diagnostics,
+    not a production QH solve closure.
+
+### Fortran v3 comparison
+
+- Re-ran the matching SFINCS Fortran v3 QH `psiN=0.5` case on `office` with
+  PETSc `-log_view`, `-snes_view`, `-ksp_view`,
+  `-ksp_monitor_true_residual`, and MUMPS verbosity. The run used `8` MPI ranks
+  and completed in `72.91 s` with max RSS reported by `/usr/bin/time` of
+  `1.87 GB`.
+- The Fortran v3 solve path is:
+  - `SNES` outer solve with a separate full Jacobian and preconditioner
+    matrix;
+  - preconditioner matrix from `populateMatrix(..., whichMatrix=0)`, with
+    `13,483,256` nnz;
+  - true Jacobian from `populateMatrix(..., whichMatrix=1)`, with `21,455,918`
+    nnz;
+  - `PC LU` backed by distributed MUMPS on the preconditioner matrix;
+  - GMRES converging in `16` iterations, with `17` MUMPS `MatSolve` calls and
+    final true residual `9.521e-09`.
+- PETSc timing confirms the dominant cost is one robust distributed sparse LU:
+  `PCSetUp ~64.6 s`, `MatLUFactorSym ~6.63 s`, `MatLUFactorNum ~57.96 s`,
+  `PCApply/MatSolve ~3.10 s`, and `KSPSolve ~3.31 s`.
+
+### Decision
+
+- Do not promote true-operator residual windows as the production solution for
+  the QH bootstrap-current lane. They are bounded, tested, and useful for
+  diagnosing residual subspaces, but the evidence shows a local residual window
+  cannot replace Fortran v3's full distributed sparse-LU preconditioner.
+- The next production algorithmic step is a first-class JAX/Python-native
+  preconditioner architecture that reproduces the useful parts of the Fortran
+  v3/PETSc/MUMPS stack without adding PETSc/MUMPS/SuperLU_DIST as runtime
+  dependencies:
+  - term-level Fortran-reduced active CSR assembly without product-pattern
+    overfill;
+  - reusable symbolic sparsity, ordering, and numeric factor/coarse data across
+    fixed geometry/profile shapes;
+  - block/field-split Schur complement over kinetic/current/constraint
+    moments;
+  - additive-Schwarz or domain-decomposed local factors with a low-rank/global
+    coarse correction;
+  - device-compatible Krylov paths for GPU/autodiff and host sparse paths for
+    non-autodiff CLI/Python solves.
+
+Progress update:
+
+- Production-resolution RHSMode=1 QH solver lane: 93%.
+- True-operator residual-window diagnostic lane: 100%.
+- JAX-native Fortran-style preconditioner architecture lane: 74%.
+- Overall open-lane average: 98%.
+
+## 2026-06-04 Addendum: QH/QA VMEC radial-cache audit and fix
+
+### Result
+
+- Closed a general geometry-cache bug exposed by the QS-paper QH `psiN=0.5`
+  and `psiN=0.7` audit. `geometry_from_namelist()` cached VMEC geometry without
+  including the explicit radial-coordinate contract (`inputRadialCoordinate`,
+  `psiHat_wish`, `psiN_wish`, `rHat_wish`, `rN_wish` /
+  `normradius_wish`) in the cache key. Multiple surfaces in one Python process
+  could therefore reuse a stale VMEC geometry while still converting profiles at
+  the requested radius.
+- Bumped the persistent geometry/output cache schema versions to invalidate
+  stale disk entries that could contain pre-fix `VPrimeHat`, `FSABHat2`,
+  `BDotCurlB`, `uHat`, or classical no-Phi1 fluxes.
+- Added a two-surface VMEC cache regression test using `inputRadialCoordinate=1`
+  and different `psiN_wish` values. This prevents the same bug from returning
+  in radial scans, Redl comparisons, and QS-paper QA/QH workflows.
+- Added `scripts/audit_qs_paper_terms.py`, a reusable term-by-term audit tool
+  for archived QS-paper QA/QH SFINCS Fortran v3 decks. It compares geometry
+  interpolation fields, radial-gradient conversion, finite-beta switches, and
+  `FSABjHat = dot(Zs, FSABFlow)` assembly when solved fields are available.
+  The tool now also supports bounded SFINCS_JAX resolution overrides
+  (`--ntheta`, `--nzeta`, `--nxi`, `--nx`, `--solver-tolerance`) so solved
+  current audits can run without accidentally launching the archived
+  `25 x 39 x 60 x 7` production grid.
+
+### Validation
+
+- Fast QH term audit at archived `25 x 39` angular grid, geometry-only:
+  `psiN=0.5` and `psiN=0.7` now match archived SFINCS Fortran v3 geometry,
+  gradient conversion, and finite-beta flags to roundoff. Worst checked
+  geometry-array relative error was `4.752e-12` in `BDotCurlB`; worst checked
+  gradient-field relative error was `9.863e-16`.
+- Regenerated bounded QS-paper figures:
+  - QA quick/errorbar grid (`13 x 13 x 21 x 5`, real refine
+    `15 x 15 x 21 x 5`, velocity refine `13 x 13 x 25 x 6`): max
+    SFINCS_JAX-vs-Fortran difference is `2.822e-2`; max SFINCS_JAX-vs-Redl
+    difference is `8.949e-2`; max numerical errorbar fraction is `2.007e-2`.
+  - QH quick/errorbar grid with the same resolutions: max
+    SFINCS_JAX-vs-Fortran difference is `9.707e-2`; max SFINCS_JAX-vs-Redl
+    difference is `9.824e-2`; max numerical errorbar fraction is `2.443e-1`.
+- Bounded solved-current term audits at `13 x 13 x 21 x 5`:
+  - QA `psiN=0.5`: SFINCS_JAX-vs-Fortran `FSABjHat` relative difference
+    `2.745e-2`; JAX internal `FSABjHat = dot(Zs, FSABFlow)` assembly error
+    `0.0`.
+  - QA `psiN=0.7`: `FSABjHat` relative difference `1.552e-2`; internal
+    assembly error `0.0`.
+  - QH `psiN=0.5`: `FSABjHat` relative difference `8.848e-2`; internal
+    assembly error `0.0`.
+  - QH `psiN=0.7`: `FSABjHat` relative difference `4.425e-2`; internal
+    assembly error `0.0`.
+  These runs completed locally in under 8 seconds per two-surface case, and
+  confirm that the remaining QH/QA current gap is not a stale-radius geometry
+  cache, radial-gradient conversion, or current-normalization assembly bug.
+- Checks run:
+  - `python -m ruff check scripts/audit_qs_paper_terms.py tests/test_audit_qs_paper_terms.py sfincs_jax/v3.py sfincs_jax/io.py tests/test_write_output_return_results.py`
+  - `python -m pytest tests/test_audit_qs_paper_terms.py tests/test_write_output_return_results.py tests/test_io_cache_helpers.py -q` (`13 passed`)
+  - `python -m ruff check scripts/audit_qs_paper_terms.py tests/test_audit_qs_paper_terms.py`
+  - `python -m pytest tests/test_audit_qs_paper_terms.py -q` (`4 passed`)
+  - `python scripts/audit_qs_paper_terms.py --case QH --s-values 0.5,0.7 --run-root /tmp/sfincs_jax_qs_term_audit --out /tmp/sfincs_jax_qh_term_audit.json --force`
+  - `python scripts/audit_qs_paper_terms.py --case QH --s-values 0.5,0.7 --run-root /tmp/sfincs_jax_qs_term_audit_bounded --out /tmp/sfincs_jax_qh_bounded_solved_audit.json --compute-solution --ntheta 13 --nzeta 13 --nxi 21 --nx 5 --solver-tolerance 1e-6 --force`
+  - `python scripts/audit_qs_paper_terms.py --case QA --s-values 0.5,0.7 --run-root /tmp/sfincs_jax_qs_term_audit_bounded --out /tmp/sfincs_jax_qa_bounded_solved_audit.json --compute-solution --ntheta 13 --nzeta 13 --nxi 21 --nx 5 --solver-tolerance 1e-6 --force`
+
+### Remaining Lane
+
+- Full archived-grid solved-current audit is still heavy locally. A bounded
+  `QH psiN=0.5`, `25 x 39 x 60 x 7`, `--compute-solution` attempt was
+  interrupted after about 10 minutes while inside GMRES/preconditioner work.
+  This should be rerun as a controlled performance/profiling job on `ssh office`
+  or after the RHSMode=1 assembled/operator-reuse solve path is promoted for
+  these QA/QH decks. It is no longer a geometry/normalization blocker.
+- Next implementation lane: promote the bounded QA/QH solved-current audit into
+  a checked nightly/benchmark gate and continue the RHSMode=1 operator-reuse /
+  production-resolution path. The specific target is reducing full-grid
+  `25 x 39 x 60 x 7` solve/setup time enough that the archived-grid
+  SFINCS_JAX-vs-Fortran current audit can complete under a controlled budget.
+
+## 2026-06-04 Addendum: production-resolution QH preconditioner audit on office
+
+### Goal
+
+Close the next best step after the radial-cache fix: determine why the archived
+QS-paper QH `psiN=0.5`, `25 x 39 x 60 x 7` RHSMode=1 solve still does not
+complete quickly enough for a production SFINCS_JAX-vs-Fortran current audit.
+
+### Remote setup
+
+- Host: `office` (`pop-os`, two RTX A4000 GPUs available but this audit used
+  `JAX_PLATFORMS=cpu` to isolate the non-autodiff host preconditioner path).
+- Synced throwaway tree: `/home/rjorge/sfincs_jax_qs_audit_current`.
+- Zenodo root: `/home/rjorge/qs_redl_zenodo`.
+- Primary command shape:
+  `python3 scripts/audit_qs_paper_terms.py --case QH --s-values 0.5 --zenodo-root /home/rjorge/qs_redl_zenodo --compute-solution --verbose`.
+- Added `--verbose` to `scripts/audit_qs_paper_terms.py` so production audits
+  show phase, factorization, and Krylov progress instead of appearing stalled.
+
+### Results
+
+- Remote geometry smoke audit stayed roundoff-clean:
+  `worst_geometry_array_rel=4.752e-12` and
+  `worst_gradient_field_rel=9.863e-16` for the checked QH surfaces.
+- Default capped x-block backend:
+  - Active size `507004`, full size `819004`.
+  - Factors only small speed blocks (`x=0,1,2`) and skips high-speed blocks
+    (`x=3..6`) because they exceed the host block cap.
+  - Initial x-block seed true residual was `6.877e-4` against
+    `rhs_norm=2.873e-4`, not accepted.
+  - GMRES stagnated: logged KSP residual went from `2.75` at 10 iterations to
+    only `1.8747` after about 450 iterations. The run was stopped after enough
+    negative evidence. A prior silent attempt used max RSS about `6.10 GB`.
+- Uncapped x-block backend
+  (`SFINCS_JAX_RHSMODE1_XBLOCK_SPARSE_HOST_BLOCK_MAX=0`):
+  - Attempts high-speed block ILU instead of skipping.
+  - Large blocks (`x=3`, `x=4`) failed with exact singular factors after
+    repeated regularized ILU attempts.
+  - This is not primarily a memory problem; sampled RSS stayed only a few GB.
+- Capped x-block plus skipped-block diagonal fallback
+  (`SFINCS_JAX_RHSMODE1_XBLOCK_SPARSE_HOST_SKIPPED_DIAG_FALLBACK=1`):
+  - Memory stayed low, but the fallback was worse.
+  - Initial seed residual degraded to `8.248e-2`.
+  - Preconditioned residual started around `2.79e2` and remained far worse than
+    the identity fallback. Keep this default-off.
+- Forced lower-fill x-block ILU
+  (`SFINCS_JAX_RHSMODE1_XBLOCK_PC_LOWER_FILL=force` with uncapped blocks):
+  - Rejected or failed even blocks that exact LU handled in the default path
+    (`x=1`, `x=2`), so it is not the production fix.
+- Global Fortran-reduced CSR backend
+  (`SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_PC_BACKEND=global`):
+  - Global active CSR assembly is viable: `507004 x 507004`,
+    `13.497M` nonzeros, about `164 MB` CSR, materialized in `~15 s`.
+  - `COLAMD` ILU did not complete factorization within the bounded sample and
+    was stopped after about `4.5 min`, with sampled RSS about `2.25 GB`.
+  - `MMD_AT_PLUS_A` ILU failed with an exact singular factor in `1:29`, max RSS
+    `2.85 GB`.
+
+### Decision
+
+- Do not promote diagonal fallback or lower-fill x-block tuning.
+- Do not switch public `auto` blindly from x-block to global SuperLU ILU:
+  global operator assembly is fast enough, but host ILU factorization is still
+  not robust enough.
+- The next real implementation step is a nullspace-aware/global preconditioner
+  for the Fortran-reduced active operator:
+  - preserve the cheap direct-tail CSR materialization path,
+  - add a robust shifted/gauge-pinned factor or block factorization that removes
+    the exact singularity seen by SuperLU ILU,
+  - cache/reuse the assembled operator and factor across same-shape radial
+    scans,
+  - gate the candidate against the production QH `psiN=0.5` audit with
+    residual, runtime, and RSS metrics before promoting it to `auto`.
+
+### Progress update
+
+- QA/QH residual-clean bounded solve lane: 100%.
+- QA/QH production-resolution RHSMode=1 solve lane: 78%.
+- RHSMode=1 global/operator-reuse architecture lane: 82%.
+- Benchmark/diagnostic tooling lane: 99% after adding verbose production audit
+  logging.
+- Overall open-lane average: 90%.
+
+## 2026-06-02 Addendum: Zenodo VMEC RHSMode=1 parity, runtime, and memory closure
+
+### Goal
+
+Make `sfincs_jax` solve the finite-beta and QS VMEC RHSMode=1 benchmark decks in
+`/Users/rogeriojorge/local/20220708-01-zenodo_for_QS_optimization_with_self_consistent_bootstrap_current`
+at small, intermediate, full, and larger resolutions, with fail-closed residual
+convergence, output parity against SFINCS Fortran v3, competitive CPU/GPU
+runtime, bounded memory, and generated README/docs benchmark artifacts.
+
+This is not a tuning-only lane. The current failures show that `sfincs_jax`
+needs a more faithful sparse operator/residual audit path and a production
+Fortran-style sparse assembly route before public claims are widened to all
+Zenodo QA/QH/finite-beta VMEC configurations.
+
+### State found in the 2026-06-02 pass
+
+- Dirty worktree contains intentional finite-beta/Redl comparison work:
+  `examples/vmec_jax_finite_beta/compare_qs_paper_sfincs_jax_redl.py`, new
+  QS-paper comparison figures, input radial-coordinate compatibility fixes, and
+  focused tests.
+- Fresh 2026-06-03 cleanup and QS-paper comparison update:
+  - Removed generated scratch output from the working tree: the untracked
+    `outputs/` run tree, ignored `docs/_build/`, and stale untracked Zenodo
+    probe/profile JSON files. The remaining dirty files are source, tests,
+    docs, and small validation/figure artifacts.
+  - The archived SFINCS Fortran v3 vs Redl normalization is consistent enough
+    to use as a reference: the full archived QA curve has max relative
+    difference `2.040e-1` at the extreme edge and only `2.115e-2` at `s=0.5`.
+  - A very low `7 x 7 x 9 x 3` SFINCS_JAX point at `s=0.5` is not meaningful:
+    it converges the linear residual but misses the bootstrap current by about
+    `8.6e-1` relative because the species flows nearly cancel incorrectly.
+  - A fresh `13 x 13 x 21 x 5` SFINCS_JAX point at `s=0.5` is much better:
+    `FSABjHat=-1.086988656840941`, relative difference `2.883e-2` versus
+    archived SFINCS Fortran v3 and `5.059e-2` versus Redl, with residual
+    `1.7e-18`. Runtime is still high at about `167-170 s` per local CPU point.
+	  - A fresh three-surface QA run at `s=0.3, 0.5, 0.7` and
+	    `13 x 13 x 21 x 5` completed in `436.7 s` local CPU wall time using the
+	    active projected direct structured-CSR route. It is not yet a radial parity
+	    claim: max relative difference is `2.505e-1` versus Redl and `2.442e-1`
+	    versus archived SFINCS Fortran v3. The README/docs figure was regenerated
+	    as a diagnostic three-surface plot, not a whole-radius parity plot.
+  - A bounded convergence probe for the worst of those three points,
+    `s=0.3` at `13 x 13 x 41 x 5`, hit the `600 s` local CPU timeout without
+    completing. This makes it unsafe to start a wider resolution ladder before
+    reducing the RHSMode=1 setup/solve cost.
+  - First assembled/operator-reuse implementation step landed:
+    `RHS1BlockCOOOperator` can now materialize host CSR directly from block
+    stencils, without dense matrices or matrix-free column probing. The new
+    `select_structured_rhs1_fblock_csr_operator()` path is fail-closed,
+    memory-budget gated, and object-cache reusable.
+  - Focused benchmark evidence:
+    `python scripts/benchmark_rhs1_fblock_csr_reuse.py --input tests/ref/quick_2species_FPCollisions_noEr.input.namelist --out /tmp/rhs1_fblock_csr_reuse_benchmark.json --repeats 3 --json`
+    matched the JAX f-block matvec to `1.95e-16` relative; cold CSR selection
+    took `0.58 s`, warm same-operator selection took `2-5 us`, and actual CSR
+    storage was `0.87 MB`.
+  - Zenodo mid-grid assembly-only evidence:
+    the `s=0.3`, `13 x 13 x 21 x 5` QA input completed f-block CSR assembly in
+    `7.5 s` cold and `6.9 us` warm, with actual CSR storage `10.7 MB` and
+    matvec relative error `6.53e-16`. This is not yet a full-solve parity
+    result, but it shows the assembled f-block route is accurate and reusable
+    at the same grid where the full solve currently takes about `171 s`.
+  - Second assembled/operator-reuse implementation step landed:
+    `sfincs_jax.rhs1_full_assembly` now builds an exact host CSR full-system
+    operator for supported RHSMode=1 linear systems by combining the verified
+    structured f-block CSR with analytic Phi1/QN/lambda and
+    `constraintScheme=1/2` source/moment couplings. Unsupported nonlinear
+    Phi1-in-kinetic cases fail closed instead of silently probing or falling
+    back.
+  - Focused full-system benchmark evidence:
+    `python scripts/benchmark_rhs1_full_csr_reuse.py --input tests/ref/quick_2species_FPCollisions_noEr.input.namelist --out /tmp/rhs1_full_csr_reuse_benchmark.json --repeats 3 --json`
+    matched the production full-system matvec to `2.93e-16` relative; cold
+    full CSR selection took `0.591 s`, warm same-operator selection took
+    `8-14 us`, matvec took `35-50 us`, and actual full CSR storage was
+    `0.887 MB`.
+  - Zenodo mid-grid full-system assembly-only evidence:
+    the `s=0.3`, `13 x 13 x 21 x 5` QA input completed exact full CSR
+    assembly in `7.51 s` cold and `34 us` warm, with actual full CSR storage
+    `10.74 MB`, `883401` scalar nonzeros, and matvec relative error
+    `7.37e-16`. This closes the no-probe operator-reuse proof for that deck;
+    the remaining blocker is using this assembled operator in the solve and
+    preconditioning policy.
+	  - First safe host/non-autodiff solve lane landed:
+	    `solve_structured_rhs1_full_csr()` runs SciPy Krylov directly on the
+	    assembled host CSR matrix, so no host matrix-vector product enters JAX
+	    tracing. `solve_v3_full_system_structured_csr()` exposes this as an opt-in
+	    `V3LinearSolveResult` path. On the small full-FP fixture, the path converged
+	    with host solve time `0.063 s` and true production-operator residual
+	    `8.80e-11`.
+	  - 2026-06-03 physical-operator update:
+	    shifted-operator `xblock_tz_low_l_coarse_schur` probes are useful sanity
+	    tests but are not representative of the singular physical RHSMode=1
+	    bootstrap-current solve. On QH `13 x 13 x 21 x 5`, unprojected physical
+	    GMRES/LGMRES stalled near `3.5e-5` residual against a `3.6e-13` target.
+	    The correct Fortran-like route is to assemble the exact full CSR operator,
+	    project to the active transport unknowns, solve that active system, and
+	    expand back to the full vector for output diagnostics.
+	  - Active projected structured direct solve landed:
+	    `SFINCS_JAX_RHS1_FULL_CSR_KRYLOV=direct` plus
+	    `SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_DOF=1` now routes
+	    `host_structured_csr` through an active-system `splu` factorization and
+	    audits the final residual against the full physical operator. The QH
+	    `s=0.5`, `13 x 13 x 21 x 5` point converged to true residual
+	    `5.85e-17` in `139.0 s` end-to-end, compared with about `207 s` for the
+	    previous default auto path on the same deck.
+	  - Explicit physical `host_structured_csr` now defaults to active projected
+	    direct solve (`identity_shift=0`). Shifted operator benchmarks keep Krylov
+	    as their default unless `SFINCS_JAX_RHS1_FULL_CSR_KRYLOV=direct` is set.
+	  - Active projected Krylov preconditioning landed:
+	    active-system `gmres`/`lgmres` can now use a bounded generic
+	    `active_ilu`/`spilu` preconditioner instead of disabling preconditioning
+	    after active projection. The setup is controlled by
+	    `SFINCS_JAX_RHS1_FULL_CSR_PRECONDITIONER_MAX_MB`,
+	    `SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_ILU_DROP_TOL`, and
+	    `SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_ILU_FILL_FACTOR`. This creates the next
+	    lower-memory comparison lane against active direct `splu`; production
+	    promotion still requires QA/QH residual-clean timing and memory evidence.
+	    Tiny fixture evidence: shifted active-ILU LGMRES passes the residual gate
+	    (`6.25e-11` against `1e-10`, wrapper `0.085 s`, factor `2.49 MB`), while
+	    physical active-ILU LGMRES fails and worsens the residual. Therefore active
+	    direct remains the physical finite-beta default until a stronger
+	    active-system field split/coarse correction replaces generic ILU.
+	  - Active projected field-split/coarse residual correction landed:
+	    `active_coarse` projects the existing low-`l`/angular/tail coarse basis
+	    into the active system and applies a Galerkin residual equation
+	    `Z^T A Z`. Tiny fixture evidence: shifted active-coarse LGMRES passes the
+	    residual gate (`8.89e-11` against `1e-10`); on the physical fixture the
+	    one-step residual improves by about `22x` versus Jacobi (`6.61e-3` to
+	    `3.03e-4`) but still does not reach the physical solve target. This is a
+	    real algorithmic improvement and the right next preconditioner family, but
+	    it remains a benchmark candidate rather than the physical default.
+	    A least-squares coarse equation is available through `active_coarse_ls` or
+	    `SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_COARSE_SOLVER=least_squares`; it improved
+	    shifted residuals but was worse than Galerkin on the physical fixture, so
+	    Galerkin remains the default active-coarse equation for now.
+	  - QA/QH three-surface active-direct evidence:
+	    This entry is superseded by the 2026-06-04 radial-cache fix and bounded
+	    solved-current audit above. After invalidating stale VMEC geometry/output
+	    cache entries, the same `13 x 13 x 21 x 5` QS-paper diagnostic surfaces
+	    complete in seconds under `auto`; max low-resolution QA current
+	    differences are `8.949e-2` versus Redl and `2.822e-2` versus archived
+	    Fortran-v3, while max QH differences are `9.824e-2` versus Redl and
+	    `9.707e-2` versus archived Fortran-v3. The next parity step remains
+	    higher-resolution QA/QH and a production-resolution operator-reuse path
+	    that reduces setup/solve time.
+	  - The current evidence rules out a simple current-normalization bug as the
+	    main blocker. The remaining blocker is radial/resolution robustness plus
+	    runtime: whole-radius and production-resolution RHSMode=1 VMEC runs need an
+	    assembled sparse/operator-reuse path before they are suitable for public
+	    parity and performance claims.
+- Office GPU/CPU probes of the full paper deck show the unresolved production
+  blocker:
+  - `25 x 39 x 60 x 7`, `psiN=0.55`, auto/GPU: failed residual gate after about
+    11.3 min with `active_size=507004`, residual `4.0e6`, target `1.9e-10`.
+  - `17 x 25 x 40 x 7`, auto/GPU: failed residual gate after about 1.7 min with
+    residual `4.0e-4`, target `1.3e-10`.
+  - `15 x 21 x 32 x 5`, auto/GPU: failed residual gate after about 5.8 min with
+    residual `3.4e-4`, target `9.6e-11`.
+  - `15 x 21 x 32 x 5`, sparse-PC: failed before solve because the current
+    explicit sparse pattern route estimated `3.48 GB` CSR against a `512 MB`
+    budget after using about `24 GB` RSS.
+- Zenodo inventory is broad enough to require a manifest-driven campaign:
+  `320` `input.namelist` files and `313` archived `sfincsOutput.h5` files were
+  found. The QS paper set includes QA and QH many-surface decks at
+  `Ntheta=25`, `Nzeta=39`, `Nxi=60`, `Nx=7`; later finite-beta QA decks reach
+  about `51 x 49 x 55 x 6`.
+- Fortran v3 solver architecture from
+  `/Users/rogeriojorge/local/sfincs/fortran/version3`:
+  - `solver.F90` uses PETSc `SNESNEWTONLS`; for linear RHSMode=1 it caps SNES
+    to one Newton step and solves a single linear system.
+  - Iterative mode uses `KSPGMRES` with restart `2000`, `PCLU`, optional
+    preconditioner reuse, and PETSc tolerances from `solverTolerance`.
+  - Direct mode uses `KSPPREONLY + PCLU`.
+  - Parallel sparse direct support is through MUMPS or SuperLU_DIST, with MUMPS
+    pivot controls and retry by increasing `ICNTL(14)`.
+  - `preallocateMatrix.F90` predicts row nonzeros from stencil structure and
+    constraint rows before `MatSetValues`.
+  - `populateMatrix.F90` assembles the operator by physics terms into PETSc AIJ
+    storage using sparse thresholding from `sparsify.F90`, instead of probing a
+    matrix-free operator column by column.
+- Current `sfincs_jax` architecture has many useful policies and diagnostics,
+  but the high-resolution RHSMode=1 failures imply the default path can select
+  a matrix-free/x-block route that does not converge and a sparse-PC route that
+  materializes too much pattern before reaching a robust solve.
+
+### Acceptance gates
+
+- Residual gate: every promoted `sfincs_jax` run must satisfy the requested
+  linear residual target, or a documented stricter floor when the Fortran output
+  uses a looser `solverTolerance`. Nonconverged HDF5/NPZ/NetCDF outputs remain
+  stress artifacts and must not enter README performance claims.
+- Observable parity gate: compare every shared scalar/vector output available in
+  both Fortran v3 and `sfincs_jax`, including at least `FSABjHat`,
+  `FSABjHatOverRootFSAB2`, flows, particle fluxes, heat fluxes, field averages,
+  iteration/residual diagnostics when present, and normalization metadata.
+  Initial gate for production VMEC RHSMode=1 current/flux observables is
+  `<= 1e-2` relative where the reference magnitude is nonzero, with explicit
+  looser research gates only for documented resolution ladders.
+- Runtime gate: small and intermediate decks must complete within the configured
+  benchmark budget; full paper decks must either be competitive with Fortran v3
+  after warmup or be documented as an open optimization lane with exact phase
+  timing. Public README bars should not include failed or nonconverged runs.
+- Memory gate: no promoted route may require dense global materialization for
+  production RHSMode=1 VMEC decks. Sparse assembly must report predicted `nnz`,
+  CSR memory, factor memory, peak RSS, and GPU memory when available.
+- Generality gate: defaults may depend on operator structure, backend, and
+  measured residuals, but not on hard-coded case names, surfaces, or Zenodo path
+  strings.
+
+### Open lanes and completion estimates
+
+- Zenodo manifest and reference inventory: 20%.
+  Current status: input/output counts and major QA/QH/finite-beta resolutions
+  identified. Missing: checked-in manifest builder, fixture tests, and generated
+  case taxonomy.
+- Fortran/JAX output parity harness: 25%.
+  Current status: QS-paper Redl/SFINCS comparison loader exists for one script.
+  Missing: reusable HDF5 comparator over all shared datasets, tolerance policy,
+  and CI fixtures.
+- Operator and residual parity audit: 25%.
+  Current status: radial-coordinate compatibility fixes landed for `psiN_wish`,
+  and exact assembled f-block plus supported full-system matvecs now match the
+  JAX production operator to roundoff. Missing: compare JAX residual at archived
+  Fortran solution, compare RHS assembly and normalization terms, and extend
+  supported assembled terms to nonlinear Phi1-in-kinetic if needed.
+- Fortran-style sparse assembly path: 63%.
+  Current status: no-probe structured f-block CSR and supported full-system CSR
+  assembly are implemented, tested, cached, memory-reported, and exposed through
+  bounded benchmarks/driver helper code. The opt-in host CSR solve lane now has
+  an active projected direct-solve route for residual-clean finite-beta QA/QH
+  diagnostics plus experimental xblock-TZ/coarse residual Krylov candidates.
+  Explicit ``structured_csr``/``structured_full_csr`` routing is now wired
+  through the driver, Python output writer, CLI solve controls, and HDF5
+  diagnostics without sending host CSR through JAX tracing. Missing: a default
+  promotion policy, a broader production VMEC residual gate campaign, and any
+  remaining nonlinear Phi1/full-production terms.
+- Production RHSMode=1 solver policy: 64%.
+  Current status: several dense/sparse/x-block/host/device policies exist, but
+  intermediate and full Zenodo VMEC runs still need higher-resolution residual
+  gates. An opt-in host CSR solve lane now exists for supported non-autodiff
+  cases, and active projected direct solves close the residual gate on bounded
+  QA/QH diagnostic decks. Active projected Krylov now has bounded ILU and
+  field-split/coarse residual preconditioners for lower-memory comparisons.
+  Explicit CLI/Python routing and output diagnostics are covered by tests.
+  Missing: active-coarse convergence on physical QA/QH, residual-clean larger
+  VMEC solves, and a separate JAX-native differentiable fallback.
+- CPU/GPU benchmark and profiling campaign: 28%.
+  Current status: office GPU failure timings, memory observations, and bounded
+  host CSR small/mid-grid preconditioner probes exist. The full-CSR benchmark
+  script now reports promotion-gate metrics, residual reduction, preconditioned
+  residual history, and preconditioner setup/storage. Missing: scripted larger
+  VMEC runner with timeout, phase timings, profiler hooks, warm/cold split, and
+  result JSON.
+- README/docs parity matrix and runtime/memory plots: 25%.
+  Current status: plot machinery exists for other lanes and QS-paper plot exists.
+  Structured full-CSR solve controls are documented in the README and examples
+  docs. Missing: manifest-generated Zenodo rows and plots populated only from
+  residual-clean runs.
+- Overall lane completion: 57%.
+
+### Implementation sequence
+
+1. Add a Zenodo manifest builder.
+   - Create `scripts/build_zenodo_vmec_manifest.py`.
+   - Discover every `input.namelist` and matching `sfincsOutput.h5`.
+   - Record case family, configuration label, surface/radius, `RHSMode`,
+     resolution, geometry files, solver tolerance, available HDF5 datasets, and
+     reference runtime if available.
+   - Add fast tests using a tiny synthetic tree plus one real-path smoke check
+     that skips if the local Zenodo tree is unavailable.
+
+2. Add a reusable SFINCS v3 vs `sfincs_jax` HDF5 parity comparator.
+   - Create a library module rather than another one-off example script.
+   - Compare only shared datasets by default, with per-dataset tolerances and
+     clear normalization labels.
+   - Emit JSON summaries consumed by docs/README plot generation.
+   - Add unit tests with synthetic HDF5 files covering scalar, vector, missing
+     reference, missing residual, zero-reference, and sign/normalization errors.
+
+3. Build a residual/operator audit harness before changing more solvers.
+   - For selected small QA/QH surfaces, run Fortran v3 with
+     `saveMatricesAndVectorsInBinary` or an equivalent matrix/vector dump when
+     possible.
+   - In `sfincs_jax`, expose the RHSMode=1 reduced/full operator, RHS vector,
+     active-DOF map, and true residual in a focused module.
+   - Compare matrix-vector products on basis vectors and random seeded vectors,
+     not just final observables.
+   - Gate progress by row-block parity for streaming, magnetic drift, collision,
+     source constraint, and quasineutrality/profile-current rows.
+
+4. Implement a direct sparse stencil assembly path for RHSMode=1.
+   - Port the Fortran preallocation logic into a Python/JAX-friendly pattern
+     builder: row `nnz` prediction, constraint-row treatment, Phi1 rows, and
+     sparse thresholding.
+   - Assemble COO/CSR by physics-term stencils and block loops, not by dense
+     matrix or column probing.
+   - Reuse existing `sfincs_jax` term evaluations where possible, but move them
+     into focused modules so individual terms are testable.
+   - Add chunked assembly over `(species, x, L, theta, zeta)` so full paper grids
+     fit CPU and GPU memory.
+   - Add `nnz`, CSR bytes, factor bytes, active-size, and assembly phase timings
+     to solver trace output.
+
+5. Add a robust JAX-native production solver route.
+   - For CLI/output runs and differentiable workflows, default large VMEC
+     RHSMode=1 full-FP cases to structured JAX operators plus block/Schur/
+     multilevel preconditioned Krylov instead of monolithic host LU.
+   - Reproduce the useful ideas from Fortran v3/PETSc-style sparse solves in
+     native Python/JAX: explicit sparsity graphs, field splits, block factors,
+     reuse, residual monitors, and fail-closed true-residual verification.
+   - Keep SciPy/SuperLU as a diagnostic comparison path only while the
+     JAX-native route is built. Do not add PETSc, MUMPS, or SuperLU_DIST as
+     product dependencies or promoted backends.
+   - Preserve end-to-end differentiability for the default Python route through
+     JAX-native linear operators and implicit-differentiation rules.
+
+6. Keep a single architecture with explicit capability lanes.
+   - The default route should be JAX-native and device-compatible for both CLI
+     and autodiff use.
+   - If a faster non-autodiff approximation is ever added, it must be a labeled
+     policy inside the same block-operator architecture, not a separate
+     external-solver backend.
+   - Add residual-derived coarse correction only after the operator audit shows
+     the JAX operator matches Fortran on small cases.
+   - Do not promote the route for full Zenodo production decks until residual
+     and observable parity pass independently of any diagnostic host path.
+
+7. Run the staged resolution campaign.
+   - Small CI tier: representative QA and QH surfaces at about
+     `13 x 13 x 21 x 5`; budget seconds; included in CI.
+   - Intermediate tier: central QA/QH surfaces at `15 x 21 x 32 x 5` and
+     `17 x 25 x 40 x 7`; budget less than 10 min per run; local/office optional
+     workflow.
+   - Full paper tier: QA/QH many-surface decks at `25 x 39 x 60 x 7`; budget
+     30 min per point initially, then tighten after solver promotion.
+   - Larger finite-beta tier: QA/QH decks around `51 x 49 x 55 x 6`; optional
+     benchmark only until the full paper tier is residual-clean.
+
+8. Profile and optimize after correctness is pinned.
+   - Each promoted benchmark records geometry load, operator build, RHS build,
+     sparse assembly, factor/preconditioner build, Krylov/factor solve,
+     diagnostics, and file-output time.
+   - Use Perfetto/XPlane only for bounded representative runs; use lightweight
+     phase timers for the full campaign.
+   - Optimize memory first by eliminating matrix-free pattern probing and dense
+     temporary retention; optimize runtime next with chunking, factor reuse,
+     warm JIT reuse, and optional process/GPU parallelism over surfaces.
+
+### 2026-06-02 sparse-PC preconditioner push results
+
+Implemented and validated in the current pass:
+
+- Added a compact Fortran-reduced RHSMode=1 sparse-PC structural pattern with
+  active-DOF projection, `preconditioner_x`, `preconditioner_xi`, and
+  `preconditioner_species` controls.
+- Added sparse-pattern progress logging during explicit pattern probing:
+  preflight, coloring, color progress, and final CSR nonzero count.
+- Enabled active-DOF projection automatically for `fortran_reduced_pc_gmres`
+  reduced-mode cases, reducing the first Zenodo QA production probe from the
+  padded `819004` unknown system to `507004` active unknowns.
+- Applied Fortran-style `preconditioner_x_min_L` behavior to the FP tensor and
+  reduced structural pattern. For x-dot terms, the current tree representation
+  cannot apply different radial derivative matrices per Legendre row, so
+  `preconditioner_x_min_L > 0` keeps full x coupling rather than creating an
+  unsafe pattern/value mismatch.
+- Added scoped large-system defaults for the Fortran-reduced sparse-PC branch:
+  default ILU factorization, lower fill/drop defaults, a small shifted
+  preconditioner, and pivot-threshold forwarding into SciPy `spilu`.
+- Added focused tests covering Fortran-reduced operator shaping, structural
+  pattern reduction, `preconditioner_x_min_L`, active-DOF selection, explicit
+  sparse progress callbacks, and sparse helper factor policy.
+
+Bounded local QA production probe progression for the
+`25 x 39 x 60 x 7`, `psiN=0.05` Zenodo RHSMode=1 case:
+
+- Before active direct patterning: timeout while building the conservative
+  pattern.
+- After Fortran-reduced active patterning:
+  `scope=fortran_reduced_active_dof`, `nnz=22,132,500`, CSR estimate `268 MB`,
+  failed the `256 MB` budget in `22.5 s`.
+- After dropping Fortran `L±2` `preconditioner_xi=1` support:
+  `nnz=13,497,900`; CSR preflight passed, then timed out in sparse
+  materialization/factorization.
+- After progress instrumentation:
+  pattern probing completed with `6827` color batches and actual CSR
+  `nnz=13,483,316`, then timed out in ILU setup at the `150 s` cap.
+- After low-fill ILU defaults:
+  materialization plus ILU attempt exited in `181.8 s`, peak child RSS
+  `4.05 GB`, but unshifted ILU factorization failed before Krylov.
+- After shifted/pivot-zero ILU:
+  factorization became stable enough to avoid the immediate ILU error, but
+  still timed out at `240 s` before Krylov progress.
+- After batched color probing:
+  `build_operator_from_pattern` can evaluate multiple structurally independent
+  color seed vectors through one JAX `matmat` call. The large Fortran-reduced
+  sparse-PC branch defaults to `color_batch=16`, with override
+  `SFINCS_JAX_EXPLICIT_SPARSE_PATTERN_COLOR_BATCH`. The `25 x 39 x 60 x 7`
+  probe now reports `color_batch=16` and completes CSR materialization before
+  the timeout, but shifted ILU still times out in factorization before Krylov.
+- After optional Jacobi factorization:
+  `SFINCS_JAX_EXPLICIT_SPARSE_FACTOR_KIND=jacobi` bypasses SuperLU completely.
+  With diagonal flooring, the same production probe reached Krylov progress
+  instead of failing setup: `3025` matvecs by `238.3 s`. However, the residual
+  stayed near `4.15e2`, so Jacobi is only a diagnostic/non-autodiff escape hatch
+  for profiling and is not strong enough for promoted production parity.
+
+Conclusion:
+
+- The current production-size blocker is not solver-path selection or Krylov
+  restart tuning. It is the cost of constructing and factoring a global sparse
+  preconditioner through matrix-free pattern probing plus SuperLU/ILU.
+- Batched probing reduces the materialization overhead, and optional Jacobi
+  confirms the run can enter Krylov without SuperLU. The Jacobi residual trend
+  proves the missing piece is a stronger structured preconditioner, not merely a
+  cheaper diagonal.
+- The next non-incremental algorithmic step is a direct Fortran-style
+  row-stencil COO/CSR assembler for RHSMode=1 plus reusable block/Schur
+  preconditioner data across fixed-shape surfaces. This should bypass the
+  remaining colored-probe overhead and avoid monolithic SuperLU/ILU setup.
+- Do not add PETSc, MUMPS, or SuperLU_DIST as a product backend for this lane;
+  use those packages only as references for what the JAX-native structured
+  preconditioner must reproduce.
+
+9. Generate README/docs artifacts from checked JSON.
+   - Add all residual-clean Zenodo QA/QH/finite-beta cases to the parity matrix.
+   - Add runtime/memory bar plots for SFINCS Fortran v3, `sfincs_jax` CPU cold,
+     CPU warm, GPU cold, and GPU warm only for converged runs.
+   - Add a Zenodo VMEC validation page with equations, normalization,
+     case provenance, solver route metadata, and exact commands.
+
+### Immediate next work items
+
+1. Implement the Zenodo manifest builder and fast tests.
+2. Implement reusable HDF5 parity comparator and tests.
+3. Add RHSMode=1 operator/RHS/residual audit hooks for one small QA surface.
+4. Prototype the direct sparse pattern/COO builder on a tiny RHSMode=1 FP VMEC
+   case and compare `nnz`/memory against the current probed sparse route.
+5. Re-run the small QA/QH and one intermediate QA surface on CPU and office GPU
+   with trace JSON, then decide which JAX-native block/Schur/multilevel
+   prototype should become the first production solver promotion.
+
+### Need from user
+
+Nothing required right now. The next implementation pass can proceed locally and
+use `ssh office` for GPU/longer benchmark probes. The product direction is
+JAX-native; external sparse packages are comparison references only.
 
 ## 1) Prompt For A New Agent (copy/paste)
 
@@ -8570,20 +11357,18 @@ Lane B: Measured candidate gates.
   `collision`, `xmg`, dense, sparse LU, and LGMRES as candidates in a measured
   portfolio rather than as hard-coded fallback order.
 
-Lane C: PETSc-like non-differentiable production backend.
+Lane C: JAX-native structured production backend.
 
-- Add an explicit host sparse backend for CLI/Python runs that do not need
-  autodiff.
-- Assemble CSR/CSC/COO sparse operators and preconditioner matrices matching the
+- Add an explicit structured block-operator backend for CLI/Python runs and
+  differentiable workflows.
+- Assemble JAX-resident block operators and preconditioner metadata matching the
   active SFINCS v3 operator semantics.
-- Use SciPy sparse direct/iterative methods by default when petsc4py is not
-  installed.
-- Add optional petsc4py support for PETSc KSP/PC, MUMPS, SuperLU_DIST, monitors,
-  and command-line-like options.
+- Reproduce PETSc-like field-split, residual-monitor, and reuse behavior in
+  Python/JAX rather than adding petsc4py, MUMPS, or SuperLU_DIST dependencies.
 - Keep this path opt-in first, then promote only after parity/performance
   validation.
-- Make the backend explicit in outputs so users know whether the run was
-  differentiable.
+- Make the solver policy explicit in outputs so users know whether the run used
+  the promoted JAX-native route or a diagnostic comparison route.
 
 Lane D: JAX-native differentiable backend.
 
@@ -8614,12 +11399,11 @@ Lane E: GPU performance model.
 Lane F: CPU performance model.
 
 - Use dense/direct paths for genuinely small systems.
-- Use host sparse direct or sparse-preconditioned Krylov for medium/large
-  non-autodiff systems.
-- Use JAX-native CPU paths for differentiable workflows and small research
-  experiments.
-- Support multi-core batch/transport workers, and add MPI/petsc4py options only
-  after the single-process sparse path is correct and documented.
+- Use JAX-native block/Schur/multilevel Krylov for medium/large systems.
+- Use the same structured CPU path for CLI runs and differentiable workflows,
+  with explicit policy labels for any diagnostic comparison route.
+- Support multi-core batch/transport workers and later explicit JAX sharding
+  after the single-process structured path is correct and documented.
 
 Lane G: Output, plotting, and reproducibility.
 
@@ -8744,15 +11528,15 @@ P2: Stable solver trace.
 - Extend trace ingestion to any remaining benchmark/summary scripts that still
   only parse free-form logs.
 
-P3: Host sparse production backend.
+P3: JAX-native structured production backend.
 
-- Start with a non-autodiff, opt-in CPU sparse backend using SciPy CSR and
-  sparse direct/GMRES/LGMRES.
+- Start with an opt-in JAX block-operator backend using structured matvecs,
+  local/line block factors, Schur corrections, and FGMRES.
 - Match SFINCS v3 active DOF ordering and constraints.
-- Validate on tiny and small reference cases against existing dense/JAX paths.
-- Add optional petsc4py integration plan after the SciPy backend is correct.
-- Promote only for measured CPU cases where it beats JAX dense/Krylov or avoids
-  a known memory cliff.
+- Validate on tiny and small reference cases against existing dense/JAX paths
+  and diagnostic sparse dumps.
+- Promote only for measured CPU/GPU cases where it preserves parity and avoids
+  the known memory cliff.
 
 P4: GPU policy hardening.
 
@@ -9159,8 +11943,8 @@ Next concrete steps:
 
 1. Implement a constrained-PAS gauge/nullspace selector that is independent of
    sparse solver pivoting. Candidate gates are minimum-flow/minimum-moment
-   constraints, explicit source/gauge rows, or a PETSc/MUMPS-backed optional
-   host solve when `petsc4py` is available.
+   constraints, explicit source/gauge rows, and JAX-native Schur/low-rank
+   constraint solves.
 2. Add a small frozen regression fixture that reproduces this nullspace branch
    sensitivity at affordable size, then assert that exact LU, minimum-norm, and
    PETSc-compatible branches are explicitly labeled rather than silently mixed.
@@ -17554,3 +20338,6882 @@ Best next steps:
    excluded as a documented non-blocking research lane, or defer tagging until
    a genuinely stronger global/coarse QI preconditioner converges the exact
    ``25 x 51 x 100 x 4`` floor.
+
+### 35.93 Zenodo VMEC parity infrastructure and production RHSMode=1 plan
+
+Scope:
+
+- Added ``scripts/build_zenodo_vmec_manifest.py`` to inventory the local
+  QS-optimization Zenodo benchmark bundle without committing large equilibria
+  or HDF5 outputs. The checked compact artifact is
+  ``docs/_static/figures/vmec_jax_finite_beta/zenodo_vmec_manifest.json``.
+- Added ``sfincs_jax/h5_parity.py`` as a strict numeric HDF5 output comparator.
+  Unlike the existing SFINCS-specific tolerant comparator, this records missing
+  candidate datasets, candidate-only diagnostics, shape mismatches, max
+  absolute error, and max relative error for every selected numeric dataset.
+- Added synthetic CI tests for both tools:
+  ``tests/test_zenodo_vmec_manifest.py`` and ``tests/test_h5_parity.py``.
+- Generated a bounded current-output parity artifact for the current
+  whole-radius QA diagnostic grid:
+  ``docs/_static/figures/vmec_jax_finite_beta/qs_paper_s0p5_scalar_h5_parity.json``.
+- Added ``scripts/select_zenodo_vmec_benchmark_cases.py`` and generated
+  ``docs/_static/figures/vmec_jax_finite_beta/zenodo_vmec_benchmark_selection.json``
+  so the next CPU/GPU/Fortran campaign has deterministic QA/QH surface and
+  resolution targets.
+
+Results:
+
+- The manifest found ``359`` Zenodo SFINCS inputs, ``313`` with Fortran-v3
+  ``sfincsOutput.h5`` files.
+- Family coverage in that bundle is ``130`` QA cases, ``190`` QH cases,
+  ``12`` W7-X cases, and ``27`` unclassified cases.
+- The dominant production-resolution RHSMode=1 grids are not small smoke
+  examples: ``31 x 39 x 95 x 7`` appears ``148`` times,
+  ``51 x 49 x 55 x 6`` appears ``86`` times, and
+  ``25 x 39 x 60 x 7`` appears ``80`` times.
+- The bounded ``s=0.5`` scalar HDF5 report compares the current low-cost
+  ``7 x 7 x 21 x 5`` SFINCS-JAX diagnostic grid against the Zenodo
+  ``25 x 39 x 60 x 7`` Fortran-v3 output. It intentionally fails, with
+  ``FSABjHatOverRootFSAB2`` relative error ``0.739`` and ``FSABjHat`` relative
+  error ``0.738``. This confirms the public figure is diagnostic evidence, not
+  a production parity claim.
+- The deterministic benchmark selector chose ``17`` Fortran-backed RHSMode=1
+  cases: ``9`` QA and ``8`` QH. The selected rungs are ``25 x 39 x 60 x 7``,
+  ``51 x 49 x 55 x 6``/``31 x 39 x 95 x 7``, and
+  ``53 x 49 x 55 x 6``/``33 x 39 x 95 x 7``. No W7-X entry was selected under
+  the strict filter because the manifest did not expose an eligible W7-X
+  Fortran-output RHSMode=1 case.
+
+Validation:
+
+- ``python -m pytest tests/test_zenodo_vmec_manifest.py tests/test_h5_parity.py -q``:
+  ``6 passed in 0.41s``.
+- ``python -m pytest tests/test_select_zenodo_vmec_benchmark_cases.py -q``:
+  ``2 passed in 0.02s``.
+- ``python -m ruff check scripts/build_zenodo_vmec_manifest.py sfincs_jax/h5_parity.py tests/test_zenodo_vmec_manifest.py tests/test_h5_parity.py``:
+  passed.
+
+Source-code change plan for SFINCS-JAX accuracy/runtime parity:
+
+1. Add a production RHSMode=1 benchmark selector that consumes the Zenodo
+   manifest and emits a fixed campaign: central/edge QA, central/edge QH,
+   W7-X, low/intermediate/full grid rungs, and optional full-radius ladders.
+   The selector must keep large files external and write only compact JSON
+   provenance.
+2. Add a reusable run-and-compare harness that records SFINCS-JAX CPU, GPU,
+   cold, warm, Fortran-v3 reference, HDF5 parity, residual history, solver
+   path, wall time, peak RSS, and device memory when available.
+3. Split RHSMode=1 VMEC full-FP solve construction into explicit stages:
+   geometry build, real-space coefficients, velocity-space operators, RHS
+   assembly, constraint rows, preconditioner build, Krylov solve, diagnostics,
+   and HDF5 output. Each stage must expose timing and retained-array sizes.
+4. Implement a non-autodiff production sparse-assembly path for CLI and
+   benchmark runs. The first target is a chunked COO/CSR assembly mirroring
+   the Fortran-v3 row-stencil structure, routed to robust host sparse direct or
+   sparse iterative solves when autodiff is not requested. Matrix-free JAX
+   remains the differentiable path.
+5. Add operator-equivalence tests between matrix-free matvecs and assembled CSR
+   matvecs on small QA/QH/geometryScheme=5 fixtures, including species,
+   pitch-angle, speed, theta/zeta, radial-drift, and constraint blocks.
+6. Promote the assembled path only if it passes these gates on selected Zenodo
+   cases: all selected scalar transport outputs within agreed Fortran-v3
+   tolerances after convergence, no CPU/GPU disagreement beyond tolerance,
+   no residual-gated output on nonconverged solves, wall time competitive with
+   Fortran-v3 on at least the intermediate rung, and peak memory not worse
+   than the current matrix-free/default path.
+7. If production assembled CSR is accurate but too slow, add block-Schur
+   preconditioning over constraint/current/profile moments and block-Jacobi or
+   line-block factors over local speed/pitch subdomains. Keep only variants
+   that reduce both residual stagnation and peak memory on QA/QH production
+   rungs.
+
+Future-proof test plan:
+
+- Unit tests: manifest parsing, HDF5 parity statuses, sparse pattern row
+  counts, coordinate normalization, Redl/SFINCS current-unit conversion, and
+  deterministic solver-policy selection.
+- Numerical tests: assembled-vs-matrix-free matvec equality, adjoint/JVP checks
+  on differentiable low-resolution operators, residual monotonicity for
+  preconditioner probes, and CPU/GPU output equality for bounded fixtures.
+- Physics gates: high-collisionality trend checks, ambipolarity sign/root
+  sanity, bootstrap-current radial smoothness, particle/heat/current
+  normalization consistency, and Fortran-v3 scalar-output parity for selected
+  QA/QH/W7-X surfaces.
+- Regression tests: small fast fixtures in normal CI, medium Zenodo-derived
+  external-data gates in scheduled CI, and optional production-resolution
+  CPU/GPU benchmarks with strict timeouts and fail-closed residual policies.
+
+Progress:
+
+- Zenodo VMEC inventory lane: ``70%``. The manifest, selector, and local
+  artifacts exist; the remaining work is scheduled external-data CI and W7-X
+  reference provenance.
+- Strict HDF5 parity lane: ``48%``. The comparator and tests exist; the
+  remaining work is integrating it into run campaigns and README/runtime
+  figures.
+- RHSMode=1 production parity/performance lane: ``28%``. The bottleneck is now
+  well localized to production VMEC full-FP RHSMode=1 solve construction and
+  sparse/preconditioner behavior, but the assembled production path is not yet
+  implemented.
+- Overall Zenodo/QA-QH parity plan completion: ``43%``.
+
+Best next steps:
+
+1. Implement the stage-timing/run-and-compare harness so every large run reports
+   solver path, preconditioner branch, residual history, wall time, RSS, and
+   HDF5 parity.
+2. Run the selected QA/QH campaign in read-only/reference mode first: Fortran
+   HDF5 key inventory, scalar current/flux targets, and currently cached
+   SFINCS-JAX output availability.
+3. Start the RHSMode=1 assembled sparse path with small operator-equivalence
+   tests before running any production grid.
+
+### 35.94 Zenodo VMEC reference-audit harness and timing schema
+
+Scope:
+
+- Added ``sfincs_jax/phase_timing.py`` so benchmark and audit scripts can write
+  a common JSON timing schema with per-phase elapsed time and normalized peak
+  RSS on macOS/Linux.
+- Added ``scripts/run_zenodo_vmec_parity_campaign.py``. Current modes are
+  ``reference-only`` and ``cached-compare``:
+
+  - ``reference-only`` audits selected Fortran-v3 HDF5 outputs without running
+    SFINCS-JAX.
+  - ``cached-compare`` compares already-produced SFINCS-JAX HDF5 candidates
+    against the selected Fortran-v3 references using ``sfincs_jax.h5_parity``.
+
+- The harness supports candidate maps and path templates so future CPU/GPU
+  campaign runs can produce outputs anywhere, then compare them deterministically
+  without changing the benchmark selection.
+- Generated
+  ``docs/_static/figures/vmec_jax_finite_beta/zenodo_vmec_reference_audit.json``.
+
+Results:
+
+- The real reference-only campaign audited all selected QA/QH Fortran-v3 HDF5
+  files successfully: ``17/17 reference_ok``.
+- The audit completed in about ``0.14 s`` and the checked report is compact
+  (about ``53 KB``).
+- The selected output-contract keys now match all ``17`` references:
+  ``FSABjHat``, ``FSABjHatOverRootFSAB2``, ``NIterations``, ``FSABFlow``,
+  ``particleFlux_vm_psiHat``, ``heatFlux_vm_psiHat``,
+  ``particleFlux_vm_psiN``, and ``heatFlux_vm_psiN``.
+- The first audit showed generic ``particleFlux``/``heatFlux`` names are not
+  part of the Fortran-v3 output contract for these runs. The default campaign
+  keys were therefore tightened to concrete SFINCS-v3 dataset names before the
+  report was regenerated.
+
+Validation:
+
+- ``python -m pytest tests/test_phase_timing.py tests/test_run_zenodo_vmec_parity_campaign.py -q``:
+  ``6 passed``.
+- ``python -m ruff check sfincs_jax/phase_timing.py scripts/run_zenodo_vmec_parity_campaign.py tests/test_phase_timing.py tests/test_run_zenodo_vmec_parity_campaign.py``:
+  passed.
+
+Progress:
+
+- Zenodo VMEC inventory lane: ``74%``. The reference audit is now reproducible;
+  the remaining work is scheduled external-data CI and W7-X provenance.
+- Strict HDF5 parity lane: ``55%``. The comparator is now integrated into a
+  campaign harness; the remaining work is cached CPU/GPU candidate generation
+  and README/runtime figure integration.
+- RHSMode=1 production parity/performance lane: ``30%``. The campaign can now
+  measure parity, but the production sparse/operator path still needs
+  implementation.
+- Overall Zenodo/QA-QH parity plan completion: ``48%``.
+
+Best next steps:
+
+1. Add solve execution to the campaign harness with strict per-case timeouts,
+   solver-trace sidecars, RSS capture, stdout tail capture, and fail-closed
+   nonconverged output handling.
+2. Instrument RHSMode=1 full-system setup stages inside ``v3_driver`` and
+   ``v3_system`` so the harness can report geometry, coefficient, RHS,
+   preconditioner, Krylov, diagnostics, and HDF5 timings.
+3. Begin the assembled sparse operator path on small VMEC fixtures and compare
+   matrix-free matvecs to assembled CSR matvecs before attempting the selected
+   production-resolution QA/QH cases.
+
+### 35.95 Bounded Zenodo solve-mode harness
+
+Scope:
+
+- Extended ``scripts/run_zenodo_vmec_parity_campaign.py`` with explicit
+  ``--mode solve``. This mode now constructs and optionally runs
+  ``sfincs_jax write-output`` for selected Zenodo VMEC cases.
+- Added fail-closed solve bookkeeping: per-case ``--timeout-s``,
+  ``solver_trace.json`` sidecar path, stdout/stderr tails, child return code,
+  child elapsed time, child peak RSS, and post-solve HDF5 parity if a candidate
+  output exists.
+- Added ``--dry-run`` and ``--max-cases`` so campaign commands can be audited
+  without launching production solves.
+- Added VMEC path repair for old Zenodo namelists that point to remote
+  ``/ptmp`` paths: solve mode reads ``geometryParameters.equilibriumFile``,
+  searches the Zenodo root by basename, and passes the resolved local file via
+  ``--wout-path`` without editing the original input.
+- Generated
+  ``docs/_static/figures/vmec_jax_finite_beta/zenodo_vmec_solve_dry_run_probe.json``
+  for the first selected case.
+
+Results:
+
+- The real dry-run probe produced ``solve_dry_run: 1`` and resolved the first
+  selected QA case to the local VMEC file
+  ``calculations/20211226-01-sfincs_for_precise_QS_for_Redl_benchmark/wout_new_QA_aScaling.nc``.
+- The generated command targets
+  ``outputs/zenodo_vmec_campaign_probe/000_qa_low_inner_edge_25x39x60x7/sfincsOutput.h5``
+  plus a matching ``solver_trace.json`` sidecar.
+- No heavy production solve was launched in this step; the harness is now ready
+  for one-case bounded probes and later CPU/GPU campaign runs.
+
+Validation:
+
+- ``python -m pytest tests/test_run_zenodo_vmec_parity_campaign.py tests/test_phase_timing.py -q``:
+  ``7 passed``.
+- ``python -m ruff check scripts/run_zenodo_vmec_parity_campaign.py tests/test_run_zenodo_vmec_parity_campaign.py``:
+  passed.
+
+Progress:
+
+- Zenodo VMEC inventory lane: ``76%``. Reference and solve command provenance
+  are now reproducible.
+- Strict HDF5 parity lane: ``58%``. The solve harness can now call the strict
+  comparator automatically when a candidate HDF5 exists.
+- RHSMode=1 production parity/performance lane: ``34%``. Campaign execution is
+  scaffolded with fail-closed reports; the actual production solver path is
+  still the bottleneck.
+- Overall Zenodo/QA-QH parity plan completion: ``52%``.
+
+Best next steps:
+
+1. Run a single selected QA central/edge case with a strict short timeout to
+   capture the current production-resolution failure mode in the new report
+   schema.
+2. Instrument RHSMode=1 setup phases in ``v3_driver``/``v3_system`` and expose
+   retained-array estimates so the one-case report points to the exact memory
+   and runtime bottleneck.
+3. Start assembled sparse operator tests on reduced VMEC grids before changing
+   the production default solver route.
+
+### 35.96 Production QA probe and bounded SciPy-rescue cap
+
+Scope:
+
+- Ran the first selected Zenodo QA production-resolution RHSMode=1 case through
+  the new solve campaign harness:
+  ``25 x 39 x 60 x 7``, ``psiN=0.05``, active reduced size ``507004``,
+  full size ``819004``.
+- Generated timeout evidence before changing policy:
+  ``docs/_static/figures/vmec_jax_finite_beta/zenodo_vmec_solve_probe_case0_verbose.json``.
+- Added explicit ``rhs1_scipy_rescue_start``,
+  ``rhs1_scipy_rescue_done``, ``rhs1_scipy_rescue_failed``, and
+  ``rhs1_scipy_rescue_skipped`` profiler markers in ``v3_driver``.
+- Added ``rhs1_scipy_rescue_active_size_allowed`` in
+  ``sfincs_jax/rhs1_post_xblock_policy.py``. The default behavior now skips
+  the old CPU SciPy rescue for very large explicit FP RHSMode=1 systems when
+  the large-CPU x-block shortcut produced no explicit x-block seed. Users can
+  restore the historical unbounded rescue with
+  ``SFINCS_JAX_RHSMODE1_SCIPY_GMRES_RESCUE_MAX_ACTIVE=0``.
+- Generated post-cap evidence:
+  ``docs/_static/figures/vmec_jax_finite_beta/zenodo_vmec_solve_probe_case0_capped.json``.
+
+Results:
+
+- Before the cap, the selected case reached SciPy GMRES rescue in less than one
+  second and then timed out. The report showed
+  ``rhs1_scipy_rescue_start`` without ``rhs1_scipy_rescue_done``.
+- The solve path before the cap was:
+
+  - geometry/output fields ready in about ``0.2 s``;
+  - active matrix size ``507004 x 507004``;
+  - RHS assembled in about ``0.13 s``;
+  - collision preconditioner built quickly;
+  - probe shortcut skipped because ``size=507004 > dense_max=8000``;
+  - initial Krylov skipped by the large CPU FP x-block shortcut;
+  - strong preconditioner skipped because ``size=507004 > fp_max=120000``;
+  - sparse ILU disabled because ``size=507004 > max=6000``;
+  - SciPy rescue entered with residual ``1.239e6`` against target
+    ``4.773e-13``.
+
+- After the cap, the same case returned in ``1.63 s`` as a fail-closed
+  ``solve_error`` instead of timing out. It wrote only
+  ``outputs/zenodo_vmec_campaign_probe_capped/000_qa_low_inner_edge_25x39x60x7/solver_trace.json``
+  and refused HDF5 output.
+- The capped trace records ``scipy_rescue_skipped=True``,
+  ``scipy_rescue_skip_reason=active_size_cap``,
+  ``scipy_rescue_active_size=507004``, and
+  ``scipy_rescue_attempted=False``.
+- This improves runtime/UX for nonconverged production cases but does not close
+  physics parity. The residual is still ``1.239e6``; the next algorithmic
+  solution must replace this ladder with a better production solve route.
+
+Validation:
+
+- ``python -m pytest tests/test_rhs1_post_xblock_policy.py tests/test_rhs1_sparse_first_heuristic.py::test_scipy_rescue_abs_floor_after_large_xblock_seed tests/test_run_zenodo_vmec_parity_campaign.py tests/test_phase_timing.py -q``:
+  ``19 passed``.
+- ``python -m ruff check sfincs_jax/rhs1_post_xblock_policy.py sfincs_jax/v3_driver.py tests/test_rhs1_post_xblock_policy.py scripts/run_zenodo_vmec_parity_campaign.py tests/test_run_zenodo_vmec_parity_campaign.py``:
+  passed.
+
+Progress:
+
+- Zenodo VMEC inventory lane: ``77%``. The selected probe is now reproducible
+  and bounded.
+- Strict HDF5 parity lane: ``58%``. No new candidate HDF5 was written because
+  the solve is correctly fail-closed.
+- RHSMode=1 production parity/performance lane: ``38%``. A major stall source
+  is eliminated, and the next algorithmic blocker is isolated.
+- Overall Zenodo/QA-QH parity plan completion: ``55%``.
+
+Best next steps:
+
+1. Implement a reduced-grid assembled CSR/operator-equivalence test for
+   RHSMode=1 VMEC FP so matrix-free and assembled matvecs agree before any
+   production solve route changes.
+2. Add a production non-autodiff assembled/operator-reuse solve path for large
+   RHSMode=1 FP CLI runs, initially opt-in via ``--solve-method`` or an
+   environment flag.
+3. Rerun the same ``psiN=0.05`` QA probe with the assembled path, requiring
+   residual improvement under a bounded timeout before promoting the route.
+
+### 35.97 Zenodo solve-trace summaries for production solver decisions
+
+Scope:
+
+- Added a compact solver-trace summary to
+  ``scripts/run_zenodo_vmec_parity_campaign.py``. Each solve row now surfaces
+  active size, total size, residual/target ratio, peak memory, profile labels,
+  failure reason, output-refusal state, and selected solver metadata such as
+  ``scipy_rescue_skip_reason`` and x-block assembled/device-operator status.
+- Added a top-level ``solve_trace_summary`` for multi-case reports, including
+  selected-path counts, backend counts, SciPy-rescue skip reasons, output
+  refusal count, x-block assembled/device counts, and maximum residual ratio.
+- Kept summaries compact by converting long metadata arrays to lengths or
+  omitting unrelated histories.
+
+Results:
+
+- Refreshed
+  ``docs/_static/figures/vmec_jax_finite_beta/zenodo_vmec_solve_probe_case0_capped.json``.
+- The same first Zenodo QA production probe now reports, from one JSON file:
+  ``active_size=507004``, ``total_size=819004``,
+  ``residual_norm=1.239037e6``, ``residual_target=4.772842e-10``,
+  ``output_refused=True``, ``failure_reason=nonconverged_rhsmode1_output``,
+  and ``scipy_rescue_skip_reason=active_size_cap``.
+- Aggregate summary confirms one readable CPU solver trace, one refused output,
+  one ``active_size_cap`` rescue skip, and no x-block assembled operator used
+  for this default production run.
+
+Validation:
+
+- ``python -m pytest tests/test_run_zenodo_vmec_parity_campaign.py -q``:
+  ``9 passed``.
+- ``python -m ruff check scripts/run_zenodo_vmec_parity_campaign.py tests/test_run_zenodo_vmec_parity_campaign.py``:
+  passed.
+
+Progress:
+
+- Zenodo VMEC inventory lane: ``78%``. Production solve reports now capture
+  solver-path state and bounded failures without requiring manual log
+  inspection.
+- Strict HDF5 parity lane: ``59%``. Candidate comparison remains automatic
+  when HDF5 output exists; nonconverged refusal is now explicit.
+- RHSMode=1 production parity/performance lane: ``40%``. Default production
+  failure mode is now bounded and diagnosable, but the residual is not fixed.
+- Overall Zenodo/QA-QH parity plan completion: ``57%``.
+
+Best next steps:
+
+1. Add a reduced-grid RHSMode=1 VMEC FP assembled-operator equivalence test
+   that validates active-sliced pattern probing against matrix-free matvecs.
+2. Use that evidence to introduce an opt-in production assembled/operator-reuse
+   solve route for CLI/non-autodiff RHSMode=1 FP cases.
+3. Rerun the first ``psiN=0.05`` QA production probe with the opt-in route and
+   require residual reduction within a bounded timeout before widening the
+   Zenodo QA/QH campaign.
+
+### 35.98 Opt-in production x-block rescue probes
+
+Scope:
+
+- Used the new solve-trace summaries to identify why the first Zenodo QA
+  production-resolution case was not trying sparse x-block rescue by default:
+  the default policy records ``sparse_xblock_rescue_reason=sparse_disabled``
+  for the ``507004``-active system.
+- Ran an opt-in bounded probe with
+  ``SFINCS_JAX_RHSMODE1_SPARSE_XBLOCK_RESCUE_MAX=600000`` and
+  ``SFINCS_JAX_RHSMODE1_SCIPY_GMRES_RESCUE=0``.
+- Ran a second bounded probe with the same x-block rescue cap plus
+  ``SFINCS_JAX_RHSMODE1_XBLOCK_SPARSE_HOST_BLOCK_MAX=40000`` to test whether
+  including the next radial block tier is safe.
+
+Results:
+
+- Default capped run:
+  ``docs/_static/figures/vmec_jax_finite_beta/zenodo_vmec_solve_probe_case0_capped.json``
+  now reports ``sparse_xblock_rescue_reason=sparse_disabled`` and
+  ``scipy_rescue_skip_reason=active_size_cap``. Runtime remains about
+  ``1.4 s`` wall for fail-closed output refusal.
+- X-block max ``600000`` run:
+  ``docs/_static/figures/vmec_jax_finite_beta/zenodo_vmec_solve_probe_case0_xblock600k.json``.
+  It built an explicit x-block seed and reduced the residual from
+  ``1.239037e6`` to ``4.960252e-5`` in ``45.5 s`` wall, with peak RSS about
+  ``6.1 GB``. This is a major residual improvement but still about
+  ``1.04e5`` times the ``4.772842e-10`` output gate, so output remains
+  correctly refused.
+- The x-block ``600000`` trace records:
+  ``sparse_xblock_rescue_active=True``,
+  ``sparse_xblock_rescue_attempted=True``,
+  ``sparse_xblock_rescue_built=True``,
+  ``sparse_xblock_rescue_reason=seed_accepted``,
+  ``sparse_xblock_rescue_seed_improvement_ratio=8.59e9``, and
+  ``sparse_xblock_rescue_candidate_accepted=True``.
+- Block cap ``40000`` run:
+  ``docs/_static/figures/vmec_jax_finite_beta/zenodo_vmec_solve_probe_case0_xblock600k_block40k.json``.
+  It timed out at ``90 s`` while factorizing the 38k local blocks. Logs show
+  repeated singular local-factor attempts and unstable-block rejection before
+  reaching species 1 ``x=3``. No solver trace was written because the timeout
+  happened inside factor assembly.
+
+Conclusion:
+
+- Raising the x-block rescue active-size cap is useful as an explicit
+  diagnostic/residual-reduction lane, but it is not yet a production default:
+  it uses about ``6 GB`` and still does not converge.
+- Raising the local host-block cap to include 38k blocks is not defaultable on
+  this CPU path. It is slower, can time out under ``90 s``, and hits singular
+  local factors.
+- The next real algorithmic step is not another cap increase. It should be a
+  production route that keeps the successful lower-x x-block seed, then adds a
+  cheaper global correction/coarse solve for the skipped high-x residual
+  components without factorizing the unstable 38k-58k local blocks.
+
+Validation:
+
+- ``python -m pytest tests/test_run_zenodo_vmec_parity_campaign.py -q``:
+  ``9 passed``.
+- ``python -m pytest tests/test_run_zenodo_vmec_parity_campaign.py tests/test_rhs1_post_xblock_policy.py tests/test_rhs1_sparse_first_heuristic.py::test_scipy_rescue_abs_floor_after_large_xblock_seed -q``:
+  ``20 passed``.
+- Ruff checks for ``v3_driver.py`` and the Zenodo campaign harness passed.
+
+Progress:
+
+- Zenodo VMEC inventory lane: ``79%``. Reports now identify production
+  policy blockers and opt-in residual-reduction behavior.
+- Strict HDF5 parity lane: ``59%``. Still no production candidate HDF5 for
+  the first QA case because all nonconverged RHSMode=1 outputs are refused.
+- RHSMode=1 production parity/performance lane: ``45%``. The x-block seed
+  route is validated as a strong residual reducer, but convergence still needs
+  a second-level correction.
+- Overall Zenodo/QA-QH parity plan completion: ``60%``.
+
+Best next steps:
+
+1. Implement a bounded global correction after accepted lower-x x-block seeds,
+   targeting the residual left in skipped high-x/local-block components without
+   factorizing those unstable local blocks.
+2. Add a unit/regression test that verifies the correction is attempted only
+   after an accepted x-block seed and that nonconverged outputs remain refused.
+3. Re-run the first QA production probe with x-block max ``600000`` plus the
+   new correction, requiring residual improvement below the current
+   ``4.96e-5`` baseline under a ``60-90 s`` budget before widening the
+   campaign.
+
+### 35.99 Bounded post-x-block correction and rejected high-x diagonal fallback
+
+Scope:
+
+- Added an opt-in post-x-block global correction policy for large explicit
+  CPU RHSMode=1 FP-only cases. The correction runs only after an accepted
+  sparse x-block seed and applies a bounded matrix-free residual-equation
+  minres step with an existing preconditioner.
+- Extended Zenodo solve-trace summaries to report
+  ``fp_xblock_global_correction_*`` metadata, including whether the correction
+  was attempted, accepted, elapsed time, and before/after residuals.
+- Tested a high-x diagonal fallback for skipped/rejected host x-blocks. The
+  fallback computes a cheap inverse diagonal from the explicit FP x-block
+  diagonal and avoids high-x SuperLU factorization, but remains opt-in only
+  after the production probe below.
+
+Results:
+
+- Focused unit/trace tests:
+  ``python -m pytest tests/test_sparse_assembly.py tests/test_rhs1_post_xblock_policy.py tests/test_run_zenodo_vmec_parity_campaign.py -q``:
+  ``25 passed``.
+- Broader targeted set before the high-x fallback experiment:
+  ``73 passed`` in about ``6.1 s``.
+- Ruff passed on all touched solver/policy/campaign/test files.
+- Post-x-block global correction probe:
+  ``docs/_static/figures/vmec_jax_finite_beta/zenodo_vmec_solve_probe_case0_xblock600k_global_correction_default_diagoff.json``.
+  It completed fail-closed in ``42.8 s`` child wall time, with child peak RSS
+  ``4.52 GB`` and solver-trace peak RSS ``4.74 GB``. The lower-x x-block seed
+  reduced the residual to ``4.960252e-5``; the bounded global correction
+  accepted 3 minres steps and reduced it only to ``4.959686e-5``. The target
+  remains ``4.772841e-10``, so output refusal is still correct.
+- High-x diagonal fallback probe:
+  ``docs/_static/figures/vmec_jax_finite_beta/zenodo_vmec_solve_probe_case0_xblock600k_diag_fallback.json``.
+  This timed out at ``90 s``. It worsened the explicit FP x-block seed
+  residual from the known ``1.442421e-4`` seed to ``1.014568e-2`` and then
+  triggered an expensive global sparse-operator assembly. Therefore the
+  diagonal fallback is disabled by default and should remain a documented
+  experiment, not a production path.
+
+Conclusion:
+
+- The accepted lower-x x-block seed is still the useful production diagnostic
+  route, but the residual left in the skipped high-x/global-coupling
+  components is not fixed by scalar minres correction or by diagonal high-x
+  substitution.
+- The next real algorithmic step should be a reduced high-x residual equation:
+  assemble/probe only a compact basis over the skipped x blocks, species
+  current moments, and low angular modes, then solve that Galerkin/action
+  residual equation as a correction to the accepted x-block seed. This avoids
+  both failed 38k-58k local factorizations and full 507k sparse assembly.
+
+Progress:
+
+- Zenodo VMEC inventory lane: ``79%``. The campaign reports now expose
+  correction decisions and rejected experiments.
+- Strict HDF5 parity lane: ``59%``. Still no production candidate HDF5 for the
+  first QA case because the residual gate is not met.
+- RHSMode=1 production parity/performance lane: ``48%``. We ruled out two
+  cheap correction families and preserved bounded fail-closed behavior.
+- Overall Zenodo/QA-QH parity plan completion: ``61%``.
+
+Best next steps:
+
+1. Implement a compact high-x residual-equation correction basis that targets
+   the skipped x-block residual after the accepted lower-x x-block seed.
+2. Keep the diagonal fallback opt-in and only revisit it if the reduced
+   residual-equation basis shows that diagonal high-x modes are required.
+3. Rerun the first QA production probe under a ``90 s`` budget and require a
+   material residual drop below ``4.959686e-5`` before running wider QA/QH
+   radial probes.
+
+### 36.00 Compact x-block residual-equation probes
+
+Scope:
+
+- Added an opt-in residual-equation correction after the accepted lower-x
+  sparse x-block seed. The correction forms a compact basis from residual
+  slices over skipped high-x blocks, optionally over all x blocks, and
+  optionally with the raw reduced residual. It solves only a small
+  least-squares residual equation and accepts only true residual reductions.
+- The hook is disabled by default. Production HDF5 output remains refused
+  unless the true residual satisfies the existing target.
+- Extended solve-trace campaign summaries with
+  ``fp_xblock_highx_residual_correction_*`` metadata.
+
+Results on the first Zenodo QA production probe
+``25 x 39 x 60 x 7``, ``psiN=0.05``, active size ``507004``:
+
+- Baseline opt-in lower-x x-block plus scalar global correction:
+  ``docs/_static/figures/vmec_jax_finite_beta/zenodo_vmec_solve_probe_case0_xblock600k_global_correction_default_diagoff.json``.
+  Residual ``4.959686e-5``; child wall time ``42.8 s``; child peak RSS
+  ``4.52 GB``. Output correctly refused.
+- High-x-only residual-equation correction, 1 step:
+  ``docs/_static/figures/vmec_jax_finite_beta/zenodo_vmec_solve_probe_case0_xblock600k_highx_residual.json``.
+  Accepted 9 directions, residual ``4.959686e-5 -> 4.779384e-5`` in
+  ``0.23 s``. Final trace residual ``4.779546e-5``. Output refused.
+- High-x-only residual-equation correction, 3 steps:
+  ``docs/_static/figures/vmec_jax_finite_beta/zenodo_vmec_solve_probe_case0_xblock600k_highx_residual_steps3.json``.
+  Accepted 27 directions, residual ``4.959686e-5 -> 4.772280e-5`` in
+  ``0.64 s``. Output refused.
+- All-x residual-equation correction, 3 steps:
+  ``docs/_static/figures/vmec_jax_finite_beta/zenodo_vmec_solve_probe_case0_xblock600k_allx_residual_steps3.json``.
+  Accepted 45 directions, residual ``4.959686e-5 -> 3.541712e-5`` in
+  ``1.09 s``. This is the first material post-seed residual reduction, but it
+  is still about ``7.4e4`` times the target.
+- All-x residual-equation correction, 8 steps:
+  ``docs/_static/figures/vmec_jax_finite_beta/zenodo_vmec_solve_probe_case0_xblock600k_allx_residual_steps8.json``.
+  Accepted 120 directions, residual ``4.959686e-5 -> 3.362016e-5`` in
+  ``2.77 s``. The additional steps plateau and increase RSS to about
+  ``6.7 GB`` child peak.
+- Raw-residual plus all-x correction, 3 steps:
+  ``docs/_static/figures/vmec_jax_finite_beta/zenodo_vmec_solve_probe_case0_xblock600k_raw_allx_residual_steps3.json``.
+  Residual reduction is essentially unchanged from all-x 3-step
+  (``3.541426e-5``), so the raw residual direction does not explain the
+  remaining gap.
+
+Conclusion:
+
+- Compact residual-equation corrections are safe, bounded, and useful as
+  diagnostics, but they are not yet a convergence path for this production QA
+  RHSMode=1 case.
+- The remaining residual is not primarily a skipped-block scalar residual mode.
+  The next algorithmic push needs a stronger coupled coarse space: current /
+  profile constraints, species moments, and radial-profile closure modes, or a
+  true assembled/operator-reuse path that can run a robust Krylov method
+  without full sparse assembly.
+
+Validation:
+
+- ``python -m pytest tests/test_sparse_assembly.py tests/test_rhs1_post_xblock_policy.py tests/test_run_zenodo_vmec_parity_campaign.py -q``:
+  ``25 passed``.
+- ``python -m pytest tests/test_rhs1_post_xblock_policy.py tests/test_rhs1_sparse_first_heuristic.py::test_scipy_rescue_abs_floor_after_large_xblock_seed tests/test_run_zenodo_vmec_parity_campaign.py tests/test_phase_timing.py tests/test_h5_parity.py tests/test_zenodo_vmec_manifest.py tests/test_select_zenodo_vmec_benchmark_cases.py tests/test_finite_beta_vmec_example.py tests/test_input_compat.py tests/test_rhs1_device_operator.py tests/test_sparse_assembly.py -q``:
+  ``78 passed`` after the default-off high-x diagonal fallback patch.
+- Ruff passed on touched solver, policy, campaign, and test files.
+
+Progress:
+
+- Zenodo VMEC inventory lane: ``80%``.
+- Strict HDF5 parity lane: ``59%``.
+- RHSMode=1 production parity/performance lane: ``52%``. We now have a
+  bounded residual-equation family that materially improves the production
+  probe but does not converge it.
+- Overall Zenodo/QA-QH parity plan completion: ``63%``.
+
+Best next steps:
+
+1. Add current/profile/species-moment coarse directions to the residual
+   equation and probe whether they reduce the ``3.36e-5`` plateau.
+2. In parallel, prototype an assembled/operator-reuse Krylov path for this
+   case that avoids full 507k sparse assembly but can reuse lower-x factors and
+   compact coupling operators.
+3. Only promote defaults after a probe converges or reduces residual by at
+   least an order of magnitude under the ``90 s`` budget.
+
+### 36.01 Fortran/PETSc solver profile and SFINCS-JAX xblock forced probe
+
+Scope:
+
+- Inspected SFINCS Fortran v3 solver and matrix assembly in
+  ``/Users/rogeriojorge/local/sfincs/fortran/version3`` to identify the
+  production RHSMode=1 solve mechanism used by the Zenodo QA benchmark.
+- Compared the archived Fortran v3 PETSc/MUMPS log for the first selected
+  Zenodo QA case against the current SFINCS-JAX x-block/residual-equation
+  probes.
+- Ran a bounded forced SFINCS-JAX full ``xblock_sparse_pc_gmres`` +
+  moment-Schur probe on the same ``25 x 39 x 60 x 7`` QA case:
+  ``docs/_static/figures/vmec_jax_finite_beta/zenodo_vmec_solve_probe_case0_forced_xblock_momentschur.json``.
+
+Fortran/PETSc findings:
+
+- Fortran v3 assembles PETSc AIJ matrices with precise preallocation. For the
+  benchmark case the true Jacobian has ``507004`` rows and ``21400898``
+  nonzeros; the preconditioner matrix has ``13483256`` nonzeros.
+- The default iterative path is PETSc GMRES with restart ``2000`` and an LU
+  factorization of the reduced preconditioner matrix. MUMPS is selected when
+  available, with pivoting controls such as ``CNTL(1)=1e-6`` and adaptive
+  ``ICNTL(14)``.
+- The reduced preconditioner is not a local smoother. It keeps the global
+  source/constraint structure and full theta/zeta differentiation by default,
+  while simplifying x-coupling, pitch-angle off-diagonal couplings, magnetic
+  drift L-couplings, and species coupling according to the Fortran
+  ``preconditionerOptions``.
+- The archived 40-rank Fortran run converged in ``52`` GMRES iterations and
+  reported ``18.95 s`` main solve time. Matrix assembly was cheap relative to
+  factorization/Krylov: about ``0.19 s`` for the preconditioner assembly and
+  ``0.29 s`` for the full Jacobian assembly after preallocation.
+- A local 4-rank Mac Fortran attempt was not useful as an inner-loop profile:
+  it exceeded the bounded wall-clock before completion. The archived 40-rank
+  PETSc/MUMPS log remains the production reference for this case.
+
+SFINCS-JAX findings:
+
+- The current accepted lower-x host x-block route builds in about ``42 s`` and
+  peaks around ``6-7 GB`` RSS on this case, but only reduces the true residual
+  to ``4.96e-5``. Compact all-x residual-equation corrections improve this to
+  ``3.36e-5`` but plateau far above the ``4.77e-10`` target.
+- The forced full ``xblock_sparse_pc_gmres`` + moment-Schur probe reached
+  Krylov and remained CPU-active, but timed out at ``480 s`` after about
+  ``2000`` matvecs. This is the closest existing SFINCS-JAX path to the
+  Fortran GMRES-with-factored-preconditioner structure, and it is still much
+  weaker than the Fortran/PETSc preconditioner.
+- ``petsc4py`` is not installed locally, while ``pyamg`` is available. A
+  PETSc-backed non-autodiff production lane is not pursued; the required
+  field-split/reuse behavior should be reproduced in native Python/JAX.
+
+Implementation result:
+
+- Added residual-progress plumbing for long host SciPy GMRES runs. The
+  ``gmres_solve_with_history_scipy`` and
+  ``explicit_left_preconditioned_gmres_scipy`` wrappers now accept an optional
+  progress callback, and the large ``xblock_sparse_pc_gmres`` and
+  ``sparse_pc_gmres`` branches emit periodic ``ksp_residual`` lines in
+  addition to matvec-count progress.
+- This instrumentation does not change solver numerics. It makes future
+  bounded probes diagnosable when they time out before a final solver trace is
+  written.
+
+Conclusion:
+
+- The gap is not explained by JIT overhead or output writing. It is a
+  preconditioner-fidelity gap: Fortran factors a reduced but still global
+  matrix, while SFINCS-JAX currently relies on local x-block factors plus small
+  corrections.
+- The next real algorithmic push should be a JAX-native reduced/global block
+  preconditioner operator that preserves full theta/zeta and
+  source/constraint coupling while simplifying x, xi, and species couplings.
+  External PETSc/petsc4py-style backends are comparison references, not product
+  targets.
+
+Progress:
+
+- Zenodo VMEC inventory lane: ``80%``.
+- Strict HDF5 parity lane: ``59%``.
+- RHSMode=1 production parity/performance lane: ``55%``. We now have a
+  concrete Fortran/PETSc profile and have ruled out the current full x-block
+  path as a production-convergent replacement.
+- Overall Zenodo/QA-QH parity plan completion: ``65%``.
+
+Best next steps:
+
+1. Prototype the Fortran-like reduced global preconditioner operator:
+   full theta/zeta coupling, x-diagonal or x-upwind preconditioner, optional
+   species decoupling, ``preconditioner_xi=1`` L-coupling truncation, and
+   retained source/constraint rows/columns.
+2. Build/factor that reduced operator with explicit CSR preflight and progress
+   logging. First gate: residual below ``1e-6`` on the first QA production
+   probe under ``10 min`` and peak RSS below the current forced xblock path.
+   Promotion gate: residual meets target or reproduces Fortran HDF5 observables
+   within the existing parity tolerances.
+3. In parallel, document how the JAX-native route reproduces the useful
+   PETSc-style field-split, residual-monitor, and preconditioner-reuse
+   behavior without depending on PETSc, MUMPS, or SuperLU_DIST.
+
+### 36.02 Profiling instrumentation hardening for bounded production probes
+
+Scope:
+
+- Hardened the long-solve profiling path so future RHSMode=1 VMEC probes report
+  useful progress even when they time out before a final solver-trace sidecar is
+  flushed.
+- Added SciPy-GMRES progress callbacks to the low-level solver wrappers and
+  wired those callbacks into the host ``sparse_pc_gmres`` and
+  ``xblock_sparse_pc_gmres`` branches.
+- Extended the Zenodo campaign parser to detect both residual-bearing host
+  Krylov lines, for example ``iters=20 ksp_residual=3e-4 elapsed_s=12.5``, and
+  matrix-free/device progress lines, for example ``matvecs=2000 elapsed_s=478``.
+
+Results:
+
+- The previous forced ``25 x 39 x 60 x 7`` QA timeout artifact contained
+  ``matvecs=2000 elapsed_s=478.202`` in stdout, but the report summarized it as
+  ``progress_line_count=0``. The parser now records
+  ``krylov_progress_count``, ``max_krylov_count``, ``last_krylov_progress``,
+  ``last_krylov_residual``, and ``min_krylov_residual``.
+- Host SciPy-GMRES probes now emit periodic true residual progress through the
+  same stdout path, making it possible to distinguish three cases under a
+  timeout: setup/factorization hang, Krylov progress with monotone residual
+  reduction, and Krylov stagnation.
+- Added regression coverage that the callbacks match the residual-history
+  arrays exactly, and that right-preconditioned SciPy GMRES interprets ``x0`` as
+  a physical-space solution when solver policies switch sides.
+
+Validation:
+
+- ``python -m pytest tests/test_solver_gmres.py -q``:
+  ``49 passed``.
+- ``python -m pytest tests/test_run_zenodo_vmec_parity_campaign.py -q``:
+  ``10 passed``.
+- ``python -m pytest tests/test_solver_gmres.py tests/test_run_zenodo_vmec_parity_campaign.py tests/test_phase_timing.py -q``:
+  ``61 passed``.
+- ``python -m ruff check sfincs_jax/solver.py sfincs_jax/v3_driver.py scripts/run_zenodo_vmec_parity_campaign.py tests/test_solver_gmres.py tests/test_run_zenodo_vmec_parity_campaign.py``:
+  passed.
+- ``git diff --check``: passed.
+- Documentation follow-up updated README, usage, and performance-technique notes
+  so the public recommendation remains ``--solve-method auto`` and the promoted
+  Fortran-reduced host route is visible without requiring users to know hidden
+  environment variables. ``tests/test_structured_csr_docs.py`` now gates the
+  documented method and auto-control names.
+- Final focused rerun after docs/test updates:
+  ``python -m pytest tests/test_fortran_reduced_preconditioner.py
+  tests/test_v3_sparse_pattern.py::test_fortran_reduced_pc_gmres_solve_method_solves_tiny_rhs1_system
+  tests/test_v3_sparse_pattern.py::test_auto_selects_fortran_reduced_pc_gmres_for_large_full_fp_rhs1
+  tests/test_v3_sparse_pattern.py::test_fortran_reduced_pc_auto_uses_active_dof_for_truncated_modes
+  tests/test_rhs1_full_assembly.py tests/test_benchmark_rhs1_full_csr_reuse.py
+  tests/test_structured_csr_docs.py -q``: ``43 passed``.
+
+Refined next step:
+
+- Stop spending cycles on local smoother/restart variants for the Zenodo
+  RHSMode=1 production blocker. The Fortran/PETSc profile shows that the
+  successful method is a factored, reduced but still global preconditioner. The
+  next implementation must therefore be a JAX-native reduced global/block
+  operator with Schur/coarse correction, with the new progress parser used to
+  gate bounded probes.
+
+### 36.03 Reusable Fortran-v3 PETSc/MUMPS profile parser
+
+Scope:
+
+- Added ``sfincs_jax/fortran_profile.py`` and
+  ``scripts/summarize_fortran_v3_profile.py`` so archived or fresh SFINCS
+  Fortran v3 stdout/PETSc logs can be summarized as compact JSON.
+- The parser extracts resolution, MPI process count, solver tolerance, matrix
+  size, Jacobian/preconditioner/residual-matrix nonzeros, MUMPS analysis and
+  factorization timing, MUMPS factor-memory metadata, KSP residual history, and
+  convergence reason.
+- Generated the first compact profile artifact for the Zenodo QA production
+  reference:
+  ``docs/_static/figures/vmec_jax_finite_beta/zenodo_vmec_fortran_profile_case0.json``.
+
+Results:
+
+- The archived Fortran-v3/PETSc/MUMPS reference for the first QA case is now
+  machine-readable:
+  ``507004`` unknowns, ``21400898`` true-Jacobian nonzeros,
+  ``13483256`` preconditioner nonzeros, ``796672990`` MUMPS factor entries,
+  ``11.0101 s`` analysis-driver time, ``2.7922 s`` factorization-driver time,
+  and ``52`` logged KSP residuals ending at ``1.148996017067e-8``.
+- This gives a concrete performance target for the SFINCS-JAX reduced-global
+  preconditioner lane: the preconditioner must reduce the production case in
+  tens of Krylov iterations, not thousands of matvecs.
+
+Validation:
+
+- ``python -m pytest tests/test_fortran_profile.py -q``:
+  ``2 passed``.
+- Generated profile command:
+  ``python scripts/summarize_fortran_v3_profile.py <slurm-4912632.out> --out docs/_static/figures/vmec_jax_finite_beta/zenodo_vmec_fortran_profile_case0.json``.
+
+Best next steps:
+
+1. Add a paired Fortran-profile/SFINCS-JAX-profile comparison table generator
+   for README/docs artifacts so solver-path regressions are visible in compact
+   JSON before plots are regenerated.
+2. Begin the Fortran-like reduced-global preconditioner implementation by
+   building a small-case CSR operator that mirrors Fortran's
+   ``whichMatrix=0`` preconditioner rules, then compare ``nnz`` and matvec
+   parity against SFINCS-JAX's true operator on small QA/QH fixtures.
+
+### 36.04 Paired Fortran-vs-JAX solver profile comparator
+
+Scope:
+
+- Added ``sfincs_jax/solver_profile_compare.py`` and
+  ``scripts/compare_fortran_jax_solver_profiles.py``.
+- The comparator consumes a compact Fortran profile plus either a SFINCS-JAX
+  campaign report or a solver-trace JSON. It reports Fortran KSP/factorization
+  metrics, JAX solve status/residual/progress metrics, and direct comparison
+  ratios.
+- It also parses older timeout reports directly from ``stdout_tail``/
+  ``stderr_tail`` when the campaign JSON predates the new progress parser.
+
+Results:
+
+- Generated
+  ``docs/_static/figures/vmec_jax_finite_beta/zenodo_vmec_fortran_vs_jax_profile_case0.json``.
+- For the first Zenodo QA production case, the compact comparison reports:
+  Fortran ``52`` KSP iterations versus SFINCS-JAX timeout after ``2000``
+  matvecs, a ``38.46`` Krylov-count ratio. The old JAX timeout artifact did
+  not contain a flushed solver trace, so active-size and final residual parity
+  remain explicitly ``unknown`` rather than inferred.
+
+Validation:
+
+- ``python -m pytest tests/test_solver_profile_compare.py -q``:
+  ``3 passed``.
+- Generated comparison command:
+  ``python scripts/compare_fortran_jax_solver_profiles.py --fortran-profile docs/_static/figures/vmec_jax_finite_beta/zenodo_vmec_fortran_profile_case0.json --jax-profile docs/_static/figures/vmec_jax_finite_beta/zenodo_vmec_solve_probe_case0_forced_xblock_momentschur.json --out docs/_static/figures/vmec_jax_finite_beta/zenodo_vmec_fortran_vs_jax_profile_case0.json``.
+
+Best next steps:
+
+1. Use this comparison artifact as the mandatory gate for the next
+   preconditioner probe. A new route is only worth keeping if it moves from
+   thousands of matvecs toward the Fortran tens-of-iterations regime while
+   preserving parity.
+2. Implement the small-case Fortran-like reduced-global CSR prototype and add
+   operator/preconditioner ``nnz`` comparisons against Fortran-style expectations
+   before attempting another full ``25 x 39 x 60 x 7`` run.
+
+### 36.05 Opt-in Fortran-reduced global RHSMode=1 preconditioner route
+
+Scope:
+
+- Added the opt-in solve-method aliases ``fortran_reduced_pc_gmres``,
+  ``fortran_reduced_sparse_pc_gmres``, ``fortran_like_pc_gmres``, and
+  ``petsc_like_pc_gmres``.
+- Added ``_build_rhsmode1_preconditioner_operator_fortran_reduced(...)``.
+  Unlike the older point preconditioner, this route preserves the theta/zeta
+  streaming and drift derivatives, source rows, constraint rows, and collision
+  couplings in the preconditioner operator. It currently applies only the safe
+  radial derivative diagonal simplification exposed by the current JAX operator
+  tree.
+- Routed the new aliases through the host sparse-PC GMRES branch and recorded
+  explicit solver metadata:
+  ``sparse_pc_preconditioner_operator=fortran_reduced_global``,
+  ``sparse_pc_fortran_reduced=True``, and the retained Fortran-style reduction
+  knobs.
+- Added regression coverage that the reduced operator keeps angular coupling
+  while the old point preconditioner diagonalizes it, and that the new solve
+  method converges on a tiny RHSMode=1 FP fixture.
+- Added a compact small-case structural ``nnz`` gate comparing the true,
+  point-preconditioned, and Fortran-reduced conservative sparsity patterns.
+
+Results:
+
+- This closes the first implementation step from the Fortran/PETSc profile
+  audit: SFINCS-JAX now has a real global angular-coupled reduced
+  preconditioner lane instead of only local x-block or point-diagonalized
+  sparse preconditioners.
+- This is not yet a production-size replacement for the Fortran v3
+  ``whichMatrix=0`` preconditioner. The current implementation intentionally
+  keeps FP/PAS pitch-angle and species couplings rather than dropping them from
+  incomplete tree-level subblocks. Exact Fortran row-stencil parity is still
+  the next gate.
+- A bounded ``25 x 39 x 60 x 7`` Zenodo QA probe with
+  ``--solve-method fortran_reduced_pc_gmres``,
+  ``SFINCS_JAX_EXPLICIT_SPARSE_CSR_MAX_MB=256``, and a ``90 s`` cap timed out
+  before Krylov progress while building the conservative sparse pattern. The
+  probe reported the Fortran active matrix size ``507004`` but a JAX full
+  operator size ``819004`` before entering sparse-pattern construction. This
+  confirms that the remaining production blocker is matrix-free pattern/
+  preconditioner construction, not Krylov smoother tuning.
+- On the tiny two-species FP fixture, the conservative structural comparison is
+  now pinned at: true operator ``130200 nnz``, point preconditioner ``15000
+  nnz``, Fortran-reduced preconditioner ``130200 nnz``, and zero
+  Fortran-reduced entries outside the true pattern. This is intentionally a
+  structural gate, not a production-performance claim.
+
+Validation:
+
+- ``python -m pytest tests/test_v3_sparse_pattern.py::test_fortran_reduced_pc_operator_preserves_angular_coupling tests/test_v3_sparse_pattern.py::test_fortran_reduced_pc_pattern_keeps_global_coupling tests/test_v3_sparse_pattern.py::test_fortran_reduced_pc_gmres_solve_method_solves_tiny_rhs1_system -q``:
+  ``3 passed``.
+- ``python -m pytest tests/test_v3_sparse_pattern.py::test_sparse_pc_gmres_solve_method_solves_tiny_rhs1_system tests/test_v3_sparse_pattern.py::test_fortran_reduced_pc_operator_preserves_angular_coupling tests/test_v3_sparse_pattern.py::test_fortran_reduced_pc_pattern_keeps_global_coupling tests/test_v3_sparse_pattern.py::test_fortran_reduced_pc_gmres_solve_method_solves_tiny_rhs1_system tests/test_v3_sparse_pattern.py::test_xblock_sparse_pc_gmres_solve_method_solves_fp_rhs1_system tests/test_v3_sparse_pattern.py::test_xblock_sparse_pc_assembled_operator_records_metadata -q``:
+  ``6 passed``.
+- ``python -m pytest tests/test_v3_sparse_pattern.py::test_sparse_pc_gmres_solve_method_solves_tiny_rhs1_system tests/test_v3_sparse_pattern.py::test_fortran_reduced_pc_operator_preserves_angular_coupling tests/test_v3_sparse_pattern.py::test_fortran_reduced_pc_pattern_keeps_global_coupling tests/test_v3_sparse_pattern.py::test_fortran_reduced_pc_gmres_solve_method_solves_tiny_rhs1_system tests/test_v3_sparse_pattern.py::test_xblock_sparse_pc_gmres_solve_method_solves_fp_rhs1_system tests/test_v3_sparse_pattern.py::test_xblock_sparse_pc_assembled_operator_records_metadata tests/test_solver_profile_compare.py tests/test_fortran_profile.py tests/test_run_zenodo_vmec_parity_campaign.py -q``:
+  ``21 passed``.
+- ``python -m ruff check sfincs_jax/v3_driver.py tests/test_v3_sparse_pattern.py``:
+  passed.
+- Bounded production-probe command:
+  ``python scripts/run_zenodo_vmec_parity_campaign.py --selection docs/_static/figures/vmec_jax_finite_beta/zenodo_vmec_benchmark_selection.json --zenodo-root /Users/rogeriojorge/local/20220708-01-zenodo_for_QS_optimization_with_self_consistent_bootstrap_current --out /tmp/sfincs_jax_fortran_reduced_probe.json --mode solve --max-cases 1 --timeout-s 90 --solve-method fortran_reduced_pc_gmres --run-root outputs/zenodo_fortran_reduced_probe --equilibrium-search-root /Users/rogeriojorge/local/20220708-01-zenodo_for_QS_optimization_with_self_consistent_bootstrap_current --extra-env JAX_ENABLE_X64=True --extra-env SFINCS_JAX_EXPLICIT_SPARSE_CSR_MAX_MB=256 --extra-env SFINCS_JAX_GMRES_PROGRESS_INTERVAL=25``.
+  Result: ``solve_timeout=1`` with ``krylov_progress_count=0`` and last progress
+  line ``sparse_pc_gmres building conservative pattern``.
+
+Best next steps:
+
+1. Implement exact Fortran ``whichMatrix=0`` row-stencil assembly for RHSMode=1
+   FP/PAS production sizes so the preconditioner can drop selected x/xi/species
+   couplings without probing an overly dense matrix-free operator.
+2. Only after the row-stencil path passes the small-case structural gates, rerun
+   the full ``25 x 39 x 60 x 7`` QA case and compare against the archived
+   Fortran/PETSc target of ``52`` KSP iterations and final residual
+   ``1.148996017067e-8``.
+
+### 36.06 Fortran-reduced x-block backend for large RHSMode=1 production probes
+
+Scope:
+
+- Added an alternate backend for ``fortran_reduced_pc_gmres`` selected with
+  ``SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_PC_BACKEND``.
+- The default policy keeps the existing monolithic global CSR path for small
+  cases, but automatically routes large full-FP RHSMode=1 systems
+  (default active-size threshold ``100000``) to a host sparse x-block backend.
+- The x-block backend reuses the existing per-``x`` theta/zeta/L sparse
+  factors, applies them to the Fortran-reduced preconditioner operator, and
+  still checks convergence using the true global RHSMode=1 residual.
+- Added opt-in host Krylov choices for this backend through
+  ``SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_XBLOCK_KRYLOV``:
+  ``gmres`` (default), ``lgmres``, ``gcrotmk``, and ``bicgstab``.
+- Added a guarded x-block initial-seed/refinement stage. The seed is accepted
+  only if it improves the zero initial residual, so poor local solves cannot
+  degrade the Krylov solve.
+- Fixed RHSMode=1 HDF5 solver diagnostics so optional integer/float metadata
+  fields with value ``None`` are skipped instead of crashing the output writer.
+
+Results:
+
+- The new backend removes the previous monolithic CSR/ILU setup blocker for
+  the first Zenodo QA production case
+  (``25 x 39 x 60 x 7``, active size ``507004``).
+- Bounded CPU probe, skipped high-``x`` local factors with diagonal fallback:
+  setup ``39.8 s``, solve ``209.3 s``, total ``249.1 s``, child peak RSS
+  ``6.37 GB``, ``1600`` GMRES iterations / ``1682`` matvecs, residual
+  ``4.54849e-5``. HDF5 output was correctly refused by the production
+  non-convergence guard because the target is ``4.772841e-10``.
+- ``lgmres`` did not improve this case: total ``241.4 s``, RSS ``5.81 GB``,
+  residual ``5.182184e-5``.
+- Right-preconditioned GMRES was only marginally better: total ``247.8 s``,
+  RSS ``5.82 GB``, residual ``4.449393e-5``.
+- Forcing high-block low-fill ILU was not worthwhile: residual improved only
+  to ``4.503373e-5`` while setup grew to ``421.2 s`` and total runtime to
+  ``466.6 s``.
+- The x-block initial seed was safely rejected on this case: seed residual
+  ``1.014568e-2`` and improvement ratio ``4.70e-3`` relative to the zero
+  initial residual.
+- A debug-only run with ``SFINCS_JAX_ALLOW_NONCONVERGED_OUTPUT=1`` confirmed
+  the residual plateau is not parity-safe: selected transport/current outputs
+  differ from the Fortran v3 reference at order unity, e.g.
+  ``FSABjHat=1.557e-4`` versus Fortran ``-4.293665870561747e-1``.
+
+Validation:
+
+- ``python -m ruff check sfincs_jax/v3_driver.py sfincs_jax/io.py tests/test_v3_sparse_pattern.py tests/test_v3_driver_sparse_helper_coverage.py tests/test_io_export_and_h5_coverage.py``:
+  passed.
+- ``python -m py_compile sfincs_jax/v3_driver.py sfincs_jax/io.py``:
+  passed.
+- ``SFINCS_JAX_DISABLE_COMPILATION_CACHE=1 SFINCS_JAX_CI=1 JAX_PLATFORM_NAME=cpu python -m pytest -q tests/test_fortran_reduced_preconditioner.py tests/test_explicit_sparse.py tests/test_v3_driver_sparse_helper_coverage.py tests/test_io_export_and_h5_coverage.py::test_rhsmode1_solver_diagnostics_are_output_visible tests/test_v3_sparse_pattern.py::test_fortran_reduced_pc_gmres_solve_method_solves_tiny_rhs1_system tests/test_v3_sparse_pattern.py::test_fortran_reduced_pc_gmres_xblock_backend_solves_tiny_rhs1_system tests/test_v3_sparse_pattern.py::test_fortran_reduced_pc_gmres_xblock_backend_accepts_lgmres tests/test_v3_sparse_pattern.py::test_fortran_reduced_pc_auto_uses_active_dof_for_truncated_modes``:
+  ``48 passed``.
+- Production-probe reports:
+  ``docs/_static/figures/vmec_jax_finite_beta/zenodo_vmec_solve_probe_case0_fortran_reduced_xblock_seed.json``,
+  ``docs/_static/figures/vmec_jax_finite_beta/zenodo_vmec_solve_probe_case0_fortran_reduced_xblock_rightpc.json``,
+  ``docs/_static/figures/vmec_jax_finite_beta/zenodo_vmec_solve_probe_case0_fortran_reduced_xblock_highblocks.json``,
+  ``docs/_static/figures/vmec_jax_finite_beta/zenodo_vmec_solve_probe_case0_fortran_reduced_xblock_lgmres.json``,
+  and debug parity report
+  ``docs/_static/figures/vmec_jax_finite_beta/zenodo_vmec_solve_probe_case0_fortran_reduced_xblock_debug_output.json``.
+
+Best next steps:
+
+1. Keep the x-block backend as the bounded large-case fallback because it
+   reaches Krylov and writes solver traces without monolithic CSR setup.
+2. Do not promote high-block low-fill ILU, LGMRES, or right-preconditioned GMRES
+   as defaults for this Zenodo case; none materially reduces the residual.
+3. The next required algorithmic step is a true global closure/preconditioner:
+   either an exact Fortran ``whichMatrix=0`` row-stencil CSR assembler with
+   PETSc-like block reduction, or a small dense Schur/coarse correction over
+   current/source/profile moments that reduces the true residual and current
+   observable together.
+4. Gate the next implementation on this production case: it must move the
+   residual below the output guard and bring ``FSABjHat``/transport outputs
+   close to the Fortran v3 reference before being used in README/runtime claims.
+
+### 36.07 Bounded coarse-closure probes for the Fortran-reduced x-block backend
+
+Scope:
+
+- Wired the existing constraintScheme=1 moment-Schur and low-rank
+  global-coupling wrappers into the ``fortran_reduced_pc_gmres`` x-block
+  backend.
+- Both wrappers are fail-closed and expose solver metadata under
+  ``sparse_pc_xblock_moment_schur_*`` and
+  ``sparse_pc_xblock_global_coupling_*``.
+- Moment-Schur and global-coupling are intentionally opt-in for this backend.
+  Production probes showed that they are useful diagnostics for residual
+  structure but are not safe default fixes for the Zenodo QA production case.
+
+Results:
+
+- Focused tiny-case gates pass for the default x-block backend, opt-in
+  moment-Schur, and opt-in global-coupling.
+- The first Zenodo QA production case with opt-in moment-Schur
+  (``25 x 39 x 60 x 7``, active size ``507004``) timed out at the ``600 s``
+  cap. It was still at Krylov iteration ``2200`` with reported KSP residual
+  ``1.350086``. No candidate HDF5 output was produced.
+- A short opt-in global-coupling probe with moment-Schur disabled, ``12`` coarse
+  directions, and a ``240 s`` cap timed out at Krylov iteration ``1300`` with
+  reported KSP residual ``2.317473``. No candidate HDF5 output was produced.
+- These probes are materially worse than the previous default x-block baseline,
+  which completed the bounded solve in about ``249 s`` and reached true residual
+  ``4.54849e-5`` before correctly refusing non-converged production output.
+
+Validation:
+
+- ``python -m ruff check sfincs_jax/v3_driver.py tests/test_v3_sparse_pattern.py``:
+  passed.
+- ``python -m py_compile sfincs_jax/v3_driver.py sfincs_jax/io.py``:
+  passed.
+- ``SFINCS_JAX_DISABLE_COMPILATION_CACHE=1 SFINCS_JAX_CI=1 JAX_PLATFORM_NAME=cpu python -m pytest -q tests/test_fortran_reduced_preconditioner.py tests/test_explicit_sparse.py tests/test_v3_driver_sparse_helper_coverage.py tests/test_io_export_and_h5_coverage.py::test_rhsmode1_solver_diagnostics_are_output_visible tests/test_v3_sparse_pattern.py::test_fortran_reduced_pc_gmres_solve_method_solves_tiny_rhs1_system tests/test_v3_sparse_pattern.py::test_fortran_reduced_pc_gmres_xblock_backend_solves_tiny_rhs1_system tests/test_v3_sparse_pattern.py::test_fortran_reduced_pc_gmres_xblock_backend_accepts_lgmres tests/test_v3_sparse_pattern.py::test_fortran_reduced_pc_gmres_xblock_backend_moment_schur_records_metadata tests/test_v3_sparse_pattern.py::test_fortran_reduced_pc_gmres_xblock_backend_global_coupling_records_metadata tests/test_v3_sparse_pattern.py::test_fortran_reduced_pc_auto_uses_active_dof_for_truncated_modes``:
+  ``50 passed``.
+
+Best next steps:
+
+1. Stop tuning additive coarse wrappers for this case. The measured production
+   residual trend is worse than the baseline.
+2. Implement the real replacement path: an exact Fortran ``whichMatrix=0`` row
+   stencil / PETSc-like block preconditioner that drops only the intended
+   couplings while preserving the rows needed for the RHSMode=1 constraints.
+3. Gate that path first on small structural parity with the Fortran-reduced
+   matrix, then on the same Zenodo QA production case against the archived
+   Fortran/PETSc target of ``52`` KSP iterations and final residual
+   ``1.148996017067e-8``.
+
+### 36.08 Structured Fortran-reduced pattern and direct constraint-tail assembly
+
+Scope:
+
+- Added a structured ``velocity_graph x angular_graph`` sparsity builder for
+  Fortran-reduced RHSMode=1 preconditioner patterns. This replaces the slow
+  Python row-loop path when the active set contains complete angular blocks.
+- Added an opt-in/auto large-case direct-tail materializer for
+  ``fortran_reduced_pc_gmres`` with RHSMode=1, ``constraintScheme=1``, and no
+  ``Phi1``. It probes only the kinetic block and inserts source columns and
+  density/pressure moment rows analytically from the same formulas used by the
+  matrix-free operator.
+- The direct-tail path is fail-closed and records metadata through
+  ``sparse_pc_fortran_reduced_direct_tail_*``.
+
+Results:
+
+- Local Fortran dump audit on the quick two-species FP fixture showed the
+  materialized JAX Fortran-reduced matrix matches the Fortran v3
+  ``whichMatrix=0`` matrix to roundoff on the common nonzeros. The current
+  JAX conservative pattern has extra structural candidates before value
+  probing, but no missing Fortran nonzeros after materialization.
+- For the first Zenodo QA production case
+  (``25 x 39 x 60 x 7``, active size ``507004``), structured pattern
+  construction now takes ``0.16 s`` and produces a ``13,497,900``-candidate
+  active pattern. This closes the previous pattern-builder bottleneck.
+- A bounded global backend probe without direct-tail completed full colored
+  probing of ``6827`` colors and built a ``13,483,316``-nnz CSR matrix before
+  timing out in ILU factorization at the ``180 s`` cap.
+- The direct-tail materializer reduced value probing from ``6827`` colors to
+  ``53`` kinetic colors and built the full ``13,496,892``-nnz CSR matrix in
+  ``6.985 s``. This is the first production-size global Fortran-reduced
+  materialization path that reaches factorization quickly.
+- Default ILU with direct-tail still timed out in factorization under the
+  ``180 s`` cap, so factorization quality/cost is now the blocker.
+- Lower-fill ILU (``fill=1.2``, ``drop=1e-2``, ``MMD_AT_PLUS_A``) completed in
+  ``39.7 s`` and used ``2.79 GB`` RSS, but was too weak: true residual stayed
+  at ``4.772841e-5``.
+- Middle-fill ILU (``fill=2.0``, ``drop=1e-3``, ``MMD_AT_PLUS_A``) completed
+  in ``57.0 s`` and used ``2.88 GB`` RSS, but worsened the true residual to
+  ``2.983764e-4``. Both lower-fill probes are rejected by the accuracy gate.
+
+Validation:
+
+- ``python -m ruff check sfincs_jax/v3_driver.py sfincs_jax/v3_sparse_pattern.py tests/test_v3_sparse_pattern.py``:
+  passed.
+- ``python -m py_compile sfincs_jax/v3_driver.py sfincs_jax/v3_sparse_pattern.py``:
+  passed.
+- ``SFINCS_JAX_DISABLE_COMPILATION_CACHE=1 SFINCS_JAX_CI=1 JAX_PLATFORM_NAME=cpu python -m pytest -q tests/test_fortran_reduced_preconditioner.py tests/test_explicit_sparse.py tests/test_v3_driver_sparse_helper_coverage.py tests/test_io_export_and_h5_coverage.py::test_rhsmode1_solver_diagnostics_are_output_visible tests/test_v3_sparse_pattern.py::test_fortran_reduced_pc_gmres_solve_method_solves_tiny_rhs1_system tests/test_v3_sparse_pattern.py::test_fortran_reduced_pc_gmres_direct_tail_solves_tiny_rhs1_system tests/test_v3_sparse_pattern.py::test_fortran_reduced_pc_gmres_xblock_backend_solves_tiny_rhs1_system tests/test_v3_sparse_pattern.py::test_fortran_reduced_pc_gmres_xblock_backend_accepts_lgmres tests/test_v3_sparse_pattern.py::test_fortran_reduced_pc_gmres_xblock_backend_moment_schur_records_metadata tests/test_v3_sparse_pattern.py::test_fortran_reduced_pc_gmres_xblock_backend_global_coupling_records_metadata tests/test_v3_sparse_pattern.py::test_fortran_reduced_pc_auto_uses_active_dof_for_truncated_modes``:
+  ``51 passed``.
+
+Best next steps:
+
+1. Keep structured pattern and direct-tail materialization. They are clear
+   setup wins and preserve the small-case solve gate.
+2. Do not promote lower-fill SuperLU ILU settings; they are fast but fail the
+   true-residual gate.
+3. The next real production path is a JAX-native block/Schur/multilevel solve:
+   keep the direct-tail sparse materializer for diagnostics, but move the
+   promoted solver away from monolithic host factorization and toward structured
+   block operators with device-resident preconditioners.
+
+### 36.09 Factor-quality preflight and monolithic SuperLU rejection
+
+Scope:
+
+- Added explicit sparse factorization timing to ``SparseFactorBundle`` and
+  RHSMode=1 sparse-PC progress logs. Solver traces now distinguish operator
+  materialization, factorization, Krylov solve, factor storage, and true
+  residual quality.
+- Added global sparse-PC factor preflight for Fortran-reduced RHSMode=1 paths.
+  The preflight applies the assembled factor once to the RHS, evaluates the true
+  residual, optionally reuses the result as the Krylov initial guess, and can be
+  made strict with
+  ``SFINCS_JAX_RHSMODE1_SPARSE_PC_FACTOR_PREFLIGHT_REQUIRED=1``.
+- Exposed the new metadata fields:
+  ``sparse_pc_factor_preflight_*``,
+  ``sparse_pc_operator_nnz_estimate``,
+  ``sparse_pc_operator_csr_nbytes_estimate``,
+  ``sparse_pc_factor_elapsed_s``,
+  ``sparse_pc_residual_target``,
+  ``sparse_pc_residual_ratio_to_target``, and
+  ``sparse_pc_factor_quality_rejected``.
+
+Results:
+
+- Bounded exact-LU probe on the first Zenodo QA production case
+  (``25 x 39 x 60 x 7``, active size ``507004``), using direct-tail
+  materialization and ``MMD_AT_PLUS_A`` ordering, timed out at the ``300 s``
+  cap. The trace reached direct-tail assembly in about ``6.56 s`` and then
+  stopped inside monolithic SuperLU factorization before any Krylov iteration.
+  This rejects monolithic SciPy/SuperLU exact LU as the default production fix.
+- Strict low-fill ILU preflight on the same case completed in ``37.4 s`` and
+  failed closed before GMRES. Direct-tail assembly took about ``6.52 s``,
+  factorization took ``29.52 s``, factor storage was about ``195 MB``, and the
+  preflight residual was non-finite. This confirms that the cheap ILU settings
+  are not just inaccurate after GMRES; the factor itself is numerically
+  unsuitable for the production preconditioner.
+
+Validation:
+
+- ``python -m ruff check sfincs_jax/explicit_sparse.py sfincs_jax/v3_driver.py tests/test_explicit_sparse.py tests/test_v3_sparse_pattern.py tests/test_v3_driver_sparse_helper_coverage.py``:
+  passed.
+- ``python -m py_compile sfincs_jax/explicit_sparse.py sfincs_jax/v3_driver.py sfincs_jax/v3_sparse_pattern.py``:
+  passed.
+- ``SFINCS_JAX_DISABLE_COMPILATION_CACHE=1 SFINCS_JAX_CI=1 JAX_PLATFORM_NAME=cpu python -m pytest -q tests/test_fortran_reduced_preconditioner.py tests/test_explicit_sparse.py tests/test_v3_driver_sparse_helper_coverage.py tests/test_io_export_and_h5_coverage.py::test_rhsmode1_solver_diagnostics_are_output_visible tests/test_v3_sparse_pattern.py::test_fortran_reduced_pc_gmres_solve_method_solves_tiny_rhs1_system tests/test_v3_sparse_pattern.py::test_fortran_reduced_pc_gmres_direct_tail_solves_tiny_rhs1_system tests/test_v3_sparse_pattern.py::test_fortran_reduced_pc_gmres_xblock_backend_solves_tiny_rhs1_system tests/test_v3_sparse_pattern.py::test_fortran_reduced_pc_gmres_xblock_backend_accepts_lgmres tests/test_v3_sparse_pattern.py::test_fortran_reduced_pc_gmres_xblock_backend_moment_schur_records_metadata tests/test_v3_sparse_pattern.py::test_fortran_reduced_pc_gmres_xblock_backend_global_coupling_records_metadata tests/test_v3_sparse_pattern.py::test_fortran_reduced_pc_auto_uses_active_dof_for_truncated_modes``:
+  ``51 passed``.
+
+Best next steps:
+
+1. Do not spend more effort on monolithic SuperLU tuning for the ``507k``
+   active-unknown production case. Direct-tail assembly is solved; SuperLU
+   factorization is the blocker.
+2. Implement the next production solver route as a JAX-native replacement:
+   block factorization plus Schur/coarse corrections that keep radial, species,
+   moment, and constraint coupling without requiring monolithic Python LU or any
+   PETSc/MUMPS/SuperLU_DIST backend.
+3. Gate the next implementation with the same strict preflight metadata plus a
+   true residual target check before it can enter README/runtime claims.
+
+### 36.10 JAX-native production solver architecture, no external sparse backend
+
+Decision:
+
+- Do not add PETSc, MUMPS, SuperLU_DIST, or another external sparse-direct
+  backend as a product route. They remain useful references for profiling,
+  literature comparison, and understanding Fortran v3 behavior, but
+  ``sfincs_jax`` should solve production decks from Python/JAX so it remains
+  CPU/GPU capable, easy to install, AI-ready, and differentiable.
+- Treat current SciPy/SuperLU paths as diagnostic scaffolding. They can stay
+  temporarily for regression comparisons and failure reproduction, but the
+  promoted architecture must not depend on host sparse factorization.
+- The replacement should reproduce the useful algorithmic pieces of PETSc/KSP,
+  MUMPS, and SuperLU_DIST in JAX-native form: explicit operator graphs,
+  field-split preconditioning, block factorizations, residual monitoring,
+  preconditioner reuse, coarse corrections, and distributed/sharded execution.
+
+Architecture target:
+
+1. Split the RHSMode=1 operator into focused source modules.
+   - Add modules such as ``rhs1_operator_terms.py``,
+     ``rhs1_block_operator.py``, ``rhs1_fieldsplit.py``,
+     ``rhs1_multilevel.py``, ``rhs1_krylov.py``, and
+     ``rhs1_solver_policy.py``.
+   - Move physics-term assembly out of ``v3_driver.py`` so streaming,
+     magnetic-drift, electric-field, collision, source, constraint,
+     quasineutrality, and profile-current terms can be tested independently.
+   - Keep public CLI/Python behavior unchanged while the refactor lands; every
+     moved term needs operator-action and observable parity tests.
+
+2. Replace monolithic CSR factorization with a structured JAX operator graph.
+   - Represent the unknowns by their physical axes:
+     ``(species, x, xi/Legendre, theta, zeta, constraints, Phi1/moments)``.
+   - Build a ``BlockLinearOperator`` abstraction with ``matvec``, ``matmat``,
+     transpose/adjoin metadata, block sizes, stencil neighbors, estimated bytes,
+     and phase timing hooks.
+   - Store block-sparse pieces in JAX arrays: BSR/ELL-like local blocks for
+     repeated stencils, compact edge lists for irregular geometry terms, and
+     dense tiny blocks for constraints/source moments.
+   - Keep direct-tail source/moment insertion because the production probe shows
+     this part is already fast; use it for operator audits and for constructing
+     block metadata, not as a reason to factor a giant CSR matrix.
+
+3. Implement JAX-native local factorization kernels.
+   - Build exact small-block Gaussian elimination for per-cell and per-line
+     dense blocks using ``jax.lax.scan``/``vmap``.
+   - Add block Jacobi, block ILU(0), and dropped block ILU over the structured
+     stencil graph, with deterministic drop rules and true-residual gates.
+   - Add line solvers for the strongest directions: radial ``x`` lines,
+     Legendre/pitch blocks, and optionally ``theta``/``zeta`` angular lines.
+   - Use mixed storage where appropriate: float64 for residual-critical values,
+     optional float32 preconditioner storage only behind accuracy gates.
+   - Test every kernel against dense NumPy/JAX solves on synthetic block systems
+     before connecting it to physics decks.
+
+4. Add field-split and Schur-complement preconditioning.
+   - Split kinetic unknowns from constraints, source moments, profile-current
+     closure, and Phi1/quasineutrality variables.
+   - Approximate the kinetic inverse with local/line/block factors, then form a
+     small Schur system for moments and constraints:
+     ``S = D - C A_kin^{-1} B``.
+   - Apply Woodbury/low-rank updates in JAX for source constraints and current
+     moments rather than relying on sparse LU fill to discover this structure.
+   - Include physics-derived coarse variables: flux-surface averages, density
+     and pressure moments, bootstrap-current/profile-current moments, low
+     Legendre harmonics, and low-order radial basis functions.
+   - Gate promotion on strict preflight residual reduction and final true
+     residual, not on preconditioned residual alone.
+
+5. Build a multilevel residual equation instead of more smoother tuning.
+   - Construct restriction/prolongation from the physical axes: radial
+     coarsening, angular Fourier/real-space coarsening, low-L pitch moments,
+     and species/profile moments.
+   - Build Galerkin coarse operators through ``R A P`` using the structured
+     operator ``matmat``; cache ``A P`` for fixed shape/profile scans.
+   - Implement V-cycle/F-cycle preconditioners in JAX and keep the coarse solve
+     small enough for dense device solves.
+   - Add block Schwarz or additive Schwarz variants for CPU multi-core and GPU
+     shard-local smoothing, with a replicated coarse correction.
+
+6. Replace ad-hoc Krylov paths with a reusable JAX solver layer.
+   - Implement restarted GMRES and FGMRES around JAX ``LinearOperator`` objects,
+     with explicit residual history, breakdown detection, restart metadata, and
+     fail-closed output.
+   - Add GCRO-DR/recycling only after FGMRES is correct, because profile/radius
+     ladders can reuse subspaces across nearby surfaces and electric fields.
+   - Use ``jax.custom_linear_solve`` or a custom VJP so gradients use the
+     adjoint linear solve without storing all Krylov iterates.
+   - Expose one simple policy to users: ``solver='auto'``. Advanced users can
+     request ``block_schur``, ``multilevel``, ``matrix_free``, or diagnostic
+     sparse paths explicitly.
+
+7. Make CPU, GPU, and multi-device execution first-class.
+   - Keep all promoted preconditioner data as JAX arrays so GPU runs do not
+     bounce through host callbacks during Krylov iterations.
+   - Use ``vmap`` for batches over radii, electric-field scans, species-local
+     blocks, and profile perturbations.
+   - Use ``pmap``/``pjit``/explicit sharding for multi-GPU and many-core CPU
+     runs: shard angular/radial domains, apply local block factors per shard,
+     and replicate the small Schur/coarse solve.
+   - Track compile time, steady solve time, memory, matvec count, preconditioner
+     setup/apply time, and HDF5/NetCDF output time separately.
+
+8. Keep accuracy gates stronger than performance gates.
+   - Operator audit: compare term-by-term actions against Fortran matrix dumps
+     on small QA/QH/PAS/FP/Phi1 decks.
+   - Solver audit: require true residual, observable parity, and CPU/GPU
+     agreement; preconditioned residual alone is not sufficient.
+   - Physics gates: bootstrap current, particle/heat fluxes, ambipolar root,
+     high-collisionality trends, monoenergetic coefficients, and finite-beta
+     profile-current observables.
+   - Autodiff gates: finite-difference vs ``grad`` checks for profile gradients,
+     electric-field sensitivity, and geometry/VMEC-adapter parameters.
+   - Performance gates: compare against current JAX baselines and Fortran v3 on
+     setup time, solve time, memory, and failure rate.
+
+Implementation milestones:
+
+1. Refactor without changing numerics.
+   - Extract operator terms and block metadata from ``v3_driver.py``.
+   - Add unit tests for every extracted term and keep existing parity tests
+     passing.
+   - Completion gate: no output changes on current example/parity suite.
+
+2. Land ``BlockLinearOperator`` and JAX block-sparse kernels.
+   - Implement device ``matvec``/``matmat`` and local block factor tests.
+   - Completion gate: synthetic block systems match dense solves to tight
+     tolerances; production-size operator applies without CSR materialization.
+
+3. Land local/line block preconditioners.
+   - Implement block Jacobi, block ILU(0), radial-line, pitch-line, and hybrid
+     variants.
+   - Completion gate: strict preflight residual improves over current matrix-
+     free/Jacobi paths without increasing memory.
+
+4. Land field-split Schur correction.
+   - Implement moment/constraint/Phi1 Schur systems and Woodbury updates.
+   - Completion gate: the Zenodo ``25 x 39 x 60 x 7`` first QA case reaches the
+     requested true residual within the benchmark budget and without host LU.
+
+5. Land multilevel residual correction.
+   - Implement physical restriction/prolongation and Galerkin coarse operators.
+   - Completion gate: production-resolution QA/QH ladders converge reliably
+     across seeds and radii, with CPU/GPU agreement.
+
+6. Land differentiable production solve.
+   - Wrap solver in implicit differentiation and add sensitivity/inverse-design
+     examples.
+   - Completion gate: gradients pass finite-difference checks and optimization
+     examples run without solver-path special cases.
+
+7. Promote to public runtime claims.
+   - Regenerate README/docs runtime-memory plots only after the above gates pass.
+   - Completion gate: no promoted benchmark uses external sparse-direct backends,
+     no nonconverged outputs are presented as successful solves, and all solver
+     metadata reports the exact policy used.
+
+Near-term next steps:
+
+1. Freeze the current SuperLU/direct-tail probes as diagnostic artifacts and
+   stop tuning SuperLU fill/restart/orderings for production.
+2. Start milestone 1 by extracting RHSMode=1 term actions and active-DOF/block
+   metadata into focused modules with tests.
+3. Build the first ``BlockLinearOperator`` prototype around the existing
+   Fortran-reduced operator action and verify it on tiny RHSMode=1 systems.
+4. Implement synthetic block-factor tests before touching production decks.
+5. Re-run the ``25 x 39 x 60 x 7`` QA probe only after the first JAX-native
+   block preconditioner has a strict preflight gate.
+
+### 36.11 First JAX-native block-operator scaffold
+
+Scope:
+
+- Added ``sfincs_jax/rhs1_block_operator.py`` as the first neutral layer for the
+  new JAX-native production architecture. The module defines
+  ``RHS1BlockLayout``, ``RHS1ActiveBlockLayout``, ``RHS1BlockLinearOperator``,
+  and ``RHS1UniformBlockDiagonalFactor``.
+- ``RHS1BlockLayout`` centralizes the full-system RHSMode=1 physical axes:
+  species, radial ``x``, pitch/Legendre ``ell``, ``theta``, ``zeta``, Phi1,
+  lambda, and constraint/source extras. This is the target metadata surface for
+  block kernels, Schur complements, multilevel restriction/prolongation, and
+  future sharding.
+- ``RHS1BlockLinearOperator`` wraps existing matvecs while carrying shape,
+  dtype, active-DOF, and layout metadata. This lets the refactor move from
+  opaque callable paths to structured operators without changing solver
+  numerics immediately.
+- ``RHS1BlockCOOOperator`` adds the first JAX-native uniform block-sparse
+  matvec prototype. It represents operators as ``(row_block, col_block,
+  dense_block)`` triples, uses device scatter-add accumulation, supports batched
+  ``matmat`` through ``vmap``, and can wrap itself as an
+  ``RHS1BlockLinearOperator``.
+- ``RHS1BlockCOOBuilder`` adds the first term-stencil assembly surface. Physics
+  terms can now add scalar COO entries or dense blocks directly into a
+  deterministic block map, then build an immutable JAX block-COO operator
+  without dense matrix or SciPy CSR materialization.
+- ``RHS1BlockCOOBuilder.add_tridiagonal_block_line`` adds the first
+  production-shaped line-stencil assembly primitive. It supports
+  nearest-neighbor dense-block lines with diagonal, lower, and upper couplings,
+  so radial, pitch/Legendre, or angular line terms can migrate out of
+  ``v3_driver.py`` without dense assembly or colored matrix-free column
+  probing.
+- ``RHS1BlockCOOOperator.from_scalar_coo_entries`` now routes through the
+  builder, so scalar stencil data can be grouped into block entries without a
+  dense intermediate.
+- ``RHS1UniformBlockDiagonalFactor`` is the first small JAX-native factor
+  kernel. It applies exact repeated dense block solves with ``jax.vmap`` and is
+  suitable for synthetic tests and later local block preconditioner prototypes.
+- ``RHS1BlockCOOOperator.block_jacobi_factor`` now extracts the first local
+  block-Jacobi preconditioner primitive directly from block-sparse operator
+  data.
+- ``RHS1BlockCOOOperator.line_jacobi_factor`` now extracts grouped same-line
+  dense factors from block-sparse operator data. This is the first stronger
+  JAX-native line-preconditioner primitive for radial, pitch, or angular line
+  solves without host sparse factorization.
+- ``preflight_rhs1_block_jacobi_candidate`` is the first strict true-residual
+  gate for JAX-native block candidates. It fails closed on shape mismatch, data
+  budget overflow, JIT smoke failures, nonfinite/amplified corrections, and
+  insufficient true-residual reduction.
+- ``preflight_rhs1_line_jacobi_candidate`` applies the same fail-closed gate to
+  grouped line candidates. Synthetic tests show a same-line coupled system that
+  block-Jacobi rejects can be accepted by the line factor when the true residual
+  reaches target.
+- Replaced one direct-tail materialization indexing block in ``v3_driver.py``
+  with ``RHS1BlockLayout.decode_kinetic_indices``. This is a no-numerics-change
+  extraction that removes duplicated flat-index arithmetic from the driver.
+- Replaced the direct-tail active kinetic/tail bookkeeping with
+  ``RHS1ActiveBlockLayout`` metadata. This keeps the current direct-tail route
+  behavior while preparing it for block-stencil assembly.
+
+Validation:
+
+- ``python -m ruff check sfincs_jax/rhs1_block_operator.py sfincs_jax/v3_driver.py tests/test_rhs1_block_operator.py``:
+  passed.
+- ``python -m py_compile sfincs_jax/rhs1_block_operator.py sfincs_jax/v3_driver.py``:
+  passed.
+- ``SFINCS_JAX_DISABLE_COMPILATION_CACHE=1 SFINCS_JAX_CI=1 JAX_PLATFORM_NAME=cpu python -m pytest -q tests/test_rhs1_block_operator.py``:
+  ``26 passed``.
+- ``SFINCS_JAX_DISABLE_COMPILATION_CACHE=1 SFINCS_JAX_CI=1 JAX_PLATFORM_NAME=cpu python -m pytest -q tests/test_v3_sparse_pattern.py::test_fortran_reduced_pc_gmres_direct_tail_solves_tiny_rhs1_system tests/test_v3_sparse_pattern.py::test_fortran_reduced_pc_operator_preserves_angular_coupling tests/test_v3_sparse_pattern.py::test_fortran_reduced_structural_pattern_drops_fp_x_species_coupling tests/test_fortran_reduced_preconditioner.py``:
+  ``8 passed``.
+- ``SFINCS_JAX_DISABLE_COMPILATION_CACHE=1 SFINCS_JAX_CI=1 JAX_PLATFORM_NAME=cpu python -m pytest -q tests/test_rhs1_block_operator.py tests/test_rhs1_residual.py tests/test_rhs1_active_dof.py tests/test_rhs1_active_projection.py tests/test_rhs1_device_operator.py tests/test_rhs1_device_operator_unit.py tests/test_rhs1_solver_policy.py tests/test_v3_driver_sparse_helper_coverage.py tests/test_fortran_reduced_preconditioner.py tests/test_explicit_sparse.py tests/test_v3_sparse_pattern.py::test_fortran_reduced_pc_gmres_direct_tail_solves_tiny_rhs1_system tests/test_v3_sparse_pattern.py::test_fortran_reduced_pc_gmres_solve_method_solves_tiny_rhs1_system tests/test_v3_sparse_pattern.py::test_fortran_reduced_pc_auto_uses_active_dof_for_truncated_modes``:
+  ``93 passed``.
+- ``SFINCS_JAX_DISABLE_COMPILATION_CACHE=1 SFINCS_JAX_CI=1 JAX_PLATFORM_NAME=cpu python -m pytest -q tests/test_v3_sparse_pattern.py``:
+  ``87 passed``.
+- ``git diff --check``: passed.
+
+Next steps:
+
+1. Use ``RHS1BlockLayout`` in the remaining sparse-pattern and active-DOF
+   metadata code so the driver no longer owns physical index math.
+2. Connect one tiny RHSMode=1 physics-term-generated stencil to
+   ``RHS1BlockCOOBuilder.add_tridiagonal_block_line`` and compare its matvec
+   against the existing dense/CSR diagnostic path.
+3. Connect line candidates to a small RHSMode=1 operator audit and record true
+   residual contraction before rerunning production-size Zenodo decks.
+
+### 36.12 Validation/refactor push after block-operator scaffold
+
+Completed in this pass:
+
+- Added a true Krylov residual gate to ``tests/test_rhs1_block_operator.py``.
+  The synthetic operator has strong same-line coupling and weak cross-line
+  coupling. One FGMRES step now checks the physical residual ``b - A x`` for
+  unpreconditioned, local block-Jacobi, and grouped-line-Jacobi solves. The
+  gate requires local blocks to improve over no preconditioner and the grouped
+  line factor to improve by another order of magnitude over local blocks. This
+  protects the next RHSMode=1 preconditioner work from optimizing only a
+  preconditioned proxy norm.
+- Re-ran
+  ``SFINCS_JAX_DISABLE_COMPILATION_CACHE=1 SFINCS_JAX_CI=1 JAX_PLATFORM_NAME=cpu python -m pytest -q tests/test_rhs1_block_operator.py``:
+  ``27 passed``.
+- Re-ran
+  ``python -m ruff check tests/test_rhs1_block_operator.py sfincs_jax/rhs1_block_operator.py sfincs_jax/v3_driver.py``:
+  passed.
+- Added and tested ``RHS1BlockCOOBuilder.add_tridiagonal_block_line``. The tests
+  compare generated line stencils against explicit dense reference matrices,
+  cover broadcasted same-block couplings, and reject empty, duplicate,
+  out-of-range, and malformed line inputs.
+- Added ``sfincs_jax/rhs1_collision_stencils.py`` with
+  ``build_pas_collision_f_block_operator``. This is the first real physics-term
+  bridge into the block-COO architecture: it assembles the v3
+  pitch-angle-scattering collision term on the kinetic f-block, storing each
+  fixed ``(species, x, L, theta)`` zeta line as one dense diagonal block.
+- Added ``tests/test_rhs1_collision_stencils.py``. The tests compare the
+  assembled block-COO matvec against ``apply_pitch_angle_scattering_v3``, check
+  inactive Legendre slots remain zero, and validate layout/operator shape
+  failures.
+- Added ``sfincs_jax/rhs1_collisionless_stencils.py`` with
+  ``build_exb_theta_f_block_operator``. This is the first off-diagonal
+  collisionless f-block bridge: the ExB ``d/dtheta`` term is assembled as
+  zeta-line dense blocks coupling theta rows while remaining diagonal in
+  species, radial index, Legendre index, and zeta.
+- Extended ``sfincs_jax/rhs1_collisionless_stencils.py`` with
+  ``build_exb_zeta_f_block_operator``. The ExB ``d/dzeta`` term uses scalar COO
+  insertion grouped into the same zeta-line block structure, so this tests a
+  complementary sparse assembly path inside the block-COO architecture.
+- Extended ``sfincs_jax/rhs1_collisionless_stencils.py`` with
+  ``build_collisionless_f_block_operator``. This migrates the always-present v3
+  collisionless streaming + mirror f-block term into the same JAX-native
+  block-COO architecture, including ``L +/- 1`` pitch coupling, theta/zeta
+  derivatives, mirror-force coupling, inactive-L masking, and finite geometry
+  validation. It is a direct step toward a production assembled f-block path
+  that does not probe a matrix-free operator column by column.
+- Added ``sfincs_jax/rhs1_fblock_assembly.py`` as the first reusable
+  integration layer for migrated f-block terms. It builds one block-COO
+  operator from a ``V3FBlockOperator`` using identity shift, collisionless,
+  PAS, and ExB theta/zeta terms, and records unsupported terms explicitly
+  instead of silently falling back to dense probing. This is the safe seam for
+  later solver-policy wiring.
+- Extended ``sfincs_jax/rhs1_collisionless_stencils.py`` with
+  ``build_er_xidot_f_block_operator`` and ``build_er_xdot_f_block_operator``.
+  The ``xi-dot`` bridge assembles diagonal and ``L +/- 2`` pitch couplings while
+  preserving the production padded-column behavior. The ``x-dot`` bridge
+  assembles sign-selected upwind radial derivative coupling together with
+  diagonal and ``L +/- 2`` pitch coefficients.
+- Extended ``sfincs_jax/rhs1_fblock_assembly.py`` to include the migrated
+  ``er_xidot`` and ``er_xdot`` terms. PAS full-trajectory finite-Er f-blocks can
+  now be marked complete by the block-COO factory when no FP, Phi1-collision,
+  or magnetic-drift terms are present.
+- Extended ``sfincs_jax/rhs1_collisionless_stencils.py`` with
+  ``build_magnetic_drift_xidot_f_block_operator``. This ports the local
+  magnetic-drift ``xi-dot`` term into block-COO form, preserving the production
+  input pitch masking before diagonal and ``L +/- 2`` pitch coupling.
+- Extended ``sfincs_jax/rhs1_fblock_assembly.py`` to include
+  ``magdrift_xidot`` while still reporting magnetic theta/zeta drifts as
+  unsupported. This improves coverage for magnetic-drift cases without
+  pretending the angular drift terms have been migrated.
+- Extended ``sfincs_jax/rhs1_collisionless_stencils.py`` with
+  ``build_magnetic_drift_theta_f_block_operator`` and
+  ``build_magnetic_drift_zeta_f_block_operator``. These port the upwind
+  magnetic angular drift terms into block-COO form, including sign-selected
+  derivative matrices, diagonal-in-L geometric factors, ``L +/- 2`` pitch
+  coupling, and production-style input/output pitch masking.
+- Extended ``sfincs_jax/rhs1_fblock_assembly.py`` to include magnetic theta and
+  zeta drifts. Magnetic-drift PAS fixtures are now complete in the migrated
+  block-COO f-block factory; the remaining unsupported f-block families are FP
+  and FP+Phi1 collision terms.
+- Added ``tests/test_rhs1_collisionless_stencils.py``. The tests compare the
+  collisionless streaming + mirror block-COO matvec against
+  ``apply_collisionless_v3``, compare the
+  ExB theta block-COO matvec against ``apply_exb_theta_v3`` for both standard
+  and DKES ExB normalization, compare the ExB zeta block-COO matvec against
+  ``apply_exb_zeta_v3`` for both standard and DKES ExB normalization, enforce
+  inactive Legendre masking, validate bad operator shapes, and check that the
+  assembled PAS collision plus collisionless streaming/mirror plus ExB theta
+  plus ExB zeta block sum matches the sum of the existing standalone apply
+  functions.
+- Added a fixture-backed production-construction gate to
+  ``tests/test_rhs1_collisionless_stencils.py``. The test patches the tiny
+  geometryScheme=12 PAS input to finite ``Er``, parses it through
+  ``read_sfincs_input``, builds the real ``V3FBlockOperator`` with
+  ``fblock_operator_from_namelist``, and verifies that the assembled block-COO
+  PAS + collisionless + ExB(theta) + ExB(zeta) matvec matches the existing
+  production term evaluators on a seeded vector. This closes the gap between
+  synthetic tensor tests and parsed namelist/operator construction for the
+  first migrated RHSMode=1 f-block terms.
+- Added ``tests/test_rhs1_fblock_assembly.py``. The tests require the assembled
+  PAS+Er geometryScheme=12 f-block to match the complete
+  ``apply_v3_fblock_operator`` when all nonzero terms are covered, require an
+  FP fixture to report ``unsupported_terms=("fp",)`` and fail closed under
+  ``strict_complete=True``, and check JSON-friendly metadata for docs/profiling.
+- Extended ``tests/test_rhs1_collisionless_stencils.py`` with parsed fixture
+  gates for ``er_xidot_1species_tiny`` and ``er_xdot_1species_tiny``. These
+  compare the block-COO electric-field drift matvecs against
+  ``apply_er_xidot_v3`` and ``apply_er_xdot_v3`` on seeded padded vectors.
+- Extended ``tests/test_rhs1_fblock_assembly.py`` with a finite-Er scheme-1 PAS
+  full-trajectory fixture. The assembled identity + collisionless + PAS + ExB +
+  Er xi-dot + Er x-dot block operator must now match the complete
+  ``apply_v3_fblock_operator``.
+- Extended ``tests/test_rhs1_collisionless_stencils.py`` with a parsed
+  ``magdrift_1species_tiny`` gate comparing the magnetic ``xi-dot`` block-COO
+  matvec against ``apply_magnetic_drift_xidot_v3``.
+- Extended ``tests/test_rhs1_fblock_assembly.py`` with a magnetic-drift partial
+  assembly gate. The factory must include collisionless + PAS + magnetic
+  ``xi-dot`` exactly, report only magnetic theta/zeta drifts as unsupported, and
+  fail closed under ``strict_complete=True``.
+- Extended ``tests/test_rhs1_collisionless_stencils.py`` with parsed magnetic
+  theta and zeta drift gates comparing the block-COO matvecs against
+  ``apply_magnetic_drift_theta_v3`` and ``apply_magnetic_drift_zeta_v3``.
+- Updated the magnetic-drift factory test to require the complete
+  collisionless + PAS + magnetic theta/zeta/xi-dot block operator to match
+  ``apply_v3_fblock_operator``.
+- Re-ran ``python -m pytest -q tests/test_rhs1_block_operator.py``:
+  ``30 passed``.
+- Re-ran ``python -m pytest -q tests/test_rhs1_collision_stencils.py tests/test_rhs1_block_operator.py``:
+  ``33 passed``.
+- Re-ran
+  ``python -m pytest -q tests/test_rhs1_collisionless_stencils.py tests/test_rhs1_collision_stencils.py tests/test_rhs1_block_operator.py``:
+  ``42 passed``.
+- Re-ran
+  ``python -m pytest -q tests/test_rhs1_collisionless_stencils.py tests/test_rhs1_collision_stencils.py tests/test_rhs1_block_operator.py``:
+  ``43 passed``.
+- Re-ran
+  ``python -m pytest -q tests/test_rhs1_collisionless_stencils.py tests/test_rhs1_collision_stencils.py tests/test_rhs1_block_operator.py``:
+  ``46 passed``.
+- Re-ran
+  ``python -m pytest -q tests/test_rhs1_fblock_assembly.py tests/test_rhs1_collisionless_stencils.py tests/test_rhs1_collision_stencils.py tests/test_rhs1_block_operator.py``:
+  ``49 passed``.
+- Re-ran
+  ``python -m pytest -q tests/test_rhs1_fblock_assembly.py tests/test_rhs1_collisionless_stencils.py tests/test_rhs1_collision_stencils.py tests/test_rhs1_block_operator.py``:
+  ``53 passed``.
+- Re-ran
+  ``python -m pytest -q tests/test_rhs1_fblock_assembly.py tests/test_rhs1_collisionless_stencils.py tests/test_rhs1_collision_stencils.py tests/test_rhs1_block_operator.py``:
+  ``55 passed``.
+- Re-ran
+  ``python -m pytest -q tests/test_rhs1_collisionless_stencils.py tests/test_rhs1_collision_stencils.py tests/test_rhs1_block_operator.py``:
+  ``52 passed``.
+- Re-ran
+  ``python -m pytest -q tests/test_rhs1_fblock_assembly.py tests/test_rhs1_collisionless_stencils.py tests/test_rhs1_collision_stencils.py tests/test_rhs1_block_operator.py``:
+  ``57 passed``.
+- Re-ran
+  ``python -m ruff check sfincs_jax/rhs1_collisionless_stencils.py sfincs_jax/rhs1_fblock_assembly.py tests/test_rhs1_collisionless_stencils.py tests/test_rhs1_fblock_assembly.py``:
+  passed.
+- Re-ran
+  ``python -m py_compile sfincs_jax/rhs1_collisionless_stencils.py sfincs_jax/rhs1_fblock_assembly.py tests/test_rhs1_collisionless_stencils.py tests/test_rhs1_fblock_assembly.py``:
+  passed.
+- Re-ran the broader targeted RHSMode=1/transport validation:
+  ``SFINCS_JAX_DISABLE_COMPILATION_CACHE=1 SFINCS_JAX_CI=1 JAX_PLATFORM_NAME=cpu python -m pytest -q tests/test_solver_gmres.py tests/test_rhs1_block_operator.py tests/test_rhs1_collision_stencils.py tests/test_rhs1_collisionless_stencils.py tests/test_rhs1_fblock_assembly.py tests/test_rhsmode1_current_closure.py tests/test_rhsmode1_write_output_end_to_end.py tests/test_rhsmode1_phi1_write_output_end_to_end.py tests/test_er_scan_and_ambipolar.py tests/test_transport_matrix_rhsmode2_parity.py tests/test_transport_matrix_rhsmode3_parity.py tests/test_rhs1_residual.py tests/test_rhs1_active_dof.py tests/test_rhs1_active_projection.py tests/test_rhs1_device_operator.py tests/test_rhs1_device_operator_unit.py tests/test_rhs1_solver_policy.py tests/test_v3_driver_sparse_helper_coverage.py tests/test_fortran_reduced_preconditioner.py tests/test_explicit_sparse.py tests/test_v3_sparse_pattern.py::test_fortran_reduced_pc_gmres_direct_tail_solves_tiny_rhs1_system tests/test_v3_sparse_pattern.py::test_fortran_reduced_pc_gmres_solve_method_solves_tiny_rhs1_system tests/test_v3_sparse_pattern.py::test_fortran_reduced_pc_auto_uses_active_dof_for_truncated_modes``:
+  ``178 passed, 30 skipped``.
+- Re-ran
+  ``python -m ruff check sfincs_jax/rhs1_collisionless_stencils.py sfincs_jax/rhs1_fblock_assembly.py tests/test_rhs1_collisionless_stencils.py tests/test_rhs1_fblock_assembly.py``:
+  passed.
+- Re-ran
+  ``python -m py_compile sfincs_jax/rhs1_collisionless_stencils.py sfincs_jax/rhs1_fblock_assembly.py tests/test_rhs1_collisionless_stencils.py tests/test_rhs1_fblock_assembly.py``:
+  passed.
+- Re-ran the broader targeted RHSMode=1/transport validation:
+  ``SFINCS_JAX_DISABLE_COMPILATION_CACHE=1 SFINCS_JAX_CI=1 JAX_PLATFORM_NAME=cpu python -m pytest -q tests/test_solver_gmres.py tests/test_rhs1_block_operator.py tests/test_rhs1_collision_stencils.py tests/test_rhs1_collisionless_stencils.py tests/test_rhs1_fblock_assembly.py tests/test_rhsmode1_current_closure.py tests/test_rhsmode1_write_output_end_to_end.py tests/test_rhsmode1_phi1_write_output_end_to_end.py tests/test_er_scan_and_ambipolar.py tests/test_transport_matrix_rhsmode2_parity.py tests/test_transport_matrix_rhsmode3_parity.py tests/test_rhs1_residual.py tests/test_rhs1_active_dof.py tests/test_rhs1_active_projection.py tests/test_rhs1_device_operator.py tests/test_rhs1_device_operator_unit.py tests/test_rhs1_solver_policy.py tests/test_v3_driver_sparse_helper_coverage.py tests/test_fortran_reduced_preconditioner.py tests/test_explicit_sparse.py tests/test_v3_sparse_pattern.py::test_fortran_reduced_pc_gmres_direct_tail_solves_tiny_rhs1_system tests/test_v3_sparse_pattern.py::test_fortran_reduced_pc_gmres_solve_method_solves_tiny_rhs1_system tests/test_v3_sparse_pattern.py::test_fortran_reduced_pc_auto_uses_active_dof_for_truncated_modes``:
+  ``176 passed, 30 skipped``.
+- Re-ran final hygiene:
+  ``python -m ruff check sfincs_jax/rhs1_fblock_assembly.py sfincs_jax/rhs1_collisionless_stencils.py sfincs_jax/rhs1_collision_stencils.py sfincs_jax/rhs1_block_operator.py tests/test_rhs1_fblock_assembly.py tests/test_rhs1_collisionless_stencils.py tests/test_rhs1_collision_stencils.py tests/test_rhs1_block_operator.py tests/test_rhsmode1_write_output_end_to_end.py tests/test_rhsmode1_phi1_write_output_end_to_end.py tests/test_solver_gmres.py tests/test_er_scan_and_ambipolar.py tests/test_transport_matrix_rhsmode2_parity.py tests/test_transport_matrix_rhsmode3_parity.py``:
+  passed.
+- Re-ran
+  ``python -m py_compile sfincs_jax/rhs1_fblock_assembly.py sfincs_jax/rhs1_collisionless_stencils.py sfincs_jax/rhs1_collision_stencils.py sfincs_jax/rhs1_block_operator.py sfincs_jax/v3_driver.py``:
+  passed.
+- ``git diff --check``: passed.
+- Re-ran
+  ``python -m ruff check sfincs_jax/rhs1_collisionless_stencils.py sfincs_jax/rhs1_fblock_assembly.py tests/test_rhs1_collisionless_stencils.py tests/test_rhs1_fblock_assembly.py``:
+  passed.
+- Re-ran
+  ``python -m py_compile sfincs_jax/rhs1_collisionless_stencils.py sfincs_jax/rhs1_fblock_assembly.py tests/test_rhs1_collisionless_stencils.py tests/test_rhs1_fblock_assembly.py``:
+  passed.
+- Re-ran
+  ``python -m ruff check sfincs_jax/rhs1_fblock_assembly.py tests/test_rhs1_fblock_assembly.py sfincs_jax/rhs1_collisionless_stencils.py tests/test_rhs1_collisionless_stencils.py``:
+  passed.
+- Re-ran
+  ``python -m py_compile sfincs_jax/rhs1_fblock_assembly.py tests/test_rhs1_fblock_assembly.py sfincs_jax/rhs1_collisionless_stencils.py tests/test_rhs1_collisionless_stencils.py``:
+  passed.
+- Re-ran the broader targeted RHSMode=1/transport validation:
+  ``SFINCS_JAX_DISABLE_COMPILATION_CACHE=1 SFINCS_JAX_CI=1 JAX_PLATFORM_NAME=cpu python -m pytest -q tests/test_solver_gmres.py tests/test_rhs1_block_operator.py tests/test_rhs1_collision_stencils.py tests/test_rhs1_collisionless_stencils.py tests/test_rhs1_fblock_assembly.py tests/test_rhsmode1_current_closure.py tests/test_rhsmode1_write_output_end_to_end.py tests/test_rhsmode1_phi1_write_output_end_to_end.py tests/test_er_scan_and_ambipolar.py tests/test_transport_matrix_rhsmode2_parity.py tests/test_transport_matrix_rhsmode3_parity.py tests/test_rhs1_residual.py tests/test_rhs1_active_dof.py tests/test_rhs1_active_projection.py tests/test_rhs1_device_operator.py tests/test_rhs1_device_operator_unit.py tests/test_rhs1_solver_policy.py tests/test_v3_driver_sparse_helper_coverage.py tests/test_fortran_reduced_preconditioner.py tests/test_explicit_sparse.py tests/test_v3_sparse_pattern.py::test_fortran_reduced_pc_gmres_direct_tail_solves_tiny_rhs1_system tests/test_v3_sparse_pattern.py::test_fortran_reduced_pc_gmres_solve_method_solves_tiny_rhs1_system tests/test_v3_sparse_pattern.py::test_fortran_reduced_pc_auto_uses_active_dof_for_truncated_modes``:
+  ``170 passed, 30 skipped``.
+- Re-ran final hygiene:
+  ``python -m ruff check sfincs_jax/rhs1_fblock_assembly.py sfincs_jax/rhs1_collisionless_stencils.py sfincs_jax/rhs1_collision_stencils.py sfincs_jax/rhs1_block_operator.py tests/test_rhs1_fblock_assembly.py tests/test_rhs1_collisionless_stencils.py tests/test_rhs1_collision_stencils.py tests/test_rhs1_block_operator.py tests/test_rhsmode1_write_output_end_to_end.py tests/test_rhsmode1_phi1_write_output_end_to_end.py tests/test_solver_gmres.py tests/test_er_scan_and_ambipolar.py tests/test_transport_matrix_rhsmode2_parity.py tests/test_transport_matrix_rhsmode3_parity.py``:
+  passed.
+- Re-ran
+  ``python -m py_compile sfincs_jax/rhs1_fblock_assembly.py sfincs_jax/rhs1_collisionless_stencils.py sfincs_jax/rhs1_collision_stencils.py sfincs_jax/rhs1_block_operator.py sfincs_jax/v3_driver.py``:
+  passed.
+- ``git diff --check``: passed.
+- Re-ran
+  ``python -m ruff check sfincs_jax/rhs1_collisionless_stencils.py tests/test_rhs1_collisionless_stencils.py``:
+  passed.
+- Re-ran
+  ``python -m py_compile sfincs_jax/rhs1_collisionless_stencils.py tests/test_rhs1_collisionless_stencils.py``:
+  passed.
+- Re-ran
+  ``python -m ruff check sfincs_jax/rhs1_block_operator.py tests/test_rhs1_block_operator.py``:
+  passed.
+- Re-ran
+  ``python -m ruff check sfincs_jax/rhs1_collision_stencils.py tests/test_rhs1_collision_stencils.py sfincs_jax/rhs1_block_operator.py tests/test_rhs1_block_operator.py``:
+  passed.
+- Re-ran
+  ``python -m ruff check sfincs_jax/rhs1_collisionless_stencils.py sfincs_jax/rhs1_collision_stencils.py tests/test_rhs1_collisionless_stencils.py tests/test_rhs1_collision_stencils.py``:
+  passed.
+- Added ``test_fgmres_true_residual_is_preconditioner_side_invariant`` to
+  ``tests/test_solver_gmres.py``. The gate solves the same nonsymmetric system
+  with no preconditioner, left preconditioning, and right preconditioning, then
+  requires the same physical solution and the same true ``b - A x`` residual.
+- Re-ran ``python -m pytest -q tests/test_solver_gmres.py tests/test_rhs1_block_operator.py``:
+  ``80 passed``.
+- Re-ran
+  ``python -m ruff check tests/test_solver_gmres.py tests/test_rhs1_block_operator.py sfincs_jax/rhs1_block_operator.py``:
+  passed.
+- Added a real RHSMode=1 current-moment closure gate in
+  ``tests/test_rhsmode1_current_closure.py``. The checked fixtures now assert
+  ``FSABjHat = sum_s Z_s FSABFlow_s`` and that ``FSABjHatOverB0`` and
+  ``FSABjHatOverRootFSAB2`` are the documented normalizations by
+  ``B0OverBBar`` and ``sqrt(FSABHat2)``.
+- Extended that current-moment closure to the end-to-end output-writer tests in
+  ``tests/test_rhsmode1_write_output_end_to_end.py`` and
+  ``tests/test_rhsmode1_phi1_write_output_end_to_end.py``. The output files
+  generated by ``write_sfincs_jax_output_h5(..., compute_solution=True)`` now
+  must satisfy the same charge-weighted flow/current identities.
+- Strengthened ``tests/test_er_scan_and_ambipolar.py`` with deterministic
+  two-species Er-scan H5 fixtures. The tests now enforce the no-Phi1
+  ``particleFlux_vm_rHat`` current convention, the Phi1
+  ``particleFlux_vd_rHat`` current convention, sign-bracketed roots, near-zero
+  interpolated root current, and negative-Er ion-root classification.
+- Strengthened ``tests/test_transport_matrix_rhsmode3_parity.py`` with
+  monoenergetic/DKES normalization gates: ``Nx = 1``, ``x = [1]`` where stored,
+  ``Nxi_for_x_option = 0``, ``nu_n`` from ``nuPrime`` normalization,
+  ``dPhiHatdpsiHat`` from ``EStar`` normalization, and ``L12/L21``
+  reciprocity after the Fortran H5 transpose.
+- Strengthened ``tests/test_transport_matrix_rhsmode2_parity.py`` with an
+  Onsager/transpose guard for ``L12/L21``, ``L13/L31``, and ``L23/L32``. The
+  filtered geometry fixture uses a looser tolerance because it is intentionally
+  low resolution; direct-geometry fixtures remain at the tighter tolerance.
+- Re-ran
+  ``python -m pytest -q tests/test_transport_matrix_rhsmode2_parity.py tests/test_rhsmode1_current_closure.py tests/test_er_scan_and_ambipolar.py tests/test_transport_matrix_rhsmode3_parity.py tests/test_rhs1_block_operator.py``:
+  ``52 passed``.
+- Re-ran
+  ``python -m ruff check tests/test_transport_matrix_rhsmode2_parity.py tests/test_rhsmode1_current_closure.py tests/test_er_scan_and_ambipolar.py tests/test_transport_matrix_rhsmode3_parity.py tests/test_rhs1_block_operator.py``:
+  passed.
+- ``git diff --check``: passed.
+- Re-ran without the CI skip flag:
+  ``SFINCS_JAX_DISABLE_COMPILATION_CACHE=1 JAX_PLATFORM_NAME=cpu python -m pytest -q tests/test_rhsmode1_write_output_end_to_end.py tests/test_rhsmode1_phi1_write_output_end_to_end.py``:
+  ``9 passed``.
+- Re-ran
+  ``python -m ruff check tests/test_rhsmode1_write_output_end_to_end.py tests/test_rhsmode1_phi1_write_output_end_to_end.py``:
+  passed.
+
+Physics-gate backlog to implement as real tests, not smoke tests:
+
+1. RHSMode=1 bootstrap-current moment closure. Status: implemented for checked
+   fixtures and for the output-writer end-to-end path.
+
+2. Ambipolarity charge-flux closure and root bracketing. Status: implemented
+   for deterministic synthetic H5 scans plus strengthened tiny scan regression.
+
+3. RHSMode=3 monoenergetic DKES contract. Status: implemented for checked
+   monoenergetic PAS fixtures.
+
+4. RHSMode=2 transport-matrix Onsager/transpose guard. Status: implemented for
+   checked RHSMode=2 PAS fixtures.
+
+5. Full-Fokker-Planck conservation/nullspace moments.
+   - Build a tiny FP collision operator and test weighted conservation of
+     particle number, total parallel momentum, and energy.
+   - Keep the existing PAS ``L = 0`` nullspace check as a separate regression
+     gate.
+
+6. High-collisionality asymptotic trend gate.
+   - Use checked-in validation artifacts to require inverse-collisionality tail
+     slopes for W7-X FP transport coefficients.
+   - Keep LHD marked as requiring a wider high-``nu'`` scan until the full
+     Simakov-Helander reproduction is pinned.
+
+7. Krylov/preconditioner invariance. Status: implemented for FGMRES
+   preconditioner-side invariance and block-candidate true-residual
+   improvement/rejection. Next extension is the same check on a tiny extracted
+   RHSMode=1 operator.
+
+8. Phi1 no-Er invariance and flux-split sanity.
+   - Compare no-Phi1 and linear-Phi1 tiny RHSMode=1 fixtures at ``Er = 0``.
+   - Particle flux, heat flux, parallel flow, and ``FSABjHat`` should agree
+     within fixture tolerance. If vm0/vE0 diagnostics are present, enforce the
+     documented cancellation channel.
+
+Facade-first refactor sequence:
+
+1. Keep ``v3_driver.py`` as the compatibility facade while moving leaf helpers
+   behind wrappers. Tests and scripts still import private helpers from this
+   module, so deleting or renaming them is not safe in the first pass.
+2. Extract KSP dispatch and residual/history reporting first into a focused
+   module such as ``v3_ksp_driver.py``. Protect with
+   ``tests/test_solver_gmres.py`` and
+   ``tests/test_v3_driver_solve_policy_coverage.py``.
+3. Extract sparse factor utilities and diagnostic sparse assembly next into a
+   module such as ``rhs1_sparse_factor.py``. Protect with
+   ``tests/test_sparse_assembly.py``, ``tests/test_v3_driver_sparse_helper_coverage.py``,
+   and ``tests/test_v3_sparse_pattern.py``.
+4. Extract RHSMode=1 preconditioner builders behind a context dataclass. Keep
+   metadata keys and construction order identical while the facade remains.
+5. Extract transport-matrix and Phi1/Newton drivers last. They have clearer
+   public APIs, but depend on driver-level imports and result dataclasses.
+
+Next implementation step:
+
+- Add a collisionless streaming/mirror bridge or an extracted tiny-fixture
+  wrapper that builds PAS+ExB theta+ExB zeta from an actual
+  ``fblock_operator_from_namelist`` object and compares the assembled block
+  operator against the matching pieces of ``apply_v3_fblock_operator`` before
+  replacing any production solve path.
+
+## 2026-06-03 RHSMode=1 f-block FP collision migration
+
+Objective:
+
+- Continue the JAX-native RHSMode=1 block/operator refactor with real physics
+  stencils rather than dense probing or solver-path tuning. The goal for this
+  pass was to make ordinary no-Phi1 full-Fokker-Planck collisions a complete
+  structured f-block term and then close the Phi1-in-collision case whenever a
+  frozen ``phi1_hat_base`` is available.
+
+Steps completed:
+
+- Added ``build_fokker_planck_collision_f_block_operator`` in
+  ``sfincs_jax/rhs1_collision_stencils.py``.
+- The FP builder preserves the existing v3 padded-vector convention: output
+  rows are masked by ``n_xi_for_x`` but input columns are not pre-masked. This
+  is important because active low-``x`` rows can couple to padded high-``x``
+  Legendre slots through the dense species/radial FP matrix.
+- Added synthetic and parsed-fixture tests in
+  ``tests/test_rhs1_collision_stencils.py`` against
+  ``apply_fokker_planck_v3``.
+- Wired the no-Phi1 FP builder into
+  ``assemble_partial_rhs1_fblock_operator`` in
+  ``sfincs_jax/rhs1_fblock_assembly.py``.
+- Replaced the previous "FP unsupported" factory gate with a complete
+  no-Phi1 FP parity gate against ``apply_v3_fblock_operator``.
+- Added ``build_fokker_planck_phi1_collision_f_block_operator``. It assembles
+  the frozen-Phi1 ``includePhi1InCollisionOperator`` term by expanding the
+  same Boltzmann density factors, CD/CE terms, Rosenbluth contribution, and
+  pitch-angle diagonal used by ``apply_fokker_planck_v3_phi1``.
+- Added direct synthetic and parsed-fixture FP+Phi1 parity gates against
+  ``apply_fokker_planck_v3_phi1``.
+- Extended ``assemble_partial_rhs1_fblock_operator`` with optional
+  ``phi1_hat_base``. FP+Phi1 is complete when that frozen base field is
+  supplied, and remains fail-closed under ``strict_complete=True`` when it is
+  absent.
+- Pruned exact zero FP/FP+Phi1 blocks during assembly so the new structured
+  path does not retain avoidable block data at ``drop_tol=0``.
+
+Validation:
+
+- ``python -m pytest -q tests/test_rhs1_collision_stencils.py tests/test_rhs1_block_operator.py``:
+  ``36 passed``.
+- ``python -m pytest -q tests/test_rhs1_fblock_assembly.py tests/test_rhs1_collision_stencils.py tests/test_rhs1_collisionless_stencils.py tests/test_rhs1_block_operator.py``:
+  ``65 passed``.
+- ``python -m ruff check sfincs_jax/rhs1_collision_stencils.py sfincs_jax/rhs1_fblock_assembly.py tests/test_rhs1_collision_stencils.py tests/test_rhs1_fblock_assembly.py``:
+  passed.
+- ``python -m py_compile sfincs_jax/rhs1_collision_stencils.py sfincs_jax/rhs1_fblock_assembly.py tests/test_rhs1_collision_stencils.py tests/test_rhs1_fblock_assembly.py``:
+  passed.
+- Bounded RHSMode=1/transport regression slice after no-Phi1 FP:
+  ``182 passed, 30 skipped``.
+- Bounded RHSMode=1/transport regression slice after frozen-Phi1 FP:
+  ``186 passed, 30 skipped``.
+
+Remaining f-block/operator refactor lanes:
+
+1. Extract RHSMode=1 block preconditioner construction into a focused module
+   once the f-block operator path has a production integration seam.
+2. Add a tiny extracted RHSMode=1 operator residual/preconditioner invariance
+   test so future preconditioner changes cannot reduce the preconditioned
+   residual while worsening the true physical residual.
+3. Add a guarded solver-policy opt-in that uses the structured f-block selector
+   for eligible no-Phi1 and frozen-Phi1 cases, with default-off environment
+   control until benchmarked on production-resolution cases.
+
+Progress update:
+
+- RHSMode=1 block/operator refactor: 82%.
+- Physics-gate/refactor coverage lane: 81%.
+- Overall open-lane average: 84%.
+
+## 2026-06-03 RHSMode=1 structured f-block selector
+
+Objective:
+
+- Create the production integration seam for the structured f-block operator
+  without changing solver defaults or risking partial-operator solves.
+
+Steps completed:
+
+- Added ``RHS1StructuredFBlockSelection`` to
+  ``sfincs_jax/rhs1_fblock_assembly.py``.
+- Added ``select_structured_rhs1_fblock_operator``. The selector builds the
+  structured assembly, returns a ``RHS1BlockLinearOperator`` only when migrated
+  term coverage is complete, and is fail-closed by default when unsupported
+  terms remain.
+- The selector supports complete no-Phi1 PAS/FP/magnetic/Er f-blocks and the
+  frozen-Phi1 FP collision path when ``phi1_hat_base`` is supplied.
+- Added selector tests covering complete no-Phi1 FP, rejected missing-base
+  FP+Phi1, accepted frozen-Phi1 FP, metadata serialization, and matvec parity
+  with ``apply_v3_fblock_operator``.
+
+Validation:
+
+- ``python -m pytest -q tests/test_rhs1_fblock_assembly.py``:
+  ``10 passed``.
+- ``python -m pytest -q tests/test_rhs1_fblock_assembly.py tests/test_rhs1_collision_stencils.py tests/test_rhs1_collisionless_stencils.py tests/test_rhs1_block_operator.py``:
+  ``68 passed``.
+- Touched-file ``ruff`` and ``py_compile``:
+  passed.
+- Bounded RHSMode=1/transport regression slice:
+  ``189 passed, 30 skipped``.
+
+Next implementation steps:
+
+1. Add an extracted tiny RHSMode=1 full-system residual test that compares
+   structured f-block matvecs inside the full operator against the existing
+   matrix-free f-block application before any default solver-policy switch.
+2. Add a default-off policy flag that routes eligible f-block-only preconditioner
+   probes through ``select_structured_rhs1_fblock_operator`` and records
+   coverage/data-size metadata in solver traces.
+3. Benchmark that flag on the known FP/PAS geometry-rich offenders before
+   promoting it to an automatic solver-policy candidate.
+
+Progress update:
+
+- RHSMode=1 block/operator refactor: 85%.
+- Physics-gate/refactor coverage lane: 82%.
+- Overall open-lane average: 85%.
+
+## 2026-06-03 RHSMode=1 structured f-block preconditioner opt-in
+
+Objective:
+
+- Add the first real solver-policy integration point for the structured
+  f-block operator without changing defaults. The path must remain explicit,
+  fail closed when f-block coverage is incomplete, and expose enough metadata
+  to benchmark memory/runtime before automatic promotion.
+
+Steps completed:
+
+- Added a full-system DKE-block guard in
+  ``tests/test_rhs1_fblock_assembly.py``. For a no-Phi1 RHSMode=1 full-FP
+  fixture with zero source extras, it compares ``apply_v3_full_system_operator``
+  DKE rows against the structured f-block selector matvec.
+- Added ``structured_fblock_jacobi`` aliases to the RHSMode=1 preconditioner
+  policy. Users can select the lane explicitly with
+  ``SFINCS_JAX_RHSMODE1_PRECONDITIONER=structured_fblock_jacobi``.
+- Added ``structured_fblock_jacobi`` to the shared RHSMode=1 preconditioner
+  dispatch ladder.
+- Added ``_build_rhsmode1_structured_fblock_jacobi_preconditioner`` in
+  ``sfincs_jax/v3_driver.py``. It uses
+  ``select_structured_rhs1_fblock_operator`` and then builds a safe
+  block-Jacobi action on the kinetic f-block while leaving Phi1/constraint
+  tails as identity.
+- Added solver metadata recording for this explicit preconditioner:
+  selected flag, reason, block count, data bytes, and full selector/factor
+  metadata are copied into ``metadata_out`` when the path is built.
+- Added unit coverage for aliasing, dispatch, and the real full-vector
+  preconditioner action.
+
+Validation:
+
+- Focused alias/dispatch/builder/full-system guard:
+  ``4 passed``.
+- Focused RHSMode=1 block/factory/dispatch policy group:
+  ``106 passed``.
+- Bounded RHSMode=1/transport integration slice:
+  ``227 passed, 30 skipped``.
+- Touched-file ``ruff``, ``py_compile``, and ``git diff --check``:
+  passed for this step before the final plan update.
+
+Next implementation steps:
+
+1. Run default-off benchmarks with
+   ``SFINCS_JAX_RHSMODE1_PRECONDITIONER=structured_fblock_jacobi`` on the
+   small FP/PAS geometry-rich offenders to measure residual behavior,
+   setup time, solve time, and metadata ``data_nbytes``.
+2. If block-Jacobi is too weak, add a structured line/group Jacobi variant
+   using the existing block-COO line factor primitives instead of dense probing.
+3. Only promote any structured f-block preconditioner into auto policy after it
+   has a measured runtime or memory win and preserves true residual convergence.
+
+Progress update:
+
+- RHSMode=1 block/operator refactor: 88%.
+- Physics-gate/refactor coverage lane: 84%.
+- Overall open-lane average: 87%.
+
+## 2026-06-03 RHSMode=1 structured xi-angular preconditioner probe
+
+Objective:
+
+- Push the structured f-block preconditioner beyond local block-Jacobi without
+  returning to dense probing or external sparse factorization. The target was a
+  stronger JAX-native grouped factor that can be tested on small extracted
+  RHSMode=1 operators before any automatic solver-policy promotion.
+
+Steps completed:
+
+- Added two explicit line-factor variants to the RHSMode=1 preconditioner
+  policy and dispatch:
+  ``structured_fblock_angular_jacobi`` and
+  ``structured_fblock_xi_angular_jacobi``.
+- ``structured_fblock_angular_jacobi`` groups all angular blocks for each fixed
+  ``(species, x, L)`` line.
+- ``structured_fblock_xi_angular_jacobi`` groups all pitch/Legendre and angular
+  blocks for each fixed ``(species, x)`` line. This captures the stiff local
+  PAS/collisionless velocity-angular coupling while retaining a hard memory
+  guard through
+  ``SFINCS_JAX_RHSMODE1_STRUCTURED_FBLOCK_XI_ANGULAR_MAX_BLOCK_SIZE``.
+- Added environment controls for regularization/damping for each explicit
+  structured f-block factor, keeping the path advanced-user/default-off.
+- Added metadata recording for line kind, blocks per line, scalar block size,
+  maximum block-size guard, and factor data.
+- Added a true DKE/f-block residual regression on a parsed PAS fixture. The
+  test applies one preconditioner step and evaluates the physical DKE residual
+  ``b_f - A_f M^{-1} b`` instead of the preconditioned proxy norm.
+
+Measured probe results:
+
+- ``quick_2species_FPCollisions_noEr``:
+  - block Jacobi one-step DKE residual ratio: ``1.6964403853596364``.
+  - angular Jacobi one-step DKE residual ratio: ``1.6964403853596364``.
+  - xi-angular Jacobi one-step DKE residual ratio: ``0.6453754940061668``.
+- ``pas_1species_PAS_noEr_tiny_scheme1``:
+  - block Jacobi ratio: ``3.5642536007409973``.
+  - angular Jacobi ratio: ``3.5642536007409973``.
+  - xi-angular Jacobi ratio: ``1.5838114167690023e-10``.
+- ``pas_1species_PAS_noEr_small``:
+  - block Jacobi ratio: ``2.1101601391998455``.
+  - angular Jacobi ratio: ``2.1101601391998455``.
+  - xi-angular Jacobi ratio: ``1.8062630401368404e-10``.
+- ``magdrift_1species_tiny``:
+  - block Jacobi ratio: ``1.6569850321407862``.
+  - angular Jacobi ratio: ``1.6593809482677122``.
+  - xi-angular Jacobi ratio: ``0.03099613554169782``.
+
+Validation:
+
+- ``python -m pytest -q tests/test_rhs1_preconditioner_auto_policy.py tests/test_v3_driver_rhs1_dispatch_coverage.py tests/test_rhs1_fblock_assembly.py tests/test_rhs1_collision_stencils.py tests/test_rhs1_collisionless_stencils.py tests/test_rhs1_block_operator.py``:
+  ``111 passed``.
+- ``python -m pytest -q tests/test_v3_driver_rhs1_dispatch_coverage.py tests/test_rhs1_fblock_assembly.py``:
+  ``31 passed`` after adding the true DKE residual regression.
+- Touched-file ``ruff`` and ``py_compile``:
+  passed.
+
+Decision:
+
+- Keep ``structured_fblock_xi_angular_jacobi`` as an explicit/default-off
+  advanced preconditioner. It is strong enough to justify more PAS and
+  magnetic-drift benchmarking, but it should not be auto-promoted yet because
+  full-FP still needs additional species/radial or Schur/coarse coupling.
+- Do not promote ``structured_fblock_jacobi`` or
+  ``structured_fblock_angular_jacobi`` automatically; measured one-step
+  residual behavior is not strong enough.
+
+Next implementation steps:
+
+1. Add a stronger FP-aware structured factor or coarse correction that couples
+   the remaining species/radial FP blocks without materializing a global dense
+   or host sparse factor.
+2. Benchmark explicit ``structured_fblock_xi_angular_jacobi`` on the known
+   PAS/magnetic-drift offender inputs with solve-time, setup-time, RSS, and
+   residual metadata before considering a narrow PAS-only auto policy.
+3. Extract the structured f-block preconditioner builders out of
+   ``v3_driver.py`` into a focused module once the next FP/coarse correction is
+   prototyped and covered by true-residual gates.
+
+Progress update:
+
+- RHSMode=1 block/operator refactor: 90%.
+- Physics-gate/refactor coverage lane: 85%.
+- Structured preconditioner lane: 72%.
+- Overall open-lane average: 88%.
+
+## 2026-06-03 RHSMode=1 FP-radial grouped factor
+
+Objective:
+
+- Close the structural gap left by xi-angular Jacobi on full-Fokker-Planck
+  cases. The FP collision term is dense in species and radial ``x`` for each
+  fixed Legendre index and angular point, so a fixed ``(species,x)`` block
+  cannot approximate it. The required next primitive is an indexed grouped
+  factor over non-contiguous block-COO rows.
+
+Steps completed:
+
+- Added ``RHS1GroupedBlockDiagonalFactor`` in
+  ``sfincs_jax/rhs1_block_operator.py``.
+- Added ``RHS1BlockCOOOperator.grouped_jacobi_factor``. It extracts arbitrary
+  non-contiguous, non-overlapping block groups from the block-COO operator,
+  builds dense per-group factors, and applies them through JAX gather/solve/
+  scatter without host sparse factorization.
+- Added synthetic tests proving exact non-contiguous grouped solves, JIT
+  compatibility, metadata, and fail-closed validation for malformed groups.
+- Added explicit policy aliases and dispatch for
+  ``structured_fblock_fp_radial_jacobi``.
+- Added
+  ``_build_rhsmode1_structured_fblock_fp_radial_jacobi_preconditioner``. It
+  groups all ``(species, x, zeta)`` blocks at fixed ``(L, theta)``, which
+  captures the dense FP species/radial collision matrix while leaving the
+  global RHSMode=1 tails unchanged.
+- The FP-radial path is guarded by:
+  ``SFINCS_JAX_RHSMODE1_STRUCTURED_FBLOCK_FP_RADIAL_MAX_BLOCK_SIZE`` and
+  ``SFINCS_JAX_RHSMODE1_STRUCTURED_FBLOCK_FP_RADIAL_MAX_FACTOR_NBYTES``.
+- Added dispatch, metadata, factor-memory guard, FP-required, and true DKE
+  residual tests.
+
+Measured probe result:
+
+- On ``quick_2species_FPCollisions_noEr`` with one f-block preconditioner
+  application and true DKE residual ``||b_f - A_f M^{-1}b|| / ||b_f||``:
+  - structured block Jacobi: ``40.33087012874533``.
+  - structured xi-angular Jacobi: ``40.34117597670464``.
+  - structured FP-radial Jacobi: ``0.029055524096059073``.
+- The FP-radial factor used ``40`` groups, grouped block size ``70``, and
+  about ``1.57 MB`` factor data on this fixture.
+
+Validation:
+
+- ``python -m pytest -q tests/test_rhs1_block_operator.py``:
+  ``32 passed``.
+- ``python -m pytest -q tests/test_rhs1_block_operator.py tests/test_rhs1_preconditioner_auto_policy.py tests/test_v3_driver_rhs1_dispatch_coverage.py tests/test_rhs1_fblock_assembly.py``:
+  ``91 passed``.
+- Touched-file ``ruff``, ``py_compile``, and ``git diff --check``:
+  passed.
+
+Decision:
+
+- Keep ``structured_fblock_fp_radial_jacobi`` explicit/default-off until
+  full-solve benchmarks show a runtime or RSS win on FP offenders. It is a
+  real structural improvement over xi-angular for FP, but it only captures the
+  FP species/radial block; production solves still need a composition or coarse
+  correction to cover simultaneous FP and streaming/PAS/angular coupling.
+
+Next implementation steps:
+
+1. Add a coupled coarse/Schur residual equation that contains both FP-radial
+   species/x moments and velocity-angular correction modes, then gate it by
+   true DKE residual reduction on both FP and PAS fixtures.
+2. Add a lower-memory factor policy for production grids:
+   group subsets by ``L`` bands or theta tiles when the full FP-radial grouped
+   factor exceeds the factor-byte guard.
+3. Run explicit full-solve benchmarks on one small FP fixture and one
+   production-adjacent FP fixture before any auto policy promotion.
+
+Progress update:
+
+- RHSMode=1 block/operator refactor: 92%.
+- Physics-gate/refactor coverage lane: 86%.
+- Structured preconditioner lane: 78%.
+- Overall open-lane average: 89%.
+
+Follow-up composition probe:
+
+- A naïve residual-correction composition was tested and rejected on the same
+  FP quick fixture:
+  - FP-radial alone: ``0.029055524096059073``.
+  - FP-radial then xi-angular residual correction: ``166.63422815416268``.
+  - xi-angular then FP-radial residual correction: ``154.59238478876205``.
+- This means the next coupled path should be a true coarse/Schur residual
+  equation or block factor with a mathematically consistent splitting, not a
+  simple stacked preconditioner.
+
+## 2026-06-03 RHSMode=1 low-mode Galerkin residual correction
+
+Objective:
+
+- Replace the rejected stacked local-preconditioner composition with a real
+  coarse residual equation. The first bounded version uses FP-radial grouped
+  Jacobi as a base solve and then solves a fixed Galerkin residual equation on
+  normalized low angular modes for each ``(species, x, L)`` kinetic slice.
+
+Steps completed:
+
+- Added ``RHS1GalerkinResidualCorrection`` in
+  ``sfincs_jax/rhs1_block_operator.py``. It builds
+  ``Z^T A Z`` from a structured block-COO operator, applies
+  ``Z (Z^T A Z + alpha I)^{-1} Z^T r``, supports JIT application, and reports
+  basis/coarse storage metadata.
+- Added memory/coarse-size guards to the generic Galerkin builder.
+- Added explicit/default-off ``structured_fblock_fp_lowmode_schur`` aliases and
+  dispatch.
+- Added
+  ``_build_rhsmode1_structured_fblock_fp_lowmode_schur_preconditioner`` in
+  ``v3_driver.py``. The path is guarded by:
+  ``SFINCS_JAX_RHSMODE1_STRUCTURED_FBLOCK_FP_LOWMODE_MAX_COARSE``,
+  ``SFINCS_JAX_RHSMODE1_STRUCTURED_FBLOCK_FP_LOWMODE_MAX_BASIS_NBYTES``,
+  ``SFINCS_JAX_RHSMODE1_STRUCTURED_FBLOCK_FP_LOWMODE_THETA``, and
+  ``SFINCS_JAX_RHSMODE1_STRUCTURED_FBLOCK_FP_LOWMODE_ZETA``.
+- Kept the coarse path explicit/default-off. It raises ``MemoryError`` before
+  allocating if the coarse basis is too large for the configured budget.
+- Added synthetic Galerkin residual-correction tests and a parsed FP+Phi1
+  RHSMode=1 DKE residual gate.
+
+Measured probe results:
+
+- On ``fp_1species_FPCollisions_noEr_tiny_withPhi1_inCollision``:
+  - FP-radial grouped factor DKE residual ratio: ``0.09143130134146103``.
+  - FP-radial plus low-mode Galerkin Schur ratio:
+    ``0.05143975614390413``.
+  - The low-mode path used ``80`` coarse modes, ``256000`` basis bytes, and
+    ``51200`` coarse-matrix bytes.
+- On the larger quick FP fixture, the same low-mode idea reduced FP-radial from
+  ``0.029055524096059073`` to ``0.017444691953829215`` in exploratory probing,
+  but the checked regression uses the smaller FP+Phi1 fixture to keep CI
+  runtime bounded.
+
+Validation:
+
+- ``python -m pytest -q tests/test_rhs1_block_operator.py``:
+  ``34 passed``.
+- ``python -m pytest -q tests/test_rhs1_block_operator.py tests/test_rhs1_preconditioner_auto_policy.py tests/test_v3_driver_rhs1_dispatch_coverage.py tests/test_rhs1_fblock_assembly.py``:
+  ``96 passed``.
+- A solve-level policy probe initially showed that explicit structured
+  preconditioners were silently disabled for ``includePhi1=true`` cases because
+  ``rhs1_precond_enabled`` required ``not include_phi1``. The policy now allows
+  explicit ``structured_fblock_*`` preconditioners through for Phi1 cases while
+  keeping legacy non-structured preconditioners disabled unless already
+  supported.
+- Bounded solve-level probe on
+  ``fp_1species_FPCollisions_noEr_tiny_withPhi1_inCollision`` with
+  ``solve_method=incremental``, ``restart=20``, ``maxiter=40``, and
+  ``identity_shift=0.5``:
+  - ``structured_fblock_fp_radial_jacobi`` selected correctly, residual
+    ``2.816215658635939e-12``, elapsed ``3.29 s``.
+  - ``structured_fblock_fp_lowmode_schur`` selected correctly, residual
+    ``1.4431943695117652e-12``, elapsed ``1.79 s`` in the measured run.
+  - This is only a bounded sanity probe; public runtime claims still require
+    warm/cold benchmark harness runs.
+- Added regression coverage requiring explicit structured f-block
+  preconditioners to be honored for a Phi1 RHSMode=1 solve.
+- ``python -m pytest -q tests/test_v3_driver_rhs1_dispatch_coverage.py tests/test_rhs1_preconditioner_auto_policy.py tests/test_rhs1_block_operator.py``:
+  ``86 passed``.
+- Touched-file ``ruff`` and ``py_compile``:
+  passed.
+
+Decision:
+
+- Keep ``structured_fblock_fp_lowmode_schur`` explicit/default-off. It is the
+  first mathematically consistent coupled residual equation for the structured
+  f-block path, but its dense basis is not yet the production memory-optimal
+  representation for large grids.
+
+Next implementation steps:
+
+1. Replace the dense low-mode basis with matrix-free restriction/prolongation
+   so production grids can use the same coarse equation without storing
+   ``N_f x N_coarse`` explicitly.
+2. Add a bounded full-solve benchmark comparing FP-radial and FP-lowmode-Schur
+   on a small FP fixture before considering any narrow auto policy.
+3. Extend the coarse basis from low angular modes to moment/constraint modes
+   only if the true residual gate improves on FP/PAS mixed fixtures.
+
+Progress update:
+
+- RHSMode=1 block/operator refactor: 94%.
+- Physics-gate/refactor coverage lane: 87%.
+- Structured preconditioner lane: 82%.
+- Overall open-lane average: 90%.
+
+## 2026-06-03 RHSMode=1 matrix-free low-mode Schur storage reduction
+
+Objective:
+
+- Keep the low-mode Galerkin residual equation while removing dense
+  ``N_f x N_coarse`` basis storage. The production direction is callback-based
+  restriction/prolongation over the physical ``(species, x, L, theta, zeta)``
+  tensor, with only the coarse matrix retained.
+
+Steps completed:
+
+- Added ``RHS1MatrixFreeGalerkinResidualCorrection`` in
+  ``sfincs_jax/rhs1_block_operator.py``.
+- The new class builds ``Z^T A Z`` in coarse-column batches by calling
+  ``prolong(E_batch)``, applying the structured block-COO operator, and calling
+  ``restrict(A Z_batch)``. It never stores the dense basis matrix.
+- Added synthetic tests proving the matrix-free correction matches the dense
+  ``RHS1GalerkinResidualCorrection`` exactly on a small block operator, is
+  JIT-applicable, reports ``basis_storage_nbytes=0``, and fails closed on
+  malformed callbacks / coarse-size / batch-memory guards.
+- Refactored the RHSMode=1 low-mode builder to use analytic tensor
+  restriction/prolongation:
+  - restriction: project ``f[s,x,L,theta,zeta]`` onto normalized low angular
+    feature fields,
+  - prolongation: reconstruct low angular fields from coarse coefficients,
+  - coarse batching controlled by
+    ``SFINCS_JAX_RHSMODE1_STRUCTURED_FBLOCK_FP_LOWMODE_BASIS_BATCH``.
+- The previous dense-basis helper remains as a small reference utility, but the
+  production builder now uses the matrix-free path.
+
+Measured sanity probe:
+
+- Bounded solve-level run on
+  ``fp_1species_FPCollisions_noEr_tiny_withPhi1_inCollision`` with
+  ``solve_method=incremental``, ``restart=20``, ``maxiter=40``,
+  ``identity_shift=0.5``, and BiCGStab preconditioner disabled:
+  - ``structured_fblock_fp_radial_jacobi`` residual
+    ``2.816215658635939e-12``, elapsed ``2.66 s``.
+  - ``structured_fblock_fp_lowmode_schur`` residual
+    ``3.75131136419025e-12``, elapsed ``1.90 s`` in the measured run.
+  - The low-mode metadata reports
+    ``kind=matrix_free_galerkin_residual_correction``,
+    ``basis_storage_nbytes=0``, and ``basis_batch_size=32``.
+
+Validation:
+
+- ``python -m pytest -q tests/test_rhs1_block_operator.py``:
+  ``36 passed``.
+- ``python -m pytest -q tests/test_rhs1_block_operator.py tests/test_rhs1_preconditioner_auto_policy.py tests/test_v3_driver_rhs1_dispatch_coverage.py tests/test_rhs1_fblock_assembly.py``:
+  ``99 passed``.
+- Touched-file ``ruff`` and ``py_compile``:
+  passed.
+
+Decision:
+
+- Keep the matrix-free low-mode Schur path explicit/default-off but retain it as
+  the preferred implementation over the dense-basis prototype. It has the same
+  residual behavior on checked fixtures and removes the limiting basis storage
+  term.
+
+Next implementation steps:
+
+1. Add a bounded benchmark harness row for FP-radial vs matrix-free low-mode
+   Schur on one small FP+Phi1 fixture and one larger FP fixture.
+2. Probe GPU compatibility on ``ssh office`` after the local CPU regression is
+   clean, because the path uses only JAX tensor operations and should be device
+   compatible.
+3. If full-solve benchmarks show a robust win, add a narrow measured auto-policy
+   candidate for small/mid-size FP Phi1 cases; otherwise keep explicit-only.
+
+Progress update:
+
+- RHSMode=1 block/operator refactor: 95%.
+- Physics-gate/refactor coverage lane: 88%.
+- Structured preconditioner lane: 85%.
+- Overall open-lane average: 91%.
+
+## 2026-06-03 Structured f-block benchmark harness and GPU probe
+
+Objective:
+
+- Convert the structured FP-radial / matrix-free low-mode Schur probes from
+  ad hoc commands into a bounded, repeatable benchmark harness with JSON rows.
+  The harness must run finite CPU/GPU probes, capture solver metadata, and keep
+  full solves bounded to small cases unless explicitly requested.
+
+Steps completed:
+
+- Added ``scripts/benchmark_structured_fblock_preconditioners.py``.
+- The harness supports:
+  - checked case aliases ``fp_phi1_tiny`` and ``quick_fp``,
+  - checked preconditioner aliases ``fp_radial`` and ``fp_lowmode_schur``,
+  - per-row subprocess isolation with hard timeouts,
+  - one-step true DKE residual ratios,
+  - optional bounded Krylov solve rows,
+  - JSON metadata for backend, device count, operator shape, build/apply time,
+    solve residual, and structured f-block preconditioner metadata.
+- Added ``tests/test_benchmark_structured_fblock_preconditioners.py`` covering
+  dry-run plans, plan serialization, actual tiny matrix-free low-mode metadata,
+  and summary best-row selection.
+
+Local CPU benchmark:
+
+- Command:
+  ``python scripts/benchmark_structured_fblock_preconditioners.py --out outputs/structured_fblock_preconditioner_benchmark.json --timeout-s 60 --cases fp_phi1_tiny quick_fp --preconditioners fp_radial fp_lowmode_schur --solve-cases fp_phi1_tiny --restart 20 --maxiter 40 --solve-method incremental``
+- Summary: ``4/4`` rows OK, ``2`` solve rows OK.
+- ``fp_phi1_tiny``:
+  - FP-radial DKE ratio ``9.143130e-02``, solve residual
+    ``2.816215658635939e-12``, solve ``1.56 s``.
+  - matrix-free low-mode Schur DKE ratio ``5.143976e-02``, solve residual
+    ``3.75131136419025e-12``, solve ``1.74 s``,
+    ``basis_storage_nbytes=0``.
+- ``quick_fp``:
+  - FP-radial DKE ratio ``2.905552e-02``.
+  - matrix-free low-mode Schur DKE ratio ``1.744469e-02``,
+    ``basis_storage_nbytes=0``.
+
+Office GPU compatibility probe:
+
+- To avoid modifying the dirty remote checkout, synced the local working tree
+  into ``/home/rjorge/sfincs_jax_structured_probe`` excluding ``.git`` and
+  heavy generated outputs.
+- JAX on ``office`` sees ``CudaDevice(id=0)`` with
+  ``CUDA_VISIBLE_DEVICES=0 JAX_PLATFORM_NAME=gpu``.
+- Command:
+  ``python3 scripts/benchmark_structured_fblock_preconditioners.py --out outputs/structured_fblock_preconditioner_benchmark_gpu.json --timeout-s 90 --cases fp_phi1_tiny --preconditioners fp_radial fp_lowmode_schur --solve-cases fp_phi1_tiny --restart 20 --maxiter 40 --solve-method incremental``
+- Summary: ``2/2`` rows OK, ``2`` solve rows OK.
+- GPU ``fp_phi1_tiny``:
+  - FP-radial DKE ratio ``9.143130e-02``, solve residual
+    ``2.651139099984759e-12``, solve ``6.46 s``.
+  - matrix-free low-mode Schur DKE ratio ``5.143976e-02``, solve residual
+    ``3.351058263782409e-12``, solve ``7.74 s``,
+    ``basis_storage_nbytes=0``.
+
+Validation:
+
+- ``python -m pytest -q tests/test_benchmark_structured_fblock_preconditioners.py``:
+  ``4 passed``.
+- Script/test ``ruff`` and ``py_compile``:
+  passed.
+
+Decision:
+
+- The matrix-free low-mode Schur path is CPU/GPU compatible and improves
+  one-step DKE residuals on both bounded FP fixtures, but it should remain
+  explicit/default-off. The current GPU run is tiny and compile/setup dominated,
+  so it is a compatibility result, not a public performance claim.
+
+Next implementation steps:
+
+1. Add one warm/cold larger FP benchmark row with enough per-device work to
+   assess runtime rather than compilation overhead.
+2. Add promotion gates that require solve residual cleanliness, finite RSS, and
+   warm runtime improvement before any small/mid-size FP auto policy can select
+   low-mode Schur.
+3. Keep the benchmark JSON artifacts under ``outputs/`` for local audit; only
+   promote sanitized rows to docs after the larger warm/cold gate is complete.
+
+Progress update:
+
+- RHSMode=1 block/operator refactor: 96%.
+- Physics-gate/refactor coverage lane: 89%.
+- Structured preconditioner lane: 88%.
+- Benchmark/validation lane: 86%.
+- Overall open-lane average: 92%.
+
+## 2026-06-03 Structured f-block auto-promotion gate hardening
+
+Objective:
+
+- Finish the next structured RHSMode=1 f-block preconditioner step without
+  over-promoting a residual-improving path that is slower or more memory hungry
+  than the simpler FP-radial grouped factor.
+
+Steps completed:
+
+- Extended ``scripts/benchmark_structured_fblock_preconditioners.py`` with:
+  - same-process warm preconditioner apply timings,
+  - optional repeated solve timings for cold/warm solve comparison,
+  - ``tokamak_fp_phi1_medium`` as a non-default medium FP+Phi1 benchmark row,
+  - timeout-safe subprocess rows so long GPU candidates produce JSON evidence
+    instead of crashing the parent campaign,
+  - separate promotion booleans for solve residual, matrix-free storage, warm
+    runtime, and RSS.
+- Added adaptive low-mode feature capping in
+  ``_build_rhs1_lowmode_angular_matrix_free_correction``. The builder now
+  truncates optional angular features to fit
+  ``SFINCS_JAX_RHSMODE1_STRUCTURED_FBLOCK_FP_LOWMODE_MAX_COARSE`` while still
+  raising ``MemoryError`` if even the constant coarse block exceeds the cap.
+- Added a setup-time inverse reuse path in
+  ``RHS1MatrixFreeGalerkinResidualCorrection``. The regularized coarse inverse
+  is built once, and warm/Krylov applications use a dense matvec instead of
+  repeatedly calling ``jnp.linalg.solve``.
+- Added regression coverage for:
+  - adaptive low-mode feature truncation,
+  - timeout rows in the benchmark harness,
+  - matrix-free Galerkin inverse metadata and dense-basis equivalence.
+
+Measured CPU benchmark evidence:
+
+- ``fp_phi1_tiny``:
+  - low-mode Schur improves the one-step DKE residual by ``1.777x``.
+  - same-process warm solve is still ``1.136x`` slower than FP-radial.
+  - RSS ratio is ``1.158x`` and within the ``1.25x`` gate.
+  - auto-promotion: rejected by warm-runtime gate.
+- ``quick_fp``:
+  - one-step DKE residual improvement ``1.666x``.
+  - warm apply ``2.039x`` slower.
+  - RSS ratio ``1.385x`` exceeds the ``1.25x`` gate.
+  - auto-promotion: rejected by warm-runtime and RSS gates.
+- ``tokamak_fp_phi1_medium``:
+  - adaptive capping reduces the requested low-mode coarse space from ``992``
+    to ``744`` modes under the default ``800`` cap.
+  - one-step DKE residual improvement ``2.523x``.
+  - warm apply improved after inverse reuse but remains ``3.344x`` slower.
+  - RSS ratio ``1.028x`` and within the gate.
+  - auto-promotion: rejected by warm-runtime gate.
+
+Measured GPU benchmark evidence on ``office``:
+
+- ``fp_phi1_tiny`` on one CUDA device:
+  - low-mode Schur improves the one-step DKE residual by ``1.777x``.
+  - same-process warm solve is ``1.213x`` slower than FP-radial.
+  - RSS ratio is ``1.065x`` and within the ``1.25x`` gate.
+  - auto-promotion: rejected by warm-runtime gate.
+- A previous medium GPU run with a ``60 s`` per-row timeout produced bounded
+  timeout rows for both medium candidates. This is not a correctness failure,
+  but it is enough evidence to avoid GPU auto-promotion until setup cost is
+  reduced.
+
+Validation:
+
+- ``python -m pytest -q tests/test_benchmark_structured_fblock_preconditioners.py``:
+  ``6 passed``.
+- Focused inverse/truncation tests:
+  ``9 passed``.
+- Focused structured f-block/preconditioner/dispatch slice before the final
+  gate changes:
+  ``104 passed``.
+- Touched-file ``ruff``, ``py_compile``, and ``git diff --check`` checks are
+  kept as release gates for this lane.
+
+Decision:
+
+- Keep ``structured_fblock_fp_lowmode_schur`` explicit/default-off. It is a
+  useful residual-reducing diagnostic/preconditioner and is CPU/GPU compatible
+  on bounded cases, but it is not yet a safe automatic solver-policy choice.
+- The next real algorithmic step, if this lane continues, is not smoother
+  tuning. It should reduce coarse setup/application cost, for example by using
+  a smaller physics-derived moment space, a sparse/blocked coarse equation, or
+  reusing a compiled coarse operator across same-shape RHSMode=1 solves.
+
+Progress update:
+
+- RHSMode=1 block/operator refactor: 97%.
+- Physics-gate/refactor coverage lane: 90%.
+- Structured preconditioner lane: 90%.
+- Benchmark/validation lane: 89%.
+- Overall open-lane average: 93%.
+
+## 2026-06-03 Compact moment-space Schur candidate and rejection gates
+
+Objective:
+
+- Try the next real algorithmic step after the full low-mode Schur gate failed:
+  replace the ``n_species * n_x * n_xi * n_angular`` coarse space with a compact
+  physics-moment coarse space using low speed-grid moments, low Legendre
+  moments, and low angular harmonics.
+
+Steps completed:
+
+- Added explicit/default-off
+  ``structured_fblock_fp_moment_schur`` / ``fp_moment_schur``.
+- The new builder constructs a compact matrix-free Galerkin residual correction
+  on top of the FP-radial grouped factor:
+  ``_build_rhsmode1_structured_fblock_fp_moment_schur_preconditioner``.
+- The moment basis defaults to two speed-grid polynomial moments and two low-L
+  pitch/Legendre moments, with angular feature capping and no dense
+  ``N_f x N_c`` basis storage.
+- Wired canonical aliases, dispatch, benchmark harness support, and tests.
+- Extended the benchmark summary to compare every candidate Schur path against
+  FP-radial with independent promotion keys, while preserving the historical
+  low-mode comparison key.
+
+Measured CPU evidence:
+
+- Three-way tiny/quick benchmark
+  (``outputs/structured_fblock_preconditioner_benchmark_threeway.json``):
+  - ``fp_phi1_tiny``:
+    - full low-mode Schur: ``1.777x`` DKE residual improvement, ``1.097x``
+      slower warm solve, ``1.163x`` RSS.
+    - compact moment Schur: ``1.252x`` DKE residual improvement, ``1.071x``
+      slower warm solve, ``1.104x`` RSS.
+    - no auto-promotion candidate.
+  - ``quick_fp``:
+    - full low-mode Schur: ``1.666x`` DKE residual improvement, ``1.776x``
+      slower warm apply, ``1.427x`` RSS.
+    - compact moment Schur: residual worsens, with DKE improvement ratio
+      ``0.322x``, ``1.726x`` slower warm apply, ``1.324x`` RSS.
+    - no auto-promotion candidate.
+- Medium FP+Phi1 benchmark
+  (``outputs/structured_fblock_preconditioner_benchmark_medium_threeway.json``):
+  - full low-mode Schur: ``2.523x`` DKE residual improvement, ``3.097x``
+    slower warm apply, ``1.034x`` RSS.
+  - compact moment Schur: residual worsens, with DKE improvement ratio
+    ``0.930x``, ``2.735x`` slower warm apply, ``1.024x`` RSS.
+  - no auto-promotion candidate.
+
+Measured GPU evidence on ``office``:
+
+- Tiny one-GPU three-way benchmark
+  (``outputs/structured_fblock_preconditioner_benchmark_gpu_threeway.json``):
+  - full low-mode Schur: ``1.777x`` DKE residual improvement, ``1.113x``
+    slower warm solve, ``1.062x`` RSS.
+  - compact moment Schur: ``1.252x`` DKE residual improvement, ``1.176x``
+    slower warm solve, ``1.046x`` RSS.
+  - no auto-promotion candidate.
+
+Validation:
+
+- ``python -m pytest -q tests/test_benchmark_structured_fblock_preconditioners.py
+  tests/test_rhs1_preconditioner_auto_policy.py
+  tests/test_v3_driver_rhs1_dispatch_coverage.py::test_rhs1_dispatch_structured_fblock_fp_moment_schur_uses_builder
+  tests/test_v3_driver_rhs1_dispatch_coverage.py::test_structured_fblock_fp_moment_schur_is_compact_and_finite``:
+  ``32 passed``.
+- Touched-file ``ruff`` and ``py_compile`` passed before benchmark execution.
+
+Decision:
+
+- Keep the compact moment Schur path explicit/default-off as a documented
+  residual-probe candidate, but reject it for auto-policy. It is cheaper than
+  full low-mode Schur but not robust: it worsens ``quick_fp`` and the medium
+  FP+Phi1 row, and it is still slower than FP-radial even on the tiny row.
+- Do not spend more time on small moment-space variants unless a new physics
+  argument changes the coarse variables. The next useful algorithmic push should
+  target reusable same-shape operator/coarse setup or a genuinely coupled
+  field-split residual equation that reduces Krylov iterations enough to offset
+  setup cost.
+
+Progress update:
+
+- RHSMode=1 block/operator refactor: 98%.
+- Physics-gate/refactor coverage lane: 91%.
+- Structured preconditioner lane: 92%.
+- Benchmark/validation lane: 91%.
+- Overall open-lane average: 94%.
+
+## 2026-06-03 Structured f-block same-shape setup cache
+
+Objective:
+
+- Address the measured bottleneck that kept the structured Schur candidates out
+  of auto-policy: repeated setup/application overhead, not correctness.
+
+Steps completed:
+
+- Added ``_RHSMode1StructuredFBlockPrecondCache`` and
+  ``_rhsmode1_structured_fblock_cache_key`` in ``v3_driver.py``.
+- Cached same-shape setup for:
+  - ``structured_fblock_fp_radial_jacobi`` grouped factors,
+  - ``structured_fblock_fp_lowmode_schur`` base factor plus Galerkin coarse
+    inverse,
+  - ``structured_fblock_fp_moment_schur`` base factor plus compact moment
+    coarse inverse.
+- Cache keys reuse the existing RHSMode=1 operator signature and add
+  ``phi1_hat_base`` plus all structured-preconditioner controls that affect the
+  factor or coarse equation.
+- Added a regression test confirming repeated FP-radial builds report
+  ``cache_hit=True`` and preserve the preconditioner output to roundoff.
+
+Measured evidence after cache:
+
+- CPU three-way tiny/quick benchmark:
+  - ``fp_phi1_tiny``:
+    - low-mode Schur: ``1.777x`` DKE residual improvement, ``1.259x`` slower
+      warm solve, ``1.150x`` RSS.
+    - moment Schur: ``1.252x`` DKE residual improvement, ``1.177x`` slower
+      warm solve, ``1.102x`` RSS.
+  - ``quick_fp``:
+    - low-mode Schur: ``1.666x`` DKE residual improvement, ``2.229x`` slower
+      warm apply, ``1.402x`` RSS.
+    - moment Schur: residual worsens, ``0.322x`` DKE ratio, ``2.263x`` slower
+      warm apply, ``1.368x`` RSS.
+  - no auto-promotion candidate.
+- GPU tiny three-way benchmark on ``office``:
+  - low-mode Schur: ``1.777x`` DKE residual improvement, ``1.031x`` slower
+    warm solve, ``1.064x`` RSS.
+  - moment Schur: ``1.252x`` DKE residual improvement, ``1.048x`` slower warm
+    solve, ``1.046x`` RSS.
+  - no auto-promotion candidate under the strict ``<= 1.0`` warm-runtime gate.
+
+Validation:
+
+- Focused cache/preconditioner test slice: ``5 passed``.
+- Full focused structured f-block/preconditioner/dispatch slice before cache:
+  ``109 passed``.
+- Touched-file ``ruff``, ``py_compile``, and ``git diff --check`` passed before
+  the cache benchmark reruns.
+
+Decision:
+
+- Keep same-shape caching. It is behavior-preserving, test-covered, and improves
+  the implementation architecture even though it does not make Schur candidates
+  auto-promotable in the current gates.
+- Do not relax the promotion gate to accept the GPU low-mode ``1.031x`` slower
+  result. The candidate must beat or match FP-radial on runtime/RSS, not merely
+  come close on a tiny compile-dominated fixture.
+
+Progress update:
+
+- RHSMode=1 block/operator refactor: 98%.
+- Physics-gate/refactor coverage lane: 91%.
+- Structured preconditioner lane: 93%.
+- Benchmark/validation lane: 92%.
+- Overall open-lane average: 94.5%.
+
+## 2026-06-03 Coupled field-split residual equation
+
+Objective:
+
+- Replace smoother/restart tuning with a genuinely coupled full-system residual
+  equation that sees the DKE variables, constraints, fields, and profile/current
+  tails together.
+- Reuse compiled same-shape operator/coarse infrastructure where possible so the
+  candidate can only be promoted if Krylov/residual improvements offset setup
+  and application cost.
+
+Steps completed:
+
+- Added ``structured_fblock_fp_coupled_moment_schur`` as an explicit/default-off
+  RHSMode=1 preconditioner candidate.
+- Built the candidate as a field-split residual correction:
+  - start from the device-compatible FP-radial grouped f-block preconditioner,
+  - assemble a compact Galerkin coarse residual equation over selected angular
+    moments plus the non-f tail variables,
+  - apply the full RHSMode=1 matrix-free operator to the provisional full-system
+    correction,
+  - solve the coupled coarse residual equation and inject the result back into
+    the full state.
+- Added aliases in dispatch and benchmark coverage:
+  ``fblock_fp_coupled_moment_schur``, ``fblock_fp_coupled_galerkin``, and
+  ``block_coo_fp_coupled_moment_schur``.
+- Extended the structured preconditioner benchmark to report both DKE-block and
+  full-system residual ratios, since the coupled correction can improve one while
+  damaging the other.
+- Added tests that check:
+  - dispatch reaches the coupled builder,
+  - the coupled candidate is finite and matrix-free,
+  - the full residual is reduced on the tiny RHSMode=1 FP+Phi1 fixture,
+  - benchmark rows include full-residual metadata.
+
+Measured CPU evidence:
+
+- CPU four-way benchmark
+  (``outputs/structured_fblock_preconditioner_benchmark_coupled.json``):
+  - ``fp_phi1_tiny``:
+    - FP-radial baseline: DKE residual ratio ``9.143e-2``, full residual ratio
+      ``2.970e2``, warm solve ``0.688 s``.
+    - coupled moment Schur: full residual improves by ``5.58e2x``
+      (``2.970e2 -> 5.324e-1``), but DKE residual worsens
+      (``9.143e-2 -> 5.324e-1``) and warm solve is ``1.478x`` slower.
+  - ``quick_fp``:
+    - coupled moment Schur improves full residual by ``2.72e1x`` but worsens
+      DKE residual badly and is ``1.464x`` slower warm than FP-radial.
+  - no auto-promotion candidate.
+
+Measured GPU evidence:
+
+- One-GPU benchmark on ``office``
+  (``outputs/structured_fblock_preconditioner_benchmark_gpu_coupled.json``):
+  - ``fp_phi1_tiny``:
+    - FP-radial baseline: DKE residual ratio ``9.143e-2``, full residual ratio
+      ``2.970e2``, warm solve ``3.121 s``, RSS ``1.527 GB``.
+    - coupled moment Schur: full residual improves by ``5.58e2x`` but DKE
+      residual worsens to ``5.324e-1``, warm solve is ``1.588x`` slower, and RSS
+      is ``1.085x`` baseline.
+  - low-mode and compact moment Schur still improve the DKE residual on this
+    tiny fixture, but remain slower warm than FP-radial, so no candidate satisfies
+    the promotion gate.
+
+Validation:
+
+- Focused structured-preconditioner validation after the coupled changes:
+  ``python -m pytest -q tests/test_benchmark_structured_fblock_preconditioners.py
+  tests/test_rhs1_block_operator.py tests/test_rhs1_preconditioner_auto_policy.py
+  tests/test_v3_driver_rhs1_dispatch_coverage.py tests/test_rhs1_fblock_assembly.py``:
+  ``113 passed``.
+- Touched-file ``ruff`` passed.
+- Touched-file ``py_compile`` passed.
+- ``git diff --check`` passed.
+
+Decision:
+
+- Keep the coupled field-split residual equation as an explicit research and
+  diagnostics path. It is device-compatible, test-covered, and proves the
+  full-system coarse equation is assembled and reusable.
+- Do not auto-promote it. The current left-preconditioner form reduces the full
+  residual dramatically but damages the DKE-block residual and does not reduce
+  warm runtime enough to offset setup/application cost.
+- The next real algorithmic step is not smoother tuning. It should convert this
+  coupled residual correction into a block factorization or outer field-split
+  iteration that preserves the FP-radial DKE reduction while applying the coupled
+  coarse solve only to the tail/global residual it actually fixes.
+
+Progress update:
+
+- RHSMode=1 block/operator refactor: 98%.
+- Physics-gate/refactor coverage lane: 91%.
+- Structured preconditioner lane: 95%.
+- Benchmark/validation lane: 94%.
+- Overall open-lane average: 95%.
+
+## 2026-06-03 Tail/global minimum-residual coarse correction
+
+Objective:
+
+- Test whether the full-system residual problem can be corrected without
+  overwriting the strong FP-radial f-block correction.
+- Avoid raw nonsymmetric tail Schur/Galerkin solves when the tail block is
+  ill-conditioned.
+
+Steps completed:
+
+- Added ``RHS1MatrixFreeLeastSquaresResidualCorrection`` in
+  ``rhs1_block_operator.py``. It builds a bounded compact action matrix
+  ``B = A Z`` and applies the regularized minimum-residual correction
+  ``Z (B^T B + lambda I)^{-1} B^T r``.
+- Added explicit/default-off
+  ``structured_fblock_fp_tail_coupled_schur``. Internally this now uses the
+  minimum-residual equation and records ``line_kind =
+  fp_radial_plus_tail_coupled_minres``.
+- Added a separate memory guard:
+  ``SFINCS_JAX_RHSMODE1_STRUCTURED_FBLOCK_FP_TAIL_COUPLED_MAX_ACTION_NBYTES``.
+- Added dispatch, alias, benchmark, and regression coverage for the new
+  candidate.
+
+Measured evidence:
+
+- Raw tail-only Galerkin was tested first and rejected:
+  - CPU tiny/quick residual ratios blew up to O(``1e10``), confirming the tail
+    submatrix is too ill-conditioned for ``Z^T A Z``.
+- CPU minimum-residual benchmark
+  (``outputs/structured_fblock_preconditioner_benchmark_tail_coupled_minres.json``):
+  - ``fp_phi1_tiny``:
+    - DKE residual is preserved: ``9.143130e-2 -> 9.143064e-2``.
+    - full residual improves only ``1.015x``.
+    - warm solve is ``1.361x`` slower and RSS is ``1.126x`` baseline.
+  - ``quick_fp``:
+    - DKE/full residuals are essentially unchanged.
+    - warm apply is ``1.059x`` slower and RSS is ``1.121x`` baseline.
+  - no auto-promotion candidate.
+- GPU minimum-residual benchmark on ``office``
+  (``outputs/structured_fblock_preconditioner_benchmark_gpu_tail_coupled_minres.json``):
+  - ``fp_phi1_tiny``:
+    - DKE residual is preserved: ``9.143130e-2 -> 9.143064e-2``.
+    - full residual improves only ``1.015x``.
+    - warm solve is ``1.569x`` slower and RSS is ``1.053x`` baseline.
+  - no auto-promotion candidate.
+
+Validation:
+
+- Focused tests for dispatch, aliasing, benchmark metadata, tail f-block
+  preservation, and block-operator helpers: ``40 passed``.
+- Touched-file ``ruff`` passed.
+- Touched-file ``py_compile`` passed.
+
+Decision:
+
+- Keep the minimum-residual coarse primitive. It is numerically safer than raw
+  Galerkin and is useful infrastructure for future global/tail corrections.
+- Keep ``structured_fblock_fp_tail_coupled_schur`` explicit/default-off as a
+  diagnostic path, but do not promote it. It is stable, but its residual
+  improvement is too small to offset setup/application cost.
+- The remaining useful path is a block factorization or outer field-split
+  strategy that combines the two observed strengths:
+  - FP-radial keeps the DKE residual small and fast,
+  - coupled moment Schur strongly reduces the full residual,
+  - tail-minres alone is stable but too weak.
+
+Progress update:
+
+- RHSMode=1 block/operator refactor: 99%.
+- Physics-gate/refactor coverage lane: 91%.
+- Structured preconditioner lane: 96%.
+- Benchmark/validation lane: 95%.
+- Overall open-lane average: 95.25%.
+
+## 2026-06-03 RHSMode=1 full CSR host solve preconditioner pass
+
+Objective:
+
+- Turn the exact no-probe RHSMode=1 full-system CSR assembly into a bounded
+  non-autodiff solve lane that can be measured honestly before any CLI/default
+  promotion.
+- Keep host CSR out of JAX tracing. This lane is for runtime/CLI solves and
+  solver-policy experiments; the differentiable path remains matrix-free/JAX.
+
+Steps completed:
+
+- Added ``RHS1StructuredFullCSRPreconditioner`` and
+  ``build_structured_rhs1_full_csr_preconditioner`` in
+  ``rhs1_full_assembly.py``.
+- Added ``diagonal_schur``: scalar kinetic diagonal inverse plus an exact Schur
+  complement over the small Phi1/constraint tail.
+- Added explicit ``block_schur``: zeta-line kinetic block inverses plus the same
+  exact tail Schur complement, protected by a block-inverse memory cap.
+- Added explicit ``xi_block_schur``: pitch-angle kinetic block inverses at fixed
+  species/radius/theta/zeta plus the same exact tail Schur complement, protected
+  by the same block-inverse memory cap.
+- Added explicit ``x_xi_block_schur``: radial-velocity kinetic block inverses
+  at fixed species/theta/zeta plus the same exact tail Schur complement,
+  protected by the same block-inverse memory cap.
+- Added ``xblock_tz_low_l_schur``: Fortran-inspired low-L kinetic factors at
+  fixed species and speed, retaining full theta/zeta coupling inside each block
+  and using diagonal fallback outside the low-L subspace. The default ``auto``
+  host-CSR preconditioner now tries this path on medium/large systems when it is
+  within the configured factor-memory cap, then falls back to diagonal-Schur.
+- Kept ``auto`` evidence-based: it selects ``diagonal_schur`` for supported
+  global-tail systems and falls back to Jacobi when the Schur tail is too large.
+  ``block_schur`` remains explicit/default-off because current evidence does
+  not justify setup cost.
+- Exposed ``--preconditioner``, ``--preconditioner-max-schur-size``, and
+  ``--preconditioner-max-block-inverse-mb`` in
+  ``scripts/benchmark_rhs1_full_csr_reuse.py``.
+- Wired the same controls through the opt-in
+  ``solve_v3_full_system_structured_csr`` helper.
+- Routed the structured full-CSR lane through
+  ``solve_v3_full_system_linear_gmres`` for explicit non-autodiff solve methods:
+  ``structured_csr``, ``structured_full_csr``, ``host_structured_csr``,
+  ``host_full_csr``, ``no_probe_csr``, ``full_csr_host_gmres``, and
+  ``structured_full_csr_host_gmres``.
+- Allowed the same explicit solve-method names in the RHSMode=1 output writer
+  and CLI environment override policy, while rejecting ``differentiable=True``
+  for this host-only lane.
+- Added output-visible HDF5 diagnostics for the routed lane, including
+  ``linearSolverCsrNnz`` and ``linearSolverCsrOperatorNbytes`` in addition to
+  residual, iteration, setup/solve time, and preconditioner-storage fields.
+
+Measured evidence:
+
+- Tiny FP full-system case
+  (``tests/ref/quick_2species_FPCollisions_noEr.input.namelist``):
+  - exact CSR matvec relative error: ``2.930429633658705e-16``;
+  - diagonal-Schur host solve: true residual ``6.917216253e-11``, solve time
+    ``0.0166 s`` after CSR reuse;
+  - earlier unpreconditioned host solve on the same case took about ``0.063 s``;
+  - block-Schur also converged, but wrapper time was ``0.0304 s`` because setup
+    dominated, so it is not promoted for small cases.
+- Zenodo QA mid-grid probe
+  (``Ntheta=13, Nzeta=13, Nxi=21, Nx=5`` at ``s=0.3``):
+  - exact CSR matvec relative error: ``7.367583651954802e-16``;
+  - assembled full CSR memory: ``10,742,792`` bytes, ``883,401`` nnz,
+    ``6,760`` tail nnz;
+  - 800-step bounded GMRES residuals:
+    - no preconditioner: ``9.135797069e-7`` in ``0.788 s`` solve time;
+    - diagonal-Schur: ``5.767298683e-7`` in ``0.917 s`` solve time;
+    - block-Schur: ``5.768361343e-7`` in ``1.063 s`` solve time, with
+      ``3.69 MB`` block-inverse storage.
+    - xi-block-Schur: ``2.622618680e-6`` in ``1.211 s`` solve time, with
+      ``5.96 MB`` block-inverse storage.
+    - x-xi-block-Schur: ``2.597893451e-6`` in ``1.973 s`` solve time, with
+      ``29.8 MB`` block-inverse storage.
+    - xblock-TZ low-L, ``Lmax=4``: ``1.947649661e-8`` in ``2.575 s`` solve
+      time, with ``21.9 MB`` sparse-factor storage. This is retained as
+      explicit/opt-in structured-CSR evidence rather than a public default.
+    - xblock-TZ low-L, ``Lmax=8``: converged to ``9.742582196e-11`` in
+      ``12.053 s`` solve time, with ``76.0 MB`` sparse-factor storage.
+  - Fresh bounded promotion gate after CLI/Python routing:
+    ``scripts/benchmark_rhs1_full_csr_reuse.py`` on the same patched input with
+    ``--solve-restart 80`` confirmed exact operator parity
+    (``7.367583651954802e-16`` matvec relative error) and cache reuse
+    (``cache_hits=1``).
+    - diagonal-Schur, ``maxiter=10``: stalled at ``4.225940100639139e-7``,
+      ``info=10``, solve time ``1.288 s``.
+    - xblock-TZ low-L, ``Lmax=8``, ``maxiter=10``: selected the intended
+      preconditioner, used ``72.49 MB`` factors, and reduced the true residual
+      to ``2.342103927441276e-9`` but did not meet the ``1e-10`` target.
+    - xblock-TZ low-L, ``Lmax=8``, ``maxiter=20``: converged with
+      ``info=0`` to ``9.742582196284179e-11`` against the ``1e-10`` target,
+      setup time ``0.321 s``, solve time ``11.850 s``, and ``72.49 MB`` factor
+      storage.
+- Host ILU negative control on the same Zenodo mid-grid operator:
+  - loose fills were singular;
+  - the only completed factor used ``6,709,189`` factor nnz, took ``15.7 s``
+    setup plus ``4.55 s`` solve, and worsened the true residual to
+    ``3.895e-5``;
+  - do not promote host ILU for this lane.
+- Fortran/PETSc audit by subagent ``Poincare``:
+  - Fortran v3 builds a separate reduced preconditioner matrix through
+    ``populateMatrix(..., whichMatrix=0)`` and factors it in PETSc;
+  - the relevant pure-Python/JAX analogue is an x/species-separated,
+    low-pitch-order, full-theta/zeta block preconditioner, which motivated
+    ``xblock_tz_low_l_schur``.
+
+Validation:
+
+- Focused full-CSR and benchmark tests: ``11 passed``.
+- Routed CLI/Python/output diagnostics tests:
+  ``python -m pytest tests/test_io_export_and_h5_coverage.py tests/test_cli_solve_mode.py tests/test_rhs1_full_assembly.py tests/test_benchmark_rhs1_full_csr_reuse.py tests/test_rhs1_full_csr_kinetic_pc.py tests/test_structured_csr_docs.py -q``
+  passed ``83`` tests in ``7.88 s``.
+- Added regression coverage that explicit ``structured_csr`` fails closed under
+  a too-small CSR memory cap instead of falling through to matrix-free/probed
+  routes.
+- Touched-file ``ruff`` passed.
+- ``git diff --check`` passed.
+- The block-Schur memory gate is covered by regression tests: requested
+  block-Schur fails closed when the inverse-block budget is too small and
+  selects only when explicitly allowed.
+
+Decision:
+
+- Keep exact full CSR assembly and the opt-in host CSR solve lane.
+- Promote bounded ``xblock_tz_low_l_schur`` inside the opt-in host CSR
+  ``auto`` path for medium/large systems. It is the first tested kinetic
+  preconditioner that materially improves the Zenodo mid-grid true residual.
+- Keep ``diagonal_schur`` as the small-system and fail-closed fallback because
+  it is cheap and improves the true mid-grid residual when the xblock path is
+  over budget.
+- Keep ``block_schur`` as explicit/default-off infrastructure. It proves the
+  memory-gated kinetic-block interface but does not yet improve residual enough
+  to offset setup cost.
+- Keep ``xi_block_schur`` as explicit/default-off negative evidence. It targets
+  pitch coupling but worsens the mid-grid true residual, so it is not a
+  production path.
+- Keep ``x_xi_block_schur`` as explicit/default-off negative evidence. It helps
+  the tiny fixture but worsens the Zenodo mid-grid true residual and has much
+  larger setup/storage cost, so it is not a production path.
+- Do not add or promote a SciPy ILU default from this evidence.
+- Next real algorithmic step: rerun the bounded Zenodo/bootstrap-current
+  surfaces through the explicit host CSR lane with ``auto`` and optional
+  ``SFINCS_JAX_RHS1_FULL_CSR_XBLOCK_LMAX=8`` where memory budget permits,
+  then decide whether default non-autodiff RHSMode=1 promotion is justified.
+
+Progress update:
+
+- RHSMode=1 block/operator refactor: 99%.
+- Physics-gate/refactor coverage lane: 91%.
+- Structured preconditioner lane: 99%.
+- Benchmark/validation lane: 96%.
+- Overall open-lane average: 96.25%.
+
+## 2026-06-03 Structured full-CSR auto demotion after Zenodo QA/QH gate
+
+Objective:
+
+- Test whether ``xblock_tz_low_l_schur`` is broadly better enough to become
+  the public RHSMode=1 default inside ``--solve-method auto``.
+- Include real Zenodo QA/QH finite-beta/bootstrap-current decks instead of only
+  the smaller mid-grid operator benchmark where the structured route looked
+  promising.
+
+Steps completed:
+
+- Added a shared public policy gate,
+  ``rhs1_structured_full_csr_auto_allowed()``, and routed the structured
+  full-CSR candidate through ``write-output``/Python ``auto`` only through that
+  gate.
+- Added ``scan-er --solve-method`` plumbing and made scan output solves pass
+  ``differentiable=False`` by default, so scan workflows use the same
+  non-autodiff solver policy as CLI ``write-output``.
+- Ran a quick full-FP fixture with the structured gate forced low:
+  structured full CSR tried first, failed the strict true-residual gate
+  (``1.291e-6``), and safely fell back to the existing dense/matrix-free path.
+- Ran the Zenodo QA finite-beta RHSMode=1 deck at
+  ``Ntheta=13, Nzeta=13, Nxi=21, Nx=5`` and ``solverTolerance=1e-8``:
+  structured full CSR spent ``375.1 s`` in the candidate solve, did not
+  converge (residual ``5.783e-6``), then fell back and hit the ``600 s`` guard.
+- Ran the Zenodo QH Redl-benchmark RHSMode=1 deck at
+  ``Ntheta=13, Nzeta=13, Nxi=21, Nx=5`` and ``solverTolerance=1e-8``:
+  structured full CSR spent ``258.5 s`` in the candidate solve, did not
+  converge (residual ``1.218e-6``), then fell back and hit the ``300 s`` guard.
+- Re-ran QA and QH negative gates after demotion:
+  ``--solve-method auto`` no longer entered structured full CSR on either deck
+  (captured logs reported ``contains_structured_full_csr=False``).
+
+Decision:
+
+- Do not promote structured full CSR or ``xblock_tz_low_l_schur`` into the
+  public default. It is exact at the operator level and useful for explicit
+  benchmarks, but the current preconditioner is not robust enough for the
+  Zenodo QA/QH finite-beta class.
+- Keep the lane explicit through ``--solve-method structured_csr`` /
+  ``--solve-method host_structured_csr`` and expert opt-in through
+  ``SFINCS_JAX_RHS1_STRUCTURED_CSR_AUTO=1``.
+- Keep ``auto`` user-friendly by avoiding this expensive unsuccessful candidate
+  unless explicitly requested. The remaining real algorithmic work is a
+  stronger field-split/coarse residual preconditioner, not more default tuning.
+
+Validation:
+
+- ``python -m pytest tests/test_rhs1_host_policy.py tests/test_rhs1_full_assembly.py tests/test_structured_csr_docs.py tests/test_cli_solve_mode.py::test_main_scan_er_forwards_structured_csr_solve_method tests/test_io_export_and_h5_coverage.py tests/test_helper_module_coverage.py -q``
+  passed ``63`` tests in ``8.41 s``.
+- ``python -m ruff check sfincs_jax/rhs1_host_policy.py sfincs_jax/cli.py sfincs_jax/scans.py tests/test_rhs1_host_policy.py tests/test_rhs1_full_assembly.py tests/test_structured_csr_docs.py tests/test_cli_solve_mode.py``
+  passed.
+- ``git diff --check`` passed.
+- The full local test suite passed after fixing a policy-hook robustness bug in
+  ``_matvec_shard_axis`` for lightweight/fake operators:
+  ``2201 passed in 472.81 s``.
+
+Progress update:
+
+- RHSMode=1 block/operator refactor: 99%.
+- Physics-gate/refactor coverage lane: 91%.
+- Structured preconditioner lane: 96% (operator exact and benchmarkable; public
+  default demoted after QA/QH negative evidence).
+- Benchmark/validation lane: 97%.
+- Overall open-lane average: 95.75%.
+
+## 2026-06-03 Active low-L Schur residual correction for physical RHSMode=1
+
+Objective:
+
+- Replace smoother/restart tuning with a genuinely coupled active-system
+  field split for physical unshifted RHSMode=1 bootstrap-current solves.
+- Keep the path pure Python/SciPy host-side for the explicit non-autodiff CSR
+  solve lane and memory-gated before factorization. Differentiable/JAX solves
+  remain on the matrix-free routes.
+
+Steps completed:
+
+- Added ``active_low_l_schur`` to the active projected full-CSR preconditioner
+  family. It applies a cheap active Jacobi base, forms the remaining residual,
+  and solves a sparse exact Schur residual equation on all theta/zeta points for
+  the first low-pitch Legendre modes plus the global tail.
+- Added ``SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_LOW_L_SCHUR_LMAX`` to control the
+  low-pitch cutoff. The sparse factor is bounded by
+  ``SFINCS_JAX_RHS1_FULL_CSR_PRECONDITIONER_MAX_MB`` through the existing
+  preconditioner memory gate.
+- Hardened the preflight factor-memory estimate after the QA ``lmax=8`` probe
+  showed the sparse-fill estimate could underpredict SuperLU fill by more than
+  an order of magnitude. The gate now uses the maximum of sparse-fill and dense
+  selected-subspace estimates, so oversized low-L Schur attempts are rejected
+  before expensive factorization.
+- Added explicit ``active_xblock`` and ``active_xblock_low_l_schur`` probes.
+  These factor active sparse blocks at fixed species and speed index and can be
+  used as a high-pitch/geometry remainder base for the low-L Schur correction.
+  They are memory-gated with ``SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_XBLOCK_LMAX`` and
+  remain default-off.
+- Kept the route explicit through
+  ``SFINCS_JAX_RHS1_FULL_CSR_PRECONDITIONER=active_low_l_schur``. It is not yet
+  promoted into public ``auto`` because QA/QH finite-beta decks still need a
+  bounded rerun.
+
+Measured evidence:
+
+- Tiny physical full-FP fixture
+  (``tests/ref/quick_2species_FPCollisions_noEr.input.namelist``,
+  ``identity_shift=0``):
+  - active direct remains the residual-clean reference:
+    residual ``5.906854379204838e-18`` with about ``41.0 MB`` sparse-LU factor
+    storage;
+  - Jacobi GMRES stalls at ``1.408e-4`` true residual after the bounded
+    ``20 x 80`` cycle;
+  - modal ``active_coarse`` GMRES improves to ``8.506e-6`` but does not
+    converge;
+  - enlarged modal ``active_coarse`` can reach ``1.788e-7`` but costs about
+    ``110 MB`` on the tiny fixture and still misses the ``1e-10`` target;
+  - scratch sparse low-L/full-angle Schur with ``lmax=4`` reached
+    ``9.987936973341387e-11`` with GMRES under the same ``20 x 80`` bound.
+- Benchmark-driver rerun of the implemented ``active_low_l_schur`` route on the
+  same tiny physical fixture reached true residual ``2.9474626695286584e-11``
+  with ``13.5 MB`` factor storage and ``0.099 s`` setup. This is lower-memory
+  than active direct on the tiny fixture (``41.0 MB``), but slower in wall time
+  (``0.80 s`` solve versus ``0.25 s`` direct solve).
+- QA Zenodo mid-grid gate at ``s=0.5`` and ``13 x 13 x 21 x 5`` did not pass:
+  ``active_low_l_schur`` with ``lmax=4`` was active and memory-bounded but
+  ``write-output`` refused nonconverged diagnostics with true residual
+  ``3.776087e-03`` against target ``5.938690e-13``.
+- QA setup-only one-step audit for that same deck:
+  - Jacobi one-step residual: ``7.461421070329065e-03``;
+  - modal ``active_coarse`` one-step residual: ``1.1397598866961085e-02`` with
+    ``175.1 MB`` dense coarse storage;
+  - sparse ``active_low_l_schur`` ``lmax=4`` one-step residual:
+    ``9.839805401103408e-05`` with ``275.5 MB`` factor storage;
+  - sparse ``active_low_l_schur`` ``lmax=8`` factorization used ``916.7 MB`` and
+    only improved the one-step residual to ``8.071801896928674e-05``. This is
+    not a viable production direction under the current algorithm.
+- After the memory-estimate fix, the same QA ``lmax=8`` attempt is rejected in
+  ``0.025 s`` under the ``512 MB`` cap with estimate
+  ``1,057,264,128`` bytes, before sparse factorization.
+- Tiny physical active-xblock negative control:
+  - standalone ``active_xblock`` selected ``10`` species/speed blocks, covered
+    ``2800`` kinetic unknowns, stored ``2.7 MB`` factors, and worsened the
+    one-step residual to ``1.673317697365633e-02``;
+  - ``active_xblock_low_l_schur`` selected but worsened the one-step residual to
+    ``1.4399279153498254e-03``. This rules out the naive active xblock base as
+    the next promotion path.
+
+Decision:
+
+- Keep active projected direct as the physical finite-beta QA/QH default. The
+  tiny-fixture ``active_low_l_schur`` success is useful infrastructure, but the
+  QA mid-grid negative gate prevents promotion.
+- Use ``active_low_l_schur`` and ``active_xblock`` as checked infrastructure for
+  future field-split work, but do not promote either as-is. The next algorithm
+  must improve the high-pitch/geometry-rich remainder outside the low-L Schur
+  subspace without the naive xblock residual correction; simply increasing
+  ``lmax`` is too expensive.
+
+Next validation gates:
+
+1. Run focused unit/benchmark tests for the new preconditioner and docs.
+2. Prototype a qualitatively stronger high-pitch/geometry remainder base for
+   the active low-L Schur correction. The naive active x/species block sparse
+   factor is now checked negative evidence, so the next candidate should use a
+   true block Schur complement, residual-minimizing additive Schwarz, or an
+   operator-derived near-nullspace basis rather than another block-Jacobi
+   residual correction.
+3. Rerun one QA and one QH Zenodo mid-grid surface under a 10-minute guard.
+   Promote only if both are residual-clean and do not worsen memory/runtime
+   relative to active direct.
+
+Progress update:
+
+- RHSMode=1 block/operator refactor: 99%.
+- Physics-gate/refactor coverage lane: 91%.
+- Structured preconditioner lane: 97% (new low-L Schur infrastructure is
+  residual-clean on the tiny physical fixture, but QA promotion failed).
+- Benchmark/validation lane: 98%.
+- Overall open-lane average: 96.25%.
+
+## 2026-06-03 Active overlap-Schwarz gate and Fortran/PETSc target profile
+
+Objective:
+
+- Try a stronger high-pitch/geometry-rich remainder correction for the active
+  RHSMode=1 full-CSR lane without more smoother/restart tuning.
+- If the candidate still fails QA/QH, profile SFINCS Fortran v3 on the same
+  Zenodo QA/QH reduced decks to identify the solver/preconditioner behavior
+  that SFINCS_JAX must reproduce in pure Python/JAX infrastructure.
+
+Implementation completed:
+
+- Added ``active_overlap_schwarz`` as a restricted additive-Schwarz residual
+  correction over overlapping speed-space patches in the active projected
+  system. It factors overlapping species/speed/pitch/theta/zeta submatrices and
+  scatters only the center speed-block correction, avoiding double-counting.
+- Added ``active_schwarz_low_l_schur`` / ``active_overlap_low_l_schur`` as a
+  combined path: overlap-Schwarz base correction followed by the existing
+  sparse low-pitch Schur residual equation.
+- Added bounded knobs:
+  ``SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_SCHWARZ_LMAX``,
+  ``SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_SCHWARZ_RADIUS``,
+  ``SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_SCHWARZ_DAMPING``, and
+  ``SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_SCHWARZ_PERMC_SPEC``.
+- Added focused tests for active overlap-Schwarz shifted convergence and memory
+  gating, and documented the explicit solver/debug knobs in README/docs.
+
+Focused test/benchmark evidence:
+
+- ``python -m ruff check sfincs_jax/rhs1_full_assembly.py
+  tests/test_rhs1_full_assembly.py tests/test_structured_csr_docs.py
+  scripts/benchmark_rhs1_full_csr_reuse.py`` passed.
+- ``python -m pytest tests/test_rhs1_full_assembly.py
+  tests/test_benchmark_rhs1_full_csr_reuse.py
+  tests/test_structured_csr_docs.py -q`` passed: ``34 passed``.
+- Tiny shifted benchmark, ``active_overlap_schwarz`` with ``lmax=4`` and
+  radius ``1``:
+  - true residual ``7.178499353564078e-11``;
+  - solve time ``0.059 s``;
+  - factor storage ``5.604592 MB``.
+- Tiny shifted benchmark, ``active_schwarz_low_l_schur``:
+  - true residual ``6.282332259379579e-11``;
+  - solve time ``0.188 s``;
+  - factor storage ``19.115100 MB``.
+- Tiny unshifted physical check, ``active_schwarz_low_l_schur``:
+  - true residual ``5.95364100220637e-11``;
+  - solve time ``1.276 s``;
+  - factor storage ``19.115100 MB``.
+
+QA/QH bounded gate evidence:
+
+- QA Zenodo ``s=0.5`` at ``13 x 13 x 21 x 5`` with
+  ``active_schwarz_low_l_schur``, ``low_l_lmax=4``, Schwarz ``lmax=4``,
+  radius ``1``, and a ``768 MB`` cap failed the production true-residual gate:
+  residual ``1.900996e-04`` against target ``5.938690e-13``. This is about
+  ``20x`` better than the previous ``active_low_l_schur`` QA residual
+  ``3.776087e-03``, but still not viable.
+- QH Zenodo ``s=0.5`` at ``13 x 13 x 21 x 5`` with the same settings also
+  failed: residual ``6.671297e-05`` against target ``6.691727e-13``.
+- Both JAX gates remained silent for several minutes before final refusal,
+  confirming that the production RHSMode=1 path still needs periodic phase and
+  residual flushing on long preconditioner/GMRES runs.
+
+SFINCS Fortran v3/PETSc profile target:
+
+- Local Fortran source: ``/Users/rogeriojorge/local/sfincs/fortran/version3``.
+  Temporary profile decks:
+  ``/tmp/sfincs_fortran_v3_profile_QA_s05_13x13x21x5`` and
+  ``/tmp/sfincs_fortran_v3_profile_QH_s05_13x13x21x5``.
+- Both profiles used the same reduced grid ``13 x 13 x 21 x 5`` and
+  ``solverTolerance = 1e-8`` with local Zenodo VMEC files.
+- PETSc configuration observed:
+  - SNES ``newtonls``, maximum iterations ``1``;
+  - KSP ``gmres`` with restart ``2000``, max iterations ``10000``;
+  - left preconditioning and preconditioned-norm convergence;
+  - PC ``lu`` with MUMPS on a separate simplified preconditioner matrix.
+- QA Fortran profile:
+  - initial RHS norm ``5.938690201795e-05``;
+  - true matrix nnz ``753,531``;
+  - preconditioner matrix nnz ``531,126``;
+  - MUMPS factor nnz ``9,947,336``;
+  - MUMPS internal factor memory ``132 MB`` and effective factor memory
+    ``91 MB``;
+  - KSP converged in ``18`` iterations to true residual
+    ``4.964118511338e-12``;
+  - SNESSolve time ``2.3095 s``, KSPSolve time ``0.166 s``, PCSetUp
+    ``2.009 s``;
+  - peak RSS ``326,778,880`` bytes.
+- QH Fortran profile:
+  - initial RHS norm ``1.057162952463e-04``;
+  - preconditioner matrix nnz ``531,126``;
+  - MUMPS internal factor memory ``132 MB``;
+  - KSP converged in ``33`` iterations to true residual
+    ``2.074287371413e-12``;
+  - SNESSolve time ``1.0197 s``, KSPSolve time ``0.329 s``, PCSetUp
+    ``0.549 s``;
+  - peak RSS ``314,753,024`` bytes.
+
+Decision:
+
+- Do not promote ``active_overlap_schwarz`` or
+  ``active_schwarz_low_l_schur`` as defaults. They are useful explicit
+  benchmark infrastructure and improve the QA/QH residual, but they miss the
+  production residual gate by many orders of magnitude.
+- The next real algorithmic step is not another local smoother. It is a
+  Fortran-style global preconditioner matrix lane: assemble a simplified
+  active RHSMode=1 preconditioner matrix with the same term omissions and
+  preconditioner simplifications as Fortran ``populateMatrix(whichMatrix=0)``,
+  factor it once, and use it as a left preconditioner for GMRES on the true
+  active matrix.
+- To remain aligned with project requirements, implement this from scratch in
+  Python/JAX/SciPy infrastructure first, not via PETSc/MUMPS/SuperLU_DIST as a
+  dependency. The direct sparse factor can remain a host-only non-autodiff CLI
+  lane; differentiable JAX lanes should reuse the same simplified operator as a
+  matrix-free/coarse preconditioner approximation.
+
+Next validation gates:
+
+1. Add a reusable ``rhs1_preconditioner_operator`` assembly path that mirrors
+   Fortran ``whichMatrix=0``/``reusePreconditioner=true`` simplifications and
+   exposes true/preconditioner matrix nnz side by side.
+2. Reproduce the Fortran QA/QH reduced profiles in SFINCS_JAX: target
+   preconditioner matrix nnz near ``531k``, GMRES convergence below ``1e-8``
+   relative tolerance in fewer than ``40`` iterations, and factor storage below
+   ``200 MB`` on the ``13 x 13 x 21 x 5`` decks.
+3. Add a bounded regression test that builds the simplified preconditioner
+   matrix on a tiny fixture and checks residual reduction versus active direct,
+   without adding Zenodo-size solves to CI.
+4. Add progress flushing for structured CSR preconditioner setup and Krylov
+   iterations before rerunning larger Zenodo gates.
+
+Progress update:
+
+- RHSMode=1 block/operator refactor: 99%.
+- Physics-gate/refactor coverage lane: 91%.
+- Structured preconditioner lane: 98% infrastructure complete, but production
+  QA/QH iterative promotion remains open pending Fortran-style preconditioner
+  matrix assembly.
+- Benchmark/validation lane: 98%.
+- Overall open-lane average: 96.5%.
+
+## 2026-06-03 RHSMode=1 auto policy promotion after Fortran-style PC audit
+
+Follow-up result:
+
+- The requested stronger local/block candidate was implemented and tested as
+  ``active_overlap_schwarz`` / ``active_schwarz_low_l_schur``. It improves the
+  geometry-rich QA/QH residuals, but it is not a viable production default:
+  QA still stalled at ``1.900996e-04`` and QH at ``6.671297e-05`` against
+  ``1e-8`` relative solver gates.
+- The fallback Fortran-v3 profiling step was therefore run on the same Zenodo
+  QA/QH ``s=0.5`` decks at ``13 x 13 x 21 x 5``. Fortran v3 uses GMRES with a
+  simplified global MUMPS/LU preconditioner matrix: about ``531k`` PC nnz,
+  about ``132 MB`` internal MUMPS factor memory, and convergence in ``18`` QA
+  / ``33`` QH Krylov iterations.
+- SFINCS-JAX already has the matching from-scratch Python/JAX/SciPy lane:
+  ``fortran_reduced_pc_gmres``. Explicit bounded gates are residual-clean and
+  fast:
+  - QA ``s=0.5``: true residual ``3.3718889689003533e-13`` below target
+    ``5.938690201794517e-13``, ``27`` iterations, ``32`` matvecs,
+    ``3.25 s`` solver time, ``4.07 s`` wrapper time.
+  - QH ``s=0.5``: true residual ``6.312700221382995e-13`` below target
+    ``6.691726818907219e-13``, ``69`` iterations, ``74`` matvecs,
+    ``3.70 s`` solver time, ``4.46 s`` wrapper time.
+- The problem with public defaults was policy, not the absence of a viable
+  solver method. A previous ``--solve-method auto`` QA run selected a slower
+  path and took about ``168.7 s``. ``auto`` now selects
+  ``fortran_reduced_pc_gmres`` by default for large non-differentiable
+  RHSMode=1 full-FP, no-``Phi1``, ``constraintScheme=1`` solves. This is gated
+  by ``SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_PC_AUTO`` and
+  ``SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_PC_AUTO_MIN_SIZE``.
+- New default-policy bounded gates:
+  - QA ``--solve-method auto``: ``linearSolverKind=fortran_reduced_pc_gmres``,
+    true residual ``3.3718889689003533e-13`` below target
+    ``5.938690201794517e-13``, ``27`` iterations, ``32`` matvecs,
+    ``3.12 s`` solver time, ``3.82 s`` wrapper time, JAX-vs-Fortran current
+    relative difference ``2.822e-2``.
+  - QH ``--solve-method auto``: ``linearSolverKind=fortran_reduced_pc_gmres``,
+    true residual ``6.312700221382995e-13`` below target
+    ``6.691726818907219e-13``, ``69`` iterations, ``74`` matvecs,
+    ``3.52 s`` solver time, ``4.21 s`` wrapper time.
+
+Tests run:
+
+- ``python -m ruff check sfincs_jax/v3_driver.py tests/test_v3_sparse_pattern.py
+  sfincs_jax/rhs1_full_assembly.py tests/test_rhs1_full_assembly.py
+  tests/test_structured_csr_docs.py scripts/benchmark_rhs1_full_csr_reuse.py``:
+  passed.
+- ``python -m pytest tests/test_fortran_reduced_preconditioner.py
+  tests/test_v3_sparse_pattern.py::test_fortran_reduced_pc_gmres_solve_method_solves_tiny_rhs1_system
+  tests/test_v3_sparse_pattern.py::test_auto_selects_fortran_reduced_pc_gmres_for_large_full_fp_rhs1
+  tests/test_v3_sparse_pattern.py::test_fortran_reduced_pc_auto_uses_active_dof_for_truncated_modes
+  -q``: ``8 passed``.
+- ``python -m pytest tests/test_rhs1_full_assembly.py
+  tests/test_benchmark_rhs1_full_csr_reuse.py tests/test_structured_csr_docs.py
+  -q``: ``34 passed``.
+- ``git diff --check``: passed.
+
+Remaining lane:
+
+- Solver viability for bounded QA/QH mid-grid RHSMode=1 is closed for the
+  non-autodiff host path. The remaining QA/QH finite-beta/bootstrap-current
+  issue is now an operator/observable/normalization parity lane, not a Krylov
+  residual lane: QA agrees with Fortran to about ``2.8%`` at this mid-grid
+  point, while QH still differs by about ``24%`` despite residual-clean solves.
+- Next work should compare SFINCS-JAX versus Fortran-v3 terms and current
+  diagnostics on QH after convergence: species flow/current normalization,
+  radial-coordinate gradient conversion, finite-beta geometric terms, and
+  output observable assembly. Do not spend more time tuning local smoothers for
+  this lane unless those audits show a concrete operator residual defect that a
+  preconditioner can address.
+
+Progress update:
+
+- RHSMode=1 block/operator refactor: 99%.
+- Physics-gate/refactor coverage lane: 92%.
+- Structured/preconditioner lane: 99% for non-autodiff host QA/QH mid-grid
+  solves; remaining device/differentiable promotion remains a deferred
+  research lane.
+- Zenodo QA/QH bootstrap parity lane: 72% because QH observable parity remains
+  open after solver convergence.
+- Benchmark/validation lane: 98%.
+- Overall open-lane average: 97%.
+
+## 2026-06-04 QS-paper QA/QH Redl comparison error-bar refresh
+
+Scope:
+
+- Added ``--with-errorbars`` to
+  ``examples/vmec_jax_finite_beta/compare_qs_paper_sfincs_jax_redl.py``.
+  The script now runs/reads a baseline SFINCS-JAX scan plus one real-space
+  refinement and one velocity-space refinement. The plotted error bar is the
+  pointwise maximum absolute change in ``<J.B>`` from either refinement.
+- The same workflow supports both Zenodo arXiv:2205.02914 benchmark families:
+  ``--case QA`` and ``--case QH``.
+- The plotted SFINCS-JAX points use the public ``--solve-method auto`` policy.
+  For these bounded RHSMode=1 full-FP finite-beta cases, ``auto`` selected
+  ``fortran_reduced_pc_gmres`` for every baseline and refinement solve.
+
+Commands used:
+
+- QA:
+  ``JAX_ENABLE_X64=1 SFINCS_JAX_GMRES_PROGRESS_INTERVAL=25
+  SFINCS_JAX_EXPLICIT_SPARSE_CSR_MAX_MB=512 python
+  examples/vmec_jax_finite_beta/compare_qs_paper_sfincs_jax_redl.py --case QA
+  --quick --ntheta 13 --nzeta 13 --nxi 21 --nx 5 --with-errorbars
+  --real-ntheta 15 --real-nzeta 15 --velocity-nxi 25 --velocity-nx 6
+  --solver-tolerance 1e-6 --solve-method auto --force --keep-going --out-dir
+  outputs/qs_paper_sfincs_jax_redl_errorbars --fig-dir
+  docs/_static/figures/vmec_jax_finite_beta --stem
+  qs_paper_sfincs_jax_redl_comparison``.
+- QH: same command with ``--case QH`` and
+  ``--stem qs_paper_qh_sfincs_jax_redl_comparison``.
+
+Artifacts:
+
+- ``docs/_static/figures/vmec_jax_finite_beta/qs_paper_sfincs_jax_redl_comparison.{png,pdf,json}``.
+- ``docs/_static/figures/vmec_jax_finite_beta/qs_paper_qh_sfincs_jax_redl_comparison.{png,pdf,json}``.
+
+Measured QA status:
+
+- Baseline grid: ``13 x 13 x 21 x 5`` at ``s = 0.3, 0.5, 0.7``.
+- Refinements: ``15 x 15 x 21 x 5`` real space and ``13 x 13 x 25 x 6``
+  velocity space.
+- Baseline runtime sum after the 2026-06-04 cache fix: ``10.0765 s`` for
+  three surfaces.
+- All nine solves were true-residual clean with ``linearSolverKind =
+  fortran_reduced_pc_gmres``.
+- Max baseline difference after the cache fix: ``8.949%`` versus Redl and
+  ``2.822%`` versus archived SFINCS Fortran v3.
+- Max refinement bar after the cache fix: ``2.007%`` relative to baseline.
+
+Measured QH status:
+
+- Same baseline/refinement grids and surfaces.
+- Baseline runtime sum after the 2026-06-04 cache fix: ``11.0746 s`` for three
+  surfaces.
+- All nine solves were true-residual clean with ``linearSolverKind =
+  fortran_reduced_pc_gmres``.
+- Max baseline difference after the cache fix: ``9.824%`` versus Redl and
+  ``9.707%`` versus archived SFINCS Fortran v3.
+- Max refinement bar after the cache fix: ``24.43%`` relative to baseline.
+
+Decision:
+
+- The new figures are useful diagnostic convergence/error-bar plots and should
+  remain in README/docs as honest bounded evidence.
+- Do not promote QA/QH finite-beta bootstrap current to production parity yet.
+  The solver residual lane is closed for the non-autodiff host route, but the
+  QH and outer-radius QA current remain sensitive to real-space resolution and
+  still differ from the archived references.
+- Next best technical step: audit finite-beta geometry/operator/current
+  observable terms against Fortran v3 on the residual-clean outputs, starting
+  with QH at ``s=0.5`` and ``s=0.7``. Focus on angular geometry interpolation,
+  radial-gradient coordinate conversion, finite-beta field terms, and
+  ``FSABjHat`` assembly; do not spend the next iteration on Krylov smoother
+  tuning.
+
+Tests run:
+
+- ``python -m ruff check
+  examples/vmec_jax_finite_beta/compare_qs_paper_sfincs_jax_redl.py
+  tests/test_finite_beta_vmec_example.py``: passed.
+- ``python -m pytest tests/test_finite_beta_vmec_example.py -q``:
+  ``19 passed``.
+
+Progress update:
+
+- QS-paper error-bar plotting lane: 100%.
+- QA/QH residual-clean bounded solve lane: 100%.
+- QA/QH finite-beta bootstrap observable parity lane: 74%.
+- Overall open-lane average: 97%.
+
+## 2026-06-04 Addendum: production QH full-grid preconditioner replacement audit
+
+Scope:
+
+- Revisited the archived QH ``s = 0.5`` production grid from the
+  arXiv:2205.02914 Zenodo inputs with ``Ntheta x Nzeta x Nxi x Nx =
+  25 x 39 x 60 x 7`` and active RHSMode=1 size ``507004``.
+- All runs used bounded wall-clock caps on ``office`` so stalled production
+  candidates do not consume unbounded CPU/RSS.
+
+Measured candidates:
+
+- Global fortran-reduced active CSR with ILU singular-retry:
+  - Direct-tail active CSR materialization remained good: ``13.497M`` nonzeros,
+    ``~164 MB`` CSR storage, and ``15.095 s`` setup.
+  - ILU with ``MMD_AT_PLUS_A`` and three singular retries did not reach Krylov
+    before the ``300 s`` cap.
+  - Peak RSS was ``4.74 GB``.
+  - Decision: retry regularization fixes immediate singular crashes but not the
+    production setup bottleneck, so it is not a default solver.
+- Structured full-CSR host route with active low-``ell`` Schur:
+  - Explicit ``host_structured_csr`` correctly bypassed the older auto
+    fortran-reduced path.
+  - The route timed out before Krylov/preconditioner diagnostics and reached
+    ``51.18 GB`` peak RSS.
+  - Decision: the current full-CSR implementation assembles too much before
+    active projection and is not promotable for production 3D FP grids.
+- Global fortran-reduced active CSR with Jacobi/diagonal factor:
+  - Direct-tail setup was again fast: ``14.713 s``.
+  - Jacobi factorization was cheap: ``0.067 s`` and ``4.06 MB`` factor storage.
+  - Peak RSS was ``2.80 GB``.
+  - Krylov slope was unusable: preflight residual worsened from
+    ``2.873e-04`` to ``8.244e-02`` and the preconditioned residual only moved
+    from ``2.85e2`` at 10 iterations to ``1.85e2`` after more than 600
+    iterations before the ``180 s`` cap.
+  - Decision: diagonal-only is a memory win but not a solver.
+
+Code guard added:
+
+- ``rhs1_structured_full_csr_auto_allowed`` now keeps a finite default active
+  size ceiling of ``100000`` for the opt-in structured full-CSR auto route.
+  This prevents expert-auto experiments from accidentally routing production
+  QH-scale decks into the observed ``~51 GB`` setup. Explicit
+  ``solve_method='host_structured_csr'`` still works, and experts can set
+  ``SFINCS_JAX_RHS1_STRUCTURED_CSR_AUTO_MAX_SIZE=0`` for deliberate large
+  benchmarks.
+- ``select_structured_rhs1_full_csr_operator`` now performs a conservative
+  full-system CSR memory preflight before assembling the structured f-block.
+  Re-running the same production QH explicit ``host_structured_csr`` command on
+  ``office`` now fails closed in ``2.40 s`` with
+  ``csr_budget_preflight_exceeded:82559131220>1073741824`` and ``707 MB`` peak
+  RSS, instead of timing out after ``5 min`` with ``51.18 GB`` peak RSS.
+
+Next implementation step:
+
+- Refactor the fast fortran-reduced direct-tail active CSR materialization into
+  a reusable object and feed that reduced active operator into the structured
+  block/coarse preconditioners. This avoids both failed extremes measured here:
+  global ILU setup on the cheap active matrix and full-CSR assembly before
+  active projection.
+- The first preconditioner target should be an active reduced block-Schur/coarse
+  residual equation over low-``ell`` pitch modes, species/x moments, and the
+  source/constraint tail, using the same active CSR that already materializes in
+  about 15 seconds.
+
+Progress update:
+
+- Production-resolution RHSMode=1 QH solver lane: 80%. The bad paths are now
+  bounded and measured; a concrete reusable-active-CSR architecture remains.
+- Structured/full-CSR safety lane: 100% for preventing accidental production
+  auto selection.
+- Global/operator-reuse architecture lane: 84%.
+- Overall open-lane average: 97%.
+
+## 2026-06-04 Addendum: active direct-tail diagonal-Schur candidate
+
+Code added:
+
+- Added ``active_diagonal_schur`` / ``active_tail_schur`` support to
+  ``build_active_projected_rhs1_full_csr_preconditioner``.
+- The preconditioner targets the direct-tail active CSR ordering:
+  active kinetic rows followed by the retained global RHSMode=1 tail. It uses
+  a diagonal inverse for the kinetic block and a dense Schur complement only
+  over the small source/constraint tail.
+- Added fail-closed gates for non-square matrices, active-size mismatches,
+  Phi1-containing active layouts, missing/unsupported active tails, and dense
+  tail-Schur memory budget.
+- Added an optional driver hook controlled by
+  ``SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_PRECONDITIONER``. The
+  default remains the existing host factor path; setting the variable to
+  ``active_diagonal_schur`` or ``structured`` uses the new reduced active-tail
+  split and records ``sparse_pc_fortran_reduced_direct_tail_structured_pc_*``
+  metadata.
+- Added a production-size fail-fast gate for explicitly requested direct-tail
+  structured preconditioners. If the one-step residual preflight fails for
+  active systems above
+  ``SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_STRUCTURED_PC_PREFLIGHT_REQUIRED_MIN_SIZE``
+  (default ``100000``), the solve raises before entering a long Krylov loop.
+  Tiny systems can still run through Krylov unless the threshold is lowered.
+- Fixed a namelist parser bug discovered during the direct QH audit:
+  double-quoted strings such as ``equilibriumFile = "wout.nc"`` are now parsed
+  without embedded quote characters, and ``!`` inside quoted strings is no
+  longer treated as a comment marker.
+
+Local validation:
+
+- ``python -m ruff check sfincs_jax/rhs1_full_assembly.py
+  sfincs_jax/v3_driver.py tests/test_rhs1_full_assembly.py
+  tests/test_v3_sparse_pattern.py``: passed.
+- ``python -m pytest tests/test_rhs1_full_assembly.py
+  tests/test_v3_driver_sparse_helper_coverage.py
+  tests/test_v3_sparse_pattern.py -q``: ``130 passed``.
+- ``python -m pytest tests/test_rhs1_full_assembly.py
+  tests/test_v3_sparse_pattern.py -q`` after the driver regression:
+  ``117 passed``.
+- ``python -m ruff check sfincs_jax/namelist.py tests/test_namelist.py
+  sfincs_jax/rhs1_full_assembly.py sfincs_jax/v3_driver.py
+  tests/test_rhs1_full_assembly.py tests/test_v3_sparse_pattern.py``: passed.
+- ``python -m pytest tests/test_namelist.py tests/test_rhs1_full_assembly.py
+  tests/test_v3_sparse_pattern.py -q``: ``119 passed``.
+- After adding the production-size fail-fast gate:
+  ``python -m pytest tests/test_namelist.py tests/test_rhs1_full_assembly.py
+  tests/test_v3_sparse_pattern.py -q``: ``120 passed``.
+
+Small-system result:
+
+- The tiny ``quick_2species_FPCollisions_noEr`` direct-tail solve selected the
+  new structured preconditioner, skipped legacy sparse factorization, and
+  reached residual ``2.19e-11``.
+- Tail-Schur setup was ``~0.001 s`` with ``128 bytes`` reported factor storage
+  for the tiny system.
+
+Production QH result on ``office``:
+
+- Case: QH ``s = 0.5`` from the arXiv:2205.02914 Zenodo benchmark,
+  ``Ntheta x Nzeta x Nxi x Nx = 25 x 39 x 60 x 7``, active size ``507004``.
+- Wrapper run through ``compare_qs_paper_sfincs_jax_redl.py`` timed out after
+  ``600 s`` before HDF5 output. Peak RSS was ``3.35 GB`` and CPU utilization was
+  about ``30`` cores, so this was a compute/setup/solver-quality blocker rather
+  than a memory blow-up.
+- Direct lower-level solve with explicit ``emit`` localized the phases:
+  VMEC operator build ``0.780 s``; direct-tail CSR materialization ``15.019 s``;
+  active diagonal-Schur setup ``0.184 s``; active CSR nonzeros ``13.496892M``.
+- Krylov quality was not acceptable. The preflight residual worsened from
+  ``2.873075e-04`` to ``8.244150e-02`` and the preconditioned GMRES residual
+  was still ``1.901612e+02`` after ``375`` iterations and ``108.545 s``.
+- After the fail-fast gate, the same QH diagnostic exits after preflight in
+  ``18.55 s`` with ``2.78 GB`` peak RSS instead of entering the long Krylov
+  loop. The rejected residual metrics are unchanged:
+  ``2.873075e-04 -> 8.244150e-02`` with target ratio ``2.869e10``.
+
+Decision:
+
+- Keep the active diagonal-Schur code as a low-memory candidate and testable
+  building block, but do not promote it as the production QH solver. It fixes
+  setup/factor cost, not the coupled residual physics.
+- Keep the fail-fast gate enabled by default for production-sized direct-tail
+  structured candidates so weak preconditioners do not create apparent stalls.
+- Next real algorithmic target remains a genuinely coupled active reduced
+  field-split/coarse residual equation over low-``ell`` pitch modes, species/x
+  moments, and the global source/constraint tail. This should reuse the
+  measured fast active direct-tail CSR materialization and should be gated by
+  preflight residual improvement before running long Krylov iterations.
+
+Progress update:
+
+- Production-resolution RHSMode=1 QH solver lane: 82%. We now have a cheap
+  active-tail Schur implementation and a measured rejection for production QH.
+- Structured/full-CSR safety lane: 100%.
+- Global/operator-reuse architecture lane: 87%.
+- Overall open-lane average: 97%.
+
+## 2026-06-04 Addendum: sparse coarse residual and x-block QH audit
+
+Code added:
+
+- Added ``active_tail_sparse_coarse`` and ``active_xblock_sparse_coarse``
+  direct-tail structured preconditioner kinds.
+- These keep the projected physics coarse basis and ``A @ Z`` sparse, forming
+  only the small coarse residual matrix densely. This avoids the existing dense
+  ``active_coarse`` memory pattern where ``Z`` and ``A Z`` scale as
+  ``active_size x coarse_size``.
+- ``active_tail_sparse_coarse`` uses ``active_diagonal_schur`` as the base.
+  ``active_xblock_sparse_coarse`` uses ``active_xblock`` as the local kinetic
+  base and applies the sparse global/moment/tail residual correction on top.
+
+Local validation:
+
+- ``python -m ruff check sfincs_jax/rhs1_full_assembly.py
+  tests/test_rhs1_full_assembly.py tests/test_v3_sparse_pattern.py``: passed.
+- Synthetic residual-equation test: the sparse coarse basis spans the full
+  reduced system and both diagonal-tail and x-block bases recover the exact
+  solution.
+- Tiny driver test: ``active_tail_sparse_coarse`` selected through the
+  direct-tail driver hook and converged to residual ``3.67e-13``.
+- Focused shard after adding these paths:
+  ``python -m pytest tests/test_namelist.py tests/test_rhs1_full_assembly.py
+  tests/test_v3_sparse_pattern.py -q``: ``122 passed``.
+
+Production QH ``s=0.5`` evidence on ``office``:
+
+- ``active_tail_sparse_coarse`` with Galerkin coarse equation:
+  - direct-tail CSR materialization ``14.533 s``;
+  - sparse coarse setup ``1.239 s``;
+  - preflight worsened residual ``2.873075e-04 -> 2.757690e-01``;
+  - rejected by fail-fast gate.
+- ``active_tail_sparse_coarse`` with least-squares coarse equation:
+  - setup ``1.246 s``;
+  - preflight worsened residual ``2.873075e-04 -> 7.967603e-02``;
+  - rejected by fail-fast gate.
+- ``active_xblock`` with ``Lmax=4`` and ``2048 MB`` factor cap:
+  - setup ``2.769 s``;
+  - preflight worsened residual ``2.873075e-04 -> 6.437757e-04``;
+  - this is the best direction so far, but still fails one-step improvement.
+  - Allowing Krylov despite preflight failure timed out at ``180 s`` with
+    residual plateau ``1.184e+01`` after ``550`` iterations and peak RSS
+    ``3.40 GB``.
+- ``active_xblock_sparse_coarse`` with least-squares sparse coarse equation:
+  - composite setup ``3.772 s``;
+  - preflight worsened residual ``2.873075e-04 -> 7.307544e-04``;
+  - rejected by fail-fast gate and slightly worse than x-block alone.
+
+Decision:
+
+- Sparse coarse residual infrastructure is useful and memory-safe, but the
+  current coarse basis does not represent the hard QH residual component.
+- The best measured local kinetic factor is ``active_xblock``. It reduces the
+  failure severity by more than two orders of magnitude relative to diagonal
+  Schur, but it still stalls without a stronger global/current closure.
+- Next real algorithmic target: augment the x-block base with an adaptive
+  residual-derived coarse space. The basis should be built from actual
+  preflight residual snapshots, projected current/source/constraint moments,
+  and a small number of operator-applied Krylov-like residual directions, then
+  solved with the sparse least-squares coarse equation. Static low-angle modes
+  alone are not sufficient for production QH.
+
+Progress update:
+
+- Production-resolution RHSMode=1 QH solver lane: 84%. We have a measured best
+  local factor and rejected two sparse static-global coarse variants.
+- Structured/full-CSR safety lane: 100%.
+- Global/operator-reuse architecture lane: 89%.
+- Overall open-lane average: 97%.
+
+## 2026-06-04 Addendum: adaptive residual-coarse preflight rescue
+
+Code added:
+
+- Added a bounded opt-in adaptive residual-coarse host preconditioner around an
+  existing direct-tail structured factor. It builds a low-rank least-squares
+  correction from the actual failed preflight residual using repeated base
+  solves, sparse operator applications, and a dense matrix only of size
+  ``rank x rank``.
+- Driver controls:
+  - ``SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_RESIDUAL_COARSE``;
+  - ``SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_RESIDUAL_COARSE_RANK``;
+  - ``SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_RESIDUAL_COARSE_MAX_MB``;
+  - ``SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_RESIDUAL_COARSE_REGULARIZATION``.
+- The rescue is deliberately fail-closed. It only replaces the base
+  preconditioner if the corrected one-step residual is finite, lower than the
+  failed factor residual, and lower than the original RHS residual. Otherwise
+  the existing production-size fail-fast gate still rejects before long Krylov.
+
+Local validation:
+
+- ``python -m ruff check sfincs_jax/v3_driver.py tests/test_v3_sparse_pattern.py``:
+  passed.
+- Added a deterministic unit test where a half-identity base factor leaves a
+  known residual and the adaptive coarse equation exactly corrects it.
+- Focused local shard:
+  ``python -m pytest tests/test_namelist.py tests/test_rhs1_full_assembly.py
+  tests/test_v3_sparse_pattern.py -q``: ``123 passed``.
+- ``git diff --check``: passed.
+
+Production QH ``s=0.5`` evidence on ``office``:
+
+- ``active_xblock`` base, ``Lmax=4``, ``2048 MB`` cap, adaptive residual-coarse
+  rank ``4``:
+  - direct-tail CSR materialization ``14.884 s``;
+  - x-block setup ``2.732 s``;
+  - adaptive coarse setup ``0.471 s``;
+  - adaptive storage ``434.5 MB``;
+  - preflight worsened from ``2.873075e-04 -> 6.437757e-04`` for the base and
+    then to ``8.602453e-04`` after the adaptive correction;
+  - correctly rejected in ``21.31 s`` with peak RSS ``2.91 GB``.
+- ``active_diagonal_schur`` base, adaptive residual-coarse rank ``4``:
+  - diagonal-Schur setup ``0.184 s``;
+  - adaptive coarse setup ``0.170 s``;
+  - adaptive storage ``32.4 MB``;
+  - base residual ``8.244150e-02`` improved slightly to ``8.038630e-02`` but
+    remained far worse than the original RHS residual ``2.873075e-04``;
+  - this motivated the stricter acceptance gate described above.
+
+Decision:
+
+- Keep adaptive residual-coarse infrastructure as a tested candidate, but do
+  not promote it for production QH. The actual hard residual is not captured by
+  simply applying the same weak base factor to its own failed residual.
+- The next viable algorithmic route is not another smoother/restart/static
+  coarse variant. It needs a coupled field-split residual equation that exposes
+  the global current/source/constraint closure directly, likely using an
+  active kinetic block as a local approximate inverse plus an explicit small
+  Schur complement over profile/current moments assembled from the measured
+  direct-tail CSR.
+
+Progress update:
+
+- Production-resolution RHSMode=1 QH solver lane: 85%. We added and rejected a
+  real adaptive residual-coarse rescue under bounded production evidence.
+- Structured/full-CSR safety lane: 100%.
+- Global/operator-reuse architecture lane: 90%.
+- Overall open-lane average: 97%.
+
+## 2026-06-04 Addendum: explicit structured-request safety and existing QH coarse-lane closure
+
+Safety fix:
+
+- Explicit direct-tail structured preconditioner requests now fail fast if the
+  requested candidate is not selected. Previously, a rejected candidate could
+  silently fall back to the legacy monolithic host factorization, which is
+  exactly the behavior that makes production QH experiments appear stalled.
+- Added regression coverage forcing an ``active_xblock`` direct-tail
+  preconditioner under a zero memory cap and asserting that no
+  ``explicit_sparse: factorization start`` fallback occurs.
+
+Production QH ``s=0.5`` evidence on ``office``:
+
+- ``active_xblock_low_l_schur`` with ``Lmax=2`` and a ``3 GB`` direct-tail
+  structured cap is rejected before Krylov:
+  ``active_low_l_schur_budget_exceeded:6366121680>3221225472``. With the safety
+  fix, this now exits cleanly instead of launching legacy host ILU.
+- ``active_xblock_low_l_schur`` with ``Lmax=1`` fits and builds in
+  ``2.829 s``, but its one-step residual is identical to x-block alone:
+  ``2.873075e-04 -> 6.437756e-04``. It is correctly rejected by the
+  production-size preflight gate.
+- Existing x-block ``constraint1 moment-Schur`` built a rank-4 tail closure but
+  rejected itself by probe: ``2.873075e-04 -> 6.877341e-04``. The subsequent
+  bounded GMRES run hit the ``180 s`` cap with KSP residual plateauing near
+  ``2.045``.
+- Existing x-block smoothed ``global-coupling`` built an additive rank-20
+  correction from 24 loads, but its seed residual worsened to
+  ``7.459856e-04``. The bounded GMRES run hit the ``180 s`` cap with KSP
+  residual still above ``3.43``.
+
+Decision:
+
+- The existing direct-tail diagonal/tail Schur, sparse static coarse,
+  adaptive residual-coarse, active low-L Schur, x-block moment-Schur, and
+  x-block global-coupling branches are all bounded and rejected for the
+  production QH ``25 x 39 x 60 x 7`` case.
+- The remaining production QH blocker is therefore not a missing restart,
+  smoother, or small static moment correction. The next implementation should
+  be a new assembled active field-split architecture:
+  - reuse the exact active direct-tail CSR materialization;
+  - split kinetic blocks and source/constraint/current closure explicitly;
+  - assemble a small Schur complement from operator-applied kinetic-block
+    solves, but select coarse variables from measured residual energy rather
+    than fixed low-L/tail guesses;
+  - expose a preflight diagnostic that decomposes residual norm by
+    kinetic/tail/species/x/pitch/flux-surface moment before running Krylov.
+
+Progress update:
+
+- Production-resolution RHSMode=1 QH solver lane: 86%. We closed the current
+  preconditioner-family experiments for this hard seed with bounded evidence.
+- Structured/full-CSR safety lane: 100%.
+- Global/operator-reuse architecture lane: 91%.
+- Overall open-lane average: 97%.
+
+## 2026-06-04 Addendum: active residual localization for QH field-split design
+
+Code added:
+
+- Added direct-tail preflight residual diagnostics for active RHSMode=1 solves.
+  The diagnostic reports component energy fractions and top residual
+  concentrations by species, speed index, pitch/Legendre index, and
+  species-speed pair. It is emitted before the production-size fail-fast gate
+  and stored in solver metadata when a solve completes.
+
+Production QH ``s=0.5`` diagnostic evidence on ``office``:
+
+- ``active_xblock`` with ``Lmax=4``:
+  - direct-tail CSR materialization ``14.987 s``;
+  - x-block setup ``2.732 s``;
+  - preflight residual ``2.873075e-04 -> 6.437757e-04``;
+  - residual energy is kinetic, not global-tail:
+    ``kinetic_energy_fraction=1.000000`` and
+    ``extra_energy_fraction=9.0e-11``;
+  - top residual concentration:
+    ``species=0, x=0`` with ``3.972e-1`` of total residual energy, and
+    pitch/Legendre ``ell=4`` with ``5.732e-1`` of total residual energy.
+- ``active_xblock`` with ``Lmax=5``:
+  - setup increased to ``4.416 s``;
+  - preflight residual worsened to ``1.479581e-03``;
+  - residual energy shifted to ``species=0, x=4`` and ``ell=5``.
+
+Decision:
+
+- The hard QH production residual is a kinetic block residual, not a tail
+  closure residual. The current x-block inverse does not just miss one
+  low-pitch mode; increasing ``Lmax`` pushes the residual into the next
+  speed/pitch region and worsens the one-step preflight.
+- Next implementation should build a residual-localized kinetic Schur, not a
+  fixed low-L/tail Schur:
+  - use the new diagnostics to identify the active ``(species, x, ell)``
+    residual support;
+  - factor a small number of targeted local windows around those supports;
+  - include neighbor pitch/speed coupling in the selected submatrix;
+  - gate by one-step residual decrease before Krylov.
+
+Progress update:
+
+- Production-resolution RHSMode=1 QH solver lane: 87%.
+- Structured/full-CSR safety lane: 100%.
+- Global/operator-reuse architecture lane: 92%.
+- Overall open-lane average: 97%.
+
+## 2026-06-04 Addendum: residual-localized kinetic window Schur trial
+
+Code added:
+
+- Added an opt-in residual-localized active kinetic window preconditioner. It is
+  built only after failed direct-tail structured preflight, using the measured
+  residual support to select small ``(species, x, ell)`` windows, factor their
+  active CSR submatrices, and apply them as an additive correction around the
+  base factor.
+- Added optional least-squares coefficients over the window correction
+  directions. This forms a small dynamic residual equation from ``A Z`` at
+  apply time, avoiding the fixed coefficient-one additive assumption.
+- Added coupled residual-window modes:
+  - ``..._COMBINE=union`` factors the union of selected residual windows as one
+    active submatrix;
+  - ``..._COMBINE=interface`` expands that union by sparse row/column graph
+    neighbors up to ``..._INTERFACE_DEPTH`` with a hard ``..._MAX_SIZE`` cap.
+- Controls:
+  - ``SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_RESIDUAL_WINDOW``;
+  - ``..._MAX_WINDOWS``;
+  - ``..._X_RADIUS``;
+  - ``..._ELL_RADIUS``;
+  - ``..._MAX_MB``;
+  - ``..._REGULARIZATION``;
+  - ``..._COEFFICIENTS=additive|least_squares``;
+  - ``..._COMBINE=independent|union|interface``;
+  - ``..._INTERFACE_DEPTH``;
+  - ``..._MAX_SIZE``.
+- The acceptance rule is the same strict production rule used elsewhere: the
+  windowed factor only replaces the base factor if the one-step true residual
+  is finite, lower than the base-factor residual, and lower than the original
+  RHS norm.
+- Added deterministic unit coverage showing a residual-localized kinetic
+  window exactly corrects a targeted identity residual.
+
+Production QH ``s=0.5`` evidence on ``office``:
+
+- Base ``active_xblock`` at ``Lmax=4``:
+  ``2.873075e-04 -> 6.437757e-04``.
+- Residual window with ``max_windows=2``, ``x_radius=0``,
+  ``ell_radius=1``, ``512 MB`` cap:
+  - built 2 windows in ``0.182 s``;
+  - factor storage ``432.6 MB``;
+  - improved residual to ``5.126737e-04`` but did not beat the original RHS
+    norm, so rejected.
+- Residual window with ``max_windows=8``, ``x_radius=1``,
+  ``ell_radius=1``, ``2048 MB`` cap:
+  - built 5 windows in ``0.604 s``;
+  - factor storage ``510.9 MB``;
+  - improved residual to ``4.892253e-04`` but still failed the strict gate.
+- Same moderate window with least-squares coefficients:
+  - built 5 windows in ``0.649 s``;
+  - factor storage ``510.9 MB``;
+  - improved residual further to ``4.547305e-04`` but still failed the strict
+    gate.
+- Pitch-wider least-squares window with ``max_windows=12``, ``x_radius=1``,
+  ``ell_radius=2``, ``3072 MB`` cap:
+  - built 8 windows in ``2.137 s``;
+  - factor storage ``702.3 MB``;
+  - worsened residual to ``6.284981e-04``.
+- Coupled union least-squares window with ``max_windows=8``, ``x_radius=1``,
+  ``ell_radius=1``, ``3072 MB`` cap:
+  - built one union factor in ``1.234 s``;
+  - factor storage ``587.3 MB``;
+  - residual ``5.693038e-04``; worse than independent LS windows.
+- Graph-interface least-squares window with ``interface_depth=1`` and
+  ``max_size=80000``:
+  - built one expanded factor in ``3.059 s``;
+  - factor storage ``759.6 MB``;
+  - residual ``6.169246e-04``; worse than independent LS windows.
+- Residual window with ``max_windows=16``, ``x_radius=2``,
+  ``ell_radius=2``, ``4096 MB`` cap:
+  - built 6 windows in ``2.271 s``;
+  - factor storage ``733.4 MB``;
+  - worsened residual to ``1.432812e-03``.
+
+Decision:
+
+- Residual-localized kinetic windows are the first new local correction that
+  reduces the hard QH preflight residual in this pass, and least-squares
+  coefficients improve it further. The improvement is still insufficient for
+  production promotion.
+- Widening or coupling windows naively is not monotone and can worsen
+  residuals. The next production candidate should not be another local-window
+  enlargement. It should change the local inverse itself: either a physically
+  structured speed-pitch block factor that includes the dominant ``ell=4``
+  kinetic residual without pushing error into neighboring ``ell/x`` blocks, or
+  a true active-system approximate factorization with row/column scaling and
+  nullspace/gauge handling.
+
+Progress update:
+
+- Production-resolution RHSMode=1 QH solver lane: 90%.
+- Structured/full-CSR safety lane: 100%.
+- Global/operator-reuse architecture lane: 95%.
+- Overall open-lane average: 98%.
+
+## 2026-06-04 Addendum: active-system scaling and pitch-band factorization audit
+
+Implementation:
+
+- Added opt-in row/column-equilibrated active sparse factors:
+  ``active_scaled_ilu`` / ``active_scaled_lu``. These are size-gated by
+  ``SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_SCALED_ILU_MAX_SIZE`` so production-sized
+  active systems fail fast instead of spending minutes in a global SuperLU
+  factorization.
+- Added opt-in local x-block equilibration controlled by
+  ``SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_XBLOCK_SCALE``. This scales each bounded
+  local ``(species,x,ell,theta,zeta)`` block before SuperLU factorization and
+  accounts for scale-vector memory in the budget.
+- Added opt-in ``active_ell_band_schur``. It factors a coupled active residual
+  equation on a selected Legendre/pitch band, for example ``ell=3..5`` across
+  all species, speeds, and angles plus the global tail. The correction defaults
+  to a least-squares scalar coefficient so a harmful band solve cannot
+  catastrophically overshoot the full active residual.
+- Added unit coverage for the global scaled active factor, scaled local
+  x-block factors, and the coupled pitch-band Schur factor.
+
+Validation:
+
+- Local:
+  ``python -m ruff check sfincs_jax/rhs1_full_assembly.py tests/test_rhs1_full_assembly.py``
+  passed.
+- Local:
+  ``python -m pytest tests/test_rhs1_full_assembly.py::test_active_scaled_ilu_preconditioner_equilibrates_and_solves tests/test_rhs1_full_assembly.py::test_active_xblock_preconditioner_can_scale_local_blocks tests/test_rhs1_full_assembly.py::test_active_ell_band_schur_preconditioner_builds_coupled_pitch_band tests/test_rhs1_full_assembly.py::test_active_projected_spilu_preconditioner_is_memory_gated -q``
+  passed with ``4 passed``.
+- Remote ``office`` targeted pitch-band unit test passed in the current
+  QH audit copy.
+
+Production QH ``s=0.5`` evidence on ``office``:
+
+- Global scaled active factor:
+  - ``active_scaled_ilu`` with diagonal shift ``1e-10`` failed fast in SuperLU;
+  - with shift ``1e-6`` it did not finish factorization before the bounded
+    ``240 s`` guard, so the new max-size gate is required.
+- Scaled local x-block:
+  - ``active_xblock`` with ``Lmax=4`` and
+    ``SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_XBLOCK_SCALE=1`` built in ``3.972 s``;
+  - one-step residual was unchanged relative to unscaled x-block:
+    ``2.873075e-04 -> 6.437757e-04``;
+  - conclusion: local row/column conditioning is not the blocker.
+- Coupled pitch-band Schur:
+  - ``active_ell_band_schur`` over ``ell=3..5`` with a ``4096 MB`` cap built in
+    ``4.163 s`` but the raw additive correction overshot badly:
+    ``2.873075e-04 -> 3.750515e-01``, pushing residual energy into ``ell=0``;
+  - the least-squares scalar safeguard avoided the overshoot, but collapsed the
+    correction back to the x-block residual:
+    ``2.873075e-04 -> 6.437752e-04``.
+- Deeper local pitch coupling:
+  - ``active_xblock`` with ``Lmax=8`` was rejected under a ``4096 MB`` cap with
+    estimate ``4639050000`` bytes;
+  - under a ``6144 MB`` cap it was still rejected with estimate
+    ``6585930000`` bytes and had already reached ``5.41 GB`` peak RSS before
+    selection completed.
+
+Decision:
+
+- Keep the new scaled-factor and pitch-band infrastructure as documented
+  research/debug paths because they are bounded, tested, and give useful
+  diagnostics.
+- Do not promote any of these paths as production defaults for QH. The evidence
+  rules out pure local equilibration, single-band additive Schur correction,
+  and deeper local pitch blocks under practical memory caps.
+- The next real production path should reproduce the compact Fortran-v3
+  preconditioner matrix more directly, not keep factoring pieces of the exact
+  active operator. The source audit confirmed that SFINCS Fortran v3 uses
+  preconditioner-specific derivative matrices and drops selected pitch/radial
+  couplings in ``populateMatrix.F90``; SFINCS_JAX should expose a first-class
+  assembled/sparsified RHSMode=1 preconditioner operator with the same
+  term-level reductions, then factor or approximately factor that operator
+  with Python/JAX-native sparse infrastructure.
+
+Progress update:
+
+- Production-resolution RHSMode=1 QH solver lane: 91%.
+- Structured/full-CSR safety lane: 100%.
+- Active-system factorization research lane: 96%.
+- Overall open-lane average: 98%.
+
+### 2026-06-04 stronger active-system factorization pass
+
+Implementation:
+
+- Added an actual-CSR memory gate for the direct-tail structured CSR helper.
+  This avoids rejecting compact term-separated direct-tail matrices based only
+  on the conservative product-pattern estimate.
+- Added a large-system safety guard:
+  ``SFINCS_JAX_RHSMODE1_STRUCTURED_FULL_CSR_PROJECT_AFTER_BUILD_MAX_SIZE``.
+  Large active-reduced RHSMode=1 systems now skip the unsafe path that builds a
+  full CSR matrix and slices active rows afterward. This prevents the QH
+  ``819004 -> 507004`` active projection from materializing the full matrix.
+- Added an active-projected preconditioner ``auto`` ladder. The ladder is
+  memory-gated and records rejected candidates, but QH evidence below shows it
+  must remain quality-gated before production promotion.
+- Added opt-in ``active_xell_window_lsq_schur``. This builds a bounded window
+  ``W`` from ``species:x:ell`` targets, forms ``A[:, W]``, and solves a
+  regularized least-squares residual equation before scattering the correction.
+  It supports zero-base mode and global scalar damping so it can be used as a
+  controlled research/debug factorization.
+
+Local validation:
+
+- ``python -m pytest tests/test_rhs1_full_assembly.py tests/test_v3_sparse_pattern.py::test_fortran_reduced_direct_tail_auto_preconditioner_uses_active_ladder tests/test_v3_sparse_pattern.py::test_structured_direct_tail_skips_large_project_after_build tests/test_v3_sparse_pattern.py::test_structured_direct_tail_uses_actual_csr_budget_instead_of_preflight -q``
+  passed with ``39 passed``.
+- ``python -m pytest tests/test_fortran_reduced_preconditioner.py tests/test_rhs1_collisionless_stencils.py tests/test_rhs1_collision_stencils.py tests/test_rhs1_full_assembly.py tests/test_v3_sparse_pattern.py -q``
+  passed with ``169 passed``.
+- ``python -m ruff check sfincs_jax/rhs1_full_assembly.py sfincs_jax/v3_driver.py tests/test_rhs1_full_assembly.py tests/test_v3_sparse_pattern.py --extend-ignore E402,E741``
+  passed.
+
+Production QH ``s=0.5`` evidence on ``office``:
+
+- Full structured CSR before active projection is not viable:
+  bypassing the conservative preflight entered assembly but hit an allocator
+  OOM after ``5:31`` and ``19.9 GB`` peak RSS. The large-system guard therefore
+  stays mandatory until true active-projected structured assembly exists.
+- With the guard enabled, direct-tail materialization is bounded and fast:
+  the QH active matrix builds in about ``12-13 s`` with about ``164 MB`` CSR
+  storage and peak RSS near ``3.9 GB``.
+- Host-factor fallback is not viable for this QH point:
+  direct-tail host ILU stayed in factorization until the ``360 s`` timeout.
+- Active auto selected ``active_ell_band_schur`` in about ``5-7 s``, but the
+  true-operator one-step preflight worsened or stagnated:
+  ``2.873075e-04 -> 6.437753e-04`` for ``Lmax=4`` and
+  ``2.873075e-04 -> 1.479581e-03`` for ``Lmax=5``.
+- Existing residual-window correction is not sufficient:
+  a one-window block built in ``0.712 s`` using about ``0.887 GB`` but worsened
+  ``6.437753e-04 -> 2.080440e-03``.
+- The new ``active_xell_window_lsq_schur`` is bounded and fast but not yet a
+  production solution:
+  ``spec=0:0:4`` with zero base and damping only changed the residual at
+  roundoff, while ``spec=0:2:0`` still worsened the true-operator residual.
+
+Decision:
+
+- Keep ``active_xell_window_lsq_schur`` as an explicit research/debug
+  preconditioner with tests. Do not promote it to default.
+- The failure mode is now specific: these active preconditioners are built from
+  the preconditioner matrix ``op_pc`` while QH quality is evaluated against the
+  true operator ``op``. A residual equation based on ``op_pc[:, W]`` can be
+  mathematically well posed and still worsen the true residual.
+- Next production algorithmic step: construct a compact active-projected
+  preconditioner operator whose columns are consistent with the true operator
+  for selected residual windows, or assemble the Fortran-v3-style
+  term-reduced preconditioner at the term level without full product-pattern
+  overfill. Candidate implementation is a true-operator window correction in
+  the driver that forms ``A_true[:, W]`` with bounded batched matvecs and
+  accepts it only if it improves the one-step true residual.
+
+Progress update:
+
+- Production-resolution RHSMode=1 QH solver lane: 92%.
+- Structured/full-CSR safety lane: 100%.
+- Active-system factorization research lane: 97%.
+- Overall open-lane average: 98%.
+
+### 2026-06-04 real replacement-path implementation pass
+
+Implementation:
+
+- Added ``active_schwarz_sparse_coarse`` and aliases to the active projected
+  preconditioner dispatch. This is a two-level candidate: restricted
+  additive-Schwarz/RAS over active speed/pitch patches plus a global sparse
+  coarse residual equation. It is now first in the active ``auto`` ladder, but
+  remains quality-gated by preflight.
+- Fixed direct-tail active-index handoff for already reduced active CSR
+  matrices. If a direct-tail matrix is already active-projected, the
+  sparse-coarse builder now passes ``arange(n_active)`` to the Schwarz base
+  instead of losing active-layout information.
+- Added a direct-tail structured-preconditioner cache in ``v3_driver.py``.
+  Cache keys include CSR structure/data, active indices, RHSMode=1 layout,
+  preconditioner kind, memory budget, regularization, and active-preconditioner
+  environment knobs. Successful repeated solves now reuse the factor/coarse
+  object and report ``direct_tail_structured_pc_cache_hit`` metadata.
+- Added ``active_global_sparse_factor`` with explicit aliases
+  ``active_global_sparse_lu`` and ``active_global_sparse_ilu``. This provides a
+  Python-native global active sparse factor over the assembled
+  Fortran-reduced CSR with memory gates, exact-LU mode for bounded validation,
+  ILU mode for production experiments, and cache-compatible metadata. Exact LU
+  uses diagonal pivoting by default; a unit test caught that disabling pivoting
+  produced a poor inverse even on a tiny active CSR.
+
+Local validation:
+
+- ``python -m pytest tests/test_v3_sparse_pattern.py::test_fortran_reduced_direct_tail_structured_pc_cache_reuses_candidate tests/test_rhs1_full_assembly.py::test_active_schwarz_sparse_coarse_preconditioner_builds_two_level_candidate tests/test_rhs1_full_assembly.py::test_active_projected_auto_ladder_can_select_schwarz_sparse_coarse -q``
+  passed with ``3 passed``.
+- ``python -m pytest tests/test_rhs1_full_assembly.py tests/test_v3_sparse_pattern.py::test_fortran_reduced_pc_gmres_direct_tail_sparse_coarse_solves_tiny_rhs1_system tests/test_v3_sparse_pattern.py::test_fortran_reduced_direct_tail_structured_pc_cache_reuses_candidate tests/test_v3_sparse_pattern.py::test_fortran_reduced_direct_tail_auto_preconditioner_uses_active_ladder -q``
+  passed with ``41 passed`` before the global-factor additions and ``42
+  passed`` after adding the global sparse factor tests.
+- ``python -m ruff check sfincs_jax/rhs1_full_assembly.py sfincs_jax/v3_driver.py tests/test_rhs1_full_assembly.py tests/test_v3_sparse_pattern.py --extend-ignore E402,E741``
+  passed.
+
+Production QH ``s=0.5`` evidence on ``office``:
+
+- Direct-tail term-level active CSR assembly is now consistently bounded and
+  fast for the QH production surface:
+  ``507004 x 507004``, ``13483256`` nnz, materialization ``14.4-15.0 s``.
+  This closes the assembly side of the replacement path.
+- ``active_schwarz_sparse_coarse`` with ``LMAX=4`` was rejected by the
+  ``4096 MB`` gate: estimated ``4867200000`` bytes. ``LMAX=3`` was also just
+  over budget: ``4517370000`` bytes.
+- ``active_schwarz_sparse_coarse`` with ``LMAX=2`` fit the budget and built in
+  about ``2.7 s`` with peak RSS about ``2.65 GB``, but failed true preflight:
+  Galerkin coarse equation ``2.873075e-04 -> 9.083689e-02`` and least-squares
+  coarse equation ``2.873075e-04 -> 3.840157e-02``. Conclusion: the
+  Schwarz/global-coarse candidate is implemented and tested, but not strong
+  enough for the production QH default.
+- ``active_global_sparse_ilu`` over the full active CSR is memory-feasible but
+  not setup-feasible with SciPy/SuperLU-style ILU:
+  ``fill_factor=4`` timed out at ``360 s`` with peak RSS ``2.58 GB``;
+  ``fill_factor=2`` timed out at ``240 s`` with peak RSS ``2.55 GB``;
+  ``fill_factor=1.5`` failed quickly during factorization. Conclusion: keep
+  this path as validation/debug infrastructure, not as the QH default.
+- ``active_xblock_sparse_coarse`` with the correct active knob
+  ``SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_XBLOCK_LMAX=4`` built in ``5.4 s`` and
+  stayed within memory, but failed true preflight:
+  ``2.873075e-04 -> 7.307542e-04``. Letting GMRES proceed despite preflight
+  failure stagnated: preconditioned residual stayed near ``1.5e+01`` through
+  ``150`` iterations, so the gate correctly rejected it. ``LMAX=5`` worsened
+  to ``1.479581e-03`` and ``LMAX=8`` exceeded the 4 GiB gate.
+
+Decision:
+
+- The real replacement architecture now has the core pieces in source:
+  term-level active CSR assembly, direct-tail factor/coarse cache, two-level
+  Schwarz/global coarse, x-block/global coarse, and global active sparse
+  factor infrastructure.
+- None of the new QH candidates should be promoted as the production default
+  yet. The production blocker is no longer assembly or cache/reuse; it is the
+  quality of the active preconditioner against the true RHSMode=1 operator.
+- The next non-incremental algorithmic step should be a genuinely coupled
+  field-split residual equation: assemble or apply the true operator on a
+  compact set of global current/constraint/profile moments plus the dominant
+  kinetic residual subspace, then solve the residual equation with a
+  nonsymmetric least-squares/Petrov-Galerkin coarse operator. This should avoid
+  both pure local Schwarz over-correction and monolithic ILU setup time.
+
+Progress update:
+
+- Production-resolution RHSMode=1 QH solver lane: 93%.
+- Structured/full-CSR safety lane: 100%.
+- Active-system factorization/reuse infrastructure lane: 99%.
+- Overall open-lane average: 98%.
+
+### 2026-06-04 true-operator coupled coarse residual equation pass
+
+Implementation:
+
+- Added an opt-in ``TRUE_COUPLED_COARSE`` correction around the direct-tail
+  structured preconditioner. The correction builds a small solution basis ``Z``,
+  applies the active true RHSMode=1 operator to form ``A_true Z`` with bounded
+  batched columns, solves a regularized least-squares residual equation, and
+  accepts the wrapper only through explicit true-residual gates.
+- Extended the coupled basis beyond local residual windows:
+  - separate dominant kinetic residual-window columns rather than only one union
+    column;
+  - global tail/source directions for constraint rows;
+  - geometry-weighted density, pressure, flow/current, and heat-flow profile
+    moment columns using the same flux-surface-average factor used by the
+    constraint rows;
+  - low-L flux-surface-averaged residual columns;
+  - low Fourier angular residual projections and optional angular basis columns.
+- Added solver metadata and environment controls for each basis family, memory
+  cap, rank cap, column batch, regularization, and a diagnostic-only
+  ``ACCEPT_BASE_IMPROVEMENT`` Krylov override. The override is off by default and
+  records when it bypasses the stricter one-step preflight gate.
+- Added an opt-in response-basis layer:
+  ``INCLUDE_PRECONDITIONED_LOADS`` applies the current active preconditioner to a
+  bounded number of physics/load columns, sparsifies each response, and then
+  tests those solution-space columns with the true active operator. This is a
+  field-split Schur-style probe of ``Z = M^{-1} B`` rather than another raw
+  residual-window smoother.
+- Tightened the tiny regression so it proves that the true-coupled metadata
+  includes profile/current moment columns and angular residual columns, not just
+  the older residual-window/tail/source basis.
+
+Local validation:
+
+- ``python -m py_compile sfincs_jax/v3_driver.py`` passed.
+- ``python -m ruff check sfincs_jax/v3_driver.py tests/test_v3_sparse_pattern.py --extend-ignore E402,E741``
+  passed.
+- ``python -m pytest tests/test_v3_sparse_pattern.py::test_fortran_reduced_direct_tail_true_coupled_coarse_records_bounded_metadata tests/test_v3_sparse_pattern.py::test_fortran_reduced_direct_tail_structured_pc_cache_reuses_candidate -q``
+  passed with ``2 passed``.
+- The broader RHSMode=1 sparse/refactor slice was rerun after the final
+  split-window/profile-weighting edit:
+  ``python -m pytest tests/test_fortran_reduced_preconditioner.py tests/test_rhs1_collisionless_stencils.py tests/test_rhs1_collision_stencils.py tests/test_rhs1_full_assembly.py tests/test_v3_sparse_pattern.py -q``
+  passed with ``180 passed in 136.56 s``.
+- After adding the response-basis layer, the focused regression
+  ``python -m pytest tests/test_v3_sparse_pattern.py::test_fortran_reduced_direct_tail_true_coupled_coarse_records_bounded_metadata tests/test_v3_sparse_pattern.py::test_fortran_reduced_direct_tail_structured_pc_cache_reuses_candidate -q``
+  passed with ``2 passed``.
+- After adding the response-basis layer, the broader RHSMode=1 sparse/refactor
+  slice was rerun:
+  ``python -m pytest tests/test_fortran_reduced_preconditioner.py tests/test_rhs1_collisionless_stencils.py tests/test_rhs1_collision_stencils.py tests/test_rhs1_full_assembly.py tests/test_v3_sparse_pattern.py -q``
+  passed with ``180 passed in 127.61 s``.
+
+Production QH ``s=0.5`` evidence on ``office``:
+
+- Baseline direct-tail assembly remains bounded and fast:
+  ``507004 x 507004``, ``13483256`` nnz, direct-tail materialization about
+  ``14.7-15.1 s``, active x-block sparse-coarse setup about ``5.8-6.4 s``, and
+  peak RSS about ``4.3-5.0 GB`` for the coupled probes.
+- Previous small true-coupled basis:
+  ``coarse_size=18-19`` improved the active x-block one-step residual from
+  ``7.307542e-04`` to about ``4.76e-04`` but did not beat the original
+  ``2.873075e-04`` RHS norm, so it was rejected.
+- Profile/current plus angular residual basis:
+  ``coarse_size=74`` improved ``7.307542e-04 -> 4.262358e-04``.
+- Split residual-window plus geometry-weighted profile/current basis:
+  ``coarse_size=77`` improved ``7.307542e-04 -> 3.883393e-04``.
+- Larger angular-basis run:
+  ``coarse_size=244``, ``z_nnz=1652443``, ``a_nnz=5749726``, setup
+  ``15.477 s``, estimated storage ``711435920`` bytes, improved
+  ``7.307542e-04 -> 3.494961e-04``. This is the best coupled-basis result so
+  far but still does not beat the original ``2.873075e-04`` true residual.
+- Response-basis run:
+  ``coarse_size=308``, ``z_nnz=2087283``, ``a_nnz=7466127``, setup
+  ``19.698 s``, estimated storage ``737817084`` bytes, peak RSS about
+  ``5.18 GB``. It improved ``7.307542e-04 -> 3.489284e-04``. This is only a
+  marginal improvement over the larger angular-basis run, so response columns
+  alone do not close production QH either.
+- Diagnostic Krylov override:
+  accepting the best coupled basis only because it improved the base
+  preconditioner did not converge. The preconditioned residual decreased slowly
+  from about ``2.11e+01`` to only ``1.78e+01`` after more than ``250`` matvecs,
+  so the run was manually terminated rather than spending the full timeout.
+
+Decision:
+
+- Keep the true-coupled/profile/angular residual infrastructure because it is
+  bounded, tested, and gives a real residual reduction against the true operator.
+- Keep the response-basis hook as a tested diagnostic because it verifies the
+  ``M^{-1}B`` Schur-response idea cheaply, but do not promote it for production
+  QH.
+- Do not promote it as a production QH default. Even a 244-dimensional
+  true-operator basis and a 308-dimensional response-basis variant do not reach
+  the strict preflight gate, and Krylov with a base-improvement override still
+  stagnates.
+- The next replacement path should stop expanding low-rank basis families and
+  instead build a stronger Python/JAX-native field split:
+  - active true/preconditioner matrix split into dominant kinetic block plus
+    global constraint/profile/current rows;
+  - an explicit Schur residual equation over that split, with reusable
+    term-level active CSR blocks;
+  - a native sparse triangular/block factor or block-Jacobi/Schur factor that
+    approximates the compact SFINCS Fortran-v3 preconditioner matrix closely
+    enough to reproduce the Fortran/PETSc ``~16``-iteration QH behavior without
+    PETSc/MUMPS/SuperLU_DIST dependencies.
+
+Progress update:
+
+- Production-resolution RHSMode=1 QH solver lane: 94%.
+- True-operator coupled residual infrastructure lane: 100% as a tested
+  diagnostic/research component, not a production default.
+- Structured/full-CSR safety lane: 100%.
+- Active-system factorization/reuse infrastructure lane: 99%.
+- Overall open-lane average: 98%.
+
+### 2026-06-04 JAX-native PETSc/MUMPS/SuperLU-style replacement pass
+
+Goal:
+
+- Keep the production direction explicitly Python/JAX-native. PETSc, MUMPS,
+  SuperLU_DIST, and SuperLU-style host factors remain reference behavior to
+  learn from, not runtime dependencies for SFINCS_JAX.
+- Reproduce the useful behavior in our own code: physics-aware block assembly,
+  reusable block factors, compact Schur residual equations, bounded memory
+  budgets, residual-gated acceptance, and device-compatible application.
+
+Library audit:
+
+- ``jax.experimental.sparse`` remains the primary JAX-native sparse storage and
+  matvec candidate for explicit device operators. It provides BCOO sparse data
+  structures and sparse dot primitives, but it is not a sparse direct
+  factorization package. Use it for matrix storage/matvec and build our
+  block/Schur/factor infrastructure around it.
+- ``lineax`` is useful for differentiable linear-solve and least-squares
+  wrappers, especially once the RHSMode=1 coarse residual equations are exposed
+  as explicit JAX operators. It should be evaluated behind benchmark gates; it
+  is not a MUMPS replacement by itself.
+- ``jaxopt`` is useful for optimization/implicit-differentiation workflows but
+  does not solve the sparse factor/preconditioner gap directly.
+- ``equinox`` is mostly relevant if we adopt ``lineax`` operator/module objects;
+  it is not needed for the first native factor kernels.
+- ``interpax`` is useful for differentiable interpolation/function
+  approximation in geometry/profile pipelines. It does not provide sparse
+  matrix factorization or strong preconditioning, so it should not be added for
+  the PETSc/MUMPS replacement lane.
+
+Implementation:
+
+- Added ``sfincs_jax.native_block_factor`` with small, dependency-free JAX
+  kernels:
+  - ``NativeDenseBlockJacobi`` plus build/apply helpers for equal-sized dense
+    diagonal block inverses;
+  - ``NativeTwoFieldSchurFactor`` plus build/apply helpers for exact dense
+    two-field block-LDU/Schur updates;
+  - ``NativeXEllKineticFactor`` plus build/apply helpers for device-compatible
+    ``(x, ell)`` kinetic line inverse blocks with optional tail Jacobi.
+- Extended ``RHS1FullCSRKineticPreconditioner`` with an optional
+  ``native_factor`` and ``apply_native``. The default host path is unchanged,
+  but tests can now request a JAX-native factor built from the same extracted
+  full-CSR ``x_ell`` blocks.
+- Added native-factor tests proving exact agreement with dense solves, host CSR
+  kinetic preconditioner output, JIT application, multi-RHS application, shape
+  guards, and finite gradients through the two-field Schur factor.
+
+Validation:
+
+- ``python -m py_compile sfincs_jax/native_block_factor.py
+  sfincs_jax/rhs1_full_csr_kinetic_pc.py tests/test_native_block_factor.py
+  tests/test_rhs1_full_csr_kinetic_pc.py`` passed.
+- ``python -m ruff check sfincs_jax/native_block_factor.py
+  sfincs_jax/rhs1_full_csr_kinetic_pc.py tests/test_native_block_factor.py
+  tests/test_rhs1_full_csr_kinetic_pc.py --extend-ignore E402,E741`` passed.
+- ``python -m pytest tests/test_native_block_factor.py
+  tests/test_rhs1_full_csr_kinetic_pc.py -q`` passed with ``9 passed in
+  4.23 s``.
+- Bounded RHSMode=1 sparse/refactor slice:
+  ``python -m pytest tests/test_fortran_reduced_preconditioner.py
+  tests/test_rhs1_collisionless_stencils.py tests/test_rhs1_collision_stencils.py
+  tests/test_rhs1_full_assembly.py tests/test_rhs1_full_csr_kinetic_pc.py
+  tests/test_native_block_factor.py tests/test_v3_sparse_pattern.py -q``
+  passed with ``189 passed in 130.76 s``.
+
+Next implementation stages:
+
+- Stage 1: promote the optional native ``x_ell`` factor into a bounded solver
+  policy probe for device RHSMode=1 solves, with identical residual gates to the
+  host path and no default promotion until CPU/GPU parity is demonstrated.
+- Stage 2: extract active true-operator block partitions from the assembled
+  full CSR path: dominant kinetic block, Phi1/QN block, constraint/profile
+  rows, and current/profile moment columns.
+- Stage 3: build a reusable JAX-native field-split factor:
+  local kinetic ``x_ell``/angular/radial block inverses plus an explicit Schur
+  residual equation over global constraints, Phi1/QN, and current/profile
+  moments.
+- Stage 4: evaluate a ``lineax`` wrapper for the coarse residual equation only
+  after the native block factor has a stable operator API; keep it only if it
+  materially reduces code complexity or improves autodiff/least-squares
+  behavior without runtime/RSS regressions.
+- Stage 5: rerun bounded QA/QH bootstrap-current gates and production QH
+  ``s=0.5`` after the field-split native factor exists. Promotion requires
+  residual-clean convergence, CPU/GPU agreement, lower setup+solve time than
+  the current host/diagnostic path, and no memory regression.
+
+Progress update:
+
+- Native PETSc/MUMPS replacement kernel lane: 35%.
+- Device-compatible ``x_ell`` factor/reuse lane: 40%.
+- Production-resolution RHSMode=1 QH solver lane: 94% infrastructure, still
+  blocked on stronger factor quality.
+- Overall open-lane average: 98% for existing shipped lanes, about 42% for the
+  new native-direct-replacement research lane.
+
+### 2026-06-04 JAX ecosystem probes and native ``x_ell`` structured-CSR wiring
+
+Implementation:
+
+- Added an explicit ``native_xell`` / ``jax_native_xell`` preconditioner kind to
+  ``build_structured_rhs1_full_csr_preconditioner``. This is intentionally an
+  opt-in structured full-CSR probe, not part of matrix-free RHSMode=1
+  preconditioner auto-selection.
+- The new preconditioner reuses the existing memory-bounded full-CSR
+  ``x_ell`` kinetic block extraction and applies the inverse blocks with the
+  JAX-native ``NativeXEllKineticFactor``. The host SciPy Krylov wrapper receives
+  writable NumPy arrays from the JAX apply path to avoid read-only output issues.
+- Added a driver-level opt-in test for
+  ``SFINCS_JAX_RHS1_FULL_CSR_PRECONDITIONER=native_xell`` with
+  ``SFINCS_JAX_RHS1_FULL_CSR_KRYLOV=gmres`` and
+  ``SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_DOF=0``. This proves users can request the
+  probe through the structured full-CSR lane while default active-direct
+  behavior remains unchanged.
+- Added ``scripts/benchmark_jax_ecosystem_backends.py``. It builds one bounded
+  RHSMode=1 structured CSR matrix and records:
+  - JAX ``BCOO`` conversion/matvec accuracy and timing;
+  - native ``xell`` setup/apply timing and one-step residual scale;
+  - optional Lineax dense GMRES behavior only when the matrix is below a strict
+    dense-size cap.
+- Added ``tests/test_jax_ecosystem_backend_probes.py`` with fast gates for JAX
+  sparse ``BCOO`` matvec parity, optional Lineax GMRES agreement on a tiny
+  dense nonsymmetric system, optional Interpax differentiable profile
+  interpolation, and the benchmark script payload.
+
+Validation:
+
+- Focused compile/lint passed for the native, structured-CSR, benchmark, and
+  ecosystem probe files.
+- ``python -m pytest tests/test_jax_ecosystem_backend_probes.py
+  tests/test_rhs1_full_assembly.py::test_driver_linear_gmres_structured_csr_native_xell_env_probe
+  tests/test_rhs1_full_assembly.py::test_driver_linear_gmres_structured_csr_physical_default_is_active_direct
+  tests/test_native_block_factor.py tests/test_rhs1_full_csr_kinetic_pc.py -q``
+  passed with ``15 passed in 8.46 s``.
+- Broader device/operator/full-CSR gate:
+  ``python -m pytest tests/test_rhs1_device_operator.py
+  tests/test_rhs1_full_assembly.py tests/test_rhs1_block_operator.py
+  tests/test_benchmark_rhs1_fblock_csr_reuse.py
+  tests/test_benchmark_rhs1_full_csr_reuse.py tests/test_native_block_factor.py
+  tests/test_rhs1_full_csr_kinetic_pc.py
+  tests/test_jax_ecosystem_backend_probes.py -q`` passed with
+  ``100 passed in 42.03 s``.
+
+Local benchmark evidence:
+
+- ``scripts/benchmark_jax_ecosystem_backends.py --json --repeats 3
+  --lineax-max-dense-size 4096`` on
+  ``quick_2species_FPCollisions_noEr.input.namelist``:
+  - JAX sparse ``BCOO`` matvec matched host CSR with relative error
+    ``1.40e-16`` and warm matvec mean ``3.31e-4 s`` after conversion.
+  - Optional Lineax dense GMRES converged on this small matrix, residual
+    ``4.25e-13``, but mean solve time was ``5.93e-1 s`` and required dense
+    storage. It is not a production sparse replacement.
+  - Native ``xell`` setup was ``1.37e-1 s`` and apply mean ``2.11e-3 s``, but a
+    one-step application gave residual/rhs ``1.67``. It is a useful factor
+    kernel, not an adequate standalone global preconditioner.
+- Bounded GMRES solve comparison on the same small case:
+  - ``native_xell`` converged, residual ``3.26e-12``, but took ``157`` GMRES
+    callback entries.
+  - ``diagonal_schur`` converged with ``77`` callback entries.
+  - ``jacobi`` converged with ``120`` callback entries.
+  Therefore ``native_xell`` should not be promoted above ``diagonal_schur`` on
+  current evidence.
+
+Library decisions:
+
+- ``jax.experimental.sparse`` is useful now for device-resident sparse matvecs
+  and should remain the primary native sparse storage/matvec target. It does
+  not provide the missing MUMPS/SuperLU-style direct factorization.
+- ``lineax`` remains optional and benchmark-gated. It is useful for future
+  differentiable coarse residual equations, but current dense GMRES evidence
+  does not justify adding it to production RHSMode=1 defaults.
+- ``interpax`` remains useful for differentiable profile/geometry interpolation
+  gates only. It does not belong in sparse solves or preconditioners.
+- ``equinox``, ``jaxopt``, ``optax``, ``quadax``, and ``orthax`` are not needed
+  for this sparse/preconditioner lane unless a future bounded benchmark shows a
+  material runtime, memory, accuracy, or autodiff benefit.
+
+QA/QH bounded physics-gate evidence:
+
+- Forced QA ``native_xell`` structured full-CSR gate at
+  ``13 x 13 x 21 x 5``, ``s=0.5,0.7`` was attempted with full-system GMRES
+  (``ACTIVE_DOF=0``). It failed correctly before writing HDF5 because the first
+  surface was nonconverged:
+  ``active_size=20622 residual_norm=3.055768e-04 target=5.938690e-11``.
+  This confirms that native ``xell`` alone is not a QA/QH bootstrap-current
+  closure.
+- Auto QA ``s=0.5`` bounded diagnostic with ``--verbose`` showed the current
+  solver path entering matrix-free active sparse-LU rescue:
+  ``active_size=20622``, assembled sparse operator ``20622 x 20622`` with
+  ``753531`` nnz. The run remained silent past the bounded diagnostic budget
+  and was terminated after about two minutes. This is a performance/progress
+  issue in the current QA/QH auto path, not a reason to promote native
+  ``xell``.
+
+Next implementation stages:
+
+- Build a true field-split native factor, not more standalone ``xell`` tuning:
+  kinetic ``xell``/angular/radial local blocks plus an explicit Schur residual
+  equation over constraints, Phi1/QN, and current/profile moments.
+- Add progress flushing around sparse LU/factorization rescue so bounded
+  QA/QH gates report what they are doing and can be stopped intelligently.
+- Use the fixed QA/QH gates from this section for promotion:
+  bounded QS-paper ``13 x 13 x 21 x 5`` solved-current audits for QA/QH
+  ``s=0.5,0.7`` and QS-paper comparison/errorbar runs. Promotion requires
+  residual-clean HDF5 solves, no worse than existing QA/QH current deltas, lower
+  runtime than current auto, CPU/GPU agreement, and no RSS regression.
+
+Progress update:
+
+- Native ``xell`` wiring/probe lane: 100% as an opt-in diagnostic component.
+- JAX ecosystem library gate lane: 80%; JAX sparse accepted for matvec work,
+  optional Lineax/Interpax tests exist, no new production dependencies.
+- QA/QH native default promotion lane: 35%; standalone native ``xell`` failed
+  the bounded physics gate, so the next real work is a coupled field-split
+  Schur factor.
+- Overall open-lane average remains about 98% for shipped lanes and about 50%
+  for the native-direct-replacement research lane.
+
+### 2026-06-04 Coupled native ``x_ell`` tail-Schur probe
+
+Implementation:
+
+- Added opt-in ``native_xell_tail_schur`` / ``jax_native_xell_tail_schur`` to
+  the structured full-CSR preconditioner dispatcher. This is still full-system
+  only and is not included in ``auto`` or active-projected auto candidates.
+- The preconditioner uses the JAX-native ``x_ell`` kinetic inverse for the
+  kinetic block and builds a dense tail Schur equation
+  ``S = W - V F_{x\ell}^{-1} U`` over the non-kinetic rows. It loops over sparse
+  ``U`` columns, so it never materializes dense ``F_{x\ell}^{-1} U``.
+- Added memory gates for tail Schur size and total factor budget. Metadata now
+  records kinetic inverse bytes, Schur bytes, work-vector bytes, active
+  ``U`` columns, Schur conditioning, and the opt-in/non-default status.
+- Added/extended tests for:
+  - end-to-end structured GMRES convergence with
+    ``preconditioner=native_xell_tail_schur``;
+  - driver environment opt-in via
+    ``SFINCS_JAX_RHS1_FULL_CSR_PRECONDITIONER=native_xell_tail_schur``;
+  - memory-gated rejection;
+  - active-projected unsupported behavior for full-space native preconditioner
+    names;
+  - ``tail_policy=identity`` in the lower-level kinetic ``x_ell`` factor;
+  - benchmark payload reporting for both standalone ``native_xell`` and coupled
+    ``native_xell_tail_schur``.
+
+Validation:
+
+- Focused compile/lint passed for the changed native/full-CSR/test/benchmark
+  files.
+- Focused test slice:
+  ``python -m pytest tests/test_rhs1_full_csr_kinetic_pc.py
+  tests/test_rhs1_full_assembly.py::test_structured_full_csr_native_xell_tail_schur_gmres_reaches_true_residual
+  tests/test_rhs1_full_assembly.py::test_structured_full_csr_native_xell_tail_schur_preconditioner_is_memory_gated
+  tests/test_rhs1_full_assembly.py::test_driver_linear_gmres_structured_csr_native_xell_tail_schur_env_probe
+  tests/test_rhs1_full_assembly.py::test_active_projected_spilu_preconditioner_is_memory_gated
+  tests/test_jax_ecosystem_backend_probes.py -q`` passed with
+  ``13 passed in 8.00 s``.
+- Broader gate after adding the coupled candidate:
+  ``python -m pytest tests/test_rhs1_device_operator.py
+  tests/test_rhs1_full_assembly.py tests/test_rhs1_block_operator.py
+  tests/test_benchmark_rhs1_fblock_csr_reuse.py
+  tests/test_benchmark_rhs1_full_csr_reuse.py tests/test_native_block_factor.py
+  tests/test_rhs1_full_csr_kinetic_pc.py
+  tests/test_jax_ecosystem_backend_probes.py -q`` passed with
+  ``102 passed in 46.30 s``.
+
+Small-case performance evidence:
+
+- On ``quick_2species_FPCollisions_noEr.input.namelist`` with
+  ``identity_shift=0.5`` and structured host GMRES:
+  - ``native_xell_tail_schur`` converged with true residual ``2.52e-11`` and
+    ``65`` GMRES callback entries;
+  - standalone ``native_xell`` converged with ``157`` entries;
+  - ``diagonal_schur`` converged with ``77`` entries;
+  - ``jacobi`` converged with ``120`` entries.
+- The coupled candidate therefore improves Krylov quality over both standalone
+  ``native_xell`` and ``diagonal_schur`` on this small fixture, but setup/apply
+  cost and one-step residual do not justify default promotion yet.
+- Updated ecosystem benchmark evidence:
+  - JAX sparse ``BCOO`` matvec relative error remains ``1.40e-16`` with warm
+    matvec around ``3e-4 s``;
+  - ``native_xell_tail_schur`` selected with ``factor_nbytes_actual=963328`` on
+    the small fixture and stayed under the configured memory cap;
+  - one-step residual/rhs remained ``1.67`` for both standalone and coupled
+    native candidates, so this is a Krylov preconditioner, not a one-shot
+    correction.
+
+QA/QH bounded gate:
+
+- A forced QA ``s=0.5`` ``13 x 13 x 21 x 5`` run with
+  ``solve_method=host_structured_csr``,
+  ``SFINCS_JAX_RHS1_FULL_CSR_PRECONDITIONER=native_xell_tail_schur``, and
+  ``ACTIVE_DOF=0`` reached full-CSR assembly/setup logging but did not produce a
+  solved HDF5 artifact within the bounded diagnostic window. It should be
+  treated as a negative/unfinished physics gate, not a promotion result.
+- The next production algorithmic step should move beyond a full-space tail
+  Schur over only non-kinetic rows. For QA/QH, the preconditioner needs an
+  active-system/global-moment Schur equation that includes current/profile
+  closure moments and a dominant kinetic residual subspace.
+
+Progress update:
+
+- Coupled native ``xell`` tail-Schur probe lane: 100% as opt-in tested
+  infrastructure.
+- QA/QH default promotion lane: 42%; coupled tail Schur is better on small
+  fixtures but still not fast/robust enough on bounded QA.
+- Native-direct-replacement research lane: 58%; next required item is a
+  stronger active/global field-split Schur, not additional ``xell`` tuning.
+
+### 2026-06-05 Active/global field-split Schur preconditioner
+
+Implementation:
+
+- Added an opt-in active/global field-split Schur preconditioner family:
+  ``active_global_field_split_schur`` / ``active_field_split_schur`` /
+  ``active_xblock_global_schur``.  It is available both through the structured
+  full-CSR solve and through the Fortran-reduced direct-tail
+  ``fortran_reduced_pc_gmres`` lane.
+- The preconditioner forms the active block split
+  ``A = [[K, U], [V, W]]`` where ``K`` is the retained kinetic active system and
+  ``W`` is the explicit global source/constraint tail.  It then applies a
+  block-LDU inverse using
+  ``S = W - V K^{-1} U`` with ``K^{-1}`` approximated by an existing local
+  active kinetic preconditioner, initially ``active_xblock`` by default.
+- The first implementation supports full RHSMode=1 ordering and active
+  projected ordering, requires no Phi1 tail in the active split, requires the
+  extra/source rows to be contiguous at the end, and fail-closes on unsupported
+  layouts.  This keeps it usable for the current QH/QA direct-tail target while
+  avoiding implicit assumptions about nonlinear Phi1 systems.
+- Added memory gates for the kinetic-response columns, Schur dense factor, CSR
+  partitions, and base kinetic factor.  Metadata records the selected base,
+  tail size, active ``U`` columns, Schur conditioning, factor bytes, and the
+  non-default/opt-in status.
+- Added direct-tail integration coverage proving
+  ``SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_PRECONDITIONER=active_global_field_split_schur``
+  is forwarded to the structured active preconditioner builder, selected, and
+  avoids the legacy host sparse factorization fallback.
+
+Validation:
+
+- Focused field-split tests passed:
+  ``python -m pytest
+  tests/test_v3_sparse_pattern.py::test_fortran_reduced_pc_gmres_direct_tail_active_global_field_split_schur_solves_tiny_rhs1_system
+  tests/test_rhs1_full_assembly.py::test_active_global_field_split_schur_solves_block_system_with_xblock_base
+  tests/test_rhs1_full_assembly.py::test_active_global_field_split_schur_is_memory_gated
+  tests/test_rhs1_full_assembly.py::test_active_global_field_split_schur_builds_and_applies_on_quick_active_csr
+  tests/test_rhs1_full_assembly.py::test_structured_full_csr_active_global_field_split_schur_gmres_reaches_true_residual -q``
+  passed with ``5 passed in 4.93 s``.
+- ``python -m ruff check sfincs_jax/rhs1_full_assembly.py
+  tests/test_rhs1_full_assembly.py tests/test_v3_sparse_pattern.py
+  --extend-ignore E402,E741`` passed.
+- Driver sparse-helper and RHSMode=1 dispatch coverage passed:
+  ``python -m pytest tests/test_v3_driver_sparse_helper_coverage.py
+  tests/test_v3_driver_rhs1_dispatch_coverage.py -q`` with
+  ``51 passed in 25.82 s``.
+- After removing ``active_tail_sparse_coarse`` from the built-in default
+  active-auto ladder, the broader RHSMode=1 sparse/full-assembly gate passed:
+  ``python -m pytest tests/test_rhs1_full_assembly.py
+  tests/test_v3_sparse_pattern.py -q`` with ``157 passed in 123.76 s``.
+
+Small-case performance evidence:
+
+- On ``quick_2species_FPCollisions_noEr.input.namelist`` with
+  ``identity_shift=0.5`` and active structured GMRES:
+  - ``active_global_field_split_schur`` converged to true residual
+    ``3.814e-11`` with ``8`` GMRES callback entries;
+  - ``active_xblock`` converged to the same residual with ``16`` entries;
+  - ``active_diagonal_schur`` converged with ``77`` entries;
+  - ``active_tail_sparse_coarse`` converged with ``65`` entries;
+  - ``active_schwarz_sparse_coarse`` converged with ``5`` entries but had
+    higher setup cost and selected the existing sparse-coarse architecture.
+- This is a real Krylov-quality improvement over the local ``xblock`` and
+  diagonal/tail Schur paths on a bounded fixture, but not enough evidence for
+  default promotion.
+- Bounded QA/QH solved-current audit at ``13 x 13 x 21 x 5``:
+  - ``active_global_field_split_schur`` selected through
+    ``fortran_reduced_pc_gmres`` with direct-tail CSR assembly
+    ``5.3-5.6 s`` and preconditioner setup ``0.61-0.63 s`` on the checked
+    local CPU surfaces.
+  - QA ``psiN=0.5`` solved in about ``7.0 s`` with ``23`` GMRES iterations,
+    residual ``1.73e-11`` below target ``5.94e-11``, and worst current-scalar
+    relative difference ``2.74e-2`` versus archived Fortran v3.
+  - QA ``psiN=0.7`` solved in about ``6.3 s`` with ``21`` iterations,
+    residual ``5.22e-11`` below target ``1.27e-10``, and current difference
+    ``1.55e-2``.
+  - QH ``psiN=0.5`` solved in about ``7.7 s`` with ``33`` iterations /
+    ``38`` matvecs, residual ``6.03e-11`` below target ``1.06e-10``, and
+    current difference ``8.85e-2``.
+  - QH ``psiN=0.7`` solved in about ``7.2 s`` with ``39`` iterations /
+    ``44`` matvecs, residual ``1.01e-10`` below target ``2.26e-10``, and
+    current difference ``4.42e-2``.
+  - The same four bounded surfaces were rerun on ``office`` GPU 0 with JAX
+    ``0.6.2`` and ``CUDA_VISIBLE_DEVICES=0``. All solved residual-clean and
+    matched the local CPU current values to displayed precision:
+    QA ``0.5`` current difference ``2.7448e-2``, QA ``0.7``
+    ``1.5523e-2``, QH ``0.5`` ``8.8482e-2``, QH ``0.7``
+    ``4.4245e-2``. Peak RSS was ``2.1-2.6 GB``.
+  - GPU wall times were slower on this host-sparse lane: QH ``0.5`` took
+    about ``30 s`` wall and QH ``0.7`` about ``26 s`` wall, with structured CSR
+    assembly taking ``17-19 s`` instead of ``5-6 s`` locally. This confirms
+    correctness and memory safety, but it also confirms that the current
+    non-autodiff direct-tail path is CPU/host sparse dominated and should not
+    be marketed as the GPU-performance path.
+  - The same gate with explicit ``active_xblock`` converged in ``54``
+    iterations / ``59`` matvecs and total run time about ``7.3 s``. Runtime is
+    still dominated by CSR assembly at this small resolution, but the new
+    field-split Schur reduces Krylov work by about ``39%``.
+  - ``active_schwarz_sparse_coarse`` was rejected by the default ``512 MB``
+    preconditioner memory gate with an estimated ``605 MB`` factor budget.
+  - ``active_tail_sparse_coarse`` selected cheaply but was pathological:
+    preflight worsened the residual from ``1.06e-4`` to ``5.89e-1`` and GMRES
+    stagnated near KSP residual ``9.14e1`` for more than ``11k`` matvecs before
+    the run was killed. Keep it available as an explicit diagnostic path, but
+    do not let default auto reach it silently.
+  - The default active-auto candidate ladder now omits
+    ``active_tail_sparse_coarse``. The code still supports it through
+    ``SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_AUTO_CANDIDATES`` or direct explicit
+    selection, but users who just run ``sfincs_jax`` should not fall into this
+    known QH-stagnating path after a memory rejection. Added a regression that
+    checks the built-in default ladder contains
+    ``active_global_field_split_schur`` and excludes
+    ``active_tail_sparse_coarse``.
+- Intermediate-grid QH ``psiN=0.5`` probes at ``17 x 17 x 31 x 5``:
+  - Full ``active_xblock`` base rejected under the default ``512 MB`` direct
+    tail PC cap: ``active_xblock_budget_exceeded:745007320>536870912``.
+  - Raising the direct-tail PC cap to ``1 GB`` still rejected because the
+    x-block factor sequence estimated ``1.39 GB``.
+  - ``active_low_l_schur`` base was not a memory reduction for this matrix:
+    ``1.07 GB`` estimate under the same ``512 MB`` cap.
+  - ``active_xblock`` with ``lmax=13`` was close but still rejected
+    (``581 MB``), while ``lmax=11`` was non-monotone and rejected
+    (``615 MB``), consistent with sparse-LU fill sensitivity.
+  - ``active_xblock`` with ``lmax=9`` passed the immediate memory rejection
+    stage but did not complete within the bounded five-minute probe, so it is
+    not a safe automatic fallback at this resolution.
+  - Conclusion: the coupled field-split Schur residual equation is useful and
+    robust on bounded QA/QH surfaces, but intermediate-grid closure needs a
+    better kinetic inverse/reuse path rather than a low-order x-block or
+    diagonal fallback. The next algorithmic step is device/native reusable
+    operator-coarse infrastructure, not another smoother or restart variant.
+- Native/active ``x_ell`` kinetic-base work:
+  - Wired an opt-in native ``x_ell`` base into
+    ``active_global_field_split_schur``. Full kinetic layouts reuse the
+    existing JAX-native full-layout ``native_xell`` factor; active-projected
+    layouts now use a new memory-gated active ``(x, ell)`` line inverse grouped
+    by original ``(species, theta, zeta)`` lines.
+  - Added focused tests for both full-layout and reduced-active-kinetic
+    field-split Schur solves, plus the existing native kinetic-factor tests.
+    The focused native gate passed with ``8 passed in 3.83 s``.
+  - Broader native/full-assembly coverage passed:
+    ``python -m pytest tests/test_rhs1_full_assembly.py
+    tests/test_rhs1_full_csr_kinetic_pc.py tests/test_native_block_factor.py
+    -q`` with ``62 passed in 38.17 s``. Direct-tail routing checks for the
+    field-split Schur path and explicit tail-sparse opt-in passed with
+    ``3 passed in 4.72 s``.
+  - Bounded QH ``psiN=0.5`` at ``13 x 13 x 21 x 5`` with
+    ``SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_GLOBAL_FIELD_SPLIT_BASE=active_native_xell``
+    did not converge in the bounded probe: after about ``106 s`` it attempted
+    to write a nonconverged output with residual ``4.03e-4`` against target
+    ``1.06e-10`` and peak RSS about ``1.67 GB``. This confirms the native
+    line factor is a low-memory infrastructure component, not a QA/QH default
+    solver by itself.
+  - Added the next true coupled correction path:
+    ``active_native_xell_field_split_sparse_coarse``. It builds the
+    active-native ``(x, ell)`` line inverse, applies the exact global
+    current/constraint Schur residual equation, then solves a true residual
+    coarse equation using the actual active CSR operator ``A @ Z``. The coarse
+    equation supports Galerkin or least-squares form and remains memory-gated.
+  - Added optional residual-window coarse columns through
+    ``SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_NATIVE_XELL_COARSE_WINDOW_SPECS``. These
+    are bounded identity columns over requested ``species:x:ell`` windows and
+    are prepended before the generic low-mode basis, so diagnostic runs can
+    target suspected high-pitch residual subspaces without changing solver
+    source.
+  - Focused synthetic testing proves the new path is a real correction:
+    a native line/field-split base leaves a true residual on a cross-line
+    coupled block system, while the coupled sparse-coarse correction reduces
+    that residual below ``1e-10``. Direct-tail integration coverage verifies
+    ``fortran_reduced_pc_gmres`` can select the new preconditioner without
+    falling back to legacy host factorization.
+  - Broader routing/full-assembly validation passed:
+    ``python -m pytest tests/test_rhs1_full_assembly.py
+    tests/test_v3_sparse_pattern.py -q`` with ``161 passed in 126.24 s``.
+  - Real bounded QH result: at ``13 x 13 x 21 x 5``, the coupled coarse path
+    improves the active-native residual only slightly and is not competitive
+    yet. Without residual windows it reached residual ``3.835e-4`` against
+    target ``1.057e-10`` in about ``126 s`` with peak RSS ``2.03 GB``.
+    Increasing ``coarse_lmax`` to ``8`` improved to ``3.697e-4`` in about
+    ``138 s``. A broad ``all:all:4`` residual window worsened to
+    ``4.116e-4`` in about ``138 s``. Keep this path explicit while using it to
+    diagnose the missing global residual subspace.
+
+Remaining promotion gates before claiming production-resolution closure:
+
+- CPU and GPU results must agree within the existing RHSMode=1 current gates.
+- Production-resolution or intermediate-resolution QA/QH runs must show that
+  the Krylov reduction amortizes the assembly/setup cost, and peak RSS must not
+  regress.
+- Device-native GPU performance still requires moving assembly/operator reuse
+  out of the host sparse path; the current field-split Schur is the robust
+  non-autodiff CPU/host path and a GPU-correct fallback, not yet a true
+  GPU-accelerated solver.
+- Before any broader default promotion, add a native/reusable kinetic inverse
+  that is materially cheaper than the current x-block sparse LU at
+  ``17 x 17 x 31 x 5`` and above while also reducing residuals enough to meet
+  the QA/QH current gates. The active ``x_ell`` line factor alone fails this
+  residual-quality gate; the first true coarse/Schur correction is now
+  implemented but still misses the QH residual subspace, so the next algorithmic
+  step is an adaptive residual-derived coarse space or a stronger block
+  factorization over coupled angular lines rather than a wider static low-mode
+  basis.
+
+Progress update:
+
+- Active/global field-split Schur infrastructure lane: 100% as an opt-in,
+  tested solver component.
+- QA/QH default promotion lane: 80%; a stronger coupled preconditioner now
+  exists, all four bounded QA/QH CPU and GPU surfaces are residual-clean, and
+  the active-auto ladder excludes a known pathological tail-sparse path by
+  default. Intermediate-resolution probes identified the next bottleneck as
+  kinetic x-block factor memory/fill.
+- Native-direct-replacement research lane: 80%; the code now has native
+  ``x_ell`` kernels, an active Schur residual equation, and a true sparse
+  coarse correction layer. The remaining blocker is residual quality on the
+  real QH/QA active system, not routing or infrastructure.
+
+### 2026-06-05 adaptive residual-derived coarse and angular-line factorization pass
+
+Implementation completed in ``sfincs_jax/rhs1_full_assembly.py``:
+
+- Added ``active_angular_line`` and coupled sparse-coarse aliases such as
+  ``active_angular_line_field_split_sparse_coarse``. This factors active
+  kinetic blocks grouped by ``(species, x, ell)`` over the angular
+  ``(theta, zeta)`` line, then applies Jacobi to non-kinetic tail rows.
+- Added the adaptive residual-derived coarse-space builder. When
+  ``SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_ADAPTIVE_RESIDUAL_BASIS=1``, the coupled
+  coarse wrapper appends bounded construction-time residual snapshots
+  ``z - A M z`` from static/window coarse seeds before forming the true
+  residual equation ``A Z``. This keeps the preconditioner linear while adding
+  operator-derived directions that are not hand-tuned to the RHS.
+- Added metadata for adaptive residual columns, seed counts, nonzeros, and
+  residual-norm bounds so solver traces can show whether the adaptive basis was
+  actually active.
+
+Focused validation:
+
+- ``python -m pytest
+  tests/test_rhs1_full_assembly.py::test_active_angular_line_preconditioner_solves_angular_blocks
+  tests/test_rhs1_full_assembly.py::test_active_native_xell_field_split_sparse_coarse_reduces_true_residual
+  tests/test_rhs1_full_assembly.py::test_active_angular_line_field_split_sparse_coarse_builds_coupled_path
+  -q`` passed with ``3 passed in 0.93 s``.
+- ``python -m pytest
+  tests/test_v3_sparse_pattern.py::test_fortran_reduced_pc_gmres_direct_tail_active_angular_line_coarse_solves_tiny_rhs1_system
+  tests/test_v3_sparse_pattern.py::test_fortran_reduced_pc_gmres_direct_tail_active_native_xell_coarse_solves_tiny_rhs1_system
+  tests/test_rhs1_full_assembly.py::test_active_angular_line_field_split_sparse_coarse_builds_coupled_path
+  -q`` passed with ``3 passed in 11.09 s``.
+- ``python -m ruff check sfincs_jax/rhs1_full_assembly.py
+  tests/test_rhs1_full_assembly.py tests/test_v3_sparse_pattern.py
+  --extend-ignore E402,E741`` passed.
+
+Real-system QH result:
+
+- Bounded QH ``s=0.5`` at ``13 x 13 x 21 x 5`` with
+  ``active_angular_line_field_split_sparse_coarse`` and adaptive residual basis
+  did not close the residual. It reached ``8.594e-4`` against target
+  ``1.057e-10`` in ``135.93 s`` with peak RSS about ``1.68 GB``.
+- This is worse than the native ``x_ell`` sparse-coarse probes
+  (best observed ``3.697e-4`` at the same bounded QH surface). Keep both the
+  angular-line and adaptive residual-derived paths as explicit research
+  infrastructure, not as defaults.
+
+QS-paper bootstrap-current plot regeneration:
+
+- Patched ``examples/vmec_jax_finite_beta/compare_qs_paper_sfincs_jax_redl.py``
+  so the paper-comparison benchmark uses the runtime/non-autodiff lane by
+  default: ``SFINCS_JAX_IMPLICIT_SOLVE=0``, direct-tail
+  ``active_global_field_split_schur``, and a bounded ``2048 MB`` direct-tail
+  preconditioner cap unless users override those variables.
+- The script now stores ``linearSolver*`` diagnostics from each HDF5 output in
+  its JSON rows, including solver kind, true residual, target, iterations,
+  setup time, solve time, sparse pattern size, and factor estimate.
+- Regenerated
+  ``docs/_static/figures/vmec_jax_finite_beta/qs_paper_sfincs_jax_redl_comparison.{png,pdf,json}``.
+  QA baseline surfaces all selected ``fortran_reduced_pc_gmres`` and reached
+  true-residual targets. Three baseline points completed in ``19.5 s`` total.
+  Max baseline difference is ``8.95%`` versus Redl and ``2.82%`` versus archived
+  SFINCS Fortran v3; max refinement bar is ``2.01%``.
+- Regenerated
+  ``docs/_static/figures/vmec_jax_finite_beta/qs_paper_qh_sfincs_jax_redl_comparison.{png,pdf,json}``.
+  QH baseline surfaces all selected ``fortran_reduced_pc_gmres`` and reached
+  true-residual targets. Three baseline points completed in ``21.9 s`` total.
+  Max baseline difference is ``9.82%`` versus Redl and ``9.71%`` versus archived
+  SFINCS Fortran v3; max refinement bar is still ``24.43%`` at this bounded
+  grid.
+
+Updated status:
+
+- Adaptive residual-derived coarse infrastructure: 100% as tested opt-in
+  infrastructure.
+- Angular-line block factorization infrastructure: 100% as tested opt-in
+  infrastructure.
+- QA/QH residual-clean diagnostic plot lane: 100% for the bounded
+  ``13 x 13 x 21 x 5`` documentation grid and convergence probes.
+- QA/QH production-resolution closure: 82%. The fast direct-tail
+  field-split Schur path is robust for bounded documentation and parity
+  diagnostics, but production-resolution closure still needs a stronger
+  reusable kinetic inverse/coarse architecture. Static/adaptive coarse snapshots
+  and independent angular-line blocks did not capture the missing QH residual
+  subspace.
+
+Next non-incremental algorithmic step:
+
+- Build a coupled multi-line kinetic residual equation that combines
+  ``x_ell`` and angular-line blocks in one coarse/factorization stage, rather
+  than selecting either independently. The current evidence says the missing
+  residual subspace is cross-line/cross-moment; another smoother, restart, or
+  wider static low-mode basis is not justified.
+
+### 2026-06-05 coupled multi-line residual equation and whole-radius QS-paper panels
+
+Implementation completed in ``sfincs_jax/rhs1_full_assembly.py``:
+
+- Added ``active_multiline_field_split_sparse_coarse`` plus aliases
+  ``active_xell_angular_field_split_sparse_coarse``,
+  ``active_coupled_multiline_field_split_sparse_coarse``, and
+  ``active_global_field_split_multiline_sparse_coarse``.
+- The new base preconditioner composes the native ``x_ell`` field-split solve
+  with an angular-line field-split solve through a true residual equation:
+  apply ``M_x r``, form ``r - A M_x r``, then apply ``M_\theta`` to that residual
+  before the existing sparse coarse residual correction. ``additive`` and
+  ``angular_then_xell`` modes are also available through
+  ``SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_MULTILINE_MODE``.
+- The path is fully memory-gated by the sum of the x-ell base, angular-line base,
+  sparse basis, ``A Z`` basis, and dense coarse equation storage.
+
+Validation:
+
+- ``python -m pytest
+  tests/test_rhs1_full_assembly.py::test_active_multiline_field_split_sparse_coarse_builds_residual_composed_path
+  tests/test_v3_sparse_pattern.py::test_fortran_reduced_pc_gmres_direct_tail_active_multiline_coarse_solves_tiny_rhs1_system
+  -q`` passed with ``2 passed``.
+- ``python -m pytest`` over the x-ell/angular/multiline focused builder and
+  driver tests passed with ``6 passed``.
+- ``python -m pytest tests/test_audit_qs_paper_terms.py
+  tests/test_finite_beta_vmec_example.py -q`` passed with ``24 passed``.
+- ``python -m ruff check`` passed for the touched solver, driver-test, and
+  QS-paper comparison script files.
+
+Real-system promotion result:
+
+- The multiline path is implemented and tested as opt-in infrastructure, but it
+  is not promoted to the QA/QH public default. Real first-surface probes at
+  ``13 x 13 x 21 x 5`` failed strict production residual gates:
+  QA ``s=0.3`` reached ``3.28e-5`` against target ``3.01e-11`` and QH ``s=0.3``
+  reached ``6.49e-5`` against target ``5.37e-11`` before nonconverged output was
+  refused. This is negative default-promotion evidence.
+- The public QS-paper comparison script therefore remains on the residual-clean
+  direct-tail ``active_global_field_split_schur`` default unless the user
+  explicitly overrides
+  ``SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_PRECONDITIONER``.
+
+QS-paper whole-radius outputs:
+
+- Updated ``examples/vmec_jax_finite_beta/compare_qs_paper_sfincs_jax_redl.py``
+  to parse archived Fortran v3 Slurm/MUMPS logs for solve wall time and MUMPS
+  memory, record JAX solver factor/CSR memory estimates from HDF5 diagnostics,
+  and render a right-side panel with total all-radius runtime and peak solver
+  memory.
+- Regenerated
+  ``docs/_static/figures/vmec_jax_finite_beta/qs_paper_sfincs_jax_redl_comparison.{png,pdf,json}``
+  on the same 39 radial surfaces as the archived Fortran v3 QA data. Results:
+  ``39/39`` JAX surfaces completed, max JAX-vs-Fortran difference ``6.94%``,
+  max JAX-vs-Redl difference ``23.95%``, JAX runtime ``232.5 s`` versus Fortran
+  v3 ``696.1 s``, and peak solver memory ``109 MB`` versus Fortran MUMPS
+  effective total ``12.96 GB``.
+- Regenerated
+  ``docs/_static/figures/vmec_jax_finite_beta/qs_paper_qh_sfincs_jax_redl_comparison.{png,pdf,json}``
+  on the same 39 radial surfaces as the archived Fortran v3 QH data. Results:
+  ``39/39`` JAX surfaces completed, max JAX-vs-Fortran difference ``18.77%``,
+  max JAX-vs-Redl difference ``15.31%``, JAX runtime ``261.1 s`` versus Fortran
+  v3 ``655.5 s``, and peak solver memory ``109 MB`` versus Fortran MUMPS
+  effective total ``12.80 GB``.
+- A transient QH campaign stall at ``s=0.775`` was not reproducible: the isolated
+  point completed in ``7.25 s`` with residual ``9.05e-11`` below target
+  ``3.29e-10``, and the rerun completed the whole QH scan.
+
+Updated status:
+
+- Coupled multi-line preconditioner infrastructure: 100% as opt-in,
+  test-covered code.
+- Whole-radius QS-paper documentation panels: 100%.
+- QA reduced-grid bootstrap-current agreement: 90%; residual-clean and within
+  ``6.94%`` of archived Fortran v3, but not a production same-resolution claim.
+- QH reduced-grid bootstrap-current agreement: 78%; residual-clean, but the
+  ``18.77%`` reduced-grid difference to archived Fortran v3 means the
+  same-resolution/prod-resolution convergence lane stays open.
+- Next best accuracy step: stop broad low-resolution scans and run a targeted
+  same-resolution or monotone-resolution ladder for the QH high-discrepancy
+  surfaces, especially around ``s=0.25-0.35`` and ``s=0.775-0.85``, with
+  term-level geometry/profile/current diagnostics against archived Fortran v3.
+
+### 2026-06-05 same-resolution QS-paper plotting gate and production-grid probe
+
+Implementation completed in
+``examples/vmec_jax_finite_beta/compare_qs_paper_sfincs_jax_redl.py``:
+
+- Added ``--match-fortran-resolution`` to read the archived Fortran v3
+  ``Ntheta,Nzeta,Nxi,Nx`` grid on the selected surfaces and use that grid for
+  the SFINCS_JAX solve.
+- Added ``--require-same-resolution`` to fail before plotting if the JAX and
+  Fortran curves are not same-resolution. This prevents reduced-grid JAX runs
+  from being promoted as SFINCS_JAX/SFINCS Fortran v3 parity figures.
+- Added ``resolution_comparison`` metadata to the JSON payload and plot text.
+  Mixed-grid payloads now set
+  ``max_jax_relative_difference_vs_fortran_same_resolution = null`` and store
+  the plotted difference only under the mixed-resolution metric.
+- Added explicit Fortran error-bar support through
+  ``--fortran-errorbar-json``. The script does not infer Fortran error bars from
+  a single archived run; sidecar data must come from a documented repeated-run
+  or refinement ladder. JAX error bars remain generated by ``--with-errorbars``
+  refinement probes.
+
+Focused validation:
+
+- ``python -m ruff check
+  examples/vmec_jax_finite_beta/compare_qs_paper_sfincs_jax_redl.py
+  tests/test_finite_beta_vmec_example.py`` passed.
+- ``python -m pytest tests/test_finite_beta_vmec_example.py -q`` passed with
+  ``21 passed``. The new tests cover archived Fortran MUMPS timing/memory
+  parsing, fail-closed same-resolution gates, explicit Fortran error-bar
+  sidecars, and plotting with mixed-grid metadata.
+
+Regenerated documentation artifacts:
+
+- Regenerated
+  ``docs/_static/figures/vmec_jax_finite_beta/qs_paper_sfincs_jax_redl_comparison.{png,pdf,json}``
+  and
+  ``docs/_static/figures/vmec_jax_finite_beta/qs_paper_qh_sfincs_jax_redl_comparison.{png,pdf,json}``
+  from cached reduced-grid solves. Both JSON payloads now state
+  ``status = mixed_resolution``, with JAX grid ``13x13x21x5`` and archived
+  Fortran v3 grid ``25x39x60x7``.
+- README/docs now show the same-resolution command as the path for public
+  apples-to-apples figures and describe the current whole-radius QA/QH plots as
+  mixed-grid diagnostics only.
+
+Same-resolution production-grid probe:
+
+- QA ``s=0.5`` with ``--match-fortran-resolution --require-same-resolution``
+  selects the archived ``25x39x60x7`` grid. With the default ``2048 MB``
+  direct-tail cap, the structured preconditioner fails closed:
+  ``active_xblock_budget_exceeded:6616350000>2147483648``.
+- Raising the cap to ``8192 MB`` still fails closed:
+  ``active_xblock_budget_exceeded:18183555000>8589934592``.
+- Raising the cap to ``24576 MB`` still fails before solving:
+  ``active_xblock_budget_exceeded:41188680000>25769803776``.
+- Disabling the strict structured-preconditioner requirement lets the
+  same-resolution fallback start, but the QA ``s=0.5`` solve did not complete
+  within the 10-minute bounded local budget.
+
+Updated status:
+
+- Public plotting/claim-boundary gate: 100%.
+- Explicit JAX and Fortran error-bar plumbing: 100% infrastructure, 0% Fortran
+  production bars until a same-resolution Fortran refinement/repeat sidecar is
+  generated.
+- QA/QH reduced-grid documentation panels: 100% as mixed-grid diagnostics.
+- QA/QH same-resolution production-grid parity: 45%. The current blocker is a
+  memory-efficient RHSMode=1 preconditioner/operator-reuse path for
+  ``25x39x60x7`` and above, not profile normalization, VMEC radial selection, or
+  current assembly.
+
+Next non-incremental algorithmic step:
+
+- Replace the current high-fill x-block/direct-tail preconditioner for
+  production-grid RHSMode=1 with a bounded-memory reusable operator/coarse
+  architecture. The new gate is concrete: QA/QH ``s=0.5`` at ``25x39x60x7``
+  must converge within the 10-minute single-surface budget, produce the same
+  residual-clean ``FSABjHat`` diagnostic as SFINCS Fortran v3 to the agreed
+  tolerance, and keep peak memory below the largest available GPU/CPU budget.
+
+### 2026-06-05 45 GB full-grid probe and reduced-grid Fortran apples-to-apples fallback
+
+Full-grid SFINCS_JAX probes:
+
+- QA ``s=0.5`` at the archived Fortran grid ``25x39x60x7`` was rerun with
+  ``SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_PC_MAX_MB=46080``. The
+  default ``active_global_field_split_schur`` path still failed closed:
+  ``active_xblock_budget_exceeded:68566680000>48318382080``. The run spent
+  ``128.19 s`` before failing and reached about ``9.94 GB`` maximum resident
+  set size, so the blocker is the estimated sparse factor fill, not a plotting
+  or normalization issue.
+- A bounded lower-memory full-grid QA ``s=0.5`` probe using
+  ``active_global_sparse_ilu`` with an ``8192 MB`` cap, ILU fill factor ``2.0``,
+  and drop tolerance ``1e-2`` did not fail on memory but timed out at the
+  ``600 s`` wall-clock cap before producing a residual-clean output. This shows
+  the current lower-memory factor route is structurally viable but not yet
+  strong/fast enough for production-grid RHSMode=1 QA.
+
+Reduced-grid Fortran v3 fallback:
+
+- Reran local SFINCS Fortran v3 at the same ``13x13x21x5`` grid as the fast
+  SFINCS_JAX documentation solves for QA and QH at ``s = 0.3, 0.5, 0.7``.
+  The local executable writes valid ``sfincsOutput.h5`` files and then exits
+  with an MPI finalization warning; the success gate is the HDF5 output plus
+  ``Done with the main solve`` in stdout.
+- Added ``--fortran-case-root`` to the QS-paper plotting script so custom
+  reduced-resolution Fortran roots can be overlaid instead of the archived
+  full-resolution Zenodo root.
+- Extended Fortran profile parsing to support local
+  ``sfincs_fortran_stdout.txt`` / ``sfincs_fortran_stderr.txt`` files, including
+  solve time, MUMPS solve-space memory, and process RSS fallback.
+- Added explicit Fortran error-bar sidecars for the reduced-grid plots. The bars
+  are one-sided refinement deltas
+  ``|J_{25x39x60x7}^{Fortran} - J_{13x13x21x5}^{Fortran}|`` on the same
+  surfaces/profile contract.
+- Regenerated same-resolution quick figures:
+  ``docs/_static/figures/vmec_jax_finite_beta/qs_paper_qa_same_resolution_quick.{png,pdf,json}``
+  and
+  ``docs/_static/figures/vmec_jax_finite_beta/qs_paper_qh_same_resolution_quick.{png,pdf,json}``.
+
+Same-resolution quick results:
+
+- QA max JAX-vs-Fortran difference over ``s=0.3,0.5,0.7``:
+  ``9.922856965e-4``. Max JAX-vs-Redl difference: ``8.95%``. Max JAX refinement
+  bar relative to baseline: ``2.01%``.
+- QH max JAX-vs-Fortran difference over ``s=0.3,0.5,0.7``:
+  ``2.836715606e-3``. Max JAX-vs-Redl difference: ``9.82%``. Max JAX refinement
+  bar relative to baseline: ``24.43%`` at ``s=0.3``, so QH remains more
+  velocity-resolution sensitive even though JAX/Fortran agree on the same grid.
+
+Updated status:
+
+- Apples-to-apples QA/QH reduced-grid comparison: 100% for the three-surface
+  documentation gate.
+- Full archived-grid SFINCS_JAX production parity: still open. Raising memory
+  to ``45 GB`` is not enough for the current default direct-tail Schur route,
+  and the lower-memory ILU probe is not fast enough.
+- Lower-memory RHSMode=1 production solver viability: plausible but not closed.
+  Existing native candidates can bound memory; they do not yet provide the
+  residual reduction/setup amortization needed for ``25x39x60x7``.
+
+Next decision:
+
+- Treat the reduced-grid Fortran rerun as the README/docs apples-to-apples
+  trust-building figure.
+- Keep full-grid QA/QH as a research solver lane. The next implementation must
+  be a materially stronger bounded-memory operator-reuse/coarse preconditioner,
+  not another high-fill x-block Schur cap increase.
+
+### 2026-06-05 seven-surface QS-paper gate and bounded-memory preconditioner probe
+
+Scope:
+
+- Replace the README-facing three-surface QA/QH bootstrap-current figure with a
+  denser same-resolution diagnostic that still runs in bounded documentation
+  time.
+- Give the full-grid ``25x39x60x7`` RHSMode=1 production solver one more
+  bounded-memory implementation attempt that does not rely on increasing the
+  high-fill direct-tail Schur cap.
+
+Documentation/data results:
+
+- Reran local SFINCS Fortran v3 at ``13x13x21x5`` for QA and QH on
+  ``s = 0.15, 0.30, 0.45, 0.50, 0.60, 0.70, 0.85``. Several fresh local
+  Fortran solves exit with the known MPI finalization code ``143`` after writing
+  valid ``sfincsOutput.h5`` and printing ``Done with the main solve``; this is
+  treated as a successful reduced-grid data point.
+- Regenerated explicit Fortran refinement-error sidecars:
+  ``docs/_static/figures/vmec_jax_finite_beta/qs_paper_qa_same_resolution_7surface_fortran_errorbars.json``
+  and
+  ``docs/_static/figures/vmec_jax_finite_beta/qs_paper_qh_same_resolution_7surface_fortran_errorbars.json``.
+  The bars are
+  ``|J_{25x39x60x7}^{Fortran} - J_{13x13x21x5}^{Fortran}|`` on the same
+  surface/profile contract.
+- Regenerated README/docs figures:
+  ``docs/_static/figures/vmec_jax_finite_beta/qs_paper_qa_same_resolution_7surface.{png,pdf,json}``
+  and
+  ``docs/_static/figures/vmec_jax_finite_beta/qs_paper_qh_same_resolution_7surface.{png,pdf,json}``.
+- QA seven-surface same-grid metrics:
+  max SFINCS_JAX-vs-Fortran difference ``9.922856965e-4``; max
+  SFINCS_JAX-vs-Redl difference ``9.40%``; max JAX refinement bar ``4.21%``;
+  seven-surface JAX solve-wall sum ``44.9 s``; parsed Fortran solve-wall sum
+  ``6.6 s``; peak solver-memory metrics ``109 MB`` JAX and ``91 MB`` Fortran.
+- QH seven-surface same-grid metrics:
+  max SFINCS_JAX-vs-Fortran difference ``2.836715606e-3``; max
+  SFINCS_JAX-vs-Redl difference ``9.82%``; max JAX refinement bar ``24.43%``;
+  seven-surface JAX solve-wall sum ``47.6 s``; parsed Fortran solve-wall sum
+  ``11.7 s``; peak solver-memory metrics ``109 MB`` JAX and ``91 MB`` Fortran.
+- README/docs now use the seven-surface same-resolution figures as the main
+  bootstrap-current trust-building plots. The text explicitly says the QH
+  reduced-grid bars are a convergence stress test, not a production-resolution
+  claim.
+
+Bounded-memory solver work:
+
+- Added an explicit active preconditioner candidate
+  ``active_scaled_ilu_sparse_coarse``. It composes row/column-equilibrated
+  active ILU/LU with the existing true sparse coarse residual equation, keeping
+  the same memory gates and true-residual preflight as the other RHSMode=1
+  direct-tail candidates.
+- Added a deterministic unit gate proving that
+  ``active_scaled_ilu_sparse_coarse`` solves a spanned active residual equation
+  and records ``scaled_ilu_global_sparse_coarse`` architecture metadata.
+- Full-grid QA ``s=0.5`` probe with
+  ``active_global_field_split_multiline_sparse_coarse`` stayed bounded but
+  failed true-residual preflight:
+  residual ``1.61e-4 -> 3.78`` against target ``1.61e-12``. It is not viable as
+  a replacement default.
+- Full-grid QA ``s=0.5`` probe with ``active_scaled_ilu_sparse_coarse`` and
+  ``8192 MB`` memory cap first failed the conservative active-size gate
+  ``507004>200000``. With the size gate raised to ``600000``, it remained
+  memory-feasible at about ``4 GB`` RSS but timed out at the ``600 s`` wall cap
+  during setup/factorization before reaching Krylov or producing an output.
+
+Status:
+
+- Seven-surface QA/QH same-resolution documentation gate: 100%.
+- Reduced-grid SFINCS_JAX/SFINCS Fortran v3 parity at the documented grid:
+  100% for the seven-surface gate.
+- Full archived-grid ``25x39x60x7`` SFINCS_JAX production solve: still open.
+  The high-fill Schur path is over the available memory budget; the bounded
+  multiline/coarse path fails residual preflight; the scaled-ILU/coarse path is
+  memory-feasible but too slow in setup without stronger reuse/native factors.
+- Next real production-grid solver step remains operator/factor reuse plus a
+  faster bounded-memory factor/coarse kernel. More smoother tuning or memory-cap
+  increases are not justified by the probes above.
+
+### 2026-06-05 11-surface QS-paper gate and Fortran-v3 preconditioner audit
+
+Scope:
+
+- Expand the README/docs same-resolution QA/QH bootstrap-current diagnostic from
+  seven to 11 surfaces without changing the plotted grid.
+- Start the real full-grid RHSMode=1 replacement path by matching the structure
+  of SFINCS Fortran v3's iterative solver instead of adding another smoother or
+  restart variant.
+
+Documentation/data results:
+
+- Added local reduced-grid SFINCS Fortran v3 runs at ``13x13x21x5`` for
+  ``s = 0.10, 0.25, 0.75, 0.90`` in both QA and QH. All eight runs wrote valid
+  ``sfincsOutput.h5`` and printed ``Done with the main solve``; the local MPI
+  stack still exits with the known finalization code ``143`` after output.
+- Regenerated Fortran refinement sidecars:
+  ``docs/_static/figures/vmec_jax_finite_beta/qs_paper_qa_same_resolution_11surface_fortran_errorbars.json``
+  and
+  ``docs/_static/figures/vmec_jax_finite_beta/qs_paper_qh_same_resolution_11surface_fortran_errorbars.json``.
+- Regenerated README/docs figures:
+  ``docs/_static/figures/vmec_jax_finite_beta/qs_paper_qa_same_resolution_11surface.{png,pdf,json}``
+  and
+  ``docs/_static/figures/vmec_jax_finite_beta/qs_paper_qh_same_resolution_11surface.{png,pdf,json}``.
+- QA 11-surface same-grid metrics:
+  max SFINCS_JAX-vs-Fortran difference ``1.211055042e-3``; max
+  SFINCS_JAX-vs-Redl difference ``9.69%``; max JAX refinement bar ``4.21%``;
+  JAX solve-wall sum ``70.42 s``; parsed Fortran solve-wall sum ``8.84 s``;
+  peak solver-memory metrics ``109 MB`` JAX and ``91 MB`` Fortran.
+- QH 11-surface same-grid metrics:
+  max SFINCS_JAX-vs-Fortran difference ``3.535744209e-3``; max
+  SFINCS_JAX-vs-Redl difference ``10.12%``; max JAX refinement bar ``24.43%``;
+  JAX solve-wall sum ``74.11 s``; parsed Fortran solve-wall sum ``17.51 s``;
+  peak solver-memory metrics ``109 MB`` JAX and ``91 MB`` Fortran.
+- README, ``docs/examples.rst``, and
+  ``examples/vmec_jax_finite_beta/README.md`` now use the 11-surface figures as
+  the main bootstrap-current trust-building plots.
+
+Fortran/PETSc solver audit:
+
+- SFINCS Fortran v3 iterative RHSMode=1 solves call PETSc ``SNES``/``KSP`` with
+  GMRES restart ``2000`` and ``PC LU``. When a parallel sparse direct solver is
+  available, the factor backend is selected through ``PCFactorSetMatSolverType``
+  as MUMPS or SuperLU_DIST.
+- The preconditioner matrix is not the exact Jacobian. ``populateMatrix.F90``
+  uses ``whichMatrix=0`` for the Jacobian preconditioner and replaces selected
+  derivatives/couplings with simplified stencils from ``createGrids.F90``:
+  default ``preconditioner_x=1`` keeps only diagonal speed-derivative entries,
+  ``preconditioner_xi=1`` drops off-by-two pitch couplings, and the drift
+  preconditioner is limited by ``preconditioner_magnetic_drifts_max_L``.
+- This explains why a Python/JAX replacement should assemble a separate
+  Fortran-style preconditioner matrix and factor/reuse that, not factor a
+  high-fill active projection of the exact matrix.
+
+Code results:
+
+- Added ``active_fortran_v3_reduced_{ilu,lu}`` as an active RHSMode=1
+  direct-tail candidate in ``sfincs_jax/rhs1_full_assembly.py``. It builds a
+  Fortran-v3-inspired active preconditioner matrix by dropping nonlocal
+  speed-index and off-by-two pitch couplings from the active CSR, then
+  row/column equilibrates and factors the reduced matrix under hard memory
+  gates.
+- Added tests proving finite application and memory rejection for this path in
+  ``tests/test_rhs1_full_assembly.py``.
+
+Validation:
+
+- ``python -m ruff check sfincs_jax/rhs1_full_assembly.py tests/test_rhs1_full_assembly.py`` passed.
+- Focused new tests passed: ``2 passed``.
+- Full RHSMode=1 full-assembly test file passed: ``59 passed in 39.73 s``.
+
+Status:
+
+- 11-surface QA/QH same-resolution documentation gate: ``100%``.
+- Reduced-grid SFINCS_JAX/SFINCS Fortran v3 parity at the documented grid:
+  ``100%`` for the 11-surface gate.
+- Full archived-grid ``25x39x60x7`` SFINCS_JAX production solve remains open
+  until the new Fortran-v3-inspired preconditioner is probed on production QA/QH
+  and either passes true-residual gates or motivates direct term-level
+  ``whichMatrix=0`` assembly with symbolic/numeric factor reuse.
+
+### 2026-06-05 follow-up: full-grid probe visibility and native Fortran-v3-PC integration
+
+Implementation results:
+
+- Added ``--verbose-sfincs`` to
+  ``examples/vmec_jax_finite_beta/compare_qs_paper_sfincs_jax_redl.py`` and
+  an equivalent ``SFINCS_JAX_EXAMPLE_VERBOSE=1`` environment switch. The
+  comparison script now forwards SFINCS_JAX phase, preconditioner, and Krylov
+  progress messages to the terminal during production-grid runs instead of
+  suppressing them with ``verbose=False``.
+- Hardened ``active_fortran_v3_reduced_{ilu,lu}`` so it works both with
+  active-projected systems and full-index systems. If no active projection is
+  present, the builder now treats the matrix rows as the full index set instead
+  of rejecting the candidate with ``missing_active_layout``.
+- Added a real RHSMode=1 driver regression proving that
+  ``fortran_reduced_pc_gmres`` can select
+  ``active_fortran_v3_reduced_ilu`` through the direct-tail path on a tiny
+  full-FP system, solve to the true residual target, and record
+  ``fortran_v3_reduced_active_pc_matrix`` metadata.
+- Updated README, ReadTheDocs examples, and the finite-beta example README to
+  recommend ``--verbose-sfincs`` for same-resolution/production-grid reruns.
+
+Full-grid probe result:
+
+- A QA ``s=0.5`` archived-grid ``25x39x60x7`` probe with
+  ``active_fortran_v3_reduced_ilu``, ``45 GB`` preconditioner cap, ILU fill
+  factor ``2.0``, drop tolerance ``1e-2``, and strict structured-PC selection
+  was stopped after about 10 minutes because it produced no HDF5 output and no
+  phase progress in the comparison-script terminal. RSS rose to roughly
+  ``4.9 GB`` and later dropped near ``1.3 GB``, consistent with setup/factor
+  work rather than a memory-cap failure. The run is negative promotion evidence
+  for the current active-CSR-reduction implementation, not for the final
+  Fortran-v3-style architecture.
+- The rerun should be repeated only with ``--verbose-sfincs`` or
+  ``SFINCS_JAX_EXAMPLE_VERBOSE=1`` so phase timing distinguishes true CSR
+  materialization, reduced-PC construction, SuperLU ILU/LU setup, preflight,
+  and Krylov iterations.
+- The verbose rerun with the same QA ``s=0.5`` grid and a 3-minute cap reached
+  the direct-tail phase cleanly. Active-DOF reduction was ``507004/819004``;
+  the Fortran-reduced active pattern had ``13,497,900`` nnz; the direct-tail
+  CSR materialization completed in ``6.609 s`` with ``13,483,256`` nnz,
+  matching the scale of the Fortran-v3 preconditioner matrix. The run then
+  remained in ``active_fortran_v3_reduced_ilu`` structured-preconditioner setup
+  until the timeout. This isolates the full-grid blocker to serial reduced-ILU
+  setup/factorization, not VMEC geometry, RHS assembly, active projection, or
+  direct-tail CSR construction.
+
+Fortran v3/PETSc/MUMPS audit checkpoint:
+
+- Local SFINCS Fortran v3 source confirms the production strategy:
+  ``solver.F90`` creates PETSc ``SNES``/``KSP`` with ``KSPGMRES`` restart
+  ``2000`` and ``PC LU``; when available it selects MUMPS or SuperLU_DIST with
+  ``PCFactorSetMatSolverType``.
+- ``populateMatrix.F90`` constructs two different matrices: the true Jacobian
+  (``whichMatrix=1``) and a Jacobian preconditioner (``whichMatrix=0``). The
+  preconditioner matrix intentionally simplifies speed, pitch, species, and
+  drift couplings according to the defaults in ``globalVariables.F90`` and
+  ``createGrids.F90``: ``preconditioner_x=1``, ``preconditioner_xi=1``,
+  ``preconditioner_species=1``, and ``preconditioner_magnetic_drifts_max_L=2``.
+- Previous PETSc/MUMPS profile logs for QH ``psiN=0.5`` at
+  ``25x39x60x7`` showed the Fortran path converging in 16 GMRES iterations
+  after factoring the separate reduced preconditioner matrix. The dominant cost
+  was the distributed sparse LU factor setup, not Krylov matvec time.
+
+Decision:
+
+- Do not promote the active-CSR-reduction path as the production full-grid
+  solver. It is useful as tested infrastructure and a bounded probe, but it
+  still first materializes/reduces the true active CSR and relies on serial
+  SuperLU-style factor setup.
+- The next non-incremental solver project is direct term-level assembly of the
+  SFINCS-v3 ``whichMatrix=0`` preconditioner in Python/JAX-native data
+  structures, avoiding product-pattern overfill and avoiding construction of the
+  full true CSR solely to derive a preconditioner.
+
+Concrete next implementation steps:
+
+- Port the ``whichMatrix=0`` stencil choices term-by-term into a dedicated
+  RHSMode=1 preconditioner assembler: theta/zeta derivative switches,
+  diagonal-x derivative stencils for ``preconditioner_x=1``, off-by-two pitch
+  drops for ``preconditioner_xi=1``, same-species collision blocks for
+  ``preconditioner_species=1``, and drift max-L truncation.
+- Add symbolic sparsity reuse keyed by geometry/profile shape and
+  preconditioner options, then separate numeric value refresh from symbolic
+  ordering/factor metadata across radial scans.
+- Implement bounded native factor/coarse kernels around that reduced matrix:
+  block speed/pitch/angular line factors, field-split Schur over
+  current/constraint/profile moments, additive-Schwarz local factors, and a
+  low-rank/global coarse correction. The goal is to reproduce the useful
+  effect of PETSc+MUMPS/SuperLU_DIST without depending on those packages at
+  runtime.
+- Gate promotion on QA and QH ``s=0.5`` at ``25x39x60x7``: true residual below
+  target, SFINCS_JAX/SFINCS Fortran v3 ``FSABjHat`` agreement at the same grid,
+  single-surface wall time below the bounded production budget, and peak memory
+  below the configured CPU/GPU cap.
+
+Validation:
+
+- ``python -m ruff check
+  examples/vmec_jax_finite_beta/compare_qs_paper_sfincs_jax_redl.py
+  tests/test_finite_beta_vmec_example.py tests/test_v3_sparse_pattern.py
+  sfincs_jax/rhs1_full_assembly.py tests/test_rhs1_full_assembly.py`` passed.
+- Focused tests passed:
+  ``test_qs_paper_redl_comparison_*verbose*``,
+  ``test_fortran_reduced_pc_gmres_direct_tail_active_fortran_v3_reduced_ilu_solves_tiny_rhs1_system``,
+  and the low-level ``active_fortran_v3_reduced`` builder gates.
+
+Updated status:
+
+- 11-surface QA/QH same-resolution documentation gate: ``100%``.
+- Full-grid probe observability: ``100%`` for the comparison launcher.
+- Active Fortran-v3-reduced preconditioner integration: ``82%`` as a tested
+  candidate, not production-promoted.
+- Full archived-grid ``25x39x60x7`` RHSMode=1 production solver: ``55%``.
+  The remaining work is the direct term-level ``whichMatrix=0`` assembler and
+  reusable native factor/coarse infrastructure.
+
+2026-06-05 direct ``whichMatrix=0`` active-term implementation checkpoint:
+
+- Added an explicit RHSMode=1 direct-tail assembly mode controlled by
+  ``SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_ASSEMBLY``.  The
+  ``whichMatrix0``/``term_level`` modes bypass full-system projection and build
+  the kinetic block from migrated RHSMode=1 f-block stencils using the
+  Fortran-v3-reduced ``op_pc`` coefficients.  The source columns and density /
+  pressure moment rows are still inserted analytically, so the resulting CSR is
+  a reusable active-system preconditioner matrix rather than a probed true
+  operator.
+- In ``auto`` mode this direct active-term assembler is attempted for active
+  projected direct-tail systems after the legacy structured-full CSR route is
+  skipped or unavailable.  Full-system small cases keep the existing structured
+  CSR path, and pattern probing remains the fail-closed fallback.
+- Added a batched pattern-probe fallback for explicit ``whichMatrix0`` probing
+  experiments.  It uses ``jax.vmap`` over color batches when
+  ``SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_PATTERN_MATMAT=1`` or when
+  the explicit ``whichMatrix0`` mode requests multiple pattern colors.
+- Added solver-level regression coverage:
+  ``test_fortran_reduced_pc_gmres_direct_tail_whichmatrix0_active_terms_solve_tiny_rhs1_system``.
+  The test forces the new assembler, requires true residual convergence, and
+  asserts that the metadata reports ``whichMatrix=0 active term-level`` and
+  ``no kinetic probing``.
+
+Validation:
+
+- ``python -m ruff check sfincs_jax/v3_driver.py tests/test_v3_sparse_pattern.py`` passed.
+- Focused direct-tail tests passed:
+  ``3 passed, 110 deselected in 2.96 s``.
+- Wider direct-tail / active-preconditioner subset passed:
+  ``18 passed, 95 deselected in 29.96 s``.
+- Lower-level structured RHSMode=1 CSR/f-block tests passed:
+  ``74 passed in 45.25 s``.
+- ``git diff --check`` passed.
+- Bounded QA ``s=0.5`` Zenodo VMEC probe at ``13 x 13 x 21 x 5`` with
+  ``SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_ASSEMBLY=whichMatrix0``
+  completed in ``10.3 s`` wall time.  The new active-term direct-tail CSR was
+  selected, with ``531126`` nnz, ``5.53 s`` materialization time, ``0.64 s``
+  active structured-preconditioner setup, ``27`` Krylov iterations, and true
+  residual ``3.36e-13`` against target ``5.94e-13``.
+- Bounded QH ``s=0.5`` Zenodo VMEC probe at the same grid completed in
+  ``9.8 s`` wall time.  The same active-term direct-tail CSR was selected, with
+  ``531126`` nnz, ``5.46 s`` materialization time, ``0.64 s`` active
+  structured-preconditioner setup, ``42`` Krylov iterations, and true residual
+  ``2.40e-13`` against target ``1.06e-12``.
+
+Updated status after this checkpoint:
+
+- Direct ``whichMatrix=0`` active-term assembler: ``70%``.  The first
+  production-facing path is implemented, tested, and wired into the direct-tail
+  policy.  It still builds the full structured f-block before active
+  projection; a true active-only symbolic/numeric f-block emission pass remains
+  the next memory-reduction step.
+- Reusable native sparse factor/coarse infrastructure: ``84%``.  The new CSR
+  bundle feeds the existing active projected factor/coarse stack, including
+  x-block, low-L Schur, global field-split, sparse coarse, and multiline
+  candidates.
+- Full archived-grid ``25x39x60x7`` RHSMode=1 production solver: ``60%``.  The
+  next gate is a bounded QA/QH ``s=0.5`` rerun with
+  ``SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_ASSEMBLY=whichMatrix0`` and
+  the strongest active coarse/factor candidate, measuring setup time, true
+  residual reduction, ``FSABjHat`` parity, and peak RSS.
+
+Follow-up implementation checkpoint:
+
+- Added ``RHS1BlockCOOOperator.project_block_indices`` so term-level f-block
+  stencils can be projected at the block-COO level before scalar CSR
+  materialization.  This is exact for RHSMode=1 active pitch systems because the
+  active mask keeps complete ``Nzeta`` blocks for each retained
+  ``(species, x, ell, theta)`` block row.
+- Switched the explicit ``whichMatrix0`` active-term assembler to use this
+  active block projection before CSR conversion.  This avoids full scalar
+  f-block CSR construction on supported grids.
+- Added a production-size guard:
+  ``SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_WHICHMATRIX0_ACTIVE_TERM_AUTO_MAX_SIZE``
+  defaults to ``100000``.  ``auto`` only attempts the prototype active-term
+  assembler below this reduced size, while explicit ``whichMatrix0`` still
+  enables development probes.  This prevents production-size default regressions
+  until active-aware term emission is complete.
+- Full-grid QA ``s=0.5`` at ``25 x 39 x 60 x 7`` was rerun with a 3-minute cap
+  after block projection.  It again reached
+  ``whichMatrix=0 active term assembly start`` for active size ``507004`` but
+  timed out before the projected CSR was built.  Therefore the current blocker
+  is full block-COO stencil construction, not scalar CSR slicing.  The next
+  true production step is active-aware term builders that emit only retained
+  ``(species, x, ell)`` / ``theta`` block rows and columns, rather than building
+  all full-grid blocks and filtering afterward.
+
+Additional validation:
+
+- ``python -m ruff check sfincs_jax/rhs1_block_operator.py sfincs_jax/v3_driver.py
+  tests/test_rhs1_block_operator.py tests/test_v3_sparse_pattern.py`` passed.
+- ``python -m pytest tests/test_rhs1_block_operator.py -k
+  'project_block_indices or block_coo_operator' -q`` passed:
+  ``10 passed, 27 deselected``.
+- ``python -m pytest tests/test_v3_sparse_pattern.py -k
+  'direct_tail_whichmatrix0 or direct_tail_can_fallback_to_pattern_probe or
+  direct_tail_solves_tiny_rhs1_system' -q`` passed:
+  ``3 passed, 110 deselected``.
+
+Updated status after block-projection checkpoint:
+
+- Direct ``whichMatrix=0`` active-term assembler: ``75%`` for small/mid-grid
+  explicit use, ``55%`` for production-grid use.  Correctness and policy gates
+  are in place; active-aware stencil emission is still required for production
+  runtime.
+- Full archived-grid ``25x39x60x7`` RHSMode=1 production solver: ``61%``.
+  The default path is protected from this prototype; the remaining production
+  work is active-only term emission plus a stronger active factor/coarse
+  candidate on the resulting reduced matrix.
+
+2026-06-05 active-aware f-block emission and production-grid solver checkpoint:
+
+- Implemented active-aware collisionless/drift f-block term builders in
+  ``rhs1_collisionless_stencils.py``.  The high-volume RHSMode=1 terms now emit
+  only retained active ``(species, x, ell, theta)`` / ``Nzeta`` block rows and
+  columns for streaming, ExB, electric-field, and magnetic-drift contributions,
+  instead of constructing scalar entries for the full inactive pitch grid and
+  projecting afterward.
+- Full-grid QA ``s=0.5`` at ``25 x 39 x 60 x 7`` with explicit
+  ``SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_ASSEMBLY=whichMatrix0``
+  now passes the previous assembly stall.  The active term-level CSR was built
+  in ``45-53 s`` with ``507004`` active unknowns, ``13483256`` total nnz,
+  ``13428652`` kinetic nnz, ``13000`` active blocks, and ``503150`` projected
+  block nnz.
+- The former default full-grid candidate
+  ``active_global_field_split_schur`` still fails closed on memory at this
+  grid: its ``active_xblock`` base estimates ``68.6 GB`` against the configured
+  ``45 GB`` cap.
+- The bounded line/coarse candidate
+  ``active_native_xell_field_split_sparse_coarse`` is memory-safe and fast to
+  set up (``2.25 s``), but is too weak for the production QA surface.  Its
+  one-shot preflight worsens the residual from ``1.61e-4`` to ``3.83e-3``, and
+  GMRES without the solve-like preflight stalled near preconditioned residual
+  ``4.1e1`` after more than ``1000`` matvecs.
+- The Python/SciPy global Fortran-v3-reduced ILU analogue is not a viable
+  default at this production size.  With the previous fill defaults it timed
+  out in factor setup; with new large-matrix defaults
+  ``fill_factor=1.2`` and ``drop_tol=5e-2``, the reduced matrix still had
+  ``13483256`` nnz and ``spilu`` did not finish within the ``300 s`` cap,
+  despite a small memory estimate.  The bottleneck is serial symbolic/numeric
+  setup time, not memory.
+- The ``active_xblock_ilu_low_l_schur`` candidate also timed out in setup at
+  this grid under the same cap.  This confirms that production full-grid
+  QA/QH cannot rely on large serial SciPy factorization inside structured
+  candidates.
+
+New safety / diagnostics:
+
+- Large active Fortran-v3-style ILU now defaults to bounded setup parameters:
+  ``SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_FORTRAN_V3_PC_LARGE_FILL_FACTOR=1.2`` and
+  ``SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_FORTRAN_V3_PC_LARGE_DROP_TOL=5e-2`` for
+  matrices above ``300000`` unknowns.
+- The same path now prints a one-line factor estimate for large matrices before
+  entering ``spilu`` so long setup stalls report ``n``, ``nnz``, fill, drop
+  tolerance, estimated memory, and budget.
+- Added a CI regression that forces the large-matrix branch on a tiny system
+  and checks the selected metadata so future changes cannot silently restore
+  high-fill global ILU defaults.
+
+Validation:
+
+- ``python -m ruff check sfincs_jax/rhs1_collisionless_stencils.py
+  sfincs_jax/rhs1_block_operator.py sfincs_jax/rhs1_full_assembly.py
+  sfincs_jax/v3_driver.py tests/test_rhs1_collisionless_stencils.py
+  tests/test_rhs1_fblock_assembly.py tests/test_rhs1_block_operator.py
+  tests/test_rhs1_full_assembly.py tests/test_v3_sparse_pattern.py`` passed.
+- Focused active/f-block/direct-tail regression subset passed:
+  ``46 passed, 137 deselected in 25.62 s``.
+- Structured-preconditioner large-default test subset passed:
+  ``3 passed, 58 deselected in 1.35 s``.
+
+Updated status after active-aware f-block checkpoint:
+
+- Active-aware ``whichMatrix=0`` term emission: ``85%`` for collisionless and
+  drift terms, ``70%`` overall because collision/Phi1/source-tail term-level
+  production specialization still needs final audit.
+- Full archived-grid ``25x39x60x7`` RHSMode=1 production solver: ``66%``.
+  Assembly is no longer the blocker; the remaining blocker is a genuinely
+  bounded setup-time native factor/coarse architecture.
+- QA/QH bootstrap-current production parity: ``62%``.  Mid-grid QA/QH remains
+  residual-clean; full-grid same-resolution parity is still blocked by the
+  production preconditioner.
+
+Next implementation step:
+
+- Replace serial SciPy factor setup in production RHSMode=1 candidates with a
+  true bounded native preconditioner stack: direct term-level
+  ``whichMatrix=0`` preconditioner matrix emission, reusable symbolic block
+  ordering, low-memory block triangular/angular-speed line factors,
+  additive-Schwarz patches with explicit setup-time budgets, and a coupled
+  current/constraint/profile Schur coarse equation.  Promotion requires QA and
+  QH ``s=0.5`` at ``25 x 39 x 60 x 7`` to converge below the true residual
+  target and match SFINCS Fortran v3 ``FSABjHat`` on the same grid within the
+  documented physics gate.
+
+## 2026-06-06 Addendum: true active residual-block correction and acceptance gate
+
+Implementation:
+
+- Added
+  ``_try_build_true_operator_active_residual_block_lsq_preconditioner`` in
+  ``sfincs_jax/v3_driver.py``.  It selects the largest remaining active true
+  residual entries, forms bounded batches of exact true-operator columns
+  ``A_true[:, W]``, and solves a regularized LSQ residual equation over those
+  degrees of freedom.
+- Wired the new stage into the RHSMode=1 Fortran-reduced direct-tail preflight
+  chain behind
+  ``SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_ACTIVE_RESIDUAL_BLOCK``.
+  The stage reuses the same bounded true-action column cache as true active
+  submatrix/LSQ builders.
+- Extended the true-action cache to the existing true residual-window builder,
+  so all one-hot true-column probes in this rescue chain can share columns in a
+  single solve.
+- Added a strict default acceptance gate for the residual-adaptive block: it
+  must reduce the current residual and also improve the original preflight
+  residual.  ``SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_ACTIVE_RESIDUAL_BLOCK_ACCEPT_BASE_IMPROVEMENT=1``
+  exists only for explicit research probes that intentionally accept a
+  correction which improves the current rescue state but remains worse than the
+  original preflight residual.
+
+Validation:
+
+- ``ruff check sfincs_jax/v3_driver.py tests/test_v3_sparse_pattern.py``
+  passed.
+- ``python -m pytest tests/test_v3_sparse_pattern.py`` passed
+  after the acceptance-gate tightening (``123 passed in 106.86 s``).
+- New focused tests passed after the gate tightening:
+  ``python -m pytest tests/test_v3_sparse_pattern.py::test_true_operator_active_residual_block_lsq_solves_dominant_true_residual tests/test_v3_sparse_pattern.py::test_active_residual_block_reuses_true_action_column_cache -q``
+  (``2 passed``).
+- Adjacent RHSMode=1 integration groups passed:
+  ``python -m pytest tests/test_v3_driver_rhs1_dispatch_coverage.py -q``
+  (``37 passed``) and
+  ``python -m pytest tests/test_rhs1_full_assembly.py -q``
+  (``65 passed``).
+
+Bounded QA probe:
+
+- QA ``s=0.5`` at ``13 x 13 x 21 x 5`` with active direct-tail
+  ``active_symbolic_coupled_schur`` and true-coupled coarse:
+  - direct-tail structured CSR built in about ``3.43 s`` with ``291931`` nnz;
+  - structured preconditioner setup took about ``0.47 s``;
+  - the raw structured one-apply preflight residual worsened
+    ``5.938690e-05 -> 2.680587e+04``;
+  - true-coupled coarse with base-improvement override reduced that bad rescue
+    state to ``4.085438e-03``;
+  - the new true active residual block selected ``1024`` active entries
+    (``1020`` kinetic + ``4`` tail), captured ``96.9%`` of the current residual
+    energy, built ``43151`` true nonzeros in about ``1.05 s``, and reduced the
+    current rescue state to ``2.753598e-03``;
+  - because ``2.753598e-03`` is still worse than the original
+    ``5.938690e-05`` preflight residual, the tightened acceptance gate rejected
+    the block by default.
+
+Decision:
+
+- Keep the true active residual-block builder and cache integration as tested
+  infrastructure.  It is a real true-operator residual equation and is useful
+  for diagnosing the dominant active residual subspace.
+- Do not promote it as a production QA/QH default.  The bounded QA probe shows
+  it improves the current bad rescue state but does not beat the original
+  residual, so accepting it would reproduce the solver-path selection problem
+  reported by collaborators.
+- Next real algorithmic step remains a stronger native factor/coarse
+  architecture that improves the original true residual directly: active-only
+  term-level ``whichMatrix=0`` factor emission, reusable symbolic ordering, and
+  a coupled current/constraint/profile Schur equation that is used as a
+  correction to a genuinely strong local factor rather than as a rescue around
+  a weak one.
+
+Progress:
+
+- QA/QH RHSMode=1 production solver closure: ``67%``.  We added a useful
+  bounded true-operator residual equation and fixed an unsafe acceptance mode,
+  but the full-grid convergence blocker is still open.
+- Solver-path safety/diagnostics lane: ``92%``.  This pass closes one concrete
+  class of bad solver selection by requiring residual-adaptive true-column
+  corrections to beat the original preflight residual before they can seed
+  Krylov.
+
+### 2026-06-06 update: native indexed-block Schwarz infrastructure
+
+Goal:
+
+- Move beyond smoother/restart tuning by adding reusable, device-compatible
+  local factor infrastructure for overlapping additive-Schwarz and mixed
+  angular/velocity-line blocks.  The production RHSMode=1 blocker still needs a
+  stronger local factor that a coupled current/constraint/profile Schur
+  equation can correct, not another residual rescue around a weak factor.
+
+Implemented:
+
+- Added ``NativePaddedIndexedBlockFactor`` in
+  ``sfincs_jax/native_block_factor.py``.  It stores padded dense inverse blocks,
+  active masks, indexed scatter/gather maps, overlap weights, and damping as a
+  JAX PyTree.
+- Added
+  ``build_native_padded_indexed_block_factor``,
+  ``build_native_padded_indexed_block_factor_from_matrix``, and
+  ``apply_native_padded_indexed_block_factor``.  These support variable-size
+  local blocks with one static padded shape, matrix RHS columns, overlap
+  normalization, JIT application, and safe masked padding rows.
+- Added an opt-in active CSR preconditioner,
+  ``active_native_indexed_schwarz`` and aliases, in
+  ``sfincs_jax/rhs1_full_assembly.py``.  It emits active kinetic line blocks for
+  both fixed ``(species, theta, zeta)`` ``x,ell`` lines and fixed
+  ``(species, x, ell)`` angular lines, factors only bounded local dense patches,
+  and applies them through the JAX-native indexed factor.  Large or empty block
+  sets fail closed with explicit memory metadata.
+
+Validation:
+
+- ``ruff check sfincs_jax/native_block_factor.py sfincs_jax/rhs1_full_assembly.py tests/test_native_block_factor.py tests/test_rhs1_full_assembly.py``
+  passed.
+- ``python -m pytest tests/test_native_block_factor.py -q`` passed
+  (``8 passed``).
+- ``python -m pytest tests/test_rhs1_full_assembly.py -q`` passed
+  (``67 passed``).
+- Adjacent tests passed:
+  ``python -m pytest tests/test_rhs1_full_csr_kinetic_pc.py tests/test_rhs1_block_operator.py -q``
+  (``44 passed``),
+  ``python -m pytest tests/test_v3_driver_rhs1_dispatch_coverage.py -q``
+  (``37 passed``), and focused true-operator sparse-pattern tests
+  (``3 passed``).
+
+Bounded quick-case probe:
+
+- Existing quick active system: ``2804 x 2804`` active matrix with ``73020``
+  nnz.
+- One-apply residual norms for local preconditioners:
+  - ``jacobi``: ``7.970211e+09``;
+  - ``active_angular_line``: ``2.480209e+12``;
+  - ``active_native_indexed_schwarz``: ``2.480209e+12``;
+  - ``active_schwarz_sparse_coarse``: ``1.873016e+13``.
+- One-apply residual norms for global field-split Schur with different kinetic
+  bases:
+  - ``active_xblock`` base: ``3.440054e+04``;
+  - ``active_angular_line`` base: ``2.046425e+04``;
+  - ``active_native_xell`` base: ``3.176480e+06``;
+  - ``active_native_indexed_schwarz`` base: ``1.588121e+06``.
+
+Decision:
+
+- Keep ``active_native_indexed_schwarz`` as tested infrastructure and an
+  explicit opt-in research path.  It is the correct native representation for
+  overlapping local factors, but the bounded quick-case probe does not justify
+  adding it to the default auto ladder yet.
+- Do not promote it as a production default until it reduces the original true
+  preflight residual on QA/QH RHSMode=1 gates and improves Krylov iteration
+  count enough to offset setup cost.
+
+Next steps:
+
+- Use the new padded indexed factor as the storage/apply backend for a stronger
+  active-only term-level ``whichMatrix=0`` factor, not just principal submatrix
+  line factors extracted from the active matrix.
+- Build a coupled residual equation whose coarse variables include
+  current/constraint/profile moments plus dominant kinetic residual modes from
+  the failed QA/QH runs.  Acceptance gate remains: improve the original true
+  residual and preserve SFINCS Fortran v3 parity before default promotion.
+
+Progress:
+
+- QA/QH RHSMode=1 production solver closure: ``69%``.  Native overlapping block
+  infrastructure is now present and tested, but production convergence is still
+  open.
+- Solver-path safety/diagnostics lane: ``93%``.  The new candidate is opt-in and
+  memory-gated; default solver selection remains conservative because probes do
+  not show a net improvement yet.
+
+### 2026-06-06 update: Fortran-reduced active support modes are now explicit
+
+Goal:
+
+- Make the active Fortran-v3-style preconditioner closer to ``whichMatrix=0`` by
+  retaining/dropping kinetic entries according to the same support modes used by
+  the driver and Fortran-v3-inspired operator shaping:
+  ``preconditioner_x``, ``preconditioner_xi``,
+  ``preconditioner_species``, and ``preconditioner_x_min_L``.
+- Remove an unsafe source of solver-path mismatch: active full-CSR
+  preconditioner setup previously read these modes only from environment
+  variables, so direct-tail solver policy could build a preconditioner with
+  settings different from the actual selected solver path.
+
+Implemented:
+
+- Extended ``build_active_projected_rhs1_full_csr_preconditioner`` with optional
+  explicit support-mode arguments:
+  ``preconditioner_x``, ``preconditioner_xi``,
+  ``preconditioner_species``, and ``preconditioner_x_min_l``.
+- Threaded those arguments through the active auto-candidate recursion and the
+  ``active_fortran_v3_*`` reduced sparse-factor branch.
+- Updated ``_active_fortran_v3_reduced_preconditioner_matrix`` to use decoded
+  layout supports instead of boolean heuristic drops:
+  - ``preconditioner_x=0`` keeps all radial coupling;
+  - ``preconditioner_x=1`` keeps only same-``x`` coupling;
+  - ``preconditioner_x=2`` keeps upper-radial coupling;
+  - ``preconditioner_x=3``/``5`` keep nearest-neighbor radial coupling;
+  - ``preconditioner_x=4`` keeps same and forward radial coupling;
+  - ``preconditioner_x_min_l`` keeps full radial coupling below the requested
+    Legendre threshold;
+  - ``preconditioner_xi=1`` keeps ``|Delta ell| <= 1`` and drops wider pitch
+    couplings;
+  - ``preconditioner_xi=0`` keeps ``|Delta ell| <= 2``;
+  - ``preconditioner_species=1`` drops cross-species kinetic entries.
+- Threaded the actual direct-tail solver-policy values from
+  ``sfincs_jax/v3_driver.py`` into the active full-CSR preconditioner builder,
+  rather than relying on ambient environment variables.
+
+Validation:
+
+- ``ruff check sfincs_jax/rhs1_full_assembly.py sfincs_jax/v3_driver.py tests/test_rhs1_full_assembly.py``
+  passed.
+- New focused tests passed:
+  ``test_active_fortran_v3_reduced_matrix_respects_support_modes``,
+  ``test_active_fortran_v3_reduced_builder_prefers_explicit_support_modes``,
+  and the existing default drop test.
+- Full adjacent groups passed:
+  - ``python -m pytest tests/test_rhs1_full_assembly.py -q``:
+    ``69 passed``;
+  - ``python -m pytest tests/test_v3_driver_rhs1_dispatch_coverage.py tests/test_fortran_reduced_preconditioner.py -q``:
+    ``43 passed``;
+  - ``python -m pytest tests/test_native_block_factor.py tests/test_rhs1_full_csr_kinetic_pc.py tests/test_rhs1_block_operator.py -q``:
+    ``52 passed``.
+
+Bounded quick-case probe:
+
+- Existing active quick system: shape ``2804 x 2804`` with ``73020`` exact nnz.
+- For ``active_fortran_v3_reduced_lu`` one-apply residuals:
+  - default ``x=1, xi=1, species=1``:
+    ``47824`` reduced nnz, ``2.52 MB`` factor, residual ``3.855610e+03``;
+  - ``preconditioner_x=0``:
+    ``59024`` reduced nnz, ``10.51 MB`` factor, residual ``3.294724e+02``;
+  - ``preconditioner_x=3``:
+    ``52304`` reduced nnz, ``9.91 MB`` factor, residual ``7.338237e+03``;
+  - ``preconditioner_x_min_L=2``:
+    ``50624`` reduced nnz, ``4.57 MB`` factor, residual ``2.828376e+03``;
+  - ``preconditioner_species=0``:
+    ``50624`` reduced nnz, ``4.58 MB`` factor, residual ``3.877060e+03``.
+
+Decision:
+
+- Keep the conservative default support modes for now, but the probe shows that
+  retaining radial coupling with ``preconditioner_x=0`` can be much stronger on
+  at least one quick active system at modest absolute memory cost.
+- Do not silently switch defaults from this single probe.  Add a bounded
+  preflight mode-selection gate next: try a small set of support modes under
+  the existing memory cap, evaluate the original true residual improvement, and
+  select the cheapest mode that improves residual enough to justify setup.
+
+Progress:
+
+- QA/QH RHSMode=1 production solver closure: ``72%``.  The active
+  Fortran-reduced path now honors the full support-mode contract and direct-tail
+  policy values.
+- Solver-path safety/diagnostics lane: ``95%``.  This closes another concrete
+  mismatch vector between selected solver policy and the active preconditioner
+  actually built.
+
+### 2026-06-06 update: Bounded support-mode preflight selector
+
+Goal:
+
+- Close the remaining solver-path ambiguity for the direct-tail
+  Fortran-reduced RHSMode=1 preconditioner by selecting support modes from
+  evidence, not from a hardcoded global default.
+- Prevent cache reuse across different ``preconditioner_x``,
+  ``preconditioner_xi``, ``preconditioner_species``, and
+  ``preconditioner_x_min_L`` choices.
+
+Implemented:
+
+- Added
+  ``select_active_fortran_v3_reduced_support_mode_preconditioner`` in
+  ``sfincs_jax/rhs1_full_assembly.py``.  It builds a bounded candidate list
+  such as ``current,x0,xmin_l2,species0``, respects the configured factor
+  memory cap, applies each candidate once to the actual RHS, evaluates the
+  residual with the true operator, and promotes a non-current mode only when it
+  improves the one-apply residual by the requested ratio.
+- Wired the selector into ``sfincs_jax/v3_driver.py`` behind
+  ``SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_SUPPORT_MODE_PREFLIGHT``.
+  It is currently opt-in so CI and small examples do not pay extra setup cost.
+- Added support-mode values to the direct-tail structured-preconditioner cache
+  key, preventing stale factors from being reused after a support-mode change.
+- Added metadata and progress output for the selector, including candidate
+  residuals, selected support mode, factor size, and whether a non-current mode
+  was accepted.
+
+Validation:
+
+- ``ruff check sfincs_jax/rhs1_full_assembly.py sfincs_jax/v3_driver.py tests/test_rhs1_full_assembly.py``
+  passed.
+- ``python -m pytest tests/test_rhs1_full_assembly.py -q`` passed
+  (``71 passed``).
+- ``python -m pytest tests/test_v3_driver_rhs1_dispatch_coverage.py tests/test_fortran_reduced_preconditioner.py -q``
+  passed (``43 passed``).
+- ``python -m pytest tests/test_native_block_factor.py tests/test_rhs1_full_csr_kinetic_pc.py tests/test_rhs1_block_operator.py -q``
+  passed (``52 passed``).
+- Driver wiring was also exercised through the direct-tail sparse-pattern
+  subset:
+  ``python -m pytest tests/test_v3_sparse_pattern.py -k 'direct_tail' -q``
+  passed (``21 passed, 102 deselected``).
+
+Bounded quick-system probe:
+
+- On ``quick_2species_FPCollisions_noEr`` active CSR, with
+  ``active_fortran_v3_reduced_lu`` and a ``64 MB`` cap, the selector chose
+  ``x0``:
+  - current support residual: ``4.881324810255436e-04`` with about
+    ``2.64 MB`` factor memory and ``47824`` reduced nnz;
+  - ``x0`` support residual: ``1.9294541043052274e-05`` with about
+    ``11.02 MB`` factor memory and ``59024`` reduced nnz;
+  - ``xmin_l2`` residual: ``4.135359398064997e-04`` with about ``4.79 MB``;
+  - ``species0`` residual: ``4.883372610151184e-04`` with about ``4.81 MB``.
+- This is enough evidence to keep ``x0`` in the bounded selector candidate
+  list, but not enough to promote it unconditionally for all geometries.
+
+Decision:
+
+- Keep the selector opt-in until bounded QA/QH mid-grid probes show that the
+  extra candidate setup reduces true residual and outer Krylov time enough to
+  justify enabling it by default.
+- Next test gate: run QA and QH RHSMode=1 bootstrap-current probes with
+  ``SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_SUPPORT_MODE_PREFLIGHT=1``
+  and compare residual history, wall time, peak RSS, and agreement with SFINCS
+  Fortran v3/Redl at the same resolution.
+
+Progress:
+
+- QA/QH RHSMode=1 production solver closure: ``75%``.  The support-mode
+  selector is implemented and tested, but not yet validated on production
+  resolution QA/QH ladders.
+- Solver-path safety/diagnostics lane: ``96%``.  Cache-key and support-mode
+  mismatch risks are now covered by tests.
+
+### 2026-06-06 update: QA/QH support-mode preflight gate and output diagnostics
+
+Goal:
+
+- Run the new support-mode selector on bounded QS-paper QA/QH RHSMode=1
+  bootstrap-current surfaces and decide whether it should become a default
+  production path.
+- Persist compact support-mode selector diagnostics in HDF5/NetCDF/NPZ outputs
+  so future benchmark artifacts show which support mode was selected and why.
+
+Implemented:
+
+- Added compact output fields in ``sfincs_jax/io.py`` for direct-tail
+  support-mode preflight:
+  ``linearSolverDirectTailSupportModePreflightRequested``,
+  ``linearSolverDirectTailSupportModePreflightSelected``,
+  ``linearSolverDirectTailSupportModeAcceptedNonbaseline``,
+  ``linearSolverDirectTailSupportModeSelectedCandidate``,
+  ``linearSolverDirectTailSupportModeRequestedCandidateCount``,
+  ``linearSolverDirectTailSupportModeCandidateCount``,
+  ``linearSolverDirectTailSupportModeBaselineResidualAfter``,
+  ``linearSolverDirectTailSupportModeBestResidualAfter``,
+  ``linearSolverDirectTailSupportModeRhsNorm``,
+  ``linearSolverDirectTailSupportModeSetupTime``, and bounded
+  ``linearSolverDirectTailSupportModeCandidatesJson``.
+- Added an early-exit guard to
+  ``select_active_fortran_v3_reduced_support_mode_preconditioner``: if the
+  current support drops zero kinetic entries, relaxed support candidates cannot
+  add anything, so the selector stops after the current candidate and records
+  ``current_support_dropped_no_entries``.
+- Marked ``active_fortran_v3_reduced_ilu`` factors as requiring the true
+  residual preflight.  This keeps explicit low-memory ILU experiments available
+  but prevents fragile ILU factors from entering long Krylov runs when the
+  one-apply true residual is nonfinite or worse than the RHS norm.
+
+Validation:
+
+- ``ruff check sfincs_jax/io.py sfincs_jax/rhs1_full_assembly.py sfincs_jax/v3_driver.py tests/test_io_export_and_h5_coverage.py tests/test_rhs1_full_assembly.py tests/test_v3_sparse_pattern.py``
+  passed.
+- ``python -m pytest tests/test_io_export_and_h5_coverage.py::test_rhsmode1_solver_diagnostics_are_output_visible tests/test_rhs1_full_assembly.py -k 'support_mode or fortran_v3_reduced_builder' -q``
+  passed (``5 passed, 68 deselected``).
+- ``python -m pytest tests/test_v3_sparse_pattern.py::test_fortran_reduced_pc_gmres_direct_tail_active_fortran_v3_reduced_ilu_solves_tiny_rhs1_system -q``
+  was replaced by the safer fail-fast assertion for weak ILU preflight.
+- ``python -m pytest tests/test_rhs1_full_assembly.py::test_active_fortran_v3_reduced_ilu_uses_large_matrix_safe_defaults tests/test_v3_sparse_pattern.py::test_fortran_reduced_pc_gmres_direct_tail_active_fortran_v3_reduced_ilu_fails_fast_when_preflight_worsens -q``
+  passed.
+- ``python -m pytest tests/test_v3_sparse_pattern.py -k 'direct_tail' -q``
+  passed (``21 passed, 102 deselected``).
+
+Bounded QA/QH central-surface probes:
+
+- Command family:
+  ``python scripts/audit_qs_paper_terms.py --case QA|QH --s-values 0.5 --compute-solution --solve-method fortran_reduced_pc_gmres --ntheta 13 --nzeta 13 --nxi 21 --nx 5 --solver-tolerance 1e-6`` with
+  direct-tail ``active_fortran_v3_reduced_lu`` forced.
+- QA baseline: ``6.31 s`` wall, peak RSS about ``1.33 GB``,
+  SFINCS_JAX-vs-Fortran current scalar relative difference ``2.7448e-2``.
+- QA support preflight before early exit: ``8.96 s`` wall, peak RSS about
+  ``2.52 GB``, same current difference.  HDF5 diagnostics showed all four
+  candidates had identical reduced nnz, identical factor size, and identical
+  one-apply residual; selected candidate remained ``current``.
+- QA support preflight after early exit: ``6.02 s`` wall, peak RSS about
+  ``1.72 GB``, same current difference.  HDF5 diagnostics record
+  ``selected_candidate=current`` and early-stop reason
+  ``current_support_dropped_no_entries`` in the candidate JSON.
+- QH baseline: ``5.37 s`` wall, peak RSS about ``1.31 GB``,
+  SFINCS_JAX-vs-Fortran current scalar relative difference ``8.8482e-2``.
+- QH support preflight before early exit: ``8.77 s`` wall, peak RSS about
+  ``2.56 GB``, same current difference.
+- QH support preflight after early exit: ``6.20 s`` wall, peak RSS about
+  ``1.64 GB``, same current difference.
+- QA reduced-ILU probe with default ILU settings was rejected: before the
+  fail-fast guard it ran past ``60 s`` with residual-overflow warnings; after
+  marking ILU as preflight-required it failed in ``4.49 s`` with
+  ``residual_after=nan`` and peak RSS about ``1.03 GB``.  This is the desired
+  behavior for an explicitly requested but unsafe low-memory path.
+
+Decision:
+
+- Do not enable support-mode preflight by default for the current QA/QH
+  central-surface mid-grid lane.  These surfaces are support-insensitive under
+  the active direct-tail matrix, so the selector is useful diagnostics but not a
+  physics/runtime improvement there.
+- Keep the selector opt-in and keep the early-exit guard.  It remains useful
+  for cases like the quick active CSR probe where ``x0`` reduced the true
+  one-apply residual by about ``25x`` under a modest memory cap.
+- Do not promote default reduced ILU for QA/QH RHSMode=1.  It lowers factor
+  memory but fails the true-residual preflight on these surfaces and can stall
+  without the guard.
+- Next implementation lane should move back to production-grid RHSMode=1:
+  lower-memory direct-tail factors and a stronger active operator/coarse
+  architecture, not more support-mode selection.
+
+Progress:
+
+- QA/QH RHSMode=1 production solver closure: ``76%``.  The support-mode branch
+  is now measured on bounded QA/QH and ruled out as the central-surface default
+  fix.
+- Solver-path safety/diagnostics lane: ``97%``.  Support-mode preflight
+  decisions are now output-visible and tested.
+
+### 2026-06-06 update: lower-memory exact-LU ordering for active direct-tail RHSMode=1
+
+Goal:
+
+- Reduce RHSMode=1 active direct-tail exact-factor memory before attempting
+  larger QA/QH production-grid bootstrap-current ladders.
+- Keep the path automatic for ordinary users: users should not need to know the
+  SuperLU ordering knob to get the better default.
+
+Implemented:
+
+- Changed the ``active_fortran_v3_reduced_lu`` preconditioner ordering policy
+  in ``sfincs_jax/rhs1_full_assembly.py``.  When
+  ``SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_FORTRAN_V3_PC_PERMC_SPEC`` is unset or set
+  to ``AUTO``, exact LU now tries ``NATURAL`` first and falls back to
+  ``COLAMD`` if factorization fails.  Explicit values
+  ``NATURAL``, ``COLAMD``, ``MMD_ATA``, or ``MMD_AT_PLUS_A`` are still honored.
+- Kept ILU default ordering at ``COLAMD`` because the bounded QA/QH ILU probe
+  failed the true-residual preflight and incomplete factors are more sensitive
+  to natural-order pivot growth.
+- Added output-visible direct-tail factor diagnostics in ``sfincs_jax/io.py``:
+  ``linearSolverSparsePCSelectedKind``,
+  ``linearSolverSparsePCFactorKind``,
+  ``linearSolverSparsePCPermcSpec``,
+  ``linearSolverSparsePCPermcSpecRequested``,
+  ``linearSolverSparsePCPermcSpecCandidatesJson``, and
+  ``linearSolverSparsePCPermcFailuresJson``.
+- Replaced the fixed unset direct-tail structured-PC cap with a bounded
+  adaptive cap for ``active_fortran_v3_reduced_lu``:
+  ``max_mb = min(auto_max, max(base, base + slope * active_size))`` with
+  defaults ``base=512 MB``, ``slope=0.005 MB/unknown``, and
+  ``auto_max=2048 MB``.  Explicit
+  ``SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_PC_MAX_MB`` still wins.
+  The effective cap is output-visible through
+  ``linearSolverDirectTailStructuredPCMaxMB`` and
+  ``linearSolverDirectTailStructuredPCMaxMBAuto``.
+- Added tests for the automatic ordering default, explicit ordering override,
+  and ``NATURAL``-to-``COLAMD`` fallback.
+
+Bounded QA/QH ordering sweep:
+
+- Sweep command family:
+  ``python scripts/audit_qs_paper_terms.py --case QA|QH --s-values 0.5 --compute-solution --solve-method fortran_reduced_pc_gmres --ntheta 13 --nzeta 13 --nxi 21 --nx 5 --solver-tolerance 1e-6`` with
+  direct-tail ``active_fortran_v3_reduced_lu`` forced.
+- QA ``COLAMD``: wall ``5.38 s``, factor bytes ``164,264,768``,
+  factor time ``0.869 s``, residual target ratio ``0.29065``.
+- QA ``NATURAL``: wall ``4.64 s``, factor bytes ``99,654,776``,
+  factor time ``0.417 s``, residual target ratio ``0.29065``.
+- QH ``COLAMD``: wall ``5.24 s``, factor bytes ``164,264,768``,
+  factor time ``0.863 s``, residual target ratio ``0.57021``.
+- QH ``NATURAL``: wall ``4.78 s``, factor bytes ``99,654,776``,
+  factor time ``0.422 s``, residual target ratio ``0.57020``.
+- ``MMD_AT_PLUS_A`` was worse on both cases, with about ``195.8 MB`` factors
+  and about ``4.7 s`` factor setup.  ``MMD_ATA`` was also worse than
+  ``NATURAL`` and slightly worse than ``COLAMD`` in factor bytes.
+- Default no-override rerun after the code change selected ``NATURAL`` and
+  wrote the selected ordering to HDF5:
+  ``linearSolverSparsePCPermcSpec=NATURAL``,
+  ``linearSolverSparsePCPermcSpecRequested=AUTO``, and
+  ``linearSolverSparsePCPermcSpecCandidatesJson=["NATURAL", "COLAMD"]``.
+
+Validation:
+
+- ``ruff check sfincs_jax/io.py sfincs_jax/rhs1_full_assembly.py tests/test_io_export_and_h5_coverage.py tests/test_rhs1_full_assembly.py``
+  passed.
+- ``python -m pytest tests/test_io_export_and_h5_coverage.py::test_rhsmode1_solver_diagnostics_are_output_visible tests/test_rhs1_full_assembly.py -k 'active_fortran_v3_reduced_lu_defaults_to_natural_ordering or active_fortran_v3_reduced_lu_respects_explicit_ordering or active_fortran_v3_reduced_lu_falls_back_when_natural_fails or active_fortran_v3_reduced_lu_preconditioner_drops_default_couplings or active_fortran_v3_reduced_ilu_uses_large_matrix_safe_defaults' -q``
+  passed.
+- ``python -m pytest tests/test_v3_sparse_pattern.py -k 'direct_tail and (fortran_v3_reduced_ilu or structured_pc_preflight or active_fortran_v3_reduced)' -q``
+  passed.
+- ``git diff --check -- sfincs_jax/io.py sfincs_jax/rhs1_full_assembly.py tests/test_io_export_and_h5_coverage.py tests/test_rhs1_full_assembly.py``
+  passed.
+- GitHub Actions check on the latest visible ``main`` commits: ``CI`` and
+  ``Docs`` were green for the latest 20 listed runs.  No active remote CI/CD
+  failure was visible from ``gh run list``.
+
+Decision:
+
+- Promote ``NATURAL`` as the automatic exact-LU ordering for the active
+  Fortran-v3 reduced direct-tail path.  This is a real lower-memory improvement
+  for the bounded QA/QH RHSMode=1 lane and does not change the physics result.
+- Continue the production-grid lane with stronger active operator/coarse
+  architecture.  The ordering change reduces factor memory and setup cost, but
+  it is not by itself a full-grid 25x39x60x7 solution strategy.
+
+Progress:
+
+- QA/QH RHSMode=1 production solver closure: ``78%``.  Exact-factor memory and
+  setup time improved materially on the bounded central-surface gate; the
+  remaining blocker is the stronger production-grid active/coarse method.
+- Solver-path safety/diagnostics lane: ``98%``.  Factor-kind and ordering
+  choices are now output-visible, tested, and protected by fallback behavior.
+
+### 2026-06-06 update: automatic true-operator coupled coarse gate
+
+Goal:
+
+- Move beyond support-mode and smoother tuning by promoting a real
+  true-operator residual equation when the active exact factor is not enough.
+- Keep the default safe: do not build the coarse equation when the one-apply
+  active factor is already close to target, but do build it automatically for
+  active Fortran-v3 reduced LU when the preflight target ratio is still large.
+
+Implemented:
+
+- Added an automatic gate for
+  ``SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_COUPLED_COARSE`` in
+  ``sfincs_jax/v3_driver.py``:
+  ``SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_COUPLED_COARSE_AUTO``
+  defaults to enabled.
+- The auto path is intentionally scoped to ``active_fortran_v3_reduced_lu``.
+  It triggers only when the preflight residual target ratio exceeds
+  ``SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_COUPLED_AUTO_TARGET_RATIO``
+  (default ``10``) and the active system has at least
+  ``SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_COUPLED_AUTO_MIN_SIZE``
+  unknowns (default ``300,000``).  The coarse correction is still accepted only
+  if it reduces the true residual.
+- Added metadata:
+  ``sparse_pc_direct_tail_true_coupled_coarse_explicit_requested``,
+  ``sparse_pc_direct_tail_true_coupled_coarse_auto_enabled``,
+  ``sparse_pc_direct_tail_true_coupled_coarse_auto_selected``, and
+  ``sparse_pc_direct_tail_true_coupled_coarse_auto_target_ratio`` plus
+  ``sparse_pc_direct_tail_true_coupled_coarse_auto_min_size``.
+- Added compact output fields in ``sfincs_jax/io.py``:
+  ``linearSolverDirectTailTrueCoupledCoarseRequested``,
+  ``linearSolverDirectTailTrueCoupledCoarseExplicitRequested``,
+  ``linearSolverDirectTailTrueCoupledCoarseAutoEnabled``,
+  ``linearSolverDirectTailTrueCoupledCoarseAutoSelected``,
+  ``linearSolverDirectTailTrueCoupledCoarseSelected``,
+  ``linearSolverDirectTailTrueCoupledCoarseAutoTargetRatio``,
+  ``linearSolverDirectTailTrueCoupledCoarseAutoMinSize``,
+  ``linearSolverDirectTailTrueCoupledCoarseResidualAfter``,
+  ``linearSolverDirectTailTrueCoupledCoarseBaseResidualAfter``,
+  ``linearSolverDirectTailTrueCoupledCoarseSize``,
+  ``linearSolverDirectTailTrueCoupledCoarseNbytesEstimate``, and bounded
+  ``linearSolverDirectTailTrueCoupledCoarseBasisJson``.
+
+Validation:
+
+- Tiny RHSMode=1 driver gate with explicit coarse disabled and auto enabled:
+  ``active_fortran_v3_reduced_lu`` one-apply preflight residual worsened from
+  ``4.388223e-05`` to ``3.203356e-04``; the auto true-coupled coarse built
+  ``62`` columns and reduced the true residual to ``2.386381e-05``.  The
+  subsequent GMRES solve converged to ``3.783960e-13``.
+- Bounded QA/QH central-surface default rerun with no explicit coarse request:
+  auto coarse stayed inactive because exact LU already had target ratios below
+  one.  QA used ``NATURAL`` with factor bytes ``99,654,776`` and target ratio
+  ``0.29065``; QH used ``NATURAL`` with factor bytes ``101,677,456`` and
+  target ratio ``0.23343``.
+- Mid-grid QA ``17x21x31x5`` with the old fixed ``512 MB`` cap failed fast
+  because the exact ``NATURAL`` active LU factor was ``622,139,000`` bytes.
+  With a manual ``1 GB`` cap the solve completed; with the new adaptive default
+  it also completes without an explicit cap using
+  ``linearSolverDirectTailStructuredPCMaxMB=826.18``, factor bytes
+  ``622,139,000``, ``NATURAL`` ordering, and residual target ratio ``0.00934``.
+  Auto coarse remains off by default on this mid-grid
+  (``AutoSelected=-1``) due the production-size gate.
+  A verbose no-auto run showed the exact-LU one-apply preflight residual
+  worsened from ``8.631382e-05`` to ``3.612849e-04`` with target ratio
+  ``4.185713e8``, yet GMRES still converged cleanly; this is why the coarse
+  auto gate now requires production-scale size, not target ratio alone.
+- ``ruff check sfincs_jax/io.py sfincs_jax/v3_driver.py tests/test_io_export_and_h5_coverage.py tests/test_v3_sparse_pattern.py``
+  passed.
+- ``python -m pytest tests/test_io_export_and_h5_coverage.py::test_rhsmode1_solver_diagnostics_are_output_visible tests/test_v3_sparse_pattern.py -k 'true_coupled_coarse or active_fortran_v3_reduced' -q``
+  passed.
+- ``python -m pytest tests/test_io_export_and_h5_coverage.py tests/test_rhs1_full_assembly.py tests/test_v3_sparse_pattern.py -k 'direct_tail or support_mode or true_coupled or active_fortran_v3' -q``
+  passed (``33 passed, 179 deselected``).
+- ``python -m pytest tests/test_io_export_and_h5_coverage.py::test_rhsmode1_solver_diagnostics_are_output_visible tests/test_v3_sparse_pattern.py -k 'pc_default_cap or true_coupled_coarse_auto_promotes or active_fortran_v3_reduced' -q``
+  passed.
+
+Decision:
+
+- Keep the automatic true-coupled coarse gate enabled for active exact LU.  This
+  is the first default production path that combines a lower-memory active
+  exact factor with a true-operator residual equation, without adding overhead
+  on already-clean QA/QH central surfaces.
+- Next production-grid step: run bounded mid-grid QA/QH bootstrap-current
+  surfaces where the active LU preflight target ratio is high, and verify
+  whether the auto coarse gate lowers Krylov iterations enough to offset setup.
+
+Progress:
+
+- QA/QH RHSMode=1 production solver closure: ``81%``.  The default path now has
+  a lower-memory exact factor plus automatic true-operator coarse rescue.
+- Solver-path safety/diagnostics lane: ``99%``.  Direct-tail support, factor
+  ordering, and coupled-coarse decisions are output-visible and tested.
+
+### 2026-06-06 update: upper-midgrid exact-LU preflight policy and 4 GB bounded cap
+
+Goal:
+
+- Close the next QA/QH RHSMode=1 bootstrap-current rung without reverting to
+  broad resolution scans or smoother/restart tuning.
+- Determine whether the ``21 x 31 x 45 x 5`` QS-paper QA/QH surfaces are
+  blocked by memory, by the exact active factor itself, or by an overly
+  aggressive preflight policy.
+
+Implemented:
+
+- Raised the unset adaptive exact-LU direct-tail cap for
+  ``active_fortran_v3_reduced_lu`` to a bounded ``4 GB`` ceiling with
+  ``base=512 MB`` and ``slope=0.016 MB/active_unknown``.  Explicit
+  ``SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_PC_MAX_MB`` still wins.
+- Changed the direct-tail structured-preconditioner preflight default so exact
+  ``active_fortran_v3_reduced_lu`` keeps one-step preflight as diagnostics, not
+  as a size-based fail-closed gate.  Approximate factors and experimental
+  structured factors still fail closed when their metadata requests preflight.
+- Added a pre-factor exact-LU fill-safety gate in
+  ``sfincs_jax/rhs1_full_assembly.py``.  The default multiplier
+  ``SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_FORTRAN_V3_PC_LU_PREFILL_SAFETY_FACTOR=4.5``
+  rejects exact LU before SuperLU allocation when the raw factor estimate is
+  small enough to pass the cap but the expected fill is not credible for the
+  available memory.
+- Added a regression test that forces the size gate to ``1`` and verifies that
+  exact active LU is still judged by final Krylov residual rather than rejected
+  only because its one-apply residual is poor.
+- Added a regression test proving the LU prefill gate rejects before
+  factorization when the safety-adjusted estimate exceeds the cap.
+
+Evidence:
+
+- QA ``21 x 31 x 45 x 5`` with a manual ``4 GB`` cap and the old fail-closed
+  structured preflight built the exact factor but failed before GMRES:
+  residual ``1.165566e-4 -> 5.429396e-4``, target ratio ``4.658e8``.
+- The same QA run with structured preflight kept diagnostic-only completed in
+  ``46.9 s`` wall time: factor bytes ``3,003,511,928``, factor setup
+  ``36.95 s``, GMRES ``30`` iterations, final residual ``3.712e-13`` against
+  target ``1.166e-12``, and worst current scalar relative audit
+  ``8.06e-3``.
+- With the new default policy and no explicit cap/preflight override, QA
+  ``21 x 31 x 45 x 5`` completed in ``45.5 s`` wall time with automatic cap
+  ``3220.224 MB``, factor bytes ``3,003,511,928``, ``NATURAL`` ordering,
+  ``30`` GMRES iterations, and residual target ratio ``3.19e-3``.
+- With the same new default policy, QH ``21 x 31 x 45 x 5`` completed in
+  ``45.5 s`` wall time with automatic cap ``3220.224 MB``, factor bytes
+  ``3,003,511,928``, ``NATURAL`` ordering, ``25`` GMRES iterations, residual
+  target ratio ``2.73e-3``, and worst current scalar relative audit
+  ``6.49e-3``.
+- QA full-grid ``25 x 39 x 60 x 7`` materialization guard with a deliberately
+  tiny ``1 MB`` factor cap measured active size ``507004`` and direct-tail CSR
+  ``13,483,256`` nnz in ``6.20 s``; it rejected before factorization as
+  expected.
+- QA full-grid ``25 x 39 x 60 x 7`` with the new normal adaptive ``4 GB`` cap
+  now also rejects before SuperLU allocation: raw exact-factor estimate
+  ``1.863 GiB`` is below the cap, but the LU-prefill safety estimate
+  ``8,791,906,356`` bytes exceeds the ``4,294,967,296`` byte cap.  This keeps
+  the default safe while documenting that full-grid production needs a
+  lower-memory operator/coarse factor, not a larger exact host LU.
+
+Validation:
+
+- ``ruff check sfincs_jax/io.py sfincs_jax/rhs1_full_assembly.py sfincs_jax/v3_driver.py tests/test_io_export_and_h5_coverage.py tests/test_rhs1_full_assembly.py tests/test_v3_sparse_pattern.py``
+  passed.
+- ``python -m pytest tests/test_io_export_and_h5_coverage.py tests/test_rhs1_full_assembly.py tests/test_v3_sparse_pattern.py -k 'direct_tail or support_mode or true_coupled or active_fortran_v3 or pc_default_cap' -q``
+  passed (``35 passed, 179 deselected``).
+- After adding the LU prefill gate,
+  ``python -m pytest tests/test_io_export_and_h5_coverage.py tests/test_rhs1_full_assembly.py tests/test_v3_sparse_pattern.py -k 'direct_tail or support_mode or true_coupled or active_fortran_v3 or pc_default_cap or prefill_gate' -q``
+  passed (``36 passed, 179 deselected``).
+- QA ``21 x 31 x 45 x 5`` was rerun after the prefill gate and still solved:
+  ``46.7 s`` wall time, factor bytes ``3,003,511,928``, ``30`` iterations, and
+  final residual target ratio ``3.19e-3``.
+
+Decision:
+
+- Promote diagnostic-only one-step preflight for exact active LU.  The
+  upper-midgrid QA/QH evidence shows that a poor one-step residual is not a
+  reliable rejection criterion for the exact active factor; final true residual
+  after GMRES is the correct gate.
+- Keep the ``4 GB`` default cap ceiling.  It is large enough for the
+  upper-midgrid QS-paper rung and still bounded for ordinary CPU/GPU hosts.
+  Full-grid ``25 x 39 x 60 x 7`` remains a separate production-memory lane and
+  should use a lower-memory factor/coarse architecture rather than simply
+  raising this ceiling further.
+- Keep the LU prefill safety gate enabled by default.  It prevents accidental
+  workstation-hostile factor allocations on full-grid RHSMode=1 QA/QH runs
+  while preserving the residual-clean upper-midgrid rung.
+
+Progress:
+
+- QA/QH RHSMode=1 production solver closure: ``84%``.  The default path now
+  solves the next upper-midgrid rung for both QA and QH in under one minute on
+  CPU with residual-clean results and sub-percent term-audit mismatch.
+- Lower-memory RHSMode=1 factor lane: ``70%``.  ``NATURAL`` ordering plus the
+  bounded exact cap is now useful through ``21 x 31 x 45 x 5``; the next real
+  blocker is reducing or replacing the multi-GB exact factor for full-grid
+  production.
+- Full-grid RHSMode=1 safety lane: ``92%``.  Full-grid direct-tail assembly is
+  fast and bounded, and exact-LU OOM risk is now guarded before SuperLU
+  allocation under the default cap.
+- Solver-path safety/diagnostics lane: ``99%``.  Exact vs approximate
+  preflight semantics are now explicit, tested, and output-visible.
+
+### 2026-06-07 update: production-grid auto ladder and full-grid memory evidence
+
+Goal:
+
+- Move the ordinary user path closer to "just run it": no environment-variable
+  solver selection should be needed for the residual-clean upper-midgrid
+  QA/QH RHSMode=1 cases.
+- Probe the real full-grid ``25 x 39 x 60 x 7`` blocker without broad scans or
+  workstation-hostile allocations.
+
+Implemented:
+
+- Updated the direct-tail active preconditioner ``auto`` ladder in
+  ``sfincs_jax/rhs1_full_assembly.py``:
+  - try ``active_fortran_v3_reduced_lu`` first, so safe upper-midgrid cases use
+    the residual-clean exact active factor automatically;
+  - then try bounded Schwarz/field-split/native candidates;
+  - avoid early global sparse ILU as a default production candidate;
+  - keep diagonal/Jacobi as last-resort fallbacks only.
+- Updated the driver's unset direct-tail auto cap in ``sfincs_jax/v3_driver.py``
+  so ``auto`` uses the same adaptive cap as the exact active-LU candidate.
+  This is what lets ``21 x 31 x 45 x 5`` auto-select exact LU without an
+  explicit cap.
+- Tightened the exact-LU prefill safety gate for large systems:
+  above ``SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_FORTRAN_V3_PC_LU_LARGE_SIZE=300000``
+  active unknowns, the default prefill safety factor is now ``7.5`` instead of
+  ``4.5``.  Smaller upper-midgrid cases keep the previous ``4.5`` default.
+
+Evidence:
+
+- QA ``21 x 31 x 45 x 5`` with no direct-tail preconditioner env var now
+  auto-selects ``active_fortran_v3_reduced_lu`` and completes in ``47.8 s``:
+  automatic cap ``3220.224 MB``, factor bytes ``3,003,511,928``, ``30`` GMRES
+  iterations, residual target ratio ``3.19e-3``.
+- QA full-grid ``25 x 39 x 60 x 7`` with ordinary auto still cannot be called
+  closed: exact LU is rejected by the fill-safety gate, lower-memory candidates
+  do not yet pass, and the ladder eventually reaches ``active_diagonal_schur``,
+  which fails true preflight:
+  residual ``1.614e-4 -> 1.169e-2`` and target ratio ``7.25e9``.
+- Lower-memory candidate probes at the full-grid size:
+  - ``active_schwarz_sparse_coarse`` rejected under the ``512 MB`` cap with
+    overlap-Schwarz estimate ``1.711 GB``; with ``2 GB`` cap the configured
+    estimate rose to ``5.734 GB``.
+  - ``active_global_field_split_schur`` rejected under ``512 MB`` with x-block
+    estimate ``1.863 GB``; with ``2 GB`` cap the configured estimate rose to
+    ``6.616 GB``.
+  - ``active_xblock_ell_band_schur`` showed the same ``6.616 GB`` configured
+    estimate at ``2 GB`` cap.
+  - ``active_bounded_native_stack`` rejected under ``512 MB`` because the
+    x-ell native part estimated ``1.059 GB`` and the angular-line part
+    estimated ``3.959 GB``.
+  - low-fill ``active_xblock_ilu`` variants built quickly within ``1-2 GB`` but
+    were numerically unsafe: one-step true residuals became ``1e15``,
+    ``1e46``, ``1e92``, or ``inf`` even with scaling and diagonal shifts.
+- Exact-LU full-grid probe with explicit ``12 GB`` cap:
+  - direct-tail materialization completed in ``6.45 s``;
+  - SuperLU factorization ran for ``259 s`` and produced actual factor bytes
+    ``13,303,259,384``, then rejected as over the ``12 GB`` cap;
+  - this proves the exact factor is closer to ``13.3 GB`` than the old
+    prefill estimate and is not acceptable as the default.
+- After raising the large-system prefill safety factor, the same explicit
+  ``12 GB`` exact-LU request now rejects in ``9.2 s`` before SuperLU:
+  prefill estimate ``14,653,177,260`` bytes exceeds the ``12 GB`` cap.
+
+Validation:
+
+- ``ruff check sfincs_jax/rhs1_full_assembly.py sfincs_jax/v3_driver.py tests/test_v3_sparse_pattern.py tests/test_rhs1_full_assembly.py``
+  passed.
+- ``python -m pytest tests/test_rhs1_full_assembly.py tests/test_v3_sparse_pattern.py -k 'auto_ladder or pc_default_cap or active_projected_default_auto_ladder or active_fortran_v3 or prefill_gate' -q``
+  passed (``16 passed, 186 deselected``).
+
+Decision:
+
+- Promote the auto ladder change for upper-midgrid and smaller production
+  cases.  It removes the need for users to force exact LU manually on
+  ``21 x 31 x 45 x 5``.
+- Do not promote full-grid exact LU.  It is useful for bounded reference
+  experiments only when users explicitly allow at least about ``15 GB`` of
+  factor memory, and it is too slow and too memory-heavy for the default.
+- Do not promote low-fill x-block ILU for full-grid QA/QH.  It is fast and
+  small, but the true residual evidence is nonfinite or catastrophically large.
+- The remaining real algorithmic lane is a lower-memory active operator/coarse
+  factor that avoids both global exact LU and unstable independent x-block ILU:
+  active line factors must be stabilized and coupled through a stronger
+  residual/coarse equation before GMRES.
+
+Progress:
+
+- Hands-off upper-midgrid QA/QH RHSMode=1 path: ``95%``.  The important
+  ``21 x 31 x 45 x 5`` rung is now automatic and residual-clean.
+- Full-grid RHSMode=1 memory-safety lane: ``96%``.  Full-grid unsafe exact-LU
+  allocations are now guarded quickly, including explicit ``12 GB`` requests.
+- Full-grid RHSMode=1 production solver closure: ``72%``.  The blocker is now
+  well localized: stable lower-memory active line/coarse coupling, not direct
+  CSR materialization or solver-path selection.
+
+### 2026-06-07 update: fail-closed full-grid auto policy and residual-window evidence
+
+Goal:
+
+- Stop the production-size RHSMode=1 ``auto`` path from spending minutes on
+  fallback preconditioners that are already known to worsen the true residual.
+- Preserve the hands-off upper-midgrid behavior while making full-grid
+  ``25 x 39 x 60 x 7`` failures fast, bounded, and diagnostic until a genuinely
+  stronger lower-memory production solver is available.
+
+Implemented:
+
+- Added a separate large-system ``auto`` candidate list in
+  ``sfincs_jax/rhs1_full_assembly.py``.  When the active system has at least
+  ``SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_AUTO_LARGE_FALLBACK_SIZE`` unknowns
+  (default ``300000``), and the user has not explicitly supplied
+  ``SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_AUTO_CANDIDATES``, ``auto`` now defaults to
+  the memory-gated exact active-LU reference candidate only.
+- Added a fail-closed large-system fallback policy: diagonal/Jacobi-like
+  fallbacks are skipped by default for large active systems and can only be
+  restored explicitly with
+  ``SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_AUTO_ALLOW_LARGE_DIAGONAL_FALLBACK=1`` or
+  a user-supplied candidate list.
+- Added regression coverage so large-system ``auto`` cannot silently return to
+  unsafe diagonal/Jacobi fallbacks.
+
+Evidence:
+
+- Full-grid QA ``25 x 39 x 60 x 7`` default ``auto`` before this change timed
+  out after ``120 s`` during structured-preconditioner setup, before reaching a
+  useful preflight diagnostic.
+- The same full-grid default ``auto`` run now fails closed in ``9.1 s`` with
+  ``active_auto_no_safe_large_candidate_selected``.  The structured setup phase
+  itself reports ``0.989 s`` after the grid/geometry fields are available.
+- Direct probes of the lower-memory native/coarse candidates at the full-grid
+  size confirm they are not production-ready:
+  - ``active_native_xell_field_split_sparse_coarse`` builds in ``2.35 s`` under
+    a ``4 GB`` cap but worsens the true preflight residual
+    ``1.614e-4 -> 3.834e-3``.
+  - ``active_angular_line_field_split_sparse_coarse`` builds in ``7.29 s``
+    under a ``4 GB`` cap but worsens the residual
+    ``1.614e-4 -> 2.909e-3``.
+  - ``active_multiline_field_split_sparse_coarse`` builds in ``9.30 s`` under a
+    ``6 GB`` cap but worsens the residual ``1.614e-4 -> 3.775e0``.
+  - ``active_xell_window_lsq_schur`` with a residual-derived
+    ``(species=0,x=4,ell=1)`` window and native x-ell base is stable but too
+    weak: ``1.614e-4 -> 1.635e-4``.
+  - Expanding the true-operator LSQ residual window to include
+    ``(species=0,x=4,ell=1)`` and ``(species=0,x=2,ell=0)`` under an ``8 GB``
+    cap worsens the residual to ``2.910e-3``.
+
+Validation:
+
+- ``ruff check sfincs_jax/rhs1_full_assembly.py tests/test_rhs1_full_assembly.py``
+  passed.
+- ``python -m pytest tests/test_rhs1_full_assembly.py -k 'auto_ladder or active_projected_default_auto_ladder or large_diagonal_fallbacks or large_default_candidates or active_xell_window' -q``
+  passed (``8 passed, 70 deselected``).
+- Broader focused validation passed:
+  ``python -m pytest tests/test_io_export_and_h5_coverage.py tests/test_rhs1_full_assembly.py tests/test_v3_sparse_pattern.py -k 'direct_tail or support_mode or true_coupled or active_fortran_v3 or pc_default_cap or prefill_gate or auto_ladder or large_default_candidates or large_diagonal_fallbacks or active_xell_window' -q``
+  passed (``44 passed, 173 deselected``).
+- Upper-midgrid regression solve passed after the large-system policy change:
+  QA ``21 x 31 x 45 x 5`` default ``auto`` selected
+  ``active_fortran_v3_reduced_lu`` and completed in ``44.7 s`` with ``30``
+  GMRES iterations and residual ``3.71e-13``.
+
+Decision:
+
+- Keep the large-system default fail-closed.  It is more honest and more useful
+  than silently trying residual-worsening diagonal/Jacobi fallbacks on
+  production-size RHSMode=1 systems.
+- Do not promote independent x-ell, angular-line, multiline, or local
+  true-window corrections for full-grid QA/QH.  They are bounded and fast to
+  build, but the actual operator residual shows they do not approximate the
+  coupled production system sufficiently.
+- The next non-incremental solver step must assemble a stronger coupled
+  active-block residual equation or a native sparse factor that retains
+  dominant off-diagonal kinetic couplings directly.  More smoother/restart or
+  local-window tuning is not justified by the residual evidence above.
+
+Progress:
+
+- Hands-off upper-midgrid QA/QH RHSMode=1 path: ``95%``.
+- Full-grid RHSMode=1 memory-safety and user-facing diagnostics: ``98%``.
+- Full-grid RHSMode=1 production solver closure: ``73%``.  The default path is
+  now safe and fast to fail; the remaining work is the true lower-memory
+  coupled solver, not candidate ordering.
+
+### 2026-06-07 update: coupled low-mode and global ell-band production probes
+
+Goal:
+
+- Test the strongest existing coupled active-block candidates before writing a
+  new factorization path.  The question was whether the remaining full-grid
+  blocker could be solved by retaining more low-pitch/speed coupling inside the
+  already implemented Schur/RAS infrastructure.
+
+Evidence:
+
+- ``active_overlap_schwarz`` at full-grid QA ``25 x 39 x 60 x 7``:
+  - ``lmax=2, radius=1`` selected in ``0.885 s`` under a ``4 GB`` cap but
+    worsened the preflight residual ``1.614e-4 -> 7.159e-3``.
+  - ``lmax=4, radius=1`` rejected quickly with memory estimate
+    ``4.867 GB > 4 GB``.
+- Global low-pitch Schur probes:
+  - exact ``active_low_l_schur`` is too large for the target bounded path:
+    ``lmax=2`` estimates ``5.964 GB > 4 GB`` and ``lmax=4`` estimates
+    ``23.853 GB > 8 GB``.
+  - incomplete low-pitch Schur is not viable: ``lmax=2`` with
+    ``fill=2, drop=1e-2`` fails factorization; ``lmax=2`` with
+    ``fill=4, drop=1e-3`` selects but worsens the residual
+    ``1.614e-4 -> 1.169e-2``; ``lmax=3`` with ``fill=2`` times out after
+    ``300 s`` during setup under a ``6 GB`` cap.
+- Global ell-band Schur probes around the actual residual peak:
+  - ``ell=1`` only selects in ``0.144 s`` but worsens residual
+    ``1.614e-4 -> 1.169e-2``.
+  - ``ell=0..2`` selects in ``0.792 s`` and is less bad but still fails:
+    ``1.614e-4 -> 1.964e-3``.
+  - Disabling preflight for the ``ell=0..2`` candidate confirms the gate is not
+    overly conservative: GMRES timed out at ``300 s`` with Krylov residuals in
+    the ``1e5-1e6`` range after thousands of iterations.
+
+Decision:
+
+- Do not promote RAS, global low-L Schur, low-L ILU, or global ell-band Schur
+  for full-grid QA/QH production.  These are coupled and physically motivated,
+  but the actual residual/solve evidence shows they are either too large,
+  divergent, or too slow.
+- The remaining implementation lane must be a different architecture:
+  active-only off-diagonal kinetic retention in the native factor itself,
+  followed by a small true residual/coarse correction.  The tested pattern of
+  "cheap base + selected Schur rescue" is not enough at full grid.
+
+Progress:
+
+- Full-grid RHSMode=1 candidate triage: ``95%``.  The negative space is now
+  well mapped across x-line, angular-line, multiline, local true-window, RAS,
+  low-L Schur, low-L ILU, and ell-band Schur.
+- Full-grid RHSMode=1 production solver closure: ``74%``.  The next increase
+  requires the new active-only off-diagonal native factor, not more probes of
+  existing Schur variants.
+
+### 2026-06-07 update: active coupled-kinetic factor probe
+
+Goal:
+
+- Check whether the existing ``active_coupled_kinetic_block`` implementation
+  already provides the needed "dominant off-diagonal kinetic retention" path
+  before writing a new factor.
+
+Evidence:
+
+- ``active_coupled_kinetic_block`` with the default Jacobi base, ``x_count=1``
+  and ``ell_count=6`` selected in ``0.590 s`` but was catastrophically unstable:
+  preflight residual ``1.614e-4 -> 2.099e4``.
+- A requested standalone ``active_native_xell`` base is not currently a valid
+  full-active preconditioner alias; it fails as
+  ``base_preconditioner_not_selected:unsupported_active_projected_preconditioner``.
+  This is correct for now because the raw native x-ell builder applies only to
+  the active kinetic sub-block, not the full active kinetic+tail matrix.
+- Using the supported full-active
+  ``active_native_xell_field_split_sparse_coarse`` base:
+  - ``x_count=1, ell_count=6`` selected in ``2.913 s`` under an ``8 GB`` cap,
+    but only reproduces the native-xell residual scale
+    ``1.614e-4 -> 3.835e-3``.
+  - ``x_count=2, ell_count=6`` selected in ``3.348 s`` but diverged
+    catastrophically, ``1.614e-4 -> 1.393e72``.
+
+Decision:
+
+- Do not promote the current coupled-kinetic block for full-grid QA/QH.
+- Do not add a standalone ``active_native_xell`` full-active alias without a
+  wrapper that explicitly handles the global tail; the existing field-split
+  native-xell path is the safe public wrapper.
+- The next implementation must be a new active-only sparse factor architecture,
+  not another wrapper around the existing coupled-kinetic block.  It should
+  retain selected off-diagonal kinetic couplings while enforcing a residual
+  gate at setup time, so catastrophic local factors cannot enter GMRES.
+
+Progress:
+
+- Full-grid RHSMode=1 candidate triage: ``98%``.
+- Full-grid RHSMode=1 production solver closure: ``74%``.
+
+### 2026-06-07 update: active physics-filtered sparse factor implementation
+
+Goal:
+
+- Implement a new active-only sparse factor architecture that retains selected
+  off-diagonal kinetic couplings directly in the factor, instead of adding
+  another local smoother or Schur rescue.
+
+Implemented:
+
+- Added opt-in ``active_filtered_sparse_factor`` in
+  ``sfincs_jax/rhs1_full_assembly.py``.  The builder filters the true active
+  RHSMode=1 CSR operator and factors the retained sparse matrix.
+- The filter keeps:
+  - all diagonal entries;
+  - all non-kinetic tail/global couplings when enabled;
+  - kinetic-kinetic entries inside a selected physical neighborhood in
+    ``(species, x, ell, theta, zeta)``.
+- Added memory gates before and after factorization, full metadata for retained
+  nonzeros/factor memory, and ``requires_preflight=True`` so the driver must
+  run the true residual gate before GMRES uses the factor.
+- Added a unit test that verifies the filter retains near physical
+  off-diagonal couplings, drops out-of-band couplings, and applies a finite
+  factor.
+
+Evidence:
+
+- Unit/quality checks:
+  - ``ruff check sfincs_jax/rhs1_full_assembly.py tests/test_rhs1_full_assembly.py``
+    passed.
+  - ``python -m pytest tests/test_rhs1_full_assembly.py -k 'filtered_sparse_factor or coupled_kinetic_block or auto_ladder or large_default_candidates or large_diagonal_fallbacks' -q``
+    passed (``7 passed, 72 deselected``).
+- Full-grid QA ``25 x 39 x 60 x 7`` probes:
+  - Conservative same-angle filters with ``x_radius=1``,
+    ``ell_radius=1`` or ``2``, ``theta_radius=0``, ``zeta_radius=0``,
+    ``fill=2``, ``drop=1e-2``, and ``4 GB`` cap selected in about ``1.7 s``
+    but were unstable: ``1.614e-4 -> 3.767e4``.
+  - Retaining all angular couplings inside ``x_radius=1, ell_radius=1`` under
+    an ``8 GB`` cap timed out after ``240 s`` during factor setup.
+
+Decision:
+
+- Keep ``active_filtered_sparse_factor`` as an experimental, test-covered
+  architecture probe.  It is the right structural direction, but the current
+  filtered-operator + generic ILU realization is not production-ready.
+- Do not add it to the default or large-system auto ladder yet.
+- The next implementation needs a bounded native factorization of this filtered
+  operator class, not generic host ``spilu`` on the full filtered matrix.  The
+  useful path is likely symbolic block ordering plus per-block or hierarchical
+  factorization of the filtered operator, with the same residual setup gate.
+
+Progress:
+
+- Full-grid RHSMode=1 architecture implementation lane: ``82%``.  A real new
+  architecture exists and is tested, but it needs a native/hierarchical factor
+  to become viable at full grid.
+- Full-grid RHSMode=1 production solver closure: ``75%``.
+
+### 2026-06-09 update: reusable active symbolic block admission for RHSMode=2/3 FP
+
+Goal:
+
+- Replace one-off RHSMode=2/3 FP direct-active block probes with reusable
+  symbolic block-ordering/coarse-factor infrastructure and a setup-time true
+  residual admission gate before any candidate reaches Krylov.
+
+Implemented:
+
+- Added ``sfincs_jax.transport_active_factor`` with:
+  - ``ActiveBlockOrdering`` for symbolic kinetic layouts
+    (``zeta_line``, ``theta_line``, ``angular_plane``, ``ell_band``);
+  - ``ActiveBlockSchurFactor`` for block inverse plus source/constraint Schur
+    application;
+  - ``ActiveBlockAdmission`` and deterministic true-operator probes.
+- Wired ``fp_direct_active_block_schur`` through this reusable layer in
+  ``sfincs_jax.v3_driver``.
+- Added setup controls for block kind, ell-band size, per-block size cap,
+  storage cap, factor dtype, admission residual threshold, admission
+  improvement threshold, and probe count.
+- Tightened admission semantics: the candidate must pass both the true
+  residual gate and the identity-improvement gate.
+- Added focused tests for symbolic layouts, memory/size rejection, exact
+  block-tail Schur application, and true-residual admission rejection.
+- Added reusable sparse symbolic analysis in ``sfincs_jax.explicit_sparse``.
+  ``fp_fortran_reduced_lu`` now records a stable pattern hash, ordering hash,
+  row/column density, bandwidth/profile before and after RCM, diagonal coverage,
+  and a bounded block plan for the emitted reduced Pmat.
+
+Evidence:
+
+- Focused checks passed:
+  ``python -m compileall`` on the new/edited modules,
+  ``ruff check --select F821,F401,F811``, and
+  ``pytest -q tests/test_transport_active_factor.py tests/test_fortran_reduced_preconditioner.py tests/test_transport_preconditioner_dispatch.py -k 'active_block or direct_active or direct_reduced_pmat or block_schur or fp_direct_active or normalize_transport_preconditioner_kind_maps_aliases or resolve_transport_precondition_side_for_kind_keeps_fp_line_left_only'``
+  (``12 passed, 31 deselected``).
+- Reduced geometry-scheme-11 ``13 x 17 x 30 x 4`` with
+  ``fp_direct_active_block_schur`` now rejects weak factors before Krylov:
+  - ``zeta_line``: direct true active CSR ``active=2900``, ``nnz=59524``;
+    admission rejected with ``max_rel=2.051e3`` and
+    ``min_improvement=8.140e-2``.
+  - ``angular_plane``: ``blocks=46``; admission rejected with the same
+    deterministic probe metrics.
+  - fallback dense rescue solved the reduced fixture with max relative
+    residual ``4.071e-13``.
+- Fresh reduced geometry-scheme-11 SFINCS Fortran v3 profile:
+  - true matrix: ``59526`` nonzeros;
+  - ``whichMatrix=0`` preconditioner matrix: ``49320`` nonzeros;
+  - PETSc ``GMRES`` + ``PCLU`` + MUMPS;
+  - MUMPS ``N=2900``, ``NNZ=49320``, maximum frontal size ``419``;
+  - first RHS residual ``1.9046e-4 -> 1.58e-10`` in about 50 iterations;
+  - solve phase ``0.067 s`` and max RSS about ``130 MB``.
+- Focused symbolic tests now pass:
+  ``pytest -q tests/test_explicit_sparse.py tests/test_transport_active_factor.py tests/test_fortran_reduced_preconditioner.py tests/test_transport_preconditioner_dispatch.py -k 'symbolic or active_block or direct_active or direct_reduced_pmat or fortran_reduced_lu_attaches or block_schur or fp_direct_active or normalize_transport_preconditioner_kind_maps_aliases or resolve_transport_precondition_side_for_kind_keeps_fp_line_left_only'``
+  (``14 passed, 56 deselected``).
+- Bounded direct-Pmat ``fp_fortran_reduced_lu`` gates with dense rescue,
+  sparse-direct rescue, and host-GMRES rescue disabled:
+  - geometry-scheme-2: direct Pmat ``active=2532``, ``nnz=55704``,
+    ``csr_mb=0.679``, LU factor ``13.984 MB``, symbolic RCM bandwidth/profile
+    ``2531/2007237 -> 638/1028290``, max relative residual ``6.98e-11``,
+    wall ``5.54 s``.
+  - geometry-scheme-11: direct Pmat ``active=2900``, ``nnz=59526``,
+    ``csr_mb=0.726``, LU factor ``16.976 MB``, symbolic RCM bandwidth/profile
+    ``2899/2149494 -> 488/880579``, max relative residual ``5.07e-13``,
+    wall ``4.86 s``.
+- Production-floor setup-only direct-Pmat gates with cheap Jacobi numeric factor
+  and no Krylov solve:
+  - geometry-scheme-2 ``25 x 51 x 100 x 8``: active ``648977``,
+    direct Pmat ``15165133`` nonzeros, CSR estimate ``184.578 MB``, setup
+    wall ``25.20 s``.
+  - geometry-scheme-11 ``25 x 51 x 100 x 6``: active ``462827``,
+    direct Pmat ``10124069`` nonzeros, CSR estimate ``123.340 MB``, setup
+    wall ``14.24 s``.
+  - Both production setup gates reported natural symbolic ordering because the
+    default RCM safety cap is ``250000`` unknowns. Added
+    ``SFINCS_JAX_TRANSPORT_FP_FORTRAN_REDUCED_LU_SYMBOLIC_MAX_PERMUTATION_SIZE``
+    so production campaigns can explicitly raise the cap when measuring RCM or
+    future native ordering strategies.
+
+Decision:
+
+- Keep ``fp_direct_active_block_schur`` as an opt-in residual-equation
+  diagnostic, not an ``auto`` candidate.
+- Do not spend more time tuning independent local true-operator blocks for the
+  production FP RHSMode=2/3 lane.  The admission probes show they miss
+  important couplings even on reduced geometry-scheme-11.
+- The next production implementation should mimic the successful Fortran/PETSc
+  structure more directly without adding PETSc/MUMPS/SuperLU_DIST dependencies:
+  direct term-level ``whichMatrix=0`` reduced Pmat emission, reusable symbolic
+  sparse ordering metadata, lower-memory numeric block/native factors, and
+  strict true-operator residual admission.
+
+Progress:
+
+- RHSMode=2/3 FP production-preconditioner infrastructure: ``90%``.  Direct
+  true-operator emission, direct reduced Pmat emission, reusable sparse
+  symbolic metadata, and reusable active block/coarse admission now exist and
+  are tested.
+- RHSMode=2/3 FP production-default closure: ``76%``.  The remaining blocker is
+  a lower-memory reusable reduced-Pmat factor that passes production-floor
+  geom2/geom11 CPU/GPU solve gates without full exact SuperLU fill.
+
+### 2026-06-10 update: promote residual-clean RHSMode=2/3 FP direct-Pmat LU into auto
+
+Goal:
+
+- Promote the best currently residual-clean transport preconditioner before the
+  release, while keeping the lower-memory native replacement lane honest and
+  fail-closed.
+
+Implemented:
+
+- ``auto`` now tries ``fp_fortran_reduced_lu`` by default for eligible non-Phi1
+  RHSMode=2/3 full-FP transport cases.  Users can disable it with
+  ``SFINCS_JAX_TRANSPORT_FP_FORTRAN_REDUCED_LU_AUTO=0``.
+- Explicitly forced FP candidates such as ``fp_tzfft_line`` still override this
+  default unless ``SFINCS_JAX_TRANSPORT_FP_FORTRAN_REDUCED_LU_AUTO=1`` is set
+  explicitly.
+- The promoted route uses exact ``lu`` as its default factor kind because the
+  current ``ilu`` and symbolic/native factors do not yet pass the same strict
+  true-residual gates.
+- README/docs now state that the QA/QH bootstrap-current figures are reduced
+  same-resolution documentation gates, not production-resolution parity claims.
+
+Evidence:
+
+- Focused dispatch and direct-Pmat tests passed:
+  ``pytest -q tests/test_transport_preconditioner_dispatch.py
+  tests/test_fortran_reduced_preconditioner.py -q`` (``45 passed``).
+- Static import/name checks passed:
+  ``ruff check sfincs_jax/transport_preconditioner_dispatch.py
+  sfincs_jax/v3_driver.py tests/test_transport_preconditioner_dispatch.py
+  --select F821,F401,F811``.
+
+Decision:
+
+- Promote the exact direct-Pmat LU route into ``auto`` as the current best
+  default for eligible RHSMode=2/3 full-FP transport.
+- Keep the lower-memory symbolic/native replacement lane open until it passes
+  production-floor geom2/geom11 CPU/GPU strict-residual, runtime, and RSS gates.
+
+Progress:
+
+- RHSMode=2/3 FP production-default closure: ``92%``.  The public default is now
+  residual-clean for the bounded gates; the remaining work is making the same
+  Fortran-style route lower-memory and faster at full production grids.
+- Lower-memory/faster production replacement: ``84%``.  Direct term-level Pmat
+  emission and symbolic metadata exist, but a production-clean native factor is
+  not promoted.

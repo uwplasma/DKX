@@ -54,7 +54,8 @@ DEFAULT_ARCHIVED_NTX_INPUTS = (
 
 RESOLUTION_KEYS = ("NTHETA", "NZETA", "NX", "NXI")
 DEFAULT_3D_MINIMUM = {"NTHETA": 25, "NZETA": 51, "NX": 4, "NXI": 100}
-DEFAULT_TOKAMAK_MINIMUM = {"NTHETA": 25, "NX": 4, "NXI": 100}
+DEFAULT_TOKAMAK_MINIMUM = {"NTHETA": 33, "NX": 12, "NXI": 140}
+DEFAULT_TOKAMAK_PAS_NOER_MINIMUM = {"NTHETA": 89, "NX": 24, "NXI": 300}
 DEFAULT_TARGET_FORTRAN_MIN_RUNTIME_S = 10.0
 
 
@@ -211,11 +212,21 @@ def _benchmark_resolution(
     resolution: dict[str, int],
     *,
     kind: str,
+    text: str,
     min_3d: dict[str, int],
     min_tokamak: dict[str, int],
+    min_tokamak_pas_noer: dict[str, int],
 ) -> dict[str, int]:
     updated = dict(resolution)
     minimum = min_tokamak if kind == "tokamak" else min_3d
+    if kind == "tokamak":
+        rhs_mode = int(_read_int_parameter(text, "RHSMode", 1) or 1)
+        collision_operator = int(_read_int_parameter(text, "collisionOperator", 0) or 0)
+        if rhs_mode == 1 and collision_operator == 1 and not _effective_xdot_requested(text):
+            minimum = {
+                key: max(int(minimum.get(key, 0)), int(value))
+                for key, value in min_tokamak_pas_noer.items()
+            }
     for key, value in minimum.items():
         if key in updated:
             updated[key] = max(int(updated[key]), int(value))
@@ -366,6 +377,7 @@ def _resolution_policy_text(
     enforce_minimum: bool,
     min_3d: dict[str, int],
     min_tokamak: dict[str, int],
+    min_tokamak_pas_noer: dict[str, int],
     target_fortran_min_runtime_s: float,
 ) -> str:
     if not enforce_minimum:
@@ -378,9 +390,15 @@ def _resolution_policy_text(
         f"{int(min_tokamak['NTHETA'])}x1x"
         f"{int(min_tokamak['NX'])}x{int(min_tokamak['NXI'])}"
     )
+    min_tokamak_pas_noer_text = (
+        f"{int(min_tokamak_pas_noer['NTHETA'])}x1x"
+        f"{int(min_tokamak_pas_noer['NX'])}x{int(min_tokamak_pas_noer['NXI'])}"
+    )
     return (
         f"preserve nominal grid, but enforce 3D >= {min_3d_text} "
-        f"and tokamak >= {min_tokamak_text}; production timing rows target "
+        f"and tokamak >= {min_tokamak_text} "
+        f"(RHSMode=1 PAS/no-Er tokamak >= {min_tokamak_pas_noer_text}); "
+        f"production timing rows target "
         f"Fortran v3 >= {float(target_fortran_min_runtime_s):g} s"
     )
 
@@ -411,6 +429,7 @@ def _build_entry(
     source_group: str,
     min_3d: dict[str, int],
     min_tokamak: dict[str, int],
+    min_tokamak_pas_noer: dict[str, int],
     enforce_minimum: bool,
     target_fortran_min_runtime_s: float,
 ) -> dict[str, object] | None:
@@ -423,7 +442,14 @@ def _build_entry(
     if source_group == "examples" and kind not in {"tokamak", "3d"}:
         return None
     benchmark = (
-        _benchmark_resolution(original, kind=kind, min_3d=min_3d, min_tokamak=min_tokamak)
+        _benchmark_resolution(
+            original,
+            kind=kind,
+            text=text,
+            min_3d=min_3d,
+            min_tokamak=min_tokamak,
+            min_tokamak_pas_noer=min_tokamak_pas_noer,
+        )
         if enforce_minimum
         else dict(original)
     )
@@ -451,6 +477,7 @@ def _build_entry(
             enforce_minimum=enforce_minimum,
             min_3d=min_3d,
             min_tokamak=min_tokamak,
+            min_tokamak_pas_noer=min_tokamak_pas_noer,
             target_fortran_min_runtime_s=float(target_fortran_min_runtime_s),
         ),
     }
@@ -521,6 +548,21 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--min-tokamak-nx", type=int, default=DEFAULT_TOKAMAK_MINIMUM["NX"])
     parser.add_argument("--min-tokamak-nxi", type=int, default=DEFAULT_TOKAMAK_MINIMUM["NXI"])
     parser.add_argument(
+        "--min-tokamak-pas-noer-ntheta",
+        type=int,
+        default=DEFAULT_TOKAMAK_PAS_NOER_MINIMUM["NTHETA"],
+    )
+    parser.add_argument(
+        "--min-tokamak-pas-noer-nx",
+        type=int,
+        default=DEFAULT_TOKAMAK_PAS_NOER_MINIMUM["NX"],
+    )
+    parser.add_argument(
+        "--min-tokamak-pas-noer-nxi",
+        type=int,
+        default=DEFAULT_TOKAMAK_PAS_NOER_MINIMUM["NXI"],
+    )
+    parser.add_argument(
         "--target-fortran-min-runtime-s",
         type=float,
         default=DEFAULT_TARGET_FORTRAN_MIN_RUNTIME_S,
@@ -551,6 +593,11 @@ def main(argv: list[str] | None = None) -> int:
         "NX": int(args.min_tokamak_nx),
         "NXI": int(args.min_tokamak_nxi),
     }
+    min_tokamak_pas_noer = {
+        "NTHETA": int(args.min_tokamak_pas_noer_ntheta),
+        "NX": int(args.min_tokamak_pas_noer_nx),
+        "NXI": int(args.min_tokamak_pas_noer_nxi),
+    }
     target_fortran_min_runtime_s = float(args.target_fortran_min_runtime_s)
     entries: list[dict[str, object]] = []
     for case, src_input in _iter_example_inputs(Path(args.examples_root), Path(args.additional_input)):
@@ -561,6 +608,7 @@ def main(argv: list[str] | None = None) -> int:
             source_group="examples",
             min_3d=min_3d,
             min_tokamak=min_tokamak,
+            min_tokamak_pas_noer=min_tokamak_pas_noer,
             enforce_minimum=True,
             target_fortran_min_runtime_s=target_fortran_min_runtime_s,
         )
@@ -578,6 +626,7 @@ def main(argv: list[str] | None = None) -> int:
             source_group="external",
             min_3d=min_3d,
             min_tokamak=min_tokamak,
+            min_tokamak_pas_noer=min_tokamak_pas_noer,
             enforce_minimum=bool(args.enforce_minimum_on_external),
             target_fortran_min_runtime_s=target_fortran_min_runtime_s,
         )
@@ -588,11 +637,13 @@ def main(argv: list[str] | None = None) -> int:
         "schema_version": 1,
         "minimum_3d_resolution": min_3d,
         "minimum_tokamak_resolution": min_tokamak,
+        "minimum_tokamak_pas_noer_resolution": min_tokamak_pas_noer,
         "target_fortran_min_runtime_s": target_fortran_min_runtime_s,
         "resolution_policy": _resolution_policy_text(
             enforce_minimum=True,
             min_3d=min_3d,
             min_tokamak=min_tokamak,
+            min_tokamak_pas_noer=min_tokamak_pas_noer,
             target_fortran_min_runtime_s=target_fortran_min_runtime_s,
         ),
         "case_count": len(entries),

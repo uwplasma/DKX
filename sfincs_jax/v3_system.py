@@ -26,7 +26,7 @@ from .diagnostics import g_hat_i_hat as g_hat_i_hat_jax
 from .input_compat import (
     effective_equilibrium_file,
     effective_psi_a_hat,
-    effective_r_n_wish,
+    effective_psi_n_wish,
     infer_phi_input_radial_coordinate_for_gradients,
     infer_species_input_radial_coordinate_for_gradients,
 )
@@ -1464,10 +1464,13 @@ def _matvec_shard_axis(op: V3FullSystemOperator | None = None) -> str | None:
         min_tz = int(min_tz_env) if min_tz_env else 128
     except ValueError:
         min_tz = 128
-    if int(op.n_theta) * int(op.n_zeta) < max(1, min_tz):
+    try:
+        ntheta = int(getattr(op, "n_theta"))
+        nzeta = int(getattr(op, "n_zeta"))
+    except (TypeError, ValueError, AttributeError):
         return None
-    ntheta = int(op.n_theta)
-    nzeta = int(op.n_zeta)
+    if ntheta * nzeta < max(1, min_tz):
+        return None
     prefer_x_env = os.environ.get("SFINCS_JAX_MATVEC_SHARD_PREFER_X", "").strip().lower()
     prefer_x = prefer_x_env in {"1", "true", "yes", "on"}
     try:
@@ -1882,7 +1885,6 @@ def full_system_operator_from_namelist(
     include_phi1_in_kinetic = bool(phys.get("INCLUDEPHI1INKINETICEQUATION", False))
 
     # Radial normalization factors (radialCoordinates.F90).
-    input_radial = _get_int(geom_params, "inputRadialCoordinate", 3)
     species_input_radial_grad = infer_species_input_radial_coordinate_for_gradients(
         geom_params=geom_params,
         species_params=species,
@@ -1894,13 +1896,12 @@ def full_system_operator_from_namelist(
         default=4,
     )
     if (
-        input_radial != 3
-        or species_input_radial_grad not in {0, 1, 2, 3, 4}
+        species_input_radial_grad not in {0, 1, 2, 3, 4}
         or phi_input_radial_grad not in {0, 1, 2, 3, 4}
     ):
         raise NotImplementedError(
-            "sfincs_jax currently supports inputRadialCoordinate=3 (rN) with "
-            "inputRadialCoordinateForGradients in {0 (psiHat), 1 (psiN), 2 (rHat), 3 (rN), 4 (Er/rHat)}."
+            "sfincs_jax currently supports inputRadialCoordinateForGradients "
+            "in {0 (psiHat), 1 (psiN), 2 (rHat), 3 (rN), 4 (Er/rHat)}."
         )
 
     geometry_scheme = _get_int(geom_params, "geometryScheme", -1)
@@ -1908,7 +1909,14 @@ def full_system_operator_from_namelist(
         # v3 defaults are in `globalVariables.F90`; allow the namelist to override them.
         psi_a_hat = effective_psi_a_hat(geom_params=geom_params, phys_params=phys, default=0.15596)
         a_hat = float(geom_params.get("AHAT", 0.5585))
-        r_n = effective_r_n_wish(geom_params=geom_params, default=0.5)
+        r_n = float(
+            effective_psi_n_wish(
+                geom_params=geom_params,
+                default_r_n=0.5,
+                psi_a_hat=psi_a_hat,
+                a_hat=a_hat,
+            )
+        ) ** 0.5
     elif geometry_scheme == 2:
         # v3 ignores *_wish and uses rN=0.5 for this simplified LHD model.
         a_hat = 0.5585
@@ -1929,7 +1937,8 @@ def full_system_operator_from_namelist(
         header = read_boozer_bc_header(path=str(p), geometry_scheme=int(geometry_scheme))
         psi_a_hat = float(header.psi_a_hat)
         a_hat = float(header.a_hat)
-        r_n_wish = effective_r_n_wish(geom_params=geom_params, default=0.5)
+        psi_n_wish = effective_psi_n_wish(geom_params=geom_params, default_r_n=0.5)
+        r_n_wish = float(psi_n_wish) ** 0.5
         vmecradial_option = _get_int(geom_params, "VMECRadialOption", _get_int(geom_params, "VMECRADIALOPTION", 1))
         r_n = selected_r_n_from_bc(
             path=str(p),
@@ -1955,8 +1964,12 @@ def full_system_operator_from_namelist(
         psi_a_hat = float(psi_a_hat_from_wout(w))
         a_hat = float(w.aminor_p)
 
-        r_n_wish = effective_r_n_wish(geom_params=geom_params, default=0.5)
-        psi_n_wish = float(r_n_wish) * float(r_n_wish)
+        psi_n_wish = effective_psi_n_wish(
+            geom_params=geom_params,
+            default_r_n=0.5,
+            psi_a_hat=psi_a_hat,
+            a_hat=a_hat,
+        )
         vmecradial_option = _get_int(geom_params, "VMECRadialOption", _get_int(geom_params, "VMECRADIALOPTION", 1))
         interp = vmec_interpolation(w=w, psi_n_wish=psi_n_wish, vmec_radial_option=vmecradial_option)
         r_n = float(interp.psi_n) ** 0.5

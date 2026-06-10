@@ -39,6 +39,7 @@ from .rhs1_host_policy import (
     rhs1_dense_backend_allowed,
     rhs1_fp_3d_sparse_pc_auto_allowed,
     rhs1_fp_3d_xblock_sparse_pc_auto_allowed,
+    rhs1_structured_full_csr_auto_allowed,
     rhs1_tokamak_er_dense_auto_allowed,
     rhs1_tokamak_fp_er_sparse_pc_auto_allowed,
     rhs1_tokamak_fp_noer_sparse_pc_auto_allowed,
@@ -74,6 +75,7 @@ class ExportFConfig:
 
 
 _OUTPUT_GEOM_CACHE: dict[tuple[object, ...], dict[str, np.ndarray]] = {}
+_OUTPUT_GEOM_CACHE_VERSION = 2
 _OUTPUT_CACHE_FIELDS = (
     "gpsiHatpsiHat",
     "uHat",
@@ -222,6 +224,28 @@ def _metadata_int(metadata: dict[str, Any], key: str) -> int | None:
     except (TypeError, ValueError, OverflowError):
         return None
     return value if value >= 0 else None
+
+
+def _metadata_float(metadata: dict[str, Any], key: str) -> float | None:
+    """Return a finite scalar metadata value when present."""
+    if key not in metadata or metadata[key] is None:
+        return None
+    try:
+        value = float(metadata[key])
+    except (TypeError, ValueError, OverflowError):
+        return None
+    return value if np.isfinite(value) else None
+
+
+def _compact_json_metadata(value: Any, *, max_chars: int = 16384) -> str | None:
+    """Return bounded JSON text for small diagnostic metadata payloads."""
+    try:
+        text = json.dumps(value, sort_keys=True, default=str)
+    except (TypeError, ValueError, OverflowError):
+        return None
+    if len(text) <= int(max_chars):
+        return text
+    return text[: max(0, int(max_chars) - 32)] + "...<truncated>"
 
 
 def _profile_memory_summary(profiler: Any | None) -> tuple[float | None, float | None, float | None]:
@@ -473,6 +497,18 @@ def _add_rhsmode1_solver_diagnostics(
     """Persist RHSMode=1 convergence metadata in the main output file."""
     solver_metadata = dict(solver_metadata or {})
     data["linearSolverMethod"] = str(solve_method)
+    if "solve_method_requested" in solver_metadata:
+        data["linearSolverRequestedMethod"] = str(solver_metadata["solve_method_requested"])
+    elif "requested_solve_method" in solver_metadata:
+        data["linearSolverRequestedMethod"] = str(solver_metadata["requested_solve_method"])
+    else:
+        data["linearSolverRequestedMethod"] = str(solve_method)
+    if "solver_path" in solver_metadata:
+        data["linearSolverPath"] = str(solver_metadata["solver_path"])
+    if "solver_kind" in solver_metadata:
+        data["linearSolverKind"] = str(solver_metadata["solver_kind"])
+    if "preconditioner_kind" in solver_metadata:
+        data["linearSolverPreconditionerKind"] = str(solver_metadata["preconditioner_kind"])
     if residual_norm is not None:
         data["linearSolverResidualNorm"] = np.asarray(float(residual_norm), dtype=np.float64)
     if residual_target is not None:
@@ -509,11 +545,13 @@ def _add_rhsmode1_solver_diagnostics(
         "sparse_pc_factor_s": "linearSolverSparsePCFactorTime",
     }
     for metadata_key, output_key in time_fields.items():
-        if metadata_key in solver_metadata:
+        if metadata_key in solver_metadata and solver_metadata[metadata_key] is not None:
             data[output_key] = np.asarray(float(solver_metadata[metadata_key]), dtype=np.float64)
     int_fields = {
         "sparse_pattern_nnz": "linearSolverSparsePatternNnz",
         "sparse_pattern_max_row_nnz": "linearSolverSparsePatternMaxRowNnz",
+        "csr_nnz": "linearSolverCsrNnz",
+        "csr_operator_nbytes": "linearSolverCsrOperatorNbytes",
         "sparse_pc_factor_nbytes_estimate": "linearSolverSparsePCFactorNbytesEstimate",
         "sparse_pc_factor_nnz_estimate": "linearSolverSparsePCFactorNnzEstimate",
         "sparse_pc_xblock_preconditioner_xi": "linearSolverSparsePCXBlockPreconditionerXi",
@@ -533,7 +571,7 @@ def _add_rhsmode1_solver_diagnostics(
         ),
     }
     for metadata_key, output_key in int_fields.items():
-        if metadata_key in solver_metadata:
+        if metadata_key in solver_metadata and solver_metadata[metadata_key] is not None:
             data[output_key] = np.asarray(int(solver_metadata[metadata_key]), dtype=np.int64)
     if "sparse_pattern_avg_row_nnz" in solver_metadata:
         data["linearSolverSparsePatternAvgRowNnz"] = np.asarray(
@@ -544,6 +582,28 @@ def _add_rhsmode1_solver_diagnostics(
         data["linearSolverSparsePCXBlockAssembledHost"] = _fortran_logical(
             bool(solver_metadata["sparse_pc_xblock_assembled_host"])
         )
+    direct_tail_pc_key = "sparse_pc_fortran_reduced_direct_tail_structured_pc_metadata"
+    direct_tail_pc_metadata = solver_metadata.get(direct_tail_pc_key)
+    if isinstance(direct_tail_pc_metadata, dict):
+        selected_kind = direct_tail_pc_metadata.get("kind")
+        if selected_kind is not None:
+            data["linearSolverSparsePCSelectedKind"] = str(selected_kind)
+        nested_metadata = direct_tail_pc_metadata.get("metadata")
+        if isinstance(nested_metadata, dict):
+            for metadata_key, output_key in (
+                ("factor_kind", "linearSolverSparsePCFactorKind"),
+                ("permc_spec", "linearSolverSparsePCPermcSpec"),
+                ("permc_spec_requested", "linearSolverSparsePCPermcSpecRequested"),
+            ):
+                value = nested_metadata.get(metadata_key)
+                if value is not None:
+                    data[output_key] = str(value)
+            candidates_json = _compact_json_metadata(nested_metadata.get("permc_spec_candidates", ()))
+            if candidates_json is not None:
+                data["linearSolverSparsePCPermcSpecCandidatesJson"] = candidates_json
+            failures_json = _compact_json_metadata(nested_metadata.get("permc_failures", ()))
+            if failures_json is not None:
+                data["linearSolverSparsePCPermcFailuresJson"] = failures_json
     if "xblock_initial_seed_used" in solver_metadata:
         data["linearSolverXBlockInitialSeedUsed"] = _fortran_logical(
             bool(solver_metadata["xblock_initial_seed_used"])
@@ -586,6 +646,104 @@ def _add_rhsmode1_solver_diagnostics(
                 float(value),
                 dtype=np.float64,
             )
+    support_key = "sparse_pc_fortran_reduced_direct_tail_support_mode_preflight_metadata"
+    support_metadata = solver_metadata.get(support_key)
+    if isinstance(support_metadata, dict):
+        data["linearSolverDirectTailSupportModePreflightRequested"] = _fortran_logical(
+            bool(solver_metadata.get("sparse_pc_fortran_reduced_direct_tail_support_mode_preflight_requested", False))
+        )
+        data["linearSolverDirectTailSupportModePreflightSelected"] = _fortran_logical(
+            bool(solver_metadata.get("sparse_pc_fortran_reduced_direct_tail_support_mode_preflight_selected", False))
+        )
+        data["linearSolverDirectTailSupportModeAcceptedNonbaseline"] = _fortran_logical(
+            bool(support_metadata.get("accepted_nonbaseline", False))
+        )
+        selected_candidate = support_metadata.get("selected_candidate")
+        if selected_candidate is not None:
+            data["linearSolverDirectTailSupportModeSelectedCandidate"] = str(selected_candidate)
+        candidate_specs = support_metadata.get("candidate_specs")
+        if isinstance(candidate_specs, (list, tuple)):
+            data["linearSolverDirectTailSupportModeRequestedCandidateCount"] = np.asarray(
+                len(candidate_specs),
+                dtype=np.int32,
+            )
+        evaluated_candidates = support_metadata.get("candidates")
+        if isinstance(evaluated_candidates, (list, tuple)):
+            data["linearSolverDirectTailSupportModeCandidateCount"] = np.asarray(
+                len(evaluated_candidates),
+                dtype=np.int32,
+            )
+        for metadata_key, output_key in (
+            ("baseline_residual_after", "linearSolverDirectTailSupportModeBaselineResidualAfter"),
+            ("best_residual_after", "linearSolverDirectTailSupportModeBestResidualAfter"),
+            ("rhs_norm", "linearSolverDirectTailSupportModeRhsNorm"),
+            ("setup_s", "linearSolverDirectTailSupportModeSetupTime"),
+        ):
+            value = _metadata_float(support_metadata, metadata_key)
+            if value is not None:
+                data[output_key] = np.asarray(float(value), dtype=np.float64)
+        candidate_json = _compact_json_metadata(support_metadata.get("candidates", ()))
+        if candidate_json is not None:
+            data["linearSolverDirectTailSupportModeCandidatesJson"] = candidate_json
+    elif solver_metadata.get("sparse_pc_fortran_reduced_direct_tail_support_mode_preflight_requested") is not None:
+        data["linearSolverDirectTailSupportModePreflightRequested"] = _fortran_logical(
+            bool(solver_metadata.get("sparse_pc_fortran_reduced_direct_tail_support_mode_preflight_requested", False))
+        )
+        data["linearSolverDirectTailSupportModePreflightSelected"] = _fortran_logical(False)
+    if "sparse_pc_fortran_reduced_direct_tail_structured_pc_max_mb" in solver_metadata:
+        value = _metadata_float(solver_metadata, "sparse_pc_fortran_reduced_direct_tail_structured_pc_max_mb")
+        if value is not None:
+            data["linearSolverDirectTailStructuredPCMaxMB"] = np.asarray(float(value), dtype=np.float64)
+        data["linearSolverDirectTailStructuredPCMaxMBAuto"] = _fortran_logical(
+            bool(solver_metadata.get("sparse_pc_fortran_reduced_direct_tail_structured_pc_max_mb_auto", False))
+        )
+    if "sparse_pc_direct_tail_true_coupled_coarse_requested" in solver_metadata:
+        data["linearSolverDirectTailTrueCoupledCoarseRequested"] = _fortran_logical(
+            bool(solver_metadata.get("sparse_pc_direct_tail_true_coupled_coarse_requested", False))
+        )
+        data["linearSolverDirectTailTrueCoupledCoarseExplicitRequested"] = _fortran_logical(
+            bool(solver_metadata.get("sparse_pc_direct_tail_true_coupled_coarse_explicit_requested", False))
+        )
+        data["linearSolverDirectTailTrueCoupledCoarseAutoEnabled"] = _fortran_logical(
+            bool(solver_metadata.get("sparse_pc_direct_tail_true_coupled_coarse_auto_enabled", False))
+        )
+        data["linearSolverDirectTailTrueCoupledCoarseAutoSelected"] = _fortran_logical(
+            bool(solver_metadata.get("sparse_pc_direct_tail_true_coupled_coarse_auto_selected", False))
+        )
+        data["linearSolverDirectTailTrueCoupledCoarseSelected"] = _fortran_logical(
+            bool(solver_metadata.get("sparse_pc_direct_tail_true_coupled_coarse_selected", False))
+        )
+        value = _metadata_float(solver_metadata, "sparse_pc_direct_tail_true_coupled_coarse_auto_target_ratio")
+        if value is not None:
+            data["linearSolverDirectTailTrueCoupledCoarseAutoTargetRatio"] = np.asarray(
+                float(value),
+                dtype=np.float64,
+            )
+        if solver_metadata.get("sparse_pc_direct_tail_true_coupled_coarse_auto_min_size") is not None:
+            data["linearSolverDirectTailTrueCoupledCoarseAutoMinSize"] = np.asarray(
+                int(solver_metadata["sparse_pc_direct_tail_true_coupled_coarse_auto_min_size"]),
+                dtype=np.int64,
+            )
+        value = _metadata_float(solver_metadata, "sparse_pc_direct_tail_true_coupled_coarse_residual_after")
+        if value is not None:
+            data["linearSolverDirectTailTrueCoupledCoarseResidualAfter"] = np.asarray(
+                float(value),
+                dtype=np.float64,
+            )
+        true_coupled_metadata = solver_metadata.get("sparse_pc_direct_tail_true_coupled_coarse_metadata")
+        if isinstance(true_coupled_metadata, dict):
+            for metadata_key, output_key in (
+                ("base_residual_after", "linearSolverDirectTailTrueCoupledCoarseBaseResidualAfter"),
+                ("coarse_size", "linearSolverDirectTailTrueCoupledCoarseSize"),
+                ("factor_nbytes_estimate", "linearSolverDirectTailTrueCoupledCoarseNbytesEstimate"),
+            ):
+                value_float = _metadata_float(true_coupled_metadata, metadata_key)
+                if value_float is not None:
+                    dtype = np.int64 if metadata_key in {"coarse_size", "factor_nbytes_estimate"} else np.float64
+                    data[output_key] = np.asarray(value_float, dtype=dtype)
+            basis_json = _compact_json_metadata(true_coupled_metadata.get("basis_names", ()))
+            if basis_json is not None:
+                data["linearSolverDirectTailTrueCoupledCoarseBasisJson"] = basis_json
     if float(residual_target) > 0.0:
         data["linearSolverResidualTargetRatio"] = np.asarray(
             float(residual_norm) / float(residual_target),
@@ -633,6 +791,13 @@ def _select_rhsmode1_linear_solve_method(
         "sparse_xblock_pc_gmres",
         "xblock_host_pc_gmres",
         "host_xblock_pc_gmres",
+        "structured_csr",
+        "structured_full_csr",
+        "host_structured_csr",
+        "host_full_csr",
+        "no_probe_csr",
+        "full_csr_host_gmres",
+        "structured_full_csr_host_gmres",
         "sparse_host_gmres",
         "sparse_host_pc",
         "host_sparse_pc_gmres",
@@ -897,7 +1062,7 @@ def _load_output_cache(cache_key: tuple[object, ...]) -> dict[str, np.ndarray] |
         return None
     try:
         with np.load(path, allow_pickle=False) as data:
-            if int(np.asarray(data.get("cache_version", 0)).reshape(())) != 1:
+            if int(np.asarray(data.get("cache_version", 0)).reshape(())) != _OUTPUT_GEOM_CACHE_VERSION:
                 return None
             return {k: np.asarray(data[k]) for k in data.files if k in _OUTPUT_CACHE_FIELDS}
     except Exception:  # noqa: BLE001
@@ -911,7 +1076,7 @@ def _save_output_cache(cache_key: tuple[object, ...], payload: dict[str, np.ndar
     if path is None:
         return
     try:
-        data = {"cache_version": np.asarray(1, dtype=np.int32)}
+        data = {"cache_version": np.asarray(_OUTPUT_GEOM_CACHE_VERSION, dtype=np.int32)}
         for field in _OUTPUT_CACHE_FIELDS:
             if field in payload:
                 data[field] = np.asarray(payload[field])
@@ -3130,7 +3295,9 @@ def write_sfincs_jax_output_h5(
     solve_method
         Optional RHSMode=1 linear solve method. ``"sparse_host"`` selects the
         non-differentiable structural sparse-host LU path for full-system
-        production runs.
+        production runs. ``"structured_csr"`` / ``"host_structured_csr"``
+        select the non-autodiff no-probe full-CSR host route for supported
+        RHSMode=1 systems.
     equilibrium_file, wout_path
         Optional equilibrium-path override applied on top of the namelist.
         ``wout_path`` is a compatibility alias for VMEC-centric workflows.
@@ -3615,6 +3782,23 @@ def write_sfincs_jax_output_h5(
         if solve_method_forced:
             if emit is not None:
                 emit(1, f"write_sfincs_jax_output_h5: keeping explicit solve_method={solve_method}")
+        elif (
+            (not force_krylov)
+            and rhs1_structured_full_csr_auto_allowed(
+                op=op0,
+                active_size=int(active_total_size),
+                use_implicit=bool(_resolve_use_implicit(differentiable=differentiable)),
+                solve_method_kind=solve_method,
+                backend=str(dense_auto_backend),
+                eparallel_abs=float(epar_abs),
+            )
+        ):
+            if emit is not None:
+                emit(
+                    1,
+                    "write_sfincs_jax_output_h5: 3D full-FP RHSMode=1 "
+                    "-> trying no-probe structured full-CSR host solve",
+                )
         elif (
             (not force_krylov)
             and rhs1_tokamak_pas_er_sparse_pc_auto_allowed(
@@ -5500,6 +5684,24 @@ def write_sfincs_jax_output_h5(
                     trace_metadata["elapsed_time_s_by_rhs"] = [float(v) for v in np.asarray(elapsed_by_rhs).reshape((-1,))]
                 except Exception:
                     pass
+            solver_kinds_by_rhs = getattr(result, "solver_kinds_by_rhs", None)
+            if isinstance(solver_kinds_by_rhs, dict) and solver_kinds_by_rhs:
+                trace_metadata["solver_kinds_by_rhs"] = {
+                    str(int(k)): str(v)
+                    for k, v in sorted(solver_kinds_by_rhs.items(), key=lambda item: int(item[0]))
+                }
+            solve_methods_by_rhs = getattr(result, "solve_methods_by_rhs", None)
+            if isinstance(solve_methods_by_rhs, dict) and solve_methods_by_rhs:
+                trace_metadata["solve_methods_by_rhs"] = {
+                    str(int(k)): str(v)
+                    for k, v in sorted(solve_methods_by_rhs.items(), key=lambda item: int(item[0]))
+                }
+            preconditioner_kind = getattr(result, "preconditioner_kind", None)
+            if preconditioner_kind is not None:
+                trace_metadata["preconditioner_kind"] = str(preconditioner_kind)
+            strong_preconditioner_kind = getattr(result, "strong_preconditioner_kind", None)
+            if strong_preconditioner_kind is not None:
+                trace_metadata["strong_preconditioner_kind"] = str(strong_preconditioner_kind)
         if trace_residual_norm is not None and trace_residual_target is not None:
             trace_converged = bool(float(trace_residual_norm) <= float(trace_residual_target))
             trace_metadata["converged"] = trace_converged

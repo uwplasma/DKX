@@ -16,6 +16,7 @@ from sfincs_jax.rhs1_host_policy import (
     rhs1_dense_krylov_allowed,
     rhs1_fp_3d_sparse_pc_auto_allowed,
     rhs1_fp_3d_xblock_sparse_pc_auto_allowed,
+    rhs1_structured_full_csr_auto_allowed,
     rhs1_explicit_sparse_host_direct_allowed,
     rhs1_host_dense_fallback_allowed,
     rhs1_host_dense_shortcut_allowed,
@@ -50,6 +51,131 @@ def _op(
         n_species=n_species,
         point_at_x0=point_at_x0,
         fblock=SimpleNamespace(fp=object() if has_fp else None, pas=object() if has_pas else None),
+    )
+
+
+def test_rhs1_structured_full_csr_auto_policy_targets_3d_full_fp(monkeypatch) -> None:
+    monkeypatch.delenv("SFINCS_JAX_RHS1_STRUCTURED_CSR_AUTO", raising=False)
+    monkeypatch.delenv("SFINCS_JAX_RHS1_STRUCTURED_CSR_AUTO_MIN_SIZE", raising=False)
+    monkeypatch.delenv("SFINCS_JAX_RHS1_STRUCTURED_CSR_AUTO_MIN_NXI", raising=False)
+
+    assert not rhs1_structured_full_csr_auto_allowed(
+        op=_op(has_fp=True, n_xi=21),
+        active_size=20_000,
+        use_implicit=False,
+        solve_method_kind="auto",
+        backend="cpu",
+    )
+    monkeypatch.setenv("SFINCS_JAX_RHS1_STRUCTURED_CSR_AUTO", "1")
+
+    assert rhs1_structured_full_csr_auto_allowed(
+        op=_op(has_fp=True, n_xi=21),
+        active_size=20_000,
+        use_implicit=False,
+        solve_method_kind="auto",
+        backend="cpu",
+    )
+    assert rhs1_structured_full_csr_auto_allowed(
+        op=_op(has_fp=True, n_xi=21),
+        active_size=20_000,
+        use_implicit=False,
+        solve_method_kind="auto",
+        backend="gpu",
+    )
+
+    assert not rhs1_structured_full_csr_auto_allowed(
+        op=_op(has_fp=True, n_xi=21),
+        active_size=20_000,
+        use_implicit=True,
+        solve_method_kind="auto",
+        backend="cpu",
+    )
+    assert not rhs1_structured_full_csr_auto_allowed(
+        op=_op(has_fp=True, n_xi=21),
+        active_size=20_000,
+        use_implicit=False,
+        solve_method_kind="incremental",
+        backend="cpu",
+    )
+    assert not rhs1_structured_full_csr_auto_allowed(
+        op=_op(has_fp=True, has_pas=True, n_xi=21),
+        active_size=20_000,
+        use_implicit=False,
+        solve_method_kind="auto",
+        backend="cpu",
+    )
+    assert not rhs1_structured_full_csr_auto_allowed(
+        op=_op(has_fp=True, n_xi=21, include_phi1=True),
+        active_size=20_000,
+        use_implicit=False,
+        solve_method_kind="auto",
+        backend="cpu",
+    )
+    assert not rhs1_structured_full_csr_auto_allowed(
+        op=_op(has_fp=True, n_xi=21, n_species=3),
+        active_size=20_000,
+        use_implicit=False,
+        solve_method_kind="auto",
+        backend="cpu",
+    )
+    monkeypatch.setenv("SFINCS_JAX_RHS1_STRUCTURED_CSR_AUTO", "1")
+    assert not rhs1_structured_full_csr_auto_allowed(
+        op=_op(has_fp=True, n_xi=21, n_species=3),
+        active_size=20_000,
+        use_implicit=False,
+        solve_method_kind="auto",
+        backend="cpu",
+    )
+
+
+def test_rhs1_structured_full_csr_auto_policy_respects_thresholds(monkeypatch) -> None:
+    monkeypatch.setenv("SFINCS_JAX_RHS1_STRUCTURED_CSR_AUTO", "1")
+    monkeypatch.setenv("SFINCS_JAX_RHS1_STRUCTURED_CSR_AUTO_MIN_SIZE", "3000")
+    monkeypatch.setenv("SFINCS_JAX_RHS1_STRUCTURED_CSR_AUTO_MIN_NXI", "4")
+
+    assert rhs1_structured_full_csr_auto_allowed(
+        op=_op(has_fp=True, n_xi=8),
+        active_size=3000,
+        use_implicit=False,
+        solve_method_kind="auto",
+        backend="cpu",
+    )
+    assert not rhs1_structured_full_csr_auto_allowed(
+        op=_op(has_fp=True, n_xi=3),
+        active_size=3000,
+        use_implicit=False,
+        solve_method_kind="auto",
+        backend="cpu",
+    )
+    assert not rhs1_structured_full_csr_auto_allowed(
+        op=_op(has_fp=True, n_xi=8),
+        active_size=2999,
+        use_implicit=False,
+        solve_method_kind="auto",
+        backend="cpu",
+    )
+    assert not rhs1_structured_full_csr_auto_allowed(
+        op=_op(has_fp=True, n_xi=60),
+        active_size=507_004,
+        use_implicit=False,
+        solve_method_kind="auto",
+        backend="cpu",
+    )
+    monkeypatch.setenv("SFINCS_JAX_RHS1_STRUCTURED_CSR_AUTO_MAX_SIZE", "0")
+    assert rhs1_structured_full_csr_auto_allowed(
+        op=_op(has_fp=True, n_xi=60),
+        active_size=507_004,
+        use_implicit=False,
+        solve_method_kind="auto",
+        backend="cpu",
+    )
+    monkeypatch.setenv("SFINCS_JAX_RHS1_STRUCTURED_CSR_AUTO", "0")
+    assert not rhs1_structured_full_csr_auto_allowed(
+        op=_op(has_fp=True, n_xi=8),
+        active_size=3000,
+        use_implicit=False,
+        solve_method_kind="auto",
+        backend="cpu",
     )
 
 
@@ -683,6 +809,8 @@ def test_rhs1_tokamak_pas_noer_sparse_pc_targets_production_floor_window(monkeyp
     )
     assert rhs1_tokamak_pas_noer_sparse_pc_auto_allowed(**common)
     assert rhs1_tokamak_pas_noer_sparse_pc_auto_allowed(**{**common, "active_size": 5_604})
+    assert rhs1_tokamak_pas_noer_sparse_pc_auto_allowed(**{**common, "active_size": 469_321})
+    assert not rhs1_tokamak_pas_noer_sparse_pc_auto_allowed(**{**common, "active_size": 900_000})
     assert rhs1_tokamak_pas_noer_sparse_pc_auto_allowed(**{**common, "backend": "gpu"})
     assert rhs1_tokamak_pas_noer_sparse_pc_auto_allowed(**{**common, "backend": "cuda"})
     assert not rhs1_tokamak_pas_noer_sparse_pc_auto_allowed(**{**common, "backend": "tpu"})

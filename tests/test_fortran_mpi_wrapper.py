@@ -61,3 +61,41 @@ def test_fortran_mpi_wrapper_uses_mpirun_when_available(tmp_path: Path) -> None:
         str(fake_exe),
         "--example-arg",
     ]
+
+
+def test_fortran_mpi_wrapper_defaults_to_one_rank_for_reference_runs(tmp_path: Path) -> None:
+    fake_exe = tmp_path / "sfincs"
+    fake_exe.write_text("#!/usr/bin/env bash\nexit 0\n", encoding="utf-8")
+    fake_exe.chmod(0o755)
+
+    args_file = tmp_path / "mpirun_args.txt"
+    fake_mpirun = tmp_path / "mpirun"
+    fake_mpirun.write_text(
+        "#!/usr/bin/env bash\n"
+        f"printf '%s\\n' \"$@\" > {args_file}\n",
+        encoding="utf-8",
+    )
+    fake_mpirun.chmod(0o755)
+
+    env = os.environ.copy()
+    env["SFINCS_FORTRAN_EXE"] = str(fake_exe)
+    env.pop("SFINCS_FORTRAN_MPI_NP", None)
+    env.pop("SFINCS_MPI_NP", None)
+    env["PATH"] = f"{tmp_path}{os.pathsep}{env.get('PATH', '')}"
+
+    proc = subprocess.run(
+        [str(WRAPPER), "--example-arg"],
+        cwd=REPO_ROOT,
+        env=env,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert proc.returncode == 0
+    assert args_file.read_text(encoding="utf-8").splitlines() == [
+        "-np",
+        "1",
+        str(fake_exe),
+        "--example-arg",
+    ]
