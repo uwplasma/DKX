@@ -1,0 +1,764 @@
+{
+  "case_count": 31,
+  "cases": [
+    {
+      "backends": [
+        "cpu",
+        "gpu"
+      ],
+      "case": "HSX_FPCollisions_DKESTrajectories",
+      "commands": {
+        "cpu": "PYTHONPATH=. python scripts/run_scaled_example_suite.py --examples-root benchmarks/production_resolution_inputs_2026-05-04/inputs --production-manifest benchmarks/production_resolution_inputs_2026-05-04/manifest.json --pattern '^HSX_FPCollisions_DKESTrajectories$' --max-run-recommendation all --out-root tests/production_stress_cpu_campaign_2026-06-11/HSX_FPCollisions_DKESTrajectories --fortran-exe /home/rjorge/sfincs/fortran/version3/sfincs --timeout-s 5400 --max-attempts 1 --jobs 1 --reset-report --jax-profile-marks off",
+        "gpu": "CUDA_VISIBLE_DEVICES=1 JAX_PLATFORM_NAME=gpu PYTHONPATH=. python scripts/run_scaled_example_suite.py --examples-root benchmarks/production_resolution_inputs_2026-05-04/inputs --production-manifest benchmarks/production_resolution_inputs_2026-05-04/manifest.json --pattern '^HSX_FPCollisions_DKESTrajectories$' --max-run-recommendation all --out-root tests/production_stress_gpu_campaign_2026-06-11/HSX_FPCollisions_DKESTrajectories --fortran-exe /home/rjorge/sfincs/fortran/version3/sfincs --timeout-s 5400 --max-attempts 1 --jobs 1 --reset-report --jax-profile-marks off"
+      },
+      "production_input": "/Users/rogeriojorge/local/tests/sfincs_jax/benchmarks/production_resolution_inputs_2026-05-04/inputs/HSX_FPCollisions_DKESTrajectories/input.namelist",
+      "production_resolution": {
+        "NTHETA": 25,
+        "NX": 5,
+        "NXI": 149,
+        "NZETA": 115
+      },
+      "reasons": [
+        "below_public_benchmark_resolution_floor"
+      ],
+      "run_recommendation": "remote_or_cluster_only",
+      "timeout_s": 5400,
+      "total_unknowns_estimate": 4283754
+    },
+    {
+      "backends": [
+        "cpu",
+        "gpu"
+      ],
+      "case": "HSX_FPCollisions_fullTrajectories",
+      "commands": {
+        "cpu": "PYTHONPATH=. python scripts/run_scaled_example_suite.py --examples-root benchmarks/production_resolution_inputs_2026-05-04/inputs --production-manifest benchmarks/production_resolution_inputs_2026-05-04/manifest.json --pattern '^HSX_FPCollisions_fullTrajectories$' --max-run-recommendation all --out-root tests/production_stress_cpu_campaign_2026-06-11/HSX_FPCollisions_fullTrajectories --fortran-exe /home/rjorge/sfincs/fortran/version3/sfincs --timeout-s 5400 --max-attempts 1 --jobs 1 --reset-report --jax-profile-marks off",
+        "gpu": "CUDA_VISIBLE_DEVICES=1 JAX_PLATFORM_NAME=gpu PYTHONPATH=. python scripts/run_scaled_example_suite.py --examples-root benchmarks/production_resolution_inputs_2026-05-04/inputs --production-manifest benchmarks/production_resolution_inputs_2026-05-04/manifest.json --pattern '^HSX_FPCollisions_fullTrajectories$' --max-run-recommendation all --out-root tests/production_stress_gpu_campaign_2026-06-11/HSX_FPCollisions_fullTrajectories --fortran-exe /home/rjorge/sfincs/fortran/version3/sfincs --timeout-s 5400 --max-attempts 1 --jobs 1 --reset-report --jax-profile-marks off"
+      },
+      "production_input": "/Users/rogeriojorge/local/tests/sfincs_jax/benchmarks/production_resolution_inputs_2026-05-04/inputs/HSX_FPCollisions_fullTrajectories/input.namelist",
+      "production_resolution": {
+        "NTHETA": 25,
+        "NX": 5,
+        "NXI": 149,
+        "NZETA": 115
+      },
+      "reasons": [
+        "below_public_benchmark_resolution_floor"
+      ],
+      "run_recommendation": "remote_or_cluster_only",
+      "timeout_s": 5400,
+      "total_unknowns_estimate": 4283754
+    },
+    {
+      "backends": [
+        "cpu",
+        "gpu"
+      ],
+      "case": "HSX_PASCollisions_DKESTrajectories",
+      "commands": {
+        "cpu": "PYTHONPATH=. python scripts/run_scaled_example_suite.py --examples-root benchmarks/production_resolution_inputs_2026-05-04/inputs --production-manifest benchmarks/production_resolution_inputs_2026-05-04/manifest.json --pattern '^HSX_PASCollisions_DKESTrajectories$' --max-run-recommendation all --out-root tests/production_stress_cpu_campaign_2026-06-11/HSX_PASCollisions_DKESTrajectories --fortran-exe /home/rjorge/sfincs/fortran/version3/sfincs --timeout-s 5400 --max-attempts 1 --jobs 1 --reset-report --jax-profile-marks off",
+        "gpu": "CUDA_VISIBLE_DEVICES=1 JAX_PLATFORM_NAME=gpu PYTHONPATH=. python scripts/run_scaled_example_suite.py --examples-root benchmarks/production_resolution_inputs_2026-05-04/inputs --production-manifest benchmarks/production_resolution_inputs_2026-05-04/manifest.json --pattern '^HSX_PASCollisions_DKESTrajectories$' --max-run-recommendation all --out-root tests/production_stress_gpu_campaign_2026-06-11/HSX_PASCollisions_DKESTrajectories --fortran-exe /home/rjorge/sfincs/fortran/version3/sfincs --timeout-s 5400 --max-attempts 1 --jobs 1 --reset-report --jax-profile-marks off"
+      },
+      "production_input": "/Users/rogeriojorge/local/tests/sfincs_jax/benchmarks/production_resolution_inputs_2026-05-04/inputs/HSX_PASCollisions_DKESTrajectories/input.namelist",
+      "production_resolution": {
+        "NTHETA": 25,
+        "NX": 5,
+        "NXI": 149,
+        "NZETA": 115
+      },
+      "reasons": [
+        "fortran_runtime_below_public_plot_floor"
+      ],
+      "run_recommendation": "remote_or_cluster_only",
+      "timeout_s": 5400,
+      "total_unknowns_estimate": 4283760
+    },
+    {
+      "backends": [
+        "cpu",
+        "gpu"
+      ],
+      "case": "HSX_PASCollisions_fullTrajectories",
+      "commands": {
+        "cpu": "PYTHONPATH=. python scripts/run_scaled_example_suite.py --examples-root benchmarks/production_resolution_inputs_2026-05-04/inputs --production-manifest benchmarks/production_resolution_inputs_2026-05-04/manifest.json --pattern '^HSX_PASCollisions_fullTrajectories$' --max-run-recommendation all --out-root tests/production_stress_cpu_campaign_2026-06-11/HSX_PASCollisions_fullTrajectories --fortran-exe /home/rjorge/sfincs/fortran/version3/sfincs --timeout-s 5400 --max-attempts 1 --jobs 1 --reset-report --jax-profile-marks off",
+        "gpu": "CUDA_VISIBLE_DEVICES=1 JAX_PLATFORM_NAME=gpu PYTHONPATH=. python scripts/run_scaled_example_suite.py --examples-root benchmarks/production_resolution_inputs_2026-05-04/inputs --production-manifest benchmarks/production_resolution_inputs_2026-05-04/manifest.json --pattern '^HSX_PASCollisions_fullTrajectories$' --max-run-recommendation all --out-root tests/production_stress_gpu_campaign_2026-06-11/HSX_PASCollisions_fullTrajectories --fortran-exe /home/rjorge/sfincs/fortran/version3/sfincs --timeout-s 5400 --max-attempts 1 --jobs 1 --reset-report --jax-profile-marks off"
+      },
+      "production_input": "/Users/rogeriojorge/local/tests/sfincs_jax/benchmarks/production_resolution_inputs_2026-05-04/inputs/HSX_PASCollisions_fullTrajectories/input.namelist",
+      "production_resolution": {
+        "NTHETA": 25,
+        "NX": 5,
+        "NXI": 149,
+        "NZETA": 115
+      },
+      "reasons": [
+        "fortran_runtime_below_public_plot_floor"
+      ],
+      "run_recommendation": "remote_or_cluster_only",
+      "timeout_s": 5400,
+      "total_unknowns_estimate": 4283760
+    },
+    {
+      "backends": [
+        "cpu",
+        "gpu"
+      ],
+      "case": "additional_examples",
+      "commands": {
+        "cpu": "PYTHONPATH=. python scripts/run_scaled_example_suite.py --examples-root benchmarks/production_resolution_inputs_2026-05-04/inputs --production-manifest benchmarks/production_resolution_inputs_2026-05-04/manifest.json --pattern '^additional_examples$' --max-run-recommendation all --out-root tests/production_stress_cpu_campaign_2026-06-11/additional_examples --fortran-exe /home/rjorge/sfincs/fortran/version3/sfincs --timeout-s 3600 --max-attempts 1 --jobs 1 --reset-report --jax-profile-marks off",
+        "gpu": "CUDA_VISIBLE_DEVICES=1 JAX_PLATFORM_NAME=gpu PYTHONPATH=. python scripts/run_scaled_example_suite.py --examples-root benchmarks/production_resolution_inputs_2026-05-04/inputs --production-manifest benchmarks/production_resolution_inputs_2026-05-04/manifest.json --pattern '^additional_examples$' --max-run-recommendation all --out-root tests/production_stress_gpu_campaign_2026-06-11/additional_examples --fortran-exe /home/rjorge/sfincs/fortran/version3/sfincs --timeout-s 3600 --max-attempts 1 --jobs 1 --reset-report --jax-profile-marks off"
+      },
+      "production_input": "/Users/rogeriojorge/local/tests/sfincs_jax/benchmarks/production_resolution_inputs_2026-05-04/inputs/additional_examples/input.namelist",
+      "production_resolution": {
+        "NTHETA": 25,
+        "NX": 8,
+        "NXI": 100,
+        "NZETA": 51
+      },
+      "reasons": [
+        "below_public_benchmark_resolution_floor"
+      ],
+      "run_recommendation": "remote_or_cluster_only",
+      "timeout_s": 3600,
+      "total_unknowns_estimate": 1020002
+    },
+    {
+      "backends": [
+        "cpu",
+        "gpu"
+      ],
+      "case": "filteredW7XNetCDF_2species_magneticDrifts_noEr",
+      "commands": {
+        "cpu": "PYTHONPATH=. python scripts/run_scaled_example_suite.py --examples-root benchmarks/production_resolution_inputs_2026-05-04/inputs --production-manifest benchmarks/production_resolution_inputs_2026-05-04/manifest.json --pattern '^filteredW7XNetCDF_2species_magneticDrifts_noEr$' --max-run-recommendation all --out-root tests/production_stress_cpu_campaign_2026-06-11/filteredW7XNetCDF_2species_magneticDrifts_noEr --fortran-exe /home/rjorge/sfincs/fortran/version3/sfincs --timeout-s 5400 --max-attempts 1 --jobs 1 --reset-report --jax-profile-marks off",
+        "gpu": "CUDA_VISIBLE_DEVICES=1 JAX_PLATFORM_NAME=gpu PYTHONPATH=. python scripts/run_scaled_example_suite.py --examples-root benchmarks/production_resolution_inputs_2026-05-04/inputs --production-manifest benchmarks/production_resolution_inputs_2026-05-04/manifest.json --pattern '^filteredW7XNetCDF_2species_magneticDrifts_noEr$' --max-run-recommendation all --out-root tests/production_stress_gpu_campaign_2026-06-11/filteredW7XNetCDF_2species_magneticDrifts_noEr --fortran-exe /home/rjorge/sfincs/fortran/version3/sfincs --timeout-s 5400 --max-attempts 1 --jobs 1 --reset-report --jax-profile-marks off"
+      },
+      "production_input": "/Users/rogeriojorge/local/tests/sfincs_jax/benchmarks/production_resolution_inputs_2026-05-04/inputs/filteredW7XNetCDF_2species_magneticDrifts_noEr/input.namelist",
+      "production_resolution": {
+        "NTHETA": 25,
+        "NX": 6,
+        "NXI": 100,
+        "NZETA": 55
+      },
+      "reasons": [
+        "below_public_benchmark_resolution_floor"
+      ],
+      "run_recommendation": "remote_or_cluster_only",
+      "timeout_s": 5400,
+      "total_unknowns_estimate": 1650004
+    },
+    {
+      "backends": [
+        "cpu",
+        "gpu"
+      ],
+      "case": "filteredW7XNetCDF_2species_magneticDrifts_withEr",
+      "commands": {
+        "cpu": "PYTHONPATH=. python scripts/run_scaled_example_suite.py --examples-root benchmarks/production_resolution_inputs_2026-05-04/inputs --production-manifest benchmarks/production_resolution_inputs_2026-05-04/manifest.json --pattern '^filteredW7XNetCDF_2species_magneticDrifts_withEr$' --max-run-recommendation all --out-root tests/production_stress_cpu_campaign_2026-06-11/filteredW7XNetCDF_2species_magneticDrifts_withEr --fortran-exe /home/rjorge/sfincs/fortran/version3/sfincs --timeout-s 5400 --max-attempts 1 --jobs 1 --reset-report --jax-profile-marks off",
+        "gpu": "CUDA_VISIBLE_DEVICES=1 JAX_PLATFORM_NAME=gpu PYTHONPATH=. python scripts/run_scaled_example_suite.py --examples-root benchmarks/production_resolution_inputs_2026-05-04/inputs --production-manifest benchmarks/production_resolution_inputs_2026-05-04/manifest.json --pattern '^filteredW7XNetCDF_2species_magneticDrifts_withEr$' --max-run-recommendation all --out-root tests/production_stress_gpu_campaign_2026-06-11/filteredW7XNetCDF_2species_magneticDrifts_withEr --fortran-exe /home/rjorge/sfincs/fortran/version3/sfincs --timeout-s 5400 --max-attempts 1 --jobs 1 --reset-report --jax-profile-marks off"
+      },
+      "production_input": "/Users/rogeriojorge/local/tests/sfincs_jax/benchmarks/production_resolution_inputs_2026-05-04/inputs/filteredW7XNetCDF_2species_magneticDrifts_withEr/input.namelist",
+      "production_resolution": {
+        "NTHETA": 25,
+        "NX": 6,
+        "NXI": 100,
+        "NZETA": 55
+      },
+      "reasons": [
+        "below_public_benchmark_resolution_floor"
+      ],
+      "run_recommendation": "remote_or_cluster_only",
+      "timeout_s": 5400,
+      "total_unknowns_estimate": 1650004
+    },
+    {
+      "backends": [
+        "cpu",
+        "gpu"
+      ],
+      "case": "filteredW7XNetCDF_2species_noEr",
+      "commands": {
+        "cpu": "PYTHONPATH=. python scripts/run_scaled_example_suite.py --examples-root benchmarks/production_resolution_inputs_2026-05-04/inputs --production-manifest benchmarks/production_resolution_inputs_2026-05-04/manifest.json --pattern '^filteredW7XNetCDF_2species_noEr$' --max-run-recommendation all --out-root tests/production_stress_cpu_campaign_2026-06-11/filteredW7XNetCDF_2species_noEr --fortran-exe /home/rjorge/sfincs/fortran/version3/sfincs --timeout-s 3600 --max-attempts 1 --jobs 1 --reset-report --jax-profile-marks off",
+        "gpu": "CUDA_VISIBLE_DEVICES=1 JAX_PLATFORM_NAME=gpu PYTHONPATH=. python scripts/run_scaled_example_suite.py --examples-root benchmarks/production_resolution_inputs_2026-05-04/inputs --production-manifest benchmarks/production_resolution_inputs_2026-05-04/manifest.json --pattern '^filteredW7XNetCDF_2species_noEr$' --max-run-recommendation all --out-root tests/production_stress_gpu_campaign_2026-06-11/filteredW7XNetCDF_2species_noEr --fortran-exe /home/rjorge/sfincs/fortran/version3/sfincs --timeout-s 3600 --max-attempts 1 --jobs 1 --reset-report --jax-profile-marks off"
+      },
+      "production_input": "/Users/rogeriojorge/local/tests/sfincs_jax/benchmarks/production_resolution_inputs_2026-05-04/inputs/filteredW7XNetCDF_2species_noEr/input.namelist",
+      "production_resolution": {
+        "NTHETA": 25,
+        "NX": 5,
+        "NXI": 100,
+        "NZETA": 51
+      },
+      "reasons": [
+        "below_public_benchmark_resolution_floor"
+      ],
+      "run_recommendation": "remote_or_cluster_only",
+      "timeout_s": 3600,
+      "total_unknowns_estimate": 1275004
+    },
+    {
+      "backends": [
+        "cpu",
+        "gpu"
+      ],
+      "case": "geometryScheme4_1species_PAS_withEr_DKESTrajectories",
+      "commands": {
+        "cpu": "PYTHONPATH=. python scripts/run_scaled_example_suite.py --examples-root benchmarks/production_resolution_inputs_2026-05-04/inputs --production-manifest benchmarks/production_resolution_inputs_2026-05-04/manifest.json --pattern '^geometryScheme4_1species_PAS_withEr_DKESTrajectories$' --max-run-recommendation all --out-root tests/production_stress_cpu_campaign_2026-06-11/geometryScheme4_1species_PAS_withEr_DKESTrajectories --fortran-exe /home/rjorge/sfincs/fortran/version3/sfincs --timeout-s 1800 --max-attempts 1 --jobs 1 --reset-report --jax-profile-marks off",
+        "gpu": "CUDA_VISIBLE_DEVICES=1 JAX_PLATFORM_NAME=gpu PYTHONPATH=. python scripts/run_scaled_example_suite.py --examples-root benchmarks/production_resolution_inputs_2026-05-04/inputs --production-manifest benchmarks/production_resolution_inputs_2026-05-04/manifest.json --pattern '^geometryScheme4_1species_PAS_withEr_DKESTrajectories$' --max-run-recommendation all --out-root tests/production_stress_gpu_campaign_2026-06-11/geometryScheme4_1species_PAS_withEr_DKESTrajectories --fortran-exe /home/rjorge/sfincs/fortran/version3/sfincs --timeout-s 1800 --max-attempts 1 --jobs 1 --reset-report --jax-profile-marks off"
+      },
+      "production_input": "/Users/rogeriojorge/local/tests/sfincs_jax/benchmarks/production_resolution_inputs_2026-05-04/inputs/geometryScheme4_1species_PAS_withEr_DKESTrajectories/input.namelist",
+      "production_resolution": {
+        "NTHETA": 25,
+        "NX": 5,
+        "NXI": 100,
+        "NZETA": 51
+      },
+      "reasons": [
+        "fortran_runtime_below_public_plot_floor"
+      ],
+      "run_recommendation": "remote_or_cluster_only",
+      "timeout_s": 1800,
+      "total_unknowns_estimate": 637505
+    },
+    {
+      "backends": [
+        "cpu",
+        "gpu"
+      ],
+      "case": "geometryScheme4_2species_PAS_noEr",
+      "commands": {
+        "cpu": "PYTHONPATH=. python scripts/run_scaled_example_suite.py --examples-root benchmarks/production_resolution_inputs_2026-05-04/inputs --production-manifest benchmarks/production_resolution_inputs_2026-05-04/manifest.json --pattern '^geometryScheme4_2species_PAS_noEr$' --max-run-recommendation all --out-root tests/production_stress_cpu_campaign_2026-06-11/geometryScheme4_2species_PAS_noEr --fortran-exe /home/rjorge/sfincs/fortran/version3/sfincs --timeout-s 3600 --max-attempts 1 --jobs 1 --reset-report --jax-profile-marks off",
+        "gpu": "CUDA_VISIBLE_DEVICES=1 JAX_PLATFORM_NAME=gpu PYTHONPATH=. python scripts/run_scaled_example_suite.py --examples-root benchmarks/production_resolution_inputs_2026-05-04/inputs --production-manifest benchmarks/production_resolution_inputs_2026-05-04/manifest.json --pattern '^geometryScheme4_2species_PAS_noEr$' --max-run-recommendation all --out-root tests/production_stress_gpu_campaign_2026-06-11/geometryScheme4_2species_PAS_noEr --fortran-exe /home/rjorge/sfincs/fortran/version3/sfincs --timeout-s 3600 --max-attempts 1 --jobs 1 --reset-report --jax-profile-marks off"
+      },
+      "production_input": "/Users/rogeriojorge/local/tests/sfincs_jax/benchmarks/production_resolution_inputs_2026-05-04/inputs/geometryScheme4_2species_PAS_noEr/input.namelist",
+      "production_resolution": {
+        "NTHETA": 25,
+        "NX": 5,
+        "NXI": 100,
+        "NZETA": 51
+      },
+      "reasons": [
+        "fortran_runtime_below_public_plot_floor"
+      ],
+      "run_recommendation": "remote_or_cluster_only",
+      "timeout_s": 3600,
+      "total_unknowns_estimate": 1275010
+    },
+    {
+      "backends": [
+        "cpu",
+        "gpu"
+      ],
+      "case": "geometryScheme4_2species_noEr",
+      "commands": {
+        "cpu": "PYTHONPATH=. python scripts/run_scaled_example_suite.py --examples-root benchmarks/production_resolution_inputs_2026-05-04/inputs --production-manifest benchmarks/production_resolution_inputs_2026-05-04/manifest.json --pattern '^geometryScheme4_2species_noEr$' --max-run-recommendation all --out-root tests/production_stress_cpu_campaign_2026-06-11/geometryScheme4_2species_noEr --fortran-exe /home/rjorge/sfincs/fortran/version3/sfincs --timeout-s 3600 --max-attempts 1 --jobs 1 --reset-report --jax-profile-marks off",
+        "gpu": "CUDA_VISIBLE_DEVICES=1 JAX_PLATFORM_NAME=gpu PYTHONPATH=. python scripts/run_scaled_example_suite.py --examples-root benchmarks/production_resolution_inputs_2026-05-04/inputs --production-manifest benchmarks/production_resolution_inputs_2026-05-04/manifest.json --pattern '^geometryScheme4_2species_noEr$' --max-run-recommendation all --out-root tests/production_stress_gpu_campaign_2026-06-11/geometryScheme4_2species_noEr --fortran-exe /home/rjorge/sfincs/fortran/version3/sfincs --timeout-s 3600 --max-attempts 1 --jobs 1 --reset-report --jax-profile-marks off"
+      },
+      "production_input": "/Users/rogeriojorge/local/tests/sfincs_jax/benchmarks/production_resolution_inputs_2026-05-04/inputs/geometryScheme4_2species_noEr/input.namelist",
+      "production_resolution": {
+        "NTHETA": 25,
+        "NX": 5,
+        "NXI": 100,
+        "NZETA": 51
+      },
+      "reasons": [
+        "below_public_benchmark_resolution_floor"
+      ],
+      "run_recommendation": "remote_or_cluster_only",
+      "timeout_s": 3600,
+      "total_unknowns_estimate": 1275004
+    },
+    {
+      "backends": [
+        "cpu",
+        "gpu"
+      ],
+      "case": "geometryScheme4_2species_noEr_withPhi1InDKE",
+      "commands": {
+        "cpu": "PYTHONPATH=. python scripts/run_scaled_example_suite.py --examples-root benchmarks/production_resolution_inputs_2026-05-04/inputs --production-manifest benchmarks/production_resolution_inputs_2026-05-04/manifest.json --pattern '^geometryScheme4_2species_noEr_withPhi1InDKE$' --max-run-recommendation all --out-root tests/production_stress_cpu_campaign_2026-06-11/geometryScheme4_2species_noEr_withPhi1InDKE --fortran-exe /home/rjorge/sfincs/fortran/version3/sfincs --timeout-s 3600 --max-attempts 1 --jobs 1 --reset-report --jax-profile-marks off",
+        "gpu": "CUDA_VISIBLE_DEVICES=1 JAX_PLATFORM_NAME=gpu PYTHONPATH=. python scripts/run_scaled_example_suite.py --examples-root benchmarks/production_resolution_inputs_2026-05-04/inputs --production-manifest benchmarks/production_resolution_inputs_2026-05-04/manifest.json --pattern '^geometryScheme4_2species_noEr_withPhi1InDKE$' --max-run-recommendation all --out-root tests/production_stress_gpu_campaign_2026-06-11/geometryScheme4_2species_noEr_withPhi1InDKE --fortran-exe /home/rjorge/sfincs/fortran/version3/sfincs --timeout-s 3600 --max-attempts 1 --jobs 1 --reset-report --jax-profile-marks off"
+      },
+      "production_input": "/Users/rogeriojorge/local/tests/sfincs_jax/benchmarks/production_resolution_inputs_2026-05-04/inputs/geometryScheme4_2species_noEr_withPhi1InDKE/input.namelist",
+      "production_resolution": {
+        "NTHETA": 25,
+        "NX": 5,
+        "NXI": 100,
+        "NZETA": 51
+      },
+      "reasons": [
+        "below_public_benchmark_resolution_floor"
+      ],
+      "run_recommendation": "remote_or_cluster_only",
+      "timeout_s": 3600,
+      "total_unknowns_estimate": 1276279
+    },
+    {
+      "backends": [
+        "cpu",
+        "gpu"
+      ],
+      "case": "geometryScheme4_2species_noEr_withQN",
+      "commands": {
+        "cpu": "PYTHONPATH=. python scripts/run_scaled_example_suite.py --examples-root benchmarks/production_resolution_inputs_2026-05-04/inputs --production-manifest benchmarks/production_resolution_inputs_2026-05-04/manifest.json --pattern '^geometryScheme4_2species_noEr_withQN$' --max-run-recommendation all --out-root tests/production_stress_cpu_campaign_2026-06-11/geometryScheme4_2species_noEr_withQN --fortran-exe /home/rjorge/sfincs/fortran/version3/sfincs --timeout-s 3600 --max-attempts 1 --jobs 1 --reset-report --jax-profile-marks off",
+        "gpu": "CUDA_VISIBLE_DEVICES=1 JAX_PLATFORM_NAME=gpu PYTHONPATH=. python scripts/run_scaled_example_suite.py --examples-root benchmarks/production_resolution_inputs_2026-05-04/inputs --production-manifest benchmarks/production_resolution_inputs_2026-05-04/manifest.json --pattern '^geometryScheme4_2species_noEr_withQN$' --max-run-recommendation all --out-root tests/production_stress_gpu_campaign_2026-06-11/geometryScheme4_2species_noEr_withQN --fortran-exe /home/rjorge/sfincs/fortran/version3/sfincs --timeout-s 3600 --max-attempts 1 --jobs 1 --reset-report --jax-profile-marks off"
+      },
+      "production_input": "/Users/rogeriojorge/local/tests/sfincs_jax/benchmarks/production_resolution_inputs_2026-05-04/inputs/geometryScheme4_2species_noEr_withQN/input.namelist",
+      "production_resolution": {
+        "NTHETA": 25,
+        "NX": 5,
+        "NXI": 100,
+        "NZETA": 51
+      },
+      "reasons": [
+        "below_public_benchmark_resolution_floor"
+      ],
+      "run_recommendation": "remote_or_cluster_only",
+      "timeout_s": 3600,
+      "total_unknowns_estimate": 1276279
+    },
+    {
+      "backends": [
+        "cpu",
+        "gpu"
+      ],
+      "case": "geometryScheme4_2species_withEr_fullTrajectories",
+      "commands": {
+        "cpu": "PYTHONPATH=. python scripts/run_scaled_example_suite.py --examples-root benchmarks/production_resolution_inputs_2026-05-04/inputs --production-manifest benchmarks/production_resolution_inputs_2026-05-04/manifest.json --pattern '^geometryScheme4_2species_withEr_fullTrajectories$' --max-run-recommendation all --out-root tests/production_stress_cpu_campaign_2026-06-11/geometryScheme4_2species_withEr_fullTrajectories --fortran-exe /home/rjorge/sfincs/fortran/version3/sfincs --timeout-s 3600 --max-attempts 1 --jobs 1 --reset-report --jax-profile-marks off",
+        "gpu": "CUDA_VISIBLE_DEVICES=1 JAX_PLATFORM_NAME=gpu PYTHONPATH=. python scripts/run_scaled_example_suite.py --examples-root benchmarks/production_resolution_inputs_2026-05-04/inputs --production-manifest benchmarks/production_resolution_inputs_2026-05-04/manifest.json --pattern '^geometryScheme4_2species_withEr_fullTrajectories$' --max-run-recommendation all --out-root tests/production_stress_gpu_campaign_2026-06-11/geometryScheme4_2species_withEr_fullTrajectories --fortran-exe /home/rjorge/sfincs/fortran/version3/sfincs --timeout-s 3600 --max-attempts 1 --jobs 1 --reset-report --jax-profile-marks off"
+      },
+      "production_input": "/Users/rogeriojorge/local/tests/sfincs_jax/benchmarks/production_resolution_inputs_2026-05-04/inputs/geometryScheme4_2species_withEr_fullTrajectories/input.namelist",
+      "production_resolution": {
+        "NTHETA": 25,
+        "NX": 5,
+        "NXI": 100,
+        "NZETA": 51
+      },
+      "reasons": [
+        "below_public_benchmark_resolution_floor"
+      ],
+      "run_recommendation": "remote_or_cluster_only",
+      "timeout_s": 3600,
+      "total_unknowns_estimate": 1275004
+    },
+    {
+      "backends": [
+        "cpu",
+        "gpu"
+      ],
+      "case": "geometryScheme4_2species_withEr_fullTrajectories_withQN",
+      "commands": {
+        "cpu": "PYTHONPATH=. python scripts/run_scaled_example_suite.py --examples-root benchmarks/production_resolution_inputs_2026-05-04/inputs --production-manifest benchmarks/production_resolution_inputs_2026-05-04/manifest.json --pattern '^geometryScheme4_2species_withEr_fullTrajectories_withQN$' --max-run-recommendation all --out-root tests/production_stress_cpu_campaign_2026-06-11/geometryScheme4_2species_withEr_fullTrajectories_withQN --fortran-exe /home/rjorge/sfincs/fortran/version3/sfincs --timeout-s 3600 --max-attempts 1 --jobs 1 --reset-report --jax-profile-marks off",
+        "gpu": "CUDA_VISIBLE_DEVICES=1 JAX_PLATFORM_NAME=gpu PYTHONPATH=. python scripts/run_scaled_example_suite.py --examples-root benchmarks/production_resolution_inputs_2026-05-04/inputs --production-manifest benchmarks/production_resolution_inputs_2026-05-04/manifest.json --pattern '^geometryScheme4_2species_withEr_fullTrajectories_withQN$' --max-run-recommendation all --out-root tests/production_stress_gpu_campaign_2026-06-11/geometryScheme4_2species_withEr_fullTrajectories_withQN --fortran-exe /home/rjorge/sfincs/fortran/version3/sfincs --timeout-s 3600 --max-attempts 1 --jobs 1 --reset-report --jax-profile-marks off"
+      },
+      "production_input": "/Users/rogeriojorge/local/tests/sfincs_jax/benchmarks/production_resolution_inputs_2026-05-04/inputs/geometryScheme4_2species_withEr_fullTrajectories_withQN/input.namelist",
+      "production_resolution": {
+        "NTHETA": 25,
+        "NX": 5,
+        "NXI": 100,
+        "NZETA": 51
+      },
+      "reasons": [
+        "below_public_benchmark_resolution_floor"
+      ],
+      "run_recommendation": "remote_or_cluster_only",
+      "timeout_s": 3600,
+      "total_unknowns_estimate": 1276279
+    },
+    {
+      "backends": [
+        "cpu",
+        "gpu"
+      ],
+      "case": "geometryScheme5_3species_loRes",
+      "commands": {
+        "cpu": "PYTHONPATH=. python scripts/run_scaled_example_suite.py --examples-root benchmarks/production_resolution_inputs_2026-05-04/inputs --production-manifest benchmarks/production_resolution_inputs_2026-05-04/manifest.json --pattern '^geometryScheme5_3species_loRes$' --max-run-recommendation all --out-root tests/production_stress_cpu_campaign_2026-06-11/geometryScheme5_3species_loRes --fortran-exe /home/rjorge/sfincs/fortran/version3/sfincs --timeout-s 3600 --max-attempts 1 --jobs 1 --reset-report --jax-profile-marks off",
+        "gpu": "CUDA_VISIBLE_DEVICES=1 JAX_PLATFORM_NAME=gpu PYTHONPATH=. python scripts/run_scaled_example_suite.py --examples-root benchmarks/production_resolution_inputs_2026-05-04/inputs --production-manifest benchmarks/production_resolution_inputs_2026-05-04/manifest.json --pattern '^geometryScheme5_3species_loRes$' --max-run-recommendation all --out-root tests/production_stress_gpu_campaign_2026-06-11/geometryScheme5_3species_loRes --fortran-exe /home/rjorge/sfincs/fortran/version3/sfincs --timeout-s 3600 --max-attempts 1 --jobs 1 --reset-report --jax-profile-marks off"
+      },
+      "production_input": "/Users/rogeriojorge/local/tests/sfincs_jax/benchmarks/production_resolution_inputs_2026-05-04/inputs/geometryScheme5_3species_loRes/input.namelist",
+      "production_resolution": {
+        "NTHETA": 25,
+        "NX": 4,
+        "NXI": 100,
+        "NZETA": 51
+      },
+      "reasons": [
+        "below_public_benchmark_resolution_floor"
+      ],
+      "run_recommendation": "remote_or_cluster_only",
+      "timeout_s": 3600,
+      "total_unknowns_estimate": 1530006
+    },
+    {
+      "backends": [
+        "cpu",
+        "gpu"
+      ],
+      "case": "inductiveE_noEr",
+      "commands": {
+        "cpu": "PYTHONPATH=. python scripts/run_scaled_example_suite.py --examples-root benchmarks/production_resolution_inputs_2026-05-04/inputs --production-manifest benchmarks/production_resolution_inputs_2026-05-04/manifest.json --pattern '^inductiveE_noEr$' --max-run-recommendation all --out-root tests/production_stress_cpu_campaign_2026-06-11/inductiveE_noEr --fortran-exe /home/rjorge/sfincs/fortran/version3/sfincs --timeout-s 3600 --max-attempts 1 --jobs 1 --reset-report --jax-profile-marks off",
+        "gpu": "CUDA_VISIBLE_DEVICES=1 JAX_PLATFORM_NAME=gpu PYTHONPATH=. python scripts/run_scaled_example_suite.py --examples-root benchmarks/production_resolution_inputs_2026-05-04/inputs --production-manifest benchmarks/production_resolution_inputs_2026-05-04/manifest.json --pattern '^inductiveE_noEr$' --max-run-recommendation all --out-root tests/production_stress_gpu_campaign_2026-06-11/inductiveE_noEr --fortran-exe /home/rjorge/sfincs/fortran/version3/sfincs --timeout-s 3600 --max-attempts 1 --jobs 1 --reset-report --jax-profile-marks off"
+      },
+      "production_input": "/Users/rogeriojorge/local/tests/sfincs_jax/benchmarks/production_resolution_inputs_2026-05-04/inputs/inductiveE_noEr/input.namelist",
+      "production_resolution": {
+        "NTHETA": 25,
+        "NX": 5,
+        "NXI": 100,
+        "NZETA": 51
+      },
+      "reasons": [
+        "below_public_benchmark_resolution_floor"
+      ],
+      "run_recommendation": "remote_or_cluster_only",
+      "timeout_s": 3600,
+      "total_unknowns_estimate": 1275004
+    },
+    {
+      "backends": [
+        "cpu",
+        "gpu"
+      ],
+      "case": "monoenergetic_geometryScheme1",
+      "commands": {
+        "cpu": "PYTHONPATH=. python scripts/run_scaled_example_suite.py --examples-root benchmarks/production_resolution_inputs_2026-05-04/inputs --production-manifest benchmarks/production_resolution_inputs_2026-05-04/manifest.json --pattern '^monoenergetic_geometryScheme1$' --max-run-recommendation all --out-root tests/production_stress_cpu_campaign_2026-06-11/monoenergetic_geometryScheme1 --fortran-exe /home/rjorge/sfincs/fortran/version3/sfincs --timeout-s 1800 --max-attempts 1 --jobs 1 --reset-report --jax-profile-marks off",
+        "gpu": "CUDA_VISIBLE_DEVICES=1 JAX_PLATFORM_NAME=gpu PYTHONPATH=. python scripts/run_scaled_example_suite.py --examples-root benchmarks/production_resolution_inputs_2026-05-04/inputs --production-manifest benchmarks/production_resolution_inputs_2026-05-04/manifest.json --pattern '^monoenergetic_geometryScheme1$' --max-run-recommendation all --out-root tests/production_stress_gpu_campaign_2026-06-11/monoenergetic_geometryScheme1 --fortran-exe /home/rjorge/sfincs/fortran/version3/sfincs --timeout-s 1800 --max-attempts 1 --jobs 1 --reset-report --jax-profile-marks off"
+      },
+      "production_input": "/Users/rogeriojorge/local/tests/sfincs_jax/benchmarks/production_resolution_inputs_2026-05-04/inputs/monoenergetic_geometryScheme1/input.namelist",
+      "production_resolution": {
+        "NTHETA": 27,
+        "NX": 4,
+        "NXI": 100,
+        "NZETA": 51
+      },
+      "reasons": [
+        "fortran_runtime_below_public_plot_floor"
+      ],
+      "run_recommendation": "remote_or_cluster_only",
+      "timeout_s": 1800,
+      "total_unknowns_estimate": 550804
+    },
+    {
+      "backends": [
+        "cpu",
+        "gpu"
+      ],
+      "case": "monoenergetic_geometryScheme11",
+      "commands": {
+        "cpu": "PYTHONPATH=. python scripts/run_scaled_example_suite.py --examples-root benchmarks/production_resolution_inputs_2026-05-04/inputs --production-manifest benchmarks/production_resolution_inputs_2026-05-04/manifest.json --pattern '^monoenergetic_geometryScheme11$' --max-run-recommendation all --out-root tests/production_stress_cpu_campaign_2026-06-11/monoenergetic_geometryScheme11 --fortran-exe /home/rjorge/sfincs/fortran/version3/sfincs --timeout-s 1800 --max-attempts 1 --jobs 1 --reset-report --jax-profile-marks off",
+        "gpu": "CUDA_VISIBLE_DEVICES=1 JAX_PLATFORM_NAME=gpu PYTHONPATH=. python scripts/run_scaled_example_suite.py --examples-root benchmarks/production_resolution_inputs_2026-05-04/inputs --production-manifest benchmarks/production_resolution_inputs_2026-05-04/manifest.json --pattern '^monoenergetic_geometryScheme11$' --max-run-recommendation all --out-root tests/production_stress_gpu_campaign_2026-06-11/monoenergetic_geometryScheme11 --fortran-exe /home/rjorge/sfincs/fortran/version3/sfincs --timeout-s 1800 --max-attempts 1 --jobs 1 --reset-report --jax-profile-marks off"
+      },
+      "production_input": "/Users/rogeriojorge/local/tests/sfincs_jax/benchmarks/production_resolution_inputs_2026-05-04/inputs/monoenergetic_geometryScheme11/input.namelist",
+      "production_resolution": {
+        "NTHETA": 25,
+        "NX": 4,
+        "NXI": 100,
+        "NZETA": 51
+      },
+      "reasons": [
+        "fortran_runtime_below_public_plot_floor"
+      ],
+      "run_recommendation": "remote_or_cluster_only",
+      "timeout_s": 1800,
+      "total_unknowns_estimate": 510004
+    },
+    {
+      "backends": [
+        "cpu",
+        "gpu"
+      ],
+      "case": "monoenergetic_geometryScheme5_ASCII",
+      "commands": {
+        "cpu": "PYTHONPATH=. python scripts/run_scaled_example_suite.py --examples-root benchmarks/production_resolution_inputs_2026-05-04/inputs --production-manifest benchmarks/production_resolution_inputs_2026-05-04/manifest.json --pattern '^monoenergetic_geometryScheme5_ASCII$' --max-run-recommendation all --out-root tests/production_stress_cpu_campaign_2026-06-11/monoenergetic_geometryScheme5_ASCII --fortran-exe /home/rjorge/sfincs/fortran/version3/sfincs --timeout-s 1800 --max-attempts 1 --jobs 1 --reset-report --jax-profile-marks off",
+        "gpu": "CUDA_VISIBLE_DEVICES=1 JAX_PLATFORM_NAME=gpu PYTHONPATH=. python scripts/run_scaled_example_suite.py --examples-root benchmarks/production_resolution_inputs_2026-05-04/inputs --production-manifest benchmarks/production_resolution_inputs_2026-05-04/manifest.json --pattern '^monoenergetic_geometryScheme5_ASCII$' --max-run-recommendation all --out-root tests/production_stress_gpu_campaign_2026-06-11/monoenergetic_geometryScheme5_ASCII --fortran-exe /home/rjorge/sfincs/fortran/version3/sfincs --timeout-s 1800 --max-attempts 1 --jobs 1 --reset-report --jax-profile-marks off"
+      },
+      "production_input": "/Users/rogeriojorge/local/tests/sfincs_jax/benchmarks/production_resolution_inputs_2026-05-04/inputs/monoenergetic_geometryScheme5_ASCII/input.namelist",
+      "production_resolution": {
+        "NTHETA": 25,
+        "NX": 4,
+        "NXI": 100,
+        "NZETA": 51
+      },
+      "reasons": [
+        "fortran_runtime_below_public_plot_floor"
+      ],
+      "run_recommendation": "remote_or_cluster_only",
+      "timeout_s": 1800,
+      "total_unknowns_estimate": 510004
+    },
+    {
+      "backends": [
+        "cpu",
+        "gpu"
+      ],
+      "case": "monoenergetic_geometryScheme5_netCDF",
+      "commands": {
+        "cpu": "PYTHONPATH=. python scripts/run_scaled_example_suite.py --examples-root benchmarks/production_resolution_inputs_2026-05-04/inputs --production-manifest benchmarks/production_resolution_inputs_2026-05-04/manifest.json --pattern '^monoenergetic_geometryScheme5_netCDF$' --max-run-recommendation all --out-root tests/production_stress_cpu_campaign_2026-06-11/monoenergetic_geometryScheme5_netCDF --fortran-exe /home/rjorge/sfincs/fortran/version3/sfincs --timeout-s 1800 --max-attempts 1 --jobs 1 --reset-report --jax-profile-marks off",
+        "gpu": "CUDA_VISIBLE_DEVICES=1 JAX_PLATFORM_NAME=gpu PYTHONPATH=. python scripts/run_scaled_example_suite.py --examples-root benchmarks/production_resolution_inputs_2026-05-04/inputs --production-manifest benchmarks/production_resolution_inputs_2026-05-04/manifest.json --pattern '^monoenergetic_geometryScheme5_netCDF$' --max-run-recommendation all --out-root tests/production_stress_gpu_campaign_2026-06-11/monoenergetic_geometryScheme5_netCDF --fortran-exe /home/rjorge/sfincs/fortran/version3/sfincs --timeout-s 1800 --max-attempts 1 --jobs 1 --reset-report --jax-profile-marks off"
+      },
+      "production_input": "/Users/rogeriojorge/local/tests/sfincs_jax/benchmarks/production_resolution_inputs_2026-05-04/inputs/monoenergetic_geometryScheme5_netCDF/input.namelist",
+      "production_resolution": {
+        "NTHETA": 25,
+        "NX": 4,
+        "NXI": 100,
+        "NZETA": 51
+      },
+      "reasons": [
+        "fortran_runtime_below_public_plot_floor"
+      ],
+      "run_recommendation": "remote_or_cluster_only",
+      "timeout_s": 1800,
+      "total_unknowns_estimate": 510004
+    },
+    {
+      "backends": [
+        "cpu",
+        "gpu"
+      ],
+      "case": "quick_2species_FPCollisions_noEr",
+      "commands": {
+        "cpu": "PYTHONPATH=. python scripts/run_scaled_example_suite.py --examples-root benchmarks/production_resolution_inputs_2026-05-04/inputs --production-manifest benchmarks/production_resolution_inputs_2026-05-04/manifest.json --pattern '^quick_2species_FPCollisions_noEr$' --max-run-recommendation all --out-root tests/production_stress_cpu_campaign_2026-06-11/quick_2species_FPCollisions_noEr --fortran-exe /home/rjorge/sfincs/fortran/version3/sfincs --timeout-s 3600 --max-attempts 1 --jobs 1 --reset-report --jax-profile-marks off",
+        "gpu": "CUDA_VISIBLE_DEVICES=1 JAX_PLATFORM_NAME=gpu PYTHONPATH=. python scripts/run_scaled_example_suite.py --examples-root benchmarks/production_resolution_inputs_2026-05-04/inputs --production-manifest benchmarks/production_resolution_inputs_2026-05-04/manifest.json --pattern '^quick_2species_FPCollisions_noEr$' --max-run-recommendation all --out-root tests/production_stress_gpu_campaign_2026-06-11/quick_2species_FPCollisions_noEr --fortran-exe /home/rjorge/sfincs/fortran/version3/sfincs --timeout-s 3600 --max-attempts 1 --jobs 1 --reset-report --jax-profile-marks off"
+      },
+      "production_input": "/Users/rogeriojorge/local/tests/sfincs_jax/benchmarks/production_resolution_inputs_2026-05-04/inputs/quick_2species_FPCollisions_noEr/input.namelist",
+      "production_resolution": {
+        "NTHETA": 25,
+        "NX": 5,
+        "NXI": 100,
+        "NZETA": 51
+      },
+      "reasons": [
+        "below_public_benchmark_resolution_floor"
+      ],
+      "run_recommendation": "remote_or_cluster_only",
+      "timeout_s": 3600,
+      "total_unknowns_estimate": 1275004
+    },
+    {
+      "backends": [
+        "cpu",
+        "gpu"
+      ],
+      "case": "sfincsPaperFigure3_geometryScheme11_FPCollisions_2Species_DKESTrajectories",
+      "commands": {
+        "cpu": "PYTHONPATH=. python scripts/run_scaled_example_suite.py --examples-root benchmarks/production_resolution_inputs_2026-05-04/inputs --production-manifest benchmarks/production_resolution_inputs_2026-05-04/manifest.json --pattern '^sfincsPaperFigure3_geometryScheme11_FPCollisions_2Species_DKESTrajectories$' --max-run-recommendation all --out-root tests/production_stress_cpu_campaign_2026-06-11/sfincsPaperFigure3_geometryScheme11_FPCollisions_2Species_DKESTrajectories --fortran-exe /home/rjorge/sfincs/fortran/version3/sfincs --timeout-s 3600 --max-attempts 1 --jobs 1 --reset-report --jax-profile-marks off",
+        "gpu": "CUDA_VISIBLE_DEVICES=1 JAX_PLATFORM_NAME=gpu PYTHONPATH=. python scripts/run_scaled_example_suite.py --examples-root benchmarks/production_resolution_inputs_2026-05-04/inputs --production-manifest benchmarks/production_resolution_inputs_2026-05-04/manifest.json --pattern '^sfincsPaperFigure3_geometryScheme11_FPCollisions_2Species_DKESTrajectories$' --max-run-recommendation all --out-root tests/production_stress_gpu_campaign_2026-06-11/sfincsPaperFigure3_geometryScheme11_FPCollisions_2Species_DKESTrajectories --fortran-exe /home/rjorge/sfincs/fortran/version3/sfincs --timeout-s 3600 --max-attempts 1 --jobs 1 --reset-report --jax-profile-marks off"
+      },
+      "production_input": "/Users/rogeriojorge/local/tests/sfincs_jax/benchmarks/production_resolution_inputs_2026-05-04/inputs/sfincsPaperFigure3_geometryScheme11_FPCollisions_2Species_DKESTrajectories/input.namelist",
+      "production_resolution": {
+        "NTHETA": 25,
+        "NX": 5,
+        "NXI": 100,
+        "NZETA": 59
+      },
+      "reasons": [
+        "below_public_benchmark_resolution_floor"
+      ],
+      "run_recommendation": "remote_or_cluster_only",
+      "timeout_s": 3600,
+      "total_unknowns_estimate": 1475004
+    },
+    {
+      "backends": [
+        "cpu",
+        "gpu"
+      ],
+      "case": "sfincsPaperFigure3_geometryScheme11_FPCollisions_2Species_fullTrajectories",
+      "commands": {
+        "cpu": "PYTHONPATH=. python scripts/run_scaled_example_suite.py --examples-root benchmarks/production_resolution_inputs_2026-05-04/inputs --production-manifest benchmarks/production_resolution_inputs_2026-05-04/manifest.json --pattern '^sfincsPaperFigure3_geometryScheme11_FPCollisions_2Species_fullTrajectories$' --max-run-recommendation all --out-root tests/production_stress_cpu_campaign_2026-06-11/sfincsPaperFigure3_geometryScheme11_FPCollisions_2Species_fullTrajectories --fortran-exe /home/rjorge/sfincs/fortran/version3/sfincs --timeout-s 3600 --max-attempts 1 --jobs 1 --reset-report --jax-profile-marks off",
+        "gpu": "CUDA_VISIBLE_DEVICES=1 JAX_PLATFORM_NAME=gpu PYTHONPATH=. python scripts/run_scaled_example_suite.py --examples-root benchmarks/production_resolution_inputs_2026-05-04/inputs --production-manifest benchmarks/production_resolution_inputs_2026-05-04/manifest.json --pattern '^sfincsPaperFigure3_geometryScheme11_FPCollisions_2Species_fullTrajectories$' --max-run-recommendation all --out-root tests/production_stress_gpu_campaign_2026-06-11/sfincsPaperFigure3_geometryScheme11_FPCollisions_2Species_fullTrajectories --fortran-exe /home/rjorge/sfincs/fortran/version3/sfincs --timeout-s 3600 --max-attempts 1 --jobs 1 --reset-report --jax-profile-marks off"
+      },
+      "production_input": "/Users/rogeriojorge/local/tests/sfincs_jax/benchmarks/production_resolution_inputs_2026-05-04/inputs/sfincsPaperFigure3_geometryScheme11_FPCollisions_2Species_fullTrajectories/input.namelist",
+      "production_resolution": {
+        "NTHETA": 25,
+        "NX": 5,
+        "NXI": 100,
+        "NZETA": 59
+      },
+      "reasons": [
+        "below_public_benchmark_resolution_floor"
+      ],
+      "run_recommendation": "remote_or_cluster_only",
+      "timeout_s": 3600,
+      "total_unknowns_estimate": 1475004
+    },
+    {
+      "backends": [
+        "cpu",
+        "gpu"
+      ],
+      "case": "sfincsPaperFigure3_geometryScheme11_PASCollisions_2Species_DKESTrajectories",
+      "commands": {
+        "cpu": "PYTHONPATH=. python scripts/run_scaled_example_suite.py --examples-root benchmarks/production_resolution_inputs_2026-05-04/inputs --production-manifest benchmarks/production_resolution_inputs_2026-05-04/manifest.json --pattern '^sfincsPaperFigure3_geometryScheme11_PASCollisions_2Species_DKESTrajectories$' --max-run-recommendation all --out-root tests/production_stress_cpu_campaign_2026-06-11/sfincsPaperFigure3_geometryScheme11_PASCollisions_2Species_DKESTrajectories --fortran-exe /home/rjorge/sfincs/fortran/version3/sfincs --timeout-s 3600 --max-attempts 1 --jobs 1 --reset-report --jax-profile-marks off",
+        "gpu": "CUDA_VISIBLE_DEVICES=1 JAX_PLATFORM_NAME=gpu PYTHONPATH=. python scripts/run_scaled_example_suite.py --examples-root benchmarks/production_resolution_inputs_2026-05-04/inputs --production-manifest benchmarks/production_resolution_inputs_2026-05-04/manifest.json --pattern '^sfincsPaperFigure3_geometryScheme11_PASCollisions_2Species_DKESTrajectories$' --max-run-recommendation all --out-root tests/production_stress_gpu_campaign_2026-06-11/sfincsPaperFigure3_geometryScheme11_PASCollisions_2Species_DKESTrajectories --fortran-exe /home/rjorge/sfincs/fortran/version3/sfincs --timeout-s 3600 --max-attempts 1 --jobs 1 --reset-report --jax-profile-marks off"
+      },
+      "production_input": "/Users/rogeriojorge/local/tests/sfincs_jax/benchmarks/production_resolution_inputs_2026-05-04/inputs/sfincsPaperFigure3_geometryScheme11_PASCollisions_2Species_DKESTrajectories/input.namelist",
+      "production_resolution": {
+        "NTHETA": 25,
+        "NX": 5,
+        "NXI": 100,
+        "NZETA": 59
+      },
+      "reasons": [
+        "fortran_runtime_below_public_plot_floor"
+      ],
+      "run_recommendation": "remote_or_cluster_only",
+      "timeout_s": 3600,
+      "total_unknowns_estimate": 1475010
+    },
+    {
+      "backends": [
+        "cpu",
+        "gpu"
+      ],
+      "case": "sfincsPaperFigure3_geometryScheme11_PASCollisions_2Species_fullTrajectories",
+      "commands": {
+        "cpu": "PYTHONPATH=. python scripts/run_scaled_example_suite.py --examples-root benchmarks/production_resolution_inputs_2026-05-04/inputs --production-manifest benchmarks/production_resolution_inputs_2026-05-04/manifest.json --pattern '^sfincsPaperFigure3_geometryScheme11_PASCollisions_2Species_fullTrajectories$' --max-run-recommendation all --out-root tests/production_stress_cpu_campaign_2026-06-11/sfincsPaperFigure3_geometryScheme11_PASCollisions_2Species_fullTrajectories --fortran-exe /home/rjorge/sfincs/fortran/version3/sfincs --timeout-s 3600 --max-attempts 1 --jobs 1 --reset-report --jax-profile-marks off",
+        "gpu": "CUDA_VISIBLE_DEVICES=1 JAX_PLATFORM_NAME=gpu PYTHONPATH=. python scripts/run_scaled_example_suite.py --examples-root benchmarks/production_resolution_inputs_2026-05-04/inputs --production-manifest benchmarks/production_resolution_inputs_2026-05-04/manifest.json --pattern '^sfincsPaperFigure3_geometryScheme11_PASCollisions_2Species_fullTrajectories$' --max-run-recommendation all --out-root tests/production_stress_gpu_campaign_2026-06-11/sfincsPaperFigure3_geometryScheme11_PASCollisions_2Species_fullTrajectories --fortran-exe /home/rjorge/sfincs/fortran/version3/sfincs --timeout-s 3600 --max-attempts 1 --jobs 1 --reset-report --jax-profile-marks off"
+      },
+      "production_input": "/Users/rogeriojorge/local/tests/sfincs_jax/benchmarks/production_resolution_inputs_2026-05-04/inputs/sfincsPaperFigure3_geometryScheme11_PASCollisions_2Species_fullTrajectories/input.namelist",
+      "production_resolution": {
+        "NTHETA": 25,
+        "NX": 5,
+        "NXI": 100,
+        "NZETA": 59
+      },
+      "reasons": [
+        "fortran_runtime_below_public_plot_floor"
+      ],
+      "run_recommendation": "remote_or_cluster_only",
+      "timeout_s": 3600,
+      "total_unknowns_estimate": 1475010
+    },
+    {
+      "backends": [
+        "cpu",
+        "gpu"
+      ],
+      "case": "tokamak_1species_FPCollisions_noEr",
+      "commands": {
+        "cpu": "PYTHONPATH=. python scripts/run_scaled_example_suite.py --examples-root benchmarks/production_resolution_inputs_2026-05-04/inputs --production-manifest benchmarks/production_resolution_inputs_2026-05-04/manifest.json --pattern '^tokamak_1species_FPCollisions_noEr$' --max-run-recommendation all --out-root tests/production_stress_cpu_campaign_2026-06-11/tokamak_1species_FPCollisions_noEr --fortran-exe /home/rjorge/sfincs/fortran/version3/sfincs --timeout-s 900 --max-attempts 1 --jobs 1 --reset-report --jax-profile-marks off",
+        "gpu": "CUDA_VISIBLE_DEVICES=1 JAX_PLATFORM_NAME=gpu PYTHONPATH=. python scripts/run_scaled_example_suite.py --examples-root benchmarks/production_resolution_inputs_2026-05-04/inputs --production-manifest benchmarks/production_resolution_inputs_2026-05-04/manifest.json --pattern '^tokamak_1species_FPCollisions_noEr$' --max-run-recommendation all --out-root tests/production_stress_gpu_campaign_2026-06-11/tokamak_1species_FPCollisions_noEr --fortran-exe /home/rjorge/sfincs/fortran/version3/sfincs --timeout-s 900 --max-attempts 1 --jobs 1 --reset-report --jax-profile-marks off"
+      },
+      "production_input": "/Users/rogeriojorge/local/tests/sfincs_jax/benchmarks/production_resolution_inputs_2026-05-04/inputs/tokamak_1species_FPCollisions_noEr/input.namelist",
+      "production_resolution": {
+        "NTHETA": 33,
+        "NX": 12,
+        "NXI": 140,
+        "NZETA": 1
+      },
+      "reasons": [
+        "fortran_runtime_below_public_plot_floor"
+      ],
+      "run_recommendation": "remote_or_cluster_only",
+      "timeout_s": 900,
+      "total_unknowns_estimate": 55440
+    },
+    {
+      "backends": [
+        "cpu",
+        "gpu"
+      ],
+      "case": "tokamak_1species_FPCollisions_withEr_DKESTrajectories",
+      "commands": {
+        "cpu": "PYTHONPATH=. python scripts/run_scaled_example_suite.py --examples-root benchmarks/production_resolution_inputs_2026-05-04/inputs --production-manifest benchmarks/production_resolution_inputs_2026-05-04/manifest.json --pattern '^tokamak_1species_FPCollisions_withEr_DKESTrajectories$' --max-run-recommendation all --out-root tests/production_stress_cpu_campaign_2026-06-11/tokamak_1species_FPCollisions_withEr_DKESTrajectories --fortran-exe /home/rjorge/sfincs/fortran/version3/sfincs --timeout-s 900 --max-attempts 1 --jobs 1 --reset-report --jax-profile-marks off",
+        "gpu": "CUDA_VISIBLE_DEVICES=1 JAX_PLATFORM_NAME=gpu PYTHONPATH=. python scripts/run_scaled_example_suite.py --examples-root benchmarks/production_resolution_inputs_2026-05-04/inputs --production-manifest benchmarks/production_resolution_inputs_2026-05-04/manifest.json --pattern '^tokamak_1species_FPCollisions_withEr_DKESTrajectories$' --max-run-recommendation all --out-root tests/production_stress_gpu_campaign_2026-06-11/tokamak_1species_FPCollisions_withEr_DKESTrajectories --fortran-exe /home/rjorge/sfincs/fortran/version3/sfincs --timeout-s 900 --max-attempts 1 --jobs 1 --reset-report --jax-profile-marks off"
+      },
+      "production_input": "/Users/rogeriojorge/local/tests/sfincs_jax/benchmarks/production_resolution_inputs_2026-05-04/inputs/tokamak_1species_FPCollisions_withEr_DKESTrajectories/input.namelist",
+      "production_resolution": {
+        "NTHETA": 33,
+        "NX": 12,
+        "NXI": 140,
+        "NZETA": 1
+      },
+      "reasons": [
+        "fortran_runtime_below_public_plot_floor"
+      ],
+      "run_recommendation": "remote_or_cluster_only",
+      "timeout_s": 900,
+      "total_unknowns_estimate": 55442
+    },
+    {
+      "backends": [
+        "cpu",
+        "gpu"
+      ],
+      "case": "tokamak_1species_FPCollisions_withEr_fullTrajectories",
+      "commands": {
+        "cpu": "PYTHONPATH=. python scripts/run_scaled_example_suite.py --examples-root benchmarks/production_resolution_inputs_2026-05-04/inputs --production-manifest benchmarks/production_resolution_inputs_2026-05-04/manifest.json --pattern '^tokamak_1species_FPCollisions_withEr_fullTrajectories$' --max-run-recommendation all --out-root tests/production_stress_cpu_campaign_2026-06-11/tokamak_1species_FPCollisions_withEr_fullTrajectories --fortran-exe /home/rjorge/sfincs/fortran/version3/sfincs --timeout-s 900 --max-attempts 1 --jobs 1 --reset-report --jax-profile-marks off",
+        "gpu": "CUDA_VISIBLE_DEVICES=1 JAX_PLATFORM_NAME=gpu PYTHONPATH=. python scripts/run_scaled_example_suite.py --examples-root benchmarks/production_resolution_inputs_2026-05-04/inputs --production-manifest benchmarks/production_resolution_inputs_2026-05-04/manifest.json --pattern '^tokamak_1species_FPCollisions_withEr_fullTrajectories$' --max-run-recommendation all --out-root tests/production_stress_gpu_campaign_2026-06-11/tokamak_1species_FPCollisions_withEr_fullTrajectories --fortran-exe /home/rjorge/sfincs/fortran/version3/sfincs --timeout-s 900 --max-attempts 1 --jobs 1 --reset-report --jax-profile-marks off"
+      },
+      "production_input": "/Users/rogeriojorge/local/tests/sfincs_jax/benchmarks/production_resolution_inputs_2026-05-04/inputs/tokamak_1species_FPCollisions_withEr_fullTrajectories/input.namelist",
+      "production_resolution": {
+        "NTHETA": 33,
+        "NX": 12,
+        "NXI": 140,
+        "NZETA": 1
+      },
+      "reasons": [
+        "fortran_runtime_below_public_plot_floor"
+      ],
+      "run_recommendation": "remote_or_cluster_only",
+      "timeout_s": 900,
+      "total_unknowns_estimate": 55442
+    },
+    {
+      "backends": [
+        "cpu",
+        "gpu"
+      ],
+      "case": "transportMatrix_geometryScheme11",
+      "commands": {
+        "cpu": "PYTHONPATH=. python scripts/run_scaled_example_suite.py --examples-root benchmarks/production_resolution_inputs_2026-05-04/inputs --production-manifest benchmarks/production_resolution_inputs_2026-05-04/manifest.json --pattern '^transportMatrix_geometryScheme11$' --max-run-recommendation all --out-root tests/production_stress_cpu_campaign_2026-06-11/transportMatrix_geometryScheme11 --fortran-exe /home/rjorge/sfincs/fortran/version3/sfincs --timeout-s 1800 --max-attempts 1 --jobs 1 --reset-report --jax-profile-marks off",
+        "gpu": "CUDA_VISIBLE_DEVICES=1 JAX_PLATFORM_NAME=gpu PYTHONPATH=. python scripts/run_scaled_example_suite.py --examples-root benchmarks/production_resolution_inputs_2026-05-04/inputs --production-manifest benchmarks/production_resolution_inputs_2026-05-04/manifest.json --pattern '^transportMatrix_geometryScheme11$' --max-run-recommendation all --out-root tests/production_stress_gpu_campaign_2026-06-11/transportMatrix_geometryScheme11 --fortran-exe /home/rjorge/sfincs/fortran/version3/sfincs --timeout-s 1800 --max-attempts 1 --jobs 1 --reset-report --jax-profile-marks off"
+      },
+      "production_input": "/Users/rogeriojorge/local/tests/sfincs_jax/benchmarks/production_resolution_inputs_2026-05-04/inputs/transportMatrix_geometryScheme11/input.namelist",
+      "production_resolution": {
+        "NTHETA": 25,
+        "NX": 6,
+        "NXI": 100,
+        "NZETA": 51
+      },
+      "reasons": [
+        "fortran_runtime_below_public_plot_floor"
+      ],
+      "run_recommendation": "remote_or_cluster_only",
+      "timeout_s": 1800,
+      "total_unknowns_estimate": 765002
+    },
+    {
+      "backends": [
+        "cpu",
+        "gpu"
+      ],
+      "case": "transportMatrix_geometryScheme2",
+      "commands": {
+        "cpu": "PYTHONPATH=. python scripts/run_scaled_example_suite.py --examples-root benchmarks/production_resolution_inputs_2026-05-04/inputs --production-manifest benchmarks/production_resolution_inputs_2026-05-04/manifest.json --pattern '^transportMatrix_geometryScheme2$' --max-run-recommendation all --out-root tests/production_stress_cpu_campaign_2026-06-11/transportMatrix_geometryScheme2 --fortran-exe /home/rjorge/sfincs/fortran/version3/sfincs --timeout-s 3600 --max-attempts 1 --jobs 1 --reset-report --jax-profile-marks off",
+        "gpu": "CUDA_VISIBLE_DEVICES=1 JAX_PLATFORM_NAME=gpu PYTHONPATH=. python scripts/run_scaled_example_suite.py --examples-root benchmarks/production_resolution_inputs_2026-05-04/inputs --production-manifest benchmarks/production_resolution_inputs_2026-05-04/manifest.json --pattern '^transportMatrix_geometryScheme2$' --max-run-recommendation all --out-root tests/production_stress_gpu_campaign_2026-06-11/transportMatrix_geometryScheme2 --fortran-exe /home/rjorge/sfincs/fortran/version3/sfincs --timeout-s 3600 --max-attempts 1 --jobs 1 --reset-report --jax-profile-marks off"
+      },
+      "production_input": "/Users/rogeriojorge/local/tests/sfincs_jax/benchmarks/production_resolution_inputs_2026-05-04/inputs/transportMatrix_geometryScheme2/input.namelist",
+      "production_resolution": {
+        "NTHETA": 25,
+        "NX": 8,
+        "NXI": 100,
+        "NZETA": 51
+      },
+      "reasons": [
+        "fortran_runtime_below_public_plot_floor"
+      ],
+      "run_recommendation": "remote_or_cluster_only",
+      "timeout_s": 3600,
+      "total_unknowns_estimate": 1020002
+    }
+  ],
+  "examples_root": "/Users/rogeriojorge/local/tests/sfincs_jax/benchmarks/production_resolution_inputs_2026-05-04/inputs",
+  "kind": "sfincs_jax_production_stress_campaign_plan",
+  "production_manifest": "/Users/rogeriojorge/local/tests/sfincs_jax/benchmarks/production_resolution_inputs_2026-05-04/manifest.json",
+  "repo": {
+    "commit": "ed4fc759c4de58e20bf89abc22cef123c1651036",
+    "root": "/Users/rogeriojorge/local/tests/sfincs_jax"
+  },
+  "run_guidance": [
+    "Run one case command at a time for first-pass evidence.",
+    "Use reference-results-root to reuse completed Fortran references before GPU reruns.",
+    "Do not regenerate public README/runtime plots from rows with status other than parity_ok.",
+    "Inspect fortran_profile on reference timeout rows to decide whether factor fill or wall-time budget is the blocker."
+  ],
+  "schema_version": 1,
+  "stress_manifest": "/Users/rogeriojorge/local/tests/sfincs_jax/benchmarks/production_stress_manifest_2026-06-11/manifest.json"
+}

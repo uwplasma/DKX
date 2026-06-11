@@ -345,6 +345,28 @@ Owner: incoming agent
   - ``_run_case`` coverage proving a Fortran timeout row carries
     ``fortran_profile`` and is classified as ``reference timeout``.
 
+### Execution status: production stress campaign plan
+
+- ``scripts/create_production_stress_campaign.py`` now turns the production
+  stress manifest into exact one-case CPU/GPU commands.
+- Checked artifacts:
+  - ``benchmarks/production_stress_manifest_2026-06-11/campaign_plan/campaign_plan.json``;
+  - ``benchmarks/production_stress_manifest_2026-06-11/campaign_plan/commands.sh``.
+- The campaign contains ``31`` unique public-performance candidates:
+  - ``16`` rows that were below the public benchmark resolution floor;
+  - ``15`` rows excluded from the public runtime plot because archived Fortran
+    v3 runtime was below ``10 s``.
+- Commands use anchored case patterns such as ``--pattern '^additional_examples$'``
+  and repo-relative production input paths, so they work from clean local or
+  office checkouts and avoid duplicate ``additional_examples`` runs.
+- Timeout tiers are based on the manifest unknown-count estimate:
+  - small cases: ``900-1800 s``;
+  - million-unknown geometry-rich rows: ``3600 s``;
+  - HSX-sized rows: ``5400 s``.
+- The plan is intentionally command/comment based rather than auto-executing all
+  rows, because these runs can be memory-heavy and should be scheduled one row
+  at a time until reference artifacts are available for reuse.
+
 ## 2026-06-10 Addendum: native block-Schur factor plus exact-Pmat LU admission rescue
 
 ### Implementation
