@@ -27990,3 +27990,69 @@ Decision:
   use the separator Schur complement as a correction.  It must pass setup
   admission, strict direct-tail true residual preflight, runtime, and RSS gates
   before it can be promoted beyond explicit/diagnostic use.
+
+### 2026-06-11 continuation: coupled kinetic true-action sparse coarse
+
+Goal:
+
+- Replace another layer of local-smoother tuning with a stronger bounded
+  active-operator architecture: retain dominant off-diagonal kinetic couplings
+  directly in an active-only coupled factor, then use the existing sparse
+  least-squares coarse residual equation as a correction rather than as the
+  main rescue.
+
+Implemented:
+
+- Added the production candidate
+  ``active_coupled_kinetic_field_split_sparse_coarse`` and aliases
+  ``active_coupled_kinetic_sparse_coarse``,
+  ``active_dominant_kinetic_sparse_coarse``, and
+  ``active_true_coupled_kinetic_sparse_coarse``.
+- The candidate reuses the existing ``active_coupled_kinetic_block`` true
+  off-diagonal kinetic factor as the base and then applies the sparse
+  field-split/coarse residual equation.  It has separate coarse-size and
+  admission knobs under
+  ``SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_COUPLED_KINETIC_COARSE_*``.
+- Added setup-time true-action admission for this new candidate using
+  deterministic probes.  Weak candidates now fail closed with
+  ``max_rel``, ``median_rel``, and ``min_improvement`` diagnostics before
+  GMRES/preflight.
+- Inserted the candidate into the large active-auto ladder between the bounded
+  native stack and the separator-Schur probe.  Existing native-xell/angular/
+  multiline sparse-coarse candidates keep their prior preflight behavior; only
+  the new coupled kinetic/coarse candidate is admitted at setup.
+
+Evidence:
+
+- ``pytest -q
+  tests/test_rhs1_full_assembly.py::test_active_coupled_kinetic_sparse_coarse_admits_true_coupled_factor
+  tests/test_rhs1_full_assembly.py::test_active_coupled_kinetic_sparse_coarse_rejects_weak_true_action
+  tests/test_rhs1_full_assembly.py::test_active_projected_auto_ladder_uses_large_default_candidates``:
+  ``3 passed``.
+- ``pytest -q tests/test_rhs1_full_assembly.py -k
+  "coupled_kinetic or sparse_coarse or bounded_native_stack or
+  auto_ladder_uses_large_default_candidates or symbolic_block_schur_lu"``:
+  ``15 passed, 74 deselected``.
+- ``pytest -q tests/test_v3_sparse_pattern.py -k
+  "direct_tail or active_symbolic or sparse_coarse or
+  active_fortran_v3_reduced_native_stack or
+  active_fortran_v3_reduced_lu_large_default_prefill"``:
+  ``28 passed, 103 deselected``.
+- ``pytest -q tests/test_explicit_sparse.py -k
+  "symbolic_block_schur_lu or coarse or admission"``:
+  ``6 passed, 28 deselected``.
+- ``ruff check sfincs_jax/rhs1_full_assembly.py tests/test_rhs1_full_assembly.py
+  --select F821,F401,F811``: passed.
+- ``python -m compileall -q sfincs_jax/rhs1_full_assembly.py
+  tests/test_rhs1_full_assembly.py`` and ``git diff --check``: passed.
+
+Decision:
+
+- This is a real coupled-factor/coarse architecture and is now safe to probe in
+  production because it either admits by deterministic true residuals or fails
+  closed.  It is not yet a production-grid closure claim.  The next gate is the
+  office CPU reference-reuse production probe on ``additional_examples`` at
+  ``25 x 51 x 100 x 8``.  If it fails admission, inspect the reported
+  ``max_rel``/``median_rel`` and decide whether the missing space is a
+  cross-block kinetic front, a source/current Schur mode, or a true direct-Pmat
+  reduced operator issue.

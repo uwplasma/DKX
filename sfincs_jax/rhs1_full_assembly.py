@@ -910,6 +910,7 @@ def build_active_projected_rhs1_full_csr_preconditioner(
                 "SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_AUTO_LARGE_CANDIDATES",
                 (
                     "active_fortran_v3_reduced_native_stack,"
+                    "active_coupled_kinetic_field_split_sparse_coarse,"
                     "active_symbolic_block_schur_lu,"
                     "active_fortran_v3_reduced_lu"
                 ),
@@ -1419,9 +1420,15 @@ def build_active_projected_rhs1_full_csr_preconditioner(
         "active_xell_angular_field_split_sparse_coarse",
         "active_coupled_multiline_field_split_sparse_coarse",
         "active_global_field_split_multiline_sparse_coarse",
+        "active_coupled_kinetic_field_split_sparse_coarse",
+        "active_coupled_kinetic_sparse_coarse",
+        "active_dominant_kinetic_sparse_coarse",
+        "active_true_coupled_kinetic_sparse_coarse",
     }:
         if layout is None:
             missing_kind = "active_native_xell_field_split_sparse_coarse"
+            if "coupled_kinetic" in kind_l or "dominant_kinetic" in kind_l:
+                missing_kind = "active_coupled_kinetic_field_split_sparse_coarse"
             if "angular" in kind_l and "xell_angular" not in kind_l:
                 missing_kind = "active_angular_line_field_split_sparse_coarse"
             if "multiline" in kind_l or "xell_angular" in kind_l:
@@ -5609,6 +5616,83 @@ def _active_nonkinetic_tail_size(
     return tail_size, bool(np.all(nonkinetic[-tail_size:]))
 
 
+def _admit_linear_operator_against_matrix(
+    *,
+    matrix: Any,
+    operator: Any,
+    probe_count: int,
+    max_relative_residual: float,
+    min_improvement_vs_identity: float,
+) -> tuple[bool, dict[str, object]]:
+    """Gate a preconditioner with deterministic true residual probes."""
+
+    from .explicit_sparse import deterministic_sparse_probe_matrix  # noqa: PLC0415
+
+    matrix_csr = matrix.tocsr()
+    n_rows, n_cols = int(matrix_csr.shape[0]), int(matrix_csr.shape[1])
+    if n_rows != n_cols:
+        metadata = {
+            "accepted": False,
+            "reason": "operator_not_square",
+            "max_relative_residual": float("inf"),
+            "median_relative_residual": float("inf"),
+            "min_improvement_vs_identity": 0.0,
+            "probe_count": 0,
+        }
+        return False, metadata
+    probes = deterministic_sparse_probe_matrix(
+        n_rows,
+        count=max(1, int(probe_count)),
+        dtype=matrix_csr.dtype,
+    )
+    tiny = np.finfo(np.float64).tiny
+    residuals: list[float] = []
+    improvements: list[float] = []
+    for col in range(int(probes.shape[1])):
+        rhs = np.asarray(probes[:, col], dtype=matrix_csr.dtype).reshape((n_rows,))
+        rhs_norm = max(tiny, float(np.linalg.norm(rhs.astype(np.float64, copy=False))))
+        try:
+            y = np.asarray(operator.matvec(rhs), dtype=matrix_csr.dtype).reshape((n_rows,))
+            residual = np.asarray(matrix_csr @ y - rhs, dtype=np.float64).reshape((-1,))
+            identity_residual = np.asarray(matrix_csr @ rhs - rhs, dtype=np.float64).reshape((-1,))
+            rel = float(np.linalg.norm(residual) / rhs_norm)
+            identity_rel = float(np.linalg.norm(identity_residual) / rhs_norm)
+        except Exception:  # noqa: BLE001
+            rel = float("inf")
+            identity_rel = 0.0
+        if not np.isfinite(rel):
+            rel = float("inf")
+        residuals.append(float(rel))
+        if rel <= tiny:
+            improvement = float("inf") if identity_rel > tiny else 1.0
+        else:
+            improvement = float(identity_rel / rel) if np.isfinite(identity_rel) else 0.0
+        if not np.isfinite(improvement) and improvement != float("inf"):
+            improvement = 0.0
+        improvements.append(float(improvement))
+    residuals_np = np.asarray(residuals, dtype=np.float64)
+    improvements_np = np.asarray(improvements, dtype=np.float64)
+    max_rel = float(np.max(residuals_np)) if residuals_np.size else float("inf")
+    median_rel = float(np.median(residuals_np)) if residuals_np.size else float("inf")
+    min_improvement = float(np.min(improvements_np)) if improvements_np.size else 0.0
+    accepted = bool(
+        np.isfinite(max_rel)
+        and max_rel <= float(max_relative_residual)
+        and min_improvement >= float(min_improvement_vs_identity)
+    )
+    metadata = {
+        "accepted": bool(accepted),
+        "reason": "accepted" if accepted else "residual_or_improvement_gate_failed",
+        "max_relative_residual": float(max_rel),
+        "median_relative_residual": float(median_rel),
+        "min_improvement_vs_identity": float(min_improvement),
+        "probe_count": int(probes.shape[1]),
+        "max_relative_residual_gate": float(max_relative_residual),
+        "min_improvement_vs_identity_gate": float(min_improvement_vs_identity),
+    }
+    return accepted, metadata
+
+
 def _build_active_projected_symbolic_block_schur_lu_preconditioner(
     *,
     matrix: Any,
@@ -6291,7 +6375,10 @@ def _build_active_projected_native_xell_field_split_sparse_coarse_preconditioner
     requested_kind_l = str(requested_kind).strip().lower().replace("-", "_")
     is_multiline = "multiline" in requested_kind_l or "xell_angular" in requested_kind_l
     is_angular_only = "angular" in requested_kind_l and not is_multiline
+    is_coupled_kinetic = "coupled_kinetic" in requested_kind_l or "dominant_kinetic" in requested_kind_l
     output_kind = "active_native_xell_field_split_sparse_coarse"
+    if is_coupled_kinetic:
+        output_kind = "active_coupled_kinetic_field_split_sparse_coarse"
     if is_angular_only:
         output_kind = "active_angular_line_field_split_sparse_coarse"
     if is_multiline:
@@ -6315,7 +6402,9 @@ def _build_active_projected_native_xell_field_split_sparse_coarse_preconditioner
         )
 
     requested_base_kind = "active_multiline_xell_angular"
-    if not is_multiline:
+    if bool(is_coupled_kinetic):
+        requested_base_kind = "active_coupled_kinetic_block"
+    elif not is_multiline:
         requested_base_kind = (
             "active_angular_line"
             if is_angular_only
@@ -6325,7 +6414,17 @@ def _build_active_projected_native_xell_field_split_sparse_coarse_preconditioner
             )
         )
         requested_base_kind = str(requested_base_kind).strip().lower().replace("-", "_") or "active_native_xell"
-    if is_multiline:
+    if bool(is_coupled_kinetic):
+        base = _build_active_projected_coupled_kinetic_block_preconditioner(
+            matrix=matrix_csr,
+            layout=layout,
+            active_indices=active_np,
+            requested_kind="active_coupled_kinetic_block",
+            regularization=regularization,
+            max_factor_nbytes=max_factor_nbytes,
+            t0=t0,
+        )
+    elif is_multiline:
         base = _build_active_projected_multiline_field_split_base_preconditioner(
             matrix=matrix_csr,
             layout=layout,
@@ -6357,7 +6456,11 @@ def _build_active_projected_native_xell_field_split_sparse_coarse_preconditioner
 
     config = _coarse_residual_config(layout)
     max_coarse_size = _env_int(
-        "SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_NATIVE_XELL_COARSE_MAX_SIZE",
+        (
+            "SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_COUPLED_KINETIC_COARSE_MAX_SIZE"
+            if bool(is_coupled_kinetic)
+            else "SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_NATIVE_XELL_COARSE_MAX_SIZE"
+        ),
         _env_int("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_SPARSE_COARSE_MAX_SIZE", 640),
     )
     max_coarse_size = max(1, int(max_coarse_size))
@@ -6488,6 +6591,76 @@ def _build_active_projected_native_xell_field_split_sparse_coarse_preconditioner
         return y_base + np.asarray(basis @ coeff, dtype=np.float64).reshape((-1,))
 
     operator = LinearOperator(matrix_csr.shape, matvec=apply, dtype=np.float64)
+    admission_metadata: dict[str, object] = {"admission_enabled": bool(is_coupled_kinetic), "accepted": True}
+    if bool(is_coupled_kinetic):
+        accepted, admission_metadata = _admit_linear_operator_against_matrix(
+            matrix=matrix_csr,
+            operator=operator,
+            probe_count=max(
+                1,
+                int(
+                    _env_int(
+                        "SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_COUPLED_KINETIC_COARSE_ADMISSION_PROBES",
+                        4,
+                    )
+                ),
+            ),
+            max_relative_residual=max(
+                0.0,
+                float(
+                    _env_float(
+                        "SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_COUPLED_KINETIC_COARSE_ADMISSION_MAX_RELATIVE_RESIDUAL",
+                        1.0e-2,
+                    )
+                ),
+            ),
+            min_improvement_vs_identity=max(
+                0.0,
+                float(
+                    _env_float(
+                        "SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_COUPLED_KINETIC_COARSE_ADMISSION_MIN_IMPROVEMENT",
+                        1.0,
+                    )
+                ),
+            ),
+        )
+        admission_metadata["admission_enabled"] = True
+        if not bool(accepted):
+            reason = (
+                "active_coupled_kinetic_sparse_coarse_admission_failed:"
+                f"{admission_metadata.get('reason', 'unknown')}:"
+                f"max_rel={float(admission_metadata.get('max_relative_residual', float('inf'))):.3e}:"
+                f"median_rel={float(admission_metadata.get('median_relative_residual', float('inf'))):.3e}:"
+                f"min_improvement={float(admission_metadata.get('min_improvement_vs_identity', 0.0)):.3e}"
+            )
+            return RHS1StructuredFullCSRPreconditioner(
+                operator=None,
+                selected=False,
+                kind=output_kind,
+                reason=reason,
+                setup_s=max(0.0, time.perf_counter() - t0),
+                metadata={
+                    "requested_kind": str(requested_kind),
+                    "architecture": "active_coupled_kinetic_true_action_sparse_coarse",
+                    "base_kind": str(base.kind),
+                    "requested_base_kind": str(requested_base_kind),
+                    "base_preconditioner": base.to_dict(),
+                    "active_size": int(matrix_csr.shape[0]),
+                    "coarse_size": int(coarse_size),
+                    "max_coarse_size": int(max_coarse_size),
+                    "projected_basis_nnz": int(basis.nnz),
+                    "az_basis_nnz": int(az_basis.nnz),
+                    "coarse_solver": str(solver_kind),
+                    "coarse_equation": str(coarse_solver_mode),
+                    "admission": dict(admission_metadata),
+                    "factor_nbytes_actual": int(total_nbytes),
+                    "max_factor_nbytes": int(max_factor_nbytes),
+                    "requires_preflight": True,
+                    **adaptive_metadata,
+                    **window_metadata,
+                    **config,
+                },
+            )
     return RHS1StructuredFullCSRPreconditioner(
         operator=operator,
         selected=True,
@@ -6497,12 +6670,16 @@ def _build_active_projected_native_xell_field_split_sparse_coarse_preconditioner
         metadata={
             "requested_kind": str(requested_kind),
             "architecture": (
-                "active_multiline_xell_angular_global_field_split_sparse_coarse"
-                if is_multiline
+                "active_coupled_kinetic_true_action_sparse_coarse"
+                if bool(is_coupled_kinetic)
                 else (
-                    "active_angular_line_global_field_split_sparse_coarse"
-                    if str(requested_base_kind) == "active_angular_line"
-                    else "active_native_xell_global_field_split_sparse_coarse"
+                    "active_multiline_xell_angular_global_field_split_sparse_coarse"
+                    if is_multiline
+                    else (
+                        "active_angular_line_global_field_split_sparse_coarse"
+                        if str(requested_base_kind) == "active_angular_line"
+                        else "active_native_xell_global_field_split_sparse_coarse"
+                    )
                 )
             ),
             "base_kind": str(base.kind),
@@ -6523,6 +6700,8 @@ def _build_active_projected_native_xell_field_split_sparse_coarse_preconditioner
             "base_factor_nbytes_actual": int(base_nbytes),
             "factor_nbytes_actual": int(total_nbytes),
             "max_factor_nbytes": int(max_factor_nbytes),
+            "admission": dict(admission_metadata),
+            "requires_preflight": bool(is_coupled_kinetic),
             "note": "opt_in_probe_not_auto_default",
             **adaptive_metadata,
             **window_metadata,

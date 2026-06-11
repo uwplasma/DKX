@@ -1190,15 +1190,19 @@ def test_active_projected_auto_ladder_uses_large_default_candidates(monkeypatch,
     assert pc.reason == "active_auto_no_safe_large_candidate_selected"
     assert pc.metadata["auto_candidates"] == [
         "active_fortran_v3_reduced_native_stack",
+        "active_coupled_kinetic_field_split_sparse_coarse",
         "active_symbolic_block_schur_lu",
         "active_fortran_v3_reduced_lu",
     ]
     assert pc.metadata["auto_large_default_used"] is True
     assert pc.metadata["auto_rejected_candidates"][0]["kind"] == "active_fortran_v3_reduced_native_stack"
-    assert pc.metadata["auto_rejected_candidates"][1]["kind"] == "active_symbolic_block_schur_lu"
-    assert pc.metadata["auto_rejected_candidates"][2]["kind"] == "active_fortran_v3_reduced_lu"
+    assert pc.metadata["auto_rejected_candidates"][1]["kind"] == "active_coupled_kinetic_field_split_sparse_coarse"
+    assert pc.metadata["auto_rejected_candidates"][2]["kind"] == "active_symbolic_block_schur_lu"
+    assert pc.metadata["auto_rejected_candidates"][3]["kind"] == "active_fortran_v3_reduced_lu"
     assert "auto candidate start kind=active_fortran_v3_reduced_native_stack" in out
     assert "auto candidate done kind=active_fortran_v3_reduced_native_stack" in out
+    assert "auto candidate start kind=active_coupled_kinetic_field_split_sparse_coarse" in out
+    assert "auto candidate done kind=active_coupled_kinetic_field_split_sparse_coarse" in out
     assert "auto candidate start kind=active_symbolic_block_schur_lu" in out
     assert "auto candidate done kind=active_symbolic_block_schur_lu" in out
     assert "auto candidate start kind=active_fortran_v3_reduced_lu" in out
@@ -2330,6 +2334,129 @@ def test_active_filtered_sparse_factor_retains_selected_offdiagonal_couplings(mo
     applied = np.asarray(pc.operator.matvec(rhs), dtype=np.float64)
     assert applied.shape == rhs.shape
     assert np.all(np.isfinite(applied))
+
+
+def test_active_coupled_kinetic_sparse_coarse_admits_true_coupled_factor(monkeypatch) -> None:
+    layout = RHS1BlockLayout(
+        n_species=1,
+        n_x=1,
+        n_xi=2,
+        n_theta=2,
+        n_zeta=1,
+        f_size=4,
+        phi1_size=0,
+        extra_size=2,
+        total_size=6,
+        constraint_scheme=1,
+        include_phi1=False,
+        include_phi1_in_kinetic=False,
+        rhs_mode=1,
+    )
+    kinetic = np.asarray(
+        [
+            [3.2, -0.7, 0.9, 0.3],
+            [0.6, 2.9, -0.8, 0.7],
+            [0.8, -0.5, 3.4, -0.9],
+            [-0.4, 0.6, 0.5, 2.8],
+        ],
+        dtype=np.float64,
+    )
+    u = np.asarray([[0.20, -0.15], [0.08, 0.17], [-0.22, 0.19], [0.12, -0.09]], dtype=np.float64)
+    v = np.asarray([[0.11, -0.16, 0.24, -0.18], [-0.21, 0.09, -0.13, 0.25]], dtype=np.float64)
+    w = np.asarray([[1.6, 0.07], [-0.05, 1.8]], dtype=np.float64)
+    matrix = sp.bmat(
+        [[sp.csr_matrix(kinetic), sp.csr_matrix(u)], [sp.csr_matrix(v), sp.csr_matrix(w)]],
+        format="csr",
+    )
+    active = np.arange(layout.total_size, dtype=np.int64)
+    monkeypatch.setenv("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_COUPLED_KINETIC_X_COUNT", "1")
+    monkeypatch.setenv("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_COUPLED_KINETIC_ELL_COUNT", "2")
+    monkeypatch.setenv("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_COUPLED_KINETIC_MAX_BLOCK_SIZE", "16")
+    monkeypatch.setenv("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_COUPLED_KINETIC_MAX_POSITIONS", "16")
+    monkeypatch.setenv("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_COUPLED_KINETIC_BASE", "zero")
+    monkeypatch.setenv("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_COUPLED_KINETIC_FACTOR_KIND", "splu")
+    monkeypatch.setenv(
+        "SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_COUPLED_KINETIC_COARSE_ADMISSION_MAX_RELATIVE_RESIDUAL",
+        "1e-11",
+    )
+
+    pc = build_active_projected_rhs1_full_csr_preconditioner(
+        matrix=matrix,
+        layout=layout,
+        active_indices=active,
+        kind="active_coupled_kinetic_field_split_sparse_coarse",
+        max_factor_nbytes=1_000_000,
+        regularization=0.0,
+    )
+
+    assert pc.selected, pc.to_dict()
+    assert pc.kind == "active_coupled_kinetic_field_split_sparse_coarse"
+    assert pc.metadata["architecture"] == "active_coupled_kinetic_true_action_sparse_coarse"
+    assert pc.metadata["base_preconditioner"]["kind"] == "active_coupled_kinetic_block"
+    assert pc.metadata["admission"]["accepted"] is True
+    assert pc.metadata["requires_preflight"] is True
+    rhs = _deterministic_vector(layout.total_size)
+    residual = rhs - np.asarray(matrix @ np.asarray(pc.operator.matvec(rhs), dtype=np.float64))
+    assert np.linalg.norm(residual) < 1.0e-10
+
+
+def test_active_coupled_kinetic_sparse_coarse_rejects_weak_true_action(monkeypatch) -> None:
+    layout = RHS1BlockLayout(
+        n_species=1,
+        n_x=1,
+        n_xi=2,
+        n_theta=2,
+        n_zeta=1,
+        f_size=4,
+        phi1_size=0,
+        extra_size=2,
+        total_size=6,
+        constraint_scheme=1,
+        include_phi1=False,
+        include_phi1_in_kinetic=False,
+        rhs_mode=1,
+    )
+    matrix = sp.csr_matrix(
+        [
+            [3.0, 0.4, 1.6, 0.0, 0.2, 0.0],
+            [0.1, 2.7, 0.0, -1.2, 0.0, 0.2],
+            [1.1, 0.0, 3.4, 0.5, 0.2, 0.0],
+            [0.0, -0.9, 0.2, 2.8, 0.0, 0.1],
+            [0.1, 0.0, 0.2, 0.0, 1.6, 0.3],
+            [0.0, 0.2, 0.0, 0.1, 0.4, 1.8],
+        ],
+        dtype=np.float64,
+    )
+    active = np.arange(layout.total_size, dtype=np.int64)
+    monkeypatch.setenv("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_COUPLED_KINETIC_X_COUNT", "1")
+    monkeypatch.setenv("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_COUPLED_KINETIC_ELL_COUNT", "1")
+    monkeypatch.setenv("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_COUPLED_KINETIC_MAX_BLOCK_SIZE", "4")
+    monkeypatch.setenv("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_COUPLED_KINETIC_MAX_POSITIONS", "2")
+    monkeypatch.setenv("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_COUPLED_KINETIC_MAX_TAIL", "0")
+    monkeypatch.setenv("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_COUPLED_KINETIC_BASE", "zero")
+    monkeypatch.setenv("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_COUPLED_KINETIC_FACTOR_KIND", "splu")
+    monkeypatch.setenv("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_COUPLED_KINETIC_COARSE_MAX_SIZE", "1")
+    monkeypatch.setenv(
+        "SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_COUPLED_KINETIC_COARSE_ADMISSION_MAX_RELATIVE_RESIDUAL",
+        "1e-6",
+    )
+
+    pc = build_active_projected_rhs1_full_csr_preconditioner(
+        matrix=matrix,
+        layout=layout,
+        active_indices=active,
+        kind="active_coupled_kinetic_field_split_sparse_coarse",
+        max_factor_nbytes=1_000_000,
+        regularization=0.0,
+    )
+
+    assert not pc.selected
+    assert pc.kind == "active_coupled_kinetic_field_split_sparse_coarse"
+    assert pc.reason.startswith("active_coupled_kinetic_sparse_coarse_admission_failed:")
+    assert "max_rel=" in pc.reason
+    assert "min_improvement=" in pc.reason
+    assert pc.metadata["admission"]["accepted"] is False
+    assert pc.metadata["requires_preflight"] is True
 
 
 def test_active_filtered_sparse_factor_prefill_gate_rejects_before_factorization(monkeypatch) -> None:
