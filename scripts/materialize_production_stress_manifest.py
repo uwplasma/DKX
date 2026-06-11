@@ -10,7 +10,7 @@ bounded, auditable list rather than from ad hoc case names.
 from __future__ import annotations
 
 import argparse
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 import hashlib
 import json
 from pathlib import Path
@@ -386,7 +386,7 @@ def build_manifest(
     return {
         "schema_version": 1,
         "kind": "sfincs_jax_production_stress_manifest",
-        "generated_at_utc": datetime.now(UTC).replace(microsecond=0).isoformat(),
+        "generated_at_utc": datetime.now(timezone.utc).replace(microsecond=0).isoformat(),
         "repo": {
             "root": str(REPO_ROOT),
             "commit": _repo_commit(),

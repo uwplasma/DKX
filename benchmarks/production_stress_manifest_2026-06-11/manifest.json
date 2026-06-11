@@ -1709,7 +1709,7 @@
     "Promote or regenerate QI nfp1-4 VMEC-JAX fixtures into owned external-data artifacts.",
     "Only regenerate README/docs runtime, memory, parity, and bootstrap figures from passing artifacts."
   ],
-  "generated_at_utc": "2026-06-11T02:48:25+00:00",
+  "generated_at_utc": "2026-06-11T02:52:27+00:00",
   "kind": "sfincs_jax_production_stress_manifest",
   "open_lanes": [
     {
@@ -1986,7 +1986,7 @@
     "source": "/Users/rogeriojorge/local/tests/sfincs_jax/docs/_static/qi_seed_robustness_evidence_manifest.json"
   },
   "repo": {
-    "commit": "b14ee7101acecf0910734edaf59d9de0e684371a",
+    "commit": "750672069a2dc7523810d0cadbcc0b9dfa9ef77d",
     "root": "/Users/rogeriojorge/local/tests/sfincs_jax"
   },
   "schema_version": 1,
