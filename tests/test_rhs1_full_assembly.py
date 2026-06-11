@@ -2450,6 +2450,40 @@ def test_active_symbolic_coupled_schur_uses_symbolic_kinetic_and_tail_space(monk
     assert np.linalg.norm(residual) < 1.0e-8
 
 
+def test_active_symbolic_coupled_schur_large_size_gate_fails_fast(monkeypatch) -> None:
+    layout = RHS1BlockLayout(
+        n_species=1,
+        n_x=1,
+        n_xi=2,
+        n_theta=2,
+        n_zeta=1,
+        f_size=4,
+        phi1_size=0,
+        extra_size=2,
+        total_size=6,
+        constraint_scheme=1,
+        include_phi1=False,
+        include_phi1_in_kinetic=False,
+        rhs_mode=1,
+    )
+    matrix = sp.eye(layout.total_size, dtype=np.float64, format="csr")
+    monkeypatch.setenv("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_SYMBOLIC_SCHUR_MAX_ACTIVE_SIZE", "5")
+
+    pc = build_active_projected_rhs1_full_csr_preconditioner(
+        matrix=matrix,
+        layout=layout,
+        active_indices=np.arange(layout.total_size, dtype=np.int64),
+        kind="active_symbolic_coupled_schur",
+        max_factor_nbytes=2_000_000,
+        regularization=0.0,
+    )
+
+    assert not pc.selected
+    assert pc.reason == "active_symbolic_coupled_schur_size_exceeded:6>5"
+    assert pc.metadata["active_size"] == 6
+    assert pc.metadata["max_active_size"] == 5
+
+
 def test_structured_full_csr_active_global_field_split_schur_gmres_reaches_true_residual() -> None:
     clear_structured_rhs1_full_csr_cache(clear_fblock_cache=True)
     nml = read_sfincs_input(REF / "quick_2species_FPCollisions_noEr.input.namelist")

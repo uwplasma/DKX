@@ -5529,6 +5529,30 @@ def _build_active_projected_symbolic_coupled_schur_preconditioner(
     from scipy.sparse.linalg import LinearOperator  # noqa: PLC0415
 
     matrix_csr = matrix.tocsr()
+    active_size = int(matrix_csr.shape[0])
+    max_active_size = int(
+        _env_int(
+            "SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_SYMBOLIC_SCHUR_MAX_ACTIVE_SIZE",
+            300_000,
+        )
+    )
+    if int(max_active_size) > 0 and int(active_size) > int(max_active_size):
+        return RHS1StructuredFullCSRPreconditioner(
+            operator=None,
+            selected=False,
+            kind="active_symbolic_coupled_schur",
+            reason=f"active_symbolic_coupled_schur_size_exceeded:{active_size}>{int(max_active_size)}",
+            setup_s=max(0.0, time.perf_counter() - t0),
+            metadata={
+                "active_size": int(active_size),
+                "max_active_size": int(max_active_size),
+                "requested_kind": str(requested_kind),
+                "note": (
+                    "increase SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_SYMBOLIC_SCHUR_MAX_ACTIVE_SIZE "
+                    "for explicit large probes"
+                ),
+            },
+        )
     active_np = (
         np.arange(int(layout.total_size), dtype=np.int64)
         if active_indices is None

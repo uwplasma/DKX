@@ -27751,6 +27751,12 @@ Evidence:
 - Timeout markers in failed JAX logs now override earlier internal
   ``elapsed_s=...`` phase markers, so future timeout reports show the cap that
   was actually reached rather than the last completed setup phase.
+- Added a size admission gate for ``active_symbolic_coupled_schur``:
+  production-size active systems above ``300,000`` unknowns reject before the
+  expensive symbolic/native coarse setup unless the user explicitly raises
+  ``SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_SYMBOLIC_SCHUR_MAX_ACTIVE_SIZE``.  This
+  converts the observed ``300 s`` opt-in timeout into a fast fail-closed
+  rejection while preserving the candidate for bounded research probes.
 - ``pytest -q tests/test_scaled_example_suite_reference.py -k
   "classify_blocker or fortran_timeout or fortran_profile"
   tests/test_v3_sparse_pattern.py::test_fortran_reduced_direct_tail_large_auto_fails_closed_before_host_factor_fallback
@@ -27766,6 +27772,13 @@ Evidence:
   fortran_profile"
   tests/test_v3_sparse_pattern.py::test_fortran_reduced_direct_tail_large_auto_fails_closed_before_host_factor_fallback
   tests/test_rhs1_full_assembly.py::test_active_fortran_v3_reduced_lu_large_default_prefill_rejects_observed_production_estimate``:
+  ``8 passed``.
+- ``pytest -q tests/test_rhs1_full_assembly.py -k
+  "symbolic_coupled_schur or
+  active_fortran_v3_reduced_lu_large_default_prefill"
+  tests/test_scaled_example_suite_reference.py -k "classify_blocker or
+  parse_gnu_time or timeout_marker or fortran_timeout or fortran_profile"
+  tests/test_v3_sparse_pattern.py::test_fortran_reduced_direct_tail_large_auto_fails_closed_before_host_factor_fallback``:
   ``8 passed``.
 
 Decision:
