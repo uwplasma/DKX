@@ -46,6 +46,39 @@ def test_pas_l0_is_null_and_inactive_legendre_slots_are_masked() -> None:
     assert np.all(out[:, :, 1, :, :] > 0.0)
 
 
+def test_pas_arbitrary_l0_is_null_and_anisotropic_modes_are_dissipative() -> None:
+    op = _pas_operator()
+    f = np.zeros((1, 3, 5, 2, 2), dtype=np.float64)
+    f[:, :, 0, :, :] = np.asarray(
+        [
+            [
+                [[1.0, -0.5], [0.25, 2.0]],
+                [[-1.5, 0.7], [3.0, -2.0]],
+                [[0.1, 0.3], [-0.4, 0.9]],
+            ]
+        ],
+        dtype=np.float64,
+    )
+    out_l0 = np.asarray(apply_pitch_angle_scattering_v3(op, jnp.asarray(f)))
+    np.testing.assert_allclose(out_l0, 0.0, rtol=0.0, atol=0.0)
+
+    anisotropic = np.arange(1, 1 + np.prod(f.shape), dtype=np.float64).reshape(f.shape) / 11.0
+    anisotropic[:, :, 0, :, :] = 0.0
+    out = np.asarray(apply_pitch_angle_scattering_v3(op, jnp.asarray(anisotropic)))
+
+    coef = np.asarray(op.coef[0], dtype=np.float64)
+    ell_mask = np.arange(anisotropic.shape[2])[None, :] < np.asarray(op.n_xi_for_x)[:, None]
+    expected_quadratic_form = np.sum(
+        coef[None, :, :, None, None]
+        * ell_mask[None, :, :, None, None]
+        * anisotropic
+        * anisotropic
+    )
+    actual_quadratic_form = np.sum(anisotropic * out)
+    assert expected_quadratic_form > 0.0
+    np.testing.assert_allclose(actual_quadratic_form, expected_quadratic_form, rtol=0.0, atol=1.0e-12)
+
+
 def test_pas_legendre_eigenvalues_follow_l_lplus1_over_two() -> None:
     op = _pas_operator()
     coef = np.asarray(op.coef[0])
