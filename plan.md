@@ -309,6 +309,18 @@ Owner: incoming agent
     timeouts as ``reference timeout``;
   - ``tests/test_scaled_example_suite_reference.py`` covers the new blocker
     classification.
+  - ``scripts/run_scaled_example_suite.py`` now suppresses the implicit
+    ``examples/additional_examples`` extra input when a generated production
+    manifest is active. This prevents production probes from accidentally
+    running both the production ``additional_examples`` deck and the default
+    local extra deck.
+- Office pattern check after that fix:
+  - broad pattern ``additional_examples`` selected exactly one row,
+    ``additional_examples`` from
+    ``benchmarks/production_resolution_inputs_2026-05-04/inputs``;
+  - a ``1 s`` timeout probe returned ``max_attempts`` with blocker
+    ``reference timeout``, confirming both the filter fix and the new blocker
+    classification.
 
 ## 2026-06-10 Addendum: native block-Schur factor plus exact-Pmat LU admission rescue
 
