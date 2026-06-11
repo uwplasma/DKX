@@ -2364,6 +2364,73 @@ def test_active_filtered_sparse_factor_prefill_gate_rejects_before_factorization
     assert pc.metadata["prefill_safety_factor"] == 10.0
 
 
+def test_active_filtered_sparse_factor_sparse_coarse_wraps_true_residual(monkeypatch) -> None:
+    layout = RHS1BlockLayout(
+        n_species=1,
+        n_x=1,
+        n_xi=2,
+        n_theta=2,
+        n_zeta=1,
+        f_size=4,
+        phi1_size=0,
+        extra_size=2,
+        total_size=6,
+        constraint_scheme=1,
+        include_phi1=False,
+        include_phi1_in_kinetic=False,
+        rhs_mode=1,
+    )
+    kinetic = np.asarray(
+        [
+            [3.2, -0.35, 0.18, 0.00],
+            [0.24, 2.9, -0.31, 0.12],
+            [0.10, -0.22, 3.4, -0.28],
+            [0.00, 0.16, 0.25, 2.8],
+        ],
+        dtype=np.float64,
+    )
+    u = np.asarray([[0.10, -0.05], [0.02, 0.08], [-0.12, 0.14], [0.07, -0.03]], dtype=np.float64)
+    v = np.asarray([[0.04, -0.09, 0.11, -0.10], [-0.13, 0.02, -0.06, 0.16]], dtype=np.float64)
+    w = np.asarray([[1.7, 0.05], [-0.04, 1.5]], dtype=np.float64)
+    matrix = sp.bmat(
+        [[sp.csr_matrix(kinetic), sp.csr_matrix(u)], [sp.csr_matrix(v), sp.csr_matrix(w)]],
+        format="csr",
+    )
+    active = np.arange(layout.total_size, dtype=np.int64)
+    monkeypatch.setenv("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_FILTERED_FACTOR_KIND", "splu")
+    monkeypatch.setenv("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_FILTERED_FACTOR_X_RADIUS", "0")
+    monkeypatch.setenv("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_FILTERED_FACTOR_ELL_RADIUS", "0")
+    monkeypatch.setenv("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_FILTERED_FACTOR_THETA_RADIUS", "0")
+    monkeypatch.setenv("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_FILTERED_FACTOR_ZETA_RADIUS", "0")
+
+    base = build_active_projected_rhs1_full_csr_preconditioner(
+        matrix=matrix,
+        layout=layout,
+        active_indices=active,
+        kind="active_filtered_sparse_factor",
+        max_factor_nbytes=2_000_000,
+        regularization=0.0,
+    )
+    pc = build_active_projected_rhs1_full_csr_preconditioner(
+        matrix=matrix,
+        layout=layout,
+        active_indices=active,
+        kind="active_filtered_sparse_factor_sparse_coarse",
+        max_factor_nbytes=2_000_000,
+        regularization=0.0,
+    )
+
+    assert base.selected, base.to_dict()
+    assert pc.selected, pc.to_dict()
+    assert pc.metadata["architecture"] == "filtered_sparse_factor_global_sparse_coarse"
+    assert pc.metadata["base_kind"] == "active_filtered_sparse_factor"
+    assert pc.metadata["requires_preflight"] is True
+    rhs = _deterministic_vector(layout.total_size)
+    base_residual = rhs - np.asarray(matrix @ np.asarray(base.operator.matvec(rhs), dtype=np.float64))
+    pc_residual = rhs - np.asarray(matrix @ np.asarray(pc.operator.matvec(rhs), dtype=np.float64))
+    assert np.linalg.norm(pc_residual) <= 1.0e-10 * max(np.linalg.norm(base_residual), 1.0)
+
+
 def test_active_symbolic_coupled_schur_can_use_coupled_kinetic_factor_base(monkeypatch) -> None:
     layout = RHS1BlockLayout(
         n_species=1,

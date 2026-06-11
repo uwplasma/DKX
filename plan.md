@@ -3,6 +3,60 @@
 Last updated: 2026-06-11 (America/Chicago)
 Owner: incoming agent
 
+## 2026-06-11 Addendum: filtered-factor true-coarse replacement probe
+
+### Implementation
+
+- Added the explicit RHSMode=1 active projected candidate
+  ``active_filtered_sparse_factor_sparse_coarse`` (aliases:
+  ``active_filtered_sparse_coarse``, ``active_filtered_factor_sparse_coarse``,
+  and ``active_physics_filtered_sparse_coarse``).
+- The candidate reuses the memory-bounded
+  ``active_filtered_sparse_factor`` as the base inverse, then applies the
+  existing sparse true-action coarse residual equation over the
+  source/constraint/profile moment basis.  This is a real coupled residual
+  correction on top of the low-memory filtered factor, not another smoother or
+  restart-policy variant.
+- The composite path records
+  ``architecture=filtered_sparse_factor_global_sparse_coarse`` and
+  ``requires_preflight=True``.  The driver must still reject it before GMRES if
+  the one-application true residual fails the strict preflight gate.
+
+### Evidence
+
+- Added
+  ``test_active_filtered_sparse_factor_sparse_coarse_wraps_true_residual``.
+  The test builds a coupled kinetic/tail active system, constructs both the
+  incomplete filtered factor and the filtered-plus-coarse composite, and checks
+  that the composite true residual is driven to roundoff on the controlled
+  system.
+- Focused validation:
+  ``pytest -q tests/test_rhs1_full_assembly.py -k "filtered_sparse_factor"``
+  passed with ``3 passed``.
+- Expanded focused validation:
+  ``pytest -q tests/test_rhs1_full_assembly.py -k
+  "filtered_sparse_factor or sparse_coarse or symbolic_coupled_schur or
+  active_fortran_v3_reduced_lu_large_default_prefill"
+  tests/test_scaled_example_suite_reference.py -k
+  "classify_blocker or parse_gnu_time or timeout_marker"
+  tests/test_v3_sparse_pattern.py::test_fortran_reduced_direct_tail_large_auto_fails_closed_before_host_factor_fallback``
+  passed with ``8 passed``.
+- ``ruff check sfincs_jax/rhs1_full_assembly.py
+  tests/test_rhs1_full_assembly.py --select F821,F401,F811``,
+  ``python -m compileall -q sfincs_jax/rhs1_full_assembly.py
+  tests/test_rhs1_full_assembly.py``, and ``git diff --check`` passed.
+- GitHub CI for the preceding fail-closed/preflight-classifier push completed
+  successfully:
+  ``https://github.com/uwplasma/sfincs_jax/actions/runs/27347561074``.
+
+### Decision
+
+- Keep the new candidate opt-in until the production-floor
+  ``additional_examples`` / QA-QH RHSMode=1 CPU probe passes the true residual,
+  runtime, and RSS gates.  This path is the next bounded-memory production
+  replacement to test because the prior low-memory filtered factor built safely
+  but failed preflight by worsening the residual.
+
 ## 2026-06-10 Addendum: final production-readiness stress-test plan after v1.1.6
 
 ### Current verified state

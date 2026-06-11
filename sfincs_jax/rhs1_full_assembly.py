@@ -1081,6 +1081,10 @@ def build_active_projected_rhs1_full_csr_preconditioner(
         "active_diagonal_schur_sparse_coarse",
         "active_diagonal_schur_coarse",
         "active_coupled_tail_coarse",
+        "active_filtered_sparse_coarse",
+        "active_filtered_sparse_factor_sparse_coarse",
+        "active_filtered_factor_sparse_coarse",
+        "active_physics_filtered_sparse_coarse",
         "active_xblock_sparse_coarse",
         "active_xblock_tail_sparse_coarse",
         "active_xblock_coupled_tail_coarse",
@@ -6208,6 +6212,8 @@ def _build_active_projected_sparse_coarse_residual_preconditioner(
         base_kind = "active_scaled_ilu"
     elif "schwarz" in requested_norm or "ras" in requested_norm:
         base_kind = "active_overlap_schwarz"
+    elif "filtered" in requested_norm:
+        base_kind = "active_filtered_sparse_factor"
     elif "xblock" in requested_norm:
         base_kind = "active_xblock"
     else:
@@ -6361,7 +6367,11 @@ def _build_active_projected_sparse_coarse_residual_preconditioner(
                 else (
                     "additive_schwarz_global_sparse_coarse"
                     if str(base_kind) == "active_overlap_schwarz"
-                    else "field_split_global_sparse_coarse"
+                    else (
+                        "filtered_sparse_factor_global_sparse_coarse"
+                        if str(base_kind) == "active_filtered_sparse_factor"
+                        else "field_split_global_sparse_coarse"
+                    )
                 )
             ),
             "base_preconditioner": base.to_dict(),
@@ -6379,6 +6389,7 @@ def _build_active_projected_sparse_coarse_residual_preconditioner(
             "coarse_nbytes_actual": int(coarse_nbytes),
             "base_factor_nbytes_actual": int(base_nbytes),
             "factor_nbytes_actual": int(total_nbytes),
+            "requires_preflight": True,
             **config,
         },
     )
