@@ -28188,6 +28188,12 @@ Evidence:
   The setup admission rejected the factor with
   ``max_rel=4.073e+06``, ``median_rel=2.465e+06``, and
   ``min_improvement=3.684e-06``.  This is not production-viable.
+- After adding the retained-coupling pre-factor gate, a strict
+  ``MIN_RETAINED_CROSS_FRACTION=0.95`` production preflight on the same case
+  failed closed in ``44.9 s`` and ``2.97 GB`` RSS, before the expensive
+  numerical factorization.  This confirms the new gate prevents the previous
+  ``39 GB`` diagnostic attempt when the symbolic grouping cannot retain enough
+  of the reduced-Pmat coupling.
 - The same Fortran v3 reference run uses MUMPS 5.8.2 with METIS ordering on the
   same ``whichMatrix=0`` preconditioner matrix: ``648,977`` unknowns,
   ``12,176,533`` nnz, estimated factor entries ``1.274e9``, effective factor
