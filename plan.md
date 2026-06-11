@@ -27737,6 +27737,20 @@ Evidence:
   budget in ``1.737 s``, and stopped before the generic host sparse-factor
   fallback.  This confirms the default no longer repeats the earlier
   ``47.96 GiB`` SIGKILL path.
+- Re-running the same reference-reuse probe on commit ``0ac3818`` produced a
+  compact suite report with ``blocker=solver policy fail-closed``, JAX attempt
+  time ``22.2 s``, JAX peak RSS ``3.47 GiB``, and JAX/Fortran RSS ratio
+  ``0.276``.  This is a controlled diagnostic stop, not a solved production
+  row.
+- A bounded CPU probe of the strongest existing coupled symbolic/native Schur
+  candidate, ``active_symbolic_coupled_schur`` with coarse size ``384`` and
+  identity columns ``256``, reached direct-tail Pmat materialization in
+  ``17.779 s`` but timed out at the ``300 s`` per-attempt cap inside candidate
+  setup before selecting a preconditioner or entering Krylov.  This candidate
+  is therefore not a production replacement in its current form.
+- Timeout markers in failed JAX logs now override earlier internal
+  ``elapsed_s=...`` phase markers, so future timeout reports show the cap that
+  was actually reached rather than the last completed setup phase.
 - ``pytest -q tests/test_scaled_example_suite_reference.py -k
   "classify_blocker or fortran_timeout or fortran_profile"
   tests/test_v3_sparse_pattern.py::test_fortran_reduced_direct_tail_large_auto_fails_closed_before_host_factor_fallback
@@ -27747,6 +27761,12 @@ Evidence:
   tests/test_v3_sparse_pattern.py::test_fortran_reduced_direct_tail_large_auto_fails_closed_before_host_factor_fallback
   tests/test_rhs1_full_assembly.py::test_active_fortran_v3_reduced_lu_large_default_prefill_rejects_observed_production_estimate``:
   ``7 passed``.
+- ``pytest -q tests/test_scaled_example_suite_reference.py -k
+  "classify_blocker or parse_gnu_time or timeout_marker or fortran_timeout or
+  fortran_profile"
+  tests/test_v3_sparse_pattern.py::test_fortran_reduced_direct_tail_large_auto_fails_closed_before_host_factor_fallback
+  tests/test_rhs1_full_assembly.py::test_active_fortran_v3_reduced_lu_large_default_prefill_rejects_observed_production_estimate``:
+  ``8 passed``.
 
 Decision:
 

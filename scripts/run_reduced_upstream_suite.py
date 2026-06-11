@@ -913,6 +913,10 @@ _GNU_TIME_ELAPSED_PATTERN = re.compile(
     r"elapsed\s*\(wall clock\).*:\s*([0-9]+(?::[0-9]+){1,2}(?:\.[0-9]+)?)",
     flags=re.IGNORECASE,
 )
+_SUBPROCESS_TIMEOUT_PATTERN = re.compile(
+    r"subprocess timed out after\s*([-+0-9.eEdD]+)\s*s",
+    flags=re.IGNORECASE,
+)
 
 
 def _parse_colon_elapsed_s(token: str) -> float | None:
@@ -953,6 +957,12 @@ def _parse_elapsed_s_from_log(path: Path) -> float | None:
             parsed = _parse_colon_elapsed_s(match.group(1))
             if parsed is not None:
                 elapsed = float(parsed)
+        match = _SUBPROCESS_TIMEOUT_PATTERN.search(line)
+        if match is not None:
+            try:
+                elapsed = float(match.group(1).replace("D", "E").replace("d", "e"))
+            except ValueError:
+                pass
     return elapsed
 
 

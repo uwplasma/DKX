@@ -709,6 +709,19 @@ def test_parse_gnu_time_elapsed_and_rss_from_failed_jax_log(tmp_path: Path) -> N
     assert metrics["jax_max_rss_mb"] == pytest.approx(3553380.0 / 1024.0)
 
 
+def test_parse_timeout_marker_overrides_internal_elapsed_phase(tmp_path: Path) -> None:
+    log_path = tmp_path / "sfincs_jax.log"
+    log_path.write_text(
+        "solve_v3_full_system_linear_gmres: fortran_reduced direct-tail materialization "
+        "complete elapsed_s=17.779\n"
+        "\n[sfincs_jax subprocess timed out after 300.0s]\n",
+        encoding="utf-8",
+    )
+
+    assert _parse_elapsed_s_from_log(log_path) == pytest.approx(300.0)
+    assert _jax_attempt_metrics_from_log(log_path)["jax_logged_elapsed_s"] == pytest.approx(300.0)
+
+
 def test_classify_blocker_treats_fortran_snes_divergence_as_reference_quality() -> None:
     assert (
         _classify_blocker(
