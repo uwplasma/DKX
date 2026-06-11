@@ -1,6 +1,6 @@
 # SFINCS_JAX Master Handoff + Execution Plan
 
-Last updated: 2026-06-10 (America/Chicago)
+Last updated: 2026-06-11 (America/Chicago)
 Owner: incoming agent
 
 ## 2026-06-10 Addendum: final production-readiness stress-test plan after v1.1.6
@@ -8,7 +8,8 @@ Owner: incoming agent
 ### Current verified state
 
 - Repository state:
-  - ``main`` is clean at ``a7c2fce`` and tagged ``v1.1.6``.
+  - ``main`` is clean at ``b14ee71`` after the post-release production-readiness
+    plan commit; ``a7c2fce`` remains tagged ``v1.1.6``.
   - Local release gates, research-lane gates, Sphinx ``-W``, build/twine, and
     main GitHub CI are green for the release state.
 - Correctness/parity evidence:
@@ -209,6 +210,67 @@ Owner: incoming agent
    setup residual on reduced geometry-scheme-2/11 before touching auto defaults.
 7. Regenerate README/docs plots and parity/runtime/memory tables only from
    artifacts that pass the gates above.
+
+### Execution status: production stress manifest materialized
+
+- Execution item 1 is now backed by
+  ``benchmarks/production_stress_manifest_2026-06-11/manifest.json``, generated
+  by ``scripts/materialize_production_stress_manifest.py``.
+- The manifest consolidates the current public benchmark gaps:
+  - ``16`` CPU rows and ``16`` GPU rows still have source-report resolution below
+    the public production floor.
+  - ``15`` source rows are excluded from the README runtime plot because the
+    archived Fortran v3 runtime is below ``10 s``.
+  - The production input manifest still contains ``39`` cases.
+- The manifest records the checked QA/QH bootstrap-current state:
+  - QA and QH each have ``11/11`` reduced-grid points.
+  - QA maximum same-resolution SFINCS_JAX-vs-Fortran relative difference is
+    ``1.211e-3``.
+  - QH maximum same-resolution SFINCS_JAX-vs-Fortran relative difference is
+    ``3.536e-3``.
+  - QH still carries a ``24.43%`` maximum reduced-grid refinement bar, so it is
+    not yet production-resolution evidence.
+- The manifest records seven local VMEC-JAX QI candidate wouts with checksums,
+  covering ``nfp=1,2,3,4``. The built-doc candidates remain ephemeral and must be
+  promoted to SFINCS_JAX-owned release/external-data fixtures before becoming
+  long-term CI inputs.
+- Fast validation added:
+  - ``tests/test_materialize_production_stress_manifest.py`` checks the manifest
+    schema, production-gap counts, QA/QH metrics, QI nfp coverage, and QI
+    checksum behavior using a fake VMEC-JAX root so CI is not tied to a local
+    workstation path.
+- Next required compute step:
+  - run bounded CPU probes from the manifest for local-safe rows first, then
+    run remote-only rows on office GPU/CPU with phase timing and memory logs.
+
+### Execution status: bounded production CPU sanity probe
+
+- Command run locally with a ``600 s`` per-case cap:
+  ``python scripts/run_scaled_example_suite.py --examples-root
+  benchmarks/production_resolution_inputs_2026-05-04/inputs
+  --production-manifest
+  benchmarks/production_resolution_inputs_2026-05-04/manifest.json --pattern
+  'tokamak_1species_PASCollisions_withEr_fullTrajectories|tokamak_2species_PASCollisions_withEr_fullTrajectories'
+  --max-run-recommendation bounded_remote --fortran-exe
+  /Users/rogeriojorge/local/sfincs/fortran/version3/sfincs --timeout-s 600
+  --max-attempts 1 --jobs 1``.
+- Results at ``NTHETA=33, NZETA=1, NX=12, NXI=140``:
+  - ``tokamak_1species_PASCollisions_withEr_fullTrajectories``:
+    ``parity_ok``, ``strict_n_mismatch_common=0/195``,
+    Fortran ``2.243 s`` and ``723 MB`` RSS, SFINCS_JAX logged solve
+    ``8.851 s`` and ``3009 MB`` RSS.
+  - ``tokamak_2species_PASCollisions_withEr_fullTrajectories``:
+    ``parity_ok``, ``strict_n_mismatch_common=0/195``,
+    Fortran ``3.629 s`` and ``1331 MB`` RSS, SFINCS_JAX logged solve
+    ``16.454 s`` and ``5692 MB`` RSS.
+- Output-key coverage had ``missing_total=0`` and both rows had only the known
+  terminal print-parity ``residual`` text gap. The transient run directory was
+  deleted because it contained ``54 MB`` of untracked HDF5/Fortran matrix dumps.
+- Interpretation:
+  - production-manifest PAS tokamak defaults are accurate and bounded;
+  - memory remains about ``4.2x`` Fortran on this local CPU probe;
+  - these rows do not close the public README production-floor gaps because the
+    current gap set is all ``remote_or_cluster_only``.
 
 ## 2026-06-10 Addendum: native block-Schur factor plus exact-Pmat LU admission rescue
 

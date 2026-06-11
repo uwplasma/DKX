@@ -1,0 +1,2397 @@
+{
+  "benchmark_floor_gaps": {
+    "cpu": [
+      {
+        "backend": "cpu",
+        "case": "HSX_FPCollisions_DKESTrajectories",
+        "observed_resolution": {
+          "NTHETA": 5,
+          "NX": 2,
+          "NXI": 4,
+          "NZETA": 5
+        },
+        "original_resolution": {
+          "NTHETA": 11,
+          "NX": 5,
+          "NXI": 149,
+          "NZETA": 115
+        },
+        "production_case_found": true,
+        "production_input": "/Users/rogeriojorge/local/tests/sfincs_jax/benchmarks/production_resolution_inputs_2026-05-04/inputs/HSX_FPCollisions_DKESTrajectories/input.namelist",
+        "production_input_exists": true,
+        "production_resolution": {
+          "NTHETA": 25,
+          "NX": 5,
+          "NXI": 149,
+          "NZETA": 115
+        },
+        "reason": "below_public_benchmark_resolution_floor",
+        "required_resolution": {
+          "NTHETA": 25,
+          "NX": 4,
+          "NXI": 100,
+          "NZETA": 51
+        },
+        "run_recommendation": "remote_or_cluster_only",
+        "source_input": "/Users/rogeriojorge/local/tests/sfincs_jax/examples/sfincs_examples/HSX_FPCollisions_DKESTrajectories/input.namelist",
+        "total_unknowns_estimate": 4283754,
+        "violating_fields": {
+          "NTHETA": {
+            "actual": 5,
+            "required": 25
+          },
+          "NX": {
+            "actual": 2,
+            "required": 4
+          },
+          "NXI": {
+            "actual": 4,
+            "required": 100
+          },
+          "NZETA": {
+            "actual": 5,
+            "required": 51
+          }
+        }
+      },
+      {
+        "backend": "cpu",
+        "case": "HSX_FPCollisions_fullTrajectories",
+        "observed_resolution": {
+          "NTHETA": 5,
+          "NX": 2,
+          "NXI": 4,
+          "NZETA": 5
+        },
+        "original_resolution": {
+          "NTHETA": 11,
+          "NX": 5,
+          "NXI": 149,
+          "NZETA": 115
+        },
+        "production_case_found": true,
+        "production_input": "/Users/rogeriojorge/local/tests/sfincs_jax/benchmarks/production_resolution_inputs_2026-05-04/inputs/HSX_FPCollisions_fullTrajectories/input.namelist",
+        "production_input_exists": true,
+        "production_resolution": {
+          "NTHETA": 25,
+          "NX": 5,
+          "NXI": 149,
+          "NZETA": 115
+        },
+        "reason": "below_public_benchmark_resolution_floor",
+        "required_resolution": {
+          "NTHETA": 25,
+          "NX": 4,
+          "NXI": 100,
+          "NZETA": 51
+        },
+        "run_recommendation": "remote_or_cluster_only",
+        "source_input": "/Users/rogeriojorge/local/tests/sfincs_jax/examples/sfincs_examples/HSX_FPCollisions_fullTrajectories/input.namelist",
+        "total_unknowns_estimate": 4283754,
+        "violating_fields": {
+          "NTHETA": {
+            "actual": 5,
+            "required": 25
+          },
+          "NX": {
+            "actual": 2,
+            "required": 4
+          },
+          "NXI": {
+            "actual": 4,
+            "required": 100
+          },
+          "NZETA": {
+            "actual": 5,
+            "required": 51
+          }
+        }
+      },
+      {
+        "backend": "cpu",
+        "case": "additional_examples",
+        "observed_resolution": {
+          "NTHETA": 5,
+          "NX": 2,
+          "NXI": 4,
+          "NZETA": 5
+        },
+        "original_resolution": {
+          "NTHETA": 25,
+          "NX": 8,
+          "NXI": 100,
+          "NZETA": 51
+        },
+        "production_case_found": true,
+        "production_input": "/Users/rogeriojorge/local/tests/sfincs_jax/benchmarks/production_resolution_inputs_2026-05-04/inputs/additional_examples/input.namelist",
+        "production_input_exists": true,
+        "production_resolution": {
+          "NTHETA": 25,
+          "NX": 8,
+          "NXI": 100,
+          "NZETA": 51
+        },
+        "reason": "below_public_benchmark_resolution_floor",
+        "required_resolution": {
+          "NTHETA": 25,
+          "NX": 4,
+          "NXI": 100,
+          "NZETA": 51
+        },
+        "run_recommendation": "remote_or_cluster_only",
+        "source_input": "/Users/rogeriojorge/local/tests/sfincs_jax/examples/additional_examples/input.namelist",
+        "total_unknowns_estimate": 1020002,
+        "violating_fields": {
+          "NTHETA": {
+            "actual": 5,
+            "required": 25
+          },
+          "NX": {
+            "actual": 2,
+            "required": 4
+          },
+          "NXI": {
+            "actual": 4,
+            "required": 100
+          },
+          "NZETA": {
+            "actual": 5,
+            "required": 51
+          }
+        }
+      },
+      {
+        "backend": "cpu",
+        "case": "filteredW7XNetCDF_2species_magneticDrifts_noEr",
+        "observed_resolution": {
+          "NTHETA": 5,
+          "NX": 2,
+          "NXI": 4,
+          "NZETA": 5
+        },
+        "original_resolution": {
+          "NTHETA": 23,
+          "NX": 6,
+          "NXI": 100,
+          "NZETA": 55
+        },
+        "production_case_found": true,
+        "production_input": "/Users/rogeriojorge/local/tests/sfincs_jax/benchmarks/production_resolution_inputs_2026-05-04/inputs/filteredW7XNetCDF_2species_magneticDrifts_noEr/input.namelist",
+        "production_input_exists": true,
+        "production_resolution": {
+          "NTHETA": 25,
+          "NX": 6,
+          "NXI": 100,
+          "NZETA": 55
+        },
+        "reason": "below_public_benchmark_resolution_floor",
+        "required_resolution": {
+          "NTHETA": 25,
+          "NX": 4,
+          "NXI": 100,
+          "NZETA": 51
+        },
+        "run_recommendation": "remote_or_cluster_only",
+        "source_input": "/Users/rogeriojorge/local/tests/sfincs_jax/examples/sfincs_examples/filteredW7XNetCDF_2species_magneticDrifts_noEr/input.namelist",
+        "total_unknowns_estimate": 1650004,
+        "violating_fields": {
+          "NTHETA": {
+            "actual": 5,
+            "required": 25
+          },
+          "NX": {
+            "actual": 2,
+            "required": 4
+          },
+          "NXI": {
+            "actual": 4,
+            "required": 100
+          },
+          "NZETA": {
+            "actual": 5,
+            "required": 51
+          }
+        }
+      },
+      {
+        "backend": "cpu",
+        "case": "filteredW7XNetCDF_2species_magneticDrifts_withEr",
+        "observed_resolution": {
+          "NTHETA": 5,
+          "NX": 2,
+          "NXI": 4,
+          "NZETA": 5
+        },
+        "original_resolution": {
+          "NTHETA": 23,
+          "NX": 6,
+          "NXI": 100,
+          "NZETA": 55
+        },
+        "production_case_found": true,
+        "production_input": "/Users/rogeriojorge/local/tests/sfincs_jax/benchmarks/production_resolution_inputs_2026-05-04/inputs/filteredW7XNetCDF_2species_magneticDrifts_withEr/input.namelist",
+        "production_input_exists": true,
+        "production_resolution": {
+          "NTHETA": 25,
+          "NX": 6,
+          "NXI": 100,
+          "NZETA": 55
+        },
+        "reason": "below_public_benchmark_resolution_floor",
+        "required_resolution": {
+          "NTHETA": 25,
+          "NX": 4,
+          "NXI": 100,
+          "NZETA": 51
+        },
+        "run_recommendation": "remote_or_cluster_only",
+        "source_input": "/Users/rogeriojorge/local/tests/sfincs_jax/examples/sfincs_examples/filteredW7XNetCDF_2species_magneticDrifts_withEr/input.namelist",
+        "total_unknowns_estimate": 1650004,
+        "violating_fields": {
+          "NTHETA": {
+            "actual": 5,
+            "required": 25
+          },
+          "NX": {
+            "actual": 2,
+            "required": 4
+          },
+          "NXI": {
+            "actual": 4,
+            "required": 100
+          },
+          "NZETA": {
+            "actual": 5,
+            "required": 51
+          }
+        }
+      },
+      {
+        "backend": "cpu",
+        "case": "filteredW7XNetCDF_2species_noEr",
+        "observed_resolution": {
+          "NTHETA": 5,
+          "NX": 2,
+          "NXI": 4,
+          "NZETA": 5
+        },
+        "original_resolution": {
+          "NTHETA": 13,
+          "NX": 5,
+          "NXI": 70,
+          "NZETA": 33
+        },
+        "production_case_found": true,
+        "production_input": "/Users/rogeriojorge/local/tests/sfincs_jax/benchmarks/production_resolution_inputs_2026-05-04/inputs/filteredW7XNetCDF_2species_noEr/input.namelist",
+        "production_input_exists": true,
+        "production_resolution": {
+          "NTHETA": 25,
+          "NX": 5,
+          "NXI": 100,
+          "NZETA": 51
+        },
+        "reason": "below_public_benchmark_resolution_floor",
+        "required_resolution": {
+          "NTHETA": 25,
+          "NX": 4,
+          "NXI": 100,
+          "NZETA": 51
+        },
+        "run_recommendation": "remote_or_cluster_only",
+        "source_input": "/Users/rogeriojorge/local/tests/sfincs_jax/examples/sfincs_examples/filteredW7XNetCDF_2species_noEr/input.namelist",
+        "total_unknowns_estimate": 1275004,
+        "violating_fields": {
+          "NTHETA": {
+            "actual": 5,
+            "required": 25
+          },
+          "NX": {
+            "actual": 2,
+            "required": 4
+          },
+          "NXI": {
+            "actual": 4,
+            "required": 100
+          },
+          "NZETA": {
+            "actual": 5,
+            "required": 51
+          }
+        }
+      },
+      {
+        "backend": "cpu",
+        "case": "geometryScheme4_2species_noEr",
+        "observed_resolution": {
+          "NTHETA": 5,
+          "NX": 2,
+          "NXI": 4,
+          "NZETA": 5
+        },
+        "original_resolution": {
+          "NTHETA": 13,
+          "NX": 5,
+          "NXI": 48,
+          "NZETA": 19
+        },
+        "production_case_found": true,
+        "production_input": "/Users/rogeriojorge/local/tests/sfincs_jax/benchmarks/production_resolution_inputs_2026-05-04/inputs/geometryScheme4_2species_noEr/input.namelist",
+        "production_input_exists": true,
+        "production_resolution": {
+          "NTHETA": 25,
+          "NX": 5,
+          "NXI": 100,
+          "NZETA": 51
+        },
+        "reason": "below_public_benchmark_resolution_floor",
+        "required_resolution": {
+          "NTHETA": 25,
+          "NX": 4,
+          "NXI": 100,
+          "NZETA": 51
+        },
+        "run_recommendation": "remote_or_cluster_only",
+        "source_input": "/Users/rogeriojorge/local/tests/sfincs_jax/examples/sfincs_examples/geometryScheme4_2species_noEr/input.namelist",
+        "total_unknowns_estimate": 1275004,
+        "violating_fields": {
+          "NTHETA": {
+            "actual": 5,
+            "required": 25
+          },
+          "NX": {
+            "actual": 2,
+            "required": 4
+          },
+          "NXI": {
+            "actual": 4,
+            "required": 100
+          },
+          "NZETA": {
+            "actual": 5,
+            "required": 51
+          }
+        }
+      },
+      {
+        "backend": "cpu",
+        "case": "geometryScheme4_2species_noEr_withPhi1InDKE",
+        "observed_resolution": {
+          "NTHETA": 5,
+          "NX": 2,
+          "NXI": 4,
+          "NZETA": 5
+        },
+        "original_resolution": {
+          "NTHETA": 13,
+          "NX": 5,
+          "NXI": 48,
+          "NZETA": 19
+        },
+        "production_case_found": true,
+        "production_input": "/Users/rogeriojorge/local/tests/sfincs_jax/benchmarks/production_resolution_inputs_2026-05-04/inputs/geometryScheme4_2species_noEr_withPhi1InDKE/input.namelist",
+        "production_input_exists": true,
+        "production_resolution": {
+          "NTHETA": 25,
+          "NX": 5,
+          "NXI": 100,
+          "NZETA": 51
+        },
+        "reason": "below_public_benchmark_resolution_floor",
+        "required_resolution": {
+          "NTHETA": 25,
+          "NX": 4,
+          "NXI": 100,
+          "NZETA": 51
+        },
+        "run_recommendation": "remote_or_cluster_only",
+        "source_input": "/Users/rogeriojorge/local/tests/sfincs_jax/examples/sfincs_examples/geometryScheme4_2species_noEr_withPhi1InDKE/input.namelist",
+        "total_unknowns_estimate": 1276279,
+        "violating_fields": {
+          "NTHETA": {
+            "actual": 5,
+            "required": 25
+          },
+          "NX": {
+            "actual": 2,
+            "required": 4
+          },
+          "NXI": {
+            "actual": 4,
+            "required": 100
+          },
+          "NZETA": {
+            "actual": 5,
+            "required": 51
+          }
+        }
+      },
+      {
+        "backend": "cpu",
+        "case": "geometryScheme4_2species_noEr_withQN",
+        "observed_resolution": {
+          "NTHETA": 5,
+          "NX": 2,
+          "NXI": 4,
+          "NZETA": 5
+        },
+        "original_resolution": {
+          "NTHETA": 13,
+          "NX": 5,
+          "NXI": 48,
+          "NZETA": 19
+        },
+        "production_case_found": true,
+        "production_input": "/Users/rogeriojorge/local/tests/sfincs_jax/benchmarks/production_resolution_inputs_2026-05-04/inputs/geometryScheme4_2species_noEr_withQN/input.namelist",
+        "production_input_exists": true,
+        "production_resolution": {
+          "NTHETA": 25,
+          "NX": 5,
+          "NXI": 100,
+          "NZETA": 51
+        },
+        "reason": "below_public_benchmark_resolution_floor",
+        "required_resolution": {
+          "NTHETA": 25,
+          "NX": 4,
+          "NXI": 100,
+          "NZETA": 51
+        },
+        "run_recommendation": "remote_or_cluster_only",
+        "source_input": "/Users/rogeriojorge/local/tests/sfincs_jax/examples/sfincs_examples/geometryScheme4_2species_noEr_withQN/input.namelist",
+        "total_unknowns_estimate": 1276279,
+        "violating_fields": {
+          "NTHETA": {
+            "actual": 5,
+            "required": 25
+          },
+          "NX": {
+            "actual": 2,
+            "required": 4
+          },
+          "NXI": {
+            "actual": 4,
+            "required": 100
+          },
+          "NZETA": {
+            "actual": 5,
+            "required": 51
+          }
+        }
+      },
+      {
+        "backend": "cpu",
+        "case": "geometryScheme4_2species_withEr_fullTrajectories",
+        "observed_resolution": {
+          "NTHETA": 5,
+          "NX": 2,
+          "NXI": 4,
+          "NZETA": 5
+        },
+        "original_resolution": {
+          "NTHETA": 13,
+          "NX": 5,
+          "NXI": 48,
+          "NZETA": 19
+        },
+        "production_case_found": true,
+        "production_input": "/Users/rogeriojorge/local/tests/sfincs_jax/benchmarks/production_resolution_inputs_2026-05-04/inputs/geometryScheme4_2species_withEr_fullTrajectories/input.namelist",
+        "production_input_exists": true,
+        "production_resolution": {
+          "NTHETA": 25,
+          "NX": 5,
+          "NXI": 100,
+          "NZETA": 51
+        },
+        "reason": "below_public_benchmark_resolution_floor",
+        "required_resolution": {
+          "NTHETA": 25,
+          "NX": 4,
+          "NXI": 100,
+          "NZETA": 51
+        },
+        "run_recommendation": "remote_or_cluster_only",
+        "source_input": "/Users/rogeriojorge/local/tests/sfincs_jax/examples/sfincs_examples/geometryScheme4_2species_withEr_fullTrajectories/input.namelist",
+        "total_unknowns_estimate": 1275004,
+        "violating_fields": {
+          "NTHETA": {
+            "actual": 5,
+            "required": 25
+          },
+          "NX": {
+            "actual": 2,
+            "required": 4
+          },
+          "NXI": {
+            "actual": 4,
+            "required": 100
+          },
+          "NZETA": {
+            "actual": 5,
+            "required": 51
+          }
+        }
+      },
+      {
+        "backend": "cpu",
+        "case": "geometryScheme4_2species_withEr_fullTrajectories_withQN",
+        "observed_resolution": {
+          "NTHETA": 5,
+          "NX": 2,
+          "NXI": 4,
+          "NZETA": 5
+        },
+        "original_resolution": {
+          "NTHETA": 13,
+          "NX": 5,
+          "NXI": 48,
+          "NZETA": 19
+        },
+        "production_case_found": true,
+        "production_input": "/Users/rogeriojorge/local/tests/sfincs_jax/benchmarks/production_resolution_inputs_2026-05-04/inputs/geometryScheme4_2species_withEr_fullTrajectories_withQN/input.namelist",
+        "production_input_exists": true,
+        "production_resolution": {
+          "NTHETA": 25,
+          "NX": 5,
+          "NXI": 100,
+          "NZETA": 51
+        },
+        "reason": "below_public_benchmark_resolution_floor",
+        "required_resolution": {
+          "NTHETA": 25,
+          "NX": 4,
+          "NXI": 100,
+          "NZETA": 51
+        },
+        "run_recommendation": "remote_or_cluster_only",
+        "source_input": "/Users/rogeriojorge/local/tests/sfincs_jax/examples/sfincs_examples/geometryScheme4_2species_withEr_fullTrajectories_withQN/input.namelist",
+        "total_unknowns_estimate": 1276279,
+        "violating_fields": {
+          "NTHETA": {
+            "actual": 5,
+            "required": 25
+          },
+          "NX": {
+            "actual": 2,
+            "required": 4
+          },
+          "NXI": {
+            "actual": 4,
+            "required": 100
+          },
+          "NZETA": {
+            "actual": 5,
+            "required": 51
+          }
+        }
+      },
+      {
+        "backend": "cpu",
+        "case": "geometryScheme5_3species_loRes",
+        "observed_resolution": {
+          "NTHETA": 5,
+          "NX": 2,
+          "NXI": 4,
+          "NZETA": 5
+        },
+        "original_resolution": {
+          "NTHETA": 9,
+          "NX": 4,
+          "NXI": 18,
+          "NZETA": 17
+        },
+        "production_case_found": true,
+        "production_input": "/Users/rogeriojorge/local/tests/sfincs_jax/benchmarks/production_resolution_inputs_2026-05-04/inputs/geometryScheme5_3species_loRes/input.namelist",
+        "production_input_exists": true,
+        "production_resolution": {
+          "NTHETA": 25,
+          "NX": 4,
+          "NXI": 100,
+          "NZETA": 51
+        },
+        "reason": "below_public_benchmark_resolution_floor",
+        "required_resolution": {
+          "NTHETA": 25,
+          "NX": 4,
+          "NXI": 100,
+          "NZETA": 51
+        },
+        "run_recommendation": "remote_or_cluster_only",
+        "source_input": "/Users/rogeriojorge/local/tests/sfincs_jax/examples/sfincs_examples/geometryScheme5_3species_loRes/input.namelist",
+        "total_unknowns_estimate": 1530006,
+        "violating_fields": {
+          "NTHETA": {
+            "actual": 5,
+            "required": 25
+          },
+          "NX": {
+            "actual": 2,
+            "required": 4
+          },
+          "NXI": {
+            "actual": 4,
+            "required": 100
+          },
+          "NZETA": {
+            "actual": 5,
+            "required": 51
+          }
+        }
+      },
+      {
+        "backend": "cpu",
+        "case": "inductiveE_noEr",
+        "observed_resolution": {
+          "NTHETA": 5,
+          "NX": 2,
+          "NXI": 4,
+          "NZETA": 5
+        },
+        "original_resolution": {
+          "NTHETA": 5,
+          "NX": 5,
+          "NXI": 8,
+          "NZETA": 7
+        },
+        "production_case_found": true,
+        "production_input": "/Users/rogeriojorge/local/tests/sfincs_jax/benchmarks/production_resolution_inputs_2026-05-04/inputs/inductiveE_noEr/input.namelist",
+        "production_input_exists": true,
+        "production_resolution": {
+          "NTHETA": 25,
+          "NX": 5,
+          "NXI": 100,
+          "NZETA": 51
+        },
+        "reason": "below_public_benchmark_resolution_floor",
+        "required_resolution": {
+          "NTHETA": 25,
+          "NX": 4,
+          "NXI": 100,
+          "NZETA": 51
+        },
+        "run_recommendation": "remote_or_cluster_only",
+        "source_input": "/Users/rogeriojorge/local/tests/sfincs_jax/examples/sfincs_examples/inductiveE_noEr/input.namelist",
+        "total_unknowns_estimate": 1275004,
+        "violating_fields": {
+          "NTHETA": {
+            "actual": 5,
+            "required": 25
+          },
+          "NX": {
+            "actual": 2,
+            "required": 4
+          },
+          "NXI": {
+            "actual": 4,
+            "required": 100
+          },
+          "NZETA": {
+            "actual": 5,
+            "required": 51
+          }
+        }
+      },
+      {
+        "backend": "cpu",
+        "case": "quick_2species_FPCollisions_noEr",
+        "observed_resolution": {
+          "NTHETA": 5,
+          "NX": 2,
+          "NXI": 4,
+          "NZETA": 5
+        },
+        "original_resolution": {
+          "NTHETA": 5,
+          "NX": 5,
+          "NXI": 8,
+          "NZETA": 7
+        },
+        "production_case_found": true,
+        "production_input": "/Users/rogeriojorge/local/tests/sfincs_jax/benchmarks/production_resolution_inputs_2026-05-04/inputs/quick_2species_FPCollisions_noEr/input.namelist",
+        "production_input_exists": true,
+        "production_resolution": {
+          "NTHETA": 25,
+          "NX": 5,
+          "NXI": 100,
+          "NZETA": 51
+        },
+        "reason": "below_public_benchmark_resolution_floor",
+        "required_resolution": {
+          "NTHETA": 25,
+          "NX": 4,
+          "NXI": 100,
+          "NZETA": 51
+        },
+        "run_recommendation": "remote_or_cluster_only",
+        "source_input": "/Users/rogeriojorge/local/tests/sfincs_jax/examples/sfincs_examples/quick_2species_FPCollisions_noEr/input.namelist",
+        "total_unknowns_estimate": 1275004,
+        "violating_fields": {
+          "NTHETA": {
+            "actual": 5,
+            "required": 25
+          },
+          "NX": {
+            "actual": 2,
+            "required": 4
+          },
+          "NXI": {
+            "actual": 4,
+            "required": 100
+          },
+          "NZETA": {
+            "actual": 5,
+            "required": 51
+          }
+        }
+      },
+      {
+        "backend": "cpu",
+        "case": "sfincsPaperFigure3_geometryScheme11_FPCollisions_2Species_DKESTrajectories",
+        "observed_resolution": {
+          "NTHETA": 5,
+          "NX": 2,
+          "NXI": 4,
+          "NZETA": 5
+        },
+        "original_resolution": {
+          "NTHETA": 19,
+          "NX": 5,
+          "NXI": 60,
+          "NZETA": 59
+        },
+        "production_case_found": true,
+        "production_input": "/Users/rogeriojorge/local/tests/sfincs_jax/benchmarks/production_resolution_inputs_2026-05-04/inputs/sfincsPaperFigure3_geometryScheme11_FPCollisions_2Species_DKESTrajectories/input.namelist",
+        "production_input_exists": true,
+        "production_resolution": {
+          "NTHETA": 25,
+          "NX": 5,
+          "NXI": 100,
+          "NZETA": 59
+        },
+        "reason": "below_public_benchmark_resolution_floor",
+        "required_resolution": {
+          "NTHETA": 25,
+          "NX": 4,
+          "NXI": 100,
+          "NZETA": 51
+        },
+        "run_recommendation": "remote_or_cluster_only",
+        "source_input": "/Users/rogeriojorge/local/tests/sfincs_jax/examples/sfincs_examples/sfincsPaperFigure3_geometryScheme11_FPCollisions_2Species_DKESTrajectories/input.namelist",
+        "total_unknowns_estimate": 1475004,
+        "violating_fields": {
+          "NTHETA": {
+            "actual": 5,
+            "required": 25
+          },
+          "NX": {
+            "actual": 2,
+            "required": 4
+          },
+          "NXI": {
+            "actual": 4,
+            "required": 100
+          },
+          "NZETA": {
+            "actual": 5,
+            "required": 51
+          }
+        }
+      },
+      {
+        "backend": "cpu",
+        "case": "sfincsPaperFigure3_geometryScheme11_FPCollisions_2Species_fullTrajectories",
+        "observed_resolution": {
+          "NTHETA": 5,
+          "NX": 2,
+          "NXI": 4,
+          "NZETA": 5
+        },
+        "original_resolution": {
+          "NTHETA": 19,
+          "NX": 5,
+          "NXI": 60,
+          "NZETA": 59
+        },
+        "production_case_found": true,
+        "production_input": "/Users/rogeriojorge/local/tests/sfincs_jax/benchmarks/production_resolution_inputs_2026-05-04/inputs/sfincsPaperFigure3_geometryScheme11_FPCollisions_2Species_fullTrajectories/input.namelist",
+        "production_input_exists": true,
+        "production_resolution": {
+          "NTHETA": 25,
+          "NX": 5,
+          "NXI": 100,
+          "NZETA": 59
+        },
+        "reason": "below_public_benchmark_resolution_floor",
+        "required_resolution": {
+          "NTHETA": 25,
+          "NX": 4,
+          "NXI": 100,
+          "NZETA": 51
+        },
+        "run_recommendation": "remote_or_cluster_only",
+        "source_input": "/Users/rogeriojorge/local/tests/sfincs_jax/examples/sfincs_examples/sfincsPaperFigure3_geometryScheme11_FPCollisions_2Species_fullTrajectories/input.namelist",
+        "total_unknowns_estimate": 1475004,
+        "violating_fields": {
+          "NTHETA": {
+            "actual": 5,
+            "required": 25
+          },
+          "NX": {
+            "actual": 2,
+            "required": 4
+          },
+          "NXI": {
+            "actual": 4,
+            "required": 100
+          },
+          "NZETA": {
+            "actual": 5,
+            "required": 51
+          }
+        }
+      }
+    ],
+    "gpu": [
+      {
+        "backend": "gpu",
+        "case": "HSX_FPCollisions_DKESTrajectories",
+        "observed_resolution": {
+          "NTHETA": 5,
+          "NX": 2,
+          "NXI": 4,
+          "NZETA": 5
+        },
+        "original_resolution": {
+          "NTHETA": 11,
+          "NX": 5,
+          "NXI": 149,
+          "NZETA": 115
+        },
+        "production_case_found": true,
+        "production_input": "/Users/rogeriojorge/local/tests/sfincs_jax/benchmarks/production_resolution_inputs_2026-05-04/inputs/HSX_FPCollisions_DKESTrajectories/input.namelist",
+        "production_input_exists": true,
+        "production_resolution": {
+          "NTHETA": 25,
+          "NX": 5,
+          "NXI": 149,
+          "NZETA": 115
+        },
+        "reason": "below_public_benchmark_resolution_floor",
+        "required_resolution": {
+          "NTHETA": 25,
+          "NX": 4,
+          "NXI": 100,
+          "NZETA": 51
+        },
+        "run_recommendation": "remote_or_cluster_only",
+        "source_input": "/Users/rogeriojorge/local/tests/sfincs_jax/examples/sfincs_examples/HSX_FPCollisions_DKESTrajectories/input.namelist",
+        "total_unknowns_estimate": 4283754,
+        "violating_fields": {
+          "NTHETA": {
+            "actual": 5,
+            "required": 25
+          },
+          "NX": {
+            "actual": 2,
+            "required": 4
+          },
+          "NXI": {
+            "actual": 4,
+            "required": 100
+          },
+          "NZETA": {
+            "actual": 5,
+            "required": 51
+          }
+        }
+      },
+      {
+        "backend": "gpu",
+        "case": "HSX_FPCollisions_fullTrajectories",
+        "observed_resolution": {
+          "NTHETA": 5,
+          "NX": 2,
+          "NXI": 4,
+          "NZETA": 5
+        },
+        "original_resolution": {
+          "NTHETA": 11,
+          "NX": 5,
+          "NXI": 149,
+          "NZETA": 115
+        },
+        "production_case_found": true,
+        "production_input": "/Users/rogeriojorge/local/tests/sfincs_jax/benchmarks/production_resolution_inputs_2026-05-04/inputs/HSX_FPCollisions_fullTrajectories/input.namelist",
+        "production_input_exists": true,
+        "production_resolution": {
+          "NTHETA": 25,
+          "NX": 5,
+          "NXI": 149,
+          "NZETA": 115
+        },
+        "reason": "below_public_benchmark_resolution_floor",
+        "required_resolution": {
+          "NTHETA": 25,
+          "NX": 4,
+          "NXI": 100,
+          "NZETA": 51
+        },
+        "run_recommendation": "remote_or_cluster_only",
+        "source_input": "/Users/rogeriojorge/local/tests/sfincs_jax/examples/sfincs_examples/HSX_FPCollisions_fullTrajectories/input.namelist",
+        "total_unknowns_estimate": 4283754,
+        "violating_fields": {
+          "NTHETA": {
+            "actual": 5,
+            "required": 25
+          },
+          "NX": {
+            "actual": 2,
+            "required": 4
+          },
+          "NXI": {
+            "actual": 4,
+            "required": 100
+          },
+          "NZETA": {
+            "actual": 5,
+            "required": 51
+          }
+        }
+      },
+      {
+        "backend": "gpu",
+        "case": "additional_examples",
+        "observed_resolution": {
+          "NTHETA": 5,
+          "NX": 2,
+          "NXI": 4,
+          "NZETA": 5
+        },
+        "original_resolution": {
+          "NTHETA": 25,
+          "NX": 8,
+          "NXI": 100,
+          "NZETA": 51
+        },
+        "production_case_found": true,
+        "production_input": "/Users/rogeriojorge/local/tests/sfincs_jax/benchmarks/production_resolution_inputs_2026-05-04/inputs/additional_examples/input.namelist",
+        "production_input_exists": true,
+        "production_resolution": {
+          "NTHETA": 25,
+          "NX": 8,
+          "NXI": 100,
+          "NZETA": 51
+        },
+        "reason": "below_public_benchmark_resolution_floor",
+        "required_resolution": {
+          "NTHETA": 25,
+          "NX": 4,
+          "NXI": 100,
+          "NZETA": 51
+        },
+        "run_recommendation": "remote_or_cluster_only",
+        "source_input": "/Users/rogeriojorge/local/tests/sfincs_jax/examples/additional_examples/input.namelist",
+        "total_unknowns_estimate": 1020002,
+        "violating_fields": {
+          "NTHETA": {
+            "actual": 5,
+            "required": 25
+          },
+          "NX": {
+            "actual": 2,
+            "required": 4
+          },
+          "NXI": {
+            "actual": 4,
+            "required": 100
+          },
+          "NZETA": {
+            "actual": 5,
+            "required": 51
+          }
+        }
+      },
+      {
+        "backend": "gpu",
+        "case": "filteredW7XNetCDF_2species_magneticDrifts_noEr",
+        "observed_resolution": {
+          "NTHETA": 5,
+          "NX": 2,
+          "NXI": 4,
+          "NZETA": 5
+        },
+        "original_resolution": {
+          "NTHETA": 23,
+          "NX": 6,
+          "NXI": 100,
+          "NZETA": 55
+        },
+        "production_case_found": true,
+        "production_input": "/Users/rogeriojorge/local/tests/sfincs_jax/benchmarks/production_resolution_inputs_2026-05-04/inputs/filteredW7XNetCDF_2species_magneticDrifts_noEr/input.namelist",
+        "production_input_exists": true,
+        "production_resolution": {
+          "NTHETA": 25,
+          "NX": 6,
+          "NXI": 100,
+          "NZETA": 55
+        },
+        "reason": "below_public_benchmark_resolution_floor",
+        "required_resolution": {
+          "NTHETA": 25,
+          "NX": 4,
+          "NXI": 100,
+          "NZETA": 51
+        },
+        "run_recommendation": "remote_or_cluster_only",
+        "source_input": "/Users/rogeriojorge/local/tests/sfincs_jax/examples/sfincs_examples/filteredW7XNetCDF_2species_magneticDrifts_noEr/input.namelist",
+        "total_unknowns_estimate": 1650004,
+        "violating_fields": {
+          "NTHETA": {
+            "actual": 5,
+            "required": 25
+          },
+          "NX": {
+            "actual": 2,
+            "required": 4
+          },
+          "NXI": {
+            "actual": 4,
+            "required": 100
+          },
+          "NZETA": {
+            "actual": 5,
+            "required": 51
+          }
+        }
+      },
+      {
+        "backend": "gpu",
+        "case": "filteredW7XNetCDF_2species_magneticDrifts_withEr",
+        "observed_resolution": {
+          "NTHETA": 5,
+          "NX": 2,
+          "NXI": 4,
+          "NZETA": 5
+        },
+        "original_resolution": {
+          "NTHETA": 23,
+          "NX": 6,
+          "NXI": 100,
+          "NZETA": 55
+        },
+        "production_case_found": true,
+        "production_input": "/Users/rogeriojorge/local/tests/sfincs_jax/benchmarks/production_resolution_inputs_2026-05-04/inputs/filteredW7XNetCDF_2species_magneticDrifts_withEr/input.namelist",
+        "production_input_exists": true,
+        "production_resolution": {
+          "NTHETA": 25,
+          "NX": 6,
+          "NXI": 100,
+          "NZETA": 55
+        },
+        "reason": "below_public_benchmark_resolution_floor",
+        "required_resolution": {
+          "NTHETA": 25,
+          "NX": 4,
+          "NXI": 100,
+          "NZETA": 51
+        },
+        "run_recommendation": "remote_or_cluster_only",
+        "source_input": "/Users/rogeriojorge/local/tests/sfincs_jax/examples/sfincs_examples/filteredW7XNetCDF_2species_magneticDrifts_withEr/input.namelist",
+        "total_unknowns_estimate": 1650004,
+        "violating_fields": {
+          "NTHETA": {
+            "actual": 5,
+            "required": 25
+          },
+          "NX": {
+            "actual": 2,
+            "required": 4
+          },
+          "NXI": {
+            "actual": 4,
+            "required": 100
+          },
+          "NZETA": {
+            "actual": 5,
+            "required": 51
+          }
+        }
+      },
+      {
+        "backend": "gpu",
+        "case": "filteredW7XNetCDF_2species_noEr",
+        "observed_resolution": {
+          "NTHETA": 5,
+          "NX": 2,
+          "NXI": 4,
+          "NZETA": 5
+        },
+        "original_resolution": {
+          "NTHETA": 13,
+          "NX": 5,
+          "NXI": 70,
+          "NZETA": 33
+        },
+        "production_case_found": true,
+        "production_input": "/Users/rogeriojorge/local/tests/sfincs_jax/benchmarks/production_resolution_inputs_2026-05-04/inputs/filteredW7XNetCDF_2species_noEr/input.namelist",
+        "production_input_exists": true,
+        "production_resolution": {
+          "NTHETA": 25,
+          "NX": 5,
+          "NXI": 100,
+          "NZETA": 51
+        },
+        "reason": "below_public_benchmark_resolution_floor",
+        "required_resolution": {
+          "NTHETA": 25,
+          "NX": 4,
+          "NXI": 100,
+          "NZETA": 51
+        },
+        "run_recommendation": "remote_or_cluster_only",
+        "source_input": "/Users/rogeriojorge/local/tests/sfincs_jax/examples/sfincs_examples/filteredW7XNetCDF_2species_noEr/input.namelist",
+        "total_unknowns_estimate": 1275004,
+        "violating_fields": {
+          "NTHETA": {
+            "actual": 5,
+            "required": 25
+          },
+          "NX": {
+            "actual": 2,
+            "required": 4
+          },
+          "NXI": {
+            "actual": 4,
+            "required": 100
+          },
+          "NZETA": {
+            "actual": 5,
+            "required": 51
+          }
+        }
+      },
+      {
+        "backend": "gpu",
+        "case": "geometryScheme4_2species_noEr",
+        "observed_resolution": {
+          "NTHETA": 5,
+          "NX": 2,
+          "NXI": 4,
+          "NZETA": 5
+        },
+        "original_resolution": {
+          "NTHETA": 13,
+          "NX": 5,
+          "NXI": 48,
+          "NZETA": 19
+        },
+        "production_case_found": true,
+        "production_input": "/Users/rogeriojorge/local/tests/sfincs_jax/benchmarks/production_resolution_inputs_2026-05-04/inputs/geometryScheme4_2species_noEr/input.namelist",
+        "production_input_exists": true,
+        "production_resolution": {
+          "NTHETA": 25,
+          "NX": 5,
+          "NXI": 100,
+          "NZETA": 51
+        },
+        "reason": "below_public_benchmark_resolution_floor",
+        "required_resolution": {
+          "NTHETA": 25,
+          "NX": 4,
+          "NXI": 100,
+          "NZETA": 51
+        },
+        "run_recommendation": "remote_or_cluster_only",
+        "source_input": "/Users/rogeriojorge/local/tests/sfincs_jax/examples/sfincs_examples/geometryScheme4_2species_noEr/input.namelist",
+        "total_unknowns_estimate": 1275004,
+        "violating_fields": {
+          "NTHETA": {
+            "actual": 5,
+            "required": 25
+          },
+          "NX": {
+            "actual": 2,
+            "required": 4
+          },
+          "NXI": {
+            "actual": 4,
+            "required": 100
+          },
+          "NZETA": {
+            "actual": 5,
+            "required": 51
+          }
+        }
+      },
+      {
+        "backend": "gpu",
+        "case": "geometryScheme4_2species_noEr_withPhi1InDKE",
+        "observed_resolution": {
+          "NTHETA": 5,
+          "NX": 2,
+          "NXI": 4,
+          "NZETA": 5
+        },
+        "original_resolution": {
+          "NTHETA": 13,
+          "NX": 5,
+          "NXI": 48,
+          "NZETA": 19
+        },
+        "production_case_found": true,
+        "production_input": "/Users/rogeriojorge/local/tests/sfincs_jax/benchmarks/production_resolution_inputs_2026-05-04/inputs/geometryScheme4_2species_noEr_withPhi1InDKE/input.namelist",
+        "production_input_exists": true,
+        "production_resolution": {
+          "NTHETA": 25,
+          "NX": 5,
+          "NXI": 100,
+          "NZETA": 51
+        },
+        "reason": "below_public_benchmark_resolution_floor",
+        "required_resolution": {
+          "NTHETA": 25,
+          "NX": 4,
+          "NXI": 100,
+          "NZETA": 51
+        },
+        "run_recommendation": "remote_or_cluster_only",
+        "source_input": "/Users/rogeriojorge/local/tests/sfincs_jax/examples/sfincs_examples/geometryScheme4_2species_noEr_withPhi1InDKE/input.namelist",
+        "total_unknowns_estimate": 1276279,
+        "violating_fields": {
+          "NTHETA": {
+            "actual": 5,
+            "required": 25
+          },
+          "NX": {
+            "actual": 2,
+            "required": 4
+          },
+          "NXI": {
+            "actual": 4,
+            "required": 100
+          },
+          "NZETA": {
+            "actual": 5,
+            "required": 51
+          }
+        }
+      },
+      {
+        "backend": "gpu",
+        "case": "geometryScheme4_2species_noEr_withQN",
+        "observed_resolution": {
+          "NTHETA": 5,
+          "NX": 2,
+          "NXI": 4,
+          "NZETA": 5
+        },
+        "original_resolution": {
+          "NTHETA": 13,
+          "NX": 5,
+          "NXI": 48,
+          "NZETA": 19
+        },
+        "production_case_found": true,
+        "production_input": "/Users/rogeriojorge/local/tests/sfincs_jax/benchmarks/production_resolution_inputs_2026-05-04/inputs/geometryScheme4_2species_noEr_withQN/input.namelist",
+        "production_input_exists": true,
+        "production_resolution": {
+          "NTHETA": 25,
+          "NX": 5,
+          "NXI": 100,
+          "NZETA": 51
+        },
+        "reason": "below_public_benchmark_resolution_floor",
+        "required_resolution": {
+          "NTHETA": 25,
+          "NX": 4,
+          "NXI": 100,
+          "NZETA": 51
+        },
+        "run_recommendation": "remote_or_cluster_only",
+        "source_input": "/Users/rogeriojorge/local/tests/sfincs_jax/examples/sfincs_examples/geometryScheme4_2species_noEr_withQN/input.namelist",
+        "total_unknowns_estimate": 1276279,
+        "violating_fields": {
+          "NTHETA": {
+            "actual": 5,
+            "required": 25
+          },
+          "NX": {
+            "actual": 2,
+            "required": 4
+          },
+          "NXI": {
+            "actual": 4,
+            "required": 100
+          },
+          "NZETA": {
+            "actual": 5,
+            "required": 51
+          }
+        }
+      },
+      {
+        "backend": "gpu",
+        "case": "geometryScheme4_2species_withEr_fullTrajectories",
+        "observed_resolution": {
+          "NTHETA": 5,
+          "NX": 2,
+          "NXI": 4,
+          "NZETA": 5
+        },
+        "original_resolution": {
+          "NTHETA": 13,
+          "NX": 5,
+          "NXI": 48,
+          "NZETA": 19
+        },
+        "production_case_found": true,
+        "production_input": "/Users/rogeriojorge/local/tests/sfincs_jax/benchmarks/production_resolution_inputs_2026-05-04/inputs/geometryScheme4_2species_withEr_fullTrajectories/input.namelist",
+        "production_input_exists": true,
+        "production_resolution": {
+          "NTHETA": 25,
+          "NX": 5,
+          "NXI": 100,
+          "NZETA": 51
+        },
+        "reason": "below_public_benchmark_resolution_floor",
+        "required_resolution": {
+          "NTHETA": 25,
+          "NX": 4,
+          "NXI": 100,
+          "NZETA": 51
+        },
+        "run_recommendation": "remote_or_cluster_only",
+        "source_input": "/Users/rogeriojorge/local/tests/sfincs_jax/examples/sfincs_examples/geometryScheme4_2species_withEr_fullTrajectories/input.namelist",
+        "total_unknowns_estimate": 1275004,
+        "violating_fields": {
+          "NTHETA": {
+            "actual": 5,
+            "required": 25
+          },
+          "NX": {
+            "actual": 2,
+            "required": 4
+          },
+          "NXI": {
+            "actual": 4,
+            "required": 100
+          },
+          "NZETA": {
+            "actual": 5,
+            "required": 51
+          }
+        }
+      },
+      {
+        "backend": "gpu",
+        "case": "geometryScheme4_2species_withEr_fullTrajectories_withQN",
+        "observed_resolution": {
+          "NTHETA": 5,
+          "NX": 2,
+          "NXI": 4,
+          "NZETA": 5
+        },
+        "original_resolution": {
+          "NTHETA": 13,
+          "NX": 5,
+          "NXI": 48,
+          "NZETA": 19
+        },
+        "production_case_found": true,
+        "production_input": "/Users/rogeriojorge/local/tests/sfincs_jax/benchmarks/production_resolution_inputs_2026-05-04/inputs/geometryScheme4_2species_withEr_fullTrajectories_withQN/input.namelist",
+        "production_input_exists": true,
+        "production_resolution": {
+          "NTHETA": 25,
+          "NX": 5,
+          "NXI": 100,
+          "NZETA": 51
+        },
+        "reason": "below_public_benchmark_resolution_floor",
+        "required_resolution": {
+          "NTHETA": 25,
+          "NX": 4,
+          "NXI": 100,
+          "NZETA": 51
+        },
+        "run_recommendation": "remote_or_cluster_only",
+        "source_input": "/Users/rogeriojorge/local/tests/sfincs_jax/examples/sfincs_examples/geometryScheme4_2species_withEr_fullTrajectories_withQN/input.namelist",
+        "total_unknowns_estimate": 1276279,
+        "violating_fields": {
+          "NTHETA": {
+            "actual": 5,
+            "required": 25
+          },
+          "NX": {
+            "actual": 2,
+            "required": 4
+          },
+          "NXI": {
+            "actual": 4,
+            "required": 100
+          },
+          "NZETA": {
+            "actual": 5,
+            "required": 51
+          }
+        }
+      },
+      {
+        "backend": "gpu",
+        "case": "geometryScheme5_3species_loRes",
+        "observed_resolution": {
+          "NTHETA": 5,
+          "NX": 2,
+          "NXI": 4,
+          "NZETA": 5
+        },
+        "original_resolution": {
+          "NTHETA": 9,
+          "NX": 4,
+          "NXI": 18,
+          "NZETA": 17
+        },
+        "production_case_found": true,
+        "production_input": "/Users/rogeriojorge/local/tests/sfincs_jax/benchmarks/production_resolution_inputs_2026-05-04/inputs/geometryScheme5_3species_loRes/input.namelist",
+        "production_input_exists": true,
+        "production_resolution": {
+          "NTHETA": 25,
+          "NX": 4,
+          "NXI": 100,
+          "NZETA": 51
+        },
+        "reason": "below_public_benchmark_resolution_floor",
+        "required_resolution": {
+          "NTHETA": 25,
+          "NX": 4,
+          "NXI": 100,
+          "NZETA": 51
+        },
+        "run_recommendation": "remote_or_cluster_only",
+        "source_input": "/Users/rogeriojorge/local/tests/sfincs_jax/examples/sfincs_examples/geometryScheme5_3species_loRes/input.namelist",
+        "total_unknowns_estimate": 1530006,
+        "violating_fields": {
+          "NTHETA": {
+            "actual": 5,
+            "required": 25
+          },
+          "NX": {
+            "actual": 2,
+            "required": 4
+          },
+          "NXI": {
+            "actual": 4,
+            "required": 100
+          },
+          "NZETA": {
+            "actual": 5,
+            "required": 51
+          }
+        }
+      },
+      {
+        "backend": "gpu",
+        "case": "inductiveE_noEr",
+        "observed_resolution": {
+          "NTHETA": 5,
+          "NX": 2,
+          "NXI": 4,
+          "NZETA": 5
+        },
+        "original_resolution": {
+          "NTHETA": 5,
+          "NX": 5,
+          "NXI": 8,
+          "NZETA": 7
+        },
+        "production_case_found": true,
+        "production_input": "/Users/rogeriojorge/local/tests/sfincs_jax/benchmarks/production_resolution_inputs_2026-05-04/inputs/inductiveE_noEr/input.namelist",
+        "production_input_exists": true,
+        "production_resolution": {
+          "NTHETA": 25,
+          "NX": 5,
+          "NXI": 100,
+          "NZETA": 51
+        },
+        "reason": "below_public_benchmark_resolution_floor",
+        "required_resolution": {
+          "NTHETA": 25,
+          "NX": 4,
+          "NXI": 100,
+          "NZETA": 51
+        },
+        "run_recommendation": "remote_or_cluster_only",
+        "source_input": "/Users/rogeriojorge/local/tests/sfincs_jax/examples/sfincs_examples/inductiveE_noEr/input.namelist",
+        "total_unknowns_estimate": 1275004,
+        "violating_fields": {
+          "NTHETA": {
+            "actual": 5,
+            "required": 25
+          },
+          "NX": {
+            "actual": 2,
+            "required": 4
+          },
+          "NXI": {
+            "actual": 4,
+            "required": 100
+          },
+          "NZETA": {
+            "actual": 5,
+            "required": 51
+          }
+        }
+      },
+      {
+        "backend": "gpu",
+        "case": "quick_2species_FPCollisions_noEr",
+        "observed_resolution": {
+          "NTHETA": 5,
+          "NX": 2,
+          "NXI": 4,
+          "NZETA": 5
+        },
+        "original_resolution": {
+          "NTHETA": 5,
+          "NX": 5,
+          "NXI": 8,
+          "NZETA": 7
+        },
+        "production_case_found": true,
+        "production_input": "/Users/rogeriojorge/local/tests/sfincs_jax/benchmarks/production_resolution_inputs_2026-05-04/inputs/quick_2species_FPCollisions_noEr/input.namelist",
+        "production_input_exists": true,
+        "production_resolution": {
+          "NTHETA": 25,
+          "NX": 5,
+          "NXI": 100,
+          "NZETA": 51
+        },
+        "reason": "below_public_benchmark_resolution_floor",
+        "required_resolution": {
+          "NTHETA": 25,
+          "NX": 4,
+          "NXI": 100,
+          "NZETA": 51
+        },
+        "run_recommendation": "remote_or_cluster_only",
+        "source_input": "/Users/rogeriojorge/local/tests/sfincs_jax/examples/sfincs_examples/quick_2species_FPCollisions_noEr/input.namelist",
+        "total_unknowns_estimate": 1275004,
+        "violating_fields": {
+          "NTHETA": {
+            "actual": 5,
+            "required": 25
+          },
+          "NX": {
+            "actual": 2,
+            "required": 4
+          },
+          "NXI": {
+            "actual": 4,
+            "required": 100
+          },
+          "NZETA": {
+            "actual": 5,
+            "required": 51
+          }
+        }
+      },
+      {
+        "backend": "gpu",
+        "case": "sfincsPaperFigure3_geometryScheme11_FPCollisions_2Species_DKESTrajectories",
+        "observed_resolution": {
+          "NTHETA": 5,
+          "NX": 2,
+          "NXI": 4,
+          "NZETA": 5
+        },
+        "original_resolution": {
+          "NTHETA": 19,
+          "NX": 5,
+          "NXI": 60,
+          "NZETA": 59
+        },
+        "production_case_found": true,
+        "production_input": "/Users/rogeriojorge/local/tests/sfincs_jax/benchmarks/production_resolution_inputs_2026-05-04/inputs/sfincsPaperFigure3_geometryScheme11_FPCollisions_2Species_DKESTrajectories/input.namelist",
+        "production_input_exists": true,
+        "production_resolution": {
+          "NTHETA": 25,
+          "NX": 5,
+          "NXI": 100,
+          "NZETA": 59
+        },
+        "reason": "below_public_benchmark_resolution_floor",
+        "required_resolution": {
+          "NTHETA": 25,
+          "NX": 4,
+          "NXI": 100,
+          "NZETA": 51
+        },
+        "run_recommendation": "remote_or_cluster_only",
+        "source_input": "/Users/rogeriojorge/local/tests/sfincs_jax/examples/sfincs_examples/sfincsPaperFigure3_geometryScheme11_FPCollisions_2Species_DKESTrajectories/input.namelist",
+        "total_unknowns_estimate": 1475004,
+        "violating_fields": {
+          "NTHETA": {
+            "actual": 5,
+            "required": 25
+          },
+          "NX": {
+            "actual": 2,
+            "required": 4
+          },
+          "NXI": {
+            "actual": 4,
+            "required": 100
+          },
+          "NZETA": {
+            "actual": 5,
+            "required": 51
+          }
+        }
+      },
+      {
+        "backend": "gpu",
+        "case": "sfincsPaperFigure3_geometryScheme11_FPCollisions_2Species_fullTrajectories",
+        "observed_resolution": {
+          "NTHETA": 5,
+          "NX": 2,
+          "NXI": 4,
+          "NZETA": 5
+        },
+        "original_resolution": {
+          "NTHETA": 19,
+          "NX": 5,
+          "NXI": 60,
+          "NZETA": 59
+        },
+        "production_case_found": true,
+        "production_input": "/Users/rogeriojorge/local/tests/sfincs_jax/benchmarks/production_resolution_inputs_2026-05-04/inputs/sfincsPaperFigure3_geometryScheme11_FPCollisions_2Species_fullTrajectories/input.namelist",
+        "production_input_exists": true,
+        "production_resolution": {
+          "NTHETA": 25,
+          "NX": 5,
+          "NXI": 100,
+          "NZETA": 59
+        },
+        "reason": "below_public_benchmark_resolution_floor",
+        "required_resolution": {
+          "NTHETA": 25,
+          "NX": 4,
+          "NXI": 100,
+          "NZETA": 51
+        },
+        "run_recommendation": "remote_or_cluster_only",
+        "source_input": "/Users/rogeriojorge/local/tests/sfincs_jax/examples/sfincs_examples/sfincsPaperFigure3_geometryScheme11_FPCollisions_2Species_fullTrajectories/input.namelist",
+        "total_unknowns_estimate": 1475004,
+        "violating_fields": {
+          "NTHETA": {
+            "actual": 5,
+            "required": 25
+          },
+          "NX": {
+            "actual": 2,
+            "required": 4
+          },
+          "NXI": {
+            "actual": 4,
+            "required": 100
+          },
+          "NZETA": {
+            "actual": 5,
+            "required": 51
+          }
+        }
+      }
+    ]
+  },
+  "execution_order": [
+    "Review this manifest and verify all source artifact paths/checksums.",
+    "Run bounded CPU probes for local/remote production rows without broad all-suite launches.",
+    "Run matching office GPU probes with solver traces and memory accounting.",
+    "Run QA/QH next-grid bootstrap-current ladder at identical radii for JAX, Fortran v3, and Redl.",
+    "Promote or regenerate QI nfp1-4 VMEC-JAX fixtures into owned external-data artifacts.",
+    "Only regenerate README/docs runtime, memory, parity, and bootstrap figures from passing artifacts."
+  ],
+  "generated_at_utc": "2026-06-11T02:48:25+00:00",
+  "kind": "sfincs_jax_production_stress_manifest",
+  "open_lanes": [
+    {
+      "lane": "production_floor_example_suite",
+      "next_gate": "rerun CPU/GPU rows from benchmark_floor_gaps and short_fortran_runtime_cases",
+      "status": "open"
+    },
+    {
+      "lane": "qa_qh_rhsmode1_bootstrap_production",
+      "next_gate": "residual-clean next-grid ladder before production 25x39x60x7 claim",
+      "status": "open"
+    },
+    {
+      "lane": "lower_memory_production_replacement",
+      "next_gate": "strict true-residual admission plus RSS/runtime improvement over exact LU",
+      "status": "open"
+    },
+    {
+      "lane": "true_device_qi_and_production_qi_ladders",
+      "next_gate": "nfp1-4 owned fixture manifest and CPU/GPU production-resolution ladder",
+      "status": "open"
+    },
+    {
+      "lane": "parallelism_and_scaling",
+      "next_gate": "single-case multi-GPU and multi-CPU scaling on production-sized work",
+      "status": "open"
+    },
+    {
+      "lane": "docs_tests_and_release_claims",
+      "next_gate": "README/docs plots regenerated only from passing production artifacts",
+      "status": "open"
+    }
+  ],
+  "production_input_manifest": {
+    "case_count": 39,
+    "minimum_3d_resolution": {
+      "NTHETA": 25,
+      "NX": 4,
+      "NXI": 100,
+      "NZETA": 51
+    },
+    "minimum_tokamak_pas_noer_resolution": {
+      "NTHETA": 89,
+      "NX": 24,
+      "NXI": 300
+    },
+    "minimum_tokamak_resolution": {
+      "NTHETA": 33,
+      "NX": 12,
+      "NXI": 140
+    },
+    "target_fortran_min_runtime_s": 10.0
+  },
+  "public_benchmark_summary": {
+    "canonical_row_source": "filtered_cpu_gpu_suite_reports",
+    "min_fortran_runtime_s": 10.0,
+    "reported_case_counts": {
+      "cpu": 24,
+      "gpu": 24
+    },
+    "source_case_counts": {
+      "cpu": 39,
+      "gpu": 39
+    }
+  },
+  "qa_qh_bootstrap": [
+    {
+      "case": "QA",
+      "current_claim_boundary": "11-surface same-resolution SFINCS_JAX/SFINCS Fortran v3 diagnostic; production parity still requires residual, convergence, and accuracy gates.",
+      "current_grid_label": "13x13x21x5 diagnostic, 11 radial surfaces",
+      "metrics": {
+        "completed_points": 11,
+        "failed_points": 0,
+        "max_errorbar_rel_to_baseline": 0.04212557503567128,
+        "max_jax_relative_difference_vs_fortran_same_resolution": 0.0012110550423087153,
+        "max_jax_relative_difference_vs_redl": 0.09690002259552323,
+        "requested_points": 11,
+        "sfincs_fortran_v3_elapsed_s_sum_on_jax_surfaces": 8.839602000000436,
+        "sfincs_fortran_v3_mumps_memory_mb_max_on_jax_surfaces": 91.0,
+        "sfincs_jax_elapsed_s_sum": 70.42038562492235,
+        "sfincs_jax_solver_memory_mb_max": 108.986308
+      },
+      "next_required_ladder": [
+        "rerun same QA/QH surfaces at a bounded mid-grid with residual-clean solves",
+        "promote to 25x39x60x7 or documented production-equivalent floor",
+        "keep SFINCS_JAX, SFINCS Fortran v3, and Redl on the same radii and normalization",
+        "regenerate error bars from real-space and velocity-space refinement"
+      ],
+      "performance": {
+        "memory_definition": "JAX: factor+CSR estimate. Fortran: parsed MUMPS memory metric or process RSS from logs.",
+        "memory_peak_mb": {
+          "definition": "Peak over plotted surfaces. JAX uses linear-solver factor plus CSR estimates from HDF5; Fortran v3 uses archived MUMPS effective total factor memory when present.",
+          "sfincs_fortran_v3": 91.0,
+          "sfincs_fortran_v3_points": 11,
+          "sfincs_jax": 108.986308,
+          "sfincs_jax_points": 11
+        },
+        "runtime_total_s": {
+          "definition": "Sum of per-surface solve wall times for the radial points shown in the figure.",
+          "sfincs_fortran_v3": 8.839602000000436,
+          "sfincs_fortran_v3_points": 11,
+          "sfincs_jax": 70.42038562492235,
+          "sfincs_jax_points": 11
+        }
+      },
+      "production_target_resolution": {
+        "NTHETA": 25,
+        "NX": 4,
+        "NXI": 100,
+        "NZETA": 51
+      },
+      "source": "/Users/rogeriojorge/local/tests/sfincs_jax/docs/_static/figures/vmec_jax_finite_beta/qs_paper_qa_same_resolution_11surface.json",
+      "source_exists": true
+    },
+    {
+      "case": "QH",
+      "current_claim_boundary": "11-surface same-resolution SFINCS_JAX/SFINCS Fortran v3 diagnostic; production parity still requires residual, convergence, and accuracy gates.",
+      "current_grid_label": "13x13x21x5 diagnostic, 11 radial surfaces",
+      "metrics": {
+        "completed_points": 11,
+        "failed_points": 0,
+        "max_errorbar_rel_to_baseline": 0.24433432267816163,
+        "max_jax_relative_difference_vs_fortran_same_resolution": 0.003535744208836141,
+        "max_jax_relative_difference_vs_redl": 0.1012387246673676,
+        "requested_points": 11,
+        "sfincs_fortran_v3_elapsed_s_sum_on_jax_surfaces": 17.50815599999993,
+        "sfincs_fortran_v3_mumps_memory_mb_max_on_jax_surfaces": 91.0,
+        "sfincs_jax_elapsed_s_sum": 74.11127966805361,
+        "sfincs_jax_solver_memory_mb_max": 108.986308
+      },
+      "next_required_ladder": [
+        "rerun same QA/QH surfaces at a bounded mid-grid with residual-clean solves",
+        "promote to 25x39x60x7 or documented production-equivalent floor",
+        "keep SFINCS_JAX, SFINCS Fortran v3, and Redl on the same radii and normalization",
+        "regenerate error bars from real-space and velocity-space refinement"
+      ],
+      "performance": {
+        "memory_definition": "JAX: factor+CSR estimate. Fortran: parsed MUMPS memory metric or process RSS from logs.",
+        "memory_peak_mb": {
+          "definition": "Peak over plotted surfaces. JAX uses linear-solver factor plus CSR estimates from HDF5; Fortran v3 uses archived MUMPS effective total factor memory when present.",
+          "sfincs_fortran_v3": 91.0,
+          "sfincs_fortran_v3_points": 11,
+          "sfincs_jax": 108.986308,
+          "sfincs_jax_points": 11
+        },
+        "runtime_total_s": {
+          "definition": "Sum of per-surface solve wall times for the radial points shown in the figure.",
+          "sfincs_fortran_v3": 17.50815599999993,
+          "sfincs_fortran_v3_points": 11,
+          "sfincs_jax": 74.11127966805361,
+          "sfincs_jax_points": 11
+        }
+      },
+      "production_target_resolution": {
+        "NTHETA": 25,
+        "NX": 4,
+        "NXI": 100,
+        "NZETA": 51
+      },
+      "source": "/Users/rogeriojorge/local/tests/sfincs_jax/docs/_static/figures/vmec_jax_finite_beta/qs_paper_qh_same_resolution_11surface.json",
+      "source_exists": true
+    }
+  ],
+  "qi_candidates": [
+    {
+      "exists": true,
+      "fixture_stability": "built_docs_ephemeral",
+      "label": "qi_nfp1_readme_final",
+      "nfp": "1",
+      "path": "/Users/rogeriojorge/local/vmec_jax/docs/_build/html/_static/qi_readme_cases/nfp1/wout_final.nc",
+      "recommended_fixture_action": "promote to SFINCS_JAX release/external-data fixture with checksum",
+      "sha256": "8463f7aacd667accfc758d6a3dbc2c5c6a536671d75240469025cdd09b1f47bf",
+      "size_bytes": 685112
+    },
+    {
+      "exists": true,
+      "fixture_stability": "built_docs_ephemeral",
+      "label": "qi_nfp2_target_helicity_readme_final",
+      "nfp": "2",
+      "path": "/Users/rogeriojorge/local/vmec_jax/docs/_build/html/_static/qi_readme_cases/nfp2_target_helicity/wout_final.nc",
+      "recommended_fixture_action": "promote to SFINCS_JAX release/external-data fixture with checksum",
+      "sha256": "5d8499cd7099b9e9ad10b203d45fe2c38c1208da120f3f358d7937c8504b6c73",
+      "size_bytes": 772216
+    },
+    {
+      "exists": true,
+      "fixture_stability": "built_docs_ephemeral",
+      "label": "qi_nfp3_seed3127_readme_final",
+      "nfp": "3",
+      "path": "/Users/rogeriojorge/local/vmec_jax/docs/_build/html/_static/qi_readme_cases/nfp3_seed3127/wout_final.nc",
+      "recommended_fixture_action": "promote to SFINCS_JAX release/external-data fixture with checksum",
+      "sha256": "5c0d1bfc204a7c5f94229912492ab7e3eb3f14d1d71d0924a7481149566b74d8",
+      "size_bytes": 686456
+    },
+    {
+      "exists": true,
+      "fixture_stability": "built_docs_ephemeral",
+      "label": "qi_nfp4_minimal_readme_final",
+      "nfp": "4",
+      "path": "/Users/rogeriojorge/local/vmec_jax/docs/_build/html/_static/qi_readme_cases/nfp4_minimal/wout_final.nc",
+      "recommended_fixture_action": "promote to SFINCS_JAX release/external-data fixture with checksum",
+      "sha256": "8fa2a552a9b542cd59857cede705f8d8f0bd5a78b573710e2dbb6b462ff8098a",
+      "size_bytes": 601048
+    },
+    {
+      "exists": true,
+      "fixture_stability": "local_vmec_jax_docs_static",
+      "label": "qi_readme_best_case_static",
+      "nfp": "unknown",
+      "path": "/Users/rogeriojorge/local/vmec_jax/docs/_static/readme_best_cases/qi/wout_final.nc",
+      "recommended_fixture_action": "use as local candidate only until an owned fixture is published",
+      "sha256": "5b9d06e19839f176522e84cb2e597206496a9e2a087c1b87d4423891f74ce833",
+      "size_bytes": 685112
+    },
+    {
+      "exists": true,
+      "fixture_stability": "local_vmec_jax_example_data",
+      "label": "qi_seed3127_examples_data",
+      "nfp": "3",
+      "path": "/Users/rogeriojorge/local/vmec_jax/examples/data/wout_QI_stel_seed_3127.nc",
+      "recommended_fixture_action": "use as local candidate only until an owned fixture is published",
+      "sha256": "d5dadc3a2344ebc85f488f20241a5ecd4fe473aabbfe3b2df711ee37dc355b67",
+      "size_bytes": 533400
+    },
+    {
+      "exists": true,
+      "fixture_stability": "local_vmec_jax_example_data",
+      "label": "qi_nfp3_fixed_resolution_examples_data",
+      "nfp": "3",
+      "path": "/Users/rogeriojorge/local/vmec_jax/examples/data/wout_nfp3_QI_fixed_resolution_final.nc",
+      "recommended_fixture_action": "use as local candidate only until an owned fixture is published",
+      "sha256": "fad4876814b437b73d7371672a037b535d263756e72fbbdbea2e4933639903ff",
+      "size_bytes": 1598107
+    }
+  ],
+  "qi_evidence": {
+    "current_evidence": {
+      "artifact_count": 112,
+      "max_checked_per_axis_resolution_fraction": 0.6,
+      "max_checked_total_size_fraction": 0.27353226065780134,
+      "nonpassing_artifact_count": 80,
+      "passing_artifact_count": 32,
+      "production_total_size_uncovered_percent": 72.65
+    },
+    "open_blockers": [
+      "Run and check in production-resolution CPU multi-seed summary artifact before promoting broad public-auto QI.",
+      "Run and check in production-resolution GPU0 multi-seed summary artifact before promoting broad public-auto QI.",
+      "Keep true device-QI closed deferred until an operator-Krylov device-QI scale-0.60 GPU hard-seed artifact writes output, trace, and accepted-converged residual metadata.",
+      "Keep the augmented-seed operator-Krylov device-QI probe fail-closed until a converged artifact reports observed augmented-seed metadata.",
+      "Keep the global-moment closure device-QI probe fail-closed until a converged artifact reports observed global-moment residual-equation metadata.",
+      "Keep the residual-Galerkin device-QI probe fail-closed until a converged artifact reports observed residual-derived Galerkin metadata.",
+      "Keep the phase-space coarse-reuse device-QI probe fail-closed until a converged artifact reports observed phase-space residual-equation metadata.",
+      "Keep the residual-region/bounce-region device-QI probe fail-closed until a converged artifact reports observed residual-bounce coarse metadata.",
+      "Keep the block-Schur residual device-QI probe fail-closed until a converged artifact reports observed block-Schur residual metadata.",
+      "Keep the coupled residual-equation device-QI probe fail-closed until a converged artifact reports observed coupled-equation metadata.",
+      "Do not use the non-autodiff host fallback as evidence for differentiable or true device-resident QI."
+    ],
+    "production_target": {
+      "required_backends": [
+        "cpu",
+        "gpu"
+      ],
+      "resolution": {
+        "NTHETA": 25,
+        "NX": 4,
+        "NXI": 100,
+        "NZETA": 51
+      },
+      "seed_count": 5,
+      "total_size_estimate": 510002
+    },
+    "release_gate": "bounded_proxy",
+    "release_gate_reason": "Scoped production non-autodiff host fallback evidence is release-ready; the broad public auto QI gate remains a bounded proxy until production-resolution CPU/GPU ladders pass, and true device-QI is closed deferred post-release.",
+    "source": "/Users/rogeriojorge/local/tests/sfincs_jax/docs/_static/qi_seed_robustness_evidence_manifest.json"
+  },
+  "repo": {
+    "commit": "b14ee7101acecf0910734edaf59d9de0e684371a",
+    "root": "/Users/rogeriojorge/local/tests/sfincs_jax"
+  },
+  "schema_version": 1,
+  "short_fortran_runtime_cases": [
+    {
+      "case": "HSX_PASCollisions_DKESTrajectories",
+      "fortran_runtime_s": 0.9940000000060536,
+      "original_resolution": {
+        "NTHETA": 11,
+        "NX": 5,
+        "NXI": 149,
+        "NZETA": 115
+      },
+      "production_case_found": true,
+      "production_input": "/Users/rogeriojorge/local/tests/sfincs_jax/benchmarks/production_resolution_inputs_2026-05-04/inputs/HSX_PASCollisions_DKESTrajectories/input.namelist",
+      "production_input_exists": true,
+      "production_resolution": {
+        "NTHETA": 25,
+        "NX": 5,
+        "NXI": 149,
+        "NZETA": 115
+      },
+      "reason": "fortran_runtime_below_public_plot_floor",
+      "required_for_public_plot_s": 10.0,
+      "run_recommendation": "remote_or_cluster_only",
+      "source_input": "/Users/rogeriojorge/local/tests/sfincs_jax/examples/sfincs_examples/HSX_PASCollisions_DKESTrajectories/input.namelist",
+      "total_unknowns_estimate": 4283760
+    },
+    {
+      "case": "HSX_PASCollisions_fullTrajectories",
+      "fortran_runtime_s": 2.5100000000093132,
+      "original_resolution": {
+        "NTHETA": 11,
+        "NX": 5,
+        "NXI": 149,
+        "NZETA": 115
+      },
+      "production_case_found": true,
+      "production_input": "/Users/rogeriojorge/local/tests/sfincs_jax/benchmarks/production_resolution_inputs_2026-05-04/inputs/HSX_PASCollisions_fullTrajectories/input.namelist",
+      "production_input_exists": true,
+      "production_resolution": {
+        "NTHETA": 25,
+        "NX": 5,
+        "NXI": 149,
+        "NZETA": 115
+      },
+      "reason": "fortran_runtime_below_public_plot_floor",
+      "required_for_public_plot_s": 10.0,
+      "run_recommendation": "remote_or_cluster_only",
+      "source_input": "/Users/rogeriojorge/local/tests/sfincs_jax/examples/sfincs_examples/HSX_PASCollisions_fullTrajectories/input.namelist",
+      "total_unknowns_estimate": 4283760
+    },
+    {
+      "case": "geometryScheme4_1species_PAS_withEr_DKESTrajectories",
+      "fortran_runtime_s": 1.3649999999906868,
+      "original_resolution": {
+        "NTHETA": 13,
+        "NX": 5,
+        "NXI": 48,
+        "NZETA": 23
+      },
+      "production_case_found": true,
+      "production_input": "/Users/rogeriojorge/local/tests/sfincs_jax/benchmarks/production_resolution_inputs_2026-05-04/inputs/geometryScheme4_1species_PAS_withEr_DKESTrajectories/input.namelist",
+      "production_input_exists": true,
+      "production_resolution": {
+        "NTHETA": 25,
+        "NX": 5,
+        "NXI": 100,
+        "NZETA": 51
+      },
+      "reason": "fortran_runtime_below_public_plot_floor",
+      "required_for_public_plot_s": 10.0,
+      "run_recommendation": "remote_or_cluster_only",
+      "source_input": "/Users/rogeriojorge/local/tests/sfincs_jax/examples/sfincs_examples/geometryScheme4_1species_PAS_withEr_DKESTrajectories/input.namelist",
+      "total_unknowns_estimate": 637505
+    },
+    {
+      "case": "geometryScheme4_2species_PAS_noEr",
+      "fortran_runtime_s": 0.9530000000086147,
+      "original_resolution": {
+        "NTHETA": 13,
+        "NX": 5,
+        "NXI": 48,
+        "NZETA": 23
+      },
+      "production_case_found": true,
+      "production_input": "/Users/rogeriojorge/local/tests/sfincs_jax/benchmarks/production_resolution_inputs_2026-05-04/inputs/geometryScheme4_2species_PAS_noEr/input.namelist",
+      "production_input_exists": true,
+      "production_resolution": {
+        "NTHETA": 25,
+        "NX": 5,
+        "NXI": 100,
+        "NZETA": 51
+      },
+      "reason": "fortran_runtime_below_public_plot_floor",
+      "required_for_public_plot_s": 10.0,
+      "run_recommendation": "remote_or_cluster_only",
+      "source_input": "/Users/rogeriojorge/local/tests/sfincs_jax/examples/sfincs_examples/geometryScheme4_2species_PAS_noEr/input.namelist",
+      "total_unknowns_estimate": 1275010
+    },
+    {
+      "case": "monoenergetic_geometryScheme1",
+      "fortran_runtime_s": 0.7950000000128057,
+      "original_resolution": {
+        "NTHETA": 27,
+        "NX": 1,
+        "NXI": 70,
+        "NZETA": 29
+      },
+      "production_case_found": true,
+      "production_input": "/Users/rogeriojorge/local/tests/sfincs_jax/benchmarks/production_resolution_inputs_2026-05-04/inputs/monoenergetic_geometryScheme1/input.namelist",
+      "production_input_exists": true,
+      "production_resolution": {
+        "NTHETA": 27,
+        "NX": 4,
+        "NXI": 100,
+        "NZETA": 51
+      },
+      "reason": "fortran_runtime_below_public_plot_floor",
+      "required_for_public_plot_s": 10.0,
+      "run_recommendation": "remote_or_cluster_only",
+      "source_input": "/Users/rogeriojorge/local/tests/sfincs_jax/examples/sfincs_examples/monoenergetic_geometryScheme1/input.namelist",
+      "total_unknowns_estimate": 550804
+    },
+    {
+      "case": "monoenergetic_geometryScheme11",
+      "fortran_runtime_s": 0.8610000000044238,
+      "original_resolution": {
+        "NTHETA": 17,
+        "NX": 1,
+        "NXI": 24,
+        "NZETA": 31
+      },
+      "production_case_found": true,
+      "production_input": "/Users/rogeriojorge/local/tests/sfincs_jax/benchmarks/production_resolution_inputs_2026-05-04/inputs/monoenergetic_geometryScheme11/input.namelist",
+      "production_input_exists": true,
+      "production_resolution": {
+        "NTHETA": 25,
+        "NX": 4,
+        "NXI": 100,
+        "NZETA": 51
+      },
+      "reason": "fortran_runtime_below_public_plot_floor",
+      "required_for_public_plot_s": 10.0,
+      "run_recommendation": "remote_or_cluster_only",
+      "source_input": "/Users/rogeriojorge/local/tests/sfincs_jax/examples/sfincs_examples/monoenergetic_geometryScheme11/input.namelist",
+      "total_unknowns_estimate": 510004
+    },
+    {
+      "case": "monoenergetic_geometryScheme5_ASCII",
+      "fortran_runtime_s": 1.0519999999960419,
+      "original_resolution": {
+        "NTHETA": 17,
+        "NX": 1,
+        "NXI": 24,
+        "NZETA": 31
+      },
+      "production_case_found": true,
+      "production_input": "/Users/rogeriojorge/local/tests/sfincs_jax/benchmarks/production_resolution_inputs_2026-05-04/inputs/monoenergetic_geometryScheme5_ASCII/input.namelist",
+      "production_input_exists": true,
+      "production_resolution": {
+        "NTHETA": 25,
+        "NX": 4,
+        "NXI": 100,
+        "NZETA": 51
+      },
+      "reason": "fortran_runtime_below_public_plot_floor",
+      "required_for_public_plot_s": 10.0,
+      "run_recommendation": "remote_or_cluster_only",
+      "source_input": "/Users/rogeriojorge/local/tests/sfincs_jax/examples/sfincs_examples/monoenergetic_geometryScheme5_ASCII/input.namelist",
+      "total_unknowns_estimate": 510004
+    },
+    {
+      "case": "monoenergetic_geometryScheme5_netCDF",
+      "fortran_runtime_s": 1.029000000009546,
+      "original_resolution": {
+        "NTHETA": 17,
+        "NX": 1,
+        "NXI": 24,
+        "NZETA": 31
+      },
+      "production_case_found": true,
+      "production_input": "/Users/rogeriojorge/local/tests/sfincs_jax/benchmarks/production_resolution_inputs_2026-05-04/inputs/monoenergetic_geometryScheme5_netCDF/input.namelist",
+      "production_input_exists": true,
+      "production_resolution": {
+        "NTHETA": 25,
+        "NX": 4,
+        "NXI": 100,
+        "NZETA": 51
+      },
+      "reason": "fortran_runtime_below_public_plot_floor",
+      "required_for_public_plot_s": 10.0,
+      "run_recommendation": "remote_or_cluster_only",
+      "source_input": "/Users/rogeriojorge/local/tests/sfincs_jax/examples/sfincs_examples/monoenergetic_geometryScheme5_netCDF/input.namelist",
+      "total_unknowns_estimate": 510004
+    },
+    {
+      "case": "sfincsPaperFigure3_geometryScheme11_PASCollisions_2Species_DKESTrajectories",
+      "fortran_runtime_s": 1.1039999999920838,
+      "original_resolution": {
+        "NTHETA": 19,
+        "NX": 5,
+        "NXI": 60,
+        "NZETA": 59
+      },
+      "production_case_found": true,
+      "production_input": "/Users/rogeriojorge/local/tests/sfincs_jax/benchmarks/production_resolution_inputs_2026-05-04/inputs/sfincsPaperFigure3_geometryScheme11_PASCollisions_2Species_DKESTrajectories/input.namelist",
+      "production_input_exists": true,
+      "production_resolution": {
+        "NTHETA": 25,
+        "NX": 5,
+        "NXI": 100,
+        "NZETA": 59
+      },
+      "reason": "fortran_runtime_below_public_plot_floor",
+      "required_for_public_plot_s": 10.0,
+      "run_recommendation": "remote_or_cluster_only",
+      "source_input": "/Users/rogeriojorge/local/tests/sfincs_jax/examples/sfincs_examples/sfincsPaperFigure3_geometryScheme11_PASCollisions_2Species_DKESTrajectories/input.namelist",
+      "total_unknowns_estimate": 1475010
+    },
+    {
+      "case": "sfincsPaperFigure3_geometryScheme11_PASCollisions_2Species_fullTrajectories",
+      "fortran_runtime_s": 1.705999999976484,
+      "original_resolution": {
+        "NTHETA": 19,
+        "NX": 5,
+        "NXI": 60,
+        "NZETA": 59
+      },
+      "production_case_found": true,
+      "production_input": "/Users/rogeriojorge/local/tests/sfincs_jax/benchmarks/production_resolution_inputs_2026-05-04/inputs/sfincsPaperFigure3_geometryScheme11_PASCollisions_2Species_fullTrajectories/input.namelist",
+      "production_input_exists": true,
+      "production_resolution": {
+        "NTHETA": 25,
+        "NX": 5,
+        "NXI": 100,
+        "NZETA": 59
+      },
+      "reason": "fortran_runtime_below_public_plot_floor",
+      "required_for_public_plot_s": 10.0,
+      "run_recommendation": "remote_or_cluster_only",
+      "source_input": "/Users/rogeriojorge/local/tests/sfincs_jax/examples/sfincs_examples/sfincsPaperFigure3_geometryScheme11_PASCollisions_2Species_fullTrajectories/input.namelist",
+      "total_unknowns_estimate": 1475010
+    },
+    {
+      "case": "tokamak_1species_FPCollisions_noEr",
+      "fortran_runtime_s": 7.896682255901396,
+      "original_resolution": {
+        "NTHETA": 21,
+        "NX": 8,
+        "NXI": 31,
+        "NZETA": 1
+      },
+      "production_case_found": true,
+      "production_input": "/Users/rogeriojorge/local/tests/sfincs_jax/benchmarks/production_resolution_inputs_2026-05-04/inputs/tokamak_1species_FPCollisions_noEr/input.namelist",
+      "production_input_exists": true,
+      "production_resolution": {
+        "NTHETA": 33,
+        "NX": 12,
+        "NXI": 140,
+        "NZETA": 1
+      },
+      "reason": "fortran_runtime_below_public_plot_floor",
+      "required_for_public_plot_s": 10.0,
+      "run_recommendation": "remote_or_cluster_only",
+      "source_input": "/Users/rogeriojorge/local/tests/sfincs_jax/examples/sfincs_examples/tokamak_1species_FPCollisions_noEr/input.namelist",
+      "total_unknowns_estimate": 55440
+    },
+    {
+      "case": "tokamak_1species_FPCollisions_withEr_DKESTrajectories",
+      "fortran_runtime_s": 6.9583003469742835,
+      "original_resolution": {
+        "NTHETA": 21,
+        "NX": 8,
+        "NXI": 31,
+        "NZETA": 1
+      },
+      "production_case_found": true,
+      "production_input": "/Users/rogeriojorge/local/tests/sfincs_jax/benchmarks/production_resolution_inputs_2026-05-04/inputs/tokamak_1species_FPCollisions_withEr_DKESTrajectories/input.namelist",
+      "production_input_exists": true,
+      "production_resolution": {
+        "NTHETA": 33,
+        "NX": 12,
+        "NXI": 140,
+        "NZETA": 1
+      },
+      "reason": "fortran_runtime_below_public_plot_floor",
+      "required_for_public_plot_s": 10.0,
+      "run_recommendation": "remote_or_cluster_only",
+      "source_input": "/Users/rogeriojorge/local/tests/sfincs_jax/examples/sfincs_examples/tokamak_1species_FPCollisions_withEr_DKESTrajectories/input.namelist",
+      "total_unknowns_estimate": 55442
+    },
+    {
+      "case": "tokamak_1species_FPCollisions_withEr_fullTrajectories",
+      "fortran_runtime_s": 6.735952196177095,
+      "original_resolution": {
+        "NTHETA": 21,
+        "NX": 8,
+        "NXI": 31,
+        "NZETA": 1
+      },
+      "production_case_found": true,
+      "production_input": "/Users/rogeriojorge/local/tests/sfincs_jax/benchmarks/production_resolution_inputs_2026-05-04/inputs/tokamak_1species_FPCollisions_withEr_fullTrajectories/input.namelist",
+      "production_input_exists": true,
+      "production_resolution": {
+        "NTHETA": 33,
+        "NX": 12,
+        "NXI": 140,
+        "NZETA": 1
+      },
+      "reason": "fortran_runtime_below_public_plot_floor",
+      "required_for_public_plot_s": 10.0,
+      "run_recommendation": "remote_or_cluster_only",
+      "source_input": "/Users/rogeriojorge/local/tests/sfincs_jax/examples/sfincs_examples/tokamak_1species_FPCollisions_withEr_fullTrajectories/input.namelist",
+      "total_unknowns_estimate": 55442
+    },
+    {
+      "case": "transportMatrix_geometryScheme11",
+      "fortran_runtime_s": 0.025000000023283064,
+      "original_resolution": {
+        "NTHETA": 13,
+        "NX": 6,
+        "NXI": 24,
+        "NZETA": 31
+      },
+      "production_case_found": true,
+      "production_input": "/Users/rogeriojorge/local/tests/sfincs_jax/benchmarks/production_resolution_inputs_2026-05-04/inputs/transportMatrix_geometryScheme11/input.namelist",
+      "production_input_exists": true,
+      "production_resolution": {
+        "NTHETA": 25,
+        "NX": 6,
+        "NXI": 100,
+        "NZETA": 51
+      },
+      "reason": "fortran_runtime_below_public_plot_floor",
+      "required_for_public_plot_s": 10.0,
+      "run_recommendation": "remote_or_cluster_only",
+      "source_input": "/Users/rogeriojorge/local/tests/sfincs_jax/examples/sfincs_examples/transportMatrix_geometryScheme11/input.namelist",
+      "total_unknowns_estimate": 765002
+    },
+    {
+      "case": "transportMatrix_geometryScheme2",
+      "fortran_runtime_s": 0.031000000017229468,
+      "original_resolution": {
+        "NTHETA": 15,
+        "NX": 8,
+        "NXI": 16,
+        "NZETA": 13
+      },
+      "production_case_found": true,
+      "production_input": "/Users/rogeriojorge/local/tests/sfincs_jax/benchmarks/production_resolution_inputs_2026-05-04/inputs/transportMatrix_geometryScheme2/input.namelist",
+      "production_input_exists": true,
+      "production_resolution": {
+        "NTHETA": 25,
+        "NX": 8,
+        "NXI": 100,
+        "NZETA": 51
+      },
+      "reason": "fortran_runtime_below_public_plot_floor",
+      "required_for_public_plot_s": 10.0,
+      "run_recommendation": "remote_or_cluster_only",
+      "source_input": "/Users/rogeriojorge/local/tests/sfincs_jax/examples/sfincs_examples/transportMatrix_geometryScheme2/input.namelist",
+      "total_unknowns_estimate": 1020002
+    }
+  ],
+  "sources": {
+    "benchmark_summary": "/Users/rogeriojorge/local/tests/sfincs_jax/examples/publication_figures/artifacts/sfincs_jax_fortran_suite_benchmark_summary.json",
+    "production_input_manifest": "/Users/rogeriojorge/local/tests/sfincs_jax/benchmarks/production_resolution_inputs_2026-05-04/manifest.json",
+    "qa_bootstrap": "/Users/rogeriojorge/local/tests/sfincs_jax/docs/_static/figures/vmec_jax_finite_beta/qs_paper_qa_same_resolution_11surface.json",
+    "qh_bootstrap": "/Users/rogeriojorge/local/tests/sfincs_jax/docs/_static/figures/vmec_jax_finite_beta/qs_paper_qh_same_resolution_11surface.json",
+    "qi_evidence": "/Users/rogeriojorge/local/tests/sfincs_jax/docs/_static/qi_seed_robustness_evidence_manifest.json",
+    "vmec_jax_root": "/Users/rogeriojorge/local/vmec_jax"
+  },
+  "summary_counts": {
+    "benchmark_floor_gap_rows": {
+      "cpu": 16,
+      "gpu": 16
+    },
+    "benchmark_floor_gap_unique_cases": [
+      "HSX_FPCollisions_DKESTrajectories",
+      "HSX_FPCollisions_fullTrajectories",
+      "additional_examples",
+      "filteredW7XNetCDF_2species_magneticDrifts_noEr",
+      "filteredW7XNetCDF_2species_magneticDrifts_withEr",
+      "filteredW7XNetCDF_2species_noEr",
+      "geometryScheme4_2species_noEr",
+      "geometryScheme4_2species_noEr_withPhi1InDKE",
+      "geometryScheme4_2species_noEr_withQN",
+      "geometryScheme4_2species_withEr_fullTrajectories",
+      "geometryScheme4_2species_withEr_fullTrajectories_withQN",
+      "geometryScheme5_3species_loRes",
+      "inductiveE_noEr",
+      "quick_2species_FPCollisions_noEr",
+      "sfincsPaperFigure3_geometryScheme11_FPCollisions_2Species_DKESTrajectories",
+      "sfincsPaperFigure3_geometryScheme11_FPCollisions_2Species_fullTrajectories"
+    ],
+    "production_manifest_cases": 39,
+    "qi_candidate_count": 7,
+    "qi_existing_candidate_count": 7,
+    "qi_nfps_covered": [
+      "1",
+      "2",
+      "3",
+      "4"
+    ],
+    "short_fortran_runtime_case_count": 15
+  }
+}
