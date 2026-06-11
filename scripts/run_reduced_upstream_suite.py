@@ -1791,6 +1791,21 @@ def _classify_blocker(*, status: str, note: str, mismatch_keys: list[str], jax_l
             return "solver branch mismatch"
         return "output field mismatch"
 
+    if (
+        status == "jax_error"
+        and (
+            "return code 137" in text
+            or "rc=137" in text
+            or "exit status 137" in text
+            or "signal 9" in text
+            or "sigkill" in text
+            or "out of memory" in text
+            or "oom" in text
+            or "died with <signals.sigterm" in text
+            or "signal 15" in text
+        )
+    ):
+        return "jax resource/signal"
     if "cusolver_" in text or "xla_ffi" in text or "ffi_python_gpu_callback" in text:
         return "solver branch mismatch"
     if "notimplemented" in text or "unsupported" in text or "todo" in text:

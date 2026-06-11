@@ -632,6 +632,37 @@ def test_classify_blocker_treats_cuda_dense_custom_calls_as_solver_branch(tmp_pa
     )
 
 
+def test_classify_blocker_treats_jax_signal_and_oom_as_resource_failure(tmp_path: Path) -> None:
+    log_path = tmp_path / "sfincs_jax.log"
+    log_path.write_text(
+        "input=wout_QI_nfp2_stable_Er_006_000043_hires_scaled.nc\n"
+        "active_projected_rhs1_full_csr_preconditioner: auto candidate start\n"
+        "Command terminated by signal 9\n"
+        "[sfincs_jax subprocess failed rc=137]\n",
+        encoding="utf-8",
+    )
+
+    assert (
+        _classify_blocker(
+            status="jax_error",
+            note="JAX error: CalledProcessError returned non-zero exit status 137.",
+            mismatch_keys=[],
+            jax_log=log_path,
+        )
+        == "jax resource/signal"
+    )
+
+    assert (
+        _classify_blocker(
+            status="jax_error",
+            note="JAX error: CalledProcessError died with <Signals.SIGTERM: 15> while reading .nc geometry.",
+            mismatch_keys=[],
+            jax_log=None,
+        )
+        == "jax resource/signal"
+    )
+
+
 def test_classify_blocker_treats_fortran_snes_divergence_as_reference_quality() -> None:
     assert (
         _classify_blocker(

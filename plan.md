@@ -27666,3 +27666,33 @@ Current production-run observation:
   direct-tail active Pmat with ``12,176,533`` nonzeros in ``16.814 s``.  It then
   spent more than 14 minutes inside structured preconditioner setup, which is
   why large-candidate telemetry is now required for the next run.
+
+Follow-up evidence:
+
+- The stale GPU run was stopped after more than 21 minutes without JAX progress
+  beyond structured-preconditioner setup.  The completed Fortran reference was
+  preserved.
+- A reference-reuse CPU rerun on ``3fea5fc`` forced
+  ``active_fortran_v3_reduced_lu`` first.  It reached the new telemetry line
+  ``auto candidate start kind=active_fortran_v3_reduced_lu`` and the
+  Fortran-style Pmat factor setup with ``n=648977``, ``nnz=12176533``,
+  ``factor_kind=lu``, and estimated memory ``1687 MB``.
+- That exact reduced-LU probe was killed by signal 9 after ``14:52.99`` with
+  peak RSS ``50,292,840 KB`` (about ``47.96 GiB``), before producing a
+  solution.  This is worse than Fortran v3's ``12.27 GiB`` and should not be
+  promoted as the production default for this row.
+- Fixed suite blocker classification so JAX SIGKILL/SIGTERM/OOM-style failures
+  are reported as ``jax resource/signal`` instead of being misclassified as
+  ``geometry parsing mismatch`` when the error text also contains ``.nc`` paths.
+
+Evidence:
+
+- ``pytest -q tests/test_scaled_example_suite_reference.py -k "classify_blocker
+  or fortran_timeout or fortran_profile"``: ``5 passed, 25 deselected``.
+
+Decision:
+
+- Do not promote exact reduced LU for production-grid RHSMode=1 QI rows.  The
+  next real algorithmic path is a bounded-memory coupled/native factor that
+  retains enough global coupling to reduce the residual without monolithic
+  SuperLU/MUMPS-style fill.
