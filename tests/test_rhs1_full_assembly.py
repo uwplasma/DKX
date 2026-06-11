@@ -2422,8 +2422,10 @@ def test_active_filtered_sparse_factor_sparse_coarse_wraps_true_residual(monkeyp
 
     assert base.selected, base.to_dict()
     assert pc.selected, pc.to_dict()
+    assert pc.kind == "active_filtered_sparse_coarse"
     assert pc.metadata["architecture"] == "filtered_sparse_factor_global_sparse_coarse"
     assert pc.metadata["base_kind"] == "active_filtered_sparse_factor"
+    assert pc.metadata["coarse_equation"] == "least_squares"
     assert pc.metadata["requires_preflight"] is True
     rhs = _deterministic_vector(layout.total_size)
     base_residual = rhs - np.asarray(matrix @ np.asarray(base.operator.matvec(rhs), dtype=np.float64))

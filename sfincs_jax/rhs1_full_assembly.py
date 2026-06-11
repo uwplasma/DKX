@@ -6218,6 +6218,11 @@ def _build_active_projected_sparse_coarse_residual_preconditioner(
         base_kind = "active_xblock"
     else:
         base_kind = "active_diagonal_schur"
+    output_kind = (
+        "active_filtered_sparse_coarse"
+        if str(base_kind) == "active_filtered_sparse_factor"
+        else "active_tail_sparse_coarse"
+    )
     base = build_active_projected_rhs1_full_csr_preconditioner(
         matrix=matrix_csr,
         layout=layout,
@@ -6230,7 +6235,7 @@ def _build_active_projected_sparse_coarse_residual_preconditioner(
         return RHS1StructuredFullCSRPreconditioner(
             operator=None,
             selected=False,
-            kind="active_tail_sparse_coarse",
+            kind=output_kind,
             reason=f"base_preconditioner_not_selected:{base.reason}",
             setup_s=max(0.0, time.perf_counter() - t0),
             metadata={"base_preconditioner": base.to_dict()},
@@ -6245,7 +6250,7 @@ def _build_active_projected_sparse_coarse_residual_preconditioner(
         return RHS1StructuredFullCSRPreconditioner(
             operator=None,
             selected=False,
-            kind="active_tail_sparse_coarse",
+            kind=output_kind,
             reason="empty_projected_sparse_coarse_basis",
             setup_s=max(0.0, time.perf_counter() - t0),
             metadata={"base_preconditioner": base.to_dict(), **config},
@@ -6256,7 +6261,7 @@ def _build_active_projected_sparse_coarse_residual_preconditioner(
         return RHS1StructuredFullCSRPreconditioner(
             operator=None,
             selected=False,
-            kind="active_tail_sparse_coarse",
+            kind=output_kind,
             reason="zero_projected_sparse_coarse_basis",
             setup_s=max(0.0, time.perf_counter() - t0),
             metadata={"base_preconditioner": base.to_dict(), **config},
@@ -6270,7 +6275,7 @@ def _build_active_projected_sparse_coarse_residual_preconditioner(
         return RHS1StructuredFullCSRPreconditioner(
             operator=None,
             selected=False,
-            kind="active_tail_sparse_coarse",
+            kind=output_kind,
             reason="invalid_projected_sparse_coarse_basis",
             setup_s=max(0.0, time.perf_counter() - t0),
             metadata={"base_preconditioner": base.to_dict(), **config},
@@ -6281,8 +6286,9 @@ def _build_active_projected_sparse_coarse_residual_preconditioner(
     basis.eliminate_zeros()
 
     az_basis = (matrix_csr @ basis).tocsc()
+    default_coarse_solver = "least_squares" if str(base_kind) == "active_filtered_sparse_factor" else "galerkin"
     coarse_solver_mode = (
-        os.environ.get("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_SPARSE_COARSE_SOLVER", "galerkin")
+        os.environ.get("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_SPARSE_COARSE_SOLVER", default_coarse_solver)
         .strip()
         .lower()
         .replace("-", "_")
@@ -6306,7 +6312,7 @@ def _build_active_projected_sparse_coarse_residual_preconditioner(
         return RHS1StructuredFullCSRPreconditioner(
             operator=None,
             selected=False,
-            kind="active_tail_sparse_coarse",
+            kind=output_kind,
             reason=f"active_sparse_coarse_budget_exceeded:{total_nbytes}>{int(max_factor_nbytes)}",
             setup_s=max(0.0, time.perf_counter() - t0),
             metadata={
@@ -6354,7 +6360,7 @@ def _build_active_projected_sparse_coarse_residual_preconditioner(
     return RHS1StructuredFullCSRPreconditioner(
         operator=operator,
         selected=True,
-        kind="active_tail_sparse_coarse",
+        kind=output_kind,
         reason="complete",
         setup_s=max(0.0, time.perf_counter() - t0),
         metadata={

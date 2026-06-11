@@ -48,6 +48,22 @@ Owner: incoming agent
 - GitHub CI for the preceding fail-closed/preflight-classifier push completed
   successfully:
   ``https://github.com/uwplasma/sfincs_jax/actions/runs/27347561074``.
+- Office CPU reference-reuse production probe on ``additional_examples`` at
+  ``25 x 51 x 100 x 8`` forced the first filtered-plus-coarse candidate and
+  returned in ``26.9 s`` without stalling.  It remains a non-promotion result:
+  total JAX attempt time ``24.98 s``, peak RSS ``3169.7 MB`` versus Fortran
+  ``12566.0 MB``, but the strict true preflight residual worsened from
+  ``5.889e-05`` to ``6.557e-03``.  The suite correctly classified this as
+  ``solver branch mismatch``.
+- Follow-up refinement: the filtered-plus-coarse path now reports
+  ``kind=active_filtered_sparse_coarse`` instead of the generic
+  ``active_tail_sparse_coarse`` and uses a least-squares default coarse equation
+  for filtered bases.  This is the mathematically appropriate residual
+  minimization form for an incomplete filtered factor.
+- Focused validation after the refinement:
+  ``pytest -q tests/test_rhs1_full_assembly.py -k
+  "filtered_sparse_factor or sparse_coarse"`` passed with ``9 passed``;
+  ruff selected checks and ``compileall`` also passed.
 
 ### Decision
 
