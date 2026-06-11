@@ -64,6 +64,32 @@ Owner: incoming agent
   ``pytest -q tests/test_rhs1_full_assembly.py -k
   "filtered_sparse_factor or sparse_coarse"`` passed with ``9 passed``;
   ruff selected checks and ``compileall`` also passed.
+- Office CPU reference-reuse probe of the refined least-squares
+  filtered-plus-coarse path remained a non-promotion result:
+  ``additional_examples`` at ``25 x 51 x 100 x 8`` returned in ``27.6 s``,
+  peak RSS ``3158.0 MB``, and selected
+  ``kind=active_filtered_sparse_coarse``, but the preflight residual worsened
+  from ``5.889e-05`` to ``8.830e-03``.
+- Follow-up bounded local-factor probes on the same production row:
+  - ``active_ell_band_schur`` centered at ``ell=2`` with ``active_xblock`` base
+    failed setup admission because the base x-block estimate exceeded the
+    16 GiB budget (``25.97 GB > 16 GiB``) after ``~102 s``.
+  - ``active_ell_band_schur`` centered at ``ell=2`` with Jacobi base selected
+    in ``1.13 s`` with ``150.6 MB`` factor memory, but failed preflight
+    ``5.889e-05 -> 1.510e-03``.  This is the least-bad low-memory local probe
+    so far, but it is still not admissible.
+  - ``active_low_l_schur`` with ``lmax=3`` and Jacobi base selected in
+    ``1.09 s`` with ``28.3 MB`` factor memory, but was numerically unstable
+    at preflight (``5.889e-05 -> 2.869e138``).
+  - ``active_coupled_kinetic_block`` with a filtered sparse base selected in
+    ``2.75 s`` with ``95.7 MB`` factor memory, but was also unstable at
+    preflight (``5.889e-05 -> 5.017e146``).
+- These probes show that the remaining production-grid RHSMode=1 blocker is
+  not setup overhead or local memory alone.  The local low-memory block/factor
+  family is missing essential global coupling; the next credible replacement
+  must approximate the Fortran/PETSc/MUMPS global elimination behavior through a
+  reusable ordering/separator/coarse architecture or a matrix-free Krylov
+  method with a demonstrably residual-reducing global preconditioner.
 
 ### Decision
 
