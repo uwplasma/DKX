@@ -1120,7 +1120,7 @@ def test_active_projected_auto_ladder_skips_large_diagonal_fallbacks(monkeypatch
     assert pc.metadata["auto_skipped_large_fallbacks"] == ("active_diagonal_schur", "jacobi")
 
 
-def test_active_projected_auto_ladder_uses_large_default_candidates(monkeypatch) -> None:
+def test_active_projected_auto_ladder_uses_large_default_candidates(monkeypatch, capsys) -> None:
     clear_structured_rhs1_full_csr_cache(clear_fblock_cache=True)
     matrix = sp.eye(12, format="csc")
 
@@ -1135,6 +1135,7 @@ def test_active_projected_auto_ladder_uses_large_default_candidates(monkeypatch)
         kind="auto",
         max_factor_nbytes=100_000_000,
     )
+    out = capsys.readouterr().out
 
     assert not pc.selected
     assert pc.reason == "active_auto_no_safe_large_candidate_selected"
@@ -1145,6 +1146,10 @@ def test_active_projected_auto_ladder_uses_large_default_candidates(monkeypatch)
     assert pc.metadata["auto_large_default_used"] is True
     assert pc.metadata["auto_rejected_candidates"][0]["kind"] == "active_fortran_v3_reduced_native_stack"
     assert pc.metadata["auto_rejected_candidates"][1]["kind"] == "active_fortran_v3_reduced_lu"
+    assert "auto candidate start kind=active_fortran_v3_reduced_native_stack" in out
+    assert "auto candidate done kind=active_fortran_v3_reduced_native_stack" in out
+    assert "auto candidate start kind=active_fortran_v3_reduced_lu" in out
+    assert "auto candidate done kind=active_fortran_v3_reduced_lu" in out
 
 
 def test_active_schwarz_sparse_coarse_preconditioner_builds_two_level_candidate(monkeypatch) -> None:

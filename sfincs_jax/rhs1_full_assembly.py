@@ -937,9 +937,21 @@ def build_active_projected_rhs1_full_csr_preconditioner(
             skipped_large_fallbacks = [candidate for candidate in candidates if candidate in large_fallbacks]
             candidates = [candidate for candidate in candidates if candidate not in large_fallbacks]
         rejected: list[dict[str, object]] = []
+        log_large_auto = _env_bool(
+            "SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_AUTO_PROGRESS",
+            bool(large_default_used) or int(matrix.shape[0]) >= int(large_fallback_size),
+        )
         for candidate in candidates:
             if candidate in {"auto", "active_auto", "structured_auto"}:
                 continue
+            candidate_start_s = time.perf_counter()
+            if bool(log_large_auto):
+                print(
+                    "active_projected_rhs1_full_csr_preconditioner: auto candidate start "
+                    f"kind={candidate} size={int(matrix.shape[0])} "
+                    f"max_factor_mb={float(max_factor_nbytes) / (1024.0 * 1024.0):.1f}",
+                    flush=True,
+                )
             pc = build_active_projected_rhs1_full_csr_preconditioner(
                 matrix=matrix,
                 layout=layout,
@@ -952,6 +964,7 @@ def build_active_projected_rhs1_full_csr_preconditioner(
                 preconditioner_species=preconditioner_species,
                 preconditioner_x_min_l=preconditioner_x_min_l,
             )
+            candidate_setup_s = max(0.0, time.perf_counter() - candidate_start_s)
             entry = {
                 "kind": str(candidate),
                 "selected": bool(pc.selected),
@@ -959,6 +972,13 @@ def build_active_projected_rhs1_full_csr_preconditioner(
                 "setup_s": float(pc.setup_s),
                 "metadata": dict(pc.metadata),
             }
+            if bool(log_large_auto):
+                print(
+                    "active_projected_rhs1_full_csr_preconditioner: auto candidate done "
+                    f"kind={candidate} selected={bool(pc.selected)} reason={pc.reason} "
+                    f"candidate_elapsed_s={candidate_setup_s:.3f} setup_s={float(pc.setup_s):.3f}",
+                    flush=True,
+                )
             if bool(pc.selected) and pc.operator is not None:
                 metadata = dict(pc.metadata)
                 metadata["auto_requested_kind"] = str(kind_l)

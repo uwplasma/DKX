@@ -27629,3 +27629,40 @@ Progress:
   regenerated honestly.
 - Docs/release evidence lane: ``84%``.  The remaining blocker is production
   data, not documentation mechanics.
+
+### 2026-06-11 update: large RHSMode=1 auto-candidate telemetry
+
+Goal:
+
+- Make large RHSMode=1 structured preconditioner setup auditable when a
+  production run spends many minutes inside auto selection.
+
+Implemented:
+
+- ``build_active_projected_rhs1_full_csr_preconditioner(..., kind="auto")`` now
+  prints fail-closed start/done telemetry for each large auto candidate by
+  default.  The output includes candidate kind, active size, factor-memory
+  budget, selected/rejected status, reason, and elapsed setup seconds.
+- The telemetry is controlled by
+  ``SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_AUTO_PROGRESS`` and defaults on for large
+  systems or large-default candidate lists.
+
+Evidence:
+
+- ``pytest -q tests/test_rhs1_full_assembly.py::test_active_projected_auto_ladder_uses_large_default_candidates``:
+  passed.
+- ``pytest -q tests/test_rhs1_full_assembly.py -k "active_projected_auto_ladder
+  or active_fortran_v3_reduced_native_stack or active_bounded_native_stack"``:
+  ``6 passed, 75 deselected``.
+- ``ruff check sfincs_jax/rhs1_full_assembly.py
+  tests/test_rhs1_full_assembly.py --select F821,F401,F811``: passed.
+
+Current production-run observation:
+
+- The office ``additional_examples`` production row completed the Fortran v3
+  reference in ``17:07.94`` with max RSS ``12.27 GiB``, final residual
+  ``2.155e-09``, and ``FSABjHat = 2.383521154e-05``.
+- The JAX run selected active-DOF Fortran-reduced sparse-PC GMRES and built the
+  direct-tail active Pmat with ``12,176,533`` nonzeros in ``16.814 s``.  It then
+  spent more than 14 minutes inside structured preconditioner setup, which is
+  why large-candidate telemetry is now required for the next run.
