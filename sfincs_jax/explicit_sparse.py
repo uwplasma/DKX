@@ -21,6 +21,7 @@ FactorKind = Literal[
     "symbolic_block_lu_coarse",
     "symbolic_block_schur_lu",
     "symbolic_superblock_lu",
+    "symbolic_frontal_schur_lu",
 ]
 
 
@@ -363,6 +364,11 @@ class _SymbolicBlockSchurFactor:
     n: int
     analysis: SparseSymbolicAnalysis
     separator_count: int
+    frontal_block_count: int = 0
+    total_cross_nnz: int = 0
+    selected_cross_nnz: int = 0
+    cross_separator_fraction: float = 1.0
+    factor_failures: int = 0
 
     @property
     def overlap_size(self) -> int:
@@ -661,6 +667,277 @@ def _build_symbolic_superblock_factor(
         retained_cross_nnz=int(retained_cross),
         dropped_cross_nnz=int(dropped_cross),
         retained_cross_fraction=float(retained_fraction),
+        factor_failures=int(factor_failures),
+    )
+    return factor, int(total_nbytes), int(total_nnz)
+
+
+def _build_symbolic_frontal_schur_factor(
+    matrix: sp.spmatrix,
+    *,
+    analysis: SparseSymbolicAnalysis,
+    diag_pivot_thresh: float,
+    max_separator_cols: int = 1024,
+    tail_size: int = 0,
+    boundary_width: int = 1,
+    high_degree_cols: int = 128,
+    max_superblock_size: int = 8192,
+    max_superblock_blocks: int = 8,
+    min_cross_nnz: int = 1,
+    min_cross_separator_fraction: float = 0.0,
+    regularization_rel: float = 1.0e-12,
+) -> tuple[_SymbolicBlockSchurFactor, int, int]:
+    """Build a bounded frontal/Schur elimination over symbolic block groups.
+
+    Unlike ``symbolic_superblock_lu``, cross-group couplings are not simply
+    dropped.  Their endpoints are promoted into a bounded separator, local
+    interiors are eliminated, and the separator Schur complement retains the
+    global coupling that local block factors miss.
+    """
+
+    matrix_csr = matrix.tocsr()
+    n = int(matrix_csr.shape[0])
+    if n != int(matrix_csr.shape[1]):
+        raise ValueError("symbolic frontal Schur factor requires a square matrix")
+    dtype = np.dtype(matrix_csr.dtype)
+    permutation = np.asarray(analysis.permutation, dtype=np.int64)
+    if permutation.size != n:
+        permutation = np.arange(n, dtype=np.int64)
+    block_size = max(1, int(analysis.block_size_target))
+    base_block_count = int(analysis.block_count)
+    max_cols = max(0, min(int(max_separator_cols), n))
+    if n == 0 or base_block_count <= 0:
+        empty = _SymbolicBlockSchurFactor(
+            blocks=tuple(),
+            separator_indices=np.asarray([], dtype=np.int64),
+            schur_factor=_DenseInverseFactor(inverse=np.zeros((0, 0), dtype=dtype)),
+            dtype=dtype,
+            n=n,
+            analysis=analysis,
+            separator_count=0,
+        )
+        return empty, 0, 0
+
+    block_sizes = np.asarray(
+        [
+            min(block_size, max(0, n - int(block) * block_size))
+            for block in range(base_block_count)
+        ],
+        dtype=np.int64,
+    )
+    dsu = _DisjointSet(block_sizes)
+    matrix_perm = matrix_csr[permutation, :][:, permutation].tocsr()
+    coo = matrix_perm.tocoo()
+    row_block = np.asarray(coo.row // block_size, dtype=np.int64)
+    col_block = np.asarray(coo.col // block_size, dtype=np.int64)
+    cross = row_block != col_block
+    edge_counts: list[tuple[int, int, int]] = []
+    if np.any(cross):
+        lo = np.minimum(row_block[cross], col_block[cross])
+        hi = np.maximum(row_block[cross], col_block[cross])
+        valid = (lo >= 0) & (hi < base_block_count)
+        if np.any(valid):
+            pair_id = lo[valid] * int(base_block_count) + hi[valid]
+            unique, counts = np.unique(pair_id, return_counts=True)
+            for pair, count in zip(unique, counts, strict=True):
+                c = int(count)
+                if c < int(min_cross_nnz):
+                    continue
+                a = int(pair // int(base_block_count))
+                b = int(pair % int(base_block_count))
+                edge_counts.append((c, a, b))
+    edge_counts.sort(key=lambda item: (-item[0], item[1], item[2]))
+    max_rows = max(1, int(max_superblock_size))
+    max_blocks = max(1, int(max_superblock_blocks))
+    for _, a, b in edge_counts:
+        dsu.union_if_fits(a, b, max_rows=max_rows, max_blocks=max_blocks)
+
+    unresolved_cross = np.zeros((0,), dtype=bool)
+    if np.any(cross):
+        unresolved_cross = np.asarray(
+            [dsu.find(int(rb)) != dsu.find(int(cb)) for rb, cb in zip(row_block[cross], col_block[cross], strict=True)],
+            dtype=bool,
+        )
+    total_cross_nnz = int(np.count_nonzero(unresolved_cross))
+
+    candidates: dict[int, tuple[int, int]] = {}
+
+    def _add_candidate(index: int, priority: int, score: int = 0) -> None:
+        idx = int(index)
+        if idx < 0 or idx >= n or len(candidates) >= max(8 * max(1, max_cols), n):
+            return
+        value = (int(priority), int(score))
+        old = candidates.get(idx)
+        if old is None or value > old:
+            candidates[idx] = value
+
+    tail = max(0, min(int(tail_size), n))
+    if tail:
+        for idx in range(n - tail, n):
+            _add_candidate(idx, 1000, n - idx)
+
+    if total_cross_nnz:
+        cross_rows = np.asarray(coo.row[cross], dtype=np.int64)[unresolved_cross]
+        cross_cols = np.asarray(coo.col[cross], dtype=np.int64)[unresolved_cross]
+        endpoints = np.concatenate((permutation[cross_rows], permutation[cross_cols])).astype(np.int64, copy=False)
+        counts = np.bincount(endpoints, minlength=n)
+        for idx in np.flatnonzero(counts):
+            _add_candidate(int(idx), 900, int(counts[int(idx)]))
+
+    high_degree = max(0, min(int(high_degree_cols), n))
+    if high_degree:
+        row_degree = np.diff(matrix_csr.indptr).astype(np.int64, copy=False)
+        col_degree = np.diff(matrix_csr.tocsc().indptr).astype(np.int64, copy=False)
+        degree = row_degree + col_degree
+        top = np.argpartition(-degree, kth=high_degree - 1)[:high_degree]
+        for idx in top:
+            _add_candidate(int(idx), 700, int(degree[int(idx)]))
+
+    boundary = max(0, int(boundary_width))
+    if boundary:
+        for start in range(0, n, block_size):
+            stop = min(n, start + block_size)
+            edge = min(boundary, stop - start)
+            for local in range(start, start + edge):
+                _add_candidate(int(permutation[local]), 500, edge - (local - start))
+            for local in range(max(start, stop - edge), stop):
+                _add_candidate(int(permutation[local]), 500, local - max(start, stop - edge) + 1)
+
+    if candidates and max_cols:
+        ordered = sorted(candidates.items(), key=lambda item: (-item[1][0], -item[1][1], item[0]))
+        separator = np.asarray(sorted(idx for idx, _ in ordered[:max_cols]), dtype=np.int64)
+    else:
+        separator = np.asarray([], dtype=np.int64)
+    separator_set = set(int(v) for v in separator)
+    sep_count = int(separator.size)
+    selected_cross = 0
+    if total_cross_nnz and sep_count:
+        cross_rows_orig = np.asarray(coo.row[cross], dtype=np.int64)[unresolved_cross]
+        cross_cols_orig = np.asarray(coo.col[cross], dtype=np.int64)[unresolved_cross]
+        row_orig = permutation[cross_rows_orig]
+        col_orig = permutation[cross_cols_orig]
+        selected_cross = int(
+            np.count_nonzero(
+                np.fromiter(
+                    ((int(r) in separator_set) or (int(c) in separator_set) for r, c in zip(row_orig, col_orig, strict=True)),
+                    dtype=bool,
+                    count=int(total_cross_nnz),
+                )
+            )
+        )
+    cross_fraction = 1.0 if total_cross_nnz == 0 else float(selected_cross) / float(total_cross_nnz)
+    min_fraction = max(0.0, min(1.0, float(min_cross_separator_fraction)))
+    if cross_fraction < min_fraction:
+        raise RuntimeError(
+            "symbolic_frontal_schur_lu selected insufficient cross-block separator coverage "
+            f"({cross_fraction:.6g} < {min_fraction:.6g}; "
+            f"selected={int(selected_cross)} total={int(total_cross_nnz)} separator={int(sep_count)})"
+        )
+
+    groups: dict[int, list[int]] = {}
+    for block in range(base_block_count):
+        groups.setdefault(dsu.find(block), []).append(int(block))
+    ordered_groups = sorted(groups.values(), key=lambda values: (min(values), len(values)))
+
+    schur = (
+        matrix_csr[separator, :][:, separator].toarray().astype(dtype, copy=False)
+        if sep_count
+        else np.zeros((0, 0), dtype=dtype)
+    )
+    max_abs = float(np.max(np.abs(matrix_csr.data))) if matrix_csr.nnz else 0.0
+    reg = max(1.0e-14, float(regularization_rel) * max(1.0, max_abs))
+    blocks: list[_SymbolicSchurBlock] = []
+    total_nbytes = 0
+    total_nnz = 0
+    factor_failures = 0
+
+    for group in ordered_groups:
+        positions: list[np.ndarray] = []
+        for block in group:
+            start = int(block) * block_size
+            stop = min(n, start + block_size)
+            if stop > start:
+                positions.append(np.arange(start, stop, dtype=np.int64))
+        if not positions:
+            continue
+        idx_all = np.asarray(permutation[np.concatenate(positions)], dtype=np.int64)
+        if sep_count:
+            idx = np.asarray([int(v) for v in idx_all if int(v) not in separator_set], dtype=np.int64)
+        else:
+            idx = idx_all
+        if idx.size == 0:
+            continue
+        local = matrix_csr[idx, :][:, idx].tocsc()
+        try:
+            factor = splu(local, permc_spec="COLAMD", diag_pivot_thresh=float(diag_pivot_thresh))
+        except RuntimeError:
+            factor_failures += 1
+            local_reg = (local + reg * sp.eye(local.shape[0], dtype=dtype, format="csc")).tocsc()
+            try:
+                factor = splu(local_reg, permc_spec="COLAMD", diag_pivot_thresh=float(diag_pivot_thresh))
+            except RuntimeError:
+                diagonal = np.asarray(local.diagonal(), dtype=np.float64)
+                scale = max(1.0, float(np.max(np.abs(diagonal))) if diagonal.size else 1.0)
+                floor = max(1.0e-14, float(regularization_rel) * scale)
+                sign = np.where(diagonal < 0.0, -1.0, 1.0)
+                diagonal_safe = np.where(np.abs(diagonal) > floor, diagonal, sign * floor)
+                factor = _JacobiFactor(inverse_diagonal=np.asarray(1.0 / diagonal_safe, dtype=dtype))
+        nbytes, nnz = estimate_superlu_factor_storage(factor)
+        if nbytes is None and isinstance(factor, _JacobiFactor):
+            nbytes = int(factor.inverse_diagonal.nbytes)
+            nnz = int(factor.inverse_diagonal.size)
+        total_nbytes += int(nbytes or 0)
+        total_nnz += int(nnz or 0)
+        if sep_count:
+            b_mat = matrix_csr[idx, :][:, separator].tocsr().astype(dtype, copy=False)
+            c_mat = matrix_csr[separator, :][:, idx].tocsr().astype(dtype, copy=False)
+            if b_mat.nnz and c_mat.nnz:
+                b_dense = b_mat.toarray().astype(dtype, copy=False)
+                try:
+                    eliminated = np.asarray(factor.solve(b_dense), dtype=dtype)
+                except Exception:
+                    eliminated = np.zeros((idx.size, sep_count), dtype=dtype)
+                schur -= np.asarray(c_mat @ eliminated, dtype=dtype)
+            total_nbytes += estimate_csr_nbytes(b_mat.shape, int(b_mat.nnz), data_dtype=b_mat.dtype, index_dtype=b_mat.indices.dtype)
+            total_nbytes += estimate_csr_nbytes(c_mat.shape, int(c_mat.nnz), data_dtype=c_mat.dtype, index_dtype=c_mat.indices.dtype)
+            total_nnz += int(b_mat.nnz) + int(c_mat.nnz)
+        else:
+            b_mat = sp.csr_matrix((idx.size, 0), dtype=dtype)
+            c_mat = sp.csr_matrix((0, idx.size), dtype=dtype)
+        blocks.append(_SymbolicSchurBlock(indices=idx, factor=factor, b_to_separator=b_mat, c_from_separator=c_mat))
+
+    if sep_count:
+        schur_csc = sp.csc_matrix(schur)
+        schur_csc.sum_duplicates()
+        schur_max = float(np.max(np.abs(schur_csc.data))) if schur_csc.nnz else 0.0
+        schur_reg = max(1.0e-14, float(regularization_rel) * max(1.0, schur_max))
+        schur_reg_csc = (schur_csc + schur_reg * sp.eye(sep_count, dtype=dtype, format="csc")).tocsc()
+        try:
+            schur_factor = splu(schur_reg_csc, permc_spec="COLAMD", diag_pivot_thresh=1.0)
+        except RuntimeError:
+            schur_factor = _DenseInverseFactor(inverse=np.linalg.pinv(schur_reg_csc.toarray()))
+        schur_nbytes, schur_nnz = estimate_superlu_factor_storage(schur_factor)
+        if schur_nbytes is None and isinstance(schur_factor, _DenseInverseFactor):
+            schur_nbytes = int(schur_factor.inverse.nbytes)
+            schur_nnz = int(schur_factor.inverse.size)
+        total_nbytes += estimate_csr_nbytes(schur_csc.shape, int(schur_csc.nnz), data_dtype=schur_csc.dtype, index_dtype=schur_csc.indices.dtype)
+        total_nbytes += int(schur_nbytes or 0)
+        total_nnz += int(schur_csc.nnz) + int(schur_nnz or 0)
+    else:
+        schur_factor = _DenseInverseFactor(inverse=np.zeros((0, 0), dtype=dtype))
+
+    factor = _SymbolicBlockSchurFactor(
+        blocks=tuple(blocks),
+        separator_indices=separator,
+        schur_factor=schur_factor,
+        dtype=dtype,
+        n=n,
+        analysis=analysis,
+        separator_count=sep_count,
+        frontal_block_count=len(blocks),
+        total_cross_nnz=int(total_cross_nnz),
+        selected_cross_nnz=int(selected_cross),
+        cross_separator_fraction=float(cross_fraction),
         factor_failures=int(factor_failures),
     )
     return factor, int(total_nbytes), int(total_nnz)
@@ -1958,6 +2235,15 @@ def factorize_host_sparse_operator(
     symbolic_schur_boundary_width: int = 1,
     symbolic_schur_high_degree_cols: int = 64,
     symbolic_schur_regularization_rel: float = 1.0e-12,
+    symbolic_frontal_max_separator_cols: int = 1024,
+    symbolic_frontal_tail_size: int = 0,
+    symbolic_frontal_boundary_width: int = 1,
+    symbolic_frontal_high_degree_cols: int = 128,
+    symbolic_frontal_max_superblock_size: int = 8192,
+    symbolic_frontal_max_superblock_blocks: int = 8,
+    symbolic_frontal_min_cross_nnz: int = 1,
+    symbolic_frontal_min_cross_separator_fraction: float = 0.0,
+    symbolic_frontal_regularization_rel: float = 1.0e-12,
     symbolic_superblock_max_size: int = 32768,
     symbolic_superblock_max_blocks: int = 8,
     symbolic_superblock_min_cross_nnz: int = 1,
@@ -2064,6 +2350,7 @@ def factorize_host_sparse_operator(
             "symbolic_block_lu_coarse",
             "symbolic_block_schur_lu",
             "symbolic_superblock_lu",
+            "symbolic_frontal_schur_lu",
         }:
             analysis = symbolic_analysis
             if analysis is None:
@@ -2083,6 +2370,21 @@ def factorize_host_sparse_operator(
                     boundary_width=int(symbolic_schur_boundary_width),
                     high_degree_cols=int(symbolic_schur_high_degree_cols),
                     regularization_rel=float(symbolic_schur_regularization_rel),
+                )
+            elif kind == "symbolic_frontal_schur_lu":
+                factor, symbolic_nbytes, symbolic_nnz = _build_symbolic_frontal_schur_factor(
+                    matrix,
+                    analysis=analysis,
+                    diag_pivot_thresh=float(diag_pivot_thresh),
+                    max_separator_cols=int(symbolic_frontal_max_separator_cols),
+                    tail_size=int(symbolic_frontal_tail_size),
+                    boundary_width=int(symbolic_frontal_boundary_width),
+                    high_degree_cols=int(symbolic_frontal_high_degree_cols),
+                    max_superblock_size=int(symbolic_frontal_max_superblock_size),
+                    max_superblock_blocks=int(symbolic_frontal_max_superblock_blocks),
+                    min_cross_nnz=int(symbolic_frontal_min_cross_nnz),
+                    min_cross_separator_fraction=float(symbolic_frontal_min_cross_separator_fraction),
+                    regularization_rel=float(symbolic_frontal_regularization_rel),
                 )
             elif kind == "symbolic_superblock_lu":
                 factor, symbolic_nbytes, symbolic_nnz = _build_symbolic_superblock_factor(
@@ -2132,6 +2434,7 @@ def factorize_host_sparse_operator(
         "symbolic_block_lu_coarse",
         "symbolic_block_schur_lu",
         "symbolic_superblock_lu",
+        "symbolic_frontal_schur_lu",
     }:
         factor_nbytes, factor_nnz = int(symbolic_nbytes), int(symbolic_nnz)
     else:

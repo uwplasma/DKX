@@ -1190,6 +1190,7 @@ def test_active_projected_auto_ladder_uses_large_default_candidates(monkeypatch,
     assert pc.reason == "active_auto_no_safe_large_candidate_selected"
     assert pc.metadata["auto_candidates"] == [
         "active_fortran_v3_reduced_native_stack",
+        "active_symbolic_frontal_schur_lu",
         "active_symbolic_superblock_lu",
         "active_coupled_kinetic_field_split_sparse_coarse",
         "active_symbolic_block_schur_lu",
@@ -1197,12 +1198,15 @@ def test_active_projected_auto_ladder_uses_large_default_candidates(monkeypatch,
     ]
     assert pc.metadata["auto_large_default_used"] is True
     assert pc.metadata["auto_rejected_candidates"][0]["kind"] == "active_fortran_v3_reduced_native_stack"
-    assert pc.metadata["auto_rejected_candidates"][1]["kind"] == "active_symbolic_superblock_lu"
-    assert pc.metadata["auto_rejected_candidates"][2]["kind"] == "active_coupled_kinetic_field_split_sparse_coarse"
-    assert pc.metadata["auto_rejected_candidates"][3]["kind"] == "active_symbolic_block_schur_lu"
-    assert pc.metadata["auto_rejected_candidates"][4]["kind"] == "active_fortran_v3_reduced_lu"
+    assert pc.metadata["auto_rejected_candidates"][1]["kind"] == "active_symbolic_frontal_schur_lu"
+    assert pc.metadata["auto_rejected_candidates"][2]["kind"] == "active_symbolic_superblock_lu"
+    assert pc.metadata["auto_rejected_candidates"][3]["kind"] == "active_coupled_kinetic_field_split_sparse_coarse"
+    assert pc.metadata["auto_rejected_candidates"][4]["kind"] == "active_symbolic_block_schur_lu"
+    assert pc.metadata["auto_rejected_candidates"][5]["kind"] == "active_fortran_v3_reduced_lu"
     assert "auto candidate start kind=active_fortran_v3_reduced_native_stack" in out
     assert "auto candidate done kind=active_fortran_v3_reduced_native_stack" in out
+    assert "auto candidate start kind=active_symbolic_frontal_schur_lu" in out
+    assert "auto candidate done kind=active_symbolic_frontal_schur_lu" in out
     assert "auto candidate start kind=active_symbolic_superblock_lu" in out
     assert "auto candidate done kind=active_symbolic_superblock_lu" in out
     assert "auto candidate start kind=active_coupled_kinetic_field_split_sparse_coarse" in out
@@ -2507,6 +2511,119 @@ def test_active_coupled_kinetic_sparse_coarse_rejects_weak_true_action(monkeypat
     assert "min_improvement=" in pc.reason
     assert pc.metadata["admission"]["accepted"] is False
     assert pc.metadata["requires_preflight"] is True
+
+
+def test_active_symbolic_frontal_schur_lu_solves_separator_coupled_active_system(monkeypatch) -> None:
+    layout = RHS1BlockLayout(
+        n_species=1,
+        n_x=1,
+        n_xi=2,
+        n_theta=2,
+        n_zeta=1,
+        f_size=4,
+        phi1_size=0,
+        extra_size=0,
+        total_size=4,
+        constraint_scheme=1,
+        include_phi1=False,
+        include_phi1_in_kinetic=False,
+        rhs_mode=1,
+    )
+    matrix = sp.csr_matrix(
+        [
+            [4.0, 1.0, 25.0, 0.0],
+            [2.0, 3.0, 0.0, 0.0],
+            [30.0, 0.0, 5.0, -1.0],
+            [0.0, 0.0, 1.0, 2.0],
+        ],
+        dtype=np.float64,
+    )
+    active = np.arange(layout.total_size, dtype=np.int64)
+    monkeypatch.setenv("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_SYMBOLIC_FRONTAL_ORDERING", "natural")
+    monkeypatch.setenv("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_SYMBOLIC_FRONTAL_BLOCK_SIZE", "2")
+    monkeypatch.setenv("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_SYMBOLIC_FRONTAL_MAX_SUPERBLOCK_SIZE", "2")
+    monkeypatch.setenv("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_SYMBOLIC_FRONTAL_MAX_SUPERBLOCK_BLOCKS", "1")
+    monkeypatch.setenv("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_SYMBOLIC_FRONTAL_MAX_SEPARATOR_COLS", "2")
+    monkeypatch.setenv("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_SYMBOLIC_FRONTAL_BOUNDARY_WIDTH", "0")
+    monkeypatch.setenv("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_SYMBOLIC_FRONTAL_HIGH_DEGREE_COLS", "0")
+    monkeypatch.setenv("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_SYMBOLIC_FRONTAL_MIN_CROSS_SEPARATOR_FRACTION", "1")
+    monkeypatch.setenv(
+        "SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_SYMBOLIC_FRONTAL_ADMISSION_MAX_RELATIVE_RESIDUAL",
+        "2e-12",
+    )
+
+    pc = build_active_projected_rhs1_full_csr_preconditioner(
+        matrix=matrix,
+        layout=layout,
+        active_indices=active,
+        kind="active_symbolic_frontal_schur_lu",
+        max_factor_nbytes=2_000_000,
+        regularization=0.0,
+    )
+
+    assert pc.selected, pc.to_dict()
+    assert pc.kind == "active_symbolic_frontal_schur_lu"
+    assert pc.metadata["architecture"] == "active_true_operator_symbolic_frontal_schur_lu"
+    assert pc.metadata["symbolic_factor_kind"] == "symbolic_frontal_schur_lu"
+    assert pc.metadata["separator_count"] == 2
+    assert pc.metadata["selected_cross_nnz"] == pc.metadata["total_cross_nnz"]
+    assert pc.metadata["cross_separator_fraction"] == 1.0
+    assert pc.metadata["admission"]["accepted"] is True
+    assert pc.metadata["requires_preflight"] is True
+    rhs = _deterministic_vector(layout.total_size)
+    recovered = np.asarray(pc.operator.matvec(rhs), dtype=np.float64)
+    np.testing.assert_allclose(recovered, np.linalg.solve(matrix.toarray(), rhs), rtol=1.0e-11, atol=1.0e-11)
+
+
+def test_active_symbolic_frontal_schur_lu_rejects_insufficient_separator_coverage(monkeypatch) -> None:
+    layout = RHS1BlockLayout(
+        n_species=1,
+        n_x=1,
+        n_xi=2,
+        n_theta=2,
+        n_zeta=1,
+        f_size=4,
+        phi1_size=0,
+        extra_size=0,
+        total_size=4,
+        constraint_scheme=1,
+        include_phi1=False,
+        include_phi1_in_kinetic=False,
+        rhs_mode=1,
+    )
+    matrix = sp.csr_matrix(
+        [
+            [4.0, 1.0, 25.0, 0.0],
+            [2.0, 3.0, 0.0, 0.0],
+            [30.0, 0.0, 5.0, -1.0],
+            [0.0, 0.0, 1.0, 2.0],
+        ],
+        dtype=np.float64,
+    )
+    active = np.arange(layout.total_size, dtype=np.int64)
+    monkeypatch.setenv("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_SYMBOLIC_FRONTAL_ORDERING", "natural")
+    monkeypatch.setenv("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_SYMBOLIC_FRONTAL_BLOCK_SIZE", "2")
+    monkeypatch.setenv("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_SYMBOLIC_FRONTAL_MAX_SUPERBLOCK_SIZE", "2")
+    monkeypatch.setenv("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_SYMBOLIC_FRONTAL_MAX_SUPERBLOCK_BLOCKS", "1")
+    monkeypatch.setenv("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_SYMBOLIC_FRONTAL_MAX_SEPARATOR_COLS", "0")
+    monkeypatch.setenv("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_SYMBOLIC_FRONTAL_BOUNDARY_WIDTH", "0")
+    monkeypatch.setenv("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_SYMBOLIC_FRONTAL_HIGH_DEGREE_COLS", "0")
+    monkeypatch.setenv("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_SYMBOLIC_FRONTAL_MIN_CROSS_SEPARATOR_FRACTION", "1")
+
+    pc = build_active_projected_rhs1_full_csr_preconditioner(
+        matrix=matrix,
+        layout=layout,
+        active_indices=active,
+        kind="active_symbolic_frontal_schur_lu",
+        max_factor_nbytes=2_000_000,
+        regularization=0.0,
+    )
+
+    assert not pc.selected
+    assert pc.kind == "active_symbolic_frontal_schur_lu"
+    assert pc.reason.startswith("active_symbolic_frontal_schur_lu_factor_failed:")
+    assert "selected insufficient cross-block separator coverage" in pc.reason
+    assert pc.metadata["min_cross_separator_fraction"] == 1.0
 
 
 def test_active_symbolic_superblock_lu_solves_coupled_active_blocks(monkeypatch) -> None:
