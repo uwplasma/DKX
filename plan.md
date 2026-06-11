@@ -27919,3 +27919,59 @@ Decision:
   next real algorithmic path is a bounded-memory coupled/native factor that
   retains enough global coupling to reduce the residual without monolithic
   SuperLU/MUMPS-style fill.
+
+### 2026-06-11 update: active symbolic separator-Schur candidate
+
+Goal:
+
+- Move the RHSMode=1 production replacement work from local smoother/coarse
+  tuning to a more PETSc/MUMPS-like architecture that has explicit global
+  separators, bounded memory gates, and setup-time true-action admission.
+
+Implemented:
+
+- Added an explicit active projected preconditioner candidate,
+  ``active_symbolic_block_schur_lu``.  It reuses the native symbolic sparse
+  analysis and ``symbolic_block_schur_lu`` factor in ``explicit_sparse.py``:
+  interior blocks are factored locally, non-kinetic/source tails are kept as a
+  separator when they form an active-vector suffix, and the separator Schur
+  complement is solved explicitly.
+- Added strict fail-closed gates before promotion:
+  active-size gate, rough prefill-memory gate, actual factor-memory gate, and
+  deterministic setup admission against the true active operator via
+  ``admit_sparse_factor_against_operator``.
+- Added the candidate to the large active-auto ladder between the bounded native
+  stack and exact reduced LU.  The default large active-size gate keeps
+  production rows safe: large runs now report that this separator-Schur
+  replacement was considered and why it was rejected, instead of falling through
+  silently.
+
+Evidence:
+
+- ``pytest -q tests/test_rhs1_full_assembly.py::test_active_symbolic_block_schur_lu_solves_separator_coupled_active_system tests/test_rhs1_full_assembly.py::test_active_symbolic_block_schur_lu_admission_rejects_missing_interior_coupling tests/test_rhs1_full_assembly.py::test_active_projected_auto_ladder_uses_large_default_candidates``:
+  ``3 passed``.
+- ``pytest -q tests/test_rhs1_full_assembly.py -k
+  "symbolic_block_schur_lu or active_projected_auto_ladder_uses_large_default_candidates"``:
+  ``3 passed, 84 deselected``.
+- ``pytest -q
+  tests/test_v3_sparse_pattern.py::test_fortran_reduced_direct_tail_large_auto_fails_closed_before_host_factor_fallback
+  tests/test_v3_sparse_pattern.py::test_fortran_reduced_pc_gmres_direct_tail_active_symbolic_coupled_schur_solves_tiny_rhs1_system
+  tests/test_v3_sparse_pattern.py::test_fortran_reduced_direct_tail_structured_pc_preflight_can_fail_fast``:
+  ``3 passed``.
+- ``pytest -q tests/test_explicit_sparse.py -k "symbolic_block_schur_lu"``:
+  ``2 passed, 32 deselected``.
+- ``ruff check sfincs_jax/rhs1_full_assembly.py tests/test_rhs1_full_assembly.py
+  --select F821,F401,F811``: passed.
+- ``python -m compileall -q sfincs_jax/rhs1_full_assembly.py
+  tests/test_rhs1_full_assembly.py``: passed.
+- ``git diff --check``: passed.
+
+Decision:
+
+- This is the next real replacement candidate for production RHSMode=1, but it
+  is not yet a production-grid closure claim.  The next compute gate is an
+  office CPU reference-reuse run on ``additional_examples`` with the explicit
+  candidate enabled and a bounded active-size cap high enough to build it.  It
+  must pass setup admission, strict direct-tail true residual preflight,
+  runtime, and RSS gates before it can be promoted beyond explicit/diagnostic
+  use.

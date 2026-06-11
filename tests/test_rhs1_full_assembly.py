@@ -1190,13 +1190,17 @@ def test_active_projected_auto_ladder_uses_large_default_candidates(monkeypatch,
     assert pc.reason == "active_auto_no_safe_large_candidate_selected"
     assert pc.metadata["auto_candidates"] == [
         "active_fortran_v3_reduced_native_stack",
+        "active_symbolic_block_schur_lu",
         "active_fortran_v3_reduced_lu",
     ]
     assert pc.metadata["auto_large_default_used"] is True
     assert pc.metadata["auto_rejected_candidates"][0]["kind"] == "active_fortran_v3_reduced_native_stack"
-    assert pc.metadata["auto_rejected_candidates"][1]["kind"] == "active_fortran_v3_reduced_lu"
+    assert pc.metadata["auto_rejected_candidates"][1]["kind"] == "active_symbolic_block_schur_lu"
+    assert pc.metadata["auto_rejected_candidates"][2]["kind"] == "active_fortran_v3_reduced_lu"
     assert "auto candidate start kind=active_fortran_v3_reduced_native_stack" in out
     assert "auto candidate done kind=active_fortran_v3_reduced_native_stack" in out
+    assert "auto candidate start kind=active_symbolic_block_schur_lu" in out
+    assert "auto candidate done kind=active_symbolic_block_schur_lu" in out
     assert "auto candidate start kind=active_fortran_v3_reduced_lu" in out
     assert "auto candidate done kind=active_fortran_v3_reduced_lu" in out
 
@@ -2431,6 +2435,127 @@ def test_active_filtered_sparse_factor_sparse_coarse_wraps_true_residual(monkeyp
     base_residual = rhs - np.asarray(matrix @ np.asarray(base.operator.matvec(rhs), dtype=np.float64))
     pc_residual = rhs - np.asarray(matrix @ np.asarray(pc.operator.matvec(rhs), dtype=np.float64))
     assert np.linalg.norm(pc_residual) <= 1.0e-10 * max(np.linalg.norm(base_residual), 1.0)
+
+
+def test_active_symbolic_block_schur_lu_solves_separator_coupled_active_system(monkeypatch) -> None:
+    layout = RHS1BlockLayout(
+        n_species=1,
+        n_x=1,
+        n_xi=2,
+        n_theta=2,
+        n_zeta=1,
+        f_size=4,
+        phi1_size=0,
+        extra_size=1,
+        total_size=5,
+        constraint_scheme=1,
+        include_phi1=False,
+        include_phi1_in_kinetic=False,
+        rhs_mode=1,
+    )
+    matrix = sp.csr_matrix(
+        [
+            [4.0, 1.0, 0.0, 0.0, 2.0],
+            [1.0, 3.0, 0.0, 0.0, -1.0],
+            [0.0, 0.0, 5.0, -1.0, 1.5],
+            [0.0, 0.0, -1.0, 2.0, 0.5],
+            [3.0, -2.0, 1.0, 1.0, 7.0],
+        ],
+        dtype=np.float64,
+    )
+    active = np.arange(layout.total_size, dtype=np.int64)
+    monkeypatch.setenv("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_SYMBOLIC_BLOCK_SCHUR_ORDERING", "natural")
+    monkeypatch.setenv("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_SYMBOLIC_BLOCK_SCHUR_BLOCK_SIZE", "2")
+    monkeypatch.setenv("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_SYMBOLIC_BLOCK_SCHUR_MAX_SEPARATOR_COLS", "1")
+    monkeypatch.setenv("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_SYMBOLIC_BLOCK_SCHUR_BOUNDARY_WIDTH", "0")
+    monkeypatch.setenv("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_SYMBOLIC_BLOCK_SCHUR_HIGH_DEGREE_COLS", "0")
+    monkeypatch.setenv("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_SYMBOLIC_BLOCK_SCHUR_REGULARIZATION_REL", "0")
+    monkeypatch.setenv(
+        "SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_SYMBOLIC_BLOCK_SCHUR_ADMISSION_MAX_RELATIVE_RESIDUAL",
+        "1e-12",
+    )
+
+    pc = build_active_projected_rhs1_full_csr_preconditioner(
+        matrix=matrix,
+        layout=layout,
+        active_indices=active,
+        kind="active_symbolic_block_schur_lu",
+        max_factor_nbytes=2_000_000,
+        regularization=0.0,
+    )
+
+    assert pc.selected, pc.to_dict()
+    assert pc.kind == "active_symbolic_block_schur_lu"
+    assert pc.metadata["architecture"] == "active_true_operator_symbolic_separator_schur_lu"
+    assert pc.metadata["symbolic_factor_kind"] == "symbolic_block_schur_lu"
+    assert pc.metadata["separator_size"] == 1
+    assert pc.metadata["tail_size"] == 1
+    assert pc.metadata["admission"]["accepted"] is True
+    assert pc.metadata["requires_preflight"] is True
+    rhs = _deterministic_vector(layout.total_size)
+    recovered = np.asarray(pc.operator.matvec(rhs), dtype=np.float64)
+    np.testing.assert_allclose(recovered, np.linalg.solve(matrix.toarray(), rhs), rtol=1.0e-11, atol=1.0e-11)
+
+
+def test_active_symbolic_block_schur_lu_admission_rejects_missing_interior_coupling(
+    monkeypatch,
+) -> None:
+    layout = RHS1BlockLayout(
+        n_species=1,
+        n_x=1,
+        n_xi=2,
+        n_theta=2,
+        n_zeta=1,
+        f_size=4,
+        phi1_size=0,
+        extra_size=1,
+        total_size=5,
+        constraint_scheme=1,
+        include_phi1=False,
+        include_phi1_in_kinetic=False,
+        rhs_mode=1,
+    )
+    matrix = sp.csr_matrix(
+        [
+            [4.0, 1.0, 30.0, 0.0, 2.0],
+            [1.0, 3.0, 0.0, 0.0, -1.0],
+            [25.0, 0.0, 5.0, -1.0, 1.5],
+            [0.0, 0.0, -1.0, 2.0, 0.5],
+            [3.0, -2.0, 1.0, 1.0, 7.0],
+        ],
+        dtype=np.float64,
+    )
+    active = np.arange(layout.total_size, dtype=np.int64)
+    monkeypatch.setenv("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_SYMBOLIC_BLOCK_SCHUR_ORDERING", "natural")
+    monkeypatch.setenv("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_SYMBOLIC_BLOCK_SCHUR_BLOCK_SIZE", "2")
+    monkeypatch.setenv("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_SYMBOLIC_BLOCK_SCHUR_MAX_SEPARATOR_COLS", "1")
+    monkeypatch.setenv("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_SYMBOLIC_BLOCK_SCHUR_BOUNDARY_WIDTH", "0")
+    monkeypatch.setenv("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_SYMBOLIC_BLOCK_SCHUR_HIGH_DEGREE_COLS", "0")
+    monkeypatch.setenv("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_SYMBOLIC_BLOCK_SCHUR_REGULARIZATION_REL", "0")
+    monkeypatch.setenv(
+        "SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_SYMBOLIC_BLOCK_SCHUR_ADMISSION_MAX_RELATIVE_RESIDUAL",
+        "1e-2",
+    )
+    monkeypatch.setenv(
+        "SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_SYMBOLIC_BLOCK_SCHUR_ADMISSION_MIN_IMPROVEMENT",
+        "10",
+    )
+
+    pc = build_active_projected_rhs1_full_csr_preconditioner(
+        matrix=matrix,
+        layout=layout,
+        active_indices=active,
+        kind="active_symbolic_block_schur_lu",
+        max_factor_nbytes=2_000_000,
+        regularization=0.0,
+    )
+
+    assert not pc.selected
+    assert pc.kind == "active_symbolic_block_schur_lu"
+    assert pc.reason.startswith("active_symbolic_block_schur_lu_admission_failed:")
+    assert pc.metadata["admission"]["accepted"] is False
+    assert pc.metadata["admission"]["max_relative_residual"] > 1.0e-2
+    assert pc.metadata["requires_preflight"] is True
 
 
 def test_active_symbolic_coupled_schur_can_use_coupled_kinetic_factor_base(monkeypatch) -> None:

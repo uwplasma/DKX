@@ -892,6 +892,7 @@ def build_active_projected_rhs1_full_csr_preconditioner(
             else (
                 "active_fortran_v3_reduced_lu,"
                 "active_fortran_v3_reduced_native_stack,"
+                "active_symbolic_block_schur_lu,"
                 "active_schwarz_sparse_coarse,"
                 "active_global_field_split_schur,"
                 "active_xblock_ell_band_schur,"
@@ -907,7 +908,11 @@ def build_active_projected_rhs1_full_csr_preconditioner(
         if candidate_env_override is None and int(matrix.shape[0]) >= int(large_fallback_size):
             candidate_env = os.environ.get(
                 "SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_AUTO_LARGE_CANDIDATES",
-                "active_fortran_v3_reduced_native_stack,active_fortran_v3_reduced_lu",
+                (
+                    "active_fortran_v3_reduced_native_stack,"
+                    "active_symbolic_block_schur_lu,"
+                    "active_fortran_v3_reduced_lu"
+                ),
             )
             large_default_used = True
         candidates = [
@@ -1298,6 +1303,30 @@ def build_active_projected_rhs1_full_csr_preconditioner(
                 metadata={},
             )
         return _build_active_projected_filtered_sparse_factor_preconditioner(
+            matrix=matrix,
+            layout=layout,
+            active_indices=active_indices,
+            requested_kind=kind_l,
+            regularization=regularization,
+            max_factor_nbytes=max_factor_nbytes,
+            t0=t0,
+        )
+    if kind_l in {
+        "active_symbolic_block_schur_lu",
+        "active_symbolic_separator_schur_lu",
+        "active_separator_schur_lu",
+        "active_native_symbolic_block_schur",
+    }:
+        if layout is None:
+            return RHS1StructuredFullCSRPreconditioner(
+                operator=None,
+                selected=False,
+                kind="active_symbolic_block_schur_lu",
+                reason="missing_active_layout",
+                setup_s=max(0.0, time.perf_counter() - t0),
+                metadata={},
+            )
+        return _build_active_projected_symbolic_block_schur_lu_preconditioner(
             matrix=matrix,
             layout=layout,
             active_indices=active_indices,
@@ -5561,6 +5590,332 @@ def _build_active_symbolic_dominant_kinetic_basis_csc(
     basis.eliminate_zeros()
     metadata["symbolic_kinetic_basis_nnz"] = int(basis.nnz)
     return basis, metadata
+
+
+def _active_nonkinetic_tail_size(
+    *,
+    layout: RHS1BlockLayout,
+    active_indices: np.ndarray,
+) -> tuple[int, bool]:
+    """Return the active-vector suffix size occupied by non-kinetic rows."""
+
+    active = np.asarray(active_indices, dtype=np.int64).reshape((-1,))
+    if active.size == 0:
+        return 0, False
+    nonkinetic = active >= int(layout.f_size)
+    tail_size = int(np.count_nonzero(nonkinetic))
+    if tail_size == 0:
+        return 0, True
+    return tail_size, bool(np.all(nonkinetic[-tail_size:]))
+
+
+def _build_active_projected_symbolic_block_schur_lu_preconditioner(
+    *,
+    matrix: Any,
+    layout: RHS1BlockLayout,
+    active_indices: Any | None,
+    requested_kind: str,
+    regularization: float,
+    max_factor_nbytes: int,
+    t0: float,
+) -> RHS1StructuredFullCSRPreconditioner:
+    """Build a bounded separator-Schur factor over the active true operator.
+
+    This candidate is closer to sparse-direct PETSc/MUMPS/SuperLU behavior than
+    the local smoothers: it factors interior blocks, forms an explicit separator
+    Schur complement, and admits the factor only when deterministic true-action
+    probes pass.  It remains size-gated by default so production-grid auto
+    selection can fail closed instead of entering an unbounded host factor.
+    """
+
+    from scipy.sparse.linalg import LinearOperator  # noqa: PLC0415
+
+    from .explicit_sparse import (  # noqa: PLC0415
+        admit_sparse_factor_against_operator,
+        analyze_sparse_symbolic_structure,
+        factorize_host_sparse_operator,
+    )
+
+    matrix_csr = matrix.tocsr()
+    active_size = int(matrix_csr.shape[0])
+    max_active_size = int(
+        _env_int(
+            "SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_SYMBOLIC_BLOCK_SCHUR_MAX_ACTIVE_SIZE",
+            300_000,
+        )
+    )
+    if int(max_active_size) > 0 and int(active_size) > int(max_active_size):
+        return RHS1StructuredFullCSRPreconditioner(
+            operator=None,
+            selected=False,
+            kind="active_symbolic_block_schur_lu",
+            reason=f"active_symbolic_block_schur_lu_size_exceeded:{active_size}>{int(max_active_size)}",
+            setup_s=max(0.0, time.perf_counter() - t0),
+            metadata={
+                "active_size": int(active_size),
+                "max_active_size": int(max_active_size),
+                "requested_kind": str(requested_kind),
+                "note": (
+                    "increase SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_SYMBOLIC_BLOCK_SCHUR_MAX_ACTIVE_SIZE "
+                    "for explicit large separator-Schur probes"
+                ),
+            },
+        )
+
+    active_np = (
+        np.arange(int(layout.total_size), dtype=np.int64)
+        if active_indices is None
+        else np.asarray(active_indices, dtype=np.int64).reshape((-1,))
+    )
+    if active_np.shape != (active_size,):
+        return RHS1StructuredFullCSRPreconditioner(
+            operator=None,
+            selected=False,
+            kind="active_symbolic_block_schur_lu",
+            reason="active_index_size_mismatch",
+            setup_s=max(0.0, time.perf_counter() - t0),
+            metadata={
+                "active_index_size": int(active_np.size),
+                "matrix_shape": tuple(int(v) for v in matrix_csr.shape),
+            },
+        )
+    tail_size, nonkinetic_tail_is_suffix = _active_nonkinetic_tail_size(
+        layout=layout,
+        active_indices=active_np,
+    )
+
+    ordering_kind = (
+        os.environ.get(
+            "SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_SYMBOLIC_BLOCK_SCHUR_ORDERING",
+            "rcm",
+        )
+        .strip()
+        .lower()
+    )
+    block_size = max(
+        1,
+        int(_env_int("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_SYMBOLIC_BLOCK_SCHUR_BLOCK_SIZE", 2048)),
+    )
+    max_permutation_size = max(
+        1,
+        int(
+            _env_int(
+                "SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_SYMBOLIC_BLOCK_SCHUR_MAX_PERMUTATION_SIZE",
+                300_000,
+            )
+        ),
+    )
+    separator_cols = max(
+        0,
+        int(
+            _env_int(
+                "SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_SYMBOLIC_BLOCK_SCHUR_MAX_SEPARATOR_COLS",
+                512,
+            )
+        ),
+    )
+    boundary_width = max(
+        0,
+        int(_env_int("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_SYMBOLIC_BLOCK_SCHUR_BOUNDARY_WIDTH", 1)),
+    )
+    high_degree_cols = max(
+        0,
+        int(_env_int("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_SYMBOLIC_BLOCK_SCHUR_HIGH_DEGREE_COLS", 128)),
+    )
+    regularization_rel = max(
+        0.0,
+        float(
+            _env_float(
+                "SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_SYMBOLIC_BLOCK_SCHUR_REGULARIZATION_REL",
+                max(float(abs(regularization)), 1.0e-12),
+            )
+        ),
+    )
+    analysis = analyze_sparse_symbolic_structure(
+        matrix_csr,
+        ordering_kind=ordering_kind,
+        block_size_target=block_size,
+        max_permutation_size=max_permutation_size,
+    )
+    separator_use = min(int(separator_cols), int(active_size))
+    local_dense_estimate = (
+        int(analysis.block_count)
+        * int(max(1, analysis.block_size_max))
+        * int(max(1, analysis.block_size_max))
+        * np.dtype(np.float64).itemsize
+    )
+    separator_dense_estimate = int(separator_use * separator_use * np.dtype(np.float64).itemsize)
+    csr_nbytes = int(_scipy_csr_nbytes(matrix_csr))
+    raw_estimate = int(csr_nbytes + 2 * local_dense_estimate + 3 * separator_dense_estimate)
+    prefill_safety = max(
+        1.0,
+        float(
+            _env_float(
+                "SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_SYMBOLIC_BLOCK_SCHUR_PREFILL_SAFETY_FACTOR",
+                4.0,
+            )
+        ),
+    )
+    prefill_estimate = int(np.ceil(float(raw_estimate) * float(prefill_safety)))
+    if prefill_estimate > int(max_factor_nbytes):
+        return RHS1StructuredFullCSRPreconditioner(
+            operator=None,
+            selected=False,
+            kind="active_symbolic_block_schur_lu",
+            reason=f"active_symbolic_block_schur_lu_prefill_budget_exceeded:{prefill_estimate}>{int(max_factor_nbytes)}",
+            setup_s=max(0.0, time.perf_counter() - t0),
+            metadata={
+                "requested_kind": str(requested_kind),
+                "architecture": "active_true_operator_symbolic_separator_schur_lu",
+                "active_size": int(active_size),
+                "matrix_nnz": int(matrix_csr.nnz),
+                "tail_size": int(tail_size),
+                "nonkinetic_tail_is_suffix": bool(nonkinetic_tail_is_suffix),
+                "symbolic_analysis": analysis.to_dict(),
+                "factor_nbytes_estimate": int(raw_estimate),
+                "factor_nbytes_prefill_estimate": int(prefill_estimate),
+                "prefill_safety_factor": float(prefill_safety),
+                "max_factor_nbytes": int(max_factor_nbytes),
+            },
+        )
+
+    try:
+        factor = factorize_host_sparse_operator(
+            matrix_csr,
+            kind="symbolic_block_schur_lu",
+            symbolic_analysis=analysis,
+            symbolic_block_size=block_size,
+            symbolic_schur_tail_size=int(tail_size if nonkinetic_tail_is_suffix else 0),
+            symbolic_schur_max_separator_cols=separator_cols,
+            symbolic_schur_boundary_width=boundary_width,
+            symbolic_schur_high_degree_cols=high_degree_cols,
+            symbolic_schur_regularization_rel=regularization_rel,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return RHS1StructuredFullCSRPreconditioner(
+            operator=None,
+            selected=False,
+            kind="active_symbolic_block_schur_lu",
+            reason=f"active_symbolic_block_schur_lu_factor_failed:{type(exc).__name__}",
+            setup_s=max(0.0, time.perf_counter() - t0),
+            metadata={
+                "requested_kind": str(requested_kind),
+                "architecture": "active_true_operator_symbolic_separator_schur_lu",
+                "active_size": int(active_size),
+                "matrix_nnz": int(matrix_csr.nnz),
+                "error": str(exc),
+                "symbolic_analysis": analysis.to_dict(),
+            },
+        )
+    factor_nbytes = int(factor.factor_nbytes_estimate or 0)
+    if factor_nbytes > int(max_factor_nbytes):
+        return RHS1StructuredFullCSRPreconditioner(
+            operator=None,
+            selected=False,
+            kind="active_symbolic_block_schur_lu",
+            reason=f"active_symbolic_block_schur_lu_budget_exceeded:{factor_nbytes}>{int(max_factor_nbytes)}",
+            setup_s=max(0.0, time.perf_counter() - t0),
+            metadata={
+                "requested_kind": str(requested_kind),
+                "architecture": "active_true_operator_symbolic_separator_schur_lu",
+                "active_size": int(active_size),
+                "matrix_nnz": int(matrix_csr.nnz),
+                "symbolic_analysis": analysis.to_dict(),
+                "factor_nbytes_estimate": int(raw_estimate),
+                "factor_nbytes_actual": int(factor_nbytes),
+                "factor_nnz_actual": int(factor.factor_nnz_estimate or 0),
+                "max_factor_nbytes": int(max_factor_nbytes),
+            },
+        )
+
+    admission = admit_sparse_factor_against_operator(
+        factor.operator,
+        factor,
+        probe_count=max(
+            1,
+            int(_env_int("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_SYMBOLIC_BLOCK_SCHUR_ADMISSION_PROBES", 4)),
+        ),
+        max_relative_residual=max(
+            0.0,
+            float(
+                _env_float(
+                    "SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_SYMBOLIC_BLOCK_SCHUR_ADMISSION_MAX_RELATIVE_RESIDUAL",
+                    1.0e-2,
+                )
+            ),
+        ),
+        min_improvement_vs_identity=max(
+            0.0,
+            float(
+                _env_float(
+                    "SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_SYMBOLIC_BLOCK_SCHUR_ADMISSION_MIN_IMPROVEMENT",
+                    1.0,
+                )
+            ),
+        ),
+    )
+    if not bool(admission.accepted):
+        return RHS1StructuredFullCSRPreconditioner(
+            operator=None,
+            selected=False,
+            kind="active_symbolic_block_schur_lu",
+            reason=f"active_symbolic_block_schur_lu_admission_failed:{admission.reason}",
+            setup_s=max(0.0, time.perf_counter() - t0),
+            metadata={
+                "requested_kind": str(requested_kind),
+                "architecture": "active_true_operator_symbolic_separator_schur_lu",
+                "active_size": int(active_size),
+                "matrix_nnz": int(matrix_csr.nnz),
+                "tail_size": int(tail_size),
+                "nonkinetic_tail_is_suffix": bool(nonkinetic_tail_is_suffix),
+                "symbolic_analysis": analysis.to_dict(),
+                "factor_nbytes_estimate": int(raw_estimate),
+                "factor_nbytes_prefill_estimate": int(prefill_estimate),
+                "factor_nbytes_actual": int(factor_nbytes),
+                "factor_nnz_actual": int(factor.factor_nnz_estimate or 0),
+                "max_factor_nbytes": int(max_factor_nbytes),
+                "admission": admission.to_dict(),
+                "requires_preflight": True,
+            },
+        )
+
+    def apply(x: Any) -> np.ndarray:
+        arr = np.asarray(x, dtype=np.float64).reshape((-1,))
+        return np.asarray(factor.solve(arr), dtype=np.float64).reshape((-1,))
+
+    operator = LinearOperator(matrix_csr.shape, matvec=apply, dtype=np.float64)
+    return RHS1StructuredFullCSRPreconditioner(
+        operator=operator,
+        selected=True,
+        kind="active_symbolic_block_schur_lu",
+        reason="complete",
+        setup_s=max(0.0, time.perf_counter() - t0),
+        metadata={
+            "requested_kind": str(requested_kind),
+            "architecture": "active_true_operator_symbolic_separator_schur_lu",
+            "active_size": int(active_size),
+            "matrix_nnz": int(matrix_csr.nnz),
+            "tail_size": int(tail_size),
+            "nonkinetic_tail_is_suffix": bool(nonkinetic_tail_is_suffix),
+            "symbolic_analysis": analysis.to_dict(),
+            "symbolic_factor_kind": str(factor.kind),
+            "separator_size": int(getattr(factor.factor, "coarse_size", 0)),
+            "factor_nbytes_estimate": int(raw_estimate),
+            "factor_nbytes_prefill_estimate": int(prefill_estimate),
+            "factor_nbytes_actual": int(factor_nbytes),
+            "factor_nnz_actual": int(factor.factor_nnz_estimate or 0),
+            "max_factor_nbytes": int(max_factor_nbytes),
+            "block_size": int(block_size),
+            "ordering_kind": str(ordering_kind),
+            "max_separator_cols": int(separator_cols),
+            "boundary_width": int(boundary_width),
+            "high_degree_cols": int(high_degree_cols),
+            "regularization_rel": float(regularization_rel),
+            "admission": admission.to_dict(),
+            "requires_preflight": True,
+            "note": "explicit_separator_schur_probe_not_production_default_until_full_grid_gate_passes",
+        },
+    )
 
 
 def _build_active_projected_symbolic_coupled_schur_preconditioner(
