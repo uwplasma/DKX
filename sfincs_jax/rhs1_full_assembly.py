@@ -6395,7 +6395,7 @@ def _build_active_projected_sparse_coarse_residual_preconditioner(
             "coarse_nbytes_actual": int(coarse_nbytes),
             "base_factor_nbytes_actual": int(base_nbytes),
             "factor_nbytes_actual": int(total_nbytes),
-            "requires_preflight": True,
+            "requires_preflight": bool(str(base_kind) == "active_filtered_sparse_factor"),
             **config,
         },
     )
