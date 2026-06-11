@@ -2553,6 +2553,8 @@ def test_active_symbolic_block_schur_lu_admission_rejects_missing_interior_coupl
     assert not pc.selected
     assert pc.kind == "active_symbolic_block_schur_lu"
     assert pc.reason.startswith("active_symbolic_block_schur_lu_admission_failed:")
+    assert "max_rel=" in pc.reason
+    assert "min_improvement=" in pc.reason
     assert pc.metadata["admission"]["accepted"] is False
     assert pc.metadata["admission"]["max_relative_residual"] > 1.0e-2
     assert pc.metadata["requires_preflight"] is True

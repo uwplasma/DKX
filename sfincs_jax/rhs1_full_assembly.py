@@ -5855,11 +5855,18 @@ def _build_active_projected_symbolic_block_schur_lu_preconditioner(
         ),
     )
     if not bool(admission.accepted):
+        admission_reason = (
+            "active_symbolic_block_schur_lu_admission_failed:"
+            f"{admission.reason}:"
+            f"max_rel={float(admission.max_relative_residual):.3e}:"
+            f"median_rel={float(admission.median_relative_residual):.3e}:"
+            f"min_improvement={float(admission.min_improvement_vs_identity):.3e}"
+        )
         return RHS1StructuredFullCSRPreconditioner(
             operator=None,
             selected=False,
             kind="active_symbolic_block_schur_lu",
-            reason=f"active_symbolic_block_schur_lu_admission_failed:{admission.reason}",
+            reason=admission_reason,
             setup_s=max(0.0, time.perf_counter() - t0),
             metadata={
                 "requested_kind": str(requested_kind),

@@ -27965,13 +27965,28 @@ Evidence:
 - ``python -m compileall -q sfincs_jax/rhs1_full_assembly.py
   tests/test_rhs1_full_assembly.py``: passed.
 - ``git diff --check``: passed.
+- Office CPU reference-reuse production probe on ``additional_examples`` at
+  ``25 x 51 x 100 x 8`` with
+  ``SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_PRECONDITIONER=active_symbolic_block_schur_lu``,
+  block size ``512``, separator cap ``512``, and a ``45 GiB`` factor cap:
+  the run reused the completed Fortran reference, built the direct-tail
+  ``whichMatrix=0`` Pmat in ``18.410 s``, reached separator-Schur setup/admission
+  in ``10.167 s``, then failed closed with
+  ``active_symbolic_block_schur_lu_admission_failed:residual_or_improvement_gate_failed``.
+  Total suite wall was ``32.94 s`` and peak RSS was ``2.99 GB``.  The row is
+  not solved, but the candidate is safely bounded.
+- A stronger office CPU variant with block size ``1024``, separator cap
+  ``2048``, boundary width ``2``, and high-degree cap ``512`` also failed the
+  same admission gate.  Total suite wall was ``33.81 s`` and peak RSS was
+  ``2.95 GB``.  This rules out simple separator-rank/block-size promotion as
+  the production fix for this QI row.
 
 Decision:
 
 - This is the next real replacement candidate for production RHSMode=1, but it
   is not yet a production-grid closure claim.  The next compute gate is an
-  office CPU reference-reuse run on ``additional_examples`` with the explicit
-  candidate enabled and a bounded active-size cap high enough to build it.  It
-  must pass setup admission, strict direct-tail true residual preflight,
-  runtime, and RSS gates before it can be promoted beyond explicit/diagnostic
-  use.
+  architecture change, not more separator tuning: add a coupled factor/residual
+  equation that retains dominant cross-block kinetic couplings directly, then
+  use the separator Schur complement as a correction.  It must pass setup
+  admission, strict direct-tail true residual preflight, runtime, and RSS gates
+  before it can be promoted beyond explicit/diagnostic use.
