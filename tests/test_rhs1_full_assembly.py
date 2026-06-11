@@ -2668,9 +2668,11 @@ def test_active_symbolic_frontal_schur_lu_rejects_dense_rhs_work_budget(monkeypa
 
     assert not pc.selected
     assert pc.kind == "active_symbolic_frontal_schur_lu"
-    assert pc.reason == "active_symbolic_frontal_schur_lu_dense_rhs_budget_exceeded:4>1"
+    assert pc.reason.startswith("active_symbolic_frontal_schur_lu_factor_failed:")
+    assert "dense separator RHS work budget exceeded" in pc.reason
     assert pc.metadata["dense_rhs_entries_estimate"] == 4
     assert pc.metadata["max_dense_rhs_entries"] == 1
+    assert pc.metadata["max_dense_rhs_cols_per_block"] == 256
 
 
 def test_active_symbolic_superblock_lu_solves_coupled_active_blocks(monkeypatch) -> None:

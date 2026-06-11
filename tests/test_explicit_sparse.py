@@ -638,6 +638,9 @@ def test_symbolic_frontal_schur_lu_solves_separator_coupled_blocks() -> None:
     assert factor.factor.total_cross_nnz > 0
     assert factor.factor.selected_cross_nnz == factor.factor.total_cross_nnz
     assert factor.factor.cross_separator_fraction == 1.0
+    assert factor.factor.dense_rhs_entries == 2
+    assert factor.factor.peak_dense_rhs_entries == 1
+    assert factor.factor.separator_update_columns == 2
     assert admission.accepted is True
 
 

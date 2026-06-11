@@ -368,6 +368,9 @@ class _SymbolicBlockSchurFactor:
     total_cross_nnz: int = 0
     selected_cross_nnz: int = 0
     cross_separator_fraction: float = 1.0
+    dense_rhs_entries: int = 0
+    peak_dense_rhs_entries: int = 0
+    separator_update_columns: int = 0
     factor_failures: int = 0
 
     @property
@@ -687,6 +690,7 @@ def _build_symbolic_frontal_schur_factor(
     min_cross_separator_fraction: float = 0.0,
     regularization_rel: float = 1.0e-12,
     max_dense_rhs_entries: int = 0,
+    max_dense_rhs_cols_per_block: int = 0,
 ) -> tuple[_SymbolicBlockSchurFactor, int, int]:
     """Build a bounded frontal/Schur elimination over symbolic block groups.
 
@@ -840,31 +844,43 @@ def _build_symbolic_frontal_schur_factor(
         groups.setdefault(dsu.find(block), []).append(int(block))
     ordered_groups = sorted(groups.values(), key=lambda values: (min(values), len(values)))
 
-    if sep_count and int(max_dense_rhs_entries) > 0:
+    if sep_count:
         separator_mask = np.zeros((n,), dtype=bool)
         separator_mask[separator] = True
         dense_rhs_entries = 0
         peak_dense_rhs_entries = 0
+        separator_update_columns = 0
         for group in ordered_groups:
-            group_rows = 0
+            positions: list[np.ndarray] = []
             for block in group:
                 start = int(block) * block_size
                 stop = min(n, start + block_size)
                 if stop <= start:
                     continue
-                local_positions = np.arange(start, stop, dtype=np.int64)
-                local_indices = np.asarray(permutation[local_positions], dtype=np.int64)
-                group_rows += int(np.count_nonzero(~separator_mask[local_indices]))
-            entries = int(group_rows) * int(sep_count)
+                positions.append(np.arange(start, stop, dtype=np.int64))
+            if not positions:
+                continue
+            idx_all = np.asarray(permutation[np.concatenate(positions)], dtype=np.int64)
+            idx = idx_all[~separator_mask[idx_all]]
+            if idx.size == 0:
+                continue
+            b_pattern = matrix_csr[idx, :][:, separator].tocsr()
+            local_cols = int(np.unique(b_pattern.indices).size) if b_pattern.nnz else 0
+            separator_update_columns += local_cols
+            entries = int(idx.size) * int(local_cols)
             dense_rhs_entries += entries
             peak_dense_rhs_entries = max(peak_dense_rhs_entries, entries)
-        if dense_rhs_entries > int(max_dense_rhs_entries):
+        if int(max_dense_rhs_entries) > 0 and dense_rhs_entries > int(max_dense_rhs_entries):
             raise RuntimeError(
                 "symbolic_frontal_schur_lu dense separator RHS work budget exceeded "
                 f"({int(dense_rhs_entries)}>{int(max_dense_rhs_entries)}; "
                 f"peak_block_entries={int(peak_dense_rhs_entries)} separator={int(sep_count)} "
                 f"groups={int(len(ordered_groups))})"
             )
+    else:
+        dense_rhs_entries = 0
+        peak_dense_rhs_entries = 0
+        separator_update_columns = 0
 
     schur = (
         matrix_csr[separator, :][:, separator].toarray().astype(dtype, copy=False)
@@ -919,12 +935,19 @@ def _build_symbolic_frontal_schur_factor(
             b_mat = matrix_csr[idx, :][:, separator].tocsr().astype(dtype, copy=False)
             c_mat = matrix_csr[separator, :][:, idx].tocsr().astype(dtype, copy=False)
             if b_mat.nnz and c_mat.nnz:
-                b_dense = b_mat.toarray().astype(dtype, copy=False)
-                try:
-                    eliminated = np.asarray(factor.solve(b_dense), dtype=dtype)
-                except Exception:
-                    eliminated = np.zeros((idx.size, sep_count), dtype=dtype)
-                schur -= np.asarray(c_mat @ eliminated, dtype=dtype)
+                local_cols = np.unique(b_mat.indices).astype(np.int64, copy=False)
+                max_cols_per_chunk = int(max_dense_rhs_cols_per_block)
+                if max_cols_per_chunk <= 0:
+                    max_cols_per_chunk = int(local_cols.size)
+                max_cols_per_chunk = max(1, int(max_cols_per_chunk))
+                for col_start in range(0, int(local_cols.size), max_cols_per_chunk):
+                    col_chunk = local_cols[col_start : col_start + max_cols_per_chunk]
+                    b_dense = b_mat[:, col_chunk].toarray().astype(dtype, copy=False)
+                    try:
+                        eliminated = np.asarray(factor.solve(b_dense), dtype=dtype)
+                    except Exception:
+                        eliminated = np.zeros((idx.size, int(col_chunk.size)), dtype=dtype)
+                    schur[:, col_chunk] -= np.asarray(c_mat @ eliminated, dtype=dtype)
             total_nbytes += estimate_csr_nbytes(b_mat.shape, int(b_mat.nnz), data_dtype=b_mat.dtype, index_dtype=b_mat.indices.dtype)
             total_nbytes += estimate_csr_nbytes(c_mat.shape, int(c_mat.nnz), data_dtype=c_mat.dtype, index_dtype=c_mat.indices.dtype)
             total_nnz += int(b_mat.nnz) + int(c_mat.nnz)
@@ -965,6 +988,9 @@ def _build_symbolic_frontal_schur_factor(
         total_cross_nnz=int(total_cross_nnz),
         selected_cross_nnz=int(selected_cross),
         cross_separator_fraction=float(cross_fraction),
+        dense_rhs_entries=int(dense_rhs_entries),
+        peak_dense_rhs_entries=int(peak_dense_rhs_entries),
+        separator_update_columns=int(separator_update_columns),
         factor_failures=int(factor_failures),
     )
     return factor, int(total_nbytes), int(total_nnz)
@@ -2272,6 +2298,7 @@ def factorize_host_sparse_operator(
     symbolic_frontal_min_cross_separator_fraction: float = 0.0,
     symbolic_frontal_regularization_rel: float = 1.0e-12,
     symbolic_frontal_max_dense_rhs_entries: int = 0,
+    symbolic_frontal_max_dense_rhs_cols_per_block: int = 0,
     symbolic_superblock_max_size: int = 32768,
     symbolic_superblock_max_blocks: int = 8,
     symbolic_superblock_min_cross_nnz: int = 1,
@@ -2414,6 +2441,7 @@ def factorize_host_sparse_operator(
                     min_cross_separator_fraction=float(symbolic_frontal_min_cross_separator_fraction),
                     regularization_rel=float(symbolic_frontal_regularization_rel),
                     max_dense_rhs_entries=int(symbolic_frontal_max_dense_rhs_entries),
+                    max_dense_rhs_cols_per_block=int(symbolic_frontal_max_dense_rhs_cols_per_block),
                 )
             elif kind == "symbolic_superblock_lu":
                 factor, symbolic_nbytes, symbolic_nnz = _build_symbolic_superblock_factor(
