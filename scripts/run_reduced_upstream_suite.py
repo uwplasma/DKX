@@ -1663,7 +1663,13 @@ def _classify_blocker(*, status: str, note: str, mismatch_keys: list[str], jax_l
         or "snesconvergedreason" in text
     ):
         return "reference solver quality"
-    if status in {"fortran_timeout", "jax_timeout", "max_attempts"}:
+    if (
+        status == "fortran_timeout"
+        or "fortran timeout" in text
+        or "reference timeout" in text
+    ):
+        return "reference timeout"
+    if status in {"jax_timeout", "max_attempts"}:
         return "solver branch mismatch"
     if "reference-solve quality suspect" in text:
         return "reference solver quality"

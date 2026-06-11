@@ -272,6 +272,44 @@ Owner: incoming agent
   - these rows do not close the public README production-floor gaps because the
     current gap set is all ``remote_or_cluster_only``.
 
+### Execution status: office GPU production-floor probe for a remote-only gap
+
+- A clean office clone was created at
+  ``/home/rjorge/local/tests/sfincs_jax_production_stress_7506720`` and updated
+  to ``cfdb08b`` because the older ``~/sfincs_jax`` checkout was dirty and
+  diverged.
+- Office environment:
+  - Python ``3.10.12``;
+  - JAX ``0.6.2`` with two CUDA devices;
+  - SFINCS Fortran v3 at ``/home/rjorge/sfincs/fortran/version3/sfincs``.
+- The first remote-only gap probe targeted the generated production input
+  ``additional_examples`` at ``NTHETA=25, NZETA=51, NX=8, NXI=100`` on GPU 1.
+- Result:
+  - the run did not reach a SFINCS_JAX GPU solve within the ``600 s`` per-case
+    cap because the Fortran reference side timed out first;
+  - the suite row was ``max_attempts`` with no common HDF5 outputs;
+  - this was reclassified in code from misleading ``solver branch mismatch`` to
+    the new blocker ``reference timeout``.
+- Fortran log evidence before timeout:
+  - matrix size ``648977 x 648977``;
+  - ``whichMatrix=0`` nonzeros ``12,176,533``;
+  - ``whichMatrix=1`` nonzeros ``15,165,133``;
+  - MUMPS used METIS ordering, estimated ``1,274,005,121`` factor entries and
+    ``3.078e12`` elimination operations;
+  - observed Fortran RSS during the timeout probe was about ``11-12 GB``.
+- Interpretation:
+  - the production-floor public gap rows are not suitable for local CI and need
+    scheduled/remote artifacts with longer reference budgets or reused Fortran
+    references;
+  - this confirms the need for the lower-memory direct-Pmat/operator-reuse lane,
+    but it also shows README production plot regeneration is blocked by missing
+    reference artifacts, not just SFINCS_JAX GPU runtime.
+- Code/test follow-up:
+  - ``scripts/run_reduced_upstream_suite.py`` now reports Fortran/reference
+    timeouts as ``reference timeout``;
+  - ``tests/test_scaled_example_suite_reference.py`` covers the new blocker
+    classification.
+
 ## 2026-06-10 Addendum: native block-Schur factor plus exact-Pmat LU admission rescue
 
 ### Implementation

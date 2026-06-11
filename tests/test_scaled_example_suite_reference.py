@@ -646,6 +646,27 @@ def test_classify_blocker_treats_fortran_snes_divergence_as_reference_quality() 
     )
 
 
+def test_classify_blocker_treats_fortran_timeout_as_reference_timeout() -> None:
+    assert (
+        _classify_blocker(
+            status="max_attempts",
+            note="Reached max attempts while reducing resolution. Last failure: Fortran timeout; reduced largest axis.",
+            mismatch_keys=[],
+            jax_log=None,
+        )
+        == "reference timeout"
+    )
+    assert (
+        _classify_blocker(
+            status="fortran_timeout",
+            note="Fortran timeout; reduced largest axis.",
+            mismatch_keys=[],
+            jax_log=None,
+        )
+        == "reference timeout"
+    )
+
+
 def test_run_case_reports_fortran_snes_divergence_without_max_attempts(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
