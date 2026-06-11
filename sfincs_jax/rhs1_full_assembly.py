@@ -1806,7 +1806,7 @@ def _build_active_fortran_v3_reduced_sparse_factor_preconditioner(
     lu_prefill_default = 4.5
     if factor_kind == "lu" and n >= int(lu_large_prefill_size):
         lu_prefill_default = float(
-            _env_float("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_FORTRAN_V3_PC_LU_LARGE_PREFILL_SAFETY_FACTOR", 7.5)
+            _env_float("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_FORTRAN_V3_PC_LU_LARGE_PREFILL_SAFETY_FACTOR", 32.0)
         )
     lu_prefill_safety_factor = max(
         1.0,

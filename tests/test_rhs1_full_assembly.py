@@ -765,6 +765,55 @@ def test_active_fortran_v3_reduced_lu_prefill_gate_rejects_before_factorization(
     assert rejected.metadata["lu_prefill_safety_factor"] == 1.0e9
 
 
+def test_active_fortran_v3_reduced_lu_large_default_prefill_rejects_observed_production_estimate(
+    monkeypatch,
+) -> None:
+    layout = RHS1BlockLayout(
+        n_species=1,
+        n_x=3,
+        n_xi=3,
+        n_theta=1,
+        n_zeta=1,
+        f_size=9,
+        phi1_size=0,
+        extra_size=0,
+        total_size=9,
+        constraint_scheme=1,
+        include_phi1=False,
+        include_phi1_in_kinetic=False,
+        rhs_mode=1,
+    )
+    matrix = sp.eye(layout.total_size, format="csr", dtype=np.float64)
+    observed_symbolic_estimate = int(1687.0 * 1024.0 * 1024.0)
+    monkeypatch.setenv("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_FORTRAN_V3_PC_FACTOR_KIND", "lu")
+    monkeypatch.setenv("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_FORTRAN_V3_PC_LU_LARGE_SIZE", "1")
+    monkeypatch.delenv(
+        "SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_FORTRAN_V3_PC_LU_LARGE_PREFILL_SAFETY_FACTOR",
+        raising=False,
+    )
+    monkeypatch.setattr(
+        rfa,
+        "_estimate_spilu_factor_nbytes",
+        lambda *, matrix, fill_factor: observed_symbolic_estimate,
+    )
+
+    rejected = build_active_projected_rhs1_full_csr_preconditioner(
+        matrix=matrix,
+        layout=layout,
+        active_indices=np.arange(layout.total_size, dtype=np.int64),
+        kind="active_fortran_v3_reduced_lu",
+        max_factor_nbytes=int(45.0 * 1024.0 * 1024.0 * 1024.0),
+        regularization=0.0,
+    )
+
+    assert rejected.selected is False
+    assert rejected.reason.startswith("active_fortran_v3_pc_matrix_lu_prefill_budget_exceeded:")
+    assert rejected.metadata["factor_kind"] == "lu"
+    assert rejected.metadata["factor_nbytes_estimate"] == observed_symbolic_estimate + 2 * layout.total_size * 8
+    assert rejected.metadata["lu_prefill_safety_factor"] == 32.0
+    assert rejected.metadata["factor_nbytes_prefill_estimate"] > int(45.0 * 1024.0 * 1024.0 * 1024.0)
+
+
 def test_active_fortran_v3_support_mode_preflight_selects_lower_true_residual(monkeypatch) -> None:
     layout = RHS1BlockLayout(
         n_species=1,

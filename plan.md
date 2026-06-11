@@ -27681,6 +27681,11 @@ Follow-up evidence:
   peak RSS ``50,292,840 KB`` (about ``47.96 GiB``), before producing a
   solution.  This is worse than Fortran v3's ``12.27 GiB`` and should not be
   promoted as the production default for this row.
+- Increased the default large-LU prefill safety factor from ``7.5`` to ``32.0``
+  so the observed ``1687 MB`` symbolic estimate is rejected before SuperLU
+  factorization under both ``16 GiB`` and ``45 GiB`` caps.  This prevents the
+  exact reduced-LU path from repeating the production OOM/SIGKILL failure by
+  default.
 - Fixed suite blocker classification so JAX SIGKILL/SIGTERM/OOM-style failures
   are reported as ``jax resource/signal`` instead of being misclassified as
   ``geometry parsing mismatch`` when the error text also contains ``.nc`` paths.
@@ -27689,6 +27694,11 @@ Evidence:
 
 - ``pytest -q tests/test_scaled_example_suite_reference.py -k "classify_blocker
   or fortran_timeout or fortran_profile"``: ``5 passed, 25 deselected``.
+- ``pytest -q
+  tests/test_rhs1_full_assembly.py::test_active_fortran_v3_reduced_lu_large_default_prefill_rejects_observed_production_estimate
+  tests/test_rhs1_full_assembly.py::test_active_fortran_v3_reduced_lu_prefill_gate_rejects_before_factorization
+  tests/test_rhs1_full_assembly.py::test_active_projected_auto_ladder_uses_large_default_candidates``:
+  ``3 passed``.
 
 Decision:
 
