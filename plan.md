@@ -28422,3 +28422,62 @@ Current open-lane status after this pass:
 - Overall average: ``83%``.  The repo is green and the current replacement
   path is better bounded, but full-grid lower-memory production closure still
   requires the term-level active reduced-Pmat elimination hierarchy.
+
+### 2026-06-11 continuation: first-class compressed active-pitch layout
+
+Goal:
+
+- Start the real reduced-Pmat hierarchy by making the Fortran v3 active pitch
+  layout explicit and tested, instead of rebuilding active indices from a
+  rectangular ``(species, x, L, theta, zeta)`` mask in each caller.
+
+Implemented:
+
+- Added ``sfincs_jax.rhs1_compressed_layout.RHS1CompressedPitchLayout`` and
+  ``build_rhs1_compressed_pitch_layout``.  The layout stores
+  ``Nxi_for_x``, ``first_index_for_x``, compressed kinetic sizes, explicit tail
+  ranges, full active indices, and a full-to-reduced map.
+- Replaced ``v3_driver._transport_active_dof_indices`` with the new compressed
+  layout helper.  This keeps the historical active-index ordering but makes
+  the reduced layout reusable by future direct ``whichMatrix=0`` term builders
+  and factor metadata.
+- Added ``tests/test_rhs1_compressed_layout.py`` to verify active full-index
+  order against the previous mask construction, reduced index formulas, tail
+  preservation, inactive-mode rejection, rectangular no-reduction behavior, and
+  invalid operator-size rejection.
+- Extended fast physics gates with Gauss-Radau ``x=0`` speed-grid exactness and
+  PAS collision invariants/dissipation.
+
+Evidence:
+
+- ``python -m pytest tests/test_rhs1_compressed_layout.py
+  tests/test_rhs1_active_dof.py tests/test_velocity_space_physics_gates.py
+  tests/test_collision_physics_gates.py -q``: ``23 passed`` in ``1.12 s``.
+- ``python -m pytest tests/test_rhs1_full_assembly.py
+  tests/test_v3_sparse_pattern.py -q``: ``226 passed`` in ``2:18``.
+- ``ruff check sfincs_jax/rhs1_compressed_layout.py sfincs_jax/v3_driver.py
+  tests/test_rhs1_compressed_layout.py tests/test_velocity_space_physics_gates.py
+  tests/test_collision_physics_gates.py`` and ``git diff --check``: passed.
+
+Decision:
+
+- This closes the layout-contract step required before direct term-level
+  reduced-Pmat assembly.  The next implementation step is to add reduced Pmat
+  term emitters that write into this compressed layout directly, beginning with
+  collisionless/PAS/FP kinetic diagonal and x-line terms plus explicit
+  source/constraint tail blocks, then add true-residual admission before any
+  auto/default promotion.
+
+Current open-lane status after this pass:
+
+- RHSMode=1 production solver lane: ``96%``.  The layout foundation is now
+  first-class and used by the driver.
+- Lower-memory/faster production replacement: ``93%``.  The remaining blocker
+  is the native reduced-Pmat numeric hierarchy, not active-index plumbing.
+- Production QA/QH/QI full-grid evidence: ``70%``.  No new production solves
+  in this layout pass.
+- True device-QI/GPU: ``60%``.  No GPU promotion until CPU true-residual
+  admission is clean for the reduced-Pmat hierarchy.
+- Coverage/physics-gate lane: ``74%``.  Additional fast real gates now cover
+  x0 velocity quadrature and PAS invariants.
+- Overall average: ``84%``.

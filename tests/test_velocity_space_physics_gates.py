@@ -37,6 +37,20 @@ def test_x_grid_gaussian_quadrature_exact_for_weighted_monomials(x_grid_k: float
     )
 
 
+@pytest.mark.parametrize("x_grid_k", [0.0, 2.0])
+def test_x_grid_with_x0_gauss_radau_exact_for_weighted_monomials(x_grid_k: float) -> None:
+    """The optional x=0 grid point must preserve low-order Maxwellian moments."""
+
+    n_x = 6
+    x_grid = make_x_grid(n=n_x, k=x_grid_k, include_point_at_x0=True)
+
+    np.testing.assert_allclose(x_grid.x[0], 0.0, rtol=0.0, atol=0.0)
+    for power in range(2 * n_x - 1):
+        expected = 0.5 * math.gamma((x_grid_k + power + 1.0) / 2.0)
+        actual = float(np.sum(x_grid.gaussian_weights * x_grid.x**power))
+        np.testing.assert_allclose(actual, expected, rtol=0.0, atol=5.0e-12)
+
+
 def test_constraint_scheme1_sources_are_density_energy_moment_biorthogonal() -> None:
     """ConstraintScheme=1 sources isolate density and energy moments.
 

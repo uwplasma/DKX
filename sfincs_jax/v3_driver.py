@@ -186,6 +186,7 @@ from .rhs1_active_dof import (
     build_rhs1_active_dof_state,
     resolve_rhs1_active_dof_mode,
 )
+from .rhs1_compressed_layout import build_rhs1_compressed_pitch_layout
 from .rhs1_active_projection import (
     expand_reduced_with_map,
     project_pas_constraint_f,
@@ -45302,20 +45303,7 @@ def _transport_active_dof_indices(op: V3FullSystemOperator) -> np.ndarray:
     This helper builds that reduced active set so matrix-free solves can mirror
     Fortran's non-singular system size.
     """
-    s = int(op.n_species)
-    x = int(op.n_x)
-    l = int(op.n_xi)
-    t = int(op.n_theta)
-    z = int(op.n_zeta)
-
-    nxi_for_x = np.asarray(op.fblock.collisionless.n_xi_for_x, dtype=np.int32)  # (X,)
-    l_idx = np.arange(l, dtype=np.int32)[None, :]  # (1,L)
-    xl_mask = l_idx < nxi_for_x[:, None]  # (X,L)
-    f_mask = np.broadcast_to(xl_mask[None, :, :, None, None], (s, x, l, t, z))
-    f_active = np.flatnonzero(f_mask.reshape((-1,)))  # within f block
-
-    tail_active = np.arange(int(op.f_size), int(op.total_size), dtype=np.int32)
-    return np.concatenate([f_active.astype(np.int32), tail_active], axis=0)
+    return build_rhs1_compressed_pitch_layout(op).active_full_indices.astype(np.int32, copy=False)
 
 
 def _constraint_scheme2_source_from_f(op: V3FullSystemOperator, f: jnp.ndarray) -> jnp.ndarray:
