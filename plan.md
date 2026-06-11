@@ -27581,3 +27581,47 @@ Progress:
 - Lower-memory/faster production replacement: ``84%``.  Direct term-level Pmat
   emission and symbolic metadata exist, but a production-clean native factor is
   not promoted.
+
+### 2026-06-11 update: compact production stress campaign summaries
+
+Goal:
+
+- Convert long production CPU/GPU stress runs into small, reviewable evidence
+  artifacts without committing large HDF5, VMEC, or profiler outputs.
+
+Implemented:
+
+- Added ``scripts/summarize_production_stress_campaign.py``.  It recursively
+  reads production ``suite_report.json`` files, infers CPU/GPU backend, and
+  emits compact JSON/Markdown summaries with status counts, blocker counts,
+  runtime and RSS ratios, solver kinds, mismatch counts, and compact
+  Fortran/PETSc/MUMPS profile evidence.
+- Added regression coverage for parity, JAX-failure, and Fortran reference
+  timeout rows, including MUMPS factor-fill metadata.
+
+Evidence:
+
+- ``pytest -q tests/test_create_production_stress_campaign.py
+  tests/test_summarize_production_stress_campaign.py
+  tests/test_scaled_example_suite_reference.py
+  tests/test_materialize_production_stress_manifest.py``:
+  ``35 passed``.
+- ``ruff check scripts/summarize_production_stress_campaign.py
+  tests/test_summarize_production_stress_campaign.py --select F821,F401,F811``:
+  passed.
+
+Current long-run status:
+
+- Office production GPU campaign for ``additional_examples`` is running under
+  the 3600 s cap using the clean ``199ed17`` checkout.  At the last poll it had
+  produced the Fortran input/output/log files but not yet written
+  ``suite_report.json``.
+
+Progress:
+
+- Production-floor example-suite rerun evidence: ``45%``.  Exact campaign
+  commands and compact evidence summarization now exist; completed CPU/GPU
+  production rows are still needed before README runtime/memory figures can be
+  regenerated honestly.
+- Docs/release evidence lane: ``84%``.  The remaining blocker is production
+  data, not documentation mechanics.
