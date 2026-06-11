@@ -58,6 +58,20 @@ Owner: incoming agent
   colored CSR materialization, as the immediate setup blocker.  The new
   dense-RHS gate is intended to turn that timeout into a deterministic
   fail-closed policy decision.
+- Follow-up office CPU production probe after the dense-RHS setup guard
+  confirmed the intended fail-fast behavior:
+  - command root:
+    ``tests/production_stress_cpu_campaign_2026-06-11/additional_examples_frontal_schur_guard_cached_945bd9f``;
+  - total suite wall time ``27.32 s`` and JAX attempt time ``25.71 s``;
+  - peak JAX RSS ``2748.9 MB``;
+  - direct-tail reduced-Pmat CSR materialization completed in ``17.207 s`` with
+    ``12176533`` nonzeros;
+  - frontal setup rejected in ``5.139 s`` with
+    ``active_symbolic_frontal_schur_lu_dense_rhs_budget_exceeded:
+    1324910592>160000000``.
+  This closes the timeout/stall part of the new hierarchy.  It does not close
+  the production solve, because the path still fails closed before true
+  residual admission.
 - The same Fortran v3 production reference used MUMPS with METIS ordering:
   matrix size ``648977``, Pmat nonzeros ``12176533``, estimated factor entries
   ``1.274e9``, estimated max frontal size ``5330``, and estimated operations
