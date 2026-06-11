@@ -2280,6 +2280,52 @@ def test_active_coupled_kinetic_block_retains_true_offdiagonal_couplings(monkeyp
     assert np.linalg.norm(residual) < 1.0e-10
 
 
+def test_probe_residual_basis_adds_true_action_columns_and_reduces_residual(monkeypatch) -> None:
+    from scipy.sparse.linalg import LinearOperator
+
+    matrix = sp.csr_matrix(
+        [
+            [4.0, 1.5, 0.0],
+            [-0.7, 3.2, 0.9],
+            [0.0, -1.1, 2.8],
+        ],
+        dtype=np.float64,
+    )
+    diagonal = matrix.diagonal()
+    base = LinearOperator(
+        matrix.shape,
+        matvec=lambda x: np.asarray(x, dtype=np.float64).reshape((-1,)) / diagonal,
+        dtype=np.float64,
+    )
+    basis0 = sp.csc_matrix((matrix.shape[0], 0), dtype=np.float64)
+    monkeypatch.setenv("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_PROBE_RESIDUAL_BASIS", "1")
+    monkeypatch.setenv("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_PROBE_RESIDUAL_MAX_COLUMNS", "2")
+    monkeypatch.setenv("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_PROBE_RESIDUAL_PROBES", "2")
+    monkeypatch.setenv("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_PROBE_RESIDUAL_DROP_REL", "0")
+
+    basis, metadata = rfa._append_probe_residual_basis_csc(
+        matrix=matrix,
+        base_operator=base,
+        basis=basis0,
+        max_total_columns=2,
+        enabled_default=False,
+    )
+
+    assert metadata["probe_residual_basis_enabled"] is True
+    assert metadata["probe_residual_basis_columns"] > 0
+    assert basis.shape[1] <= 2
+    rhs = _deterministic_vector(matrix.shape[0])
+    y0 = np.asarray(base.matvec(rhs), dtype=np.float64)
+    residual0 = rhs - np.asarray(matrix @ y0, dtype=np.float64)
+    az_basis = matrix @ basis
+    coarse = np.asarray((az_basis.T @ az_basis).toarray(), dtype=np.float64)
+    coarse_rhs = np.asarray(az_basis.T @ residual0, dtype=np.float64).reshape((-1,))
+    coeff = np.linalg.solve(coarse + 1.0e-14 * np.eye(coarse.shape[0]), coarse_rhs)
+    y1 = y0 + np.asarray(basis @ coeff, dtype=np.float64).reshape((-1,))
+    residual1 = rhs - np.asarray(matrix @ y1, dtype=np.float64)
+    assert np.linalg.norm(residual1) < np.linalg.norm(residual0)
+
+
 def test_active_filtered_sparse_factor_retains_selected_offdiagonal_couplings(monkeypatch) -> None:
     layout = RHS1BlockLayout(
         n_species=1,

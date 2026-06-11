@@ -6516,6 +6516,13 @@ def _build_active_projected_native_xell_field_split_sparse_coarse_preconditioner
         basis=basis,
         max_total_columns=max_coarse_size,
     )
+    basis, probe_residual_metadata = _append_probe_residual_basis_csc(
+        matrix=matrix_csr,
+        base_operator=base.operator,
+        basis=basis,
+        max_total_columns=max_coarse_size,
+        enabled_default=bool(is_coupled_kinetic),
+    )
 
     az_basis = (matrix_csr @ basis).tocsc()
     coarse_solver_mode = (
@@ -6657,6 +6664,7 @@ def _build_active_projected_native_xell_field_split_sparse_coarse_preconditioner
                     "max_factor_nbytes": int(max_factor_nbytes),
                     "requires_preflight": True,
                     **adaptive_metadata,
+                    **probe_residual_metadata,
                     **window_metadata,
                     **config,
                 },
@@ -6704,6 +6712,7 @@ def _build_active_projected_native_xell_field_split_sparse_coarse_preconditioner
             "requires_preflight": bool(is_coupled_kinetic),
             "note": "opt_in_probe_not_auto_default",
             **adaptive_metadata,
+            **probe_residual_metadata,
             **window_metadata,
             **config,
         },
@@ -10244,6 +10253,138 @@ def _append_adaptive_residual_basis_csc(
             "adaptive_residual_basis_residual_norm_max": float(max(residual_norms)),
             "adaptive_residual_basis_residual_norm_min": float(min(residual_norms)),
             "adaptive_residual_basis_truncated_by_total_cap": bool(len(rows) >= max_columns_use),
+        }
+    )
+    return combined, metadata
+
+
+def _append_probe_residual_basis_csc(
+    *,
+    matrix: Any,
+    base_operator: Any,
+    basis: Any,
+    max_total_columns: int,
+    enabled_default: bool = False,
+) -> tuple[Any, dict[str, object]]:
+    """Append bounded residual modes from deterministic setup probes."""
+
+    from .explicit_sparse import deterministic_sparse_probe_matrix  # noqa: PLC0415
+
+    enabled = _env_bool("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_PROBE_RESIDUAL_BASIS", bool(enabled_default))
+    max_columns = max(0, int(_env_int("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_PROBE_RESIDUAL_MAX_COLUMNS", 32)))
+    probe_count = max(1, int(_env_int("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_PROBE_RESIDUAL_PROBES", 8)))
+    max_nnz_per_column = max(
+        1,
+        int(_env_int("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_PROBE_RESIDUAL_MAX_NNZ_PER_COLUMN", 8192)),
+    )
+    drop_rel = max(
+        0.0,
+        float(_env_float("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_PROBE_RESIDUAL_DROP_REL", 1.0e-3)),
+    )
+    min_rel_norm = max(
+        0.0,
+        float(_env_float("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_PROBE_RESIDUAL_MIN_REL_NORM", 1.0e-8)),
+    )
+    metadata = {
+        "probe_residual_basis_enabled": bool(enabled),
+        "probe_residual_basis_columns": 0,
+        "probe_residual_basis_probe_count": int(probe_count),
+        "probe_residual_basis_max_columns": int(max_columns),
+        "probe_residual_basis_max_nnz_per_column": int(max_nnz_per_column),
+        "probe_residual_basis_drop_rel": float(drop_rel),
+        "probe_residual_basis_min_rel_norm": float(min_rel_norm),
+    }
+    basis_csc = basis.tocsc()
+    if not bool(enabled) or int(max_columns) <= 0 or int(max_total_columns) <= int(basis_csc.shape[1]):
+        metadata["probe_residual_basis_truncated_by_total_cap"] = bool(
+            int(max_total_columns) <= int(basis_csc.shape[1])
+        )
+        return basis_csc, metadata
+
+    matrix_csr = matrix.tocsr()
+    remaining = max(0, int(max_total_columns) - int(basis_csc.shape[1]))
+    max_columns_use = min(int(max_columns), int(remaining))
+    probes = deterministic_sparse_probe_matrix(
+        int(matrix_csr.shape[0]),
+        count=int(probe_count),
+        dtype=matrix_csr.dtype,
+    )
+    rows: list[np.ndarray] = []
+    cols: list[np.ndarray] = []
+    data: list[np.ndarray] = []
+    residual_norms: list[float] = []
+    skipped_small = 0
+    skipped_zero = 0
+    for probe_col in range(int(probes.shape[1])):
+        if len(rows) >= max_columns_use:
+            break
+        probe = np.asarray(probes[:, probe_col], dtype=np.float64).reshape((-1,))
+        probe_norm = max(float(np.linalg.norm(probe)), np.finfo(np.float64).tiny)
+        mz = np.asarray(base_operator.matvec(probe), dtype=np.float64).reshape((-1,))
+        residual = probe - np.asarray(matrix_csr @ mz, dtype=np.float64).reshape((-1,))
+        if int(basis_csc.shape[1]) > 0:
+            projection = basis_csc @ np.asarray(basis_csc.T @ residual, dtype=np.float64).reshape((-1,))
+            residual = residual - np.asarray(projection, dtype=np.float64).reshape((-1,))
+        for previous_rows, previous_data in zip(rows, data, strict=False):
+            previous = np.zeros_like(residual)
+            previous[previous_rows] = previous_data
+            residual = residual - previous * float(np.dot(previous, residual))
+        residual_norm = float(np.linalg.norm(residual))
+        if not np.isfinite(residual_norm) or residual_norm <= 0.0:
+            skipped_zero += 1
+            continue
+        if residual_norm / probe_norm < float(min_rel_norm):
+            skipped_small += 1
+            continue
+        abs_residual = np.abs(residual)
+        threshold = float(drop_rel) * max(float(np.max(abs_residual)), np.finfo(np.float64).tiny)
+        keep = np.flatnonzero(abs_residual >= threshold)
+        if keep.size > int(max_nnz_per_column):
+            order = np.argpartition(abs_residual[keep], -int(max_nnz_per_column))[-int(max_nnz_per_column) :]
+            keep = keep[order]
+            keep.sort()
+        if keep.size == 0:
+            skipped_zero += 1
+            continue
+        values = residual[keep]
+        value_norm = float(np.linalg.norm(values))
+        if not np.isfinite(value_norm) or value_norm <= 0.0:
+            skipped_zero += 1
+            continue
+        rows.append(keep.astype(np.int64, copy=False))
+        cols.append(np.full((int(keep.size),), len(rows) - 1, dtype=np.int64))
+        data.append((values / value_norm).astype(np.float64, copy=False))
+        residual_norms.append(float(residual_norm))
+
+    if not rows:
+        metadata.update(
+            {
+                "probe_residual_basis_skipped_small": int(skipped_small),
+                "probe_residual_basis_skipped_zero": int(skipped_zero),
+                "probe_residual_basis_truncated_by_total_cap": False,
+            }
+        )
+        return basis_csc, metadata
+
+    residual_basis = sp.coo_matrix(
+        (
+            np.concatenate(data),
+            (np.concatenate(rows), np.concatenate(cols)),
+        ),
+        shape=(int(matrix_csr.shape[0]), int(len(rows))),
+    ).tocsc()
+    residual_basis.sum_duplicates()
+    residual_basis.eliminate_zeros()
+    combined = sp.hstack([basis_csc, residual_basis], format="csc")
+    metadata.update(
+        {
+            "probe_residual_basis_columns": int(residual_basis.shape[1]),
+            "probe_residual_basis_nnz": int(residual_basis.nnz),
+            "probe_residual_basis_skipped_small": int(skipped_small),
+            "probe_residual_basis_skipped_zero": int(skipped_zero),
+            "probe_residual_basis_residual_norm_max": float(max(residual_norms)),
+            "probe_residual_basis_residual_norm_min": float(min(residual_norms)),
+            "probe_residual_basis_truncated_by_total_cap": bool(len(rows) >= max_columns_use),
         }
     )
     return combined, metadata

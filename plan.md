@@ -28045,14 +28045,78 @@ Evidence:
   --select F821,F401,F811``: passed.
 - ``python -m compileall -q sfincs_jax/rhs1_full_assembly.py
   tests/test_rhs1_full_assembly.py`` and ``git diff --check``: passed.
+- Office CPU reference-reuse production probe on ``additional_examples`` at
+  ``25 x 51 x 100 x 8`` with this candidate and a ``45 GiB`` factor cap failed
+  closed after ``25.64 s`` JAX time and ``2.61 GB`` JAX RSS.  Fortran reference
+  was reused: ``1027.981 s`` and ``12.27 GiB``.  The setup admission rejected
+  the candidate with ``max_rel=1.885e+07``, ``median_rel=8.766e+06``, and
+  ``min_improvement=2.512e-06``.
+- A larger retained-block variant with ``x_count=2``, ``ell_count=12``,
+  ``max_block_size=40000``, ``coarse_size=2048``, and adaptive residual columns
+  also failed closed after ``31.85 s`` JAX time and ``2.62 GB`` JAX RSS:
+  ``max_rel=3.508e+07``, ``median_rel=1.632e+07``, and
+  ``min_improvement=1.349e-06``.  This rules out simply increasing the retained
+  low-x/low-ell kinetic block as the production fix.
 
 Decision:
 
 - This is a real coupled-factor/coarse architecture and is now safe to probe in
   production because it either admits by deterministic true residuals or fails
-  closed.  It is not yet a production-grid closure claim.  The next gate is the
-  office CPU reference-reuse production probe on ``additional_examples`` at
-  ``25 x 51 x 100 x 8``.  If it fails admission, inspect the reported
-  ``max_rel``/``median_rel`` and decide whether the missing space is a
-  cross-block kinetic front, a source/current Schur mode, or a true direct-Pmat
-  reduced operator issue.
+  closed.  It is not yet a production-grid closure claim.  The production probes
+  show that the missing space is not captured by larger low-x/low-ell retained
+  blocks; the next step must add residual-derived global modes or a stronger
+  direct-Pmat reduced operator, not another local block-size increase.
+
+### 2026-06-11 continuation: deterministic probe-residual coarse enrichment
+
+Goal:
+
+- Build the next residual-derived coarse space from the actual deterministic
+  setup probes that fail candidate admission, instead of only from physics
+  moment/window seed columns.
+
+Implemented:
+
+- Added ``_append_probe_residual_basis_csc``.  It computes bounded residual
+  columns ``z - A M z`` for deterministic setup probes, sparsifies each column
+  by relative magnitude and max nnz, orthogonalizes against previously retained
+  residual columns, and appends the modes to the sparse coarse basis.
+- The new basis is enabled by default only for the coupled kinetic sparse-coarse
+  candidate and can be controlled with
+  ``SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_PROBE_RESIDUAL_*`` knobs.  Other existing
+  sparse-coarse candidates keep their prior defaults.
+
+Evidence:
+
+- ``pytest -q
+  tests/test_rhs1_full_assembly.py::test_probe_residual_basis_adds_true_action_columns_and_reduces_residual
+  tests/test_rhs1_full_assembly.py::test_active_coupled_kinetic_sparse_coarse_admits_true_coupled_factor
+  tests/test_rhs1_full_assembly.py::test_active_coupled_kinetic_sparse_coarse_rejects_weak_true_action
+  tests/test_rhs1_full_assembly.py::test_active_projected_auto_ladder_uses_large_default_candidates``:
+  ``4 passed``.
+- ``pytest -q tests/test_rhs1_full_assembly.py -k
+  "probe_residual or coupled_kinetic or sparse_coarse or bounded_native_stack or
+  auto_ladder_uses_large_default_candidates or symbolic_block_schur_lu"``:
+  ``16 passed, 74 deselected``.
+- ``pytest -q tests/test_v3_sparse_pattern.py -k
+  "direct_tail or active_symbolic or sparse_coarse or
+  active_fortran_v3_reduced_native_stack or
+  active_fortran_v3_reduced_lu_large_default_prefill"``:
+  ``28 passed, 103 deselected``.
+- ``pytest -q tests/test_explicit_sparse.py -k
+  "symbolic_block_schur_lu or coarse or admission"``:
+  ``6 passed, 28 deselected``.
+- ``ruff check sfincs_jax/rhs1_full_assembly.py tests/test_rhs1_full_assembly.py
+  --select F821,F401,F811``: passed.
+- ``python -m compileall -q sfincs_jax/rhs1_full_assembly.py
+  tests/test_rhs1_full_assembly.py`` and ``git diff --check``: passed.
+
+Decision:
+
+- This is the next architecture to production-probe on ``additional_examples``.
+  It should either reduce the setup admission residual materially or fail closed
+  with the same bounded runtime/RSS behavior.  If it still reports
+  ``max_rel`` of order ``1e7``, then the residual modes are too global/dense for
+  the current sparse residual basis and the lower-memory replacement lane needs
+  a direct reduced-Pmat symbolic/numeric factor rather than more sparse coarse
+  enrichment.
