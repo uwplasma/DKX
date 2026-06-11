@@ -27596,8 +27596,12 @@ Implemented:
   emits compact JSON/Markdown summaries with status counts, blocker counts,
   runtime and RSS ratios, solver kinds, mismatch counts, and compact
   Fortran/PETSc/MUMPS profile evidence.
+- The same summarizer now also detects in-progress ``fortran_run/sfincs.log``
+  files when ``suite_report.json`` is not available yet, emitting
+  ``running_or_unreported`` rows with matrix size, Pmat/true-matrix nonzeros,
+  METIS/symbolic timings, and MUMPS factor-fill estimates.
 - Added regression coverage for parity, JAX-failure, and Fortran reference
-  timeout rows, including MUMPS factor-fill metadata.
+  timeout rows, including MUMPS factor-fill metadata and partial live-log rows.
 
 Evidence:
 
@@ -27605,7 +27609,7 @@ Evidence:
   tests/test_summarize_production_stress_campaign.py
   tests/test_scaled_example_suite_reference.py
   tests/test_materialize_production_stress_manifest.py``:
-  ``35 passed``.
+  ``37 passed``.
 - ``ruff check scripts/summarize_production_stress_campaign.py
   tests/test_summarize_production_stress_campaign.py --select F821,F401,F811``:
   passed.

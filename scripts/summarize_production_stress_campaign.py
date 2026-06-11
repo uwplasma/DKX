@@ -14,6 +14,7 @@ import argparse
 from collections import Counter, defaultdict
 import json
 from pathlib import Path
+import re
 from typing import Any
 
 
@@ -104,6 +105,87 @@ def _compact_fortran_profile(profile: Any) -> dict[str, Any] | None:
     return compact or None
 
 
+def _last_float(pattern: str, text: str) -> float | None:
+    matches = re.findall(pattern, text, flags=re.IGNORECASE | re.MULTILINE)
+    if not matches:
+        return None
+    value = matches[-1]
+    if isinstance(value, tuple):
+        value = value[-1]
+    try:
+        return float(str(value).replace("D", "E").replace("d", "e"))
+    except ValueError:
+        return None
+
+
+def _last_int(pattern: str, text: str) -> int | None:
+    value = _last_float(pattern, text)
+    return None if value is None else int(value)
+
+
+def _parse_live_fortran_profile(log_path: Path) -> dict[str, Any] | None:
+    """Extract high-value matrix/MUMPS fields from an in-progress Fortran log."""
+
+    text = log_path.read_text(encoding="utf-8", errors="replace")
+    profile: dict[str, Any] = {}
+    size_match = re.findall(r"The matrix is\s+(\d+)\s+x\s+(\d+)\s+elements", text, re.IGNORECASE)
+    if size_match:
+        rows, cols = size_match[-1]
+        profile["matrix_shape"] = [int(rows), int(cols)]
+
+    active_which: str | None = None
+    which_nnz: dict[str, int] = {}
+    for line in text.splitlines():
+        which_match = re.search(r"Running populateMatrix with whichMatrix\s*=\s*(\d+)", line, re.IGNORECASE)
+        if which_match is not None:
+            active_which = which_match.group(1)
+            continue
+        nnz_match = re.search(r"# of nonzeros in Jacobian(?: preconditioner)? matrix:\s*(\d+)", line, re.IGNORECASE)
+        if active_which is not None and nnz_match is not None:
+            which_nnz[active_which] = int(nnz_match.group(1))
+    if which_nnz:
+        profile["which_matrix_nnz"] = which_nnz
+        if "1" in which_nnz:
+            profile["matrix_nnz"] = which_nnz["1"]
+        if "0" in which_nnz:
+            profile["preconditioner_nnz"] = which_nnz["0"]
+
+    timings = {
+        "preassemble_preconditioner": _last_float(
+            r"Time to pre-assemble Jacobian preconditioner matrix:\s*([-+0-9.eEdD]+)", text
+        ),
+        "assemble_preconditioner": _last_float(
+            r"Time to assemble Jacobian preconditioner matrix:\s*([-+0-9.eEdD]+)", text
+        ),
+        "preassemble_jacobian": _last_float(r"Time to pre-assemble Jacobian matrix:\s*([-+0-9.eEdD]+)", text),
+        "assemble_jacobian": _last_float(r"Time to assemble Jacobian matrix:\s*([-+0-9.eEdD]+)", text),
+        "metis_reordering": _last_float(r"ELAPSED TIME SPENT IN METIS reordering\s*=\s*([-+0-9.eEdD]+)", text),
+        "symbolic_factorization": _last_float(r"ELAPSED TIME IN symbolic factorization\s*=\s*([-+0-9.eEdD]+)", text),
+    }
+    timings = {key: value for key, value in timings.items() if value is not None}
+    if timings:
+        profile["timings_s"] = timings
+
+    if "Entering DMUMPS" in text:
+        profile["solver_package"] = "mumps"
+        mumps = {
+            "n": _last_int(r"Entering DMUMPS.*?JOB,\s*N,\s*NNZ\s*=\s*\d+\s+(\d+)\s+\d+", text),
+            "nnz": _last_int(r"Entering DMUMPS.*?JOB,\s*N,\s*NNZ\s*=\s*\d+\s+\d+\s+(\d+)", text),
+            "n_mpi_processes": _last_int(r"executing #MPI\s*=\s*(\d+)", text),
+            "n_omp_threads": _last_int(r"#OMP\s*=\s*(\d+)", text),
+            "ordering": "METIS" if re.search(r"Ordering based on METIS", text, re.IGNORECASE) else None,
+            "estimated_factor_entries": _last_int(r"Number of entries in factors \(estim\.\)\s*=\s*(\d+)", text),
+            "estimated_real_factor_space": _last_int(r"Real space for factors\s+\(estimated\)\s*=\s*(\d+)", text),
+            "estimated_integer_factor_space": _last_int(r"Integer space for factors \(estimated\)\s*=\s*(\d+)", text),
+            "estimated_max_frontal_size": _last_int(r"Maximum frontal size\s+\(estimated\)\s*=\s*(\d+)", text),
+            "estimated_elimination_operations": _last_float(
+                r"Operations during elimination \(estim\)\s*=\s*([-+0-9.eEdD]+)", text
+            ),
+        }
+        profile["mumps"] = {key: value for key, value in mumps.items() if value is not None}
+    return profile or None
+
+
 def _compact_row(*, row: dict[str, Any], report: Path, root: Path) -> dict[str, Any]:
     jax_perf_runtime = row.get("jax_logged_elapsed_s")
     if jax_perf_runtime is None:
@@ -148,12 +230,42 @@ def _find_reports(roots: list[Path]) -> list[tuple[Path, Path]]:
     return reports
 
 
+def _find_partial_fortran_logs(roots: list[Path], reports: list[tuple[Path, Path]]) -> list[tuple[Path, Path]]:
+    report_dirs = {report.parent.resolve() for _, report in reports}
+    logs: list[tuple[Path, Path]] = []
+    for root in roots:
+        if root.is_file() or not root.exists():
+            continue
+        for log_path in sorted(root.rglob("fortran_run/sfincs.log")):
+            case_out_dir = log_path.parent.parent.parent
+            if case_out_dir.resolve() in report_dirs:
+                continue
+            logs.append((root, log_path))
+    return logs
+
+
+def _partial_row_from_fortran_log(*, root: Path, log_path: Path) -> dict[str, Any]:
+    profile = _parse_live_fortran_profile(log_path)
+    return {
+        "case": log_path.parent.parent.name,
+        "backend": _infer_backend(root, log_path),
+        "source_report": _repo_rel(log_path),
+        "status": "running_or_unreported",
+        "blocker_type": "pending_suite_report",
+        "message": "Fortran log exists but suite_report.json has not been written yet.",
+        "fortran_profile": _compact_fortran_profile(profile),
+    }
+
+
 def build_summary(roots: list[Path]) -> dict[str, Any]:
     reports = _find_reports(roots)
     rows: list[dict[str, Any]] = []
     for root, report in reports:
         for row in _load_report(report):
             rows.append(_compact_row(row=row, report=report, root=root))
+    partial_logs = _find_partial_fortran_logs(roots, reports)
+    for root, log_path in partial_logs:
+        rows.append(_partial_row_from_fortran_log(root=root, log_path=log_path))
 
     status_counts = Counter(str(row.get("status", "unknown")) for row in rows)
     blocker_counts = Counter(str(row.get("blocker_type", "unknown")) for row in rows)
@@ -171,6 +283,7 @@ def build_summary(roots: list[Path]) -> dict[str, Any]:
         "kind": "sfincs_jax_production_stress_campaign_summary",
         "roots": [_repo_rel(root) for root in roots],
         "report_count": len(reports),
+        "partial_fortran_log_count": len(partial_logs),
         "row_count": len(rows_sorted),
         "status_counts": dict(sorted(status_counts.items())),
         "blocker_counts": dict(sorted(blocker_counts.items())),
@@ -186,6 +299,7 @@ def _write_markdown(summary: dict[str, Any], out_path: Path) -> None:
         "# SFINCS-JAX production stress campaign summary",
         "",
         f"- Reports found: {summary['report_count']}",
+        f"- Partial Fortran logs found: {summary['partial_fortran_log_count']}",
         f"- Rows found: {summary['row_count']}",
         f"- Status counts: {json.dumps(summary['status_counts'], sort_keys=True)}",
         f"- Blocker counts: {json.dumps(summary['blocker_counts'], sort_keys=True)}",
