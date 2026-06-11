@@ -28328,3 +28328,97 @@ Current open-lane status after this pass:
 - Overall average: ``81%``.  The repo is greener and the native factor
   architecture is broader, but production full-grid lower-memory closure
   remains a research lane.
+
+### 2026-06-11 continuation: sparse-aware frontal-Schur updates and physics gates
+
+Goal:
+
+- Remove the stale dense-separator work model from the active symbolic
+  frontal-Schur candidate, production-probe it with the correct RHSMode=1
+  memory cap, and add fast physics/numerics tests that raise meaningful
+  coverage without adding smoke-only CI cost.
+
+Implemented:
+
+- Updated ``symbolic_frontal_schur_lu`` in ``sfincs_jax.explicit_sparse`` so
+  local separator updates solve only the local separator columns actually
+  touched by each eliminated row group.  The factor metadata now reports
+  ``dense_rhs_entries``, ``peak_dense_rhs_entries``, and
+  ``separator_update_columns``.
+- Updated the RHSMode=1 full-CSR active path to pass
+  ``symbolic_frontal_max_dense_rhs_cols_per_block`` and to report the actual
+  sparse separator-update work instead of rejecting from the old
+  ``active_size * separator_cols`` upper bound.
+- Added fast physics gates:
+  - ``tests/test_velocity_space_physics_gates.py`` verifies exact SFINCS
+    Gaussian speed-grid moments and the constraintScheme=1 density/energy
+    source biorthogonality.
+  - ``tests/test_classical_transport_physics_gates.py`` verifies that
+    classical fluxes vanish with zero thermodynamic drives and scale exactly
+    with the v3 ``delta**2``, collisionality, and metric prefactors.
+
+Evidence:
+
+- ``python -m pytest tests/test_explicit_sparse.py tests/test_rhs1_full_assembly.py
+  -q``: ``135 passed``.
+- ``python -m pytest tests/test_v3_sparse_pattern.py -q``:
+  ``131 passed``.
+- ``python -m pytest tests/test_velocity_space_physics_gates.py
+  tests/test_classical_transport_physics_gates.py -q``:
+  ``4 passed`` in ``1.31 s``.
+- ``ruff check sfincs_jax/explicit_sparse.py
+  sfincs_jax/rhs1_full_assembly.py tests/test_explicit_sparse.py
+  tests/test_rhs1_full_assembly.py`` and ``git diff --check``: passed.
+- GitHub Actions for ``9c27594``: CI and Docs both passed.
+- Office CPU reference-reuse production probe on ``additional_examples`` at
+  ``25 x 51 x 100 x 8`` with the correct cap environment
+  ``SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_PC_MAX_MB=4096`` reached
+  sparse frontal numeric setup but failed closed after ``2:24.57`` JAX time:
+  ``active_symbolic_frontal_schur_lu_budget_exceeded:7056109824>4294967296``.
+  Peak RSS was about ``16.3 GiB``.
+- The same probe with an ``8192`` MiB cap reached setup admission and failed
+  closed after ``206.85 s``:
+  ``active_symbolic_frontal_schur_lu_admission_failed`` with
+  ``max_rel=4.201e+01``, ``median_rel=3.182e+01``, and
+  ``min_improvement=6.904e-01``.  This confirms the stale setup timeout is
+  fixed, but a single coarse separator is not residual-clean enough for the
+  full-grid QI row.
+
+Decision:
+
+- Keep sparse-aware frontal-Schur as bounded diagnostic and
+  intermediate-grid infrastructure.  Do not promote it to auto for full-grid
+  production rows.
+- The next implementation must be active-pitch-aware and term-level, not a
+  wrapper around an already materialized rectangular active CSR.  The Fortran
+  v3 audit shows production RHSMode=1 uses GMRES on ``whichMatrix=1`` with a
+  PETSc LU preconditioner built from ``whichMatrix=0``; MUMPS/SuperLU_DIST
+  retain global frontal coupling through the matrix ordering.  The JAX-native
+  replacement should therefore emit the reduced ``whichMatrix=0`` Pmat terms
+  directly, preserve the v3 compressed active pitch layout
+  ``DKE_size = sum(Nxi_for_x) * Ntheta * Nzeta`` with ``first_index_for_x``
+  offsets, keep source columns and constraint/profile/Phi1 rows as explicit
+  tail blocks, build reusable symbolic ordering/factor metadata, and apply
+  bounded frontal/Schur elimination over source/constraint/profile moments
+  plus selected kinetic separators with a setup-time true-residual admission
+  gate.
+
+Current open-lane status after this pass:
+
+- RHSMode=1 production solver lane: ``96%``.  Reliable high-memory active LU
+  remains the production fallback; lower-memory candidates fail closed with
+  useful telemetry.
+- Lower-memory/faster production replacement: ``92%``.  The sparse frontal
+  path is now correctly bounded and production-probed, but full-grid admission
+  still fails.
+- Production QA/QH/QI full-grid evidence: ``70%``.  The additional QI row has
+  fresh bounded evidence; QA/QH bootstrap-current production checks still need
+  apples-to-apples reruns after the next reduced-Pmat hierarchy.
+- True device-QI/GPU: ``60%``.  No new GPU production promotion in this pass;
+  the next GPU gate should wait until the CPU true-residual admission is clean.
+- Coverage/physics-gate lane: ``72%``.  New velocity-grid, source-moment, and
+  classical-transport tests are real numerical/physics gates and run in under
+  two seconds locally.
+- Overall average: ``83%``.  The repo is green and the current replacement
+  path is better bounded, but full-grid lower-memory production closure still
+  requires the term-level active reduced-Pmat elimination hierarchy.
