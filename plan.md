@@ -27757,6 +27757,13 @@ Evidence:
   ``SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_SYMBOLIC_SCHUR_MAX_ACTIVE_SIZE``.  This
   converts the observed ``300 s`` opt-in timeout into a fast fail-closed
   rejection while preserving the candidate for bounded research probes.
+- Office CPU reference-reuse verification of that gate on ``additional_examples``
+  at ``25 x 51 x 100 x 8`` now reports
+  ``active_symbolic_coupled_schur_size_exceeded:648977>300000`` in ``0.063 s``
+  after direct-tail materialization, with total failed-attempt time ``21.37 s``
+  and peak RSS ``2.61 GiB``.  The setup timeout is closed; the production solve
+  remains open because no bounded candidate has yet reduced the true residual
+  enough to enter and finish Krylov at this grid.
 - ``pytest -q tests/test_scaled_example_suite_reference.py -k
   "classify_blocker or fortran_timeout or fortran_profile"
   tests/test_v3_sparse_pattern.py::test_fortran_reduced_direct_tail_large_auto_fails_closed_before_host_factor_fallback
