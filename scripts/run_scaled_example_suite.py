@@ -41,6 +41,7 @@ _RUN_RECOMMENDATION_ORDER = {
     "bounded_remote": 1,
     "remote_or_cluster_only": 2,
 }
+DEFAULT_EXTRA_INPUT = Path("examples") / "additional_examples" / "input.namelist"
 
 
 def _gather_jax_env() -> dict[str, object]:
@@ -88,6 +89,20 @@ def _load_production_manifest_cases(
             continue
         by_input[(manifest_root / str(rel_input)).resolve()] = case
     return resolved_manifest, by_input, payload
+
+
+def _default_extra_inputs_for_run(production_manifest_path: Path | None) -> list[Path]:
+    """Return implicit extra inputs for a suite run.
+
+    The normal upstream-suite run includes ``examples/additional_examples`` as a
+    convenience. Generated production input trees already contain that case, so
+    adding it again creates duplicate work and can accidentally launch the wrong
+    row when filtering by a broad pattern.
+    """
+
+    if production_manifest_path is not None:
+        return []
+    return [DEFAULT_EXTRA_INPUT]
 
 
 def _run_recommendation_allowed(recommendation: str | None, max_recommendation: str) -> bool:
@@ -655,8 +670,12 @@ def main() -> int:
     parser.add_argument(
         "--extra-input",
         action="append",
-        default=[str(Path("examples") / "additional_examples" / "input.namelist")],
-        help="Extra input.namelist to include outside --examples-root. Repeatable.",
+        default=None,
+        help=(
+            "Extra input.namelist to include outside --examples-root. Repeatable. "
+            "If omitted, examples/additional_examples is included for normal example runs "
+            "and suppressed for generated production input trees."
+        ),
     )
     parser.add_argument(
         "--scale-factor",
@@ -866,9 +885,13 @@ def main() -> int:
         )
 
     inputs = _iter_inputs(examples_root)
+    raw_extra_inputs = (
+        [Path(raw) for raw in args.extra_input]
+        if args.extra_input is not None
+        else _default_extra_inputs_for_run(production_manifest_path)
+    )
     extra_inputs: list[Path] = []
-    for raw in args.extra_input:
-        path = Path(raw)
+    for path in raw_extra_inputs:
         if path.exists():
             extra_inputs.append(path)
     deduped_inputs: list[Path] = []

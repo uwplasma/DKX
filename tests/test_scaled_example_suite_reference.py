@@ -26,6 +26,7 @@ _auto_production_manifest_path = _MODULE._auto_production_manifest_path
 _filter_inputs_by_production_recommendation = _MODULE._filter_inputs_by_production_recommendation
 _load_production_manifest_cases = _MODULE._load_production_manifest_cases
 _run_recommendation_allowed = _MODULE._run_recommendation_allowed
+_default_extra_inputs_for_run = _MODULE._default_extra_inputs_for_run
 
 from run_reduced_upstream_suite import CaseResult  # noqa: E402
 from run_reduced_upstream_suite import _run_case  # noqa: E402
@@ -66,6 +67,11 @@ def test_reduced_suite_can_disable_reduced_seed_for_production_inputs(
     assert selected == production_input
     assert use_seed is False
     assert seed_path == reduced_seed
+
+
+def test_scaled_suite_suppresses_default_extra_input_for_production_manifest() -> None:
+    assert _default_extra_inputs_for_run(Path("benchmarks/production_inputs/manifest.json")) == []
+    assert _default_extra_inputs_for_run(None) == [Path("examples") / "additional_examples" / "input.namelist"]
 
 
 def test_solver_trace_parser_prefers_realized_solver_metadata(tmp_path: Path) -> None:
