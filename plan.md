@@ -27769,6 +27769,16 @@ Evidence:
   raw factor estimate, safety-adjusted prefill estimate, and memory budget
   before calling SuperLU, and rejects before factorization if the
   safety-adjusted estimate exceeds the budget.
+- Office CPU reference-reuse probe of ``active_filtered_sparse_factor`` at
+  ``25 x 51 x 100 x 8`` built safely and quickly:
+  filtered nnz ``1,956,133`` from ``12,176,533`` Pmat nnz, ILU setup
+  ``1.65 s``, factor bytes ``59,738,088``, total failed-attempt time
+  ``22.78 s``, and peak RSS ``2.71 GiB``.  It is not viable for promotion:
+  the true preflight residual worsened from ``5.889e-05`` to ``3.269e-03`` and
+  failed before Krylov.
+- Suite blocker classification now treats direct-tail preflight residual
+  failures as ``solver branch mismatch`` before considering generic geometry
+  path strings.
 - ``pytest -q tests/test_scaled_example_suite_reference.py -k
   "classify_blocker or fortran_timeout or fortran_profile"
   tests/test_v3_sparse_pattern.py::test_fortran_reduced_direct_tail_large_auto_fails_closed_before_host_factor_fallback
@@ -27799,6 +27809,13 @@ Evidence:
   parse_gnu_time or timeout_marker or fortran_timeout or fortran_profile"
   tests/test_v3_sparse_pattern.py::test_fortran_reduced_direct_tail_large_auto_fails_closed_before_host_factor_fallback``:
   ``8 passed``.
+- ``pytest -q tests/test_scaled_example_suite_reference.py -k
+  "classify_blocker or parse_gnu_time or timeout_marker or fortran_timeout or
+  fortran_profile" tests/test_rhs1_full_assembly.py -k
+  "active_filtered_sparse_factor or symbolic_coupled_schur or
+  active_fortran_v3_reduced_lu_large_default_prefill"
+  tests/test_v3_sparse_pattern.py::test_fortran_reduced_direct_tail_large_auto_fails_closed_before_host_factor_fallback``:
+  ``6 passed``.
 
 Decision:
 

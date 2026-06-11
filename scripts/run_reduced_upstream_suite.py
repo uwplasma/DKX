@@ -1880,6 +1880,13 @@ def _classify_blocker(*, status: str, note: str, mismatch_keys: list[str], jax_l
         or "structured preconditioner not selected" in text
     ):
         return "solver policy fail-closed"
+    if (
+        "preflight failed" in text
+        or "factor preflight residual" in text
+        or "preflight residual diagnostics" in text
+        or "residual_after=" in text
+    ):
+        return "solver branch mismatch"
     if "notimplemented" in text or "unsupported" in text or "todo" in text:
         return "unsupported physics/path"
     if "equilibrium" in text or "geometryscheme" in text or ".bc" in text or ".nc" in text or "netcdf" in text:

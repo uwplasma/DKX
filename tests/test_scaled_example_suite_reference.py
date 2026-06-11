@@ -692,6 +692,30 @@ def test_classify_blocker_treats_fail_closed_solver_policy_before_geometry(tmp_p
     )
 
 
+def test_classify_blocker_treats_solver_preflight_failure_before_geometry(tmp_path: Path) -> None:
+    log_path = tmp_path / "sfincs_jax.log"
+    log_path.write_text(
+        "solve_v3_full_system_linear_gmres: VMEC operator build start "
+        "(wout_QI_nfp2_stable_Er_006_000043_hires_scaled.nc)\n"
+        "solve_v3_full_system_linear_gmres: sparse_pc_gmres factor preflight "
+        "residual=5.889121e-05->3.268501e-03 improvement=1.801781e-02\n"
+        "sfincs_jax write-output failed: direct-tail structured preconditioner "
+        "preflight failed: kind=active_filtered_sparse_factor residual_before=5.889e-05 "
+        "residual_after=0.0032685\n",
+        encoding="utf-8",
+    )
+
+    assert (
+        _classify_blocker(
+            status="jax_error",
+            note="JAX error: CalledProcessError returned non-zero exit status 2.",
+            mismatch_keys=[],
+            jax_log=log_path,
+        )
+        == "solver branch mismatch"
+    )
+
+
 def test_parse_gnu_time_elapsed_and_rss_from_failed_jax_log(tmp_path: Path) -> None:
     log_path = tmp_path / "sfincs_jax.log"
     log_path.write_text(
