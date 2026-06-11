@@ -28516,7 +28516,8 @@ Evidence:
   tests/test_rhs1_compressed_layout.py tests/test_rhs1_active_dof.py
   tests/test_velocity_space_physics_gates.py tests/test_collision_physics_gates.py
   tests/test_rhs1_full_assembly.py tests/test_v3_sparse_pattern.py -q``:
-  ``252 passed`` in ``1:44``.
+  ``253 passed`` in ``1:46`` after adding the Maxwellian ``f0(L=0)``
+  density/pressure moment gate.
 - ``ruff check sfincs_jax/rhs1_compressed_layout.py
   sfincs_jax/rhs1_reduced_pmat_plan.py sfincs_jax/v3_driver.py
   tests/test_rhs1_compressed_layout.py tests/test_rhs1_reduced_pmat_plan.py
@@ -28539,5 +28540,5 @@ Current open-lane status after this pass:
   implementation blocker.
 - Production QA/QH/QI full-grid evidence: ``70%``.
 - True device-QI/GPU: ``60%``.
-- Coverage/physics-gate lane: ``75%``.
+- Coverage/physics-gate lane: ``76%``.
 - Overall average: ``85%``.

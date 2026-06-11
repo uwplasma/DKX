@@ -6,7 +6,10 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
+from sfincs_jax.namelist import read_sfincs_input
 from sfincs_jax.rhs1_full_assembly import _source_basis_constraint_scheme1_np
+from sfincs_jax.transport_matrix import f0_l0_v3_from_operator
+from sfincs_jax.v3_system import full_system_operator_from_namelist
 from sfincs_jax.v3_system import _source_basis_constraint_scheme_1
 from sfincs_jax.xgrid import make_x_grid
 
@@ -82,3 +85,23 @@ def test_constraint_scheme1_sources_are_density_energy_moment_biorthogonal() -> 
     np.testing.assert_allclose(density_source2, 0.0, rtol=0.0, atol=2.0e-14)
     np.testing.assert_allclose(energy_source1, 0.0, rtol=0.0, atol=2.0e-14)
     np.testing.assert_allclose(energy_source2, 1.0, rtol=0.0, atol=2.0e-14)
+
+
+def test_f0_l0_maxwellian_moments_normalize_density_and_pressure() -> None:
+    """The background Maxwellian must reproduce density and pressure moments."""
+
+    nml = read_sfincs_input("tests/ref/pas_1species_PAS_noEr_tiny.input.namelist")
+    op = full_system_operator_from_namelist(nml=nml)
+    f0_l0 = np.asarray(f0_l0_v3_from_operator(op))
+    fs_factor = np.asarray(op.theta_weights)[:, None] * np.asarray(op.zeta_weights)[None, :] / np.asarray(op.d_hat)
+    fs_sum = np.sum(fs_factor)
+
+    fsavg_f0 = np.einsum("tz,sxtz->sx", fs_factor, f0_l0) / fs_sum
+    density_moment = 4.0 * math.pi * np.einsum("x,x,sx->s", np.asarray(op.x_weights), np.asarray(op.x) ** 2, fsavg_f0)
+    pressure_moment = (
+        (8.0 * math.pi / 3.0)
+        * np.einsum("x,x,sx->s", np.asarray(op.x_weights), np.asarray(op.x) ** 4, fsavg_f0)
+    )
+
+    np.testing.assert_allclose(density_moment, np.asarray(op.n_hat), rtol=0.0, atol=2.0e-12)
+    np.testing.assert_allclose(pressure_moment, np.asarray(op.n_hat) * np.asarray(op.t_hat), rtol=0.0, atol=2.0e-12)
