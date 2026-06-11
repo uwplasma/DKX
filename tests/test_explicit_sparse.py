@@ -502,6 +502,82 @@ def test_symbolic_block_lu_admission_rejects_missing_offblock_coupling() -> None
     assert admission.reason == "residual_or_improvement_gate_failed"
 
 
+def test_symbolic_superblock_lu_retains_coupled_block_edges() -> None:
+    matrix = sp.csr_matrix(
+        [
+            [4.0, 1.0, 2.5, 0.0],
+            [2.0, 3.0, 0.0, -1.0],
+            [3.0, 0.0, 5.0, -1.0],
+            [0.0, -0.7, 1.0, 2.0],
+        ]
+    )
+    rhs = np.array([1.0, 2.0, -1.0, 3.0])
+    local = factorize_host_sparse_operator(
+        matrix,
+        kind="symbolic_block_lu",
+        symbolic_ordering_kind="natural",
+        symbolic_block_size=2,
+    )
+    grouped = factorize_host_sparse_operator(
+        matrix,
+        kind="symbolic_superblock_lu",
+        symbolic_ordering_kind="natural",
+        symbolic_block_size=2,
+        symbolic_superblock_max_size=4,
+        symbolic_superblock_max_blocks=2,
+    )
+
+    exact = np.linalg.solve(matrix.toarray(), rhs)
+    local_error = np.linalg.norm(local.solve(rhs) - exact)
+    grouped_error = np.linalg.norm(grouped.solve(rhs) - exact)
+    admission = admit_sparse_factor_against_operator(
+        grouped.operator,
+        grouped,
+        max_relative_residual=1.0e-12,
+        min_improvement_vs_identity=1.0,
+    )
+
+    assert grouped.kind == "symbolic_superblock_lu"
+    assert grouped.factor.superblock_count == 1
+    assert grouped.factor.retained_cross_nnz > 0
+    assert grouped.factor.dropped_cross_nnz == 0
+    assert grouped_error < 1.0e-12
+    assert grouped_error < local_error
+    assert admission.accepted is True
+
+
+def test_symbolic_superblock_lu_admission_rejects_when_size_gate_drops_edges() -> None:
+    matrix = sp.csr_matrix(
+        [
+            [4.0, 1.0, 25.0, 0.0],
+            [2.0, 3.0, 0.0, 0.0],
+            [30.0, 0.0, 5.0, -1.0],
+            [0.0, 0.0, 1.0, 2.0],
+        ]
+    )
+    factor = factorize_host_sparse_operator(
+        matrix,
+        kind="symbolic_superblock_lu",
+        symbolic_ordering_kind="natural",
+        symbolic_block_size=2,
+        symbolic_superblock_max_size=2,
+        symbolic_superblock_max_blocks=1,
+    )
+
+    admission = admit_sparse_factor_against_operator(
+        factor.operator,
+        factor,
+        max_relative_residual=1.0e-2,
+        min_improvement_vs_identity=10.0,
+    )
+
+    assert factor.factor.superblock_count == 2
+    assert factor.factor.retained_cross_nnz == 0
+    assert factor.factor.dropped_cross_nnz > 0
+    assert admission.accepted is False
+    assert admission.reason == "residual_or_improvement_gate_failed"
+
+
 def test_symbolic_block_lu_overlap_retains_boundary_couplings() -> None:
     matrix = sp.csr_matrix(
         [

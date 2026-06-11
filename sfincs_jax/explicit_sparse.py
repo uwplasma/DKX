@@ -20,6 +20,7 @@ FactorKind = Literal[
     "symbolic_block_lu",
     "symbolic_block_lu_coarse",
     "symbolic_block_schur_lu",
+    "symbolic_superblock_lu",
 ]
 
 
@@ -412,6 +413,244 @@ class _SymbolicBlockSchurFactor:
         if not np.all(finite):
             out = np.where(finite, out, 0.0)
         return np.asarray(out, dtype=self.dtype)
+
+
+@dataclass(frozen=True)
+class _SymbolicSuperblock:
+    indices: np.ndarray
+    base_blocks: tuple[int, ...]
+    factor: object
+
+
+@dataclass(frozen=True)
+class _SymbolicSuperblockFactor:
+    """Bounded sparse-direct factor over grouped symbolic blocks.
+
+    This is a native analogue of the first useful layer in multifrontal/sparse
+    direct solvers: reuse a symbolic ordering, merge strongly coupled base
+    blocks subject to a hard size cap, and factor each merged block exactly.
+    Cross-superblock couplings are intentionally dropped, then measured by the
+    setup residual admission gate before the factor is allowed into Krylov.
+    """
+
+    blocks: tuple[_SymbolicSuperblock, ...]
+    analysis: SparseSymbolicAnalysis
+    dtype: np.dtype
+    n: int
+    max_superblock_size: int
+    max_superblock_blocks: int
+    retained_cross_nnz: int
+    dropped_cross_nnz: int
+    factor_failures: int
+
+    @property
+    def superblock_count(self) -> int:
+        return int(len(self.blocks))
+
+    @property
+    def base_block_count(self) -> int:
+        return int(self.analysis.block_count)
+
+    def solve(self, rhs) -> np.ndarray:
+        rhs_np = np.asarray(rhs, dtype=self.dtype).reshape((int(self.n),))
+        out = np.array(rhs_np, dtype=self.dtype, copy=True)
+        for block in self.blocks:
+            idx = np.asarray(block.indices, dtype=np.int64)
+            if idx.size == 0:
+                continue
+            try:
+                out[idx] = np.asarray(block.factor.solve(rhs_np[idx]), dtype=self.dtype).reshape((idx.size,))
+            except Exception:
+                out[idx] = rhs_np[idx]
+        finite = np.isfinite(out)
+        if not np.all(finite):
+            out = np.where(finite, out, 0.0)
+        return np.asarray(out, dtype=self.dtype)
+
+
+class _DisjointSet:
+    def __init__(self, sizes: np.ndarray) -> None:
+        self.parent = np.arange(int(sizes.size), dtype=np.int64)
+        self.rows = np.asarray(sizes, dtype=np.int64).copy()
+        self.blocks = np.ones((int(sizes.size),), dtype=np.int64)
+
+    def find(self, item: int) -> int:
+        idx = int(item)
+        parent = self.parent
+        while int(parent[idx]) != idx:
+            parent[idx] = parent[int(parent[idx])]
+            idx = int(parent[idx])
+        return idx
+
+    def union_if_fits(
+        self,
+        a: int,
+        b: int,
+        *,
+        max_rows: int,
+        max_blocks: int,
+    ) -> bool:
+        root_a = self.find(a)
+        root_b = self.find(b)
+        if root_a == root_b:
+            return False
+        rows = int(self.rows[root_a] + self.rows[root_b])
+        blocks = int(self.blocks[root_a] + self.blocks[root_b])
+        if rows > int(max_rows) or blocks > int(max_blocks):
+            return False
+        if self.rows[root_a] < self.rows[root_b]:
+            root_a, root_b = root_b, root_a
+        self.parent[root_b] = root_a
+        self.rows[root_a] = rows
+        self.blocks[root_a] = blocks
+        return True
+
+
+def _build_symbolic_superblock_factor(
+    matrix: sp.spmatrix,
+    *,
+    analysis: SparseSymbolicAnalysis,
+    diag_pivot_thresh: float,
+    max_superblock_size: int = 32768,
+    max_superblock_blocks: int = 8,
+    min_cross_nnz: int = 1,
+    regularization_rel: float = 1.0e-12,
+) -> tuple[_SymbolicSuperblockFactor, int, int]:
+    """Build a bounded grouped-block sparse factor retaining dominant couplings."""
+
+    matrix_csr = matrix.tocsr()
+    n = int(matrix_csr.shape[0])
+    if n != int(matrix_csr.shape[1]):
+        raise ValueError("symbolic superblock factor requires a square matrix")
+    dtype = np.dtype(matrix_csr.dtype)
+    permutation = np.asarray(analysis.permutation, dtype=np.int64)
+    if permutation.size != n:
+        permutation = np.arange(n, dtype=np.int64)
+    block_size = max(1, int(analysis.block_size_target))
+    base_block_count = int(analysis.block_count)
+    if base_block_count <= 0:
+        return (
+            _SymbolicSuperblockFactor(
+                blocks=tuple(),
+                analysis=analysis,
+                dtype=dtype,
+                n=n,
+                max_superblock_size=max(1, int(max_superblock_size)),
+                max_superblock_blocks=max(1, int(max_superblock_blocks)),
+                retained_cross_nnz=0,
+                dropped_cross_nnz=0,
+                factor_failures=0,
+            ),
+            0,
+            0,
+        )
+
+    block_sizes = np.asarray(
+        [
+            min(block_size, max(0, n - int(block) * block_size))
+            for block in range(base_block_count)
+        ],
+        dtype=np.int64,
+    )
+    dsu = _DisjointSet(block_sizes)
+    matrix_perm = matrix_csr[permutation, :][:, permutation].tocsr()
+    coo = matrix_perm.tocoo()
+    row_block = np.asarray(coo.row // block_size, dtype=np.int64)
+    col_block = np.asarray(coo.col // block_size, dtype=np.int64)
+    cross = row_block != col_block
+    edge_counts: list[tuple[int, int, int]] = []
+    if np.any(cross):
+        lo = np.minimum(row_block[cross], col_block[cross])
+        hi = np.maximum(row_block[cross], col_block[cross])
+        valid = (lo >= 0) & (hi < base_block_count)
+        if np.any(valid):
+            pair_id = lo[valid] * int(base_block_count) + hi[valid]
+            unique, counts = np.unique(pair_id, return_counts=True)
+            for pair, count in zip(unique, counts, strict=True):
+                c = int(count)
+                if c < int(min_cross_nnz):
+                    continue
+                a = int(pair // int(base_block_count))
+                b = int(pair % int(base_block_count))
+                edge_counts.append((c, a, b))
+    edge_counts.sort(key=lambda item: (-item[0], item[1], item[2]))
+    max_rows = max(1, int(max_superblock_size))
+    max_blocks = max(1, int(max_superblock_blocks))
+    for _, a, b in edge_counts:
+        dsu.union_if_fits(a, b, max_rows=max_rows, max_blocks=max_blocks)
+
+    groups: dict[int, list[int]] = {}
+    for block in range(base_block_count):
+        groups.setdefault(dsu.find(block), []).append(int(block))
+    ordered_groups = sorted(groups.values(), key=lambda values: (min(values), len(values)))
+
+    retained_cross = 0
+    dropped_cross = 0
+    if np.any(cross):
+        for rb, cb in zip(row_block[cross], col_block[cross], strict=True):
+            if dsu.find(int(rb)) == dsu.find(int(cb)):
+                retained_cross += 1
+            else:
+                dropped_cross += 1
+
+    blocks: list[_SymbolicSuperblock] = []
+    total_nbytes = 0
+    total_nnz = 0
+    factor_failures = 0
+    max_abs = float(np.max(np.abs(matrix_csr.data))) if matrix_csr.nnz else 0.0
+    reg = max(1.0e-14, float(regularization_rel) * max(1.0, max_abs))
+    for group in ordered_groups:
+        perm_positions: list[np.ndarray] = []
+        for block in group:
+            start = int(block) * block_size
+            stop = min(n, start + block_size)
+            if stop > start:
+                perm_positions.append(np.arange(start, stop, dtype=np.int64))
+        if not perm_positions:
+            continue
+        positions = np.concatenate(perm_positions).astype(np.int64, copy=False)
+        indices = np.asarray(permutation[positions], dtype=np.int64)
+        local = matrix_csr[indices, :][:, indices].tocsc()
+        try:
+            factor = splu(local, permc_spec="COLAMD", diag_pivot_thresh=float(diag_pivot_thresh))
+        except RuntimeError:
+            factor_failures += 1
+            local_reg = (local + reg * sp.eye(local.shape[0], dtype=dtype, format="csc")).tocsc()
+            try:
+                factor = splu(local_reg, permc_spec="COLAMD", diag_pivot_thresh=float(diag_pivot_thresh))
+            except RuntimeError:
+                diagonal = np.asarray(local.diagonal(), dtype=np.float64)
+                scale = max(1.0, float(np.max(np.abs(diagonal))) if diagonal.size else 1.0)
+                floor = max(1.0e-14, float(regularization_rel) * scale)
+                sign = np.where(diagonal < 0.0, -1.0, 1.0)
+                diagonal_safe = np.where(np.abs(diagonal) > floor, diagonal, sign * floor)
+                factor = _JacobiFactor(inverse_diagonal=np.asarray(1.0 / diagonal_safe, dtype=dtype))
+        nbytes, nnz = estimate_superlu_factor_storage(factor)
+        if nbytes is None and isinstance(factor, _JacobiFactor):
+            nbytes = int(factor.inverse_diagonal.nbytes)
+            nnz = int(factor.inverse_diagonal.size)
+        total_nbytes += int(nbytes or 0)
+        total_nnz += int(nnz or 0)
+        blocks.append(
+            _SymbolicSuperblock(
+                indices=indices,
+                base_blocks=tuple(int(v) for v in group),
+                factor=factor,
+            )
+        )
+
+    factor = _SymbolicSuperblockFactor(
+        blocks=tuple(blocks),
+        analysis=analysis,
+        dtype=dtype,
+        n=n,
+        max_superblock_size=int(max_rows),
+        max_superblock_blocks=int(max_blocks),
+        retained_cross_nnz=int(retained_cross),
+        dropped_cross_nnz=int(dropped_cross),
+        factor_failures=int(factor_failures),
+    )
+    return factor, int(total_nbytes), int(total_nnz)
 
 
 def wrap_sparse_factor_with_coarse_correction(
@@ -1706,6 +1945,10 @@ def factorize_host_sparse_operator(
     symbolic_schur_boundary_width: int = 1,
     symbolic_schur_high_degree_cols: int = 64,
     symbolic_schur_regularization_rel: float = 1.0e-12,
+    symbolic_superblock_max_size: int = 32768,
+    symbolic_superblock_max_blocks: int = 8,
+    symbolic_superblock_min_cross_nnz: int = 1,
+    symbolic_superblock_regularization_rel: float = 1.0e-12,
     symbolic_max_permutation_size: int = 250_000,
 ) -> SparseFactorBundle:
     if isinstance(operator, SparseOperatorBundle):
@@ -1802,7 +2045,12 @@ def factorize_host_sparse_operator(
             sign = np.where(diagonal < 0.0, -1.0, 1.0)
             diagonal_safe = np.where(np.abs(diagonal) > floor, diagonal, sign * floor)
             factor = _JacobiFactor(inverse_diagonal=1.0 / diagonal_safe)
-        elif kind in {"symbolic_block_lu", "symbolic_block_lu_coarse", "symbolic_block_schur_lu"}:
+        elif kind in {
+            "symbolic_block_lu",
+            "symbolic_block_lu_coarse",
+            "symbolic_block_schur_lu",
+            "symbolic_superblock_lu",
+        }:
             analysis = symbolic_analysis
             if analysis is None:
                 analysis = analyze_sparse_symbolic_structure(
@@ -1821,6 +2069,16 @@ def factorize_host_sparse_operator(
                     boundary_width=int(symbolic_schur_boundary_width),
                     high_degree_cols=int(symbolic_schur_high_degree_cols),
                     regularization_rel=float(symbolic_schur_regularization_rel),
+                )
+            elif kind == "symbolic_superblock_lu":
+                factor, symbolic_nbytes, symbolic_nnz = _build_symbolic_superblock_factor(
+                    matrix,
+                    analysis=analysis,
+                    diag_pivot_thresh=float(diag_pivot_thresh),
+                    max_superblock_size=int(symbolic_superblock_max_size),
+                    max_superblock_blocks=int(symbolic_superblock_max_blocks),
+                    min_cross_nnz=int(symbolic_superblock_min_cross_nnz),
+                    regularization_rel=float(symbolic_superblock_regularization_rel),
                 )
             elif kind == "symbolic_block_lu_coarse":
                 factor, symbolic_nbytes, symbolic_nnz = _build_symbolic_block_coarse_factor(
@@ -1852,7 +2110,12 @@ def factorize_host_sparse_operator(
     factor_s = time.perf_counter() - factor_start_s
     if kind == "jacobi":
         factor_nbytes, factor_nnz = int(factor.inverse_diagonal.nbytes), int(factor.inverse_diagonal.size)
-    elif kind in {"symbolic_block_lu", "symbolic_block_lu_coarse", "symbolic_block_schur_lu"}:
+    elif kind in {
+        "symbolic_block_lu",
+        "symbolic_block_lu_coarse",
+        "symbolic_block_schur_lu",
+        "symbolic_superblock_lu",
+    }:
         factor_nbytes, factor_nnz = int(symbolic_nbytes), int(symbolic_nnz)
     else:
         factor_nbytes, factor_nnz = estimate_superlu_factor_storage(factor)
