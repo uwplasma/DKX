@@ -55,7 +55,8 @@ def test_build_manifest_collects_current_production_gaps_and_research_lanes(tmp_
     assert "HSX_FPCollisions_DKESTrajectories" in cpu_floor_cases
     assert "geometryScheme4_2species_noEr_withPhi1InDKE" in cpu_floor_cases
     assert all(
-        Path(row["production_input"]).exists()
+        row["production_input"].endswith("/input.namelist")
+        and row["production_resolution"] is not None
         for row in manifest["benchmark_floor_gaps"]["cpu"]
         if row["production_case_found"]
     )
