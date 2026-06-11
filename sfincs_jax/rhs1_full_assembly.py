@@ -5903,7 +5903,10 @@ def _build_active_projected_symbolic_superblock_lu_preconditioner(
             symbolic_superblock_regularization_rel=regularization_rel,
         )
     except Exception as exc:  # noqa: BLE001
-        error_detail = str(exc).strip().replace("\n", " ")[:320]
+        root_exc: BaseException = exc
+        while getattr(root_exc, "__cause__", None) is not None:
+            root_exc = root_exc.__cause__  # type: ignore[assignment]
+        error_detail = str(root_exc).strip().replace("\n", " ")[:320]
         return RHS1StructuredFullCSRPreconditioner(
             operator=None,
             selected=False,
