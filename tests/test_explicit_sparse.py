@@ -667,6 +667,33 @@ def test_symbolic_frontal_schur_lu_rejects_insufficient_separator_coverage() -> 
         )
 
 
+def test_symbolic_frontal_schur_lu_rejects_dense_rhs_work_budget() -> None:
+    matrix = sp.csr_matrix(
+        [
+            [4.0, 1.0, 25.0, 0.0],
+            [2.0, 3.0, 0.0, 0.0],
+            [30.0, 0.0, 5.0, -1.0],
+            [0.0, 0.0, 1.0, 2.0],
+        ],
+        dtype=np.float64,
+    )
+
+    with pytest.raises(RuntimeError, match="dense separator RHS work budget exceeded"):
+        factorize_host_sparse_operator(
+            matrix,
+            kind="symbolic_frontal_schur_lu",
+            symbolic_ordering_kind="natural",
+            symbolic_block_size=2,
+            symbolic_frontal_max_superblock_size=2,
+            symbolic_frontal_max_superblock_blocks=1,
+            symbolic_frontal_max_separator_cols=2,
+            symbolic_frontal_boundary_width=0,
+            symbolic_frontal_high_degree_cols=0,
+            symbolic_frontal_min_cross_separator_fraction=1.0,
+            symbolic_frontal_max_dense_rhs_entries=1,
+        )
+
+
 def test_symbolic_block_lu_overlap_retains_boundary_couplings() -> None:
     matrix = sp.csr_matrix(
         [

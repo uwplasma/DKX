@@ -2626,6 +2626,53 @@ def test_active_symbolic_frontal_schur_lu_rejects_insufficient_separator_coverag
     assert pc.metadata["min_cross_separator_fraction"] == 1.0
 
 
+def test_active_symbolic_frontal_schur_lu_rejects_dense_rhs_work_budget(monkeypatch) -> None:
+    layout = RHS1BlockLayout(
+        n_species=1,
+        n_x=1,
+        n_xi=2,
+        n_theta=2,
+        n_zeta=1,
+        f_size=4,
+        phi1_size=0,
+        extra_size=0,
+        total_size=4,
+        constraint_scheme=1,
+        include_phi1=False,
+        include_phi1_in_kinetic=False,
+        rhs_mode=1,
+    )
+    matrix = sp.csr_matrix(
+        [
+            [4.0, 1.0, 25.0, 0.0],
+            [2.0, 3.0, 0.0, 0.0],
+            [30.0, 0.0, 5.0, -1.0],
+            [0.0, 0.0, 1.0, 2.0],
+        ],
+        dtype=np.float64,
+    )
+    active = np.arange(layout.total_size, dtype=np.int64)
+    monkeypatch.setenv("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_SYMBOLIC_FRONTAL_ORDERING", "natural")
+    monkeypatch.setenv("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_SYMBOLIC_FRONTAL_BLOCK_SIZE", "2")
+    monkeypatch.setenv("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_SYMBOLIC_FRONTAL_MAX_SEPARATOR_COLS", "2")
+    monkeypatch.setenv("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_SYMBOLIC_FRONTAL_MAX_DENSE_RHS_ENTRIES", "1")
+
+    pc = build_active_projected_rhs1_full_csr_preconditioner(
+        matrix=matrix,
+        layout=layout,
+        active_indices=active,
+        kind="active_symbolic_frontal_schur_lu",
+        max_factor_nbytes=2_000_000,
+        regularization=0.0,
+    )
+
+    assert not pc.selected
+    assert pc.kind == "active_symbolic_frontal_schur_lu"
+    assert pc.reason == "active_symbolic_frontal_schur_lu_dense_rhs_budget_exceeded:4>1"
+    assert pc.metadata["dense_rhs_entries_estimate"] == 4
+    assert pc.metadata["max_dense_rhs_entries"] == 1
+
+
 def test_active_symbolic_superblock_lu_solves_coupled_active_blocks(monkeypatch) -> None:
     layout = RHS1BlockLayout(
         n_species=1,

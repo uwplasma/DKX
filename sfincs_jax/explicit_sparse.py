@@ -686,6 +686,7 @@ def _build_symbolic_frontal_schur_factor(
     min_cross_nnz: int = 1,
     min_cross_separator_fraction: float = 0.0,
     regularization_rel: float = 1.0e-12,
+    max_dense_rhs_entries: int = 0,
 ) -> tuple[_SymbolicBlockSchurFactor, int, int]:
     """Build a bounded frontal/Schur elimination over symbolic block groups.
 
@@ -838,6 +839,32 @@ def _build_symbolic_frontal_schur_factor(
     for block in range(base_block_count):
         groups.setdefault(dsu.find(block), []).append(int(block))
     ordered_groups = sorted(groups.values(), key=lambda values: (min(values), len(values)))
+
+    if sep_count and int(max_dense_rhs_entries) > 0:
+        separator_mask = np.zeros((n,), dtype=bool)
+        separator_mask[separator] = True
+        dense_rhs_entries = 0
+        peak_dense_rhs_entries = 0
+        for group in ordered_groups:
+            group_rows = 0
+            for block in group:
+                start = int(block) * block_size
+                stop = min(n, start + block_size)
+                if stop <= start:
+                    continue
+                local_positions = np.arange(start, stop, dtype=np.int64)
+                local_indices = np.asarray(permutation[local_positions], dtype=np.int64)
+                group_rows += int(np.count_nonzero(~separator_mask[local_indices]))
+            entries = int(group_rows) * int(sep_count)
+            dense_rhs_entries += entries
+            peak_dense_rhs_entries = max(peak_dense_rhs_entries, entries)
+        if dense_rhs_entries > int(max_dense_rhs_entries):
+            raise RuntimeError(
+                "symbolic_frontal_schur_lu dense separator RHS work budget exceeded "
+                f"({int(dense_rhs_entries)}>{int(max_dense_rhs_entries)}; "
+                f"peak_block_entries={int(peak_dense_rhs_entries)} separator={int(sep_count)} "
+                f"groups={int(len(ordered_groups))})"
+            )
 
     schur = (
         matrix_csr[separator, :][:, separator].toarray().astype(dtype, copy=False)
@@ -2244,6 +2271,7 @@ def factorize_host_sparse_operator(
     symbolic_frontal_min_cross_nnz: int = 1,
     symbolic_frontal_min_cross_separator_fraction: float = 0.0,
     symbolic_frontal_regularization_rel: float = 1.0e-12,
+    symbolic_frontal_max_dense_rhs_entries: int = 0,
     symbolic_superblock_max_size: int = 32768,
     symbolic_superblock_max_blocks: int = 8,
     symbolic_superblock_min_cross_nnz: int = 1,
@@ -2385,6 +2413,7 @@ def factorize_host_sparse_operator(
                     min_cross_nnz=int(symbolic_frontal_min_cross_nnz),
                     min_cross_separator_fraction=float(symbolic_frontal_min_cross_separator_fraction),
                     regularization_rel=float(symbolic_frontal_regularization_rel),
+                    max_dense_rhs_entries=int(symbolic_frontal_max_dense_rhs_entries),
                 )
             elif kind == "symbolic_superblock_lu":
                 factor, symbolic_nbytes, symbolic_nnz = _build_symbolic_superblock_factor(

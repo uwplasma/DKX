@@ -3,6 +3,88 @@
 Last updated: 2026-06-11 (America/Chicago)
 Owner: incoming agent
 
+## 2026-06-11 Addendum: native frontal-Schur reduced-Pmat hierarchy
+
+### Implementation
+
+- Added a native reduced-Pmat elimination hierarchy for RHSMode=1 active
+  systems:
+  - ``symbolic_frontal_schur_lu`` in ``sfincs_jax.explicit_sparse`` builds
+    symbolic superblocks from the reduced active CSR pattern, promotes
+    source/constraint/profile tail entries, high-degree nodes, block-boundary
+    nodes, and unresolved cross-block endpoints into a bounded separator, then
+    eliminates local interiors and factors the separator Schur complement.
+  - ``active_symbolic_frontal_schur_lu`` in ``rhs1_full_assembly`` exposes this
+    path through the RHSMode=1 solver-policy stack with aliases
+    ``active_frontal_schur_lu``, ``active_reduced_pmat_frontal_schur``, and
+    ``active_native_frontal_schur``.
+  - The path records separator count, frontal block count, unresolved/selected
+    cross-block couplings, cross-separator coverage, factor memory estimates,
+    and strict setup-admission metadata.
+- Added a dense-separator RHS work gate:
+  - ``SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_SYMBOLIC_FRONTAL_MAX_DENSE_RHS_ENTRIES``
+    defaults to ``160000000``.
+  - Oversized separator plans now fail before numerical local-factor/Schur
+    assembly instead of spending minutes in setup and timing out.
+  - The lower-level factor API also exposes
+    ``symbolic_frontal_max_dense_rhs_entries`` for direct tests and research
+    probes.
+
+### Evidence
+
+- Local focused validation:
+  ``python -m pytest tests/test_explicit_sparse.py tests/test_rhs1_full_assembly.py -q``
+  passed with ``135 passed``.
+- Local sparse-pattern validation:
+  ``python -m pytest tests/test_v3_sparse_pattern.py -q`` passed with
+  ``131 passed``.
+- Style/whitespace validation:
+  ``ruff check sfincs_jax/explicit_sparse.py sfincs_jax/rhs1_full_assembly.py
+  tests/test_explicit_sparse.py tests/test_rhs1_full_assembly.py`` and
+  ``git diff --check`` passed.
+- GitHub CI and Docs for the preceding hierarchy commit
+  ``10013c7`` both passed:
+  ``https://github.com/uwplasma/sfincs_jax/actions/runs/27355481958``.
+- Office CPU production probe on ``additional_examples`` at
+  ``25 x 51 x 100 x 8`` with strict cross-separator coverage failed closed in
+  ``45.8 s`` and about ``3.0 GB`` RSS:
+  ``selected insufficient cross-block separator coverage
+  (0.0310861 < 0.5; selected=76284 total=2453960 separator=2048)``.
+- Office CPU production probe with relaxed coverage entered the new numeric
+  setup.  Direct-tail CSR materialization completed in ``17.474 s`` for the
+  ``648977 x 648977`` active system with ``12176533`` reduced-Pmat nonzeros,
+  but the frontal-Schur numeric setup did not reach admission before the
+  ``240 s`` cap.  This identified dense multi-RHS separator elimination, not
+  colored CSR materialization, as the immediate setup blocker.  The new
+  dense-RHS gate is intended to turn that timeout into a deterministic
+  fail-closed policy decision.
+- The same Fortran v3 production reference used MUMPS with METIS ordering:
+  matrix size ``648977``, Pmat nonzeros ``12176533``, estimated factor entries
+  ``1.274e9``, estimated max frontal size ``5330``, and estimated operations
+  ``3.078e12``.  The native SFINCS_JAX hierarchy is therefore now structurally
+  closer to MUMPS/METIS, but it is not yet a lower-memory production
+  replacement because its bounded separator plan has not passed the true
+  residual/runtime/RSS gates.
+
+### Decision
+
+- Keep ``active_symbolic_frontal_schur_lu`` in auto as a fail-closed candidate,
+  but do not promote it as the production replacement claim.
+- The next real algorithmic step is a lower-memory numeric realization of the
+  same hierarchy: sparse/block RHS separator solves, nested separators, or
+  frontal update compression.  The current dense separator update is useful
+  infrastructure and a diagnostic bridge to MUMPS/METIS behavior, but it is too
+  expensive for the ``25 x 51 x 100 x 8`` production QI/RHSMode=1 row without
+  additional compression.
+- Lower-memory/faster RHSMode=1 production replacement: ``87%``.  Native
+  symbolic ordering, direct reduced-Pmat materialization, superblock factors,
+  and frontal-Schur hierarchy are implemented and tested; production closure is
+  blocked by separator numeric cost and strict true-residual admission.
+- Overall RHSMode=1 production solver lane: ``95%``.  Correctness fallbacks and
+  bounded fail-closed policies are in place; the remaining work is an actually
+  production-clean lower-memory factor/coarse architecture for full-grid QA/QH
+  and QI stress rows.
+
 ## 2026-06-11 Addendum: filtered-factor true-coarse replacement probe
 
 ### Implementation

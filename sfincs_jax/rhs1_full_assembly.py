@@ -5844,6 +5844,15 @@ def _build_active_projected_symbolic_frontal_schur_lu_preconditioner(
         int(_env_int("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_SYMBOLIC_FRONTAL_HIGH_DEGREE_COLS", 128)),
     )
     min_cross_nnz = max(1, int(_env_int("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_SYMBOLIC_FRONTAL_MIN_CROSS_NNZ", 1)))
+    max_dense_rhs_entries = max(
+        0,
+        int(
+            _env_int(
+                "SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_SYMBOLIC_FRONTAL_MAX_DENSE_RHS_ENTRIES",
+                160_000_000,
+            )
+        ),
+    )
     large_separator_default = 0.20 if int(active_size) > 300_000 else 0.0
     min_cross_separator_fraction = max(
         0.0,
@@ -5881,6 +5890,31 @@ def _build_active_projected_symbolic_frontal_schur_lu_preconditioner(
         float(_env_float("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_SYMBOLIC_FRONTAL_PREFILL_SAFETY_FACTOR", 4.0)),
     )
     prefill_estimate = int(np.ceil(float(raw_estimate) * float(prefill_safety)))
+    dense_rhs_entries_estimate = int(max(0, active_size - separator_cols)) * int(separator_cols)
+    if int(max_dense_rhs_entries) > 0 and dense_rhs_entries_estimate > int(max_dense_rhs_entries):
+        return RHS1StructuredFullCSRPreconditioner(
+            operator=None,
+            selected=False,
+            kind="active_symbolic_frontal_schur_lu",
+            reason=(
+                "active_symbolic_frontal_schur_lu_dense_rhs_budget_exceeded:"
+                f"{int(dense_rhs_entries_estimate)}>{int(max_dense_rhs_entries)}"
+            ),
+            setup_s=max(0.0, time.perf_counter() - t0),
+            metadata={
+                "requested_kind": str(requested_kind),
+                "architecture": "active_true_operator_symbolic_frontal_schur_lu",
+                "active_size": int(active_size),
+                "matrix_nnz": int(matrix_csr.nnz),
+                "tail_size": int(tail_size),
+                "nonkinetic_tail_is_suffix": bool(nonkinetic_tail_is_suffix),
+                "symbolic_analysis": analysis.to_dict(),
+                "max_separator_cols": int(separator_cols),
+                "dense_rhs_entries_estimate": int(dense_rhs_entries_estimate),
+                "max_dense_rhs_entries": int(max_dense_rhs_entries),
+                "requires_preflight": True,
+            },
+        )
     if prefill_estimate > int(max_factor_nbytes):
         return RHS1StructuredFullCSRPreconditioner(
             operator=None,
@@ -5918,6 +5952,7 @@ def _build_active_projected_symbolic_frontal_schur_lu_preconditioner(
             symbolic_frontal_min_cross_nnz=min_cross_nnz,
             symbolic_frontal_min_cross_separator_fraction=min_cross_separator_fraction,
             symbolic_frontal_regularization_rel=regularization_rel,
+            symbolic_frontal_max_dense_rhs_entries=max_dense_rhs_entries,
         )
     except Exception as exc:  # noqa: BLE001
         root_exc: BaseException = exc
@@ -5938,6 +5973,8 @@ def _build_active_projected_symbolic_frontal_schur_lu_preconditioner(
                 "error": str(exc),
                 "symbolic_analysis": analysis.to_dict(),
                 "min_cross_separator_fraction": float(min_cross_separator_fraction),
+                "dense_rhs_entries_estimate": int(dense_rhs_entries_estimate),
+                "max_dense_rhs_entries": int(max_dense_rhs_entries),
             },
         )
     factor_nbytes = int(factor.factor_nbytes_estimate or 0)
@@ -6006,6 +6043,8 @@ def _build_active_projected_symbolic_frontal_schur_lu_preconditioner(
                 "factor_nbytes_actual": int(factor_nbytes),
                 "factor_nnz_actual": int(factor.factor_nnz_estimate or 0),
                 "max_factor_nbytes": int(max_factor_nbytes),
+                "dense_rhs_entries_estimate": int(dense_rhs_entries_estimate),
+                "max_dense_rhs_entries": int(max_dense_rhs_entries),
                 "separator_count": int(getattr(factor.factor, "separator_count", 0)),
                 "frontal_block_count": int(getattr(factor.factor, "frontal_block_count", 0)),
                 "total_cross_nnz": int(getattr(factor.factor, "total_cross_nnz", 0)),
@@ -6047,6 +6086,8 @@ def _build_active_projected_symbolic_frontal_schur_lu_preconditioner(
             "factor_nbytes_actual": int(factor_nbytes),
             "factor_nnz_actual": int(factor.factor_nnz_estimate or 0),
             "max_factor_nbytes": int(max_factor_nbytes),
+            "dense_rhs_entries_estimate": int(dense_rhs_entries_estimate),
+            "max_dense_rhs_entries": int(max_dense_rhs_entries),
             "block_size": int(block_size),
             "ordering_kind": str(ordering_kind),
             "max_separator_cols": int(separator_cols),
