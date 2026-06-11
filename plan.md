@@ -3,6 +3,213 @@
 Last updated: 2026-06-10 (America/Chicago)
 Owner: incoming agent
 
+## 2026-06-10 Addendum: final production-readiness stress-test plan after v1.1.6
+
+### Current verified state
+
+- Repository state:
+  - ``main`` is clean at ``a7c2fce`` and tagged ``v1.1.6``.
+  - Local release gates, research-lane gates, Sphinx ``-W``, build/twine, and
+    main GitHub CI are green for the release state.
+- Correctness/parity evidence:
+  - The frozen/scaled 39-case CPU and GPU suite reports under
+    ``tests/scaled_example_suite_*`` are all ``39/39 parity_ok`` in both
+    practical and strict reports.
+  - This is still release-suite parity evidence, not a complete production
+    performance claim for every example at the public resolution floor.
+- README/runtime evidence:
+  - ``examples/publication_figures/artifacts/sfincs_jax_fortran_suite_benchmark_summary.json``
+    currently filters to ``24`` CPU rows and ``24`` GPU rows with Fortran runtime
+    at least ``10 s``.
+  - The same artifact records ``16`` CPU and ``16`` GPU resolution-floor
+    violations in the source reports. Those rows include HSX/filtered-W7X,
+    geometry-scheme-4/5, quick FP, and geometry-11 FP rows still reported at
+    ``5 x 5 x 4 x 2``-scale reduced grids.
+  - Fifteen additional source rows are excluded because the Fortran reference
+    runtime is below ``10 s``. These remain CI/regression rows unless they are
+    rerun at production-comparison resolution.
+- QA/QH bootstrap-current evidence:
+  - The checked QA and QH whole-radius figures are same-resolution
+    ``13 x 13 x 21 x 5`` diagnostics, not full
+    ``25 x 39 x 60 x 7`` production claims.
+  - QA: ``11/11`` SFINCS_JAX points pass, maximum same-resolution
+    SFINCS_JAX-vs-Fortran relative difference is ``1.211e-3``, maximum Redl
+    difference is about ``9.69e-2``, maximum JAX refinement bar is ``4.21%``.
+  - QH: ``11/11`` SFINCS_JAX points pass, maximum same-resolution
+    SFINCS_JAX-vs-Fortran relative difference is ``3.536e-3``, maximum Redl
+    difference is about ``1.012e-1``, maximum JAX refinement bar is ``24.43%``.
+    QH therefore remains a visible reduced-grid convergence stress case.
+- Current solver-policy state:
+  - RHSMode=2/3 non-Phi1 full-FP transport automatically admits the
+    ``fp_fortran_reduced_lu`` direct ``whichMatrix=0`` reduced-Pmat LU route
+    when eligible. This is the residual-clean Fortran/PETSc analogue.
+  - Lower-memory native symbolic/block-Schur candidates are implemented and
+    tested, but remain opt-in because they fail setup-time true-residual
+    admission on geometry-rich reduced gates or require separators large enough
+    to lose the memory advantage.
+  - RHSMode=1 finite-beta/profile-current production grids still need a
+    lower-memory residual-clean path. The non-autodiff host sparse routes are
+    the correctness fallback; true device/autodiff routes remain research lanes.
+- QI evidence:
+  - QI ``nfp=2`` is closed through bounded fixed-resolution rungs up to the
+    ``15x`` GPU campaign, but the machine-readable QI manifest still marks the
+    release gate as ``bounded_proxy``.
+  - Open blockers remain: production-resolution CPU multi-seed, production
+    GPU multi-seed, and true device-QI/operator-Krylov evidence with converged
+    residual metadata.
+  - Local VMEC-JAX candidates found for the next SFINCS_JAX campaign:
+    ``/Users/rogeriojorge/local/vmec_jax/examples/data/wout_QI_stel_seed_3127.nc``,
+    ``/Users/rogeriojorge/local/vmec_jax/examples/data/wout_nfp3_QI_fixed_resolution_final.nc``,
+    ``/Users/rogeriojorge/local/vmec_jax/docs/_build/html/_static/qi_readme_cases/nfp1/wout_final.nc``,
+    ``.../nfp2_target_helicity/wout_final.nc``,
+    ``.../nfp3_seed3127/wout_final.nc``, and
+    ``.../nfp4_minimal/wout_final.nc``.
+  - The built-doc QI readme-case wouts are not all present under
+    ``vmec_jax/docs/_static``. Before using them as long-term fixtures, copy
+    them into a SFINCS_JAX-owned external-data artifact or regenerate them from
+    VMEC-JAX inputs with recorded commands and checksums.
+
+### Open lanes after this pass
+
+1. **Production-floor example-suite rerun**
+   - Scope: all 39 upstream/example cases, CPU and GPU, SFINCS Fortran v3
+     comparison, full output-key parity, runtime, and memory.
+   - Grid floor: use ``benchmarks/production_resolution_inputs_2026-05-04`` as
+     the strict public benchmark target unless a case is explicitly marked
+     ``remote_or_cluster_only``. That means 3D cases at least
+     ``25 x 51 x 100 x 4`` and tokamak cases at least the manifest floor, with
+     larger PAS/no-Er RHSMode=1 tokamak rows where specified.
+   - Acceptance gates:
+     - every completed row has ``strict_n_mismatch_common = 0``;
+     - SFINCS_JAX CPU/GPU key observables agree within existing physics gates;
+     - Fortran reference runtime is at least ``10 s`` for README performance
+       rows;
+     - no public plot row has a production-floor violation;
+     - each failure is classified as ``needs_more_memory``,
+       ``timeout_before_solver``, ``solver_nonconverged``, ``reference_quality``,
+       or ``unsupported_mode`` with phase timings.
+   - First compute action:
+     - rerun only the currently violating 16 source rows at production floor on
+       CPU; then rerun the same rows on office GPU; then merge with already
+       valid rows and regenerate the summary plot.
+
+2. **QA/QH RHSMode=1 bootstrap-current production convergence**
+   - Scope: Zenodo QA and QH benchmark surfaces from arXiv:2205.02914, same
+     profile/normalization contract, SFINCS_JAX vs SFINCS Fortran v3 vs Redl.
+   - Grid ladder:
+     - keep current ``13 x 13 x 21 x 5`` as the reduced baseline;
+     - add ``17 x 21 x 31 x 5`` and ``21 x 31 x 45 x 6`` bounded rungs;
+     - promote only after representative surfaces pass or after full
+       ``25 x 39 x 60 x 7`` succeeds under the same residual gate.
+   - Acceptance gates:
+     - ``linearSolverAccepted = 1`` and true residual below target for each
+       SFINCS_JAX point;
+     - SFINCS_JAX and Fortran are always compared at the same resolution and
+       radial surfaces;
+     - bootstrap-current refinement bars are below ``5%`` for QA and QH before
+       wording becomes production-quality;
+     - Redl comparison is used as physics trend evidence, not as a strict
+       identity check.
+   - Algorithmic blocker:
+     - a lower-memory RHSMode=1 production solver is required before full
+       ``25 x 39 x 60 x 7`` becomes routine. Host sparse exact LU is allowed as
+       a correctness fallback for non-autodiff CLI use, but cannot be the final
+       device/autodiff story.
+
+3. **Lower-memory production replacement**
+   - Scope: replace exact host LU fill where it blocks production grids, without
+     dropping true-residual admission.
+   - Required architecture:
+     - direct term-level reduced ``whichMatrix=0`` Pmat emission;
+     - reusable symbolic ordering and block metadata;
+     - active-only factorization retaining dominant kinetic off-diagonal
+       couplings directly;
+     - source/constraint/profile-moment Schur complement;
+     - deterministic setup-time true-residual admission before Krylov use.
+   - Non-goals:
+     - no more smoother/restart tuning as a lane-completion mechanism;
+     - no public default promotion for candidates that pass only small smoke
+       systems or fail setup residual on geometry-rich gates.
+   - Gates:
+     - bounded ``13 x 17 x 30 x 4`` geometry-scheme-2 and geometry-scheme-11
+       gates pass strict residual and memory;
+     - production-floor transportMatrix geometry-scheme-2/11 pass CPU gates;
+     - office GPU route either uses a device-safe factor/apply path or falls
+       back cleanly with explicit metadata.
+
+4. **True device-QI and production QI ladders**
+   - Scope: QI ``nfp=1,2,3,4`` VMEC-JAX examples and optimized/readme cases.
+   - Candidate geometries:
+     - nfp1: ``vmec_jax`` readme QI built-doc wout or regenerate from
+       ``input.nfp1_QI`` / ``input.minimal_seed_nfp1``;
+     - nfp2: existing SFINCS_JAX QI nfp2 promotion input plus
+       VMEC-JAX ``input.nfp2_QI`` and ``input.minimal_seed_nfp2_target_helicity``;
+     - nfp3: ``wout_nfp3_QI_fixed_resolution_final.nc`` and
+       ``results/qi_opt/ess/nfp3_seed3127/wout_final.nc``;
+     - nfp4: regenerate/checkpoint from ``input.nfp4_QI_finite_beta`` or use
+       the built-doc ``nfp4_minimal`` wout after checksumming.
+   - Matrix of SFINCS_JAX tests:
+     - RHSMode=1 profile/current at one central surface and a short radial
+       ladder;
+     - RHSMode=2/3 transport matrix where the geometry/profile contract allows;
+     - with/without ``includePhi1`` where physically supported;
+     - CPU cold/warm, GPU cold/warm, and one multi-device throughput or sharded
+       route per geometry family.
+   - Production ladder:
+     - start ``9 x 9 x 11 x 4`` for all nfp candidates;
+     - continue ``13 x 13 x 15 x 4`` for candidates with residual-clean roots;
+     - promote one nfp candidate to ``17 x 21 x 31 x 5`` and then to
+       ``25 x 51 x 100 x 4`` only after CPU/GPU and residual gates pass.
+   - Acceptance gates:
+     - CPU/GPU root agreement within existing electron-root gate;
+     - residual-clean selected roots;
+     - true device-QI artifact must report device/operator-reuse route
+       activation, accepted convergence, residual history, memory, and no
+       host-sparse hidden fallback.
+
+5. **Parallelism and scaling**
+   - Scope:
+     - case/RHS throughput for RHSMode=2/3 transport on CPU/GPU;
+     - single-case sharded RHSMode=1 only when residual-clean and faster than
+       one device for sufficiently large systems.
+   - Gates:
+     - deterministic output digests across device counts;
+     - speedup and memory plots at a size large enough to amortize setup;
+     - if 2-GPU single-case scaling is not faster, keep it documented as
+       research-only and show only throughput scaling publicly.
+
+6. **Documentation/test closure**
+   - Update README/docs only after the production reruns above are complete.
+   - CI remains bounded: unit/regression/physics tests stay under the current
+     GitHub time budget; production CPU/GPU/Fortran sweeps stay manual or
+     scheduled.
+   - Add tests for any promoted auto solver using:
+     - path-selection assertions;
+     - setup-admission failure cases;
+     - true-residual gates;
+     - CPU/GPU observable parity;
+     - artifact-schema checks for new benchmark JSON.
+
+### Execution order
+
+1. Run artifact-only sanity checks and materialize a fresh run manifest listing
+   every missing production-floor row and every QI/QA/QH candidate.
+2. Run bounded CPU probes for the 16 benchmark rows that currently violate the
+   README production floor. Do not update public plots until these rows pass or
+   are explicitly moved out of public performance scope.
+3. Run the same bounded set on office GPU with phase timings, memory, and solver
+   path traces.
+4. Run QA/QH bootstrap-current ladder at the next bounded grid. If QH error bars
+   remain above ``5%``, keep the figure labeled reduced-grid and focus on
+   RHSMode=1 solver memory before attempting full grid.
+5. Build the QI nfp1-4 fixture manifest from VMEC-JAX, regenerate missing wouts
+   if needed, then run the low/mid QI SFINCS_JAX stress matrix.
+6. Implement the next lower-memory factor only if the production probes show
+   exact LU fill/setup is the blocker. The candidate must pass deterministic
+   setup residual on reduced geometry-scheme-2/11 before touching auto defaults.
+7. Regenerate README/docs plots and parity/runtime/memory tables only from
+   artifacts that pass the gates above.
+
 ## 2026-06-10 Addendum: native block-Schur factor plus exact-Pmat LU admission rescue
 
 ### Implementation
