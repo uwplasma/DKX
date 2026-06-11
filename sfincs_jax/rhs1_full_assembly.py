@@ -5827,6 +5827,19 @@ def _build_active_projected_symbolic_superblock_lu_preconditioner(
         1,
         int(_env_int("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_SYMBOLIC_SUPERBLOCK_MIN_CROSS_NNZ", 1)),
     )
+    large_retained_default = 0.25 if int(active_size) > 300_000 else 0.0
+    min_retained_cross_fraction = max(
+        0.0,
+        min(
+            1.0,
+            float(
+                _env_float(
+                    "SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_SYMBOLIC_SUPERBLOCK_MIN_RETAINED_CROSS_FRACTION",
+                    large_retained_default,
+                )
+            ),
+        ),
+    )
     regularization_rel = max(
         0.0,
         float(
@@ -5886,6 +5899,7 @@ def _build_active_projected_symbolic_superblock_lu_preconditioner(
             symbolic_superblock_max_size=max_superblock_size,
             symbolic_superblock_max_blocks=max_superblock_blocks,
             symbolic_superblock_min_cross_nnz=min_cross_nnz,
+            symbolic_superblock_min_retained_cross_fraction=min_retained_cross_fraction,
             symbolic_superblock_regularization_rel=regularization_rel,
         )
     except Exception as exc:  # noqa: BLE001
@@ -5902,6 +5916,7 @@ def _build_active_projected_symbolic_superblock_lu_preconditioner(
                 "matrix_nnz": int(matrix_csr.nnz),
                 "error": str(exc),
                 "symbolic_analysis": analysis.to_dict(),
+                "min_retained_cross_fraction": float(min_retained_cross_fraction),
             },
         )
     factor_nbytes = int(factor.factor_nbytes_estimate or 0)
@@ -5981,6 +5996,7 @@ def _build_active_projected_symbolic_superblock_lu_preconditioner(
                 "superblock_count": int(getattr(factor.factor, "superblock_count", 0)),
                 "retained_cross_nnz": int(getattr(factor.factor, "retained_cross_nnz", 0)),
                 "dropped_cross_nnz": int(getattr(factor.factor, "dropped_cross_nnz", 0)),
+                "retained_cross_fraction": float(getattr(factor.factor, "retained_cross_fraction", 0.0)),
                 "admission": admission.to_dict(),
                 "requires_preflight": True,
             },
@@ -6012,6 +6028,7 @@ def _build_active_projected_symbolic_superblock_lu_preconditioner(
             "max_superblock_blocks": int(max_superblock_blocks),
             "retained_cross_nnz": int(getattr(factor.factor, "retained_cross_nnz", 0)),
             "dropped_cross_nnz": int(getattr(factor.factor, "dropped_cross_nnz", 0)),
+            "retained_cross_fraction": float(getattr(factor.factor, "retained_cross_fraction", 0.0)),
             "factor_failures": int(getattr(factor.factor, "factor_failures", 0)),
             "factor_nbytes_estimate": int(raw_estimate),
             "factor_nbytes_prefill_estimate": int(prefill_estimate),
@@ -6021,6 +6038,7 @@ def _build_active_projected_symbolic_superblock_lu_preconditioner(
             "block_size": int(block_size),
             "ordering_kind": str(ordering_kind),
             "min_cross_nnz": int(min_cross_nnz),
+            "min_retained_cross_fraction": float(min_retained_cross_fraction),
             "regularization_rel": float(regularization_rel),
             "admission": admission.to_dict(),
             "requires_preflight": True,

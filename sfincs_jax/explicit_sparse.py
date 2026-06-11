@@ -441,6 +441,7 @@ class _SymbolicSuperblockFactor:
     max_superblock_blocks: int
     retained_cross_nnz: int
     dropped_cross_nnz: int
+    retained_cross_fraction: float
     factor_failures: int
 
     @property
@@ -514,6 +515,7 @@ def _build_symbolic_superblock_factor(
     max_superblock_size: int = 32768,
     max_superblock_blocks: int = 8,
     min_cross_nnz: int = 1,
+    min_retained_cross_fraction: float = 0.0,
     regularization_rel: float = 1.0e-12,
 ) -> tuple[_SymbolicSuperblockFactor, int, int]:
     """Build a bounded grouped-block sparse factor retaining dominant couplings."""
@@ -539,6 +541,7 @@ def _build_symbolic_superblock_factor(
                 max_superblock_blocks=max(1, int(max_superblock_blocks)),
                 retained_cross_nnz=0,
                 dropped_cross_nnz=0,
+                retained_cross_fraction=1.0,
                 factor_failures=0,
             ),
             0,
@@ -592,6 +595,15 @@ def _build_symbolic_superblock_factor(
                 retained_cross += 1
             else:
                 dropped_cross += 1
+    cross_total = int(retained_cross + dropped_cross)
+    retained_fraction = 1.0 if cross_total == 0 else float(retained_cross) / float(cross_total)
+    min_retained = max(0.0, min(1.0, float(min_retained_cross_fraction)))
+    if retained_fraction < min_retained:
+        raise RuntimeError(
+            "symbolic_superblock_lu retained insufficient cross-block coupling "
+            f"({retained_fraction:.6g} < {min_retained:.6g}; "
+            f"retained={int(retained_cross)} dropped={int(dropped_cross)} total={int(cross_total)})"
+        )
 
     blocks: list[_SymbolicSuperblock] = []
     total_nbytes = 0
@@ -648,6 +660,7 @@ def _build_symbolic_superblock_factor(
         max_superblock_blocks=int(max_blocks),
         retained_cross_nnz=int(retained_cross),
         dropped_cross_nnz=int(dropped_cross),
+        retained_cross_fraction=float(retained_fraction),
         factor_failures=int(factor_failures),
     )
     return factor, int(total_nbytes), int(total_nnz)
@@ -1948,6 +1961,7 @@ def factorize_host_sparse_operator(
     symbolic_superblock_max_size: int = 32768,
     symbolic_superblock_max_blocks: int = 8,
     symbolic_superblock_min_cross_nnz: int = 1,
+    symbolic_superblock_min_retained_cross_fraction: float = 0.0,
     symbolic_superblock_regularization_rel: float = 1.0e-12,
     symbolic_max_permutation_size: int = 250_000,
 ) -> SparseFactorBundle:
@@ -2078,6 +2092,7 @@ def factorize_host_sparse_operator(
                     max_superblock_size=int(symbolic_superblock_max_size),
                     max_superblock_blocks=int(symbolic_superblock_max_blocks),
                     min_cross_nnz=int(symbolic_superblock_min_cross_nnz),
+                    min_retained_cross_fraction=float(symbolic_superblock_min_retained_cross_fraction),
                     regularization_rel=float(symbolic_superblock_regularization_rel),
                 )
             elif kind == "symbolic_block_lu_coarse":
@@ -2101,11 +2116,13 @@ def factorize_host_sparse_operator(
         else:  # pragma: no cover - defensive
             raise ValueError(f"unknown factorization kind: {kind}")
     except RuntimeError as exc:
+        detail = str(exc).strip()
         raise RuntimeError(
             "Host sparse factorization failed. The assembled RHSMode=1 operator may be singular, "
             "ill-conditioned, or missing a pinned gauge/nullspace constraint for this solver branch. "
             "Use the default solver for parity runs, try solve_method='sparse_lsmr' only for diagnostic "
-            "minimum-norm probes, or adjust SFINCS_JAX_EXPLICIT_SPARSE_* factorization controls."
+            "minimum-norm probes, or adjust SFINCS_JAX_EXPLICIT_SPARSE_* factorization controls. "
+            f"Underlying factorization error: {detail}"
         ) from exc
     factor_s = time.perf_counter() - factor_start_s
     if kind == "jacobi":

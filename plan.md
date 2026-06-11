@@ -28143,3 +28143,83 @@ Current open-lane status after this pass:
   ``6400bfc``.
 - Overall average: ``80%``.  The code is safer and better instrumented, but
   production full-grid lower-memory closure remains open.
+
+### 2026-06-11 continuation: direct reduced-Pmat symbolic superblock factor
+
+Goal:
+
+- Add reusable direct reduced-Pmat symbolic/numeric factor infrastructure that
+  is closer to the Fortran v3/MUMPS path than the previous smoother/coarse
+  candidates, while staying bounded and fail-closed in Python/JAX.
+
+Implemented:
+
+- Added ``symbolic_superblock_lu`` in ``sfincs_jax.explicit_sparse``.  It
+  reuses ``SparseSymbolicAnalysis`` ordering metadata, builds a graph over
+  symbolic base blocks, greedily merges strongly coupled blocks subject to hard
+  row/block caps, and factors each retained superblock numerically.
+- Added ``active_symbolic_superblock_lu`` to the RHSMode=1 active direct-tail
+  preconditioner path and auto ladder.  It records superblock count, retained
+  and dropped cross-block nnz, retained-coupling fraction, factor memory, and
+  deterministic setup-residual admission metrics.
+- Added a retained-coupling pre-factor gate so large explicit probes can reject
+  before spending minutes and tens of GiB on a grouped LU that cannot retain
+  enough of the true reduced-Pmat coupling.
+- Preserved the underlying sparse factorization error in user-facing
+  ``Host sparse factorization failed`` messages so production logs identify
+  whether a failure was due to retained-coupling, budget, singularity, or
+  admission.
+
+Evidence:
+
+- ``pytest -q tests/test_explicit_sparse.py tests/test_rhs1_full_assembly.py``:
+  ``129 passed``.
+- ``pytest -q tests/test_v3_sparse_pattern.py``: ``131 passed``.
+- ``ruff check sfincs_jax/explicit_sparse.py sfincs_jax/rhs1_full_assembly.py
+  tests/test_explicit_sparse.py tests/test_rhs1_full_assembly.py``: passed.
+- GitHub Actions for ``f76162b``: Docs and CI both passed.
+- Office CPU production probe on ``additional_examples`` at
+  ``25 x 51 x 100 x 8`` with ``active_symbolic_superblock_lu`` and the default
+  active-size guard failed closed in ``22.9 s`` and ``2.69 GB`` RSS because the
+  active system size ``648,977`` exceeded the guarded default ``300,000``.
+- The explicit large probe with ``ACTIVE_SYMBOLIC_SUPERBLOCK_MAX_ACTIVE_SIZE``
+  raised to ``800,000``, ``max_superblock_size=16,384``, and a ``45 GiB``
+  factor cap failed closed after ``8:16.6`` wall time and ``38.99 GB`` peak RSS.
+  The setup admission rejected the factor with
+  ``max_rel=4.073e+06``, ``median_rel=2.465e+06``, and
+  ``min_improvement=3.684e-06``.  This is not production-viable.
+- The same Fortran v3 reference run uses MUMPS 5.8.2 with METIS ordering on the
+  same ``whichMatrix=0`` preconditioner matrix: ``648,977`` unknowns,
+  ``12,176,533`` nnz, estimated factor entries ``1.274e9``, effective factor
+  memory about ``15.3 GB``, and factorization time ``901 s``.  That explains
+  why a naive grouped Python LU can become both memory-heavy and weak: it does
+  not reproduce the global elimination tree/frontal coupling that MUMPS keeps.
+
+Decision:
+
+- Keep ``active_symbolic_superblock_lu`` as diagnostic infrastructure and a
+  small/intermediate-system candidate with strict admission.  Do not promote it
+  as a large production default.
+- The production lower-memory replacement cannot be solved by local grouped
+  blocks alone.  The next real algorithmic step is a reusable reduced-Pmat
+  elimination hierarchy: symbolic ordering plus a bounded frontal/Schur
+  elimination over source/constraint/profile moments and selected kinetic
+  separators, with retained-coupling gates before numeric factorization.
+
+Current open-lane status after this pass:
+
+- RHSMode=1 production solver lane: ``95%``.  Reliable high-memory active LU
+  remains the production fallback; the new superblock path is tested and
+  fail-closed.
+- Lower-memory/faster production replacement: ``91%``.  Direct reduced-Pmat
+  symbolic/numeric infrastructure now exists, but full-grid admission fails and
+  the MUMPS profile shows a true global elimination hierarchy is needed.
+- Production-floor example-suite evidence: ``68%``.  The additional QI row now
+  has fresh MUMPS-profiled Fortran evidence and two SFINCS_JAX superblock CPU
+  probes.
+- True device-QI/GPU: ``60%``.  No GPU production probe in this pass; office
+  GPUs were occupied by unrelated long jobs.
+- CI/docs/release evidence: ``92%`` with ``f76162b`` CI and Docs passing.
+- Overall average: ``81%``.  The repo is greener and the native factor
+  architecture is broader, but production full-grid lower-memory closure
+  remains a research lane.

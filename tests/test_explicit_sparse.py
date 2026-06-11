@@ -578,6 +578,28 @@ def test_symbolic_superblock_lu_admission_rejects_when_size_gate_drops_edges() -
     assert admission.reason == "residual_or_improvement_gate_failed"
 
 
+def test_symbolic_superblock_lu_can_reject_low_retained_coupling_before_factorization() -> None:
+    matrix = sp.csr_matrix(
+        [
+            [4.0, 1.0, 25.0, 0.0],
+            [2.0, 3.0, 0.0, 0.0],
+            [30.0, 0.0, 5.0, -1.0],
+            [0.0, 0.0, 1.0, 2.0],
+        ]
+    )
+
+    with pytest.raises(RuntimeError, match="retained insufficient cross-block coupling"):
+        factorize_host_sparse_operator(
+            matrix,
+            kind="symbolic_superblock_lu",
+            symbolic_ordering_kind="natural",
+            symbolic_block_size=2,
+            symbolic_superblock_max_size=2,
+            symbolic_superblock_max_blocks=1,
+            symbolic_superblock_min_retained_cross_fraction=0.5,
+        )
+
+
 def test_symbolic_block_lu_overlap_retains_boundary_couplings() -> None:
     matrix = sp.csr_matrix(
         [
