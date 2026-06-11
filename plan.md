@@ -28110,13 +28110,36 @@ Evidence:
   --select F821,F401,F811``: passed.
 - ``python -m compileall -q sfincs_jax/rhs1_full_assembly.py
   tests/test_rhs1_full_assembly.py`` and ``git diff --check``: passed.
+- Office CPU reference-reuse production probe on ``additional_examples`` at
+  ``25 x 51 x 100 x 8`` with probe-residual enrichment enabled failed closed
+  after ``27.33 s`` JAX time and ``2.57 GiB`` JAX RSS.  The admission metrics
+  were ``max_rel=1.958e+07``, ``median_rel=9.102e+06``, and
+  ``min_improvement=2.419e-06``.  This is not a material improvement over the
+  coupled kinetic/coarse baseline, so this enrichment is useful diagnostic
+  infrastructure but not the production fix for the QI full-grid row.
 
 Decision:
 
 - This is the next architecture to production-probe on ``additional_examples``.
-  It should either reduce the setup admission residual materially or fail closed
-  with the same bounded runtime/RSS behavior.  If it still reports
-  ``max_rel`` of order ``1e7``, then the residual modes are too global/dense for
-  the current sparse residual basis and the lower-memory replacement lane needs
-  a direct reduced-Pmat symbolic/numeric factor rather than more sparse coarse
-  enrichment.
+  It failed closed with the same bounded runtime/RSS behavior and still reports
+  ``max_rel`` of order ``1e7``.  The residual modes are therefore too global or
+  too densely coupled for the current sparse residual basis.  The lower-memory
+  replacement lane should move to direct reduced-Pmat symbolic/numeric factor
+  infrastructure rather than more sparse coarse enrichment.
+
+Current open-lane status after this pass:
+
+- RHSMode=1 production solver lane: ``95%``.  The robust high-memory active LU
+  path remains the reliable route; lower-memory replacements are fail-closed.
+- Lower-memory/faster production replacement: ``90%``.  Separator-Schur,
+  coupled kinetic/coarse, and probe-residual enrichment are implemented,
+  unit-tested, and production-probed.  None is residual-clean at full grid.
+- Production-floor example-suite evidence: ``66%``.  The additional QI
+  full-grid row now has fresh bounded CPU evidence on three new candidates, but
+  no solved lower-memory replacement.
+- True device-QI/GPU: ``60%``.  No new GPU evidence in this pass because office
+  GPUs were occupied by unrelated long jobs.
+- CI/docs/release evidence: ``90%`` pending the two CI jobs for commit
+  ``6400bfc``.
+- Overall average: ``80%``.  The code is safer and better instrumented, but
+  production full-grid lower-memory closure remains open.
