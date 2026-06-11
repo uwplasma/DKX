@@ -27701,6 +27701,9 @@ Follow-up evidence:
   ``prefill_budget_exceeded``, or an explicitly requested-but-not-selected
   preconditioner are now reported as ``solver policy fail-closed`` before the
   generic ``.nc`` geometry-path fallback is considered.
+- Suite reports now parse GNU ``/usr/bin/time -v`` elapsed time and peak RSS
+  from failed JAX logs, so controlled fail-closed production probes retain the
+  actual failed-attempt runtime and memory instead of showing null JAX metrics.
 
 Evidence:
 
@@ -27739,6 +27742,11 @@ Evidence:
   tests/test_v3_sparse_pattern.py::test_fortran_reduced_direct_tail_large_auto_fails_closed_before_host_factor_fallback
   tests/test_rhs1_full_assembly.py::test_active_fortran_v3_reduced_lu_large_default_prefill_rejects_observed_production_estimate``:
   ``6 passed``.
+- ``pytest -q tests/test_scaled_example_suite_reference.py -k
+  "classify_blocker or parse_gnu_time or fortran_timeout or fortran_profile"
+  tests/test_v3_sparse_pattern.py::test_fortran_reduced_direct_tail_large_auto_fails_closed_before_host_factor_fallback
+  tests/test_rhs1_full_assembly.py::test_active_fortran_v3_reduced_lu_large_default_prefill_rejects_observed_production_estimate``:
+  ``7 passed``.
 
 Decision:
 

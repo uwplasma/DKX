@@ -909,6 +909,25 @@ def _parse_jax_memory_profile_from_log(path: Path) -> dict[str, float | str | No
 
 _ELAPSED_S_PATTERN = re.compile(r"elapsed_s\s*=\s*([-+0-9.eEdD]+)")
 _REAL_TIME_PATTERN = re.compile(r"^\s*([-+0-9.]+)\s+real\b")
+_GNU_TIME_ELAPSED_PATTERN = re.compile(
+    r"elapsed\s*\(wall clock\).*:\s*([0-9]+(?::[0-9]+){1,2}(?:\.[0-9]+)?)",
+    flags=re.IGNORECASE,
+)
+
+
+def _parse_colon_elapsed_s(token: str) -> float | None:
+    parts = str(token).strip().split(":")
+    if len(parts) not in {2, 3}:
+        return None
+    try:
+        values = [float(part) for part in parts]
+    except ValueError:
+        return None
+    if len(values) == 2:
+        minutes, seconds = values
+        return float(60.0 * minutes + seconds)
+    hours, minutes, seconds = values
+    return float(3600.0 * hours + 60.0 * minutes + seconds)
 
 
 def _parse_elapsed_s_from_log(path: Path) -> float | None:
@@ -929,6 +948,11 @@ def _parse_elapsed_s_from_log(path: Path) -> float | None:
                 elapsed = float(match.group(1))
             except ValueError:
                 pass
+        match = _GNU_TIME_ELAPSED_PATTERN.search(line)
+        if match is not None:
+            parsed = _parse_colon_elapsed_s(match.group(1))
+            if parsed is not None:
+                elapsed = float(parsed)
     return elapsed
 
 
@@ -1009,6 +1033,35 @@ def _path_from_obj(obj: object | None) -> Path | None:
     if isinstance(obj, str) and obj.strip():
         return Path(obj)
     return None
+
+
+def _jax_attempt_metrics_from_log(path: Path | None) -> dict[str, float | str | None]:
+    """Return timing/RSS metrics available even when a JAX subprocess fails."""
+
+    if path is None or not path.exists():
+        return {
+            "jax_logged_elapsed_s": None,
+            "jax_max_rss_mb": None,
+            "jax_incremental_max_rss_mb": None,
+            "jax_rss_baseline_mb": None,
+            "jax_memory_metric_source": None,
+        }
+    profile = _parse_jax_memory_profile_from_log(path)
+    rss_candidates = [
+        value
+        for value in (
+            profile.get("jax_max_rss_mb"),
+            _parse_max_rss_mb_from_time_log(path),
+        )
+        if value is not None
+    ]
+    return {
+        "jax_logged_elapsed_s": _parse_elapsed_s_from_log(path),
+        "jax_max_rss_mb": max(float(value) for value in rss_candidates) if rss_candidates else None,
+        "jax_incremental_max_rss_mb": profile.get("jax_incremental_max_rss_mb"),
+        "jax_rss_baseline_mb": profile.get("jax_rss_baseline_mb"),
+        "jax_memory_metric_source": profile.get("jax_memory_metric_source"),
+    }
 
 
 def _hydrate_last_success_metrics(success: dict[str, object] | None) -> dict[str, object] | None:
@@ -2272,6 +2325,15 @@ def _run_case(
             jax_runtime = jax_runtime_warm if jax_runtime_warm is not None else jax_runtime_cold
             jax_h5_path = jax_h5
         except subprocess.TimeoutExpired:
+            jax_attempt_metrics = _jax_attempt_metrics_from_log(jax_log_path)
+            jax_logged_elapsed_s = jax_attempt_metrics.get("jax_logged_elapsed_s")
+            jax_max_rss_mb = jax_attempt_metrics.get("jax_max_rss_mb")
+            jax_incremental_max_rss_mb = jax_attempt_metrics.get("jax_incremental_max_rss_mb")
+            jax_rss_baseline_mb = jax_attempt_metrics.get("jax_rss_baseline_mb")
+            jax_memory_metric_source = jax_attempt_metrics.get("jax_memory_metric_source")
+            if jax_runtime is None:
+                jax_runtime = jax_logged_elapsed_s
+                jax_runtime_cold = jax_logged_elapsed_s
             note = "JAX timeout; reduced largest axis."
             saw_timeout = True
             fallback = last_success or disk_last_success
@@ -2288,6 +2350,15 @@ def _run_case(
             continue
         except Exception as exc:  # noqa: BLE001
             note = f"JAX error: {type(exc).__name__}: {exc}"
+            jax_attempt_metrics = _jax_attempt_metrics_from_log(jax_log_path)
+            jax_logged_elapsed_s = jax_attempt_metrics.get("jax_logged_elapsed_s")
+            jax_max_rss_mb = jax_attempt_metrics.get("jax_max_rss_mb")
+            jax_incremental_max_rss_mb = jax_attempt_metrics.get("jax_incremental_max_rss_mb")
+            jax_rss_baseline_mb = jax_attempt_metrics.get("jax_rss_baseline_mb")
+            jax_memory_metric_source = jax_attempt_metrics.get("jax_memory_metric_source")
+            if jax_runtime is None:
+                jax_runtime = jax_logged_elapsed_s
+                jax_runtime_cold = jax_logged_elapsed_s
             # Treat transient/runtime JAX failures similarly to timeout handling:
             # reduce the active resolution and retry before final failure.
             new_res = _scale_resolution_in_place(dst_input, factor=0.6)

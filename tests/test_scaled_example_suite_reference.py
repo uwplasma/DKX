@@ -33,6 +33,9 @@ from run_reduced_upstream_suite import _run_case  # noqa: E402
 from run_reduced_upstream_suite import _classify_blocker  # noqa: E402
 from run_reduced_upstream_suite import _parse_jax_rhs_norm_from_log  # noqa: E402
 from run_reduced_upstream_suite import _parse_fortran_solver_profile_from_log  # noqa: E402
+from run_reduced_upstream_suite import _parse_elapsed_s_from_log  # noqa: E402
+from run_reduced_upstream_suite import _parse_max_rss_mb_from_time_log  # noqa: E402
+from run_reduced_upstream_suite import _jax_attempt_metrics_from_log  # noqa: E402
 from run_reduced_upstream_suite import _reference_solve_quality_note  # noqa: E402
 from run_reduced_upstream_suite import _runtime_metric_for_basis  # noqa: E402
 from run_reduced_upstream_suite import _solver_tolerance_from_namelist  # noqa: E402
@@ -687,6 +690,23 @@ def test_classify_blocker_treats_fail_closed_solver_policy_before_geometry(tmp_p
         )
         == "solver policy fail-closed"
     )
+
+
+def test_parse_gnu_time_elapsed_and_rss_from_failed_jax_log(tmp_path: Path) -> None:
+    log_path = tmp_path / "sfincs_jax.log"
+    log_path.write_text(
+        "sfincs_jax write-output failed: direct-tail structured preconditioner was explicitly requested\n"
+        "\tElapsed (wall clock) time (h:mm:ss or m:ss): 0:25.51\n"
+        "\tMaximum resident set size (kbytes): 3553380\n"
+        "\tExit status: 2\n",
+        encoding="utf-8",
+    )
+
+    assert _parse_elapsed_s_from_log(log_path) == pytest.approx(25.51)
+    assert _parse_max_rss_mb_from_time_log(log_path) == pytest.approx(3553380.0 / 1024.0)
+    metrics = _jax_attempt_metrics_from_log(log_path)
+    assert metrics["jax_logged_elapsed_s"] == pytest.approx(25.51)
+    assert metrics["jax_max_rss_mb"] == pytest.approx(3553380.0 / 1024.0)
 
 
 def test_classify_blocker_treats_fortran_snes_divergence_as_reference_quality() -> None:
