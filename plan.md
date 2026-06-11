@@ -28481,3 +28481,63 @@ Current open-lane status after this pass:
 - Coverage/physics-gate lane: ``74%``.  Additional fast real gates now cover
   x0 velocity quadrature and PAS invariants.
 - Overall average: ``84%``.
+
+### 2026-06-11 continuation: reduced-Pmat symbolic elimination plan
+
+Goal:
+
+- Add the symbolic ordering/root contract needed for a native
+  ``whichMatrix=0`` reduced-Pmat factor hierarchy, using the new compressed
+  active-pitch layout as input.
+
+Implemented:
+
+- Added ``sfincs_jax.rhs1_reduced_pmat_plan`` with:
+  - ``RHS1ReducedPmatGroup`` for named symbolic groups and dense factor byte
+    estimates.
+  - ``RHS1ReducedPmatEliminationPlan`` for interior groups, selected kinetic
+    separator rows, explicit tail rows, Schur-root rows, complete permutation,
+    inverse permutation, and metadata.
+  - ``build_rhs1_reduced_pmat_elimination_plan`` to create a bounded symbolic
+    ordering over compressed active DOFs.  Kinetic interiors are split by
+    species/x block under a hard group-size cap; selected low-``ell`` kinetic
+    rows and explicit tail variables form the Schur root.  The selected
+    separator x nodes are bounded by a separator-size cap before any numeric
+    factorization.
+- Added ``tests/test_rhs1_reduced_pmat_plan.py`` to verify complete
+  permutations, tail-root ordering, separator selection, group-size caps,
+  inactive separator handling, and metadata byte estimates.
+
+Evidence:
+
+- ``python -m pytest tests/test_rhs1_reduced_pmat_plan.py
+  tests/test_rhs1_compressed_layout.py -q``: ``6 passed``.
+- ``python -m pytest tests/test_rhs1_reduced_pmat_plan.py
+  tests/test_rhs1_compressed_layout.py tests/test_rhs1_active_dof.py
+  tests/test_velocity_space_physics_gates.py tests/test_collision_physics_gates.py
+  tests/test_rhs1_full_assembly.py tests/test_v3_sparse_pattern.py -q``:
+  ``252 passed`` in ``1:44``.
+- ``ruff check sfincs_jax/rhs1_compressed_layout.py
+  sfincs_jax/rhs1_reduced_pmat_plan.py sfincs_jax/v3_driver.py
+  tests/test_rhs1_compressed_layout.py tests/test_rhs1_reduced_pmat_plan.py
+  tests/test_velocity_space_physics_gates.py
+  tests/test_collision_physics_gates.py`` and ``git diff --check``: passed.
+
+Decision:
+
+- This is the symbolic layer for the true native replacement path.  The next
+  code step is numeric: emit the reduced ``whichMatrix=0`` Pmat terms directly
+  into this ordering, starting with the diagonal/x-line kinetic terms and
+  source/constraint tails, then compare setup admission against the true active
+  operator before attempting production-grid promotion.
+
+Current open-lane status after this pass:
+
+- RHSMode=1 production solver lane: ``96%``.
+- Lower-memory/faster production replacement: ``94%``.  The symbolic hierarchy
+  now exists; the numeric reduced-Pmat assembler/factor is the main remaining
+  implementation blocker.
+- Production QA/QH/QI full-grid evidence: ``70%``.
+- True device-QI/GPU: ``60%``.
+- Coverage/physics-gate lane: ``75%``.
+- Overall average: ``85%``.
