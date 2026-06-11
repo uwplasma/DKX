@@ -322,6 +322,29 @@ Owner: incoming agent
     ``reference timeout``, confirming both the filter fix and the new blocker
     classification.
 
+### Execution status: structured Fortran/PETSc/MUMPS timeout evidence
+
+- ``scripts/run_reduced_upstream_suite.py`` now parses compact Fortran v3 solver
+  diagnostics from ``sfincs.log`` and attaches them to each ``CaseResult`` as
+  ``fortran_profile``.
+- Parsed fields include:
+  - matrix shape;
+  - ``whichMatrix`` nonzero counts;
+  - Jacobian/preconditioner assembly timings;
+  - solver package;
+  - MUMPS ``JOB/N/NNZ``;
+  - MPI/OMP counts;
+  - ordering method;
+  - estimated factor entries, real/integer factor spaces, max frontal size,
+    elimination-tree nodes, and estimated elimination operations.
+- This converts the office timeout evidence into machine-readable suite-report
+  fields so production campaign aggregation can identify factor-fill/setup
+  blockers without manually tailing logs.
+- Tests added:
+  - direct parser coverage for the office-style MUMPS excerpt;
+  - ``_run_case`` coverage proving a Fortran timeout row carries
+    ``fortran_profile`` and is classified as ``reference timeout``.
+
 ## 2026-06-10 Addendum: native block-Schur factor plus exact-Pmat LU admission rescue
 
 ### Implementation

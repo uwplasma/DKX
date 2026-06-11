@@ -312,6 +312,7 @@ class CaseResult:
     promoted_input_path: str | None
     fortran_h5: str | None
     jax_h5: str | None
+    fortran_profile: dict[str, object] | None = None
 
 
 def _runtime_metric_for_basis(
@@ -327,6 +328,113 @@ def _runtime_metric_for_basis(
     if not runtimes:
         return None
     return max(runtimes)
+
+
+def _last_float(pattern: str, text: str) -> float | None:
+    matches = re.findall(pattern, text, flags=re.IGNORECASE | re.MULTILINE)
+    if not matches:
+        return None
+    value = matches[-1]
+    if isinstance(value, tuple):
+        value = value[-1]
+    try:
+        return float(str(value).replace("D", "E").replace("d", "e"))
+    except ValueError:
+        return None
+
+
+def _last_int(pattern: str, text: str) -> int | None:
+    value = _last_float(pattern, text)
+    return None if value is None else int(value)
+
+
+def _parse_fortran_solver_profile_from_log(log_path: Path | None) -> dict[str, object] | None:
+    """Parse compact Fortran v3/PETSc/MUMPS diagnostics from a run log."""
+
+    if log_path is None or not log_path.exists():
+        return None
+    text = log_path.read_text(encoding="utf-8", errors="replace")
+    profile: dict[str, object] = {}
+
+    size_match = re.findall(r"The matrix is\s+(\d+)\s+x\s+(\d+)\s+elements", text, re.IGNORECASE)
+    if size_match:
+        rows, cols = size_match[-1]
+        profile["matrix_shape"] = [int(rows), int(cols)]
+
+    which_nnz: dict[str, int] = {}
+    active_which: str | None = None
+    for line in text.splitlines():
+        which_match = re.search(r"Running populateMatrix with whichMatrix\s*=\s*(\d+)", line, re.IGNORECASE)
+        if which_match is not None:
+            active_which = which_match.group(1)
+            continue
+        nnz_match = re.search(r"# of nonzeros in Jacobian(?: preconditioner)? matrix:\s*(\d+)", line, re.IGNORECASE)
+        if active_which is not None and nnz_match is not None:
+            which_nnz[active_which] = int(nnz_match.group(1))
+    if which_nnz:
+        profile["which_matrix_nnz"] = which_nnz
+        if "1" in which_nnz:
+            profile["matrix_nnz"] = which_nnz["1"]
+        if "0" in which_nnz:
+            profile["preconditioner_nnz"] = which_nnz["0"]
+
+    timings = {
+        "preassemble_preconditioner": _last_float(
+            r"Time to pre-assemble Jacobian preconditioner matrix:\s*([-+0-9.eEdD]+)", text
+        ),
+        "assemble_preconditioner": _last_float(
+            r"Time to assemble Jacobian preconditioner matrix:\s*([-+0-9.eEdD]+)", text
+        ),
+        "preassemble_jacobian": _last_float(
+            r"Time to pre-assemble Jacobian matrix:\s*([-+0-9.eEdD]+)", text
+        ),
+        "assemble_jacobian": _last_float(
+            r"Time to assemble Jacobian matrix:\s*([-+0-9.eEdD]+)", text
+        ),
+        "metis_reordering": _last_float(r"ELAPSED TIME SPENT IN METIS reordering\s*=\s*([-+0-9.eEdD]+)", text),
+        "symbolic_factorization": _last_float(r"ELAPSED TIME IN symbolic factorization\s*=\s*([-+0-9.eEdD]+)", text),
+    }
+    kept_timings = {key: value for key, value in timings.items() if value is not None}
+    if kept_timings:
+        profile["timings_s"] = kept_timings
+
+    mumps: dict[str, object] = {}
+    job_match = re.findall(
+        r"Entering DMUMPS.*?JOB,\s*N,\s*NNZ\s*=\s*(\d+)\s+(\d+)\s+(\d+)",
+        text,
+        flags=re.IGNORECASE,
+    )
+    if job_match:
+        job, n, nnz = job_match[-1]
+        mumps.update({"job": int(job), "n": int(n), "nnz": int(nnz)})
+    mpi_omp_match = re.findall(r"executing #MPI\s*=\s*(\d+)\s+and #OMP\s*=\s*(\d+)", text, re.IGNORECASE)
+    if mpi_omp_match:
+        n_mpi, n_omp = mpi_omp_match[-1]
+        mumps.update({"n_mpi_processes": int(n_mpi), "n_omp_threads": int(n_omp)})
+    ordering_match = re.findall(r"Ordering based on\s+([A-Za-z0-9_+-]+)", text, re.IGNORECASE)
+    if ordering_match:
+        mumps["ordering"] = ordering_match[-1]
+    for key, pattern in {
+        "estimated_factor_entries": r"Number of entries in factors \(estim\.\)\s*=\s*(\d+)",
+        "estimated_real_factor_space": r"Real space for factors\s+\(estimated\)\s*=\s*(\d+)",
+        "estimated_integer_factor_space": r"Integer space for factors \(estimated\)\s*=\s*(\d+)",
+        "estimated_max_frontal_size": r"Maximum frontal size\s+\(estimated\)\s*=\s*(\d+)",
+        "elimination_tree_nodes": r"Number of nodes in the tree\s*=\s*(\d+)",
+    }.items():
+        value = _last_int(pattern, text)
+        if value is not None:
+            mumps[key] = value
+    operations = _last_float(r"RINFOG\(1\) Operations during elimination \(estim\)=\s*([-+0-9.eEdD]+)", text)
+    if operations is not None:
+        mumps["estimated_elimination_operations"] = operations
+    if mumps:
+        profile["mumps"] = mumps
+
+    solver_match = re.findall(r"Solver package which will be used:\s*([A-Za-z0-9_+-]+)", text, re.IGNORECASE)
+    if solver_match:
+        profile["solver_package"] = solver_match[-1].strip().lower()
+
+    return profile or None
 
 
 def _select_case_input(
@@ -1764,6 +1872,7 @@ def _load_existing_results(report_json: Path) -> dict[str, CaseResult]:
             promoted_input_path=item.get("promoted_input_path"),
             fortran_h5=item.get("fortran_h5"),
             jax_h5=item.get("jax_h5"),
+            fortran_profile=item.get("fortran_profile") if isinstance(item.get("fortran_profile"), dict) else None,
         )
     return out
 
@@ -2413,6 +2522,7 @@ def _run_case(
             jax_log_path = _path_from_obj(fallback.get("jax_log")) or jax_log_path
 
     blocker_type = _classify_blocker(status=status, note=note, mismatch_keys=mismatch_keys, jax_log=jax_log_path)
+    fortran_profile = _parse_fortran_solver_profile_from_log(fortran_log_path)
 
     return CaseResult(
         case=case,
@@ -2461,6 +2571,7 @@ def _run_case(
         promoted_input_path=None,
         fortran_h5=_repo_rel(fortran_h5_path),
         jax_h5=_repo_rel(jax_h5_path),
+        fortran_profile=fortran_profile,
     )
 
 

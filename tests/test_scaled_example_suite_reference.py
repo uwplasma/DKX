@@ -32,6 +32,7 @@ from run_reduced_upstream_suite import CaseResult  # noqa: E402
 from run_reduced_upstream_suite import _run_case  # noqa: E402
 from run_reduced_upstream_suite import _classify_blocker  # noqa: E402
 from run_reduced_upstream_suite import _parse_jax_rhs_norm_from_log  # noqa: E402
+from run_reduced_upstream_suite import _parse_fortran_solver_profile_from_log  # noqa: E402
 from run_reduced_upstream_suite import _reference_solve_quality_note  # noqa: E402
 from run_reduced_upstream_suite import _runtime_metric_for_basis  # noqa: E402
 from run_reduced_upstream_suite import _solver_tolerance_from_namelist  # noqa: E402
@@ -671,6 +672,114 @@ def test_classify_blocker_treats_fortran_timeout_as_reference_timeout() -> None:
         )
         == "reference timeout"
     )
+
+
+def test_parse_fortran_solver_profile_from_mumps_timeout_log(tmp_path: Path) -> None:
+    log_path = tmp_path / "sfincs.log"
+    log_path.write_text(
+        """
+ The matrix is       648977 x      648977  elements.
+ Solver package which will be used: mumps
+ Running populateMatrix with whichMatrix =            0
+ Time to pre-assemble Jacobian preconditioner matrix:    1.9041487920000000       seconds.
+ Time to assemble Jacobian preconditioner matrix:    5.6573986999999715E-002  seconds.
+ # of nonzeros in Jacobian preconditioner matrix:    12176533 , allocated:    48044552 , mallocs:           0
+ Running populateMatrix with whichMatrix =            1
+ Time to pre-assemble Jacobian matrix:    1.8479550460000000       seconds.
+ Time to assemble Jacobian matrix:    5.8177826999999738E-002  seconds.
+ # of nonzeros in Jacobian matrix:    15165133 , allocated:    48044552 , mallocs:           0
+Entering DMUMPS 5.8.2 from C interface with JOB, N, NNZ =   1      648977       12176533
+      executing #MPI =      1 and #OMP =     36
+ Ordering based on METIS
+ ELAPSED TIME SPENT IN METIS reordering  =      8.8168
+ ELAPSED TIME IN symbolic factorization  =      0.1709
+ -- (20) Number of entries in factors (estim.)  =      1274005121
+ --  (3) Real space for factors    (estimated)  =      1274005121
+ --  (4) Integer space for factors (estimated)  =        14044192
+ --  (5) Maximum frontal size      (estimated)  =            5330
+ --  (6) Number of nodes in the tree            =          132305
+ RINFOG(1) Operations during elimination (estim)= 3.078D+12
+""",
+        encoding="utf-8",
+    )
+
+    profile = _parse_fortran_solver_profile_from_log(log_path)
+
+    assert profile is not None
+    assert profile["solver_package"] == "mumps"
+    assert profile["matrix_shape"] == [648977, 648977]
+    assert profile["matrix_nnz"] == 15165133
+    assert profile["preconditioner_nnz"] == 12176533
+    assert profile["which_matrix_nnz"] == {"0": 12176533, "1": 15165133}
+    assert profile["timings_s"]["preassemble_preconditioner"] == pytest.approx(1.904148792)
+    assert profile["timings_s"]["metis_reordering"] == pytest.approx(8.8168)
+    assert profile["mumps"]["n"] == 648977
+    assert profile["mumps"]["nnz"] == 12176533
+    assert profile["mumps"]["n_omp_threads"] == 36
+    assert profile["mumps"]["ordering"] == "METIS"
+    assert profile["mumps"]["estimated_factor_entries"] == 1274005121
+    assert profile["mumps"]["estimated_elimination_operations"] == pytest.approx(3.078e12)
+
+
+def test_run_case_reports_fortran_timeout_profile(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    input_path = tmp_path / "input.namelist"
+    input_path.write_text(
+        "&resolutionParameters\n"
+        "  NTHETA = 25\n"
+        "  NZETA = 51\n"
+        "  NX = 8\n"
+        "  NXI = 100\n"
+        "/\n",
+        encoding="utf-8",
+    )
+
+    def fake_run_fortran_direct(*, input_path, exe, timeout_s, log_path):  # noqa: ANN001
+        log_path.write_text(
+            "The matrix is 648977 x 648977 elements.\n"
+            "Running populateMatrix with whichMatrix = 0\n"
+            "# of nonzeros in Jacobian preconditioner matrix: 12176533 , allocated: 48044552\n"
+            "Entering DMUMPS 5.8.2 from C interface with JOB, N, NNZ =   1      648977       12176533\n"
+            "-- (20) Number of entries in factors (estim.)  =      1274005121\n",
+            encoding="utf-8",
+        )
+        raise reduced_suite.subprocess.TimeoutExpired(cmd=["sfincs"], timeout=timeout_s)
+
+    def fail_if_jax_runs(**kwargs):  # noqa: ANN003
+        raise AssertionError("JAX should not run when the Fortran reference times out")
+
+    monkeypatch.setattr(reduced_suite, "_run_fortran_direct", fake_run_fortran_direct)
+    monkeypatch.setattr(reduced_suite, "_run_jax_cli", fail_if_jax_runs)
+
+    result = _run_case(
+        case_name="production_timeout",
+        case_input=input_path,
+        reference_input=input_path,
+        case_out_dir=tmp_path / "out",
+        fortran_exe=tmp_path / "fake_sfincs",
+        timeout_s=1.0,
+        rtol=5e-4,
+        atol=1e-9,
+        max_attempts=1,
+        target_runtime_s=None,
+        target_runtime_max_s=None,
+        target_runtime_max_iters=0,
+        target_runtime_basis="fortran",
+        use_seed_resolution=True,
+        reuse_fortran=False,
+        collect_iterations=True,
+        jax_repeats=1,
+        jax_cache_dir=None,
+        jax_profile_mode="off",
+    )
+
+    assert result.status == "max_attempts"
+    assert result.blocker_type == "reference timeout"
+    assert result.fortran_profile is not None
+    assert result.fortran_profile["matrix_shape"] == [648977, 648977]
+    assert result.fortran_profile["preconditioner_nnz"] == 12176533
+    assert result.fortran_profile["mumps"]["estimated_factor_entries"] == 1274005121
 
 
 def test_run_case_reports_fortran_snes_divergence_without_max_attempts(
