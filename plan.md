@@ -27686,6 +27686,13 @@ Follow-up evidence:
   factorization under both ``16 GiB`` and ``45 GiB`` caps.  This prevents the
   exact reduced-LU path from repeating the production OOM/SIGKILL failure by
   default.
+- Large RHSMode=1 direct-tail ``auto`` structured-preconditioner requests now
+  fail closed above ``300,000`` active unknowns if the structured candidate is
+  rejected.  This prevents a production-grid default run from silently falling
+  through into the generic host sparse-factor fallback after the structured
+  preflight fails.  Users can still opt into explicit experimental policies,
+  but the default no longer risks an unbounded host factorization after the
+  observed ``additional_examples`` production failure.
 - Fixed suite blocker classification so JAX SIGKILL/SIGTERM/OOM-style failures
   are reported as ``jax resource/signal`` instead of being misclassified as
   ``geometry parsing mismatch`` when the error text also contains ``.nc`` paths.
@@ -27699,6 +27706,22 @@ Evidence:
   tests/test_rhs1_full_assembly.py::test_active_fortran_v3_reduced_lu_prefill_gate_rejects_before_factorization
   tests/test_rhs1_full_assembly.py::test_active_projected_auto_ladder_uses_large_default_candidates``:
   ``3 passed``.
+- ``pytest -q
+  tests/test_v3_sparse_pattern.py::test_fortran_reduced_direct_tail_large_auto_fails_closed_before_host_factor_fallback
+  tests/test_rhs1_full_assembly.py::test_active_fortran_v3_reduced_lu_large_default_prefill_rejects_observed_production_estimate
+  tests/test_scaled_example_suite_reference.py -k "classify_blocker or
+  fortran_timeout or fortran_profile"``: ``5 passed``.
+- ``python -m compileall -q sfincs_jax/v3_driver.py
+  tests/test_v3_sparse_pattern.py sfincs_jax/rhs1_full_assembly.py
+  tests/test_rhs1_full_assembly.py scripts/run_reduced_upstream_suite.py
+  scripts/summarize_production_stress_campaign.py``: passed.
+- ``ruff check sfincs_jax/v3_driver.py tests/test_v3_sparse_pattern.py
+  sfincs_jax/rhs1_full_assembly.py tests/test_rhs1_full_assembly.py
+  scripts/run_reduced_upstream_suite.py
+  scripts/summarize_production_stress_campaign.py
+  tests/test_scaled_example_suite_reference.py
+  tests/test_summarize_production_stress_campaign.py --select
+  F821,F401,F811``: passed.
 
 Decision:
 

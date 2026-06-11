@@ -31195,11 +31195,23 @@ def solve_v3_full_system_linear_gmres(
             direct_tail_structured_pc_requested = "auto"
         else:
             direct_tail_structured_pc_requested = direct_tail_pc_env
+        direct_tail_fail_closed_size = _rhs1_int_env(
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_STRUCTURED_PC_FAIL_CLOSED_SIZE",
+            default=300_000,
+        )
+        direct_tail_auto_large_fail_closed = bool(
+            direct_tail_structured_pc_requested is not None
+            and direct_tail_pc_env in {"", "auto", "active_auto", "structured"}
+            and int(sparse_pc_linear_size) >= int(direct_tail_fail_closed_size)
+        )
         direct_tail_structured_pc_required = _rhs1_bool_env(
             "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_STRUCTURED_PC_REQUIRED",
             default=bool(
-                direct_tail_structured_pc_requested is not None
-                and direct_tail_pc_env not in {"auto", "active_auto", "structured"}
+                direct_tail_auto_large_fail_closed
+                or (
+                    direct_tail_structured_pc_requested is not None
+                    and direct_tail_pc_env not in {"auto", "active_auto", "structured"}
+                )
             ),
         )
         if emit is not None:

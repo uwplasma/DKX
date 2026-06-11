@@ -1587,6 +1587,42 @@ def test_fortran_reduced_direct_tail_auto_retries_active_lu_after_native_preflig
     )
 
 
+def test_fortran_reduced_direct_tail_large_auto_fails_closed_before_host_factor_fallback(
+    monkeypatch,
+) -> None:
+    v3_driver_module._DIRECT_TAIL_STRUCTURED_PC_CACHE.clear()
+    here = Path(__file__).parent
+    nml = read_sfincs_input(here / "ref" / "quick_2species_FPCollisions_noEr.input.namelist")
+    nml.group("resolutionParameters")["NTHETA"] = 5
+    nml.group("resolutionParameters")["NZETA"] = 5
+    nml.group("resolutionParameters")["NXI"] = 4
+    nml.group("resolutionParameters")["NX"] = 3
+    monkeypatch.setenv("SFINCS_JAX_ACTIVE_DOF", "0")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_XBLOCK_MIN_SIZE", "1")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_CONSTRAINT_TAIL", "1")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_PRECONDITIONER", "auto")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_PC_MAX_MB", "1e-6")
+    monkeypatch.setenv(
+        "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_STRUCTURED_PC_FAIL_CLOSED_SIZE",
+        "1",
+    )
+    monkeypatch.setenv("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_AUTO_LARGE_FALLBACK_SIZE", "1")
+    monkeypatch.setenv("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_AUTO_LARGE_CANDIDATES", "active_fortran_v3_reduced_lu")
+    messages: list[str] = []
+
+    with pytest.raises(RuntimeError, match="direct-tail structured preconditioner was explicitly requested"):
+        solve_v3_full_system_linear_gmres(
+            nml=nml,
+            solve_method="fortran_reduced_pc_gmres",
+            tol=1.0e-8,
+            maxiter=80,
+            emit=lambda _level, msg: messages.append(msg),
+        )
+
+    assert any("structured preconditioner not selected" in msg for msg in messages)
+    assert not any("sparse_pc_gmres host sparse factor built" in msg for msg in messages)
+
+
 def test_structured_direct_tail_uses_actual_csr_budget_instead_of_preflight() -> None:
     here = Path(__file__).parent
     nml = read_sfincs_input(here / "ref" / "quick_2species_FPCollisions_noEr.input.namelist")
