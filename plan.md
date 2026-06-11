@@ -27696,6 +27696,11 @@ Follow-up evidence:
 - Fixed suite blocker classification so JAX SIGKILL/SIGTERM/OOM-style failures
   are reported as ``jax resource/signal`` instead of being misclassified as
   ``geometry parsing mismatch`` when the error text also contains ``.nc`` paths.
+- Added a second blocker classification fix for controlled solver-policy stops:
+  logs containing ``active_auto_no_safe_large_candidate_selected``,
+  ``prefill_budget_exceeded``, or an explicitly requested-but-not-selected
+  preconditioner are now reported as ``solver policy fail-closed`` before the
+  generic ``.nc`` geometry-path fallback is considered.
 
 Evidence:
 
@@ -27722,6 +27727,18 @@ Evidence:
   tests/test_scaled_example_suite_reference.py
   tests/test_summarize_production_stress_campaign.py --select
   F821,F401,F811``: passed.
+- Office CPU reference-reuse fail-closed verification on commit ``5a8c1f6``:
+  production ``additional_examples`` at ``25 x 51 x 100 x 8`` returned in
+  ``25.51 s`` wall, used ``3,553,380 KB`` peak RSS, materialized the direct-tail
+  Pmat in ``19.796 s``, rejected the exact reduced-LU candidate by prefill
+  budget in ``1.737 s``, and stopped before the generic host sparse-factor
+  fallback.  This confirms the default no longer repeats the earlier
+  ``47.96 GiB`` SIGKILL path.
+- ``pytest -q tests/test_scaled_example_suite_reference.py -k
+  "classify_blocker or fortran_timeout or fortran_profile"
+  tests/test_v3_sparse_pattern.py::test_fortran_reduced_direct_tail_large_auto_fails_closed_before_host_factor_fallback
+  tests/test_rhs1_full_assembly.py::test_active_fortran_v3_reduced_lu_large_default_prefill_rejects_observed_production_estimate``:
+  ``6 passed``.
 
 Decision:
 

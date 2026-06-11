@@ -663,6 +663,32 @@ def test_classify_blocker_treats_jax_signal_and_oom_as_resource_failure(tmp_path
     )
 
 
+def test_classify_blocker_treats_fail_closed_solver_policy_before_geometry(tmp_path: Path) -> None:
+    log_path = tmp_path / "sfincs_jax.log"
+    log_path.write_text(
+        "solve_v3_full_system_linear_gmres: VMEC operator build start "
+        "(wout_QI_nfp2_stable_Er_006_000043_hires_scaled.nc)\n"
+        "active_projected_rhs1_full_csr_preconditioner: auto candidate done "
+        "kind=active_fortran_v3_reduced_lu selected=False "
+        "reason=active_fortran_v3_pc_matrix_lu_prefill_budget_exceeded:56607878656>17179869184\n"
+        "solve_v3_full_system_linear_gmres: fortran_reduced direct-tail structured "
+        "preconditioner not selected kind=auto reason=active_auto_no_safe_large_candidate_selected\n"
+        "sfincs_jax write-output failed: direct-tail structured preconditioner was "
+        "explicitly requested but not selected\n",
+        encoding="utf-8",
+    )
+
+    assert (
+        _classify_blocker(
+            status="jax_error",
+            note="JAX error: CalledProcessError returned non-zero exit status 2.",
+            mismatch_keys=[],
+            jax_log=log_path,
+        )
+        == "solver policy fail-closed"
+    )
+
+
 def test_classify_blocker_treats_fortran_snes_divergence_as_reference_quality() -> None:
     assert (
         _classify_blocker(

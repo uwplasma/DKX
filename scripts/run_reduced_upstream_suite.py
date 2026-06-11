@@ -1808,6 +1808,15 @@ def _classify_blocker(*, status: str, note: str, mismatch_keys: list[str], jax_l
         return "jax resource/signal"
     if "cusolver_" in text or "xla_ffi" in text or "ffi_python_gpu_callback" in text:
         return "solver branch mismatch"
+    if (
+        "fail closed" in text
+        or "fail-closed" in text
+        or "preconditioner was explicitly requested but not selected" in text
+        or "active_auto_no_safe_large_candidate_selected" in text
+        or "prefill_budget_exceeded" in text
+        or "structured preconditioner not selected" in text
+    ):
+        return "solver policy fail-closed"
     if "notimplemented" in text or "unsupported" in text or "todo" in text:
         return "unsupported physics/path"
     if "equilibrium" in text or "geometryscheme" in text or ".bc" in text or ".nc" in text or "netcdf" in text:
