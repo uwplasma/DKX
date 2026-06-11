@@ -28193,7 +28193,10 @@ Evidence:
   failed closed in ``44.9 s`` and ``2.97 GB`` RSS, before the expensive
   numerical factorization.  This confirms the new gate prevents the previous
   ``39 GB`` diagnostic attempt when the symbolic grouping cannot retain enough
-  of the reduced-Pmat coupling.
+  of the reduced-Pmat coupling.  A root-cause logging rerun on commit
+  ``30b4928`` reported retained fraction ``0.918233`` with
+  ``10,455,691`` retained and ``931,061`` dropped cross-block nonzeros, and
+  exited in ``48.3 s`` with ``2.96 GB`` RSS.
 - The same Fortran v3 reference run uses MUMPS 5.8.2 with METIS ordering on the
   same ``whichMatrix=0`` preconditioner matrix: ``648,977`` unknowns,
   ``12,176,533`` nnz, estimated factor entries ``1.274e9``, effective factor
