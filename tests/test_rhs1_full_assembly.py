@@ -2328,6 +2328,42 @@ def test_active_filtered_sparse_factor_retains_selected_offdiagonal_couplings(mo
     assert np.all(np.isfinite(applied))
 
 
+def test_active_filtered_sparse_factor_prefill_gate_rejects_before_factorization(monkeypatch) -> None:
+    layout = RHS1BlockLayout(
+        n_species=1,
+        n_x=1,
+        n_xi=2,
+        n_theta=2,
+        n_zeta=1,
+        f_size=4,
+        phi1_size=0,
+        extra_size=2,
+        total_size=6,
+        constraint_scheme=1,
+        include_phi1=False,
+        include_phi1_in_kinetic=False,
+        rhs_mode=1,
+    )
+    matrix = sp.eye(layout.total_size, dtype=np.float64, format="csr")
+    monkeypatch.setenv("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_FILTERED_FACTOR_LARGE_SIZE", "1")
+    monkeypatch.setenv("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_FILTERED_FACTOR_PREFILL_SAFETY_FACTOR", "10")
+
+    pc = build_active_projected_rhs1_full_csr_preconditioner(
+        matrix=matrix,
+        layout=layout,
+        active_indices=np.arange(layout.total_size, dtype=np.int64),
+        kind="active_filtered_sparse_factor",
+        max_factor_nbytes=1000,
+        regularization=0.0,
+    )
+
+    assert not pc.selected
+    assert pc.reason.startswith("active_filtered_sparse_factor_prefill_budget_exceeded:")
+    assert pc.metadata["factor_nbytes_estimate"] < pc.metadata["max_factor_nbytes"]
+    assert pc.metadata["factor_nbytes_prefill_estimate"] > pc.metadata["max_factor_nbytes"]
+    assert pc.metadata["prefill_safety_factor"] == 10.0
+
+
 def test_active_symbolic_coupled_schur_can_use_coupled_kinetic_factor_base(monkeypatch) -> None:
     layout = RHS1BlockLayout(
         n_species=1,

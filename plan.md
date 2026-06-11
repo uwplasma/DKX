@@ -27764,6 +27764,11 @@ Evidence:
   and peak RSS ``2.61 GiB``.  The setup timeout is closed; the production solve
   remains open because no bounded candidate has yet reduced the true residual
   enough to enter and finish Krylov at this grid.
+- Added a prefill safety gate and large-system progress telemetry for
+  ``active_filtered_sparse_factor``.  The candidate now prints filtered nnz,
+  raw factor estimate, safety-adjusted prefill estimate, and memory budget
+  before calling SuperLU, and rejects before factorization if the
+  safety-adjusted estimate exceeds the budget.
 - ``pytest -q tests/test_scaled_example_suite_reference.py -k
   "classify_blocker or fortran_timeout or fortran_profile"
   tests/test_v3_sparse_pattern.py::test_fortran_reduced_direct_tail_large_auto_fails_closed_before_host_factor_fallback
@@ -27782,6 +27787,13 @@ Evidence:
   ``8 passed``.
 - ``pytest -q tests/test_rhs1_full_assembly.py -k
   "symbolic_coupled_schur or
+  active_fortran_v3_reduced_lu_large_default_prefill"
+  tests/test_scaled_example_suite_reference.py -k "classify_blocker or
+  parse_gnu_time or timeout_marker or fortran_timeout or fortran_profile"
+  tests/test_v3_sparse_pattern.py::test_fortran_reduced_direct_tail_large_auto_fails_closed_before_host_factor_fallback``:
+  ``8 passed``.
+- ``pytest -q tests/test_rhs1_full_assembly.py -k
+  "active_filtered_sparse_factor or symbolic_coupled_schur or
   active_fortran_v3_reduced_lu_large_default_prefill"
   tests/test_scaled_example_suite_reference.py -k "classify_blocker or
   parse_gnu_time or timeout_marker or fortran_timeout or fortran_profile"

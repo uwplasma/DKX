@@ -5281,6 +5281,30 @@ def _build_active_projected_filtered_sparse_factor_preconditioner(
     sparse_estimate = int(_estimate_spilu_factor_nbytes(matrix=filtered, fill_factor=fill_factor))
     dense_estimate = int(n_active * n_active * np.dtype(np.float64).itemsize)
     factor_estimate = int(filtered_nbytes + (sparse_estimate if factor_kind == "spilu" else max(sparse_estimate, dense_estimate)))
+    large_size = int(_env_int("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_FILTERED_FACTOR_LARGE_SIZE", 300_000))
+    large_matrix = int(large_size) > 0 and int(n_active) >= int(large_size)
+    prefill_safety_default = 4.0 if bool(large_matrix) else 1.0
+    prefill_safety = max(
+        1.0,
+        float(
+            _env_float(
+                "SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_FILTERED_FACTOR_PREFILL_SAFETY_FACTOR",
+                prefill_safety_default,
+            )
+        ),
+    )
+    prefill_estimate = int(np.ceil(float(factor_estimate) * float(prefill_safety)))
+    progress = _env_bool("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_FILTERED_FACTOR_PROGRESS", bool(large_matrix))
+    if bool(progress):
+        print(
+            "active_filtered_sparse_factor: setup "
+            f"n={int(n_active)} matrix_nnz={int(matrix_csr.nnz)} filtered_nnz={int(filtered.nnz)} "
+            f"factor_kind={factor_kind} fill_factor={float(fill_factor):.3g} "
+            f"drop_tol={float(drop_tol):.3g} estimate_mb={float(factor_estimate) / (1024.0 * 1024.0):.1f} "
+            f"prefill_estimate_mb={float(prefill_estimate) / (1024.0 * 1024.0):.1f} "
+            f"budget_mb={float(max_factor_nbytes) / (1024.0 * 1024.0):.1f}",
+            flush=True,
+        )
     if factor_estimate > int(max_factor_nbytes):
         return RHS1StructuredFullCSRPreconditioner(
             operator=None,
@@ -5305,6 +5329,38 @@ def _build_active_projected_filtered_sparse_factor_preconditioner(
                 "ell_radius": int(ell_radius),
                 "theta_radius": int(theta_radius),
                 "zeta_radius": int(zeta_radius),
+                "large_matrix_defaults": bool(large_matrix),
+                "prefill_safety_factor": float(prefill_safety),
+                "factor_nbytes_prefill_estimate": int(prefill_estimate),
+            },
+        )
+    if prefill_estimate > int(max_factor_nbytes):
+        return RHS1StructuredFullCSRPreconditioner(
+            operator=None,
+            selected=False,
+            kind="active_filtered_sparse_factor",
+            reason=f"active_filtered_sparse_factor_prefill_budget_exceeded:{prefill_estimate}>{int(max_factor_nbytes)}",
+            setup_s=max(0.0, time.perf_counter() - t0),
+            metadata={
+                "active_size": int(n_active),
+                "matrix_nnz": int(matrix_csr.nnz),
+                "filtered_nnz": int(filtered.nnz),
+                "retained_fraction": float(filtered.nnz / max(int(matrix_csr.nnz), 1)),
+                "filtered_nbytes_actual": int(filtered_nbytes),
+                "factor_nbytes_estimate": int(factor_estimate),
+                "factor_nbytes_prefill_estimate": int(prefill_estimate),
+                "sparse_factor_nbytes_estimate": int(sparse_estimate),
+                "dense_factor_nbytes_estimate": int(dense_estimate),
+                "max_factor_nbytes": int(max_factor_nbytes),
+                "factor_kind": str(factor_kind),
+                "fill_factor": float(fill_factor),
+                "drop_tol": float(drop_tol),
+                "x_radius": int(x_radius),
+                "ell_radius": int(ell_radius),
+                "theta_radius": int(theta_radius),
+                "zeta_radius": int(zeta_radius),
+                "large_matrix_defaults": bool(large_matrix),
+                "prefill_safety_factor": float(prefill_safety),
             },
         )
 
@@ -5383,6 +5439,7 @@ def _build_active_projected_filtered_sparse_factor_preconditioner(
             "tail_or_diagonal_nnz": int(np.count_nonzero(diagonal_mask | tail_mask)),
             "filtered_nbytes_actual": int(filtered_nbytes),
             "factor_nbytes_estimate": int(factor_estimate),
+            "factor_nbytes_prefill_estimate": int(prefill_estimate),
             "factor_nbytes_actual": int(actual_total),
             "local_factor_nbytes_actual": int(factor_nbytes),
             "max_factor_nbytes": int(max_factor_nbytes),
@@ -5390,6 +5447,8 @@ def _build_active_projected_filtered_sparse_factor_preconditioner(
             "factor_nnz": int(factor.L.nnz + factor.U.nnz),
             "fill_factor": float(fill_factor),
             "drop_tol": float(drop_tol),
+            "prefill_safety_factor": float(prefill_safety),
+            "large_matrix_defaults": bool(large_matrix),
             "diag_pivot_thresh": float(diag_pivot),
             "permc_spec": str(permc_spec),
             "diagonal_shift": float(diagonal_shift),
