@@ -37,12 +37,17 @@ Owner: incoming agent
   LU.  This is controlled by
   ``SFINCS_JAX_*SYMBOLIC_ND_MAX_TERMINAL_FACTOR_SIZE`` in the generic,
   RHSMode=2/3 transport, and RHSMode=1 active paths.
+- Added fail-fast setup-time guards to the multilevel factor, controlled by
+  ``SFINCS_JAX_*SYMBOLIC_ND_MAX_SETUP_S`` in the generic, RHSMode=2/3
+  transport, and RHSMode=1 active paths.  This prevents production CLI runs
+  from spending many minutes inside Python-side Schur construction without a
+  clear admission result.
 
 ### Evidence
 
 - Low-level ND sparse tests pass:
   ``python -m pytest -q tests/test_explicit_sparse.py -k "symbolic_nd_frontal_schur_lu"``
-  with ``4 passed``.
+  with ``5 passed``.
 - Generic host-builder and transport reduced-Pmat ND tests pass:
   ``python -m pytest -q tests/test_fortran_reduced_preconditioner.py -k
   "host_sparse_builder_env_accepts_symbolic_nd_frontal or nd_frontal_residual_polish"``
@@ -79,6 +84,14 @@ Owner: incoming agent
   with ``176 passed`` in about ``60 s``.
 - Full local suite after the ND/terminal-guard integration:
   ``python -m pytest -q`` with ``2491 passed`` in ``630.49 s``.
+- JAX-only production-floor ``transportMatrix_geometryScheme11`` probe with
+  deeper ND settings reached actual ``symbolic_nd_frontal_schur_lu`` setup
+  (not prefill rejection) but hit the ``600 s`` cap before factor/admission
+  completion.  Peak RSS was about ``10.2 GB``.  This confirms the next blocker
+  is Python-side recursive Schur setup latency for the full production matrix,
+  not residual accuracy on the reduced fixtures.  The production path should
+  remain opt-in until chunked/vectorized Schur update construction, setup
+  progress logging, and intermediate setup-budget admission pass.
 
 ### Decision
 

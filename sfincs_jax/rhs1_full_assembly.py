@@ -6244,6 +6244,10 @@ def _build_active_projected_symbolic_frontal_schur_lu_preconditioner(
         0,
         int(_env_int("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_SYMBOLIC_ND_MAX_DENSE_RHS_COLS_PER_CHILD", 0)),
     )
+    nd_max_setup_s = max(
+        0.0,
+        float(_env_float("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_SYMBOLIC_ND_MAX_SETUP_S", 0.0)),
+    )
     nd_residual_polish_steps = max(
         0,
         int(_env_int("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_SYMBOLIC_ND_RESIDUAL_POLISH_STEPS", 2)),
@@ -6316,6 +6320,7 @@ def _build_active_projected_symbolic_frontal_schur_lu_preconditioner(
             symbolic_nd_regularization_rel=regularization_rel,
             symbolic_nd_max_dense_rhs_entries=nd_max_dense_rhs_entries,
             symbolic_nd_max_dense_rhs_cols_per_child=nd_max_dense_rhs_cols_per_child,
+            symbolic_nd_max_setup_s=nd_max_setup_s,
             symbolic_nd_residual_polish_steps=nd_residual_polish_steps,
             symbolic_nd_residual_polish_damping=nd_residual_polish_damping,
         )
@@ -6479,6 +6484,7 @@ def _build_active_projected_symbolic_frontal_schur_lu_preconditioner(
             "symbolic_nd_high_degree_cols": int(nd_high_degree_cols),
             "symbolic_nd_max_dense_rhs_entries": int(nd_max_dense_rhs_entries),
             "symbolic_nd_max_dense_rhs_cols_per_child": int(nd_max_dense_rhs_cols_per_child),
+            "symbolic_nd_max_setup_s": float(nd_max_setup_s),
             "symbolic_nd_residual_polish_steps": int(nd_residual_polish_steps),
             "symbolic_nd_residual_polish_damping": float(nd_residual_polish_damping),
             "symbolic_factor_metadata": dict(inner_factor_metadata) if isinstance(inner_factor_metadata, dict) else {},

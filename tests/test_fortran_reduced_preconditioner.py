@@ -367,12 +367,14 @@ def test_host_sparse_builder_env_accepts_symbolic_nd_frontal(monkeypatch: pytest
         default_symbolic_nd_max_separator_cols=3,
         default_symbolic_nd_high_degree_cols=0,
         default_symbolic_nd_regularization_rel=0.0,
+        default_symbolic_nd_max_setup_s=60.0,
     )
 
     rhs = np.linspace(-1.0, 1.0, n, dtype=np.float64)
     assert factor.kind == "symbolic_nd_frontal_schur_lu"
     assert factor.factor.node_count > 1
     assert factor.factor.metadata["max_terminal_factor_size"] == 12
+    assert factor.factor.metadata["max_setup_s"] == 60.0
     np.testing.assert_allclose(a @ factor.solve(rhs), rhs, rtol=1e-11, atol=1e-11)
 
 
@@ -690,6 +692,7 @@ def test_transport_fortran_reduced_lu_admits_nd_frontal_residual_polish_on_reduc
     monkeypatch.setenv("SFINCS_JAX_TRANSPORT_FP_FORTRAN_REDUCED_LU_SYMBOLIC_ND_MAX_SEPARATOR_COLS", "4096")
     monkeypatch.setenv("SFINCS_JAX_TRANSPORT_FP_FORTRAN_REDUCED_LU_SYMBOLIC_ND_HIGH_DEGREE_COLS", "256")
     monkeypatch.setenv("SFINCS_JAX_TRANSPORT_FP_FORTRAN_REDUCED_LU_SYMBOLIC_ND_MAX_DENSE_RHS_ENTRIES", "400000000")
+    monkeypatch.setenv("SFINCS_JAX_TRANSPORT_FP_FORTRAN_REDUCED_LU_SYMBOLIC_ND_MAX_SETUP_S", "60")
     monkeypatch.setenv("SFINCS_JAX_TRANSPORT_FP_FORTRAN_REDUCED_LU_SYMBOLIC_ND_RESIDUAL_POLISH_STEPS", "2")
 
     nml = read_sfincs_input(input_path)
@@ -724,7 +727,9 @@ def test_transport_fortran_reduced_lu_admits_nd_frontal_residual_polish_on_reduc
     assert admission["min_improvement_vs_identity"] > 10.0
     assert factor_metadata["architecture"] == "symbolic_nd_frontal_schur_lu"
     assert factor_metadata["max_terminal_factor_size"] == 4096
+    assert factor_metadata["max_setup_s"] == 60.0
     assert metadata["symbolic_nd_max_terminal_factor_size"] == 4096
+    assert metadata["symbolic_nd_max_setup_s"] == 60.0
     assert factor_metadata["node_count"] >= 3
     assert factor_metadata["residual_polish_steps"] == 2
 

@@ -1632,6 +1632,7 @@ def _build_symbolic_nd_frontal_schur_factor(
     regularization_rel: float = 1.0e-12,
     max_dense_rhs_entries: int = 0,
     max_dense_rhs_cols_per_child: int = 0,
+    max_setup_s: float = 0.0,
 ) -> tuple[_SymbolicNDFrontalNode, int, int]:
     """Build a recursive nested-dissection Schur factor over a symbolic order.
 
@@ -1660,15 +1661,29 @@ def _build_symbolic_nd_frontal_schur_factor(
     high_degree = max(0, int(high_degree_cols))
     max_dense_entries = max(0, int(max_dense_rhs_entries))
     max_cols_per_child = max(0, int(max_dense_rhs_cols_per_child))
+    max_setup_seconds = max(0.0, float(max_setup_s))
+    setup_start_s = time.perf_counter()
     row_degree = np.diff(matrix_csr.indptr).astype(np.int64, copy=False)
     col_degree = np.diff(matrix_csr.tocsc().indptr).astype(np.int64, copy=False)
     degree = row_degree + col_degree
     dense_entries_global = 0
 
+    def _check_setup_budget(*, stage: str, node_size: int, depth: int) -> None:
+        if max_setup_seconds <= 0.0:
+            return
+        elapsed_s = time.perf_counter() - setup_start_s
+        if elapsed_s > max_setup_seconds:
+            raise RuntimeError(
+                "symbolic_nd_frontal_schur_lu setup time budget exceeded "
+                f"({elapsed_s:.3f}s>{max_setup_seconds:.3f}s; "
+                f"stage={stage}; node_size={int(node_size)} depth={int(depth)})"
+            )
+
     def _build_node(indices: np.ndarray, depth: int) -> _SymbolicNDFrontalNode:
         nonlocal dense_entries_global
         idx = np.asarray(indices, dtype=np.int64).reshape((-1,))
         node_n = int(idx.size)
+        _check_setup_budget(stage="node_start", node_size=node_n, depth=int(depth))
         if node_n == 0:
             return _SymbolicNDFrontalNode(
                 indices=idx,
@@ -1854,6 +1869,7 @@ def _build_symbolic_nd_frontal_schur_factor(
                 cols_per_chunk = int(max_cols_per_child) if max_cols_per_child > 0 else int(local_cols.size)
                 cols_per_chunk = max(1, int(cols_per_chunk))
                 for col_start in range(0, int(local_cols.size), cols_per_chunk):
+                    _check_setup_budget(stage="separator_update", node_size=node_n, depth=int(depth))
                     col_chunk = local_cols[col_start : col_start + cols_per_chunk]
                     b_dense = b_mat[:, col_chunk].toarray().astype(dtype, copy=False)
                     try:
@@ -1936,6 +1952,7 @@ def _build_symbolic_nd_frontal_schur_factor(
         "max_leaf_size": int(max_leaf),
         "max_terminal_factor_size": int(max_terminal),
         "max_depth": int(depth_cap),
+        "max_setup_s": float(max_setup_seconds),
         "separator_width": int(sep_width_default),
         "max_separator_cols": int(max_sep),
         "high_degree_cols": int(high_degree),
@@ -3294,6 +3311,7 @@ def factorize_host_sparse_operator(
     symbolic_nd_regularization_rel: float = 1.0e-12,
     symbolic_nd_max_dense_rhs_entries: int = 0,
     symbolic_nd_max_dense_rhs_cols_per_child: int = 0,
+    symbolic_nd_max_setup_s: float = 0.0,
     symbolic_nd_residual_polish_steps: int = 0,
     symbolic_nd_residual_polish_damping: float = 1.0,
     symbolic_superblock_max_size: int = 32768,
@@ -3483,6 +3501,7 @@ def factorize_host_sparse_operator(
                     regularization_rel=float(symbolic_nd_regularization_rel),
                     max_dense_rhs_entries=int(symbolic_nd_max_dense_rhs_entries),
                     max_dense_rhs_cols_per_child=int(symbolic_nd_max_dense_rhs_cols_per_child),
+                    max_setup_s=float(symbolic_nd_max_setup_s),
                 )
                 polish_steps = max(0, int(symbolic_nd_residual_polish_steps))
                 if polish_steps:

@@ -954,6 +954,25 @@ def test_symbolic_nd_frontal_schur_lu_rejects_oversized_terminal_leaf() -> None:
         )
 
 
+def test_symbolic_nd_frontal_schur_lu_rejects_setup_time_budget() -> None:
+    matrix = _nested_dissection_tridiagonal_matrix(n=12)
+
+    with pytest.raises(RuntimeError, match="setup time budget exceeded"):
+        factorize_host_sparse_operator(
+            matrix,
+            kind="symbolic_nd_frontal_schur_lu",
+            symbolic_ordering_kind="natural",
+            symbolic_block_size=3,
+            symbolic_nd_max_leaf_size=3,
+            symbolic_nd_max_depth=4,
+            symbolic_nd_separator_width=2,
+            symbolic_nd_max_separator_cols=8,
+            symbolic_nd_high_degree_cols=0,
+            symbolic_nd_regularization_rel=0.0,
+            symbolic_nd_max_setup_s=1.0e-12,
+        )
+
+
 def test_symbolic_nd_frontal_schur_lu_promotes_cross_graph_edges_to_separator() -> None:
     matrix = _nested_dissection_tridiagonal_matrix(n=12).tolil()
     matrix[1, 10] = 0.25
