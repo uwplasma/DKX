@@ -2840,6 +2840,7 @@ def test_active_symbolic_nd_frontal_schur_lu_solves_cross_coupled_active_system(
     monkeypatch.setenv("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_SYMBOLIC_ND_SEPARATOR_WIDTH", "2")
     monkeypatch.setenv("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_SYMBOLIC_ND_MAX_SEPARATOR_COLS", "8")
     monkeypatch.setenv("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_SYMBOLIC_ND_HIGH_DEGREE_COLS", "0")
+    monkeypatch.setenv("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_SYMBOLIC_ND_MAX_DENSE_RHS_ENTRIES_PER_CHILD", "100000")
     monkeypatch.setenv("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_SYMBOLIC_ND_MAX_SETUP_S", "60")
     monkeypatch.setenv("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_SYMBOLIC_ND_RESIDUAL_POLISH_STEPS", "1")
     monkeypatch.setenv(
@@ -2865,6 +2866,8 @@ def test_active_symbolic_nd_frontal_schur_lu_solves_cross_coupled_active_system(
     assert pc.metadata["symbolic_factor_metadata"]["architecture"] == "symbolic_nd_frontal_schur_lu"
     assert pc.metadata["symbolic_factor_metadata"]["max_terminal_factor_size"] == 12
     assert pc.metadata["symbolic_factor_metadata"]["max_setup_s"] == 60.0
+    assert pc.metadata["symbolic_factor_metadata"]["max_dense_rhs_entries_per_child"] == 100000
+    assert pc.metadata["symbolic_nd_max_dense_rhs_entries_per_child"] == 100000
     assert pc.metadata["symbolic_factor_metadata"]["separator_update_mode"] == "csc_column_chunks"
     assert pc.metadata["symbolic_factor_metadata"]["separator_update_chunks"] > 0
     assert pc.metadata["symbolic_factor_metadata"]["residual_polish_steps"] == 1

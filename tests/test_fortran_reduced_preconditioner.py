@@ -740,6 +740,10 @@ def test_transport_fortran_reduced_lu_admits_nd_frontal_residual_polish_on_reduc
     monkeypatch.setenv("SFINCS_JAX_TRANSPORT_FP_FORTRAN_REDUCED_LU_SYMBOLIC_ND_MAX_SEPARATOR_COLS", "4096")
     monkeypatch.setenv("SFINCS_JAX_TRANSPORT_FP_FORTRAN_REDUCED_LU_SYMBOLIC_ND_HIGH_DEGREE_COLS", "256")
     monkeypatch.setenv("SFINCS_JAX_TRANSPORT_FP_FORTRAN_REDUCED_LU_SYMBOLIC_ND_MAX_DENSE_RHS_ENTRIES", "400000000")
+    monkeypatch.setenv(
+        "SFINCS_JAX_TRANSPORT_FP_FORTRAN_REDUCED_LU_SYMBOLIC_ND_MAX_DENSE_RHS_ENTRIES_PER_CHILD",
+        "200000000",
+    )
     monkeypatch.setenv("SFINCS_JAX_TRANSPORT_FP_FORTRAN_REDUCED_LU_SYMBOLIC_ND_MAX_SETUP_S", "60")
     monkeypatch.setenv("SFINCS_JAX_TRANSPORT_FP_FORTRAN_REDUCED_LU_SYMBOLIC_ND_RESIDUAL_POLISH_STEPS", "2")
 
@@ -776,9 +780,11 @@ def test_transport_fortran_reduced_lu_admits_nd_frontal_residual_polish_on_reduc
     assert factor_metadata["architecture"] == "symbolic_nd_frontal_schur_lu"
     assert factor_metadata["max_terminal_factor_size"] == 4096
     assert factor_metadata["max_setup_s"] == 60.0
+    assert factor_metadata["max_dense_rhs_entries_per_child"] == 200000000
     assert factor_metadata["separator_update_mode"] == "csc_column_chunks"
     assert factor_metadata["separator_update_chunks"] > 0
     assert metadata["symbolic_nd_max_terminal_factor_size"] == 4096
+    assert metadata["symbolic_nd_max_dense_rhs_entries_per_child"] == 200000000
     assert metadata["symbolic_nd_max_setup_s"] == 60.0
     assert factor_metadata["node_count"] >= 3
     assert factor_metadata["residual_polish_steps"] == 2

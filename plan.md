@@ -49,6 +49,12 @@ Owner: incoming agent
 
 - Keep the CSC chunked update because it is simpler, metadata-visible, and
   avoids repeated CSR column indexing in admitted reduced cases.
+- Added a per-child separator RHS work cap,
+  ``*_SYMBOLIC_ND_MAX_DENSE_RHS_ENTRIES_PER_CHILD``, through the generic
+  explicit sparse path, RHSMode=2/3 transport reduced-Pmat path, and RHSMode=1
+  active reduced-Pmat path.  This guard rejects a known oversized child Schur
+  update before allocating dense RHS blocks or spending minutes in recursive
+  separator solves.
 - Do not promote nested-dissection production defaults and do not regenerate
   public README/docs runtime plots from this candidate yet.  Full production
   geom11 still fails the setup gate before a solve can be admitted.
@@ -77,6 +83,11 @@ Owner: incoming agent
 - Public README/docs runtime plots were not regenerated from this run because
   it did not produce a valid JAX production-floor report.  Regenerating those
   plots requires a green CPU/GPU suite report, not an interrupted gate.
+- After adding the per-child guard, focused and affected tests pass:
+  ``python -m pytest -q tests/test_explicit_sparse.py
+  tests/test_fortran_reduced_preconditioner.py tests/test_rhs1_full_assembly.py``
+  with ``179 passed``.  Ruff, ``py_compile``, and ``git diff --check`` also
+  pass for the touched files.
 
 ## 2026-06-12 Addendum: recursive nested-dissection residual-equation factor
 

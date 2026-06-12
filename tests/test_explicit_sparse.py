@@ -937,6 +937,26 @@ def test_symbolic_nd_frontal_schur_lu_rejects_dense_update_budget() -> None:
         )
 
 
+def test_symbolic_nd_frontal_schur_lu_rejects_dense_update_child_budget() -> None:
+    matrix = _nested_dissection_tridiagonal_matrix()
+
+    with pytest.raises(RuntimeError, match="dense separator RHS child work budget exceeded"):
+        factorize_host_sparse_operator(
+            matrix,
+            kind="symbolic_nd_frontal_schur_lu",
+            symbolic_ordering_kind="natural",
+            symbolic_block_size=3,
+            symbolic_nd_max_leaf_size=3,
+            symbolic_nd_max_depth=4,
+            symbolic_nd_separator_width=2,
+            symbolic_nd_max_separator_cols=3,
+            symbolic_nd_high_degree_cols=0,
+            symbolic_nd_regularization_rel=0.0,
+            symbolic_nd_max_dense_rhs_entries=1000,
+            symbolic_nd_max_dense_rhs_entries_per_child=1,
+        )
+
+
 def test_symbolic_nd_frontal_schur_lu_rejects_oversized_terminal_leaf() -> None:
     matrix = _nested_dissection_tridiagonal_matrix(n=12)
 

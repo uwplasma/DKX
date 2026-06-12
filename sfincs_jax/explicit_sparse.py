@@ -1632,6 +1632,7 @@ def _build_symbolic_nd_frontal_schur_factor(
     high_degree_cols: int = 64,
     regularization_rel: float = 1.0e-12,
     max_dense_rhs_entries: int = 0,
+    max_dense_rhs_entries_per_child: int = 0,
     max_dense_rhs_cols_per_child: int = 0,
     max_setup_s: float = 0.0,
 ) -> tuple[_SymbolicNDFrontalNode, int, int]:
@@ -1661,6 +1662,7 @@ def _build_symbolic_nd_frontal_schur_factor(
     max_sep = max(1, int(max_separator_cols))
     high_degree = max(0, int(high_degree_cols))
     max_dense_entries = max(0, int(max_dense_rhs_entries))
+    max_dense_entries_per_child = max(0, int(max_dense_rhs_entries_per_child))
     max_cols_per_child = max(0, int(max_dense_rhs_cols_per_child))
     max_setup_seconds = max(0.0, float(max_setup_s))
     setup_start_s = time.perf_counter()
@@ -1863,6 +1865,14 @@ def _build_symbolic_nd_frontal_schur_factor(
                 else np.asarray([], dtype=np.int64)
             )
             child_dense_entries = int(child_indices.size) * int(local_cols.size)
+            if max_dense_entries_per_child and child_dense_entries > max_dense_entries_per_child:
+                raise RuntimeError(
+                    "symbolic_nd_frontal_schur_lu dense separator RHS child work budget exceeded "
+                    f"({int(child_dense_entries)}>{int(max_dense_entries_per_child)}; "
+                    f"node_size={int(node_n)} depth={int(depth)} "
+                    f"separator={int(sep_count)} child={int(child_indices.size)} "
+                    f"local_cols={int(local_cols.size)})"
+                )
             dense_entries_global += child_dense_entries
             dense_update_entries += child_dense_entries
             peak_dense_update_entries = max(peak_dense_update_entries, child_dense_entries)
@@ -1972,6 +1982,9 @@ def _build_symbolic_nd_frontal_schur_factor(
         "separator_width": int(sep_width_default),
         "max_separator_cols": int(max_sep),
         "high_degree_cols": int(high_degree),
+        "max_dense_rhs_entries": int(max_dense_entries),
+        "max_dense_rhs_entries_per_child": int(max_dense_entries_per_child),
+        "max_dense_rhs_cols_per_child": int(max_cols_per_child),
         "node_count": int(root.node_count),
         "leaf_count": int(root.leaf_count),
         "max_depth_reached": int(root.max_depth_reached),
@@ -3329,6 +3342,7 @@ def factorize_host_sparse_operator(
     symbolic_nd_high_degree_cols: int = 64,
     symbolic_nd_regularization_rel: float = 1.0e-12,
     symbolic_nd_max_dense_rhs_entries: int = 0,
+    symbolic_nd_max_dense_rhs_entries_per_child: int = 0,
     symbolic_nd_max_dense_rhs_cols_per_child: int = 0,
     symbolic_nd_max_setup_s: float = 0.0,
     symbolic_nd_residual_polish_steps: int = 0,
@@ -3519,6 +3533,7 @@ def factorize_host_sparse_operator(
                     high_degree_cols=int(symbolic_nd_high_degree_cols),
                     regularization_rel=float(symbolic_nd_regularization_rel),
                     max_dense_rhs_entries=int(symbolic_nd_max_dense_rhs_entries),
+                    max_dense_rhs_entries_per_child=int(symbolic_nd_max_dense_rhs_entries_per_child),
                     max_dense_rhs_cols_per_child=int(symbolic_nd_max_dense_rhs_cols_per_child),
                     max_setup_s=float(symbolic_nd_max_setup_s),
                 )

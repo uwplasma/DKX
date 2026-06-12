@@ -987,6 +987,7 @@ def _build_host_sparse_direct_factor_from_matvec(
     default_symbolic_nd_high_degree_cols: int = 64,
     default_symbolic_nd_regularization_rel: float = 1.0e-12,
     default_symbolic_nd_max_dense_rhs_entries: int = 0,
+    default_symbolic_nd_max_dense_rhs_entries_per_child: int = 0,
     default_symbolic_nd_max_dense_rhs_cols_per_child: int = 0,
     default_symbolic_nd_max_setup_s: float = 0.0,
     default_symbolic_nd_residual_polish_steps: int = 0,
@@ -1087,6 +1088,9 @@ def _build_host_sparse_direct_factor_from_matvec(
     symbolic_nd_reg_env = os.environ.get("SFINCS_JAX_EXPLICIT_SPARSE_SYMBOLIC_ND_REG_REL", "").strip()
     symbolic_nd_max_dense_rhs_entries_env = os.environ.get(
         "SFINCS_JAX_EXPLICIT_SPARSE_SYMBOLIC_ND_MAX_DENSE_RHS_ENTRIES", ""
+    ).strip()
+    symbolic_nd_max_dense_rhs_entries_per_child_env = os.environ.get(
+        "SFINCS_JAX_EXPLICIT_SPARSE_SYMBOLIC_ND_MAX_DENSE_RHS_ENTRIES_PER_CHILD", ""
     ).strip()
     symbolic_nd_max_dense_rhs_cols_env = os.environ.get(
         "SFINCS_JAX_EXPLICIT_SPARSE_SYMBOLIC_ND_MAX_DENSE_RHS_COLS_PER_CHILD", ""
@@ -1371,6 +1375,11 @@ def _build_host_sparse_direct_factor_from_matvec(
     symbolic_nd_max_dense_rhs_entries = _parse_int_env(
         symbolic_nd_max_dense_rhs_entries_env,
         int(default_symbolic_nd_max_dense_rhs_entries),
+        minimum=0,
+    )
+    symbolic_nd_max_dense_rhs_entries_per_child = _parse_int_env(
+        symbolic_nd_max_dense_rhs_entries_per_child_env,
+        int(default_symbolic_nd_max_dense_rhs_entries_per_child),
         minimum=0,
     )
     symbolic_nd_max_dense_rhs_cols_per_child = _parse_int_env(
@@ -1698,6 +1707,7 @@ def _build_host_sparse_direct_factor_from_matvec(
             symbolic_nd_high_degree_cols=int(symbolic_nd_high_degree_cols),
             symbolic_nd_regularization_rel=float(symbolic_nd_regularization_rel),
             symbolic_nd_max_dense_rhs_entries=int(symbolic_nd_max_dense_rhs_entries),
+            symbolic_nd_max_dense_rhs_entries_per_child=int(symbolic_nd_max_dense_rhs_entries_per_child),
             symbolic_nd_max_dense_rhs_cols_per_child=int(symbolic_nd_max_dense_rhs_cols_per_child),
             symbolic_nd_max_setup_s=float(symbolic_nd_max_setup_s),
             symbolic_nd_residual_polish_steps=int(symbolic_nd_residual_polish_steps),
@@ -13950,6 +13960,11 @@ def _build_rhsmode23_fp_fortran_reduced_lu_preconditioner(
         0,
         minimum=0,
     )
+    symbolic_nd_max_dense_rhs_entries_per_child = _int_env(
+        "SFINCS_JAX_TRANSPORT_FP_FORTRAN_REDUCED_LU_SYMBOLIC_ND_MAX_DENSE_RHS_ENTRIES_PER_CHILD",
+        0,
+        minimum=0,
+    )
     symbolic_nd_max_dense_rhs_cols_per_child = _int_env(
         "SFINCS_JAX_TRANSPORT_FP_FORTRAN_REDUCED_LU_SYMBOLIC_ND_MAX_DENSE_RHS_COLS_PER_CHILD",
         0,
@@ -14173,6 +14188,7 @@ def _build_rhsmode23_fp_fortran_reduced_lu_preconditioner(
             f"{int(symbolic_nd_separator_width)}_{int(symbolic_nd_max_separator_cols)}_"
             f"{int(symbolic_nd_high_degree_cols)}_{float(symbolic_nd_regularization_rel):.3e}_"
             f"{int(symbolic_nd_max_dense_rhs_entries)}_"
+            f"{int(symbolic_nd_max_dense_rhs_entries_per_child)}_"
             f"{int(symbolic_nd_max_dense_rhs_cols_per_child)}_"
             f"setups{float(symbolic_nd_max_setup_s):.3e}_"
             f"polish{int(symbolic_nd_residual_polish_steps)}_"
@@ -14390,6 +14406,9 @@ def _build_rhsmode23_fp_fortran_reduced_lu_preconditioner(
                         default_symbolic_nd_high_degree_cols=int(symbolic_nd_high_degree_cols),
                         default_symbolic_nd_regularization_rel=float(symbolic_nd_regularization_rel),
                         default_symbolic_nd_max_dense_rhs_entries=int(symbolic_nd_max_dense_rhs_entries),
+                        default_symbolic_nd_max_dense_rhs_entries_per_child=int(
+                            symbolic_nd_max_dense_rhs_entries_per_child
+                        ),
                         default_symbolic_nd_max_dense_rhs_cols_per_child=int(
                             symbolic_nd_max_dense_rhs_cols_per_child
                         ),
@@ -14519,6 +14538,9 @@ def _build_rhsmode23_fp_fortran_reduced_lu_preconditioner(
                     default_symbolic_nd_high_degree_cols=int(symbolic_nd_high_degree_cols),
                     default_symbolic_nd_regularization_rel=float(symbolic_nd_regularization_rel),
                     default_symbolic_nd_max_dense_rhs_entries=int(symbolic_nd_max_dense_rhs_entries),
+                    default_symbolic_nd_max_dense_rhs_entries_per_child=int(
+                        symbolic_nd_max_dense_rhs_entries_per_child
+                    ),
                     default_symbolic_nd_max_dense_rhs_cols_per_child=int(symbolic_nd_max_dense_rhs_cols_per_child),
                     default_symbolic_nd_max_setup_s=float(symbolic_nd_max_setup_s),
                     default_symbolic_nd_residual_polish_steps=int(symbolic_nd_residual_polish_steps),
@@ -14828,6 +14850,7 @@ def _build_rhsmode23_fp_fortran_reduced_lu_preconditioner(
             "symbolic_nd_high_degree_cols": int(symbolic_nd_high_degree_cols),
             "symbolic_nd_regularization_rel": float(symbolic_nd_regularization_rel),
             "symbolic_nd_max_dense_rhs_entries": int(symbolic_nd_max_dense_rhs_entries),
+            "symbolic_nd_max_dense_rhs_entries_per_child": int(symbolic_nd_max_dense_rhs_entries_per_child),
             "symbolic_nd_max_dense_rhs_cols_per_child": int(symbolic_nd_max_dense_rhs_cols_per_child),
             "symbolic_nd_max_setup_s": float(symbolic_nd_max_setup_s),
             "symbolic_nd_residual_polish_steps": int(symbolic_nd_residual_polish_steps),

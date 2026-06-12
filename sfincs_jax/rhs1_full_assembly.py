@@ -6240,6 +6240,10 @@ def _build_active_projected_symbolic_frontal_schur_lu_preconditioner(
             )
         ),
     )
+    nd_max_dense_rhs_entries_per_child = max(
+        0,
+        int(_env_int("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_SYMBOLIC_ND_MAX_DENSE_RHS_ENTRIES_PER_CHILD", 0)),
+    )
     nd_max_dense_rhs_cols_per_child = max(
         0,
         int(_env_int("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_SYMBOLIC_ND_MAX_DENSE_RHS_COLS_PER_CHILD", 0)),
@@ -6319,6 +6323,7 @@ def _build_active_projected_symbolic_frontal_schur_lu_preconditioner(
             symbolic_nd_high_degree_cols=nd_high_degree_cols,
             symbolic_nd_regularization_rel=regularization_rel,
             symbolic_nd_max_dense_rhs_entries=nd_max_dense_rhs_entries,
+            symbolic_nd_max_dense_rhs_entries_per_child=nd_max_dense_rhs_entries_per_child,
             symbolic_nd_max_dense_rhs_cols_per_child=nd_max_dense_rhs_cols_per_child,
             symbolic_nd_max_setup_s=nd_max_setup_s,
             symbolic_nd_residual_polish_steps=nd_residual_polish_steps,
@@ -6483,6 +6488,7 @@ def _build_active_projected_symbolic_frontal_schur_lu_preconditioner(
             "symbolic_nd_max_separator_cols": int(nd_max_separator_cols),
             "symbolic_nd_high_degree_cols": int(nd_high_degree_cols),
             "symbolic_nd_max_dense_rhs_entries": int(nd_max_dense_rhs_entries),
+            "symbolic_nd_max_dense_rhs_entries_per_child": int(nd_max_dense_rhs_entries_per_child),
             "symbolic_nd_max_dense_rhs_cols_per_child": int(nd_max_dense_rhs_cols_per_child),
             "symbolic_nd_max_setup_s": float(nd_max_setup_s),
             "symbolic_nd_residual_polish_steps": int(nd_residual_polish_steps),
