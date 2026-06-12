@@ -20,11 +20,14 @@ Owner: incoming agent
   the prefill memory guard, the builder may now try an exact sparse LU only if
   the MUMPS-like fill estimate fits a host-memory-derived cap and the active
   system size is below ``SFINCS_JAX_TRANSPORT_FP_FORTRAN_REDUCED_LU_AUTO_EXACT_RESCUE_MAX_SIZE``.
-- Added strict setup admission for exact LU/ILU factors using the same
+- Added strict setup admission for the auto exact-LU/ILU rescue using the same
   deterministic true-residual probes already used for symbolic factors.  Exact
   rescue is accepted only if ``P M^{-1}`` reduces the materialized
   preconditioner residual by the configured gate; otherwise the code falls back
-  to the bounded sx-block preconditioner.
+  to the bounded sx-block preconditioner.  Explicit exact-LU diagnostics keep
+  the prior behavior unless
+  ``SFINCS_JAX_TRANSPORT_FP_FORTRAN_REDUCED_LU_DIRECT_ADMISSION_EXPLICIT=1`` is
+  set.
 - Added metadata for ``host_memory_mb``, ``factor_max_mb``,
   ``effective_factor_max_mb``, ``auto_exact_rescue_*``,
   ``direct_admission_enabled``, and ``direct_admission`` so future production

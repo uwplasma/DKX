@@ -14103,6 +14103,10 @@ def _build_rhsmode23_fp_fortran_reduced_lu_preconditioner(
         "SFINCS_JAX_TRANSPORT_FP_FORTRAN_REDUCED_LU_DIRECT_ADMISSION",
         True,
     )
+    direct_admission_explicit_enabled = _bool_env(
+        "SFINCS_JAX_TRANSPORT_FP_FORTRAN_REDUCED_LU_DIRECT_ADMISSION_EXPLICIT",
+        False,
+    )
     factor_dtype_env = os.environ.get("SFINCS_JAX_TRANSPORT_FP_FORTRAN_REDUCED_LU_FACTOR_DTYPE", "").strip().lower()
     factor_dtype = np.dtype(np.float32) if factor_dtype_env in {"float32", "fp32", "32"} else np.dtype(np.float64)
     factor_kind_env = os.environ.get("SFINCS_JAX_TRANSPORT_FP_FORTRAN_REDUCED_LU_FACTOR", "").strip().lower()
@@ -14263,7 +14267,7 @@ def _build_rhsmode23_fp_fortran_reduced_lu_preconditioner(
             f"rescue{int(symbolic_admission_rescue_lu)}_{float(symbolic_admission_rescue_lu_max_mb):.3e}_"
             f"autoexact{int(auto_exact_rescue_enabled)}_{float(auto_exact_rescue_max_mb):.3e}_"
             f"{float(auto_exact_rescue_ram_fraction):.3e}_{int(auto_exact_rescue_max_size)}_"
-            f"directadm{int(direct_admission_enabled)}_"
+            f"directadm{int(direct_admission_enabled)}_{int(direct_admission_explicit_enabled)}_"
             f"maxfactor{float(max_factor_mb):.3e}",
         ),
         str(active_hash),
@@ -14749,7 +14753,12 @@ def _build_rhsmode23_fp_fortran_reduced_lu_preconditioner(
         factor_operator = getattr(factor_bundle, "operator", None)
         factor_matrix = None if factor_operator is None else getattr(factor_operator, "matrix", None)
         factor_kind_for_admission = str(getattr(factor_bundle, "kind", ""))
-        if factor_kind_for_admission in {"lu", "ilu"} and bool(direct_admission_enabled):
+        direct_admission_required = (
+            bool(direct_admission_enabled)
+            and factor_kind_for_admission in {"lu", "ilu"}
+            and (bool(auto_exact_rescue_selected) or bool(direct_admission_explicit_enabled))
+        )
+        if bool(direct_admission_required):
             direct_admission = admit_sparse_factor_against_operator(
                 factor_operator if factor_operator is not None else factor_matrix,
                 factor_bundle,
@@ -14959,6 +14968,8 @@ def _build_rhsmode23_fp_fortran_reduced_lu_preconditioner(
             "auto_exact_rescue_max_size": int(auto_exact_rescue_max_size),
             "auto_exact_rescue_selected": bool(auto_exact_rescue_selected),
             "direct_admission_enabled": bool(direct_admission_enabled),
+            "direct_admission_explicit_enabled": bool(direct_admission_explicit_enabled),
+            "direct_admission_required": bool(direct_admission_required),
             "symbolic_ordering": str(symbolic_ordering),
             "symbolic_block_size": int(symbolic_block_size),
             "symbolic_block_overlap": int(symbolic_block_overlap),
