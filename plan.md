@@ -57,6 +57,27 @@ Owner: incoming agent
   low-rank/blocked Schur update compression, with the same strict true-residual
   admission gate and a fail-fast work estimate before large separators.
 
+### Fresh production-floor run status
+
+- A fresh local CPU production-floor ``transportMatrix_geometryScheme11`` run
+  was launched from ``benchmarks/production_resolution_inputs_2026-06-08`` with
+  the local SFINCS Fortran v3 executable and the current ``sfincs_jax`` main
+  branch.
+- Fortran v3 completed the full reference at ``Ntheta=25, Nzeta=51, Nxi=100,
+  Nx=6`` in ``219.47 s`` real time with peak RSS ``8.56 GB`` and converged to
+  ``KSP_CONVERGED_RTOL``.
+- The current JAX auto path selected active DOFs, built the direct reduced
+  Pmat in ``15.615 s`` with ``active=462827`` and ``nnz=10124069``, rejected
+  ``symbolic_block_lu_coarse`` by the 4 GB prefill guard, and fell back to the
+  existing reduced preconditioner.  It then spent more than 10 minutes on
+  ``whichRHS=1/3`` with no further progress log and was stopped deliberately.
+- Office GPUs were checked before launching GPU work; both RTX A4000 devices
+  were already at 100% utilization with high memory use, so no fresh GPU timing
+  was collected from that saturated state.
+- Public README/docs runtime plots were not regenerated from this run because
+  it did not produce a valid JAX production-floor report.  Regenerating those
+  plots requires a green CPU/GPU suite report, not an interrupted gate.
+
 ## 2026-06-12 Addendum: recursive nested-dissection residual-equation factor
 
 ### Implementation
