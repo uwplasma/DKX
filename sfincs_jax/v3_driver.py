@@ -14406,6 +14406,23 @@ def _build_rhsmode23_fp_fortran_reduced_lu_preconditioner(
                         default_symbolic_max_permutation_size=int(symbolic_max_permutation_size),
                     )
                 except Exception as exc:  # noqa: BLE001
+                    exc_text = str(exc)
+                    if default_factor_kind == "symbolic_nd_frontal_schur_lu" and (
+                        "symbolic_nd_frontal_schur_lu setup time budget exceeded" in exc_text
+                        or "symbolic_nd_frontal_schur_lu terminal leaf factor size exceeded" in exc_text
+                    ):
+                        if emit is not None:
+                            emit(
+                                1,
+                                "solve_v3_transport_matrix_linear_gmres: direct reduced Pmat ND factor "
+                                "rejected by setup guard; skipping pattern-probe fallback "
+                                f"({type(exc).__name__}: {exc})",
+                            )
+                        return _build_rhsmode23_sxblock_preconditioner(
+                            op=op,
+                            reduce_full=reduce_full,
+                            expand_reduced=expand_reduced,
+                        )
                     if emit is not None:
                         emit(
                             1,

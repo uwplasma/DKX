@@ -92,6 +92,17 @@ Owner: incoming agent
   not residual accuracy on the reduced fixtures.  The production path should
   remain opt-in until chunked/vectorized Schur update construction, setup
   progress logging, and intermediate setup-budget admission pass.
+- Follow-up production diagnostics with explicit setup budgets identified the
+  expensive stage as ``separator_update`` on geometry-rich subnodes
+  (for example ``node_size=55796`` at depth 3 for a 90 s budget, and
+  ``node_size=26551`` at depth 4 for a 20 s budget).  Deeper recursion moved
+  the failure to smaller nodes but still did not complete within 120 s.
+- Added a production-safe fallback rule: when explicit ND direct-Pmat setup
+  fails due to terminal-leaf or setup-time guards, the transport path now skips
+  the expensive pattern-color fallback and returns the bounded sx-block
+  preconditioner immediately.  The real production geom11 CLI probe confirmed
+  the new log line
+  ``direct reduced Pmat ND factor rejected by setup guard; skipping pattern-probe fallback``.
 
 ### Decision
 
@@ -99,9 +110,10 @@ Owner: incoming agent
   metadata-visible, and protected by true-residual gates for both transport
   reduced Pmat and RHSMode=1 active reduced-Pmat paths.
 - Do not promote it to automatic production defaults yet.  The next required
-  compute gates are full production-floor geom2/geom11 CPU solves, then bounded
-  QA/QH RHSMode=1 surfaces, comparing residual, runtime, and RSS against the
-  current defaults and Fortran v3 references.
+  compute gates are full production-floor geom2/geom11 CPU solves with a
+  genuinely faster separator-update implementation, then bounded QA/QH
+  RHSMode=1 surfaces, comparing residual, runtime, and RSS against the current
+  defaults and Fortran v3 references.
 - Updated lane status:
   - Geometry-rich RHSMode=2/3 production preconditioner: ``96%``.  Reduced
     geom2/geom11 now pass strict native ND admission; production-floor full
