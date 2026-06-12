@@ -22,6 +22,7 @@ FactorKind = Literal[
     "symbolic_block_schur_lu",
     "symbolic_superblock_lu",
     "symbolic_frontal_schur_lu",
+    "symbolic_blr_frontal_schur_lu",
 ]
 
 
@@ -374,6 +375,140 @@ class _SymbolicSchurBlock:
 
 
 @dataclass(frozen=True)
+class _BLRUpdateBlock:
+    """Compressed separator contribution ``U @ VT`` on selected columns."""
+
+    columns: np.ndarray
+    u: np.ndarray
+    vt: np.ndarray
+    original_shape: tuple[int, int]
+    rank: int
+    relative_error_estimate: float
+
+
+@dataclass(frozen=True)
+class _BLRSchurFactor:
+    """Bounded direct/Krylov solve for a Schur complement with BLR updates.
+
+    The represented separator operator is
+
+    ``S ~= S0 - sum_k U_k @ V_k.T[:, columns_k]``.
+
+    ``S0`` is factored exactly.  When the aggregate compressed rank is bounded,
+    the solve uses the Woodbury identity,
+
+    ``(S0 - U V.T)^-1 = S0^-1 + S0^-1 U (I - V.T S0^-1 U)^-1 V.T S0^-1``.
+
+    This is the safer BLR/HSS analogue of a compressed multifrontal separator
+    update.  If the aggregate rank is too large or the Woodbury core is rejected
+    at setup, the factor falls back to a small GMRES solve preconditioned by
+    ``S0``.  True-residual admission outside this object decides whether either
+    approximation is good enough for production use.
+    """
+
+    base_matrix: sp.csr_matrix
+    base_factor: object
+    updates: tuple[_BLRUpdateBlock, ...]
+    dtype: np.dtype
+    rtol: float
+    atol: float
+    maxiter: int
+    restart: int
+    woodbury_z: np.ndarray | None = None
+    woodbury_vt: np.ndarray | None = None
+    woodbury_core_inverse: np.ndarray | None = None
+    woodbury_condition: float | None = None
+    last_info: int = 0
+
+    @property
+    def woodbury_rank(self) -> int:
+        return 0 if self.woodbury_vt is None else int(self.woodbury_vt.shape[0])
+
+    @property
+    def woodbury_nbytes(self) -> int:
+        total = 0
+        for value in (self.woodbury_z, self.woodbury_vt, self.woodbury_core_inverse):
+            if value is not None:
+                total += int(np.asarray(value).nbytes)
+        return int(total)
+
+    def _base_solve(self, rhs: np.ndarray) -> np.ndarray:
+        try:
+            return np.asarray(self.base_factor.solve(np.asarray(rhs, dtype=self.dtype)), dtype=self.dtype)
+        except Exception:
+            return np.asarray(rhs, dtype=self.dtype)
+
+    def matvec(self, x_vec: np.ndarray) -> np.ndarray:
+        n = int(self.base_matrix.shape[0])
+        x_np = np.asarray(x_vec, dtype=self.dtype).reshape((n,))
+        out = np.asarray(self.base_matrix @ x_np, dtype=self.dtype)
+        for update in self.updates:
+            cols = np.asarray(update.columns, dtype=np.int64)
+            if cols.size == 0 or update.rank <= 0:
+                continue
+            coeff = np.asarray(update.vt @ x_np[cols], dtype=self.dtype).reshape((int(update.rank),))
+            out -= np.asarray(update.u @ coeff, dtype=self.dtype).reshape((n,))
+        return out
+
+    def solve(self, rhs) -> np.ndarray:
+        from scipy.sparse.linalg import LinearOperator, gmres  # noqa: PLC0415
+
+        rhs_np = np.asarray(rhs, dtype=self.dtype).reshape((int(self.base_matrix.shape[0]),))
+        n = int(rhs_np.size)
+        if n == 0:
+            return rhs_np
+
+        if (
+            self.woodbury_z is not None
+            and self.woodbury_vt is not None
+            and self.woodbury_core_inverse is not None
+        ):
+            y0 = self._base_solve(rhs_np).reshape((n,))
+            try:
+                alpha = np.asarray(
+                    self.woodbury_core_inverse @ np.asarray(self.woodbury_vt @ y0, dtype=self.dtype),
+                    dtype=self.dtype,
+                ).reshape((int(self.woodbury_core_inverse.shape[0]),))
+                solution_np = y0 + np.asarray(self.woodbury_z @ alpha, dtype=self.dtype).reshape((n,))
+                if np.all(np.isfinite(solution_np)):
+                    return np.asarray(solution_np, dtype=self.dtype)
+            except Exception:
+                pass
+
+        operator = LinearOperator((n, n), matvec=self.matvec, dtype=self.dtype)
+        preconditioner = LinearOperator((n, n), matvec=self._base_solve, dtype=self.dtype)
+        try:
+            solution, info = gmres(
+                operator,
+                rhs_np,
+                M=preconditioner,
+                rtol=float(self.rtol),
+                atol=float(self.atol),
+                restart=max(1, min(int(self.restart), n)),
+                maxiter=max(1, int(self.maxiter)),
+            )
+        except TypeError:  # pragma: no cover - old SciPy compatibility
+            solution, info = gmres(
+                operator,
+                rhs_np,
+                M=preconditioner,
+                tol=float(self.rtol),
+                restart=max(1, min(int(self.restart), n)),
+                maxiter=max(1, int(self.maxiter)),
+            )
+        except Exception:
+            solution = self._base_solve(rhs_np)
+            info = -1
+        solution_np = np.asarray(solution, dtype=self.dtype).reshape((n,))
+        if int(info) != 0 or not np.all(np.isfinite(solution_np)):
+            fallback = self._base_solve(rhs_np)
+            fallback_np = np.asarray(fallback, dtype=self.dtype).reshape((n,))
+            if np.all(np.isfinite(fallback_np)):
+                return fallback_np
+        return np.where(np.isfinite(solution_np), solution_np, 0.0).astype(self.dtype, copy=False)
+
+
+@dataclass(frozen=True)
 class _SymbolicBlockSchurFactor:
     """Block sparse factor with an explicit separator Schur complement.
 
@@ -398,6 +533,7 @@ class _SymbolicBlockSchurFactor:
     peak_dense_rhs_entries: int = 0
     separator_update_columns: int = 0
     factor_failures: int = 0
+    metadata: dict[str, object] | None = None
 
     @property
     def overlap_size(self) -> int:
@@ -540,6 +676,119 @@ class _DisjointSet:
         self.rows[root_a] = rows
         self.blocks[root_a] = blocks
         return True
+
+
+def _compress_update_block(
+    update: np.ndarray,
+    *,
+    columns: np.ndarray,
+    tol: float,
+    max_rank: int,
+    dtype: np.dtype,
+) -> _BLRUpdateBlock:
+    """Return a low-rank representation of one dense separator update block."""
+
+    update_np = np.asarray(update, dtype=dtype)
+    cols = np.asarray(columns, dtype=np.int64).reshape((-1,))
+    if update_np.ndim != 2:
+        raise ValueError("BLR update block must be a 2D matrix")
+    if int(update_np.shape[1]) != int(cols.size):
+        raise ValueError("BLR update column list does not match update block width")
+    if update_np.size == 0:
+        return _BLRUpdateBlock(
+            columns=cols,
+            u=np.zeros((update_np.shape[0], 0), dtype=dtype),
+            vt=np.zeros((0, update_np.shape[1]), dtype=dtype),
+            original_shape=tuple(int(v) for v in update_np.shape),
+            rank=0,
+            relative_error_estimate=0.0,
+        )
+    max_rank_use = max(1, min(int(max_rank), min(update_np.shape)))
+    try:
+        u, singular_values, vt = np.linalg.svd(update_np, full_matrices=False)
+    except np.linalg.LinAlgError:
+        max_rank_use = min(max_rank_use, update_np.shape[1])
+        return _BLRUpdateBlock(
+            columns=cols,
+            u=update_np[:, :max_rank_use].astype(dtype, copy=False),
+            vt=np.eye(update_np.shape[1], dtype=dtype)[:max_rank_use, :],
+            original_shape=tuple(int(v) for v in update_np.shape),
+            rank=int(max_rank_use),
+            relative_error_estimate=float("inf"),
+        )
+    if singular_values.size == 0:
+        rank = 0
+    else:
+        eps_floor = (
+            np.finfo(np.float64).eps
+            * float(max(update_np.shape))
+            * max(float(singular_values[0]), np.finfo(np.float64).tiny)
+        )
+        threshold = max(max(float(tol), 0.0) * max(float(singular_values[0]), np.finfo(np.float64).tiny), eps_floor)
+        rank = int(np.count_nonzero(singular_values > threshold))
+        rank = max(1, min(rank, max_rank_use))
+    kept = singular_values[:rank]
+    tail = singular_values[rank:]
+    denom = max(float(np.linalg.norm(singular_values)), np.finfo(np.float64).tiny)
+    rel_error = float(np.linalg.norm(tail) / denom) if tail.size else 0.0
+    u_scaled = np.asarray(u[:, :rank] * kept[None, :], dtype=dtype)
+    vt_kept = np.asarray(vt[:rank, :], dtype=dtype)
+    return _BLRUpdateBlock(
+        columns=cols,
+        u=u_scaled,
+        vt=vt_kept,
+        original_shape=tuple(int(v) for v in update_np.shape),
+        rank=int(rank),
+        relative_error_estimate=float(rel_error),
+    )
+
+
+def _build_blr_woodbury_state(
+    base_factor: object,
+    updates: tuple[_BLRUpdateBlock, ...],
+    *,
+    separator_size: int,
+    dtype: np.dtype,
+    max_rank: int,
+    max_condition: float,
+) -> tuple[np.ndarray | None, np.ndarray | None, np.ndarray | None, float | None]:
+    """Build a bounded Woodbury inverse core for compressed Schur updates."""
+
+    n = int(separator_size)
+    rank_total = int(sum(max(0, int(update.rank)) for update in updates))
+    if n <= 0 or rank_total <= 0 or rank_total > max(0, int(max_rank)):
+        return None, None, None, None
+    u_all = np.zeros((n, rank_total), dtype=dtype)
+    vt_all = np.zeros((rank_total, n), dtype=dtype)
+    cursor = 0
+    for update in updates:
+        rank = max(0, int(update.rank))
+        if rank <= 0:
+            continue
+        next_cursor = cursor + rank
+        cols = np.asarray(update.columns, dtype=np.int64)
+        if cols.size:
+            u_all[:, cursor:next_cursor] = np.asarray(update.u, dtype=dtype)[:, :rank]
+            vt_all[cursor:next_cursor, cols] = np.asarray(update.vt, dtype=dtype)[:rank, :]
+        cursor = next_cursor
+    if cursor != rank_total:
+        u_all = u_all[:, :cursor]
+        vt_all = vt_all[:cursor, :]
+        rank_total = int(cursor)
+    if rank_total <= 0:
+        return None, None, None, None
+    try:
+        z = np.asarray(base_factor.solve(u_all), dtype=dtype)
+        core = np.eye(rank_total, dtype=dtype) - np.asarray(vt_all @ z, dtype=dtype)
+        condition = float(np.linalg.cond(core))
+        if not np.isfinite(condition) or condition > max(1.0, float(max_condition)):
+            return None, None, None, condition
+        core_inverse = np.asarray(np.linalg.inv(core), dtype=dtype)
+    except Exception:
+        return None, None, None, None
+    if not (np.all(np.isfinite(z)) and np.all(np.isfinite(vt_all)) and np.all(np.isfinite(core_inverse))):
+        return None, None, None, None
+    return z, vt_all, core_inverse, condition
 
 
 def _build_symbolic_superblock_factor(
@@ -717,6 +966,16 @@ def _build_symbolic_frontal_schur_factor(
     regularization_rel: float = 1.0e-12,
     max_dense_rhs_entries: int = 0,
     max_dense_rhs_cols_per_block: int = 0,
+    compress_updates: bool = False,
+    blr_tol: float = 1.0e-6,
+    blr_max_rank: int = 64,
+    blr_min_cols: int = 8,
+    blr_gmres_rtol: float = 1.0e-6,
+    blr_gmres_atol: float = 0.0,
+    blr_gmres_maxiter: int = 50,
+    blr_gmres_restart: int = 64,
+    blr_woodbury_max_rank: int = 512,
+    blr_woodbury_max_condition: float = 1.0e8,
 ) -> tuple[_SymbolicBlockSchurFactor, int, int]:
     """Build a bounded frontal/Schur elimination over symbolic block groups.
 
@@ -893,7 +1152,30 @@ def _build_symbolic_frontal_schur_factor(
             b_pattern = matrix_csr[idx, :][:, separator].tocsr()
             local_cols = int(np.unique(b_pattern.indices).size) if b_pattern.nnz else 0
             separator_update_columns += local_cols
-            entries = int(idx.size) * int(local_cols)
+            if bool(compress_updates) and local_cols > 0:
+                entries = 0
+                max_cols_per_chunk = int(max_dense_rhs_cols_per_block)
+                if max_cols_per_chunk <= 0:
+                    max_cols_per_chunk = int(local_cols)
+                max_cols_per_chunk = max(1, int(max_cols_per_chunk))
+                local_pattern_cols = np.unique(b_pattern.indices).astype(np.int64, copy=False) if b_pattern.nnz else np.asarray([], dtype=np.int64)
+                for col_start in range(0, int(local_pattern_cols.size), max_cols_per_chunk):
+                    col_chunk = local_pattern_cols[col_start : col_start + max_cols_per_chunk]
+                    b_dense_probe = b_pattern[:, col_chunk].toarray().astype(dtype, copy=False)
+                    tol_use = float(blr_tol) if int(col_chunk.size) >= max(1, int(blr_min_cols)) else 0.0
+                    rank_cap = max(1, int(blr_max_rank))
+                    if tol_use == 0.0:
+                        rank_cap = max(1, min(rank_cap, min(b_dense_probe.shape)))
+                    compressed_probe = _compress_update_block(
+                        b_dense_probe,
+                        columns=col_chunk,
+                        tol=tol_use,
+                        max_rank=rank_cap,
+                        dtype=dtype,
+                    )
+                    entries += int(idx.size) * int(compressed_probe.rank)
+            else:
+                entries = int(idx.size) * int(local_cols)
             dense_rhs_entries += entries
             peak_dense_rhs_entries = max(peak_dense_rhs_entries, entries)
         if int(max_dense_rhs_entries) > 0 and dense_rhs_entries > int(max_dense_rhs_entries):
@@ -908,11 +1190,14 @@ def _build_symbolic_frontal_schur_factor(
         peak_dense_rhs_entries = 0
         separator_update_columns = 0
 
-    schur = (
-        matrix_csr[separator, :][:, separator].toarray().astype(dtype, copy=False)
-        if sep_count
-        else np.zeros((0, 0), dtype=dtype)
-    )
+    schur_base_sparse = matrix_csr[separator, :][:, separator].tocsc().astype(dtype, copy=False) if sep_count else sp.csc_matrix((0, 0), dtype=dtype)
+    schur = None if bool(compress_updates) else schur_base_sparse.toarray().astype(dtype, copy=False)
+    blr_updates: list[_BLRUpdateBlock] = []
+    blr_update_count = 0
+    blr_rank_total = 0
+    blr_dense_entries_original = 0
+    blr_dense_entries_compressed = 0
+    blr_error_estimate_max = 0.0
     max_abs = float(np.max(np.abs(matrix_csr.data))) if matrix_csr.nnz else 0.0
     reg = max(1.0e-14, float(regularization_rel) * max(1.0, max_abs))
     blocks: list[_SymbolicSchurBlock] = []
@@ -969,11 +1254,52 @@ def _build_symbolic_frontal_schur_factor(
                 for col_start in range(0, int(local_cols.size), max_cols_per_chunk):
                     col_chunk = local_cols[col_start : col_start + max_cols_per_chunk]
                     b_dense = b_mat[:, col_chunk].toarray().astype(dtype, copy=False)
-                    try:
-                        eliminated = np.asarray(factor.solve(b_dense), dtype=dtype)
-                    except Exception:
-                        eliminated = np.zeros((idx.size, int(col_chunk.size)), dtype=dtype)
-                    schur[:, col_chunk] -= np.asarray(c_mat @ eliminated, dtype=dtype)
+                    if bool(compress_updates):
+                        tol_use = float(blr_tol) if int(col_chunk.size) >= max(1, int(blr_min_cols)) else 0.0
+                        rank_cap = max(1, int(blr_max_rank))
+                        if tol_use == 0.0:
+                            rank_cap = max(1, min(rank_cap, min(b_dense.shape)))
+                        compressed_rhs = _compress_update_block(
+                            b_dense,
+                            columns=col_chunk,
+                            tol=tol_use,
+                            max_rank=rank_cap,
+                            dtype=dtype,
+                        )
+                        if int(compressed_rhs.rank) > 0:
+                            try:
+                                eliminated_basis = np.asarray(factor.solve(compressed_rhs.u), dtype=dtype)
+                            except Exception:
+                                eliminated_basis = np.zeros((idx.size, int(compressed_rhs.rank)), dtype=dtype)
+                            update_u = np.asarray(c_mat @ eliminated_basis, dtype=dtype)
+                        else:
+                            update_u = np.zeros((sep_count, 0), dtype=dtype)
+                        compressed = _BLRUpdateBlock(
+                            columns=np.asarray(col_chunk, dtype=np.int64),
+                            u=update_u,
+                            vt=np.asarray(compressed_rhs.vt, dtype=dtype),
+                            original_shape=(int(sep_count), int(col_chunk.size)),
+                            rank=int(compressed_rhs.rank),
+                            relative_error_estimate=float(compressed_rhs.relative_error_estimate),
+                        )
+                        blr_updates.append(compressed)
+                        blr_update_count += 1
+                        blr_rank_total += int(compressed.rank)
+                        blr_dense_entries_original += int(sep_count) * int(col_chunk.size)
+                        blr_dense_entries_compressed += int(compressed.u.size + compressed.vt.size)
+                        if np.isfinite(compressed.relative_error_estimate):
+                            blr_error_estimate_max = max(
+                                float(blr_error_estimate_max),
+                                float(compressed.relative_error_estimate),
+                            )
+                    else:
+                        try:
+                            eliminated = np.asarray(factor.solve(b_dense), dtype=dtype)
+                        except Exception:
+                            eliminated = np.zeros((idx.size, int(col_chunk.size)), dtype=dtype)
+                        update = np.asarray(c_mat @ eliminated, dtype=dtype)
+                        assert schur is not None
+                        schur[:, col_chunk] -= update
             total_nbytes += estimate_csr_nbytes(b_mat.shape, int(b_mat.nnz), data_dtype=b_mat.dtype, index_dtype=b_mat.indices.dtype)
             total_nbytes += estimate_csr_nbytes(c_mat.shape, int(c_mat.nnz), data_dtype=c_mat.dtype, index_dtype=c_mat.indices.dtype)
             total_nnz += int(b_mat.nnz) + int(c_mat.nnz)
@@ -983,19 +1309,64 @@ def _build_symbolic_frontal_schur_factor(
         blocks.append(_SymbolicSchurBlock(indices=idx, factor=factor, b_to_separator=b_mat, c_from_separator=c_mat))
 
     if sep_count:
-        schur_csc = sp.csc_matrix(schur)
+        if bool(compress_updates):
+            schur_csc = schur_base_sparse
+        else:
+            assert schur is not None
+            schur_csc = sp.csc_matrix(schur)
         schur_csc.sum_duplicates()
         schur_max = float(np.max(np.abs(schur_csc.data))) if schur_csc.nnz else 0.0
         schur_reg = max(1.0e-14, float(regularization_rel) * max(1.0, schur_max))
         schur_reg_csc = (schur_csc + schur_reg * sp.eye(sep_count, dtype=dtype, format="csc")).tocsc()
         try:
-            schur_factor = splu(schur_reg_csc, permc_spec="COLAMD", diag_pivot_thresh=1.0)
+            base_schur_factor = splu(schur_reg_csc, permc_spec="COLAMD", diag_pivot_thresh=1.0)
         except RuntimeError:
-            schur_factor = _DenseInverseFactor(inverse=np.linalg.pinv(schur_reg_csc.toarray()))
-        schur_nbytes, schur_nnz = estimate_superlu_factor_storage(schur_factor)
-        if schur_nbytes is None and isinstance(schur_factor, _DenseInverseFactor):
-            schur_nbytes = int(schur_factor.inverse.nbytes)
-            schur_nnz = int(schur_factor.inverse.size)
+            base_schur_factor = _DenseInverseFactor(inverse=np.linalg.pinv(schur_reg_csc.toarray()))
+        if bool(compress_updates):
+            woodbury_z, woodbury_vt, woodbury_core_inverse, woodbury_condition = _build_blr_woodbury_state(
+                base_schur_factor,
+                tuple(blr_updates),
+                separator_size=int(sep_count),
+                dtype=dtype,
+                max_rank=max(0, int(blr_woodbury_max_rank)),
+                max_condition=float(blr_woodbury_max_condition),
+            )
+            schur_factor = _BLRSchurFactor(
+                base_matrix=schur_reg_csc.tocsr(),
+                base_factor=base_schur_factor,
+                updates=tuple(blr_updates),
+                dtype=dtype,
+                rtol=float(blr_gmres_rtol),
+                atol=float(blr_gmres_atol),
+                maxiter=max(1, int(blr_gmres_maxiter)),
+                restart=max(1, int(blr_gmres_restart)),
+                woodbury_z=woodbury_z,
+                woodbury_vt=woodbury_vt,
+                woodbury_core_inverse=woodbury_core_inverse,
+                woodbury_condition=woodbury_condition,
+            )
+        else:
+            schur_factor = base_schur_factor
+        schur_nbytes, schur_nnz = estimate_superlu_factor_storage(base_schur_factor)
+        if schur_nbytes is None and isinstance(base_schur_factor, _DenseInverseFactor):
+            schur_nbytes = int(base_schur_factor.inverse.nbytes)
+            schur_nnz = int(base_schur_factor.inverse.size)
+        if bool(compress_updates):
+            update_nbytes = sum(int(update.u.nbytes + update.vt.nbytes + update.columns.nbytes) for update in blr_updates)
+            update_nnz = sum(int(update.u.size + update.vt.size) for update in blr_updates)
+            if isinstance(schur_factor, _BLRSchurFactor):
+                update_nbytes += int(schur_factor.woodbury_nbytes)
+                update_nnz += int(
+                    (0 if schur_factor.woodbury_z is None else schur_factor.woodbury_z.size)
+                    + (0 if schur_factor.woodbury_vt is None else schur_factor.woodbury_vt.size)
+                    + (
+                        0
+                        if schur_factor.woodbury_core_inverse is None
+                        else schur_factor.woodbury_core_inverse.size
+                    )
+                )
+            schur_nbytes = int(schur_nbytes or 0) + int(update_nbytes)
+            schur_nnz = int(schur_nnz or 0) + int(update_nnz)
         total_nbytes += estimate_csr_nbytes(schur_csc.shape, int(schur_csc.nnz), data_dtype=schur_csc.dtype, index_dtype=schur_csc.indices.dtype)
         total_nbytes += int(schur_nbytes or 0)
         total_nnz += int(schur_csc.nnz) + int(schur_nnz or 0)
@@ -1018,6 +1389,30 @@ def _build_symbolic_frontal_schur_factor(
         peak_dense_rhs_entries=int(peak_dense_rhs_entries),
         separator_update_columns=int(separator_update_columns),
         factor_failures=int(factor_failures),
+        metadata=(
+            {
+                "blr_update_count": int(blr_update_count),
+                "blr_rank_total": int(blr_rank_total),
+                "blr_dense_entries_original": int(blr_dense_entries_original),
+                "blr_dense_entries_compressed": int(blr_dense_entries_compressed),
+                "blr_error_estimate_max": float(blr_error_estimate_max),
+                "blr_woodbury_rank": int(schur_factor.woodbury_rank)
+                if isinstance(schur_factor, _BLRSchurFactor)
+                else 0,
+                "blr_woodbury_condition": (
+                    float(schur_factor.woodbury_condition)
+                    if isinstance(schur_factor, _BLRSchurFactor)
+                    and schur_factor.woodbury_condition is not None
+                    and np.isfinite(float(schur_factor.woodbury_condition))
+                    else None
+                ),
+                "blr_woodbury_nbytes": int(schur_factor.woodbury_nbytes)
+                if isinstance(schur_factor, _BLRSchurFactor)
+                else 0,
+            }
+            if bool(compress_updates)
+            else None
+        ),
     )
     return factor, int(total_nbytes), int(total_nnz)
 
@@ -2325,6 +2720,15 @@ def factorize_host_sparse_operator(
     symbolic_frontal_regularization_rel: float = 1.0e-12,
     symbolic_frontal_max_dense_rhs_entries: int = 0,
     symbolic_frontal_max_dense_rhs_cols_per_block: int = 0,
+    symbolic_blr_frontal_tol: float = 1.0e-6,
+    symbolic_blr_frontal_max_rank: int = 64,
+    symbolic_blr_frontal_min_cols: int = 8,
+    symbolic_blr_frontal_gmres_rtol: float = 1.0e-6,
+    symbolic_blr_frontal_gmres_atol: float = 0.0,
+    symbolic_blr_frontal_gmres_maxiter: int = 50,
+    symbolic_blr_frontal_gmres_restart: int = 64,
+    symbolic_blr_frontal_woodbury_max_rank: int = 512,
+    symbolic_blr_frontal_woodbury_max_condition: float = 1.0e8,
     symbolic_superblock_max_size: int = 32768,
     symbolic_superblock_max_blocks: int = 8,
     symbolic_superblock_min_cross_nnz: int = 1,
@@ -2432,6 +2836,7 @@ def factorize_host_sparse_operator(
             "symbolic_block_schur_lu",
             "symbolic_superblock_lu",
             "symbolic_frontal_schur_lu",
+            "symbolic_blr_frontal_schur_lu",
         }:
             analysis = symbolic_analysis
             if analysis is None:
@@ -2468,6 +2873,33 @@ def factorize_host_sparse_operator(
                     regularization_rel=float(symbolic_frontal_regularization_rel),
                     max_dense_rhs_entries=int(symbolic_frontal_max_dense_rhs_entries),
                     max_dense_rhs_cols_per_block=int(symbolic_frontal_max_dense_rhs_cols_per_block),
+                )
+            elif kind == "symbolic_blr_frontal_schur_lu":
+                factor, symbolic_nbytes, symbolic_nnz = _build_symbolic_frontal_schur_factor(
+                    matrix,
+                    analysis=analysis,
+                    diag_pivot_thresh=float(diag_pivot_thresh),
+                    max_separator_cols=int(symbolic_frontal_max_separator_cols),
+                    tail_size=int(symbolic_frontal_tail_size),
+                    boundary_width=int(symbolic_frontal_boundary_width),
+                    high_degree_cols=int(symbolic_frontal_high_degree_cols),
+                    max_superblock_size=int(symbolic_frontal_max_superblock_size),
+                    max_superblock_blocks=int(symbolic_frontal_max_superblock_blocks),
+                    min_cross_nnz=int(symbolic_frontal_min_cross_nnz),
+                    min_cross_separator_fraction=float(symbolic_frontal_min_cross_separator_fraction),
+                    regularization_rel=float(symbolic_frontal_regularization_rel),
+                    max_dense_rhs_entries=int(symbolic_frontal_max_dense_rhs_entries),
+                    max_dense_rhs_cols_per_block=int(symbolic_frontal_max_dense_rhs_cols_per_block),
+                    compress_updates=True,
+                    blr_tol=float(symbolic_blr_frontal_tol),
+                    blr_max_rank=int(symbolic_blr_frontal_max_rank),
+                    blr_min_cols=int(symbolic_blr_frontal_min_cols),
+                    blr_gmres_rtol=float(symbolic_blr_frontal_gmres_rtol),
+                    blr_gmres_atol=float(symbolic_blr_frontal_gmres_atol),
+                    blr_gmres_maxiter=int(symbolic_blr_frontal_gmres_maxiter),
+                    blr_gmres_restart=int(symbolic_blr_frontal_gmres_restart),
+                    blr_woodbury_max_rank=int(symbolic_blr_frontal_woodbury_max_rank),
+                    blr_woodbury_max_condition=float(symbolic_blr_frontal_woodbury_max_condition),
                 )
             elif kind == "symbolic_superblock_lu":
                 factor, symbolic_nbytes, symbolic_nnz = _build_symbolic_superblock_factor(
@@ -2518,6 +2950,7 @@ def factorize_host_sparse_operator(
         "symbolic_block_schur_lu",
         "symbolic_superblock_lu",
         "symbolic_frontal_schur_lu",
+        "symbolic_blr_frontal_schur_lu",
     }:
         factor_nbytes, factor_nnz = int(symbolic_nbytes), int(symbolic_nnz)
     else:

@@ -970,6 +970,15 @@ def _build_host_sparse_direct_factor_from_matvec(
     default_symbolic_frontal_regularization_rel: float = 1.0e-12,
     default_symbolic_frontal_max_dense_rhs_entries: int = 0,
     default_symbolic_frontal_max_dense_rhs_cols_per_block: int = 0,
+    default_symbolic_blr_frontal_tol: float = 1.0e-6,
+    default_symbolic_blr_frontal_max_rank: int = 64,
+    default_symbolic_blr_frontal_min_cols: int = 8,
+    default_symbolic_blr_frontal_gmres_rtol: float = 1.0e-6,
+    default_symbolic_blr_frontal_gmres_atol: float = 0.0,
+    default_symbolic_blr_frontal_gmres_maxiter: int = 50,
+    default_symbolic_blr_frontal_gmres_restart: int = 64,
+    default_symbolic_blr_frontal_woodbury_max_rank: int = 512,
+    default_symbolic_blr_frontal_woodbury_max_condition: float = 1.0e8,
     default_symbolic_superblock_max_size: int = 32768,
     default_symbolic_superblock_max_blocks: int = 8,
     default_symbolic_superblock_min_cross_nnz: int = 1,
@@ -1021,6 +1030,31 @@ def _build_host_sparse_direct_factor_from_matvec(
     ).strip()
     symbolic_frontal_max_dense_rhs_cols_env = os.environ.get(
         "SFINCS_JAX_EXPLICIT_SPARSE_SYMBOLIC_FRONTAL_MAX_DENSE_RHS_COLS_PER_BLOCK", ""
+    ).strip()
+    symbolic_blr_frontal_tol_env = os.environ.get("SFINCS_JAX_EXPLICIT_SPARSE_SYMBOLIC_BLR_FRONTAL_TOL", "").strip()
+    symbolic_blr_frontal_max_rank_env = os.environ.get(
+        "SFINCS_JAX_EXPLICIT_SPARSE_SYMBOLIC_BLR_FRONTAL_MAX_RANK", ""
+    ).strip()
+    symbolic_blr_frontal_min_cols_env = os.environ.get(
+        "SFINCS_JAX_EXPLICIT_SPARSE_SYMBOLIC_BLR_FRONTAL_MIN_COLS", ""
+    ).strip()
+    symbolic_blr_frontal_gmres_rtol_env = os.environ.get(
+        "SFINCS_JAX_EXPLICIT_SPARSE_SYMBOLIC_BLR_FRONTAL_GMRES_RTOL", ""
+    ).strip()
+    symbolic_blr_frontal_gmres_atol_env = os.environ.get(
+        "SFINCS_JAX_EXPLICIT_SPARSE_SYMBOLIC_BLR_FRONTAL_GMRES_ATOL", ""
+    ).strip()
+    symbolic_blr_frontal_gmres_maxiter_env = os.environ.get(
+        "SFINCS_JAX_EXPLICIT_SPARSE_SYMBOLIC_BLR_FRONTAL_GMRES_MAXITER", ""
+    ).strip()
+    symbolic_blr_frontal_gmres_restart_env = os.environ.get(
+        "SFINCS_JAX_EXPLICIT_SPARSE_SYMBOLIC_BLR_FRONTAL_GMRES_RESTART", ""
+    ).strip()
+    symbolic_blr_frontal_woodbury_max_rank_env = os.environ.get(
+        "SFINCS_JAX_EXPLICIT_SPARSE_SYMBOLIC_BLR_FRONTAL_WOODBURY_MAX_RANK", ""
+    ).strip()
+    symbolic_blr_frontal_woodbury_max_condition_env = os.environ.get(
+        "SFINCS_JAX_EXPLICIT_SPARSE_SYMBOLIC_BLR_FRONTAL_WOODBURY_MAX_CONDITION", ""
     ).strip()
     symbolic_superblock_max_size_env = os.environ.get(
         "SFINCS_JAX_EXPLICIT_SPARSE_SYMBOLIC_SUPERBLOCK_MAX_SIZE", ""
@@ -1210,6 +1244,51 @@ def _build_host_sparse_direct_factor_from_matvec(
         int(default_symbolic_frontal_max_dense_rhs_cols_per_block),
         minimum=0,
     )
+    symbolic_blr_frontal_tol = _parse_float_env(
+        symbolic_blr_frontal_tol_env,
+        float(default_symbolic_blr_frontal_tol),
+        minimum=0.0,
+    )
+    symbolic_blr_frontal_max_rank = _parse_int_env(
+        symbolic_blr_frontal_max_rank_env,
+        int(default_symbolic_blr_frontal_max_rank),
+        minimum=1,
+    )
+    symbolic_blr_frontal_min_cols = _parse_int_env(
+        symbolic_blr_frontal_min_cols_env,
+        int(default_symbolic_blr_frontal_min_cols),
+        minimum=1,
+    )
+    symbolic_blr_frontal_gmres_rtol = _parse_float_env(
+        symbolic_blr_frontal_gmres_rtol_env,
+        float(default_symbolic_blr_frontal_gmres_rtol),
+        minimum=0.0,
+    )
+    symbolic_blr_frontal_gmres_atol = _parse_float_env(
+        symbolic_blr_frontal_gmres_atol_env,
+        float(default_symbolic_blr_frontal_gmres_atol),
+        minimum=0.0,
+    )
+    symbolic_blr_frontal_gmres_maxiter = _parse_int_env(
+        symbolic_blr_frontal_gmres_maxiter_env,
+        int(default_symbolic_blr_frontal_gmres_maxiter),
+        minimum=1,
+    )
+    symbolic_blr_frontal_gmres_restart = _parse_int_env(
+        symbolic_blr_frontal_gmres_restart_env,
+        int(default_symbolic_blr_frontal_gmres_restart),
+        minimum=1,
+    )
+    symbolic_blr_frontal_woodbury_max_rank = _parse_int_env(
+        symbolic_blr_frontal_woodbury_max_rank_env,
+        int(default_symbolic_blr_frontal_woodbury_max_rank),
+        minimum=0,
+    )
+    symbolic_blr_frontal_woodbury_max_condition = _parse_float_env(
+        symbolic_blr_frontal_woodbury_max_condition_env,
+        float(default_symbolic_blr_frontal_woodbury_max_condition),
+        minimum=1.0,
+    )
     symbolic_superblock_max_size = _parse_int_env(
         symbolic_superblock_max_size_env,
         int(default_symbolic_superblock_max_size),
@@ -1254,6 +1333,13 @@ def _build_host_sparse_direct_factor_from_matvec(
     }:
         factor_kind = "symbolic_frontal_schur_lu"
     elif factor_kind_env in {
+        "symbolic_blr_frontal_schur_lu",
+        "blr_frontal_schur_lu",
+        "native_blr_frontal_schur_lu",
+        "compressed_frontal_schur_lu",
+    }:
+        factor_kind = "symbolic_blr_frontal_schur_lu"
+    elif factor_kind_env in {
         "symbolic_superblock_lu",
         "superblock_lu",
         "native_superblock_lu",
@@ -1284,6 +1370,13 @@ def _build_host_sparse_direct_factor_from_matvec(
         "multifrontal_schur_lu",
     }:
         factor_kind = "symbolic_frontal_schur_lu"
+    elif default_factor_kind_norm in {
+        "symbolic_blr_frontal_schur_lu",
+        "blr_frontal_schur_lu",
+        "native_blr_frontal_schur_lu",
+        "compressed_frontal_schur_lu",
+    }:
+        factor_kind = "symbolic_blr_frontal_schur_lu"
     elif default_factor_kind_norm in {
         "symbolic_superblock_lu",
         "superblock_lu",
@@ -1468,6 +1561,15 @@ def _build_host_sparse_direct_factor_from_matvec(
             symbolic_frontal_regularization_rel=float(symbolic_frontal_regularization_rel),
             symbolic_frontal_max_dense_rhs_entries=int(symbolic_frontal_max_dense_rhs_entries),
             symbolic_frontal_max_dense_rhs_cols_per_block=int(symbolic_frontal_max_dense_rhs_cols_per_block),
+            symbolic_blr_frontal_tol=float(symbolic_blr_frontal_tol),
+            symbolic_blr_frontal_max_rank=int(symbolic_blr_frontal_max_rank),
+            symbolic_blr_frontal_min_cols=int(symbolic_blr_frontal_min_cols),
+            symbolic_blr_frontal_gmres_rtol=float(symbolic_blr_frontal_gmres_rtol),
+            symbolic_blr_frontal_gmres_atol=float(symbolic_blr_frontal_gmres_atol),
+            symbolic_blr_frontal_gmres_maxiter=int(symbolic_blr_frontal_gmres_maxiter),
+            symbolic_blr_frontal_gmres_restart=int(symbolic_blr_frontal_gmres_restart),
+            symbolic_blr_frontal_woodbury_max_rank=int(symbolic_blr_frontal_woodbury_max_rank),
+            symbolic_blr_frontal_woodbury_max_condition=float(symbolic_blr_frontal_woodbury_max_condition),
             symbolic_superblock_max_size=int(symbolic_superblock_max_size),
             symbolic_superblock_max_blocks=int(symbolic_superblock_max_blocks),
             symbolic_superblock_min_cross_nnz=int(symbolic_superblock_min_cross_nnz),
@@ -13631,6 +13733,51 @@ def _build_rhsmode23_fp_fortran_reduced_lu_preconditioner(
         0,
         minimum=0,
     )
+    symbolic_blr_frontal_tol = _float_env(
+        "SFINCS_JAX_TRANSPORT_FP_FORTRAN_REDUCED_LU_SYMBOLIC_BLR_FRONTAL_TOL",
+        1.0e-6,
+        minimum=0.0,
+    )
+    symbolic_blr_frontal_max_rank = _int_env(
+        "SFINCS_JAX_TRANSPORT_FP_FORTRAN_REDUCED_LU_SYMBOLIC_BLR_FRONTAL_MAX_RANK",
+        64,
+        minimum=1,
+    )
+    symbolic_blr_frontal_min_cols = _int_env(
+        "SFINCS_JAX_TRANSPORT_FP_FORTRAN_REDUCED_LU_SYMBOLIC_BLR_FRONTAL_MIN_COLS",
+        8,
+        minimum=1,
+    )
+    symbolic_blr_frontal_gmres_rtol = _float_env(
+        "SFINCS_JAX_TRANSPORT_FP_FORTRAN_REDUCED_LU_SYMBOLIC_BLR_FRONTAL_GMRES_RTOL",
+        1.0e-6,
+        minimum=0.0,
+    )
+    symbolic_blr_frontal_gmres_atol = _float_env(
+        "SFINCS_JAX_TRANSPORT_FP_FORTRAN_REDUCED_LU_SYMBOLIC_BLR_FRONTAL_GMRES_ATOL",
+        0.0,
+        minimum=0.0,
+    )
+    symbolic_blr_frontal_gmres_maxiter = _int_env(
+        "SFINCS_JAX_TRANSPORT_FP_FORTRAN_REDUCED_LU_SYMBOLIC_BLR_FRONTAL_GMRES_MAXITER",
+        50,
+        minimum=1,
+    )
+    symbolic_blr_frontal_gmres_restart = _int_env(
+        "SFINCS_JAX_TRANSPORT_FP_FORTRAN_REDUCED_LU_SYMBOLIC_BLR_FRONTAL_GMRES_RESTART",
+        64,
+        minimum=1,
+    )
+    symbolic_blr_frontal_woodbury_max_rank = _int_env(
+        "SFINCS_JAX_TRANSPORT_FP_FORTRAN_REDUCED_LU_SYMBOLIC_BLR_FRONTAL_WOODBURY_MAX_RANK",
+        512,
+        minimum=0,
+    )
+    symbolic_blr_frontal_woodbury_max_condition = _float_env(
+        "SFINCS_JAX_TRANSPORT_FP_FORTRAN_REDUCED_LU_SYMBOLIC_BLR_FRONTAL_WOODBURY_MAX_CONDITION",
+        1.0e8,
+        minimum=1.0,
+    )
     symbolic_superblock_max_size = _int_env(
         "SFINCS_JAX_TRANSPORT_FP_FORTRAN_REDUCED_LU_SYMBOLIC_SUPERBLOCK_MAX_SIZE",
         32768,
@@ -13728,6 +13875,10 @@ def _build_rhsmode23_fp_fortran_reduced_lu_preconditioner(
             "frontal_schur_lu",
             "native_frontal_schur_lu",
             "multifrontal_schur_lu",
+            "symbolic_blr_frontal_schur_lu",
+            "blr_frontal_schur_lu",
+            "native_blr_frontal_schur_lu",
+            "compressed_frontal_schur_lu",
             "symbolic_superblock_lu",
             "superblock_lu",
             "native_superblock_lu",
@@ -13743,6 +13894,12 @@ def _build_rhsmode23_fp_fortran_reduced_lu_preconditioner(
         default_factor_kind = "symbolic_block_schur_lu"
     elif default_factor_kind in {"frontal_schur_lu", "native_frontal_schur_lu", "multifrontal_schur_lu"}:
         default_factor_kind = "symbolic_frontal_schur_lu"
+    elif default_factor_kind in {
+        "blr_frontal_schur_lu",
+        "native_blr_frontal_schur_lu",
+        "compressed_frontal_schur_lu",
+    }:
+        default_factor_kind = "symbolic_blr_frontal_schur_lu"
     elif default_factor_kind in {"superblock_lu", "native_superblock_lu", "block_edge_lu"}:
         default_factor_kind = "symbolic_superblock_lu"
     elif default_factor_kind in {"block_lu_coarse", "native_block_lu_coarse", "symbolic_lu_coarse"}:
@@ -13801,6 +13958,12 @@ def _build_rhsmode23_fp_fortran_reduced_lu_preconditioner(
             f"{float(symbolic_frontal_regularization_rel):.3e}_"
             f"{int(symbolic_frontal_max_dense_rhs_entries)}_"
             f"{int(symbolic_frontal_max_dense_rhs_cols_per_block)}_"
+            f"blr{float(symbolic_blr_frontal_tol):.3e}_{int(symbolic_blr_frontal_max_rank)}_"
+            f"{int(symbolic_blr_frontal_min_cols)}_{float(symbolic_blr_frontal_gmres_rtol):.3e}_"
+            f"{float(symbolic_blr_frontal_gmres_atol):.3e}_{int(symbolic_blr_frontal_gmres_maxiter)}_"
+            f"{int(symbolic_blr_frontal_gmres_restart)}_"
+            f"wb{int(symbolic_blr_frontal_woodbury_max_rank)}_"
+            f"{float(symbolic_blr_frontal_woodbury_max_condition):.3e}_"
             f"super{int(symbolic_superblock_max_size)}_{int(symbolic_superblock_max_blocks)}_"
             f"{int(symbolic_superblock_min_cross_nnz)}_"
             f"{float(symbolic_superblock_min_retained_cross_fraction):.3e}_"
@@ -13864,6 +14027,7 @@ def _build_rhsmode23_fp_fortran_reduced_lu_preconditioner(
                         "symbolic_block_lu_coarse",
                         "symbolic_block_schur_lu",
                         "symbolic_frontal_schur_lu",
+                        "symbolic_blr_frontal_schur_lu",
                         "symbolic_superblock_lu",
                     }
                     else 0
@@ -13991,6 +14155,19 @@ def _build_rhsmode23_fp_fortran_reduced_lu_preconditioner(
                         default_symbolic_frontal_max_dense_rhs_cols_per_block=int(
                             symbolic_frontal_max_dense_rhs_cols_per_block
                         ),
+                        default_symbolic_blr_frontal_tol=float(symbolic_blr_frontal_tol),
+                        default_symbolic_blr_frontal_max_rank=int(symbolic_blr_frontal_max_rank),
+                        default_symbolic_blr_frontal_min_cols=int(symbolic_blr_frontal_min_cols),
+                        default_symbolic_blr_frontal_gmres_rtol=float(symbolic_blr_frontal_gmres_rtol),
+                        default_symbolic_blr_frontal_gmres_atol=float(symbolic_blr_frontal_gmres_atol),
+                        default_symbolic_blr_frontal_gmres_maxiter=int(symbolic_blr_frontal_gmres_maxiter),
+                        default_symbolic_blr_frontal_gmres_restart=int(symbolic_blr_frontal_gmres_restart),
+                        default_symbolic_blr_frontal_woodbury_max_rank=int(
+                            symbolic_blr_frontal_woodbury_max_rank
+                        ),
+                        default_symbolic_blr_frontal_woodbury_max_condition=float(
+                            symbolic_blr_frontal_woodbury_max_condition
+                        ),
                         default_symbolic_superblock_max_size=int(symbolic_superblock_max_size),
                         default_symbolic_superblock_max_blocks=int(symbolic_superblock_max_blocks),
                         default_symbolic_superblock_min_cross_nnz=int(symbolic_superblock_min_cross_nnz),
@@ -14077,6 +14254,17 @@ def _build_rhsmode23_fp_fortran_reduced_lu_preconditioner(
                     default_symbolic_frontal_max_dense_rhs_entries=int(symbolic_frontal_max_dense_rhs_entries),
                     default_symbolic_frontal_max_dense_rhs_cols_per_block=int(
                         symbolic_frontal_max_dense_rhs_cols_per_block
+                    ),
+                    default_symbolic_blr_frontal_tol=float(symbolic_blr_frontal_tol),
+                    default_symbolic_blr_frontal_max_rank=int(symbolic_blr_frontal_max_rank),
+                    default_symbolic_blr_frontal_min_cols=int(symbolic_blr_frontal_min_cols),
+                    default_symbolic_blr_frontal_gmres_rtol=float(symbolic_blr_frontal_gmres_rtol),
+                    default_symbolic_blr_frontal_gmres_atol=float(symbolic_blr_frontal_gmres_atol),
+                    default_symbolic_blr_frontal_gmres_maxiter=int(symbolic_blr_frontal_gmres_maxiter),
+                    default_symbolic_blr_frontal_gmres_restart=int(symbolic_blr_frontal_gmres_restart),
+                    default_symbolic_blr_frontal_woodbury_max_rank=int(symbolic_blr_frontal_woodbury_max_rank),
+                    default_symbolic_blr_frontal_woodbury_max_condition=float(
+                        symbolic_blr_frontal_woodbury_max_condition
                     ),
                     default_symbolic_superblock_max_size=int(symbolic_superblock_max_size),
                     default_symbolic_superblock_max_blocks=int(symbolic_superblock_max_blocks),
@@ -14172,6 +14360,7 @@ def _build_rhsmode23_fp_fortran_reduced_lu_preconditioner(
             "symbolic_block_lu_coarse",
             "symbolic_block_schur_lu",
             "symbolic_frontal_schur_lu",
+            "symbolic_blr_frontal_schur_lu",
             "symbolic_superblock_lu",
         } and bool(symbolic_admission_enabled):
             admission = admit_sparse_factor_against_operator(
@@ -14281,6 +14470,9 @@ def _build_rhsmode23_fp_fortran_reduced_lu_preconditioner(
                 factor_bundle = rescue_bundle
                 factor_nbytes = getattr(factor_bundle, "factor_nbytes_estimate", None)
                 factor_kind_for_admission = str(getattr(factor_bundle, "kind", ""))
+        inner_factor_metadata = getattr(getattr(factor_bundle, "factor", None), "metadata", None)
+        if isinstance(inner_factor_metadata, dict):
+            symbolic_metadata["symbolic_factor_metadata"] = dict(inner_factor_metadata)
         if factor_matrix is not None:
             try:
                 symbolic_analysis = getattr(getattr(factor_bundle, "factor", None), "analysis", None)
@@ -14361,6 +14553,15 @@ def _build_rhsmode23_fp_fortran_reduced_lu_preconditioner(
             "symbolic_frontal_regularization_rel": float(symbolic_frontal_regularization_rel),
             "symbolic_frontal_max_dense_rhs_entries": int(symbolic_frontal_max_dense_rhs_entries),
             "symbolic_frontal_max_dense_rhs_cols_per_block": int(symbolic_frontal_max_dense_rhs_cols_per_block),
+            "symbolic_blr_frontal_tol": float(symbolic_blr_frontal_tol),
+            "symbolic_blr_frontal_max_rank": int(symbolic_blr_frontal_max_rank),
+            "symbolic_blr_frontal_min_cols": int(symbolic_blr_frontal_min_cols),
+            "symbolic_blr_frontal_gmres_rtol": float(symbolic_blr_frontal_gmres_rtol),
+            "symbolic_blr_frontal_gmres_atol": float(symbolic_blr_frontal_gmres_atol),
+            "symbolic_blr_frontal_gmres_maxiter": int(symbolic_blr_frontal_gmres_maxiter),
+            "symbolic_blr_frontal_gmres_restart": int(symbolic_blr_frontal_gmres_restart),
+            "symbolic_blr_frontal_woodbury_max_rank": int(symbolic_blr_frontal_woodbury_max_rank),
+            "symbolic_blr_frontal_woodbury_max_condition": float(symbolic_blr_frontal_woodbury_max_condition),
             "symbolic_superblock_max_size": int(symbolic_superblock_max_size),
             "symbolic_superblock_max_blocks": int(symbolic_superblock_max_blocks),
             "symbolic_superblock_min_cross_nnz": int(symbolic_superblock_min_cross_nnz),
@@ -24407,7 +24608,7 @@ def solve_v3_full_system_linear_gmres(
                         )
                         row_equilibration_max_scale = _rhs1_float_env(
                             "SFINCS_JAX_RHSMODE1_XBLOCK_ASSEMBLED_OPERATOR_ROW_EQUILIBRATE_MAX_SCALE",
-                            default=1.0e12,
+                            default=1.0e8,
                             minimum=1.0,
                         )
                         assembled_csr_for_scaling = assembled_matrix.tocsr()

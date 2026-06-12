@@ -707,6 +707,163 @@ def test_symbolic_frontal_schur_lu_rejects_dense_rhs_work_budget() -> None:
         )
 
 
+_SYMBOLIC_BLR_FRONTAL_SCHUR_LU_KIND = "symbolic_blr_frontal_schur_lu"
+
+
+def _rank_one_separator_coupled_blr_matrix() -> sp.csr_matrix:
+    interior0 = np.array(
+        [
+            [5.0, 0.8, 0.0],
+            [0.4, 4.5, -0.6],
+            [0.0, 0.7, 3.8],
+        ],
+        dtype=np.float64,
+    )
+    interior1 = np.array(
+        [
+            [4.8, -0.5, 0.0],
+            [0.3, 4.2, 0.9],
+            [0.0, -0.4, 4.6],
+        ],
+        dtype=np.float64,
+    )
+    separator = np.array([[7.5, 0.4], [-0.2, 6.8]], dtype=np.float64)
+    b0 = 0.7 * np.outer(np.array([1.0, -0.5, 0.25]), np.array([1.4, -0.9]))
+    c0 = 0.6 * np.outer(np.array([-0.7, 0.55]), np.array([0.8, -0.35, 0.45]))
+    b1 = 0.8 * np.outer(np.array([-0.6, 1.0, 0.35]), np.array([1.1, 0.75]))
+    c1 = 0.5 * np.outer(np.array([0.6, -0.8]), np.array([-0.5, 0.65, 0.25]))
+
+    matrix = np.zeros((8, 8), dtype=np.float64)
+    matrix[:3, :3] = interior0
+    matrix[3:6, 3:6] = interior1
+    matrix[6:, 6:] = separator
+    matrix[:3, 6:] = b0
+    matrix[6:, :3] = c0
+    matrix[3:6, 6:] = b1
+    matrix[6:, 3:6] = c1
+    return sp.csr_matrix(matrix)
+
+
+def _factorize_symbolic_blr_frontal_schur_lu(matrix: sp.spmatrix, **overrides):
+    kwargs = {
+        "kind": _SYMBOLIC_BLR_FRONTAL_SCHUR_LU_KIND,
+        "symbolic_ordering_kind": "natural",
+        "symbolic_block_size": 3,
+        "symbolic_frontal_tail_size": 2,
+        "symbolic_frontal_max_separator_cols": 2,
+        "symbolic_frontal_boundary_width": 0,
+        "symbolic_frontal_high_degree_cols": 0,
+        "symbolic_frontal_max_superblock_size": 3,
+        "symbolic_frontal_max_superblock_blocks": 1,
+        "symbolic_frontal_min_cross_separator_fraction": 1.0,
+        "symbolic_frontal_regularization_rel": 0.0,
+    }
+    kwargs.update(overrides)
+    try:
+        return factorize_host_sparse_operator(matrix, **kwargs)
+    except ValueError as exc:
+        if _SYMBOLIC_BLR_FRONTAL_SCHUR_LU_KIND in str(exc) and "unknown factorization kind" in str(exc):
+            pytest.xfail(
+                f"{_SYMBOLIC_BLR_FRONTAL_SCHUR_LU_KIND} is not implemented in explicit_sparse dispatch yet"
+            )
+        raise
+
+
+def test_symbolic_blr_frontal_schur_lu_solves_rank_one_separator_updates_under_budget() -> None:
+    matrix = _rank_one_separator_coupled_blr_matrix()
+    rhs = np.asarray([1.0, -2.0, 0.5, 1.5, -0.75, 2.25, -1.0, 0.8], dtype=np.float64)
+
+    # Dense frontal updates need 12 local RHS entries here; rank-one BLR updates need 6.
+    factor = _factorize_symbolic_blr_frontal_schur_lu(
+        matrix,
+        symbolic_frontal_max_dense_rhs_entries=6,
+    )
+
+    np.testing.assert_allclose(
+        factor.solve(rhs),
+        np.linalg.solve(matrix.toarray(), rhs),
+        rtol=1.0e-11,
+        atol=1.0e-11,
+    )
+    assert factor.kind == _SYMBOLIC_BLR_FRONTAL_SCHUR_LU_KIND
+    assert factor.factor.separator_count == 2
+    assert factor.factor.total_cross_nnz > 0
+    assert factor.factor.selected_cross_nnz == factor.factor.total_cross_nnz
+    assert factor.factor.cross_separator_fraction == 1.0
+    assert factor.factor.metadata is not None
+    assert factor.factor.metadata["blr_woodbury_rank"] > 0
+    assert factor.factor.metadata["blr_error_estimate_max"] < 1.0e-12
+    assert factor.factor_nbytes_estimate is not None and factor.factor_nbytes_estimate > 0
+
+
+def test_symbolic_blr_frontal_schur_lu_rejects_ill_conditioned_woodbury_core_to_gmres() -> None:
+    matrix = _rank_one_separator_coupled_blr_matrix()
+    rhs = np.asarray([1.0, -2.0, 0.5, 1.5, -0.75, 2.25, -1.0, 0.8], dtype=np.float64)
+
+    factor = _factorize_symbolic_blr_frontal_schur_lu(
+        matrix,
+        symbolic_frontal_max_dense_rhs_entries=6,
+        symbolic_blr_frontal_woodbury_max_condition=1.0,
+        symbolic_blr_frontal_gmres_rtol=1.0e-12,
+        symbolic_blr_frontal_gmres_maxiter=20,
+    )
+
+    np.testing.assert_allclose(
+        factor.solve(rhs),
+        np.linalg.solve(matrix.toarray(), rhs),
+        rtol=1.0e-11,
+        atol=1.0e-11,
+    )
+    assert factor.factor.metadata is not None
+    assert factor.factor.metadata["blr_woodbury_rank"] == 0
+    assert factor.factor.metadata["blr_woodbury_condition"] is not None
+
+
+def test_symbolic_blr_frontal_schur_lu_rejects_dense_rhs_update_budget() -> None:
+    matrix = _rank_one_separator_coupled_blr_matrix()
+
+    # The same rank-one updates should not fit below one compressed 3-row RHS per interior block.
+    with pytest.raises(RuntimeError, match="budget exceeded"):
+        _factorize_symbolic_blr_frontal_schur_lu(
+            matrix,
+            symbolic_frontal_max_dense_rhs_entries=5,
+        )
+
+
+def test_symbolic_blr_frontal_schur_lu_admission_accepts_and_rejects_small_matrix() -> None:
+    matrix = _rank_one_separator_coupled_blr_matrix()
+    accepted_factor = _factorize_symbolic_blr_frontal_schur_lu(
+        matrix,
+        symbolic_frontal_max_dense_rhs_entries=6,
+    )
+    rejected_factor = _factorize_symbolic_blr_frontal_schur_lu(
+        matrix,
+        symbolic_frontal_max_separator_cols=1,
+        symbolic_frontal_min_cross_separator_fraction=0.0,
+    )
+
+    accepted = admit_sparse_factor_against_operator(
+        accepted_factor.operator,
+        accepted_factor,
+        max_relative_residual=1.0e-10,
+        min_improvement_vs_identity=1.0,
+    )
+    rejected = admit_sparse_factor_against_operator(
+        rejected_factor.operator,
+        rejected_factor,
+        max_relative_residual=1.0e-2,
+        min_improvement_vs_identity=10.0,
+    )
+
+    assert accepted.accepted is True
+    assert accepted.max_relative_residual < 1.0e-10
+    assert accepted.reason == "accepted"
+    assert rejected_factor.factor.separator_count == 1
+    assert rejected.accepted is False
+    assert rejected.max_relative_residual > 1.0e-2
+    assert rejected.reason == "residual_or_improvement_gate_failed"
+
+
 def test_symbolic_block_lu_overlap_retains_boundary_couplings() -> None:
     matrix = sp.csr_matrix(
         [

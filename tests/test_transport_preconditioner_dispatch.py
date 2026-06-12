@@ -587,7 +587,10 @@ def test_build_transport_strong_preconditioner_from_kind_reuses_primary_when_sam
     calls: list[tuple[str, dict]] = []
     builders = _builders(calls)
     context = TransportPreconditionerContext(op=_op(), active_size=128, use_active_dof_mode=False)
-    primary = lambda v: v
+
+    def primary(v):
+        return v
+
     reused = build_transport_strong_preconditioner_from_kind(
         kind="block",
         use_reduced=False,

@@ -3,6 +3,86 @@
 Last updated: 2026-06-12 (America/Chicago)
 Owner: incoming agent
 
+## 2026-06-12 Addendum: BLR/frontal-Schur compressed separator implementation
+
+### Implementation
+
+- Added the opt-in ``symbolic_blr_frontal_schur_lu`` sparse-factor path in
+  ``sfincs_jax.explicit_sparse``.  It keeps the existing frontal-Schur local
+  elimination structure but stores separator updates in a BLR/HSS-style
+  compressed form instead of always materializing dense update blocks.
+- The BLR path now compresses the interior-to-separator RHS before local solves,
+  applies local factors only to retained low-rank bases, and represents the
+  separator operator as ``S ~= S0 - U V^T``.
+- Added a bounded Woodbury separator solve,
+  ``S^-1 = S0^-1 + S0^-1 U (I - V^T S0^-1 U)^-1 V^T S0^-1``, with hard
+  aggregate-rank and condition-number gates.  Ill-conditioned Woodbury cores
+  fall back to a small ``S0``-preconditioned separator GMRES and still must pass
+  the outer true-residual admission gate.
+- Wired BLR/frontal controls through the generic host sparse builder and the
+  RHSMode=2/3 Fortran-reduced transport Pmat path, including cache-key entries
+  for BLR tolerance, max rank, GMRES controls, Woodbury max rank, and Woodbury
+  condition cap.
+- Propagated inner symbolic factor metadata into transport preconditioner
+  metadata so benchmark summaries can report BLR update count, aggregate rank,
+  compression error, Woodbury rank, Woodbury condition, and Woodbury memory.
+- Fixed an existing ruff violation in ``tests/test_transport_preconditioner_dispatch.py``
+  so the affected validation slice is style-clean.
+
+### Evidence
+
+- Focused BLR sparse tests pass:
+  ``pytest -q tests/test_explicit_sparse.py -k "symbolic_blr_frontal_schur_lu"``
+  with ``4 passed``.
+- Affected transport/sparse test slice passes:
+  ``pytest -q tests/test_explicit_sparse.py tests/test_fortran_reduced_preconditioner.py
+  tests/test_transport_preconditioner_dispatch.py tests/test_transport_sparse_direct.py``
+  with ``146 passed``.
+- Lint/compile pass:
+  ``python -m ruff check sfincs_jax/explicit_sparse.py sfincs_jax/v3_driver.py
+  tests/test_explicit_sparse.py tests/test_fortran_reduced_preconditioner.py
+  tests/test_transport_preconditioner_dispatch.py tests/test_transport_sparse_direct.py``
+  and ``python -m compileall -q`` on the touched Python files.
+- Real reduced geometry-rich RHSMode=2/3 Pmat admission gate:
+  - With rescue disabled and common BLR/frontal settings
+    ``block_size=384``, ``max_separator_cols=2400``,
+    ``boundary_width=2``, ``high_degree_cols=256``,
+    ``max_superblock_size=4096``, ``max_superblock_blocks=2``,
+    ``blr_max_rank=256``, and Woodbury forced through the condition gate,
+    reduced ``transportMatrix_geometryScheme11`` passes with
+    ``max_relative_residual = 1.485e-05`` and factor storage estimate
+    ``33.36 MB``.
+  - The same gate on reduced ``transportMatrix_geometryScheme2`` passes with
+    ``max_relative_residual = 6.458e-05`` and factor storage estimate
+    ``39.38 MB``.
+- Diagnostic sweeps show why this must remain fail-closed:
+  - Small separators such as ``512`` columns fail the harder transport Pmat even
+    with exact-rank BLR updates.
+  - Low rank caps such as ``16--128`` produce BLR update errors of order
+    ``0.3--0.9`` on geometry-rich cases and are not admissible.
+  - Geom2 can produce an ill-conditioned Woodbury core; the stricter default
+    condition cap now rejects that core and lets separator GMRES handle the
+    compressed system instead.
+
+### Decision
+
+- ``symbolic_blr_frontal_schur_lu`` is implemented, tested, metadata-visible,
+  and useful as a reduced-case research candidate, but it is not promoted to
+  production defaults yet.
+- The one-level frontal separator is still not a true nested-dissection /
+  multifrontal hierarchy.  Production-floor geom2/geom11 and QA/QH RHSMode=1
+  gates must pass without exact-LU rescue before making public performance
+  claims or changing automatic solver defaults.
+- Updated lane status:
+  - Geometry-rich RHSMode=2/3 production preconditioner: ``93%``.  Reduced
+    geometry-rich BLR/frontal admission now passes under strict gates; production
+    floor remains open.
+  - Lower-memory/faster production replacement: ``98%``.  The BLR compressed
+    separator is implemented, but production-scale nested-dissection /
+    multifrontal hierarchy is still the remaining blocker.
+  - RHSMode=1 production solver: ``97%``.  No default change in this pass; the
+    same BLR/frontal machinery is available for future RHSMode=1 experiments.
+
 ## 2026-06-12 Addendum: Fortran v3/PETSc/MUMPS transport profile and native candidate wiring
 
 ### Implementation
