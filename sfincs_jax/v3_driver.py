@@ -979,6 +979,17 @@ def _build_host_sparse_direct_factor_from_matvec(
     default_symbolic_blr_frontal_gmres_restart: int = 64,
     default_symbolic_blr_frontal_woodbury_max_rank: int = 512,
     default_symbolic_blr_frontal_woodbury_max_condition: float = 1.0e8,
+    default_symbolic_nd_max_leaf_size: int = 4096,
+    default_symbolic_nd_max_terminal_factor_size: int = 32768,
+    default_symbolic_nd_max_depth: int = 4,
+    default_symbolic_nd_separator_width: int = 64,
+    default_symbolic_nd_max_separator_cols: int = 4096,
+    default_symbolic_nd_high_degree_cols: int = 64,
+    default_symbolic_nd_regularization_rel: float = 1.0e-12,
+    default_symbolic_nd_max_dense_rhs_entries: int = 0,
+    default_symbolic_nd_max_dense_rhs_cols_per_child: int = 0,
+    default_symbolic_nd_residual_polish_steps: int = 0,
+    default_symbolic_nd_residual_polish_damping: float = 1.0,
     default_symbolic_superblock_max_size: int = 32768,
     default_symbolic_superblock_max_blocks: int = 8,
     default_symbolic_superblock_min_cross_nnz: int = 1,
@@ -1055,6 +1066,35 @@ def _build_host_sparse_direct_factor_from_matvec(
     ).strip()
     symbolic_blr_frontal_woodbury_max_condition_env = os.environ.get(
         "SFINCS_JAX_EXPLICIT_SPARSE_SYMBOLIC_BLR_FRONTAL_WOODBURY_MAX_CONDITION", ""
+    ).strip()
+    symbolic_nd_max_leaf_size_env = os.environ.get(
+        "SFINCS_JAX_EXPLICIT_SPARSE_SYMBOLIC_ND_MAX_LEAF_SIZE", ""
+    ).strip()
+    symbolic_nd_max_terminal_factor_size_env = os.environ.get(
+        "SFINCS_JAX_EXPLICIT_SPARSE_SYMBOLIC_ND_MAX_TERMINAL_FACTOR_SIZE", ""
+    ).strip()
+    symbolic_nd_max_depth_env = os.environ.get("SFINCS_JAX_EXPLICIT_SPARSE_SYMBOLIC_ND_MAX_DEPTH", "").strip()
+    symbolic_nd_separator_width_env = os.environ.get(
+        "SFINCS_JAX_EXPLICIT_SPARSE_SYMBOLIC_ND_SEPARATOR_WIDTH", ""
+    ).strip()
+    symbolic_nd_max_separator_cols_env = os.environ.get(
+        "SFINCS_JAX_EXPLICIT_SPARSE_SYMBOLIC_ND_MAX_SEPARATOR_COLS", ""
+    ).strip()
+    symbolic_nd_high_degree_cols_env = os.environ.get(
+        "SFINCS_JAX_EXPLICIT_SPARSE_SYMBOLIC_ND_HIGH_DEGREE_COLS", ""
+    ).strip()
+    symbolic_nd_reg_env = os.environ.get("SFINCS_JAX_EXPLICIT_SPARSE_SYMBOLIC_ND_REG_REL", "").strip()
+    symbolic_nd_max_dense_rhs_entries_env = os.environ.get(
+        "SFINCS_JAX_EXPLICIT_SPARSE_SYMBOLIC_ND_MAX_DENSE_RHS_ENTRIES", ""
+    ).strip()
+    symbolic_nd_max_dense_rhs_cols_env = os.environ.get(
+        "SFINCS_JAX_EXPLICIT_SPARSE_SYMBOLIC_ND_MAX_DENSE_RHS_COLS_PER_CHILD", ""
+    ).strip()
+    symbolic_nd_residual_polish_steps_env = os.environ.get(
+        "SFINCS_JAX_EXPLICIT_SPARSE_SYMBOLIC_ND_RESIDUAL_POLISH_STEPS", ""
+    ).strip()
+    symbolic_nd_residual_polish_damping_env = os.environ.get(
+        "SFINCS_JAX_EXPLICIT_SPARSE_SYMBOLIC_ND_RESIDUAL_POLISH_DAMPING", ""
     ).strip()
     symbolic_superblock_max_size_env = os.environ.get(
         "SFINCS_JAX_EXPLICIT_SPARSE_SYMBOLIC_SUPERBLOCK_MAX_SIZE", ""
@@ -1289,6 +1329,61 @@ def _build_host_sparse_direct_factor_from_matvec(
         float(default_symbolic_blr_frontal_woodbury_max_condition),
         minimum=1.0,
     )
+    symbolic_nd_max_leaf_size = _parse_int_env(
+        symbolic_nd_max_leaf_size_env,
+        int(default_symbolic_nd_max_leaf_size),
+        minimum=1,
+    )
+    symbolic_nd_max_terminal_factor_size = _parse_int_env(
+        symbolic_nd_max_terminal_factor_size_env,
+        int(default_symbolic_nd_max_terminal_factor_size),
+        minimum=1,
+    )
+    symbolic_nd_max_depth = _parse_int_env(
+        symbolic_nd_max_depth_env,
+        int(default_symbolic_nd_max_depth),
+        minimum=0,
+    )
+    symbolic_nd_separator_width = _parse_int_env(
+        symbolic_nd_separator_width_env,
+        int(default_symbolic_nd_separator_width),
+        minimum=1,
+    )
+    symbolic_nd_max_separator_cols = _parse_int_env(
+        symbolic_nd_max_separator_cols_env,
+        int(default_symbolic_nd_max_separator_cols),
+        minimum=1,
+    )
+    symbolic_nd_high_degree_cols = _parse_int_env(
+        symbolic_nd_high_degree_cols_env,
+        int(default_symbolic_nd_high_degree_cols),
+        minimum=0,
+    )
+    symbolic_nd_regularization_rel = _parse_float_env(
+        symbolic_nd_reg_env,
+        float(default_symbolic_nd_regularization_rel),
+        minimum=0.0,
+    )
+    symbolic_nd_max_dense_rhs_entries = _parse_int_env(
+        symbolic_nd_max_dense_rhs_entries_env,
+        int(default_symbolic_nd_max_dense_rhs_entries),
+        minimum=0,
+    )
+    symbolic_nd_max_dense_rhs_cols_per_child = _parse_int_env(
+        symbolic_nd_max_dense_rhs_cols_env,
+        int(default_symbolic_nd_max_dense_rhs_cols_per_child),
+        minimum=0,
+    )
+    symbolic_nd_residual_polish_steps = _parse_int_env(
+        symbolic_nd_residual_polish_steps_env,
+        int(default_symbolic_nd_residual_polish_steps),
+        minimum=0,
+    )
+    symbolic_nd_residual_polish_damping = _parse_float_env(
+        symbolic_nd_residual_polish_damping_env,
+        float(default_symbolic_nd_residual_polish_damping),
+        minimum=0.0,
+    )
     symbolic_superblock_max_size = _parse_int_env(
         symbolic_superblock_max_size_env,
         int(default_symbolic_superblock_max_size),
@@ -1340,6 +1435,14 @@ def _build_host_sparse_direct_factor_from_matvec(
     }:
         factor_kind = "symbolic_blr_frontal_schur_lu"
     elif factor_kind_env in {
+        "symbolic_nd_frontal_schur_lu",
+        "nd_frontal_schur_lu",
+        "nested_dissection_frontal_schur_lu",
+        "native_nd_frontal_schur_lu",
+        "multilevel_frontal_schur_lu",
+    }:
+        factor_kind = "symbolic_nd_frontal_schur_lu"
+    elif factor_kind_env in {
         "symbolic_superblock_lu",
         "superblock_lu",
         "native_superblock_lu",
@@ -1377,6 +1480,14 @@ def _build_host_sparse_direct_factor_from_matvec(
         "compressed_frontal_schur_lu",
     }:
         factor_kind = "symbolic_blr_frontal_schur_lu"
+    elif default_factor_kind_norm in {
+        "symbolic_nd_frontal_schur_lu",
+        "nd_frontal_schur_lu",
+        "nested_dissection_frontal_schur_lu",
+        "native_nd_frontal_schur_lu",
+        "multilevel_frontal_schur_lu",
+    }:
+        factor_kind = "symbolic_nd_frontal_schur_lu"
     elif default_factor_kind_norm in {
         "symbolic_superblock_lu",
         "superblock_lu",
@@ -1570,6 +1681,17 @@ def _build_host_sparse_direct_factor_from_matvec(
             symbolic_blr_frontal_gmres_restart=int(symbolic_blr_frontal_gmres_restart),
             symbolic_blr_frontal_woodbury_max_rank=int(symbolic_blr_frontal_woodbury_max_rank),
             symbolic_blr_frontal_woodbury_max_condition=float(symbolic_blr_frontal_woodbury_max_condition),
+            symbolic_nd_max_leaf_size=int(symbolic_nd_max_leaf_size),
+            symbolic_nd_max_terminal_factor_size=int(symbolic_nd_max_terminal_factor_size),
+            symbolic_nd_max_depth=int(symbolic_nd_max_depth),
+            symbolic_nd_separator_width=int(symbolic_nd_separator_width),
+            symbolic_nd_max_separator_cols=int(symbolic_nd_max_separator_cols),
+            symbolic_nd_high_degree_cols=int(symbolic_nd_high_degree_cols),
+            symbolic_nd_regularization_rel=float(symbolic_nd_regularization_rel),
+            symbolic_nd_max_dense_rhs_entries=int(symbolic_nd_max_dense_rhs_entries),
+            symbolic_nd_max_dense_rhs_cols_per_child=int(symbolic_nd_max_dense_rhs_cols_per_child),
+            symbolic_nd_residual_polish_steps=int(symbolic_nd_residual_polish_steps),
+            symbolic_nd_residual_polish_damping=float(symbolic_nd_residual_polish_damping),
             symbolic_superblock_max_size=int(symbolic_superblock_max_size),
             symbolic_superblock_max_blocks=int(symbolic_superblock_max_blocks),
             symbolic_superblock_min_cross_nnz=int(symbolic_superblock_min_cross_nnz),
@@ -13778,6 +13900,61 @@ def _build_rhsmode23_fp_fortran_reduced_lu_preconditioner(
         1.0e8,
         minimum=1.0,
     )
+    symbolic_nd_max_leaf_size = _int_env(
+        "SFINCS_JAX_TRANSPORT_FP_FORTRAN_REDUCED_LU_SYMBOLIC_ND_MAX_LEAF_SIZE",
+        4096,
+        minimum=1,
+    )
+    symbolic_nd_max_terminal_factor_size = _int_env(
+        "SFINCS_JAX_TRANSPORT_FP_FORTRAN_REDUCED_LU_SYMBOLIC_ND_MAX_TERMINAL_FACTOR_SIZE",
+        32768,
+        minimum=1,
+    )
+    symbolic_nd_max_depth = _int_env(
+        "SFINCS_JAX_TRANSPORT_FP_FORTRAN_REDUCED_LU_SYMBOLIC_ND_MAX_DEPTH",
+        4,
+        minimum=0,
+    )
+    symbolic_nd_separator_width = _int_env(
+        "SFINCS_JAX_TRANSPORT_FP_FORTRAN_REDUCED_LU_SYMBOLIC_ND_SEPARATOR_WIDTH",
+        64,
+        minimum=1,
+    )
+    symbolic_nd_max_separator_cols = _int_env(
+        "SFINCS_JAX_TRANSPORT_FP_FORTRAN_REDUCED_LU_SYMBOLIC_ND_MAX_SEPARATOR_COLS",
+        4096,
+        minimum=1,
+    )
+    symbolic_nd_high_degree_cols = _int_env(
+        "SFINCS_JAX_TRANSPORT_FP_FORTRAN_REDUCED_LU_SYMBOLIC_ND_HIGH_DEGREE_COLS",
+        64,
+        minimum=0,
+    )
+    symbolic_nd_regularization_rel = _float_env(
+        "SFINCS_JAX_TRANSPORT_FP_FORTRAN_REDUCED_LU_SYMBOLIC_ND_REG_REL",
+        1.0e-12,
+        minimum=0.0,
+    )
+    symbolic_nd_max_dense_rhs_entries = _int_env(
+        "SFINCS_JAX_TRANSPORT_FP_FORTRAN_REDUCED_LU_SYMBOLIC_ND_MAX_DENSE_RHS_ENTRIES",
+        0,
+        minimum=0,
+    )
+    symbolic_nd_max_dense_rhs_cols_per_child = _int_env(
+        "SFINCS_JAX_TRANSPORT_FP_FORTRAN_REDUCED_LU_SYMBOLIC_ND_MAX_DENSE_RHS_COLS_PER_CHILD",
+        0,
+        minimum=0,
+    )
+    symbolic_nd_residual_polish_steps = _int_env(
+        "SFINCS_JAX_TRANSPORT_FP_FORTRAN_REDUCED_LU_SYMBOLIC_ND_RESIDUAL_POLISH_STEPS",
+        2,
+        minimum=0,
+    )
+    symbolic_nd_residual_polish_damping = _float_env(
+        "SFINCS_JAX_TRANSPORT_FP_FORTRAN_REDUCED_LU_SYMBOLIC_ND_RESIDUAL_POLISH_DAMPING",
+        1.0,
+        minimum=0.0,
+    )
     symbolic_superblock_max_size = _int_env(
         "SFINCS_JAX_TRANSPORT_FP_FORTRAN_REDUCED_LU_SYMBOLIC_SUPERBLOCK_MAX_SIZE",
         32768,
@@ -13879,6 +14056,11 @@ def _build_rhsmode23_fp_fortran_reduced_lu_preconditioner(
             "blr_frontal_schur_lu",
             "native_blr_frontal_schur_lu",
             "compressed_frontal_schur_lu",
+            "symbolic_nd_frontal_schur_lu",
+            "nd_frontal_schur_lu",
+            "nested_dissection_frontal_schur_lu",
+            "native_nd_frontal_schur_lu",
+            "multilevel_frontal_schur_lu",
             "symbolic_superblock_lu",
             "superblock_lu",
             "native_superblock_lu",
@@ -13900,6 +14082,13 @@ def _build_rhsmode23_fp_fortran_reduced_lu_preconditioner(
         "compressed_frontal_schur_lu",
     }:
         default_factor_kind = "symbolic_blr_frontal_schur_lu"
+    elif default_factor_kind in {
+        "nd_frontal_schur_lu",
+        "nested_dissection_frontal_schur_lu",
+        "native_nd_frontal_schur_lu",
+        "multilevel_frontal_schur_lu",
+    }:
+        default_factor_kind = "symbolic_nd_frontal_schur_lu"
     elif default_factor_kind in {"superblock_lu", "native_superblock_lu", "block_edge_lu"}:
         default_factor_kind = "symbolic_superblock_lu"
     elif default_factor_kind in {"block_lu_coarse", "native_block_lu_coarse", "symbolic_lu_coarse"}:
@@ -13964,6 +14153,14 @@ def _build_rhsmode23_fp_fortran_reduced_lu_preconditioner(
             f"{int(symbolic_blr_frontal_gmres_restart)}_"
             f"wb{int(symbolic_blr_frontal_woodbury_max_rank)}_"
             f"{float(symbolic_blr_frontal_woodbury_max_condition):.3e}_"
+            f"nd{int(symbolic_nd_max_leaf_size)}_{int(symbolic_nd_max_depth)}_"
+            f"terminal{int(symbolic_nd_max_terminal_factor_size)}_"
+            f"{int(symbolic_nd_separator_width)}_{int(symbolic_nd_max_separator_cols)}_"
+            f"{int(symbolic_nd_high_degree_cols)}_{float(symbolic_nd_regularization_rel):.3e}_"
+            f"{int(symbolic_nd_max_dense_rhs_entries)}_"
+            f"{int(symbolic_nd_max_dense_rhs_cols_per_child)}_"
+            f"polish{int(symbolic_nd_residual_polish_steps)}_"
+            f"{float(symbolic_nd_residual_polish_damping):.3e}_"
             f"super{int(symbolic_superblock_max_size)}_{int(symbolic_superblock_max_blocks)}_"
             f"{int(symbolic_superblock_min_cross_nnz)}_"
             f"{float(symbolic_superblock_min_retained_cross_fraction):.3e}_"
@@ -14028,6 +14225,7 @@ def _build_rhsmode23_fp_fortran_reduced_lu_preconditioner(
                         "symbolic_block_schur_lu",
                         "symbolic_frontal_schur_lu",
                         "symbolic_blr_frontal_schur_lu",
+                        "symbolic_nd_frontal_schur_lu",
                         "symbolic_superblock_lu",
                     }
                     else 0
@@ -14168,6 +14366,19 @@ def _build_rhsmode23_fp_fortran_reduced_lu_preconditioner(
                         default_symbolic_blr_frontal_woodbury_max_condition=float(
                             symbolic_blr_frontal_woodbury_max_condition
                         ),
+                        default_symbolic_nd_max_leaf_size=int(symbolic_nd_max_leaf_size),
+                        default_symbolic_nd_max_terminal_factor_size=int(symbolic_nd_max_terminal_factor_size),
+                        default_symbolic_nd_max_depth=int(symbolic_nd_max_depth),
+                        default_symbolic_nd_separator_width=int(symbolic_nd_separator_width),
+                        default_symbolic_nd_max_separator_cols=int(symbolic_nd_max_separator_cols),
+                        default_symbolic_nd_high_degree_cols=int(symbolic_nd_high_degree_cols),
+                        default_symbolic_nd_regularization_rel=float(symbolic_nd_regularization_rel),
+                        default_symbolic_nd_max_dense_rhs_entries=int(symbolic_nd_max_dense_rhs_entries),
+                        default_symbolic_nd_max_dense_rhs_cols_per_child=int(
+                            symbolic_nd_max_dense_rhs_cols_per_child
+                        ),
+                        default_symbolic_nd_residual_polish_steps=int(symbolic_nd_residual_polish_steps),
+                        default_symbolic_nd_residual_polish_damping=float(symbolic_nd_residual_polish_damping),
                         default_symbolic_superblock_max_size=int(symbolic_superblock_max_size),
                         default_symbolic_superblock_max_blocks=int(symbolic_superblock_max_blocks),
                         default_symbolic_superblock_min_cross_nnz=int(symbolic_superblock_min_cross_nnz),
@@ -14266,6 +14477,17 @@ def _build_rhsmode23_fp_fortran_reduced_lu_preconditioner(
                     default_symbolic_blr_frontal_woodbury_max_condition=float(
                         symbolic_blr_frontal_woodbury_max_condition
                     ),
+                    default_symbolic_nd_max_leaf_size=int(symbolic_nd_max_leaf_size),
+                    default_symbolic_nd_max_terminal_factor_size=int(symbolic_nd_max_terminal_factor_size),
+                    default_symbolic_nd_max_depth=int(symbolic_nd_max_depth),
+                    default_symbolic_nd_separator_width=int(symbolic_nd_separator_width),
+                    default_symbolic_nd_max_separator_cols=int(symbolic_nd_max_separator_cols),
+                    default_symbolic_nd_high_degree_cols=int(symbolic_nd_high_degree_cols),
+                    default_symbolic_nd_regularization_rel=float(symbolic_nd_regularization_rel),
+                    default_symbolic_nd_max_dense_rhs_entries=int(symbolic_nd_max_dense_rhs_entries),
+                    default_symbolic_nd_max_dense_rhs_cols_per_child=int(symbolic_nd_max_dense_rhs_cols_per_child),
+                    default_symbolic_nd_residual_polish_steps=int(symbolic_nd_residual_polish_steps),
+                    default_symbolic_nd_residual_polish_damping=float(symbolic_nd_residual_polish_damping),
                     default_symbolic_superblock_max_size=int(symbolic_superblock_max_size),
                     default_symbolic_superblock_max_blocks=int(symbolic_superblock_max_blocks),
                     default_symbolic_superblock_min_cross_nnz=int(symbolic_superblock_min_cross_nnz),
@@ -14361,6 +14583,7 @@ def _build_rhsmode23_fp_fortran_reduced_lu_preconditioner(
             "symbolic_block_schur_lu",
             "symbolic_frontal_schur_lu",
             "symbolic_blr_frontal_schur_lu",
+            "symbolic_nd_frontal_schur_lu",
             "symbolic_superblock_lu",
         } and bool(symbolic_admission_enabled):
             admission = admit_sparse_factor_against_operator(
@@ -14562,6 +14785,17 @@ def _build_rhsmode23_fp_fortran_reduced_lu_preconditioner(
             "symbolic_blr_frontal_gmres_restart": int(symbolic_blr_frontal_gmres_restart),
             "symbolic_blr_frontal_woodbury_max_rank": int(symbolic_blr_frontal_woodbury_max_rank),
             "symbolic_blr_frontal_woodbury_max_condition": float(symbolic_blr_frontal_woodbury_max_condition),
+            "symbolic_nd_max_leaf_size": int(symbolic_nd_max_leaf_size),
+            "symbolic_nd_max_terminal_factor_size": int(symbolic_nd_max_terminal_factor_size),
+            "symbolic_nd_max_depth": int(symbolic_nd_max_depth),
+            "symbolic_nd_separator_width": int(symbolic_nd_separator_width),
+            "symbolic_nd_max_separator_cols": int(symbolic_nd_max_separator_cols),
+            "symbolic_nd_high_degree_cols": int(symbolic_nd_high_degree_cols),
+            "symbolic_nd_regularization_rel": float(symbolic_nd_regularization_rel),
+            "symbolic_nd_max_dense_rhs_entries": int(symbolic_nd_max_dense_rhs_entries),
+            "symbolic_nd_max_dense_rhs_cols_per_child": int(symbolic_nd_max_dense_rhs_cols_per_child),
+            "symbolic_nd_residual_polish_steps": int(symbolic_nd_residual_polish_steps),
+            "symbolic_nd_residual_polish_damping": float(symbolic_nd_residual_polish_damping),
             "symbolic_superblock_max_size": int(symbolic_superblock_max_size),
             "symbolic_superblock_max_blocks": int(symbolic_superblock_max_blocks),
             "symbolic_superblock_min_cross_nnz": int(symbolic_superblock_min_cross_nnz),

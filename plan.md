@@ -3,6 +3,103 @@
 Last updated: 2026-06-12 (America/Chicago)
 Owner: incoming agent
 
+## 2026-06-12 Addendum: recursive nested-dissection residual-equation factor
+
+### Implementation
+
+- Added the opt-in ``symbolic_nd_frontal_schur_lu`` sparse-factor path in
+  ``sfincs_jax.explicit_sparse``.  It recursively splits the symbolic ordering,
+  promotes true graph cross-partition endpoints into separators, eliminates
+  child interiors, and builds separator Schur complements.  This is the first
+  native multilevel/nested-dissection replacement path rather than another
+  smoother/restart variant.
+- Added bounded residual-equation polish for the ND factor.  The correction
+  applies the same nested factor to ``r = b - A x`` for a fixed number of
+  setup-visible steps, which turned out to be essential for the nonsymmetric
+  geometry-rich reduced Pmat conditioning.
+- Wired ND controls through the generic host sparse builder:
+  ``SFINCS_JAX_EXPLICIT_SPARSE_SYMBOLIC_ND_*`` covers leaf size, depth,
+  terminal leaf factor cap, separator width/cap, high-degree separator
+  promotion, dense RHS work caps, residual-polish steps, and polish damping.
+- Wired ND controls through the RHSMode=2/3 Fortran-reduced transport Pmat
+  path, including cache-key entries and metadata.  Explicit transport selection
+  via ``SFINCS_JAX_TRANSPORT_FP_FORTRAN_REDUCED_LU_FACTOR=symbolic_nd_frontal_schur_lu``
+  now runs the multilevel factor with strict true-residual admission.
+- Added RHSMode=1 active reduced-Pmat aliases:
+  ``active_symbolic_nd_frontal_schur_lu``, ``active_nd_frontal_schur_lu``,
+  ``active_nested_dissection_frontal_schur_lu``, and
+  ``active_multilevel_frontal_schur_lu``.  These reuse the existing active
+  admission path but factor the active true operator with the ND residual
+  equation when explicitly selected.
+- Added fail-fast terminal-leaf guards to the multilevel factor.  If the chosen
+  depth/separator settings would leave a large monolithic child factor, the
+  candidate now rejects immediately instead of silently building a giant leaf
+  LU.  This is controlled by
+  ``SFINCS_JAX_*SYMBOLIC_ND_MAX_TERMINAL_FACTOR_SIZE`` in the generic,
+  RHSMode=2/3 transport, and RHSMode=1 active paths.
+
+### Evidence
+
+- Low-level ND sparse tests pass:
+  ``python -m pytest -q tests/test_explicit_sparse.py -k "symbolic_nd_frontal_schur_lu"``
+  with ``4 passed``.
+- Generic host-builder and transport reduced-Pmat ND tests pass:
+  ``python -m pytest -q tests/test_fortran_reduced_preconditioner.py -k
+  "host_sparse_builder_env_accepts_symbolic_nd_frontal or nd_frontal_residual_polish"``
+  with ``3 passed``.
+- RHSMode=1 active reduced-Pmat ND alias test passes:
+  ``python -m pytest -q tests/test_rhs1_full_assembly.py -k
+  "active_symbolic_nd_frontal_schur_lu"`` with ``1 passed``.
+- Bounded reduced geometry-rich RHSMode=2/3 Pmat probes with direct
+  term-level reduced Pmat, ``rcm`` ordering, ``max_leaf_size=384``,
+  ``max_depth=1``, ``separator_width=128``, ``max_separator_cols=4096``,
+  ``high_degree_cols=256``, and two residual-polish corrections:
+  - ``transportMatrix_geometryScheme2`` admits with
+    ``max_relative_residual = 6.287e-07``, setup about ``0.21 s``, and factor
+    storage estimate ``32.19 MB``.
+  - ``transportMatrix_geometryScheme11`` admits with
+    ``max_relative_residual = 1.349e-11``, setup about ``0.19 s``, and factor
+    storage estimate ``25.63 MB``.
+- Diagnostic result before residual polish: the same graph-separator ND factor
+  reduced geom2 from catastrophic residuals to order-unity residuals, but did
+  not pass strict admission.  One residual-equation correction brought geom2
+  to order ``1e-7`` and two corrections to order ``1e-12`` on deterministic
+  probes; geom11 reached order ``1e-13`` after two corrections.
+- First production-floor ``transportMatrix_geometryScheme11`` CPU probe at
+  ``Ntheta=25, Nzeta=51, Nxi=100, Nx=6`` reran the Fortran v3 reference
+  successfully in about ``199 s`` real time with peak RSS about ``8.5 GB``.
+  The JAX direct reduced Pmat build reached ``active=462827`` and
+  ``nnz=10124069`` in about ``11.2 s``, but the ND factor was rejected by the
+  symbolic prefill guard (about ``7.9 GB`` estimate against a ``4 GB`` cap) and
+  fell back to the old preconditioner.  This was not a valid ND production
+  gate, and the stopped-run artifacts were intentionally not kept.
+- Focused integration after the terminal guard:
+  ``python -m pytest -q tests/test_explicit_sparse.py
+  tests/test_fortran_reduced_preconditioner.py tests/test_rhs1_full_assembly.py``
+  with ``176 passed`` in about ``60 s``.
+- Full local suite after the ND/terminal-guard integration:
+  ``python -m pytest -q`` with ``2491 passed`` in ``630.49 s``.
+
+### Decision
+
+- ``symbolic_nd_frontal_schur_lu`` is implemented, opt-in selectable,
+  metadata-visible, and protected by true-residual gates for both transport
+  reduced Pmat and RHSMode=1 active reduced-Pmat paths.
+- Do not promote it to automatic production defaults yet.  The next required
+  compute gates are full production-floor geom2/geom11 CPU solves, then bounded
+  QA/QH RHSMode=1 surfaces, comparing residual, runtime, and RSS against the
+  current defaults and Fortran v3 references.
+- Updated lane status:
+  - Geometry-rich RHSMode=2/3 production preconditioner: ``96%``.  Reduced
+    geom2/geom11 now pass strict native ND admission; production-floor full
+    solve gates remain.
+  - Lower-memory/faster production replacement: ``99%``.  A true multilevel
+    native residual-equation factor now exists; default promotion depends on
+    production-floor solve evidence.
+  - RHSMode=1 production solver: ``98%``.  QA/QH can now explicitly try active
+    ND reduced-Pmat with residual polish, but production QA/QH surfaces still
+    need rerun before claiming closure.
+
 ## 2026-06-12 Addendum: BLR/frontal-Schur compressed separator implementation
 
 ### Implementation
