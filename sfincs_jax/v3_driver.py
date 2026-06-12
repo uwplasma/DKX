@@ -1121,6 +1121,8 @@ def _build_host_sparse_direct_factor_from_matvec(
         factor_kind = "ilu"
     else:
         factor_kind = "lu"
+    guard_env = os.environ.get("SFINCS_JAX_EXPLICIT_SPARSE_MONOLITHIC_GUARD", "").strip().lower()
+    monolithic_guard_enabled = guard_env not in {"0", "false", "no", "off"}
     ilu_fill_env = os.environ.get("SFINCS_JAX_EXPLICIT_SPARSE_ILU_FILL_FACTOR", "").strip()
     ilu_drop_env = os.environ.get("SFINCS_JAX_EXPLICIT_SPARSE_ILU_DROP_TOL", "").strip()
     default_permc_spec_use = str(default_permc_spec).strip().upper()
@@ -1197,13 +1199,13 @@ def _build_host_sparse_direct_factor_from_matvec(
                 else lambda message: emit(1, f"explicit_sparse: {message}")
             ),
         )
+    operator_metadata = getattr(operator_bundle, "metadata", None)
+    operator_nnz = getattr(operator_metadata, "nnz_estimate", None)
+    operator_csr_nbytes = getattr(operator_metadata, "csr_nbytes_estimate", None)
+    operator_csr_mb = None if operator_csr_nbytes is None else float(operator_csr_nbytes) / 1.0e6
+    operator_csr_mb_text = "unknown" if operator_csr_mb is None else f"{operator_csr_mb:.3f}"
+    operator_shape = getattr(operator_metadata, "shape", (int(n), int(n)))
     if emit is not None:
-        operator_metadata = getattr(operator_bundle, "metadata", None)
-        operator_nnz = getattr(operator_metadata, "nnz_estimate", None)
-        operator_csr_nbytes = getattr(operator_metadata, "csr_nbytes_estimate", None)
-        operator_csr_mb = None if operator_csr_nbytes is None else float(operator_csr_nbytes) / 1.0e6
-        operator_csr_mb_text = "unknown" if operator_csr_mb is None else f"{operator_csr_mb:.3f}"
-        operator_shape = getattr(operator_metadata, "shape", (int(n), int(n)))
         if log_operator_phase:
             emit(
                 1,
@@ -1220,6 +1222,31 @@ def _build_host_sparse_direct_factor_from_matvec(
             f"permc={permc_env} diag_pivot={float(diag_pivot_thresh):.3g} "
             f"operator_nnz={operator_nnz} operator_csr_mb={operator_csr_mb_text}",
         )
+    if bool(monolithic_guard_enabled) and factor_kind in {"lu", "ilu"}:
+        max_n_name = (
+            "SFINCS_JAX_EXPLICIT_SPARSE_MONOLITHIC_LU_MAX_SIZE"
+            if factor_kind == "lu"
+            else "SFINCS_JAX_EXPLICIT_SPARSE_MONOLITHIC_ILU_MAX_SIZE"
+        )
+        max_n_env = os.environ.get(max_n_name, "").strip()
+        max_n_fallback_env = os.environ.get("SFINCS_JAX_EXPLICIT_SPARSE_MONOLITHIC_MAX_SIZE", "").strip()
+        try:
+            max_n = int(max_n_env) if max_n_env else int(max_n_fallback_env or "250000")
+        except ValueError:
+            max_n = 250_000
+        max_n = max(0, int(max_n))
+        operator_rows = int(operator_shape[0]) if operator_shape is not None else int(n)
+        if max_n > 0 and operator_rows > max_n:
+            message = (
+                "explicit_sparse: monolithic factor preflight rejected "
+                f"factor_kind={factor_kind} n={operator_rows} max_n={max_n} "
+                "set SFINCS_JAX_EXPLICIT_SPARSE_FACTOR_KIND=symbolic_block_lu_coarse "
+                "or raise the monolithic guard only for explicit diagnostics"
+            )
+            if emit is not None:
+                emit(1, message)
+            raise MemoryError(message)
+    if emit is not None:
         emit(
             1,
             "explicit_sparse: factorization start "
@@ -13328,6 +13355,29 @@ def _build_rhsmode23_fp_fortran_reduced_lu_preconditioner(
         default_factor_kind = "symbolic_block_lu_coarse"
     elif default_factor_kind in {"block_lu", "native_block_lu", "symbolic_lu"}:
         default_factor_kind = "symbolic_block_lu"
+    explicit_factor_requested = bool(factor_kind_env) or bool(
+        os.environ.get("SFINCS_JAX_EXPLICIT_SPARSE_FACTOR_KIND", "").strip()
+    )
+    monolithic_auto_guard_size = _int_env(
+        "SFINCS_JAX_TRANSPORT_FP_FORTRAN_REDUCED_LU_MONOLITHIC_AUTO_MAX_SIZE",
+        250_000,
+        minimum=0,
+    )
+    if (
+        bool(direct_pmat_enabled)
+        and not bool(explicit_factor_requested)
+        and default_factor_kind in {"lu", "ilu"}
+        and int(monolithic_auto_guard_size) > 0
+        and int(linear_size) > int(monolithic_auto_guard_size)
+    ):
+        default_factor_kind = "symbolic_block_lu_coarse"
+        if emit is not None:
+            emit(
+                1,
+                "solve_v3_transport_matrix_linear_gmres: large direct-Pmat auto factor switched "
+                "from monolithic LU/ILU to symbolic_block_lu_coarse "
+                f"(linear_size={int(linear_size)} max_size={int(monolithic_auto_guard_size)})",
+            )
 
     op_pc = _build_transport_preconditioner_operator_fortran_reduced(
         op,
@@ -13394,6 +13444,44 @@ def _build_rhsmode23_fp_fortran_reduced_lu_preconditioner(
             _operator_bundle = None
             factor_bundle = None
             if direct_operator_bundle is not None:
+                direct_csr_nbytes = int(direct_metadata.get("direct_pmat_csr_nbytes_estimate", 0) or 0)
+                direct_symbolic_prefill_safety = _float_env(
+                    "SFINCS_JAX_TRANSPORT_FP_FORTRAN_REDUCED_LU_SYMBOLIC_PREFILL_SAFETY_FACTOR",
+                    64.0,
+                    minimum=1.0,
+                )
+                direct_symbolic_prefill_estimate = (
+                    int(np.ceil(float(direct_csr_nbytes) * float(direct_symbolic_prefill_safety)))
+                    if direct_csr_nbytes > 0
+                    and default_factor_kind
+                    in {
+                        "symbolic_block_lu",
+                        "symbolic_block_lu_coarse",
+                        "symbolic_block_schur_lu",
+                    }
+                    else 0
+                )
+                max_factor_nbytes = int(float(max_factor_mb) * 1.0e6)
+                if (
+                    direct_symbolic_prefill_estimate > 0
+                    and max_factor_nbytes > 0
+                    and direct_symbolic_prefill_estimate > max_factor_nbytes
+                ):
+                    if emit is not None:
+                        emit(
+                            1,
+                            "solve_v3_transport_matrix_linear_gmres: direct reduced Pmat symbolic factor "
+                            "rejected by prefill guard "
+                            f"factor_kind={default_factor_kind} "
+                            f"prefill_mb={float(direct_symbolic_prefill_estimate) / 1.0e6:.3f} "
+                            f"max_mb={float(max_factor_mb):.3f} "
+                            f"safety={float(direct_symbolic_prefill_safety):.3g}",
+                        )
+                    return _build_rhsmode23_sxblock_preconditioner(
+                        op=op,
+                        reduce_full=reduce_full,
+                        expand_reduced=expand_reduced,
+                    )
                 try:
                     _operator_bundle, factor_bundle = _build_host_sparse_direct_factor_from_matvec(
                         matvec=_pc_matvec,

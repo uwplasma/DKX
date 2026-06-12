@@ -1937,6 +1937,27 @@ def _build_active_fortran_v3_reduced_sparse_factor_preconditioner(
         factor_kind = "ilu"
     factor_kind = "lu" if factor_kind in {"lu", "splu"} else "ilu"
     large_matrix = n >= int(_env_int("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_FORTRAN_V3_PC_LARGE_SIZE", 300_000))
+    if factor_kind == "ilu":
+        ilu_max_size = int(_env_int("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_FORTRAN_V3_PC_ILU_MAX_SIZE", 350_000))
+        if int(ilu_max_size) > 0 and n > int(ilu_max_size):
+            return RHS1StructuredFullCSRPreconditioner(
+                operator=None,
+                selected=False,
+                kind="active_fortran_v3_pc_matrix",
+                reason=f"active_fortran_v3_pc_matrix_ilu_size_exceeded:{n}>{int(ilu_max_size)}",
+                setup_s=max(0.0, time.perf_counter() - t0),
+                metadata={
+                    **reduction_metadata,
+                    "factor_kind": str(factor_kind),
+                    "matrix_size": int(n),
+                    "ilu_max_size": int(ilu_max_size),
+                    "note": (
+                        "large ILU setup is intentionally fail-closed; raise "
+                        "SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_FORTRAN_V3_PC_ILU_MAX_SIZE "
+                        "only for explicit diagnostics"
+                    ),
+                },
+            )
     fill_factor_default = 3.0 if factor_kind == "ilu" else 12.0
     drop_tol_default = 3.0e-3 if factor_kind == "ilu" else 0.0
     if bool(large_matrix) and factor_kind == "ilu":
@@ -2309,6 +2330,31 @@ def build_direct_active_fortran_v3_reduced_pmat_preconditioner(
     """Build a reduced-Pmat preconditioner without materializing true active CSR."""
 
     t0 = time.perf_counter()
+    active_size_estimate = (
+        int(getattr(op, "total_size", 0))
+        if active_indices is None
+        else int(np.asarray(active_indices, dtype=np.int64).reshape((-1,)).size)
+    )
+    emission_max_size = int(_env_int("SFINCS_JAX_RHS1_FULL_CSR_DIRECT_REDUCED_PMAT_EMISSION_MAX_SIZE", 350_000))
+    if int(emission_max_size) > 0 and int(active_size_estimate) > int(emission_max_size):
+        return RHS1StructuredFullCSRPreconditioner(
+            operator=None,
+            selected=False,
+            kind="active_fortran_v3_reduced_direct_pmat",
+            reason=f"direct_reduced_pmat_emission_size_exceeded:{active_size_estimate}>{int(emission_max_size)}",
+            setup_s=max(0.0, time.perf_counter() - t0),
+            metadata={
+                "requested_kind": str(requested_kind),
+                "direct_reduced_pmat_emission": False,
+                "direct_reduced_pmat_emission_active_size_estimate": int(active_size_estimate),
+                "direct_reduced_pmat_emission_max_size": int(emission_max_size),
+                "note": (
+                    "large direct-Pmat emission is fail-closed by default; raise "
+                    "SFINCS_JAX_RHS1_FULL_CSR_DIRECT_REDUCED_PMAT_EMISSION_MAX_SIZE "
+                    "only for explicit diagnostics"
+                ),
+            },
+        )
     try:
         pmat_input, layout, active, emission_metadata = _direct_active_fortran_v3_reduced_pmat_input_matrix(
             op=op,

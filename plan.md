@@ -28773,3 +28773,98 @@ Current open-lane status after this pass:
 - True device-QI/GPU: ``60%``.
 - Coverage/physics-gate lane: ``78%``.
 - Overall average: ``88%``.
+
+### 2026-06-12 direct-Pmat fail-fast and bounded-admission follow-up
+
+Goal:
+
+- Close the immediate production safety gap found in the previous direct-Pmat
+  auto-promotion gate: unsafe direct-Pmat LU/ILU or symbolic factors should
+  reject before entering long host factorization, and production auto/defaults
+  should not silently spend minutes on paths that already fail strict residual
+  or memory gates.
+
+Implementation:
+
+- Added a generic explicit sparse monolithic-factor preflight guard in
+  ``_build_host_sparse_direct_factor_from_matvec``.  Large ``lu``/``ilu``
+  factors now reject before calling SuperLU unless
+  ``SFINCS_JAX_EXPLICIT_SPARSE_MONOLITHIC_*`` caps are raised explicitly.
+- Added a RHSMode=2/3 transport auto guard: large direct-Pmat automatic
+  attempts switch from monolithic ``lu``/``ilu`` to the bounded
+  ``symbolic_block_lu_coarse`` path unless a user explicitly requests a factor
+  kind.
+- Added a RHSMode=1 reduced-Pmat ILU size guard.  The previous production
+  QA/QH direct-Pmat ILU case estimated small memory but stalled in setup; it
+  now rejects above
+  ``SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_FORTRAN_V3_PC_ILU_MAX_SIZE``.
+- Added a RHSMode=1 direct reduced-Pmat emission size guard.  Production QA/QH
+  explicit direct-Pmat probes now reject before spending roughly ``50 s``
+  emitting a matrix that is known to exceed the safe direct-Pmat production
+  floor unless
+  ``SFINCS_JAX_RHS1_FULL_CSR_DIRECT_REDUCED_PMAT_EMISSION_MAX_SIZE`` is raised.
+- Added a RHSMode=2/3 direct-Pmat symbolic prefill guard.  Production geom11
+  previously spent ``98.990 s`` building a ``6.98 GB`` symbolic factor that was
+  rejected only after setup.  The new guard estimates symbolic fill from the
+  direct Pmat CSR size and rejects before factorization when the configured
+  factor budget would be exceeded.
+
+Production-gate evidence:
+
+- QA/QH ``psiN=0.5`` explicit direct-Pmat LU/ILU with the correct selector
+  ``SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_PRECONDITIONER`` now
+  fail closed in about ``1.9-2.2 s`` per row instead of ``48-55 s`` per row.
+  All four rows reject with
+  ``direct_reduced_pmat_emission_size_exceeded:507004>350000`` and no timeout.
+- QA/QH default direct-tail ``auto`` remains non-promotable: it selects
+  ``active_fortran_v3_reduced_native_stack`` in roughly ``9-11 s`` but worsens
+  the strict preflight residual by many orders of magnitude.
+- ``transportMatrix_geometryScheme11`` at ``25x51x100x6`` now switches large
+  direct-Pmat auto factorization to ``symbolic_block_lu_coarse`` and rejects
+  the symbolic factor before setup:
+  direct Pmat build ``14.030 s``, symbolic prefill estimate ``7.894 GB`` >
+  ``4.096 GB``.  The fallback Krylov path was interrupted after exceeding the
+  useful bounded-gate time, so the case does not pass the runtime gate.
+- ``transportMatrix_geometryScheme2`` at ``25x51x100x8`` behaves similarly:
+  direct Pmat build ``21.615 s``, symbolic prefill estimate ``11.813 GB`` >
+  ``4.096 GB``; fallback Krylov timed out at ``180 s`` with max RSS
+  ``13.8 GB``.
+
+Verification:
+
+- ``pytest -q
+  tests/test_fortran_reduced_preconditioner.py::test_transport_fortran_reduced_symbolic_prefill_guard_skips_factorization
+  tests/test_v3_driver_sparse_helper_coverage.py::test_build_host_sparse_direct_factor_from_matvec_rejects_large_monolithic_factor
+  tests/test_rhs1_full_assembly.py::test_active_fortran_v3_reduced_ilu_rejects_above_size_guard
+  tests/test_rhs1_full_assembly.py::test_direct_reduced_pmat_emission_rejects_above_size_guard``:
+  ``4 passed``.
+- ``ruff check sfincs_jax/v3_driver.py sfincs_jax/rhs1_full_assembly.py
+  tests/test_fortran_reduced_preconditioner.py
+  tests/test_v3_driver_sparse_helper_coverage.py tests/test_rhs1_full_assembly.py``:
+  passed.
+
+Decision:
+
+- Do not promote the direct-Pmat RHSMode=1 or geometry-rich RHSMode=2/3 path
+  to ``auto``.  It is now safer and bounded, but it still does not pass the
+  production accuracy/runtime/RSS gates.
+- Do not pause the stronger algorithm lane yet.  The default/public parity
+  evidence remains valid where already documented, but the production-floor
+  QA/QH RHSMode=1 direct-Pmat and geometry-rich transport preconditioner gates
+  are not closed by current algorithms.  The remaining work is a true
+  lower-memory coupled factor/coarse replacement, not more smoother tuning.
+
+Current open-lane status after this pass:
+
+- RHSMode=1 production solver lane: ``97%``.  Unsafe explicit direct-Pmat
+  probes are now fail-fast; a production-convergent RHSMode=1 factor/coarse
+  path remains open.
+- Lower-memory/faster production replacement: ``97%``.  The direct-Pmat stack
+  is bounded and test-covered, but not residual-clean at full grid.
+- Geometry-rich RHSMode=2/3 production preconditioner lane: ``88%``.  Factor
+  setup is now guarded, but geom11/geom2 fallback solves still fail production
+  runtime gates.
+- Production QA/QH/QI full-grid evidence: ``72%``.
+- True device-QI/GPU: ``60%``.
+- Coverage/physics-gate lane: ``78%``.
+- Overall average: ``89%``.

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from types import SimpleNamespace
 
 import jax.numpy as jnp
 import numpy as np
@@ -845,6 +846,59 @@ def test_direct_reduced_pmat_preconditioner_solves_small_exact_pmat(monkeypatch)
     rhs = np.asarray(pmat_input @ x_true, dtype=np.float64)
     x_actual = np.asarray(pc.operator.matvec(rhs), dtype=np.float64)
     np.testing.assert_allclose(x_actual, x_true, rtol=1.0e-10, atol=1.0e-10)
+
+
+def test_active_fortran_v3_reduced_ilu_rejects_above_size_guard(monkeypatch) -> None:
+    layout = RHS1BlockLayout(
+        n_species=1,
+        n_x=1,
+        n_xi=20,
+        n_theta=1,
+        n_zeta=1,
+        f_size=20,
+        phi1_size=0,
+        extra_size=0,
+        total_size=20,
+        constraint_scheme=1,
+        include_phi1=False,
+        include_phi1_in_kinetic=False,
+        rhs_mode=1,
+    )
+    matrix = sp.eye(20, format="csr")
+
+    monkeypatch.setenv("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_FORTRAN_V3_PC_FACTOR_KIND", "ilu")
+    monkeypatch.setenv("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_FORTRAN_V3_PC_ILU_MAX_SIZE", "10")
+
+    pc = rfa._build_active_fortran_v3_reduced_sparse_factor_preconditioner(
+        matrix=matrix,
+        layout=layout,
+        active_indices=None,
+        requested_kind="active_fortran_v3_reduced_direct_pmat_ilu",
+        regularization=1.0e-12,
+        max_factor_nbytes=100_000_000,
+        t0=0.0,
+    )
+
+    assert not pc.selected
+    assert pc.reason == "active_fortran_v3_pc_matrix_ilu_size_exceeded:20>10"
+    assert pc.metadata["factor_kind"] == "ilu"
+    assert pc.metadata["ilu_max_size"] == 10
+
+
+def test_direct_reduced_pmat_emission_rejects_above_size_guard(monkeypatch) -> None:
+    monkeypatch.setenv("SFINCS_JAX_RHS1_FULL_CSR_DIRECT_REDUCED_PMAT_EMISSION_MAX_SIZE", "10")
+
+    pc = build_direct_active_fortran_v3_reduced_pmat_preconditioner(
+        op=SimpleNamespace(total_size=20),
+        active_indices=np.arange(20, dtype=np.int32),
+        requested_kind="active_fortran_v3_reduced_direct_pmat_lu",
+        max_factor_nbytes=100_000_000,
+    )
+
+    assert not pc.selected
+    assert pc.reason == "direct_reduced_pmat_emission_size_exceeded:20>10"
+    assert pc.metadata["direct_reduced_pmat_emission"] is False
+    assert pc.metadata["direct_reduced_pmat_emission_max_size"] == 10
 
 
 def test_active_fortran_v3_reduced_builder_prefers_explicit_support_modes(monkeypatch) -> None:

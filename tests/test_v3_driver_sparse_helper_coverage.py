@@ -393,6 +393,44 @@ def test_build_host_sparse_direct_factor_from_matvec_default_ilu_and_env_overrid
     assert seen_kinds == ["ilu", "lu", "jacobi"]
 
 
+def test_build_host_sparse_direct_factor_from_matvec_rejects_large_monolithic_factor(monkeypatch) -> None:
+    operator_bundle = SimpleNamespace(
+        metadata=SimpleNamespace(
+            storage_kind="csr",
+            reason="unit-large",
+            shape=(4, 4),
+            nnz_estimate=4,
+            csr_nbytes_estimate=128,
+        )
+    )
+    factorize_called = False
+
+    monkeypatch.setattr(v3_driver, "build_operator_from_matvec", lambda _matvec, **_kwargs: operator_bundle)
+
+    def fake_factorize_host_sparse_operator(*_args, **_kwargs):
+        nonlocal factorize_called
+        factorize_called = True
+        return SimpleNamespace()
+
+    monkeypatch.setattr(v3_driver, "factorize_host_sparse_operator", fake_factorize_host_sparse_operator)
+    monkeypatch.setenv("SFINCS_JAX_EXPLICIT_SPARSE_MONOLITHIC_MAX_SIZE", "3")
+    monkeypatch.setattr("sfincs_jax.v3_driver.jax.default_backend", lambda: "cpu")
+    messages: list[tuple[int, str]] = []
+
+    with pytest.raises(MemoryError, match="monolithic factor preflight rejected"):
+        v3_driver._build_host_sparse_direct_factor_from_matvec(
+            matvec=lambda x: x,
+            n=4,
+            dtype=jnp.float64,
+            factor_dtype=np.dtype(np.float64),
+            emit=lambda level, msg: messages.append((level, msg)),
+        )
+
+    assert not factorize_called
+    assert any("monolithic factor preflight rejected factor_kind=lu" in msg for _, msg in messages)
+    assert not any("factorization start" in msg for _, msg in messages)
+
+
 def test_large_fortran_reduced_sparse_pc_defaults_to_ilu_but_env_override_wins(monkeypatch) -> None:
     size = 100_000
     op = SimpleNamespace(
