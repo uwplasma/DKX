@@ -2865,6 +2865,8 @@ def test_active_symbolic_nd_frontal_schur_lu_solves_cross_coupled_active_system(
     assert pc.metadata["symbolic_factor_metadata"]["architecture"] == "symbolic_nd_frontal_schur_lu"
     assert pc.metadata["symbolic_factor_metadata"]["max_terminal_factor_size"] == 12
     assert pc.metadata["symbolic_factor_metadata"]["max_setup_s"] == 60.0
+    assert pc.metadata["symbolic_factor_metadata"]["separator_update_mode"] == "csc_column_chunks"
+    assert pc.metadata["symbolic_factor_metadata"]["separator_update_chunks"] > 0
     assert pc.metadata["symbolic_factor_metadata"]["residual_polish_steps"] == 1
     assert pc.metadata["admission"]["accepted"] is True
     rhs = _deterministic_vector(layout.total_size)

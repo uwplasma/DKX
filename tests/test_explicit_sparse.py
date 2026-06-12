@@ -912,7 +912,9 @@ def test_symbolic_nd_frontal_schur_lu_recursively_solves_separated_operator() ->
     assert factor.factor.max_depth_reached >= 2
     assert factor.factor.separator_count_total > factor.factor.max_separator_count
     assert factor.factor.dense_update_entries > 0
+    assert factor.factor.separator_update_chunks > 0
     assert factor.factor.metadata["architecture"] == "symbolic_nd_frontal_schur_lu"
+    assert factor.factor.metadata["separator_update_mode"] == "csc_column_chunks"
     assert admission.accepted is True
 
 
@@ -1006,6 +1008,7 @@ def test_symbolic_nd_frontal_schur_lu_promotes_cross_graph_edges_to_separator() 
         atol=1.0e-11,
     )
     assert factor.factor.max_separator_count >= 4
+    assert factor.factor.metadata["separator_update_mode"] == "csc_column_chunks"
     assert admission.accepted is True
 
 

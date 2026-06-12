@@ -3,6 +3,60 @@
 Last updated: 2026-06-12 (America/Chicago)
 Owner: incoming agent
 
+## 2026-06-12 Addendum: CSC chunked nested-dissection separator updates
+
+### Implementation
+
+- Updated the ``symbolic_nd_frontal_schur_lu`` separator-update construction to
+  use CSC column chunks for child-to-separator RHS extraction.  The previous
+  path repeatedly indexed CSR columns during Schur updates; the new path
+  converts the child-to-separator block once, extracts nonzero separator
+  columns from CSC pointers, and forms dense multi-RHS blocks from contiguous
+  CSC slices whenever possible.
+- Added separator-update metadata:
+  ``separator_update_mode = csc_column_chunks`` and
+  ``separator_update_chunks``.  These fields are exposed through the generic
+  explicit sparse factor metadata, RHSMode=2/3 reduced-Pmat metadata, and
+  RHSMode=1 active reduced-Pmat metadata.
+
+### Evidence
+
+- Focused sparse tests pass:
+  ``python -m pytest -q tests/test_explicit_sparse.py -k
+  "symbolic_nd_frontal_schur_lu"`` with ``5 passed``.
+- Focused transport reduced-Pmat tests pass:
+  ``python -m pytest -q tests/test_fortran_reduced_preconditioner.py -k
+  "host_sparse_builder_env_accepts_symbolic_nd_frontal or
+  nd_frontal_residual_polish or nd_setup_guard_skips_pattern_probe"`` with
+  ``4 passed``.
+- Focused RHSMode=1 active reduced-Pmat test passes:
+  ``python -m pytest -q tests/test_rhs1_full_assembly.py -k
+  "active_symbolic_nd_frontal_schur_lu"`` with ``1 passed``.
+- Lint/compile pass for the touched files.
+- Production-floor ``transportMatrix_geometryScheme11`` CPU setup probe at
+  ``Ntheta=25, Nzeta=51, Nxi=100, Nx=6`` still does not pass the production
+  gate:
+  - CSC chunks with ``max_dense_rhs_cols_per_child=256`` moved the blocker
+    deeper into setup but still exceeded the 120 s budget at
+    ``separator_update`` on a ``node_size=25081`` subproblem.
+  - CSC chunks with ``max_dense_rhs_cols_per_child=1024`` exceeded the 180 s
+    setup budget after ``253.4 s`` at ``separator_update`` on
+    ``node_size=113886`` and peak RSS about ``11.3 GB``.  The run correctly
+    rejected the direct ND factor and skipped the expensive pattern-probe
+    fallback.
+
+### Decision
+
+- Keep the CSC chunked update because it is simpler, metadata-visible, and
+  avoids repeated CSR column indexing in admitted reduced cases.
+- Do not promote nested-dissection production defaults and do not regenerate
+  public README/docs runtime plots from this candidate yet.  Full production
+  geom11 still fails the setup gate before a solve can be admitted.
+- The next real algorithmic step is not chunk-size tuning.  It is a compressed
+  separator-update layer for ND setup: vectorized batched child solves plus
+  low-rank/blocked Schur update compression, with the same strict true-residual
+  admission gate and a fail-fast work estimate before large separators.
+
 ## 2026-06-12 Addendum: recursive nested-dissection residual-equation factor
 
 ### Implementation

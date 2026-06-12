@@ -665,6 +665,7 @@ class _SymbolicNDFrontalNode:
     max_separator_count: int = 0
     dense_update_entries: int = 0
     peak_dense_update_entries: int = 0
+    separator_update_chunks: int = 0
     factor_failures: int = 0
     total_nbytes_estimate: int = 0
     total_nnz_estimate: int = 0
@@ -1847,6 +1848,7 @@ def _build_symbolic_nd_frontal_schur_factor(
         max_separator_count = sep_count
         dense_update_entries = 0
         peak_dense_update_entries = 0
+        separator_update_chunks = 0
         factor_failures = 0
 
         for positions in child_position_groups:
@@ -1854,7 +1856,12 @@ def _build_symbolic_nd_frontal_schur_factor(
             child_factor = _build_node(child_indices, int(depth) + 1)
             b_mat = matrix_csr[child_indices, :][:, sep_indices].tocsr().astype(dtype, copy=False)
             c_mat = matrix_csr[sep_indices, :][:, child_indices].tocsr().astype(dtype, copy=False)
-            local_cols = np.unique(b_mat.indices).astype(np.int64, copy=False) if b_mat.nnz else np.asarray([], dtype=np.int64)
+            b_csc = b_mat.tocsc()
+            local_cols = (
+                np.flatnonzero(np.diff(b_csc.indptr) > 0).astype(np.int64, copy=False)
+                if b_csc.nnz
+                else np.asarray([], dtype=np.int64)
+            )
             child_dense_entries = int(child_indices.size) * int(local_cols.size)
             dense_entries_global += child_dense_entries
             dense_update_entries += child_dense_entries
@@ -1871,7 +1878,14 @@ def _build_symbolic_nd_frontal_schur_factor(
                 for col_start in range(0, int(local_cols.size), cols_per_chunk):
                     _check_setup_budget(stage="separator_update", node_size=node_n, depth=int(depth))
                     col_chunk = local_cols[col_start : col_start + cols_per_chunk]
-                    b_dense = b_mat[:, col_chunk].toarray().astype(dtype, copy=False)
+                    separator_update_chunks += 1
+                    if int(col_chunk.size) == 1:
+                        b_block = b_csc[:, int(col_chunk[0]) : int(col_chunk[0]) + 1]
+                    elif np.all(np.diff(col_chunk) == 1):
+                        b_block = b_csc[:, int(col_chunk[0]) : int(col_chunk[-1]) + 1]
+                    else:
+                        b_block = b_csc[:, col_chunk]
+                    b_dense = b_block.toarray().astype(dtype, copy=False)
                     try:
                         eliminated = np.asarray(child_factor.solve_local(b_dense), dtype=dtype)
                     except Exception:
@@ -1890,6 +1904,7 @@ def _build_symbolic_nd_frontal_schur_factor(
             max_separator_count = max(max_separator_count, int(child_factor.max_separator_count))
             dense_update_entries += int(child_factor.dense_update_entries)
             peak_dense_update_entries = max(peak_dense_update_entries, int(child_factor.peak_dense_update_entries))
+            separator_update_chunks += int(child_factor.separator_update_chunks)
             factor_failures += int(child_factor.factor_failures)
             children.append(
                 _SymbolicNDChild(
@@ -1934,6 +1949,7 @@ def _build_symbolic_nd_frontal_schur_factor(
             max_separator_count=int(max_separator_count),
             dense_update_entries=int(dense_update_entries),
             peak_dense_update_entries=int(peak_dense_update_entries),
+            separator_update_chunks=int(separator_update_chunks),
             factor_failures=int(factor_failures),
             total_nbytes_estimate=int(total_nbytes),
             total_nnz_estimate=int(total_nnz),
@@ -1963,6 +1979,8 @@ def _build_symbolic_nd_frontal_schur_factor(
         "max_separator_count": int(root.max_separator_count),
         "dense_update_entries": int(root.dense_update_entries),
         "peak_dense_update_entries": int(root.peak_dense_update_entries),
+        "separator_update_chunks": int(root.separator_update_chunks),
+        "separator_update_mode": "csc_column_chunks",
         "factor_failures": int(root.factor_failures),
     }
     root = _SymbolicNDFrontalNode(
@@ -1982,6 +2000,7 @@ def _build_symbolic_nd_frontal_schur_factor(
         max_separator_count=root.max_separator_count,
         dense_update_entries=root.dense_update_entries,
         peak_dense_update_entries=root.peak_dense_update_entries,
+        separator_update_chunks=root.separator_update_chunks,
         factor_failures=root.factor_failures,
         total_nbytes_estimate=root.total_nbytes_estimate,
         total_nnz_estimate=root.total_nnz_estimate,

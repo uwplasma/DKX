@@ -776,6 +776,8 @@ def test_transport_fortran_reduced_lu_admits_nd_frontal_residual_polish_on_reduc
     assert factor_metadata["architecture"] == "symbolic_nd_frontal_schur_lu"
     assert factor_metadata["max_terminal_factor_size"] == 4096
     assert factor_metadata["max_setup_s"] == 60.0
+    assert factor_metadata["separator_update_mode"] == "csc_column_chunks"
+    assert factor_metadata["separator_update_chunks"] > 0
     assert metadata["symbolic_nd_max_terminal_factor_size"] == 4096
     assert metadata["symbolic_nd_max_setup_s"] == 60.0
     assert factor_metadata["node_count"] >= 3
