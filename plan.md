@@ -3,6 +3,73 @@
 Last updated: 2026-06-11 (America/Chicago)
 Owner: incoming agent
 
+## 2026-06-12 Addendum: transport residual-coarse block-Schur gate
+
+### Implementation
+
+- Added ``ActiveBlockSchurResidualCoarseFactor`` in
+  ``sfincs_jax.transport_active_factor``.  It wraps the active FP transport
+  block-Schur factor with a bounded true-operator residual equation:
+  ``y = M0 r + Z (A Z)^+ (r - A M0 r)``.
+- ``Z`` is built from setup-probe residuals using the actual emitted active
+  operator, then thin-QR filtered and capped by
+  ``SFINCS_JAX_TRANSPORT_FP_DIRECT_ACTIVE_BLOCK_SCHUR_RESIDUAL_COARSE_MAX_COLS``
+  and
+  ``SFINCS_JAX_TRANSPORT_FP_DIRECT_ACTIVE_BLOCK_SCHUR_RESIDUAL_COARSE_MAX_MB``.
+- Wired this into the opt-in
+  ``SFINCS_JAX_TRANSPORT_PRECOND=fp_direct_active_block_schur`` path.  If the
+  base block-Schur factor fails setup admission, the residual-coarse correction
+  is tried once and still must pass the same true-residual gate before use.
+
+### Evidence
+
+- Focused numerical tests:
+  ``pytest -q tests/test_transport_active_factor.py
+  tests/test_fortran_reduced_preconditioner.py::test_transport_direct_active_block_schur_closes_true_tail_residual``
+  passed with ``6 passed``.
+- Lint passed:
+  ``python -m ruff check sfincs_jax/transport_active_factor.py
+  sfincs_jax/v3_driver.py tests/test_transport_active_factor.py``.
+- Synthetic off-block residual test:
+  ``test_residual_coarse_factor_repairs_ranked_offblock_residuals`` now verifies
+  that a base block-Schur factor rejected by true residual is repaired to
+  ``< 1e-10`` residual by the new coarse equation on a controlled coupled
+  block system.
+- Production-floor setup/admission probes at
+  ``25 x 51 x 100`` transport resolution:
+  - ``transportMatrix_geometryScheme11`` direct active operator emitted in
+    ``12.639 s`` with active size ``462827``, ``10124067`` nonzeros, and
+    ``123.340 MB`` CSR.  Base block-Schur setup residual was
+    ``7.653e2``; the residual-coarse correction reduced this to
+    ``2.086e2`` but still failed the strict ``1e-2`` admission gate.
+  - ``transportMatrix_geometryScheme2`` direct active operator emitted in
+    ``19.213 s`` with active size ``648977``, ``15165131`` nonzeros, and
+    ``184.577 MB`` CSR.  Base block-Schur setup residual was
+    ``1.303e4``; residual-coarse reduced this to ``7.519e3`` but still failed
+    strict admission.
+  - ``theta_line`` and ``angular_plane`` block layouts did not materially change
+    the admission residuals.  A larger ``32``-column residual coarse basis on
+    geom11 also failed (``6.670e2``), so this is not a simple coarse-size or
+    line-orientation issue.
+
+### Decision
+
+- Do not promote ``fp_direct_active_block_schur`` or the residual-coarse wrapper
+  into auto/default transport policy.
+- Keep the implementation and tests because it is a true residual-equation
+  building block and improves controlled off-block systems, but production
+  geom11/geom2 evidence shows it is not strong enough to close the
+  geometry-rich FP RHSMode=2/3 production-preconditioner lane.
+- Updated lane status:
+  - Geometry-rich RHSMode=2/3 production preconditioner: ``89%``.  Direct
+    active operator emission is now fast and bounded; the blocker is a stronger
+    coupled kinetic factor, not sparse emission or fail-fast policy.
+  - Lower-memory/faster production replacement: ``97%``.  RHSMode=1 fail-fast
+    and direct-Pmat admission are guarded; production closure still needs a
+    stronger factor/coarse architecture.
+  - Overall average: ``89%``.  Accuracy/parity-safe fallbacks remain intact, but
+    the strict lower-memory production promotion gates are still open.
+
 ## 2026-06-11 Addendum: native frontal-Schur reduced-Pmat hierarchy
 
 ### Implementation

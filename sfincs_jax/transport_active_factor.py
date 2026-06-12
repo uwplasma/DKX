@@ -77,6 +77,47 @@ class ActiveBlockSchurFactor:
 
 
 @dataclass(frozen=True)
+class ActiveBlockSchurResidualCoarseFactor:
+    """Block-Schur factor plus a true-operator residual coarse correction.
+
+    The base block factor intentionally ignores most off-block kinetic
+    couplings.  This wrapper adds a bounded least-squares correction in a small
+    solution subspace derived from setup residual probes:
+
+    ``y = M0 r + Z (A Z)^+ (r - A M0 r)``.
+
+    ``Z`` and ``A Z`` are precomputed, so each application uses one true sparse
+    residual and a small dense normal-equation solve.  Admission still uses the
+    true operator before this factor can be promoted by the caller.
+    """
+
+    base: ActiveBlockSchurFactor
+    matrix: Any
+    coarse_basis: np.ndarray
+    action_basis: np.ndarray
+    normal_inverse: np.ndarray
+    damping: float
+    ordering: ActiveBlockOrdering
+    dtype: np.dtype
+    metadata: dict[str, Any]
+
+    def apply(self, rhs: np.ndarray) -> np.ndarray:
+        """Apply one base solve plus the residual-derived coarse correction."""
+
+        dtype = np.dtype(self.dtype)
+        rhs_np = np.asarray(rhs, dtype=dtype).reshape((int(self.ordering.active_size),))
+        y0 = np.asarray(self.base.apply(rhs_np), dtype=dtype).reshape(rhs_np.shape)
+        residual = np.asarray(rhs_np - self.matrix @ y0, dtype=dtype)
+        alpha_rhs = np.asarray(self.action_basis.T @ residual, dtype=dtype)
+        alpha = np.asarray(self.normal_inverse @ alpha_rhs, dtype=dtype)
+        out = np.asarray(y0 + float(self.damping) * (self.coarse_basis @ alpha), dtype=dtype)
+        finite = np.isfinite(out)
+        if not np.all(finite):
+            out = np.where(finite, out, 0.0)
+        return np.asarray(out, dtype=np.float64)
+
+
+@dataclass(frozen=True)
 class ActiveBlockAdmission:
     """Result of setup-time residual admission."""
 
@@ -265,6 +306,111 @@ def build_active_block_schur_factor(
     )
 
 
+def build_active_block_schur_residual_coarse_factor(
+    matrix: Any,
+    factor: ActiveBlockSchurFactor,
+    probes: np.ndarray | None = None,
+    *,
+    max_cols: int = 8,
+    regularization_rel: float = 1.0e-10,
+    damping: float = 1.0,
+    max_mb: float = 512.0,
+) -> ActiveBlockSchurResidualCoarseFactor:
+    """Build a small true-residual coarse correction for a block factor.
+
+    The candidate columns are ``M0`` applied to setup residuals from deterministic
+    probes.  A thin QR keeps the correction numerically independent and bounded.
+    The caller should still run :func:`admit_active_block_schur_factor` against
+    the returned factor before using it in production solves.
+    """
+
+    matrix_csr = matrix.tocsr().astype(np.dtype(factor.dtype), copy=False)
+    ordering = factor.ordering
+    active_size = int(ordering.active_size)
+    kinetic_size = int(ordering.kinetic_size)
+    tail_size = int(ordering.tail_size)
+    max_cols = max(1, int(max_cols))
+    dtype = np.dtype(factor.dtype)
+    if probes is None:
+        probes = deterministic_probe_matrix(
+            active_size=active_size,
+            kinetic_size=kinetic_size,
+            tail_size=tail_size,
+            count=max_cols,
+        )
+    probes_np = np.asarray(probes, dtype=dtype)
+    if probes_np.ndim == 1:
+        probes_np = probes_np.reshape((-1, 1))
+    if int(probes_np.shape[0]) != active_size:
+        raise ValueError(f"probe length {int(probes_np.shape[0])} does not match active size {active_size}")
+
+    candidates: list[np.ndarray] = []
+    residual_norms: list[float] = []
+    for icol in range(min(int(probes_np.shape[1]), max_cols)):
+        rhs = np.asarray(probes_np[:, icol], dtype=dtype).reshape((active_size,))
+        y0 = np.asarray(factor.apply(rhs), dtype=dtype).reshape((active_size,))
+        residual = np.asarray(rhs - matrix_csr @ y0, dtype=dtype).reshape((active_size,))
+        residual_norm = float(np.linalg.norm(residual))
+        if not np.isfinite(residual_norm) or residual_norm <= 0.0:
+            continue
+        correction = np.asarray(factor.apply(residual), dtype=dtype).reshape((active_size,))
+        correction_norm = float(np.linalg.norm(correction))
+        if not np.isfinite(correction_norm) or correction_norm <= 0.0:
+            continue
+        candidates.append(correction / correction_norm)
+        residual_norms.append(residual_norm)
+    if not candidates:
+        raise ValueError("residual coarse correction produced no finite candidate columns")
+
+    candidate_matrix = np.column_stack(candidates).astype(dtype, copy=False)
+    q, r = np.linalg.qr(candidate_matrix, mode="reduced")
+    diag = np.abs(np.diag(r)) if r.ndim == 2 else np.asarray([], dtype=dtype)
+    tol = max(float(np.finfo(dtype).eps) * max(candidate_matrix.shape) * float(np.linalg.norm(candidate_matrix)), 1.0e-14)
+    keep = np.nonzero(diag > tol)[0]
+    if keep.size == 0:
+        raise ValueError("residual coarse correction columns are rank deficient")
+    keep = keep[:max_cols]
+    coarse_basis = np.asarray(q[:, keep], dtype=dtype)
+    action_basis = np.asarray(matrix_csr @ coarse_basis, dtype=dtype)
+    coarse_cols = int(coarse_basis.shape[1])
+    gram = np.asarray(action_basis.T @ action_basis, dtype=dtype)
+    gram_scale = max(float(np.linalg.norm(gram, ord=np.inf)), 1.0)
+    regularization = max(float(regularization_rel), 0.0) * gram_scale
+    normal = gram + np.asarray(regularization, dtype=dtype) * np.eye(coarse_cols, dtype=dtype)
+    try:
+        normal_inverse = np.linalg.inv(normal)
+    except np.linalg.LinAlgError:
+        normal_inverse = np.linalg.pinv(normal, rcond=max(float(regularization_rel), 1.0e-14))
+
+    coarse_nbytes = int(coarse_basis.nbytes + action_basis.nbytes + normal_inverse.nbytes)
+    if float(max_mb) > 0.0 and coarse_nbytes > int(float(max_mb) * 1.0e6):
+        raise MemoryError(f"residual coarse estimate {coarse_nbytes / 1.0e6:.3f} MB exceeds {max_mb:.3f} MB")
+
+    metadata = {
+        **dict(factor.metadata),
+        "residual_coarse": True,
+        "residual_coarse_cols": int(coarse_cols),
+        "residual_coarse_candidate_cols": int(len(candidates)),
+        "residual_coarse_nbytes_estimate": int(coarse_nbytes),
+        "residual_coarse_regularization_rel": float(regularization_rel),
+        "residual_coarse_regularization": float(regularization),
+        "residual_coarse_damping": float(damping),
+        "residual_coarse_probe_residual_norm_max": float(np.max(residual_norms)),
+        "residual_coarse_probe_residual_norm_median": float(np.median(residual_norms)),
+    }
+    return ActiveBlockSchurResidualCoarseFactor(
+        base=factor,
+        matrix=matrix_csr,
+        coarse_basis=coarse_basis,
+        action_basis=action_basis,
+        normal_inverse=np.asarray(normal_inverse, dtype=dtype),
+        damping=float(damping),
+        ordering=ordering,
+        dtype=dtype,
+        metadata=metadata,
+    )
+
+
 def deterministic_probe_matrix(
     *,
     active_size: int,
@@ -355,8 +501,10 @@ __all__ = [
     "ActiveBlockAdmission",
     "ActiveBlockOrdering",
     "ActiveBlockSchurFactor",
+    "ActiveBlockSchurResidualCoarseFactor",
     "admit_active_block_schur_factor",
     "build_active_block_ordering",
     "build_active_block_schur_factor",
+    "build_active_block_schur_residual_coarse_factor",
     "deterministic_probe_matrix",
 ]

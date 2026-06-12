@@ -300,6 +300,7 @@ from .transport_active_factor import (
     admit_active_block_schur_factor,
     build_active_block_ordering,
     build_active_block_schur_factor,
+    build_active_block_schur_residual_coarse_factor,
     deterministic_probe_matrix,
 )
 from .transport_solve_policy import (
@@ -12908,6 +12909,11 @@ def _build_rhsmode23_fp_direct_active_block_schur_preconditioner(
     admission_rel_env = os.environ.get(f"{prefix}_ADMISSION_MAX_REL", "").strip()
     admission_improvement_env = os.environ.get(f"{prefix}_ADMISSION_MIN_IMPROVEMENT", "").strip()
     admission_probes_env = os.environ.get(f"{prefix}_ADMISSION_PROBES", "").strip()
+    coarse_env = os.environ.get(f"{prefix}_RESIDUAL_COARSE", "").strip().lower()
+    coarse_cols_env = os.environ.get(f"{prefix}_RESIDUAL_COARSE_MAX_COLS", "").strip()
+    coarse_mb_env = os.environ.get(f"{prefix}_RESIDUAL_COARSE_MAX_MB", "").strip()
+    coarse_reg_env = os.environ.get(f"{prefix}_RESIDUAL_COARSE_REGULARIZATION_REL", "").strip()
+    coarse_damping_env = os.environ.get(f"{prefix}_RESIDUAL_COARSE_DAMPING", "").strip()
     try:
         max_mb = float(max_mb_env) if max_mb_env else 2048.0
     except ValueError:
@@ -12940,8 +12946,25 @@ def _build_rhsmode23_fp_direct_active_block_schur_preconditioner(
         admission_probe_count = int(admission_probes_env) if admission_probes_env else 4
     except ValueError:
         admission_probe_count = 4
+    try:
+        coarse_max_cols = int(coarse_cols_env) if coarse_cols_env else 8
+    except ValueError:
+        coarse_max_cols = 8
+    try:
+        coarse_max_mb = float(coarse_mb_env) if coarse_mb_env else 512.0
+    except ValueError:
+        coarse_max_mb = 512.0
+    try:
+        coarse_regularization_rel = float(coarse_reg_env) if coarse_reg_env else 1.0e-10
+    except ValueError:
+        coarse_regularization_rel = 1.0e-10
+    try:
+        coarse_damping = float(coarse_damping_env) if coarse_damping_env else 1.0
+    except ValueError:
+        coarse_damping = 1.0
     block_kind = block_kind_env if block_kind_env else "zeta_line"
     admission_enabled = admission_env not in {"0", "false", "no", "off"}
+    coarse_enabled = coarse_env not in {"0", "false", "no", "off"}
     factor_dtype = np.dtype(np.float32) if dtype_env in {"float32", "fp32", "32"} else np.dtype(np.float64)
     active_indices_use = np.asarray(active_indices_np, dtype=np.int64).reshape((-1,))
     if active_indices_use.size <= 0:
@@ -12958,7 +12981,9 @@ def _build_rhsmode23_fp_direct_active_block_schur_preconditioner(
             f"{block_kind}_{int(ell_block)}_{factor_dtype.name}_{float(reg):.3e}_"
             f"{int(max_block)}_{int(tail_max)}_{int(admission_enabled)}_"
             f"{float(admission_max_rel):.3e}_{float(admission_min_improvement):.3e}_"
-            f"{int(admission_probe_count)}",
+            f"{int(admission_probe_count)}_{int(coarse_enabled)}_{int(coarse_max_cols)}_"
+            f"{float(coarse_max_mb):.3e}_{float(coarse_regularization_rel):.3e}_"
+            f"{float(coarse_damping):.3e}",
         ),
         str(active_hash),
         int(active_indices_use.size),
@@ -13008,6 +13033,10 @@ def _build_rhsmode23_fp_direct_active_block_schur_preconditioner(
                 max_mb=float(max_mb),
             )
             admission = None
+            coarse_metadata: dict[str, object] = {
+                "residual_coarse_enabled": bool(coarse_enabled),
+                "residual_coarse_accepted": None,
+            }
             if bool(admission_enabled):
                 probes = deterministic_probe_matrix(
                     active_size=int(active_size),
@@ -13023,12 +13052,90 @@ def _build_rhsmode23_fp_direct_active_block_schur_preconditioner(
                     min_improvement_vs_identity=float(admission_min_improvement),
                 )
                 if not bool(admission.accepted):
-                    raise RuntimeError(
-                        "admission rejected direct active block-Schur "
-                        f"(block_kind={factor.ordering.block_kind}, blocks={len(factor.ordering.blocks)}, "
-                        f"reason={admission.reason}, max_rel={admission.max_relative_residual:.3e}, "
-                        f"min_improvement={admission.min_improvement_vs_identity:.3e})"
-                    )
+                    if bool(coarse_enabled):
+                        try:
+                            coarse_factor = build_active_block_schur_residual_coarse_factor(
+                                matrix,
+                                factor,
+                                probes,
+                                max_cols=int(coarse_max_cols),
+                                regularization_rel=float(coarse_regularization_rel),
+                                damping=float(coarse_damping),
+                                max_mb=float(coarse_max_mb),
+                            )
+                            coarse_admission = admit_active_block_schur_factor(
+                                matrix,
+                                coarse_factor,
+                                probes,
+                                max_relative_residual=float(admission_max_rel),
+                                min_improvement_vs_identity=float(admission_min_improvement),
+                            )
+                            coarse_metadata = {
+                                "residual_coarse_enabled": True,
+                                "residual_coarse_accepted": bool(coarse_admission.accepted),
+                                "residual_coarse_reason": str(coarse_admission.reason),
+                                "residual_coarse_max_relative_residual": float(
+                                    coarse_admission.max_relative_residual
+                                ),
+                                "residual_coarse_median_relative_residual": float(
+                                    coarse_admission.median_relative_residual
+                                ),
+                                "residual_coarse_min_improvement_vs_identity": float(
+                                    coarse_admission.min_improvement_vs_identity
+                                ),
+                                "residual_coarse_probe_count": int(coarse_admission.probe_count),
+                                "residual_coarse_max_cols": int(coarse_max_cols),
+                                "residual_coarse_max_mb": float(coarse_max_mb),
+                                "residual_coarse_regularization_rel": float(coarse_regularization_rel),
+                                "residual_coarse_damping": float(coarse_damping),
+                            }
+                            if bool(coarse_admission.accepted):
+                                factor = coarse_factor
+                                admission = coarse_admission
+                            elif emit is not None:
+                                emit(
+                                    1,
+                                    "solve_v3_transport_matrix_linear_gmres: "
+                                    "fp_direct_active_block_schur residual coarse rejected "
+                                    f"max_rel={float(coarse_admission.max_relative_residual):.3e} "
+                                    f"reason={coarse_admission.reason}",
+                                )
+                        except Exception as coarse_exc:  # noqa: BLE001
+                            coarse_metadata = {
+                                "residual_coarse_enabled": True,
+                                "residual_coarse_accepted": False,
+                                "residual_coarse_error": f"{type(coarse_exc).__name__}: {coarse_exc}",
+                                "residual_coarse_max_cols": int(coarse_max_cols),
+                                "residual_coarse_max_mb": float(coarse_max_mb),
+                                "residual_coarse_regularization_rel": float(coarse_regularization_rel),
+                                "residual_coarse_damping": float(coarse_damping),
+                            }
+                            if emit is not None:
+                                emit(
+                                    1,
+                                    "solve_v3_transport_matrix_linear_gmres: "
+                                    "fp_direct_active_block_schur residual coarse unavailable "
+                                    f"({type(coarse_exc).__name__}: {coarse_exc})",
+                                )
+                    if not bool(admission.accepted):
+                        coarse_suffix = ""
+                        if coarse_metadata.get("residual_coarse_accepted") is False:
+                            coarse_suffix = (
+                                ", residual_coarse="
+                                f"{coarse_metadata.get('residual_coarse_reason', coarse_metadata.get('residual_coarse_error', 'rejected'))}"
+                            )
+                        raise RuntimeError(
+                            "admission rejected direct active block-Schur "
+                            f"(block_kind={factor.ordering.block_kind}, blocks={len(factor.ordering.blocks)}, "
+                            f"reason={admission.reason}, max_rel={admission.max_relative_residual:.3e}, "
+                            f"min_improvement={admission.min_improvement_vs_identity:.3e}{coarse_suffix})"
+                        )
+            else:
+                coarse_metadata = {
+                    "residual_coarse_enabled": bool(coarse_enabled),
+                    "residual_coarse_accepted": None,
+                    "residual_coarse_reason": "admission_disabled",
+                }
 
             factor_metadata = dict(factor.metadata)
             metadata = {
@@ -13060,8 +13167,10 @@ def _build_rhsmode23_fp_direct_active_block_schur_preconditioner(
                 if admission is None
                 else float(admission.min_improvement_vs_identity),
                 "admission_probe_count": None if admission is None else int(admission.probe_count),
+                "residual_coarse_enabled": bool(coarse_enabled),
             }
             metadata.update(direct_metadata)
+            metadata.update(coarse_metadata)
             cached = _TransportFpDirectActiveBlockSchurPrecondCache(
                 block_inverse=(),
                 block_size=int(factor.ordering.block_size_max),

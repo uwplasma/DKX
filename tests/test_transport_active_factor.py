@@ -8,6 +8,7 @@ from sfincs_jax.transport_active_factor import (
     admit_active_block_schur_factor,
     build_active_block_ordering,
     build_active_block_schur_factor,
+    build_active_block_schur_residual_coarse_factor,
     deterministic_probe_matrix,
 )
 
@@ -134,3 +135,54 @@ def test_active_block_schur_admission_rejects_missing_strong_offblock_couplings(
     assert not admission.accepted
     assert admission.reason == "relative_residual_gate"
     assert admission.max_relative_residual > 1.0e-1
+
+
+def test_residual_coarse_factor_repairs_ranked_offblock_residuals() -> None:
+    k = np.asarray(
+        [
+            [3.0, 0.0, 2.5, 0.0],
+            [0.0, 3.0, 0.0, 2.5],
+            [2.5, 0.0, 3.0, 0.0],
+            [0.0, 2.5, 0.0, 3.0],
+        ],
+        dtype=np.float64,
+    )
+    matrix = sp.csr_matrix(k)
+    ordering = build_active_block_ordering(
+        kinetic_size=4,
+        tail_size=0,
+        n_theta=1,
+        n_zeta=2,
+        block_kind="zeta_line",
+        max_block_size=2,
+    )
+    base = build_active_block_schur_factor(matrix, ordering, reg=0.0, max_mb=1.0)
+    probes = np.eye(4, dtype=np.float64)
+    base_admission = admit_active_block_schur_factor(
+        matrix,
+        base,
+        probes,
+        max_relative_residual=1.0e-3,
+        min_improvement_vs_identity=1.0,
+    )
+    assert not base_admission.accepted
+
+    coarse = build_active_block_schur_residual_coarse_factor(
+        matrix,
+        base,
+        probes,
+        max_cols=4,
+        regularization_rel=1.0e-14,
+        max_mb=1.0,
+    )
+    admission = admit_active_block_schur_factor(
+        matrix,
+        coarse,
+        probes,
+        max_relative_residual=1.0e-10,
+        min_improvement_vs_identity=1.0,
+    )
+
+    assert admission.accepted
+    assert admission.max_relative_residual < 1.0e-10
+    assert coarse.metadata["residual_coarse_cols"] == 4
