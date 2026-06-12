@@ -28542,3 +28542,67 @@ Current open-lane status after this pass:
 - True device-QI/GPU: ``60%``.
 - Coverage/physics-gate lane: ``76%``.
 - Overall average: ``85%``.
+
+### 2026-06-11 continuation: planned reduced-Pmat numeric factor path
+
+Goal:
+
+- Connect the compressed active-pitch layout and reduced-Pmat symbolic plan to
+  a real numeric preconditioner path, without changing defaults before
+  production gates pass.
+
+Implemented:
+
+- Added ``infer_rhs1_compressed_pitch_layout_from_active_indices`` to
+  ``sfincs_jax.rhs1_compressed_layout``.  It validates that a legacy active
+  full-index vector forms the Fortran v3 compressed prefix layout, with
+  complete species/theta/zeta planes and an explicit contiguous tail block.
+- Added planned aliases to the active Fortran-v3 reduced factor selector:
+  ``active_fortran_v3_reduced_planned_lu`` and
+  ``active_fortran_v3_reduced_planned_ilu``.
+- The planned path now builds ``RHS1ReducedPmatEliminationPlan`` during numeric
+  setup, permutes the reduced matrix into the symbolic interior/root ordering
+  before factorization, and unpermutes the solution on every preconditioner
+  application.  It fails closed if the active pitch layout cannot be inferred
+  or the symbolic permutation is incomplete.
+- The default auto ladder is unchanged.  The new path is opt-in by requested
+  kind or by setting
+  ``SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_FORTRAN_V3_PC_SYMBOLIC_PLAN=1``.
+
+Evidence:
+
+- ``python -m pytest tests/test_rhs1_compressed_layout.py
+  tests/test_rhs1_reduced_pmat_plan.py tests/test_rhs1_full_assembly.py -k
+  "compressed_pitch or reduced_pmat_plan or planned_lu or support_modes" -q``:
+  ``13 passed``.
+- ``python -m pytest tests/test_rhs1_compressed_layout.py
+  tests/test_rhs1_reduced_pmat_plan.py tests/test_rhs1_active_dof.py
+  tests/test_velocity_space_physics_gates.py tests/test_collision_physics_gates.py
+  tests/test_rhs1_full_assembly.py tests/test_v3_sparse_pattern.py -q``:
+  ``257 passed`` in ``2:02``.
+- ``ruff check sfincs_jax/rhs1_compressed_layout.py
+  sfincs_jax/rhs1_reduced_pmat_plan.py sfincs_jax/rhs1_full_assembly.py
+  tests/test_rhs1_compressed_layout.py tests/test_rhs1_reduced_pmat_plan.py
+  tests/test_rhs1_full_assembly.py tests/test_velocity_space_physics_gates.py
+  tests/test_collision_physics_gates.py`` and ``git diff --check``: passed.
+
+Decision:
+
+- This is the first numeric user-selectable reduced-Pmat hierarchy path.  It
+  still uses the existing active-CSR sparsening to provide numeric entries, so
+  it is not yet the final lower-memory production replacement.  The next step
+  is to emit reduced ``whichMatrix=0`` terms directly into the compressed
+  ordering so large production rows do not need to materialize the true active
+  CSR before preconditioning.
+
+Current open-lane status after this pass:
+
+- RHSMode=1 production solver lane: ``96%``.
+- Lower-memory/faster production replacement: ``95%``.  A symbolic/numeric
+  planned factor path exists and is tested; direct term-level Pmat emission is
+  still required for large production memory reduction.
+- Production QA/QH/QI full-grid evidence: ``70%``.  No new production solves
+  in this bounded local pass.
+- True device-QI/GPU: ``60%``.
+- Coverage/physics-gate lane: ``77%``.
+- Overall average: ``86%``.

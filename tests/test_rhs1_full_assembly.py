@@ -677,6 +677,98 @@ def test_active_fortran_v3_reduced_matrix_respects_support_modes(monkeypatch) ->
     assert xmin_l_nnz > default_nnz
 
 
+def test_active_fortran_v3_reduced_planned_lu_applies_symbolic_pmat_plan(monkeypatch) -> None:
+    layout = RHS1BlockLayout(
+        n_species=1,
+        n_x=3,
+        n_xi=3,
+        n_theta=1,
+        n_zeta=1,
+        f_size=9,
+        phi1_size=0,
+        extra_size=0,
+        total_size=9,
+        constraint_scheme=1,
+        include_phi1=False,
+        include_phi1_in_kinetic=False,
+        rhs_mode=1,
+    )
+    dense = np.asarray(
+        [
+            [5.0, -0.3, 0.2, 0.1, 0.0, 0.0, 0.2, 0.0, 0.0],
+            [-0.2, 4.0, -0.4, 0.0, 0.3, 0.0, 0.0, 0.2, 0.0],
+            [0.1, -0.1, 4.5, 0.0, 0.0, 0.4, 0.0, 0.0, 0.1],
+            [0.2, 0.0, 0.0, 5.5, -0.2, 0.1, 0.3, 0.0, 0.0],
+            [0.0, 0.1, 0.0, -0.1, 4.8, -0.3, 0.0, 0.2, 0.0],
+            [0.0, 0.0, 0.2, 0.0, -0.2, 4.7, 0.0, 0.0, 0.2],
+            [0.1, 0.0, 0.0, 0.2, 0.0, 0.0, 5.2, -0.2, 0.1],
+            [0.0, 0.1, 0.0, 0.0, 0.2, 0.0, -0.1, 4.4, -0.2],
+            [0.0, 0.0, 0.1, 0.0, 0.0, 0.2, 0.1, -0.1, 4.9],
+        ],
+        dtype=np.float64,
+    )
+    matrix = sp.csr_matrix(dense)
+    active = np.arange(layout.total_size, dtype=np.int64)
+    monkeypatch.setenv("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_FORTRAN_V3_PC_PRECONDITIONER_X", "0")
+    monkeypatch.setenv("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_FORTRAN_V3_PC_PRECONDITIONER_XI", "0")
+    monkeypatch.setenv("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_FORTRAN_V3_PC_PRECONDITIONER_SPECIES", "0")
+    monkeypatch.setenv("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_FORTRAN_V3_PC_DIAGONAL_SHIFT", "0")
+
+    pc = build_active_projected_rhs1_full_csr_preconditioner(
+        matrix=matrix,
+        layout=layout,
+        active_indices=active,
+        kind="active_fortran_v3_reduced_planned_lu",
+        max_factor_nbytes=10_000_000,
+        regularization=0.0,
+    )
+
+    assert pc.selected, pc.to_dict()
+    assert pc.kind == "active_fortran_v3_reduced_planned_lu"
+    assert pc.metadata["symbolic_plan_applied"] is True
+    assert pc.metadata["symbolic_plan_permutation"] is True
+    assert pc.metadata["reduced_pmat_symbolic_plan"]["root_size"] > 0
+
+    x_true = _deterministic_vector(layout.total_size)
+    rhs = np.asarray(matrix @ x_true, dtype=np.float64)
+    x_actual = np.asarray(pc.operator.matvec(rhs), dtype=np.float64)
+    np.testing.assert_allclose(x_actual, x_true, rtol=1.0e-12, atol=1.0e-12)
+
+
+def test_active_fortran_v3_reduced_planned_lu_rejects_invalid_active_pitch_pattern() -> None:
+    layout = RHS1BlockLayout(
+        n_species=1,
+        n_x=2,
+        n_xi=3,
+        n_theta=1,
+        n_zeta=1,
+        f_size=6,
+        phi1_size=0,
+        extra_size=0,
+        total_size=6,
+        constraint_scheme=1,
+        include_phi1=False,
+        include_phi1_in_kinetic=False,
+        rhs_mode=1,
+    )
+    active = np.asarray([1, 2, 3, 4, 5], dtype=np.int64)
+    matrix = sp.eye(active.size, format="csr", dtype=np.float64)
+
+    pc = build_active_projected_rhs1_full_csr_preconditioner(
+        matrix=matrix,
+        layout=layout,
+        active_indices=active,
+        kind="active_fortran_v3_reduced_planned_lu",
+        max_factor_nbytes=10_000_000,
+        regularization=0.0,
+    )
+
+    assert not pc.selected
+    assert pc.kind == "active_fortran_v3_reduced_planned_matrix"
+    assert pc.reason == "active_fortran_v3_reduced_symbolic_plan_invalid"
+    assert pc.metadata["symbolic_plan_requested"] is True
+
+
 def test_active_fortran_v3_reduced_builder_prefers_explicit_support_modes(monkeypatch) -> None:
     layout = RHS1BlockLayout(
         n_species=1,

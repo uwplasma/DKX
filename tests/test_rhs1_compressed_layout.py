@@ -5,7 +5,10 @@ from types import SimpleNamespace
 import numpy as np
 import pytest
 
-from sfincs_jax.rhs1_compressed_layout import build_rhs1_compressed_pitch_layout
+from sfincs_jax.rhs1_compressed_layout import (
+    build_rhs1_compressed_pitch_layout,
+    infer_rhs1_compressed_pitch_layout_from_active_indices,
+)
 
 
 def _op(*, nxi_for_x: list[int] | None = None, total_tail: int = 5) -> SimpleNamespace:
@@ -99,3 +102,51 @@ def test_compressed_pitch_layout_rejects_invalid_operator_sizes() -> None:
     bad_total.total_size = bad_total.f_size - 1
     with pytest.raises(ValueError, match="total_size"):
         build_rhs1_compressed_pitch_layout(bad_total)
+
+
+def test_infer_compressed_pitch_layout_from_active_indices_matches_builder() -> None:
+    op = _op()
+    expected = build_rhs1_compressed_pitch_layout(op)
+    inferred = infer_rhs1_compressed_pitch_layout_from_active_indices(op, expected.active_full_indices)
+
+    np.testing.assert_array_equal(inferred.nxi_for_x, expected.nxi_for_x)
+    np.testing.assert_array_equal(inferred.first_index_for_x, expected.first_index_for_x)
+    np.testing.assert_array_equal(inferred.active_full_indices, expected.active_full_indices)
+    np.testing.assert_array_equal(inferred.full_to_reduced_index, expected.full_to_reduced_index)
+
+    kinetic_only = infer_rhs1_compressed_pitch_layout_from_active_indices(op, expected.kinetic_active_full_indices)
+    assert kinetic_only.total_size == op.f_size
+    assert kinetic_only.tail_size == 0
+    np.testing.assert_array_equal(kinetic_only.active_full_indices, expected.kinetic_active_full_indices)
+
+
+def test_infer_compressed_pitch_layout_rejects_non_fortran_active_patterns() -> None:
+    op = _op()
+    expected = build_rhs1_compressed_pitch_layout(op)
+
+    non_prefix = expected.active_full_indices.copy()
+    ell0_plane = np.asarray(
+        [
+            expected.full_kinetic_index(species, 0, 0, theta, zeta)
+            for species in range(op.n_species)
+            for theta in range(op.n_theta)
+            for zeta in range(op.n_zeta)
+        ],
+        dtype=np.int64,
+    )
+    non_prefix = non_prefix[~np.isin(non_prefix, ell0_plane)]
+    with pytest.raises(ValueError, match="contiguous ell prefix"):
+        infer_rhs1_compressed_pitch_layout_from_active_indices(op, non_prefix)
+
+    incomplete_plane = expected.active_full_indices.copy()
+    plane_point = expected.full_kinetic_index(0, 1, 1, 1, 2)
+    incomplete_plane = incomplete_plane[incomplete_plane != plane_point]
+    with pytest.raises(ValueError, match="complete species/theta/zeta planes"):
+        infer_rhs1_compressed_pitch_layout_from_active_indices(op, incomplete_plane)
+
+    with pytest.raises(ValueError, match="duplicates"):
+        infer_rhs1_compressed_pitch_layout_from_active_indices(op, np.concatenate([expected.active_full_indices, expected.active_full_indices[:1]]))
+
+    bad_tail = expected.active_full_indices[expected.active_full_indices != op.f_size + 2]
+    with pytest.raises(ValueError, match="contiguous tail"):
+        infer_rhs1_compressed_pitch_layout_from_active_indices(op, bad_tail)

@@ -20,11 +20,13 @@ import numpy as np
 import scipy.sparse as sp
 
 from .rhs1_block_operator import RHS1ActiveBlockLayout, RHS1ActiveFieldSplitOrdering, RHS1BlockLayout
+from .rhs1_compressed_layout import infer_rhs1_compressed_pitch_layout_from_active_indices
 from .rhs1_fblock_assembly import (
     RHS1StructuredFBlockCSRSelection,
     clear_structured_rhs1_fblock_csr_cache,
     select_structured_rhs1_fblock_csr_operator,
 )
+from .rhs1_reduced_pmat_plan import build_rhs1_reduced_pmat_elimination_plan
 from .v3_sparse_pattern import estimate_v3_full_system_conservative_sparsity_summary
 
 _STRUCTURED_FULL_CSR_OBJECT_CACHE: dict[tuple[object, ...], tuple[Any, dict[str, object]]] = {}
@@ -1124,6 +1126,10 @@ def build_active_projected_rhs1_full_csr_preconditioner(
         "active_fortran_v3_pc_matrix",
         "active_fortran_v3_reduced_lu",
         "active_fortran_v3_reduced_ilu",
+        "active_fortran_v3_reduced_planned_lu",
+        "active_fortran_v3_reduced_planned_ilu",
+        "active_fortran_v3_planned_reduced_lu",
+        "active_fortran_v3_planned_reduced_ilu",
         "active_v3_pc_matrix",
         "active_v3_reduced_lu",
         "active_v3_reduced_ilu",
@@ -1815,6 +1821,100 @@ def _build_active_fortran_v3_reduced_sparse_factor_preconditioner(
             metadata={"error": str(exc)},
         )
 
+    requested = str(requested_kind).strip().lower().replace("-", "_")
+    use_symbolic_plan = bool(
+        _env_bool(
+            "SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_FORTRAN_V3_PC_SYMBOLIC_PLAN",
+            "planned" in requested,
+        )
+    )
+    plan_permutation: np.ndarray | None = None
+    if use_symbolic_plan:
+        separator_ells_raw = os.environ.get(
+            "SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_FORTRAN_V3_PC_SYMBOLIC_PLAN_SEPARATOR_ELLS",
+            "0",
+        )
+        separator_ells: list[int] = []
+        for token in separator_ells_raw.replace(";", ",").split(","):
+            token = token.strip()
+            if not token:
+                continue
+            try:
+                separator_ells.append(int(token))
+            except ValueError:
+                continue
+        if not separator_ells:
+            separator_ells = [0]
+        try:
+            compressed_layout = infer_rhs1_compressed_pitch_layout_from_active_indices(
+                layout,
+                active_indices,
+            )
+            plan = build_rhs1_reduced_pmat_elimination_plan(
+                compressed_layout,
+                separator_ells=tuple(separator_ells),
+                max_interior_group_size=max(
+                    1,
+                    int(
+                        _env_int(
+                            "SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_FORTRAN_V3_PC_SYMBOLIC_PLAN_MAX_INTERIOR_GROUP_SIZE",
+                            32768,
+                        )
+                    ),
+                ),
+                max_separator_size=max(
+                    1,
+                    int(
+                        _env_int(
+                            "SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_FORTRAN_V3_PC_SYMBOLIC_PLAN_MAX_SEPARATOR_SIZE",
+                            8192,
+                        )
+                    ),
+                ),
+            )
+        except ValueError as exc:
+            return RHS1StructuredFullCSRPreconditioner(
+                operator=None,
+                selected=False,
+                kind="active_fortran_v3_reduced_planned_matrix",
+                reason="active_fortran_v3_reduced_symbolic_plan_invalid",
+                setup_s=max(0.0, time.perf_counter() - t0),
+                metadata={
+                    **reduction_metadata,
+                    "symbolic_plan_requested": True,
+                    "error": str(exc),
+                },
+            )
+        plan_permutation = np.asarray(plan.permutation, dtype=np.int64)
+        if plan_permutation.size != int(reduced.shape[0]) or np.unique(plan_permutation).size != int(reduced.shape[0]):
+            return RHS1StructuredFullCSRPreconditioner(
+                operator=None,
+                selected=False,
+                kind="active_fortran_v3_reduced_planned_matrix",
+                reason="active_fortran_v3_reduced_symbolic_plan_incomplete_permutation",
+                setup_s=max(0.0, time.perf_counter() - t0),
+                metadata={
+                    **reduction_metadata,
+                    "symbolic_plan_requested": True,
+                    "symbolic_plan_size": int(plan_permutation.size),
+                    "matrix_size": int(reduced.shape[0]),
+                },
+            )
+        reduced = reduced[plan_permutation, :][:, plan_permutation].tocsr()
+        reduction_metadata = {
+            **reduction_metadata,
+            "symbolic_plan_requested": True,
+            "symbolic_plan_applied": True,
+            "symbolic_plan_permutation_nbytes": int(plan_permutation.nbytes),
+            "reduced_pmat_symbolic_plan": plan.metadata(),
+        }
+    else:
+        reduction_metadata = {
+            **reduction_metadata,
+            "symbolic_plan_requested": False,
+            "symbolic_plan_applied": False,
+        }
+
     max_size = _env_int("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_FORTRAN_V3_PC_MAX_SIZE", 1_000_000)
     n = int(reduced.shape[0])
     if int(max_size) > 0 and n > int(max_size):
@@ -1830,7 +1930,6 @@ def _build_active_fortran_v3_reduced_sparse_factor_preconditioner(
             },
         )
 
-    requested = str(requested_kind).strip().lower().replace("-", "_")
     factor_kind = os.environ.get("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_FORTRAN_V3_PC_FACTOR_KIND", "").strip().lower()
     if not factor_kind:
         factor_kind = "ilu" if "ilu" in requested or requested.endswith("pc_matrix") else "lu"
@@ -1952,7 +2051,14 @@ def _build_active_fortran_v3_reduced_sparse_factor_preconditioner(
     )
     scaled = scaled.multiply(col_scale[None, :]).tocsc()
     factor = None
-    selected_kind = "active_fortran_v3_reduced_lu" if factor_kind == "lu" else "active_fortran_v3_reduced_ilu"
+    if use_symbolic_plan:
+        selected_kind = (
+            "active_fortran_v3_reduced_planned_lu"
+            if factor_kind == "lu"
+            else "active_fortran_v3_reduced_planned_ilu"
+        )
+    else:
+        selected_kind = "active_fortran_v3_reduced_lu" if factor_kind == "lu" else "active_fortran_v3_reduced_ilu"
     permc_failures: list[dict[str, object]] = []
     selected_permutation: np.ndarray | None = None
     selected_superlu_permc = str(permc_spec)
@@ -2020,7 +2126,12 @@ def _build_active_fortran_v3_reduced_sparse_factor_preconditioner(
             },
         )
 
-    factor_nbytes = int(_sparse_lu_factor_nbytes(factor) + row_scale.nbytes + col_scale.nbytes)
+    factor_nbytes = int(
+        _sparse_lu_factor_nbytes(factor)
+        + row_scale.nbytes
+        + col_scale.nbytes
+        + (0 if plan_permutation is None else plan_permutation.nbytes)
+    )
     if factor_nbytes > int(max_factor_nbytes):
         return RHS1StructuredFullCSRPreconditioner(
             operator=None,
@@ -2043,7 +2154,8 @@ def _build_active_fortran_v3_reduced_sparse_factor_preconditioner(
 
     def apply(x: Any) -> np.ndarray:
         arr = np.asarray(x, dtype=np.float64).reshape((-1,))
-        scaled_rhs = row_scale * arr
+        arr_factor_order = arr if plan_permutation is None else arr[plan_permutation]
+        scaled_rhs = row_scale * arr_factor_order
         if selected_permutation is None:
             scaled_solution = np.asarray(factor.solve(scaled_rhs), dtype=np.float64).reshape((-1,))
         else:
@@ -2053,7 +2165,12 @@ def _build_active_fortran_v3_reduced_sparse_factor_preconditioner(
             ).reshape((-1,))
             scaled_solution = np.empty_like(permuted_solution)
             scaled_solution[selected_permutation] = permuted_solution
-        return col_scale * scaled_solution
+        solution_factor_order = col_scale * scaled_solution
+        if plan_permutation is None:
+            return solution_factor_order
+        solution = np.empty_like(solution_factor_order)
+        solution[plan_permutation] = solution_factor_order
+        return solution
 
     operator = LinearOperator(reduced.shape, matvec=apply, dtype=np.float64)
     return RHS1StructuredFullCSRPreconditioner(
@@ -2081,6 +2198,7 @@ def _build_active_fortran_v3_reduced_sparse_factor_preconditioner(
             "permc_spec": str(permc_spec),
             "superlu_permc_spec": str(selected_superlu_permc),
             "explicit_symmetric_ordering": bool(selected_permutation is not None),
+            "symbolic_plan_permutation": bool(plan_permutation is not None),
             "permc_spec_requested": str(permc_env or "AUTO"),
             "permc_spec_candidates": tuple(str(candidate) for candidate in permc_candidates),
             "permc_failures": tuple(dict(entry) for entry in permc_failures),
