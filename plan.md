@@ -28687,3 +28687,89 @@ Current open-lane status after this pass:
 - True device-QI/GPU: ``60%``.
 - Coverage/physics-gate lane: ``78%``.
 - Overall average: ``87%``.
+
+### 2026-06-12 production-floor direct-Pmat auto-promotion gate
+
+Goal:
+
+- Run the first production-floor gates for the explicit direct-Pmat path before
+  considering any ``auto`` promotion.  The gate requires strict residual
+  behavior, bounded setup time, and lower or comparable memory/runtime than the
+  current default.
+
+Cases and settings:
+
+- RHSMode=1 QS-paper QA bootstrap-current surface:
+  ``psiN_0.5``, ``Ntheta=25``, ``Nzeta=39``, ``Nxi=60``, ``Nx=7``,
+  ``geometryScheme=5``, ``collisionOperator=0``, active size ``507004``.
+- Geometry-rich RHSMode=2 transport case:
+  ``transportMatrix_geometryScheme11``, ``Ntheta=25``, ``Nzeta=51``,
+  ``Nxi=100``, ``Nx=6``, active size ``462827``.
+- CPU-only bounded local run, one core, ``180 s`` cap per row.  The
+  preconditioner memory cap was raised to ``45000 MiB`` to test the method
+  rather than reject it on the old small workstation cap.
+
+Evidence:
+
+- QA default direct-tail ``auto`` built the old materialized active CSR:
+  active CSR materialization ``6.268 s``; selected
+  ``active_fortran_v3_reduced_native_stack`` with setup ``9.533 s`` and factor
+  memory ``5.09 GB``; strict preflight failed badly, worsening residual from
+  ``1.613966e-04`` to ``3.775297e+00``.  Status: ``error`` in ``18.464 s``.
+- QA explicit ``active_fortran_v3_reduced_direct_pmat_lu`` correctly skipped
+  active-CSR materialization, but the LU prefill gate rejected it:
+  ``62520222976 > 47185920000`` bytes.  Status: ``error`` in ``53.414 s``.
+- QA explicit ``active_fortran_v3_reduced_direct_pmat_ilu`` also skipped
+  active-CSR materialization and estimated a small ILU budget
+  (``196.8 MiB``), but it did not complete factor setup before the ``180 s``
+  cap.  Status: ``timeout``.
+- Geometry-rich transport with direct reduced Pmat enabled emitted the reduced
+  term-level Pmat directly: active ``462827``, ``10124069`` nnz,
+  ``123.340 MiB`` CSR, build ``20.295 s``.  Monolithic LU factorization did not
+  complete before ``180 s``.  Status: ``timeout``.
+- Geometry-rich transport with direct Pmat disabled attempted a pattern probe:
+  active pattern ``84406275`` nnz, estimated ``~1.01 GB`` CSR, then disabled
+  after the ``512 MiB`` default pattern budget and did not finish before
+  ``180 s``.  Status: ``timeout``.
+- Geometry-rich direct-Pmat ILU also timed out in factorization before
+  preflight.
+- Geometry-rich direct-Pmat ``symbolic_block_lu`` completed bounded setup:
+  direct Pmat build ``22.950 s``; factorization ``5.712 s``; factor memory
+  ``805.231 MiB``.  However, the strict admission gate rejected it with
+  ``max_rel=4.319e+08``, ``median_rel=3.802e+08``, and improvement
+  ``5.301e-07``.  The fallback solve did not complete before ``180 s``.
+
+Decision:
+
+- Do not promote the explicit RHSMode=1 direct reduced-Pmat path to ``auto``.
+  It avoids active true-CSR materialization, but production QA does not pass
+  strict residual/runtime gates.
+- Do not promote the geometry-rich direct reduced-Pmat transport factor path.
+  Direct term-level Pmat emission is useful and much smaller than pattern
+  probing, but current monolithic LU/ILU factorization is too slow and the
+  available symbolic-block factor is not accurate enough under the admission
+  gate.
+
+Next implementation target:
+
+- Replace the remaining production blocker with a stronger bounded-memory
+  factor/coarse architecture: active-only kinetic emission plus coupled
+  block-Schur/field-split coarse correction whose admission residual improves
+  production QA/QH and geometry-rich transport cases before Krylov starts.
+  The relevant metric is no longer just CSR memory; it is strict preflight
+  residual reduction at production active sizes without monolithic LU/ILU
+  factorization.
+
+Current open-lane status after this pass:
+
+- RHSMode=1 production solver lane: ``97%``.  Production-floor evidence exists,
+  but the direct-Pmat path is not auto-promotable.
+- Lower-memory/faster production replacement: ``96%``.  Direct Pmat removes
+  active true-CSR setup, but production factor/admission remains open.
+- Geometry-rich RHSMode=2/3 production preconditioner lane: ``88%``.  Direct
+  term-level Pmat emission is production-size capable; the blocker is the
+  factor/coarse admission quality.
+- Production QA/QH/QI full-grid evidence: ``72%``.
+- True device-QI/GPU: ``60%``.
+- Coverage/physics-gate lane: ``78%``.
+- Overall average: ``88%``.
