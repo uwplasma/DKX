@@ -1044,6 +1044,12 @@ Controls:
 - ``SFINCS_JAX_TRANSPORT_FP_FORTRAN_REDUCED_LU_SYMBOLIC_BLOCK_SIZE`` controls
   the bounded block plan recorded by the symbolic metadata and used by the
   opt-in ``symbolic_block_lu`` numeric factor path.
+- ``SFINCS_JAX_TRANSPORT_FP_FORTRAN_REDUCED_LU_AUTO_EXACT_RESCUE_MAX_FACTOR_ENTRIES``
+  caps automatic exact-LU rescue by estimated multifrontal factor entries, in
+  addition to the existing memory and active-size caps.  This prevents
+  production-size cases from spending many minutes in a single-core SuperLU
+  setup merely because the memory estimate fits; set it to ``0`` only for an
+  explicit diagnostic run where that cost is acceptable.
 - ``SFINCS_JAX_TRANSPORT_FP_FORTRAN_REDUCED_LU_SYMBOLIC_BLOCK_OVERLAP``
   extends each symbolic block by a fixed number of neighboring unknowns before
   factorization and restricts the local solution back to the owned block. This

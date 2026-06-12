@@ -27,6 +27,11 @@ Owner: incoming agent
   plain ``rcm`` to ``mumps_like`` so auto and opt-in symbolic candidates start
   from the same ordering idea used by PETSc+MUMPS/SuperLU_DIST, while still
   allowing users to force ``rcm`` or ``natural`` for diagnostics.
+- Added
+  ``SFINCS_JAX_TRANSPORT_FP_FORTRAN_REDUCED_LU_AUTO_EXACT_RESCUE_MAX_FACTOR_ENTRIES``
+  to cap exact-LU rescue by estimated multifrontal factor entries. This closes
+  the specific failure mode observed in the production geom11 probe: memory was
+  bounded, but single-core SuperLU setup did not finish within ``900 s``.
 
 ### Verification
 

@@ -693,6 +693,53 @@ def test_transport_fortran_reduced_auto_exact_rescue_after_symbolic_prefill_guar
     assert metadata["factor_nbytes_estimate"] > 0
 
 
+def test_transport_fortran_reduced_auto_exact_rescue_factor_entry_guard(monkeypatch) -> None:
+    monkeypatch.setenv("SFINCS_JAX_TRANSPORT_FP_FORTRAN_REDUCED_LU_DIRECT", "1")
+    monkeypatch.delenv("SFINCS_JAX_TRANSPORT_FP_FORTRAN_REDUCED_LU_FACTOR", raising=False)
+    monkeypatch.delenv("SFINCS_JAX_EXPLICIT_SPARSE_FACTOR_KIND", raising=False)
+    monkeypatch.setenv("SFINCS_JAX_TRANSPORT_FP_FORTRAN_REDUCED_LU_MONOLITHIC_AUTO_MAX_SIZE", "1")
+    monkeypatch.setenv("SFINCS_JAX_TRANSPORT_FP_FORTRAN_REDUCED_LU_FACTOR_MAX_MB", "0.001")
+    monkeypatch.setenv("SFINCS_JAX_TRANSPORT_FP_FORTRAN_REDUCED_LU_SYMBOLIC_PREFILL_SAFETY_FACTOR", "64")
+    monkeypatch.setenv("SFINCS_JAX_TRANSPORT_FP_FORTRAN_REDUCED_LU_AUTO_EXACT_RESCUE", "1")
+    monkeypatch.setenv("SFINCS_JAX_TRANSPORT_FP_FORTRAN_REDUCED_LU_AUTO_EXACT_RESCUE_MAX_MB", "256")
+    monkeypatch.setenv("SFINCS_JAX_TRANSPORT_FP_FORTRAN_REDUCED_LU_AUTO_EXACT_RESCUE_MAX_SIZE", "10000")
+    monkeypatch.setenv("SFINCS_JAX_TRANSPORT_FP_FORTRAN_REDUCED_LU_AUTO_EXACT_RESCUE_MAX_FACTOR_ENTRIES", "1")
+
+    def fail_factor_build(*_args, **_kwargs):
+        raise AssertionError("factor-entry guard should reject exact rescue before factorization")
+
+    monkeypatch.setattr(vd, "_build_host_sparse_direct_factor_from_matvec", fail_factor_build)
+
+    nml = read_sfincs_input("tests/reduced_inputs/transportMatrix_geometryScheme11.input.namelist")
+    op = full_system_operator_from_namelist(nml=nml, identity_shift=0.0)
+    active = np.asarray(vd._transport_active_dof_indices(op), dtype=np.int64)
+    active_jnp = jnp.asarray(active, dtype=jnp.int32)
+    full_to_active = np.zeros((int(op.total_size) + 1,), dtype=np.int32)
+    full_to_active[active + 1] = np.arange(1, int(active.size) + 1, dtype=np.int32)
+    full_to_active_jnp = jnp.asarray(full_to_active, dtype=jnp.int32)
+
+    def _reduce_full(v_full: jnp.ndarray) -> jnp.ndarray:
+        return v_full[active_jnp]
+
+    def _expand_reduced(v_reduced: jnp.ndarray) -> jnp.ndarray:
+        padded = jnp.concatenate([jnp.zeros((1,), dtype=v_reduced.dtype), v_reduced], axis=0)
+        return padded[full_to_active_jnp[1:]]
+
+    preconditioner = vd._build_rhsmode23_fp_fortran_reduced_lu_preconditioner(
+        op=op,
+        reduce_full=_reduce_full,
+        expand_reduced=_expand_reduced,
+        active_indices_np=active,
+        emit=None,
+    )
+
+    rhs = jnp.ones((int(active.size),), dtype=jnp.float64)
+    actual = preconditioner(rhs)
+    assert actual.shape == rhs.shape
+    assert np.all(np.isfinite(np.asarray(actual)))
+    assert not hasattr(preconditioner, "_sfincs_jax_transport_fp_fortran_reduced_lu_metadata")
+
+
 def test_transport_fortran_reduced_lu_rescues_rejected_symbolic_factor_with_direct_lu(monkeypatch) -> None:
     monkeypatch.setenv("SFINCS_JAX_TRANSPORT_FP_FORTRAN_REDUCED_LU_FACTOR", "symbolic_block_schur_lu")
     monkeypatch.setenv("SFINCS_JAX_TRANSPORT_FP_FORTRAN_REDUCED_LU_DIRECT", "1")

@@ -14099,6 +14099,11 @@ def _build_rhsmode23_fp_fortran_reduced_lu_preconditioner(
         250_000,
         minimum=0,
     )
+    auto_exact_rescue_max_factor_entries = _int_env(
+        "SFINCS_JAX_TRANSPORT_FP_FORTRAN_REDUCED_LU_AUTO_EXACT_RESCUE_MAX_FACTOR_ENTRIES",
+        250_000_000,
+        minimum=0,
+    )
     direct_admission_enabled = _bool_env(
         "SFINCS_JAX_TRANSPORT_FP_FORTRAN_REDUCED_LU_DIRECT_ADMISSION",
         True,
@@ -14267,6 +14272,7 @@ def _build_rhsmode23_fp_fortran_reduced_lu_preconditioner(
             f"rescue{int(symbolic_admission_rescue_lu)}_{float(symbolic_admission_rescue_lu_max_mb):.3e}_"
             f"autoexact{int(auto_exact_rescue_enabled)}_{float(auto_exact_rescue_max_mb):.3e}_"
             f"{float(auto_exact_rescue_ram_fraction):.3e}_{int(auto_exact_rescue_max_size)}_"
+            f"{int(auto_exact_rescue_max_factor_entries)}_"
             f"directadm{int(direct_admission_enabled)}_{int(direct_admission_explicit_enabled)}_"
             f"maxfactor{float(max_factor_mb):.3e}",
         ),
@@ -14344,6 +14350,11 @@ def _build_rhsmode23_fp_fortran_reduced_lu_preconditioner(
                     1.15,
                     minimum=1.0,
                 )
+                direct_multifrontal_entries_estimate = (
+                    int(np.ceil(float(direct_pmat_nnz) * float(direct_mf_fill_ratio)))
+                    if direct_pmat_nnz > 0
+                    else 0
+                )
                 direct_multifrontal_nbytes_estimate = (
                     estimate_multifrontal_direct_lu_nbytes(
                         direct_pmat_nnz,
@@ -14358,6 +14369,9 @@ def _build_rhsmode23_fp_fortran_reduced_lu_preconditioner(
                     {
                         "direct_pmat_multifrontal_fill_ratio_estimate": float(direct_mf_fill_ratio),
                         "direct_pmat_multifrontal_overhead_estimate": float(direct_mf_overhead),
+                        "direct_pmat_multifrontal_factor_entries_estimate": int(
+                            direct_multifrontal_entries_estimate
+                        ),
                         "direct_pmat_multifrontal_factor_nbytes_estimate": int(
                             direct_multifrontal_nbytes_estimate
                         ),
@@ -14408,6 +14422,11 @@ def _build_rhsmode23_fp_fortran_reduced_lu_preconditioner(
                             int(auto_exact_rescue_max_size) <= 0
                             or int(linear_size) <= int(auto_exact_rescue_max_size)
                         )
+                        and (
+                            int(auto_exact_rescue_max_factor_entries) <= 0
+                            or int(direct_multifrontal_entries_estimate)
+                            <= int(auto_exact_rescue_max_factor_entries)
+                        )
                         and direct_multifrontal_nbytes_estimate > 0
                         and auto_exact_cap_nbytes > 0
                         and direct_multifrontal_nbytes_estimate <= auto_exact_cap_nbytes
@@ -14437,13 +14456,15 @@ def _build_rhsmode23_fp_fortran_reduced_lu_preconditioner(
                         if emit is not None:
                             emit(
                                 1,
-                                "solve_v3_transport_matrix_linear_gmres: direct reduced Pmat symbolic factor "
-                                "rejected by prefill guard "
-                                f"factor_kind={factor_kind_for_build} "
-                                f"prefill_mb={float(direct_symbolic_prefill_estimate) / 1.0e6:.3f} "
-                                f"max_mb={float(effective_factor_max_mb):.3f} "
-                                f"safety={float(direct_symbolic_prefill_safety):.3g}",
-                            )
+                            "solve_v3_transport_matrix_linear_gmres: direct reduced Pmat symbolic factor "
+                            "rejected by prefill guard "
+                            f"factor_kind={factor_kind_for_build} "
+                            f"prefill_mb={float(direct_symbolic_prefill_estimate) / 1.0e6:.3f} "
+                            f"max_mb={float(effective_factor_max_mb):.3f} "
+                            f"exact_entries={int(direct_multifrontal_entries_estimate)} "
+                            f"exact_entries_cap={int(auto_exact_rescue_max_factor_entries)} "
+                            f"safety={float(direct_symbolic_prefill_safety):.3g}",
+                        )
                         return _build_rhsmode23_sxblock_preconditioner(
                             op=op,
                             reduce_full=reduce_full,
@@ -14966,6 +14987,7 @@ def _build_rhsmode23_fp_fortran_reduced_lu_preconditioner(
             "auto_exact_rescue_ram_fraction": float(auto_exact_rescue_ram_fraction),
             "auto_exact_rescue_max_mb": float(auto_exact_rescue_max_mb),
             "auto_exact_rescue_max_size": int(auto_exact_rescue_max_size),
+            "auto_exact_rescue_max_factor_entries": int(auto_exact_rescue_max_factor_entries),
             "auto_exact_rescue_selected": bool(auto_exact_rescue_selected),
             "direct_admission_enabled": bool(direct_admission_enabled),
             "direct_admission_explicit_enabled": bool(direct_admission_explicit_enabled),
