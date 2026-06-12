@@ -264,6 +264,77 @@ def test_transport_fortran_reduced_operator_can_drop_angular_couplings() -> None
     )
 
 
+def test_host_sparse_builder_accepts_symbolic_frontal_default(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("SFINCS_JAX_EXPLICIT_SPARSE_FACTOR_KIND", raising=False)
+    a = np.asarray(
+        [
+            [4.0, 1.0, 0.5, 0.0],
+            [1.0, 3.5, 0.0, 0.25],
+            [0.5, 0.0, 3.0, 1.0],
+            [0.0, 0.25, 1.0, 2.5],
+        ],
+        dtype=np.float64,
+    )
+
+    def _matvec(x: jnp.ndarray) -> jnp.ndarray:
+        return jnp.asarray(a) @ x
+
+    _operator, factor = vd._build_host_sparse_direct_factor_from_matvec(
+        matvec=_matvec,
+        n=4,
+        dtype=jnp.float64,
+        factor_dtype=np.dtype(np.float64),
+        default_factor_kind="symbolic_frontal_schur_lu",
+        default_symbolic_ordering_kind="natural",
+        default_symbolic_block_size=2,
+        default_symbolic_frontal_max_separator_cols=2,
+        default_symbolic_frontal_boundary_width=0,
+        default_symbolic_frontal_high_degree_cols=0,
+        default_symbolic_frontal_max_superblock_size=2,
+        default_symbolic_frontal_max_superblock_blocks=1,
+        default_symbolic_frontal_min_cross_separator_fraction=1.0,
+        default_symbolic_frontal_regularization_rel=0.0,
+    )
+
+    rhs = np.asarray([1.0, -2.0, 0.5, 3.0], dtype=np.float64)
+    assert factor.kind == "symbolic_frontal_schur_lu"
+    np.testing.assert_allclose(a @ factor.solve(rhs), rhs, rtol=1e-11, atol=1e-11)
+
+
+def test_host_sparse_builder_env_accepts_symbolic_superblock(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("SFINCS_JAX_EXPLICIT_SPARSE_FACTOR_KIND", "symbolic_superblock_lu")
+    a = np.asarray(
+        [
+            [5.0, 1.0, 0.25, 0.0],
+            [1.0, 4.0, 0.0, 0.25],
+            [0.25, 0.0, 3.0, 1.0],
+            [0.0, 0.25, 1.0, 2.0],
+        ],
+        dtype=np.float64,
+    )
+
+    def _matvec(x: jnp.ndarray) -> jnp.ndarray:
+        return jnp.asarray(a) @ x
+
+    _operator, factor = vd._build_host_sparse_direct_factor_from_matvec(
+        matvec=_matvec,
+        n=4,
+        dtype=jnp.float64,
+        factor_dtype=np.dtype(np.float64),
+        default_factor_kind="jacobi",
+        default_symbolic_ordering_kind="natural",
+        default_symbolic_block_size=2,
+        default_symbolic_superblock_max_size=4,
+        default_symbolic_superblock_max_blocks=2,
+        default_symbolic_superblock_min_retained_cross_fraction=1.0,
+        default_symbolic_superblock_regularization_rel=0.0,
+    )
+
+    rhs = np.asarray([2.0, -1.0, 1.5, -0.5], dtype=np.float64)
+    assert factor.kind == "symbolic_superblock_lu"
+    np.testing.assert_allclose(a @ factor.solve(rhs), rhs, rtol=1e-11, atol=1e-11)
+
+
 @pytest.mark.parametrize(
     "input_path",
     (

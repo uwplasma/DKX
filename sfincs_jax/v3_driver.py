@@ -64,6 +64,7 @@ from .explicit_sparse import (
     build_operator_from_pattern,
     estimate_csr_nbytes,
     estimate_dense_nbytes,
+    estimate_multifrontal_direct_lu_nbytes,
     factorize_host_sparse_operator,
     wrap_sparse_factor_with_coarse_correction,
 )
@@ -958,6 +959,22 @@ def _build_host_sparse_direct_factor_from_matvec(
     default_symbolic_schur_boundary_width: int = 1,
     default_symbolic_schur_high_degree_cols: int = 64,
     default_symbolic_schur_regularization_rel: float = 1.0e-12,
+    default_symbolic_frontal_max_separator_cols: int = 1024,
+    default_symbolic_frontal_tail_size: int = 0,
+    default_symbolic_frontal_boundary_width: int = 1,
+    default_symbolic_frontal_high_degree_cols: int = 128,
+    default_symbolic_frontal_max_superblock_size: int = 8192,
+    default_symbolic_frontal_max_superblock_blocks: int = 8,
+    default_symbolic_frontal_min_cross_nnz: int = 1,
+    default_symbolic_frontal_min_cross_separator_fraction: float = 0.0,
+    default_symbolic_frontal_regularization_rel: float = 1.0e-12,
+    default_symbolic_frontal_max_dense_rhs_entries: int = 0,
+    default_symbolic_frontal_max_dense_rhs_cols_per_block: int = 0,
+    default_symbolic_superblock_max_size: int = 32768,
+    default_symbolic_superblock_max_blocks: int = 8,
+    default_symbolic_superblock_min_cross_nnz: int = 1,
+    default_symbolic_superblock_min_retained_cross_fraction: float = 0.0,
+    default_symbolic_superblock_regularization_rel: float = 1.0e-12,
     default_symbolic_max_permutation_size: int = 250_000,
 ):
     factor_dtype_np = np.dtype(factor_dtype)
@@ -976,6 +993,48 @@ def _build_host_sparse_direct_factor_from_matvec(
     symbolic_schur_boundary_env = os.environ.get("SFINCS_JAX_EXPLICIT_SPARSE_SYMBOLIC_SCHUR_BOUNDARY_WIDTH", "").strip()
     symbolic_schur_high_degree_env = os.environ.get("SFINCS_JAX_EXPLICIT_SPARSE_SYMBOLIC_SCHUR_HIGH_DEGREE_COLS", "").strip()
     symbolic_schur_reg_env = os.environ.get("SFINCS_JAX_EXPLICIT_SPARSE_SYMBOLIC_SCHUR_REG_REL", "").strip()
+    symbolic_frontal_max_separator_env = os.environ.get(
+        "SFINCS_JAX_EXPLICIT_SPARSE_SYMBOLIC_FRONTAL_MAX_SEPARATOR_COLS", ""
+    ).strip()
+    symbolic_frontal_tail_env = os.environ.get("SFINCS_JAX_EXPLICIT_SPARSE_SYMBOLIC_FRONTAL_TAIL_SIZE", "").strip()
+    symbolic_frontal_boundary_env = os.environ.get(
+        "SFINCS_JAX_EXPLICIT_SPARSE_SYMBOLIC_FRONTAL_BOUNDARY_WIDTH", ""
+    ).strip()
+    symbolic_frontal_high_degree_env = os.environ.get(
+        "SFINCS_JAX_EXPLICIT_SPARSE_SYMBOLIC_FRONTAL_HIGH_DEGREE_COLS", ""
+    ).strip()
+    symbolic_frontal_max_superblock_size_env = os.environ.get(
+        "SFINCS_JAX_EXPLICIT_SPARSE_SYMBOLIC_FRONTAL_MAX_SUPERBLOCK_SIZE", ""
+    ).strip()
+    symbolic_frontal_max_superblock_blocks_env = os.environ.get(
+        "SFINCS_JAX_EXPLICIT_SPARSE_SYMBOLIC_FRONTAL_MAX_SUPERBLOCK_BLOCKS", ""
+    ).strip()
+    symbolic_frontal_min_cross_nnz_env = os.environ.get(
+        "SFINCS_JAX_EXPLICIT_SPARSE_SYMBOLIC_FRONTAL_MIN_CROSS_NNZ", ""
+    ).strip()
+    symbolic_frontal_min_cross_separator_fraction_env = os.environ.get(
+        "SFINCS_JAX_EXPLICIT_SPARSE_SYMBOLIC_FRONTAL_MIN_CROSS_SEPARATOR_FRACTION", ""
+    ).strip()
+    symbolic_frontal_reg_env = os.environ.get("SFINCS_JAX_EXPLICIT_SPARSE_SYMBOLIC_FRONTAL_REG_REL", "").strip()
+    symbolic_frontal_max_dense_rhs_entries_env = os.environ.get(
+        "SFINCS_JAX_EXPLICIT_SPARSE_SYMBOLIC_FRONTAL_MAX_DENSE_RHS_ENTRIES", ""
+    ).strip()
+    symbolic_frontal_max_dense_rhs_cols_env = os.environ.get(
+        "SFINCS_JAX_EXPLICIT_SPARSE_SYMBOLIC_FRONTAL_MAX_DENSE_RHS_COLS_PER_BLOCK", ""
+    ).strip()
+    symbolic_superblock_max_size_env = os.environ.get(
+        "SFINCS_JAX_EXPLICIT_SPARSE_SYMBOLIC_SUPERBLOCK_MAX_SIZE", ""
+    ).strip()
+    symbolic_superblock_max_blocks_env = os.environ.get(
+        "SFINCS_JAX_EXPLICIT_SPARSE_SYMBOLIC_SUPERBLOCK_MAX_BLOCKS", ""
+    ).strip()
+    symbolic_superblock_min_cross_nnz_env = os.environ.get(
+        "SFINCS_JAX_EXPLICIT_SPARSE_SYMBOLIC_SUPERBLOCK_MIN_CROSS_NNZ", ""
+    ).strip()
+    symbolic_superblock_min_retained_cross_fraction_env = os.environ.get(
+        "SFINCS_JAX_EXPLICIT_SPARSE_SYMBOLIC_SUPERBLOCK_MIN_RETAINED_CROSS_FRACTION", ""
+    ).strip()
+    symbolic_superblock_reg_env = os.environ.get("SFINCS_JAX_EXPLICIT_SPARSE_SYMBOLIC_SUPERBLOCK_REG_REL", "").strip()
     try:
         block_cols = int(block_cols_env) if block_cols_env else 32
     except ValueError:
@@ -1081,6 +1140,101 @@ def _build_host_sparse_direct_factor_from_matvec(
     except ValueError:
         symbolic_schur_regularization_rel = float(default_symbolic_schur_regularization_rel)
     symbolic_schur_regularization_rel = max(0.0, float(symbolic_schur_regularization_rel))
+
+    def _parse_int_env(value: str, default: int, *, minimum: int = 0) -> int:
+        try:
+            parsed = int(value) if value else int(default)
+        except ValueError:
+            parsed = int(default)
+        return max(int(minimum), int(parsed))
+
+    def _parse_float_env(value: str, default: float, *, minimum: float = 0.0) -> float:
+        try:
+            parsed = float(value) if value else float(default)
+        except ValueError:
+            parsed = float(default)
+        return max(float(minimum), float(parsed))
+
+    symbolic_frontal_max_separator_cols = _parse_int_env(
+        symbolic_frontal_max_separator_env,
+        int(default_symbolic_frontal_max_separator_cols),
+        minimum=0,
+    )
+    symbolic_frontal_tail_size = _parse_int_env(
+        symbolic_frontal_tail_env,
+        int(default_symbolic_frontal_tail_size),
+        minimum=0,
+    )
+    symbolic_frontal_boundary_width = _parse_int_env(
+        symbolic_frontal_boundary_env,
+        int(default_symbolic_frontal_boundary_width),
+        minimum=0,
+    )
+    symbolic_frontal_high_degree_cols = _parse_int_env(
+        symbolic_frontal_high_degree_env,
+        int(default_symbolic_frontal_high_degree_cols),
+        minimum=0,
+    )
+    symbolic_frontal_max_superblock_size = _parse_int_env(
+        symbolic_frontal_max_superblock_size_env,
+        int(default_symbolic_frontal_max_superblock_size),
+        minimum=1,
+    )
+    symbolic_frontal_max_superblock_blocks = _parse_int_env(
+        symbolic_frontal_max_superblock_blocks_env,
+        int(default_symbolic_frontal_max_superblock_blocks),
+        minimum=1,
+    )
+    symbolic_frontal_min_cross_nnz = _parse_int_env(
+        symbolic_frontal_min_cross_nnz_env,
+        int(default_symbolic_frontal_min_cross_nnz),
+        minimum=1,
+    )
+    symbolic_frontal_min_cross_separator_fraction = _parse_float_env(
+        symbolic_frontal_min_cross_separator_fraction_env,
+        float(default_symbolic_frontal_min_cross_separator_fraction),
+        minimum=0.0,
+    )
+    symbolic_frontal_regularization_rel = _parse_float_env(
+        symbolic_frontal_reg_env,
+        float(default_symbolic_frontal_regularization_rel),
+        minimum=0.0,
+    )
+    symbolic_frontal_max_dense_rhs_entries = _parse_int_env(
+        symbolic_frontal_max_dense_rhs_entries_env,
+        int(default_symbolic_frontal_max_dense_rhs_entries),
+        minimum=0,
+    )
+    symbolic_frontal_max_dense_rhs_cols_per_block = _parse_int_env(
+        symbolic_frontal_max_dense_rhs_cols_env,
+        int(default_symbolic_frontal_max_dense_rhs_cols_per_block),
+        minimum=0,
+    )
+    symbolic_superblock_max_size = _parse_int_env(
+        symbolic_superblock_max_size_env,
+        int(default_symbolic_superblock_max_size),
+        minimum=1,
+    )
+    symbolic_superblock_max_blocks = _parse_int_env(
+        symbolic_superblock_max_blocks_env,
+        int(default_symbolic_superblock_max_blocks),
+        minimum=1,
+    )
+    symbolic_superblock_min_cross_nnz = _parse_int_env(
+        symbolic_superblock_min_cross_nnz_env,
+        int(default_symbolic_superblock_min_cross_nnz),
+        minimum=1,
+    )
+    symbolic_superblock_min_retained_cross_fraction = _parse_float_env(
+        symbolic_superblock_min_retained_cross_fraction_env,
+        float(default_symbolic_superblock_min_retained_cross_fraction),
+        minimum=0.0,
+    )
+    symbolic_superblock_regularization_rel = _parse_float_env(
+        symbolic_superblock_reg_env,
+        float(default_symbolic_superblock_regularization_rel),
+        minimum=0.0,
+    )
     factor_kind_env = os.environ.get("SFINCS_JAX_EXPLICIT_SPARSE_FACTOR_KIND", "").strip().lower()
     default_factor_kind_norm = str(default_factor_kind).strip().lower()
     if factor_kind_env in {"jacobi", "diagonal", "diag", "none"}:
@@ -1092,6 +1246,20 @@ def _build_host_sparse_direct_factor_from_matvec(
         "symbolic_schur_lu",
     }:
         factor_kind = "symbolic_block_schur_lu"
+    elif factor_kind_env in {
+        "symbolic_frontal_schur_lu",
+        "frontal_schur_lu",
+        "native_frontal_schur_lu",
+        "multifrontal_schur_lu",
+    }:
+        factor_kind = "symbolic_frontal_schur_lu"
+    elif factor_kind_env in {
+        "symbolic_superblock_lu",
+        "superblock_lu",
+        "native_superblock_lu",
+        "block_edge_lu",
+    }:
+        factor_kind = "symbolic_superblock_lu"
     elif factor_kind_env in {"symbolic_block_lu_coarse", "block_lu_coarse", "native_block_lu_coarse", "symbolic_lu_coarse"}:
         factor_kind = "symbolic_block_lu_coarse"
     elif factor_kind_env in {"symbolic_block_lu", "block_lu", "native_block_lu", "symbolic_lu"}:
@@ -1109,6 +1277,20 @@ def _build_host_sparse_direct_factor_from_matvec(
         "symbolic_schur_lu",
     }:
         factor_kind = "symbolic_block_schur_lu"
+    elif default_factor_kind_norm in {
+        "symbolic_frontal_schur_lu",
+        "frontal_schur_lu",
+        "native_frontal_schur_lu",
+        "multifrontal_schur_lu",
+    }:
+        factor_kind = "symbolic_frontal_schur_lu"
+    elif default_factor_kind_norm in {
+        "symbolic_superblock_lu",
+        "superblock_lu",
+        "native_superblock_lu",
+        "block_edge_lu",
+    }:
+        factor_kind = "symbolic_superblock_lu"
     elif default_factor_kind_norm in {
         "symbolic_block_lu_coarse",
         "block_lu_coarse",
@@ -1275,6 +1457,22 @@ def _build_host_sparse_direct_factor_from_matvec(
             symbolic_schur_boundary_width=int(symbolic_schur_boundary_width),
             symbolic_schur_high_degree_cols=int(symbolic_schur_high_degree_cols),
             symbolic_schur_regularization_rel=float(symbolic_schur_regularization_rel),
+            symbolic_frontal_max_separator_cols=int(symbolic_frontal_max_separator_cols),
+            symbolic_frontal_tail_size=int(symbolic_frontal_tail_size),
+            symbolic_frontal_boundary_width=int(symbolic_frontal_boundary_width),
+            symbolic_frontal_high_degree_cols=int(symbolic_frontal_high_degree_cols),
+            symbolic_frontal_max_superblock_size=int(symbolic_frontal_max_superblock_size),
+            symbolic_frontal_max_superblock_blocks=int(symbolic_frontal_max_superblock_blocks),
+            symbolic_frontal_min_cross_nnz=int(symbolic_frontal_min_cross_nnz),
+            symbolic_frontal_min_cross_separator_fraction=float(symbolic_frontal_min_cross_separator_fraction),
+            symbolic_frontal_regularization_rel=float(symbolic_frontal_regularization_rel),
+            symbolic_frontal_max_dense_rhs_entries=int(symbolic_frontal_max_dense_rhs_entries),
+            symbolic_frontal_max_dense_rhs_cols_per_block=int(symbolic_frontal_max_dense_rhs_cols_per_block),
+            symbolic_superblock_max_size=int(symbolic_superblock_max_size),
+            symbolic_superblock_max_blocks=int(symbolic_superblock_max_blocks),
+            symbolic_superblock_min_cross_nnz=int(symbolic_superblock_min_cross_nnz),
+            symbolic_superblock_min_retained_cross_fraction=float(symbolic_superblock_min_retained_cross_fraction),
+            symbolic_superblock_regularization_rel=float(symbolic_superblock_regularization_rel),
             symbolic_max_permutation_size=int(default_symbolic_max_permutation_size),
         )
     except Exception as exc:
@@ -13383,6 +13581,81 @@ def _build_rhsmode23_fp_fortran_reduced_lu_preconditioner(
         1.0e-12,
         minimum=0.0,
     )
+    symbolic_frontal_max_separator_cols = _int_env(
+        "SFINCS_JAX_TRANSPORT_FP_FORTRAN_REDUCED_LU_SYMBOLIC_FRONTAL_MAX_SEPARATOR_COLS",
+        1024,
+        minimum=0,
+    )
+    symbolic_frontal_boundary_width = _int_env(
+        "SFINCS_JAX_TRANSPORT_FP_FORTRAN_REDUCED_LU_SYMBOLIC_FRONTAL_BOUNDARY_WIDTH",
+        1,
+        minimum=0,
+    )
+    symbolic_frontal_high_degree_cols = _int_env(
+        "SFINCS_JAX_TRANSPORT_FP_FORTRAN_REDUCED_LU_SYMBOLIC_FRONTAL_HIGH_DEGREE_COLS",
+        128,
+        minimum=0,
+    )
+    symbolic_frontal_max_superblock_size = _int_env(
+        "SFINCS_JAX_TRANSPORT_FP_FORTRAN_REDUCED_LU_SYMBOLIC_FRONTAL_MAX_SUPERBLOCK_SIZE",
+        8192,
+        minimum=1,
+    )
+    symbolic_frontal_max_superblock_blocks = _int_env(
+        "SFINCS_JAX_TRANSPORT_FP_FORTRAN_REDUCED_LU_SYMBOLIC_FRONTAL_MAX_SUPERBLOCK_BLOCKS",
+        8,
+        minimum=1,
+    )
+    symbolic_frontal_min_cross_nnz = _int_env(
+        "SFINCS_JAX_TRANSPORT_FP_FORTRAN_REDUCED_LU_SYMBOLIC_FRONTAL_MIN_CROSS_NNZ",
+        1,
+        minimum=1,
+    )
+    symbolic_frontal_min_cross_separator_fraction = _float_env(
+        "SFINCS_JAX_TRANSPORT_FP_FORTRAN_REDUCED_LU_SYMBOLIC_FRONTAL_MIN_CROSS_SEPARATOR_FRACTION",
+        0.0,
+        minimum=0.0,
+    )
+    symbolic_frontal_regularization_rel = _float_env(
+        "SFINCS_JAX_TRANSPORT_FP_FORTRAN_REDUCED_LU_SYMBOLIC_FRONTAL_REG_REL",
+        1.0e-12,
+        minimum=0.0,
+    )
+    symbolic_frontal_max_dense_rhs_entries = _int_env(
+        "SFINCS_JAX_TRANSPORT_FP_FORTRAN_REDUCED_LU_SYMBOLIC_FRONTAL_MAX_DENSE_RHS_ENTRIES",
+        0,
+        minimum=0,
+    )
+    symbolic_frontal_max_dense_rhs_cols_per_block = _int_env(
+        "SFINCS_JAX_TRANSPORT_FP_FORTRAN_REDUCED_LU_SYMBOLIC_FRONTAL_MAX_DENSE_RHS_COLS_PER_BLOCK",
+        0,
+        minimum=0,
+    )
+    symbolic_superblock_max_size = _int_env(
+        "SFINCS_JAX_TRANSPORT_FP_FORTRAN_REDUCED_LU_SYMBOLIC_SUPERBLOCK_MAX_SIZE",
+        32768,
+        minimum=1,
+    )
+    symbolic_superblock_max_blocks = _int_env(
+        "SFINCS_JAX_TRANSPORT_FP_FORTRAN_REDUCED_LU_SYMBOLIC_SUPERBLOCK_MAX_BLOCKS",
+        8,
+        minimum=1,
+    )
+    symbolic_superblock_min_cross_nnz = _int_env(
+        "SFINCS_JAX_TRANSPORT_FP_FORTRAN_REDUCED_LU_SYMBOLIC_SUPERBLOCK_MIN_CROSS_NNZ",
+        1,
+        minimum=1,
+    )
+    symbolic_superblock_min_retained_cross_fraction = _float_env(
+        "SFINCS_JAX_TRANSPORT_FP_FORTRAN_REDUCED_LU_SYMBOLIC_SUPERBLOCK_MIN_RETAINED_CROSS_FRACTION",
+        0.0,
+        minimum=0.0,
+    )
+    symbolic_superblock_regularization_rel = _float_env(
+        "SFINCS_JAX_TRANSPORT_FP_FORTRAN_REDUCED_LU_SYMBOLIC_SUPERBLOCK_REG_REL",
+        1.0e-12,
+        minimum=0.0,
+    )
     symbolic_max_permutation_size = _int_env(
         "SFINCS_JAX_TRANSPORT_FP_FORTRAN_REDUCED_LU_SYMBOLIC_MAX_PERMUTATION_SIZE",
         250_000,
@@ -13451,6 +13724,14 @@ def _build_rhsmode23_fp_fortran_reduced_lu_preconditioner(
             "block_lu_coarse",
             "native_block_lu_coarse",
             "symbolic_lu_coarse",
+            "symbolic_frontal_schur_lu",
+            "frontal_schur_lu",
+            "native_frontal_schur_lu",
+            "multifrontal_schur_lu",
+            "symbolic_superblock_lu",
+            "superblock_lu",
+            "native_superblock_lu",
+            "block_edge_lu",
         }
         else "lu"
     )
@@ -13460,6 +13741,10 @@ def _build_rhsmode23_fp_fortran_reduced_lu_preconditioner(
         default_factor_kind = "jacobi"
     elif default_factor_kind in {"block_schur_lu", "native_block_schur_lu", "symbolic_schur_lu"}:
         default_factor_kind = "symbolic_block_schur_lu"
+    elif default_factor_kind in {"frontal_schur_lu", "native_frontal_schur_lu", "multifrontal_schur_lu"}:
+        default_factor_kind = "symbolic_frontal_schur_lu"
+    elif default_factor_kind in {"superblock_lu", "native_superblock_lu", "block_edge_lu"}:
+        default_factor_kind = "symbolic_superblock_lu"
     elif default_factor_kind in {"block_lu_coarse", "native_block_lu_coarse", "symbolic_lu_coarse"}:
         default_factor_kind = "symbolic_block_lu_coarse"
     elif default_factor_kind in {"block_lu", "native_block_lu", "symbolic_lu"}:
@@ -13509,6 +13794,17 @@ def _build_rhsmode23_fp_fortran_reduced_lu_preconditioner(
             f"phys{int(symbolic_physics_coarse_enabled)}_{int(symbolic_physics_coarse_max_cols)}_"
             f"schur{int(symbolic_schur_max_separator_cols)}_{int(symbolic_schur_boundary_width)}_"
             f"{int(symbolic_schur_high_degree_cols)}_{float(symbolic_schur_regularization_rel):.3e}_"
+            f"frontal{int(symbolic_frontal_max_separator_cols)}_{int(symbolic_frontal_boundary_width)}_"
+            f"{int(symbolic_frontal_high_degree_cols)}_{int(symbolic_frontal_max_superblock_size)}_"
+            f"{int(symbolic_frontal_max_superblock_blocks)}_{int(symbolic_frontal_min_cross_nnz)}_"
+            f"{float(symbolic_frontal_min_cross_separator_fraction):.3e}_"
+            f"{float(symbolic_frontal_regularization_rel):.3e}_"
+            f"{int(symbolic_frontal_max_dense_rhs_entries)}_"
+            f"{int(symbolic_frontal_max_dense_rhs_cols_per_block)}_"
+            f"super{int(symbolic_superblock_max_size)}_{int(symbolic_superblock_max_blocks)}_"
+            f"{int(symbolic_superblock_min_cross_nnz)}_"
+            f"{float(symbolic_superblock_min_retained_cross_fraction):.3e}_"
+            f"{float(symbolic_superblock_regularization_rel):.3e}_"
             f"{int(symbolic_max_permutation_size)}_"
             f"adm{int(symbolic_admission_enabled)}_{float(symbolic_admission_max_rel):.3e}_"
             f"{float(symbolic_admission_min_improvement):.3e}_{int(symbolic_admission_probes)}_"
@@ -13567,10 +13863,72 @@ def _build_rhsmode23_fp_fortran_reduced_lu_preconditioner(
                         "symbolic_block_lu",
                         "symbolic_block_lu_coarse",
                         "symbolic_block_schur_lu",
+                        "symbolic_frontal_schur_lu",
+                        "symbolic_superblock_lu",
                     }
                     else 0
                 )
+                direct_pmat_nnz = int(direct_metadata.get("direct_pmat_nnz", 0) or 0)
+                direct_mf_fill_ratio = _float_env(
+                    "SFINCS_JAX_TRANSPORT_FP_FORTRAN_REDUCED_LU_MULTIFRONTAL_FILL_RATIO",
+                    104.0,
+                    minimum=1.0,
+                )
+                direct_mf_overhead = _float_env(
+                    "SFINCS_JAX_TRANSPORT_FP_FORTRAN_REDUCED_LU_MULTIFRONTAL_OVERHEAD",
+                    1.15,
+                    minimum=1.0,
+                )
+                direct_multifrontal_nbytes_estimate = (
+                    estimate_multifrontal_direct_lu_nbytes(
+                        direct_pmat_nnz,
+                        fill_ratio=float(direct_mf_fill_ratio),
+                        data_dtype=factor_dtype,
+                        overhead=float(direct_mf_overhead),
+                    )
+                    if direct_pmat_nnz > 0
+                    else 0
+                )
+                direct_metadata.update(
+                    {
+                        "direct_pmat_multifrontal_fill_ratio_estimate": float(direct_mf_fill_ratio),
+                        "direct_pmat_multifrontal_overhead_estimate": float(direct_mf_overhead),
+                        "direct_pmat_multifrontal_factor_nbytes_estimate": int(
+                            direct_multifrontal_nbytes_estimate
+                        ),
+                    }
+                )
                 max_factor_nbytes = int(float(max_factor_mb) * 1.0e6)
+                if emit is not None and direct_multifrontal_nbytes_estimate > 0:
+                    emit(
+                        1,
+                        "solve_v3_transport_matrix_linear_gmres: direct reduced Pmat "
+                        "MUMPS-like fill estimate "
+                        f"nnz={int(direct_pmat_nnz)} "
+                        f"fill_ratio={float(direct_mf_fill_ratio):.3g} "
+                        f"factor_mb={float(direct_multifrontal_nbytes_estimate) / 1.0e6:.3f} "
+                        f"max_mb={float(max_factor_mb):.3f}",
+                    )
+                if (
+                    default_factor_kind in {"lu", "ilu"}
+                    and direct_multifrontal_nbytes_estimate > 0
+                    and max_factor_nbytes > 0
+                    and direct_multifrontal_nbytes_estimate > max_factor_nbytes
+                ):
+                    if emit is not None:
+                        emit(
+                            1,
+                            "solve_v3_transport_matrix_linear_gmres: direct reduced Pmat exact factor "
+                            "rejected by MUMPS-like fill guard "
+                            f"factor_kind={default_factor_kind} "
+                            f"factor_mb={float(direct_multifrontal_nbytes_estimate) / 1.0e6:.3f} "
+                            f"max_mb={float(max_factor_mb):.3f}",
+                        )
+                    return _build_rhsmode23_sxblock_preconditioner(
+                        op=op,
+                        reduce_full=reduce_full,
+                        expand_reduced=expand_reduced,
+                    )
                 if (
                     direct_symbolic_prefill_estimate > 0
                     and max_factor_nbytes > 0
@@ -13618,6 +13976,28 @@ def _build_rhsmode23_fp_fortran_reduced_lu_preconditioner(
                         default_symbolic_schur_boundary_width=int(symbolic_schur_boundary_width),
                         default_symbolic_schur_high_degree_cols=int(symbolic_schur_high_degree_cols),
                         default_symbolic_schur_regularization_rel=float(symbolic_schur_regularization_rel),
+                        default_symbolic_frontal_max_separator_cols=int(symbolic_frontal_max_separator_cols),
+                        default_symbolic_frontal_tail_size=int(direct_metadata.get("direct_pmat_tail_size", 0)),
+                        default_symbolic_frontal_boundary_width=int(symbolic_frontal_boundary_width),
+                        default_symbolic_frontal_high_degree_cols=int(symbolic_frontal_high_degree_cols),
+                        default_symbolic_frontal_max_superblock_size=int(symbolic_frontal_max_superblock_size),
+                        default_symbolic_frontal_max_superblock_blocks=int(symbolic_frontal_max_superblock_blocks),
+                        default_symbolic_frontal_min_cross_nnz=int(symbolic_frontal_min_cross_nnz),
+                        default_symbolic_frontal_min_cross_separator_fraction=float(
+                            symbolic_frontal_min_cross_separator_fraction
+                        ),
+                        default_symbolic_frontal_regularization_rel=float(symbolic_frontal_regularization_rel),
+                        default_symbolic_frontal_max_dense_rhs_entries=int(symbolic_frontal_max_dense_rhs_entries),
+                        default_symbolic_frontal_max_dense_rhs_cols_per_block=int(
+                            symbolic_frontal_max_dense_rhs_cols_per_block
+                        ),
+                        default_symbolic_superblock_max_size=int(symbolic_superblock_max_size),
+                        default_symbolic_superblock_max_blocks=int(symbolic_superblock_max_blocks),
+                        default_symbolic_superblock_min_cross_nnz=int(symbolic_superblock_min_cross_nnz),
+                        default_symbolic_superblock_min_retained_cross_fraction=float(
+                            symbolic_superblock_min_retained_cross_fraction
+                        ),
+                        default_symbolic_superblock_regularization_rel=float(symbolic_superblock_regularization_rel),
                         default_symbolic_max_permutation_size=int(symbolic_max_permutation_size),
                     )
                 except Exception as exc:  # noqa: BLE001
@@ -13683,6 +14063,28 @@ def _build_rhsmode23_fp_fortran_reduced_lu_preconditioner(
                     default_symbolic_schur_boundary_width=int(symbolic_schur_boundary_width),
                     default_symbolic_schur_high_degree_cols=int(symbolic_schur_high_degree_cols),
                     default_symbolic_schur_regularization_rel=float(symbolic_schur_regularization_rel),
+                    default_symbolic_frontal_max_separator_cols=int(symbolic_frontal_max_separator_cols),
+                    default_symbolic_frontal_tail_size=0,
+                    default_symbolic_frontal_boundary_width=int(symbolic_frontal_boundary_width),
+                    default_symbolic_frontal_high_degree_cols=int(symbolic_frontal_high_degree_cols),
+                    default_symbolic_frontal_max_superblock_size=int(symbolic_frontal_max_superblock_size),
+                    default_symbolic_frontal_max_superblock_blocks=int(symbolic_frontal_max_superblock_blocks),
+                    default_symbolic_frontal_min_cross_nnz=int(symbolic_frontal_min_cross_nnz),
+                    default_symbolic_frontal_min_cross_separator_fraction=float(
+                        symbolic_frontal_min_cross_separator_fraction
+                    ),
+                    default_symbolic_frontal_regularization_rel=float(symbolic_frontal_regularization_rel),
+                    default_symbolic_frontal_max_dense_rhs_entries=int(symbolic_frontal_max_dense_rhs_entries),
+                    default_symbolic_frontal_max_dense_rhs_cols_per_block=int(
+                        symbolic_frontal_max_dense_rhs_cols_per_block
+                    ),
+                    default_symbolic_superblock_max_size=int(symbolic_superblock_max_size),
+                    default_symbolic_superblock_max_blocks=int(symbolic_superblock_max_blocks),
+                    default_symbolic_superblock_min_cross_nnz=int(symbolic_superblock_min_cross_nnz),
+                    default_symbolic_superblock_min_retained_cross_fraction=float(
+                        symbolic_superblock_min_retained_cross_fraction
+                    ),
+                    default_symbolic_superblock_regularization_rel=float(symbolic_superblock_regularization_rel),
                     default_symbolic_max_permutation_size=int(symbolic_max_permutation_size),
                 )
         except Exception as exc:  # noqa: BLE001
@@ -13769,6 +14171,8 @@ def _build_rhsmode23_fp_fortran_reduced_lu_preconditioner(
             "symbolic_block_lu",
             "symbolic_block_lu_coarse",
             "symbolic_block_schur_lu",
+            "symbolic_frontal_schur_lu",
+            "symbolic_superblock_lu",
         } and bool(symbolic_admission_enabled):
             admission = admit_sparse_factor_against_operator(
                 factor_operator if factor_operator is not None else factor_matrix,
@@ -13947,6 +14351,21 @@ def _build_rhsmode23_fp_fortran_reduced_lu_preconditioner(
             "symbolic_schur_boundary_width": int(symbolic_schur_boundary_width),
             "symbolic_schur_high_degree_cols": int(symbolic_schur_high_degree_cols),
             "symbolic_schur_regularization_rel": float(symbolic_schur_regularization_rel),
+            "symbolic_frontal_max_separator_cols": int(symbolic_frontal_max_separator_cols),
+            "symbolic_frontal_boundary_width": int(symbolic_frontal_boundary_width),
+            "symbolic_frontal_high_degree_cols": int(symbolic_frontal_high_degree_cols),
+            "symbolic_frontal_max_superblock_size": int(symbolic_frontal_max_superblock_size),
+            "symbolic_frontal_max_superblock_blocks": int(symbolic_frontal_max_superblock_blocks),
+            "symbolic_frontal_min_cross_nnz": int(symbolic_frontal_min_cross_nnz),
+            "symbolic_frontal_min_cross_separator_fraction": float(symbolic_frontal_min_cross_separator_fraction),
+            "symbolic_frontal_regularization_rel": float(symbolic_frontal_regularization_rel),
+            "symbolic_frontal_max_dense_rhs_entries": int(symbolic_frontal_max_dense_rhs_entries),
+            "symbolic_frontal_max_dense_rhs_cols_per_block": int(symbolic_frontal_max_dense_rhs_cols_per_block),
+            "symbolic_superblock_max_size": int(symbolic_superblock_max_size),
+            "symbolic_superblock_max_blocks": int(symbolic_superblock_max_blocks),
+            "symbolic_superblock_min_cross_nnz": int(symbolic_superblock_min_cross_nnz),
+            "symbolic_superblock_min_retained_cross_fraction": float(symbolic_superblock_min_retained_cross_fraction),
+            "symbolic_superblock_regularization_rel": float(symbolic_superblock_regularization_rel),
             "symbolic_max_permutation_size": int(symbolic_max_permutation_size),
             "symbolic_admission_enabled": bool(symbolic_admission_enabled),
             "symbolic_admission_max_rel": float(symbolic_admission_max_rel),

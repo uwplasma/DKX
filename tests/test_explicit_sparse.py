@@ -17,6 +17,7 @@ from sfincs_jax.explicit_sparse import (
     color_pattern_columns,
     estimate_csr_nbytes,
     estimate_dense_nbytes,
+    estimate_multifrontal_direct_lu_nbytes,
     estimate_superlu_factor_storage,
     factorize_host_sparse_operator,
     wrap_sparse_factor_with_coarse_correction,
@@ -26,6 +27,15 @@ from sfincs_jax.explicit_sparse import (
 def test_storage_estimates_are_consistent() -> None:
     assert estimate_dense_nbytes((3, 4), np.float64) == 3 * 4 * 8
     assert estimate_csr_nbytes((3, 4), 5, data_dtype=np.float64, index_dtype=np.int32) == 5 * 12 + 4 * 4
+
+
+def test_multifrontal_direct_lu_estimate_tracks_profiled_fill() -> None:
+    estimate = estimate_multifrontal_direct_lu_nbytes(
+        8_678_219,
+        fill_ratio=888_160_169 / 8_678_219,
+        overhead=1.0,
+    )
+    assert estimate == 888_160_169 * 12
 
 
 def test_sparse_symbolic_analysis_reports_reusable_ordering_metadata() -> None:

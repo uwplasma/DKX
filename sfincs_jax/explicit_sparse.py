@@ -56,6 +56,32 @@ def estimate_csr_nbytes(
     return int(nnz) * (data_itemsize + index_itemsize) + (int(shape[0]) + 1) * index_itemsize
 
 
+def estimate_multifrontal_direct_lu_nbytes(
+    nnz: int,
+    *,
+    fill_ratio: float = 104.0,
+    data_dtype=np.float64,
+    index_dtype=np.int32,
+    overhead: float = 1.15,
+) -> int:
+    """Estimate sparse-direct LU storage from profiled nested-dissection fill.
+
+    Production SFINCS Fortran v3 FP transport profiles on geometry-rich
+    ``whichMatrix=0`` matrices show roughly 100x nonzero growth between the
+    assembled preconditioner matrix and the MUMPS factors.  This helper keeps
+    SFINCS-JAX admission honest: if a monolithic or near-monolithic sparse
+    direct fallback would require that level of fill, reject it before spending
+    minutes in setup unless the caller explicitly raises the memory cap.
+    """
+
+    nnz_use = max(0, int(nnz))
+    fill_use = max(1.0, float(fill_ratio))
+    overhead_use = max(1.0, float(overhead))
+    entries = int(np.ceil(float(nnz_use) * fill_use))
+    bytes_per_entry = int(np.dtype(data_dtype).itemsize + np.dtype(index_dtype).itemsize)
+    return int(np.ceil(float(entries * bytes_per_entry) * overhead_use))
+
+
 @dataclass(frozen=True)
 class SparseDecision:
     storage_kind: StorageKind

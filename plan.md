@@ -1,7 +1,103 @@
 # SFINCS_JAX Master Handoff + Execution Plan
 
-Last updated: 2026-06-11 (America/Chicago)
+Last updated: 2026-06-12 (America/Chicago)
 Owner: incoming agent
+
+## 2026-06-12 Addendum: Fortran v3/PETSc/MUMPS transport profile and native candidate wiring
+
+### Implementation
+
+- Profiled SFINCS Fortran v3 production-floor FP transport runs for
+  ``transportMatrix_geometryScheme11`` and ``transportMatrix_geometryScheme2``
+  using PETSc/MUMPS logging.  The solver stack is GMRES on the true
+  ``whichMatrix=1`` operator with a reused exact sparse LU factorization of the
+  ``whichMatrix=0`` preconditioner matrix.
+- Wired the existing native ``symbolic_frontal_schur_lu`` and
+  ``symbolic_superblock_lu`` sparse-factor candidates through the RHSMode=2/3
+  transport reduced-Pmat path.  They are now selectable via transport defaults
+  or ``SFINCS_JAX_EXPLICIT_SPARSE_FACTOR_KIND`` aliases and are still guarded
+  by setup-time true-residual admission.
+- Added bounded frontal/superblock controls to the transport sparse-factor
+  cache key and metadata so separator/superblock budget changes cannot reuse
+  stale factors.
+- Added ``estimate_multifrontal_direct_lu_nbytes`` to make exact direct-factor
+  attempts fail fast when the Fortran/MUMPS-like fill estimate exceeds the
+  configured memory cap.  This prevents unbounded monolithic LU/ILU attempts
+  while still allowing lower-memory symbolic candidates to run their own
+  bounded setup and residual admission.
+
+### Evidence
+
+- Fortran v3 ``transportMatrix_geometryScheme11``:
+  - active/system size ``462827``;
+  - true matrix nnz ``10124069``;
+  - preconditioner matrix nnz ``8678219``;
+  - MUMPS factor entries ``888160169`` (about ``102.3x`` Pmat fill);
+  - MUMPS reported factorization memory ``7474 MB`` and solve-phase memory
+    ``11044 MB``; observed process memory about ``8.92 GB``;
+  - largest frontal matrix order ``5150`` and elimination-tree nodes ``99806``;
+  - reused the same factor across three RHS solves with roughly
+    ``38--46 s`` per reported solve.
+- Fortran v3 ``transportMatrix_geometryScheme2``:
+  - active/system size ``648977``;
+  - true matrix nnz ``15165133``;
+  - preconditioner matrix nnz ``12176533``;
+  - MUMPS factor entries ``1214252173`` (about ``99.7x`` Pmat fill);
+  - MUMPS reported factorization memory ``10038 MB`` and solve-phase memory
+    ``14823 MB``; observed process memory about ``10.79 GB``;
+  - largest frontal matrix order ``4550`` and elimination-tree nodes
+    ``127169``;
+  - reused the same factor across all RHS solves with reported solve times
+    around ``31--58 s``.
+- Focused local validation passed:
+  ``pytest -q tests/test_explicit_sparse.py
+  tests/test_fortran_reduced_preconditioner.py -q`` with ``61 passed``.
+- Lint passed:
+  ``python -m ruff check sfincs_jax/explicit_sparse.py sfincs_jax/v3_driver.py
+  tests/test_explicit_sparse.py tests/test_fortran_reduced_preconditioner.py``.
+- Reduced-input candidate gate:
+  - ``symbolic_frontal_schur_lu`` built quickly but failed true-residual
+    admission on reduced geom11/geom2, then correctly fell back to exact LU
+    rescue.
+  - ``symbolic_superblock_lu`` passed true-residual admission on reduced
+    geom11 (``max_rel=1.535e-05``) and reduced geom2
+    (``max_rel=1.486e-09``).
+- Production-floor candidate gate at ``25 x 51 x 100``:
+  - geom11 direct Pmat emission: active size ``462827``,
+    ``10124069`` nnz, ``123.340 MB`` CSR, ``14.465 s`` build.
+    ``symbolic_superblock_lu`` then took ``39.924 s`` setup, estimated
+    ``6387 MB`` factor storage, observed ``11.58 GB`` RSS, and failed
+    admission with ``max_rel=2.841e8``.
+  - geom2 direct Pmat emission: active size ``648977``,
+    ``15165133`` nnz, ``184.578 MB`` CSR, ``21.066 s`` build.
+    ``symbolic_superblock_lu`` then took ``56.554 s`` setup, estimated
+    ``8859 MB`` factor storage, observed ``12.90 GB`` RSS, and failed
+    admission with ``max_rel=2.232e7``.
+
+### Decision
+
+- The measured Fortran v3 baseline is not a genuinely low-memory algorithm for
+  these two geometry-rich FP transport cases.  It succeeds by using nested
+  ordering plus exact MUMPS multifrontal sparse LU with roughly ``100x`` factor
+  fill and ``9--11 GB`` observed memory on these single-rank runs.
+- SFINCS-JAX should not auto-promote local block/coarse approximations that
+  fail true-residual admission.  The new frontal/superblock candidates are now
+  testable, but they remain candidates until production geom11/geom2 gates pass
+  strict residual/runtime/RSS criteria.
+- ``symbolic_superblock_lu`` is useful as a reduced-resolution diagnostic but
+  is not a production replacement.  It still approaches Fortran-scale memory
+  while losing the global elimination accuracy needed by GMRES at production
+  resolution.
+- Updated lane status:
+  - Geometry-rich RHSMode=2/3 production preconditioner: ``91%``.  The
+    Fortran target behavior is now measured and the closest native candidates
+    are wired into the transport path; production admission still must pass.
+  - Lower-memory/faster production replacement: ``98%``.  Exact-factor
+    fail-fast is now profile-informed; the remaining blocker is a lower-memory
+    native factor that passes true residual at production grid.
+  - RHSMode=1 production solver: ``97%``.  No regression introduced in this
+    pass; the same native frontal/superblock infrastructure remains available
+    for the RHSMode=1 lane.
 
 ## 2026-06-12 Addendum: transport residual-coarse block-Schur gate
 
