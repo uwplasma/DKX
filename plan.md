@@ -28606,3 +28606,84 @@ Current open-lane status after this pass:
 - True device-QI/GPU: ``60%``.
 - Coverage/physics-gate lane: ``77%``.
 - Overall average: ``86%``.
+
+### 2026-06-12 continuation: direct reduced-Pmat emission without active true CSR
+
+Goal:
+
+- Add the first RHSMode=1 ``whichMatrix=0`` reduced-Pmat path that reaches the
+  compressed active ordering without first materializing the full true active
+  CSR used by the preflight operator.  This specifically targets large
+  production QA/QH bootstrap-current and finite-beta profile-current cases
+  where CSR setup, not Krylov matvec cost, can dominate memory and wall time.
+
+Implemented:
+
+- Added
+  ``build_direct_active_fortran_v3_reduced_pmat_preconditioner`` in
+  ``sfincs_jax.rhs1_full_assembly``.  It infers the compressed active-pitch
+  layout, emits the reduced-Pmat input from the migrated structured f-block
+  term CSR plus the direct source/constraint/profile tail, and then reuses the
+  existing active Fortran-v3 reduced sparse factor/admission stack.
+- Added explicit driver aliases:
+  ``active_fortran_v3_reduced_direct_pmat_lu``,
+  ``active_fortran_v3_reduced_direct_pmat_ilu``,
+  ``active_fortran_v3_direct_pmat_lu``,
+  ``active_fortran_v3_direct_pmat_ilu``,
+  ``direct_reduced_pmat_lu``, and ``direct_reduced_pmat_ilu`` through
+  ``SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_PRECONDITIONER``.
+- When one of those aliases is requested, the RHSMode=1 driver now skips the
+  old ``fortran_reduced`` direct-tail active-CSR materialization and calls the
+  direct reduced-Pmat builder from ``op_pc`` and the active indices.  Solver
+  metadata records
+  ``sparse_pc_fortran_reduced_direct_pmat_requested=True`` and keeps
+  ``sparse_pc_fortran_reduced_direct_tail_built=False`` when the bypass is
+  active.
+- Added regression coverage proving that the direct reduced-Pmat matrix matches
+  the legacy active-CSR reduction on a small RHSMode=1 FP case and that the
+  driver solve path converges while bypassing active-CSR materialization.
+
+Evidence:
+
+- ``python -m pytest tests/test_rhs1_full_assembly.py -k
+  "direct_reduced_pmat or planned_lu or support_modes" -q``:
+  ``7 passed``.
+- ``python -m pytest tests/test_v3_sparse_pattern.py -k
+  "direct_pmat_preconditioner_skips_active_csr_materialization or
+  direct_tail_auto_preconditioner_uses_active_ladder" -q``:
+  ``2 passed``.
+- ``python -m pytest tests/test_rhs1_compressed_layout.py
+  tests/test_rhs1_reduced_pmat_plan.py tests/test_rhs1_full_assembly.py
+  tests/test_v3_sparse_pattern.py -k "compressed_pitch or reduced_pmat_plan
+  or planned_lu or support_modes or direct_reduced_pmat or
+  direct_pmat_preconditioner" -q``: ``16 passed``.
+- ``python -m pytest tests/test_rhs1_full_assembly.py -q``:
+  ``99 passed`` in ``35.60 s``.
+- ``python -m pytest tests/test_v3_sparse_pattern.py -q``:
+  ``132 passed`` in ``1:55``.
+- ``ruff check sfincs_jax/rhs1_full_assembly.py sfincs_jax/v3_driver.py
+  tests/test_rhs1_full_assembly.py tests/test_v3_sparse_pattern.py`` and
+  ``git diff --check``: passed.
+
+Decision and limitations:
+
+- This path is now a real user-selectable replacement for the active-CSR setup
+  step, but it is not promoted to ``auto`` yet.  Auto promotion still requires
+  production-floor QA/QH RHSMode=1 gates and geometry-rich RHSMode=2/3 gates to
+  show strict residuals, lower peak RSS, and no runtime regression.
+- The kinetic part currently uses the migrated structured f-block term CSR and
+  projects it into the compressed ordering.  It avoids the full true active
+  CSR, but the next deeper memory step is an active-only kinetic term emitter
+  that never builds the full f-block CSR for dropped pitch/field components.
+
+Current open-lane status after this pass:
+
+- RHSMode=1 production solver lane: ``97%``.
+- Lower-memory/faster production replacement: ``96%``.  Explicit direct
+  reduced-Pmat setup exists and is tested; production auto promotion and an
+  active-only kinetic emitter remain open.
+- Production QA/QH/QI full-grid evidence: ``70%``.  No new production solves
+  were run in this code-focused pass.
+- True device-QI/GPU: ``60%``.
+- Coverage/physics-gate lane: ``78%``.
+- Overall average: ``87%``.

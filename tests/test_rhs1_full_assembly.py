@@ -10,6 +10,7 @@ import sfincs_jax.rhs1_full_assembly as rfa
 import sfincs_jax.v3_driver as vd
 from sfincs_jax.namelist import read_sfincs_input
 from sfincs_jax.rhs1_full_assembly import (
+    build_direct_active_fortran_v3_reduced_pmat_preconditioner,
     build_active_projected_rhs1_full_csr_preconditioner,
     build_structured_rhs1_full_csr_preconditioner,
     clear_structured_rhs1_full_csr_cache,
@@ -769,6 +770,81 @@ def test_active_fortran_v3_reduced_planned_lu_rejects_invalid_active_pitch_patte
     assert pc.kind == "active_fortran_v3_reduced_planned_matrix"
     assert pc.reason == "active_fortran_v3_reduced_symbolic_plan_invalid"
     assert pc.metadata["symbolic_plan_requested"] is True
+
+
+def test_direct_reduced_pmat_emission_matches_legacy_active_csr_reduction() -> None:
+    clear_structured_rhs1_full_csr_cache(clear_fblock_cache=True)
+    nml = read_sfincs_input(REF / "quick_2species_FPCollisions_noEr.input.namelist")
+    op = full_system_operator_from_namelist(nml=nml, identity_shift=0.5)
+    layout = RHS1BlockLayout.from_operator(op)
+    active = vd._transport_active_dof_indices(op)
+
+    selection = select_structured_rhs1_full_csr_operator(op, max_csr_nbytes=100_000_000)
+    assert selection.selected and selection.matrix is not None
+    active_matrix = selection.matrix.tocsr()[active[:, None], active].tocsr()
+    legacy, legacy_metadata = rfa._active_fortran_v3_reduced_preconditioner_matrix(
+        matrix=active_matrix,
+        layout=layout,
+        active_indices=active,
+        regularization=0.0,
+    )
+
+    pmat_input, direct_layout, direct_active, emission_metadata = rfa._direct_active_fortran_v3_reduced_pmat_input_matrix(
+        op=op,
+        active_indices=active,
+        max_csr_nbytes=100_000_000,
+    )
+    direct, direct_metadata = rfa._active_fortran_v3_reduced_preconditioner_matrix(
+        matrix=pmat_input,
+        layout=direct_layout,
+        active_indices=direct_active,
+        regularization=0.0,
+    )
+
+    assert direct_layout == layout
+    np.testing.assert_array_equal(direct_active, active)
+    assert emission_metadata["direct_reduced_pmat_avoids_full_active_true_csr"] is True
+    assert direct_metadata["matrix_nnz"] <= legacy_metadata["matrix_nnz"]
+    diff = (direct - legacy).tocoo()
+    np.testing.assert_allclose(diff.data, 0.0, rtol=0.0, atol=1.0e-12)
+
+
+def test_direct_reduced_pmat_preconditioner_solves_small_exact_pmat(monkeypatch) -> None:
+    clear_structured_rhs1_full_csr_cache(clear_fblock_cache=True)
+    nml = read_sfincs_input(REF / "quick_2species_FPCollisions_noEr.input.namelist")
+    op = full_system_operator_from_namelist(nml=nml, identity_shift=0.5)
+    active = vd._transport_active_dof_indices(op)
+    monkeypatch.setenv("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_FORTRAN_V3_PC_PRECONDITIONER_X", "0")
+    monkeypatch.setenv("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_FORTRAN_V3_PC_PRECONDITIONER_XI", "0")
+    monkeypatch.setenv("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_FORTRAN_V3_PC_PRECONDITIONER_SPECIES", "0")
+    monkeypatch.setenv("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_FORTRAN_V3_PC_DIAGONAL_SHIFT", "0")
+
+    pc = build_direct_active_fortran_v3_reduced_pmat_preconditioner(
+        op=op,
+        active_indices=active,
+        requested_kind="active_fortran_v3_reduced_direct_pmat_lu",
+        max_factor_nbytes=100_000_000,
+        max_csr_nbytes=100_000_000,
+        regularization=0.0,
+        preconditioner_x=0,
+        preconditioner_xi=0,
+        preconditioner_species=0,
+    )
+
+    assert pc.selected, pc.to_dict()
+    assert pc.metadata["direct_reduced_pmat_emission"] is True
+    assert pc.metadata["direct_reduced_pmat_avoids_full_active_true_csr"] is True
+    assert pc.operator is not None
+
+    pmat_input, _layout, _active, _metadata = rfa._direct_active_fortran_v3_reduced_pmat_input_matrix(
+        op=op,
+        active_indices=active,
+        max_csr_nbytes=100_000_000,
+    )
+    x_true = _deterministic_vector(int(pmat_input.shape[0]))
+    rhs = np.asarray(pmat_input @ x_true, dtype=np.float64)
+    x_actual = np.asarray(pc.operator.matvec(rhs), dtype=np.float64)
+    np.testing.assert_allclose(x_actual, x_true, rtol=1.0e-10, atol=1.0e-10)
 
 
 def test_active_fortran_v3_reduced_builder_prefers_explicit_support_modes(monkeypatch) -> None:

@@ -1525,6 +1525,53 @@ def test_fortran_reduced_direct_tail_auto_preconditioner_uses_active_ladder(monk
     assert structured_metadata["metadata"]["auto_selected_kind"] == "jacobi"
 
 
+def test_fortran_reduced_direct_pmat_preconditioner_skips_active_csr_materialization(monkeypatch) -> None:
+    here = Path(__file__).parent
+    nml = read_sfincs_input(here / "ref" / "quick_2species_FPCollisions_noEr.input.namelist")
+    nml.group("resolutionParameters")["NTHETA"] = 5
+    nml.group("resolutionParameters")["NZETA"] = 5
+    nml.group("resolutionParameters")["NXI"] = 4
+    nml.group("resolutionParameters")["NX"] = 3
+    monkeypatch.setenv("SFINCS_JAX_ACTIVE_DOF", "0")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_PC_BACKEND", "global")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_CONSTRAINT_TAIL", "1")
+    monkeypatch.setenv(
+        "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_PRECONDITIONER",
+        "active_fortran_v3_reduced_direct_pmat_lu",
+    )
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_STRUCTURED_PC_REQUIRED", "1")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_PC_MAX_MB", "256")
+    monkeypatch.setenv("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_FORTRAN_V3_PC_PRECONDITIONER_X", "0")
+    monkeypatch.setenv("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_FORTRAN_V3_PC_PRECONDITIONER_XI", "0")
+    monkeypatch.setenv("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_FORTRAN_V3_PC_PRECONDITIONER_SPECIES", "0")
+    monkeypatch.setenv("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_FORTRAN_V3_PC_PRECONDITIONER_X_MIN_L", "0")
+    monkeypatch.setenv("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_FORTRAN_V3_PC_DIAGONAL_SHIFT", "0")
+    messages: list[str] = []
+
+    result = solve_v3_full_system_linear_gmres(
+        nml=nml,
+        solve_method="fortran_reduced_pc_gmres",
+        tol=1.0e-8,
+        maxiter=80,
+        emit=lambda _level, msg: messages.append(msg),
+    )
+
+    assert float(result.residual_norm) < 1.0e-8
+    assert result.metadata["sparse_pc_backend"] == "global"
+    assert result.metadata["sparse_pc_fortran_reduced_direct_pmat_requested"] is True
+    assert result.metadata["sparse_pc_fortran_reduced_direct_tail_built"] is False
+    assert (
+        result.metadata["sparse_pc_fortran_reduced_direct_tail_structured_pc_requested"]
+        == "active_fortran_v3_reduced_direct_pmat_lu"
+    )
+    assert result.metadata["sparse_pc_fortran_reduced_direct_tail_structured_pc_selected"] is True
+    structured_metadata = result.metadata["sparse_pc_fortran_reduced_direct_tail_structured_pc_metadata"]
+    assert structured_metadata["metadata"]["direct_reduced_pmat_emission"] is True
+    assert structured_metadata["metadata"]["direct_reduced_pmat_avoids_full_active_true_csr"] is True
+    assert any("materialization skipped; direct reduced-Pmat preconditioner requested" in msg for msg in messages)
+    assert not any("whichMatrix=0 active term CSR built" in msg for msg in messages)
+
+
 def test_fortran_reduced_direct_tail_auto_retries_active_lu_after_native_preflight_failure(
     monkeypatch,
 ) -> None:

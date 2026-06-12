@@ -113,6 +113,7 @@ from .rhs1_preconditioner_dispatch import (
 from .rhs1_fblock_assembly import select_structured_rhs1_fblock_csr_operator, select_structured_rhs1_fblock_operator
 from .rhs1_full_assembly import (
     build_active_projected_rhs1_full_csr_preconditioner,
+    build_direct_active_fortran_v3_reduced_pmat_preconditioner,
     select_active_fortran_v3_reduced_support_mode_preconditioner,
     select_structured_rhs1_full_csr_operator,
     solve_structured_rhs1_full_csr,
@@ -1293,6 +1294,23 @@ class _StructuredHostSparsePreconditionerBundle:
 
 
 _DIRECT_TAIL_STRUCTURED_PC_CACHE: dict[tuple[object, ...], object] = {}
+_DIRECT_REDUCED_PMAT_PC_KINDS = frozenset(
+    {
+        "active_fortran_v3_reduced_direct_pmat_lu",
+        "active_fortran_v3_reduced_direct_pmat_ilu",
+        "active_fortran_v3_direct_pmat_lu",
+        "active_fortran_v3_direct_pmat_ilu",
+        "direct_reduced_pmat_lu",
+        "direct_reduced_pmat_ilu",
+    }
+)
+
+
+def _is_direct_reduced_pmat_pc_kind(kind: str | None) -> bool:
+    """Return true for explicit preconditioner aliases that avoid active CSR assembly."""
+
+    normalized = str(kind or "").strip().lower().replace("-", "_")
+    return normalized in _DIRECT_REDUCED_PMAT_PC_KINDS
 
 
 def _hash_numpy_array_for_cache(array: Any) -> str:
@@ -31107,7 +31125,23 @@ def solve_v3_full_system_linear_gmres(
         direct_tail_structured_pc_reason: str | None = None
         direct_tail_structured_pc_metadata: dict[str, object] | None = None
         direct_tail_structured_pc_error: str | None = None
-        if bool(direct_tail_enabled):
+        direct_tail_pc_env_early = (
+            os.environ.get("SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_PRECONDITIONER", "")
+            .strip()
+            .lower()
+            .replace("-", "_")
+        )
+        direct_tail_direct_reduced_pmat_requested = _is_direct_reduced_pmat_pc_kind(direct_tail_pc_env_early)
+        if bool(direct_tail_enabled) and bool(direct_tail_direct_reduced_pmat_requested):
+            direct_tail_built = False
+            if emit is not None:
+                emit(
+                    1,
+                    "solve_v3_full_system_linear_gmres: fortran_reduced direct-tail "
+                    "materialization skipped; direct reduced-Pmat preconditioner requested "
+                    f"kind={direct_tail_pc_env_early}",
+                )
+        if bool(direct_tail_enabled) and not bool(direct_tail_direct_reduced_pmat_requested):
             direct_tail_start_s = sparse_timer.elapsed_s()
             csr_max_env_direct = os.environ.get("SFINCS_JAX_EXPLICIT_SPARSE_CSR_MAX_MB", "").strip()
             drop_tol_env_direct = os.environ.get("SFINCS_JAX_EXPLICIT_SPARSE_DROP_TOL", "").strip()
@@ -31233,7 +31267,9 @@ def solve_v3_full_system_linear_gmres(
         direct_tail_support_mode_preflight_metadata: dict[str, object] | None = None
         direct_tail_support_mode_preflight_error: str | None = None
         direct_tail_structured_pc_max_mb_auto = False
-        if direct_tail_operator_bundle is not None and direct_tail_structured_pc_requested is not None:
+        if direct_tail_structured_pc_requested is not None and (
+            direct_tail_operator_bundle is not None or bool(direct_tail_direct_reduced_pmat_requested)
+        ):
             pc_max_mb_env = os.environ.get(
                 "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_PC_MAX_MB",
                 "",
@@ -31271,45 +31307,104 @@ def solve_v3_full_system_linear_gmres(
                 direct_tail_structured_active_indices = (
                     sparse_pc_active_idx_np if sparse_pc_use_active_dof else None
                 )
-                direct_tail_structured_pc_cache_enabled = _rhs1_bool_env(
-                    "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_PC_CACHE",
-                    default=True,
-                )
                 direct_tail_structured_pc_cache_key = None
                 direct_tail_structured_pc_cache_hit = False
-                if bool(direct_tail_structured_pc_cache_enabled):
-                    direct_tail_structured_pc_cache_key = _direct_tail_structured_pc_cache_key(
-                        matrix=direct_tail_operator_bundle.matrix,
-                        layout=direct_tail_structured_layout,
+                if bool(direct_tail_direct_reduced_pmat_requested):
+                    direct_tail_structured_pc = build_direct_active_fortran_v3_reduced_pmat_preconditioner(
+                        op=op_pc,
                         active_indices=direct_tail_structured_active_indices,
-                        kind=str(direct_tail_structured_pc_requested),
-                        max_factor_nbytes=int(direct_tail_structured_max_nbytes),
+                        requested_kind=str(direct_tail_structured_pc_requested),
                         regularization=float(pc_reg),
-                        support_modes=(
-                            int(preconditioner_x),
-                            int(preconditioner_xi),
-                            int(preconditioner_species),
-                            int(preconditioner_x_min_l),
+                        max_factor_nbytes=int(direct_tail_structured_max_nbytes),
+                        max_csr_nbytes=int(direct_tail_structured_max_nbytes),
+                        include_identity_shift=True,
+                        include_jacobian_terms=True,
+                        drop_tol=0.0,
+                        preconditioner_x=int(preconditioner_x),
+                        preconditioner_xi=int(preconditioner_xi),
+                        preconditioner_species=int(preconditioner_species),
+                        preconditioner_x_min_l=int(preconditioner_x_min_l),
+                    )
+                    direct_tail_structured_pc = _direct_tail_structured_pc_with_cache_metadata(
+                        direct_tail_structured_pc,
+                        cache_hit=False,
+                        cache_key=(
+                            "direct_reduced_pmat_pc_cache_disabled",
+                            str(direct_tail_structured_pc_requested),
+                            int(sparse_pc_linear_size),
+                            (
+                                int(preconditioner_x),
+                                int(preconditioner_xi),
+                                int(preconditioner_species),
+                                int(preconditioner_x_min_l),
+                            ),
                         ),
                     )
-                    cached_direct_tail_pc = _DIRECT_TAIL_STRUCTURED_PC_CACHE.get(
-                        direct_tail_structured_pc_cache_key
+                else:
+                    direct_tail_structured_pc_cache_enabled = _rhs1_bool_env(
+                        "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_PC_CACHE",
+                        default=True,
                     )
-                    if cached_direct_tail_pc is not None:
-                        direct_tail_structured_pc_cache_hit = True
-                        if emit is not None:
-                            emit(
-                                1,
-                                "solve_v3_full_system_linear_gmres: fortran_reduced direct-tail "
-                                "structured preconditioner cache hit "
-                                f"elapsed_s={sparse_timer.elapsed_s() - direct_tail_structured_pc_start_s:.3f}",
-                            )
-                        direct_tail_structured_pc = _direct_tail_structured_pc_with_cache_metadata(
-                            cached_direct_tail_pc,
-                            cache_hit=True,
-                            cache_key=direct_tail_structured_pc_cache_key,
+                    if bool(direct_tail_structured_pc_cache_enabled):
+                        if direct_tail_operator_bundle is None:
+                            raise RuntimeError("direct-tail structured cache requested without a direct-tail matrix")
+                        direct_tail_structured_pc_cache_key = _direct_tail_structured_pc_cache_key(
+                            matrix=direct_tail_operator_bundle.matrix,
+                            layout=direct_tail_structured_layout,
+                            active_indices=direct_tail_structured_active_indices,
+                            kind=str(direct_tail_structured_pc_requested),
+                            max_factor_nbytes=int(direct_tail_structured_max_nbytes),
+                            regularization=float(pc_reg),
+                            support_modes=(
+                                int(preconditioner_x),
+                                int(preconditioner_xi),
+                                int(preconditioner_species),
+                                int(preconditioner_x_min_l),
+                            ),
                         )
+                        cached_direct_tail_pc = _DIRECT_TAIL_STRUCTURED_PC_CACHE.get(
+                            direct_tail_structured_pc_cache_key
+                        )
+                        if cached_direct_tail_pc is not None:
+                            direct_tail_structured_pc_cache_hit = True
+                            if emit is not None:
+                                emit(
+                                    1,
+                                    "solve_v3_full_system_linear_gmres: fortran_reduced direct-tail "
+                                    "structured preconditioner cache hit "
+                                    f"elapsed_s={sparse_timer.elapsed_s() - direct_tail_structured_pc_start_s:.3f}",
+                                )
+                            direct_tail_structured_pc = _direct_tail_structured_pc_with_cache_metadata(
+                                cached_direct_tail_pc,
+                                cache_hit=True,
+                                cache_key=direct_tail_structured_pc_cache_key,
+                            )
+                        else:
+                            direct_tail_structured_pc = build_active_projected_rhs1_full_csr_preconditioner(
+                                matrix=direct_tail_operator_bundle.matrix,
+                                layout=direct_tail_structured_layout,
+                                active_indices=direct_tail_structured_active_indices,
+                                kind=str(direct_tail_structured_pc_requested),
+                                max_factor_nbytes=int(direct_tail_structured_max_nbytes),
+                                regularization=float(pc_reg),
+                                preconditioner_x=int(preconditioner_x),
+                                preconditioner_xi=int(preconditioner_xi),
+                                preconditioner_species=int(preconditioner_species),
+                                preconditioner_x_min_l=int(preconditioner_x_min_l),
+                            )
+                            direct_tail_structured_pc = _direct_tail_structured_pc_with_cache_metadata(
+                                direct_tail_structured_pc,
+                                cache_hit=False,
+                                cache_key=direct_tail_structured_pc_cache_key,
+                            )
+                            _DIRECT_TAIL_STRUCTURED_PC_CACHE[direct_tail_structured_pc_cache_key] = (
+                                direct_tail_structured_pc
+                            )
                     else:
+                        if direct_tail_operator_bundle is None:
+                            raise RuntimeError(
+                                "direct-tail structured preconditioner requested without a direct-tail matrix"
+                            )
                         direct_tail_structured_pc = build_active_projected_rhs1_full_csr_preconditioner(
                             matrix=direct_tail_operator_bundle.matrix,
                             layout=direct_tail_structured_layout,
@@ -31325,38 +31420,17 @@ def solve_v3_full_system_linear_gmres(
                         direct_tail_structured_pc = _direct_tail_structured_pc_with_cache_metadata(
                             direct_tail_structured_pc,
                             cache_hit=False,
-                            cache_key=direct_tail_structured_pc_cache_key,
-                        )
-                        _DIRECT_TAIL_STRUCTURED_PC_CACHE[direct_tail_structured_pc_cache_key] = (
-                            direct_tail_structured_pc
-                        )
-                else:
-                    direct_tail_structured_pc = build_active_projected_rhs1_full_csr_preconditioner(
-                        matrix=direct_tail_operator_bundle.matrix,
-                        layout=direct_tail_structured_layout,
-                        active_indices=direct_tail_structured_active_indices,
-                        kind=str(direct_tail_structured_pc_requested),
-                        max_factor_nbytes=int(direct_tail_structured_max_nbytes),
-                        regularization=float(pc_reg),
-                        preconditioner_x=int(preconditioner_x),
-                        preconditioner_xi=int(preconditioner_xi),
-                        preconditioner_species=int(preconditioner_species),
-                        preconditioner_x_min_l=int(preconditioner_x_min_l),
-                    )
-                    direct_tail_structured_pc = _direct_tail_structured_pc_with_cache_metadata(
-                        direct_tail_structured_pc,
-                        cache_hit=False,
-                        cache_key=(
-                            "direct_tail_structured_pc_cache_disabled",
-                            str(direct_tail_structured_pc_requested),
-                            (
-                                int(preconditioner_x),
-                                int(preconditioner_xi),
-                                int(preconditioner_species),
-                                int(preconditioner_x_min_l),
+                            cache_key=(
+                                "direct_tail_structured_pc_cache_disabled",
+                                str(direct_tail_structured_pc_requested),
+                                (
+                                    int(preconditioner_x),
+                                    int(preconditioner_xi),
+                                    int(preconditioner_species),
+                                    int(preconditioner_x_min_l),
+                                ),
                             ),
-                        ),
-                    )
+                        )
                 direct_tail_structured_pc_selected = bool(direct_tail_structured_pc.selected)
                 direct_tail_structured_pc_reason = str(direct_tail_structured_pc.reason)
                 direct_tail_structured_pc_metadata = direct_tail_structured_pc.to_dict()
@@ -31429,7 +31503,8 @@ def solve_v3_full_system_linear_gmres(
                 f"kind={direct_tail_structured_pc_requested} "
                 f"reason={direct_tail_structured_pc_reason} "
                 f"error={direct_tail_structured_pc_error} "
-                f"direct_tail_built={bool(direct_tail_built)}"
+                f"direct_tail_built={bool(direct_tail_built)} "
+                f"direct_reduced_pmat_requested={bool(direct_tail_direct_reduced_pmat_requested)}"
             )
         if not structured_pc_ready:
             _operator_bundle_pc, factor_bundle_pc = _build_host_sparse_direct_factor_from_matvec(
@@ -33119,6 +33194,7 @@ def solve_v3_full_system_linear_gmres(
                 if (
                     bool(direct_tail_residual_coarse_requested)
                     and bool(structured_pc_ready)
+                    and _operator_bundle_pc is not None
                     and _direct_tail_rescue_needed_after_preflight()
                     and factor_preflight_residual_after is not None
                     and np.isfinite(float(factor_preflight_residual_after))
@@ -33233,6 +33309,7 @@ def solve_v3_full_system_linear_gmres(
                 if (
                     bool(direct_tail_residual_window_requested)
                     and bool(structured_pc_ready)
+                    and _operator_bundle_pc is not None
                     and _direct_tail_rescue_needed_after_preflight()
                     and factor_preflight_residual_after is not None
                     and np.isfinite(float(factor_preflight_residual_after))
@@ -34252,6 +34329,9 @@ def solve_v3_full_system_linear_gmres(
                 "sparse_pc_default_ilu_drop_tol": float(sparse_pc_default_ilu_drop_tol),
                 "sparse_pc_default_pattern_color_batch": int(sparse_pc_default_pattern_color_batch),
                 "sparse_pc_fortran_reduced_direct_tail_enabled": bool(direct_tail_enabled),
+                "sparse_pc_fortran_reduced_direct_pmat_requested": bool(
+                    direct_tail_direct_reduced_pmat_requested
+                ),
                 "sparse_pc_fortran_reduced_direct_tail_built": bool(direct_tail_built),
                 "sparse_pc_fortran_reduced_direct_tail_error": direct_tail_error,
                 "sparse_pc_fortran_reduced_direct_tail_operator_reason": (

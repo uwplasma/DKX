@@ -2216,6 +2216,144 @@ def _build_active_fortran_v3_reduced_sparse_factor_preconditioner(
     )
 
 
+def _direct_active_fortran_v3_reduced_pmat_input_matrix(
+    *,
+    op: Any,
+    active_indices: Any | None,
+    include_identity_shift: bool = True,
+    include_jacobian_terms: bool = True,
+    drop_tol: float = 0.0,
+    max_csr_nbytes: int | None = None,
+) -> tuple[Any, RHS1BlockLayout, np.ndarray, dict[str, object]]:
+    """Emit an active reduced-Pmat input matrix without full active CSR assembly."""
+
+    layout = RHS1BlockLayout.from_operator(op)
+    reason = _unsupported_reason(op=op, include_jacobian_terms=include_jacobian_terms)
+    if reason is not None:
+        raise ValueError(reason)
+
+    compressed_layout = infer_rhs1_compressed_pitch_layout_from_active_indices(
+        layout,
+        active_indices,
+    )
+    active = compressed_layout.active_full_indices.astype(np.int64, copy=False)
+
+    phi1_base = getattr(op, "phi1_hat_base", None)
+    fblock_selection = select_structured_rhs1_fblock_csr_operator(
+        op.fblock,
+        include_identity_shift=bool(include_identity_shift),
+        phi1_hat_base=phi1_base,
+        drop_tol=float(drop_tol),
+        require_complete=True,
+        max_csr_nbytes=max_csr_nbytes,
+        use_cache=True,
+    )
+    if not bool(fblock_selection.selected) or fblock_selection.matrix is None:
+        raise ValueError(f"fblock_not_selected:{fblock_selection.reason}")
+
+    kinetic_full = compressed_layout.kinetic_active_full_indices.astype(np.int64, copy=False)
+    kinetic = fblock_selection.matrix.tocsr()[kinetic_full[:, None], kinetic_full].tocsr()
+    tail = _assemble_full_tail_csr(op=op, layout=layout, include_jacobian_terms=include_jacobian_terms)
+    tail_active = tail[active[:, None], active].tocsr()
+    if int(compressed_layout.tail_size) > 0:
+        zero_tail = sp.csr_matrix((int(compressed_layout.tail_size), int(compressed_layout.tail_size)), dtype=np.float64)
+        base = sp.block_diag((kinetic, zero_tail), format="csr")
+    else:
+        base = kinetic
+    direct = (base + tail_active).tocsr()
+    direct.sum_duplicates()
+    direct.eliminate_zeros()
+
+    direct_nbytes = _scipy_csr_nbytes(direct)
+    if max_csr_nbytes is not None and int(direct_nbytes) > int(max_csr_nbytes):
+        raise ValueError(f"direct_reduced_pmat_budget_exceeded:{int(direct_nbytes)}>{int(max_csr_nbytes)}")
+
+    metadata = {
+        "direct_reduced_pmat_emission": True,
+        "direct_reduced_pmat_source": "structured_fblock_csr_plus_direct_tail",
+        "direct_reduced_pmat_shape": tuple(int(v) for v in direct.shape),
+        "direct_reduced_pmat_nnz": int(direct.nnz),
+        "direct_reduced_pmat_nbytes": int(direct_nbytes),
+        "direct_reduced_pmat_max_csr_nbytes": None if max_csr_nbytes is None else int(max_csr_nbytes),
+        "direct_reduced_pmat_kinetic_nnz": int(kinetic.nnz),
+        "direct_reduced_pmat_tail_nnz": int(tail_active.nnz),
+        "direct_reduced_pmat_avoids_full_active_true_csr": True,
+        "compressed_layout": {
+            "nxi_for_x": tuple(int(v) for v in compressed_layout.nxi_for_x),
+            "first_index_for_x": tuple(int(v) for v in compressed_layout.first_index_for_x),
+            "kinetic_active_size": int(compressed_layout.kinetic_active_size),
+            "tail_size": int(compressed_layout.tail_size),
+            "reduced_size": int(compressed_layout.reduced_size),
+        },
+        "fblock_selection": fblock_selection.to_dict(),
+    }
+    return direct, layout, active, metadata
+
+
+def build_direct_active_fortran_v3_reduced_pmat_preconditioner(
+    *,
+    op: Any,
+    active_indices: Any | None,
+    requested_kind: str = "active_fortran_v3_reduced_direct_pmat_lu",
+    regularization: float = 1.0e-12,
+    max_factor_nbytes: int = 512 * 1024 * 1024,
+    max_csr_nbytes: int | None = None,
+    include_identity_shift: bool = True,
+    include_jacobian_terms: bool = True,
+    drop_tol: float = 0.0,
+    preconditioner_x: int | None = None,
+    preconditioner_xi: int | None = None,
+    preconditioner_species: int | None = None,
+    preconditioner_x_min_l: int | None = None,
+) -> RHS1StructuredFullCSRPreconditioner:
+    """Build a reduced-Pmat preconditioner without materializing true active CSR."""
+
+    t0 = time.perf_counter()
+    try:
+        pmat_input, layout, active, emission_metadata = _direct_active_fortran_v3_reduced_pmat_input_matrix(
+            op=op,
+            active_indices=active_indices,
+            include_identity_shift=include_identity_shift,
+            include_jacobian_terms=include_jacobian_terms,
+            drop_tol=drop_tol,
+            max_csr_nbytes=max_csr_nbytes,
+        )
+    except ValueError as exc:
+        return RHS1StructuredFullCSRPreconditioner(
+            operator=None,
+            selected=False,
+            kind="active_fortran_v3_reduced_direct_pmat",
+            reason="direct_reduced_pmat_emission_failed",
+            setup_s=max(0.0, time.perf_counter() - t0),
+            metadata={"error": str(exc), "direct_reduced_pmat_emission": False},
+        )
+
+    pc = _build_active_fortran_v3_reduced_sparse_factor_preconditioner(
+        matrix=pmat_input,
+        layout=layout,
+        active_indices=active,
+        requested_kind=requested_kind,
+        regularization=regularization,
+        max_factor_nbytes=max_factor_nbytes,
+        t0=t0,
+        preconditioner_x=preconditioner_x,
+        preconditioner_xi=preconditioner_xi,
+        preconditioner_species=preconditioner_species,
+        preconditioner_x_min_l=preconditioner_x_min_l,
+    )
+    return RHS1StructuredFullCSRPreconditioner(
+        operator=pc.operator,
+        selected=bool(pc.selected),
+        kind=str(pc.kind),
+        reason=str(pc.reason),
+        setup_s=float(pc.setup_s),
+        metadata={
+            **dict(pc.metadata),
+            **emission_metadata,
+        },
+    )
+
+
 def _active_fortran_v3_reduced_permc_candidates(*, requested: str, factor_kind: str) -> tuple[str, ...]:
     """Return SuperLU ordering candidates for the active Fortran-v3 factor.
 
@@ -11602,6 +11740,7 @@ __all__ = [
     "RHS1StructuredFullCSRSelection",
     "RHS1StructuredFullCSRSolveResult",
     "build_active_projected_rhs1_full_csr_preconditioner",
+    "build_direct_active_fortran_v3_reduced_pmat_preconditioner",
     "build_structured_rhs1_full_csr_preconditioner",
     "clear_structured_rhs1_full_csr_cache",
     "select_active_fortran_v3_reduced_support_mode_preconditioner",
