@@ -13799,7 +13799,7 @@ def _build_rhsmode23_fp_fortran_reduced_lu_preconditioner(
     direct_pmat_enabled = _bool_env("SFINCS_JAX_TRANSPORT_FP_FORTRAN_REDUCED_LU_DIRECT", True)
     symbolic_ordering = (
         os.environ.get("SFINCS_JAX_TRANSPORT_FP_FORTRAN_REDUCED_LU_SYMBOLIC_ORDERING", "").strip().lower()
-        or "rcm"
+        or "mumps_like"
     )
     symbolic_block_size = _int_env("SFINCS_JAX_TRANSPORT_FP_FORTRAN_REDUCED_LU_SYMBOLIC_BLOCK_SIZE", 4096, minimum=1)
     symbolic_block_overlap = _int_env(

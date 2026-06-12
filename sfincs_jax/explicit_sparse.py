@@ -2648,6 +2648,101 @@ def _bandwidth_and_profile(pattern_csr: sp.csr_matrix) -> tuple[int, int]:
     return bandwidth, int(profile)
 
 
+def _nested_dissection_like_permutation(
+    pattern_csr: sp.csr_matrix,
+    *,
+    leaf_size: int,
+    max_depth: int,
+) -> np.ndarray:
+    """Return a bounded graph-bisection ordering for native sparse factors.
+
+    MUMPS/SuperLU_DIST get most of their production-grid robustness from a
+    symbolic analysis phase driven by graph orderings such as SCOTCH,
+    PT-SCOTCH, ParMETIS, METIS, or RCM.  SFINCS-JAX cannot depend on those
+    packages in the default install, so this helper provides the deterministic
+    native fallback used by the symbolic factors: recursively order the local
+    graph with RCM, split it, promote cross-edge endpoints into a separator,
+    and emit ``left, separator, right`` so the current frontal-Schur builder
+    sees the separator near the middle of each active interval.
+    """
+
+    n = int(pattern_csr.shape[0])
+    if n <= 0:
+        return np.arange(0, dtype=np.int64)
+    graph = (pattern_csr + pattern_csr.T).astype(np.int8, copy=False).tocsr()
+    graph.sum_duplicates()
+    if graph.nnz:
+        graph.data = np.ones_like(graph.data, dtype=np.int8)
+    graph.setdiag(0)
+    graph.eliminate_zeros()
+    leaf = max(2, int(leaf_size))
+    depth_cap = max(0, int(max_depth))
+    try:
+        from scipy.sparse.csgraph import reverse_cuthill_mckee  # noqa: PLC0415
+    except Exception:
+        reverse_cuthill_mckee = None  # type: ignore[assignment]
+
+    def _rcm_local(nodes: np.ndarray) -> np.ndarray:
+        nodes = np.asarray(nodes, dtype=np.int64).reshape((-1,))
+        if nodes.size <= 2 or reverse_cuthill_mckee is None:
+            return nodes
+        try:
+            local = graph[nodes, :][:, nodes]
+            order = np.asarray(reverse_cuthill_mckee(local, symmetric_mode=True), dtype=np.int64)
+            if order.size == nodes.size and np.unique(order).size == nodes.size:
+                return nodes[order]
+        except Exception:
+            pass
+        return nodes
+
+    def _order(nodes: np.ndarray, depth: int) -> np.ndarray:
+        nodes = _rcm_local(nodes)
+        node_count = int(nodes.size)
+        if node_count <= leaf or int(depth) >= depth_cap:
+            return nodes
+        midpoint = node_count // 2
+        left = nodes[:midpoint]
+        right = nodes[midpoint:]
+        if left.size == 0 or right.size == 0:
+            return nodes
+        local = graph[nodes, :][:, nodes].tocoo()
+        side = np.zeros((node_count,), dtype=np.int8)
+        side[:midpoint] = 1
+        side[midpoint:] = 2
+        row_side = side[np.asarray(local.row, dtype=np.int64)]
+        col_side = side[np.asarray(local.col, dtype=np.int64)]
+        cross = (row_side > 0) & (col_side > 0) & (row_side != col_side)
+        if not np.any(cross):
+            return np.concatenate([_order(left, depth + 1), _order(right, depth + 1)])
+        separator_local = np.unique(
+            np.concatenate(
+                [
+                    np.asarray(local.row[cross], dtype=np.int64),
+                    np.asarray(local.col[cross], dtype=np.int64),
+                ]
+            )
+        )
+        separator_mask = np.zeros((node_count,), dtype=bool)
+        separator_mask[separator_local] = True
+        left_keep = nodes[(np.arange(node_count) < midpoint) & (~separator_mask)]
+        right_keep = nodes[(np.arange(node_count) >= midpoint) & (~separator_mask)]
+        separator = nodes[separator_mask]
+        if left_keep.size == 0 or right_keep.size == 0 or separator.size >= node_count:
+            return nodes
+        return np.concatenate(
+            [
+                _order(left_keep, depth + 1),
+                separator,
+                _order(right_keep, depth + 1),
+            ]
+        )
+
+    perm = _order(np.arange(n, dtype=np.int64), 0)
+    if perm.size != n or np.unique(perm).size != n:
+        return np.arange(n, dtype=np.int64)
+    return np.asarray(perm, dtype=np.int64)
+
+
 def analyze_sparse_symbolic_structure(
     matrix: np.ndarray | sp.spmatrix,
     *,
@@ -2702,6 +2797,25 @@ def analyze_sparse_symbolic_structure(
         except Exception:
             ordering_norm = "natural"
             permutation = np.arange(n_rows, dtype=np.int64)
+    elif ordering_norm in {
+        "nd",
+        "nested_dissection",
+        "nested-dissection",
+        "mumps",
+        "mumps_like",
+        "mumps-like",
+        "scotch",
+        "ptscotch",
+        "pt-scotch",
+        "parmetis",
+        "metis",
+    } and n_rows <= int(max_permutation_size):
+        permutation = _nested_dissection_like_permutation(
+            pattern,
+            leaf_size=max(2, int(block_size_target)),
+            max_depth=max(1, int(np.ceil(np.log2(max(2, n_rows // max(2, int(block_size_target)))))) + 1),
+        )
+        ordering_norm = "nested_dissection"
     else:
         ordering_norm = "natural"
         permutation = np.arange(n_rows, dtype=np.int64)

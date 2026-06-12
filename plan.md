@@ -3,6 +3,60 @@
 Last updated: 2026-06-12 (America/Chicago)
 Owner: incoming agent
 
+## 2026-06-12 Addendum: native MUMPS-like symbolic ordering
+
+### Implementation
+
+- Rechecked SFINCS Fortran v3, PETSc, MUMPS, and SuperLU_DIST behavior for the
+  production-grid rejections. The robust Fortran path is GMRES on the true
+  Jacobian/operator with a simplified ``whichMatrix=0`` sparse preconditioner
+  matrix, then sparse direct LU through PETSc factor backends. MUMPS and
+  SuperLU_DIST get the production advantage from symbolic graph ordering,
+  factor reuse, pivot safeguards, and parallel multifrontal/supernodal numeric
+  factorization rather than from a different drift-kinetic equation.
+- Added a native bounded ``mumps_like`` symbolic ordering in
+  ``sfincs_jax.explicit_sparse``. It recursively orders the structural graph
+  with RCM, bisects it, promotes cross-edge endpoints into a separator, and
+  emits a ``left, separator, right`` permutation compatible with the current
+  frontal/Schur builders.
+- Added PETSc/MUMPS-style aliases for this native ordering:
+  ``nested_dissection``, ``mumps_like``, ``scotch``, ``ptscotch``,
+  ``parmetis``, and ``metis``. These aliases do not add external solver
+  dependencies; they select SFINCS-JAX's native graph-ordering approximation.
+- Promoted the RHSMode=2/3 direct reduced-Pmat symbolic-ordering default from
+  plain ``rcm`` to ``mumps_like`` so auto and opt-in symbolic candidates start
+  from the same ordering idea used by PETSc+MUMPS/SuperLU_DIST, while still
+  allowing users to force ``rcm`` or ``natural`` for diagnostics.
+
+### Verification
+
+- ``python -m pytest -q tests/test_explicit_sparse.py -k
+  "symbolic_analysis or mumps_like or symbolic_nd_frontal_schur_lu"
+  tests/test_fortran_reduced_preconditioner.py -k
+  "defaults_to_mumps_like or attaches_symbolic_metadata or auto_exact_rescue"``:
+  ``3 passed``.
+- ``python -m pytest -q tests/test_explicit_sparse.py
+  tests/test_fortran_reduced_preconditioner.py tests/test_transport_sparse_direct.py
+  tests/test_rhs1_full_assembly.py``: ``237 passed``.
+- ``ruff check sfincs_jax/explicit_sparse.py sfincs_jax/v3_driver.py
+  tests/test_explicit_sparse.py tests/test_fortran_reduced_preconditioner.py``:
+  passed.
+- ``py_compile`` and ``git diff --check``: passed.
+- GitHub CI for the preceding exact-LU-rescue fix completed successfully on
+  run ``27442725260``.
+
+### Decision
+
+- Keep the current exact SuperLU-style LU rescue as a bounded diagnostic and
+  small/medium-system correctness path. The production geom11 probe showed it
+  can stay under roughly ``10 GB`` RSS but did not finish factorization within
+  ``900 s``, so it is not the production replacement for MUMPS.
+- The next real closure step is numeric, not another smoother: implement a
+  parallel/chunked multifrontal or supernodal numeric factor over the direct
+  reduced ``whichMatrix=0`` Pmat using the reusable symbolic ordering metadata,
+  compressed separator updates, and the existing strict true-residual admission
+  gate.
+
 ## 2026-06-12 Addendum: guarded exact-LU rescue for production reduced Pmat
 
 ### Implementation

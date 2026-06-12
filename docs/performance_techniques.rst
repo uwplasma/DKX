@@ -1033,8 +1033,14 @@ Controls:
   ``symbolic_block_schur_lu``.  The symbolic options are native lower-memory
   block/coarse/Schur experiments and are not automatic defaults.
 - ``SFINCS_JAX_TRANSPORT_FP_FORTRAN_REDUCED_LU_SYMBOLIC_ORDERING`` controls the
-  reusable symbolic analysis ordering metadata. ``rcm`` is the default;
-  ``natural`` disables structural reordering in the analysis report.
+  reusable symbolic analysis ordering metadata. ``mumps_like`` is the default:
+  it applies a bounded native nested-dissection-style graph ordering that
+  mirrors the role of SCOTCH/PT-SCOTCH/ParMETIS/METIS ordering in the
+  PETSc+MUMPS/SuperLU_DIST SFINCS v3 path without adding those packages as
+  runtime dependencies.  Aliases ``nested_dissection``, ``scotch``,
+  ``ptscotch``, ``parmetis``, and ``metis`` select the same native ordering.
+  ``rcm`` selects reverse Cuthill-McKee, and ``natural`` disables structural
+  reordering in the analysis report.
 - ``SFINCS_JAX_TRANSPORT_FP_FORTRAN_REDUCED_LU_SYMBOLIC_BLOCK_SIZE`` controls
   the bounded block plan recorded by the symbolic metadata and used by the
   opt-in ``symbolic_block_lu`` numeric factor path.

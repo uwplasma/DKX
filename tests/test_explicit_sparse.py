@@ -66,6 +66,39 @@ def test_sparse_symbolic_analysis_reports_reusable_ordering_metadata() -> None:
     assert analysis.cache_key()[2] == analysis.pattern_hash
 
 
+@pytest.mark.parametrize("ordering", ["nested_dissection", "mumps_like", "scotch", "parmetis", "metis"])
+def test_sparse_symbolic_analysis_supports_mumps_like_ordering_aliases(ordering: str) -> None:
+    n = 12
+    left = sp.diags(
+        [np.ones(5), -np.ones(4), -np.ones(4)],
+        offsets=[0, -1, 1],
+        shape=(5, 5),
+        format="csr",
+    )
+    right = sp.diags(
+        [2.0 * np.ones(5), -np.ones(4), -np.ones(4)],
+        offsets=[0, -1, 1],
+        shape=(5, 5),
+        format="csr",
+    )
+    matrix = sp.block_diag((left, right, sp.eye(2, format="csr")), format="lil")
+    matrix[4, 10] = 0.25
+    matrix[10, 4] = 0.25
+    matrix[9, 11] = -0.5
+    matrix[11, 9] = -0.5
+    matrix = matrix.tocsr()
+
+    analysis = analyze_sparse_symbolic_structure(matrix, ordering_kind=ordering, block_size_target=3)
+
+    assert analysis.shape == (n, n)
+    assert analysis.ordering_kind == "nested_dissection"
+    assert analysis.permutation is not None
+    assert analysis.inverse_permutation is not None
+    np.testing.assert_array_equal(np.sort(analysis.permutation), np.arange(n))
+    np.testing.assert_array_equal(analysis.inverse_permutation[analysis.permutation], np.arange(n))
+    assert analysis.ordering_hash
+
+
 def test_choose_storage_kind_prefers_dense_when_dense_fits_and_is_smaller() -> None:
     decision = choose_storage_kind(
         shape=(2, 2),
