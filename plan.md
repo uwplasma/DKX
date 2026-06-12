@@ -3,6 +3,66 @@
 Last updated: 2026-06-12 (America/Chicago)
 Owner: incoming agent
 
+## 2026-06-12 Addendum: guarded exact-LU rescue for production reduced Pmat
+
+### Implementation
+
+- Rechecked the local SFINCS Fortran v3 solver path in
+  ``/Users/rogeriojorge/local/sfincs/fortran/version3/solver.F90`` and
+  ``populateMatrix.F90``.  The production analogue is PETSc GMRES on the true
+  ``whichMatrix=1`` operator with a sparse direct LU factor of the simplified
+  ``whichMatrix=0`` preconditioner matrix.  MUMPS/SuperLU_DIST are selected
+  when available; the serial PETSc path uses sparse LU with RCM-style ordering
+  and pivot safeguards.
+- Added a guarded auto exact-LU rescue for RHSMode=2/3 direct reduced Pmat
+  transport preconditioning.  When auto switches large systems from monolithic
+  LU/ILU to ``symbolic_block_lu_coarse`` and that symbolic path is rejected by
+  the prefill memory guard, the builder may now try an exact sparse LU only if
+  the MUMPS-like fill estimate fits a host-memory-derived cap and the active
+  system size is below ``SFINCS_JAX_TRANSPORT_FP_FORTRAN_REDUCED_LU_AUTO_EXACT_RESCUE_MAX_SIZE``.
+- Added strict setup admission for exact LU/ILU factors using the same
+  deterministic true-residual probes already used for symbolic factors.  Exact
+  rescue is accepted only if ``P M^{-1}`` reduces the materialized
+  preconditioner residual by the configured gate; otherwise the code falls back
+  to the bounded sx-block preconditioner.
+- Added metadata for ``host_memory_mb``, ``factor_max_mb``,
+  ``effective_factor_max_mb``, ``auto_exact_rescue_*``,
+  ``direct_admission_enabled``, and ``direct_admission`` so future production
+  rejections can be diagnosed from solver traces.
+
+### Evidence
+
+- Added a regression test for the policy failure seen in production
+  ``transportMatrix_geometryScheme11``: default auto switches away from
+  monolithic LU by size, symbolic prefill rejects under the default small
+  budget, and exact LU rescue is admitted only when the configured host cap and
+  true residual gate both pass.
+- Fresh production-floor ``transportMatrix_geometryScheme11`` probe at
+  ``Ntheta=25, Nzeta=51, Nxi=100, Nx=6`` with an explicit 20 GB exact-rescue
+  cap and no size cap showed:
+  - direct reduced Pmat emission succeeded in ``47.339 s`` with
+    ``active=462827`` and ``nnz=10124069``;
+  - the MUMPS-like factor estimate was ``14530 MB`` and fit the requested
+    20 GB rescue cap;
+  - SciPy/SuperLU exact LU entered factorization and remained single-core,
+    timing out at the 900 s cap with peak RSS about ``9.74 GB`` and no admitted
+    solve.
+
+### Decision
+
+- This is a CPU/non-autodiff production rescue path, matching the robust
+  Fortran v3/PETSc behavior for large CLI solves.  It does not replace the
+  differentiable JAX-native path, and it does not promote weak symbolic factors
+  into auto defaults.
+- Because single-core SciPy/SuperLU did not finish production-floor geom11
+  factorization within 15 minutes, exact rescue stays size-guarded by default.
+  The next production algorithmic step remains a MUMPS-like native/parallel
+  factor architecture: ordering-aware sparse elimination with reusable symbolic
+  metadata, parallel frontal/nested-dissection numeric work, and the same strict
+  true-residual admission gate.
+- A fresh production-floor geom11 solve is still required before regenerating
+  public README/docs performance plots.
+
 ## 2026-06-12 Addendum: CSC chunked nested-dissection separator updates
 
 ### Implementation

@@ -915,6 +915,33 @@ def _host_sparse_direct_polish(
     return x_polish, residual_norm
 
 
+def _host_physical_memory_mb() -> float | None:
+    """Return physical host memory in MB when the platform exposes it cheaply."""
+    try:
+        pages = os.sysconf("SC_PHYS_PAGES")
+        page_size = os.sysconf("SC_PAGE_SIZE")
+        value = float(pages) * float(page_size) / 1.0e6
+        if np.isfinite(value) and value > 0.0:
+            return value
+    except (AttributeError, OSError, ValueError):
+        pass
+    try:
+        result = subprocess.run(
+            ["sysctl", "-n", "hw.memsize"],
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=2.0,
+        )
+        if result.returncode == 0:
+            value = float(result.stdout.strip()) / 1.0e6
+            if np.isfinite(value) and value > 0.0:
+                return value
+    except Exception:
+        pass
+    return None
+
+
 def _rhsmode1_host_sparse_skip_dense_ratio() -> float:
     return _rhs1_host_sparse_skip_dense_ratio_impl()
 
@@ -998,6 +1025,7 @@ def _build_host_sparse_direct_factor_from_matvec(
     default_symbolic_superblock_min_retained_cross_fraction: float = 0.0,
     default_symbolic_superblock_regularization_rel: float = 1.0e-12,
     default_symbolic_max_permutation_size: int = 250_000,
+    default_monolithic_guard_enabled: bool = True,
 ):
     factor_dtype_np = np.dtype(factor_dtype)
     block_cols_env = os.environ.get("SFINCS_JAX_EXPLICIT_SPARSE_BLOCK_COLS", "").strip()
@@ -1527,7 +1555,10 @@ def _build_host_sparse_direct_factor_from_matvec(
     else:
         factor_kind = "lu"
     guard_env = os.environ.get("SFINCS_JAX_EXPLICIT_SPARSE_MONOLITHIC_GUARD", "").strip().lower()
-    monolithic_guard_enabled = guard_env not in {"0", "false", "no", "off"}
+    if guard_env:
+        monolithic_guard_enabled = guard_env not in {"0", "false", "no", "off"}
+    else:
+        monolithic_guard_enabled = bool(default_monolithic_guard_enabled)
     ilu_fill_env = os.environ.get("SFINCS_JAX_EXPLICIT_SPARSE_ILU_FILL_FACTOR", "").strip()
     ilu_drop_env = os.environ.get("SFINCS_JAX_EXPLICIT_SPARSE_ILU_DROP_TOL", "").strip()
     default_permc_spec_use = str(default_permc_spec).strip().upper()
@@ -14043,6 +14074,35 @@ def _build_rhsmode23_fp_fortran_reduced_lu_preconditioner(
         max_factor_mb,
         minimum=0.0,
     )
+    auto_exact_rescue_enabled = _bool_env(
+        "SFINCS_JAX_TRANSPORT_FP_FORTRAN_REDUCED_LU_AUTO_EXACT_RESCUE",
+        True,
+    )
+    auto_exact_rescue_ram_fraction = _float_env(
+        "SFINCS_JAX_TRANSPORT_FP_FORTRAN_REDUCED_LU_AUTO_EXACT_RESCUE_RAM_FRACTION",
+        0.45,
+        minimum=0.0,
+    )
+    host_memory_mb = _host_physical_memory_mb()
+    auto_exact_rescue_default_max_mb = (
+        0.0
+        if host_memory_mb is None
+        else max(0.0, float(host_memory_mb) * float(auto_exact_rescue_ram_fraction))
+    )
+    auto_exact_rescue_max_mb = _float_env(
+        "SFINCS_JAX_TRANSPORT_FP_FORTRAN_REDUCED_LU_AUTO_EXACT_RESCUE_MAX_MB",
+        auto_exact_rescue_default_max_mb,
+        minimum=0.0,
+    )
+    auto_exact_rescue_max_size = _int_env(
+        "SFINCS_JAX_TRANSPORT_FP_FORTRAN_REDUCED_LU_AUTO_EXACT_RESCUE_MAX_SIZE",
+        250_000,
+        minimum=0,
+    )
+    direct_admission_enabled = _bool_env(
+        "SFINCS_JAX_TRANSPORT_FP_FORTRAN_REDUCED_LU_DIRECT_ADMISSION",
+        True,
+    )
     factor_dtype_env = os.environ.get("SFINCS_JAX_TRANSPORT_FP_FORTRAN_REDUCED_LU_FACTOR_DTYPE", "").strip().lower()
     factor_dtype = np.dtype(np.float32) if factor_dtype_env in {"float32", "fp32", "32"} else np.dtype(np.float64)
     factor_kind_env = os.environ.get("SFINCS_JAX_TRANSPORT_FP_FORTRAN_REDUCED_LU_FACTOR", "").strip().lower()
@@ -14200,7 +14260,11 @@ def _build_rhsmode23_fp_fortran_reduced_lu_preconditioner(
             f"{int(symbolic_max_permutation_size)}_"
             f"adm{int(symbolic_admission_enabled)}_{float(symbolic_admission_max_rel):.3e}_"
             f"{float(symbolic_admission_min_improvement):.3e}_{int(symbolic_admission_probes)}_"
-            f"rescue{int(symbolic_admission_rescue_lu)}_{float(symbolic_admission_rescue_lu_max_mb):.3e}",
+            f"rescue{int(symbolic_admission_rescue_lu)}_{float(symbolic_admission_rescue_lu_max_mb):.3e}_"
+            f"autoexact{int(auto_exact_rescue_enabled)}_{float(auto_exact_rescue_max_mb):.3e}_"
+            f"{float(auto_exact_rescue_ram_fraction):.3e}_{int(auto_exact_rescue_max_size)}_"
+            f"directadm{int(direct_admission_enabled)}_"
+            f"maxfactor{float(max_factor_mb):.3e}",
         ),
         str(active_hash),
         int(linear_size),
@@ -14240,6 +14304,9 @@ def _build_rhsmode23_fp_fortran_reduced_lu_preconditioner(
 
             _operator_bundle = None
             factor_bundle = None
+            factor_kind_for_build = str(default_factor_kind)
+            effective_factor_max_mb = float(max_factor_mb)
+            auto_exact_rescue_selected = False
             if direct_operator_bundle is not None:
                 direct_csr_nbytes = int(direct_metadata.get("direct_pmat_csr_nbytes_estimate", 0) or 0)
                 direct_symbolic_prefill_safety = _float_env(
@@ -14250,7 +14317,7 @@ def _build_rhsmode23_fp_fortran_reduced_lu_preconditioner(
                 direct_symbolic_prefill_estimate = (
                     int(np.ceil(float(direct_csr_nbytes) * float(direct_symbolic_prefill_safety)))
                     if direct_csr_nbytes > 0
-                    and default_factor_kind
+                    and factor_kind_for_build
                     in {
                         "symbolic_block_lu",
                         "symbolic_block_lu_coarse",
@@ -14292,7 +14359,7 @@ def _build_rhsmode23_fp_fortran_reduced_lu_preconditioner(
                         ),
                     }
                 )
-                max_factor_nbytes = int(float(max_factor_mb) * 1.0e6)
+                max_factor_nbytes = int(float(effective_factor_max_mb) * 1.0e6)
                 if emit is not None and direct_multifrontal_nbytes_estimate > 0:
                     emit(
                         1,
@@ -14301,10 +14368,10 @@ def _build_rhsmode23_fp_fortran_reduced_lu_preconditioner(
                         f"nnz={int(direct_pmat_nnz)} "
                         f"fill_ratio={float(direct_mf_fill_ratio):.3g} "
                         f"factor_mb={float(direct_multifrontal_nbytes_estimate) / 1.0e6:.3f} "
-                        f"max_mb={float(max_factor_mb):.3f}",
+                        f"max_mb={float(effective_factor_max_mb):.3f}",
                     )
                 if (
-                    default_factor_kind in {"lu", "ilu"}
+                    factor_kind_for_build in {"lu", "ilu"}
                     and direct_multifrontal_nbytes_estimate > 0
                     and max_factor_nbytes > 0
                     and direct_multifrontal_nbytes_estimate > max_factor_nbytes
@@ -14314,9 +14381,9 @@ def _build_rhsmode23_fp_fortran_reduced_lu_preconditioner(
                             1,
                             "solve_v3_transport_matrix_linear_gmres: direct reduced Pmat exact factor "
                             "rejected by MUMPS-like fill guard "
-                            f"factor_kind={default_factor_kind} "
+                            f"factor_kind={factor_kind_for_build} "
                             f"factor_mb={float(direct_multifrontal_nbytes_estimate) / 1.0e6:.3f} "
-                            f"max_mb={float(max_factor_mb):.3f}",
+                            f"max_mb={float(effective_factor_max_mb):.3f}",
                         )
                     return _build_rhsmode23_sxblock_preconditioner(
                         op=op,
@@ -14328,21 +14395,56 @@ def _build_rhsmode23_fp_fortran_reduced_lu_preconditioner(
                     and max_factor_nbytes > 0
                     and direct_symbolic_prefill_estimate > max_factor_nbytes
                 ):
-                    if emit is not None:
-                        emit(
-                            1,
-                            "solve_v3_transport_matrix_linear_gmres: direct reduced Pmat symbolic factor "
-                            "rejected by prefill guard "
-                            f"factor_kind={default_factor_kind} "
-                            f"prefill_mb={float(direct_symbolic_prefill_estimate) / 1.0e6:.3f} "
-                            f"max_mb={float(max_factor_mb):.3f} "
-                            f"safety={float(direct_symbolic_prefill_safety):.3g}",
+                    auto_exact_cap_nbytes = int(float(auto_exact_rescue_max_mb) * 1.0e6)
+                    auto_exact_candidate_ok = (
+                        bool(auto_exact_rescue_enabled)
+                        and not bool(explicit_factor_requested)
+                        and factor_kind_for_build == "symbolic_block_lu_coarse"
+                        and (
+                            int(auto_exact_rescue_max_size) <= 0
+                            or int(linear_size) <= int(auto_exact_rescue_max_size)
                         )
-                    return _build_rhsmode23_sxblock_preconditioner(
-                        op=op,
-                        reduce_full=reduce_full,
-                        expand_reduced=expand_reduced,
+                        and direct_multifrontal_nbytes_estimate > 0
+                        and auto_exact_cap_nbytes > 0
+                        and direct_multifrontal_nbytes_estimate <= auto_exact_cap_nbytes
                     )
+                    if auto_exact_candidate_ok:
+                        factor_kind_for_build = "lu"
+                        effective_factor_max_mb = max(float(max_factor_mb), float(auto_exact_rescue_max_mb))
+                        max_factor_nbytes = int(float(effective_factor_max_mb) * 1.0e6)
+                        auto_exact_rescue_selected = True
+                        direct_metadata.update(
+                            {
+                                "direct_pmat_auto_exact_rescue_selected": True,
+                                "direct_pmat_auto_exact_rescue_reason": "symbolic_prefill_guard",
+                                "direct_pmat_auto_exact_rescue_max_mb": float(auto_exact_rescue_max_mb),
+                            }
+                        )
+                        if emit is not None:
+                            emit(
+                                1,
+                                "solve_v3_transport_matrix_linear_gmres: direct reduced Pmat symbolic factor "
+                                "prefill exceeds default budget; trying exact LU rescue "
+                                f"prefill_mb={float(direct_symbolic_prefill_estimate) / 1.0e6:.3f} "
+                                f"exact_factor_mb={float(direct_multifrontal_nbytes_estimate) / 1.0e6:.3f} "
+                                f"rescue_max_mb={float(auto_exact_rescue_max_mb):.3f}",
+                            )
+                    else:
+                        if emit is not None:
+                            emit(
+                                1,
+                                "solve_v3_transport_matrix_linear_gmres: direct reduced Pmat symbolic factor "
+                                "rejected by prefill guard "
+                                f"factor_kind={factor_kind_for_build} "
+                                f"prefill_mb={float(direct_symbolic_prefill_estimate) / 1.0e6:.3f} "
+                                f"max_mb={float(effective_factor_max_mb):.3f} "
+                                f"safety={float(direct_symbolic_prefill_safety):.3g}",
+                            )
+                        return _build_rhsmode23_sxblock_preconditioner(
+                            op=op,
+                            reduce_full=reduce_full,
+                            expand_reduced=expand_reduced,
+                        )
                 try:
                     _operator_bundle, factor_bundle = _build_host_sparse_direct_factor_from_matvec(
                         matvec=_pc_matvec,
@@ -14352,7 +14454,7 @@ def _build_rhsmode23_fp_fortran_reduced_lu_preconditioner(
                         pattern=None,
                         operator_bundle_override=direct_operator_bundle,
                         emit=emit,
-                        default_factor_kind=str(default_factor_kind),
+                        default_factor_kind=str(factor_kind_for_build),
                         default_ilu_fill_factor=4.0,
                         default_ilu_drop_tol=1.0e-4,
                         default_permc_spec="MMD_AT_PLUS_A",
@@ -14423,10 +14525,23 @@ def _build_rhsmode23_fp_fortran_reduced_lu_preconditioner(
                         ),
                         default_symbolic_superblock_regularization_rel=float(symbolic_superblock_regularization_rel),
                         default_symbolic_max_permutation_size=int(symbolic_max_permutation_size),
+                        default_monolithic_guard_enabled=not bool(auto_exact_rescue_selected),
                     )
                 except Exception as exc:  # noqa: BLE001
                     exc_text = str(exc)
-                    if default_factor_kind == "symbolic_nd_frontal_schur_lu" and (
+                    if bool(auto_exact_rescue_selected):
+                        if emit is not None:
+                            emit(
+                                1,
+                                "solve_v3_transport_matrix_linear_gmres: direct reduced Pmat exact LU rescue "
+                                f"failed; skipping pattern-probe fallback ({type(exc).__name__}: {exc})",
+                            )
+                        return _build_rhsmode23_sxblock_preconditioner(
+                            op=op,
+                            reduce_full=reduce_full,
+                            expand_reduced=expand_reduced,
+                        )
+                    if factor_kind_for_build == "symbolic_nd_frontal_schur_lu" and (
                         "symbolic_nd_frontal_schur_lu setup time budget exceeded" in exc_text
                         or "symbolic_nd_frontal_schur_lu terminal leaf factor size exceeded" in exc_text
                     ):
@@ -14615,15 +14730,15 @@ def _build_rhsmode23_fp_fortran_reduced_lu_preconditioner(
 
         factor_nbytes = getattr(factor_bundle, "factor_nbytes_estimate", None)
         if (
-            float(max_factor_mb) > 0.0
+            float(effective_factor_max_mb) > 0.0
             and factor_nbytes is not None
-            and int(factor_nbytes) > int(float(max_factor_mb) * 1.0e6)
+            and int(factor_nbytes) > int(float(effective_factor_max_mb) * 1.0e6)
         ):
             if emit is not None:
                 emit(
                     1,
                     "solve_v3_transport_matrix_linear_gmres: fp_fortran_reduced_lu factor rejected by budget "
-                    f"factor_mb={float(factor_nbytes) / 1.0e6:.3f} max_mb={float(max_factor_mb):.3f}",
+                    f"factor_mb={float(factor_nbytes) / 1.0e6:.3f} max_mb={float(effective_factor_max_mb):.3f}",
                 )
             return _build_rhsmode23_sxblock_preconditioner(
                 op=op,
@@ -14634,6 +14749,31 @@ def _build_rhsmode23_fp_fortran_reduced_lu_preconditioner(
         factor_operator = getattr(factor_bundle, "operator", None)
         factor_matrix = None if factor_operator is None else getattr(factor_operator, "matrix", None)
         factor_kind_for_admission = str(getattr(factor_bundle, "kind", ""))
+        if factor_kind_for_admission in {"lu", "ilu"} and bool(direct_admission_enabled):
+            direct_admission = admit_sparse_factor_against_operator(
+                factor_operator if factor_operator is not None else factor_matrix,
+                factor_bundle,
+                probe_count=int(symbolic_admission_probes),
+                max_relative_residual=float(symbolic_admission_max_rel),
+                min_improvement_vs_identity=float(symbolic_admission_min_improvement),
+            )
+            symbolic_metadata["direct_admission"] = direct_admission.to_dict()
+            if emit is not None:
+                emit(
+                    1,
+                    "solve_v3_transport_matrix_linear_gmres: fp_fortran_reduced_lu exact factor admission "
+                    f"{'accepted' if direct_admission.accepted else 'rejected'} "
+                    f"max_rel={float(direct_admission.max_relative_residual):.3e} "
+                    f"median_rel={float(direct_admission.median_relative_residual):.3e} "
+                    f"min_improvement={float(direct_admission.min_improvement_vs_identity):.3e} "
+                    f"probes={int(direct_admission.probe_count)}",
+                )
+            if not bool(direct_admission.accepted):
+                return _build_rhsmode23_sxblock_preconditioner(
+                    op=op,
+                    reduce_full=reduce_full,
+                    expand_reduced=expand_reduced,
+                )
         if factor_kind_for_admission in {
             "symbolic_block_lu",
             "symbolic_block_lu_coarse",
@@ -14810,6 +14950,15 @@ def _build_rhsmode23_fp_fortran_reduced_lu_preconditioner(
             "keeps_theta_zeta": bool(keep_theta_zeta),
             "shift": float(pc_shift),
             "direct_pmat_enabled": bool(direct_pmat_enabled),
+            "factor_max_mb": float(max_factor_mb),
+            "effective_factor_max_mb": float(effective_factor_max_mb),
+            "host_memory_mb": None if host_memory_mb is None else float(host_memory_mb),
+            "auto_exact_rescue_enabled": bool(auto_exact_rescue_enabled),
+            "auto_exact_rescue_ram_fraction": float(auto_exact_rescue_ram_fraction),
+            "auto_exact_rescue_max_mb": float(auto_exact_rescue_max_mb),
+            "auto_exact_rescue_max_size": int(auto_exact_rescue_max_size),
+            "auto_exact_rescue_selected": bool(auto_exact_rescue_selected),
+            "direct_admission_enabled": bool(direct_admission_enabled),
             "symbolic_ordering": str(symbolic_ordering),
             "symbolic_block_size": int(symbolic_block_size),
             "symbolic_block_overlap": int(symbolic_block_overlap),
