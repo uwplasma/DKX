@@ -2206,7 +2206,12 @@ def _build_active_fortran_v3_reduced_sparse_factor_preconditioner(
             "max_scale": float(max_scale),
             "row_scaling": row_meta,
             "column_scaling": col_meta,
-            "requires_preflight": bool(factor_kind == "ilu"),
+            "requires_preflight": bool(factor_kind == "ilu" or use_symbolic_plan),
+            "admission_policy": (
+                "external_true_residual_required"
+                if bool(factor_kind == "ilu" or use_symbolic_plan)
+                else "exact_reduced_matrix_factor"
+            ),
         },
     )
 

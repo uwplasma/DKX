@@ -727,6 +727,8 @@ def test_active_fortran_v3_reduced_planned_lu_applies_symbolic_pmat_plan(monkeyp
     assert pc.kind == "active_fortran_v3_reduced_planned_lu"
     assert pc.metadata["symbolic_plan_applied"] is True
     assert pc.metadata["symbolic_plan_permutation"] is True
+    assert pc.metadata["requires_preflight"] is True
+    assert pc.metadata["admission_policy"] == "external_true_residual_required"
     assert pc.metadata["reduced_pmat_symbolic_plan"]["root_size"] > 0
 
     x_true = _deterministic_vector(layout.total_size)
