@@ -3,6 +3,62 @@
 Last updated: 2026-06-12 (America/Chicago)
 Owner: incoming agent
 
+## 2026-06-12 Addendum: bounded parallel symbolic numeric setup
+
+### Implementation
+
+- Added bounded native parallel numeric setup for the direct reduced
+  ``whichMatrix=0`` symbolic-factor candidates.
+- ``symbolic_superblock_lu`` now factors independent retained superblocks with
+  ``ThreadPoolExecutor`` when more than one worker is requested.  The operation
+  is deterministic because group ordering is preserved and each task returns
+  local storage/failure counts instead of mutating shared state.
+- ``symbolic_nd_frontal_schur_lu`` now supports parallel root-child frontal
+  factor setup, while keeping separator Schur updates chunked and serial.  The
+  existing dense-RHS setup budget remains protected by a lock so admission and
+  setup guards still reject oversized production probes.
+- Added driver plumbing for
+  ``SFINCS_JAX_TRANSPORT_FP_FORTRAN_REDUCED_LU_SYMBOLIC_NUMERIC_PARALLEL_WORKERS``
+  and the generic
+  ``SFINCS_JAX_EXPLICIT_SPARSE_SYMBOLIC_NUMERIC_PARALLEL_WORKERS``.  The worker
+  count is included in the transport preconditioner cache key and final solver
+  metadata, avoiding stale serial/parallel factor reuse during profiling.
+
+### Verification
+
+- ``python -m pytest -q tests/test_explicit_sparse.py -k
+  "superblock_lu or nd_frontal_schur_lu"``: ``11 passed``.
+- New tests require the parallel factor metadata to be present and the factors
+  to preserve the same direct solve/admission behavior as the serial paths.
+- Broader affected solver group:
+  ``python -m pytest -q tests/test_explicit_sparse.py
+  tests/test_fortran_reduced_preconditioner.py tests/test_transport_sparse_direct.py
+  tests/test_rhs1_full_assembly.py``: ``240 passed``.
+- Isolated superblock numeric setup benchmark on a 12-block sparse operator
+  preserved residual ``6.8e-16`` and improved setup from ``0.107 s`` with one
+  worker to ``0.058 s`` with four workers.  Very small factors remain overhead
+  dominated, as expected.
+- Production geom11 RHSMode=2 probe at ``Ntheta=25, Nzeta=51, Nxi=100, Nx=6``
+  reached the new direct-Pmat symbolic ND setup with ``462827`` active DOFs and
+  ``10124069`` nonzeros after raising the factor budget to ``10 GB``.  The
+  factor was still rejected by the existing setup guard after ``180 s`` during a
+  depth-3 separator update on a ``55675``-unknown front, so this patch improves
+  independent numeric-front setup but does not close the production geom11
+  replacement lane by itself.
+
+### Decision
+
+- This closes the first practical parallel numeric-setup step.  It is still not
+  a complete native MUMPS/SuperLU_DIST replacement: symbolic candidates remain
+  gated by the strict true-residual admission probes, and production-floor
+  promotion still requires fresh CPU/GPU solves showing residual cleanliness
+  and runtime within the agreed tolerance relative to SFINCS Fortran v3.
+- The next blocker is separator-update cost, not worker tuning.  The next real
+  algorithmic step should vectorize/chunk separator updates across children and
+  columns more aggressively, or replace full dense separator updates with an
+  admitted low-rank/HSS-style Schur update that is tested against the true Pmat
+  residual before Krylov uses it.
+
 ## 2026-06-12 Addendum: native MUMPS-like symbolic ordering
 
 ### Implementation

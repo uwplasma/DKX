@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 import hashlib
 import os
 import time
+from threading import Lock
 from typing import Callable, Literal
 
 import numpy as np
@@ -769,6 +771,8 @@ class _SymbolicSuperblockFactor:
     dropped_cross_nnz: int
     retained_cross_fraction: float
     factor_failures: int
+    parallel_workers: int = 1
+    numeric_factor_tasks: int = 0
 
     @property
     def superblock_count(self) -> int:
@@ -956,6 +960,7 @@ def _build_symbolic_superblock_factor(
     min_cross_nnz: int = 1,
     min_retained_cross_fraction: float = 0.0,
     regularization_rel: float = 1.0e-12,
+    parallel_workers: int = 1,
 ) -> tuple[_SymbolicSuperblockFactor, int, int]:
     """Build a bounded grouped-block sparse factor retaining dominant couplings."""
 
@@ -969,6 +974,7 @@ def _build_symbolic_superblock_factor(
         permutation = np.arange(n, dtype=np.int64)
     block_size = max(1, int(analysis.block_size_target))
     base_block_count = int(analysis.block_count)
+    worker_count = max(1, int(parallel_workers))
     if base_block_count <= 0:
         return (
             _SymbolicSuperblockFactor(
@@ -982,6 +988,8 @@ def _build_symbolic_superblock_factor(
                 dropped_cross_nnz=0,
                 retained_cross_fraction=1.0,
                 factor_failures=0,
+                parallel_workers=worker_count,
+                numeric_factor_tasks=0,
             ),
             0,
             0,
@@ -1050,7 +1058,8 @@ def _build_symbolic_superblock_factor(
     factor_failures = 0
     max_abs = float(np.max(np.abs(matrix_csr.data))) if matrix_csr.nnz else 0.0
     reg = max(1.0e-14, float(regularization_rel) * max(1.0, max_abs))
-    for group in ordered_groups:
+
+    def _factor_group(group: list[int]) -> tuple[_SymbolicSuperblock | None, int, int, int]:
         perm_positions: list[np.ndarray] = []
         for block in group:
             start = int(block) * block_size
@@ -1058,18 +1067,20 @@ def _build_symbolic_superblock_factor(
             if stop > start:
                 perm_positions.append(np.arange(start, stop, dtype=np.int64))
         if not perm_positions:
-            continue
+            return None, 0, 0, 0
         positions = np.concatenate(perm_positions).astype(np.int64, copy=False)
         indices = np.asarray(permutation[positions], dtype=np.int64)
         local = matrix_csr[indices, :][:, indices].tocsc()
+        local_failures = 0
         try:
             factor = splu(local, permc_spec="COLAMD", diag_pivot_thresh=float(diag_pivot_thresh))
         except RuntimeError:
-            factor_failures += 1
+            local_failures += 1
             local_reg = (local + reg * sp.eye(local.shape[0], dtype=dtype, format="csc")).tocsc()
             try:
                 factor = splu(local_reg, permc_spec="COLAMD", diag_pivot_thresh=float(diag_pivot_thresh))
             except RuntimeError:
+                local_failures += 1
                 diagonal = np.asarray(local.diagonal(), dtype=np.float64)
                 scale = max(1.0, float(np.max(np.abs(diagonal))) if diagonal.size else 1.0)
                 floor = max(1.0e-14, float(regularization_rel) * scale)
@@ -1080,15 +1091,29 @@ def _build_symbolic_superblock_factor(
         if nbytes is None and isinstance(factor, _JacobiFactor):
             nbytes = int(factor.inverse_diagonal.nbytes)
             nnz = int(factor.inverse_diagonal.size)
-        total_nbytes += int(nbytes or 0)
-        total_nnz += int(nnz or 0)
-        blocks.append(
+        return (
             _SymbolicSuperblock(
                 indices=indices,
                 base_blocks=tuple(int(v) for v in group),
                 factor=factor,
-            )
+            ),
+            int(nbytes or 0),
+            int(nnz or 0),
+            int(local_failures),
         )
+
+    if worker_count > 1 and len(ordered_groups) > 1:
+        with ThreadPoolExecutor(max_workers=min(worker_count, len(ordered_groups))) as executor:
+            factor_results = list(executor.map(_factor_group, ordered_groups))
+    else:
+        factor_results = [_factor_group(group) for group in ordered_groups]
+    for block, nbytes, nnz, failures in factor_results:
+        if block is None:
+            continue
+        blocks.append(block)
+        total_nbytes += int(nbytes)
+        total_nnz += int(nnz)
+        factor_failures += int(failures)
 
     factor = _SymbolicSuperblockFactor(
         blocks=tuple(blocks),
@@ -1101,6 +1126,8 @@ def _build_symbolic_superblock_factor(
         dropped_cross_nnz=int(dropped_cross),
         retained_cross_fraction=float(retained_fraction),
         factor_failures=int(factor_failures),
+        parallel_workers=int(min(worker_count, max(1, len(ordered_groups)))),
+        numeric_factor_tasks=int(len(factor_results)),
     )
     return factor, int(total_nbytes), int(total_nnz)
 
@@ -1635,6 +1662,7 @@ def _build_symbolic_nd_frontal_schur_factor(
     max_dense_rhs_entries_per_child: int = 0,
     max_dense_rhs_cols_per_child: int = 0,
     max_setup_s: float = 0.0,
+    parallel_child_workers: int = 1,
 ) -> tuple[_SymbolicNDFrontalNode, int, int]:
     """Build a recursive nested-dissection Schur factor over a symbolic order.
 
@@ -1665,11 +1693,15 @@ def _build_symbolic_nd_frontal_schur_factor(
     max_dense_entries_per_child = max(0, int(max_dense_rhs_entries_per_child))
     max_cols_per_child = max(0, int(max_dense_rhs_cols_per_child))
     max_setup_seconds = max(0.0, float(max_setup_s))
+    child_workers = max(1, int(parallel_child_workers))
     setup_start_s = time.perf_counter()
     row_degree = np.diff(matrix_csr.indptr).astype(np.int64, copy=False)
     col_degree = np.diff(matrix_csr.tocsc().indptr).astype(np.int64, copy=False)
     degree = row_degree + col_degree
     dense_entries_global = 0
+    parallel_child_nodes = 0
+    parallel_child_factor_tasks = 0
+    stats_lock = Lock()
 
     def _check_setup_budget(*, stage: str, node_size: int, depth: int) -> None:
         if max_setup_seconds <= 0.0:
@@ -1683,7 +1715,7 @@ def _build_symbolic_nd_frontal_schur_factor(
             )
 
     def _build_node(indices: np.ndarray, depth: int) -> _SymbolicNDFrontalNode:
-        nonlocal dense_entries_global
+        nonlocal dense_entries_global, parallel_child_nodes, parallel_child_factor_tasks
         idx = np.asarray(indices, dtype=np.int64).reshape((-1,))
         node_n = int(idx.size)
         _check_setup_budget(stage="node_start", node_size=node_n, depth=int(depth))
@@ -1853,9 +1885,26 @@ def _build_symbolic_nd_frontal_schur_factor(
         separator_update_chunks = 0
         factor_failures = 0
 
-        for positions in child_position_groups:
-            child_indices = np.asarray(idx[np.asarray(positions, dtype=np.int64)], dtype=np.int64)
-            child_factor = _build_node(child_indices, int(depth) + 1)
+        child_inputs = [
+            (
+                np.asarray(positions, dtype=np.int64),
+                np.asarray(idx[np.asarray(positions, dtype=np.int64)], dtype=np.int64),
+            )
+            for positions in child_position_groups
+        ]
+
+        if child_workers > 1 and int(depth) == 0 and len(child_inputs) > 1:
+            with stats_lock:
+                parallel_child_nodes += 1
+                parallel_child_factor_tasks += int(len(child_inputs))
+            with ThreadPoolExecutor(max_workers=min(child_workers, len(child_inputs))) as executor:
+                child_factors = list(
+                    executor.map(lambda item: _build_node(item[1], int(depth) + 1), child_inputs)
+                )
+        else:
+            child_factors = [_build_node(child_indices, int(depth) + 1) for _, child_indices in child_inputs]
+
+        for (positions, child_indices), child_factor in zip(child_inputs, child_factors, strict=True):
             b_mat = matrix_csr[child_indices, :][:, sep_indices].tocsr().astype(dtype, copy=False)
             c_mat = matrix_csr[sep_indices, :][:, child_indices].tocsr().astype(dtype, copy=False)
             b_csc = b_mat.tocsc()
@@ -1873,13 +1922,15 @@ def _build_symbolic_nd_frontal_schur_factor(
                     f"separator={int(sep_count)} child={int(child_indices.size)} "
                     f"local_cols={int(local_cols.size)})"
                 )
-            dense_entries_global += child_dense_entries
+            with stats_lock:
+                dense_entries_global += child_dense_entries
+                dense_entries_global_now = int(dense_entries_global)
             dense_update_entries += child_dense_entries
             peak_dense_update_entries = max(peak_dense_update_entries, child_dense_entries)
-            if max_dense_entries and dense_entries_global > max_dense_entries:
+            if max_dense_entries and dense_entries_global_now > max_dense_entries:
                 raise RuntimeError(
                     "symbolic_nd_frontal_schur_lu dense separator RHS work budget exceeded "
-                    f"({int(dense_entries_global)}>{int(max_dense_entries)}; "
+                    f"({int(dense_entries_global_now)}>{int(max_dense_entries)}; "
                     f"node_size={int(node_n)} separator={int(sep_count)} child={int(child_indices.size)})"
                 )
             if b_mat.nnz and c_mat.nnz and local_cols.size:
@@ -1985,6 +2036,9 @@ def _build_symbolic_nd_frontal_schur_factor(
         "max_dense_rhs_entries": int(max_dense_entries),
         "max_dense_rhs_entries_per_child": int(max_dense_entries_per_child),
         "max_dense_rhs_cols_per_child": int(max_cols_per_child),
+        "parallel_child_workers": int(child_workers),
+        "parallel_child_nodes": int(parallel_child_nodes),
+        "parallel_child_factor_tasks": int(parallel_child_factor_tasks),
         "node_count": int(root.node_count),
         "leaf_count": int(root.leaf_count),
         "max_depth_reached": int(root.max_depth_reached),
@@ -3466,6 +3520,7 @@ def factorize_host_sparse_operator(
     symbolic_superblock_min_cross_nnz: int = 1,
     symbolic_superblock_min_retained_cross_fraction: float = 0.0,
     symbolic_superblock_regularization_rel: float = 1.0e-12,
+    symbolic_numeric_parallel_workers: int = 1,
     symbolic_max_permutation_size: int = 250_000,
 ) -> SparseFactorBundle:
     if isinstance(operator, SparseOperatorBundle):
@@ -3650,6 +3705,7 @@ def factorize_host_sparse_operator(
                     max_dense_rhs_entries_per_child=int(symbolic_nd_max_dense_rhs_entries_per_child),
                     max_dense_rhs_cols_per_child=int(symbolic_nd_max_dense_rhs_cols_per_child),
                     max_setup_s=float(symbolic_nd_max_setup_s),
+                    parallel_child_workers=int(symbolic_numeric_parallel_workers),
                 )
                 polish_steps = max(0, int(symbolic_nd_residual_polish_steps))
                 if polish_steps:
@@ -3674,6 +3730,7 @@ def factorize_host_sparse_operator(
                     min_cross_nnz=int(symbolic_superblock_min_cross_nnz),
                     min_retained_cross_fraction=float(symbolic_superblock_min_retained_cross_fraction),
                     regularization_rel=float(symbolic_superblock_regularization_rel),
+                    parallel_workers=int(symbolic_numeric_parallel_workers),
                 )
             elif kind == "symbolic_block_lu_coarse":
                 factor, symbolic_nbytes, symbolic_nnz = _build_symbolic_block_coarse_factor(

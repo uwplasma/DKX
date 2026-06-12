@@ -643,6 +643,44 @@ def test_symbolic_superblock_lu_can_reject_low_retained_coupling_before_factoriz
         )
 
 
+def test_symbolic_superblock_lu_parallel_numeric_tasks_preserve_solution() -> None:
+    matrix = sp.block_diag(
+        (
+            sp.csr_matrix([[4.0, 1.0], [0.5, 3.0]], dtype=np.float64),
+            sp.csr_matrix([[5.0, -0.25], [1.0, 2.5]], dtype=np.float64),
+        ),
+        format="csr",
+    )
+    rhs = np.array([1.0, -2.0, 0.5, 3.0], dtype=np.float64)
+
+    factor = factorize_host_sparse_operator(
+        matrix,
+        kind="symbolic_superblock_lu",
+        symbolic_ordering_kind="natural",
+        symbolic_block_size=2,
+        symbolic_superblock_max_size=2,
+        symbolic_superblock_max_blocks=1,
+        symbolic_numeric_parallel_workers=2,
+    )
+    admission = admit_sparse_factor_against_operator(
+        factor.operator,
+        factor,
+        max_relative_residual=1.0e-12,
+        min_improvement_vs_identity=1.0,
+    )
+
+    assert factor.factor.superblock_count == 2
+    assert factor.factor.parallel_workers == 2
+    assert factor.factor.numeric_factor_tasks == 2
+    np.testing.assert_allclose(
+        factor.solve(rhs),
+        np.linalg.solve(matrix.toarray(), rhs),
+        rtol=1.0e-12,
+        atol=1.0e-12,
+    )
+    assert admission.accepted is True
+
+
 def test_symbolic_frontal_schur_lu_solves_separator_coupled_blocks() -> None:
     matrix = sp.csr_matrix(
         [
@@ -968,6 +1006,42 @@ def test_symbolic_nd_frontal_schur_lu_rejects_dense_update_budget() -> None:
             symbolic_nd_regularization_rel=0.0,
             symbolic_nd_max_dense_rhs_entries=1,
         )
+
+
+def test_symbolic_nd_frontal_schur_lu_parallel_child_setup_preserves_solution() -> None:
+    matrix = _nested_dissection_tridiagonal_matrix()
+    rhs = np.linspace(2.0, -1.0, matrix.shape[0], dtype=np.float64)
+
+    factor = factorize_host_sparse_operator(
+        matrix,
+        kind="symbolic_nd_frontal_schur_lu",
+        symbolic_ordering_kind="natural",
+        symbolic_block_size=3,
+        symbolic_nd_max_leaf_size=3,
+        symbolic_nd_max_depth=4,
+        symbolic_nd_separator_width=2,
+        symbolic_nd_max_separator_cols=3,
+        symbolic_nd_high_degree_cols=0,
+        symbolic_nd_regularization_rel=0.0,
+        symbolic_numeric_parallel_workers=2,
+    )
+    admission = admit_sparse_factor_against_operator(
+        factor.operator,
+        factor,
+        max_relative_residual=1.0e-11,
+        min_improvement_vs_identity=1.0,
+    )
+
+    np.testing.assert_allclose(
+        factor.solve(rhs),
+        np.linalg.solve(matrix.toarray(), rhs),
+        rtol=1.0e-11,
+        atol=1.0e-11,
+    )
+    assert factor.factor.metadata["parallel_child_workers"] == 2
+    assert factor.factor.metadata["parallel_child_nodes"] == 1
+    assert factor.factor.metadata["parallel_child_factor_tasks"] == 2
+    assert admission.accepted is True
 
 
 def test_symbolic_nd_frontal_schur_lu_rejects_dense_update_child_budget() -> None:

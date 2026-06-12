@@ -1030,8 +1030,10 @@ Controls:
   sparse factor kind, factor precision, factor memory guard, and diagonal shift.
   Supported diagnostic factors are ``lu``, ``ilu``, ``jacobi``,
   ``symbolic_block_lu``, ``symbolic_block_lu_coarse``, and
-  ``symbolic_block_schur_lu``.  The symbolic options are native lower-memory
-  block/coarse/Schur experiments and are not automatic defaults.
+  ``symbolic_block_schur_lu``, ``symbolic_superblock_lu``, and
+  ``symbolic_nd_frontal_schur_lu``.  The symbolic options are native
+  lower-memory block/coarse/Schur/frontal experiments and are not automatic
+  defaults unless they pass setup-time admission.
 - ``SFINCS_JAX_TRANSPORT_FP_FORTRAN_REDUCED_LU_SYMBOLIC_ORDERING`` controls the
   reusable symbolic analysis ordering metadata. ``mumps_like`` is the default:
   it applies a bounded native nested-dissection-style graph ordering that
@@ -1050,6 +1052,14 @@ Controls:
   production-size cases from spending many minutes in a single-core SuperLU
   setup merely because the memory estimate fits; set it to ``0`` only for an
   explicit diagnostic run where that cost is acceptable.
+- ``SFINCS_JAX_TRANSPORT_FP_FORTRAN_REDUCED_LU_SYMBOLIC_NUMERIC_PARALLEL_WORKERS``
+  controls bounded native parallel numeric setup for symbolic factors.  The
+  direct reduced ``whichMatrix=0`` Pmat still uses the same symbolic metadata
+  and strict true-residual admission, but independent ``symbolic_superblock_lu``
+  superblocks and root children in ``symbolic_nd_frontal_schur_lu`` can be
+  factored concurrently before chunked Schur updates are applied.  The generic
+  explicit-sparse equivalent is
+  ``SFINCS_JAX_EXPLICIT_SPARSE_SYMBOLIC_NUMERIC_PARALLEL_WORKERS``.
 - ``SFINCS_JAX_TRANSPORT_FP_FORTRAN_REDUCED_LU_SYMBOLIC_BLOCK_OVERLAP``
   extends each symbolic block by a fixed number of neighboring unknowns before
   factorization and restricts the local solution back to the owned block. This

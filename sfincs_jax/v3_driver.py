@@ -1024,6 +1024,7 @@ def _build_host_sparse_direct_factor_from_matvec(
     default_symbolic_superblock_min_cross_nnz: int = 1,
     default_symbolic_superblock_min_retained_cross_fraction: float = 0.0,
     default_symbolic_superblock_regularization_rel: float = 1.0e-12,
+    default_symbolic_numeric_parallel_workers: int = 1,
     default_symbolic_max_permutation_size: int = 250_000,
     default_monolithic_guard_enabled: bool = True,
 ):
@@ -1145,6 +1146,9 @@ def _build_host_sparse_direct_factor_from_matvec(
         "SFINCS_JAX_EXPLICIT_SPARSE_SYMBOLIC_SUPERBLOCK_MIN_RETAINED_CROSS_FRACTION", ""
     ).strip()
     symbolic_superblock_reg_env = os.environ.get("SFINCS_JAX_EXPLICIT_SPARSE_SYMBOLIC_SUPERBLOCK_REG_REL", "").strip()
+    symbolic_numeric_parallel_workers_env = os.environ.get(
+        "SFINCS_JAX_EXPLICIT_SPARSE_SYMBOLIC_NUMERIC_PARALLEL_WORKERS", ""
+    ).strip()
     try:
         block_cols = int(block_cols_env) if block_cols_env else 32
     except ValueError:
@@ -1455,6 +1459,11 @@ def _build_host_sparse_direct_factor_from_matvec(
         float(default_symbolic_superblock_regularization_rel),
         minimum=0.0,
     )
+    symbolic_numeric_parallel_workers = _parse_int_env(
+        symbolic_numeric_parallel_workers_env,
+        int(default_symbolic_numeric_parallel_workers),
+        minimum=1,
+    )
     factor_kind_env = os.environ.get("SFINCS_JAX_EXPLICIT_SPARSE_FACTOR_KIND", "").strip().lower()
     default_factor_kind_norm = str(default_factor_kind).strip().lower()
     if factor_kind_env in {"jacobi", "diagonal", "diag", "none"}:
@@ -1748,6 +1757,7 @@ def _build_host_sparse_direct_factor_from_matvec(
             symbolic_superblock_min_cross_nnz=int(symbolic_superblock_min_cross_nnz),
             symbolic_superblock_min_retained_cross_fraction=float(symbolic_superblock_min_retained_cross_fraction),
             symbolic_superblock_regularization_rel=float(symbolic_superblock_regularization_rel),
+            symbolic_numeric_parallel_workers=int(symbolic_numeric_parallel_workers),
             symbolic_max_permutation_size=int(default_symbolic_max_permutation_size),
         )
     except Exception as exc:
@@ -14041,6 +14051,12 @@ def _build_rhsmode23_fp_fortran_reduced_lu_preconditioner(
         1.0e-12,
         minimum=0.0,
     )
+    symbolic_numeric_parallel_workers_default = min(4, max(1, int(os.cpu_count() or 1)))
+    symbolic_numeric_parallel_workers = _int_env(
+        "SFINCS_JAX_TRANSPORT_FP_FORTRAN_REDUCED_LU_SYMBOLIC_NUMERIC_PARALLEL_WORKERS",
+        symbolic_numeric_parallel_workers_default,
+        minimum=1,
+    )
     symbolic_max_permutation_size = _int_env(
         "SFINCS_JAX_TRANSPORT_FP_FORTRAN_REDUCED_LU_SYMBOLIC_MAX_PERMUTATION_SIZE",
         250_000,
@@ -14266,6 +14282,7 @@ def _build_rhsmode23_fp_fortran_reduced_lu_preconditioner(
             f"{int(symbolic_superblock_min_cross_nnz)}_"
             f"{float(symbolic_superblock_min_retained_cross_fraction):.3e}_"
             f"{float(symbolic_superblock_regularization_rel):.3e}_"
+            f"symworkers{int(symbolic_numeric_parallel_workers)}_"
             f"{int(symbolic_max_permutation_size)}_"
             f"adm{int(symbolic_admission_enabled)}_{float(symbolic_admission_max_rel):.3e}_"
             f"{float(symbolic_admission_min_improvement):.3e}_{int(symbolic_admission_probes)}_"
@@ -14549,6 +14566,7 @@ def _build_rhsmode23_fp_fortran_reduced_lu_preconditioner(
                             symbolic_superblock_min_retained_cross_fraction
                         ),
                         default_symbolic_superblock_regularization_rel=float(symbolic_superblock_regularization_rel),
+                        default_symbolic_numeric_parallel_workers=int(symbolic_numeric_parallel_workers),
                         default_symbolic_max_permutation_size=int(symbolic_max_permutation_size),
                         default_monolithic_guard_enabled=not bool(auto_exact_rescue_selected),
                     )
@@ -14692,6 +14710,7 @@ def _build_rhsmode23_fp_fortran_reduced_lu_preconditioner(
                         symbolic_superblock_min_retained_cross_fraction
                     ),
                     default_symbolic_superblock_regularization_rel=float(symbolic_superblock_regularization_rel),
+                    default_symbolic_numeric_parallel_workers=int(symbolic_numeric_parallel_workers),
                     default_symbolic_max_permutation_size=int(symbolic_max_permutation_size),
                 )
         except Exception as exc:  # noqa: BLE001
@@ -15042,6 +15061,7 @@ def _build_rhsmode23_fp_fortran_reduced_lu_preconditioner(
             "symbolic_superblock_min_cross_nnz": int(symbolic_superblock_min_cross_nnz),
             "symbolic_superblock_min_retained_cross_fraction": float(symbolic_superblock_min_retained_cross_fraction),
             "symbolic_superblock_regularization_rel": float(symbolic_superblock_regularization_rel),
+            "symbolic_numeric_parallel_workers": int(symbolic_numeric_parallel_workers),
             "symbolic_max_permutation_size": int(symbolic_max_permutation_size),
             "symbolic_admission_enabled": bool(symbolic_admission_enabled),
             "symbolic_admission_max_rel": float(symbolic_admission_max_rel),
