@@ -164,6 +164,11 @@ for debugging and monkeypatch-based tests. The first extracted layers are:
   diagonal and block-diagonal matrix reductions used by simplified
   preconditioner operators. These are numerical building blocks with direct
   local-coupling tests.
+- ``sfincs_jax/linear_algebra.py``:
+  small differentiable JAX-native linear algebra kernels used by solver
+  infrastructure. The current exported kernel is the regularized tiny
+  least-squares solve used by recycled initial guesses and coarse/residual
+  correction paths when backend LAPACK/SVD calls are unavailable.
 - ``sfincs_jax/sparse_triangular.py``:
   JAX-native triangular solves for padded and compact-CSR sparse factor rows,
   plus permutation inversion. These pure kernels are used by sparse

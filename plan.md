@@ -96,6 +96,8 @@ Current branch status:
   ``v3_results.py`` owns solve-result dataclasses;
   ``solver_runtime.py`` owns finite-result and synchronization helpers;
   ``matrix_reductions.py`` owns diagonal/block-diagonal reduction primitives;
+  ``linear_algebra.py`` owns small differentiable numerical kernels such as the
+  regularized tiny least-squares helper used by recycled/coarse corrections;
   ``sparse_triangular.py`` owns padded-row and compact-CSR triangular
   sparse-factor solve kernels;
   and ``preconditioner_context.py`` owns mutable preconditioner hint state,
@@ -114,7 +116,11 @@ Current branch status:
 - Latest branch validation after these extractions: focused cache-key wrapper
   tests passed with ``10 passed in 4.05 s``; broader RHSMode=1/preconditioner
   tests passed with ``70 passed in 48.61 s``; full local suite passed with
-  ``2556 passed in 543.16 s``; strict docs build passed.
+  ``2556 passed in 543.16 s``; strict docs build passed. The focused
+  ``linear_algebra.py`` extraction tests passed with ``4 passed in 2.14 s``;
+  broader least-squares/GMRES/Schur validation passed with
+  ``77 passed in 50.66 s``; full local suite passed with
+  ``2558 passed in 542.63 s``; strict docs build passed.
 - Next PR-level moves should split high-level RHSMode=1 solve orchestration
   into ``rhs1_solve.py`` and RHSMode=2/3 orchestration into
   ``transport_solve.py`` after the focused module extractions are green.
