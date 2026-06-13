@@ -28,6 +28,12 @@ Unreleased
   tests and local debugging while the extracted module has direct route-policy
   tests. The post-extraction local full suite passed with
   ``2537 passed in 534.28 s``.
+- Moved passive RHSMode=1 and RHSMode=2/3 preconditioner cache dataclasses and
+  global cache registries into ``preconditioner_caches.py``. The driver still
+  re-exports the same registry objects under the existing private names, so
+  existing cache-clearing tests and debugging scripts keep working while the
+  containers now have direct lightweight tests. The post-extraction local full
+  suite passed with ``2545 passed in 535.59 s``.
 
 v1.1.7
 ------

@@ -175,6 +175,13 @@ for debugging and monkeypatch-based tests. The first extracted layers are:
   ``SFINCS_JAX_GMRES_DISTRIBUTED`` axis selection. The driver passes its current
   solver globals through compatibility wrappers so existing monkeypatch-based
   tests still exercise the same routes.
+- ``sfincs_jax/preconditioner_caches.py``:
+  passive dataclasses and global cache registries for RHSMode=1 and
+  RHSMode=2/3 preconditioners.  The numerical setup/apply routines still live
+  in the driver during this stage, but cache containers are now directly
+  importable and tested.  ``v3_driver.py`` re-exports the same registry objects
+  under the old private names so existing debugging scripts and tests keep
+  clearing the real caches.
 - ``sfincs_jax/rhs1_pas_policy.py``:
   PAS applicability, PAS-TZ memory safety, PAS fallback routing, and PAS
   adaptive-smoother eligibility.
