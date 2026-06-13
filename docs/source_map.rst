@@ -177,7 +177,9 @@ for debugging and monkeypatch-based tests. The first extracted layers are:
 - ``sfincs_jax/preconditioner_setup.py``:
   shared setup utilities for preconditioner construction: memory-bounded
   basis-column chunking, selected-row/selected-column matrix-free submatrix
-  probing, and stable array hashes used in preconditioner cache keys.
+  probing, stable array hashes, and RHSMode=1/transport preconditioner
+  cache-key construction. The keys intentionally omit RHS-only gradients so
+  fixed-operator scan points can reuse factors.
 - ``sfincs_jax/krylov_dispatch.py``:
   concrete Krylov solver routing for host-only SciPy methods, JIT/non-JIT JAX
   GMRES, distributed GMRES, diagnostic solver labels, and

@@ -45,6 +45,12 @@ Unreleased
   submatrix probing so tests and debugging hooks can still monkeypatch the
   driver-level unsharded operator application. The post-extraction local full
   suite passed with ``2553 passed in 541.27 s``.
+- Moved RHSMode=1 structured-preconditioner and RHSMode=2/3 transport
+  preconditioner cache-key construction into ``preconditioner_setup.py``.
+  Driver wrappers keep the historical private function names and live
+  ``_precond_dtype()`` behavior, while direct tests now cover key stability,
+  Phi1 participation, PAS/FP signatures, and dtype partitioning. The
+  post-extraction local full suite passed with ``2556 passed in 543.16 s``.
 
 v1.1.7
 ------
