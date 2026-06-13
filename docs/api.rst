@@ -75,6 +75,9 @@ research workflows.
 .. automodule:: sfincs_jax.rhs1_handoff
    :members:
 
+.. automodule:: sfincs_jax.rhs1_lowmode_coarse
+   :members:
+
 .. automodule:: sfincs_jax.rhs1_acceptance_policy
    :members:
 

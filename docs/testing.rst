@@ -203,7 +203,11 @@ about ``82%`` by checking the exact polynomial order conditions of the 3-point a
 five-point guard branches. In parallel, the bounded sparse-helper campaign covered
 the explicit sparse-factor builder in ``v3_driver.py``, including environment parsing,
 matrix-free operator assembly hooks, and host sparse factorization handoff on tiny
-synthetic operators. These tests were chosen from the same identities used in the
+synthetic operators. The next refactor extraction moved RHSMode=1 low-mode angular
+and moment coarse-space construction into ``rhs1_lowmode_coarse.py`` with direct
+tests for feature normalization, rank capping, compact matrix-free Galerkin
+metadata, and residual projection on bounded synthetic operators. These tests were
+chosen from the same identities used in the
 SFINCS technical documentation and the 2014 SFINCS paper: periodic/spectral
 differentiation exactness, finite-difference order conditions, Boozer-coordinate
 field-component relations, VMEC half-mesh finite-difference conventions, and
@@ -308,6 +312,16 @@ of the dispatch ladder had drifted away from it. After this refactor the audited
 tree moved to ``596 tests collected`` and ``596 passed``, package coverage stayed
 at about ``55%``, and ``v3_driver.py`` itself moved from about ``37%`` to about
 ``38%``.
+
+The current release-preparation pass supersedes those historical counts. On
+2026-06-13, the final local tree passed ``2510`` tests in ``562.68 s`` without
+coverage instrumentation and ``2510`` tests in ``746.33 s`` with coverage
+enabled. The final full coverage audit measured total package coverage at ``74%`` with
+``v3_driver.py`` at ``56%`` and the newly extracted
+``rhs1_lowmode_coarse.py`` at ``94%``. The remaining gap to ``95%`` is therefore
+no longer broad helper coverage; it is concentrated in the largest solver,
+I/O, sparse-pattern, and system-assembly bodies that still need further
+behavior-preserving extraction.
 
 The large refactor closure gate extends that strategy in two directions. First, it
 splits RHSMode=1 preconditioner policy into directly tested helper modules, covering alias
