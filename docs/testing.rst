@@ -203,10 +203,11 @@ about ``82%`` by checking the exact polynomial order conditions of the 3-point a
 five-point guard branches. In parallel, the bounded sparse-helper campaign covered
 the explicit sparse-factor builder in ``v3_driver.py``, including environment parsing,
 matrix-free operator assembly hooks, and host sparse factorization handoff on tiny
-synthetic operators. The next refactor extraction moved RHSMode=1 low-mode angular
-and moment coarse-space construction into ``rhs1_lowmode_coarse.py`` with direct
-tests for feature normalization, rank capping, compact matrix-free Galerkin
-metadata, and residual projection on bounded synthetic operators. These tests were
+synthetic operators. The next refactor extraction moved RHSMode=1 low-mode angular,
+moment, coupled f/tail, and tail-only coarse-space construction into
+``rhs1_lowmode_coarse.py`` with direct tests for feature normalization, rank
+capping, compact matrix-free Galerkin and least-squares metadata, residual
+projection, and tail-selection policies on bounded synthetic operators. These tests were
 chosen from the same identities used in the
 SFINCS technical documentation and the 2014 SFINCS paper: periodic/spectral
 differentiation exactness, finite-difference order conditions, Boozer-coordinate
