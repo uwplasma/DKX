@@ -56,6 +56,12 @@ Unreleased
   direct tests now cover dense-reference agreement, near-rank-deficient systems,
   empty coarse bases, and finite autodiff through the helper. The
   post-extraction local full suite passed with ``2558 passed in 542.63 s``.
+- Moved host sparse-direct GMRES polish into ``host_refinement.py`` next to the
+  existing host direct-refinement kernels. ``v3_driver.py`` keeps a wrapper that
+  injects the monkeypatchable driver GMRES solver, while direct tests now cover
+  the extracted polish helper with an injected solver and sparse-factor
+  preconditioner. The post-extraction local full suite passed with
+  ``2559 passed in 543.75 s``.
 
 v1.1.7
 ------
