@@ -330,11 +330,14 @@ behavior-preserving extraction.
 The next main-branch refactor step extracted RHSMode=1 domain-decomposition
 heuristics and passed the local full suite with ``2520`` tests in ``537.83 s``.
 The dedicated architecture branch then started by moving v3 result dataclasses,
-solver-runtime finite/synchronization helpers, matrix-reduction primitives, and
-preconditioner context state out of ``v3_driver.py`` with direct tests for
+solver-runtime finite/synchronization helpers, matrix-reduction primitives,
+preconditioner context state, and Krylov dispatch routing out of
+``v3_driver.py`` with direct tests for
 pytree round-trips, diagnostic metadata retention, finite-result rejection,
 local-coupling preservation, mutable solver-hint state, dtype policy, and
-sparse structural-tolerance handling.
+sparse structural-tolerance handling. ``krylov_dispatch.py`` adds direct tests
+for host-only method rejection, JIT/plain/distributed dispatch, diagnostic
+labels, and distributed-axis environment policy.
 
 The large refactor closure gate extends that strategy in two directions. First, it
 splits RHSMode=1 preconditioner policy into directly tested helper modules, covering alias
