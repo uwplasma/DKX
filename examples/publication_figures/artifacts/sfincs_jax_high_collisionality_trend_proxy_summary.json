@@ -59,6 +59,14 @@
       "state": "asymptotic_trend_proxy"
     }
   },
+  "gates": {
+    "all_fp_l11_l12_inverse_like": false,
+    "all_pas_l11_l12_positive": true,
+    "checked_in_converged_artifact": false,
+    "full_simakov_helander_reproduction_closed": true,
+    "proxy_or_deferred_only": true,
+    "ready_for_literature_claim": false
+  },
   "metadata": {
     "kind": "high_collisionality_trend_proxy",
     "literature": [
@@ -70,6 +78,13 @@
       "Momentum-conserving FP/model-operator L11/L12 should approach inverse-nu scaling only in the nu' >> 1 limit.",
       "The checked-in scans stop at nu'=10, so this artifact is a trend proxy, not the full Simakov-Helander analytic-limit reproduction."
     ],
+    "publication_figure": {
+      "artifact_class": "checked_in_high_collisionality_trend_proxy",
+      "checked_in_converged_artifact": false,
+      "claim_status": "proxy_or_deferred",
+      "manuscript_label": "checked-in trend proxy; full analytic-limit validation deferred",
+      "ready_for_physics_validation_claim": false
+    },
     "schema_version": 1,
     "source_artifacts": {
       "lhd_collisionality": "lhd_collisionality_summary.json",

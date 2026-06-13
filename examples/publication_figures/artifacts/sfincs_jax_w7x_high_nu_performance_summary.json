@@ -1,19 +1,40 @@
 {
   "gates": {
+    "checked_in_converged_artifact": true,
+    "declared_passed_routes_residual_clean": true,
     "factor_reuse_fewer_factorizations": true,
     "factor_reuse_present": true,
     "factor_reuse_residual_clean": true,
+    "factor_reuse_residuals_match_no_reuse": true,
     "factor_reuse_speedup_vs_no_reuse": 3.4824418305142952,
     "factor_reuse_wall_time_saved_s": 1445.65,
-    "failed_route_rejected": true
+    "failed_route_rejected": true,
+    "finite_factor_reuse_measurement": true,
+    "ready_for_physics_validation_claim": false,
+    "single_point_performance_claim_supported": true
   },
   "metadata": {
     "case": "W7-X FP high-nu first point",
     "kind": "w7x_high_nu_preconditioning_performance",
+    "notes": [
+      "This artifact supports a single W7-X high-nu preconditioner performance claim.",
+      "It is not a closed W7-X physics-validation or Simakov-Helander analytic-limit claim.",
+      "The rejected bounded Krylov route remains plotted only because it fails the residual gate."
+    ],
     "nuprime": 17.78332923601508,
+    "publication_figure": {
+      "artifact_class": "checked_in_w7x_high_nu_single_point_performance",
+      "checked_in_converged_artifact": true,
+      "claim_status": "checked_in_converged_artifact",
+      "manuscript_label": "single-point W7-X high-nu preconditioner performance, not physics validation",
+      "ready_for_physics_validation_claim": false
+    },
+    "records_source": "checked_in_default_records",
     "residual_gate": 1e-06,
     "schema_version": 1,
-    "source_script": "examples/publication_figures/generate_w7x_high_nu_performance.py"
+    "source_script": "examples/publication_figures/generate_w7x_high_nu_performance.py",
+    "summary_artifact_checked_in": true,
+    "validation_state": "checked_converged_single_point_performance"
   },
   "records": [
     {

@@ -3,6 +3,40 @@
 Last updated: 2026-06-12 (America/Chicago)
 Owner: incoming agent
 
+## 2026-06-12 Addendum: finalize release scope and defer native production-preconditioner optimization
+
+### Decision
+
+- The lower-memory/faster native sparse-factor replacement for production
+  geometry-rich RHSMode=2/3 and full-grid QA/QH RHSMode=1 cases is deferred as
+  a post-release optimization lane.
+- The current release scope is correctness, parity, CLI/Python usability,
+  documented solver metadata, and reproducible benchmark artifacts. Promoted
+  defaults continue to select residual-clean routes and audited fallback paths.
+- The opt-in native infrastructure remains valuable and test-covered:
+  direct reduced ``whichMatrix=0`` Pmat emission, symbolic ordering metadata,
+  superblock/nested-dissection factors, BLR/HSS separator updates, parallel
+  numeric setup, and strict true-residual admission.
+- Do not promote BLR/HSS or nested-dissection paths into ``auto`` until a future
+  production-floor CPU/GPU campaign passes residual, setup-time, runtime, and
+  memory gates. The last production geom11 probes reached the direct Pmat but
+  rejected the native ND/BLR setup before admission.
+
+### Regenerated release artifacts
+
+- Regenerated the canonical Fortran-v3 vs SFINCS_JAX runtime/memory summary:
+  ``python examples/publication_figures/generate_fortran_suite_benchmark_summary.py``.
+- Regenerated the README audit block/table from the same canonical reports:
+  ``python scripts/generate_readme_fast_branch_audit.py``.
+- Replayed lightweight publication figures from checked artifacts:
+  validation dashboard, autodiff sensitivity/gradient checks, W7-X high-nu
+  performance, high-collisionality trend proxy, Simakov-Helander normalization
+  audit, and Er trajectory sweeps.
+- Did not rewrite SFINCS-paper scan summaries from ``generate_sfincs_paper_figs
+  --plot-only`` because the local scan output directories are absent and the
+  script correctly refuses to regenerate publication summaries without complete
+  scan outputs.
+
 ## 2026-06-12 Addendum: ND BLR separator-update path
 
 ### Implementation

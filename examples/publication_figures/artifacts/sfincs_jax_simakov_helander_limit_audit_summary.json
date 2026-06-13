@@ -306,7 +306,10 @@
   "gates": {
     "all_cases_ready_for_full_overlay": false,
     "appendix_b_geometry_inputs_available": true,
-    "full_simakov_helander_reproduction_closed": true
+    "checked_in_converged_artifact": false,
+    "full_simakov_helander_reproduction_closed": true,
+    "proxy_or_deferred_only": true,
+    "ready_for_literature_claim": false
   },
   "metadata": {
     "kind": "simakov_helander_limit_audit",
@@ -320,6 +323,13 @@
       "It intentionally keeps the full reproduction gate closed until a wider nu' >> 1 scan is checked in.",
       "The current full collisionality summaries stop near nu'=10, below the default full-limit threshold."
     ],
+    "publication_figure": {
+      "artifact_class": "checked_in_normalization_audit_deferred_full_limit",
+      "checked_in_converged_artifact": false,
+      "claim_status": "proxy_or_deferred",
+      "manuscript_label": "normalization audit; full Simakov-Helander high-nu validation deferred",
+      "ready_for_physics_validation_claim": false
+    },
     "schema_version": 1,
     "source_artifacts": {
       "lhd_collisionality": "lhd_collisionality_summary.json",
