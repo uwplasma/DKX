@@ -22,6 +22,12 @@ Unreleased
   compatibility names, while dtype, structural-tolerance, and solver-JIT policy
   now have direct module tests. The post-extraction local full suite passed
   with ``2531 passed in 508.54 s``.
+- Extracted Krylov dispatch, host-only SciPy method routing, concrete solver
+  labels, and distributed-GMRES axis resolution into ``krylov_dispatch.py``.
+  ``v3_driver.py`` retains thin compatibility wrappers for monkeypatch-based
+  tests and local debugging while the extracted module has direct route-policy
+  tests. The post-extraction local full suite passed with
+  ``2537 passed in 534.28 s``.
 
 v1.1.7
 ------

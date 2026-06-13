@@ -401,6 +401,16 @@ from .matrix_reductions import (
     block_diagonal_only as _block_diag_only,
     diagonal_only as _diag_only,
 )
+from .krylov_dispatch import (
+    HOST_SCIPY_KRYLOV_METHODS as _HOST_SCIPY_KRYLOV_METHODS,
+    gmres_solve_dispatch as _gmres_solve_dispatch_impl,
+    gmres_solve_with_residual_dispatch as _gmres_solve_with_residual_dispatch_impl,
+    host_scipy_krylov_requested as _host_scipy_krylov_requested,
+    ksp_iteration_solver_label as _ksp_iteration_solver_label,
+    resolve_distributed_gmres_axis as _resolve_distributed_gmres_axis_impl,
+    rhs_krylov_method_for_context as _rhs_krylov_method_for_context,
+    solver_kind_for_label as _solver_kind_for_label,
+)
 from .preconditioner_context import (
     auto_pas_geom4_fp32_precond_allowed as _auto_pas_geom4_fp32_precond_allowed,
     precond_dtype as _precond_dtype,
@@ -438,7 +448,6 @@ from .v3_sparse_pattern import (
 )
 from .profiling import _rss_mb, maybe_profiler
 
-_HOST_SCIPY_KRYLOV_METHODS = frozenset({"lgmres", "lgmres_scipy"})
 _SPARSE_HOST_DIRECT_SOLVE_METHODS = frozenset({"sparse_host", "host_sparse", "sparse_host_lu"})
 _SPARSE_HOST_SAFE_SOLVE_METHODS = frozenset(
     {
@@ -5528,113 +5537,40 @@ def _transport_host_gmres_progress_every() -> int:
         return 10
 
 
-def _host_scipy_krylov_requested(solve_method: str | None) -> bool:
-    return str(solve_method or "").strip().lower() in _HOST_SCIPY_KRYLOV_METHODS
-
-
 def _gmres_solve_dispatch(*, distributed_axis: str | None = None, size_hint: int | None = None, **kwargs):
-    solve_method = kwargs.get("solve_method")
-    if _host_scipy_krylov_requested(solve_method):
-        if distributed_axis is not None or distributed_gmres_enabled():
-            raise ValueError(f"solve_method={solve_method} is host-only and incompatible with distributed GMRES.")
-        return gmres_solve(**kwargs)
-    if distributed_axis is not None:
-        with sharding_constraints(True):
-            return gmres_solve_distributed(axis_name=distributed_axis, **kwargs)
-    if distributed_gmres_enabled():
-        with sharding_constraints(True):
-            return gmres_solve_distributed(**kwargs)
-    solver_fn = gmres_solve_jit if _use_solver_jit(size_hint) else gmres_solve
-    return solver_fn(**kwargs)
+    return _gmres_solve_dispatch_impl(
+        distributed_axis=distributed_axis,
+        size_hint=size_hint,
+        gmres_solve_fn=gmres_solve,
+        gmres_solve_jit_fn=gmres_solve_jit,
+        gmres_solve_distributed_fn=gmres_solve_distributed,
+        distributed_gmres_enabled_fn=distributed_gmres_enabled,
+        use_solver_jit_fn=_use_solver_jit,
+        **kwargs,
+    )
 
 
 def _gmres_solve_with_residual_dispatch(*, distributed_axis: str | None = None, size_hint: int | None = None, **kwargs):
-    solve_method = kwargs.get("solve_method")
-    if _host_scipy_krylov_requested(solve_method):
-        if distributed_axis is not None or distributed_gmres_enabled():
-            raise ValueError(f"solve_method={solve_method} is host-only and incompatible with distributed GMRES.")
-        return gmres_solve_with_residual(**kwargs)
-    if distributed_axis is not None:
-        with sharding_constraints(True):
-            return gmres_solve_with_residual_distributed(axis_name=distributed_axis, **kwargs)
-    if distributed_gmres_enabled():
-        with sharding_constraints(True):
-            return gmres_solve_with_residual_distributed(**kwargs)
-    solver_fn = gmres_solve_with_residual_jit if _use_solver_jit(size_hint) else gmres_solve_with_residual
-    return solver_fn(**kwargs)
-
-
-def _rhs_krylov_method_for_context(
-    *,
-    gmres_method: str,
-    use_implicit: bool,
-    distributed_axis: str | None,
-    solver_jit: bool,
-) -> str:
-    method = str(gmres_method).strip().lower()
-    if method in {"lgmres", "lgmres_scipy"} and (bool(use_implicit) or distributed_axis is not None or bool(solver_jit)):
-        return "incremental"
-    return method
-
-
-def _ksp_iteration_solver_label(*, solver_kind: str, solve_method: str) -> str:
-    """Return the concrete Krylov label used for iteration-history replay."""
-    solver_kind_l = str(solver_kind or "").strip().lower()
-    if solver_kind_l == "gmres":
-        _kind, gmres_method = _solver_kind_for_label(str(solve_method))
-        method_l = str(gmres_method).strip().lower()
-        if method_l in _HOST_SCIPY_KRYLOV_METHODS:
-            return "lgmres"
-        if method_l in {"incremental", "batched", "auto", "default", ""}:
-            return "gmres"
-        return method_l
-    return solver_kind_l
-
-
-def _solver_kind_for_label(method: str) -> tuple[str, str]:
-    """Small top-level mirror of RHSMode=1 solver-kind labels for diagnostics."""
-    method_l = str(method).strip().lower()
-    if method_l in {"bicgstab", "bicgstab_jax"}:
-        return "bicgstab", "batched"
-    if method_l in {"auto", "default", ""}:
-        return "gmres", "incremental"
-    return "gmres", method_l
+    return _gmres_solve_with_residual_dispatch_impl(
+        distributed_axis=distributed_axis,
+        size_hint=size_hint,
+        gmres_solve_with_residual_fn=gmres_solve_with_residual,
+        gmres_solve_with_residual_jit_fn=gmres_solve_with_residual_jit,
+        gmres_solve_with_residual_distributed_fn=gmres_solve_with_residual_distributed,
+        distributed_gmres_enabled_fn=distributed_gmres_enabled,
+        use_solver_jit_fn=_use_solver_jit,
+        **kwargs,
+    )
 
 
 def _resolve_distributed_gmres_axis(
     *, op: V3FullSystemOperator | None, emit: Callable[[int, str], None] | None = None
 ) -> str | None:
-    env = os.environ.get("SFINCS_JAX_GMRES_DISTRIBUTED", "").strip().lower()
-    if env in {"", "0", "false", "no", "off"}:
-        return None
-    if env in {"theta", "zeta"}:
-        axis = env
-    elif env in {"1", "true", "yes", "on", "auto"}:
-        axis = _matvec_shard_axis(op) if op is not None else None
-        if axis not in {"theta", "zeta"}:
-            axis = None
-    else:
-        axis = None
-    if axis not in {"theta", "zeta"}:
-        if env not in {"theta", "zeta", "1", "true", "yes", "on", "auto"} and emit is not None:
-            emit(1, f"SFINCS_JAX_GMRES_DISTRIBUTED={env!r} not recognized; distributed GMRES disabled.")
-        return None
-    if env in {"1", "true", "yes", "on", "auto"} and jax.default_backend() != "cpu":
-        allow_accel = os.environ.get("SFINCS_JAX_GMRES_DISTRIBUTED_ALLOW_ACCELERATOR", "").strip().lower()
-        if allow_accel not in {"1", "true", "yes", "on"}:
-            if emit is not None:
-                emit(
-                    1,
-                    "solve_v3_*: distributed GMRES auto mode disabled on "
-                    f"backend={jax.default_backend()}",
-                )
-            return None
-    n_devices = jax.local_device_count()
-    if n_devices <= 1:
-        return None
-    # Keep distributed GMRES enabled for non-divisible theta/zeta grids.
-    # Padding/masking in the sharded matvec path handles irregular partitions.
-    return axis
+    return _resolve_distributed_gmres_axis_impl(
+        op=op,
+        emit=emit,
+        matvec_shard_axis_fn=_matvec_shard_axis,
+    )
 
 
 @dataclass(frozen=True)

@@ -73,6 +73,9 @@ API reference
 .. automodule:: sfincs_jax.preconditioner_context
    :members:
 
+.. automodule:: sfincs_jax.krylov_dispatch
+   :members:
+
 .. automodule:: sfincs_jax.v3_driver
    :members:
 

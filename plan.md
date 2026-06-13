@@ -97,12 +97,14 @@ Current branch status:
   ``solver_runtime.py`` owns finite-result and synchronization helpers;
   ``matrix_reductions.py`` owns diagonal/block-diagonal reduction primitives;
   and ``preconditioner_context.py`` owns mutable preconditioner hint state,
-  dtype/tolerance context, and solver-JIT admission.
+  dtype/tolerance context, and solver-JIT admission. ``krylov_dispatch.py`` now
+  owns host-only/JAX/distributed Krylov route selection and solver labels, with
+  thin driver wrappers preserving existing monkeypatch/debug workflows.
 - ``v3_driver.py`` still imports compatibility names for existing tests,
   downstream scripts, and local debugging while new direct tests attach coverage
   to the focused modules.
 - Latest branch validation after these extractions: full local suite passed
-  with ``2531 passed in 508.54 s`` and strict docs build passed.
+  with ``2537 passed in 534.28 s`` and strict docs build passed.
 - Next PR-level moves should split high-level RHSMode=1 solve orchestration
   into ``rhs1_solve.py`` and RHSMode=2/3 orchestration into
   ``transport_solve.py`` after the focused module extractions are green.
