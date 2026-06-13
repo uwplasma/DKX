@@ -733,9 +733,11 @@ Closed branch evidence:
    Trend proxy for the ``L11`` and ``L12`` tails. The SFINCS 2014 paper states that
    PAS ``L11``/``L12`` scale like ``+nu`` at high collisionality, while
    momentum-conserving FP/model-operator results should approach inverse-``nu``
-   scaling in the ``nu' >> 1`` limit. The checked-in W7-X artifact satisfies the
-   inverse-tail proxy, but the LHD artifact does not yet, so this figure is kept as a
-   implemented trend gate rather than the final analytic-limit reproduction.
+   scaling in the ``nu' >> 1`` limit. The checked-in LHD artifact satisfies the
+   loose inverse-tail proxy, but the W7-X artifact does not yet. The stricter
+   Simakov-Helander audit therefore keeps both geometries deferred until wider
+   high-``nu`` scans are pinned, so this figure is kept as an implemented trend gate
+   rather than the final analytic-limit reproduction.
 
 .. figure:: _static/figures/paper/sfincs_jax_simakov_helander_limit_audit.png
    :alt: Simakov-Helander high-collisionality readiness audit
