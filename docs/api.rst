@@ -61,6 +61,18 @@ API reference
 .. automodule:: sfincs_jax.memory_model
    :members:
 
+.. automodule:: sfincs_jax.v3_results
+   :members:
+
+.. automodule:: sfincs_jax.solver_runtime
+   :members:
+
+.. automodule:: sfincs_jax.matrix_reductions
+   :members:
+
+.. automodule:: sfincs_jax.preconditioner_context
+   :members:
+
 .. automodule:: sfincs_jax.v3_driver
    :members:
 

@@ -393,6 +393,23 @@ from .transport_matrix import (
     v3_transport_output_fields_vm_only,
     v3_transport_matrix_from_flux_arrays,
 )
+from .solver_runtime import (
+    block_gmres_result_ready as _block_gmres_result_ready,
+    gmres_result_is_finite as _gmres_result_is_finite,
+)
+from .matrix_reductions import (
+    block_diagonal_only as _block_diag_only,
+    diagonal_only as _diag_only,
+)
+from .preconditioner_context import (
+    auto_pas_geom4_fp32_precond_allowed as _auto_pas_geom4_fp32_precond_allowed,
+    precond_dtype as _precond_dtype,
+    precond_policy_hints as _precond_policy_hints,
+    set_precond_policy_hints as _set_precond_policy_hints,
+    set_precond_size_hint as _set_precond_size_hint,
+    sparse_structural_tol as _sparse_structural_tol,
+    use_solver_jit as _use_solver_jit,
+)
 from .v3_system import _fs_average_factor, _ix_min, _source_basis_constraint_scheme_1, _matvec_shard_axis, sharding_constraints
 from .verbose import Timer
 from .v3 import geometry_from_namelist, grids_from_namelist
@@ -410,6 +427,7 @@ from .v3_system import (
     rhs_v3_full_system_jit,
     with_transport_rhs_settings,
 )
+from .v3_results import V3LinearSolveResult, V3NewtonKrylovResult, V3TransportMatrixSolveResult
 from .v3_sparse_pattern import (
     estimate_v3_full_system_conservative_sparsity_summary,
     summarize_v3_sparse_pattern,
@@ -550,13 +568,6 @@ def _rhs1_dkes_gmres_budget(
     )
 
 
-def _use_solver_jit(size_hint: int | None = None) -> bool:
-    return _solver_path_policy.use_solver_jit(
-        size_hint=size_hint,
-        precond_size_hint=_PRECOND_SIZE_HINT,
-    )
-
-
 def _rhs1_residual_needs_rescue(residual_norm: float, target: float, *, force: bool = False) -> bool:
     """Return whether a second-stage RHSMode=1 rescue is worth launching.
 
@@ -595,89 +606,6 @@ def _rhs1_gpu_sparse_fallback_skip_allowed(
 
 def _is_resource_exhausted_error(exc: Exception) -> bool:
     return _solver_path_policy.is_resource_exhausted_error(exc)
-
-
-_PRECOND_SIZE_HINT: int | None = None
-_PRECOND_GEOM_SCHEME_HINT: int | None = None
-_PRECOND_USE_DKES_HINT: bool | None = None
-_PRECOND_RHS1_PRECOND_KIND_HINT: str | None = None
-_PRECOND_HAS_PAS_HINT: bool | None = None
-_PRECOND_HAS_FP_HINT: bool | None = None
-_PRECOND_INCLUDE_PHI1_HINT: bool | None = None
-_PRECOND_RHS_MODE_HINT: int | None = None
-_PRECOND_ER_ABS_HINT: float | None = None
-
-
-def _set_precond_size_hint(n: int | None) -> None:
-    global _PRECOND_SIZE_HINT
-    if n is None:
-        _PRECOND_SIZE_HINT = None
-    else:
-        _PRECOND_SIZE_HINT = int(n)
-
-
-def _set_precond_policy_hints(
-    *,
-    geom_scheme: int | None = None,
-    use_dkes: bool | None = None,
-    rhs1_precond_kind: str | None = None,
-    has_pas: bool | None = None,
-    has_fp: bool | None = None,
-    include_phi1: bool | None = None,
-    rhs_mode: int | None = None,
-    er_abs: float | None = None,
-) -> None:
-    global _PRECOND_GEOM_SCHEME_HINT
-    global _PRECOND_USE_DKES_HINT
-    global _PRECOND_RHS1_PRECOND_KIND_HINT
-    global _PRECOND_HAS_PAS_HINT
-    global _PRECOND_HAS_FP_HINT
-    global _PRECOND_INCLUDE_PHI1_HINT
-    global _PRECOND_RHS_MODE_HINT
-    global _PRECOND_ER_ABS_HINT
-    _PRECOND_GEOM_SCHEME_HINT = None if geom_scheme is None else int(geom_scheme)
-    _PRECOND_USE_DKES_HINT = None if use_dkes is None else bool(use_dkes)
-    _PRECOND_RHS1_PRECOND_KIND_HINT = None if rhs1_precond_kind is None else str(rhs1_precond_kind)
-    _PRECOND_HAS_PAS_HINT = None if has_pas is None else bool(has_pas)
-    _PRECOND_HAS_FP_HINT = None if has_fp is None else bool(has_fp)
-    _PRECOND_INCLUDE_PHI1_HINT = None if include_phi1 is None else bool(include_phi1)
-    _PRECOND_RHS_MODE_HINT = None if rhs_mode is None else int(rhs_mode)
-    _PRECOND_ER_ABS_HINT = None if er_abs is None else float(er_abs)
-
-
-def _precond_policy_hints() -> _solver_path_policy.PreconditionerPolicyHints:
-    return _solver_path_policy.PreconditionerPolicyHints(
-        size_hint=_PRECOND_SIZE_HINT,
-        geom_scheme=_PRECOND_GEOM_SCHEME_HINT,
-        use_dkes=_PRECOND_USE_DKES_HINT,
-        rhs1_precond_kind=_PRECOND_RHS1_PRECOND_KIND_HINT,
-        has_pas=_PRECOND_HAS_PAS_HINT,
-        has_fp=_PRECOND_HAS_FP_HINT,
-        include_phi1=_PRECOND_INCLUDE_PHI1_HINT,
-        rhs_mode=_PRECOND_RHS_MODE_HINT,
-        er_abs=_PRECOND_ER_ABS_HINT,
-    )
-
-
-def _auto_pas_geom4_fp32_precond_allowed(*, size_hint: int) -> bool:
-    return _solver_path_policy.auto_pas_geom4_fp32_precond_allowed(
-        size_hint=int(size_hint),
-        hints=_precond_policy_hints(),
-        backend=jax.default_backend(),
-    )
-
-
-def _sparse_structural_tol() -> float:
-    return _solver_path_policy.sparse_structural_tol(default_tol=float(_THRESHOLD_FOR_INCLUSION))
-
-
-def _precond_dtype(size_hint: int | None = None) -> jnp.dtype:
-    dtype_name = _solver_path_policy.precond_dtype_name(
-        size_hint=size_hint,
-        hints=_precond_policy_hints(),
-        backend=jax.default_backend(),
-    )
-    return jnp.float32 if dtype_name == "float32" else jnp.float64
 
 
 def _resolve_use_implicit(*, differentiable: bool | None = None) -> bool:
@@ -10179,68 +10107,6 @@ def _build_rhsmode1_collision_preconditioner(
     return _apply_reduced
 
 
-@jtu.register_pytree_node_class
-@dataclass(frozen=True)
-class V3LinearSolveResult:
-    """Result of a single matrix-free GMRES solve for the (currently supported) v3 full-system operator."""
-
-    op: V3FullSystemOperator
-    rhs: jnp.ndarray
-    gmres: GMRESSolveResult
-    metadata: dict[str, object] | None = None
-
-    def tree_flatten(self):
-        children = (self.op, self.rhs, self.gmres)
-        aux = self.metadata
-        return children, aux
-
-    @classmethod
-    def tree_unflatten(cls, aux, children):
-        op, rhs, gmres_result = children
-        return cls(op=op, rhs=rhs, gmres=gmres_result, metadata=aux)
-
-    @property
-    def x(self) -> jnp.ndarray:
-        return self.gmres.x
-
-    @property
-    def residual_norm(self) -> jnp.ndarray:
-        return self.gmres.residual_norm
-
-
-def _gmres_result_is_finite(res: GMRESSolveResult) -> bool:
-    """Return True when GMRES returned finite state and residual."""
-    return bool(jnp.all(jnp.isfinite(res.x)) and jnp.isfinite(res.residual_norm))
-
-
-def _block_gmres_result_ready(res: GMRESSolveResult) -> GMRESSolveResult:
-    """Synchronize a GMRES result so timing/profiling marks include XLA work."""
-    try:
-        jax.block_until_ready((res.x, res.residual_norm))
-    except Exception:
-        pass
-    return res
-
-
-def _diag_only(m: jnp.ndarray) -> jnp.ndarray:
-    """Return a diagonal-only copy of a square matrix."""
-    return jnp.diag(jnp.diag(m))
-
-
-def _block_diag_only(m: jnp.ndarray, block: int) -> jnp.ndarray:
-    """Return a block-diagonal copy of a square matrix (block size in indices)."""
-    if int(block) <= 1:
-        return _diag_only(m)
-    mat_np = np.asarray(m, dtype=np.float64)
-    n = int(mat_np.shape[0])
-    mask = np.zeros((n, n), dtype=bool)
-    for start in range(0, n, int(block)):
-        end = min(n, start + int(block))
-        mask[start:end, start:end] = True
-    mat_np = np.where(mask, mat_np, 0.0)
-    return jnp.asarray(mat_np, dtype=m.dtype)
-
-
 def _build_rhsmode1_preconditioner_operator_point(op: V3FullSystemOperator) -> V3FullSystemOperator:
     """Return a simplified RHSMode=1 operator for point-block preconditioning.
 
@@ -15254,7 +15120,7 @@ def _build_rhsmode1_schur_preconditioner(
 ) -> Callable[[jnp.ndarray], jnp.ndarray]:
     """Approximate Schur-complement preconditioner for constraintScheme=2 RHSMode=1 solves."""
     precond_dtype = _precond_dtype()
-    geom_scheme = int(_PRECOND_GEOM_SCHEME_HINT or 0)
+    geom_scheme = int(_precond_policy_hints().geom_scheme or 0)
     base_xblock_tz_lmax = 0
     base_kind_env = os.environ.get("SFINCS_JAX_RHSMODE1_SCHUR_BASE", "").strip().lower()
     nxi_for_x = np.asarray(op.fblock.collisionless.n_xi_for_x, dtype=np.int32)
@@ -45338,28 +45204,6 @@ solve_v3_full_system_linear_gmres_jit = jax.jit(
 )
 
 
-@jtu.register_pytree_node_class
-@dataclass(frozen=True)
-class V3NewtonKrylovResult:
-    """Result of a simple Newton–Krylov solve for `residual_v3_full_system` (experimental)."""
-
-    op: V3FullSystemOperator
-    x: jnp.ndarray
-    residual_norm: jnp.ndarray
-    n_newton: int
-    last_linear_residual_norm: jnp.ndarray
-
-    def tree_flatten(self):
-        children = (self.op, self.x, self.residual_norm, self.last_linear_residual_norm)
-        aux = int(self.n_newton)
-        return children, aux
-
-    @classmethod
-    def tree_unflatten(cls, aux, children):
-        op, x, residual_norm, last_linear_residual_norm = children
-        return cls(op=op, x=x, residual_norm=residual_norm, n_newton=int(aux), last_linear_residual_norm=last_linear_residual_norm)
-
-
 def solve_v3_full_system_newton_krylov(
     *,
     nml: Namelist,
@@ -45912,30 +45756,6 @@ def solve_v3_full_system_newton_krylov_history(
         ),
         accepted,
     )
-
-
-@dataclass(frozen=True)
-class V3TransportMatrixSolveResult:
-    """Result of assembling a RHSMode=2/3 transport matrix by looping `whichRHS` solves."""
-
-    op0: V3FullSystemOperator
-    transport_matrix: jnp.ndarray  # (N,N) in mathematical (row, col) order
-    state_vectors_by_rhs: dict[int, jnp.ndarray]
-    residual_norms_by_rhs: dict[int, jnp.ndarray]
-    # Diagnostics in the same normalized units as v3 `diagnostics.F90`.
-    # Arrays are returned in mathematical axis order: (species, whichRHS).
-    fsab_flow: jnp.ndarray  # (S, N)
-    particle_flux_vm_psi_hat: jnp.ndarray  # (S, N)
-    heat_flux_vm_psi_hat: jnp.ndarray  # (S, N)
-    elapsed_time_s: jnp.ndarray  # (N,)
-    transport_output_fields: dict[str, np.ndarray] | None = None
-    rhs_norms_by_rhs: dict[int, jnp.ndarray] | None = None
-    active_size: int | None = None
-    use_active_dof_mode: bool | None = None
-    solver_kinds_by_rhs: dict[int, str] | None = None
-    solve_methods_by_rhs: dict[int, str] | None = None
-    preconditioner_kind: str | None = None
-    strong_preconditioner_kind: str | None = None
 
 
 def _rewrite_xla_flags(flags: str, *, cpu_threads: int | None, host_devices: int | None) -> str:

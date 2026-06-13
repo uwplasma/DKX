@@ -87,6 +87,26 @@ The long-term structure should be:
 - Require CI, docs, focused physics gates, and at least one full local suite
   before the PR is marked ready for review.
 
+Current branch status:
+
+- Branch ``refactor/v3-driver-architecture`` has been created from green
+  ``main``.
+- First architecture moves:
+  ``rhs1_domain_decomposition.py`` owns Schwarz patch/block heuristics;
+  ``v3_results.py`` owns solve-result dataclasses;
+  ``solver_runtime.py`` owns finite-result and synchronization helpers;
+  ``matrix_reductions.py`` owns diagonal/block-diagonal reduction primitives;
+  and ``preconditioner_context.py`` owns mutable preconditioner hint state,
+  dtype/tolerance context, and solver-JIT admission.
+- ``v3_driver.py`` still imports compatibility names for existing tests,
+  downstream scripts, and local debugging while new direct tests attach coverage
+  to the focused modules.
+- Latest branch validation after these extractions: full local suite passed
+  with ``2531 passed in 508.54 s`` and strict docs build passed.
+- Next PR-level moves should split high-level RHSMode=1 solve orchestration
+  into ``rhs1_solve.py`` and RHSMode=2/3 orchestration into
+  ``transport_solve.py`` after the focused module extractions are green.
+
 ### Phase 2: define stable data models and names
 
 - Create typed dataclasses for:
