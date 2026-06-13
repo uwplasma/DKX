@@ -411,6 +411,82 @@ from .krylov_dispatch import (
     rhs_krylov_method_for_context as _rhs_krylov_method_for_context,
     solver_kind_for_label as _solver_kind_for_label,
 )
+from .preconditioner_caches import (
+    _RHSMODE1_DIAG_PRECOND_CACHE,
+    _RHSMODE1_FP_XBLOCK_ASSEMBLED_HOST_CACHE,
+    _RHSMODE1_PAS_PRECOND_PROBE_CACHE,
+    _RHSMODE1_PAS_TOKAMAK_THETA_CACHE,
+    _RHSMODE1_PAS_TZ_CACHE,
+    _RHSMODE1_PRECOND_CACHE,
+    _RHSMODE1_PRECOND_DIAGX_CACHE,
+    _RHSMODE1_PRECOND_GLOBAL_CACHE,
+    _RHSMODE1_PRECOND_IDX_CACHE,
+    _RHSMODE1_PRECOND_ILU_CACHE,
+    _RHSMODE1_PRECOND_LIST_CACHE,
+    _RHSMODE1_SCHUR_CACHE,
+    _RHSMODE1_SCHWARZ_PRECOND_CACHE,
+    _RHSMODE1_SPARSE_ILU_CACHE,
+    _RHSMODE1_SPARSE_JAX_CACHE,
+    _RHSMODE1_SPARSE_SXBLOCK_HOST_PRECOND_CACHE,
+    _RHSMODE1_SPARSE_XBLOCK_CSR_PRECOND_CACHE,
+    _RHSMODE1_SPARSE_XBLOCK_HOST_PRECOND_CACHE,
+    _RHSMODE1_SPARSE_XBLOCK_PRECOND_CACHE,
+    _RHSMODE1_STRUCTURED_FBLOCK_PRECOND_CACHE,
+    _RHSMODE1_SXBLOCK_LR_PRECOND_CACHE,
+    _RHSMODE1_SXBLOCK_PRECOND_CACHE,
+    _RHSMODE1_THETA_LINE_DIAGX_CACHE,
+    _RHSMODE1_XBLOCK_PRECOND_CACHE,
+    _RHSMODE1_XMG_PRECOND_CACHE,
+    _RHSMODE1_XUPWIND_PRECOND_CACHE,
+    _RHSMODE23_PRECOND_CACHE,
+    _TRANSPORT_FP_DIRECT_ACTIVE_BLOCK_SCHUR_PRECOND_CACHE,
+    _TRANSPORT_FP_FORTRAN_REDUCED_LU_PRECOND_CACHE,
+    _TRANSPORT_FP_LOCAL_GEOM_LINE_PRECOND_CACHE,
+    _TRANSPORT_FP_STRUCTURED_FBLOCK_LU_PRECOND_CACHE,
+    _TRANSPORT_FP_TZFFT_LINE_PRECOND_CACHE,
+    _TRANSPORT_FP_TZFFT_LINE_SCHUR_PRECOND_CACHE,
+    _TRANSPORT_FP_TZFFT_PRECOND_CACHE,
+    _TRANSPORT_FP_XBLOCK_TZ_LU_PRECOND_CACHE,
+    _TRANSPORT_FP_XBLOCK_TZ_LU_SCHUR_PRECOND_CACHE,
+    _TRANSPORT_PRECOND_CACHE,
+    _TRANSPORT_SXBLOCK_LR_PRECOND_CACHE,
+    _TRANSPORT_SXBLOCK_PRECOND_CACHE,
+    _TRANSPORT_TZFFT_PRECOND_CACHE,
+    _TRANSPORT_XBLOCK_PRECOND_CACHE,
+    _TRANSPORT_XMG_PRECOND_CACHE,
+    _LowRankXBlockPrecondCache,
+    _PasTokamakThetaPrecondCache,
+    _PasTzPrecondCache,
+    _RHSMode1FPXBlockAssembledHostCache,
+    _RHSMode1ILUBlockPrecondCache,
+    _RHSMode1PrecondCache,
+    _RHSMode1PrecondDiagXCache,
+    _RHSMode1PrecondGlobalCache,
+    _RHSMode1PrecondIdxCache,
+    _RHSMode1PrecondListCache,
+    _RHSMode1SchwarzPrecondCache,
+    _RHSMode1SparseSXBlockHostPrecondCache,
+    _RHSMode1SparseXBlockCSRPrecondCache,
+    _RHSMode1SparseXBlockHostPrecondCache,
+    _RHSMode1SparseXBlockPrecondCache,
+    _RHSMode1StructuredFBlockPrecondCache,
+    _RHSMode1ThetaLineDiagXCache,
+    _SparseILUCache,
+    _SparseJaxPrecondCache,
+    _TransportFpDirectActiveBlockSchurPrecondCache,
+    _TransportFpFortranReducedLuPrecondCache,
+    _TransportFpLocalGeomLinePrecondCache,
+    _TransportFpStructuredFBlockLuPrecondCache,
+    _TransportFpTzFftLinePrecondCache,
+    _TransportFpTzFftLineSchurPrecondCache,
+    _TransportFpTzFftPrecondCache,
+    _TransportFpXBlockTzLuPrecondCache,
+    _TransportPrecondCache,
+    _TransportTzFftPrecondCache,
+    _TransportXBlockPrecondCache,
+    _TransportXmgPrecondCache,
+    _XUpwindPrecondCache,
+)
 from .preconditioner_context import (
     auto_pas_geom4_fp32_precond_allowed as _auto_pas_geom4_fp32_precond_allowed,
     precond_dtype as _precond_dtype,
@@ -5574,117 +5650,6 @@ def _resolve_distributed_gmres_axis(
 
 
 @dataclass(frozen=True)
-class _RHSMode1PrecondCache:
-    idx_map_jnp: jnp.ndarray
-    flat_idx_jnp: jnp.ndarray
-    block_inv_jnp: jnp.ndarray
-    extra_idx_jnp: jnp.ndarray
-    extra_inv_jnp: jnp.ndarray | None
-
-
-_RHSMODE1_PRECOND_CACHE: dict[tuple[object, ...], _RHSMode1PrecondCache] = {}
-
-
-@dataclass(frozen=True)
-class _RHSMode1PrecondListCache:
-    block_inv_list: tuple[jnp.ndarray, ...]
-    block_slices: tuple[tuple[int, int], ...]
-    extra_idx_jnp: jnp.ndarray
-    extra_inv_jnp: jnp.ndarray | None
-
-
-_RHSMODE1_PRECOND_LIST_CACHE: dict[tuple[object, ...], _RHSMode1PrecondListCache] = {}
-
-
-@dataclass(frozen=True)
-class _RHSMode1SchwarzPrecondCache:
-    inv_padded_jnp: jnp.ndarray
-    patch_idx_padded_jnp: jnp.ndarray
-    core_idx_padded_jnp: jnp.ndarray
-    core_local_padded_jnp: jnp.ndarray
-    core_mask_padded_jnp: jnp.ndarray
-    extra_idx_jnp: jnp.ndarray
-    extra_inv_jnp: jnp.ndarray | None
-
-
-_RHSMODE1_SCHWARZ_PRECOND_CACHE: dict[tuple[object, ...], _RHSMode1SchwarzPrecondCache] = {}
-
-
-@dataclass(frozen=True)
-class _RHSMode1PrecondGlobalCache:
-    idx_map_jnp: jnp.ndarray
-    flat_idx_jnp: jnp.ndarray
-    block_inv_jnp: jnp.ndarray
-    extra_idx_jnp: jnp.ndarray
-    extra_inv_jnp: jnp.ndarray | None
-
-
-_RHSMODE1_PRECOND_GLOBAL_CACHE: dict[tuple[object, ...], _RHSMode1PrecondGlobalCache] = {}
-
-
-@dataclass(frozen=True)
-class _RHSMode1PrecondDiagXCache:
-    block_inv_list: tuple[tuple[jnp.ndarray, ...], ...]
-    idx_map_list: tuple[tuple[jnp.ndarray, ...], ...]
-    extra_idx_jnp: jnp.ndarray
-    extra_inv_jnp: jnp.ndarray | None
-
-
-_RHSMODE1_PRECOND_DIAGX_CACHE: dict[tuple[object, ...], _RHSMode1PrecondDiagXCache] = {}
-
-
-@dataclass(frozen=True)
-class _RHSMode1PrecondIdxCache:
-    block_inv_list: tuple[jnp.ndarray, ...]
-    block_idx_list: tuple[jnp.ndarray, ...]
-    extra_idx_jnp: jnp.ndarray
-    extra_inv_jnp: jnp.ndarray | None
-
-
-_RHSMODE1_PRECOND_IDX_CACHE: dict[tuple[object, ...], _RHSMode1PrecondIdxCache] = {}
-_RHSMODE1_PAS_PRECOND_PROBE_CACHE: dict[tuple[object, ...], bool] = {}
-
-
-@dataclass(frozen=True)
-class _RHSMode1ILUBlockPrecondCache:
-    """Sparse ILU block-Jacobi preconditioner cache for PAS-like operators.
-
-    Notes
-    -----
-    We store per-(species,x) ILU factors in a padded row format so the apply path
-    is JAX-compatible (no SciPy calls inside GMRES iterations). Factorization is
-    done once per operator signature using SciPy's `spilu` (PETSc-like ILU).
-    """
-
-    inv_perm_r_sx: jnp.ndarray  # (S,X,N)
-    perm_c_sx: jnp.ndarray  # (S,X,N)
-    lower_idx_sx: jnp.ndarray  # (S,X,N,Klower) int32
-    lower_val_sx: jnp.ndarray  # (S,X,N,Klower)
-    upper_idx_sx: jnp.ndarray  # (S,X,N,Kupper) int32
-    upper_val_sx: jnp.ndarray  # (S,X,N,Kupper)
-    upper_diag_sx: jnp.ndarray  # (S,X,N)
-    extra_idx_jnp: jnp.ndarray
-    extra_inv_jnp: jnp.ndarray | None
-
-
-_RHSMODE1_PRECOND_ILU_CACHE: dict[tuple[object, ...], _RHSMode1ILUBlockPrecondCache] = {}
-
-
-@dataclass(frozen=True)
-class _RHSMode1StructuredFBlockPrecondCache:
-    """Cached structured f-block factor/coarse data for same-shape solves."""
-
-    operator: object
-    metadata: dict[str, object]
-    factor: object | None = None
-    coarse: object | None = None
-    base_preconditioner: Callable[[jnp.ndarray], jnp.ndarray] | None = None
-
-
-_RHSMODE1_STRUCTURED_FBLOCK_PRECOND_CACHE: dict[tuple[object, ...], _RHSMode1StructuredFBlockPrecondCache] = {}
-
-
-@dataclass(frozen=True)
 class _RHS1FullSystemMatrixFreeOperatorAdapter:
     """Duck-typed adapter used by Galerkin corrections on the full system."""
 
@@ -5708,153 +5673,6 @@ class _RHS1FullSystemMatrixFreeOperatorAdapter:
             in_axes=1,
             out_axes=1,
         )(mat)
-
-
-@dataclass(frozen=True)
-class _RHSMode1SparseXBlockPrecondCache:
-    """Sparse per-(species,x) block-Jacobi preconditioner cache for FP-like RHSMode=1 operators."""
-
-    perm_r_sx: jnp.ndarray  # (S,X,N)
-    inv_perm_c_sx: jnp.ndarray  # (S,X,N)
-    lower_idx_sx: jnp.ndarray  # (S,X,N,Klower)
-    lower_val_sx: jnp.ndarray  # (S,X,N,Klower)
-    upper_idx_sx: jnp.ndarray  # (S,X,N,Kupper)
-    upper_val_sx: jnp.ndarray  # (S,X,N,Kupper)
-    upper_diag_sx: jnp.ndarray  # (S,X,N)
-    extra_idx_jnp: jnp.ndarray
-    extra_inv_jnp: jnp.ndarray | None
-
-
-_RHSMODE1_SPARSE_XBLOCK_PRECOND_CACHE: dict[tuple[object, ...], _RHSMode1SparseXBlockPrecondCache] = {}
-
-
-@dataclass(frozen=True)
-class _RHSMode1SparseXBlockCSRPrecondCache:
-    """Compact CSR SuperLU factors for device-side x-block preconditioning.
-
-    The older JAX factor path pads every row to the largest lower/upper row fill
-    across every block. That is simple and fast for weak ILU factors, but exact
-    LU factors on QI/FP blocks can have a few very wide rows that make the
-    padded representation expensive. This cache stores the same triangular
-    factors in concatenated CSR rows and lets the JAX apply loop traverse only
-    actual nonzeros.
-    """
-
-    perm_r_sx: jnp.ndarray  # (S,X,N)
-    inv_perm_c_sx: jnp.ndarray  # (S,X,N)
-    lower_indptr: jnp.ndarray  # flattened per-block row pointers, absolute offsets
-    lower_indices: jnp.ndarray
-    lower_val: jnp.ndarray
-    upper_indptr: jnp.ndarray
-    upper_indices: jnp.ndarray
-    upper_val: jnp.ndarray
-    upper_diag_sx: jnp.ndarray  # (S,X,N)
-    extra_idx_jnp: jnp.ndarray
-    extra_inv_jnp: jnp.ndarray | None
-    lower_nnz: int
-    upper_nnz: int
-    nbytes_estimate: int
-
-
-_RHSMODE1_SPARSE_XBLOCK_CSR_PRECOND_CACHE: dict[
-    tuple[object, ...], _RHSMode1SparseXBlockCSRPrecondCache
-] = {}
-
-
-@dataclass(frozen=True)
-class _RHSMode1SparseXBlockHostPrecondCache:
-    """Host sparse per-(species,x) block-Jacobi preconditioner cache for explicit solves."""
-
-    block_slices: tuple[tuple[int, int], ...]
-    block_factors: tuple[object | None, ...]
-    block_diag_inv: tuple[np.ndarray | None, ...]
-    extra_idx_np: np.ndarray
-    extra_inv_np: np.ndarray | None
-
-
-_RHSMODE1_SPARSE_XBLOCK_HOST_PRECOND_CACHE: dict[
-    tuple[object, ...], _RHSMode1SparseXBlockHostPrecondCache
-] = {}
-
-
-@dataclass(frozen=True)
-class _RHSMode1SparseSXBlockHostPrecondCache:
-    """Host sparse per-L species/x block preconditioner cache for explicit solves."""
-
-    block_indices: tuple[np.ndarray, ...]
-    block_factors: tuple[object | None, ...]
-    extra_idx_np: np.ndarray
-    extra_inv_np: np.ndarray | None
-
-
-_RHSMODE1_SPARSE_SXBLOCK_HOST_PRECOND_CACHE: dict[
-    tuple[object, ...], _RHSMode1SparseSXBlockHostPrecondCache
-] = {}
-
-
-@dataclass(frozen=True)
-class _RHSMode1FPXBlockAssembledHostCache:
-    """Cached host-side ingredients for explicit FP x-block assembly."""
-
-    x: np.ndarray
-    z_s: np.ndarray
-    fp_diag_sxl: np.ndarray
-    n_tz_eye: object
-    stream_tz_by_species: tuple[object, ...]
-    mirror_diag_by_species: tuple[object, ...]
-    exb_op_tz: object | None
-    mag_theta_m1_tz_by_species: tuple[object, ...] | None
-    mag_theta_m2_tz_by_species: tuple[object, ...] | None
-    mag_zeta_m1_tz_by_species: tuple[object, ...] | None
-    mag_zeta_m2_tz_by_species: tuple[object, ...] | None
-    mag_xidot_factor_flat: np.ndarray | None
-    er_xidot_factor_flat: np.ndarray | None
-    er_xdot_factor_flat: np.ndarray | None
-    ddx_plus_diag: np.ndarray | None
-    ddx_minus_diag: np.ndarray | None
-    identity_shift: float
-
-
-_RHSMODE1_FP_XBLOCK_ASSEMBLED_HOST_CACHE: dict[
-    tuple[object, ...], _RHSMode1FPXBlockAssembledHostCache
-] = {}
-
-
-@dataclass(frozen=True)
-class _RHSMode1ThetaLineDiagXCache:
-    block_inv: jnp.ndarray
-    block_idx: jnp.ndarray
-    extra_idx_jnp: jnp.ndarray
-    extra_inv_jnp: jnp.ndarray | None
-
-
-_RHSMODE1_THETA_LINE_DIAGX_CACHE: dict[tuple[object, ...], _RHSMode1ThetaLineDiagXCache] = {}
-
-
-@dataclass(frozen=True)
-class _SparseILUCache:
-    a_csr_full: object
-    a_csr_drop: object
-    ilu: object | None
-    a_dense: np.ndarray | None
-    l_dense: np.ndarray | None
-    u_dense: np.ndarray | None
-    l_unit_diag: bool
-    # JAX-native triangular-solve representation for implicit/differentiable solves.
-    # These factors incorporate SuperLU's row/column permutations via `perm_r` and
-    # `inv_perm_c` in the preconditioner apply.
-    perm_r: jnp.ndarray | None = None
-    inv_perm_c: jnp.ndarray | None = None
-    lower_idx: jnp.ndarray | None = None
-    lower_val: jnp.ndarray | None = None
-    lower_diag: jnp.ndarray | None = None
-    upper_idx: jnp.ndarray | None = None
-    upper_val: jnp.ndarray | None = None
-    upper_diag: jnp.ndarray | None = None
-
-
-_RHSMODE1_SPARSE_ILU_CACHE: dict[tuple[object, ...], _SparseILUCache] = {}
-
 
 def _rhsmode1_sparse_cache_key(
     op: V3FullSystemOperator,
@@ -7180,246 +6998,6 @@ def _build_sparse_jax_preconditioner_from_matvec(
         return jnp.asarray(x, dtype=jnp.float64)
 
     return _apply
-
-
-@dataclass(frozen=True)
-class _TransportPrecondCache:
-    inv_diag_f: jnp.ndarray
-
-
-@dataclass(frozen=True)
-class _TransportXBlockPrecondCache:
-    inv_xblock: jnp.ndarray
-
-
-@dataclass(frozen=True)
-class _LowRankXBlockPrecondCache:
-    d_inv: jnp.ndarray
-    d_inv_u: jnp.ndarray
-    v: jnp.ndarray
-    m_inv: jnp.ndarray
-
-
-@dataclass(frozen=True)
-class _TransportXmgPrecondCache:
-    inv_diag_f: jnp.ndarray
-    coarse_inv: jnp.ndarray
-    coarse_idx: jnp.ndarray
-    coarse_inv_lblock: jnp.ndarray | None = None
-    lblock: int = 0
-
-
-@dataclass(frozen=True)
-class _XUpwindPrecondCache:
-    """Cached factors for a simple x-upwind (bidiagonal) preconditioner."""
-
-    diag: jnp.ndarray  # (S, X, L)
-    sub: jnp.ndarray  # (S, X, L) with sub[:, 0, :] ignored
-    lblock: int = 0
-    block_inv: jnp.ndarray | None = None  # (S, X, Lb, Lb)
-    block_sub: jnp.ndarray | None = None  # (S, X, Lb, Lb)
-
-
-@dataclass(frozen=True)
-class _TransportTzFftPrecondCache:
-    subdiag: jnp.ndarray  # (S,X,T,Z,L) complex (subdiag[0] ignored)
-    diag: jnp.ndarray  # (S,X,T,Z,L) complex
-    superdiag: jnp.ndarray  # (S,X,T,Z,L) complex (superdiag[-1] ignored)
-
-
-@dataclass(frozen=True)
-class _TransportFpTzFftPrecondCache:
-    inv_mode: jnp.ndarray  # (T,Z,L*S*X,L*S*X) complex inverse per Fourier mode
-    n_block: int
-
-
-@dataclass(frozen=True)
-class _TransportFpTzFftLinePrecondCache:
-    """Block-Thomas FP transport factors in Fourier space.
-
-    The old ``fp_tzfft`` candidate stored a dense inverse over all
-    ``(L, species, x)`` unknowns for every Fourier mode.  This cache stores only
-    effective diagonal block inverses over ``(species, x)`` for each Legendre
-    row, plus diagonal streaming links.  It captures the same block-tridiagonal
-    residual equation with much lower memory.
-    """
-
-    inv_eff: jnp.ndarray  # (T,Z,L,S*X,S*X) complex effective diagonal inverses
-    lower_diag: jnp.ndarray  # (T,Z,L,S*X) complex lower L-link diagonal
-    super_diag: jnp.ndarray  # (T,Z,L,S*X) complex upper L-link diagonal
-    n_block: int
-
-
-@dataclass(frozen=True)
-class _TransportFpTzFftLineSchurPrecondCache:
-    """Small true-action Schur correction on top of FP Fourier line factors."""
-
-    basis: jnp.ndarray  # (N,K) normalized solution-space coarse columns
-    action: jnp.ndarray  # (R,K) restricted true action R @ A @ basis
-    normal_inv: jnp.ndarray  # (K,R) pseudoinverse of the restricted Schur/coarse action
-    restrict_basis: jnp.ndarray | None  # (N,R) optional Galerkin/test basis; None means tail rows
-    damping: float
-    tail0: int
-    n_columns: int
-    restriction_kind: str
-    basis_labels: tuple[str, ...]
-
-
-@dataclass(frozen=True)
-class _TransportFpLocalGeomLinePrecondCache:
-    """Block-Thomas FP transport factors with local non-averaged geometry."""
-
-    inv_eff: jnp.ndarray  # (T,Z,L,S*X,S*X) effective diagonal inverses
-    lower_diag: jnp.ndarray  # (T,Z,L,S*X) lower L-link diagonal
-    super_diag: jnp.ndarray  # (T,Z,L,S*X) upper L-link diagonal
-    n_block: int
-
-
-@dataclass(frozen=True)
-class _TransportFpStructuredFBlockLuPrecondCache:
-    """Host kinetic f-block sparse factor retaining full migrated couplings."""
-
-    factor_bundle: object
-    f_size: int
-    metadata: dict[str, object]
-
-
-@dataclass(frozen=True)
-class _TransportFpFortranReducedLuPrecondCache:
-    """Host sparse factor for a global Fortran-v3-style reduced transport Pmat."""
-
-    factor_bundle: object
-    linear_size: int
-    metadata: dict[str, object]
-
-
-@dataclass(frozen=True)
-class _TransportFpDirectActiveBlockSchurPrecondCache:
-    """Bounded-memory block inverse plus tail Schur factor for active FP transport."""
-
-    block_inverse: object
-    block_size: int
-    kinetic_size: int
-    tail_size: int
-    c_tail: object | None
-    mb_tail: np.ndarray | None
-    schur_inverse: np.ndarray | None
-    metadata: dict[str, object]
-    factor: object | None = None
-
-
-@dataclass(frozen=True)
-class _TransportFpXBlockTzLuPrecondCache:
-    """Per-(species,x) sparse factors over coupled (ell,theta,zeta) blocks."""
-
-    factors: tuple[tuple[object | None, ...], ...]
-    diag_inverses: tuple[tuple[np.ndarray | None, ...], ...]
-    nxi_for_x: tuple[int, ...]
-    factor_nbytes_estimate: int
-    factor_nnz_estimate: int
-    metadata: dict[str, object]
-
-
-@dataclass(frozen=True)
-class _SparseJaxPrecondCache:
-    a_sp: object
-    d_inv: jnp.ndarray
-    omega: float
-    sweeps: int
-
-
-@dataclass(frozen=True)
-class _PasTokamakThetaPrecondCache:
-    """Cached factors for PAS tokamak (Nzeta=1) theta/L block-tridiagonal preconditioning.
-
-    Notes
-    -----
-    This cache stores the block-Thomas factors for the (theta,L) coupling within each x.
-    It is intended for the stiff PAS-only tokamak branch (no drift terms) where x-coupling
-    is absent and theta-line blocks over the full x-grid are prohibitively large.
-    """
-
-    inv_a01: jnp.ndarray  # (S, X, 2*T, 2*T) effective inverse for the (L=0,1) combined block
-    g01: jnp.ndarray  # (S, X, 2*T, T) block-Thomas factor coupling (L=0,1) block to L=2
-    inv_a: jnp.ndarray  # (S, X, L-2, T, T) approximate inverse of effective diagonal blocks for L>=2
-    g: jnp.ndarray  # (S, X, max(L-3,0), T, T) block-Thomas factors for back-substitution for L>=2
-    c_stream: jnp.ndarray  # (X, L) scalar streaming coupling (row L from col L-1)
-    c_mirror: jnp.ndarray  # (X, L) scalar mirror coupling (row L from col L-1)
-    m_theta: jnp.ndarray  # (S, T, T) row-scaled theta-derivative matrix
-    mirror_factor: jnp.ndarray  # (S, T) diagonal mirror factor in theta
-    mask_active: jnp.ndarray  # (X, L) float mask (1.0 active, 0.0 inactive)
-    n_l_build: int  # L truncation used for the preconditioner
-    tail_factors: tuple[tuple[object | None, ...], ...] | None = None
-
-
-@dataclass(frozen=True)
-class _PasTzPrecondCache:
-    """Cached factors for PAS 3D (theta,zeta)/L block-tridiagonal preconditioning.
-
-    Notes
-    -----
-    This cache stores block-Thomas factors for a per-(species,x) block-tridiagonal-in-L
-    approximation with blocks over the full (theta,zeta) plane.
-
-    This is intended for PAS-only RHSMode=1 cases in 3D (Ntheta*Nzeta>1) where building
-    dense per-x (theta,zeta,L) blocks (e.g. `xblock_tz`) is prohibitively expensive.
-    """
-
-    inv_a01: jnp.ndarray  # (S, X, 2*TZ, 2*TZ) effective inverse for the (L=0,1) combined block
-    g01: jnp.ndarray  # (S, X, 2*TZ, TZ) block-Thomas factor coupling (L=0,1) block to L=2
-    inv_a: jnp.ndarray  # (S, X, L-2, TZ, TZ) approximate inverse of effective diagonal blocks for L>=2
-    g: jnp.ndarray  # (S, X, max(L-3,0), TZ, TZ) block-Thomas factors for back-substitution for L>=2
-    c_stream: jnp.ndarray  # (X, L) scalar streaming coupling (row L from col L-1)
-    c_mirror: jnp.ndarray  # (X, L) scalar mirror coupling (row L from col L-1)
-    m_tz: jnp.ndarray  # (S, TZ, TZ) row-scaled (theta,zeta)-derivative matrix
-    mirror_factor: jnp.ndarray  # (S, TZ) diagonal mirror factor in (theta,zeta)
-    mask_active: jnp.ndarray  # (X, L) float mask (1.0 active, 0.0 inactive)
-    diag_inv: jnp.ndarray  # (S, X, L) diagonal inverse for cheap high-L fallback
-    n_l_use: int  # Number of L modes used in the block-tridiagonal approximation
-
-
-_TRANSPORT_PRECOND_CACHE: dict[tuple[object, ...], _TransportPrecondCache] = {}
-_RHSMODE1_DIAG_PRECOND_CACHE: dict[tuple[object, ...], _TransportPrecondCache] = {}
-_RHSMODE1_XBLOCK_PRECOND_CACHE: dict[tuple[object, ...], _TransportXBlockPrecondCache] = {}
-_RHSMODE1_SCHUR_CACHE: dict[tuple[object, ...], jnp.ndarray] = {}
-_TRANSPORT_SXBLOCK_LR_PRECOND_CACHE: dict[tuple[object, ...], _LowRankXBlockPrecondCache] = {}
-_RHSMODE1_SXBLOCK_LR_PRECOND_CACHE: dict[tuple[object, ...], _LowRankXBlockPrecondCache] = {}
-_TRANSPORT_XMG_PRECOND_CACHE: dict[tuple[object, ...], _TransportXmgPrecondCache] = {}
-_RHSMODE1_XMG_PRECOND_CACHE: dict[tuple[object, ...], _TransportXmgPrecondCache] = {}
-_RHSMODE1_XUPWIND_PRECOND_CACHE: dict[tuple[object, ...], _XUpwindPrecondCache] = {}
-_RHSMODE1_SXBLOCK_PRECOND_CACHE: dict[tuple[object, ...], _TransportXBlockPrecondCache] = {}
-_TRANSPORT_XBLOCK_PRECOND_CACHE: dict[tuple[object, ...], _TransportXBlockPrecondCache] = {}
-_TRANSPORT_SXBLOCK_PRECOND_CACHE: dict[tuple[object, ...], _TransportXBlockPrecondCache] = {}
-_TRANSPORT_TZFFT_PRECOND_CACHE: dict[tuple[object, ...], _TransportTzFftPrecondCache] = {}
-_TRANSPORT_FP_TZFFT_PRECOND_CACHE: dict[tuple[object, ...], _TransportFpTzFftPrecondCache] = {}
-_TRANSPORT_FP_TZFFT_LINE_PRECOND_CACHE: dict[
-    tuple[object, ...], _TransportFpTzFftLinePrecondCache
-] = {}
-_TRANSPORT_FP_TZFFT_LINE_SCHUR_PRECOND_CACHE: dict[
-    tuple[object, ...], _TransportFpTzFftLineSchurPrecondCache
-] = {}
-_TRANSPORT_FP_LOCAL_GEOM_LINE_PRECOND_CACHE: dict[
-    tuple[object, ...], _TransportFpLocalGeomLinePrecondCache
-] = {}
-_TRANSPORT_FP_STRUCTURED_FBLOCK_LU_PRECOND_CACHE: dict[
-    tuple[object, ...], _TransportFpStructuredFBlockLuPrecondCache
-] = {}
-_TRANSPORT_FP_FORTRAN_REDUCED_LU_PRECOND_CACHE: dict[
-    tuple[object, ...], _TransportFpFortranReducedLuPrecondCache
-] = {}
-_TRANSPORT_FP_DIRECT_ACTIVE_BLOCK_SCHUR_PRECOND_CACHE: dict[
-    tuple[object, ...], _TransportFpDirectActiveBlockSchurPrecondCache
-] = {}
-_TRANSPORT_FP_XBLOCK_TZ_LU_PRECOND_CACHE: dict[
-    tuple[object, ...], _TransportFpXBlockTzLuPrecondCache
-] = {}
-_TRANSPORT_FP_XBLOCK_TZ_LU_SCHUR_PRECOND_CACHE: dict[
-    tuple[object, ...], _TransportFpTzFftLineSchurPrecondCache
-] = {}
-_RHSMODE23_PRECOND_CACHE: dict[tuple[object, ...], _RHSMode1PrecondCache] = {}
-_RHSMODE1_SPARSE_JAX_CACHE: dict[tuple[object, ...], _SparseJaxPrecondCache] = {}
-_RHSMODE1_PAS_TOKAMAK_THETA_CACHE: dict[tuple[object, ...], _PasTokamakThetaPrecondCache] = {}
-_RHSMODE1_PAS_TZ_CACHE: dict[tuple[object, ...], _PasTzPrecondCache] = {}
 
 
 def _precond_chunk_cols(total_size: int, n_cols: int) -> int:

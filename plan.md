@@ -100,11 +100,14 @@ Current branch status:
   dtype/tolerance context, and solver-JIT admission. ``krylov_dispatch.py`` now
   owns host-only/JAX/distributed Krylov route selection and solver labels, with
   thin driver wrappers preserving existing monkeypatch/debug workflows.
+  ``preconditioner_caches.py`` now owns the passive RHSMode=1 and transport
+  preconditioner cache dataclasses plus global registry objects, while
+  ``v3_driver.py`` imports and re-exports the same objects for compatibility.
 - ``v3_driver.py`` still imports compatibility names for existing tests,
   downstream scripts, and local debugging while new direct tests attach coverage
   to the focused modules.
 - Latest branch validation after these extractions: full local suite passed
-  with ``2537 passed in 534.28 s`` and strict docs build passed.
+  with ``2545 passed in 535.59 s`` and strict docs build passed.
 - Next PR-level moves should split high-level RHSMode=1 solve orchestration
   into ``rhs1_solve.py`` and RHSMode=2/3 orchestration into
   ``transport_solve.py`` after the focused module extractions are green.
