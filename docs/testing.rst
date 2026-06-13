@@ -337,7 +337,10 @@ pytree round-trips, diagnostic metadata retention, finite-result rejection,
 local-coupling preservation, mutable solver-hint state, dtype policy, and
 sparse structural-tolerance handling. ``krylov_dispatch.py`` adds direct tests
 for host-only method rejection, JIT/plain/distributed dispatch, diagnostic
-labels, and distributed-axis environment policy.
+labels, and distributed-axis environment policy. ``preconditioner_caches.py``
+adds direct tests for representative RHSMode=1, transport, sparse-ILU, Schur,
+and PAS cache containers, plus identity checks proving that legacy
+``v3_driver`` cache names still refer to the same registry objects.
 
 The large refactor closure gate extends that strategy in two directions. First, it
 splits RHSMode=1 preconditioner policy into directly tested helper modules, covering alias
