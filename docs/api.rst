@@ -70,6 +70,9 @@ API reference
 .. automodule:: sfincs_jax.matrix_reductions
    :members:
 
+.. automodule:: sfincs_jax.sparse_triangular
+   :members:
+
 .. automodule:: sfincs_jax.preconditioner_context
    :members:
 
