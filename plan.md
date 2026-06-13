@@ -96,6 +96,8 @@ Current branch status:
   ``v3_results.py`` owns solve-result dataclasses;
   ``solver_runtime.py`` owns finite-result and synchronization helpers;
   ``matrix_reductions.py`` owns diagonal/block-diagonal reduction primitives;
+  ``sparse_triangular.py`` owns padded-row and compact-CSR triangular
+  sparse-factor solve kernels;
   and ``preconditioner_context.py`` owns mutable preconditioner hint state,
   dtype/tolerance context, and solver-JIT admission. ``krylov_dispatch.py`` now
   owns host-only/JAX/distributed Krylov route selection and solver labels, with
@@ -107,7 +109,7 @@ Current branch status:
   downstream scripts, and local debugging while new direct tests attach coverage
   to the focused modules.
 - Latest branch validation after these extractions: full local suite passed
-  with ``2545 passed in 535.59 s`` and strict docs build passed.
+  with ``2549 passed in 507.83 s`` and strict docs build passed.
 - Next PR-level moves should split high-level RHSMode=1 solve orchestration
   into ``rhs1_solve.py`` and RHSMode=2/3 orchestration into
   ``transport_solve.py`` after the focused module extractions are green.
