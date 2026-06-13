@@ -34,6 +34,11 @@ Unreleased
   existing cache-clearing tests and debugging scripts keep working while the
   containers now have direct lightweight tests. The post-extraction local full
   suite passed with ``2545 passed in 535.59 s``.
+- Extracted JAX-native padded-row and compact-CSR triangular sparse-factor
+  solves into ``sparse_triangular.py`` with dense-reference tests. The driver
+  keeps the old private helper names by import, preserving sparse-preconditioner
+  apply behavior while making the kernels independently testable. The
+  post-extraction local full suite passed with ``2549 passed in 507.83 s``.
 
 v1.1.7
 ------

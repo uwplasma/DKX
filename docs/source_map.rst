@@ -164,6 +164,11 @@ for debugging and monkeypatch-based tests. The first extracted layers are:
   diagonal and block-diagonal matrix reductions used by simplified
   preconditioner operators. These are numerical building blocks with direct
   local-coupling tests.
+- ``sfincs_jax/sparse_triangular.py``:
+  JAX-native triangular solves for padded and compact-CSR sparse factor rows,
+  plus permutation inversion. These pure kernels are used by sparse
+  preconditioner apply paths and are directly tested against dense triangular
+  references.
 - ``sfincs_jax/preconditioner_context.py``:
   mutable solve-context hints for preconditioner auto-selection, including
   cached operator size, geometry/collision metadata, sparse structural
