@@ -6,6 +6,20 @@ Unreleased
 
 - No pending changes.
 
+v1.1.7
+------
+
+This patch release includes the regenerated validation artifacts from the
+previous release pass and continues the ``v3_driver.py`` maintainability path
+without changing the public solve interface. RHSMode=1 low-mode angular and
+moment coarse-space helpers now live in ``rhs1_lowmode_coarse.py`` with direct
+unit tests for feature construction, bounded matrix-free Galerkin correction
+metadata, and projection behavior. The driver still owns solve orchestration,
+but another algebraic preconditioner seam is now documented and independently
+testable as part of the path toward higher meaningful coverage. The release
+candidate passed the full local suite with coverage on 2026-06-13:
+``2510 passed in 746.33 s`` with total package coverage at ``74%``.
+
 v1.1.6
 ------
 
