@@ -4,7 +4,10 @@ Release notes
 Unreleased
 ----------
 
-- No pending changes.
+- Continued the ``v3_driver.py`` refactor path by moving the coupled
+  f/tail-moment and tail-only matrix-free residual-correction builders into
+  ``rhs1_lowmode_coarse.py`` with direct tests for tail-selection policy,
+  compact metadata, and bounded projection behavior.
 
 v1.1.7
 ------

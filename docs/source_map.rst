@@ -176,10 +176,11 @@ for debugging and monkeypatch-based tests. The first extracted layers are:
   metadata key assembly. This keeps output-visible trace fields independently
   testable while ``v3_driver.py`` continues to own the solve orchestration.
 - ``sfincs_jax/rhs1_lowmode_coarse.py``:
-  low-mode angular and moment feature construction plus matrix-free Galerkin
-  residual-correction builders for structured RHSMode=1 f-block
-  preconditioners. The module keeps coarse-space algebra independently
-  testable without materializing dense operator bases in the driver.
+  low-mode angular, moment, coupled f/tail, and tail-only feature construction
+  plus matrix-free Galerkin/least-squares residual-correction builders for
+  structured RHSMode=1 f-block preconditioners. The module keeps coarse-space
+  algebra independently testable without materializing dense operator bases in
+  the driver.
 - ``sfincs_jax/rhs1_active_dof.py``:
   RHSMode=1 active-degree-of-freedom routing and reduced-index-map
   construction for truncated pitch grids, x-block active-DOF opt-ins, and PAS

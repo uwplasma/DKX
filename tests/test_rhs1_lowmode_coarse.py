@@ -7,8 +7,10 @@ import numpy as np
 import pytest
 
 from sfincs_jax.rhs1_lowmode_coarse import (
+    _build_rhs1_coupled_moment_matrix_free_correction,
     _build_rhs1_lowmode_angular_matrix_free_correction,
     _build_rhs1_moment_angular_matrix_free_correction,
+    _build_rhs1_tail_matrix_free_correction,
     _rhs1_cap_lowmode_features,
     _rhs1_low_legendre_index_features,
     _rhs1_lowmode_angular_features,
@@ -112,3 +114,96 @@ def test_moment_matrix_free_correction_keeps_compact_coarse_metadata() -> None:
     assert metadata["x_moments_retained"] == 1
     assert metadata["xi_moments_retained"] == 2
     assert correction.n_coarse == 2
+
+
+def test_coupled_moment_matrix_free_correction_tracks_tail_policy() -> None:
+    op = SimpleNamespace(
+        n_species=1,
+        n_x=2,
+        n_xi=2,
+        n_theta=3,
+        n_zeta=3,
+        f_size=36,
+        total_size=40,
+        phi1_size=2,
+        extra_size=2,
+    )
+    correction, metadata = _build_rhs1_coupled_moment_matrix_free_correction(
+        op=op,
+        operator=_IdentityOperator(op.total_size),
+        theta_modes=0,
+        zeta_modes=0,
+        x_moments=1,
+        xi_moments=1,
+        max_tail_size=8,
+        max_coarse_size=16,
+        max_basis_batch_nbytes=8192,
+        basis_batch_size=2,
+        regularization=0.0,
+        damping=1.0,
+    )
+
+    residual = jnp.arange(op.total_size, dtype=jnp.float64)
+    projected = correction.apply(residual)
+    assert projected.shape == residual.shape
+    assert np.all(np.isfinite(np.asarray(projected)))
+    assert metadata["tail_policy"] == "all_tail"
+    assert metadata["tail_count"] == 4
+    assert metadata["f_coarse_size"] == 1
+    assert correction.to_dict()["basis_storage_nbytes"] == 0
+
+
+def test_tail_matrix_free_correction_projects_tail_only_and_constraints_only() -> None:
+    op = SimpleNamespace(f_size=6, total_size=10, phi1_size=2, extra_size=2)
+    correction, metadata = _build_rhs1_tail_matrix_free_correction(
+        op=op,
+        operator=_IdentityOperator(op.total_size),
+        max_tail_size=8,
+        max_coarse_size=8,
+        max_basis_batch_nbytes=4096,
+        max_action_nbytes=4096,
+        basis_batch_size=2,
+        regularization=0.0,
+        damping=1.0,
+    )
+
+    residual = jnp.arange(op.total_size, dtype=jnp.float64)
+    projected = correction.apply(residual)
+    np.testing.assert_allclose(np.asarray(projected[: op.f_size]), np.zeros((op.f_size,)), atol=0.0)
+    np.testing.assert_allclose(np.asarray(projected[op.f_size :]), np.asarray(residual[op.f_size :]), atol=1.0e-12)
+    assert metadata["tail_policy"] == "all_tail"
+    assert correction.to_dict()["solver_kind"] == "precomputed_normal_inverse"
+
+    constrained, constrained_metadata = _build_rhs1_tail_matrix_free_correction(
+        op=op,
+        operator=_IdentityOperator(op.total_size),
+        max_tail_size=1,
+        max_coarse_size=8,
+        max_basis_batch_nbytes=4096,
+        max_action_nbytes=4096,
+        basis_batch_size=2,
+        regularization=0.0,
+        damping=1.0,
+    )
+    constrained_projected = constrained.apply(residual)
+    np.testing.assert_allclose(np.asarray(constrained_projected[:8]), np.zeros((8,)), atol=0.0)
+    np.testing.assert_allclose(np.asarray(constrained_projected[8:]), np.asarray(residual[8:]), atol=1.0e-12)
+    assert constrained_metadata["tail_policy"] == "constraints_only"
+    assert constrained_metadata["tail_count"] == 2
+
+
+def test_tail_matrix_free_correction_rejects_missing_tail_variables() -> None:
+    op = SimpleNamespace(f_size=6, total_size=10, phi1_size=4, extra_size=0)
+
+    with pytest.raises(NotImplementedError, match="requires non-f tail variables"):
+        _build_rhs1_tail_matrix_free_correction(
+            op=op,
+            operator=_IdentityOperator(op.total_size),
+            max_tail_size=1,
+            max_coarse_size=8,
+            max_basis_batch_nbytes=4096,
+            max_action_nbytes=4096,
+            basis_batch_size=2,
+            regularization=0.0,
+            damping=1.0,
+        )
