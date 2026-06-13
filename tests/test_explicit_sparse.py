@@ -1044,6 +1044,50 @@ def test_symbolic_nd_frontal_schur_lu_parallel_child_setup_preserves_solution() 
     assert admission.accepted is True
 
 
+def test_symbolic_nd_frontal_schur_lu_blr_separator_updates_preserve_solution() -> None:
+    matrix = _nested_dissection_tridiagonal_matrix()
+    rhs = np.linspace(-1.0, 2.0, matrix.shape[0], dtype=np.float64)
+
+    factor = factorize_host_sparse_operator(
+        matrix,
+        kind="symbolic_nd_frontal_schur_lu",
+        symbolic_ordering_kind="natural",
+        symbolic_block_size=3,
+        symbolic_nd_max_leaf_size=3,
+        symbolic_nd_max_depth=4,
+        symbolic_nd_separator_width=2,
+        symbolic_nd_max_separator_cols=3,
+        symbolic_nd_high_degree_cols=0,
+        symbolic_nd_regularization_rel=0.0,
+        symbolic_nd_compress_updates=True,
+        symbolic_nd_parallel_update_workers=2,
+        symbolic_blr_frontal_tol=0.0,
+        symbolic_blr_frontal_max_rank=8,
+        symbolic_blr_frontal_min_cols=1,
+        symbolic_blr_frontal_woodbury_max_rank=128,
+    )
+    admission = admit_sparse_factor_against_operator(
+        factor.operator,
+        factor,
+        max_relative_residual=1.0e-11,
+        min_improvement_vs_identity=1.0,
+    )
+
+    np.testing.assert_allclose(
+        factor.solve(rhs),
+        np.linalg.solve(matrix.toarray(), rhs),
+        rtol=1.0e-11,
+        atol=1.0e-11,
+    )
+    assert factor.factor.metadata["separator_update_mode"] == "blr_csc_column_chunks"
+    assert factor.factor.metadata["parallel_update_workers"] == 2
+    assert factor.factor.metadata["blr_update_count"] > 0
+    assert factor.factor.metadata["blr_rank_total"] > 0
+    assert factor.factor.metadata["blr_error_estimate_max"] == 0.0
+    assert factor.factor.metadata["blr_woodbury_rank_total"] > 0
+    assert admission.accepted is True
+
+
 def test_symbolic_nd_frontal_schur_lu_rejects_dense_update_child_budget() -> None:
     matrix = _nested_dissection_tridiagonal_matrix()
 

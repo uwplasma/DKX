@@ -498,59 +498,63 @@ class _BLRSchurFactor:
     def solve(self, rhs) -> np.ndarray:
         from scipy.sparse.linalg import LinearOperator, gmres  # noqa: PLC0415
 
-        rhs_np = np.asarray(rhs, dtype=self.dtype).reshape((int(self.base_matrix.shape[0]),))
-        n = int(rhs_np.size)
+        n = int(self.base_matrix.shape[0])
+        rhs_arr = np.asarray(rhs, dtype=self.dtype)
+        was_vector = rhs_arr.ndim == 1
+        rhs_2d = rhs_arr.reshape((n, 1)) if was_vector else rhs_arr.reshape((n, -1))
         if n == 0:
-            return rhs_np
+            return rhs_arr
 
         if (
             self.woodbury_z is not None
             and self.woodbury_vt is not None
             and self.woodbury_core_inverse is not None
         ):
-            y0 = self._base_solve(rhs_np).reshape((n,))
+            y0 = np.asarray(self._base_solve(rhs_2d), dtype=self.dtype).reshape((n, -1))
             try:
-                alpha = np.asarray(
-                    self.woodbury_core_inverse @ np.asarray(self.woodbury_vt @ y0, dtype=self.dtype),
-                    dtype=self.dtype,
-                ).reshape((int(self.woodbury_core_inverse.shape[0]),))
-                solution_np = y0 + np.asarray(self.woodbury_z @ alpha, dtype=self.dtype).reshape((n,))
+                alpha = np.asarray(self.woodbury_core_inverse @ np.asarray(self.woodbury_vt @ y0, dtype=self.dtype), dtype=self.dtype)
+                solution_np = y0 + np.asarray(self.woodbury_z @ alpha, dtype=self.dtype).reshape((n, -1))
                 if np.all(np.isfinite(solution_np)):
-                    return np.asarray(solution_np, dtype=self.dtype)
+                    return np.asarray(solution_np[:, 0] if was_vector else solution_np, dtype=self.dtype)
             except Exception:
                 pass
 
         operator = LinearOperator((n, n), matvec=self.matvec, dtype=self.dtype)
         preconditioner = LinearOperator((n, n), matvec=self._base_solve, dtype=self.dtype)
-        try:
-            solution, info = gmres(
-                operator,
-                rhs_np,
-                M=preconditioner,
-                rtol=float(self.rtol),
-                atol=float(self.atol),
-                restart=max(1, min(int(self.restart), n)),
-                maxiter=max(1, int(self.maxiter)),
-            )
-        except TypeError:  # pragma: no cover - old SciPy compatibility
-            solution, info = gmres(
-                operator,
-                rhs_np,
-                M=preconditioner,
-                tol=float(self.rtol),
-                restart=max(1, min(int(self.restart), n)),
-                maxiter=max(1, int(self.maxiter)),
-            )
-        except Exception:
-            solution = self._base_solve(rhs_np)
-            info = -1
-        solution_np = np.asarray(solution, dtype=self.dtype).reshape((n,))
-        if int(info) != 0 or not np.all(np.isfinite(solution_np)):
-            fallback = self._base_solve(rhs_np)
-            fallback_np = np.asarray(fallback, dtype=self.dtype).reshape((n,))
-            if np.all(np.isfinite(fallback_np)):
-                return fallback_np
-        return np.where(np.isfinite(solution_np), solution_np, 0.0).astype(self.dtype, copy=False)
+        solutions: list[np.ndarray] = []
+        for col in range(int(rhs_2d.shape[1])):
+            rhs_col = np.asarray(rhs_2d[:, col], dtype=self.dtype).reshape((n,))
+            try:
+                solution, info = gmres(
+                    operator,
+                    rhs_col,
+                    M=preconditioner,
+                    rtol=float(self.rtol),
+                    atol=float(self.atol),
+                    restart=max(1, min(int(self.restart), n)),
+                    maxiter=max(1, int(self.maxiter)),
+                )
+            except TypeError:  # pragma: no cover - old SciPy compatibility
+                solution, info = gmres(
+                    operator,
+                    rhs_col,
+                    M=preconditioner,
+                    tol=float(self.rtol),
+                    restart=max(1, min(int(self.restart), n)),
+                    maxiter=max(1, int(self.maxiter)),
+                )
+            except Exception:
+                solution = self._base_solve(rhs_col)
+                info = -1
+            solution_np = np.asarray(solution, dtype=self.dtype).reshape((n,))
+            if int(info) != 0 or not np.all(np.isfinite(solution_np)):
+                fallback = self._base_solve(rhs_col)
+                fallback_np = np.asarray(fallback, dtype=self.dtype).reshape((n,))
+                if np.all(np.isfinite(fallback_np)):
+                    solution_np = fallback_np
+            solutions.append(np.where(np.isfinite(solution_np), solution_np, 0.0).astype(self.dtype, copy=False))
+        out = np.column_stack(solutions).astype(self.dtype, copy=False)
+        return out[:, 0] if was_vector else out
 
 
 @dataclass(frozen=True)
@@ -671,6 +675,13 @@ class _SymbolicNDFrontalNode:
     factor_failures: int = 0
     total_nbytes_estimate: int = 0
     total_nnz_estimate: int = 0
+    blr_update_count: int = 0
+    blr_rank_total: int = 0
+    blr_dense_entries_original: int = 0
+    blr_dense_entries_compressed: int = 0
+    blr_error_estimate_max: float = 0.0
+    blr_woodbury_rank_total: int = 0
+    blr_woodbury_nbytes: int = 0
     metadata: dict[str, object] | None = None
 
     @property
@@ -1663,6 +1674,17 @@ def _build_symbolic_nd_frontal_schur_factor(
     max_dense_rhs_cols_per_child: int = 0,
     max_setup_s: float = 0.0,
     parallel_child_workers: int = 1,
+    parallel_update_workers: int = 1,
+    compress_updates: bool = False,
+    blr_tol: float = 1.0e-6,
+    blr_max_rank: int = 64,
+    blr_min_cols: int = 8,
+    blr_gmres_rtol: float = 1.0e-6,
+    blr_gmres_atol: float = 0.0,
+    blr_gmres_maxiter: int = 50,
+    blr_gmres_restart: int = 64,
+    blr_woodbury_max_rank: int = 512,
+    blr_woodbury_max_condition: float = 1.0e8,
 ) -> tuple[_SymbolicNDFrontalNode, int, int]:
     """Build a recursive nested-dissection Schur factor over a symbolic order.
 
@@ -1694,6 +1716,10 @@ def _build_symbolic_nd_frontal_schur_factor(
     max_cols_per_child = max(0, int(max_dense_rhs_cols_per_child))
     max_setup_seconds = max(0.0, float(max_setup_s))
     child_workers = max(1, int(parallel_child_workers))
+    update_workers = max(1, int(parallel_update_workers))
+    use_blr_updates = bool(compress_updates)
+    blr_rank_cap = max(1, int(blr_max_rank))
+    blr_min_cols_use = max(1, int(blr_min_cols))
     setup_start_s = time.perf_counter()
     row_degree = np.diff(matrix_csr.indptr).astype(np.int64, copy=False)
     col_degree = np.diff(matrix_csr.tocsc().indptr).astype(np.int64, copy=False)
@@ -1871,10 +1897,20 @@ def _build_symbolic_nd_frontal_schur_factor(
 
         sep_indices = np.asarray(idx[sep_positions], dtype=np.int64)
         sep_count = int(sep_indices.size)
-        schur = matrix_csr[sep_indices, :][:, sep_indices].toarray().astype(dtype, copy=False)
+        schur_base_csc = matrix_csr[sep_indices, :][:, sep_indices].tocsc().astype(dtype, copy=False)
+        schur = None if use_blr_updates else schur_base_csc.toarray().astype(dtype, copy=False)
         children: list[_SymbolicNDChild] = []
-        total_nbytes = int(schur.nbytes)
-        total_nnz = int(np.count_nonzero(schur))
+        total_nbytes = (
+            estimate_csr_nbytes(
+                schur_base_csc.shape,
+                int(schur_base_csc.nnz),
+                data_dtype=schur_base_csc.dtype,
+                index_dtype=schur_base_csc.indices.dtype,
+            )
+            if use_blr_updates
+            else int(schur.nbytes)
+        )
+        total_nnz = int(schur_base_csc.nnz if use_blr_updates else np.count_nonzero(schur))
         node_count = 1
         leaf_count = 0
         max_depth_reached = int(depth)
@@ -1884,6 +1920,14 @@ def _build_symbolic_nd_frontal_schur_factor(
         peak_dense_update_entries = 0
         separator_update_chunks = 0
         factor_failures = 0
+        blr_updates: list[_BLRUpdateBlock] = []
+        blr_update_count = 0
+        blr_rank_total = 0
+        blr_dense_entries_original = 0
+        blr_dense_entries_compressed = 0
+        blr_error_estimate_max = 0.0
+        blr_woodbury_rank_total = 0
+        blr_woodbury_nbytes = 0
 
         child_inputs = [
             (
@@ -1913,33 +1957,20 @@ def _build_symbolic_nd_frontal_schur_factor(
                 if b_csc.nnz
                 else np.asarray([], dtype=np.int64)
             )
-            child_dense_entries = int(child_indices.size) * int(local_cols.size)
-            if max_dense_entries_per_child and child_dense_entries > max_dense_entries_per_child:
-                raise RuntimeError(
-                    "symbolic_nd_frontal_schur_lu dense separator RHS child work budget exceeded "
-                    f"({int(child_dense_entries)}>{int(max_dense_entries_per_child)}; "
-                    f"node_size={int(node_n)} depth={int(depth)} "
-                    f"separator={int(sep_count)} child={int(child_indices.size)} "
-                    f"local_cols={int(local_cols.size)})"
-                )
-            with stats_lock:
-                dense_entries_global += child_dense_entries
-                dense_entries_global_now = int(dense_entries_global)
-            dense_update_entries += child_dense_entries
-            peak_dense_update_entries = max(peak_dense_update_entries, child_dense_entries)
-            if max_dense_entries and dense_entries_global_now > max_dense_entries:
-                raise RuntimeError(
-                    "symbolic_nd_frontal_schur_lu dense separator RHS work budget exceeded "
-                    f"({int(dense_entries_global_now)}>{int(max_dense_entries)}; "
-                    f"node_size={int(node_n)} separator={int(sep_count)} child={int(child_indices.size)})"
-                )
             if b_mat.nnz and c_mat.nnz and local_cols.size:
                 cols_per_chunk = int(max_cols_per_child) if max_cols_per_child > 0 else int(local_cols.size)
                 cols_per_chunk = max(1, int(cols_per_chunk))
-                for col_start in range(0, int(local_cols.size), cols_per_chunk):
+                child_work_entries = 0
+                child_peak_entries = 0
+                col_chunks = [
+                    local_cols[col_start : col_start + cols_per_chunk]
+                    for col_start in range(0, int(local_cols.size), cols_per_chunk)
+                ]
+
+                def _build_separator_update_chunk(
+                    col_chunk: np.ndarray,
+                ) -> tuple[np.ndarray, np.ndarray | None, _BLRUpdateBlock | None, int, int]:
                     _check_setup_budget(stage="separator_update", node_size=node_n, depth=int(depth))
-                    col_chunk = local_cols[col_start : col_start + cols_per_chunk]
-                    separator_update_chunks += 1
                     if int(col_chunk.size) == 1:
                         b_block = b_csc[:, int(col_chunk[0]) : int(col_chunk[0]) + 1]
                     elif np.all(np.diff(col_chunk) == 1):
@@ -1947,13 +1978,104 @@ def _build_symbolic_nd_frontal_schur_factor(
                     else:
                         b_block = b_csc[:, col_chunk]
                     b_dense = b_block.toarray().astype(dtype, copy=False)
+                    peak_entries = int(child_indices.size) * int(col_chunk.size)
+                    if use_blr_updates:
+                        tol_use = float(blr_tol) if int(col_chunk.size) >= blr_min_cols_use else 0.0
+                        rank_cap = blr_rank_cap
+                        if tol_use == 0.0:
+                            rank_cap = max(1, min(rank_cap, min(b_dense.shape)))
+                        compressed_rhs = _compress_update_block(
+                            b_dense,
+                            columns=col_chunk,
+                            tol=tol_use,
+                            max_rank=rank_cap,
+                            dtype=dtype,
+                        )
+                        rank = int(compressed_rhs.rank)
+                        work_entries = int(child_indices.size) * int(rank)
+                        if rank > 0:
+                            try:
+                                eliminated_basis = np.asarray(child_factor.solve_local(compressed_rhs.u), dtype=dtype)
+                            except Exception:
+                                eliminated_basis = np.zeros((int(child_indices.size), rank), dtype=dtype)
+                            if eliminated_basis.ndim == 1:
+                                eliminated_basis = eliminated_basis.reshape((int(child_indices.size), 1))
+                            update_u = np.asarray(c_mat @ eliminated_basis, dtype=dtype)
+                        else:
+                            update_u = np.zeros((sep_count, 0), dtype=dtype)
+                        return (
+                            np.asarray(col_chunk, dtype=np.int64),
+                            None,
+                            _BLRUpdateBlock(
+                                columns=np.asarray(col_chunk, dtype=np.int64),
+                                u=update_u,
+                                vt=np.asarray(compressed_rhs.vt, dtype=dtype),
+                                original_shape=(int(sep_count), int(col_chunk.size)),
+                                rank=int(rank),
+                                relative_error_estimate=float(compressed_rhs.relative_error_estimate),
+                            ),
+                            work_entries,
+                            peak_entries,
+                        )
                     try:
                         eliminated = np.asarray(child_factor.solve_local(b_dense), dtype=dtype)
                     except Exception:
                         eliminated = np.zeros((int(child_indices.size), int(col_chunk.size)), dtype=dtype)
                     if eliminated.ndim == 1:
                         eliminated = eliminated.reshape((int(child_indices.size), 1))
-                    schur[:, col_chunk] -= np.asarray(c_mat @ eliminated, dtype=dtype)
+                    update = np.asarray(c_mat @ eliminated, dtype=dtype)
+                    return (
+                        np.asarray(col_chunk, dtype=np.int64),
+                        update,
+                        None,
+                        int(child_indices.size) * int(col_chunk.size),
+                        peak_entries,
+                    )
+
+                if update_workers > 1 and len(col_chunks) > 1:
+                    with ThreadPoolExecutor(max_workers=min(update_workers, len(col_chunks))) as executor:
+                        chunk_results = list(executor.map(_build_separator_update_chunk, col_chunks))
+                else:
+                    chunk_results = [_build_separator_update_chunk(col_chunk) for col_chunk in col_chunks]
+
+                for col_chunk, dense_update, compressed_update, work_entries, peak_entries in chunk_results:
+                    separator_update_chunks += 1
+                    child_work_entries += int(work_entries)
+                    child_peak_entries = max(child_peak_entries, int(peak_entries))
+                    if compressed_update is not None:
+                        blr_updates.append(compressed_update)
+                        blr_update_count += 1
+                        blr_rank_total += int(compressed_update.rank)
+                        blr_dense_entries_original += int(sep_count) * int(col_chunk.size)
+                        blr_dense_entries_compressed += int(compressed_update.u.size + compressed_update.vt.size)
+                        if np.isfinite(float(compressed_update.relative_error_estimate)):
+                            blr_error_estimate_max = max(
+                                float(blr_error_estimate_max),
+                                float(compressed_update.relative_error_estimate),
+                            )
+                    else:
+                        assert schur is not None
+                        assert dense_update is not None
+                        schur[:, col_chunk] -= np.asarray(dense_update, dtype=dtype)
+                if max_dense_entries_per_child and child_work_entries > max_dense_entries_per_child:
+                    raise RuntimeError(
+                        "symbolic_nd_frontal_schur_lu dense separator RHS child work budget exceeded "
+                        f"({int(child_work_entries)}>{int(max_dense_entries_per_child)}; "
+                        f"node_size={int(node_n)} depth={int(depth)} "
+                        f"separator={int(sep_count)} child={int(child_indices.size)} "
+                        f"local_cols={int(local_cols.size)})"
+                    )
+                with stats_lock:
+                    dense_entries_global += child_work_entries
+                    dense_entries_global_now = int(dense_entries_global)
+                dense_update_entries += child_work_entries
+                peak_dense_update_entries = max(peak_dense_update_entries, child_peak_entries)
+                if max_dense_entries and dense_entries_global_now > max_dense_entries:
+                    raise RuntimeError(
+                        "symbolic_nd_frontal_schur_lu dense separator RHS work budget exceeded "
+                        f"({int(dense_entries_global_now)}>{int(max_dense_entries)}; "
+                        f"node_size={int(node_n)} separator={int(sep_count)} child={int(child_indices.size)})"
+                    )
             b_nbytes = estimate_csr_nbytes(b_mat.shape, int(b_mat.nnz), data_dtype=b_mat.dtype, index_dtype=b_mat.indices.dtype)
             c_nbytes = estimate_csr_nbytes(c_mat.shape, int(c_mat.nnz), data_dtype=c_mat.dtype, index_dtype=c_mat.indices.dtype)
             total_nbytes += int(child_factor.total_nbytes_estimate) + int(b_nbytes) + int(c_nbytes)
@@ -1967,6 +2089,13 @@ def _build_symbolic_nd_frontal_schur_factor(
             peak_dense_update_entries = max(peak_dense_update_entries, int(child_factor.peak_dense_update_entries))
             separator_update_chunks += int(child_factor.separator_update_chunks)
             factor_failures += int(child_factor.factor_failures)
+            blr_update_count += int(child_factor.blr_update_count)
+            blr_rank_total += int(child_factor.blr_rank_total)
+            blr_dense_entries_original += int(child_factor.blr_dense_entries_original)
+            blr_dense_entries_compressed += int(child_factor.blr_dense_entries_compressed)
+            blr_error_estimate_max = max(float(blr_error_estimate_max), float(child_factor.blr_error_estimate_max))
+            blr_woodbury_rank_total += int(child_factor.blr_woodbury_rank_total)
+            blr_woodbury_nbytes += int(child_factor.blr_woodbury_nbytes)
             children.append(
                 _SymbolicNDChild(
                     positions=np.asarray(positions, dtype=np.int64),
@@ -1977,15 +2106,52 @@ def _build_symbolic_nd_frontal_schur_factor(
                 )
             )
 
-        schur_csc = sp.csc_matrix(schur)
+        schur_csc = schur_base_csc if use_blr_updates else sp.csc_matrix(schur)
         schur_csc.sum_duplicates()
-        schur_factor, schur_nbytes, schur_nnz, schur_failures = _factor_csc_with_regularized_fallback(
+        base_schur_factor, schur_nbytes, schur_nnz, schur_failures = _factor_csc_with_regularized_fallback(
             schur_csc,
             dtype=dtype,
             diag_pivot_thresh=1.0,
             regularization_rel=float(regularization_rel),
             permc_spec="COLAMD",
         )
+        if use_blr_updates:
+            woodbury_z, woodbury_vt, woodbury_core_inverse, woodbury_condition = _build_blr_woodbury_state(
+                base_schur_factor,
+                tuple(blr_updates),
+                separator_size=int(sep_count),
+                dtype=dtype,
+                max_rank=max(0, int(blr_woodbury_max_rank)),
+                max_condition=float(blr_woodbury_max_condition),
+            )
+            schur_factor = _BLRSchurFactor(
+                base_matrix=schur_csc.tocsr(),
+                base_factor=base_schur_factor,
+                updates=tuple(blr_updates),
+                dtype=dtype,
+                rtol=float(blr_gmres_rtol),
+                atol=float(blr_gmres_atol),
+                maxiter=max(1, int(blr_gmres_maxiter)),
+                restart=max(1, int(blr_gmres_restart)),
+                woodbury_z=woodbury_z,
+                woodbury_vt=woodbury_vt,
+                woodbury_core_inverse=woodbury_core_inverse,
+                woodbury_condition=woodbury_condition,
+            )
+            update_nbytes = sum(int(update.u.nbytes + update.vt.nbytes + update.columns.nbytes) for update in blr_updates)
+            update_nnz = sum(int(update.u.size + update.vt.size) for update in blr_updates)
+            update_nbytes += int(schur_factor.woodbury_nbytes)
+            update_nnz += int(
+                (0 if schur_factor.woodbury_z is None else schur_factor.woodbury_z.size)
+                + (0 if schur_factor.woodbury_vt is None else schur_factor.woodbury_vt.size)
+                + (0 if schur_factor.woodbury_core_inverse is None else schur_factor.woodbury_core_inverse.size)
+            )
+            schur_nbytes = int(schur_nbytes) + int(update_nbytes)
+            schur_nnz = int(schur_nnz) + int(update_nnz)
+            blr_woodbury_rank_total += int(schur_factor.woodbury_rank)
+            blr_woodbury_nbytes += int(schur_factor.woodbury_nbytes)
+        else:
+            schur_factor = base_schur_factor
         total_nbytes += int(schur_nbytes) + estimate_csr_nbytes(
             schur_csc.shape,
             int(schur_csc.nnz),
@@ -2014,6 +2180,13 @@ def _build_symbolic_nd_frontal_schur_factor(
             factor_failures=int(factor_failures),
             total_nbytes_estimate=int(total_nbytes),
             total_nnz_estimate=int(total_nnz),
+            blr_update_count=int(blr_update_count),
+            blr_rank_total=int(blr_rank_total),
+            blr_dense_entries_original=int(blr_dense_entries_original),
+            blr_dense_entries_compressed=int(blr_dense_entries_compressed),
+            blr_error_estimate_max=float(blr_error_estimate_max),
+            blr_woodbury_rank_total=int(blr_woodbury_rank_total),
+            blr_woodbury_nbytes=int(blr_woodbury_nbytes),
             metadata={
                 "node_kind": "separator",
                 "node_size": int(node_n),
@@ -2039,6 +2212,17 @@ def _build_symbolic_nd_frontal_schur_factor(
         "parallel_child_workers": int(child_workers),
         "parallel_child_nodes": int(parallel_child_nodes),
         "parallel_child_factor_tasks": int(parallel_child_factor_tasks),
+        "parallel_update_workers": int(update_workers),
+        "compress_updates": bool(use_blr_updates),
+        "blr_tol": float(blr_tol),
+        "blr_max_rank": int(blr_rank_cap),
+        "blr_min_cols": int(blr_min_cols_use),
+        "blr_gmres_rtol": float(blr_gmres_rtol),
+        "blr_gmres_atol": float(blr_gmres_atol),
+        "blr_gmres_maxiter": int(blr_gmres_maxiter),
+        "blr_gmres_restart": int(blr_gmres_restart),
+        "blr_woodbury_max_rank": int(blr_woodbury_max_rank),
+        "blr_woodbury_max_condition": float(blr_woodbury_max_condition),
         "node_count": int(root.node_count),
         "leaf_count": int(root.leaf_count),
         "max_depth_reached": int(root.max_depth_reached),
@@ -2047,8 +2231,15 @@ def _build_symbolic_nd_frontal_schur_factor(
         "dense_update_entries": int(root.dense_update_entries),
         "peak_dense_update_entries": int(root.peak_dense_update_entries),
         "separator_update_chunks": int(root.separator_update_chunks),
-        "separator_update_mode": "csc_column_chunks",
+        "separator_update_mode": "blr_csc_column_chunks" if bool(use_blr_updates) else "csc_column_chunks",
         "factor_failures": int(root.factor_failures),
+        "blr_update_count": int(root.blr_update_count),
+        "blr_rank_total": int(root.blr_rank_total),
+        "blr_dense_entries_original": int(root.blr_dense_entries_original),
+        "blr_dense_entries_compressed": int(root.blr_dense_entries_compressed),
+        "blr_error_estimate_max": float(root.blr_error_estimate_max),
+        "blr_woodbury_rank_total": int(root.blr_woodbury_rank_total),
+        "blr_woodbury_nbytes": int(root.blr_woodbury_nbytes),
     }
     root = _SymbolicNDFrontalNode(
         indices=root.indices,
@@ -2071,6 +2262,13 @@ def _build_symbolic_nd_frontal_schur_factor(
         factor_failures=root.factor_failures,
         total_nbytes_estimate=root.total_nbytes_estimate,
         total_nnz_estimate=root.total_nnz_estimate,
+        blr_update_count=root.blr_update_count,
+        blr_rank_total=root.blr_rank_total,
+        blr_dense_entries_original=root.blr_dense_entries_original,
+        blr_dense_entries_compressed=root.blr_dense_entries_compressed,
+        blr_error_estimate_max=root.blr_error_estimate_max,
+        blr_woodbury_rank_total=root.blr_woodbury_rank_total,
+        blr_woodbury_nbytes=root.blr_woodbury_nbytes,
         metadata=root_metadata,
     )
     return root, int(root.total_nbytes_estimate), int(root.total_nnz_estimate)
@@ -3513,6 +3711,8 @@ def factorize_host_sparse_operator(
     symbolic_nd_max_dense_rhs_entries_per_child: int = 0,
     symbolic_nd_max_dense_rhs_cols_per_child: int = 0,
     symbolic_nd_max_setup_s: float = 0.0,
+    symbolic_nd_compress_updates: bool = False,
+    symbolic_nd_parallel_update_workers: int = 1,
     symbolic_nd_residual_polish_steps: int = 0,
     symbolic_nd_residual_polish_damping: float = 1.0,
     symbolic_superblock_max_size: int = 32768,
@@ -3706,6 +3906,17 @@ def factorize_host_sparse_operator(
                     max_dense_rhs_cols_per_child=int(symbolic_nd_max_dense_rhs_cols_per_child),
                     max_setup_s=float(symbolic_nd_max_setup_s),
                     parallel_child_workers=int(symbolic_numeric_parallel_workers),
+                    parallel_update_workers=int(symbolic_nd_parallel_update_workers),
+                    compress_updates=bool(symbolic_nd_compress_updates),
+                    blr_tol=float(symbolic_blr_frontal_tol),
+                    blr_max_rank=int(symbolic_blr_frontal_max_rank),
+                    blr_min_cols=int(symbolic_blr_frontal_min_cols),
+                    blr_gmres_rtol=float(symbolic_blr_frontal_gmres_rtol),
+                    blr_gmres_atol=float(symbolic_blr_frontal_gmres_atol),
+                    blr_gmres_maxiter=int(symbolic_blr_frontal_gmres_maxiter),
+                    blr_gmres_restart=int(symbolic_blr_frontal_gmres_restart),
+                    blr_woodbury_max_rank=int(symbolic_blr_frontal_woodbury_max_rank),
+                    blr_woodbury_max_condition=float(symbolic_blr_frontal_woodbury_max_condition),
                 )
                 polish_steps = max(0, int(symbolic_nd_residual_polish_steps))
                 if polish_steps:

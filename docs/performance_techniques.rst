@@ -1060,6 +1060,21 @@ Controls:
   factored concurrently before chunked Schur updates are applied.  The generic
   explicit-sparse equivalent is
   ``SFINCS_JAX_EXPLICIT_SPARSE_SYMBOLIC_NUMERIC_PARALLEL_WORKERS``.
+- ``SFINCS_JAX_TRANSPORT_FP_FORTRAN_REDUCED_LU_SYMBOLIC_ND_COMPRESS_UPDATES``
+  enables the opt-in BLR/HSS-style separator-update path for
+  ``symbolic_nd_frontal_schur_lu``.  Each child-to-separator RHS chunk is
+  compressed with an SVD, only the retained basis is solved through the child
+  factor, and the separator update is stored as a low-rank ``U V^T``
+  contribution to the Schur operator.  The same setup-time true-residual
+  admission gate remains mandatory before Krylov can use the factor.
+- ``SFINCS_JAX_TRANSPORT_FP_FORTRAN_REDUCED_LU_SYMBOLIC_ND_PARALLEL_UPDATE_WORKERS``
+  controls opt-in parallel execution of separator-update chunks.  This is
+  intentionally separate from ``..._SYMBOLIC_NUMERIC_PARALLEL_WORKERS`` because
+  production profiles show that sparse triangular solves and BLAS calls can
+  contend when too many separator chunks are threaded.  The generic
+  explicit-sparse equivalents are
+  ``SFINCS_JAX_EXPLICIT_SPARSE_SYMBOLIC_ND_COMPRESS_UPDATES`` and
+  ``SFINCS_JAX_EXPLICIT_SPARSE_SYMBOLIC_ND_PARALLEL_UPDATE_WORKERS``.
 - ``SFINCS_JAX_TRANSPORT_FP_FORTRAN_REDUCED_LU_SYMBOLIC_BLOCK_OVERLAP``
   extends each symbolic block by a fixed number of neighboring unknowns before
   factorization and restricts the local solution back to the owned block. This

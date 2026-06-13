@@ -1017,6 +1017,8 @@ def _build_host_sparse_direct_factor_from_matvec(
     default_symbolic_nd_max_dense_rhs_entries_per_child: int = 0,
     default_symbolic_nd_max_dense_rhs_cols_per_child: int = 0,
     default_symbolic_nd_max_setup_s: float = 0.0,
+    default_symbolic_nd_compress_updates: bool = False,
+    default_symbolic_nd_parallel_update_workers: int = 1,
     default_symbolic_nd_residual_polish_steps: int = 0,
     default_symbolic_nd_residual_polish_damping: float = 1.0,
     default_symbolic_superblock_max_size: int = 32768,
@@ -1126,6 +1128,12 @@ def _build_host_sparse_direct_factor_from_matvec(
     ).strip()
     symbolic_nd_max_setup_s_env = os.environ.get(
         "SFINCS_JAX_EXPLICIT_SPARSE_SYMBOLIC_ND_MAX_SETUP_S", ""
+    ).strip()
+    symbolic_nd_compress_updates_env = os.environ.get(
+        "SFINCS_JAX_EXPLICIT_SPARSE_SYMBOLIC_ND_COMPRESS_UPDATES", ""
+    ).strip()
+    symbolic_nd_parallel_update_workers_env = os.environ.get(
+        "SFINCS_JAX_EXPLICIT_SPARSE_SYMBOLIC_ND_PARALLEL_UPDATE_WORKERS", ""
     ).strip()
     symbolic_nd_residual_polish_steps_env = os.environ.get(
         "SFINCS_JAX_EXPLICIT_SPARSE_SYMBOLIC_ND_RESIDUAL_POLISH_STEPS", ""
@@ -1268,6 +1276,14 @@ def _build_host_sparse_direct_factor_from_matvec(
         except ValueError:
             parsed = float(default)
         return max(float(minimum), float(parsed))
+
+    def _parse_bool_env(value: str, default: bool) -> bool:
+        normalized = str(value).strip().lower()
+        if normalized in {"1", "true", "t", "yes", "y", "on", ".true.", ".t."}:
+            return True
+        if normalized in {"0", "false", "f", "no", "n", "off", ".false.", ".f."}:
+            return False
+        return bool(default)
 
     symbolic_frontal_max_separator_cols = _parse_int_env(
         symbolic_frontal_max_separator_env,
@@ -1423,6 +1439,15 @@ def _build_host_sparse_direct_factor_from_matvec(
         symbolic_nd_max_setup_s_env,
         float(default_symbolic_nd_max_setup_s),
         minimum=0.0,
+    )
+    symbolic_nd_compress_updates = _parse_bool_env(
+        symbolic_nd_compress_updates_env,
+        bool(default_symbolic_nd_compress_updates),
+    )
+    symbolic_nd_parallel_update_workers = _parse_int_env(
+        symbolic_nd_parallel_update_workers_env,
+        int(default_symbolic_nd_parallel_update_workers),
+        minimum=1,
     )
     symbolic_nd_residual_polish_steps = _parse_int_env(
         symbolic_nd_residual_polish_steps_env,
@@ -1750,6 +1775,8 @@ def _build_host_sparse_direct_factor_from_matvec(
             symbolic_nd_max_dense_rhs_entries_per_child=int(symbolic_nd_max_dense_rhs_entries_per_child),
             symbolic_nd_max_dense_rhs_cols_per_child=int(symbolic_nd_max_dense_rhs_cols_per_child),
             symbolic_nd_max_setup_s=float(symbolic_nd_max_setup_s),
+            symbolic_nd_compress_updates=bool(symbolic_nd_compress_updates),
+            symbolic_nd_parallel_update_workers=int(symbolic_nd_parallel_update_workers),
             symbolic_nd_residual_polish_steps=int(symbolic_nd_residual_polish_steps),
             symbolic_nd_residual_polish_damping=float(symbolic_nd_residual_polish_damping),
             symbolic_superblock_max_size=int(symbolic_superblock_max_size),
@@ -14016,6 +14043,10 @@ def _build_rhsmode23_fp_fortran_reduced_lu_preconditioner(
         0.0,
         minimum=0.0,
     )
+    symbolic_nd_compress_updates = _bool_env(
+        "SFINCS_JAX_TRANSPORT_FP_FORTRAN_REDUCED_LU_SYMBOLIC_ND_COMPRESS_UPDATES",
+        False,
+    )
     symbolic_nd_residual_polish_steps = _int_env(
         "SFINCS_JAX_TRANSPORT_FP_FORTRAN_REDUCED_LU_SYMBOLIC_ND_RESIDUAL_POLISH_STEPS",
         2,
@@ -14055,6 +14086,11 @@ def _build_rhsmode23_fp_fortran_reduced_lu_preconditioner(
     symbolic_numeric_parallel_workers = _int_env(
         "SFINCS_JAX_TRANSPORT_FP_FORTRAN_REDUCED_LU_SYMBOLIC_NUMERIC_PARALLEL_WORKERS",
         symbolic_numeric_parallel_workers_default,
+        minimum=1,
+    )
+    symbolic_nd_parallel_update_workers = _int_env(
+        "SFINCS_JAX_TRANSPORT_FP_FORTRAN_REDUCED_LU_SYMBOLIC_ND_PARALLEL_UPDATE_WORKERS",
+        symbolic_numeric_parallel_workers,
         minimum=1,
     )
     symbolic_max_permutation_size = _int_env(
@@ -14276,6 +14312,7 @@ def _build_rhsmode23_fp_fortran_reduced_lu_preconditioner(
             f"{int(symbolic_nd_max_dense_rhs_entries_per_child)}_"
             f"{int(symbolic_nd_max_dense_rhs_cols_per_child)}_"
             f"setups{float(symbolic_nd_max_setup_s):.3e}_"
+            f"ndblr{int(symbolic_nd_compress_updates)}_upd{int(symbolic_nd_parallel_update_workers)}_"
             f"polish{int(symbolic_nd_residual_polish_steps)}_"
             f"{float(symbolic_nd_residual_polish_damping):.3e}_"
             f"super{int(symbolic_superblock_max_size)}_{int(symbolic_superblock_max_blocks)}_"
@@ -14557,6 +14594,8 @@ def _build_rhsmode23_fp_fortran_reduced_lu_preconditioner(
                             symbolic_nd_max_dense_rhs_cols_per_child
                         ),
                         default_symbolic_nd_max_setup_s=float(symbolic_nd_max_setup_s),
+                        default_symbolic_nd_compress_updates=bool(symbolic_nd_compress_updates),
+                        default_symbolic_nd_parallel_update_workers=int(symbolic_nd_parallel_update_workers),
                         default_symbolic_nd_residual_polish_steps=int(symbolic_nd_residual_polish_steps),
                         default_symbolic_nd_residual_polish_damping=float(symbolic_nd_residual_polish_damping),
                         default_symbolic_superblock_max_size=int(symbolic_superblock_max_size),
@@ -14701,6 +14740,8 @@ def _build_rhsmode23_fp_fortran_reduced_lu_preconditioner(
                     ),
                     default_symbolic_nd_max_dense_rhs_cols_per_child=int(symbolic_nd_max_dense_rhs_cols_per_child),
                     default_symbolic_nd_max_setup_s=float(symbolic_nd_max_setup_s),
+                    default_symbolic_nd_compress_updates=bool(symbolic_nd_compress_updates),
+                    default_symbolic_nd_parallel_update_workers=int(symbolic_nd_parallel_update_workers),
                     default_symbolic_nd_residual_polish_steps=int(symbolic_nd_residual_polish_steps),
                     default_symbolic_nd_residual_polish_damping=float(symbolic_nd_residual_polish_damping),
                     default_symbolic_superblock_max_size=int(symbolic_superblock_max_size),
@@ -15054,6 +15095,8 @@ def _build_rhsmode23_fp_fortran_reduced_lu_preconditioner(
             "symbolic_nd_max_dense_rhs_entries_per_child": int(symbolic_nd_max_dense_rhs_entries_per_child),
             "symbolic_nd_max_dense_rhs_cols_per_child": int(symbolic_nd_max_dense_rhs_cols_per_child),
             "symbolic_nd_max_setup_s": float(symbolic_nd_max_setup_s),
+            "symbolic_nd_compress_updates": bool(symbolic_nd_compress_updates),
+            "symbolic_nd_parallel_update_workers": int(symbolic_nd_parallel_update_workers),
             "symbolic_nd_residual_polish_steps": int(symbolic_nd_residual_polish_steps),
             "symbolic_nd_residual_polish_damping": float(symbolic_nd_residual_polish_damping),
             "symbolic_superblock_max_size": int(symbolic_superblock_max_size),

@@ -3,6 +3,63 @@
 Last updated: 2026-06-12 (America/Chicago)
 Owner: incoming agent
 
+## 2026-06-12 Addendum: ND BLR separator-update path
+
+### Implementation
+
+- Added an opt-in BLR/HSS-style separator-update path to
+  ``symbolic_nd_frontal_schur_lu``.  For each child-to-separator RHS chunk,
+  the builder now can compress ``B`` with an SVD, solve only the retained
+  basis through the child factor, and store the Schur update as a low-rank
+  ``U V^T`` contribution to the separator operator.
+- Extended ``_BLRSchurFactor.solve`` to handle multi-column RHS arrays.  This
+  is required for recursive nested dissection because parent separator updates
+  call child solves with dense RHS blocks.
+- Added opt-in parallel separator-update chunk workers, applied serially back
+  to the Schur state after each chunk result is computed.  The controls are:
+  ``SFINCS_JAX_TRANSPORT_FP_FORTRAN_REDUCED_LU_SYMBOLIC_ND_COMPRESS_UPDATES``,
+  ``SFINCS_JAX_TRANSPORT_FP_FORTRAN_REDUCED_LU_SYMBOLIC_ND_PARALLEL_UPDATE_WORKERS``,
+  and generic explicit-sparse equivalents.
+- Kept all new paths behind the existing strict true-residual admission gate.
+  No ``auto`` promotion was made.
+
+### Verification
+
+- ``python -m pytest -q tests/test_explicit_sparse.py -k
+  "nd_frontal_schur_lu or blr_frontal"``: ``12 passed``.
+- ``python -m pytest -q tests/test_explicit_sparse.py
+  tests/test_fortran_reduced_preconditioner.py tests/test_transport_sparse_direct.py
+  tests/test_rhs1_full_assembly.py`` after the parallel-update addition:
+  ``241 passed``.
+- Toy ND exact-rank BLR updates solve to roundoff and pass true-residual
+  admission with max relative residual around ``1.8e-16``.
+
+### Production Probe
+
+- Production geom11 RHSMode=2 at ``Ntheta=25, Nzeta=51, Nxi=100, Nx=6`` with
+  direct reduced Pmat reached the new BLR-compressed ND setup:
+  ``462827`` active DOFs, ``10124069`` nonzeros, direct Pmat build
+  ``13.7--16.9 s``.
+- BLR-compressed ND with serial separator chunks still hit the setup guard:
+  ``241.3 s > 240 s`` at ``separator_update`` on a ``54069``-unknown
+  depth-3 front.
+- BLR-compressed ND with four parallel separator-update workers was worse:
+  ``281.6 s > 240 s`` at ``separator_update`` on a ``113840``-unknown
+  depth-2 front.  This likely reflects contention inside sparse triangular
+  solves / BLAS rather than useful parallel speedup.
+
+### Decision
+
+- Keep the BLR/HSS separator-update and parallel-update infrastructure as
+  opt-in research paths, covered by tests and documented controls, but do not
+  promote them into ``auto`` for production geom11/geom2.
+- The geometry-rich RHSMode=2/3 production preconditioner lane is not closed by
+  this native ND refinement.  The remaining blocker is deeper than update
+  compression: production needs either a materially different separator
+  hierarchy/orderer, a matrix-free admitted Schur approximation, or a
+  JAX-native/compiled sparse factor path that avoids Python-level recursive
+  setup on 50k--110k fronts.
+
 ## 2026-06-12 Addendum: bounded parallel symbolic numeric setup
 
 ### Implementation
