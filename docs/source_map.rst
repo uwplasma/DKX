@@ -153,6 +153,22 @@ On the active refactor branch, the main policy layers are being split out of the
 monolith into narrower modules while keeping ``v3_driver.py`` as the stable public seam
 for debugging and monkeypatch-based tests. The first extracted layers are:
 
+- ``sfincs_jax/v3_results.py``:
+  typed solve-result dataclasses for linear, Newton-Krylov, and transport-matrix
+  v3-compatible workflows. Moving these data models out of the driver makes the
+  user-facing result contract explicit and easier to document.
+- ``sfincs_jax/solver_runtime.py``:
+  small runtime helpers for finite GMRES-result checks and XLA synchronization
+  around solver timing/profiling.
+- ``sfincs_jax/matrix_reductions.py``:
+  diagonal and block-diagonal matrix reductions used by simplified
+  preconditioner operators. These are numerical building blocks with direct
+  local-coupling tests.
+- ``sfincs_jax/preconditioner_context.py``:
+  mutable solve-context hints for preconditioner auto-selection, including
+  cached operator size, geometry/collision metadata, sparse structural
+  tolerance, factor dtype, and solver-JIT admission. The numerical policy lives
+  in ``solver_path_policy.py``; this module owns the runtime state bridge.
 - ``sfincs_jax/rhs1_pas_policy.py``:
   PAS applicability, PAS-TZ memory safety, PAS fallback routing, and PAS
   adaptive-smoother eligibility.

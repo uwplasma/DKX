@@ -13,6 +13,15 @@ Unreleased
   shard-aware block sizing, overlap clamping, environment override handling,
   and multi-level coarse-block termination. The post-extraction local full
   suite passed with ``2520 passed in 537.83 s``.
+- Started the dedicated v3-driver architecture branch by extracting v3 result
+  dataclasses, small solver-runtime helpers, and matrix-reduction primitives
+  into focused modules with direct tests while preserving compatibility imports
+  from ``v3_driver.py``.
+- Moved mutable preconditioner hint/context state out of ``v3_driver.py`` and
+  into ``preconditioner_context.py``. The driver keeps the same private
+  compatibility names, while dtype, structural-tolerance, and solver-JIT policy
+  now have direct module tests. The post-extraction local full suite passed
+  with ``2531 passed in 508.54 s``.
 
 v1.1.7
 ------
