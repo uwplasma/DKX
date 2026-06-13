@@ -69,6 +69,13 @@ from .explicit_sparse import (
     wrap_sparse_factor_with_coarse_correction,
 )
 from .rhs1_device_operator import device_csr_from_matrix, validate_device_csr_matvec
+from .rhs1_domain_decomposition import (
+    _dd_core_patch_ranges,
+    _rhs1_dd_auto_block_size,
+    _rhs1_dd_coarse_block_size,
+    _rhs1_dd_coarse_block_sizes,
+    _rhs1_dd_coarse_level_count,
+)
 from .rhs1_qi_coarse import (
     RHS1QICoarseBasis,
     RHS1QICoarseBlockLayout,
@@ -10232,87 +10239,6 @@ def _block_diag_only(m: jnp.ndarray, block: int) -> jnp.ndarray:
         mask[start:end, start:end] = True
     mat_np = np.where(mask, mat_np, 0.0)
     return jnp.asarray(mat_np, dtype=m.dtype)
-
-
-def _dd_core_patch_ranges(n: int, block: int, overlap: int) -> list[tuple[int, int, int, int]]:
-    """Return (core_start, core_end, patch_start, patch_end) ranges for DD/RAS blocks."""
-    n = int(n)
-    block = max(1, int(block))
-    overlap = max(0, int(overlap))
-    ranges: list[tuple[int, int, int, int]] = []
-    for core_start in range(0, n, block):
-        core_end = min(n, core_start + block)
-        patch_start = max(0, core_start - overlap)
-        patch_end = min(n, core_end + overlap)
-        ranges.append((core_start, core_end, patch_start, patch_end))
-    return ranges
-
-
-def _rhs1_dd_auto_block_size(
-    *,
-    n: int,
-    n_dev: int,
-    sum_nxi: int,
-    dof_target: int,
-) -> int:
-    """Choose a shard-local Schwarz block that spans more than one local shard.
-
-    A single local shard is often too narrow once theta/zeta sharding is active,
-    especially on 4-8 CPU devices. Using ``local_n`` alone over-fragments the
-    restricted additive Schwarz patches and increases synchronization overhead.
-    The auto rule below keeps the original DOF target, but adds one target-width
-    of coupled angular DOFs on top of the local shard width so each patch can
-    capture cross-shard angular coupling without becoming nearly global.
-    """
-    n = max(1, int(n))
-    n_dev = max(1, int(n_dev))
-    sum_nxi = max(1, int(sum_nxi))
-    dof_target = max(128, int(dof_target))
-    local_n = max(1, (n + n_dev - 1) // n_dev)
-    dof_cap = max(2, int(dof_target) // int(sum_nxi))
-    block = max(dof_cap, local_n + dof_cap)
-    return max(1, min(n, int(block)))
-
-
-def _rhs1_dd_coarse_block_size(*, n: int, block: int, overlap: int) -> int:
-    """Choose a wider coarse theta/zeta block for two-level Schwarz correction."""
-    n = max(1, int(n))
-    block = max(1, min(n, int(block)))
-    overlap = max(0, int(overlap))
-    coarse = block + max(8, block // 2, 2 * overlap)
-    return max(1, min(n, int(coarse)))
-
-
-def _rhs1_dd_coarse_level_count(*, n_dev: int) -> int:
-    """Choose how many coarse residual-correction levels to apply."""
-    n_dev = max(1, int(n_dev))
-    coarse_levels_env = os.environ.get("SFINCS_JAX_RHSMODE1_SCHWARZ_COARSE_LEVELS", "").strip()
-    if coarse_levels_env:
-        try:
-            return max(0, int(coarse_levels_env))
-        except ValueError:
-            return 1
-    if n_dev >= 8:
-        return 2
-    if n_dev >= 4:
-        return 1
-    return 0
-
-
-def _rhs1_dd_coarse_block_sizes(*, n: int, block: int, overlap: int, levels: int) -> tuple[int, ...]:
-    """Choose one or more increasingly wider coarse theta/zeta block sizes."""
-    n = max(1, int(n))
-    current = max(1, min(n, int(block)))
-    out: list[int] = []
-    for _ in range(max(0, int(levels))):
-        next_block = _rhs1_dd_coarse_block_size(n=n, block=current, overlap=overlap)
-        if next_block <= current:
-            break
-        out.append(int(next_block))
-        current = int(next_block)
-        if current >= n:
-            break
-    return tuple(out)
 
 
 def _build_rhsmode1_preconditioner_operator_point(op: V3FullSystemOperator) -> V3FullSystemOperator:

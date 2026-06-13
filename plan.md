@@ -1,7 +1,211 @@
 # SFINCS_JAX Master Handoff + Execution Plan
 
-Last updated: 2026-06-12 (America/Chicago)
+Last updated: 2026-06-13 (America/Chicago)
 Owner: incoming agent
+
+## 2026-06-13 Addendum: full ``v3_driver.py`` retirement refactor plan
+
+### Goal
+
+Eliminate ``sfincs_jax/v3_driver.py`` as a 49k-line monolith and replace it
+with a standard, navigable package structure that is easier to test, profile,
+document, and extend. The public user contract must stay stable: users should
+still be able to run ``sfincs_jax input.namelist`` or call the documented Python
+API without selecting internal solver machinery. Advanced users can still opt
+into solver/preconditioner controls, but defaults should remain automatic,
+accurate, and performance-aware.
+
+### Non-negotiable constraints
+
+- Preserve numerical behavior and output schemas at each step. Every extraction
+  must land with a compatibility wrapper or import seam until downstream tests,
+  examples, and docs are migrated.
+- Keep public release artifacts honest. README/docs benchmark plots, parity
+  tables, bootstrap-current comparisons, and validation dashboards must only be
+  regenerated from complete checked reports.
+- Do not raise the CI coverage floor merely by adding trivial tests. Coverage
+  gains must come from focused physics, numerical, policy, I/O, or regression
+  tests that can catch real failures.
+- Keep every commit reviewable. Each PR should extract one conceptual layer and
+  include docs/tests for that layer.
+- Avoid large tracked fixtures. Use generated synthetic operators, release-data
+  downloads, small JSON artifacts, or tiny reference inputs for tests.
+
+### Target source tree
+
+The long-term structure should be:
+
+- ``sfincs_jax/api.py``:
+  stable Python entry points, high-level solve/result objects, and deprecation
+  shims.
+- ``sfincs_jax/cli.py``:
+  argument parsing and user-facing progress/output only; no solver policy logic.
+- ``sfincs_jax/input_compat.py`` and ``sfincs_jax/namelist.py``:
+  input parsing, normalization, and compatibility translation.
+- ``sfincs_jax/geometry/`` or focused top-level modules:
+  VMEC/Boozer/Miller loading, geometry interpolation, field components,
+  coordinate conversions, and geometry diagnostics.
+- ``sfincs_jax/grids.py`` and ``sfincs_jax/xgrid.py``:
+  phase-space grid construction, stencil identities, and velocity/radial grids.
+- ``sfincs_jax/operators/`` or focused ``rhs1_*`` / ``transport_*`` modules:
+  RHSMode=1 full-system assembly, RHSMode=2/3 transport assembly, collision
+  stencils, streaming/drift terms, and active-DOF compression.
+- ``sfincs_jax/preconditioners/`` or focused top-level modules:
+  policy parsing, automatic selection, structured f-block factors, x-block
+  factors, Schwarz/domain decomposition, sparse/direct host paths, device
+  paths, QI/QA/QH coarse spaces, and admission gates.
+- ``sfincs_jax/solvers/`` or existing ``solver.py`` split:
+  GMRES/BiCGSTAB wrappers, distributed Krylov, residual gates, solver tracing,
+  and backend-specific fallback rules.
+- ``sfincs_jax/output/`` or split ``io.py``:
+  HDF5/NetCDF/NPZ writers, output schema definitions, plotting payloads, and
+  partial-output-on-timeout logic.
+- ``sfincs_jax/validation/``:
+  release artifact readers, parity metrics, physics gates, benchmark report
+  schema, and figure generation helpers.
+
+### Phase 0: stabilization before the large branch
+
+- Finish the current coverage/refactor sequence on ``main`` with bounded
+  extractions that do not disturb user behavior.
+- Keep compatibility names imported into ``v3_driver.py`` so existing tests and
+  local debug scripts continue to work while direct tests move to the new
+  modules.
+- Maintain the release baseline: full local suite, docs, ruff, GitHub CI/Docs,
+  and PyPI release state remain green after each batch.
+- Stop when the remaining work requires changing import paths, public entry
+  points, package layout, or multiple solver call chains at once. That is the
+  trigger for the dedicated branch/PR.
+
+### Phase 1: open the dedicated refactor branch and PR
+
+- Branch name: ``refactor/v3-driver-architecture``.
+- Open a draft PR immediately after the branch is created, with this plan in
+  the PR description and a checklist matching the phases below.
+- Do not mix performance experiments with architectural moves in this PR unless
+  a performance regression is caused by the refactor itself.
+- Require CI, docs, focused physics gates, and at least one full local suite
+  before the PR is marked ready for review.
+
+### Phase 2: define stable data models and names
+
+- Create typed dataclasses for:
+  ``SolveInputs``, ``GeometryState``, ``GridState``, ``OperatorState``,
+  ``PreconditionerState``, ``SolverResult``, ``TransportResult``,
+  ``OutputSchema``, and ``BenchmarkReport``.
+- Replace ambiguous names such as ``op``, ``nml``, ``rhs1_precond_kind`` in new
+  modules with names like ``operator_state``, ``input_model``,
+  ``preconditioner_kind``, and ``transport_rhs_index``.
+- Keep short local variables only inside small mathematical kernels where the
+  notation matches equations in docs.
+- Add module docstrings explaining the physics/numerics each module owns and
+  where the relevant equations are documented.
+
+### Phase 3: split solve orchestration
+
+- Move high-level RHSMode=1 orchestration into ``rhs1_solve.py``:
+  input normalization, operator construction, default solver selection,
+  residual gates, fallback ordering, diagnostics, and result assembly.
+- Move RHSMode=2/3 transport orchestration into ``transport_solve.py``:
+  transport-matrix RHS loops, worker/parallel dispatch, sparse-direct route,
+  and output diagnostics.
+- Leave ``v3_driver.py`` as a thin compatibility facade that imports from the
+  new modules and emits deprecation comments only after all tests migrate.
+- Tests:
+  direct unit tests for policy branches, integration tests for tiny solves,
+  output-key regression tests, and CPU/GPU equivalence gates on bounded inputs.
+
+### Phase 4: split operator assembly
+
+- Keep existing ``rhs1_full_assembly.py``, ``rhs1_fblock_assembly.py``,
+  ``rhs1_collision_stencils.py``, and ``rhs1_collisionless_stencils.py`` as the
+  nucleus.
+- Move any remaining operator mutation/build helpers out of ``v3_driver.py`` to
+  assembly modules grouped by equation term:
+  streaming, magnetic drift, electric-field drift, collision, Phi1, quasineutrality,
+  current/profile constraints, and source terms.
+- Each extracted term builder must have:
+  shape tests, inactive-mask tests, zero-drive/constant-field limits, and at
+  least one finite-difference/Fourier/order-condition test where applicable.
+
+### Phase 5: split preconditioner architecture
+
+- Create a clearly named preconditioner package or module family:
+  ``preconditioner_policy.py``, ``preconditioner_dispatch.py``,
+  ``preconditioner_structured_fblock.py``, ``preconditioner_xblock.py``,
+  ``preconditioner_domain_decomposition.py``, ``preconditioner_sparse_host.py``,
+  ``preconditioner_device.py``, and ``preconditioner_coarse_spaces.py``.
+- Existing modules already started this path:
+  ``rhs1_lowmode_coarse.py``, ``rhs1_domain_decomposition.py``,
+  ``rhs1_preconditioner_dispatch.py``, ``rhs1_preconditioner_auto_policy.py``,
+  ``rhs1_qi_*``, and ``transport_preconditioner_dispatch.py``.
+- Promote those names to descriptive public-internal names once the dedicated
+  PR is active. Keep aliases for one release cycle if any docs/tests use old
+  private names.
+- Tests:
+  admission-gate tests, memory-budget tests, matrix-free metadata tests,
+  residual-reduction probes, and failure-mode tests for nonfinite/preflight
+  rejection.
+
+### Phase 6: split output and plotting
+
+- Move HDF5/NetCDF/NPZ schema construction into a small schema module with
+  explicit versioned output keys.
+- Keep plotting functions separate from solve execution; CLI ``--plot`` should
+  consume output files and never require a rerun.
+- Tests:
+  schema round-trip tests, partial-output tests, output-key parity tests versus
+  Fortran v3, and plot smoke tests from tiny checked artifacts.
+
+### Phase 7: migrate tests to module ownership
+
+- Every new module gets direct tests named after the module.
+- Existing ``test_v3_driver_*`` files should shrink to compatibility/integration
+  tests only.
+- Coverage milestones:
+  ``74 -> 80%`` after policy/preconditioner extraction,
+  ``80 -> 87%`` after solve orchestration and output schema split,
+  ``87 -> 92%`` after operator-term extraction,
+  ``92 -> 95%`` after remaining solver/transport integration seams are covered.
+- CI floor should move only after a milestone is reached on a full local
+  coverage run and GitHub CI stays below the wall-time budget.
+
+### Phase 8: performance and memory guardrails during refactor
+
+- Add lightweight benchmark gates for:
+  cold vs warm JIT, structured preconditioner setup, HDF5/NetCDF write time,
+  peak RSS on representative synthetic operators, and CLI progress reporting.
+- Keep production-resolution CPU/GPU/Fortran comparisons as release/nightly
+  gates, not every-commit CI gates.
+- Any refactor that increases runtime or memory by more than ``5%`` on a
+  bounded benchmark must either be fixed immediately or documented as a
+  deliberate tradeoff before merge.
+
+### Phase 9: documentation deliverables
+
+- Update source-map docs with the new module ownership.
+- Update API docs to show only stable public entry points and a separate
+  internal architecture page for solver/preconditioner modules.
+- Add a contributor guide explaining:
+  where to add new physics terms, where to add preconditioners, how to add
+  output keys, how to add release-data tests, and how to write bounded physics
+  gates.
+- Keep equations close to code ownership: each physics/numerical module should
+  link to the docs page with the corresponding drift-kinetic equation term,
+  discretization, and normalization.
+
+### Merge criteria for the full refactor PR
+
+- ``v3_driver.py`` is reduced to a compatibility facade below ``1000`` lines, or
+  is removed if all public imports are migrated safely.
+- Full local suite passes.
+- GitHub CI and Docs pass.
+- Package coverage is at least the next agreed milestone above the current
+  baseline, with a clear path to ``95%``.
+- Public CLI and Python API examples still run.
+- README/docs figures and tables are either unchanged by the refactor or
+  regenerated from complete reports.
+- No large fixtures or generated outputs are added to git.
 
 ## 2026-06-12 Addendum: finalize release scope and defer native production-preconditioner optimization
 
