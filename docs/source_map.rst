@@ -169,6 +169,12 @@ for debugging and monkeypatch-based tests. The first extracted layers are:
   cached operator size, geometry/collision metadata, sparse structural
   tolerance, factor dtype, and solver-JIT admission. The numerical policy lives
   in ``solver_path_policy.py``; this module owns the runtime state bridge.
+- ``sfincs_jax/krylov_dispatch.py``:
+  concrete Krylov solver routing for host-only SciPy methods, JIT/non-JIT JAX
+  GMRES, distributed GMRES, diagnostic solver labels, and
+  ``SFINCS_JAX_GMRES_DISTRIBUTED`` axis selection. The driver passes its current
+  solver globals through compatibility wrappers so existing monkeypatch-based
+  tests still exercise the same routes.
 - ``sfincs_jax/rhs1_pas_policy.py``:
   PAS applicability, PAS-TZ memory safety, PAS fallback routing, and PAS
   adaptive-smoother eligibility.
