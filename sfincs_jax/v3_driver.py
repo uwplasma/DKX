@@ -412,6 +412,9 @@ from .preconditioner_setup import (
     hash_array as _hash_array,
     matvec_submatrix as _matvec_submatrix_impl,
     precond_chunk_cols as _precond_chunk_cols,
+    rhs_mode1_precond_cache_key as _rhs_mode1_precond_cache_key_impl,
+    rhs_mode1_structured_fblock_cache_key as _rhs_mode1_structured_fblock_cache_key_impl,
+    transport_precond_cache_key as _transport_precond_cache_key_impl,
 )
 from .krylov_dispatch import (
     HOST_SCIPY_KRYLOV_METHODS as _HOST_SCIPY_KRYLOV_METHODS,
@@ -7040,44 +7043,7 @@ def _rhsmode1_dense_fallback_max(op: V3FullSystemOperator) -> int:
 
 
 def _rhsmode1_precond_cache_key(op: V3FullSystemOperator, kind: str) -> tuple[object, ...]:
-    nxi_for_x = np.asarray(op.fblock.collisionless.n_xi_for_x, dtype=np.int32)
-    precond_dtype = str(_precond_dtype())
-    # RHS-only gradients do not affect the operator; omit them so preconditioners
-    # can be reused across whichRHS/scan points.
-    return (
-        kind,
-        precond_dtype,
-        int(op.rhs_mode),
-        int(op.n_species),
-        int(op.n_x),
-        int(op.n_xi),
-        int(op.n_theta),
-        int(op.n_zeta),
-        int(op.constraint_scheme),
-        int(op.quasineutrality_option),
-        bool(op.include_phi1),
-        bool(op.include_phi1_in_kinetic),
-        bool(op.with_adiabatic),
-        float(op.alpha),
-        float(op.delta),
-        float(op.dphi_hat_dpsi_hat),
-        _hash_array(op.adiabatic_z),
-        _hash_array(op.adiabatic_nhat),
-        _hash_array(op.adiabatic_that),
-        _hash_array(op.z_s),
-        _hash_array(op.m_hat),
-        _hash_array(op.t_hat),
-        _hash_array(op.n_hat),
-        _hash_array(op.theta_weights),
-        _hash_array(op.zeta_weights),
-        _hash_array(op.b_hat),
-        _hash_array(op.d_hat),
-        _hash_array(op.b_hat_sub_theta),
-        _hash_array(op.b_hat_sub_zeta),
-        _hash_array(op.x),
-        _hash_array(op.x_weights),
-        tuple(nxi_for_x.tolist()),
-    )
+    return _rhs_mode1_precond_cache_key_impl(op, kind, precond_dtype=_precond_dtype())
 
 
 def _rhsmode1_structured_fblock_cache_key(
@@ -7086,38 +7052,16 @@ def _rhsmode1_structured_fblock_cache_key(
     *,
     params: tuple[object, ...] = (),
 ) -> tuple[object, ...]:
-    phi1_hash = None
-    if getattr(op, "phi1_hat_base", None) is not None:
-        phi1_hash = _hash_array(op.phi1_hat_base)
-    return (
-        *_rhsmode1_precond_cache_key(op, f"structured_fblock_{kind}"),
-        phi1_hash,
-        *tuple(params),
+    return _rhs_mode1_structured_fblock_cache_key_impl(
+        op,
+        kind,
+        precond_dtype=_precond_dtype(),
+        params=params,
     )
 
 
 def _transport_precond_cache_key(op: V3FullSystemOperator, kind: str) -> tuple[object, ...]:
-    nxi_for_x = np.asarray(op.fblock.collisionless.n_xi_for_x, dtype=np.int32)
-    pas = op.fblock.pas
-    fp = op.fblock.fp
-    precond_dtype = str(_precond_dtype())
-    return (
-        kind,
-        precond_dtype,
-        int(op.n_species),
-        int(op.n_x),
-        int(op.n_xi),
-        int(op.n_theta),
-        int(op.n_zeta),
-        float(op.fblock.identity_shift),
-        bool(pas is not None),
-        float(pas.nu_n) if pas is not None else None,
-        float(pas.krook) if pas is not None else None,
-        _hash_array(pas.nu_d_hat) if pas is not None else None,
-        bool(fp is not None),
-        _hash_array(fp.mat) if fp is not None else None,
-        tuple(nxi_for_x.tolist()),
-    )
+    return _transport_precond_cache_key_impl(op, kind, precond_dtype=_precond_dtype())
 
 
 def _build_rhsmode23_collision_preconditioner(

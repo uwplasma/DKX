@@ -84,3 +84,106 @@ def hash_array(arr: jnp.ndarray | np.ndarray) -> str:
 
     arr_np = np.asarray(arr, dtype=np.float64)
     return hashlib.blake2b(arr_np.tobytes(), digest_size=8).hexdigest()
+
+
+def rhs_mode1_precond_cache_key(
+    op: object,
+    kind: str,
+    *,
+    precond_dtype: object,
+) -> tuple[object, ...]:
+    """Build the operator-only cache key for RHSMode=1 preconditioners.
+
+    RHS-only gradients are deliberately excluded so preconditioners can be
+    reused across whichRHS/profile scan points that share the same linear
+    operator.
+    """
+
+    nxi_for_x = np.asarray(op.fblock.collisionless.n_xi_for_x, dtype=np.int32)
+    return (
+        kind,
+        str(precond_dtype),
+        int(op.rhs_mode),
+        int(op.n_species),
+        int(op.n_x),
+        int(op.n_xi),
+        int(op.n_theta),
+        int(op.n_zeta),
+        int(op.constraint_scheme),
+        int(op.quasineutrality_option),
+        bool(op.include_phi1),
+        bool(op.include_phi1_in_kinetic),
+        bool(op.with_adiabatic),
+        float(op.alpha),
+        float(op.delta),
+        float(op.dphi_hat_dpsi_hat),
+        hash_array(op.adiabatic_z),
+        hash_array(op.adiabatic_nhat),
+        hash_array(op.adiabatic_that),
+        hash_array(op.z_s),
+        hash_array(op.m_hat),
+        hash_array(op.t_hat),
+        hash_array(op.n_hat),
+        hash_array(op.theta_weights),
+        hash_array(op.zeta_weights),
+        hash_array(op.b_hat),
+        hash_array(op.d_hat),
+        hash_array(op.b_hat_sub_theta),
+        hash_array(op.b_hat_sub_zeta),
+        hash_array(op.x),
+        hash_array(op.x_weights),
+        tuple(nxi_for_x.tolist()),
+    )
+
+
+def rhs_mode1_structured_fblock_cache_key(
+    op: object,
+    kind: str,
+    *,
+    precond_dtype: object,
+    params: tuple[object, ...] = (),
+) -> tuple[object, ...]:
+    """Build a cache key for structured RHSMode=1 f-block preconditioners."""
+
+    phi1_hash = None
+    if getattr(op, "phi1_hat_base", None) is not None:
+        phi1_hash = hash_array(op.phi1_hat_base)
+    return (
+        *rhs_mode1_precond_cache_key(
+            op,
+            f"structured_fblock_{kind}",
+            precond_dtype=precond_dtype,
+        ),
+        phi1_hash,
+        *tuple(params),
+    )
+
+
+def transport_precond_cache_key(
+    op: object,
+    kind: str,
+    *,
+    precond_dtype: object,
+) -> tuple[object, ...]:
+    """Build the cache key for RHSMode=2/3 transport preconditioners."""
+
+    nxi_for_x = np.asarray(op.fblock.collisionless.n_xi_for_x, dtype=np.int32)
+    pas = op.fblock.pas
+    fp = op.fblock.fp
+    return (
+        kind,
+        str(precond_dtype),
+        int(op.n_species),
+        int(op.n_x),
+        int(op.n_xi),
+        int(op.n_theta),
+        int(op.n_zeta),
+        float(op.fblock.identity_shift),
+        bool(pas is not None),
+        float(pas.nu_n) if pas is not None else None,
+        float(pas.krook) if pas is not None else None,
+        hash_array(pas.nu_d_hat) if pas is not None else None,
+        bool(fp is not None),
+        hash_array(fp.mat) if fp is not None else None,
+        tuple(nxi_for_x.tolist()),
+    )
