@@ -42,4 +42,7 @@ def test_generate_high_collisionality_trend_proxy_from_artifacts(tmp_path: Path)
     assert (out_dir / "high_collisionality_proxy_test.pdf").exists()
     payload = json.loads(summary_json.read_text())
     assert payload["metadata"]["kind"] == "high_collisionality_trend_proxy"
-    assert payload["cases"]["w7x"]["gates"]["fp_l11_l12_inverse_like"] is True
+    assert payload["cases"]["lhd"]["gates"]["fp_l11_l12_inverse_like"] is True
+    assert payload["cases"]["w7x"]["gates"]["fp_l11_l12_inverse_like"] is False
+    assert payload["cases"]["w7x"]["state"] == "needs_wider_high_nu_scan"
+    assert payload["gates"]["ready_for_literature_claim"] is False

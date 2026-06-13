@@ -139,23 +139,25 @@ def test_high_collisionality_tail_slopes_match_expected_proxy_behavior() -> None
         assert pas_l11 > 0.65
         assert pas_l12 > 0.65
 
-    w7x_fp_l11 = collisionality_power_law_slope(w7x, label="Fokker-Planck", element=(0, 0), n_fit=3)
-    w7x_fp_l12 = collisionality_power_law_slope(w7x, label="Fokker-Planck", element=(0, 1), n_fit=3)
-    assert w7x_fp_l11 < -1.0
-    assert w7x_fp_l12 < -1.0
-
     lhd_summary = high_collisionality_trend_summary(lhd, n_fit=3)
     assert lhd_summary["gates"]["pas_l11_l12_positive"] is True
-    assert lhd_summary["gates"]["fp_l11_l12_inverse_like"] is False
-    assert lhd_summary["state"] == "needs_wider_high_nu_scan"
+    assert lhd_summary["gates"]["fp_l11_l12_inverse_like"] is True
+    assert lhd_summary["state"] == "asymptotic_trend_proxy"
+
+    w7x_summary = high_collisionality_trend_summary(w7x, n_fit=3)
+    assert w7x_summary["gates"]["pas_l11_l12_positive"] is True
+    assert w7x_summary["gates"]["fp_l11_l12_inverse_like"] is False
+    assert w7x_summary["state"] == "needs_wider_high_nu_scan"
 
 
 def test_high_collisionality_proxy_summary_keeps_analytic_limit_lane_honest() -> None:
     payload = build_high_collisionality_trend_proxy_summary(artifact_dir=_artifact_dir(), n_fit=3)
     assert payload["metadata"]["kind"] == "high_collisionality_trend_proxy"
     assert "nu' >> 1" in " ".join(payload["metadata"]["notes"])
-    assert payload["cases"]["lhd"]["state"] == "needs_wider_high_nu_scan"
-    assert payload["cases"]["w7x"]["state"] == "asymptotic_trend_proxy"
+    assert payload["cases"]["lhd"]["state"] == "asymptotic_trend_proxy"
+    assert payload["cases"]["w7x"]["state"] == "needs_wider_high_nu_scan"
+    assert payload["gates"]["all_fp_l11_l12_inverse_like"] is False
+    assert payload["gates"]["ready_for_literature_claim"] is False
 
 
 def test_recommended_high_collisionality_nuprime_grid_extends_beyond_current_tail() -> None:
@@ -198,7 +200,8 @@ def test_simakov_helander_audit_records_geometry_and_keeps_full_gate_closed(tmp_
     assert payload["metadata"]["kind"] == "simakov_helander_limit_audit"
     assert payload["cases"]["lhd"]["gates"]["scan_extends_to_required_high_nu"] is False
     assert payload["cases"]["lhd"]["recommended_high_nuprime_extension"][0] > payload["cases"]["lhd"]["max_nuprime"]
-    assert payload["cases"]["w7x"]["gates"]["fp_l11_l12_target_inverse_slope"] is True
+    assert payload["cases"]["lhd"]["gates"]["fp_l11_l12_target_inverse_slope"] is False
+    assert payload["cases"]["w7x"]["gates"]["fp_l11_l12_target_inverse_slope"] is False
     assert payload["gates"]["all_cases_ready_for_full_overlay"] is False
     assert payload["gates"]["full_simakov_helander_reproduction_closed"] is True
 

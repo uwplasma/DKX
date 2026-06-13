@@ -116,10 +116,11 @@ Generate the trend proxy with
 
    Power-law tail fits for ``L11`` and ``L12`` from the corrected full LHD and W7-X
    collisionality artifacts. This is a trend proxy, not the final
-   Simakov-Helander analytic-limit reproduction: the W7-X Fokker-Planck tail shows
-   the expected inverse-``nu`` trend on the checked-in range, while the LHD
+   Simakov-Helander analytic-limit reproduction: the LHD Fokker-Planck tail passes
+   the loose inverse-``nu`` trend proxy on the checked-in range, while the W7-X
    Fokker-Planck tail still needs a wider ``nu' >> 1`` scan before it can support the
-   analytic-limit claim.
+   analytic-limit claim. The stricter Simakov-Helander audit below keeps both
+   geometries deferred until the wider high-``nu`` scan is pinned.
 
 Simakov-Helander limit audit
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
