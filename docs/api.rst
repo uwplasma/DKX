@@ -70,6 +70,9 @@ API reference
 .. automodule:: sfincs_jax.matrix_reductions
    :members:
 
+.. automodule:: sfincs_jax.linear_algebra
+   :members:
+
 .. automodule:: sfincs_jax.sparse_triangular
    :members:
 
