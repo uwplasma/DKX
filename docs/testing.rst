@@ -447,6 +447,9 @@ dtype selection, iterative-refinement step parsing, explicit sparse-helper
 bounds, and the FP/PAS dense-fallback active-size ceiling.  The public driver
 wrappers remain tested separately, so this is a
 behavior-preserving refactor with a smaller directly testable policy surface.
+The adjacent ``tests/test_host_refinement.py`` covers the host direct
+refinement kernels and sparse-direct GMRES polish helper directly, including
+solver injection and sparse-factor preconditioner application.
 
 The adjacent constraint-scheme-0 sparse-first policy now lives in
 ``sfincs_jax/rhs1_constraint0_policy.py``. ``tests/test_rhs1_constraint0_policy.py``

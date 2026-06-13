@@ -623,6 +623,11 @@ for debugging and monkeypatch-based tests. The first extracted layers are:
 - ``sfincs_jax/rhs1_host_policy.py``:
   RHSMode=1 host dense fallback, host sparse-direct, sparse-preconditioned
   GMRES rescue, factor-dtype, and explicit sparse-helper policy.
+- ``sfincs_jax/host_refinement.py``:
+  host direct-solve refinement and sparse-direct GMRES polish helpers. The
+  monotone refinement loops are NumPy-only, while the polish helper accepts the
+  JAX matvec and a host sparse factor so residual-polish behavior can be tested
+  without importing the full driver.
 - ``sfincs_jax/rhs1_large_cpu_policy.py``:
   large explicit full-FP CPU sparse rescue, x-block seed, exact-LU promotion,
   host x-block assembly, and species-x-block rescue policy.
