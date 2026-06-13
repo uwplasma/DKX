@@ -39,6 +39,12 @@ Unreleased
   keeps the old private helper names by import, preserving sparse-preconditioner
   apply behavior while making the kernels independently testable. The
   post-extraction local full suite passed with ``2549 passed in 507.83 s``.
+- Extracted preconditioner setup utilities into ``preconditioner_setup.py``:
+  chunk-size policy, matrix-free selected submatrix probing, and stable array
+  hashing for cache keys. ``v3_driver.py`` keeps a compatibility wrapper for
+  submatrix probing so tests and debugging hooks can still monkeypatch the
+  driver-level unsharded operator application. The post-extraction local full
+  suite passed with ``2553 passed in 541.27 s``.
 
 v1.1.7
 ------

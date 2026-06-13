@@ -174,6 +174,10 @@ for debugging and monkeypatch-based tests. The first extracted layers are:
   cached operator size, geometry/collision metadata, sparse structural
   tolerance, factor dtype, and solver-JIT admission. The numerical policy lives
   in ``solver_path_policy.py``; this module owns the runtime state bridge.
+- ``sfincs_jax/preconditioner_setup.py``:
+  shared setup utilities for preconditioner construction: memory-bounded
+  basis-column chunking, selected-row/selected-column matrix-free submatrix
+  probing, and stable array hashes used in preconditioner cache keys.
 - ``sfincs_jax/krylov_dispatch.py``:
   concrete Krylov solver routing for host-only SciPy methods, JIT/non-JIT JAX
   GMRES, distributed GMRES, diagnostic solver labels, and
