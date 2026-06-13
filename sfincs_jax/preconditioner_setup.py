@@ -1,0 +1,86 @@
+"""Setup utilities shared by sparse and block preconditioner builders."""
+
+from __future__ import annotations
+
+from collections.abc import Callable, Mapping
+import hashlib
+import os
+
+import jax
+import jax.numpy as jnp
+import numpy as np
+
+
+def precond_chunk_cols(
+    total_size: int,
+    n_cols: int,
+    *,
+    environ: Mapping[str, str] | None = None,
+) -> int:
+    """Choose how many basis columns to probe at once during setup.
+
+    The explicit column override wins over the memory-budget estimate. Invalid
+    environment values deliberately fall back to conservative defaults, matching
+    the historical driver behavior.
+    """
+
+    env = os.environ if environ is None else environ
+    env_cols = env.get("SFINCS_JAX_PRECOND_CHUNK", "").strip()
+    if env_cols:
+        try:
+            cols = int(env_cols)
+            if cols > 0:
+                return min(cols, n_cols)
+        except ValueError:
+            pass
+    env_max_mb = env.get("SFINCS_JAX_PRECOND_MAX_MB", "").strip()
+    try:
+        max_mb = float(env_max_mb) if env_max_mb else 256.0
+    except ValueError:
+        max_mb = 256.0
+    if max_mb <= 0:
+        return n_cols
+    bytes_per_row = int(total_size) * 8
+    if bytes_per_row <= 0:
+        return n_cols
+    max_cols = max(1, int((max_mb * 1e6) // bytes_per_row))
+    return min(n_cols, max_cols)
+
+
+def matvec_submatrix(
+    op_pc: object,
+    *,
+    col_idx: np.ndarray,
+    row_idx: np.ndarray,
+    total_size: int,
+    chunk_cols: int,
+    apply_operator_fn: Callable[..., jnp.ndarray],
+) -> np.ndarray:
+    """Assemble selected rows of selected operator columns by batched probes."""
+
+    col_idx = np.asarray(col_idx, dtype=np.int32)
+    row_idx_jnp = jnp.asarray(row_idx, dtype=jnp.int32)
+    blocks: list[np.ndarray] = []
+    for start in range(0, int(col_idx.shape[0]), int(chunk_cols)):
+        idx = col_idx[start : start + int(chunk_cols)]
+        basis = jax.nn.one_hot(jnp.asarray(idx, dtype=jnp.int32), total_size, dtype=jnp.float64)
+        y = jax.vmap(
+            lambda v: apply_operator_fn(
+                op_pc,
+                v,
+                include_jacobian_terms=True,
+                allow_sharding=False,
+            )
+        )(basis)
+        y_sub = y[:, row_idx_jnp]
+        blocks.append(np.asarray(y_sub, dtype=np.float64))
+    if len(blocks) == 1:
+        return blocks[0]
+    return np.concatenate(blocks, axis=0)
+
+
+def hash_array(arr: jnp.ndarray | np.ndarray) -> str:
+    """Stable short hash for numeric arrays used in preconditioner cache keys."""
+
+    arr_np = np.asarray(arr, dtype=np.float64)
+    return hashlib.blake2b(arr_np.tobytes(), digest_size=8).hexdigest()

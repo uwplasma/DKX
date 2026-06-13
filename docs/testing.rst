@@ -336,6 +336,8 @@ preconditioner context state, and Krylov dispatch routing out of
 pytree round-trips, diagnostic metadata retention, finite-result rejection,
 local-coupling preservation, sparse triangular factor solves, mutable
 solver-hint state, dtype policy, and sparse structural-tolerance handling.
+``preconditioner_setup.py`` adds direct tests for setup chunk sizing,
+stable cache-key array hashing, and injected matrix-free submatrix probing.
 ``krylov_dispatch.py`` adds direct tests
 for host-only method rejection, JIT/plain/distributed dispatch, diagnostic
 labels, and distributed-axis environment policy. ``preconditioner_caches.py``
