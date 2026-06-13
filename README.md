@@ -26,6 +26,13 @@ seed ladders, true differentiable device-QI closure, and single-case multi-GPU
 strong scaling; those remain bounded or deferred research lanes until their
 promotion artifacts pass.
 
+The lower-memory native sparse-factor/preconditioner work for the largest
+geometry-rich RHSMode=2/3 and full-grid QA/QH RHSMode=1 cases is also deferred
+as an optimization lane. Current defaults prioritize residual-clean, auditable
+solves and Fortran-v3 parity; the experimental BLR/HSS and nested-dissection
+factor routes remain available only as opt-in research controls until they pass
+the same true-residual and setup-time gates as the promoted paths.
+
 The only README figures that are not yet production-quality claims are labeled
 as such in place: the QA/QH bootstrap-current profiles use a same-resolution
 `13 x 13 x 21 x 5` documentation grid with `15 x 15 x 21 x 5` real-space and
@@ -173,9 +180,10 @@ clean at the new floor for the one-species PAS/no-`E_r` rows, and the bounded
 PAS/with-`E_r` office GPU shard was strict-clean at `33 x 1 x 12 x 140`. The
 refreshed 3D monoenergetic geometry-11 production row was strict-clean at the
 `25 x 51 x 4 x 100` manifest floor using the structured `tzfft` transport
-preconditioner before sparse-direct rescue. Regenerate the README plot only
-after the remaining CPU/GPU production rows are collected from the checked-in
-manifest floor.
+preconditioner before sparse-direct rescue. The current README plot/table have
+been regenerated from the canonical checked reports; future production-floor
+CPU/GPU sweeps should replace them only when every promoted row passes parity,
+runtime-budget, and memory-budget gates.
 
 ## Optimization Lane
 
@@ -665,11 +673,11 @@ fails. The checked QA auto audit converged to `9.00e-13` residual in `343.5 s`
 wall after rejecting the native stack; earlier checked QA/QH active-LU reference
 audits converge to `9.95e-13` and `8.71e-14` residual with a `13.3 GB` active LU
 factor. A stricter guarded rerun with `tol=1e-10` converged to `7.27e-16` in
-`354.6 s`, and native true-coupled rescue remains opt-in because the measured
-full-grid native/coarse probes reduce the bad one-apply residual but do not
-produce a residual-clean Krylov solve. The remaining research/performance lane
-is making the lower-memory native block/coarse factor pass the same residual
-gate so the active-LU fallback is no longer needed at full grid.
+`354.6 s`. Native true-coupled, BLR/HSS, and nested-dissection rescue paths
+remain opt-in because the measured full-grid probes reduce some setup residuals
+but do not yet produce residual-clean production Krylov solves within the setup
+budget. This is now deferred optimization work, not a blocker for the current
+parity/release scope.
 
 ```bash
 SFINCS_JAX_RHS1_FULL_CSR_KRYLOV=direct \

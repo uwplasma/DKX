@@ -6,6 +6,29 @@ example suite. The lanes below are intentionally not release blockers; they are
 the next algorithmic targets for larger, more memory-limited, and more strongly
 parallel research workloads.
 
+Release decision on the native production-preconditioner lane
+-------------------------------------------------------------
+
+The lower-memory native sparse-factor/preconditioner campaign for the largest
+geometry-rich RHSMode=2/3 and full-grid QA/QH RHSMode=1 cases is deferred as
+optimization work. The code now contains tested opt-in infrastructure for
+Fortran-reduced direct ``Pmat`` emission, symbolic ordering metadata,
+superblock/nested-dissection factors, BLR/HSS-style separator updates, and
+strict setup-time true-residual admission. Those pieces are useful research
+controls, but production ``geom11`` probes still reject the native
+nested-dissection/BLR path on setup time before admission, and full-grid QA/QH
+still rely on residual-clean active-LU fallback when the lower-memory native
+candidate fails its residual gate.
+
+This means the release scope is closed on correctness and documentation:
+promoted defaults keep the residual-clean/Fortran-parity paths, while the
+native lower-memory replacement remains nonblocking until a future algorithm
+passes the same residual, runtime, and memory gates. Future work should avoid
+more smoother/restart tuning and instead target a materially different
+separator hierarchy/orderer, matrix-free admitted Schur approximation, or
+compiled/JAX-native sparse factorization that avoids Python-level recursive
+setup on large fronts.
+
 This page exists to keep those lanes concrete. Each item names the present
 implementation, the remaining blocker, the next source-code touchpoints, and the
 gate that must pass before the result can be promoted into public performance
