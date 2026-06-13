@@ -1,8 +1,8 @@
-"""Host-side iterative-refinement helpers for sparse and dense direct solves.
+"""Host-side refinement and polish helpers for direct solve fallbacks.
 
-These routines are intentionally NumPy-only.  They sit below the JAX driver
-paths that build matrices and factors, and above SciPy/SuperLU solve objects.
-Keeping them isolated makes the residual-polishing behavior easy to test
+The direct refinement routines are NumPy-only. The sparse polish helper accepts
+a JAX matvec because it uses a host factor as a preconditioner inside SciPy
+GMRES. Keeping them isolated makes residual-improvement behavior testable
 without importing the full v3 driver.
 """
 
@@ -10,7 +10,10 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
+import jax.numpy as jnp
 import numpy as np
+
+from .solver import gmres_solve_with_history_scipy
 
 
 def host_sparse_direct_solve_with_refinement(
@@ -79,7 +82,47 @@ def host_direct_solve_with_refinement(
     return x_np, residual_norm
 
 
+def host_sparse_direct_polish(
+    *,
+    matvec_fn: Callable[[jnp.ndarray], jnp.ndarray],
+    rhs_vec: jnp.ndarray,
+    x0_np: np.ndarray,
+    ilu,
+    factor_dtype: np.dtype,
+    tol: float,
+    atol: float,
+    restart: int,
+    maxiter: int | None,
+    precondition_side: str,
+    gmres_solver: Callable[..., tuple[np.ndarray, float, list[float]]] | None = None,
+) -> tuple[np.ndarray, float]:
+    """Polish a host sparse-direct solution with preconditioned SciPy GMRES."""
+
+    def _precond_sparse(v: jnp.ndarray) -> jnp.ndarray:
+        v_np = np.asarray(v, dtype=factor_dtype).reshape((-1,))
+        y_np = ilu.solve(v_np)
+        return jnp.asarray(y_np, dtype=jnp.float64)
+
+    solver = gmres_solve_with_history_scipy if gmres_solver is None else gmres_solver
+    x_np, _rn_sparse, _history = solver(
+        matvec=matvec_fn,
+        b=rhs_vec,
+        preconditioner=_precond_sparse,
+        x0=jnp.asarray(x0_np, dtype=jnp.float64),
+        tol=tol,
+        atol=atol,
+        restart=restart,
+        maxiter=maxiter,
+        precondition_side=precondition_side,
+    )
+    x_polish = np.asarray(x_np, dtype=np.float64)
+    residual_vec = rhs_vec - matvec_fn(jnp.asarray(x_polish, dtype=jnp.float64))
+    residual_norm = float(jnp.linalg.norm(residual_vec))
+    return x_polish, residual_norm
+
+
 __all__ = [
     "host_direct_solve_with_refinement",
+    "host_sparse_direct_polish",
     "host_sparse_direct_solve_with_refinement",
 ]

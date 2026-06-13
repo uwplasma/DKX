@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+import jax.numpy as jnp
 import numpy as np
 import pytest
 from scipy import sparse
 
 from sfincs_jax.host_refinement import (
     host_direct_solve_with_refinement,
+    host_sparse_direct_polish,
     host_sparse_direct_solve_with_refinement,
 )
 
@@ -63,3 +65,30 @@ def test_refinement_stops_when_trial_residual_worsens() -> None:
     np.testing.assert_allclose(x, np.zeros_like(rhs))
     assert rn == pytest.approx(np.linalg.norm(rhs))
     assert calls == 2
+
+
+def test_sparse_direct_polish_uses_injected_solver_and_preconditioner() -> None:
+    seen = {}
+
+    def fake_gmres(**kwargs):
+        probe = kwargs["preconditioner"](jnp.asarray([4.0, -2.0], dtype=jnp.float64))
+        seen["probe"] = np.asarray(probe)
+        return np.asarray([1.0, -2.0]), 0.0, [0.0]
+
+    x, rn = host_sparse_direct_polish(
+        matvec_fn=lambda x: x,
+        rhs_vec=jnp.asarray([1.0, -2.0], dtype=jnp.float64),
+        x0_np=np.zeros(2, dtype=np.float64),
+        ilu=_HalfSolve(),
+        factor_dtype=np.dtype(np.float64),
+        tol=1e-12,
+        atol=0.0,
+        restart=4,
+        maxiter=4,
+        precondition_side="left",
+        gmres_solver=fake_gmres,
+    )
+
+    np.testing.assert_allclose(seen["probe"], np.asarray([2.0, -1.0]))
+    np.testing.assert_allclose(x, np.asarray([1.0, -2.0]))
+    assert rn == 0.0

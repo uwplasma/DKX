@@ -104,6 +104,8 @@ Current branch status:
   dtype/tolerance context, and solver-JIT admission. ``preconditioner_setup.py``
   owns preconditioner setup chunking, submatrix probing, and cache-key array
   hashing plus RHSMode=1/transport preconditioner cache-key construction.
+  ``host_refinement.py`` owns host direct-solve refinement and sparse-direct
+  GMRES polish helpers.
   ``krylov_dispatch.py`` now
   owns host-only/JAX/distributed Krylov route selection and solver labels, with
   thin driver wrappers preserving existing monkeypatch/debug workflows.
@@ -120,7 +122,11 @@ Current branch status:
   ``linear_algebra.py`` extraction tests passed with ``4 passed in 2.14 s``;
   broader least-squares/GMRES/Schur validation passed with
   ``77 passed in 50.66 s``; full local suite passed with
-  ``2558 passed in 542.63 s``; strict docs build passed.
+  ``2558 passed in 542.63 s``; strict docs build passed. The focused
+  ``host_refinement.py`` polish extraction tests passed with
+  ``18 passed in 1.04 s``; broader sparse/refinement validation passed with
+  ``68 passed in 13.30 s``; full local suite passed with
+  ``2559 passed in 543.75 s``; strict docs build passed.
 - Next PR-level moves should split high-level RHSMode=1 solve orchestration
   into ``rhs1_solve.py`` and RHSMode=2/3 orchestration into
   ``transport_solve.py`` after the focused module extractions are green.

@@ -282,6 +282,7 @@ from .rhs1_host_policy import (
 )
 from .host_refinement import (
     host_direct_solve_with_refinement as _host_direct_solve_with_refinement_impl,
+    host_sparse_direct_polish as _host_sparse_direct_polish_impl,
     host_sparse_direct_solve_with_refinement as _host_sparse_direct_solve_with_refinement_impl,
 )
 from .transport_policy import (
@@ -884,26 +885,19 @@ def _host_sparse_direct_polish(
     maxiter: int | None,
     precondition_side: str,
 ) -> tuple[np.ndarray, float]:
-    def _precond_sparse(v: jnp.ndarray) -> jnp.ndarray:
-        v_np = np.asarray(v, dtype=factor_dtype).reshape((-1,))
-        y_np = ilu.solve(v_np)
-        return jnp.asarray(y_np, dtype=jnp.float64)
-
-    x_np, _rn_sparse, _history = gmres_solve_with_history_scipy(
-        matvec=matvec_fn,
-        b=rhs_vec,
-        preconditioner=_precond_sparse,
-        x0=jnp.asarray(x0_np, dtype=jnp.float64),
+    return _host_sparse_direct_polish_impl(
+        matvec_fn=matvec_fn,
+        rhs_vec=rhs_vec,
+        x0_np=x0_np,
+        ilu=ilu,
+        factor_dtype=factor_dtype,
         tol=tol,
         atol=atol,
         restart=restart,
         maxiter=maxiter,
         precondition_side=precondition_side,
+        gmres_solver=gmres_solve_with_history_scipy,
     )
-    x_polish = np.asarray(x_np, dtype=np.float64)
-    residual_vec = rhs_vec - matvec_fn(jnp.asarray(x_polish, dtype=jnp.float64))
-    residual_norm = float(jnp.linalg.norm(residual_vec))
-    return x_polish, residual_norm
 
 
 def _host_physical_memory_mb() -> float | None:
