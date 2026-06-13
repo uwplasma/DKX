@@ -334,7 +334,8 @@ solver-runtime finite/synchronization helpers, matrix-reduction primitives,
 preconditioner context state, and Krylov dispatch routing out of
 ``v3_driver.py`` with direct tests for
 pytree round-trips, diagnostic metadata retention, finite-result rejection,
-local-coupling preservation, sparse triangular factor solves, mutable
+local-coupling preservation, small differentiable regularized least-squares
+solves, sparse triangular factor solves, mutable
 solver-hint state, dtype policy, and sparse structural-tolerance handling.
 ``preconditioner_setup.py`` adds direct tests for setup chunk sizing,
 stable cache-key array hashing, injected matrix-free submatrix probing, and

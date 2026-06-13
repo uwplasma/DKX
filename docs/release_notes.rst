@@ -51,6 +51,11 @@ Unreleased
   ``_precond_dtype()`` behavior, while direct tests now cover key stability,
   Phi1 participation, PAS/FP signatures, and dtype partitioning. The
   post-extraction local full suite passed with ``2556 passed in 543.16 s``.
+- Extracted the backend-safe tiny regularized least-squares kernel into
+  ``linear_algebra.py``. The driver keeps the historical private alias, while
+  direct tests now cover dense-reference agreement, near-rank-deficient systems,
+  empty coarse bases, and finite autodiff through the helper. The
+  post-extraction local full suite passed with ``2558 passed in 542.63 s``.
 
 v1.1.7
 ------
