@@ -8,6 +8,11 @@ Unreleased
   f/tail-moment and tail-only matrix-free residual-correction builders into
   ``rhs1_lowmode_coarse.py`` with direct tests for tail-selection policy,
   compact metadata, and bounded projection behavior.
+- Extracted RHSMode=1 angular domain-decomposition sizing and patch-range
+  helpers into ``rhs1_domain_decomposition.py`` with direct tests for
+  shard-aware block sizing, overlap clamping, environment override handling,
+  and multi-level coarse-block termination. The post-extraction local full
+  suite passed with ``2520 passed in 537.83 s``.
 
 v1.1.7
 ------

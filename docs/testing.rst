@@ -207,7 +207,11 @@ synthetic operators. The next refactor extraction moved RHSMode=1 low-mode angul
 moment, coupled f/tail, and tail-only coarse-space construction into
 ``rhs1_lowmode_coarse.py`` with direct tests for feature normalization, rank
 capping, compact matrix-free Galerkin and least-squares metadata, residual
-projection, and tail-selection policies on bounded synthetic operators. These tests were
+projection, and tail-selection policies on bounded synthetic operators. The next
+small extraction moved RHSMode=1 angular domain-decomposition patch and
+two-level Schwarz sizing rules into ``rhs1_domain_decomposition.py`` with direct
+tests for patch coverage, overlap clamping, shard-aware block sizing,
+environment overrides, and coarse-level termination. These tests were
 chosen from the same identities used in the
 SFINCS technical documentation and the 2014 SFINCS paper: periodic/spectral
 differentiation exactness, finite-difference order conditions, Boozer-coordinate
@@ -323,6 +327,8 @@ enabled. The final full coverage audit measured total package coverage at ``74%`
 no longer broad helper coverage; it is concentrated in the largest solver,
 I/O, sparse-pattern, and system-assembly bodies that still need further
 behavior-preserving extraction.
+The next main-branch refactor step extracted RHSMode=1 domain-decomposition
+heuristics and passed the local full suite with ``2520`` tests in ``537.83 s``.
 
 The large refactor closure gate extends that strategy in two directions. First, it
 splits RHSMode=1 preconditioner policy into directly tested helper modules, covering alias

@@ -181,6 +181,11 @@ for debugging and monkeypatch-based tests. The first extracted layers are:
   structured RHSMode=1 f-block preconditioners. The module keeps coarse-space
   algebra independently testable without materializing dense operator bases in
   the driver.
+- ``sfincs_jax/rhs1_domain_decomposition.py``:
+  deterministic angular domain-decomposition patch ranges, shard-aware block
+  sizing, and two-level Schwarz coarse-block heuristics. These rules are kept
+  independent of the full operator so multi-device preconditioner policy can be
+  tested without launching a solve.
 - ``sfincs_jax/rhs1_active_dof.py``:
   RHSMode=1 active-degree-of-freedom routing and reduced-index-map
   construction for truncated pitch grids, x-block active-DOF opt-ins, and PAS
