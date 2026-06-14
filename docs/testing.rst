@@ -497,6 +497,10 @@ builder itself with injected operator-build, pattern-build, backend, guard, and
 factorization callbacks. The existing driver sparse-helper tests remain in
 place to prove that monkeypatching the ``v3_driver`` compatibility seam still
 reaches the extracted implementation.
+``tests/test_rhs1_direct_tail_policy.py`` covers the next adjacent extraction:
+direct-tail cache-key hashing, support-mode/env sensitivity, cache-hit metadata,
+direct reduced-Pmat aliases, adaptive memory-cap policy, and the structured
+host sparse adapter without running a production solve.
 ``tests/test_rhs1_xblock_sparse_host_policy.py`` also covers the production
 host x-block factor cap: by default, very large local sparse factors are skipped
 instead of spending the full runtime budget on singular ILU attempts, while an
