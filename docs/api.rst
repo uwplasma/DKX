@@ -243,10 +243,16 @@ research workflows.
 .. automodule:: sfincs_jax.transport_dense_lu
    :members:
 
+.. automodule:: sfincs_jax.transport_dense_batch
+   :members:
+
 .. automodule:: sfincs_jax.transport_handoff_policy
    :members:
 
 .. automodule:: sfincs_jax.transport_host_gmres
+   :members:
+
+.. automodule:: sfincs_jax.transport_iteration_stats
    :members:
 
 .. automodule:: sfincs_jax.transport_parallel_payload
