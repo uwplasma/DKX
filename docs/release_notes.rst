@@ -62,6 +62,12 @@ Unreleased
   the extracted polish helper with an injected solver and sparse-factor
   preconditioner. The post-extraction local full suite passed with
   ``2559 passed in 543.75 s``.
+- Moved transport-worker XLA flag rewriting into
+  ``transport_parallel_policy.py`` next to the backend, environment, and
+  process-pool policy helpers. The driver keeps a compatibility wrapper, now
+  accepting the positional callback signature used by worker-env setup, and
+  focused tests cover stale XLA thread/device-cap replacement. The
+  post-extraction local full suite passed with ``2562 passed in 550.40 s``.
 
 v1.1.7
 ------

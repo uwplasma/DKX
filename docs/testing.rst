@@ -405,8 +405,9 @@ split into manageable pieces.
 The docstring gate now discovers every ``sfincs_jax/*policy*.py`` module and also
 checks public policy classes/functions, so new extraction seams must remain
 discoverable. ``tests/test_transport_policy_coverage.py`` adds fast direct coverage
-for transport backend/sparse-host/recycle policy and transport parallel
-scaling-audit/environment helpers without running transport solves.
+for transport backend/sparse-host/recycle policy, transport parallel
+scaling-audit/environment helpers, and worker-local XLA flag rewriting without running
+transport solves.
 
 QI seed-robustness artifacts are also checked as data, not only as scripts.
 ``tests/test_qi_seed_smoke_artifact.py`` verifies the one-seed smoke artifact,
