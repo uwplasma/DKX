@@ -686,10 +686,19 @@ the historical private driver name and test the focused module directly. This ke
 - ``sfincs_jax/transport_dense_lu.py``:
   cached dense-LU solver and preconditioner construction used by bounded transport
   dense fallback and dense-preconditioner paths.
+- ``sfincs_jax/transport_dense_batch.py``:
+  batched dense RHSMode=2/3 transport solve helper. It owns all-RHS dense matrix
+  assembly, active-DOF reduction/expansion, optional streamed diagnostic
+  collection, residual bookkeeping, and per-``whichRHS`` progress emission for
+  the bounded dense branch.
 - ``sfincs_jax/transport_host_gmres.py``:
   host SciPy GMRES first-attempt/rescue solve helper for explicit transport paths,
   including PETSc-like preconditioned-residual acceptance for the relevant
   near-singular transport systems.
+- ``sfincs_jax/transport_iteration_stats.py``:
+  optional small-system SciPy Krylov history reruns used only for transport
+  ``ksp_iterations`` progress diagnostics. Diagnostic failures are reported but
+  never change the production solve result.
 - ``sfincs_jax/transport_parallel_payload.py``:
   injected-dependency payload normalization, child-worker guard setup, transport solve
   call construction, merge-ready result packing, and GPU-worker NPZ array conversion
