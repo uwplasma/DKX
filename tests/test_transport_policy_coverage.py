@@ -9,6 +9,7 @@ import pytest
 from sfincs_jax.transport_parallel_policy import (
     audit_sharded_solve_scaling_summary,
     audit_transport_parallel_scaling_summary,
+    rewrite_xla_flags,
     transport_parallel_backend,
     transport_parallel_gpu_worker_env,
     transport_parallel_persistent_pool_enabled,
@@ -564,6 +565,37 @@ def test_sharded_scaling_audit_stays_non_release_but_ci_gateable() -> None:
     assert audit.timing_semantics == "hot_solve"
     assert audit.operator_reuse_gate
     assert any("not a release scaling claim" in note for note in audit.notes)
+
+
+def test_rewrite_xla_flags_replaces_stale_thread_and_device_caps() -> None:
+    rewritten = rewrite_xla_flags(
+        " --keep=this "
+        "--xla_cpu_parallelism_threads=99 "
+        "--xla_cpu_multi_thread_eigen=false "
+        "--xla_cpu_multi_thread_eigen_num_threads=32 "
+        "--xla_force_host_platform_device_count=8 ",
+        6,
+        2,
+    )
+
+    assert rewritten == (
+        "--keep=this "
+        "--xla_cpu_multi_thread_eigen=true "
+        "--xla_cpu_multi_thread_eigen_num_threads=6 "
+        "--xla_force_host_platform_device_count=2"
+    )
+
+
+def test_rewrite_xla_flags_drops_managed_tokens_when_caps_are_unset() -> None:
+    rewritten = rewrite_xla_flags(
+        "--xla_force_host_platform_device_count=4 "
+        "--xla_cpu_multi_thread_eigen_num_threads=3 "
+        "--other_flag=yes",
+        None,
+        None,
+    )
+
+    assert rewritten == "--other_flag=yes"
 
 
 def test_transport_parallel_env_helpers_restore_and_fallback(

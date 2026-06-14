@@ -339,6 +339,7 @@ from .transport_dense_lu import (
 )
 from .transport_host_gmres import transport_host_gmres_solve as _transport_host_gmres_solve
 from .transport_parallel_policy import (
+    rewrite_xla_flags as _rewrite_xla_flags_impl,
     transport_parallel_backend as _transport_parallel_backend_impl,
     transport_parallel_gpu_worker_env as _transport_parallel_gpu_worker_env_impl,
     transport_parallel_persistent_pool_enabled as _transport_parallel_persistent_pool_enabled_impl,
@@ -45000,24 +45001,8 @@ def solve_v3_full_system_newton_krylov_history(
     )
 
 
-def _rewrite_xla_flags(flags: str, *, cpu_threads: int | None, host_devices: int | None) -> str:
-    parts = []
-    for token in flags.split():
-        if token.startswith("--xla_cpu_parallelism_threads="):
-            continue
-        if token.startswith("--xla_cpu_multi_thread_eigen_num_threads="):
-            continue
-        if token.startswith("--xla_cpu_multi_thread_eigen="):
-            continue
-        if token.startswith("--xla_force_host_platform_device_count="):
-            continue
-        parts.append(token)
-    if cpu_threads is not None:
-        parts.append("--xla_cpu_multi_thread_eigen=true")
-        parts.append(f"--xla_cpu_multi_thread_eigen_num_threads={int(cpu_threads)}")
-    if host_devices is not None:
-        parts.append(f"--xla_force_host_platform_device_count={int(host_devices)}")
-    return " ".join(parts).strip()
+def _rewrite_xla_flags(flags: str, cpu_threads: int | None, host_devices: int | None) -> str:
+    return _rewrite_xla_flags_impl(flags, cpu_threads, host_devices)
 
 
 @contextlib.contextmanager

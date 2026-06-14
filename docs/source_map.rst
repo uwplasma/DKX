@@ -678,7 +678,7 @@ for debugging and monkeypatch-based tests. The first extracted layers are:
 - ``sfincs_jax/transport_parallel_policy.py``:
   pure transport process-parallel backend selection, worker-count validation,
   benchmark scaling audits, process-pool cache keys, GPU-worker environment
-  isolation, and multiprocessing fallback policy.
+  isolation, XLA worker flag rewriting, and multiprocessing fallback policy.
 - ``sfincs_jax/transport_parallel_runtime.py``:
   transport parallel RHS partitioning, GPU worker subprocess launch, and parent-side
   merge of per-worker state/residual/elapsed-time results.

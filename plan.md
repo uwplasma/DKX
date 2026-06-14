@@ -105,7 +105,9 @@ Current branch status:
   owns preconditioner setup chunking, submatrix probing, and cache-key array
   hashing plus RHSMode=1/transport preconditioner cache-key construction.
   ``host_refinement.py`` owns host direct-solve refinement and sparse-direct
-  GMRES polish helpers.
+  GMRES polish helpers. ``transport_parallel_policy.py`` owns worker-local XLA
+  flag rewriting in addition to transport parallel backend/environment/pool
+  policy.
   ``krylov_dispatch.py`` now
   owns host-only/JAX/distributed Krylov route selection and solver labels, with
   thin driver wrappers preserving existing monkeypatch/debug workflows.
@@ -126,7 +128,11 @@ Current branch status:
   ``host_refinement.py`` polish extraction tests passed with
   ``18 passed in 1.04 s``; broader sparse/refinement validation passed with
   ``68 passed in 13.30 s``; full local suite passed with
-  ``2559 passed in 543.75 s``; strict docs build passed.
+  ``2559 passed in 543.75 s``; strict docs build passed. The focused
+  transport parallel XLA-flag policy extraction passed focused
+  policy/parallel tests with ``62 passed in 16.13 s``, broader
+  policy/docstring tests with ``65 passed in 14.74 s``, full local suite with
+  ``2562 passed in 550.40 s``, and strict docs build passed.
 - Next PR-level moves should split high-level RHSMode=1 solve orchestration
   into ``rhs1_solve.py`` and RHSMode=2/3 orchestration into
   ``transport_solve.py`` after the focused module extractions are green.

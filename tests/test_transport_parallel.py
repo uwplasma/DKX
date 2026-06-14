@@ -488,6 +488,21 @@ def test_transport_parallel_pool_key_tracks_backend(monkeypatch: pytest.MonkeyPa
     assert key_cpu != key_gpu
 
 
+def test_driver_xla_rewrite_wrapper_accepts_worker_env_positional_callback() -> None:
+    rewritten = v3_driver._rewrite_xla_flags(
+        "--xla_cpu_multi_thread_eigen=false --keep=1",
+        3,
+        1,
+    )
+
+    assert rewritten == (
+        "--keep=1 "
+        "--xla_cpu_multi_thread_eigen=true "
+        "--xla_cpu_multi_thread_eigen_num_threads=3 "
+        "--xla_force_host_platform_device_count=1"
+    )
+
+
 def test_apply_cores_setting_does_not_force_transport_parallel(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("SFINCS_JAX_TRANSPORT_PARALLEL", raising=False)
     monkeypatch.delenv("SFINCS_JAX_TRANSPORT_PARALLEL_WORKERS", raising=False)

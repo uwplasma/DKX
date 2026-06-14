@@ -113,6 +113,32 @@ def validate_transport_parallel_worker_count(
     return workers
 
 
+def rewrite_xla_flags(flags: str, cpu_threads: int | None, host_devices: int | None) -> str:
+    """Rewrite worker-local XLA flags without duplicating stale thread/device caps.
+
+    Transport worker pools set CPU thread and host-device limits in child
+    processes. Rewriting instead of appending avoids conflicting XLA tokens when
+    workers are reused or launched from shells that already export ``XLA_FLAGS``.
+    """
+    parts = []
+    for token in str(flags).split():
+        if token.startswith("--xla_cpu_parallelism_threads="):
+            continue
+        if token.startswith("--xla_cpu_multi_thread_eigen_num_threads="):
+            continue
+        if token.startswith("--xla_cpu_multi_thread_eigen="):
+            continue
+        if token.startswith("--xla_force_host_platform_device_count="):
+            continue
+        parts.append(token)
+    if cpu_threads is not None:
+        parts.append("--xla_cpu_multi_thread_eigen=true")
+        parts.append(f"--xla_cpu_multi_thread_eigen_num_threads={int(cpu_threads)}")
+    if host_devices is not None:
+        parts.append(f"--xla_force_host_platform_device_count={int(host_devices)}")
+    return " ".join(parts).strip()
+
+
 def _finite_positive_float(value: object, *, name: str) -> float:
     try:
         numeric = float(value)
