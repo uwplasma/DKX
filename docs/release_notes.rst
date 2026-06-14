@@ -106,6 +106,12 @@ Unreleased
   solver-kind mapping, restart policy, implicit custom-solve routing,
   JIT/non-JIT selection, and distributed residual-solve routing to a focused
   module with direct tests.
+- Extracted the RHSMode=2/3 sparse-direct rescue implementation into
+  ``transport_sparse_direct_solve.py``. The driver now builds an explicit
+  context for pattern probing, direct active FP factors, explicit sparse helper
+  setup, fallback sparse-ILU setup, host refinement, float32 polish, and
+  float64 retry, preserving the existing sparse rescue behavior with direct
+  unit coverage and sparse-direct regressions.
 
 v1.1.7
 ------
