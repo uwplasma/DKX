@@ -671,6 +671,11 @@ the historical private driver name and test the focused module directly. This ke
   shared active-DOF transport policy, active-index map construction, and dense
   fallback / dense-preconditioner policy used before the transport preconditioner and
   solve handoff layers.
+- ``sfincs_jax/transport_streaming_outputs.py``:
+  host-side streaming accumulator for RHSMode=2/3 transport diagnostics. It owns the
+  per-``whichRHS`` NumPy buffers, NTV/source handling, and final output-field
+  dictionary assembly used by low-memory transport solves, keeping HDF5-layout details
+  out of the solver loop.
 - ``sfincs_jax/transport_handoff_policy.py``:
   shared transport retry residual metrics, better-candidate comparisons, and RHSMode=3
   polish threshold/restart/maxiter policy used by the reduced and full transport solve
