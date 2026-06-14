@@ -18950,7 +18950,7 @@ Implemented:
   and `SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_ADJOINT_KRYLOV_TRANSPOSE`.
   It is not enabled in public defaults and is not yet promoted as evidence.
 
-Validation so far:
+Validation:
 
 - `py_compile` passed for the touched QI source, driver, runner, and tests.
 - `ruff` passed for the touched QI source, driver, runner, and tests.
@@ -30097,6 +30097,49 @@ Validation:
   tests/test_transport_sparse_direct_solve.py tests/test_transport_sparse_direct.py
   tests/test_fortran_reduced_preconditioner.py``:
   ``106 passed in 13.97 s``.
+
+### 19.33 Explicit sparse host-factor builder split
+
+Goal:
+
+- Move the explicit sparse host operator assembly, logging, preflight guard,
+  and factorization orchestration out of ``v3_driver.py`` while preserving the
+  existing monkeypatch/debug seam used by sparse-helper and preconditioner
+  tests.
+
+Implementation:
+
+- Added ``sfincs_jax/explicit_sparse_factor_builder.py`` with
+  ``build_host_sparse_direct_factor_from_matvec``.
+- Kept ``v3_driver.py`` as a compatibility wrapper that injects
+  ``build_operator_from_matvec``, ``build_operator_from_pattern``,
+  ``factorize_host_sparse_operator``, ``jax.default_backend``, and the
+  monolithic guard-size callback from the current driver namespace.
+- Added direct builder tests for injected matvec/backend/factorizer behavior,
+  pattern-probe progress logging, and injected monolithic preflight rejection.
+- Updated API docs, release notes, source map, and testing documentation.
+
+Validation so far:
+
+- ``python -m py_compile sfincs_jax/explicit_sparse_factor_builder.py
+  sfincs_jax/v3_driver.py tests/test_explicit_sparse_factor_builder.py
+  tests/test_v3_driver_sparse_helper_coverage.py``: passed.
+- ``python -m ruff check sfincs_jax/explicit_sparse_factor_builder.py
+  sfincs_jax/v3_driver.py tests/test_explicit_sparse_factor_builder.py
+  tests/test_v3_driver_sparse_helper_coverage.py``: passed.
+- ``python -m pytest -q tests/test_explicit_sparse_factor_builder.py
+  tests/test_v3_driver_sparse_helper_coverage.py -k 'explicit_sparse or
+  build_host_sparse_direct'``: ``9 passed, 9 deselected in 0.77 s``.
+- ``python -m pytest -q tests/test_explicit_sparse_factor_builder.py
+  tests/test_explicit_sparse_factor_policy.py
+  tests/test_v3_driver_sparse_helper_coverage.py
+  tests/test_transport_sparse_direct_solve.py tests/test_transport_sparse_direct.py
+  tests/test_fortran_reduced_preconditioner.py``:
+  ``109 passed in 24.37 s``.
+- ``SPHINXOPTS='-W --keep-going' python -m sphinx -b html docs
+  docs/_build/html``: passed.
+- ``git diff --check``: passed.
+- ``python -m pytest -q``: ``2610 passed in 554.00 s``.
 
 ### 19.30 Newton-Krylov KSP diagnostics split
 

@@ -131,6 +131,11 @@ Unreleased
   monkeypatch-compatible seams, but default/override parsing for dense/CSR
   budgets, pattern probing, symbolic Schur/frontal/ND/BLR settings, SuperLU
   options, and ILU options is now tested in one focused module.
+- Extracted explicit sparse host-factor assembly/factorization orchestration
+  into ``explicit_sparse_factor_builder.py``. ``v3_driver.py`` now keeps a
+  compatibility wrapper that injects the current operator-build, pattern-build,
+  factorization, backend, and guard callbacks, preserving existing debug and
+  monkeypatch seams while removing another large block from the monolith.
 
 v1.1.7
 ------

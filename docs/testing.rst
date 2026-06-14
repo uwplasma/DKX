@@ -492,6 +492,11 @@ cap, while PAS and JAX-factor paths retain the lower memory-conservative cap.
 defaults, environment overrides, bounds, factor-kind aliases, SuperLU
 permutation fallback, ILU options, monolithic LU/ILU guards, and symbolic
 Schur/frontal/ND/BLR knobs are checked without launching a large solve.
+``tests/test_explicit_sparse_factor_builder.py`` then tests the extracted
+builder itself with injected operator-build, pattern-build, backend, guard, and
+factorization callbacks. The existing driver sparse-helper tests remain in
+place to prove that monkeypatching the ``v3_driver`` compatibility seam still
+reaches the extracted implementation.
 ``tests/test_rhs1_xblock_sparse_host_policy.py`` also covers the production
 host x-block factor cap: by default, very large local sparse factors are skipped
 instead of spending the full runtime budget on singular ILU attempts, while an

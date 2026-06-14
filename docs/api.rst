@@ -85,6 +85,9 @@ API reference
 .. automodule:: sfincs_jax.explicit_sparse_factor_policy
    :members:
 
+.. automodule:: sfincs_jax.explicit_sparse_factor_builder
+   :members:
+
 .. automodule:: sfincs_jax.krylov_dispatch
    :members:
 
