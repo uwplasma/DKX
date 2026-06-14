@@ -255,6 +255,9 @@ research workflows.
 .. automodule:: sfincs_jax.transport_iteration_stats
    :members:
 
+.. automodule:: sfincs_jax.transport_linear_solve
+   :members:
+
 .. automodule:: sfincs_jax.transport_parallel_payload
    :members:
 
