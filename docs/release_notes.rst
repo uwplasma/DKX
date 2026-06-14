@@ -117,6 +117,10 @@ Unreleased
   wrappers that inject the active matvec, preconditioner, emit callback, and
   size/iteration guards, while the SciPy replay and non-fatal diagnostic
   failure paths have direct unit tests.
+- Extracted optional Newton-Krylov/Phi1 GMRES history replay into
+  ``newton_krylov_diagnostics.py`` with direct tests for disabled diagnostics,
+  size/iteration skip gates, successful residual-history emission, and
+  non-fatal replay failures.
 
 v1.1.7
 ------
