@@ -71,12 +71,8 @@ from .explicit_sparse import (
     wrap_sparse_factor_with_coarse_correction,
 )
 from .explicit_sparse_factor_policy import (
-    explicit_sparse_factor_kind_from_env as _explicit_sparse_factor_kind_from_env,
-    explicit_sparse_monolithic_guard_enabled as _explicit_sparse_monolithic_guard_enabled,
+    explicit_sparse_factor_settings_from_env as _explicit_sparse_factor_settings_from_env,
     explicit_sparse_monolithic_max_size as _explicit_sparse_monolithic_max_size,
-    parse_explicit_sparse_bool as _parse_explicit_sparse_bool,
-    parse_explicit_sparse_float as _parse_explicit_sparse_float,
-    parse_explicit_sparse_int as _parse_explicit_sparse_int,
 )
 from .rhs1_device_operator import device_csr_from_matrix, validate_device_csr_matvec
 from .rhs1_domain_decomposition import (
@@ -1053,410 +1049,128 @@ def _build_host_sparse_direct_factor_from_matvec(
     default_monolithic_guard_enabled: bool = True,
 ):
     factor_dtype_np = np.dtype(factor_dtype)
-    block_cols_env = os.environ.get("SFINCS_JAX_EXPLICIT_SPARSE_BLOCK_COLS", "").strip()
-    dense_max_env = os.environ.get("SFINCS_JAX_EXPLICIT_SPARSE_DENSE_MAX_MB", "").strip()
-    csr_max_env = os.environ.get("SFINCS_JAX_EXPLICIT_SPARSE_CSR_MAX_MB", "").strip()
-    drop_tol_env = os.environ.get("SFINCS_JAX_EXPLICIT_SPARSE_DROP_TOL", "").strip()
-    color_batch_env = os.environ.get("SFINCS_JAX_EXPLICIT_SPARSE_PATTERN_COLOR_BATCH", "").strip()
-    symbolic_overlap_env = os.environ.get("SFINCS_JAX_EXPLICIT_SPARSE_SYMBOLIC_BLOCK_OVERLAP", "").strip()
-    symbolic_coarse_cols_env = os.environ.get("SFINCS_JAX_EXPLICIT_SPARSE_SYMBOLIC_COARSE_MAX_COLS", "").strip()
-    symbolic_coarse_probe_cols_env = os.environ.get("SFINCS_JAX_EXPLICIT_SPARSE_SYMBOLIC_COARSE_PROBE_COLS", "").strip()
-    symbolic_coarse_damping_env = os.environ.get("SFINCS_JAX_EXPLICIT_SPARSE_SYMBOLIC_COARSE_DAMPING", "").strip()
-    symbolic_coarse_reg_env = os.environ.get("SFINCS_JAX_EXPLICIT_SPARSE_SYMBOLIC_COARSE_REG_REL", "").strip()
-    symbolic_schur_max_separator_env = os.environ.get("SFINCS_JAX_EXPLICIT_SPARSE_SYMBOLIC_SCHUR_MAX_SEPARATOR_COLS", "").strip()
-    symbolic_schur_tail_env = os.environ.get("SFINCS_JAX_EXPLICIT_SPARSE_SYMBOLIC_SCHUR_TAIL_SIZE", "").strip()
-    symbolic_schur_boundary_env = os.environ.get("SFINCS_JAX_EXPLICIT_SPARSE_SYMBOLIC_SCHUR_BOUNDARY_WIDTH", "").strip()
-    symbolic_schur_high_degree_env = os.environ.get("SFINCS_JAX_EXPLICIT_SPARSE_SYMBOLIC_SCHUR_HIGH_DEGREE_COLS", "").strip()
-    symbolic_schur_reg_env = os.environ.get("SFINCS_JAX_EXPLICIT_SPARSE_SYMBOLIC_SCHUR_REG_REL", "").strip()
-    symbolic_frontal_max_separator_env = os.environ.get(
-        "SFINCS_JAX_EXPLICIT_SPARSE_SYMBOLIC_FRONTAL_MAX_SEPARATOR_COLS", ""
-    ).strip()
-    symbolic_frontal_tail_env = os.environ.get("SFINCS_JAX_EXPLICIT_SPARSE_SYMBOLIC_FRONTAL_TAIL_SIZE", "").strip()
-    symbolic_frontal_boundary_env = os.environ.get(
-        "SFINCS_JAX_EXPLICIT_SPARSE_SYMBOLIC_FRONTAL_BOUNDARY_WIDTH", ""
-    ).strip()
-    symbolic_frontal_high_degree_env = os.environ.get(
-        "SFINCS_JAX_EXPLICIT_SPARSE_SYMBOLIC_FRONTAL_HIGH_DEGREE_COLS", ""
-    ).strip()
-    symbolic_frontal_max_superblock_size_env = os.environ.get(
-        "SFINCS_JAX_EXPLICIT_SPARSE_SYMBOLIC_FRONTAL_MAX_SUPERBLOCK_SIZE", ""
-    ).strip()
-    symbolic_frontal_max_superblock_blocks_env = os.environ.get(
-        "SFINCS_JAX_EXPLICIT_SPARSE_SYMBOLIC_FRONTAL_MAX_SUPERBLOCK_BLOCKS", ""
-    ).strip()
-    symbolic_frontal_min_cross_nnz_env = os.environ.get(
-        "SFINCS_JAX_EXPLICIT_SPARSE_SYMBOLIC_FRONTAL_MIN_CROSS_NNZ", ""
-    ).strip()
-    symbolic_frontal_min_cross_separator_fraction_env = os.environ.get(
-        "SFINCS_JAX_EXPLICIT_SPARSE_SYMBOLIC_FRONTAL_MIN_CROSS_SEPARATOR_FRACTION", ""
-    ).strip()
-    symbolic_frontal_reg_env = os.environ.get("SFINCS_JAX_EXPLICIT_SPARSE_SYMBOLIC_FRONTAL_REG_REL", "").strip()
-    symbolic_frontal_max_dense_rhs_entries_env = os.environ.get(
-        "SFINCS_JAX_EXPLICIT_SPARSE_SYMBOLIC_FRONTAL_MAX_DENSE_RHS_ENTRIES", ""
-    ).strip()
-    symbolic_frontal_max_dense_rhs_cols_env = os.environ.get(
-        "SFINCS_JAX_EXPLICIT_SPARSE_SYMBOLIC_FRONTAL_MAX_DENSE_RHS_COLS_PER_BLOCK", ""
-    ).strip()
-    symbolic_blr_frontal_tol_env = os.environ.get("SFINCS_JAX_EXPLICIT_SPARSE_SYMBOLIC_BLR_FRONTAL_TOL", "").strip()
-    symbolic_blr_frontal_max_rank_env = os.environ.get(
-        "SFINCS_JAX_EXPLICIT_SPARSE_SYMBOLIC_BLR_FRONTAL_MAX_RANK", ""
-    ).strip()
-    symbolic_blr_frontal_min_cols_env = os.environ.get(
-        "SFINCS_JAX_EXPLICIT_SPARSE_SYMBOLIC_BLR_FRONTAL_MIN_COLS", ""
-    ).strip()
-    symbolic_blr_frontal_gmres_rtol_env = os.environ.get(
-        "SFINCS_JAX_EXPLICIT_SPARSE_SYMBOLIC_BLR_FRONTAL_GMRES_RTOL", ""
-    ).strip()
-    symbolic_blr_frontal_gmres_atol_env = os.environ.get(
-        "SFINCS_JAX_EXPLICIT_SPARSE_SYMBOLIC_BLR_FRONTAL_GMRES_ATOL", ""
-    ).strip()
-    symbolic_blr_frontal_gmres_maxiter_env = os.environ.get(
-        "SFINCS_JAX_EXPLICIT_SPARSE_SYMBOLIC_BLR_FRONTAL_GMRES_MAXITER", ""
-    ).strip()
-    symbolic_blr_frontal_gmres_restart_env = os.environ.get(
-        "SFINCS_JAX_EXPLICIT_SPARSE_SYMBOLIC_BLR_FRONTAL_GMRES_RESTART", ""
-    ).strip()
-    symbolic_blr_frontal_woodbury_max_rank_env = os.environ.get(
-        "SFINCS_JAX_EXPLICIT_SPARSE_SYMBOLIC_BLR_FRONTAL_WOODBURY_MAX_RANK", ""
-    ).strip()
-    symbolic_blr_frontal_woodbury_max_condition_env = os.environ.get(
-        "SFINCS_JAX_EXPLICIT_SPARSE_SYMBOLIC_BLR_FRONTAL_WOODBURY_MAX_CONDITION", ""
-    ).strip()
-    symbolic_nd_max_leaf_size_env = os.environ.get(
-        "SFINCS_JAX_EXPLICIT_SPARSE_SYMBOLIC_ND_MAX_LEAF_SIZE", ""
-    ).strip()
-    symbolic_nd_max_terminal_factor_size_env = os.environ.get(
-        "SFINCS_JAX_EXPLICIT_SPARSE_SYMBOLIC_ND_MAX_TERMINAL_FACTOR_SIZE", ""
-    ).strip()
-    symbolic_nd_max_depth_env = os.environ.get("SFINCS_JAX_EXPLICIT_SPARSE_SYMBOLIC_ND_MAX_DEPTH", "").strip()
-    symbolic_nd_separator_width_env = os.environ.get(
-        "SFINCS_JAX_EXPLICIT_SPARSE_SYMBOLIC_ND_SEPARATOR_WIDTH", ""
-    ).strip()
-    symbolic_nd_max_separator_cols_env = os.environ.get(
-        "SFINCS_JAX_EXPLICIT_SPARSE_SYMBOLIC_ND_MAX_SEPARATOR_COLS", ""
-    ).strip()
-    symbolic_nd_high_degree_cols_env = os.environ.get(
-        "SFINCS_JAX_EXPLICIT_SPARSE_SYMBOLIC_ND_HIGH_DEGREE_COLS", ""
-    ).strip()
-    symbolic_nd_reg_env = os.environ.get("SFINCS_JAX_EXPLICIT_SPARSE_SYMBOLIC_ND_REG_REL", "").strip()
-    symbolic_nd_max_dense_rhs_entries_env = os.environ.get(
-        "SFINCS_JAX_EXPLICIT_SPARSE_SYMBOLIC_ND_MAX_DENSE_RHS_ENTRIES", ""
-    ).strip()
-    symbolic_nd_max_dense_rhs_entries_per_child_env = os.environ.get(
-        "SFINCS_JAX_EXPLICIT_SPARSE_SYMBOLIC_ND_MAX_DENSE_RHS_ENTRIES_PER_CHILD", ""
-    ).strip()
-    symbolic_nd_max_dense_rhs_cols_env = os.environ.get(
-        "SFINCS_JAX_EXPLICIT_SPARSE_SYMBOLIC_ND_MAX_DENSE_RHS_COLS_PER_CHILD", ""
-    ).strip()
-    symbolic_nd_max_setup_s_env = os.environ.get(
-        "SFINCS_JAX_EXPLICIT_SPARSE_SYMBOLIC_ND_MAX_SETUP_S", ""
-    ).strip()
-    symbolic_nd_compress_updates_env = os.environ.get(
-        "SFINCS_JAX_EXPLICIT_SPARSE_SYMBOLIC_ND_COMPRESS_UPDATES", ""
-    ).strip()
-    symbolic_nd_parallel_update_workers_env = os.environ.get(
-        "SFINCS_JAX_EXPLICIT_SPARSE_SYMBOLIC_ND_PARALLEL_UPDATE_WORKERS", ""
-    ).strip()
-    symbolic_nd_residual_polish_steps_env = os.environ.get(
-        "SFINCS_JAX_EXPLICIT_SPARSE_SYMBOLIC_ND_RESIDUAL_POLISH_STEPS", ""
-    ).strip()
-    symbolic_nd_residual_polish_damping_env = os.environ.get(
-        "SFINCS_JAX_EXPLICIT_SPARSE_SYMBOLIC_ND_RESIDUAL_POLISH_DAMPING", ""
-    ).strip()
-    symbolic_superblock_max_size_env = os.environ.get(
-        "SFINCS_JAX_EXPLICIT_SPARSE_SYMBOLIC_SUPERBLOCK_MAX_SIZE", ""
-    ).strip()
-    symbolic_superblock_max_blocks_env = os.environ.get(
-        "SFINCS_JAX_EXPLICIT_SPARSE_SYMBOLIC_SUPERBLOCK_MAX_BLOCKS", ""
-    ).strip()
-    symbolic_superblock_min_cross_nnz_env = os.environ.get(
-        "SFINCS_JAX_EXPLICIT_SPARSE_SYMBOLIC_SUPERBLOCK_MIN_CROSS_NNZ", ""
-    ).strip()
-    symbolic_superblock_min_retained_cross_fraction_env = os.environ.get(
-        "SFINCS_JAX_EXPLICIT_SPARSE_SYMBOLIC_SUPERBLOCK_MIN_RETAINED_CROSS_FRACTION", ""
-    ).strip()
-    symbolic_superblock_reg_env = os.environ.get("SFINCS_JAX_EXPLICIT_SPARSE_SYMBOLIC_SUPERBLOCK_REG_REL", "").strip()
-    symbolic_numeric_parallel_workers_env = os.environ.get(
-        "SFINCS_JAX_EXPLICIT_SPARSE_SYMBOLIC_NUMERIC_PARALLEL_WORKERS", ""
-    ).strip()
-    block_cols = _parse_explicit_sparse_int(block_cols_env, 32)
-    dense_max_mb = _parse_explicit_sparse_float(dense_max_env, 128.0)
-    csr_max_mb = _parse_explicit_sparse_float(csr_max_env, 512.0)
-    drop_tol = _parse_explicit_sparse_float(drop_tol_env, 0.0)
-    pattern_color_batch = _parse_explicit_sparse_int(color_batch_env, int(default_pattern_color_batch), minimum=1)
-    symbolic_block_overlap = _parse_explicit_sparse_int(
-        symbolic_overlap_env,
-        int(default_symbolic_block_overlap),
-        minimum=0,
+    sparse_settings = _explicit_sparse_factor_settings_from_env(
+        default_diag_pivot_thresh=default_diag_pivot_thresh,
+        default_permc_spec=default_permc_spec,
+        default_factor_kind=default_factor_kind,
+        default_ilu_fill_factor=default_ilu_fill_factor,
+        default_ilu_drop_tol=default_ilu_drop_tol,
+        default_pattern_color_batch=default_pattern_color_batch,
+        default_symbolic_block_overlap=default_symbolic_block_overlap,
+        default_symbolic_coarse_max_cols=default_symbolic_coarse_max_cols,
+        default_symbolic_coarse_probe_cols=default_symbolic_coarse_probe_cols,
+        default_symbolic_coarse_damping=default_symbolic_coarse_damping,
+        default_symbolic_coarse_regularization_rel=default_symbolic_coarse_regularization_rel,
+        default_symbolic_schur_max_separator_cols=default_symbolic_schur_max_separator_cols,
+        default_symbolic_schur_tail_size=default_symbolic_schur_tail_size,
+        default_symbolic_schur_boundary_width=default_symbolic_schur_boundary_width,
+        default_symbolic_schur_high_degree_cols=default_symbolic_schur_high_degree_cols,
+        default_symbolic_schur_regularization_rel=default_symbolic_schur_regularization_rel,
+        default_symbolic_frontal_max_separator_cols=default_symbolic_frontal_max_separator_cols,
+        default_symbolic_frontal_tail_size=default_symbolic_frontal_tail_size,
+        default_symbolic_frontal_boundary_width=default_symbolic_frontal_boundary_width,
+        default_symbolic_frontal_high_degree_cols=default_symbolic_frontal_high_degree_cols,
+        default_symbolic_frontal_max_superblock_size=default_symbolic_frontal_max_superblock_size,
+        default_symbolic_frontal_max_superblock_blocks=default_symbolic_frontal_max_superblock_blocks,
+        default_symbolic_frontal_min_cross_nnz=default_symbolic_frontal_min_cross_nnz,
+        default_symbolic_frontal_min_cross_separator_fraction=default_symbolic_frontal_min_cross_separator_fraction,
+        default_symbolic_frontal_regularization_rel=default_symbolic_frontal_regularization_rel,
+        default_symbolic_frontal_max_dense_rhs_entries=default_symbolic_frontal_max_dense_rhs_entries,
+        default_symbolic_frontal_max_dense_rhs_cols_per_block=default_symbolic_frontal_max_dense_rhs_cols_per_block,
+        default_symbolic_blr_frontal_tol=default_symbolic_blr_frontal_tol,
+        default_symbolic_blr_frontal_max_rank=default_symbolic_blr_frontal_max_rank,
+        default_symbolic_blr_frontal_min_cols=default_symbolic_blr_frontal_min_cols,
+        default_symbolic_blr_frontal_gmres_rtol=default_symbolic_blr_frontal_gmres_rtol,
+        default_symbolic_blr_frontal_gmres_atol=default_symbolic_blr_frontal_gmres_atol,
+        default_symbolic_blr_frontal_gmres_maxiter=default_symbolic_blr_frontal_gmres_maxiter,
+        default_symbolic_blr_frontal_gmres_restart=default_symbolic_blr_frontal_gmres_restart,
+        default_symbolic_blr_frontal_woodbury_max_rank=default_symbolic_blr_frontal_woodbury_max_rank,
+        default_symbolic_blr_frontal_woodbury_max_condition=default_symbolic_blr_frontal_woodbury_max_condition,
+        default_symbolic_nd_max_leaf_size=default_symbolic_nd_max_leaf_size,
+        default_symbolic_nd_max_terminal_factor_size=default_symbolic_nd_max_terminal_factor_size,
+        default_symbolic_nd_max_depth=default_symbolic_nd_max_depth,
+        default_symbolic_nd_separator_width=default_symbolic_nd_separator_width,
+        default_symbolic_nd_max_separator_cols=default_symbolic_nd_max_separator_cols,
+        default_symbolic_nd_high_degree_cols=default_symbolic_nd_high_degree_cols,
+        default_symbolic_nd_regularization_rel=default_symbolic_nd_regularization_rel,
+        default_symbolic_nd_max_dense_rhs_entries=default_symbolic_nd_max_dense_rhs_entries,
+        default_symbolic_nd_max_dense_rhs_entries_per_child=default_symbolic_nd_max_dense_rhs_entries_per_child,
+        default_symbolic_nd_max_dense_rhs_cols_per_child=default_symbolic_nd_max_dense_rhs_cols_per_child,
+        default_symbolic_nd_max_setup_s=default_symbolic_nd_max_setup_s,
+        default_symbolic_nd_compress_updates=default_symbolic_nd_compress_updates,
+        default_symbolic_nd_parallel_update_workers=default_symbolic_nd_parallel_update_workers,
+        default_symbolic_nd_residual_polish_steps=default_symbolic_nd_residual_polish_steps,
+        default_symbolic_nd_residual_polish_damping=default_symbolic_nd_residual_polish_damping,
+        default_symbolic_superblock_max_size=default_symbolic_superblock_max_size,
+        default_symbolic_superblock_max_blocks=default_symbolic_superblock_max_blocks,
+        default_symbolic_superblock_min_cross_nnz=default_symbolic_superblock_min_cross_nnz,
+        default_symbolic_superblock_min_retained_cross_fraction=default_symbolic_superblock_min_retained_cross_fraction,
+        default_symbolic_superblock_regularization_rel=default_symbolic_superblock_regularization_rel,
+        default_symbolic_numeric_parallel_workers=default_symbolic_numeric_parallel_workers,
+        default_monolithic_guard_enabled=default_monolithic_guard_enabled,
     )
-    symbolic_coarse_max_cols = _parse_explicit_sparse_int(
-        symbolic_coarse_cols_env,
-        int(default_symbolic_coarse_max_cols),
-        minimum=1,
-    )
-    symbolic_coarse_probe_cols = _parse_explicit_sparse_int(
-        symbolic_coarse_probe_cols_env,
-        int(default_symbolic_coarse_probe_cols),
-        minimum=0,
-    )
-    symbolic_coarse_damping = _parse_explicit_sparse_float(
-        symbolic_coarse_damping_env,
-        float(default_symbolic_coarse_damping),
-        minimum=0.0,
-    )
-    symbolic_coarse_regularization_rel = _parse_explicit_sparse_float(
-        symbolic_coarse_reg_env,
-        float(default_symbolic_coarse_regularization_rel),
-        minimum=0.0,
-    )
-    symbolic_schur_max_separator_cols = _parse_explicit_sparse_int(
-        symbolic_schur_max_separator_env,
-        int(default_symbolic_schur_max_separator_cols),
-        minimum=0,
-    )
-    symbolic_schur_tail_size = _parse_explicit_sparse_int(
-        symbolic_schur_tail_env,
-        int(default_symbolic_schur_tail_size),
-        minimum=0,
-    )
-    symbolic_schur_boundary_width = _parse_explicit_sparse_int(
-        symbolic_schur_boundary_env,
-        int(default_symbolic_schur_boundary_width),
-        minimum=0,
-    )
-    symbolic_schur_high_degree_cols = _parse_explicit_sparse_int(
-        symbolic_schur_high_degree_env,
-        int(default_symbolic_schur_high_degree_cols),
-        minimum=0,
-    )
-    symbolic_schur_regularization_rel = _parse_explicit_sparse_float(
-        symbolic_schur_reg_env,
-        float(default_symbolic_schur_regularization_rel),
-        minimum=0.0,
-    )
-
-    symbolic_frontal_max_separator_cols = _parse_explicit_sparse_int(
-        symbolic_frontal_max_separator_env,
-        int(default_symbolic_frontal_max_separator_cols),
-        minimum=0,
-    )
-    symbolic_frontal_tail_size = _parse_explicit_sparse_int(
-        symbolic_frontal_tail_env,
-        int(default_symbolic_frontal_tail_size),
-        minimum=0,
-    )
-    symbolic_frontal_boundary_width = _parse_explicit_sparse_int(
-        symbolic_frontal_boundary_env,
-        int(default_symbolic_frontal_boundary_width),
-        minimum=0,
-    )
-    symbolic_frontal_high_degree_cols = _parse_explicit_sparse_int(
-        symbolic_frontal_high_degree_env,
-        int(default_symbolic_frontal_high_degree_cols),
-        minimum=0,
-    )
-    symbolic_frontal_max_superblock_size = _parse_explicit_sparse_int(
-        symbolic_frontal_max_superblock_size_env,
-        int(default_symbolic_frontal_max_superblock_size),
-        minimum=1,
-    )
-    symbolic_frontal_max_superblock_blocks = _parse_explicit_sparse_int(
-        symbolic_frontal_max_superblock_blocks_env,
-        int(default_symbolic_frontal_max_superblock_blocks),
-        minimum=1,
-    )
-    symbolic_frontal_min_cross_nnz = _parse_explicit_sparse_int(
-        symbolic_frontal_min_cross_nnz_env,
-        int(default_symbolic_frontal_min_cross_nnz),
-        minimum=1,
-    )
-    symbolic_frontal_min_cross_separator_fraction = _parse_explicit_sparse_float(
-        symbolic_frontal_min_cross_separator_fraction_env,
-        float(default_symbolic_frontal_min_cross_separator_fraction),
-        minimum=0.0,
-    )
-    symbolic_frontal_regularization_rel = _parse_explicit_sparse_float(
-        symbolic_frontal_reg_env,
-        float(default_symbolic_frontal_regularization_rel),
-        minimum=0.0,
-    )
-    symbolic_frontal_max_dense_rhs_entries = _parse_explicit_sparse_int(
-        symbolic_frontal_max_dense_rhs_entries_env,
-        int(default_symbolic_frontal_max_dense_rhs_entries),
-        minimum=0,
-    )
-    symbolic_frontal_max_dense_rhs_cols_per_block = _parse_explicit_sparse_int(
-        symbolic_frontal_max_dense_rhs_cols_env,
-        int(default_symbolic_frontal_max_dense_rhs_cols_per_block),
-        minimum=0,
-    )
-    symbolic_blr_frontal_tol = _parse_explicit_sparse_float(
-        symbolic_blr_frontal_tol_env,
-        float(default_symbolic_blr_frontal_tol),
-        minimum=0.0,
-    )
-    symbolic_blr_frontal_max_rank = _parse_explicit_sparse_int(
-        symbolic_blr_frontal_max_rank_env,
-        int(default_symbolic_blr_frontal_max_rank),
-        minimum=1,
-    )
-    symbolic_blr_frontal_min_cols = _parse_explicit_sparse_int(
-        symbolic_blr_frontal_min_cols_env,
-        int(default_symbolic_blr_frontal_min_cols),
-        minimum=1,
-    )
-    symbolic_blr_frontal_gmres_rtol = _parse_explicit_sparse_float(
-        symbolic_blr_frontal_gmres_rtol_env,
-        float(default_symbolic_blr_frontal_gmres_rtol),
-        minimum=0.0,
-    )
-    symbolic_blr_frontal_gmres_atol = _parse_explicit_sparse_float(
-        symbolic_blr_frontal_gmres_atol_env,
-        float(default_symbolic_blr_frontal_gmres_atol),
-        minimum=0.0,
-    )
-    symbolic_blr_frontal_gmres_maxiter = _parse_explicit_sparse_int(
-        symbolic_blr_frontal_gmres_maxiter_env,
-        int(default_symbolic_blr_frontal_gmres_maxiter),
-        minimum=1,
-    )
-    symbolic_blr_frontal_gmres_restart = _parse_explicit_sparse_int(
-        symbolic_blr_frontal_gmres_restart_env,
-        int(default_symbolic_blr_frontal_gmres_restart),
-        minimum=1,
-    )
-    symbolic_blr_frontal_woodbury_max_rank = _parse_explicit_sparse_int(
-        symbolic_blr_frontal_woodbury_max_rank_env,
-        int(default_symbolic_blr_frontal_woodbury_max_rank),
-        minimum=0,
-    )
-    symbolic_blr_frontal_woodbury_max_condition = _parse_explicit_sparse_float(
-        symbolic_blr_frontal_woodbury_max_condition_env,
-        float(default_symbolic_blr_frontal_woodbury_max_condition),
-        minimum=1.0,
-    )
-    symbolic_nd_max_leaf_size = _parse_explicit_sparse_int(
-        symbolic_nd_max_leaf_size_env,
-        int(default_symbolic_nd_max_leaf_size),
-        minimum=1,
-    )
-    symbolic_nd_max_terminal_factor_size = _parse_explicit_sparse_int(
-        symbolic_nd_max_terminal_factor_size_env,
-        int(default_symbolic_nd_max_terminal_factor_size),
-        minimum=1,
-    )
-    symbolic_nd_max_depth = _parse_explicit_sparse_int(
-        symbolic_nd_max_depth_env,
-        int(default_symbolic_nd_max_depth),
-        minimum=0,
-    )
-    symbolic_nd_separator_width = _parse_explicit_sparse_int(
-        symbolic_nd_separator_width_env,
-        int(default_symbolic_nd_separator_width),
-        minimum=1,
-    )
-    symbolic_nd_max_separator_cols = _parse_explicit_sparse_int(
-        symbolic_nd_max_separator_cols_env,
-        int(default_symbolic_nd_max_separator_cols),
-        minimum=1,
-    )
-    symbolic_nd_high_degree_cols = _parse_explicit_sparse_int(
-        symbolic_nd_high_degree_cols_env,
-        int(default_symbolic_nd_high_degree_cols),
-        minimum=0,
-    )
-    symbolic_nd_regularization_rel = _parse_explicit_sparse_float(
-        symbolic_nd_reg_env,
-        float(default_symbolic_nd_regularization_rel),
-        minimum=0.0,
-    )
-    symbolic_nd_max_dense_rhs_entries = _parse_explicit_sparse_int(
-        symbolic_nd_max_dense_rhs_entries_env,
-        int(default_symbolic_nd_max_dense_rhs_entries),
-        minimum=0,
-    )
-    symbolic_nd_max_dense_rhs_entries_per_child = _parse_explicit_sparse_int(
-        symbolic_nd_max_dense_rhs_entries_per_child_env,
-        int(default_symbolic_nd_max_dense_rhs_entries_per_child),
-        minimum=0,
-    )
-    symbolic_nd_max_dense_rhs_cols_per_child = _parse_explicit_sparse_int(
-        symbolic_nd_max_dense_rhs_cols_env,
-        int(default_symbolic_nd_max_dense_rhs_cols_per_child),
-        minimum=0,
-    )
-    symbolic_nd_max_setup_s = _parse_explicit_sparse_float(
-        symbolic_nd_max_setup_s_env,
-        float(default_symbolic_nd_max_setup_s),
-        minimum=0.0,
-    )
-    symbolic_nd_compress_updates = _parse_explicit_sparse_bool(
-        symbolic_nd_compress_updates_env,
-        bool(default_symbolic_nd_compress_updates),
-    )
-    symbolic_nd_parallel_update_workers = _parse_explicit_sparse_int(
-        symbolic_nd_parallel_update_workers_env,
-        int(default_symbolic_nd_parallel_update_workers),
-        minimum=1,
-    )
-    symbolic_nd_residual_polish_steps = _parse_explicit_sparse_int(
-        symbolic_nd_residual_polish_steps_env,
-        int(default_symbolic_nd_residual_polish_steps),
-        minimum=0,
-    )
-    symbolic_nd_residual_polish_damping = _parse_explicit_sparse_float(
-        symbolic_nd_residual_polish_damping_env,
-        float(default_symbolic_nd_residual_polish_damping),
-        minimum=0.0,
-    )
-    symbolic_superblock_max_size = _parse_explicit_sparse_int(
-        symbolic_superblock_max_size_env,
-        int(default_symbolic_superblock_max_size),
-        minimum=1,
-    )
-    symbolic_superblock_max_blocks = _parse_explicit_sparse_int(
-        symbolic_superblock_max_blocks_env,
-        int(default_symbolic_superblock_max_blocks),
-        minimum=1,
-    )
-    symbolic_superblock_min_cross_nnz = _parse_explicit_sparse_int(
-        symbolic_superblock_min_cross_nnz_env,
-        int(default_symbolic_superblock_min_cross_nnz),
-        minimum=1,
-    )
-    symbolic_superblock_min_retained_cross_fraction = _parse_explicit_sparse_float(
-        symbolic_superblock_min_retained_cross_fraction_env,
-        float(default_symbolic_superblock_min_retained_cross_fraction),
-        minimum=0.0,
-    )
-    symbolic_superblock_regularization_rel = _parse_explicit_sparse_float(
-        symbolic_superblock_reg_env,
-        float(default_symbolic_superblock_regularization_rel),
-        minimum=0.0,
-    )
-    symbolic_numeric_parallel_workers = _parse_explicit_sparse_int(
-        symbolic_numeric_parallel_workers_env,
-        int(default_symbolic_numeric_parallel_workers),
-        minimum=1,
-    )
-    factor_kind = _explicit_sparse_factor_kind_from_env(default_factor_kind)
-    monolithic_guard_enabled = _explicit_sparse_monolithic_guard_enabled(default_monolithic_guard_enabled)
-    ilu_fill_env = os.environ.get("SFINCS_JAX_EXPLICIT_SPARSE_ILU_FILL_FACTOR", "").strip()
-    ilu_drop_env = os.environ.get("SFINCS_JAX_EXPLICIT_SPARSE_ILU_DROP_TOL", "").strip()
-    default_permc_spec_use = str(default_permc_spec).strip().upper()
-    if default_permc_spec_use not in {"NATURAL", "MMD_ATA", "MMD_AT_PLUS_A", "COLAMD"}:
-        default_permc_spec_use = "COLAMD"
-    permc_env = os.environ.get("SFINCS_JAX_EXPLICIT_SPARSE_PERMC_SPEC", "").strip().upper()
-    pivot_env = os.environ.get("SFINCS_JAX_EXPLICIT_SPARSE_DIAG_PIVOT_THRESH", "").strip()
-    ilu_fill_factor = _parse_explicit_sparse_float(ilu_fill_env, float(default_ilu_fill_factor))
-    ilu_drop_tol = _parse_explicit_sparse_float(ilu_drop_env, float(default_ilu_drop_tol))
-    if permc_env not in {"NATURAL", "MMD_ATA", "MMD_AT_PLUS_A", "COLAMD"}:
-        permc_env = default_permc_spec_use
-    diag_pivot_thresh = _parse_explicit_sparse_float(
-        pivot_env,
-        float(default_diag_pivot_thresh),
-        minimum=0.0,
-    )
+    block_cols = sparse_settings.block_cols
+    dense_max_mb = sparse_settings.dense_max_mb
+    csr_max_mb = sparse_settings.csr_max_mb
+    drop_tol = sparse_settings.drop_tol
+    pattern_color_batch = sparse_settings.pattern_color_batch
+    symbolic_block_overlap = sparse_settings.symbolic_block_overlap
+    symbolic_coarse_max_cols = sparse_settings.symbolic_coarse_max_cols
+    symbolic_coarse_probe_cols = sparse_settings.symbolic_coarse_probe_cols
+    symbolic_coarse_damping = sparse_settings.symbolic_coarse_damping
+    symbolic_coarse_regularization_rel = sparse_settings.symbolic_coarse_regularization_rel
+    symbolic_schur_max_separator_cols = sparse_settings.symbolic_schur_max_separator_cols
+    symbolic_schur_tail_size = sparse_settings.symbolic_schur_tail_size
+    symbolic_schur_boundary_width = sparse_settings.symbolic_schur_boundary_width
+    symbolic_schur_high_degree_cols = sparse_settings.symbolic_schur_high_degree_cols
+    symbolic_schur_regularization_rel = sparse_settings.symbolic_schur_regularization_rel
+    symbolic_frontal_max_separator_cols = sparse_settings.symbolic_frontal_max_separator_cols
+    symbolic_frontal_tail_size = sparse_settings.symbolic_frontal_tail_size
+    symbolic_frontal_boundary_width = sparse_settings.symbolic_frontal_boundary_width
+    symbolic_frontal_high_degree_cols = sparse_settings.symbolic_frontal_high_degree_cols
+    symbolic_frontal_max_superblock_size = sparse_settings.symbolic_frontal_max_superblock_size
+    symbolic_frontal_max_superblock_blocks = sparse_settings.symbolic_frontal_max_superblock_blocks
+    symbolic_frontal_min_cross_nnz = sparse_settings.symbolic_frontal_min_cross_nnz
+    symbolic_frontal_min_cross_separator_fraction = sparse_settings.symbolic_frontal_min_cross_separator_fraction
+    symbolic_frontal_regularization_rel = sparse_settings.symbolic_frontal_regularization_rel
+    symbolic_frontal_max_dense_rhs_entries = sparse_settings.symbolic_frontal_max_dense_rhs_entries
+    symbolic_frontal_max_dense_rhs_cols_per_block = sparse_settings.symbolic_frontal_max_dense_rhs_cols_per_block
+    symbolic_blr_frontal_tol = sparse_settings.symbolic_blr_frontal_tol
+    symbolic_blr_frontal_max_rank = sparse_settings.symbolic_blr_frontal_max_rank
+    symbolic_blr_frontal_min_cols = sparse_settings.symbolic_blr_frontal_min_cols
+    symbolic_blr_frontal_gmres_rtol = sparse_settings.symbolic_blr_frontal_gmres_rtol
+    symbolic_blr_frontal_gmres_atol = sparse_settings.symbolic_blr_frontal_gmres_atol
+    symbolic_blr_frontal_gmres_maxiter = sparse_settings.symbolic_blr_frontal_gmres_maxiter
+    symbolic_blr_frontal_gmres_restart = sparse_settings.symbolic_blr_frontal_gmres_restart
+    symbolic_blr_frontal_woodbury_max_rank = sparse_settings.symbolic_blr_frontal_woodbury_max_rank
+    symbolic_blr_frontal_woodbury_max_condition = sparse_settings.symbolic_blr_frontal_woodbury_max_condition
+    symbolic_nd_max_leaf_size = sparse_settings.symbolic_nd_max_leaf_size
+    symbolic_nd_max_terminal_factor_size = sparse_settings.symbolic_nd_max_terminal_factor_size
+    symbolic_nd_max_depth = sparse_settings.symbolic_nd_max_depth
+    symbolic_nd_separator_width = sparse_settings.symbolic_nd_separator_width
+    symbolic_nd_max_separator_cols = sparse_settings.symbolic_nd_max_separator_cols
+    symbolic_nd_high_degree_cols = sparse_settings.symbolic_nd_high_degree_cols
+    symbolic_nd_regularization_rel = sparse_settings.symbolic_nd_regularization_rel
+    symbolic_nd_max_dense_rhs_entries = sparse_settings.symbolic_nd_max_dense_rhs_entries
+    symbolic_nd_max_dense_rhs_entries_per_child = sparse_settings.symbolic_nd_max_dense_rhs_entries_per_child
+    symbolic_nd_max_dense_rhs_cols_per_child = sparse_settings.symbolic_nd_max_dense_rhs_cols_per_child
+    symbolic_nd_max_setup_s = sparse_settings.symbolic_nd_max_setup_s
+    symbolic_nd_compress_updates = sparse_settings.symbolic_nd_compress_updates
+    symbolic_nd_parallel_update_workers = sparse_settings.symbolic_nd_parallel_update_workers
+    symbolic_nd_residual_polish_steps = sparse_settings.symbolic_nd_residual_polish_steps
+    symbolic_nd_residual_polish_damping = sparse_settings.symbolic_nd_residual_polish_damping
+    symbolic_superblock_max_size = sparse_settings.symbolic_superblock_max_size
+    symbolic_superblock_max_blocks = sparse_settings.symbolic_superblock_max_blocks
+    symbolic_superblock_min_cross_nnz = sparse_settings.symbolic_superblock_min_cross_nnz
+    symbolic_superblock_min_retained_cross_fraction = sparse_settings.symbolic_superblock_min_retained_cross_fraction
+    symbolic_superblock_regularization_rel = sparse_settings.symbolic_superblock_regularization_rel
+    symbolic_numeric_parallel_workers = sparse_settings.symbolic_numeric_parallel_workers
+    factor_kind = sparse_settings.factor_kind
+    monolithic_guard_enabled = sparse_settings.monolithic_guard_enabled
+    ilu_fill_factor = sparse_settings.ilu_fill_factor
+    ilu_drop_tol = sparse_settings.ilu_drop_tol
+    permc_env = sparse_settings.permc_spec
+    diag_pivot_thresh = sparse_settings.diag_pivot_thresh
 
     def _matvec_np(x_np: np.ndarray) -> np.ndarray:
         return np.asarray(matvec(jnp.asarray(x_np, dtype=dtype)), dtype=np.float64)

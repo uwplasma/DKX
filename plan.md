@@ -30058,6 +30058,46 @@ Validation:
   docs/_build/html``: passed.
 - ``git diff --check``: passed.
 
+### 19.32 Explicit sparse host-factor settings split
+
+Goal:
+
+- Continue shrinking ``_build_host_sparse_direct_factor_from_matvec`` by moving
+  the remaining explicit-sparse environment parsing bundle into the focused
+  policy module while preserving the driver-owned operator assembly and sparse
+  factorization seams used by existing monkeypatch/debug tests.
+
+Implementation:
+
+- Added the frozen ``ExplicitSparseFactorSettings`` dataclass and
+  ``explicit_sparse_factor_settings_from_env`` to
+  ``sfincs_jax/explicit_sparse_factor_policy.py``.
+- Centralized dense/CSR memory budgets, pattern-color probing, symbolic
+  Schur/frontal/BLR/nested-dissection/superblock settings, SuperLU permutation
+  and pivot options, ILU options, factor-kind aliases, and monolithic guard
+  settings in that typed policy object.
+- Rewired ``v3_driver.py`` to consume the typed settings object before operator
+  assembly. The driver still owns logging, operator construction,
+  factorization, and the compatibility monkeypatch seam.
+- Added focused tests for settings defaults, environment overrides, bounds,
+  invalid permutation fallback, boolean parsing, factor-kind aliases, and
+  monolithic LU/ILU guard sizing.
+- Updated release notes, source map, and testing documentation.
+
+Validation:
+
+- ``python -m py_compile sfincs_jax/explicit_sparse_factor_policy.py
+  sfincs_jax/v3_driver.py tests/test_explicit_sparse_factor_policy.py``:
+  passed.
+- ``python -m ruff check sfincs_jax/explicit_sparse_factor_policy.py
+  sfincs_jax/v3_driver.py tests/test_explicit_sparse_factor_policy.py
+  tests/test_v3_driver_sparse_helper_coverage.py``: passed.
+- ``python -m pytest -q tests/test_explicit_sparse_factor_policy.py
+  tests/test_v3_driver_sparse_helper_coverage.py
+  tests/test_transport_sparse_direct_solve.py tests/test_transport_sparse_direct.py
+  tests/test_fortran_reduced_preconditioner.py``:
+  ``106 passed in 13.97 s``.
+
 ### 19.30 Newton-Krylov KSP diagnostics split
 
 Goal:
