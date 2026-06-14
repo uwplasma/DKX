@@ -212,6 +212,14 @@ the historical private driver name and test the focused module directly. This ke
   direct-tail memory-cap policy. ``v3_driver.py`` imports the same private
   compatibility names so existing debug scripts can still clear the direct-tail
   cache or inspect the policy through the historical driver namespace.
+- ``sfincs_jax/rhs1_true_operator_rescue.py``:
+  support bundles and low-level helpers for RHSMode=1 true-operator
+  residual-window, active-submatrix, coupled-coarse, and residual-coarse rescue
+  preconditioners. The module owns the reusable true-action column cache,
+  sparse-factor storage estimator, additive-rescue budget accounting, graph
+  expansion, residual-window target parsing, and residual-driven window
+  selection; ``v3_driver.py`` keeps the builder orchestration and imports the
+  historical private names for compatibility.
 - ``sfincs_jax/krylov_dispatch.py``:
   concrete Krylov solver routing for host-only SciPy methods, JIT/non-JIT JAX
   GMRES, distributed GMRES, diagnostic solver labels, and
