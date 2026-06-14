@@ -101,6 +101,11 @@ Unreleased
   ``transport_iteration_stats.py``. The production solve loop now calls a
   focused helper for small host SciPy history reruns while preserving the same
   skip/error messages and keeping diagnostic failures non-fatal.
+- Extracted RHSMode=2/3 transport Krylov dispatch into
+  ``transport_linear_solve.py``. The driver now delegates transport-specific
+  solver-kind mapping, restart policy, implicit custom-solve routing,
+  JIT/non-JIT selection, and distributed residual-solve routing to a focused
+  module with direct tests.
 
 v1.1.7
 ------
