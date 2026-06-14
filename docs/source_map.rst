@@ -620,6 +620,10 @@ for debugging and monkeypatch-based tests. The first extracted layers are:
 - ``sfincs_jax/rhs1_constraint0_policy.py``:
   RHSMode=1 constraint-scheme-0 sparse-first, PETSc-compatible sparse routing, and
   dense-fallback opt-in policy.
+- ``sfincs_jax/rhs1_constraint_sources.py``:
+  JAX kernels that convert between kinetic ``f`` blocks and constraint-source
+  amplitudes for constraint schemes 1 and 2, including flux-surface averages,
+  density/pressure moments, and source-basis injection with ``pointAtX0`` handling.
 - ``sfincs_jax/rhs1_host_policy.py``:
   RHSMode=1 host dense fallback, host sparse-direct, sparse-preconditioned
   GMRES rescue, factor-dtype, and explicit sparse-helper policy.

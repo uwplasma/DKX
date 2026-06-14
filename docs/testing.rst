@@ -401,6 +401,11 @@ policy modules and checks that their explanatory module docstrings are real
 ``__doc__`` strings rather than inert comments. This is intentionally small, but it
 keeps the source map and generated API documentation useful as the large driver is
 split into manageable pieces.
+``tests/test_rhs1_constraint_sources.py`` covers the extracted constraint-source
+JAX kernels directly, including flux-surface averages, velocity-weighted
+density/pressure moments, ``pointAtX0`` source injection, and the documented
+constraintScheme=1 source basis. These are algebraic tests, not smoke tests, so
+they protect the source/moment closure used by both RHSMode=1 and transport solves.
 
 The docstring gate now discovers every ``sfincs_jax/*policy*.py`` module and also
 checks public policy classes/functions, so new extraction seams must remain

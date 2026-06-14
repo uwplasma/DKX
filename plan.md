@@ -109,7 +109,9 @@ Current branch status:
   flag rewriting in addition to transport parallel backend/environment/pool
   policy. ``transport_parallel_payload.py`` owns shared CPU/GPU transport worker
   payload normalization, child-worker recursion guards, solve-call construction,
-  result packing, and GPU-worker NPZ conversion.
+  result packing, and GPU-worker NPZ conversion. ``rhs1_constraint_sources.py``
+  owns constraintScheme=1/2 source and moment JAX kernels used by RHSMode=1 and
+  transport residual corrections.
   ``krylov_dispatch.py`` now
   owns host-only/JAX/distributed Krylov route selection and solver labels, with
   thin driver wrappers preserving existing monkeypatch/debug workflows.
@@ -137,7 +139,10 @@ Current branch status:
   ``2562 passed in 550.40 s``, and strict docs build passed. The shared
   transport parallel payload extraction passed focused payload/parallel tests
   with ``54 passed in 14.65 s``, full local suite with
-  ``2566 passed in 543.33 s``, and strict docs build passed.
+  ``2566 passed in 543.33 s``, and strict docs build passed. The focused
+  constraint-source extraction passed direct RHS1/transport regression tests
+  with ``139 passed in 48.54 s``, full local suite with
+  ``2570 passed in 542.11 s``, and strict docs build passed.
 - Next PR-level moves should split high-level RHSMode=1 solve orchestration
   into ``rhs1_solve.py`` and RHSMode=2/3 orchestration into
   ``transport_solve.py`` after the focused module extractions are green.

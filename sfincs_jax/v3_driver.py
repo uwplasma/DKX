@@ -228,6 +228,12 @@ from .rhs1_constraint0_policy import (
     rhs1_constraint0_petsc_compat as _rhs1_constraint0_petsc_compat_impl,
     rhs1_constraint0_sparse_first as _rhs1_constraint0_sparse_first_impl,
 )
+from .rhs1_constraint_sources import (
+    constraint_scheme1_inject_source as _constraint_scheme1_inject_source_impl,
+    constraint_scheme1_moments_from_f as _constraint_scheme1_moments_from_f_impl,
+    constraint_scheme2_inject_source as _constraint_scheme2_inject_source_impl,
+    constraint_scheme2_source_from_f as _constraint_scheme2_source_from_f_impl,
+)
 from .rhs1_sparse_exact_policy import (
     rhs1_prefer_sparse_over_dense_shortcut as _rhs1_prefer_sparse_over_dense_shortcut_impl,
     rhs1_sparse_exact_lu_requested as _rhs1_sparse_exact_lu_requested_impl,
@@ -45113,42 +45119,22 @@ def _transport_active_dof_indices(op: V3FullSystemOperator) -> np.ndarray:
 
 def _constraint_scheme2_source_from_f(op: V3FullSystemOperator, f: jnp.ndarray) -> jnp.ndarray:
     """Return constraintScheme=2 source terms from L=0 flux-surface averages."""
-    factor = _fs_average_factor(op.theta_weights, op.zeta_weights, op.d_hat)  # (T,Z)
-    y_avg = jnp.einsum("tz,sxtz->sx", factor, f[:, :, 0, :, :])  # (S,X)
-    return y_avg
+    return _constraint_scheme2_source_from_f_impl(op, f)
 
 
 def _constraint_scheme2_inject_source(op: V3FullSystemOperator, src: jnp.ndarray) -> jnp.ndarray:
     """Inject constraintScheme=2 source terms into the L=0 rows of the f block."""
-    f = jnp.zeros(op.fblock.f_shape, dtype=jnp.float64)
-    ix0 = _ix_min(bool(op.point_at_x0))
-    f = f.at[:, ix0:, 0, :, :].set(src[:, ix0:, None, None])
-    return f.reshape((-1,))
+    return _constraint_scheme2_inject_source_impl(op, src)
 
 
 def _constraint_scheme1_moments_from_f(op: V3FullSystemOperator, f: jnp.ndarray) -> jnp.ndarray:
     """Return constraintScheme=1 density/pressure moments from the L=0 block."""
-    factor = _fs_average_factor(op.theta_weights, op.zeta_weights, op.d_hat)  # (T,Z)
-    x2 = op.x * op.x
-    x4 = x2 * x2
-    w2 = x2 * op.x_weights
-    w4 = x4 * op.x_weights
-    y_dens = jnp.einsum("x,tz,sxtz->s", w2, factor, f[:, :, 0, :, :])
-    y_pres = jnp.einsum("x,tz,sxtz->s", w4, factor, f[:, :, 0, :, :])
-    return jnp.stack([y_dens, y_pres], axis=1)
+    return _constraint_scheme1_moments_from_f_impl(op, f)
 
 
 def _constraint_scheme1_inject_source(op: V3FullSystemOperator, src: jnp.ndarray) -> jnp.ndarray:
     """Inject constraintScheme=1 particle/energy source amplitudes into L=0 rows."""
-    src = jnp.asarray(src, dtype=jnp.float64).reshape((int(op.n_species), 2))
-    xpart1, xpart2 = _source_basis_constraint_scheme_1(op.x)
-    ix0 = _ix_min(bool(op.point_at_x0))
-    f = jnp.zeros(op.fblock.f_shape, dtype=jnp.float64)
-    f = f.at[:, ix0:, 0, :, :].set(
-        xpart1[ix0:][None, :, None, None] * src[:, 0, None, None, None]
-        + xpart2[ix0:][None, :, None, None] * src[:, 1, None, None, None]
-    )
-    return f.reshape((-1,))
+    return _constraint_scheme1_inject_source_impl(op, src)
 
 
 def _project_constraint_scheme1_nullspace_solution_with_residual(

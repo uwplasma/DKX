@@ -120,6 +120,9 @@ research workflows.
 .. automodule:: sfincs_jax.rhs1_constraint0_policy
    :members:
 
+.. automodule:: sfincs_jax.rhs1_constraint_sources
+   :members:
+
 .. automodule:: sfincs_jax.rhs1_device_operator
    :members:
 
