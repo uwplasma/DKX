@@ -671,6 +671,12 @@ the historical private driver name and test the focused module directly. This ke
   shared active-DOF transport policy, active-index map construction, and dense
   fallback / dense-preconditioner policy used before the transport preconditioner and
   solve handoff layers.
+- ``sfincs_jax/transport_sparse_direct_solve.py``:
+  RHSMode=2/3 sparse-direct rescue implementation. It owns sparse-pattern
+  admission/caching, direct active FP operator factor reuse, explicit sparse
+  helper materialization, fallback sparse-ILU setup, host iterative refinement,
+  float32 polish, and float64 retry while receiving driver-local builders as
+  explicit callbacks.
 - ``sfincs_jax/transport_streaming_outputs.py``:
   host-side streaming accumulator for RHSMode=2/3 transport diagnostics. It owns the
   per-``whichRHS`` NumPy buffers, NTV/source handling, and final output-field

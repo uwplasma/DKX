@@ -356,6 +356,11 @@ from .transport_linear_solve import (
     transport_restart_for_method as _transport_restart_for_method,
     transport_solver_kind as _transport_solver_kind,
 )
+from .transport_sparse_direct_solve import (
+    TransportSparseDirectContext,
+    transport_sparse_direct_pattern_for_solve as _transport_sparse_direct_pattern_for_context,
+    transport_sparse_direct_solve as _transport_sparse_direct_solve_with_context,
+)
 from .transport_parallel_policy import (
     rewrite_xla_flags as _rewrite_xla_flags,
     transport_parallel_backend as _transport_parallel_backend_impl,
@@ -45991,62 +45996,32 @@ def solve_v3_transport_matrix_linear_gmres(
 
     # RHSMode=2/3 transport reuses the same active operator for multiple drives,
     # so keep sparse-helper factors scoped to this solve and reuse them across RHS.
-    transport_sparse_direct_factor_cache: dict[tuple[object, ...], tuple[object, object, str, str]] = {}
-    transport_sparse_direct_pattern_cache: dict[tuple[object, ...], object] = {}
+    transport_sparse_direct_context = TransportSparseDirectContext(
+        op=op0,
+        factor_cache={},
+        pattern_cache={},
+        sparse_drop_tol=float(transport_sparse_drop_tol),
+        sparse_drop_rel=float(transport_sparse_drop_rel),
+        emit=emit,
+        sparse_factor_cache_key=_sparse_factor_cache_key,
+        hash_numpy_array_for_cache=_hash_numpy_array_for_cache,
+        build_host_sparse_direct_factor_from_matvec=_build_host_sparse_direct_factor_from_matvec,
+        build_sparse_ilu_from_matvec=_build_sparse_ilu_from_matvec,
+        try_build_direct_active_operator_bundle=_try_build_rhsmode23_fp_direct_active_operator_bundle,
+        host_sparse_direct_solve_with_refinement=_host_sparse_direct_solve_with_refinement,
+        host_sparse_direct_refine_steps=_host_sparse_direct_refine_steps,
+        host_sparse_direct_polish=_host_sparse_direct_polish,
+        sparse_factor_dtype=_transport_sparse_factor_dtype,
+        sparse_direct_use_explicit_helper=_transport_sparse_direct_use_explicit_helper,
+        sparse_direct_needs_float64_retry=_transport_sparse_direct_needs_float64_retry,
+    )
 
     def _transport_sparse_direct_pattern_for_solve(*, n: int, active_indices_np: np.ndarray | None):
-        raw = os.environ.get("SFINCS_JAX_TRANSPORT_SPARSE_PATTERN", "").strip().lower()
-        if raw in {"0", "false", "no", "off", "dense", "matvec"}:
-            return None
-        force_pattern = raw in {"1", "true", "yes", "on", "pattern", "probe", "color_probe"}
-        mono_pas_transport = (
-            int(op0.rhs_mode) == 3
-            and not bool(op0.include_phi1)
-            and getattr(op0.fblock, "fp", None) is None
-            and int(getattr(op0, "n_x", 0) or 0) <= 2
+        return _transport_sparse_direct_pattern_for_context(
+            context=transport_sparse_direct_context,
+            n=int(n),
+            active_indices_np=active_indices_np,
         )
-        if not (force_pattern or mono_pas_transport):
-            return None
-        active_key = "full" if active_indices_np is None else _hash_numpy_array_for_cache(active_indices_np)
-        cache_key = ("transport_sparse_pattern", int(n), active_key)
-        cached_pattern = transport_sparse_direct_pattern_cache.get(cache_key)
-        if cached_pattern is not None:
-            return cached_pattern
-        if active_indices_np is None:
-            if int(n) != int(op0.total_size):
-                return None
-            pattern = v3_full_system_conservative_sparsity_pattern(op0)
-        else:
-            active_np = np.asarray(active_indices_np, dtype=np.int32).reshape((-1,))
-            if int(n) != int(active_np.size):
-                return None
-            pattern = v3_full_system_conservative_sparsity_pattern_for_indices(op0, active_np)
-        summary = summarize_v3_sparse_pattern(op0, pattern)
-        csr_estimate_mb = float(estimate_csr_nbytes(summary.shape, summary.nnz)) / 1.0e6
-        max_mb_env = os.environ.get("SFINCS_JAX_TRANSPORT_SPARSE_PATTERN_CSR_MAX_MB", "").strip()
-        try:
-            max_mb = float(max_mb_env) if max_mb_env else 512.0
-        except ValueError:
-            max_mb = 512.0
-        if csr_estimate_mb > max(0.0, float(max_mb)):
-            message = (
-                "transport sparse-pattern assembly exceeds CSR budget "
-                f"({csr_estimate_mb:.3f} MB > {float(max_mb):.3f} MB, nnz={summary.nnz})"
-            )
-            if force_pattern:
-                raise MemoryError(message)
-            if emit is not None:
-                emit(1, f"solve_v3_transport_matrix_linear_gmres: {message}; using matvec probing")
-            return None
-        transport_sparse_direct_pattern_cache[cache_key] = pattern
-        if emit is not None:
-            emit(
-                1,
-                "solve_v3_transport_matrix_linear_gmres: transport sparse pattern selected "
-                f"shape={summary.shape} nnz={summary.nnz} avg_row_nnz={summary.avg_row_nnz:.3f} "
-                f"max_row_nnz={summary.max_row_nnz} csr_estimate_mb={csr_estimate_mb:.3f}",
-            )
-        return pattern
 
     def _transport_sparse_direct_solve(
         *,
@@ -46062,344 +46037,19 @@ def solve_v3_transport_matrix_linear_gmres(
         maxiter_val: int | None,
         precondition_side_val: str,
     ) -> GMRESSolveResult:
-        def _solve_with_factor_dtype(factor_dtype_use: np.dtype) -> tuple[np.ndarray, float, object]:
-            direct_true_enabled_env = os.environ.get(
-                "SFINCS_JAX_TRANSPORT_FP_DIRECT_ACTIVE_OPERATOR",
-                "",
-            ).strip().lower()
-            direct_true_enabled = direct_true_enabled_env not in {"0", "false", "no", "off"}
-            direct_true_attempted = False
-            if (
-                bool(direct_true_enabled)
-                and int(op0.rhs_mode) in {2, 3}
-                and getattr(op0.fblock, "fp", None) is not None
-                and not bool(op0.include_phi1)
-                and active_indices_np is not None
-                and int(n) == int(np.asarray(active_indices_np).size)
-            ):
-                factor_kind_env = os.environ.get(
-                    "SFINCS_JAX_TRANSPORT_FP_DIRECT_ACTIVE_OPERATOR_FACTOR",
-                    "",
-                ).strip().lower()
-                if factor_kind_env in {"lu", "exact"}:
-                    direct_factor_kind = "lu"
-                elif factor_kind_env in {"ilu", "spilu", "incomplete"}:
-                    direct_factor_kind = "ilu"
-                else:
-                    direct_factor_kind = "lu" if int(n) <= 50_000 else "ilu"
-                fill_env = os.environ.get(
-                    "SFINCS_JAX_TRANSPORT_FP_DIRECT_ACTIVE_OPERATOR_ILU_FILL",
-                    "",
-                ).strip()
-                drop_env = os.environ.get(
-                    "SFINCS_JAX_TRANSPORT_FP_DIRECT_ACTIVE_OPERATOR_ILU_DROP_TOL",
-                    "",
-                ).strip()
-                try:
-                    direct_ilu_fill = float(fill_env) if fill_env else 6.0
-                except ValueError:
-                    direct_ilu_fill = 6.0
-                try:
-                    direct_ilu_drop = float(drop_env) if drop_env else 1.0e-4
-                except ValueError:
-                    direct_ilu_drop = 1.0e-4
-                active_hash_direct = _hash_numpy_array_for_cache(np.asarray(active_indices_np, dtype=np.int64))
-                factor_cache_key = (
-                    *_sparse_factor_cache_key(cache_key, factor_dtype_use),
-                    "direct_active_true_fp_operator",
-                    str(jax.default_backend()),
-                    str(active_hash_direct),
-                    str(direct_factor_kind),
-                    float(direct_ilu_fill),
-                    float(direct_ilu_drop),
-                )
-                cached_factor = transport_sparse_direct_factor_cache.get(factor_cache_key)
-                if cached_factor is not None:
-                    a_csr_full, ilu, storage_kind, reason = cached_factor
-                    direct_true_attempted = True
-                    if emit is not None:
-                        emit(
-                            1,
-                            "solve_v3_transport_matrix_linear_gmres: reusing direct active true FP operator "
-                            f"storage={storage_kind} reason={reason}",
-                        )
-                else:
-                    direct_result = _try_build_rhsmode23_fp_direct_active_operator_bundle(
-                        op=op0,
-                        active_indices=np.asarray(active_indices_np, dtype=np.int64),
-                        factor_dtype=factor_dtype_use,
-                        emit=emit,
-                    )
-                    if direct_result is not None:
-                        direct_true_attempted = True
-                        operator_bundle, _direct_metadata = direct_result
-                        factor_bundle = factorize_host_sparse_operator(
-                            operator_bundle,
-                            kind=direct_factor_kind,
-                            drop_tol=float(direct_ilu_drop) if direct_factor_kind == "ilu" else 0.0,
-                            fill_factor=float(direct_ilu_fill) if direct_factor_kind == "ilu" else 1.0,
-                            permc_spec="MMD_AT_PLUS_A",
-                            diag_pivot_thresh=0.0,
-                        )
-                        a_csr_full = factor_bundle.operator.matrix
-                        ilu = factor_bundle.factor
-                        transport_sparse_direct_factor_cache[factor_cache_key] = (
-                            a_csr_full,
-                            ilu,
-                            str(operator_bundle.metadata.storage_kind),
-                            str(operator_bundle.metadata.reason),
-                        )
-                        if emit is not None:
-                            emit(
-                                1,
-                                "solve_v3_transport_matrix_linear_gmres: direct active true FP operator "
-                                f"factorization complete factor_kind={factor_bundle.kind} "
-                                f"factor_s={float(factor_bundle.factor_s or 0.0):.3f} "
-                                f"factor_mb={float(factor_bundle.factor_nbytes_estimate or 0) / 1.0e6:.3f}",
-                            )
-            if not direct_true_attempted:
-                pattern = _transport_sparse_direct_pattern_for_solve(
-                    n=int(n),
-                    active_indices_np=active_indices_np,
-                )
-            else:
-                pattern = None
-            if (not direct_true_attempted) and pattern is not None:
-                color_batch_env = os.environ.get("SFINCS_JAX_TRANSPORT_SPARSE_PATTERN_COLOR_BATCH", "").strip()
-                try:
-                    color_batch = int(color_batch_env) if color_batch_env else 8
-                except ValueError:
-                    color_batch = 8
-                color_batch = max(1, int(color_batch))
-                factor_cache_key = (
-                    *_sparse_factor_cache_key(cache_key, factor_dtype_use),
-                    "pattern_probe",
-                    int(getattr(pattern, "nnz", 0)),
-                    int(color_batch),
-                    str(jax.default_backend()),
-                )
-                cached_factor = transport_sparse_direct_factor_cache.get(factor_cache_key)
-                if cached_factor is not None:
-                    a_csr_full, ilu, storage_kind, reason = cached_factor
-                    if emit is not None:
-                        emit(
-                            1,
-                            "solve_v3_transport_matrix_linear_gmres: reusing pattern sparse helper "
-                            f"storage={storage_kind} reason={reason}",
-                        )
-                else:
-                    operator_bundle, factor_bundle = _build_host_sparse_direct_factor_from_matvec(
-                        matvec=matvec_fn,
-                        n=int(n),
-                        dtype=dtype,
-                        factor_dtype=factor_dtype_use,
-                        pattern=pattern,
-                        emit=emit,
-                        default_factor_kind="lu",
-                        default_pattern_color_batch=int(color_batch),
-                    )
-                    a_csr_full = factor_bundle.operator.matrix
-                    ilu = factor_bundle.factor
-                    metadata = getattr(operator_bundle, "metadata", None)
-                    storage_kind = str(getattr(metadata, "storage_kind", "unknown"))
-                    reason = str(getattr(metadata, "reason", "unknown"))
-                    transport_sparse_direct_factor_cache[factor_cache_key] = (
-                        a_csr_full,
-                        ilu,
-                        storage_kind,
-                        reason,
-                    )
-            elif (not direct_true_attempted) and _transport_sparse_direct_use_explicit_helper(size=int(n)):
-                block_cols_env = os.environ.get("SFINCS_JAX_TRANSPORT_SPARSE_HELPER_BLOCK_COLS", "").strip()
-                dense_max_env = os.environ.get("SFINCS_JAX_TRANSPORT_SPARSE_HELPER_DENSE_MAX_MB", "").strip()
-                csr_max_env = os.environ.get("SFINCS_JAX_TRANSPORT_SPARSE_HELPER_CSR_MAX_MB", "").strip()
-                try:
-                    block_cols = int(block_cols_env) if block_cols_env else 32
-                except ValueError:
-                    block_cols = 32
-                try:
-                    dense_max_mb = float(dense_max_env) if dense_max_env else 128.0
-                except ValueError:
-                    dense_max_mb = 128.0
-                try:
-                    csr_max_mb = float(csr_max_env) if csr_max_env else 512.0
-                except ValueError:
-                    csr_max_mb = 512.0
-
-                def _matvec_host(x_np: np.ndarray) -> np.ndarray:
-                    return np.asarray(
-                        matvec_fn(jnp.asarray(x_np, dtype=dtype)),
-                        dtype=factor_dtype_use,
-                        copy=True,
-                    )
-
-                def _matmat_host(cols_np: np.ndarray) -> np.ndarray:
-                    cols = jnp.asarray(cols_np, dtype=dtype)
-                    out = jax.vmap(matvec_fn, in_axes=1, out_axes=1)(cols)
-                    return np.asarray(out, dtype=factor_dtype_use, copy=True)
-
-                force_sparse = bool(jax.default_backend() != "cpu")
-                factor_cache_key = (
-                    *_sparse_factor_cache_key(cache_key, factor_dtype_use),
-                    "explicit_helper",
-                    str(jax.default_backend()),
-                    int(max(1, int(block_cols))),
-                    float(dense_max_mb),
-                    float(csr_max_mb),
-                    int(force_sparse),
-                )
-                cached_factor = transport_sparse_direct_factor_cache.get(factor_cache_key)
-                if cached_factor is not None:
-                    a_csr_full, ilu, storage_kind, reason = cached_factor
-                    if emit is not None:
-                        emit(
-                            1,
-                            "solve_v3_transport_matrix_linear_gmres: reusing explicit sparse helper "
-                            f"storage={storage_kind} reason={reason}",
-                        )
-                else:
-                    operator_bundle = build_operator_from_matvec(
-                        _matvec_host,
-                        n=int(n),
-                        dtype=factor_dtype_use,
-                        backend=jax.default_backend(),
-                        block_cols=max(1, int(block_cols)),
-                        dense_max_mb=float(dense_max_mb),
-                        csr_max_mb=float(csr_max_mb),
-                        prefer_sparse_on_gpu=True,
-                        force_sparse=force_sparse,
-                        drop_tol=0.0,
-                        matmat=_matmat_host,
-                        allow_operator_only=False,
-                    )
-                    if emit is not None:
-                        emit(
-                            1,
-                            "solve_v3_transport_matrix_linear_gmres: explicit sparse helper "
-                            f"storage={operator_bundle.metadata.storage_kind} "
-                            f"reason={operator_bundle.metadata.reason}",
-                        )
-                    factor_bundle = factorize_host_sparse_operator(
-                        operator_bundle,
-                        kind="lu",
-                        drop_tol=0.0,
-                        fill_factor=1.0,
-                    )
-                    a_csr_full = factor_bundle.operator.matrix
-                    ilu = factor_bundle.factor
-                    transport_sparse_direct_factor_cache[factor_cache_key] = (
-                        a_csr_full,
-                        ilu,
-                        str(operator_bundle.metadata.storage_kind),
-                        str(operator_bundle.metadata.reason),
-                    )
-            elif not direct_true_attempted:
-                cache_key_use = _sparse_factor_cache_key(cache_key, factor_dtype_use)
-                a_csr_full, _a_csr_drop, ilu, _a_dense, _l_dense, _u_dense, _l_unit = _build_sparse_ilu_from_matvec(
-                    matvec=matvec_fn,
-                    n=int(n),
-                    dtype=dtype,
-                    cache_key=cache_key_use,
-                    factor_dtype=factor_dtype_use,
-                    drop_tol=transport_sparse_drop_tol,
-                    drop_rel=transport_sparse_drop_rel,
-                    ilu_drop_tol=0.0,
-                    fill_factor=1.0,
-                    build_dense_factors=False,
-                    build_jax_factors=False,
-                    build_ilu=True,
-                    store_dense=False,
-                    factorization="lu",
-                    emit=emit,
-                )
-                if ilu is None:
-                    raise RuntimeError("transport sparse_lu: factors unavailable")
-            x_local, residual_local = _host_sparse_direct_solve_with_refinement(
-                ilu=ilu,
-                a_csr_full=a_csr_full,
-                rhs_vec=b_vec,
-                factor_dtype=factor_dtype_use,
-                refine_steps=_host_sparse_direct_refine_steps("SFINCS_JAX_TRANSPORT_SPARSE_DIRECT_REFINE", default=2),
-            )
-            return x_local, float(residual_local), ilu
-
-        factor_dtype = _transport_sparse_factor_dtype(size=int(n), use_implicit=False)
-        if emit is not None:
-            emit(
-                1,
-                "solve_v3_transport_matrix_linear_gmres: sparse LU factor_dtype="
-                f"{np.dtype(factor_dtype).name}",
-            )
-        target_true = max(float(atol_val), float(tol_val) * float(jnp.linalg.norm(b_vec)))
-        x_np, residual_norm, ilu_for_polish = _solve_with_factor_dtype(factor_dtype)
-
-        def _true_residual_norm(x_arr: np.ndarray) -> float:
-            ax = matvec_fn(jnp.asarray(x_arr, dtype=dtype))
-            residual = np.asarray(ax - b_vec, dtype=np.float64).reshape((-1,))
-            return float(np.linalg.norm(residual))
-
-        true_residual_norm = _true_residual_norm(x_np)
-        if np.isfinite(true_residual_norm) and (
-            (not np.isfinite(float(residual_norm))) or float(true_residual_norm) > float(residual_norm)
-        ):
-            residual_norm = float(true_residual_norm)
-        if factor_dtype == np.dtype(np.float32) and residual_norm > target_true:
-            polish_env = os.environ.get("SFINCS_JAX_TRANSPORT_SPARSE_DIRECT_POLISH", "").strip().lower()
-            if polish_env not in {"0", "false", "no", "off"}:
-                polish_restart_env = os.environ.get("SFINCS_JAX_TRANSPORT_SPARSE_DIRECT_POLISH_RESTART", "").strip()
-                polish_maxiter_env = os.environ.get("SFINCS_JAX_TRANSPORT_SPARSE_DIRECT_POLISH_MAXITER", "").strip()
-                try:
-                    polish_restart = int(polish_restart_env) if polish_restart_env else min(int(restart_val), 40)
-                except ValueError:
-                    polish_restart = min(int(restart_val), 40)
-                try:
-                    polish_maxiter = (
-                        int(polish_maxiter_env)
-                        if polish_maxiter_env
-                        else min(max(40, int(maxiter_val or 120)), 120)
-                    )
-                except ValueError:
-                    polish_maxiter = min(max(40, int(maxiter_val or 120)), 120)
-                polish_restart = max(5, int(polish_restart))
-                polish_maxiter = max(5, int(polish_maxiter))
-                x_polish, residual_norm_polish = _host_sparse_direct_polish(
-                    matvec_fn=matvec_fn,
-                    rhs_vec=b_vec,
-                    x0_np=x_np,
-                    ilu=ilu_for_polish,
-                    factor_dtype=factor_dtype,
-                    tol=tol_val,
-                    atol=atol_val,
-                    restart=polish_restart,
-                    maxiter=polish_maxiter,
-                    precondition_side=precondition_side_val,
-                )
-                if np.isfinite(residual_norm_polish) and residual_norm_polish < residual_norm:
-                    x_np = x_polish
-                    residual_norm = residual_norm_polish
-                    true_residual_norm = _true_residual_norm(x_np)
-                    if np.isfinite(true_residual_norm):
-                        residual_norm = float(true_residual_norm)
-        if _transport_sparse_direct_needs_float64_retry(
-            factor_dtype=factor_dtype,
-            residual_norm=float(residual_norm),
-            target_true=float(target_true),
-        ):
-            if emit is not None:
-                emit(
-                    1,
-                    "solve_v3_transport_matrix_linear_gmres: retrying sparse LU with float64 factors "
-                    f"(residual={float(residual_norm):.6e}, target={float(target_true):.6e})",
-                )
-            x64_np, residual64, _ilu64 = _solve_with_factor_dtype(np.dtype(np.float64))
-            if np.isfinite(residual64) and (
-                not np.isfinite(float(residual_norm)) or float(residual64) < float(residual_norm)
-            ):
-                x_np = x64_np
-                residual_norm = residual64
-        return GMRESSolveResult(
-            x=jnp.asarray(x_np, dtype=jnp.float64),
-            residual_norm=jnp.asarray(residual_norm, dtype=jnp.float64),
+        return _transport_sparse_direct_solve_with_context(
+            context=transport_sparse_direct_context,
+            matvec_fn=matvec_fn,
+            b_vec=b_vec,
+            n=int(n),
+            dtype=dtype,
+            cache_key=cache_key,
+            active_indices_np=active_indices_np,
+            tol_val=float(tol_val),
+            atol_val=float(atol_val),
+            restart_val=int(restart_val),
+            maxiter_val=maxiter_val,
+            precondition_side_val=str(precondition_side_val),
         )
 
     # Geometry scalars needed for the transport-matrix formulas.

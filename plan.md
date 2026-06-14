@@ -8463,6 +8463,39 @@ Testing docs should include:
     examples smoke, external-data smoke, optional ecosystem gates, coverage report, tests,
     and Codecov patch all passed; PR remains draft and merge state is clean.
 
+### 19.28 Transport sparse-direct rescue split
+
+- The RHSMode=2/3 transport sparse-direct rescue path was the largest remaining
+  nested transport helper in `solve_v3_transport_matrix_linear_gmres(...)`.
+- That implementation is now extracted into
+  `sfincs_jax/transport_sparse_direct_solve.py`.
+- `v3_driver.py` now builds an explicit `TransportSparseDirectContext` and keeps
+  thin local adapters for the existing sparse-pattern and sparse-direct solve
+  function names used by the surrounding retry logic.
+- The extracted helper owns:
+  - sparse-pattern policy admission and cache reuse,
+  - direct active FP operator factorization and cache reuse,
+  - pattern-probed sparse materialization,
+  - explicit sparse-helper materialization,
+  - fallback sparse-ILU construction,
+  - host sparse direct iterative refinement,
+  - float32 sparse-factor polish,
+  - float64 sparse-factor retry.
+- This stayed structure-preserving:
+  - no sparse-direct policy threshold changed,
+  - driver-local builder and policy functions are passed as callbacks to
+    preserve existing monkeypatch and debugging seams,
+  - existing sparse-direct transport regressions stayed green.
+- New bounded regression coverage now lives in:
+  - `tests/test_transport_sparse_direct_solve.py`
+- Current validation for the sparse-direct slice:
+  - `python -m py_compile sfincs_jax/transport_sparse_direct_solve.py sfincs_jax/v3_driver.py tests/test_transport_sparse_direct_solve.py`:
+    passed.
+  - `python -m ruff check sfincs_jax/transport_sparse_direct_solve.py sfincs_jax/v3_driver.py tests/test_transport_sparse_direct_solve.py tests/test_transport_sparse_direct.py`:
+    passed.
+  - `python -m pytest -q tests/test_transport_sparse_direct_solve.py tests/test_transport_sparse_direct.py`:
+    `53 passed in 11.95 s`.
+
 ### 19.19 Collisionality lane status after writer fix
 
 - A real publication-lane bug was found in `examples/publication_figures/generate_sfincs_paper_figs.py`:
