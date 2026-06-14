@@ -153,6 +153,12 @@ On the active refactor branch, the main policy layers are being split out of the
 monolith into narrower modules while keeping ``v3_driver.py`` as the stable public seam
 for debugging and monkeypatch-based tests. The first extracted layers are:
 
+Refactor rule for new extractions: keep a driver wrapper only when it injects
+driver-local dependencies, adapts a signature, preserves live monkeypatch behavior,
+or bridges a public debugging seam. Otherwise, import the extracted function under
+the historical private driver name and test the focused module directly. This keeps
+``v3_driver.py`` shrinking without replacing monolithic code with wrapper clutter.
+
 - ``sfincs_jax/v3_results.py``:
   typed solve-result dataclasses for linear, Newton-Krylov, and transport-matrix
   v3-compatible workflows. Moving these data models out of the driver makes the
