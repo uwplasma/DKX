@@ -30022,3 +30022,38 @@ Current open-lane status after this pass:
 - True device-QI/GPU: ``60%``.
 - Coverage/physics-gate lane: ``78%``.
 - Overall average: ``89%``.
+
+### 19.29 RHSMode=1 KSP diagnostics split
+
+Goal:
+
+- Continue the v3-driver architecture refactor by removing optional
+  RHSMode=1 PETSc-style KSP residual-history replay and iteration-count
+  diagnostic logic from the full-system solve loop without changing numerical
+  solve paths.
+
+Implementation:
+
+- Added ``sfincs_jax/rhs1_ksp_diagnostics.py`` with bounded helpers for
+  ``fortran-stdout`` residual-history replay and
+  ``SFINCS_JAX_SOLVER_ITER_STATS`` iteration-count diagnostics.
+- Kept ``v3_driver.py`` wrappers only for dependency injection: active matvec,
+  RHS vector, preconditioner, emit callback, solver labels, and existing
+  size/iteration guard values are forwarded to the extracted module.
+- Added direct unit tests for disabled diagnostics, size/iteration skip
+  messages, GMRES history emission, history reuse without extra solver replay,
+  BiCGStab iteration-count replay, and non-fatal diagnostic failure reporting.
+- Added the new module to the API docs, source-code map, and release notes.
+
+Validation:
+
+- ``python -m py_compile sfincs_jax/rhs1_ksp_diagnostics.py
+  sfincs_jax/v3_driver.py tests/test_rhs1_ksp_diagnostics.py``: passed.
+- ``python -m ruff check sfincs_jax/rhs1_ksp_diagnostics.py
+  sfincs_jax/v3_driver.py tests/test_rhs1_ksp_diagnostics.py``: passed.
+- ``python -m pytest -q tests/test_rhs1_ksp_diagnostics.py
+  tests/test_v3_driver_rhs1_dispatch_coverage.py tests/test_rhs1_handoff.py
+  tests/test_audit_rhs1_solver_stack.py``: ``62 passed in 24.54 s``.
+- ``SPHINXOPTS='-W --keep-going' python -m sphinx -b html docs
+  docs/_build/html``: passed.
+- ``git diff --check``: passed.

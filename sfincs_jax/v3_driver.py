@@ -192,6 +192,10 @@ from .rhs1_solver_diagnostics import (
     RHS1SubspaceCorrectionDiagnostics,
     build_rhs1_xblock_correction_metadata,
 )
+from .rhs1_ksp_diagnostics import (
+    emit_rhs1_ksp_history as _emit_rhs1_ksp_history,
+    emit_rhs1_ksp_iter_stats as _emit_rhs1_ksp_iter_stats,
+)
 from .rhs1_active_dof import (
     build_rhs1_active_dof_state,
     resolve_rhs1_active_dof_mode,
@@ -36069,60 +36073,23 @@ def solve_v3_full_system_linear_gmres(
         solver_kind: str,
         solve_method_val: str,
     ) -> list[float] | None:
-        if emit is None or not fortran_stdout:
-            return None
-        solver_label = _ksp_iteration_solver_label(solver_kind=solver_kind, solve_method=solve_method_val)
-        if solver_label not in {"gmres", "lgmres"}:
-            return None
-        size = int(b_vec.size)
-        if ksp_history_max_size is not None and size > int(ksp_history_max_size):
-            emit(1, f"fortran-stdout: KSP history skipped (size={size} > max={int(ksp_history_max_size)})")
-            return None
-        if maxiter_val is not None and ksp_history_max_iter is not None:
-            est_iters = int(maxiter_val)
-            if solver_label == "gmres":
-                est_iters *= max(1, int(restart_val))
-            if est_iters > int(ksp_history_max_iter):
-                emit(
-                    1,
-                    "fortran-stdout: KSP history skipped "
-                    f"(estimated_iters={est_iters} > max={int(ksp_history_max_iter)})",
-                )
-                return None
-        try:
-            if solver_label == "lgmres":
-                _x_hist, _rn, history = lgmres_solve_with_history_scipy(
-                    matvec=matvec_fn,
-                    b=b_vec,
-                    preconditioner=precond_fn,
-                    x0=x0_vec,
-                    tol=tol_val,
-                    atol=atol_val,
-                    restart=restart_val,
-                    maxiter=maxiter_val,
-                    precondition_side=precond_side,
-                )
-            else:
-                _x_hist, _rn, history = gmres_solve_with_history_scipy(
-                    matvec=matvec_fn,
-                    b=b_vec,
-                    preconditioner=precond_fn,
-                    x0=x0_vec,
-                    tol=tol_val,
-                    atol=atol_val,
-                    restart=restart_val,
-                    maxiter=maxiter_val,
-                    precondition_side=precond_side,
-                )
-        except Exception as exc:  # noqa: BLE001
-            emit(1, f"fortran-stdout: KSP history unavailable ({type(exc).__name__}: {exc})")
-            return None
-        for k, rn in enumerate(history):
-            emit(0, f"{k:4d} KSP Residual norm {rn: .12e} ")
-        if history:
-            emit(0, " Linear iteration (KSP) converged.  KSPConvergedReason =            2")
-            emit(0, "   KSP_CONVERGED_RTOL: Norm decreased by rtol.")
-        return history
+        return _emit_rhs1_ksp_history(
+            matvec_fn=matvec_fn,
+            b_vec=b_vec,
+            precond_fn=precond_fn,
+            x0_vec=x0_vec,
+            tol_val=tol_val,
+            atol_val=atol_val,
+            restart_val=restart_val,
+            maxiter_val=maxiter_val,
+            precond_side=precond_side,
+            solver_kind=solver_kind,
+            solve_method_val=solve_method_val,
+            emit=emit,
+            fortran_stdout=bool(fortran_stdout),
+            max_size=ksp_history_max_size,
+            max_history_iter=ksp_history_max_iter,
+        )
 
     def _emit_ksp_iter_stats(
         *,
@@ -36139,77 +36106,23 @@ def solve_v3_full_system_linear_gmres(
         history: list[float] | None,
         solve_method_val: str,
     ) -> None:
-        if emit is None or not iter_stats_enabled:
-            return
-        size = int(b_vec.size)
-        if iter_stats_max_size is not None and size > int(iter_stats_max_size):
-            emit(1, f"ksp_iterations skipped (size={size} > max={int(iter_stats_max_size)})")
-            return
-        solver_kind_l = str(solver_kind).strip().lower()
-        solver_label = _ksp_iteration_solver_label(solver_kind=solver_kind_l, solve_method=solve_method_val)
-        iter_stats_max_iter_env = os.environ.get("SFINCS_JAX_SOLVER_ITER_STATS_MAX_ITER", "").strip()
-        try:
-            iter_stats_max_iter = int(iter_stats_max_iter_env) if iter_stats_max_iter_env else 2000
-        except ValueError:
-            iter_stats_max_iter = 2000
-        if maxiter_val is not None and iter_stats_max_iter is not None:
-            est_iters = int(maxiter_val)
-            if solver_label == "gmres":
-                est_iters *= max(1, int(restart_val))
-            if est_iters > int(iter_stats_max_iter):
-                emit(
-                    1,
-                    "ksp_iterations skipped "
-                    f"(estimated_iters={est_iters} > max={int(iter_stats_max_iter)})",
-                )
-                return
-        try:
-            if solver_label == "gmres":
-                if history is None:
-                    _x_hist, _rn, history = gmres_solve_with_history_scipy(
-                        matvec=matvec_fn,
-                        b=b_vec,
-                        preconditioner=precond_fn,
-                        x0=x0_vec,
-                        tol=tol_val,
-                        atol=atol_val,
-                        restart=restart_val,
-                        maxiter=maxiter_val,
-                        precondition_side=precond_side,
-                    )
-                iters = len(history or [])
-            elif solver_label == "lgmres":
-                if history is None:
-                    _x_hist, _rn, history = lgmres_solve_with_history_scipy(
-                        matvec=matvec_fn,
-                        b=b_vec,
-                        preconditioner=precond_fn,
-                        x0=x0_vec,
-                        tol=tol_val,
-                        atol=atol_val,
-                        restart=restart_val,
-                        maxiter=maxiter_val,
-                        precondition_side=precond_side,
-                    )
-                iters = len(history or [])
-            elif solver_kind_l == "bicgstab":
-                _x_hist, _rn, history = bicgstab_solve_with_history_scipy(
-                    matvec=matvec_fn,
-                    b=b_vec,
-                    preconditioner=precond_fn,
-                    x0=x0_vec,
-                    tol=tol_val,
-                    atol=atol_val,
-                    maxiter=maxiter_val,
-                    precondition_side=precond_side,
-                )
-                iters = len(history or [])
-            else:
-                return
-        except Exception as exc:  # noqa: BLE001
-            emit(1, f"ksp_iterations unavailable ({type(exc).__name__}: {exc})")
-            return
-        emit(0, f"ksp_iterations={iters} solver={solver_label}")
+        _emit_rhs1_ksp_iter_stats(
+            matvec_fn=matvec_fn,
+            b_vec=b_vec,
+            precond_fn=precond_fn,
+            x0_vec=x0_vec,
+            tol_val=tol_val,
+            atol_val=atol_val,
+            restart_val=restart_val,
+            maxiter_val=maxiter_val,
+            precond_side=precond_side,
+            solver_kind=solver_kind,
+            history=history,
+            solve_method_val=solve_method_val,
+            emit=emit,
+            enabled=bool(iter_stats_enabled),
+            max_size=iter_stats_max_size,
+        )
     if use_active_dof_mode:
         assert active_idx_jnp is not None
         assert full_to_active_jnp is not None
