@@ -82,6 +82,9 @@ API reference
 .. automodule:: sfincs_jax.preconditioner_setup
    :members:
 
+.. automodule:: sfincs_jax.explicit_sparse_factor_policy
+   :members:
+
 .. automodule:: sfincs_jax.krylov_dispatch
    :members:
 
