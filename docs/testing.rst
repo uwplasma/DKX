@@ -407,7 +407,10 @@ checks public policy classes/functions, so new extraction seams must remain
 discoverable. ``tests/test_transport_policy_coverage.py`` adds fast direct coverage
 for transport backend/sparse-host/recycle policy, transport parallel
 scaling-audit/environment helpers, and worker-local XLA flag rewriting without running
-transport solves.
+transport solves. ``tests/test_transport_parallel_payload.py`` separately validates the
+transport worker payload contract: normalized solve kwargs, child-worker recursion
+guards, merge-ready result packing, and GPU-worker NPZ conversion for non-contiguous
+``whichRHS`` chunks.
 
 QI seed-robustness artifacts are also checked as data, not only as scripts.
 ``tests/test_qi_seed_smoke_artifact.py`` verifies the one-seed smoke artifact,

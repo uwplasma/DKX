@@ -675,6 +675,10 @@ for debugging and monkeypatch-based tests. The first extracted layers are:
   host SciPy GMRES first-attempt/rescue solve helper for explicit transport paths,
   including PETSc-like preconditioned-residual acceptance for the relevant
   near-singular transport systems.
+- ``sfincs_jax/transport_parallel_payload.py``:
+  injected-dependency payload normalization, child-worker guard setup, transport solve
+  call construction, merge-ready result packing, and GPU-worker NPZ array conversion
+  shared by CPU process workers and GPU subprocess workers.
 - ``sfincs_jax/transport_parallel_policy.py``:
   pure transport process-parallel backend selection, worker-count validation,
   benchmark scaling audits, process-pool cache keys, GPU-worker environment
