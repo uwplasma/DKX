@@ -112,6 +112,11 @@ Unreleased
   setup, fallback sparse-ILU setup, host refinement, float32 polish, and
   float64 retry, preserving the existing sparse rescue behavior with direct
   unit coverage and sparse-direct regressions.
+- Extracted RHSMode=1 optional KSP residual-history replay and iteration-count
+  diagnostics into ``rhs1_ksp_diagnostics.py``. The driver now keeps only thin
+  wrappers that inject the active matvec, preconditioner, emit callback, and
+  size/iteration guards, while the SciPy replay and non-fatal diagnostic
+  failure paths have direct unit tests.
 
 v1.1.7
 ------

@@ -204,6 +204,9 @@ research workflows.
 .. automodule:: sfincs_jax.rhs1_solver_diagnostics
    :members:
 
+.. automodule:: sfincs_jax.rhs1_ksp_diagnostics
+   :members:
+
 .. automodule:: sfincs_jax.rhs1_solver_policy
    :members:
 
