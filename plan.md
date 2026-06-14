@@ -30141,6 +30141,57 @@ Validation so far:
 - ``git diff --check``: passed.
 - ``python -m pytest -q``: ``2610 passed in 554.00 s``.
 
+### 19.34 RHSMode=1 direct-tail policy split
+
+Goal:
+
+- Continue the sparse/preconditioner refactor by moving the direct-tail
+  structured-preconditioner adapter, cache-key/hash helpers, direct reduced-Pmat
+  alias policy, cache metadata tagging, and adaptive direct-tail memory-cap
+  policy out of ``v3_driver.py`` without changing runtime behavior.
+
+Implementation:
+
+- Added ``sfincs_jax/rhs1_direct_tail_policy.py`` with the direct-tail cache
+  registry, stable NumPy-array hashing, cache-key construction, metadata
+  tagging, direct reduced-Pmat kind recognition, adaptive memory-cap policy, and
+  ``_StructuredHostSparsePreconditionerBundle``.
+- Rewired ``v3_driver.py`` to import and re-export the historical private
+  compatibility names, so existing debug scripts and tests can still clear the
+  direct-tail cache or inspect policy through the driver namespace.
+- Added ``tests/test_rhs1_direct_tail_policy.py`` for adapter application,
+  missing-operator failure, stable hashing, alias matching, cache-key
+  support/env sensitivity, cache-hit metadata, and adaptive memory caps.
+- Updated API docs, source map, release notes, and testing documentation.
+
+Validation so far:
+
+- ``python -m py_compile sfincs_jax/rhs1_direct_tail_policy.py
+  sfincs_jax/v3_driver.py tests/test_rhs1_direct_tail_policy.py
+  tests/test_v3_sparse_pattern.py tests/test_rhs1_full_assembly.py``: passed.
+- ``python -m ruff check sfincs_jax/rhs1_direct_tail_policy.py
+  sfincs_jax/v3_driver.py tests/test_rhs1_direct_tail_policy.py``: passed.
+- ``python -m pytest -q tests/test_rhs1_direct_tail_policy.py``:
+  ``5 passed in 0.40 s``.
+- ``python -m pytest -q tests/test_rhs1_full_assembly.py -k
+  direct_tail_cache_key tests/test_v3_sparse_pattern.py -k
+  'direct_tail_pc_default_cap or direct_tail_structured_pc_cache'``:
+  ``2 passed, 232 deselected in 2.78 s``.
+- ``python -m pytest -q tests/test_v3_sparse_pattern.py -k
+  'direct_tail_structured_pc_cache or direct_tail_pc_default_cap or
+  fortran_reduced_direct_tail'``:
+  ``12 passed, 120 deselected in 10.33 s``.
+- Broader sparse/RHSMode=1 regression slice:
+  ``python -m pytest -q tests/test_rhs1_direct_tail_policy.py
+  tests/test_v3_sparse_pattern.py tests/test_rhs1_full_assembly.py
+  tests/test_fortran_reduced_preconditioner.py``:
+  ``268 passed in 116.46 s``.
+- Strict docs build:
+  ``SPHINXOPTS='-W --keep-going' python -m sphinx -b html docs
+  docs/_build/html``: passed.
+- Final full local suite after the extraction:
+  ``python -m pytest -q``: ``2615 passed in 550.21 s``.
+
 ### 19.30 Newton-Krylov KSP diagnostics split
 
 Goal:

@@ -135,6 +135,9 @@ research workflows.
 .. automodule:: sfincs_jax.rhs1_host_policy
    :members:
 
+.. automodule:: sfincs_jax.rhs1_direct_tail_policy
+   :members:
+
 .. automodule:: sfincs_jax.host_refinement
    :members:
 

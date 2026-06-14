@@ -136,6 +136,11 @@ Unreleased
   compatibility wrapper that injects the current operator-build, pattern-build,
   factorization, backend, and guard callbacks, preserving existing debug and
   monkeypatch seams while removing another large block from the monolith.
+- Extracted RHSMode=1 direct-tail structured-preconditioner cache and memory-cap
+  policy into ``rhs1_direct_tail_policy.py``. The driver still re-exports the
+  private compatibility names, but cache keys, cache metadata, direct reduced
+  Pmat aliases, adaptive memory caps, and the structured host sparse adapter
+  now have focused tests outside the main solve loop.
 
 v1.1.7
 ------
