@@ -8457,6 +8457,11 @@ Testing docs should include:
     passed.
   - `python -m pytest -q tests/test_transport_linear_solve.py tests/test_transport_dense_batch.py tests/test_transport_iteration_stats.py tests/test_transport_streaming_outputs.py`:
     `14 passed in 6.58 s`.
+- Post-slice full validation:
+  - `python -m pytest -q`: `2584 passed in 522.03 s`.
+  - GitHub PR #8 checks for `refactor/v3-driver-architecture`: Docs, CI coverage shards,
+    examples smoke, external-data smoke, optional ecosystem gates, coverage report, tests,
+    and Codecov patch all passed; PR remains draft and merge state is clean.
 
 ### 19.19 Collisionality lane status after writer fix
 
