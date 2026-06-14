@@ -147,6 +147,11 @@ Unreleased
   solves, reusable true-action column caching, graph expansion, sparse-factor
   storage estimates, and residual-window target selection now have direct tests
   outside the driver monolith.
+- Extended ``rhs1_true_operator_rescue.py`` with the residual sparse-window and
+  residual-coarse builder routines plus active reduced-residual diagnostics.
+  Existing ``v3_driver`` private names remain import-compatible while the
+  builder and diagnostic behavior is now directly testable in the focused
+  module.
 
 v1.1.7
 ------
