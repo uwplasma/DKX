@@ -92,6 +92,15 @@ Unreleased
   diagnostic collection, NTV/source handling, and final output-field assembly
   to a focused module, with regression tests comparing streamed diagnostics
   against the established batched transport-output path.
+- Extracted the RHSMode=2/3 all-RHS dense batch solve path into
+  ``transport_dense_batch.py``. The driver now builds a transport context and
+  delegates dense matrix assembly, active-DOF projection, streamed diagnostics,
+  residual bookkeeping, and progress logging to a focused helper with direct
+  unit coverage plus the existing transport-output regression.
+- Extracted optional RHSMode=2/3 transport KSP iteration-count diagnostics into
+  ``transport_iteration_stats.py``. The production solve loop now calls a
+  focused helper for small host SciPy history reruns while preserving the same
+  skip/error messages and keeping diagnostic failures non-fatal.
 
 v1.1.7
 ------
