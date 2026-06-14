@@ -87,6 +87,11 @@ Unreleased
   compatibility import aliases, not one-line wrapper bodies. This reduces
   ``v3_driver.py`` without adding new runtime layers and keeps future line-count
   reductions focused on whole solve-orchestration clusters.
+- Extracted the RHSMode=2/3 streamed transport-output accumulator into
+  ``transport_streaming_outputs.py``. The driver now delegates per-``whichRHS``
+  diagnostic collection, NTV/source handling, and final output-field assembly
+  to a focused module, with regression tests comparing streamed diagnostics
+  against the established batched transport-output path.
 
 v1.1.7
 ------
