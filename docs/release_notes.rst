@@ -68,6 +68,13 @@ Unreleased
   accepting the positional callback signature used by worker-env setup, and
   focused tests cover stale XLA thread/device-cap replacement. The
   post-extraction local full suite passed with ``2562 passed in 550.40 s``.
+- Extracted shared transport parallel payload handling into
+  ``transport_parallel_payload.py``. CPU process workers and GPU subprocess
+  workers now use the same injected-dependency payload parser, child-worker
+  recursion guard, solve-call construction, merge-ready result packing, and
+  NPZ conversion path, with direct tests covering non-contiguous
+  ``whichRHS`` chunks. The post-extraction local full suite passed with
+  ``2566 passed in 543.33 s``.
 
 v1.1.7
 ------
