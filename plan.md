@@ -30057,3 +30057,42 @@ Validation:
 - ``SPHINXOPTS='-W --keep-going' python -m sphinx -b html docs
   docs/_build/html``: passed.
 - ``git diff --check``: passed.
+
+### 19.30 Newton-Krylov KSP diagnostics split
+
+Goal:
+
+- Remove the second PETSc-style KSP residual-history replay block from
+  ``v3_driver.py`` by extracting the optional Phi1/Newton-Krylov GMRES
+  diagnostic path into a focused module.
+
+Implementation:
+
+- Added ``sfincs_jax/newton_krylov_diagnostics.py`` with
+  ``emit_newton_krylov_ksp_history``.
+- Kept the local ``_emit_ksp_history_nk`` callback in ``v3_driver.py`` as a
+  thin adapter because ``solve_newton_linear_step`` receives this callable as
+  part of the nonlinear solve loop.
+- Added direct tests for disabled diagnostics, size and estimated-iteration
+  skip gates, successful GMRES residual-history emission, and non-fatal
+  replay failures.
+- Added the module to the API docs, source-code map, and release notes.
+
+Validation:
+
+- ``python -m py_compile sfincs_jax/newton_krylov_diagnostics.py
+  sfincs_jax/v3_driver.py tests/test_newton_krylov_diagnostics.py``:
+  passed.
+- ``python -m ruff check sfincs_jax/newton_krylov_diagnostics.py
+  sfincs_jax/v3_driver.py tests/test_newton_krylov_diagnostics.py``:
+  passed.
+- ``python -m pytest -q tests/test_newton_krylov_diagnostics.py
+  tests/test_rhsmode1_phi1_write_output_end_to_end.py
+  tests/test_v3_driver_solve_policy_coverage.py``: ``29 passed in 12.95 s``.
+- ``python -m pytest -q tests/test_rhs1_ksp_diagnostics.py
+  tests/test_newton_krylov_diagnostics.py
+  tests/test_v3_driver_rhs1_dispatch_coverage.py
+  tests/test_v3_driver_solve_policy_coverage.py
+  tests/test_audit_rhs1_solver_stack.py``: ``72 passed in 23.31 s``.
+- ``SPHINXOPTS='-W --keep-going' python -m sphinx -b html docs
+  docs/_build/html``: passed.

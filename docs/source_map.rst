@@ -231,6 +231,10 @@ the historical private driver name and test the focused module directly. This ke
   diagnostics. The driver passes the active matvec, preconditioner, and emit
   callback into this module so optional diagnostics stay non-fatal and testable
   without embedding SciPy replay logic in the solve loop.
+- ``sfincs_jax/newton_krylov_diagnostics.py``:
+  bounded PETSc-style GMRES history replay for the optional Phi1/Newton-Krylov
+  full-system path. This keeps nonlinear-solve logging policy out of the driver
+  while preserving the existing size and estimated-iteration guards.
 - ``sfincs_jax/rhs1_lowmode_coarse.py``:
   low-mode angular, moment, coupled f/tail, and tail-only feature construction
   plus matrix-free Galerkin/least-squares residual-correction builders for

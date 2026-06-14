@@ -27,6 +27,7 @@ import jax.numpy as jnp
 from jax import tree_util as jtu
 
 from .namelist import Namelist, read_sfincs_input
+from .newton_krylov_diagnostics import emit_newton_krylov_ksp_history as _emit_newton_krylov_ksp_history
 from .solver import (
     GMRESSolveResult,
     assemble_dense_matrix_from_matvec,
@@ -44629,41 +44630,21 @@ def solve_v3_full_system_newton_krylov_history(
         maxiter_val: int | None,
         precond_side: str,
     ) -> None:
-        if emit is None or not fortran_stdout:
-            return
-        size = int(b_vec.size)
-        if ksp_history_max_size is not None and size > int(ksp_history_max_size):
-            emit(1, f"fortran-stdout: KSP history skipped (size={size} > max={int(ksp_history_max_size)})")
-            return
-        if maxiter_val is not None and ksp_history_max_iter is not None:
-            est_iters = int(maxiter_val) * max(1, int(restart_val))
-            if est_iters > int(ksp_history_max_iter):
-                emit(
-                    1,
-                    "fortran-stdout: KSP history skipped "
-                    f"(estimated_iters={est_iters} > max={int(ksp_history_max_iter)})",
-                )
-                return
-        try:
-            _x_hist, _rn, history = gmres_solve_with_history_scipy(
-                matvec=matvec_fn,
-                b=b_vec,
-                preconditioner=precond_fn,
-                x0=x0_vec,
-                tol=tol_val,
-                atol=atol_val,
-                restart=restart_val,
-                maxiter=maxiter_val,
-                precondition_side=precond_side,
-            )
-        except Exception as exc:  # noqa: BLE001
-            emit(1, f"fortran-stdout: KSP history unavailable ({type(exc).__name__}: {exc})")
-            return
-        for k_hist, rn in enumerate(history):
-            emit(0, f"{k_hist:4d} KSP Residual norm {rn: .12e} ")
-        if history:
-            emit(0, " Linear iteration (KSP) converged.  KSPConvergedReason =            2")
-            emit(0, "   KSP_CONVERGED_RTOL: Norm decreased by rtol.")
+        _emit_newton_krylov_ksp_history(
+            matvec_fn=matvec_fn,
+            b_vec=b_vec,
+            precond_fn=precond_fn,
+            x0_vec=x0_vec,
+            tol_val=tol_val,
+            atol_val=atol_val,
+            restart_val=restart_val,
+            maxiter_val=maxiter_val,
+            precond_side=precond_side,
+            emit=emit,
+            fortran_stdout=bool(fortran_stdout),
+            max_size=ksp_history_max_size,
+            max_history_iter=ksp_history_max_iter,
+        )
 
     def _phi1_sparse_direct_solve(
         *,
