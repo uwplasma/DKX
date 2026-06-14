@@ -264,6 +264,9 @@ research workflows.
 .. automodule:: sfincs_jax.transport_solve_policy
    :members:
 
+.. automodule:: sfincs_jax.transport_streaming_outputs
+   :members:
+
 .. automodule:: sfincs_jax.indices
    :members:
 

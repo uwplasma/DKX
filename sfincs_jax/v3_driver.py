@@ -391,8 +391,6 @@ from .solver_progress import (
 from .transport_matrix import (
     _flux_functions_from_op,
     transport_matrix_size_from_rhs_mode,
-    v3_rhsmode1_output_fields_vm_only_jit,
-    v3_transport_diagnostics_vm_only,
     v3_transport_diagnostics_vm_only_precompute,
     v3_transport_diagnostics_vm_only_batch_jit,
     v3_transport_diagnostics_vm_only_batch_remat_jit,
@@ -403,6 +401,7 @@ from .transport_matrix import (
     v3_transport_output_fields_vm_only,
     v3_transport_matrix_from_flux_arrays,
 )
+from .transport_streaming_outputs import TransportStreamingOutputAccumulator
 from .solver_runtime import (
     block_gmres_result_ready as _block_gmres_result_ready,
     gmres_result_is_finite as _gmres_result_is_finite,
@@ -46503,273 +46502,22 @@ def solve_v3_transport_matrix_linear_gmres(
     diag_op_by_index = op_rhs_by_index if not use_diag_op0 else None
 
     transport_output_fields: dict[str, np.ndarray] | None = None
-    diag_pf_arr: np.ndarray | None = None
-    diag_hf_arr: np.ndarray | None = None
-    diag_flow_arr: np.ndarray | None = None
     collect_full_transport_outputs = bool(collect_transport_output_fields)
+    streaming_outputs: TransportStreamingOutputAccumulator | None = None
     if stream_diagnostics:
-        s = int(op0.n_species)
-        t = int(op0.n_theta)
-        z = int(op0.n_zeta)
-        x = int(op0.n_x)
-        diag_pf_arr = np.zeros((s, n), dtype=np.float64)
-        diag_hf_arr = np.zeros((s, n), dtype=np.float64)
-        diag_flow_arr = np.zeros((s, n), dtype=np.float64)
-
-        def _alloc_ztsn() -> np.ndarray:
-            return np.zeros((z, t, s, n), dtype=np.float64)
-
-        def _alloc_zt_n() -> np.ndarray:
-            return np.zeros((z, t, n), dtype=np.float64)
-
-        def _alloc_sn() -> np.ndarray:
-            return np.zeros((s, n), dtype=np.float64)
-
-        def _alloc_xsn() -> np.ndarray:
-            return np.zeros((x, s, n), dtype=np.float64)
-
-        def _alloc_2sn() -> np.ndarray:
-            return np.zeros((2, s, n), dtype=np.float64)
-
-        dens = pres = pres_aniso = flow = total_dens = total_pres = vel_fsadens = vel_total = mach = None
-        j_hat = fsa_dens = fsa_pres = None
-        mf_before_vm = mf_before_vm0 = mf_before_vE = mf_before_vE0 = mf_vm_psi_hat = mf_vm0_psi_hat = None
-        ntv_before = ntv = None
-        pf_before_vm = hf_before_vm = pf_before_vm0 = hf_before_vm0 = None
-        pf_before_ve = hf_before_ve = pf_before_ve0 = hf_before_ve0 = None
-        pf_vm_psi_hat = hf_vm_psi_hat = pf_vm0_psi_hat = hf_vm0_psi_hat = None
-        pf_vs_x = hf_vs_x = fsab_flow = fsab_flow_vs_x = None
-        sources = None
-        if collect_full_transport_outputs:
-            dens = _alloc_ztsn()
-            pres = _alloc_ztsn()
-            pres_aniso = _alloc_ztsn()
-            flow = _alloc_ztsn()
-            total_dens = _alloc_ztsn()
-            total_pres = _alloc_ztsn()
-            vel_fsadens = _alloc_ztsn()
-            vel_total = _alloc_ztsn()
-            mach = _alloc_ztsn()
-            j_hat = _alloc_zt_n()
-            fsa_dens = _alloc_sn()
-            fsa_pres = _alloc_sn()
-
-            mf_before_vm = _alloc_ztsn()
-            mf_before_vm0 = _alloc_ztsn()
-            mf_before_vE = _alloc_ztsn()
-            mf_before_vE0 = _alloc_ztsn()
-            mf_vm_psi_hat = _alloc_sn()
-            mf_vm0_psi_hat = _alloc_sn()
-
-            ntv_before = _alloc_ztsn()
-            ntv = _alloc_sn()
-
-            pf_before_vm = _alloc_ztsn()
-            hf_before_vm = _alloc_ztsn()
-            pf_before_vm0 = _alloc_ztsn()
-            hf_before_vm0 = _alloc_ztsn()
-            pf_before_ve = _alloc_ztsn()
-            hf_before_ve = _alloc_ztsn()
-            pf_before_ve0 = _alloc_ztsn()
-            hf_before_ve0 = _alloc_ztsn()
-
-            pf_vm_psi_hat = _alloc_sn()
-            hf_vm_psi_hat = _alloc_sn()
-            pf_vm0_psi_hat = _alloc_sn()
-            hf_vm0_psi_hat = _alloc_sn()
-            pf_vs_x = _alloc_xsn()
-            hf_vs_x = _alloc_xsn()
-            fsab_flow = _alloc_sn()
-            fsab_flow_vs_x = _alloc_xsn()
-
-            if int(op0.constraint_scheme) == 2:
-                sources = _alloc_xsn()
-            elif int(op0.constraint_scheme) in {1, 3, 4}:
-                sources = _alloc_2sn()
-
-        compute_ntv = False
-        ntv_kernel = None
-        w2d_np = None
-        b0_val = None
-        fsab2_val = None
-        n_hat_np = None
-        w_ntv = None
-        t_hat = None
-        sqrt_t = None
-        m_hat = None
-        sqrt_m = None
-        vprime_hat = None
-        if collect_full_transport_outputs:
-            geom_params = nml.group("geometryParameters")
-            geometry_scheme = int(geom_params.get("GEOMETRYSCHEME", geom_params.get("geometryScheme", -1)))
-            compute_ntv = geometry_scheme != 5
-            if compute_ntv:
-                from .diagnostics import u_hat_np  # noqa: PLC0415
-
-                uhat_np = u_hat_np(grids=grids, geom=geom)
-                uhat = jnp.asarray(uhat_np, dtype=jnp.float64)
-                bh = jnp.asarray(op0.b_hat, dtype=jnp.float64)
-                dbt = jnp.asarray(op0.db_hat_dtheta, dtype=jnp.float64)
-                dbz = jnp.asarray(op0.db_hat_dzeta, dtype=jnp.float64)
-                inv_fsa_b2 = 1.0 / jnp.asarray(op0.fsab_hat2, dtype=jnp.float64)
-                ghat = jnp.asarray(float(geom.g_hat), dtype=jnp.float64)
-                ihat = jnp.asarray(float(geom.i_hat), dtype=jnp.float64)
-                iota = jnp.asarray(float(geom.iota), dtype=jnp.float64)
-                ntv_kernel = (2.0 / 5.0) / bh * (
-                    (uhat - ghat * inv_fsa_b2) * (iota * dbt + dbz)
-                    + iota * (1.0 / (bh * bh)) * (ghat * dbt - ihat * dbz)
-                )
-            else:
-                ntv_kernel = jnp.zeros_like(jnp.asarray(op0.b_hat, dtype=jnp.float64))
-
-            w2d = jnp.asarray(op0.theta_weights, dtype=jnp.float64)[:, None] * jnp.asarray(op0.zeta_weights, dtype=jnp.float64)[None, :]
-            vprime_hat = jnp.sum(w2d / jnp.asarray(op0.d_hat, dtype=jnp.float64))
-            x_grid = jnp.asarray(op0.x, dtype=jnp.float64)
-            xw = jnp.asarray(op0.x_weights, dtype=jnp.float64)
-            w_ntv = xw * (x_grid**4)
-            t_hat = jnp.asarray(op0.t_hat, dtype=jnp.float64)
-            m_hat = jnp.asarray(op0.m_hat, dtype=jnp.float64)
-            sqrt_t = jnp.sqrt(t_hat)
-            sqrt_m = jnp.sqrt(m_hat)
-            b0, _g, _i = _flux_functions_from_op(op0)
-            fsab2 = jnp.asarray(op0.fsab_hat2, dtype=jnp.float64)
-
-            w2d_np = np.asarray(w2d, dtype=np.float64)
-            b0_val = float(np.asarray(b0, dtype=np.float64))
-            fsab2_val = float(np.asarray(fsab2, dtype=np.float64))
-            n_hat_np = np.asarray(op0.n_hat, dtype=np.float64)
+        streaming_outputs = TransportStreamingOutputAccumulator.create(
+            nml=nml,
+            grids=grids,
+            geom=geom,
+            op0=op0,
+            n_rhs=n,
+            collect_full_output_fields=collect_full_transport_outputs,
+        )
 
         def _collect_transport_outputs(which_rhs: int, x_full: jnp.ndarray) -> None:
             """Populate streaming diagnostics for a single whichRHS solve."""
-            j = int(which_rhs) - 1
-            op_rhs = with_transport_rhs_settings(op0, which_rhs=int(which_rhs))
-            diag = v3_transport_diagnostics_vm_only(op_rhs, x_full=x_full)
-            diag_pf_arr[:, j] = np.asarray(diag.particle_flux_vm_psi_hat, dtype=np.float64)
-            diag_hf_arr[:, j] = np.asarray(diag.heat_flux_vm_psi_hat, dtype=np.float64)
-            diag_flow_arr[:, j] = np.asarray(diag.fsab_flow, dtype=np.float64)
-            if not collect_full_transport_outputs:
-                return
-
-            d = v3_rhsmode1_output_fields_vm_only_jit(op_rhs, x_full=x_full)
-            assert dens is not None
-            assert pres is not None
-            assert pres_aniso is not None
-            assert flow is not None
-            assert total_dens is not None
-            assert total_pres is not None
-            assert vel_fsadens is not None
-            assert vel_total is not None
-            assert mach is not None
-            assert j_hat is not None
-            assert fsa_dens is not None
-            assert fsa_pres is not None
-            assert mf_before_vm is not None
-            assert mf_before_vm0 is not None
-            assert mf_before_vE is not None
-            assert mf_before_vE0 is not None
-            assert mf_vm_psi_hat is not None
-            assert mf_vm0_psi_hat is not None
-            assert pf_before_vm is not None
-            assert hf_before_vm is not None
-            assert pf_before_vm0 is not None
-            assert hf_before_vm0 is not None
-            assert pf_vs_x is not None
-            assert hf_vs_x is not None
-            assert fsab_flow_vs_x is not None
-            assert pf_vm_psi_hat is not None
-            assert hf_vm_psi_hat is not None
-            assert pf_vm0_psi_hat is not None
-            assert hf_vm0_psi_hat is not None
-            assert ntv is not None
-            assert ntv_before is not None
-            assert w2d_np is not None
-            assert w_ntv is not None
-            assert t_hat is not None
-            assert sqrt_t is not None
-            assert m_hat is not None
-            assert sqrt_m is not None
-            assert vprime_hat is not None
-            assert ntv_kernel is not None
-
-            dens[:, :, :, j] = np.asarray(jnp.transpose(d["densityPerturbation"], (2, 1, 0)), dtype=np.float64)
-            pres[:, :, :, j] = np.asarray(jnp.transpose(d["pressurePerturbation"], (2, 1, 0)), dtype=np.float64)
-            pres_aniso[:, :, :, j] = np.asarray(jnp.transpose(d["pressureAnisotropy"], (2, 1, 0)), dtype=np.float64)
-            flow[:, :, :, j] = np.asarray(jnp.transpose(d["flow"], (2, 1, 0)), dtype=np.float64)
-            total_dens[:, :, :, j] = np.asarray(jnp.transpose(d["totalDensity"], (2, 1, 0)), dtype=np.float64)
-            total_pres[:, :, :, j] = np.asarray(jnp.transpose(d["totalPressure"], (2, 1, 0)), dtype=np.float64)
-            vel_fsadens[:, :, :, j] = np.asarray(jnp.transpose(d["velocityUsingFSADensity"], (2, 1, 0)), dtype=np.float64)
-            vel_total[:, :, :, j] = np.asarray(jnp.transpose(d["velocityUsingTotalDensity"], (2, 1, 0)), dtype=np.float64)
-            mach[:, :, :, j] = np.asarray(jnp.transpose(d["MachUsingFSAThermalSpeed"], (2, 1, 0)), dtype=np.float64)
-            j_hat[:, :, j] = np.asarray(jnp.transpose(d["jHat"], (1, 0)), dtype=np.float64)
-            fsa_dens[:, j] = np.asarray(d["FSADensityPerturbation"], dtype=np.float64)
-            fsa_pres[:, j] = np.asarray(d["FSAPressurePerturbation"], dtype=np.float64)
-
-            mf_before_vm[:, :, :, j] = np.asarray(
-                jnp.transpose(d["momentumFluxBeforeSurfaceIntegral_vm"], (2, 1, 0)), dtype=np.float64
-            )
-            mf_before_vm0[:, :, :, j] = np.asarray(
-                jnp.transpose(d["momentumFluxBeforeSurfaceIntegral_vm0"], (2, 1, 0)), dtype=np.float64
-            )
-            mf_before_vE[:, :, :, j] = np.asarray(
-                jnp.transpose(d["momentumFluxBeforeSurfaceIntegral_vE"], (2, 1, 0)), dtype=np.float64
-            )
-            mf_before_vE0[:, :, :, j] = np.asarray(
-                jnp.transpose(d["momentumFluxBeforeSurfaceIntegral_vE0"], (2, 1, 0)), dtype=np.float64
-            )
-            mf_vm_psi_hat[:, j] = np.asarray(d["momentumFlux_vm_psiHat"], dtype=np.float64)
-            mf_vm0_psi_hat[:, j] = np.asarray(d["momentumFlux_vm0_psiHat"], dtype=np.float64)
-
-            pf_before_vm[:, :, :, j] = np.asarray(
-                jnp.transpose(diag.particle_flux_before_surface_integral_vm, (2, 1, 0)), dtype=np.float64
-            )
-            hf_before_vm[:, :, :, j] = np.asarray(
-                jnp.transpose(diag.heat_flux_before_surface_integral_vm, (2, 1, 0)), dtype=np.float64
-            )
-            pf_before_vm0[:, :, :, j] = np.asarray(
-                jnp.transpose(diag.particle_flux_before_surface_integral_vm0, (2, 1, 0)), dtype=np.float64
-            )
-            hf_before_vm0[:, :, :, j] = np.asarray(
-                jnp.transpose(diag.heat_flux_before_surface_integral_vm0, (2, 1, 0)), dtype=np.float64
-            )
-            pf_vs_x[:, :, j] = np.asarray(diag.particle_flux_vm_psi_hat_vs_x, dtype=np.float64)
-            hf_vs_x[:, :, j] = np.asarray(diag.heat_flux_vm_psi_hat_vs_x, dtype=np.float64)
-            fsab_flow_vs_x[:, :, j] = np.asarray(diag.fsab_flow_vs_x, dtype=np.float64)
-
-            pf_vm_psi_hat[:, j] = np.asarray(diag.particle_flux_vm_psi_hat, dtype=np.float64)
-            hf_vm_psi_hat[:, j] = np.asarray(diag.heat_flux_vm_psi_hat, dtype=np.float64)
-            fsab_flow[:, j] = np.asarray(diag.fsab_flow, dtype=np.float64)
-
-            pf_vm0_psi_hat[:, j] = np.einsum(
-                "tz,stz->s",
-                w2d_np,
-                np.asarray(diag.particle_flux_before_surface_integral_vm0, dtype=np.float64),
-            )
-            hf_vm0_psi_hat[:, j] = np.einsum(
-                "tz,stz->s",
-                w2d_np,
-                np.asarray(diag.heat_flux_before_surface_integral_vm0, dtype=np.float64),
-            )
-
-            if compute_ntv and int(op0.n_xi) > 2:
-                f_delta = np.asarray(x_full[: op0.f_size], dtype=np.float64).reshape(op0.fblock.f_shape)
-                sum_ntv = np.einsum("x,sxtz->stz", np.asarray(w_ntv, dtype=np.float64), f_delta[:, :, 2, :, :])
-                ntv_before_stz = (
-                    (4.0 * np.pi * (np.asarray(t_hat) ** 2) * np.asarray(sqrt_t) / (np.asarray(m_hat) * np.asarray(sqrt_m) * float(np.asarray(vprime_hat))))
-                )[:, None, None] * np.asarray(ntv_kernel, dtype=np.float64)[None, :, :] * sum_ntv
-                ntv_s = np.einsum("tz,stz->s", w2d_np, ntv_before_stz)
-            else:
-                ntv_before_stz = np.zeros((int(op0.n_species), int(op0.n_theta), int(op0.n_zeta)), dtype=np.float64)
-                ntv_s = np.zeros((int(op0.n_species),), dtype=np.float64)
-            ntv[:, j] = ntv_s
-            ntv_before[:, :, :, j] = np.asarray(np.transpose(ntv_before_stz, (2, 1, 0)), dtype=np.float64)
-
-            if sources is not None:
-                extra = np.asarray(x_full[op0.f_size + op0.phi1_size :], dtype=np.float64)
-                if int(op0.constraint_scheme) == 2:
-                    src = extra.reshape((int(op0.n_species), int(op0.n_x))).T
-                else:
-                    src = extra.reshape((int(op0.n_species), 2)).T
-                sources[:, :, j] = src
+            assert streaming_outputs is not None
+            streaming_outputs.collect(int(which_rhs), x_full)
 
 
     matvec_full_cache: dict[tuple[object, ...], Callable[[jnp.ndarray], jnp.ndarray]] = {}
@@ -48106,100 +47854,9 @@ def solve_v3_transport_matrix_linear_gmres(
     if emit is not None:
         emit(0, "solve_v3_transport_matrix_linear_gmres: computing whichRHS diagnostics (batched)")
     if stream_diagnostics:
-        assert diag_pf_arr is not None
-        assert diag_hf_arr is not None
-        assert diag_flow_arr is not None
-        diag_pf_jnp = jnp.asarray(diag_pf_arr, dtype=jnp.float64)
-        diag_hf_jnp = jnp.asarray(diag_hf_arr, dtype=jnp.float64)
-        diag_flow_jnp = jnp.asarray(diag_flow_arr, dtype=jnp.float64)
-        if collect_full_transport_outputs:
-            assert fsab_flow is not None
-            assert fsab_flow_vs_x is not None
-            assert dens is not None
-            assert pres is not None
-            assert pres_aniso is not None
-            assert flow is not None
-            assert total_dens is not None
-            assert total_pres is not None
-            assert vel_fsadens is not None
-            assert vel_total is not None
-            assert mach is not None
-            assert j_hat is not None
-            assert fsa_dens is not None
-            assert fsa_pres is not None
-            assert mf_before_vm is not None
-            assert mf_before_vm0 is not None
-            assert mf_before_vE is not None
-            assert mf_before_vE0 is not None
-            assert mf_vm_psi_hat is not None
-            assert mf_vm0_psi_hat is not None
-            assert ntv_before is not None
-            assert ntv is not None
-            assert pf_vm_psi_hat is not None
-            assert hf_vm_psi_hat is not None
-            assert pf_vm0_psi_hat is not None
-            assert hf_vm0_psi_hat is not None
-            assert pf_before_vm is not None
-            assert hf_before_vm is not None
-            assert pf_before_vm0 is not None
-            assert hf_before_vm0 is not None
-            assert pf_before_ve is not None
-            assert hf_before_ve is not None
-            assert pf_before_ve0 is not None
-            assert hf_before_ve0 is not None
-            assert pf_vs_x is not None
-            assert hf_vs_x is not None
-            assert n_hat_np is not None
-            assert b0_val is not None
-            assert fsab2_val is not None
-            z_s_np = np.asarray(op0.z_s, dtype=np.float64)
-            fsab_jhat = np.einsum("s,sn->n", z_s_np, fsab_flow)
-            transport_output_fields = {
-                "densityPerturbation": dens,
-                "pressurePerturbation": pres,
-                "pressureAnisotropy": pres_aniso,
-                "flow": flow,
-                "totalDensity": total_dens,
-                "totalPressure": total_pres,
-                "velocityUsingFSADensity": vel_fsadens,
-                "velocityUsingTotalDensity": vel_total,
-                "MachUsingFSAThermalSpeed": mach,
-                "jHat": j_hat,
-                "FSADensityPerturbation": fsa_dens,
-                "FSAPressurePerturbation": fsa_pres,
-                "momentumFluxBeforeSurfaceIntegral_vm": mf_before_vm,
-                "momentumFluxBeforeSurfaceIntegral_vm0": mf_before_vm0,
-                "momentumFluxBeforeSurfaceIntegral_vE": mf_before_vE,
-                "momentumFluxBeforeSurfaceIntegral_vE0": mf_before_vE0,
-                "momentumFlux_vm_psiHat": mf_vm_psi_hat,
-                "momentumFlux_vm0_psiHat": mf_vm0_psi_hat,
-                "NTVBeforeSurfaceIntegral": ntv_before,
-                "NTV": ntv,
-                "FSABFlow": fsab_flow,
-                "FSABFlow_vs_x": fsab_flow_vs_x,
-                "FSABVelocityUsingFSADensity": fsab_flow / n_hat_np[:, None],
-                "FSABVelocityUsingFSADensityOverB0": (fsab_flow / n_hat_np[:, None]) / b0_val,
-                "FSABVelocityUsingFSADensityOverRootFSAB2": (fsab_flow / n_hat_np[:, None]) / np.sqrt(fsab2_val),
-                "FSABjHat": fsab_jhat,
-                "FSABjHatOverB0": fsab_jhat / b0_val,
-                "FSABjHatOverRootFSAB2": fsab_jhat / np.sqrt(fsab2_val),
-                "particleFlux_vm_psiHat": pf_vm_psi_hat,
-                "heatFlux_vm_psiHat": hf_vm_psi_hat,
-                "particleFlux_vm0_psiHat": pf_vm0_psi_hat,
-                "heatFlux_vm0_psiHat": hf_vm0_psi_hat,
-                "particleFluxBeforeSurfaceIntegral_vm": pf_before_vm,
-                "heatFluxBeforeSurfaceIntegral_vm": hf_before_vm,
-                "particleFluxBeforeSurfaceIntegral_vm0": pf_before_vm0,
-                "heatFluxBeforeSurfaceIntegral_vm0": hf_before_vm0,
-                "particleFluxBeforeSurfaceIntegral_vE": pf_before_ve,
-                "heatFluxBeforeSurfaceIntegral_vE": hf_before_ve,
-                "particleFluxBeforeSurfaceIntegral_vE0": pf_before_ve0,
-                "heatFluxBeforeSurfaceIntegral_vE0": hf_before_ve0,
-                "particleFlux_vm_psiHat_vs_x": pf_vs_x,
-                "heatFlux_vm_psiHat_vs_x": hf_vs_x,
-            }
-            if sources is not None:
-                transport_output_fields["sources"] = sources
+        assert streaming_outputs is not None
+        diag_pf_jnp, diag_hf_jnp, diag_flow_jnp = streaming_outputs.diagnostic_flux_arrays()
+        transport_output_fields = streaming_outputs.output_fields()
     else:
         remat_env = os.environ.get("SFINCS_JAX_REMAT_TRANSPORT_DIAGNOSTICS", "").strip().lower()
         if remat_env in {"1", "true", "yes", "on"}:

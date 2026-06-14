@@ -190,6 +190,14 @@ Current branch status:
   broader RHSMode/transport regression tests passed with
   ``199 passed in 78.13 s``; strict docs build passed; and the full local suite
   passed with ``2570 passed in 546.45 s``.
+- The 2026-06-14 transport streaming-output extraction moved the
+  RHSMode=2/3 per-``whichRHS`` streamed diagnostic buffers, NTV/source handling,
+  and output-field dictionary assembly into ``transport_streaming_outputs.py``.
+  ``solve_v3_transport_matrix_linear_gmres`` dropped from ``3111`` to ``2769``
+  lines. Focused transport-output tests passed with ``30 passed in 6.68 s``;
+  broader transport regression tests passed with ``130 passed in 45.93 s``;
+  strict docs build passed; and the full local suite passed with
+  ``2573 passed in 530.49 s``.
 - Next PR-level moves should split high-level RHSMode=1 solve orchestration
   into ``rhs1_solve.py`` and RHSMode=2/3 orchestration into
   ``transport_solve.py`` after the focused module extractions are green.
