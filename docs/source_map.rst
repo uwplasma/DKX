@@ -699,6 +699,11 @@ the historical private driver name and test the focused module directly. This ke
   optional small-system SciPy Krylov history reruns used only for transport
   ``ksp_iterations`` progress diagnostics. Diagnostic failures are reported but
   never change the production solve result.
+- ``sfincs_jax/transport_linear_solve.py``:
+  transport RHSMode=2/3 Krylov dispatch, including the transport-specific
+  ``auto``/``default`` BiCGStab preference, implicit custom-solve routing,
+  JIT/non-JIT solver selection, restart-budget policy, and distributed-axis
+  residual-solve routing.
 - ``sfincs_jax/transport_parallel_payload.py``:
   injected-dependency payload normalization, child-worker guard setup, transport solve
   call construction, merge-ready result packing, and GPU-worker NPZ array conversion

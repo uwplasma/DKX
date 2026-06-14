@@ -349,6 +349,13 @@ from .transport_dense_batch import (
 )
 from .transport_host_gmres import transport_host_gmres_solve as _transport_host_gmres_solve
 from .transport_iteration_stats import emit_transport_ksp_iteration_stats as _emit_transport_ksp_iteration_stats
+from .transport_linear_solve import (
+    TransportLinearSolveContext,
+    solve_transport_linear as _solve_transport_linear,
+    solve_transport_linear_with_residual as _solve_transport_linear_with_residual,
+    transport_restart_for_method as _transport_restart_for_method,
+    transport_solver_kind as _transport_solver_kind,
+)
 from .transport_parallel_policy import (
     rewrite_xla_flags as _rewrite_xla_flags,
     transport_parallel_backend as _transport_parallel_backend_impl,
@@ -45636,23 +45643,27 @@ def solve_v3_transport_matrix_linear_gmres(
             maxiter = max(int(maxiter), 800)
 
     use_solver_jit = _use_solver_jit(int(op0.total_size))
+    transport_linear_context = TransportLinearSolveContext(
+        rhs_mode=int(rhs_mode),
+        size_hint=int(op0.total_size),
+        use_implicit=bool(use_implicit),
+        use_solver_jit=bool(use_solver_jit),
+        distributed_axis=distributed_axis,
+    )
 
     def _dense_dtype(dtype_in: jnp.dtype) -> jnp.dtype:
         return jnp.float32 if dense_use_mixed else dtype_in
 
     def _solver_kind(method: str) -> tuple[str, str]:
-        method_l = str(method).strip().lower()
-        if method_l in {"auto", "default"}:
-            if int(rhs_mode) in {2, 3}:
-                # Favor short-recurrence Krylov for RHSMode=2/3; fall back to GMRES if needed.
-                return "bicgstab", "batched"
-            return "bicgstab", "batched"
-        if method_l in {"bicgstab", "bicgstab_jax"}:
-            return "bicgstab", "batched"
-        return "gmres", method_l
+        return _transport_solver_kind(method, rhs_mode=int(rhs_mode))
 
     def _restart_for_method(method: str) -> int:
-        return gmres_restart if _solver_kind(method)[0] == "gmres" else int(restart)
+        return _transport_restart_for_method(
+            method,
+            rhs_mode=int(rhs_mode),
+            gmres_restart=int(gmres_restart),
+            restart=int(restart),
+        )
 
     def _solve_linear(
         *,
@@ -45667,34 +45678,18 @@ def solve_v3_transport_matrix_linear_gmres(
         preconditioner_val=None,
         precondition_side_val: str = "left",
     ):
-        if use_implicit:
-            solver_kind, gmres_method = _solver_kind(solve_method_val)
-            return linear_custom_solve(
-                matvec=matvec_fn,
-                b=b_vec,
-                preconditioner=preconditioner_val,
-                x0=x0_vec,
-                tol=tol_val,
-                atol=atol_val,
-                restart=restart_val,
-                maxiter=maxiter_val,
-                solve_method=gmres_method,
-                solver=solver_kind,
-                precondition_side=precondition_side_val,
-                size_hint=int(op0.total_size),
-            )
-        solver_fn = gmres_solve_jit if use_solver_jit else gmres_solve
-        return solver_fn(
-            matvec=matvec_fn,
-            b=b_vec,
-            preconditioner=preconditioner_val,
-            x0=x0_vec,
-            tol=tol_val,
-            atol=atol_val,
-            restart=restart_val,
-            maxiter=maxiter_val,
-            solve_method=solve_method_val,
-            precondition_side=precondition_side_val,
+        return _solve_transport_linear(
+            context=transport_linear_context,
+            matvec_fn=matvec_fn,
+            b_vec=b_vec,
+            x0_vec=x0_vec,
+            tol_val=tol_val,
+            atol_val=atol_val,
+            restart_val=restart_val,
+            maxiter_val=maxiter_val,
+            solve_method_val=solve_method_val,
+            preconditioner_val=preconditioner_val,
+            precondition_side_val=precondition_side_val,
         )
 
     def _solve_linear_with_residual(
@@ -45710,76 +45705,18 @@ def solve_v3_transport_matrix_linear_gmres(
         preconditioner_val=None,
         precondition_side_val: str = "left",
     ) -> tuple[GMRESSolveResult, jnp.ndarray]:
-        solver_kind, gmres_method = _solver_kind(solve_method_val)
-        if use_implicit:
-            return linear_custom_solve_with_residual(
-                matvec=matvec_fn,
-                b=b_vec,
-                preconditioner=preconditioner_val,
-                x0=x0_vec,
-                tol=tol_val,
-                atol=atol_val,
-                restart=restart_val,
-                maxiter=maxiter_val,
-                solve_method=gmres_method,
-                solver=solver_kind,
-                precondition_side=precondition_side_val,
-                size_hint=int(op0.total_size),
-            )
-        if solver_kind == "bicgstab":
-            if distributed_axis is not None:
-                with sharding_constraints(True):
-                    return gmres_solve_with_residual_distributed(
-                        matvec=matvec_fn,
-                        b=b_vec,
-                        preconditioner=preconditioner_val,
-                        x0=x0_vec,
-                        tol=tol_val,
-                        atol=atol_val,
-                        restart=restart_val,
-                        maxiter=maxiter_val,
-                        solve_method="bicgstab",
-                        precondition_side=precondition_side_val,
-                        axis_name=distributed_axis,
-                    )
-            solver_fn = bicgstab_solve_with_residual_jit if use_solver_jit else bicgstab_solve_with_residual
-            return solver_fn(
-                matvec=matvec_fn,
-                b=b_vec,
-                preconditioner=preconditioner_val,
-                x0=x0_vec,
-                tol=tol_val,
-                atol=atol_val,
-                maxiter=maxiter_val,
-                precondition_side=precondition_side_val,
-            )
-        if distributed_axis is not None:
-            with sharding_constraints(True):
-                return gmres_solve_with_residual_distributed(
-                    matvec=matvec_fn,
-                    b=b_vec,
-                    preconditioner=preconditioner_val,
-                    x0=x0_vec,
-                    tol=tol_val,
-                    atol=atol_val,
-                    restart=restart_val,
-                    maxiter=maxiter_val,
-                    solve_method=gmres_method,
-                    precondition_side=precondition_side_val,
-                    axis_name=distributed_axis,
-                )
-        solver_fn = gmres_solve_with_residual_jit if use_solver_jit else gmres_solve_with_residual
-        return solver_fn(
-            matvec=matvec_fn,
-            b=b_vec,
-            preconditioner=preconditioner_val,
-            x0=x0_vec,
-            tol=tol_val,
-            atol=atol_val,
-            restart=restart_val,
-            maxiter=maxiter_val,
-            solve_method=gmres_method,
-            precondition_side=precondition_side_val,
+        return _solve_transport_linear_with_residual(
+            context=transport_linear_context,
+            matvec_fn=matvec_fn,
+            b_vec=b_vec,
+            x0_vec=x0_vec,
+            tol_val=tol_val,
+            atol_val=atol_val,
+            restart_val=restart_val,
+            maxiter_val=maxiter_val,
+            solve_method_val=solve_method_val,
+            preconditioner_val=preconditioner_val,
+            precondition_side_val=precondition_side_val,
         )
 
     active_dof_env = os.environ.get("SFINCS_JAX_TRANSPORT_ACTIVE_DOF", "").strip().lower()

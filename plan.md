@@ -8432,6 +8432,32 @@ Testing docs should include:
   - `python -m pytest -q tests/test_transport_dense_batch.py tests/test_transport_iteration_stats.py tests/test_transport_streaming_outputs.py tests/test_transport_dense_lu.py tests/test_transport_handoff_policy.py tests/test_transport_solve_policy.py`:
     `21 passed in 7.59 s`.
 
+### 19.27 Transport linear-solver dispatch split
+
+- The RHSMode=2/3 transport loop still carried nested Krylov dispatch helpers
+  for:
+  - transport-specific `auto`/`default` mapping to BiCGStab,
+  - restart-budget choice for GMRES vs short-recurrence methods,
+  - implicit custom-solve routing,
+  - JIT vs non-JIT GMRES/BiCGStab selection,
+  - distributed-axis residual-solve routing.
+- That dispatch is now extracted into `sfincs_jax/transport_linear_solve.py`.
+- `v3_driver.py` keeps thin local adapters so the surrounding retry, dense
+  fallback, sparse rescue, and polish branches are unchanged.
+- This stayed structure-preserving:
+  - no solver-path default changed,
+  - the same JAX/custom/distributed solver backends are called,
+  - the extraction only makes the dispatch independently testable.
+- New bounded regression coverage now lives in:
+  - `tests/test_transport_linear_solve.py`
+- Current validation for the linear-dispatch slice:
+  - `python -m py_compile sfincs_jax/transport_linear_solve.py sfincs_jax/v3_driver.py`:
+    passed.
+  - `python -m ruff check sfincs_jax/transport_linear_solve.py sfincs_jax/v3_driver.py tests/test_transport_linear_solve.py`:
+    passed.
+  - `python -m pytest -q tests/test_transport_linear_solve.py tests/test_transport_dense_batch.py tests/test_transport_iteration_stats.py tests/test_transport_streaming_outputs.py`:
+    `14 passed in 6.58 s`.
+
 ### 19.19 Collisionality lane status after writer fix
 
 - A real publication-lane bug was found in `examples/publication_figures/generate_sfincs_paper_figs.py`:
