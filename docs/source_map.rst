@@ -191,6 +191,11 @@ the historical private driver name and test the focused module directly. This ke
   probing, stable array hashes, and RHSMode=1/transport preconditioner
   cache-key construction. The keys intentionally omit RHS-only gradients so
   fixed-operator scan points can reuse factors.
+- ``sfincs_jax/explicit_sparse_factor_policy.py``:
+  explicit-sparse host-factor environment parsing, canonical factor-kind alias
+  resolution, and monolithic LU/ILU guard sizing. The sparse builder still owns
+  monkeypatch-sensitive operator/factor construction, but this policy layer is
+  directly tested and reusable.
 - ``sfincs_jax/krylov_dispatch.py``:
   concrete Krylov solver routing for host-only SciPy methods, JIT/non-JIT JAX
   GMRES, distributed GMRES, diagnostic solver labels, and

@@ -30098,3 +30098,50 @@ Validation:
   docs/_build/html``: passed.
 - Post-push local full-suite validation for the diagnostics-split checkpoints:
   ``python -m pytest -q``: ``2598 passed in 542.77 s``.
+
+### 19.31 Explicit sparse host-factor policy split
+
+Goal:
+
+- Begin the larger extraction of ``_build_host_sparse_direct_factor_from_matvec``
+  without breaking existing tests and debugging hooks that monkeypatch
+  ``v3_driver.build_operator_from_matvec`` and
+  ``v3_driver.factorize_host_sparse_operator``.
+
+Implementation:
+
+- Added ``sfincs_jax/explicit_sparse_factor_policy.py`` for explicit-sparse
+  numeric/boolean environment parsing, canonical factor-kind alias resolution,
+  monolithic LU/ILU guard enablement, and factor-specific guard-size parsing.
+- Replaced the driver-local explicit-sparse parsing helpers, the factor-kind
+  alias tree, and monolithic guard-size parsing with calls into the focused
+  policy module.
+- Kept operator assembly and host sparse factorization inside the driver for
+  this checkpoint so current monkeypatch-based sparse tests keep exercising the
+  real build/factorization seams.
+- Added direct policy tests for invalid-env fallback, bounds clamping,
+  Fortran/Python boolean parsing, factor-kind alias normalization, env override
+  precedence, and LU/ILU guard-size precedence.
+- Added the module to the API docs, source-code map, and release notes.
+
+Validation:
+
+- ``python -m py_compile sfincs_jax/explicit_sparse_factor_policy.py
+  sfincs_jax/v3_driver.py tests/test_explicit_sparse_factor_policy.py``:
+  passed.
+- ``python -m ruff check sfincs_jax/explicit_sparse_factor_policy.py
+  sfincs_jax/v3_driver.py tests/test_explicit_sparse_factor_policy.py
+  tests/test_v3_driver_sparse_helper_coverage.py``: passed.
+- ``python -m pytest -q tests/test_explicit_sparse_factor_policy.py
+  tests/test_v3_driver_sparse_helper_coverage.py
+  tests/test_fortran_reduced_preconditioner.py -k 'explicit_sparse or
+  build_host_sparse_direct or symbolic_prefill_guard or direct_tail'``:
+  ``14 passed, 36 deselected in 1.78 s``.
+- ``python -m pytest -q tests/test_explicit_sparse_factor_policy.py
+  tests/test_v3_driver_sparse_helper_coverage.py
+  tests/test_transport_sparse_direct_solve.py tests/test_transport_sparse_direct.py
+  tests/test_fortran_reduced_preconditioner.py``:
+  ``103 passed in 13.68 s``.
+- ``SPHINXOPTS='-W --keep-going' python -m sphinx -b html docs
+  docs/_build/html``: passed.
+- ``git diff --check``: passed.
