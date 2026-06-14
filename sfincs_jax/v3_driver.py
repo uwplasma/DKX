@@ -349,6 +349,7 @@ from .transport_parallel_policy import (
     transport_parallel_visible_gpu_ids as _transport_parallel_visible_gpu_ids_impl,
     transport_parallel_worker_env as _transport_parallel_worker_env_impl,
 )
+from .transport_parallel_payload import solve_transport_parallel_payload as _solve_transport_parallel_payload
 from .transport_parallel_runtime import (
     merge_transport_parallel_results,
     partition_transport_rhs,
@@ -45016,54 +45017,11 @@ def _transport_parallel_worker_env(parallel_workers: int):
 
 def _transport_parallel_worker(payload: dict[str, object]) -> dict[str, object]:
     """Worker entry point for parallel whichRHS transport solves."""
-    input_path = Path(str(payload["input_path"]))
-    which_rhs_values = [int(v) for v in payload["which_rhs_values"]]  # type: ignore[assignment]
-    tol = float(payload.get("tol", 1e-10))
-    atol = float(payload.get("atol", 0.0))
-    restart = int(payload.get("restart", 80))
-    maxiter = payload.get("maxiter")
-    solve_method = str(payload.get("solve_method", "auto"))
-    identity_shift = float(payload.get("identity_shift", 0.0))
-    collect_transport_output_fields = bool(payload.get("collect_transport_output_fields", True))
-    differentiable_payload = payload.get("differentiable", None)
-    if differentiable_payload is not None:
-        differentiable_payload = bool(differentiable_payload)
-    phi1_hat_base = payload.get("phi1_hat_base")
-    if phi1_hat_base is not None:
-        phi1_hat_base = jnp.asarray(phi1_hat_base, dtype=jnp.float64)
-
-    # Prevent recursive parallelism inside workers.
-    os.environ["SFINCS_JAX_TRANSPORT_PARALLEL"] = "off"
-    os.environ["SFINCS_JAX_TRANSPORT_PARALLEL_CHILD"] = "1"
-
-    nml = read_sfincs_input(input_path)
-    result = solve_v3_transport_matrix_linear_gmres(
-        nml=nml,
-        tol=tol,
-        atol=atol,
-        restart=restart,
-        maxiter=maxiter,
-        solve_method=solve_method,
-        identity_shift=identity_shift,
-        phi1_hat_base=phi1_hat_base,
-        differentiable=differentiable_payload,
-        input_namelist=input_path,
-        which_rhs_values=which_rhs_values,
-        force_stream_diagnostics=True,
-        force_store_state=True,
-        collect_transport_output_fields=False,
-        parallel_workers=1,
+    return _solve_transport_parallel_payload(
+        payload,
+        read_input=read_sfincs_input,
+        solve_transport=solve_v3_transport_matrix_linear_gmres,
     )
-    return {
-        "which_rhs_values": which_rhs_values,
-        "state_vectors_by_rhs": {int(k): np.asarray(v) for k, v in result.state_vectors_by_rhs.items()},
-        "residual_norms_by_rhs": {int(k): float(np.asarray(v)) for k, v in result.residual_norms_by_rhs.items()},
-        "rhs_norms_by_rhs": {
-            int(k): float(np.asarray(v))
-            for k, v in (getattr(result, "rhs_norms_by_rhs", None) or {}).items()
-        },
-        "elapsed_time_s": np.asarray(result.elapsed_time_s, dtype=np.float64),
-    }
 
 
 _TRANSPORT_PARALLEL_POOL_CACHE = TransportParallelPoolCache()

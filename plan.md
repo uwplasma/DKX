@@ -107,7 +107,9 @@ Current branch status:
   ``host_refinement.py`` owns host direct-solve refinement and sparse-direct
   GMRES polish helpers. ``transport_parallel_policy.py`` owns worker-local XLA
   flag rewriting in addition to transport parallel backend/environment/pool
-  policy.
+  policy. ``transport_parallel_payload.py`` owns shared CPU/GPU transport worker
+  payload normalization, child-worker recursion guards, solve-call construction,
+  result packing, and GPU-worker NPZ conversion.
   ``krylov_dispatch.py`` now
   owns host-only/JAX/distributed Krylov route selection and solver labels, with
   thin driver wrappers preserving existing monkeypatch/debug workflows.
@@ -132,7 +134,10 @@ Current branch status:
   transport parallel XLA-flag policy extraction passed focused
   policy/parallel tests with ``62 passed in 16.13 s``, broader
   policy/docstring tests with ``65 passed in 14.74 s``, full local suite with
-  ``2562 passed in 550.40 s``, and strict docs build passed.
+  ``2562 passed in 550.40 s``, and strict docs build passed. The shared
+  transport parallel payload extraction passed focused payload/parallel tests
+  with ``54 passed in 14.65 s``, full local suite with
+  ``2566 passed in 543.33 s``, and strict docs build passed.
 - Next PR-level moves should split high-level RHSMode=1 solve orchestration
   into ``rhs1_solve.py`` and RHSMode=2/3 orchestration into
   ``transport_solve.py`` after the focused module extractions are green.

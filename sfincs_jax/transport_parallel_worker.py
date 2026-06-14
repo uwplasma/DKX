@@ -4,10 +4,13 @@ import argparse
 import json
 from pathlib import Path
 
-import jax.numpy as jnp
 import numpy as np
 
 from .namelist import read_sfincs_input
+from .transport_parallel_payload import (
+    solve_transport_parallel_payload,
+    transport_parallel_result_to_npz_arrays,
+)
 from .v3_driver import solve_v3_transport_matrix_linear_gmres
 
 
@@ -18,78 +21,20 @@ def main() -> int:
     args = parser.parse_args()
 
     payload = json.loads(args.payload.read_text())
-    input_path = Path(str(payload["input_path"]))
-    which_rhs_values = [int(v) for v in payload["which_rhs_values"]]
-    tol = float(payload.get("tol", 1e-10))
-    atol = float(payload.get("atol", 0.0))
-    restart = int(payload.get("restart", 80))
-    maxiter = payload.get("maxiter")
-    solve_method = str(payload.get("solve_method", "auto"))
-    identity_shift = float(payload.get("identity_shift", 0.0))
-    differentiable = payload.get("differentiable", None)
-    if differentiable is not None:
-        differentiable = bool(differentiable)
-    phi1_hat_base = payload.get("phi1_hat_base")
-    if phi1_hat_base is not None:
-        phi1_hat_base = jnp.asarray(phi1_hat_base, dtype=jnp.float64)
 
     def _emit(_level: int, message: str) -> None:
         print(message, flush=True)
 
-    nml = read_sfincs_input(input_path)
-    result = solve_v3_transport_matrix_linear_gmres(
-        nml=nml,
-        tol=tol,
-        atol=atol,
-        restart=restart,
-        maxiter=maxiter,
-        solve_method=solve_method,
-        identity_shift=identity_shift,
-        phi1_hat_base=phi1_hat_base,
-        differentiable=differentiable,
-        input_namelist=input_path,
-        which_rhs_values=which_rhs_values,
-        force_stream_diagnostics=True,
-        force_store_state=True,
-        collect_transport_output_fields=False,
-        parallel_workers=1,
+    result = solve_transport_parallel_payload(
+        payload,
+        read_input=read_sfincs_input,
+        solve_transport=solve_v3_transport_matrix_linear_gmres,
         emit=_emit,
     )
-
-    rhs_values = np.asarray(which_rhs_values, dtype=np.int32)
-    if rhs_values.size > 0:
-        state_vectors = np.stack(
-            [np.asarray(result.state_vectors_by_rhs[int(rhs)], dtype=np.float64) for rhs in rhs_values],
-            axis=0,
-        )
-        residual_norms = np.asarray(
-            [float(np.asarray(result.residual_norms_by_rhs[int(rhs)], dtype=np.float64)) for rhs in rhs_values],
-            dtype=np.float64,
-        )
-        rhs_norms_by_rhs = getattr(result, "rhs_norms_by_rhs", None) or {}
-        rhs_norms = np.asarray(
-            [float(np.asarray(rhs_norms_by_rhs.get(int(rhs), np.nan), dtype=np.float64)) for rhs in rhs_values],
-            dtype=np.float64,
-        )
-        elapsed_time_s = np.asarray(
-            [float(np.asarray(result.elapsed_time_s[int(rhs) - 1], dtype=np.float64)) for rhs in rhs_values],
-            dtype=np.float64,
-        )
-    else:
-        state_vectors = np.zeros((0, 0), dtype=np.float64)
-        residual_norms = np.zeros((0,), dtype=np.float64)
-        rhs_norms = np.zeros((0,), dtype=np.float64)
-        elapsed_time_s = np.zeros((0,), dtype=np.float64)
+    arrays = transport_parallel_result_to_npz_arrays(result)
 
     args.output.parent.mkdir(parents=True, exist_ok=True)
-    np.savez(
-        args.output,
-        which_rhs_values=rhs_values,
-        state_vectors=state_vectors,
-        residual_norms=residual_norms,
-        rhs_norms=rhs_norms,
-        elapsed_time_s=elapsed_time_s,
-    )
+    np.savez(args.output, **arrays)
     return 0
 
 

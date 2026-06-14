@@ -246,6 +246,15 @@ research workflows.
 .. automodule:: sfincs_jax.transport_host_gmres
    :members:
 
+.. automodule:: sfincs_jax.transport_parallel_payload
+   :members:
+
+.. automodule:: sfincs_jax.transport_parallel_policy
+   :members:
+
+.. automodule:: sfincs_jax.transport_parallel_runtime
+   :members:
+
 .. automodule:: sfincs_jax.transport_preconditioner_dispatch
    :members:
 
