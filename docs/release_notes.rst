@@ -121,6 +121,10 @@ Unreleased
   ``newton_krylov_diagnostics.py`` with direct tests for disabled diagnostics,
   size/iteration skip gates, successful residual-history emission, and
   non-fatal replay failures.
+- Extracted explicit sparse host-factor policy parsing into
+  ``explicit_sparse_factor_policy.py``. Factor-kind aliases, numeric/boolean
+  environment parsing, and monolithic LU/ILU guard sizing now have direct tests
+  while the driver keeps the monkeypatch-sensitive operator/factorization seam.
 
 v1.1.7
 ------
