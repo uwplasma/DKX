@@ -141,6 +141,12 @@ Unreleased
   private compatibility names, but cache keys, cache metadata, direct reduced
   Pmat aliases, adaptive memory caps, and the structured host sparse adapter
   now have focused tests outside the main solve loop.
+- Extracted RHSMode=1 true-operator rescue support bundles and helper routines
+  into ``rhs1_true_operator_rescue.py``. The solver builders remain in
+  ``v3_driver.py`` for this checkpoint, while residual-window/coarse bundle
+  solves, reusable true-action column caching, graph expansion, sparse-factor
+  storage estimates, and residual-window target selection now have direct tests
+  outside the driver monolith.
 
 v1.1.7
 ------
