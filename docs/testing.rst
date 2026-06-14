@@ -505,8 +505,10 @@ host sparse adapter without running a production solve.
 true-operator rescue split: residual/coarse bundle application, reusable
 true-action column caching, additive-rescue storage accounting, sparse-factor
 storage estimates, graph expansion, residual-window parsing, and residual-window
-selection with tail variables. Existing sparse-pattern tests still exercise the
-``v3_driver`` compatibility aliases and the higher-level builder paths.
+selection with tail variables. It also covers residual sparse-window/coarse
+builder application and active residual component diagnostics. Existing
+sparse-pattern tests still exercise the ``v3_driver`` compatibility aliases and
+the higher-level builder paths.
 ``tests/test_rhs1_xblock_sparse_host_policy.py`` also covers the production
 host x-block factor cap: by default, very large local sparse factors are skipped
 instead of spending the full runtime budget on singular ILU attempts, while an

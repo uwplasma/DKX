@@ -30236,6 +30236,50 @@ Validation so far:
 - Final full local suite after the extraction:
   ``python -m pytest -q``: ``2619 passed in 545.21 s``.
 
+### 19.36 RHSMode=1 residual rescue builder split
+
+Goal:
+
+- Continue the RHSMode=1 true-operator rescue refactor by moving the
+  residual sparse-window builder, residual-coarse builder, and active reduced
+  residual diagnostics out of ``v3_driver.py`` while preserving the historical
+  private driver names.
+
+Implementation:
+
+- Extended ``sfincs_jax/rhs1_true_operator_rescue.py`` with
+  ``_try_build_residual_window_host_sparse_preconditioner``,
+  ``_try_build_residual_coarse_host_sparse_preconditioner``, and
+  ``_rhs1_active_reduced_residual_diagnostics``.
+- Rewired ``v3_driver.py`` to import those names, so solver call sites and
+  monkeypatch/debug tests still use the same compatibility seam.
+- Added direct tests for the residual sparse-window builder, residual-coarse
+  builder, and active residual component diagnostics in
+  ``tests/test_rhs1_true_operator_rescue.py``.
+- Updated release notes, source map, and testing documentation.
+
+Validation so far:
+
+- ``python -m py_compile sfincs_jax/rhs1_true_operator_rescue.py
+  sfincs_jax/v3_driver.py tests/test_rhs1_true_operator_rescue.py``: passed.
+- ``python -m ruff check sfincs_jax/rhs1_true_operator_rescue.py
+  sfincs_jax/v3_driver.py tests/test_rhs1_true_operator_rescue.py``: passed.
+- Focused direct/driver-alias slice:
+  ``python -m pytest -q tests/test_rhs1_true_operator_rescue.py
+  tests/test_v3_sparse_pattern.py -k 'residual_coarse_host_preconditioner or
+  residual_window_host_preconditioner or active_reduced_residual_diagnostics'``:
+  ``4 passed, 135 deselected in 0.81 s``.
+- Broader sparse/RHSMode=1 regression slice:
+  ``python -m pytest -q tests/test_rhs1_true_operator_rescue.py
+  tests/test_v3_sparse_pattern.py tests/test_rhs1_full_assembly.py
+  tests/test_fortran_reduced_preconditioner.py``:
+  ``270 passed in 117.70 s``.
+- Strict docs build:
+  ``SPHINXOPTS='-W --keep-going' python -m sphinx -b html docs
+  docs/_build/html``: passed.
+- Final full local suite after the extraction:
+  ``python -m pytest -q``: ``2622 passed in 553.19 s``.
+
 ### 19.30 Newton-Krylov KSP diagnostics split
 
 Goal:

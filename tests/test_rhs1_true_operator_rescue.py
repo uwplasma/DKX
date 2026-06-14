@@ -14,8 +14,11 @@ from sfincs_jax.rhs1_true_operator_rescue import (
     _expand_sparse_graph_positions,
     _parse_true_operator_window_specs,
     _rhs1_additive_rescue_nbytes,
+    _rhs1_active_reduced_residual_diagnostics,
     _sparse_factor_nbytes_estimate,
     _true_operator_window_positions_from_residual,
+    _try_build_residual_coarse_host_sparse_preconditioner,
+    _try_build_residual_window_host_sparse_preconditioner,
 )
 
 
@@ -24,6 +27,16 @@ class _IdentityFactor:
 
     def solve(self, rhs):
         return np.asarray(rhs, dtype=np.float64)
+
+
+class _HalfFactor:
+    kind = "half_identity"
+    factor_nbytes_estimate = 0
+    factor_nnz_estimate = 4
+    factor_s = 0.0
+
+    def solve(self, rhs):
+        return 0.5 * np.asarray(rhs, dtype=np.float64)
 
 
 def _layout_with_tail() -> RHS1BlockLayout:
@@ -156,3 +169,116 @@ def test_graph_expansion_and_window_selection_are_layout_aware() -> None:
     assert metadata[0]["species"] == 0
     assert metadata[0]["x_center"] == 0
     assert metadata[0]["ell_center"] == 1
+
+
+def test_residual_coarse_builder_corrects_failed_identity_factor() -> None:
+    matrix = sp.eye(4, format="csr")
+    operator = SparseOperatorBundle(
+        matrix=matrix,
+        operator=aslinearoperator(matrix),
+        metadata=SparseDecision(
+            storage_kind="csr",
+            reason="unit-test",
+            backend="cpu",
+            shape=(4, 4),
+            dense_nbytes=4 * 4 * 8,
+            csr_nbytes_estimate=128,
+            nnz_estimate=4,
+        ),
+    )
+    rhs = np.asarray([1.0, -2.0, 3.0, -4.0], dtype=np.float64)
+    failed_residual = rhs - operator.matvec(_HalfFactor().solve(rhs))
+
+    bundle = _try_build_residual_coarse_host_sparse_preconditioner(
+        operator_bundle=operator,
+        factor_bundle=_HalfFactor(),
+        residual=failed_residual,
+        max_rank=2,
+        max_nbytes=1024 * 1024,
+        regularization=0.0,
+    )
+
+    assert bundle is not None
+    assert bundle.metadata is not None
+    assert bundle.metadata["rank"] == 1
+    np.testing.assert_allclose(operator.matvec(bundle.solve(rhs)), rhs, rtol=1.0e-12, atol=1.0e-12)
+
+
+def test_residual_window_builder_corrects_targeted_kinetic_window() -> None:
+    matrix = sp.eye(4, format="csr")
+    operator = SparseOperatorBundle(
+        matrix=matrix,
+        operator=aslinearoperator(matrix),
+        metadata=SparseDecision(
+            storage_kind="csr",
+            reason="unit-test",
+            backend="cpu",
+            shape=(4, 4),
+            dense_nbytes=4 * 4 * 8,
+            csr_nbytes_estimate=128,
+            nnz_estimate=4,
+        ),
+    )
+    layout = RHS1BlockLayout(
+        n_species=1,
+        n_x=1,
+        n_xi=2,
+        n_theta=2,
+        n_zeta=1,
+        f_size=4,
+        phi1_size=0,
+        extra_size=0,
+        total_size=4,
+        constraint_scheme=1,
+        include_phi1=False,
+        include_phi1_in_kinetic=False,
+        rhs_mode=1,
+    )
+    rhs = np.asarray([0.0, 2.0, 0.0, 0.0], dtype=np.float64)
+    failed_residual = rhs - operator.matvec(_HalfFactor().solve(rhs))
+
+    bundle = _try_build_residual_window_host_sparse_preconditioner(
+        operator_bundle=operator,
+        factor_bundle=_HalfFactor(),
+        residual=failed_residual,
+        layout=layout,
+        active_indices=None,
+        max_windows=1,
+        x_radius=0,
+        ell_radius=0,
+        max_nbytes=1024 * 1024,
+        regularization=0.0,
+        coefficient_mode="least_squares",
+        combine_mode="independent",
+        interface_depth=0,
+        max_window_size=16,
+    )
+
+    assert bundle is not None
+    assert bundle.metadata is not None
+    assert bundle.metadata["window_count"] == 1
+    np.testing.assert_allclose(operator.matvec(bundle.solve(rhs)), rhs, rtol=1.0e-12, atol=1.0e-12)
+
+
+def test_active_reduced_residual_diagnostics_splits_components() -> None:
+    layout = _layout_with_tail()
+    diagnostics = _rhs1_active_reduced_residual_diagnostics(
+        residual=np.asarray([0.0, 3.0, 0.0, 0.0, -4.0, 0.0, 2.0, -1.0]),
+        layout=layout,
+        active_indices=None,
+        top_k=2,
+    )
+
+    assert diagnostics["selected"] is True
+    assert diagnostics["component_norms"]["kinetic"]["energy_fraction"] > 0.0
+    assert diagnostics["component_norms"]["phi1"]["energy_fraction"] > 0.0
+    assert diagnostics["component_norms"]["extra"]["energy_fraction"] > 0.0
+    assert diagnostics["top_ell"][0]["label"] in {"1", "2"}
+
+    mismatch = _rhs1_active_reduced_residual_diagnostics(
+        residual=np.asarray([1.0, 2.0]),
+        layout=layout,
+        active_indices=np.asarray([0]),
+    )
+    assert mismatch["selected"] is False
+    assert mismatch["reason"] == "shape_mismatch"

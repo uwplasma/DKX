@@ -218,8 +218,9 @@ the historical private driver name and test the focused module directly. This ke
   preconditioners. The module owns the reusable true-action column cache,
   sparse-factor storage estimator, additive-rescue budget accounting, graph
   expansion, residual-window target parsing, and residual-driven window
-  selection; ``v3_driver.py`` keeps the builder orchestration and imports the
-  historical private names for compatibility.
+  selection. It also owns the residual sparse-window/coarse builders and active
+  residual diagnostic summaries; ``v3_driver.py`` imports the historical private
+  names for compatibility.
 - ``sfincs_jax/krylov_dispatch.py``:
   concrete Krylov solver routing for host-only SciPy methods, JIT/non-JIT JAX
   GMRES, distributed GMRES, diagnostic solver labels, and
