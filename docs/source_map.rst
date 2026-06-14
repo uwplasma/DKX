@@ -206,6 +206,12 @@ the historical private driver name and test the focused module directly. This ke
   ``factorize_host_sparse_operator``, and backend callbacks so existing
   monkeypatch/debug workflows keep exercising the same runtime seam while the
   implementation is directly testable outside the monolith.
+- ``sfincs_jax/rhs1_direct_tail_policy.py``:
+  RHSMode=1 direct-tail structured-preconditioner adapter, direct reduced-Pmat
+  aliases, stable cache-key hashing, cache-hit metadata tagging, and adaptive
+  direct-tail memory-cap policy. ``v3_driver.py`` imports the same private
+  compatibility names so existing debug scripts can still clear the direct-tail
+  cache or inspect the policy through the historical driver namespace.
 - ``sfincs_jax/krylov_dispatch.py``:
   concrete Krylov solver routing for host-only SciPy methods, JIT/non-JIT JAX
   GMRES, distributed GMRES, diagnostic solver labels, and
