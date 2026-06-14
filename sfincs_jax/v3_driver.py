@@ -229,10 +229,10 @@ from .rhs1_constraint0_policy import (
     rhs1_constraint0_sparse_first as _rhs1_constraint0_sparse_first_impl,
 )
 from .rhs1_constraint_sources import (
-    constraint_scheme1_inject_source as _constraint_scheme1_inject_source_impl,
-    constraint_scheme1_moments_from_f as _constraint_scheme1_moments_from_f_impl,
-    constraint_scheme2_inject_source as _constraint_scheme2_inject_source_impl,
-    constraint_scheme2_source_from_f as _constraint_scheme2_source_from_f_impl,
+    constraint_scheme1_inject_source as _constraint_scheme1_inject_source,
+    constraint_scheme1_moments_from_f as _constraint_scheme1_moments_from_f,
+    constraint_scheme2_inject_source as _constraint_scheme2_inject_source,
+    constraint_scheme2_source_from_f as _constraint_scheme2_source_from_f,
 )
 from .rhs1_sparse_exact_policy import (
     rhs1_prefer_sparse_over_dense_shortcut as _rhs1_prefer_sparse_over_dense_shortcut_impl,
@@ -345,7 +345,7 @@ from .transport_dense_lu import (
 )
 from .transport_host_gmres import transport_host_gmres_solve as _transport_host_gmres_solve
 from .transport_parallel_policy import (
-    rewrite_xla_flags as _rewrite_xla_flags_impl,
+    rewrite_xla_flags as _rewrite_xla_flags,
     transport_parallel_backend as _transport_parallel_backend_impl,
     transport_parallel_gpu_worker_env as _transport_parallel_gpu_worker_env_impl,
     transport_parallel_persistent_pool_enabled as _transport_parallel_persistent_pool_enabled_impl,
@@ -45008,10 +45008,6 @@ def solve_v3_full_system_newton_krylov_history(
     )
 
 
-def _rewrite_xla_flags(flags: str, cpu_threads: int | None, host_devices: int | None) -> str:
-    return _rewrite_xla_flags_impl(flags, cpu_threads, host_devices)
-
-
 @contextlib.contextmanager
 def _transport_parallel_worker_env(parallel_workers: int):
     with _transport_parallel_worker_env_impl(
@@ -45115,26 +45111,6 @@ def _transport_active_dof_indices(op: V3FullSystemOperator) -> np.ndarray:
     Fortran's non-singular system size.
     """
     return build_rhs1_compressed_pitch_layout(op).active_full_indices.astype(np.int32, copy=False)
-
-
-def _constraint_scheme2_source_from_f(op: V3FullSystemOperator, f: jnp.ndarray) -> jnp.ndarray:
-    """Return constraintScheme=2 source terms from L=0 flux-surface averages."""
-    return _constraint_scheme2_source_from_f_impl(op, f)
-
-
-def _constraint_scheme2_inject_source(op: V3FullSystemOperator, src: jnp.ndarray) -> jnp.ndarray:
-    """Inject constraintScheme=2 source terms into the L=0 rows of the f block."""
-    return _constraint_scheme2_inject_source_impl(op, src)
-
-
-def _constraint_scheme1_moments_from_f(op: V3FullSystemOperator, f: jnp.ndarray) -> jnp.ndarray:
-    """Return constraintScheme=1 density/pressure moments from the L=0 block."""
-    return _constraint_scheme1_moments_from_f_impl(op, f)
-
-
-def _constraint_scheme1_inject_source(op: V3FullSystemOperator, src: jnp.ndarray) -> jnp.ndarray:
-    """Inject constraintScheme=1 particle/energy source amplitudes into L=0 rows."""
-    return _constraint_scheme1_inject_source_impl(op, src)
 
 
 def _project_constraint_scheme1_nullspace_solution_with_residual(

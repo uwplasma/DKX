@@ -64,9 +64,9 @@ Unreleased
   ``2559 passed in 543.75 s``.
 - Moved transport-worker XLA flag rewriting into
   ``transport_parallel_policy.py`` next to the backend, environment, and
-  process-pool policy helpers. The driver keeps a compatibility wrapper, now
-  accepting the positional callback signature used by worker-env setup, and
-  focused tests cover stale XLA thread/device-cap replacement. The
+  process-pool policy helpers. The driver now imports the helper under the
+  historical private name instead of carrying a forwarding wrapper, and focused
+  tests cover stale XLA thread/device-cap replacement. The
   post-extraction local full suite passed with ``2562 passed in 550.40 s``.
 - Extracted shared transport parallel payload handling into
   ``transport_parallel_payload.py``. CPU process workers and GPU subprocess
@@ -76,11 +76,17 @@ Unreleased
   ``whichRHS`` chunks. The post-extraction local full suite passed with
   ``2566 passed in 543.33 s``.
 - Extracted RHSMode=1/transport constraint-source moment kernels into
-  ``rhs1_constraint_sources.py``. The driver keeps private compatibility
-  wrappers, while direct algebraic tests now cover constraintScheme=1 and 2
-  flux-surface averages, density/pressure moments, source injection, and
-  ``pointAtX0`` handling. The post-extraction local full suite passed with
+  ``rhs1_constraint_sources.py``. The driver now imports the extracted kernels
+  under the historical private names instead of carrying forwarding wrappers,
+  while direct algebraic tests cover constraintScheme=1 and 2 flux-surface
+  averages, density/pressure moments, source injection, and ``pointAtX0``
+  handling. The post-extraction local full suite passed with
   ``2570 passed in 542.11 s``.
+- Tightened the active refactor rule: extracted functions that need no
+  dependency injection, live-global adaptation, or monkeypatch seam should be
+  compatibility import aliases, not one-line wrapper bodies. This reduces
+  ``v3_driver.py`` without adding new runtime layers and keeps future line-count
+  reductions focused on whole solve-orchestration clusters.
 
 v1.1.7
 ------

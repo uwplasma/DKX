@@ -1,6 +1,6 @@
 # SFINCS_JAX Master Handoff + Execution Plan
 
-Last updated: 2026-06-13 (America/Chicago)
+Last updated: 2026-06-14 (America/Chicago)
 Owner: incoming agent
 
 ## 2026-06-13 Addendum: full ``v3_driver.py`` retirement refactor plan
@@ -30,6 +30,46 @@ accurate, and performance-aware.
   include docs/tests for that layer.
 - Avoid large tracked fixtures. Use generated synthetic operators, release-data
   downloads, small JSON artifacts, or tiny reference inputs for tests.
+
+### 2026-06-14 correction: extract responsibilities, not wrappers
+
+The first architecture commits proved the focused-module direction, but they
+also exposed a refactor smell: helper-by-helper extraction can shrink
+``v3_driver.py`` slowly while adding compatibility wrappers elsewhere. The
+next stage must optimize for responsibility removal, not helper count.
+
+Source-backed rules for the next commits:
+
+- Use Python packages/namespaces to group responsibilities, consistent with the
+  standard-library guidance that packages structure module namespaces by
+  dotted names. Near-term targets are ``transport/``, ``rhs1/``,
+  ``preconditioners/``, ``solvers/``, ``output/``, and ``validation/`` once a
+  whole cluster can move without circular imports.
+- Keep I/O and user-interface code out of numerical kernels. This follows
+  Scientific Python design guidance: scientific logic should be functions that
+  take standard data and return standard data, while file/network/UI effects
+  stay at orchestration boundaries.
+- Keep JAX-facing kernels pure and transformation-friendly. New solver state
+  objects should be dataclasses/pytrees only where they need JAX transforms;
+  otherwise use plain typed dataclasses at orchestration boundaries.
+- Use pytest fixtures for repeated operator/input builders instead of copying
+  large setup blocks across integration tests. This keeps new coverage useful
+  without expanding slow solve tests.
+- Prefer import aliases over wrapper functions when an extracted function needs
+  no dependency injection, signature adaptation, live-global policy lookup, or
+  monkeypatch seam. Keep wrappers only when they intentionally adapt behavior.
+- Move whole orchestration clusters next. The immediate high-ROI target is
+  ``solve_v3_transport_matrix_linear_gmres`` (about 3.1k lines), because its
+  policy, payload, runtime, and preconditioner-dispatch helpers are already in
+  focused modules. The 22k-line RHSMode=1 solve should move after the transport
+  call graph is clean enough to provide the template.
+
+Evidence used for this correction:
+
+- Python modules/packages: https://docs.python.org/3/tutorial/modules.html
+- JAX pytrees/state containers: https://docs.jax.dev/en/latest/pytrees.html
+- Scientific Python design recommendations: https://learn.scientific-python.org/development/principles/design/
+- pytest fixture model: https://docs.pytest.org/en/stable/explanation/fixtures.html
 
 ### Target source tree
 
@@ -143,6 +183,13 @@ Current branch status:
   constraint-source extraction passed direct RHS1/transport regression tests
   with ``139 passed in 48.54 s``, full local suite with
   ``2570 passed in 542.11 s``, and strict docs build passed.
+- The 2026-06-14 wrapper-cleanup pass replaced redundant
+  ``v3_driver.py`` forwarding wrappers for XLA flag rewriting and RHSMode=1
+  constraint-source kernels with direct compatibility import aliases. Focused
+  lint passed; focused transport/RHS tests passed with ``31 passed in 30.73 s``;
+  broader RHSMode/transport regression tests passed with
+  ``199 passed in 78.13 s``; strict docs build passed; and the full local suite
+  passed with ``2570 passed in 546.45 s``.
 - Next PR-level moves should split high-level RHSMode=1 solve orchestration
   into ``rhs1_solve.py`` and RHSMode=2/3 orchestration into
   ``transport_solve.py`` after the focused module extractions are green.
