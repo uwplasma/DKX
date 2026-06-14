@@ -30096,3 +30096,5 @@ Validation:
   tests/test_audit_rhs1_solver_stack.py``: ``72 passed in 23.31 s``.
 - ``SPHINXOPTS='-W --keep-going' python -m sphinx -b html docs
   docs/_build/html``: passed.
+- Post-push local full-suite validation for the diagnostics-split checkpoints:
+  ``python -m pytest -q``: ``2598 passed in 542.77 s``.
