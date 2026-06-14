@@ -343,7 +343,12 @@ from .transport_dense_lu import (
     dense_preconditioner_for_matvec as _dense_preconditioner_for_matvec,
     dense_solver_for_matvec as _dense_solver_for_matvec,
 )
+from .transport_dense_batch import (
+    TransportDenseBatchContext,
+    solve_transport_dense_batch as _solve_transport_dense_batch,
+)
 from .transport_host_gmres import transport_host_gmres_solve as _transport_host_gmres_solve
+from .transport_iteration_stats import emit_transport_ksp_iteration_stats as _emit_transport_ksp_iteration_stats
 from .transport_parallel_policy import (
     rewrite_xla_flags as _rewrite_xla_flags,
     transport_parallel_backend as _transport_parallel_backend_impl,
@@ -46667,60 +46672,6 @@ def solve_v3_transport_matrix_linear_gmres(
     except ValueError:
         iter_stats_max_size = None
 
-    def _emit_ksp_iter_stats_transport(
-        *,
-        which_rhs: int,
-        matvec_fn,
-        b_vec: jnp.ndarray,
-        precond_fn,
-        x0_vec: jnp.ndarray | None,
-        tol_val: float,
-        atol_val: float,
-        restart_val: int,
-        maxiter_val: int | None,
-        precond_side: str,
-        solver_kind: str,
-    ) -> None:
-        if emit is None or not iter_stats_enabled:
-            return
-        size = int(b_vec.size)
-        if iter_stats_max_size is not None and size > int(iter_stats_max_size):
-            emit(1, f"whichRHS={which_rhs} ksp_iterations skipped (size={size} > max={int(iter_stats_max_size)})")
-            return
-        solver_kind_l = str(solver_kind).strip().lower()
-        try:
-            if solver_kind_l == "gmres":
-                _x_hist, _rn, history = gmres_solve_with_history_scipy(
-                    matvec=matvec_fn,
-                    b=b_vec,
-                    preconditioner=precond_fn,
-                    x0=x0_vec,
-                    tol=tol_val,
-                    atol=atol_val,
-                    restart=restart_val,
-                    maxiter=maxiter_val,
-                    precondition_side=precond_side,
-                )
-                iters = len(history)
-            elif solver_kind_l == "bicgstab":
-                _x_hist, _rn, history = bicgstab_solve_with_history_scipy(
-                    matvec=matvec_fn,
-                    b=b_vec,
-                    preconditioner=precond_fn,
-                    x0=x0_vec,
-                    tol=tol_val,
-                    atol=atol_val,
-                    maxiter=maxiter_val,
-                    precondition_side=precond_side,
-                )
-                iters = len(history)
-            else:
-                return
-        except Exception as exc:  # noqa: BLE001
-            emit(1, f"whichRHS={which_rhs} ksp_iterations unavailable ({type(exc).__name__}: {exc})")
-            return
-        emit(0, f"whichRHS={which_rhs} ksp_iterations={iters} solver={solver_kind_l}")
-
     def _maybe_project_constraint_nullspace(
         x_vec: jnp.ndarray,
         *,
@@ -46747,128 +46698,35 @@ def solve_v3_transport_matrix_linear_gmres(
     dense_batch_fallback_enabled = dense_batch_fallback_env not in {"0", "false", "no", "off"}
 
     def _dense_batch_solve_all(*, op_probe_ref: V3FullSystemOperator, reason: str) -> bool:
-        if not dense_backend_allowed:
-            return False
-        requested_epar_krylov = any(
-            (_rhs3_krylov_flags(which_rhs)[0] or _rhs3_krylov_flags(which_rhs)[1]) for which_rhs in which_rhs_values
+        dense_batch_context = TransportDenseBatchContext(
+            dense_backend_allowed=bool(dense_backend_allowed),
+            dense_use_mixed=bool(dense_use_mixed),
+            use_active_dof_mode=bool(use_active_dof_mode),
+            active_size=int(active_size),
+            op0=op0,
+            op_matvec_by_index=op_matvec_by_index,
+            rhs_by_index=rhs_by_index,
+            which_rhs_values=which_rhs_values,
+            rhs_norms=rhs_norms,
+            residual_norms=residual_norms,
+            solver_kinds_by_rhs=solver_kinds_by_rhs,
+            solve_methods_by_rhs=solve_methods_by_rhs,
+            elapsed_s=elapsed_s,
+            state_vectors=state_vectors,
+            store_state_vectors=bool(store_state_vectors),
+            stream_diagnostics=bool(stream_diagnostics),
+            rhs3_krylov_flags=_rhs3_krylov_flags,
+            maybe_project_constraint_nullspace=_maybe_project_constraint_nullspace,
+            collect_transport_outputs=_collect_transport_outputs if stream_diagnostics else None,
+            reduce_full=reduce_full,
+            expand_reduced=expand_reduced,
+            emit=emit,
         )
-        if requested_epar_krylov:
-            return False
-        sig_ref = _operator_signature_cached(op_probe_ref)
-        for op_probe in op_matvec_by_index[1:]:
-            if _operator_signature_cached(op_probe) != sig_ref:
-                if emit is not None:
-                    emit(1, "solve_v3_transport_matrix_linear_gmres: dense batch disabled (matvec operator varies)")
-                return False
-        if emit is not None:
-            emit(1, "solve_v3_transport_matrix_linear_gmres: evaluateJacobian called (matrix-free)")
-            emit(1, f"solve_v3_transport_matrix_linear_gmres: dense batched solve across all whichRHS ({reason})")
-        t_dense = Timer()
-
-        if use_active_dof_mode:
-            assert reduce_full is not None
-            assert expand_reduced is not None
-
-            def _mv_dense(x: jnp.ndarray) -> jnp.ndarray:
-                y_full = apply_v3_full_system_operator_cached(op_probe_ref, expand_reduced(x))
-                return reduce_full(y_full)
-
-            dense_dtype = _dense_dtype(jnp.float64)
-            rhs_mat = jnp.stack([reduce_full(rhs) for rhs in rhs_by_index], axis=1)
-            a_dense = assemble_dense_matrix_from_matvec(
-                matvec=_mv_dense, n=int(active_size), dtype=dense_dtype
-            )
-            rhs_mat = jnp.asarray(rhs_mat, dtype=dense_dtype)
-            x_mat, _ = dense_solve_from_matrix(a=a_dense, b=rhs_mat)
-            if dense_use_mixed:
-                r_mat = rhs_mat - a_dense @ x_mat
-                dx_mat, _ = dense_solve_from_matrix(a=a_dense, b=r_mat)
-                x_mat = x_mat + dx_mat
-            x_mat = jnp.asarray(x_mat, dtype=jnp.float64)
-            res_mat = a_dense @ x_mat - rhs_mat
-            res_norms = jnp.linalg.norm(res_mat, axis=0)
-            for idx, which_rhs in enumerate(which_rhs_values):
-                x_col = expand_reduced(x_mat[:, idx])
-                rhs_vec = rhs_by_index[idx]
-                x_col = _maybe_project_constraint_nullspace(
-                    x_col, which_rhs=int(which_rhs), op_matvec=op_probe_ref, rhs_vec=rhs_vec
-                )
-                if store_state_vectors:
-                    state_vectors[which_rhs] = x_col
-                if stream_diagnostics:
-                    _collect_transport_outputs(int(which_rhs), x_col)
-                residual_norms[which_rhs] = res_norms[idx]
-                solver_kinds_by_rhs[which_rhs] = "dense"
-                solve_methods_by_rhs[which_rhs] = "dense"
-                elapsed_s[int(which_rhs) - 1] = float(t_dense.elapsed_s() / float(n))
-                if emit is not None:
-                    rhs_norm_val = float(rhs_norms[int(which_rhs)])
-                    residual_norm_val = float(residual_norms[which_rhs])
-                    relative_residual_val = (
-                        residual_norm_val / rhs_norm_val
-                        if np.isfinite(rhs_norm_val) and rhs_norm_val > 0.0
-                        else float("nan")
-                    )
-                    emit(
-                        0,
-                        f"whichRHS={which_rhs}: residual_norm={residual_norm_val:.6e} "
-                        f"rhs_norm={rhs_norm_val:.6e} relative_residual={relative_residual_val:.6e} "
-                        f"elapsed_s={float(elapsed_s[int(which_rhs) - 1]):.3f}",
-                    )
-            return True
-
-        def _mv_dense(x: jnp.ndarray) -> jnp.ndarray:
-            return apply_v3_full_system_operator_cached(op_probe_ref, x)
-
-        a_dense = assemble_dense_matrix_from_matvec(
-            matvec=_mv_dense, n=int(op0.total_size), dtype=_dense_dtype(jnp.float64)
+        return _solve_transport_dense_batch(
+            context=dense_batch_context,
+            op_probe_ref=op_probe_ref,
+            reason=reason,
         )
-        rhs_mat = jnp.stack(rhs_by_index, axis=1)
-        rhs_mat = jnp.asarray(rhs_mat, dtype=a_dense.dtype)
-        x_mat, _ = dense_solve_from_matrix(a=a_dense, b=rhs_mat)
-        if dense_use_mixed:
-            r_mat = rhs_mat - a_dense @ x_mat
-            dx_mat, _ = dense_solve_from_matrix(a=a_dense, b=r_mat)
-            x_mat = x_mat + dx_mat
-        x_mat = jnp.asarray(x_mat, dtype=jnp.float64)
-        x_cols: list[jnp.ndarray] = []
-        for idx, which_rhs in enumerate(which_rhs_values):
-            x_col = x_mat[:, idx]
-            rhs_vec = rhs_by_index[idx]
-            x_col = _maybe_project_constraint_nullspace(
-                x_col, which_rhs=int(which_rhs), op_matvec=op_probe_ref, rhs_vec=rhs_vec
-            )
-            x_cols.append(x_col)
-
-        x_mat_proj = jnp.stack(x_cols, axis=1)
-        res_mat = a_dense @ x_mat_proj - rhs_mat
-        res_norms = jnp.linalg.norm(res_mat, axis=0)
-
-        for idx, which_rhs in enumerate(which_rhs_values):
-            x_col = x_mat_proj[:, idx]
-            if store_state_vectors:
-                state_vectors[which_rhs] = x_col
-            if stream_diagnostics:
-                _collect_transport_outputs(int(which_rhs), x_col)
-            residual_norms[which_rhs] = res_norms[idx]
-            solver_kinds_by_rhs[which_rhs] = "dense"
-            solve_methods_by_rhs[which_rhs] = "dense"
-            elapsed_s[int(which_rhs) - 1] = float(t_dense.elapsed_s() / float(n))
-            if emit is not None:
-                rhs_norm_val = float(rhs_norms[int(which_rhs)])
-                residual_norm_val = float(residual_norms[which_rhs])
-                relative_residual_val = (
-                    residual_norm_val / rhs_norm_val
-                    if np.isfinite(rhs_norm_val) and rhs_norm_val > 0.0
-                    else float("nan")
-                )
-                emit(
-                    0,
-                    f"whichRHS={which_rhs}: residual_norm={residual_norm_val:.6e} "
-                    f"rhs_norm={rhs_norm_val:.6e} relative_residual={relative_residual_val:.6e} "
-                    f"elapsed_s={float(elapsed_s[int(which_rhs) - 1]):.3f}",
-                )
-        return True
 
     if str(solve_method_use).lower() == "dense":
         op_probe_ref = op_matvec_by_index[0]
@@ -47367,7 +47225,7 @@ def solve_v3_transport_matrix_linear_gmres(
                         recycle_basis_full = recycle_basis_full[-recycle_k:]
                         recycle_basis_full_au = recycle_basis_full_au[-recycle_k:]
                 if not dense_used:
-                    _emit_ksp_iter_stats_transport(
+                    _emit_transport_ksp_iteration_stats(
                         which_rhs=int(which_rhs),
                         matvec_fn=mv_reduced,
                         b_vec=rhs_reduced,
@@ -47379,6 +47237,9 @@ def solve_v3_transport_matrix_linear_gmres(
                         maxiter_val=maxiter,
                         precond_side=transport_precondition_side,
                         solver_kind=solver_kind_used,
+                        emit=emit,
+                        enabled=bool(iter_stats_enabled),
+                        max_size=iter_stats_max_size,
                     )
             else:
                 mv = _get_full_matvec(op_matvec)
@@ -47800,7 +47661,7 @@ def solve_v3_transport_matrix_linear_gmres(
                         recycle_basis_full = recycle_basis_full[-recycle_k:]
                         recycle_basis_full_au = recycle_basis_full_au[-recycle_k:]
                 if not dense_used:
-                    _emit_ksp_iter_stats_transport(
+                    _emit_transport_ksp_iteration_stats(
                         which_rhs=int(which_rhs),
                         matvec_fn=mv,
                         b_vec=rhs,
@@ -47812,6 +47673,9 @@ def solve_v3_transport_matrix_linear_gmres(
                         maxiter_val=maxiter,
                         precond_side=transport_precondition_side,
                         solver_kind=solver_kind_used,
+                        emit=emit,
+                        enabled=bool(iter_stats_enabled),
+                        max_size=iter_stats_max_size,
                     )
             if emit is not None:
                 rhs_norm_val = float(rhs_norms[int(which_rhs)])

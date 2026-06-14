@@ -8381,6 +8381,57 @@ Testing docs should include:
   - `tests/test_transport_parallel.py`
   - all passed together after the extraction.
 
+### 19.25 Transport dense-batch solve split
+
+- The RHSMode=2/3 dense batched solve path still lived inside
+  `solve_v3_transport_matrix_linear_gmres(...)`, mixing all-RHS dense matrix
+  assembly, active-DOF projection, streamed diagnostics, residual bookkeeping,
+  and terminal progress emission with the main solve loop.
+- That dense batched solve implementation is now extracted into
+  `sfincs_jax/transport_dense_batch.py`.
+- `v3_driver.py` now keeps only a small context-building wrapper for this path,
+  while the extracted helper owns:
+  - operator-signature admission for one shared dense matrix across all
+    `whichRHS` values,
+  - full-size and active-DOF dense matrix assembly,
+  - optional mixed-precision dense iterative refinement,
+  - constraint-nullspace projection callback integration,
+  - state-vector retention or streamed diagnostic collection,
+  - per-RHS residual and elapsed-time recording.
+- This stayed structure-preserving:
+  - no dense policy thresholds changed,
+  - the dense fallback call sites still use the same wrapper name,
+  - the existing streamed-vs-batched transport-output regression stayed green.
+- New bounded regression coverage now lives in:
+  - `tests/test_transport_dense_batch.py`
+- Current validation for the dense-batch slice:
+  - `python -m pytest -q tests/test_transport_dense_batch.py tests/test_transport_streaming_outputs.py`:
+    `6 passed in 7.43 s`.
+  - `python -m ruff check sfincs_jax/transport_dense_batch.py sfincs_jax/v3_driver.py tests/test_transport_dense_batch.py tests/test_transport_streaming_outputs.py`:
+    passed.
+
+### 19.26 Transport iteration-stat diagnostics split
+
+- The RHSMode=2/3 optional `ksp_iterations` diagnostic rerun was still nested
+  inside `solve_v3_transport_matrix_linear_gmres(...)`.
+- That helper is now extracted into `sfincs_jax/transport_iteration_stats.py`.
+- `v3_driver.py` now calls the shared module directly for the reduced and
+  full-size transport branches, passing the explicit emit callback, enable flag,
+  and maximum diagnostic size instead of relying on closures.
+- This stayed structure-preserving:
+  - the main production solver result is unchanged,
+  - diagnostic failures are still reported and swallowed,
+  - the same GMRES/BiCGStab history solvers and skip messages are used.
+- New bounded regression coverage now lives in:
+  - `tests/test_transport_iteration_stats.py`
+- Current validation for the iteration-stat slice:
+  - `python -m py_compile sfincs_jax/transport_dense_batch.py sfincs_jax/transport_iteration_stats.py sfincs_jax/v3_driver.py`:
+    passed.
+  - `python -m ruff check sfincs_jax/transport_dense_batch.py sfincs_jax/transport_iteration_stats.py sfincs_jax/v3_driver.py tests/test_transport_dense_batch.py tests/test_transport_iteration_stats.py tests/test_transport_streaming_outputs.py`:
+    passed.
+  - `python -m pytest -q tests/test_transport_dense_batch.py tests/test_transport_iteration_stats.py tests/test_transport_streaming_outputs.py tests/test_transport_dense_lu.py tests/test_transport_handoff_policy.py tests/test_transport_solve_policy.py`:
+    `21 passed in 7.59 s`.
+
 ### 19.19 Collisionality lane status after writer fix
 
 - A real publication-lane bug was found in `examples/publication_figures/generate_sfincs_paper_figs.py`:
