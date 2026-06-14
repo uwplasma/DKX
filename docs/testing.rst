@@ -487,6 +487,11 @@ The sparse helper coverage in ``tests/test_v3_driver_sparse_helper_coverage.py``
 also protects the host full-FP x-block exact-LU cap. It verifies that only the
 non-differentiable full-FP x-block path defaults to the larger production-floor
 cap, while PAS and JAX-factor paths retain the lower memory-conservative cap.
+``tests/test_explicit_sparse_factor_policy.py`` now covers the typed
+``ExplicitSparseFactorSettings`` bundle consumed by that sparse builder:
+defaults, environment overrides, bounds, factor-kind aliases, SuperLU
+permutation fallback, ILU options, monolithic LU/ILU guards, and symbolic
+Schur/frontal/ND/BLR knobs are checked without launching a large solve.
 ``tests/test_rhs1_xblock_sparse_host_policy.py`` also covers the production
 host x-block factor cap: by default, very large local sparse factors are skipped
 instead of spending the full runtime budget on singular ILU attempts, while an

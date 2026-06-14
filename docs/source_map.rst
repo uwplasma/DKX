@@ -193,9 +193,12 @@ the historical private driver name and test the focused module directly. This ke
   fixed-operator scan points can reuse factors.
 - ``sfincs_jax/explicit_sparse_factor_policy.py``:
   explicit-sparse host-factor environment parsing, canonical factor-kind alias
-  resolution, and monolithic LU/ILU guard sizing. The sparse builder still owns
-  monkeypatch-sensitive operator/factor construction, but this policy layer is
-  directly tested and reusable.
+  resolution, monolithic LU/ILU guard sizing, and the typed
+  ``ExplicitSparseFactorSettings`` bundle consumed by the host sparse builder.
+  The sparse builder still owns monkeypatch-sensitive operator/factor
+  construction, but the dense/CSR budgets, pattern-color probing, symbolic
+  Schur/frontal/ND/BLR settings, SuperLU pivot/permutation options, and ILU
+  options are parsed in this directly tested policy layer.
 - ``sfincs_jax/krylov_dispatch.py``:
   concrete Krylov solver routing for host-only SciPy methods, JIT/non-JIT JAX
   GMRES, distributed GMRES, diagnostic solver labels, and

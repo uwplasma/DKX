@@ -125,6 +125,12 @@ Unreleased
   ``explicit_sparse_factor_policy.py``. Factor-kind aliases, numeric/boolean
   environment parsing, and monolithic LU/ILU guard sizing now have direct tests
   while the driver keeps the monkeypatch-sensitive operator/factorization seam.
+- Moved the remaining explicit sparse host-factor environment bundle into the
+  typed ``ExplicitSparseFactorSettings`` policy object. The driver still owns
+  operator assembly, sparse factorization, logging, and the existing
+  monkeypatch-compatible seams, but default/override parsing for dense/CSR
+  budgets, pattern probing, symbolic Schur/frontal/ND/BLR settings, SuperLU
+  options, and ILU options is now tested in one focused module.
 
 v1.1.7
 ------
