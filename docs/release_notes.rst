@@ -75,6 +75,12 @@ Unreleased
   NPZ conversion path, with direct tests covering non-contiguous
   ``whichRHS`` chunks. The post-extraction local full suite passed with
   ``2566 passed in 543.33 s``.
+- Extracted RHSMode=1/transport constraint-source moment kernels into
+  ``rhs1_constraint_sources.py``. The driver keeps private compatibility
+  wrappers, while direct algebraic tests now cover constraintScheme=1 and 2
+  flux-surface averages, density/pressure moments, source injection, and
+  ``pointAtX0`` handling. The post-extraction local full suite passed with
+  ``2570 passed in 542.11 s``.
 
 v1.1.7
 ------
