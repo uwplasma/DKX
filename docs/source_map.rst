@@ -191,6 +191,12 @@ the historical private driver name and test the focused module directly. This ke
   preconditioner matrices. These helpers encode the PETSc/Fortran-v3-style
   ``Pmat`` shaping rules without carrying solve state, caches, or sparse
   factorization logic.
+- ``sfincs_jax/rhs1_xblock_tz_sparse.py``:
+  sparse per-``x`` RHSMode=1 full-FP preconditioner setup. This module owns the
+  host/JAX x-block LU/ILU policy, compact CSR/padded triangular-factor apply,
+  skipped-block diagonal fallback, and extra-variable Schur solve. The driver
+  injects only the still-local FP x-block assembly, sparse-factor, cache-key,
+  and safety-wrapper seams.
 - ``sfincs_jax/transport_direct_pmat.py``:
   direct term-level RHSMode=2/3 reduced ``Pmat`` and exact active-operator
   emission for full-FP transport preconditioners, plus the physics/source
