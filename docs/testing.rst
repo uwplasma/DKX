@@ -416,6 +416,10 @@ transport solves. ``tests/test_transport_parallel_payload.py`` separately valida
 transport worker payload contract: normalized solve kwargs, child-worker recursion
 guards, merge-ready result packing, and GPU-worker NPZ conversion for non-contiguous
 ``whichRHS`` chunks.
+``tests/test_transport_parallel_solve.py`` covers the parent-side parallel solve
+seam directly: inactive-policy no-op behavior, payload partitioning, worker result
+merge, output-field propagation, transport-matrix assembly, and progress emission
+are tested with monkeypatched kernels and worker runtimes.
 ``tests/test_transport_postsolve_diagnostics.py`` covers the extracted post-solve
 diagnostics seam directly: streamed accumulator reuse, output-field propagation,
 chunked fixed-operator diagnostic evaluation, and transport-matrix assembly are

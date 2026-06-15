@@ -14,6 +14,7 @@ SOURCE_MAPPED_CONTROL_MODULES = (
     "sfincs_jax.profiling",
     "sfincs_jax.rhs1_handoff",
     "sfincs_jax.rhs1_pas_xblock_ilu",
+    "sfincs_jax.transport_parallel_solve",
     "sfincs_jax.transport_postsolve_diagnostics",
 )
 

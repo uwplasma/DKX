@@ -247,6 +247,14 @@ Current branch status:
   tests passed with ``5 passed in 1.00 s``; broader transport diagnostics and
   parity validation passed with ``46 passed in 41.13 s``; strict docs passed;
   and the full local suite passed with ``2624 passed in 557.63 s``.
+- The next parent-side transport parallel extraction moved the early RHSMode=2/3
+  process/GPU ``whichRHS`` branch into ``transport_parallel_solve.py``.
+  ``v3_driver.py`` now injects worker-launch hooks and returns the extracted
+  module's result when parallel transport is active. Direct parallel-solve and
+  docstring tests passed with ``5 passed in 0.85 s``; the corrected transport
+  parallel suite passed with ``99 passed in 15.08 s``; and the transport
+  diagnostics/output slice passed with ``31 passed in 16.27 s``; strict docs
+  passed; and the full local suite passed with ``2626 passed in 545.40 s``.
 - Next PR-level moves should split high-level RHSMode=1 solve orchestration
   into ``rhs1_solve.py`` and RHSMode=2/3 orchestration into
   ``transport_solve.py`` after the focused module extractions are green.

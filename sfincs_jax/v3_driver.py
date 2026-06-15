@@ -412,20 +412,14 @@ from .transport_parallel_policy import (
 )
 from .transport_parallel_payload import solve_transport_parallel_payload as _solve_transport_parallel_payload
 from .transport_parallel_runtime import (
-    merge_transport_parallel_results,
-    partition_transport_rhs,
     run_transport_parallel_gpu_subprocesses as _run_transport_parallel_gpu_subprocesses_impl,
 )
+from .transport_parallel_solve import TransportParallelSolveRuntime, maybe_run_transport_parallel_solve
 from .transport_residual_quality import (
     transport_residual_gate_failure,
     transport_residual_gate_thresholds_from_env,
 )
 from .transport_parallel_pool import TransportParallelPoolCache
-from .transport_parallel_execution import (
-    build_transport_parallel_payloads,
-    run_transport_parallel_payloads,
-    should_run_transport_parallel,
-)
 from .solve_mode_policy import resolve_use_implicit as _resolve_use_implicit_impl
 from .phi1_newton_policy import (
     phi1_frozen_jacobian_policy,
@@ -446,8 +440,6 @@ from .solver_progress import (
 from .transport_matrix import (
     _flux_functions_from_op,
     transport_matrix_size_from_rhs_mode,
-    v3_transport_output_fields_vm_only,
-    v3_transport_matrix_from_flux_arrays,
 )
 from .transport_postsolve_diagnostics import compute_transport_postsolve_diagnostics
 from .transport_streaming_outputs import TransportStreamingOutputAccumulator
@@ -36951,38 +36943,26 @@ def solve_v3_transport_matrix_linear_gmres(
         if parallel_workers <= 1:
             parallel_backend = "cpu"
 
-    if should_run_transport_parallel(
-        parallel_child=parallel_child,
-        parallel_workers=int(parallel_workers),
+    parallel_result = maybe_run_transport_parallel_solve(
+        nml=nml,
+        op0=op0,
+        rhs_mode=int(rhs_mode),
+        n_rhs=int(n),
         which_rhs_values=which_rhs_values,
+        parallel_child=bool(parallel_child),
+        parallel_workers=int(parallel_workers),
+        parallel_backend=parallel_backend,
         input_namelist=input_namelist,
-    ):
-        if emit is not None:
-            emit(
-                0,
-                "solve_v3_transport_matrix_linear_gmres: parallel whichRHS "
-                f"(backend={parallel_backend} workers={int(parallel_workers)} rhs_count={len(which_rhs_values)}/{n})",
-            )
-
-        chunks = partition_transport_rhs(list(which_rhs_values), int(parallel_workers))
-        payloads = build_transport_parallel_payloads(
-            chunks=chunks,
-            input_namelist=input_namelist,
-            tol=tol,
-            atol=atol,
-            restart=restart,
-            maxiter=maxiter,
-            solve_method=solve_method,
-            identity_shift=identity_shift,
-            collect_transport_output_fields=bool(collect_transport_output_fields),
-            phi1_hat_base=phi1_hat_base,
-            differentiable=differentiable,
-        )
-
-        results = run_transport_parallel_payloads(
-            payloads=payloads,
-            parallel_workers=int(parallel_workers),
-            parallel_backend=parallel_backend,
+        tol=float(tol),
+        atol=float(atol),
+        restart=int(restart),
+        maxiter=maxiter,
+        solve_method=solve_method,
+        identity_shift=float(identity_shift),
+        collect_transport_output_fields=bool(collect_transport_output_fields),
+        phi1_hat_base=phi1_hat_base,
+        differentiable=differentiable,
+        runtime=TransportParallelSolveRuntime(
             run_gpu_subprocesses=_run_transport_parallel_gpu_subprocesses,
             persistent_pool_enabled=_transport_parallel_persistent_pool_enabled(),
             get_pool=_get_transport_parallel_pool,
@@ -36991,65 +36971,12 @@ def solve_v3_transport_matrix_linear_gmres(
             worker_env=_transport_parallel_worker_env,
             executor_class=concurrent.futures.ProcessPoolExecutor,
             executor_kwargs=_transport_parallel_pool_executor_kwargs,
-            emit=emit,
-        )
-
-        state_vectors_np, residual_norms_np, rhs_norms_np, elapsed_s = merge_transport_parallel_results(
-            n_rhs=n,
-            results=results,
-        )
-        state_vectors = {int(k): jnp.asarray(v, dtype=jnp.float64) for k, v in state_vectors_np.items()}
-        residual_norms = {int(k): jnp.asarray(v, dtype=jnp.float64) for k, v in residual_norms_np.items()}
-        rhs_norms = {int(k): jnp.asarray(v, dtype=jnp.float64) for k, v in rhs_norms_np.items()}
-
-        missing_rhs = [which_rhs for which_rhs in range(1, n + 1) if which_rhs not in state_vectors]
-        if missing_rhs:
-            raise RuntimeError(f"parallel transport solve missing state vectors for whichRHS={missing_rhs}")
-
-        if emit is not None:
-            for which_rhs in range(1, n + 1):
-                rn = float(np.asarray(residual_norms.get(which_rhs, np.nan), dtype=np.float64))
-                rhsn = float(np.asarray(rhs_norms.get(which_rhs, np.nan), dtype=np.float64))
-                rel = rn / rhsn if np.isfinite(rhsn) and rhsn > 0.0 else float("nan")
-                emit(
-                    0,
-                    f"whichRHS={which_rhs}: residual_norm={rn:.6e} rhs_norm={rhsn:.6e} "
-                    f"relative_residual={rel:.6e} "
-                    f"elapsed_s={float(elapsed_s[which_rhs - 1]):.3f}",
-                )
-            emit(0, "solve_v3_transport_matrix_linear_gmres: computing whichRHS diagnostics (batched)")
-
-        transport_fields_full = v3_transport_output_fields_vm_only(
-            op0=op0,
-            state_vectors_by_rhs=state_vectors,
-        )
-        diag_pf = jnp.asarray(transport_fields_full["particleFlux_vm_psiHat"], dtype=jnp.float64)
-        diag_hf = jnp.asarray(transport_fields_full["heatFlux_vm_psiHat"], dtype=jnp.float64)
-        diag_flow = jnp.asarray(transport_fields_full["FSABFlow"], dtype=jnp.float64)
-        geom = geometry_from_namelist(nml=nml, grids=grids_from_namelist(nml))
-        tm = v3_transport_matrix_from_flux_arrays(
-            op=op0,
-            geom=geom,
-            particle_flux_vm_psi_hat=diag_pf,
-            heat_flux_vm_psi_hat=diag_hf,
-            fsab_flow=diag_flow,
-        )
-        transport_output_fields = transport_fields_full if collect_transport_output_fields else None
-        if emit is not None:
-            emit(0, "solve_v3_transport_matrix_linear_gmres: done")
-            emit(1, f"solve_v3_transport_matrix_linear_gmres: elapsed_s={t_all.elapsed_s():.3f}")
-        return V3TransportMatrixSolveResult(
-            op0=op0,
-            transport_matrix=tm,
-            state_vectors_by_rhs=state_vectors,
-            residual_norms_by_rhs=residual_norms,
-            fsab_flow=diag_flow,
-            particle_flux_vm_psi_hat=diag_pf,
-            heat_flux_vm_psi_hat=diag_hf,
-            elapsed_time_s=jnp.asarray(elapsed_s, dtype=jnp.float64),
-            transport_output_fields=transport_output_fields,
-            rhs_norms_by_rhs=rhs_norms,
-        )
+            elapsed_s=t_all.elapsed_s,
+        ),
+        emit=emit,
+    )
+    if parallel_result is not None:
+        return parallel_result
     if emit is not None:
         emit(1, f"solve_v3_transport_matrix_linear_gmres: rhs_mode={rhs_mode} whichRHS_count={n} total_size={int(op0.total_size)}")
         emit(

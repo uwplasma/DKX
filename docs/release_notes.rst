@@ -208,10 +208,15 @@ Unreleased
   batched diagnostic selection, rematerialization/precompute/chunking policy,
   final flux-array assembly, optional output-field propagation, and transport
   matrix construction after the Krylov solve loop.
+- Extracted the parent-side RHSMode=2/3 parallel solve branch into
+  ``transport_parallel_solve.py``. The new module owns ``whichRHS`` partitioning,
+  CPU/GPU worker launch through injected runtime hooks, worker payload merging,
+  parallel-result diagnostics assembly, and early transport-matrix result
+  construction.
 - The post-extraction strict docs build passed, the repo-size audit now has no
   reviewed files above 2 MiB after ``v3_driver.py`` dropped below the threshold,
-  and the latest local full suite after the RHSMode=2/3 transport post-solve
-  diagnostics extraction passed with ``2624 passed in 557.63 s``.
+  and the latest local full suite after the RHSMode=2/3 parent-side parallel
+  solve extraction passed with ``2626 passed in 545.40 s``.
 
 v1.1.7
 ------
