@@ -82,6 +82,9 @@ API reference
 .. automodule:: sfincs_jax.preconditioner_operators
    :members:
 
+.. automodule:: sfincs_jax.transport_direct_pmat
+   :members:
+
 .. automodule:: sfincs_jax.preconditioner_setup
    :members:
 

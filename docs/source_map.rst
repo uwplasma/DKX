@@ -191,6 +191,12 @@ the historical private driver name and test the focused module directly. This ke
   preconditioner matrices. These helpers encode the PETSc/Fortran-v3-style
   ``Pmat`` shaping rules without carrying solve state, caches, or sparse
   factorization logic.
+- ``sfincs_jax/transport_direct_pmat.py``:
+  direct term-level RHSMode=2/3 reduced ``Pmat`` and exact active-operator
+  emission for full-FP transport preconditioners, plus the physics/source
+  coarse-basis columns used by symbolic Schur corrections. The module owns the
+  sparse matrix assembly; ``v3_driver.py`` still owns admission, factor choice,
+  fallback ordering, and solver orchestration.
 - ``sfincs_jax/preconditioner_setup.py``:
   shared setup utilities for preconditioner construction: memory-bounded
   basis-column chunking, selected-row/selected-column matrix-free submatrix
