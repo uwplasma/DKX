@@ -811,8 +811,8 @@ the historical private driver name and test the focused module directly. This ke
   loop-local RHSMode=2/3 support for cached full/reduced transport matvec
   closures and bounded Krylov recycle bases. It owns recycle-size admission,
   stored-state seeding, reduced/full recycle-vector trimming, and small recycled
-  initial guesses so the main solve loop no longer carries this mutable cache
-  bookkeeping.
+  initial guesses plus sequential residual-gate and ETA progress bookkeeping, so
+  the main solve loop no longer carries this mutable cache/progress state.
 - ``sfincs_jax/transport_parallel_payload.py``:
   injected-dependency payload normalization, child-worker guard setup, transport solve
   call construction, merge-ready result packing, and GPU-worker NPZ array conversion
