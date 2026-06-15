@@ -505,7 +505,11 @@ The extracted materializer in ``rhs1_fortran_reduced_direct_tail.py`` is covered
 through ``tests/test_v3_sparse_pattern.py`` direct-tail regressions, including
 structured CSR, pattern-probe fallback, active term-level ``whichMatrix=0``
 assembly, active structured-preconditioner aliases, cache reuse, fail-fast
-guards, and true-coupled-coarse metadata.
+guards, and true-coupled-coarse metadata. The no-probe structured full-CSR
+adapter extracted to ``rhs1_structured_full_csr.py`` is covered by
+``tests/test_rhs1_full_assembly.py`` and the same direct-tail regressions,
+including active projection, budget rejection, metadata emission, and fallback
+to the established sparse-PC path when the analytic assembly is not selected.
 ``tests/test_rhs1_true_operator_rescue.py`` covers the next RHSMode=1
 true-operator rescue split: residual/coarse bundle application, reusable
 true-action column caching, additive-rescue storage accounting, sparse-factor
