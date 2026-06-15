@@ -550,6 +550,12 @@ historical uncapped experiment available. ``tests/test_v3_sparse_pattern.py``
 then checks that singular local ILU attempts escalate diagonal regularization
 before failing closed, which makes high-resolution blocker evidence more
 diagnostic without changing the physical operator.
+The extracted ``rhs1_xblock_tz_sparse.py`` module is covered through the same
+driver compatibility seam and direct policy gates: compact CSR and padded JAX
+factor application, host-factor caps, lower-fill policy, explicit FP x-block
+assembly admission, skipped-block diagonal fallback, and extra-variable Schur
+solve behavior remain exercised without promoting production-grid RHSMode=1
+solves into CI.
 
 The follow-up post-x-block policy split is covered by
 ``tests/test_rhs1_post_xblock_policy.py``. These tests check the residual and

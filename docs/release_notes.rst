@@ -191,10 +191,16 @@ Unreleased
   admission, exact-LU rescue, physics coarse correction, and host-factor
   callback application; the driver keeps a compatibility wrapper only for
   fallback/cache-key/sparse-builder/host-memory injection.
+- Extracted the RHSMode=1 full-FP sparse x-block/TZ preconditioner into
+  ``rhs1_xblock_tz_sparse.py``. The new module owns host/JAX x-block factor
+  setup, compact CSR and padded triangular apply, skipped-block diagonal
+  fallback, and extra-variable Schur handling; ``v3_driver.py`` now injects the
+  still-local FP assembly and sparse-factor seams through a compatibility
+  wrapper.
 - The post-extraction strict docs build passed, the repo-size audit now has no
   reviewed files above 2 MiB after ``v3_driver.py`` dropped below the threshold,
-  and the latest local full suite after the Fortran-reduced LU extraction passed
-  with ``2622 passed in 536.83 s``.
+  and the latest local full suite after the RHSMode=1 sparse x-block extraction
+  passed with ``2622 passed in 537.19 s``.
 
 v1.1.7
 ------

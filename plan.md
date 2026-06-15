@@ -224,6 +224,13 @@ Current branch status:
   gate now reports zero reviewed files above 2 MiB because ``v3_driver.py``
   dropped below the large-file threshold; and the full local suite passed with
   ``2622 passed in 536.83 s``.
+- The next RHSMode=1 extraction moved the 1.0k-line sparse x-block/TZ
+  preconditioner into ``rhs1_xblock_tz_sparse.py``. ``v3_driver.py`` now keeps a
+  compatibility wrapper only for FP x-block assembly, sparse-factor, cache-key,
+  and safety-wrapper injection. Focused x-block sparse tests passed with
+  ``74 passed, 98 deselected in 51.15 s``; broader RHSMode=1 sparse/preconditioner
+  validation passed with ``175 passed, 30 deselected in 95.03 s``; strict docs
+  passed; and the full local suite passed with ``2622 passed in 537.19 s``.
 - Next PR-level moves should split high-level RHSMode=1 solve orchestration
   into ``rhs1_solve.py`` and RHSMode=2/3 orchestration into
   ``transport_solve.py`` after the focused module extractions are green.

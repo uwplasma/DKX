@@ -82,6 +82,9 @@ API reference
 .. automodule:: sfincs_jax.preconditioner_operators
    :members:
 
+.. automodule:: sfincs_jax.rhs1_xblock_tz_sparse
+   :members:
+
 .. automodule:: sfincs_jax.transport_direct_pmat
    :members:
 
