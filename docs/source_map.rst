@@ -185,6 +185,12 @@ the historical private driver name and test the focused module directly. This ke
   cached operator size, geometry/collision metadata, sparse structural
   tolerance, factor dtype, and solver-JIT admission. The numerical policy lives
   in ``solver_path_policy.py``; this module owns the runtime state bridge.
+- ``sfincs_jax/preconditioner_operators.py``:
+  pure dataclass/JAX transformations that build simplified ``V3FullSystemOperator``
+  variants used as point, line, domain-decomposition, and Fortran-reduced
+  preconditioner matrices. These helpers encode the PETSc/Fortran-v3-style
+  ``Pmat`` shaping rules without carrying solve state, caches, or sparse
+  factorization logic.
 - ``sfincs_jax/preconditioner_setup.py``:
   shared setup utilities for preconditioner construction: memory-bounded
   basis-column chunking, selected-row/selected-column matrix-free submatrix
