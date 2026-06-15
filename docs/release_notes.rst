@@ -168,8 +168,14 @@ Unreleased
   lives in ``rhs1_full_assembly.py``; the new module owns the runtime sparse-PC
   adapter, active projection, memory-budget admission, and no-probe metadata
   emission previously embedded in ``v3_driver.py``.
+- Extracted RHSMode=1 and RHSMode=2/3 preconditioner-operator shaping into
+  ``preconditioner_operators.py``. Point, theta/zeta line, theta/zeta
+  domain-decomposition, and Fortran-reduced operator builders are now pure
+  dataclass/JAX transformations outside the solve driver, with the existing
+  driver private names preserved as import aliases.
 - The post-extraction strict docs build passed, and the latest local full suite
-  after the structured full-CSR split passed with ``2622 passed in 549.42 s``.
+  after the preconditioner-operator split passed with
+  ``2622 passed in 537.84 s``.
 
 v1.1.7
 ------
