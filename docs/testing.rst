@@ -512,6 +512,13 @@ Those same direct-active tests now exercise the wrapper into
 preconditioner is built from the exact active operator, applies through the
 host callback path, and closes the source/constraint tail residual on the
 reduced geometryScheme 11 case.
+The Fortran-reduced LU tests also exercise ``transport_fortran_reduced_lu.py``
+through the driver compatibility seam: symbolic block, block-Schur, BLR
+frontal, and ND frontal factor metadata, direct reduced-``Pmat`` admission,
+symbolic rejection fallback, and exact-LU rescue are checked on reduced
+geometry-rich transport inputs without promoting a production-size solve into
+CI. The extraction checkpoint also passed the strict docs build, the repository
+size policy gate, and the local full suite with ``2622`` tests in ``536.83 s``.
 ``tests/test_rhs1_direct_tail_policy.py`` covers the next adjacent extraction:
 direct-tail cache-key hashing, support-mode/env sensitivity, cache-hit metadata,
 direct reduced-Pmat aliases, adaptive memory-cap policy, and the structured

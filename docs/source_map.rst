@@ -203,6 +203,13 @@ the historical private driver name and test the focused module directly. This ke
   admission, residual-coarse rescue, cache storage, and host callback
   application, while the driver injects the current fallback preconditioner and
   cache-key policy.
+- ``sfincs_jax/transport_fortran_reduced_lu.py``:
+  global RHSMode=2/3 full-FP Fortran-reduced sparse-factor preconditioner. This
+  module owns the PETSc/Fortran-v3-style reduced ``Pmat`` sparse setup,
+  symbolic/BLR/ND/native factor policy, direct-``Pmat`` admission, exact-LU
+  rescue, physics coarse correction, and host sparse-factor callback apply.
+  ``v3_driver.py`` injects only the current fallback builder, cache-key policy,
+  explicit sparse builder seam, and host-memory callback.
 - ``sfincs_jax/preconditioner_setup.py``:
   shared setup utilities for preconditioner construction: memory-bounded
   basis-column chunking, selected-row/selected-column matrix-free submatrix
