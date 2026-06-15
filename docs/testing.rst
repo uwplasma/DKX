@@ -501,14 +501,21 @@ reaches the extracted implementation.
 direct-tail cache-key hashing, support-mode/env sensitivity, cache-hit metadata,
 direct reduced-Pmat aliases, adaptive memory-cap policy, and the structured
 host sparse adapter without running a production solve.
+The extracted materializer in ``rhs1_fortran_reduced_direct_tail.py`` is covered
+through ``tests/test_v3_sparse_pattern.py`` direct-tail regressions, including
+structured CSR, pattern-probe fallback, active term-level ``whichMatrix=0``
+assembly, active structured-preconditioner aliases, cache reuse, fail-fast
+guards, and true-coupled-coarse metadata.
 ``tests/test_rhs1_true_operator_rescue.py`` covers the next RHSMode=1
 true-operator rescue split: residual/coarse bundle application, reusable
 true-action column caching, additive-rescue storage accounting, sparse-factor
 storage estimates, graph expansion, residual-window parsing, and residual-window
 selection with tail variables. It also covers residual sparse-window/coarse
-builder application and active residual component diagnostics. Existing
-sparse-pattern tests still exercise the ``v3_driver`` compatibility aliases and
-the higher-level builder paths.
+builder application, active residual component diagnostics, and the focused
+true-operator LSQ builders for residual windows, active blocks,
+active-residual blocks, active submatrices, and coupled coarse corrections.
+Existing sparse-pattern tests still exercise the ``v3_driver`` compatibility
+aliases and the higher-level builder paths.
 ``tests/test_rhs1_xblock_sparse_host_policy.py`` also covers the production
 host x-block factor cap: by default, very large local sparse factors are skipped
 instead of spending the full runtime budget on singular ILU attempts, while an
