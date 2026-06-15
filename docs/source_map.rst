@@ -777,6 +777,11 @@ the historical private driver name and test the focused module directly. This ke
   normalization, and CPU/GPU process-parallel worker requests. The driver emits
   the returned notes and keeps solve orchestration, while these pure setup rules
   are covered by direct unit tests.
+- ``sfincs_jax/transport_active_dense_setup.py``:
+  combined RHSMode=2/3 active-DOF and dense-path setup. It resolves the initial
+  output/restart policy, active-index compaction state, dense fallback and dense
+  preconditioner admission, and ordered user-facing notes before the transport
+  loop builds matvecs or preconditioners.
 - ``sfincs_jax/transport_sparse_direct_solve.py``:
   RHSMode=2/3 sparse-direct rescue implementation. It owns sparse-pattern
   admission/caching, direct active FP operator factor reuse, explicit sparse
