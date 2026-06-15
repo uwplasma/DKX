@@ -109,6 +109,26 @@ TRANSPORT_COMPATIBILITY_IMPORTS = (
         "sfincs_jax.problems.transport_matrix.iteration_stats",
         "emit_transport_ksp_iteration_stats",
     ),
+    (
+        "sfincs_jax.transport_dense_lu",
+        "sfincs_jax.problems.transport_matrix.dense_lu",
+        "dense_solver_for_matvec",
+    ),
+    (
+        "sfincs_jax.transport_dense_batch",
+        "sfincs_jax.problems.transport_matrix.dense_batch",
+        "solve_transport_dense_batch",
+    ),
+    (
+        "sfincs_jax.transport_active_factor",
+        "sfincs_jax.problems.transport_matrix.active_factor",
+        "build_active_block_schur_factor",
+    ),
+    (
+        "sfincs_jax.transport_sparse_direct_solve",
+        "sfincs_jax.problems.transport_matrix.sparse_direct_solve",
+        "transport_sparse_direct_solve",
+    ),
 )
 
 
