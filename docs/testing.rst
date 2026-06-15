@@ -556,6 +556,12 @@ factor application, host-factor caps, lower-fill policy, explicit FP x-block
 assembly admission, skipped-block diagonal fallback, and extra-variable Schur
 solve behavior remain exercised without promoting production-grid RHSMode=1
 solves into CI.
+The adjacent ``rhs1_pas_xblock_ilu.py`` extraction keeps the PAS-only block
+ILU/LU path under the same solver-path and PAS heuristic gates: DKES/tokamak
+PAS branch selection, SciPy ILU/exact-LU fallback behavior, padded triangular
+apply kernels, cache reuse, and the extra-variable Schur block are exercised
+through the ``v3_driver`` compatibility seam and the PAS-focused regression
+suite.
 
 The follow-up post-x-block policy split is covered by
 ``tests/test_rhs1_post_xblock_policy.py``. These tests check the residual and
