@@ -395,6 +395,11 @@ from .transport_linear_solve import (
     transport_restart_for_method as _transport_restart_for_method,
     transport_solver_kind as _transport_solver_kind,
 )
+from .transport_loop_support import (
+    TransportMatvecCache,
+    TransportRecycleState,
+    resolve_transport_recycle_k,
+)
 from .transport_sparse_direct_solve import (
     TransportSparseDirectContext,
     transport_sparse_direct_pattern_for_solve as _transport_sparse_direct_pattern_for_context,
@@ -37498,86 +37503,33 @@ def solve_v3_transport_matrix_linear_gmres(
             assert streaming_outputs is not None
             streaming_outputs.collect(int(which_rhs), x_full)
 
+    transport_matvec_cache = TransportMatvecCache(
+        use_active_dof_mode=bool(use_active_dof_mode),
+        active_size=int(active_size),
+        reduce_full=reduce_full,
+        expand_reduced=expand_reduced,
+    )
+    _get_full_matvec = transport_matvec_cache.get_full
+    _get_reduced_matvec = transport_matvec_cache.get_reduced
 
-    matvec_full_cache: dict[tuple[object, ...], Callable[[jnp.ndarray], jnp.ndarray]] = {}
-    matvec_reduced_cache: dict[tuple[object, ...], Callable[[jnp.ndarray], jnp.ndarray]] = {}
-
-    def _get_full_matvec(op_matvec: V3FullSystemOperator) -> Callable[[jnp.ndarray], jnp.ndarray]:
-        sig = _operator_signature_cached(op_matvec)
-        fn = matvec_full_cache.get(sig)
-        if fn is None:
-            def mv(x: jnp.ndarray, op=op_matvec) -> jnp.ndarray:
-                return apply_v3_full_system_operator_cached(op, x)
-
-            matvec_full_cache[sig] = mv
-            fn = mv
-        return fn
-
-    def _get_reduced_matvec(op_matvec: V3FullSystemOperator) -> Callable[[jnp.ndarray], jnp.ndarray]:
-        if not use_active_dof_mode or reduce_full is None or expand_reduced is None:
-            return _get_full_matvec(op_matvec)
-        sig = _operator_signature_cached(op_matvec)
-        key = (sig, int(active_size))
-        fn = matvec_reduced_cache.get(key)
-        if fn is None:
-            def mv(x_reduced: jnp.ndarray, op=op_matvec) -> jnp.ndarray:
-                y_full = apply_v3_full_system_operator_cached(op, expand_reduced(x_reduced))
-                return reduce_full(y_full)
-
-            matvec_reduced_cache[key] = mv
-            fn = mv
-        return fn
-
-    recycle_k_env = os.environ.get("SFINCS_JAX_TRANSPORT_RECYCLE_K", "").strip()
-    try:
-        recycle_k = int(recycle_k_env) if recycle_k_env else 4
-    except ValueError:
-        recycle_k = 4
-    recycle_k = max(0, recycle_k)
-    if recycle_k > 0 and _transport_disable_auto_recycle(op=op0, use_implicit=bool(use_implicit)):
-        recycle_k = 0
-        if emit is not None:
-            emit(
-                1,
-                "solve_v3_transport_matrix_linear_gmres: auto recycle disabled "
-                "for branch-sensitive explicit mono transport",
-            )
-    if recycle_k > 0:
-        sig_ref = _operator_signature_cached(op_matvec_by_index[0])
-        for op_probe in op_matvec_by_index[1:]:
-            if _operator_signature_cached(op_probe) != sig_ref:
-                recycle_k = 0
-                if emit is not None:
-                    emit(1, "solve_v3_transport_matrix_linear_gmres: recycle disabled (matvec operator varies across whichRHS)")
-                break
-
-    recycle_basis_full: list[jnp.ndarray] = []
-    recycle_basis_full_au: list[jnp.ndarray] = []
-    recycle_basis_reduced: list[jnp.ndarray] = []
-    recycle_basis_reduced_au: list[jnp.ndarray] = []
+    recycle_k = resolve_transport_recycle_k(
+        op=op0,
+        use_implicit=bool(use_implicit),
+        op_matvec_by_index=op_matvec_by_index,
+        disable_auto_recycle=_transport_disable_auto_recycle,
+        emit=emit,
+    )
+    recycle_state = TransportRecycleState(k=int(recycle_k))
     state_recycle_env = os.environ.get("SFINCS_JAX_TRANSPORT_RECYCLE_STATE", "").strip().lower()
     state_recycle_enabled = state_recycle_env not in {"0", "false", "no", "off"}
     if recycle_k > 0 and state_recycle_enabled and state_x_by_rhs:
-        mv_ref_full = _get_full_matvec(op_matvec_by_index[0])
-        mv_ref_reduced = _get_reduced_matvec(op_matvec_by_index[0])
-        for which_rhs in sorted(state_x_by_rhs.keys()):
-            x_full = jnp.asarray(state_x_by_rhs[int(which_rhs)])
-            if x_full.shape == (op0.total_size,):
-                recycle_basis_full.append(x_full)
-                recycle_basis_full_au.append(mv_ref_full(x_full))
-                if use_active_dof_mode and reduce_full is not None:
-                    x_red = reduce_full(x_full)
-                    recycle_basis_reduced.append(x_red)
-                    recycle_basis_reduced_au.append(mv_ref_reduced(x_red))
-            elif use_active_dof_mode and x_full.shape == (active_size,) and reduce_full is not None:
-                recycle_basis_reduced.append(x_full)
-                recycle_basis_reduced_au.append(mv_ref_reduced(x_full))
-        if len(recycle_basis_full) > recycle_k:
-            recycle_basis_full = recycle_basis_full[-recycle_k:]
-            recycle_basis_full_au = recycle_basis_full_au[-recycle_k:]
-        if len(recycle_basis_reduced) > recycle_k:
-            recycle_basis_reduced = recycle_basis_reduced[-recycle_k:]
-            recycle_basis_reduced_au = recycle_basis_reduced_au[-recycle_k:]
+        recycle_state.seed_from_state(
+            state_x_by_rhs=state_x_by_rhs,
+            total_size=int(op0.total_size),
+            active_size=int(active_size),
+            matvec_cache=transport_matvec_cache,
+            op_ref=op_matvec_by_index[0],
+        )
 
     def _residual_value(res: GMRESSolveResult) -> float:
         return transport_residual_value(res)
@@ -37588,21 +37540,6 @@ def solve_v3_transport_matrix_linear_gmres(
             float(target),
             result_is_finite=_gmres_result_is_finite,
         )
-
-    def _recycled_initial_guess(
-        rhs_vec: jnp.ndarray,
-        basis: list[jnp.ndarray],
-        basis_au: list[jnp.ndarray],
-    ) -> jnp.ndarray | None:
-        if not basis or not basis_au:
-            return None
-        u = jnp.stack(basis, axis=1)  # (N, k)
-        au = jnp.stack(basis_au, axis=1)  # (N, k)
-        coeff = _small_regularized_lstsq(au, rhs_vec)
-        x0 = u @ coeff
-        if not jnp.all(jnp.isfinite(x0)):
-            return None
-        return x0
 
     loose_env = os.environ.get("SFINCS_JAX_TRANSPORT_EPAR_LOOSE", "").strip().lower()
     krylov_env = os.environ.get("SFINCS_JAX_TRANSPORT_EPAR_KRYLOV", "").strip().lower()
@@ -37757,11 +37694,7 @@ def solve_v3_transport_matrix_linear_gmres(
                     elif x0_arr.shape == (op0.total_size,):
                         x0_reduced = reduce_full(x0_arr)
                 if recycle_k > 0:
-                    x0_recycled = _recycled_initial_guess(
-                        rhs_reduced,
-                        recycle_basis_reduced[-recycle_k:],
-                        recycle_basis_reduced_au[-recycle_k:],
-                    )
+                    x0_recycled = recycle_state.candidate_reduced(rhs_reduced)
                     if x0_reduced is None and x0_recycled is not None:
                         x0_reduced = x0_recycled
 
@@ -38188,16 +38121,12 @@ def solve_v3_transport_matrix_linear_gmres(
                 if stream_diagnostics:
                     _collect_transport_outputs(int(which_rhs), x_full)
                 if recycle_k > 0:
-                    recycle_basis_reduced.append(res_reduced.x)
-                    recycle_basis_reduced_au.append(reduce_full(ax_full))
-                    if len(recycle_basis_reduced) > recycle_k:
-                        recycle_basis_reduced = recycle_basis_reduced[-recycle_k:]
-                        recycle_basis_reduced_au = recycle_basis_reduced_au[-recycle_k:]
-                    recycle_basis_full.append(x_full)
-                    recycle_basis_full_au.append(ax_full)
-                    if len(recycle_basis_full) > recycle_k:
-                        recycle_basis_full = recycle_basis_full[-recycle_k:]
-                        recycle_basis_full_au = recycle_basis_full_au[-recycle_k:]
+                    recycle_state.append_reduced(
+                        res_reduced.x,
+                        reduce_full(ax_full),
+                        x_full=x_full,
+                        ax_full=ax_full,
+                    )
                 if not dense_used:
                     _emit_transport_ksp_iteration_stats(
                         which_rhs=int(which_rhs),
@@ -38230,11 +38159,7 @@ def solve_v3_transport_matrix_linear_gmres(
                     )
                 x0_full = x0_by_rhs.get(int(which_rhs)) if x0_by_rhs else x0
                 if recycle_k > 0:
-                    x0_recycled = _recycled_initial_guess(
-                        rhs,
-                        recycle_basis_full[-recycle_k:],
-                        recycle_basis_full_au[-recycle_k:],
-                    )
+                    x0_recycled = recycle_state.candidate_full(rhs)
                     if x0_full is None and x0_recycled is not None:
                         x0_full = x0_recycled
 
@@ -38629,11 +38554,7 @@ def solve_v3_transport_matrix_linear_gmres(
                 if stream_diagnostics:
                     _collect_transport_outputs(int(which_rhs), x_full)
                 if recycle_k > 0:
-                    recycle_basis_full.append(x_full)
-                    recycle_basis_full_au.append(ax_full)
-                    if len(recycle_basis_full) > recycle_k:
-                        recycle_basis_full = recycle_basis_full[-recycle_k:]
-                        recycle_basis_full_au = recycle_basis_full_au[-recycle_k:]
+                    recycle_state.append_full(x_full, ax_full)
                 if not dense_used:
                     _emit_transport_ksp_iteration_stats(
                         which_rhs=int(which_rhs),

@@ -266,6 +266,16 @@ Current branch status:
   with ``99 passed in 16.20 s``; strict docs and the repo-size audit passed;
   and the full local suite passed with ``2631 passed in 563.04 s``.
   ``v3_driver.py`` is now ``38,738`` lines.
+- The next sequential-loop support extraction moved RHSMode=2/3 full/reduced
+  matvec caches and recycle-basis bookkeeping into
+  ``transport_loop_support.py``. ``v3_driver.py`` now delegates cached matvec
+  closure construction, recycle-size admission, stored-state recycle seeding,
+  basis trimming, and recycled initial-guess construction. Direct loop-support
+  and docstring tests passed with ``7 passed in 1.27 s``; the transport
+  regression slice passed with ``44 passed in 17.52 s``; and the broader
+  transport/parallel support slice passed with ``180 passed in 37.04 s``;
+  strict docs and the repo-size audit passed; and the full local suite passed
+  with ``2635 passed in 534.44 s``. ``v3_driver.py`` is now ``38,659`` lines.
 - Next PR-level moves should split high-level RHSMode=1 solve orchestration
   into ``rhs1_solve.py`` and RHSMode=2/3 orchestration into
   ``transport_solve.py`` after the focused module extractions are green.

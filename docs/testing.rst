@@ -431,6 +431,12 @@ low-memory VMEC monoenergetic routing, dense fallback admission, dense memory-ca
 blocking, subset streaming, state-vector retention, and GMRES restart/max-iteration
 guards are checked as pure policy tests before heavier parity solves exercise the
 same decisions end-to-end.
+``tests/test_transport_loop_support.py`` covers the sequential transport-loop
+infrastructure that is now outside ``v3_driver.py``: cached full and active-DOF
+matvec closures, operator-variation recycle admission, stored-state recycle seeding,
+basis trimming, and small recycled initial guesses. These tests protect the
+stateful bookkeeping that the heavier RHSMode=2/3 parity tests then exercise through
+the public solve path.
 
 QI seed-robustness artifacts are also checked as data, not only as scripts.
 ``tests/test_qi_seed_smoke_artifact.py`` verifies the one-seed smoke artifact,

@@ -219,10 +219,15 @@ Unreleased
   force-dense/force-Krylov handling, dense fallback admission, dense memory-cap
   blocking, and GMRES restart/max-iteration guards to a focused policy object
   before active-DOF and preconditioner setup.
+- Extracted RHSMode=2/3 sequential-loop matvec caching and recycle-basis
+  bookkeeping into ``transport_loop_support.py``. The driver now delegates
+  cached full/reduced matvec closure construction, recycle-size admission,
+  stored-state recycle seeding, basis trimming, and recycled initial-guess
+  construction to a focused helper before the per-``whichRHS`` solve branches.
 - The post-extraction strict docs build passed, the repo-size audit now has no
   reviewed files above 2 MiB after ``v3_driver.py`` dropped below the threshold,
-  and the latest local full suite after the initial RHSMode=2/3 transport solve
-  policy extraction passed with ``2631 passed in 563.04 s``.
+  and the latest local full suite after the RHSMode=2/3 transport loop-support
+  extraction passed with ``2635 passed in 534.44 s``.
 
 v1.1.7
 ------
