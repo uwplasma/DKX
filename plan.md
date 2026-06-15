@@ -198,6 +198,14 @@ Current branch status:
   broader transport regression tests passed with ``130 passed in 45.93 s``;
   strict docs build passed; and the full local suite passed with
   ``2573 passed in 530.49 s``.
+- The 2026-06-15 direct transport ``Pmat`` extraction moved the RHSMode=2/3
+  full-FP direct reduced-``Pmat`` emitter, exact active-operator wrapper, and
+  physics/source coarse-basis builder into ``transport_direct_pmat.py`` while
+  keeping driver compatibility import aliases. Focused matrix-free equivalence
+  tests passed with ``4 passed, 25 deselected in 4.14 s``; broader
+  transport/preconditioner regression passed with
+  ``41 passed, 21 deselected in 13.17 s``; strict docs passed; and the full
+  local suite passed with ``2622 passed in 545.10 s``.
 - Next PR-level moves should split high-level RHSMode=1 solve orchestration
   into ``rhs1_solve.py`` and RHSMode=2/3 orchestration into
   ``transport_solve.py`` after the focused module extractions are green.
