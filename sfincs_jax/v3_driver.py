@@ -370,6 +370,7 @@ from .transport_solve_policy import (
     resolve_transport_active_dof_mode,
     resolve_transport_dense_policy,
     resolve_transport_initial_solve_policy,
+    resolve_transport_per_rhs_loop_policy,
     transport_geometry_scheme_from_namelist,
 )
 from .transport_handoff_policy import (
@@ -37535,47 +37536,7 @@ def solve_v3_transport_matrix_linear_gmres(
             result_is_finite=_gmres_result_is_finite,
         )
 
-    loose_env = os.environ.get("SFINCS_JAX_TRANSPORT_EPAR_LOOSE", "").strip().lower()
-    krylov_env = os.environ.get("SFINCS_JAX_TRANSPORT_EPAR_KRYLOV", "").strip().lower()
-
-    def _rhs3_krylov_flags(which_rhs: int) -> tuple[bool, bool]:
-        use_loose = (
-            loose_env in {"1", "true", "yes", "on"}
-            and int(rhs_mode) == 2
-            and int(which_rhs) == 3
-            and int(op0.constraint_scheme) == 1
-        )
-        force_k = (
-            krylov_env in {"1", "true", "yes", "on"}
-            and int(rhs_mode) == 2
-            and int(which_rhs) == 3
-            and int(op0.constraint_scheme) == 1
-        )
-        return use_loose, force_k
-
-    project_env = os.environ.get("SFINCS_JAX_TRANSPORT_PROJECT_NULLSPACE", "").strip().lower()
-    project_nullspace_enabled = (
-        int(op0.constraint_scheme) == 1
-        and int(op0.phi1_size) == 0
-        and int(op0.extra_size) > 0
-        and project_env not in {"0", "false", "no", "off"}
-    )
-
-    def _projection_needed(which_rhs: int) -> bool:
-        if not project_nullspace_enabled:
-            return False
-        return (
-            (int(rhs_mode) == 2 and int(which_rhs) == 3)
-            or (int(rhs_mode) == 3 and int(which_rhs) == 2)
-        )
-
-    iter_stats_env = os.environ.get("SFINCS_JAX_SOLVER_ITER_STATS", "").strip().lower()
-    iter_stats_enabled = iter_stats_env in {"1", "true", "yes", "on"}
-    iter_stats_max_env = os.environ.get("SFINCS_JAX_SOLVER_ITER_STATS_MAX_SIZE", "").strip()
-    try:
-        iter_stats_max_size = int(iter_stats_max_env) if iter_stats_max_env else None
-    except ValueError:
-        iter_stats_max_size = None
+    per_rhs_loop_policy = resolve_transport_per_rhs_loop_policy(op=op0, rhs_mode=int(rhs_mode))
 
     def _maybe_project_constraint_nullspace(
         x_vec: jnp.ndarray,
@@ -37584,11 +37545,7 @@ def solve_v3_transport_matrix_linear_gmres(
         op_matvec: V3FullSystemOperator,
         rhs_vec: jnp.ndarray,
     ) -> jnp.ndarray:
-        apply_projection = (
-            (int(rhs_mode) == 2 and int(which_rhs) == 3)
-            or (int(rhs_mode) == 3 and int(which_rhs) == 2)
-        )
-        if not apply_projection:
+        if not per_rhs_loop_policy.projection_candidate(int(which_rhs)):
             return x_vec
         return _project_constraint_scheme1_nullspace_solution(
             op=op0,
@@ -37599,8 +37556,7 @@ def solve_v3_transport_matrix_linear_gmres(
         )
 
     dense_batch_done = False
-    dense_batch_fallback_env = os.environ.get("SFINCS_JAX_TRANSPORT_DENSE_BATCH_FALLBACK", "").strip().lower()
-    dense_batch_fallback_enabled = dense_batch_fallback_env not in {"0", "false", "no", "off"}
+    dense_batch_fallback_enabled = bool(per_rhs_loop_policy.dense_batch_fallback_enabled)
 
     def _dense_batch_solve_all(*, op_probe_ref: V3FullSystemOperator, reason: str) -> bool:
         dense_batch_context = TransportDenseBatchContext(
@@ -37620,7 +37576,7 @@ def solve_v3_transport_matrix_linear_gmres(
             state_vectors=state_vectors,
             store_state_vectors=bool(store_state_vectors),
             stream_diagnostics=bool(stream_diagnostics),
-            rhs3_krylov_flags=_rhs3_krylov_flags,
+            rhs3_krylov_flags=per_rhs_loop_policy.rhs3_krylov_flags,
             maybe_project_constraint_nullspace=_maybe_project_constraint_nullspace,
             collect_transport_outputs=_collect_transport_outputs if stream_diagnostics else None,
             reduce_full=reduce_full,
@@ -37648,7 +37604,7 @@ def solve_v3_transport_matrix_linear_gmres(
                 emit(0, f"whichRHS={which_rhs}/{n}: assembling+solving (rhs_norm={float(jnp.linalg.norm(rhs)):.6e})")
                 emit(1, f"whichRHS={which_rhs}/{n}: evaluateJacobian called (matrix-free)")
 
-            use_loose_epar_krylov, force_epar_krylov = _rhs3_krylov_flags(which_rhs)
+            use_loose_epar_krylov, force_epar_krylov = per_rhs_loop_policy.rhs3_krylov_flags(which_rhs)
             solve_method_rhs = solve_method_use
             tol_rhs = tol
             if force_epar_krylov or use_loose_epar_krylov:
@@ -38135,8 +38091,8 @@ def solve_v3_transport_matrix_linear_gmres(
                         precond_side=transport_precondition_side,
                         solver_kind=solver_kind_used,
                         emit=emit,
-                        enabled=bool(iter_stats_enabled),
-                        max_size=iter_stats_max_size,
+                        enabled=bool(per_rhs_loop_policy.iter_stats_enabled),
+                        max_size=per_rhs_loop_policy.iter_stats_max_size,
                     )
             else:
                 mv = _get_full_matvec(op_matvec)
@@ -38529,7 +38485,7 @@ def solve_v3_transport_matrix_linear_gmres(
                         dense_batch_done = True
                         break
                 x_full = res.x
-                projection_needed = _projection_needed(which_rhs)
+                projection_needed = per_rhs_loop_policy.projection_needed(which_rhs)
                 if projection_needed:
                     x_full = _maybe_project_constraint_nullspace(
                         x_full, which_rhs=int(which_rhs), op_matvec=op_matvec, rhs_vec=rhs
@@ -38563,8 +38519,8 @@ def solve_v3_transport_matrix_linear_gmres(
                         precond_side=transport_precondition_side,
                         solver_kind=solver_kind_used,
                         emit=emit,
-                        enabled=bool(iter_stats_enabled),
-                        max_size=iter_stats_max_size,
+                        enabled=bool(per_rhs_loop_policy.iter_stats_enabled),
+                        max_size=per_rhs_loop_policy.iter_stats_max_size,
                     )
             transport_loop_progress.finish_rhs(
                 which_rhs=int(which_rhs),

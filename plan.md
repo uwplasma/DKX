@@ -286,6 +286,16 @@ Current branch status:
   35.59 s``. Strict docs, lint, repo-size, diff-check, and the full local suite
   passed with ``2637 passed in 533.76 s``. ``v3_driver.py`` is now ``38,621``
   lines.
+- The next transport policy extraction moved RHSMode=2/3 per-``whichRHS`` loop
+  decisions into ``TransportPerRHSLoopPolicy`` in ``transport_solve_policy.py``:
+  E_parallel loose/Krylov routing, constraint-nullspace projection admission,
+  iteration-stat settings, and dense-batch fallback admission are now pure policy
+  tests instead of inline driver environment parsing. Focused policy/loop tests
+  passed with ``22 passed in 1.05 s``; the RHSMode=2/3 transport regression
+  slice passed with ``59 passed in 7.00 s``; and the broader transport/parallel
+  support slice passed with ``180 passed in 35.80 s``. Strict docs, lint,
+  repo-size, diff-check, and the full local suite passed with ``2641 passed in
+  539.35 s``. ``v3_driver.py`` is now ``38,577`` lines.
 - Next PR-level moves should split high-level RHSMode=1 solve orchestration
   into ``rhs1_solve.py`` and RHSMode=2/3 orchestration into
   ``transport_solve.py`` after the focused module extractions are green.

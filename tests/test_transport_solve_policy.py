@@ -9,16 +9,29 @@ from sfincs_jax.transport_solve_policy import (
     resolve_transport_active_dof_mode,
     resolve_transport_dense_policy,
     resolve_transport_initial_solve_policy,
+    resolve_transport_per_rhs_loop_policy,
     transport_geometry5_mono_low_memory_preferred,
     transport_geometry_scheme_from_namelist,
 )
 
 
-def _op(*, rhs_mode: int = 2, n_xi: int = 4, nxi_for_x=(4, 2), total_size: int = 40):
+def _op(
+    *,
+    rhs_mode: int = 2,
+    n_xi: int = 4,
+    nxi_for_x=(4, 2),
+    total_size: int = 40,
+    constraint_scheme: int = 1,
+    phi1_size: int = 0,
+    extra_size: int = 2,
+):
     return SimpleNamespace(
         rhs_mode=rhs_mode,
         n_xi=n_xi,
         total_size=total_size,
+        constraint_scheme=constraint_scheme,
+        phi1_size=phi1_size,
+        extra_size=extra_size,
         n_x=1,
         fblock=SimpleNamespace(
             collisionless=SimpleNamespace(n_xi_for_x=np.asarray(nxi_for_x, dtype=np.int32)),
@@ -51,6 +64,12 @@ def _clear_initial_policy_env(monkeypatch) -> None:
         "SFINCS_JAX_TRANSPORT_GEOM5_MONO_LOW_MEMORY",
         "SFINCS_JAX_TRANSPORT_GEOM5_MONO_LOW_MEMORY_MIN",
         "SFINCS_JAX_TRANSPORT_GEOM5_MONO_LOW_MEMORY_MAX",
+        "SFINCS_JAX_TRANSPORT_EPAR_LOOSE",
+        "SFINCS_JAX_TRANSPORT_EPAR_KRYLOV",
+        "SFINCS_JAX_TRANSPORT_PROJECT_NULLSPACE",
+        "SFINCS_JAX_SOLVER_ITER_STATS",
+        "SFINCS_JAX_SOLVER_ITER_STATS_MAX_SIZE",
+        "SFINCS_JAX_TRANSPORT_DENSE_BATCH_FALLBACK",
     ):
         monkeypatch.delenv(name, raising=False)
 
@@ -257,6 +276,70 @@ def test_resolve_transport_dense_policy_handles_memory_caps_and_auto_dense(monke
     assert capped.solve_method_use == "incremental"
     assert not capped.force_dense
     assert not capped.dense_fallback
+
+
+def test_resolve_transport_per_rhs_loop_policy_defaults_and_projection(monkeypatch) -> None:
+    _clear_initial_policy_env(monkeypatch)
+    policy = resolve_transport_per_rhs_loop_policy(op=_op(), rhs_mode=2)
+
+    assert policy.rhs3_krylov_flags(3) == (False, False)
+    assert policy.projection_candidate(3)
+    assert not policy.projection_candidate(2)
+    assert policy.projection_needed(3)
+    assert not policy.projection_needed(2)
+    assert not policy.iter_stats_enabled
+    assert policy.iter_stats_max_size is None
+    assert policy.dense_batch_fallback_enabled
+
+
+def test_resolve_transport_per_rhs_loop_policy_env_overrides(monkeypatch) -> None:
+    _clear_initial_policy_env(monkeypatch)
+    monkeypatch.setenv("SFINCS_JAX_TRANSPORT_EPAR_LOOSE", "1")
+    monkeypatch.setenv("SFINCS_JAX_TRANSPORT_EPAR_KRYLOV", "true")
+    monkeypatch.setenv("SFINCS_JAX_TRANSPORT_PROJECT_NULLSPACE", "0")
+    monkeypatch.setenv("SFINCS_JAX_SOLVER_ITER_STATS", "yes")
+    monkeypatch.setenv("SFINCS_JAX_SOLVER_ITER_STATS_MAX_SIZE", "17")
+    monkeypatch.setenv("SFINCS_JAX_TRANSPORT_DENSE_BATCH_FALLBACK", "off")
+
+    policy = resolve_transport_per_rhs_loop_policy(op=_op(), rhs_mode=2)
+
+    assert policy.rhs3_krylov_flags(3) == (True, True)
+    assert policy.rhs3_krylov_flags(2) == (False, False)
+    assert policy.projection_candidate(3)
+    assert not policy.projection_needed(3)
+    assert policy.iter_stats_enabled
+    assert policy.iter_stats_max_size == 17
+    assert not policy.dense_batch_fallback_enabled
+
+
+def test_resolve_transport_per_rhs_loop_policy_invalid_iter_limit_and_rhs3_projection(monkeypatch) -> None:
+    _clear_initial_policy_env(monkeypatch)
+    monkeypatch.setenv("SFINCS_JAX_SOLVER_ITER_STATS_MAX_SIZE", "not-an-int")
+
+    policy = resolve_transport_per_rhs_loop_policy(op=_op(constraint_scheme=1, phi1_size=0, extra_size=4), rhs_mode=3)
+
+    assert policy.iter_stats_max_size is None
+    assert policy.projection_candidate(2)
+    assert policy.projection_needed(2)
+    assert not policy.projection_candidate(3)
+    assert policy.rhs3_krylov_flags(3) == (False, False)
+
+
+def test_resolve_transport_per_rhs_loop_policy_requires_constraint_source_rows(monkeypatch) -> None:
+    _clear_initial_policy_env(monkeypatch)
+
+    assert not resolve_transport_per_rhs_loop_policy(
+        op=_op(constraint_scheme=0, phi1_size=0, extra_size=2),
+        rhs_mode=2,
+    ).projection_needed(3)
+    assert not resolve_transport_per_rhs_loop_policy(
+        op=_op(constraint_scheme=1, phi1_size=2, extra_size=2),
+        rhs_mode=2,
+    ).projection_needed(3)
+    assert not resolve_transport_per_rhs_loop_policy(
+        op=_op(constraint_scheme=1, phi1_size=0, extra_size=0),
+        rhs_mode=2,
+    ).projection_needed(3)
 
 
 def test_geometry5_mono_low_memory_policy_is_guarded(monkeypatch) -> None:

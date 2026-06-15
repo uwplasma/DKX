@@ -229,10 +229,15 @@ Unreleased
   summaries, applies configured residual abort gates, and reports remaining-time
   estimates through ``TransportLoopProgress`` instead of carrying mutable
   progress state inline.
+- Moved the RHSMode=2/3 per-``whichRHS`` loop policy into
+  ``transport_solve_policy.py``. The driver now delegates E_parallel loose/Krylov
+  routing, constraint-nullspace projection admission, optional KSP iteration-stat
+  settings, and dense-batch fallback admission to a focused policy object before
+  entering the sequential solve branches.
 - The post-extraction strict docs build passed, the repo-size audit now has no
   reviewed files above 2 MiB after ``v3_driver.py`` dropped below the threshold,
-  and the latest local full suite after the RHSMode=2/3 transport-loop progress
-  extraction passed with ``2637 passed in 533.76 s``.
+  and the latest local full suite after the RHSMode=2/3 per-RHS loop-policy
+  extraction passed with ``2641 passed in 539.35 s``.
 
 v1.1.7
 ------

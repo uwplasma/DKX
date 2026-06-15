@@ -74,6 +74,37 @@ class TransportInitialSolvePolicy:
     notes: tuple[tuple[int, str], ...] = ()
 
 
+@dataclass(frozen=True)
+class TransportPerRHSLoopPolicy:
+    """Per-``whichRHS`` transport solve-loop decisions parsed from environment."""
+
+    rhs_mode: int
+    constraint_scheme: int
+    phi1_size: int
+    extra_size: int
+    epar_loose_enabled: bool
+    epar_krylov_enabled: bool
+    project_nullspace_enabled: bool
+    iter_stats_enabled: bool
+    iter_stats_max_size: int | None
+    dense_batch_fallback_enabled: bool
+
+    def rhs3_krylov_flags(self, which_rhs: int) -> tuple[bool, bool]:
+        """Return ``(use_loose_tol, force_krylov)`` for the E_parallel RHS."""
+        is_epar_rhs = int(self.rhs_mode) == 2 and int(which_rhs) == 3 and int(self.constraint_scheme) == 1
+        return bool(self.epar_loose_enabled and is_epar_rhs), bool(self.epar_krylov_enabled and is_epar_rhs)
+
+    def projection_candidate(self, which_rhs: int) -> bool:
+        """Return whether this RHS is one of the transport constraint-nullspace RHSs."""
+        return (int(self.rhs_mode) == 2 and int(which_rhs) == 3) or (
+            int(self.rhs_mode) == 3 and int(which_rhs) == 2
+        )
+
+    def projection_needed(self, which_rhs: int) -> bool:
+        """Return whether nullspace projection is enabled and relevant for this RHS."""
+        return bool(self.project_nullspace_enabled and self.projection_candidate(which_rhs))
+
+
 def transport_geometry_scheme_from_namelist(nml: Any) -> int:
     """Return ``geometryScheme`` from a namelist-like object, or ``-1``."""
     geom_params = nml.group("geometryParameters")
@@ -90,6 +121,46 @@ def _transport_bool_env(name: str) -> bool | None:
     if value in {"0", "false", "no", "off"}:
         return False
     return None
+
+
+def _transport_true_env(name: str) -> bool:
+    return os.environ.get(name, "").strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _transport_disabled_env(name: str) -> bool:
+    return os.environ.get(name, "").strip().lower() in {"0", "false", "no", "off"}
+
+
+def _transport_optional_int_env(name: str) -> int | None:
+    value = os.environ.get(name, "").strip()
+    if not value:
+        return None
+    try:
+        return int(value)
+    except ValueError:
+        return None
+
+
+def resolve_transport_per_rhs_loop_policy(*, op: Any, rhs_mode: int) -> TransportPerRHSLoopPolicy:
+    """Resolve branch-local RHSMode=2/3 loop policy before the ``whichRHS`` loop."""
+    project_nullspace_enabled = (
+        int(op.constraint_scheme) == 1
+        and int(op.phi1_size) == 0
+        and int(op.extra_size) > 0
+        and not _transport_disabled_env("SFINCS_JAX_TRANSPORT_PROJECT_NULLSPACE")
+    )
+    return TransportPerRHSLoopPolicy(
+        rhs_mode=int(rhs_mode),
+        constraint_scheme=int(op.constraint_scheme),
+        phi1_size=int(op.phi1_size),
+        extra_size=int(op.extra_size),
+        epar_loose_enabled=_transport_true_env("SFINCS_JAX_TRANSPORT_EPAR_LOOSE"),
+        epar_krylov_enabled=_transport_true_env("SFINCS_JAX_TRANSPORT_EPAR_KRYLOV"),
+        project_nullspace_enabled=bool(project_nullspace_enabled),
+        iter_stats_enabled=_transport_true_env("SFINCS_JAX_SOLVER_ITER_STATS"),
+        iter_stats_max_size=_transport_optional_int_env("SFINCS_JAX_SOLVER_ITER_STATS_MAX_SIZE"),
+        dense_batch_fallback_enabled=not _transport_disabled_env("SFINCS_JAX_TRANSPORT_DENSE_BATCH_FALLBACK"),
+    )
 
 
 def resolve_transport_initial_solve_policy(
@@ -524,10 +595,12 @@ __all__ = [
     "TransportActiveDOFState",
     "TransportDensePolicy",
     "TransportInitialSolvePolicy",
+    "TransportPerRHSLoopPolicy",
     "build_transport_active_dof_state",
     "resolve_transport_active_dof_mode",
     "resolve_transport_dense_policy",
     "resolve_transport_initial_solve_policy",
+    "resolve_transport_per_rhs_loop_policy",
     "transport_geometry5_mono_low_memory_preferred",
     "transport_geometry_scheme_from_namelist",
 ]
