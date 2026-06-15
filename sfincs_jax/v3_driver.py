@@ -377,6 +377,12 @@ from .transport_solve_policy import (
     resolve_transport_per_rhs_loop_policy,
     transport_geometry_scheme_from_namelist,
 )
+from .transport_solve_setup import (
+    resolve_transport_maxiter_setup,
+    resolve_transport_parallel_request,
+    resolve_transport_state_setup,
+    resolve_transport_which_rhs_setup,
+)
 from .transport_handoff_policy import (
     transport_candidate_is_better,
     transport_polish_config_from_env,
@@ -36783,19 +36789,11 @@ def solve_v3_transport_matrix_linear_gmres(
     """
     t_all = Timer()
 
-    maxiter_env = os.environ.get("SFINCS_JAX_TRANSPORT_MAXITER", "").strip()
-    if maxiter_env:
-        try:
-            maxiter = max(1, int(maxiter_env))
-            if emit is not None:
-                emit(1, f"solve_v3_transport_matrix_linear_gmres: maxiter override={int(maxiter)}")
-        except ValueError:
-            if emit is not None:
-                emit(
-                    1,
-                    "solve_v3_transport_matrix_linear_gmres: ignoring invalid "
-                    f"SFINCS_JAX_TRANSPORT_MAXITER={maxiter_env!r}",
-                )
+    maxiter_setup = resolve_transport_maxiter_setup(maxiter)
+    maxiter = maxiter_setup.maxiter
+    if emit is not None:
+        for level, message in maxiter_setup.notes:
+            emit(int(level), message)
 
     if emit is not None:
         emit(0, "solve_v3_transport_matrix_linear_gmres: starting whichRHS loop")
@@ -36807,59 +36805,27 @@ def solve_v3_transport_matrix_linear_gmres(
         include_phi1=bool(op0.include_phi1),
         rhs_mode=int(op0.rhs_mode),
     )
-    state_in_env = os.environ.get("SFINCS_JAX_STATE_IN", "").strip()
-    state_out_env = os.environ.get("SFINCS_JAX_STATE_OUT", "").strip()
-    state_x_by_rhs: dict[int, jnp.ndarray] | None = None
-    if state_in_env:
-        try:
-            from .solver_state import load_krylov_state  # noqa: PLC0415
-
-            state = load_krylov_state(path=state_in_env, op=op0)
-        except Exception:
-            state = None
-        if state:
-            state_x_by_rhs = state.get("x_by_rhs")
-            if x0_by_rhs is None:
-                x0_by_rhs = state_x_by_rhs
-            if x0 is None:
-                x0 = state.get("x_full")
-    rhs_mode = int(op0.rhs_mode)
-    n = transport_matrix_size_from_rhs_mode(rhs_mode)
-    if which_rhs_values is None:
-        which_rhs_values = list(range(1, n + 1))
-    else:
-        which_rhs_values = [int(v) for v in which_rhs_values]
-        which_rhs_values = [v for v in which_rhs_values if 1 <= v <= n]
-        which_rhs_values = sorted(set(which_rhs_values))
-    subset_mode = len(which_rhs_values) < n
-    parallel_child = os.environ.get("SFINCS_JAX_TRANSPORT_PARALLEL_CHILD", "").strip().lower() in {"1", "true", "yes", "on"}
-    parallel_env = os.environ.get("SFINCS_JAX_TRANSPORT_PARALLEL", "").strip().lower()
-    if parallel_workers is None:
-        workers_env = os.environ.get("SFINCS_JAX_TRANSPORT_PARALLEL_WORKERS", "").strip()
-        try:
-            workers_val = int(workers_env) if workers_env else 0
-        except ValueError:
-            workers_val = 0
-        if parallel_env in {"", "0", "false", "no", "off"}:
-            parallel_workers = 1
-        elif parallel_env in {"process", "auto", "1", "true", "yes", "on"}:
-            if workers_val > 0:
-                parallel_workers = workers_val
-            else:
-                cpu_count = os.cpu_count() or 1
-                parallel_workers = min(cpu_count, n) if n > 1 else 1
-        else:
-            parallel_workers = 1
-    else:
-        parallel_workers = max(1, int(parallel_workers))
-    if parallel_workers > 1:
-        parallel_workers = min(int(parallel_workers), len(which_rhs_values))
-    parallel_backend = _transport_parallel_backend()
-    if parallel_backend == "gpu" and parallel_workers > 1:
-        visible_gpu_ids = _transport_parallel_visible_gpu_ids(parallel_workers)
-        parallel_workers = min(int(parallel_workers), len(visible_gpu_ids))
-        if parallel_workers <= 1:
-            parallel_backend = "cpu"
+    state_setup = resolve_transport_state_setup(op=op0, x0=x0, x0_by_rhs=x0_by_rhs)
+    state_in_env = state_setup.state_in_path
+    state_out_env = state_setup.state_out_path
+    x0 = state_setup.x0
+    x0_by_rhs = state_setup.x0_by_rhs
+    state_x_by_rhs = state_setup.state_x_by_rhs
+    rhs_setup = resolve_transport_which_rhs_setup(rhs_mode=int(op0.rhs_mode), which_rhs_values=which_rhs_values)
+    rhs_mode = int(rhs_setup.rhs_mode)
+    n = int(rhs_setup.n_rhs)
+    which_rhs_values = rhs_setup.which_rhs_values
+    subset_mode = bool(rhs_setup.subset_mode)
+    parallel_request = resolve_transport_parallel_request(
+        which_rhs_count=len(which_rhs_values),
+        n_rhs=int(n),
+        parallel_workers=parallel_workers,
+        parallel_backend=_transport_parallel_backend(),
+        visible_gpu_ids=_transport_parallel_visible_gpu_ids,
+    )
+    parallel_child = bool(parallel_request.parallel_child)
+    parallel_workers = int(parallel_request.parallel_workers)
+    parallel_backend = str(parallel_request.parallel_backend)
 
     parallel_result = maybe_run_transport_parallel_solve(
         nml=nml,

@@ -771,6 +771,12 @@ the historical private driver name and test the focused module directly. This ke
   the per-``whichRHS`` loop policy for E_parallel loose/Krylov routing,
   constraint-nullspace projection admission, KSP iteration-stat settings, and
   dense-batch fallback admission.
+- ``sfincs_jax/transport_solve_setup.py``:
+  side-effect-light RHSMode=2/3 setup resolution for transport max-iteration
+  overrides, optional Krylov state-file loading/merging, ``whichRHS`` subset
+  normalization, and CPU/GPU process-parallel worker requests. The driver emits
+  the returned notes and keeps solve orchestration, while these pure setup rules
+  are covered by direct unit tests.
 - ``sfincs_jax/transport_sparse_direct_solve.py``:
   RHSMode=2/3 sparse-direct rescue implementation. It owns sparse-pattern
   admission/caching, direct active FP operator factor reuse, explicit sparse

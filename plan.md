@@ -320,6 +320,16 @@ Current branch status:
   passed with ``281 passed in 24.24 s``. Strict docs, lint, repo-size, and
   diff-check passed; and the full local suite passed with ``2650 passed in
   532.10 s``. ``v3_driver.py`` is now ``38,486`` lines.
+- The next RHSMode=2/3 orchestration extraction moved transport entry setup
+  into ``transport_solve_setup.py``. The driver now delegates
+  ``SFINCS_JAX_TRANSPORT_MAXITER`` parsing, optional Krylov state checkpoint
+  loading/merging, ``whichRHS`` subset normalization, CPU process-worker
+  defaults and caps, GPU visible-device caps, and child-worker recursion flags
+  to a focused helper. Compile/lint and focused setup/policy/parallel
+  validation passed with ``40 passed in 0.69 s``; the broader
+  transport/parallel slice passed with ``287 passed in 27.33 s``; strict docs,
+  repo-size, and diff-check passed; and the full local suite passed with
+  ``2656 passed in 556.33 s``. ``v3_driver.py`` is now ``38,452`` lines.
 - Next PR-level moves should split high-level RHSMode=1 solve orchestration
   into ``rhs1_solve.py`` and RHSMode=2/3 orchestration into
   ``transport_solve.py`` after the focused module extractions are green.

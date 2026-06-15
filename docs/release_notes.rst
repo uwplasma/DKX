@@ -245,10 +245,15 @@ Unreleased
   historical private driver helper names as compatibility aliases, while direct
   tests now cover no-op admission, environment disablement, transport roundoff
   skip behavior, source-row residual reduction, and the driver alias contract.
+- Extracted RHSMode=2/3 entry setup into ``transport_solve_setup.py``. The
+  driver now delegates transport max-iteration environment overrides, optional
+  Krylov state checkpoint loading, ``whichRHS`` subset normalization, and
+  CPU/GPU process-parallel worker request resolution to focused helpers with
+  direct unit coverage.
 - The post-extraction strict docs build passed, the repo-size audit now has no
   reviewed files above 2 MiB after ``v3_driver.py`` dropped below the threshold,
-  and the latest local full suite after the constraint-projection extraction
-  passed with ``2650 passed in 532.10 s``.
+  and the latest local full suite after the transport setup extraction passed
+  with ``2656 passed in 556.33 s``.
 
 v1.1.7
 ------
