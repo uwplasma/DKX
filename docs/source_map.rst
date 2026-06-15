@@ -197,6 +197,12 @@ the historical private driver name and test the focused module directly. This ke
   coarse-basis columns used by symbolic Schur corrections. The module owns the
   sparse matrix assembly; ``v3_driver.py`` still owns admission, factor choice,
   fallback ordering, and solver orchestration.
+- ``sfincs_jax/transport_direct_block_schur.py``:
+  bounded-memory direct active block-Schur preconditioner setup for RHSMode=2/3
+  full-FP transport. It owns environment parsing, setup-time true-residual
+  admission, residual-coarse rescue, cache storage, and host callback
+  application, while the driver injects the current fallback preconditioner and
+  cache-key policy.
 - ``sfincs_jax/preconditioner_setup.py``:
   shared setup utilities for preconditioner construction: memory-bounded
   basis-column chunking, selected-row/selected-column matrix-free submatrix

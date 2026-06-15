@@ -206,6 +206,14 @@ Current branch status:
   transport/preconditioner regression passed with
   ``41 passed, 21 deselected in 13.17 s``; strict docs passed; and the full
   local suite passed with ``2622 passed in 545.10 s``.
+- The next local extraction moved the RHSMode=2/3 direct active block-Schur
+  full-FP transport preconditioner into ``transport_direct_block_schur.py``.
+  ``v3_driver.py`` now keeps only an injection wrapper for the current fallback
+  preconditioner and transport cache-key policy. Focused direct-active tests
+  passed with ``4 passed, 25 deselected in 4.26 s``; broader
+  transport/preconditioner regression passed with
+  ``41 passed, 21 deselected in 13.70 s``; strict docs passed; and the full
+  local suite passed with ``2622 passed in 542.15 s``.
 - Next PR-level moves should split high-level RHSMode=1 solve orchestration
   into ``rhs1_solve.py`` and RHSMode=2/3 orchestration into
   ``transport_solve.py`` after the focused module extractions are green.

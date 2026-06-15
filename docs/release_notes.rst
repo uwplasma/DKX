@@ -179,9 +179,15 @@ Unreleased
   admission/factor/fallback orchestration; focused tests verify the emitted CSR
   matrices against the matrix-free active operator and verify the physics
   coarse-basis source/constraint columns.
+- Extracted the RHSMode=2/3 direct active block-Schur full-FP transport
+  preconditioner into ``transport_direct_block_schur.py``. The driver keeps a
+  thin compatibility wrapper only to inject the current fallback
+  preconditioner and cache-key policy; setup admission, residual-coarse rescue,
+  cache storage, and host callback application now live with the direct
+  transport factor path.
 - The post-extraction strict docs build passed, and the latest local full suite
-  after the direct-``Pmat`` extraction passed with
-  ``2622 passed in 545.10 s``.
+  after the direct block-Schur extraction passed with
+  ``2622 passed in 542.15 s``.
 
 v1.1.7
 ------
