@@ -250,10 +250,15 @@ Unreleased
   Krylov state checkpoint loading, ``whichRHS`` subset normalization, and
   CPU/GPU process-parallel worker request resolution to focused helpers with
   direct unit coverage.
+- Extracted RHSMode=2/3 active-DOF and dense-path setup into
+  ``transport_active_dense_setup.py``. The helper now owns the initial
+  output/restart policy, active-index compaction state, dense fallback and dense
+  preconditioner admission, and ordered user-facing notes before preconditioner
+  setup and the transport loop.
 - The post-extraction strict docs build passed, the repo-size audit now has no
   reviewed files above 2 MiB after ``v3_driver.py`` dropped below the threshold,
-  and the latest local full suite after the transport setup extraction passed
-  with ``2656 passed in 556.33 s``.
+  and the latest local full suite after the active/dense setup extraction passed
+  with ``2659 passed in 551.86 s``.
 
 v1.1.7
 ------

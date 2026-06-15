@@ -439,6 +439,10 @@ that now sits between high-level solve entry and the transport loop:
 ``whichRHS`` subset normalization, CPU worker-count defaults, explicit worker
 caps, GPU worker capping, and child-worker recursion flags are checked without
 launching transport solves.
+``tests/test_transport_active_dense_setup.py`` covers the combined active-DOF
+and dense-path resolver used by RHSMode=2/3: active-index compaction,
+auto-dense re-selection on the compacted system, disabled-active hints, and
+dense-preconditioner memory guard messages are tested as pure setup behavior.
 ``tests/test_transport_loop_support.py`` covers the sequential transport-loop
 infrastructure that is now outside ``v3_driver.py``: cached full and active-DOF
 matvec closures, operator-variation recycle admission, stored-state recycle seeding,
