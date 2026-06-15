@@ -4,12 +4,15 @@ from __future__ import annotations
 
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
+import math
 import os
 from typing import Any
 
 import jax.numpy as jnp
 
 from .linear_algebra import small_regularized_lstsq
+from .solver_progress import transport_progress_message
+from .transport_residual_quality import transport_residual_gate_failure
 from .v3_system import _operator_signature_cached, apply_v3_full_system_operator_cached
 
 
@@ -183,6 +186,79 @@ class TransportRecycleState:
             self.reduced_basis_au = self.reduced_basis_au[-k:]
 
 
+@dataclass
+class TransportLoopProgress:
+    """Residual-gate and ETA bookkeeping for sequential transport RHS solves."""
+
+    which_rhs_values: Sequence[int]
+    rhs_norms: Mapping[int, Any]
+    residual_norms: Mapping[int, Any]
+    elapsed_s: Any
+    abort_max_residual: float
+    abort_max_relative_residual: float
+    emit: EmitFn | None = None
+    progress_message: Callable[..., str] = transport_progress_message
+    residual_gate_failure: Callable[..., str | None] = transport_residual_gate_failure
+    elapsed_history: list[float] = field(default_factory=list)
+
+    def relative_residual(self, which_rhs: int) -> float:
+        """Return the RHS-normalized residual for one completed transport drive."""
+        rhs_norm_val = float(self.rhs_norms[int(which_rhs)])
+        residual_norm_val = float(self.residual_norms[int(which_rhs)])
+        if math.isfinite(rhs_norm_val) and rhs_norm_val > 0.0:
+            return residual_norm_val / rhs_norm_val
+        return float("nan")
+
+    def residual_failure(self, which_rhs: int) -> str | None:
+        """Return the configured residual-gate failure string, if any."""
+        if self.abort_max_residual <= 0.0 and self.abort_max_relative_residual <= 0.0:
+            return None
+        return self.residual_gate_failure(
+            which_rhs=int(which_rhs),
+            residual_norm=float(self.residual_norms[int(which_rhs)]),
+            rhs_norm=float(self.rhs_norms[int(which_rhs)]),
+            max_abs=float(self.abort_max_residual),
+            max_relative=float(self.abort_max_relative_residual),
+        )
+
+    def finish_rhs(self, *, which_rhs: int, rhs_elapsed_s: float, total_elapsed_s: float) -> None:
+        """Record, gate, and report one completed sequential transport RHS solve."""
+        which_rhs_i = int(which_rhs)
+        elapsed = float(rhs_elapsed_s)
+        if self.emit is not None:
+            rhs_norm_val = float(self.rhs_norms[which_rhs_i])
+            residual_norm_val = float(self.residual_norms[which_rhs_i])
+            self.emit(
+                0,
+                f"whichRHS={which_rhs_i}: residual_norm={residual_norm_val:.6e} "
+                f"rhs_norm={rhs_norm_val:.6e} relative_residual={self.relative_residual(which_rhs_i):.6e} "
+                f"elapsed_s={elapsed:.3f}",
+            )
+        self.elapsed_s[which_rhs_i - 1] = elapsed
+        failure = self.residual_failure(which_rhs_i)
+        if failure is not None:
+            if self.emit is not None:
+                self.emit(
+                    1,
+                    "solve_v3_transport_matrix_linear_gmres: transport residual gate failed; "
+                    f"aborting remaining whichRHS solves ({failure})",
+                )
+            raise RuntimeError(f"transport residual gate failed: {failure}")
+        self.elapsed_history.append(elapsed)
+        if self.emit is not None:
+            completed_rhs = len(self.elapsed_history)
+            avg_rhs_s = float(sum(self.elapsed_history) / max(1, completed_rhs))
+            self.emit(
+                0,
+                self.progress_message(
+                    completed=completed_rhs,
+                    total=len(self.which_rhs_values),
+                    avg_rhs_s=avg_rhs_s,
+                    elapsed_s=float(total_elapsed_s),
+                ),
+            )
+
+
 def resolve_transport_recycle_k(
     *,
     op: Any,
@@ -223,6 +299,7 @@ def resolve_transport_recycle_k(
 
 
 __all__ = [
+    "TransportLoopProgress",
     "TransportMatvecCache",
     "TransportRecycleState",
     "recycled_transport_initial_guess",

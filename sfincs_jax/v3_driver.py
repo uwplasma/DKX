@@ -396,6 +396,7 @@ from .transport_linear_solve import (
     transport_solver_kind as _transport_solver_kind,
 )
 from .transport_loop_support import (
+    TransportLoopProgress,
     TransportMatvecCache,
     TransportRecycleState,
     resolve_transport_recycle_k,
@@ -421,10 +422,7 @@ from .transport_parallel_runtime import (
     run_transport_parallel_gpu_subprocesses as _run_transport_parallel_gpu_subprocesses_impl,
 )
 from .transport_parallel_solve import TransportParallelSolveRuntime, maybe_run_transport_parallel_solve
-from .transport_residual_quality import (
-    transport_residual_gate_failure,
-    transport_residual_gate_thresholds_from_env,
-)
+from .transport_residual_quality import transport_residual_gate_thresholds_from_env
 from .transport_parallel_pool import TransportParallelPoolCache
 from .solve_mode_policy import resolve_use_implicit as _resolve_use_implicit_impl
 from .phi1_newton_policy import (
@@ -441,7 +439,6 @@ from .phi1_line_search import advance_phi1_newton_iterate
 from .solver_progress import (
     RHS1ProgressNotes,
     rhs1_large_progress_enabled,
-    transport_progress_message,
 )
 from .transport_matrix import (
     _flux_functions_from_op,
@@ -37453,7 +37450,6 @@ def solve_v3_transport_matrix_linear_gmres(
     solver_kinds_by_rhs: dict[int, str] = {}
     solve_methods_by_rhs: dict[int, str] = {}
     elapsed_s = np.zeros((n,), dtype=np.float64)
-    elapsed_history_transport: list[float] = []
     op_rhs_by_index = [with_transport_rhs_settings(op0, which_rhs=which_rhs) for which_rhs in which_rhs_values]
     rhs_by_index = [rhs_v3_full_system_jit(op_rhs) for op_rhs in op_rhs_by_index]
     rhs_norms: dict[int, jnp.ndarray] = {
@@ -37461,17 +37457,15 @@ def solve_v3_transport_matrix_linear_gmres(
         for idx, which_rhs in enumerate(which_rhs_values)
     }
     abort_max_residual, abort_max_relative_residual = transport_residual_gate_thresholds_from_env()
-
-    def _transport_abort_failure(which_rhs: int) -> str | None:
-        if abort_max_residual <= 0.0 and abort_max_relative_residual <= 0.0:
-            return None
-        return transport_residual_gate_failure(
-            which_rhs=int(which_rhs),
-            residual_norm=float(residual_norms[int(which_rhs)]),
-            rhs_norm=float(rhs_norms[int(which_rhs)]),
-            max_abs=float(abort_max_residual),
-            max_relative=float(abort_max_relative_residual),
-        )
+    transport_loop_progress = TransportLoopProgress(
+        which_rhs_values=which_rhs_values,
+        rhs_norms=rhs_norms,
+        residual_norms=residual_norms,
+        elapsed_s=elapsed_s,
+        abort_max_residual=float(abort_max_residual),
+        abort_max_relative_residual=float(abort_max_relative_residual),
+        emit=emit,
+    )
 
     use_op_rhs_in_matvec = bool(op0.include_phi1_in_kinetic)
     env_transport_matvec = os.environ.get("SFINCS_JAX_TRANSPORT_MATVEC_MODE", "").strip().lower()
@@ -38572,43 +38566,11 @@ def solve_v3_transport_matrix_linear_gmres(
                         enabled=bool(iter_stats_enabled),
                         max_size=iter_stats_max_size,
                     )
-            if emit is not None:
-                rhs_norm_val = float(rhs_norms[int(which_rhs)])
-                residual_norm_val = float(residual_norms[which_rhs])
-                relative_residual_val = (
-                    residual_norm_val / rhs_norm_val
-                    if np.isfinite(rhs_norm_val) and rhs_norm_val > 0.0
-                    else float("nan")
-                )
-                emit(
-                    0,
-                    f"whichRHS={which_rhs}: residual_norm={residual_norm_val:.6e} "
-                    f"rhs_norm={rhs_norm_val:.6e} relative_residual={relative_residual_val:.6e} "
-                    f"elapsed_s={t_rhs.elapsed_s():.3f}",
-                )
-            elapsed_s[int(which_rhs) - 1] = float(t_rhs.elapsed_s())
-            residual_gate_failure = _transport_abort_failure(int(which_rhs))
-            if residual_gate_failure is not None:
-                if emit is not None:
-                    emit(
-                        1,
-                        "solve_v3_transport_matrix_linear_gmres: transport residual gate failed; "
-                        f"aborting remaining whichRHS solves ({residual_gate_failure})",
-                    )
-                raise RuntimeError(f"transport residual gate failed: {residual_gate_failure}")
-            elapsed_history_transport.append(float(t_rhs.elapsed_s()))
-            if emit is not None:
-                completed_rhs = len(elapsed_history_transport)
-                avg_rhs_s = float(sum(elapsed_history_transport) / max(1, completed_rhs))
-                emit(
-                    0,
-                    transport_progress_message(
-                        completed=completed_rhs,
-                        total=len(which_rhs_values),
-                        avg_rhs_s=avg_rhs_s,
-                        elapsed_s=t_all.elapsed_s(),
-                    ),
-                )
+            transport_loop_progress.finish_rhs(
+                which_rhs=int(which_rhs),
+                rhs_elapsed_s=float(t_rhs.elapsed_s()),
+                total_elapsed_s=float(t_all.elapsed_s()),
+            )
 
     if emit is not None:
         emit(0, "solve_v3_transport_matrix_linear_gmres: computing whichRHS diagnostics (batched)")

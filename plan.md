@@ -276,6 +276,16 @@ Current branch status:
   transport/parallel support slice passed with ``180 passed in 37.04 s``;
   strict docs and the repo-size audit passed; and the full local suite passed
   with ``2635 passed in 534.44 s``. ``v3_driver.py`` is now ``38,659`` lines.
+- The follow-on loop-support extraction moved sequential RHSMode=2/3
+  post-``whichRHS`` completion bookkeeping into ``TransportLoopProgress``:
+  residual summary emission, elapsed-time recording, residual abort gates, and
+  ETA progress messages are now directly unit-tested outside ``v3_driver.py``.
+  Direct loop-support and docstring tests passed with ``9 passed in 1.10 s``;
+  the transport regression slice passed with ``46 passed in 17.48 s``; and the
+  broader transport/parallel support slice passed with ``180 passed in
+  35.59 s``. Strict docs, lint, repo-size, diff-check, and the full local suite
+  passed with ``2637 passed in 533.76 s``. ``v3_driver.py`` is now ``38,621``
+  lines.
 - Next PR-level moves should split high-level RHSMode=1 solve orchestration
   into ``rhs1_solve.py`` and RHSMode=2/3 orchestration into
   ``transport_solve.py`` after the focused module extractions are green.

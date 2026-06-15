@@ -4,8 +4,10 @@ from types import SimpleNamespace
 
 import jax.numpy as jnp
 import numpy as np
+import pytest
 
 from sfincs_jax.transport_loop_support import (
+    TransportLoopProgress,
     TransportMatvecCache,
     TransportRecycleState,
     recycled_transport_initial_guess,
@@ -144,3 +146,46 @@ def test_resolve_transport_recycle_k_respects_env_and_operator_variation(monkeyp
         == 0
     )
     assert any("auto recycle disabled" in message for _, message in messages)
+
+
+def test_transport_loop_progress_records_elapsed_and_emits_eta() -> None:
+    messages: list[tuple[int, str]] = []
+    elapsed_s = np.zeros((2,), dtype=np.float64)
+    progress = TransportLoopProgress(
+        which_rhs_values=[1, 2],
+        rhs_norms={1: jnp.asarray(10.0), 2: jnp.asarray(5.0)},
+        residual_norms={1: jnp.asarray(0.25), 2: jnp.asarray(0.1)},
+        elapsed_s=elapsed_s,
+        abort_max_residual=0.0,
+        abort_max_relative_residual=0.0,
+        emit=lambda level, message: messages.append((int(level), str(message))),
+    )
+
+    progress.finish_rhs(which_rhs=1, rhs_elapsed_s=2.5, total_elapsed_s=3.0)
+    progress.finish_rhs(which_rhs=2, rhs_elapsed_s=1.5, total_elapsed_s=4.5)
+
+    np.testing.assert_allclose(elapsed_s, np.asarray([2.5, 1.5]))
+    assert progress.elapsed_history == [2.5, 1.5]
+    assert any("whichRHS=1: residual_norm=2.500000e-01" in message for _, message in messages)
+    assert any("progress 2/2" in message for _, message in messages)
+
+
+def test_transport_loop_progress_residual_gate_fails_fast() -> None:
+    messages: list[tuple[int, str]] = []
+    elapsed_s = np.zeros((1,), dtype=np.float64)
+    progress = TransportLoopProgress(
+        which_rhs_values=[1],
+        rhs_norms={1: jnp.asarray(2.0)},
+        residual_norms={1: jnp.asarray(1.0)},
+        elapsed_s=elapsed_s,
+        abort_max_residual=0.5,
+        abort_max_relative_residual=0.0,
+        emit=lambda level, message: messages.append((int(level), str(message))),
+    )
+
+    with pytest.raises(RuntimeError, match="transport residual gate failed"):
+        progress.finish_rhs(which_rhs=1, rhs_elapsed_s=7.0, total_elapsed_s=8.0)
+
+    np.testing.assert_allclose(elapsed_s, np.asarray([7.0]))
+    assert progress.elapsed_history == []
+    assert any("aborting remaining whichRHS solves" in message for _, message in messages)
