@@ -58,6 +58,22 @@ that moves the implementation without shadowing or breaking existing imports.
 Core modules
 ------------
 
+``sfincs_jax/api.py``
+^^^^^^^^^^^^^^^^^^^^^
+
+Stable public data contracts for high-level workflows:
+
+- ``SolveInputs`` for normalized CLI/Python solve requests,
+- ``GeometryState`` / ``GridState`` / ``OperatorState`` summaries passed across
+  problem setup, validation, and solver layers,
+- ``PreconditionerState`` and ``SolverResult`` for solver metadata,
+- ``TransportResult`` for file-format-independent transport summaries,
+- ``OutputSchema`` and ``BenchmarkReport`` for output and performance artifacts.
+
+These contracts are plain frozen dataclasses and intentionally avoid importing
+JAX. Solver-specific JAX pytrees remain in the numerical modules that need JAX
+transformations.
+
 ``sfincs_jax/cli.py``
 ^^^^^^^^^^^^^^^^^^^^^
 

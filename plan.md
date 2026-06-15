@@ -397,6 +397,15 @@ Current branch status:
   tests/test_domain_package_import_contracts.py tests/test_policy_module_docstrings.py``
   (``6 passed``), strict docs build, and the full local suite
   (``2662 passed in 549.92 s``).
+- Phase B contract checkpoint, 2026-06-15: added ``sfincs_jax/api.py`` as the
+  public JAX-free orchestration contract layer with frozen dataclasses for
+  ``SolveInputs``, ``GeometryState``, ``GridState``, ``OperatorState``,
+  ``PreconditionerState``, ``SolverResult``, ``TransportResult``,
+  ``OutputSchema``, and ``BenchmarkReport``. The top-level package now
+  re-exports those names. Focused ruff and contract/import tests passed with
+  ``8 passed``; broader focused tests passed with ``13 passed``; strict docs
+  build passed; and the full local suite passed with
+  ``2667 passed in 565.10 s``.
 
 ### Active execution phases for the draft PR
 
