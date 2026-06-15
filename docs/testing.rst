@@ -420,7 +420,9 @@ guards, merge-ready result packing, and GPU-worker NPZ conversion for non-contig
 seam directly: inactive-policy no-op behavior, payload partitioning, worker result
 merge, output-field propagation, transport-matrix assembly, and progress emission
 are tested with monkeypatched kernels and worker runtimes.
-``tests/test_transport_postsolve_diagnostics.py`` covers the extracted post-solve
+``tests/test_transport_postsolve_diagnostics.py`` covers
+``sfincs_jax.problems.transport_matrix.postsolve_diagnostics`` through both the
+new package path and the legacy compatibility alias. The extracted post-solve
 diagnostics seam directly: streamed accumulator reuse, output-field propagation,
 chunked fixed-operator diagnostic evaluation, and transport-matrix assembly are
 checked with monkeypatched numerical kernels so the behavior is protected without
@@ -433,17 +435,20 @@ guards are checked as pure policy tests before heavier parity solves exercise th
 same decisions end-to-end. The same file now covers the per-``whichRHS`` loop
 policy for E_parallel loose/Krylov routing, constraint-nullspace projection
 admission, optional iteration-stat limits, and dense-batch fallback admission.
-``tests/test_transport_solve_setup.py`` covers the RHSMode=2/3 setup resolver
-that now sits between high-level solve entry and the transport loop:
+``tests/test_transport_solve_setup.py`` covers
+``sfincs_jax.problems.transport_matrix.setup``, the RHSMode=2/3 setup resolver
+that sits between high-level solve entry and the transport loop:
 ``SFINCS_JAX_TRANSPORT_MAXITER`` parsing, Krylov state checkpoint merge rules,
 ``whichRHS`` subset normalization, CPU worker-count defaults, explicit worker
 caps, GPU worker capping, and child-worker recursion flags are checked without
 launching transport solves.
-``tests/test_transport_active_dense_setup.py`` covers the combined active-DOF
+``tests/test_transport_active_dense_setup.py`` covers
+``sfincs_jax.problems.transport_matrix.active_dense``, the combined active-DOF
 and dense-path resolver used by RHSMode=2/3: active-index compaction,
 auto-dense re-selection on the compacted system, disabled-active hints, and
 dense-preconditioner memory guard messages are tested as pure setup behavior.
-``tests/test_transport_loop_support.py`` covers the sequential transport-loop
+``tests/test_transport_loop_support.py`` covers
+``sfincs_jax.problems.transport_matrix.loop``, the sequential transport-loop
 infrastructure that is now outside ``v3_driver.py``: cached full and active-DOF
 matvec closures, operator-variation recycle admission, stored-state recycle seeding,
 basis trimming, small recycled initial guesses, elapsed-time recording, residual
@@ -456,8 +461,9 @@ solves: ineligible systems reuse supplied residuals, disabled projection is a
 true no-op, transport roundoff residuals skip the correction, source-row
 residuals are reduced by the small least-squares correction, and the
 ``v3_driver`` private compatibility alias remains intact.
-``tests/test_transport_solve_finalization.py`` covers the sequential
-RHSMode=2/3 finalization seam: full-space residual-vector reuse, projection-time
+``tests/test_transport_solve_finalization.py`` covers
+``sfincs_jax.problems.transport_matrix.finalize``, the sequential RHSMode=2/3
+finalization seam: full-space residual-vector reuse, projection-time
 true-residual recomputation, active-DOF accepted-state overrides for dense
 fallback, streamed-output collection, recycle updates, solver-method recording,
 and optional KSP iteration-stat dispatch. This keeps branch-finalization

@@ -406,6 +406,16 @@ Current branch status:
   ``8 passed``; broader focused tests passed with ``13 passed``; strict docs
   build passed; and the full local suite passed with
   ``2667 passed in 565.10 s``.
+- Phase C transport-package checkpoint, 2026-06-15: moved the first RHSMode=2/3
+  implementation cluster into ``sfincs_jax.problems.transport_matrix``:
+  ``setup.py``, ``active_dense.py``, ``loop.py``, ``finalize.py``,
+  ``streaming_outputs.py``, and ``postsolve_diagnostics.py``. The historical
+  top-level module paths are now ``sys.modules`` aliases to the new modules, so
+  existing imports and monkeypatch/debug seams still target the implementation
+  module. Focused ruff and transport import/setup/finalization/diagnostic tests
+  passed with ``28 passed``; broader transport/docstring tests passed with
+  ``33 passed``; strict docs build passed; and the full local suite passed with
+  ``2668 passed in 562.12 s``.
 
 ### Active execution phases for the draft PR
 
