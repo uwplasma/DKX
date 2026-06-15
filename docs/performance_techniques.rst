@@ -945,7 +945,7 @@ by itself.
 
 The direct-active true-operator emitter is also now paired with a reusable
 symbolic block/coarse factor layer in
-``sfincs_jax.transport_active_factor``. The layer separates symbolic block
+``sfincs_jax.problems.transport_matrix.active_factor``. The layer separates symbolic block
 ordering over active kinetic unknowns, numerical block inverse plus
 source/constraint Schur construction, and setup-time true-residual admission
 against the same active operator used by the residual gate. This mirrors the

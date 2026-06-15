@@ -427,6 +427,16 @@ Current branch status:
   with ``63 passed``; broader focused transport tests passed with
   ``101 passed``; strict docs build passed; and the full local suite passed
   with ``2668 passed in 556.85 s``.
+- Phase C dense/active/sparse solve-support checkpoint, 2026-06-15: moved
+  cached dense LU, all-RHS dense-batch solves, active block-Schur/coarse factors,
+  and sparse-direct rescue into ``sfincs_jax.problems.transport_matrix`` as
+  ``dense_lu.py``, ``dense_batch.py``, ``active_factor.py``, and
+  ``sparse_direct_solve.py``. The old top-level paths are ``sys.modules``
+  aliases so tests, user imports, and monkeypatch/debug seams continue to target
+  the implementation modules. Focused ruff passed; focused import/dense/active/
+  sparse-direct tests passed with ``67 passed``; the broader transport refactor
+  slice passed with ``140 passed``; strict docs build passed; and the full local
+  suite passed with ``2668 passed in 556.60 s``.
 
 ### Active execution phases for the draft PR
 
@@ -454,8 +464,9 @@ Phase B, shared data contracts:
 Phase C, transport-matrix problem package:
 
 - Move RHSMode=2/3 setup, active/dense setup, loop support, finalization,
-  streaming outputs, postsolve diagnostics, parallel solve, residual quality,
-  and transport-matrix helpers into ``problems/transport_matrix/``.
+  streaming outputs, postsolve diagnostics, dense/active/sparse solve-support,
+  parallel solve, residual quality, and transport-matrix helpers into
+  ``problems/transport_matrix/``.
 - Keep existing flat modules as tiny compatibility shims only while downstream
   imports migrate.
 - Validate with focused transport tests, parallel policy tests, output schema
