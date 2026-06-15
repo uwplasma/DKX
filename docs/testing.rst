@@ -433,6 +433,12 @@ guards are checked as pure policy tests before heavier parity solves exercise th
 same decisions end-to-end. The same file now covers the per-``whichRHS`` loop
 policy for E_parallel loose/Krylov routing, constraint-nullspace projection
 admission, optional iteration-stat limits, and dense-batch fallback admission.
+``tests/test_transport_solve_setup.py`` covers the RHSMode=2/3 setup resolver
+that now sits between high-level solve entry and the transport loop:
+``SFINCS_JAX_TRANSPORT_MAXITER`` parsing, Krylov state checkpoint merge rules,
+``whichRHS`` subset normalization, CPU worker-count defaults, explicit worker
+caps, GPU worker capping, and child-worker recursion flags are checked without
+launching transport solves.
 ``tests/test_transport_loop_support.py`` covers the sequential transport-loop
 infrastructure that is now outside ``v3_driver.py``: cached full and active-DOF
 matvec closures, operator-variation recycle admission, stored-state recycle seeding,
