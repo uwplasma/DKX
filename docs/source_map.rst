@@ -807,6 +807,12 @@ the historical private driver name and test the focused module directly. This ke
   ``auto``/``default`` BiCGStab preference, implicit custom-solve routing,
   JIT/non-JIT solver selection, restart-budget policy, and distributed-axis
   residual-solve routing.
+- ``sfincs_jax/transport_loop_support.py``:
+  loop-local RHSMode=2/3 support for cached full/reduced transport matvec
+  closures and bounded Krylov recycle bases. It owns recycle-size admission,
+  stored-state seeding, reduced/full recycle-vector trimming, and small recycled
+  initial guesses so the main solve loop no longer carries this mutable cache
+  bookkeeping.
 - ``sfincs_jax/transport_parallel_payload.py``:
   injected-dependency payload normalization, child-worker guard setup, transport solve
   call construction, merge-ready result packing, and GPU-worker NPZ array conversion
