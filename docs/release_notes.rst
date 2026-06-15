@@ -11,6 +11,12 @@ Unreleased
   importable while legacy ``geometry.py`` and ``io.py`` module paths remain
   unchanged until their later migration. The post-skeleton local full suite
   passed with ``2662 passed in 549.92 s``.
+- Added ``sfincs_jax/api.py`` with frozen public dataclass contracts for
+  normalized solve inputs, geometry/grid/operator summaries, preconditioner and
+  solver metadata, transport summaries, output schemas, and benchmark reports.
+  These contracts are JAX-free orchestration boundaries; solver-specific pytrees
+  remain in numerical modules. The post-contract local full suite passed with
+  ``2667 passed in 565.10 s``.
 - Continued the ``v3_driver.py`` refactor path by moving the coupled
   f/tail-moment and tail-only matrix-free residual-correction builders into
   ``rhs1_lowmode_coarse.py`` with direct tests for tail-selection policy,
