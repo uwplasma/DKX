@@ -369,20 +369,14 @@ from .transport_preconditioner_dispatch import (
 )
 from .transport_direct_block_schur import build_transport_fp_direct_active_block_schur_preconditioner
 from .transport_fortran_reduced_lu import build_transport_fp_fortran_reduced_lu_preconditioner
-from .transport_solve_policy import (
-    build_transport_active_dof_state,
-    resolve_transport_active_dof_mode,
-    resolve_transport_dense_policy,
-    resolve_transport_initial_solve_policy,
-    resolve_transport_per_rhs_loop_policy,
-    transport_geometry_scheme_from_namelist,
-)
+from .transport_solve_policy import resolve_transport_per_rhs_loop_policy, transport_geometry_scheme_from_namelist
 from .transport_solve_setup import (
     resolve_transport_maxiter_setup,
     resolve_transport_parallel_request,
     resolve_transport_state_setup,
     resolve_transport_which_rhs_setup,
 )
+from .transport_active_dense_setup import resolve_transport_active_dense_setup
 from .transport_handoff_policy import (
     transport_candidate_is_better,
     transport_polish_config_from_env,
@@ -36870,7 +36864,7 @@ def solve_v3_transport_matrix_linear_gmres(
         )
 
     transport_geom_scheme = transport_geometry_scheme_from_namelist(nml)
-    initial_transport_policy = resolve_transport_initial_solve_policy(
+    active_dense_setup = resolve_transport_active_dense_setup(
         op=op0,
         rhs_mode=int(rhs_mode),
         n_rhs=int(n),
@@ -36888,24 +36882,21 @@ def solve_v3_transport_matrix_linear_gmres(
         force_stream_diagnostics=force_stream_diagnostics,
         force_store_state=force_store_state,
         subset_mode=bool(subset_mode),
+        active_dof_indices=_transport_active_dof_indices,
     )
     if emit is not None:
-        for level, message in initial_transport_policy.notes:
+        for level, message in active_dense_setup.initial_notes:
             emit(int(level), message)
-    low_memory_outputs = bool(initial_transport_policy.low_memory_outputs)
-    stream_diagnostics = bool(initial_transport_policy.stream_diagnostics)
-    store_state_vectors = bool(initial_transport_policy.store_state_vectors)
-    solve_method_use = str(initial_transport_policy.solve_method_use)
-    force_krylov = bool(initial_transport_policy.force_krylov)
-    force_dense = bool(initial_transport_policy.force_dense)
-    dense_fallback = bool(initial_transport_policy.dense_fallback)
-    dense_retry_max = int(initial_transport_policy.dense_retry_max)
-    dense_mem_max_mb = float(initial_transport_policy.dense_mem_max_mb)
-    dense_mem_block = bool(initial_transport_policy.dense_mem_block)
-    dense_use_mixed = bool(initial_transport_policy.dense_use_mixed)
-    dense_backend_allowed = bool(initial_transport_policy.dense_backend_allowed)
-    gmres_restart = int(initial_transport_policy.gmres_restart)
-    maxiter = initial_transport_policy.maxiter
+    low_memory_outputs = bool(active_dense_setup.low_memory_outputs)
+    stream_diagnostics = bool(active_dense_setup.stream_diagnostics)
+    store_state_vectors = bool(active_dense_setup.store_state_vectors)
+    solve_method_use = str(active_dense_setup.solve_method_use)
+    dense_retry_max = int(active_dense_setup.dense_retry_max)
+    dense_mem_block = bool(active_dense_setup.dense_mem_block)
+    dense_use_mixed = bool(active_dense_setup.dense_use_mixed)
+    dense_backend_allowed = bool(active_dense_setup.dense_backend_allowed)
+    gmres_restart = int(active_dense_setup.gmres_restart)
+    maxiter = active_dense_setup.maxiter
 
     use_implicit = _resolve_use_implicit(differentiable=differentiable)
     transport_precondition_side = _transport_precondition_side(op=op0, use_implicit=bool(use_implicit))
@@ -36994,99 +36985,18 @@ def solve_v3_transport_matrix_linear_gmres(
             precondition_side_val=precondition_side_val,
         )
 
-    active_dof_env = os.environ.get("SFINCS_JAX_TRANSPORT_ACTIVE_DOF", "").strip().lower()
-    active_dof_decision = resolve_transport_active_dof_mode(
-        op=op0,
-        rhs_mode=int(rhs_mode),
-        solve_method_use=str(solve_method_use),
-        solve_method=str(solve_method),
-        active_dof_env=active_dof_env,
-    )
-    use_active_dof_mode = bool(active_dof_decision.use_active_dof_mode)
-    solve_method_use = str(active_dof_decision.solve_method_use)
-    if active_dof_decision.emit_disabled_hint and emit is not None:
-        emit(
-            1,
-            "solve_v3_transport_matrix_linear_gmres: active-DOF mode disabled "
-            "(set SFINCS_JAX_TRANSPORT_ACTIVE_DOF=1 to enable; "
-            "SFINCS_JAX_TRANSPORT_ACTIVE_DOF=0 to force full-size solve)",
-        )
-    active_dof_state = build_transport_active_dof_state(
-        op=op0,
-        use_active_dof_mode=bool(use_active_dof_mode),
-        active_dof_indices=_transport_active_dof_indices,
-    )
-    active_idx_np = active_dof_state.active_idx_np
-    active_idx_jnp = active_dof_state.active_idx_jnp
-    full_to_active_jnp = active_dof_state.full_to_active_jnp
-    active_size = int(active_dof_state.active_size)
-    if use_active_dof_mode:
-        if emit is not None:
-            reason = f" ({active_dof_decision.reason})" if active_dof_decision.reason else ""
-            emit(
-                1,
-                "solve_v3_transport_matrix_linear_gmres: active-DOF mode enabled "
-                f"(size={active_size}/{int(op0.total_size)}){reason}",
-            )
-
-    dense_policy = resolve_transport_dense_policy(
-        rhs_mode=int(rhs_mode),
-        n_rhs=int(n),
-        total_size=int(op0.total_size),
-        active_size=int(active_size),
-        solve_method_use=str(solve_method_use),
-        force_krylov=bool(force_krylov),
-        force_dense=bool(force_dense),
-        dense_fallback=bool(dense_fallback),
-        dense_retry_max=int(dense_retry_max),
-        dense_mem_max_mb=float(dense_mem_max_mb),
-        dense_mem_block=bool(dense_mem_block),
-        dense_use_mixed=bool(dense_use_mixed),
-        low_memory_outputs=bool(low_memory_outputs),
-        dense_backend_allowed=bool(dense_backend_allowed),
-        dense_precond_default=bool(not dense_mem_block),
-    )
-    if dense_policy.dense_mem_block and not dense_mem_block:
-        dense_mem_block = True
-        dense_use_mixed = bool(dense_policy.dense_use_mixed)
-        dense_fallback = bool(dense_policy.dense_fallback)
-        dense_retry_max = int(dense_policy.dense_retry_max)
-        force_dense = bool(dense_policy.force_dense)
-        if emit is not None:
-            emit(
-                1,
-                "solve_v3_transport_matrix_linear_gmres: dense fallback disabled "
-                f"(active_est_mem32={dense_policy.dense_mem_est_active_mb32:.1f} MB > {dense_mem_max_mb:.1f} MB)",
-            )
-    elif dense_policy.dense_use_mixed and not dense_use_mixed:
-        dense_use_mixed = bool(dense_policy.dense_use_mixed)
-        if emit is not None:
-            emit(
-                1,
-                "solve_v3_transport_matrix_linear_gmres: dense fallback using float32 "
-                f"(active_est_mem64={dense_policy.dense_mem_est_active_mb64:.1f} MB > {dense_mem_max_mb:.1f} MB)",
-            )
-    auto_dense_size = int(active_size) if use_active_dof_mode else int(op0.total_size)
-    if str(dense_policy.solve_method_use).lower() == "dense" and str(solve_method_use).lower() != "dense":
-        if emit is not None and int(rhs_mode) == 2 and (not dense_policy.force_dense):
-            emit(
-                0,
-                "solve_v3_transport_matrix_linear_gmres: auto dense solve for RHSMode=2 "
-                f"(n={auto_dense_size})",
-            )
-    dense_mem_block = bool(dense_policy.dense_mem_block)
-    dense_use_mixed = bool(dense_policy.dense_use_mixed)
-    dense_fallback = bool(dense_policy.dense_fallback)
-    dense_retry_max = int(dense_policy.dense_retry_max)
-    force_dense = bool(dense_policy.force_dense)
-    solve_method_use = str(dense_policy.solve_method_use)
-    if dense_policy.dense_precond_mem_block and emit is not None:
-        emit(
-            1,
-            "solve_v3_transport_matrix_linear_gmres: dense preconditioner disabled "
-            f"(est_mem={dense_policy.dense_precond_est_mb:.1f} MB > {dense_policy.dense_precond_mem_max_mb:.1f} MB)",
-        )
-    dense_precond_enabled = bool(dense_policy.dense_precond_enabled)
+    if emit is not None:
+        for level, message in (*active_dense_setup.active_notes, *active_dense_setup.dense_notes):
+            emit(int(level), message)
+    use_active_dof_mode = bool(active_dense_setup.use_active_dof_mode)
+    active_idx_np = active_dense_setup.active_idx_np
+    active_idx_jnp = active_dense_setup.active_idx_jnp
+    full_to_active_jnp = active_dense_setup.full_to_active_jnp
+    active_size = int(active_dense_setup.active_size)
+    dense_mem_block = bool(active_dense_setup.dense_mem_block)
+    dense_use_mixed = bool(active_dense_setup.dense_use_mixed)
+    solve_method_use = str(active_dense_setup.solve_method_use)
+    dense_precond_enabled = bool(active_dense_setup.dense_precond_enabled)
     dense_precond_cache_full: dict[tuple[object, int], Callable[[jnp.ndarray], jnp.ndarray]] = {}
     dense_precond_cache_reduced: dict[tuple[object, int], Callable[[jnp.ndarray], jnp.ndarray]] = {}
     dense_solver_cache_full: dict[tuple[object, int], Callable[[jnp.ndarray], jnp.ndarray]] = {}

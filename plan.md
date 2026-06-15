@@ -330,6 +330,16 @@ Current branch status:
   transport/parallel slice passed with ``287 passed in 27.33 s``; strict docs,
   repo-size, and diff-check passed; and the full local suite passed with
   ``2656 passed in 556.33 s``. ``v3_driver.py`` is now ``38,452`` lines.
+- The next RHSMode=2/3 orchestration extraction moved active-DOF and dense-path
+  setup into ``transport_active_dense_setup.py``. The driver now delegates the
+  initial output/restart policy, active-index compaction state, dense fallback
+  and dense-preconditioner admission, and ordered active/dense user-facing notes
+  before constructing transport matvecs and preconditioners. Compile/lint and
+  focused active/dense/setup/policy/parallel validation passed with
+  ``24 passed in 0.75 s``; the broader transport/parallel slice passed with
+  ``290 passed in 23.91 s``; strict docs, repo-size, and diff-check passed; and
+  the full local suite passed with ``2659 passed in 551.86 s``.
+  ``v3_driver.py`` is now ``38,362`` lines.
 - Next PR-level moves should split high-level RHSMode=1 solve orchestration
   into ``rhs1_solve.py`` and RHSMode=2/3 orchestration into
   ``transport_solve.py`` after the focused module extractions are green.
