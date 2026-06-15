@@ -440,6 +440,12 @@ basis trimming, small recycled initial guesses, elapsed-time recording, residual
 abort gates, and ETA progress messages. These tests protect the stateful
 bookkeeping that the heavier RHSMode=2/3 parity tests then exercise through the
 public solve path.
+``tests/test_transport_solve_finalization.py`` covers the sequential
+RHSMode=2/3 finalization seam: full-space residual-vector reuse, projection-time
+true-residual recomputation, active-DOF accepted-state overrides for dense
+fallback, streamed-output collection, recycle updates, solver-method recording,
+and optional KSP iteration-stat dispatch. This keeps branch-finalization
+regressions cheap to catch before the heavier RHSMode=2/3 parity tests run.
 
 QI seed-robustness artifacts are also checked as data, not only as scripts.
 ``tests/test_qi_seed_smoke_artifact.py`` verifies the one-seed smoke artifact,

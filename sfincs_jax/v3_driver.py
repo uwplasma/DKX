@@ -396,6 +396,11 @@ from .transport_linear_solve import (
     transport_restart_for_method as _transport_restart_for_method,
     transport_solver_kind as _transport_solver_kind,
 )
+from .transport_solve_finalization import (
+    TransportRHSFinalizationContext,
+    finalize_full_transport_rhs,
+    finalize_reduced_transport_rhs,
+)
 from .transport_loop_support import (
     TransportLoopProgress,
     TransportMatvecCache,
@@ -37557,6 +37562,22 @@ def solve_v3_transport_matrix_linear_gmres(
 
     dense_batch_done = False
     dense_batch_fallback_enabled = bool(per_rhs_loop_policy.dense_batch_fallback_enabled)
+    transport_rhs_finalization_context = TransportRHSFinalizationContext(
+        state_vectors=state_vectors,
+        residual_norms=residual_norms,
+        solver_kinds_by_rhs=solver_kinds_by_rhs,
+        solve_methods_by_rhs=solve_methods_by_rhs,
+        store_state_vectors=bool(store_state_vectors),
+        stream_diagnostics=bool(stream_diagnostics),
+        collect_transport_outputs=_collect_transport_outputs if stream_diagnostics else None,
+        recycle_state=recycle_state if recycle_k > 0 else None,
+        apply_operator=apply_v3_full_system_operator_cached,
+        emit_iteration_stats=_emit_transport_ksp_iteration_stats,
+        emit=emit,
+        iter_stats_enabled=bool(per_rhs_loop_policy.iter_stats_enabled),
+        iter_stats_max_size=per_rhs_loop_policy.iter_stats_max_size,
+        atol=float(atol), maxiter=maxiter, precond_side=transport_precondition_side,
+    )
 
     def _dense_batch_solve_all(*, op_probe_ref: V3FullSystemOperator, reason: str) -> bool:
         dense_batch_context = TransportDenseBatchContext(
@@ -38063,37 +38084,31 @@ def solve_v3_transport_matrix_linear_gmres(
                     if _dense_batch_solve_all(op_probe_ref=op_matvec_by_index[0], reason="dense fallback"):
                         dense_batch_done = True
                         break
-                if store_state_vectors:
-                    state_vectors[which_rhs] = x_full
-                residual_norms[which_rhs] = res_norm_full
-                solver_kinds_by_rhs[which_rhs] = str(solver_kind_used)
-                solve_methods_by_rhs[which_rhs] = str(solve_method_used)
-                if stream_diagnostics:
-                    _collect_transport_outputs(int(which_rhs), x_full)
-                if recycle_k > 0:
-                    recycle_state.append_reduced(
-                        res_reduced.x,
-                        reduce_full(ax_full),
-                        x_full=x_full,
-                        ax_full=ax_full,
-                    )
-                if not dense_used:
-                    _emit_transport_ksp_iteration_stats(
-                        which_rhs=int(which_rhs),
-                        matvec_fn=mv_reduced,
-                        b_vec=rhs_reduced,
-                        precond_fn=preconditioner_used,
-                        x0_vec=x0_used,
+                finalize_reduced_transport_rhs(
+                    context=transport_rhs_finalization_context,
+                    which_rhs=int(which_rhs),
+                    result=res_reduced,
+                    rhs_full=rhs,
+                    op_matvec=op_matvec,
+                    solver_kind=str(solver_kind_used),
+                    solve_method=str(solve_method_used),
+                    dense_used=bool(dense_used),
+                    expand_reduced=expand_reduced,
+                    reduce_full=reduce_full,
+                    maybe_project_constraint_nullspace=_maybe_project_constraint_nullspace,
+                    ksp_request=transport_rhs_finalization_context.ksp_request(
+                        mv_reduced,
+                        rhs_reduced,
+                        preconditioner_used,
+                        x0_used,
                         tol_val=float(tol_rhs),
-                        atol_val=float(atol),
                         restart_val=int(restart_used),
-                        maxiter_val=maxiter,
-                        precond_side=transport_precondition_side,
-                        solver_kind=solver_kind_used,
-                        emit=emit,
-                        enabled=bool(per_rhs_loop_policy.iter_stats_enabled),
-                        max_size=per_rhs_loop_policy.iter_stats_max_size,
-                    )
+                        solver_kind=str(solver_kind_used),
+                    ),
+                    accepted_x_full=x_full,
+                    accepted_ax_full=ax_full,
+                    accepted_residual_norm=res_norm_full,
+                )
             else:
                 mv = _get_full_matvec(op_matvec)
 
@@ -38484,44 +38499,29 @@ def solve_v3_transport_matrix_linear_gmres(
                     if _dense_batch_solve_all(op_probe_ref=op_matvec_by_index[0], reason="dense fallback"):
                         dense_batch_done = True
                         break
-                x_full = res.x
                 projection_needed = per_rhs_loop_policy.projection_needed(which_rhs)
-                if projection_needed:
-                    x_full = _maybe_project_constraint_nullspace(
-                        x_full, which_rhs=int(which_rhs), op_matvec=op_matvec, rhs_vec=rhs
-                    )
-                if store_state_vectors:
-                    state_vectors[which_rhs] = x_full
-                if (not projection_needed) and residual_vec is not None and residual_vec.shape == rhs.shape:
-                    ax_full = rhs - residual_vec
-                    residual_norms[which_rhs] = res.residual_norm
-                else:
-                    ax_full = apply_v3_full_system_operator_cached(op_matvec, x_full)
-                    residual_vec = ax_full - rhs
-                    residual_norms[which_rhs] = jnp.linalg.norm(residual_vec)
-                solver_kinds_by_rhs[which_rhs] = str(solver_kind_used)
-                solve_methods_by_rhs[which_rhs] = str(solve_method_used)
-                if stream_diagnostics:
-                    _collect_transport_outputs(int(which_rhs), x_full)
-                if recycle_k > 0:
-                    recycle_state.append_full(x_full, ax_full)
-                if not dense_used:
-                    _emit_transport_ksp_iteration_stats(
-                        which_rhs=int(which_rhs),
-                        matvec_fn=mv,
-                        b_vec=rhs,
-                        precond_fn=preconditioner_used,
-                        x0_vec=x0_used,
+                finalize_full_transport_rhs(
+                    context=transport_rhs_finalization_context,
+                    which_rhs=int(which_rhs),
+                    result=res,
+                    rhs_full=rhs,
+                    op_matvec=op_matvec,
+                    solver_kind=str(solver_kind_used),
+                    solve_method=str(solve_method_used),
+                    dense_used=bool(dense_used),
+                    projection_needed=bool(projection_needed),
+                    residual_vec=residual_vec,
+                    maybe_project_constraint_nullspace=_maybe_project_constraint_nullspace,
+                    ksp_request=transport_rhs_finalization_context.ksp_request(
+                        mv,
+                        rhs,
+                        preconditioner_used,
+                        x0_used,
                         tol_val=float(tol_rhs),
-                        atol_val=float(atol),
                         restart_val=int(restart_used),
-                        maxiter_val=maxiter,
-                        precond_side=transport_precondition_side,
-                        solver_kind=solver_kind_used,
-                        emit=emit,
-                        enabled=bool(per_rhs_loop_policy.iter_stats_enabled),
-                        max_size=per_rhs_loop_policy.iter_stats_max_size,
-                    )
+                        solver_kind=str(solver_kind_used),
+                    ),
+                )
             transport_loop_progress.finish_rhs(
                 which_rhs=int(which_rhs),
                 rhs_elapsed_s=float(t_rhs.elapsed_s()),

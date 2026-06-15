@@ -296,6 +296,18 @@ Current branch status:
   support slice passed with ``180 passed in 35.80 s``. Strict docs, lint,
   repo-size, diff-check, and the full local suite passed with ``2641 passed in
   539.35 s``. ``v3_driver.py`` is now ``38,577`` lines.
+- The next sequential transport extraction moved RHSMode=2/3 branch-finalization
+  bookkeeping into ``transport_solve_finalization.py``. The driver now delegates
+  reduced/full accepted-state recording, optional projection, true-residual
+  recomputation, streaming collection, recycle updates, solver-method maps, and
+  optional KSP iteration-stat dispatch after each solver branch accepts a
+  candidate. Direct finalization/policy/loop tests passed with
+  ``23 passed in 1.21 s``; the RHSMode=2/3 transport regression/support slices
+  passed with ``46 passed in 10.72 s``; the broader transport/parallel support
+  slice passed with ``281 passed in 22.00 s``; strict docs, lint, repo-size, and
+  diff-check passed; and the full local suite passed with ``2645 passed in
+  511.79 s``. ``v3_driver.py`` remains ``38,577`` lines while the extracted
+  finalization logic is now directly tested.
 - Next PR-level moves should split high-level RHSMode=1 solve orchestration
   into ``rhs1_solve.py`` and RHSMode=2/3 orchestration into
   ``transport_solve.py`` after the focused module extractions are green.
