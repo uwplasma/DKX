@@ -758,9 +758,10 @@ the historical private driver name and test the focused module directly. This ke
   shared transport preconditioner-kind normalization, auto-selection, DD/sparse-JAX
   env parsing, and reduced/full preconditioner builder dispatch.
 - ``sfincs_jax/transport_solve_policy.py``:
-  shared active-DOF transport policy, active-index map construction, and dense
-  fallback / dense-preconditioner policy used before the transport preconditioner and
-  solve handoff layers.
+  shared RHSMode=2/3 initial solve policy, active-DOF transport policy,
+  active-index map construction, dense fallback, dense-preconditioner, low-memory
+  output, streamed-diagnostic, state-vector retention, and GMRES restart policy
+  used before the transport preconditioner and solve handoff layers.
 - ``sfincs_jax/transport_sparse_direct_solve.py``:
   RHSMode=2/3 sparse-direct rescue implementation. It owns sparse-pattern
   admission/caching, direct active FP operator factor reuse, explicit sparse

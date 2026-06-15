@@ -255,6 +255,17 @@ Current branch status:
   parallel suite passed with ``99 passed in 15.08 s``; and the transport
   diagnostics/output slice passed with ``31 passed in 16.27 s``; strict docs
   passed; and the full local suite passed with ``2626 passed in 545.40 s``.
+- The next transport setup extraction moved the initial RHSMode=2/3 solve policy
+  into ``transport_solve_policy.py``. ``v3_driver.py`` now delegates
+  ``geometryScheme`` parsing, low-memory output routing, streamed diagnostics,
+  state-vector retention, force-dense/force-Krylov handling, dense fallback
+  admission, dense memory-cap blocking, and GMRES restart/max-iteration guards
+  before active-DOF setup. Direct policy/docstring validation passed with
+  ``12 passed in 0.67 s``; the transport regression slice passed with
+  ``40 passed in 20.22 s``; and the corrected transport parallel suite passed
+  with ``99 passed in 16.20 s``; strict docs and the repo-size audit passed;
+  and the full local suite passed with ``2631 passed in 563.04 s``.
+  ``v3_driver.py`` is now ``38,738`` lines.
 - Next PR-level moves should split high-level RHSMode=1 solve orchestration
   into ``rhs1_solve.py`` and RHSMode=2/3 orchestration into
   ``transport_solve.py`` after the focused module extractions are green.

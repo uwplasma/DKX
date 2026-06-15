@@ -213,10 +213,16 @@ Unreleased
   CPU/GPU worker launch through injected runtime hooks, worker payload merging,
   parallel-result diagnostics assembly, and early transport-matrix result
   construction.
+- Extracted the initial RHSMode=2/3 transport solve policy into
+  ``transport_solve_policy.py``. The driver now delegates geometryScheme parsing,
+  low-memory output routing, streamed-diagnostic/state-vector retention,
+  force-dense/force-Krylov handling, dense fallback admission, dense memory-cap
+  blocking, and GMRES restart/max-iteration guards to a focused policy object
+  before active-DOF and preconditioner setup.
 - The post-extraction strict docs build passed, the repo-size audit now has no
   reviewed files above 2 MiB after ``v3_driver.py`` dropped below the threshold,
-  and the latest local full suite after the RHSMode=2/3 parent-side parallel
-  solve extraction passed with ``2626 passed in 545.40 s``.
+  and the latest local full suite after the initial RHSMode=2/3 transport solve
+  policy extraction passed with ``2631 passed in 563.04 s``.
 
 v1.1.7
 ------

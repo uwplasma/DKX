@@ -369,7 +369,8 @@ from .transport_solve_policy import (
     build_transport_active_dof_state,
     resolve_transport_active_dof_mode,
     resolve_transport_dense_policy,
-    transport_geometry5_mono_low_memory_preferred,
+    resolve_transport_initial_solve_policy,
+    transport_geometry_scheme_from_namelist,
 )
 from .transport_handoff_policy import (
     transport_candidate_is_better,
@@ -36985,185 +36986,43 @@ def solve_v3_transport_matrix_linear_gmres(
             "The first solve may include one-time JIT compilation, so later solves can be faster.",
         )
 
-    geom_params = nml.group("geometryParameters")
-    try:
-        transport_geom_scheme = int(geom_params.get("GEOMETRYSCHEME", geom_params.get("geometryScheme", -1)) or -1)
-    except (TypeError, ValueError):
-        transport_geom_scheme = -1
-    low_memory_env = os.environ.get("SFINCS_JAX_TRANSPORT_LOW_MEMORY", "").strip().lower()
-    if low_memory_env in {"1", "true", "yes", "on"}:
-        low_memory_outputs = True
-    elif low_memory_env in {"0", "false", "no", "off"}:
-        low_memory_outputs = False
-    elif transport_geometry5_mono_low_memory_preferred(
+    transport_geom_scheme = transport_geometry_scheme_from_namelist(nml)
+    initial_transport_policy = resolve_transport_initial_solve_policy(
+        op=op0,
         rhs_mode=int(rhs_mode),
-        geometry_scheme=int(transport_geom_scheme),
+        n_rhs=int(n),
+        solve_method=str(solve_method),
+        restart=int(restart),
+        maxiter=maxiter,
         backend=jax.default_backend(),
-        has_fp=op0.fblock.fp is not None,
-        n_x=int(op0.n_x),
-        total_size=int(op0.total_size),
-    ):
-        low_memory_outputs = True
-        if emit is not None:
-            emit(
-                1,
-                "solve_v3_transport_matrix_linear_gmres: geometryScheme=5 RHSMode=3 "
-                "auto -> low-memory Krylov transport path",
-            )
-    else:
-        low_memory_outputs = int(op0.total_size) * int(n) >= 200_000
-    stream_env = os.environ.get("SFINCS_JAX_TRANSPORT_STREAM_DIAGNOSTICS", "").strip().lower()
-    if stream_env in {"1", "true", "yes", "on"}:
-        stream_diagnostics = True
-    elif stream_env in {"0", "false", "no", "off"}:
-        stream_diagnostics = False
-    else:
-        stream_diagnostics = low_memory_outputs
-    store_state_env = os.environ.get("SFINCS_JAX_TRANSPORT_STORE_STATE", "").strip().lower()
-    if store_state_env in {"1", "true", "yes", "on"}:
-        store_state_vectors = True
-    elif store_state_env in {"0", "false", "no", "off"}:
-        store_state_vectors = False
-    else:
-        store_state_vectors = not stream_diagnostics
-    if state_out_env:
-        store_state_vectors = True
-    if (not stream_diagnostics) and (not store_state_vectors):
-        store_state_vectors = True
-        if emit is not None:
-            emit(1, "solve_v3_transport_matrix_linear_gmres: forcing state storage (streaming disabled)")
-    if force_stream_diagnostics is not None:
-        stream_diagnostics = bool(force_stream_diagnostics)
-    if force_store_state is not None:
-        store_state_vectors = bool(force_store_state)
-    if subset_mode and not stream_diagnostics:
-        stream_diagnostics = True
-        if emit is not None:
-            emit(1, "solve_v3_transport_matrix_linear_gmres: streaming diagnostics forced for subset whichRHS")
-
-    solve_method_use = solve_method
-    force_krylov_env = os.environ.get("SFINCS_JAX_TRANSPORT_FORCE_KRYLOV", "").strip().lower()
-    force_krylov = force_krylov_env in {"1", "true", "yes", "on"}
-    force_dense_env = os.environ.get("SFINCS_JAX_TRANSPORT_FORCE_DENSE", "").strip().lower()
-    force_dense = force_dense_env in {"1", "true", "yes", "on"}
-    if low_memory_outputs:
-        force_krylov = True
-        force_dense = False
-    dense_fallback_env = os.environ.get("SFINCS_JAX_TRANSPORT_DENSE_FALLBACK", "").strip().lower()
-    dense_fallback_max_env = os.environ.get("SFINCS_JAX_TRANSPORT_DENSE_FALLBACK_MAX", "").strip()
-    try:
-        dense_fallback_max = int(dense_fallback_max_env) if dense_fallback_max_env else 0
-    except ValueError:
-        dense_fallback_max = 0
-    dense_retry_env = os.environ.get("SFINCS_JAX_TRANSPORT_DENSE_RETRY_MAX", "").strip()
-    try:
-        if dense_retry_env:
-            dense_retry_max = int(dense_retry_env)
-        else:
-            dense_retry_max = 6000 if int(rhs_mode) in {2, 3} else 0
-    except ValueError:
-        dense_retry_max = 3000 if int(rhs_mode) in {2, 3} else 0
-    if low_memory_outputs:
-        dense_retry_max = 0
-    dense_mem_env = os.environ.get("SFINCS_JAX_TRANSPORT_DENSE_MAX_MB", "").strip()
-    try:
-        dense_mem_max_mb = float(dense_mem_env) if dense_mem_env else 128.0
-    except ValueError:
-        dense_mem_max_mb = 128.0
-    dense_mem_est_mb64 = (int(op0.total_size) ** 2) * 8.0 / 1.0e6
-    dense_mem_est_mb32 = (int(op0.total_size) ** 2) * 4.0 / 1.0e6
-    dense_mem_block64 = bool(dense_mem_max_mb > 0.0 and dense_mem_est_mb64 > dense_mem_max_mb)
-    dense_mem_block32 = bool(dense_mem_max_mb > 0.0 and dense_mem_est_mb32 > dense_mem_max_mb)
-    dense_mem_block = dense_mem_block32
-    dense_use_mixed = dense_mem_block64 and not dense_mem_block32
-    dense_fallback_enabled_env = dense_fallback_env in {"1", "true", "yes", "on"}
-    dense_fallback_disabled_env = dense_fallback_env in {"0", "false", "no", "off"}
-    if dense_fallback_enabled_env:
-        dense_fallback = True
-        if not dense_fallback_max_env:
-            dense_fallback_max = 1600
-    elif dense_fallback_disabled_env:
-        dense_fallback = False
-    else:
-        # Default to a dense fallback for RHSMode=3 monoenergetic solves when the system is modest,
-        # since iterative Krylov often stalls for the E_parallel RHS.
-        dense_fallback = int(rhs_mode) == 3
-        if dense_fallback and not dense_fallback_max_env:
-            dense_fallback_max = 6000
-    dense_accelerator_auto_allowed = _transport_dense_accelerator_auto_allowed(
-        op0,
         geometry_scheme=int(transport_geom_scheme),
+        dense_accelerator_auto_allowed=_transport_dense_accelerator_auto_allowed(
+            op0,
+            geometry_scheme=int(transport_geom_scheme),
+        ),
+        dense_backend_policy_allowed=_transport_dense_backend_allowed(),
+        state_out_requested=bool(state_out_env),
+        force_stream_diagnostics=force_stream_diagnostics,
+        force_store_state=force_store_state,
+        subset_mode=bool(subset_mode),
     )
-    dense_backend_allowed = _transport_dense_backend_allowed() or dense_accelerator_auto_allowed
-    if dense_accelerator_auto_allowed and emit is not None:
-        emit(
-            1,
-            "solve_v3_transport_matrix_linear_gmres: bounded accelerator dense transport auto enabled",
-        )
-    if not dense_backend_allowed:
-        dense_fallback = False
-        dense_retry_max = 0
-        force_dense = False
-        if str(solve_method_use).lower() == "dense":
-            solve_method_use = "incremental"
-        if emit is not None:
-            emit(
-                1,
-                "solve_v3_transport_matrix_linear_gmres: dense transport path disabled "
-                f"on backend={jax.default_backend()}",
-            )
-    if dense_mem_block:
-        dense_fallback = False
-        dense_retry_max = 0
-        force_dense = False
-        if emit is not None:
-            emit(
-                1,
-                "solve_v3_transport_matrix_linear_gmres: dense fallback disabled "
-                f"(est_mem32={dense_mem_est_mb32:.1f} MB > {dense_mem_max_mb:.1f} MB)",
-            )
-        if str(solve_method_use).lower() in {"auto", "default", "batched"}:
-            solve_method_use = "incremental"
-    elif dense_use_mixed and emit is not None:
-        emit(
-            1,
-            "solve_v3_transport_matrix_linear_gmres: dense fallback using float32 "
-            f"(est_mem64={dense_mem_est_mb64:.1f} MB > {dense_mem_max_mb:.1f} MB)",
-        )
-    if low_memory_outputs:
-        dense_fallback = False
-    if int(rhs_mode) in {2, 3}:
-        if force_dense:
-            solve_method_use = "dense"
-            if emit is not None:
-                emit(0, f"solve_v3_transport_matrix_linear_gmres: forced dense solve for RHSMode={rhs_mode} (n={int(op0.total_size)})")
-        elif (
-            int(rhs_mode) == 2
-            and (not force_krylov)
-            and str(solve_method_use).lower() in {"auto", "default", "batched", "incremental"}
-            and int(op0.total_size) <= 1500
-            and (not dense_mem_block)
-        ):
-            solve_method_use = "dense"
-            if emit is not None:
-                emit(
-                    0,
-                    "solve_v3_transport_matrix_linear_gmres: auto dense solve for RHSMode=2 "
-                    f"(n={int(op0.total_size)})",
-                )
-        elif (
-            dense_fallback
-            and (not force_krylov)
-            and int(op0.total_size) <= dense_fallback_max
-            and str(solve_method_use).lower() in {"auto", "default", "batched", "incremental"}
-            and (not dense_mem_block)
-        ):
-            # On some JAX versions/platforms, `jax.scipy.sparse.linalg.gmres` can return NaNs for
-            # small ill-conditioned problems (observed in CI for RHSMode=3 scheme12 fixtures).
-            # Enable a dense fallback only when explicitly requested.
-            solve_method_use = "dense"
-            if emit is not None:
-                emit(0, f"solve_v3_transport_matrix_linear_gmres: dense fallback enabled for RHSMode={rhs_mode} (n={int(op0.total_size)})")
+    if emit is not None:
+        for level, message in initial_transport_policy.notes:
+            emit(int(level), message)
+    low_memory_outputs = bool(initial_transport_policy.low_memory_outputs)
+    stream_diagnostics = bool(initial_transport_policy.stream_diagnostics)
+    store_state_vectors = bool(initial_transport_policy.store_state_vectors)
+    solve_method_use = str(initial_transport_policy.solve_method_use)
+    force_krylov = bool(initial_transport_policy.force_krylov)
+    force_dense = bool(initial_transport_policy.force_dense)
+    dense_fallback = bool(initial_transport_policy.dense_fallback)
+    dense_retry_max = int(initial_transport_policy.dense_retry_max)
+    dense_mem_max_mb = float(initial_transport_policy.dense_mem_max_mb)
+    dense_mem_block = bool(initial_transport_policy.dense_mem_block)
+    dense_use_mixed = bool(initial_transport_policy.dense_use_mixed)
+    dense_backend_allowed = bool(initial_transport_policy.dense_backend_allowed)
+    gmres_restart = int(initial_transport_policy.gmres_restart)
+    maxiter = initial_transport_policy.maxiter
 
     use_implicit = _resolve_use_implicit(differentiable=differentiable)
     transport_precondition_side = _transport_precondition_side(op=op0, use_implicit=bool(use_implicit))
@@ -37174,20 +37033,6 @@ def solve_v3_transport_matrix_linear_gmres(
             f"{transport_precondition_side}",
         )
     distributed_axis = _resolve_distributed_gmres_axis(op=op0, emit=emit)
-
-    gmres_restart_env = os.environ.get("SFINCS_JAX_TRANSPORT_GMRES_RESTART", "").strip()
-    try:
-        gmres_restart = int(gmres_restart_env) if gmres_restart_env else min(int(restart), 40)
-    except ValueError:
-        gmres_restart = min(int(restart), 40)
-    if dense_mem_block and gmres_restart < 80:
-        gmres_restart = 80
-
-    if dense_mem_block:
-        if maxiter is None:
-            maxiter = 800
-        else:
-            maxiter = max(int(maxiter), 800)
 
     use_solver_jit = _use_solver_jit(int(op0.total_size))
     transport_linear_context = TransportLinearSolveContext(
