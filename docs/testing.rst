@@ -430,7 +430,9 @@ policy extracted from ``v3_driver.py``: geometryScheme namelist parsing,
 low-memory VMEC monoenergetic routing, dense fallback admission, dense memory-cap
 blocking, subset streaming, state-vector retention, and GMRES restart/max-iteration
 guards are checked as pure policy tests before heavier parity solves exercise the
-same decisions end-to-end.
+same decisions end-to-end. The same file now covers the per-``whichRHS`` loop
+policy for E_parallel loose/Krylov routing, constraint-nullspace projection
+admission, optional iteration-stat limits, and dense-batch fallback admission.
 ``tests/test_transport_loop_support.py`` covers the sequential transport-loop
 infrastructure that is now outside ``v3_driver.py``: cached full and active-DOF
 matvec closures, operator-variation recycle admission, stored-state recycle seeding,
