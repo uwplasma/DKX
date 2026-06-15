@@ -27,53 +27,48 @@ Refactoring Plan
 
 The main code-health target is to reduce the responsibility of
 ``sfincs_jax/v3_driver.py``. The refactor should be behavior-preserving and
-land in small, gated slices.
+land in gated slices. The active branch uses a domain-package plan rather than
+adding more flat ``rhs1_*`` or ``transport_*`` files.
 
-1. Operator and state extraction
-   Move RHSMode=1 operator construction, active-DOF projection, residual
-   evaluation, and solver-state metadata into focused modules. Target modules:
-   ``rhs1_operator.py``, ``rhs1_state.py``, and ``rhs1_metadata.py``. The
-   active-DOF routing/index-map portion has started in
-   ``rhs1_active_dof.py``.
+1. Package skeleton and import contract
+   Introduce importable domain packages before moving logic:
+   ``input``, ``physics``, ``discretization``, ``operators``, ``problems``,
+   ``solvers``, ``parallel``, ``workflows``, ``validation``, ``benchmarks``,
+   and ``compat``. The ``geometry`` and ``io`` package names are reserved for a
+   later migration because ``sfincs_jax/geometry.py`` and ``sfincs_jax/io.py``
+   must keep their existing import paths until the move is complete. Import
+   tests should verify both the new package names and the legacy module paths.
 
-2. Solver-policy extraction
-   Move auto-selection heuristics, environment parsing, fallback policy, and
-   promotion gates into a dedicated policy module. The policy layer should
-   return a typed decision object rather than mutating driver-local flags.
-   The first landed slice is ``sfincs_jax/rhs1_solver_policy.py``, which owns
-   typed parsing for x-block probe-coarse, post-minres, post-coarse, and
-   post-residual-equation controls.
-   The second landed slice is ``sfincs_jax/rhs1_solver_diagnostics.py``, which
-   owns x-block correction diagnostic records and output-visible metadata key
-   assembly.
-   The third landed slice is ``sfincs_jax/rhs1_active_dof.py``, which owns
-   active-DOF routing and index-map construction for RHSMode=1 truncated pitch
-   grids and PAS constraint-projection solves.
-   The fourth landed slice is ``sfincs_jax/rhs1_active_projection.py``, which
-   owns reusable JAX full/reduced vector gathers, one-based scatter expansion,
-   and PAS constraint projection primitives used by sparse-PC and x-block
-   active-DOF residual paths.
-   The fifth landed slice is ``sfincs_jax/rhs1_residual.py``, which owns small
-   residual norm/target/ratio helpers used by sparse-PC and x-block solver
-   metadata.
+2. Problem packages
+   Move RHSMode=2/3 orchestration into ``problems/transport_matrix`` and
+   RHSMode=1 profile-current/bootstrap-current orchestration into
+   ``problems/profile_response``. Public-internal APIs should use physics names
+   such as ``solve_profile_response`` and ``compute_transport_matrix`` instead
+   of new historical ``rhs1`` wrapper names.
 
-3. Preconditioner registry
-   Keep x-block, PAS-lite, Schur, QI, and post-residual-equation preconditioners
-   behind a registry with explicit capability metadata: CPU/GPU safe,
-   differentiable/non-differentiable, setup memory estimate, and expected
-   operator shape.
+3. Physics, discretization, and operators
+   Move model terms, grids, quadrature, active layouts, residual construction,
+   and sparse/operator assembly into packages named for the equations they own.
+   Each extracted term builder should have shape, masking, zero-drive or
+   constant-field, and order-condition/conservation tests where applicable.
 
-4. Output and diagnostics boundary
+4. Solver and preconditioner architecture
+   Move reusable Krylov dispatch, residual gates, progress reporting, sparse
+   factors, recycling, checkpoints, and implicit-differentiation contracts into
+   ``solvers``. Move preconditioners under ``solvers/preconditioners`` by
+   numerical structure: PAS, full-FP, QI, Schur, domain decomposition, coarse
+   space, x-block, and symbolic sparse. Auto-selection remains a user-facing
+   default, but the implementation should return typed decisions with capability
+   metadata: CPU/GPU safe, differentiable/non-differentiable, setup memory
+   estimate, and expected operator shape.
+
+5. I/O, workflow, validation, and benchmark boundaries
    Keep HDF5/NPZ/NetCDF writes outside solver internals. Solver code should
-   return structured diagnostics; output modules should serialize those
-   diagnostics without reinterpreting convergence. The first concrete step is
-   the RHSMode=1 x-block correction metadata extraction, which preserves the
-   historical field names while making schema regressions unit-testable.
-
-5. Benchmark and evidence schema
-   Consolidate benchmark JSON schemas so README plots, documentation figures,
-   and research-lane manifests consume the same fields for runtime, memory,
-   residuals, backend, solver path, and comparison status.
+   return structured diagnostics; I/O modules should serialize those diagnostics
+   without reinterpreting convergence. Benchmark JSON schemas should be shared
+   by README plots, documentation figures, and research-lane manifests so
+   runtime, memory, residuals, backend, solver path, and comparison status have
+   one contract.
 
 Testing Plan
 ------------

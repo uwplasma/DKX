@@ -17,6 +17,44 @@ For a standard solve, the execution path is:
 5. run the linear or nonlinear iteration,
 6. postprocess diagnostics and write ``sfincsOutput.h5``.
 
+Active package migration
+------------------------
+
+The architecture branch is migrating the historical flat module layout into
+domain packages. New behavior should be placed by physics or numerical
+responsibility, not by historical helper prefixes. The current importable
+skeleton packages are:
+
+- ``sfincs_jax/input`` for namelist parsing, input normalization, compatibility
+  translation, defaults, and option validation.
+- ``sfincs_jax/physics`` for drift-kinetic terms, collisions, ambipolarity,
+  bootstrap-current normalization, and analytic validation formulas.
+- ``sfincs_jax/discretization`` for grids, quadrature, basis functions,
+  indexing/layout, sparse stencils, and active degrees of freedom.
+- ``sfincs_jax/operators`` for matrix-free and assembled DKE operators,
+  residual/source assembly, sparse patterns, and SFINCS Fortran-v3 convention
+  translation.
+- ``sfincs_jax/problems/profile_response`` for RHSMode=1 profile-current and
+  bootstrap-current problem orchestration.
+- ``sfincs_jax/problems/transport_matrix`` for RHSMode=2/3 transport-matrix and
+  monoenergetic-response orchestration.
+- ``sfincs_jax/solvers`` and ``sfincs_jax/solvers/preconditioners`` for reusable
+  Krylov, sparse/direct, residual-gate, implicit-differentiation, and
+  preconditioning machinery.
+- ``sfincs_jax/parallel`` for CPU/GPU process, sharding, worker payload, and
+  scaling utilities.
+- ``sfincs_jax/workflows`` for optimization, VMEC-JAX/Boozer/SFINCS-JAX
+  pipelines, scans, and publication figures.
+- ``sfincs_jax/validation`` and ``sfincs_jax/benchmarks`` for physics gates,
+  parity reports, benchmark schemas, and release artifact readers.
+- ``sfincs_jax/compat`` for legacy import shims and external-code comparison
+  helpers.
+
+``sfincs_jax/geometry.py`` and ``sfincs_jax/io.py`` intentionally remain modules
+for now because those import paths are already part of the active code. The
+``geometry`` and ``io`` package names are reserved for a later migration step
+that moves the implementation without shadowing or breaking existing imports.
+
 Core modules
 ------------
 
