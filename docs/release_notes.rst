@@ -203,10 +203,15 @@ Unreleased
   padded triangular-factor apply, threaded factor build, cache storage, and
   extra-variable Schur solve; the driver keeps a compatibility wrapper for
   fallback/cache-key/matrix-probe injection.
+- Extracted the RHSMode=2/3 post-solve diagnostic assembly into
+  ``transport_postsolve_diagnostics.py``. The new module owns streamed versus
+  batched diagnostic selection, rematerialization/precompute/chunking policy,
+  final flux-array assembly, optional output-field propagation, and transport
+  matrix construction after the Krylov solve loop.
 - The post-extraction strict docs build passed, the repo-size audit now has no
   reviewed files above 2 MiB after ``v3_driver.py`` dropped below the threshold,
-  and the latest local full suite after the RHSMode=1 PAS x-block ILU
-  extraction passed with ``2622 passed in 528.19 s``.
+  and the latest local full suite after the RHSMode=2/3 transport post-solve
+  diagnostics extraction passed with ``2624 passed in 557.63 s``.
 
 v1.1.7
 ------
