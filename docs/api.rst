@@ -88,6 +88,9 @@ API reference
 .. automodule:: sfincs_jax.transport_direct_block_schur
    :members:
 
+.. automodule:: sfincs_jax.transport_fortran_reduced_lu
+   :members:
+
 .. automodule:: sfincs_jax.preconditioner_setup
    :members:
 
