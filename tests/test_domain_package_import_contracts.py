@@ -43,6 +43,39 @@ RESERVED_MODULE_NAMES_UNTIL_MIGRATION = (
     "sfincs_jax.io",
 )
 
+TRANSPORT_COMPATIBILITY_IMPORTS = (
+    (
+        "sfincs_jax.transport_solve_setup",
+        "sfincs_jax.problems.transport_matrix.setup",
+        "resolve_transport_which_rhs_setup",
+    ),
+    (
+        "sfincs_jax.transport_active_dense_setup",
+        "sfincs_jax.problems.transport_matrix.active_dense",
+        "resolve_transport_active_dense_setup",
+    ),
+    (
+        "sfincs_jax.transport_loop_support",
+        "sfincs_jax.problems.transport_matrix.loop",
+        "resolve_transport_recycle_k",
+    ),
+    (
+        "sfincs_jax.transport_solve_finalization",
+        "sfincs_jax.problems.transport_matrix.finalize",
+        "finalize_full_transport_rhs",
+    ),
+    (
+        "sfincs_jax.transport_streaming_outputs",
+        "sfincs_jax.problems.transport_matrix.streaming_outputs",
+        "TransportStreamingOutputAccumulator",
+    ),
+    (
+        "sfincs_jax.transport_postsolve_diagnostics",
+        "sfincs_jax.problems.transport_matrix.postsolve_diagnostics",
+        "compute_transport_postsolve_diagnostics",
+    ),
+)
+
 
 def _import_module(name: str) -> ModuleType:
     return importlib.import_module(name)
@@ -75,3 +108,14 @@ def test_module_names_reserved_for_later_package_migration_still_load_as_modules
         assert not hasattr(module, "__path__"), module_name
         assert module.__file__ is not None
         assert module.__file__.endswith(".py"), module.__file__
+
+
+def test_transport_matrix_package_moves_preserve_legacy_imports() -> None:
+    """Moved implementation modules must remain reachable through old names."""
+
+    for legacy_name, new_name, public_name in TRANSPORT_COMPATIBILITY_IMPORTS:
+        legacy_module = _import_module(legacy_name)
+        new_module = _import_module(new_name)
+        assert getattr(legacy_module, public_name) is getattr(new_module, public_name)
+        assert public_name in legacy_module.__all__
+        assert public_name in new_module.__all__

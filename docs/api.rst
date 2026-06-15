@@ -97,7 +97,19 @@ API reference
 .. automodule:: sfincs_jax.transport_fortran_reduced_lu
    :members:
 
-.. automodule:: sfincs_jax.transport_postsolve_diagnostics
+.. automodule:: sfincs_jax.problems.transport_matrix.setup
+   :members:
+
+.. automodule:: sfincs_jax.problems.transport_matrix.active_dense
+   :members:
+
+.. automodule:: sfincs_jax.problems.transport_matrix.loop
+   :members:
+
+.. automodule:: sfincs_jax.problems.transport_matrix.finalize
+   :members:
+
+.. automodule:: sfincs_jax.problems.transport_matrix.postsolve_diagnostics
    :members:
 
 .. automodule:: sfincs_jax.transport_parallel_solve
@@ -324,7 +336,7 @@ research workflows.
 .. automodule:: sfincs_jax.transport_sparse_direct_solve
    :members:
 
-.. automodule:: sfincs_jax.transport_streaming_outputs
+.. automodule:: sfincs_jax.problems.transport_matrix.streaming_outputs
    :members:
 
 .. automodule:: sfincs_jax.indices

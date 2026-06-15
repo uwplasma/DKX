@@ -17,6 +17,12 @@ Unreleased
   These contracts are JAX-free orchestration boundaries; solver-specific pytrees
   remain in numerical modules. The post-contract local full suite passed with
   ``2667 passed in 565.10 s``.
+- Moved the first RHSMode=2/3 transport implementation cluster into
+  ``sfincs_jax.problems.transport_matrix``: setup, active/dense setup, loop
+  support, finalization, streaming outputs, and postsolve diagnostics. The old
+  top-level module paths now alias the new modules so existing imports and
+  monkeypatch-based debug tests keep working. The post-move local full suite
+  passed with ``2668 passed in 562.12 s``.
 - Continued the ``v3_driver.py`` refactor path by moving the coupled
   f/tail-moment and tail-only matrix-free residual-correction builders into
   ``rhs1_lowmode_coarse.py`` with direct tests for tail-selection policy,
