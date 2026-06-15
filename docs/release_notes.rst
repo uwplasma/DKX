@@ -152,6 +152,19 @@ Unreleased
   Existing ``v3_driver`` private names remain import-compatible while the
   builder and diagnostic behavior is now directly testable in the focused
   module.
+- Moved the remaining RHSMode=1 true-operator LSQ rescue builders into
+  ``rhs1_true_operator_rescue.py``: residual-window LSQ, deterministic
+  active-block LSQ, active-residual-block LSQ, active-submatrix, and
+  coupled-coarse correction construction now live with the true-action cache and
+  residual-window utilities they use.
+- Extracted RHSMode=1 Fortran-reduced constraintScheme=1 direct-tail sparse
+  operator materialization into ``rhs1_fortran_reduced_direct_tail.py``. The
+  driver injects the structured full-CSR callback so monkeypatch/debug seams are
+  preserved, while the source-column, moment-row, and active term-level
+  ``whichMatrix=0`` assembly logic is no longer embedded in the main solve
+  orchestrator.
+- The post-extraction strict docs build passed, and the local full suite passed
+  with ``2622 passed in 548.14 s``.
 
 v1.1.7
 ------

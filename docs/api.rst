@@ -138,6 +138,9 @@ research workflows.
 .. automodule:: sfincs_jax.rhs1_direct_tail_policy
    :members:
 
+.. automodule:: sfincs_jax.rhs1_fortran_reduced_direct_tail
+   :members:
+
 .. automodule:: sfincs_jax.rhs1_true_operator_rescue
    :members:
 
