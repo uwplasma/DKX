@@ -824,6 +824,11 @@ the historical private driver name and test the focused module directly. This ke
   top-level transport process-parallel execution control, including run/no-run gating,
   per-worker payload construction, backend-specific execution, retry, and sequential
   fallback.
+- ``sfincs_jax/transport_parallel_solve.py``:
+  parent-side RHSMode=2/3 parallel-solve orchestration. It owns the early
+  parallel branch that partitions ``whichRHS`` values, launches CPU/GPU workers
+  through injected runtime hooks, merges state/residual/timing payloads, builds
+  final transport diagnostics, and returns the transport-matrix solve result.
 - ``sfincs_jax/transport_parallel_sharding.py``:
   pure single-case sharded-solve planning metadata. It caps requested device
   counts, records per-device workload balance, estimates whether setup and

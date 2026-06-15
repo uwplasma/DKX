@@ -100,6 +100,9 @@ API reference
 .. automodule:: sfincs_jax.transport_postsolve_diagnostics
    :members:
 
+.. automodule:: sfincs_jax.transport_parallel_solve
+   :members:
+
 .. automodule:: sfincs_jax.preconditioner_setup
    :members:
 
