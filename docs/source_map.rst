@@ -816,6 +816,13 @@ the historical private driver name and test the focused module directly. This ke
   stored-state seeding, reduced/full recycle-vector trimming, and small recycled
   initial guesses plus sequential residual-gate and ETA progress bookkeeping, so
   the main solve loop no longer carries this mutable cache/progress state.
+- ``sfincs_jax/transport_solve_finalization.py``:
+  sequential RHSMode=2/3 per-``whichRHS`` finalization after a solver branch has
+  accepted a candidate. It owns reduced/full state bookkeeping, optional
+  constraint projection, true-residual recomputation, streamed-output
+  collection, recycle-basis updates, and optional KSP iteration-stat dispatch.
+  Dense fallback accepted-state overrides are explicit so the refactor preserves
+  the established active-DOF branch behavior.
 - ``sfincs_jax/transport_parallel_payload.py``:
   injected-dependency payload normalization, child-worker guard setup, transport solve
   call construction, merge-ready result packing, and GPU-worker NPZ array conversion
