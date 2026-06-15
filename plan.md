@@ -30058,6 +30058,62 @@ Validation:
   docs/_build/html``: passed.
 - ``git diff --check``: passed.
 
+### 19.37 RHSMode=1 true-operator and direct-tail builder split
+
+Goal:
+
+- Make a larger reduction in ``v3_driver.py`` by moving whole RHSMode=1
+  preconditioner-builder clusters, not just small policy helpers, while keeping
+  the existing solver behavior and monkeypatch/debug seams intact.
+
+Implementation:
+
+- Moved the remaining true-operator LSQ rescue builders into
+  ``sfincs_jax/rhs1_true_operator_rescue.py``:
+  residual-window LSQ, active-block LSQ, active-residual-block LSQ,
+  active-submatrix, and coupled-coarse correction construction.
+- Added the missing low-level dependency imports directly to
+  ``rhs1_true_operator_rescue.py`` so the module owns the builders without
+  depending back on ``v3_driver.py``.
+- Added ``sfincs_jax/rhs1_fortran_reduced_direct_tail.py`` for the RHSMode=1
+  Fortran-reduced constraintScheme=1 direct-tail sparse-operator
+  materializer. The driver injects the structured full-CSR callback, preserving
+  the existing monkeypatchable structured-assembly seam while moving
+  source-column, moment-row, pattern-probe, and active ``whichMatrix=0`` tail
+  materialization out of the main solve orchestrator.
+- Updated the source map, release notes, and testing documentation so the new
+  module boundaries and regression coverage are explicit.
+- ``sfincs_jax/v3_driver.py`` was reduced from ``45561`` lines at the start of
+  this extraction sequence to ``43569`` lines after these two moves.
+
+Validation:
+
+- ``python -m py_compile sfincs_jax/rhs1_true_operator_rescue.py
+  sfincs_jax/v3_driver.py tests/test_rhs1_true_operator_rescue.py
+  tests/test_v3_sparse_pattern.py``: passed.
+- ``python -m ruff check sfincs_jax/rhs1_true_operator_rescue.py
+  sfincs_jax/v3_driver.py tests/test_rhs1_true_operator_rescue.py``: passed.
+- ``python -m pytest -q tests/test_v3_sparse_pattern.py -k
+  'true_operator_residual_window_lsq or true_operator_active_block_lsq or
+  true_operator_active_residual_block_lsq or true_operator_active_submatrix or
+  true_operator_coupled'``: ``7 passed, 125 deselected in 0.63 s``.
+- ``python -m py_compile sfincs_jax/rhs1_fortran_reduced_direct_tail.py
+  sfincs_jax/rhs1_true_operator_rescue.py sfincs_jax/v3_driver.py``: passed.
+- ``python -m ruff check sfincs_jax/rhs1_fortran_reduced_direct_tail.py
+  sfincs_jax/rhs1_true_operator_rescue.py sfincs_jax/v3_driver.py``: passed.
+- ``python -m pytest -q tests/test_v3_sparse_pattern.py -k
+  'fortran_reduced_pc_gmres_direct_tail or fortran_reduced_direct_tail'``:
+  ``26 passed, 106 deselected in 33.56 s``.
+- ``python -m pytest -q tests/test_fortran_reduced_preconditioner.py -k
+  'fortran_reduced'``: ``29 passed in 13.54 s``.
+- ``python -m pytest -q tests/test_rhs1_true_operator_rescue.py
+  tests/test_v3_sparse_pattern.py tests/test_rhs1_full_assembly.py
+  tests/test_fortran_reduced_preconditioner.py``:
+  ``270 passed in 118.27 s``.
+- ``SPHINXOPTS='-W --keep-going' python -m sphinx -b html docs
+  docs/_build/html``: passed.
+- ``python -m pytest -q``: ``2622 passed in 548.14 s``.
+
 ### 19.32 Explicit sparse host-factor settings split
 
 Goal:

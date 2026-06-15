@@ -212,15 +212,23 @@ the historical private driver name and test the focused module directly. This ke
   direct-tail memory-cap policy. ``v3_driver.py`` imports the same private
   compatibility names so existing debug scripts can still clear the direct-tail
   cache or inspect the policy through the historical driver namespace.
+- ``sfincs_jax/rhs1_fortran_reduced_direct_tail.py``:
+  RHSMode=1 Fortran-reduced constraintScheme=1 direct-tail sparse-operator
+  materialization. The module emits source/tail columns and moment rows from the
+  same formulas used by the matrix-free v3 operator, while ``v3_driver.py``
+  injects the structured full-CSR builder callback to preserve the existing
+  monkeypatch/debug seam and avoid circular imports.
 - ``sfincs_jax/rhs1_true_operator_rescue.py``:
   support bundles and low-level helpers for RHSMode=1 true-operator
   residual-window, active-submatrix, coupled-coarse, and residual-coarse rescue
   preconditioners. The module owns the reusable true-action column cache,
   sparse-factor storage estimator, additive-rescue budget accounting, graph
   expansion, residual-window target parsing, and residual-driven window
-  selection. It also owns the residual sparse-window/coarse builders and active
-  residual diagnostic summaries; ``v3_driver.py`` imports the historical private
-  names for compatibility.
+  selection. It also owns the residual sparse-window/coarse builders, true-
+  operator residual-window LSQ, active-block LSQ, active-residual-block LSQ,
+  active-submatrix, coupled-coarse builders, and active residual diagnostic
+  summaries; ``v3_driver.py`` imports the historical private names for
+  compatibility.
 - ``sfincs_jax/krylov_dispatch.py``:
   concrete Krylov solver routing for host-only SciPy methods, JIT/non-JIT JAX
   GMRES, distributed GMRES, diagnostic solver labels, and

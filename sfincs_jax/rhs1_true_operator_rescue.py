@@ -3,13 +3,22 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass
 import time
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import jax
+import jax.numpy as jnp
 import numpy as np
 
 from .explicit_sparse import SparseOperatorBundle
-from .rhs1_block_operator import RHS1BlockLayout
+from .rhs1_constraint_sources import (
+    constraint_scheme2_inject_source as _constraint_scheme2_inject_source,
+    constraint_scheme2_source_from_f as _constraint_scheme2_source_from_f,
+)
+from .v3_system import _fs_average_factor, _ix_min, _source_basis_constraint_scheme_1
+from .rhs1_block_operator import RHS1ActiveFieldSplitOrdering, RHS1BlockLayout
+
+if TYPE_CHECKING:
+    from .v3_system import V3FullSystemOperator
 
 __all__ = [
     "_ResidualCoarseHostSparsePreconditionerBundle",
@@ -24,6 +33,11 @@ __all__ = [
     "_sparse_factor_nbytes_estimate",
     "_rhs1_active_reduced_residual_diagnostics",
     "_true_operator_window_positions_from_residual",
+    "_try_build_true_operator_active_block_lsq_preconditioner",
+    "_try_build_true_operator_active_residual_block_lsq_preconditioner",
+    "_try_build_true_operator_active_submatrix_preconditioner",
+    "_try_build_true_operator_coupled_coarse_lsq_preconditioner",
+    "_try_build_true_operator_residual_window_lsq_preconditioner",
     "_try_build_residual_coarse_host_sparse_preconditioner",
     "_try_build_residual_window_host_sparse_preconditioner",
 ]
@@ -505,6 +519,1591 @@ def _true_operator_window_positions_from_residual(
         if tail_positions.size:
             positions_out = np.unique(np.concatenate((positions_out, tail_positions)).astype(np.int64, copy=False))
     return positions_out, tuple(metadata)
+
+
+def _try_build_true_operator_residual_window_lsq_preconditioner(
+    *,
+    true_matvec: Callable[[np.ndarray], np.ndarray],
+    true_matmat: Callable[[np.ndarray], np.ndarray] | None,
+    factor_bundle: object,
+    residual: np.ndarray,
+    layout: RHS1BlockLayout,
+    active_indices: np.ndarray | None,
+    max_windows: int,
+    x_radius: int,
+    ell_radius: int,
+    max_nbytes: int,
+    regularization: float,
+    max_window_size: int,
+    column_batch: int,
+    drop_tol: float,
+    include_tail: bool,
+    explicit_specs: tuple[tuple[int, int, int], ...] = (),
+    damping: bool = False,
+    beta_max: float = 10.0,
+    emit: Callable[[int, str], None] | None = None,
+) -> _TrueOperatorWindowLSQPreconditionerBundle | None:
+    """Build a bounded LSQ correction from columns of the true active operator."""
+
+    import scipy.sparse as sp  # noqa: PLC0415
+    from scipy.linalg import cho_factor, cho_solve, lu_factor, lu_solve  # noqa: PLC0415
+
+    t0 = time.perf_counter()
+    residual_np = np.asarray(residual, dtype=np.float64).reshape((-1,))
+    n = int(residual_np.size)
+    positions, window_metadata = _true_operator_window_positions_from_residual(
+        residual=residual_np,
+        layout=layout,
+        active_indices=active_indices,
+        max_windows=int(max_windows),
+        x_radius=int(x_radius),
+        ell_radius=int(ell_radius),
+        include_tail=bool(include_tail),
+        explicit_specs=tuple(explicit_specs),
+    )
+    if positions.size == 0:
+        return None
+    if positions.size > int(max_window_size):
+        if emit is not None:
+            emit(
+                1,
+                "solve_v3_full_system_linear_gmres: true residual window skipped "
+                f"window_size={int(positions.size)} max_window_size={int(max_window_size)}",
+            )
+        return None
+
+    batch = max(1, int(column_batch))
+    rows: list[np.ndarray] = []
+    cols: list[np.ndarray] = []
+    data: list[np.ndarray] = []
+    nnz_total = 0
+    max_nbytes_use = max(0, int(max_nbytes))
+    drop = max(0.0, float(drop_tol))
+    for start in range(0, int(positions.size), int(batch)):
+        stop = min(int(positions.size), int(start) + int(batch))
+        pos_batch = np.asarray(positions[start:stop], dtype=np.int64)
+        matmat_batch = int(batch) if true_matmat is not None and int(batch) > 1 else int(pos_batch.size)
+        transient_estimated = int(2 * n * max(1, int(matmat_batch)) * np.dtype(np.float64).itemsize)
+        estimated_before_batch = int(nnz_total * (np.dtype(np.float64).itemsize + np.dtype(np.int32).itemsize))
+        estimated_before_batch += int((positions.size + 1) * np.dtype(np.int32).itemsize)
+        estimated_before_batch += int(2 * positions.size * positions.size * np.dtype(np.float64).itemsize)
+        estimated_before_batch += int(n * np.dtype(np.float64).itemsize)
+        estimated_before_batch += int(transient_estimated)
+        if max_nbytes_use > 0 and estimated_before_batch > max_nbytes_use:
+            if emit is not None:
+                emit(
+                    1,
+                    "solve_v3_full_system_linear_gmres: true residual window budget exceeded "
+                    f"estimated_bytes={int(estimated_before_batch)} max_bytes={int(max_nbytes_use)} "
+                    f"columns_done={int(start)}/{int(positions.size)}",
+                )
+            return None
+        basis = np.zeros((n, int(matmat_batch)), dtype=np.float64)
+        basis[pos_batch, np.arange(int(pos_batch.size), dtype=np.int64)] = 1.0
+        if true_matmat is not None and int(matmat_batch) > 1:
+            y_batch = np.asarray(true_matmat(basis), dtype=np.float64)[:, : int(pos_batch.size)]
+        else:
+            y_batch = np.column_stack(
+                [
+                    np.asarray(true_matvec(basis[:, j]), dtype=np.float64).reshape((-1,))
+                    for j in range(int(pos_batch.size))
+                ]
+            )
+        if y_batch.shape != (n, int(pos_batch.size)):
+            return None
+        for local_col in range(int(pos_batch.size)):
+            y_col = y_batch[:, local_col]
+            keep = np.flatnonzero(np.isfinite(y_col) & (np.abs(y_col) > drop))
+            if keep.size == 0:
+                continue
+            rows.append(keep.astype(np.int32, copy=False))
+            cols.append(np.full((int(keep.size),), int(start + local_col), dtype=np.int32))
+            data.append(np.asarray(y_col[keep], dtype=np.float64))
+            nnz_total += int(keep.size)
+        estimated = int(nnz_total * (np.dtype(np.float64).itemsize + np.dtype(np.int32).itemsize))
+        estimated += int((positions.size + 1) * np.dtype(np.int32).itemsize)
+        estimated += int(2 * positions.size * positions.size * np.dtype(np.float64).itemsize)
+        estimated += int(n * np.dtype(np.float64).itemsize)
+        estimated += int(transient_estimated)
+        if max_nbytes_use > 0 and estimated > max_nbytes_use:
+            if emit is not None:
+                emit(
+                    1,
+                    "solve_v3_full_system_linear_gmres: true residual window budget exceeded "
+                    f"estimated_bytes={int(estimated)} max_bytes={int(max_nbytes_use)} "
+                    f"columns_done={int(stop)}/{int(positions.size)}",
+                )
+            return None
+    if not data:
+        return None
+    a_window = sp.csc_matrix(
+        (np.concatenate(data), (np.concatenate(rows), np.concatenate(cols))),
+        shape=(n, int(positions.size)),
+        dtype=np.float64,
+    )
+    a_window.sum_duplicates()
+    a_window.eliminate_zeros()
+    col_norms = np.sqrt(np.asarray(a_window.power(2).sum(axis=0), dtype=np.float64).reshape((-1,)))
+    norm_floor = max(float(abs(regularization)), np.finfo(np.float64).eps)
+    inv_col_scale = np.zeros_like(col_norms)
+    good = np.isfinite(col_norms) & (col_norms > norm_floor)
+    inv_col_scale[good] = 1.0 / col_norms[good]
+    if not np.any(good):
+        return None
+    a_scaled = a_window @ sp.diags(inv_col_scale, format="csc")
+    normal = np.asarray((a_scaled.T @ a_scaled).toarray(), dtype=np.float64)
+    normal_scale = max(float(np.linalg.norm(normal, ord=np.inf)) if normal.size else 0.0, 1.0)
+    normal_regularization = max(float(abs(regularization)), 1.0e-14) * normal_scale
+    normal = normal + normal_regularization * np.eye(int(positions.size), dtype=np.float64)
+    solver_kind = "cholesky"
+    try:
+        factor = cho_factor(normal, lower=True, check_finite=False)
+
+        def solve_normal(rhs: np.ndarray) -> np.ndarray:
+            return np.asarray(cho_solve(factor, rhs, check_finite=False), dtype=np.float64).reshape((-1,))
+
+    except Exception:  # noqa: BLE001
+        solver_kind = "lu"
+        lu, piv = lu_factor(normal, check_finite=False)
+
+        def solve_normal(rhs: np.ndarray) -> np.ndarray:
+            return np.asarray(lu_solve((lu, piv), rhs, check_finite=False), dtype=np.float64).reshape((-1,))
+
+    a_window_nbytes = int(a_window.data.nbytes + a_window.indices.nbytes + a_window.indptr.nbytes)
+    normal_nbytes = int(normal.nbytes)
+    factor_nbytes = int(
+        a_window_nbytes
+        + 2 * normal_nbytes
+        + inv_col_scale.nbytes
+        + int(getattr(factor_bundle, "factor_nbytes_estimate", 0) or 0)
+    )
+    if max_nbytes_use > 0 and factor_nbytes > max_nbytes_use:
+        return None
+    condition_estimate = None
+    if int(positions.size) <= 256:
+        condition_estimate = float(np.linalg.cond(normal))
+    metadata = {
+        "window_size": int(positions.size),
+        "windows": tuple(window_metadata),
+        "x_radius": int(x_radius),
+        "ell_radius": int(ell_radius),
+        "include_tail": bool(include_tail),
+        "column_batch": int(batch),
+        "drop_tol": float(drop),
+        "a_window_nnz": int(a_window.nnz),
+        "a_window_nbytes_actual": int(a_window_nbytes),
+        "normal_nbytes": int(normal_nbytes),
+        "normal_regularization": float(normal_regularization),
+        "normal_solver": str(solver_kind),
+        "normal_condition_estimate": condition_estimate,
+        "factor_nbytes_estimate": int(factor_nbytes),
+        "nonzero_column_count": int(np.count_nonzero(good)),
+        "zero_or_invalid_column_count": int(positions.size - np.count_nonzero(good)),
+        "damping": bool(damping),
+        "beta_max": float(beta_max),
+        "setup_s": float(max(0.0, time.perf_counter() - t0)),
+    }
+    if emit is not None:
+        first = window_metadata[0] if window_metadata else {}
+        emit(
+            1,
+            "solve_v3_full_system_linear_gmres: true residual window built "
+            f"window_size={int(positions.size)} nnz={int(a_window.nnz)} "
+            f"setup_s={metadata['setup_s']:.3f} bytes={int(factor_nbytes)} "
+            f"first=s{first.get('species', 'na')}/x{first.get('x_center', 'na')}/ell{first.get('ell_center', 'na')}",
+        )
+    return _TrueOperatorWindowLSQPreconditionerBundle(
+        base_factor=factor_bundle,
+        true_matvec=lambda x: np.asarray(true_matvec(np.asarray(x, dtype=np.float64)), dtype=np.float64).reshape((-1,)),
+        window_positions=np.asarray(positions, dtype=np.int64),
+        a_window=a_scaled,
+        inv_column_scale=np.asarray(inv_col_scale, dtype=np.float64),
+        solve_normal=solve_normal,
+        kind=f"{getattr(factor_bundle, 'kind', 'host')}_true_residual_window_lsq",
+        regularization=float(regularization),
+        damping=bool(damping),
+        beta_max=float(beta_max),
+        factor_nbytes_estimate=int(factor_nbytes),
+        factor_nnz_estimate=int(a_window.nnz),
+        factor_s=float(max(0.0, time.perf_counter() - t0)),
+        metadata=metadata,
+    )
+
+
+def _try_build_true_operator_active_block_lsq_preconditioner(
+    *,
+    true_matvec: Callable[[np.ndarray], np.ndarray],
+    true_matmat: Callable[[np.ndarray], np.ndarray] | None,
+    factor_bundle: object,
+    residual: np.ndarray,
+    layout: RHS1BlockLayout,
+    active_indices: np.ndarray | None,
+    x_count: int,
+    ell_count: int,
+    max_nbytes: int,
+    regularization: float,
+    max_block_size: int,
+    column_batch: int,
+    drop_tol: float,
+    include_tail: bool,
+    max_tail: int,
+    species_count: int | None = None,
+    theta_stride: int = 1,
+    zeta_stride: int = 1,
+    damping: bool = False,
+    beta_max: float = 10.0,
+    emit: Callable[[int, str], None] | None = None,
+) -> _TrueOperatorWindowLSQPreconditionerBundle | None:
+    """Build a deterministic true-operator LSQ correction over an active kinetic block.
+
+    Unlike the residual-window builder, this selects the same symbolic
+    low-speed/low-pitch block used by the native active coupled factor and then
+    forms columns of the *true* active operator.  It directly targets the
+    remaining mismatch between the fast ``whichMatrix=0`` preconditioner and
+    the true RHSMode=1 operator while preserving bounded setup and memory.
+    """
+
+    import scipy.sparse as sp  # noqa: PLC0415
+    from scipy.linalg import cho_factor, cho_solve, lu_factor, lu_solve  # noqa: PLC0415
+
+    t0 = time.perf_counter()
+    residual_np = np.asarray(residual, dtype=np.float64).reshape((-1,))
+    n = int(residual_np.size)
+    active_np = (
+        np.arange(int(layout.total_size), dtype=np.int64)
+        if active_indices is None
+        else np.asarray(active_indices, dtype=np.int64).reshape((-1,))
+    )
+    if active_np.shape != (n,):
+        if emit is not None:
+            emit(
+                1,
+                "solve_v3_full_system_linear_gmres: true active block skipped "
+                f"active_shape_mismatch active={tuple(active_np.shape)} residual={(n,)}",
+            )
+        return None
+    try:
+        ordering = RHS1ActiveFieldSplitOrdering.from_layout(layout, active_np)
+    except ValueError as exc:
+        if emit is not None:
+            emit(
+                1,
+                "solve_v3_full_system_linear_gmres: true active block skipped "
+                f"invalid_ordering={type(exc).__name__}: {exc}",
+            )
+        return None
+
+    max_block_size_use = max(1, int(max_block_size))
+    kinetic_positions = ordering.dominant_kinetic_positions(
+        x_count=max(0, int(x_count)),
+        ell_count=max(0, int(ell_count)),
+        species_count=species_count,
+        theta_stride=max(1, int(theta_stride)),
+        zeta_stride=max(1, int(zeta_stride)),
+        max_positions=max_block_size_use,
+    )
+    positions = kinetic_positions.astype(np.int64, copy=False)
+    tail_selected = 0
+    if bool(include_tail) and positions.size < max_block_size_use and int(max_tail) > 0:
+        tail_candidates = np.concatenate(
+            (
+                ordering.phi1_positions.astype(np.int64, copy=False),
+                ordering.extra_positions.astype(np.int64, copy=False),
+            )
+        )
+        if tail_candidates.size:
+            take = min(int(max_tail), max_block_size_use - int(positions.size))
+            tail_selected = int(min(int(tail_candidates.size), int(take)))
+            positions = np.concatenate((positions, tail_candidates[:tail_selected])).astype(np.int64, copy=False)
+    if positions.size:
+        _, first = np.unique(positions, return_index=True)
+        positions = positions[np.sort(first)].astype(np.int64, copy=False)
+    if positions.size == 0:
+        return None
+    if positions.size > max_block_size_use:
+        if emit is not None:
+            emit(
+                1,
+                "solve_v3_full_system_linear_gmres: true active block skipped "
+                f"block_size={int(positions.size)} max_block_size={int(max_block_size_use)}",
+            )
+        return None
+
+    batch = max(1, int(column_batch))
+    max_nbytes_use = max(0, int(max_nbytes))
+    drop = max(0.0, float(drop_tol))
+    rows: list[np.ndarray] = []
+    cols: list[np.ndarray] = []
+    data: list[np.ndarray] = []
+    nnz_total = 0
+    for start in range(0, int(positions.size), int(batch)):
+        stop = min(int(positions.size), int(start) + int(batch))
+        pos_batch = np.asarray(positions[start:stop], dtype=np.int64)
+        ncols = int(pos_batch.size)
+        transient_estimated = int(2 * n * ncols * np.dtype(np.float64).itemsize)
+        estimated_before = int(nnz_total * (np.dtype(np.float64).itemsize + np.dtype(np.int32).itemsize))
+        estimated_before += int((positions.size + 1) * np.dtype(np.int32).itemsize)
+        estimated_before += int(2 * positions.size * positions.size * np.dtype(np.float64).itemsize)
+        estimated_before += int(transient_estimated)
+        if max_nbytes_use > 0 and estimated_before > max_nbytes_use:
+            if emit is not None:
+                emit(
+                    1,
+                    "solve_v3_full_system_linear_gmres: true active block budget exceeded "
+                    f"estimated_bytes={int(estimated_before)} max_bytes={int(max_nbytes_use)} "
+                    f"columns_done={int(start)}/{int(positions.size)}",
+                )
+            return None
+        basis = np.zeros((n, ncols), dtype=np.float64)
+        basis[pos_batch, np.arange(ncols, dtype=np.int64)] = 1.0
+        if true_matmat is not None and ncols > 1:
+            y_batch = np.asarray(true_matmat(basis), dtype=np.float64)
+        else:
+            y_batch = np.column_stack(
+                [np.asarray(true_matvec(basis[:, j]), dtype=np.float64).reshape((-1,)) for j in range(ncols)]
+            )
+        if y_batch.shape != (n, ncols):
+            return None
+        for local_col in range(ncols):
+            y_col = y_batch[:, local_col]
+            keep = np.flatnonzero(np.isfinite(y_col) & (np.abs(y_col) > drop))
+            if keep.size == 0:
+                continue
+            rows.append(keep.astype(np.int32, copy=False))
+            cols.append(np.full((int(keep.size),), int(start + local_col), dtype=np.int32))
+            data.append(np.asarray(y_col[keep], dtype=np.float64))
+            nnz_total += int(keep.size)
+    if not data:
+        return None
+
+    a_window = sp.csc_matrix(
+        (np.concatenate(data), (np.concatenate(rows), np.concatenate(cols))),
+        shape=(n, int(positions.size)),
+        dtype=np.float64,
+    )
+    a_window.sum_duplicates()
+    a_window.eliminate_zeros()
+    col_norms = np.sqrt(np.asarray(a_window.power(2).sum(axis=0), dtype=np.float64).reshape((-1,)))
+    norm_floor = max(float(abs(regularization)), np.finfo(np.float64).eps)
+    good = np.isfinite(col_norms) & (col_norms > norm_floor)
+    if not np.any(good):
+        return None
+    inv_col_scale = np.zeros_like(col_norms)
+    inv_col_scale[good] = 1.0 / col_norms[good]
+    a_scaled = a_window @ sp.diags(inv_col_scale, format="csc")
+    normal = np.asarray((a_scaled.T @ a_scaled).toarray(), dtype=np.float64)
+    normal_scale = max(float(np.linalg.norm(normal, ord=np.inf)) if normal.size else 0.0, 1.0)
+    normal_regularization = max(float(abs(regularization)), 1.0e-14) * normal_scale
+    normal = normal + normal_regularization * np.eye(int(positions.size), dtype=np.float64)
+    solver_kind = "cholesky"
+    try:
+        factor = cho_factor(normal, lower=True, check_finite=False)
+
+        def solve_normal(rhs: np.ndarray) -> np.ndarray:
+            return np.asarray(cho_solve(factor, rhs, check_finite=False), dtype=np.float64).reshape((-1,))
+
+    except Exception:  # noqa: BLE001
+        solver_kind = "lu"
+        lu, piv = lu_factor(normal, check_finite=False)
+
+        def solve_normal(rhs: np.ndarray) -> np.ndarray:
+            return np.asarray(lu_solve((lu, piv), rhs, check_finite=False), dtype=np.float64).reshape((-1,))
+
+    a_window_nbytes = int(a_window.data.nbytes + a_window.indices.nbytes + a_window.indptr.nbytes)
+    normal_nbytes = int(normal.nbytes)
+    factor_nbytes = int(
+        a_window_nbytes
+        + 2 * normal_nbytes
+        + inv_col_scale.nbytes
+        + int(getattr(factor_bundle, "factor_nbytes_estimate", 0) or 0)
+    )
+    if max_nbytes_use > 0 and factor_nbytes > max_nbytes_use:
+        if emit is not None:
+            emit(
+                1,
+                "solve_v3_full_system_linear_gmres: true active block skipped final_budget "
+                f"bytes={int(factor_nbytes)} max_bytes={int(max_nbytes_use)} block_size={int(positions.size)}",
+            )
+        return None
+    metadata = {
+        "block_size": int(positions.size),
+        "kinetic_selected": int(kinetic_positions.size),
+        "tail_selected": int(tail_selected),
+        "x_count": int(x_count),
+        "ell_count": int(ell_count),
+        "species_count": None if species_count is None else int(species_count),
+        "theta_stride": int(max(1, int(theta_stride))),
+        "zeta_stride": int(max(1, int(zeta_stride))),
+        "include_tail": bool(include_tail),
+        "max_tail": int(max_tail),
+        "column_batch": int(batch),
+        "drop_tol": float(drop),
+        "a_window_nnz": int(a_window.nnz),
+        "a_window_nbytes_actual": int(a_window_nbytes),
+        "normal_nbytes": int(normal_nbytes),
+        "normal_regularization": float(normal_regularization),
+        "normal_solver": str(solver_kind),
+        "factor_nbytes_estimate": int(factor_nbytes),
+        "nonzero_column_count": int(np.count_nonzero(good)),
+        "zero_or_invalid_column_count": int(positions.size - np.count_nonzero(good)),
+        "damping": bool(damping),
+        "beta_max": float(beta_max),
+        "symbolic_ordering": ordering.to_dict(),
+        "setup_s": float(max(0.0, time.perf_counter() - t0)),
+    }
+    if emit is not None:
+        emit(
+            1,
+            "solve_v3_full_system_linear_gmres: true active block built "
+            f"block_size={int(positions.size)} kinetic={int(kinetic_positions.size)} "
+            f"tail={int(tail_selected)} nnz={int(a_window.nnz)} "
+            f"setup_s={metadata['setup_s']:.3f} bytes={int(factor_nbytes)}",
+        )
+    return _TrueOperatorWindowLSQPreconditionerBundle(
+        base_factor=factor_bundle,
+        true_matvec=lambda x: np.asarray(true_matvec(np.asarray(x, dtype=np.float64)), dtype=np.float64).reshape((-1,)),
+        window_positions=np.asarray(positions, dtype=np.int64),
+        a_window=a_scaled,
+        inv_column_scale=np.asarray(inv_col_scale, dtype=np.float64),
+        solve_normal=solve_normal,
+        kind=f"{getattr(factor_bundle, 'kind', 'host')}_true_active_block_lsq",
+        regularization=float(regularization),
+        damping=bool(damping),
+        beta_max=float(beta_max),
+        factor_nbytes_estimate=int(factor_nbytes),
+        factor_nnz_estimate=int(a_window.nnz),
+        factor_s=float(max(0.0, time.perf_counter() - t0)),
+        metadata=metadata,
+    )
+
+
+def _try_build_true_operator_active_residual_block_lsq_preconditioner(
+    *,
+    true_matvec: Callable[[np.ndarray], np.ndarray],
+    true_matmat: Callable[[np.ndarray], np.ndarray] | None,
+    factor_bundle: object,
+    residual: np.ndarray,
+    layout: RHS1BlockLayout,
+    active_indices: np.ndarray | None,
+    max_nbytes: int,
+    regularization: float,
+    max_block_size: int,
+    column_batch: int,
+    drop_tol: float,
+    include_tail: bool,
+    max_tail: int,
+    kinetic_only: bool = True,
+    damping: bool = False,
+    beta_max: float = 10.0,
+    emit: Callable[[int, str], None] | None = None,
+) -> _TrueOperatorWindowLSQPreconditionerBundle | None:
+    """Build a true-operator LSQ correction on dominant residual components.
+
+    This is the residual-adaptive counterpart to the deterministic low-x/low-ell
+    active block.  It selects the largest remaining residual entries in the
+    active vector, forms the exact true-operator columns ``A[:, W]``, and solves
+    a bounded normal equation for the correction on ``W``.  The caller still
+    performs the measured true-residual acceptance test.
+    """
+
+    import scipy.sparse as sp  # noqa: PLC0415
+    from scipy.linalg import cho_factor, cho_solve, lu_factor, lu_solve  # noqa: PLC0415
+
+    t0 = time.perf_counter()
+    residual_np = np.asarray(residual, dtype=np.float64).reshape((-1,))
+    n = int(residual_np.size)
+    active_np = (
+        np.arange(int(layout.total_size), dtype=np.int64)
+        if active_indices is None
+        else np.asarray(active_indices, dtype=np.int64).reshape((-1,))
+    )
+    if active_np.shape != (n,):
+        if emit is not None:
+            emit(
+                1,
+                "solve_v3_full_system_linear_gmres: true active residual block skipped "
+                f"active_shape_mismatch active={tuple(active_np.shape)} residual={(n,)}",
+            )
+        return None
+
+    max_block_size_use = max(1, int(max_block_size))
+    residual_abs = np.abs(residual_np)
+    finite = np.isfinite(residual_abs)
+    kinetic_mask = active_np < int(layout.f_size)
+    base_mask = finite & kinetic_mask if bool(kinetic_only) else finite
+    if bool(include_tail) and bool(kinetic_only):
+        tail_mask = finite & ~kinetic_mask
+    else:
+        tail_mask = np.zeros_like(finite, dtype=bool)
+
+    tail_selected = 0
+    tail_positions = np.zeros((0,), dtype=np.int64)
+    if bool(include_tail) and int(max_tail) > 0 and np.any(tail_mask):
+        tail_candidates = np.flatnonzero(tail_mask).astype(np.int64, copy=False)
+        tail_order = np.argsort(residual_abs[tail_candidates])[::-1]
+        tail_take = min(int(max_tail), max_block_size_use, int(tail_candidates.size))
+        tail_positions = tail_candidates[tail_order[:tail_take]].astype(np.int64, copy=False)
+        tail_selected = int(tail_positions.size)
+
+    kinetic_capacity = max(0, max_block_size_use - int(tail_positions.size))
+    if not np.any(base_mask) or kinetic_capacity == 0:
+        selected = tail_positions
+    else:
+        candidates = np.flatnonzero(base_mask).astype(np.int64, copy=False)
+        order = np.argsort(residual_abs[candidates])[::-1]
+        selected = candidates[order[:kinetic_capacity]].astype(np.int64, copy=False)
+        if tail_positions.size:
+            selected = np.concatenate((selected, tail_positions)).astype(np.int64, copy=False)
+    if selected.size:
+        _, first = np.unique(selected, return_index=True)
+        positions = selected[np.sort(first)].astype(np.int64, copy=False)
+    else:
+        positions = np.zeros((0,), dtype=np.int64)
+    if positions.size == 0:
+        return None
+    if positions.size > max_block_size_use:
+        return None
+
+    batch = max(1, int(column_batch))
+    max_nbytes_use = max(0, int(max_nbytes))
+    drop = max(0.0, float(drop_tol))
+    rows: list[np.ndarray] = []
+    cols: list[np.ndarray] = []
+    data: list[np.ndarray] = []
+    nnz_total = 0
+    for start in range(0, int(positions.size), int(batch)):
+        stop = min(int(positions.size), int(start) + int(batch))
+        pos_batch = np.asarray(positions[start:stop], dtype=np.int64)
+        ncols = int(pos_batch.size)
+        transient_estimated = int(2 * n * ncols * np.dtype(np.float64).itemsize)
+        estimated_before = int(nnz_total * (np.dtype(np.float64).itemsize + np.dtype(np.int32).itemsize))
+        estimated_before += int((positions.size + 1) * np.dtype(np.int32).itemsize)
+        estimated_before += int(2 * positions.size * positions.size * np.dtype(np.float64).itemsize)
+        estimated_before += int(transient_estimated)
+        if max_nbytes_use > 0 and estimated_before > max_nbytes_use:
+            if emit is not None:
+                emit(
+                    1,
+                    "solve_v3_full_system_linear_gmres: true active residual block budget exceeded "
+                    f"estimated_bytes={int(estimated_before)} max_bytes={int(max_nbytes_use)} "
+                    f"columns_done={int(start)}/{int(positions.size)}",
+                )
+            return None
+        basis = np.zeros((n, ncols), dtype=np.float64)
+        basis[pos_batch, np.arange(ncols, dtype=np.int64)] = 1.0
+        if true_matmat is not None and ncols > 1:
+            y_batch = np.asarray(true_matmat(basis), dtype=np.float64)
+        else:
+            y_batch = np.column_stack(
+                [np.asarray(true_matvec(basis[:, j]), dtype=np.float64).reshape((-1,)) for j in range(ncols)]
+            )
+        if y_batch.shape != (n, ncols):
+            return None
+        for local_col in range(ncols):
+            y_col = y_batch[:, local_col]
+            keep = np.flatnonzero(np.isfinite(y_col) & (np.abs(y_col) > drop))
+            if keep.size == 0:
+                continue
+            rows.append(keep.astype(np.int32, copy=False))
+            cols.append(np.full((int(keep.size),), int(start + local_col), dtype=np.int32))
+            data.append(np.asarray(y_col[keep], dtype=np.float64))
+            nnz_total += int(keep.size)
+    if not data:
+        return None
+
+    a_window = sp.csc_matrix(
+        (np.concatenate(data), (np.concatenate(rows), np.concatenate(cols))),
+        shape=(n, int(positions.size)),
+        dtype=np.float64,
+    )
+    a_window.sum_duplicates()
+    a_window.eliminate_zeros()
+    col_norms = np.sqrt(np.asarray(a_window.power(2).sum(axis=0), dtype=np.float64).reshape((-1,)))
+    norm_floor = max(float(abs(regularization)), np.finfo(np.float64).eps)
+    good = np.isfinite(col_norms) & (col_norms > norm_floor)
+    if not np.any(good):
+        return None
+    inv_col_scale = np.zeros_like(col_norms)
+    inv_col_scale[good] = 1.0 / col_norms[good]
+    a_scaled = a_window @ sp.diags(inv_col_scale, format="csc")
+    normal = np.asarray((a_scaled.T @ a_scaled).toarray(), dtype=np.float64)
+    normal_scale = max(float(np.linalg.norm(normal, ord=np.inf)) if normal.size else 0.0, 1.0)
+    normal_regularization = max(float(abs(regularization)), 1.0e-14) * normal_scale
+    normal = normal + normal_regularization * np.eye(int(positions.size), dtype=np.float64)
+    solver_kind = "cholesky"
+    try:
+        factor = cho_factor(normal, lower=True, check_finite=False)
+
+        def solve_normal(rhs: np.ndarray) -> np.ndarray:
+            return np.asarray(cho_solve(factor, rhs, check_finite=False), dtype=np.float64).reshape((-1,))
+
+    except Exception:  # noqa: BLE001
+        solver_kind = "lu"
+        lu, piv = lu_factor(normal, check_finite=False)
+
+        def solve_normal(rhs: np.ndarray) -> np.ndarray:
+            return np.asarray(lu_solve((lu, piv), rhs, check_finite=False), dtype=np.float64).reshape((-1,))
+
+    a_window_nbytes = int(a_window.data.nbytes + a_window.indices.nbytes + a_window.indptr.nbytes)
+    normal_nbytes = int(normal.nbytes)
+    factor_nbytes = int(
+        a_window_nbytes
+        + 2 * normal_nbytes
+        + inv_col_scale.nbytes
+        + int(getattr(factor_bundle, "factor_nbytes_estimate", 0) or 0)
+    )
+    if max_nbytes_use > 0 and factor_nbytes > max_nbytes_use:
+        if emit is not None:
+            emit(
+                1,
+                "solve_v3_full_system_linear_gmres: true active residual block skipped final_budget "
+                f"bytes={int(factor_nbytes)} max_bytes={int(max_nbytes_use)} block_size={int(positions.size)}",
+            )
+        return None
+
+    total_energy = float(np.sum(np.square(residual_np[np.isfinite(residual_np)])))
+    selected_energy = float(np.sum(np.square(residual_np[positions])))
+    metadata = {
+        "block_size": int(positions.size),
+        "kinetic_selected": int(np.count_nonzero(active_np[positions] < int(layout.f_size))),
+        "tail_selected": int(tail_selected),
+        "kinetic_only": bool(kinetic_only),
+        "include_tail": bool(include_tail),
+        "max_tail": int(max_tail),
+        "column_batch": int(batch),
+        "drop_tol": float(drop),
+        "a_window_nnz": int(a_window.nnz),
+        "a_window_nbytes_actual": int(a_window_nbytes),
+        "normal_nbytes": int(normal_nbytes),
+        "normal_regularization": float(normal_regularization),
+        "normal_solver": str(solver_kind),
+        "factor_nbytes_estimate": int(factor_nbytes),
+        "nonzero_column_count": int(np.count_nonzero(good)),
+        "zero_or_invalid_column_count": int(positions.size - np.count_nonzero(good)),
+        "residual_energy_fraction": float(selected_energy / total_energy) if total_energy > 0.0 else 0.0,
+        "max_residual_abs_selected": float(np.max(residual_abs[positions])) if positions.size else 0.0,
+        "damping": bool(damping),
+        "beta_max": float(beta_max),
+        "selection": "top_residual_active_positions",
+        "setup_s": float(max(0.0, time.perf_counter() - t0)),
+    }
+    if emit is not None:
+        emit(
+            1,
+            "solve_v3_full_system_linear_gmres: true active residual block built "
+            f"block_size={int(positions.size)} kinetic={metadata['kinetic_selected']} "
+            f"tail={int(tail_selected)} energy={metadata['residual_energy_fraction']:.3e} "
+            f"nnz={int(a_window.nnz)} setup_s={metadata['setup_s']:.3f} bytes={int(factor_nbytes)}",
+        )
+    return _TrueOperatorWindowLSQPreconditionerBundle(
+        base_factor=factor_bundle,
+        true_matvec=lambda x: np.asarray(true_matvec(np.asarray(x, dtype=np.float64)), dtype=np.float64).reshape((-1,)),
+        window_positions=np.asarray(positions, dtype=np.int64),
+        a_window=a_scaled,
+        inv_column_scale=np.asarray(inv_col_scale, dtype=np.float64),
+        solve_normal=solve_normal,
+        kind=f"{getattr(factor_bundle, 'kind', 'host')}_true_active_residual_block_lsq",
+        regularization=float(regularization),
+        damping=bool(damping),
+        beta_max=float(beta_max),
+        factor_nbytes_estimate=int(factor_nbytes),
+        factor_nnz_estimate=int(a_window.nnz),
+        factor_s=float(max(0.0, time.perf_counter() - t0)),
+        metadata=metadata,
+    )
+
+
+def _try_build_true_operator_active_submatrix_preconditioner(
+    *,
+    true_matvec: Callable[[np.ndarray], np.ndarray],
+    true_matmat: Callable[[np.ndarray], np.ndarray] | None,
+    factor_bundle: object,
+    residual: np.ndarray,
+    layout: RHS1BlockLayout,
+    active_indices: np.ndarray | None,
+    x_count: int,
+    ell_count: int,
+    max_nbytes: int,
+    regularization: float,
+    max_block_size: int,
+    column_batch: int,
+    drop_tol: float,
+    include_tail: bool,
+    max_tail: int,
+    species_count: int | None = None,
+    theta_stride: int = 1,
+    zeta_stride: int = 1,
+    damping: bool = True,
+    alpha_clip: float = 10.0,
+    emit: Callable[[int, str], None] | None = None,
+) -> _TrueOperatorActiveSubmatrixPreconditionerBundle | None:
+    """Build a true local active-block factor ``A[W,W]``.
+
+    The LSQ active-block path uses full columns ``A[:, W]`` as a coarse
+    correction.  This builder instead factors the local block rows and columns
+    directly, which is closer to an additive-Schwarz block solve and retains
+    the true finite-beta/field-split couplings inside the selected active
+    kinetic block.
+    """
+
+    import scipy.sparse as sp  # noqa: PLC0415
+    from scipy.sparse.linalg import splu, spilu  # noqa: PLC0415
+
+    t0 = time.perf_counter()
+    residual_np = np.asarray(residual, dtype=np.float64).reshape((-1,))
+    n = int(residual_np.size)
+    active_np = (
+        np.arange(int(layout.total_size), dtype=np.int64)
+        if active_indices is None
+        else np.asarray(active_indices, dtype=np.int64).reshape((-1,))
+    )
+    if active_np.shape != (n,):
+        if emit is not None:
+            emit(
+                1,
+                "solve_v3_full_system_linear_gmres: true active submatrix skipped "
+                f"active_shape_mismatch active={tuple(active_np.shape)} residual={(n,)}",
+            )
+        return None
+    try:
+        ordering = RHS1ActiveFieldSplitOrdering.from_layout(layout, active_np)
+    except ValueError as exc:
+        if emit is not None:
+            emit(
+                1,
+                "solve_v3_full_system_linear_gmres: true active submatrix skipped "
+                f"invalid_ordering={type(exc).__name__}: {exc}",
+            )
+        return None
+
+    max_block_size_use = max(1, int(max_block_size))
+    kinetic_positions = ordering.dominant_kinetic_positions(
+        x_count=max(0, int(x_count)),
+        ell_count=max(0, int(ell_count)),
+        species_count=species_count,
+        theta_stride=max(1, int(theta_stride)),
+        zeta_stride=max(1, int(zeta_stride)),
+        max_positions=max_block_size_use,
+    )
+    positions = kinetic_positions.astype(np.int64, copy=False)
+    tail_selected = 0
+    if bool(include_tail) and positions.size < max_block_size_use and int(max_tail) > 0:
+        tail_candidates = np.concatenate(
+            (
+                ordering.phi1_positions.astype(np.int64, copy=False),
+                ordering.extra_positions.astype(np.int64, copy=False),
+            )
+        )
+        if tail_candidates.size:
+            take = min(int(max_tail), max_block_size_use - int(positions.size))
+            tail_selected = int(min(int(tail_candidates.size), int(take)))
+            positions = np.concatenate((positions, tail_candidates[:tail_selected])).astype(np.int64, copy=False)
+    if positions.size:
+        _, first = np.unique(positions, return_index=True)
+        positions = positions[np.sort(first)].astype(np.int64, copy=False)
+    if positions.size == 0 or positions.size > max_block_size_use:
+        return None
+
+    batch = max(1, int(column_batch))
+    max_nbytes_use = max(0, int(max_nbytes))
+    drop = max(0.0, float(drop_tol))
+    rows: list[np.ndarray] = []
+    cols: list[np.ndarray] = []
+    data: list[np.ndarray] = []
+    nnz_total = 0
+    for start in range(0, int(positions.size), int(batch)):
+        stop = min(int(positions.size), int(start) + int(batch))
+        pos_batch = np.asarray(positions[start:stop], dtype=np.int64)
+        ncols = int(pos_batch.size)
+        transient_estimated = int(2 * n * ncols * np.dtype(np.float64).itemsize)
+        estimated_before = int(nnz_total * (np.dtype(np.float64).itemsize + np.dtype(np.int32).itemsize))
+        estimated_before += int((positions.size + 1) * np.dtype(np.int32).itemsize)
+        estimated_before += int(positions.size * positions.size * np.dtype(np.float64).itemsize)
+        estimated_before += int(transient_estimated)
+        if max_nbytes_use > 0 and estimated_before > max_nbytes_use:
+            if emit is not None:
+                emit(
+                    1,
+                    "solve_v3_full_system_linear_gmres: true active submatrix budget exceeded "
+                    f"estimated_bytes={int(estimated_before)} max_bytes={int(max_nbytes_use)} "
+                    f"columns_done={int(start)}/{int(positions.size)}",
+                )
+            return None
+        basis = np.zeros((n, ncols), dtype=np.float64)
+        basis[pos_batch, np.arange(ncols, dtype=np.int64)] = 1.0
+        if true_matmat is not None and ncols > 1:
+            y_batch = np.asarray(true_matmat(basis), dtype=np.float64)
+        else:
+            y_batch = np.column_stack(
+                [np.asarray(true_matvec(basis[:, j]), dtype=np.float64).reshape((-1,)) for j in range(ncols)]
+            )
+        if y_batch.shape != (n, ncols):
+            return None
+        for local_col in range(ncols):
+            y_col = y_batch[:, local_col]
+            keep = np.flatnonzero(np.isfinite(y_col) & (np.abs(y_col) > drop))
+            if keep.size == 0:
+                continue
+            rows.append(keep.astype(np.int32, copy=False))
+            cols.append(np.full((int(keep.size),), int(start + local_col), dtype=np.int32))
+            data.append(np.asarray(y_col[keep], dtype=np.float64))
+            nnz_total += int(keep.size)
+    if not data:
+        return None
+
+    a_window = sp.csc_matrix(
+        (np.concatenate(data), (np.concatenate(rows), np.concatenate(cols))),
+        shape=(n, int(positions.size)),
+        dtype=np.float64,
+    )
+    a_window.sum_duplicates()
+    a_window.eliminate_zeros()
+    a_block = a_window[positions, :].tocsc()
+    a_block.sum_duplicates()
+    a_block.eliminate_zeros()
+    if a_block.shape != (int(positions.size), int(positions.size)) or a_block.nnz == 0:
+        return None
+
+    row_norms = np.sqrt(np.asarray(a_block.power(2).sum(axis=1), dtype=np.float64).reshape((-1,)))
+    col_norms = np.sqrt(np.asarray(a_block.power(2).sum(axis=0), dtype=np.float64).reshape((-1,)))
+    norm_floor = max(float(abs(regularization)), np.finfo(np.float64).eps)
+    inv_row_scale = np.ones_like(row_norms)
+    inv_col_scale = np.ones_like(col_norms)
+    good_rows = np.isfinite(row_norms) & (row_norms > norm_floor)
+    good_cols = np.isfinite(col_norms) & (col_norms > norm_floor)
+    inv_row_scale[good_rows] = 1.0 / row_norms[good_rows]
+    inv_col_scale[good_cols] = 1.0 / col_norms[good_cols]
+    a_scaled = sp.diags(inv_row_scale, format="csc") @ a_block @ sp.diags(inv_col_scale, format="csc")
+    scale = max(float(np.max(np.abs(a_scaled.data))) if a_scaled.nnz else 0.0, 1.0)
+    reg = max(float(abs(regularization)), 1.0e-14) * scale
+    if reg > 0.0:
+        a_scaled = (a_scaled + reg * sp.eye(int(positions.size), format="csc", dtype=np.float64)).tocsc()
+
+    solver_kind = "splu"
+    try:
+        lu = splu(a_scaled, permc_spec="COLAMD", diag_pivot_thresh=0.0)
+    except Exception:  # noqa: BLE001
+        solver_kind = "spilu"
+        lu = spilu(a_scaled, drop_tol=max(float(regularization), 1.0e-12), fill_factor=20.0)
+
+    def solve_block(rhs_block: np.ndarray) -> np.ndarray:
+        rhs_np = np.asarray(rhs_block, dtype=np.float64).reshape((-1,))
+        y_scaled = np.asarray(lu.solve(inv_row_scale * rhs_np), dtype=np.float64).reshape((-1,))
+        return np.asarray(inv_col_scale * y_scaled, dtype=np.float64).reshape((-1,))
+
+    a_window_nbytes = int(a_window.data.nbytes + a_window.indices.nbytes + a_window.indptr.nbytes)
+    a_block_nbytes = int(a_block.data.nbytes + a_block.indices.nbytes + a_block.indptr.nbytes)
+    lu_nnz = int(getattr(lu, "L").nnz + getattr(lu, "U").nnz)
+    factor_nbytes = int(
+        a_window_nbytes
+        + a_block_nbytes
+        + lu_nnz * (np.dtype(np.float64).itemsize + np.dtype(np.int32).itemsize)
+        + inv_row_scale.nbytes
+        + inv_col_scale.nbytes
+        + int(getattr(factor_bundle, "factor_nbytes_estimate", 0) or 0)
+    )
+    if max_nbytes_use > 0 and factor_nbytes > max_nbytes_use:
+        if emit is not None:
+            emit(
+                1,
+                "solve_v3_full_system_linear_gmres: true active submatrix skipped final_budget "
+                f"bytes={int(factor_nbytes)} max_bytes={int(max_nbytes_use)} block_size={int(positions.size)}",
+            )
+        return None
+
+    metadata = {
+        "block_size": int(positions.size),
+        "kinetic_selected": int(kinetic_positions.size),
+        "tail_selected": int(tail_selected),
+        "x_count": int(x_count),
+        "ell_count": int(ell_count),
+        "species_count": None if species_count is None else int(species_count),
+        "theta_stride": int(max(1, int(theta_stride))),
+        "zeta_stride": int(max(1, int(zeta_stride))),
+        "include_tail": bool(include_tail),
+        "max_tail": int(max_tail),
+        "column_batch": int(batch),
+        "drop_tol": float(drop),
+        "a_window_nnz": int(a_window.nnz),
+        "a_block_nnz": int(a_block.nnz),
+        "lu_nnz": int(lu_nnz),
+        "a_window_nbytes_actual": int(a_window_nbytes),
+        "a_block_nbytes_actual": int(a_block_nbytes),
+        "local_regularization": float(reg),
+        "local_solver": str(solver_kind),
+        "factor_nbytes_estimate": int(factor_nbytes),
+        "damping": bool(damping),
+        "alpha_clip": float(alpha_clip),
+        "symbolic_ordering": ordering.to_dict(),
+        "setup_s": float(max(0.0, time.perf_counter() - t0)),
+    }
+    if emit is not None:
+        emit(
+            1,
+            "solve_v3_full_system_linear_gmres: true active submatrix built "
+            f"block_size={int(positions.size)} kinetic={int(kinetic_positions.size)} "
+            f"tail={int(tail_selected)} block_nnz={int(a_block.nnz)} lu_nnz={int(lu_nnz)} "
+            f"setup_s={metadata['setup_s']:.3f} bytes={int(factor_nbytes)}",
+        )
+    return _TrueOperatorActiveSubmatrixPreconditionerBundle(
+        base_factor=factor_bundle,
+        true_matvec=lambda x: np.asarray(true_matvec(np.asarray(x, dtype=np.float64)), dtype=np.float64).reshape((-1,)),
+        block_positions=np.asarray(positions, dtype=np.int64),
+        a_window=a_window,
+        solve_block=solve_block,
+        kind=f"{getattr(factor_bundle, 'kind', 'host')}_true_active_submatrix",
+        damping=bool(damping),
+        alpha_clip=float(alpha_clip),
+        factor_nbytes_estimate=int(factor_nbytes),
+        factor_nnz_estimate=int(a_block.nnz),
+        factor_s=float(max(0.0, time.perf_counter() - t0)),
+        metadata=metadata,
+    )
+
+
+def _try_build_true_operator_coupled_coarse_lsq_preconditioner(
+    *,
+    true_matvec: Callable[[np.ndarray], np.ndarray],
+    true_matmat: Callable[[np.ndarray], np.ndarray] | None,
+    factor_bundle: object,
+    residual: np.ndarray,
+    op: V3FullSystemOperator,
+    layout: RHS1BlockLayout,
+    active_indices: np.ndarray | None,
+    max_windows: int,
+    x_radius: int,
+    ell_radius: int,
+    max_nbytes: int,
+    regularization: float,
+    max_coarse_size: int,
+    column_batch: int,
+    drop_tol: float,
+    low_lmax: int,
+    profile_moment_count: int,
+    angular_lmax: int,
+    angular_mode_max: int,
+    max_tail_units: int,
+    include_tail: bool,
+    include_constraint_sources: bool,
+    include_fsavg: bool,
+    include_window_residual: bool,
+    include_profile_moments: bool,
+    include_angular_residual: bool,
+    include_angular_basis: bool,
+    include_preconditioned_loads: bool,
+    preconditioned_load_max_columns: int,
+    preconditioned_load_max_nnz: int,
+    preconditioned_load_drop_tol: float,
+    damping: bool = False,
+    beta_max: float = 10.0,
+    emit: Callable[[int, str], None] | None = None,
+) -> _TrueOperatorCoupledCoarseLSQPreconditionerBundle | None:
+    """Build a coupled true-operator coarse residual correction.
+
+    The basis is deliberately small and physics-structured: it combines the
+    global tail/source unknowns, source-moment directions used by
+    constraintScheme=1/2, velocity/profile moments, low-L flux-surface-averaged
+    residual moments, low Fourier angular residual projections, and the dominant
+    kinetic residual window.  Optionally it also applies the existing active
+    preconditioner to these physics/load directions, yielding solution-space
+    response columns closer to a field-split Schur correction.  The coarse
+    equation uses columns of the *true* active operator, not the reduced
+    preconditioner matrix.
+    """
+
+    import scipy.sparse as sp  # noqa: PLC0415
+    from scipy.linalg import cho_factor, cho_solve, lu_factor, lu_solve  # noqa: PLC0415
+
+    t0 = time.perf_counter()
+    residual_np = np.asarray(residual, dtype=np.float64).reshape((-1,))
+    n = int(residual_np.size)
+    if active_indices is None:
+        active_np = np.arange(int(layout.total_size), dtype=np.int64)
+    else:
+        active_np = np.asarray(active_indices, dtype=np.int64).reshape((-1,))
+    if active_np.shape != (n,):
+        if emit is not None:
+            emit(
+                1,
+                "solve_v3_full_system_linear_gmres: true coupled coarse skipped "
+                f"active_shape_mismatch active={tuple(active_np.shape)} residual={(n,)}",
+            )
+        return None
+    max_cols = max(1, int(max_coarse_size))
+    max_nbytes_use = max(0, int(max_nbytes))
+    drop = max(0.0, float(drop_tol))
+
+    col_rows: list[np.ndarray] = []
+    col_data: list[np.ndarray] = []
+    names: list[str] = []
+
+    def _add_active_column(name: str, positions: Any, values: Any) -> None:
+        if len(names) >= max_cols:
+            return
+        pos = np.asarray(positions, dtype=np.int64).reshape((-1,))
+        val = np.asarray(values, dtype=np.float64).reshape((-1,))
+        if pos.shape != val.shape or pos.size == 0:
+            return
+        valid = (pos >= 0) & (pos < n) & np.isfinite(val) & (np.abs(val) > 0.0)
+        if not np.any(valid):
+            return
+        pos = pos[valid]
+        val = val[valid]
+        order = np.argsort(pos)
+        pos = pos[order]
+        val = val[order]
+        unique, inverse = np.unique(pos, return_inverse=True)
+        if unique.size != pos.size:
+            summed = np.zeros((int(unique.size),), dtype=np.float64)
+            np.add.at(summed, inverse, val)
+            pos = unique
+            val = summed
+        norm = float(np.linalg.norm(val))
+        if not (np.isfinite(norm) and norm > 0.0):
+            return
+        col_rows.append(pos.astype(np.int32, copy=False))
+        col_data.append(val.astype(np.float64, copy=False))
+        names.append(str(name))
+
+    def _add_full_column(name: str, full: Any) -> None:
+        if len(names) >= max_cols:
+            return
+        vec = np.asarray(full, dtype=np.float64).reshape((-1,))
+        if vec.shape != (int(layout.total_size),):
+            return
+        active_values = vec[active_np]
+        keep = np.flatnonzero(np.isfinite(active_values) & (np.abs(active_values) > 0.0))
+        if keep.size == 0:
+            return
+        _add_active_column(name, keep, active_values[keep])
+
+    def _apply_base_preconditioner_response(load: np.ndarray) -> np.ndarray | None:
+        load_np = np.asarray(load, dtype=np.float64).reshape((-1,))
+        if load_np.shape != (n,):
+            return None
+        try:
+            solve = getattr(factor_bundle, "solve", None)
+            if solve is not None:
+                response = np.asarray(solve(load_np), dtype=np.float64).reshape((-1,))
+                if response.shape == (n,):
+                    return response
+        except Exception:
+            pass
+        try:
+            operator = getattr(factor_bundle, "operator", None)
+            matvec = getattr(operator, "matvec", None)
+            if matvec is not None:
+                response = np.asarray(matvec(load_np), dtype=np.float64).reshape((-1,))
+                if response.shape == (n,):
+                    return response
+            if callable(operator):
+                response = np.asarray(operator(load_np), dtype=np.float64).reshape((-1,))
+                if response.shape == (n,):
+                    return response
+        except Exception:
+            pass
+        return None
+
+    kinetic_mask = active_np < int(layout.f_size)
+    kinetic_positions = np.flatnonzero(kinetic_mask).astype(np.int64, copy=False)
+    decoded = None
+    if kinetic_positions.size:
+        decoded = layout.decode_kinetic_indices(active_np[kinetic_mask])
+
+    def _add_decoded_kinetic_column(name: str, mask: np.ndarray, values: np.ndarray) -> None:
+        if decoded is None or kinetic_positions.size == 0:
+            return
+        mask_np = np.asarray(mask, dtype=bool).reshape((-1,))
+        if mask_np.shape != kinetic_positions.shape:
+            return
+        local = kinetic_positions[mask_np]
+        if local.size == 0:
+            return
+        values_np = np.asarray(values, dtype=np.float64).reshape((-1,))
+        if values_np.shape != kinetic_positions.shape:
+            return
+        _add_active_column(name, local, values_np[mask_np])
+
+    positions, window_metadata = _true_operator_window_positions_from_residual(
+        residual=residual_np,
+        layout=layout,
+        active_indices=active_np,
+        max_windows=int(max_windows),
+        x_radius=int(x_radius),
+        ell_radius=int(ell_radius),
+        include_tail=False,
+        explicit_specs=(),
+    )
+    if bool(include_window_residual) and positions.size:
+        _add_active_column("dominant_kinetic_residual_window", positions, residual_np[positions])
+        if decoded is not None:
+            for i_window, meta in enumerate(window_metadata):
+                if len(names) >= max_cols:
+                    break
+                try:
+                    species = int(meta.get("species", -1))
+                    x_lo, x_hi = tuple(int(v) for v in meta.get("x_range", (-1, -1)))
+                    ell_lo, ell_hi = tuple(int(v) for v in meta.get("ell_range", (-1, -1)))
+                    x_center = int(meta.get("x_center", x_lo))
+                    ell_center = int(meta.get("ell_center", ell_lo))
+                except Exception:
+                    continue
+                mask = (
+                    (decoded.species == int(species))
+                    & (decoded.x >= int(x_lo))
+                    & (decoded.x <= int(x_hi))
+                    & (decoded.ell >= int(ell_lo))
+                    & (decoded.ell <= int(ell_hi))
+                )
+                values = residual_np[kinetic_positions]
+                _add_decoded_kinetic_column(
+                    f"dominant_kinetic_residual_window_{i_window}_s{species}_x{x_center}_l{ell_center}",
+                    mask,
+                    values,
+                )
+
+    tail_positions = np.flatnonzero(active_np >= int(layout.f_size)).astype(np.int64, copy=False)
+    if bool(include_tail) and tail_positions.size:
+        _add_active_column("tail_residual", tail_positions, residual_np[tail_positions])
+        if int(tail_positions.size) <= int(max_tail_units):
+            for local_pos in tail_positions:
+                _add_active_column(f"tail_unit_{int(active_np[int(local_pos)] - int(layout.f_size))}", [local_pos], [1.0])
+
+    if bool(include_constraint_sources):
+        if int(op.constraint_scheme) == 1:
+            ix0 = _ix_min(bool(op.point_at_x0))
+            source_basis = _source_basis_constraint_scheme_1(op.x)
+            for species in range(int(op.n_species)):
+                for basis_index, basis in enumerate(source_basis):
+                    if len(names) >= max_cols:
+                        break
+                    f_dir = jnp.zeros(op.fblock.f_shape, dtype=jnp.float64)
+                    f_dir = f_dir.at[species, ix0:, 0, :, :].set(basis[ix0:, None, None])
+                    full = jnp.concatenate(
+                        [f_dir.reshape((-1,)), jnp.zeros((int(layout.total_size) - int(layout.f_size),), dtype=jnp.float64)]
+                    )
+                    _add_full_column(f"constraint1_source_s{species}_{basis_index}", full)
+        elif int(op.constraint_scheme) == 2:
+            try:
+                f_res = jnp.zeros(op.fblock.f_shape, dtype=jnp.float64)
+                kinetic_mask = active_np < int(layout.f_size)
+                if np.any(kinetic_mask):
+                    f_res = f_res.reshape((-1,)).at[jnp.asarray(active_np[kinetic_mask], dtype=jnp.int32)].set(
+                        jnp.asarray(residual_np[np.flatnonzero(kinetic_mask)], dtype=jnp.float64)
+                    )
+                    f_res = f_res.reshape(op.fblock.f_shape)
+                    src = _constraint_scheme2_source_from_f(op, f_res)
+                    full = jnp.concatenate(
+                        [
+                            _constraint_scheme2_inject_source(op, src),
+                            jnp.zeros((int(layout.total_size) - int(layout.f_size),), dtype=jnp.float64),
+                        ]
+                    )
+                    _add_full_column("constraint2_source_residual", full)
+            except Exception:
+                pass
+
+    factor_np = None
+    f_res_np = None
+    if kinetic_positions.size:
+        f_res_np = np.zeros(tuple(int(v) for v in op.fblock.f_shape), dtype=np.float64)
+        f_res_np.reshape((-1,))[active_np[kinetic_mask]] = residual_np[np.flatnonzero(kinetic_mask)]
+        factor_np = np.asarray(
+            jax.device_get(_fs_average_factor(op.theta_weights, op.zeta_weights, op.d_hat)),
+            dtype=np.float64,
+        )
+
+    if bool(include_profile_moments) and kinetic_positions.size and decoded is not None:
+        x_np = np.asarray(jax.device_get(op.x), dtype=np.float64).reshape((-1,))
+        xw_np = np.asarray(jax.device_get(op.x_weights), dtype=np.float64).reshape((-1,))
+        if x_np.size == int(layout.n_x) and xw_np.size == int(layout.n_x):
+            moment_specs: list[tuple[str, int, np.ndarray]] = [
+                ("density_moment", 0, (x_np**2) * xw_np),
+                ("pressure_moment", 0, (x_np**4) * xw_np),
+                ("flow_current_moment", min(1, int(layout.n_xi) - 1), (x_np**3) * xw_np),
+                ("heat_flow_moment", min(1, int(layout.n_xi) - 1), (x_np**5) * xw_np),
+            ]
+            if factor_np is not None:
+                angular_values = np.asarray(factor_np[decoded.theta, decoded.zeta], dtype=np.float64)
+                angular_norm = float(np.linalg.norm(angular_values))
+                if np.isfinite(angular_norm) and angular_norm > 0.0:
+                    angular_values = angular_values / float(angular_norm)
+                else:
+                    angular_values = np.full(
+                        kinetic_positions.shape,
+                        float(max(1, int(layout.n_theta) * int(layout.n_zeta))) ** -0.5,
+                        dtype=np.float64,
+                    )
+            else:
+                angular_values = np.full(
+                    kinetic_positions.shape,
+                    float(max(1, int(layout.n_theta) * int(layout.n_zeta))) ** -0.5,
+                    dtype=np.float64,
+                )
+            for moment_name, ell, weights in moment_specs[: max(0, int(profile_moment_count))]:
+                if len(names) >= max_cols:
+                    break
+                if int(ell) < 0 or int(ell) >= int(layout.n_xi):
+                    continue
+                for species in range(int(layout.n_species)):
+                    if len(names) >= max_cols:
+                        break
+                    mask = (decoded.species == int(species)) & (decoded.ell == int(ell))
+                    values = np.asarray(weights[decoded.x], dtype=np.float64) * angular_values
+                    _add_decoded_kinetic_column(f"profile_{moment_name}_s{species}_l{int(ell)}", mask, values)
+
+    if bool(include_fsavg):
+        if f_res_np is not None and factor_np is not None:
+            f_res_np = np.zeros(tuple(int(v) for v in op.fblock.f_shape), dtype=np.float64)
+            f_res_np.reshape((-1,))[active_np[kinetic_mask]] = residual_np[np.flatnonzero(kinetic_mask)]
+            lmax_use = max(0, min(int(low_lmax), int(layout.n_xi) - 1))
+            for ell in range(lmax_use + 1):
+                for species in range(int(layout.n_species)):
+                    if len(names) >= max_cols:
+                        break
+                    avg = np.einsum("tz,xtz->x", factor_np, f_res_np[species, :, ell, :, :])
+                    f_dir_np = np.zeros_like(f_res_np)
+                    f_dir_np[species, :, ell, :, :] = avg[:, None, None]
+                    full_np = np.concatenate(
+                        [
+                            f_dir_np.reshape((-1,)),
+                            np.zeros((int(layout.total_size) - int(layout.f_size),), dtype=np.float64),
+                        ]
+                    )
+                    _add_full_column(f"fsavg_residual_s{species}_l{ell}", full_np)
+
+    if (
+        (bool(include_angular_residual) or bool(include_angular_basis))
+        and f_res_np is not None
+        and factor_np is not None
+        and decoded is not None
+        and int(layout.n_theta) > 1
+        and int(layout.n_zeta) > 1
+    ):
+        theta = np.arange(int(layout.n_theta), dtype=np.float64)
+        zeta = np.arange(int(layout.n_zeta), dtype=np.float64)
+        two_pi = float(2.0 * np.pi)
+        all_mode_pairs = (
+            (1, 0),
+            (0, 1),
+            (1, 1),
+            (1, -1),
+            (2, 0),
+            (0, 2),
+            (2, 1),
+            (1, 2),
+            (2, -1),
+            (1, -2),
+            (2, 2),
+            (2, -2),
+            (3, 0),
+            (0, 3),
+            (3, 1),
+            (1, 3),
+            (3, -1),
+            (1, -3),
+        )
+        max_mode = max(0, int(angular_mode_max))
+        mode_pairs = tuple(
+            pair for pair in all_mode_pairs if max(abs(int(pair[0])), abs(int(pair[1]))) <= int(max_mode)
+        )
+        lmax_use = max(0, min(int(angular_lmax), int(layout.n_xi) - 1))
+        for ell in range(lmax_use + 1):
+            for m_mode, n_mode in mode_pairs:
+                if len(names) >= max_cols:
+                    break
+                phase = two_pi * (
+                    float(m_mode) * theta[:, None] / float(max(1, int(layout.n_theta)))
+                    + float(n_mode) * zeta[None, :] / float(max(1, int(layout.n_zeta)))
+                )
+                for parity, pattern in (("cos", np.cos(phase)), ("sin", np.sin(phase))):
+                    if len(names) >= max_cols:
+                        break
+                    weighted_pattern = factor_np * pattern
+                    denom = float(np.sum(weighted_pattern * pattern))
+                    if not (np.isfinite(denom) and abs(denom) > 0.0):
+                        denom = float(np.sum(pattern * pattern))
+                    if not (np.isfinite(denom) and abs(denom) > 0.0):
+                        continue
+                    pattern_values = pattern[decoded.theta, decoded.zeta]
+                    if bool(include_angular_residual):
+                        for species in range(int(layout.n_species)):
+                            if len(names) >= max_cols:
+                                break
+                            coeff = np.einsum(
+                                "tz,xtz->x",
+                                weighted_pattern,
+                                f_res_np[species, :, ell, :, :],
+                            ) / float(denom)
+                            mask = (decoded.species == int(species)) & (decoded.ell == int(ell))
+                            values = np.asarray(coeff[decoded.x], dtype=np.float64) * pattern_values
+                            _add_decoded_kinetic_column(
+                                f"angular_residual_s{species}_l{ell}_m{m_mode}_n{n_mode}_{parity}",
+                                mask,
+                                values,
+                            )
+                    if bool(include_angular_basis):
+                        pattern_norm = float(np.linalg.norm(pattern))
+                        if not (np.isfinite(pattern_norm) and pattern_norm > 0.0):
+                            continue
+                        unit_pattern_values = pattern_values / float(pattern_norm)
+                        for species in range(int(layout.n_species)):
+                            if len(names) >= max_cols:
+                                break
+                            mask = (decoded.species == int(species)) & (decoded.ell == int(ell))
+                            _add_decoded_kinetic_column(
+                                f"angular_basis_s{species}_l{ell}_m{m_mode}_n{n_mode}_{parity}",
+                                mask,
+                                unit_pattern_values,
+                            )
+
+    if not names:
+        if emit is not None:
+            emit(1, "solve_v3_full_system_linear_gmres: true coupled coarse skipped empty_basis")
+        return None
+    rows = np.concatenate(col_rows)
+    cols = np.concatenate(
+        [np.full((int(row.size),), int(i), dtype=np.int32) for i, row in enumerate(col_rows)]
+    )
+    data = np.concatenate(col_data)
+    z_basis = sp.csc_matrix((data, (rows, cols)), shape=(n, int(len(names))), dtype=np.float64)
+    z_basis.sum_duplicates()
+    z_basis.eliminate_zeros()
+    preconditioned_load_column_count = 0
+    preconditioned_load_nnz = 0
+    if bool(include_preconditioned_loads) and int(z_basis.shape[1]) > 0 and len(names) < max_cols:
+        max_pre_cols = max(0, min(int(preconditioned_load_max_columns), int(z_basis.shape[1])))
+        max_pre_nnz = max(0, int(preconditioned_load_max_nnz))
+        pre_drop = max(0.0, float(preconditioned_load_drop_tol))
+        extra_rows: list[np.ndarray] = []
+        extra_cols: list[np.ndarray] = []
+        extra_data: list[np.ndarray] = []
+        extra_names: list[str] = []
+        for source_col in range(max_pre_cols):
+            if len(names) + len(extra_names) >= max_cols:
+                break
+            try:
+                load = np.asarray(z_basis[:, source_col].toarray(), dtype=np.float64).reshape((-1,))
+                response = _apply_base_preconditioner_response(load)
+            except Exception:
+                continue
+            if response is None:
+                continue
+            if response.shape != (n,):
+                continue
+            keep = np.flatnonzero(np.isfinite(response) & (np.abs(response) > float(pre_drop)))
+            if keep.size == 0:
+                continue
+            if max_pre_nnz > 0 and keep.size > max_pre_nnz:
+                local_order = np.argpartition(np.abs(response[keep]), -int(max_pre_nnz))[-int(max_pre_nnz) :]
+                keep = np.sort(keep[local_order])
+            values = response[keep]
+            norm = float(np.linalg.norm(values))
+            if not (np.isfinite(norm) and norm > 0.0):
+                continue
+            col_index = int(len(extra_names))
+            extra_rows.append(keep.astype(np.int32, copy=False))
+            extra_cols.append(np.full((int(keep.size),), col_index, dtype=np.int32))
+            extra_data.append(np.asarray(values, dtype=np.float64))
+            extra_names.append(f"preconditioned_{names[source_col]}")
+            preconditioned_load_nnz += int(keep.size)
+        if extra_data:
+            extra_basis = sp.csc_matrix(
+                (np.concatenate(extra_data), (np.concatenate(extra_rows), np.concatenate(extra_cols))),
+                shape=(n, int(len(extra_names))),
+                dtype=np.float64,
+            )
+            extra_basis.sum_duplicates()
+            extra_basis.eliminate_zeros()
+            z_basis = sp.hstack([z_basis, extra_basis], format="csc")
+            names.extend(extra_names)
+            preconditioned_load_column_count = int(extra_basis.shape[1])
+    z_col_norms = np.sqrt(np.asarray(z_basis.power(2).sum(axis=0), dtype=np.float64).reshape((-1,)))
+    valid_z = np.flatnonzero(np.isfinite(z_col_norms) & (z_col_norms > 0.0))
+    if valid_z.size == 0:
+        return None
+    if valid_z.size != z_basis.shape[1]:
+        z_basis = z_basis[:, valid_z].tocsc()
+        names = [names[int(i)] for i in valid_z]
+
+    batch = max(1, int(column_batch))
+    az_rows: list[np.ndarray] = []
+    az_cols: list[np.ndarray] = []
+    az_data: list[np.ndarray] = []
+    nnz_total = 0
+    for start in range(0, int(z_basis.shape[1]), int(batch)):
+        stop = min(int(z_basis.shape[1]), int(start) + int(batch))
+        z_batch = np.asarray(z_basis[:, start:stop].toarray(), dtype=np.float64)
+        transient_estimated = int(2 * n * int(z_batch.shape[1]) * np.dtype(np.float64).itemsize)
+        estimated_before = int((z_basis.nnz + nnz_total) * (np.dtype(np.float64).itemsize + np.dtype(np.int32).itemsize))
+        estimated_before += int((z_basis.shape[1] + 1) * np.dtype(np.int32).itemsize)
+        estimated_before += int(2 * z_basis.shape[1] * z_basis.shape[1] * np.dtype(np.float64).itemsize)
+        estimated_before += int(transient_estimated)
+        if max_nbytes_use > 0 and estimated_before > max_nbytes_use:
+            if emit is not None:
+                emit(
+                    1,
+                    "solve_v3_full_system_linear_gmres: true coupled coarse skipped budget_pre_matvec "
+                    f"estimated_bytes={int(estimated_before)} max_bytes={int(max_nbytes_use)} "
+                    f"columns_done={int(start)}/{int(z_basis.shape[1])}",
+                )
+            return None
+        if true_matmat is not None and z_batch.shape[1] > 1:
+            y_batch = np.asarray(true_matmat(z_batch), dtype=np.float64)
+        else:
+            y_batch = np.column_stack(
+                [
+                    np.asarray(true_matvec(z_batch[:, j]), dtype=np.float64).reshape((-1,))
+                    for j in range(int(z_batch.shape[1]))
+                ]
+            )
+        if y_batch.shape != z_batch.shape:
+            if emit is not None:
+                emit(
+                    1,
+                    "solve_v3_full_system_linear_gmres: true coupled coarse skipped matmat_shape_mismatch "
+                    f"got={tuple(int(v) for v in y_batch.shape)} expected={tuple(int(v) for v in z_batch.shape)}",
+                )
+            return None
+        for local_col in range(int(y_batch.shape[1])):
+            y_col = y_batch[:, local_col]
+            keep = np.flatnonzero(np.isfinite(y_col) & (np.abs(y_col) > drop))
+            if keep.size == 0:
+                continue
+            az_rows.append(keep.astype(np.int32, copy=False))
+            az_cols.append(np.full((int(keep.size),), int(start + local_col), dtype=np.int32))
+            az_data.append(np.asarray(y_col[keep], dtype=np.float64))
+            nnz_total += int(keep.size)
+    if not az_data:
+        if emit is not None:
+            emit(1, "solve_v3_full_system_linear_gmres: true coupled coarse skipped empty_operator_columns")
+        return None
+    a_basis = sp.csc_matrix(
+        (np.concatenate(az_data), (np.concatenate(az_rows), np.concatenate(az_cols))),
+        shape=(n, int(z_basis.shape[1])),
+        dtype=np.float64,
+    )
+    a_basis.sum_duplicates()
+    a_basis.eliminate_zeros()
+    col_norms = np.sqrt(np.asarray(a_basis.power(2).sum(axis=0), dtype=np.float64).reshape((-1,)))
+    norm_floor = max(float(abs(regularization)), np.finfo(np.float64).eps)
+    good = np.isfinite(col_norms) & (col_norms > norm_floor)
+    if not np.any(good):
+        if emit is not None:
+            emit(1, "solve_v3_full_system_linear_gmres: true coupled coarse skipped zero_operator_columns")
+        return None
+    if np.count_nonzero(good) != a_basis.shape[1]:
+        keep = np.flatnonzero(good)
+        a_basis = a_basis[:, keep].tocsc()
+        z_basis = z_basis[:, keep].tocsc()
+        col_norms = col_norms[keep]
+        names = [names[int(i)] for i in keep]
+    inv_col_scale = np.zeros_like(col_norms)
+    inv_col_scale[:] = 1.0 / col_norms
+    a_scaled = a_basis @ sp.diags(inv_col_scale, format="csc")
+    normal = np.asarray((a_scaled.T @ a_scaled).toarray(), dtype=np.float64)
+    normal_scale = max(float(np.linalg.norm(normal, ord=np.inf)) if normal.size else 0.0, 1.0)
+    normal_regularization = max(float(abs(regularization)), 1.0e-14) * normal_scale
+    normal = normal + normal_regularization * np.eye(int(a_scaled.shape[1]), dtype=np.float64)
+    solver_kind = "cholesky"
+    try:
+        factor = cho_factor(normal, lower=True, check_finite=False)
+
+        def solve_normal(rhs: np.ndarray) -> np.ndarray:
+            return np.asarray(cho_solve(factor, rhs, check_finite=False), dtype=np.float64).reshape((-1,))
+
+    except Exception:  # noqa: BLE001
+        solver_kind = "lu"
+        lu, piv = lu_factor(normal, check_finite=False)
+
+        def solve_normal(rhs: np.ndarray) -> np.ndarray:
+            return np.asarray(lu_solve((lu, piv), rhs, check_finite=False), dtype=np.float64).reshape((-1,))
+
+    z_nbytes = int(z_basis.data.nbytes + z_basis.indices.nbytes + z_basis.indptr.nbytes)
+    a_nbytes = int(a_basis.data.nbytes + a_basis.indices.nbytes + a_basis.indptr.nbytes)
+    normal_nbytes = int(normal.nbytes)
+    factor_nbytes = int(
+        z_nbytes
+        + a_nbytes
+        + 2 * normal_nbytes
+        + inv_col_scale.nbytes
+        + int(getattr(factor_bundle, "factor_nbytes_estimate", 0) or 0)
+    )
+    if max_nbytes_use > 0 and factor_nbytes > max_nbytes_use:
+        if emit is not None:
+            emit(
+                1,
+                "solve_v3_full_system_linear_gmres: true coupled coarse skipped final_budget "
+                f"bytes={int(factor_nbytes)} max_bytes={int(max_nbytes_use)} coarse_size={int(z_basis.shape[1])}",
+            )
+        return None
+    condition_estimate = None
+    if int(normal.shape[0]) <= 256:
+        condition_estimate = float(np.linalg.cond(normal))
+    metadata = {
+        "coarse_size": int(z_basis.shape[1]),
+        "basis_names": tuple(str(name) for name in names),
+        "dominant_windows": tuple(window_metadata),
+        "window_count": int(len(window_metadata)),
+        "x_radius": int(x_radius),
+        "ell_radius": int(ell_radius),
+        "low_lmax": int(low_lmax),
+        "profile_moment_count": int(profile_moment_count),
+        "angular_lmax": int(angular_lmax),
+        "angular_mode_max": int(angular_mode_max),
+        "tail_included": bool(include_tail),
+        "constraint_sources_included": bool(include_constraint_sources),
+        "fsavg_included": bool(include_fsavg),
+        "window_residual_included": bool(include_window_residual),
+        "profile_moments_included": bool(include_profile_moments),
+        "angular_residual_included": bool(include_angular_residual),
+        "angular_basis_included": bool(include_angular_basis),
+        "preconditioned_loads_included": bool(include_preconditioned_loads),
+        "preconditioned_load_column_count": int(preconditioned_load_column_count),
+        "preconditioned_load_nnz": int(preconditioned_load_nnz),
+        "preconditioned_load_max_columns": int(preconditioned_load_max_columns),
+        "preconditioned_load_max_nnz": int(preconditioned_load_max_nnz),
+        "preconditioned_load_drop_tol": float(preconditioned_load_drop_tol),
+        "column_batch": int(batch),
+        "drop_tol": float(drop),
+        "z_basis_nnz": int(z_basis.nnz),
+        "a_basis_nnz": int(a_basis.nnz),
+        "z_basis_nbytes_actual": int(z_nbytes),
+        "a_basis_nbytes_actual": int(a_nbytes),
+        "normal_nbytes": int(normal_nbytes),
+        "normal_regularization": float(normal_regularization),
+        "normal_solver": str(solver_kind),
+        "normal_condition_estimate": condition_estimate,
+        "factor_nbytes_estimate": int(factor_nbytes),
+        "damping": bool(damping),
+        "beta_max": float(beta_max),
+        "setup_s": float(max(0.0, time.perf_counter() - t0)),
+    }
+    if emit is not None:
+        emit(
+            1,
+            "solve_v3_full_system_linear_gmres: true coupled coarse built "
+            f"coarse_size={int(z_basis.shape[1])} z_nnz={int(z_basis.nnz)} "
+            f"a_nnz={int(a_basis.nnz)} setup_s={metadata['setup_s']:.3f} "
+            f"bytes={int(factor_nbytes)}",
+        )
+    return _TrueOperatorCoupledCoarseLSQPreconditionerBundle(
+        base_factor=factor_bundle,
+        true_matvec=lambda x: np.asarray(true_matvec(np.asarray(x, dtype=np.float64)), dtype=np.float64).reshape((-1,)),
+        z_basis=z_basis,
+        a_basis=a_scaled,
+        inv_column_scale=np.asarray(inv_col_scale, dtype=np.float64),
+        solve_normal=solve_normal,
+        kind=f"{getattr(factor_bundle, 'kind', 'host')}_true_coupled_coarse_lsq",
+        regularization=float(regularization),
+        damping=bool(damping),
+        beta_max=float(beta_max),
+        factor_nbytes_estimate=int(factor_nbytes),
+        factor_nnz_estimate=int(a_basis.nnz + z_basis.nnz),
+        factor_s=float(max(0.0, time.perf_counter() - t0)),
+        metadata=metadata,
+    )
+
 
 
 def _try_build_residual_window_host_sparse_preconditioner(
