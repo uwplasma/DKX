@@ -812,12 +812,14 @@ the historical private driver name and test the focused module directly. This ke
   measured candidate acceptance gates used by automatic solver/preconditioner
   promotions, including residual/parity checks and paired runtime/memory
   comparisons against an incumbent path.
-- ``sfincs_jax/transport_policy.py``:
+- ``sfincs_jax/problems/transport_matrix/policies.py``
+  (legacy alias: ``sfincs_jax/transport_policy.py``):
   pure transport backend, sparse-direct, host-GMRES, dtype, and recycle policy.
 - ``sfincs_jax/transport_preconditioner_dispatch.py``:
   shared transport preconditioner-kind normalization, auto-selection, DD/sparse-JAX
   env parsing, and reduced/full preconditioner builder dispatch.
-- ``sfincs_jax/transport_solve_policy.py``:
+- ``sfincs_jax/problems/transport_matrix/solve_policy.py``
+  (legacy alias: ``sfincs_jax/transport_solve_policy.py``):
   shared RHSMode=2/3 initial solve policy, active-DOF transport policy,
   active-index map construction, dense fallback, dense-preconditioner, low-memory
   output, streamed-diagnostic, state-vector retention, and GMRES restart policy
@@ -857,11 +859,13 @@ the historical private driver name and test the focused module directly. This ke
   environment policy, assembles species-by-``whichRHS`` flux arrays, and returns
   the transport matrix plus optional output fields. This keeps diagnostic memory
   policy out of the main Krylov solve loop.
-- ``sfincs_jax/transport_handoff_policy.py``:
+- ``sfincs_jax/problems/transport_matrix/handoff_policy.py``
+  (legacy alias: ``sfincs_jax/transport_handoff_policy.py``):
   shared transport retry residual metrics, better-candidate comparisons, and RHSMode=3
   polish threshold/restart/maxiter policy used by the reduced and full transport solve
   branches.
-- ``sfincs_jax/transport_residual_quality.py``:
+- ``sfincs_jax/problems/transport_matrix/residual_quality.py``
+  (legacy alias: ``sfincs_jax/transport_residual_quality.py``):
   fast transport worker residual-abort threshold parsing and failure-message
   formatting for absolute and RHS-normalized diagnostics.
 - ``sfincs_jax/transport_dense_lu.py``:
@@ -872,15 +876,18 @@ the historical private driver name and test the focused module directly. This ke
   assembly, active-DOF reduction/expansion, optional streamed diagnostic
   collection, residual bookkeeping, and per-``whichRHS`` progress emission for
   the bounded dense branch.
-- ``sfincs_jax/transport_host_gmres.py``:
+- ``sfincs_jax/problems/transport_matrix/host_gmres.py``
+  (legacy alias: ``sfincs_jax/transport_host_gmres.py``):
   host SciPy GMRES first-attempt/rescue solve helper for explicit transport paths,
   including PETSc-like preconditioned-residual acceptance for the relevant
   near-singular transport systems.
-- ``sfincs_jax/transport_iteration_stats.py``:
+- ``sfincs_jax/problems/transport_matrix/iteration_stats.py``
+  (legacy alias: ``sfincs_jax/transport_iteration_stats.py``):
   optional small-system SciPy Krylov history reruns used only for transport
   ``ksp_iterations`` progress diagnostics. Diagnostic failures are reported but
   never change the production solve result.
-- ``sfincs_jax/transport_linear_solve.py``:
+- ``sfincs_jax/problems/transport_matrix/linear_solve.py``
+  (legacy alias: ``sfincs_jax/transport_linear_solve.py``):
   transport RHSMode=2/3 Krylov dispatch, including the transport-specific
   ``auto``/``default`` BiCGStab preference, implicit custom-solve routing,
   JIT/non-JIT solver selection, restart-budget policy, and distributed-axis
