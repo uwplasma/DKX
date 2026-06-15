@@ -214,6 +214,16 @@ Current branch status:
   transport/preconditioner regression passed with
   ``41 passed, 21 deselected in 13.70 s``; strict docs passed; and the full
   local suite passed with ``2622 passed in 542.15 s``.
+- The 2026-06-15 follow-up extracted the 1.3k-line RHSMode=2/3 full-FP
+  Fortran-reduced LU preconditioner into ``transport_fortran_reduced_lu.py``.
+  The driver now keeps a wrapper only for fallback/cache-key/explicit-sparse
+  builder/host-memory injection. Focused Fortran-reduced/direct-``Pmat``
+  regression passed with ``29 passed in 13.31 s``; broader
+  transport/preconditioner validation passed with
+  ``53 passed, 21 deselected in 13.42 s``; strict docs passed; the repo-size
+  gate now reports zero reviewed files above 2 MiB because ``v3_driver.py``
+  dropped below the large-file threshold; and the full local suite passed with
+  ``2622 passed in 536.83 s``.
 - Next PR-level moves should split high-level RHSMode=1 solve orchestration
   into ``rhs1_solve.py`` and RHSMode=2/3 orchestration into
   ``transport_solve.py`` after the focused module extractions are green.

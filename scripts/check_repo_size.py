@@ -19,12 +19,7 @@ DEFAULT_THRESHOLD_MIB = 2.0
 # Files above the default threshold that are intentionally kept in the current
 # tree. Each entry needs a short reason so the audit is reviewable. Public
 # multi-megabyte equilibrium fixtures are release-hosted, not tracked.
-REVIEWED_LARGE_FILES: dict[str, str] = {
-    "sfincs_jax/v3_driver.py": (
-        "RHSMode/transport compatibility driver monolith under active extraction; "
-        "kept as reviewed source code until the solver-policy refactor fully splits it."
-    ),
-}
+REVIEWED_LARGE_FILES: dict[str, str] = {}
 
 
 def _repo_root() -> Path:
