@@ -825,13 +825,15 @@ the historical private driver name and test the focused module directly. This ke
   the per-``whichRHS`` loop policy for E_parallel loose/Krylov routing,
   constraint-nullspace projection admission, KSP iteration-stat settings, and
   dense-batch fallback admission.
-- ``sfincs_jax/transport_solve_setup.py``:
+- ``sfincs_jax/problems/transport_matrix/setup.py``
+  (legacy alias: ``sfincs_jax/transport_solve_setup.py``):
   side-effect-light RHSMode=2/3 setup resolution for transport max-iteration
   overrides, optional Krylov state-file loading/merging, ``whichRHS`` subset
   normalization, and CPU/GPU process-parallel worker requests. The driver emits
   the returned notes and keeps solve orchestration, while these pure setup rules
   are covered by direct unit tests.
-- ``sfincs_jax/transport_active_dense_setup.py``:
+- ``sfincs_jax/problems/transport_matrix/active_dense.py``
+  (legacy alias: ``sfincs_jax/transport_active_dense_setup.py``):
   combined RHSMode=2/3 active-DOF and dense-path setup. It resolves the initial
   output/restart policy, active-index compaction state, dense fallback and dense
   preconditioner admission, and ordered user-facing notes before the transport
@@ -842,12 +844,14 @@ the historical private driver name and test the focused module directly. This ke
   helper materialization, fallback sparse-ILU setup, host iterative refinement,
   float32 polish, and float64 retry while receiving driver-local builders as
   explicit callbacks.
-- ``sfincs_jax/transport_streaming_outputs.py``:
+- ``sfincs_jax/problems/transport_matrix/streaming_outputs.py``
+  (legacy alias: ``sfincs_jax/transport_streaming_outputs.py``):
   host-side streaming accumulator for RHSMode=2/3 transport diagnostics. It owns the
   per-``whichRHS`` NumPy buffers, NTV/source handling, and final output-field
   dictionary assembly used by low-memory transport solves, keeping HDF5-layout details
   out of the solver loop.
-- ``sfincs_jax/transport_postsolve_diagnostics.py``:
+- ``sfincs_jax/problems/transport_matrix/postsolve_diagnostics.py``
+  (legacy alias: ``sfincs_jax/transport_postsolve_diagnostics.py``):
   post-solve RHSMode=2/3 transport diagnostics orchestration. It chooses streamed
   versus batched diagnostics, applies the rematerialization/precompute/chunking
   environment policy, assembles species-by-``whichRHS`` flux arrays, and returns
@@ -881,13 +885,15 @@ the historical private driver name and test the focused module directly. This ke
   ``auto``/``default`` BiCGStab preference, implicit custom-solve routing,
   JIT/non-JIT solver selection, restart-budget policy, and distributed-axis
   residual-solve routing.
-- ``sfincs_jax/transport_loop_support.py``:
+- ``sfincs_jax/problems/transport_matrix/loop.py``
+  (legacy alias: ``sfincs_jax/transport_loop_support.py``):
   loop-local RHSMode=2/3 support for cached full/reduced transport matvec
   closures and bounded Krylov recycle bases. It owns recycle-size admission,
   stored-state seeding, reduced/full recycle-vector trimming, and small recycled
   initial guesses plus sequential residual-gate and ETA progress bookkeeping, so
   the main solve loop no longer carries this mutable cache/progress state.
-- ``sfincs_jax/transport_solve_finalization.py``:
+- ``sfincs_jax/problems/transport_matrix/finalize.py``
+  (legacy alias: ``sfincs_jax/transport_solve_finalization.py``):
   sequential RHSMode=2/3 per-``whichRHS`` finalization after a solver branch has
   accepted a candidate. It owns reduced/full state bookkeeping, optional
   constraint projection, true-residual recomputation, streamed-output
