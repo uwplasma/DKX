@@ -507,6 +507,11 @@ column-action-by-column-action against the matrix-free v3 operator for
 geometryScheme 2 and 11 reduced inputs, and the physics coarse-basis test
 checks source, constraint, and tail-Schur response columns without launching a
 production solve.
+Those same direct-active tests now exercise the wrapper into
+``transport_direct_block_schur.py`` as well: the active block-Schur
+preconditioner is built from the exact active operator, applies through the
+host callback path, and closes the source/constraint tail residual on the
+reduced geometryScheme 11 case.
 ``tests/test_rhs1_direct_tail_policy.py`` covers the next adjacent extraction:
 direct-tail cache-key hashing, support-mode/env sensitivity, cache-hit metadata,
 direct reduced-Pmat aliases, adaptive memory-cap policy, and the structured
