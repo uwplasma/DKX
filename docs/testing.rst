@@ -501,6 +501,12 @@ reaches the extracted implementation.
 ``preconditioner_operators.py`` module directly for the Fortran-reduced
 operator-shaping contract, including the radial-x simplification and the
 preserved driver compatibility alias.
+The same file now protects the extracted ``transport_direct_pmat.py`` module:
+direct reduced-``Pmat`` and exact active transport CSR emission are compared
+column-action-by-column-action against the matrix-free v3 operator for
+geometryScheme 2 and 11 reduced inputs, and the physics coarse-basis test
+checks source, constraint, and tail-Schur response columns without launching a
+production solve.
 ``tests/test_rhs1_direct_tail_policy.py`` covers the next adjacent extraction:
 direct-tail cache-key hashing, support-mode/env sensitivity, cache-hit metadata,
 direct reduced-Pmat aliases, adaptive memory-cap policy, and the structured

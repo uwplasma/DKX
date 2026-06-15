@@ -173,9 +173,15 @@ Unreleased
   domain-decomposition, and Fortran-reduced operator builders are now pure
   dataclass/JAX transformations outside the solve driver, with the existing
   driver private names preserved as import aliases.
+- Extracted RHSMode=2/3 full-FP direct reduced-``Pmat`` and exact active
+  transport-operator sparse emission into ``transport_direct_pmat.py``. The
+  driver now imports the historical private helper names while retaining
+  admission/factor/fallback orchestration; focused tests verify the emitted CSR
+  matrices against the matrix-free active operator and verify the physics
+  coarse-basis source/constraint columns.
 - The post-extraction strict docs build passed, and the latest local full suite
-  after the preconditioner-operator split passed with
-  ``2622 passed in 537.84 s``.
+  after the direct-``Pmat`` extraction passed with
+  ``2622 passed in 545.10 s``.
 
 v1.1.7
 ------
