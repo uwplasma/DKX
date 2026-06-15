@@ -772,6 +772,12 @@ the historical private driver name and test the focused module directly. This ke
   per-``whichRHS`` NumPy buffers, NTV/source handling, and final output-field
   dictionary assembly used by low-memory transport solves, keeping HDF5-layout details
   out of the solver loop.
+- ``sfincs_jax/transport_postsolve_diagnostics.py``:
+  post-solve RHSMode=2/3 transport diagnostics orchestration. It chooses streamed
+  versus batched diagnostics, applies the rematerialization/precompute/chunking
+  environment policy, assembles species-by-``whichRHS`` flux arrays, and returns
+  the transport matrix plus optional output fields. This keeps diagnostic memory
+  policy out of the main Krylov solve loop.
 - ``sfincs_jax/transport_handoff_policy.py``:
   shared transport retry residual metrics, better-candidate comparisons, and RHSMode=3
   polish threshold/restart/maxiter policy used by the reduced and full transport solve

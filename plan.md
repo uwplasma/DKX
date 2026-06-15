@@ -239,6 +239,14 @@ Current branch status:
   dispatch/solver-path validation passed with
   ``86 passed, 15 deselected in 51.03 s``; strict docs passed; and the full
   local suite passed with ``2622 passed in 528.19 s``.
+- The next transport orchestration extraction moved the RHSMode=2/3 post-solve
+  diagnostic policy into ``transport_postsolve_diagnostics.py``. ``v3_driver.py``
+  now delegates streamed versus batched diagnostics, rematerialization,
+  precompute, diagnostic chunking, flux-array assembly, and transport-matrix
+  construction after the Krylov loop. Direct post-solve diagnostics/docstring
+  tests passed with ``5 passed in 1.00 s``; broader transport diagnostics and
+  parity validation passed with ``46 passed in 41.13 s``; strict docs passed;
+  and the full local suite passed with ``2624 passed in 557.63 s``.
 - Next PR-level moves should split high-level RHSMode=1 solve orchestration
   into ``rhs1_solve.py`` and RHSMode=2/3 orchestration into
   ``transport_solve.py`` after the focused module extractions are green.

@@ -24,7 +24,6 @@ import numpy as np
 
 import jax
 import jax.numpy as jnp
-from jax import tree_util as jtu
 
 from .namelist import Namelist, read_sfincs_input
 from .newton_krylov_diagnostics import emit_newton_krylov_ksp_history as _emit_newton_krylov_ksp_history
@@ -447,16 +446,10 @@ from .solver_progress import (
 from .transport_matrix import (
     _flux_functions_from_op,
     transport_matrix_size_from_rhs_mode,
-    v3_transport_diagnostics_vm_only_precompute,
-    v3_transport_diagnostics_vm_only_batch_jit,
-    v3_transport_diagnostics_vm_only_batch_remat_jit,
-    v3_transport_diagnostics_vm_only_batch_op0_jit,
-    v3_transport_diagnostics_vm_only_batch_op0_remat_jit,
-    v3_transport_diagnostics_vm_only_batch_op0_precomputed_jit,
-    v3_transport_diagnostics_vm_only_batch_op0_precomputed_remat_jit,
     v3_transport_output_fields_vm_only,
     v3_transport_matrix_from_flux_arrays,
 )
+from .transport_postsolve_diagnostics import compute_transport_postsolve_diagnostics
 from .transport_streaming_outputs import TransportStreamingOutputAccumulator
 from .solver_runtime import (
     block_gmres_result_ready as _block_gmres_result_ready,
@@ -38926,100 +38919,22 @@ def solve_v3_transport_matrix_linear_gmres(
 
     if emit is not None:
         emit(0, "solve_v3_transport_matrix_linear_gmres: computing whichRHS diagnostics (batched)")
-    if stream_diagnostics:
-        assert streaming_outputs is not None
-        diag_pf_jnp, diag_hf_jnp, diag_flow_jnp = streaming_outputs.diagnostic_flux_arrays()
-        transport_output_fields = streaming_outputs.output_fields()
-    else:
-        remat_env = os.environ.get("SFINCS_JAX_REMAT_TRANSPORT_DIAGNOSTICS", "").strip().lower()
-        if remat_env in {"1", "true", "yes", "on"}:
-            use_remat_diag = True
-        elif remat_env in {"0", "false", "no", "off"}:
-            use_remat_diag = False
-        else:
-            remat_min_env = os.environ.get("SFINCS_JAX_REMAT_TRANSPORT_DIAGNOSTICS_MIN", "").strip()
-            try:
-                remat_min = int(remat_min_env) if remat_min_env else 20000
-            except ValueError:
-                remat_min = 20000
-            use_remat_diag = int(op0.total_size) * int(n) >= remat_min
-        diag_chunk_env = os.environ.get("SFINCS_JAX_TRANSPORT_DIAG_CHUNK", "").strip()
-        try:
-            diag_chunk = int(diag_chunk_env) if diag_chunk_env else None
-        except ValueError:
-            diag_chunk = None
-        if diag_chunk is None or int(diag_chunk) <= 0:
-            diag_chunk = 0
-        if diag_chunk == 0 and int(op0.total_size) * int(n) >= 200_000:
-            diag_chunk = 4
-
-        if use_diag_op0:
-            precompute_env = os.environ.get("SFINCS_JAX_TRANSPORT_DIAG_PRECOMPUTE", "").strip().lower()
-            use_precompute = precompute_env not in {"0", "false", "no", "off"}
-            if use_precompute:
-                precomputed = v3_transport_diagnostics_vm_only_precompute(op0)
-                diag_fn = (
-                    v3_transport_diagnostics_vm_only_batch_op0_precomputed_remat_jit
-                    if use_remat_diag
-                    else v3_transport_diagnostics_vm_only_batch_op0_precomputed_jit
-                )
-            else:
-                diag_fn = (
-                    v3_transport_diagnostics_vm_only_batch_op0_remat_jit
-                    if use_remat_diag
-                    else v3_transport_diagnostics_vm_only_batch_op0_jit
-                )
-        else:
-            diag_op_stack = jtu.tree_map(lambda *xs: jnp.stack(xs, axis=0), *diag_op_by_index)
-            diag_fn = (
-                v3_transport_diagnostics_vm_only_batch_remat_jit
-                if use_remat_diag
-                else v3_transport_diagnostics_vm_only_batch_jit
-            )
-
-        if diag_chunk <= 0 or int(diag_chunk) >= int(n):
-            x_stack = jnp.stack([state_vectors[which_rhs] for which_rhs in which_rhs_values], axis=0)  # (N,total)
-            if use_diag_op0:
-                if use_precompute:
-                    diag_stack = diag_fn(op0=op0, precomputed=precomputed, x_full_stack=x_stack)
-                else:
-                    diag_stack = diag_fn(op0=op0, x_full_stack=x_stack)
-            else:
-                diag_stack = diag_fn(op_stack=diag_op_stack, x_full_stack=x_stack)
-            diag_pf_jnp = jnp.transpose(diag_stack.particle_flux_vm_psi_hat, (1, 0))  # (S,N)
-            diag_hf_jnp = jnp.transpose(diag_stack.heat_flux_vm_psi_hat, (1, 0))  # (S,N)
-            diag_flow_jnp = jnp.transpose(diag_stack.fsab_flow, (1, 0))  # (S,N)
-        else:
-            s = int(op0.n_species)
-            diag_pf_arr = np.zeros((s, n), dtype=np.float64)
-            diag_hf_arr = np.zeros((s, n), dtype=np.float64)
-            diag_flow_arr = np.zeros((s, n), dtype=np.float64)
-            for start in range(0, n, int(diag_chunk)):
-                end = min(n, start + int(diag_chunk))
-                rhs_chunk = which_rhs_values[start:end]
-                x_stack_chunk = jnp.stack([state_vectors[which_rhs] for which_rhs in rhs_chunk], axis=0)
-                if use_diag_op0:
-                    if use_precompute:
-                        diag_stack = diag_fn(op0=op0, precomputed=precomputed, x_full_stack=x_stack_chunk)
-                    else:
-                        diag_stack = diag_fn(op0=op0, x_full_stack=x_stack_chunk)
-                else:
-                    op_chunk = jtu.tree_map(lambda arr: arr[start:end], diag_op_stack)
-                    diag_stack = diag_fn(op_stack=op_chunk, x_full_stack=x_stack_chunk)
-                diag_pf_arr[:, start:end] = np.asarray(jnp.transpose(diag_stack.particle_flux_vm_psi_hat, (1, 0)))
-                diag_hf_arr[:, start:end] = np.asarray(jnp.transpose(diag_stack.heat_flux_vm_psi_hat, (1, 0)))
-                diag_flow_arr[:, start:end] = np.asarray(jnp.transpose(diag_stack.fsab_flow, (1, 0)))
-            diag_pf_jnp = jnp.asarray(diag_pf_arr, dtype=jnp.float64)
-            diag_hf_jnp = jnp.asarray(diag_hf_arr, dtype=jnp.float64)
-            diag_flow_jnp = jnp.asarray(diag_flow_arr, dtype=jnp.float64)
-
-    tm = v3_transport_matrix_from_flux_arrays(
-        op=op0,
+    postsolve_diagnostics = compute_transport_postsolve_diagnostics(
+        op0=op0,
         geom=geom,
-        particle_flux_vm_psi_hat=diag_pf_jnp,
-        heat_flux_vm_psi_hat=diag_hf_jnp,
-        fsab_flow=diag_flow_jnp,
+        state_vectors=state_vectors,
+        which_rhs_values=which_rhs_values,
+        stream_diagnostics=bool(stream_diagnostics),
+        streaming_outputs=streaming_outputs,
+        use_diag_op0=bool(use_diag_op0),
+        diag_op_by_index=diag_op_by_index,
+        emit=None,
     )
+    tm = postsolve_diagnostics.transport_matrix
+    diag_pf_jnp = postsolve_diagnostics.particle_flux_vm_psi_hat
+    diag_hf_jnp = postsolve_diagnostics.heat_flux_vm_psi_hat
+    diag_flow_jnp = postsolve_diagnostics.fsab_flow
+    transport_output_fields = postsolve_diagnostics.transport_output_fields
     if state_out_env:
         try:
             from .solver_state import save_krylov_state  # noqa: PLC0415

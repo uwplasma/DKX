@@ -416,6 +416,11 @@ transport solves. ``tests/test_transport_parallel_payload.py`` separately valida
 transport worker payload contract: normalized solve kwargs, child-worker recursion
 guards, merge-ready result packing, and GPU-worker NPZ conversion for non-contiguous
 ``whichRHS`` chunks.
+``tests/test_transport_postsolve_diagnostics.py`` covers the extracted post-solve
+diagnostics seam directly: streamed accumulator reuse, output-field propagation,
+chunked fixed-operator diagnostic evaluation, and transport-matrix assembly are
+checked with monkeypatched numerical kernels so the behavior is protected without
+adding heavyweight transport solves to CI.
 
 QI seed-robustness artifacts are also checked as data, not only as scripts.
 ``tests/test_qi_seed_smoke_artifact.py`` verifies the one-seed smoke artifact,
