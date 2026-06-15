@@ -224,10 +224,15 @@ Unreleased
   cached full/reduced matvec closure construction, recycle-size admission,
   stored-state recycle seeding, basis trimming, and recycled initial-guess
   construction to a focused helper before the per-``whichRHS`` solve branches.
+- Moved the sequential RHSMode=2/3 post-``whichRHS`` residual/ETA bookkeeping
+  into the same helper. The driver now records elapsed times, emits residual
+  summaries, applies configured residual abort gates, and reports remaining-time
+  estimates through ``TransportLoopProgress`` instead of carrying mutable
+  progress state inline.
 - The post-extraction strict docs build passed, the repo-size audit now has no
   reviewed files above 2 MiB after ``v3_driver.py`` dropped below the threshold,
-  and the latest local full suite after the RHSMode=2/3 transport loop-support
-  extraction passed with ``2635 passed in 534.44 s``.
+  and the latest local full suite after the RHSMode=2/3 transport-loop progress
+  extraction passed with ``2637 passed in 533.76 s``.
 
 v1.1.7
 ------
