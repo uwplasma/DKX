@@ -30154,6 +30154,49 @@ Validation:
   docs/_build/html``: passed.
 - ``python -m pytest -q``: ``2622 passed in 549.42 s``.
 
+### 19.39 Preconditioner operator-shaping split
+
+Goal:
+
+- Move pure RHSMode=1/transport preconditioner-operator transformations out of
+  ``v3_driver.py`` so the Fortran-reduced/PETSc-style ``Pmat`` shaping rules
+  are directly testable and separate from solve orchestration.
+
+Implementation:
+
+- Added ``sfincs_jax/preconditioner_operators.py`` with point, Fortran-reduced,
+  theta-line, zeta-line, theta-domain-decomposition, zeta-domain-decomposition,
+  and transport Fortran-reduced operator builders.
+- Rewired ``v3_driver.py`` to import the historical private names from the new
+  module, preserving all current call sites and monkeypatch/debug expectations.
+- Added direct module coverage in ``tests/test_fortran_reduced_preconditioner.py``
+  while keeping existing sparse-pattern tests exercising the driver aliases.
+- Updated API docs, source map, release notes, and testing documentation.
+- ``sfincs_jax/v3_driver.py`` is now ``43052`` lines after this checkpoint.
+
+Validation:
+
+- ``python -m py_compile sfincs_jax/preconditioner_operators.py
+  sfincs_jax/v3_driver.py``: passed.
+- ``python -m ruff check sfincs_jax/preconditioner_operators.py
+  sfincs_jax/v3_driver.py``: passed.
+- ``python -m pytest -q tests/test_fortran_reduced_preconditioner.py -k
+  'operator or direct_pmat or fortran_reduced'``:
+  ``29 passed in 13.32 s``.
+- ``python -m pytest -q tests/test_v3_sparse_pattern.py -k
+  'fortran_reduced_pc_operator or fortran_reduced_pc_pattern or
+  fortran_reduced_structural_pattern or fortran_reduced_pc_gmres'``:
+  ``24 passed, 108 deselected in 27.92 s``.
+- ``SPHINXOPTS='-W --keep-going' python -m sphinx -b html docs
+  docs/_build/html``: passed.
+- ``python -m pytest -q tests/test_v3_driver_dd_reduction_coverage.py
+  tests/test_fortran_reduced_preconditioner.py -k
+  'diag_only or block_diag_only or operator or direct_pmat or
+  fortran_reduced'``:
+  ``31 passed, 7 deselected in 13.29 s`` after preserving the historical
+  ``v3_driver`` matrix-reduction aliases.
+- ``python -m pytest -q``: ``2622 passed in 537.84 s``.
+
 ### 19.32 Explicit sparse host-factor settings split
 
 Goal:

@@ -10,6 +10,7 @@ import scipy.sparse as sp
 
 from sfincs_jax.explicit_sparse import factorize_host_sparse_operator
 from sfincs_jax.namelist import read_sfincs_input
+from sfincs_jax import preconditioner_operators as po
 from sfincs_jax.v3_system import full_system_operator_from_namelist
 import sfincs_jax.v3_driver as vd
 
@@ -87,7 +88,10 @@ def _fake_rhs1_op() -> _Op:
 def test_fortran_reduced_operator_diagonalizes_only_radial_x_drift() -> None:
     op = _fake_rhs1_op()
 
-    reduced = vd._build_rhsmode1_preconditioner_operator_fortran_reduced(
+    assert vd._build_rhsmode1_preconditioner_operator_fortran_reduced is (
+        po._build_rhsmode1_preconditioner_operator_fortran_reduced
+    )
+    reduced = po._build_rhsmode1_preconditioner_operator_fortran_reduced(
         op,
         preconditioner_x=1,
         preconditioner_xi=1,
