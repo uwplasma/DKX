@@ -10,7 +10,11 @@ PACKAGE_DIR = Path(__file__).resolve().parents[1] / "sfincs_jax"
 POLICY_MODULES = tuple(
     f"sfincs_jax.{path.stem}" for path in sorted(PACKAGE_DIR.glob("*policy*.py"))
 )
-SOURCE_MAPPED_CONTROL_MODULES = ("sfincs_jax.profiling", "sfincs_jax.rhs1_handoff")
+SOURCE_MAPPED_CONTROL_MODULES = (
+    "sfincs_jax.profiling",
+    "sfincs_jax.rhs1_handoff",
+    "sfincs_jax.rhs1_pas_xblock_ilu",
+)
 
 
 def _missing_public_api_docstrings(module_names: tuple[str, ...]) -> list[str]:

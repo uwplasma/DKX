@@ -197,10 +197,16 @@ Unreleased
   fallback, and extra-variable Schur handling; ``v3_driver.py`` now injects the
   still-local FP assembly and sparse-factor seams through a compatibility
   wrapper.
+- Extracted the PAS-only RHSMode=1 sparse x-block ILU/LU preconditioner into
+  ``rhs1_pas_xblock_ilu.py``. The new module owns the per-``(species,x)``
+  Legendre/theta/zeta block assembly, PETSc-style ILU/exact-LU setup policy,
+  padded triangular-factor apply, threaded factor build, cache storage, and
+  extra-variable Schur solve; the driver keeps a compatibility wrapper for
+  fallback/cache-key/matrix-probe injection.
 - The post-extraction strict docs build passed, the repo-size audit now has no
   reviewed files above 2 MiB after ``v3_driver.py`` dropped below the threshold,
-  and the latest local full suite after the RHSMode=1 sparse x-block extraction
-  passed with ``2622 passed in 537.19 s``.
+  and the latest local full suite after the RHSMode=1 PAS x-block ILU
+  extraction passed with ``2622 passed in 528.19 s``.
 
 v1.1.7
 ------

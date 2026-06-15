@@ -1,6 +1,6 @@
 # SFINCS_JAX Master Handoff + Execution Plan
 
-Last updated: 2026-06-14 (America/Chicago)
+Last updated: 2026-06-15 (America/Chicago)
 Owner: incoming agent
 
 ## 2026-06-13 Addendum: full ``v3_driver.py`` retirement refactor plan
@@ -231,6 +231,14 @@ Current branch status:
   ``74 passed, 98 deselected in 51.15 s``; broader RHSMode=1 sparse/preconditioner
   validation passed with ``175 passed, 30 deselected in 95.03 s``; strict docs
   passed; and the full local suite passed with ``2622 passed in 537.19 s``.
+- The next PAS-focused extraction moved the RHSMode=1 PAS-only sparse
+  x-block ILU/LU preconditioner into ``rhs1_pas_xblock_ilu.py``. ``v3_driver.py``
+  now keeps a compatibility wrapper only for PAS-hybrid fallback, matrix-probe,
+  chunking, cache-key, and safety-wrapper injection. Focused PAS/docstring tests
+  passed with ``44 passed, 19 deselected in 8.03 s``; broader RHSMode=1
+  dispatch/solver-path validation passed with
+  ``86 passed, 15 deselected in 51.03 s``; strict docs passed; and the full
+  local suite passed with ``2622 passed in 528.19 s``.
 - Next PR-level moves should split high-level RHSMode=1 solve orchestration
   into ``rhs1_solve.py`` and RHSMode=2/3 orchestration into
   ``transport_solve.py`` after the focused module extractions are green.
