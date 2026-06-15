@@ -163,8 +163,13 @@ Unreleased
   preserved, while the source-column, moment-row, and active term-level
   ``whichMatrix=0`` assembly logic is no longer embedded in the main solve
   orchestrator.
-- The post-extraction strict docs build passed, and the local full suite passed
-  with ``2622 passed in 548.14 s``.
+- Extracted the RHSMode=1 structured full-CSR ``SparseOperatorBundle`` wrapper
+  into ``rhs1_structured_full_csr.py``. The analytic full-CSR assembly still
+  lives in ``rhs1_full_assembly.py``; the new module owns the runtime sparse-PC
+  adapter, active projection, memory-budget admission, and no-probe metadata
+  emission previously embedded in ``v3_driver.py``.
+- The post-extraction strict docs build passed, and the latest local full suite
+  after the structured full-CSR split passed with ``2622 passed in 549.42 s``.
 
 v1.1.7
 ------

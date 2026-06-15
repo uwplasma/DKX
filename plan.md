@@ -30114,6 +30114,46 @@ Validation:
   docs/_build/html``: passed.
 - ``python -m pytest -q``: ``2622 passed in 548.14 s``.
 
+### 19.38 RHSMode=1 structured full-CSR sparse bundle split
+
+Goal:
+
+- Continue the larger refactor push by moving the no-probe RHSMode=1
+  structured full-CSR ``SparseOperatorBundle`` adapter out of ``v3_driver.py``
+  while preserving the direct-tail callback seam added in 19.37.
+
+Implementation:
+
+- Added ``sfincs_jax/rhs1_structured_full_csr.py``. The module adapts analytic
+  RHSMode=1 full-CSR assembly from ``rhs1_full_assembly.py`` to the explicit
+  sparse bundle contract used by sparse-PC solver paths.
+- Kept unsupported/over-budget behavior unchanged: the adapter returns ``None``
+  so callers can fall back to matrix-free or pattern-probed sparse paths.
+- Rewired ``v3_driver.py`` to import the historical private helper name from
+  the new module and kept ``rhs1_fortran_reduced_direct_tail.py`` receiving it
+  through the existing injected callback.
+- Added API/source-map/release/testing documentation for the extracted module.
+- ``sfincs_jax/v3_driver.py`` is now ``43429`` lines after this checkpoint.
+
+Validation:
+
+- ``python -m py_compile sfincs_jax/rhs1_structured_full_csr.py
+  sfincs_jax/rhs1_fortran_reduced_direct_tail.py sfincs_jax/v3_driver.py``:
+  passed.
+- ``python -m ruff check sfincs_jax/rhs1_structured_full_csr.py
+  sfincs_jax/rhs1_fortran_reduced_direct_tail.py sfincs_jax/v3_driver.py``:
+  passed.
+- ``python -m pytest -q tests/test_rhs1_full_assembly.py -k
+  'structured_rhs1_full_csr or active_projected or full_csr'``:
+  ``27 passed, 75 deselected in 15.06 s``.
+- ``python -m pytest -q tests/test_v3_sparse_pattern.py -k
+  'structured_direct_tail or fortran_reduced_pc_gmres_direct_tail or
+  fortran_reduced_direct_tail'``:
+  ``28 passed, 104 deselected in 32.75 s``.
+- ``SPHINXOPTS='-W --keep-going' python -m sphinx -b html docs
+  docs/_build/html``: passed.
+- ``python -m pytest -q``: ``2622 passed in 549.42 s``.
+
 ### 19.32 Explicit sparse host-factor settings split
 
 Goal:

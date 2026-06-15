@@ -218,6 +218,11 @@ the historical private driver name and test the focused module directly. This ke
   same formulas used by the matrix-free v3 operator, while ``v3_driver.py``
   injects the structured full-CSR builder callback to preserve the existing
   monkeypatch/debug seam and avoid circular imports.
+- ``sfincs_jax/rhs1_structured_full_csr.py``:
+  runtime/non-autodiff wrapper that adapts analytic RHSMode=1 full-CSR assembly
+  from ``rhs1_full_assembly.py`` into the ``SparseOperatorBundle`` contract used
+  by sparse-PC solver paths. Unsupported or over-budget cases return ``None`` so
+  callers can fall back to the established matrix-free or pattern-probed path.
 - ``sfincs_jax/rhs1_true_operator_rescue.py``:
   support bundles and low-level helpers for RHSMode=1 true-operator
   residual-window, active-submatrix, coupled-coarse, and residual-coarse rescue
