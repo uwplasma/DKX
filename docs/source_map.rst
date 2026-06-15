@@ -761,7 +761,10 @@ the historical private driver name and test the focused module directly. This ke
   shared RHSMode=2/3 initial solve policy, active-DOF transport policy,
   active-index map construction, dense fallback, dense-preconditioner, low-memory
   output, streamed-diagnostic, state-vector retention, and GMRES restart policy
-  used before the transport preconditioner and solve handoff layers.
+  used before the transport preconditioner and solve handoff layers. It also owns
+  the per-``whichRHS`` loop policy for E_parallel loose/Krylov routing,
+  constraint-nullspace projection admission, KSP iteration-stat settings, and
+  dense-batch fallback admission.
 - ``sfincs_jax/transport_sparse_direct_solve.py``:
   RHSMode=2/3 sparse-direct rescue implementation. It owns sparse-pattern
   admission/caching, direct active FP operator factor reuse, explicit sparse
