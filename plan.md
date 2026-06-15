@@ -31,101 +31,140 @@ accurate, and performance-aware.
 - Avoid large tracked fixtures. Use generated synthetic operators, release-data
   downloads, small JSON artifacts, or tiny reference inputs for tests.
 
-### 2026-06-14 correction: extract responsibilities, not wrappers
+### Single active refactor plan, authoritative as of 2026-06-15
 
-The first architecture commits proved the focused-module direction, but they
-also exposed a refactor smell: helper-by-helper extraction can shrink
-``v3_driver.py`` slowly while adding compatibility wrappers elsewhere. The
-next stage must optimize for responsibility removal, not helper count.
+This section supersedes earlier helper-by-helper and flat-prefix split ideas in
+this file. Historical notes below remain useful for audit context only. If any
+older note conflicts with this section, follow this section.
 
-Source-backed rules for the next commits:
+The active work stays on the existing draft PR for
+``refactor/v3-driver-architecture``. Do not open or merge additional refactor
+PRs. This PR is merged only after the phases in this section satisfy their
+tests, documentation, benchmark, coverage, and review gates.
+
+Primary design goals:
+
+- Keep the user contract simple: ``sfincs_jax input.namelist`` and the public
+  Python API choose accurate, fast, memory-aware defaults automatically. Advanced
+  solver knobs remain available but are not required for normal use.
+- Use domain package names instead of implementation prefixes. New code should
+  live under physics, geometry, discretization, operators, problems, solvers,
+  parallel, I/O, workflows, validation, benchmarks, or compatibility packages.
+- Preserve research-grade JAX behavior. Differentiable code paths must remain
+  pure, transformation-friendly, typed, and explicit about static versus dynamic
+  state.
+- Improve performance and memory while refactoring. Moving code must not
+  introduce extra host-device transfers, materialized dense intermediates,
+  redundant JIT compilation, or unnecessary retained diagnostics.
+- Reduce total complexity. Shrinking ``v3_driver.py`` is not enough if the same
+  complexity reappears as many tiny flat modules. Prefer cohesive modules with
+  clear contracts, useful docstrings, and tests that explain the physics or
+  numerical invariant being protected.
+
+Source-backed rules for the current PR:
 
 - Use Python packages/namespaces to group responsibilities, consistent with the
-  standard-library guidance that packages structure module namespaces by
-  dotted names. Near-term targets are ``transport/``, ``rhs1/``,
-  ``preconditioners/``, ``solvers/``, ``output/``, and ``validation/`` once a
-  whole cluster can move without circular imports.
-- Keep I/O and user-interface code out of numerical kernels. This follows
-  Scientific Python design guidance: scientific logic should be functions that
-  take standard data and return standard data, while file/network/UI effects
-  stay at orchestration boundaries.
-- Keep JAX-facing kernels pure and transformation-friendly. New solver state
-  objects should be dataclasses/pytrees only where they need JAX transforms;
-  otherwise use plain typed dataclasses at orchestration boundaries.
+  standard-library guidance that packages structure module namespaces by dotted
+  names.
+- Keep I/O and user-interface code out of numerical kernels. Scientific logic
+  should be functions that take standard data and return standard data; file,
+  network, plotting, and terminal effects stay at orchestration boundaries.
+- Keep JAX-facing kernels pure and transformation-friendly. Use dataclasses or
+  pytrees only where they improve transform safety; keep mutable runtime caches
+  outside differentiable kernels.
 - Use pytest fixtures for repeated operator/input builders instead of copying
-  large setup blocks across integration tests. This keeps new coverage useful
-  without expanding slow solve tests.
-- Prefer import aliases over wrapper functions when an extracted function needs
-  no dependency injection, signature adaptation, live-global policy lookup, or
-  monkeypatch seam. Keep wrappers only when they intentionally adapt behavior.
-- Move whole orchestration clusters next. The immediate high-ROI target is
-  ``solve_v3_transport_matrix_linear_gmres`` (about 3.1k lines), because its
-  policy, payload, runtime, and preconditioner-dispatch helpers are already in
-  focused modules. The 22k-line RHSMode=1 solve should move after the transport
-  call graph is clean enough to provide the template.
+  large setup blocks across integration tests.
+- Prefer import aliases over wrapper functions when no signature adaptation,
+  dependency injection, live policy lookup, or monkeypatch seam is needed.
+- Stop adding new top-level ``rhs1_*``, ``transport_*``,
+  ``preconditioner_*``, and ``v3_*`` modules. Existing flat modules can stay as
+  compatibility shims while their implementation moves into domain packages.
 
-Evidence used for this correction:
+Evidence used for this plan:
 
 - Python modules/packages: https://docs.python.org/3/tutorial/modules.html
 - JAX pytrees/state containers: https://docs.jax.dev/en/latest/pytrees.html
 - Scientific Python design recommendations: https://learn.scientific-python.org/development/principles/design/
 - pytest fixture model: https://docs.pytest.org/en/stable/explanation/fixtures.html
 
-### Target source tree
+### Target domain package layout
 
-The long-term structure should be:
+The target source tree is:
 
-- ``sfincs_jax/api.py``:
-  stable Python entry points, high-level solve/result objects, and deprecation
-  shims.
-- ``sfincs_jax/cli.py``:
-  argument parsing and user-facing progress/output only; no solver policy logic.
-- ``sfincs_jax/input_compat.py`` and ``sfincs_jax/namelist.py``:
-  input parsing, normalization, and compatibility translation.
-- ``sfincs_jax/geometry/`` or focused top-level modules:
-  VMEC/Boozer/Miller loading, geometry interpolation, field components,
-  coordinate conversions, and geometry diagnostics.
-- ``sfincs_jax/grids.py`` and ``sfincs_jax/xgrid.py``:
-  phase-space grid construction, stencil identities, and velocity/radial grids.
-- ``sfincs_jax/operators/`` or focused ``rhs1_*`` / ``transport_*`` modules:
-  RHSMode=1 full-system assembly, RHSMode=2/3 transport assembly, collision
-  stencils, streaming/drift terms, and active-DOF compression.
-- ``sfincs_jax/preconditioners/`` or focused top-level modules:
-  policy parsing, automatic selection, structured f-block factors, x-block
-  factors, Schwarz/domain decomposition, sparse/direct host paths, device
-  paths, QI/QA/QH coarse spaces, and admission gates.
-- ``sfincs_jax/solvers/`` or existing ``solver.py`` split:
-  GMRES/BiCGSTAB wrappers, distributed Krylov, residual gates, solver tracing,
-  and backend-specific fallback rules.
-- ``sfincs_jax/output/`` or split ``io.py``:
-  HDF5/NetCDF/NPZ writers, output schema definitions, plotting payloads, and
-  partial-output-on-timeout logic.
-- ``sfincs_jax/validation/``:
-  release artifact readers, parity metrics, physics gates, benchmark report
-  schema, and figure generation helpers.
+- ``sfincs_jax/api.py`` and ``sfincs_jax/cli.py``:
+  public user entry points, progress output, plotting commands, and stable
+  result objects. No solver implementation details belong here.
+- ``sfincs_jax/input/``:
+  namelist parsing, input normalization, compatibility translation, defaults,
+  and validation of user-facing options.
+- ``sfincs_jax/physics/``:
+  drift-kinetic model terms and named physics formulas: collisions,
+  collisionless streaming, electric-field terms, magnetic drifts, classical
+  transport, ambipolarity, bootstrap-current normalization, and analytic gates.
+- ``sfincs_jax/geometry/``:
+  analytic, VMEC, Boozer, VMEC-JAX, and booz_xform_jax geometry
+  loading/evaluation. File names should describe data contracts, such as
+  ``vmec.py``, ``boozer.py``, ``adapters.py``, and ``metrics.py``.
+- ``sfincs_jax/discretization/``:
+  grids, basis functions, quadrature, indexing/layout, velocity and radial
+  maps, sparse stencils, and active-DOF layouts.
+- ``sfincs_jax/operators/``:
+  matrix-free and assembled DKE operators, residual/source assembly,
+  f-block/system composition, sparse patterns, and compatibility translation
+  for SFINCS Fortran-v3 conventions.
+- ``sfincs_jax/problems/profile_response/``:
+  RHSMode=1 problem logic with physics names, not ``rhs1`` names:
+  setup, solve, current, residual, diagnostics, and policies.
+- ``sfincs_jax/problems/transport_matrix/``:
+  RHSMode=2/3 transport-matrix and monoenergetic response logic:
+  setup, loop, diagnostics, parallel dispatch, matrix assembly, finalization,
+  and policies.
+- ``sfincs_jax/solvers/``:
+  reusable numerical solvers independent of a physics problem: Krylov dispatch,
+  nonlinear solves, dense/direct fallback, sparse factors, recycling, progress,
+  checkpoints, and implicit differentiation contracts.
+- ``sfincs_jax/solvers/preconditioners/``:
+  preconditioners organized by numerical structure rather than caller prefix:
+  ``pas/``, ``full_fp/``, ``qi/``, ``schur/``,
+  ``domain_decomposition/``, ``coarse_space/``, ``xblock/``, and
+  ``symbolic_sparse/``.
+- ``sfincs_jax/parallel/``:
+  process, CPU, GPU, sharding, worker payloads, scaling validation, and runtime
+  policy.
+- ``sfincs_jax/io/``:
+  namelist/HDF5/NetCDF/NPZ output, plotting payloads, parity output comparison,
+  release-data fetching, and partial-output-on-timeout support.
+- ``sfincs_jax/workflows/``:
+  optimization, VMEC-JAX/Boozer/SFINCS-JAX pipelines, scans, validation
+  artifacts, and publication figure workflows.
+- ``sfincs_jax/validation/`` and ``sfincs_jax/benchmarks/``:
+  physics gates, benchmark artifact policies, parity reports, source-data
+  manifests, CI/nightly gate definitions, and figure-generation contracts.
+- ``sfincs_jax/compat/``:
+  legacy import shims, Fortran-v3 comparison helpers, and deprecation warnings.
 
-### Phase 0: stabilization before the large branch
+### Naming and size rules
 
-- Finish the current coverage/refactor sequence on ``main`` with bounded
-  extractions that do not disturb user behavior.
-- Keep compatibility names imported into ``v3_driver.py`` so existing tests and
-  local debug scripts continue to work while direct tests move to the new
-  modules.
-- Maintain the release baseline: full local suite, docs, ruff, GitHub CI/Docs,
-  and PyPI release state remain green after each batch.
-- Stop when the remaining work requires changing import paths, public entry
-  points, package layout, or multiple solver call chains at once. That is the
-  trigger for the dedicated branch/PR.
-
-### Phase 1: open the dedicated refactor branch and PR
-
-- Branch name: ``refactor/v3-driver-architecture``.
-- Open a draft PR immediately after the branch is created, with this plan in
-  the PR description and a checklist matching the phases below.
-- Do not mix performance experiments with architectural moves in this PR unless
-  a performance regression is caused by the refactor itself.
-- Require CI, docs, focused physics gates, and at least one full local suite
-  before the PR is marked ready for review.
+- Prefer domain nouns over historical implementation prefixes:
+  ``profile_response`` and ``transport_matrix`` are acceptable; new top-level
+  ``rhs1_*`` and ``transport_*`` files are not.
+- Inside a package, avoid repeating the package name. Use
+  ``problems/transport_matrix/setup.py`` rather than
+  ``transport_matrix/transport_setup.py``.
+- Target 200-800 lines per implementation module. More than 1500 lines requires
+  a split plan; less than about 80 lines should usually merge into a neighboring
+  module unless it is a stable math kernel, type contract, or compatibility
+  shim.
+- Public functions should read like user concepts:
+  ``solve_profile_response``, ``compute_transport_matrix``,
+  ``build_kinetic_operator``, ``make_preconditioner``, and
+  ``write_output``. Private functions can be specific but should avoid opaque
+  abbreviations.
+- Data passed through JAX-transformed code should be typed dataclasses or
+  pytrees with explicit static/dynamic fields. Mutable runtime caches stay
+  outside differentiable kernels.
+- Every package needs a short ``__init__.py`` facade exposing stable concepts.
+  Tests may import internals, but examples and docs should not.
 
 Current branch status:
 
@@ -340,240 +379,141 @@ Current branch status:
   ``290 passed in 23.91 s``; strict docs, repo-size, and diff-check passed; and
   the full local suite passed with ``2659 passed in 551.86 s``.
   ``v3_driver.py`` is now ``38,362`` lines.
-- Architecture reset before more extractions, 2026-06-15: stop adding new
-  top-level ``rhs1_*``, ``transport_*``, ``preconditioner_*``, and ``v3_*``
-  modules. The flat source tree has grown to 184 Python files, with about 60
-  ``rhs1_*`` files and 31 ``transport_*`` files, so continuing the current
-  naming pattern would replace one monolith with a prefix-based file dump. The
-  next refactor phase should first introduce domain subpackages and then move
-  existing extracted modules into those packages with compatibility shims.
+- Architecture reset before more extractions, 2026-06-15: the flat source tree
+  had grown to 184 Python files, with about 60 ``rhs1_*`` files and 31
+  ``transport_*`` files. Continuing that pattern would replace one monolith with
+  a prefix-based file dump. The detailed reset has now been consolidated into
+  the single active refactor plan above.
 
-  Target package layout:
+### Active execution phases for the draft PR
 
-  - ``sfincs_jax/api.py`` and ``sfincs_jax/cli.py``: public user entry points.
-    Keep this layer small and stable: ``run(...)``, ``solve(...)``,
-    ``read_output(...)``, ``plot_output(...)``, and documented advanced solver
-    options.
-  - ``sfincs_jax/physics/``: drift-kinetic model terms and named physics
-    formulas: collisions, collisionless streaming, electric-field terms,
-    magnetic drifts, classical transport, ambipolarity, and bootstrap-current
-    normalizations.
-  - ``sfincs_jax/geometry/``: analytic, VMEC, Boozer, VMEC-JAX, and
-    booz_xform_jax geometry loading/evaluation. File names should describe
-    data contracts: ``vmec.py``, ``boozer.py``, ``adapters.py``, ``metrics.py``.
-  - ``sfincs_jax/discretization/``: grids, basis functions, quadrature,
-    indexing/layout, speed maps, sparse stencils, and active-DOF layouts.
-  - ``sfincs_jax/operators/``: matrix-free and assembled DKE operators,
-    residual/source assembly, f-block/system composition, sparse patterns, and
-    compatibility translation for SFINCS Fortran-v3 input/output conventions.
-    Avoid ``v3`` as the main domain name; keep Fortran-v3-specific references in
-    ``operators/compat.py`` or ``compat/fortran_v3.py``.
-  - ``sfincs_jax/problems/profile_response/``: RHSMode=1 user-facing problem
-    logic. Use physics names in this package rather than ``rhs1`` names:
-    ``setup.py``, ``solve.py``, ``current.py``, ``residual.py``,
-    ``policies.py``.
-  - ``sfincs_jax/problems/transport_matrix/``: RHSMode=2/3 transport-matrix and
-    monoenergetic response logic. Existing ``transport_*`` modules should move
-    here as ``setup.py``, ``loop.py``, ``diagnostics.py``, ``parallel.py``,
-    ``matrix.py``, ``finalize.py``, and ``policies.py``.
-  - ``sfincs_jax/solvers/``: reusable numerical solvers independent of a
-    particular physics problem: Krylov dispatch, nonlinear solves, dense/direct
-    fallback, sparse factors, recycling, progress, state checkpoints, and
-    implicit differentiation contracts.
-  - ``sfincs_jax/solvers/preconditioners/``: preconditioners organized by
-    numerical structure rather than caller prefix: ``pas/``, ``full_fp/``,
-    ``qi/``, ``schur/``, ``domain_decomposition/``, ``coarse_space/``,
-    ``xblock/``, and ``symbolic_sparse/``.
-  - ``sfincs_jax/parallel/``: process, GPU, sharding, worker payloads, scaling
-    validation, and runtime policy.
-  - ``sfincs_jax/io/`` or ``sfincs_jax/output/``: namelist/HDF5/NetCDF/NPZ
-    output, plotting payloads, parity output comparison, and external data
-    fetching. ``io.py`` is already too large and should become a package.
-  - ``sfincs_jax/workflows/``: optimization, VMEC-JAX/Boozer/SFINCS-JAX
-    pipelines, scans, validation artifacts, and publication figure workflows.
-  - ``sfincs_jax/validation/`` and ``sfincs_jax/benchmarks/``: physics gates,
-    benchmark artifact policies, parity reports, source-data manifests, and
-    figure-generation contracts.
-  - ``sfincs_jax/compat/``: legacy import shims, Fortran-v3 comparison helpers,
-    and deprecation warnings. This package lets tests and users transition
-    without breaking existing scripts.
+Phase A, package skeleton and import contract:
 
-  Naming rules for the next phase:
+- Add domain-package skeletons and ``__init__.py`` facades without behavior
+  changes.
+- Add import-contract tests proving old public imports and new domain-package
+  imports both work.
+- Move no large logic until the skeleton, docs source map, and import tests are
+  green.
 
-  - Prefer domain nouns over implementation prefixes: ``profile_response`` and
-    ``transport_matrix`` are acceptable; new top-level ``rhs1_*`` and
-    ``transport_*`` files are not.
-  - Inside a package, avoid repeating the package name. Use
-    ``problems/transport_matrix/setup.py`` rather than
-    ``transport_matrix/transport_setup.py``.
-  - Target 200-800 lines per implementation module. More than 1500 lines
-    requires a split plan; less than about 80 lines should usually be merged
-    into a neighboring module unless it is a stable math kernel, type contract,
-    or compatibility shim.
-  - Public functions should read like user concepts:
-    ``solve_profile_response``, ``compute_transport_matrix``,
-    ``build_kinetic_operator``, ``make_preconditioner``. Private functions can
-    be specific, but should still avoid opaque abbreviations.
-  - Data passed through JAX-transformed code should be typed dataclasses or
-    PyTrees with explicit static/dynamic fields. Keep mutable runtime caches
-    outside differentiable kernels.
-  - Every package needs a short ``__init__.py`` facade exposing only stable
-    concepts; tests may import internals, but examples and docs should not.
+Phase B, shared data contracts:
 
-  Migration phases:
-
-  1. Add the package skeleton with ``__init__.py`` facades and no behavior
-     changes. Add import-contract tests that the old public imports and new
-     package imports both work.
-  2. Move recently extracted RHSMode=2/3 modules into
-     ``problems/transport_matrix/`` using thin top-level compatibility shims.
-     This should include setup, active/dense setup, loop support,
-     finalization, streaming outputs, postsolve diagnostics, parallel solve,
-     residual quality, and transport matrix helpers.
-  3. Move RHSMode=1 solver/preconditioner modules into
-     ``problems/profile_response/`` and ``solvers/preconditioners/`` based on
-     whether they express problem logic or reusable numerical machinery. QI
-     modules should become ``solvers/preconditioners/qi/`` with a single public
-     ``qi.make_preconditioner(...)`` style seam.
-  4. Split ``io.py`` into an ``io/`` package before further output-feature work:
-     ``namelist.py``, ``hdf5.py``, ``netcdf.py``, ``npz.py``,
-     ``plot_payload.py``, and ``compare.py``.
-  5. Convert ``v3_driver.py`` last, after domain packages are available. The
-     target should not be ``v3_driver.py`` plus many wrappers; it should be a
-     small orchestrator in ``sfincs_jax/engine.py`` or ``sfincs_jax/api.py`` that
-     calls problem modules and solver modules through explicit dataclass
-     contracts.
-  6. Remove compatibility shims only in a later major version. Until then, shims
-     should be tiny, documented, and covered by import tests.
-
-  Acceptance gates for each package move:
-
-  - No numerical behavior change: focused tests, relevant regression slices,
-    full local suite, and CI must pass.
-  - No public API break: documented imports and CLI examples keep working.
-  - No performance regression on the benchmark slices touched by the move.
-  - No new large flat top-level modules.
-  - Source map and testing docs must describe the new package location in terms
-    of physics/numerics, not historical RHS labels.
-  - Coverage should move with the code; tests should be renamed by domain
-    package when practical, but not churned only for aesthetics.
-
-### Phase 2: define stable data models and names
-
-- Create typed dataclasses for:
+- Define stable typed contracts where they reduce ambiguity:
   ``SolveInputs``, ``GeometryState``, ``GridState``, ``OperatorState``,
   ``PreconditionerState``, ``SolverResult``, ``TransportResult``,
   ``OutputSchema``, and ``BenchmarkReport``.
-- Replace ambiguous names such as ``op``, ``nml``, ``rhs1_precond_kind`` in new
-  modules with names like ``operator_state``, ``input_model``,
-  ``preconditioner_kind``, and ``transport_rhs_index``.
-- Keep short local variables only inside small mathematical kernels where the
-  notation matches equations in docs.
-- Add module docstrings explaining the physics/numerics each module owns and
-  where the relevant equations are documented.
+- Replace ambiguous names in new code with domain names such as
+  ``operator_state``, ``input_model``, ``preconditioner_kind``,
+  ``transport_rhs_index``, and ``profile_response_state``.
+- Keep short mathematical names only inside small kernels where the notation is
+  tied to equations in docs.
 
-### Phase 3: split solve orchestration
+Phase C, transport-matrix problem package:
 
-- Move high-level RHSMode=1 orchestration into ``rhs1_solve.py``:
-  input normalization, operator construction, default solver selection,
-  residual gates, fallback ordering, diagnostics, and result assembly.
-- Move RHSMode=2/3 transport orchestration into ``transport_solve.py``:
-  transport-matrix RHS loops, worker/parallel dispatch, sparse-direct route,
-  and output diagnostics.
-- Leave ``v3_driver.py`` as a thin compatibility facade that imports from the
-  new modules and emits deprecation comments only after all tests migrate.
-- Tests:
-  direct unit tests for policy branches, integration tests for tiny solves,
-  output-key regression tests, and CPU/GPU equivalence gates on bounded inputs.
+- Move RHSMode=2/3 setup, active/dense setup, loop support, finalization,
+  streaming outputs, postsolve diagnostics, parallel solve, residual quality,
+  and transport-matrix helpers into ``problems/transport_matrix/``.
+- Keep existing flat modules as tiny compatibility shims only while downstream
+  imports migrate.
+- Validate with focused transport tests, parallel policy tests, output schema
+  tests, representative parity slices, and benchmark guardrails.
 
-### Phase 4: split operator assembly
+Phase D, profile-response problem package:
 
-- Keep existing ``rhs1_full_assembly.py``, ``rhs1_fblock_assembly.py``,
-  ``rhs1_collision_stencils.py``, and ``rhs1_collisionless_stencils.py`` as the
-  nucleus.
-- Move any remaining operator mutation/build helpers out of ``v3_driver.py`` to
-  assembly modules grouped by equation term:
-  streaming, magnetic drift, electric-field drift, collision, Phi1, quasineutrality,
-  current/profile constraints, and source terms.
-- Each extracted term builder must have:
-  shape tests, inactive-mask tests, zero-drive/constant-field limits, and at
-  least one finite-difference/Fourier/order-condition test where applicable.
+- Move RHSMode=1 input normalization, operator construction, automatic solver
+  selection, residual gates, fallback ordering, bootstrap-current diagnostics,
+  and result assembly into ``problems/profile_response/``.
+- Use physics names in package APIs. Avoid exposing ``rhs1`` in new public or
+  public-internal function names.
+- Validate with profile-current physics gates, finite-beta QA/QH bootstrap
+  comparisons, CPU/GPU equivalence gates, and differentiability checks.
 
-### Phase 5: split preconditioner architecture
+Phase E, operator and discretization split:
 
-- Create a clearly named preconditioner package or module family:
-  ``preconditioner_policy.py``, ``preconditioner_dispatch.py``,
-  ``preconditioner_structured_fblock.py``, ``preconditioner_xblock.py``,
-  ``preconditioner_domain_decomposition.py``, ``preconditioner_sparse_host.py``,
-  ``preconditioner_device.py``, and ``preconditioner_coarse_spaces.py``.
-- Existing modules already started this path:
-  ``rhs1_lowmode_coarse.py``, ``rhs1_domain_decomposition.py``,
-  ``rhs1_preconditioner_dispatch.py``, ``rhs1_preconditioner_auto_policy.py``,
-  ``rhs1_qi_*``, and ``transport_preconditioner_dispatch.py``.
-- Promote those names to descriptive public-internal names once the dedicated
-  PR is active. Keep aliases for one release cycle if any docs/tests use old
-  private names.
-- Tests:
-  admission-gate tests, memory-budget tests, matrix-free metadata tests,
-  residual-reduction probes, and failure-mode tests for nonfinite/preflight
-  rejection.
+- Move remaining DKE term builders into ``operators/`` and
+  ``discretization/`` by equation responsibility: streaming, magnetic drift,
+  electric-field drift, collision, Phi1, quasineutrality, current/profile
+  constraints, sparse patterns, grids, quadrature, and active layouts.
+- Each extracted term builder needs shape tests, inactive-mask tests,
+  zero-drive or constant-field limits, and at least one order-condition,
+  finite-difference, Fourier, or conservation test where applicable.
 
-### Phase 6: split output and plotting
+Phase F, solver and preconditioner split:
 
-- Move HDF5/NetCDF/NPZ schema construction into a small schema module with
-  explicit versioned output keys.
-- Keep plotting functions separate from solve execution; CLI ``--plot`` should
-  consume output files and never require a rerun.
-- Tests:
-  schema round-trip tests, partial-output tests, output-key parity tests versus
-  Fortran v3, and plot smoke tests from tiny checked artifacts.
+- Move reusable Krylov dispatch, residual gates, solver tracing, recycling,
+  checkpoints, implicit differentiation, sparse/direct factors, and dense
+  fallback into ``solvers/``.
+- Move preconditioners under ``solvers/preconditioners/`` by numerical
+  structure: PAS, full-FP, QI, Schur, domain decomposition, coarse space,
+  x-block, and symbolic sparse.
+- Validate with admission-gate tests, memory-budget tests, matrix-free metadata
+  tests, residual-reduction probes, strict true-residual gates, and failure-mode
+  tests for nonfinite/preflight rejection.
 
-### Phase 7: migrate tests to module ownership
+Phase G, I/O, plotting, workflows, validation, and benchmarks:
 
-- Every new module gets direct tests named after the module.
-- Existing ``test_v3_driver_*`` files should shrink to compatibility/integration
-  tests only.
-- Coverage milestones:
-  ``74 -> 80%`` after policy/preconditioner extraction,
-  ``80 -> 87%`` after solve orchestration and output schema split,
+- Split ``io.py`` into ``io/`` with explicit schema modules for HDF5, NetCDF,
+  NPZ, plotting payloads, comparison, and release-data fetches.
+- Keep CLI ``--plot`` as a consumer of output files; plotting must never force a
+  rerun.
+- Move example workflows, optimization pipelines, and publication figure helpers
+  into ``workflows/`` where they can share tested APIs.
+- Move parity metrics, physics gates, benchmark report schemas, and release
+  artifact readers into ``validation/`` and ``benchmarks/``.
+
+Phase H, shrink and retire ``v3_driver.py``:
+
+- Convert ``v3_driver.py`` only after the domain packages own their contracts.
+- The target is a small compatibility facade/orchestrator that delegates to
+  ``api.py`` and the problem packages, not a second monolith.
+- Remove dead helpers only when coverage, import-contract tests, and downstream
+  compatibility checks prove they are unused or covered by replacements.
+
+Phase I, docs, coverage, and release readiness:
+
+- Update source-map docs, testing docs, API docs, and contributor docs with the
+  domain package ownership.
+- Keep equations close to code ownership: physics and numerical modules should
+  link to docs pages with the corresponding drift-kinetic equation term,
+  discretization, normalization, and validation gate.
+- Coverage milestones remain meaningful rather than cosmetic:
+  ``74 -> 80%`` after policy/preconditioner and import-contract coverage,
+  ``80 -> 87%`` after problem orchestration and output schema split,
   ``87 -> 92%`` after operator-term extraction,
   ``92 -> 95%`` after remaining solver/transport integration seams are covered.
-- CI floor should move only after a milestone is reached on a full local
-  coverage run and GitHub CI stays below the wall-time budget.
+- Raise CI coverage floors only after full local coverage and GitHub CI remain
+  inside the wall-time budget.
 
-### Phase 8: performance and memory guardrails during refactor
+### Refactor acceptance gates
 
-- Add lightweight benchmark gates for:
-  cold vs warm JIT, structured preconditioner setup, HDF5/NetCDF write time,
-  peak RSS on representative synthetic operators, and CLI progress reporting.
-- Keep production-resolution CPU/GPU/Fortran comparisons as release/nightly
-  gates, not every-commit CI gates.
-- Any refactor that increases runtime or memory by more than ``5%`` on a
-  bounded benchmark must either be fixed immediately or documented as a
-  deliberate tradeoff before merge.
-
-### Phase 9: documentation deliverables
-
-- Update source-map docs with the new module ownership.
-- Update API docs to show only stable public entry points and a separate
-  internal architecture page for solver/preconditioner modules.
-- Add a contributor guide explaining:
-  where to add new physics terms, where to add preconditioners, how to add
-  output keys, how to add release-data tests, and how to write bounded physics
-  gates.
-- Keep equations close to code ownership: each physics/numerical module should
-  link to the docs page with the corresponding drift-kinetic equation term,
-  discretization, and normalization.
+- No numerical behavior change: focused tests, relevant regression slices, full
+  local suite, and CI must pass after each conceptual batch.
+- No public API break: documented imports, CLI examples, plotting commands, and
+  Python examples keep working.
+- No performance or memory regression above ``5%`` on bounded benchmark slices
+  touched by the move unless explicitly documented as a deliberate tradeoff and
+  accepted before merge.
+- No new large flat top-level modules and no new large tracked fixtures.
+- Source map, testing docs, and API docs describe the new package location in
+  physics/numerics terms, not historical RHS labels.
+- README/docs benchmark plots and parity tables are regenerated only from
+  complete checked reports when behavior or benchmark data actually changes.
 
 ### Merge criteria for the full refactor PR
 
+- PR #8 remains draft until every active phase above is complete or explicitly
+  moved into a documented post-merge follow-up with a non-blocking rationale.
+- No additional refactor PRs are opened or merged before this PR completes.
 - ``v3_driver.py`` is reduced to a compatibility facade below ``1000`` lines, or
-  is removed if all public imports are migrated safely.
+  is removed if all public imports are migrated safely. Any temporary exception
+  requires an explicit remaining-line inventory and a follow-up owner.
 - Full local suite passes.
-- GitHub CI and Docs pass.
-- Package coverage is at least the next agreed milestone above the current
-  baseline, with a clear path to ``95%``.
-- Public CLI and Python API examples still run.
+- GitHub CI, Docs, and coverage checks pass.
+- Package coverage reaches the next agreed milestone above the current baseline
+  and the remaining path to ``95%`` is concrete and bounded.
+- Public CLI and Python API examples still run, including plotting and
+  output-format selection.
+- Differentiability tests for the documented JAX-native lanes pass.
 - README/docs figures and tables are either unchanged by the refactor or
   regenerated from complete reports.
 - No large fixtures or generated outputs are added to git.
