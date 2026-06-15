@@ -240,10 +240,15 @@ Unreleased
   recomputation, streamed-output collection, recycle-basis updates, solver-method
   recording, and KSP iteration-stat dispatch, with direct unit coverage for dense
   fallback accepted-state overrides.
+- Extracted the constraintScheme=1 nullspace/source-row projection into
+  ``constraint_projection.py``. RHSMode=1 and RHSMode=2/3 solve paths keep the
+  historical private driver helper names as compatibility aliases, while direct
+  tests now cover no-op admission, environment disablement, transport roundoff
+  skip behavior, source-row residual reduction, and the driver alias contract.
 - The post-extraction strict docs build passed, the repo-size audit now has no
   reviewed files above 2 MiB after ``v3_driver.py`` dropped below the threshold,
-  and the latest local full suite after the RHSMode=2/3 branch-finalization
-  extraction passed with ``2645 passed in 511.79 s``.
+  and the latest local full suite after the constraint-projection extraction
+  passed with ``2650 passed in 532.10 s``.
 
 v1.1.7
 ------

@@ -440,6 +440,12 @@ basis trimming, small recycled initial guesses, elapsed-time recording, residual
 abort gates, and ETA progress messages. These tests protect the stateful
 bookkeeping that the heavier RHSMode=2/3 parity tests then exercise through the
 public solve path.
+``tests/test_constraint_projection.py`` covers the extracted
+constraintScheme=1 nullspace projection used by both RHSMode=1 and transport
+solves: ineligible systems reuse supplied residuals, disabled projection is a
+true no-op, transport roundoff residuals skip the correction, source-row
+residuals are reduced by the small least-squares correction, and the
+``v3_driver`` private compatibility alias remains intact.
 ``tests/test_transport_solve_finalization.py`` covers the sequential
 RHSMode=2/3 finalization seam: full-space residual-vector reuse, projection-time
 true-residual recomputation, active-DOF accepted-state overrides for dense
