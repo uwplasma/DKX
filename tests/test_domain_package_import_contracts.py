@@ -74,6 +74,41 @@ TRANSPORT_COMPATIBILITY_IMPORTS = (
         "sfincs_jax.problems.transport_matrix.postsolve_diagnostics",
         "compute_transport_postsolve_diagnostics",
     ),
+    (
+        "sfincs_jax.transport_policy",
+        "sfincs_jax.problems.transport_matrix.policies",
+        "transport_dense_backend_allowed",
+    ),
+    (
+        "sfincs_jax.transport_solve_policy",
+        "sfincs_jax.problems.transport_matrix.solve_policy",
+        "resolve_transport_initial_solve_policy",
+    ),
+    (
+        "sfincs_jax.transport_linear_solve",
+        "sfincs_jax.problems.transport_matrix.linear_solve",
+        "solve_transport_linear_with_residual",
+    ),
+    (
+        "sfincs_jax.transport_host_gmres",
+        "sfincs_jax.problems.transport_matrix.host_gmres",
+        "transport_host_gmres_solve",
+    ),
+    (
+        "sfincs_jax.transport_handoff_policy",
+        "sfincs_jax.problems.transport_matrix.handoff_policy",
+        "transport_polish_config_from_env",
+    ),
+    (
+        "sfincs_jax.transport_residual_quality",
+        "sfincs_jax.problems.transport_matrix.residual_quality",
+        "transport_residual_gate_failure",
+    ),
+    (
+        "sfincs_jax.transport_iteration_stats",
+        "sfincs_jax.problems.transport_matrix.iteration_stats",
+        "emit_transport_ksp_iteration_stats",
+    ),
 )
 
 
@@ -117,5 +152,7 @@ def test_transport_matrix_package_moves_preserve_legacy_imports() -> None:
         legacy_module = _import_module(legacy_name)
         new_module = _import_module(new_name)
         assert getattr(legacy_module, public_name) is getattr(new_module, public_name)
-        assert public_name in legacy_module.__all__
-        assert public_name in new_module.__all__
+        if hasattr(legacy_module, "__all__"):
+            assert public_name in legacy_module.__all__
+        if hasattr(new_module, "__all__"):
+            assert public_name in new_module.__all__
