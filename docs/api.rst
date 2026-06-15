@@ -97,6 +97,9 @@ API reference
 .. automodule:: sfincs_jax.transport_fortran_reduced_lu
    :members:
 
+.. automodule:: sfincs_jax.transport_postsolve_diagnostics
+   :members:
+
 .. automodule:: sfincs_jax.preconditioner_setup
    :members:
 
