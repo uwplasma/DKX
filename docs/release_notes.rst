@@ -29,6 +29,13 @@ Unreleased
   KSP iteration diagnostics, and linear-solve dispatch. The old top-level module
   paths remain aliases to preserve existing imports and monkeypatch seams. The
   post-move local full suite passed with ``2668 passed in 556.85 s``.
+- Moved the RHSMode=2/3 dense/active/sparse solve-support cluster into
+  ``sfincs_jax.problems.transport_matrix``: cached dense LU, batched all-RHS
+  dense solves, active block-Schur/coarse factors, and sparse-direct rescue.
+  The old top-level module paths remain aliases, so existing user scripts,
+  tests, and debug monkeypatches keep working while the maintained source map
+  uses the domain package. The post-move local full suite passed with
+  ``2668 passed in 556.60 s``.
 - Continued the ``v3_driver.py`` refactor path by moving the coupled
   f/tail-moment and tail-only matrix-free residual-correction builders into
   ``rhs1_lowmode_coarse.py`` with direct tests for tail-selection policy,

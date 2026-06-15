@@ -300,10 +300,13 @@ research workflows.
 .. automodule:: sfincs_jax.solve_mode_policy
    :members:
 
-.. automodule:: sfincs_jax.transport_dense_lu
+.. automodule:: sfincs_jax.problems.transport_matrix.dense_lu
    :members:
 
-.. automodule:: sfincs_jax.transport_dense_batch
+.. automodule:: sfincs_jax.problems.transport_matrix.dense_batch
+   :members:
+
+.. automodule:: sfincs_jax.problems.transport_matrix.active_factor
    :members:
 
 .. automodule:: sfincs_jax.problems.transport_matrix.policies
@@ -339,7 +342,7 @@ research workflows.
 .. automodule:: sfincs_jax.problems.transport_matrix.residual_quality
    :members:
 
-.. automodule:: sfincs_jax.transport_sparse_direct_solve
+.. automodule:: sfincs_jax.problems.transport_matrix.sparse_direct_solve
    :members:
 
 .. automodule:: sfincs_jax.problems.transport_matrix.streaming_outputs

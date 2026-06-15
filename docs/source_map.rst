@@ -840,7 +840,8 @@ the historical private driver name and test the focused module directly. This ke
   output/restart policy, active-index compaction state, dense fallback and dense
   preconditioner admission, and ordered user-facing notes before the transport
   loop builds matvecs or preconditioners.
-- ``sfincs_jax/transport_sparse_direct_solve.py``:
+- ``sfincs_jax/problems/transport_matrix/sparse_direct_solve.py``
+  (legacy alias: ``sfincs_jax/transport_sparse_direct_solve.py``):
   RHSMode=2/3 sparse-direct rescue implementation. It owns sparse-pattern
   admission/caching, direct active FP operator factor reuse, explicit sparse
   helper materialization, fallback sparse-ILU setup, host iterative refinement,
@@ -868,14 +869,22 @@ the historical private driver name and test the focused module directly. This ke
   (legacy alias: ``sfincs_jax/transport_residual_quality.py``):
   fast transport worker residual-abort threshold parsing and failure-message
   formatting for absolute and RHS-normalized diagnostics.
-- ``sfincs_jax/transport_dense_lu.py``:
+- ``sfincs_jax/problems/transport_matrix/dense_lu.py``
+  (legacy alias: ``sfincs_jax/transport_dense_lu.py``):
   cached dense-LU solver and preconditioner construction used by bounded transport
   dense fallback and dense-preconditioner paths.
-- ``sfincs_jax/transport_dense_batch.py``:
+- ``sfincs_jax/problems/transport_matrix/dense_batch.py``
+  (legacy alias: ``sfincs_jax/transport_dense_batch.py``):
   batched dense RHSMode=2/3 transport solve helper. It owns all-RHS dense matrix
   assembly, active-DOF reduction/expansion, optional streamed diagnostic
   collection, residual bookkeeping, and per-``whichRHS`` progress emission for
   the bounded dense branch.
+- ``sfincs_jax/problems/transport_matrix/active_factor.py``
+  (legacy alias: ``sfincs_jax/transport_active_factor.py``):
+  active-operator block-Schur and residual-coarse factors for RHSMode=2/3
+  transport. It owns symbolic active block ordering, bounded numerical block
+  inverses, source/constraint Schur closure, and setup-time true-residual
+  admission before any factor is eligible for production use.
 - ``sfincs_jax/problems/transport_matrix/host_gmres.py``
   (legacy alias: ``sfincs_jax/transport_host_gmres.py``):
   host SciPy GMRES first-attempt/rescue solve helper for explicit transport paths,
