@@ -425,6 +425,12 @@ diagnostics seam directly: streamed accumulator reuse, output-field propagation,
 chunked fixed-operator diagnostic evaluation, and transport-matrix assembly are
 checked with monkeypatched numerical kernels so the behavior is protected without
 adding heavyweight transport solves to CI.
+``tests/test_transport_solve_policy.py`` also covers the initial RHSMode=2/3 solve
+policy extracted from ``v3_driver.py``: geometryScheme namelist parsing,
+low-memory VMEC monoenergetic routing, dense fallback admission, dense memory-cap
+blocking, subset streaming, state-vector retention, and GMRES restart/max-iteration
+guards are checked as pure policy tests before heavier parity solves exercise the
+same decisions end-to-end.
 
 QI seed-robustness artifacts are also checked as data, not only as scripts.
 ``tests/test_qi_seed_smoke_artifact.py`` verifies the one-seed smoke artifact,
