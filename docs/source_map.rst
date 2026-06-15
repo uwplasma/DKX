@@ -175,6 +175,12 @@ the historical private driver name and test the focused module directly. This ke
   infrastructure. The current exported kernel is the regularized tiny
   least-squares solve used by recycled initial guesses and coarse/residual
   correction paths when backend LAPACK/SVD calls are unavailable.
+- ``sfincs_jax/constraint_projection.py``:
+  constraintScheme=1 nullspace/source-row projection used by RHSMode=1 and
+  RHSMode=2/3 solves after iterative branches. It builds the small
+  particle/energy source correction basis, applies the roundoff skip gate used
+  by transport solves, and returns either the corrected state or the corrected
+  residual through an injected operator action for direct numerical tests.
 - ``sfincs_jax/sparse_triangular.py``:
   JAX-native triangular solves for padded and compact-CSR sparse factor rows,
   plus permutation inversion. These pure kernels are used by sparse

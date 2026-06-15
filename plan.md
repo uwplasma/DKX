@@ -308,6 +308,18 @@ Current branch status:
   diff-check passed; and the full local suite passed with ``2645 passed in
   511.79 s``. ``v3_driver.py`` remains ``38,577`` lines while the extracted
   finalization logic is now directly tested.
+- The next numerical-helper extraction moved constraintScheme=1
+  nullspace/source-row projection into ``constraint_projection.py``. The driver
+  now imports the historical private helper names as compatibility aliases, and
+  the module has direct tests for ineligible no-op behavior, environment
+  disablement, transport roundoff skip gates, source-row residual reduction, and
+  driver alias preservation. Focused projection/finalization/policy/loop tests
+  passed with ``28 passed in 1.62 s``; RHSMode=1 dispatch/output slices passed
+  with ``50 passed in 23.44 s``; focused transport tests passed with
+  ``26 passed in 11.37 s``; and the broader transport/parallel support slice
+  passed with ``281 passed in 24.24 s``. Strict docs, lint, repo-size, and
+  diff-check passed; and the full local suite passed with ``2650 passed in
+  532.10 s``. ``v3_driver.py`` is now ``38,486`` lines.
 - Next PR-level moves should split high-level RHSMode=1 solve orchestration
   into ``rhs1_solve.py`` and RHSMode=2/3 orchestration into
   ``transport_solve.py`` after the focused module extractions are green.

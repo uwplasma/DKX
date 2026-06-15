@@ -54,6 +54,10 @@ from .solver import (
 )
 from .implicit_solve import linear_custom_solve, linear_custom_solve_with_residual
 from .linear_algebra import small_regularized_lstsq as _small_regularized_lstsq
+from .constraint_projection import (
+    project_constraint_scheme1_nullspace_solution as _project_constraint_scheme1_nullspace_solution,
+    project_constraint_scheme1_nullspace_solution_with_residual as _project_constraint_scheme1_nullspace_solution_with_residual,
+)
 from .structured_velocity import factor_block_tridiagonal
 from .pas_smoother import adaptive_pas_smoother
 from .explicit_sparse import (
@@ -36743,101 +36747,6 @@ def _transport_active_dof_indices(op: V3FullSystemOperator) -> np.ndarray:
     Fortran's non-singular system size.
     """
     return build_rhs1_compressed_pitch_layout(op).active_full_indices.astype(np.int32, copy=False)
-
-
-def _project_constraint_scheme1_nullspace_solution_with_residual(
-    *,
-    op: V3FullSystemOperator,
-    x_vec: jnp.ndarray,
-    rhs_vec: jnp.ndarray,
-    matvec_op: V3FullSystemOperator,
-    enabled_env_var: str,
-    residual_vec: jnp.ndarray | None = None,
-) -> tuple[jnp.ndarray, jnp.ndarray]:
-    """Project solution to constraintScheme=1 nullspace complement and return residual."""
-    if int(op.constraint_scheme) != 1:
-        if residual_vec is not None and residual_vec.shape == rhs_vec.shape:
-            return x_vec, residual_vec
-        return x_vec, apply_v3_full_system_operator_cached(matvec_op, x_vec) - rhs_vec
-    if int(op.phi1_size) != 0:
-        if residual_vec is not None and residual_vec.shape == rhs_vec.shape:
-            return x_vec, residual_vec
-        return x_vec, apply_v3_full_system_operator_cached(matvec_op, x_vec) - rhs_vec
-    if int(op.extra_size) == 0:
-        if residual_vec is not None and residual_vec.shape == rhs_vec.shape:
-            return x_vec, residual_vec
-        return x_vec, apply_v3_full_system_operator_cached(matvec_op, x_vec) - rhs_vec
-
-    project_env = os.environ.get(enabled_env_var, "").strip().lower()
-    if project_env in {"0", "false", "no", "off"}:
-        if residual_vec is not None and residual_vec.shape == rhs_vec.shape:
-            return x_vec, residual_vec
-        return x_vec, apply_v3_full_system_operator_cached(matvec_op, x_vec) - rhs_vec
-
-    xpart1, xpart2 = _source_basis_constraint_scheme_1(op.x)
-    ix0 = 1 if bool(op.point_at_x0) else 0
-    f_shape = op.fblock.f_shape
-    n_s, _, _, _, _ = f_shape
-
-    def _basis(species_index: int, src_index: int, xpart: jnp.ndarray) -> jnp.ndarray:
-        f = jnp.zeros(f_shape, dtype=jnp.float64)
-        f = f.at[species_index, ix0:, 0, :, :].set(xpart[ix0:][:, None, None])
-        extra = jnp.zeros((n_s, 2), dtype=jnp.float64)
-        extra = extra.at[species_index, src_index].set(-1.0)
-        return jnp.concatenate([f.reshape((-1,)), extra.reshape((-1,))], axis=0)
-
-    basis: list[jnp.ndarray] = []
-    for s in range(n_s):
-        basis.append(_basis(s, 0, xpart1))
-        basis.append(_basis(s, 1, xpart2))
-
-    if residual_vec is not None and residual_vec.shape == rhs_vec.shape:
-        r = residual_vec
-    else:
-        r = apply_v3_full_system_operator_cached(matvec_op, x_vec) - rhs_vec
-    r_extra = r[-op.extra_size :]
-    proj_atol_env = os.environ.get(f"{enabled_env_var}_ATOL", "").strip()
-    if proj_atol_env:
-        try:
-            proj_atol = float(proj_atol_env)
-        except ValueError:
-            proj_atol = 0.0
-    else:
-        # For transport-matrix solves, skip projection when the constraint residuals are
-        # already at roundoff. Keep RHSMode=1 default behavior unchanged.
-        proj_atol = 0.0 if "RHSMODE1" in enabled_env_var else 1e-9
-    if proj_atol > 0.0:
-        max_res = float(np.max(np.abs(np.asarray(r_extra, dtype=np.float64))))
-        if max_res <= proj_atol:
-            return x_vec, r
-    cols_full = [apply_v3_full_system_operator_cached(matvec_op, v) for v in basis]
-    cols_extra = [col[-op.extra_size :] for col in cols_full]
-    m = jnp.stack(cols_extra, axis=1)
-    c_res = _small_regularized_lstsq(m, -r_extra)
-    x_corr = sum(v * c_res[i] for i, v in enumerate(basis))
-    r_corr = sum(col * c_res[i] for i, col in enumerate(cols_full))
-    # For constraintScheme=1, enforce the source rows directly and keep the corrected
-    # solution. Projecting out the basis reintroduces the constraint residuals.
-    return x_vec + x_corr, r + r_corr
-
-
-def _project_constraint_scheme1_nullspace_solution(
-    *,
-    op: V3FullSystemOperator,
-    x_vec: jnp.ndarray,
-    rhs_vec: jnp.ndarray,
-    matvec_op: V3FullSystemOperator,
-    enabled_env_var: str,
-) -> jnp.ndarray:
-    """Project solution to constraintScheme=1 nullspace complement and enforce source rows."""
-    x_proj, _r = _project_constraint_scheme1_nullspace_solution_with_residual(
-        op=op,
-        x_vec=x_vec,
-        rhs_vec=rhs_vec,
-        matvec_op=matvec_op,
-        enabled_env_var=enabled_env_var,
-    )
-    return x_proj
 
 
 def solve_v3_transport_matrix_linear_gmres(
