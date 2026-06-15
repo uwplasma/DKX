@@ -416,6 +416,17 @@ Current branch status:
   passed with ``28 passed``; broader transport/docstring tests passed with
   ``33 passed``; strict docs build passed; and the full local suite passed with
   ``2668 passed in 562.12 s``.
+- Phase C policy/solver-support checkpoint, 2026-06-15: moved transport
+  backend/sparse/recycle policy, solve policy, handoff policy, residual-quality
+  gates, KSP iteration diagnostics, host-GMRES rescue, and linear-solve dispatch
+  into ``sfincs_jax.problems.transport_matrix`` as ``policies.py``,
+  ``solve_policy.py``, ``handoff_policy.py``, ``residual_quality.py``,
+  ``iteration_stats.py``, ``host_gmres.py``, and ``linear_solve.py``. The old
+  top-level paths are ``sys.modules`` aliases to preserve direct imports and
+  monkeypatch/debug seams. Focused ruff and policy/solver-support tests passed
+  with ``63 passed``; broader focused transport tests passed with
+  ``101 passed``; strict docs build passed; and the full local suite passed
+  with ``2668 passed in 556.85 s``.
 
 ### Active execution phases for the draft PR
 

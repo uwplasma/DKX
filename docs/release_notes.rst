@@ -23,6 +23,12 @@ Unreleased
   top-level module paths now alias the new modules so existing imports and
   monkeypatch-based debug tests keep working. The post-move local full suite
   passed with ``2668 passed in 562.12 s``.
+- Moved the RHSMode=2/3 transport policy and solver-support cluster into
+  ``sfincs_jax.problems.transport_matrix``: backend/sparse/recycle policies,
+  solve policy, residual-quality gates, handoff policy, host-GMRES rescue,
+  KSP iteration diagnostics, and linear-solve dispatch. The old top-level module
+  paths remain aliases to preserve existing imports and monkeypatch seams. The
+  post-move local full suite passed with ``2668 passed in 556.85 s``.
 - Continued the ``v3_driver.py`` refactor path by moving the coupled
   f/tail-moment and tail-only matrix-free residual-correction builders into
   ``rhs1_lowmode_coarse.py`` with direct tests for tail-selection policy,

@@ -12,7 +12,7 @@ import jax.numpy as jnp
 
 from sfincs_jax.linear_algebra import small_regularized_lstsq
 from sfincs_jax.solver_progress import transport_progress_message
-from sfincs_jax.transport_residual_quality import transport_residual_gate_failure
+from sfincs_jax.problems.transport_matrix.residual_quality import transport_residual_gate_failure
 from sfincs_jax.v3_system import _operator_signature_cached, apply_v3_full_system_operator_cached
 
 

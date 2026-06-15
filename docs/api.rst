@@ -306,16 +306,22 @@ research workflows.
 .. automodule:: sfincs_jax.transport_dense_batch
    :members:
 
-.. automodule:: sfincs_jax.transport_handoff_policy
+.. automodule:: sfincs_jax.problems.transport_matrix.policies
    :members:
 
-.. automodule:: sfincs_jax.transport_host_gmres
+.. automodule:: sfincs_jax.problems.transport_matrix.solve_policy
    :members:
 
-.. automodule:: sfincs_jax.transport_iteration_stats
+.. automodule:: sfincs_jax.problems.transport_matrix.handoff_policy
    :members:
 
-.. automodule:: sfincs_jax.transport_linear_solve
+.. automodule:: sfincs_jax.problems.transport_matrix.host_gmres
+   :members:
+
+.. automodule:: sfincs_jax.problems.transport_matrix.iteration_stats
+   :members:
+
+.. automodule:: sfincs_jax.problems.transport_matrix.linear_solve
    :members:
 
 .. automodule:: sfincs_jax.transport_parallel_payload
@@ -330,7 +336,7 @@ research workflows.
 .. automodule:: sfincs_jax.transport_preconditioner_dispatch
    :members:
 
-.. automodule:: sfincs_jax.transport_solve_policy
+.. automodule:: sfincs_jax.problems.transport_matrix.residual_quality
    :members:
 
 .. automodule:: sfincs_jax.transport_sparse_direct_solve

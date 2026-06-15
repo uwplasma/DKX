@@ -410,7 +410,8 @@ they protect the source/moment closure used by both RHSMode=1 and transport solv
 The docstring gate now discovers every ``sfincs_jax/*policy*.py`` module and also
 checks public policy classes/functions, so new extraction seams must remain
 discoverable. ``tests/test_transport_policy_coverage.py`` adds fast direct coverage
-for transport backend/sparse-host/recycle policy, transport parallel
+for ``sfincs_jax.problems.transport_matrix.policies`` transport
+backend/sparse-host/recycle policy, transport parallel
 scaling-audit/environment helpers, and worker-local XLA flag rewriting without running
 transport solves. ``tests/test_transport_parallel_payload.py`` separately validates the
 transport worker payload contract: normalized solve kwargs, child-worker recursion
@@ -427,14 +428,16 @@ diagnostics seam directly: streamed accumulator reuse, output-field propagation,
 chunked fixed-operator diagnostic evaluation, and transport-matrix assembly are
 checked with monkeypatched numerical kernels so the behavior is protected without
 adding heavyweight transport solves to CI.
-``tests/test_transport_solve_policy.py`` also covers the initial RHSMode=2/3 solve
-policy extracted from ``v3_driver.py``: geometryScheme namelist parsing,
-low-memory VMEC monoenergetic routing, dense fallback admission, dense memory-cap
-blocking, subset streaming, state-vector retention, and GMRES restart/max-iteration
-guards are checked as pure policy tests before heavier parity solves exercise the
-same decisions end-to-end. The same file now covers the per-``whichRHS`` loop
-policy for E_parallel loose/Krylov routing, constraint-nullspace projection
-admission, optional iteration-stat limits, and dense-batch fallback admission.
+``tests/test_transport_solve_policy.py`` covers
+``sfincs_jax.problems.transport_matrix.solve_policy``, the initial RHSMode=2/3
+solve policy extracted from ``v3_driver.py``: geometryScheme namelist parsing,
+low-memory VMEC monoenergetic routing, dense fallback admission, dense
+memory-cap blocking, subset streaming, state-vector retention, and GMRES
+restart/max-iteration guards are checked as pure policy tests before heavier
+parity solves exercise the same decisions end-to-end. The same file covers the
+per-``whichRHS`` loop policy for E_parallel loose/Krylov routing,
+constraint-nullspace projection admission, optional iteration-stat limits, and
+dense-batch fallback admission.
 ``tests/test_transport_solve_setup.py`` covers
 ``sfincs_jax.problems.transport_matrix.setup``, the RHSMode=2/3 setup resolver
 that sits between high-level solve entry and the transport loop:
@@ -663,10 +666,12 @@ docstring audit in ``tests/test_policy_module_docstrings.py`` now also covers
 this source-mapped non-policy control module so the handoff contract remains
 discoverable while ``v3_driver.py`` is split further.
 Transport worker residual abort formatting is covered in
-``tests/test_transport_residual_quality.py``, including custom environment names,
-negative/invalid threshold normalization, nonfinite residual diagnostics, and
-array-to-message collection. These are intentionally fast policy checks; they
-protect solver-path diagnostics without launching transport solves.
+``tests/test_transport_residual_quality.py`` for
+``sfincs_jax.problems.transport_matrix.residual_quality``, including custom
+environment names, negative/invalid threshold normalization, nonfinite residual
+diagnostics, and array-to-message collection. These are intentionally fast
+policy checks; they protect solver-path diagnostics without launching transport
+solves.
 
 The output/helper layer is kept under small, direct tests rather than only
 end-to-end HDF5 comparisons. ``tests/test_io_export_and_h5_coverage.py`` covers

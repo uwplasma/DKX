@@ -10,7 +10,7 @@ from typing import Any
 import jax.numpy as jnp
 import numpy as np
 
-from sfincs_jax.transport_solve_policy import (
+from sfincs_jax.problems.transport_matrix.solve_policy import (
     TransportActiveDOFDecision,
     TransportActiveDOFState,
     TransportDensePolicy,
