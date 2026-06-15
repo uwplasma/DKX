@@ -4,6 +4,13 @@ Release notes
 Unreleased
 ----------
 
+- Added the first domain-package skeletons for the active ``v3_driver.py``
+  architecture refactor: input, physics, discretization, operators, problems,
+  solvers/preconditioners, parallel, workflows, validation, benchmarks, and
+  compatibility. Import-contract tests verify that the new packages are
+  importable while legacy ``geometry.py`` and ``io.py`` module paths remain
+  unchanged until their later migration. The post-skeleton local full suite
+  passed with ``2662 passed in 549.92 s``.
 - Continued the ``v3_driver.py`` refactor path by moving the coupled
   f/tail-moment and tail-only matrix-free residual-correction builders into
   ``rhs1_lowmode_coarse.py`` with direct tests for tail-selection policy,

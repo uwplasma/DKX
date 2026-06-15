@@ -384,6 +384,19 @@ Current branch status:
   ``transport_*`` files. Continuing that pattern would replace one monolith with
   a prefix-based file dump. The detailed reset has now been consolidated into
   the single active refactor plan above.
+- Phase A package-skeleton checkpoint, 2026-06-15: added importable domain
+  package facades for ``input``, ``physics``, ``discretization``, ``operators``,
+  ``problems/profile_response``, ``problems/transport_matrix``, ``solvers``,
+  ``solvers/preconditioners/*``, ``parallel``, ``workflows``, ``validation``,
+  ``benchmarks``, and ``compat`` without moving behavior. ``geometry`` and
+  ``io`` are reserved for later migration because ``sfincs_jax/geometry.py`` and
+  ``sfincs_jax/io.py`` must keep their current import paths until their
+  implementation is moved atomically. Validation passed with focused ruff,
+  ``python -m pytest -q tests/test_domain_package_import_contracts.py``
+  (``3 passed``), ``python -m pytest -q
+  tests/test_domain_package_import_contracts.py tests/test_policy_module_docstrings.py``
+  (``6 passed``), strict docs build, and the full local suite
+  (``2662 passed in 549.92 s``).
 
 ### Active execution phases for the draft PR
 
