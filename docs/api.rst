@@ -147,22 +147,22 @@ research workflows.
 .. automodule:: sfincs_jax.problems.profile_response.handoff
    :members:
 
+.. automodule:: sfincs_jax.problems.profile_response.policies
+   :members:
+
+.. automodule:: sfincs_jax.problems.profile_response.strong_preconditioning
+   :members:
+
 .. automodule:: sfincs_jax.rhs1_lowmode_coarse
    :members:
 
 .. automodule:: sfincs_jax.rhs1_domain_decomposition
    :members:
 
-.. automodule:: sfincs_jax.rhs1_acceptance_policy
-   :members:
-
 .. automodule:: sfincs_jax.problems.profile_response.active_dof
    :members:
 
 .. automodule:: sfincs_jax.problems.profile_response.active_projection
-   :members:
-
-.. automodule:: sfincs_jax.rhs1_constraint0_policy
    :members:
 
 .. automodule:: sfincs_jax.rhs1_constraint_sources
@@ -196,9 +196,6 @@ research workflows.
    :members:
 
 .. automodule:: sfincs_jax.rhs1_pas_policy
-   :members:
-
-.. automodule:: sfincs_jax.rhs1_post_xblock_policy
    :members:
 
 .. automodule:: sfincs_jax.rhs1_preconditioner_auto_policy
@@ -270,28 +267,7 @@ research workflows.
 .. automodule:: sfincs_jax.rhs1_solver_policy
    :members:
 
-.. automodule:: sfincs_jax.rhs1_sparse_polish_policy
-   :members:
-
-.. automodule:: sfincs_jax.rhs1_sparse_exact_policy
-   :members:
-
-.. automodule:: sfincs_jax.rhs1_sparse_rescue_policy
-   :members:
-
-.. automodule:: sfincs_jax.rhs1_stage2_policy
-   :members:
-
-.. automodule:: sfincs_jax.rhs1_strong_auto_kind
-   :members:
-
-.. automodule:: sfincs_jax.rhs1_strong_control
-   :members:
-
 .. automodule:: sfincs_jax.rhs1_strong_fallback
-   :members:
-
-.. automodule:: sfincs_jax.rhs1_strong_policy
    :members:
 
 .. automodule:: sfincs_jax.rhs1_xblock_policy

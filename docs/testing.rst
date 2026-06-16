@@ -516,15 +516,17 @@ refinement kernels and sparse-direct GMRES polish helper directly, including
 solver injection and sparse-factor preconditioner application.
 
 The adjacent constraint-scheme-0 sparse-first policy now lives in
-``sfincs_jax/rhs1_constraint0_policy.py``. ``tests/test_rhs1_constraint0_policy.py``
-checks that the accelerator-default sparse-first lane, explicit
+``sfincs_jax.problems.profile_response.policies``. The legacy
+``sfincs_jax/rhs1_constraint0_policy.py`` import is a compatibility alias.
+``tests/test_rhs1_constraint0_policy.py`` checks that the accelerator-default sparse-first lane, explicit
 PETSc-compatible sparse mode, and dense-fallback opt-in preserve the same RHSMode,
 ``Phi1``, full-FP, solve-method, preconditioner, and size guards as the driver
 wrappers in ``tests/test_rhs1_sparse_first_heuristic.py``.
 
 The sparse exact-LU and sparse-over-dense preference decisions now live in
-``sfincs_jax/rhs1_sparse_exact_policy.py``. ``tests/test_rhs1_sparse_exact_policy.py``
-checks full-x CPU exact-LU routing, accelerator DKES and small-FP exact-LU
+``sfincs_jax.problems.profile_response.policies``. The legacy
+``sfincs_jax/rhs1_sparse_exact_policy.py`` import is a compatibility alias.
+``tests/test_rhs1_sparse_exact_policy.py`` checks full-x CPU exact-LU routing, accelerator DKES and small-FP exact-LU
 routing, PAS-only full-preconditioner opt-in, explicit enable/disable behavior,
 size caps, dense-method rejection, moderate-FP sparse preference, and the
 stage-2 skip guard. Existing driver-wrapper tests keep the `v3_driver` seam
@@ -630,24 +632,23 @@ are exercised through the ``v3_driver`` compatibility seam and the PAS-focused
 regression suite. The legacy ``sfincs_jax.rhs1_pas_xblock_ilu`` import path
 remains a compatibility alias.
 
-The follow-up post-x-block policy split is covered by
-``tests/test_rhs1_post_xblock_policy.py``. These tests check the residual and
-active-size gates for fast post-x-block polish, targeted FP polish, and explicit
+The follow-up post-x-block, sparse-polish, and acceptance gates now share the
+same canonical module, ``sfincs_jax.problems.profile_response.policies``.
+``tests/test_rhs1_post_xblock_policy.py`` checks the residual and active-size
+gates for fast post-x-block polish, targeted FP polish, and explicit
 disable/override behavior for skip-global-sparse-after-xblock routing after a
-good x-block seed. The tests keep
-large-case convergence handoff decisions visible while avoiding heavyweight CI
-runs. ``tests/test_rhs1_sparse_polish_policy.py`` also covers the large-system
+good x-block seed. The tests keep large-case convergence handoff decisions
+visible while avoiding heavyweight CI runs.
+``tests/test_rhs1_sparse_polish_policy.py`` also covers the large-system
 post-x-block polish budget: for active systems above the configured floor, the
 default SciPy polish is a short ``restart=10, maxiter=1`` probe rather than a
 second long solve, unless the user explicitly overrides the restart or maxiter
-environment variables.
-
-Small acceptance/probe gates are covered directly by
-``tests/test_rhs1_acceptance_policy.py``. That file checks the large-PAS
-fast-accept environment parsing and backend/implicit/Phi1/PAS guards, plus the
-host x-block factor probe for exceptions, shape mismatches, nonfinite solves, and
-excessive amplification. The PAS residual formula itself is shared with
-``sfincs_jax/pas_smoother.py`` so the acceptance threshold is not duplicated.
+environment variables. ``tests/test_rhs1_acceptance_policy.py`` checks the
+large-PAS fast-accept environment parsing and backend/implicit/Phi1/PAS guards,
+plus the host x-block factor probe for exceptions, shape mismatches, nonfinite
+solves, and excessive amplification. The PAS residual formula itself is shared
+with ``sfincs_jax/pas_smoother.py`` so the acceptance threshold is not
+duplicated.
 
 The PAS adaptive-smoother gate and implicit-solve mode resolver also have direct
 coverage in ``tests/test_rhs1_pas_policy.py`` and ``tests/test_solve_mode_policy.py``.

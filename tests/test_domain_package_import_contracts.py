@@ -231,6 +231,11 @@ PRECONDITIONER_COMPATIBILITY_IMPORTS = (
 
 PROFILE_RESPONSE_COMPATIBILITY_IMPORTS = (
     (
+        "sfincs_jax.rhs1_acceptance_policy",
+        "sfincs_jax.problems.profile_response.policies",
+        "rhs1_pas_fast_accept",
+    ),
+    (
         "sfincs_jax.rhs1_active_dof",
         "sfincs_jax.problems.profile_response.active_dof",
         "resolve_rhs1_active_dof_mode",
@@ -241,9 +246,19 @@ PROFILE_RESPONSE_COMPATIBILITY_IMPORTS = (
         "reduce_full_with_indices",
     ),
     (
+        "sfincs_jax.rhs1_constraint0_policy",
+        "sfincs_jax.problems.profile_response.policies",
+        "rhs1_constraint0_sparse_first",
+    ),
+    (
         "sfincs_jax.rhs1_handoff",
         "sfincs_jax.problems.profile_response.handoff",
         "rhs1_accept_candidate",
+    ),
+    (
+        "sfincs_jax.rhs1_post_xblock_policy",
+        "sfincs_jax.problems.profile_response.policies",
+        "rhs1_fast_post_xblock_polish_allowed",
     ),
     (
         "sfincs_jax.rhs1_residual",
@@ -251,9 +266,44 @@ PROFILE_RESPONSE_COMPATIBILITY_IMPORTS = (
         "residual_target",
     ),
     (
+        "sfincs_jax.rhs1_sparse_exact_policy",
+        "sfincs_jax.problems.profile_response.policies",
+        "rhs1_sparse_exact_lu_requested",
+    ),
+    (
+        "sfincs_jax.rhs1_sparse_polish_policy",
+        "sfincs_jax.problems.profile_response.policies",
+        "rhs1_polish_enabled",
+    ),
+    (
+        "sfincs_jax.rhs1_sparse_rescue_policy",
+        "sfincs_jax.problems.profile_response.policies",
+        "rhs1_sparse_kind_use",
+    ),
+    (
+        "sfincs_jax.rhs1_stage2_policy",
+        "sfincs_jax.problems.profile_response.policies",
+        "rhs1_stage2_trigger",
+    ),
+    (
         "sfincs_jax.rhs1_solver_diagnostics",
         "sfincs_jax.problems.profile_response.solver_diagnostics",
         "build_rhs1_xblock_correction_metadata",
+    ),
+    (
+        "sfincs_jax.rhs1_strong_auto_kind",
+        "sfincs_jax.problems.profile_response.strong_preconditioning",
+        "auto_rhs1_full_strong_kind",
+    ),
+    (
+        "sfincs_jax.rhs1_strong_control",
+        "sfincs_jax.problems.profile_response.strong_preconditioning",
+        "rhs1_resolved_strong_preconditioner_control",
+    ),
+    (
+        "sfincs_jax.rhs1_strong_policy",
+        "sfincs_jax.problems.profile_response.strong_preconditioning",
+        "requested_rhs1_strong_preconditioner_kind",
     ),
 )
 
