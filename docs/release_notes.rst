@@ -97,6 +97,14 @@ Unreleased
   RHSMode=1 QI/device/sparse policy slice passed with
   ``251 passed in 149.96 s``. The post-move local full suite passed with
   ``2680 passed in 555.56 s``.
+- Moved the x-block global coarse/load-vector builders and smoothed-load QI
+  basis construction from ``v3_driver.py`` into ``rhs1_qi_coarse.py``. The new
+  direct tests cover RHS, tail, constraint-source, flux-surface-average, and
+  low-angular load labels, smoothed-load rank gating, and driver alias
+  compatibility. Focused validation passed with ``15`` tests and the broader
+  RHSMode=1 QI/device/sparse policy slice passed with
+  ``253 passed in 153.39 s``. The post-move local full suite passed with
+  ``2682 passed in 527.23 s``.
 - Continued the ``v3_driver.py`` refactor path by moving the coupled
   f/tail-moment and tail-only matrix-free residual-correction builders into
   ``rhs1_lowmode_coarse.py`` with direct tests for tail-selection policy,
