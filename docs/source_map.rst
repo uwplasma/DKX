@@ -264,19 +264,22 @@ the historical private driver name and test the focused module directly. This ke
   skipped-block diagonal fallback, and extra-variable Schur solve. The driver
   injects only the still-local FP x-block assembly, sparse-factor, cache-key,
   and safety-wrapper seams.
-- ``sfincs_jax/transport_direct_pmat.py``:
+- ``sfincs_jax/problems/transport_matrix/direct_pmat.py``
+  (legacy alias: ``sfincs_jax/transport_direct_pmat.py``):
   direct term-level RHSMode=2/3 reduced ``Pmat`` and exact active-operator
   emission for full-FP transport preconditioners, plus the physics/source
   coarse-basis columns used by symbolic Schur corrections. The module owns the
   sparse matrix assembly; ``v3_driver.py`` still owns admission, factor choice,
   fallback ordering, and solver orchestration.
-- ``sfincs_jax/transport_direct_block_schur.py``:
+- ``sfincs_jax/problems/transport_matrix/direct_block_schur.py``
+  (legacy alias: ``sfincs_jax/transport_direct_block_schur.py``):
   bounded-memory direct active block-Schur preconditioner setup for RHSMode=2/3
   full-FP transport. It owns environment parsing, setup-time true-residual
   admission, residual-coarse rescue, cache storage, and host callback
   application, while the driver injects the current fallback preconditioner and
   cache-key policy.
-- ``sfincs_jax/transport_fortran_reduced_lu.py``:
+- ``sfincs_jax/problems/transport_matrix/fortran_reduced_lu.py``
+  (legacy alias: ``sfincs_jax/transport_fortran_reduced_lu.py``):
   global RHSMode=2/3 full-FP Fortran-reduced sparse-factor preconditioner. This
   module owns the PETSc/Fortran-v3-style reduced ``Pmat`` sparse setup,
   symbolic/BLR/ND/native factor policy, direct-``Pmat`` admission, exact-LU
@@ -815,7 +818,8 @@ the historical private driver name and test the focused module directly. This ke
 - ``sfincs_jax/problems/transport_matrix/policies.py``
   (legacy alias: ``sfincs_jax/transport_policy.py``):
   pure transport backend, sparse-direct, host-GMRES, dtype, and recycle policy.
-- ``sfincs_jax/transport_preconditioner_dispatch.py``:
+- ``sfincs_jax/problems/transport_matrix/preconditioner_dispatch.py``
+  (legacy alias: ``sfincs_jax/transport_preconditioner_dispatch.py``):
   shared transport preconditioner-kind normalization, auto-selection, DD/sparse-JAX
   env parsing, and reduced/full preconditioner builder dispatch.
 - ``sfincs_jax/problems/transport_matrix/solve_policy.py``
