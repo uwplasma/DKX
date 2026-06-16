@@ -6,9 +6,15 @@ from dataclasses import dataclass
 import os
 from typing import Any
 
+import jax.numpy as jnp
 import numpy as np
 
 from ...pas_smoother import pas_fast_accept as _pas_fast_accept_metric
+from ...rhs1_solver_policy import (
+    read_bool_env as _read_bool_env,
+    read_float_env as _read_float_env,
+    read_int_env as _read_int_env,
+)
 
 _TRUE_VALUES = {"1", "true", "yes", "on"}
 _FALSE_VALUES = {"0", "false", "no", "off"}
@@ -32,6 +38,327 @@ def _env_float(name: str, default: float) -> float:
         return float(raw) if raw else float(default)
     except ValueError:
         return float(default)
+
+
+def parse_rhs1_pas_tz_guarded_structured_levels(raw: str) -> tuple[str, ...]:
+    """Parse low-memory coarse levels for guarded PAS-TZ fallback trials."""
+
+    normalized = str(raw or "").strip().lower().replace("-", "_")
+    if normalized in {"", "0", "false", "no", "off", "none"}:
+        return ()
+    for sep in ("+", ";", ":", "|"):
+        normalized = normalized.replace(sep, ",")
+    aliases = {
+        "x": "xmg",
+        "x_grid": "xmg",
+        "xmultigrid": "xmg",
+        "x_mg": "xmg",
+        "coll": "collision",
+        "collisions": "collision",
+        "collision_diag": "collision",
+        "collision_diagonal": "collision",
+        "diag": "collision",
+        "xmg_collision": "xmg,collision",
+        "collision_xmg": "collision,xmg",
+        "structured": "xmg,collision",
+        "default": "xmg,collision",
+    }
+    expanded_tokens: list[str] = []
+    for token in normalized.replace(" ", ",").split(","):
+        token = token.strip("_ ")
+        if not token:
+            continue
+        expanded = aliases.get(token, token)
+        expanded_tokens.extend(
+            part.strip("_ ") for part in expanded.split(",") if part.strip("_ ")
+        )
+
+    levels: list[str] = []
+    for token in expanded_tokens:
+        if token not in {"xmg", "collision"}:
+            continue
+        if token not in levels:
+            levels.append(token)
+    return tuple(levels)
+
+
+def _qi_device_solver_env(name: str, *, default: str) -> str:
+    raw = os.environ.get(name, default).strip().lower().replace("-", "_")
+    if raw in {"action", "action_ls", "least_squares", "lstsq", "staged"}:
+        return "action_lstsq"
+    if raw in {"galerkin", "projected", "qtaq", "coarse_grid", "schur"}:
+        return "galerkin"
+    return default
+
+
+def rhs1_qi_device_extra_coarse_controls() -> dict[str, object]:
+    """Read optional QI device coarse-equation controls shared by seed hooks."""
+
+    return {
+        "multilevel_current_moments": _read_bool_env(
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_CURRENT_MOMENTS",
+            default=False,
+        ),
+        "multilevel_species_current_moments": _read_bool_env(
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_SPECIES_CURRENT_MOMENTS",
+            default=True,
+        ),
+        "multilevel_radial_current_moments": _read_bool_env(
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_RADIAL_CURRENT_MOMENTS",
+            default=True,
+        ),
+        "multilevel_tail_constraint_moments": _read_bool_env(
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_TAIL_CONSTRAINT_MOMENTS",
+            default=True,
+        ),
+        "multilevel_current_max_pitch_degree": _read_int_env(
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_CURRENT_MAX_PITCH_DEGREE",
+            default=1,
+            minimum=0,
+        ),
+        "global_moment_residual_equation": _read_bool_env(
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_GLOBAL_MOMENT_RESIDUAL_EQUATION",
+            default=False,
+        ),
+        "global_moment_residual_equation_max_rank": _read_int_env(
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_GLOBAL_MOMENT_RESIDUAL_EQUATION_MAX_RANK",
+            default=16,
+            minimum=1,
+        ),
+        "global_moment_residual_equation_solver": _qi_device_solver_env(
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_GLOBAL_MOMENT_RESIDUAL_EQUATION_SOLVER",
+            default="galerkin",
+        ),
+        "global_moment_residual_equation_include_profile": _read_bool_env(
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_GLOBAL_MOMENT_RESIDUAL_EQUATION_INCLUDE_PROFILE",
+            default=True,
+        ),
+        "global_moment_residual_equation_include_current": _read_bool_env(
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_GLOBAL_MOMENT_RESIDUAL_EQUATION_INCLUDE_CURRENT",
+            default=True,
+        ),
+        "global_moment_residual_equation_include_tail": _read_bool_env(
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_GLOBAL_MOMENT_RESIDUAL_EQUATION_INCLUDE_TAIL",
+            default=True,
+        ),
+        "residual_galerkin_equation": _read_bool_env(
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RESIDUAL_GALERKIN_EQUATION",
+            default=False,
+        ),
+        "residual_galerkin_equation_max_stages": _read_int_env(
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RESIDUAL_GALERKIN_EQUATION_MAX_STAGES",
+            default=3,
+            minimum=1,
+        ),
+        "residual_galerkin_equation_max_stage_rank": _read_int_env(
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RESIDUAL_GALERKIN_EQUATION_MAX_STAGE_RANK",
+            default=4,
+            minimum=1,
+        ),
+        "residual_galerkin_equation_max_rank": _read_int_env(
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RESIDUAL_GALERKIN_EQUATION_MAX_RANK",
+            default=24,
+            minimum=1,
+        ),
+        "residual_galerkin_equation_solver": _qi_device_solver_env(
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RESIDUAL_GALERKIN_EQUATION_SOLVER",
+            default="action_lstsq",
+        ),
+        "residual_galerkin_equation_include_global_residual": _read_bool_env(
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RESIDUAL_GALERKIN_EQUATION_INCLUDE_GLOBAL_RESIDUAL",
+            default=True,
+        ),
+        "residual_galerkin_equation_include_block_residuals": _read_bool_env(
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RESIDUAL_GALERKIN_EQUATION_INCLUDE_BLOCK_RESIDUALS",
+            default=True,
+        ),
+        "residual_galerkin_equation_include_operator_images": _read_bool_env(
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RESIDUAL_GALERKIN_EQUATION_INCLUDE_OPERATOR_IMAGES",
+            default=False,
+        ),
+        "phase_space_residual_equation": _read_bool_env(
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_PHASE_SPACE_RESIDUAL_EQUATION",
+            default=False,
+        ),
+        "phase_space_residual_equation_max_rank": _read_int_env(
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_PHASE_SPACE_RESIDUAL_EQUATION_MAX_RANK",
+            default=24,
+            minimum=1,
+        ),
+        "phase_space_residual_equation_solver": _qi_device_solver_env(
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_PHASE_SPACE_RESIDUAL_EQUATION_SOLVER",
+            default="action_lstsq",
+        ),
+        "phase_space_residual_equation_include_global": _read_bool_env(
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_PHASE_SPACE_RESIDUAL_EQUATION_INCLUDE_GLOBAL",
+            default=False,
+        ),
+        "phase_space_residual_equation_boundary": _read_float_env(
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_PHASE_SPACE_RESIDUAL_EQUATION_BOUNDARY",
+            default=0.35,
+            minimum=1.0e-6,
+        ),
+        "phase_space_residual_equation_include_radial": _read_bool_env(
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_PHASE_SPACE_RESIDUAL_EQUATION_INCLUDE_RADIAL",
+            default=True,
+        ),
+        "phase_space_residual_equation_include_species": _read_bool_env(
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_PHASE_SPACE_RESIDUAL_EQUATION_INCLUDE_SPECIES",
+            default=True,
+        ),
+        "residual_region_bounce_coarse": _read_bool_env(
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RESIDUAL_REGION_BOUNCE_COARSE",
+            default=False,
+        ),
+        "residual_region_bounce_coarse_max_rank": _read_int_env(
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RESIDUAL_REGION_BOUNCE_COARSE_MAX_RANK",
+            default=32,
+            minimum=1,
+        ),
+        "residual_region_bounce_coarse_max_candidates": _read_int_env(
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RESIDUAL_REGION_BOUNCE_COARSE_MAX_CANDIDATES",
+            default=48,
+            minimum=1,
+        ),
+        "residual_region_bounce_coarse_solver": _qi_device_solver_env(
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RESIDUAL_REGION_BOUNCE_COARSE_SOLVER",
+            default="action_lstsq",
+        ),
+        "residual_region_bounce_coarse_include_global": _read_bool_env(
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RESIDUAL_REGION_BOUNCE_COARSE_INCLUDE_GLOBAL",
+            default=True,
+        ),
+        "residual_region_bounce_coarse_include_radial": _read_bool_env(
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RESIDUAL_REGION_BOUNCE_COARSE_INCLUDE_RADIAL",
+            default=True,
+        ),
+        "residual_region_bounce_coarse_include_species": _read_bool_env(
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RESIDUAL_REGION_BOUNCE_COARSE_INCLUDE_SPECIES",
+            default=True,
+        ),
+        "residual_region_bounce_coarse_boundary": _read_float_env(
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RESIDUAL_REGION_BOUNCE_COARSE_BOUNCE_BOUNDARY",
+            default=0.35,
+            minimum=1.0e-6,
+        ),
+        "residual_region_bounce_coarse_min_energy": _read_float_env(
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RESIDUAL_REGION_BOUNCE_COARSE_MIN_REGION_ENERGY_FRACTION",
+            default=1.0e-2,
+            minimum=0.0,
+        ),
+        "residual_region_bounce_coarse_region_bands": os.environ.get(
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RESIDUAL_REGION_BOUNCE_COARSE_REGION_BANDS",
+            "bounce,trapped,passing",
+        ).strip(),
+        "active_pattern_coarse": _read_bool_env(
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_ACTIVE_PATTERN_COARSE",
+            default=False,
+        ),
+        "active_pattern_coarse_max_rank": _read_int_env(
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_ACTIVE_PATTERN_COARSE_MAX_RANK",
+            default=32,
+            minimum=1,
+        ),
+        "active_pattern_coarse_max_candidates": _read_int_env(
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_ACTIVE_PATTERN_COARSE_MAX_CANDIDATES",
+            default=64,
+            minimum=1,
+        ),
+        "active_pattern_coarse_solver": _qi_device_solver_env(
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_ACTIVE_PATTERN_COARSE_SOLVER",
+            default="action_lstsq",
+        ),
+        "active_pattern_coarse_include_global": _read_bool_env(
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_ACTIVE_PATTERN_COARSE_INCLUDE_GLOBAL",
+            default=True,
+        ),
+        "active_pattern_coarse_min_chunk_energy": _read_float_env(
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_ACTIVE_PATTERN_COARSE_MIN_CHUNK_ENERGY_FRACTION",
+            default=1.0e-2,
+            minimum=0.0,
+        ),
+        "active_pattern_coarse_include_block_pitch": _read_bool_env(
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_ACTIVE_PATTERN_COARSE_INCLUDE_BLOCK_PITCH",
+            default=True,
+        ),
+        "active_pattern_coarse_include_block_angular": _read_bool_env(
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_ACTIVE_PATTERN_COARSE_INCLUDE_BLOCK_ANGULAR",
+            default=True,
+        ),
+        "active_pattern_coarse_include_radial_pitch": _read_bool_env(
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_ACTIVE_PATTERN_COARSE_INCLUDE_RADIAL_PITCH",
+            default=True,
+        ),
+        "active_pattern_coarse_include_radial_angular": _read_bool_env(
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_ACTIVE_PATTERN_COARSE_INCLUDE_RADIAL_ANGULAR",
+            default=True,
+        ),
+        "active_pattern_coarse_include_block": _read_bool_env(
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_ACTIVE_PATTERN_COARSE_INCLUDE_BLOCK",
+            default=True,
+        ),
+        "active_pattern_coarse_include_radial": _read_bool_env(
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_ACTIVE_PATTERN_COARSE_INCLUDE_RADIAL",
+            default=True,
+        ),
+        "active_pattern_coarse_include_species": _read_bool_env(
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_ACTIVE_PATTERN_COARSE_INCLUDE_SPECIES",
+            default=True,
+        ),
+    }
+
+
+def rhs1_qi_device_probe_uses_minres_step() -> bool:
+    """Return whether QI-device seed probes should line-search each correction."""
+
+    raw = (
+        os.environ.get(
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_STEP_POLICY",
+            "fixed",
+        )
+        .strip()
+        .lower()
+        .replace("-", "_")
+    )
+    return raw in {"minres", "residual_minimizing", "line_search", "linesearch"}
+
+
+def rhs1_xblock_fallback_initial_guess(
+    *,
+    candidate: np.ndarray,
+    original_x0: jnp.ndarray | None,
+    rhs_shape: tuple[int, ...],
+    candidate_residual_norm: float,
+    rhs_norm: float,
+    precondition_side: str,
+) -> tuple[jnp.ndarray | None, bool, bool]:
+    """Return a safe initial guess for x-block Krylov rescues.
+
+    Non-GMRES host Krylov methods can produce a useful physical-space state
+    before failing a strict residual gate. Reusing that state is safe only for
+    left/no preconditioning when it improves over the zero-state RHS norm.
+    Right-preconditioned iteration states are rejected because SciPy stores
+    them in preconditioned coordinates.
+    """
+
+    candidate_improved_rhs = bool(
+        np.isfinite(float(candidate_residual_norm))
+        and np.isfinite(float(rhs_norm))
+        and float(candidate_residual_norm) < float(rhs_norm)
+    )
+    if (not candidate_improved_rhs) or str(
+        precondition_side
+    ).strip().lower() == "right":
+        return original_x0, False, candidate_improved_rhs
+    try:
+        candidate_x0 = jnp.asarray(candidate, dtype=jnp.float64)
+        if candidate_x0.shape == tuple(rhs_shape) and bool(
+            jnp.all(jnp.isfinite(candidate_x0))
+        ):
+            return candidate_x0, True, candidate_improved_rhs
+    except Exception:
+        pass
+    return original_x0, False, candidate_improved_rhs
 
 
 # From sfincs_jax.rhs1_acceptance_policy
@@ -815,6 +1142,7 @@ def rhs1_pas_tz_guarded_stage2_retry() -> bool:
 
 __all__ = (
     "RHS1SparseRescueOrdering",
+    "parse_rhs1_pas_tz_guarded_structured_levels",
     "rhs1_constraint0_dense_fallback_allowed",
     "rhs1_constraint0_petsc_compat",
     "rhs1_constraint0_sparse_first",
@@ -830,6 +1158,8 @@ __all__ = (
     "rhs1_pas_tz_guarded_stage2_retry",
     "rhs1_polish_enabled",
     "rhs1_prefer_sparse_over_dense_shortcut",
+    "rhs1_qi_device_extra_coarse_controls",
+    "rhs1_qi_device_probe_uses_minres_step",
     "rhs1_resolved_sparse_rescue_ordering",
     "rhs1_scipy_rescue_abs_floor_after_xblock",
     "rhs1_scipy_rescue_active_size_allowed",
@@ -840,4 +1170,5 @@ __all__ = (
     "rhs1_sparse_prefer_skips_stage2",
     "rhs1_stage2_ratio",
     "rhs1_stage2_trigger",
+    "rhs1_xblock_fallback_initial_guess",
 )

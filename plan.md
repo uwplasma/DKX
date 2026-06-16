@@ -30941,3 +30941,54 @@ Validation:
   docs/_build/html``: passed.
 - ``git diff --check``: passed.
 - ``python -m pytest -q``: ``2670 passed in 579.02 s``.
+
+### 19.33 X-block/QI control helper migration
+
+Goal:
+
+- Continue reducing ``v3_driver.py`` without adding another narrowly named
+  module. The intended direction is one profile-response policy/control surface
+  for solver-routing decisions and a smaller driver that orchestrates numerical
+  calls.
+
+Implementation:
+
+- Moved these pure RHSMode=1 helpers from ``v3_driver.py`` into
+  ``sfincs_jax.problems.profile_response.policies``:
+  ``parse_rhs1_pas_tz_guarded_structured_levels``,
+  ``rhs1_qi_device_extra_coarse_controls``,
+  ``rhs1_qi_device_probe_uses_minres_step``, and
+  ``rhs1_xblock_fallback_initial_guess``.
+- Kept the historical ``v3_driver`` private names as imported aliases so
+  existing tests and local debugging scripts still work.
+- Extended ``tests/test_rhs1_xblock_fallback_initial_guess.py`` to test the
+  canonical helpers directly, including environment parsing and bounded QI
+  control defaults, and to assert that the driver-private names are aliases.
+- Updated the source map, testing guide, and release notes to keep the
+  architecture plan aligned with the package-domain structure.
+
+Validation:
+
+- ``python -m py_compile sfincs_jax/problems/profile_response/policies.py
+  sfincs_jax/v3_driver.py tests/test_rhs1_xblock_fallback_initial_guess.py``:
+  passed.
+- ``python -m ruff check sfincs_jax/problems/profile_response/policies.py
+  sfincs_jax/v3_driver.py tests/test_rhs1_xblock_fallback_initial_guess.py``:
+  passed.
+- ``python -m pytest -q tests/test_rhs1_xblock_fallback_initial_guess.py
+  tests/test_policy_module_docstrings.py tests/test_v3_driver_rhs1_dispatch_coverage.py``:
+  ``57 passed in 24.54 s``.
+- ``python -m pytest -q tests/test_rhs1_xblock_fallback_initial_guess.py
+  tests/test_policy_module_docstrings.py tests/test_v3_driver_rhs1_dispatch_coverage.py
+  tests/test_domain_package_import_contracts.py tests/test_rhs1_acceptance_policy.py
+  tests/test_rhs1_constraint0_policy.py tests/test_rhs1_post_xblock_policy.py
+  tests/test_rhs1_sparse_exact_policy.py tests/test_rhs1_sparse_rescue_policy.py
+  tests/test_rhs1_sparse_polish_policy.py tests/test_rhs1_stage2_policy.py
+  tests/test_v3_driver_policy_helpers.py tests/test_v3_driver_solve_policy_coverage.py
+  tests/test_v3_driver_sparse_helper_coverage.py tests/test_rhs1_sparse_first_heuristic.py
+  tests/test_sparse_exact_lu_heuristic.py tests/test_transport_sparse_direct.py``:
+  ``285 passed in 35.54 s``.
+- ``SPHINXOPTS='-W --keep-going' python -m sphinx -b html docs
+  docs/_build/html``: passed.
+- ``git diff --check``: passed.
+- ``python -m pytest -q``: ``2678 passed in 555.29 s``.
