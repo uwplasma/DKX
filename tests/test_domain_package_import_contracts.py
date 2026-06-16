@@ -46,6 +46,11 @@ RESERVED_MODULE_NAMES_UNTIL_MIGRATION = (
 
 TRANSPORT_COMPATIBILITY_IMPORTS = (
     (
+        "sfincs_jax.transport_matrix",
+        "sfincs_jax.problems.transport_matrix.diagnostics",
+        "v3_transport_matrix_from_state_vectors",
+    ),
+    (
         "sfincs_jax.transport_solve_setup",
         "sfincs_jax.problems.transport_matrix.setup",
         "resolve_transport_which_rhs_setup",
