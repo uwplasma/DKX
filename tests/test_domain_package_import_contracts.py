@@ -31,6 +31,12 @@ DOMAIN_PACKAGES = (
 )
 
 ACTIVE_PACKAGE_EXPORTS = {
+    "sfincs_jax.solvers.preconditioners.pas": (
+        "build_rhs1_pas_xblock_ilu_preconditioner",
+    ),
+    "sfincs_jax.solvers.preconditioners.xblock": (
+        "build_rhs1_xblock_tz_sparse_preconditioner",
+    ),
     "sfincs_jax.solvers.preconditioners.symbolic_sparse": (
         "RHS1FullSystemMatrixFreeOperatorAdapter",
         "build_sparse_ilu_from_matvec",
@@ -210,6 +216,19 @@ TRANSPORT_COMPATIBILITY_IMPORTS = (
     ),
 )
 
+PRECONDITIONER_COMPATIBILITY_IMPORTS = (
+    (
+        "sfincs_jax.rhs1_pas_xblock_ilu",
+        "sfincs_jax.solvers.preconditioners.pas.xblock_ilu",
+        "build_rhs1_pas_xblock_ilu_preconditioner",
+    ),
+    (
+        "sfincs_jax.rhs1_xblock_tz_sparse",
+        "sfincs_jax.solvers.preconditioners.xblock.tz_sparse",
+        "build_rhs1_xblock_tz_sparse_preconditioner",
+    ),
+)
+
 
 def _import_module(name: str) -> ModuleType:
     return importlib.import_module(name)
@@ -253,6 +272,16 @@ def test_transport_matrix_package_moves_preserve_legacy_imports() -> None:
     for legacy_name, new_name, public_name in TRANSPORT_COMPATIBILITY_IMPORTS:
         legacy_module = _import_module(legacy_name)
         new_module = _import_module(new_name)
+        assert getattr(legacy_module, public_name) is getattr(new_module, public_name)
+
+
+def test_preconditioner_package_moves_preserve_legacy_imports() -> None:
+    """Moved preconditioner modules must remain reachable through old names."""
+
+    for legacy_name, new_name, public_name in PRECONDITIONER_COMPATIBILITY_IMPORTS:
+        legacy_module = _import_module(legacy_name)
+        new_module = _import_module(new_name)
+        assert legacy_module is new_module
         assert getattr(legacy_module, public_name) is getattr(new_module, public_name)
         if hasattr(legacy_module, "__all__"):
             assert public_name in legacy_module.__all__

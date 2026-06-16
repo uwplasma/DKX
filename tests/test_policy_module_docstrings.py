@@ -13,7 +13,8 @@ POLICY_MODULES = tuple(
 SOURCE_MAPPED_CONTROL_MODULES = (
     "sfincs_jax.profiling",
     "sfincs_jax.rhs1_handoff",
-    "sfincs_jax.rhs1_pas_xblock_ilu",
+    "sfincs_jax.solvers.preconditioners.pas.xblock_ilu",
+    "sfincs_jax.solvers.preconditioners.xblock.tz_sparse",
     "sfincs_jax.transport_parallel_solve",
     "sfincs_jax.transport_postsolve_diagnostics",
 )

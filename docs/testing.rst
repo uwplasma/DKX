@@ -614,18 +614,21 @@ historical uncapped experiment available. ``tests/test_v3_sparse_pattern.py``
 then checks that singular local ILU attempts escalate diagonal regularization
 before failing closed, which makes high-resolution blocker evidence more
 diagnostic without changing the physical operator.
-The extracted ``rhs1_xblock_tz_sparse.py`` module is covered through the same
-driver compatibility seam and direct policy gates: compact CSR and padded JAX
-factor application, host-factor caps, lower-fill policy, explicit FP x-block
-assembly admission, skipped-block diagonal fallback, and extra-variable Schur
-solve behavior remain exercised without promoting production-grid RHSMode=1
-solves into CI.
-The adjacent ``rhs1_pas_xblock_ilu.py`` extraction keeps the PAS-only block
-ILU/LU path under the same solver-path and PAS heuristic gates: DKES/tokamak
-PAS branch selection, SciPy ILU/exact-LU fallback behavior, padded triangular
-apply kernels, cache reuse, and the extra-variable Schur block are exercised
-through the ``v3_driver`` compatibility seam and the PAS-focused regression
-suite.
+The moved ``sfincs_jax.solvers.preconditioners.xblock.tz_sparse`` module is
+covered through the same driver compatibility seam and direct policy gates:
+compact CSR and padded JAX factor application, host-factor caps, lower-fill
+policy, explicit FP x-block assembly admission, skipped-block diagonal
+fallback, and extra-variable Schur solve behavior remain exercised without
+promoting production-grid RHSMode=1 solves into CI. The legacy
+``sfincs_jax.rhs1_xblock_tz_sparse`` import path is now a compatibility alias
+to that implementation module.
+The adjacent ``sfincs_jax.solvers.preconditioners.pas.xblock_ilu`` module keeps
+the PAS-only block ILU/LU path under the same solver-path and PAS heuristic
+gates: DKES/tokamak PAS branch selection, SciPy ILU/exact-LU fallback behavior,
+padded triangular apply kernels, cache reuse, and the extra-variable Schur block
+are exercised through the ``v3_driver`` compatibility seam and the PAS-focused
+regression suite. The legacy ``sfincs_jax.rhs1_pas_xblock_ilu`` import path
+remains a compatibility alias.
 
 The follow-up post-x-block policy split is covered by
 ``tests/test_rhs1_post_xblock_policy.py``. These tests check the residual and

@@ -264,16 +264,22 @@ Current branch status:
   dropped below the large-file threshold; and the full local suite passed with
   ``2622 passed in 536.83 s``.
 - The next RHSMode=1 extraction moved the 1.0k-line sparse x-block/TZ
-  preconditioner into ``rhs1_xblock_tz_sparse.py``. ``v3_driver.py`` now keeps a
-  compatibility wrapper only for FP x-block assembly, sparse-factor, cache-key,
-  and safety-wrapper injection. Focused x-block sparse tests passed with
+  preconditioner into
+  ``sfincs_jax.solvers.preconditioners.xblock.tz_sparse``. The legacy
+  ``sfincs_jax.rhs1_xblock_tz_sparse`` path is now a compatibility alias.
+  ``v3_driver.py`` now keeps a compatibility wrapper only for FP x-block
+  assembly, sparse-factor, cache-key, and safety-wrapper injection. Focused
+  x-block sparse tests passed with
   ``74 passed, 98 deselected in 51.15 s``; broader RHSMode=1 sparse/preconditioner
   validation passed with ``175 passed, 30 deselected in 95.03 s``; strict docs
   passed; and the full local suite passed with ``2622 passed in 537.19 s``.
 - The next PAS-focused extraction moved the RHSMode=1 PAS-only sparse
-  x-block ILU/LU preconditioner into ``rhs1_pas_xblock_ilu.py``. ``v3_driver.py``
-  now keeps a compatibility wrapper only for PAS-hybrid fallback, matrix-probe,
-  chunking, cache-key, and safety-wrapper injection. Focused PAS/docstring tests
+  x-block ILU/LU preconditioner into
+  ``sfincs_jax.solvers.preconditioners.pas.xblock_ilu``. The legacy
+  ``sfincs_jax.rhs1_pas_xblock_ilu`` path is now a compatibility alias.
+  ``v3_driver.py`` now keeps a compatibility wrapper only for PAS-hybrid
+  fallback, matrix-probe, chunking, cache-key, and safety-wrapper injection.
+  Focused PAS/docstring tests
   passed with ``44 passed, 19 deselected in 8.03 s``; broader RHSMode=1
   dispatch/solver-path validation passed with
   ``86 passed, 15 deselected in 51.03 s``; strict docs passed; and the full
@@ -471,6 +477,18 @@ Current branch status:
   RHSMode=1 sparse/preconditioner slice passed with ``285 passed in 58.97 s``.
   Strict docs passed; the full local suite passed with
   ``2668 passed in 549.84 s``. ``v3_driver.py`` is now ``37,614`` lines.
+- Phase F preconditioner-package checkpoint, 2026-06-16: moved the already
+  extracted RHSMode=1 full-FP x-block/TZ and PAS x-block ILU implementations
+  under ``sfincs_jax.solvers.preconditioners.xblock`` and
+  ``sfincs_jax.solvers.preconditioners.pas``. Their historical top-level
+  ``sfincs_jax.rhs1_*`` paths are now 9-line compatibility aliases, and
+  ``v3_driver.py`` imports the domain package facades directly. This reduces
+  flat top-level RHS module clutter without changing solver policy, operator
+  assembly, or differentiability boundaries. Focused import/docstring/
+  preconditioner validation passed with ``146 passed, 2 deselected``; broader
+  RHSMode=1 sparse/preconditioner validation passed with ``293 passed``; strict
+  docs passed; and the full local suite passed with
+  ``2669 passed in 518.48 s``.
 
 ### Active execution phases for the draft PR
 

@@ -252,14 +252,16 @@ the historical private driver name and test the focused module directly. This ke
   preconditioner matrices. These helpers encode the PETSc/Fortran-v3-style
   ``Pmat`` shaping rules without carrying solve state, caches, or sparse
   factorization logic.
-- ``sfincs_jax/rhs1_pas_xblock_ilu.py``:
+- ``sfincs_jax/solvers/preconditioners/pas/xblock_ilu.py``
+  (legacy alias: ``sfincs_jax/rhs1_pas_xblock_ilu.py``):
   sparse block-Jacobi ILU/LU setup for PAS-only RHSMode=1 operators. This
   module owns the per-``(species,x)`` Legendre/theta/zeta block assembly,
   PETSc-style ILU/exact-LU cutoff policy, padded triangular-factor conversion,
   threaded block factor setup, and extra-variable Schur solve. ``v3_driver.py``
   keeps a compatibility wrapper only to inject the current PAS-hybrid fallback,
   cache-key, matrix-probe, chunking, and safety-wrapper seams.
-- ``sfincs_jax/rhs1_xblock_tz_sparse.py``:
+- ``sfincs_jax/solvers/preconditioners/xblock/tz_sparse.py``
+  (legacy alias: ``sfincs_jax/rhs1_xblock_tz_sparse.py``):
   sparse per-``x`` RHSMode=1 full-FP preconditioner setup. This module owns the
   host/JAX x-block LU/ILU policy, compact CSR/padded triangular-factor apply,
   skipped-block diagonal fallback, and extra-variable Schur solve. The driver

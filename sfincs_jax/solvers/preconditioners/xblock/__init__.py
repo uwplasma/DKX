@@ -2,4 +2,6 @@
 
 from __future__ import annotations
 
-__all__: tuple[str, ...] = ()
+from .tz_sparse import build_rhs1_xblock_tz_sparse_preconditioner
+
+__all__ = ("build_rhs1_xblock_tz_sparse_preconditioner",)

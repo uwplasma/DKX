@@ -253,18 +253,18 @@ Unreleased
   admission, exact-LU rescue, physics coarse correction, and host-factor
   callback application; the driver keeps a compatibility wrapper only for
   fallback/cache-key/sparse-builder/host-memory injection.
-- Extracted the RHSMode=1 full-FP sparse x-block/TZ preconditioner into
-  ``rhs1_xblock_tz_sparse.py``. The new module owns host/JAX x-block factor
-  setup, compact CSR and padded triangular apply, skipped-block diagonal
-  fallback, and extra-variable Schur handling; ``v3_driver.py`` now injects the
-  still-local FP assembly and sparse-factor seams through a compatibility
-  wrapper.
-- Extracted the PAS-only RHSMode=1 sparse x-block ILU/LU preconditioner into
-  ``rhs1_pas_xblock_ilu.py``. The new module owns the per-``(species,x)``
-  Legendre/theta/zeta block assembly, PETSc-style ILU/exact-LU setup policy,
-  padded triangular-factor apply, threaded factor build, cache storage, and
-  extra-variable Schur solve; the driver keeps a compatibility wrapper for
-  fallback/cache-key/matrix-probe injection.
+- Moved the RHSMode=1 full-FP sparse x-block/TZ preconditioner into
+  ``sfincs_jax.solvers.preconditioners.xblock.tz_sparse``. The module owns
+  host/JAX x-block factor setup, compact CSR and padded triangular apply,
+  skipped-block diagonal fallback, and extra-variable Schur handling; the old
+  ``sfincs_jax.rhs1_xblock_tz_sparse`` import path remains a compatibility
+  alias.
+- Moved the PAS-only RHSMode=1 sparse x-block ILU/LU preconditioner into
+  ``sfincs_jax.solvers.preconditioners.pas.xblock_ilu``. The module owns the
+  per-``(species,x)`` Legendre/theta/zeta block assembly, PETSc-style
+  ILU/exact-LU setup policy, padded triangular-factor apply, threaded factor
+  build, cache storage, and extra-variable Schur solve; the old
+  ``sfincs_jax.rhs1_pas_xblock_ilu`` import path remains a compatibility alias.
 - Extracted the RHSMode=2/3 post-solve diagnostic assembly into
   ``transport_postsolve_diagnostics.py``. The new module owns streamed versus
   batched diagnostic selection, rematerialization/precompute/chunking policy,

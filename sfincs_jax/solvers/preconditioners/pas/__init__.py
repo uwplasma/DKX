@@ -2,4 +2,6 @@
 
 from __future__ import annotations
 
-__all__: tuple[str, ...] = ()
+from .xblock_ilu import build_rhs1_pas_xblock_ilu_preconditioner
+
+__all__ = ("build_rhs1_pas_xblock_ilu_preconditioner",)

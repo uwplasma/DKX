@@ -184,8 +184,8 @@ from . import rhs1_xblock_sparse_host_policy as _rhs1_xblock_sparse_host_policy
 from .rhs1_xblock_policy import (
     resolve_rhs1_xblock_sparse_pc_policy,
 )
-from .rhs1_pas_xblock_ilu import build_rhs1_pas_xblock_ilu_preconditioner
-from .rhs1_xblock_tz_sparse import build_rhs1_xblock_tz_sparse_preconditioner
+from .solvers.preconditioners.pas import build_rhs1_pas_xblock_ilu_preconditioner
+from .solvers.preconditioners.xblock import build_rhs1_xblock_tz_sparse_preconditioner
 from .rhs1_sparse_polish_policy import (
     rhs1_parse_accept_ratio,
     rhs1_parse_polish_gmres_config,
