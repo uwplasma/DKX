@@ -36,6 +36,15 @@ Unreleased
   tests, and debug monkeypatches keep working while the maintained source map
   uses the domain package. The post-move local full suite passed with
   ``2668 passed in 556.60 s``.
+- Moved the transport parallelism cluster into
+  ``sfincs_jax.problems.transport_matrix.parallel``: worker payloads, process/GPU
+  execution, runtime merge/partition helpers, persistent-pool management,
+  scaling/sharding policy, validation, and the subprocess worker entry point.
+  The old ``sfincs_jax.transport_parallel_*`` module paths remain compatibility
+  aliases, and ``python -m sfincs_jax.transport_parallel_worker`` still works
+  for GPU worker subprocesses. Focused parallel/import tests passed with
+  ``139 passed``, a broader transport/CLI slice passed with ``169 passed``, and
+  the post-move local full suite passed with ``2668 passed in 552.24 s``.
 - Continued the ``v3_driver.py`` refactor path by moving the coupled
   f/tail-moment and tail-only matrix-free residual-correction builders into
   ``rhs1_lowmode_coarse.py`` with direct tests for tail-selection policy,
