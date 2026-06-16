@@ -552,6 +552,13 @@ builder itself with injected operator-build, pattern-build, backend, guard, and
 factorization callbacks. The existing driver sparse-helper tests remain in
 place to prove that monkeypatching the ``v3_driver`` compatibility seam still
 reaches the extracted implementation.
+The symbolic-sparse host-factor extraction is guarded by
+``tests/test_sparse_assembly.py`` and the sparse-pattern checks in
+``tests/test_v3_sparse_pattern.py``. These tests verify chunked matrix-free CSR
+assembly against dense operators, Fortran-style structural-threshold removal,
+diagonal regularization for singular local factors, and the preserved
+``v3_driver`` compatibility aliases for the RHSMode=1 non-differentiable host
+ILU/LU path.
 ``tests/test_fortran_reduced_preconditioner.py`` now also exercises the
 ``preconditioner_operators.py`` module directly for the Fortran-reduced
 operator-shaping contract, including the radial-x simplification and the

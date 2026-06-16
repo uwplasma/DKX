@@ -59,6 +59,13 @@ Unreleased
   The public ``sfincs_jax.transport_matrix`` import path remains a compatibility
   alias for existing notebooks and scripts, while internal transport modules now
   import the maintained domain module directly.
+- Moved RHSMode=1 host sparse ILU/LU matvec assembly, CSR factorization, cached
+  dense/JAX triangular-factor materialization, and the full-system
+  matrix-free adapter into
+  ``sfincs_jax.solvers.preconditioners.symbolic_sparse.host_factor``. The
+  historical ``v3_driver`` private helper names remain compatibility aliases,
+  while the non-differentiable host-factor path now lives in the solver-domain
+  package.
 - Continued the ``v3_driver.py`` refactor path by moving the coupled
   f/tail-moment and tail-only matrix-free residual-correction builders into
   ``rhs1_lowmode_coarse.py`` with direct tests for tail-selection policy,

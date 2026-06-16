@@ -1,6 +1,6 @@
 # SFINCS_JAX Master Handoff + Execution Plan
 
-Last updated: 2026-06-15 (America/Chicago)
+Last updated: 2026-06-16 (America/Chicago)
 Owner: incoming agent
 
 ## 2026-06-13 Addendum: full ``v3_driver.py`` retirement refactor plan
@@ -459,6 +459,18 @@ Current branch status:
   ``117 passed``; a broader transport/preconditioner slice passed with
   ``148 passed``; strict docs build passed; and the full local suite passed
   with ``2668 passed in 554.82 s``.
+- Phase F symbolic-sparse host-factor checkpoint, 2026-06-16: moved the
+  RHSMode=1 host sparse ILU/LU matvec-assembly and CSR-factorization helpers
+  plus the full-system matrix-free adapter into
+  ``sfincs_jax.solvers.preconditioners.symbolic_sparse.host_factor``.
+  ``v3_driver.py`` now imports the historical private helper names as aliases,
+  so existing monkeypatch/debug tests still exercise the same seam while the
+  solver-domain package owns the non-differentiable CLI-oriented host-factor
+  implementation. Focused compile/lint passed; focused sparse assembly and
+  sparse-pattern tests passed with ``137 passed in 109.06 s``; and the broader
+  RHSMode=1 sparse/preconditioner slice passed with ``285 passed in 58.97 s``.
+  Strict docs passed; the full local suite passed with
+  ``2668 passed in 549.84 s``. ``v3_driver.py`` is now ``37,614`` lines.
 
 ### Active execution phases for the draft PR
 

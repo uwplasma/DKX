@@ -2,4 +2,14 @@
 
 from __future__ import annotations
 
-__all__: tuple[str, ...] = ()
+from .host_factor import (
+    RHS1FullSystemMatrixFreeOperatorAdapter,
+    build_sparse_ilu_from_matvec,
+    factorize_sparse_matrix_csr_host,
+)
+
+__all__ = (
+    "RHS1FullSystemMatrixFreeOperatorAdapter",
+    "build_sparse_ilu_from_matvec",
+    "factorize_sparse_matrix_csr_host",
+)
