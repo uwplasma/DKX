@@ -656,6 +656,17 @@ Those tests keep the PAS smoother activation threshold and
 ``SFINCS_JAX_IMPLICIT_SOLVE`` / differentiability precedence rules explicit while
 the driver wrappers remain stable for compatibility tests.
 
+The same profile-response policy module now owns several x-block/QI control
+helpers that previously lived directly in ``v3_driver.py``:
+``parse_rhs1_pas_tz_guarded_structured_levels``,
+``rhs1_qi_device_extra_coarse_controls``,
+``rhs1_qi_device_probe_uses_minres_step``, and
+``rhs1_xblock_fallback_initial_guess``.
+``tests/test_rhs1_xblock_fallback_initial_guess.py`` covers the canonical
+helpers directly and also checks that the historical ``v3_driver`` private names
+remain aliases, so legacy debug scripts keep working without duplicating the
+implementation.
+
 The solver-path refactor continues this policy-first testing style in
 ``sfincs_jax/solver_path_policy.py`` and ``tests/test_solver_path_policy.py``.
 The direct tests cover JIT eligibility, preconditioner dtype selection, the narrow

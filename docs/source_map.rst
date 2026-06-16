@@ -778,7 +778,11 @@ the historical private driver name and test the focused module directly. This ke
   RHSMode=1 profile-response solve-routing gates, including stage-2 triggers,
   sparse exact-LU admission, sparse-rescue ordering, sparse-polish budgets,
   post-x-block polish, large-PAS fast acceptance, host factor probes, and
-  constraint-scheme-0 sparse/dense routing.
+  constraint-scheme-0 sparse/dense routing. It also owns small x-block/QI
+  control helpers that used to live in ``v3_driver.py``: guarded PAS-TZ
+  structured-level parsing, QI device extra-coarse environment controls,
+  QI probe minres-step selection, and safe x-block fallback initial-guess
+  admission.
 - ``sfincs_jax/problems/profile_response/strong_preconditioning.py``
   (legacy aliases: ``sfincs_jax/rhs1_strong_policy.py``,
   ``sfincs_jax/rhs1_strong_control.py``, and

@@ -82,6 +82,13 @@ Unreleased
   package. Focused policy/import/driver validation passed with ``282`` tests
   and the post-consolidation local full suite passed with
   ``2670 passed in 579.02 s``.
+- Moved the remaining small RHSMode=1 x-block/QI control helpers into
+  ``sfincs_jax.problems.profile_response.policies``: guarded PAS-TZ structured
+  levels, QI device extra-coarse controls, QI minres-step probe selection, and
+  safe x-block fallback initial-guess admission. ``v3_driver.py`` keeps the old
+  private names as imported aliases, and focused policy/driver validation
+  passed with ``285`` tests. The post-move local full suite passed with
+  ``2678 passed in 555.29 s``.
 - Continued the ``v3_driver.py`` refactor path by moving the coupled
   f/tail-moment and tail-only matrix-free residual-correction builders into
   ``rhs1_lowmode_coarse.py`` with direct tests for tail-selection policy,
