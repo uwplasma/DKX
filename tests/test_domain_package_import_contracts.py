@@ -229,6 +229,34 @@ PRECONDITIONER_COMPATIBILITY_IMPORTS = (
     ),
 )
 
+PROFILE_RESPONSE_COMPATIBILITY_IMPORTS = (
+    (
+        "sfincs_jax.rhs1_active_dof",
+        "sfincs_jax.problems.profile_response.active_dof",
+        "resolve_rhs1_active_dof_mode",
+    ),
+    (
+        "sfincs_jax.rhs1_active_projection",
+        "sfincs_jax.problems.profile_response.active_projection",
+        "reduce_full_with_indices",
+    ),
+    (
+        "sfincs_jax.rhs1_handoff",
+        "sfincs_jax.problems.profile_response.handoff",
+        "rhs1_accept_candidate",
+    ),
+    (
+        "sfincs_jax.rhs1_residual",
+        "sfincs_jax.problems.profile_response.residual",
+        "residual_target",
+    ),
+    (
+        "sfincs_jax.rhs1_solver_diagnostics",
+        "sfincs_jax.problems.profile_response.solver_diagnostics",
+        "build_rhs1_xblock_correction_metadata",
+    ),
+)
+
 
 def _import_module(name: str) -> ModuleType:
     return importlib.import_module(name)
@@ -279,6 +307,16 @@ def test_preconditioner_package_moves_preserve_legacy_imports() -> None:
     """Moved preconditioner modules must remain reachable through old names."""
 
     for legacy_name, new_name, public_name in PRECONDITIONER_COMPATIBILITY_IMPORTS:
+        legacy_module = _import_module(legacy_name)
+        new_module = _import_module(new_name)
+        assert legacy_module is new_module
+        assert getattr(legacy_module, public_name) is getattr(new_module, public_name)
+
+
+def test_profile_response_package_moves_preserve_legacy_imports() -> None:
+    """Moved profile-response modules must remain reachable through old names."""
+
+    for legacy_name, new_name, public_name in PROFILE_RESPONSE_COMPATIBILITY_IMPORTS:
         legacy_module = _import_module(legacy_name)
         new_module = _import_module(new_name)
         assert legacy_module is new_module

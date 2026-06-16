@@ -377,7 +377,8 @@ the historical private driver name and test the focused module directly. This ke
   bounded sparse-polish and host x-block factorization policy helpers. These
   modules keep large RHSMode=1 FP rescue limits, override semantics, and
   fail-closed high-resolution behavior independently testable.
-- ``sfincs_jax/rhs1_solver_diagnostics.py``:
+- ``sfincs_jax/problems/profile_response/solver_diagnostics.py``
+  (legacy alias: ``sfincs_jax/rhs1_solver_diagnostics.py``):
   typed RHSMode=1 x-block correction diagnostic records and historical solver
   metadata key assembly. This keeps output-visible trace fields independently
   testable while ``v3_driver.py`` continues to own the solve orchestration.
@@ -401,17 +402,20 @@ the historical private driver name and test the focused module directly. This ke
   sizing, and two-level Schwarz coarse-block heuristics. These rules are kept
   independent of the full operator so multi-device preconditioner policy can be
   tested without launching a solve.
-- ``sfincs_jax/rhs1_active_dof.py``:
+- ``sfincs_jax/problems/profile_response/active_dof.py``
+  (legacy alias: ``sfincs_jax/rhs1_active_dof.py``):
   RHSMode=1 active-degree-of-freedom routing and reduced-index-map
   construction for truncated pitch grids, x-block active-DOF opt-ins, and PAS
   constraint-projection solves. This makes the active/full-system selection
   policy independently testable before deeper residual/operator extraction.
-- ``sfincs_jax/rhs1_active_projection.py``:
+- ``sfincs_jax/problems/profile_response/active_projection.py``
+  (legacy alias: ``sfincs_jax/rhs1_active_projection.py``):
   reusable JAX primitives for full-to-reduced gathers, reduced-to-full
   one-based scatters, and PAS ``l=0`` flux-surface-average projection. These
   primitives are shared by RHSMode=1 sparse-PC, x-block active-DOF, and
   PAS-projected reduced residual paths.
-- ``sfincs_jax/rhs1_residual.py``:
+- ``sfincs_jax/problems/profile_response/residual.py``
+  (legacy alias: ``sfincs_jax/rhs1_residual.py``):
   small residual target, ratio, convergence, and host-scalar norm helpers used
   by RHSMode=1 sparse-PC and x-block diagnostics. This is the first step toward
   making residual gates and solver metadata independent of the driver branch
@@ -778,7 +782,8 @@ the historical private driver name and test the focused module directly. This ke
 - ``sfincs_jax/rhs1_sparse_exact_policy.py``:
   sparse exact-LU request policy, sparse-over-dense preference, and stage-2
   skip decisions for moderate RHSMode=1 full-FP systems.
-- ``sfincs_jax/rhs1_handoff.py``:
+- ``sfincs_jax/problems/profile_response/handoff.py``
+  (legacy alias: ``sfincs_jax/rhs1_handoff.py``):
   accepted-candidate handoff and Krylov replay-state updates. This is the
   source-mapped seam for the repeated RHSMode=1 driver pattern: compare a
   rescue/refinement candidate against the incumbent residual, apply optional
