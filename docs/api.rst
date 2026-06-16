@@ -85,10 +85,10 @@ scripts and notebooks.
 .. automodule:: sfincs_jax.preconditioner_operators
    :members:
 
-.. automodule:: sfincs_jax.rhs1_pas_xblock_ilu
+.. automodule:: sfincs_jax.solvers.preconditioners.pas.xblock_ilu
    :members:
 
-.. automodule:: sfincs_jax.rhs1_xblock_tz_sparse
+.. automodule:: sfincs_jax.solvers.preconditioners.xblock.tz_sparse
    :members:
 
 .. automodule:: sfincs_jax.problems.transport_matrix.direct_pmat
