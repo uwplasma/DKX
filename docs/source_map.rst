@@ -37,7 +37,8 @@ skeleton packages are:
 - ``sfincs_jax/problems/profile_response`` for RHSMode=1 profile-current and
   bootstrap-current problem orchestration.
 - ``sfincs_jax/problems/transport_matrix`` for RHSMode=2/3 transport-matrix and
-  monoenergetic-response orchestration.
+  monoenergetic-response orchestration, diagnostics, output-field assembly, and
+  compatibility shims for historical flat transport modules.
 - ``sfincs_jax/solvers`` and ``sfincs_jax/solvers/preconditioners`` for reusable
   Krylov, sparse/direct, residual-gate, implicit-differentiation, and
   preconditioning machinery.
@@ -864,6 +865,11 @@ the historical private driver name and test the focused module directly. This ke
   environment policy, assembles species-by-``whichRHS`` flux arrays, and returns
   the transport matrix plus optional output fields. This keeps diagnostic memory
   policy out of the main Krylov solve loop.
+- ``sfincs_jax/problems/transport_matrix/diagnostics.py``
+  (legacy alias: ``sfincs_jax/transport_matrix.py``):
+  JAX formulas for RHSMode=1 output moments, RHSMode=2/3 transport diagnostics,
+  transport-matrix assembly, strict Fortran-order reductions, and cached
+  geometry/species diagnostic precomputes.
 - ``sfincs_jax/problems/transport_matrix/handoff_policy.py``
   (legacy alias: ``sfincs_jax/transport_handoff_policy.py``):
   shared transport retry residual metrics, better-candidate comparisons, and RHSMode=3
@@ -1017,10 +1023,12 @@ Linear-algebra infrastructure:
 - augmented FGMRES hooks that reuse a checked coarse basis and stored operator
   action ``(U, A U)`` without assembling a dense global operator.
 
-``sfincs_jax/transport_matrix.py``
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+``sfincs_jax/problems/transport_matrix/diagnostics.py``
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 RHSMode=2/3 postprocessing and transport-matrix assembly.
+The legacy ``sfincs_jax/transport_matrix.py`` path remains a compatibility
+alias for existing user scripts.
 
 ``sfincs_jax/diagnostics.py``
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^

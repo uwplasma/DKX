@@ -11,7 +11,7 @@ import jax.numpy as jnp
 import numpy as np
 
 from sfincs_jax.namelist import Namelist
-from sfincs_jax.transport_matrix import (
+from sfincs_jax.problems.transport_matrix.diagnostics import (
     v3_transport_matrix_from_flux_arrays,
     v3_transport_output_fields_vm_only,
 )

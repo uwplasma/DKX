@@ -9,7 +9,7 @@ from typing import Any
 
 import jax.numpy as jnp
 
-from sfincs_jax.transport_matrix import transport_matrix_size_from_rhs_mode
+from sfincs_jax.problems.transport_matrix.diagnostics import transport_matrix_size_from_rhs_mode
 
 
 StateLoader = Callable[..., dict[str, Any] | None]

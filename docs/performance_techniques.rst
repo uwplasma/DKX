@@ -1926,8 +1926,8 @@ then compute diagnostics in one batched kernel.
    \mathrm{FSABFlow}_s \propto \int d\theta\,d\zeta\; \frac{B}{D}\,
    \sum_x w_x x^3 f_{s,L=1}.
 
-These are implemented in ``sfincs_jax.transport_matrix`` with strict-order
-reductions matching v3 when required.
+These are implemented in ``sfincs_jax.problems.transport_matrix.diagnostics``
+with strict-order reductions matching v3 when required.
 
 **Precompute constants + cache.**
 
@@ -1939,7 +1939,8 @@ and reused for all ``whichRHS`` solves.
 
 - ``v3_transport_diagnostics_vm_only_precompute`` and
   ``v3_transport_diagnostics_vm_only_batch_op0_precomputed``.
-- Cached by operator signature in ``sfincs_jax.transport_matrix`` to reuse
+- Cached by operator signature in
+  ``sfincs_jax.problems.transport_matrix.diagnostics`` to reuse
   geometry/species factors across repeated transport solves (default cache size: ``4``;
   override with ``SFINCS_JAX_TRANSPORT_DIAG_CACHE_MAX``).
 - For large transport solves, diagnostics can be processed in chunks to reduce peak
@@ -1990,7 +1991,7 @@ Fortran-like deterministic accumulation order when parity demands it.
 **Implementation.**
 
 - ``_weighted_sum_x_fortran`` and ``_weighted_sum_tz_fortran`` in
-  ``sfincs_jax.transport_matrix``.
+  ``sfincs_jax.problems.transport_matrix.diagnostics``.
 - Strict order controlled by ``SFINCS_JAX_STRICT_SUM_ORDER``.
 
 This reduces Python overhead and improves performance, while still preserving
@@ -3084,7 +3085,8 @@ Key modules and functions referenced above:
 
 - **Diagnostics and flux formulas**:
 
-  - ``sfincs_jax/transport_matrix.py``: ``v3_transport_diagnostics_vm_only_precompute``,
+  - ``sfincs_jax/problems/transport_matrix/diagnostics.py``:
+    ``v3_transport_diagnostics_vm_only_precompute``,
     ``v3_transport_diagnostics_vm_only_batch_op0_precomputed``.
 
 - **Solver backends**:

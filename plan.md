@@ -30330,6 +30330,69 @@ Validation:
   docs/_build/html``: passed.
 - ``git diff --check``: passed.
 
+### 19.32 Transport diagnostics domain relocation
+
+Goal:
+
+- Finish the transport-matrix package migration for the diagnostics/output
+  formulas without changing public user imports or the parity-tested transport
+  moment equations.
+
+Implementation:
+
+- Moved the ``sfincs_jax.transport_matrix`` implementation into
+  ``sfincs_jax.problems.transport_matrix.diagnostics``.
+- Replaced the old top-level ``sfincs_jax/transport_matrix.py`` with a 9-line
+  compatibility alias so existing notebooks, tests, and scripts can still use
+  ``from sfincs_jax.transport_matrix import ...``.
+- Updated internal transport, output, and driver imports to use the maintained
+  domain module directly.
+- Added an import-contract test that verifies the legacy module and new module
+  expose the same transport-matrix assembly function.
+- Updated API docs, source-code map, physics references, performance notes, and
+  release notes to point at the domain module while documenting the legacy alias.
+
+Validation so far:
+
+- ``python -m py_compile sfincs_jax/transport_matrix.py
+  sfincs_jax/problems/transport_matrix/diagnostics.py
+  sfincs_jax/problems/transport_matrix/setup.py
+  sfincs_jax/problems/transport_matrix/postsolve_diagnostics.py
+  sfincs_jax/problems/transport_matrix/streaming_outputs.py
+  sfincs_jax/problems/transport_matrix/parallel/solve.py
+  sfincs_jax/v3_driver.py tests/test_domain_package_import_contracts.py``:
+  passed.
+- ``python -m ruff check sfincs_jax/io.py sfincs_jax/transport_matrix.py
+  sfincs_jax/problems/transport_matrix/diagnostics.py
+  sfincs_jax/problems/transport_matrix/setup.py
+  sfincs_jax/problems/transport_matrix/postsolve_diagnostics.py
+  sfincs_jax/problems/transport_matrix/streaming_outputs.py
+  sfincs_jax/problems/transport_matrix/parallel/solve.py
+  sfincs_jax/v3_driver.py tests/test_domain_package_import_contracts.py``:
+  passed.
+- Focused diagnostics/import slice:
+  ``python -m pytest -q tests/test_domain_package_import_contracts.py
+  tests/test_transport_matrix_rhsmode2_parity.py
+  tests/test_transport_matrix_rhsmode3_parity.py tests/test_transport_solve_setup.py
+  tests/test_transport_streaming_outputs.py tests/test_velocity_space_physics_gates.py``:
+  ``37 passed in 11.25 s``.
+- Broader transport/output/parallel slice:
+  ``python -m pytest -q tests/test_domain_package_import_contracts.py
+  tests/test_transport_matrix_rhsmode2_parity.py
+  tests/test_transport_matrix_rhsmode3_parity.py
+  tests/test_transport_matrix_write_output_end_to_end.py
+  tests/test_rhsmode1_phi1_write_output_end_to_end.py
+  tests/test_transport_solve_setup.py tests/test_transport_streaming_outputs.py
+  tests/test_transport_parallel.py tests/test_transport_parallel_runtime.py
+  tests/test_transport_parallel_execution.py tests/test_velocity_space_physics_gates.py``:
+  ``100 passed in 54.51 s``.
+- Strict docs build:
+  ``SPHINXOPTS='-W --keep-going' python -m sphinx -b html docs
+  docs/_build/html``: passed.
+- ``git diff --check``: passed.
+- Full local suite:
+  ``python -m pytest -q``: ``2668 passed in 559.10 s``.
+
 ### 19.37 RHSMode=1 true-operator and direct-tail builder split
 
 Goal:

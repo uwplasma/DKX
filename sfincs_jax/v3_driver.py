@@ -450,7 +450,7 @@ from .solver_progress import (
     RHS1ProgressNotes,
     rhs1_large_progress_enabled,
 )
-from .transport_matrix import (
+from .problems.transport_matrix.diagnostics import (
     _flux_functions_from_op,
     transport_matrix_size_from_rhs_mode,
 )

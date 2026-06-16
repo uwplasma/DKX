@@ -157,7 +157,7 @@ schematically
    j_\parallel = \sum_s Z_s e V_{\parallel,s}.
 
 `sfincs_jax` evaluates these moments in ``sfincs_jax/diagnostics.py`` and
-``sfincs_jax/transport_matrix.py``.
+``sfincs_jax/problems/transport_matrix/diagnostics.py``.
 
 Trajectory-model knobs
 ----------------------

@@ -15,7 +15,7 @@ import jax.numpy as jnp
 import numpy as np
 
 from sfincs_jax.diagnostics import u_hat_np
-from sfincs_jax.transport_matrix import (
+from sfincs_jax.problems.transport_matrix.diagnostics import (
     _flux_functions_from_op,
     v3_rhsmode1_output_fields_vm_only_jit,
     v3_transport_diagnostics_vm_only,

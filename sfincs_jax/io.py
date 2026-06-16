@@ -1436,7 +1436,7 @@ def _write_transport_h5_streaming(
     """Stream RHSMode=2/3 transport diagnostics directly to H5 to reduce memory."""
     # Local imports to keep module import light.
     from .classical_transport import classical_flux_v3  # noqa: PLC0415
-    from .transport_matrix import (
+    from .problems.transport_matrix.diagnostics import (
         _flux_functions_from_op,
         transport_matrix_size_from_rhs_mode,
         v3_rhsmode1_output_fields_vm_only_jit,
@@ -3553,7 +3553,7 @@ def write_sfincs_jax_output_h5(
 
         import jax.numpy as jnp
 
-        from .transport_matrix import (
+        from .problems.transport_matrix.diagnostics import (
             f0_l0_v3_from_operator,
             v3_rhsmode1_output_fields_vm_only_batch_jit,
             v3_rhsmode1_output_fields_vm_only_phi1_batch_jit,
@@ -4490,7 +4490,7 @@ def write_sfincs_jax_output_h5(
         export_full_f = int(np.asarray(data.get("export_full_f", 0)).reshape(())) == 1
         export_delta_f = int(np.asarray(data.get("export_delta_f", 0)).reshape(())) == 1
         if export_full_f or export_delta_f:
-            from .transport_matrix import f0_l0_v3_from_operator  # noqa: PLC0415
+            from .problems.transport_matrix.diagnostics import f0_l0_v3_from_operator  # noqa: PLC0415
 
             op_use = result.op
             f0_l0 = f0_l0_v3_from_operator(op_use)
@@ -5191,7 +5191,7 @@ def write_sfincs_jax_output_h5(
 
             # Import lazily to keep geometry-only use-cases lightweight.
             from .v3_driver import solve_v3_transport_matrix_linear_gmres
-            from .transport_matrix import (
+            from .problems.transport_matrix.diagnostics import (
                 transport_matrix_size_from_rhs_mode,
                 v3_rhsmode1_output_fields_vm_only_jit,
                 v3_transport_output_fields_vm_only,
@@ -5321,7 +5321,7 @@ def write_sfincs_jax_output_h5(
             export_full_f = int(np.asarray(data.get("export_full_f", 0)).reshape(())) == 1
             export_delta_f = int(np.asarray(data.get("export_delta_f", 0)).reshape(())) == 1
             if (export_full_f or export_delta_f) and result.state_vectors_by_rhs:
-                from .transport_matrix import f0_l0_v3_from_operator  # noqa: PLC0415
+                from .problems.transport_matrix.diagnostics import f0_l0_v3_from_operator  # noqa: PLC0415
 
                 f0_l0 = f0_l0_v3_from_operator(result.op0)
                 delta_list: list[np.ndarray] = []
