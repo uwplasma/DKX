@@ -372,11 +372,12 @@ the historical private driver name and test the focused module directly. This ke
   post-coarse, and post-residual-equation controls. This keeps environment
   parsing and correction-policy defaults out of ``v3_driver.py`` while
   preserving the existing opt-in behavior and fail-closed defaults.
-- ``sfincs_jax/rhs1_sparse_polish_policy.py`` and
+- ``sfincs_jax/problems/profile_response/policies.py`` and
   ``sfincs_jax/rhs1_xblock_sparse_host_policy.py``:
   bounded sparse-polish and host x-block factorization policy helpers. These
   modules keep large RHSMode=1 FP rescue limits, override semantics, and
-  fail-closed high-resolution behavior independently testable.
+  fail-closed high-resolution behavior independently testable while the legacy
+  ``sfincs_jax/rhs1_sparse_polish_policy.py`` import remains available.
 - ``sfincs_jax/problems/profile_response/solver_diagnostics.py``
   (legacy alias: ``sfincs_jax/rhs1_solver_diagnostics.py``):
   typed RHSMode=1 x-block correction diagnostic records and historical solver
@@ -766,22 +767,28 @@ the historical private driver name and test the focused module directly. This ke
 - ``sfincs_jax/rhs1_schur_policy.py``:
   RHSMode=1 Schur base-preconditioner alias normalization and automatic
   geometry/PAS/DKES routing policy.
-- ``sfincs_jax/rhs1_stage2_policy.py``:
-  stage-2 trigger and skip rules.
-- ``sfincs_jax/rhs1_strong_policy.py``, ``sfincs_jax/rhs1_strong_control.py``,
-  ``sfincs_jax/rhs1_strong_auto_kind.py``:
-  strong-preconditioner request mapping, enable/disable control, and automatic
-  strong-kind selection.
+- ``sfincs_jax/problems/profile_response/policies.py``
+  (legacy aliases: ``sfincs_jax/rhs1_acceptance_policy.py``,
+  ``sfincs_jax/rhs1_constraint0_policy.py``,
+  ``sfincs_jax/rhs1_post_xblock_policy.py``,
+  ``sfincs_jax/rhs1_sparse_exact_policy.py``,
+  ``sfincs_jax/rhs1_sparse_rescue_policy.py``,
+  ``sfincs_jax/rhs1_sparse_polish_policy.py``, and
+  ``sfincs_jax/rhs1_stage2_policy.py``):
+  RHSMode=1 profile-response solve-routing gates, including stage-2 triggers,
+  sparse exact-LU admission, sparse-rescue ordering, sparse-polish budgets,
+  post-x-block polish, large-PAS fast acceptance, host factor probes, and
+  constraint-scheme-0 sparse/dense routing.
+- ``sfincs_jax/problems/profile_response/strong_preconditioning.py``
+  (legacy aliases: ``sfincs_jax/rhs1_strong_policy.py``,
+  ``sfincs_jax/rhs1_strong_control.py``, and
+  ``sfincs_jax/rhs1_strong_auto_kind.py``):
+  strong-preconditioner request mapping, enable/disable control, automatic
+  strong-kind selection, and post-selection adjustment policy.
 - ``sfincs_jax/rhs1_strong_fallback.py``:
   bounded strong-preconditioner retry/fallback metadata and stage decision
   helpers used to keep residual rescue paths observable without embedding the
   branch logic directly in ``v3_driver.py``.
-- ``sfincs_jax/rhs1_sparse_rescue_policy.py`` and
-  ``sfincs_jax/rhs1_sparse_polish_policy.py``:
-  sparse-rescue ordering, skip logic, and sparse-polish env parsing.
-- ``sfincs_jax/rhs1_sparse_exact_policy.py``:
-  sparse exact-LU request policy, sparse-over-dense preference, and stage-2
-  skip decisions for moderate RHSMode=1 full-FP systems.
 - ``sfincs_jax/problems/profile_response/handoff.py``
   (legacy alias: ``sfincs_jax/rhs1_handoff.py``):
   accepted-candidate handoff and Krylov replay-state updates. This is the
@@ -790,11 +797,6 @@ the historical private driver name and test the focused module directly. This ke
   measured solver-candidate gates, preserve the accepted residual vector, and
   update the KSP replay metadata only after a strict finite residual
   improvement.
-- ``sfincs_jax/rhs1_acceptance_policy.py``:
-  large-PAS fast-accept gates and host x-block factor-probe safety checks.
-- ``sfincs_jax/rhs1_constraint0_policy.py``:
-  RHSMode=1 constraint-scheme-0 sparse-first, PETSc-compatible sparse routing, and
-  dense-fallback opt-in policy.
 - ``sfincs_jax/rhs1_constraint_sources.py``:
   JAX kernels that convert between kinetic ``f`` blocks and constraint-source
   amplitudes for constraint schemes 1 and 2, including flux-surface averages,
@@ -810,10 +812,6 @@ the historical private driver name and test the focused module directly. This ke
 - ``sfincs_jax/rhs1_large_cpu_policy.py``:
   large explicit full-FP CPU sparse rescue, x-block seed, exact-LU promotion,
   host x-block assembly, and species-x-block rescue policy.
-- ``sfincs_jax/rhs1_post_xblock_policy.py``:
-  post-x-block polish, targeted FP polish, skip-global-sparse-after-xblock, and
-  bounded SciPy-rescue absolute-floor policy for large explicit full-FP CPU
-  systems.
 - ``sfincs_jax/rhs1_xblock_policy.py``:
   pure x-block sparse-PC routing, Krylov-side selection, local factorization
   tuning, lower-fill acceptance gates, and non-autodiff device-host fallback
