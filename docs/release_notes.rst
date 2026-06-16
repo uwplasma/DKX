@@ -89,6 +89,14 @@ Unreleased
   private names as imported aliases, and focused policy/driver validation
   passed with ``285`` tests. The post-move local full suite passed with
   ``2678 passed in 555.29 s``.
+- Moved the operator-derived x-block QI coarse-basis and block-metadata helpers
+  from ``v3_driver.py`` into ``rhs1_qi_coarse.py``. The driver now imports the
+  historical private names as aliases while the canonical implementation lives
+  beside the QI coarse-space builders, Galerkin correction, and hard-seed
+  basis logic. Focused QI validation passed with ``13`` tests and the broader
+  RHSMode=1 QI/device/sparse policy slice passed with
+  ``251 passed in 149.96 s``. The post-move local full suite passed with
+  ``2680 passed in 555.56 s``.
 - Continued the ``v3_driver.py`` refactor path by moving the coupled
   f/tail-moment and tail-only matrix-free residual-correction builders into
   ``rhs1_lowmode_coarse.py`` with direct tests for tail-selection policy,
