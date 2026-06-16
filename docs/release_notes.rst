@@ -73,6 +73,15 @@ Unreleased
   ``sfincs_jax.rhs1_active_dof``, ``sfincs_jax.rhs1_active_projection``,
   ``sfincs_jax.rhs1_handoff``, and ``sfincs_jax.rhs1_solver_diagnostics``
   import paths remain compatibility aliases.
+- Consolidated RHSMode=1 profile-response solve-routing and strong
+  preconditioner controls into
+  ``sfincs_jax.problems.profile_response.policies`` and
+  ``sfincs_jax.problems.profile_response.strong_preconditioning``. The ten old
+  ``sfincs_jax.rhs1_*`` policy files remain compatibility aliases, while the
+  maintained source map, API docs, and driver imports now use the domain
+  package. Focused policy/import/driver validation passed with ``282`` tests
+  and the post-consolidation local full suite passed with
+  ``2670 passed in 579.02 s``.
 - Continued the ``v3_driver.py`` refactor path by moving the coupled
   f/tail-moment and tail-only matrix-free residual-correction builders into
   ``rhs1_lowmode_coarse.py`` with direct tests for tail-selection policy,

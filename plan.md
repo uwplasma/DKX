@@ -30883,3 +30883,61 @@ Validation:
 - ``SPHINXOPTS='-W --keep-going' python -m sphinx -b html docs
   docs/_build/html``: passed.
 - ``git diff --check``: passed.
+
+### 19.32 Profile-response policy consolidation
+
+Goal:
+
+- Keep the refactor moving toward a small, domain-named architecture instead of
+  a growing set of flat ``rhs1_*_policy.py`` files.
+- Preserve every existing import path for user scripts, notebooks, debugging
+  monkeypatches, and tests while making the domain package the canonical home
+  for future profile-response policy work.
+
+Implementation:
+
+- Added ``sfincs_jax/problems/profile_response/policies.py`` for RHSMode=1
+  profile-response solve-routing gates: large-PAS acceptance, constraint-0
+  sparse/dense routing, post-x-block polish, sparse exact-LU admission,
+  sparse-rescue ordering, sparse-polish budgets, and stage-2 triggers.
+- Added ``sfincs_jax/problems/profile_response/strong_preconditioning.py`` for
+  RHSMode=1 strong-preconditioner request parsing, enable/disable/auto control,
+  automatic kind selection, and post-selection adjustments.
+- Replaced the ten old top-level policy implementation files with compatibility
+  aliases to the two canonical modules:
+  ``rhs1_acceptance_policy.py``, ``rhs1_constraint0_policy.py``,
+  ``rhs1_post_xblock_policy.py``, ``rhs1_sparse_exact_policy.py``,
+  ``rhs1_sparse_polish_policy.py``, ``rhs1_sparse_rescue_policy.py``,
+  ``rhs1_stage2_policy.py``, ``rhs1_strong_auto_kind.py``,
+  ``rhs1_strong_control.py``, and ``rhs1_strong_policy.py``.
+- Updated ``v3_driver.py`` to import the canonical modules directly and updated
+  the API docs, source map, testing guide, release notes, and import-contract
+  tests to make the domain modules the maintained surface.
+- Deduplicated generated environment parsing helpers inside
+  ``profile_response.policies`` so the consolidation is a real simplification,
+  not just a mechanical concatenation.
+
+Validation:
+
+- ``python -m py_compile sfincs_jax/problems/profile_response/policies.py
+  sfincs_jax/problems/profile_response/strong_preconditioning.py
+  sfincs_jax/v3_driver.py``: passed.
+- ``python -m ruff check sfincs_jax/problems/profile_response/policies.py
+  sfincs_jax/problems/profile_response/strong_preconditioning.py
+  sfincs_jax/v3_driver.py tests/test_domain_package_import_contracts.py
+  tests/test_policy_module_docstrings.py``: passed.
+- ``python -m pytest -q tests/test_domain_package_import_contracts.py
+  tests/test_policy_module_docstrings.py tests/test_rhs1_acceptance_policy.py
+  tests/test_rhs1_constraint0_policy.py tests/test_rhs1_post_xblock_policy.py
+  tests/test_rhs1_sparse_exact_policy.py tests/test_rhs1_sparse_rescue_policy.py
+  tests/test_rhs1_sparse_polish_policy.py tests/test_rhs1_stage2_policy.py
+  tests/test_rhs1_strong_policy.py tests/test_rhs1_strong_control.py
+  tests/test_rhs1_strong_auto_kind.py tests/test_v3_driver_rhs1_dispatch_coverage.py
+  tests/test_v3_driver_policy_helpers.py tests/test_v3_driver_solve_policy_coverage.py
+  tests/test_v3_driver_sparse_helper_coverage.py tests/test_rhs1_sparse_first_heuristic.py
+  tests/test_sparse_exact_lu_heuristic.py tests/test_transport_sparse_direct.py``:
+  ``282 passed in 17.98 s``.
+- ``SPHINXOPTS='-W --keep-going' python -m sphinx -b html docs
+  docs/_build/html``: passed.
+- ``git diff --check``: passed.
+- ``python -m pytest -q``: ``2670 passed in 579.02 s``.

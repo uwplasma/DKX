@@ -162,19 +162,17 @@ from .rhs1_preconditioner_auto_policy import (
 from .rhs1_schur_policy import resolve_rhs1_schur_base_kind
 from .problems.profile_response.handoff import rhs1_accept_candidate
 from .rhs1_strong_fallback import build_rhs1_strong_preconditioner_full_from_kind
-from .rhs1_strong_policy import (
-    requested_rhs1_strong_preconditioner_kind,
-    rhs1_pas_weak_minres_steps,
-    rhs1_pas_weak_strong_retry_skip,
-)
-from .rhs1_strong_control import rhs1_resolved_strong_preconditioner_control
-from .rhs1_strong_auto_kind import (
+from .problems.profile_response.strong_preconditioning import (
     adjust_rhs1_reduced_auto_kind,
     adjust_rhs1_theta_line_auto_kind,
     auto_rhs1_full_strong_kind,
     auto_rhs1_reduced_strong_kind,
+    requested_rhs1_strong_preconditioner_kind,
+    rhs1_pas_weak_minres_steps,
+    rhs1_pas_weak_strong_retry_skip,
+    rhs1_resolved_strong_preconditioner_control,
 )
-from .rhs1_sparse_rescue_policy import (
+from .problems.profile_response.policies import (
     rhs1_resolved_sparse_rescue_ordering,
     rhs1_sparse_enabled_initial,
     rhs1_sparse_kind_use,
@@ -186,7 +184,7 @@ from .rhs1_xblock_policy import (
 )
 from .solvers.preconditioners.pas import build_rhs1_pas_xblock_ilu_preconditioner
 from .solvers.preconditioners.xblock import build_rhs1_xblock_tz_sparse_preconditioner
-from .rhs1_sparse_polish_policy import (
+from .problems.profile_response.policies import (
     rhs1_parse_accept_ratio,
     rhs1_parse_polish_gmres_config,
     rhs1_polish_enabled,
@@ -270,7 +268,7 @@ from .problems.profile_response.residual import (
     residual_target as rhs1_residual_target,
     safe_ratio as rhs1_safe_ratio,
 )
-from .rhs1_constraint0_policy import (
+from .problems.profile_response.policies import (
     rhs1_constraint0_dense_fallback_allowed as _rhs1_constraint0_dense_fallback_allowed_impl,
     rhs1_constraint0_petsc_compat as _rhs1_constraint0_petsc_compat_impl,
     rhs1_constraint0_sparse_first as _rhs1_constraint0_sparse_first_impl,
@@ -281,7 +279,7 @@ from .rhs1_constraint_sources import (
     constraint_scheme2_inject_source as _constraint_scheme2_inject_source,
     constraint_scheme2_source_from_f as _constraint_scheme2_source_from_f,
 )
-from .rhs1_sparse_exact_policy import (
+from .problems.profile_response.policies import (
     rhs1_prefer_sparse_over_dense_shortcut as _rhs1_prefer_sparse_over_dense_shortcut_impl,
     rhs1_sparse_exact_lu_requested as _rhs1_sparse_exact_lu_requested_impl,
     rhs1_sparse_prefer_skips_stage2 as _rhs1_sparse_prefer_skips_stage2_impl,
@@ -297,7 +295,7 @@ from .rhs1_large_cpu_policy import (
     rhs1_sparse_sxblock_rescue_allowed as _rhs1_sparse_sxblock_rescue_allowed_impl,
     rhs1_sparse_xblock_rescue_allowed as _rhs1_sparse_xblock_rescue_allowed_impl,
 )
-from .rhs1_post_xblock_policy import (
+from .problems.profile_response.policies import (
     rhs1_fast_post_xblock_polish_allowed as _rhs1_fast_post_xblock_polish_allowed_impl,
     rhs1_fp_xblock_global_correction_allowed as _rhs1_fp_xblock_global_correction_allowed_impl,
     rhs1_fp_targeted_polish_allowed as _rhs1_fp_targeted_polish_allowed_impl,
@@ -305,11 +303,11 @@ from .rhs1_post_xblock_policy import (
     rhs1_scipy_rescue_active_size_allowed as _rhs1_scipy_rescue_active_size_allowed_impl,
     rhs1_skip_global_sparse_after_xblock_allowed as _rhs1_skip_global_sparse_after_xblock_allowed_impl,
 )
-from .rhs1_acceptance_policy import (
+from .problems.profile_response.policies import (
     rhs1_host_factor_probe_ok as _rhs1_host_factor_probe_ok_impl,
     rhs1_pas_fast_accept as _rhs1_pas_fast_accept_impl,
 )
-from .rhs1_stage2_policy import (
+from .problems.profile_response.policies import (
     rhs1_fp_force_stage2,
     rhs1_pas_stage2_skip,
     rhs1_pas_tz_guarded_stage2_retry,
