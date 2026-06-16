@@ -54,6 +54,11 @@ Unreleased
   passed with ``117 passed`` and a broader transport/preconditioner slice passed
   with ``148 passed``. The post-move local full suite passed with
   ``2668 passed in 554.82 s``.
+- Moved the RHSMode=1/2/3 transport diagnostics and transport-matrix assembly
+  implementation into ``sfincs_jax.problems.transport_matrix.diagnostics``.
+  The public ``sfincs_jax.transport_matrix`` import path remains a compatibility
+  alias for existing notebooks and scripts, while internal transport modules now
+  import the maintained domain module directly.
 - Continued the ``v3_driver.py`` refactor path by moving the coupled
   f/tail-moment and tail-only matrix-free residual-correction builders into
   ``rhs1_lowmode_coarse.py`` with direct tests for tail-selection policy,
