@@ -19,6 +19,7 @@ from dataclasses import dataclass
 from typing import Any
 
 import jax.numpy as jnp
+import numpy as np
 
 
 ArrayLike = Any
@@ -208,7 +209,9 @@ def _stack_candidates(
     return jnp.stack(tuple(columns), axis=1), tuple(str(label) for label in labels)
 
 
-def _block_constant(layout: RHS1QICoarseBlockLayout, block_index: int, dtype: Any) -> ArrayLike:
+def _block_constant(
+    layout: RHS1QICoarseBlockLayout, block_index: int, dtype: Any
+) -> ArrayLike:
     values = jnp.zeros((layout.total_size,), dtype=dtype)
     offsets = layout.block_offsets
     start = int(offsets[block_index])
@@ -263,7 +266,9 @@ def _centered_unit_weights(values: Sequence[float]) -> tuple[float, ...] | None:
     return tuple(value / scale for value in centered)
 
 
-def _centered_power_weights(values: Sequence[float], power: int) -> tuple[float, ...] | None:
+def _centered_power_weights(
+    values: Sequence[float], power: int
+) -> tuple[float, ...] | None:
     linear = _centered_unit_weights(values)
     if linear is None:
         return None
@@ -402,7 +407,9 @@ def _angular_harmonic_specs(
     specs: list[tuple[str, ArrayLike]] = []
     for mode in range(1, max_mode + 1):
         if int(layout.n_theta) > 1:
-            theta_phase = 2.0 * jnp.pi * float(mode) * theta_grid / float(layout.n_theta)
+            theta_phase = (
+                2.0 * jnp.pi * float(mode) * theta_grid / float(layout.n_theta)
+            )
             specs.append((f"theta_cos{mode}", jnp.cos(theta_phase)))
             specs.append((f"theta_sin{mode}", jnp.sin(theta_phase)))
         if int(layout.n_zeta) > 1:
@@ -410,7 +417,9 @@ def _angular_harmonic_specs(
             specs.append((f"zeta_cos{mode}", jnp.cos(zeta_phase)))
             specs.append((f"zeta_sin{mode}", jnp.sin(zeta_phase)))
         if bool(include_mixed) and int(layout.n_theta) > 1 and int(layout.n_zeta) > 1:
-            theta_phase = 2.0 * jnp.pi * float(mode) * theta_grid / float(layout.n_theta)
+            theta_phase = (
+                2.0 * jnp.pi * float(mode) * theta_grid / float(layout.n_theta)
+            )
             zeta_phase = 2.0 * jnp.pi * float(mode) * zeta_grid / float(layout.n_zeta)
             specs.append((f"mixed_cos_plus{mode}", jnp.cos(theta_phase + zeta_phase)))
             specs.append((f"mixed_sin_plus{mode}", jnp.sin(theta_phase + zeta_phase)))
@@ -440,7 +449,9 @@ def build_rhs1_qi_coarse_candidates(
     labels: list[str] = []
 
     if include_global:
-        _append_candidate(columns, labels, jnp.ones((layout.total_size,), dtype=dtype), "global")
+        _append_candidate(
+            columns, labels, jnp.ones((layout.total_size,), dtype=dtype), "global"
+        )
 
     if include_species and layout.block_species is not None:
         species_to_blocks: dict[int, list[int]] = {}
@@ -462,7 +473,9 @@ def build_rhs1_qi_coarse_candidates(
             _append_candidate(
                 columns,
                 labels,
-                _block_weighted_constant(layout, tuple(float(v) for v in centered), dtype),
+                _block_weighted_constant(
+                    layout, tuple(float(v) for v in centered), dtype
+                ),
                 "x_ramp",
             )
 
@@ -550,46 +563,73 @@ def build_rhs1_qi_xblock_hard_seed_candidates(
         for species in sorted(species_to_blocks):
             if not has_room():
                 return finish()
-            add(_group_constant(layout, species_to_blocks[species], dtype), f"species:{species}")
+            add(
+                _group_constant(layout, species_to_blocks[species], dtype),
+                f"species:{species}",
+            )
 
     if include_radial:
         if x_ramp_weights is not None:
             if not has_room():
                 return finish()
-            add(_block_weighted_constant(layout, x_ramp_weights, dtype), "radial:x_ramp")
+            add(
+                _block_weighted_constant(layout, x_ramp_weights, dtype), "radial:x_ramp"
+            )
         if x_quad_weights is not None:
             if not has_room():
                 return finish()
-            add(_block_weighted_constant(layout, x_quad_weights, dtype), "radial:x_quad")
+            add(
+                _block_weighted_constant(layout, x_quad_weights, dtype), "radial:x_quad"
+            )
         for species in sorted(species_to_blocks):
             block_ids = species_to_blocks[species]
-            local_x = tuple(float(layout.block_x[block_index]) for block_index in block_ids)
+            local_x = tuple(
+                float(layout.block_x[block_index]) for block_index in block_ids
+            )
             local_ramp = _centered_unit_weights(local_x)
             local_quad = _centered_power_weights(local_x, 2)
             if local_ramp is not None:
                 if not has_room():
                     return finish()
-                weights = _weights_for_blocks(n_blocks, tuple(zip(block_ids, local_ramp, strict=True)))
-                add(_block_weighted_constant(layout, weights, dtype), f"radial:species:{species}:x_ramp")
+                weights = _weights_for_blocks(
+                    n_blocks, tuple(zip(block_ids, local_ramp, strict=True))
+                )
+                add(
+                    _block_weighted_constant(layout, weights, dtype),
+                    f"radial:species:{species}:x_ramp",
+                )
             if local_quad is not None:
                 if not has_room():
                     return finish()
-                weights = _weights_for_blocks(n_blocks, tuple(zip(block_ids, local_quad, strict=True)))
-                add(_block_weighted_constant(layout, weights, dtype), f"radial:species:{species}:x_quad")
+                weights = _weights_for_blocks(
+                    n_blocks, tuple(zip(block_ids, local_quad, strict=True))
+                )
+                add(
+                    _block_weighted_constant(layout, weights, dtype),
+                    f"radial:species:{species}:x_quad",
+                )
 
     if include_constraint_moments:
         ones = tuple(1.0 for _ in range(n_blocks))
         if not has_room():
             return finish()
-        add(_intra_block_moment_candidate(layout, ones, power=1, dtype=dtype), "constraint:xi_ramp")
+        add(
+            _intra_block_moment_candidate(layout, ones, power=1, dtype=dtype),
+            "constraint:xi_ramp",
+        )
         if not has_room():
             return finish()
-        add(_intra_block_moment_candidate(layout, ones, power=2, dtype=dtype), "constraint:xi_quad")
+        add(
+            _intra_block_moment_candidate(layout, ones, power=2, dtype=dtype),
+            "constraint:xi_quad",
+        )
         if x_ramp_weights is not None:
             if not has_room():
                 return finish()
             add(
-                _intra_block_moment_candidate(layout, x_ramp_weights, power=1, dtype=dtype),
+                _intra_block_moment_candidate(
+                    layout, x_ramp_weights, power=1, dtype=dtype
+                ),
                 "constraint:radial_x_ramp*xi_ramp",
             )
         for species in sorted(species_to_blocks):
@@ -623,7 +663,9 @@ def build_rhs1_qi_xblock_hard_seed_candidates(
             if not has_room():
                 return finish()
             add(
-                _block_weighted_angular_candidate(layout, angular_values, x_ramp_weights, dtype),
+                _block_weighted_angular_candidate(
+                    layout, angular_values, x_ramp_weights, dtype
+                ),
                 f"radial:x_ramp*{label}",
             )
         if x_quad_weights is not None:
@@ -631,7 +673,9 @@ def build_rhs1_qi_xblock_hard_seed_candidates(
                 if not has_room():
                     return finish()
                 add(
-                    _block_weighted_angular_candidate(layout, angular_values, x_quad_weights, dtype),
+                    _block_weighted_angular_candidate(
+                        layout, angular_values, x_quad_weights, dtype
+                    ),
                     f"radial:x_quad*{label}",
                 )
 
@@ -639,44 +683,66 @@ def build_rhs1_qi_xblock_hard_seed_candidates(
         for species in sorted(species_to_blocks):
             x_to_blocks: dict[int, list[int]] = {}
             for block_index in species_to_blocks[species]:
-                x_to_blocks.setdefault(int(layout.block_x[block_index]), []).append(block_index)
+                x_to_blocks.setdefault(int(layout.block_x[block_index]), []).append(
+                    block_index
+                )
             x_values = sorted(x_to_blocks)
             for left_x, right_x in zip(x_values, x_values[1:], strict=False):
                 if not has_room():
                     return finish()
-                weighted_blocks = tuple((block_index, -1.0) for block_index in x_to_blocks[left_x]) + tuple(
-                    (block_index, 1.0) for block_index in x_to_blocks[right_x]
-                )
+                weighted_blocks = tuple(
+                    (block_index, -1.0) for block_index in x_to_blocks[left_x]
+                ) + tuple((block_index, 1.0) for block_index in x_to_blocks[right_x])
                 add(
-                    _block_weighted_constant(layout, _weights_for_blocks(n_blocks, weighted_blocks), dtype),
+                    _block_weighted_constant(
+                        layout, _weights_for_blocks(n_blocks, weighted_blocks), dtype
+                    ),
                     f"schur:x_diff:s{species}:{left_x}->{right_x}",
                 )
-            for left_x, center_x, right_x in zip(x_values, x_values[1:], x_values[2:], strict=False):
+            for left_x, center_x, right_x in zip(
+                x_values, x_values[1:], x_values[2:], strict=False
+            ):
                 if not has_room():
                     return finish()
                 weighted_blocks = (
                     tuple((block_index, 1.0) for block_index in x_to_blocks[left_x])
-                    + tuple((block_index, -2.0) for block_index in x_to_blocks[center_x])
+                    + tuple(
+                        (block_index, -2.0) for block_index in x_to_blocks[center_x]
+                    )
                     + tuple((block_index, 1.0) for block_index in x_to_blocks[right_x])
                 )
                 add(
-                    _block_weighted_constant(layout, _weights_for_blocks(n_blocks, weighted_blocks), dtype),
+                    _block_weighted_constant(
+                        layout, _weights_for_blocks(n_blocks, weighted_blocks), dtype
+                    ),
                     f"schur:x_curve:s{species}:{left_x},{center_x},{right_x}",
                 )
 
         x_species_blocks: dict[int, dict[int, list[int]]] = {}
-        for block_index, (x_value, species) in enumerate(zip(layout.block_x, layout.block_species, strict=True)):
-            x_species_blocks.setdefault(int(x_value), {}).setdefault(int(species), []).append(block_index)
+        for block_index, (x_value, species) in enumerate(
+            zip(layout.block_x, layout.block_species, strict=True)
+        ):
+            x_species_blocks.setdefault(int(x_value), {}).setdefault(
+                int(species), []
+            ).append(block_index)
         for x_value in sorted(x_species_blocks):
             species_values = sorted(x_species_blocks[x_value])
-            for left_species, right_species in zip(species_values, species_values[1:], strict=False):
+            for left_species, right_species in zip(
+                species_values, species_values[1:], strict=False
+            ):
                 if not has_room():
                     return finish()
                 weighted_blocks = tuple(
-                    (block_index, -1.0) for block_index in x_species_blocks[x_value][left_species]
-                ) + tuple((block_index, 1.0) for block_index in x_species_blocks[x_value][right_species])
+                    (block_index, -1.0)
+                    for block_index in x_species_blocks[x_value][left_species]
+                ) + tuple(
+                    (block_index, 1.0)
+                    for block_index in x_species_blocks[x_value][right_species]
+                )
                 add(
-                    _block_weighted_constant(layout, _weights_for_blocks(n_blocks, weighted_blocks), dtype),
+                    _block_weighted_constant(
+                        layout, _weights_for_blocks(n_blocks, weighted_blocks), dtype
+                    ),
                     f"schur:species_diff:x{x_value}:s{left_species}->{right_species}",
                 )
 
@@ -707,7 +773,10 @@ def orthonormalize_rhs1_qi_coarse_basis(
 
     n_rows = int(matrix.shape[0])
     n_cols = int(matrix.shape[1])
-    candidate_labels = tuple(str(label) for label in (labels or tuple(f"candidate:{i}" for i in range(n_cols))))
+    candidate_labels = tuple(
+        str(label)
+        for label in (labels or tuple(f"candidate:{i}" for i in range(n_cols)))
+    )
     if len(candidate_labels) != n_cols:
         raise ValueError("labels must match the number of candidate columns")
 
@@ -768,7 +837,9 @@ def build_rhs1_qi_coarse_basis(
 ) -> RHS1QICoarseBasis:
     """Build and rank-gate a QI coarse basis from a block layout."""
 
-    candidates, labels = build_rhs1_qi_coarse_candidates(layout, dtype=dtype, **candidate_options)
+    candidates, labels = build_rhs1_qi_coarse_candidates(
+        layout, dtype=dtype, **candidate_options
+    )
     return orthonormalize_rhs1_qi_coarse_basis(
         candidates,
         labels=labels,
@@ -812,16 +883,166 @@ def build_rhs1_qi_xblock_hard_seed_basis(
     )
 
 
+def _rhs1_qi_block_layout_from_operator(
+    op: Any,
+    *,
+    active_dof: bool,
+) -> tuple[RHS1QICoarseBlockLayout, int]:
+    """Return the x/species QI block layout represented by a full operator."""
+
+    n_species = int(op.n_species)
+    n_x = int(op.n_x)
+    n_l = int(op.n_xi)
+    n_theta = int(op.n_theta)
+    n_zeta = int(op.n_zeta)
+    nxi_for_x = np.asarray(op.fblock.collisionless.n_xi_for_x, dtype=np.int32)
+    block_sizes: list[int] = []
+    block_x: list[int] = []
+    block_species: list[int] = []
+    for species in range(n_species):
+        for ix in range(n_x):
+            n_lx = int(nxi_for_x[ix]) if bool(active_dof) else n_l
+            size = int(max(0, n_lx) * n_theta * n_zeta)
+            if size <= 0:
+                continue
+            block_sizes.append(size)
+            block_x.append(ix)
+            block_species.append(species)
+    if not block_sizes:
+        raise RuntimeError("QI coarse seed found no active f blocks")
+    layout = RHS1QICoarseBlockLayout(
+        block_sizes=tuple(block_sizes),
+        n_theta=n_theta,
+        n_zeta=n_zeta,
+        block_x=tuple(block_x),
+        block_species=tuple(block_species),
+    )
+    return layout, int(sum(block_sizes))
+
+
+def build_rhs1_xblock_qi_coarse_basis(
+    *,
+    op: Any,
+    active_dof: bool,
+    linear_size: int,
+    max_rank: int,
+    rank_rtol: float,
+    include_angular: bool,
+    include_blocks: bool,
+    basis_kind: str = "legacy",
+    max_candidates: int = 96,
+    max_angular_mode: int = 2,
+    include_radial: bool = True,
+    include_radial_angular: bool = True,
+    include_constraint_moments: bool = True,
+    include_schur: bool = True,
+) -> RHS1QICoarseBasis:
+    """Build a padded QI coarse basis in the current x-block Krylov space.
+
+    ``basis_kind='enriched'`` adds radial moments, angular harmonics,
+    constraint-like moments, and local block-Schur contrast vectors before rank
+    truncation. The legacy basis remains available for A/B tests and
+    reproducibility. The returned basis is padded to ``linear_size`` so it can
+    be passed directly to x-block Krylov/coarse hooks that include tail
+    variables after the kinetic block.
+    """
+
+    layout, _f_block_size = _rhs1_qi_block_layout_from_operator(
+        op,
+        active_dof=bool(active_dof),
+    )
+    basis_kind_norm = str(basis_kind).strip().lower().replace("-", "_")
+    if basis_kind_norm in {"enriched", "hard_seed", "xblock_hard_seed", "schur"}:
+        basis = build_rhs1_qi_xblock_hard_seed_basis(
+            layout,
+            max_candidates=max(1, int(max_candidates)),
+            max_rank=max(1, int(max_rank)),
+            max_angular_mode=max(0, int(max_angular_mode)),
+            rtol=float(rank_rtol),
+            include_radial=bool(include_radial),
+            include_angular=bool(include_angular),
+            include_radial_angular=bool(include_radial_angular),
+            include_constraint_moments=bool(include_constraint_moments),
+            include_schur=bool(include_schur),
+            include_blocks=bool(include_blocks),
+        )
+    elif basis_kind_norm in {"legacy", "basic", "coarse"}:
+        basis = build_rhs1_qi_coarse_basis(
+            layout,
+            max_rank=max(1, int(max_rank)),
+            rtol=float(rank_rtol),
+            include_angular=bool(include_angular),
+            include_blocks=bool(include_blocks),
+        )
+    else:
+        raise ValueError(f"Unknown QI coarse seed basis kind: {basis_kind!r}")
+    basis_vectors = jnp.asarray(basis.vectors, dtype=jnp.float64)
+    tail_size = int(linear_size) - int(basis_vectors.shape[0])
+    if tail_size < 0:
+        raise RuntimeError(
+            "QI coarse seed basis is larger than the active x-block space "
+            f"({basis_vectors.shape[0]} > {int(linear_size)})"
+        )
+    if tail_size > 0:
+        basis_vectors = jnp.concatenate(
+            [
+                basis_vectors,
+                jnp.zeros(
+                    (tail_size, int(basis_vectors.shape[1])),
+                    dtype=jnp.float64,
+                ),
+            ],
+            axis=0,
+        )
+    return RHS1QICoarseBasis(vectors=basis_vectors, metadata=basis.metadata)
+
+
+def rhs1_xblock_qi_block_geometry_metadata(
+    *,
+    op: Any,
+    active_dof: bool,
+    linear_size: int,
+    include_tail_block: bool = False,
+) -> dict[str, object]:
+    """Return x/species block metadata for matrix-free QI device helpers."""
+
+    layout, f_block_size = _rhs1_qi_block_layout_from_operator(
+        op,
+        active_dof=bool(active_dof),
+    )
+    block_sizes = tuple(int(value) for value in layout.block_sizes)
+    block_x = tuple(int(value) for value in (layout.block_x or ()))
+    block_species = tuple(int(value) for value in (layout.block_species or ()))
+    tail_size = max(0, int(linear_size) - int(f_block_size))
+    if bool(include_tail_block) and tail_size > 0:
+        block_sizes = (*block_sizes, int(tail_size))
+        block_x = (*block_x, -1)
+        block_species = (*block_species, -1)
+    return {
+        "qi_block_sizes": block_sizes,
+        "qi_block_x": block_x,
+        "qi_block_species": block_species,
+        "qi_block_f_size": int(f_block_size),
+        "qi_block_tail_size": int(tail_size),
+        "qi_block_tail_included": bool(include_tail_block and tail_size > 0),
+    }
+
+
 def _apply_operator(operator: LinearOperator, vector: ArrayLike) -> ArrayLike:
     if callable(operator):
         return jnp.asarray(operator(vector))
     return jnp.asarray(operator) @ vector
 
 
-def _apply_operator_to_basis(operator: LinearOperator, basis_vectors: ArrayLike) -> ArrayLike:
+def _apply_operator_to_basis(
+    operator: LinearOperator, basis_vectors: ArrayLike
+) -> ArrayLike:
     if not callable(operator):
         return jnp.asarray(operator) @ basis_vectors
-    columns = [_apply_operator(operator, basis_vectors[:, i]) for i in range(int(basis_vectors.shape[1]))]
+    columns = [
+        _apply_operator(operator, basis_vectors[:, i])
+        for i in range(int(basis_vectors.shape[1]))
+    ]
     if not columns:
         return _empty_matrix(int(basis_vectors.shape[0]), basis_vectors.dtype)
     return jnp.stack(columns, axis=1)
@@ -975,7 +1196,10 @@ def apply_rhs1_qi_galerkin_correction(
     residual_after_norm = float(jnp.linalg.norm(residual_after))
     improvement_ratio = residual_after_norm / residual_before_norm
 
-    required_drop = max(float(acceptance_atol), residual_before_norm * max(0.0, float(min_relative_improvement)))
+    required_drop = max(
+        float(acceptance_atol),
+        residual_before_norm * max(0.0, float(min_relative_improvement)),
+    )
     if residual_after_norm < residual_before_norm - required_drop:
         return RHS1QICoarseCorrection(
             solution=candidate_solution,
@@ -1064,14 +1288,19 @@ def apply_rhs1_qi_coarse_correction(
         )
 
     coarse_operator = _apply_operator_to_basis(operator, basis.vectors)
-    coefficients = _small_regularized_least_squares(coarse_operator, residual_before, rcond=rcond)
+    coefficients = _small_regularized_least_squares(
+        coarse_operator, residual_before, rcond=rcond
+    )
     correction = float(damping) * (basis.vectors @ coefficients)
     candidate_solution = current_vec + correction
     residual_after = rhs_vec - _apply_operator(operator, candidate_solution)
     residual_after_norm = float(jnp.linalg.norm(residual_after))
     improvement_ratio = residual_after_norm / residual_before_norm
 
-    required_drop = max(float(acceptance_atol), residual_before_norm * max(0.0, float(min_relative_improvement)))
+    required_drop = max(
+        float(acceptance_atol),
+        residual_before_norm * max(0.0, float(min_relative_improvement)),
+    )
     if residual_after_norm < residual_before_norm - required_drop:
         return RHS1QICoarseCorrection(
             solution=candidate_solution,
@@ -1107,10 +1336,12 @@ __all__ = [
     "RHS1QIGalerkinPreconditionerMetadata",
     "apply_rhs1_qi_galerkin_correction",
     "apply_rhs1_qi_coarse_correction",
+    "build_rhs1_xblock_qi_coarse_basis",
     "build_rhs1_qi_galerkin_preconditioner",
     "build_rhs1_qi_coarse_basis",
     "build_rhs1_qi_coarse_candidates",
     "build_rhs1_qi_xblock_hard_seed_basis",
     "build_rhs1_qi_xblock_hard_seed_candidates",
     "orthonormalize_rhs1_qi_coarse_basis",
+    "rhs1_xblock_qi_block_geometry_metadata",
 ]

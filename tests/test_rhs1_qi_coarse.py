@@ -1,20 +1,25 @@
 from __future__ import annotations
 
+from types import SimpleNamespace
+
 import jax
 import jax.numpy as jnp
 import numpy as np
 import pytest
 
+from sfincs_jax import v3_driver as vd
 from sfincs_jax.rhs1_qi_coarse import (
     RHS1QICoarseBlockLayout,
     apply_rhs1_qi_galerkin_correction,
     apply_rhs1_qi_coarse_correction,
+    build_rhs1_xblock_qi_coarse_basis,
     build_rhs1_qi_galerkin_preconditioner,
     build_rhs1_qi_coarse_basis,
     build_rhs1_qi_coarse_candidates,
     build_rhs1_qi_xblock_hard_seed_basis,
     build_rhs1_qi_xblock_hard_seed_candidates,
     orthonormalize_rhs1_qi_coarse_basis,
+    rhs1_xblock_qi_block_geometry_metadata,
 )
 
 
@@ -45,7 +50,9 @@ def test_build_qi_coarse_basis_is_deterministic_and_rank_gated() -> None:
     assert basis.metadata.discarded_count > 0
     assert basis.metadata.accepted_labels[0] == "global"
     np.testing.assert_allclose(basis.vectors, repeated.vectors, atol=1.0e-14)
-    np.testing.assert_allclose(basis.vectors.T @ basis.vectors, np.eye(basis.metadata.rank), atol=1.0e-13)
+    np.testing.assert_allclose(
+        basis.vectors.T @ basis.vectors, np.eye(basis.metadata.rank), atol=1.0e-13
+    )
 
 
 def test_xblock_hard_seed_basis_is_deterministic_bounded_and_rank_gated() -> None:
@@ -107,8 +114,69 @@ def test_xblock_hard_seed_basis_is_deterministic_bounded_and_rank_gated() -> Non
     assert limited_basis.metadata.candidate_count == 18
     assert limited_basis.metadata.rank <= 5
     assert limited_basis.metadata.discarded_count >= 13
-    assert limited_basis.metadata.accepted_labels == repeated_limited_basis.metadata.accepted_labels
-    np.testing.assert_allclose(limited_basis.vectors, repeated_limited_basis.vectors, atol=1.0e-14)
+    assert (
+        limited_basis.metadata.accepted_labels
+        == repeated_limited_basis.metadata.accepted_labels
+    )
+    np.testing.assert_allclose(
+        limited_basis.vectors, repeated_limited_basis.vectors, atol=1.0e-14
+    )
+
+
+def _fake_xblock_qi_operator() -> SimpleNamespace:
+    return SimpleNamespace(
+        n_species=2,
+        n_x=2,
+        n_xi=4,
+        n_theta=2,
+        n_zeta=2,
+        fblock=SimpleNamespace(
+            collisionless=SimpleNamespace(n_xi_for_x=np.asarray([1, 3], dtype=np.int32))
+        ),
+    )
+
+
+def test_xblock_qi_coarse_basis_pads_active_operator_layout() -> None:
+    op = _fake_xblock_qi_operator()
+    # active f size = species * sum(nxi_for_x) * n_theta * n_zeta = 32.
+    basis = build_rhs1_xblock_qi_coarse_basis(
+        op=op,
+        active_dof=True,
+        linear_size=37,
+        max_rank=4,
+        rank_rtol=1.0e-12,
+        include_angular=False,
+        include_blocks=True,
+        basis_kind="legacy",
+    )
+
+    assert basis.vectors.shape == (37, basis.metadata.rank)
+    assert 1 <= basis.metadata.rank <= 4
+    np.testing.assert_allclose(np.asarray(basis.vectors[32:, :]), 0.0, atol=0.0)
+    assert basis.metadata.accepted_labels[0] == "global"
+
+
+def test_xblock_qi_block_geometry_metadata_tracks_tail_block_and_driver_alias() -> None:
+    op = _fake_xblock_qi_operator()
+
+    metadata = rhs1_xblock_qi_block_geometry_metadata(
+        op=op,
+        active_dof=True,
+        linear_size=37,
+        include_tail_block=True,
+    )
+
+    assert metadata["qi_block_sizes"] == (4, 12, 4, 12, 5)
+    assert metadata["qi_block_x"] == (0, 1, 0, 1, -1)
+    assert metadata["qi_block_species"] == (0, 0, 1, 1, -1)
+    assert metadata["qi_block_f_size"] == 32
+    assert metadata["qi_block_tail_size"] == 5
+    assert metadata["qi_block_tail_included"] is True
+    assert vd._rhs1_xblock_qi_coarse_basis is build_rhs1_xblock_qi_coarse_basis
+    assert (
+        vd._rhs1_xblock_qi_block_geometry_metadata
+        is rhs1_xblock_qi_block_geometry_metadata
+    )
 
 
 def test_qi_coarse_correction_reduces_residual_for_block_slow_mode() -> None:
@@ -149,6 +217,7 @@ def test_xblock_hard_seed_basis_reduces_synthetic_constraint_moment_residual() -
     )
     exact = 0.25 * candidates[:, labels.index("constraint:xi_ramp")]
     diagonal = jnp.linspace(1.0, 2.0, layout.total_size)
+
     def operator(value: jnp.ndarray) -> jnp.ndarray:
         return diagonal * value
 
@@ -178,7 +247,9 @@ def test_qi_coarse_correction_supports_callable_operator_and_existing_seed() -> 
     current = jnp.asarray([0.50, 0.50, 0.0, 0.0])
     rhs = matrix @ exact
 
-    result = apply_rhs1_qi_coarse_correction(lambda value: matrix @ value, rhs, current=current, basis=basis)
+    result = apply_rhs1_qi_coarse_correction(
+        lambda value: matrix @ value, rhs, current=current, basis=basis
+    )
 
     assert result.applied
     assert result.residual_after_norm < result.residual_before_norm
@@ -198,7 +269,9 @@ def test_qi_coarse_correction_guards_empty_basis_and_zero_residual() -> None:
     assert empty_result.basis_metadata.rank == 0
     np.testing.assert_allclose(empty_result.solution, jnp.zeros_like(rhs), atol=0.0)
 
-    zero_result = apply_rhs1_qi_coarse_correction(operator, rhs, current=rhs, basis=basis)
+    zero_result = apply_rhs1_qi_coarse_correction(
+        operator, rhs, current=rhs, basis=basis
+    )
 
     assert not zero_result.applied
     assert zero_result.reason == "zero_residual"
@@ -221,7 +294,9 @@ def test_xblock_hard_seed_basis_rejects_when_residual_is_not_reduced() -> None:
     np.testing.assert_allclose(result.solution, jnp.zeros_like(rhs), atol=0.0)
 
 
-def test_qi_galerkin_preconditioner_reuses_coarse_operator_and_eliminates_coarse_residual() -> None:
+def test_qi_galerkin_preconditioner_reuses_coarse_operator_and_eliminates_coarse_residual() -> (
+    None
+):
     layout = RHS1QICoarseBlockLayout(block_sizes=(3, 3, 3), block_x=(0, 1, 2))
     basis = build_rhs1_qi_coarse_basis(layout, include_angular=False)
     q = basis.vectors
@@ -234,18 +309,27 @@ def test_qi_galerkin_preconditioner_reuses_coarse_operator_and_eliminates_coarse
         dtype=jnp.float64,
     )[: basis.metadata.rank, : basis.metadata.rank]
     projector = q @ q.T
-    operator = q @ coarse_matrix @ q.T + 5.0 * (jnp.eye(layout.total_size, dtype=jnp.float64) - projector)
+    operator = q @ coarse_matrix @ q.T + 5.0 * (
+        jnp.eye(layout.total_size, dtype=jnp.float64) - projector
+    )
     coefficients = jnp.linspace(0.25, 0.75, basis.metadata.rank, dtype=jnp.float64)
     exact = q @ coefficients
     rhs = operator @ exact
 
     preconditioner = build_rhs1_qi_galerkin_preconditioner(operator, basis=basis)
-    result = apply_rhs1_qi_galerkin_correction(operator, rhs, preconditioner=preconditioner)
+    result = apply_rhs1_qi_galerkin_correction(
+        operator, rhs, preconditioner=preconditioner
+    )
     jitted_correction = jax.jit(preconditioner.as_preconditioner())(rhs)
 
     assert preconditioner.metadata.rank == basis.metadata.rank
-    assert preconditioner.metadata.coarse_operator_shape == (basis.metadata.rank, basis.metadata.rank)
-    np.testing.assert_allclose(preconditioner.coarse_operator, q.T @ operator @ q, atol=1.0e-12)
+    assert preconditioner.metadata.coarse_operator_shape == (
+        basis.metadata.rank,
+        basis.metadata.rank,
+    )
+    np.testing.assert_allclose(
+        preconditioner.coarse_operator, q.T @ operator @ q, atol=1.0e-12
+    )
     assert result.applied
     assert result.reason == "galerkin_residual_reduced"
     assert result.residual_after_norm < result.residual_before_norm * 1.0e-10
@@ -253,7 +337,9 @@ def test_qi_galerkin_preconditioner_reuses_coarse_operator_and_eliminates_coarse
     np.testing.assert_allclose(jitted_correction, exact, atol=1.0e-10)
 
 
-def test_qi_galerkin_preconditioner_can_wrap_base_preconditioner_multiplicatively() -> None:
+def test_qi_galerkin_preconditioner_can_wrap_base_preconditioner_multiplicatively() -> (
+    None
+):
     layout = RHS1QICoarseBlockLayout(block_sizes=(3, 3, 3), block_x=(0, 1, 2))
     basis = build_rhs1_qi_coarse_basis(layout, include_angular=False)
     q = basis.vectors
@@ -266,8 +352,12 @@ def test_qi_galerkin_preconditioner_can_wrap_base_preconditioner_multiplicativel
         dtype=jnp.float64,
     )[: basis.metadata.rank, : basis.metadata.rank]
     projector = q @ q.T
-    operator = q @ coarse_matrix @ q.T + 4.0 * (jnp.eye(layout.total_size, dtype=jnp.float64) - projector)
-    coefficients = jnp.asarray([0.5, -0.25, 0.75], dtype=jnp.float64)[: basis.metadata.rank]
+    operator = q @ coarse_matrix @ q.T + 4.0 * (
+        jnp.eye(layout.total_size, dtype=jnp.float64) - projector
+    )
+    coefficients = jnp.asarray([0.5, -0.25, 0.75], dtype=jnp.float64)[
+        : basis.metadata.rank
+    ]
     exact = q @ coefficients
     rhs = operator @ exact
     preconditioner = build_rhs1_qi_galerkin_preconditioner(operator, basis=basis)
@@ -280,5 +370,8 @@ def test_qi_galerkin_preconditioner_can_wrap_base_preconditioner_multiplicativel
     corrected_solution = base_solution + preconditioner.apply(base_residual)
     corrected_residual = rhs - operator @ corrected_solution
 
-    assert float(jnp.linalg.norm(corrected_residual)) < float(jnp.linalg.norm(base_residual)) * 1.0e-10
+    assert (
+        float(jnp.linalg.norm(corrected_residual))
+        < float(jnp.linalg.norm(base_residual)) * 1.0e-10
+    )
     np.testing.assert_allclose(corrected_solution, exact, atol=1.0e-10)

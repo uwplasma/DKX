@@ -30992,3 +30992,48 @@ Validation:
   docs/_build/html``: passed.
 - ``git diff --check``: passed.
 - ``python -m pytest -q``: ``2678 passed in 555.29 s``.
+
+### 19.34 X-block/QI coarse-basis helper migration
+
+Goal:
+
+- Continue reducing ``v3_driver.py`` while avoiding new one-off modules. The
+  canonical home for QI coarse-space construction should be
+  ``sfincs_jax/rhs1_qi_coarse.py`` because it already owns the deterministic
+  QI basis builders, Galerkin/action coarse corrections, hard-seed basis
+  generation, and residual-reduction probes.
+
+Implementation:
+
+- Moved the operator-derived x-block QI coarse-basis helper and x-block
+  geometry metadata helper from ``v3_driver.py`` into
+  ``sfincs_jax/rhs1_qi_coarse.py``.
+- Kept the historical ``v3_driver`` private helper names as imported aliases
+  so existing local debugging scripts and tests do not need to change.
+- Added direct tests that build a truncated-pitch fake operator, verify
+  active-DOF basis padding back to the full linear system, check
+  species/radial/tail block metadata, and assert that the driver aliases point
+  to the canonical implementation.
+- Updated the source map, testing guide, and release notes so the refactor plan
+  stays aligned with the package-domain structure.
+
+Validation:
+
+- ``python -m ruff check sfincs_jax/rhs1_qi_coarse.py
+  sfincs_jax/v3_driver.py tests/test_rhs1_qi_coarse.py``: passed.
+- ``python -m py_compile sfincs_jax/rhs1_qi_coarse.py
+  sfincs_jax/v3_driver.py tests/test_rhs1_qi_coarse.py``: passed.
+- ``python -m pytest -q tests/test_rhs1_qi_coarse.py
+  tests/test_v3_sparse_pattern.py::test_xblock_post_coarse_directions_can_include_angular_modes
+  tests/test_v3_sparse_pattern.py::test_xblock_post_coarse_directions_can_include_residual_weighted_angular_modes``:
+  ``13 passed in 5.29 s``.
+- ``python -m pytest -q tests/test_rhs1_qi_coarse.py
+  tests/test_rhs1_qi_device_preconditioner.py
+  tests/test_rhs1_qi_device_smoother.py tests/test_rhs1_qi_two_level.py
+  tests/test_v3_sparse_pattern.py tests/test_v3_driver_rhs1_dispatch_coverage.py
+  tests/test_v3_driver_solve_policy_coverage.py``:
+  ``251 passed in 149.96 s``.
+- ``SPHINXOPTS='-W --keep-going' python -m sphinx -b html docs
+  docs/_build/html``: passed.
+- ``git diff --check``: passed.
+- ``python -m pytest -q``: ``2680 passed in 555.56 s``.

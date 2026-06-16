@@ -89,12 +89,11 @@ from .rhs1_domain_decomposition import (
 )
 from .rhs1_qi_coarse import (
     RHS1QICoarseBasis,
-    RHS1QICoarseBlockLayout,
     apply_rhs1_qi_coarse_correction,
+    build_rhs1_xblock_qi_coarse_basis as _rhs1_xblock_qi_coarse_basis,
     build_rhs1_qi_galerkin_preconditioner,
-    build_rhs1_qi_coarse_basis,
-    build_rhs1_qi_xblock_hard_seed_basis,
     orthonormalize_rhs1_qi_coarse_basis,
+    rhs1_xblock_qi_block_geometry_metadata as _rhs1_xblock_qi_block_geometry_metadata,
 )
 from .rhs1_qi_galerkin_policy import (
     RHS1QIGalerkinProbeCandidate,
@@ -8947,141 +8946,6 @@ def _rhs1_xblock_post_coarse_directions(
                 _add(f"constraint1_source_s{s}_{ibasis}", full)
 
     return tuple(directions)
-
-
-def _rhs1_xblock_qi_coarse_basis(
-    *,
-    op: V3FullSystemOperator,
-    active_dof: bool,
-    linear_size: int,
-    max_rank: int,
-    rank_rtol: float,
-    include_angular: bool,
-    include_blocks: bool,
-    basis_kind: str = "legacy",
-    max_candidates: int = 96,
-    max_angular_mode: int = 2,
-    include_radial: bool = True,
-    include_radial_angular: bool = True,
-    include_constraint_moments: bool = True,
-    include_schur: bool = True,
-) -> RHS1QICoarseBasis:
-    """Build a padded QI coarse basis in the current x-block Krylov space.
-
-    ``basis_kind='enriched'`` is intended for A/B testing the hard QI seed lane.  It adds
-    radial moments, angular harmonics, constraint-like moments, and local
-    block-Schur contrast vectors before rank truncation.  The legacy basis is
-    still available for A/B tests and reproducibility.
-    """
-    n_species = int(op.n_species)
-    n_x = int(op.n_x)
-    n_l = int(op.n_xi)
-    n_theta = int(op.n_theta)
-    n_zeta = int(op.n_zeta)
-    nxi_for_x = np.asarray(op.fblock.collisionless.n_xi_for_x, dtype=np.int32)
-    block_sizes: list[int] = []
-    block_x: list[int] = []
-    block_species: list[int] = []
-    for s in range(n_species):
-        for ix in range(n_x):
-            n_lx = int(nxi_for_x[ix]) if bool(active_dof) else n_l
-            size = int(max(0, n_lx) * n_theta * n_zeta)
-            if size <= 0:
-                continue
-            block_sizes.append(size)
-            block_x.append(ix)
-            block_species.append(s)
-    if not block_sizes:
-        raise RuntimeError("QI coarse seed found no active f blocks")
-
-    layout = RHS1QICoarseBlockLayout(
-        block_sizes=tuple(block_sizes),
-        n_theta=n_theta,
-        n_zeta=n_zeta,
-        block_x=tuple(block_x),
-        block_species=tuple(block_species),
-    )
-    basis_kind_norm = str(basis_kind).strip().lower().replace("-", "_")
-    if basis_kind_norm in {"enriched", "hard_seed", "xblock_hard_seed", "schur"}:
-        basis = build_rhs1_qi_xblock_hard_seed_basis(
-            layout,
-            max_candidates=max(1, int(max_candidates)),
-            max_rank=max(1, int(max_rank)),
-            max_angular_mode=max(0, int(max_angular_mode)),
-            rtol=float(rank_rtol),
-            include_radial=bool(include_radial),
-            include_angular=bool(include_angular),
-            include_radial_angular=bool(include_radial_angular),
-            include_constraint_moments=bool(include_constraint_moments),
-            include_schur=bool(include_schur),
-            include_blocks=bool(include_blocks),
-        )
-    elif basis_kind_norm in {"legacy", "basic", "coarse"}:
-        basis = build_rhs1_qi_coarse_basis(
-            layout,
-            max_rank=max(1, int(max_rank)),
-            rtol=float(rank_rtol),
-            include_angular=bool(include_angular),
-            include_blocks=bool(include_blocks),
-        )
-    else:
-        raise ValueError(f"Unknown QI coarse seed basis kind: {basis_kind!r}")
-    basis_vectors = jnp.asarray(basis.vectors, dtype=jnp.float64)
-    tail_size = int(linear_size) - int(basis_vectors.shape[0])
-    if tail_size < 0:
-        raise RuntimeError(
-            "QI coarse seed basis is larger than the active x-block space "
-            f"({basis_vectors.shape[0]} > {int(linear_size)})"
-        )
-    if tail_size > 0:
-        basis_vectors = jnp.concatenate(
-            [basis_vectors, jnp.zeros((tail_size, int(basis_vectors.shape[1])), dtype=jnp.float64)],
-            axis=0,
-        )
-    return RHS1QICoarseBasis(vectors=basis_vectors, metadata=basis.metadata)
-
-
-def _rhs1_xblock_qi_block_geometry_metadata(
-    *,
-    op: V3FullSystemOperator,
-    active_dof: bool,
-    linear_size: int,
-    include_tail_block: bool = False,
-) -> dict[str, object]:
-    """Return x/species block metadata for matrix-free QI device helpers."""
-
-    n_species = int(op.n_species)
-    n_x = int(op.n_x)
-    n_l = int(op.n_xi)
-    n_theta = int(op.n_theta)
-    n_zeta = int(op.n_zeta)
-    nxi_for_x = np.asarray(op.fblock.collisionless.n_xi_for_x, dtype=np.int32)
-    block_sizes: list[int] = []
-    block_x: list[int] = []
-    block_species: list[int] = []
-    for s in range(n_species):
-        for ix in range(n_x):
-            n_lx = int(nxi_for_x[ix]) if bool(active_dof) else n_l
-            size = int(max(0, n_lx) * n_theta * n_zeta)
-            if size <= 0:
-                continue
-            block_sizes.append(size)
-            block_x.append(ix)
-            block_species.append(s)
-    f_block_size = int(sum(block_sizes))
-    tail_size = max(0, int(linear_size) - int(f_block_size))
-    if bool(include_tail_block) and tail_size > 0:
-        block_sizes.append(int(tail_size))
-        block_x.append(-1)
-        block_species.append(-1)
-    return {
-        "qi_block_sizes": tuple(int(value) for value in block_sizes),
-        "qi_block_x": tuple(int(value) for value in block_x),
-        "qi_block_species": tuple(int(value) for value in block_species),
-        "qi_block_f_size": int(f_block_size),
-        "qi_block_tail_size": int(tail_size),
-        "qi_block_tail_included": bool(include_tail_block and tail_size > 0),
-    }
 
 
 def _rhs1_xblock_global_coarse_basis(
