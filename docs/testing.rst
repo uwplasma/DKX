@@ -667,6 +667,14 @@ helpers directly and also checks that the historical ``v3_driver`` private names
 remain aliases, so legacy debug scripts keep working without duplicating the
 implementation.
 
+``tests/test_rhs1_qi_coarse.py`` now also covers the canonical x-block QI
+coarse-basis helpers. The regression builds a small truncated-pitch operator,
+checks that active-DOF basis vectors are padded back to the full linear system,
+verifies block-size/species/radial metadata including the tail block, and
+asserts that the historical ``v3_driver`` private helper names remain aliases.
+This keeps the QI coarse-space implementation testable without importing the
+large driver as the source of truth.
+
 The solver-path refactor continues this policy-first testing style in
 ``sfincs_jax/solver_path_policy.py`` and ``tests/test_solver_path_policy.py``.
 The direct tests cover JIT eligibility, preconditioner dtype selection, the narrow
