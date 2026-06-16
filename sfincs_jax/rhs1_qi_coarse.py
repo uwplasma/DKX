@@ -21,6 +21,8 @@ from typing import Any
 import jax.numpy as jnp
 import numpy as np
 
+from .v3_system import _ix_min, _source_basis_constraint_scheme_1
+
 
 ArrayLike = Any
 LinearOperator = ArrayLike | Callable[[ArrayLike], ArrayLike]
@@ -1028,6 +1030,370 @@ def rhs1_xblock_qi_block_geometry_metadata(
     }
 
 
+def _append_checked_direction(
+    directions: list[tuple[str, ArrayLike]],
+    *,
+    name: str,
+    direction: ArrayLike,
+    total_size: int,
+    max_directions: int,
+) -> None:
+    if len(directions) >= int(max_directions):
+        return
+    vec = jnp.asarray(direction, dtype=jnp.float64).reshape((-1,))
+    if vec.shape != (int(total_size),):
+        return
+    try:
+        norm = float(jnp.linalg.norm(vec))
+    except Exception:
+        return
+    if np.isfinite(norm) and norm > 0.0:
+        directions.append((str(name), vec))
+
+
+def build_rhs1_xblock_global_coarse_basis(
+    *,
+    op: Any,
+    rhs: ArrayLike,
+    preconditioner: Callable[[ArrayLike], ArrayLike],
+    include_rhs: bool,
+    fsavg_lmax: int,
+    max_extra_units: int,
+    max_directions: int,
+) -> tuple[tuple[str, ArrayLike], ...]:
+    """Build fixed global directions missed by local x-block preconditioners."""
+
+    rhs = jnp.asarray(rhs, dtype=jnp.float64).reshape((-1,))
+    total = int(op.total_size)
+    directions: list[tuple[str, ArrayLike]] = []
+
+    def add(name: str, direction: ArrayLike) -> None:
+        _append_checked_direction(
+            directions,
+            name=name,
+            direction=direction,
+            total_size=total,
+            max_directions=int(max_directions),
+        )
+
+    if include_rhs:
+        try:
+            add("preconditioned_rhs", preconditioner(rhs))
+        except Exception:
+            pass
+        add("raw_rhs", rhs)
+
+    _append_tail_loads(
+        op=op,
+        rhs=rhs,
+        directions=directions,
+        max_extra_units=int(max_extra_units),
+        max_directions=int(max_directions),
+    )
+    _append_constraint_source_loads(
+        op=op,
+        directions=directions,
+        max_directions=int(max_directions),
+    )
+    _append_fsavg_loads(
+        op=op,
+        directions=directions,
+        fsavg_lmax=int(fsavg_lmax),
+        max_directions=int(max_directions),
+    )
+    return tuple(directions)
+
+
+def _append_tail_loads(
+    *,
+    op: Any,
+    rhs: ArrayLike,
+    directions: list[tuple[str, ArrayLike]],
+    max_extra_units: int,
+    max_directions: int,
+) -> None:
+    total = int(op.total_size)
+    extra_start = int(op.f_size + op.phi1_size)
+    extra_size = int(op.extra_size)
+    if extra_size <= 0:
+        return
+    rhs_extra = jnp.asarray(rhs, dtype=jnp.float64).reshape((-1,))[
+        extra_start : extra_start + extra_size
+    ]
+    extra_dir = (
+        jnp.zeros((total,), dtype=jnp.float64)
+        .at[extra_start : extra_start + extra_size]
+        .set(rhs_extra)
+    )
+    _append_checked_direction(
+        directions,
+        name="extra_rhs",
+        direction=extra_dir,
+        total_size=total,
+        max_directions=int(max_directions),
+    )
+    if extra_size <= int(max_extra_units):
+        for ie in range(extra_size):
+            if len(directions) >= int(max_directions):
+                break
+            unit = jnp.zeros((total,), dtype=jnp.float64).at[extra_start + ie].set(1.0)
+            _append_checked_direction(
+                directions,
+                name=f"extra_unit_{ie}",
+                direction=unit,
+                total_size=total,
+                max_directions=int(max_directions),
+            )
+
+
+def _append_constraint_source_loads(
+    *,
+    op: Any,
+    directions: list[tuple[str, ArrayLike]],
+    max_directions: int,
+) -> None:
+    if int(op.constraint_scheme) != 1:
+        return
+    total = int(op.total_size)
+    ix0 = _ix_min(bool(op.point_at_x0))
+    source_basis = _source_basis_constraint_scheme_1(op.x)
+    for species in range(int(op.n_species)):
+        for ibasis, basis in enumerate(source_basis):
+            if len(directions) >= int(max_directions):
+                break
+            f_dir = jnp.zeros(op.fblock.f_shape, dtype=jnp.float64)
+            f_dir = f_dir.at[species, ix0:, 0, :, :].set(basis[ix0:, None, None])
+            tail = jnp.zeros((total - int(op.f_size),), dtype=jnp.float64)
+            _append_checked_direction(
+                directions,
+                name=f"constraint1_source_s{species}_{ibasis}",
+                direction=jnp.concatenate([f_dir.reshape((-1,)), tail]),
+                total_size=total,
+                max_directions=int(max_directions),
+            )
+
+
+def _append_fsavg_loads(
+    *,
+    op: Any,
+    directions: list[tuple[str, ArrayLike]],
+    fsavg_lmax: int,
+    max_directions: int,
+) -> None:
+    total = int(op.total_size)
+    lmax_use = min(max(0, int(fsavg_lmax)), max(0, int(op.n_xi) - 1))
+    angular_norm = float(max(1, int(op.n_theta) * int(op.n_zeta))) ** -0.5
+    for il in range(lmax_use + 1):
+        for species in range(int(op.n_species)):
+            for ix in range(int(op.n_x)):
+                if len(directions) >= int(max_directions):
+                    return
+                f_dir = jnp.zeros(op.fblock.f_shape, dtype=jnp.float64)
+                f_dir = f_dir.at[species, ix, il, :, :].set(angular_norm)
+                tail = jnp.zeros((total - int(op.f_size),), dtype=jnp.float64)
+                _append_checked_direction(
+                    directions,
+                    name=f"fsavg_s{species}_x{ix}_l{il}",
+                    direction=jnp.concatenate([f_dir.reshape((-1,)), tail]),
+                    total_size=total,
+                    max_directions=int(max_directions),
+                )
+
+
+def _append_low_angular_loads(
+    *,
+    op: Any,
+    directions: list[tuple[str, ArrayLike]],
+    angular_lmax: int,
+    max_directions: int,
+) -> None:
+    angular_l_use = min(max(0, int(angular_lmax)), max(0, int(op.n_xi) - 1))
+    if angular_l_use < 0 or int(op.n_theta) <= 1 or int(op.n_zeta) <= 1:
+        return
+    total = int(op.total_size)
+    theta = jnp.arange(int(op.n_theta), dtype=jnp.float64)
+    zeta = jnp.arange(int(op.n_zeta), dtype=jnp.float64)
+    two_pi = float(2.0 * np.pi)
+    mode_pairs = (
+        (1, 0),
+        (0, 1),
+        (1, 1),
+        (1, -1),
+        (2, 0),
+        (0, 2),
+        (2, 1),
+        (1, 2),
+    )
+    for il in range(angular_l_use + 1):
+        for m_mode, n_mode in mode_pairs:
+            phase = two_pi * (
+                float(m_mode) * theta[:, None] / float(max(1, int(op.n_theta)))
+                + float(n_mode) * zeta[None, :] / float(max(1, int(op.n_zeta)))
+            )
+            for parity, pattern in (("cos", jnp.cos(phase)), ("sin", jnp.sin(phase))):
+                pattern_norm = float(jnp.linalg.norm(pattern))
+                if (not np.isfinite(pattern_norm)) or pattern_norm <= 0.0:
+                    continue
+                pattern = pattern / pattern_norm
+                for species in range(int(op.n_species)):
+                    if len(directions) >= int(max_directions):
+                        return
+                    f_dir = jnp.zeros(op.fblock.f_shape, dtype=jnp.float64)
+                    f_dir = f_dir.at[species, :, il, :, :].set(pattern[None, :, :])
+                    tail = jnp.zeros((total - int(op.f_size),), dtype=jnp.float64)
+                    _append_checked_direction(
+                        directions,
+                        name=(
+                            f"angular_s{species}_allx_l{il}_m{m_mode}_n{n_mode}_"
+                            f"{parity}"
+                        ),
+                        direction=jnp.concatenate([f_dir.reshape((-1,)), tail]),
+                        total_size=total,
+                        max_directions=int(max_directions),
+                    )
+
+
+def build_rhs1_xblock_global_coupling_load_basis(
+    *,
+    op: Any,
+    rhs: ArrayLike,
+    include_rhs: bool,
+    fsavg_lmax: int,
+    angular_lmax: int,
+    max_extra_units: int,
+    max_directions: int,
+) -> tuple[tuple[str, ArrayLike], ...]:
+    """Build low-rank source, moment, and angular load vectors."""
+
+    rhs = jnp.asarray(rhs, dtype=jnp.float64).reshape((-1,))
+    directions: list[tuple[str, ArrayLike]] = []
+    if include_rhs:
+        _append_checked_direction(
+            directions,
+            name="raw_rhs",
+            direction=rhs,
+            total_size=int(op.total_size),
+            max_directions=int(max_directions),
+        )
+    _append_tail_loads(
+        op=op,
+        rhs=rhs,
+        directions=directions,
+        max_extra_units=int(max_extra_units),
+        max_directions=int(max_directions),
+    )
+    _append_constraint_source_loads(
+        op=op,
+        directions=directions,
+        max_directions=int(max_directions),
+    )
+    _append_fsavg_loads(
+        op=op,
+        directions=directions,
+        fsavg_lmax=int(fsavg_lmax),
+        max_directions=int(max_directions),
+    )
+    _append_low_angular_loads(
+        op=op,
+        directions=directions,
+        angular_lmax=int(angular_lmax),
+        max_directions=int(max_directions),
+    )
+    return tuple(directions)
+
+
+def build_rhs1_xblock_smoothed_load_qi_basis(
+    *,
+    op: Any,
+    rhs: ArrayLike,
+    base_preconditioner: Callable[[ArrayLike], ArrayLike],
+    direction_projector: Callable[[ArrayLike], ArrayLike] | None = None,
+    expected_size: int | None = None,
+    include_rhs: bool,
+    fsavg_lmax: int,
+    angular_lmax: int,
+    max_extra_units: int,
+    max_directions: int,
+    rank_rtol: float,
+    max_rank: int,
+) -> tuple[RHS1QICoarseBasis, dict[str, object]]:
+    """Build a QI coarse basis from smoothed global-coupling load vectors."""
+
+    expected_size_use = (
+        int(op.total_size) if expected_size is None else int(expected_size)
+    )
+    max_dirs_use = max(1, int(max_directions))
+    raw_loads = build_rhs1_xblock_global_coupling_load_basis(
+        op=op,
+        rhs=rhs,
+        include_rhs=bool(include_rhs),
+        fsavg_lmax=int(fsavg_lmax),
+        angular_lmax=int(angular_lmax),
+        max_extra_units=int(max_extra_units),
+        max_directions=max_dirs_use,
+    )
+    columns: list[ArrayLike] = []
+    labels: list[str] = []
+    for name, load in raw_loads[:max_dirs_use]:
+        load_vec = jnp.asarray(load, dtype=jnp.float64).reshape((-1,))
+        if direction_projector is not None:
+            load_vec = jnp.asarray(
+                direction_projector(load_vec), dtype=jnp.float64
+            ).reshape((-1,))
+        if int(load_vec.shape[0]) != expected_size_use:
+            continue
+        try:
+            load_norm = float(jnp.linalg.norm(load_vec))
+        except Exception:
+            continue
+        if not np.isfinite(load_norm) or load_norm <= 0.0:
+            continue
+        try:
+            smoothed = jnp.asarray(
+                base_preconditioner(
+                    load_vec / jnp.asarray(load_norm, dtype=load_vec.dtype)
+                ),
+                dtype=jnp.float64,
+            ).reshape((-1,))
+        except Exception:
+            continue
+        if int(smoothed.shape[0]) != expected_size_use:
+            continue
+        try:
+            smooth_norm = float(jnp.linalg.norm(smoothed))
+        except Exception:
+            continue
+        if not np.isfinite(smooth_norm) or smooth_norm <= 0.0:
+            continue
+        columns.append(smoothed / jnp.asarray(smooth_norm, dtype=smoothed.dtype))
+        labels.append(f"smoothed_load:{name}")
+
+    if not columns:
+        raise RuntimeError(
+            "smoothed-load QI basis found no valid preconditioned load directions"
+        )
+
+    candidates = jnp.stack(tuple(columns), axis=1)
+    basis = orthonormalize_rhs1_qi_coarse_basis(
+        candidates,
+        labels=tuple(labels),
+        rtol=float(rank_rtol),
+        max_rank=max(1, int(max_rank)),
+    )
+    metadata = {
+        "load_basis_size": int(len(raw_loads)),
+        "smoothed_candidate_count": int(len(columns)),
+        "rank": int(basis.metadata.rank),
+        "max_directions": int(max_dirs_use),
+        "max_rank": int(max_rank),
+        "fsavg_lmax": int(fsavg_lmax),
+        "angular_lmax": int(angular_lmax),
+        "include_rhs": bool(include_rhs),
+        "accepted_labels": tuple(basis.metadata.accepted_labels),
+    }
+    return basis, metadata
+
+
 def _apply_operator(operator: LinearOperator, vector: ArrayLike) -> ArrayLike:
     if callable(operator):
         return jnp.asarray(operator(vector))
@@ -1336,7 +1702,10 @@ __all__ = [
     "RHS1QIGalerkinPreconditionerMetadata",
     "apply_rhs1_qi_galerkin_correction",
     "apply_rhs1_qi_coarse_correction",
+    "build_rhs1_xblock_global_coarse_basis",
+    "build_rhs1_xblock_global_coupling_load_basis",
     "build_rhs1_xblock_qi_coarse_basis",
+    "build_rhs1_xblock_smoothed_load_qi_basis",
     "build_rhs1_qi_galerkin_preconditioner",
     "build_rhs1_qi_coarse_basis",
     "build_rhs1_qi_coarse_candidates",

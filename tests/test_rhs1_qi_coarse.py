@@ -12,7 +12,10 @@ from sfincs_jax.rhs1_qi_coarse import (
     RHS1QICoarseBlockLayout,
     apply_rhs1_qi_galerkin_correction,
     apply_rhs1_qi_coarse_correction,
+    build_rhs1_xblock_global_coarse_basis,
+    build_rhs1_xblock_global_coupling_load_basis,
     build_rhs1_xblock_qi_coarse_basis,
+    build_rhs1_xblock_smoothed_load_qi_basis,
     build_rhs1_qi_galerkin_preconditioner,
     build_rhs1_qi_coarse_basis,
     build_rhs1_qi_coarse_candidates,
@@ -136,6 +139,36 @@ def _fake_xblock_qi_operator() -> SimpleNamespace:
     )
 
 
+def _fake_global_qi_operator() -> SimpleNamespace:
+    n_species = 1
+    n_x = 2
+    n_xi = 2
+    n_theta = 2
+    n_zeta = 2
+    f_size = n_species * n_x * n_xi * n_theta * n_zeta
+    extra_size = 2
+    return SimpleNamespace(
+        n_species=n_species,
+        n_x=n_x,
+        n_xi=n_xi,
+        n_theta=n_theta,
+        n_zeta=n_zeta,
+        f_size=f_size,
+        phi1_size=0,
+        extra_size=extra_size,
+        total_size=f_size + extra_size,
+        constraint_scheme=1,
+        point_at_x0=True,
+        x=jnp.asarray([0.0, 1.0], dtype=jnp.float64),
+        fblock=SimpleNamespace(
+            f_shape=(n_species, n_x, n_xi, n_theta, n_zeta),
+            collisionless=SimpleNamespace(
+                n_xi_for_x=np.asarray([1, 2], dtype=np.int32)
+            ),
+        ),
+    )
+
+
 def test_xblock_qi_coarse_basis_pads_active_operator_layout() -> None:
     op = _fake_xblock_qi_operator()
     # active f size = species * sum(nxi_for_x) * n_theta * n_zeta = 32.
@@ -176,6 +209,84 @@ def test_xblock_qi_block_geometry_metadata_tracks_tail_block_and_driver_alias() 
     assert (
         vd._rhs1_xblock_qi_block_geometry_metadata
         is rhs1_xblock_qi_block_geometry_metadata
+    )
+
+
+def test_global_coarse_and_load_bases_cover_tail_source_and_moments() -> None:
+    op = _fake_global_qi_operator()
+    rhs = jnp.arange(1, int(op.total_size) + 1, dtype=jnp.float64)
+
+    coarse = build_rhs1_xblock_global_coarse_basis(
+        op=op,
+        rhs=rhs,
+        preconditioner=lambda value: 2.0 * value,
+        include_rhs=True,
+        fsavg_lmax=1,
+        max_extra_units=4,
+        max_directions=32,
+    )
+    coarse_labels = tuple(label for label, _ in coarse)
+
+    assert coarse_labels[:2] == ("preconditioned_rhs", "raw_rhs")
+    assert "extra_rhs" in coarse_labels
+    assert "extra_unit_0" in coarse_labels
+    assert "constraint1_source_s0_0" in coarse_labels
+    assert "fsavg_s0_x0_l0" in coarse_labels
+    assert all(vector.shape == (op.total_size,) for _, vector in coarse)
+    assert vd._rhs1_xblock_global_coarse_basis is build_rhs1_xblock_global_coarse_basis
+
+    loads = build_rhs1_xblock_global_coupling_load_basis(
+        op=op,
+        rhs=rhs,
+        include_rhs=True,
+        fsavg_lmax=1,
+        angular_lmax=1,
+        max_extra_units=4,
+        max_directions=64,
+    )
+    load_labels = tuple(label for label, _ in loads)
+
+    assert load_labels[0] == "raw_rhs"
+    assert "extra_rhs" in load_labels
+    assert any(label.startswith("constraint1_source_s0_") for label in load_labels)
+    assert "fsavg_s0_x1_l1" in load_labels
+    assert any(label.startswith("angular_s0_allx_l0_m1_n0_") for label in load_labels)
+    assert all(vector.shape == (op.total_size,) for _, vector in loads)
+    assert (
+        vd._rhs1_xblock_global_coupling_load_basis
+        is build_rhs1_xblock_global_coupling_load_basis
+    )
+
+
+def test_smoothed_load_qi_basis_rank_gates_and_records_metadata() -> None:
+    op = _fake_global_qi_operator()
+    rhs = jnp.arange(1, int(op.total_size) + 1, dtype=jnp.float64)
+
+    basis, metadata = build_rhs1_xblock_smoothed_load_qi_basis(
+        op=op,
+        rhs=rhs,
+        base_preconditioner=lambda value: value,
+        include_rhs=True,
+        fsavg_lmax=1,
+        angular_lmax=1,
+        max_extra_units=4,
+        max_directions=12,
+        rank_rtol=1.0e-12,
+        max_rank=4,
+    )
+
+    assert basis.vectors.shape == (op.total_size, basis.metadata.rank)
+    assert 1 <= basis.metadata.rank <= 4
+    assert metadata["rank"] == basis.metadata.rank
+    assert metadata["load_basis_size"] >= metadata["smoothed_candidate_count"]
+    assert metadata["smoothed_candidate_count"] >= basis.metadata.rank
+    assert metadata["accepted_labels"] == basis.metadata.accepted_labels
+    assert all(
+        label.startswith("smoothed_load:") for label in basis.metadata.accepted_labels
+    )
+    assert (
+        vd._rhs1_xblock_smoothed_load_qi_basis
+        is build_rhs1_xblock_smoothed_load_qi_basis
     )
 
 

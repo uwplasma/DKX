@@ -31037,3 +31037,47 @@ Validation:
   docs/_build/html``: passed.
 - ``git diff --check``: passed.
 - ``python -m pytest -q``: ``2680 passed in 555.56 s``.
+
+### 19.35 X-block QI global-coupling basis migration
+
+Goal:
+
+- Continue the QI coarse-space consolidation without creating another narrow
+  module. The global coarse/load-vector builders are part of the same QI
+  basis-construction domain as the x-block QI seed basis, so they should live
+  in ``sfincs_jax/rhs1_qi_coarse.py`` instead of inside the production driver.
+
+Implementation:
+
+- Moved the fixed x-block global coarse-basis builder, global-coupling
+  load-vector builder, and smoothed-load QI basis builder from
+  ``v3_driver.py`` into ``sfincs_jax/rhs1_qi_coarse.py``.
+- Deduplicated the repeated RHS/tail/source/flux-surface-average/angular load
+  appending logic behind small private helpers inside the QI coarse module.
+- Kept the historical ``v3_driver`` private helper names as imported aliases
+  so current solver orchestration and debug scripts keep working unchanged.
+- Added direct tests for RHS, tail, constraint-source, flux-surface-average,
+  low-angular load labels, smoothed-load rank gating, vector shape contracts,
+  and driver alias compatibility.
+- Updated the source map, testing guide, and release notes.
+
+Validation:
+
+- ``python -m py_compile sfincs_jax/rhs1_qi_coarse.py
+  sfincs_jax/v3_driver.py tests/test_rhs1_qi_coarse.py``: passed.
+- ``python -m ruff check sfincs_jax/rhs1_qi_coarse.py
+  sfincs_jax/v3_driver.py tests/test_rhs1_qi_coarse.py``: passed.
+- ``python -m pytest -q tests/test_rhs1_qi_coarse.py
+  tests/test_v3_sparse_pattern.py::test_xblock_sparse_pc_qi_two_level_smoothed_load_basis_records_metadata
+  tests/test_v3_sparse_pattern.py::test_xblock_sparse_pc_two_level_preconditioner_records_metadata``:
+  ``15 passed in 9.72 s``.
+- ``python -m pytest -q tests/test_rhs1_qi_coarse.py
+  tests/test_rhs1_qi_device_preconditioner.py
+  tests/test_rhs1_qi_device_smoother.py tests/test_rhs1_qi_two_level.py
+  tests/test_v3_sparse_pattern.py tests/test_v3_driver_rhs1_dispatch_coverage.py
+  tests/test_v3_driver_solve_policy_coverage.py``:
+  ``253 passed in 153.39 s``.
+- ``SPHINXOPTS='-W --keep-going' python -m sphinx -b html docs
+  docs/_build/html``: passed.
+- ``git diff --check``: passed.
+- ``python -m pytest -q``: ``2682 passed in 527.23 s``.
