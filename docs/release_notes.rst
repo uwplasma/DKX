@@ -45,6 +45,15 @@ Unreleased
   for GPU worker subprocesses. Focused parallel/import tests passed with
   ``139 passed``, a broader transport/CLI slice passed with ``169 passed``, and
   the post-move local full suite passed with ``2668 passed in 552.24 s``.
+- Moved the RHSMode=2/3 transport preconditioner/direct-operator cluster into
+  ``sfincs_jax.problems.transport_matrix``: preconditioner-kind dispatch,
+  direct reduced ``Pmat`` emission, direct active block-Schur setup, and
+  Fortran-reduced sparse-factor preconditioning. The old top-level
+  ``sfincs_jax.transport_*`` module paths remain aliases for existing scripts,
+  tests, and monkeypatch/debug workflows. Focused preconditioner/direct tests
+  passed with ``117 passed`` and a broader transport/preconditioner slice passed
+  with ``148 passed``. The post-move local full suite passed with
+  ``2668 passed in 554.82 s``.
 - Continued the ``v3_driver.py`` refactor path by moving the coupled
   f/tail-moment and tail-only matrix-free residual-correction builders into
   ``rhs1_lowmode_coarse.py`` with direct tests for tail-selection policy,

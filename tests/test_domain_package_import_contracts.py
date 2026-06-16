@@ -131,6 +131,26 @@ TRANSPORT_COMPATIBILITY_IMPORTS = (
         "transport_sparse_direct_solve",
     ),
     (
+        "sfincs_jax.transport_preconditioner_dispatch",
+        "sfincs_jax.problems.transport_matrix.preconditioner_dispatch",
+        "build_transport_preconditioner_from_kind",
+    ),
+    (
+        "sfincs_jax.transport_direct_pmat",
+        "sfincs_jax.problems.transport_matrix.direct_pmat",
+        "_try_build_rhsmode23_fp_fortran_reduced_direct_pmat_bundle",
+    ),
+    (
+        "sfincs_jax.transport_direct_block_schur",
+        "sfincs_jax.problems.transport_matrix.direct_block_schur",
+        "build_transport_fp_direct_active_block_schur_preconditioner",
+    ),
+    (
+        "sfincs_jax.transport_fortran_reduced_lu",
+        "sfincs_jax.problems.transport_matrix.fortran_reduced_lu",
+        "build_transport_fp_fortran_reduced_lu_preconditioner",
+    ),
+    (
         "sfincs_jax.transport_parallel_payload",
         "sfincs_jax.problems.transport_matrix.parallel.payload",
         "solve_transport_parallel_payload",

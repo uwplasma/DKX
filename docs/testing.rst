@@ -556,19 +556,21 @@ reaches the extracted implementation.
 ``preconditioner_operators.py`` module directly for the Fortran-reduced
 operator-shaping contract, including the radial-x simplification and the
 preserved driver compatibility alias.
-The same file now protects the extracted ``transport_direct_pmat.py`` module:
+The same file now protects the extracted
+``sfincs_jax.problems.transport_matrix.direct_pmat`` module:
 direct reduced-``Pmat`` and exact active transport CSR emission are compared
 column-action-by-column-action against the matrix-free v3 operator for
 geometryScheme 2 and 11 reduced inputs, and the physics coarse-basis test
 checks source, constraint, and tail-Schur response columns without launching a
 production solve.
 Those same direct-active tests now exercise the wrapper into
-``transport_direct_block_schur.py`` as well: the active block-Schur
+``sfincs_jax.problems.transport_matrix.direct_block_schur`` as well: the active block-Schur
 preconditioner is built from the exact active operator, applies through the
 host callback path, and closes the source/constraint tail residual on the
 reduced geometryScheme 11 case.
-The Fortran-reduced LU tests also exercise ``transport_fortran_reduced_lu.py``
-through the driver compatibility seam: symbolic block, block-Schur, BLR
+The Fortran-reduced LU tests also exercise
+``sfincs_jax.problems.transport_matrix.fortran_reduced_lu`` through the driver
+compatibility seam: symbolic block, block-Schur, BLR
 frontal, and ND frontal factor metadata, direct reduced-``Pmat`` admission,
 symbolic rejection fallback, and exact-LU rescue are checked on reduced
 geometry-rich transport inputs without promoting a production-size solve into

@@ -356,7 +356,7 @@ from .transport_policy import (
     transport_tzfft_first_attempt_budget as _transport_tzfft_first_attempt_budget_impl,
     transport_tzfft_structured_first_attempt_allowed as _transport_tzfft_structured_first_attempt_allowed_impl,
 )
-from .transport_preconditioner_dispatch import (
+from .problems.transport_matrix.preconditioner_dispatch import (
     TransportPreconditionerContext,
     TransportPreconditionerDispatchBuilders,
     build_transport_preconditioner_from_kind,
@@ -367,8 +367,8 @@ from .transport_preconditioner_dispatch import (
     transport_dd_config_from_env,
     transport_sparse_jax_config_from_env,
 )
-from .transport_direct_block_schur import build_transport_fp_direct_active_block_schur_preconditioner
-from .transport_fortran_reduced_lu import build_transport_fp_fortran_reduced_lu_preconditioner
+from .problems.transport_matrix.direct_block_schur import build_transport_fp_direct_active_block_schur_preconditioner
+from .problems.transport_matrix.fortran_reduced_lu import build_transport_fp_fortran_reduced_lu_preconditioner
 from .transport_solve_policy import resolve_transport_per_rhs_loop_policy, transport_geometry_scheme_from_namelist
 from .transport_solve_setup import (
     resolve_transport_maxiter_setup,
@@ -584,7 +584,7 @@ from .preconditioner_context import (
     sparse_structural_tol as _sparse_structural_tol,
     use_solver_jit as _use_solver_jit,
 )
-from .transport_direct_pmat import (
+from .problems.transport_matrix.direct_pmat import (
     _build_rhsmode23_direct_pmat_physics_coarse_basis,
     _try_build_rhsmode23_fp_direct_active_operator_bundle,
     _try_build_rhsmode23_fp_fortran_reduced_direct_pmat_bundle,

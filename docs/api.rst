@@ -88,13 +88,13 @@ API reference
 .. automodule:: sfincs_jax.rhs1_xblock_tz_sparse
    :members:
 
-.. automodule:: sfincs_jax.transport_direct_pmat
+.. automodule:: sfincs_jax.problems.transport_matrix.direct_pmat
    :members:
 
-.. automodule:: sfincs_jax.transport_direct_block_schur
+.. automodule:: sfincs_jax.problems.transport_matrix.direct_block_schur
    :members:
 
-.. automodule:: sfincs_jax.transport_fortran_reduced_lu
+.. automodule:: sfincs_jax.problems.transport_matrix.fortran_reduced_lu
    :members:
 
 .. automodule:: sfincs_jax.problems.transport_matrix.setup
@@ -351,7 +351,7 @@ research workflows.
 .. automodule:: sfincs_jax.problems.transport_matrix.parallel.worker
    :members:
 
-.. automodule:: sfincs_jax.transport_preconditioner_dispatch
+.. automodule:: sfincs_jax.problems.transport_matrix.preconditioner_dispatch
    :members:
 
 .. automodule:: sfincs_jax.problems.transport_matrix.residual_quality

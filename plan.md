@@ -448,6 +448,17 @@ Current branch status:
   passed with ``139 passed``; a broader transport/CLI slice passed with
   ``169 passed``; strict docs build passed; and the full local suite passed
   with ``2668 passed in 552.24 s``.
+- Phase C transport-preconditioner checkpoint, 2026-06-15: moved RHSMode=2/3
+  preconditioner dispatch, direct reduced-``Pmat`` emission, direct active
+  block-Schur setup, and Fortran-reduced sparse-factor preconditioning into
+  ``sfincs_jax.problems.transport_matrix`` as
+  ``preconditioner_dispatch.py``, ``direct_pmat.py``,
+  ``direct_block_schur.py``, and ``fortran_reduced_lu.py``. The old top-level
+  paths remain ``sys.modules`` aliases for user imports and monkeypatch/debug
+  seams. Focused ruff passed; focused preconditioner/direct tests passed with
+  ``117 passed``; a broader transport/preconditioner slice passed with
+  ``148 passed``; strict docs build passed; and the full local suite passed
+  with ``2668 passed in 554.82 s``.
 
 ### Active execution phases for the draft PR
 
