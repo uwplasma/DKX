@@ -30,6 +30,14 @@ DOMAIN_PACKAGES = (
     "sfincs_jax.compat",
 )
 
+ACTIVE_PACKAGE_EXPORTS = {
+    "sfincs_jax.solvers.preconditioners.symbolic_sparse": (
+        "RHS1FullSystemMatrixFreeOperatorAdapter",
+        "build_sparse_ilu_from_matvec",
+        "factorize_sparse_matrix_csr_host",
+    ),
+}
+
 LEGACY_MODULES_THAT_KEEP_THEIR_IMPORT_PATHS = (
     "sfincs_jax.input_compat",
     "sfincs_jax.namelist",
@@ -207,15 +215,18 @@ def _import_module(name: str) -> ModuleType:
     return importlib.import_module(name)
 
 
-def test_domain_package_skeletons_are_importable_packages() -> None:
-    """Phase-A package skeletons must be importable without moving behavior."""
+def test_domain_packages_are_importable_with_expected_facades() -> None:
+    """Domain packages are importable and expose only intentional facades."""
 
     for module_name in DOMAIN_PACKAGES:
         module = _import_module(module_name)
         assert module.__doc__ is not None, module_name
         assert module.__doc__.strip(), module_name
         assert hasattr(module, "__path__"), module_name
-        assert module.__all__ == (), module_name
+        expected_exports = ACTIVE_PACKAGE_EXPORTS.get(module_name, ())
+        assert module.__all__ == expected_exports, module_name
+        for export_name in expected_exports:
+            assert hasattr(module, export_name), f"{module_name}.{export_name}"
 
 
 def test_existing_legacy_modules_keep_their_import_paths() -> None:

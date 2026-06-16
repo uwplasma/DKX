@@ -308,6 +308,14 @@ the historical private driver name and test the focused module directly. This ke
   ``factorize_host_sparse_operator``, and backend callbacks so existing
   monkeypatch/debug workflows keep exercising the same runtime seam while the
   implementation is directly testable outside the monolith.
+- ``sfincs_jax/solvers/preconditioners/symbolic_sparse/host_factor.py``:
+  RHSMode=1 host sparse ILU/LU factor setup used by non-differentiable
+  CLI-oriented rescue paths. The module owns matrix-free column assembly,
+  structural-threshold application, SuperLU retry/regularization policy, cached
+  dense/JAX triangular-factor materialization, and the matrix-free full-system
+  adapter used by coarse/Galerkin corrections. ``v3_driver.py`` imports the
+  historical private helper names as aliases so existing debugging and
+  monkeypatch tests keep using the same seam.
 - ``sfincs_jax/rhs1_direct_tail_policy.py``:
   RHSMode=1 direct-tail structured-preconditioner adapter, direct reduced-Pmat
   aliases, stable cache-key hashing, cache-hit metadata tagging, and adaptive
