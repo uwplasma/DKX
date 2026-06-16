@@ -489,6 +489,18 @@ Current branch status:
   RHSMode=1 sparse/preconditioner validation passed with ``293 passed``; strict
   docs passed; and the full local suite passed with
   ``2669 passed in 518.48 s``.
+- Phase D profile-response support checkpoint, 2026-06-16: moved the already
+  extracted RHSMode=1 residual gates, active-DOF decision/state helpers,
+  full/reduced active projection primitives, accepted-candidate handoff, and
+  solver diagnostic metadata assembly into ``sfincs_jax.problems.profile_response``.
+  Their historical top-level ``sfincs_jax.rhs1_*`` paths are compatibility
+  aliases, and ``v3_driver.py`` imports the profile-response modules directly.
+  This starts the RHSMode=1 problem-package migration without changing solve
+  policy, residual gates, output metadata keys, or differentiability boundaries.
+  Focused import/docstring/profile-response tests passed with ``33 passed``;
+  broader RHSMode=1 driver/output validation passed with ``345 passed``; strict
+  docs passed; and the full local suite passed with
+  ``2670 passed in 560.13 s``.
 
 ### Active execution phases for the draft PR
 

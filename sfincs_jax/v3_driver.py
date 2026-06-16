@@ -160,7 +160,7 @@ from .rhs1_preconditioner_auto_policy import (
     rhs1_gpu_sparse_fallback_skip_allowed as _rhs1_gpu_sparse_fallback_skip_allowed_impl,
 )
 from .rhs1_schur_policy import resolve_rhs1_schur_base_kind
-from .rhs1_handoff import rhs1_accept_candidate
+from .problems.profile_response.handoff import rhs1_accept_candidate
 from .rhs1_strong_fallback import build_rhs1_strong_preconditioner_full_from_kind
 from .rhs1_strong_policy import (
     requested_rhs1_strong_preconditioner_kind,
@@ -229,7 +229,7 @@ from .rhs1_true_operator_rescue import (
     _try_build_residual_coarse_host_sparse_preconditioner,
     _try_build_residual_window_host_sparse_preconditioner,
 )
-from .rhs1_solver_diagnostics import (
+from .problems.profile_response.solver_diagnostics import (
     RHS1PostMinresDiagnostics,
     RHS1PreflightDiagnostics,
     RHS1SubspaceCorrectionDiagnostics,
@@ -239,12 +239,12 @@ from .rhs1_ksp_diagnostics import (
     emit_rhs1_ksp_history as _emit_rhs1_ksp_history,
     emit_rhs1_ksp_iter_stats as _emit_rhs1_ksp_iter_stats,
 )
-from .rhs1_active_dof import (
+from .problems.profile_response.active_dof import (
     build_rhs1_active_dof_state,
     resolve_rhs1_active_dof_mode,
 )
 from .rhs1_compressed_layout import build_rhs1_compressed_pitch_layout
-from .rhs1_active_projection import (
+from .problems.profile_response.active_projection import (
     expand_reduced_with_map,
     project_pas_constraint_f,
     reduce_full_with_indices,
@@ -264,7 +264,7 @@ from .rhs1_lowmode_coarse import (
     _rhs1_lowmode_angular_features,
     _rhs1_polynomial_moment_features,
 )
-from .rhs1_residual import (
+from .problems.profile_response.residual import (
     l2_norm_float as rhs1_l2_norm_float,
     residual_converged as rhs1_residual_converged,
     residual_target as rhs1_residual_target,

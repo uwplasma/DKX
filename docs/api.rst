@@ -144,7 +144,7 @@ to live inside the large driver. They are included here because they are part of
 the maintainable public source structure for debugging, testing, and downstream
 research workflows.
 
-.. automodule:: sfincs_jax.rhs1_handoff
+.. automodule:: sfincs_jax.problems.profile_response.handoff
    :members:
 
 .. automodule:: sfincs_jax.rhs1_lowmode_coarse
@@ -156,10 +156,10 @@ research workflows.
 .. automodule:: sfincs_jax.rhs1_acceptance_policy
    :members:
 
-.. automodule:: sfincs_jax.rhs1_active_dof
+.. automodule:: sfincs_jax.problems.profile_response.active_dof
    :members:
 
-.. automodule:: sfincs_jax.rhs1_active_projection
+.. automodule:: sfincs_jax.problems.profile_response.active_projection
    :members:
 
 .. automodule:: sfincs_jax.rhs1_constraint0_policy
@@ -252,13 +252,13 @@ research workflows.
 .. automodule:: sfincs_jax.rhs1_qi_two_level
    :members:
 
-.. automodule:: sfincs_jax.rhs1_residual
+.. automodule:: sfincs_jax.problems.profile_response.residual
    :members:
 
 .. automodule:: sfincs_jax.rhs1_schur_policy
    :members:
 
-.. automodule:: sfincs_jax.rhs1_solver_diagnostics
+.. automodule:: sfincs_jax.problems.profile_response.solver_diagnostics
    :members:
 
 .. automodule:: sfincs_jax.rhs1_ksp_diagnostics

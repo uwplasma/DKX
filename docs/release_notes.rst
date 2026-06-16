@@ -66,6 +66,13 @@ Unreleased
   historical ``v3_driver`` private helper names remain compatibility aliases,
   while the non-differentiable host-factor path now lives in the solver-domain
   package.
+- Moved RHSMode=1 profile-response support utilities into
+  ``sfincs_jax.problems.profile_response``: residual gates, active-DOF
+  decisions, active full/reduced projection, accepted-solve handoff, and solver
+  diagnostics. The old ``sfincs_jax.rhs1_residual``,
+  ``sfincs_jax.rhs1_active_dof``, ``sfincs_jax.rhs1_active_projection``,
+  ``sfincs_jax.rhs1_handoff``, and ``sfincs_jax.rhs1_solver_diagnostics``
+  import paths remain compatibility aliases.
 - Continued the ``v3_driver.py`` refactor path by moving the coupled
   f/tail-moment and tail-only matrix-free residual-correction builders into
   ``rhs1_lowmode_coarse.py`` with direct tests for tail-selection policy,
