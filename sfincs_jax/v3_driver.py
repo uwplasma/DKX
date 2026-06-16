@@ -416,7 +416,7 @@ from .transport_sparse_direct_solve import (
     transport_sparse_direct_pattern_for_solve as _transport_sparse_direct_pattern_for_context,
     transport_sparse_direct_solve as _transport_sparse_direct_solve_with_context,
 )
-from .transport_parallel_policy import (
+from .problems.transport_matrix.parallel.policy import (
     rewrite_xla_flags as _rewrite_xla_flags,
     transport_parallel_backend as _transport_parallel_backend_impl,
     transport_parallel_gpu_worker_env as _transport_parallel_gpu_worker_env_impl,
@@ -427,13 +427,13 @@ from .transport_parallel_policy import (
     transport_parallel_visible_gpu_ids as _transport_parallel_visible_gpu_ids_impl,
     transport_parallel_worker_env as _transport_parallel_worker_env_impl,
 )
-from .transport_parallel_payload import solve_transport_parallel_payload as _solve_transport_parallel_payload
-from .transport_parallel_runtime import (
+from .problems.transport_matrix.parallel.payload import solve_transport_parallel_payload as _solve_transport_parallel_payload
+from .problems.transport_matrix.parallel.runtime import (
     run_transport_parallel_gpu_subprocesses as _run_transport_parallel_gpu_subprocesses_impl,
 )
-from .transport_parallel_solve import TransportParallelSolveRuntime, maybe_run_transport_parallel_solve
+from .problems.transport_matrix.parallel.solve import TransportParallelSolveRuntime, maybe_run_transport_parallel_solve
 from .transport_residual_quality import transport_residual_gate_thresholds_from_env
-from .transport_parallel_pool import TransportParallelPoolCache
+from .problems.transport_matrix.parallel.pool import TransportParallelPoolCache
 from .solve_mode_policy import resolve_use_implicit as _resolve_use_implicit_impl
 from .phi1_newton_policy import (
     phi1_frozen_jacobian_policy,

@@ -916,35 +916,47 @@ the historical private driver name and test the focused module directly. This ke
   collection, recycle-basis updates, and optional KSP iteration-stat dispatch.
   Dense fallback accepted-state overrides are explicit so the refactor preserves
   the established active-DOF branch behavior.
-- ``sfincs_jax/transport_parallel_payload.py``:
+- ``sfincs_jax/problems/transport_matrix/parallel/payload.py``
+  (legacy alias: ``sfincs_jax/transport_parallel_payload.py``):
   injected-dependency payload normalization, child-worker guard setup, transport solve
   call construction, merge-ready result packing, and GPU-worker NPZ array conversion
   shared by CPU process workers and GPU subprocess workers.
-- ``sfincs_jax/transport_parallel_policy.py``:
+- ``sfincs_jax/problems/transport_matrix/parallel/policy.py``
+  (legacy alias: ``sfincs_jax/transport_parallel_policy.py``):
   pure transport process-parallel backend selection, worker-count validation,
   benchmark scaling audits, process-pool cache keys, GPU-worker environment
   isolation, XLA worker flag rewriting, and multiprocessing fallback policy.
-- ``sfincs_jax/transport_parallel_runtime.py``:
+- ``sfincs_jax/problems/transport_matrix/parallel/runtime.py``
+  (legacy alias: ``sfincs_jax/transport_parallel_runtime.py``):
   transport parallel RHS partitioning, GPU worker subprocess launch, and parent-side
   merge of per-worker state/residual/elapsed-time results.
-- ``sfincs_jax/transport_parallel_pool.py``:
+- ``sfincs_jax/problems/transport_matrix/parallel/pool.py``
+  (legacy alias: ``sfincs_jax/transport_parallel_pool.py``):
   persistent transport process-pool caching, rebuild, and shutdown behavior used by the
   CPU process-parallel transport lane.
-- ``sfincs_jax/transport_parallel_execution.py``:
+- ``sfincs_jax/problems/transport_matrix/parallel/execution.py``
+  (legacy alias: ``sfincs_jax/transport_parallel_execution.py``):
   top-level transport process-parallel execution control, including run/no-run gating,
   per-worker payload construction, backend-specific execution, retry, and sequential
   fallback.
-- ``sfincs_jax/transport_parallel_solve.py``:
+- ``sfincs_jax/problems/transport_matrix/parallel/solve.py``
+  (legacy alias: ``sfincs_jax/transport_parallel_solve.py``):
   parent-side RHSMode=2/3 parallel-solve orchestration. It owns the early
   parallel branch that partitions ``whichRHS`` values, launches CPU/GPU workers
   through injected runtime hooks, merges state/residual/timing payloads, builds
   final transport diagnostics, and returns the transport-matrix solve result.
-- ``sfincs_jax/transport_parallel_sharding.py``:
+- ``sfincs_jax/problems/transport_matrix/parallel/sharding.py``
+  (legacy alias: ``sfincs_jax/transport_parallel_sharding.py``):
   pure single-case sharded-solve planning metadata. It caps requested device
   counts, records per-device workload balance, estimates whether setup and
   Krylov communication can be amortized, marks single-case sharding as
   experimental/non-release by default, and prevents malformed sharded payloads
   from becoming release scaling claims.
+- ``sfincs_jax/problems/transport_matrix/parallel/worker.py``
+  (legacy executable wrapper: ``sfincs_jax/transport_parallel_worker.py``):
+  command-line worker entry point used by GPU transport subprocesses. The old
+  ``python -m sfincs_jax.transport_parallel_worker`` path remains supported and
+  delegates to this implementation.
 - ``sfincs_jax/validation_artifacts.py``:
   lightweight loaders and physics metrics for checked-in publication artifacts. This
   module is independent of the heavy solver path, so documentation and CI can verify

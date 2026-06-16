@@ -437,6 +437,17 @@ Current branch status:
   sparse-direct tests passed with ``67 passed``; the broader transport refactor
   slice passed with ``140 passed``; strict docs build passed; and the full local
   suite passed with ``2668 passed in 556.60 s``.
+- Phase C transport-parallel checkpoint, 2026-06-15: moved the RHSMode=2/3
+  process/GPU parallel cluster into
+  ``sfincs_jax.problems.transport_matrix.parallel`` as ``payload.py``,
+  ``policy.py``, ``runtime.py``, ``pool.py``, ``execution.py``, ``solve.py``,
+  ``validation.py``, ``sharding.py``, and ``worker.py``. The old
+  ``sfincs_jax.transport_parallel_*`` paths are compatibility aliases, and the
+  historical ``python -m sfincs_jax.transport_parallel_worker`` subprocess entry
+  point remains executable. Focused ruff passed; focused parallel/import tests
+  passed with ``139 passed``; a broader transport/CLI slice passed with
+  ``169 passed``; strict docs build passed; and the full local suite passed
+  with ``2668 passed in 552.24 s``.
 
 ### Active execution phases for the draft PR
 
