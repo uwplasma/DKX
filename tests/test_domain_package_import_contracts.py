@@ -12,6 +12,7 @@ DOMAIN_PACKAGES = (
     "sfincs_jax.problems",
     "sfincs_jax.problems.profile_response",
     "sfincs_jax.problems.transport_matrix",
+    "sfincs_jax.problems.transport_matrix.parallel",
     "sfincs_jax.solvers",
     "sfincs_jax.solvers.preconditioners",
     "sfincs_jax.solvers.preconditioners.pas",
@@ -128,6 +129,51 @@ TRANSPORT_COMPATIBILITY_IMPORTS = (
         "sfincs_jax.transport_sparse_direct_solve",
         "sfincs_jax.problems.transport_matrix.sparse_direct_solve",
         "transport_sparse_direct_solve",
+    ),
+    (
+        "sfincs_jax.transport_parallel_payload",
+        "sfincs_jax.problems.transport_matrix.parallel.payload",
+        "solve_transport_parallel_payload",
+    ),
+    (
+        "sfincs_jax.transport_parallel_policy",
+        "sfincs_jax.problems.transport_matrix.parallel.policy",
+        "transport_parallel_backend",
+    ),
+    (
+        "sfincs_jax.transport_parallel_runtime",
+        "sfincs_jax.problems.transport_matrix.parallel.runtime",
+        "merge_transport_parallel_results",
+    ),
+    (
+        "sfincs_jax.transport_parallel_pool",
+        "sfincs_jax.problems.transport_matrix.parallel.pool",
+        "TransportParallelPoolCache",
+    ),
+    (
+        "sfincs_jax.transport_parallel_execution",
+        "sfincs_jax.problems.transport_matrix.parallel.execution",
+        "run_transport_parallel_payloads",
+    ),
+    (
+        "sfincs_jax.transport_parallel_solve",
+        "sfincs_jax.problems.transport_matrix.parallel.solve",
+        "maybe_run_transport_parallel_solve",
+    ),
+    (
+        "sfincs_jax.transport_parallel_validation",
+        "sfincs_jax.problems.transport_matrix.parallel.validation",
+        "validate_transport_worker_result_payload",
+    ),
+    (
+        "sfincs_jax.transport_parallel_sharding",
+        "sfincs_jax.problems.transport_matrix.parallel.sharding",
+        "plan_single_case_operator_coarse_reuse",
+    ),
+    (
+        "sfincs_jax.transport_parallel_worker",
+        "sfincs_jax.problems.transport_matrix.parallel.worker",
+        "main",
     ),
 )
 

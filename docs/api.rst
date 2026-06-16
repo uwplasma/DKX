@@ -112,7 +112,7 @@ API reference
 .. automodule:: sfincs_jax.problems.transport_matrix.postsolve_diagnostics
    :members:
 
-.. automodule:: sfincs_jax.transport_parallel_solve
+.. automodule:: sfincs_jax.problems.transport_matrix.parallel.solve
    :members:
 
 .. automodule:: sfincs_jax.preconditioner_setup
@@ -327,13 +327,28 @@ research workflows.
 .. automodule:: sfincs_jax.problems.transport_matrix.linear_solve
    :members:
 
-.. automodule:: sfincs_jax.transport_parallel_payload
+.. automodule:: sfincs_jax.problems.transport_matrix.parallel.payload
    :members:
 
-.. automodule:: sfincs_jax.transport_parallel_policy
+.. automodule:: sfincs_jax.problems.transport_matrix.parallel.policy
    :members:
 
-.. automodule:: sfincs_jax.transport_parallel_runtime
+.. automodule:: sfincs_jax.problems.transport_matrix.parallel.runtime
+   :members:
+
+.. automodule:: sfincs_jax.problems.transport_matrix.parallel.execution
+   :members:
+
+.. automodule:: sfincs_jax.problems.transport_matrix.parallel.pool
+   :members:
+
+.. automodule:: sfincs_jax.problems.transport_matrix.parallel.validation
+   :members:
+
+.. automodule:: sfincs_jax.problems.transport_matrix.parallel.sharding
+   :members:
+
+.. automodule:: sfincs_jax.problems.transport_matrix.parallel.worker
    :members:
 
 .. automodule:: sfincs_jax.transport_preconditioner_dispatch
