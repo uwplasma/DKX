@@ -925,9 +925,9 @@ Relevant implementation:
 - ``examples/performance/benchmark_sharded_solve_scaling.py`` and
   ``examples/performance/benchmark_sharded_matvec_scaling.py`` generate
   bounded single-case scaling evidence.
-- ``sfincs_jax/transport_parallel_policy.py`` prevents cold or malformed
-  scaling payloads from becoming release claims.
-- ``sfincs_jax/transport_parallel_sharding.py`` records pure single-case
+- ``sfincs_jax/problems/transport_matrix/parallel/policy.py`` prevents cold or
+  malformed scaling payloads from becoming release claims.
+- ``sfincs_jax/problems/transport_matrix/parallel/sharding.py`` records pure single-case
   sharded-solve plans, caps requested devices to available work, reports
   workload balance, estimates setup/communication amortization, and fail-closes
   release scaling claims for experimental single-case sharding.
