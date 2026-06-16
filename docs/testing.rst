@@ -675,6 +675,13 @@ asserts that the historical ``v3_driver`` private helper names remain aliases.
 This keeps the QI coarse-space implementation testable without importing the
 large driver as the source of truth.
 
+The same test module covers the global x-block coarse/load basis builders that
+feed two-level and smoothed-load QI paths. It verifies RHS, tail, constraint
+source, flux-surface-average, and low angular load labels, checks vector shapes,
+rank-gates the smoothed-load basis, and asserts driver alias compatibility.
+These tests keep the QI global-coupling basis mechanics independent of full
+solve smoke tests.
+
 The solver-path refactor continues this policy-first testing style in
 ``sfincs_jax/solver_path_policy.py`` and ``tests/test_solver_path_policy.py``.
 The direct tests cover JIT eligibility, preconditioner dtype selection, the narrow

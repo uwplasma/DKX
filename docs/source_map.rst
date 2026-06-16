@@ -429,7 +429,8 @@ the historical private driver name and test the focused module directly. This ke
   deterministic QI coarse-basis construction, rank/conditioning diagnostics,
   Galerkin/action coarse solves, and synthetic residual-reduction probes used
   by the true device-QI research lane. It also owns the operator-derived
-  x-block QI coarse-basis padding and block-geometry metadata that the
+  x-block QI coarse-basis padding, block-geometry metadata, global coarse-load
+  direction builders, and smoothed-load QI basis construction that the
   production driver used to build inline; ``v3_driver.py`` keeps those old
   private names as compatibility aliases only.
 - ``sfincs_jax/rhs1_qi_galerkin_policy.py``:
