@@ -411,7 +411,9 @@ source/moment closure used by both RHSMode=1 and transport solves.
 The subspace residual-correction tests now import
 ``sfincs_jax.problems.profile_response.residual`` directly for the host and
 device residual-equation correction kernels, with driver-alias checks retained
-only as compatibility guards.
+only as compatibility guards. The same module also owns the x-block
+post-coarse direction-builder tests for flux-surface-averaged and
+residual-weighted angular correction bases.
 
 The docstring gate now discovers every ``sfincs_jax/*policy*.py`` module and also
 checks public policy classes/functions, so new extraction seams must remain
