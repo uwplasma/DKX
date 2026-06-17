@@ -2,4 +2,6 @@
 
 from __future__ import annotations
 
-__all__: tuple[str, ...] = ()
+from .line_blocks import build_rhs1_zeta_line_preconditioner
+
+__all__ = ("build_rhs1_zeta_line_preconditioner",)

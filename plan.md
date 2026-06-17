@@ -31602,3 +31602,54 @@ Validation:
 - ``git diff --check``: passed.
 - ``PYTHONDONTWRITEBYTECODE=1 pytest -q -p no:cacheprovider``:
   ``2697 passed in 523.00 s``.
+
+### 19.41 RHSMode=1 preconditioner usage audit and zeta-line extraction
+
+Goal:
+
+- Continue reducing ``v3_driver.py`` while checking whether remaining
+  preconditioner functions are still used before moving or deleting them.
+
+Usage audit:
+
+- ``_build_rhsmode1_zeta_line_preconditioner`` is still active. It is reached
+  from Schur-base selection, normal RHSMode=1 preconditioner dispatch, automatic
+  line selection, and strong-preconditioner fallback.
+- Since it is used in multiple solve-routing paths, the correct action is a
+  behavior-preserving extraction with a driver compatibility wrapper, not
+  deletion.
+
+Implementation:
+
+- Added ``sfincs_jax/solvers/preconditioners/domain_decomposition/line_blocks.py``
+  with ``build_rhs1_zeta_line_preconditioner``.
+- Preserved ``_build_rhsmode1_zeta_line_preconditioner`` in ``v3_driver.py`` as
+  a compatibility wrapper.
+- Updated domain-decomposition package exports, import-contract tests, and the
+  source map.
+- Added a focused zeta-line test that validates the theta-plane/zeta-line block
+  mapping and block inverse apply behavior without constructing a full SFINCS
+  operator.
+
+Validation so far:
+
+- ``python -m ruff check sfincs_jax/v3_driver.py
+  sfincs_jax/solvers/preconditioners/domain_decomposition
+  tests/test_rhs1_line_blocks.py tests/test_domain_package_import_contracts.py``:
+  passed.
+- ``python -m compileall -q sfincs_jax/v3_driver.py
+  sfincs_jax/solvers/preconditioners/domain_decomposition
+  tests/test_rhs1_line_blocks.py``: passed.
+- ``pytest -q tests/test_rhs1_line_blocks.py
+  tests/test_domain_package_import_contracts.py``: ``7 passed in 0.98 s``.
+- ``PYTHONDONTWRITEBYTECODE=1 pytest -q -p no:cacheprovider
+  tests/test_rhs1_line_blocks.py tests/test_rhs1_schwarz_heuristic.py
+  tests/test_v3_driver_rhs1_dispatch_coverage.py
+  tests/test_v3_driver_solve_policy_coverage.py
+  tests/test_domain_package_import_contracts.py``:
+  ``79 passed in 31.49 s``.
+- ``SPHINXOPTS='-W --keep-going' python -m sphinx -b html docs
+  docs/_build/html``: passed.
+- ``git diff --check``: passed.
+- ``PYTHONDONTWRITEBYTECODE=1 pytest -q -p no:cacheprovider``:
+  ``2698 passed in 543.37 s``.

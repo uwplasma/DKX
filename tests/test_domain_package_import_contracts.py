@@ -44,6 +44,9 @@ ACTIVE_PACKAGE_EXPORTS = {
         "build_rhs1_species_block_preconditioner",
         "build_rhs1_species_xblock_preconditioner",
     ),
+    "sfincs_jax.solvers.preconditioners.domain_decomposition": (
+        "build_rhs1_zeta_line_preconditioner",
+    ),
     "sfincs_jax.solvers.preconditioners.xblock": (
         "assemble_rhsmode1_fp_xblock_tz_sparse_matrix",
         "assemble_selected_theta_tz_operator",
