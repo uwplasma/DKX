@@ -2,4 +2,12 @@
 
 from __future__ import annotations
 
-__all__: tuple[str, ...] = ()
+from .rhs1 import (
+    RHS1SchurPreconditionerBuilders,
+    build_rhs1_schur_preconditioner,
+)
+
+__all__ = (
+    "RHS1SchurPreconditionerBuilders",
+    "build_rhs1_schur_preconditioner",
+)

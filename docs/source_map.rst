@@ -328,6 +328,12 @@ the historical private driver name and test the focused module directly. This ke
   axis-line index maps, cache keys, regularization policy, extra-variable tail
   solves, and multi-level residual correction hooks live here; ``v3_driver.py``
   keeps compatibility wrappers only.
+- ``sfincs_jax/solvers/preconditioners/schur/rhs1.py``:
+  RHSMode=1 constraintScheme=2 constraint-source Schur preconditioner. It owns
+  Schur base-preconditioner selection, diagonal/full/x-coupled Schur inverse
+  setup, PAS-ILU Schur shortcuts, constraint-source injection/projection, cache
+  population, and reduced/full apply wrappers. ``v3_driver.py`` injects the
+  current base builders and keeps a compatibility wrapper only.
 - ``sfincs_jax/problems/transport_matrix/direct_pmat.py``
   (legacy alias: ``sfincs_jax/transport_direct_pmat.py``):
   direct term-level RHSMode=2/3 reduced ``Pmat`` and exact active-operator

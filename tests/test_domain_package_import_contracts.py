@@ -57,6 +57,10 @@ ACTIVE_PACKAGE_EXPORTS = {
         "build_rhs1_structured_fblock_jacobi_preconditioner",
         "build_rhs1_structured_fblock_xi_angular_jacobi_preconditioner",
     ),
+    "sfincs_jax.solvers.preconditioners.schur": (
+        "RHS1SchurPreconditionerBuilders",
+        "build_rhs1_schur_preconditioner",
+    ),
     "sfincs_jax.solvers.preconditioners.domain_decomposition": (
         "build_rhs1_theta_dd_preconditioner",
         "build_rhs1_theta_line_preconditioner",

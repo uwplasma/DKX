@@ -32001,3 +32001,58 @@ Validation so far:
 - ``git diff --check``: passed.
 - ``PYTHONDONTWRITEBYTECODE=1 pytest -q -p no:cacheprovider``:
   ``2703 passed in 545.06 s``.
+
+### 19.48 RHSMode=1 constraint-source Schur extraction
+
+Goal:
+
+- Move the RHSMode=1 constraintScheme=2 Schur preconditioner out of
+  ``v3_driver.py`` while preserving historical private driver hooks used by
+  dispatch and Schur-base monkeypatch tests.
+
+Usage audit:
+
+- ``_build_rhsmode1_schur_preconditioner`` is used by RHSMode=1 strong/auto
+  policy, direct tests, and compatibility/debug workflows.
+- Its base-preconditioner selection needs the current driver builders so tests
+  can still monkeypatch ``_build_rhsmode1_pas_tz_preconditioner``,
+  ``_build_rhsmode1_xblock_tz_preconditioner``, and related private names.
+
+Implementation:
+
+- Added ``sfincs_jax/solvers/preconditioners/schur/rhs1.py`` with
+  ``RHS1SchurPreconditionerBuilders`` and ``build_rhs1_schur_preconditioner``.
+- The new Schur module owns base-kind resolution, diagonal/full/x-coupled Schur
+  setup, PAS-ILU Schur shortcuts, constraint-source injection/projection,
+  cache population, and reduced/full apply wrappers.
+- ``v3_driver.py`` now keeps only a compatibility wrapper that constructs the
+  builder bundle from the current driver facade and passes the active geometry
+  policy hint.
+- Exported the Schur builder through
+  ``sfincs_jax.solvers.preconditioners.schur`` and updated import-contract
+  tests and source map.
+
+Validation so far:
+
+- ``python -m ruff check sfincs_jax/v3_driver.py
+  sfincs_jax/solvers/preconditioners/schur
+  tests/test_rhs1_schur_policy.py tests/test_schur_precond_heuristic.py
+  tests/test_v3_driver_rhs1_dispatch_coverage.py
+  tests/test_domain_package_import_contracts.py``: passed.
+- ``python -m compileall -q sfincs_jax/v3_driver.py
+  sfincs_jax/solvers/preconditioners/schur
+  tests/test_rhs1_schur_policy.py tests/test_schur_precond_heuristic.py
+  tests/test_v3_driver_rhs1_dispatch_coverage.py
+  tests/test_domain_package_import_contracts.py``: passed.
+- ``PYTHONDONTWRITEBYTECODE=1 pytest -q -p no:cacheprovider
+  tests/test_rhs1_schur_policy.py tests/test_schur_precond_heuristic.py
+  tests/test_v3_driver_rhs1_dispatch_coverage.py
+  tests/test_v3_driver_pas_precond_policy_coverage.py
+  tests/test_preconditioner_caches.py
+  tests/test_domain_package_import_contracts.py``:
+  ``95 passed in 20.97 s``.
+- ``SPHINXOPTS='-W --keep-going' python -m sphinx -b html docs
+  docs/_build/html``: passed.
+- ``git diff --check``: passed.
+- ``PYTHONDONTWRITEBYTECODE=1 pytest -q -p no:cacheprovider``:
+  ``2703 passed in 539.69 s``.
