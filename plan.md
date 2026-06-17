@@ -31896,3 +31896,56 @@ Validation so far:
 - ``git diff --check``: passed.
 - ``PYTHONDONTWRITEBYTECODE=1 pytest -q -p no:cacheprovider``:
   ``2703 passed in 552.11 s``.
+
+### 19.46 RHSMode=1 radial x-grid preconditioner extraction
+
+Goal:
+
+- Move the RHSMode=1 radial x-grid preconditioners out of ``v3_driver.py``
+  while preserving private driver entry points used by dispatch, tests, and
+  downstream compatibility scripts.
+
+Usage audit:
+
+- ``_build_rhsmode1_xmg_preconditioner`` is still selected by RHSMode=1 FP and
+  fallback policies, and it routes PAS+``Er`` cases into the safer x-upwind
+  line solve.
+- ``_build_rhsmode1_xupwind_preconditioner`` is used by PAS+``Er`` runs and by
+  xmg safety routing, so the legacy cache aliases must stay visible through
+  ``v3_driver.py``.
+
+Implementation:
+
+- Added ``sfincs_jax/solvers/preconditioners/xblock/radial.py`` as the owner of
+  the two-level xmg builder and PAS+``Er`` x-upwind builder.
+- Kept the historical ``v3_driver.py`` function names as compatibility wrappers
+  that forward into the new x-block radial module.
+- Exported the builders through ``sfincs_jax.solvers.preconditioners.xblock``
+  and updated import-contract tests.
+- Updated the source map so future work can find the radial x-grid
+  preconditioner implementation without reading ``v3_driver.py``.
+
+Validation so far:
+
+- ``python -m ruff check sfincs_jax/v3_driver.py
+  sfincs_jax/solvers/preconditioners/xblock
+  tests/test_rhsmode1_xmg_er_xdot_coupling.py
+  tests/test_domain_package_import_contracts.py``: passed.
+- ``python -m compileall -q sfincs_jax/v3_driver.py
+  sfincs_jax/solvers/preconditioners/xblock
+  tests/test_rhsmode1_xmg_er_xdot_coupling.py
+  tests/test_domain_package_import_contracts.py``: passed.
+- ``PYTHONDONTWRITEBYTECODE=1 pytest -q -p no:cacheprovider
+  tests/test_rhsmode1_xmg_er_xdot_coupling.py
+  tests/test_v3_driver_rhs1_dispatch_coverage.py
+  tests/test_rhs1_pas_composite.py
+  tests/test_domain_package_import_contracts.py``: ``49 passed in 28.24 s``.
+- ``PYTHONDONTWRITEBYTECODE=1 pytest -q -p no:cacheprovider
+  tests/test_rhs1_preconditioner_auto_policy.py tests/test_rhs1_schur_policy.py
+  tests/test_rhs1_strong_auto_kind.py tests/test_preconditioner_caches.py
+  tests/test_v3_driver_pas_precond_policy_coverage.py``: ``58 passed in 0.87 s``.
+- ``SPHINXOPTS='-W --keep-going' python -m sphinx -b html docs
+  docs/_build/html``: passed.
+- ``git diff --check``: passed.
+- ``PYTHONDONTWRITEBYTECODE=1 pytest -q -p no:cacheprovider``:
+  ``2703 passed in 567.61 s``.

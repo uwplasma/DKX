@@ -71,6 +71,8 @@ ACTIVE_PACKAGE_EXPORTS = {
         "assemble_selected_zeta_tz_operator",
         "build_rhs1_sxblock_tz_preconditioner",
         "build_rhs1_sxblock_tz_sparse_host_preconditioner",
+        "build_rhs1_xmg_preconditioner",
+        "build_rhs1_xupwind_preconditioner",
         "build_rhs1_xblock_tz_lmax_preconditioner",
         "build_rhs1_xblock_tz_preconditioner",
         "build_rhs1_xblock_tz_sparse_preconditioner",
