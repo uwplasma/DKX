@@ -36,6 +36,8 @@ ACTIVE_PACKAGE_EXPORTS = {
         "build_rhs1_pas_hybrid_preconditioner",
         "build_rhs1_pas_lite_preconditioner",
         "build_rhs1_pas_schur_preconditioner",
+        "build_rhs1_pas_tokamak_theta_preconditioner",
+        "build_rhs1_pas_tz_preconditioner",
         "build_rhs1_pas_xblock_ilu_preconditioner",
         "compose_preconditioners",
         "rhsmode1_pas_xblock_precond_cache_key",

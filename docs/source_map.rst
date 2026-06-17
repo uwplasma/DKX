@@ -260,6 +260,14 @@ the historical private driver name and test the focused module directly. This ke
   ``v3_driver.py`` keeps compatibility wrappers that bind the current low-level
   builders so monkeypatch-based debug workflows continue to use the historical
   private names.
+- ``sfincs_jax/solvers/preconditioners/pas/angular.py``:
+  PAS-only RHSMode=1 angular block-tridiagonal factors, including the
+  tokamak-like theta/:math:`L` builder and the geometry-rich theta-zeta/:math:`L`
+  builder. This module owns the block-Thomas factor setup, low-mode combined
+  ``L=0,1`` singularity handling, optional structured velocity tail factors,
+  PAS-TZ memory fallback invocation, cache population, and reduced/full apply
+  wrappers. ``v3_driver.py`` injects fallback builders and keeps compatibility
+  wrappers only.
 - ``sfincs_jax/solvers/preconditioners/pas/xblock_ilu.py``
   (legacy alias: ``sfincs_jax/rhs1_pas_xblock_ilu.py``):
   sparse block-Jacobi ILU/LU setup for PAS-only RHSMode=1 operators. This

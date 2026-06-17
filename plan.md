@@ -31949,3 +31949,55 @@ Validation so far:
 - ``git diff --check``: passed.
 - ``PYTHONDONTWRITEBYTECODE=1 pytest -q -p no:cacheprovider``:
   ``2703 passed in 567.61 s``.
+
+### 19.47 RHSMode=1 PAS angular preconditioner extraction
+
+Goal:
+
+- Move the PAS-only tokamak-theta and theta-zeta angular block-tridiagonal
+  preconditioners out of ``v3_driver.py`` without changing solver policy,
+  fallback routing, cache identity, or monkeypatch-based debug compatibility.
+
+Usage audit:
+
+- ``_build_rhsmode1_pas_tokamak_theta_preconditioner`` is used by PAS lite,
+  PAS Schur, Schur-heuristic tests, and RHSMode=1 dispatch.
+- ``_build_rhsmode1_pas_tz_preconditioner`` owns the geometry-rich PAS angular
+  branch and its memory-fallback routing into Schwarz, collision, hybrid, or
+  TZFFT builders.
+- Both functions therefore remain as driver compatibility wrappers, but their
+  numerical block-Thomas setup and apply kernels now live in the PAS package.
+
+Implementation:
+
+- Added ``sfincs_jax/solvers/preconditioners/pas/angular.py`` as the owner of
+  PAS tokamak theta/:math:`L` and theta-zeta/:math:`L` preconditioners.
+- The new module receives policy predicates and fallback builders from
+  ``v3_driver.py`` so existing monkeypatch tests keep operating on historical
+  driver-private names.
+- Exported the angular builders through
+  ``sfincs_jax.solvers.preconditioners.pas`` and updated import-contract tests.
+- Updated the source map.
+
+Validation so far:
+
+- ``python -m ruff check sfincs_jax/v3_driver.py
+  sfincs_jax/solvers/preconditioners/pas
+  tests/test_v3_driver_pas_precond_policy_coverage.py
+  tests/test_rhs1_schwarz_heuristic.py tests/test_schur_precond_heuristic.py
+  tests/test_domain_package_import_contracts.py``: passed.
+- ``python -m compileall -q sfincs_jax/v3_driver.py
+  sfincs_jax/solvers/preconditioners/pas
+  tests/test_v3_driver_pas_precond_policy_coverage.py
+  tests/test_rhs1_schwarz_heuristic.py tests/test_schur_precond_heuristic.py
+  tests/test_domain_package_import_contracts.py``: passed.
+- ``PYTHONDONTWRITEBYTECODE=1 pytest -q -p no:cacheprovider
+  tests/test_v3_driver_pas_precond_policy_coverage.py
+  tests/test_rhs1_schwarz_heuristic.py tests/test_schur_precond_heuristic.py
+  tests/test_v3_driver_rhs1_dispatch_coverage.py tests/test_rhs1_pas_composite.py
+  tests/test_domain_package_import_contracts.py``: ``100 passed in 23.40 s``.
+- ``SPHINXOPTS='-W --keep-going' python -m sphinx -b html docs
+  docs/_build/html``: passed.
+- ``git diff --check``: passed.
+- ``PYTHONDONTWRITEBYTECODE=1 pytest -q -p no:cacheprovider``:
+  ``2703 passed in 545.06 s``.
