@@ -41,6 +41,9 @@ ACTIVE_PACKAGE_EXPORTS = {
         "rhsmode1_pas_xblock_precond_cache_key",
     ),
     "sfincs_jax.solvers.preconditioners.full_fp": (
+        "build_rhs1_block_preconditioner",
+        "build_rhs1_block_preconditioner_xdiag",
+        "build_rhs1_collision_preconditioner",
         "build_rhs1_species_block_preconditioner",
         "build_rhs1_species_xblock_preconditioner",
         "build_rhs1_structured_fblock_angular_jacobi_preconditioner",

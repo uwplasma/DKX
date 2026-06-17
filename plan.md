@@ -31841,3 +31841,58 @@ Validation so far:
   tests/test_domain_package_import_contracts.py``: ``51 passed in 24.88 s``.
 - ``PYTHONDONTWRITEBYTECODE=1 pytest -q -p no:cacheprovider``:
   ``2703 passed in 556.91 s``.
+
+### 19.45 RHSMode=1 collision and point-block preconditioner extraction
+
+Goal:
+
+- Move the next connected kinetic preconditioner group out of ``v3_driver.py``:
+  collision-based BiCGStab helpers, point-xdiag blocks, and PETSc-style point
+  blocks.
+
+Usage audit:
+
+- ``_build_rhsmode1_collision_preconditioner`` is used by BiCGStab setup,
+  fallback probes, PAS composites, and strong-preconditioner paths.
+- ``_build_rhsmode1_block_preconditioner_xdiag`` is used by dispatch and the
+  point-block builder when ``preconditioner_x=1``.
+- ``_build_rhsmode1_block_preconditioner`` is still the default fallback for
+  several RHSMode=1 policies and Schur-base construction.
+- These functions therefore need compatibility wrappers, not deletion.
+
+Implementation:
+
+- Added ``sfincs_jax/solvers/preconditioners/full_fp/kinetic_blocks.py`` as
+  the owner of collision, point-xdiag, and point-block RHSMode=1 kinetic
+  preconditioners.
+- Moved PAS/FP diagonal collision inverse setup, FP species-``x`` and ``x``
+  collision factors, low-rank FP collision correction, point block probing,
+  extra-variable tail solves, and full/reduced apply wrappers into that module.
+- Exported the builders through
+  ``sfincs_jax.solvers.preconditioners.full_fp`` and updated import-contract
+  tests.
+- Converted historical driver functions into compatibility wrappers so current
+  dispatch monkeypatch tests and private method names continue to work.
+- Updated the source map.
+
+Validation so far:
+
+- ``python -m ruff check sfincs_jax/v3_driver.py
+  sfincs_jax/solvers/preconditioners/full_fp
+  tests/test_v3_driver_rhs1_dispatch_coverage.py
+  tests/test_v3_driver_pas_precond_policy_coverage.py
+  tests/test_domain_package_import_contracts.py``: passed.
+- ``python -m compileall -q sfincs_jax/v3_driver.py
+  sfincs_jax/solvers/preconditioners/full_fp
+  tests/test_v3_driver_rhs1_dispatch_coverage.py
+  tests/test_v3_driver_pas_precond_policy_coverage.py``: passed.
+- ``PYTHONDONTWRITEBYTECODE=1 pytest -q -p no:cacheprovider
+  tests/test_v3_driver_rhs1_dispatch_coverage.py
+  tests/test_v3_driver_pas_precond_policy_coverage.py
+  tests/test_preconditioner_caches.py
+  tests/test_domain_package_import_contracts.py``: ``66 passed in 24.48 s``.
+- ``SPHINXOPTS='-W --keep-going' python -m sphinx -b html docs
+  docs/_build/html``: passed.
+- ``git diff --check``: passed.
+- ``PYTHONDONTWRITEBYTECODE=1 pytest -q -p no:cacheprovider``:
+  ``2703 passed in 552.11 s``.

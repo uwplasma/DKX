@@ -2,6 +2,11 @@
 
 from __future__ import annotations
 
+from .kinetic_blocks import (
+    build_rhs1_block_preconditioner,
+    build_rhs1_block_preconditioner_xdiag,
+    build_rhs1_collision_preconditioner,
+)
 from .species_blocks import (
     build_rhs1_species_block_preconditioner,
     build_rhs1_species_xblock_preconditioner,
@@ -18,6 +23,9 @@ from .structured_fblock import (
 )
 
 __all__ = (
+    "build_rhs1_block_preconditioner",
+    "build_rhs1_block_preconditioner_xdiag",
+    "build_rhs1_collision_preconditioner",
     "build_rhs1_species_block_preconditioner",
     "build_rhs1_species_xblock_preconditioner",
     "build_rhs1_structured_fblock_angular_jacobi_preconditioner",
