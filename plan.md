@@ -283,9 +283,22 @@ Current structural findings from the review:
 - ``v3_driver.py`` is now ``34959`` lines. The full-FP x-block wrapper is now a
   compatibility forwarding wrapper only, and the PAS composite wrappers are
   compatibility forwarding wrappers that still bind live component builders.
-  Next extraction targets are broader driver-local RHSMode=1 block/species
-  preconditioners or transport compatibility alias cleanup, whichever gives the
-  cleaner domain-module contract with direct tests.
+- Moved the RHSMode=1 ``species_block`` and ``sxblock`` block-Jacobi builders
+  into ``sfincs_jax/solvers/preconditioners/full_fp/species_blocks.py``. The
+  new module owns active species/x/L index maps, shared chunked V3 operator
+  probing, block inverse construction, extra-tail inversion, and JAX apply
+  kernels. ``v3_driver.py`` now keeps compatibility wrappers only.
+- Validation after the species-block move:
+  ``python -m ruff check`` and ``python -m compileall -q`` passed on touched
+  full-FP/driver/test files; focused species-block/dispatch/cache tests passed
+  with ``127 passed in 22.57 s``; strict Sphinx docs passed,
+  ``git diff --check`` passed, and the broader RHSMode=1 solver slice passed
+  with ``154 passed in 24.15 s``. The full local suite passed with
+  ``2692 passed in 517.74 s``.
+- ``v3_driver.py`` is now ``34726`` lines. Next extraction targets are broader
+  driver-local xblock/sxblock_tz structured preconditioners or transport
+  compatibility alias cleanup, whichever gives the cleaner domain-module
+  contract with direct tests.
 
 ### Target domain package layout
 

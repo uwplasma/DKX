@@ -2,4 +2,12 @@
 
 from __future__ import annotations
 
-__all__: tuple[str, ...] = ()
+from .species_blocks import (
+    build_rhs1_species_block_preconditioner,
+    build_rhs1_species_xblock_preconditioner,
+)
+
+__all__ = (
+    "build_rhs1_species_block_preconditioner",
+    "build_rhs1_species_xblock_preconditioner",
+)
