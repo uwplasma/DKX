@@ -404,8 +404,14 @@ split into manageable pieces.
 ``tests/test_rhs1_constraint_sources.py`` covers the extracted constraint-source
 JAX kernels directly, including flux-surface averages, velocity-weighted
 density/pressure moments, ``pointAtX0`` source injection, and the documented
-constraintScheme=1 source basis. These are algebraic tests, not smoke tests, so
-they protect the source/moment closure used by both RHSMode=1 and transport solves.
+constraintScheme=1 source basis. It also exercises the constraintScheme=1
+moment-Schur x-block wrapper directly, including emitted metadata and apply
+counters. These are algebraic tests, not smoke tests, so they protect the
+source/moment closure used by both RHSMode=1 and transport solves.
+The subspace residual-correction tests now import
+``sfincs_jax.problems.profile_response.residual`` directly for the host and
+device residual-equation correction kernels, with driver-alias checks retained
+only as compatibility guards.
 
 The docstring gate now discovers every ``sfincs_jax/*policy*.py`` module and also
 checks public policy classes/functions, so new extraction seams must remain
