@@ -11,6 +11,7 @@ import numpy as np
 
 from .... import rhs1_xblock_policy as _rhs1_xblock_policy
 from .... import rhs1_xblock_sparse_host_policy as _rhs1_xblock_sparse_host_policy
+from ....preconditioner_context import sparse_structural_tol
 from ....preconditioner_caches import (
     _RHSMODE1_SPARSE_ILU_CACHE,
     _RHSMODE1_SPARSE_XBLOCK_CSR_PRECOND_CACHE,
@@ -30,7 +31,107 @@ from ....sparse_triangular import (
 )
 from ....v3_system import V3FullSystemOperator, apply_v3_full_system_operator_cached
 
-__all__ = ["build_rhs1_xblock_tz_sparse_preconditioner"]
+__all__ = [
+    "assemble_selected_theta_tz_operator",
+    "assemble_selected_zeta_tz_operator",
+    "build_rhs1_xblock_tz_sparse_preconditioner",
+    "safe_inverse_diagonal_np",
+]
+
+
+def assemble_selected_theta_tz_operator(
+    *, dd_plus: np.ndarray, dd_minus: np.ndarray, use_plus: np.ndarray
+):
+    """Assemble a theta-upwind derivative over flattened ``(theta, zeta)`` rows."""
+
+    import scipy.sparse as sp  # noqa: PLC0415
+
+    n_theta, n_zeta = use_plus.shape
+    n_tz = int(n_theta * n_zeta)
+    struct_tol = sparse_structural_tol()
+    rows: list[np.ndarray] = []
+    cols: list[np.ndarray] = []
+    data: list[np.ndarray] = []
+    for it in range(n_theta):
+        row_plus = np.asarray(dd_plus[it, :], dtype=np.float64)
+        row_minus = np.asarray(dd_minus[it, :], dtype=np.float64)
+        if struct_tol > 0.0:
+            row_plus = row_plus.copy()
+            row_minus = row_minus.copy()
+            row_plus[np.abs(row_plus) <= struct_tol] = 0.0
+            row_minus[np.abs(row_minus) <= struct_tol] = 0.0
+        nz_plus = np.flatnonzero(row_plus)
+        nz_minus = np.flatnonzero(row_minus)
+        for iz in range(n_zeta):
+            row = int(it * n_zeta + iz)
+            nz = nz_plus if bool(use_plus[it, iz]) else nz_minus
+            row_vals = row_plus if bool(use_plus[it, iz]) else row_minus
+            if int(nz.size) == 0:
+                continue
+            rows.append(np.full((int(nz.size),), row, dtype=np.int32))
+            cols.append((nz.astype(np.int32, copy=False) * int(n_zeta)) + int(iz))
+            data.append(np.asarray(row_vals[nz], dtype=np.float64))
+    if not data:
+        return sp.csr_matrix((n_tz, n_tz), dtype=np.float64)
+    row_idx = np.concatenate(rows)
+    col_idx = np.concatenate(cols)
+    values = np.concatenate(data)
+    return sp.csr_matrix((values, (row_idx, col_idx)), shape=(n_tz, n_tz), dtype=np.float64)
+
+
+def assemble_selected_zeta_tz_operator(
+    *, dd_plus: np.ndarray, dd_minus: np.ndarray, use_plus: np.ndarray
+):
+    """Assemble a zeta-upwind derivative over flattened ``(theta, zeta)`` rows."""
+
+    import scipy.sparse as sp  # noqa: PLC0415
+
+    n_theta, n_zeta = use_plus.shape
+    n_tz = int(n_theta * n_zeta)
+    struct_tol = sparse_structural_tol()
+    rows: list[np.ndarray] = []
+    cols: list[np.ndarray] = []
+    data: list[np.ndarray] = []
+    for it in range(n_theta):
+        for iz in range(n_zeta):
+            row = int(it * n_zeta + iz)
+            row_vals = np.asarray(
+                dd_plus[iz, :] if bool(use_plus[it, iz]) else dd_minus[iz, :],
+                dtype=np.float64,
+            )
+            if struct_tol > 0.0:
+                row_vals = row_vals.copy()
+                row_vals[np.abs(row_vals) <= struct_tol] = 0.0
+            nz = np.flatnonzero(row_vals)
+            if int(nz.size) == 0:
+                continue
+            rows.append(np.full((int(nz.size),), row, dtype=np.int32))
+            cols.append((int(it) * int(n_zeta)) + nz.astype(np.int32, copy=False))
+            data.append(np.asarray(row_vals[nz], dtype=np.float64))
+    if not data:
+        return sp.csr_matrix((n_tz, n_tz), dtype=np.float64)
+    row_idx = np.concatenate(rows)
+    col_idx = np.concatenate(cols)
+    values = np.concatenate(data)
+    return sp.csr_matrix((values, (row_idx, col_idx)), shape=(n_tz, n_tz), dtype=np.float64)
+
+
+def safe_inverse_diagonal_np(diagonal: np.ndarray, *, floor: float) -> np.ndarray | None:
+    """Return a finite inverse diagonal or ``None`` if the diagonal is unusable."""
+
+    diag = np.asarray(diagonal, dtype=np.float64).reshape((-1,))
+    if diag.size == 0 or not np.all(np.isfinite(diag)):
+        return None
+    floor_use = max(0.0, float(floor))
+    if floor_use > 0.0:
+        sign = np.where(diag < 0.0, -1.0, 1.0)
+        diag = np.where(np.abs(diag) > floor_use, diag, sign * floor_use)
+    elif np.any(diag == 0.0):
+        return None
+    inv = 1.0 / diag
+    if not np.all(np.isfinite(inv)):
+        return None
+    return np.asarray(inv, dtype=np.float64)
 
 
 def build_rhs1_xblock_tz_sparse_preconditioner(

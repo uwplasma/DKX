@@ -194,7 +194,12 @@ from .rhs1_xblock_policy import (
     resolve_rhs1_xblock_sparse_pc_policy,
 )
 from .solvers.preconditioners.pas import build_rhs1_pas_xblock_ilu_preconditioner
-from .solvers.preconditioners.xblock import build_rhs1_xblock_tz_sparse_preconditioner
+from .solvers.preconditioners.xblock import (
+    assemble_selected_theta_tz_operator as _assemble_selected_theta_tz_operator,
+    assemble_selected_zeta_tz_operator as _assemble_selected_zeta_tz_operator,
+    build_rhs1_xblock_tz_sparse_preconditioner,
+    safe_inverse_diagonal_np as _safe_inverse_diagonal_np,
+)
 from .problems.profile_response.policies import (
     rhs1_parse_accept_ratio,
     rhs1_parse_polish_gmres_config,
@@ -710,78 +715,10 @@ _SPARSE_HOST_PETSC_COMPAT_SOLVE_METHODS = frozenset(
 )
 
 
-def _rhs1_xblock_precondition_side(
-    *,
-    env_value: str,
-    tokamak_fp_er_pc: bool,
-    full_fp_3d_pc: bool = False,
-    active_size: int | None = None,
-    full_fp_3d_right_pc_max_env_value: str = "",
-    use_dkes: bool,
-    include_xdot: bool,
-    include_electric_field_xi: bool,
-) -> tuple[str, bool]:
-    """Compatibility wrapper for the extracted x-block precondition-side policy."""
-    return _rhs1_xblock_policy.rhs1_xblock_precondition_side(
-        env_value=env_value,
-        tokamak_fp_er_pc=tokamak_fp_er_pc,
-        full_fp_3d_pc=full_fp_3d_pc,
-        active_size=active_size,
-        full_fp_3d_right_pc_max_env_value=full_fp_3d_right_pc_max_env_value,
-        use_dkes=use_dkes,
-        include_xdot=include_xdot,
-        include_electric_field_xi=include_electric_field_xi,
-    )
-
-
-def _rhs1_xblock_gmres_restart(
-    *,
-    requested_restart: int,
-    restart_env_value: str,
-    krylov_method: str,
-    default_right_preconditioned: bool,
-) -> tuple[int, bool]:
-    """Compatibility wrapper for the extracted x-block restart policy."""
-    return _rhs1_xblock_policy.rhs1_xblock_gmres_restart(
-        requested_restart=requested_restart,
-        restart_env_value=restart_env_value,
-        krylov_method=krylov_method,
-        default_right_preconditioned=default_right_preconditioned,
-    )
-
-
-def _rhs1_dkes_gmres_budget(
-    *,
-    restart: int,
-    maxiter: int | None,
-    restart_forced: bool,
-    maxiter_forced: bool,
-    restart_cap_env: str,
-) -> tuple[int, int | None, bool, bool]:
-    """Apply PAS/FP DKES GMRES defaults without overriding explicit budgets."""
-    return _solver_path_policy.rhs1_dkes_gmres_budget(
-        restart=restart,
-        maxiter=maxiter,
-        restart_forced=restart_forced,
-        maxiter_forced=maxiter_forced,
-        restart_cap_env=restart_cap_env,
-    )
-
-
-def _rhs1_residual_needs_rescue(residual_norm: float, target: float, *, force: bool = False) -> bool:
-    """Return whether a second-stage RHSMode=1 rescue is worth launching.
-
-    Large GPU Krylov solves can land within roundoff of the requested absolute
-    target. Launching a heavy fallback for a sub-percent overshoot increases peak
-    memory and runtime without changing the accepted physics outputs. Keep a tiny
-    relative slack by default, with an env override for audit runs.
-    """
-
-    return _solver_path_policy.rhs1_residual_needs_rescue(
-        residual_norm,
-        target,
-        force=force,
-    )
+_rhs1_xblock_precondition_side = _rhs1_xblock_policy.rhs1_xblock_precondition_side
+_rhs1_xblock_gmres_restart = _rhs1_xblock_policy.rhs1_xblock_gmres_restart
+_rhs1_dkes_gmres_budget = _solver_path_policy.rhs1_dkes_gmres_budget
+_rhs1_residual_needs_rescue = _solver_path_policy.rhs1_residual_needs_rescue
 
 
 def _rhs1_gpu_sparse_fallback_skip_allowed(
@@ -804,13 +741,8 @@ def _rhs1_gpu_sparse_fallback_skip_allowed(
     )
 
 
-def _is_resource_exhausted_error(exc: Exception) -> bool:
-    return _solver_path_policy.is_resource_exhausted_error(exc)
-
-
-def _resolve_use_implicit(*, differentiable: bool | None = None) -> bool:
-    """Resolve whether to use the implicit/differentiable linear solve path."""
-    return _resolve_use_implicit_impl(differentiable=differentiable)
+_is_resource_exhausted_error = _solver_path_policy.is_resource_exhausted_error
+_resolve_use_implicit = _resolve_use_implicit_impl
 
 
 def _rhsmode1_dense_backend_allowed() -> bool:
@@ -1800,72 +1732,6 @@ def _rhsmode1_host_factor_probe_ok(*, factor: object | None, block_size: int) ->
     return _rhs1_host_factor_probe_ok_impl(factor=factor, block_size=int(block_size))
 
 
-def _assemble_selected_theta_tz_operator(*, dd_plus: np.ndarray, dd_minus: np.ndarray, use_plus: np.ndarray):
-    import scipy.sparse as sp  # noqa: PLC0415
-
-    n_theta, n_zeta = use_plus.shape
-    n_tz = int(n_theta * n_zeta)
-    struct_tol = _sparse_structural_tol()
-    rows: list[np.ndarray] = []
-    cols: list[np.ndarray] = []
-    data: list[np.ndarray] = []
-    for it in range(n_theta):
-        row_plus = np.asarray(dd_plus[it, :], dtype=np.float64)
-        row_minus = np.asarray(dd_minus[it, :], dtype=np.float64)
-        if struct_tol > 0.0:
-            row_plus = row_plus.copy()
-            row_minus = row_minus.copy()
-            row_plus[np.abs(row_plus) <= struct_tol] = 0.0
-            row_minus[np.abs(row_minus) <= struct_tol] = 0.0
-        nz_plus = np.flatnonzero(row_plus)
-        nz_minus = np.flatnonzero(row_minus)
-        for iz in range(n_zeta):
-            row = int(it * n_zeta + iz)
-            nz = nz_plus if bool(use_plus[it, iz]) else nz_minus
-            row_vals = row_plus if bool(use_plus[it, iz]) else row_minus
-            if int(nz.size) == 0:
-                continue
-            rows.append(np.full((int(nz.size),), row, dtype=np.int32))
-            cols.append((nz.astype(np.int32, copy=False) * int(n_zeta)) + int(iz))
-            data.append(np.asarray(row_vals[nz], dtype=np.float64))
-    if not data:
-        return sp.csr_matrix((n_tz, n_tz), dtype=np.float64)
-    row_idx = np.concatenate(rows)
-    col_idx = np.concatenate(cols)
-    values = np.concatenate(data)
-    return sp.csr_matrix((values, (row_idx, col_idx)), shape=(n_tz, n_tz), dtype=np.float64)
-
-
-def _assemble_selected_zeta_tz_operator(*, dd_plus: np.ndarray, dd_minus: np.ndarray, use_plus: np.ndarray):
-    import scipy.sparse as sp  # noqa: PLC0415
-
-    n_theta, n_zeta = use_plus.shape
-    n_tz = int(n_theta * n_zeta)
-    struct_tol = _sparse_structural_tol()
-    rows: list[np.ndarray] = []
-    cols: list[np.ndarray] = []
-    data: list[np.ndarray] = []
-    for it in range(n_theta):
-        for iz in range(n_zeta):
-            row = int(it * n_zeta + iz)
-            row_vals = np.asarray(dd_plus[iz, :] if bool(use_plus[it, iz]) else dd_minus[iz, :], dtype=np.float64)
-            if struct_tol > 0.0:
-                row_vals = row_vals.copy()
-                row_vals[np.abs(row_vals) <= struct_tol] = 0.0
-            nz = np.flatnonzero(row_vals)
-            if int(nz.size) == 0:
-                continue
-            rows.append(np.full((int(nz.size),), row, dtype=np.int32))
-            cols.append((int(it) * int(n_zeta)) + nz.astype(np.int32, copy=False))
-            data.append(np.asarray(row_vals[nz], dtype=np.float64))
-    if not data:
-        return sp.csr_matrix((n_tz, n_tz), dtype=np.float64)
-    row_idx = np.concatenate(rows)
-    col_idx = np.concatenate(cols)
-    values = np.concatenate(data)
-    return sp.csr_matrix((values, (row_idx, col_idx)), shape=(n_tz, n_tz), dtype=np.float64)
-
-
 def _get_rhsmode1_fp_xblock_assembled_host_cache(*, op: V3FullSystemOperator) -> _RHSMode1FPXBlockAssembledHostCache:
     import scipy.sparse as sp  # noqa: PLC0415
 
@@ -2204,24 +2070,6 @@ def _assemble_rhsmode1_fp_xblock_tz_sparse_matrix(
     a = a.tocsc()
     a.eliminate_zeros()
     return a
-
-
-def _safe_inverse_diagonal_np(diagonal: np.ndarray, *, floor: float) -> np.ndarray | None:
-    """Return a finite inverse diagonal or ``None`` if the diagonal is unusable."""
-
-    diag = np.asarray(diagonal, dtype=np.float64).reshape((-1,))
-    if diag.size == 0 or not np.all(np.isfinite(diag)):
-        return None
-    floor_use = max(0.0, float(floor))
-    if floor_use > 0.0:
-        sign = np.where(diag < 0.0, -1.0, 1.0)
-        diag = np.where(np.abs(diag) > floor_use, diag, sign * floor_use)
-    elif np.any(diag == 0.0):
-        return None
-    inv = 1.0 / diag
-    if not np.all(np.isfinite(inv)):
-        return None
-    return np.asarray(inv, dtype=np.float64)
 
 
 def _rhsmode1_fp_xblock_tz_sparse_diagonal(

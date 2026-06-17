@@ -35,7 +35,10 @@ ACTIVE_PACKAGE_EXPORTS = {
         "build_rhs1_pas_xblock_ilu_preconditioner",
     ),
     "sfincs_jax.solvers.preconditioners.xblock": (
+        "assemble_selected_theta_tz_operator",
+        "assemble_selected_zeta_tz_operator",
         "build_rhs1_xblock_tz_sparse_preconditioner",
+        "safe_inverse_diagonal_np",
     ),
     "sfincs_jax.solvers.preconditioners.symbolic_sparse": (
         "RHS1FullSystemMatrixFreeOperatorAdapter",
