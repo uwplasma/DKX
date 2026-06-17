@@ -24,6 +24,9 @@ from ....preconditioner_caches import (
     _RHSMode1SparseXBlockPrecondCache,
 )
 from ....preconditioner_setup import rhs_mode1_precond_cache_key
+from ....rhs1_large_cpu_policy import (
+    rhs1_fp_xblock_assembled_host_allowed as _rhs1_fp_xblock_assembled_host_allowed,
+)
 from ....rhs1_solver_policy import read_bool_env as _rhs1_bool_env
 from ....rhs1_solver_policy import read_float_env as _rhs1_float_env
 from ....sparse_triangular import (
@@ -40,7 +43,10 @@ __all__ = [
     "assemble_selected_zeta_tz_operator",
     "build_rhs1_xblock_tz_sparse_preconditioner",
     "get_rhsmode1_fp_xblock_assembled_host_cache",
+    "rhsmode1_fp_xblock_assembled_host_allowed",
+    "rhsmode1_fp_xblock_species_decoupled_for_host_assembly",
     "rhsmode1_fp_xblock_tz_sparse_diagonal",
+    "rhsmode1_xblock_sparse_lu_default_max",
     "safe_inverse_diagonal_np",
 ]
 
@@ -567,6 +573,48 @@ def rhsmode1_fp_xblock_tz_sparse_diagonal(
     return np.asarray(diag, dtype=np.float64)
 
 
+def rhsmode1_fp_xblock_assembled_host_allowed(
+    *,
+    op: V3FullSystemOperator,
+    preconditioner_species: int,
+    preconditioner_xi: int,
+    use_implicit: bool,
+    active_size: int | None = None,
+) -> bool:
+    """Return whether this RHSMode=1 FP x-block can use host sparse assembly."""
+
+    return _rhs1_fp_xblock_assembled_host_allowed(
+        op=op,
+        preconditioner_species=int(preconditioner_species),
+        preconditioner_xi=int(preconditioner_xi),
+        use_implicit=bool(use_implicit),
+        backend=jax.default_backend(),
+        active_size=None if active_size is None else int(active_size),
+    )
+
+
+def rhsmode1_fp_xblock_species_decoupled_for_host_assembly(
+    *, op: V3FullSystemOperator, preconditioner_species: int
+) -> bool:
+    """Return whether x-block host assembly preserves the requested species coupling."""
+
+    return _rhs1_xblock_sparse_host_policy.rhs1_fp_xblock_species_decoupled_for_host_assembly(
+        n_species=int(getattr(op, "n_species", 0) or 0),
+        preconditioner_species=int(preconditioner_species),
+    )
+
+
+def rhsmode1_xblock_sparse_lu_default_max(op: object, *, build_jax_factors: bool) -> int:
+    """Return the default exact-LU cap for RHSMode=1 x-block sparse factors."""
+
+    fblock = getattr(op, "fblock", None)
+    return _rhs1_xblock_sparse_host_policy.rhs1_xblock_sparse_lu_default_max(
+        has_fp=getattr(fblock, "fp", None) is not None,
+        has_pas=getattr(fblock, "pas", None) is not None,
+        build_jax_factors=bool(build_jax_factors),
+    )
+
+
 def build_rhs1_xblock_tz_sparse_preconditioner(
     *,
     op: V3FullSystemOperator,
@@ -585,11 +633,8 @@ def build_rhs1_xblock_tz_sparse_preconditioner(
     factorize_sparse_matrix_csr_host: Callable[..., object],
     matvec_submatrix: Callable[..., jnp.ndarray],
     precond_chunk_cols: Callable[[int, int], int],
-    rhsmode1_fp_xblock_assembled_host_allowed: Callable[..., bool],
-    rhsmode1_fp_xblock_species_decoupled_for_host_assembly: Callable[..., bool],
     rhsmode1_host_factor_probe_ok: Callable[..., bool],
     rhsmode1_precond_cache_key: Callable[[V3FullSystemOperator, str], tuple[object, ...]],
-    rhsmode1_xblock_sparse_lu_default_max: Callable[..., int],
     safe_preconditioner: Callable[[Callable[[jnp.ndarray], jnp.ndarray]], Callable[[jnp.ndarray], jnp.ndarray]],
 ) -> Callable[[jnp.ndarray], jnp.ndarray]:
     """Sparse per-x preconditioner for large FP RHSMode=1 systems.

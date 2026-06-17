@@ -200,7 +200,10 @@ from .solvers.preconditioners.xblock import (
     assemble_selected_zeta_tz_operator as _assemble_selected_zeta_tz_operator,
     build_rhs1_xblock_tz_sparse_preconditioner,
     get_rhsmode1_fp_xblock_assembled_host_cache as _get_rhsmode1_fp_xblock_assembled_host_cache,
+    rhsmode1_fp_xblock_assembled_host_allowed as _rhsmode1_fp_xblock_assembled_host_allowed,
+    rhsmode1_fp_xblock_species_decoupled_for_host_assembly as _rhsmode1_fp_xblock_species_decoupled_for_host_assembly,
     rhsmode1_fp_xblock_tz_sparse_diagonal as _rhsmode1_fp_xblock_tz_sparse_diagonal,
+    rhsmode1_xblock_sparse_lu_default_max as _rhsmode1_xblock_sparse_lu_default_max,
     safe_inverse_diagonal_np as _safe_inverse_diagonal_np,
 )
 from .problems.profile_response.policies import (
@@ -313,7 +316,6 @@ from .problems.profile_response.policies import (
     rhs1_sparse_prefer_skips_stage2 as _rhs1_sparse_prefer_skips_stage2_impl,
 )
 from .rhs1_large_cpu_policy import (
-    rhs1_fp_xblock_assembled_host_allowed as _rhs1_fp_xblock_assembled_host_allowed_impl,
     rhs1_large_cpu_sparse_exact_lu_allowed as _rhs1_large_cpu_sparse_exact_lu_allowed_impl,
     rhs1_large_cpu_sparse_exact_lu_xblock_allowed as _rhs1_large_cpu_sparse_exact_lu_xblock_allowed_impl,
     rhs1_large_cpu_sparse_rescue_allowed as _rhs1_large_cpu_sparse_rescue_allowed_impl,
@@ -1339,35 +1341,6 @@ def _rhsmode1_sparse_xblock_rescue_allowed(
         residual_norm=float(residual_norm),
         target=float(target),
         backend=jax.default_backend(),
-    )
-
-
-def _rhsmode1_fp_xblock_assembled_host_allowed(
-    *,
-    op: V3FullSystemOperator,
-    preconditioner_species: int,
-    preconditioner_xi: int,
-    use_implicit: bool,
-    active_size: int | None = None,
-) -> bool:
-    return _rhs1_fp_xblock_assembled_host_allowed_impl(
-        op=op,
-        preconditioner_species=int(preconditioner_species),
-        preconditioner_xi=int(preconditioner_xi),
-        use_implicit=bool(use_implicit),
-        backend=jax.default_backend(),
-        active_size=None if active_size is None else int(active_size),
-    )
-
-
-def _rhsmode1_fp_xblock_species_decoupled_for_host_assembly(
-    *, op: V3FullSystemOperator, preconditioner_species: int
-) -> bool:
-    """Return whether x-block host assembly preserves the requested species coupling."""
-
-    return _rhs1_xblock_sparse_host_policy.rhs1_fp_xblock_species_decoupled_for_host_assembly(
-        n_species=int(getattr(op, "n_species", 0) or 0),
-        preconditioner_species=int(preconditioner_species),
     )
 
 
@@ -8816,16 +8789,6 @@ def _build_rhsmode1_xblock_tz_lmax_preconditioner(
     return _apply_reduced
 
 
-def _rhsmode1_xblock_sparse_lu_default_max(op: object, *, build_jax_factors: bool) -> int:
-    """Default exact-LU cap for RHSMode=1 x-block sparse preconditioners."""
-    fblock = getattr(op, "fblock", None)
-    return _rhs1_xblock_sparse_host_policy.rhs1_xblock_sparse_lu_default_max(
-        has_fp=getattr(fblock, "fp", None) is not None,
-        has_pas=getattr(fblock, "pas", None) is not None,
-        build_jax_factors=bool(build_jax_factors),
-    )
-
-
 def _build_rhsmode1_xblock_tz_sparse_preconditioner(
     *,
     op: V3FullSystemOperator,
@@ -8858,11 +8821,8 @@ def _build_rhsmode1_xblock_tz_sparse_preconditioner(
         factorize_sparse_matrix_csr_host=_factorize_sparse_matrix_csr_host,
         matvec_submatrix=_matvec_submatrix,
         precond_chunk_cols=_precond_chunk_cols,
-        rhsmode1_fp_xblock_assembled_host_allowed=_rhsmode1_fp_xblock_assembled_host_allowed,
-        rhsmode1_fp_xblock_species_decoupled_for_host_assembly=_rhsmode1_fp_xblock_species_decoupled_for_host_assembly,
         rhsmode1_host_factor_probe_ok=_rhsmode1_host_factor_probe_ok,
         rhsmode1_precond_cache_key=_rhsmode1_precond_cache_key,
-        rhsmode1_xblock_sparse_lu_default_max=_rhsmode1_xblock_sparse_lu_default_max,
         safe_preconditioner=_safe_preconditioner,
     )
 

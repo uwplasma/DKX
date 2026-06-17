@@ -231,6 +231,10 @@ Current structural findings from the review:
 - Updated the x-block package export contract and ``docs/source_map.rst`` so
   the source map states that selected upwind stencil assembly and explicit FP
   x-block assembly now live with the x-block preconditioner implementation.
+- Moved the x-block operator-aware host-assembly admission, species-decoupling,
+  and default exact-LU cap wrappers into the x-block package so
+  ``v3_driver.py`` no longer injects those policy callbacks into
+  ``build_rhs1_xblock_tz_sparse_preconditioner``.
 - Validation for this checkpoint:
   ``python -m pytest -q tests/test_sparse_assembly.py tests/test_domain_package_import_contracts.py tests/test_rhs1_xblock_fallback_initial_guess.py tests/test_rhs1_qi_two_level.py tests/test_rhs1_qi_coarse.py``
   passed with ``48 passed``; the broader import/policy slice
@@ -239,10 +243,18 @@ Current structural findings from the review:
   ``python -m pytest -q tests/test_sparse_assembly.py tests/test_domain_package_import_contracts.py tests/test_v3_driver_sparse_helper_coverage.py tests/test_preconditioner_caches.py tests/test_rhs1_xblock_fallback_initial_guess.py tests/test_rhs1_qi_two_level.py tests/test_rhs1_qi_coarse.py``
   passed with ``72 passed``; ``python -m compileall -q
   sfincs_jax/v3_driver.py sfincs_jax/solvers/preconditioners/xblock`` passed;
-  the full local suite passed with ``2687 passed in 538.27 s``.
-- ``v3_driver.py`` is now ``35147`` lines. The next high-value extraction is
-  the remaining sparse x-block factorization/caching orchestration seam,
-  followed by transport compatibility alias cleanup.
+  the full local suite passed with ``2687 passed in 538.27 s``; after the
+  x-block policy-wrapper move, ``python -m pytest -q
+  tests/test_domain_package_import_contracts.py
+  tests/test_rhs1_xblock_sparse_host_policy.py
+  tests/test_v3_driver_sparse_helper_coverage.py
+  tests/test_rhs1_sparse_first_heuristic.py tests/test_sparse_assembly.py``
+  passed with ``101 passed`` and ruff passed on the touched modules.
+- ``v3_driver.py`` is now ``35105`` lines. The next high-value extraction is
+  the remaining sparse x-block factorization/caching orchestration seam:
+  sparse factor setup, cache-key construction, matrix probing/chunking, host
+  factor probing, and safety wrapping. Transport compatibility alias cleanup
+  follows after that seam is thinner.
 
 ### Target domain package layout
 
