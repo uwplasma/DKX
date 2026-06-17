@@ -264,10 +264,10 @@ the historical private driver name and test the focused module directly. This ke
   (legacy alias: ``sfincs_jax/rhs1_xblock_tz_sparse.py``):
   sparse per-``x`` RHSMode=1 full-FP preconditioner setup. This module owns the
   host/JAX x-block LU/ILU policy, compact CSR/padded triangular-factor apply,
-  selected theta/zeta upwind sparse-stencil assembly, skipped-block diagonal
-  fallback, and extra-variable Schur solve. The driver injects only the
-  remaining full FP x-block matrix assembly, sparse-factor, cache-key, and
-  safety-wrapper seams.
+  selected theta/zeta upwind sparse-stencil assembly, explicit FP assembled-host
+  cache, per-block sparse matrix/diagonal assembly, skipped-block diagonal
+  fallback, and extra-variable Schur solve. The driver injects only sparse
+  factorization, cache-key, matrix-probe, chunking, and safety-wrapper seams.
 - ``sfincs_jax/problems/transport_matrix/direct_pmat.py``
   (legacy alias: ``sfincs_jax/transport_direct_pmat.py``):
   direct term-level RHSMode=2/3 reduced ``Pmat`` and exact active-operator

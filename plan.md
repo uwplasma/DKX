@@ -220,24 +220,29 @@ Current structural findings from the review:
 
 2026-06-17 extraction checkpoint:
 
-- Moved RHSMode=1 x-block selected theta/zeta sparse-stencil assembly helpers
-  and the safe diagonal-inverse helper from ``v3_driver.py`` into
-  ``sfincs_jax/solvers/preconditioners/xblock/tz_sparse.py``.
+- Moved RHSMode=1 x-block selected theta/zeta sparse-stencil assembly helpers,
+  safe diagonal-inverse helper, explicit FP assembled-host cache, per-block
+  sparse matrix builder, and per-block diagonal fallback from ``v3_driver.py``
+  into ``sfincs_jax/solvers/preconditioners/xblock/tz_sparse.py``.
 - Collapsed redundant ``v3_driver.py`` compatibility wrappers for x-block
   precondition side, x-block GMRES restart, DKES GMRES budgets, residual-rescue
   gating, resource-exhaustion checks, and implicit-solve selection into direct
   aliases to their extracted policy functions.
 - Updated the x-block package export contract and ``docs/source_map.rst`` so
-  the source map states that selected upwind stencil assembly now lives with
-  the x-block preconditioner implementation.
+  the source map states that selected upwind stencil assembly and explicit FP
+  x-block assembly now live with the x-block preconditioner implementation.
 - Validation for this checkpoint:
   ``python -m pytest -q tests/test_sparse_assembly.py tests/test_domain_package_import_contracts.py tests/test_rhs1_xblock_fallback_initial_guess.py tests/test_rhs1_qi_two_level.py tests/test_rhs1_qi_coarse.py``
   passed with ``48 passed``; the broader import/policy slice
   ``tests/test_policy_module_docstrings.py tests/test_v3_driver_sparse_helper_coverage.py tests/test_sparse_triangular.py tests/test_preconditioner_caches.py``
-  passed with ``30 passed``; strict Sphinx docs and ``git diff --check`` passed.
-- ``v3_driver.py`` is now ``35565`` lines. The next high-value extraction is
-  the remaining full FP x-block matrix/diagonal assembly cache, followed by
-  transport compatibility alias cleanup.
+  passed with ``30 passed``; after the explicit FP x-block move,
+  ``python -m pytest -q tests/test_sparse_assembly.py tests/test_domain_package_import_contracts.py tests/test_v3_driver_sparse_helper_coverage.py tests/test_preconditioner_caches.py tests/test_rhs1_xblock_fallback_initial_guess.py tests/test_rhs1_qi_two_level.py tests/test_rhs1_qi_coarse.py``
+  passed with ``72 passed``; ``python -m compileall -q
+  sfincs_jax/v3_driver.py sfincs_jax/solvers/preconditioners/xblock`` passed;
+  the full local suite passed with ``2687 passed in 538.27 s``.
+- ``v3_driver.py`` is now ``35147`` lines. The next high-value extraction is
+  the remaining sparse x-block factorization/caching orchestration seam,
+  followed by transport compatibility alias cleanup.
 
 ### Target domain package layout
 

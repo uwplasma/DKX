@@ -11,16 +11,19 @@ import numpy as np
 
 from .... import rhs1_xblock_policy as _rhs1_xblock_policy
 from .... import rhs1_xblock_sparse_host_policy as _rhs1_xblock_sparse_host_policy
-from ....preconditioner_context import sparse_structural_tol
+from ....preconditioner_context import precond_dtype, sparse_structural_tol
 from ....preconditioner_caches import (
+    _RHSMODE1_FP_XBLOCK_ASSEMBLED_HOST_CACHE,
     _RHSMODE1_SPARSE_ILU_CACHE,
     _RHSMODE1_SPARSE_XBLOCK_CSR_PRECOND_CACHE,
     _RHSMODE1_SPARSE_XBLOCK_HOST_PRECOND_CACHE,
     _RHSMODE1_SPARSE_XBLOCK_PRECOND_CACHE,
+    _RHSMode1FPXBlockAssembledHostCache,
     _RHSMode1SparseXBlockCSRPrecondCache,
     _RHSMode1SparseXBlockHostPrecondCache,
     _RHSMode1SparseXBlockPrecondCache,
 )
+from ....preconditioner_setup import rhs_mode1_precond_cache_key
 from ....rhs1_solver_policy import read_bool_env as _rhs1_bool_env
 from ....rhs1_solver_policy import read_float_env as _rhs1_float_env
 from ....sparse_triangular import (
@@ -32,9 +35,12 @@ from ....sparse_triangular import (
 from ....v3_system import V3FullSystemOperator, apply_v3_full_system_operator_cached
 
 __all__ = [
+    "assemble_rhsmode1_fp_xblock_tz_sparse_matrix",
     "assemble_selected_theta_tz_operator",
     "assemble_selected_zeta_tz_operator",
     "build_rhs1_xblock_tz_sparse_preconditioner",
+    "get_rhsmode1_fp_xblock_assembled_host_cache",
+    "rhsmode1_fp_xblock_tz_sparse_diagonal",
     "safe_inverse_diagonal_np",
 ]
 
@@ -134,6 +140,433 @@ def safe_inverse_diagonal_np(diagonal: np.ndarray, *, floor: float) -> np.ndarra
     return np.asarray(inv, dtype=np.float64)
 
 
+def get_rhsmode1_fp_xblock_assembled_host_cache(*, op: V3FullSystemOperator) -> _RHSMode1FPXBlockAssembledHostCache:
+    """Return cached host-side pieces for explicit FP x-block sparse assembly."""
+
+    import scipy.sparse as sp  # noqa: PLC0415
+
+    cache_key = rhs_mode1_precond_cache_key(
+        op,
+        "fp_xblock_assembled_host",
+        precond_dtype=precond_dtype(),
+    )
+    cached = _RHSMODE1_FP_XBLOCK_ASSEMBLED_HOST_CACHE.get(cache_key)
+    if cached is not None:
+        return cached
+
+    colless = op.fblock.collisionless
+    fp = op.fblock.fp
+    if colless is None or fp is None:
+        raise ValueError("assembled FP x-block host cache requires collisionless and FP operators")
+
+    n_species = int(op.n_species)
+    n_x = int(op.n_x)
+    n_l = int(op.n_xi)
+    n_theta = int(op.n_theta)
+    n_zeta = int(op.n_zeta)
+    n_tz = int(n_theta * n_zeta)
+
+    x = np.asarray(colless.x, dtype=np.float64).reshape((n_x,))
+    z_s = np.asarray(op.z_s, dtype=np.float64).reshape((n_species,))
+    identity_shift = float(np.asarray(op.fblock.identity_shift, dtype=np.float64).reshape(()))
+    fp_diag_sxl = np.zeros((n_species, n_x, n_l), dtype=np.float64)
+    for s in range(n_species):
+        for ix in range(n_x):
+            fp_diag_sxl[s, ix, :] = np.asarray(fp.mat[s, s, :, ix, ix], dtype=np.float64)
+
+    struct_tol = sparse_structural_tol()
+    ddtheta = np.asarray(colless.ddtheta, dtype=np.float64)
+    ddzeta = np.asarray(colless.ddzeta, dtype=np.float64)
+    if struct_tol > 0.0:
+        ddtheta = ddtheta.copy()
+        ddzeta = ddzeta.copy()
+        ddtheta[np.abs(ddtheta) <= struct_tol] = 0.0
+        ddzeta[np.abs(ddzeta) <= struct_tol] = 0.0
+    n_tz_eye = sp.eye(n_tz, format="csr", dtype=np.float64)
+    dtheta_tz = sp.kron(sp.csr_matrix(ddtheta), sp.eye(n_zeta, format="csr", dtype=np.float64), format="csr")
+    dzeta_tz = sp.kron(sp.eye(n_theta, format="csr", dtype=np.float64), sp.csr_matrix(ddzeta), format="csr")
+
+    b_hat = np.asarray(colless.b_hat, dtype=np.float64)
+    b_hat_sup_theta = np.asarray(colless.b_hat_sup_theta, dtype=np.float64)
+    b_hat_sup_zeta = np.asarray(colless.b_hat_sup_zeta, dtype=np.float64)
+    db_hat_dtheta = np.asarray(colless.db_hat_dtheta, dtype=np.float64)
+    db_hat_dzeta = np.asarray(colless.db_hat_dzeta, dtype=np.float64)
+    t_hats = np.asarray(colless.t_hats, dtype=np.float64).reshape((n_species,))
+    m_hats = np.asarray(colless.m_hats, dtype=np.float64).reshape((n_species,))
+    sqrt_t_over_m = np.sqrt(t_hats / m_hats)
+
+    stream_tz_by_species: list[object] = []
+    mirror_diag_by_species: list[object] = []
+    v_theta = b_hat_sup_theta / b_hat
+    v_zeta = b_hat_sup_zeta / b_hat
+    mirror_geom = b_hat_sup_theta * db_hat_dtheta + b_hat_sup_zeta * db_hat_dzeta
+    for s in range(n_species):
+        stream_tz = sp.diags((sqrt_t_over_m[s] * v_theta).reshape((-1,)), 0, format="csr") @ dtheta_tz
+        stream_tz = stream_tz + (sp.diags((sqrt_t_over_m[s] * v_zeta).reshape((-1,)), 0, format="csr") @ dzeta_tz)
+        mirror_factor = (-sqrt_t_over_m[s] * mirror_geom / (2.0 * (b_hat**2))).reshape((-1,))
+        stream_tz_by_species.append(stream_tz.tocsr())
+        mirror_diag_by_species.append(sp.diags(mirror_factor, 0, format="csr"))
+
+    exb_op_tz = None
+    exb_theta = op.fblock.exb_theta
+    exb_zeta = op.fblock.exb_zeta
+    if exb_theta is not None:
+        denom = (
+            float(np.asarray(exb_theta.fsab_hat2, dtype=np.float64).reshape(()))
+            if bool(getattr(exb_theta, "use_dkes_exb_drift", False))
+            else None
+        )
+        coef = np.asarray(exb_theta.d_hat * exb_theta.b_hat_sub_zeta, dtype=np.float64)
+        coef = coef / denom if denom is not None else coef / (np.asarray(exb_theta.b_hat, dtype=np.float64) ** 2)
+        factor = float(
+            np.asarray(
+                exb_theta.alpha * exb_theta.delta * 0.5 * exb_theta.dphi_hat_dpsi_hat,
+                dtype=np.float64,
+            ).reshape(())
+        )
+        exb_op_tz = sp.diags((factor * coef).reshape((-1,)), 0, format="csr") @ dtheta_tz
+    if exb_zeta is not None:
+        denom = (
+            float(np.asarray(exb_zeta.fsab_hat2, dtype=np.float64).reshape(()))
+            if bool(getattr(exb_zeta, "use_dkes_exb_drift", False))
+            else None
+        )
+        coef = np.asarray(exb_zeta.d_hat * exb_zeta.b_hat_sub_theta, dtype=np.float64)
+        coef = coef / denom if denom is not None else coef / (np.asarray(exb_zeta.b_hat, dtype=np.float64) ** 2)
+        factor = float(
+            np.asarray(
+                -exb_zeta.alpha * exb_zeta.delta * 0.5 * exb_zeta.dphi_hat_dpsi_hat,
+                dtype=np.float64,
+            ).reshape(())
+        )
+        exb_term = sp.diags((factor * coef).reshape((-1,)), 0, format="csr") @ dzeta_tz
+        exb_op_tz = exb_term if exb_op_tz is None else (exb_op_tz + exb_term)
+    if exb_op_tz is not None:
+        exb_op_tz = exb_op_tz.tocsr()
+
+    mag_theta_m1_tz_by_species = None
+    mag_theta_m2_tz_by_species = None
+    mag_theta = op.fblock.magdrift_theta
+    if mag_theta is not None:
+        gf1 = np.asarray(
+            mag_theta.b_hat_sub_zeta * mag_theta.db_hat_dpsi_hat - mag_theta.b_hat_sub_psi * mag_theta.db_hat_dzeta,
+            dtype=np.float64,
+        )
+        gf2 = np.asarray(
+            2.0 * mag_theta.b_hat * (mag_theta.db_hat_sub_psi_dzeta - mag_theta.db_hat_sub_zeta_dpsi_hat),
+            dtype=np.float64,
+        )
+        base = np.asarray(
+            mag_theta.delta * mag_theta.t_hat * mag_theta.d_hat / (2.0 * mag_theta.z * (mag_theta.b_hat**3)),
+            dtype=np.float64,
+        )
+        d_hat_ref = float(np.asarray(mag_theta.d_hat, dtype=np.float64).reshape((-1,))[0])
+        mag_theta_m1_tz_by_species = []
+        mag_theta_m2_tz_by_species = []
+        for s in range(n_species):
+            use_plus = (gf1 * d_hat_ref / float(z_s[s])) > 0.0
+            dtheta_used_tz = assemble_selected_theta_tz_operator(
+                dd_plus=np.asarray(mag_theta.ddtheta_plus, dtype=np.float64),
+                dd_minus=np.asarray(mag_theta.ddtheta_minus, dtype=np.float64),
+                use_plus=np.asarray(use_plus, dtype=bool),
+            )
+            mag_theta_m1_tz_by_species.append(
+                (sp.diags((base * gf1).reshape((-1,)), 0, format="csr") @ dtheta_used_tz).tocsr()
+            )
+            mag_theta_m2_tz_by_species.append(
+                (sp.diags((base * gf2).reshape((-1,)), 0, format="csr") @ dtheta_used_tz).tocsr()
+            )
+        mag_theta_m1_tz_by_species = tuple(mag_theta_m1_tz_by_species)
+        mag_theta_m2_tz_by_species = tuple(mag_theta_m2_tz_by_species)
+
+    mag_zeta_m1_tz_by_species = None
+    mag_zeta_m2_tz_by_species = None
+    mag_zeta = op.fblock.magdrift_zeta
+    if mag_zeta is not None:
+        gf1 = np.asarray(
+            mag_zeta.b_hat_sub_psi * mag_zeta.db_hat_dtheta - mag_zeta.b_hat_sub_theta * mag_zeta.db_hat_dpsi_hat,
+            dtype=np.float64,
+        )
+        gf2 = np.asarray(
+            2.0 * mag_zeta.b_hat * (mag_zeta.db_hat_sub_theta_dpsi_hat - mag_zeta.db_hat_sub_psi_dtheta),
+            dtype=np.float64,
+        )
+        base = np.asarray(
+            mag_zeta.delta * mag_zeta.t_hat * mag_zeta.d_hat / (2.0 * mag_zeta.z * (mag_zeta.b_hat**3)),
+            dtype=np.float64,
+        )
+        d_hat_ref = float(np.asarray(mag_zeta.d_hat, dtype=np.float64).reshape((-1,))[0])
+        mag_zeta_m1_tz_by_species = []
+        mag_zeta_m2_tz_by_species = []
+        for s in range(n_species):
+            use_plus = (gf1 * d_hat_ref / float(z_s[s])) > 0.0
+            dzeta_used_tz = assemble_selected_zeta_tz_operator(
+                dd_plus=np.asarray(mag_zeta.ddzeta_plus, dtype=np.float64),
+                dd_minus=np.asarray(mag_zeta.ddzeta_minus, dtype=np.float64),
+                use_plus=np.asarray(use_plus, dtype=bool),
+            )
+            mag_zeta_m1_tz_by_species.append(
+                (sp.diags((base * gf1).reshape((-1,)), 0, format="csr") @ dzeta_used_tz).tocsr()
+            )
+            mag_zeta_m2_tz_by_species.append(
+                (sp.diags((base * gf2).reshape((-1,)), 0, format="csr") @ dzeta_used_tz).tocsr()
+            )
+        mag_zeta_m1_tz_by_species = tuple(mag_zeta_m1_tz_by_species)
+        mag_zeta_m2_tz_by_species = tuple(mag_zeta_m2_tz_by_species)
+
+    mag_xidot_factor_flat = None
+    mag_xidot = op.fblock.magdrift_xidot
+    if mag_xidot is not None:
+        temp = np.asarray(
+            (mag_xidot.db_hat_sub_psi_dzeta - mag_xidot.db_hat_sub_zeta_dpsi_hat) * mag_xidot.db_hat_dtheta
+            + (mag_xidot.db_hat_sub_theta_dpsi_hat - mag_xidot.db_hat_sub_psi_dtheta) * mag_xidot.db_hat_dzeta,
+            dtype=np.float64,
+        )
+        mag_xidot_factor_flat = np.asarray(
+            (-(mag_xidot.delta * mag_xidot.t_hat) * mag_xidot.d_hat / (2.0 * mag_xidot.z * (mag_xidot.b_hat**3)) * temp),
+            dtype=np.float64,
+        ).reshape((-1,))
+
+    er_xidot_factor_flat = None
+    er_xidot = op.fblock.er_xidot
+    if er_xidot is not None:
+        temp = np.asarray(
+            er_xidot.b_hat_sub_zeta * er_xidot.db_hat_dtheta - er_xidot.b_hat_sub_theta * er_xidot.db_hat_dzeta,
+            dtype=np.float64,
+        )
+        er_xidot_factor_flat = np.asarray(
+            er_xidot.alpha
+            * er_xidot.delta
+            * er_xidot.dphi_hat_dpsi_hat
+            / (4.0 * (er_xidot.b_hat**3))
+            * er_xidot.d_hat
+            * temp,
+            dtype=np.float64,
+        ).reshape((-1,))
+
+    er_xdot_factor_flat = None
+    ddx_plus_diag = None
+    ddx_minus_diag = None
+    er_xdot = op.fblock.er_xdot
+    if er_xdot is not None:
+        factor0 = float(np.asarray(-(er_xdot.alpha * er_xdot.delta * er_xdot.dphi_hat_dpsi_hat) / 4.0, dtype=np.float64).reshape(()))
+        er_xdot_factor_flat = np.asarray(
+            factor0
+            * er_xdot.d_hat
+            / (er_xdot.b_hat**3)
+            * (er_xdot.b_hat_sub_theta * er_xdot.db_hat_dzeta - er_xdot.b_hat_sub_zeta * er_xdot.db_hat_dtheta),
+            dtype=np.float64,
+        ).reshape((-1,))
+        ddx_plus_diag = np.asarray(np.diag(np.asarray(er_xdot.ddx_plus, dtype=np.float64)), dtype=np.float64)
+        ddx_minus_diag = np.asarray(np.diag(np.asarray(er_xdot.ddx_minus, dtype=np.float64)), dtype=np.float64)
+
+    cached = _RHSMode1FPXBlockAssembledHostCache(
+        x=x,
+        z_s=z_s,
+        fp_diag_sxl=fp_diag_sxl,
+        n_tz_eye=n_tz_eye,
+        stream_tz_by_species=tuple(stream_tz_by_species),
+        mirror_diag_by_species=tuple(mirror_diag_by_species),
+        exb_op_tz=exb_op_tz,
+        mag_theta_m1_tz_by_species=mag_theta_m1_tz_by_species,
+        mag_theta_m2_tz_by_species=mag_theta_m2_tz_by_species,
+        mag_zeta_m1_tz_by_species=mag_zeta_m1_tz_by_species,
+        mag_zeta_m2_tz_by_species=mag_zeta_m2_tz_by_species,
+        mag_xidot_factor_flat=mag_xidot_factor_flat,
+        er_xidot_factor_flat=er_xidot_factor_flat,
+        er_xdot_factor_flat=er_xdot_factor_flat,
+        ddx_plus_diag=ddx_plus_diag,
+        ddx_minus_diag=ddx_minus_diag,
+        identity_shift=identity_shift,
+    )
+    _RHSMODE1_FP_XBLOCK_ASSEMBLED_HOST_CACHE[cache_key] = cached
+    return cached
+
+
+def assemble_rhsmode1_fp_xblock_tz_sparse_matrix(
+    *,
+    op: V3FullSystemOperator,
+    species: int,
+    ix: int,
+    preconditioner_xi: int,
+    host_cache: _RHSMode1FPXBlockAssembledHostCache | None = None,
+):
+    """Assemble one explicit FP ``(theta,zeta,L)`` sparse x-block on the host."""
+
+    import scipy.sparse as sp  # noqa: PLC0415
+
+    if op.fblock.fp is None:
+        raise ValueError("assembled FP x-block matrix requires an FP operator")
+    if int(preconditioner_xi) != 1:
+        raise ValueError("assembled FP x-block matrix currently requires preconditioner_xi=1")
+    if bool(op.point_at_x0):
+        raise ValueError("assembled FP x-block matrix currently requires pointAtX0=false")
+
+    colless = op.fblock.collisionless
+    host = host_cache if host_cache is not None else get_rhsmode1_fp_xblock_assembled_host_cache(op=op)
+    mag_theta = op.fblock.magdrift_theta
+    mag_zeta = op.fblock.magdrift_zeta
+
+    n_lx = int(np.asarray(colless.n_xi_for_x, dtype=np.int32)[int(ix)])
+    if n_lx <= 0:
+        return sp.csc_matrix((0, 0), dtype=np.float64)
+
+    x_val = float(host.x[int(ix)])
+
+    diag_vals = float(host.identity_shift) + host.fp_diag_sxl[int(species), int(ix), :n_lx]
+    a = sp.kron(sp.diags(diag_vals, 0, format="csr"), host.n_tz_eye, format="csc")
+    stream_tz = host.stream_tz_by_species[int(species)]
+    mirror_diag = host.mirror_diag_by_species[int(species)]
+
+    ell = np.arange(n_lx, dtype=np.float64)
+    coef_plus = x_val * (ell + 1.0) / (2.0 * ell + 3.0)
+    coef_minus = np.where(ell > 0, x_val * ell / (2.0 * ell - 1.0), 0.0)
+    coef_mirror_plus = x_val * (ell + 1.0) * (ell + 2.0) / (2.0 * ell + 3.0)
+    coef_mirror_minus = np.where(ell > 1, -x_val * ell * (ell - 1.0) / (2.0 * ell - 1.0), 0.0)
+    if n_lx > 1:
+        c_stream = sp.diags(
+            [coef_minus[1:], coef_plus[:-1]],
+            offsets=[-1, 1],
+            shape=(n_lx, n_lx),
+            format="csr",
+            dtype=np.float64,
+        )
+        c_mirror = sp.diags(
+            [coef_mirror_minus[1:], coef_mirror_plus[:-1]],
+            offsets=[-1, 1],
+            shape=(n_lx, n_lx),
+            format="csr",
+            dtype=np.float64,
+        )
+        a = a + sp.kron(c_stream, stream_tz, format="csc") + sp.kron(c_mirror, mirror_diag, format="csc")
+
+    if host.exb_op_tz is not None:
+        a = a + sp.kron(sp.eye(n_lx, format="csr", dtype=np.float64), host.exb_op_tz, format="csc")
+
+    if mag_theta is not None:
+        assert host.mag_theta_m1_tz_by_species is not None
+        assert host.mag_theta_m2_tz_by_species is not None
+        m1 = (x_val * x_val) * host.mag_theta_m1_tz_by_species[int(species)]
+        m2 = (x_val * x_val) * host.mag_theta_m2_tz_by_species[int(species)]
+        denom = (2.0 * ell + 3.0) * (2.0 * ell - 1.0)
+        c1 = 2.0 * (3.0 * ell * ell + 3.0 * ell - 2.0) / denom
+        c2 = (2.0 * ell * ell + 2.0 * ell - 1.0) / denom
+        a = a + sp.kron(sp.diags(c1, 0, format="csr"), m1, format="csc")
+        a = a + sp.kron(sp.diags(c2, 0, format="csr"), m2, format="csc")
+
+    if mag_zeta is not None:
+        assert host.mag_zeta_m1_tz_by_species is not None
+        assert host.mag_zeta_m2_tz_by_species is not None
+        m1 = (x_val * x_val) * host.mag_zeta_m1_tz_by_species[int(species)]
+        m2 = (x_val * x_val) * host.mag_zeta_m2_tz_by_species[int(species)]
+        denom = (2.0 * ell + 3.0) * (2.0 * ell - 1.0)
+        c1 = 2.0 * (3.0 * ell * ell + 3.0 * ell - 2.0) / denom
+        c2 = (2.0 * ell * ell + 2.0 * ell - 1.0) / denom
+        a = a + sp.kron(sp.diags(c1, 0, format="csr"), m1, format="csc")
+        a = a + sp.kron(sp.diags(c2, 0, format="csr"), m2, format="csc")
+
+    if host.mag_xidot_factor_flat is not None:
+        diag_c = np.where(ell > 0, (ell + 1.0) * ell / ((2.0 * ell - 1.0) * (2.0 * ell + 3.0)), 0.0)
+        a = a + sp.kron(
+            sp.diags(diag_c, 0, format="csr"),
+            sp.diags((x_val * x_val * host.mag_xidot_factor_flat).reshape((-1,)), 0, format="csr"),
+            format="csc",
+        )
+
+    if host.er_xidot_factor_flat is not None:
+        diag_c = np.where(ell > 0, (ell + 1.0) * ell / ((2.0 * ell - 1.0) * (2.0 * ell + 3.0)), 0.0)
+        a = a + sp.kron(
+            sp.diags(diag_c, 0, format="csr"),
+            sp.diags((x_val * x_val * host.er_xidot_factor_flat).reshape((-1,)), 0, format="csr"),
+            format="csc",
+        )
+
+    if host.er_xdot_factor_flat is not None and host.ddx_plus_diag is not None and host.ddx_minus_diag is not None:
+        use_plus = host.er_xdot_factor_flat > 0.0
+        xdiag = x_val * np.where(use_plus, host.ddx_plus_diag[int(ix)], host.ddx_minus_diag[int(ix)])
+        denom = (2.0 * ell + 3.0) * (2.0 * ell - 1.0)
+        diag_coef = 2.0 * (3.0 * ell * ell + 3.0 * ell - 2.0) / denom
+        xdot_diag = sp.diags((xdiag * host.er_xdot_factor_flat).reshape((-1,)), 0, format="csr")
+        a = a + sp.kron(sp.diags(diag_coef, 0, format="csr"), xdot_diag, format="csc")
+
+    a = a.tocsc()
+    a.eliminate_zeros()
+    return a
+
+
+def rhsmode1_fp_xblock_tz_sparse_diagonal(
+    *,
+    op: V3FullSystemOperator,
+    species: int,
+    ix: int,
+    preconditioner_xi: int,
+    host_cache: _RHSMode1FPXBlockAssembledHostCache | None = None,
+) -> np.ndarray:
+    """Assemble only the diagonal of an explicit FP x-block preconditioner."""
+
+    if op.fblock.fp is None:
+        raise ValueError("assembled FP x-block diagonal requires an FP operator")
+    if int(preconditioner_xi) != 1:
+        raise ValueError("assembled FP x-block diagonal currently requires preconditioner_xi=1")
+    if bool(op.point_at_x0):
+        raise ValueError("assembled FP x-block diagonal currently requires pointAtX0=false")
+
+    colless = op.fblock.collisionless
+    host = host_cache if host_cache is not None else get_rhsmode1_fp_xblock_assembled_host_cache(op=op)
+    n_theta = int(op.n_theta)
+    n_zeta = int(op.n_zeta)
+    n_tz = int(n_theta * n_zeta)
+    n_lx = int(np.asarray(colless.n_xi_for_x, dtype=np.int32)[int(ix)])
+    if n_lx <= 0:
+        return np.zeros((0,), dtype=np.float64)
+
+    def _matrix_diag(matrix: object) -> np.ndarray:
+        if hasattr(matrix, "diagonal"):
+            return np.asarray(matrix.diagonal(), dtype=np.float64).reshape((-1,))
+        return np.asarray(np.diag(np.asarray(matrix, dtype=np.float64)), dtype=np.float64).reshape((-1,))
+
+    x_val = float(host.x[int(ix)])
+    ell = np.arange(n_lx, dtype=np.float64)
+    diag = np.repeat(
+        float(host.identity_shift) + host.fp_diag_sxl[int(species), int(ix), :n_lx],
+        n_tz,
+    ).astype(np.float64, copy=False)
+
+    if host.exb_op_tz is not None:
+        diag += np.tile(_matrix_diag(host.exb_op_tz), n_lx)
+
+    denom = (2.0 * ell + 3.0) * (2.0 * ell - 1.0)
+    if host.mag_theta_m1_tz_by_species is not None and host.mag_theta_m2_tz_by_species is not None:
+        m1_diag = _matrix_diag(host.mag_theta_m1_tz_by_species[int(species)])
+        m2_diag = _matrix_diag(host.mag_theta_m2_tz_by_species[int(species)])
+        c1 = 2.0 * (3.0 * ell * ell + 3.0 * ell - 2.0) / denom
+        c2 = (2.0 * ell * ell + 2.0 * ell - 1.0) / denom
+        diag += np.repeat((x_val * x_val) * c1, n_tz) * np.tile(m1_diag, n_lx)
+        diag += np.repeat((x_val * x_val) * c2, n_tz) * np.tile(m2_diag, n_lx)
+
+    if host.mag_zeta_m1_tz_by_species is not None and host.mag_zeta_m2_tz_by_species is not None:
+        m1_diag = _matrix_diag(host.mag_zeta_m1_tz_by_species[int(species)])
+        m2_diag = _matrix_diag(host.mag_zeta_m2_tz_by_species[int(species)])
+        c1 = 2.0 * (3.0 * ell * ell + 3.0 * ell - 2.0) / denom
+        c2 = (2.0 * ell * ell + 2.0 * ell - 1.0) / denom
+        diag += np.repeat((x_val * x_val) * c1, n_tz) * np.tile(m1_diag, n_lx)
+        diag += np.repeat((x_val * x_val) * c2, n_tz) * np.tile(m2_diag, n_lx)
+
+    diag_c = np.where(ell > 0, (ell + 1.0) * ell / denom, 0.0)
+    if host.mag_xidot_factor_flat is not None:
+        diag += np.repeat(x_val * x_val * diag_c, n_tz) * np.tile(host.mag_xidot_factor_flat, n_lx)
+    if host.er_xidot_factor_flat is not None:
+        diag += np.repeat(x_val * x_val * diag_c, n_tz) * np.tile(host.er_xidot_factor_flat, n_lx)
+
+    if host.er_xdot_factor_flat is not None and host.ddx_plus_diag is not None and host.ddx_minus_diag is not None:
+        use_plus = host.er_xdot_factor_flat > 0.0
+        xdiag = x_val * np.where(use_plus, host.ddx_plus_diag[int(ix)], host.ddx_minus_diag[int(ix)])
+        diag_coef = 2.0 * (3.0 * ell * ell + 3.0 * ell - 2.0) / denom
+        diag += np.repeat(diag_coef, n_tz) * np.tile(xdiag * host.er_xdot_factor_flat, n_lx)
+
+    return np.asarray(diag, dtype=np.float64)
+
+
 def build_rhs1_xblock_tz_sparse_preconditioner(
     *,
     op: V3FullSystemOperator,
@@ -148,19 +581,15 @@ def build_rhs1_xblock_tz_sparse_preconditioner(
     fill_factor: float,
     force_assembled_host_fp: bool = False,
     emit: Callable[[int, str], None] | None = None,
-    assemble_rhsmode1_fp_xblock_tz_sparse_matrix: Callable[..., object],
     build_sparse_ilu_from_matvec: Callable[..., object],
     factorize_sparse_matrix_csr_host: Callable[..., object],
-    get_rhsmode1_fp_xblock_assembled_host_cache: Callable[..., object],
     matvec_submatrix: Callable[..., jnp.ndarray],
     precond_chunk_cols: Callable[[int, int], int],
     rhsmode1_fp_xblock_assembled_host_allowed: Callable[..., bool],
     rhsmode1_fp_xblock_species_decoupled_for_host_assembly: Callable[..., bool],
-    rhsmode1_fp_xblock_tz_sparse_diagonal: Callable[..., np.ndarray],
     rhsmode1_host_factor_probe_ok: Callable[..., bool],
     rhsmode1_precond_cache_key: Callable[[V3FullSystemOperator, str], tuple[object, ...]],
     rhsmode1_xblock_sparse_lu_default_max: Callable[..., int],
-    safe_inverse_diagonal_np: Callable[..., np.ndarray | None],
     safe_preconditioner: Callable[[Callable[[jnp.ndarray], jnp.ndarray]], Callable[[jnp.ndarray], jnp.ndarray]],
 ) -> Callable[[jnp.ndarray], jnp.ndarray]:
     """Sparse per-x preconditioner for large FP RHSMode=1 systems.
