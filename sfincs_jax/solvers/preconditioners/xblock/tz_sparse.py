@@ -43,6 +43,7 @@ from ....sparse_triangular import (
     triangular_solve_upper_csr_rows as _triangular_solve_upper_csr_rows,
     triangular_solve_upper_padded as _triangular_solve_upper_padded,
 )
+from ..symbolic_sparse import build_sparse_ilu_from_matvec, factorize_sparse_matrix_csr_host
 from ....v3_system import V3FullSystemOperator, apply_v3_full_system_operator_cached
 
 __all__ = [
@@ -651,8 +652,6 @@ def build_rhs1_xblock_tz_sparse_preconditioner(
     fill_factor: float,
     force_assembled_host_fp: bool = False,
     emit: Callable[[int, str], None] | None = None,
-    build_sparse_ilu_from_matvec: Callable[..., object],
-    factorize_sparse_matrix_csr_host: Callable[..., object],
 ) -> Callable[[jnp.ndarray], jnp.ndarray]:
     """Sparse per-x preconditioner for large FP RHSMode=1 systems.
 

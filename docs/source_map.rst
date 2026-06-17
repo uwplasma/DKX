@@ -267,7 +267,7 @@ the historical private driver name and test the focused module directly. This ke
   cache, host-assembly admission policy, per-block sparse matrix/diagonal
   assembly, skipped-block diagonal fallback, host-factor probe/cache-key
   policy, shared chunked unsharded matrix probing, and extra-variable Schur
-  solve. The driver injects only sparse factorization seams.
+  solve. ``v3_driver.py`` keeps a compatibility wrapper only.
 - ``sfincs_jax/problems/transport_matrix/direct_pmat.py``
   (legacy alias: ``sfincs_jax/transport_direct_pmat.py``):
   direct term-level RHSMode=2/3 reduced ``Pmat`` and exact active-operator

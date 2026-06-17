@@ -250,6 +250,9 @@ Current structural findings from the review:
 - Switched the PAS and full-FP x-block preconditioner modules to import
   ``safe_preconditioner`` directly from the profile-response residual module.
   Their driver wrappers no longer inject safety-wrapper callbacks.
+- Switched the full-FP x-block preconditioner module to import symbolic sparse
+  factor builders directly from ``solvers/preconditioners/symbolic_sparse``.
+  Its driver wrapper no longer injects sparse factorization callbacks.
 - Validation for this checkpoint:
   ``python -m pytest -q tests/test_sparse_assembly.py tests/test_domain_package_import_contracts.py tests/test_rhs1_xblock_fallback_initial_guess.py tests/test_rhs1_qi_two_level.py tests/test_rhs1_qi_coarse.py``
   passed with ``48 passed``; the broader import/policy slice
@@ -266,9 +269,10 @@ Current structural findings from the review:
   tests/test_rhs1_sparse_first_heuristic.py tests/test_sparse_assembly.py``
   passed with ``101 passed`` and ruff passed on the touched modules.
 - ``v3_driver.py`` is now ``35105`` lines before the host-probe/cache-key
-  callback removal. The next high-value extraction is the remaining sparse
-  preconditioner orchestration seam: sparse factor setup. Transport
-  compatibility alias cleanup follows after that seam is thinner.
+  callback removal. The full-FP x-block wrapper is now a compatibility
+  forwarding wrapper only. Transport compatibility alias cleanup follows after
+  the remaining PAS fallback and broader driver-local preconditioners are
+  assessed.
 
 ### Target domain package layout
 

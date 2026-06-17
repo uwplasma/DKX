@@ -8802,8 +8802,6 @@ def _build_rhsmode1_xblock_tz_sparse_preconditioner(
         fill_factor=fill_factor,
         force_assembled_host_fp=force_assembled_host_fp,
         emit=emit,
-        build_sparse_ilu_from_matvec=_build_sparse_ilu_from_matvec,
-        factorize_sparse_matrix_csr_host=_factorize_sparse_matrix_csr_host,
     )
 
 
