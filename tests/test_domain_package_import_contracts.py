@@ -35,9 +35,12 @@ ACTIVE_PACKAGE_EXPORTS = {
         "build_rhs1_pas_xblock_ilu_preconditioner",
     ),
     "sfincs_jax.solvers.preconditioners.xblock": (
+        "assemble_rhsmode1_fp_xblock_tz_sparse_matrix",
         "assemble_selected_theta_tz_operator",
         "assemble_selected_zeta_tz_operator",
         "build_rhs1_xblock_tz_sparse_preconditioner",
+        "get_rhsmode1_fp_xblock_assembled_host_cache",
+        "rhsmode1_fp_xblock_tz_sparse_diagonal",
         "safe_inverse_diagonal_np",
     ),
     "sfincs_jax.solvers.preconditioners.symbolic_sparse": (
