@@ -239,6 +239,10 @@ Current structural findings from the review:
   cache-key wrapper into the x-block package. ``v3_driver.py`` keeps legacy
   private aliases for tests/imports but no longer passes those callbacks into
   ``build_rhs1_xblock_tz_sparse_preconditioner``.
+- Moved PAS x-block ILU cache-key construction into
+  ``sfincs_jax/solvers/preconditioners/pas/xblock_ilu.py``. The driver PAS
+  wrapper now injects only the PAS-hybrid fallback, matrix-probe, chunking, and
+  safety-wrapper seams.
 - Validation for this checkpoint:
   ``python -m pytest -q tests/test_sparse_assembly.py tests/test_domain_package_import_contracts.py tests/test_rhs1_xblock_fallback_initial_guess.py tests/test_rhs1_qi_two_level.py tests/test_rhs1_qi_coarse.py``
   passed with ``48 passed``; the broader import/policy slice
@@ -255,10 +259,10 @@ Current structural findings from the review:
   tests/test_rhs1_sparse_first_heuristic.py tests/test_sparse_assembly.py``
   passed with ``101 passed`` and ruff passed on the touched modules.
 - ``v3_driver.py`` is now ``35105`` lines before the host-probe/cache-key
-  callback removal. The next high-value extraction is
-  the remaining sparse x-block factorization/caching orchestration seam:
-  sparse factor setup, matrix probing/chunking, and safety wrapping. Transport
-  compatibility alias cleanup follows after that seam is thinner.
+  callback removal. The next high-value extraction is the remaining sparse
+  preconditioner orchestration seam: factor setup, matrix probing/chunking, and
+  safety wrapping. Transport compatibility alias cleanup follows after that
+  seam is thinner.
 
 ### Target domain package layout
 

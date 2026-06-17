@@ -9246,7 +9246,6 @@ def _build_rhsmode1_pas_xblock_ilu_preconditioner(
         matvec_submatrix=_matvec_submatrix,
         pas_hybrid_preconditioner=_build_rhsmode1_pas_hybrid_preconditioner,
         precond_chunk_cols=_precond_chunk_cols,
-        rhsmode1_precond_cache_key=_rhsmode1_precond_cache_key,
         safe_preconditioner=_safe_preconditioner,
     )
 

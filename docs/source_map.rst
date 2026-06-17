@@ -259,7 +259,7 @@ the historical private driver name and test the focused module directly. This ke
   PETSc-style ILU/exact-LU cutoff policy, padded triangular-factor conversion,
   threaded block factor setup, and extra-variable Schur solve. ``v3_driver.py``
   keeps a compatibility wrapper only to inject the current PAS-hybrid fallback,
-  cache-key, matrix-probe, chunking, and safety-wrapper seams.
+  matrix-probe, chunking, and safety-wrapper seams.
 - ``sfincs_jax/solvers/preconditioners/xblock/tz_sparse.py``
   (legacy alias: ``sfincs_jax/rhs1_xblock_tz_sparse.py``):
   sparse per-``x`` RHSMode=1 full-FP preconditioner setup. This module owns the

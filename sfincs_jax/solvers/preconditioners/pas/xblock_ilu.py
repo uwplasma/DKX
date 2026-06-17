@@ -13,7 +13,8 @@ from ....preconditioner_caches import (
     _RHSMODE1_PRECOND_ILU_CACHE,
     _RHSMode1ILUBlockPrecondCache,
 )
-from ....preconditioner_setup import hash_array
+from ....preconditioner_context import precond_dtype
+from ....preconditioner_setup import hash_array, rhs_mode1_precond_cache_key
 from ....sparse_triangular import (
     inverse_permutation,
     triangular_solve_lower_padded,
@@ -21,7 +22,19 @@ from ....sparse_triangular import (
 )
 from ....v3_system import V3FullSystemOperator
 
-__all__ = ["build_rhs1_pas_xblock_ilu_preconditioner"]
+__all__ = [
+    "build_rhs1_pas_xblock_ilu_preconditioner",
+    "rhsmode1_pas_xblock_precond_cache_key",
+]
+
+
+def rhsmode1_pas_xblock_precond_cache_key(
+    op: V3FullSystemOperator,
+    kind: str = "pas_xblock_ilu",
+) -> tuple[object, ...]:
+    """Return the RHSMode=1 PAS x-block preconditioner cache key."""
+
+    return rhs_mode1_precond_cache_key(op, kind, precond_dtype=precond_dtype())
 
 
 def build_rhs1_pas_xblock_ilu_preconditioner(
@@ -32,7 +45,6 @@ def build_rhs1_pas_xblock_ilu_preconditioner(
     matvec_submatrix: Callable[..., np.ndarray],
     pas_hybrid_preconditioner: Callable[..., Callable[[jnp.ndarray], jnp.ndarray]],
     precond_chunk_cols: Callable[[int, int], int],
-    rhsmode1_precond_cache_key: Callable[[V3FullSystemOperator, str], tuple[object, ...]],
     safe_preconditioner: Callable[[Callable[[jnp.ndarray], jnp.ndarray]], Callable[[jnp.ndarray], jnp.ndarray]],
 ) -> Callable[[jnp.ndarray], jnp.ndarray]:
     """Sparse block-Jacobi ILU preconditioner for PAS-like RHSMode=1 operators.
@@ -144,7 +156,7 @@ def build_rhs1_pas_xblock_ilu_preconditioner(
     pas = op.fblock.pas
 
     cache_key = (
-        *rhsmode1_precond_cache_key(op, "pas_xblock_ilu"),
+        *rhsmode1_pas_xblock_precond_cache_key(op),
         float(op.fblock.identity_shift),
         float(pas.nu_n),
         float(pas.krook),
