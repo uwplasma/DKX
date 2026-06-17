@@ -209,9 +209,11 @@ from .solvers.preconditioners.xblock import (
     assemble_rhsmode1_fp_xblock_tz_sparse_matrix as _assemble_rhsmode1_fp_xblock_tz_sparse_matrix,
     assemble_selected_theta_tz_operator as _assemble_selected_theta_tz_operator,
     assemble_selected_zeta_tz_operator as _assemble_selected_zeta_tz_operator,
+    build_rhs1_sxblock_tz_sparse_host_preconditioner,
     build_rhs1_xblock_tz_lmax_preconditioner,
     build_rhs1_xblock_tz_preconditioner,
     build_rhs1_xblock_tz_sparse_preconditioner,
+    compute_rhs1_sxblock_tz_sparse_host_seed,
     get_rhsmode1_fp_xblock_assembled_host_cache as _get_rhsmode1_fp_xblock_assembled_host_cache,
     rhsmode1_fp_xblock_assembled_host_allowed as _rhsmode1_fp_xblock_assembled_host_allowed,
     rhsmode1_fp_xblock_species_decoupled_for_host_assembly as _rhsmode1_fp_xblock_species_decoupled_for_host_assembly,
@@ -8224,156 +8226,18 @@ def _build_rhsmode1_sxblock_tz_sparse_host_preconditioner(
     fill_factor: float,
     emit: Callable[[int, str], None] | None = None,
 ) -> Callable[[jnp.ndarray], jnp.ndarray]:
-    """Explicit-only sparse per-L species/x rescue preconditioner for large FP systems."""
-    cache_key = (
-        *_rhsmode1_precond_cache_key(op, "sxblock_tz_sparse_host"),
-        float(drop_tol),
-        float(drop_rel),
-        float(ilu_drop_tol),
-        float(fill_factor),
+    """Compatibility wrapper for the canonical sparse species/x-per-L builder."""
+
+    return build_rhs1_sxblock_tz_sparse_host_preconditioner(
+        op=op,
+        reduce_full=reduce_full,
+        expand_reduced=expand_reduced,
+        drop_tol=drop_tol,
+        drop_rel=drop_rel,
+        ilu_drop_tol=ilu_drop_tol,
+        fill_factor=fill_factor,
+        emit=emit,
     )
-    cached = _RHSMODE1_SPARSE_SXBLOCK_HOST_PRECOND_CACHE.get(cache_key)
-    n_species = int(op.n_species)
-    n_x = int(op.n_x)
-    n_l = int(op.n_xi)
-    n_theta = int(op.n_theta)
-    n_zeta = int(op.n_zeta)
-    total_size = int(op.total_size)
-    nxi_for_x = np.asarray(op.fblock.collisionless.n_xi_for_x, dtype=np.int32)
-    lu_max_env = os.environ.get("SFINCS_JAX_RHSMODE1_SXBLOCK_SPARSE_LU_MAX", "").strip()
-    try:
-        lu_max = int(lu_max_env) if lu_max_env else 4000
-    except ValueError:
-        lu_max = 4000
-    lu_max = max(0, int(lu_max))
-
-    if cached is None:
-        import scipy.sparse as sp  # noqa: PLC0415
-
-        extra_start = int(op.f_size + op.phi1_size)
-        extra_size = int(op.extra_size)
-        extra_idx_np = np.arange(extra_start, extra_start + extra_size, dtype=np.int32)
-        reg_env = os.environ.get("SFINCS_JAX_RHSMODE1_PRECOND_REG", "").strip()
-        reg_val = float(reg_env) if reg_env else 1e-10
-        struct_tol = _sparse_structural_tol()
-        block_indices: list[np.ndarray] = []
-        block_factors: list[object | None] = []
-        for il in range(n_l):
-            active_x = np.where(nxi_for_x > il)[0]
-            if active_x.size == 0:
-                continue
-            idx: list[int] = []
-            for s in range(n_species):
-                for ix in active_x:
-                    base = int((((s * n_x + int(ix)) * n_l + il) * n_theta) * n_zeta)
-                    for it in range(n_theta):
-                        for iz in range(n_zeta):
-                            idx.append(base + it * n_zeta + iz)
-            rep_idx_np = np.asarray(idx, dtype=np.int32)
-            block_cache_key = (cache_key, int(il), int(rep_idx_np.size))
-            exact_lu = int(rep_idx_np.size) <= int(lu_max)
-            try:
-                if emit is not None:
-                    emit(
-                        1,
-                        "sxblock_sparse_host: assembling per-L species/x block "
-                        f"(L={int(il)} size={int(rep_idx_np.size)})",
-                    )
-                chunk_cols = _precond_chunk_cols(total_size, int(rep_idx_np.shape[0]))
-                y_sub = _matvec_submatrix(
-                    op,
-                    col_idx=rep_idx_np,
-                    row_idx=rep_idx_np,
-                    total_size=total_size,
-                    chunk_cols=chunk_cols,
-                )
-                a_block = np.asarray(y_sub.T, dtype=np.float64)
-                if struct_tol > 0.0 and a_block.size:
-                    a_block[np.abs(a_block) <= struct_tol] = 0.0
-                a_csr = sp.csr_matrix(a_block)
-                a_csr.eliminate_zeros()
-                _factorize_sparse_matrix_csr_host(
-                    a_csr_full=a_csr,
-                    cache_key=block_cache_key,
-                    drop_tol=drop_tol,
-                    drop_rel=drop_rel,
-                    ilu_drop_tol=ilu_drop_tol,
-                    fill_factor=fill_factor,
-                    factorization="lu" if exact_lu else "ilu",
-                    emit=emit,
-                )
-                fac_cache = _RHSMODE1_SPARSE_ILU_CACHE.get(block_cache_key)
-            except Exception as exc:  # noqa: BLE001
-                fac_cache = None
-                if emit is not None:
-                    emit(
-                        1,
-                        "sxblock_sparse_host: factorization failed for block "
-                        f"(L={int(il)} size={int(rep_idx_np.size)}) "
-                        f"({type(exc).__name__}: {exc})",
-                    )
-            host_factor = None if fac_cache is None else fac_cache.ilu
-            if host_factor is not None and (
-                not _rhsmode1_host_factor_probe_ok(factor=host_factor, block_size=int(rep_idx_np.size))
-            ):
-                if emit is not None:
-                    emit(
-                        1,
-                        "sxblock_sparse_host: rejecting unstable block factor "
-                        f"(L={int(il)} size={int(rep_idx_np.size)})",
-                    )
-                host_factor = None
-            block_indices.append(rep_idx_np)
-            block_factors.append(host_factor)
-
-        extra_inv_np: np.ndarray | None = None
-        if extra_size > 0:
-            chunk_cols = _precond_chunk_cols(total_size, int(extra_idx_np.shape[0]))
-            y_sub = _matvec_submatrix(
-                op,
-                col_idx=extra_idx_np,
-                row_idx=extra_idx_np,
-                total_size=total_size,
-                chunk_cols=chunk_cols,
-            )
-            ee = np.asarray(y_sub.T, dtype=np.float64)
-            ee = ee + np.float64(reg_val) * np.eye(extra_size, dtype=np.float64)
-            try:
-                extra_inv_np = np.linalg.inv(ee)
-            except np.linalg.LinAlgError:
-                extra_inv_np = np.linalg.pinv(ee, rcond=1e-12)
-            if not np.all(np.isfinite(extra_inv_np)):
-                extra_inv_np = np.linalg.pinv(ee, rcond=1e-12)
-
-        cached = _RHSMode1SparseSXBlockHostPrecondCache(
-            block_indices=tuple(block_indices),
-            block_factors=tuple(block_factors),
-            extra_idx_np=extra_idx_np,
-            extra_inv_np=extra_inv_np,
-        )
-        _RHSMODE1_SPARSE_SXBLOCK_HOST_PRECOND_CACHE[cache_key] = cached
-
-    def _apply_full(r_full: jnp.ndarray) -> jnp.ndarray:
-        r_np = np.asarray(r_full, dtype=np.float64).reshape((-1,))
-        z_np = np.array(r_np, copy=True)
-        for idx_np, fac in zip(cached.block_indices, cached.block_factors, strict=True):
-            if fac is None or idx_np.size == 0:
-                continue
-            z_np[idx_np] = np.asarray(fac.solve(r_np[idx_np]), dtype=np.float64)
-        if cached.extra_inv_np is not None and cached.extra_idx_np.size:
-            z_np[cached.extra_idx_np] = cached.extra_inv_np @ r_np[cached.extra_idx_np]
-        return jnp.asarray(z_np, dtype=jnp.float64)
-
-    apply_full_safe = _safe_preconditioner(_apply_full)
-
-    if reduce_full is None or expand_reduced is None:
-        return apply_full_safe
-
-    def _apply_reduced(r_reduced: jnp.ndarray) -> jnp.ndarray:
-        z_full = apply_full_safe(expand_reduced(r_reduced))
-        return reduce_full(z_full)
-
-    return _apply_reduced
 
 
 def _compute_rhsmode1_sxblock_tz_sparse_host_seed(
@@ -8388,129 +8252,19 @@ def _compute_rhsmode1_sxblock_tz_sparse_host_seed(
     fill_factor: float,
     emit: Callable[[int, str], None] | None = None,
 ) -> jnp.ndarray:
-    """Build an explicit sxblock_tz seed without retaining all per-L factors."""
-    import scipy.sparse as sp  # noqa: PLC0415
+    """Compatibility wrapper for the canonical sparse species/x-per-L seed."""
 
-    rhs_full = expand_reduced(rhs_reduced) if expand_reduced is not None else rhs_reduced
-    rhs_full_np = np.asarray(rhs_full, dtype=np.float64).reshape((-1,))
-    seed_full_np = np.array(rhs_full_np, copy=True)
-
-    n_species = int(op.n_species)
-    n_x = int(op.n_x)
-    n_l = int(op.n_xi)
-    n_theta = int(op.n_theta)
-    n_zeta = int(op.n_zeta)
-    total_size = int(op.total_size)
-    nxi_for_x = np.asarray(op.fblock.collisionless.n_xi_for_x, dtype=np.int32)
-    lu_max_env = os.environ.get("SFINCS_JAX_RHSMODE1_SXBLOCK_SPARSE_LU_MAX", "").strip()
-    chunk_cols_env = os.environ.get("SFINCS_JAX_RHSMODE1_SXBLOCK_CHUNK_COLS", "").strip()
-    try:
-        lu_max = int(lu_max_env) if lu_max_env else 4000
-    except ValueError:
-        lu_max = 4000
-    lu_max = max(0, int(lu_max))
-    try:
-        chunk_cols_cap = int(chunk_cols_env) if chunk_cols_env else 32
-    except ValueError:
-        chunk_cols_cap = 32
-    chunk_cols_cap = max(1, int(chunk_cols_cap))
-    struct_tol = _sparse_structural_tol()
-
-    for il in range(n_l):
-        active_x = np.where(nxi_for_x > il)[0]
-        if active_x.size == 0:
-            continue
-        idx: list[int] = []
-        for s in range(n_species):
-            for ix in active_x:
-                base = int((((s * n_x + int(ix)) * n_l + il) * n_theta) * n_zeta)
-                for it in range(n_theta):
-                    for iz in range(n_zeta):
-                        idx.append(base + it * n_zeta + iz)
-        rep_idx_np = np.asarray(idx, dtype=np.int32)
-        exact_lu = int(rep_idx_np.size) <= int(lu_max)
-        block_cache_key = (
-            *_rhsmode1_precond_cache_key(op, "sxblock_tz_sparse_seed"),
-            int(il),
-            int(rep_idx_np.size),
-            float(drop_tol),
-            float(drop_rel),
-            float(ilu_drop_tol),
-            float(fill_factor),
-            int(exact_lu),
-        )
-        try:
-            if emit is not None:
-                emit(
-                    1,
-                    "sxblock_sparse_seed: assembling per-L species/x block "
-                    f"(L={int(il)} size={int(rep_idx_np.size)})",
-                )
-            chunk_cols = min(_precond_chunk_cols(total_size, int(rep_idx_np.shape[0])), int(chunk_cols_cap))
-            y_sub = _matvec_submatrix(
-                op,
-                col_idx=rep_idx_np,
-                row_idx=rep_idx_np,
-                total_size=total_size,
-                chunk_cols=chunk_cols,
-            )
-            a_block = np.asarray(y_sub.T, dtype=np.float64)
-            if struct_tol > 0.0 and a_block.size:
-                a_block[np.abs(a_block) <= struct_tol] = 0.0
-            a_csr = sp.csr_matrix(a_block)
-            a_csr.eliminate_zeros()
-            _factorize_sparse_matrix_csr_host(
-                a_csr_full=a_csr,
-                cache_key=block_cache_key,
-                drop_tol=drop_tol,
-                drop_rel=drop_rel,
-                ilu_drop_tol=ilu_drop_tol,
-                fill_factor=fill_factor,
-                factorization="lu" if exact_lu else "ilu",
-                emit=emit,
-            )
-            fac_cache = _RHSMODE1_SPARSE_ILU_CACHE.pop(block_cache_key, None)
-            fac = None if fac_cache is None else fac_cache.ilu
-            if fac is None:
-                continue
-            sol = np.asarray(fac.solve(rhs_full_np[rep_idx_np]), dtype=np.float64)
-            if np.all(np.isfinite(sol)):
-                seed_full_np[rep_idx_np] = sol
-        except Exception as exc:  # noqa: BLE001
-            if emit is not None:
-                emit(
-                    1,
-                    "sxblock_sparse_seed: block solve failed "
-                    f"(L={int(il)} size={int(rep_idx_np.size)}) "
-                    f"({type(exc).__name__}: {exc})",
-                )
-
-    extra_start = int(op.f_size + op.phi1_size)
-    extra_size = int(op.extra_size)
-    if extra_size > 0:
-        extra_idx_np = np.arange(extra_start, extra_start + extra_size, dtype=np.int32)
-        reg_env = os.environ.get("SFINCS_JAX_RHSMODE1_PRECOND_REG", "").strip()
-        reg_val = float(reg_env) if reg_env else 1e-10
-        chunk_cols = _precond_chunk_cols(total_size, int(extra_idx_np.shape[0]))
-        y_sub = _matvec_submatrix(
-            op,
-            col_idx=extra_idx_np,
-            row_idx=extra_idx_np,
-            total_size=total_size,
-            chunk_cols=chunk_cols,
-        )
-        ee = np.asarray(y_sub.T, dtype=np.float64)
-        ee = ee + np.float64(reg_val) * np.eye(extra_size, dtype=np.float64)
-        try:
-            extra_inv_np = np.linalg.inv(ee)
-        except np.linalg.LinAlgError:
-            extra_inv_np = np.linalg.pinv(ee, rcond=1e-12)
-        if not np.all(np.isfinite(extra_inv_np)):
-            extra_inv_np = np.linalg.pinv(ee, rcond=1e-12)
-        seed_full_np[extra_idx_np] = extra_inv_np @ rhs_full_np[extra_idx_np]
-
-    seed_full = jnp.asarray(seed_full_np, dtype=jnp.float64)
-    return reduce_full(seed_full) if reduce_full is not None else seed_full
+    return compute_rhs1_sxblock_tz_sparse_host_seed(
+        op=op,
+        rhs_reduced=rhs_reduced,
+        reduce_full=reduce_full,
+        expand_reduced=expand_reduced,
+        drop_tol=drop_tol,
+        drop_rel=drop_rel,
+        ilu_drop_tol=ilu_drop_tol,
+        fill_factor=fill_factor,
+        emit=emit,
+    )
 
 
 def _build_rhsmode1_sxblock_tz_preconditioner(
