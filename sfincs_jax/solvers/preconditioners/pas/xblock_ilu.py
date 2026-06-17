@@ -14,7 +14,12 @@ from ....preconditioner_caches import (
     _RHSMode1ILUBlockPrecondCache,
 )
 from ....preconditioner_context import precond_dtype
-from ....preconditioner_setup import hash_array, rhs_mode1_precond_cache_key
+from ....preconditioner_setup import (
+    hash_array,
+    matvec_submatrix_v3_unsharded,
+    precond_chunk_cols,
+    rhs_mode1_precond_cache_key,
+)
 from ....sparse_triangular import (
     inverse_permutation,
     triangular_solve_lower_padded,
@@ -42,9 +47,7 @@ def build_rhs1_pas_xblock_ilu_preconditioner(
     op: V3FullSystemOperator,
     reduce_full: Callable[[jnp.ndarray], jnp.ndarray] | None = None,
     expand_reduced: Callable[[jnp.ndarray], jnp.ndarray] | None = None,
-    matvec_submatrix: Callable[..., np.ndarray],
     pas_hybrid_preconditioner: Callable[..., Callable[[jnp.ndarray], jnp.ndarray]],
-    precond_chunk_cols: Callable[[int, int], int],
     safe_preconditioner: Callable[[Callable[[jnp.ndarray], jnp.ndarray]], Callable[[jnp.ndarray], jnp.ndarray]],
 ) -> Callable[[jnp.ndarray], jnp.ndarray]:
     """Sparse block-Jacobi ILU preconditioner for PAS-like RHSMode=1 operators.
@@ -585,7 +588,7 @@ def build_rhs1_pas_xblock_ilu_preconditioner(
         extra_inv_jnp: jnp.ndarray | None = None
         if extra_size > 0:
             chunk_cols = precond_chunk_cols(total_size, int(extra_idx_np.shape[0]))
-            y_sub = matvec_submatrix(
+            y_sub = matvec_submatrix_v3_unsharded(
                 op,
                 col_idx=extra_idx_np,
                 row_idx=extra_idx_np,

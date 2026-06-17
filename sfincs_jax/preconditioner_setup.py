@@ -79,6 +79,28 @@ def matvec_submatrix(
     return np.concatenate(blocks, axis=0)
 
 
+def matvec_submatrix_v3_unsharded(
+    op_pc: object,
+    *,
+    col_idx: np.ndarray,
+    row_idx: np.ndarray,
+    total_size: int,
+    chunk_cols: int,
+) -> np.ndarray:
+    """Assemble selected V3 operator rows with the unsharded operator apply."""
+
+    from .v3_system import apply_v3_full_system_operator  # noqa: PLC0415
+
+    return matvec_submatrix(
+        op_pc,
+        col_idx=col_idx,
+        row_idx=row_idx,
+        total_size=total_size,
+        chunk_cols=chunk_cols,
+        apply_operator_fn=apply_v3_full_system_operator,
+    )
+
+
 def hash_array(arr: jnp.ndarray | np.ndarray) -> str:
     """Stable short hash for numeric arrays used in preconditioner cache keys."""
 

@@ -258,8 +258,8 @@ the historical private driver name and test the focused module directly. This ke
   module owns the per-``(species,x)`` Legendre/theta/zeta block assembly,
   PETSc-style ILU/exact-LU cutoff policy, padded triangular-factor conversion,
   threaded block factor setup, and extra-variable Schur solve. ``v3_driver.py``
-  keeps a compatibility wrapper only to inject the current PAS-hybrid fallback,
-  matrix-probe, chunking, and safety-wrapper seams.
+  keeps a compatibility wrapper only to inject the current PAS-hybrid fallback
+  and safety-wrapper seams.
 - ``sfincs_jax/solvers/preconditioners/xblock/tz_sparse.py``
   (legacy alias: ``sfincs_jax/rhs1_xblock_tz_sparse.py``):
   sparse per-``x`` RHSMode=1 full-FP preconditioner setup. This module owns the
@@ -267,8 +267,8 @@ the historical private driver name and test the focused module directly. This ke
   selected theta/zeta upwind sparse-stencil assembly, explicit FP assembled-host
   cache, host-assembly admission policy, per-block sparse matrix/diagonal
   assembly, skipped-block diagonal fallback, host-factor probe/cache-key
-  policy, and extra-variable Schur solve. The driver injects only sparse
-  factorization, matrix-probe, chunking, and safety-wrapper seams.
+  policy, shared chunked unsharded matrix probing, and extra-variable Schur
+  solve. The driver injects only sparse factorization and safety-wrapper seams.
 - ``sfincs_jax/problems/transport_matrix/direct_pmat.py``
   (legacy alias: ``sfincs_jax/transport_direct_pmat.py``):
   direct term-level RHSMode=2/3 reduced ``Pmat`` and exact active-operator
@@ -294,9 +294,10 @@ the historical private driver name and test the focused module directly. This ke
 - ``sfincs_jax/preconditioner_setup.py``:
   shared setup utilities for preconditioner construction: memory-bounded
   basis-column chunking, selected-row/selected-column matrix-free submatrix
-  probing, stable array hashes, and RHSMode=1/transport preconditioner
-  cache-key construction. The keys intentionally omit RHS-only gradients so
-  fixed-operator scan points can reuse factors.
+  probing, unsharded V3-operator probing for setup-time host factors, stable
+  array hashes, and RHSMode=1/transport preconditioner cache-key construction.
+  The keys intentionally omit RHS-only gradients so fixed-operator scan points
+  can reuse factors.
 - ``sfincs_jax/explicit_sparse_factor_policy.py``:
   explicit-sparse host-factor environment parsing, canonical factor-kind alias
   resolution, monolithic LU/ILU guard sizing, and the typed

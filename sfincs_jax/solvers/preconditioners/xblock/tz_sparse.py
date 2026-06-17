@@ -23,7 +23,11 @@ from ....preconditioner_caches import (
     _RHSMode1SparseXBlockHostPrecondCache,
     _RHSMode1SparseXBlockPrecondCache,
 )
-from ....preconditioner_setup import rhs_mode1_precond_cache_key
+from ....preconditioner_setup import (
+    matvec_submatrix_v3_unsharded,
+    precond_chunk_cols,
+    rhs_mode1_precond_cache_key,
+)
 from ....rhs1_large_cpu_policy import (
     rhs1_fp_xblock_assembled_host_allowed as _rhs1_fp_xblock_assembled_host_allowed,
 )
@@ -648,8 +652,6 @@ def build_rhs1_xblock_tz_sparse_preconditioner(
     emit: Callable[[int, str], None] | None = None,
     build_sparse_ilu_from_matvec: Callable[..., object],
     factorize_sparse_matrix_csr_host: Callable[..., object],
-    matvec_submatrix: Callable[..., jnp.ndarray],
-    precond_chunk_cols: Callable[[int, int], int],
     safe_preconditioner: Callable[[Callable[[jnp.ndarray], jnp.ndarray]], Callable[[jnp.ndarray], jnp.ndarray]],
 ) -> Callable[[jnp.ndarray], jnp.ndarray]:
     """Sparse per-x preconditioner for large FP RHSMode=1 systems.
@@ -1051,7 +1053,7 @@ def build_rhs1_xblock_tz_sparse_preconditioner(
             extra_inv_jnp: jnp.ndarray | None = None
             if extra_size > 0:
                 chunk_cols = precond_chunk_cols(total_size, int(extra_idx_np.shape[0]))
-                y_sub = matvec_submatrix(
+                y_sub = matvec_submatrix_v3_unsharded(
                     op,
                     col_idx=extra_idx_np,
                     row_idx=extra_idx_np,
@@ -1257,7 +1259,7 @@ def build_rhs1_xblock_tz_sparse_preconditioner(
             extra_inv_jnp: jnp.ndarray | None = None
             if extra_size > 0:
                 chunk_cols = precond_chunk_cols(total_size, int(extra_idx_np.shape[0]))
-                y_sub = matvec_submatrix(
+                y_sub = matvec_submatrix_v3_unsharded(
                     op,
                     col_idx=extra_idx_np,
                     row_idx=extra_idx_np,
@@ -1446,7 +1448,7 @@ def build_rhs1_xblock_tz_sparse_preconditioner(
             extra_inv_np: np.ndarray | None = None
             if extra_size > 0:
                 chunk_cols = precond_chunk_cols(total_size, int(extra_idx_np.shape[0]))
-                y_sub = matvec_submatrix(
+                y_sub = matvec_submatrix_v3_unsharded(
                     op,
                     col_idx=extra_idx_np,
                     row_idx=extra_idx_np,
