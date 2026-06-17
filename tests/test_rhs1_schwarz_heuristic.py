@@ -7,7 +7,13 @@ import pytest
 import jax.numpy as jnp
 
 from sfincs_jax.namelist import read_sfincs_input
-from sfincs_jax.problems.profile_response.residual import apply_subspace_minres_correction
+from sfincs_jax.problems.profile_response.residual import (
+    apply_preconditioned_minres_correction,
+    apply_subspace_minres_correction,
+    compose_multilevel_minres_correction_preconditioner,
+    compose_multilevel_residual_correction_preconditioner,
+    compose_residual_correction_preconditioner,
+)
 import sfincs_jax.v3_driver as vd
 
 
@@ -196,7 +202,11 @@ def test_compose_residual_correction_preconditioner_matches_one_step() -> None:
     def matvec(v):
         return 2.0 * v
 
-    precond = vd._compose_residual_correction_preconditioner(
+    assert (
+        vd._compose_residual_correction_preconditioner
+        is compose_residual_correction_preconditioner
+    )
+    precond = compose_residual_correction_preconditioner(
         base=base,
         coarse=coarse,
         matvec=matvec,
@@ -220,7 +230,11 @@ def test_compose_multilevel_residual_correction_preconditioner_applies_levels_in
     def matvec(v):
         return 2.0 * v
 
-    precond = vd._compose_multilevel_residual_correction_preconditioner(
+    assert (
+        vd._compose_multilevel_residual_correction_preconditioner
+        is compose_multilevel_residual_correction_preconditioner
+    )
+    precond = compose_multilevel_residual_correction_preconditioner(
         base=base,
         coarse_levels=(coarse_1, coarse_2),
         matvec=matvec,
@@ -241,7 +255,11 @@ def test_compose_multilevel_minres_correction_rejects_zero_direction() -> None:
     def matvec(v):
         return 2.0 * v
 
-    precond = vd._compose_multilevel_minres_correction_preconditioner(
+    assert (
+        vd._compose_multilevel_minres_correction_preconditioner
+        is compose_multilevel_minres_correction_preconditioner
+    )
+    precond = compose_multilevel_minres_correction_preconditioner(
         base=base,
         coarse_levels=(bad_coarse,),
         matvec=matvec,
@@ -262,7 +280,7 @@ def test_compose_multilevel_minres_correction_accepts_better_direction() -> None
     def matvec(v):
         return 2.0 * v
 
-    precond = vd._compose_multilevel_minres_correction_preconditioner(
+    precond = compose_multilevel_minres_correction_preconditioner(
         base=base,
         coarse_levels=(coarse,),
         matvec=matvec,
@@ -283,7 +301,8 @@ def test_preconditioned_minres_correction_accepts_only_residual_improvement() ->
     rhs = jnp.asarray([2.0, 4.0], dtype=jnp.float64)
     x0 = jnp.zeros((2,), dtype=jnp.float64)
 
-    x, residual, history, alphas = vd._apply_preconditioned_minres_correction(
+    assert vd._apply_preconditioned_minres_correction is apply_preconditioned_minres_correction
+    x, residual, history, alphas = apply_preconditioned_minres_correction(
         matvec=matvec,
         rhs=rhs,
         x0=x0,

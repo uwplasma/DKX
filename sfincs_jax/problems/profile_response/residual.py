@@ -173,6 +173,173 @@ def build_rhs1_xblock_post_coarse_directions(
     return tuple(directions)
 
 
+def compose_residual_correction_preconditioner(
+    *,
+    base: Callable[[jnp.ndarray], jnp.ndarray],
+    coarse: Callable[[jnp.ndarray], jnp.ndarray],
+    matvec: Callable[[jnp.ndarray], jnp.ndarray],
+    damping: float = 1.0,
+    steps: int = 1,
+) -> Callable[[jnp.ndarray], jnp.ndarray]:
+    """Apply a small multiplicative coarse correction after a base preconditioner."""
+    return compose_multilevel_residual_correction_preconditioner(
+        base=base,
+        coarse_levels=(coarse,),
+        matvec=matvec,
+        damping=damping,
+        steps=steps,
+    )
+
+
+def compose_multilevel_residual_correction_preconditioner(
+    *,
+    base: Callable[[jnp.ndarray], jnp.ndarray],
+    coarse_levels: Sequence[Callable[[jnp.ndarray], jnp.ndarray]],
+    matvec: Callable[[jnp.ndarray], jnp.ndarray],
+    damping: float = 1.0,
+    steps: int = 1,
+) -> Callable[[jnp.ndarray], jnp.ndarray]:
+    """Apply one or more bounded residual-correction levels after a base preconditioner."""
+    steps = max(0, int(steps))
+    damping = float(damping)
+    coarse_levels = tuple(coarse_levels)
+    if steps <= 0 or not coarse_levels:
+        return base
+
+    def _apply(v: jnp.ndarray) -> jnp.ndarray:
+        z = base(v)
+        for _ in range(steps):
+            for coarse in coarse_levels:
+                r = v - matvec(z)
+                z = z + damping * coarse(r)
+        return z
+
+    return _apply
+
+
+def compose_multilevel_minres_correction_preconditioner(
+    *,
+    base: Callable[[jnp.ndarray], jnp.ndarray],
+    coarse_levels: Sequence[Callable[[jnp.ndarray], jnp.ndarray]],
+    matvec: Callable[[jnp.ndarray], jnp.ndarray],
+    alpha_clip: float = 1.0,
+    min_improvement: float = 0.0,
+    steps: int = 1,
+) -> Callable[[jnp.ndarray], jnp.ndarray]:
+    """Apply accepted coarse corrections with a local minimum-residual step."""
+    steps = max(0, int(steps))
+    coarse_levels = tuple(coarse_levels)
+    if steps <= 0 or not coarse_levels:
+        return base
+    alpha_clip = float(alpha_clip)
+    min_improvement = max(0.0, float(min_improvement))
+    improvement_factor = max(0.0, 1.0 - min_improvement) ** 2
+
+    def _apply(v: jnp.ndarray) -> jnp.ndarray:
+        z = base(v)
+        residual = v - matvec(z)
+        residual_norm_sq = jnp.real(jnp.vdot(residual, residual))
+        for _ in range(steps):
+            for coarse in coarse_levels:
+                direction = coarse(residual)
+                a_direction = matvec(direction)
+                denom = jnp.real(jnp.vdot(a_direction, a_direction))
+                numer = jnp.real(jnp.vdot(residual, a_direction))
+                alpha = jnp.where(denom > 0.0, numer / denom, 0.0)
+                alpha = jnp.nan_to_num(alpha, nan=0.0, posinf=0.0, neginf=0.0)
+                if alpha_clip > 0.0:
+                    alpha = jnp.clip(alpha, -alpha_clip, alpha_clip)
+                trial_residual = residual - alpha * a_direction
+                trial_norm_sq = jnp.real(jnp.vdot(trial_residual, trial_residual))
+                accept = jnp.logical_and(
+                    jnp.isfinite(trial_norm_sq),
+                    trial_norm_sq < residual_norm_sq * improvement_factor,
+                )
+                z = jnp.where(accept, z + alpha * direction, z)
+                residual = jnp.where(accept, trial_residual, residual)
+                residual_norm_sq = jnp.where(accept, trial_norm_sq, residual_norm_sq)
+        return z
+
+    return _apply
+
+
+def safe_preconditioner(
+    precond: Callable[[jnp.ndarray], jnp.ndarray],
+    *,
+    clip: float = 1.0e100,
+) -> Callable[[jnp.ndarray], jnp.ndarray]:
+    """Return a preconditioner wrapper that zeroes non-finite values and clips output."""
+    clip_val = float(clip)
+
+    def _apply(v: jnp.ndarray) -> jnp.ndarray:
+        out = precond(v)
+        out = jnp.nan_to_num(out, nan=0.0, posinf=0.0, neginf=0.0)
+        if clip_val > 0:
+            out = jnp.clip(out, -clip_val, clip_val)
+        return out
+
+    return _apply
+
+
+def apply_preconditioned_minres_correction(
+    *,
+    matvec: Callable[[jnp.ndarray], jnp.ndarray],
+    rhs: jnp.ndarray,
+    x0: jnp.ndarray,
+    preconditioner: Callable[[jnp.ndarray], jnp.ndarray],
+    steps: int,
+    alpha_clip: float = 10.0,
+    min_improvement: float = 0.0,
+) -> tuple[jnp.ndarray, jnp.ndarray, tuple[float, ...], tuple[float, ...]]:
+    """Apply accepted matrix-free minimal-residual corrections.
+
+    Each step computes ``d = M^{-1} r`` and chooses the scalar ``alpha`` that
+    minimizes ``||r - alpha A d||_2``. The correction is accepted only when the
+    measured residual decreases, so this is safe as a bounded post-Krylov
+    rescue for weak preconditioners and does not require storing dense operator
+    blocks.
+    """
+    x = jnp.asarray(x0, dtype=jnp.float64)
+    rhs = jnp.asarray(rhs, dtype=jnp.float64)
+    residual = rhs - jnp.asarray(matvec(x), dtype=jnp.float64)
+    residual_norm = float(jnp.linalg.norm(residual))
+    history: list[float] = [residual_norm]
+    alphas: list[float] = []
+    steps_use = max(0, int(steps))
+    alpha_clip_use = max(0.0, float(alpha_clip))
+    min_improvement_use = max(0.0, float(min_improvement))
+
+    for _ in range(steps_use):
+        direction = jnp.asarray(preconditioner(residual), dtype=jnp.float64)
+        if not bool(jnp.all(jnp.isfinite(direction))):
+            break
+        a_direction = jnp.asarray(matvec(direction), dtype=jnp.float64)
+        if not bool(jnp.all(jnp.isfinite(a_direction))):
+            break
+        denom = float(jnp.real(jnp.vdot(a_direction, a_direction)))
+        if (not np.isfinite(denom)) or denom <= 1.0e-300:
+            break
+        numer = float(jnp.real(jnp.vdot(a_direction, residual)))
+        alpha = numer / denom
+        if alpha_clip_use > 0.0:
+            alpha = max(-alpha_clip_use, min(alpha_clip_use, float(alpha)))
+        if not np.isfinite(alpha) or alpha == 0.0:
+            break
+        trial_residual = residual - float(alpha) * a_direction
+        trial_norm = float(jnp.linalg.norm(trial_residual))
+        if (not np.isfinite(trial_norm)) or trial_norm >= residual_norm * (
+            1.0 - min_improvement_use
+        ):
+            break
+        x = x + float(alpha) * direction
+        residual = trial_residual
+        residual_norm = trial_norm
+        history.append(residual_norm)
+        alphas.append(float(alpha))
+
+    return x, residual, tuple(history), tuple(alphas)
+
+
 def apply_subspace_minres_correction(
     *,
     matvec: Callable[[jnp.ndarray], jnp.ndarray],
@@ -471,10 +638,15 @@ def residual_converged(residual_norm: float, target: float) -> bool:
 
 __all__ = [
     "apply_device_subspace_residual_equation_correction",
+    "apply_preconditioned_minres_correction",
     "apply_subspace_minres_correction",
     "build_rhs1_xblock_post_coarse_directions",
+    "compose_multilevel_minres_correction_preconditioner",
+    "compose_multilevel_residual_correction_preconditioner",
+    "compose_residual_correction_preconditioner",
     "l2_norm_float",
     "residual_converged",
     "residual_target",
+    "safe_preconditioner",
     "safe_ratio",
 ]

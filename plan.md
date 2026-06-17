@@ -30372,7 +30372,59 @@ Validation:
   docs/_build/html``: passed.
 - ``git diff --check``: passed.
 - ``PYTHONDONTWRITEBYTECODE=1 python -m pytest -q -p no:cacheprovider``:
+  ``2686 passed in 549.51 s``.
+- ``PYTHONDONTWRITEBYTECODE=1 python -m pytest -q -p no:cacheprovider``:
   ``2686 passed in 557.32 s``.
+
+### 19.39 Residual-polish preconditioner helper migration
+
+Goal:
+
+- Continue the profile-response residual consolidation by moving the small
+  residual-correction preconditioner composition and scalar minres-polish
+  helpers out of ``v3_driver.py`` without changing solver behavior.
+
+Implementation:
+
+- Moved residual-correction preconditioner composition,
+  residual-correction multilevel composition, accepted multilevel minres
+  composition, safe preconditioner wrapping, and scalar
+  preconditioned-minres correction from ``v3_driver.py`` into
+  ``sfincs_jax/problems/profile_response/residual.py``.
+- Preserved the historical driver private names as imported aliases for
+  existing debug scripts and call sites.
+- Updated direct tests to call the canonical module and retain alias
+  compatibility checks.
+- Updated the source map, testing guide, release notes, and this plan.
+
+Validation:
+
+- ``python -m py_compile sfincs_jax/problems/profile_response/residual.py
+  sfincs_jax/v3_driver.py tests/test_rhs1_schwarz_heuristic.py
+  tests/test_v3_driver_dd_reduction_coverage.py``: passed.
+- ``python -m ruff check sfincs_jax/problems/profile_response/residual.py
+  sfincs_jax/v3_driver.py tests/test_rhs1_schwarz_heuristic.py
+  tests/test_v3_driver_dd_reduction_coverage.py``: passed.
+- ``PYTHONDONTWRITEBYTECODE=1 python -m pytest -q -p no:cacheprovider
+  tests/test_rhs1_schwarz_heuristic.py::test_compose_residual_correction_preconditioner_matches_one_step
+  tests/test_rhs1_schwarz_heuristic.py::test_compose_multilevel_residual_correction_preconditioner_applies_levels_in_order
+  tests/test_rhs1_schwarz_heuristic.py::test_compose_multilevel_minres_correction_rejects_zero_direction
+  tests/test_rhs1_schwarz_heuristic.py::test_compose_multilevel_minres_correction_accepts_better_direction
+  tests/test_rhs1_schwarz_heuristic.py::test_preconditioned_minres_correction_accepts_only_residual_improvement
+  tests/test_v3_driver_dd_reduction_coverage.py::test_compose_multilevel_residual_correction_steps_zero_returns_base
+  tests/test_v3_driver_dd_reduction_coverage.py::test_safe_preconditioner_zeroes_nonfinite_and_clips``:
+  ``7 passed in 1.13 s``.
+- ``PYTHONDONTWRITEBYTECODE=1 python -m pytest -q -p no:cacheprovider
+  tests/test_rhs1_schwarz_heuristic.py tests/test_v3_driver_dd_reduction_coverage.py
+  tests/test_rhs1_constraint_sources.py tests/test_rhs1_qi_coarse.py
+  tests/test_rhs1_qi_two_level.py tests/test_rhs1_qi_device_preconditioner.py
+  tests/test_rhs1_qi_device_smoother.py tests/test_v3_sparse_pattern.py
+  tests/test_v3_driver_rhs1_dispatch_coverage.py
+  tests/test_v3_driver_solve_policy_coverage.py``:
+  ``286 passed in 161.54 s``.
+- ``SPHINXOPTS='-W --keep-going' python -m sphinx -b html docs
+  docs/_build/html``: passed.
+- ``git diff --check``: passed.
 - ``git diff --check``: passed.
 
 ### 19.32 Transport diagnostics domain relocation

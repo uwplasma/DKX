@@ -413,7 +413,9 @@ The subspace residual-correction tests now import
 device residual-equation correction kernels, with driver-alias checks retained
 only as compatibility guards. The same module also owns the x-block
 post-coarse direction-builder tests for flux-surface-averaged and
-residual-weighted angular correction bases.
+residual-weighted angular correction bases, plus the residual-correction
+preconditioner composition, safe preconditioner wrapping, and scalar
+preconditioned-minres polish tests.
 
 The docstring gate now discovers every ``sfincs_jax/*policy*.py`` module and also
 checks public policy classes/functions, so new extraction seams must remain

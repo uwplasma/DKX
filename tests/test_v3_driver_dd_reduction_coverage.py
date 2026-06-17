@@ -5,6 +5,10 @@ import jax.numpy as jnp
 
 from sfincs_jax.solver import GMRESSolveResult
 import sfincs_jax.v3_driver as vd
+from sfincs_jax.problems.profile_response.residual import (
+    compose_multilevel_residual_correction_preconditioner,
+    safe_preconditioner,
+)
 
 
 def test_diag_only_preserves_only_point_coupling() -> None:
@@ -86,7 +90,11 @@ def test_compose_multilevel_residual_correction_steps_zero_returns_base() -> Non
         calls["coarse"] += 1
         return -v
 
-    precond = vd._compose_multilevel_residual_correction_preconditioner(
+    assert (
+        vd._compose_multilevel_residual_correction_preconditioner
+        is compose_multilevel_residual_correction_preconditioner
+    )
+    precond = compose_multilevel_residual_correction_preconditioner(
         base=base,
         coarse_levels=(coarse,),
         matvec=lambda v: v,
@@ -98,7 +106,8 @@ def test_compose_multilevel_residual_correction_steps_zero_returns_base() -> Non
 
 
 def test_safe_preconditioner_zeroes_nonfinite_and_clips() -> None:
-    precond = vd._safe_preconditioner(
+    assert vd._safe_preconditioner is safe_preconditioner
+    precond = safe_preconditioner(
         lambda v: jnp.asarray([jnp.inf, jnp.nan, -jnp.inf, 9.0 * v[0]], dtype=jnp.float64),
         clip=5.0,
     )
