@@ -209,6 +209,8 @@ from .solvers.preconditioners.xblock import (
     assemble_rhsmode1_fp_xblock_tz_sparse_matrix as _assemble_rhsmode1_fp_xblock_tz_sparse_matrix,
     assemble_selected_theta_tz_operator as _assemble_selected_theta_tz_operator,
     assemble_selected_zeta_tz_operator as _assemble_selected_zeta_tz_operator,
+    build_rhs1_xblock_tz_lmax_preconditioner,
+    build_rhs1_xblock_tz_preconditioner,
     build_rhs1_xblock_tz_sparse_preconditioner,
     get_rhsmode1_fp_xblock_assembled_host_cache as _get_rhsmode1_fp_xblock_assembled_host_cache,
     rhsmode1_fp_xblock_assembled_host_allowed as _rhsmode1_fp_xblock_assembled_host_allowed,
@@ -8154,135 +8156,13 @@ def _build_rhsmode1_xblock_tz_preconditioner(
     reduce_full: Callable[[jnp.ndarray], jnp.ndarray] | None = None,
     expand_reduced: Callable[[jnp.ndarray], jnp.ndarray] | None = None,
 ) -> Callable[[jnp.ndarray], jnp.ndarray]:
-    """Build a RHSMode=1 preconditioner using full (theta,zeta) blocks per x.
+    """Compatibility wrapper for the canonical dense x-block builder."""
 
-    For each species and each x, solve the block over all (L,theta,zeta) points.
-    This captures angular coupling while retaining x/L coupling without assembling
-    full species blocks.
-    """
-    cache_key = _rhsmode1_precond_cache_key(op, "xblock_tz")
-    cached = _RHSMODE1_PRECOND_LIST_CACHE.get(cache_key)
-    if cached is None:
-        op_pc = op
-        n_species = int(op.n_species)
-        n_x = int(op.n_x)
-        n_l = int(op.n_xi)
-        n_theta = int(op.n_theta)
-        n_zeta = int(op.n_zeta)
-        total_size = int(op.total_size)
-
-        nxi_for_x = np.asarray(op.fblock.collisionless.n_xi_for_x, dtype=np.int32)
-        max_l = int(np.max(nxi_for_x)) if nxi_for_x.size else 0
-        max_block_size = int(max_l * n_theta * n_zeta)
-        precond_dtype = _precond_dtype(max_block_size * max_block_size)
-
-        reg_env = os.environ.get("SFINCS_JAX_RHSMODE1_PRECOND_REG", "").strip()
-        reg_val = float(reg_env) if reg_env else 1e-10
-        reg = np.float64(reg_val)
-        pas_max_cols = None
-        if op.fblock.pas is not None:
-            pas_cols_env = os.environ.get("SFINCS_JAX_PRECOND_PAS_MAX_COLS", "").strip()
-            try:
-                if pas_cols_env:
-                    pas_max_cols = int(pas_cols_env)
-                else:
-                    tz_size = int(n_theta) * int(n_zeta)
-                    pas_max_cols = 256 if tz_size <= 256 else 64
-            except ValueError:
-                tz_size = int(n_theta) * int(n_zeta)
-                pas_max_cols = 256 if tz_size <= 256 else 64
-
-        block_inv_list: list[jnp.ndarray] = []
-        block_slices: list[tuple[int, int]] = []
-
-        for s in range(n_species):
-            for ix in range(n_x):
-                max_l = int(nxi_for_x[ix])
-                block_size = int(max_l * n_theta * n_zeta)
-                start = int((((s * n_x + ix) * n_l) * n_theta) * n_zeta)
-                if block_size <= 0:
-                    continue
-                rep_idx = np.arange(start, start + block_size, dtype=np.int32)
-                chunk_cols = _precond_chunk_cols(total_size, int(rep_idx.shape[0]))
-                if pas_max_cols is not None and block_size >= 256:
-                    chunk_cols = min(chunk_cols, pas_max_cols)
-                y_sub = _matvec_submatrix(
-                    op_pc,
-                    col_idx=rep_idx,
-                    row_idx=rep_idx,
-                    total_size=total_size,
-                    chunk_cols=chunk_cols,
-                )
-                a = np.asarray(y_sub.T, dtype=np.float64)
-                a = a + reg * np.eye(block_size, dtype=np.float64)
-                try:
-                    inv = np.linalg.inv(a)
-                except np.linalg.LinAlgError:
-                    inv = np.linalg.pinv(a, rcond=1e-12)
-                if not np.all(np.isfinite(inv)):
-                    inv = np.linalg.pinv(a, rcond=1e-12)
-                block_inv_list.append(jnp.asarray(inv, dtype=precond_dtype))
-                block_slices.append((start, block_size))
-
-        extra_start = int(op.f_size + op.phi1_size)
-        extra_size = int(op.extra_size)
-        extra_idx_np = np.arange(extra_start, extra_start + extra_size, dtype=np.int32)
-        extra_idx_jnp = jnp.asarray(extra_idx_np, dtype=jnp.int32)
-        extra_inv_jnp: jnp.ndarray | None = None
-        if extra_size > 0:
-            chunk_cols = _precond_chunk_cols(total_size, int(extra_idx_np.shape[0]))
-            y_sub = _matvec_submatrix(
-                op_pc,
-                col_idx=extra_idx_np,
-                row_idx=extra_idx_np,
-                total_size=total_size,
-                chunk_cols=chunk_cols,
-            )
-            ee = np.asarray(y_sub.T, dtype=np.float64)
-            ee = ee + reg * np.eye(extra_size, dtype=np.float64)
-            try:
-                ee_inv = np.linalg.inv(ee)
-            except np.linalg.LinAlgError:
-                ee_inv = np.linalg.pinv(ee, rcond=1e-12)
-            if not np.all(np.isfinite(ee_inv)):
-                ee_inv = np.linalg.pinv(ee, rcond=1e-12)
-            extra_inv_jnp = jnp.asarray(ee_inv, dtype=precond_dtype)
-
-        cached = _RHSMode1PrecondListCache(
-            block_inv_list=tuple(block_inv_list),
-            block_slices=tuple(block_slices),
-            extra_idx_jnp=extra_idx_jnp,
-            extra_inv_jnp=extra_inv_jnp,
-        )
-        _RHSMODE1_PRECOND_LIST_CACHE[cache_key] = cached
-
-    block_inv_list = cached.block_inv_list
-    block_slices = cached.block_slices
-    extra_idx_jnp = cached.extra_idx_jnp
-    extra_inv_jnp = cached.extra_inv_jnp
-    precond_dtype = block_inv_list[0].dtype if block_inv_list else _precond_dtype()
-
-    def _apply_full(r_full: jnp.ndarray) -> jnp.ndarray:
-        r_full = jnp.asarray(r_full, dtype=precond_dtype)
-        z_full = jnp.zeros_like(r_full)
-        for inv, (start, block_size) in zip(block_inv_list, block_slices, strict=True):
-            r_loc = r_full[start : start + block_size]
-            z_loc = inv @ r_loc
-            z_full = z_full.at[start : start + block_size].set(z_loc, unique_indices=True)
-        if extra_inv_jnp is not None:
-            r_extra = r_full[extra_idx_jnp]
-            z_extra = extra_inv_jnp @ r_extra
-            z_full = z_full.at[extra_idx_jnp].set(z_extra, unique_indices=True)
-        return jnp.asarray(z_full, dtype=jnp.float64)
-
-    if reduce_full is None or expand_reduced is None:
-        return _apply_full
-
-    def _apply_reduced(r_reduced: jnp.ndarray) -> jnp.ndarray:
-        z_full = _apply_full(expand_reduced(r_reduced))
-        return reduce_full(z_full)
-
-    return _apply_reduced
+    return build_rhs1_xblock_tz_preconditioner(
+        op=op,
+        reduce_full=reduce_full,
+        expand_reduced=expand_reduced,
+    )
 
 
 def _build_rhsmode1_xblock_tz_lmax_preconditioner(
@@ -8292,133 +8172,14 @@ def _build_rhsmode1_xblock_tz_lmax_preconditioner(
     reduce_full: Callable[[jnp.ndarray], jnp.ndarray] | None = None,
     expand_reduced: Callable[[jnp.ndarray], jnp.ndarray] | None = None,
 ) -> Callable[[jnp.ndarray], jnp.ndarray]:
-    """Build a RHSMode=1 preconditioner using truncated-L (theta,zeta) blocks per x.
+    """Compatibility wrapper for the canonical truncated-L x-block builder."""
 
-    Uses only the lowest L<=lmax modes per x to reduce block size while retaining
-    angular coupling. Higher-L rows are left unpreconditioned (identity).
-    """
-    lmax = int(lmax)
-    if lmax <= 0:
-        return _build_rhsmode1_xblock_tz_preconditioner(op=op, reduce_full=reduce_full, expand_reduced=expand_reduced)
-    cache_key = _rhsmode1_precond_cache_key(op, f"xblock_tz_lmax_{lmax}")
-    cached = _RHSMODE1_PRECOND_LIST_CACHE.get(cache_key)
-    if cached is None:
-        op_pc = op
-        n_species = int(op.n_species)
-        n_x = int(op.n_x)
-        n_l = int(op.n_xi)
-        n_theta = int(op.n_theta)
-        n_zeta = int(op.n_zeta)
-        total_size = int(op.total_size)
-
-        nxi_for_x = np.asarray(op.fblock.collisionless.n_xi_for_x, dtype=np.int32)
-        max_l = int(np.max(nxi_for_x)) if nxi_for_x.size else 0
-        max_l = min(max_l, lmax)
-        max_block_size = int(max_l * n_theta * n_zeta)
-        precond_dtype = _precond_dtype(max_block_size * max_block_size)
-
-        reg_env = os.environ.get("SFINCS_JAX_RHSMODE1_PRECOND_REG", "").strip()
-        reg_val = float(reg_env) if reg_env else 1e-10
-        reg = np.float64(reg_val)
-        pas_max_cols = None
-        if op.fblock.pas is not None:
-            pas_cols_env = os.environ.get("SFINCS_JAX_PRECOND_PAS_MAX_COLS", "").strip()
-            try:
-                pas_max_cols = int(pas_cols_env) if pas_cols_env else 64
-            except ValueError:
-                pas_max_cols = 64
-
-        block_inv_list: list[jnp.ndarray] = []
-        block_slices: list[tuple[int, int]] = []
-
-        for s in range(n_species):
-            for ix in range(n_x):
-                max_lx = min(int(nxi_for_x[ix]), lmax)
-                block_size = int(max_lx * n_theta * n_zeta)
-                start = int((((s * n_x + ix) * n_l) * n_theta) * n_zeta)
-                if block_size <= 0:
-                    continue
-                rep_idx = np.arange(start, start + block_size, dtype=np.int32)
-                chunk_cols = _precond_chunk_cols(total_size, int(rep_idx.shape[0]))
-                if pas_max_cols is not None and block_size >= 256:
-                    chunk_cols = min(chunk_cols, pas_max_cols)
-                y_sub = _matvec_submatrix(
-                    op_pc,
-                    col_idx=rep_idx,
-                    row_idx=rep_idx,
-                    total_size=total_size,
-                    chunk_cols=chunk_cols,
-                )
-                a = np.asarray(y_sub.T, dtype=np.float64)
-                a = a + reg * np.eye(block_size, dtype=np.float64)
-                try:
-                    inv = np.linalg.inv(a)
-                except np.linalg.LinAlgError:
-                    inv = np.linalg.pinv(a, rcond=1e-12)
-                if not np.all(np.isfinite(inv)):
-                    inv = np.linalg.pinv(a, rcond=1e-12)
-                block_inv_list.append(jnp.asarray(inv, dtype=precond_dtype))
-                block_slices.append((start, block_size))
-
-        extra_start = int(op.f_size + op.phi1_size)
-        extra_size = int(op.extra_size)
-        extra_idx_np = np.arange(extra_start, extra_start + extra_size, dtype=np.int32)
-        extra_idx_jnp = jnp.asarray(extra_idx_np, dtype=jnp.int32)
-        extra_inv_jnp: jnp.ndarray | None = None
-        if extra_size > 0:
-            chunk_cols = _precond_chunk_cols(total_size, int(extra_idx_np.shape[0]))
-            y_sub = _matvec_submatrix(
-                op_pc,
-                col_idx=extra_idx_np,
-                row_idx=extra_idx_np,
-                total_size=total_size,
-                chunk_cols=chunk_cols,
-            )
-            ee = np.asarray(y_sub.T, dtype=np.float64)
-            ee = ee + reg * np.eye(extra_size, dtype=np.float64)
-            try:
-                ee_inv = np.linalg.inv(ee)
-            except np.linalg.LinAlgError:
-                ee_inv = np.linalg.pinv(ee, rcond=1e-12)
-            if not np.all(np.isfinite(ee_inv)):
-                ee_inv = np.linalg.pinv(ee, rcond=1e-12)
-            extra_inv_jnp = jnp.asarray(ee_inv, dtype=precond_dtype)
-
-        cached = _RHSMode1PrecondListCache(
-            block_inv_list=tuple(block_inv_list),
-            block_slices=tuple(block_slices),
-            extra_idx_jnp=extra_idx_jnp,
-            extra_inv_jnp=extra_inv_jnp,
-        )
-        _RHSMODE1_PRECOND_LIST_CACHE[cache_key] = cached
-
-    block_inv_list = cached.block_inv_list
-    block_slices = cached.block_slices
-    extra_idx_jnp = cached.extra_idx_jnp
-    extra_inv_jnp = cached.extra_inv_jnp
-    precond_dtype = block_inv_list[0].dtype if block_inv_list else _precond_dtype()
-
-    def _apply_full(r_full: jnp.ndarray) -> jnp.ndarray:
-        r_full = jnp.asarray(r_full, dtype=precond_dtype)
-        z_full = jnp.asarray(r_full, dtype=precond_dtype)
-        for inv, (start, block_size) in zip(block_inv_list, block_slices, strict=True):
-            r_loc = r_full[start : start + block_size]
-            z_loc = inv @ r_loc
-            z_full = z_full.at[start : start + block_size].set(z_loc, unique_indices=True)
-        if extra_inv_jnp is not None:
-            r_extra = r_full[extra_idx_jnp]
-            z_extra = extra_inv_jnp @ r_extra
-            z_full = z_full.at[extra_idx_jnp].set(z_extra, unique_indices=True)
-        return jnp.asarray(z_full, dtype=jnp.float64)
-
-    if reduce_full is None or expand_reduced is None:
-        return _apply_full
-
-    def _apply_reduced(r_reduced: jnp.ndarray) -> jnp.ndarray:
-        z_full = _apply_full(expand_reduced(r_reduced))
-        return reduce_full(z_full)
-
-    return _apply_reduced
+    return build_rhs1_xblock_tz_lmax_preconditioner(
+        op=op,
+        lmax=lmax,
+        reduce_full=reduce_full,
+        expand_reduced=expand_reduced,
+    )
 
 
 def _build_rhsmode1_xblock_tz_sparse_preconditioner(

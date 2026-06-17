@@ -272,6 +272,12 @@ the historical private driver name and test the focused module directly. This ke
   RHSMode=1. The module owns the active block index maps, chunked unsharded
   operator probing, block inverse construction, extra-variable tail inverse,
   and JAX apply kernels. ``v3_driver.py`` keeps compatibility wrappers only.
+- ``sfincs_jax/solvers/preconditioners/xblock/block_jacobi.py``:
+  dense per-``(species,x)`` x-block Jacobi preconditioners for RHSMode=1,
+  including the truncated-low-:math:`L` variant used by PAS and strong-fallback
+  routes. The module owns block slicing, PAS chunk caps, chunked unsharded
+  operator probing, extra-variable tail inversion, and identity passthrough for
+  modes not covered by the truncated-:math:`L` factor.
 - ``sfincs_jax/solvers/preconditioners/xblock/tz_sparse.py``
   (legacy alias: ``sfincs_jax/rhs1_xblock_tz_sparse.py``):
   sparse per-``x`` RHSMode=1 full-FP preconditioner setup. This module owns the

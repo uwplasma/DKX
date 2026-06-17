@@ -299,6 +299,25 @@ Current structural findings from the review:
   driver-local xblock/sxblock_tz structured preconditioners or transport
   compatibility alias cleanup, whichever gives the cleaner domain-module
   contract with direct tests.
+- Moved the dense RHSMode=1 ``xblock_tz`` and ``xblock_tz_lmax``
+  preconditioners into
+  ``sfincs_jax/solvers/preconditioners/xblock/block_jacobi.py``. The new module
+  owns per-``(species,x)`` block slicing, PAS chunk caps, chunked unsharded V3
+  operator probing, dense block inverse construction, extra-tail inversion, and
+  the truncated-low-``L`` identity passthrough used by strong fallback paths.
+  ``v3_driver.py`` now keeps compatibility wrappers only.
+- Validation after the dense x-block move:
+  ``python -m ruff check`` passed on touched x-block/driver/test files,
+  ``python -m compileall -q`` passed on touched x-block/driver/test files, and
+  focused x-block/dispatch/strong-policy tests passed with
+  ``84 passed in 25.02 s``. Strict Sphinx docs passed,
+  ``git diff --check`` passed, and the broader x-block/species/PAS
+  preconditioner slice passed with ``124 passed in 26.49 s``. The full local
+  suite passed with ``2694 passed in 525.91 s``.
+- ``v3_driver.py`` is now ``34487`` lines. Next extraction targets are
+  ``sxblock_tz`` and sparse-host seed/rescue helpers, but those are more
+  stateful because they retain host sparse factors and explicit-solve seed
+  paths, so they should move only with direct seed/residual tests.
 
 ### Target domain package layout
 
