@@ -31653,3 +31653,65 @@ Validation so far:
 - ``git diff --check``: passed.
 - ``PYTHONDONTWRITEBYTECODE=1 pytest -q -p no:cacheprovider``:
   ``2698 passed in 543.37 s``.
+
+### 19.42 RHSMode=1 angular line/domain-decomposition extraction
+
+Goal:
+
+- Finish the next coherent RHSMode=1 driver split tranche by moving the related
+  theta/zeta angular line and angular domain-decomposition preconditioner
+  builders out of ``v3_driver.py`` together instead of extracting one tiny
+  function at a time.
+
+Usage audit:
+
+- ``_build_rhsmode1_theta_line_preconditioner``,
+  ``_build_rhsmode1_theta_dd_preconditioner``,
+  ``_build_rhsmode1_zeta_dd_preconditioner``,
+  ``_build_rhsmode1_theta_line_xdiag_preconditioner``, and
+  ``_build_rhsmode1_theta_zeta_preconditioner`` are still used by the shared
+  RHSMode=1 preconditioner dispatch, Schur-base selection, auto policy, and
+  explicit strong-preconditioner routes.
+- Since these routines are live solver paths, they should remain available
+  through driver compatibility wrappers until the public driver surface is
+  narrowed in a later API-cleanup tranche.
+
+Implementation:
+
+- Extended
+  ``sfincs_jax/solvers/preconditioners/domain_decomposition/line_blocks.py`` to
+  own the theta-line, zeta-line, theta-domain, zeta-domain,
+  theta-line-with-``x``-diagonal, and full theta-zeta angular-block
+  preconditioners.
+- Consolidated the shared axis-line index maps, regularization policy, cache
+  keys, dense line-block probing, block inverse application, and extra-variable
+  tail solve into the domain-decomposition module.
+- Reduced ``v3_driver.py`` to compatibility wrappers for these six angular
+  line/domain-decomposition builders.
+- Expanded package export/import-contract coverage and focused line-block
+  tests so every moved builder has a behavioral inverse-apply check.
+- Updated the source map to point future solver work to the domain-decomposition
+  module instead of the driver.
+
+Validation so far:
+
+- ``python -m ruff check sfincs_jax/v3_driver.py
+  sfincs_jax/solvers/preconditioners/domain_decomposition
+  tests/test_rhs1_line_blocks.py tests/test_domain_package_import_contracts.py``:
+  passed.
+- ``python -m compileall -q sfincs_jax/v3_driver.py
+  sfincs_jax/solvers/preconditioners/domain_decomposition
+  tests/test_rhs1_line_blocks.py``: passed.
+- ``pytest -q tests/test_rhs1_line_blocks.py
+  tests/test_domain_package_import_contracts.py``: ``11 passed in 1.02 s``.
+- ``PYTHONDONTWRITEBYTECODE=1 pytest -q -p no:cacheprovider
+  tests/test_rhs1_line_blocks.py tests/test_rhs1_schwarz_heuristic.py
+  tests/test_v3_driver_rhs1_dispatch_coverage.py
+  tests/test_v3_driver_solve_policy_coverage.py
+  tests/test_domain_package_import_contracts.py
+  tests/test_schur_precond_heuristic.py``: ``106 passed in 54.49 s``.
+- ``SPHINXOPTS='-W --keep-going' python -m sphinx -b html docs
+  docs/_build/html``: passed.
+- ``git diff --check``: passed.
+- ``PYTHONDONTWRITEBYTECODE=1 pytest -q -p no:cacheprovider``:
+  ``2702 passed in 535.65 s``.
