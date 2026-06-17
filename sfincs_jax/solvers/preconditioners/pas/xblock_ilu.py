@@ -20,6 +20,7 @@ from ....preconditioner_setup import (
     precond_chunk_cols,
     rhs_mode1_precond_cache_key,
 )
+from ....problems.profile_response.residual import safe_preconditioner
 from ....sparse_triangular import (
     inverse_permutation,
     triangular_solve_lower_padded,
@@ -48,7 +49,6 @@ def build_rhs1_pas_xblock_ilu_preconditioner(
     reduce_full: Callable[[jnp.ndarray], jnp.ndarray] | None = None,
     expand_reduced: Callable[[jnp.ndarray], jnp.ndarray] | None = None,
     pas_hybrid_preconditioner: Callable[..., Callable[[jnp.ndarray], jnp.ndarray]],
-    safe_preconditioner: Callable[[Callable[[jnp.ndarray], jnp.ndarray]], Callable[[jnp.ndarray], jnp.ndarray]],
 ) -> Callable[[jnp.ndarray], jnp.ndarray]:
     """Sparse block-Jacobi ILU preconditioner for PAS-like RHSMode=1 operators.
 

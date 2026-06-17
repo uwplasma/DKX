@@ -8804,7 +8804,6 @@ def _build_rhsmode1_xblock_tz_sparse_preconditioner(
         emit=emit,
         build_sparse_ilu_from_matvec=_build_sparse_ilu_from_matvec,
         factorize_sparse_matrix_csr_host=_factorize_sparse_matrix_csr_host,
-        safe_preconditioner=_safe_preconditioner,
     )
 
 
@@ -9242,7 +9241,6 @@ def _build_rhsmode1_pas_xblock_ilu_preconditioner(
         reduce_full=reduce_full,
         expand_reduced=expand_reduced,
         pas_hybrid_preconditioner=_build_rhsmode1_pas_hybrid_preconditioner,
-        safe_preconditioner=_safe_preconditioner,
     )
 
 

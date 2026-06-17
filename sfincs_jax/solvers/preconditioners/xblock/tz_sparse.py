@@ -28,6 +28,7 @@ from ....preconditioner_setup import (
     precond_chunk_cols,
     rhs_mode1_precond_cache_key,
 )
+from ....problems.profile_response.residual import safe_preconditioner
 from ....rhs1_large_cpu_policy import (
     rhs1_fp_xblock_assembled_host_allowed as _rhs1_fp_xblock_assembled_host_allowed,
 )
@@ -652,7 +653,6 @@ def build_rhs1_xblock_tz_sparse_preconditioner(
     emit: Callable[[int, str], None] | None = None,
     build_sparse_ilu_from_matvec: Callable[..., object],
     factorize_sparse_matrix_csr_host: Callable[..., object],
-    safe_preconditioner: Callable[[Callable[[jnp.ndarray], jnp.ndarray]], Callable[[jnp.ndarray], jnp.ndarray]],
 ) -> Callable[[jnp.ndarray], jnp.ndarray]:
     """Sparse per-x preconditioner for large FP RHSMode=1 systems.
 
