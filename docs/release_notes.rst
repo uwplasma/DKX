@@ -105,6 +105,14 @@ Unreleased
   RHSMode=1 QI/device/sparse policy slice passed with
   ``253 passed in 153.39 s``. The post-move local full suite passed with
   ``2682 passed in 527.23 s``.
+- Moved the x-block fixed two-level, host smoothed global-coupling, and device
+  global-coupling preconditioner builders from ``v3_driver.py`` into
+  ``rhs1_qi_two_level.py``. The driver now imports the historical private
+  names as aliases while the canonical implementation lives beside the QI
+  two-level primitive. Focused wrapper validation passed with ``13`` tests and
+  the broader RHSMode=1 QI/device/sparse policy slice passed with
+  ``256 passed in 153.50 s``. The post-move local full suite passed with
+  ``2685 passed in 575.33 s``.
 - Continued the ``v3_driver.py`` refactor path by moving the coupled
   f/tail-moment and tail-only matrix-free residual-correction builders into
   ``rhs1_lowmode_coarse.py`` with direct tests for tail-selection policy,
