@@ -89,6 +89,12 @@ Unreleased
   private names as imported aliases, and focused policy/driver validation
   passed with ``285`` tests. The post-move local full suite passed with
   ``2678 passed in 555.29 s``.
+- Moved the constraintScheme=1 x-block moment-Schur wrapper into
+  ``sfincs_jax.rhs1_constraint_sources`` and the bounded host/device subspace
+  residual-equation corrections into
+  ``sfincs_jax.problems.profile_response.residual``. The driver now imports
+  the historical private names as aliases, while direct algebraic tests cover
+  the canonical helper modules.
 - Moved the operator-derived x-block QI coarse-basis and block-metadata helpers
   from ``v3_driver.py`` into ``rhs1_qi_coarse.py``. The driver now imports the
   historical private names as aliases while the canonical implementation lives

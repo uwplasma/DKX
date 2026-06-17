@@ -31129,3 +31129,61 @@ Validation:
   docs/_build/html``: passed.
 - ``git diff --check``: passed.
 - ``python -m pytest -q``: ``2685 passed in 575.33 s``.
+
+### 19.37 Constraint moment-Schur and residual-correction migration
+
+Goal:
+
+- Keep shrinking ``v3_driver.py`` by moving cohesive linear-algebra kernels
+  into existing domain modules instead of adding another narrow file. The
+  driver should select policies and record solve metadata; constraint-source
+  algebra and residual-equation corrections should be directly testable.
+
+Implementation:
+
+- Moved the constraintScheme=1 x-block moment-Schur preconditioner wrapper from
+  ``v3_driver.py`` into ``sfincs_jax/rhs1_constraint_sources.py`` beside the
+  source-injection and density/pressure moment kernels it uses.
+- Moved the host small-basis minres correction and the device-resident
+  residual-equation correction from ``v3_driver.py`` into
+  ``sfincs_jax/problems/profile_response/residual.py`` beside the RHSMode=1
+  residual gates.
+- Preserved the historical ``v3_driver`` private names as imported aliases so
+  local debug scripts and existing call sites continue to work unchanged.
+- Added direct tests for moment-Schur metadata/apply counters and updated
+  subspace-correction tests to import the canonical modules while asserting
+  driver alias compatibility.
+- Updated the source map, testing guide, and release notes.
+
+Validation:
+
+- ``python -m py_compile sfincs_jax/rhs1_constraint_sources.py
+  sfincs_jax/problems/profile_response/residual.py sfincs_jax/v3_driver.py
+  tests/test_rhs1_constraint_sources.py tests/test_rhs1_schwarz_heuristic.py
+  tests/test_v3_sparse_pattern.py``: passed.
+- ``python -m ruff check sfincs_jax/rhs1_constraint_sources.py
+  sfincs_jax/problems/profile_response/residual.py sfincs_jax/v3_driver.py
+  tests/test_rhs1_constraint_sources.py tests/test_rhs1_schwarz_heuristic.py
+  tests/test_v3_sparse_pattern.py``: passed.
+- ``PYTHONDONTWRITEBYTECODE=1 python -m pytest -q -p no:cacheprovider
+  tests/test_rhs1_constraint_sources.py
+  tests/test_rhs1_schwarz_heuristic.py::test_subspace_minres_correction_combines_multiple_directions
+  tests/test_rhs1_schwarz_heuristic.py::test_subspace_minres_correction_rejects_nonimproving_basis
+  tests/test_v3_sparse_pattern.py::test_device_subspace_residual_equation_reuses_cached_operator_basis
+  tests/test_v3_sparse_pattern.py::test_device_subspace_residual_equation_fails_closed_without_improvement
+  tests/test_v3_sparse_pattern.py::test_xblock_sparse_pc_constraint1_moment_schur_records_metadata
+  tests/test_v3_sparse_pattern.py::test_xblock_sparse_pc_constraint1_moment_schur_probe_fails_closed``:
+  ``11 passed in 5.83 s``.
+- ``PYTHONDONTWRITEBYTECODE=1 python -m pytest -q -p no:cacheprovider
+  tests/test_rhs1_constraint_sources.py tests/test_rhs1_schwarz_heuristic.py
+  tests/test_rhs1_qi_coarse.py tests/test_rhs1_qi_two_level.py
+  tests/test_rhs1_qi_device_preconditioner.py
+  tests/test_rhs1_qi_device_smoother.py tests/test_v3_sparse_pattern.py
+  tests/test_v3_driver_rhs1_dispatch_coverage.py
+  tests/test_v3_driver_solve_policy_coverage.py``:
+  ``277 passed in 160.99 s``.
+- ``SPHINXOPTS='-W --keep-going' python -m sphinx -b html docs
+  docs/_build/html``: passed.
+- ``git diff --check``: passed.
+- ``PYTHONDONTWRITEBYTECODE=1 python -m pytest -q -p no:cacheprovider``:
+  ``2686 passed in 555.08 s``.

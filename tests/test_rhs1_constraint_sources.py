@@ -9,6 +9,7 @@ import numpy as np
 jax_config.update("jax_enable_x64", True)
 
 from sfincs_jax.rhs1_constraint_sources import (  # noqa: E402
+    build_rhs1_xblock_constraint1_moment_schur_preconditioner,
     constraint_scheme1_inject_source,
     constraint_scheme1_moments_from_f,
     constraint_scheme2_inject_source,
@@ -36,7 +37,9 @@ def _op(*, point_at_x0: bool = False) -> SimpleNamespace:
 
 def test_constraint_scheme2_source_from_f_matches_flux_surface_average() -> None:
     op = _op()
-    f = jnp.arange(np.prod(op.fblock.f_shape), dtype=jnp.float64).reshape(op.fblock.f_shape)
+    f = jnp.arange(np.prod(op.fblock.f_shape), dtype=jnp.float64).reshape(
+        op.fblock.f_shape
+    )
 
     source = constraint_scheme2_source_from_f(op, f)
 
@@ -49,7 +52,9 @@ def test_constraint_scheme2_inject_source_respects_point_at_x0() -> None:
     op = _op(point_at_x0=True)
     src = jnp.asarray([[10.0, 11.0, 12.0], [20.0, 21.0, 22.0]], dtype=jnp.float64)
 
-    injected = np.asarray(constraint_scheme2_inject_source(op, src)).reshape(op.fblock.f_shape)
+    injected = np.asarray(constraint_scheme2_inject_source(op, src)).reshape(
+        op.fblock.f_shape
+    )
 
     np.testing.assert_allclose(injected[:, 0, :, :, :], 0.0)
     np.testing.assert_allclose(injected[:, 1:, 1, :, :], 0.0)
@@ -59,7 +64,9 @@ def test_constraint_scheme2_inject_source_respects_point_at_x0() -> None:
 
 def test_constraint_scheme1_moments_from_f_matches_velocity_weighted_average() -> None:
     op = _op()
-    f = jnp.arange(np.prod(op.fblock.f_shape), dtype=jnp.float64).reshape(op.fblock.f_shape)
+    f = jnp.arange(np.prod(op.fblock.f_shape), dtype=jnp.float64).reshape(
+        op.fblock.f_shape
+    )
 
     moments = constraint_scheme1_moments_from_f(op, f)
 
@@ -79,7 +86,9 @@ def test_constraint_scheme1_inject_source_uses_documented_source_basis() -> None
     op = _op(point_at_x0=True)
     src = jnp.asarray([[1.5, -0.25], [0.5, 2.0]], dtype=jnp.float64)
 
-    injected = np.asarray(constraint_scheme1_inject_source(op, src)).reshape(op.fblock.f_shape)
+    injected = np.asarray(constraint_scheme1_inject_source(op, src)).reshape(
+        op.fblock.f_shape
+    )
 
     x = np.asarray(op.x)
     coef = np.exp(-(x**2)) / (np.pi * np.sqrt(np.pi))
@@ -92,3 +101,38 @@ def test_constraint_scheme1_inject_source_uses_documented_source_basis() -> None
     np.testing.assert_allclose(injected[:, 1:, 1, :, :], 0.0)
     np.testing.assert_allclose(injected[0, 1, 0, :, :], expected_x1_species0)
     np.testing.assert_allclose(injected[1, 2, 0, :, :], expected_x2_species1)
+
+
+def test_constraint_scheme1_moment_schur_wraps_xblock_preconditioner() -> None:
+    op = _op()
+    op.rhs_mode = 1
+    op.constraint_scheme = 1
+    op.phi1_size = 0
+    op.f_size = int(np.prod(op.fblock.f_shape))
+    op.extra_size = 2 * int(op.n_species)
+    op.total_size = op.f_size + op.extra_size
+
+    def identity_preconditioner(v: jnp.ndarray) -> jnp.ndarray:
+        return jnp.asarray(v, dtype=jnp.float64)
+
+    logs: list[str] = []
+    preconditioner, metadata, stats = (
+        build_rhs1_xblock_constraint1_moment_schur_preconditioner(
+            op=op,
+            base_preconditioner=identity_preconditioner,
+            emit=lambda _level, msg: logs.append(str(msg)),
+        )
+    )
+
+    rhs = jnp.arange(op.total_size, dtype=jnp.float64) / 10.0
+    out = preconditioner(rhs)
+
+    assert out.shape == (op.total_size,)
+    assert np.all(np.isfinite(np.asarray(out)))
+    assert metadata["mode"] == "constraint1_moment_schur"
+    assert metadata["extra_size"] == op.extra_size
+    assert metadata["rank"] == op.extra_size
+    assert metadata["device_resident"] is True
+    assert stats["applies"] == 1
+    assert stats["base_applies"] == 2
+    assert any("constraint1 moment-Schur built" in msg for msg in logs)

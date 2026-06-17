@@ -7,6 +7,7 @@ import pytest
 import jax.numpy as jnp
 
 from sfincs_jax.namelist import read_sfincs_input
+from sfincs_jax.problems.profile_response.residual import apply_subspace_minres_correction
 import sfincs_jax.v3_driver as vd
 
 
@@ -309,7 +310,8 @@ def test_subspace_minres_correction_combines_multiple_directions() -> None:
     rhs = jnp.asarray([2.0, 10.0], dtype=jnp.float64)
     x0 = jnp.zeros((2,), dtype=jnp.float64)
 
-    x, residual, history, counts, names = vd._apply_subspace_minres_correction(
+    assert vd._apply_subspace_minres_correction is apply_subspace_minres_correction
+    x, residual, history, counts, names = apply_subspace_minres_correction(
         matvec=matvec,
         rhs=rhs,
         x0=x0,
@@ -333,7 +335,7 @@ def test_subspace_minres_correction_rejects_nonimproving_basis() -> None:
         return (("zero", jnp.zeros((2,), dtype=jnp.float64)),)
 
     rhs = jnp.asarray([1.0, 0.0], dtype=jnp.float64)
-    x, residual, history, counts, names = vd._apply_subspace_minres_correction(
+    x, residual, history, counts, names = apply_subspace_minres_correction(
         matvec=matvec,
         rhs=rhs,
         x0=jnp.zeros((2,), dtype=jnp.float64),

@@ -16,6 +16,9 @@ from sfincs_jax.explicit_sparse import SparseDecision, SparseOperatorBundle, bui
 from sfincs_jax.io import write_sfincs_jax_output_h5
 from sfincs_jax.namelist import read_sfincs_input
 from sfincs_jax.petsc_binary import read_petsc_mat_aij
+from sfincs_jax.problems.profile_response.residual import (
+    apply_device_subspace_residual_equation_correction,
+)
 from sfincs_jax.rhs1_block_operator import RHS1BlockLayout
 from sfincs_jax.rhs1_xblock_policy import resolve_rhs1_xblock_sparse_pc_policy
 from sfincs_jax.solver import FlexibleGMRESSolveResult
@@ -27,7 +30,6 @@ from sfincs_jax.v3_sparse_pattern import (
     v3_full_system_fortran_reduced_preconditioner_sparsity_pattern,
 )
 from sfincs_jax.v3_driver import (
-    _apply_device_subspace_residual_equation_correction,
     _rhs1_additive_rescue_nbytes,
     _rhs1_xblock_gmres_restart,
     _rhs1_xblock_precondition_side,
@@ -3394,6 +3396,10 @@ def test_xblock_post_coarse_directions_can_include_residual_weighted_angular_mod
 
 
 def test_device_subspace_residual_equation_reuses_cached_operator_basis() -> None:
+    assert (
+        v3_driver_module._apply_device_subspace_residual_equation_correction
+        is apply_device_subspace_residual_equation_correction
+    )
     operator_matrix = jnp.asarray([[1.0, 1.0], [0.0, 1.0]], dtype=jnp.float64)
     rhs = jnp.asarray([0.0, 1.0], dtype=jnp.float64)
     cached_basis = jnp.asarray([[1.0], [0.0]], dtype=jnp.float64)
@@ -3405,7 +3411,7 @@ def test_device_subspace_residual_equation_reuses_cached_operator_basis() -> Non
     def direction_builder(_residual):
         return (("missing_mode", jnp.asarray([0.0, 1.0], dtype=jnp.float64)),)
 
-    x, residual, history, counts, names = _apply_device_subspace_residual_equation_correction(
+    x, residual, history, counts, names = apply_device_subspace_residual_equation_correction(
         matvec=matvec,
         rhs=rhs,
         x0=jnp.zeros_like(rhs),
@@ -3435,7 +3441,7 @@ def test_device_subspace_residual_equation_fails_closed_without_improvement() ->
     def direction_builder(_residual):
         return (("zero_mode", jnp.zeros_like(rhs)),)
 
-    x, residual, history, counts, names = _apply_device_subspace_residual_equation_correction(
+    x, residual, history, counts, names = apply_device_subspace_residual_equation_correction(
         matvec=matvec,
         rhs=rhs,
         x0=jnp.zeros_like(rhs),
