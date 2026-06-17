@@ -420,9 +420,11 @@ the historical private driver name and test the focused module directly. This ke
   small residual target, ratio, convergence, and host-scalar norm helpers used
   by RHSMode=1 sparse-PC and x-block diagnostics, plus the physics-aware
   x-block post-coarse direction builder and the bounded host/device subspace
-  residual-equation correction kernels used after x-block solves. This keeps
-  fail-closed residual-polish algebra testable without entering the production
-  driver.
+  residual-equation correction kernels used after x-block solves. The module
+  also owns residual-correction preconditioner composition, safe
+  non-finite/clipped preconditioner wrapping, and scalar preconditioned-minres
+  polish. This keeps fail-closed residual-polish algebra testable without
+  entering the production driver.
 - ``sfincs_jax/rhs1_device_operator.py``:
   bounded JAX-device CSR materialization, active-index slicing, sparse matvec
   closures, and host-vs-device validation utilities for opt-in RHSMode=1
