@@ -266,9 +266,9 @@ the historical private driver name and test the focused module directly. This ke
   host/JAX x-block LU/ILU policy, compact CSR/padded triangular-factor apply,
   selected theta/zeta upwind sparse-stencil assembly, explicit FP assembled-host
   cache, host-assembly admission policy, per-block sparse matrix/diagonal
-  assembly, skipped-block diagonal fallback, and extra-variable Schur solve.
-  The driver injects only sparse factorization, cache-key, matrix-probe,
-  chunking, host-factor probing, and safety-wrapper seams.
+  assembly, skipped-block diagonal fallback, host-factor probe/cache-key
+  policy, and extra-variable Schur solve. The driver injects only sparse
+  factorization, matrix-probe, chunking, and safety-wrapper seams.
 - ``sfincs_jax/problems/transport_matrix/direct_pmat.py``
   (legacy alias: ``sfincs_jax/transport_direct_pmat.py``):
   direct term-level RHSMode=2/3 reduced ``Pmat`` and exact active-operator
