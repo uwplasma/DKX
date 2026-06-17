@@ -418,9 +418,10 @@ the historical private driver name and test the focused module directly. This ke
 - ``sfincs_jax/problems/profile_response/residual.py``
   (legacy alias: ``sfincs_jax/rhs1_residual.py``):
   small residual target, ratio, convergence, and host-scalar norm helpers used
-  by RHSMode=1 sparse-PC and x-block diagnostics. This is the first step toward
-  making residual gates and solver metadata independent of the driver branch
-  that produced the candidate state.
+  by RHSMode=1 sparse-PC and x-block diagnostics, plus the bounded host and
+  device subspace residual-equation correction kernels used after x-block
+  solves. This keeps fail-closed residual-polish algebra testable without
+  entering the production driver.
 - ``sfincs_jax/rhs1_device_operator.py``:
   bounded JAX-device CSR materialization, active-index slicing, sparse matvec
   closures, and host-vs-device validation utilities for opt-in RHSMode=1
@@ -811,7 +812,9 @@ the historical private driver name and test the focused module directly. This ke
 - ``sfincs_jax/rhs1_constraint_sources.py``:
   JAX kernels that convert between kinetic ``f`` blocks and constraint-source
   amplitudes for constraint schemes 1 and 2, including flux-surface averages,
-  density/pressure moments, and source-basis injection with ``pointAtX0`` handling.
+  density/pressure moments, source-basis injection with ``pointAtX0`` handling,
+  and the constraintScheme=1 moment-Schur wrapper used by x-block
+  preconditioners.
 - ``sfincs_jax/rhs1_host_policy.py``:
   RHSMode=1 host dense fallback, host sparse-direct, sparse-preconditioned
   GMRES rescue, factor-dtype, and explicit sparse-helper policy.
