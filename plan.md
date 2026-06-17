@@ -31715,3 +31715,59 @@ Validation so far:
 - ``git diff --check``: passed.
 - ``PYTHONDONTWRITEBYTECODE=1 pytest -q -p no:cacheprovider``:
   ``2702 passed in 535.65 s``.
+
+### 19.43 RHSMode=1 Schwarz domain-decomposition extraction
+
+Goal:
+
+- Continue the large driver split with the next coherent live preconditioner
+  group: restricted additive-Schwarz theta/zeta domain-decomposition builders.
+
+Usage audit:
+
+- ``_build_rhsmode1_theta_schwarz_preconditioner`` and
+  ``_build_rhsmode1_zeta_schwarz_preconditioner`` are still live. They are used
+  by the RHSMode=1 auto/strong preconditioner routes, PAS memory fallback, and
+  multi-device sharded solve paths.
+- These paths must therefore remain available behind driver compatibility
+  wrappers while the implementation moves into the domain-decomposition package.
+
+Implementation:
+
+- Moved the theta-Schwarz and zeta-Schwarz implementations into
+  ``sfincs_jax/solvers/preconditioners/domain_decomposition/line_blocks.py``.
+- Kept driver wrappers so existing dispatch tests, monkeypatch hooks, and
+  downstream explicit-method requests continue to work.
+- Reused the domain-decomposition module's cache-key, regularization, line
+  probing, and extra-variable solve infrastructure, and moved the multi-level
+  coarse residual-correction hooks with the builders.
+- Exported the Schwarz builders through
+  ``sfincs_jax.solvers.preconditioners.domain_decomposition``.
+- Added focused behavior coverage for both Schwarz builders using the same
+  diagonal block-probe harness as the theta/zeta line-block tests.
+- Updated the source map so future Schwarz work no longer points at
+  ``v3_driver.py``.
+
+Validation so far:
+
+- ``python -m ruff check sfincs_jax/v3_driver.py
+  sfincs_jax/solvers/preconditioners/domain_decomposition
+  tests/test_rhs1_line_blocks.py tests/test_domain_package_import_contracts.py``:
+  passed.
+- ``python -m compileall -q sfincs_jax/v3_driver.py
+  sfincs_jax/solvers/preconditioners/domain_decomposition
+  tests/test_rhs1_line_blocks.py``: passed.
+- ``pytest -q tests/test_rhs1_line_blocks.py
+  tests/test_domain_package_import_contracts.py``: ``12 passed in 1.22 s``.
+- ``PYTHONDONTWRITEBYTECODE=1 pytest -q -p no:cacheprovider
+  tests/test_rhs1_line_blocks.py tests/test_rhs1_schwarz_heuristic.py
+  tests/test_v3_driver_rhs1_dispatch_coverage.py
+  tests/test_v3_driver_solve_policy_coverage.py
+  tests/test_v3_driver_pas_precond_policy_coverage.py
+  tests/test_domain_package_import_contracts.py
+  tests/test_schur_precond_heuristic.py``: ``122 passed in 54.89 s``.
+- ``SPHINXOPTS='-W --keep-going' python -m sphinx -b html docs
+  docs/_build/html``: passed.
+- ``git diff --check``: passed.
+- ``PYTHONDONTWRITEBYTECODE=1 pytest -q -p no:cacheprovider``:
+  ``2703 passed in 548.27 s``.
