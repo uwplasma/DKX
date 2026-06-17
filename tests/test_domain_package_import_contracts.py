@@ -40,7 +40,10 @@ ACTIVE_PACKAGE_EXPORTS = {
         "assemble_selected_zeta_tz_operator",
         "build_rhs1_xblock_tz_sparse_preconditioner",
         "get_rhsmode1_fp_xblock_assembled_host_cache",
+        "rhsmode1_fp_xblock_assembled_host_allowed",
+        "rhsmode1_fp_xblock_species_decoupled_for_host_assembly",
         "rhsmode1_fp_xblock_tz_sparse_diagonal",
+        "rhsmode1_xblock_sparse_lu_default_max",
         "safe_inverse_diagonal_np",
     ),
     "sfincs_jax.solvers.preconditioners.symbolic_sparse": (
