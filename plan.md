@@ -30371,6 +30371,9 @@ Validation:
 - ``SPHINXOPTS='-W --keep-going' python -m sphinx -b html docs
   docs/_build/html``: passed.
 - ``git diff --check``: passed.
+- ``PYTHONDONTWRITEBYTECODE=1 python -m pytest -q -p no:cacheprovider``:
+  ``2686 passed in 557.32 s``.
+- ``git diff --check``: passed.
 
 ### 19.32 Transport diagnostics domain relocation
 
@@ -31187,3 +31190,44 @@ Validation:
 - ``git diff --check``: passed.
 - ``PYTHONDONTWRITEBYTECODE=1 python -m pytest -q -p no:cacheprovider``:
   ``2686 passed in 555.08 s``.
+
+### 19.38 X-block post-coarse direction-builder migration
+
+Goal:
+
+- Complete the residual-correction extraction by moving the physics-aware basis
+  builder that feeds the post-coarse/residual-equation corrections into the
+  same profile-response residual module.
+
+Implementation:
+
+- Moved ``_rhs1_xblock_post_coarse_directions`` from ``v3_driver.py`` into
+  ``sfincs_jax/problems/profile_response/residual.py`` as
+  ``build_rhs1_xblock_post_coarse_directions``.
+- Preserved the historical driver private name as an imported alias.
+- Updated sparse-pattern tests to import the canonical helper directly while
+  checking driver alias compatibility.
+- Updated the source map, testing guide, and release notes.
+
+Validation:
+
+- ``python -m py_compile sfincs_jax/problems/profile_response/residual.py
+  sfincs_jax/v3_driver.py tests/test_v3_sparse_pattern.py``: passed.
+- ``python -m ruff check sfincs_jax/problems/profile_response/residual.py
+  sfincs_jax/v3_driver.py tests/test_v3_sparse_pattern.py``: passed.
+- ``PYTHONDONTWRITEBYTECODE=1 python -m pytest -q -p no:cacheprovider
+  tests/test_v3_sparse_pattern.py::test_xblock_post_coarse_directions_can_include_angular_modes
+  tests/test_v3_sparse_pattern.py::test_xblock_post_coarse_directions_can_include_residual_weighted_angular_modes
+  tests/test_v3_sparse_pattern.py::test_device_subspace_residual_equation_reuses_cached_operator_basis
+  tests/test_v3_sparse_pattern.py::test_device_subspace_residual_equation_fails_closed_without_improvement``:
+  ``4 passed in 2.41 s``.
+- ``PYTHONDONTWRITEBYTECODE=1 python -m pytest -q -p no:cacheprovider
+  tests/test_rhs1_constraint_sources.py tests/test_rhs1_schwarz_heuristic.py
+  tests/test_rhs1_qi_coarse.py tests/test_rhs1_qi_two_level.py
+  tests/test_rhs1_qi_device_preconditioner.py
+  tests/test_rhs1_qi_device_smoother.py tests/test_v3_sparse_pattern.py
+  tests/test_v3_driver_rhs1_dispatch_coverage.py
+  tests/test_v3_driver_solve_policy_coverage.py``:
+  ``277 passed in 160.49 s``.
+- ``SPHINXOPTS='-W --keep-going' python -m sphinx -b html docs
+  docs/_build/html``: passed.

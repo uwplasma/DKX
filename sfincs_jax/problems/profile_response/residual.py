@@ -4,10 +4,173 @@ from __future__ import annotations
 
 from collections.abc import Callable, Sequence
 import math
+from typing import Any
 
 import jax
 import jax.numpy as jnp
 import numpy as np
+
+from ...v3_system import _fs_average_factor, _ix_min, _source_basis_constraint_scheme_1
+
+
+def build_rhs1_xblock_post_coarse_directions(
+    *,
+    op: Any,
+    residual: jnp.ndarray,
+    preconditioner: Callable[[jnp.ndarray], jnp.ndarray],
+    direction_projector: Callable[[jnp.ndarray], jnp.ndarray] | None = None,
+    expected_size: int | None = None,
+    include_raw: bool,
+    fsavg_lmax: int,
+    max_extra_units: int,
+    max_directions: int,
+    angular_lmax: int = -1,
+    include_angular_residual: bool = False,
+) -> tuple[tuple[str, jnp.ndarray], ...]:
+    """Build a small physics-aware correction basis for stalled RHSMode=1 solves.
+
+    The basis is intentionally low-dimensional and matrix-free: residual-like
+    directions handle generic error, flux-surface-averaged low-L modes target
+    moment/nullspace drift, low Fourier angular modes target global coupling
+    missed by an x-local inverse, residual-weighted angular/radial projections
+    capture Fourier error with x-dependent amplitudes, and source/constraint
+    directions target the constraint rows that are not visible to a pure x-block
+    preconditioner.
+    """
+    residual = jnp.asarray(residual, dtype=jnp.float64)
+    total = int(op.total_size)
+    expected_size_use = total if expected_size is None else int(expected_size)
+    directions: list[tuple[str, jnp.ndarray]] = []
+
+    def _add(name: str, direction: jnp.ndarray) -> None:
+        if len(directions) >= int(max_directions):
+            return
+        vec = jnp.asarray(direction, dtype=jnp.float64).reshape((-1,))
+        if vec.shape != (total,):
+            return
+        if direction_projector is not None:
+            vec = jnp.asarray(direction_projector(vec), dtype=jnp.float64).reshape((-1,))
+        if vec.shape != (expected_size_use,):
+            return
+        try:
+            norm = float(jnp.linalg.norm(vec))
+        except Exception:
+            return
+        if np.isfinite(norm) and norm > 0.0:
+            directions.append((str(name), vec))
+
+    try:
+        _add("preconditioned_residual", preconditioner(residual))
+    except Exception:
+        pass
+    if include_raw:
+        _add("raw_residual", residual)
+
+    f_res = residual[: op.f_size].reshape(op.fblock.f_shape)
+    factor = _fs_average_factor(op.theta_weights, op.zeta_weights, op.d_hat)
+    lmax_use = min(max(0, int(fsavg_lmax)), max(0, int(op.n_xi) - 1))
+    for il in range(lmax_use + 1):
+        if len(directions) >= int(max_directions):
+            break
+        avg = jnp.einsum("tz,sxtz->sx", factor, f_res[:, :, il, :, :])
+        f_dir = jnp.zeros(op.fblock.f_shape, dtype=jnp.float64)
+        f_dir = f_dir.at[:, :, il, :, :].set(avg[:, :, None, None])
+        tail = jnp.zeros((total - op.f_size,), dtype=jnp.float64)
+        _add(f"fsavg_l{il}", jnp.concatenate([f_dir.reshape((-1,)), tail]))
+
+    angular_l_use = min(int(angular_lmax), max(0, int(op.n_xi) - 1))
+    if angular_l_use >= 0 and int(op.n_theta) > 1 and int(op.n_zeta) > 1:
+        theta = jnp.arange(int(op.n_theta), dtype=jnp.float64)
+        zeta = jnp.arange(int(op.n_zeta), dtype=jnp.float64)
+        two_pi = float(2.0 * np.pi)
+        mode_pairs = (
+            (1, 0),
+            (0, 1),
+            (1, 1),
+            (1, -1),
+            (2, 0),
+            (0, 2),
+            (2, 1),
+            (1, 2),
+        )
+        for il in range(angular_l_use + 1):
+            for m_mode, n_mode in mode_pairs:
+                if len(directions) >= int(max_directions):
+                    break
+                phase = two_pi * (
+                    float(m_mode) * theta[:, None] / float(max(1, int(op.n_theta)))
+                    + float(n_mode) * zeta[None, :] / float(max(1, int(op.n_zeta)))
+                )
+                for parity, pattern in (("cos", jnp.cos(phase)), ("sin", jnp.sin(phase))):
+                    pattern_norm = float(jnp.linalg.norm(pattern))
+                    if (not np.isfinite(pattern_norm)) or pattern_norm <= 0.0:
+                        continue
+                    pattern = pattern / pattern_norm
+                    if include_angular_residual:
+                        weighted_pattern = factor * pattern
+                        denom = float(jnp.sum(weighted_pattern * pattern))
+                        if np.isfinite(denom) and abs(denom) > 0.0:
+                            for s in range(int(op.n_species)):
+                                if len(directions) >= int(max_directions):
+                                    break
+                                coeff = (
+                                    jnp.einsum(
+                                        "tz,xtz->x",
+                                        weighted_pattern,
+                                        f_res[s, :, il, :, :],
+                                    )
+                                    / float(denom)
+                                )
+                                f_dir = jnp.zeros(op.fblock.f_shape, dtype=jnp.float64)
+                                f_dir = f_dir.at[s, :, il, :, :].set(
+                                    coeff[:, None, None] * pattern[None, :, :]
+                                )
+                                tail = jnp.zeros((total - op.f_size,), dtype=jnp.float64)
+                                _add(
+                                    f"angular_residual_s{s}_l{il}_m{m_mode}_"
+                                    f"n{n_mode}_{parity}",
+                                    jnp.concatenate([f_dir.reshape((-1,)), tail]),
+                                )
+                    for s in range(int(op.n_species)):
+                        if len(directions) >= int(max_directions):
+                            break
+                        f_dir = jnp.zeros(op.fblock.f_shape, dtype=jnp.float64)
+                        f_dir = f_dir.at[s, :, il, :, :].set(pattern[None, :, :])
+                        tail = jnp.zeros((total - op.f_size,), dtype=jnp.float64)
+                        _add(
+                            f"angular_s{s}_allx_l{il}_m{m_mode}_n{n_mode}_{parity}",
+                            jnp.concatenate([f_dir.reshape((-1,)), tail]),
+                        )
+
+    extra_start = int(op.f_size + op.phi1_size)
+    extra_size = int(op.extra_size)
+    if extra_size > 0 and len(directions) < int(max_directions):
+        extra_res = residual[extra_start : extra_start + extra_size]
+        extra_dir = jnp.zeros((total,), dtype=jnp.float64).at[
+            extra_start : extra_start + extra_size
+        ].set(extra_res)
+        _add("extra_residual", extra_dir)
+        if extra_size <= int(max_extra_units):
+            for ie in range(extra_size):
+                if len(directions) >= int(max_directions):
+                    break
+                unit = jnp.zeros((total,), dtype=jnp.float64).at[extra_start + ie].set(1.0)
+                _add(f"extra_unit_{ie}", unit)
+
+    if int(op.constraint_scheme) == 1 and len(directions) < int(max_directions):
+        ix0 = _ix_min(bool(op.point_at_x0))
+        source_basis = _source_basis_constraint_scheme_1(op.x)
+        for s in range(int(op.n_species)):
+            for ibasis, basis in enumerate(source_basis):
+                if len(directions) >= int(max_directions):
+                    break
+                f_dir = jnp.zeros(op.fblock.f_shape, dtype=jnp.float64)
+                f_dir = f_dir.at[s, ix0:, 0, :, :].set(basis[ix0:, None, None])
+                tail = jnp.zeros((total - op.f_size,), dtype=jnp.float64)
+                full = jnp.concatenate([f_dir.reshape((-1,)), tail])
+                _add(f"constraint1_source_s{s}_{ibasis}", full)
+
+    return tuple(directions)
 
 
 def apply_subspace_minres_correction(
@@ -309,6 +472,7 @@ def residual_converged(residual_norm: float, target: float) -> bool:
 __all__ = [
     "apply_device_subspace_residual_equation_correction",
     "apply_subspace_minres_correction",
+    "build_rhs1_xblock_post_coarse_directions",
     "l2_norm_float",
     "residual_converged",
     "residual_target",

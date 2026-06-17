@@ -18,6 +18,7 @@ from sfincs_jax.namelist import read_sfincs_input
 from sfincs_jax.petsc_binary import read_petsc_mat_aij
 from sfincs_jax.problems.profile_response.residual import (
     apply_device_subspace_residual_equation_correction,
+    build_rhs1_xblock_post_coarse_directions,
 )
 from sfincs_jax.rhs1_block_operator import RHS1BlockLayout
 from sfincs_jax.rhs1_xblock_policy import resolve_rhs1_xblock_sparse_pc_policy
@@ -33,7 +34,6 @@ from sfincs_jax.v3_driver import (
     _rhs1_additive_rescue_nbytes,
     _rhs1_xblock_gmres_restart,
     _rhs1_xblock_precondition_side,
-    _rhs1_xblock_post_coarse_directions,
     _triangular_solve_lower_csr_rows,
     _triangular_solve_upper_csr_rows,
     solve_v3_full_system_linear_gmres,
@@ -3341,12 +3341,16 @@ def test_xblock_sparse_pc_probe_coarse_uses_active_projected_directions(monkeypa
 
 
 def test_xblock_post_coarse_directions_can_include_angular_modes() -> None:
+    assert (
+        v3_driver_module._rhs1_xblock_post_coarse_directions
+        is build_rhs1_xblock_post_coarse_directions
+    )
     here = Path(__file__).parent
     nml = read_sfincs_input(here / "ref" / "quick_2species_FPCollisions_noEr.input.namelist")
     op = full_system_operator_from_namelist(nml=nml, identity_shift=0.0)
     residual = jnp.ones((op.total_size,), dtype=jnp.float64)
 
-    directions = _rhs1_xblock_post_coarse_directions(
+    directions = build_rhs1_xblock_post_coarse_directions(
         op=op,
         residual=residual,
         preconditioner=lambda v: jnp.asarray(v, dtype=jnp.float64),
@@ -3378,7 +3382,7 @@ def test_xblock_post_coarse_directions_can_include_residual_weighted_angular_mod
         [f_res.reshape((-1,)), jnp.zeros((int(op.total_size) - int(op.f_size),), dtype=jnp.float64)]
     )
 
-    directions = _rhs1_xblock_post_coarse_directions(
+    directions = build_rhs1_xblock_post_coarse_directions(
         op=op,
         residual=residual,
         preconditioner=lambda v: jnp.asarray(v, dtype=jnp.float64),
