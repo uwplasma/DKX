@@ -43,6 +43,14 @@ ACTIVE_PACKAGE_EXPORTS = {
     "sfincs_jax.solvers.preconditioners.full_fp": (
         "build_rhs1_species_block_preconditioner",
         "build_rhs1_species_xblock_preconditioner",
+        "build_rhs1_structured_fblock_angular_jacobi_preconditioner",
+        "build_rhs1_structured_fblock_fp_coupled_moment_schur_preconditioner",
+        "build_rhs1_structured_fblock_fp_lowmode_schur_preconditioner",
+        "build_rhs1_structured_fblock_fp_moment_schur_preconditioner",
+        "build_rhs1_structured_fblock_fp_radial_jacobi_preconditioner",
+        "build_rhs1_structured_fblock_fp_tail_coupled_schur_preconditioner",
+        "build_rhs1_structured_fblock_jacobi_preconditioner",
+        "build_rhs1_structured_fblock_xi_angular_jacobi_preconditioner",
     ),
     "sfincs_jax.solvers.preconditioners.domain_decomposition": (
         "build_rhs1_theta_dd_preconditioner",
