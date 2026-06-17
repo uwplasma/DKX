@@ -33,6 +33,7 @@ DOMAIN_PACKAGES = (
 ACTIVE_PACKAGE_EXPORTS = {
     "sfincs_jax.solvers.preconditioners.pas": (
         "build_rhs1_pas_xblock_ilu_preconditioner",
+        "rhsmode1_pas_xblock_precond_cache_key",
     ),
     "sfincs_jax.solvers.preconditioners.xblock": (
         "assemble_rhsmode1_fp_xblock_tz_sparse_matrix",
