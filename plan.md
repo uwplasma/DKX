@@ -31771,3 +31771,73 @@ Validation so far:
 - ``git diff --check``: passed.
 - ``PYTHONDONTWRITEBYTECODE=1 pytest -q -p no:cacheprovider``:
   ``2703 passed in 548.27 s``.
+
+### 19.44 RHSMode=1 structured f-block preconditioner extraction
+
+Goal:
+
+- Move the full structured RHSMode=1 f-block preconditioner family out of the
+  driver as one coherent domain module, rather than continuing to add small
+  one-off files or leaving an eight-function solver family in ``v3_driver.py``.
+
+Usage audit:
+
+- The structured f-block builders are live explicit/advanced solver paths and
+  have meaningful residual-reduction tests:
+  ``structured_fblock_jacobi``, ``structured_fblock_angular_jacobi``,
+  ``structured_fblock_xi_angular_jacobi``,
+  ``structured_fblock_fp_radial_jacobi``,
+  ``structured_fblock_fp_lowmode_schur``,
+  ``structured_fblock_fp_moment_schur``,
+  ``structured_fblock_fp_coupled_moment_schur``, and
+  ``structured_fblock_fp_tail_coupled_schur``.
+- Since these methods are still available through dispatch and benchmark
+  scripts, the driver should keep compatibility wrappers while the
+  implementation lives in a full-FP preconditioner module.
+
+Implementation:
+
+- Added
+  ``sfincs_jax/solvers/preconditioners/full_fp/structured_fblock.py`` as the
+  owner of the structured f-block preconditioner family.
+- Moved same-shape cache keys, metadata emission, memory guards, structured
+  f-block factor construction, FP-radial grouped factors, and low-mode/moment/
+  tail matrix-free Schur corrections into that module.
+- Exported the builders through
+  ``sfincs_jax.solvers.preconditioners.full_fp``.
+- Converted the historical driver-private functions into compatibility wrappers
+  so dispatch monkeypatch tests and downstream explicit method names continue
+  to work.
+- Updated the source map and import-contract coverage.
+- Updated the cache-reuse regression to clear the shared structured f-block
+  cache directly instead of reaching through ``v3_driver.py``.
+
+Validation so far:
+
+- ``python -m ruff check sfincs_jax/v3_driver.py
+  sfincs_jax/solvers/preconditioners/full_fp
+  tests/test_v3_driver_rhs1_dispatch_coverage.py
+  tests/test_domain_package_import_contracts.py``: passed.
+- ``python -m compileall -q sfincs_jax/v3_driver.py
+  sfincs_jax/solvers/preconditioners/full_fp
+  tests/test_v3_driver_rhs1_dispatch_coverage.py``: passed.
+- ``PYTHONDONTWRITEBYTECODE=1 pytest -q -p no:cacheprovider
+  tests/test_v3_driver_rhs1_dispatch_coverage.py
+  tests/test_domain_package_import_contracts.py``: ``43 passed in 24.50 s``.
+- ``PYTHONDONTWRITEBYTECODE=1 pytest -q -p no:cacheprovider
+  tests/test_v3_driver_rhs1_dispatch_coverage.py
+  tests/test_benchmark_structured_fblock_preconditioners.py
+  tests/test_rhs1_preconditioner_auto_policy.py tests/test_preconditioner_setup.py
+  tests/test_domain_package_import_contracts.py``: ``82 passed in 24.70 s``.
+- ``SPHINXOPTS='-W --keep-going' python -m sphinx -b html docs
+  docs/_build/html``: passed.
+- ``git diff --check``: passed.
+- First full-suite attempt exposed a compatibility regression: the structured
+  f-block cache registry was no longer re-exported through ``v3_driver.py``.
+  Restored the re-export while keeping implementation ownership in
+  ``structured_fblock.py``.
+- ``PYTHONDONTWRITEBYTECODE=1 pytest -q -p no:cacheprovider
+  tests/test_preconditioner_caches.py tests/test_v3_driver_rhs1_dispatch_coverage.py
+  tests/test_domain_package_import_contracts.py``: ``51 passed in 24.88 s``.
+- ``PYTHONDONTWRITEBYTECODE=1 pytest -q -p no:cacheprovider``:
+  ``2703 passed in 556.91 s``.

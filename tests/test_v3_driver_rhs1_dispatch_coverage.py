@@ -8,6 +8,7 @@ import pytest
 
 import sfincs_jax.v3_driver as vd
 from sfincs_jax.namelist import read_sfincs_input
+from sfincs_jax.preconditioner_caches import _RHSMODE1_STRUCTURED_FBLOCK_PRECOND_CACHE
 from sfincs_jax.v3_system import apply_v3_full_system_operator, full_system_operator_from_namelist
 
 
@@ -461,7 +462,7 @@ def test_structured_fblock_fp_radial_jacobi_reuses_same_shape_cache() -> None:
     op = full_system_operator_from_namelist(nml=nml, identity_shift=0.5)
     rhs = jnp.zeros((op.total_size,), dtype=jnp.float64)
     rhs = rhs.at[: op.f_size].set(jnp.linspace(-0.35, 0.65, op.f_size, dtype=jnp.float64))
-    vd._RHSMODE1_STRUCTURED_FBLOCK_PRECOND_CACHE.clear()
+    _RHSMODE1_STRUCTURED_FBLOCK_PRECOND_CACHE.clear()
 
     first = vd._build_rhsmode1_structured_fblock_fp_radial_jacobi_preconditioner(op=op)
     second = vd._build_rhsmode1_structured_fblock_fp_radial_jacobi_preconditioner(op=op)
