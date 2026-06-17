@@ -99,6 +99,11 @@ Unreleased
   ``sfincs_jax.problems.profile_response.residual`` next to the correction
   kernels that consume it. The driver keeps the historical private alias, and
   the sparse-pattern tests now validate the canonical helper path directly.
+- Moved residual-correction preconditioner composition, the safe
+  non-finite/clipped preconditioner wrapper, and scalar preconditioned-minres
+  polish into ``sfincs_jax.problems.profile_response.residual``. The driver
+  retains the historical private aliases while direct tests exercise the
+  canonical helpers.
 - Moved the operator-derived x-block QI coarse-basis and block-metadata helpers
   from ``v3_driver.py`` into ``rhs1_qi_coarse.py``. The driver now imports the
   historical private names as aliases while the canonical implementation lives
