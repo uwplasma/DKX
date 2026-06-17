@@ -1,6 +1,6 @@
 # SFINCS_JAX Master Handoff + Execution Plan
 
-Last updated: 2026-06-16 (America/Chicago)
+Last updated: 2026-06-17 (America/Chicago)
 Owner: incoming agent
 
 ## 2026-06-13 Addendum: full ``v3_driver.py`` retirement refactor plan
@@ -86,6 +86,137 @@ Evidence used for this plan:
 - JAX pytrees/state containers: https://docs.jax.dev/en/latest/pytrees.html
 - Scientific Python design recommendations: https://learn.scientific-python.org/development/principles/design/
 - pytest fixture model: https://docs.pytest.org/en/stable/explanation/fixtures.html
+
+### 2026-06-17 review addendum: differentiability, solver lanes, and finite closeout
+
+This addendum is the current controlling interpretation of the refactor plan.
+It does not replace the domain-package layout above; it makes the
+differentiability/performance split explicit so the refactor does not optimize
+only for smaller files.
+
+Current PR state:
+
+- Active branch: ``refactor/v3-driver-architecture``.
+- Active PR: draft PR #8 against ``main``.
+- Latest pushed checkpoint: ``b3e3422 Move RHS1 residual polish helpers out of driver``.
+- Remote PR checks after the latest pushed checkpoints: CI coverage shards,
+  tests, docs builds, examples-smoke, external-data-smoke,
+  optional-ecosystem-gates, coverage-report, and codecov patch are green.
+- Latest local full-suite evidence for the active branch:
+  ``2686 passed in 549.51 s``.
+- ``v3_driver.py`` has been reduced from the original roughly 49k-line
+  monolith to ``35717`` lines while preserving compatibility aliases and
+  direct tests for extracted modules.
+
+Autodiff strategy decision:
+
+- Keep two explicit solve lanes:
+  differentiable Python/API lane and fast production CLI/non-autodiff lane.
+  They may share operators and residual gates, but they must not silently share
+  host-only factorization, mutable caches, or non-JAX side effects.
+- The differentiable lane should use JAX-native matrix-free operators and
+  implicit differentiation for linear solves. This matches the current
+  ``sfincs_jax/implicit_solve.py`` direction and the JAX
+  ``jax.lax.custom_linear_solve`` contract: the primal solve need not itself be
+  differentiable, but ``matvec`` must be differentiable and the returned
+  solution is differentiated through the linear equation and transpose solve.
+- Adaptive solver choices are not differentiable as discrete decisions. The
+  research-grade contract is:
+  1. differentiate through the selected accepted branch using an explicit
+     branch certificate and implicit solve;
+  2. log branch predicates, residual margins, and policy metadata so users know
+     when gradients are valid away from a branch boundary;
+  3. add optional smooth/relaxed branch selectors only where the objective is a
+     deliberate differentiable surrogate;
+  4. test branch-stability and boundary warnings instead of pretending that
+     hard ``auto`` decisions have smooth derivatives.
+- Reverse-mode sensitivities for spectral/operator solves should be treated as
+  adjoint solves over the linearized residual equation, not as unrolled Krylov
+  differentiation. This is consistent with the spectral-solver adjoint
+  literature and keeps memory bounded for large systems.
+- JAXopt, Lineax, Equinox, and Optax remain optional measured lanes, not hard
+  dependencies, until a benchmark shows material benefit:
+  ``jaxopt`` is useful for custom-root/fixed-point implicit differentiation and
+  optimization examples; ``lineax`` is useful if its operator/linear-solve API
+  reduces code or improves gradients/runtime on measured fixtures; ``equinox``
+  is useful for PyTree model objects and filtered transforms when it simplifies
+  state boundaries; ``optax`` belongs in optimization workflows rather than the
+  core solver.
+
+Sources checked in the 2026-06-17 review:
+
+- DESC uses pseudo-spectral numerical methods and automatic differentiation for
+  stellarator equilibrium/optimization, with a clean user-facing CLI and
+  tutorials: https://github.com/PlasmaControl/DESC
+- Fast automated adjoints for spectral PDE solvers argues for adjoint solvers
+  built from sparse spectral operator graphs, preserving speed and memory:
+  https://arxiv.org/abs/2506.14792
+- JAX ``custom_linear_solve`` defines matrix-free implicit gradients at the
+  solution of a linear equation:
+  https://docs.jax.dev/en/latest/_autosummary/jax.lax.custom_linear_solve.html
+- JAXopt documents implicit differentiation for argmin/root/fixed-point
+  solvers and lower-level JVP/VJP routines:
+  https://jaxopt.github.io/stable/implicit_diff.html
+- Lineax provides differentiable linear solves/least-squares over JAX linear
+  operators and may be adopted only if measured gates beat the current custom
+  solve on accuracy/runtime/memory:
+  https://docs.kidger.site/lineax/
+- Equinox provides PyTree modules and filtered JAX transformations that may be
+  useful for solver/geometry state boundaries:
+  https://docs.kidger.site/equinox/
+- Optax provides composable gradient transformations for optimization
+  workflows, not core transport solves:
+  https://optax.readthedocs.io/en/latest/getting_started.html
+
+Finite closeout phases for this PR:
+
+1. Finish profile-response/RHSMode=1 extraction.
+   Move PAS, full-FP, x-block, Schur, and QI preconditioner builders into
+   existing ``problems/profile_response`` or ``solvers/preconditioners``
+   packages. Keep legacy ``v3_driver`` private names as aliases until the final
+   compatibility pass. Each move must include direct tests and one affected
+   solver slice.
+2. Finish transport compatibility cleanup.
+   Convert remaining top-level ``transport_*`` implementation files into
+   compatibility aliases where the domain implementation already exists.
+   Do not create new flat ``transport_*`` modules.
+3. Define and test the differentiable solve contract.
+   Add a focused ``solvers/differentiation`` or equivalent domain module only
+   if it consolidates ``implicit_solve.py`` contracts, branch certificates,
+   transpose-solve checks, and finite-difference/adjoint residual gates. Do not
+   add optional ecosystem dependencies unless the existing optional gates show
+   material value.
+4. Simplify compatibility shims.
+   Replace wrapper bodies with import aliases whenever no dependency injection
+   or monkeypatch seam is needed. Add deprecation notes for internal-only
+   legacy imports but keep public imports stable for this PR.
+5. Documentation consolidation.
+   Update ``docs/development_roadmap.rst``, ``docs/source_map.rst``,
+   ``docs/numerics.rst``, ``docs/performance_techniques.rst``, and README
+   wording so the CLI/non-autodiff lane and differentiable Python/API lane are
+   consistently described.
+6. Final validation and PR readiness.
+   Run focused slices after every extraction, strict docs build after doc/API
+   changes, full local suite before each push, and CI after each pushed
+   checkpoint. The PR stays draft until ``v3_driver.py`` is either below the
+   facade target or the remaining code is explicitly listed as intentional
+   orchestration with tests and docs.
+
+Current structural findings from the review:
+
+- The source tree still has ``185`` top-level Python files and ``91``
+  top-level ``rhs1_*``/``transport_*`` files. This is still too much flat
+  structure for the target maintainability goal. Future extractions must move
+  implementation into domain packages and collapse old flat paths into small
+  compatibility aliases.
+- ``sfincs_jax/problems/profile_response/residual.py`` is now ``652`` lines,
+  which is acceptable but close to the point where solver-polish and
+  branch-certificate contracts may need their own domain module if they keep
+  growing.
+- ``plan.md`` remains the single authoritative execution log. Older historical
+  sections are audit context only; if a historical section conflicts with this
+  addendum or the single active refactor plan, follow this addendum and the
+  single active refactor plan.
 
 ### Target domain package layout
 
