@@ -258,8 +258,7 @@ the historical private driver name and test the focused module directly. This ke
   module owns the per-``(species,x)`` Legendre/theta/zeta block assembly,
   PETSc-style ILU/exact-LU cutoff policy, padded triangular-factor conversion,
   threaded block factor setup, and extra-variable Schur solve. ``v3_driver.py``
-  keeps a compatibility wrapper only to inject the current PAS-hybrid fallback
-  and safety-wrapper seams.
+  keeps a compatibility wrapper only to inject the current PAS-hybrid fallback.
 - ``sfincs_jax/solvers/preconditioners/xblock/tz_sparse.py``
   (legacy alias: ``sfincs_jax/rhs1_xblock_tz_sparse.py``):
   sparse per-``x`` RHSMode=1 full-FP preconditioner setup. This module owns the
@@ -268,7 +267,7 @@ the historical private driver name and test the focused module directly. This ke
   cache, host-assembly admission policy, per-block sparse matrix/diagonal
   assembly, skipped-block diagonal fallback, host-factor probe/cache-key
   policy, shared chunked unsharded matrix probing, and extra-variable Schur
-  solve. The driver injects only sparse factorization and safety-wrapper seams.
+  solve. The driver injects only sparse factorization seams.
 - ``sfincs_jax/problems/transport_matrix/direct_pmat.py``
   (legacy alias: ``sfincs_jax/transport_direct_pmat.py``):
   direct term-level RHSMode=2/3 reduced ``Pmat`` and exact active-operator
