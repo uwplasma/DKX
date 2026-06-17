@@ -682,6 +682,13 @@ rank-gates the smoothed-load basis, and asserts driver alias compatibility.
 These tests keep the QI global-coupling basis mechanics independent of full
 solve smoke tests.
 
+``tests/test_rhs1_qi_two_level.py`` covers the preconditioner actions built
+from those bases. The focused tests now exercise the fixed x-block two-level
+wrapper, host smoothed global-coupling wrapper, device QR global-coupling
+wrapper, and device normal-equation global-coupling wrapper on a synthetic
+RHSMode=1 x-block system. They check finite actions, metadata, apply counters,
+coarse-solver routing, and the historical ``v3_driver`` alias imports.
+
 The solver-path refactor continues this policy-first testing style in
 ``sfincs_jax/solver_path_policy.py`` and ``tests/test_solver_path_policy.py``.
 The direct tests cover JIT eligibility, preconditioner dtype selection, the narrow

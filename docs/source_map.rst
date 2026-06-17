@@ -440,7 +440,10 @@ the historical private driver name and test the focused module directly. This ke
 - ``sfincs_jax/rhs1_qi_two_level.py``:
   reusable local-smoother plus coarse-correction primitive,
   ``S_local^{-1} r + Q A_c^{-1} Q^T (r - A S_local^{-1} r)``, used as a
-  directly tested architecture prototype before any hard-seed promotion.
+  directly tested architecture prototype before any hard-seed promotion. It
+  also owns the x-block fixed two-level, host smoothed global-coupling, and
+  device global-coupling preconditioner wrappers that build the actual
+  coarse-action callables used by the driver.
 - ``sfincs_jax/rhs1_qi_device_smoother.py``:
   device-local QI smoother primitives, including CSR-backed Jacobi,
   matrix-free residual-minimizing steps, and fail-closed seed probes for the
