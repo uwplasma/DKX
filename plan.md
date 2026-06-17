@@ -31081,3 +31081,51 @@ Validation:
   docs/_build/html``: passed.
 - ``git diff --check``: passed.
 - ``python -m pytest -q``: ``2682 passed in 527.23 s``.
+
+### 19.36 X-block QI two-level/global-coupling preconditioner migration
+
+Goal:
+
+- Move from basis-only extraction to preconditioner-action extraction. The
+  production driver should select policies, probe candidates, and record
+  metadata, while the QI two-level module should build the host/device
+  coarse-action callables that implement the selected preconditioner.
+
+Implementation:
+
+- Moved the fixed x-block two-level coarse preconditioner builder, host
+  smoothed global-coupling preconditioner builder, and device global-coupling
+  preconditioner builder from ``v3_driver.py`` into
+  ``sfincs_jax/rhs1_qi_two_level.py``.
+- Preserved the historical ``v3_driver`` private names as imported aliases.
+- Kept the host QR/triangular solve, setup-budget fail-closed behavior, device
+  QR path, and device normal-equation path unchanged.
+- Added direct synthetic RHSMode=1 x-block tests for finite actions, metadata,
+  apply counters, solver routing, setup metadata, and driver alias
+  compatibility.
+- Updated the source map, testing guide, and release notes.
+
+Validation:
+
+- ``python -m py_compile sfincs_jax/rhs1_qi_two_level.py
+  sfincs_jax/v3_driver.py tests/test_rhs1_qi_two_level.py``: passed.
+- ``python -m ruff check sfincs_jax/rhs1_qi_two_level.py
+  sfincs_jax/v3_driver.py tests/test_rhs1_qi_two_level.py``: passed.
+- ``python -m pytest -q tests/test_rhs1_qi_two_level.py
+  tests/test_v3_sparse_pattern.py::test_xblock_sparse_pc_two_level_preconditioner_records_metadata
+  tests/test_v3_sparse_pattern.py::test_xblock_sparse_pc_global_coupling_preconditioner_records_metadata
+  tests/test_v3_sparse_pattern.py::test_xblock_sparse_pc_global_coupling_setup_budget_uses_partial_basis
+  tests/test_v3_sparse_pattern.py::test_xblock_sparse_pc_qi_two_level_preconditioner_fails_closed_when_probe_worsens
+  tests/test_v3_sparse_pattern.py::test_xblock_sparse_pc_qi_two_level_smoothed_load_basis_records_metadata
+  tests/test_v3_sparse_pattern.py::test_xblock_sparse_pc_device_global_coupling_can_use_normal_equations``:
+  ``13 passed in 10.54 s``.
+- ``python -m pytest -q tests/test_rhs1_qi_two_level.py
+  tests/test_rhs1_qi_coarse.py tests/test_rhs1_qi_device_preconditioner.py
+  tests/test_rhs1_qi_device_smoother.py tests/test_v3_sparse_pattern.py
+  tests/test_v3_driver_rhs1_dispatch_coverage.py
+  tests/test_v3_driver_solve_policy_coverage.py``:
+  ``256 passed in 153.50 s``.
+- ``SPHINXOPTS='-W --keep-going' python -m sphinx -b html docs
+  docs/_build/html``: passed.
+- ``git diff --check``: passed.
+- ``python -m pytest -q``: ``2685 passed in 575.33 s``.

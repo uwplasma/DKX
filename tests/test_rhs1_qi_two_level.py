@@ -1,10 +1,17 @@
 from __future__ import annotations
 
+from types import SimpleNamespace
+
 import jax
 import jax.numpy as jnp
+import numpy as np
 
+from sfincs_jax import v3_driver as vd
 from sfincs_jax.rhs1_qi_coarse import RHS1QICoarseBasis, RHS1QICoarseBasisMetadata
 from sfincs_jax.rhs1_qi_two_level import (
+    build_rhs1_xblock_device_global_coupling_preconditioner,
+    build_rhs1_xblock_smoothed_global_coupling_preconditioner,
+    build_rhs1_xblock_two_level_preconditioner,
     build_rhs1_qi_two_level_preconditioner,
     probe_rhs1_qi_two_level_correction,
 )
@@ -27,6 +34,37 @@ def _basis(vectors: jnp.ndarray) -> RHS1QICoarseBasis:
             rank_atol=1.0e-14,
         ),
     )
+
+
+def _fake_xblock_operator() -> SimpleNamespace:
+    n_species = 1
+    n_x = 2
+    n_xi = 2
+    n_theta = 2
+    n_zeta = 2
+    f_size = n_species * n_x * n_xi * n_theta * n_zeta
+    extra_size = 2
+    return SimpleNamespace(
+        n_species=n_species,
+        n_x=n_x,
+        n_xi=n_xi,
+        n_theta=n_theta,
+        n_zeta=n_zeta,
+        f_size=f_size,
+        phi1_size=0,
+        extra_size=extra_size,
+        total_size=f_size + extra_size,
+        constraint_scheme=1,
+        point_at_x0=True,
+        x=jnp.asarray([0.0, 1.0], dtype=jnp.float64),
+        fblock=SimpleNamespace(f_shape=(n_species, n_x, n_xi, n_theta, n_zeta)),
+    )
+
+
+def _xblock_matrix(size: int) -> jnp.ndarray:
+    diagonal = jnp.linspace(1.0, 2.5, int(size), dtype=jnp.float64)
+    u = jnp.linspace(-1.0, 1.0, int(size), dtype=jnp.float64)
+    return jnp.diag(diagonal) + 0.08 * jnp.outer(u, u)
 
 
 def test_two_level_qi_preconditioner_reduces_low_rank_residual() -> None:
@@ -142,7 +180,10 @@ def test_two_level_qi_action_lstsq_handles_nonnormal_coarse_vectors() -> None:
     assert action_probe.accepted is True
     assert action_probe.metadata.coarse_solver == "action_lstsq"
     assert action_probe.residual_after_norm < 0.02
-    assert float(jnp.linalg.norm(rhs - operator(action_x))) == action_probe.residual_after_norm
+    assert (
+        float(jnp.linalg.norm(rhs - operator(action_x)))
+        == action_probe.residual_after_norm
+    )
 
 
 def test_two_level_qi_probe_fails_closed_without_required_improvement() -> None:
@@ -174,3 +215,148 @@ def test_two_level_qi_probe_fails_closed_without_required_improvement() -> None:
     assert probe.accepted is False
     assert probe.reason == "residual_not_reduced"
     assert jnp.allclose(x, x0)
+
+
+def test_xblock_two_level_wrapper_records_metadata_and_driver_alias() -> None:
+    op = _fake_xblock_operator()
+    matrix = _xblock_matrix(op.total_size)
+    rhs = jnp.arange(1, op.total_size + 1, dtype=jnp.float64)
+
+    def matvec(value):
+        return matrix @ value
+
+    def base_preconditioner(value):
+        return value / jnp.diag(matrix)
+
+    preconditioner, metadata, stats = build_rhs1_xblock_two_level_preconditioner(
+        op=op,
+        rhs=rhs,
+        matvec=matvec,
+        base_preconditioner=base_preconditioner,
+        mode="multiplicative",
+        fsavg_lmax=1,
+        max_extra_units=4,
+        max_directions=12,
+        rcond=1.0e-12,
+        include_rhs=True,
+    )
+    out = preconditioner(rhs)
+
+    assert out.shape == rhs.shape
+    assert metadata["mode"] == "multiplicative"
+    assert 1 <= metadata["rank"] <= metadata["basis_size"] <= 12
+    assert metadata["expected_size"] == op.total_size
+    assert stats["applies"] == 1
+    assert stats["coarse_applies"] == 1
+    assert np.all(np.isfinite(np.asarray(out)))
+    assert (
+        vd._build_rhs1_xblock_two_level_preconditioner
+        is build_rhs1_xblock_two_level_preconditioner
+    )
+
+
+def test_host_global_coupling_wrapper_records_metadata_and_stats(monkeypatch) -> None:
+    op = _fake_xblock_operator()
+    matrix = _xblock_matrix(op.total_size)
+    rhs = jnp.arange(1, op.total_size + 1, dtype=jnp.float64)
+    monkeypatch.setenv(
+        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_GLOBAL_COUPLING_SMOOTHER", "identity"
+    )
+
+    def matvec(value):
+        return matrix @ value
+
+    def base_preconditioner(value):
+        return value / jnp.diag(matrix)
+
+    preconditioner, metadata, stats = (
+        build_rhs1_xblock_smoothed_global_coupling_preconditioner(
+            op=op,
+            rhs=rhs,
+            matvec=matvec,
+            base_preconditioner=base_preconditioner,
+            mode="additive",
+            fsavg_lmax=1,
+            angular_lmax=1,
+            max_extra_units=4,
+            max_directions=14,
+            rcond=1.0e-12,
+            include_rhs=True,
+        )
+    )
+    out = preconditioner(rhs)
+
+    assert out.shape == rhs.shape
+    assert metadata["mode"] == "additive"
+    assert metadata["smoother"] == "identity"
+    assert (
+        metadata["load_basis_size"] >= metadata["basis_size"] >= metadata["rank"] >= 1
+    )
+    assert metadata["setup_budget_reached"] is False
+    assert stats["applies"] == 1
+    assert stats["coarse_applies"] == 1
+    assert np.all(np.isfinite(np.asarray(out)))
+    assert (
+        vd._build_rhs1_xblock_smoothed_global_coupling_preconditioner
+        is build_rhs1_xblock_smoothed_global_coupling_preconditioner
+    )
+
+
+def test_device_global_coupling_wrapper_supports_qr_and_normal_equations(
+    monkeypatch,
+) -> None:
+    op = _fake_xblock_operator()
+    matrix = _xblock_matrix(op.total_size)
+    rhs = jnp.arange(1, op.total_size + 1, dtype=jnp.float64)
+
+    def matvec(value):
+        return matrix @ value
+
+    def base_preconditioner(value):
+        return value / jnp.diag(matrix)
+
+    for solver in ("qr", "normal_equations"):
+        monkeypatch.setenv(
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_GLOBAL_COUPLING_DEVICE_SOLVER",
+            solver,
+        )
+        monkeypatch.setenv(
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_GLOBAL_COUPLING_SMOOTHER",
+            "identity",
+        )
+        preconditioner, metadata, stats = (
+            build_rhs1_xblock_device_global_coupling_preconditioner(
+                op=op,
+                rhs=rhs,
+                matvec=matvec,
+                base_preconditioner=base_preconditioner,
+                mode="multiplicative",
+                fsavg_lmax=1,
+                angular_lmax=1,
+                max_extra_units=4,
+                max_directions=10,
+                rcond=1.0e-10,
+                include_rhs=True,
+            )
+        )
+        out = preconditioner(rhs)
+
+        assert out.shape == rhs.shape
+        assert metadata["device_resident"] is True
+        assert metadata["smoother"] == "identity"
+        assert metadata["coarse_solver"] == solver
+        assert (
+            metadata["load_basis_size"]
+            >= metadata["basis_size"]
+            >= metadata["rank"]
+            >= 1
+        )
+        assert len(metadata["singular_values"]) >= 1
+        assert stats["applies"] == 1
+        assert stats["coarse_applies"] == 1
+        assert np.all(np.isfinite(np.asarray(out)))
+
+    assert (
+        vd._build_rhs1_xblock_device_global_coupling_preconditioner
+        is build_rhs1_xblock_device_global_coupling_preconditioner
+    )
