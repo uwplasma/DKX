@@ -291,13 +291,15 @@ the historical private driver name and test the focused module directly. This ke
   and extra-variable Schur solve. ``v3_driver.py`` keeps compatibility wrappers
   only.
 - ``sfincs_jax/solvers/preconditioners/domain_decomposition/line_blocks.py``:
-  angular line-block preconditioners for RHSMode=1 domain-decomposition and
-  strong fallback paths. It owns the theta-line, zeta-line, theta-domain,
-  zeta-domain, theta-line-with-``x``-diagonal, and full theta-zeta angular-block
-  setup/apply kernels used by automatic line selection, Schur-base construction,
-  and explicit strong-preconditioner requests. Shared axis-line index maps,
-  cache keys, regularization policy, and extra-variable tail solves live here;
-  ``v3_driver.py`` keeps compatibility wrappers only.
+  angular line-block and restricted-additive-Schwarz preconditioners for
+  RHSMode=1 domain-decomposition and strong fallback paths. It owns the
+  theta-line, zeta-line, theta-domain, zeta-domain, theta-Schwarz,
+  zeta-Schwarz, theta-line-with-``x``-diagonal, and full theta-zeta
+  angular-block setup/apply kernels used by automatic line selection,
+  Schur-base construction, and explicit strong-preconditioner requests. Shared
+  axis-line index maps, cache keys, regularization policy, extra-variable tail
+  solves, and multi-level residual correction hooks live here; ``v3_driver.py``
+  keeps compatibility wrappers only.
 - ``sfincs_jax/problems/transport_matrix/direct_pmat.py``
   (legacy alias: ``sfincs_jax/transport_direct_pmat.py``):
   direct term-level RHSMode=2/3 reduced ``Pmat`` and exact active-operator
