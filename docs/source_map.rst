@@ -284,9 +284,11 @@ the historical private driver name and test the focused module directly. This ke
   host/JAX x-block LU/ILU policy, compact CSR/padded triangular-factor apply,
   selected theta/zeta upwind sparse-stencil assembly, explicit FP assembled-host
   cache, host-assembly admission policy, per-block sparse matrix/diagonal
-  assembly, skipped-block diagonal fallback, host-factor probe/cache-key
-  policy, shared chunked unsharded matrix probing, and extra-variable Schur
-  solve. ``v3_driver.py`` keeps a compatibility wrapper only.
+  assembly, sparse per-:math:`L` species/``x`` host rescue factors, one-shot
+  sparse species/``x`` seed construction, skipped-block diagonal fallback,
+  host-factor probe/cache-key policy, shared chunked unsharded matrix probing,
+  and extra-variable Schur solve. ``v3_driver.py`` keeps compatibility wrappers
+  only.
 - ``sfincs_jax/problems/transport_matrix/direct_pmat.py``
   (legacy alias: ``sfincs_jax/transport_direct_pmat.py``):
   direct term-level RHSMode=2/3 reduced ``Pmat`` and exact active-operator
