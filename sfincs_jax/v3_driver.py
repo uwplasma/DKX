@@ -193,7 +193,14 @@ from . import rhs1_xblock_sparse_host_policy as _rhs1_xblock_sparse_host_policy
 from .rhs1_xblock_policy import (
     resolve_rhs1_xblock_sparse_pc_policy,
 )
-from .solvers.preconditioners.pas import build_rhs1_pas_xblock_ilu_preconditioner
+from .solvers.preconditioners.pas import (
+    RHS1PasCompositeBuilders,
+    build_rhs1_pas_hybrid_preconditioner,
+    build_rhs1_pas_lite_preconditioner,
+    build_rhs1_pas_schur_preconditioner,
+    build_rhs1_pas_xblock_ilu_preconditioner,
+    compose_preconditioners as _compose_preconditioners,
+)
 from .solvers.preconditioners.xblock import (
     assemble_rhsmode1_fp_xblock_tz_sparse_matrix as _assemble_rhsmode1_fp_xblock_tz_sparse_matrix,
     assemble_selected_theta_tz_operator as _assemble_selected_theta_tz_operator,
@@ -8036,15 +8043,21 @@ def _build_rhsmode1_theta_zeta_preconditioner(
     return _apply_reduced
 
 
-def _compose_preconditioners(
-    first: Callable[[jnp.ndarray], jnp.ndarray],
-    second: Callable[[jnp.ndarray], jnp.ndarray],
-) -> Callable[[jnp.ndarray], jnp.ndarray]:
-    def _apply(v: jnp.ndarray) -> jnp.ndarray:
-        return second(first(v))
+def _rhs1_pas_composite_builders() -> RHS1PasCompositeBuilders:
+    """Bind current PAS component builders for compatibility wrappers."""
 
-    return _apply
-
+    return RHS1PasCompositeBuilders(
+        pas_tokamak_theta_applicable=_pas_tokamak_theta_preconditioner_applicable,
+        pas_tz_applicable=_pas_tz_preconditioner_applicable,
+        pas_tokamak_theta_builder=_build_rhsmode1_pas_tokamak_theta_preconditioner,
+        pas_tz_builder=_build_rhsmode1_pas_tz_preconditioner,
+        theta_line_builder=_build_rhsmode1_theta_line_preconditioner,
+        zeta_line_builder=_build_rhsmode1_zeta_line_preconditioner,
+        xblock_tz_lmax_builder=_build_rhsmode1_xblock_tz_lmax_preconditioner,
+        xmg_builder=_build_rhsmode1_xmg_preconditioner,
+        xupwind_builder=_build_rhsmode1_xupwind_preconditioner,
+        collision_builder=_build_rhsmode1_collision_preconditioner,
+    )
 
 
 def _build_rhsmode1_pas_lite_preconditioner(
@@ -8054,42 +8067,15 @@ def _build_rhsmode1_pas_lite_preconditioner(
     expand_reduced: Callable[[jnp.ndarray], jnp.ndarray] | None = None,
     safe: bool = True,
 ) -> Callable[[jnp.ndarray], jnp.ndarray]:
-    """Lightweight PAS preconditioner: angular PAS block (if cheap) + x-coarse + collision diag.
+    """Compatibility wrapper for the canonical PAS-lite composite builder."""
 
-    This preconditioner is intended for large PAS DKES/full-trajectory cases where the
-    full PAS hybrid (line/xblock) preconditioner is expensive to build. We optionally
-    apply a PAS-specific angular preconditioner (tokamak theta or 3D tz) only when the
-    angular block size is modest, then follow with x-coarsening and a collision-diagonal
-    smoothing pass.
-    """
-    angular_precond: Callable[[jnp.ndarray], jnp.ndarray] | None = None
-    if _pas_tokamak_theta_preconditioner_applicable(op):
-        angular_precond = _build_rhsmode1_pas_tokamak_theta_preconditioner(
-            op=op, reduce_full=reduce_full, expand_reduced=expand_reduced
-        )
-    elif _pas_tz_preconditioner_applicable(op):
-        tz_max_env = os.environ.get("SFINCS_JAX_PAS_LITE_TZ_MAX", "").strip()
-        try:
-            tz_max = int(tz_max_env) if tz_max_env else 256
-        except ValueError:
-            tz_max = 256
-        tz_size = int(op.n_theta) * int(op.n_zeta)
-        if tz_max > 0 and tz_size <= tz_max:
-            angular_precond = _build_rhsmode1_pas_tz_preconditioner(
-                op=op, reduce_full=reduce_full, expand_reduced=expand_reduced
-            )
-
-    x_precond = _build_rhsmode1_xmg_preconditioner(
-        op=op, reduce_full=reduce_full, expand_reduced=expand_reduced
+    return build_rhs1_pas_lite_preconditioner(
+        op=op,
+        builders=_rhs1_pas_composite_builders(),
+        reduce_full=reduce_full,
+        expand_reduced=expand_reduced,
+        safe=safe,
     )
-    collision_precond = _build_rhsmode1_collision_preconditioner(
-        op=op, reduce_full=reduce_full, expand_reduced=expand_reduced
-    )
-    precond = x_precond
-    if angular_precond is not None:
-        precond = _compose_preconditioners(angular_precond, precond)
-    precond = _compose_preconditioners(precond, collision_precond)
-    return _safe_preconditioner(precond) if bool(safe) else precond
 
 
 def _build_rhsmode1_pas_hybrid_preconditioner(
@@ -8099,97 +8085,15 @@ def _build_rhsmode1_pas_hybrid_preconditioner(
     expand_reduced: Callable[[jnp.ndarray], jnp.ndarray] | None = None,
     safe: bool = True,
 ) -> Callable[[jnp.ndarray], jnp.ndarray]:
-    """Hybrid PAS preconditioner: line solve + coarse-x correction + collision diagonal.
+    """Compatibility wrapper for the canonical PAS-hybrid composite builder."""
 
-    This targets PAS DKES/full-trajectory cases where pure line or x-coarse preconditioners
-    can stagnate. We apply a line preconditioner (theta or zeta), then a coarse-x additive
-    correction (xmg), and finally the collision diagonal as a cheap smoothing pass.
-    """
-    line_precond: Callable[[jnp.ndarray], jnp.ndarray] | None = None
-    nxi_for_x = np.asarray(op.fblock.collisionless.n_xi_for_x, dtype=np.int32)
-    local_per_species = int(np.sum(nxi_for_x))
-    line_size = int(local_per_species * int(op.n_theta))
-    line_max_env = os.environ.get("SFINCS_JAX_PAS_HYBRID_LINE_MAX", "").strip()
-    try:
-        line_max = int(line_max_env) if line_max_env else 512
-    except ValueError:
-        line_max = 512
-    if not line_max_env:
-        # For small-Nzeta tokamak-like grids, allow line preconditioning by default.
-        if int(op.n_zeta) <= 5 and int(op.n_theta) >= 8:
-            line_max = max(int(line_max), 4096)
-    if line_size <= line_max:
-        if int(op.n_theta) >= int(op.n_zeta):
-            line_precond = _build_rhsmode1_theta_line_preconditioner(
-                op=op, reduce_full=reduce_full, expand_reduced=expand_reduced
-            )
-        else:
-            line_precond = _build_rhsmode1_zeta_line_preconditioner(
-                op=op, reduce_full=reduce_full, expand_reduced=expand_reduced
-            )
-    else:
-        # Try a truncated-L (theta,zeta) block per x as a cheaper angular preconditioner.
-        lmax_env = os.environ.get("SFINCS_JAX_PAS_HYBRID_LMAX", "").strip()
-        has_er = op.fblock.er_xdot is not None or op.fblock.er_xidot is not None
-        use_dkes_exb = bool(getattr(op.fblock.exb_theta, "use_dkes_exb_drift", False)) or bool(
-            getattr(op.fblock.exb_zeta, "use_dkes_exb_drift", False)
-        )
-        needs_stronger_l = bool(has_er or use_dkes_exb)
-        nz = int(op.n_theta) * int(op.n_zeta)
-        try:
-            if lmax_env:
-                lmax = int(lmax_env)
-            else:
-                # The v3 Er xDot / xiDot terms couple ΔL=±2, so a truncated angular block that
-                # only retains L=0 is often too weak. Default to keeping L=0..2 when these
-                # terms are present (bounded by xblock_max below). For small angular grids
-                # (tokamak-like cases), keep a few more L modes even without Er to improve robustness.
-                lmax = 8 if (needs_stronger_l or nz <= 256) else 2
-        except ValueError:
-            lmax = 8 if (needs_stronger_l or nz <= 256) else 2
-        xblock_max_env = os.environ.get("SFINCS_JAX_PAS_HYBRID_XBLOCK_MAX", "").strip()
-        try:
-            # PAS+Er runs need larger angular blocks to be effective; allow a larger default.
-            # For small angular grids, allow a larger default so truncated-L blocks remain useful.
-            xblock_max_default = 2048 if (needs_stronger_l or nz <= 256) else 256
-            xblock_max = int(xblock_max_env) if xblock_max_env else xblock_max_default
-        except ValueError:
-            xblock_max = 2048 if (needs_stronger_l or nz <= 256) else 256
-        if nz > 0:
-            max_allowed = int(xblock_max // nz)
-            if max_allowed > 0:
-                lmax = min(int(lmax), max_allowed)
-        block_size = int(max(0, lmax) * int(op.n_theta) * int(op.n_zeta))
-        if lmax > 0 and block_size > 0 and block_size <= xblock_max:
-            line_precond = _build_rhsmode1_xblock_tz_lmax_preconditioner(
-                op=op,
-                lmax=lmax,
-                reduce_full=reduce_full,
-                expand_reduced=expand_reduced,
-            )
-    x_precond: Callable[[jnp.ndarray], jnp.ndarray]
-    if op.fblock.pas is not None and op.fblock.fp is None and op.fblock.er_xdot is not None:
-        # The dense ddx matrices in the v3 Er xDot operator can be extremely ill-conditioned.
-        # Prefer a stable x-upwind solve over explicit dense x-block inversions.
-        x_precond = _build_rhsmode1_xupwind_preconditioner(
-            op=op, reduce_full=reduce_full, expand_reduced=expand_reduced
-        )
-    else:
-        x_precond = _build_rhsmode1_xmg_preconditioner(op=op, reduce_full=reduce_full, expand_reduced=expand_reduced)
-    collision_precond = _build_rhsmode1_collision_preconditioner(
-        op=op, reduce_full=reduce_full, expand_reduced=expand_reduced
+    return build_rhs1_pas_hybrid_preconditioner(
+        op=op,
+        builders=_rhs1_pas_composite_builders(),
+        reduce_full=reduce_full,
+        expand_reduced=expand_reduced,
+        safe=safe,
     )
-    # Apply angular/line preconditioner (if enabled), then x-coarse correction, then collision smoothing.
-    precond = x_precond
-    if line_precond is not None:
-        precond = _compose_preconditioners(line_precond, precond)
-    precond = _compose_preconditioners(precond, collision_precond)
-    # Guard against non-finite preconditioned vectors causing GMRES breakdown.
-    #
-    # Note: this wrapper is *nonlinear* (nan_to_num/clip). Avoid it when the preconditioner is
-    # used as a building block inside other Krylov preconditioners (e.g. Schur), where linearity
-    # matters for stability.
-    return _safe_preconditioner(precond) if bool(safe) else precond
 
 
 def _build_rhsmode1_pas_schur_preconditioner(
@@ -8199,39 +8103,15 @@ def _build_rhsmode1_pas_schur_preconditioner(
     expand_reduced: Callable[[jnp.ndarray], jnp.ndarray] | None = None,
     safe: bool = True,
 ) -> Callable[[jnp.ndarray], jnp.ndarray]:
-    """PAS block-Schur preconditioner: (L,theta/zeta) coupling + x-coarsening + collisions.
+    """Compatibility wrapper for the canonical PAS-Schur composite builder."""
 
-    This targets tokamak/near-tokamak PAS RHSMode=1 systems where line/x-coarse
-    preconditioners stagnate. We apply a stronger angular/L block preconditioner
-    (pas_tokamak_theta or pas_tz), then an x-coarse correction (xmg or x-upwind),
-    followed by the collision diagonal as a smoothing pass.
-    """
-    if _pas_tokamak_theta_preconditioner_applicable(op):
-        angular_precond = _build_rhsmode1_pas_tokamak_theta_preconditioner(
-            op=op, reduce_full=reduce_full, expand_reduced=expand_reduced
-        )
-    elif _pas_tz_preconditioner_applicable(op):
-        angular_precond = _build_rhsmode1_pas_tz_preconditioner(
-            op=op, reduce_full=reduce_full, expand_reduced=expand_reduced
-        )
-    else:
-        angular_precond = _build_rhsmode1_pas_hybrid_preconditioner(
-            op=op, reduce_full=reduce_full, expand_reduced=expand_reduced, safe=False
-        )
-
-    if op.fblock.pas is not None and op.fblock.fp is None and op.fblock.er_xdot is not None:
-        x_precond = _build_rhsmode1_xupwind_preconditioner(
-            op=op, reduce_full=reduce_full, expand_reduced=expand_reduced
-        )
-    else:
-        x_precond = _build_rhsmode1_xmg_preconditioner(op=op, reduce_full=reduce_full, expand_reduced=expand_reduced)
-
-    collision_precond = _build_rhsmode1_collision_preconditioner(
-        op=op, reduce_full=reduce_full, expand_reduced=expand_reduced
+    return build_rhs1_pas_schur_preconditioner(
+        op=op,
+        builders=_rhs1_pas_composite_builders(),
+        reduce_full=reduce_full,
+        expand_reduced=expand_reduced,
+        safe=safe,
     )
-    precond = _compose_preconditioners(angular_precond, x_precond)
-    precond = _compose_preconditioners(precond, collision_precond)
-    return _safe_preconditioner(precond) if bool(safe) else precond
 
 
 def _build_rhsmode1_species_block_preconditioner(

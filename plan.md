@@ -253,6 +253,12 @@ Current structural findings from the review:
 - Switched the full-FP x-block preconditioner module to import symbolic sparse
   factor builders directly from ``solvers/preconditioners/symbolic_sparse``.
   Its driver wrapper no longer injects sparse factorization callbacks.
+- Moved the PAS composite preconditioner policies (``pas_lite``,
+  ``pas_hybrid``, and ``pas_schur``) into
+  ``sfincs_jax/solvers/preconditioners/pas/composite.py`` with a typed builder
+  bundle. ``v3_driver.py`` now keeps compatibility wrappers that bind the
+  current component builders at call time, preserving monkeypatch/debug seams
+  while removing the composition policy from the monolith.
 - Validation for this checkpoint:
   ``python -m pytest -q tests/test_sparse_assembly.py tests/test_domain_package_import_contracts.py tests/test_rhs1_xblock_fallback_initial_guess.py tests/test_rhs1_qi_two_level.py tests/test_rhs1_qi_coarse.py``
   passed with ``48 passed``; the broader import/policy slice
@@ -268,11 +274,18 @@ Current structural findings from the review:
   tests/test_v3_driver_sparse_helper_coverage.py
   tests/test_rhs1_sparse_first_heuristic.py tests/test_sparse_assembly.py``
   passed with ``101 passed`` and ruff passed on the touched modules.
-- ``v3_driver.py`` is now ``35105`` lines before the host-probe/cache-key
-  callback removal. The full-FP x-block wrapper is now a compatibility
-  forwarding wrapper only. Transport compatibility alias cleanup follows after
-  the remaining PAS fallback and broader driver-local preconditioners are
-  assessed.
+  After the PAS composite move, ``python -m ruff check`` and
+  ``python -m compileall -q`` passed on the touched PAS/driver/tests files,
+  focused PAS/dispatch/import tests passed with ``87 passed in 24.08 s``, and
+  the broader PAS/x-block policy slice passed with ``131 passed in 1.23 s``.
+  Strict Sphinx docs passed, ``git diff --check`` passed, and the full local
+  suite passed with ``2690 passed in 546.46 s``.
+- ``v3_driver.py`` is now ``34959`` lines. The full-FP x-block wrapper is now a
+  compatibility forwarding wrapper only, and the PAS composite wrappers are
+  compatibility forwarding wrappers that still bind live component builders.
+  Next extraction targets are broader driver-local RHSMode=1 block/species
+  preconditioners or transport compatibility alias cleanup, whichever gives the
+  cleaner domain-module contract with direct tests.
 
 ### Target domain package layout
 
