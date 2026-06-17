@@ -293,6 +293,12 @@ the historical private driver name and test the focused module directly. This ke
   owns block slicing, active pitch-index maps, PAS chunk caps, chunked
   unsharded operator probing, extra-variable tail inversion, and identity
   passthrough for modes not covered by the truncated-:math:`L` factor.
+- ``sfincs_jax/solvers/preconditioners/xblock/radial.py``:
+  radial x-grid RHSMode=1 preconditioners, including the two-level additive
+  x-multigrid approximation and the stable PAS+``Er`` x-upwind solve. The
+  module owns coarse-x selection, Legendre-low-mode xDot coupling, upwind
+  line-factor setup, cache population, and reduced/full apply wrappers.
+  ``v3_driver.py`` keeps compatibility wrappers only.
 - ``sfincs_jax/solvers/preconditioners/xblock/tz_sparse.py``
   (legacy alias: ``sfincs_jax/rhs1_xblock_tz_sparse.py``):
   sparse per-``x`` RHSMode=1 full-FP preconditioner setup. This module owns the
