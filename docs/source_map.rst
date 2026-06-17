@@ -252,6 +252,14 @@ the historical private driver name and test the focused module directly. This ke
   preconditioner matrices. These helpers encode the PETSc/Fortran-v3-style
   ``Pmat`` shaping rules without carrying solve state, caches, or sparse
   factorization logic.
+- ``sfincs_jax/solvers/preconditioners/pas/composite.py``:
+  PAS-family RHSMode=1 composite preconditioner policy. It owns the
+  ``pas_lite``, ``pas_hybrid``, and ``pas_schur`` composition rules, including
+  angular/TZ applicability, line/truncated-:math:`L` selection, ``Er`` x-upwind
+  routing, x-coarse correction, collision smoothing, and the safety wrapper.
+  ``v3_driver.py`` keeps compatibility wrappers that bind the current low-level
+  builders so monkeypatch-based debug workflows continue to use the historical
+  private names.
 - ``sfincs_jax/solvers/preconditioners/pas/xblock_ilu.py``
   (legacy alias: ``sfincs_jax/rhs1_pas_xblock_ilu.py``):
   sparse block-Jacobi ILU/LU setup for PAS-only RHSMode=1 operators. This
