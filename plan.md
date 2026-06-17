@@ -31560,3 +31560,45 @@ Validation so far:
 - ``git diff --check``: passed.
 - ``PYTHONDONTWRITEBYTECODE=1 pytest -q -p no:cacheprovider``:
   ``2696 passed in 525.62 s``.
+
+### 19.40 Dense species/x-per-L x-block extraction
+
+Goal:
+
+- Move the dense ``sxblock_tz`` RHSMode=1 preconditioner out of
+  ``v3_driver.py`` and into the same x-block Jacobi module as the related dense
+  x-block builders.
+
+Implementation:
+
+- Added ``build_rhs1_sxblock_tz_preconditioner`` to
+  ``sfincs_jax/solvers/preconditioners/xblock/block_jacobi.py``.
+- Reused the existing dense extra-variable inverse helper and added a small
+  active pitch-index helper for the species/``x``-per-:math:`L` layout.
+- Preserved ``_build_rhsmode1_sxblock_tz_preconditioner`` in ``v3_driver.py`` as
+  a compatibility wrapper for existing dispatch and debug scripts.
+- Updated package exports, import-contract tests, the source map, and the
+  x-block block-Jacobi unit tests.
+
+Validation:
+
+- ``python -m ruff check sfincs_jax/v3_driver.py
+  sfincs_jax/solvers/preconditioners/xblock
+  tests/test_rhs1_xblock_block_jacobi.py
+  tests/test_domain_package_import_contracts.py``: passed.
+- ``python -m compileall -q sfincs_jax/v3_driver.py
+  sfincs_jax/solvers/preconditioners/xblock
+  tests/test_rhs1_xblock_block_jacobi.py``: passed.
+- ``pytest -q tests/test_rhs1_xblock_block_jacobi.py
+  tests/test_domain_package_import_contracts.py``: ``9 passed in 1.04 s``.
+- ``PYTHONDONTWRITEBYTECODE=1 pytest -q -p no:cacheprovider
+  tests/test_rhs1_xblock_block_jacobi.py
+  tests/test_rhs1_sxblock_tz_sparse_host.py
+  tests/test_rhs1_sparse_first_heuristic.py tests/test_v3_sparse_pattern.py
+  tests/test_domain_package_import_contracts.py``:
+  ``214 passed in 104.14 s``.
+- ``SPHINXOPTS='-W --keep-going' python -m sphinx -b html docs
+  docs/_build/html``: passed.
+- ``git diff --check``: passed.
+- ``PYTHONDONTWRITEBYTECODE=1 pytest -q -p no:cacheprovider``:
+  ``2697 passed in 523.00 s``.

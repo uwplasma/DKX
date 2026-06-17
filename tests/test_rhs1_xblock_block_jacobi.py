@@ -28,6 +28,7 @@ def _op() -> SimpleNamespace:
 
 def _patch_cache_and_probe(monkeypatch, diag_by_index: dict[int, float]) -> None:
     xb._RHSMODE1_PRECOND_LIST_CACHE.clear()
+    xb._RHSMODE1_PRECOND_IDX_CACHE.clear()
     monkeypatch.setenv("SFINCS_JAX_RHSMODE1_PRECOND_REG", "0")
     monkeypatch.setattr(xb, "_cache_key", lambda _op, kind: ("unit", kind, id(_op)))
 
@@ -62,3 +63,13 @@ def test_xblock_tz_lmax_builder_leaves_high_l_modes_as_identity(monkeypatch) -> 
     result = precond(jnp.asarray([2.0, 40.0, 8.0, 160.0]))
 
     assert np.allclose(np.asarray(result), np.asarray([1.0, 40.0, 1.0, 160.0]))
+
+
+def test_sxblock_tz_builder_inverts_each_pitch_block(monkeypatch) -> None:
+    op = _op()
+    _patch_cache_and_probe(monkeypatch, {0: 2.0, 1: 4.0, 2: 8.0, 3: 16.0})
+
+    precond = xb.build_rhs1_sxblock_tz_preconditioner(op=op)
+    result = precond(jnp.asarray([2.0, 4.0, 8.0, 16.0]))
+
+    assert np.allclose(np.asarray(result), np.asarray([1.0, 1.0, 1.0, 0.0]))

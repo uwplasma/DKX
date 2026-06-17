@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from .block_jacobi import (
+    build_rhs1_sxblock_tz_preconditioner,
     build_rhs1_xblock_tz_lmax_preconditioner,
     build_rhs1_xblock_tz_preconditioner,
 )
@@ -27,6 +28,7 @@ __all__ = (
     "assemble_rhsmode1_fp_xblock_tz_sparse_matrix",
     "assemble_selected_theta_tz_operator",
     "assemble_selected_zeta_tz_operator",
+    "build_rhs1_sxblock_tz_preconditioner",
     "build_rhs1_sxblock_tz_sparse_host_preconditioner",
     "build_rhs1_xblock_tz_lmax_preconditioner",
     "build_rhs1_xblock_tz_preconditioner",

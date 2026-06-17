@@ -9,7 +9,9 @@ import jax.numpy as jnp
 import numpy as np
 
 from ....preconditioner_caches import (
+    _RHSMODE1_PRECOND_IDX_CACHE,
     _RHSMODE1_PRECOND_LIST_CACHE,
+    _RHSMode1PrecondIdxCache,
     _RHSMode1PrecondListCache,
 )
 from ....preconditioner_context import precond_dtype
@@ -23,6 +25,7 @@ from ....v3_system import V3FullSystemOperator
 Preconditioner = Callable[[jnp.ndarray], jnp.ndarray]
 
 __all__ = (
+    "build_rhs1_sxblock_tz_preconditioner",
     "build_rhs1_xblock_tz_lmax_preconditioner",
     "build_rhs1_xblock_tz_preconditioner",
 )
@@ -87,6 +90,132 @@ def _extra_inverse(
             ee_inv = np.linalg.pinv(ee, rcond=1e-12)
         extra_inv_jnp = jnp.asarray(ee_inv, dtype=dtype)
     return extra_idx_jnp, extra_inv_jnp
+
+
+def _sxblock_indices_for_l(
+    *,
+    n_species: int,
+    n_x: int,
+    n_l: int,
+    n_theta: int,
+    n_zeta: int,
+    nxi_for_x: np.ndarray,
+    ell: int,
+) -> np.ndarray:
+    active_x = np.where(nxi_for_x > int(ell))[0]
+    if active_x.size == 0:
+        return np.zeros((0,), dtype=np.int32)
+    idx: list[int] = []
+    for s in range(int(n_species)):
+        for ix in active_x:
+            base = int((((s * n_x + int(ix)) * n_l + int(ell)) * n_theta) * n_zeta)
+            for it in range(int(n_theta)):
+                for iz in range(int(n_zeta)):
+                    idx.append(base + it * int(n_zeta) + iz)
+    return np.asarray(idx, dtype=np.int32)
+
+
+def build_rhs1_sxblock_tz_preconditioner(
+    *,
+    op: V3FullSystemOperator,
+    reduce_full: Callable[[jnp.ndarray], jnp.ndarray] | None = None,
+    expand_reduced: Callable[[jnp.ndarray], jnp.ndarray] | None = None,
+) -> Preconditioner:
+    """Build dense species/``x`` blocks over ``(theta,zeta)`` for each pitch mode."""
+
+    cache_key = _cache_key(op, "sxblock_tz")
+    cached = _RHSMODE1_PRECOND_IDX_CACHE.get(cache_key)
+    if cached is None:
+        n_species = int(op.n_species)
+        n_x = int(op.n_x)
+        n_l = int(op.n_xi)
+        n_theta = int(op.n_theta)
+        n_zeta = int(op.n_zeta)
+        total_size = int(op.total_size)
+
+        nxi_for_x = np.asarray(op.fblock.collisionless.n_xi_for_x, dtype=np.int32)
+        max_block_size = 0
+        for ell in range(n_l):
+            active_x = np.where(nxi_for_x > ell)[0]
+            if active_x.size:
+                max_block_size = max(max_block_size, int(active_x.size) * n_species * n_theta * n_zeta)
+        dtype = precond_dtype(max_block_size * max_block_size)
+        reg = _regularization_from_env()
+
+        block_inv_list: list[jnp.ndarray] = []
+        block_idx_list: list[jnp.ndarray] = []
+        for ell in range(n_l):
+            rep_idx = _sxblock_indices_for_l(
+                n_species=n_species,
+                n_x=n_x,
+                n_l=n_l,
+                n_theta=n_theta,
+                n_zeta=n_zeta,
+                nxi_for_x=nxi_for_x,
+                ell=ell,
+            )
+            if rep_idx.size == 0:
+                continue
+            chunk_cols = precond_chunk_cols(total_size, int(rep_idx.shape[0]))
+            y_sub = matvec_submatrix_v3_unsharded(
+                op,
+                col_idx=rep_idx,
+                row_idx=rep_idx,
+                total_size=total_size,
+                chunk_cols=chunk_cols,
+            )
+            a = np.asarray(y_sub.T, dtype=np.float64)
+            a = a + reg * np.eye(int(rep_idx.shape[0]), dtype=np.float64)
+            try:
+                inv = np.linalg.inv(a)
+            except np.linalg.LinAlgError:
+                inv = np.linalg.pinv(a, rcond=1e-12)
+            if not np.all(np.isfinite(inv)):
+                inv = np.linalg.pinv(a, rcond=1e-12)
+            block_inv_list.append(jnp.asarray(inv, dtype=dtype))
+            block_idx_list.append(jnp.asarray(rep_idx, dtype=jnp.int32))
+
+        extra_idx_jnp, extra_inv_jnp = _extra_inverse(
+            op=op,
+            total_size=total_size,
+            dtype=dtype,
+            reg=reg,
+        )
+        cached = _RHSMode1PrecondIdxCache(
+            block_inv_list=tuple(block_inv_list),
+            block_idx_list=tuple(block_idx_list),
+            extra_idx_jnp=extra_idx_jnp,
+            extra_inv_jnp=extra_inv_jnp,
+        )
+        _RHSMODE1_PRECOND_IDX_CACHE[cache_key] = cached
+
+    block_inv_list = cached.block_inv_list
+    block_idx_list = cached.block_idx_list
+    extra_idx_jnp = cached.extra_idx_jnp
+    extra_inv_jnp = cached.extra_inv_jnp
+    dtype = block_inv_list[0].dtype if block_inv_list else precond_dtype()
+
+    def _apply_full(r_full: jnp.ndarray) -> jnp.ndarray:
+        r_full = jnp.asarray(r_full, dtype=dtype)
+        z_full = jnp.zeros_like(r_full)
+        for inv, idx in zip(block_inv_list, block_idx_list, strict=True):
+            r_loc = r_full[idx]
+            z_loc = inv @ r_loc
+            z_full = z_full.at[idx].set(z_loc, unique_indices=True)
+        if extra_inv_jnp is not None:
+            r_extra = r_full[extra_idx_jnp]
+            z_extra = extra_inv_jnp @ r_extra
+            z_full = z_full.at[extra_idx_jnp].set(z_extra, unique_indices=True)
+        return jnp.asarray(z_full, dtype=jnp.float64)
+
+    if reduce_full is None or expand_reduced is None:
+        return _apply_full
+
+    def _apply_reduced(r_reduced: jnp.ndarray) -> jnp.ndarray:
+        z_full = _apply_full(expand_reduced(r_reduced))
+        return reduce_full(z_full)
+
+    return _apply_reduced
 
 
 def _build_xblock_cache(
