@@ -22,6 +22,47 @@ Goals
 - Keep autodiff explicit: differentiable paths should remain JAX-native and
   tested separately from faster non-autodiff production fallbacks.
 
+Solver And Differentiation Contract
+-----------------------------------
+
+The refactor keeps two solver lanes because they have different technical
+contracts.
+
+1. Production CLI/non-autodiff lane
+   This is the default for ``sfincs_jax input.namelist`` and for Python calls
+   with ``differentiable=False``. It may use the fastest safe host or device
+   path available for the requested model, including sparse factors,
+   preconditioner caches, and other non-differentiable setup work. This lane
+   must fail closed: accepted results need true-residual checks, phase timings,
+   solver metadata, and output diagnostics.
+
+2. Differentiable Python/API lane
+   This lane is selected explicitly with ``differentiable=True``. It should use
+   JAX-native operators and implicit differentiation for linear solves. The
+   central contract is the same one used by ``jax.lax.custom_linear_solve``:
+   gradients are defined by the linear equation and transpose/adjoint solve at
+   the converged solution, not by differentiating through every Krylov or setup
+   iteration. This keeps memory bounded and matches the adjoint strategy used
+   in modern spectral-solver differentiation work.
+
+3. Adaptive branch decisions
+   The ``auto`` policy is a hard discrete decision and is not itself a smooth
+   differentiable map. Gradients are valid through the selected accepted branch,
+   away from branch boundaries. The code should therefore record a branch
+   certificate: selected method, rejected candidates, predicates, residual
+   margins, capability metadata, and warnings when the solve is near a branch
+   boundary. Smooth or relaxed branch selectors should only be added as
+   deliberate surrogate objectives, not as hidden replacements for production
+   ``auto``.
+
+4. Optional JAX ecosystem libraries
+   ``lineax``, ``jaxopt``, ``equinox``, and ``optax`` remain measured optional
+   lanes unless they clearly improve accuracy, runtime, memory, or code
+   clarity on checked fixtures. ``lineax`` is most relevant to operator-based
+   solves, ``jaxopt`` to implicit root/fixed-point examples, ``equinox`` to
+   PyTree state boundaries, and ``optax`` to optimization workflows rather than
+   core transport solves.
+
 Refactoring Plan
 ----------------
 
