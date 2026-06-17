@@ -27,6 +27,9 @@ from ....preconditioner_setup import rhs_mode1_precond_cache_key
 from ....rhs1_large_cpu_policy import (
     rhs1_fp_xblock_assembled_host_allowed as _rhs1_fp_xblock_assembled_host_allowed,
 )
+from ....problems.profile_response.policies import (
+    rhs1_host_factor_probe_ok as _rhs1_host_factor_probe_ok,
+)
 from ....rhs1_solver_policy import read_bool_env as _rhs1_bool_env
 from ....rhs1_solver_policy import read_float_env as _rhs1_float_env
 from ....sparse_triangular import (
@@ -46,6 +49,8 @@ __all__ = [
     "rhsmode1_fp_xblock_assembled_host_allowed",
     "rhsmode1_fp_xblock_species_decoupled_for_host_assembly",
     "rhsmode1_fp_xblock_tz_sparse_diagonal",
+    "rhsmode1_host_factor_probe_ok",
+    "rhsmode1_precond_cache_key",
     "rhsmode1_xblock_sparse_lu_default_max",
     "safe_inverse_diagonal_np",
 ]
@@ -615,6 +620,18 @@ def rhsmode1_xblock_sparse_lu_default_max(op: object, *, build_jax_factors: bool
     )
 
 
+def rhsmode1_host_factor_probe_ok(*, factor: object | None, block_size: int) -> bool:
+    """Return whether a host x-block factor solve passes the bounded probe."""
+
+    return _rhs1_host_factor_probe_ok(factor=factor, block_size=int(block_size))
+
+
+def rhsmode1_precond_cache_key(op: V3FullSystemOperator, kind: str) -> tuple[object, ...]:
+    """Return the RHSMode=1 x-block preconditioner cache key."""
+
+    return rhs_mode1_precond_cache_key(op, kind, precond_dtype=precond_dtype())
+
+
 def build_rhs1_xblock_tz_sparse_preconditioner(
     *,
     op: V3FullSystemOperator,
@@ -633,8 +650,6 @@ def build_rhs1_xblock_tz_sparse_preconditioner(
     factorize_sparse_matrix_csr_host: Callable[..., object],
     matvec_submatrix: Callable[..., jnp.ndarray],
     precond_chunk_cols: Callable[[int, int], int],
-    rhsmode1_host_factor_probe_ok: Callable[..., bool],
-    rhsmode1_precond_cache_key: Callable[[V3FullSystemOperator, str], tuple[object, ...]],
     safe_preconditioner: Callable[[Callable[[jnp.ndarray], jnp.ndarray]], Callable[[jnp.ndarray], jnp.ndarray]],
 ) -> Callable[[jnp.ndarray], jnp.ndarray]:
     """Sparse per-x preconditioner for large FP RHSMode=1 systems.

@@ -11,6 +11,8 @@ from .tz_sparse import (
     rhsmode1_fp_xblock_assembled_host_allowed,
     rhsmode1_fp_xblock_species_decoupled_for_host_assembly,
     rhsmode1_fp_xblock_tz_sparse_diagonal,
+    rhsmode1_host_factor_probe_ok,
+    rhsmode1_precond_cache_key,
     rhsmode1_xblock_sparse_lu_default_max,
     safe_inverse_diagonal_np,
 )
@@ -24,6 +26,8 @@ __all__ = (
     "rhsmode1_fp_xblock_assembled_host_allowed",
     "rhsmode1_fp_xblock_species_decoupled_for_host_assembly",
     "rhsmode1_fp_xblock_tz_sparse_diagonal",
+    "rhsmode1_host_factor_probe_ok",
+    "rhsmode1_precond_cache_key",
     "rhsmode1_xblock_sparse_lu_default_max",
     "safe_inverse_diagonal_np",
 )

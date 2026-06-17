@@ -235,6 +235,10 @@ Current structural findings from the review:
   and default exact-LU cap wrappers into the x-block package so
   ``v3_driver.py`` no longer injects those policy callbacks into
   ``build_rhs1_xblock_tz_sparse_preconditioner``.
+- Moved the x-block host-factor probe wrapper and RHSMode=1 preconditioner
+  cache-key wrapper into the x-block package. ``v3_driver.py`` keeps legacy
+  private aliases for tests/imports but no longer passes those callbacks into
+  ``build_rhs1_xblock_tz_sparse_preconditioner``.
 - Validation for this checkpoint:
   ``python -m pytest -q tests/test_sparse_assembly.py tests/test_domain_package_import_contracts.py tests/test_rhs1_xblock_fallback_initial_guess.py tests/test_rhs1_qi_two_level.py tests/test_rhs1_qi_coarse.py``
   passed with ``48 passed``; the broader import/policy slice
@@ -250,11 +254,11 @@ Current structural findings from the review:
   tests/test_v3_driver_sparse_helper_coverage.py
   tests/test_rhs1_sparse_first_heuristic.py tests/test_sparse_assembly.py``
   passed with ``101 passed`` and ruff passed on the touched modules.
-- ``v3_driver.py`` is now ``35105`` lines. The next high-value extraction is
+- ``v3_driver.py`` is now ``35105`` lines before the host-probe/cache-key
+  callback removal. The next high-value extraction is
   the remaining sparse x-block factorization/caching orchestration seam:
-  sparse factor setup, cache-key construction, matrix probing/chunking, host
-  factor probing, and safety wrapping. Transport compatibility alias cleanup
-  follows after that seam is thinner.
+  sparse factor setup, matrix probing/chunking, and safety wrapping. Transport
+  compatibility alias cleanup follows after that seam is thinner.
 
 ### Target domain package layout
 

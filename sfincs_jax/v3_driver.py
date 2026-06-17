@@ -203,6 +203,8 @@ from .solvers.preconditioners.xblock import (
     rhsmode1_fp_xblock_assembled_host_allowed as _rhsmode1_fp_xblock_assembled_host_allowed,
     rhsmode1_fp_xblock_species_decoupled_for_host_assembly as _rhsmode1_fp_xblock_species_decoupled_for_host_assembly,
     rhsmode1_fp_xblock_tz_sparse_diagonal as _rhsmode1_fp_xblock_tz_sparse_diagonal,
+    rhsmode1_host_factor_probe_ok as _rhsmode1_host_factor_probe_ok,
+    rhsmode1_precond_cache_key as _rhsmode1_precond_cache_key,
     rhsmode1_xblock_sparse_lu_default_max as _rhsmode1_xblock_sparse_lu_default_max,
     safe_inverse_diagonal_np as _safe_inverse_diagonal_np,
 )
@@ -333,10 +335,7 @@ from .problems.profile_response.policies import (
     rhs1_scipy_rescue_active_size_allowed as _rhs1_scipy_rescue_active_size_allowed_impl,
     rhs1_skip_global_sparse_after_xblock_allowed as _rhs1_skip_global_sparse_after_xblock_allowed_impl,
 )
-from .problems.profile_response.policies import (
-    rhs1_host_factor_probe_ok as _rhs1_host_factor_probe_ok_impl,
-    rhs1_pas_fast_accept as _rhs1_pas_fast_accept_impl,
-)
+from .problems.profile_response.policies import rhs1_pas_fast_accept as _rhs1_pas_fast_accept_impl
 from .problems.profile_response.policies import (
     rhs1_fp_force_stage2,
     rhs1_pas_stage2_skip,
@@ -1700,14 +1699,6 @@ def _rhsmode1_sparse_cache_key(
         float(fill_factor),
     )
 
-
-
-def _rhsmode1_host_factor_probe_ok(*, factor: object | None, block_size: int) -> bool:
-    return _rhs1_host_factor_probe_ok_impl(factor=factor, block_size=int(block_size))
-
-
-
-
 def _build_sparse_jax_preconditioner_from_matvec(
     *,
     matvec: Callable[[jnp.ndarray], jnp.ndarray],
@@ -1799,12 +1790,6 @@ def _matvec_submatrix(
 
 def _rhsmode1_dense_fallback_max(op: V3FullSystemOperator) -> int:
     return _rhs1_dense_fallback_max_impl(op)
-
-
-def _rhsmode1_precond_cache_key(op: V3FullSystemOperator, kind: str) -> tuple[object, ...]:
-    return _rhs_mode1_precond_cache_key_impl(op, kind, precond_dtype=_precond_dtype())
-
-
 def _rhsmode1_structured_fblock_cache_key(
     op: V3FullSystemOperator,
     kind: str,
@@ -8821,8 +8806,6 @@ def _build_rhsmode1_xblock_tz_sparse_preconditioner(
         factorize_sparse_matrix_csr_host=_factorize_sparse_matrix_csr_host,
         matvec_submatrix=_matvec_submatrix,
         precond_chunk_cols=_precond_chunk_cols,
-        rhsmode1_host_factor_probe_ok=_rhsmode1_host_factor_probe_ok,
-        rhsmode1_precond_cache_key=_rhsmode1_precond_cache_key,
         safe_preconditioner=_safe_preconditioner,
     )
 
