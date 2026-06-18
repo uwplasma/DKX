@@ -7,15 +7,24 @@ import pytest
 import jax.numpy as jnp
 from scipy import sparse as scipy_sparse
 
+from sfincs_jax.problems.profile_response.diagnostics import (
+    fp_xblock_global_correction_metadata,
+    fp_xblock_highx_residual_correction_metadata,
+    sparse_rescue_tail_metadata,
+    sparse_xblock_rescue_metadata,
+    xblock_assembled_operator_diagnostics,
+    xblock_coarse_correction_diagnostics,
+    xblock_device_krylov_diagnostics,
+    xblock_qi_deflated_preconditioner_diagnostics,
+    xblock_qi_device_preconditioner_diagnostics,
+    xblock_qi_seed_preconditioner_diagnostics,
+    xblock_side_probe_diagnostics,
+)
 from sfincs_jax.problems.profile_response.sparse_pc import (
     SparsePCGMRESContext,
     SparsePCPostMinresContext,
     XBlockAssembledPreflightError,
     apply_sparse_pc_post_minres,
-    xblock_assembled_operator_diagnostics,
-    xblock_coarse_correction_diagnostics,
-    xblock_device_krylov_diagnostics,
-    xblock_qi_seed_preconditioner_diagnostics,
     build_xblock_assembled_equilibration_setup,
     build_xblock_assembled_device_setup,
     build_xblock_assembled_matvec_setup,
@@ -25,8 +34,6 @@ from sfincs_jax.problems.profile_response.sparse_pc import (
     failed_xblock_global_coupling_metadata,
     failed_xblock_two_level_metadata,
     failed_xblock_moment_schur_metadata,
-    fp_xblock_global_correction_metadata,
-    fp_xblock_highx_residual_correction_metadata,
     finalize_xblock_global_coupling_metadata,
     finalize_xblock_two_level_metadata,
     finalize_xblock_moment_schur_metadata,
@@ -47,11 +54,6 @@ from sfincs_jax.problems.profile_response.sparse_pc import (
     resolve_xblock_sparse_pc_side_policy_setup,
     resolve_xblock_two_level_policy_setup,
     run_sparse_pc_gmres_once,
-    sparse_rescue_tail_metadata,
-    sparse_xblock_rescue_metadata,
-    xblock_qi_deflated_preconditioner_diagnostics,
-    xblock_qi_device_preconditioner_diagnostics,
-    xblock_side_probe_diagnostics,
     finalize_xblock_assembled_operator_metadata,
 )
 

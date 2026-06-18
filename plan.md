@@ -34733,3 +34733,42 @@ Next refactor target:
   the growing diagnostics helpers from ``sparse_pc.py`` into a
   ``profile_response/diagnostics.py`` module to keep file structure simple
   before moving larger orchestration out of ``v3_driver.py``.
+
+### 19.106 Profile-response diagnostics module split
+
+Goal:
+
+- Keep the refactor from turning ``sparse_pc.py`` into another oversized
+  catch-all module by moving pure metadata construction into a focused
+  diagnostics module.
+
+Implementation:
+
+- Added ``problems/profile_response/diagnostics.py`` for pure sparse-PC
+  diagnostics builders.
+- Moved sparse-rescue, assembled-operator, coarse-correction, QI seed,
+  QI-device, QI-deflated, side-probe, and device-Krylov diagnostics helpers out
+  of ``sparse_pc.py``.
+- Kept compatibility re-exports from ``sparse_pc.py`` while updating
+  ``v3_driver.py`` and the sparse-PC tests to import diagnostics helpers from
+  the new module directly.
+- ``sparse_pc.py`` is now about ``3106`` lines, down from about ``4299`` lines.
+  ``diagnostics.py`` is about ``1223`` lines.
+- ``v3_driver.py`` remains about ``21247`` lines and
+  ``solve_v3_full_system_linear_gmres`` remains about ``15950`` lines; this
+  tranche is a module-structure cleanup, not a driver shrink.
+
+Validation:
+
+- ``python -m ruff check`` on touched source/tests: passed.
+- ``python -m compileall -q`` on touched source/tests: passed.
+- ``tests/test_profile_response_sparse_pc.py``: ``66 passed``.
+- Broader current profile-response/x-block/sparse-pattern shard:
+  ``330 passed in 111.23 s``.
+
+Next refactor target:
+
+- Start replacing ``locals()``-based diagnostics helpers with typed diagnostics
+  dataclasses or explicit result-builder inputs for the remaining sparse-PC
+  result construction. This keeps the code easier to reason about while
+  preserving the validated behavior.
