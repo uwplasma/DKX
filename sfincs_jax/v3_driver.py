@@ -227,6 +227,7 @@ from .problems.profile_response.sparse_pc import (
     resolve_sparse_pc_entry_policy,
     resolve_fortran_reduced_sparse_pc_backend,
     resolve_fortran_reduced_xblock_factor_policy,
+    resolve_fortran_reduced_xblock_global_coupling_policy,
     resolve_fortran_reduced_xblock_krylov_policy,
     resolve_fortran_reduced_xblock_moment_schur_policy,
     resolve_xblock_qi_device_admission_setup,
@@ -7143,53 +7144,18 @@ def solve_v3_full_system_linear_gmres(
                             f"constraint1 moment-Schur disabled after build failure ({type(exc).__name__}: {exc})",
                         )
 
-            global_coupling_enabled = _rhs1_bool_env(
-                "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_XBLOCK_GLOBAL_COUPLING",
-                default=False,
+            global_coupling_policy = (
+                resolve_fortran_reduced_xblock_global_coupling_policy(
+                    precondition_side=precondition_side,
+                    env=os.environ,
+                )
             )
+            global_coupling_enabled = bool(global_coupling_policy.enabled)
             global_coupling_built = False
             global_coupling_metadata: dict[str, object] = {}
             global_coupling_stats = {"applies": 0, "coarse_applies": 0}
-            if bool(global_coupling_enabled) and precondition_side != "none":
+            if bool(global_coupling_policy.should_build):
                 global_coupling_start_s = sparse_timer.elapsed_s()
-                global_coupling_mode = os.environ.get(
-                    "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_XBLOCK_GLOBAL_COUPLING_MODE",
-                    os.environ.get("SFINCS_JAX_RHSMODE1_XBLOCK_PC_GLOBAL_COUPLING_MODE", "additive"),
-                ).strip()
-                global_coupling_max_directions = _rhs1_int_env(
-                    "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_XBLOCK_GLOBAL_COUPLING_MAX_DIRECTIONS",
-                    default=96,
-                    minimum=1,
-                )
-                global_coupling_fsavg_lmax = _rhs1_int_env(
-                    "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_XBLOCK_GLOBAL_COUPLING_FSAVG_LMAX",
-                    default=12,
-                    minimum=0,
-                )
-                global_coupling_angular_lmax = _rhs1_int_env(
-                    "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_XBLOCK_GLOBAL_COUPLING_ANGULAR_LMAX",
-                    default=2,
-                    minimum=0,
-                )
-                global_coupling_max_extra_units = _rhs1_int_env(
-                    "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_XBLOCK_GLOBAL_COUPLING_MAX_EXTRA_UNITS",
-                    default=8,
-                    minimum=0,
-                )
-                global_coupling_rcond = _rhs1_float_env(
-                    "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_XBLOCK_GLOBAL_COUPLING_RCOND",
-                    default=1.0e-11,
-                    minimum=0.0,
-                )
-                global_coupling_include_rhs = _rhs1_bool_env(
-                    "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_XBLOCK_GLOBAL_COUPLING_INCLUDE_RHS",
-                    default=True,
-                )
-                global_coupling_setup_max_s = _rhs1_float_env(
-                    "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_XBLOCK_GLOBAL_COUPLING_SETUP_MAX_S",
-                    default=0.0,
-                    minimum=0.0,
-                )
                 if emit is not None:
                     emit(
                         0,
@@ -7205,14 +7171,14 @@ def solve_v3_full_system_linear_gmres(
                             base_preconditioner=precond_xblock_krylov,
                             direction_projector=_sparse_pc_reduce_full if sparse_pc_use_active_dof else None,
                             expected_size=int(sparse_pc_linear_size),
-                            mode=global_coupling_mode,
-                            fsavg_lmax=global_coupling_fsavg_lmax,
-                            angular_lmax=global_coupling_angular_lmax,
-                            max_extra_units=global_coupling_max_extra_units,
-                            max_directions=global_coupling_max_directions,
-                            rcond=global_coupling_rcond,
-                            include_rhs=global_coupling_include_rhs,
-                            max_setup_s=global_coupling_setup_max_s,
+                            mode=global_coupling_policy.mode,
+                            fsavg_lmax=global_coupling_policy.fsavg_lmax,
+                            angular_lmax=global_coupling_policy.angular_lmax,
+                            max_extra_units=global_coupling_policy.max_extra_units,
+                            max_directions=global_coupling_policy.max_directions,
+                            rcond=global_coupling_policy.rcond,
+                            include_rhs=global_coupling_policy.include_rhs,
+                            max_setup_s=global_coupling_policy.setup_max_s,
                             emit=emit,
                         )
                     )

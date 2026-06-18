@@ -32,6 +32,7 @@ from sfincs_jax.problems.profile_response.sparse_pc import (
     prepare_xblock_initial_guess,
     resolve_fortran_reduced_sparse_pc_backend,
     resolve_fortran_reduced_xblock_factor_policy,
+    resolve_fortran_reduced_xblock_global_coupling_policy,
     resolve_fortran_reduced_xblock_krylov_policy,
     resolve_fortran_reduced_xblock_moment_schur_policy,
     resolve_sparse_pc_entry_policy,
@@ -360,6 +361,73 @@ def test_fortran_reduced_xblock_moment_schur_policy_falls_back_to_generic_rcond(
     assert setup.enabled
     assert setup.rcond == pytest.approx(3.0e-9)
     assert setup.messages == ()
+
+
+def test_fortran_reduced_xblock_global_coupling_policy_defaults_off() -> None:
+    setup = resolve_fortran_reduced_xblock_global_coupling_policy(
+        precondition_side="right",
+        env={},
+    )
+
+    assert not setup.enabled
+    assert not setup.should_build
+    assert not setup.use_device_builder
+    assert setup.mode == "additive"
+    assert setup.max_directions == 96
+    assert setup.fsavg_lmax == 12
+    assert setup.angular_lmax == 2
+    assert setup.max_extra_units == 8
+    assert setup.rcond == pytest.approx(1.0e-11)
+    assert setup.include_rhs
+    assert setup.setup_max_s == 0.0
+
+
+def test_fortran_reduced_xblock_global_coupling_policy_parses_controls() -> None:
+    setup = resolve_fortran_reduced_xblock_global_coupling_policy(
+        precondition_side="left",
+        env={
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_XBLOCK_GLOBAL_COUPLING": "1",
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_XBLOCK_GLOBAL_COUPLING_MODE": "multiplicative",
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_XBLOCK_GLOBAL_COUPLING_MAX_DIRECTIONS": "11",
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_XBLOCK_GLOBAL_COUPLING_FSAVG_LMAX": "4",
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_XBLOCK_GLOBAL_COUPLING_ANGULAR_LMAX": "5",
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_XBLOCK_GLOBAL_COUPLING_MAX_EXTRA_UNITS": "6",
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_XBLOCK_GLOBAL_COUPLING_RCOND": "3e-8",
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_XBLOCK_GLOBAL_COUPLING_INCLUDE_RHS": "0",
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_XBLOCK_GLOBAL_COUPLING_SETUP_MAX_S": "9.5",
+        },
+    )
+
+    assert setup.enabled
+    assert setup.should_build
+    assert setup.mode == "multiplicative"
+    assert setup.max_directions == 11
+    assert setup.fsavg_lmax == 4
+    assert setup.angular_lmax == 5
+    assert setup.max_extra_units == 6
+    assert setup.rcond == pytest.approx(3.0e-8)
+    assert not setup.include_rhs
+    assert setup.setup_max_s == pytest.approx(9.5)
+
+
+def test_fortran_reduced_xblock_global_coupling_policy_generic_mode_and_no_side() -> (
+    None
+):
+    setup = resolve_fortran_reduced_xblock_global_coupling_policy(
+        precondition_side="none",
+        env={
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_XBLOCK_GLOBAL_COUPLING": "1",
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_GLOBAL_COUPLING_MODE": "right_additive",
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_XBLOCK_GLOBAL_COUPLING_MAX_DIRECTIONS": "bad",
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_XBLOCK_GLOBAL_COUPLING_SETUP_MAX_S": "-1",
+        },
+    )
+
+    assert setup.enabled
+    assert not setup.should_build
+    assert setup.mode == "right_additive"
+    assert setup.max_directions == 96
+    assert setup.setup_max_s == 0.0
 
 
 def test_sparse_pc_entry_policy_classifies_pas_er_and_active_dof() -> None:

@@ -35198,3 +35198,40 @@ Next refactor target:
 - Extract the remaining fortran-reduced x-block preconditioner/matvec closure
   setup or the global-coupling policy slice, then move toward a cohesive
   fortran-reduced x-block branch helper.
+
+### 19.118 Fortran-reduced x-block global-coupling policy extraction
+
+Goal:
+
+- Remove the fortran-reduced x-block global-coupling env/default parser from
+  ``v3_driver.py``.
+
+Implementation:
+
+- Added ``resolve_fortran_reduced_xblock_global_coupling_policy`` to
+  ``problems/profile_response/sparse_pc.py``.
+- The resolver returns the existing ``XBlockGlobalCouplingPolicySetup``
+  dataclass and preserves the fortran-reduced env names, generic mode fallback,
+  default ranks, rcond, include-RHS flag, and setup-budget defaults.
+- Updated ``v3_driver.py`` to consume the policy object while keeping the
+  actual smoothed global-coupling preconditioner build and failure handling in
+  place for later extraction.
+- Added focused tests for default-off behavior, explicit build controls,
+  generic mode fallback, invalid integer fallback, and side ``none`` build
+  suppression.
+- ``v3_driver.py`` is now about ``20910`` lines and
+  ``solve_v3_full_system_linear_gmres`` about ``15617`` lines.
+
+Validation:
+
+- ``python -m ruff check`` on touched source/tests: passed.
+- ``python -m compileall -q`` on touched source/tests: passed.
+- ``tests/test_profile_response_sparse_pc.py``: ``76 passed``.
+- Broader current profile-response/x-block/sparse-pattern shard:
+  ``353 passed in 103.86 s``.
+
+Next refactor target:
+
+- Extract a reusable fortran-reduced x-block preconditioner wrapper for the
+  ``_precond_xblock`` and true-matvec closures, or move the global-coupling
+  build/failure normalization into a helper if it can stay small and testable.

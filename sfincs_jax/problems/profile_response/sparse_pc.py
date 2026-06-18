@@ -1024,6 +1024,78 @@ def resolve_fortran_reduced_xblock_moment_schur_policy(
     )
 
 
+def resolve_fortran_reduced_xblock_global_coupling_policy(
+    *,
+    precondition_side: str,
+    env: Mapping[str, str] | None,
+) -> XBlockGlobalCouplingPolicySetup:
+    """Resolve global-coupling controls for fortran-reduced x-block solves."""
+
+    enabled = _env_bool(
+        env,
+        "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_XBLOCK_GLOBAL_COUPLING",
+        default=False,
+    )
+    mode = _env_value(
+        env,
+        "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_XBLOCK_GLOBAL_COUPLING_MODE",
+    ) or (
+        _env_value(env, "SFINCS_JAX_RHSMODE1_XBLOCK_PC_GLOBAL_COUPLING_MODE")
+        or "additive"
+    )
+    return XBlockGlobalCouplingPolicySetup(
+        enabled=bool(enabled),
+        should_build=bool(enabled and str(precondition_side) != "none"),
+        use_device_builder=False,
+        mode=mode,
+        max_directions=_env_int(
+            env,
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_XBLOCK_GLOBAL_COUPLING_MAX_DIRECTIONS",
+            default=96,
+            minimum=1,
+        ),
+        fsavg_lmax=_env_int(
+            env,
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_XBLOCK_GLOBAL_COUPLING_FSAVG_LMAX",
+            default=12,
+            minimum=0,
+        ),
+        angular_lmax=_env_int(
+            env,
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_XBLOCK_GLOBAL_COUPLING_ANGULAR_LMAX",
+            default=2,
+            minimum=0,
+        ),
+        max_extra_units=_env_int(
+            env,
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_XBLOCK_GLOBAL_COUPLING_MAX_EXTRA_UNITS",
+            default=8,
+            minimum=0,
+        ),
+        rcond=max(
+            0.0,
+            _env_float(
+                env,
+                "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_XBLOCK_GLOBAL_COUPLING_RCOND",
+                default=1.0e-11,
+            ),
+        ),
+        include_rhs=_env_bool(
+            env,
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_XBLOCK_GLOBAL_COUPLING_INCLUDE_RHS",
+            default=True,
+        ),
+        setup_max_s=max(
+            0.0,
+            _env_float(
+                env,
+                "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_XBLOCK_GLOBAL_COUPLING_SETUP_MAX_S",
+                default=0.0,
+            ),
+        ),
+    )
+
+
 def _normalize_qi_device_residual_equation_solver(
     value: str,
     *,
@@ -3589,6 +3661,7 @@ __all__ = [
     "fp_xblock_highx_residual_correction_metadata",
     "resolve_fortran_reduced_sparse_pc_backend",
     "resolve_fortran_reduced_xblock_factor_policy",
+    "resolve_fortran_reduced_xblock_global_coupling_policy",
     "resolve_fortran_reduced_xblock_krylov_policy",
     "resolve_fortran_reduced_xblock_moment_schur_policy",
     "run_sparse_pc_gmres_once",
