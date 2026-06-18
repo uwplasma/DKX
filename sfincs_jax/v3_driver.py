@@ -210,6 +210,7 @@ from .problems.profile_response.sparse_pc import (
     build_xblock_assembled_operator_preflight_setup,
     resolve_sparse_pc_entry_policy,
     resolve_xblock_qi_device_operator_reuse_setup,
+    resolve_xblock_moment_schur_policy_setup,
     resolve_xblock_sparse_pc_setup,
     resolve_xblock_sparse_pc_side_policy_setup,
     run_sparse_pc_gmres_once,
@@ -3783,31 +3784,22 @@ def solve_v3_full_system_linear_gmres(
                         )
 
             precond_xblock_krylov = _precond_xblock_krylov_base
-            moment_schur_default_candidate = bool(
-                str(xblock_krylov_method) in {"fgmres_jax", "gmres_jax", "bicgstab_jax", "tfqmr_jax"}
-                and int(op.rhs_mode) == 1
-                and int(op.constraint_scheme) == 1
-                and int(op.extra_size) > 0
-                and int(op.phi1_size) == 0
+            moment_schur_policy = resolve_xblock_moment_schur_policy_setup(
+                op=op,
+                xblock_krylov_method=str(xblock_krylov_method),
+                xblock_jax_factors=bool(xblock_jax_factors),
+                xblock_jax_factor_format=str(xblock_jax_factor_format),
+                precondition_side=str(precondition_side),
+                env=os.environ,
             )
-            moment_schur_env_raw = os.environ.get(
-                "SFINCS_JAX_RHSMODE1_XBLOCK_PC_MOMENT_SCHUR",
-                "",
-            ).strip().lower()
+            moment_schur_default_candidate = bool(moment_schur_policy.default_candidate)
             moment_schur_default_blocked_by_compact_factors = bool(
-                moment_schur_default_candidate
-                and moment_schur_env_raw in {"", "auto", "default"}
-                and bool(xblock_jax_factors)
-                and str(xblock_jax_factor_format).strip().lower() == "csr"
+                moment_schur_policy.default_blocked_by_compact_factors
             )
-            moment_schur_default = bool(
-                moment_schur_default_candidate
-                and not moment_schur_default_blocked_by_compact_factors
-            )
-            moment_schur_enabled = _rhs1_bool_env(
-                "SFINCS_JAX_RHSMODE1_XBLOCK_PC_MOMENT_SCHUR",
-                default=moment_schur_default,
-            )
+            moment_schur_enabled = bool(moment_schur_policy.enabled)
+            moment_schur_rcond = float(moment_schur_policy.rcond)
+            moment_schur_probe_enabled = bool(moment_schur_policy.probe_enabled)
+            moment_schur_probe_min_improvement = float(moment_schur_policy.probe_min_improvement)
             moment_schur_built = False
             moment_schur_used = False
             moment_schur_reason: str | None = None
@@ -3816,39 +3808,11 @@ def solve_v3_full_system_linear_gmres(
             moment_schur_probe_improvement_ratio: float | None = None
             moment_schur_metadata: dict[str, object] = {}
             moment_schur_stats = {"applies": 0, "base_applies": 0}
-            if (
-                emit is not None
-                and moment_schur_default_blocked_by_compact_factors
-                and not moment_schur_enabled
-            ):
-                emit(
-                    0,
-                    "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
-                    "constraint1 moment-Schur default disabled for compact JAX factors "
-                    "(set SFINCS_JAX_RHSMODE1_XBLOCK_PC_MOMENT_SCHUR=1 to force)",
-                )
+            if emit is not None:
+                for level, message in moment_schur_policy.messages:
+                    emit(int(level), str(message))
             if moment_schur_enabled and precondition_side != "none":
                 moment_schur_start_s = sparse_timer.elapsed_s()
-                moment_schur_rcond = _rhs1_float_env(
-                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_MOMENT_SCHUR_RCOND",
-                    default=1.0e-12,
-                    minimum=0.0,
-                )
-                moment_schur_probe_enabled = _rhs1_bool_env(
-                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_MOMENT_SCHUR_PROBE",
-                    default=False,
-                )
-                moment_schur_probe_min_improvement = _rhs1_float_env(
-                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_MOMENT_SCHUR_MIN_IMPROVEMENT",
-                    default=0.0,
-                    minimum=0.0,
-                )
-                if emit is not None:
-                    emit(
-                        0,
-                        "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
-                        "constraint1 moment-Schur build start",
-                    )
                 try:
                     base_precond_before_moment_schur = precond_xblock_krylov
                     moment_schur_candidate, moment_schur_metadata, moment_schur_stats = (

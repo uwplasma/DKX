@@ -33385,3 +33385,47 @@ Next refactor target:
 - Move moment-Schur default/admission/probe policy into the sparse-PC helper
   layer. Keep moment-Schur candidate construction and correction application
   in the driver until the admission policy and metadata are isolated.
+
+### 19.76 RHSMode=1 x-block moment-Schur policy extraction
+
+Goal:
+
+- Move x-block constraint moment-Schur default/admission/probe parameter
+  parsing out of ``v3_driver.py`` while preserving moment-Schur construction
+  and application behavior.
+
+Implementation:
+
+- Extended ``sfincs_jax/problems/profile_response/sparse_pc.py`` with
+  ``XBlockMomentSchurPolicySetup`` and
+  ``resolve_xblock_moment_schur_policy_setup``.
+- Moved default-candidate classification, compact-CSR default blocking,
+  explicit enable/disable parsing, rcond parsing, probe enablement,
+  probe-improvement parsing, and build/default-blocked status messages into
+  the sparse-PC helper.
+- Kept moment-Schur candidate construction, optional seed probe, and
+  correction application in ``v3_driver.py``.
+- Added direct tests for default enablement, compact CSR default blocking,
+  explicit force with probe parameters, and ``precondition_side='none'``.
+- ``solve_v3_full_system_linear_gmres`` is now about ``19759`` lines and
+  ``v3_driver.py`` is about ``25013`` lines.
+
+Validation so far:
+
+- ``python -m ruff check sfincs_jax/problems/profile_response/sparse_pc.py
+  sfincs_jax/v3_driver.py tests/test_profile_response_sparse_pc.py``: passed.
+- ``python -m compileall -q
+  sfincs_jax/problems/profile_response/sparse_pc.py sfincs_jax/v3_driver.py
+  tests/test_profile_response_sparse_pc.py``: passed.
+- ``PYTHONDONTWRITEBYTECODE=1 JAX_ENABLE_X64=True pytest -q
+  -p no:cacheprovider tests/test_profile_response_sparse_pc.py``:
+  ``27 passed in 0.98 s``.
+- Focused moment-Schur regression subset:
+  ``30 passed in 5.58 s``.
+- Broader sparse-PC/x-block/dispatch subset:
+  ``105 passed in 40.39 s``.
+
+Next refactor target:
+
+- Extract moment-Schur probe result gating and metadata normalization, then
+  proceed to the x-block seed/two-level/global-coupling admission layers.

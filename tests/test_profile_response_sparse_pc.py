@@ -19,6 +19,7 @@ from sfincs_jax.problems.profile_response.sparse_pc import (
     build_xblock_krylov_matvec_setup,
     resolve_sparse_pc_entry_policy,
     resolve_xblock_qi_device_operator_reuse_setup,
+    resolve_xblock_moment_schur_policy_setup,
     resolve_xblock_sparse_pc_setup,
     resolve_xblock_sparse_pc_side_policy_setup,
     run_sparse_pc_gmres_once,
@@ -634,6 +635,69 @@ def test_finalize_xblock_assembled_operator_metadata_normalizes_fields() -> None
     assert metadata["pattern_avg_row_nnz"] == pytest.approx(1.5)
     assert metadata["device_nnz"] == 3
     assert metadata["device_validation_rel_errors"] == (2.0e-12,)
+
+
+def test_xblock_moment_schur_policy_defaults_on_for_constraint1_device_krylov() -> None:
+    setup = resolve_xblock_moment_schur_policy_setup(
+        op=SimpleNamespace(rhs_mode=1, constraint_scheme=1, extra_size=2, phi1_size=0),
+        xblock_krylov_method="gmres_jax",
+        xblock_jax_factors=False,
+        xblock_jax_factor_format="padded",
+        precondition_side="right",
+        env={},
+    )
+
+    assert setup.default_candidate
+    assert setup.enabled
+    assert not setup.default_blocked_by_compact_factors
+    assert any("moment-Schur build start" in message for _, message in setup.messages)
+
+
+def test_xblock_moment_schur_policy_blocks_compact_csr_default_but_allows_force() -> None:
+    op = SimpleNamespace(rhs_mode=1, constraint_scheme=1, extra_size=2, phi1_size=0)
+    blocked = resolve_xblock_moment_schur_policy_setup(
+        op=op,
+        xblock_krylov_method="gmres_jax",
+        xblock_jax_factors=True,
+        xblock_jax_factor_format="csr",
+        precondition_side="right",
+        env={},
+    )
+    forced = resolve_xblock_moment_schur_policy_setup(
+        op=op,
+        xblock_krylov_method="gmres_jax",
+        xblock_jax_factors=True,
+        xblock_jax_factor_format="csr",
+        precondition_side="right",
+        env={
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_MOMENT_SCHUR": "1",
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_MOMENT_SCHUR_RCOND": "1e-9",
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_MOMENT_SCHUR_PROBE": "1",
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_MOMENT_SCHUR_MIN_IMPROVEMENT": "0.25",
+        },
+    )
+
+    assert blocked.default_blocked_by_compact_factors
+    assert not blocked.enabled
+    assert any("default disabled" in message for _, message in blocked.messages)
+    assert forced.enabled
+    assert forced.rcond == pytest.approx(1.0e-9)
+    assert forced.probe_enabled
+    assert forced.probe_min_improvement == pytest.approx(0.25)
+
+
+def test_xblock_moment_schur_policy_does_not_emit_build_for_no_preconditioner_side() -> None:
+    setup = resolve_xblock_moment_schur_policy_setup(
+        op=SimpleNamespace(rhs_mode=1, constraint_scheme=1, extra_size=2, phi1_size=0),
+        xblock_krylov_method="gmres_jax",
+        xblock_jax_factors=False,
+        xblock_jax_factor_format="padded",
+        precondition_side="none",
+        env={},
+    )
+
+    assert setup.enabled
+    assert not setup.messages
 
 
 def test_sparse_pc_gmres_once_explicit_left_recomputes_true_residual() -> None:

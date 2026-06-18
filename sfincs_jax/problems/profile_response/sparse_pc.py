@@ -266,6 +266,19 @@ class XBlockAssembledMatvecSetup:
     location: str
 
 
+@dataclass(frozen=True)
+class XBlockMomentSchurPolicySetup:
+    """Admission and probe policy for x-block constraint moment-Schur correction."""
+
+    default_candidate: bool
+    default_blocked_by_compact_factors: bool
+    enabled: bool
+    rcond: float
+    probe_enabled: bool
+    probe_min_improvement: float
+    messages: tuple[tuple[int, str], ...]
+
+
 def _env_value(env: Mapping[str, str] | None, key: str) -> str:
     source = env if env is not None else {}
     return str(source.get(key, "")).strip()
@@ -1370,6 +1383,87 @@ def finalize_xblock_assembled_operator_metadata(
         "device_validation_rel_errors": tuple(float(v) for v in device_validation_errors),
         "device_error": device_error,
     }
+
+
+def resolve_xblock_moment_schur_policy_setup(
+    *,
+    op: object,
+    xblock_krylov_method: str,
+    xblock_jax_factors: bool,
+    xblock_jax_factor_format: str,
+    precondition_side: str,
+    env: Mapping[str, str] | None = None,
+) -> XBlockMomentSchurPolicySetup:
+    """Resolve x-block moment-Schur default, force, and probe settings."""
+
+    default_candidate = bool(
+        str(xblock_krylov_method) in {"fgmres_jax", "gmres_jax", "bicgstab_jax", "tfqmr_jax"}
+        and int(op.rhs_mode) == 1
+        and int(op.constraint_scheme) == 1
+        and int(op.extra_size) > 0
+        and int(op.phi1_size) == 0
+    )
+    env_raw = _env_value(env, "SFINCS_JAX_RHSMODE1_XBLOCK_PC_MOMENT_SCHUR").lower()
+    default_blocked_by_compact_factors = bool(
+        default_candidate
+        and env_raw in {"", "auto", "default"}
+        and bool(xblock_jax_factors)
+        and str(xblock_jax_factor_format).strip().lower() == "csr"
+    )
+    default_enabled = bool(default_candidate and not default_blocked_by_compact_factors)
+    enabled = _env_bool(
+        env,
+        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_MOMENT_SCHUR",
+        default=default_enabled,
+    )
+    rcond = max(
+        0.0,
+        _env_float(
+            env,
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_MOMENT_SCHUR_RCOND",
+            default=1.0e-12,
+        ),
+    )
+    probe_enabled = _env_bool(
+        env,
+        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_MOMENT_SCHUR_PROBE",
+        default=False,
+    )
+    probe_min_improvement = max(
+        0.0,
+        _env_float(
+            env,
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_MOMENT_SCHUR_MIN_IMPROVEMENT",
+            default=0.0,
+        ),
+    )
+    messages: list[tuple[int, str]] = []
+    if bool(default_blocked_by_compact_factors) and not bool(enabled):
+        messages.append(
+            (
+                0,
+                "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
+                "constraint1 moment-Schur default disabled for compact JAX factors "
+                "(set SFINCS_JAX_RHSMODE1_XBLOCK_PC_MOMENT_SCHUR=1 to force)",
+            )
+        )
+    if bool(enabled) and str(precondition_side) != "none":
+        messages.append(
+            (
+                0,
+                "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
+                "constraint1 moment-Schur build start",
+            )
+        )
+    return XBlockMomentSchurPolicySetup(
+        default_candidate=bool(default_candidate),
+        default_blocked_by_compact_factors=bool(default_blocked_by_compact_factors),
+        enabled=bool(enabled),
+        rcond=float(rcond),
+        probe_enabled=bool(probe_enabled),
+        probe_min_improvement=float(probe_min_improvement),
+        messages=tuple(messages),
+    )
 
 
 def run_sparse_pc_gmres_once(
