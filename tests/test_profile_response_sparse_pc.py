@@ -12,6 +12,7 @@ from sfincs_jax.problems.profile_response.active_projection import (
     reduce_full_with_indices,
 )
 from sfincs_jax.problems.profile_response.sparse_pc import (
+    MatvecCounter,
     SparsePCGMRESContext,
     SparsePCPostMinresContext,
     XBlockAssembledPreflightError,
@@ -792,6 +793,42 @@ def test_xblock_krylov_matvec_setup_full_space_is_identity_mapping() -> None:
     assert setup.expand_reduced(jnp.asarray([1.0, 2.0])).tolist() == [1.0, 2.0]
     assert setup.matvec(jnp.asarray([1.0, 2.0, 3.0])).tolist() == [2.0, 3.0, 4.0]
     assert int(setup.mv_count) == 1
+
+
+def test_xblock_krylov_matvec_setup_reuses_counter_and_custom_progress_label() -> None:
+    messages: list[str] = []
+    counter = MatvecCounter(3)
+    setup = build_xblock_krylov_matvec_setup(
+        op=SimpleNamespace(total_size=4),
+        rhs=jnp.asarray([1.0, 2.0, 3.0, 4.0]),
+        xblock_use_active_dof=True,
+        active_idx=jnp.asarray([1, 3], dtype=jnp.int32),
+        full_to_active=jnp.asarray([-1, 0, -1, 1], dtype=jnp.int32),
+        reduce_full_with_indices=lambda v, idx: v[idx],
+        expand_reduced_with_map=lambda v, fmap: jnp.where(
+            fmap >= 0,
+            v[jnp.maximum(fmap, 0)],
+            0.0,
+        ),
+        operator_matvec=lambda v: 4.0 * v,
+        elapsed_s=lambda: 8.25,
+        emit=lambda _level, msg: messages.append(msg),
+        progress_every=2,
+        mv_count=counter,
+        progress_label="fortran_reduced_pc_gmres xblock",
+        emit_active_message=False,
+    )
+
+    assert setup.messages == ()
+    assert setup.mv_count is counter
+    assert int(counter) == 3
+    assert setup.xblock_rhs.tolist() == [2.0, 4.0]
+    assert setup.matvec(jnp.asarray([2.0, 3.0])).tolist() == [8.0, 12.0]
+    assert int(counter) == 4
+    assert any(
+        "fortran_reduced_pc_gmres xblock matvecs=4" in message
+        for message in messages
+    )
 
 
 def test_xblock_assembled_equilibration_setup_builds_row_scales() -> None:

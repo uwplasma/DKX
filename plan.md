@@ -35235,3 +35235,42 @@ Next refactor target:
 - Extract a reusable fortran-reduced x-block preconditioner wrapper for the
   ``_precond_xblock`` and true-matvec closures, or move the global-coupling
   build/failure normalization into a helper if it can stay small and testable.
+
+### 19.119 Shared matvec setup for fortran-reduced x-block solves
+
+Goal:
+
+- Remove duplicated true-matvec/progress closure setup from the
+  fortran-reduced x-block sparse-PC branch.
+
+Implementation:
+
+- Extended ``build_xblock_krylov_matvec_setup`` with optional externally
+  supplied matvec counters, progress cadence, progress labels, and active-DOF
+  message suppression.
+- Reused that helper in the fortran-reduced x-block branch so the driver no
+  longer defines local ``_mv_true_no_count`` and ``_mv_true`` closures by hand.
+- Preserved the existing fortran-reduced progress message label
+  ``fortran_reduced_pc_gmres xblock`` and the existing sparse-PC active-DOF
+  setup messages.
+- Added a focused helper test covering reused counters, custom progress
+  labels, active-message suppression, active RHS reduction, and matvec output.
+- ``v3_driver.py`` is now about ``20917`` lines and
+  ``solve_v3_full_system_linear_gmres`` about ``15624`` lines. This tranche
+  centralizes behavior but is not a net line-count reduction because the shared
+  helper API and tests expanded.
+
+Validation:
+
+- ``python -m ruff check`` on touched source/tests: passed.
+- ``python -m compileall -q`` on touched source/tests: passed.
+- ``tests/test_profile_response_sparse_pc.py``: ``77 passed``.
+- Broader current profile-response/x-block/sparse-pattern shard:
+  ``354 passed in 112.64 s``.
+
+Next refactor target:
+
+- Extract the fortran-reduced x-block seed/probe block or the
+  ``_precond_xblock`` wrapper into a small branch helper, then move toward a
+  cohesive fortran-reduced x-block solve object instead of more local mutable
+  driver state.

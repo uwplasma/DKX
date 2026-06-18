@@ -6914,6 +6914,8 @@ def solve_v3_full_system_linear_gmres(
             expand_reduced_with_map=expand_reduced_with_map,
         )
         sparse_pc_active_idx_np = sparse_pc_active_setup.active_idx_np
+        sparse_pc_active_idx_jnp = sparse_pc_active_setup.active_idx_jnp
+        sparse_pc_full_to_active_jnp = sparse_pc_active_setup.full_to_active_jnp
         sparse_pc_rhs = sparse_pc_active_setup.rhs
         sparse_pc_linear_size = int(sparse_pc_active_setup.linear_size)
         _sparse_pc_reduce_full = sparse_pc_active_setup.reduce_full
@@ -7029,20 +7031,25 @@ def solve_v3_full_system_linear_gmres(
                 for level, message in xblock_krylov_policy.messages:
                     emit(level, message)
 
-            def _mv_true_no_count(v: jnp.ndarray) -> jnp.ndarray:
-                x_full = _sparse_pc_expand_reduced(jnp.asarray(v, dtype=rhs.dtype))
-                y_full = apply_v3_full_system_operator_cached(op, x_full)
-                return _sparse_pc_reduce_full(y_full)
-
-            def _mv_true(v: jnp.ndarray) -> jnp.ndarray:
-                mv_count.increment()
-                if emit is not None and progress_every > 0 and mv_count % progress_every == 0:
-                    emit(
-                        1,
-                        "solve_v3_full_system_linear_gmres: fortran_reduced_pc_gmres xblock "
-                        f"matvecs={int(mv_count)} elapsed_s={sparse_timer.elapsed_s():.3f}",
-                    )
-                return _mv_true_no_count(v)
+            fortran_xblock_matvec_setup = build_xblock_krylov_matvec_setup(
+                op=op,
+                rhs=rhs,
+                xblock_use_active_dof=bool(sparse_pc_use_active_dof),
+                active_idx=sparse_pc_active_idx_jnp,
+                full_to_active=sparse_pc_full_to_active_jnp,
+                reduce_full_with_indices=reduce_full_with_indices,
+                expand_reduced_with_map=expand_reduced_with_map,
+                operator_matvec=lambda x_full: apply_v3_full_system_operator_cached(op, x_full),
+                elapsed_s=sparse_timer.elapsed_s,
+                emit=emit,
+                env=os.environ,
+                progress_every=int(progress_every),
+                mv_count=mv_count,
+                progress_label="fortran_reduced_pc_gmres xblock",
+                emit_active_message=False,
+            )
+            _mv_true_no_count = fortran_xblock_matvec_setup.matvec_no_count
+            _mv_true = fortran_xblock_matvec_setup.matvec
 
             def _precond_xblock(v: jnp.ndarray) -> jnp.ndarray:
                 return jnp.asarray(precond_xblock(jnp.asarray(v, dtype=rhs.dtype)), dtype=jnp.float64)

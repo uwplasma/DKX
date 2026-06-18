@@ -1636,16 +1636,21 @@ def build_xblock_krylov_matvec_setup(
     elapsed_s: Callable[[], float],
     emit: EmitFn | None,
     env: Mapping[str, str] | None = None,
+    progress_every: int | None = None,
+    mv_count: MatvecCounter | None = None,
+    progress_label: str = "xblock_sparse_pc_gmres",
+    emit_active_message: bool = True,
 ) -> XBlockKrylovMatvecSetup:
     """Build reduced/full matvec closures and progress accounting."""
 
-    progress_every_env = _env_value(env, "SFINCS_JAX_SPARSE_PC_PROGRESS_EVERY")
-    try:
-        progress_every = int(progress_every_env) if progress_every_env else 25
-    except ValueError:
-        progress_every = 25
+    if progress_every is None:
+        progress_every_env = _env_value(env, "SFINCS_JAX_SPARSE_PC_PROGRESS_EVERY")
+        try:
+            progress_every = int(progress_every_env) if progress_every_env else 25
+        except ValueError:
+            progress_every = 25
     progress_every = max(0, int(progress_every))
-    mv_count = MatvecCounter(0)
+    counter = mv_count if mv_count is not None else MatvecCounter(0)
 
     linear_size = int(op.total_size)
     active_idx_np: np.ndarray | None = None
@@ -1657,13 +1662,15 @@ def build_xblock_krylov_matvec_setup(
         active_idx_np = np.asarray(jax.device_get(active_idx), dtype=np.int32)
         linear_size = int(active_idx_np.shape[0])
         xblock_rhs = rhs[active_idx]
-        messages.append(
-            (
-                1,
-                "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres active-DOF reduction "
-                f"enabled (size={int(linear_size)}/{int(op.total_size)})",
+        if bool(emit_active_message):
+            messages.append(
+                (
+                    1,
+                    "solve_v3_full_system_linear_gmres: "
+                    f"{progress_label} active-DOF reduction enabled "
+                    f"(size={int(linear_size)}/{int(op.total_size)})",
+                )
             )
-        )
 
     def reduce_full(v_full: jnp.ndarray) -> jnp.ndarray:
         if not bool(xblock_use_active_dof):
@@ -1683,18 +1690,18 @@ def build_xblock_krylov_matvec_setup(
         return reduce_full(y_full)
 
     def matvec(v: jnp.ndarray) -> jnp.ndarray:
-        mv_count.increment()
-        if emit is not None and progress_every > 0 and int(mv_count) % progress_every == 0:
+        counter.increment()
+        if emit is not None and progress_every > 0 and int(counter) % progress_every == 0:
             emit(
                 1,
-                "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
-                f"matvecs={int(mv_count)} elapsed_s={float(elapsed_s()):.3f}",
+                "solve_v3_full_system_linear_gmres: "
+                f"{progress_label} matvecs={int(counter)} elapsed_s={float(elapsed_s()):.3f}",
             )
         return matvec_no_count(v)
 
     return XBlockKrylovMatvecSetup(
         progress_every=int(progress_every),
-        mv_count=mv_count,
+        mv_count=counter,
         xblock_linear_size=int(linear_size),
         xblock_active_idx_np=active_idx_np,
         xblock_rhs=jnp.asarray(xblock_rhs, dtype=rhs.dtype),
@@ -3647,6 +3654,7 @@ __all__ = [
     "FortranReducedSparsePCBackendSetup",
     "FortranReducedXBlockFactorPolicySetup",
     "FortranReducedXBlockKrylovPolicySetup",
+    "MatvecCounter",
     "XBlockAssembledOperatorDiagnosticsContext",
     "XBlockSparsePCCoreDiagnosticsContext",
     "XBlockSideProbeDiagnosticsContext",
