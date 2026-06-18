@@ -33721,3 +33721,51 @@ Next refactor target:
   contains many GPU/device and matrix-free controls, so it should be split into
   an admission/config extraction first, followed by separate probe/metadata
   consolidation only after the direct tests cover the policy surface.
+
+### 19.83 RHSMode=1 x-block QI-device admission extraction
+
+Goal:
+
+- Move the first QI-device admission gate out of ``v3_driver.py`` while keeping
+  all device/matrix-free smoother configuration, enrichment setup, probes, and
+  preconditioner application unchanged.
+
+Implementation:
+
+- Added ``XBlockQIDeviceAdmissionSetup`` and
+  ``resolve_xblock_qi_device_admission_setup`` to
+  ``sfincs_jax/problems/profile_response/sparse_pc.py``.
+- Centralized disabled-by-device-host-fallback handling, missing assembled
+  device-operator handling, matrix-free opt-in parsing, and the existing
+  missing-device metadata payload.
+- Replaced the in-driver QI-device admission branches with a policy object and
+  preserved the existing messages and reason strings:
+  ``disabled_by_device_host_fallback`` and
+  ``disabled_missing_assembled_device_operator``.
+- Added direct tests for disabled/default, host-fallback, missing-device, and
+  matrix-free-without-device-operator admission cases.
+- ``solve_v3_full_system_linear_gmres`` is now about ``19501`` lines and
+  ``v3_driver.py`` is about ``24778`` lines.
+
+Validation so far:
+
+- ``python -m ruff check sfincs_jax/problems/profile_response/sparse_pc.py
+  sfincs_jax/v3_driver.py tests/test_profile_response_sparse_pc.py``: passed.
+- ``python -m compileall -q
+  sfincs_jax/problems/profile_response/sparse_pc.py sfincs_jax/v3_driver.py
+  tests/test_profile_response_sparse_pc.py``: passed.
+- ``PYTHONDONTWRITEBYTECODE=1 JAX_ENABLE_X64=True pytest -q
+  -p no:cacheprovider tests/test_profile_response_sparse_pc.py``:
+  ``50 passed in 0.88 s``.
+- Focused QI-device regression subset:
+  ``55 passed in 13.68 s``.
+- Broader sparse-PC/x-block/dispatch subset:
+  ``140 passed in 50.66 s``.
+- ``git diff --check``: passed.
+
+Next refactor target:
+
+- Split QI-device build configuration into smaller policy helpers:
+  local/matrix-free smoother settings first, enrichment/multilevel settings
+  second. Do not move probe construction or residual acceptance until each
+  policy surface has direct tests and focused driver regressions.

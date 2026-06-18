@@ -26,6 +26,7 @@ from sfincs_jax.problems.profile_response.sparse_pc import (
     finalize_xblock_moment_schur_metadata,
     prepare_xblock_initial_guess,
     resolve_sparse_pc_entry_policy,
+    resolve_xblock_qi_device_admission_setup,
     resolve_xblock_qi_device_operator_reuse_setup,
     resolve_xblock_qi_galerkin_policy_setup,
     resolve_xblock_qi_seed_policy_setup,
@@ -1153,6 +1154,77 @@ def test_xblock_qi_two_level_policy_parses_build_parameters() -> None:
     assert setup.smoothed_load_angular_lmax == 3
     assert setup.smoothed_load_max_extra_units == 4
     assert not setup.smoothed_load_include_rhs
+
+
+def test_xblock_qi_device_admission_defaults_off_and_handles_host_fallback() -> None:
+    off = resolve_xblock_qi_device_admission_setup(
+        enabled=False,
+        host_fallback_used=False,
+        assembled_device_operator_available=False,
+        assembled_operator_enabled=False,
+        assembled_operator_built=False,
+        assembled_operator_device_resident=False,
+        assembled_operator_device_error=None,
+        env={},
+    )
+    fallback = resolve_xblock_qi_device_admission_setup(
+        enabled=True,
+        host_fallback_used=True,
+        assembled_device_operator_available=True,
+        assembled_operator_enabled=True,
+        assembled_operator_built=True,
+        assembled_operator_device_resident=True,
+        assembled_operator_device_error=None,
+        env={"SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MATRIX_FREE": "1"},
+    )
+
+    assert not off.enabled
+    assert not off.should_build
+    assert fallback.enabled
+    assert not fallback.should_build
+    assert fallback.matrix_free_enabled
+    assert fallback.reason == "disabled_by_device_host_fallback"
+    assert any("device-host fallback" in message for _level, message in fallback.messages)
+
+
+def test_xblock_qi_device_admission_records_missing_device_metadata() -> None:
+    setup = resolve_xblock_qi_device_admission_setup(
+        enabled=True,
+        host_fallback_used=False,
+        assembled_device_operator_available=False,
+        assembled_operator_enabled=True,
+        assembled_operator_built=True,
+        assembled_operator_device_resident=False,
+        assembled_operator_device_error="validation failed",
+        env={},
+    )
+
+    assert not setup.should_build
+    assert setup.reason == "disabled_missing_assembled_device_operator"
+    assert setup.metadata["assembled_operator_enabled"] is True
+    assert setup.metadata["assembled_operator_built"] is True
+    assert setup.metadata["assembled_operator_device_resident"] is False
+    assert setup.metadata["assembled_operator_device_error"] == "validation failed"
+    assert "SFINCS_JAX_RHSMODE1_XBLOCK_ASSEMBLED_OPERATOR=1" in setup.metadata["requires"]
+    assert any("no assembled device CSR operator" in message for _level, message in setup.messages)
+
+
+def test_xblock_qi_device_admission_allows_matrix_free_without_device_operator() -> None:
+    setup = resolve_xblock_qi_device_admission_setup(
+        enabled=True,
+        host_fallback_used=False,
+        assembled_device_operator_available=False,
+        assembled_operator_enabled=False,
+        assembled_operator_built=False,
+        assembled_operator_device_resident=False,
+        assembled_operator_device_error=None,
+        env={"SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MATRIX_FREE": "1"},
+    )
+
+    assert setup.should_build
+    assert setup.matrix_free_enabled
+    assert setup.reason is None
+    assert setup.metadata == {}
 
 
 def test_sparse_pc_gmres_once_explicit_left_recomputes_true_residual() -> None:

@@ -407,6 +407,18 @@ class XBlockQITwoLevelPolicySetup:
     messages: tuple[tuple[int, str], ...]
 
 
+@dataclass(frozen=True)
+class XBlockQIDeviceAdmissionSetup:
+    """Admission decision for the QI device/matrix-free x-block preconditioner."""
+
+    enabled: bool
+    should_build: bool
+    reason: str | None
+    matrix_free_enabled: bool
+    metadata: dict[str, object]
+    messages: tuple[tuple[int, str], ...]
+
+
 def _env_value(env: Mapping[str, str] | None, key: str) -> str:
     source = env if env is not None else {}
     return str(source.get(key, "")).strip()
@@ -2335,6 +2347,85 @@ def resolve_xblock_qi_two_level_policy_setup(
             "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_TWO_LEVEL_PRECONDITIONER_SMOOTHED_LOAD_INCLUDE_RHS",
             default=True,
         ),
+        messages=(),
+    )
+
+
+def resolve_xblock_qi_device_admission_setup(
+    *,
+    enabled: bool,
+    host_fallback_used: bool,
+    assembled_device_operator_available: bool,
+    assembled_operator_enabled: bool,
+    assembled_operator_built: bool,
+    assembled_operator_device_resident: bool,
+    assembled_operator_device_error: object | None,
+    env: Mapping[str, str] | None = None,
+) -> XBlockQIDeviceAdmissionSetup:
+    """Resolve whether the QI device preconditioner can build."""
+
+    matrix_free_enabled = _env_bool(
+        env,
+        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MATRIX_FREE",
+        default=False,
+    )
+    if not bool(enabled):
+        return XBlockQIDeviceAdmissionSetup(
+            enabled=False,
+            should_build=False,
+            reason=None,
+            matrix_free_enabled=bool(matrix_free_enabled),
+            metadata={},
+            messages=(),
+        )
+    if bool(host_fallback_used):
+        reason = "disabled_by_device_host_fallback"
+        return XBlockQIDeviceAdmissionSetup(
+            enabled=True,
+            should_build=False,
+            reason=reason,
+            matrix_free_enabled=bool(matrix_free_enabled),
+            metadata={},
+            messages=(
+                (
+                    1,
+                    "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
+                    "QI device preconditioner disabled because device-host fallback is active",
+                ),
+            ),
+        )
+    if not bool(assembled_device_operator_available) and not bool(matrix_free_enabled):
+        reason = "disabled_missing_assembled_device_operator"
+        return XBlockQIDeviceAdmissionSetup(
+            enabled=True,
+            should_build=False,
+            reason=reason,
+            matrix_free_enabled=False,
+            metadata={
+                "reason": reason,
+                "requires": (
+                    "SFINCS_JAX_RHSMODE1_XBLOCK_ASSEMBLED_OPERATOR=1 and device CSR success, "
+                    "or SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MATRIX_FREE=1"
+                ),
+                "assembled_operator_enabled": bool(assembled_operator_enabled),
+                "assembled_operator_built": bool(assembled_operator_built),
+                "assembled_operator_device_resident": bool(assembled_operator_device_resident),
+                "assembled_operator_device_error": assembled_operator_device_error,
+            },
+            messages=(
+                (
+                    1,
+                    "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
+                    "QI device preconditioner disabled because no assembled device CSR operator is available",
+                ),
+            ),
+        )
+    return XBlockQIDeviceAdmissionSetup(
+        enabled=True,
+        should_build=True,
+        reason=None,
+        matrix_free_enabled=bool(matrix_free_enabled),
+        metadata={},
         messages=(),
     )
 

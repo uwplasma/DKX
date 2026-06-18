@@ -217,6 +217,7 @@ from .problems.profile_response.sparse_pc import (
     finalize_xblock_two_level_metadata,
     prepare_xblock_initial_guess,
     resolve_sparse_pc_entry_policy,
+    resolve_xblock_qi_device_admission_setup,
     resolve_xblock_qi_device_operator_reuse_setup,
     resolve_xblock_qi_galerkin_policy_setup,
     resolve_xblock_qi_seed_policy_setup,
@@ -4727,37 +4728,23 @@ def solve_v3_full_system_linear_gmres(
                         )
                 qi_two_level_preconditioner_setup_s = float(sparse_timer.elapsed_s() - qi_two_level_start_s)
                 pc_factor_s += float(qi_two_level_preconditioner_setup_s)
-            if qi_device_preconditioner_enabled and bool(xblock_device_host_fallback_decision.used):
-                qi_device_preconditioner_reason = "disabled_by_device_host_fallback"
+            qi_device_admission = resolve_xblock_qi_device_admission_setup(
+                enabled=bool(qi_device_preconditioner_enabled),
+                host_fallback_used=bool(xblock_device_host_fallback_decision.used),
+                assembled_device_operator_available=assembled_device_operator is not None,
+                assembled_operator_enabled=bool(assembled_operator_enabled),
+                assembled_operator_built=bool(assembled_operator_built),
+                assembled_operator_device_resident=bool(assembled_operator_device_resident),
+                assembled_operator_device_error=assembled_operator_metadata.get("device_error"),
+                env=os.environ,
+            )
+            if qi_device_admission.reason is not None and not qi_device_admission.should_build:
+                qi_device_preconditioner_reason = qi_device_admission.reason
+                qi_device_preconditioner_metadata = dict(qi_device_admission.metadata)
+            for level, message in qi_device_admission.messages:
                 if emit is not None:
-                    emit(
-                        1,
-                        "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
-                        "QI device preconditioner disabled because device-host fallback is active",
-                    )
-            elif qi_device_preconditioner_enabled and assembled_device_operator is None and not _rhs1_bool_env(
-                "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MATRIX_FREE",
-                default=False,
-            ):
-                qi_device_preconditioner_reason = "disabled_missing_assembled_device_operator"
-                qi_device_preconditioner_metadata = {
-                    "reason": qi_device_preconditioner_reason,
-                    "requires": (
-                        "SFINCS_JAX_RHSMODE1_XBLOCK_ASSEMBLED_OPERATOR=1 and device CSR success, "
-                        "or SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MATRIX_FREE=1"
-                    ),
-                    "assembled_operator_enabled": bool(assembled_operator_enabled),
-                    "assembled_operator_built": bool(assembled_operator_built),
-                    "assembled_operator_device_resident": bool(assembled_operator_device_resident),
-                    "assembled_operator_device_error": assembled_operator_metadata.get("device_error"),
-                }
-                if emit is not None:
-                    emit(
-                        1,
-                        "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
-                        "QI device preconditioner disabled because no assembled device CSR operator is available",
-                    )
-            elif qi_device_preconditioner_enabled:
+                    emit(level, message)
+            if qi_device_admission.should_build:
                 qi_device_start_s = sparse_timer.elapsed_s()
                 qi_device_rcond = _rhs1_float_env(
                     "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RCOND",
@@ -4788,10 +4775,7 @@ def solve_v3_full_system_linear_gmres(
                     "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_JACOBI_REQUIRE_ALL_DIAGONAL",
                     default=True,
                 )
-                qi_device_matrix_free_enabled = _rhs1_bool_env(
-                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MATRIX_FREE",
-                    default=False,
-                )
+                qi_device_matrix_free_enabled = bool(qi_device_admission.matrix_free_enabled)
                 qi_device_local_smoother_kind_default = "none" if assembled_device_operator is None else "auto"
                 qi_device_local_smoother_kind = (
                     os.environ.get(
