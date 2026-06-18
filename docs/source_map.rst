@@ -470,10 +470,11 @@ the historical private driver name and test the focused module directly. This ke
   module so solver-family selection is directly testable and no longer embedded
   as a large nested body in ``v3_driver.py``.
 - ``sfincs_jax/problems/profile_response/preconditioner_build.py``:
-  RHSMode=1/profile-response reduced preconditioner build orchestration. The
-  driver passes solve-local builders and projection functions through a typed
-  context, and the helper returns explicit state for PAS-TZ guard metadata,
-  collision fallback admission, and optional BiCGStab preconditioner reuse.
+  RHSMode=1/profile-response full and reduced preconditioner build
+  orchestration. The driver passes solve-local builders and projection
+  functions through typed contexts, and the helper returns explicit state for
+  PAS-TZ guard metadata, collision fallback admission, and optional BiCGStab
+  preconditioner reuse.
 - ``sfincs_jax/problems/profile_response/sparse_pc.py``:
   RHSMode=1/profile-response host sparse-PC Krylov attempt helpers. This module
   owns sparse-PC GMRES progress/stagnation handling and optional post-minres
