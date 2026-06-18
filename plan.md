@@ -32763,3 +32763,70 @@ Immediate next steps:
 4. Keep generated run outputs, coverage files, XLA/profiler traces, and large
    figures out of git unless they are intentionally compressed documentation
    assets.
+
+### 19.64 RHSMode=1 auto host-solver routing extraction
+
+Goal:
+
+- Continue simplifying ``solve_v3_full_system_linear_gmres`` by moving a
+  cohesive solver-policy block out of ``v3_driver.py`` without changing default
+  solver behavior or public metadata.
+
+Implementation:
+
+- Added ``sfincs_jax/problems/profile_response/auto_solve.py``.
+- Moved early RHSMode=1 host-solver auto routing into
+  ``try_rhs1_auto_host_solve``:
+  Fortran-reduced sparse-PC GMRES auto selection and structured full-CSR auto
+  probe/admission now live in the profile-response domain module.
+- Moved explicit ``solve_method='structured_csr'`` environment parsing, solve
+  dispatch, and metadata normalization into
+  ``solve_rhs1_structured_full_csr_explicit``.
+- Added fast unit tests for:
+  Fortran-reduced auto selection, implicit-mode skip, structured-CSR auto
+  acceptance/rejection, and explicit structured-CSR metadata normalization.
+- ``solve_v3_full_system_linear_gmres`` is now about ``20516`` lines, down from
+  ``20715`` at the start of this resumed pass; total ``v3_driver.py`` length is
+  now about ``25754`` lines.
+
+Validation so far:
+
+- ``python -m ruff check sfincs_jax/problems/profile_response/auto_solve.py
+  sfincs_jax/v3_driver.py tests/test_profile_response_auto_solve.py``: passed.
+- ``python -m compileall -q
+  sfincs_jax/problems/profile_response/auto_solve.py sfincs_jax/v3_driver.py
+  tests/test_profile_response_auto_solve.py``: passed.
+- ``PYTHONDONTWRITEBYTECODE=1 JAX_ENABLE_X64=True pytest -q
+  -p no:cacheprovider tests/test_profile_response_auto_solve.py``:
+  ``5 passed in 0.31 s``.
+- Structured-CSR and Fortran-reduced end-to-end checks:
+  ``PYTHONDONTWRITEBYTECODE=1 JAX_ENABLE_X64=True pytest -q
+  -p no:cacheprovider
+  tests/test_rhs1_full_assembly.py::test_structured_full_csr_host_gmres_solve_reaches_true_residual
+  tests/test_rhs1_full_assembly.py::test_structured_full_csr_active_direct_solve_reaches_true_residual
+  tests/test_v3_sparse_pattern.py::test_auto_selects_fortran_reduced_pc_gmres_for_large_full_fp_rhs1
+  tests/test_v3_sparse_pattern.py::test_fortran_reduced_pc_gmres_direct_tail_solves_tiny_rhs1_system``:
+  ``4 passed``.
+- Broader profile-response/RHSMode subset:
+  ``PYTHONDONTWRITEBYTECODE=1 JAX_ENABLE_X64=True pytest -q
+  -p no:cacheprovider tests/test_profile_response_auto_solve.py
+  tests/test_profile_response_dense.py
+  tests/test_profile_response_preconditioner_build.py
+  tests/test_profile_response_sparse_pc.py
+  tests/test_rhs1_full_assembly.py
+  tests/test_v3_sparse_pattern.py::test_auto_selects_fortran_reduced_pc_gmres_for_large_full_fp_rhs1
+  tests/test_v3_sparse_pattern.py::test_fortran_reduced_pc_gmres_direct_tail_solves_tiny_rhs1_system
+  tests/test_v3_sparse_pattern.py::test_fortran_reduced_pc_gmres_direct_tail_can_fallback_to_pattern_probe
+  tests/test_schur_precond_heuristic.py
+  tests/test_v3_driver_rhs1_dispatch_coverage.py``:
+  ``181 passed in 84.54 s``.
+- ``git diff --check``: passed.
+- GitHub CI and docs for ``31c80e6`` completed successfully.
+
+Next refactor target:
+
+- Extract active-DOF setup and early RHSMode=1 solve-method normalization:
+  active mode admission, PAS/DKES budget adjustment, full-preconditioner dense
+  shortcut selection, PAS-large BiCGStab fastpath selection, and sharded-auto
+  preservation. This is the next coherent policy stage before the large
+  sparse-PC implementation branch.

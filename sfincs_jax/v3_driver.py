@@ -169,6 +169,12 @@ from .rhs1_preconditioner_auto_policy import (
 )
 from .rhs1_schur_policy import resolve_rhs1_schur_base_kind
 from .problems.profile_response.handoff import rhs1_accept_candidate
+from .problems.profile_response.auto_solve import (
+    RHS1AutoHostSolveContext,
+    RHS1StructuredCSRSolveContext,
+    solve_rhs1_structured_full_csr_explicit,
+    try_rhs1_auto_host_solve,
+)
 from .problems.profile_response.dense import (
     HostDenseFullSolveContext,
     HostDenseReducedSolveContext,
@@ -3120,278 +3126,79 @@ def solve_v3_full_system_linear_gmres(
     sparse_host_like_requested = bool(method_flags.sparse_host_like_requested)
     xblock_active_dof_requested = bool(method_flags.xblock_active_dof_requested)
     structured_full_csr_explicit_requested = bool(method_flags.structured_full_csr_explicit_requested)
-    fortran_reduced_auto_env = os.environ.get("SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_PC_AUTO", "").strip().lower()
-    fortran_reduced_auto_enabled = fortran_reduced_auto_env not in {"0", "false", "no", "off"}
-    try:
-        fortran_reduced_auto_min_size = int(
-            os.environ.get("SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_PC_AUTO_MIN_SIZE", "").strip() or 10_000
-        )
-    except ValueError:
-        fortran_reduced_auto_min_size = 10_000
-    fortran_reduced_auto_min_size = max(1, int(fortran_reduced_auto_min_size))
-    fortran_reduced_auto_size = int(op.total_size)
-    fortran_reduced_pc_auto_requested = bool(
-        fortran_reduced_auto_enabled
-        and solve_method_kind_requested in {"auto", "default"}
-        and not bool(_resolve_use_implicit(differentiable=differentiable))
-        and int(op.rhs_mode) == 1
-        and (not bool(op.include_phi1))
-        and int(op.constraint_scheme) == 1
-        and op.fblock.fp is not None
-        and op.fblock.pas is None
-        and abs(float(identity_shift)) == 0.0
-        and int(fortran_reduced_auto_size) >= int(fortran_reduced_auto_min_size)
-    )
-    if fortran_reduced_pc_auto_requested:
-        if emit is not None:
-            emit(
-                0,
-                "solve_v3_full_system_linear_gmres: auto selecting Fortran-reduced "
-                "sparse-PC GMRES for large RHSMode=1 full-FP solve "
-                f"(system_size={int(fortran_reduced_auto_size)} >= {int(fortran_reduced_auto_min_size)})",
-            )
-        auto_fortran_reduced_result = solve_v3_full_system_linear_gmres(
-            nml=nml,
-            which_rhs=which_rhs,
-            op=op,
-            x0=x0,
-            tol=tol,
-            atol=atol,
-            restart=restart,
-            maxiter=maxiter,
-            solve_method="fortran_reduced_pc_gmres",
-            identity_shift=identity_shift,
-            phi1_hat_base=phi1_hat_base,
-            differentiable=False,
-            emit=emit,
-            recycle_basis=recycle_basis,
-        )
-        metadata = dict(getattr(auto_fortran_reduced_result, "metadata", None) or {})
-        metadata.update(
-            {
-                "solve_method_requested": str(solve_method),
-                "requested_solve_method": str(solve_method),
-                "auto_solver_selected": True,
-                "auto_solver_policy": "fortran_reduced_pc_gmres",
-                "auto_solver_size": int(fortran_reduced_auto_size),
-                "auto_solver_min_size": int(fortran_reduced_auto_min_size),
-            }
-        )
-        return replace(auto_fortran_reduced_result, metadata=metadata)
-    structured_full_csr_auto_requested = False
+    use_implicit_requested = bool(_resolve_use_implicit(differentiable=differentiable))
+    structured_auto_allowed = False
+    structured_sharded_multidevice = False
     if not structured_full_csr_explicit_requested:
         phys_params_for_structured = nml.group("physicsParameters")
-
-        def _structured_abs_float(key: str) -> float:
+        structured_eparallel_values: list[float] = []
+        for key in ("EParallelHat", "eParallelHat", "EPARALLELHAT"):
             value = phys_params_for_structured.get(key, phys_params_for_structured.get(key.upper(), None))
             try:
-                return abs(float(value)) if value is not None else 0.0
+                structured_eparallel_values.append(abs(float(value)) if value is not None else 0.0)
             except (TypeError, ValueError):
-                return 0.0
-
-        structured_eparallel_abs = max(
-            _structured_abs_float("EParallelHat"),
-            _structured_abs_float("eParallelHat"),
-            _structured_abs_float("EPARALLELHAT"),
-        )
+                structured_eparallel_values.append(0.0)
+        structured_eparallel_abs = max(structured_eparallel_values, default=0.0)
         structured_sharded_axis = _matvec_shard_axis(op)
         structured_sharded_multidevice = (
             structured_sharded_axis in {"theta", "zeta"} and jax.device_count() > 1
         )
-        structured_full_csr_auto_requested = bool(
+        structured_auto_allowed = bool(
             (not _rhs1_bool_env("SFINCS_JAX_RHSMODE1_FORCE_KRYLOV", default=False))
-            and (not structured_sharded_multidevice)
             and _rhs1_structured_full_csr_auto_allowed_impl(
                 op=op,
                 active_size=int(op.total_size),
-                use_implicit=bool(_resolve_use_implicit(differentiable=differentiable)),
+                use_implicit=bool(use_implicit_requested),
                 solve_method_kind=solve_method_kind_requested,
                 backend=str(jax.default_backend()),
                 eparallel_abs=float(structured_eparallel_abs),
             )
         )
-    if structured_full_csr_auto_requested:
-        if emit is not None:
-            emit(
-                0,
-                "solve_v3_full_system_linear_gmres: auto trying structured full CSR host solve",
-            )
-        try:
-            auto_structured_result = solve_v3_full_system_linear_gmres(
-                nml=nml,
-                which_rhs=which_rhs,
-                op=op,
-                x0=x0,
-                tol=tol,
-                atol=atol,
-                restart=restart,
-                maxiter=maxiter,
-                solve_method="structured_full_csr",
-                identity_shift=identity_shift,
-                phi1_hat_base=phi1_hat_base,
-                differentiable=False,
-                emit=emit,
-                recycle_basis=recycle_basis,
-            )
-        except RuntimeError as exc:
-            if emit is not None:
-                emit(
-                    1,
-                    "solve_v3_full_system_linear_gmres: auto structured full CSR skipped "
-                    f"({exc}); falling back to matrix-free policy",
-                )
-        else:
-            metadata = dict(getattr(auto_structured_result, "metadata", None) or {})
-            accepted = bool(metadata.get("accepted_converged", False))
-            if accepted:
-                metadata.update(
-                    {
-                        "solve_method_requested": str(solve_method),
-                        "requested_solve_method": str(solve_method),
-                        "auto_solver_selected": True,
-                        "auto_solver_policy": "structured_full_csr",
-                    }
-                )
-                return replace(auto_structured_result, metadata=metadata)
-            if emit is not None:
-                residual = metadata.get("reported_residual_norm", auto_structured_result.gmres.residual_norm)
-                emit(
-                    1,
-                    "solve_v3_full_system_linear_gmres: auto structured full CSR did not converge "
-                    f"(residual={float(residual):.3e}); falling back to matrix-free policy",
-                )
-    structured_full_csr_requested = bool(structured_full_csr_explicit_requested)
-    if structured_full_csr_requested:
-        if differentiable is True:
-            raise ValueError(
-                "solve_method='structured_csr' is host-only/non-differentiable; "
-                "use differentiable=False or choose a JAX-native solve method."
-            )
-        if int(op.rhs_mode) != 1:
-            raise ValueError("solve_method='structured_csr' is only implemented for RHSMode=1 full-system solves.")
-
-        def _env_int_local(name: str, default: int) -> int:
-            try:
-                return int(os.environ.get(name, "").strip() or int(default))
-            except ValueError:
-                return int(default)
-
-        def _env_float_local(name: str, default: float) -> float:
-            try:
-                return float(os.environ.get(name, "").strip() or float(default))
-            except ValueError:
-                return float(default)
-
-        csr_max_mb = _env_float_local("SFINCS_JAX_RHS1_FULL_CSR_MAX_MB", 1024.0)
-        pc_max_mb = _env_float_local("SFINCS_JAX_RHS1_FULL_CSR_PRECONDITIONER_MAX_MB", 128.0)
-        pc_kind = os.environ.get("SFINCS_JAX_RHS1_FULL_CSR_PRECONDITIONER", "auto").strip() or "auto"
-        pc_schur_max = _env_int_local("SFINCS_JAX_RHS1_FULL_CSR_PRECONDITIONER_MAX_SCHUR_SIZE", 2048)
-        structured_krylov_env = os.environ.get("SFINCS_JAX_RHS1_FULL_CSR_KRYLOV", "").strip().lower()
-        structured_krylov_default = "direct" if abs(float(identity_shift)) <= 0.0 else "gmres"
-        structured_krylov = structured_krylov_env or structured_krylov_default
-        active_dof_env = os.environ.get("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_DOF", "").strip().lower()
-        if active_dof_env in {"1", "true", "yes", "on", "active"}:
-            structured_active_dof = True
-        elif active_dof_env in {"0", "false", "no", "off", "full"}:
-            structured_active_dof = False
-        else:
-            structured_active_dof = structured_krylov in {"direct", "splu", "sparse_direct"}
-        if emit is not None:
-            emit(
-                0,
-                "solve_v3_full_system_linear_gmres: using structured full CSR host solve "
-                f"(preconditioner={pc_kind} csr_max_mb={csr_max_mb:.3g} pc_max_mb={pc_max_mb:.3g} "
-                f"active_dof={structured_active_dof})",
-            )
-        structured_result = solve_v3_full_system_structured_csr(
+    auto_host_result = try_rhs1_auto_host_solve(
+        RHS1AutoHostSolveContext(
             nml=nml,
-            which_rhs=None,
+            which_rhs=which_rhs,
             op=op,
             x0=x0,
-            tol=tol,
-            atol=atol,
-            restart=restart,
+            tol=float(tol),
+            atol=float(atol),
+            restart=int(restart),
             maxiter=maxiter,
-            identity_shift=identity_shift,
+            solve_method=str(solve_method),
+            identity_shift=float(identity_shift),
             phi1_hat_base=phi1_hat_base,
-            max_csr_nbytes=int(max(0.0, float(csr_max_mb)) * 1024.0 * 1024.0),
-            method=structured_krylov,
-            preconditioner=pc_kind,
-            preconditioner_max_schur_size=max(1, int(pc_schur_max)),
-            preconditioner_max_block_inverse_nbytes=int(max(0.0, float(pc_max_mb)) * 1024.0 * 1024.0),
-            active_dof=bool(structured_active_dof),
+            differentiable=differentiable,
             emit=emit,
+            recycle_basis=recycle_basis,
+            solve_driver=solve_v3_full_system_linear_gmres,
+            solve_method_kind_requested=solve_method_kind_requested,
+            structured_full_csr_explicit_requested=bool(structured_full_csr_explicit_requested),
+            use_implicit=bool(use_implicit_requested),
+            structured_auto_allowed=bool(structured_auto_allowed),
+            structured_sharded_multidevice=bool(structured_sharded_multidevice),
         )
-        structured_metadata = dict(structured_result.metadata or {})
-        structured_csr_metadata = structured_metadata.get("structured_full_csr", {})
-        if not isinstance(structured_csr_metadata, dict):
-            structured_csr_metadata = {}
-        structured_solve_metadata = structured_csr_metadata.get("metadata", {})
-        if not isinstance(structured_solve_metadata, dict):
-            structured_solve_metadata = {}
-        structured_selection = structured_csr_metadata.get("selection", {})
-        if not isinstance(structured_selection, dict):
-            structured_selection = {}
-        structured_selection_metadata = structured_selection.get("metadata", {})
-        if not isinstance(structured_selection_metadata, dict):
-            structured_selection_metadata = {}
-        structured_preconditioner = structured_solve_metadata.get("preconditioner", {})
-        if not isinstance(structured_preconditioner, dict):
-            structured_preconditioner = {}
-        structured_preconditioner_metadata = structured_preconditioner.get("metadata", {})
-        if not isinstance(structured_preconditioner_metadata, dict):
-            structured_preconditioner_metadata = {}
-        residual_norm_structured = float(structured_csr_metadata.get("residual_norm", structured_result.gmres.residual_norm))
-        target_structured = float(structured_solve_metadata.get("target", max(float(atol), float(tol) * float(rhs_norm))))
-        converged_structured = bool(structured_csr_metadata.get("converged", residual_norm_structured <= target_structured))
-        setup_s_structured = float(structured_preconditioner.get("setup_s", 0.0) or 0.0)
-        solve_s_structured = float(structured_csr_metadata.get("solve_s", 0.0) or 0.0)
-        direct_factor_s = structured_solve_metadata.get("factor_s", None)
-        direct_factor_nbytes = structured_solve_metadata.get("factor_nbytes_actual", None)
-        factor_nbytes = structured_preconditioner_metadata.get(
-            "factor_nbytes_actual",
-            structured_preconditioner_metadata.get("block_inverse_nbytes_actual", direct_factor_nbytes),
-        )
-        structured_metadata.update(
-            {
-                "solver_path": "structured_full_csr_host_gmres",
-                "solver_kind": "structured_full_csr",
-                "solve_method_requested": str(solve_method),
-                "requested_solve_method": str(solve_method),
-                "differentiable": False,
-                "residual_kind": "true_residual",
-                "accepted_converged": bool(converged_structured),
-                "acceptance_criterion": "true_residual",
-                "reported_residual_norm": float(residual_norm_structured),
-                "iterations": len(tuple(structured_csr_metadata.get("residual_history", ()) or ())),
-                "info_code": int(structured_csr_metadata.get("info", 0)),
-                "setup_s": setup_s_structured,
-                "solve_s": solve_s_structured,
-                "elapsed_s": setup_s_structured + solve_s_structured,
-                "csr_nnz": int(structured_selection_metadata.get("nnz", structured_solve_metadata.get("matrix_nnz", 0)) or 0),
-                "csr_operator_nbytes": int(structured_selection_metadata.get("csr_nbytes_actual", 0) or 0),
-                "preconditioner_kind": str(structured_preconditioner.get("kind", pc_kind)),
-                "sparse_pc_factor_nbytes_estimate": None if factor_nbytes is None else int(factor_nbytes),
-                "direct_factor_s": None if direct_factor_s is None else float(direct_factor_s),
-                "direct_factor_nbytes_actual": None if direct_factor_nbytes is None else int(direct_factor_nbytes),
-                "structured_active_dof": bool(structured_solve_metadata.get("active_dof", False)),
-                "structured_active_size": int(structured_solve_metadata.get("active_size", 0) or 0),
-                "structured_full_size": int(structured_solve_metadata.get("full_size", 0) or 0),
-                "structured_full_csr_env": {
-                    "csr_max_mb": float(csr_max_mb),
-                    "preconditioner": str(pc_kind),
-                    "preconditioner_max_mb": float(pc_max_mb),
-                    "preconditioner_max_schur_size": int(pc_schur_max),
-                    "krylov": str(structured_krylov),
-                    "active_dof": bool(structured_active_dof),
-                },
-            }
-        )
-        return V3LinearSolveResult(
-            op=structured_result.op,
-            rhs=structured_result.rhs,
-            gmres=structured_result.gmres,
-            metadata=structured_metadata,
+    )
+    if auto_host_result is not None:
+        return auto_host_result
+    structured_full_csr_requested = bool(structured_full_csr_explicit_requested)
+    if structured_full_csr_requested:
+        return solve_rhs1_structured_full_csr_explicit(
+            RHS1StructuredCSRSolveContext(
+                nml=nml,
+                op=op,
+                x0=x0,
+                rhs_norm=rhs_norm,
+                tol=float(tol),
+                atol=float(atol),
+                restart=int(restart),
+                maxiter=maxiter,
+                solve_method=str(solve_method),
+                identity_shift=float(identity_shift),
+                phi1_hat_base=phi1_hat_base,
+                differentiable=differentiable,
+                emit=emit,
+                structured_solver=solve_v3_full_system_structured_csr,
+            )
         )
 
     recycle_k_env = os.environ.get("SFINCS_JAX_RHSMODE1_RECYCLE_K", "").strip()
