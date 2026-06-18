@@ -164,6 +164,28 @@ class FortranReducedXBlockKrylovPolicySetup:
 
 
 @dataclass(frozen=True)
+class FortranReducedXBlockInitialSeedPolicySetup:
+    """Initial-seed refinement controls for fortran-reduced x-block solves."""
+
+    enabled: bool
+    refine_steps: int
+    accept_ratio: float
+
+
+@dataclass(frozen=True)
+class FortranReducedXBlockInitialSeedResult:
+    """Accepted initial seed and diagnostics for fortran-reduced x-block solves."""
+
+    x0: jnp.ndarray | None
+    used: bool
+    residual_norm: float | None
+    improvement_ratio: float | None
+    refines_performed: int
+    elapsed_s: float
+    messages: tuple[tuple[int, str], ...]
+
+
+@dataclass(frozen=True)
 class SparsePCEntryPolicySetup:
     """Physics classification and GMRES budget for RHSMode=1 sparse-PC paths."""
 
@@ -958,6 +980,119 @@ def resolve_fortran_reduced_xblock_krylov_policy(
         progress_every=int(progress_every),
         mv_count=MatvecCounter(0),
         messages=tuple(messages),
+    )
+
+
+def resolve_fortran_reduced_xblock_initial_seed_policy(
+    *,
+    env: Mapping[str, str] | None,
+) -> FortranReducedXBlockInitialSeedPolicySetup:
+    """Resolve initial-seed controls for fortran-reduced x-block solves."""
+
+    seed_enabled = _env_bool(
+        env,
+        "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_XBLOCK_INITIAL_SEED",
+        default=True,
+    )
+    refine_steps = _env_int(
+        env,
+        "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_XBLOCK_SEED_REFINES",
+        2,
+        minimum=0,
+    )
+    accept_ratio = max(
+        0.0,
+        _env_float(
+            env,
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_XBLOCK_SEED_ACCEPT_RATIO",
+            default=1.0,
+        ),
+    )
+    return FortranReducedXBlockInitialSeedPolicySetup(
+        enabled=bool(seed_enabled),
+        refine_steps=int(refine_steps),
+        accept_ratio=float(accept_ratio),
+    )
+
+
+def apply_fortran_reduced_xblock_initial_seed(
+    *,
+    policy: FortranReducedXBlockInitialSeedPolicySetup,
+    rhs: jnp.ndarray,
+    rhs_norm: float,
+    x0: jnp.ndarray | None,
+    preconditioner: ArrayFn,
+    matvec_no_count: ArrayFn,
+    elapsed_s: Callable[[], float],
+) -> FortranReducedXBlockInitialSeedResult:
+    """Apply and refine the fortran-reduced x-block initial preconditioner seed."""
+
+    if (not bool(policy.enabled)) or x0 is not None:
+        return FortranReducedXBlockInitialSeedResult(
+            x0=x0,
+            used=False,
+            residual_norm=None,
+            improvement_ratio=None,
+            refines_performed=0,
+            elapsed_s=0.0,
+            messages=(),
+        )
+
+    seed_start_s = float(elapsed_s())
+    x_seed = jnp.asarray(preconditioner(rhs), dtype=jnp.float64)
+    residual_vec_seed = rhs - matvec_no_count(x_seed)
+    seed_residual_norm = float(jnp.linalg.norm(residual_vec_seed))
+    seed_improvement_ratio: float | None = None
+    if np.isfinite(seed_residual_norm) and seed_residual_norm > 0.0:
+        seed_improvement_ratio = float(rhs_norm) / float(seed_residual_norm)
+    elif np.isfinite(seed_residual_norm):
+        seed_improvement_ratio = float("inf")
+
+    refines_performed = 0
+    for refine_index in range(int(policy.refine_steps)):
+        if not np.isfinite(seed_residual_norm) or seed_residual_norm == 0.0:
+            break
+        dx_seed = jnp.asarray(preconditioner(residual_vec_seed), dtype=jnp.float64)
+        x_next = x_seed + dx_seed
+        residual_vec_next = rhs - matvec_no_count(x_next)
+        residual_norm_next = float(jnp.linalg.norm(residual_vec_next))
+        if not np.isfinite(residual_norm_next) or residual_norm_next >= float(seed_residual_norm):
+            break
+        x_seed = x_next
+        residual_vec_seed = residual_vec_next
+        seed_residual_norm = float(residual_norm_next)
+        refines_performed = int(refine_index) + 1
+        if seed_residual_norm > 0.0:
+            seed_improvement_ratio = float(rhs_norm) / float(seed_residual_norm)
+        else:
+            seed_improvement_ratio = float("inf")
+
+    seed_used = bool(
+        np.isfinite(seed_residual_norm)
+        and seed_residual_norm
+        <= (float(rhs_norm) * max(float(policy.accept_ratio), 1.0e-300))
+    )
+    elapsed = float(elapsed_s()) - seed_start_s
+    messages = (
+        (
+            1,
+            "solve_v3_full_system_linear_gmres: fortran_reduced_pc_gmres xblock "
+            "initial seed "
+            f"residual={float(seed_residual_norm):.6e} "
+            f"rhs_norm={float(rhs_norm):.6e} "
+            f"improvement={float(seed_improvement_ratio or 0.0):.6e} "
+            f"refines={int(refines_performed)}/{int(policy.refine_steps)} "
+            f"accepted={bool(seed_used)} elapsed_s={elapsed:.3f}",
+        ),
+    )
+    return FortranReducedXBlockInitialSeedResult(
+        x0=x_seed if bool(seed_used) else x0,
+        used=bool(seed_used),
+        residual_norm=float(seed_residual_norm),
+        improvement_ratio=seed_improvement_ratio,
+        refines_performed=int(refines_performed),
+        elapsed_s=float(elapsed),
+        messages=messages,
     )
 
 
@@ -3653,6 +3788,8 @@ def apply_sparse_pc_post_minres(
 __all__ = [
     "FortranReducedSparsePCBackendSetup",
     "FortranReducedXBlockFactorPolicySetup",
+    "FortranReducedXBlockInitialSeedPolicySetup",
+    "FortranReducedXBlockInitialSeedResult",
     "FortranReducedXBlockKrylovPolicySetup",
     "MatvecCounter",
     "XBlockAssembledOperatorDiagnosticsContext",
@@ -3663,6 +3800,7 @@ __all__ = [
     "SparsePCGMRESResult",
     "SparsePCPostMinresContext",
     "SparsePCPostMinresResult",
+    "apply_fortran_reduced_xblock_initial_seed",
     "apply_sparse_pc_post_minres",
     "build_sparse_pc_active_dof_setup",
     "fp_xblock_global_correction_metadata",
@@ -3670,6 +3808,7 @@ __all__ = [
     "resolve_fortran_reduced_sparse_pc_backend",
     "resolve_fortran_reduced_xblock_factor_policy",
     "resolve_fortran_reduced_xblock_global_coupling_policy",
+    "resolve_fortran_reduced_xblock_initial_seed_policy",
     "resolve_fortran_reduced_xblock_krylov_policy",
     "resolve_fortran_reduced_xblock_moment_schur_policy",
     "run_sparse_pc_gmres_once",

@@ -16,6 +16,7 @@ from sfincs_jax.problems.profile_response.sparse_pc import (
     SparsePCGMRESContext,
     SparsePCPostMinresContext,
     XBlockAssembledPreflightError,
+    apply_fortran_reduced_xblock_initial_seed,
     apply_sparse_pc_post_minres,
     build_sparse_pc_active_dof_setup,
     build_xblock_assembled_equilibration_setup,
@@ -34,6 +35,7 @@ from sfincs_jax.problems.profile_response.sparse_pc import (
     resolve_fortran_reduced_sparse_pc_backend,
     resolve_fortran_reduced_xblock_factor_policy,
     resolve_fortran_reduced_xblock_global_coupling_policy,
+    resolve_fortran_reduced_xblock_initial_seed_policy,
     resolve_fortran_reduced_xblock_krylov_policy,
     resolve_fortran_reduced_xblock_moment_schur_policy,
     resolve_sparse_pc_entry_policy,
@@ -309,6 +311,73 @@ def test_fortran_reduced_xblock_krylov_policy_falls_back_invalid_values() -> Non
             "'bad_method'; using gmres",
         ),
     )
+
+
+def test_fortran_reduced_xblock_initial_seed_policy_parses_controls() -> None:
+    setup = resolve_fortran_reduced_xblock_initial_seed_policy(
+        env={
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_XBLOCK_INITIAL_SEED": "off",
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_XBLOCK_SEED_REFINES": "bad",
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_XBLOCK_SEED_ACCEPT_RATIO": "-3",
+        }
+    )
+
+    assert not setup.enabled
+    assert setup.refine_steps == 2
+    assert setup.accept_ratio == 0.0
+
+
+def test_fortran_reduced_xblock_initial_seed_accepts_refined_seed() -> None:
+    policy = resolve_fortran_reduced_xblock_initial_seed_policy(
+        env={
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_XBLOCK_SEED_REFINES": "2",
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_XBLOCK_SEED_ACCEPT_RATIO": "0.2",
+        }
+    )
+    times = iter([5.0, 5.75])
+    result = apply_fortran_reduced_xblock_initial_seed(
+        policy=policy,
+        rhs=jnp.asarray([4.0, 0.0]),
+        rhs_norm=4.0,
+        x0=None,
+        preconditioner=lambda v: 0.25 * v,
+        matvec_no_count=lambda v: 2.0 * v,
+        elapsed_s=lambda: next(times),
+    )
+
+    assert result.used
+    assert result.refines_performed == 2
+    assert result.residual_norm == pytest.approx(0.5)
+    assert result.improvement_ratio == pytest.approx(8.0)
+    assert result.elapsed_s == pytest.approx(0.75)
+    assert result.x0 is not None
+    assert result.x0.tolist() == pytest.approx([1.75, 0.0])
+    assert any("accepted=True" in message for _, message in result.messages)
+
+
+def test_fortran_reduced_xblock_initial_seed_rejects_weak_seed() -> None:
+    policy = resolve_fortran_reduced_xblock_initial_seed_policy(
+        env={
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_XBLOCK_SEED_REFINES": "3",
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_XBLOCK_SEED_ACCEPT_RATIO": "0.5",
+        }
+    )
+    result = apply_fortran_reduced_xblock_initial_seed(
+        policy=policy,
+        rhs=jnp.asarray([2.0, 0.0]),
+        rhs_norm=2.0,
+        x0=None,
+        preconditioner=lambda v: jnp.zeros_like(v),
+        matvec_no_count=lambda v: v,
+        elapsed_s=lambda: 0.0,
+    )
+
+    assert not result.used
+    assert result.x0 is None
+    assert result.refines_performed == 0
+    assert result.residual_norm == pytest.approx(2.0)
+    assert result.improvement_ratio == pytest.approx(1.0)
+    assert any("accepted=False" in message for _, message in result.messages)
 
 
 def test_fortran_reduced_xblock_moment_schur_policy_defaults_disabled() -> None:

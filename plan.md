@@ -35274,3 +35274,44 @@ Next refactor target:
   ``_precond_xblock`` wrapper into a small branch helper, then move toward a
   cohesive fortran-reduced x-block solve object instead of more local mutable
   driver state.
+
+### 19.120 Fortran-reduced x-block initial-seed extraction
+
+Goal:
+
+- Remove the fortran-reduced x-block initial-seed env parsing, residual
+  refinement, acceptance logic, timing, and log-message formatting from
+  ``v3_driver.py``.
+
+Implementation:
+
+- Added ``FortranReducedXBlockInitialSeedPolicySetup`` and
+  ``FortranReducedXBlockInitialSeedResult`` to
+  ``problems/profile_response/sparse_pc.py``.
+- Added ``resolve_fortran_reduced_xblock_initial_seed_policy`` for the
+  existing ``INITIAL_SEED``, ``SEED_REFINES``, and ``SEED_ACCEPT_RATIO``
+  controls.
+- Added ``apply_fortran_reduced_xblock_initial_seed`` to apply the x-block
+  preconditioner seed, run bounded residual-refinement steps, apply the same
+  acceptance gate, and return the same diagnostics consumed by solve metadata.
+- Updated ``v3_driver.py`` to consume the helper while preserving metadata keys
+  for seed enablement, acceptance, residual, improvement ratio, accept ratio,
+  and requested/performed refinement counts.
+- Added focused tests for policy parsing, accepted refined seeds, and rejected
+  weak seeds.
+- ``v3_driver.py`` is now about ``20878`` lines and
+  ``solve_v3_full_system_linear_gmres`` about ``15583`` lines.
+
+Validation:
+
+- ``python -m ruff check`` on touched source/tests: passed.
+- ``python -m compileall -q`` on touched source/tests: passed.
+- ``tests/test_profile_response_sparse_pc.py``: ``80 passed``.
+- Broader current profile-response/x-block/sparse-pattern shard:
+  ``357 passed in 113.63 s``.
+
+Next refactor target:
+
+- Extract the fortran-reduced x-block Krylov solve dispatch/progress callback
+  or the remaining moment/global build-failure normalization into a cohesive
+  helper, then continue shrinking the monolithic solver branch.

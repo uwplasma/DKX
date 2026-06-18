@@ -209,6 +209,7 @@ from .problems.profile_response.diagnostics import (
 from .problems.profile_response.sparse_pc import (
     SparsePCGMRESContext,
     SparsePCPostMinresContext,
+    apply_fortran_reduced_xblock_initial_seed,
     apply_sparse_pc_post_minres,
     build_xblock_krylov_matvec_setup,
     build_xblock_assembled_equilibration_setup,
@@ -228,6 +229,7 @@ from .problems.profile_response.sparse_pc import (
     resolve_fortran_reduced_sparse_pc_backend,
     resolve_fortran_reduced_xblock_factor_policy,
     resolve_fortran_reduced_xblock_global_coupling_policy,
+    resolve_fortran_reduced_xblock_initial_seed_policy,
     resolve_fortran_reduced_xblock_krylov_policy,
     resolve_fortran_reduced_xblock_moment_schur_policy,
     resolve_xblock_qi_device_admission_setup,
@@ -7225,74 +7227,33 @@ def solve_v3_full_system_linear_gmres(
                 tol=float(tol),
                 rhs_norm=float(sparse_pc_rhs_norm),
             )
-            seed_env = (
-                os.environ.get("SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_XBLOCK_INITIAL_SEED", "1")
-                .strip()
-                .lower()
+            initial_seed_policy = resolve_fortran_reduced_xblock_initial_seed_policy(
+                env=os.environ,
             )
-            seed_enabled = seed_env not in {"0", "false", "f", "no", "off", ".false.", ".f."}
+            seed_enabled = bool(initial_seed_policy.enabled)
             seed_residual_norm: float | None = None
             seed_improvement_ratio: float | None = None
             seed_refines_performed = 0
-            seed_refine_steps_env = (
-                os.environ.get("SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_XBLOCK_SEED_REFINES", "").strip()
-            )
-            try:
-                seed_refine_steps = int(seed_refine_steps_env) if seed_refine_steps_env else 2
-            except ValueError:
-                seed_refine_steps = 2
-            seed_refine_steps = max(0, int(seed_refine_steps))
-            seed_accept_ratio_env = (
-                os.environ.get("SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_XBLOCK_SEED_ACCEPT_RATIO", "").strip()
-            )
-            try:
-                seed_accept_ratio = float(seed_accept_ratio_env) if seed_accept_ratio_env else 1.0
-            except ValueError:
-                seed_accept_ratio = 1.0
-            seed_accept_ratio = max(0.0, float(seed_accept_ratio))
+            seed_refine_steps = int(initial_seed_policy.refine_steps)
+            seed_accept_ratio = float(initial_seed_policy.accept_ratio)
             seed_used = False
-            if bool(seed_enabled) and x0_sparse is None:
-                seed_start_s = sparse_timer.elapsed_s()
-                x_seed = jnp.asarray(precond_xblock_krylov(sparse_pc_rhs), dtype=jnp.float64)
-                residual_vec_seed = sparse_pc_rhs - _mv_true_no_count(x_seed)
-                seed_residual_norm = float(jnp.linalg.norm(residual_vec_seed))
-                if np.isfinite(seed_residual_norm) and seed_residual_norm > 0.0:
-                    seed_improvement_ratio = float(sparse_pc_rhs_norm) / float(seed_residual_norm)
-                elif np.isfinite(seed_residual_norm):
-                    seed_improvement_ratio = float("inf")
-                for refine_index in range(int(seed_refine_steps)):
-                    if not np.isfinite(seed_residual_norm) or seed_residual_norm == 0.0:
-                        break
-                    dx_seed = jnp.asarray(precond_xblock_krylov(residual_vec_seed), dtype=jnp.float64)
-                    x_next = x_seed + dx_seed
-                    residual_vec_next = sparse_pc_rhs - _mv_true_no_count(x_next)
-                    residual_norm_next = float(jnp.linalg.norm(residual_vec_next))
-                    if not np.isfinite(residual_norm_next) or residual_norm_next >= float(seed_residual_norm):
-                        break
-                    x_seed = x_next
-                    residual_vec_seed = residual_vec_next
-                    seed_residual_norm = float(residual_norm_next)
-                    seed_refines_performed = int(refine_index) + 1
-                    if seed_residual_norm > 0.0:
-                        seed_improvement_ratio = float(sparse_pc_rhs_norm) / float(seed_residual_norm)
-                    else:
-                        seed_improvement_ratio = float("inf")
-                if np.isfinite(seed_residual_norm) and seed_residual_norm <= (
-                    float(sparse_pc_rhs_norm) * max(float(seed_accept_ratio), 1.0e-300)
-                ):
-                    x0_sparse = x_seed
-                    seed_used = True
-                if emit is not None:
-                    emit(
-                        1,
-                        "solve_v3_full_system_linear_gmres: fortran_reduced_pc_gmres xblock "
-                        "initial seed "
-                        f"residual={float(seed_residual_norm):.6e} "
-                        f"rhs_norm={float(sparse_pc_rhs_norm):.6e} "
-                        f"improvement={float(seed_improvement_ratio or 0.0):.6e} "
-                        f"refines={int(seed_refines_performed)}/{int(seed_refine_steps)} "
-                        f"accepted={bool(seed_used)} elapsed_s={sparse_timer.elapsed_s() - seed_start_s:.3f}",
-                    )
+            initial_seed_result = apply_fortran_reduced_xblock_initial_seed(
+                policy=initial_seed_policy,
+                rhs=sparse_pc_rhs,
+                rhs_norm=float(sparse_pc_rhs_norm),
+                x0=x0_sparse,
+                preconditioner=precond_xblock_krylov,
+                matvec_no_count=_mv_true_no_count,
+                elapsed_s=sparse_timer.elapsed_s,
+            )
+            x0_sparse = initial_seed_result.x0
+            seed_used = bool(initial_seed_result.used)
+            seed_residual_norm = initial_seed_result.residual_norm
+            seed_improvement_ratio = initial_seed_result.improvement_ratio
+            seed_refines_performed = int(initial_seed_result.refines_performed)
+            if emit is not None:
+                for level, message in initial_seed_result.messages:
+                    emit(level, message)
             if emit is not None:
                 emit(
                     0,
