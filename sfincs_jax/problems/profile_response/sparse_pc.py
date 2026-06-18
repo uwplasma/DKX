@@ -308,6 +308,389 @@ def sparse_rescue_tail_metadata(scope: Mapping[str, object]) -> dict[str, object
     }
 
 
+def xblock_qi_device_preconditioner_diagnostics(
+    scope: Mapping[str, object],
+) -> dict[str, object]:
+    """Return the x-block QI-device preconditioner diagnostics payload."""
+
+    metadata = scope["qi_device_preconditioner_metadata"]
+    stats = scope["qi_device_stats"]
+    if not isinstance(metadata, Mapping):
+        raise TypeError("qi_device_preconditioner_metadata must be a mapping")
+    if not isinstance(stats, Mapping):
+        raise TypeError("qi_device_stats must be a mapping")
+
+    out: dict[str, object] = {
+        "xblock_qi_device_preconditioner_enabled": bool(
+            scope["qi_device_preconditioner_enabled"]
+        ),
+        "xblock_qi_device_preconditioner_built": bool(
+            scope["qi_device_preconditioner_built"]
+        ),
+        "xblock_qi_device_preconditioner_used": bool(
+            scope["qi_device_preconditioner_used"]
+        ),
+        "xblock_qi_device_preconditioner_used_in_krylov": bool(
+            scope["qi_device_preconditioner_used_in_krylov"]
+        ),
+        "xblock_qi_device_preconditioner_reason": scope[
+            "qi_device_preconditioner_reason"
+        ],
+        "xblock_qi_device_preconditioner_rank": int(
+            scope["qi_device_preconditioner_rank"]
+        ),
+        "xblock_qi_device_preconditioner_candidate_count": int(
+            scope["qi_device_preconditioner_candidate_count"]
+        ),
+        "xblock_qi_device_preconditioner_coarse_operator_shape": scope[
+            "qi_device_preconditioner_coarse_shape"
+        ],
+        "xblock_qi_device_preconditioner_operator_on_basis_shape": scope[
+            "qi_device_preconditioner_operator_on_basis_shape"
+        ],
+        "xblock_qi_device_preconditioner_coarse_operator_norm": float(
+            scope["qi_device_preconditioner_coarse_norm"]
+        ),
+        "xblock_qi_device_preconditioner_operator_on_basis_norm": float(
+            scope["qi_device_preconditioner_operator_on_basis_norm"]
+        ),
+        "xblock_qi_device_preconditioner_residual_before": scope[
+            "qi_device_preconditioner_residual_before"
+        ],
+        "xblock_qi_device_preconditioner_residual_after": scope[
+            "qi_device_preconditioner_residual_after"
+        ],
+        "xblock_qi_device_preconditioner_improvement_ratio": scope[
+            "qi_device_preconditioner_improvement_ratio"
+        ],
+        "xblock_qi_device_preconditioner_metadata": metadata,
+        "xblock_qi_device_preconditioner_setup_s": float(
+            scope["qi_device_preconditioner_setup_s"]
+        ),
+        "xblock_qi_device_preconditioner_min_improvement": float(
+            scope["qi_device_preconditioner_min_improvement"]
+        ),
+        "xblock_qi_device_preconditioner_use_in_krylov": bool(
+            scope["qi_device_preconditioner_use_in_krylov"]
+        ),
+        "xblock_qi_device_preconditioner_augmented_krylov_requested": bool(
+            scope["qi_device_augmented_krylov_requested"]
+        ),
+        "xblock_qi_device_preconditioner_augmented_krylov_used": bool(
+            scope["qi_device_augmented_krylov_used"]
+        ),
+        "xblock_qi_device_preconditioner_augmented_krylov_rank": int(
+            scope["qi_device_augmented_krylov_rank"]
+        ),
+        "xblock_qi_device_preconditioner_augmented_krylov_reason": scope[
+            "qi_device_augmented_krylov_reason"
+        ],
+        "xblock_qi_device_preconditioner_augmented_krylov_mode": scope[
+            "qi_device_augmented_krylov_mode"
+        ],
+        "xblock_qi_device_preconditioner_augmented_seed_requested": bool(
+            scope["qi_device_augmented_seed_requested"]
+        ),
+        "xblock_qi_device_preconditioner_augmented_seed_available": bool(
+            scope["qi_device_augmented_seed_available"]
+        ),
+        "xblock_qi_device_preconditioner_augmented_seed_used": bool(
+            scope["qi_device_augmented_seed_used"]
+        ),
+        "xblock_qi_device_preconditioner_augmented_seed_rank": int(
+            scope["qi_device_augmented_seed_rank"]
+        ),
+        "xblock_qi_device_preconditioner_augmented_seed_max_rank": int(
+            scope["qi_device_augmented_seed_max_rank"]
+        ),
+        "xblock_qi_device_preconditioner_augmented_seed_reason": scope[
+            "qi_device_augmented_seed_reason"
+        ],
+        "xblock_qi_device_preconditioner_augmented_seed_projection_residual_norm": scope[
+            "qi_device_augmented_seed_projection_residual"
+        ],
+        "xblock_qi_device_preconditioner_augmented_seed_labels": scope[
+            "qi_device_augmented_seed_labels"
+        ],
+        "xblock_qi_device_preconditioner_applies": int(stats.get("applies", 0)),
+        "xblock_qi_device_preconditioner_operator_krylov_enrichment": bool(
+            metadata.get("operator_krylov_enrichment_enabled", False)
+        ),
+        "xblock_qi_device_preconditioner_coarse_reuse": bool(
+            metadata.get("multilevel_coarse_enabled", False)
+        ),
+        "xblock_qi_device_preconditioner_residual_snapshot_enrichment": bool(
+            metadata.get("residual_snapshot_enrichment_enabled", False)
+        ),
+        "xblock_qi_device_preconditioner_residual_snapshot_residual_equation": bool(
+            metadata.get("residual_snapshot_residual_equation_enabled", False)
+        ),
+        "xblock_qi_device_preconditioner_residual_snapshot_residual_equation_rank": int(
+            metadata.get("residual_snapshot_residual_equation_rank", 0)
+        ),
+        "xblock_qi_device_preconditioner_residual_snapshot_residual_equation_candidate_count": int(
+            metadata.get("residual_snapshot_residual_equation_candidate_count", 0)
+        ),
+        "xblock_qi_device_preconditioner_residual_snapshot_residual_equation_group_count": int(
+            metadata.get("residual_snapshot_residual_equation_group_count", 0)
+        ),
+        "xblock_qi_device_preconditioner_multilevel_residual_equation": bool(
+            metadata.get("multilevel_residual_equation_enabled", False)
+        ),
+        "xblock_qi_device_preconditioner_multilevel_residual_equation_solver": metadata.get(
+            "multilevel_residual_equation_solver"
+        ),
+        "xblock_qi_device_preconditioner_global_moment_residual_equation": bool(
+            metadata.get("global_moment_residual_equation_enabled", False)
+        ),
+        "xblock_qi_device_preconditioner_global_moment_residual_equation_solver": metadata.get(
+            "global_moment_residual_equation_solver"
+        ),
+        "xblock_qi_device_preconditioner_global_moment_residual_equation_rank": int(
+            metadata.get("global_moment_residual_equation_rank", 0)
+        ),
+        "xblock_qi_device_preconditioner_global_moment_residual_equation_candidate_count": int(
+            metadata.get("global_moment_residual_equation_candidate_count", 0)
+        ),
+        "xblock_qi_device_preconditioner_global_moment_residual_equation_condition_estimate": float(
+            metadata.get("global_moment_residual_equation_condition_estimate", float("inf"))
+        ),
+        "xblock_qi_device_preconditioner_residual_galerkin_equation": bool(
+            metadata.get("residual_galerkin_equation_enabled", False)
+        ),
+        "xblock_qi_device_preconditioner_residual_galerkin_equation_solver": metadata.get(
+            "residual_galerkin_equation_solver"
+        ),
+        "xblock_qi_device_preconditioner_residual_galerkin_equation_rank": int(
+            metadata.get("residual_galerkin_equation_rank", 0)
+        ),
+        "xblock_qi_device_preconditioner_residual_galerkin_equation_candidate_count": int(
+            metadata.get("residual_galerkin_equation_candidate_count", 0)
+        ),
+        "xblock_qi_device_preconditioner_residual_galerkin_equation_stage_count": int(
+            metadata.get("residual_galerkin_equation_stage_count", 0)
+        ),
+        "xblock_qi_device_preconditioner_residual_galerkin_equation_condition_estimate": float(
+            metadata.get("residual_galerkin_equation_condition_estimate", float("inf"))
+        ),
+        "xblock_qi_device_preconditioner_phase_space_residual_equation": bool(
+            metadata.get("phase_space_residual_equation_enabled", False)
+        ),
+        "xblock_qi_device_preconditioner_phase_space_residual_equation_max_rank": int(
+            metadata.get(
+                "phase_space_residual_equation_max_rank_requested",
+                metadata.get("phase_space_residual_equation_max_rank", 0),
+            )
+            or 0
+        ),
+        "xblock_qi_device_preconditioner_phase_space_residual_equation_solver": metadata.get(
+            "phase_space_residual_equation_solver"
+        ),
+        "xblock_qi_device_preconditioner_phase_space_residual_equation_rank": int(
+            metadata.get("phase_space_residual_equation_rank", 0)
+        ),
+        "xblock_qi_device_preconditioner_phase_space_residual_equation_candidate_count": int(
+            metadata.get("phase_space_residual_equation_candidate_count", 0)
+        ),
+        "xblock_qi_device_preconditioner_phase_space_residual_equation_stage_count": int(
+            metadata.get("phase_space_residual_equation_stage_count", 0)
+        ),
+        "xblock_qi_device_preconditioner_phase_space_residual_equation_condition_estimate": float(
+            metadata.get("phase_space_residual_equation_condition_estimate", float("inf"))
+        ),
+        "xblock_qi_device_preconditioner_phase_space_residual_equation_residual_before": float(
+            metadata.get("phase_space_residual_equation_residual_before", float("inf"))
+        ),
+        "xblock_qi_device_preconditioner_phase_space_residual_equation_residual_after": float(
+            metadata.get("phase_space_residual_equation_residual_after", float("inf"))
+        ),
+        "xblock_qi_device_preconditioner_phase_space_residual_equation_include_global": bool(
+            metadata.get("phase_space_residual_equation_include_global", False)
+        ),
+        "xblock_qi_device_preconditioner_phase_space_residual_equation_trapped_boundary_fraction": float(
+            metadata.get(
+                "phase_space_residual_equation_trapped_boundary_fraction",
+                float("nan"),
+            )
+        ),
+        "xblock_qi_device_preconditioner_phase_space_residual_equation_include_radial": bool(
+            metadata.get("phase_space_residual_equation_include_radial", False)
+        ),
+        "xblock_qi_device_preconditioner_phase_space_residual_equation_include_species": bool(
+            metadata.get("phase_space_residual_equation_include_species", False)
+        ),
+        "xblock_qi_device_preconditioner_residual_region_bounce_coarse": bool(
+            metadata.get("residual_region_bounce_coarse_enabled", False)
+        ),
+        "xblock_qi_device_preconditioner_residual_region_bounce_coarse_max_rank": int(
+            metadata.get(
+                "residual_region_bounce_coarse_max_rank_requested",
+                metadata.get("residual_region_bounce_coarse_max_rank", 0),
+            )
+            or 0
+        ),
+        "xblock_qi_device_preconditioner_residual_region_bounce_coarse_solver": metadata.get(
+            "residual_region_bounce_coarse_solver"
+        ),
+        "xblock_qi_device_preconditioner_residual_region_bounce_coarse_rank": int(
+            metadata.get("residual_region_bounce_coarse_rank", 0)
+        ),
+        "xblock_qi_device_preconditioner_residual_region_bounce_coarse_candidate_count": int(
+            metadata.get("residual_region_bounce_coarse_candidate_count", 0)
+        ),
+        "xblock_qi_device_preconditioner_residual_region_bounce_coarse_stage_count": int(
+            metadata.get("residual_region_bounce_coarse_stage_count", 0)
+        ),
+        "xblock_qi_device_preconditioner_residual_region_bounce_coarse_condition_estimate": float(
+            metadata.get("residual_region_bounce_coarse_condition_estimate", float("inf"))
+        ),
+        "xblock_qi_device_preconditioner_residual_region_bounce_coarse_residual_before": float(
+            metadata.get("residual_region_bounce_coarse_residual_before", float("inf"))
+        ),
+        "xblock_qi_device_preconditioner_residual_region_bounce_coarse_residual_after": float(
+            metadata.get("residual_region_bounce_coarse_residual_after", float("inf"))
+        ),
+        "xblock_qi_device_preconditioner_residual_region_bounce_coarse_include_global": bool(
+            metadata.get("residual_region_bounce_coarse_include_global", False)
+        ),
+        "xblock_qi_device_preconditioner_residual_region_bounce_coarse_include_radial": bool(
+            metadata.get("residual_region_bounce_coarse_include_radial", False)
+        ),
+        "xblock_qi_device_preconditioner_residual_region_bounce_coarse_include_species": bool(
+            metadata.get("residual_region_bounce_coarse_include_species", False)
+        ),
+        "xblock_qi_device_preconditioner_residual_region_bounce_coarse_bounce_boundary": float(
+            metadata.get("residual_region_bounce_coarse_bounce_boundary", float("nan"))
+        ),
+        "xblock_qi_device_preconditioner_residual_region_bounce_coarse_min_region_energy_fraction": float(
+            metadata.get(
+                "residual_region_bounce_coarse_min_region_energy_fraction",
+                float("nan"),
+            )
+        ),
+        "xblock_qi_device_preconditioner_residual_region_bounce_coarse_region_bands": metadata.get(
+            "residual_region_bounce_coarse_region_bands"
+        ),
+        "xblock_qi_device_preconditioner_active_pattern_coarse": bool(
+            metadata.get("active_pattern_coarse_enabled", False)
+        ),
+        "xblock_qi_device_preconditioner_active_pattern_coarse_max_rank": int(
+            metadata.get(
+                "active_pattern_coarse_max_rank_requested",
+                metadata.get("active_pattern_coarse_max_rank", 0),
+            )
+            or 0
+        ),
+        "xblock_qi_device_preconditioner_active_pattern_coarse_max_candidates": int(
+            metadata.get("active_pattern_coarse_max_candidates_requested", 0) or 0
+        ),
+        "xblock_qi_device_preconditioner_active_pattern_coarse_solver": metadata.get(
+            "active_pattern_coarse_solver"
+        ),
+        "xblock_qi_device_preconditioner_active_pattern_coarse_rank": int(
+            metadata.get("active_pattern_coarse_rank", 0)
+        ),
+        "xblock_qi_device_preconditioner_active_pattern_coarse_candidate_count": int(
+            metadata.get("active_pattern_coarse_candidate_count", 0)
+        ),
+        "xblock_qi_device_preconditioner_active_pattern_coarse_stage_count": int(
+            metadata.get("active_pattern_coarse_stage_count", 0)
+        ),
+        "xblock_qi_device_preconditioner_active_pattern_coarse_condition_estimate": float(
+            metadata.get("active_pattern_coarse_condition_estimate", float("inf"))
+        ),
+        "xblock_qi_device_preconditioner_active_pattern_coarse_residual_before": float(
+            metadata.get("active_pattern_coarse_residual_before", float("inf"))
+        ),
+        "xblock_qi_device_preconditioner_active_pattern_coarse_residual_after": float(
+            metadata.get("active_pattern_coarse_residual_after", float("inf"))
+        ),
+        "xblock_qi_device_preconditioner_active_pattern_coarse_include_global": bool(
+            metadata.get("active_pattern_coarse_include_global", False)
+        ),
+        "xblock_qi_device_preconditioner_active_pattern_coarse_min_chunk_energy_fraction": float(
+            metadata.get("active_pattern_coarse_min_chunk_energy_fraction", float("nan"))
+        ),
+        "xblock_qi_device_preconditioner_block_schur_residual_equation": bool(
+            metadata.get("block_schur_residual_equation_enabled", False)
+        ),
+        "xblock_qi_device_preconditioner_block_schur_residual_equation_rank": int(
+            metadata.get("block_schur_residual_equation_rank", 0)
+        ),
+        "xblock_qi_device_preconditioner_block_schur_residual_equation_candidate_count": int(
+            metadata.get("block_schur_residual_equation_candidate_count", 0)
+        ),
+        "xblock_qi_device_preconditioner_block_schur_residual_equation_group_count": int(
+            metadata.get("block_schur_residual_equation_group_count", 0)
+        ),
+        "xblock_qi_device_preconditioner_coupled_residual_equation": bool(
+            metadata.get("coupled_residual_equation_enabled", False)
+        ),
+        "xblock_qi_device_preconditioner_coupled_residual_equation_max_rank": int(
+            metadata.get(
+                "coupled_residual_equation_max_rank_requested",
+                metadata.get("coupled_residual_equation_max_rank", 0),
+            )
+            or 0
+        ),
+        "xblock_qi_device_preconditioner_coupled_residual_equation_rank": int(
+            metadata.get("coupled_residual_equation_rank", 0)
+        ),
+        "xblock_qi_device_preconditioner_coupled_residual_equation_candidate_count": int(
+            metadata.get("coupled_residual_equation_candidate_count", 0)
+        ),
+        "xblock_qi_device_preconditioner_coupled_residual_equation_source_stage_count": int(
+            metadata.get("coupled_residual_equation_source_stage_count", 0)
+        ),
+        "xblock_qi_device_preconditioner_coupled_residual_equation_source_stage_ranks": metadata.get(
+            "coupled_residual_equation_source_stage_ranks"
+        ),
+        "xblock_qi_device_preconditioner_coupled_residual_equation_solver": metadata.get(
+            "coupled_residual_equation_solver"
+        ),
+        "xblock_qi_device_preconditioner_coupled_residual_equation_include_flat": bool(
+            metadata.get("coupled_residual_equation_include_flat", False)
+        ),
+        "xblock_qi_device_preconditioner_coupled_residual_equation_min_relative_improvement": float(
+            metadata.get(
+                "coupled_residual_equation_min_relative_improvement_requested",
+                float("nan"),
+            )
+        ),
+        "xblock_qi_device_preconditioner_coupled_residual_equation_install_in_krylov_on_reject": bool(
+            metadata.get(
+                "coupled_residual_equation_install_in_krylov_on_reject_requested",
+                False,
+            )
+        ),
+        "xblock_qi_device_preconditioner_seed_probe_accepted": bool(
+            metadata.get("seed_probe_accepted", False)
+        ),
+        "xblock_qi_device_preconditioner_installed_in_krylov_after_seed_reject": bool(
+            metadata.get("installed_in_krylov_after_seed_reject", False)
+        ),
+        "xblock_qi_device_preconditioner_coupled_residual_equation_condition_estimate": float(
+            metadata.get("coupled_residual_equation_condition_estimate", float("inf"))
+        ),
+        "xblock_qi_device_preconditioner_coupled_residual_equation_residual_before": float(
+            metadata.get("coupled_residual_equation_residual_before", float("inf"))
+        ),
+        "xblock_qi_device_preconditioner_coupled_residual_equation_residual_after": float(
+            metadata.get("coupled_residual_equation_residual_after", float("inf"))
+        ),
+        "xblock_qi_device_preconditioner_coupled_residual_equation_accepted": bool(
+            metadata.get("coupled_residual_equation_accepted", False)
+        ),
+        "xblock_qi_device_preconditioner_coupled_residual_equation_reason": metadata.get(
+            "coupled_residual_equation_reason"
+        ),
+        "xblock_qi_device_preconditioner_block_schur_residual_enrichment": bool(
+            metadata.get("block_schur_residual_enrichment_enabled", False)
+        ),
+    }
+    return out
+
+
 class MatvecCounter:
     """Mutable matvec counter that preserves ``int(counter)`` call sites."""
 

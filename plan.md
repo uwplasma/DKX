@@ -34464,3 +34464,40 @@ Next refactor target:
   main sparse-PC solve result construction into a helper in
   ``problems/profile_response/sparse_pc.py``. Keep it as pure diagnostics
   construction first; do not alter solver defaults or admission gates.
+
+### 19.99 X-block QI-device diagnostics payload extraction
+
+Goal:
+
+- Remove the large x-block QI-device preconditioner diagnostics payload from
+  the main sparse-PC result dictionary in ``v3_driver.py`` without changing
+  solver behavior or metadata keys.
+
+Implementation:
+
+- Added ``xblock_qi_device_preconditioner_diagnostics`` to
+  ``problems/profile_response/sparse_pc.py``.
+- Replaced the contiguous ``xblock_qi_device_preconditioner_*`` metadata block
+  in ``v3_driver.py`` with
+  ``**xblock_qi_device_preconditioner_diagnostics(locals())``.
+- Added unit coverage for representative base, augmented-seed, global-moment,
+  phase-space, residual-region, active-pattern, coupled residual-equation, and
+  block-Schur metadata keys.
+- ``v3_driver.py`` is now about ``21742`` lines and
+  ``solve_v3_full_system_linear_gmres`` is about ``16453`` lines.
+
+Validation:
+
+- ``python -m ruff check`` on touched source/tests: passed.
+- ``python -m compileall -q`` on touched source/tests: passed.
+- ``tests/test_profile_response_sparse_pc.py``: ``60 passed``.
+- Broader current profile-response/x-block/sparse-pattern shard:
+  ``324 passed in 111.69 s``.
+- Latest pushed docs checks are green; latest PR CI is still in progress.
+
+Next refactor target:
+
+- Continue extracting pure metadata construction from the sparse-PC result,
+  next targeting the adjacent QI-deflated preconditioner diagnostics payload or
+  the assembled-operator/equilibration metadata payload. Keep each extraction
+  independently tested and avoid changing algorithm selection.
