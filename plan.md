@@ -34044,3 +34044,48 @@ Next refactor target:
   into focused helper functions. Keep numerical construction, true residual
   probes, and acceptance gates in the driver until each extracted helper has
   direct policy/unit coverage and focused driver regressions.
+
+### 19.90 RHSMode=1 x-block QI-device rank-budget extraction
+
+Goal:
+
+- Move QI-device rank-budget and max-rank calculation out of the main
+  ``v3_driver.py`` solve block while preserving the existing cap behavior and
+  metadata inputs.
+
+Implementation:
+
+- Added ``RHS1QIDeviceRankBudget`` and ``rhs1_qi_device_rank_budget`` to
+  ``sfincs_jax/problems/profile_response/policies.py`` and exported them.
+- Wired ``v3_driver.py`` to call the helper at the existing rank-budget site,
+  preserving downstream ``qi_device_rank_budget`` and ``qi_device_max_rank``
+  variable names.
+- Preserved the existing compatibility behavior in which adjoint-only
+  enrichment increases the internal budget but does not force ``max_rank``
+  unless the explicit max-rank environment override is set.
+- Added direct tests for default no-cap behavior, active controls with an
+  explicit cap, invalid explicit cap fallback to the computed budget, and the
+  adjoint-only compatibility case.
+- ``solve_v3_full_system_linear_gmres`` is now about ``18836`` lines and
+  ``v3_driver.py`` is about ``24118`` lines.
+
+Validation so far:
+
+- ``python -m ruff check sfincs_jax/problems/profile_response/policies.py
+  sfincs_jax/v3_driver.py tests/test_rhs1_xblock_fallback_initial_guess.py``:
+  passed.
+- ``python -m compileall -q
+  sfincs_jax/problems/profile_response/policies.py sfincs_jax/v3_driver.py
+  tests/test_rhs1_xblock_fallback_initial_guess.py``: passed.
+- Focused policy/helper and QI-device metadata regressions:
+  ``27 passed in 11.78 s``.
+- Broader sparse-PC/x-block/dispatch subset:
+  ``178 passed in 59.53 s``.
+- ``git diff --check``: passed.
+
+Next refactor target:
+
+- Extract QI-device progress-message construction into a helper that returns
+  deterministic message strings from the already-resolved policy state. Keep
+  emission timing in ``v3_driver.py`` and cover the helper with direct tests
+  plus the existing focused driver metadata regressions.

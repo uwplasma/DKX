@@ -7,6 +7,7 @@ from sfincs_jax.problems.profile_response.policies import (
     parse_rhs1_pas_tz_guarded_structured_levels,
     rhs1_qi_device_extra_coarse_controls,
     rhs1_qi_device_probe_uses_minres_step,
+    rhs1_qi_device_rank_budget,
     rhs1_qi_device_residual_correction_controls,
     rhs1_xblock_fallback_initial_guess,
 )
@@ -28,6 +29,7 @@ def test_driver_private_policy_helpers_alias_canonical_profile_response_helpers(
         vd._rhs1_qi_device_residual_correction_controls
         is rhs1_qi_device_residual_correction_controls
     )
+    assert vd._rhs1_qi_device_rank_budget is rhs1_qi_device_rank_budget
     assert vd._rhs1_xblock_fallback_initial_guess is rhs1_xblock_fallback_initial_guess
 
 
@@ -238,3 +240,94 @@ def test_qi_device_residual_correction_controls_parse_bounded_overrides(monkeypa
     assert controls["residual_snapshot_residual_equation_solver"] == "action_lstsq"
     assert controls["block_schur_residual_include_aggregates"] is False
     assert controls["residual_snapshot_include_primal"] is True
+
+
+def _rank_budget(**overrides):
+    defaults = {
+        "seed_max_rank": 4,
+        "n_species": 2,
+        "residual_enrichment": False,
+        "residual_enrichment_depth": 2,
+        "residual_enrichment_include_residual": True,
+        "recycle_enrichment": False,
+        "recycle_cycles": 1,
+        "operator_krylov_enrichment": False,
+        "operator_krylov_depth": 3,
+        "adjoint_krylov_enrichment": False,
+        "adjoint_krylov_depth": 3,
+        "operator_action_enrichment": False,
+        "operator_action_depth": 1,
+        "multilevel_coarse": False,
+        "multilevel_max_rank": None,
+        "multilevel_current_moments": False,
+        "multilevel_current_max_pitch_degree": 1,
+        "multilevel_residual_equation": False,
+        "multilevel_residual_equation_max_level_rank": 5,
+        "multilevel_max_levels": 2,
+        "global_moment_residual_equation": False,
+        "global_moment_residual_equation_max_rank": 7,
+        "residual_galerkin_equation": False,
+        "residual_galerkin_equation_max_rank": 11,
+        "phase_space_residual_equation": False,
+        "phase_space_residual_equation_max_rank": 13,
+        "residual_region_bounce_coarse": False,
+        "residual_region_bounce_coarse_max_rank": 17,
+        "active_pattern_coarse": False,
+        "active_pattern_coarse_max_rank": 19,
+        "block_schur_residual_equation": False,
+        "block_schur_residual_equation_max_rank": 23,
+        "coupled_residual_equation": False,
+        "coupled_residual_equation_max_rank": 29,
+        "residual_snapshot_enrichment": False,
+        "residual_snapshot_max_rank": 31,
+        "residual_snapshot_residual_equation": False,
+        "residual_snapshot_residual_equation_max_rank": 37,
+        "block_schur_residual_enrichment": False,
+        "block_schur_residual_max_rank": 41,
+        "max_rank_env_value": "",
+    }
+    defaults.update(overrides)
+    return rhs1_qi_device_rank_budget(**defaults)
+
+
+def test_qi_device_rank_budget_keeps_no_cap_without_active_enrichment() -> None:
+    setup = _rank_budget()
+
+    assert setup.rank_budget == 4
+    assert setup.max_rank is None
+
+
+def test_qi_device_rank_budget_tracks_active_controls_and_explicit_cap() -> None:
+    setup = _rank_budget(
+        residual_enrichment=True,
+        recycle_enrichment=True,
+        operator_krylov_enrichment=True,
+        operator_action_enrichment=True,
+        multilevel_coarse=True,
+        multilevel_max_rank=6,
+        multilevel_current_moments=True,
+        global_moment_residual_equation=True,
+        coupled_residual_equation=True,
+        max_rank_env_value="9",
+    )
+
+    assert setup.rank_budget == 72
+    assert setup.max_rank == 9
+
+
+def test_qi_device_rank_budget_invalid_cap_falls_back_to_budget() -> None:
+    setup = _rank_budget(
+        residual_snapshot_enrichment=True,
+        block_schur_residual_enrichment=True,
+        max_rank_env_value="bad",
+    )
+
+    assert setup.rank_budget == 76
+    assert setup.max_rank == 76
+
+
+def test_qi_device_rank_budget_preserves_adjoint_only_no_cap_behavior() -> None:
+    setup = _rank_budget(adjoint_krylov_enrichment=True)
+
+    assert setup.rank_budget == 8
+    assert setup.max_rank is None

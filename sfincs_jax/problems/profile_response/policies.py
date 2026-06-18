@@ -429,6 +429,142 @@ def rhs1_qi_device_residual_correction_controls() -> dict[str, object]:
     }
 
 
+@dataclass(frozen=True)
+class RHS1QIDeviceRankBudget:
+    """Rank budget and optional rank cap for a QI-device coarse space."""
+
+    rank_budget: int
+    max_rank: int | None
+
+
+def rhs1_qi_device_rank_budget(
+    *,
+    seed_max_rank: int,
+    n_species: int,
+    residual_enrichment: bool,
+    residual_enrichment_depth: int,
+    residual_enrichment_include_residual: bool,
+    recycle_enrichment: bool,
+    recycle_cycles: int,
+    operator_krylov_enrichment: bool,
+    operator_krylov_depth: int,
+    adjoint_krylov_enrichment: bool,
+    adjoint_krylov_depth: int,
+    operator_action_enrichment: bool,
+    operator_action_depth: int,
+    multilevel_coarse: bool,
+    multilevel_max_rank: int | None,
+    multilevel_current_moments: bool,
+    multilevel_current_max_pitch_degree: int,
+    multilevel_residual_equation: bool,
+    multilevel_residual_equation_max_level_rank: int,
+    multilevel_max_levels: int,
+    global_moment_residual_equation: bool,
+    global_moment_residual_equation_max_rank: int,
+    residual_galerkin_equation: bool,
+    residual_galerkin_equation_max_rank: int,
+    phase_space_residual_equation: bool,
+    phase_space_residual_equation_max_rank: int,
+    residual_region_bounce_coarse: bool,
+    residual_region_bounce_coarse_max_rank: int,
+    active_pattern_coarse: bool,
+    active_pattern_coarse_max_rank: int,
+    block_schur_residual_equation: bool,
+    block_schur_residual_equation_max_rank: int,
+    coupled_residual_equation: bool,
+    coupled_residual_equation_max_rank: int,
+    residual_snapshot_enrichment: bool,
+    residual_snapshot_max_rank: int,
+    residual_snapshot_residual_equation: bool,
+    residual_snapshot_residual_equation_max_rank: int,
+    block_schur_residual_enrichment: bool,
+    block_schur_residual_max_rank: int,
+    max_rank_env_value: str | None = None,
+) -> RHS1QIDeviceRankBudget:
+    """Compute the QI-device coarse-space rank budget and user rank cap."""
+
+    rank_budget = int(seed_max_rank)
+    if bool(residual_enrichment):
+        rank_budget += int(residual_enrichment_depth)
+        if bool(residual_enrichment_include_residual):
+            rank_budget += 1
+    if bool(recycle_enrichment):
+        rank_budget += int(recycle_cycles)
+    if bool(operator_krylov_enrichment):
+        rank_budget += 1 + int(operator_krylov_depth)
+    if bool(adjoint_krylov_enrichment):
+        rank_budget += 1 + int(adjoint_krylov_depth)
+    if bool(operator_action_enrichment):
+        rank_budget *= max(1, 1 + int(operator_action_depth))
+    if bool(multilevel_coarse):
+        rank_budget += int(multilevel_max_rank or 48)
+        if bool(multilevel_current_moments):
+            rank_budget += max(1, int(multilevel_current_max_pitch_degree)) * (
+                2 * max(1, int(n_species)) + 2
+            )
+    if bool(multilevel_residual_equation):
+        rank_budget += int(multilevel_residual_equation_max_level_rank) * int(
+            multilevel_max_levels
+        )
+    if bool(global_moment_residual_equation):
+        rank_budget += int(global_moment_residual_equation_max_rank)
+    if bool(residual_galerkin_equation):
+        rank_budget += int(residual_galerkin_equation_max_rank)
+    if bool(phase_space_residual_equation):
+        rank_budget += int(phase_space_residual_equation_max_rank)
+    if bool(residual_region_bounce_coarse):
+        rank_budget += int(residual_region_bounce_coarse_max_rank)
+    if bool(active_pattern_coarse):
+        rank_budget += int(active_pattern_coarse_max_rank)
+    if bool(block_schur_residual_equation):
+        rank_budget += int(block_schur_residual_equation_max_rank)
+    if bool(coupled_residual_equation):
+        rank_budget += int(coupled_residual_equation_max_rank)
+    if bool(residual_snapshot_enrichment):
+        rank_budget += int(residual_snapshot_max_rank)
+    if bool(residual_snapshot_residual_equation):
+        rank_budget += int(residual_snapshot_residual_equation_max_rank)
+    if bool(block_schur_residual_enrichment):
+        rank_budget += int(block_schur_residual_max_rank)
+
+    raw_max_rank = (
+        os.environ.get(
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MAX_RANK",
+            "",
+        )
+        if max_rank_env_value is None
+        else str(max_rank_env_value)
+    ).strip()
+    if raw_max_rank:
+        try:
+            max_rank = max(1, int(raw_max_rank))
+        except ValueError:
+            max_rank = max(1, int(rank_budget))
+    elif (
+        bool(residual_enrichment)
+        or bool(recycle_enrichment)
+        or bool(operator_krylov_enrichment)
+        or bool(operator_action_enrichment)
+        or bool(multilevel_coarse)
+        or bool(multilevel_residual_equation)
+        or bool(global_moment_residual_equation)
+        or bool(residual_galerkin_equation)
+        or bool(phase_space_residual_equation)
+        or bool(residual_region_bounce_coarse)
+        or bool(active_pattern_coarse)
+        or bool(block_schur_residual_equation)
+        or bool(coupled_residual_equation)
+        or bool(residual_snapshot_enrichment)
+        or bool(residual_snapshot_residual_equation)
+        or bool(block_schur_residual_enrichment)
+    ):
+        max_rank = max(1, int(rank_budget))
+    else:
+        max_rank = None
+
+    return RHS1QIDeviceRankBudget(rank_budget=max(1, int(rank_budget)), max_rank=max_rank)
+
+
 def rhs1_qi_device_probe_uses_minres_step() -> bool:
     """Return whether QI-device seed probes should line-search each correction."""
 
@@ -1262,6 +1398,7 @@ def rhs1_pas_tz_guarded_stage2_retry() -> bool:
 
 
 __all__ = (
+    "RHS1QIDeviceRankBudget",
     "RHS1SparseRescueOrdering",
     "parse_rhs1_pas_tz_guarded_structured_levels",
     "rhs1_constraint0_dense_fallback_allowed",
@@ -1281,6 +1418,7 @@ __all__ = (
     "rhs1_prefer_sparse_over_dense_shortcut",
     "rhs1_qi_device_extra_coarse_controls",
     "rhs1_qi_device_probe_uses_minres_step",
+    "rhs1_qi_device_rank_budget",
     "rhs1_qi_device_residual_correction_controls",
     "rhs1_resolved_sparse_rescue_ordering",
     "rhs1_scipy_rescue_abs_floor_after_xblock",
