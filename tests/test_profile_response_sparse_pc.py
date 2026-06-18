@@ -1,0 +1,131 @@
+from __future__ import annotations
+
+import numpy as np
+import pytest
+import jax.numpy as jnp
+
+from sfincs_jax.problems.profile_response.sparse_pc import (
+    SparsePCGMRESContext,
+    SparsePCPostMinresContext,
+    apply_sparse_pc_post_minres,
+    run_sparse_pc_gmres_once,
+)
+
+
+def _identity(v: jnp.ndarray) -> jnp.ndarray:
+    return v
+
+
+def test_sparse_pc_gmres_once_explicit_left_recomputes_true_residual() -> None:
+    messages: list[str] = []
+    times = iter((0.0, 0.25, 0.5, 0.75))
+
+    def explicit_left_solver(**kwargs):
+        kwargs["progress_callback"](2, 4.0e-1)
+        return np.asarray([0.25, 0.75]), 99.0, 0.5, (1.0, 0.4)
+
+    result = run_sparse_pc_gmres_once(
+        context=SparsePCGMRESContext(
+            matvec=lambda x: 2.0 * x,
+            rhs=jnp.asarray([1.0, 1.0]),
+            preconditioner=_identity,
+            emit=lambda _level, msg: messages.append(msg),
+            elapsed_s=lambda: next(times),
+            pc_form="explicit_left",
+            restart=7,
+            tol=1.0e-8,
+            atol=0.0,
+            precondition_side="left",
+            factor_dtype=np.dtype(np.float32),
+            progress_every=2,
+            stagnation_abort=False,
+            stagnation_min_iter=10,
+            stagnation_window=10,
+            stagnation_rel_improvement=1.0e-3,
+            explicit_left_solver=explicit_left_solver,
+            gmres_solver=lambda **_kwargs: (_ for _ in ()).throw(AssertionError("wrong solver")),
+        ),
+        x0=None,
+        maxiter=3,
+    )
+
+    assert result.x.tolist() == [0.25, 0.75]
+    assert result.preconditioned_residual_norm == pytest.approx(0.5)
+    assert result.residual_norm == pytest.approx(np.linalg.norm([0.5, -0.5]))
+    assert result.history == (1.0, 0.4)
+    assert any("factor_dtype=float32" in msg for msg in messages)
+    assert any("iters=2" in msg for msg in messages)
+
+
+def test_sparse_pc_gmres_once_stagnation_guard_raises() -> None:
+    def gmres_solver(**kwargs):
+        progress = kwargs["progress_callback"]
+        progress(1, 1.0)
+        progress(2, 1.0)
+        return np.ones(2), 1.0, (1.0,)
+
+    with pytest.raises(RuntimeError, match="sparse_pc_gmres stagnation detected"):
+        run_sparse_pc_gmres_once(
+            context=SparsePCGMRESContext(
+                matvec=_identity,
+                rhs=jnp.ones(2),
+                preconditioner=_identity,
+                emit=None,
+                elapsed_s=lambda: 0.0,
+                pc_form="right",
+                restart=5,
+                tol=1.0e-8,
+                atol=0.0,
+                precondition_side="right",
+                factor_dtype=np.dtype(np.float64),
+                progress_every=0,
+                stagnation_abort=True,
+                stagnation_min_iter=2,
+                stagnation_window=1,
+                stagnation_rel_improvement=1.0e-3,
+                explicit_left_solver=lambda **_kwargs: (_ for _ in ()).throw(AssertionError("wrong solver")),
+                gmres_solver=gmres_solver,
+            ),
+            x0=None,
+            maxiter=10,
+        )
+
+
+def test_sparse_pc_post_minres_accepts_improved_residual_and_recomputes_pc_norm() -> None:
+    messages: list[str] = []
+    times = iter((1.0, 1.4))
+
+    def minres_correction(**_kwargs):
+        return (
+            jnp.asarray([0.5, 0.5]),
+            jnp.asarray([0.1, 0.2]),
+            (0.9, 0.25),
+            (0.75,),
+        )
+
+    result = apply_sparse_pc_post_minres(
+        context=SparsePCPostMinresContext(
+            matvec=_identity,
+            rhs=jnp.zeros(2),
+            preconditioner=lambda v: 0.5 * v,
+            emit=lambda _level, msg: messages.append(msg),
+            elapsed_s=lambda: next(times),
+            pc_form="explicit_left",
+            steps=2,
+            alpha_clip=10.0,
+            min_improvement=0.0,
+            minres_correction=minres_correction,
+        ),
+        x=np.zeros(2),
+        residual_norm=1.0,
+        preconditioned_residual_norm=float("nan"),
+    )
+
+    assert result.x.tolist() == [0.5, 0.5]
+    assert result.residual_norm == pytest.approx(np.linalg.norm([0.1, 0.2]))
+    assert result.preconditioned_residual_norm == pytest.approx(np.linalg.norm([-0.25, -0.25]))
+    assert result.history == (0.9, 0.25)
+    assert result.alphas == (0.75,)
+    assert result.error is None
+    assert result.solve_s == pytest.approx(0.4)
+    assert any("post-minres improved residual" in msg for msg in messages)

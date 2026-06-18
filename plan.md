@@ -32423,3 +32423,62 @@ Validation so far:
 - Full-suite checkpoint:
   ``PYTHONDONTWRITEBYTECODE=1 pytest -q -p no:cacheprovider``:
   ``2722 passed in 540.97 s``.
+
+### 19.58 Sparse-PC Krylov attempt extraction
+
+Goal:
+
+- Continue reducing the profile-response solve loop by moving the RHSMode=1
+  host sparse-PC GMRES attempt and optional post-minres residual polish into a
+  direct-tested domain helper.
+
+Implementation:
+
+- Added ``sfincs_jax/problems/profile_response/sparse_pc.py`` with
+  ``SparsePCGMRESContext``, ``SparsePCGMRESResult``,
+  ``SparsePCPostMinresContext``, ``SparsePCPostMinresResult``,
+  ``run_sparse_pc_gmres_once``, and ``apply_sparse_pc_post_minres``.
+- The new helper owns sparse-PC solve-start logging, progress logging,
+  stagnation-abort detection, true-residual recomputation after SciPy GMRES,
+  and accepted/rejected post-minres residual-polish reporting.
+- ``v3_driver.py`` now builds solve-local sparse-PC contexts and delegates the
+  actual Krylov attempt/polish behavior, keeping retry/factor selection in the
+  driver for now.
+- Added direct tests for explicit-left true-residual recomputation, stagnation
+  abort behavior, and accepted post-minres residual-polish norm updates.
+
+Validation so far:
+
+- ``python -m ruff check
+  sfincs_jax/problems/profile_response/sparse_pc.py
+  sfincs_jax/v3_driver.py tests/test_profile_response_sparse_pc.py``: passed.
+- ``python -m compileall -q
+  sfincs_jax/problems/profile_response/sparse_pc.py
+  sfincs_jax/v3_driver.py tests/test_profile_response_sparse_pc.py``: passed.
+- ``PYTHONDONTWRITEBYTECODE=1 pytest -q -p no:cacheprovider
+  tests/test_profile_response_sparse_pc.py``: ``3 passed in 0.52 s``.
+- ``PYTHONDONTWRITEBYTECODE=1 pytest -q -p no:cacheprovider
+  tests/test_v3_sparse_pattern.py
+  tests/test_v3_driver_rhs1_dispatch_coverage.py
+  tests/test_profile_response_sparse_pc.py``:
+  ``172 passed in 128.63 s``.
+- ``SPHINXOPTS='-W --keep-going' python -m sphinx -b html docs
+  docs/_build/html``: passed.
+- ``git diff --check``: passed.
+- Broader RHSMode/preconditioner/sparse subset:
+  ``PYTHONDONTWRITEBYTECODE=1 pytest -q -p no:cacheprovider
+  tests/test_example_auto_selection_paths.py
+  tests/test_pas_projection_heuristic.py
+  tests/test_rhs1_full_assembly.py
+  tests/test_rhs1_schwarz_heuristic.py
+  tests/test_schur_precond_heuristic.py
+  tests/test_sparse_precond_jax.py
+  tests/test_v3_driver_rhs1_dispatch_coverage.py
+  tests/test_xblock_tz_precond_heuristic.py
+  tests/test_profile_response_preconditioner_build.py
+  tests/test_profile_response_sparse_pc.py
+  tests/test_v3_sparse_pattern.py``:
+  ``320 passed in 143.13 s``.
+- Full-suite checkpoint:
+  ``PYTHONDONTWRITEBYTECODE=1 pytest -q -p no:cacheprovider``:
+  ``2725 passed in 526.73 s``.

@@ -183,6 +183,12 @@ from .problems.profile_response.qi_device_seed import (
     MatrixFreeQIDeviceSeedContext,
     attempt_matrixfree_qi_device_seed,
 )
+from .problems.profile_response.sparse_pc import (
+    SparsePCGMRESContext,
+    SparsePCPostMinresContext,
+    apply_sparse_pc_post_minres,
+    run_sparse_pc_gmres_once,
+)
 from .rhs1_strong_fallback import build_rhs1_strong_preconditioner_full_from_kind
 from .problems.profile_response.strong_preconditioning import (
     adjust_rhs1_reduced_auto_kind,
@@ -14372,89 +14378,37 @@ def solve_v3_full_system_linear_gmres(
         )
 
         def _run_sparse_pc_gmres_once(x0_arg, *, maxiter_arg: int):
-            if emit is not None:
-                emit(
-                    0,
-                    "solve_v3_full_system_linear_gmres: sparse_pc_gmres solve start "
-                    f"form={pc_form} restart={int(pc_restart)} maxiter={int(maxiter_arg)} "
-                    f"precondition_side={precondition_side} "
-                    f"factor_dtype={np.dtype(sparse_pc_factor_dtype_used).name}",
-                )
-            rn_pc_local = float("nan")
-            solve_start_s_local = sparse_timer.elapsed_s()
-            stagnation_best = float("inf")
-            stagnation_best_iter = 0
-
-            def _sparse_pc_krylov_progress_callback(iteration: int, residual_norm: float) -> None:
-                nonlocal stagnation_best, stagnation_best_iter
-                iteration_i = int(iteration)
-                residual_f = float(residual_norm)
-                if np.isfinite(residual_f) and (
-                    not np.isfinite(stagnation_best)
-                    or residual_f
-                    < stagnation_best * (1.0 - float(sparse_pc_stagnation_rel_improvement))
-                ):
-                    stagnation_best = float(residual_f)
-                    stagnation_best_iter = int(iteration_i)
-                if (
-                    bool(sparse_pc_stagnation_abort)
-                    and iteration_i >= int(sparse_pc_stagnation_min_iter)
-                    and iteration_i - int(stagnation_best_iter) >= int(sparse_pc_stagnation_window)
-                ):
-                    raise RuntimeError(
-                        "sparse_pc_gmres stagnation detected: "
-                        f"iters={iteration_i} best_iter={int(stagnation_best_iter)} "
-                        f"best_ksp_residual={float(stagnation_best):.6e} "
-                        f"current_ksp_residual={residual_f:.6e} "
-                        f"window={int(sparse_pc_stagnation_window)} "
-                        f"rel_improvement={float(sparse_pc_stagnation_rel_improvement):.3e}"
-                    )
-                if emit is None or progress_every <= 0:
-                    return
-                if iteration_i % int(progress_every) != 0:
-                    return
-                emit(
-                    1,
-                    "solve_v3_full_system_linear_gmres: sparse_pc_gmres "
-                    f"iters={iteration_i} ksp_residual={residual_f:.6e} "
-                    f"elapsed_s={sparse_timer.elapsed_s():.3f}",
-                )
-
-            if pc_form in {"explicit_left", "petsc_left"}:
-                x_np_local, residual_norm_local, rn_pc_local, history_local = explicit_left_preconditioned_gmres_scipy(
+            sparse_pc_gmres = run_sparse_pc_gmres_once(
+                context=SparsePCGMRESContext(
                     matvec=_mv_true,
-                    b=sparse_pc_rhs,
+                    rhs=sparse_pc_rhs,
                     preconditioner=_precond_sparse,
-                    x0=x0_arg,
-                    tol=tol,
-                    atol=atol,
-                    restart=pc_restart,
-                    maxiter=maxiter_arg,
-                    progress_callback=_sparse_pc_krylov_progress_callback,
-                )
-            else:
-                x_np_local, residual_norm_local, history_local = gmres_solve_with_history_scipy(
-                    matvec=_mv_true,
-                    b=sparse_pc_rhs,
-                    preconditioner=_precond_sparse if precondition_side != "none" else None,
-                    x0=x0_arg,
-                    tol=tol,
-                    atol=atol,
-                    restart=pc_restart,
-                    maxiter=maxiter_arg,
+                    emit=emit,
+                    elapsed_s=sparse_timer.elapsed_s,
+                    pc_form=pc_form,
+                    restart=int(pc_restart),
+                    tol=float(tol),
+                    atol=float(atol),
                     precondition_side=precondition_side,
-                    progress_callback=_sparse_pc_krylov_progress_callback,
-                )
-            solve_s_local = sparse_timer.elapsed_s() - solve_start_s_local
-            try:
-                residual_true = np.asarray(sparse_pc_rhs, dtype=np.float64) - np.asarray(
-                    jax.device_get(_mv_true(jnp.asarray(x_np_local, dtype=jnp.float64))),
-                    dtype=np.float64,
-                )
-                residual_norm_local = float(np.linalg.norm(residual_true))
-            except Exception:
-                residual_norm_local = float(residual_norm_local)
-            return x_np_local, float(residual_norm_local), rn_pc_local, history_local, float(solve_s_local)
+                    factor_dtype=np.dtype(sparse_pc_factor_dtype_used),
+                    progress_every=int(progress_every),
+                    stagnation_abort=bool(sparse_pc_stagnation_abort),
+                    stagnation_min_iter=int(sparse_pc_stagnation_min_iter),
+                    stagnation_window=int(sparse_pc_stagnation_window),
+                    stagnation_rel_improvement=float(sparse_pc_stagnation_rel_improvement),
+                    explicit_left_solver=explicit_left_preconditioned_gmres_scipy,
+                    gmres_solver=gmres_solve_with_history_scipy,
+                ),
+                x0=x0_arg,
+                maxiter=int(maxiter_arg),
+            )
+            return (
+                sparse_pc_gmres.x,
+                float(sparse_pc_gmres.residual_norm),
+                float(sparse_pc_gmres.preconditioned_residual_norm),
+                sparse_pc_gmres.history,
+                float(sparse_pc_gmres.solve_s),
+            )
 
         x_np, residual_norm_sparse_pc, rn_pc, history, solve_s = _run_sparse_pc_gmres_once(
             x0_sparse,
@@ -14506,65 +14460,32 @@ def solve_v3_full_system_linear_gmres(
             and np.isfinite(float(residual_norm_sparse_pc))
             and float(residual_norm_sparse_pc) > float(target)
         ):
-            sparse_pc_post_minres_residual_before = float(residual_norm_sparse_pc)
-            post_minres_start_s = sparse_timer.elapsed_s()
-            try:
-                x_post_minres, residual_post_minres, post_minres_history, post_minres_alphas = (
-                    _apply_preconditioned_minres_correction(
-                        matvec=_mv_true,
-                        rhs=sparse_pc_rhs,
-                        x0=jnp.asarray(x_np, dtype=jnp.float64),
-                        preconditioner=_precond_sparse,
-                        steps=int(sparse_pc_post_minres_steps),
-                        alpha_clip=float(sparse_pc_post_minres_alpha_clip),
-                        min_improvement=float(sparse_pc_post_minres_min_improvement),
-                    )
-                )
-                sparse_pc_post_minres_history = tuple(float(v) for v in post_minres_history)
-                sparse_pc_post_minres_alphas = tuple(float(v) for v in post_minres_alphas)
-                sparse_pc_post_minres_residual_after = float(jnp.linalg.norm(residual_post_minres))
-                if (
-                    np.isfinite(float(sparse_pc_post_minres_residual_after))
-                    and float(sparse_pc_post_minres_residual_after) < float(residual_norm_sparse_pc)
-                ):
-                    x_np = np.asarray(x_post_minres, dtype=np.float64)
-                    residual_norm_sparse_pc = float(sparse_pc_post_minres_residual_after)
-                    if pc_form in {"explicit_left", "petsc_left"}:
-                        try:
-                            residual_pc = _precond_sparse(
-                                sparse_pc_rhs - _mv_true(jnp.asarray(x_np, dtype=jnp.float64))
-                            )
-                            rn_pc = float(jnp.linalg.norm(residual_pc))
-                        except Exception:
-                            pass
-                    if emit is not None:
-                        emit(
-                            0,
-                            "solve_v3_full_system_linear_gmres: sparse_pc_gmres post-minres "
-                            f"improved residual {sparse_pc_post_minres_residual_before:.6e} "
-                            f"-> {sparse_pc_post_minres_residual_after:.6e} "
-                            f"(accepted_steps={len(sparse_pc_post_minres_alphas)})",
-                        )
-                elif emit is not None:
-                    after = (
-                        float(sparse_pc_post_minres_residual_after)
-                        if sparse_pc_post_minres_residual_after is not None
-                        else float("nan")
-                    )
-                    emit(
-                        1,
-                        "solve_v3_full_system_linear_gmres: sparse_pc_gmres post-minres "
-                        f"rejected residual {sparse_pc_post_minres_residual_before:.6e} -> {after:.6e}",
-                    )
-            except Exception as exc:  # noqa: BLE001
-                sparse_pc_post_minres_error = f"{type(exc).__name__}: {exc}"
-                if emit is not None:
-                    emit(
-                        1,
-                        "solve_v3_full_system_linear_gmres: sparse_pc_gmres post-minres failed "
-                        f"({sparse_pc_post_minres_error})",
-                    )
-            solve_s += sparse_timer.elapsed_s() - post_minres_start_s
+            sparse_pc_post_minres = apply_sparse_pc_post_minres(
+                context=SparsePCPostMinresContext(
+                    matvec=_mv_true,
+                    rhs=sparse_pc_rhs,
+                    preconditioner=_precond_sparse,
+                    emit=emit,
+                    elapsed_s=sparse_timer.elapsed_s,
+                    pc_form=pc_form,
+                    steps=int(sparse_pc_post_minres_steps),
+                    alpha_clip=float(sparse_pc_post_minres_alpha_clip),
+                    min_improvement=float(sparse_pc_post_minres_min_improvement),
+                    minres_correction=_apply_preconditioned_minres_correction,
+                ),
+                x=np.asarray(x_np, dtype=np.float64),
+                residual_norm=float(residual_norm_sparse_pc),
+                preconditioned_residual_norm=float(rn_pc),
+            )
+            x_np = sparse_pc_post_minres.x
+            residual_norm_sparse_pc = float(sparse_pc_post_minres.residual_norm)
+            rn_pc = float(sparse_pc_post_minres.preconditioned_residual_norm)
+            sparse_pc_post_minres_history = sparse_pc_post_minres.history
+            sparse_pc_post_minres_alphas = sparse_pc_post_minres.alphas
+            sparse_pc_post_minres_residual_before = sparse_pc_post_minres.residual_before
+            sparse_pc_post_minres_residual_after = sparse_pc_post_minres.residual_after
+            sparse_pc_post_minres_error = sparse_pc_post_minres.error
+            solve_s += float(sparse_pc_post_minres.solve_s)
         if emit is not None:
             pc_suffix = f" preconditioned_residual={float(rn_pc):.6e}" if np.isfinite(rn_pc) else ""
             if history:
