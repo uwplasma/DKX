@@ -212,6 +212,7 @@ from .problems.profile_response.sparse_pc import (
     DirectTailMaterializationContext,
     DirectTailStructuredAdmissionContext,
     DirectTailStructuredBuildContext,
+    DirectTailSupportModePreflightContext,
     FortranReducedXBlockFactorBuildContext,
     FortranReducedXBlockGlobalCouplingStageContext,
     FortranReducedXBlockKrylovSetupContext,
@@ -250,6 +251,7 @@ from .problems.profile_response.sparse_pc import (
     resolve_sparse_pc_factor_policy,
     resolve_direct_tail_structured_admission,
     resolve_fortran_reduced_sparse_pc_backend,
+    run_direct_tail_support_mode_preflight,
     resolve_fortran_reduced_xblock_factor_policy,
     resolve_fortran_reduced_xblock_global_coupling_policy,
     resolve_fortran_reduced_xblock_initial_seed_policy,
@@ -7596,103 +7598,63 @@ def solve_v3_full_system_linear_gmres(
         )
         if bool(direct_tail_support_mode_preflight_requested):
             factor_kind_for_support = str(getattr(factor_bundle_pc, "kind", "")).strip().lower().replace("-", "_")
-            if (
-                bool(structured_pc_ready)
-                and factor_kind_for_support
-                in {"active_fortran_v3_reduced_lu", "active_fortran_v3_reduced_ilu"}
-                and direct_tail_operator_bundle is not None
-                and direct_tail_structured_layout is not None
-                and direct_tail_structured_max_nbytes is not None
-            ):
-                support_candidates = os.environ.get(
-                    "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_SUPPORT_MODE_CANDIDATES",
-                    "current,x0,xmin_l2,species0",
-                ).strip()
-                support_max_candidates = _rhs1_int_env(
-                    "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_SUPPORT_MODE_MAX_CANDIDATES",
-                    default=4,
-                    minimum=1,
-                )
-                support_min_improvement = _rhs1_float_env(
-                    "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_SUPPORT_MODE_MIN_IMPROVEMENT",
-                    default=1.05,
-                    minimum=1.0,
-                )
 
-                def _support_true_matvec(v_np: np.ndarray) -> np.ndarray:
-                    return np.asarray(
-                        jax.device_get(_mv_true_no_count(jnp.asarray(v_np, dtype=rhs.dtype))),
-                        dtype=np.float64,
-                    ).reshape((-1,))
+            def _support_true_matvec(v_np: np.ndarray) -> np.ndarray:
+                return np.asarray(
+                    jax.device_get(_mv_true_no_count(jnp.asarray(v_np, dtype=rhs.dtype))),
+                    dtype=np.float64,
+                ).reshape((-1,))
 
-                try:
-                    support_pc, support_metadata = (
-                        select_active_fortran_v3_reduced_support_mode_preconditioner(
-                            matrix=direct_tail_operator_bundle.matrix,
-                            layout=direct_tail_structured_layout,
-                            active_indices=direct_tail_structured_active_indices,
-                            requested_kind=factor_kind_for_support,
-                            regularization=float(pc_reg),
-                            max_factor_nbytes=int(direct_tail_structured_max_nbytes),
-                            rhs=np.asarray(sparse_pc_rhs, dtype=np.float64),
-                            true_matvec=_support_true_matvec,
-                            candidates=support_candidates or "current",
-                            max_candidates=int(support_max_candidates),
-                            min_improvement_ratio=float(support_min_improvement),
-                            preconditioner_x=int(preconditioner_x),
-                            preconditioner_xi=int(preconditioner_xi),
-                            preconditioner_species=int(preconditioner_species),
-                            preconditioner_x_min_l=int(preconditioner_x_min_l),
-                        )
+            support_preflight = run_direct_tail_support_mode_preflight(
+                DirectTailSupportModePreflightContext(
+                    env=os.environ,
+                    factor_kind=factor_kind_for_support,
+                    structured_pc_ready=bool(structured_pc_ready),
+                    operator_bundle=direct_tail_operator_bundle,
+                    layout=direct_tail_structured_layout,
+                    active_indices=direct_tail_structured_active_indices,
+                    max_nbytes=direct_tail_structured_max_nbytes,
+                    regularization=float(pc_reg),
+                    rhs=np.asarray(sparse_pc_rhs, dtype=np.float64),
+                    true_matvec=_support_true_matvec,
+                    preconditioner_x=int(preconditioner_x),
+                    preconditioner_xi=int(preconditioner_xi),
+                    preconditioner_species=int(preconditioner_species),
+                    preconditioner_x_min_l=int(preconditioner_x_min_l),
+                    selector=select_active_fortran_v3_reduced_support_mode_preconditioner,
+                    factor_bundle=_StructuredHostSparsePreconditionerBundle,
+                )
+            )
+            direct_tail_support_mode_preflight_metadata = support_preflight.metadata
+            direct_tail_support_mode_preflight_error = support_preflight.error
+            if bool(support_preflight.selected):
+                support_pc = support_preflight.preconditioner
+                factor_bundle_pc = support_preflight.factor_bundle
+                direct_tail_structured_pc_selected = True
+                direct_tail_structured_pc_reason = str(getattr(support_pc, "reason", "support_mode_selected"))
+                direct_tail_structured_pc_metadata = support_pc.to_dict()
+                direct_tail_support_mode_preflight_selected = True
+                if emit is not None and isinstance(direct_tail_support_mode_preflight_metadata, dict):
+                    selected_candidate = direct_tail_support_mode_preflight_metadata.get("selected_candidate")
+                    baseline_after = direct_tail_support_mode_preflight_metadata.get("baseline_residual_after")
+                    best_after = direct_tail_support_mode_preflight_metadata.get("best_residual_after")
+                    emit(
+                        1,
+                        "solve_v3_full_system_linear_gmres: fortran_reduced direct-tail "
+                        "support-mode preflight selected "
+                        f"candidate={selected_candidate} "
+                        f"baseline_residual={float(baseline_after or float('nan')):.6e} "
+                        f"best_residual={float(best_after or float('nan')):.6e} "
+                        f"accepted_nonbaseline="
+                        f"{bool(direct_tail_support_mode_preflight_metadata.get('accepted_nonbaseline', False))}",
                     )
-                    direct_tail_support_mode_preflight_metadata = support_metadata
-                    if bool(support_pc.selected) and support_pc.operator is not None:
-                        support_factor_nbytes = support_pc.metadata.get("factor_nbytes_actual")
-                        if support_factor_nbytes is None:
-                            support_factor_nbytes = support_pc.metadata.get("factor_nbytes_estimate")
-                        factor_bundle_pc = _StructuredHostSparsePreconditionerBundle(
-                            preconditioner=support_pc,
-                            operator=direct_tail_operator_bundle,
-                            kind=str(support_pc.kind),
-                            factor_nbytes_estimate=(
-                                None if support_factor_nbytes is None else int(support_factor_nbytes)
-                            ),
-                            factor_nnz_estimate=None,
-                            factor_s=float(support_pc.setup_s),
-                        )
-                        direct_tail_structured_pc_selected = True
-                        direct_tail_structured_pc_reason = str(support_pc.reason)
-                        direct_tail_structured_pc_metadata = support_pc.to_dict()
-                        direct_tail_support_mode_preflight_selected = True
-                        if emit is not None:
-                            selected_candidate = support_metadata.get("selected_candidate")
-                            baseline_after = support_metadata.get("baseline_residual_after")
-                            best_after = support_metadata.get("best_residual_after")
-                            emit(
-                                1,
-                                "solve_v3_full_system_linear_gmres: fortran_reduced direct-tail "
-                                "support-mode preflight selected "
-                                f"candidate={selected_candidate} "
-                                f"baseline_residual={float(baseline_after or float('nan')):.6e} "
-                                f"best_residual={float(best_after or float('nan')):.6e} "
-                                f"accepted_nonbaseline={bool(support_metadata.get('accepted_nonbaseline', False))}",
-                            )
-                except Exception as exc:  # noqa: BLE001
-                    direct_tail_support_mode_preflight_error = f"{type(exc).__name__}: {exc}"
-                    if emit is not None:
-                        emit(
-                            1,
-                            "solve_v3_full_system_linear_gmres: fortran_reduced direct-tail "
-                            f"support-mode preflight failed ({direct_tail_support_mode_preflight_error}); "
-                            "continuing with existing structured preconditioner",
-                        )
-            else:
-                direct_tail_support_mode_preflight_metadata = {
-                    "selected": False,
-                    "reason": "support_mode_preflight_not_applicable",
-                    "structured_pc_ready": bool(structured_pc_ready),
-                    "factor_kind": str(factor_kind_for_support),
-                }
+            elif direct_tail_support_mode_preflight_error is not None and emit is not None:
+                emit(
+                    1,
+                    "solve_v3_full_system_linear_gmres: fortran_reduced direct-tail "
+                    f"support-mode preflight failed ({direct_tail_support_mode_preflight_error}); "
+                    "continuing with existing structured preconditioner",
+                )
         factor_preflight_enabled = _rhs1_bool_env(
             "SFINCS_JAX_RHSMODE1_SPARSE_PC_FACTOR_PREFLIGHT",
             default=bool(fortran_reduced_sparse_pc),

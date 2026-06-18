@@ -533,6 +533,42 @@ class DirectTailStructuredBuildResult:
 
 
 @dataclass(frozen=True)
+class DirectTailSupportModePreflightContext:
+    """Inputs for optional direct-tail support-mode preflight."""
+
+    env: Mapping[str, str] | None
+    factor_kind: str
+    structured_pc_ready: bool
+    operator_bundle: Any | None
+    layout: Any | None
+    active_indices: np.ndarray | None
+    max_nbytes: int | None
+    regularization: float
+    rhs: np.ndarray
+    true_matvec: Callable[[np.ndarray], np.ndarray]
+    preconditioner_x: int
+    preconditioner_xi: int
+    preconditioner_species: int
+    preconditioner_x_min_l: int
+    selector: Callable[..., tuple[Any, dict[str, object]]]
+    factor_bundle: Callable[..., Any]
+
+
+@dataclass(frozen=True)
+class DirectTailSupportModePreflightResult:
+    """Result of optional direct-tail support-mode preflight."""
+
+    requested: bool
+    applicable: bool
+    selected: bool
+    preconditioner: Any | None
+    factor_bundle: Any | None
+    metadata: dict[str, object] | None
+    error: str | None
+    factor_kind: str
+
+
+@dataclass(frozen=True)
 class XBlockSparsePCSetup:
     """Setup controls for RHSMode=1 x-block sparse-PC solves."""
 
@@ -2764,6 +2800,131 @@ def build_direct_tail_structured_preconditioner_setup(
         cache_hit=bool(cache_hit),
         cache_key=cache_key,
     )
+
+
+def run_direct_tail_support_mode_preflight(
+    context: DirectTailSupportModePreflightContext,
+) -> DirectTailSupportModePreflightResult:
+    """Try the optional support-mode rescue for active direct-tail factors."""
+
+    requested = _env_bool(
+        context.env,
+        "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_SUPPORT_MODE_PREFLIGHT",
+        False,
+    )
+    factor_kind = str(context.factor_kind).strip().lower().replace("-", "_")
+    if not bool(requested):
+        return DirectTailSupportModePreflightResult(
+            requested=False,
+            applicable=False,
+            selected=False,
+            preconditioner=None,
+            factor_bundle=None,
+            metadata=None,
+            error=None,
+            factor_kind=factor_kind,
+        )
+
+    applicable = bool(
+        context.structured_pc_ready
+        and factor_kind in {"active_fortran_v3_reduced_lu", "active_fortran_v3_reduced_ilu"}
+        and context.operator_bundle is not None
+        and context.layout is not None
+        and context.max_nbytes is not None
+    )
+    if not bool(applicable):
+        return DirectTailSupportModePreflightResult(
+            requested=True,
+            applicable=False,
+            selected=False,
+            preconditioner=None,
+            factor_bundle=None,
+            metadata={
+                "selected": False,
+                "reason": "support_mode_preflight_not_applicable",
+                "structured_pc_ready": bool(context.structured_pc_ready),
+                "factor_kind": str(factor_kind),
+            },
+            error=None,
+            factor_kind=factor_kind,
+        )
+
+    support_candidates = _env_value(
+        context.env,
+        "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_SUPPORT_MODE_CANDIDATES",
+    )
+    if not support_candidates:
+        support_candidates = "current,x0,xmin_l2,species0"
+    support_candidates = str(support_candidates).strip()
+    support_max_candidates = _env_int(
+        context.env,
+        "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_SUPPORT_MODE_MAX_CANDIDATES",
+        4,
+        minimum=1,
+    )
+    support_min_improvement = max(
+        1.0,
+        _env_float(
+            context.env,
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_SUPPORT_MODE_MIN_IMPROVEMENT",
+            1.05,
+        ),
+    )
+
+    try:
+        support_pc, support_metadata = context.selector(
+            matrix=context.operator_bundle.matrix,
+            layout=context.layout,
+            active_indices=context.active_indices,
+            requested_kind=factor_kind,
+            regularization=float(context.regularization),
+            max_factor_nbytes=int(context.max_nbytes),
+            rhs=np.asarray(context.rhs, dtype=np.float64),
+            true_matvec=context.true_matvec,
+            candidates=support_candidates or "current",
+            max_candidates=int(support_max_candidates),
+            min_improvement_ratio=float(support_min_improvement),
+            preconditioner_x=int(context.preconditioner_x),
+            preconditioner_xi=int(context.preconditioner_xi),
+            preconditioner_species=int(context.preconditioner_species),
+            preconditioner_x_min_l=int(context.preconditioner_x_min_l),
+        )
+        selected = bool(getattr(support_pc, "selected", False)) and getattr(support_pc, "operator", None) is not None
+        factor_bundle = None
+        if bool(selected):
+            support_pc_metadata = dict(getattr(support_pc, "metadata", None) or {})
+            support_factor_nbytes = support_pc_metadata.get("factor_nbytes_actual")
+            if support_factor_nbytes is None:
+                support_factor_nbytes = support_pc_metadata.get("factor_nbytes_estimate")
+            factor_bundle = context.factor_bundle(
+                preconditioner=support_pc,
+                operator=context.operator_bundle,
+                kind=str(getattr(support_pc, "kind", factor_kind)),
+                factor_nbytes_estimate=None if support_factor_nbytes is None else int(support_factor_nbytes),
+                factor_nnz_estimate=None,
+                factor_s=float(getattr(support_pc, "setup_s", 0.0) or 0.0),
+            )
+        return DirectTailSupportModePreflightResult(
+            requested=True,
+            applicable=True,
+            selected=bool(selected),
+            preconditioner=support_pc,
+            factor_bundle=factor_bundle,
+            metadata=support_metadata,
+            error=None,
+            factor_kind=factor_kind,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return DirectTailSupportModePreflightResult(
+            requested=True,
+            applicable=True,
+            selected=False,
+            preconditioner=None,
+            factor_bundle=None,
+            metadata=None,
+            error=f"{type(exc).__name__}: {exc}",
+            factor_kind=factor_kind,
+        )
 
 
 def _xblock_device_flags(method: str) -> tuple[bool, bool, bool, bool, bool]:
@@ -5220,6 +5381,8 @@ __all__ = [
     "DirectTailStructuredAdmissionResult",
     "DirectTailStructuredBuildContext",
     "DirectTailStructuredBuildResult",
+    "DirectTailSupportModePreflightContext",
+    "DirectTailSupportModePreflightResult",
     "MatvecCounter",
     "XBlockAssembledOperatorDiagnosticsContext",
     "XBlockSparsePCCoreDiagnosticsContext",
@@ -5244,6 +5407,7 @@ __all__ = [
     "build_direct_tail_materialization_setup",
     "build_direct_tail_structured_preconditioner_setup",
     "enforce_sparse_pc_memory_budget",
+    "run_direct_tail_support_mode_preflight",
     "resolve_direct_tail_structured_admission",
     "fp_xblock_global_correction_metadata",
     "fp_xblock_highx_residual_correction_metadata",

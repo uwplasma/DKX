@@ -19,6 +19,7 @@ from sfincs_jax.problems.profile_response.sparse_pc import (
     DirectTailMaterializationContext,
     DirectTailStructuredAdmissionContext,
     DirectTailStructuredBuildContext,
+    DirectTailSupportModePreflightContext,
     FortranReducedXBlockFactorBuildContext,
     FortranReducedXBlockGlobalCouplingStageContext,
     FortranReducedXBlockKrylovSetupContext,
@@ -64,6 +65,7 @@ from sfincs_jax.problems.profile_response.sparse_pc import (
     resolve_sparse_pc_entry_policy,
     resolve_sparse_pc_factor_policy,
     resolve_direct_tail_structured_admission,
+    run_direct_tail_support_mode_preflight,
     resolve_xblock_qi_device_admission_setup,
     resolve_xblock_qi_device_base_config_setup,
     resolve_xblock_qi_device_enrichment_config_setup,
@@ -965,6 +967,127 @@ def test_direct_tail_structured_build_reports_missing_matrix_exception() -> None
     assert result.selected is False
     assert result.reason == "structured_pc_exception"
     assert result.error == "RuntimeError: direct-tail structured cache requested without a direct-tail matrix"
+
+
+def test_direct_tail_support_mode_preflight_reports_not_applicable() -> None:
+    result = run_direct_tail_support_mode_preflight(
+        DirectTailSupportModePreflightContext(
+            env={"SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_SUPPORT_MODE_PREFLIGHT": "1"},
+            factor_kind="other",
+            structured_pc_ready=True,
+            operator_bundle=SimpleNamespace(matrix=scipy_sparse.eye(2, format="csr")),
+            layout=_FakeLayout(),
+            active_indices=None,
+            max_nbytes=1024,
+            regularization=1.0e-12,
+            rhs=np.ones(2),
+            true_matvec=lambda v: np.asarray(v),
+            preconditioner_x=0,
+            preconditioner_xi=0,
+            preconditioner_species=0,
+            preconditioner_x_min_l=0,
+            selector=lambda **_kwargs: pytest.fail("unexpected selector"),
+            factor_bundle=_fake_factor_bundle,
+        )
+    )
+
+    assert result.requested is True
+    assert result.applicable is False
+    assert result.selected is False
+    assert result.metadata == {
+        "selected": False,
+        "reason": "support_mode_preflight_not_applicable",
+        "structured_pc_ready": True,
+        "factor_kind": "other",
+    }
+
+
+def test_direct_tail_support_mode_preflight_selects_factor_bundle() -> None:
+    calls: dict[str, object] = {}
+    bundle = SimpleNamespace(matrix=scipy_sparse.eye(2, format="csr"))
+
+    def selector(**kwargs):
+        calls.update(kwargs)
+        return (
+            _FakeStructuredPreconditioner(
+                kind="active_fortran_v3_reduced_lu",
+                reason="support_mode",
+                setup_s=0.75,
+                metadata={"factor_nbytes_actual": 55},
+            ),
+            {
+                "selected_candidate": "xmin_l2",
+                "baseline_residual_after": 2.0,
+                "best_residual_after": 1.0,
+            },
+        )
+
+    result = run_direct_tail_support_mode_preflight(
+        DirectTailSupportModePreflightContext(
+            env={
+                "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_SUPPORT_MODE_PREFLIGHT": "1",
+                "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_SUPPORT_MODE_CANDIDATES": "current,xmin_l2",
+                "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_SUPPORT_MODE_MAX_CANDIDATES": "2",
+                "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_SUPPORT_MODE_MIN_IMPROVEMENT": "1.25",
+            },
+            factor_kind="active-fortran-v3-reduced-lu",
+            structured_pc_ready=True,
+            operator_bundle=bundle,
+            layout=_FakeLayout(),
+            active_indices=np.array([0, 1], dtype=np.int64),
+            max_nbytes=2048,
+            regularization=1.0e-9,
+            rhs=np.ones(2),
+            true_matvec=lambda v: np.asarray(v),
+            preconditioner_x=1,
+            preconditioner_xi=2,
+            preconditioner_species=3,
+            preconditioner_x_min_l=4,
+            selector=selector,
+            factor_bundle=_fake_factor_bundle,
+        )
+    )
+
+    assert result.applicable is True
+    assert result.selected is True
+    assert result.factor_bundle.operator is bundle
+    assert result.factor_bundle.factor_nbytes_estimate == 55
+    assert result.metadata["selected_candidate"] == "xmin_l2"
+    assert calls["requested_kind"] == "active_fortran_v3_reduced_lu"
+    assert calls["candidates"] == "current,xmin_l2"
+    assert calls["max_candidates"] == 2
+    assert calls["min_improvement_ratio"] == 1.25
+
+
+def test_direct_tail_support_mode_preflight_reports_selector_exception() -> None:
+    def selector(**_kwargs):
+        raise RuntimeError("selector failed")
+
+    result = run_direct_tail_support_mode_preflight(
+        DirectTailSupportModePreflightContext(
+            env={"SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_SUPPORT_MODE_PREFLIGHT": "1"},
+            factor_kind="active_fortran_v3_reduced_ilu",
+            structured_pc_ready=True,
+            operator_bundle=SimpleNamespace(matrix=scipy_sparse.eye(2, format="csr")),
+            layout=_FakeLayout(),
+            active_indices=None,
+            max_nbytes=1024,
+            regularization=1.0e-12,
+            rhs=np.ones(2),
+            true_matvec=lambda v: np.asarray(v),
+            preconditioner_x=0,
+            preconditioner_xi=0,
+            preconditioner_species=0,
+            preconditioner_x_min_l=0,
+            selector=selector,
+            factor_bundle=_fake_factor_bundle,
+        )
+    )
+
+    assert result.applicable is True
+    assert result.selected is False
+    assert result.metadata is None
+    assert result.error == "RuntimeError: selector failed"
 
 
 def test_fortran_reduced_xblock_factor_policy_uses_specific_env_before_generic() -> None:
