@@ -34388,3 +34388,41 @@ Next refactor target:
   seed attempt improves the active residual. This should remove the next large
   driver-local copy of seed setup/metadata code while preserving sparse-rescue
   fallback behavior.
+
+### 19.97 Remove duplicated pre-sparse QI-device seed block
+
+Goal:
+
+- Eliminate the second driver-local matrix-free QI-device seed implementation
+  and keep ``v3_driver.py`` as orchestration instead of a second copy of
+  seed setup, rank budgeting, preconditioner construction, probing, metadata,
+  and progress formatting.
+
+Implementation:
+
+- Replaced the ``pre_sparse_active_dof`` block in ``v3_driver.py`` with a call
+  to ``attempt_matrixfree_qi_device_seed(..., hook="pre_sparse_active_dof",
+  context=qi_device_seed_context)``.
+- Preserved sparse-rescue behavior by updating ``ksp_x0`` only when the shared
+  seed attempt lowers the active residual.
+- The driver now has only one ``pre_sparse_active_dof`` hook string and no
+  duplicated seed-side matrix-free preconditioner setup at that location.
+- ``v3_driver.py`` is now about ``22311`` lines and
+  ``solve_v3_full_system_linear_gmres`` is about ``17027`` lines, down from
+  about ``22925`` and ``17641`` at the previous checkpoint.
+
+Validation:
+
+- ``python -m ruff check`` on touched source: passed.
+- ``python -m compileall -q`` on touched source: passed.
+- Focused QI-device seed/policy/sparse-pattern shard: ``43 passed in 13.90 s``.
+- Broader current profile-response/x-block/sparse-pattern shard:
+  ``322 passed in 115.19 s``.
+
+Next refactor target:
+
+- Continue moving non-orchestration code out of ``v3_driver.py`` by extracting
+  the sparse-rescue tail metadata/update dictionaries into
+  ``problems/profile_response/sparse_pc.py`` or a small diagnostics module.
+  Keep each tranche covered by the current sparse-pattern shard and avoid
+  changing solver admission/defaults until the refactor is complete.
