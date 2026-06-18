@@ -34615,3 +34615,40 @@ Next refactor target:
   two-level, global-coupling, or QI coarse-seed metadata. Prefer helpers with
   explicit typed diagnostics objects over growing ``locals()`` usage once the
   pure key-mapping layer is stable.
+
+### 19.103 X-block coarse-correction diagnostics extraction
+
+Goal:
+
+- Remove the moment-Schur, two-level, and global-coupling coarse-correction
+  diagnostics payloads from the sparse-PC result dictionary in ``v3_driver.py``
+  while keeping all correction setup, admission, and Krylov behavior unchanged.
+
+Implementation:
+
+- Added ``xblock_coarse_correction_diagnostics`` to
+  ``problems/profile_response/sparse_pc.py``.
+- Replaced the inline ``xblock_moment_schur_*``, ``xblock_two_level_*``, and
+  ``xblock_global_coupling_*`` result payloads in ``v3_driver.py`` with
+  ``**xblock_coarse_correction_diagnostics(locals())``.
+- Added unit coverage for representative enabled/built/used flags, compact
+  factor guard status, residual probe fields, rank/setup/rcond metadata,
+  device-residency flags, basis names, setup-budget fields, singular values,
+  and apply/coarse-apply counters across all three coarse-correction families.
+- ``v3_driver.py`` is now about ``21517`` lines and
+  ``solve_v3_full_system_linear_gmres`` is about ``16224`` lines.
+
+Validation:
+
+- ``python -m ruff check`` on touched source/tests: passed.
+- ``python -m compileall -q`` on touched source/tests: passed.
+- ``tests/test_profile_response_sparse_pc.py``: ``64 passed``.
+- Broader current profile-response/x-block/sparse-pattern shard:
+  ``328 passed in 112.87 s``.
+
+Next refactor target:
+
+- Continue extracting sparse-PC result construction by targeting the QI
+  coarse-seed, QI-Galerkin, or QI two-level diagnostics payloads. Prefer
+  grouped helpers by solver family so the file structure stays simple rather
+  than accumulating one helper per scalar key group.

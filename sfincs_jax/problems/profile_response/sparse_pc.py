@@ -915,6 +915,113 @@ def xblock_assembled_operator_diagnostics(scope: Mapping[str, object]) -> dict[s
     }
 
 
+def xblock_coarse_correction_diagnostics(scope: Mapping[str, object]) -> dict[str, object]:
+    """Return moment-Schur, two-level, and global-coupling diagnostics."""
+
+    moment_metadata = scope["moment_schur_metadata"]
+    moment_stats = scope["moment_schur_stats"]
+    two_level_metadata = scope["two_level_metadata"]
+    two_level_stats = scope["two_level_stats"]
+    global_metadata = scope["global_coupling_metadata"]
+    global_stats = scope["global_coupling_stats"]
+    for name, value in (
+        ("moment_schur_metadata", moment_metadata),
+        ("moment_schur_stats", moment_stats),
+        ("two_level_metadata", two_level_metadata),
+        ("two_level_stats", two_level_stats),
+        ("global_coupling_metadata", global_metadata),
+        ("global_coupling_stats", global_stats),
+    ):
+        if not isinstance(value, Mapping):
+            raise TypeError(f"{name} must be a mapping")
+
+    return {
+        "xblock_moment_schur_enabled": bool(scope["moment_schur_enabled"]),
+        "xblock_moment_schur_built": bool(scope["moment_schur_built"]),
+        "xblock_moment_schur_used": bool(scope["moment_schur_used"]),
+        "xblock_moment_schur_reason": scope["moment_schur_reason"],
+        "xblock_moment_schur_default_blocked_by_compact_factors": bool(
+            scope["moment_schur_default_blocked_by_compact_factors"]
+        ),
+        "xblock_moment_schur_mode": moment_metadata.get("mode"),
+        "xblock_moment_schur_rank": moment_metadata.get("rank"),
+        "xblock_moment_schur_extra_size": moment_metadata.get("extra_size"),
+        "xblock_moment_schur_setup_s": moment_metadata.get("setup_s"),
+        "xblock_moment_schur_expected_size": moment_metadata.get("expected_size"),
+        "xblock_moment_schur_rcond": moment_metadata.get("rcond"),
+        "xblock_moment_schur_singular_value_proxy": moment_metadata.get(
+            "singular_value_proxy",
+            (),
+        ),
+        "xblock_moment_schur_device_resident": bool(
+            moment_metadata.get("device_resident", False)
+        ),
+        "xblock_moment_schur_probe_residual_before": scope[
+            "moment_schur_probe_residual_before"
+        ],
+        "xblock_moment_schur_probe_residual_after": scope[
+            "moment_schur_probe_residual_after"
+        ],
+        "xblock_moment_schur_probe_improvement_ratio": scope[
+            "moment_schur_probe_improvement_ratio"
+        ],
+        "xblock_moment_schur_error": moment_metadata.get("error"),
+        "xblock_moment_schur_applies": int(moment_stats.get("applies", 0)),
+        "xblock_moment_schur_base_applies": int(
+            moment_stats.get("base_applies", 0)
+        ),
+        "xblock_two_level_enabled": bool(scope["two_level_enabled"]),
+        "xblock_two_level_built": bool(scope["two_level_built"]),
+        "xblock_two_level_mode": two_level_metadata.get("mode"),
+        "xblock_two_level_basis_size": two_level_metadata.get("basis_size"),
+        "xblock_two_level_rank": two_level_metadata.get("rank"),
+        "xblock_two_level_setup_s": two_level_metadata.get("setup_s"),
+        "xblock_two_level_rcond": two_level_metadata.get("rcond"),
+        "xblock_two_level_basis_names": two_level_metadata.get("basis_names", ()),
+        "xblock_two_level_active_projected": bool(
+            two_level_metadata.get("active_projected", False)
+        ),
+        "xblock_two_level_expected_size": two_level_metadata.get("expected_size"),
+        "xblock_two_level_error": two_level_metadata.get("error"),
+        "xblock_two_level_applies": int(two_level_stats.get("applies", 0)),
+        "xblock_two_level_coarse_applies": int(
+            two_level_stats.get("coarse_applies", 0)
+        ),
+        "xblock_global_coupling_enabled": bool(scope["global_coupling_enabled"]),
+        "xblock_global_coupling_built": bool(scope["global_coupling_built"]),
+        "xblock_global_coupling_mode": global_metadata.get("mode"),
+        "xblock_global_coupling_load_basis_size": global_metadata.get(
+            "load_basis_size"
+        ),
+        "xblock_global_coupling_basis_size": global_metadata.get("basis_size"),
+        "xblock_global_coupling_rank": global_metadata.get("rank"),
+        "xblock_global_coupling_setup_s": global_metadata.get("setup_s"),
+        "xblock_global_coupling_setup_budget_s": global_metadata.get("setup_budget_s"),
+        "xblock_global_coupling_setup_budget_reached": bool(
+            global_metadata.get("setup_budget_reached", False)
+        ),
+        "xblock_global_coupling_rcond": global_metadata.get("rcond"),
+        "xblock_global_coupling_coarse_solver": global_metadata.get("coarse_solver"),
+        "xblock_global_coupling_smoother": global_metadata.get("smoother"),
+        "xblock_global_coupling_ridge": global_metadata.get("ridge"),
+        "xblock_global_coupling_singular_values": global_metadata.get(
+            "singular_values",
+            (),
+        ),
+        "xblock_global_coupling_device_resident": bool(
+            global_metadata.get("device_resident", False)
+        ),
+        "xblock_global_coupling_fsavg_lmax": global_metadata.get("fsavg_lmax"),
+        "xblock_global_coupling_angular_lmax": global_metadata.get("angular_lmax"),
+        "xblock_global_coupling_basis_names": global_metadata.get("basis_names", ()),
+        "xblock_global_coupling_error": global_metadata.get("error"),
+        "xblock_global_coupling_applies": int(global_stats.get("applies", 0)),
+        "xblock_global_coupling_coarse_applies": int(
+            global_stats.get("coarse_applies", 0)
+        ),
+    }
+
+
 class MatvecCounter:
     """Mutable matvec counter that preserves ``int(counter)`` call sites."""
 

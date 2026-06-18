@@ -13,6 +13,7 @@ from sfincs_jax.problems.profile_response.sparse_pc import (
     XBlockAssembledPreflightError,
     apply_sparse_pc_post_minres,
     xblock_assembled_operator_diagnostics,
+    xblock_coarse_correction_diagnostics,
     build_xblock_assembled_equilibration_setup,
     build_xblock_assembled_device_setup,
     build_xblock_assembled_matvec_setup,
@@ -997,6 +998,86 @@ def test_xblock_assembled_operator_diagnostics_preserve_payload() -> None:
     assert metadata["xblock_assembled_operator_col_equilibration_zero_or_tiny_columns"] == 3
     assert metadata["xblock_assembled_operator_max_colors"] == 7
     assert metadata["xblock_assembled_operator_validation_rel_errors"] == (2.0e-12,)
+
+
+def test_xblock_coarse_correction_diagnostics_preserve_payload() -> None:
+    metadata = xblock_coarse_correction_diagnostics(
+        {
+            "moment_schur_enabled": 1,
+            "moment_schur_built": True,
+            "moment_schur_used": False,
+            "moment_schur_reason": "compact_factor_guard",
+            "moment_schur_default_blocked_by_compact_factors": 1,
+            "moment_schur_probe_residual_before": 2.0,
+            "moment_schur_probe_residual_after": 0.5,
+            "moment_schur_probe_improvement_ratio": 4.0,
+            "moment_schur_metadata": {
+                "mode": "constraint",
+                "rank": 3,
+                "extra_size": 2,
+                "setup_s": 0.1,
+                "expected_size": 5,
+                "rcond": 1.0e-8,
+                "singular_value_proxy": (1.0, 0.1),
+                "device_resident": True,
+                "error": None,
+            },
+            "moment_schur_stats": {"applies": 6, "base_applies": 4},
+            "two_level_enabled": 1,
+            "two_level_built": True,
+            "two_level_metadata": {
+                "mode": "seed",
+                "basis_size": 4,
+                "rank": 4,
+                "setup_s": 0.2,
+                "rcond": 1.0e-7,
+                "basis_names": ("density", "flow"),
+                "active_projected": True,
+                "expected_size": 8,
+                "error": None,
+            },
+            "two_level_stats": {"applies": 8, "coarse_applies": 3},
+            "global_coupling_enabled": 1,
+            "global_coupling_built": True,
+            "global_coupling_metadata": {
+                "mode": "load",
+                "load_basis_size": 5,
+                "basis_size": 7,
+                "rank": 6,
+                "setup_s": 0.3,
+                "setup_budget_s": 2.0,
+                "setup_budget_reached": False,
+                "rcond": 1.0e-6,
+                "coarse_solver": "pinv",
+                "smoother": "block",
+                "ridge": 1.0e-10,
+                "singular_values": (3.0, 1.0),
+                "device_resident": True,
+                "fsavg_lmax": 2,
+                "angular_lmax": 3,
+                "basis_names": ("source", "constraint"),
+                "error": None,
+            },
+            "global_coupling_stats": {"applies": 9, "coarse_applies": 5},
+        }
+    )
+
+    assert metadata["xblock_moment_schur_enabled"] is True
+    assert metadata["xblock_moment_schur_used"] is False
+    assert metadata["xblock_moment_schur_default_blocked_by_compact_factors"] is True
+    assert metadata["xblock_moment_schur_rank"] == 3
+    assert metadata["xblock_moment_schur_device_resident"] is True
+    assert metadata["xblock_moment_schur_applies"] == 6
+    assert metadata["xblock_two_level_enabled"] is True
+    assert metadata["xblock_two_level_basis_names"] == ("density", "flow")
+    assert metadata["xblock_two_level_active_projected"] is True
+    assert metadata["xblock_two_level_coarse_applies"] == 3
+    assert metadata["xblock_global_coupling_enabled"] is True
+    assert metadata["xblock_global_coupling_setup_budget_reached"] is False
+    assert metadata["xblock_global_coupling_coarse_solver"] == "pinv"
+    assert metadata["xblock_global_coupling_singular_values"] == (3.0, 1.0)
+    assert metadata["xblock_global_coupling_device_resident"] is True
+    assert metadata["xblock_global_coupling_coarse_applies"] == 5
 
 
 def test_xblock_moment_schur_policy_defaults_on_for_constraint1_device_krylov() -> None:
