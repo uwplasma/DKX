@@ -34002,3 +34002,45 @@ Next refactor target:
   surface. Keep construction/probe/admission logic in ``v3_driver.py`` until
   direct policy tests and focused driver metadata regressions cover those
   controls.
+
+### 19.89 RHSMode=1 x-block QI-device residual-correction policy extraction
+
+Goal:
+
+- Move block-Schur residual-equation, coupled residual-equation, residual
+  snapshot, residual-snapshot equation, and block-Schur residual-enrichment
+  settings out of ``v3_driver.py`` and into the profile-response policy layer.
+
+Implementation:
+
+- Added ``rhs1_qi_device_residual_correction_controls`` to
+  ``sfincs_jax/problems/profile_response/policies.py`` and exported it.
+- Wired ``v3_driver.py`` to read that shared policy once and preserve the
+  downstream variable names passed to QI-device preconditioner setup, metadata,
+  rank budgeting, progress logging, and install-on-reject handling.
+- Added direct policy tests for bounded rank parsing, solver alias
+  normalization, boolean toggles, and private-driver aliasing.
+- ``solve_v3_full_system_linear_gmres`` is now about ``18840`` lines and
+  ``v3_driver.py`` is about ``24121`` lines.
+
+Validation so far:
+
+- ``python -m ruff check sfincs_jax/problems/profile_response/policies.py
+  sfincs_jax/v3_driver.py tests/test_rhs1_xblock_fallback_initial_guess.py``:
+  passed.
+- ``python -m compileall -q
+  sfincs_jax/problems/profile_response/policies.py sfincs_jax/v3_driver.py
+  tests/test_rhs1_xblock_fallback_initial_guess.py``: passed.
+- Focused policy/helper and QI-device residual-correction regressions:
+  ``21 passed in 9.27 s``.
+- Broader sparse-PC/x-block/dispatch subset:
+  ``174 passed in 58.86 s``.
+- ``git diff --check``: passed.
+
+Next refactor target:
+
+- Continue shrinking the main RHSMode=1 solve block by extracting remaining
+  rank-budget/max-rank calculation and QI-device progress-message construction
+  into focused helper functions. Keep numerical construction, true residual
+  probes, and acceptance gates in the driver until each extracted helper has
+  direct policy/unit coverage and focused driver regressions.

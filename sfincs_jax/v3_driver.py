@@ -250,6 +250,7 @@ from .problems.profile_response.policies import (
     parse_rhs1_pas_tz_guarded_structured_levels as _rhs1_pas_tz_guarded_structured_levels,
     rhs1_qi_device_extra_coarse_controls as _rhs1_qi_device_extra_coarse_controls,
     rhs1_qi_device_probe_uses_minres_step as _rhs1_qi_device_probe_uses_minres_step,
+    rhs1_qi_device_residual_correction_controls as _rhs1_qi_device_residual_correction_controls,
     rhs1_resolved_sparse_rescue_ordering,
     rhs1_sparse_enabled_initial,
     rhs1_sparse_kind_use,
@@ -4875,164 +4876,127 @@ def solve_v3_full_system_linear_gmres(
                 qi_device_multilevel_residual_equation_include_global = bool(
                     qi_device_multilevel_config.multilevel_residual_equation_include_global
                 )
-                qi_device_block_schur_residual_equation = _rhs1_bool_env(
-                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_BLOCK_SCHUR_RESIDUAL_EQUATION",
-                    default=False,
+                qi_device_residual_correction_controls = (
+                    _rhs1_qi_device_residual_correction_controls()
                 )
-                qi_device_block_schur_residual_equation_max_rank = _rhs1_int_env(
-                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_BLOCK_SCHUR_RESIDUAL_EQUATION_MAX_RANK",
-                    default=24,
-                    minimum=1,
+                qi_device_block_schur_residual_equation = bool(
+                    qi_device_residual_correction_controls["block_schur_residual_equation"]
                 )
-                qi_device_block_schur_residual_equation_include_global = _rhs1_bool_env(
-                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_BLOCK_SCHUR_RESIDUAL_EQUATION_INCLUDE_GLOBAL",
-                    default=False,
+                qi_device_block_schur_residual_equation_max_rank = int(
+                    qi_device_residual_correction_controls[
+                        "block_schur_residual_equation_max_rank"
+                    ]
                 )
-                qi_device_block_schur_residual_equation_include_blocks = _rhs1_bool_env(
-                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_BLOCK_SCHUR_RESIDUAL_EQUATION_INCLUDE_BLOCKS",
-                    default=True,
+                qi_device_block_schur_residual_equation_include_global = bool(
+                    qi_device_residual_correction_controls[
+                        "block_schur_residual_equation_include_global"
+                    ]
                 )
-                qi_device_block_schur_residual_equation_include_aggregates = _rhs1_bool_env(
-                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_BLOCK_SCHUR_RESIDUAL_EQUATION_INCLUDE_AGGREGATES",
-                    default=True,
+                qi_device_block_schur_residual_equation_include_blocks = bool(
+                    qi_device_residual_correction_controls[
+                        "block_schur_residual_equation_include_blocks"
+                    ]
                 )
-                qi_device_coupled_residual_equation = _rhs1_bool_env(
-                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_COUPLED_RESIDUAL_EQUATION",
-                    default=False,
+                qi_device_block_schur_residual_equation_include_aggregates = bool(
+                    qi_device_residual_correction_controls[
+                        "block_schur_residual_equation_include_aggregates"
+                    ]
                 )
-                qi_device_coupled_residual_equation_max_rank = _rhs1_int_env(
-                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_COUPLED_RESIDUAL_EQUATION_MAX_RANK",
-                    default=96,
-                    minimum=1,
+                qi_device_coupled_residual_equation = bool(
+                    qi_device_residual_correction_controls["coupled_residual_equation"]
                 )
-                qi_device_coupled_residual_equation_solver = (
-                    os.environ.get(
-                        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_COUPLED_RESIDUAL_EQUATION_SOLVER",
-                        "action_lstsq",
-                    )
-                    .strip()
-                    .lower()
-                    .replace("-", "_")
+                qi_device_coupled_residual_equation_max_rank = int(
+                    qi_device_residual_correction_controls["coupled_residual_equation_max_rank"]
                 )
-                if qi_device_coupled_residual_equation_solver in {
-                    "action",
-                    "action_ls",
-                    "least_squares",
-                    "lstsq",
-                    "staged",
-                }:
-                    qi_device_coupled_residual_equation_solver = "action_lstsq"
-                elif qi_device_coupled_residual_equation_solver in {
-                    "galerkin",
-                    "projected",
-                    "qtaq",
-                    "coarse_grid",
-                    "schur",
-                }:
-                    qi_device_coupled_residual_equation_solver = "galerkin"
-                else:
-                    qi_device_coupled_residual_equation_solver = "action_lstsq"
-                qi_device_coupled_residual_equation_include_flat = _rhs1_bool_env(
-                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_COUPLED_RESIDUAL_EQUATION_INCLUDE_FLAT",
-                    default=True,
+                qi_device_coupled_residual_equation_solver = str(
+                    qi_device_residual_correction_controls["coupled_residual_equation_solver"]
                 )
-                qi_device_coupled_residual_equation_min_improvement = _rhs1_float_env(
-                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_COUPLED_RESIDUAL_EQUATION_MIN_RELATIVE_IMPROVEMENT",
-                    default=0.0,
-                    minimum=0.0,
+                qi_device_coupled_residual_equation_include_flat = bool(
+                    qi_device_residual_correction_controls[
+                        "coupled_residual_equation_include_flat"
+                    ]
                 )
-                qi_device_coupled_residual_equation_install_on_reject = _rhs1_bool_env(
-                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_COUPLED_RESIDUAL_EQUATION_INSTALL_IN_KRYLOV_ON_REJECT",
-                    default=False,
+                qi_device_coupled_residual_equation_min_improvement = float(
+                    qi_device_residual_correction_controls[
+                        "coupled_residual_equation_min_improvement"
+                    ]
                 )
-                qi_device_residual_snapshot_enrichment = _rhs1_bool_env(
-                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RESIDUAL_SNAPSHOT_ENRICHMENT",
-                    default=False,
+                qi_device_coupled_residual_equation_install_on_reject = bool(
+                    qi_device_residual_correction_controls[
+                        "coupled_residual_equation_install_on_reject"
+                    ]
                 )
-                qi_device_residual_snapshot_max_rank = _rhs1_int_env(
-                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RESIDUAL_SNAPSHOT_MAX_RANK",
-                    default=24,
-                    minimum=1,
+                qi_device_residual_snapshot_enrichment = bool(
+                    qi_device_residual_correction_controls["residual_snapshot_enrichment"]
                 )
-                qi_device_residual_snapshot_include_primal = _rhs1_bool_env(
-                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RESIDUAL_SNAPSHOT_INCLUDE_PRIMAL",
-                    default=True,
+                qi_device_residual_snapshot_max_rank = int(
+                    qi_device_residual_correction_controls["residual_snapshot_max_rank"]
                 )
-                qi_device_residual_snapshot_use_adjoint = _rhs1_bool_env(
-                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RESIDUAL_SNAPSHOT_USE_ADJOINT",
-                    default=False,
+                qi_device_residual_snapshot_include_primal = bool(
+                    qi_device_residual_correction_controls[
+                        "residual_snapshot_include_primal"
+                    ]
                 )
-                qi_device_residual_snapshot_include_global = _rhs1_bool_env(
-                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RESIDUAL_SNAPSHOT_INCLUDE_GLOBAL",
-                    default=False,
+                qi_device_residual_snapshot_use_adjoint = bool(
+                    qi_device_residual_correction_controls["residual_snapshot_use_adjoint"]
                 )
-                qi_device_residual_snapshot_include_blocks = _rhs1_bool_env(
-                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RESIDUAL_SNAPSHOT_INCLUDE_BLOCKS",
-                    default=True,
+                qi_device_residual_snapshot_include_global = bool(
+                    qi_device_residual_correction_controls[
+                        "residual_snapshot_include_global"
+                    ]
                 )
-                qi_device_residual_snapshot_include_aggregates = _rhs1_bool_env(
-                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RESIDUAL_SNAPSHOT_INCLUDE_AGGREGATES",
-                    default=True,
+                qi_device_residual_snapshot_include_blocks = bool(
+                    qi_device_residual_correction_controls[
+                        "residual_snapshot_include_blocks"
+                    ]
                 )
-                qi_device_residual_snapshot_residual_equation = _rhs1_bool_env(
-                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RESIDUAL_SNAPSHOT_RESIDUAL_EQUATION",
-                    default=False,
+                qi_device_residual_snapshot_include_aggregates = bool(
+                    qi_device_residual_correction_controls[
+                        "residual_snapshot_include_aggregates"
+                    ]
                 )
-                qi_device_residual_snapshot_residual_equation_max_rank = _rhs1_int_env(
-                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RESIDUAL_SNAPSHOT_RESIDUAL_EQUATION_MAX_RANK",
-                    default=24,
-                    minimum=1,
+                qi_device_residual_snapshot_residual_equation = bool(
+                    qi_device_residual_correction_controls[
+                        "residual_snapshot_residual_equation"
+                    ]
                 )
-                qi_device_residual_snapshot_residual_equation_solver = (
-                    os.environ.get(
-                        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RESIDUAL_SNAPSHOT_RESIDUAL_EQUATION_SOLVER",
-                        "action_lstsq",
-                    )
-                    .strip()
-                    .lower()
-                    .replace("-", "_")
+                qi_device_residual_snapshot_residual_equation_max_rank = int(
+                    qi_device_residual_correction_controls[
+                        "residual_snapshot_residual_equation_max_rank"
+                    ]
                 )
-                if qi_device_residual_snapshot_residual_equation_solver in {
-                    "action",
-                    "action_ls",
-                    "least_squares",
-                    "lstsq",
-                    "staged",
-                }:
-                    qi_device_residual_snapshot_residual_equation_solver = "action_lstsq"
-                elif qi_device_residual_snapshot_residual_equation_solver in {
-                    "galerkin",
-                    "projected",
-                    "qtaq",
-                    "coarse_grid",
-                }:
-                    qi_device_residual_snapshot_residual_equation_solver = "galerkin"
-                else:
-                    qi_device_residual_snapshot_residual_equation_solver = "action_lstsq"
-                qi_device_residual_snapshot_residual_equation_include_global = _rhs1_bool_env(
-                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RESIDUAL_SNAPSHOT_RESIDUAL_EQUATION_INCLUDE_GLOBAL",
-                    default=False,
+                qi_device_residual_snapshot_residual_equation_solver = str(
+                    qi_device_residual_correction_controls[
+                        "residual_snapshot_residual_equation_solver"
+                    ]
                 )
-                qi_device_block_schur_residual_enrichment = _rhs1_bool_env(
-                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_BLOCK_SCHUR_RESIDUAL_ENRICHMENT",
-                    default=False,
+                qi_device_residual_snapshot_residual_equation_include_global = bool(
+                    qi_device_residual_correction_controls[
+                        "residual_snapshot_residual_equation_include_global"
+                    ]
                 )
-                qi_device_block_schur_residual_max_rank = _rhs1_int_env(
-                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_BLOCK_SCHUR_RESIDUAL_MAX_RANK",
-                    default=24,
-                    minimum=1,
+                qi_device_block_schur_residual_enrichment = bool(
+                    qi_device_residual_correction_controls[
+                        "block_schur_residual_enrichment"
+                    ]
                 )
-                qi_device_block_schur_residual_include_global = _rhs1_bool_env(
-                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_BLOCK_SCHUR_RESIDUAL_INCLUDE_GLOBAL",
-                    default=False,
+                qi_device_block_schur_residual_max_rank = int(
+                    qi_device_residual_correction_controls["block_schur_residual_max_rank"]
                 )
-                qi_device_block_schur_residual_include_blocks = _rhs1_bool_env(
-                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_BLOCK_SCHUR_RESIDUAL_INCLUDE_BLOCKS",
-                    default=True,
+                qi_device_block_schur_residual_include_global = bool(
+                    qi_device_residual_correction_controls[
+                        "block_schur_residual_include_global"
+                    ]
                 )
-                qi_device_block_schur_residual_include_aggregates = _rhs1_bool_env(
-                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_BLOCK_SCHUR_RESIDUAL_INCLUDE_AGGREGATES",
-                    default=True,
+                qi_device_block_schur_residual_include_blocks = bool(
+                    qi_device_residual_correction_controls[
+                        "block_schur_residual_include_blocks"
+                    ]
+                )
+                qi_device_block_schur_residual_include_aggregates = bool(
+                    qi_device_residual_correction_controls[
+                        "block_schur_residual_include_aggregates"
+                    ]
                 )
                 qi_device_multilevel_max_rank_env = os.environ.get(
                     "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_MAX_RANK",

@@ -7,6 +7,7 @@ from sfincs_jax.problems.profile_response.policies import (
     parse_rhs1_pas_tz_guarded_structured_levels,
     rhs1_qi_device_extra_coarse_controls,
     rhs1_qi_device_probe_uses_minres_step,
+    rhs1_qi_device_residual_correction_controls,
     rhs1_xblock_fallback_initial_guess,
 )
 
@@ -22,6 +23,10 @@ def test_driver_private_policy_helpers_alias_canonical_profile_response_helpers(
     assert (
         vd._rhs1_qi_device_probe_uses_minres_step
         is rhs1_qi_device_probe_uses_minres_step
+    )
+    assert (
+        vd._rhs1_qi_device_residual_correction_controls
+        is rhs1_qi_device_residual_correction_controls
     )
     assert vd._rhs1_xblock_fallback_initial_guess is rhs1_xblock_fallback_initial_guess
 
@@ -196,3 +201,40 @@ def test_qi_device_extra_coarse_controls_parse_bounded_overrides(monkeypatch) ->
     assert controls["global_moment_residual_equation_solver"] == "action_lstsq"
     assert controls["active_pattern_coarse_max_rank"] == 1
     assert controls["multilevel_species_current_moments"] is True
+
+
+def test_qi_device_residual_correction_controls_parse_bounded_overrides(monkeypatch) -> None:
+    monkeypatch.setenv(
+        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_BLOCK_SCHUR_RESIDUAL_EQUATION",
+        "yes",
+    )
+    monkeypatch.setenv(
+        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_BLOCK_SCHUR_RESIDUAL_EQUATION_MAX_RANK",
+        "-4",
+    )
+    monkeypatch.setenv(
+        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_COUPLED_RESIDUAL_EQUATION_SOLVER",
+        "schur",
+    )
+    monkeypatch.setenv(
+        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_COUPLED_RESIDUAL_EQUATION_MIN_RELATIVE_IMPROVEMENT",
+        "-0.5",
+    )
+    monkeypatch.setenv(
+        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RESIDUAL_SNAPSHOT_RESIDUAL_EQUATION_SOLVER",
+        "least-squares",
+    )
+    monkeypatch.setenv(
+        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_BLOCK_SCHUR_RESIDUAL_INCLUDE_AGGREGATES",
+        "0",
+    )
+
+    controls = rhs1_qi_device_residual_correction_controls()
+
+    assert controls["block_schur_residual_equation"] is True
+    assert controls["block_schur_residual_equation_max_rank"] == 1
+    assert controls["coupled_residual_equation_solver"] == "galerkin"
+    assert controls["coupled_residual_equation_min_improvement"] == pytest.approx(0.0)
+    assert controls["residual_snapshot_residual_equation_solver"] == "action_lstsq"
+    assert controls["block_schur_residual_include_aggregates"] is False
+    assert controls["residual_snapshot_include_primal"] is True
