@@ -14,6 +14,7 @@ from sfincs_jax.problems.profile_response.sparse_pc import (
     apply_sparse_pc_post_minres,
     xblock_assembled_operator_diagnostics,
     xblock_coarse_correction_diagnostics,
+    xblock_qi_seed_preconditioner_diagnostics,
     build_xblock_assembled_equilibration_setup,
     build_xblock_assembled_device_setup,
     build_xblock_assembled_matvec_setup,
@@ -1078,6 +1079,109 @@ def test_xblock_coarse_correction_diagnostics_preserve_payload() -> None:
     assert metadata["xblock_global_coupling_singular_values"] == (3.0, 1.0)
     assert metadata["xblock_global_coupling_device_resident"] is True
     assert metadata["xblock_global_coupling_coarse_applies"] == 5
+
+
+def test_xblock_qi_seed_preconditioner_diagnostics_preserve_payload() -> None:
+    metadata = xblock_qi_seed_preconditioner_diagnostics(
+        {
+            "xblock_initial_seed_used": 1,
+            "xblock_initial_seed_residual_norm": 1.0e-3,
+            "xblock_initial_seed_residual_ratio": 0.5,
+            "moment_schur_seed_enabled": 1,
+            "moment_schur_seed_used": False,
+            "moment_schur_seed_residual_norm": 2.0e-3,
+            "moment_schur_seed_residual_ratio": 0.75,
+            "qi_coarse_seed_enabled": 1,
+            "qi_coarse_seed_used": True,
+            "qi_coarse_seed_residual_before": 3.0,
+            "qi_coarse_seed_residual_after": 1.0,
+            "qi_coarse_seed_improvement_ratio": 3.0,
+            "qi_coarse_seed_rank": 4,
+            "qi_coarse_seed_candidate_count": 9,
+            "qi_coarse_seed_reason": "accepted",
+            "qi_coarse_seed_labels": ("flat", "current"),
+            "qi_coarse_seed_s": 0.25,
+            "qi_seed_basis_kind": "load",
+            "qi_seed_max_candidates": 12,
+            "qi_seed_max_angular_mode": 3,
+            "qi_galerkin_preconditioner_enabled": 1,
+            "qi_galerkin_preconditioner_built": True,
+            "qi_galerkin_preconditioner_used": False,
+            "qi_galerkin_preconditioner_reason": "probe_rejected",
+            "qi_galerkin_preconditioner_mode": "coarse",
+            "qi_galerkin_preconditioner_rank": 5,
+            "qi_galerkin_preconditioner_candidate_count": 10,
+            "qi_galerkin_preconditioner_coarse_shape": (5, 5),
+            "qi_galerkin_preconditioner_coarse_norm": 2.5,
+            "qi_galerkin_preconditioner_rcond": 1.0e-6,
+            "qi_galerkin_preconditioner_damping": 1.0e-4,
+            "qi_galerkin_preconditioner_basis_reused_from_seed": True,
+            "qi_galerkin_preconditioner_residual_before": 4.0,
+            "qi_galerkin_preconditioner_residual_after": 2.0,
+            "qi_galerkin_preconditioner_improvement_ratio": 2.0,
+            "qi_galerkin_preconditioner_probe_reduced": True,
+            "qi_galerkin_preconditioner_probe_candidates": (0, 2),
+            "qi_galerkin_preconditioner_selected_index": 1,
+            "qi_galerkin_preconditioner_setup_s": 0.5,
+            "qi_galerkin_stats": {
+                "applies": 6,
+                "coarse_applies": 4,
+                "base_applies": 2,
+            },
+            "qi_two_level_preconditioner_enabled": 1,
+            "qi_two_level_preconditioner_built": True,
+            "qi_two_level_preconditioner_used": True,
+            "qi_two_level_preconditioner_reason": "accepted",
+            "qi_two_level_preconditioner_rank": 6,
+            "qi_two_level_preconditioner_candidate_count": 11,
+            "qi_two_level_preconditioner_coarse_shape": (6, 6),
+            "qi_two_level_preconditioner_coarse_norm": 3.5,
+            "qi_two_level_preconditioner_operator_on_basis_shape": (20, 6),
+            "qi_two_level_preconditioner_operator_on_basis_norm": 4.5,
+            "qi_two_level_preconditioner_coarse_solver": "pinv",
+            "qi_two_level_preconditioner_residual_augmented": True,
+            "qi_two_level_preconditioner_rank_before_augmentation": 4,
+            "qi_two_level_preconditioner_augmentation_labels": ("r0", "r1"),
+            "qi_two_level_preconditioner_residual_augment_max_extra": 3,
+            "qi_two_level_preconditioner_residual_augment_steps": 2,
+            "qi_two_level_preconditioner_residual_augment_include_residuals": True,
+            "qi_two_level_preconditioner_smoothed_load_basis": True,
+            "qi_two_level_preconditioner_smoothed_load_metadata": {"rank": 2},
+            "qi_two_level_preconditioner_rcond": 1.0e-7,
+            "qi_two_level_preconditioner_damping": 1.0e-5,
+            "qi_two_level_preconditioner_basis_reused_from_seed": True,
+            "qi_two_level_preconditioner_residual_before": 5.0,
+            "qi_two_level_preconditioner_residual_after": 1.0,
+            "qi_two_level_preconditioner_improvement_ratio": 5.0,
+            "qi_two_level_preconditioner_probe_candidates": (1, 3),
+            "qi_two_level_preconditioner_selected_index": 0,
+            "qi_two_level_preconditioner_setup_s": 0.75,
+            "qi_two_level_stats": {"applies": 8, "local_applies": 5},
+        }
+    )
+
+    assert metadata["xblock_initial_seed_used"] is True
+    assert metadata["xblock_moment_schur_seed_used"] is False
+    assert metadata["xblock_qi_coarse_seed_used"] is True
+    assert metadata["xblock_qi_coarse_seed_rank"] == 4
+    assert metadata["xblock_qi_coarse_seed_labels"] == ("flat", "current")
+    assert metadata["xblock_qi_galerkin_preconditioner_enabled"] is True
+    assert metadata["xblock_qi_galerkin_preconditioner_used"] is False
+    assert metadata["xblock_qi_galerkin_preconditioner_rank"] == 5
+    assert metadata["xblock_qi_galerkin_preconditioner_applies"] == 6
+    assert metadata["xblock_qi_galerkin_preconditioner_base_applies"] == 2
+    assert metadata["xblock_qi_two_level_preconditioner_enabled"] is True
+    assert metadata["xblock_qi_two_level_preconditioner_used"] is True
+    assert metadata["xblock_qi_two_level_preconditioner_rank"] == 6
+    assert metadata["xblock_qi_two_level_preconditioner_residual_augmented"] is True
+    assert metadata["xblock_qi_two_level_preconditioner_augmentation_labels"] == (
+        "r0",
+        "r1",
+    )
+    assert metadata["xblock_qi_two_level_preconditioner_smoothed_load_metadata"] == {
+        "rank": 2
+    }
+    assert metadata["xblock_qi_two_level_preconditioner_local_applies"] == 5
 
 
 def test_xblock_moment_schur_policy_defaults_on_for_constraint1_device_krylov() -> None:

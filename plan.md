@@ -34652,3 +34652,43 @@ Next refactor target:
   coarse-seed, QI-Galerkin, or QI two-level diagnostics payloads. Prefer
   grouped helpers by solver family so the file structure stays simple rather
   than accumulating one helper per scalar key group.
+
+### 19.104 X-block QI seed and preconditioner diagnostics extraction
+
+Goal:
+
+- Remove the initial seed, moment-Schur seed, QI coarse-seed, QI-Galerkin, and
+  QI two-level preconditioner diagnostics payloads from the sparse-PC result
+  dictionary in ``v3_driver.py`` while preserving all solver setup, admission,
+  and Krylov behavior.
+
+Implementation:
+
+- Added ``xblock_qi_seed_preconditioner_diagnostics`` to
+  ``problems/profile_response/sparse_pc.py``.
+- Replaced the inline ``xblock_initial_seed_*``,
+  ``xblock_moment_schur_seed_*``, ``xblock_qi_coarse_seed_*``,
+  ``xblock_qi_galerkin_preconditioner_*``, and
+  ``xblock_qi_two_level_preconditioner_*`` result payloads in ``v3_driver.py``
+  with ``**xblock_qi_seed_preconditioner_diagnostics(locals())``.
+- Added direct unit coverage for seed residuals, QI coarse-seed ranks/labels,
+  Galerkin rank/probe/apply metadata, two-level residual augmentation,
+  smoothed-load metadata, and local/apply counters.
+- ``v3_driver.py`` is now about ``21387`` lines and
+  ``solve_v3_full_system_linear_gmres`` is about ``16093`` lines.
+
+Validation:
+
+- ``python -m ruff check`` on touched source/tests: passed.
+- ``python -m compileall -q`` on touched source/tests: passed.
+- ``tests/test_profile_response_sparse_pc.py``: ``65 passed``.
+- Broader current profile-response/x-block/sparse-pattern shard:
+  ``329 passed in 111.80 s``.
+
+Next refactor target:
+
+- Continue reducing sparse-PC result construction by targeting device-Krylov
+  diagnostics, or split ``sparse_pc.py`` into a compact
+  ``sparse_pc/diagnostics.py`` module once the diagnostics helpers have fully
+  stabilized. Avoid adding algorithm changes until the current refactor
+  checkpoints are green on CI.

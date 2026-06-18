@@ -205,6 +205,7 @@ from .problems.profile_response.sparse_pc import (
     apply_sparse_pc_post_minres,
     xblock_assembled_operator_diagnostics,
     xblock_coarse_correction_diagnostics,
+    xblock_qi_seed_preconditioner_diagnostics,
     build_xblock_krylov_matvec_setup,
     build_xblock_assembled_equilibration_setup,
     build_xblock_assembled_device_setup,
@@ -7084,138 +7085,7 @@ def solve_v3_full_system_linear_gmres(
                     "xblock_full_size": int(op.total_size),
                     **xblock_assembled_operator_diagnostics(locals()),
                     **xblock_coarse_correction_diagnostics(locals()),
-                    "xblock_initial_seed_used": bool(xblock_initial_seed_used),
-                    "xblock_initial_seed_residual_norm": xblock_initial_seed_residual_norm,
-                    "xblock_initial_seed_residual_ratio": xblock_initial_seed_residual_ratio,
-                    "xblock_moment_schur_seed_enabled": bool(moment_schur_seed_enabled),
-                    "xblock_moment_schur_seed_used": bool(moment_schur_seed_used),
-                    "xblock_moment_schur_seed_residual_norm": moment_schur_seed_residual_norm,
-                    "xblock_moment_schur_seed_residual_ratio": moment_schur_seed_residual_ratio,
-                    "xblock_qi_coarse_seed_enabled": bool(qi_coarse_seed_enabled),
-                    "xblock_qi_coarse_seed_used": bool(qi_coarse_seed_used),
-                    "xblock_qi_coarse_seed_residual_before": qi_coarse_seed_residual_before,
-                    "xblock_qi_coarse_seed_residual_after": qi_coarse_seed_residual_after,
-                    "xblock_qi_coarse_seed_improvement_ratio": qi_coarse_seed_improvement_ratio,
-                    "xblock_qi_coarse_seed_rank": int(qi_coarse_seed_rank),
-                    "xblock_qi_coarse_seed_candidate_count": int(qi_coarse_seed_candidate_count),
-                    "xblock_qi_coarse_seed_reason": qi_coarse_seed_reason,
-                    "xblock_qi_coarse_seed_labels": qi_coarse_seed_labels,
-                    "xblock_qi_coarse_seed_s": float(qi_coarse_seed_s),
-                    "xblock_qi_coarse_seed_basis": qi_seed_basis_kind,
-                    "xblock_qi_coarse_seed_max_candidates": int(qi_seed_max_candidates),
-                    "xblock_qi_coarse_seed_max_angular_mode": int(qi_seed_max_angular_mode),
-                    "xblock_qi_galerkin_preconditioner_enabled": bool(qi_galerkin_preconditioner_enabled),
-                    "xblock_qi_galerkin_preconditioner_built": bool(qi_galerkin_preconditioner_built),
-                    "xblock_qi_galerkin_preconditioner_used": bool(qi_galerkin_preconditioner_used),
-                    "xblock_qi_galerkin_preconditioner_reason": qi_galerkin_preconditioner_reason,
-                    "xblock_qi_galerkin_preconditioner_mode": qi_galerkin_preconditioner_mode,
-                    "xblock_qi_galerkin_preconditioner_rank": int(qi_galerkin_preconditioner_rank),
-                    "xblock_qi_galerkin_preconditioner_candidate_count": int(
-                        qi_galerkin_preconditioner_candidate_count
-                    ),
-                    "xblock_qi_galerkin_preconditioner_coarse_operator_shape": (
-                        qi_galerkin_preconditioner_coarse_shape
-                    ),
-                    "xblock_qi_galerkin_preconditioner_coarse_operator_norm": float(
-                        qi_galerkin_preconditioner_coarse_norm
-                    ),
-                    "xblock_qi_galerkin_preconditioner_rcond": float(qi_galerkin_preconditioner_rcond),
-                    "xblock_qi_galerkin_preconditioner_damping": float(qi_galerkin_preconditioner_damping),
-                    "xblock_qi_galerkin_preconditioner_basis_reused_from_seed": bool(
-                        qi_galerkin_preconditioner_basis_reused_from_seed
-                    ),
-                    "xblock_qi_galerkin_preconditioner_residual_before": (
-                        qi_galerkin_preconditioner_residual_before
-                    ),
-                    "xblock_qi_galerkin_preconditioner_residual_after": qi_galerkin_preconditioner_residual_after,
-                    "xblock_qi_galerkin_preconditioner_improvement_ratio": (
-                        qi_galerkin_preconditioner_improvement_ratio
-                    ),
-                    "xblock_qi_galerkin_preconditioner_probe_reduced": bool(
-                        qi_galerkin_preconditioner_probe_reduced
-                    ),
-                    "xblock_qi_galerkin_preconditioner_probe_candidates": (
-                        qi_galerkin_preconditioner_probe_candidates
-                    ),
-                    "xblock_qi_galerkin_preconditioner_selected_index": (
-                        qi_galerkin_preconditioner_selected_index
-                    ),
-                    "xblock_qi_galerkin_preconditioner_setup_s": float(qi_galerkin_preconditioner_setup_s),
-                    "xblock_qi_galerkin_preconditioner_applies": int(qi_galerkin_stats.get("applies", 0)),
-                    "xblock_qi_galerkin_preconditioner_coarse_applies": int(
-                        qi_galerkin_stats.get("coarse_applies", 0)
-                    ),
-                    "xblock_qi_galerkin_preconditioner_base_applies": int(
-                        qi_galerkin_stats.get("base_applies", 0)
-                    ),
-                    "xblock_qi_two_level_preconditioner_enabled": bool(qi_two_level_preconditioner_enabled),
-                    "xblock_qi_two_level_preconditioner_built": bool(qi_two_level_preconditioner_built),
-                    "xblock_qi_two_level_preconditioner_used": bool(qi_two_level_preconditioner_used),
-                    "xblock_qi_two_level_preconditioner_reason": qi_two_level_preconditioner_reason,
-                    "xblock_qi_two_level_preconditioner_rank": int(qi_two_level_preconditioner_rank),
-                    "xblock_qi_two_level_preconditioner_candidate_count": int(
-                        qi_two_level_preconditioner_candidate_count
-                    ),
-                    "xblock_qi_two_level_preconditioner_coarse_operator_shape": (
-                        qi_two_level_preconditioner_coarse_shape
-                    ),
-                    "xblock_qi_two_level_preconditioner_coarse_operator_norm": float(
-                        qi_two_level_preconditioner_coarse_norm
-                    ),
-                    "xblock_qi_two_level_preconditioner_operator_on_basis_shape": (
-                        qi_two_level_preconditioner_operator_on_basis_shape
-                    ),
-                    "xblock_qi_two_level_preconditioner_operator_on_basis_norm": float(
-                        qi_two_level_preconditioner_operator_on_basis_norm
-                    ),
-                    "xblock_qi_two_level_preconditioner_coarse_solver": qi_two_level_preconditioner_coarse_solver,
-                    "xblock_qi_two_level_preconditioner_residual_augmented": bool(
-                        qi_two_level_preconditioner_residual_augmented
-                    ),
-                    "xblock_qi_two_level_preconditioner_rank_before_augmentation": int(
-                        qi_two_level_preconditioner_rank_before_augmentation
-                    ),
-                    "xblock_qi_two_level_preconditioner_augmentation_labels": (
-                        qi_two_level_preconditioner_augmentation_labels
-                    ),
-                    "xblock_qi_two_level_preconditioner_residual_augment_max_extra": int(
-                        qi_two_level_preconditioner_residual_augment_max_extra
-                    ),
-                    "xblock_qi_two_level_preconditioner_residual_augment_steps": int(
-                        qi_two_level_preconditioner_residual_augment_steps
-                    ),
-                    "xblock_qi_two_level_preconditioner_residual_augment_include_residuals": bool(
-                        qi_two_level_preconditioner_residual_augment_include_residuals
-                    ),
-                    "xblock_qi_two_level_preconditioner_smoothed_load_basis": bool(
-                        qi_two_level_preconditioner_smoothed_load_basis
-                    ),
-                    "xblock_qi_two_level_preconditioner_smoothed_load_metadata": (
-                        qi_two_level_preconditioner_smoothed_load_metadata
-                    ),
-                    "xblock_qi_two_level_preconditioner_rcond": float(qi_two_level_preconditioner_rcond),
-                    "xblock_qi_two_level_preconditioner_damping": float(qi_two_level_preconditioner_damping),
-                    "xblock_qi_two_level_preconditioner_basis_reused_from_seed": bool(
-                        qi_two_level_preconditioner_basis_reused_from_seed
-                    ),
-                    "xblock_qi_two_level_preconditioner_residual_before": (
-                        qi_two_level_preconditioner_residual_before
-                    ),
-                    "xblock_qi_two_level_preconditioner_residual_after": qi_two_level_preconditioner_residual_after,
-                    "xblock_qi_two_level_preconditioner_improvement_ratio": (
-                        qi_two_level_preconditioner_improvement_ratio
-                    ),
-                    "xblock_qi_two_level_preconditioner_probe_candidates": (
-                        qi_two_level_preconditioner_probe_candidates
-                    ),
-                    "xblock_qi_two_level_preconditioner_selected_index": (
-                        qi_two_level_preconditioner_selected_index
-                    ),
-                    "xblock_qi_two_level_preconditioner_setup_s": float(qi_two_level_preconditioner_setup_s),
-                    "xblock_qi_two_level_preconditioner_applies": int(qi_two_level_stats.get("applies", 0)),
-                    "xblock_qi_two_level_preconditioner_local_applies": int(
-                        qi_two_level_stats.get("local_applies", 0)
-                    ),
+                    **xblock_qi_seed_preconditioner_diagnostics(locals()),
                     **xblock_qi_device_preconditioner_diagnostics(locals()),
                     **xblock_qi_deflated_preconditioner_diagnostics(locals()),
                     **xblock_side_probe_diagnostics(locals()),

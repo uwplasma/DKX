@@ -1022,6 +1022,216 @@ def xblock_coarse_correction_diagnostics(scope: Mapping[str, object]) -> dict[st
     }
 
 
+def xblock_qi_seed_preconditioner_diagnostics(
+    scope: Mapping[str, object],
+) -> dict[str, object]:
+    """Return QI seed, Galerkin, and two-level preconditioner diagnostics."""
+
+    galerkin_stats = scope["qi_galerkin_stats"]
+    two_level_stats = scope["qi_two_level_stats"]
+    if not isinstance(galerkin_stats, Mapping):
+        raise TypeError("qi_galerkin_stats must be a mapping")
+    if not isinstance(two_level_stats, Mapping):
+        raise TypeError("qi_two_level_stats must be a mapping")
+
+    return {
+        "xblock_initial_seed_used": bool(scope["xblock_initial_seed_used"]),
+        "xblock_initial_seed_residual_norm": scope[
+            "xblock_initial_seed_residual_norm"
+        ],
+        "xblock_initial_seed_residual_ratio": scope[
+            "xblock_initial_seed_residual_ratio"
+        ],
+        "xblock_moment_schur_seed_enabled": bool(scope["moment_schur_seed_enabled"]),
+        "xblock_moment_schur_seed_used": bool(scope["moment_schur_seed_used"]),
+        "xblock_moment_schur_seed_residual_norm": scope[
+            "moment_schur_seed_residual_norm"
+        ],
+        "xblock_moment_schur_seed_residual_ratio": scope[
+            "moment_schur_seed_residual_ratio"
+        ],
+        "xblock_qi_coarse_seed_enabled": bool(scope["qi_coarse_seed_enabled"]),
+        "xblock_qi_coarse_seed_used": bool(scope["qi_coarse_seed_used"]),
+        "xblock_qi_coarse_seed_residual_before": scope[
+            "qi_coarse_seed_residual_before"
+        ],
+        "xblock_qi_coarse_seed_residual_after": scope[
+            "qi_coarse_seed_residual_after"
+        ],
+        "xblock_qi_coarse_seed_improvement_ratio": scope[
+            "qi_coarse_seed_improvement_ratio"
+        ],
+        "xblock_qi_coarse_seed_rank": int(scope["qi_coarse_seed_rank"]),
+        "xblock_qi_coarse_seed_candidate_count": int(
+            scope["qi_coarse_seed_candidate_count"]
+        ),
+        "xblock_qi_coarse_seed_reason": scope["qi_coarse_seed_reason"],
+        "xblock_qi_coarse_seed_labels": scope["qi_coarse_seed_labels"],
+        "xblock_qi_coarse_seed_s": float(scope["qi_coarse_seed_s"]),
+        "xblock_qi_coarse_seed_basis": scope["qi_seed_basis_kind"],
+        "xblock_qi_coarse_seed_max_candidates": int(scope["qi_seed_max_candidates"]),
+        "xblock_qi_coarse_seed_max_angular_mode": int(
+            scope["qi_seed_max_angular_mode"]
+        ),
+        "xblock_qi_galerkin_preconditioner_enabled": bool(
+            scope["qi_galerkin_preconditioner_enabled"]
+        ),
+        "xblock_qi_galerkin_preconditioner_built": bool(
+            scope["qi_galerkin_preconditioner_built"]
+        ),
+        "xblock_qi_galerkin_preconditioner_used": bool(
+            scope["qi_galerkin_preconditioner_used"]
+        ),
+        "xblock_qi_galerkin_preconditioner_reason": scope[
+            "qi_galerkin_preconditioner_reason"
+        ],
+        "xblock_qi_galerkin_preconditioner_mode": scope[
+            "qi_galerkin_preconditioner_mode"
+        ],
+        "xblock_qi_galerkin_preconditioner_rank": int(
+            scope["qi_galerkin_preconditioner_rank"]
+        ),
+        "xblock_qi_galerkin_preconditioner_candidate_count": int(
+            scope["qi_galerkin_preconditioner_candidate_count"]
+        ),
+        "xblock_qi_galerkin_preconditioner_coarse_operator_shape": scope[
+            "qi_galerkin_preconditioner_coarse_shape"
+        ],
+        "xblock_qi_galerkin_preconditioner_coarse_operator_norm": float(
+            scope["qi_galerkin_preconditioner_coarse_norm"]
+        ),
+        "xblock_qi_galerkin_preconditioner_rcond": float(
+            scope["qi_galerkin_preconditioner_rcond"]
+        ),
+        "xblock_qi_galerkin_preconditioner_damping": float(
+            scope["qi_galerkin_preconditioner_damping"]
+        ),
+        "xblock_qi_galerkin_preconditioner_basis_reused_from_seed": bool(
+            scope["qi_galerkin_preconditioner_basis_reused_from_seed"]
+        ),
+        "xblock_qi_galerkin_preconditioner_residual_before": scope[
+            "qi_galerkin_preconditioner_residual_before"
+        ],
+        "xblock_qi_galerkin_preconditioner_residual_after": scope[
+            "qi_galerkin_preconditioner_residual_after"
+        ],
+        "xblock_qi_galerkin_preconditioner_improvement_ratio": scope[
+            "qi_galerkin_preconditioner_improvement_ratio"
+        ],
+        "xblock_qi_galerkin_preconditioner_probe_reduced": bool(
+            scope["qi_galerkin_preconditioner_probe_reduced"]
+        ),
+        "xblock_qi_galerkin_preconditioner_probe_candidates": scope[
+            "qi_galerkin_preconditioner_probe_candidates"
+        ],
+        "xblock_qi_galerkin_preconditioner_selected_index": scope[
+            "qi_galerkin_preconditioner_selected_index"
+        ],
+        "xblock_qi_galerkin_preconditioner_setup_s": float(
+            scope["qi_galerkin_preconditioner_setup_s"]
+        ),
+        "xblock_qi_galerkin_preconditioner_applies": int(
+            galerkin_stats.get("applies", 0)
+        ),
+        "xblock_qi_galerkin_preconditioner_coarse_applies": int(
+            galerkin_stats.get("coarse_applies", 0)
+        ),
+        "xblock_qi_galerkin_preconditioner_base_applies": int(
+            galerkin_stats.get("base_applies", 0)
+        ),
+        "xblock_qi_two_level_preconditioner_enabled": bool(
+            scope["qi_two_level_preconditioner_enabled"]
+        ),
+        "xblock_qi_two_level_preconditioner_built": bool(
+            scope["qi_two_level_preconditioner_built"]
+        ),
+        "xblock_qi_two_level_preconditioner_used": bool(
+            scope["qi_two_level_preconditioner_used"]
+        ),
+        "xblock_qi_two_level_preconditioner_reason": scope[
+            "qi_two_level_preconditioner_reason"
+        ],
+        "xblock_qi_two_level_preconditioner_rank": int(
+            scope["qi_two_level_preconditioner_rank"]
+        ),
+        "xblock_qi_two_level_preconditioner_candidate_count": int(
+            scope["qi_two_level_preconditioner_candidate_count"]
+        ),
+        "xblock_qi_two_level_preconditioner_coarse_operator_shape": scope[
+            "qi_two_level_preconditioner_coarse_shape"
+        ],
+        "xblock_qi_two_level_preconditioner_coarse_operator_norm": float(
+            scope["qi_two_level_preconditioner_coarse_norm"]
+        ),
+        "xblock_qi_two_level_preconditioner_operator_on_basis_shape": scope[
+            "qi_two_level_preconditioner_operator_on_basis_shape"
+        ],
+        "xblock_qi_two_level_preconditioner_operator_on_basis_norm": float(
+            scope["qi_two_level_preconditioner_operator_on_basis_norm"]
+        ),
+        "xblock_qi_two_level_preconditioner_coarse_solver": scope[
+            "qi_two_level_preconditioner_coarse_solver"
+        ],
+        "xblock_qi_two_level_preconditioner_residual_augmented": bool(
+            scope["qi_two_level_preconditioner_residual_augmented"]
+        ),
+        "xblock_qi_two_level_preconditioner_rank_before_augmentation": int(
+            scope["qi_two_level_preconditioner_rank_before_augmentation"]
+        ),
+        "xblock_qi_two_level_preconditioner_augmentation_labels": scope[
+            "qi_two_level_preconditioner_augmentation_labels"
+        ],
+        "xblock_qi_two_level_preconditioner_residual_augment_max_extra": int(
+            scope["qi_two_level_preconditioner_residual_augment_max_extra"]
+        ),
+        "xblock_qi_two_level_preconditioner_residual_augment_steps": int(
+            scope["qi_two_level_preconditioner_residual_augment_steps"]
+        ),
+        "xblock_qi_two_level_preconditioner_residual_augment_include_residuals": bool(
+            scope["qi_two_level_preconditioner_residual_augment_include_residuals"]
+        ),
+        "xblock_qi_two_level_preconditioner_smoothed_load_basis": bool(
+            scope["qi_two_level_preconditioner_smoothed_load_basis"]
+        ),
+        "xblock_qi_two_level_preconditioner_smoothed_load_metadata": scope[
+            "qi_two_level_preconditioner_smoothed_load_metadata"
+        ],
+        "xblock_qi_two_level_preconditioner_rcond": float(
+            scope["qi_two_level_preconditioner_rcond"]
+        ),
+        "xblock_qi_two_level_preconditioner_damping": float(
+            scope["qi_two_level_preconditioner_damping"]
+        ),
+        "xblock_qi_two_level_preconditioner_basis_reused_from_seed": bool(
+            scope["qi_two_level_preconditioner_basis_reused_from_seed"]
+        ),
+        "xblock_qi_two_level_preconditioner_residual_before": scope[
+            "qi_two_level_preconditioner_residual_before"
+        ],
+        "xblock_qi_two_level_preconditioner_residual_after": scope[
+            "qi_two_level_preconditioner_residual_after"
+        ],
+        "xblock_qi_two_level_preconditioner_improvement_ratio": scope[
+            "qi_two_level_preconditioner_improvement_ratio"
+        ],
+        "xblock_qi_two_level_preconditioner_probe_candidates": scope[
+            "qi_two_level_preconditioner_probe_candidates"
+        ],
+        "xblock_qi_two_level_preconditioner_selected_index": scope[
+            "qi_two_level_preconditioner_selected_index"
+        ],
+        "xblock_qi_two_level_preconditioner_setup_s": float(
+            scope["qi_two_level_preconditioner_setup_s"]
+        ),
+        "xblock_qi_two_level_preconditioner_applies": int(
+            two_level_stats.get("applies", 0)
+        ),
+        "xblock_qi_two_level_preconditioner_local_applies": int(
+            two_level_stats.get("local_applies", 0)
+        ),
+    }
+
+
 class MatvecCounter:
     """Mutable matvec counter that preserves ``int(counter)`` call sites."""
 
