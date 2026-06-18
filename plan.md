@@ -32605,3 +32605,61 @@ Validation so far:
 - Full-suite checkpoint:
   ``PYTHONDONTWRITEBYTECODE=1 pytest -q -p no:cacheprovider``:
   ``2728 passed in 571.14 s``.
+
+### 19.61 RHSMode=1 KSP diagnostic context extraction
+
+Goal:
+
+- Remove the remaining KSP history/iteration diagnostic wrappers from
+  ``solve_v3_full_system_linear_gmres`` while preserving Fortran-style KSP
+  history replay and bounded iteration-stat diagnostics.
+
+Implementation:
+
+- Extended ``sfincs_jax/problems/profile_response/solver_diagnostics.py`` with
+  ``RHS1KSPDiagnosticsContext``,
+  ``emit_profile_response_ksp_history``, and
+  ``emit_profile_response_ksp_iter_stats``.
+- ``v3_driver.py`` now creates one KSP diagnostics context near the KSP replay
+  state and calls the profile-response helpers at the final diagnostic emission
+  point.
+- Removed the nested ``_emit_ksp_history`` and ``_emit_ksp_iter_stats`` wrappers
+  from the main solve loop.
+- Added direct tests proving that the profile-response context forwards
+  fortran-stdout, history-size, history-iteration, iteration-stat, and history
+  reuse controls to the canonical ``rhs1_ksp_diagnostics`` implementation.
+
+Validation so far:
+
+- ``python -m ruff check
+  sfincs_jax/problems/profile_response/solver_diagnostics.py
+  sfincs_jax/v3_driver.py tests/test_rhs1_solver_diagnostics.py``: passed.
+- ``python -m compileall -q
+  sfincs_jax/problems/profile_response/solver_diagnostics.py
+  sfincs_jax/v3_driver.py tests/test_rhs1_solver_diagnostics.py``: passed.
+- ``PYTHONDONTWRITEBYTECODE=1 pytest -q -p no:cacheprovider
+  tests/test_rhs1_solver_diagnostics.py tests/test_rhs1_ksp_diagnostics.py``:
+  ``10 passed in 0.66 s``.
+- ``PYTHONDONTWRITEBYTECODE=1 pytest -q -p no:cacheprovider
+  tests/test_v3_driver_rhs1_dispatch_coverage.py
+  tests/test_rhs1_handoff.py
+  tests/test_audit_rhs1_solver_stack.py
+  tests/test_rhs1_solver_diagnostics.py
+  tests/test_rhs1_ksp_diagnostics.py``:
+  ``65 passed in 25.00 s``.
+- ``SPHINXOPTS='-W --keep-going' python -m sphinx -b html docs
+  docs/_build/html``: passed.
+- ``git diff --check``: passed.
+- Broader RHSMode diagnostics/preconditioner subset:
+  ``PYTHONDONTWRITEBYTECODE=1 pytest -q -p no:cacheprovider
+  tests/test_example_auto_selection_paths.py
+  tests/test_pas_projection_heuristic.py
+  tests/test_rhs1_full_assembly.py
+  tests/test_schur_precond_heuristic.py
+  tests/test_v3_driver_rhs1_dispatch_coverage.py
+  tests/test_profile_response_preconditioner_build.py
+  tests/test_rhs1_solver_diagnostics.py
+  tests/test_rhs1_ksp_diagnostics.py
+  tests/test_rhs1_handoff.py
+  tests/test_audit_rhs1_solver_stack.py``:
+  ``196 passed in 56.93 s``.

@@ -353,14 +353,13 @@ from .rhs1_true_operator_rescue import (
     _try_build_residual_window_host_sparse_preconditioner,
 )
 from .problems.profile_response.solver_diagnostics import (
+    RHS1KSPDiagnosticsContext,
     RHS1PostMinresDiagnostics,
     RHS1PreflightDiagnostics,
     RHS1SubspaceCorrectionDiagnostics,
     build_rhs1_xblock_correction_metadata,
-)
-from .rhs1_ksp_diagnostics import (
-    emit_rhs1_ksp_history as _emit_rhs1_ksp_history,
-    emit_rhs1_ksp_iter_stats as _emit_rhs1_ksp_iter_stats,
+    emit_profile_response_ksp_history,
+    emit_profile_response_ksp_iter_stats,
 )
 from .problems.profile_response.active_dof import (
     build_rhs1_active_dof_state,
@@ -16597,6 +16596,14 @@ def solve_v3_full_system_linear_gmres(
     ksp_precond_side = gmres_precond_side
     ksp_solver_kind = "gmres"
     residual_vec: jnp.ndarray | None = None
+    rhs1_ksp_diagnostics_context = RHS1KSPDiagnosticsContext(
+        emit=emit,
+        fortran_stdout=bool(fortran_stdout),
+        history_max_size=ksp_history_max_size,
+        history_max_iter=ksp_history_max_iter,
+        iter_stats_enabled=bool(iter_stats_enabled),
+        iter_stats_max_size=iter_stats_max_size,
+    )
 
     def _apply_rhs1_handoff(state) -> None:
         nonlocal ksp_matvec, ksp_b, ksp_precond, ksp_x0, ksp_restart, ksp_maxiter, ksp_precond_side, ksp_solver_kind
@@ -16610,71 +16617,6 @@ def solve_v3_full_system_linear_gmres(
         ksp_maxiter = state.maxiter
         ksp_precond_side = state.precond_side
         ksp_solver_kind = state.solver_kind
-
-    def _emit_ksp_history(
-        *,
-        matvec_fn,
-        b_vec: jnp.ndarray,
-        precond_fn,
-        x0_vec: jnp.ndarray | None,
-        tol_val: float,
-        atol_val: float,
-        restart_val: int,
-        maxiter_val: int | None,
-        precond_side: str,
-        solver_kind: str,
-        solve_method_val: str,
-    ) -> list[float] | None:
-        return _emit_rhs1_ksp_history(
-            matvec_fn=matvec_fn,
-            b_vec=b_vec,
-            precond_fn=precond_fn,
-            x0_vec=x0_vec,
-            tol_val=tol_val,
-            atol_val=atol_val,
-            restart_val=restart_val,
-            maxiter_val=maxiter_val,
-            precond_side=precond_side,
-            solver_kind=solver_kind,
-            solve_method_val=solve_method_val,
-            emit=emit,
-            fortran_stdout=bool(fortran_stdout),
-            max_size=ksp_history_max_size,
-            max_history_iter=ksp_history_max_iter,
-        )
-
-    def _emit_ksp_iter_stats(
-        *,
-        matvec_fn,
-        b_vec: jnp.ndarray,
-        precond_fn,
-        x0_vec: jnp.ndarray | None,
-        tol_val: float,
-        atol_val: float,
-        restart_val: int,
-        maxiter_val: int | None,
-        precond_side: str,
-        solver_kind: str,
-        history: list[float] | None,
-        solve_method_val: str,
-    ) -> None:
-        _emit_rhs1_ksp_iter_stats(
-            matvec_fn=matvec_fn,
-            b_vec=b_vec,
-            precond_fn=precond_fn,
-            x0_vec=x0_vec,
-            tol_val=tol_val,
-            atol_val=atol_val,
-            restart_val=restart_val,
-            maxiter_val=maxiter_val,
-            precond_side=precond_side,
-            solver_kind=solver_kind,
-            history=history,
-            solve_method_val=solve_method_val,
-            emit=emit,
-            enabled=bool(iter_stats_enabled),
-            max_size=iter_stats_max_size,
-        )
     if use_active_dof_mode:
         assert active_idx_jnp is not None
         assert full_to_active_jnp is not None
@@ -23685,7 +23627,8 @@ def solve_v3_full_system_linear_gmres(
                 x_new = jnp.concatenate([result.x[: -int(op.extra_size)], extra], axis=0)
                 result = GMRESSolveResult(x=x_new, residual_norm=result.residual_norm)
     if ksp_matvec is not None and ksp_b is not None:
-        ksp_history = _emit_ksp_history(
+        ksp_history = emit_profile_response_ksp_history(
+            context=rhs1_ksp_diagnostics_context,
             matvec_fn=ksp_matvec,
             b_vec=ksp_b,
             precond_fn=ksp_precond,
@@ -23698,7 +23641,8 @@ def solve_v3_full_system_linear_gmres(
             solver_kind=ksp_solver_kind,
             solve_method_val=str(solve_method),
         )
-        _emit_ksp_iter_stats(
+        emit_profile_response_ksp_iter_stats(
+            context=rhs1_ksp_diagnostics_context,
             matvec_fn=ksp_matvec,
             b_vec=ksp_b,
             precond_fn=ksp_precond,

@@ -3,7 +3,14 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
+
+import jax.numpy as jnp
+
+from ...rhs1_ksp_diagnostics import emit_rhs1_ksp_history, emit_rhs1_ksp_iter_stats
+
+
+EmitFn = Callable[[int, str], None]
 
 
 @dataclass(frozen=True)
@@ -46,8 +53,93 @@ class RHS1PreflightDiagnostics:
     passed: bool | None = None
 
 
+@dataclass(frozen=True)
+class RHS1KSPDiagnosticsContext:
+    """Static controls for optional RHSMode=1 KSP diagnostic replay."""
+
+    emit: EmitFn | None
+    fortran_stdout: bool
+    history_max_size: int | None
+    history_max_iter: int | None
+    iter_stats_enabled: bool
+    iter_stats_max_size: int | None
+
+
 def _subspace_count(values: Sequence[int]) -> int:
     return int(sum(int(value) for value in values))
+
+
+def emit_profile_response_ksp_history(
+    *,
+    context: RHS1KSPDiagnosticsContext,
+    matvec_fn,
+    b_vec: jnp.ndarray,
+    precond_fn,
+    x0_vec: jnp.ndarray | None,
+    tol_val: float,
+    atol_val: float,
+    restart_val: int,
+    maxiter_val: int | None,
+    precond_side: str,
+    solver_kind: str,
+    solve_method_val: str,
+) -> list[float] | None:
+    """Emit optional PETSc-like KSP residual history for RHSMode=1 solves."""
+
+    return emit_rhs1_ksp_history(
+        matvec_fn=matvec_fn,
+        b_vec=b_vec,
+        precond_fn=precond_fn,
+        x0_vec=x0_vec,
+        tol_val=tol_val,
+        atol_val=atol_val,
+        restart_val=restart_val,
+        maxiter_val=maxiter_val,
+        precond_side=precond_side,
+        solver_kind=solver_kind,
+        solve_method_val=solve_method_val,
+        emit=context.emit,
+        fortran_stdout=bool(context.fortran_stdout),
+        max_size=context.history_max_size,
+        max_history_iter=context.history_max_iter,
+    )
+
+
+def emit_profile_response_ksp_iter_stats(
+    *,
+    context: RHS1KSPDiagnosticsContext,
+    matvec_fn,
+    b_vec: jnp.ndarray,
+    precond_fn,
+    x0_vec: jnp.ndarray | None,
+    tol_val: float,
+    atol_val: float,
+    restart_val: int,
+    maxiter_val: int | None,
+    precond_side: str,
+    solver_kind: str,
+    history: list[float] | None,
+    solve_method_val: str,
+) -> None:
+    """Emit optional bounded KSP iteration-count diagnostics for RHSMode=1."""
+
+    emit_rhs1_ksp_iter_stats(
+        matvec_fn=matvec_fn,
+        b_vec=b_vec,
+        precond_fn=precond_fn,
+        x0_vec=x0_vec,
+        tol_val=tol_val,
+        atol_val=atol_val,
+        restart_val=restart_val,
+        maxiter_val=maxiter_val,
+        precond_side=precond_side,
+        solver_kind=solver_kind,
+        history=history,
+        solve_method_val=solve_method_val,
+        emit=context.emit,
+        enabled=bool(context.iter_stats_enabled),
+        max_size=context.iter_stats_max_size,
+    )
 
 
 def build_rhs1_xblock_correction_metadata(

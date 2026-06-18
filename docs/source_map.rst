@@ -490,9 +490,10 @@ the historical private driver name and test the focused module directly. This ke
   fail-closed diagnostics.
 - ``sfincs_jax/problems/profile_response/solver_diagnostics.py``
   (legacy alias: ``sfincs_jax/rhs1_solver_diagnostics.py``):
-  typed RHSMode=1 x-block correction diagnostic records and historical solver
-  metadata key assembly. This keeps output-visible trace fields independently
-  testable while ``v3_driver.py`` continues to own the solve orchestration.
+  typed RHSMode=1 x-block correction diagnostic records, historical solver
+  metadata key assembly, and KSP replay diagnostic context forwarding. This
+  keeps output-visible trace fields independently testable while
+  ``v3_driver.py`` continues to own the solve orchestration.
 - ``sfincs_jax/rhs1_ksp_diagnostics.py``:
   bounded RHSMode=1 PETSc-style KSP residual-history replay and iteration-count
   diagnostics. The driver passes the active matvec, preconditioner, and emit
