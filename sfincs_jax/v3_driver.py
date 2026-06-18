@@ -200,7 +200,9 @@ from .problems.profile_response.qi_device_seed import (
     attempt_matrixfree_qi_device_seed,
 )
 from .problems.profile_response.diagnostics import (
+    XBlockAssembledOperatorDiagnosticsContext,
     XBlockSparsePCCoreDiagnosticsContext,
+    XBlockSideProbeDiagnosticsContext,
     fp_xblock_global_correction_metadata,
     fp_xblock_highx_residual_correction_metadata,
     sparse_rescue_tail_metadata,
@@ -6944,12 +6946,63 @@ def solve_v3_full_system_linear_gmres(
                     "xblock_active_dof": bool(xblock_use_active_dof),
                     "xblock_linear_size": int(xblock_linear_size),
                     "xblock_full_size": int(op.total_size),
-                    **xblock_assembled_operator_diagnostics(locals()),
+                    **xblock_assembled_operator_diagnostics(
+                        XBlockAssembledOperatorDiagnosticsContext(
+                            enabled=assembled_operator_enabled,
+                            built=assembled_operator_built,
+                            metadata=assembled_operator_metadata,
+                            row_equilibration_enabled=(
+                                xblock_row_equilibration_enabled
+                            ),
+                            row_equilibration_built=xblock_row_equilibration_built,
+                            row_equilibration_metadata=(
+                                xblock_row_equilibration_metadata
+                            ),
+                            col_equilibration_enabled=(
+                                xblock_col_equilibration_enabled
+                            ),
+                            col_equilibration_built=xblock_col_equilibration_built,
+                            col_equilibration_metadata=(
+                                xblock_col_equilibration_metadata
+                            ),
+                        )
+                    ),
                     **xblock_coarse_correction_diagnostics(locals()),
                     **xblock_qi_seed_preconditioner_diagnostics(locals()),
                     **xblock_qi_device_preconditioner_diagnostics(locals()),
                     **xblock_qi_deflated_preconditioner_diagnostics(locals()),
-                    **xblock_side_probe_diagnostics(locals()),
+                    **xblock_side_probe_diagnostics(
+                        XBlockSideProbeDiagnosticsContext(
+                            enabled=xblock_side_probe_enabled,
+                            used=xblock_side_probe_used,
+                            switched=xblock_side_probe_switched,
+                            switch_suppressed_by_global_coupling=(
+                                xblock_side_probe_switch_suppressed_by_global_coupling
+                            ),
+                            switch_suppressed_by_explicit_side=(
+                                xblock_side_probe_switch_suppressed_by_explicit_side
+                            ),
+                            physical_seed_preserved_after_switch=(
+                                xblock_side_probe_physical_seed_preserved_after_switch
+                            ),
+                            seed_used=xblock_side_probe_seed_used,
+                            seed_residual_norm=xblock_side_probe_seed_residual_norm,
+                            initial_side=xblock_side_probe_initial_side,
+                            selected_side=xblock_side_probe_selected_side,
+                            initial_method=xblock_side_probe_initial_method,
+                            selected_method=xblock_side_probe_selected_method,
+                            lgmres_rescue=xblock_side_probe_lgmres_rescue,
+                            lgmres_rescue_maxiter_capped=(
+                                xblock_lgmres_rescue_maxiter_capped
+                            ),
+                            lgmres_rescue_outer_k=xblock_lgmres_rescue_outer_k,
+                            residual_norm=xblock_side_probe_residual_norm,
+                            residual_ratio=xblock_side_probe_residual_ratio,
+                            iterations=xblock_side_probe_iterations,
+                            matvecs=xblock_side_probe_matvecs,
+                            elapsed_s=xblock_side_probe_s,
+                        )
+                    ),
                     **build_rhs1_xblock_correction_metadata(
                         probe_coarse=RHS1SubspaceCorrectionDiagnostics(
                             steps_requested=int(probe_coarse_steps_requested),

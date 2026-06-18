@@ -34886,3 +34886,46 @@ Next refactor target:
 - Continue replacing ``locals()`` diagnostics calls with explicit contexts,
   prioritizing ``xblock_device_krylov_diagnostics`` or the assembled/coarse
   diagnostics payloads before extracting a larger sparse-PC result builder.
+
+### 19.110 Side-probe and assembled-operator diagnostics contexts
+
+Goal:
+
+- Continue removing broad ``locals()`` dependencies from x-block sparse-PC
+  result metadata while keeping the public diagnostics payload unchanged.
+
+Implementation:
+
+- Added ``XBlockSideProbeDiagnosticsContext`` and
+  ``XBlockAssembledOperatorDiagnosticsContext`` in
+  ``problems/profile_response/diagnostics.py``.
+- Updated ``xblock_side_probe_diagnostics`` and
+  ``xblock_assembled_operator_diagnostics`` to consume explicit context
+  objects instead of the driver's local frame.
+- Updated ``v3_driver.py`` to pass the side-probe, LGMRES-rescue,
+  assembled-operator, and row/column equilibration inputs explicitly at the
+  ``V3LinearSolveResult`` boundary.
+- Re-exported the new context classes through ``profile_response/sparse_pc.py``
+  for compatibility with existing internal imports.
+- Updated direct diagnostics tests to exercise the typed contexts and preserve
+  the same output keys and coercions.
+- ``v3_driver.py`` is now about ``21301`` lines and
+  ``solve_v3_full_system_linear_gmres`` about ``16000`` lines. This is an
+  intentional intermediate increase to eliminate hidden dependencies before
+  moving the whole sparse-PC result-builder block out of the driver.
+
+Validation:
+
+- ``python -m ruff check`` on touched source/tests: passed.
+- ``python -m compileall -q`` on touched source/tests: passed.
+- ``tests/test_profile_response_diagnostics.py`` plus
+  ``tests/test_profile_response_sparse_pc.py``: ``67 passed``.
+- Broader current profile-response/x-block/sparse-pattern shard:
+  ``331 passed in 85.82 s``.
+
+Next refactor target:
+
+- Extract an ``XBlockSparsePCResultDiagnosticsContext`` or result-builder
+  wrapper that groups the typed diagnostics contexts outside ``v3_driver.py``.
+  That should reduce the driver line count instead of adding more inline
+  context construction.

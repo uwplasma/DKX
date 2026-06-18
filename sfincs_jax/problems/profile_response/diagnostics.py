@@ -595,53 +595,92 @@ def xblock_qi_deflated_preconditioner_diagnostics(
     }
 
 
-def xblock_side_probe_diagnostics(scope: Mapping[str, object]) -> dict[str, object]:
+@dataclass(frozen=True, slots=True)
+class XBlockSideProbeDiagnosticsContext:
+    """Explicit inputs for side-probe and LGMRES-rescue diagnostics."""
+
+    enabled: object
+    used: object
+    switched: object
+    switch_suppressed_by_global_coupling: object
+    switch_suppressed_by_explicit_side: object
+    physical_seed_preserved_after_switch: object
+    seed_used: object
+    seed_residual_norm: object
+    initial_side: object
+    selected_side: object
+    initial_method: object
+    selected_method: object
+    lgmres_rescue: object
+    lgmres_rescue_maxiter_capped: object
+    lgmres_rescue_outer_k: object
+    residual_norm: object
+    residual_ratio: object
+    iterations: object
+    matvecs: object
+    elapsed_s: object
+
+
+def xblock_side_probe_diagnostics(
+    context: XBlockSideProbeDiagnosticsContext,
+) -> dict[str, object]:
     """Return side-probe and LGMRES-rescue diagnostics for x-block solves."""
 
     return {
-        "xblock_side_probe_enabled": bool(scope["xblock_side_probe_enabled"]),
-        "xblock_side_probe_used": bool(scope["xblock_side_probe_used"]),
-        "xblock_side_probe_switched": bool(scope["xblock_side_probe_switched"]),
+        "xblock_side_probe_enabled": bool(context.enabled),
+        "xblock_side_probe_used": bool(context.used),
+        "xblock_side_probe_switched": bool(context.switched),
         "xblock_side_probe_switch_suppressed_by_global_coupling": bool(
-            scope["xblock_side_probe_switch_suppressed_by_global_coupling"]
+            context.switch_suppressed_by_global_coupling
         ),
         "xblock_side_probe_switch_suppressed_by_explicit_side": bool(
-            scope["xblock_side_probe_switch_suppressed_by_explicit_side"]
+            context.switch_suppressed_by_explicit_side
         ),
         "xblock_side_probe_physical_seed_preserved_after_switch": bool(
-            scope["xblock_side_probe_physical_seed_preserved_after_switch"]
+            context.physical_seed_preserved_after_switch
         ),
-        "xblock_side_probe_seed_used": bool(scope["xblock_side_probe_seed_used"]),
-        "xblock_side_probe_seed_residual_norm": scope[
-            "xblock_side_probe_seed_residual_norm"
-        ],
-        "xblock_side_probe_initial_side": scope["xblock_side_probe_initial_side"],
-        "xblock_side_probe_selected_side": scope["xblock_side_probe_selected_side"],
-        "xblock_side_probe_initial_method": scope["xblock_side_probe_initial_method"],
-        "xblock_side_probe_selected_method": scope["xblock_side_probe_selected_method"],
-        "xblock_side_probe_lgmres_rescue": bool(
-            scope["xblock_side_probe_lgmres_rescue"]
-        ),
+        "xblock_side_probe_seed_used": bool(context.seed_used),
+        "xblock_side_probe_seed_residual_norm": context.seed_residual_norm,
+        "xblock_side_probe_initial_side": context.initial_side,
+        "xblock_side_probe_selected_side": context.selected_side,
+        "xblock_side_probe_initial_method": context.initial_method,
+        "xblock_side_probe_selected_method": context.selected_method,
+        "xblock_side_probe_lgmres_rescue": bool(context.lgmres_rescue),
         "xblock_lgmres_rescue_maxiter_capped": bool(
-            scope["xblock_lgmres_rescue_maxiter_capped"]
+            context.lgmres_rescue_maxiter_capped
         ),
-        "xblock_lgmres_rescue_outer_k": scope["xblock_lgmres_rescue_outer_k"],
-        "xblock_side_probe_residual_norm": scope["xblock_side_probe_residual_norm"],
-        "xblock_side_probe_residual_ratio": scope["xblock_side_probe_residual_ratio"],
-        "xblock_side_probe_iterations": int(scope["xblock_side_probe_iterations"]),
-        "xblock_side_probe_matvecs": int(scope["xblock_side_probe_matvecs"]),
-        "xblock_side_probe_s": float(scope["xblock_side_probe_s"]),
+        "xblock_lgmres_rescue_outer_k": context.lgmres_rescue_outer_k,
+        "xblock_side_probe_residual_norm": context.residual_norm,
+        "xblock_side_probe_residual_ratio": context.residual_ratio,
+        "xblock_side_probe_iterations": int(context.iterations),
+        "xblock_side_probe_matvecs": int(context.matvecs),
+        "xblock_side_probe_s": float(context.elapsed_s),
     }
 
 
+@dataclass(frozen=True, slots=True)
+class XBlockAssembledOperatorDiagnosticsContext:
+    """Explicit inputs for assembled-operator and equilibration diagnostics."""
+
+    enabled: object
+    built: object
+    metadata: Mapping[str, object]
+    row_equilibration_enabled: object
+    row_equilibration_built: object
+    row_equilibration_metadata: Mapping[str, object]
+    col_equilibration_enabled: object
+    col_equilibration_built: object
+    col_equilibration_metadata: Mapping[str, object]
+
+
 def xblock_assembled_operator_diagnostics(
-    scope: Mapping[str, object],
+    context: XBlockAssembledOperatorDiagnosticsContext,
 ) -> dict[str, object]:
     """Return assembled-operator and equilibration diagnostics for x-block solves."""
 
-    metadata = scope["assembled_operator_metadata"]
-    row_metadata = scope["xblock_row_equilibration_metadata"]
-    col_metadata = scope["xblock_col_equilibration_metadata"]
+    metadata = context.metadata
+    row_metadata = context.row_equilibration_metadata
+    col_metadata = context.col_equilibration_metadata
     if not isinstance(metadata, Mapping):
         raise TypeError("assembled_operator_metadata must be a mapping")
     if not isinstance(row_metadata, Mapping):
@@ -650,8 +689,8 @@ def xblock_assembled_operator_diagnostics(
         raise TypeError("xblock_col_equilibration_metadata must be a mapping")
 
     return {
-        "xblock_assembled_operator_enabled": bool(scope["assembled_operator_enabled"]),
-        "xblock_assembled_operator_built": bool(scope["assembled_operator_built"]),
+        "xblock_assembled_operator_enabled": bool(context.enabled),
+        "xblock_assembled_operator_built": bool(context.built),
         "xblock_assembled_operator_active_dof": metadata.get("active_dof", False),
         "xblock_assembled_operator_preflight_scope": metadata.get("preflight_scope"),
         "xblock_assembled_operator_setup_s": metadata.get("setup_s"),
@@ -695,10 +734,10 @@ def xblock_assembled_operator_diagnostics(
         ),
         "xblock_assembled_operator_device_error": metadata.get("device_error"),
         "xblock_assembled_operator_row_equilibration_enabled": bool(
-            scope["xblock_row_equilibration_enabled"]
+            context.row_equilibration_enabled
         ),
         "xblock_assembled_operator_row_equilibration_built": bool(
-            scope["xblock_row_equilibration_built"]
+            context.row_equilibration_built
         ),
         "xblock_assembled_operator_row_equilibration_norm": row_metadata.get("norm"),
         "xblock_assembled_operator_row_equilibration_setup_s": row_metadata.get(
@@ -720,10 +759,10 @@ def xblock_assembled_operator_diagnostics(
             "row_scale_max"
         ),
         "xblock_assembled_operator_col_equilibration_enabled": bool(
-            scope["xblock_col_equilibration_enabled"]
+            context.col_equilibration_enabled
         ),
         "xblock_assembled_operator_col_equilibration_built": bool(
-            scope["xblock_col_equilibration_built"]
+            context.col_equilibration_built
         ),
         "xblock_assembled_operator_col_equilibration_norm": col_metadata.get("norm"),
         "xblock_assembled_operator_col_equilibration_setup_s": col_metadata.get(

@@ -5,7 +5,9 @@ from types import SimpleNamespace
 import numpy as np
 
 from sfincs_jax.problems.profile_response.diagnostics import (
+    XBlockAssembledOperatorDiagnosticsContext,
     XBlockSparsePCCoreDiagnosticsContext,
+    XBlockSideProbeDiagnosticsContext,
     fp_xblock_global_correction_metadata,
     fp_xblock_highx_residual_correction_metadata,
     sparse_rescue_tail_metadata,
@@ -285,7 +287,39 @@ def _xblock_side_probe_scope() -> dict[str, object]:
 
 
 def test_xblock_side_probe_diagnostics_preserve_payload() -> None:
-    metadata = xblock_side_probe_diagnostics(_xblock_side_probe_scope())
+    scope = _xblock_side_probe_scope()
+    metadata = xblock_side_probe_diagnostics(
+        XBlockSideProbeDiagnosticsContext(
+            enabled=scope["xblock_side_probe_enabled"],
+            used=scope["xblock_side_probe_used"],
+            switched=scope["xblock_side_probe_switched"],
+            switch_suppressed_by_global_coupling=scope[
+                "xblock_side_probe_switch_suppressed_by_global_coupling"
+            ],
+            switch_suppressed_by_explicit_side=scope[
+                "xblock_side_probe_switch_suppressed_by_explicit_side"
+            ],
+            physical_seed_preserved_after_switch=scope[
+                "xblock_side_probe_physical_seed_preserved_after_switch"
+            ],
+            seed_used=scope["xblock_side_probe_seed_used"],
+            seed_residual_norm=scope["xblock_side_probe_seed_residual_norm"],
+            initial_side=scope["xblock_side_probe_initial_side"],
+            selected_side=scope["xblock_side_probe_selected_side"],
+            initial_method=scope["xblock_side_probe_initial_method"],
+            selected_method=scope["xblock_side_probe_selected_method"],
+            lgmres_rescue=scope["xblock_side_probe_lgmres_rescue"],
+            lgmres_rescue_maxiter_capped=scope[
+                "xblock_lgmres_rescue_maxiter_capped"
+            ],
+            lgmres_rescue_outer_k=scope["xblock_lgmres_rescue_outer_k"],
+            residual_norm=scope["xblock_side_probe_residual_norm"],
+            residual_ratio=scope["xblock_side_probe_residual_ratio"],
+            iterations=scope["xblock_side_probe_iterations"],
+            matvecs=scope["xblock_side_probe_matvecs"],
+            elapsed_s=scope["xblock_side_probe_s"],
+        )
+    )
 
     assert metadata["xblock_side_probe_enabled"] is True
     assert metadata["xblock_side_probe_switched"] is False
@@ -306,10 +340,10 @@ def test_xblock_side_probe_diagnostics_preserve_payload() -> None:
 
 def test_xblock_assembled_operator_diagnostics_preserve_payload() -> None:
     metadata = xblock_assembled_operator_diagnostics(
-        {
-            "assembled_operator_enabled": 1,
-            "assembled_operator_built": True,
-            "assembled_operator_metadata": {
+        XBlockAssembledOperatorDiagnosticsContext(
+            enabled=1,
+            built=True,
+            metadata={
                 "active_dof": True,
                 "preflight_scope": "active",
                 "setup_s": 1.25,
@@ -332,9 +366,9 @@ def test_xblock_assembled_operator_diagnostics_preserve_payload() -> None:
                 "validation_rel_errors": (2.0e-12,),
                 "error": None,
             },
-            "xblock_row_equilibration_enabled": 1,
-            "xblock_row_equilibration_built": True,
-            "xblock_row_equilibration_metadata": {
+            row_equilibration_enabled=1,
+            row_equilibration_built=True,
+            row_equilibration_metadata={
                 "norm": "inf",
                 "setup_s": 0.1,
                 "zero_or_tiny_rows": 2,
@@ -343,9 +377,9 @@ def test_xblock_assembled_operator_diagnostics_preserve_payload() -> None:
                 "row_scale_min": 0.25,
                 "row_scale_max": 2.0,
             },
-            "xblock_col_equilibration_enabled": 1,
-            "xblock_col_equilibration_built": False,
-            "xblock_col_equilibration_metadata": {
+            col_equilibration_enabled=1,
+            col_equilibration_built=False,
+            col_equilibration_metadata={
                 "norm": "two",
                 "setup_s": 0.2,
                 "zero_or_tiny_columns": 3,
@@ -354,7 +388,7 @@ def test_xblock_assembled_operator_diagnostics_preserve_payload() -> None:
                 "col_scale_min": 0.2,
                 "col_scale_max": 4.0,
             },
-        }
+        )
     )
 
     assert metadata["xblock_assembled_operator_enabled"] is True

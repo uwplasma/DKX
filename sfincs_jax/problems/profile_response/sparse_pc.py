@@ -10,7 +10,9 @@ import jax.numpy as jnp
 import numpy as np
 
 from .diagnostics import (
+    XBlockAssembledOperatorDiagnosticsContext,
     XBlockSparsePCCoreDiagnosticsContext,
+    XBlockSideProbeDiagnosticsContext,
     fp_xblock_global_correction_metadata,
     fp_xblock_highx_residual_correction_metadata,
     sparse_rescue_tail_metadata,
@@ -3088,7 +3090,9 @@ def apply_sparse_pc_post_minres(
 
 
 __all__ = [
+    "XBlockAssembledOperatorDiagnosticsContext",
     "XBlockSparsePCCoreDiagnosticsContext",
+    "XBlockSideProbeDiagnosticsContext",
     "SparsePCGMRESContext",
     "SparsePCGMRESResult",
     "SparsePCPostMinresContext",
