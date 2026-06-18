@@ -347,6 +347,22 @@ class XBlockQISeedPolicySetup:
     basis_kind: str | None
 
 
+@dataclass(frozen=True)
+class XBlockInitialGuessSetup:
+    """Accepted initial guess for an x-block Krylov solve."""
+
+    x0_full: jnp.ndarray | None
+    messages: tuple[tuple[int, str], ...]
+
+
+@dataclass(frozen=True)
+class XBlockSeedPolicySetup:
+    """Initial preconditioner seed controls for x-block Krylov solves."""
+
+    initial_seed_enabled: bool
+    moment_schur_seed_enabled: bool
+
+
 def _env_value(env: Mapping[str, str] | None, key: str) -> str:
     source = env if env is not None else {}
     return str(source.get(key, "")).strip()
@@ -1766,6 +1782,62 @@ def failed_xblock_global_coupling_metadata(
         "error": f"{type(exc).__name__}: {exc}",
         "setup_s": float(setup_s),
     }
+
+
+def prepare_xblock_initial_guess(
+    *,
+    x0: object | None,
+    xblock_rhs: jnp.ndarray,
+    full_rhs: jnp.ndarray,
+    xblock_use_active_dof: bool,
+    reduce_full: ArrayFn,
+) -> XBlockInitialGuessSetup:
+    """Accept a user-provided initial guess if its shape matches the active x-block solve."""
+
+    if x0 is None:
+        return XBlockInitialGuessSetup(x0_full=None, messages=())
+    x0_arr = jnp.asarray(x0, dtype=jnp.float64)
+    xblock_shape = tuple(xblock_rhs.shape)
+    full_shape = tuple(full_rhs.shape)
+    if x0_arr.shape == xblock_rhs.shape:
+        return XBlockInitialGuessSetup(x0_full=x0_arr, messages=())
+    if bool(xblock_use_active_dof) and x0_arr.shape == full_rhs.shape:
+        return XBlockInitialGuessSetup(
+            x0_full=jnp.asarray(reduce_full(x0_arr), dtype=jnp.float64),
+            messages=(),
+        )
+    expected = f"expected={xblock_shape}" + (f" or {full_shape}" if bool(xblock_use_active_dof) else "")
+    return XBlockInitialGuessSetup(
+        x0_full=None,
+        messages=(
+            (
+                1,
+                "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
+                f"ignoring incompatible x0 shape={tuple(x0_arr.shape)} {expected}",
+            ),
+        ),
+    )
+
+
+def resolve_xblock_seed_policy_setup(
+    *,
+    moment_schur_used: bool,
+    env: Mapping[str, str] | None = None,
+) -> XBlockSeedPolicySetup:
+    """Resolve initial and moment-Schur x-block seed controls."""
+
+    return XBlockSeedPolicySetup(
+        initial_seed_enabled=_env_bool(
+            env,
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_INITIAL_SEED",
+            default=False,
+        ),
+        moment_schur_seed_enabled=_env_bool(
+            env,
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_MOMENT_SCHUR_SEED",
+            default=bool(moment_schur_used),
+        ),
+    )
 
 
 def resolve_xblock_qi_seed_policy_setup(env: Mapping[str, str] | None = None) -> XBlockQISeedPolicySetup:

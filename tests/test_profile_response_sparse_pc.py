@@ -24,11 +24,13 @@ from sfincs_jax.problems.profile_response.sparse_pc import (
     finalize_xblock_global_coupling_metadata,
     finalize_xblock_two_level_metadata,
     finalize_xblock_moment_schur_metadata,
+    prepare_xblock_initial_guess,
     resolve_sparse_pc_entry_policy,
     resolve_xblock_qi_device_operator_reuse_setup,
     resolve_xblock_qi_seed_policy_setup,
     resolve_xblock_global_coupling_policy_setup,
     resolve_xblock_moment_schur_policy_setup,
+    resolve_xblock_seed_policy_setup,
     resolve_xblock_sparse_pc_setup,
     resolve_xblock_sparse_pc_side_policy_setup,
     resolve_xblock_two_level_policy_setup,
@@ -880,6 +882,64 @@ def test_xblock_global_coupling_metadata_helpers_normalize_success_and_failure()
 
     assert success == {"mode": "additive", "setup_s": 0.75}
     assert failure == {"error": "RuntimeError: timeout", "setup_s": 1.5}
+
+
+def test_prepare_xblock_initial_guess_accepts_reduced_and_full_active_shapes() -> None:
+    reduced = jnp.asarray([1.0, 2.0])
+    full = jnp.asarray([10.0, 11.0, 12.0, 13.0])
+    rhs_reduced = jnp.zeros(2)
+    rhs_full = jnp.zeros(4)
+
+    reduced_result = prepare_xblock_initial_guess(
+        x0=reduced,
+        xblock_rhs=rhs_reduced,
+        full_rhs=rhs_full,
+        xblock_use_active_dof=True,
+        reduce_full=lambda v: v[jnp.asarray([0, 2])],
+    )
+    full_result = prepare_xblock_initial_guess(
+        x0=full,
+        xblock_rhs=rhs_reduced,
+        full_rhs=rhs_full,
+        xblock_use_active_dof=True,
+        reduce_full=lambda v: v[jnp.asarray([0, 2])],
+    )
+
+    assert reduced_result.messages == ()
+    assert jnp.asarray(reduced_result.x0_full).tolist() == [1.0, 2.0]
+    assert full_result.messages == ()
+    assert jnp.asarray(full_result.x0_full).tolist() == [10.0, 12.0]
+
+
+def test_prepare_xblock_initial_guess_rejects_incompatible_shape_with_message() -> None:
+    result = prepare_xblock_initial_guess(
+        x0=jnp.ones(3),
+        xblock_rhs=jnp.zeros(2),
+        full_rhs=jnp.zeros(4),
+        xblock_use_active_dof=True,
+        reduce_full=lambda v: v,
+    )
+
+    assert result.x0_full is None
+    assert len(result.messages) == 1
+    assert "ignoring incompatible x0 shape=(3,)" in result.messages[0][1]
+    assert "expected=(2,) or (4,)" in result.messages[0][1]
+
+
+def test_xblock_seed_policy_defaults_and_env_overrides() -> None:
+    default = resolve_xblock_seed_policy_setup(moment_schur_used=True, env={})
+    disabled = resolve_xblock_seed_policy_setup(
+        moment_schur_used=True,
+        env={
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_INITIAL_SEED": "1",
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_MOMENT_SCHUR_SEED": "0",
+        },
+    )
+
+    assert not default.initial_seed_enabled
+    assert default.moment_schur_seed_enabled
+    assert disabled.initial_seed_enabled
+    assert not disabled.moment_schur_seed_enabled
 
 
 def test_xblock_qi_seed_policy_defaults_off_without_shared_basis() -> None:

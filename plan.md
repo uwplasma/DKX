@@ -33620,3 +33620,52 @@ Next refactor target:
   moment-Schur seed gate into sparse-PC helpers, then continue with the QI
   Galerkin/two-level/device admission metadata before moving repeated
   RHSMode=2/3 sparse-policy helpers.
+
+### 19.81 RHSMode=1 x-block initial guess and seed policy extraction
+
+Goal:
+
+- Move generic x-block initial-guess shape admission and initial/moment-Schur
+  seed feature-flag parsing out of ``v3_driver.py`` while preserving all seed
+  vector construction and residual acceptance checks.
+
+Implementation:
+
+- Added ``XBlockInitialGuessSetup`` and ``prepare_xblock_initial_guess`` to
+  ``sfincs_jax/problems/profile_response/sparse_pc.py``.
+- Added ``XBlockSeedPolicySetup`` and ``resolve_xblock_seed_policy_setup`` to
+  centralize ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_INITIAL_SEED`` and
+  ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_MOMENT_SCHUR_SEED`` parsing.
+- Replaced in-driver ``x0`` shape checks with the helper. The helper accepts
+  reduced x-block guesses directly, reduces full guesses when active-DOF mode
+  is enabled, and emits the same incompatible-shape diagnostic otherwise.
+- Left initial preconditioner seed application, moment-Schur seed application,
+  incumbent-residual comparison, and all true-residual computations in
+  ``v3_driver.py`` for now.
+- Added direct tests for reduced/full active-DOF initial guesses, incompatible
+  shape diagnostics, and initial/moment-Schur seed env defaults/overrides.
+- ``solve_v3_full_system_linear_gmres`` is now about ``19602`` lines and
+  ``v3_driver.py`` is about ``24876`` lines.
+
+Validation so far:
+
+- ``python -m ruff check sfincs_jax/problems/profile_response/sparse_pc.py
+  sfincs_jax/v3_driver.py tests/test_profile_response_sparse_pc.py``: passed.
+- ``python -m compileall -q
+  sfincs_jax/problems/profile_response/sparse_pc.py sfincs_jax/v3_driver.py
+  tests/test_profile_response_sparse_pc.py``: passed.
+- ``PYTHONDONTWRITEBYTECODE=1 JAX_ENABLE_X64=True pytest -q
+  -p no:cacheprovider tests/test_profile_response_sparse_pc.py``:
+  ``43 passed in 0.88 s``.
+- Focused initial-seed and moment-Schur-seed regression subset:
+  ``47 passed in 5.41 s``.
+- Broader sparse-PC/x-block/dispatch subset:
+  ``129 passed in 50.99 s``.
+- ``git diff --check``: passed.
+
+Next refactor target:
+
+- Extract QI Galerkin and QI two-level preconditioner admission/probe
+  configuration helpers. Keep numerical basis construction, preconditioner
+  application, and residual probes in the driver until the surrounding policy
+  layer is fully covered.

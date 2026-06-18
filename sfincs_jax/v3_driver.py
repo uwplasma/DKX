@@ -215,11 +215,13 @@ from .problems.profile_response.sparse_pc import (
     finalize_xblock_global_coupling_metadata,
     finalize_xblock_moment_schur_metadata,
     finalize_xblock_two_level_metadata,
+    prepare_xblock_initial_guess,
     resolve_sparse_pc_entry_policy,
     resolve_xblock_qi_device_operator_reuse_setup,
     resolve_xblock_qi_seed_policy_setup,
     resolve_xblock_global_coupling_policy_setup,
     resolve_xblock_moment_schur_policy_setup,
+    resolve_xblock_seed_policy_setup,
     resolve_xblock_sparse_pc_setup,
     resolve_xblock_sparse_pc_side_policy_setup,
     resolve_xblock_two_level_policy_setup,
@@ -3979,25 +3981,25 @@ def solve_v3_full_system_linear_gmres(
                         )
 
             setup_s = sparse_timer.elapsed_s()
-            x0_full = None
-            if x0 is not None:
-                x0_arr = jnp.asarray(x0, dtype=jnp.float64)
-                if x0_arr.shape == xblock_rhs.shape:
-                    x0_full = x0_arr
-                elif xblock_use_active_dof and x0_arr.shape == rhs.shape:
-                    x0_full = _xblock_reduce_full(x0_arr)
-                elif emit is not None:
-                    emit(
-                        1,
-                        "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres ignoring incompatible x0 "
-                        f"shape={tuple(x0_arr.shape)} expected={tuple(xblock_rhs.shape)}"
-                        + (f" or {tuple(rhs.shape)}" if xblock_use_active_dof else ""),
-                    )
+            x0_setup = prepare_xblock_initial_guess(
+                x0=x0,
+                xblock_rhs=xblock_rhs,
+                full_rhs=rhs,
+                xblock_use_active_dof=bool(xblock_use_active_dof),
+                reduce_full=_xblock_reduce_full,
+            )
+            x0_full = x0_setup.x0_full
+            for level, message in x0_setup.messages:
+                if emit is not None:
+                    emit(level, message)
             xblock_initial_seed_used = False
             xblock_initial_seed_residual_norm: float | None = None
             xblock_initial_seed_residual_ratio: float | None = None
-            seed_env = os.environ.get("SFINCS_JAX_RHSMODE1_XBLOCK_PC_INITIAL_SEED", "").strip().lower()
-            seed_enabled = seed_env in {"1", "true", "t", "yes", "on", ".true.", ".t."}
+            seed_policy = resolve_xblock_seed_policy_setup(
+                moment_schur_used=bool(moment_schur_used),
+                env=os.environ,
+            )
+            seed_enabled = bool(seed_policy.initial_seed_enabled)
             if x0_full is None and seed_enabled:
                 try:
                     seed_vec = jnp.asarray(precond_xblock_krylov(xblock_rhs), dtype=jnp.float64)
@@ -4041,10 +4043,7 @@ def solve_v3_full_system_linear_gmres(
                 tol=float(tol),
                 rhs_norm=float(xblock_rhs_norm),
             )
-            moment_schur_seed_enabled = _rhs1_bool_env(
-                "SFINCS_JAX_RHSMODE1_XBLOCK_PC_MOMENT_SCHUR_SEED",
-                default=bool(moment_schur_used),
-            )
+            moment_schur_seed_enabled = bool(seed_policy.moment_schur_seed_enabled)
             moment_schur_seed_used = False
             moment_schur_seed_residual_norm: float | None = None
             moment_schur_seed_residual_ratio: float | None = None
