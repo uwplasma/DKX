@@ -209,6 +209,7 @@ from .problems.profile_response.diagnostics import (
     xblock_sparse_pc_result_diagnostics_from_driver_state,
 )
 from .problems.profile_response.sparse_pc import (
+    DirectTailMaterializationContext,
     FortranReducedXBlockFactorBuildContext,
     FortranReducedXBlockGlobalCouplingStageContext,
     FortranReducedXBlockKrylovSetupContext,
@@ -231,6 +232,7 @@ from .problems.profile_response.sparse_pc import (
     build_xblock_assembled_matvec_setup,
     build_xblock_assembled_operator_preflight_setup,
     build_sparse_pc_active_dof_setup,
+    build_direct_tail_materialization_setup,
     evaluate_xblock_moment_schur_probe_result,
     enforce_sparse_pc_memory_budget,
     failed_xblock_global_coupling_metadata,
@@ -7275,115 +7277,44 @@ def solve_v3_full_system_linear_gmres(
                 f"{shift_note} factor_dtype={sparse_pc_factor_dtype_initial.name} "
                 f"factor_kind={sparse_pc_factorization} permc={sparse_pc_permc_spec}",
             )
-        direct_tail_default = bool(
-            fortran_reduced_sparse_pc
-            and int(sparse_pc_linear_size) >= 100000
-            and int(op.rhs_mode) == 1
-            and int(op.constraint_scheme) == 1
-            and int(op.phi1_size) == 0
+        direct_tail_materialization = build_direct_tail_materialization_setup(
+            DirectTailMaterializationContext(
+                env=os.environ,
+                op=op,
+                op_pc=op_pc,
+                pattern=pattern,
+                active_indices=sparse_pc_active_idx_np,
+                sparse_pc_use_active_dof=bool(sparse_pc_use_active_dof),
+                reduce_full=_sparse_pc_reduce_full,
+                expand_reduced=_sparse_pc_expand_reduced,
+                pc_shift=float(pc_shift),
+                dtype=rhs.dtype,
+                factor_dtype=sparse_pc_factor_dtype_initial,
+                sparse_pc_linear_size=int(sparse_pc_linear_size),
+                default_pattern_color_batch=int(sparse_pc_default_pattern_color_batch),
+                elapsed_s=sparse_timer.elapsed_s,
+                emit=emit,
+                is_direct_reduced_pmat_pc_kind=_is_direct_reduced_pmat_pc_kind,
+                build_direct_tail_bundle=_try_build_fortran_reduced_constraint1_direct_tail_bundle,
+                build_structured_rhs1_full_csr_operator_bundle_callback=(
+                    _try_build_structured_rhs1_full_csr_operator_bundle
+                ),
+            )
         )
-        direct_tail_enabled = _rhs1_bool_env(
-            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_CONSTRAINT_TAIL",
-            default=direct_tail_default,
-        )
-        direct_tail_built = False
-        direct_tail_error: str | None = None
-        direct_tail_operator_bundle: SparseOperatorBundle | None = None
+        direct_tail_default = bool(direct_tail_materialization.direct_tail_default)
+        direct_tail_enabled = bool(direct_tail_materialization.enabled)
+        direct_tail_built = bool(direct_tail_materialization.built)
+        direct_tail_error = direct_tail_materialization.error
+        direct_tail_operator_bundle = direct_tail_materialization.operator_bundle
         direct_tail_structured_pc_requested: str | None = None
         direct_tail_structured_pc_selected = False
         direct_tail_structured_pc_reason: str | None = None
         direct_tail_structured_pc_metadata: dict[str, object] | None = None
         direct_tail_structured_pc_error: str | None = None
-        direct_tail_pc_env_early = (
-            os.environ.get("SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_PRECONDITIONER", "")
-            .strip()
-            .lower()
-            .replace("-", "_")
+        direct_tail_pc_env_early = str(direct_tail_materialization.pc_env)
+        direct_tail_direct_reduced_pmat_requested = bool(
+            direct_tail_materialization.direct_reduced_pmat_requested
         )
-        direct_tail_direct_reduced_pmat_requested = _is_direct_reduced_pmat_pc_kind(direct_tail_pc_env_early)
-        if bool(direct_tail_enabled) and bool(direct_tail_direct_reduced_pmat_requested):
-            direct_tail_built = False
-            if emit is not None:
-                emit(
-                    1,
-                    "solve_v3_full_system_linear_gmres: fortran_reduced direct-tail "
-                    "materialization skipped; direct reduced-Pmat preconditioner requested "
-                    f"kind={direct_tail_pc_env_early}",
-                )
-        if bool(direct_tail_enabled) and not bool(direct_tail_direct_reduced_pmat_requested):
-            direct_tail_start_s = sparse_timer.elapsed_s()
-            csr_max_env_direct = os.environ.get("SFINCS_JAX_EXPLICIT_SPARSE_CSR_MAX_MB", "").strip()
-            drop_tol_env_direct = os.environ.get("SFINCS_JAX_EXPLICIT_SPARSE_DROP_TOL", "").strip()
-            color_batch_env_direct = os.environ.get("SFINCS_JAX_EXPLICIT_SPARSE_PATTERN_COLOR_BATCH", "").strip()
-            try:
-                csr_max_mb_direct = float(csr_max_env_direct) if csr_max_env_direct else 512.0
-            except ValueError:
-                csr_max_mb_direct = 512.0
-            try:
-                drop_tol_direct = float(drop_tol_env_direct) if drop_tol_env_direct else 0.0
-            except ValueError:
-                drop_tol_direct = 0.0
-            try:
-                color_batch_direct = (
-                    int(color_batch_env_direct)
-                    if color_batch_env_direct
-                    else int(sparse_pc_default_pattern_color_batch)
-                )
-            except ValueError:
-                color_batch_direct = int(sparse_pc_default_pattern_color_batch)
-            if emit is not None:
-                emit(
-                    1,
-                    "solve_v3_full_system_linear_gmres: fortran_reduced direct-tail "
-                    "materialization start "
-                    f"size={int(sparse_pc_linear_size)} "
-                    f"csr_max_mb={float(csr_max_mb_direct):.3g} "
-                    f"drop_tol={float(drop_tol_direct):.3e} "
-                    f"color_batch={int(color_batch_direct)}",
-                )
-            try:
-                direct_tail_operator_bundle = _try_build_fortran_reduced_constraint1_direct_tail_bundle(
-                    op=op,
-                    op_pc=op_pc,
-                    pattern=pattern,
-                    active_indices=sparse_pc_active_idx_np if sparse_pc_use_active_dof else None,
-                    reduce_full=_sparse_pc_reduce_full,
-                    expand_reduced=_sparse_pc_expand_reduced,
-                    pc_shift=float(pc_shift),
-                    dtype=rhs.dtype,
-                    factor_dtype=sparse_pc_factor_dtype_initial,
-                    csr_max_mb=float(csr_max_mb_direct),
-                    drop_tol=float(drop_tol_direct),
-                    color_batch=int(color_batch_direct),
-                    emit=emit,
-                    build_structured_rhs1_full_csr_operator_bundle_callback=(
-                        _try_build_structured_rhs1_full_csr_operator_bundle
-                    ),
-                )
-                direct_tail_built = direct_tail_operator_bundle is not None
-                if emit is not None and direct_tail_built:
-                    emit(
-                        1,
-                        "solve_v3_full_system_linear_gmres: fortran_reduced direct-tail "
-                        f"materialization complete elapsed_s={sparse_timer.elapsed_s() - direct_tail_start_s:.3f}",
-                    )
-                elif emit is not None:
-                    emit(
-                        1,
-                        "solve_v3_full_system_linear_gmres: fortran_reduced direct-tail "
-                        f"materialization not selected elapsed_s={sparse_timer.elapsed_s() - direct_tail_start_s:.3f}",
-                    )
-            except Exception as exc:  # noqa: BLE001
-                direct_tail_operator_bundle = None
-                direct_tail_error = f"{type(exc).__name__}: {exc}"
-                if emit is not None:
-                    emit(
-                        1,
-                        "solve_v3_full_system_linear_gmres: fortran_reduced direct-tail "
-                        "materialization disabled after failure "
-                        f"elapsed_s={sparse_timer.elapsed_s() - direct_tail_start_s:.3f} "
-                        f"({direct_tail_error})",
-                    )
         factor_start_s = sparse_timer.elapsed_s()
         direct_tail_pc_env = (
             os.environ.get("SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_PRECONDITIONER", "")

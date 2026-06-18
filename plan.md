@@ -40,24 +40,25 @@ Make `sfincs_jax` research-grade while preserving the public user contract:
 
 ## Current Refactor State
 
-Recent pushed commits:
+Recent checkpoints:
 
+- Direct-tail materialization extraction (current checkpoint).
+- `0e9b5fb` Compact active plan.
 - `a1721b8` Extract sparse memory preflight.
 - `cb295ce` Extract sparse pattern setup.
 - `4b6a5b4` Extract sparse factor policy.
-- `20ed0cd` Compact sparse direct-tail diagnostics.
-- `3114c13` Extract sparse direct-tail diagnostics.
 
-Current source-size snapshot after `a1721b8`:
+Current source-size snapshot after the direct-tail materialization extraction:
 
-- `sfincs_jax/v3_driver.py`: about `20113` lines.
-- `solve_v3_full_system_linear_gmres`: about `14801` lines.
+- `sfincs_jax/v3_driver.py`: about `20044` lines.
+- `solve_v3_full_system_linear_gmres`: about `14730` lines.
 
 Recent local validation:
 
-- Focused sparse-PC/direct-tail/policy shards: green.
+- Focused sparse-PC/direct-tail/materialization and repo-size shards:
+  `108 passed`.
 - Latest broad profile-response/x-block/sparse-pattern shard:
-  `380 passed in 112.28 s`.
+  `384 passed in 113.47 s`.
 
 Known CI issue fixed by this rewrite:
 
@@ -68,7 +69,7 @@ Known CI issue fixed by this rewrite:
 
 ### 1. `v3_driver.py` Architecture Refactor
 
-Completion estimate: 66%.
+Completion estimate: 68%.
 
 Goal:
 
@@ -83,10 +84,10 @@ Completed recent boundaries:
 - Generic sparse-PC factor policy.
 - Generic sparse-PC pattern setup.
 - Generic sparse-PC memory-budget preflight.
+- Direct-tail materialization setup.
 
 Next steps:
 
-- Extract direct-tail materialization setup into a typed helper.
 - Extract structured direct-tail preconditioner admission into a separately
   tested helper.
 - Move remaining generic sparse-PC solve/result assembly into cohesive

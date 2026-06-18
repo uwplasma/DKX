@@ -422,6 +422,43 @@ class SparsePCMemoryBudgetPreflightContext:
 
 
 @dataclass(frozen=True)
+class DirectTailMaterializationContext:
+    """Inputs for optional Fortran-reduced direct-tail matrix materialization."""
+
+    env: Mapping[str, str] | None
+    op: object
+    op_pc: object
+    pattern: object
+    active_indices: np.ndarray | None
+    sparse_pc_use_active_dof: bool
+    reduce_full: ArrayFn
+    expand_reduced: ArrayFn
+    pc_shift: float
+    dtype: object
+    factor_dtype: object
+    sparse_pc_linear_size: int
+    default_pattern_color_batch: int
+    elapsed_s: Callable[[], float]
+    emit: EmitFn | None
+    is_direct_reduced_pmat_pc_kind: Callable[[str], bool]
+    build_direct_tail_bundle: Callable[..., object]
+    build_structured_rhs1_full_csr_operator_bundle_callback: Callable[..., object]
+
+
+@dataclass(frozen=True)
+class DirectTailMaterializationResult:
+    """Result from optional direct-tail operator materialization."""
+
+    direct_tail_default: bool
+    enabled: bool
+    built: bool
+    error: str | None
+    operator_bundle: object | None
+    pc_env: str
+    direct_reduced_pmat_requested: bool
+
+
+@dataclass(frozen=True)
 class XBlockSparsePCSetup:
     """Setup controls for RHSMode=1 x-block sparse-PC solves."""
 
@@ -2239,6 +2276,150 @@ def enforce_sparse_pc_memory_budget(
             f"restart={int(context.gmres_restart)} factor_fill_estimate={float(fill_estimate):.3g}. "
             "Raise the budget, lower the resolution, or use a lower-memory matrix-free route."
         )
+
+
+def build_direct_tail_materialization_setup(
+    context: DirectTailMaterializationContext,
+) -> DirectTailMaterializationResult:
+    """Optionally materialize the Fortran-reduced direct-tail operator bundle."""
+
+    direct_tail_default = bool(
+        int(context.sparse_pc_linear_size) >= 100000
+        and int(getattr(context.op, "rhs_mode", 0)) == 1
+        and int(getattr(context.op, "constraint_scheme", 0)) == 1
+        and int(getattr(context.op, "phi1_size", 0)) == 0
+    )
+    direct_tail_enabled = _env_bool(
+        context.env,
+        "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_CONSTRAINT_TAIL",
+        default=direct_tail_default,
+    )
+    direct_tail_pc_env = (
+        _env_value(
+            context.env,
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_PRECONDITIONER",
+        )
+        .lower()
+        .replace("-", "_")
+    )
+    direct_reduced_pmat_requested = bool(
+        context.is_direct_reduced_pmat_pc_kind(direct_tail_pc_env)
+    )
+
+    if bool(direct_tail_enabled) and bool(direct_reduced_pmat_requested):
+        if context.emit is not None:
+            context.emit(
+                1,
+                "solve_v3_full_system_linear_gmres: fortran_reduced direct-tail "
+                "materialization skipped; direct reduced-Pmat preconditioner requested "
+                f"kind={direct_tail_pc_env}",
+            )
+        return DirectTailMaterializationResult(
+            direct_tail_default=bool(direct_tail_default),
+            enabled=bool(direct_tail_enabled),
+            built=False,
+            error=None,
+            operator_bundle=None,
+            pc_env=str(direct_tail_pc_env),
+            direct_reduced_pmat_requested=True,
+        )
+
+    direct_tail_built = False
+    direct_tail_error: str | None = None
+    direct_tail_operator_bundle: object | None = None
+
+    if bool(direct_tail_enabled):
+        direct_tail_start_s = float(context.elapsed_s())
+        csr_max_env = _env_value(context.env, "SFINCS_JAX_EXPLICIT_SPARSE_CSR_MAX_MB")
+        drop_tol_env = _env_value(context.env, "SFINCS_JAX_EXPLICIT_SPARSE_DROP_TOL")
+        color_batch_env = _env_value(
+            context.env,
+            "SFINCS_JAX_EXPLICIT_SPARSE_PATTERN_COLOR_BATCH",
+        )
+        try:
+            csr_max_mb = float(csr_max_env) if csr_max_env else 512.0
+        except ValueError:
+            csr_max_mb = 512.0
+        try:
+            drop_tol = float(drop_tol_env) if drop_tol_env else 0.0
+        except ValueError:
+            drop_tol = 0.0
+        try:
+            color_batch = (
+                int(color_batch_env)
+                if color_batch_env
+                else int(context.default_pattern_color_batch)
+            )
+        except ValueError:
+            color_batch = int(context.default_pattern_color_batch)
+
+        if context.emit is not None:
+            context.emit(
+                1,
+                "solve_v3_full_system_linear_gmres: fortran_reduced direct-tail "
+                "materialization start "
+                f"size={int(context.sparse_pc_linear_size)} "
+                f"csr_max_mb={float(csr_max_mb):.3g} "
+                f"drop_tol={float(drop_tol):.3e} "
+                f"color_batch={int(color_batch)}",
+            )
+        try:
+            direct_tail_operator_bundle = context.build_direct_tail_bundle(
+                op=context.op,
+                op_pc=context.op_pc,
+                pattern=context.pattern,
+                active_indices=(
+                    context.active_indices
+                    if bool(context.sparse_pc_use_active_dof)
+                    else None
+                ),
+                reduce_full=context.reduce_full,
+                expand_reduced=context.expand_reduced,
+                pc_shift=float(context.pc_shift),
+                dtype=context.dtype,
+                factor_dtype=context.factor_dtype,
+                csr_max_mb=float(csr_max_mb),
+                drop_tol=float(drop_tol),
+                color_batch=int(color_batch),
+                emit=context.emit,
+                build_structured_rhs1_full_csr_operator_bundle_callback=(
+                    context.build_structured_rhs1_full_csr_operator_bundle_callback
+                ),
+            )
+            direct_tail_built = direct_tail_operator_bundle is not None
+            if context.emit is not None and direct_tail_built:
+                context.emit(
+                    1,
+                    "solve_v3_full_system_linear_gmres: fortran_reduced direct-tail "
+                    f"materialization complete elapsed_s={float(context.elapsed_s()) - direct_tail_start_s:.3f}",
+                )
+            elif context.emit is not None:
+                context.emit(
+                    1,
+                    "solve_v3_full_system_linear_gmres: fortran_reduced direct-tail "
+                    f"materialization not selected elapsed_s={float(context.elapsed_s()) - direct_tail_start_s:.3f}",
+                )
+        except Exception as exc:  # noqa: BLE001
+            direct_tail_operator_bundle = None
+            direct_tail_error = f"{type(exc).__name__}: {exc}"
+            if context.emit is not None:
+                context.emit(
+                    1,
+                    "solve_v3_full_system_linear_gmres: fortran_reduced direct-tail "
+                    "materialization disabled after failure "
+                    f"elapsed_s={float(context.elapsed_s()) - direct_tail_start_s:.3f} "
+                    f"({direct_tail_error})",
+                )
+
+    return DirectTailMaterializationResult(
+        direct_tail_default=bool(direct_tail_default),
+        enabled=bool(direct_tail_enabled),
+        built=bool(direct_tail_built),
+        error=direct_tail_error,
+        operator_bundle=direct_tail_operator_bundle,
+        pc_env=str(direct_tail_pc_env),
+        direct_reduced_pmat_requested=bool(direct_reduced_pmat_requested),
+    )
 
 
 def _xblock_device_flags(method: str) -> tuple[bool, bool, bool, bool, bool]:
@@ -4689,6 +4870,8 @@ __all__ = [
     "FortranReducedXBlockKrylovSetupResult",
     "FortranReducedXBlockMomentSchurStageContext",
     "FortranReducedXBlockMomentSchurStageResult",
+    "DirectTailMaterializationContext",
+    "DirectTailMaterializationResult",
     "MatvecCounter",
     "XBlockAssembledOperatorDiagnosticsContext",
     "XBlockSparsePCCoreDiagnosticsContext",
@@ -4710,6 +4893,7 @@ __all__ = [
     "build_fortran_reduced_xblock_krylov_setup",
     "build_sparse_pc_active_dof_setup",
     "build_sparse_pc_pattern_setup",
+    "build_direct_tail_materialization_setup",
     "enforce_sparse_pc_memory_budget",
     "fp_xblock_global_correction_metadata",
     "fp_xblock_highx_residual_correction_metadata",

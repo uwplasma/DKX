@@ -15,6 +15,7 @@ from sfincs_jax.problems.profile_response.diagnostics import (
     fortran_reduced_xblock_result_metadata,
 )
 from sfincs_jax.problems.profile_response.sparse_pc import (
+    DirectTailMaterializationContext,
     FortranReducedXBlockFactorBuildContext,
     FortranReducedXBlockGlobalCouplingStageContext,
     FortranReducedXBlockKrylovSetupContext,
@@ -34,6 +35,7 @@ from sfincs_jax.problems.profile_response.sparse_pc import (
     build_fortran_reduced_xblock_krylov_setup,
     build_sparse_pc_active_dof_setup,
     build_sparse_pc_pattern_setup,
+    build_direct_tail_materialization_setup,
     build_xblock_assembled_equilibration_setup,
     build_xblock_assembled_device_setup,
     build_xblock_assembled_matvec_setup,
@@ -482,6 +484,164 @@ def test_sparse_pc_memory_budget_preflight_raises_same_budget_error() -> None:
                 estimate_sparse_pc_memory=estimate,
             )
         )
+
+
+def _direct_tail_context(
+    *,
+    env: dict[str, str] | None,
+    sparse_pc_linear_size: int = 100000,
+    active_indices: np.ndarray | None = None,
+    build_direct_tail_bundle=None,
+    elapsed_s=None,
+    messages: list[tuple[int, str]] | None = None,
+) -> DirectTailMaterializationContext:
+    if build_direct_tail_bundle is None:
+        def build_direct_tail_bundle(**_kwargs):
+            return None
+
+    if elapsed_s is None:
+        def elapsed_s():
+            return 0.0
+
+    return DirectTailMaterializationContext(
+        env=env or {},
+        op=SimpleNamespace(rhs_mode=1, constraint_scheme=1, phi1_size=0),
+        op_pc="op-pc",
+        pattern="pattern",
+        active_indices=active_indices,
+        sparse_pc_use_active_dof=active_indices is not None,
+        reduce_full=_identity,
+        expand_reduced=_identity,
+        pc_shift=1.0e-8,
+        dtype=np.dtype(np.float64),
+        factor_dtype=np.dtype(np.float64),
+        sparse_pc_linear_size=sparse_pc_linear_size,
+        default_pattern_color_batch=9,
+        elapsed_s=elapsed_s,
+        emit=None if messages is None else lambda level, msg: messages.append((level, msg)),
+        is_direct_reduced_pmat_pc_kind=lambda kind: kind == "direct_pmat",
+        build_direct_tail_bundle=build_direct_tail_bundle,
+        build_structured_rhs1_full_csr_operator_bundle_callback=lambda **kwargs: kwargs,
+    )
+
+
+def test_direct_tail_materialization_respects_disabled_env_without_builder_call() -> None:
+    calls = 0
+
+    def builder(**_kwargs):
+        nonlocal calls
+        calls += 1
+        return object()
+
+    result = build_direct_tail_materialization_setup(
+        _direct_tail_context(
+            env={"SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_CONSTRAINT_TAIL": "0"},
+            build_direct_tail_bundle=builder,
+        )
+    )
+
+    assert result.direct_tail_default is True
+    assert result.enabled is False
+    assert result.built is False
+    assert result.operator_bundle is None
+    assert result.error is None
+    assert calls == 0
+
+
+def test_direct_tail_materialization_skips_direct_reduced_pmat_request() -> None:
+    messages: list[tuple[int, str]] = []
+    result = build_direct_tail_materialization_setup(
+        _direct_tail_context(
+            env={
+                "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_CONSTRAINT_TAIL": "1",
+                "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_PRECONDITIONER": (
+                    "direct-pmat"
+                ),
+            },
+            build_direct_tail_bundle=lambda **_kwargs: pytest.fail("unexpected build"),
+            messages=messages,
+        )
+    )
+
+    assert result.enabled is True
+    assert result.direct_reduced_pmat_requested is True
+    assert result.built is False
+    assert result.pc_env == "direct_pmat"
+    assert "materialization skipped" in messages[0][1]
+
+
+def test_direct_tail_materialization_forwards_builder_args_and_emits_complete() -> None:
+    calls: list[dict[str, object]] = []
+    bundle = SimpleNamespace(matrix="csr")
+    elapsed_values = iter((1.0, 1.75))
+    messages: list[tuple[int, str]] = []
+
+    def builder(**kwargs):
+        calls.append(kwargs)
+        return bundle
+
+    result = build_direct_tail_materialization_setup(
+        _direct_tail_context(
+            env={
+                "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_CONSTRAINT_TAIL": "1",
+                "SFINCS_JAX_EXPLICIT_SPARSE_CSR_MAX_MB": "bad",
+                "SFINCS_JAX_EXPLICIT_SPARSE_DROP_TOL": "bad",
+                "SFINCS_JAX_EXPLICIT_SPARSE_PATTERN_COLOR_BATCH": "bad",
+            },
+            active_indices=np.asarray([2, 0], dtype=np.int64),
+            build_direct_tail_bundle=builder,
+            elapsed_s=lambda: next(elapsed_values),
+            messages=messages,
+        )
+    )
+
+    assert result.built is True
+    assert result.operator_bundle is bundle
+    assert result.error is None
+    assert calls[0]["active_indices"].tolist() == [2, 0]
+    assert calls[0]["csr_max_mb"] == 512.0
+    assert calls[0]["drop_tol"] == 0.0
+    assert calls[0]["color_batch"] == 9
+    assert calls[0]["pc_shift"] == 1.0e-8
+    assert "materialization start" in messages[0][1]
+    assert "materialization complete elapsed_s=0.750" in messages[1][1]
+
+
+def test_direct_tail_materialization_records_not_selected_and_exception() -> None:
+    none_messages: list[tuple[int, str]] = []
+    none_elapsed = iter((3.0, 3.5))
+    none_result = build_direct_tail_materialization_setup(
+        _direct_tail_context(
+            env={"SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_CONSTRAINT_TAIL": "1"},
+            build_direct_tail_bundle=lambda **_kwargs: None,
+            elapsed_s=lambda: next(none_elapsed),
+            messages=none_messages,
+        )
+    )
+
+    assert none_result.built is False
+    assert none_result.error is None
+    assert "materialization not selected elapsed_s=0.500" in none_messages[1][1]
+
+    err_messages: list[tuple[int, str]] = []
+    err_elapsed = iter((4.0, 4.25))
+
+    def broken_builder(**_kwargs):
+        raise RuntimeError("boom")
+
+    err_result = build_direct_tail_materialization_setup(
+        _direct_tail_context(
+            env={"SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_CONSTRAINT_TAIL": "1"},
+            build_direct_tail_bundle=broken_builder,
+            elapsed_s=lambda: next(err_elapsed),
+            messages=err_messages,
+        )
+    )
+
+    assert err_result.built is False
+    assert err_result.operator_bundle is None
+    assert err_result.error == "RuntimeError: boom"
+    assert "materialization disabled after failure elapsed_s=0.250" in err_messages[1][1]
 
 
 def test_fortran_reduced_xblock_factor_policy_uses_specific_env_before_generic() -> None:
