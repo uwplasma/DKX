@@ -469,6 +469,11 @@ the historical private driver name and test the focused module directly. This ke
   GMRES, and BiCGStab solve attempts. This mirrors the transport linear-solve
   module so solver-family selection is directly testable and no longer embedded
   as a large nested body in ``v3_driver.py``.
+- ``sfincs_jax/problems/profile_response/qi_device_seed.py``:
+  matrix-free QI device seed correction for RHSMode=1 active-DOF solves. The
+  driver passes solve-local state through a typed context while the module owns
+  QI coarse-basis setup, residual-improvement admission, metadata updates, and
+  fail-closed diagnostics.
 - ``sfincs_jax/problems/profile_response/solver_diagnostics.py``
   (legacy alias: ``sfincs_jax/rhs1_solver_diagnostics.py``):
   typed RHSMode=1 x-block correction diagnostic records and historical solver

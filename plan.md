@@ -30603,6 +30603,23 @@ Validation:
   tests/test_audit_rhs1_solver_stack.py``: ``62 passed in 24.54 s``.
 - ``SPHINXOPTS='-W --keep-going' python -m sphinx -b html docs
   docs/_build/html``: passed.
+- Broader RHSMode=1/regression guard:
+  ``PYTHONDONTWRITEBYTECODE=1 pytest -q -p no:cacheprovider
+  tests/test_benchmark_case_variants.py tests/test_er_scan_and_ambipolar.py
+  tests/test_example_auto_selection_paths.py tests/test_full_system_operator_jit.py
+  tests/test_output_h5_scheme11_parity.py tests/test_pas_projection_heuristic.py
+  tests/test_rhs1_full_assembly.py tests/test_rhs1_schwarz_heuristic.py
+  tests/test_rhsmode1_phi1_write_output_end_to_end.py
+  tests/test_rhsmode1_write_output_end_to_end.py tests/test_schur_precond_heuristic.py
+  tests/test_sparse_precond_jax.py tests/test_state_recycle_parity.py
+  tests/test_v3_driver_dd_reduction_coverage.py
+  tests/test_v3_driver_rhs1_dispatch_coverage.py
+  tests/test_xblock_tz_precond_heuristic.py
+  tests/test_profile_response_qi_device_seed.py``:
+  ``218 passed in 216.27 s``.
+- Full-suite checkpoint:
+  ``PYTHONDONTWRITEBYTECODE=1 pytest -q -p no:cacheprovider``:
+  ``2719 passed in 520.70 s``.
 - ``git diff --check``: passed.
 - ``PYTHONDONTWRITEBYTECODE=1 python -m pytest -q -p no:cacheprovider``:
   ``2686 passed in 549.51 s``.
@@ -32307,3 +32324,42 @@ Validation so far:
   aliases in ``v3_driver.py``:
   ``PYTHONDONTWRITEBYTECODE=1 pytest -q -p no:cacheprovider``:
   ``2717 passed in 558.11 s``.
+
+### 19.56 Matrix-free QI device seed extraction
+
+Goal:
+
+- Remove the largest remaining nested RHSMode=1 helper from
+  ``solve_v3_full_system_linear_gmres`` without changing the QI device
+  preconditioner behavior or metadata contract.
+
+Implementation:
+
+- Added ``sfincs_jax/problems/profile_response/qi_device_seed.py`` with
+  ``MatrixFreeQIDeviceSeedContext`` and
+  ``attempt_matrixfree_qi_device_seed``.
+- Moved the matrix-free QI device seed attempt, including QI coarse-basis
+  setup, residual-improvement admission, emitted diagnostics, and metadata
+  updates, out of ``v3_driver.py``.
+- ``v3_driver.py`` now constructs a typed solve-local context and calls the
+  extracted helper only when the existing early/skip-strong QI seed controls
+  request it.
+- Added direct gate tests for the extracted helper covering disabled-by-default
+  and already-converged skip behavior without launching a full QI solve.
+
+Validation so far:
+
+- ``python -m ruff check sfincs_jax/problems/profile_response/qi_device_seed.py
+  sfincs_jax/v3_driver.py tests/test_profile_response_qi_device_seed.py``:
+  passed.
+- ``python -m compileall -q sfincs_jax/problems/profile_response/qi_device_seed.py
+  sfincs_jax/v3_driver.py tests/test_profile_response_qi_device_seed.py``:
+  passed.
+- ``PYTHONDONTWRITEBYTECODE=1 pytest -q -p no:cacheprovider
+  tests/test_profile_response_qi_device_seed.py
+  tests/test_profile_response_linear_solve.py
+  tests/test_v3_sparse_pattern.py::test_auto_selects_fortran_reduced_pc_gmres_for_large_full_fp_rhs1
+  tests/test_rhs1_schur_policy.py``:
+  ``12 passed in 2.47 s``.
+- ``SPHINXOPTS='-W --keep-going' python -m sphinx -b html docs
+  docs/_build/html``: passed.
