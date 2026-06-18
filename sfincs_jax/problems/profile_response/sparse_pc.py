@@ -221,6 +221,32 @@ class XBlockAssembledEquilibrationSetup:
     messages: tuple[tuple[int, str], ...]
 
 
+class XBlockAssembledPreflightMemoryError(MemoryError):
+    """Preflight rejection that carries metadata for solver diagnostics."""
+
+    def __init__(self, message: str, metadata: Mapping[str, object]) -> None:
+        super().__init__(message)
+        self.metadata = dict(metadata)
+
+
+XBlockAssembledPreflightError = XBlockAssembledPreflightMemoryError
+
+
+@dataclass(frozen=True)
+class XBlockAssembledOperatorPreflightSetup:
+    """Memory-budget and structural-pattern preflight for assembled x-block operators."""
+
+    csr_max_mb: float
+    drop_tol: float
+    device_enabled: bool
+    device_required: bool
+    max_colors: int
+    csr_cap_nbytes: int
+    pattern: object
+    summary: object
+    metadata: dict[str, object]
+
+
 def _env_value(env: Mapping[str, str] | None, key: str) -> str:
     source = env if env is not None else {}
     return str(source.get(key, "")).strip()
@@ -232,6 +258,17 @@ def _env_float(env: Mapping[str, str] | None, key: str, default: float) -> float
         return float(raw) if raw else float(default)
     except ValueError:
         return float(default)
+
+
+def _env_int(env: Mapping[str, str] | None, key: str, default: int, minimum: int | None = None) -> int:
+    raw = _env_value(env, key)
+    try:
+        value = int(raw) if raw else int(default)
+    except ValueError:
+        value = int(default)
+    if minimum is not None:
+        value = max(int(minimum), int(value))
+    return int(value)
 
 
 def _env_bool(env: Mapping[str, str] | None, key: str, default: bool = False) -> bool:
@@ -1021,6 +1058,146 @@ def build_xblock_assembled_equilibration_setup(
         col_scale=col_scale_jnp,
         inv_col_scale=inv_col_scale_jnp,
         messages=tuple(messages),
+    )
+
+
+def _csr_storage_nbytes(*, nnz: int, n_rows: int) -> int:
+    return int(
+        int(nnz) * (np.dtype(np.float64).itemsize + np.dtype(np.int32).itemsize)
+        + (int(n_rows) + 1) * np.dtype(np.int32).itemsize
+    )
+
+
+def build_xblock_assembled_operator_preflight_setup(
+    *,
+    op: object,
+    xblock_active_idx_np: np.ndarray | None,
+    sparse_pc_fp_dense_velocity_block: bool | None,
+    xblock_krylov_method: str,
+    estimate_summary: Callable[..., object],
+    full_pattern: Callable[..., object],
+    active_pattern: Callable[..., object],
+    summarize_pattern: Callable[..., object],
+    env: Mapping[str, str] | None = None,
+) -> XBlockAssembledOperatorPreflightSetup:
+    """Resolve assembled-operator memory budget and structural pattern."""
+
+    csr_max_mb = max(
+        0.0,
+        _env_float(
+            env,
+            "SFINCS_JAX_RHSMODE1_XBLOCK_ASSEMBLED_OPERATOR_CSR_MAX_MB",
+            default=2048.0,
+        ),
+    )
+    drop_tol = max(
+        0.0,
+        _env_float(
+            env,
+            "SFINCS_JAX_RHSMODE1_XBLOCK_ASSEMBLED_OPERATOR_DROP_TOL",
+            default=0.0,
+        ),
+    )
+    device_enabled = _env_bool(
+        env,
+        "SFINCS_JAX_RHSMODE1_XBLOCK_ASSEMBLED_OPERATOR_DEVICE",
+        default=str(xblock_krylov_method) in {"fgmres_jax", "gmres_jax", "bicgstab_jax", "tfqmr_jax"},
+    )
+    device_required = _env_bool(
+        env,
+        "SFINCS_JAX_RHSMODE1_XBLOCK_ASSEMBLED_OPERATOR_DEVICE_REQUIRED",
+        default=False,
+    )
+    max_colors = _env_int(
+        env,
+        "SFINCS_JAX_RHSMODE1_XBLOCK_ASSEMBLED_OPERATOR_MAX_COLORS",
+        default=512,
+        minimum=1,
+    )
+    full_preflight = estimate_summary(
+        op,
+        fp_dense_velocity_block=sparse_pc_fp_dense_velocity_block,
+    )
+    full_csr_nbytes = _csr_storage_nbytes(
+        nnz=int(full_preflight.nnz),
+        n_rows=int(full_preflight.shape[0]),
+    )
+    preflight_csr_nbytes = int(full_csr_nbytes)
+    preflight_peak_nbytes = int(3 * preflight_csr_nbytes)
+    csr_cap_nbytes = int(float(csr_max_mb) * 1.0e6)
+    pattern = None
+    preflight_scope = "full"
+    metadata: dict[str, object] = {
+        "active_dof": bool(xblock_active_idx_np is not None),
+        "preflight_scope": preflight_scope,
+        "preflight_pattern_nnz_estimate": int(full_preflight.nnz),
+        "preflight_pattern_max_row_nnz_estimate": int(full_preflight.max_row_nnz),
+        "preflight_csr_nbytes_estimate": int(preflight_csr_nbytes),
+        "preflight_peak_nbytes_estimate": int(preflight_peak_nbytes),
+        "preflight_full_pattern_nnz_estimate": int(full_preflight.nnz),
+        "preflight_full_csr_nbytes_estimate": int(full_csr_nbytes),
+        "preflight_csr_max_mb": float(csr_max_mb),
+        "preflight_rejected": False,
+        "device_enabled": bool(device_enabled),
+        "device_required": bool(device_required),
+        "device_resident": False,
+    }
+    if int(csr_cap_nbytes) <= 0:
+        metadata["preflight_rejected"] = True
+        raise XBlockAssembledPreflightError(
+            "assembled x-block operator preflight rejected non-positive CSR memory budget "
+            f"{float(csr_max_mb):.3g} MB",
+            metadata,
+        )
+    if xblock_active_idx_np is not None:
+        pattern = active_pattern(
+            op,
+            xblock_active_idx_np,
+            fp_dense_velocity_block=sparse_pc_fp_dense_velocity_block,
+        )
+        active_preflight = summarize_pattern(op, pattern)
+        preflight_scope = "active_dof"
+        preflight_csr_nbytes = _csr_storage_nbytes(
+            nnz=int(active_preflight.nnz),
+            n_rows=int(active_preflight.shape[0]),
+        )
+        preflight_peak_nbytes = int(3 * preflight_csr_nbytes)
+        metadata.update(
+            {
+                "preflight_scope": preflight_scope,
+                "preflight_pattern_nnz_estimate": int(active_preflight.nnz),
+                "preflight_pattern_max_row_nnz_estimate": int(active_preflight.max_row_nnz),
+                "preflight_csr_nbytes_estimate": int(preflight_csr_nbytes),
+                "preflight_peak_nbytes_estimate": int(preflight_peak_nbytes),
+                "preflight_active_pattern_nnz_estimate": int(active_preflight.nnz),
+                "preflight_active_csr_nbytes_estimate": int(preflight_csr_nbytes),
+            }
+        )
+    if int(preflight_csr_nbytes) > int(csr_cap_nbytes):
+        metadata["preflight_rejected"] = True
+        raise XBlockAssembledPreflightError(
+            "assembled x-block operator preflight rejected "
+            f"{preflight_scope} CSR estimate "
+            f"{int(preflight_csr_nbytes) / 1.0e6:.3g} MB > "
+            f"{float(csr_max_mb):.3g} MB",
+            metadata,
+        )
+    if pattern is None:
+        pattern = full_pattern(
+            op,
+            fp_dense_velocity_block=sparse_pc_fp_dense_velocity_block,
+        )
+    summary = summarize_pattern(op, pattern)
+    return XBlockAssembledOperatorPreflightSetup(
+        csr_max_mb=float(csr_max_mb),
+        drop_tol=float(drop_tol),
+        device_enabled=bool(device_enabled),
+        device_required=bool(device_required),
+        max_colors=int(max_colors),
+        csr_cap_nbytes=int(csr_cap_nbytes),
+        pattern=pattern,
+        summary=summary,
+        metadata=metadata,
     )
 
 

@@ -10,8 +10,10 @@ from scipy import sparse as scipy_sparse
 from sfincs_jax.problems.profile_response.sparse_pc import (
     SparsePCGMRESContext,
     SparsePCPostMinresContext,
+    XBlockAssembledPreflightError,
     apply_sparse_pc_post_minres,
     build_xblock_assembled_equilibration_setup,
+    build_xblock_assembled_operator_preflight_setup,
     build_xblock_krylov_matvec_setup,
     resolve_sparse_pc_entry_policy,
     resolve_xblock_qi_device_operator_reuse_setup,
@@ -417,6 +419,73 @@ def test_xblock_assembled_equilibration_setup_builds_row_and_column_scales() -> 
     assert np.all(np.isfinite(np.asarray(setup.col_scale)))
     assert np.all(np.asarray(setup.col_scale) > 0.0)
     assert any("assembled column equilibration built" in message for _, message in setup.messages)
+
+
+def test_xblock_assembled_operator_preflight_uses_full_pattern_when_under_budget() -> None:
+    full_pattern = object()
+    full_summary = SimpleNamespace(nnz=4, shape=(2, 2), max_row_nnz=2, avg_row_nnz=2.0)
+
+    setup = build_xblock_assembled_operator_preflight_setup(
+        op=SimpleNamespace(),
+        xblock_active_idx_np=None,
+        sparse_pc_fp_dense_velocity_block=False,
+        xblock_krylov_method="gmres_jax",
+        estimate_summary=lambda *_args, **_kwargs: full_summary,
+        full_pattern=lambda *_args, **_kwargs: full_pattern,
+        active_pattern=lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("unused")),
+        summarize_pattern=lambda _op, pattern: full_summary if pattern is full_pattern else None,
+        env={"SFINCS_JAX_RHSMODE1_XBLOCK_ASSEMBLED_OPERATOR_CSR_MAX_MB": "1"},
+    )
+
+    assert setup.pattern is full_pattern
+    assert setup.summary is full_summary
+    assert setup.device_enabled
+    assert not setup.metadata["preflight_rejected"]
+    assert setup.metadata["preflight_scope"] == "full"
+
+
+def test_xblock_assembled_operator_preflight_uses_active_pattern_scope() -> None:
+    full_summary = SimpleNamespace(nnz=1000, shape=(100, 100), max_row_nnz=20, avg_row_nnz=10.0)
+    active_summary = SimpleNamespace(nnz=4, shape=(2, 2), max_row_nnz=2, avg_row_nnz=2.0)
+    active_pattern = object()
+
+    setup = build_xblock_assembled_operator_preflight_setup(
+        op=SimpleNamespace(),
+        xblock_active_idx_np=np.asarray([0, 2], dtype=np.int32),
+        sparse_pc_fp_dense_velocity_block=False,
+        xblock_krylov_method="gmres",
+        estimate_summary=lambda *_args, **_kwargs: full_summary,
+        full_pattern=lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("unused")),
+        active_pattern=lambda *_args, **_kwargs: active_pattern,
+        summarize_pattern=lambda _op, pattern: active_summary if pattern is active_pattern else None,
+        env={"SFINCS_JAX_RHSMODE1_XBLOCK_ASSEMBLED_OPERATOR_CSR_MAX_MB": "1"},
+    )
+
+    assert setup.pattern is active_pattern
+    assert setup.summary is active_summary
+    assert setup.metadata["preflight_scope"] == "active_dof"
+    assert setup.metadata["preflight_active_pattern_nnz_estimate"] == 4
+    assert not setup.device_enabled
+
+
+def test_xblock_assembled_operator_preflight_rejection_carries_metadata() -> None:
+    summary = SimpleNamespace(nnz=10, shape=(3, 3), max_row_nnz=4, avg_row_nnz=3.0)
+    with pytest.raises(XBlockAssembledPreflightError) as excinfo:
+        build_xblock_assembled_operator_preflight_setup(
+            op=SimpleNamespace(),
+            xblock_active_idx_np=None,
+            sparse_pc_fp_dense_velocity_block=False,
+            xblock_krylov_method="gmres",
+            estimate_summary=lambda *_args, **_kwargs: summary,
+            full_pattern=lambda *_args, **_kwargs: object(),
+            active_pattern=lambda *_args, **_kwargs: object(),
+            summarize_pattern=lambda _op, _pattern: summary,
+            env={"SFINCS_JAX_RHSMODE1_XBLOCK_ASSEMBLED_OPERATOR_CSR_MAX_MB": "0"},
+        )
+
+    assert excinfo.value.metadata["preflight_rejected"] is True
+    assert excinfo.value.metadata["preflight_pattern_nnz_estimate"] == 10
+    assert "non-positive CSR memory budget" in str(excinfo.value)
 
 
 def test_sparse_pc_gmres_once_explicit_left_recomputes_true_residual() -> None:

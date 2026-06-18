@@ -33249,3 +33249,51 @@ Next refactor target:
 - Extract assembled-operator preflight/memory-budget metadata and conservative
   active-pattern selection from the x-block branch, keeping materialization and
   validation in the driver until the preflight policy is covered directly.
+
+### 19.73 RHSMode=1 x-block assembled-operator preflight extraction
+
+Goal:
+
+- Move assembled-operator CSR memory-budget preflight and full/active
+  conservative pattern selection out of ``v3_driver.py`` while preserving
+  rejection metadata and downstream materialization behavior.
+
+Implementation:
+
+- Extended ``sfincs_jax/problems/profile_response/sparse_pc.py`` with
+  ``XBlockAssembledOperatorPreflightSetup``,
+  ``XBlockAssembledPreflightMemoryError``/``XBlockAssembledPreflightError``,
+  and ``build_xblock_assembled_operator_preflight_setup``.
+- Moved CSR budget parsing, device/operator env parsing, max-color parsing,
+  CSR byte estimates, full-pattern preflight metadata, active-DOF pattern
+  selection, memory rejection, and final pattern summary selection into the
+  sparse-PC helper.
+- Preserved the previous rejection metadata by carrying it on the custom
+  ``MemoryError`` subclass and merging it in the driver before the existing
+  assembled-operator failure handler records the error.
+- Added direct tests for full-pattern acceptance, active-DOF scope selection,
+  and metadata-carrying budget rejection.
+- ``solve_v3_full_system_linear_gmres`` is now about ``19848`` lines and
+  ``v3_driver.py`` is about ``25098`` lines.
+
+Validation so far:
+
+- ``python -m ruff check sfincs_jax/problems/profile_response/sparse_pc.py
+  sfincs_jax/v3_driver.py tests/test_profile_response_sparse_pc.py``: passed.
+- ``python -m compileall -q
+  sfincs_jax/problems/profile_response/sparse_pc.py sfincs_jax/v3_driver.py
+  tests/test_profile_response_sparse_pc.py``: passed.
+- ``PYTHONDONTWRITEBYTECODE=1 JAX_ENABLE_X64=True pytest -q
+  -p no:cacheprovider tests/test_profile_response_sparse_pc.py``:
+  ``18 passed`` as part of the focused assembled preflight/equilibration
+  shard.
+- Focused assembled preflight/equilibration regression subset:
+  ``22 passed in 11.18 s``.
+- Broader sparse-PC/x-block/dispatch subset:
+  ``96 passed in 40.65 s``.
+
+Next refactor target:
+
+- Extract assembled-operator validation/device-CSR admission and metadata
+  normalization after materialization. Keep the actual materialization call and
+  row/column transformed Krylov solve in the driver until covered directly.

@@ -205,11 +205,13 @@ from .problems.profile_response.sparse_pc import (
     apply_sparse_pc_post_minres,
     build_xblock_krylov_matvec_setup,
     build_xblock_assembled_equilibration_setup,
+    build_xblock_assembled_operator_preflight_setup,
     resolve_sparse_pc_entry_policy,
     resolve_xblock_qi_device_operator_reuse_setup,
     resolve_xblock_sparse_pc_setup,
     resolve_xblock_sparse_pc_side_policy_setup,
     run_sparse_pc_gmres_once,
+    XBlockAssembledPreflightError,
 )
 from .rhs1_strong_fallback import build_rhs1_strong_preconditioner_full_from_kind
 from .problems.profile_response.strong_preconditioning import (
@@ -3616,113 +3618,30 @@ def solve_v3_full_system_linear_gmres(
                             "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
                             "building assembled operator for Krylov matvec reuse",
                         )
-                    assembled_csr_max_mb = _rhs1_float_env(
-                        "SFINCS_JAX_RHSMODE1_XBLOCK_ASSEMBLED_OPERATOR_CSR_MAX_MB",
-                        default=2048.0,
-                        minimum=0.0,
-                    )
-                    assembled_drop_tol = _rhs1_float_env(
-                        "SFINCS_JAX_RHSMODE1_XBLOCK_ASSEMBLED_OPERATOR_DROP_TOL",
-                        default=0.0,
-                        minimum=0.0,
-                    )
-                    assembled_device_enabled = _rhs1_bool_env(
-                        "SFINCS_JAX_RHSMODE1_XBLOCK_ASSEMBLED_OPERATOR_DEVICE",
-                        default=str(xblock_krylov_method) in {"fgmres_jax", "gmres_jax", "bicgstab_jax", "tfqmr_jax"},
-                    )
-                    assembled_device_required = _rhs1_bool_env(
-                        "SFINCS_JAX_RHSMODE1_XBLOCK_ASSEMBLED_OPERATOR_DEVICE_REQUIRED",
-                        default=False,
-                    )
-                    assembled_max_colors = _rhs1_int_env(
-                        "SFINCS_JAX_RHSMODE1_XBLOCK_ASSEMBLED_OPERATOR_MAX_COLORS",
-                        default=512,
-                        minimum=1,
-                    )
-                    def _csr_storage_nbytes(*, nnz: int, n_rows: int) -> int:
-                        return int(
-                            int(nnz) * (np.dtype(np.float64).itemsize + np.dtype(np.int32).itemsize)
-                            + (int(n_rows) + 1) * np.dtype(np.int32).itemsize
+                    try:
+                        assembled_preflight_setup = build_xblock_assembled_operator_preflight_setup(
+                            op=op,
+                            xblock_active_idx_np=xblock_active_idx_np,
+                            sparse_pc_fp_dense_velocity_block=sparse_pc_fp_dense_velocity_block,
+                            xblock_krylov_method=str(xblock_krylov_method),
+                            estimate_summary=estimate_v3_full_system_conservative_sparsity_summary,
+                            full_pattern=v3_full_system_conservative_sparsity_pattern,
+                            active_pattern=v3_full_system_conservative_sparsity_pattern_for_indices,
+                            summarize_pattern=summarize_v3_sparse_pattern,
+                            env=os.environ,
                         )
-
-                    assembled_preflight = estimate_v3_full_system_conservative_sparsity_summary(
-                        op,
-                        fp_dense_velocity_block=sparse_pc_fp_dense_velocity_block,
-                    )
-                    assembled_preflight_csr_nbytes = _csr_storage_nbytes(
-                        nnz=int(assembled_preflight.nnz),
-                        n_rows=int(assembled_preflight.shape[0]),
-                    )
-                    assembled_preflight_peak_nbytes = int(3 * assembled_preflight_csr_nbytes)
-                    assembled_csr_cap_nbytes = int(max(0.0, float(assembled_csr_max_mb)) * 1.0e6)
-                    assembled_pattern = None
-                    assembled_preflight_scope = "full"
-                    assembled_operator_metadata.update(
-                        {
-                            "active_dof": bool(xblock_active_idx_np is not None),
-                            "preflight_scope": assembled_preflight_scope,
-                            "preflight_pattern_nnz_estimate": int(assembled_preflight.nnz),
-                            "preflight_pattern_max_row_nnz_estimate": int(assembled_preflight.max_row_nnz),
-                            "preflight_csr_nbytes_estimate": int(assembled_preflight_csr_nbytes),
-                            "preflight_peak_nbytes_estimate": int(assembled_preflight_peak_nbytes),
-                            "preflight_full_pattern_nnz_estimate": int(assembled_preflight.nnz),
-                            "preflight_full_csr_nbytes_estimate": int(assembled_preflight_csr_nbytes),
-                            "preflight_csr_max_mb": float(assembled_csr_max_mb),
-                            "preflight_rejected": False,
-                            "device_enabled": bool(assembled_device_enabled),
-                            "device_required": bool(assembled_device_required),
-                            "device_resident": False,
-                        }
-                    )
-                    if assembled_csr_cap_nbytes <= 0:
-                        assembled_operator_metadata["preflight_rejected"] = True
-                        raise MemoryError(
-                            "assembled x-block operator preflight rejected non-positive CSR memory budget "
-                            f"{float(assembled_csr_max_mb):.3g} MB"
-                        )
-                    if xblock_active_idx_np is not None:
-                        # The full-system conservative estimate can be several times
-                        # larger than the actual active-DOF Krylov operator when
-                        # ``Nxi_for_x`` truncation is enabled. Build the reduced
-                        # structural pattern directly and apply the memory gate to
-                        # the matrix that will actually be probed.
-                        assembled_pattern = v3_full_system_conservative_sparsity_pattern_for_indices(
-                            op,
-                            xblock_active_idx_np,
-                            fp_dense_velocity_block=sparse_pc_fp_dense_velocity_block,
-                        )
-                        active_preflight = summarize_v3_sparse_pattern(op, assembled_pattern)
-                        assembled_preflight_scope = "active_dof"
-                        assembled_preflight_csr_nbytes = _csr_storage_nbytes(
-                            nnz=int(active_preflight.nnz),
-                            n_rows=int(active_preflight.shape[0]),
-                        )
-                        assembled_preflight_peak_nbytes = int(3 * assembled_preflight_csr_nbytes)
-                        assembled_operator_metadata.update(
-                            {
-                                "preflight_scope": assembled_preflight_scope,
-                                "preflight_pattern_nnz_estimate": int(active_preflight.nnz),
-                                "preflight_pattern_max_row_nnz_estimate": int(active_preflight.max_row_nnz),
-                                "preflight_csr_nbytes_estimate": int(assembled_preflight_csr_nbytes),
-                                "preflight_peak_nbytes_estimate": int(assembled_preflight_peak_nbytes),
-                                "preflight_active_pattern_nnz_estimate": int(active_preflight.nnz),
-                                "preflight_active_csr_nbytes_estimate": int(assembled_preflight_csr_nbytes),
-                            }
-                        )
-                    if assembled_preflight_csr_nbytes > assembled_csr_cap_nbytes:
-                        assembled_operator_metadata["preflight_rejected"] = True
-                        raise MemoryError(
-                            "assembled x-block operator preflight rejected "
-                            f"{assembled_preflight_scope} CSR estimate "
-                            f"{assembled_preflight_csr_nbytes / 1.0e6:.3g} MB > "
-                            f"{float(assembled_csr_max_mb):.3g} MB"
-                        )
-                    if assembled_pattern is None:
-                        assembled_pattern = v3_full_system_conservative_sparsity_pattern(
-                            op,
-                            fp_dense_velocity_block=sparse_pc_fp_dense_velocity_block,
-                        )
-                    assembled_summary = summarize_v3_sparse_pattern(op, assembled_pattern)
+                    except XBlockAssembledPreflightError as preflight_exc:
+                        assembled_operator_metadata.update(preflight_exc.metadata)
+                        raise
+                    assembled_csr_max_mb = float(assembled_preflight_setup.csr_max_mb)
+                    assembled_drop_tol = float(assembled_preflight_setup.drop_tol)
+                    assembled_device_enabled = bool(assembled_preflight_setup.device_enabled)
+                    assembled_device_required = bool(assembled_preflight_setup.device_required)
+                    assembled_max_colors = int(assembled_preflight_setup.max_colors)
+                    assembled_csr_cap_nbytes = int(assembled_preflight_setup.csr_cap_nbytes)
+                    assembled_pattern = assembled_preflight_setup.pattern
+                    assembled_summary = assembled_preflight_setup.summary
+                    assembled_operator_metadata.update(assembled_preflight_setup.metadata)
 
                     def _matvec_np_no_count(x_np: np.ndarray) -> np.ndarray:
                         return np.asarray(
