@@ -212,6 +212,8 @@ from .problems.profile_response.sparse_pc import (
     failed_xblock_global_coupling_metadata,
     failed_xblock_moment_schur_metadata,
     failed_xblock_two_level_metadata,
+    fp_xblock_global_correction_metadata,
+    fp_xblock_highx_residual_correction_metadata,
     finalize_xblock_global_coupling_metadata,
     finalize_xblock_moment_schur_metadata,
     finalize_xblock_two_level_metadata,
@@ -232,6 +234,8 @@ from .problems.profile_response.sparse_pc import (
     resolve_xblock_sparse_pc_side_policy_setup,
     resolve_xblock_two_level_policy_setup,
     run_sparse_pc_gmres_once,
+    sparse_rescue_tail_metadata,
+    sparse_xblock_rescue_metadata,
     XBlockAssembledPreflightError,
     finalize_xblock_assembled_operator_metadata,
 )
@@ -16385,24 +16389,7 @@ def solve_v3_full_system_linear_gmres(
                         emit(1, f"xblock_sparse: failed ({type(exc).__name__}: {exc})")
             else:
                 sparse_xblock_rescue_reason = "inactive_by_policy"
-            rhsmode1_general_metadata.update(
-                {
-                    "sparse_xblock_rescue_active": bool(sparse_xblock_rescue_active),
-                    "sparse_xblock_rescue_attempted": bool(sparse_xblock_rescue_attempted),
-                    "sparse_xblock_rescue_built": bool(sparse_xblock_rescue_built),
-                    "sparse_xblock_rescue_error": sparse_xblock_rescue_error,
-                    "sparse_xblock_rescue_reason": str(sparse_xblock_rescue_reason),
-                    "sparse_xblock_rescue_assembled_host_fp": bool(sparse_xblock_rescue_assembled_host_fp),
-                    "sparse_xblock_rescue_preconditioner_xi": sparse_xblock_rescue_preconditioner_xi,
-                    "sparse_xblock_rescue_seed_residual": sparse_xblock_rescue_seed_residual,
-                    "sparse_xblock_rescue_seed_improvement_ratio": sparse_xblock_rescue_seed_improvement_ratio,
-                    "sparse_xblock_rescue_seed_accept_ratio": sparse_xblock_rescue_seed_accept_ratio,
-                    "sparse_xblock_rescue_seed_refine_steps": sparse_xblock_rescue_seed_refine_steps,
-                    "sparse_xblock_rescue_seed_refines_performed": sparse_xblock_rescue_seed_refines_performed,
-                    "sparse_xblock_rescue_candidate_residual": sparse_xblock_rescue_candidate_residual,
-                    "sparse_xblock_rescue_candidate_accepted": bool(sparse_xblock_rescue_candidate_accepted),
-                }
-            )
+            rhsmode1_general_metadata.update(sparse_xblock_rescue_metadata(locals()))
             fp_xblock_global_correction_allowed = _rhsmode1_fp_xblock_global_correction_allowed(
                 op=op,
                 active_size=int(active_size),
@@ -16517,20 +16504,7 @@ def solve_v3_full_system_linear_gmres(
                     "disabled" if correction_env not in {"1", "true", "yes", "on"} else "policy_guard"
                 )
             rhsmode1_general_metadata.update(
-                {
-                    "fp_xblock_global_correction_allowed": bool(fp_xblock_global_correction_allowed),
-                    "fp_xblock_global_correction_attempted": bool(fp_xblock_global_correction_attempted),
-                    "fp_xblock_global_correction_accepted": bool(fp_xblock_global_correction_accepted),
-                    "fp_xblock_global_correction_reason": str(fp_xblock_global_correction_reason),
-                    "fp_xblock_global_correction_error": fp_xblock_global_correction_error,
-                    "fp_xblock_global_correction_preconditioner": fp_xblock_global_correction_preconditioner,
-                    "fp_xblock_global_correction_steps": fp_xblock_global_correction_steps,
-                    "fp_xblock_global_correction_accepted_steps": fp_xblock_global_correction_accepted_steps,
-                    "fp_xblock_global_correction_residual_before": fp_xblock_global_correction_residual_before,
-                    "fp_xblock_global_correction_residual_after": fp_xblock_global_correction_residual_after,
-                    "fp_xblock_global_correction_improvement_ratio": fp_xblock_global_correction_improvement_ratio,
-                    "fp_xblock_global_correction_elapsed_s": fp_xblock_global_correction_elapsed_s,
-                }
+                fp_xblock_global_correction_metadata(locals())
             )
             highx_env = os.environ.get("SFINCS_JAX_RHSMODE1_FP_XBLOCK_HIGHX_RESIDUAL_CORRECTION", "").strip().lower()
             highx_enabled = highx_env in {"1", "true", "yes", "on"}
@@ -16743,37 +16717,7 @@ def solve_v3_full_system_linear_gmres(
                     "disabled" if not highx_enabled else "policy_guard"
                 )
             rhsmode1_general_metadata.update(
-                {
-                    "fp_xblock_highx_residual_correction_allowed": bool(
-                        fp_xblock_highx_residual_correction_allowed
-                    ),
-                    "fp_xblock_highx_residual_correction_attempted": bool(
-                        fp_xblock_highx_residual_correction_attempted
-                    ),
-                    "fp_xblock_highx_residual_correction_accepted": bool(
-                        fp_xblock_highx_residual_correction_accepted
-                    ),
-                    "fp_xblock_highx_residual_correction_reason": str(
-                        fp_xblock_highx_residual_correction_reason
-                    ),
-                    "fp_xblock_highx_residual_correction_error": fp_xblock_highx_residual_correction_error,
-                    "fp_xblock_highx_residual_correction_residual_before": (
-                        fp_xblock_highx_residual_correction_residual_before
-                    ),
-                    "fp_xblock_highx_residual_correction_residual_after": (
-                        fp_xblock_highx_residual_correction_residual_after
-                    ),
-                    "fp_xblock_highx_residual_correction_improvement_ratio": (
-                        fp_xblock_highx_residual_correction_improvement_ratio
-                    ),
-                    "fp_xblock_highx_residual_correction_elapsed_s": fp_xblock_highx_residual_correction_elapsed_s,
-                    "fp_xblock_highx_residual_correction_direction_count": (
-                        fp_xblock_highx_residual_correction_direction_count
-                    ),
-                    "fp_xblock_highx_residual_correction_direction_names": tuple(
-                        fp_xblock_highx_residual_correction_direction_names
-                    ),
-                }
+                fp_xblock_highx_residual_correction_metadata(locals())
             )
             skip_global_sparse_after_xblock = _rhsmode1_skip_global_sparse_after_xblock_allowed(
                 op=op,
@@ -18182,65 +18126,7 @@ def solve_v3_full_system_linear_gmres(
             sparse_xblock_rescue_reason = "sparse_disabled"
         elif float(res_reduced.residual_norm) <= float(target_reduced) and not bool(sparse_xblock_rescue_attempted):
             sparse_xblock_rescue_reason = "not_needed"
-        rhsmode1_general_metadata.update(
-            {
-                "sparse_xblock_rescue_active": bool(sparse_xblock_rescue_active),
-                "sparse_xblock_rescue_attempted": bool(sparse_xblock_rescue_attempted),
-                "sparse_xblock_rescue_built": bool(sparse_xblock_rescue_built),
-                "sparse_xblock_rescue_error": sparse_xblock_rescue_error,
-                "sparse_xblock_rescue_reason": str(sparse_xblock_rescue_reason),
-                "sparse_xblock_rescue_assembled_host_fp": bool(sparse_xblock_rescue_assembled_host_fp),
-                "sparse_xblock_rescue_preconditioner_xi": sparse_xblock_rescue_preconditioner_xi,
-                "sparse_xblock_rescue_seed_residual": sparse_xblock_rescue_seed_residual,
-                "sparse_xblock_rescue_seed_improvement_ratio": sparse_xblock_rescue_seed_improvement_ratio,
-                "sparse_xblock_rescue_seed_accept_ratio": sparse_xblock_rescue_seed_accept_ratio,
-                "sparse_xblock_rescue_seed_refine_steps": sparse_xblock_rescue_seed_refine_steps,
-                "sparse_xblock_rescue_seed_refines_performed": sparse_xblock_rescue_seed_refines_performed,
-                "sparse_xblock_rescue_candidate_residual": sparse_xblock_rescue_candidate_residual,
-                "sparse_xblock_rescue_candidate_accepted": bool(sparse_xblock_rescue_candidate_accepted),
-                "fp_xblock_global_correction_allowed": bool(fp_xblock_global_correction_allowed),
-                "fp_xblock_global_correction_attempted": bool(fp_xblock_global_correction_attempted),
-                "fp_xblock_global_correction_accepted": bool(fp_xblock_global_correction_accepted),
-                "fp_xblock_global_correction_reason": str(fp_xblock_global_correction_reason),
-                "fp_xblock_global_correction_error": fp_xblock_global_correction_error,
-                "fp_xblock_global_correction_preconditioner": fp_xblock_global_correction_preconditioner,
-                "fp_xblock_global_correction_steps": fp_xblock_global_correction_steps,
-                "fp_xblock_global_correction_accepted_steps": fp_xblock_global_correction_accepted_steps,
-                "fp_xblock_global_correction_residual_before": fp_xblock_global_correction_residual_before,
-                "fp_xblock_global_correction_residual_after": fp_xblock_global_correction_residual_after,
-                "fp_xblock_global_correction_improvement_ratio": fp_xblock_global_correction_improvement_ratio,
-                "fp_xblock_global_correction_elapsed_s": fp_xblock_global_correction_elapsed_s,
-                "fp_xblock_highx_residual_correction_allowed": bool(
-                    fp_xblock_highx_residual_correction_allowed
-                ),
-                "fp_xblock_highx_residual_correction_attempted": bool(
-                    fp_xblock_highx_residual_correction_attempted
-                ),
-                "fp_xblock_highx_residual_correction_accepted": bool(
-                    fp_xblock_highx_residual_correction_accepted
-                ),
-                "fp_xblock_highx_residual_correction_reason": str(
-                    fp_xblock_highx_residual_correction_reason
-                ),
-                "fp_xblock_highx_residual_correction_error": fp_xblock_highx_residual_correction_error,
-                "fp_xblock_highx_residual_correction_residual_before": (
-                    fp_xblock_highx_residual_correction_residual_before
-                ),
-                "fp_xblock_highx_residual_correction_residual_after": (
-                    fp_xblock_highx_residual_correction_residual_after
-                ),
-                "fp_xblock_highx_residual_correction_improvement_ratio": (
-                    fp_xblock_highx_residual_correction_improvement_ratio
-                ),
-                "fp_xblock_highx_residual_correction_elapsed_s": fp_xblock_highx_residual_correction_elapsed_s,
-                "fp_xblock_highx_residual_correction_direction_count": (
-                    fp_xblock_highx_residual_correction_direction_count
-                ),
-                "fp_xblock_highx_residual_correction_direction_names": tuple(
-                    fp_xblock_highx_residual_correction_direction_names
-                ),
-            }
-        )
+        rhsmode1_general_metadata.update(sparse_rescue_tail_metadata(locals()))
         # As a last resort on CPU, retry the reduced solve using SciPy GMRES.
         #
         # JAX's gmres can stagnate or return a poor solution for some FP operators on CPU,

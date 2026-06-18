@@ -21,6 +21,8 @@ from sfincs_jax.problems.profile_response.sparse_pc import (
     failed_xblock_global_coupling_metadata,
     failed_xblock_two_level_metadata,
     failed_xblock_moment_schur_metadata,
+    fp_xblock_global_correction_metadata,
+    fp_xblock_highx_residual_correction_metadata,
     finalize_xblock_global_coupling_metadata,
     finalize_xblock_two_level_metadata,
     finalize_xblock_moment_schur_metadata,
@@ -41,6 +43,8 @@ from sfincs_jax.problems.profile_response.sparse_pc import (
     resolve_xblock_sparse_pc_side_policy_setup,
     resolve_xblock_two_level_policy_setup,
     run_sparse_pc_gmres_once,
+    sparse_rescue_tail_metadata,
+    sparse_xblock_rescue_metadata,
     finalize_xblock_assembled_operator_metadata,
 )
 
@@ -62,6 +66,69 @@ def _op(*, fp=False, pas=False, constraint_scheme=1, n_zeta=1, n_species=1) -> S
             pas=object() if pas else None,
         ),
     )
+
+
+def _sparse_rescue_scope() -> dict[str, object]:
+    return {
+        "sparse_xblock_rescue_active": 1,
+        "sparse_xblock_rescue_attempted": True,
+        "sparse_xblock_rescue_built": False,
+        "sparse_xblock_rescue_error": None,
+        "sparse_xblock_rescue_reason": "seed_rejected",
+        "sparse_xblock_rescue_assembled_host_fp": True,
+        "sparse_xblock_rescue_preconditioner_xi": 2,
+        "sparse_xblock_rescue_seed_residual": 1.25,
+        "sparse_xblock_rescue_seed_improvement_ratio": 4.0,
+        "sparse_xblock_rescue_seed_accept_ratio": 0.2,
+        "sparse_xblock_rescue_seed_refine_steps": 3,
+        "sparse_xblock_rescue_seed_refines_performed": 2,
+        "sparse_xblock_rescue_candidate_residual": 0.5,
+        "sparse_xblock_rescue_candidate_accepted": 1,
+        "fp_xblock_global_correction_allowed": True,
+        "fp_xblock_global_correction_attempted": True,
+        "fp_xblock_global_correction_accepted": False,
+        "fp_xblock_global_correction_reason": "no_improvement",
+        "fp_xblock_global_correction_error": "none",
+        "fp_xblock_global_correction_preconditioner": "xblock",
+        "fp_xblock_global_correction_steps": 4,
+        "fp_xblock_global_correction_accepted_steps": 1,
+        "fp_xblock_global_correction_residual_before": 2.0,
+        "fp_xblock_global_correction_residual_after": 1.5,
+        "fp_xblock_global_correction_improvement_ratio": 1.25,
+        "fp_xblock_global_correction_elapsed_s": 0.125,
+        "fp_xblock_highx_residual_correction_allowed": True,
+        "fp_xblock_highx_residual_correction_attempted": False,
+        "fp_xblock_highx_residual_correction_accepted": False,
+        "fp_xblock_highx_residual_correction_reason": "policy_guard",
+        "fp_xblock_highx_residual_correction_error": None,
+        "fp_xblock_highx_residual_correction_residual_before": None,
+        "fp_xblock_highx_residual_correction_residual_after": None,
+        "fp_xblock_highx_residual_correction_improvement_ratio": None,
+        "fp_xblock_highx_residual_correction_elapsed_s": None,
+        "fp_xblock_highx_residual_correction_direction_count": 0,
+        "fp_xblock_highx_residual_correction_direction_names": ["a", "b"],
+    }
+
+
+def test_sparse_rescue_metadata_helpers_preserve_driver_keys_and_types() -> None:
+    scope = _sparse_rescue_scope()
+
+    sparse_meta = sparse_xblock_rescue_metadata(scope)
+    global_meta = fp_xblock_global_correction_metadata(scope)
+    highx_meta = fp_xblock_highx_residual_correction_metadata(scope)
+    combined = sparse_rescue_tail_metadata(scope)
+
+    assert sparse_meta["sparse_xblock_rescue_active"] is True
+    assert sparse_meta["sparse_xblock_rescue_reason"] == "seed_rejected"
+    assert sparse_meta["sparse_xblock_rescue_candidate_accepted"] is True
+    assert global_meta["fp_xblock_global_correction_reason"] == "no_improvement"
+    assert global_meta["fp_xblock_global_correction_accepted"] is False
+    assert highx_meta["fp_xblock_highx_residual_correction_allowed"] is True
+    assert highx_meta["fp_xblock_highx_residual_correction_direction_names"] == (
+        "a",
+        "b",
+    )
+    assert combined == {**sparse_meta, **global_meta, **highx_meta}
 
 
 def test_sparse_pc_entry_policy_classifies_pas_er_and_active_dof() -> None:

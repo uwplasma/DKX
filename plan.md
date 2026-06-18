@@ -34426,3 +34426,41 @@ Next refactor target:
   ``problems/profile_response/sparse_pc.py`` or a small diagnostics module.
   Keep each tranche covered by the current sparse-pattern shard and avoid
   changing solver admission/defaults until the refactor is complete.
+
+### 19.98 Sparse-rescue tail diagnostics extraction
+
+Goal:
+
+- Move repeated sparse-rescue metadata/update plumbing out of ``v3_driver.py``
+  while preserving all diagnostics keys and type conversions.
+
+Implementation:
+
+- Added ``sparse_xblock_rescue_metadata``,
+  ``fp_xblock_global_correction_metadata``,
+  ``fp_xblock_highx_residual_correction_metadata``, and
+  ``sparse_rescue_tail_metadata`` to
+  ``problems/profile_response/sparse_pc.py``.
+- Replaced the mid-tail and final ``rhsmode1_general_metadata.update({...})``
+  dictionaries in ``v3_driver.py`` with those helpers.
+- Added direct unit coverage in ``tests/test_profile_response_sparse_pc.py`` to
+  lock the metadata keys and bool/tuple conversions.
+- ``v3_driver.py`` is now about ``22197`` lines and
+  ``solve_v3_full_system_linear_gmres`` is about ``16909`` lines.
+
+Validation:
+
+- ``python -m ruff check`` on touched source/tests: passed.
+- ``python -m compileall -q`` on touched source/tests: passed.
+- ``tests/test_profile_response_sparse_pc.py``: ``59 passed``.
+- Broader current profile-response/x-block/sparse-pattern shard:
+  ``323 passed in 113.44 s``.
+- Latest pushed docs checks are green; latest PR CI is still in progress and
+  should be checked after the next push window rather than watched continuously.
+
+Next refactor target:
+
+- Extract the large x-block/QI-device preconditioner metadata payload from the
+  main sparse-PC solve result construction into a helper in
+  ``problems/profile_response/sparse_pc.py``. Keep it as pure diagnostics
+  construction first; do not alter solver defaults or admission gates.

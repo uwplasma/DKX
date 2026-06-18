@@ -168,6 +168,146 @@ class XBlockQIDeviceOperatorReuseSetup:
     messages: tuple[tuple[int, str], ...]
 
 
+def sparse_xblock_rescue_metadata(scope: Mapping[str, object]) -> dict[str, object]:
+    """Return stable diagnostics for the sparse x-block rescue tail."""
+
+    return {
+        "sparse_xblock_rescue_active": bool(
+            scope["sparse_xblock_rescue_active"]
+        ),
+        "sparse_xblock_rescue_attempted": bool(
+            scope["sparse_xblock_rescue_attempted"]
+        ),
+        "sparse_xblock_rescue_built": bool(scope["sparse_xblock_rescue_built"]),
+        "sparse_xblock_rescue_error": scope["sparse_xblock_rescue_error"],
+        "sparse_xblock_rescue_reason": str(scope["sparse_xblock_rescue_reason"]),
+        "sparse_xblock_rescue_assembled_host_fp": bool(
+            scope["sparse_xblock_rescue_assembled_host_fp"]
+        ),
+        "sparse_xblock_rescue_preconditioner_xi": scope[
+            "sparse_xblock_rescue_preconditioner_xi"
+        ],
+        "sparse_xblock_rescue_seed_residual": scope[
+            "sparse_xblock_rescue_seed_residual"
+        ],
+        "sparse_xblock_rescue_seed_improvement_ratio": scope[
+            "sparse_xblock_rescue_seed_improvement_ratio"
+        ],
+        "sparse_xblock_rescue_seed_accept_ratio": scope[
+            "sparse_xblock_rescue_seed_accept_ratio"
+        ],
+        "sparse_xblock_rescue_seed_refine_steps": scope[
+            "sparse_xblock_rescue_seed_refine_steps"
+        ],
+        "sparse_xblock_rescue_seed_refines_performed": scope[
+            "sparse_xblock_rescue_seed_refines_performed"
+        ],
+        "sparse_xblock_rescue_candidate_residual": scope[
+            "sparse_xblock_rescue_candidate_residual"
+        ],
+        "sparse_xblock_rescue_candidate_accepted": bool(
+            scope["sparse_xblock_rescue_candidate_accepted"]
+        ),
+    }
+
+
+def fp_xblock_global_correction_metadata(
+    scope: Mapping[str, object],
+) -> dict[str, object]:
+    """Return stable diagnostics for FP x-block global correction."""
+
+    return {
+        "fp_xblock_global_correction_allowed": bool(
+            scope["fp_xblock_global_correction_allowed"]
+        ),
+        "fp_xblock_global_correction_attempted": bool(
+            scope["fp_xblock_global_correction_attempted"]
+        ),
+        "fp_xblock_global_correction_accepted": bool(
+            scope["fp_xblock_global_correction_accepted"]
+        ),
+        "fp_xblock_global_correction_reason": str(
+            scope["fp_xblock_global_correction_reason"]
+        ),
+        "fp_xblock_global_correction_error": scope[
+            "fp_xblock_global_correction_error"
+        ],
+        "fp_xblock_global_correction_preconditioner": scope[
+            "fp_xblock_global_correction_preconditioner"
+        ],
+        "fp_xblock_global_correction_steps": scope[
+            "fp_xblock_global_correction_steps"
+        ],
+        "fp_xblock_global_correction_accepted_steps": scope[
+            "fp_xblock_global_correction_accepted_steps"
+        ],
+        "fp_xblock_global_correction_residual_before": scope[
+            "fp_xblock_global_correction_residual_before"
+        ],
+        "fp_xblock_global_correction_residual_after": scope[
+            "fp_xblock_global_correction_residual_after"
+        ],
+        "fp_xblock_global_correction_improvement_ratio": scope[
+            "fp_xblock_global_correction_improvement_ratio"
+        ],
+        "fp_xblock_global_correction_elapsed_s": scope[
+            "fp_xblock_global_correction_elapsed_s"
+        ],
+    }
+
+
+def fp_xblock_highx_residual_correction_metadata(
+    scope: Mapping[str, object],
+) -> dict[str, object]:
+    """Return stable diagnostics for FP high-x residual correction."""
+
+    return {
+        "fp_xblock_highx_residual_correction_allowed": bool(
+            scope["fp_xblock_highx_residual_correction_allowed"]
+        ),
+        "fp_xblock_highx_residual_correction_attempted": bool(
+            scope["fp_xblock_highx_residual_correction_attempted"]
+        ),
+        "fp_xblock_highx_residual_correction_accepted": bool(
+            scope["fp_xblock_highx_residual_correction_accepted"]
+        ),
+        "fp_xblock_highx_residual_correction_reason": str(
+            scope["fp_xblock_highx_residual_correction_reason"]
+        ),
+        "fp_xblock_highx_residual_correction_error": scope[
+            "fp_xblock_highx_residual_correction_error"
+        ],
+        "fp_xblock_highx_residual_correction_residual_before": scope[
+            "fp_xblock_highx_residual_correction_residual_before"
+        ],
+        "fp_xblock_highx_residual_correction_residual_after": scope[
+            "fp_xblock_highx_residual_correction_residual_after"
+        ],
+        "fp_xblock_highx_residual_correction_improvement_ratio": scope[
+            "fp_xblock_highx_residual_correction_improvement_ratio"
+        ],
+        "fp_xblock_highx_residual_correction_elapsed_s": scope[
+            "fp_xblock_highx_residual_correction_elapsed_s"
+        ],
+        "fp_xblock_highx_residual_correction_direction_count": scope[
+            "fp_xblock_highx_residual_correction_direction_count"
+        ],
+        "fp_xblock_highx_residual_correction_direction_names": tuple(
+            scope["fp_xblock_highx_residual_correction_direction_names"]
+        ),
+    }
+
+
+def sparse_rescue_tail_metadata(scope: Mapping[str, object]) -> dict[str, object]:
+    """Return the combined sparse-rescue tail diagnostics for final metadata."""
+
+    return {
+        **sparse_xblock_rescue_metadata(scope),
+        **fp_xblock_global_correction_metadata(scope),
+        **fp_xblock_highx_residual_correction_metadata(scope),
+    }
+
+
 class MatvecCounter:
     """Mutable matvec counter that preserves ``int(counter)`` call sites."""
 
