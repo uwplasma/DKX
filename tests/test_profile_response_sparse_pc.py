@@ -14,6 +14,7 @@ from sfincs_jax.problems.profile_response.sparse_pc import (
     apply_sparse_pc_post_minres,
     build_xblock_assembled_equilibration_setup,
     build_xblock_assembled_device_setup,
+    build_xblock_assembled_matvec_setup,
     build_xblock_assembled_operator_preflight_setup,
     build_xblock_krylov_matvec_setup,
     resolve_sparse_pc_entry_policy,
@@ -21,6 +22,7 @@ from sfincs_jax.problems.profile_response.sparse_pc import (
     resolve_xblock_sparse_pc_setup,
     resolve_xblock_sparse_pc_side_policy_setup,
     run_sparse_pc_gmres_once,
+    finalize_xblock_assembled_operator_metadata,
 )
 
 
@@ -542,6 +544,96 @@ def test_xblock_assembled_device_setup_required_failure_raises() -> None:
             device_csr_from_matrix=lambda *_args, **_kwargs: (_ for _ in ()).throw(MemoryError("too large")),
             validate_device_csr_matvec=lambda *_args, **_kwargs: (),
         )
+
+
+def test_xblock_assembled_matvec_setup_host_counts_progress() -> None:
+    messages: list[str] = []
+    counter = build_xblock_krylov_matvec_setup(
+        op=SimpleNamespace(total_size=2),
+        rhs=jnp.asarray([0.0, 0.0]),
+        xblock_use_active_dof=False,
+        active_idx=None,
+        full_to_active=None,
+        reduce_full_with_indices=lambda _v, _idx: (_ for _ in ()).throw(AssertionError("unused")),
+        expand_reduced_with_map=lambda _v, _idx: (_ for _ in ()).throw(AssertionError("unused")),
+        operator_matvec=lambda v: v,
+        elapsed_s=lambda: 0.0,
+        emit=None,
+        env={},
+    ).mv_count
+    setup = build_xblock_assembled_matvec_setup(
+        assembled_matvec=lambda x: 3.0 * x,
+        device_operator=None,
+        mv_count=counter,
+        progress_every=2,
+        elapsed_s=lambda: 4.0,
+        emit=lambda _level, msg: messages.append(msg),
+    )
+
+    assert setup.location == "host"
+    assert setup.matvec(jnp.asarray([1.0, 2.0])).tolist() == [3.0, 6.0]
+    assert setup.matvec(jnp.asarray([2.0, 3.0])).tolist() == [6.0, 9.0]
+    assert int(counter) == 2
+    assert any("assembled_host_matvecs=2" in message for message in messages)
+
+
+def test_xblock_assembled_matvec_setup_device_counts_progress() -> None:
+    messages: list[str] = []
+    counter = build_xblock_krylov_matvec_setup(
+        op=SimpleNamespace(total_size=2),
+        rhs=jnp.asarray([0.0, 0.0]),
+        xblock_use_active_dof=False,
+        active_idx=None,
+        full_to_active=None,
+        reduce_full_with_indices=lambda _v, _idx: (_ for _ in ()).throw(AssertionError("unused")),
+        expand_reduced_with_map=lambda _v, _idx: (_ for _ in ()).throw(AssertionError("unused")),
+        operator_matvec=lambda v: v,
+        elapsed_s=lambda: 0.0,
+        emit=None,
+        env={},
+    ).mv_count
+    device_operator = SimpleNamespace(jitted_matvec=lambda: (lambda v: 5.0 * v))
+    setup = build_xblock_assembled_matvec_setup(
+        assembled_matvec=lambda _x: (_ for _ in ()).throw(AssertionError("unused")),
+        device_operator=device_operator,
+        mv_count=counter,
+        progress_every=1,
+        elapsed_s=lambda: 7.0,
+        emit=lambda _level, msg: messages.append(msg),
+    )
+
+    assert setup.location == "device"
+    assert setup.matvec(jnp.asarray([1.0, 2.0])).tolist() == [5.0, 10.0]
+    assert int(counter) == 1
+    assert any("assembled_device_matvecs=1" in message for message in messages)
+
+
+def test_finalize_xblock_assembled_operator_metadata_normalizes_fields() -> None:
+    metadata = finalize_xblock_assembled_operator_metadata(
+        metadata={"preflight_scope": "full"},
+        setup_s=1.25,
+        assembled_matrix=scipy_sparse.csr_matrix([[1.0, 0.0], [2.0, 3.0]]),
+        assembled_summary=SimpleNamespace(nnz=3, avg_row_nnz=1.5, max_row_nnz=2),
+        assembled_bundle_metadata=SimpleNamespace(
+            storage_kind="csr",
+            reason="materialized",
+            csr_nbytes_estimate=128,
+        ),
+        max_colors=4,
+        validation_errors=(1.0e-12,),
+        device_enabled=True,
+        device_required=False,
+        device_resident=True,
+        device_operator=SimpleNamespace(nnz=3, nbytes_estimate=96),
+        device_validation_errors=(2.0e-12,),
+        device_error=None,
+    )
+
+    assert metadata["preflight_scope"] == "full"
+    assert metadata["matrix_nnz"] == 3
+    assert metadata["pattern_avg_row_nnz"] == pytest.approx(1.5)
+    assert metadata["device_nnz"] == 3
+    assert metadata["device_validation_rel_errors"] == (2.0e-12,)
 
 
 def test_sparse_pc_gmres_once_explicit_left_recomputes_true_residual() -> None:

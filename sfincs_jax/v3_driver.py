@@ -206,6 +206,7 @@ from .problems.profile_response.sparse_pc import (
     build_xblock_krylov_matvec_setup,
     build_xblock_assembled_equilibration_setup,
     build_xblock_assembled_device_setup,
+    build_xblock_assembled_matvec_setup,
     build_xblock_assembled_operator_preflight_setup,
     resolve_sparse_pc_entry_policy,
     resolve_xblock_qi_device_operator_reuse_setup,
@@ -213,6 +214,7 @@ from .problems.profile_response.sparse_pc import (
     resolve_xblock_sparse_pc_side_policy_setup,
     run_sparse_pc_gmres_once,
     XBlockAssembledPreflightError,
+    finalize_xblock_assembled_operator_metadata,
 )
 from .rhs1_strong_fallback import build_rhs1_strong_preconditioner_full_from_kind
 from .problems.profile_response.strong_preconditioning import (
@@ -3733,75 +3735,34 @@ def solve_v3_full_system_linear_gmres(
                         for level, message in assembled_device_setup.messages:
                             emit(int(level), str(message))
 
-                    if assembled_device_operator is not None:
-                        assembled_device_matvec = assembled_device_operator.jitted_matvec()
-
-                        def _mv_assembled(v: jnp.ndarray) -> jnp.ndarray:
-                            nonlocal mv_count
-                            mv_count += 1
-                            if emit is not None and progress_every > 0 and mv_count % progress_every == 0:
-                                emit(
-                                    1,
-                                    "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
-                                    f"assembled_device_matvecs={int(mv_count)} "
-                                    f"elapsed_s={sparse_timer.elapsed_s():.3f}",
-                                )
-                            return assembled_device_matvec(jnp.asarray(v, dtype=jnp.float64))
-
-                    else:
-
-                        def _mv_assembled(v: jnp.ndarray) -> jnp.ndarray:
-                            nonlocal mv_count
-                            mv_count += 1
-                            if emit is not None and progress_every > 0 and mv_count % progress_every == 0:
-                                emit(
-                                    1,
-                                    "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
-                                    f"assembled_host_matvecs={int(mv_count)} "
-                                    f"elapsed_s={sparse_timer.elapsed_s():.3f}",
-                                )
-                            v_np = np.asarray(jax.device_get(v), dtype=np.float64).reshape((-1,))
-                            return jnp.asarray(assembled_bundle.matvec(v_np), dtype=jnp.float64)
-
-                    _mv_xblock_krylov = _mv_assembled
+                    assembled_matvec_setup = build_xblock_assembled_matvec_setup(
+                        assembled_matvec=assembled_bundle.matvec,
+                        device_operator=assembled_device_operator,
+                        mv_count=mv_count,
+                        progress_every=int(progress_every),
+                        elapsed_s=sparse_timer.elapsed_s,
+                        emit=emit,
+                    )
+                    _mv_xblock_krylov = assembled_matvec_setup.matvec
                     assembled_operator_built = True
-                    if hasattr(assembled_matrix, "nnz"):
-                        assembled_matrix_nnz = int(assembled_matrix.nnz)
-                    else:
-                        assembled_matrix_nnz = int(np.count_nonzero(np.asarray(assembled_matrix)))
-                    assembled_operator_metadata = {
-                        **assembled_operator_metadata,
-                        "setup_s": float(sparse_timer.elapsed_s() - assembled_operator_start_s),
-                        "pattern_nnz": int(assembled_summary.nnz),
-                        "pattern_avg_row_nnz": float(assembled_summary.avg_row_nnz),
-                        "pattern_max_row_nnz": int(assembled_summary.max_row_nnz),
-                        "storage_kind": assembled_bundle.metadata.storage_kind,
-                        "reason": assembled_bundle.metadata.reason,
-                        "matrix_nnz": int(assembled_matrix_nnz),
-                        "csr_nbytes_estimate": int(assembled_bundle.metadata.csr_nbytes_estimate),
-                        "max_colors": int(assembled_max_colors),
-                        "validation_rel_errors": tuple(float(v) for v in validation_errors),
-                        "device_enabled": bool(assembled_device_enabled),
-                        "device_required": bool(assembled_device_required),
-                        "device_resident": bool(assembled_operator_device_resident),
-                        "device_nnz": (
-                            int(assembled_device_operator.nnz)
-                            if assembled_device_operator is not None
-                            else None
-                        ),
-                        "device_csr_nbytes_estimate": (
-                            int(assembled_device_operator.nbytes_estimate)
-                            if assembled_device_operator is not None
-                            else None
-                        ),
-                        "device_validation_rel_errors": tuple(
-                            float(v) for v in assembled_device_validation_errors
-                        ),
-                        "device_error": assembled_device_error,
-                    }
+                    assembled_operator_metadata = finalize_xblock_assembled_operator_metadata(
+                        metadata=assembled_operator_metadata,
+                        setup_s=float(sparse_timer.elapsed_s() - assembled_operator_start_s),
+                        assembled_matrix=assembled_matrix,
+                        assembled_summary=assembled_summary,
+                        assembled_bundle_metadata=assembled_bundle.metadata,
+                        max_colors=int(assembled_max_colors),
+                        validation_errors=validation_errors,
+                        device_enabled=bool(assembled_device_enabled),
+                        device_required=bool(assembled_device_required),
+                        device_resident=bool(assembled_operator_device_resident),
+                        device_operator=assembled_device_operator,
+                        device_validation_errors=assembled_device_validation_errors,
+                        device_error=assembled_device_error,
+                    )
                     pc_factor_s += float(assembled_operator_metadata["setup_s"])
                     if emit is not None:
-                        operator_location = "device" if assembled_operator_device_resident else "host"
+                        operator_location = str(assembled_matvec_setup.location)
                         emit(
                             0,
                             "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres assembled operator "

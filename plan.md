@@ -33341,3 +33341,47 @@ Next refactor target:
   operator metadata finalization, then move on to moment-Schur admission
   policy. Keep numerical Krylov execution in the driver until these routing
   layers are fully covered.
+
+### 19.75 RHSMode=1 x-block assembled matvec and metadata extraction
+
+Goal:
+
+- Move assembled host/device matvec closure selection and assembled-operator
+  metadata normalization out of ``v3_driver.py`` while preserving matvec
+  progress messages and metadata schema.
+
+Implementation:
+
+- Extended ``sfincs_jax/problems/profile_response/sparse_pc.py`` with
+  ``XBlockAssembledMatvecSetup``, ``build_xblock_assembled_matvec_setup``, and
+  ``finalize_xblock_assembled_operator_metadata``.
+- Moved host/device assembled matvec progress accounting and final metadata
+  normalization for matrix nnz, pattern stats, CSR bytes, validation errors,
+  and device CSR metadata into sparse-PC helpers.
+- Kept actual assembled-operator materialization and all Krylov execution in
+  ``v3_driver.py``.
+- Added direct tests for host matvec progress, device matvec progress, and
+  metadata normalization.
+- ``solve_v3_full_system_linear_gmres`` is now about ``19796`` lines and
+  ``v3_driver.py`` is about ``25049`` lines.
+
+Validation so far:
+
+- ``python -m ruff check sfincs_jax/problems/profile_response/sparse_pc.py
+  sfincs_jax/v3_driver.py tests/test_profile_response_sparse_pc.py``: passed.
+- ``python -m compileall -q
+  sfincs_jax/problems/profile_response/sparse_pc.py sfincs_jax/v3_driver.py
+  tests/test_profile_response_sparse_pc.py``: passed.
+- ``PYTHONDONTWRITEBYTECODE=1 JAX_ENABLE_X64=True pytest -q
+  -p no:cacheprovider tests/test_profile_response_sparse_pc.py``:
+  ``24 passed in 0.97 s``.
+- Focused assembled-operator regression subset:
+  ``29 passed in 13.04 s``.
+- Broader sparse-PC/x-block/dispatch subset:
+  ``102 passed in 40.03 s``.
+
+Next refactor target:
+
+- Move moment-Schur default/admission/probe policy into the sparse-PC helper
+  layer. Keep moment-Schur candidate construction and correction application
+  in the driver until the admission policy and metadata are isolated.

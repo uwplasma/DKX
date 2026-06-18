@@ -258,6 +258,14 @@ class XBlockAssembledDeviceSetup:
     messages: tuple[tuple[int, str], ...]
 
 
+@dataclass(frozen=True)
+class XBlockAssembledMatvecSetup:
+    """Matvec closure for an assembled x-block operator."""
+
+    matvec: ArrayFn
+    location: str
+
+
 def _env_value(env: Mapping[str, str] | None, key: str) -> str:
     source = env if env is not None else {}
     return str(source.get(key, "")).strip()
@@ -1273,7 +1281,95 @@ def build_xblock_assembled_device_setup(
             validation_errors=(),
             error=error,
             messages=tuple(messages),
-        )
+    )
+
+
+def build_xblock_assembled_matvec_setup(
+    *,
+    assembled_matvec: Callable[[np.ndarray], np.ndarray],
+    device_operator: object | None,
+    mv_count: MatvecCounter,
+    progress_every: int,
+    elapsed_s: Callable[[], float],
+    emit: EmitFn | None,
+) -> XBlockAssembledMatvecSetup:
+    """Select host or device matvec closure for assembled x-block Krylov solves."""
+
+    if device_operator is not None:
+        device_matvec = device_operator.jitted_matvec()
+
+        def matvec(v: jnp.ndarray) -> jnp.ndarray:
+            mv_count.increment()
+            if emit is not None and int(progress_every) > 0 and int(mv_count) % int(progress_every) == 0:
+                emit(
+                    1,
+                    "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
+                    f"assembled_device_matvecs={int(mv_count)} "
+                    f"elapsed_s={float(elapsed_s()):.3f}",
+                )
+            return device_matvec(jnp.asarray(v, dtype=jnp.float64))
+
+        return XBlockAssembledMatvecSetup(matvec=matvec, location="device")
+
+    def matvec(v: jnp.ndarray) -> jnp.ndarray:
+        mv_count.increment()
+        if emit is not None and int(progress_every) > 0 and int(mv_count) % int(progress_every) == 0:
+            emit(
+                1,
+                "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
+                f"assembled_host_matvecs={int(mv_count)} "
+                f"elapsed_s={float(elapsed_s()):.3f}",
+            )
+        v_np = np.asarray(jax.device_get(v), dtype=np.float64).reshape((-1,))
+        return jnp.asarray(assembled_matvec(v_np), dtype=jnp.float64)
+
+    return XBlockAssembledMatvecSetup(matvec=matvec, location="host")
+
+
+def finalize_xblock_assembled_operator_metadata(
+    *,
+    metadata: Mapping[str, object],
+    setup_s: float,
+    assembled_matrix: object,
+    assembled_summary: object,
+    assembled_bundle_metadata: object,
+    max_colors: int,
+    validation_errors: Sequence[float],
+    device_enabled: bool,
+    device_required: bool,
+    device_resident: bool,
+    device_operator: object | None,
+    device_validation_errors: Sequence[float],
+    device_error: str | None,
+) -> dict[str, object]:
+    """Return normalized metadata after assembled x-block operator construction."""
+
+    if hasattr(assembled_matrix, "nnz"):
+        matrix_nnz = int(assembled_matrix.nnz)
+    else:
+        matrix_nnz = int(np.count_nonzero(np.asarray(assembled_matrix)))
+    return {
+        **dict(metadata),
+        "setup_s": float(setup_s),
+        "pattern_nnz": int(assembled_summary.nnz),
+        "pattern_avg_row_nnz": float(assembled_summary.avg_row_nnz),
+        "pattern_max_row_nnz": int(assembled_summary.max_row_nnz),
+        "storage_kind": assembled_bundle_metadata.storage_kind,
+        "reason": assembled_bundle_metadata.reason,
+        "matrix_nnz": int(matrix_nnz),
+        "csr_nbytes_estimate": int(assembled_bundle_metadata.csr_nbytes_estimate),
+        "max_colors": int(max_colors),
+        "validation_rel_errors": tuple(float(v) for v in validation_errors),
+        "device_enabled": bool(device_enabled),
+        "device_required": bool(device_required),
+        "device_resident": bool(device_resident),
+        "device_nnz": int(device_operator.nnz) if device_operator is not None else None,
+        "device_csr_nbytes_estimate": (
+            int(device_operator.nbytes_estimate) if device_operator is not None else None
+        ),
+        "device_validation_rel_errors": tuple(float(v) for v in device_validation_errors),
+        "device_error": device_error,
+    }
 
 
 def run_sparse_pc_gmres_once(
