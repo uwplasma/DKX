@@ -34189,3 +34189,54 @@ Next refactor target:
   main driver path and ``problems/profile_response/qi_device_seed.py``. This is
   the next high-ROI cleanup because it removes duplicated policy unpacking
   without changing solver construction.
+
+### 19.93 RHSMode=1 x-block QI-device setup-kwargs adapters
+
+Goal:
+
+- Collapse the largest grouped keyword blocks in the QI-device preconditioner
+  setup call without changing metadata, logging, or preconditioner numerical
+  behavior.
+
+Implementation:
+
+- Added ``rhs1_qi_device_extra_coarse_setup_kwargs`` and
+  ``rhs1_qi_device_residual_correction_setup_kwargs`` to
+  ``sfincs_jax/problems/profile_response/policies.py`` and exported them.
+- The adapters translate policy-control dictionary keys into the exact setup
+  parameter names used by ``setup_rhs1_qi_device_preconditioner``, including
+  renamed quantities such as trapped-boundary fractions, min-region-energy
+  fractions, and coupled residual min-improvement.
+- Wired ``v3_driver.py`` to build those grouped kwargs once and pass them with
+  ``**`` in the setup call. Existing local variables remain for metadata and
+  status strings; those should be collapsed next with dedicated metadata/status
+  helpers rather than more ad hoc dictionary unpacking.
+- Added direct tests for private-driver aliases and the renamed setup-key
+  mappings.
+- ``solve_v3_full_system_linear_gmres`` is now about ``18413`` lines and
+  ``v3_driver.py`` is about ``23692`` lines.
+
+Validation so far:
+
+- ``python -m ruff check sfincs_jax/problems/profile_response/policies.py
+  sfincs_jax/v3_driver.py tests/test_rhs1_xblock_fallback_initial_guess.py``:
+  passed.
+- ``python -m compileall -q
+  sfincs_jax/problems/profile_response/policies.py sfincs_jax/v3_driver.py
+  tests/test_rhs1_xblock_fallback_initial_guess.py``: passed.
+- Focused policy/helper and QI-device metadata regressions:
+  ``35 passed in 14.28 s``.
+- Broader current profile-response/x-block/sparse-pattern shard:
+  ``316 passed in 113.16 s``.
+- ``git diff --check``: passed.
+- Remote docs for the previous checkpoint are green; PR CI for the latest PR
+  snapshot is in progress and should be checked after the next pushed
+  checkpoint rather than watched continuously.
+
+Next refactor target:
+
+- Add metadata/status helpers for the same extra-coarse and residual-correction
+  controls, then remove the remaining dictionary-to-local expansion where those
+  locals only feed metadata dictionaries and progress strings. After that,
+  mirror the same typed/control-helper approach in
+  ``problems/profile_response/qi_device_seed.py``.

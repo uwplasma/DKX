@@ -8,10 +8,12 @@ from sfincs_jax import v3_driver as vd
 from sfincs_jax.problems.profile_response.policies import (
     parse_rhs1_pas_tz_guarded_structured_levels,
     rhs1_qi_device_extra_coarse_controls,
+    rhs1_qi_device_extra_coarse_setup_kwargs,
     rhs1_qi_device_probe_uses_minres_step,
     rhs1_qi_device_progress_messages,
     rhs1_qi_device_rank_budget,
     rhs1_qi_device_residual_correction_controls,
+    rhs1_qi_device_residual_correction_setup_kwargs,
     rhs1_qi_device_setup_summary,
     rhs1_xblock_fallback_initial_guess,
 )
@@ -26,6 +28,10 @@ def test_driver_private_policy_helpers_alias_canonical_profile_response_helpers(
         vd._rhs1_qi_device_extra_coarse_controls is rhs1_qi_device_extra_coarse_controls
     )
     assert (
+        vd._rhs1_qi_device_extra_coarse_setup_kwargs
+        is rhs1_qi_device_extra_coarse_setup_kwargs
+    )
+    assert (
         vd._rhs1_qi_device_probe_uses_minres_step
         is rhs1_qi_device_probe_uses_minres_step
     )
@@ -33,6 +39,10 @@ def test_driver_private_policy_helpers_alias_canonical_profile_response_helpers(
     assert (
         vd._rhs1_qi_device_residual_correction_controls
         is rhs1_qi_device_residual_correction_controls
+    )
+    assert (
+        vd._rhs1_qi_device_residual_correction_setup_kwargs
+        is rhs1_qi_device_residual_correction_setup_kwargs
     )
     assert vd._rhs1_qi_device_setup_summary is rhs1_qi_device_setup_summary
     assert vd._rhs1_qi_device_rank_budget is rhs1_qi_device_rank_budget
@@ -632,3 +642,38 @@ def test_qi_device_setup_summary_preserves_adjoint_only_compatibility() -> None:
     assert summary.residual_seed_required is False
     assert len(summary.progress_messages) == 1
     assert "adjoint-normal Krylov coarse enrichment" in summary.progress_messages[0]
+
+
+def test_qi_device_extra_coarse_setup_kwargs_map_solver_parameter_names() -> None:
+    kwargs = rhs1_qi_device_extra_coarse_setup_kwargs(
+        _extra_coarse_controls_for_summary(
+            phase_space_residual_equation_boundary=0.125,
+            residual_region_bounce_coarse_boundary=0.25,
+            residual_region_bounce_coarse_min_energy=0.03125,
+            active_pattern_coarse_min_chunk_energy=0.0625,
+        )
+    )
+
+    assert kwargs["phase_space_residual_equation_trapped_boundary_fraction"] == 0.125
+    assert kwargs["residual_region_bounce_coarse_trapped_boundary_fraction"] == 0.25
+    assert (
+        kwargs["residual_region_bounce_coarse_min_region_energy_fraction"]
+        == 0.03125
+    )
+    assert kwargs["active_pattern_coarse_min_chunk_energy_fraction"] == 0.0625
+    assert kwargs["global_moment_residual_equation_solver"] == "action_lstsq"
+
+
+def test_qi_device_residual_correction_setup_kwargs_map_solver_parameters() -> None:
+    kwargs = rhs1_qi_device_residual_correction_setup_kwargs(
+        _residual_controls_for_summary(
+            coupled_residual_equation=True,
+            coupled_residual_equation_min_improvement=0.2,
+            residual_snapshot_residual_equation=True,
+        )
+    )
+
+    assert kwargs["coupled_residual_equation"] is True
+    assert kwargs["coupled_residual_equation_min_relative_improvement"] == 0.2
+    assert kwargs["residual_snapshot_residual_equation"] is True
+    assert "coupled_residual_equation_install_on_reject" not in kwargs
