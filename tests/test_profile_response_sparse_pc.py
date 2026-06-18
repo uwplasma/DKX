@@ -30,6 +30,7 @@ from sfincs_jax.problems.profile_response.sparse_pc import (
     finalize_xblock_two_level_metadata,
     finalize_xblock_moment_schur_metadata,
     prepare_xblock_initial_guess,
+    resolve_fortran_reduced_sparse_pc_backend,
     resolve_sparse_pc_entry_policy,
     resolve_xblock_qi_device_admission_setup,
     resolve_xblock_qi_device_base_config_setup,
@@ -125,6 +126,78 @@ def test_sparse_pc_active_dof_setup_builds_reduction_maps_and_message() -> None:
     np.testing.assert_allclose(
         np.asarray(setup.expand_reduced(jnp.asarray([1.0, 2.0, 3.0]))),
         np.asarray([1.0, 0.0, 2.0, 0.0, 0.0, 3.0]),
+    )
+
+
+def test_fortran_reduced_backend_policy_honors_explicit_backend_alias() -> None:
+    setup = resolve_fortran_reduced_sparse_pc_backend(
+        op=_op(fp=True, constraint_scheme=1, n_zeta=3),
+        env={"SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_PC_BACKEND": "local-xblock"},
+        fortran_reduced_sparse_pc=True,
+        sparse_pc_linear_size=12,
+    )
+
+    assert setup.backend == "xblock"
+    assert setup.reason == "env"
+    assert setup.backend_raw == "local_xblock"
+    assert setup.xblock_min_size == 100000
+    assert setup.messages == ()
+
+
+def test_fortran_reduced_backend_policy_auto_selects_large_full_fp_xblock() -> None:
+    setup = resolve_fortran_reduced_sparse_pc_backend(
+        op=_op(fp=True, constraint_scheme=1, n_zeta=3),
+        env={"SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_XBLOCK_MIN_SIZE": "10"},
+        fortran_reduced_sparse_pc=True,
+        sparse_pc_linear_size=12,
+    )
+
+    assert setup.backend == "xblock"
+    assert setup.reason == "auto_large_full_fp_size>=10"
+    assert not setup.backend_ignored_env
+
+
+def test_fortran_reduced_backend_policy_direct_tail_required_forces_global() -> None:
+    setup = resolve_fortran_reduced_sparse_pc_backend(
+        op=_op(fp=True, constraint_scheme=1, n_zeta=3),
+        env={
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_XBLOCK_MIN_SIZE": "1",
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_CONSTRAINT_TAIL": "1",
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_PRECONDITIONER": (
+                "active-fortran-v3-reduced-lu"
+            ),
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_STRUCTURED_PC_REQUIRED": "1",
+        },
+        fortran_reduced_sparse_pc=True,
+        sparse_pc_linear_size=12,
+    )
+
+    assert setup.backend == "global"
+    assert setup.reason == "required_direct_tail_structured_pc"
+    assert setup.direct_tail_pc_env == "active_fortran_v3_reduced_lu"
+    assert setup.direct_tail_pc_explicit
+    assert setup.direct_tail_structured_pc_required
+    assert setup.direct_tail_structured_pc_forces_global
+
+
+def test_fortran_reduced_backend_policy_ignored_env_reports_message() -> None:
+    setup = resolve_fortran_reduced_sparse_pc_backend(
+        op=_op(fp=False, constraint_scheme=1, n_zeta=1),
+        env={"SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_PC_BACKEND": "unknown-backend"},
+        fortran_reduced_sparse_pc=True,
+        sparse_pc_linear_size=12,
+    )
+
+    assert setup.backend == "global"
+    assert setup.reason == "auto_global"
+    assert setup.backend_ignored_env
+    assert setup.messages == (
+        (
+            1,
+            "solve_v3_full_system_linear_gmres: ignoring unknown "
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_PC_BACKEND="
+            "'unknown_backend'; using global",
+        ),
     )
 
 

@@ -118,6 +118,26 @@ class SparsePCActiveDOFSetup:
 
 
 @dataclass(frozen=True)
+class FortranReducedSparsePCBackendSetup:
+    """Backend and direct-tail policy for fortran-reduced sparse-PC solves."""
+
+    backend_raw: str
+    xblock_min_size: int
+    backend_ignored_env: bool
+    direct_tail_pc_env: str
+    direct_tail_pc_explicit: bool
+    direct_tail_structured_pc_required: bool
+    direct_tail_default: bool
+    direct_tail_enabled: bool
+    direct_tail_structured_pc_forces_global: bool
+    direct_tail_auto_forces_global: bool
+    direct_tail_auto_structured_pc_forces_global: bool
+    backend: str
+    reason: str
+    messages: tuple[tuple[int, str], ...]
+
+
+@dataclass(frozen=True)
 class SparsePCEntryPolicySetup:
     """Physics classification and GMRES budget for RHSMode=1 sparse-PC paths."""
 
@@ -613,6 +633,159 @@ def _env_bool(env: Mapping[str, str] | None, key: str, default: bool = False) ->
     if raw in {"0", "false", "f", "no", "off", ".false.", ".f."}:
         return False
     return bool(default)
+
+
+def resolve_fortran_reduced_sparse_pc_backend(
+    *,
+    op: object,
+    env: Mapping[str, str] | None,
+    fortran_reduced_sparse_pc: bool,
+    sparse_pc_linear_size: int,
+) -> FortranReducedSparsePCBackendSetup:
+    """Resolve backend routing for fortran-reduced sparse-PC solves."""
+
+    backend_raw = (
+        _env_value(env, "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_PC_BACKEND")
+        .lower()
+        .replace("-", "_")
+    )
+    xblock_min_size = _env_int(
+        env,
+        "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_XBLOCK_MIN_SIZE",
+        100000,
+        minimum=1,
+    )
+    direct_tail_pc_env = (
+        _env_value(
+            env,
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_PRECONDITIONER",
+        )
+        .lower()
+        .replace("-", "_")
+    )
+    direct_tail_pc_explicit = direct_tail_pc_env not in {
+        "",
+        "auto",
+        "active_auto",
+        "structured",
+        "factor",
+        "host_factor",
+        "legacy",
+        "default",
+    }
+    direct_tail_structured_pc_required = _env_bool(
+        env,
+        "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_STRUCTURED_PC_REQUIRED",
+        default=bool(direct_tail_pc_explicit),
+    )
+    direct_tail_default = bool(
+        fortran_reduced_sparse_pc
+        and int(sparse_pc_linear_size) >= 100000
+        and int(getattr(op, "rhs_mode", 0)) == 1
+        and int(getattr(op, "constraint_scheme", 0)) == 1
+        and int(getattr(op, "phi1_size", 0)) == 0
+    )
+    direct_tail_enabled = _env_bool(
+        env,
+        "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_CONSTRAINT_TAIL",
+        default=direct_tail_default,
+    )
+    direct_tail_structured_pc_forces_global = bool(
+        fortran_reduced_sparse_pc
+        and direct_tail_enabled
+        and direct_tail_structured_pc_required
+        and (
+            direct_tail_pc_explicit
+            or direct_tail_pc_env in {"auto", "active_auto", "structured"}
+            or direct_tail_default
+        )
+        and int(getattr(op, "rhs_mode", 0)) == 1
+        and int(getattr(op, "constraint_scheme", 0)) == 1
+        and int(getattr(op, "phi1_size", 0)) == 0
+    )
+    direct_tail_auto_forces_global = _env_bool(
+        env,
+        "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_AUTO_FORCES_GLOBAL",
+        default=True,
+    )
+    direct_tail_auto_structured_pc_forces_global = bool(
+        fortran_reduced_sparse_pc
+        and direct_tail_enabled
+        and bool(direct_tail_auto_forces_global)
+        and (
+            direct_tail_pc_env in {"", "auto", "active_auto", "structured"}
+            or direct_tail_default
+        )
+        and int(getattr(op, "rhs_mode", 0)) == 1
+        and int(getattr(op, "constraint_scheme", 0)) == 1
+        and int(getattr(op, "phi1_size", 0)) == 0
+    )
+
+    backend_ignored_env = False
+    if backend_raw in {"xblock", "x_block", "local_xblock", "block", "blocked"}:
+        backend = "xblock"
+        reason = "env"
+    elif backend_raw in {"global", "monolithic", "csr", "full"}:
+        backend = "global"
+        reason = "env"
+    else:
+        backend_ignored_env = bool(backend_raw not in {"", "auto"})
+        if direct_tail_structured_pc_forces_global:
+            backend = "global"
+            reason = "required_direct_tail_structured_pc"
+        elif direct_tail_auto_structured_pc_forces_global:
+            backend = "global"
+            reason = "auto_direct_tail_structured_pc"
+        else:
+            fblock = getattr(op, "fblock", None)
+            auto_xblock_backend = bool(
+                fortran_reduced_sparse_pc
+                and int(sparse_pc_linear_size) >= int(xblock_min_size)
+                and int(getattr(op, "rhs_mode", 0)) == 1
+                and (not bool(getattr(op, "include_phi1", False)))
+                and getattr(fblock, "fp", None) is not None
+                and getattr(fblock, "pas", None) is None
+            )
+            backend = "xblock" if auto_xblock_backend else "global"
+            reason = (
+                f"auto_large_full_fp_size>={int(xblock_min_size)}"
+                if auto_xblock_backend
+                else "auto_global"
+            )
+
+    messages: tuple[tuple[int, str], ...] = ()
+    if backend_ignored_env:
+        messages = (
+            (
+                1,
+                "solve_v3_full_system_linear_gmres: ignoring unknown "
+                "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_PC_BACKEND="
+                f"{backend_raw!r}; using {backend}",
+            ),
+        )
+
+    return FortranReducedSparsePCBackendSetup(
+        backend_raw=backend_raw,
+        xblock_min_size=int(xblock_min_size),
+        backend_ignored_env=bool(backend_ignored_env),
+        direct_tail_pc_env=direct_tail_pc_env,
+        direct_tail_pc_explicit=bool(direct_tail_pc_explicit),
+        direct_tail_structured_pc_required=bool(
+            direct_tail_structured_pc_required
+        ),
+        direct_tail_default=bool(direct_tail_default),
+        direct_tail_enabled=bool(direct_tail_enabled),
+        direct_tail_structured_pc_forces_global=bool(
+            direct_tail_structured_pc_forces_global
+        ),
+        direct_tail_auto_forces_global=bool(direct_tail_auto_forces_global),
+        direct_tail_auto_structured_pc_forces_global=bool(
+            direct_tail_auto_structured_pc_forces_global
+        ),
+        backend=backend,
+        reason=reason,
+        messages=messages,
+    )
 
 
 def _normalize_qi_device_residual_equation_solver(
@@ -3163,6 +3336,7 @@ def apply_sparse_pc_post_minres(
 
 
 __all__ = [
+    "FortranReducedSparsePCBackendSetup",
     "XBlockAssembledOperatorDiagnosticsContext",
     "XBlockSparsePCCoreDiagnosticsContext",
     "XBlockSideProbeDiagnosticsContext",
@@ -3175,6 +3349,7 @@ __all__ = [
     "build_sparse_pc_active_dof_setup",
     "fp_xblock_global_correction_metadata",
     "fp_xblock_highx_residual_correction_metadata",
+    "resolve_fortran_reduced_sparse_pc_backend",
     "run_sparse_pc_gmres_once",
     "sparse_rescue_tail_metadata",
     "sparse_xblock_rescue_metadata",

@@ -35043,3 +35043,43 @@ Next refactor target:
   fortran-reduced backend/direct-tail decision block, or split the next
   self-contained preconditioner setup section once the current CI snapshot is
   checked for actionable failures.
+
+### 19.114 Fortran-reduced sparse-PC backend policy extraction
+
+Goal:
+
+- Remove the fortran-reduced sparse-PC backend/direct-tail routing policy from
+  ``v3_driver.py`` and make the decision independently testable.
+
+Implementation:
+
+- Added ``FortranReducedSparsePCBackendSetup`` and
+  ``resolve_fortran_reduced_sparse_pc_backend`` to
+  ``problems/profile_response/sparse_pc.py``.
+- The resolver preserves the previous backend selection rules:
+  explicit backend aliases, large full-FP x-block auto selection,
+  required direct-tail structured-PC global fallback, auto direct-tail
+  global fallback, and ignored-env diagnostics.
+- Updated ``v3_driver.py`` to consume the resolver while keeping the
+  downstream ``fortran_reduced_xblock_min_size``,
+  ``fortran_reduced_sparse_pc_backend``, and backend-reason names used by
+  metadata and x-block setup.
+- Added focused tests for explicit alias routing, auto large full-FP x-block
+  routing, direct-tail required global routing, and ignored-env messaging.
+- ``v3_driver.py`` is now about ``21026`` lines and
+  ``solve_v3_full_system_linear_gmres`` about ``15736`` lines.
+
+Validation:
+
+- ``python -m ruff check`` on touched source/tests: passed.
+- ``python -m compileall -q`` on touched source/tests: passed.
+- ``tests/test_profile_response_sparse_pc.py``: ``64 passed``.
+- Broader current profile-response/x-block/sparse-pattern shard:
+  ``341 passed in 107.45 s``.
+
+Next refactor target:
+
+- Continue extracting the generic sparse-PC fortran-reduced x-block setup
+  block, starting with the local environment parser and x-block promote-Xi /
+  factor-policy setup, while keeping path-routing tests in
+  ``test_v3_sparse_pattern.py`` green.

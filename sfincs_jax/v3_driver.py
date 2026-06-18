@@ -225,6 +225,7 @@ from .problems.profile_response.sparse_pc import (
     finalize_xblock_two_level_metadata,
     prepare_xblock_initial_guess,
     resolve_sparse_pc_entry_policy,
+    resolve_fortran_reduced_sparse_pc_backend,
     resolve_xblock_qi_device_admission_setup,
     resolve_xblock_qi_device_base_config_setup,
     resolve_xblock_qi_device_enrichment_config_setup,
@@ -6942,119 +6943,20 @@ def solve_v3_full_system_linear_gmres(
             sparse_pc_preconditioner_operator = "point"
             pattern_source_op = op
 
-        fortran_reduced_backend_raw = (
-            os.environ.get("SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_PC_BACKEND", "")
-            .strip()
-            .lower()
-            .replace("-", "_")
+        fortran_reduced_backend_setup = resolve_fortran_reduced_sparse_pc_backend(
+            op=op,
+            env=os.environ,
+            fortran_reduced_sparse_pc=bool(fortran_reduced_sparse_pc),
+            sparse_pc_linear_size=int(sparse_pc_linear_size),
         )
-        fortran_reduced_xblock_min_env = (
-            os.environ.get("SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_XBLOCK_MIN_SIZE", "").strip()
+        fortran_reduced_xblock_min_size = (
+            fortran_reduced_backend_setup.xblock_min_size
         )
-        try:
-            fortran_reduced_xblock_min_size = (
-                int(fortran_reduced_xblock_min_env) if fortran_reduced_xblock_min_env else 100000
-            )
-        except ValueError:
-            fortran_reduced_xblock_min_size = 100000
-        fortran_reduced_xblock_min_size = max(1, int(fortran_reduced_xblock_min_size))
-        fortran_reduced_backend_ignored_env = False
-        direct_tail_pc_env_for_backend = (
-            os.environ.get("SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_PRECONDITIONER", "")
-            .strip()
-            .lower()
-            .replace("-", "_")
-        )
-        direct_tail_pc_explicit_for_backend = direct_tail_pc_env_for_backend not in {
-            "",
-            "auto",
-            "active_auto",
-            "structured",
-            "factor",
-            "host_factor",
-            "legacy",
-            "default",
-        }
-        direct_tail_structured_pc_required_for_backend = _rhs1_bool_env(
-            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_STRUCTURED_PC_REQUIRED",
-            default=bool(direct_tail_pc_explicit_for_backend),
-        )
-        direct_tail_default_for_backend = bool(
-            fortran_reduced_sparse_pc
-            and int(sparse_pc_linear_size) >= 100000
-            and int(op.rhs_mode) == 1
-            and int(op.constraint_scheme) == 1
-            and int(op.phi1_size) == 0
-        )
-        direct_tail_enabled_for_backend = _rhs1_bool_env(
-            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_CONSTRAINT_TAIL",
-            default=direct_tail_default_for_backend,
-        )
-        direct_tail_structured_pc_forces_global_backend = bool(
-            fortran_reduced_sparse_pc
-            and direct_tail_enabled_for_backend
-            and direct_tail_structured_pc_required_for_backend
-            and (
-                direct_tail_pc_explicit_for_backend
-                or direct_tail_pc_env_for_backend in {"auto", "active_auto", "structured"}
-                or direct_tail_default_for_backend
-            )
-            and int(op.rhs_mode) == 1
-            and int(op.constraint_scheme) == 1
-            and int(op.phi1_size) == 0
-        )
-        direct_tail_auto_forces_global_backend = _rhs1_bool_env(
-            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_AUTO_FORCES_GLOBAL",
-            default=True,
-        )
-        direct_tail_auto_structured_pc_forces_global_backend = bool(
-            fortran_reduced_sparse_pc
-            and direct_tail_enabled_for_backend
-            and bool(direct_tail_auto_forces_global_backend)
-            and (
-                direct_tail_pc_env_for_backend in {"", "auto", "active_auto", "structured"}
-                or direct_tail_default_for_backend
-            )
-            and int(op.rhs_mode) == 1
-            and int(op.constraint_scheme) == 1
-            and int(op.phi1_size) == 0
-        )
-        if fortran_reduced_backend_raw in {"xblock", "x_block", "local_xblock", "block", "blocked"}:
-            fortran_reduced_sparse_pc_backend = "xblock"
-            fortran_reduced_sparse_pc_backend_reason = "env"
-        elif fortran_reduced_backend_raw in {"global", "monolithic", "csr", "full"}:
-            fortran_reduced_sparse_pc_backend = "global"
-            fortran_reduced_sparse_pc_backend_reason = "env"
-        else:
-            fortran_reduced_backend_ignored_env = bool(fortran_reduced_backend_raw not in {"", "auto"})
-            if direct_tail_structured_pc_forces_global_backend:
-                fortran_reduced_sparse_pc_backend = "global"
-                fortran_reduced_sparse_pc_backend_reason = "required_direct_tail_structured_pc"
-            elif direct_tail_auto_structured_pc_forces_global_backend:
-                fortran_reduced_sparse_pc_backend = "global"
-                fortran_reduced_sparse_pc_backend_reason = "auto_direct_tail_structured_pc"
-            else:
-                auto_xblock_backend = bool(
-                    fortran_reduced_sparse_pc
-                    and int(sparse_pc_linear_size) >= int(fortran_reduced_xblock_min_size)
-                    and int(op.rhs_mode) == 1
-                    and (not bool(op.include_phi1))
-                    and op.fblock.fp is not None
-                    and op.fblock.pas is None
-                )
-                fortran_reduced_sparse_pc_backend = "xblock" if auto_xblock_backend else "global"
-                fortran_reduced_sparse_pc_backend_reason = (
-                    f"auto_large_full_fp_size>={int(fortran_reduced_xblock_min_size)}"
-                    if auto_xblock_backend
-                    else "auto_global"
-                )
-        if fortran_reduced_backend_ignored_env and emit is not None:
-            emit(
-                1,
-                "solve_v3_full_system_linear_gmres: ignoring unknown "
-                "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_PC_BACKEND="
-                f"{fortran_reduced_backend_raw!r}; using {fortran_reduced_sparse_pc_backend}",
-            )
+        fortran_reduced_sparse_pc_backend = fortran_reduced_backend_setup.backend
+        fortran_reduced_sparse_pc_backend_reason = fortran_reduced_backend_setup.reason
+        if emit is not None:
+            for level, message in fortran_reduced_backend_setup.messages:
+                emit(level, message)
 
         if bool(fortran_reduced_sparse_pc) and str(fortran_reduced_sparse_pc_backend) == "xblock":
             if op_pc.fblock.fp is None or op_pc.fblock.pas is not None:
