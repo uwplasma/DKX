@@ -35005,3 +35005,41 @@ Next refactor target:
   ``solve_v3_full_system_linear_gmres``: either the active-DOF/reduced-map
   setup or the x-block result construction itself, keeping the same broad
   validation shard.
+
+### 19.113 Generic sparse-PC active-DOF setup extraction
+
+Goal:
+
+- Remove the generic ``sparse_pc_gmres`` active-DOF index-map setup and
+  reduce/expand closure construction from ``v3_driver.py``.
+
+Implementation:
+
+- Added ``SparsePCActiveDOFSetup`` and
+  ``build_sparse_pc_active_dof_setup`` to
+  ``problems/profile_response/sparse_pc.py``.
+- The helper builds the active index arrays, one-based full-to-active map,
+  reduced RHS, reduce/expand callables, linear size, and progress message for
+  the generic sparse-PC branch.
+- Updated ``v3_driver.py`` to consume the setup object while preserving the
+  downstream local variable names that sparse-pattern and preconditioner code
+  already uses.
+- Added focused tests for disabled active-DOF routing and active gather/scatter
+  map construction using the real active-projection primitives.
+- ``v3_driver.py`` is now about ``21124`` lines and
+  ``solve_v3_full_system_linear_gmres`` about ``15835`` lines.
+
+Validation:
+
+- ``python -m ruff check`` on touched source/tests: passed.
+- ``python -m compileall -q`` on touched source/tests: passed.
+- ``tests/test_profile_response_sparse_pc.py``: ``60 passed``.
+- Broader current profile-response/x-block/sparse-pattern shard:
+  ``337 passed in 103.76 s``.
+
+Next refactor target:
+
+- Continue with generic sparse-PC setup policy extraction near the
+  fortran-reduced backend/direct-tail decision block, or split the next
+  self-contained preconditioner setup section once the current CI snapshot is
+  checked for actionable failures.

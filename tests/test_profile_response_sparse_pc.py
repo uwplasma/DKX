@@ -7,11 +7,16 @@ import pytest
 import jax.numpy as jnp
 from scipy import sparse as scipy_sparse
 
+from sfincs_jax.problems.profile_response.active_projection import (
+    expand_reduced_with_map,
+    reduce_full_with_indices,
+)
 from sfincs_jax.problems.profile_response.sparse_pc import (
     SparsePCGMRESContext,
     SparsePCPostMinresContext,
     XBlockAssembledPreflightError,
     apply_sparse_pc_post_minres,
+    build_sparse_pc_active_dof_setup,
     build_xblock_assembled_equilibration_setup,
     build_xblock_assembled_device_setup,
     build_xblock_assembled_matvec_setup,
@@ -63,6 +68,63 @@ def _op(
             fp=object() if fp else None,
             pas=object() if pas else None,
         ),
+    )
+
+
+def test_sparse_pc_active_dof_setup_disabled_uses_full_system_vectors() -> None:
+    rhs = jnp.arange(6.0)
+    setup = build_sparse_pc_active_dof_setup(
+        op=SimpleNamespace(total_size=6),
+        rhs=rhs,
+        sparse_pc_use_active_dof=False,
+        active_dof_indices=lambda _op: np.asarray([0, 2, 5]),
+        reduce_full_with_indices=reduce_full_with_indices,
+        expand_reduced_with_map=expand_reduced_with_map,
+    )
+
+    assert setup.active_idx_np is None
+    assert setup.active_idx_jnp is None
+    assert setup.full_to_active_jnp is None
+    assert setup.linear_size == 6
+    assert setup.messages == ()
+    np.testing.assert_allclose(np.asarray(setup.rhs), np.asarray(rhs))
+    np.testing.assert_allclose(np.asarray(setup.reduce_full(rhs + 10)), np.arange(6) + 10)
+    np.testing.assert_allclose(np.asarray(setup.expand_reduced(rhs + 20)), np.arange(6) + 20)
+
+
+def test_sparse_pc_active_dof_setup_builds_reduction_maps_and_message() -> None:
+    rhs = jnp.arange(6.0)
+    setup = build_sparse_pc_active_dof_setup(
+        op=SimpleNamespace(total_size=6),
+        rhs=rhs,
+        sparse_pc_use_active_dof=True,
+        active_dof_indices=lambda _op: np.asarray([0, 2, 5], dtype=np.int64),
+        reduce_full_with_indices=reduce_full_with_indices,
+        expand_reduced_with_map=expand_reduced_with_map,
+    )
+
+    assert setup.linear_size == 3
+    assert setup.messages == (
+        (
+            1,
+            "solve_v3_full_system_linear_gmres: sparse_pc_gmres active-DOF reduction "
+            "enabled (size=3/6)",
+        ),
+    )
+    np.testing.assert_array_equal(setup.active_idx_np, np.asarray([0, 2, 5]))
+    np.testing.assert_array_equal(np.asarray(setup.active_idx_jnp), np.asarray([0, 2, 5]))
+    np.testing.assert_array_equal(
+        np.asarray(setup.full_to_active_jnp),
+        np.asarray([1, 0, 2, 0, 0, 3], dtype=np.int32),
+    )
+    np.testing.assert_allclose(np.asarray(setup.rhs), np.asarray([0.0, 2.0, 5.0]))
+    np.testing.assert_allclose(
+        np.asarray(setup.reduce_full(jnp.arange(6.0) + 10.0)),
+        np.asarray([10.0, 12.0, 15.0]),
+    )
+    np.testing.assert_allclose(
+        np.asarray(setup.expand_reduced(jnp.asarray([1.0, 2.0, 3.0]))),
+        np.asarray([1.0, 0.0, 2.0, 0.0, 0.0, 3.0]),
     )
 
 

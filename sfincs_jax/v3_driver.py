@@ -215,6 +215,7 @@ from .problems.profile_response.sparse_pc import (
     build_xblock_assembled_device_setup,
     build_xblock_assembled_matvec_setup,
     build_xblock_assembled_operator_preflight_setup,
+    build_sparse_pc_active_dof_setup,
     evaluate_xblock_moment_schur_probe_result,
     failed_xblock_global_coupling_metadata,
     failed_xblock_moment_schur_metadata,
@@ -6899,39 +6900,22 @@ def solve_v3_full_system_linear_gmres(
                 },
             )
 
-        sparse_pc_active_idx_np: np.ndarray | None = None
-        sparse_pc_active_idx_jnp: jnp.ndarray | None = None
-        sparse_pc_full_to_active_jnp: jnp.ndarray | None = None
-        sparse_pc_rhs = rhs
-        sparse_pc_linear_size = int(op.total_size)
-        if sparse_pc_use_active_dof:
-            sparse_pc_active_idx_np = _transport_active_dof_indices(op)
-            sparse_pc_active_idx_jnp = jnp.asarray(sparse_pc_active_idx_np, dtype=jnp.int32)
-            sparse_pc_full_to_active_np = np.zeros((int(op.total_size),), dtype=np.int32)
-            sparse_pc_full_to_active_np[np.asarray(sparse_pc_active_idx_np, dtype=np.int32)] = np.arange(
-                1, int(sparse_pc_active_idx_np.shape[0]) + 1, dtype=np.int32
-            )
-            sparse_pc_full_to_active_jnp = jnp.asarray(sparse_pc_full_to_active_np, dtype=jnp.int32)
-            sparse_pc_rhs = rhs[sparse_pc_active_idx_jnp]
-            sparse_pc_linear_size = int(sparse_pc_active_idx_np.shape[0])
-            if emit is not None:
-                emit(
-                    1,
-                    "solve_v3_full_system_linear_gmres: sparse_pc_gmres active-DOF reduction "
-                    f"enabled (size={int(sparse_pc_linear_size)}/{int(op.total_size)})",
-                )
-
-        def _sparse_pc_reduce_full(v_full: jnp.ndarray) -> jnp.ndarray:
-            if not sparse_pc_use_active_dof:
-                return v_full
-            assert sparse_pc_active_idx_jnp is not None
-            return reduce_full_with_indices(v_full, sparse_pc_active_idx_jnp)
-
-        def _sparse_pc_expand_reduced(v_vec: jnp.ndarray) -> jnp.ndarray:
-            if not sparse_pc_use_active_dof:
-                return v_vec
-            assert sparse_pc_full_to_active_jnp is not None
-            return expand_reduced_with_map(v_vec, sparse_pc_full_to_active_jnp)
+        sparse_pc_active_setup = build_sparse_pc_active_dof_setup(
+            op=op,
+            rhs=rhs,
+            sparse_pc_use_active_dof=bool(sparse_pc_use_active_dof),
+            active_dof_indices=_transport_active_dof_indices,
+            reduce_full_with_indices=reduce_full_with_indices,
+            expand_reduced_with_map=expand_reduced_with_map,
+        )
+        sparse_pc_active_idx_np = sparse_pc_active_setup.active_idx_np
+        sparse_pc_rhs = sparse_pc_active_setup.rhs
+        sparse_pc_linear_size = int(sparse_pc_active_setup.linear_size)
+        _sparse_pc_reduce_full = sparse_pc_active_setup.reduce_full
+        _sparse_pc_expand_reduced = sparse_pc_active_setup.expand_reduced
+        if emit is not None:
+            for level, message in sparse_pc_active_setup.messages:
+                emit(level, message)
 
         if fortran_reduced_sparse_pc:
             op_pc = _build_rhsmode1_preconditioner_operator_fortran_reduced(

@@ -104,6 +104,20 @@ class SparsePCPostMinresResult:
 
 
 @dataclass(frozen=True)
+class SparsePCActiveDOFSetup:
+    """Active-DOF maps and vector routing for the generic sparse-PC path."""
+
+    active_idx_np: np.ndarray | None
+    active_idx_jnp: jnp.ndarray | None
+    full_to_active_jnp: jnp.ndarray | None
+    rhs: jnp.ndarray
+    linear_size: int
+    reduce_full: ArrayFn
+    expand_reduced: ArrayFn
+    messages: tuple[tuple[int, str], ...]
+
+
+@dataclass(frozen=True)
 class SparsePCEntryPolicySetup:
     """Physics classification and GMRES budget for RHSMode=1 sparse-PC paths."""
 
@@ -150,6 +164,64 @@ class XBlockSparsePCSetup:
     qi_device_matrix_free_requested_for_fallback: bool
     qi_device_use_in_krylov_requested_for_fallback: bool
     messages: tuple[tuple[int, str], ...]
+
+
+def build_sparse_pc_active_dof_setup(
+    *,
+    op: object,
+    rhs: jnp.ndarray,
+    sparse_pc_use_active_dof: bool,
+    active_dof_indices: Callable[[object], np.ndarray],
+    reduce_full_with_indices: Callable[[jnp.ndarray, jnp.ndarray], jnp.ndarray],
+    expand_reduced_with_map: Callable[[jnp.ndarray, jnp.ndarray], jnp.ndarray],
+) -> SparsePCActiveDOFSetup:
+    """Build active-DOF reduction maps for the generic sparse-PC solve."""
+
+    if not bool(sparse_pc_use_active_dof):
+        return SparsePCActiveDOFSetup(
+            active_idx_np=None,
+            active_idx_jnp=None,
+            full_to_active_jnp=None,
+            rhs=rhs,
+            linear_size=int(op.total_size),
+            reduce_full=lambda v_full: v_full,
+            expand_reduced=lambda v_vec: v_vec,
+            messages=(),
+        )
+
+    active_idx_np = np.asarray(active_dof_indices(op))
+    active_idx_jnp = jnp.asarray(active_idx_np, dtype=jnp.int32)
+    full_to_active_np = np.zeros((int(op.total_size),), dtype=np.int32)
+    full_to_active_np[np.asarray(active_idx_np, dtype=np.int32)] = np.arange(
+        1,
+        int(active_idx_np.shape[0]) + 1,
+        dtype=np.int32,
+    )
+    full_to_active_jnp = jnp.asarray(full_to_active_np, dtype=jnp.int32)
+
+    def reduce_full(v_full: jnp.ndarray) -> jnp.ndarray:
+        return reduce_full_with_indices(v_full, active_idx_jnp)
+
+    def expand_reduced(v_vec: jnp.ndarray) -> jnp.ndarray:
+        return expand_reduced_with_map(v_vec, full_to_active_jnp)
+
+    linear_size = int(active_idx_np.shape[0])
+    return SparsePCActiveDOFSetup(
+        active_idx_np=active_idx_np,
+        active_idx_jnp=active_idx_jnp,
+        full_to_active_jnp=full_to_active_jnp,
+        rhs=rhs[active_idx_jnp],
+        linear_size=linear_size,
+        reduce_full=reduce_full,
+        expand_reduced=expand_reduced,
+        messages=(
+            (
+                1,
+                "solve_v3_full_system_linear_gmres: sparse_pc_gmres active-DOF reduction "
+                f"enabled (size={int(linear_size)}/{int(op.total_size)})",
+            ),
+        ),
+    )
 
 
 @dataclass(frozen=True)
@@ -3094,11 +3166,13 @@ __all__ = [
     "XBlockAssembledOperatorDiagnosticsContext",
     "XBlockSparsePCCoreDiagnosticsContext",
     "XBlockSideProbeDiagnosticsContext",
+    "SparsePCActiveDOFSetup",
     "SparsePCGMRESContext",
     "SparsePCGMRESResult",
     "SparsePCPostMinresContext",
     "SparsePCPostMinresResult",
     "apply_sparse_pc_post_minres",
+    "build_sparse_pc_active_dof_setup",
     "fp_xblock_global_correction_metadata",
     "fp_xblock_highx_residual_correction_metadata",
     "run_sparse_pc_gmres_once",
