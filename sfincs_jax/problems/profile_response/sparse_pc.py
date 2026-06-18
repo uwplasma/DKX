@@ -376,6 +376,39 @@ class SparsePCFactorPolicySetup:
 
 
 @dataclass(frozen=True)
+class SparsePCPatternSetupContext:
+    """Inputs for selecting and summarizing a generic sparse-PC pattern."""
+
+    op: object
+    pattern_source_op: object
+    fortran_reduced_sparse_pc: bool
+    sparse_pc_use_active_dof: bool
+    active_idx_np: np.ndarray | None
+    preconditioner_x: int
+    preconditioner_xi: int
+    preconditioner_species: int
+    preconditioner_x_min_l: int
+    fp_dense_velocity_block: bool | None
+    elapsed_s: Callable[[], float]
+    emit: EmitFn | None
+    fortran_reduced_pattern_for_indices: Callable[..., object]
+    fortran_reduced_pattern: Callable[..., object]
+    conservative_pattern_for_indices: Callable[..., object]
+    conservative_pattern: Callable[..., object]
+    summarize_pattern: Callable[[object, object], object]
+
+
+@dataclass(frozen=True)
+class SparsePCPatternSetupResult:
+    """Selected sparse-PC pattern, scope, timing, and summary."""
+
+    pattern: object
+    scope: str
+    build_s: float
+    summary: object
+
+
+@dataclass(frozen=True)
 class XBlockSparsePCSetup:
     """Setup controls for RHSMode=1 x-block sparse-PC solves."""
 
@@ -459,6 +492,74 @@ def build_sparse_pc_active_dof_setup(
                 f"enabled (size={int(linear_size)}/{int(op.total_size)})",
             ),
         ),
+    )
+
+
+def build_sparse_pc_pattern_setup(
+    context: SparsePCPatternSetupContext,
+) -> SparsePCPatternSetupResult:
+    """Build the conservative sparse-PC pattern and its diagnostic summary."""
+
+    pattern_start_s = float(context.elapsed_s())
+    if context.emit is not None:
+        context.emit(
+            1,
+            "solve_v3_full_system_linear_gmres: sparse_pc_gmres building conservative pattern",
+        )
+
+    if bool(context.fortran_reduced_sparse_pc):
+        if bool(context.sparse_pc_use_active_dof):
+            if context.active_idx_np is None:
+                raise AssertionError("sparse_pc active indices are required")
+            pattern = context.fortran_reduced_pattern_for_indices(
+                context.pattern_source_op,
+                np.asarray(context.active_idx_np, dtype=np.int32),
+                preconditioner_x=int(context.preconditioner_x),
+                preconditioner_xi=int(context.preconditioner_xi),
+                preconditioner_species=int(context.preconditioner_species),
+                preconditioner_x_min_l=int(context.preconditioner_x_min_l),
+            )
+            scope = "fortran_reduced_active_dof"
+        else:
+            pattern = context.fortran_reduced_pattern(
+                context.pattern_source_op,
+                preconditioner_x=int(context.preconditioner_x),
+                preconditioner_xi=int(context.preconditioner_xi),
+                preconditioner_species=int(context.preconditioner_species),
+                preconditioner_x_min_l=int(context.preconditioner_x_min_l),
+            )
+            scope = "fortran_reduced_full"
+    elif bool(context.sparse_pc_use_active_dof):
+        if context.active_idx_np is None:
+            raise AssertionError("sparse_pc active indices are required")
+        pattern = context.conservative_pattern_for_indices(
+            context.pattern_source_op,
+            np.asarray(context.active_idx_np, dtype=np.int32),
+            fp_dense_velocity_block=context.fp_dense_velocity_block,
+        )
+        scope = "active_dof"
+    else:
+        pattern = context.conservative_pattern(
+            context.pattern_source_op,
+            fp_dense_velocity_block=context.fp_dense_velocity_block,
+        )
+        scope = "full"
+
+    build_s = float(context.elapsed_s()) - pattern_start_s
+    summary = context.summarize_pattern(context.op, pattern)
+    if context.emit is not None:
+        context.emit(
+            1,
+            "solve_v3_full_system_linear_gmres: sparse_pc_gmres pattern "
+            f"scope={scope} nnz={summary.nnz} "
+            f"avg_row_nnz={summary.avg_row_nnz:.3g} max_row_nnz={summary.max_row_nnz}",
+        )
+
+    return SparsePCPatternSetupResult(
+        pattern=pattern,
+        scope=str(scope),
+        build_s=float(build_s),
+        summary=summary,
     )
 
 
@@ -4532,6 +4633,8 @@ __all__ = [
     "XBlockSideProbeDiagnosticsContext",
     "SparsePCActiveDOFSetup",
     "SparsePCFactorPolicySetup",
+    "SparsePCPatternSetupContext",
+    "SparsePCPatternSetupResult",
     "SparsePCGMRESContext",
     "SparsePCGMRESResult",
     "SparsePCPostMinresContext",
@@ -4543,6 +4646,7 @@ __all__ = [
     "build_fortran_reduced_xblock_factor_stage",
     "build_fortran_reduced_xblock_krylov_setup",
     "build_sparse_pc_active_dof_setup",
+    "build_sparse_pc_pattern_setup",
     "fp_xblock_global_correction_metadata",
     "fp_xblock_highx_residual_correction_metadata",
     "prepare_fortran_reduced_xblock_initial_guess",

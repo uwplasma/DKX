@@ -22,6 +22,7 @@ from sfincs_jax.problems.profile_response.sparse_pc import (
     FortranReducedXBlockMomentSchurStageContext,
     MatvecCounter,
     SparsePCGMRESContext,
+    SparsePCPatternSetupContext,
     SparsePCPostMinresContext,
     XBlockAssembledPreflightError,
     apply_fortran_reduced_xblock_global_coupling_stage,
@@ -31,6 +32,7 @@ from sfincs_jax.problems.profile_response.sparse_pc import (
     build_fortran_reduced_xblock_factor_stage,
     build_fortran_reduced_xblock_krylov_setup,
     build_sparse_pc_active_dof_setup,
+    build_sparse_pc_pattern_setup,
     build_xblock_assembled_equilibration_setup,
     build_xblock_assembled_device_setup,
     build_xblock_assembled_matvec_setup,
@@ -148,6 +150,92 @@ def test_sparse_pc_active_dof_setup_builds_reduction_maps_and_message() -> None:
     np.testing.assert_allclose(
         np.asarray(setup.expand_reduced(jnp.asarray([1.0, 2.0, 3.0]))),
         np.asarray([1.0, 0.0, 2.0, 0.0, 0.0, 3.0]),
+    )
+
+
+@pytest.mark.parametrize(
+    ("fortran_reduced", "active", "expected_scope", "expected_pattern"),
+    (
+        (False, False, "full", "generic_full"),
+        (False, True, "active_dof", "generic_active"),
+        (True, False, "fortran_reduced_full", "fortran_full"),
+        (True, True, "fortran_reduced_active_dof", "fortran_active"),
+    ),
+)
+def test_sparse_pc_pattern_setup_selects_scope_and_preserves_callbacks(
+    fortran_reduced: bool,
+    active: bool,
+    expected_scope: str,
+    expected_pattern: str,
+) -> None:
+    calls: list[tuple[str, tuple[object, ...], dict[str, object]]] = []
+    messages: list[tuple[int, str]] = []
+    elapsed_values = iter((10.0, 10.25))
+
+    def _record(name: str, pattern: str):
+        def _inner(*args, **kwargs):
+            calls.append((name, args, kwargs))
+            return pattern
+
+        return _inner
+
+    result = build_sparse_pc_pattern_setup(
+        SparsePCPatternSetupContext(
+            op=SimpleNamespace(total_size=4),
+            pattern_source_op="source-op",
+            fortran_reduced_sparse_pc=fortran_reduced,
+            sparse_pc_use_active_dof=active,
+            active_idx_np=np.asarray([3, 1], dtype=np.int64) if active else None,
+            preconditioner_x=2,
+            preconditioner_xi=3,
+            preconditioner_species=4,
+            preconditioner_x_min_l=5,
+            fp_dense_velocity_block=True,
+            elapsed_s=lambda: next(elapsed_values),
+            emit=lambda level, message: messages.append((level, message)),
+            fortran_reduced_pattern_for_indices=_record(
+                "fortran_active",
+                "fortran_active",
+            ),
+            fortran_reduced_pattern=_record("fortran_full", "fortran_full"),
+            conservative_pattern_for_indices=_record(
+                "generic_active",
+                "generic_active",
+            ),
+            conservative_pattern=_record("generic_full", "generic_full"),
+            summarize_pattern=lambda _op, pattern: SimpleNamespace(
+                nnz=7,
+                avg_row_nnz=1.75,
+                max_row_nnz=3,
+                pattern=pattern,
+            ),
+        )
+    )
+
+    assert result.pattern == expected_pattern
+    assert result.scope == expected_scope
+    assert result.build_s == 0.25
+    assert result.summary.nnz == 7
+    assert calls[0][0] == expected_pattern
+    if active:
+        np.testing.assert_array_equal(calls[0][1][1], np.asarray([3, 1], dtype=np.int32))
+    if fortran_reduced:
+        assert calls[0][2] == {
+            "preconditioner_x": 2,
+            "preconditioner_xi": 3,
+            "preconditioner_species": 4,
+            "preconditioner_x_min_l": 5,
+        }
+    else:
+        assert calls[0][2] == {"fp_dense_velocity_block": True}
+    assert messages[0] == (
+        1,
+        "solve_v3_full_system_linear_gmres: sparse_pc_gmres building conservative pattern",
+    )
+    assert messages[1] == (
+        1,
+        "solve_v3_full_system_linear_gmres: sparse_pc_gmres pattern "
+        f"scope={expected_scope} nnz=7 avg_row_nnz=1.75 max_row_nnz=3",
     )
 
 

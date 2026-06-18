@@ -214,6 +214,7 @@ from .problems.profile_response.sparse_pc import (
     FortranReducedXBlockKrylovSetupContext,
     FortranReducedXBlockKrylovSolveContext,
     FortranReducedXBlockMomentSchurStageContext,
+    SparsePCPatternSetupContext,
     SparsePCGMRESContext,
     SparsePCPostMinresContext,
     apply_fortran_reduced_xblock_global_coupling_stage,
@@ -222,6 +223,7 @@ from .problems.profile_response.sparse_pc import (
     apply_sparse_pc_post_minres,
     build_fortran_reduced_xblock_factor_stage,
     build_fortran_reduced_xblock_krylov_setup,
+    build_sparse_pc_pattern_setup,
     build_xblock_krylov_matvec_setup,
     build_xblock_assembled_equilibration_setup,
     build_xblock_assembled_device_setup,
@@ -7190,53 +7192,33 @@ def solve_v3_full_system_linear_gmres(
                 metadata=fortran_reduced_xblock_result_metadata(locals()),
             )
 
-        pattern_start_s = sparse_timer.elapsed_s()
-        if emit is not None:
-            emit(1, "solve_v3_full_system_linear_gmres: sparse_pc_gmres building conservative pattern")
-        if fortran_reduced_sparse_pc:
-            if sparse_pc_use_active_dof:
-                assert sparse_pc_active_idx_np is not None
-                pattern = v3_full_system_fortran_reduced_preconditioner_sparsity_pattern_for_indices(
-                    pattern_source_op,
-                    np.asarray(sparse_pc_active_idx_np, dtype=np.int32),
-                    preconditioner_x=int(preconditioner_x),
-                    preconditioner_xi=int(preconditioner_xi),
-                    preconditioner_species=int(preconditioner_species),
-                    preconditioner_x_min_l=int(preconditioner_x_min_l),
-                )
-                sparse_pattern_scope = "fortran_reduced_active_dof"
-            else:
-                pattern = v3_full_system_fortran_reduced_preconditioner_sparsity_pattern(
-                    pattern_source_op,
-                    preconditioner_x=int(preconditioner_x),
-                    preconditioner_xi=int(preconditioner_xi),
-                    preconditioner_species=int(preconditioner_species),
-                    preconditioner_x_min_l=int(preconditioner_x_min_l),
-                )
-                sparse_pattern_scope = "fortran_reduced_full"
-        elif sparse_pc_use_active_dof:
-            assert sparse_pc_active_idx_np is not None
-            pattern = v3_full_system_conservative_sparsity_pattern_for_indices(
-                pattern_source_op,
-                np.asarray(sparse_pc_active_idx_np, dtype=np.int32),
+        sparse_pc_pattern_setup = build_sparse_pc_pattern_setup(
+            SparsePCPatternSetupContext(
+                op=op,
+                pattern_source_op=pattern_source_op,
+                fortran_reduced_sparse_pc=bool(fortran_reduced_sparse_pc),
+                sparse_pc_use_active_dof=bool(sparse_pc_use_active_dof),
+                active_idx_np=sparse_pc_active_idx_np,
+                preconditioner_x=int(preconditioner_x),
+                preconditioner_xi=int(preconditioner_xi),
+                preconditioner_species=int(preconditioner_species),
+                preconditioner_x_min_l=int(preconditioner_x_min_l),
                 fp_dense_velocity_block=sparse_pc_fp_dense_velocity_block,
+                elapsed_s=sparse_timer.elapsed_s,
+                emit=emit,
+                fortran_reduced_pattern_for_indices=(
+                    v3_full_system_fortran_reduced_preconditioner_sparsity_pattern_for_indices
+                ),
+                fortran_reduced_pattern=v3_full_system_fortran_reduced_preconditioner_sparsity_pattern,
+                conservative_pattern_for_indices=v3_full_system_conservative_sparsity_pattern_for_indices,
+                conservative_pattern=v3_full_system_conservative_sparsity_pattern,
+                summarize_pattern=summarize_v3_sparse_pattern,
             )
-            sparse_pattern_scope = "active_dof"
-        else:
-            pattern = v3_full_system_conservative_sparsity_pattern(
-                pattern_source_op,
-                fp_dense_velocity_block=sparse_pc_fp_dense_velocity_block,
-            )
-            sparse_pattern_scope = "full"
-        pattern_build_s = sparse_timer.elapsed_s() - pattern_start_s
-        summary = summarize_v3_sparse_pattern(op, pattern)
-        if emit is not None:
-            emit(
-                1,
-                "solve_v3_full_system_linear_gmres: sparse_pc_gmres pattern "
-                f"scope={sparse_pattern_scope} nnz={summary.nnz} "
-                f"avg_row_nnz={summary.avg_row_nnz:.3g} max_row_nnz={summary.max_row_nnz}",
-            )
+        )
+        pattern = sparse_pc_pattern_setup.pattern
+        sparse_pattern_scope = str(sparse_pc_pattern_setup.scope)
+        pattern_build_s = float(sparse_pc_pattern_setup.build_s)
+        summary = sparse_pc_pattern_setup.summary
         sparse_pc_factor_policy = resolve_sparse_pc_factor_policy(
             env=os.environ,
             constrained_pas_pc=bool(constrained_pas_pc),

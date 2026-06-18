@@ -35622,3 +35622,42 @@ Next refactor target:
 - Extract the remaining generic sparse-PC pattern/materialization setup in a
   typed boundary, keeping direct-tail structured preconditioner construction
   and admission gates unchanged until that larger path has dedicated tests.
+
+### 19.129 Generic sparse-PC pattern setup extraction
+
+Goal:
+
+- Remove the generic RHSMode=1 sparse-PC sparsity-pattern selection and
+  summary reporting from ``solve_v3_full_system_linear_gmres`` while preserving
+  conservative/full, active-DOF, fortran-reduced, and fortran-reduced active
+  pattern routes.
+
+Implementation:
+
+- Added ``SparsePCPatternSetupContext``, ``SparsePCPatternSetupResult``, and
+  ``build_sparse_pc_pattern_setup`` to
+  ``problems/profile_response/sparse_pc.py``.
+- Updated ``v3_driver.py`` to call the typed pattern setup helper and retain
+  the same ``pattern``, ``sparse_pattern_scope``, ``pattern_build_s``, and
+  ``summary`` local names used by memory preflight, factor construction, and
+  result metadata.
+- Added focused tests covering all four pattern routes, callback arguments,
+  active-index dtype normalization, timing, summary payloads, and emitted
+  diagnostics.
+- ``v3_driver.py`` is now about ``20133`` lines and
+  ``solve_v3_full_system_linear_gmres`` about ``14823`` lines.
+
+Validation:
+
+- ``python -m ruff check`` on touched source/tests: passed.
+- ``python -m compileall -q`` on touched source/tests: passed.
+- ``tests/test_profile_response_sparse_pc.py``: ``99 passed``.
+- Broader current profile-response/x-block/sparse-pattern shard:
+  ``377 passed in 113.50 s``.
+
+Next refactor target:
+
+- Extract the generic sparse-PC memory-budget preflight and then the
+  direct-tail materialization setup in separate typed helpers, keeping
+  structured-PC construction/admission behavior unchanged until covered by
+  targeted tests.
