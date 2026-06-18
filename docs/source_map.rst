@@ -459,8 +459,10 @@ the historical private driver name and test the focused module directly. This ke
 - ``sfincs_jax/problems/profile_response/setup.py``:
   pure setup helpers for RHSMode=1/profile-response solves: GMRES restart and
   max-iteration environment overrides, geometry/equilibrium progress hints,
-  FP/PAS tolerance tightening, and solve-method lane classification. The driver
-  consumes these typed setup results before entering the numerical solve loop.
+  FP/PAS tolerance tightening, physics-flag normalization, solve-method lane
+  classification, preconditioner-option admission, and domain-decomposition
+  block/overlap parsing. The driver consumes these typed setup results before
+  entering the numerical solve loop.
 - ``sfincs_jax/problems/profile_response/solver_diagnostics.py``
   (legacy alias: ``sfincs_jax/rhs1_solver_diagnostics.py``):
   typed RHSMode=1 x-block correction diagnostic records and historical solver
