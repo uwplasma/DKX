@@ -795,3 +795,27 @@ def test_qi_device_status_fields_format_controls_and_metadata() -> None:
     assert "coupled_equation=1" in fields
     assert "coupled_rank=11" in fields
     assert "residual_snapshot=1" in fields
+
+
+def test_qi_device_status_fields_allow_seed_only_residual_controls() -> None:
+    fields = rhs1_qi_device_status_fields(
+        extra_coarse_controls=_extra_coarse_controls_for_summary(
+            phase_space_residual_equation=True,
+            active_pattern_coarse=True,
+        ),
+        residual_correction_controls={},
+        metadata={
+            "phase_space_residual_equation_rank": 5,
+            "phase_space_residual_equation_candidate_count": 9,
+            "active_pattern_coarse_rank": 3,
+            "active_pattern_coarse_candidate_count": 4,
+        },
+    )
+
+    assert "phase_space_equation=1" in fields
+    assert "phase_space_rank=5" in fields
+    assert "active_pattern_coarse=1" in fields
+    assert "active_pattern_rank=3" in fields
+    assert "block_schur_equation=0" in fields
+    assert "coupled_equation=0" in fields
+    assert "residual_snapshot=0" in fields

@@ -34343,3 +34343,48 @@ Next refactor target:
   ``problems/profile_response/qi_device_seed.py`` or the shared policy layer.
   Keep the next tranche behavior-preserving and covered by the same focused
   QI-device seed/sparse-pattern tests before broad validation.
+
+### 19.96 QI-device seed shared rank/status policy
+
+Goal:
+
+- Remove seed-side duplication of QI-device rank budgeting, requested-control
+  metadata, and progress/status formatting without changing which seed-only
+  matrix-free corrections are built.
+
+Implementation:
+
+- Routed ``problems/profile_response/qi_device_seed.py`` through the shared
+  ``rhs1_qi_device_rank_budget`` helper for seed max-rank calculation.
+- Replaced manual phase-space, residual-region, and active-pattern requested
+  metadata with ``rhs1_qi_device_extra_coarse_metadata``.
+- Reused ``rhs1_qi_device_status_fields`` for seed progress messages and made
+  that formatter accept seed-only calls with no residual-correction controls.
+- Added a regression for seed-only status formatting so missing residual
+  controls default to disabled fields.
+- Fixed the current CI failure in ``tests/test_preconditioner_context.py`` by
+  clearing the cached preconditioner size before the geometry-4 PAS fp32 policy
+  assertion. The policy intentionally lets cached size hints override explicit
+  size arguments, so the test must be hermetic under xdist.
+- ``problems/profile_response/qi_device_seed.py`` is now about ``760`` lines,
+  down from about ``884`` lines at the previous checkpoint.
+
+Validation:
+
+- ``python -m ruff check`` on touched source/tests: passed.
+- ``python -m compileall -q`` on touched source/tests: passed.
+- Focused QI-device seed/policy/sparse-pattern shard: ``43 passed in 13.90 s``.
+- Broader current profile-response/x-block/sparse-pattern shard:
+  ``322 passed in 110.98 s``.
+- ``tests/test_preconditioner_context.py``: ``4 passed``.
+- Contaminated cached-size reproduction for the CI-failing test: passed.
+- ``git diff --check``: passed.
+
+Next refactor target:
+
+- Replace the remaining duplicated ``pre_sparse_active_dof`` QI-device seed
+  block in ``v3_driver.py`` with ``attempt_matrixfree_qi_device_seed(...,
+  hook="pre_sparse_active_dof", ...)`` and update ``ksp_x0`` only when that
+  seed attempt improves the active residual. This should remove the next large
+  driver-local copy of seed setup/metadata code while preserving sparse-rescue
+  fallback behavior.

@@ -908,6 +908,9 @@ def rhs1_qi_device_status_fields(
 ) -> str:
     """Format stable QI-device status fields from grouped controls and metadata."""
 
+    def _residual_requested(name: str) -> bool:
+        return bool(residual_correction_controls.get(name, False))
+
     return (
         f"global_moment_equation={int(bool(extra_coarse_controls['global_moment_residual_equation']))} "
         f"global_moment_rank={int(metadata.get('global_moment_residual_equation_rank', 0))} "
@@ -925,13 +928,13 @@ def rhs1_qi_device_status_fields(
         f"active_pattern_coarse={int(bool(extra_coarse_controls['active_pattern_coarse']))} "
         f"active_pattern_rank={int(metadata.get('active_pattern_coarse_rank', 0))} "
         f"active_pattern_candidates={int(metadata.get('active_pattern_coarse_candidate_count', 0))} "
-        f"block_schur_equation={int(bool(residual_correction_controls['block_schur_residual_equation']))} "
-        f"coupled_equation={int(bool(residual_correction_controls['coupled_residual_equation']))} "
+        f"block_schur_equation={int(_residual_requested('block_schur_residual_equation'))} "
+        f"coupled_equation={int(_residual_requested('coupled_residual_equation'))} "
         f"coupled_rank={int(metadata.get('coupled_residual_equation_rank', 0))} "
         f"coupled_candidates={int(metadata.get('coupled_residual_equation_candidate_count', 0))} "
-        f"residual_snapshot={int(bool(residual_correction_controls['residual_snapshot_enrichment']))} "
-        f"residual_snapshot_equation={int(bool(residual_correction_controls['residual_snapshot_residual_equation']))} "
-        f"block_schur={int(bool(residual_correction_controls['block_schur_residual_enrichment']))}"
+        f"residual_snapshot={int(_residual_requested('residual_snapshot_enrichment'))} "
+        f"residual_snapshot_equation={int(_residual_requested('residual_snapshot_residual_equation'))} "
+        f"block_schur={int(_residual_requested('block_schur_residual_enrichment'))}"
     )
 
 

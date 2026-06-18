@@ -44,6 +44,7 @@ def test_context_solver_jit_uses_cached_size_hint(monkeypatch) -> None:
 
 
 def test_context_preconditioner_dtype_uses_geom4_pas_policy(monkeypatch) -> None:
+    pc.set_precond_size_hint(None)
     monkeypatch.delenv("SFINCS_JAX_PRECOND_DTYPE", raising=False)
     monkeypatch.delenv("SFINCS_JAX_PRECOND_FP32_PAS_GEOM4", raising=False)
     monkeypatch.setenv("SFINCS_JAX_PRECOND_FP32_PAS_GEOM4_MIN_SIZE", "100")

@@ -11,8 +11,11 @@ import jax.numpy as jnp
 
 from sfincs_jax.problems.profile_response.policies import (
     rhs1_qi_device_extra_coarse_controls as _rhs1_qi_device_extra_coarse_controls,
+    rhs1_qi_device_extra_coarse_metadata as _rhs1_qi_device_extra_coarse_metadata,
     rhs1_qi_device_extra_coarse_setup_kwargs as _rhs1_qi_device_extra_coarse_setup_kwargs,
     rhs1_qi_device_probe_uses_minres_step as _rhs1_qi_device_probe_uses_minres_step,
+    rhs1_qi_device_rank_budget as _rhs1_qi_device_rank_budget,
+    rhs1_qi_device_status_fields as _rhs1_qi_device_status_fields,
     rhs1_qi_device_tail_block_required as _rhs1_qi_device_tail_block_required,
 )
 from sfincs_jax.rhs1_qi_coarse import (
@@ -307,135 +310,85 @@ def attempt_matrixfree_qi_device_seed(
         qi_device_multilevel_current_max_pitch_degree = int(
             qi_device_extra_coarse_controls["multilevel_current_max_pitch_degree"]
         )
-        qi_device_global_moment_residual_equation = bool(
-            qi_device_extra_coarse_controls["global_moment_residual_equation"]
+        qi_device_rank_budget_summary = _rhs1_qi_device_rank_budget(
+            seed_max_rank=int(qi_seed_max_rank),
+            n_species=int(getattr(op, "n_species", 1)),
+            residual_enrichment=True,
+            residual_enrichment_depth=int(qi_device_depth),
+            residual_enrichment_include_residual=bool(qi_device_include_residual),
+            recycle_enrichment=bool(qi_device_recycle_enrichment),
+            recycle_cycles=int(qi_device_recycle_cycles),
+            operator_krylov_enrichment=bool(qi_device_operator_krylov_enrichment),
+            operator_krylov_depth=int(qi_device_operator_krylov_depth),
+            adjoint_krylov_enrichment=bool(qi_device_adjoint_krylov_enrichment),
+            adjoint_krylov_depth=int(qi_device_adjoint_krylov_depth),
+            operator_action_enrichment=bool(qi_device_operator_action_enrichment),
+            operator_action_depth=int(qi_device_operator_action_depth),
+            multilevel_coarse=bool(qi_device_multilevel_coarse),
+            multilevel_max_rank=qi_device_multilevel_max_rank,
+            # The seed path historically budgeted only the multilevel basis cap;
+            # keep that behavior while the full main-branch policy owns moment ranks.
+            multilevel_current_moments=False,
+            multilevel_current_max_pitch_degree=int(
+                qi_device_multilevel_current_max_pitch_degree
+            ),
+            multilevel_residual_equation=False,
+            multilevel_residual_equation_max_level_rank=0,
+            multilevel_max_levels=int(qi_device_multilevel_max_levels),
+            global_moment_residual_equation=bool(
+                qi_device_extra_coarse_controls["global_moment_residual_equation"]
+            ),
+            global_moment_residual_equation_max_rank=int(
+                qi_device_extra_coarse_controls[
+                    "global_moment_residual_equation_max_rank"
+                ]
+            ),
+            residual_galerkin_equation=bool(
+                qi_device_extra_coarse_controls["residual_galerkin_equation"]
+            ),
+            residual_galerkin_equation_max_rank=int(
+                qi_device_extra_coarse_controls[
+                    "residual_galerkin_equation_max_rank"
+                ]
+            ),
+            phase_space_residual_equation=bool(
+                qi_device_extra_coarse_controls["phase_space_residual_equation"]
+            ),
+            phase_space_residual_equation_max_rank=int(
+                qi_device_extra_coarse_controls[
+                    "phase_space_residual_equation_max_rank"
+                ]
+            ),
+            residual_region_bounce_coarse=bool(
+                qi_device_extra_coarse_controls["residual_region_bounce_coarse"]
+            ),
+            residual_region_bounce_coarse_max_rank=int(
+                qi_device_extra_coarse_controls[
+                    "residual_region_bounce_coarse_max_rank"
+                ]
+            ),
+            active_pattern_coarse=bool(
+                qi_device_extra_coarse_controls["active_pattern_coarse"]
+            ),
+            active_pattern_coarse_max_rank=int(
+                qi_device_extra_coarse_controls["active_pattern_coarse_max_rank"]
+            ),
+            block_schur_residual_equation=False,
+            block_schur_residual_equation_max_rank=0,
+            coupled_residual_equation=False,
+            coupled_residual_equation_max_rank=0,
+            residual_snapshot_enrichment=False,
+            residual_snapshot_max_rank=0,
+            residual_snapshot_residual_equation=False,
+            residual_snapshot_residual_equation_max_rank=0,
+            block_schur_residual_enrichment=False,
+            block_schur_residual_max_rank=0,
         )
-        qi_device_global_moment_residual_equation_max_rank = int(
-            qi_device_extra_coarse_controls["global_moment_residual_equation_max_rank"]
+        qi_device_rank_budget = int(qi_device_rank_budget_summary.rank_budget)
+        qi_device_max_rank = max(
+            1,
+            int(qi_device_rank_budget_summary.max_rank or qi_device_rank_budget),
         )
-        qi_device_residual_galerkin_equation = bool(
-            qi_device_extra_coarse_controls["residual_galerkin_equation"]
-        )
-        qi_device_residual_galerkin_equation_max_rank = int(
-            qi_device_extra_coarse_controls["residual_galerkin_equation_max_rank"]
-        )
-        qi_device_phase_space_residual_equation = bool(
-            qi_device_extra_coarse_controls["phase_space_residual_equation"]
-        )
-        qi_device_phase_space_residual_equation_max_rank = int(
-            qi_device_extra_coarse_controls["phase_space_residual_equation_max_rank"]
-        )
-        qi_device_phase_space_residual_equation_solver = str(
-            qi_device_extra_coarse_controls["phase_space_residual_equation_solver"]
-        )
-        qi_device_phase_space_residual_equation_include_global = bool(
-            qi_device_extra_coarse_controls[
-                "phase_space_residual_equation_include_global"
-            ]
-        )
-        qi_device_phase_space_residual_equation_boundary = float(
-            qi_device_extra_coarse_controls["phase_space_residual_equation_boundary"]
-        )
-        qi_device_phase_space_residual_equation_include_radial = bool(
-            qi_device_extra_coarse_controls[
-                "phase_space_residual_equation_include_radial"
-            ]
-        )
-        qi_device_phase_space_residual_equation_include_species = bool(
-            qi_device_extra_coarse_controls[
-                "phase_space_residual_equation_include_species"
-            ]
-        )
-        qi_device_residual_region_bounce_coarse = bool(
-            qi_device_extra_coarse_controls["residual_region_bounce_coarse"]
-        )
-        qi_device_residual_region_bounce_coarse_max_rank = int(
-            qi_device_extra_coarse_controls["residual_region_bounce_coarse_max_rank"]
-        )
-        qi_device_residual_region_bounce_coarse_max_candidates = int(
-            qi_device_extra_coarse_controls[
-                "residual_region_bounce_coarse_max_candidates"
-            ]
-        )
-        qi_device_residual_region_bounce_coarse_solver = str(
-            qi_device_extra_coarse_controls["residual_region_bounce_coarse_solver"]
-        )
-        qi_device_residual_region_bounce_coarse_include_global = bool(
-            qi_device_extra_coarse_controls[
-                "residual_region_bounce_coarse_include_global"
-            ]
-        )
-        qi_device_residual_region_bounce_coarse_include_radial = bool(
-            qi_device_extra_coarse_controls[
-                "residual_region_bounce_coarse_include_radial"
-            ]
-        )
-        qi_device_residual_region_bounce_coarse_include_species = bool(
-            qi_device_extra_coarse_controls[
-                "residual_region_bounce_coarse_include_species"
-            ]
-        )
-        qi_device_residual_region_bounce_coarse_boundary = float(
-            qi_device_extra_coarse_controls["residual_region_bounce_coarse_boundary"]
-        )
-        qi_device_residual_region_bounce_coarse_min_energy = float(
-            qi_device_extra_coarse_controls["residual_region_bounce_coarse_min_energy"]
-        )
-        qi_device_residual_region_bounce_coarse_region_bands = str(
-            qi_device_extra_coarse_controls["residual_region_bounce_coarse_region_bands"]
-        )
-        qi_device_active_pattern_coarse = bool(
-            qi_device_extra_coarse_controls["active_pattern_coarse"]
-        )
-        qi_device_active_pattern_coarse_max_rank = int(
-            qi_device_extra_coarse_controls["active_pattern_coarse_max_rank"]
-        )
-        qi_device_active_pattern_coarse_max_candidates = int(
-            qi_device_extra_coarse_controls["active_pattern_coarse_max_candidates"]
-        )
-        qi_device_active_pattern_coarse_solver = str(
-            qi_device_extra_coarse_controls["active_pattern_coarse_solver"]
-        )
-        qi_device_active_pattern_coarse_include_global = bool(
-            qi_device_extra_coarse_controls["active_pattern_coarse_include_global"]
-        )
-        qi_device_active_pattern_coarse_min_chunk_energy = float(
-            qi_device_extra_coarse_controls["active_pattern_coarse_min_chunk_energy"]
-        )
-        qi_device_max_rank_env = os.environ.get(
-            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MAX_RANK",
-            "",
-        ).strip()
-        qi_device_rank_budget = int(qi_seed_max_rank) + int(qi_device_depth)
-        if bool(qi_device_include_residual):
-            qi_device_rank_budget += 1
-        if bool(qi_device_recycle_enrichment):
-            qi_device_rank_budget += int(qi_device_recycle_cycles)
-        if bool(qi_device_operator_krylov_enrichment):
-            qi_device_rank_budget += 1 + int(qi_device_operator_krylov_depth)
-        if bool(qi_device_adjoint_krylov_enrichment):
-            qi_device_rank_budget += 1 + int(qi_device_adjoint_krylov_depth)
-        if bool(qi_device_operator_action_enrichment):
-            qi_device_rank_budget *= max(1, 1 + int(qi_device_operator_action_depth))
-        if bool(qi_device_multilevel_coarse):
-            qi_device_rank_budget += int(qi_device_multilevel_max_rank or 48)
-        if bool(qi_device_global_moment_residual_equation):
-            qi_device_rank_budget += int(qi_device_global_moment_residual_equation_max_rank)
-        if bool(qi_device_residual_galerkin_equation):
-            qi_device_rank_budget += int(qi_device_residual_galerkin_equation_max_rank)
-        if bool(qi_device_phase_space_residual_equation):
-            qi_device_rank_budget += int(qi_device_phase_space_residual_equation_max_rank)
-        if bool(qi_device_residual_region_bounce_coarse):
-            qi_device_rank_budget += int(qi_device_residual_region_bounce_coarse_max_rank)
-        if bool(qi_device_active_pattern_coarse):
-            qi_device_rank_budget += int(qi_device_active_pattern_coarse_max_rank)
-        if qi_device_max_rank_env:
-            try:
-                qi_device_max_rank = max(1, int(qi_device_max_rank_env))
-            except ValueError:
-                qi_device_max_rank = max(1, int(qi_device_rank_budget))
-        else:
-            qi_device_max_rank = max(1, int(qi_device_rank_budget))
         qi_basis_kind = (
             os.environ.get(
                 "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_COARSE_SEED_BASIS",
@@ -602,73 +555,7 @@ def attempt_matrixfree_qi_device_seed(
             "multilevel_max_angular_mode_requested": int(qi_device_multilevel_max_angular_mode),
             "multilevel_max_radial_degree_requested": int(qi_device_multilevel_max_radial_degree),
             "multilevel_max_pitch_degree_requested": int(qi_device_multilevel_max_pitch_degree),
-            "phase_space_residual_equation_requested": bool(
-                qi_device_phase_space_residual_equation
-            ),
-            "phase_space_residual_equation_max_rank_requested": int(
-                qi_device_phase_space_residual_equation_max_rank
-            ),
-            "phase_space_residual_equation_solver_requested": (
-                qi_device_phase_space_residual_equation_solver
-            ),
-            "phase_space_residual_equation_include_global_requested": bool(
-                qi_device_phase_space_residual_equation_include_global
-            ),
-            "phase_space_residual_equation_boundary_requested": float(
-                qi_device_phase_space_residual_equation_boundary
-            ),
-            "phase_space_residual_equation_include_radial_requested": bool(
-                qi_device_phase_space_residual_equation_include_radial
-            ),
-            "phase_space_residual_equation_include_species_requested": bool(
-                qi_device_phase_space_residual_equation_include_species
-            ),
-            "residual_region_bounce_coarse_requested": bool(
-                qi_device_residual_region_bounce_coarse
-            ),
-            "residual_region_bounce_coarse_max_rank_requested": int(
-                qi_device_residual_region_bounce_coarse_max_rank
-            ),
-            "residual_region_bounce_coarse_max_candidates_requested": int(
-                qi_device_residual_region_bounce_coarse_max_candidates
-            ),
-            "residual_region_bounce_coarse_solver_requested": (
-                qi_device_residual_region_bounce_coarse_solver
-            ),
-            "residual_region_bounce_coarse_include_global_requested": bool(
-                qi_device_residual_region_bounce_coarse_include_global
-            ),
-            "residual_region_bounce_coarse_include_radial_requested": bool(
-                qi_device_residual_region_bounce_coarse_include_radial
-            ),
-            "residual_region_bounce_coarse_include_species_requested": bool(
-                qi_device_residual_region_bounce_coarse_include_species
-            ),
-            "residual_region_bounce_coarse_boundary_requested": float(
-                qi_device_residual_region_bounce_coarse_boundary
-            ),
-            "residual_region_bounce_coarse_min_region_energy_fraction_requested": float(
-                qi_device_residual_region_bounce_coarse_min_energy
-            ),
-            "residual_region_bounce_coarse_region_bands_requested": (
-                qi_device_residual_region_bounce_coarse_region_bands
-            ),
-            "active_pattern_coarse_requested": bool(qi_device_active_pattern_coarse),
-            "active_pattern_coarse_max_rank_requested": int(
-                qi_device_active_pattern_coarse_max_rank
-            ),
-            "active_pattern_coarse_max_candidates_requested": int(
-                qi_device_active_pattern_coarse_max_candidates
-            ),
-            "active_pattern_coarse_solver_requested": (
-                qi_device_active_pattern_coarse_solver
-            ),
-            "active_pattern_coarse_include_global_requested": bool(
-                qi_device_active_pattern_coarse_include_global
-            ),
-            "active_pattern_coarse_min_chunk_energy_fraction_requested": float(
-                qi_device_active_pattern_coarse_min_chunk_energy
-            ),
+            **_rhs1_qi_device_extra_coarse_metadata(qi_device_extra_coarse_controls),
             "max_rank_requested": int(qi_device_max_rank),
             "residual_before_norm": float(qi_device_probe.residual_before_norm),
             "residual_after_norm": float(qi_device_probe.residual_after_norm),
@@ -679,6 +566,11 @@ def attempt_matrixfree_qi_device_seed(
             ),
             "accepted": bool(qi_device_probe.accepted),
         }
+        qi_device_status_fields = _rhs1_qi_device_status_fields(
+            extra_coarse_controls=qi_device_extra_coarse_controls,
+            residual_correction_controls={},
+            metadata=qi_device_metadata,
+        )
         if bool(qi_device_probe.accepted):
             current_result = GMRESSolveResult(
                 x=jnp.asarray(x_qi_device, dtype=jnp.float64),
@@ -696,15 +588,7 @@ def attempt_matrixfree_qi_device_seed(
                     f"ratio={float(qi_device_probe.improvement_ratio):.6e} "
                     f"operator_krylov={int(bool(qi_device_operator_krylov_enrichment))} "
                     f"coarse_reuse={int(bool(qi_device_multilevel_coarse))} "
-                    f"phase_space_equation={int(bool(qi_device_phase_space_residual_equation))} "
-                    f"phase_space_rank={int(qi_device_metadata.get('phase_space_residual_equation_rank', 0))} "
-                    f"phase_space_candidates={int(qi_device_metadata.get('phase_space_residual_equation_candidate_count', 0))} "
-                    f"residual_region_bounce={int(bool(qi_device_residual_region_bounce_coarse))} "
-                    f"residual_region_bounce_rank={int(qi_device_metadata.get('residual_region_bounce_coarse_rank', 0))} "
-                    f"residual_region_bounce_candidates={int(qi_device_metadata.get('residual_region_bounce_coarse_candidate_count', 0))} "
-                    f"active_pattern_coarse={int(bool(qi_device_active_pattern_coarse))} "
-                    f"active_pattern_rank={int(qi_device_metadata.get('active_pattern_coarse_rank', 0))} "
-                    f"active_pattern_candidates={int(qi_device_metadata.get('active_pattern_coarse_candidate_count', 0))} "
+                    f"{qi_device_status_fields} "
                     "seed_only=1)",
                 )
         elif emit is not None:
@@ -721,15 +605,7 @@ def attempt_matrixfree_qi_device_seed(
                 f"step_policy={qi_device_metadata.get('step_policy', 'fixed')} "
                 f"operator_krylov={int(bool(qi_device_operator_krylov_enrichment))} "
                 f"coarse_reuse={int(bool(qi_device_multilevel_coarse))} "
-                f"phase_space_equation={int(bool(qi_device_phase_space_residual_equation))} "
-                f"phase_space_rank={int(qi_device_metadata.get('phase_space_residual_equation_rank', 0))} "
-                f"phase_space_candidates={int(qi_device_metadata.get('phase_space_residual_equation_candidate_count', 0))} "
-                f"residual_region_bounce={int(bool(qi_device_residual_region_bounce_coarse))} "
-                f"residual_region_bounce_rank={int(qi_device_metadata.get('residual_region_bounce_coarse_rank', 0))} "
-                f"residual_region_bounce_candidates={int(qi_device_metadata.get('residual_region_bounce_coarse_candidate_count', 0))} "
-                f"active_pattern_coarse={int(bool(qi_device_active_pattern_coarse))} "
-                f"active_pattern_rank={int(qi_device_metadata.get('active_pattern_coarse_rank', 0))} "
-                f"active_pattern_candidates={int(qi_device_metadata.get('active_pattern_coarse_candidate_count', 0))} "
+                f"{qi_device_status_fields} "
                 "seed_only=1)",
             )
     except Exception as exc:  # noqa: BLE001
