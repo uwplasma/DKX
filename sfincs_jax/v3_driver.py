@@ -188,6 +188,21 @@ from .problems.profile_response.policies import (
     rhs1_sparse_kind_use,
     rhs1_xblock_fallback_initial_guess as _rhs1_xblock_fallback_initial_guess,
 )
+from .problems.profile_response.setup import (
+    SPARSE_HOST_DIRECT_SOLVE_METHODS as _SPARSE_HOST_DIRECT_SOLVE_METHODS,
+    SPARSE_HOST_FORTRAN_REDUCED_PC_GMRES_SOLVE_METHODS as _SPARSE_HOST_FORTRAN_REDUCED_PC_GMRES_SOLVE_METHODS,
+    SPARSE_HOST_MINIMUM_NORM_SOLVE_METHODS as _SPARSE_HOST_MINIMUM_NORM_SOLVE_METHODS,
+    SPARSE_HOST_PC_GMRES_SOLVE_METHODS as _SPARSE_HOST_PC_GMRES_SOLVE_METHODS,
+    SPARSE_HOST_PETSC_COMPAT_SOLVE_METHODS as _SPARSE_HOST_PETSC_COMPAT_SOLVE_METHODS,
+    SPARSE_HOST_SAFE_SOLVE_METHODS as _SPARSE_HOST_SAFE_SOLVE_METHODS,
+    SPARSE_HOST_XBLOCK_PC_GMRES_SOLVE_METHODS as _SPARSE_HOST_XBLOCK_PC_GMRES_SOLVE_METHODS,
+    STRUCTURED_FULL_CSR_HOST_SOLVE_METHODS as _STRUCTURED_FULL_CSR_HOST_SOLVE_METHODS,
+    equilibrium_name_hint_from_namelist,
+    geometry_scheme_hint_from_namelist,
+    resolve_rhs1_gmres_budget_setup,
+    resolve_rhs1_tolerance_setup,
+    resolve_solve_method_request_flags,
+)
 from . import rhs1_xblock_policy as _rhs1_xblock_policy
 from . import rhs1_xblock_sparse_host_policy as _rhs1_xblock_sparse_host_policy
 from .rhs1_xblock_policy import (
@@ -691,76 +706,6 @@ from .v3_sparse_pattern import (
     v3_full_system_fortran_reduced_preconditioner_sparsity_pattern_for_indices,
 )
 from .profiling import _rss_mb, maybe_profiler
-
-_SPARSE_HOST_DIRECT_SOLVE_METHODS = frozenset({"sparse_host", "host_sparse", "sparse_host_lu"})
-_SPARSE_HOST_SAFE_SOLVE_METHODS = frozenset(
-    {
-        "sparse_host_safe",
-        "safe_sparse_host",
-        "sparse_host_or_petsc_compat",
-    }
-)
-_SPARSE_HOST_PC_GMRES_SOLVE_METHODS = frozenset(
-    {
-        "sparse_pc_gmres",
-        "sparse_host_gmres",
-        "sparse_host_pc",
-        "host_sparse_pc_gmres",
-        "petsc_host",
-        "petsc_host_gmres",
-        "fortran_reduced_pc_gmres",
-        "fortran_reduced_sparse_pc_gmres",
-        "fortran_like_pc_gmres",
-        "petsc_like_pc_gmres",
-    }
-)
-_SPARSE_HOST_FORTRAN_REDUCED_PC_GMRES_SOLVE_METHODS = frozenset(
-    {
-        "fortran_reduced_pc_gmres",
-        "fortran_reduced_sparse_pc_gmres",
-        "fortran_like_pc_gmres",
-        "petsc_like_pc_gmres",
-    }
-)
-_SPARSE_HOST_XBLOCK_PC_GMRES_SOLVE_METHODS = frozenset(
-    {
-        "xblock_sparse_pc_gmres",
-        "sparse_xblock_pc_gmres",
-        "xblock_host_pc_gmres",
-        "host_xblock_pc_gmres",
-    }
-)
-_STRUCTURED_FULL_CSR_HOST_SOLVE_METHODS = frozenset(
-    {
-        "structured_csr",
-        "structured_full_csr",
-        "host_structured_csr",
-        "host_full_csr",
-        "no_probe_csr",
-        "full_csr_host_gmres",
-        "structured_full_csr_host_gmres",
-    }
-)
-_SPARSE_HOST_MINIMUM_NORM_SOLVE_METHODS = frozenset(
-    {
-        "sparse_lsmr",
-        "sparse_host_lsmr",
-        "sparse_lsqr",
-        "sparse_host_lsqr",
-        "minimum_norm",
-        "sparse_minimum_norm",
-        "petsc_compat",
-        "sparse_petsc_compat",
-        "petsc_minimum_norm",
-    }
-)
-_SPARSE_HOST_PETSC_COMPAT_SOLVE_METHODS = frozenset(
-    {
-        "petsc_compat",
-        "sparse_petsc_compat",
-        "petsc_minimum_norm",
-    }
-)
 
 
 _rhs1_xblock_precondition_side = _rhs1_xblock_policy.rhs1_xblock_precondition_side
@@ -3059,39 +3004,22 @@ def solve_v3_full_system_linear_gmres(
             peak_rss_mb=_rss_mb(),
             finite=finite,
         )
-    restart_env = os.environ.get("SFINCS_JAX_GMRES_RESTART", "").strip()
-    restart_env_forced = False
-    if restart_env:
-        try:
-            restart = int(restart_env)
-            restart_env_forced = True
-        except ValueError:
-            pass
-    maxiter_env = os.environ.get("SFINCS_JAX_GMRES_MAXITER", "").strip()
-    maxiter_env_forced = False
-    if maxiter_env:
-        try:
-            maxiter = int(maxiter_env)
-            maxiter_env_forced = True
-        except ValueError:
-            pass
-    geom_params_hint = nml.group("geometryParameters")
-    geom_scheme_hint = int(
-        geom_params_hint.get(
-            "GEOMETRYSCHEME",
-            geom_params_hint.get("geometryScheme", geom_params_hint.get("geometryscheme", 0)),
-        )
-        or 0
+    gmres_budget_setup = resolve_rhs1_gmres_budget_setup(
+        restart=int(restart),
+        maxiter=maxiter,
+        env=os.environ,
     )
+    maxiter_env = os.environ.get("SFINCS_JAX_GMRES_MAXITER", "").strip()
+    restart = int(gmres_budget_setup.restart)
+    maxiter = gmres_budget_setup.maxiter
+    restart_env_forced = bool(gmres_budget_setup.restart_env_forced)
+    maxiter_env_forced = bool(gmres_budget_setup.maxiter_env_forced)
+    geom_scheme_hint = geometry_scheme_hint_from_namelist(nml)
     vmec_operator_timer: Timer | None = None
     if emit is not None:
         emit(1, "solve_v3_full_system_linear_gmres: building operator")
         if geom_scheme_hint == 5:
-            eq_hint = geom_params_hint.get(
-                "EQUILIBRIUMFILE",
-                geom_params_hint.get("equilibriumFile", geom_params_hint.get("equilibriumfile", "")),
-            )
-            eq_name = Path(str(eq_hint)).name if eq_hint else "VMEC equilibrium"
+            eq_name = equilibrium_name_hint_from_namelist(nml)
             emit(1, f"solve_v3_full_system_linear_gmres: VMEC operator build start ({eq_name})")
             vmec_operator_timer = Timer()
     op = (
@@ -3114,51 +3042,21 @@ def solve_v3_full_system_linear_gmres(
         include_phi1=bool(op.include_phi1),
         rhs_mode=int(op.rhs_mode),
     )
-    # FP-only large systems: tighten tolerance automatically to recover flow/Mach parity.
-    # This avoids relying on dense fallbacks while keeping the default solverTolerance
-    # unchanged for smaller cases.
-    fp_tol_env = os.environ.get("SFINCS_JAX_RHSMODE1_FP_TOL", "").strip()
-    fp_tol_min_env = os.environ.get("SFINCS_JAX_RHSMODE1_FP_TOL_MIN_SIZE", "").strip()
-    try:
-        fp_tol = float(fp_tol_env) if fp_tol_env else 1.0e-8
-    except ValueError:
-        fp_tol = 1.0e-8
-    try:
-        fp_tol_min = int(fp_tol_min_env) if fp_tol_min_env else 80000
-    except ValueError:
-        fp_tol_min = 80000
-    if (
-        int(op.rhs_mode) == 1
-        and (not bool(op.include_phi1))
-        and op.fblock.fp is not None
-        and op.fblock.pas is None
-        and int(op.total_size) >= max(1, int(fp_tol_min))
-        and fp_tol > 0.0
-    ):
-        tol_old = float(tol)
-        tol = min(float(tol), float(fp_tol))
-        if emit is not None and float(tol) < tol_old:
-            emit(1, f"solve_v3_full_system_linear_gmres: FP tol tightened {tol_old:.1e} -> {float(tol):.1e}")
-    pas_tol_env = os.environ.get("SFINCS_JAX_RHSMODE1_PAS_TOL", "").strip()
-    if pas_tol_env:
-        try:
-            pas_tol = float(pas_tol_env)
-        except ValueError:
-            pas_tol = None
-    else:
-        pas_tol = None
-    if (
-        int(op.rhs_mode) == 1
-        and (not bool(op.include_phi1))
-        and op.fblock.pas is not None
-        and int(op.constraint_scheme) == 2
-        and pas_tol is not None
-        and pas_tol > 0.0
-    ):
-        tol_old = float(tol)
-        tol = min(float(tol), float(pas_tol))
-        if emit is not None and float(tol) < tol_old:
-            emit(1, f"solve_v3_full_system_linear_gmres: PAS tol tightened {tol_old:.1e} -> {float(tol):.1e}")
+    tolerance_setup = resolve_rhs1_tolerance_setup(op=op, tol=float(tol), env=os.environ)
+    tol = float(tolerance_setup.tol)
+    fp_tol = float(tolerance_setup.fp_tol)
+    if emit is not None and tolerance_setup.fp_tightened:
+        emit(
+            1,
+            "solve_v3_full_system_linear_gmres: FP tol tightened "
+            f"{float(tolerance_setup.fp_previous_tol):.1e} -> {float(tol):.1e}",
+        )
+    if emit is not None and tolerance_setup.pas_tightened:
+        emit(
+            1,
+            "solve_v3_full_system_linear_gmres: PAS tol tightened "
+            f"{float(tolerance_setup.pas_previous_tol):.1e} -> {float(tol):.1e}",
+        )
     if int(op.rhs_mode) in {2, 3}:
         # v3 sets (dnHatdpsiHats, dTHatdpsiHats, EParallelHat) internally based on whichRHS.
         # If the input file omits gradients (common for monoenergetic runs), callers must select whichRHS.
@@ -3179,25 +3077,18 @@ def solve_v3_full_system_linear_gmres(
         emit=emit,
         enabled=rhs1_large_progress_enabled(rhs_mode=int(op.rhs_mode), total_size=int(op.total_size)),
     )
-    solve_method_kind_requested = str(solve_method).strip().lower().replace("-", "_")
-    sparse_host_requested = solve_method_kind_requested in _SPARSE_HOST_DIRECT_SOLVE_METHODS
-    sparse_host_safe_requested = solve_method_kind_requested in _SPARSE_HOST_SAFE_SOLVE_METHODS
-    sparse_pc_gmres_requested = (
-        solve_method_kind_requested in _SPARSE_HOST_PC_GMRES_SOLVE_METHODS
-        or solve_method_kind_requested in _SPARSE_HOST_XBLOCK_PC_GMRES_SOLVE_METHODS
+    method_flags = resolve_solve_method_request_flags(
+        solve_method=str(solve_method),
+        xblock_active_dof_env=os.environ.get("SFINCS_JAX_RHSMODE1_XBLOCK_ACTIVE_DOF", ""),
     )
-    sparse_minimum_norm_requested = solve_method_kind_requested in _SPARSE_HOST_MINIMUM_NORM_SOLVE_METHODS
-    sparse_host_like_requested = (
-        sparse_host_requested
-        or sparse_host_safe_requested
-        or sparse_pc_gmres_requested
-        or sparse_minimum_norm_requested
-    )
-    xblock_active_dof_requested = (
-        solve_method_kind_requested in _SPARSE_HOST_XBLOCK_PC_GMRES_SOLVE_METHODS
-        and _rhs1_bool_env("SFINCS_JAX_RHSMODE1_XBLOCK_ACTIVE_DOF", default=False)
-    )
-    structured_full_csr_explicit_requested = solve_method_kind_requested in _STRUCTURED_FULL_CSR_HOST_SOLVE_METHODS
+    solve_method_kind_requested = method_flags.kind
+    sparse_host_requested = bool(method_flags.sparse_host_requested)
+    sparse_host_safe_requested = bool(method_flags.sparse_host_safe_requested)
+    sparse_pc_gmres_requested = bool(method_flags.sparse_pc_gmres_requested)
+    sparse_minimum_norm_requested = bool(method_flags.sparse_minimum_norm_requested)
+    sparse_host_like_requested = bool(method_flags.sparse_host_like_requested)
+    xblock_active_dof_requested = bool(method_flags.xblock_active_dof_requested)
+    structured_full_csr_explicit_requested = bool(method_flags.structured_full_csr_explicit_requested)
     fortran_reduced_auto_env = os.environ.get("SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_PC_AUTO", "").strip().lower()
     fortran_reduced_auto_enabled = fortran_reduced_auto_env not in {"0", "false", "no", "off"}
     try:

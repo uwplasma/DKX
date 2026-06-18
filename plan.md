@@ -32155,3 +32155,39 @@ Validation so far:
 - Full post-transport checkpoint after commits ``c5de435`` and ``3b96899``:
   ``PYTHONDONTWRITEBYTECODE=1 pytest -q -p no:cacheprovider``:
   ``2704 passed in 538.74 s``.
+
+### 19.52 Profile-response setup extraction
+
+Goal:
+
+- Move pure early setup decisions out of ``solve_v3_full_system_linear_gmres``
+  so the large RHSMode=1 solve loop becomes easier to reason about and the setup
+  policy can be tested without running full solves.
+
+Implementation:
+
+- Added ``sfincs_jax/problems/profile_response/setup.py`` with typed helpers for
+  GMRES restart/maxiter environment overrides, geometry/equilibrium progress
+  hints, FP/PAS tolerance tightening, and solve-method request classification.
+- Moved RHSMode=1 sparse/structured solve-method alias sets into that setup
+  module and imported them back into ``v3_driver.py`` as the historical private
+  names.
+- Replaced duplicated restart/maxiter parsing, geometry hint parsing,
+  tolerance-tightening, and solve-method classification in
+  ``solve_v3_full_system_linear_gmres`` with setup-helper calls.
+- Added focused unit tests for the setup helpers, including invalid-env behavior
+  and preservation of the original safe-sparse alias set.
+
+Validation so far:
+
+- ``python -m ruff check sfincs_jax/problems/profile_response/setup.py
+  sfincs_jax/v3_driver.py tests/test_profile_response_setup.py``: passed.
+- ``python -m compileall -q sfincs_jax/problems/profile_response/setup.py
+  sfincs_jax/v3_driver.py tests/test_profile_response_setup.py``: passed.
+- ``PYTHONDONTWRITEBYTECODE=1 pytest -q -p no:cacheprovider
+  tests/test_profile_response_setup.py
+  tests/test_v3_sparse_pattern.py::test_fortran_reduced_pc_gmres_solve_method_solves_tiny_rhs1_system
+  tests/test_v3_sparse_pattern.py::test_auto_selects_fortran_reduced_pc_gmres_for_large_full_fp_rhs1
+  tests/test_v3_sparse_pattern.py::test_fortran_reduced_pc_auto_uses_active_dof_for_truncated_modes
+  tests/test_v3_driver_pas_precond_policy_coverage.py``:
+  ``22 passed in 3.81 s``.
