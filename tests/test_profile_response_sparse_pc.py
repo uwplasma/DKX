@@ -27,6 +27,7 @@ from sfincs_jax.problems.profile_response.sparse_pc import (
     prepare_xblock_initial_guess,
     resolve_sparse_pc_entry_policy,
     resolve_xblock_qi_device_admission_setup,
+    resolve_xblock_qi_device_base_config_setup,
     resolve_xblock_qi_device_operator_reuse_setup,
     resolve_xblock_qi_galerkin_policy_setup,
     resolve_xblock_qi_seed_policy_setup,
@@ -1225,6 +1226,106 @@ def test_xblock_qi_device_admission_allows_matrix_free_without_device_operator()
     assert setup.matrix_free_enabled
     assert setup.reason is None
     assert setup.metadata == {}
+
+
+def test_xblock_qi_device_base_config_defaults_with_device_operator() -> None:
+    setup = resolve_xblock_qi_device_base_config_setup(
+        matrix_free_enabled=False,
+        assembled_device_operator_available=True,
+        precondition_side="right",
+        probe_uses_minres_step=lambda: True,
+        env={},
+    )
+
+    assert setup.rcond == pytest.approx(1.0e-12)
+    assert setup.damping == pytest.approx(1.0)
+    assert setup.jacobi_damping == pytest.approx(0.7)
+    assert setup.jacobi_sweeps == 1
+    assert setup.jacobi_floor == pytest.approx(1.0e-14)
+    assert setup.jacobi_require_all_diagonal
+    assert setup.local_smoother_kind == "auto"
+    assert setup.matrix_free_smoother_sweeps == 1
+    assert setup.matrix_free_smoother_damping == pytest.approx(1.0)
+    assert setup.matrix_free_smoother_step_policy == "residual_minimizing"
+    assert setup.matrix_free_block_smoother_max_groups == 32
+    assert setup.matrix_free_block_smoother_include_tail
+    assert setup.matrix_free_block_smoother_grouping == "contiguous"
+    assert setup.jacobi_step_policy == "stationary"
+    assert setup.coarse_solver == "action_lstsq"
+    assert setup.min_improvement == pytest.approx(0.05)
+    assert setup.cycles == 1
+    assert not setup.augmented_seed_requested
+    assert setup.augmented_seed_max_rank == 1
+    assert setup.minres_step
+    assert setup.alpha_clip == pytest.approx(10.0)
+    assert setup.use_in_krylov_requested
+    assert setup.use_in_krylov
+    assert not setup.compose_with_base
+    assert setup.compose_mode == "multiplicative"
+
+
+def test_xblock_qi_device_base_config_parses_matrix_free_and_composition_settings() -> None:
+    setup = resolve_xblock_qi_device_base_config_setup(
+        matrix_free_enabled=True,
+        assembled_device_operator_available=False,
+        precondition_side="none",
+        probe_uses_minres_step=lambda: False,
+        env={
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RCOND": "1e-8",
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_DAMPING": "0.6",
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_JACOBI_DAMPING": "0.4",
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_JACOBI_SWEEPS": "3",
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_JACOBI_DIAGONAL_FLOOR": "1e-9",
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_JACOBI_REQUIRE_ALL_DIAGONAL": "0",
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_LOCAL_SMOOTHER": "matrix-free-block-minres",
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MATRIX_FREE_SMOOTHER_SWEEPS": "4",
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MATRIX_FREE_SMOOTHER_DAMPING": "0.75",
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MATRIX_FREE_SMOOTHER_STEP_POLICY": "Fixed",
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MATRIX_FREE_SMOOTHER_ALPHA_CLIP": "2.5",
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MATRIX_FREE_BLOCK_SMOOTHER_MAX_GROUPS": "7",
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MATRIX_FREE_BLOCK_SMOOTHER_INCLUDE_TAIL": "0",
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MATRIX_FREE_BLOCK_SMOOTHER_RCOND": "1e-7",
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MATRIX_FREE_BLOCK_SMOOTHER_GROUPING": "block-x-species",
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_JACOBI_STEP_POLICY": "Residual-Minimizing",
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_COARSE_SOLVER": "Galerkin",
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MIN_IMPROVEMENT": "0.2",
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_CYCLES": "5",
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_AUGMENTED_SEED": "1",
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_AUGMENTED_SEED_MAX_RANK": "9",
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_ALPHA_CLIP": "3.5",
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_USE_IN_KRYLOV": "1",
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_COMPOSE_WITH_BASE": "1",
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_COMPOSE_MODE": "invalid",
+        },
+    )
+
+    assert setup.rcond == pytest.approx(1.0e-8)
+    assert setup.damping == pytest.approx(0.6)
+    assert setup.jacobi_damping == pytest.approx(0.4)
+    assert setup.jacobi_sweeps == 3
+    assert setup.jacobi_floor == pytest.approx(1.0e-9)
+    assert not setup.jacobi_require_all_diagonal
+    assert setup.local_smoother_kind == "matrix_free_block_minres"
+    assert setup.matrix_free_smoother_sweeps == 4
+    assert setup.matrix_free_smoother_damping == pytest.approx(0.75)
+    assert setup.matrix_free_smoother_step_policy == "fixed"
+    assert setup.matrix_free_smoother_alpha_clip == pytest.approx(2.5)
+    assert setup.matrix_free_block_smoother_max_groups == 7
+    assert not setup.matrix_free_block_smoother_include_tail
+    assert setup.matrix_free_block_smoother_rcond == pytest.approx(1.0e-7)
+    assert setup.matrix_free_block_smoother_grouping == "block_x_species"
+    assert setup.jacobi_step_policy == "residual_minimizing"
+    assert setup.coarse_solver == "galerkin"
+    assert setup.min_improvement == pytest.approx(0.2)
+    assert setup.cycles == 5
+    assert setup.augmented_seed_requested
+    assert setup.augmented_seed_max_rank == 9
+    assert not setup.minres_step
+    assert setup.alpha_clip == pytest.approx(3.5)
+    assert setup.use_in_krylov_requested
+    assert not setup.use_in_krylov
+    assert setup.compose_with_base
+    assert setup.compose_mode == "multiplicative"
 
 
 def test_sparse_pc_gmres_once_explicit_left_recomputes_true_residual() -> None:

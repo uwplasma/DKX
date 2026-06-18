@@ -218,6 +218,7 @@ from .problems.profile_response.sparse_pc import (
     prepare_xblock_initial_guess,
     resolve_sparse_pc_entry_policy,
     resolve_xblock_qi_device_admission_setup,
+    resolve_xblock_qi_device_base_config_setup,
     resolve_xblock_qi_device_operator_reuse_setup,
     resolve_xblock_qi_galerkin_policy_setup,
     resolve_xblock_qi_seed_policy_setup,
@@ -4746,158 +4747,53 @@ def solve_v3_full_system_linear_gmres(
                     emit(level, message)
             if qi_device_admission.should_build:
                 qi_device_start_s = sparse_timer.elapsed_s()
-                qi_device_rcond = _rhs1_float_env(
-                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RCOND",
-                    default=1.0e-12,
-                    minimum=0.0,
-                )
-                qi_device_damping = _rhs1_float_env(
-                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_DAMPING",
-                    default=1.0,
-                    minimum=0.0,
-                )
-                qi_device_jacobi_damping = _rhs1_float_env(
-                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_JACOBI_DAMPING",
-                    default=0.7,
-                    minimum=0.0,
-                )
-                qi_device_jacobi_sweeps = _rhs1_int_env(
-                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_JACOBI_SWEEPS",
-                    default=1,
-                    minimum=1,
-                )
-                qi_device_jacobi_floor = _rhs1_float_env(
-                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_JACOBI_DIAGONAL_FLOOR",
-                    default=1.0e-14,
-                    minimum=0.0,
-                )
-                qi_device_jacobi_require_all_diagonal = _rhs1_bool_env(
-                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_JACOBI_REQUIRE_ALL_DIAGONAL",
-                    default=True,
-                )
                 qi_device_matrix_free_enabled = bool(qi_device_admission.matrix_free_enabled)
-                qi_device_local_smoother_kind_default = "none" if assembled_device_operator is None else "auto"
-                qi_device_local_smoother_kind = (
-                    os.environ.get(
-                        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_LOCAL_SMOOTHER",
-                        qi_device_local_smoother_kind_default,
-                    )
-                    .strip()
-                    .lower()
-                    .replace("-", "_")
+                qi_device_base_config = resolve_xblock_qi_device_base_config_setup(
+                    matrix_free_enabled=bool(qi_device_matrix_free_enabled),
+                    assembled_device_operator_available=assembled_device_operator is not None,
+                    precondition_side=str(precondition_side),
+                    probe_uses_minres_step=_rhs1_qi_device_probe_uses_minres_step,
+                    env=os.environ,
                 )
-                qi_device_matrix_free_smoother_sweeps = _rhs1_int_env(
-                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MATRIX_FREE_SMOOTHER_SWEEPS",
-                    default=1,
-                    minimum=1,
-                )
-                qi_device_matrix_free_smoother_damping = _rhs1_float_env(
-                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MATRIX_FREE_SMOOTHER_DAMPING",
-                    default=1.0,
-                    minimum=0.0,
-                )
+                qi_device_rcond = float(qi_device_base_config.rcond)
+                qi_device_damping = float(qi_device_base_config.damping)
+                qi_device_jacobi_damping = float(qi_device_base_config.jacobi_damping)
+                qi_device_jacobi_sweeps = int(qi_device_base_config.jacobi_sweeps)
+                qi_device_jacobi_floor = float(qi_device_base_config.jacobi_floor)
+                qi_device_jacobi_require_all_diagonal = bool(qi_device_base_config.jacobi_require_all_diagonal)
+                qi_device_local_smoother_kind = qi_device_base_config.local_smoother_kind
+                qi_device_matrix_free_smoother_sweeps = int(qi_device_base_config.matrix_free_smoother_sweeps)
+                qi_device_matrix_free_smoother_damping = float(qi_device_base_config.matrix_free_smoother_damping)
                 qi_device_matrix_free_smoother_step_policy = (
-                    os.environ.get(
-                        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MATRIX_FREE_SMOOTHER_STEP_POLICY",
-                        "residual_minimizing",
-                    )
-                    .strip()
-                    .lower()
-                    .replace("-", "_")
+                    qi_device_base_config.matrix_free_smoother_step_policy
                 )
-                qi_device_matrix_free_smoother_alpha_clip = _rhs1_float_env(
-                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MATRIX_FREE_SMOOTHER_ALPHA_CLIP",
-                    default=10.0,
-                    minimum=0.0,
+                qi_device_matrix_free_smoother_alpha_clip = float(
+                    qi_device_base_config.matrix_free_smoother_alpha_clip
                 )
-                qi_device_matrix_free_block_smoother_max_groups = _rhs1_int_env(
-                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MATRIX_FREE_BLOCK_SMOOTHER_MAX_GROUPS",
-                    default=32,
-                    minimum=1,
+                qi_device_matrix_free_block_smoother_max_groups = int(
+                    qi_device_base_config.matrix_free_block_smoother_max_groups
                 )
-                qi_device_matrix_free_block_smoother_include_tail = _rhs1_bool_env(
-                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MATRIX_FREE_BLOCK_SMOOTHER_INCLUDE_TAIL",
-                    default=True,
+                qi_device_matrix_free_block_smoother_include_tail = bool(
+                    qi_device_base_config.matrix_free_block_smoother_include_tail
                 )
-                qi_device_matrix_free_block_smoother_rcond = _rhs1_float_env(
-                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MATRIX_FREE_BLOCK_SMOOTHER_RCOND",
-                    default=1.0e-12,
-                    minimum=0.0,
+                qi_device_matrix_free_block_smoother_rcond = float(
+                    qi_device_base_config.matrix_free_block_smoother_rcond
                 )
                 qi_device_matrix_free_block_smoother_grouping = (
-                    os.environ.get(
-                        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MATRIX_FREE_BLOCK_SMOOTHER_GROUPING",
-                        "contiguous",
-                    )
-                    .strip()
-                    .lower()
-                    .replace("-", "_")
+                    qi_device_base_config.matrix_free_block_smoother_grouping
                 )
-                qi_device_jacobi_step_policy = (
-                    os.environ.get(
-                        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_JACOBI_STEP_POLICY",
-                        "stationary",
-                    )
-                    .strip()
-                    .lower()
-                    .replace("-", "_")
-                )
-                qi_device_coarse_solver = (
-                    os.environ.get(
-                        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_COARSE_SOLVER",
-                        "action_lstsq",
-                    )
-                    .strip()
-                    .lower()
-                    .replace("-", "_")
-                )
-                qi_device_preconditioner_min_improvement = _rhs1_float_env(
-                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MIN_IMPROVEMENT",
-                    default=0.05,
-                    minimum=0.0,
-                )
-                qi_device_preconditioner_cycles = _rhs1_int_env(
-                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_CYCLES",
-                    default=1,
-                    minimum=1,
-                )
-                qi_device_augmented_seed_requested = _rhs1_bool_env(
-                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_AUGMENTED_SEED",
-                    default=False,
-                )
-                qi_device_augmented_seed_max_rank = _rhs1_int_env(
-                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_AUGMENTED_SEED_MAX_RANK",
-                    default=max(1, min(8, int(qi_device_preconditioner_cycles))),
-                    minimum=1,
-                )
-                qi_device_preconditioner_minres_step = _rhs1_qi_device_probe_uses_minres_step()
-                qi_device_preconditioner_alpha_clip = _rhs1_float_env(
-                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_ALPHA_CLIP",
-                    default=10.0,
-                    minimum=0.0,
-                )
-                qi_device_preconditioner_use_in_krylov = _rhs1_bool_env(
-                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_USE_IN_KRYLOV",
-                    default=assembled_device_operator is not None,
-                )
-                qi_device_use_in_krylov_requested = bool(qi_device_preconditioner_use_in_krylov)
-                if precondition_side == "none":
-                    qi_device_preconditioner_use_in_krylov = False
-                qi_device_compose_with_base = _rhs1_bool_env(
-                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_COMPOSE_WITH_BASE",
-                    default=False,
-                )
-                qi_device_compose_mode = (
-                    os.environ.get(
-                        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_COMPOSE_MODE",
-                        "multiplicative",
-                    )
-                    .strip()
-                    .lower()
-                    .replace("-", "_")
-                )
-                if qi_device_compose_mode not in {"additive", "multiplicative"}:
-                    qi_device_compose_mode = "multiplicative"
+                qi_device_jacobi_step_policy = qi_device_base_config.jacobi_step_policy
+                qi_device_coarse_solver = qi_device_base_config.coarse_solver
+                qi_device_preconditioner_min_improvement = float(qi_device_base_config.min_improvement)
+                qi_device_preconditioner_cycles = int(qi_device_base_config.cycles)
+                qi_device_augmented_seed_requested = bool(qi_device_base_config.augmented_seed_requested)
+                qi_device_augmented_seed_max_rank = int(qi_device_base_config.augmented_seed_max_rank)
+                qi_device_preconditioner_minres_step = bool(qi_device_base_config.minres_step)
+                qi_device_preconditioner_alpha_clip = float(qi_device_base_config.alpha_clip)
+                qi_device_use_in_krylov_requested = bool(qi_device_base_config.use_in_krylov_requested)
+                qi_device_preconditioner_use_in_krylov = bool(qi_device_base_config.use_in_krylov)
+                qi_device_compose_with_base = bool(qi_device_base_config.compose_with_base)
+                qi_device_compose_mode = qi_device_base_config.compose_mode
                 qi_device_residual_enrichment = _rhs1_bool_env(
                     "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RESIDUAL_ENRICHMENT",
                     default=bool(qi_device_matrix_free_enabled),

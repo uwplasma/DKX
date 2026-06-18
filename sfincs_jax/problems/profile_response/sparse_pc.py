@@ -419,6 +419,39 @@ class XBlockQIDeviceAdmissionSetup:
     messages: tuple[tuple[int, str], ...]
 
 
+@dataclass(frozen=True)
+class XBlockQIDeviceBaseConfigSetup:
+    """Base QI-device smoother, solve, and Krylov-composition settings."""
+
+    rcond: float
+    damping: float
+    jacobi_damping: float
+    jacobi_sweeps: int
+    jacobi_floor: float
+    jacobi_require_all_diagonal: bool
+    local_smoother_kind: str
+    matrix_free_smoother_sweeps: int
+    matrix_free_smoother_damping: float
+    matrix_free_smoother_step_policy: str
+    matrix_free_smoother_alpha_clip: float
+    matrix_free_block_smoother_max_groups: int
+    matrix_free_block_smoother_include_tail: bool
+    matrix_free_block_smoother_rcond: float
+    matrix_free_block_smoother_grouping: str
+    jacobi_step_policy: str
+    coarse_solver: str
+    min_improvement: float
+    cycles: int
+    augmented_seed_requested: bool
+    augmented_seed_max_rank: int
+    minres_step: bool
+    alpha_clip: float
+    use_in_krylov_requested: bool
+    use_in_krylov: bool
+    compose_with_base: bool
+    compose_mode: str
+
+
 def _env_value(env: Mapping[str, str] | None, key: str) -> str:
     source = env if env is not None else {}
     return str(source.get(key, "")).strip()
@@ -2427,6 +2460,185 @@ def resolve_xblock_qi_device_admission_setup(
         matrix_free_enabled=bool(matrix_free_enabled),
         metadata={},
         messages=(),
+    )
+
+
+def resolve_xblock_qi_device_base_config_setup(
+    *,
+    matrix_free_enabled: bool,
+    assembled_device_operator_available: bool,
+    precondition_side: str,
+    probe_uses_minres_step: Callable[[], bool],
+    env: Mapping[str, str] | None = None,
+) -> XBlockQIDeviceBaseConfigSetup:
+    """Resolve base QI-device preconditioner settings before enrichment setup."""
+
+    local_smoother_kind_default = "none" if not bool(assembled_device_operator_available) else "auto"
+    local_smoother_kind = (
+        _env_value(env, "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_LOCAL_SMOOTHER")
+        or local_smoother_kind_default
+    ).lower().replace("-", "_")
+    compose_mode = (
+        _env_value(env, "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_COMPOSE_MODE")
+        or "multiplicative"
+    ).lower().replace("-", "_")
+    if compose_mode not in {"additive", "multiplicative"}:
+        compose_mode = "multiplicative"
+
+    cycles = _env_int(
+        env,
+        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_CYCLES",
+        default=1,
+        minimum=1,
+    )
+    use_in_krylov = _env_bool(
+        env,
+        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_USE_IN_KRYLOV",
+        default=bool(assembled_device_operator_available),
+    )
+    use_in_krylov_requested = bool(use_in_krylov)
+    if str(precondition_side) == "none":
+        use_in_krylov = False
+
+    return XBlockQIDeviceBaseConfigSetup(
+        rcond=max(
+            0.0,
+            _env_float(
+                env,
+                "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RCOND",
+                default=1.0e-12,
+            ),
+        ),
+        damping=max(
+            0.0,
+            _env_float(
+                env,
+                "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_DAMPING",
+                default=1.0,
+            ),
+        ),
+        jacobi_damping=max(
+            0.0,
+            _env_float(
+                env,
+                "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_JACOBI_DAMPING",
+                default=0.7,
+            ),
+        ),
+        jacobi_sweeps=_env_int(
+            env,
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_JACOBI_SWEEPS",
+            default=1,
+            minimum=1,
+        ),
+        jacobi_floor=max(
+            0.0,
+            _env_float(
+                env,
+                "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_JACOBI_DIAGONAL_FLOOR",
+                default=1.0e-14,
+            ),
+        ),
+        jacobi_require_all_diagonal=_env_bool(
+            env,
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_JACOBI_REQUIRE_ALL_DIAGONAL",
+            default=True,
+        ),
+        local_smoother_kind=str(local_smoother_kind),
+        matrix_free_smoother_sweeps=_env_int(
+            env,
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MATRIX_FREE_SMOOTHER_SWEEPS",
+            default=1,
+            minimum=1,
+        ),
+        matrix_free_smoother_damping=max(
+            0.0,
+            _env_float(
+                env,
+                "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MATRIX_FREE_SMOOTHER_DAMPING",
+                default=1.0,
+            ),
+        ),
+        matrix_free_smoother_step_policy=(
+            _env_value(env, "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MATRIX_FREE_SMOOTHER_STEP_POLICY")
+            or "residual_minimizing"
+        ).lower().replace("-", "_"),
+        matrix_free_smoother_alpha_clip=max(
+            0.0,
+            _env_float(
+                env,
+                "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MATRIX_FREE_SMOOTHER_ALPHA_CLIP",
+                default=10.0,
+            ),
+        ),
+        matrix_free_block_smoother_max_groups=_env_int(
+            env,
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MATRIX_FREE_BLOCK_SMOOTHER_MAX_GROUPS",
+            default=32,
+            minimum=1,
+        ),
+        matrix_free_block_smoother_include_tail=_env_bool(
+            env,
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MATRIX_FREE_BLOCK_SMOOTHER_INCLUDE_TAIL",
+            default=True,
+        ),
+        matrix_free_block_smoother_rcond=max(
+            0.0,
+            _env_float(
+                env,
+                "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MATRIX_FREE_BLOCK_SMOOTHER_RCOND",
+                default=1.0e-12,
+            ),
+        ),
+        matrix_free_block_smoother_grouping=(
+            _env_value(env, "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MATRIX_FREE_BLOCK_SMOOTHER_GROUPING")
+            or "contiguous"
+        ).lower().replace("-", "_"),
+        jacobi_step_policy=(
+            _env_value(env, "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_JACOBI_STEP_POLICY")
+            or "stationary"
+        ).lower().replace("-", "_"),
+        coarse_solver=(
+            _env_value(env, "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_COARSE_SOLVER")
+            or "action_lstsq"
+        ).lower().replace("-", "_"),
+        min_improvement=max(
+            0.0,
+            _env_float(
+                env,
+                "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MIN_IMPROVEMENT",
+                default=0.05,
+            ),
+        ),
+        cycles=int(cycles),
+        augmented_seed_requested=_env_bool(
+            env,
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_AUGMENTED_SEED",
+            default=False,
+        ),
+        augmented_seed_max_rank=_env_int(
+            env,
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_AUGMENTED_SEED_MAX_RANK",
+            default=max(1, min(8, int(cycles))),
+            minimum=1,
+        ),
+        minres_step=bool(probe_uses_minres_step()),
+        alpha_clip=max(
+            0.0,
+            _env_float(
+                env,
+                "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_ALPHA_CLIP",
+                default=10.0,
+            ),
+        ),
+        use_in_krylov_requested=bool(use_in_krylov_requested),
+        use_in_krylov=bool(use_in_krylov),
+        compose_with_base=_env_bool(
+            env,
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_COMPOSE_WITH_BASE",
+            default=False,
+        ),
+        compose_mode=str(compose_mode),
     )
 
 

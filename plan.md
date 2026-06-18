@@ -33769,3 +33769,58 @@ Next refactor target:
   local/matrix-free smoother settings first, enrichment/multilevel settings
   second. Do not move probe construction or residual acceptance until each
   policy surface has direct tests and focused driver regressions.
+
+### 19.84 RHSMode=1 x-block QI-device base/local config extraction
+
+Goal:
+
+- Move QI-device base solve, local smoother, matrix-free smoother, augmented
+  seed, and Krylov-composition settings out of ``v3_driver.py`` while keeping
+  enrichment/multilevel controls, preconditioner construction, probes, and
+  residual acceptance unchanged.
+
+Implementation:
+
+- Added ``XBlockQIDeviceBaseConfigSetup`` and
+  ``resolve_xblock_qi_device_base_config_setup`` to
+  ``sfincs_jax/problems/profile_response/sparse_pc.py``.
+- Centralized QI-device rcond/damping, Jacobi damping/sweeps/floor/step policy,
+  local smoother kind, matrix-free residual smoother settings, matrix-free
+  block smoother settings, coarse solver, minimum-improvement gate, cycle
+  count, augmented-seed settings, minres-step gate, alpha clipping,
+  use-in-Krylov requested/effective state, and base-composition settings.
+- Preserved the existing ``precondition_side == "none"`` rule: the user
+  request is still recorded, but effective QI-device use in Krylov is disabled.
+- Preserved compose-mode normalization to ``multiplicative`` for invalid
+  values.
+- Replaced the in-driver base/local config parsing block with a policy object
+  while retaining all downstream variable names used by the device
+  preconditioner builder and metadata.
+- Added direct tests for default device-operator settings and matrix-free /
+  side-none / composition parsing.
+- ``solve_v3_full_system_linear_gmres`` is now about ``19396`` lines and
+  ``v3_driver.py`` is about ``24674`` lines.
+
+Validation so far:
+
+- ``python -m ruff check sfincs_jax/problems/profile_response/sparse_pc.py
+  sfincs_jax/v3_driver.py tests/test_profile_response_sparse_pc.py``: passed.
+- ``python -m compileall -q
+  sfincs_jax/problems/profile_response/sparse_pc.py sfincs_jax/v3_driver.py
+  tests/test_profile_response_sparse_pc.py``: passed.
+- ``PYTHONDONTWRITEBYTECODE=1 JAX_ENABLE_X64=True pytest -q
+  -p no:cacheprovider tests/test_profile_response_sparse_pc.py``:
+  ``52 passed in 0.93 s``.
+- Focused QI-device local/matrix-free regression subset:
+  ``57 passed in 12.82 s``.
+- Broader sparse-PC/x-block/dispatch subset:
+  ``145 passed in 53.25 s``.
+- ``git diff --check``: passed.
+
+Next refactor target:
+
+- Extract QI-device enrichment/multilevel configuration in smaller policy
+  groups: residual/recycle/operator/adjoint/action enrichment first, then
+  multilevel/global-moment/residual-Galerkin/phase-space/region-coarse controls.
+  Continue to keep actual preconditioner construction and residual probes in
+  the driver until the policy layer is fully covered.
