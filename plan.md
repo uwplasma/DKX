@@ -32056,3 +32056,50 @@ Validation so far:
 - ``git diff --check``: passed.
 - ``PYTHONDONTWRITEBYTECODE=1 pytest -q -p no:cacheprovider``:
   ``2703 passed in 539.69 s``.
+
+### 19.49 RHSMode=2/3 common transport-preconditioner extraction
+
+Goal:
+
+- Move the common RHSMode=2/3 transport-preconditioner numerical kernels out of
+  ``v3_driver.py`` without changing transport preconditioner dispatch,
+  monkeypatch seams, or automatic solver selection.
+
+Usage audit:
+
+- ``solve_v3_transport_matrix_linear_gmres`` passes historical driver-private
+  ``_build_rhsmode23_*`` names into
+  ``problems.transport_matrix.preconditioner_dispatch``.
+- Existing tests monkeypatch ``v3_driver._build_rhsmode23_tzfft_preconditioner``
+  directly, so the driver must keep wrapper functions instead of importing the
+  moved implementation under the old private names.
+
+Implementation:
+
+- Added ``sfincs_jax/solvers/preconditioners/transport_matrix.py`` as the owner
+  of the common RHSMode=2/3 transport preconditioners:
+  collision diagonal, species/speed block, x-grid coarse correction,
+  angular FFT/tridiagonal solve, and point-block transport block Jacobi.
+- ``v3_driver.py`` now keeps thin compatibility wrappers for those five
+  builders and continues to pass the wrappers into dispatch.
+- Updated the source map and import-contract tests so the new builder module is
+  intentionally visible.
+
+Validation so far:
+
+- ``python -m ruff check sfincs_jax/v3_driver.py
+  sfincs_jax/solvers/preconditioners/transport_matrix.py
+  tests/test_domain_package_import_contracts.py tests/test_transport_sparse_direct.py
+  tests/test_v3_driver_pas_precond_policy_coverage.py``: passed.
+- ``python -m compileall -q sfincs_jax/v3_driver.py
+  sfincs_jax/solvers/preconditioners/transport_matrix.py
+  tests/test_domain_package_import_contracts.py tests/test_transport_sparse_direct.py
+  tests/test_v3_driver_pas_precond_policy_coverage.py``: passed.
+- ``PYTHONDONTWRITEBYTECODE=1 pytest -q -p no:cacheprovider
+  tests/test_domain_package_import_contracts.py
+  tests/test_v3_driver_pas_precond_policy_coverage.py
+  tests/test_transport_sparse_direct.py tests/test_transport_matrix_rhsmode2_parity.py
+  tests/test_transport_matrix_rhsmode3_parity.py``: ``91 passed in 6.27 s``.
+- ``SPHINXOPTS='-W --keep-going' python -m sphinx -b html docs
+  docs/_build/html``: passed.
+- ``git diff --check``: passed.
