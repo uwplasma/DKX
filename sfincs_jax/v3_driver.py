@@ -208,6 +208,9 @@ from .problems.profile_response.sparse_pc import (
     build_xblock_assembled_device_setup,
     build_xblock_assembled_matvec_setup,
     build_xblock_assembled_operator_preflight_setup,
+    evaluate_xblock_moment_schur_probe_result,
+    failed_xblock_moment_schur_metadata,
+    finalize_xblock_moment_schur_metadata,
     resolve_sparse_pc_entry_policy,
     resolve_xblock_qi_device_operator_reuse_setup,
     resolve_xblock_moment_schur_policy_setup,
@@ -3836,52 +3839,32 @@ def solve_v3_full_system_linear_gmres(
                         )
                         moment_schur_probe_residual_after = float(jnp.linalg.norm(seed_residual))
                         moment_schur_probe_residual_before = float(jnp.linalg.norm(xblock_rhs))
-                        if moment_schur_probe_residual_before > 0.0:
-                            moment_schur_probe_improvement_ratio = (
-                                moment_schur_probe_residual_after / moment_schur_probe_residual_before
-                            )
-                            required = float(moment_schur_probe_residual_before) * max(
-                                0.0,
-                                1.0 - float(moment_schur_probe_min_improvement),
-                            )
-                            moment_schur_used = bool(
-                                np.isfinite(float(moment_schur_probe_residual_after))
-                                and float(moment_schur_probe_residual_after) < float(required)
-                            )
-                        else:
-                            moment_schur_probe_improvement_ratio = (
-                                0.0 if moment_schur_probe_residual_after == 0.0 else float("inf")
-                            )
-                            moment_schur_used = bool(
-                                np.isfinite(float(moment_schur_probe_residual_after))
-                                and float(moment_schur_probe_residual_after) <= 0.0
-                            )
-                        moment_schur_reason = (
-                            "probe_reduced" if bool(moment_schur_used) else "probe_not_reduced"
+                        probe_result = evaluate_xblock_moment_schur_probe_result(
+                            residual_before=float(moment_schur_probe_residual_before),
+                            residual_after=float(moment_schur_probe_residual_after),
+                            min_improvement=float(moment_schur_probe_min_improvement),
                         )
+                        moment_schur_used = bool(probe_result.used)
+                        moment_schur_reason = str(probe_result.reason)
+                        moment_schur_probe_improvement_ratio = float(probe_result.improvement_ratio)
                         if emit is not None:
-                            level = 0 if bool(moment_schur_used) else 1
-                            emit(
-                                level,
-                                "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
-                                "constraint1 moment-Schur "
-                                f"{'accepted' if bool(moment_schur_used) else 'rejected'} "
-                                f"seed residual {moment_schur_probe_residual_before:.6e} "
-                                f"-> {moment_schur_probe_residual_after:.6e} "
-                                f"(ratio={float(moment_schur_probe_improvement_ratio):.6e})",
-                            )
+                            for level, message in probe_result.messages:
+                                emit(int(level), str(message))
                     precond_xblock_krylov = (
                         moment_schur_candidate if bool(moment_schur_used) else base_precond_before_moment_schur
                     )
-                    moment_schur_metadata["setup_s"] = float(sparse_timer.elapsed_s() - moment_schur_start_s)
+                    moment_schur_metadata = finalize_xblock_moment_schur_metadata(
+                        metadata=moment_schur_metadata,
+                        setup_s=float(sparse_timer.elapsed_s() - moment_schur_start_s),
+                    )
                     pc_factor_s += float(moment_schur_metadata["setup_s"])
                 except Exception as exc:  # noqa: BLE001
                     moment_schur_used = False
                     moment_schur_reason = f"{type(exc).__name__}: {exc}"
-                    moment_schur_metadata = {
-                        "error": f"{type(exc).__name__}: {exc}",
-                        "setup_s": float(sparse_timer.elapsed_s() - moment_schur_start_s),
-                    }
+                    moment_schur_metadata = failed_xblock_moment_schur_metadata(
+                        exc=exc,
+                        setup_s=float(sparse_timer.elapsed_s() - moment_schur_start_s),
+                    )
                     if emit is not None:
                         emit(
                             1,

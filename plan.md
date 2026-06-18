@@ -33429,3 +33429,49 @@ Next refactor target:
 
 - Extract moment-Schur probe result gating and metadata normalization, then
   proceed to the x-block seed/two-level/global-coupling admission layers.
+
+### 19.77 RHSMode=1 x-block moment-Schur probe extraction
+
+Goal:
+
+- Move moment-Schur probe residual gating and setup/failure metadata
+  normalization out of ``v3_driver.py`` while preserving the actual seed
+  residual computation against the true x-block operator.
+
+Implementation:
+
+- Extended ``sfincs_jax/problems/profile_response/sparse_pc.py`` with
+  ``XBlockMomentSchurProbeResult``,
+  ``evaluate_xblock_moment_schur_probe_result``,
+  ``finalize_xblock_moment_schur_metadata``, and
+  ``failed_xblock_moment_schur_metadata``.
+- Moved residual-before/after acceptance logic, minimum-improvement gating,
+  zero-RHS residual behavior, accepted/rejected status messages, and setup
+  timing metadata normalization into sparse-PC helpers.
+- Kept moment-Schur candidate construction, true residual evaluation, and
+  preconditioner application in ``v3_driver.py``.
+- Added direct tests for accepted/rejected probe gates, zero-RHS behavior, and
+  success/failure metadata normalization.
+- ``solve_v3_full_system_linear_gmres`` is now about ``19739`` lines and
+  ``v3_driver.py`` is about ``24996`` lines.
+
+Validation so far:
+
+- ``python -m ruff check sfincs_jax/problems/profile_response/sparse_pc.py
+  sfincs_jax/v3_driver.py tests/test_profile_response_sparse_pc.py``: passed.
+- ``python -m compileall -q
+  sfincs_jax/problems/profile_response/sparse_pc.py sfincs_jax/v3_driver.py
+  tests/test_profile_response_sparse_pc.py``: passed.
+- ``PYTHONDONTWRITEBYTECODE=1 JAX_ENABLE_X64=True pytest -q
+  -p no:cacheprovider tests/test_profile_response_sparse_pc.py``:
+  ``31 passed in 0.74 s``.
+- Focused moment-Schur regression subset:
+  ``34 passed in 5.59 s``.
+- Broader sparse-PC/x-block/dispatch subset:
+  ``109 passed in 41.65 s``.
+
+Next refactor target:
+
+- Extract x-block two-level preconditioner policy/admission settings into the
+  sparse-PC helper layer, then continue with global-coupling and seed policy
+  routing before moving deeper numerical construction out of the driver.

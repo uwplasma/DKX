@@ -279,6 +279,18 @@ class XBlockMomentSchurPolicySetup:
     messages: tuple[tuple[int, str], ...]
 
 
+@dataclass(frozen=True)
+class XBlockMomentSchurProbeResult:
+    """Decision from probing a moment-Schur seed against the true residual."""
+
+    used: bool
+    reason: str
+    residual_before: float
+    residual_after: float
+    improvement_ratio: float
+    messages: tuple[tuple[int, str], ...]
+
+
 def _env_value(env: Mapping[str, str] | None, key: str) -> str:
     source = env if env is not None else {}
     return str(source.get(key, "")).strip()
@@ -1464,6 +1476,69 @@ def resolve_xblock_moment_schur_policy_setup(
         probe_min_improvement=float(probe_min_improvement),
         messages=tuple(messages),
     )
+
+
+def evaluate_xblock_moment_schur_probe_result(
+    *,
+    residual_before: float,
+    residual_after: float,
+    min_improvement: float,
+) -> XBlockMomentSchurProbeResult:
+    """Gate moment-Schur use from before/after residual norms."""
+
+    before = float(residual_before)
+    after = float(residual_after)
+    if before > 0.0:
+        ratio = float(after / before)
+        required = before * max(0.0, 1.0 - float(min_improvement))
+        used = bool(np.isfinite(after) and after < float(required))
+    else:
+        ratio = 0.0 if after == 0.0 else float("inf")
+        used = bool(np.isfinite(after) and after <= 0.0)
+    reason = "probe_reduced" if bool(used) else "probe_not_reduced"
+    messages = (
+        (
+            0 if bool(used) else 1,
+            "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
+            "constraint1 moment-Schur "
+            f"{'accepted' if bool(used) else 'rejected'} "
+            f"seed residual {before:.6e} -> {after:.6e} "
+            f"(ratio={float(ratio):.6e})",
+        ),
+    )
+    return XBlockMomentSchurProbeResult(
+        used=bool(used),
+        reason=str(reason),
+        residual_before=float(before),
+        residual_after=float(after),
+        improvement_ratio=float(ratio),
+        messages=messages,
+    )
+
+
+def finalize_xblock_moment_schur_metadata(
+    *,
+    metadata: Mapping[str, object],
+    setup_s: float,
+) -> dict[str, object]:
+    """Return moment-Schur metadata with normalized setup timing."""
+
+    out = dict(metadata)
+    out["setup_s"] = float(setup_s)
+    return out
+
+
+def failed_xblock_moment_schur_metadata(
+    *,
+    exc: BaseException,
+    setup_s: float,
+) -> dict[str, object]:
+    """Return normalized moment-Schur failure metadata."""
+
+    return {
+        "error": f"{type(exc).__name__}: {exc}",
+        "setup_s": float(setup_s),
+    }
 
 
 def run_sparse_pc_gmres_once(

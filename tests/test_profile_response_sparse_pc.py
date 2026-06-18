@@ -17,6 +17,9 @@ from sfincs_jax.problems.profile_response.sparse_pc import (
     build_xblock_assembled_matvec_setup,
     build_xblock_assembled_operator_preflight_setup,
     build_xblock_krylov_matvec_setup,
+    evaluate_xblock_moment_schur_probe_result,
+    failed_xblock_moment_schur_metadata,
+    finalize_xblock_moment_schur_metadata,
     resolve_sparse_pc_entry_policy,
     resolve_xblock_qi_device_operator_reuse_setup,
     resolve_xblock_moment_schur_policy_setup,
@@ -698,6 +701,65 @@ def test_xblock_moment_schur_policy_does_not_emit_build_for_no_preconditioner_si
 
     assert setup.enabled
     assert not setup.messages
+
+
+def test_xblock_moment_schur_probe_result_accepts_sufficient_reduction() -> None:
+    result = evaluate_xblock_moment_schur_probe_result(
+        residual_before=10.0,
+        residual_after=7.0,
+        min_improvement=0.2,
+    )
+
+    assert result.used
+    assert result.reason == "probe_reduced"
+    assert result.improvement_ratio == pytest.approx(0.7)
+    assert any("accepted" in message for _, message in result.messages)
+
+
+def test_xblock_moment_schur_probe_result_rejects_insufficient_reduction() -> None:
+    result = evaluate_xblock_moment_schur_probe_result(
+        residual_before=10.0,
+        residual_after=9.0,
+        min_improvement=0.2,
+    )
+
+    assert not result.used
+    assert result.reason == "probe_not_reduced"
+    assert result.improvement_ratio == pytest.approx(0.9)
+    assert any("rejected" in message for _, message in result.messages)
+
+
+def test_xblock_moment_schur_probe_result_handles_zero_rhs_norm() -> None:
+    zero = evaluate_xblock_moment_schur_probe_result(
+        residual_before=0.0,
+        residual_after=0.0,
+        min_improvement=0.5,
+    )
+    nonzero = evaluate_xblock_moment_schur_probe_result(
+        residual_before=0.0,
+        residual_after=1.0,
+        min_improvement=0.5,
+    )
+
+    assert zero.used
+    assert zero.improvement_ratio == 0.0
+    assert not nonzero.used
+    assert np.isinf(nonzero.improvement_ratio)
+
+
+def test_xblock_moment_schur_metadata_helpers_normalize_success_and_failure() -> None:
+    success = finalize_xblock_moment_schur_metadata(
+        metadata={"rank": 3},
+        setup_s=1.5,
+    )
+    failure = failed_xblock_moment_schur_metadata(
+        exc=ValueError("bad factor"),
+        setup_s=2.5,
+    )
+
+    assert success == {"rank": 3, "setup_s": 1.5}
+    assert failure["setup_s"] == 2.5
+    assert failure["error"] == "ValueError: bad factor"
 
 
 def test_sparse_pc_gmres_once_explicit_left_recomputes_true_residual() -> None:
