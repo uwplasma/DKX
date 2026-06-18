@@ -169,6 +169,7 @@ from .rhs1_preconditioner_auto_policy import (
 )
 from .rhs1_schur_policy import resolve_rhs1_schur_base_kind
 from .problems.profile_response.handoff import rhs1_accept_candidate
+from .problems.profile_response.dense import HostDenseReducedSolveContext, solve_host_dense_reduced
 from .problems.profile_response.linear_solve import (
     ProfileLinearSolveContext,
     profile_solver_kind,
@@ -16928,54 +16929,17 @@ def solve_v3_full_system_linear_gmres(
                 )
 
         def _solve_host_dense_reduced(*, x0_dense: jnp.ndarray | None = None) -> GMRESSolveResult:
-            use_row_scaled = bool(
-                int(op.constraint_scheme) == 0
-                or (int(op.constraint_scheme) == 1 and op.fblock.fp is not None)
+            return solve_host_dense_reduced(
+                context=HostDenseReducedSolveContext(
+                    matvec=mv_reduced,
+                    rhs=rhs_reduced,
+                    active_size=int(active_size),
+                    constraint_scheme=int(op.constraint_scheme),
+                    has_fp=op.fblock.fp is not None,
+                    dense_matrix_cache=dense_matrix_cache,
+                ),
+                x0=x0_dense,
             )
-            import scipy.linalg as sla  # noqa: PLC0415
-
-            if dense_matrix_cache is not None:
-                a_np = np.asarray(dense_matrix_cache, dtype=np.float64)
-            else:
-                a_dense_jnp = assemble_dense_matrix_from_matvec(
-                    matvec=mv_reduced, n=int(active_size), dtype=rhs_reduced.dtype
-                )
-                a_np = np.asarray(a_dense_jnp, dtype=np.float64)
-            a_np = np.array(a_np, dtype=np.float64, copy=True)
-            if a_np.ndim != 2:
-                a_np = np.squeeze(a_np)
-
-            mv_dense = mv_reduced
-            b_dense = jnp.asarray(rhs_reduced, dtype=jnp.float64)
-            if use_row_scaled:
-                diag_floor = 1e-12
-                diag = np.diag(a_np).astype(np.float64, copy=False)
-                diag_abs = np.abs(diag)
-                diag_safe = np.where(diag_abs > diag_floor, diag, np.sign(diag) * diag_floor)
-                diag_safe = np.where(diag_safe != 0.0, diag_safe, diag_floor)
-                scale = (1.0 / diag_safe).astype(np.float64, copy=False)
-                a_np = a_np * scale[:, None]
-                scale_jnp = jnp.asarray(scale, dtype=jnp.float64)
-                b_dense = b_dense * scale_jnp
-
-                def mv_dense(x: jnp.ndarray) -> jnp.ndarray:
-                    return scale_jnp * mv_reduced(x)
-
-            if a_np.ndim != 2 or a_np.shape[0] != a_np.shape[1]:
-                x_np = np.asarray(
-                    np.linalg.lstsq(a_np, np.asarray(b_dense, dtype=np.float64), rcond=None)[0],
-                    dtype=np.float64,
-                )
-                x_dense = jnp.asarray(x_np, dtype=jnp.float64)
-            else:
-                lu, piv = sla.lu_factor(a_np)
-                x_np = np.asarray(sla.lu_solve((lu, piv), np.asarray(b_dense, dtype=np.float64)), dtype=np.float64)
-                if x0_dense is not None and x0_dense.shape == rhs_reduced.shape:
-                    x_np = x_np + 0.0 * np.asarray(x0_dense, dtype=np.float64)
-                x_dense = jnp.asarray(x_np, dtype=jnp.float64)
-
-            r_dense = rhs_reduced - mv_reduced(x_dense)
-            return GMRESSolveResult(x=x_dense, residual_norm=jnp.linalg.norm(r_dense))
         if rhs1_bicgstab_kind is not None:
             if emit is not None:
                 emit(1, f"solve_v3_full_system_linear_gmres: RHSMode=1 BiCGStab preconditioner={rhs1_bicgstab_kind}")

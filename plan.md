@@ -32482,3 +32482,59 @@ Validation so far:
 - Full-suite checkpoint:
   ``PYTHONDONTWRITEBYTECODE=1 pytest -q -p no:cacheprovider``:
   ``2725 passed in 526.73 s``.
+
+### 19.59 Host dense reduced-solve extraction
+
+Goal:
+
+- Move the RHSMode=1 host dense reduced-system shortcut out of the monolithic
+  solve loop while preserving row-scaled LU, least-squares fallback, and
+  residual reporting behavior.
+
+Implementation:
+
+- Added ``sfincs_jax/problems/profile_response/dense.py`` with
+  ``HostDenseReducedSolveContext`` and ``solve_host_dense_reduced``.
+- The helper owns dense-matrix assembly/cache use, constraint/FP row scaling,
+  LU factor solve, rectangular least-squares fallback, and reduced residual
+  norm computation.
+- ``v3_driver.py`` keeps a thin local wrapper for existing dense shortcut call
+  sites and passes only solve-local matrix/RHS/context state into the helper.
+- Added direct tests for row-scaled square solves and rectangular least-squares
+  fallback behavior.
+
+Validation so far:
+
+- ``python -m ruff check sfincs_jax/problems/profile_response/dense.py
+  sfincs_jax/v3_driver.py tests/test_profile_response_dense.py``: passed.
+- ``python -m compileall -q sfincs_jax/problems/profile_response/dense.py
+  sfincs_jax/v3_driver.py tests/test_profile_response_dense.py``: passed.
+- ``PYTHONDONTWRITEBYTECODE=1 pytest -q -p no:cacheprovider
+  tests/test_profile_response_dense.py``: ``2 passed in 0.53 s``.
+- ``PYTHONDONTWRITEBYTECODE=1 pytest -q -p no:cacheprovider
+  tests/test_schur_precond_heuristic.py
+  tests/test_v3_driver_rhs1_dispatch_coverage.py
+  tests/test_profile_response_dense.py
+  tests/test_profile_response_sparse_pc.py``:
+  ``65 passed in 46.41 s``.
+- ``SPHINXOPTS='-W --keep-going' python -m sphinx -b html docs
+  docs/_build/html``: passed.
+- ``git diff --check``: passed.
+- Broader RHSMode/preconditioner/sparse/dense subset:
+  ``PYTHONDONTWRITEBYTECODE=1 pytest -q -p no:cacheprovider
+  tests/test_example_auto_selection_paths.py
+  tests/test_pas_projection_heuristic.py
+  tests/test_rhs1_full_assembly.py
+  tests/test_rhs1_schwarz_heuristic.py
+  tests/test_schur_precond_heuristic.py
+  tests/test_sparse_precond_jax.py
+  tests/test_v3_driver_rhs1_dispatch_coverage.py
+  tests/test_xblock_tz_precond_heuristic.py
+  tests/test_profile_response_preconditioner_build.py
+  tests/test_profile_response_sparse_pc.py
+  tests/test_profile_response_dense.py
+  tests/test_v3_sparse_pattern.py``:
+  ``322 passed in 140.76 s``.
+- Full-suite checkpoint:
+  ``PYTHONDONTWRITEBYTECODE=1 pytest -q -p no:cacheprovider``:
+  ``2727 passed in 923.04 s``.
