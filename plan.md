@@ -32302,3 +32302,8 @@ Validation so far:
   tests/test_profile_response_linear_solve.py
   tests/test_v3_sparse_pattern.py::test_auto_selects_fortran_reduced_pc_gmres_for_large_full_fp_rhs1``:
   ``16 passed in 4.37 s``.
+- Full-suite regression checkpoint after fixing profile linear-solve wrapper
+  keyword forwarding and restoring legacy RHSMode=1 domain-decomposition
+  aliases in ``v3_driver.py``:
+  ``PYTHONDONTWRITEBYTECODE=1 pytest -q -p no:cacheprovider``:
+  ``2717 passed in 558.11 s``.

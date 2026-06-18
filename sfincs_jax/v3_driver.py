@@ -81,6 +81,13 @@ from .explicit_sparse_factor_policy import (
     explicit_sparse_monolithic_max_size as _explicit_sparse_monolithic_max_size,
 )
 from .rhs1_device_operator import device_csr_from_matrix, validate_device_csr_matvec
+from .rhs1_domain_decomposition import (  # compatibility exports for legacy tests/debug scripts
+    _dd_core_patch_ranges,
+    _rhs1_dd_auto_block_size,
+    _rhs1_dd_coarse_block_size,
+    _rhs1_dd_coarse_block_sizes,
+    _rhs1_dd_coarse_level_count,
+)
 from .rhs1_qi_coarse import (
     RHS1QICoarseBasis,
     apply_rhs1_qi_coarse_correction,
@@ -16582,8 +16589,8 @@ def solve_v3_full_system_linear_gmres(
     ):
         return solve_profile_linear(
             context=profile_linear_context,
-            matvec=matvec_fn,
-            b=b_vec,
+            matvec_fn=matvec_fn,
+            b_vec=b_vec,
             precond_fn=precond_fn,
             x0_vec=x0_vec,
             tol_val=tol_val,
@@ -16609,8 +16616,8 @@ def solve_v3_full_system_linear_gmres(
     ) -> tuple[GMRESSolveResult, jnp.ndarray]:
         return solve_profile_linear_with_residual(
             context=profile_linear_context,
-            matvec=matvec_fn,
-            b=b_vec,
+            matvec_fn=matvec_fn,
+            b_vec=b_vec,
             precond_fn=precond_fn,
             x0_vec=x0_vec,
             tol_val=tol_val,
