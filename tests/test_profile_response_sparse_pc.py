@@ -33,6 +33,7 @@ from sfincs_jax.problems.profile_response.sparse_pc import (
     resolve_fortran_reduced_sparse_pc_backend,
     resolve_fortran_reduced_xblock_factor_policy,
     resolve_fortran_reduced_xblock_krylov_policy,
+    resolve_fortran_reduced_xblock_moment_schur_policy,
     resolve_sparse_pc_entry_policy,
     resolve_xblock_qi_device_admission_setup,
     resolve_xblock_qi_device_base_config_setup,
@@ -306,6 +307,59 @@ def test_fortran_reduced_xblock_krylov_policy_falls_back_invalid_values() -> Non
             "'bad_method'; using gmres",
         ),
     )
+
+
+def test_fortran_reduced_xblock_moment_schur_policy_defaults_disabled() -> None:
+    setup = resolve_fortran_reduced_xblock_moment_schur_policy(
+        precondition_side="left",
+        env={},
+    )
+
+    assert not setup.default_candidate
+    assert not setup.default_blocked_by_compact_factors
+    assert not setup.enabled
+    assert setup.rcond == pytest.approx(1.0e-12)
+    assert not setup.probe_enabled
+    assert setup.probe_min_improvement == 0.0
+    assert setup.messages == ()
+
+
+def test_fortran_reduced_xblock_moment_schur_policy_uses_fortran_env_over_generic() -> (
+    None
+):
+    setup = resolve_fortran_reduced_xblock_moment_schur_policy(
+        precondition_side="right",
+        env={
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_XBLOCK_MOMENT_SCHUR": "1",
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_MOMENT_SCHUR_RCOND": "3e-9",
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_XBLOCK_MOMENT_SCHUR_RCOND": "2e-8",
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_XBLOCK_MOMENT_SCHUR_PROBE": "1",
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_XBLOCK_MOMENT_SCHUR_MIN_IMPROVEMENT": "0.4",
+        },
+    )
+
+    assert setup.enabled
+    assert setup.rcond == pytest.approx(2.0e-8)
+    assert setup.probe_enabled
+    assert setup.probe_min_improvement == pytest.approx(0.4)
+    assert any("moment-Schur build start" in message for _, message in setup.messages)
+
+
+def test_fortran_reduced_xblock_moment_schur_policy_falls_back_to_generic_rcond() -> (
+    None
+):
+    setup = resolve_fortran_reduced_xblock_moment_schur_policy(
+        precondition_side="none",
+        env={
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_XBLOCK_MOMENT_SCHUR": "1",
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_MOMENT_SCHUR_RCOND": "3e-9",
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_XBLOCK_MOMENT_SCHUR_RCOND": "bad",
+        },
+    )
+
+    assert setup.enabled
+    assert setup.rcond == pytest.approx(3.0e-9)
+    assert setup.messages == ()
 
 
 def test_sparse_pc_entry_policy_classifies_pas_er_and_active_dof() -> None:

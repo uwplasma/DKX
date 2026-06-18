@@ -961,6 +961,69 @@ def resolve_fortran_reduced_xblock_krylov_policy(
     )
 
 
+def resolve_fortran_reduced_xblock_moment_schur_policy(
+    *,
+    precondition_side: str,
+    env: Mapping[str, str] | None,
+) -> XBlockMomentSchurPolicySetup:
+    """Resolve moment-Schur controls for fortran-reduced x-block solves."""
+
+    enabled = _env_bool(
+        env,
+        "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_XBLOCK_MOMENT_SCHUR",
+        default=False,
+    )
+    generic_rcond = max(
+        0.0,
+        _env_float(
+            env,
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_MOMENT_SCHUR_RCOND",
+            default=1.0e-12,
+        ),
+    )
+    rcond = max(
+        0.0,
+        _env_float(
+            env,
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_XBLOCK_MOMENT_SCHUR_RCOND",
+            default=generic_rcond,
+        ),
+    )
+    probe_enabled = _env_bool(
+        env,
+        "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_XBLOCK_MOMENT_SCHUR_PROBE",
+        default=False,
+    )
+    probe_min_improvement = max(
+        0.0,
+        _env_float(
+            env,
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_XBLOCK_MOMENT_SCHUR_MIN_IMPROVEMENT",
+            default=0.0,
+        ),
+    )
+
+    messages: tuple[tuple[int, str], ...] = ()
+    if bool(enabled) and str(precondition_side) != "none":
+        messages = (
+            (
+                0,
+                "solve_v3_full_system_linear_gmres: fortran_reduced_pc_gmres xblock "
+                "constraint1 moment-Schur build start",
+            ),
+        )
+
+    return XBlockMomentSchurPolicySetup(
+        default_candidate=False,
+        default_blocked_by_compact_factors=False,
+        enabled=bool(enabled),
+        rcond=float(rcond),
+        probe_enabled=bool(probe_enabled),
+        probe_min_improvement=float(probe_min_improvement),
+        messages=messages,
+    )
+
+
 def _normalize_qi_device_residual_equation_solver(
     value: str,
     *,
@@ -3527,6 +3590,7 @@ __all__ = [
     "resolve_fortran_reduced_sparse_pc_backend",
     "resolve_fortran_reduced_xblock_factor_policy",
     "resolve_fortran_reduced_xblock_krylov_policy",
+    "resolve_fortran_reduced_xblock_moment_schur_policy",
     "run_sparse_pc_gmres_once",
     "sparse_rescue_tail_metadata",
     "sparse_xblock_rescue_metadata",

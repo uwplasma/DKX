@@ -228,6 +228,7 @@ from .problems.profile_response.sparse_pc import (
     resolve_fortran_reduced_sparse_pc_backend,
     resolve_fortran_reduced_xblock_factor_policy,
     resolve_fortran_reduced_xblock_krylov_policy,
+    resolve_fortran_reduced_xblock_moment_schur_policy,
     resolve_xblock_qi_device_admission_setup,
     resolve_xblock_qi_device_base_config_setup,
     resolve_xblock_qi_device_enrichment_config_setup,
@@ -7046,10 +7047,11 @@ def solve_v3_full_system_linear_gmres(
                 return jnp.asarray(precond_xblock(jnp.asarray(v, dtype=rhs.dtype)), dtype=jnp.float64)
 
             precond_xblock_krylov = _precond_xblock
-            moment_schur_enabled = _rhs1_bool_env(
-                "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_XBLOCK_MOMENT_SCHUR",
-                default=False,
+            moment_schur_policy = resolve_fortran_reduced_xblock_moment_schur_policy(
+                precondition_side=precondition_side,
+                env=os.environ,
             )
+            moment_schur_enabled = bool(moment_schur_policy.enabled)
             moment_schur_built = False
             moment_schur_used = False
             moment_schur_reason: str | None = None
@@ -7060,30 +7062,9 @@ def solve_v3_full_system_linear_gmres(
             moment_schur_probe_improvement_ratio: float | None = None
             if bool(moment_schur_enabled) and precondition_side != "none":
                 moment_schur_start_s = sparse_timer.elapsed_s()
-                moment_schur_rcond = _rhs1_float_env(
-                    "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_XBLOCK_MOMENT_SCHUR_RCOND",
-                    default=_rhs1_float_env(
-                        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_MOMENT_SCHUR_RCOND",
-                        default=1.0e-12,
-                        minimum=0.0,
-                    ),
-                    minimum=0.0,
-                )
-                moment_schur_probe_enabled = _rhs1_bool_env(
-                    "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_XBLOCK_MOMENT_SCHUR_PROBE",
-                    default=False,
-                )
-                moment_schur_probe_min_improvement = _rhs1_float_env(
-                    "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_XBLOCK_MOMENT_SCHUR_MIN_IMPROVEMENT",
-                    default=0.0,
-                    minimum=0.0,
-                )
                 if emit is not None:
-                    emit(
-                        0,
-                        "solve_v3_full_system_linear_gmres: fortran_reduced_pc_gmres xblock "
-                        "constraint1 moment-Schur build start",
-                    )
+                    for level, message in moment_schur_policy.messages:
+                        emit(level, message)
                 try:
                     base_precond_before_moment_schur = precond_xblock_krylov
                     moment_schur_candidate, moment_schur_metadata, moment_schur_stats = (
@@ -7092,14 +7073,14 @@ def solve_v3_full_system_linear_gmres(
                             base_preconditioner=base_precond_before_moment_schur,
                             reduce_full=_sparse_pc_reduce_full if sparse_pc_use_active_dof else None,
                             expand_reduced=_sparse_pc_expand_reduced if sparse_pc_use_active_dof else None,
-                            rcond=moment_schur_rcond,
+                            rcond=moment_schur_policy.rcond,
                             emit=emit,
                         )
                     )
                     moment_schur_built = True
                     moment_schur_used = True
                     moment_schur_reason = "built"
-                    if bool(moment_schur_probe_enabled):
+                    if bool(moment_schur_policy.probe_enabled):
                         seed_candidate = jnp.asarray(
                             moment_schur_candidate(sparse_pc_rhs),
                             dtype=jnp.float64,
@@ -7116,7 +7097,7 @@ def solve_v3_full_system_linear_gmres(
                             )
                             required = float(moment_schur_probe_residual_before) * max(
                                 0.0,
-                                1.0 - float(moment_schur_probe_min_improvement),
+                                1.0 - float(moment_schur_policy.probe_min_improvement),
                             )
                             moment_schur_used = bool(
                                 np.isfinite(float(moment_schur_probe_residual_after))

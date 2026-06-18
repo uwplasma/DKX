@@ -35161,3 +35161,40 @@ Next refactor target:
 - Continue with the fortran-reduced x-block branch by extracting the
   preconditioner/matvec closure setup or the moment-Schur policy slice, keeping
   the broad sparse-pattern route tests green.
+
+### 19.117 Fortran-reduced x-block moment-Schur policy extraction
+
+Goal:
+
+- Remove the fortran-reduced x-block moment-Schur env/default parser and
+  build-start diagnostic from ``v3_driver.py``.
+
+Implementation:
+
+- Added ``resolve_fortran_reduced_xblock_moment_schur_policy`` to
+  ``problems/profile_response/sparse_pc.py``.
+- The resolver returns the existing ``XBlockMomentSchurPolicySetup`` dataclass,
+  preserving the fortran-reduced env names and the fallback to generic
+  ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_MOMENT_SCHUR_RCOND``.
+- Updated ``v3_driver.py`` to consume the policy object while keeping the
+  actual moment-Schur preconditioner build and probe logic in the driver for a
+  later, larger extraction.
+- Added focused tests for default-disabled behavior, fortran-specific rcond
+  override, generic rcond fallback, probe controls, and side ``none`` message
+  suppression.
+- ``v3_driver.py`` is now about ``20944`` lines and
+  ``solve_v3_full_system_linear_gmres`` about ``15651`` lines.
+
+Validation:
+
+- ``python -m ruff check`` on touched source/tests: passed.
+- ``python -m compileall -q`` on touched source/tests: passed.
+- ``tests/test_profile_response_sparse_pc.py``: ``73 passed``.
+- Broader current profile-response/x-block/sparse-pattern shard:
+  ``350 passed in 106.30 s``.
+
+Next refactor target:
+
+- Extract the remaining fortran-reduced x-block preconditioner/matvec closure
+  setup or the global-coupling policy slice, then move toward a cohesive
+  fortran-reduced x-block branch helper.
