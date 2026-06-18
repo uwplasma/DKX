@@ -876,6 +876,65 @@ def rhs1_qi_device_residual_correction_metadata(
     }
 
 
+def rhs1_qi_device_tail_block_required(
+    *,
+    multilevel_coarse: bool,
+    extra_coarse_controls: Mapping[str, object],
+) -> bool:
+    """Return whether QI-device block metadata needs the tail block retained."""
+
+    return bool(
+        multilevel_coarse
+        or (
+            bool(extra_coarse_controls["global_moment_residual_equation"])
+            and bool(extra_coarse_controls["global_moment_residual_equation_include_tail"])
+        )
+    )
+
+
+def rhs1_qi_device_coupled_install_on_reject_requested(
+    residual_correction_controls: Mapping[str, object],
+) -> bool:
+    """Return whether an accepted coupled residual stage may install after reject."""
+
+    return bool(residual_correction_controls["coupled_residual_equation_install_on_reject"])
+
+
+def rhs1_qi_device_status_fields(
+    *,
+    extra_coarse_controls: Mapping[str, object],
+    residual_correction_controls: Mapping[str, object],
+    metadata: Mapping[str, object],
+) -> str:
+    """Format stable QI-device status fields from grouped controls and metadata."""
+
+    return (
+        f"global_moment_equation={int(bool(extra_coarse_controls['global_moment_residual_equation']))} "
+        f"global_moment_rank={int(metadata.get('global_moment_residual_equation_rank', 0))} "
+        f"global_moment_candidates={int(metadata.get('global_moment_residual_equation_candidate_count', 0))} "
+        f"global_moment_cond={float(metadata.get('global_moment_residual_equation_condition_estimate', float('inf'))):.6e} "
+        f"residual_galerkin_equation={int(bool(extra_coarse_controls['residual_galerkin_equation']))} "
+        f"residual_galerkin_rank={int(metadata.get('residual_galerkin_equation_rank', 0))} "
+        f"residual_galerkin_candidates={int(metadata.get('residual_galerkin_equation_candidate_count', 0))} "
+        f"phase_space_equation={int(bool(extra_coarse_controls['phase_space_residual_equation']))} "
+        f"phase_space_rank={int(metadata.get('phase_space_residual_equation_rank', 0))} "
+        f"phase_space_candidates={int(metadata.get('phase_space_residual_equation_candidate_count', 0))} "
+        f"residual_region_bounce={int(bool(extra_coarse_controls['residual_region_bounce_coarse']))} "
+        f"residual_region_bounce_rank={int(metadata.get('residual_region_bounce_coarse_rank', 0))} "
+        f"residual_region_bounce_candidates={int(metadata.get('residual_region_bounce_coarse_candidate_count', 0))} "
+        f"active_pattern_coarse={int(bool(extra_coarse_controls['active_pattern_coarse']))} "
+        f"active_pattern_rank={int(metadata.get('active_pattern_coarse_rank', 0))} "
+        f"active_pattern_candidates={int(metadata.get('active_pattern_coarse_candidate_count', 0))} "
+        f"block_schur_equation={int(bool(residual_correction_controls['block_schur_residual_equation']))} "
+        f"coupled_equation={int(bool(residual_correction_controls['coupled_residual_equation']))} "
+        f"coupled_rank={int(metadata.get('coupled_residual_equation_rank', 0))} "
+        f"coupled_candidates={int(metadata.get('coupled_residual_equation_candidate_count', 0))} "
+        f"residual_snapshot={int(bool(residual_correction_controls['residual_snapshot_enrichment']))} "
+        f"residual_snapshot_equation={int(bool(residual_correction_controls['residual_snapshot_residual_equation']))} "
+        f"block_schur={int(bool(residual_correction_controls['block_schur_residual_enrichment']))}"
+    )
+
+
 @dataclass(frozen=True)
 class RHS1QIDeviceRankBudget:
     """Rank budget and optional rank cap for a QI-device coarse space."""
@@ -2493,6 +2552,7 @@ __all__ = (
     "rhs1_qi_device_extra_coarse_controls",
     "rhs1_qi_device_extra_coarse_metadata",
     "rhs1_qi_device_extra_coarse_setup_kwargs",
+    "rhs1_qi_device_coupled_install_on_reject_requested",
     "rhs1_qi_device_probe_uses_minres_step",
     "rhs1_qi_device_progress_messages",
     "rhs1_qi_device_rank_budget",
@@ -2500,6 +2560,8 @@ __all__ = (
     "rhs1_qi_device_residual_correction_metadata",
     "rhs1_qi_device_residual_correction_setup_kwargs",
     "rhs1_qi_device_setup_summary",
+    "rhs1_qi_device_status_fields",
+    "rhs1_qi_device_tail_block_required",
     "rhs1_resolved_sparse_rescue_ordering",
     "rhs1_scipy_rescue_abs_floor_after_xblock",
     "rhs1_scipy_rescue_active_size_allowed",

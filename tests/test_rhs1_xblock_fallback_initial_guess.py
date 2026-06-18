@@ -10,6 +10,7 @@ from sfincs_jax.problems.profile_response.policies import (
     rhs1_qi_device_extra_coarse_controls,
     rhs1_qi_device_extra_coarse_metadata,
     rhs1_qi_device_extra_coarse_setup_kwargs,
+    rhs1_qi_device_coupled_install_on_reject_requested,
     rhs1_qi_device_probe_uses_minres_step,
     rhs1_qi_device_progress_messages,
     rhs1_qi_device_rank_budget,
@@ -17,6 +18,8 @@ from sfincs_jax.problems.profile_response.policies import (
     rhs1_qi_device_residual_correction_metadata,
     rhs1_qi_device_residual_correction_setup_kwargs,
     rhs1_qi_device_setup_summary,
+    rhs1_qi_device_status_fields,
+    rhs1_qi_device_tail_block_required,
     rhs1_xblock_fallback_initial_guess,
 )
 
@@ -38,6 +41,10 @@ def test_driver_private_policy_helpers_alias_canonical_profile_response_helpers(
         is rhs1_qi_device_extra_coarse_metadata
     )
     assert (
+        vd._rhs1_qi_device_coupled_install_on_reject_requested
+        is rhs1_qi_device_coupled_install_on_reject_requested
+    )
+    assert (
         vd._rhs1_qi_device_probe_uses_minres_step
         is rhs1_qi_device_probe_uses_minres_step
     )
@@ -55,6 +62,8 @@ def test_driver_private_policy_helpers_alias_canonical_profile_response_helpers(
         is rhs1_qi_device_residual_correction_metadata
     )
     assert vd._rhs1_qi_device_setup_summary is rhs1_qi_device_setup_summary
+    assert vd._rhs1_qi_device_status_fields is rhs1_qi_device_status_fields
+    assert vd._rhs1_qi_device_tail_block_required is rhs1_qi_device_tail_block_required
     assert vd._rhs1_qi_device_rank_budget is rhs1_qi_device_rank_budget
     assert vd._rhs1_xblock_fallback_initial_guess is rhs1_xblock_fallback_initial_guess
 
@@ -721,3 +730,68 @@ def test_qi_device_residual_correction_metadata_uses_requested_key_names() -> No
     )
     assert metadata["residual_snapshot_use_adjoint_requested"] is False
     assert metadata["block_schur_residual_include_aggregates_requested"] is False
+
+
+def test_qi_device_tail_block_required_tracks_tail_moment_controls() -> None:
+    assert rhs1_qi_device_tail_block_required(
+        multilevel_coarse=True,
+        extra_coarse_controls=_extra_coarse_controls_for_summary(),
+    )
+    assert rhs1_qi_device_tail_block_required(
+        multilevel_coarse=False,
+        extra_coarse_controls=_extra_coarse_controls_for_summary(
+            global_moment_residual_equation=True,
+            global_moment_residual_equation_include_tail=True,
+        ),
+    )
+    assert not rhs1_qi_device_tail_block_required(
+        multilevel_coarse=False,
+        extra_coarse_controls=_extra_coarse_controls_for_summary(
+            global_moment_residual_equation=True,
+            global_moment_residual_equation_include_tail=False,
+        ),
+    )
+
+
+def test_qi_device_coupled_install_on_reject_uses_grouped_control() -> None:
+    assert rhs1_qi_device_coupled_install_on_reject_requested(
+        _residual_controls_for_summary(
+            coupled_residual_equation_install_on_reject=True
+        )
+    )
+    assert not rhs1_qi_device_coupled_install_on_reject_requested(
+        _residual_controls_for_summary(
+            coupled_residual_equation_install_on_reject=False
+        )
+    )
+
+
+def test_qi_device_status_fields_format_controls_and_metadata() -> None:
+    fields = rhs1_qi_device_status_fields(
+        extra_coarse_controls=_extra_coarse_controls_for_summary(
+            global_moment_residual_equation=True,
+            residual_region_bounce_coarse=True,
+            active_pattern_coarse=True,
+        ),
+        residual_correction_controls=_residual_controls_for_summary(
+            coupled_residual_equation=True,
+            residual_snapshot_enrichment=True,
+        ),
+        metadata={
+            "global_moment_residual_equation_rank": 2,
+            "global_moment_residual_equation_candidate_count": 3,
+            "global_moment_residual_equation_condition_estimate": 4.5,
+            "residual_region_bounce_coarse_rank": 5,
+            "active_pattern_coarse_candidate_count": 7,
+            "coupled_residual_equation_rank": 11,
+        },
+    )
+
+    assert "global_moment_equation=1" in fields
+    assert "global_moment_rank=2" in fields
+    assert "global_moment_cond=4.500000e+00" in fields
+    assert "residual_region_bounce=1" in fields
+    assert "active_pattern_candidates=7" in fields
+    assert "coupled_equation=1" in fields
+    assert "coupled_rank=11" in fields
+    assert "residual_snapshot=1" in fields

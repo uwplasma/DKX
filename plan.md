@@ -34289,3 +34289,57 @@ Next refactor target:
   access. Then apply the same grouped-control pattern to
   ``problems/profile_response/qi_device_seed.py`` so seed reuse and main solve
   use one policy surface.
+
+### 19.95 RHSMode=1 QI-device grouped-control cleanup
+
+Goal:
+
+- Remove the remaining QI-device extra-coarse/residual-correction local-variable
+  expansion in ``v3_driver.py`` and mirror the grouped setup-control path in
+  ``problems/profile_response/qi_device_seed.py``.
+
+Implementation:
+
+- Added ``rhs1_qi_device_tail_block_required``,
+  ``rhs1_qi_device_coupled_install_on_reject_requested``, and
+  ``rhs1_qi_device_status_fields`` to
+  ``sfincs_jax/problems/profile_response/policies.py``.
+- Replaced the main ``v3_driver.py`` QI-device tail-block predicate,
+  install-on-reject predicate, and repeated accepted/rejected status payloads
+  with those policy helpers.
+- Removed the main driver's residual-correction and extra-coarse local-variable
+  expansion now that setup kwargs, metadata, status, and predicates all use
+  grouped controls.
+- Applied the same setup-kwargs/tail-block pattern to
+  ``problems/profile_response/qi_device_seed.py`` so the seed path no longer
+  repeats the full preconditioner setup argument block.
+- Added direct unit tests for the new helpers, including stable status-field
+  formatting and grouped control predicates.
+- ``solve_v3_full_system_linear_gmres`` is now about ``17641`` lines,
+  ``v3_driver.py`` is about ``22925`` lines, and
+  ``problems/profile_response/qi_device_seed.py`` is about ``884`` lines.
+
+Validation so far:
+
+- ``python -m ruff check sfincs_jax/problems/profile_response/policies.py
+  sfincs_jax/v3_driver.py
+  sfincs_jax/problems/profile_response/qi_device_seed.py
+  tests/test_rhs1_xblock_fallback_initial_guess.py``: passed.
+- ``python -m compileall -q
+  sfincs_jax/problems/profile_response/policies.py sfincs_jax/v3_driver.py
+  sfincs_jax/problems/profile_response/qi_device_seed.py
+  tests/test_rhs1_xblock_fallback_initial_guess.py``: passed.
+- Focused policy/helper/seed and QI-device metadata regressions:
+  ``42 passed in 14.34 s``.
+- Broader current profile-response/x-block/sparse-pattern shard:
+  ``321 passed in 113.26 s``.
+- ``git diff --check``: passed.
+- Latest completed remote PR CI and Docs snapshots are green.
+
+Next refactor target:
+
+- Continue shrinking ``v3_driver.py`` by moving the remaining QI-device
+  seed/reduced-branch rank-budget and metadata/status construction into
+  ``problems/profile_response/qi_device_seed.py`` or the shared policy layer.
+  Keep the next tranche behavior-preserving and covered by the same focused
+  QI-device seed/sparse-pattern tests before broad validation.
