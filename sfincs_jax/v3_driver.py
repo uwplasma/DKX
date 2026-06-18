@@ -207,6 +207,7 @@ from .problems.profile_response.diagnostics import (
     xblock_sparse_pc_result_diagnostics_from_driver_state,
 )
 from .problems.profile_response.sparse_pc import (
+    FortranReducedXBlockKrylovSolveContext,
     SparsePCGMRESContext,
     SparsePCPostMinresContext,
     apply_fortran_reduced_xblock_initial_seed,
@@ -246,6 +247,7 @@ from .problems.profile_response.sparse_pc import (
     resolve_xblock_sparse_pc_setup,
     resolve_xblock_sparse_pc_side_policy_setup,
     resolve_xblock_two_level_policy_setup,
+    run_fortran_reduced_xblock_krylov_solve,
     run_sparse_pc_gmres_once,
     XBlockAssembledPreflightError,
     finalize_xblock_assembled_operator_metadata,
@@ -7254,109 +7256,35 @@ def solve_v3_full_system_linear_gmres(
             if emit is not None:
                 for level, message in initial_seed_result.messages:
                     emit(level, message)
-            if emit is not None:
-                emit(
-                    0,
-                    "solve_v3_full_system_linear_gmres: fortran_reduced_pc_gmres xblock solve start "
-                    f"method={xblock_krylov_method} form={pc_form} "
-                    f"restart={int(pc_restart)} maxiter={int(pc_maxiter)} "
-                    f"precondition_side={precondition_side}",
-                )
-            solve_start_s = sparse_timer.elapsed_s()
-
-            def _xblock_krylov_progress_callback(iteration: int, residual_norm: float) -> None:
-                if emit is None or progress_every <= 0:
-                    return
-                if int(iteration) % int(progress_every) != 0:
-                    return
-                emit(
-                    1,
-                    "solve_v3_full_system_linear_gmres: fortran_reduced_pc_gmres xblock "
-                    f"iters={int(iteration)} ksp_residual={float(residual_norm):.6e} "
-                    f"elapsed_s={sparse_timer.elapsed_s():.3f}",
-                )
-
-            rn_pc = float("nan")
-            if xblock_krylov_method == "lgmres":
-                x_np, residual_norm_sparse_pc, history = lgmres_solve_with_history_scipy(
+            xblock_krylov_result = run_fortran_reduced_xblock_krylov_solve(
+                context=FortranReducedXBlockKrylovSolveContext(
                     matvec=_mv_true,
-                    b=sparse_pc_rhs,
-                    preconditioner=precond_xblock_krylov if precondition_side != "none" else None,
-                    x0=x0_sparse,
-                    tol=tol,
-                    atol=atol,
-                    restart=pc_restart,
-                    maxiter=pc_maxiter,
-                    precondition_side=precondition_side,
-                )
-            elif xblock_krylov_method == "gcrotmk":
-                x_np, residual_norm_sparse_pc, history = gcrotmk_solve_with_history_scipy(
-                    matvec=_mv_true,
-                    b=sparse_pc_rhs,
-                    preconditioner=precond_xblock_krylov if precondition_side != "none" else None,
-                    x0=x0_sparse,
-                    tol=tol,
-                    atol=atol,
-                    restart=pc_restart,
-                    maxiter=pc_maxiter,
-                    precondition_side=precondition_side,
-                )
-            elif xblock_krylov_method == "bicgstab":
-                x_np, residual_norm_sparse_pc, history = bicgstab_solve_with_history_scipy(
-                    matvec=_mv_true,
-                    b=sparse_pc_rhs,
-                    preconditioner=precond_xblock_krylov if precondition_side != "none" else None,
-                    x0=x0_sparse,
-                    tol=tol,
-                    atol=atol,
-                    maxiter=pc_maxiter,
-                    precondition_side=precondition_side,
-                )
-            elif pc_form in {"explicit_left", "petsc_left"}:
-                x_np, residual_norm_sparse_pc, rn_pc, history = explicit_left_preconditioned_gmres_scipy(
-                    matvec=_mv_true,
-                    b=sparse_pc_rhs,
+                    rhs=sparse_pc_rhs,
                     preconditioner=precond_xblock_krylov,
-                    x0=x0_sparse,
-                    tol=tol,
-                    atol=atol,
-                    restart=pc_restart,
-                    maxiter=pc_maxiter,
-                    progress_callback=_xblock_krylov_progress_callback,
-                )
-            else:
-                x_np, residual_norm_sparse_pc, history = gmres_solve_with_history_scipy(
-                    matvec=_mv_true,
-                    b=sparse_pc_rhs,
-                    preconditioner=precond_xblock_krylov if precondition_side != "none" else None,
-                    x0=x0_sparse,
-                    tol=tol,
-                    atol=atol,
-                    restart=pc_restart,
-                    maxiter=pc_maxiter,
-                    precondition_side=precondition_side,
-                    progress_callback=_xblock_krylov_progress_callback,
-                )
-            solve_s = sparse_timer.elapsed_s() - solve_start_s
-            try:
-                residual_true = np.asarray(sparse_pc_rhs, dtype=np.float64) - np.asarray(
-                    jax.device_get(_mv_true(jnp.asarray(x_np, dtype=jnp.float64))),
-                    dtype=np.float64,
-                )
-                residual_norm_sparse_pc = float(np.linalg.norm(residual_true))
-            except Exception:
-                residual_norm_sparse_pc = float(residual_norm_sparse_pc)
-            if emit is not None:
-                pc_suffix = f" preconditioned_residual={float(rn_pc):.6e}" if np.isfinite(rn_pc) else ""
-                if history:
-                    pc_suffix = f"{pc_suffix} ksp_residual={float(history[-1]):.6e}"
-                emit(
-                    0,
-                    "solve_v3_full_system_linear_gmres: fortran_reduced_pc_gmres xblock complete "
-                    f"elapsed_s={sparse_timer.elapsed_s():.3f} iters={len(history or [])} "
-                    f"matvecs={int(mv_count)} residual={float(residual_norm_sparse_pc):.6e} "
-                    f"target={float(target):.6e}{pc_suffix}",
-                )
+                    emit=emit,
+                    elapsed_s=sparse_timer.elapsed_s,
+                    method=str(xblock_krylov_method),
+                    pc_form=str(pc_form),
+                    restart=int(pc_restart),
+                    maxiter=int(pc_maxiter),
+                    tol=float(tol),
+                    atol=float(atol),
+                    target=float(target),
+                    precondition_side=str(precondition_side),
+                    progress_every=int(progress_every),
+                    mv_count=mv_count,
+                    explicit_left_solver=explicit_left_preconditioned_gmres_scipy,
+                    gmres_solver=gmres_solve_with_history_scipy,
+                    lgmres_solver=lgmres_solve_with_history_scipy,
+                    gcrotmk_solver=gcrotmk_solve_with_history_scipy,
+                    bicgstab_solver=bicgstab_solve_with_history_scipy,
+                ),
+                x0=x0_sparse,
+            )
+            x_np = xblock_krylov_result.x
+            residual_norm_sparse_pc = float(xblock_krylov_result.residual_norm)
+            history = tuple(xblock_krylov_result.history)
+            solve_s = float(xblock_krylov_result.solve_s)
             return V3LinearSolveResult(
                 op=op,
                 rhs=rhs,

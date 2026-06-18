@@ -12,6 +12,7 @@ from sfincs_jax.problems.profile_response.active_projection import (
     reduce_full_with_indices,
 )
 from sfincs_jax.problems.profile_response.sparse_pc import (
+    FortranReducedXBlockKrylovSolveContext,
     MatvecCounter,
     SparsePCGMRESContext,
     SparsePCPostMinresContext,
@@ -53,6 +54,7 @@ from sfincs_jax.problems.profile_response.sparse_pc import (
     resolve_xblock_sparse_pc_setup,
     resolve_xblock_sparse_pc_side_policy_setup,
     resolve_xblock_two_level_policy_setup,
+    run_fortran_reduced_xblock_krylov_solve,
     run_sparse_pc_gmres_once,
     finalize_xblock_assembled_operator_metadata,
 )
@@ -378,6 +380,105 @@ def test_fortran_reduced_xblock_initial_seed_rejects_weak_seed() -> None:
     assert result.residual_norm == pytest.approx(2.0)
     assert result.improvement_ratio == pytest.approx(1.0)
     assert any("accepted=False" in message for _, message in result.messages)
+
+
+def test_fortran_reduced_xblock_krylov_solve_runs_gmres_and_true_residual() -> None:
+    messages: list[str] = []
+    counter = MatvecCounter(0)
+    times = iter([1.0, 1.5, 2.0, 2.25])
+
+    def matvec(v: jnp.ndarray) -> jnp.ndarray:
+        counter.increment()
+        return v
+
+    def gmres_solver(**kwargs):
+        assert kwargs["preconditioner"] is None
+        kwargs["progress_callback"](2, 0.25)
+        return np.asarray([1.0, 2.0]), 99.0, [0.5, 0.25]
+
+    def unused_solver(**_kwargs):
+        raise AssertionError("unused")
+
+    result = run_fortran_reduced_xblock_krylov_solve(
+        context=FortranReducedXBlockKrylovSolveContext(
+            matvec=matvec,
+            rhs=jnp.asarray([1.0, 2.0]),
+            preconditioner=_identity,
+            emit=lambda _level, msg: messages.append(msg),
+            elapsed_s=lambda: next(times),
+            method="gmres",
+            pc_form="scipy_left",
+            restart=8,
+            maxiter=3,
+            tol=1.0e-8,
+            atol=1.0e-10,
+            target=1.0e-9,
+            precondition_side="none",
+            progress_every=2,
+            mv_count=counter,
+            explicit_left_solver=unused_solver,
+            gmres_solver=gmres_solver,
+            lgmres_solver=unused_solver,
+            gcrotmk_solver=unused_solver,
+            bicgstab_solver=unused_solver,
+        ),
+        x0=None,
+    )
+
+    assert result.x.tolist() == [1.0, 2.0]
+    assert result.residual_norm == pytest.approx(0.0)
+    assert result.history == (0.5, 0.25)
+    assert result.solve_s == pytest.approx(1.0)
+    assert int(counter) == 1
+    assert any("iters=2 ksp_residual=2.500000e-01" in message for message in messages)
+    assert any("matvecs=1 residual=0.000000e+00" in message for message in messages)
+
+
+def test_fortran_reduced_xblock_krylov_solve_explicit_left_reports_pc_residual() -> None:
+    messages: list[str] = []
+    counter = MatvecCounter(0)
+
+    def matvec(v: jnp.ndarray) -> jnp.ndarray:
+        counter.increment()
+        return v
+
+    def explicit_left_solver(**kwargs):
+        assert kwargs["preconditioner"] is _identity
+        kwargs["progress_callback"](1, 0.125)
+        return np.asarray([3.0]), 4.0, 0.125, [0.125]
+
+    def unused_solver(**_kwargs):
+        raise AssertionError("unused")
+
+    result = run_fortran_reduced_xblock_krylov_solve(
+        context=FortranReducedXBlockKrylovSolveContext(
+            matvec=matvec,
+            rhs=jnp.asarray([3.0]),
+            preconditioner=_identity,
+            emit=lambda _level, msg: messages.append(msg),
+            elapsed_s=lambda: 0.0,
+            method="gmres",
+            pc_form="explicit_left",
+            restart=4,
+            maxiter=2,
+            tol=1.0e-8,
+            atol=1.0e-10,
+            target=1.0e-9,
+            precondition_side="left",
+            progress_every=1,
+            mv_count=counter,
+            explicit_left_solver=explicit_left_solver,
+            gmres_solver=unused_solver,
+            lgmres_solver=unused_solver,
+            gcrotmk_solver=unused_solver,
+            bicgstab_solver=unused_solver,
+        ),
+        x0=None,
+    )
+
+    assert result.residual_norm == pytest.approx(0.0)
+    assert result.preconditioned_residual_norm == pytest.approx(0.125)
+    assert any("preconditioned_residual=1.250000e-01" in message for message in messages)
 
 
 def test_fortran_reduced_xblock_moment_schur_policy_defaults_disabled() -> None:

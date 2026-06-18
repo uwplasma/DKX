@@ -186,6 +186,32 @@ class FortranReducedXBlockInitialSeedResult:
 
 
 @dataclass(frozen=True)
+class FortranReducedXBlockKrylovSolveContext:
+    """Solve-local Krylov dispatch dependencies for fortran-reduced x-block solves."""
+
+    matvec: ArrayFn
+    rhs: jnp.ndarray
+    preconditioner: ArrayFn
+    emit: EmitFn | None
+    elapsed_s: Callable[[], float]
+    method: str
+    pc_form: str
+    restart: int
+    maxiter: int
+    tol: float
+    atol: float
+    target: float
+    precondition_side: str
+    progress_every: int
+    mv_count: MatvecCounter
+    explicit_left_solver: Callable[..., tuple[np.ndarray, float, float, Sequence[float]]]
+    gmres_solver: Callable[..., tuple[np.ndarray, float, Sequence[float]]]
+    lgmres_solver: Callable[..., tuple[np.ndarray, float, Sequence[float]]]
+    gcrotmk_solver: Callable[..., tuple[np.ndarray, float, Sequence[float]]]
+    bicgstab_solver: Callable[..., tuple[np.ndarray, float, Sequence[float]]]
+
+
+@dataclass(frozen=True)
 class SparsePCEntryPolicySetup:
     """Physics classification and GMRES budget for RHSMode=1 sparse-PC paths."""
 
@@ -1093,6 +1119,132 @@ def apply_fortran_reduced_xblock_initial_seed(
         refines_performed=int(refines_performed),
         elapsed_s=float(elapsed),
         messages=messages,
+    )
+
+
+def run_fortran_reduced_xblock_krylov_solve(
+    *,
+    context: FortranReducedXBlockKrylovSolveContext,
+    x0: jnp.ndarray | np.ndarray | None,
+) -> SparsePCGMRESResult:
+    """Run the host Krylov method for a fortran-reduced x-block solve."""
+
+    if context.emit is not None:
+        context.emit(
+            0,
+            "solve_v3_full_system_linear_gmres: fortran_reduced_pc_gmres xblock solve start "
+            f"method={context.method} form={context.pc_form} "
+            f"restart={int(context.restart)} maxiter={int(context.maxiter)} "
+            f"precondition_side={context.precondition_side}",
+        )
+    solve_start_s = float(context.elapsed_s())
+
+    def _progress_callback(iteration: int, residual_norm: float) -> None:
+        if context.emit is None or int(context.progress_every) <= 0:
+            return
+        if int(iteration) % int(context.progress_every) != 0:
+            return
+        context.emit(
+            1,
+            "solve_v3_full_system_linear_gmres: fortran_reduced_pc_gmres xblock "
+            f"iters={int(iteration)} ksp_residual={float(residual_norm):.6e} "
+            f"elapsed_s={float(context.elapsed_s()):.3f}",
+        )
+
+    rn_pc = float("nan")
+    if context.method == "lgmres":
+        x_np, residual_norm, history = context.lgmres_solver(
+            matvec=context.matvec,
+            b=context.rhs,
+            preconditioner=context.preconditioner if context.precondition_side != "none" else None,
+            x0=x0,
+            tol=float(context.tol),
+            atol=float(context.atol),
+            restart=int(context.restart),
+            maxiter=int(context.maxiter),
+            precondition_side=context.precondition_side,
+        )
+    elif context.method == "gcrotmk":
+        x_np, residual_norm, history = context.gcrotmk_solver(
+            matvec=context.matvec,
+            b=context.rhs,
+            preconditioner=context.preconditioner if context.precondition_side != "none" else None,
+            x0=x0,
+            tol=float(context.tol),
+            atol=float(context.atol),
+            restart=int(context.restart),
+            maxiter=int(context.maxiter),
+            precondition_side=context.precondition_side,
+        )
+    elif context.method == "bicgstab":
+        x_np, residual_norm, history = context.bicgstab_solver(
+            matvec=context.matvec,
+            b=context.rhs,
+            preconditioner=context.preconditioner if context.precondition_side != "none" else None,
+            x0=x0,
+            tol=float(context.tol),
+            atol=float(context.atol),
+            maxiter=int(context.maxiter),
+            precondition_side=context.precondition_side,
+        )
+    elif context.pc_form in {"explicit_left", "petsc_left"}:
+        x_np, residual_norm, rn_pc, history = context.explicit_left_solver(
+            matvec=context.matvec,
+            b=context.rhs,
+            preconditioner=context.preconditioner,
+            x0=x0,
+            tol=float(context.tol),
+            atol=float(context.atol),
+            restart=int(context.restart),
+            maxiter=int(context.maxiter),
+            progress_callback=_progress_callback,
+        )
+    else:
+        x_np, residual_norm, history = context.gmres_solver(
+            matvec=context.matvec,
+            b=context.rhs,
+            preconditioner=context.preconditioner if context.precondition_side != "none" else None,
+            x0=x0,
+            tol=float(context.tol),
+            atol=float(context.atol),
+            restart=int(context.restart),
+            maxiter=int(context.maxiter),
+            precondition_side=context.precondition_side,
+            progress_callback=_progress_callback,
+        )
+    solve_s = float(context.elapsed_s()) - solve_start_s
+    try:
+        residual_true = np.asarray(context.rhs, dtype=np.float64) - np.asarray(
+            jax.device_get(context.matvec(jnp.asarray(x_np, dtype=jnp.float64))),
+            dtype=np.float64,
+        )
+        residual_norm = float(np.linalg.norm(residual_true))
+    except Exception:
+        residual_norm = float(residual_norm)
+
+    history_tuple = tuple(float(value) for value in (history or ()))
+    if context.emit is not None:
+        pc_suffix = (
+            f" preconditioned_residual={float(rn_pc):.6e}"
+            if np.isfinite(rn_pc)
+            else ""
+        )
+        if history_tuple:
+            pc_suffix = f"{pc_suffix} ksp_residual={float(history_tuple[-1]):.6e}"
+        context.emit(
+            0,
+            "solve_v3_full_system_linear_gmres: fortran_reduced_pc_gmres xblock complete "
+            f"elapsed_s={float(context.elapsed_s()):.3f} iters={len(history_tuple)} "
+            f"matvecs={int(context.mv_count)} residual={float(residual_norm):.6e} "
+            f"target={float(context.target):.6e}{pc_suffix}",
+        )
+
+    return SparsePCGMRESResult(
+        x=np.asarray(x_np, dtype=np.float64),
+        residual_norm=float(residual_norm),
+        preconditioned_residual_norm=float(rn_pc),
+        history=history_tuple,
+        solve_s=float(solve_s),
     )
 
 
@@ -3790,6 +3942,7 @@ __all__ = [
     "FortranReducedXBlockFactorPolicySetup",
     "FortranReducedXBlockInitialSeedPolicySetup",
     "FortranReducedXBlockInitialSeedResult",
+    "FortranReducedXBlockKrylovSolveContext",
     "FortranReducedXBlockKrylovPolicySetup",
     "MatvecCounter",
     "XBlockAssembledOperatorDiagnosticsContext",
@@ -3811,6 +3964,7 @@ __all__ = [
     "resolve_fortran_reduced_xblock_initial_seed_policy",
     "resolve_fortran_reduced_xblock_krylov_policy",
     "resolve_fortran_reduced_xblock_moment_schur_policy",
+    "run_fortran_reduced_xblock_krylov_solve",
     "run_sparse_pc_gmres_once",
     "sparse_rescue_tail_metadata",
     "sparse_xblock_rescue_metadata",

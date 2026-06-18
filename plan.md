@@ -35315,3 +35315,41 @@ Next refactor target:
 - Extract the fortran-reduced x-block Krylov solve dispatch/progress callback
   or the remaining moment/global build-failure normalization into a cohesive
   helper, then continue shrinking the monolithic solver branch.
+
+### 19.121 Fortran-reduced x-block Krylov-dispatch extraction
+
+Goal:
+
+- Remove the fortran-reduced x-block solve-start logging, Krylov progress
+  callback, method dispatch, final true-residual recomputation, and completion
+  logging from ``v3_driver.py``.
+
+Implementation:
+
+- Added ``FortranReducedXBlockKrylovSolveContext`` and
+  ``run_fortran_reduced_xblock_krylov_solve`` to
+  ``problems/profile_response/sparse_pc.py``.
+- The helper preserves the existing ``gmres``, ``lgmres``, ``gcrotmk``,
+  ``bicgstab``, and explicit-left solve routing, preconditioner-side handling,
+  progress cadence, final true-residual recomputation, and completion message.
+- Updated ``v3_driver.py`` to construct the context and consume the returned
+  solution, residual, history, and solve time.
+- Added focused tests for default GMRES dispatch with true-residual
+  recomputation/progress logging and explicit-left dispatch with preserved
+  preconditioned-residual diagnostics.
+- ``v3_driver.py`` is now about ``20806`` lines and
+  ``solve_v3_full_system_linear_gmres`` about ``15509`` lines.
+
+Validation:
+
+- ``python -m ruff check`` on touched source/tests: passed.
+- ``python -m compileall -q`` on touched source/tests: passed.
+- ``tests/test_profile_response_sparse_pc.py``: ``82 passed``.
+- Broader current profile-response/x-block/sparse-pattern shard:
+  ``359 passed in 113.00 s``.
+
+Next refactor target:
+
+- Consolidate the fortran-reduced x-block return metadata builder or the
+  moment/global preconditioner build-result normalization so the driver branch
+  keeps shrinking without changing numerical behavior.
