@@ -32195,3 +32195,41 @@ Validation so far:
   tests/test_v3_driver_pas_precond_policy_coverage.py
   tests/test_rhs1_schur_policy.py``:
   ``29 passed in 3.87 s``.
+
+### 19.53 Profile-response setup expansion
+
+Goal:
+
+- Continue shrinking ``solve_v3_full_system_linear_gmres`` without adding new
+  narrow modules by moving remaining pure setup decisions into the existing
+  profile-response setup module.
+
+Implementation:
+
+- Extended ``sfincs_jax/problems/profile_response/setup.py`` with typed
+  RHSMode=1 physics-flag setup for DKES, ``includeXDotTerm``,
+  ``includeElectricFieldTermInXiDot``, and radial-electric-field magnitude
+  normalization across historical namelist spellings.
+- Added typed RHSMode=1 domain-decomposition setup for distributed
+  line-Schwarz block sizes and overlaps. The driver now resolves device count,
+  sharding axis, block sizes, and overlap defaults once before the fallback
+  branches instead of re-reading environment variables from nested helper
+  functions.
+- Removed the corresponding nested helpers from ``v3_driver.py`` while keeping
+  the numerical preconditioner/fallback branches unchanged.
+- Added direct unit coverage for the physics flag parser and
+  domain-decomposition parser, including explicit/default block behavior and
+  automatic sharded-overlap behavior.
+
+Validation so far:
+
+- ``python -m ruff check sfincs_jax/problems/profile_response/setup.py
+  sfincs_jax/v3_driver.py tests/test_profile_response_setup.py``: passed.
+- ``python -m compileall -q sfincs_jax/problems/profile_response/setup.py
+  sfincs_jax/v3_driver.py tests/test_profile_response_setup.py``: passed.
+- ``PYTHONDONTWRITEBYTECODE=1 pytest -q -p no:cacheprovider
+  tests/test_profile_response_setup.py
+  tests/test_v3_driver_pas_precond_policy_coverage.py
+  tests/test_rhs1_schur_policy.py
+  tests/test_v3_sparse_pattern.py::test_auto_selects_fortran_reduced_pc_gmres_for_large_full_fp_rhs1``:
+  ``30 passed in 2.16 s``.

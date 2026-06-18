@@ -6,7 +6,9 @@ from sfincs_jax.problems.profile_response.setup import (
     SPARSE_HOST_SAFE_SOLVE_METHODS,
     equilibrium_name_hint_from_namelist,
     geometry_scheme_hint_from_namelist,
+    resolve_rhs1_domain_decomposition_setup,
     resolve_rhs1_gmres_budget_setup,
+    resolve_rhs1_physics_flag_setup,
     resolve_rhs1_preconditioner_option_setup,
     resolve_rhs1_tolerance_setup,
     resolve_solve_method_request_flags,
@@ -62,6 +64,27 @@ def test_geometry_hints_accept_v3_case_variants() -> None:
 
     assert geometry_scheme_hint_from_namelist(nml) == 5
     assert equilibrium_name_hint_from_namelist(nml) == "wout_w7x.nc"
+
+
+def test_rhs1_physics_flag_setup_preserves_namelist_spelling_variants() -> None:
+    nml = FakeNamelist(
+        {
+            "physicsParameters": {
+                "useDKESExBdrift": ".true.",
+                "includeXDotTerm": 1,
+                "includeElectricFieldTermInXiDot": "yes",
+                "dPhiHatdrN": "-2.5",
+                "Er": "not-a-number",
+            }
+        }
+    )
+
+    setup = resolve_rhs1_physics_flag_setup(nml)
+
+    assert setup.use_dkes
+    assert setup.include_xdot_sparse_pc
+    assert setup.include_electric_field_xi_sparse_pc
+    assert setup.er_abs_sparse_pc == 2.5
 
 
 def test_rhs1_tolerance_setup_tightens_only_matching_physics_lanes() -> None:
@@ -180,3 +203,50 @@ def test_preconditioner_option_setup_controls_pas_projection() -> None:
     assert disabled.full_preconditioner_requested
     assert not disabled.pas_project_enabled
     assert not disabled.use_pas_projection
+
+
+def test_rhs1_domain_decomposition_setup_resolves_explicit_and_default_blocks() -> None:
+    setup = resolve_rhs1_domain_decomposition_setup(
+        n_theta=25,
+        n_zeta=39,
+        sum_nxi=60,
+        distributed_env="off",
+        device_count=4,
+        auto_axis="theta",
+        theta_block_env="11",
+        zeta_block_env="bad",
+        theta_overlap_env="2",
+        zeta_overlap_env="",
+        overlap_env="",
+        patch_dof_target_env="bad",
+    )
+
+    assert setup.sharded_axis is None
+    assert setup.patch_dof_target == 1200
+    assert setup.block("theta") == 11
+    assert setup.block("zeta") == 8
+    assert setup.overlap("theta", default=1) == 2
+    assert setup.overlap("zeta", default=3) == 3
+
+
+def test_rhs1_domain_decomposition_setup_auto_blocks_and_overlaps_for_sharded_axis() -> None:
+    setup = resolve_rhs1_domain_decomposition_setup(
+        n_theta=25,
+        n_zeta=39,
+        sum_nxi=60,
+        distributed_env="auto",
+        device_count=2,
+        auto_axis="zeta",
+        theta_block_env="",
+        zeta_block_env="",
+        theta_overlap_env="",
+        zeta_overlap_env="",
+        overlap_env="",
+        patch_dof_target_env="700",
+    )
+
+    assert setup.sharded_axis == "zeta"
+    assert setup.block("theta") == 8
+    assert 1 <= setup.block("zeta") <= 39
+    assert setup.overlap("theta", default=0) == 0
+    assert setup.overlap("zeta", default=0) >= 1

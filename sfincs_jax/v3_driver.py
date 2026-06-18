@@ -80,13 +80,6 @@ from .explicit_sparse_factor_policy import (
     explicit_sparse_monolithic_max_size as _explicit_sparse_monolithic_max_size,
 )
 from .rhs1_device_operator import device_csr_from_matrix, validate_device_csr_matvec
-from .rhs1_domain_decomposition import (
-    _dd_core_patch_ranges,
-    _rhs1_dd_auto_block_size,
-    _rhs1_dd_coarse_block_size,
-    _rhs1_dd_coarse_block_sizes,
-    _rhs1_dd_coarse_level_count,
-)
 from .rhs1_qi_coarse import (
     RHS1QICoarseBasis,
     apply_rhs1_qi_coarse_correction,
@@ -199,7 +192,9 @@ from .problems.profile_response.setup import (
     STRUCTURED_FULL_CSR_HOST_SOLVE_METHODS as _STRUCTURED_FULL_CSR_HOST_SOLVE_METHODS,
     equilibrium_name_hint_from_namelist,
     geometry_scheme_hint_from_namelist,
+    resolve_rhs1_domain_decomposition_setup,
     resolve_rhs1_gmres_budget_setup,
+    resolve_rhs1_physics_flag_setup,
     resolve_rhs1_preconditioner_option_setup,
     resolve_rhs1_tolerance_setup,
     resolve_solve_method_request_flags,
@@ -3398,54 +3393,11 @@ def solve_v3_full_system_linear_gmres(
     nxi_for_x = np.asarray(op.fblock.collisionless.n_xi_for_x, dtype=np.int32)
     max_l = int(np.max(nxi_for_x)) if nxi_for_x.size else 0
     has_reduced_modes = bool(np.any(nxi_for_x < int(op.n_xi)))
-    phys_params = nml.group("physicsParameters")
-    def _nml_get(group: dict, key: str, default=None):
-        if key in group:
-            return group[key]
-        key_upper = key.upper()
-        if key_upper in group:
-            return group[key_upper]
-        key_lower = key.lower()
-        if key_lower in group:
-            return group[key_lower]
-        return default
-
-    def _nml_bool(val: object | None) -> bool:
-        if val is None:
-            return False
-        if isinstance(val, bool):
-            return bool(val)
-        if isinstance(val, (int, np.integer)):
-            return bool(int(val))
-        if isinstance(val, (float, np.floating)):
-            return bool(float(val))
-        if isinstance(val, str):
-            return val.strip().lower() in {"t", "true", "1", "yes", ".true.", ".t."}
-        return False
-    use_dkes = _nml_bool(
-        _nml_get(
-            phys_params,
-            "useDKESExBDrift",
-            _nml_get(phys_params, "useDKESExBdrift", _nml_get(phys_params, "use_dkes_exb_drift", None)),
-        )
-    )
-    include_xdot_sparse_pc = _nml_bool(_nml_get(phys_params, "includeXDotTerm", None))
-    include_electric_field_xi_sparse_pc = _nml_bool(_nml_get(phys_params, "includeElectricFieldTermInXiDot", None))
-
-    def _nml_abs_float(key: str) -> float:
-        value = _nml_get(phys_params, key, None)
-        try:
-            return abs(float(value)) if value is not None else 0.0
-        except (TypeError, ValueError):
-            return 0.0
-
-    er_abs_sparse_pc = max(
-        _nml_abs_float("Er"),
-        _nml_abs_float("dPhiHatdpsiHat"),
-        _nml_abs_float("dPhiHatdpsiN"),
-        _nml_abs_float("dPhiHatdrHat"),
-        _nml_abs_float("dPhiHatdrN"),
-    )
+    physics_flag_setup = resolve_rhs1_physics_flag_setup(nml)
+    use_dkes = bool(physics_flag_setup.use_dkes)
+    include_xdot_sparse_pc = bool(physics_flag_setup.include_xdot_sparse_pc)
+    include_electric_field_xi_sparse_pc = bool(physics_flag_setup.include_electric_field_xi_sparse_pc)
+    er_abs_sparse_pc = float(physics_flag_setup.er_abs_sparse_pc)
     if (
         int(op.rhs_mode) == 1
         and (not bool(op.include_phi1))
@@ -15398,79 +15350,20 @@ def solve_v3_full_system_linear_gmres(
     rhs1_precond_kind: str | None
     rhs1_xblock_tz_lmax: int | None = None
     rhs1_gpu_tokamak_pas_tight_gmres = False
-    def _rhs1_dd_sharded_axis() -> str | None:
-        gmres_dist_env = os.environ.get("SFINCS_JAX_GMRES_DISTRIBUTED", "").strip().lower()
-        if gmres_dist_env in {"0", "false", "no", "off"}:
-            return None
-        if jax.device_count() <= 1:
-            return None
-        if gmres_dist_env in {"theta", "zeta"}:
-            return gmres_dist_env
-        axis_auto = _matvec_shard_axis(op)
-        return axis_auto if axis_auto in {"theta", "zeta"} else None
-
-    def _rhs1_dd_patch_dof_target() -> int:
-        target_env = os.environ.get("SFINCS_JAX_RHSMODE1_SCHWARZ_PATCH_DOF_TARGET", "").strip()
-        try:
-            target = int(target_env) if target_env else 1200
-        except ValueError:
-            target = 1200
-        return max(128, int(target))
-
-    def _rhs1_dd_sum_nxi() -> int:
-        nxi_for_x = np.asarray(op.fblock.collisionless.n_xi_for_x, dtype=np.int32)
-        return max(1, int(np.sum(nxi_for_x)))
-
-    def _parse_rhs1_dd_block(axis: str) -> int:
-        if axis == "theta":
-            env_key = "SFINCS_JAX_RHSMODE1_DD_BLOCK_T"
-            n = int(op.n_theta)
-        else:
-            env_key = "SFINCS_JAX_RHSMODE1_DD_BLOCK_Z"
-            n = int(op.n_zeta)
-        env = os.environ.get(env_key, "").strip()
-        try:
-            block = int(env) if env else 0
-        except ValueError:
-            block = 0
-        if block <= 0 and _rhs1_dd_sharded_axis() == axis:
-            n_dev = max(1, int(jax.device_count()))
-            sum_nxi = _rhs1_dd_sum_nxi()
-            block = _rhs1_dd_auto_block_size(
-                n=int(n),
-                n_dev=n_dev,
-                sum_nxi=sum_nxi,
-                dof_target=_rhs1_dd_patch_dof_target(),
-            )
-        if block <= 0:
-            block = 8
-        return max(1, min(max(1, n), int(block)))
-
-    def _parse_rhs1_dd_overlap(axis: str, *, default: int) -> int:
-        if axis == "theta":
-            axis_key = "SFINCS_JAX_RHSMODE1_DD_OVERLAP_T"
-            n = int(op.n_theta)
-        else:
-            axis_key = "SFINCS_JAX_RHSMODE1_DD_OVERLAP_Z"
-            n = int(op.n_zeta)
-        env_axis = os.environ.get(axis_key, "").strip()
-        env_generic = os.environ.get("SFINCS_JAX_RHSMODE1_DD_OVERLAP", "").strip()
-        raw = env_axis if env_axis else env_generic
-        try:
-            overlap = int(raw) if raw else -1
-        except ValueError:
-            overlap = -1
-        if overlap < 0 and _rhs1_dd_sharded_axis() == axis:
-            block_auto = _parse_rhs1_dd_block(axis)
-            sum_nxi = _rhs1_dd_sum_nxi()
-            target = _rhs1_dd_patch_dof_target()
-            overlap = 2 if int(block_auto) >= 4 else 1
-            while overlap > 1 and int(block_auto + 2 * overlap) * int(sum_nxi) > int(target):
-                overlap -= 1
-            overlap = max(1, int(overlap))
-        if overlap < 0:
-            overlap = int(default)
-        return max(0, min(max(0, n - 1), int(overlap)))
+    rhs1_dd_setup = resolve_rhs1_domain_decomposition_setup(
+        n_theta=int(op.n_theta),
+        n_zeta=int(op.n_zeta),
+        sum_nxi=int(np.sum(nxi_for_x)) if nxi_for_x.size else 1,
+        distributed_env=os.environ.get("SFINCS_JAX_GMRES_DISTRIBUTED", ""),
+        device_count=int(jax.device_count()),
+        auto_axis=_matvec_shard_axis(op),
+        theta_block_env=os.environ.get("SFINCS_JAX_RHSMODE1_DD_BLOCK_T", ""),
+        zeta_block_env=os.environ.get("SFINCS_JAX_RHSMODE1_DD_BLOCK_Z", ""),
+        theta_overlap_env=os.environ.get("SFINCS_JAX_RHSMODE1_DD_OVERLAP_T", ""),
+        zeta_overlap_env=os.environ.get("SFINCS_JAX_RHSMODE1_DD_OVERLAP_Z", ""),
+        overlap_env=os.environ.get("SFINCS_JAX_RHSMODE1_DD_OVERLAP", ""),
+        patch_dof_target_env=os.environ.get("SFINCS_JAX_RHSMODE1_SCHWARZ_PATCH_DOF_TARGET", ""),
+    )
 
     pas_auto_strong_ratio_env = os.environ.get("SFINCS_JAX_PAS_AUTO_STRONG_RATIO", "").strip()
     try:
@@ -17384,10 +17277,16 @@ def solve_v3_full_system_linear_gmres(
                 preconditioner_x=preconditioner_x,
                 preconditioner_xi=preconditioner_xi,
                 rhs1_xblock_tz_lmax=lmax_use,
-                dd_block_theta=_parse_rhs1_dd_block("theta"),
-                dd_overlap_theta=_parse_rhs1_dd_overlap("theta", default=1 if rhs1_precond_kind == "theta_schwarz" else 0),
-                dd_block_zeta=_parse_rhs1_dd_block("zeta"),
-                dd_overlap_zeta=_parse_rhs1_dd_overlap("zeta", default=1 if rhs1_precond_kind == "zeta_schwarz" else 0),
+                dd_block_theta=rhs1_dd_setup.block("theta"),
+                dd_overlap_theta=rhs1_dd_setup.overlap(
+                    "theta",
+                    default=1 if rhs1_precond_kind == "theta_schwarz" else 0,
+                ),
+                dd_block_zeta=rhs1_dd_setup.block("zeta"),
+                dd_overlap_zeta=rhs1_dd_setup.overlap(
+                    "zeta",
+                    default=1 if rhs1_precond_kind == "zeta_schwarz" else 0,
+                ),
                 adi_sweeps=max(1, sweeps),
                 emit=emit,
             )
@@ -20015,8 +19914,8 @@ def solve_v3_full_system_linear_gmres(
                     op=op, reduce_full=reduce_full, expand_reduced=expand_reduced
                 )
             elif strong_precond_kind == "theta_schwarz":
-                dd_block = _parse_rhs1_dd_block("theta")
-                dd_overlap = _parse_rhs1_dd_overlap("theta", default=1)
+                dd_block = rhs1_dd_setup.block("theta")
+                dd_overlap = rhs1_dd_setup.overlap("theta", default=1)
                 strong_preconditioner_reduced = _build_rhsmode1_theta_schwarz_preconditioner(
                     op=op,
                     block=dd_block,
@@ -20086,8 +19985,8 @@ def solve_v3_full_system_linear_gmres(
                     op=op, reduce_full=reduce_full, expand_reduced=expand_reduced
                 )
             elif strong_precond_kind == "zeta_schwarz":
-                dd_block = _parse_rhs1_dd_block("zeta")
-                dd_overlap = _parse_rhs1_dd_overlap("zeta", default=1)
+                dd_block = rhs1_dd_setup.block("zeta")
+                dd_overlap = rhs1_dd_setup.overlap("zeta", default=1)
                 strong_preconditioner_reduced = _build_rhsmode1_zeta_schwarz_preconditioner(
                     op=op,
                     block=dd_block,
@@ -23742,10 +23641,16 @@ def solve_v3_full_system_linear_gmres(
                     preconditioner_x=preconditioner_x,
                     preconditioner_xi=preconditioner_xi,
                     rhs1_xblock_tz_lmax=lmax_use,
-                    dd_block_theta=_parse_rhs1_dd_block("theta"),
-                    dd_overlap_theta=_parse_rhs1_dd_overlap("theta", default=1 if rhs1_precond_kind == "theta_schwarz" else 0),
-                    dd_block_zeta=_parse_rhs1_dd_block("zeta"),
-                    dd_overlap_zeta=_parse_rhs1_dd_overlap("zeta", default=1 if rhs1_precond_kind == "zeta_schwarz" else 0),
+                    dd_block_theta=rhs1_dd_setup.block("theta"),
+                    dd_overlap_theta=rhs1_dd_setup.overlap(
+                        "theta",
+                        default=1 if rhs1_precond_kind == "theta_schwarz" else 0,
+                    ),
+                    dd_block_zeta=rhs1_dd_setup.block("zeta"),
+                    dd_overlap_zeta=rhs1_dd_setup.overlap(
+                        "zeta",
+                        default=1 if rhs1_precond_kind == "zeta_schwarz" else 0,
+                    ),
                     adi_sweeps=max(1, sweeps),
                     emit=emit,
                 )
@@ -24262,10 +24167,10 @@ def solve_v3_full_system_linear_gmres(
             float(result.residual_norm),
             float(target),
         ):
-            dd_block_theta = _parse_rhs1_dd_block("theta")
-            dd_overlap_theta = _parse_rhs1_dd_overlap("theta", default=1)
-            dd_block_zeta = _parse_rhs1_dd_block("zeta")
-            dd_overlap_zeta = _parse_rhs1_dd_overlap("zeta", default=1)
+            dd_block_theta = rhs1_dd_setup.block("theta")
+            dd_overlap_theta = rhs1_dd_setup.overlap("theta", default=1)
+            dd_block_zeta = rhs1_dd_setup.block("zeta")
+            dd_overlap_zeta = rhs1_dd_setup.overlap("zeta", default=1)
             sweeps_env = os.environ.get("SFINCS_JAX_RHSMODE1_ADI_SWEEPS", "").strip()
             try:
                 adi_sweeps = int(sweeps_env) if sweeps_env else 2

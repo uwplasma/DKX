@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass
+from numbers import Integral, Real
 from typing import Any
 
 
@@ -108,6 +109,16 @@ class RHS1ToleranceSetup:
 
 
 @dataclass(frozen=True)
+class RHS1PhysicsFlagSetup:
+    """Physics flags that affect RHSMode=1 sparse/preconditioner policy."""
+
+    use_dkes: bool
+    include_xdot_sparse_pc: bool
+    include_electric_field_xi_sparse_pc: bool
+    er_abs_sparse_pc: float
+
+
+@dataclass(frozen=True)
 class SolveMethodRequestFlags:
     """Normalized solve-method token plus coarse branch classifications."""
 
@@ -135,6 +146,44 @@ class RHS1PreconditionerOptionSetup:
     pas_project_enabled: bool
     use_pas_projection: bool
     use_active_dof_mode: bool
+
+
+@dataclass(frozen=True)
+class RHS1DomainDecompositionSetup:
+    """Parsed block/overlap sizes for RHSMode=1 line-Schwarz preconditioners."""
+
+    sharded_axis: str | None
+    patch_dof_target: int
+    sum_nxi: int
+    block_theta: int
+    block_zeta: int
+    overlap_theta: int | None
+    overlap_zeta: int | None
+    n_theta: int
+    n_zeta: int
+
+    def block(self, axis: str) -> int:
+        """Return the clamped block size for ``theta`` or ``zeta``."""
+
+        if axis == "theta":
+            return int(self.block_theta)
+        if axis == "zeta":
+            return int(self.block_zeta)
+        raise ValueError(f"unsupported RHSMode=1 DD axis: {axis!r}")
+
+    def overlap(self, axis: str, *, default: int) -> int:
+        """Return the clamped overlap, using ``default`` when no override exists."""
+
+        if axis == "theta":
+            n = int(self.n_theta)
+            value = self.overlap_theta
+        elif axis == "zeta":
+            n = int(self.n_zeta)
+            value = self.overlap_zeta
+        else:
+            raise ValueError(f"unsupported RHSMode=1 DD axis: {axis!r}")
+        overlap = int(default) if value is None else int(value)
+        return max(0, min(max(0, n - 1), int(overlap)))
 
 
 def _env_value(env: Mapping[str, str] | None, key: str) -> str:
@@ -168,6 +217,28 @@ def _nml_get(group: Mapping[str, object], key: str, default: object | None = Non
     if key_lower in group:
         return group[key_lower]
     return default
+
+
+def _nml_bool(value: object | None) -> bool:
+    if value is None:
+        return False
+    if isinstance(value, bool):
+        return bool(value)
+    if isinstance(value, Integral):
+        return bool(int(value))
+    if isinstance(value, Real):
+        return bool(float(value))
+    if isinstance(value, str):
+        return value.strip().lower() in {"t", "true", "1", "yes", ".true.", ".t."}
+    return False
+
+
+def _nml_abs_float(group: Mapping[str, object], key: str) -> float:
+    value = _nml_get(group, key, None)
+    try:
+        return abs(float(value)) if value is not None else 0.0
+    except (TypeError, ValueError):
+        return 0.0
 
 
 def _preconditioner_option_int(options: Mapping[str, object], key: str, default: int) -> int:
@@ -300,6 +371,38 @@ def resolve_rhs1_tolerance_setup(
     )
 
 
+def resolve_rhs1_physics_flag_setup(nml: Any) -> RHS1PhysicsFlagSetup:
+    """Resolve RHSMode=1 physics flags from namelist spelling variants."""
+
+    phys_params = nml.group("physicsParameters")
+    use_dkes = _nml_bool(
+        _nml_get(
+            phys_params,
+            "useDKESExBDrift",
+            _nml_get(
+                phys_params,
+                "useDKESExBdrift",
+                _nml_get(phys_params, "use_dkes_exb_drift", None),
+            ),
+        )
+    )
+    include_xdot = _nml_bool(_nml_get(phys_params, "includeXDotTerm", None))
+    include_electric_field_xi = _nml_bool(_nml_get(phys_params, "includeElectricFieldTermInXiDot", None))
+    er_abs = max(
+        _nml_abs_float(phys_params, "Er"),
+        _nml_abs_float(phys_params, "dPhiHatdpsiHat"),
+        _nml_abs_float(phys_params, "dPhiHatdpsiN"),
+        _nml_abs_float(phys_params, "dPhiHatdrHat"),
+        _nml_abs_float(phys_params, "dPhiHatdrN"),
+    )
+    return RHS1PhysicsFlagSetup(
+        use_dkes=bool(use_dkes),
+        include_xdot_sparse_pc=bool(include_xdot),
+        include_electric_field_xi_sparse_pc=bool(include_electric_field_xi),
+        er_abs_sparse_pc=float(er_abs),
+    )
+
+
 def normalize_profile_solve_method_kind(solve_method: str) -> str:
     """Normalize user solve-method tokens to the internal underscore style."""
 
@@ -340,6 +443,87 @@ def resolve_solve_method_request_flags(
         sparse_host_like_requested=bool(sparse_host_like_requested),
         xblock_active_dof_requested=bool(xblock_active_dof_requested),
         structured_full_csr_explicit_requested=bool(kind in STRUCTURED_FULL_CSR_HOST_SOLVE_METHODS),
+    )
+
+
+def _read_int_value(raw: object, default: int) -> int:
+    try:
+        text = str(raw).strip()
+        return int(text) if text else int(default)
+    except (TypeError, ValueError):
+        return int(default)
+
+
+def resolve_rhs1_domain_decomposition_setup(
+    *,
+    n_theta: int,
+    n_zeta: int,
+    sum_nxi: int,
+    distributed_env: str,
+    device_count: int,
+    auto_axis: str | None,
+    theta_block_env: str,
+    zeta_block_env: str,
+    theta_overlap_env: str,
+    zeta_overlap_env: str,
+    overlap_env: str,
+    patch_dof_target_env: str,
+) -> RHS1DomainDecompositionSetup:
+    """Resolve RHSMode=1 domain-decomposition block and overlap settings."""
+
+    from ...rhs1_domain_decomposition import _rhs1_dd_auto_block_size
+
+    dist = str(distributed_env or "").strip().lower()
+    if dist in {"0", "false", "no", "off"} or int(device_count) <= 1:
+        axis: str | None = None
+    elif dist in {"theta", "zeta"}:
+        axis = dist
+    else:
+        axis_auto = str(auto_axis or "").strip().lower()
+        axis = axis_auto if axis_auto in {"theta", "zeta"} else None
+
+    patch_dof_target = max(128, _read_int_value(patch_dof_target_env, 1200))
+    n_dev = max(1, int(device_count))
+    sum_nxi_use = max(1, int(sum_nxi))
+
+    def _block(axis_name: str, *, raw: str, n: int) -> int:
+        block = _read_int_value(raw, 0)
+        if block <= 0 and axis == axis_name:
+            block = _rhs1_dd_auto_block_size(
+                n=int(n),
+                n_dev=n_dev,
+                sum_nxi=sum_nxi_use,
+                dof_target=patch_dof_target,
+            )
+        if block <= 0:
+            block = 8
+        return max(1, min(max(1, int(n)), int(block)))
+
+    block_theta = _block("theta", raw=theta_block_env, n=int(n_theta))
+    block_zeta = _block("zeta", raw=zeta_block_env, n=int(n_zeta))
+
+    def _overlap(axis_name: str, *, raw_axis: str, raw_generic: str, block: int) -> int | None:
+        raw = str(raw_axis or "").strip() or str(raw_generic or "").strip()
+        overlap = _read_int_value(raw, -1)
+        if overlap < 0 and axis == axis_name:
+            overlap = 2 if int(block) >= 4 else 1
+            while overlap > 1 and int(block + 2 * overlap) * sum_nxi_use > patch_dof_target:
+                overlap -= 1
+            return max(1, int(overlap))
+        if overlap < 0:
+            return None
+        return int(overlap)
+
+    return RHS1DomainDecompositionSetup(
+        sharded_axis=axis,
+        patch_dof_target=int(patch_dof_target),
+        sum_nxi=int(sum_nxi_use),
+        block_theta=int(block_theta),
+        block_zeta=int(block_zeta),
+        overlap_theta=_overlap("theta", raw_axis=theta_overlap_env, raw_generic=overlap_env, block=block_theta),
+        overlap_zeta=_overlap("zeta", raw_axis=zeta_overlap_env, raw_generic=overlap_env, block=block_zeta),
+        n_theta=int(n_theta),
+        n_zeta=int(n_zeta),
     )
 
 
@@ -413,7 +597,9 @@ def resolve_rhs1_preconditioner_option_setup(
 
 
 __all__ = (
+    "RHS1DomainDecompositionSetup",
     "RHS1GmresBudgetSetup",
+    "RHS1PhysicsFlagSetup",
     "RHS1PreconditionerOptionSetup",
     "RHS1ToleranceSetup",
     "SPARSE_HOST_DIRECT_SOLVE_METHODS",
@@ -428,7 +614,9 @@ __all__ = (
     "equilibrium_name_hint_from_namelist",
     "geometry_scheme_hint_from_namelist",
     "normalize_profile_solve_method_kind",
+    "resolve_rhs1_domain_decomposition_setup",
     "resolve_rhs1_gmres_budget_setup",
+    "resolve_rhs1_physics_flag_setup",
     "resolve_rhs1_preconditioner_option_setup",
     "resolve_rhs1_tolerance_setup",
     "resolve_solve_method_request_flags",
