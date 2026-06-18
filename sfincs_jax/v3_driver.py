@@ -226,6 +226,7 @@ from .problems.profile_response.sparse_pc import (
     prepare_xblock_initial_guess,
     resolve_sparse_pc_entry_policy,
     resolve_fortran_reduced_sparse_pc_backend,
+    resolve_fortran_reduced_xblock_factor_policy,
     resolve_xblock_qi_device_admission_setup,
     resolve_xblock_qi_device_base_config_setup,
     resolve_xblock_qi_device_enrichment_config_setup,
@@ -6965,60 +6966,18 @@ def solve_v3_full_system_linear_gmres(
                     "full-FP RHSMode=1 systems."
                 )
 
-            def _env_float_with_fallback(names: tuple[str, ...], default: float) -> float:
-                for name in names:
-                    raw = os.environ.get(name, "").strip()
-                    if not raw:
-                        continue
-                    try:
-                        return float(raw)
-                    except ValueError:
-                        return float(default)
-                return float(default)
-
-            xblock_drop_tol = _env_float_with_fallback(
-                (
-                    "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_XBLOCK_PC_DROP_TOL",
-                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_DROP_TOL",
-                ),
-                0.0,
+            xblock_factor_policy = resolve_fortran_reduced_xblock_factor_policy(
+                env=os.environ,
+                preconditioner_xi=int(preconditioner_xi),
             )
-            xblock_drop_rel = _env_float_with_fallback(
-                (
-                    "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_XBLOCK_PC_DROP_REL",
-                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_DROP_REL",
-                ),
-                1.0e-8,
-            )
-            xblock_ilu_drop_tol = _env_float_with_fallback(
-                (
-                    "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_XBLOCK_PC_ILU_DROP_TOL",
-                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_ILU_DROP_TOL",
-                ),
-                1.0e-4,
-            )
-            xblock_fill_factor = _env_float_with_fallback(
-                (
-                    "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_XBLOCK_PC_FILL_FACTOR",
-                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_FILL_FACTOR",
-                ),
-                10.0,
-            )
-            xblock_preconditioner_xi = int(preconditioner_xi)
-            promote_xi_raw = (
-                os.environ.get("SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_XBLOCK_PROMOTE_XI", "1")
-                .strip()
-                .lower()
-            )
-            promote_xi = promote_xi_raw not in {"0", "false", "f", "no", "off", ".false.", ".f."}
-            if xblock_preconditioner_xi == 0 and bool(promote_xi):
-                xblock_preconditioner_xi = 1
-                if emit is not None:
-                    emit(
-                        1,
-                        "solve_v3_full_system_linear_gmres: fortran_reduced_pc_gmres "
-                        "promoting x-block backend preconditioner_xi 0 -> 1 for stronger FP block factors",
-                    )
+            xblock_drop_tol = xblock_factor_policy.drop_tol
+            xblock_drop_rel = xblock_factor_policy.drop_rel
+            xblock_ilu_drop_tol = xblock_factor_policy.ilu_drop_tol
+            xblock_fill_factor = xblock_factor_policy.fill_factor
+            xblock_preconditioner_xi = xblock_factor_policy.preconditioner_xi
+            if emit is not None:
+                for level, message in xblock_factor_policy.messages:
+                    emit(level, message)
             force_assembled_host_fp = _rhsmode1_fp_xblock_assembled_host_allowed(
                 op=op_pc,
                 preconditioner_species=preconditioner_species,

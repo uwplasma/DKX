@@ -35083,3 +35083,41 @@ Next refactor target:
   block, starting with the local environment parser and x-block promote-Xi /
   factor-policy setup, while keeping path-routing tests in
   ``test_v3_sparse_pattern.py`` green.
+
+### 19.115 Fortran-reduced x-block factor-policy extraction
+
+Goal:
+
+- Remove the local fortran-reduced x-block factor environment parser and
+  ``preconditioner_xi`` promotion policy from ``v3_driver.py``.
+
+Implementation:
+
+- Added ``FortranReducedXBlockFactorPolicySetup`` and
+  ``resolve_fortran_reduced_xblock_factor_policy`` to
+  ``problems/profile_response/sparse_pc.py``.
+- The resolver preserves the existing specific-env-over-generic-env
+  precedence for drop tolerances, relative drop, ILU drop tolerance, and fill
+  factor.
+- Moved default x-block ``preconditioner_xi=0`` promotion and its diagnostic
+  message into the resolver; explicit off settings still leave ``xi=0``.
+- Updated ``v3_driver.py`` to consume the resolver before the existing
+  ``force_assembled_host_fp`` capability decision and x-block factor build.
+- Added focused tests for specific/generic env precedence, invalid-value
+  fallback, default Xi promotion, and explicit promotion disablement.
+- ``v3_driver.py`` is now about ``20985`` lines and
+  ``solve_v3_full_system_linear_gmres`` about ``15694`` lines.
+
+Validation:
+
+- ``python -m ruff check`` on touched source/tests: passed.
+- ``python -m compileall -q`` on touched source/tests: passed.
+- ``tests/test_profile_response_sparse_pc.py``: ``67 passed``.
+- Broader current profile-response/x-block/sparse-pattern shard:
+  ``344 passed in 107.02 s``.
+
+Next refactor target:
+
+- Extract the remaining fortran-reduced x-block Krylov/GMRES policy setup
+  around side selection, method normalization, progress cadence, and matvec
+  counter setup, or pause to check CI if a non-cancelled failure appears.

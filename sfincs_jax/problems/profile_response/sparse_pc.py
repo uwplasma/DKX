@@ -138,6 +138,19 @@ class FortranReducedSparsePCBackendSetup:
 
 
 @dataclass(frozen=True)
+class FortranReducedXBlockFactorPolicySetup:
+    """Local x-block factor controls for fortran-reduced sparse-PC solves."""
+
+    drop_tol: float
+    drop_rel: float
+    ilu_drop_tol: float
+    fill_factor: float
+    preconditioner_xi: int
+    promote_xi: bool
+    messages: tuple[tuple[int, str], ...]
+
+
+@dataclass(frozen=True)
 class SparsePCEntryPolicySetup:
     """Physics classification and GMRES budget for RHSMode=1 sparse-PC paths."""
 
@@ -784,6 +797,98 @@ def resolve_fortran_reduced_sparse_pc_backend(
         ),
         backend=backend,
         reason=reason,
+        messages=messages,
+    )
+
+
+def _env_float_first(
+    env: Mapping[str, str] | None,
+    names: Sequence[str],
+    default: float,
+) -> float:
+    for name in names:
+        raw = _env_value(env, name)
+        if not raw:
+            continue
+        try:
+            return float(raw)
+        except ValueError:
+            return float(default)
+    return float(default)
+
+
+def resolve_fortran_reduced_xblock_factor_policy(
+    *,
+    env: Mapping[str, str] | None,
+    preconditioner_xi: int,
+) -> FortranReducedXBlockFactorPolicySetup:
+    """Resolve x-block factor tolerances for fortran-reduced sparse-PC solves."""
+
+    drop_tol = _env_float_first(
+        env,
+        (
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_XBLOCK_PC_DROP_TOL",
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_DROP_TOL",
+        ),
+        0.0,
+    )
+    drop_rel = _env_float_first(
+        env,
+        (
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_XBLOCK_PC_DROP_REL",
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_DROP_REL",
+        ),
+        1.0e-8,
+    )
+    ilu_drop_tol = _env_float_first(
+        env,
+        (
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_XBLOCK_PC_ILU_DROP_TOL",
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_ILU_DROP_TOL",
+        ),
+        1.0e-4,
+    )
+    fill_factor = _env_float_first(
+        env,
+        (
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_XBLOCK_PC_FILL_FACTOR",
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_FILL_FACTOR",
+        ),
+        10.0,
+    )
+    xblock_preconditioner_xi = int(preconditioner_xi)
+    promote_xi_raw = _env_value(
+        env,
+        "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_XBLOCK_PROMOTE_XI",
+    ).lower()
+    promote_xi = promote_xi_raw not in {
+        "0",
+        "false",
+        "f",
+        "no",
+        "off",
+        ".false.",
+        ".f.",
+    }
+
+    messages: tuple[tuple[int, str], ...] = ()
+    if xblock_preconditioner_xi == 0 and bool(promote_xi):
+        xblock_preconditioner_xi = 1
+        messages = (
+            (
+                1,
+                "solve_v3_full_system_linear_gmres: fortran_reduced_pc_gmres "
+                "promoting x-block backend preconditioner_xi 0 -> 1 for stronger FP block factors",
+            ),
+        )
+
+    return FortranReducedXBlockFactorPolicySetup(
+        drop_tol=float(drop_tol),
+        drop_rel=float(drop_rel),
+        ilu_drop_tol=float(ilu_drop_tol),
+        fill_factor=float(fill_factor),
+        preconditioner_xi=int(xblock_preconditioner_xi),
+        promote_xi=bool(promote_xi),
         messages=messages,
     )
 
@@ -3337,6 +3442,7 @@ def apply_sparse_pc_post_minres(
 
 __all__ = [
     "FortranReducedSparsePCBackendSetup",
+    "FortranReducedXBlockFactorPolicySetup",
     "XBlockAssembledOperatorDiagnosticsContext",
     "XBlockSparsePCCoreDiagnosticsContext",
     "XBlockSideProbeDiagnosticsContext",
@@ -3350,6 +3456,7 @@ __all__ = [
     "fp_xblock_global_correction_metadata",
     "fp_xblock_highx_residual_correction_metadata",
     "resolve_fortran_reduced_sparse_pc_backend",
+    "resolve_fortran_reduced_xblock_factor_policy",
     "run_sparse_pc_gmres_once",
     "sparse_rescue_tail_metadata",
     "sparse_xblock_rescue_metadata",

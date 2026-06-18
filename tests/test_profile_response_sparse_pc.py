@@ -31,6 +31,7 @@ from sfincs_jax.problems.profile_response.sparse_pc import (
     finalize_xblock_moment_schur_metadata,
     prepare_xblock_initial_guess,
     resolve_fortran_reduced_sparse_pc_backend,
+    resolve_fortran_reduced_xblock_factor_policy,
     resolve_sparse_pc_entry_policy,
     resolve_xblock_qi_device_admission_setup,
     resolve_xblock_qi_device_base_config_setup,
@@ -199,6 +200,55 @@ def test_fortran_reduced_backend_policy_ignored_env_reports_message() -> None:
             "'unknown_backend'; using global",
         ),
     )
+
+
+def test_fortran_reduced_xblock_factor_policy_uses_specific_env_before_generic() -> None:
+    setup = resolve_fortran_reduced_xblock_factor_policy(
+        env={
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_DROP_TOL": "9.0",
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_XBLOCK_PC_DROP_TOL": "1.5",
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_XBLOCK_PC_DROP_REL": "2.5e-7",
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_XBLOCK_PC_ILU_DROP_TOL": "bad",
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_FILL_FACTOR": "4.0",
+        },
+        preconditioner_xi=2,
+    )
+
+    assert setup.drop_tol == 1.5
+    assert setup.drop_rel == 2.5e-7
+    assert setup.ilu_drop_tol == 1.0e-4
+    assert setup.fill_factor == 4.0
+    assert setup.preconditioner_xi == 2
+    assert setup.promote_xi
+    assert setup.messages == ()
+
+
+def test_fortran_reduced_xblock_factor_policy_promotes_zero_xi_by_default() -> None:
+    setup = resolve_fortran_reduced_xblock_factor_policy(
+        env={},
+        preconditioner_xi=0,
+    )
+
+    assert setup.preconditioner_xi == 1
+    assert setup.promote_xi
+    assert setup.messages == (
+        (
+            1,
+            "solve_v3_full_system_linear_gmres: fortran_reduced_pc_gmres "
+            "promoting x-block backend preconditioner_xi 0 -> 1 for stronger FP block factors",
+        ),
+    )
+
+
+def test_fortran_reduced_xblock_factor_policy_can_disable_xi_promotion() -> None:
+    setup = resolve_fortran_reduced_xblock_factor_policy(
+        env={"SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_XBLOCK_PROMOTE_XI": "off"},
+        preconditioner_xi=0,
+    )
+
+    assert setup.preconditioner_xi == 0
+    assert not setup.promote_xi
+    assert setup.messages == ()
 
 
 def test_sparse_pc_entry_policy_classifies_pas_er_and_active_dof() -> None:
