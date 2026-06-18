@@ -186,6 +186,39 @@ class FortranReducedXBlockInitialSeedResult:
 
 
 @dataclass(frozen=True)
+class FortranReducedXBlockKrylovSetupContext:
+    """Dependencies for fortran-reduced x-block Krylov policy and matvec setup."""
+
+    op: object
+    rhs: jnp.ndarray
+    xblock_use_active_dof: bool
+    active_idx: jnp.ndarray | None
+    full_to_active: jnp.ndarray | None
+    reduce_full_with_indices: Callable[[jnp.ndarray, jnp.ndarray], jnp.ndarray]
+    expand_reduced_with_map: Callable[[jnp.ndarray, jnp.ndarray], jnp.ndarray]
+    operator_matvec: ArrayFn
+    base_preconditioner: ArrayFn
+    elapsed_s: Callable[[], float]
+    emit: EmitFn | None
+    env: Mapping[str, str] | None
+
+
+@dataclass(frozen=True)
+class FortranReducedXBlockKrylovSetupResult:
+    """Policy values and closures for fortran-reduced x-block Krylov solves."""
+
+    side_env: str
+    precondition_side: str
+    pc_form: str
+    krylov_method: str
+    progress_every: int
+    mv_count: MatvecCounter
+    matvec_no_count: ArrayFn
+    matvec: ArrayFn
+    preconditioner: ArrayFn
+
+
+@dataclass(frozen=True)
 class FortranReducedXBlockKrylovSolveContext:
     """Solve-local Krylov dispatch dependencies for fortran-reduced x-block solves."""
 
@@ -1211,6 +1244,54 @@ def apply_fortran_reduced_xblock_initial_seed(
         refines_performed=int(refines_performed),
         elapsed_s=float(elapsed),
         messages=messages,
+    )
+
+
+def build_fortran_reduced_xblock_krylov_setup(
+    *,
+    context: FortranReducedXBlockKrylovSetupContext,
+) -> FortranReducedXBlockKrylovSetupResult:
+    """Resolve Krylov controls and closures for fortran-reduced x-block solves."""
+
+    policy = resolve_fortran_reduced_xblock_krylov_policy(env=context.env)
+    if context.emit is not None:
+        for level, message in policy.messages:
+            context.emit(level, message)
+
+    matvec_setup = build_xblock_krylov_matvec_setup(
+        op=context.op,
+        rhs=context.rhs,
+        xblock_use_active_dof=bool(context.xblock_use_active_dof),
+        active_idx=context.active_idx,
+        full_to_active=context.full_to_active,
+        reduce_full_with_indices=context.reduce_full_with_indices,
+        expand_reduced_with_map=context.expand_reduced_with_map,
+        operator_matvec=context.operator_matvec,
+        elapsed_s=context.elapsed_s,
+        emit=context.emit,
+        env=context.env,
+        progress_every=int(policy.progress_every),
+        mv_count=policy.mv_count,
+        progress_label="fortran_reduced_pc_gmres xblock",
+        emit_active_message=False,
+    )
+
+    def preconditioner(v: jnp.ndarray) -> jnp.ndarray:
+        return jnp.asarray(
+            context.base_preconditioner(jnp.asarray(v, dtype=context.rhs.dtype)),
+            dtype=jnp.float64,
+        )
+
+    return FortranReducedXBlockKrylovSetupResult(
+        side_env=policy.side_env,
+        precondition_side=policy.precondition_side,
+        pc_form=policy.pc_form,
+        krylov_method=policy.krylov_method,
+        progress_every=int(policy.progress_every),
+        mv_count=policy.mv_count,
+        matvec_no_count=matvec_setup.matvec_no_count,
+        matvec=matvec_setup.matvec,
+        preconditioner=preconditioner,
     )
 
 
@@ -4314,6 +4395,8 @@ __all__ = [
     "FortranReducedXBlockGlobalCouplingStageResult",
     "FortranReducedXBlockKrylovSolveContext",
     "FortranReducedXBlockKrylovPolicySetup",
+    "FortranReducedXBlockKrylovSetupContext",
+    "FortranReducedXBlockKrylovSetupResult",
     "FortranReducedXBlockMomentSchurStageContext",
     "FortranReducedXBlockMomentSchurStageResult",
     "MatvecCounter",
@@ -4330,6 +4413,7 @@ __all__ = [
     "apply_fortran_reduced_xblock_moment_schur_stage",
     "apply_sparse_pc_post_minres",
     "build_fortran_reduced_xblock_factor_stage",
+    "build_fortran_reduced_xblock_krylov_setup",
     "build_sparse_pc_active_dof_setup",
     "fp_xblock_global_correction_metadata",
     "fp_xblock_highx_residual_correction_metadata",

@@ -210,6 +210,7 @@ from .problems.profile_response.diagnostics import (
 from .problems.profile_response.sparse_pc import (
     FortranReducedXBlockFactorBuildContext,
     FortranReducedXBlockGlobalCouplingStageContext,
+    FortranReducedXBlockKrylovSetupContext,
     FortranReducedXBlockKrylovSolveContext,
     FortranReducedXBlockMomentSchurStageContext,
     SparsePCGMRESContext,
@@ -219,6 +220,7 @@ from .problems.profile_response.sparse_pc import (
     apply_fortran_reduced_xblock_moment_schur_stage,
     apply_sparse_pc_post_minres,
     build_fortran_reduced_xblock_factor_stage,
+    build_fortran_reduced_xblock_krylov_setup,
     build_xblock_krylov_matvec_setup,
     build_xblock_assembled_equilibration_setup,
     build_xblock_assembled_device_setup,
@@ -239,7 +241,6 @@ from .problems.profile_response.sparse_pc import (
     resolve_fortran_reduced_xblock_factor_policy,
     resolve_fortran_reduced_xblock_global_coupling_policy,
     resolve_fortran_reduced_xblock_initial_seed_policy,
-    resolve_fortran_reduced_xblock_krylov_policy,
     resolve_fortran_reduced_xblock_moment_schur_policy,
     resolve_xblock_qi_device_admission_setup,
     resolve_xblock_qi_device_base_config_setup,
@@ -7009,43 +7010,31 @@ def solve_v3_full_system_linear_gmres(
             pc_factor_s = float(xblock_factor_build.factor_s)
             setup_s = sparse_timer.elapsed_s()
 
-            xblock_krylov_policy = resolve_fortran_reduced_xblock_krylov_policy(
-                env=os.environ,
+            xblock_krylov_setup = build_fortran_reduced_xblock_krylov_setup(
+                context=FortranReducedXBlockKrylovSetupContext(
+                    op=op,
+                    rhs=rhs,
+                    xblock_use_active_dof=bool(sparse_pc_use_active_dof),
+                    active_idx=sparse_pc_active_idx_jnp,
+                    full_to_active=sparse_pc_full_to_active_jnp,
+                    reduce_full_with_indices=reduce_full_with_indices,
+                    expand_reduced_with_map=expand_reduced_with_map,
+                    operator_matvec=lambda x_full: apply_v3_full_system_operator_cached(op, x_full),
+                    base_preconditioner=precond_xblock,
+                    elapsed_s=sparse_timer.elapsed_s,
+                    emit=emit,
+                    env=os.environ,
+                )
             )
-            side_env = xblock_krylov_policy.side_env
-            precondition_side = xblock_krylov_policy.precondition_side
-            pc_form = xblock_krylov_policy.pc_form
-            xblock_krylov_method = xblock_krylov_policy.krylov_method
-            progress_every = xblock_krylov_policy.progress_every
-            mv_count = xblock_krylov_policy.mv_count
-            if emit is not None:
-                for level, message in xblock_krylov_policy.messages:
-                    emit(level, message)
-
-            fortran_xblock_matvec_setup = build_xblock_krylov_matvec_setup(
-                op=op,
-                rhs=rhs,
-                xblock_use_active_dof=bool(sparse_pc_use_active_dof),
-                active_idx=sparse_pc_active_idx_jnp,
-                full_to_active=sparse_pc_full_to_active_jnp,
-                reduce_full_with_indices=reduce_full_with_indices,
-                expand_reduced_with_map=expand_reduced_with_map,
-                operator_matvec=lambda x_full: apply_v3_full_system_operator_cached(op, x_full),
-                elapsed_s=sparse_timer.elapsed_s,
-                emit=emit,
-                env=os.environ,
-                progress_every=int(progress_every),
-                mv_count=mv_count,
-                progress_label="fortran_reduced_pc_gmres xblock",
-                emit_active_message=False,
-            )
-            _mv_true_no_count = fortran_xblock_matvec_setup.matvec_no_count
-            _mv_true = fortran_xblock_matvec_setup.matvec
-
-            def _precond_xblock(v: jnp.ndarray) -> jnp.ndarray:
-                return jnp.asarray(precond_xblock(jnp.asarray(v, dtype=rhs.dtype)), dtype=jnp.float64)
-
-            precond_xblock_krylov = _precond_xblock
+            side_env = xblock_krylov_setup.side_env
+            precondition_side = xblock_krylov_setup.precondition_side
+            pc_form = xblock_krylov_setup.pc_form
+            xblock_krylov_method = xblock_krylov_setup.krylov_method
+            progress_every = xblock_krylov_setup.progress_every
+            mv_count = xblock_krylov_setup.mv_count
+            _mv_true_no_count = xblock_krylov_setup.matvec_no_count
+            _mv_true = xblock_krylov_setup.matvec
+            precond_xblock_krylov = xblock_krylov_setup.preconditioner
             moment_schur_policy = resolve_fortran_reduced_xblock_moment_schur_policy(
                 precondition_side=precondition_side,
                 env=os.environ,

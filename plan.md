@@ -35506,3 +35506,41 @@ Next refactor target:
 - Extract the remaining fortran-reduced x-block matvec/Krylov policy setup
   into a cohesive setup object, then continue moving generic sparse-PC
   metadata and pattern/factor setup out of the monolithic solver.
+
+### 19.126 Fortran-reduced x-block Krylov-setup extraction
+
+Goal:
+
+- Remove the fortran-reduced x-block Krylov-policy resolution, matvec closure
+  setup, progress-counter wiring, and raw preconditioner wrapper from
+  ``v3_driver.py``.
+
+Implementation:
+
+- Added ``FortranReducedXBlockKrylovSetupContext`` and
+  ``FortranReducedXBlockKrylovSetupResult`` to
+  ``problems/profile_response/sparse_pc.py``.
+- Added ``build_fortran_reduced_xblock_krylov_setup`` to resolve the existing
+  Krylov policy, emit policy diagnostics, reuse the shared x-block matvec
+  builder with the fortran-reduced progress label, and wrap the local
+  preconditioner with the existing dtype behavior.
+- Updated ``v3_driver.py`` to consume the setup object and preserve the local
+  variable names used by later stages and result metadata.
+- Added a focused test covering active-DOF matvec routing, invalid Krylov
+  method fallback, progress cadence/counter updates, progress label, and
+  preconditioner wrapping.
+- ``v3_driver.py`` is now about ``20574`` lines and
+  ``solve_v3_full_system_linear_gmres`` about ``15268`` lines.
+
+Validation:
+
+- ``python -m ruff check`` on touched source/tests: passed.
+- ``python -m compileall -q`` on touched source/tests: passed.
+- ``tests/test_profile_response_sparse_pc.py``: ``92 passed``.
+- Broader current profile-response/x-block/sparse-pattern shard:
+  ``369 passed in 114.07 s``.
+
+Next refactor target:
+
+- Move generic sparse-PC result metadata into diagnostics, or extract the
+  generic sparse-PC pattern/factor setup in the same incremental style.

@@ -17,6 +17,7 @@ from sfincs_jax.problems.profile_response.diagnostics import (
 from sfincs_jax.problems.profile_response.sparse_pc import (
     FortranReducedXBlockFactorBuildContext,
     FortranReducedXBlockGlobalCouplingStageContext,
+    FortranReducedXBlockKrylovSetupContext,
     FortranReducedXBlockKrylovSolveContext,
     FortranReducedXBlockMomentSchurStageContext,
     MatvecCounter,
@@ -28,6 +29,7 @@ from sfincs_jax.problems.profile_response.sparse_pc import (
     apply_fortran_reduced_xblock_moment_schur_stage,
     apply_sparse_pc_post_minres,
     build_fortran_reduced_xblock_factor_stage,
+    build_fortran_reduced_xblock_krylov_setup,
     build_sparse_pc_active_dof_setup,
     build_xblock_assembled_equilibration_setup,
     build_xblock_assembled_device_setup,
@@ -369,6 +371,47 @@ def test_fortran_reduced_xblock_krylov_policy_falls_back_invalid_values() -> Non
             "'bad_method'; using gmres",
         ),
     )
+
+
+def test_fortran_reduced_xblock_krylov_setup_builds_active_matvec_and_wrapper() -> None:
+    messages: list[str] = []
+    setup = build_fortran_reduced_xblock_krylov_setup(
+        context=FortranReducedXBlockKrylovSetupContext(
+            op=SimpleNamespace(total_size=4),
+            rhs=jnp.asarray([1.0, 2.0, 3.0, 4.0]),
+            xblock_use_active_dof=True,
+            active_idx=jnp.asarray([0, 2], dtype=jnp.int32),
+            full_to_active=jnp.asarray([0, -1, 1, -1], dtype=jnp.int32),
+            reduce_full_with_indices=lambda v, idx: v[idx],
+            expand_reduced_with_map=lambda v, fmap: jnp.where(
+                fmap >= 0,
+                v[jnp.maximum(fmap, 0)],
+                0.0,
+            ),
+            operator_matvec=lambda v: v + 10.0,
+            base_preconditioner=lambda v: 2.0 * v,
+            elapsed_s=lambda: 3.5,
+            emit=lambda _level, msg: messages.append(msg),
+            env={
+                "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_XBLOCK_KRYLOV": "bad-method",
+                "SFINCS_JAX_SPARSE_PC_PROGRESS_EVERY": "2",
+            },
+        )
+    )
+
+    assert setup.precondition_side == "left"
+    assert setup.pc_form == "scipy_left"
+    assert setup.krylov_method == "gmres"
+    assert setup.progress_every == 2
+    assert setup.matvec_no_count(jnp.asarray([5.0, 7.0])).tolist() == [15.0, 17.0]
+    assert setup.preconditioner(jnp.asarray([1.0, 3.0])).tolist() == [2.0, 6.0]
+    assert int(setup.mv_count) == 0
+    setup.matvec(jnp.asarray([0.0, 1.0]))
+    setup.matvec(jnp.asarray([2.0, 3.0]))
+    assert int(setup.mv_count) == 2
+    assert any("using gmres" in message for message in messages)
+    assert any("fortran_reduced_pc_gmres xblock matvecs=2" in message for message in messages)
+    assert not any("active-DOF reduction" in message for message in messages)
 
 
 def test_fortran_reduced_xblock_initial_seed_policy_parses_controls() -> None:
