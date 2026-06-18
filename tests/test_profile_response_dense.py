@@ -5,7 +5,9 @@ import pytest
 import jax.numpy as jnp
 
 from sfincs_jax.problems.profile_response.dense import (
+    HostDenseFullSolveContext,
     HostDenseReducedSolveContext,
+    solve_host_dense_full,
     solve_host_dense_reduced,
 )
 
@@ -46,3 +48,45 @@ def test_host_dense_reduced_lstsq_handles_rectangular_cache() -> None:
     expected = np.linalg.lstsq(a_np, np.asarray(rhs), rcond=None)[0]
     assert result.x.tolist() == pytest.approx(expected.tolist())
     assert float(result.residual_norm) == pytest.approx(0.0, abs=1.0e-12)
+
+
+def test_host_dense_full_lu_returns_residual_vector() -> None:
+    a_np = np.asarray([[3.0, 0.0], [0.0, 5.0]])
+    rhs = jnp.asarray([6.0, 15.0])
+    result, residual = solve_host_dense_full(
+        context=HostDenseFullSolveContext(
+            matvec=lambda x: jnp.asarray(a_np) @ x,
+            rhs=rhs,
+            total_size=2,
+        ),
+        x0=jnp.zeros(2),
+    )
+
+    assert result.x.tolist() == pytest.approx([2.0, 3.0])
+    assert residual.tolist() == pytest.approx([0.0, 0.0])
+    assert float(result.residual_norm) == pytest.approx(0.0, abs=1.0e-12)
+
+
+def test_host_dense_full_lstsq_handles_rectangular_operator(monkeypatch) -> None:
+    a_np = np.asarray([[1.0, 0.0], [0.0, 1.0], [1.0, 1.0]])
+    rhs = jnp.asarray([1.0, 2.0, 3.0])
+
+    def fake_assemble_dense_matrix_from_matvec(**_kwargs):
+        return jnp.asarray(a_np)
+
+    monkeypatch.setattr(
+        "sfincs_jax.problems.profile_response.dense.assemble_dense_matrix_from_matvec",
+        fake_assemble_dense_matrix_from_matvec,
+    )
+    result, residual = solve_host_dense_full(
+        context=HostDenseFullSolveContext(
+            matvec=lambda x: jnp.asarray(a_np) @ x,
+            rhs=rhs,
+            total_size=2,
+        )
+    )
+
+    expected = np.linalg.lstsq(a_np, np.asarray(rhs), rcond=None)[0]
+    assert result.x.tolist() == pytest.approx(expected.tolist())
+    assert residual.tolist() == pytest.approx((np.asarray(rhs) - a_np @ expected).tolist())
+    assert float(result.residual_norm) == pytest.approx(float(np.linalg.norm(np.asarray(residual))))

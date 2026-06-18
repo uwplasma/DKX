@@ -169,7 +169,12 @@ from .rhs1_preconditioner_auto_policy import (
 )
 from .rhs1_schur_policy import resolve_rhs1_schur_base_kind
 from .problems.profile_response.handoff import rhs1_accept_candidate
-from .problems.profile_response.dense import HostDenseReducedSolveContext, solve_host_dense_reduced
+from .problems.profile_response.dense import (
+    HostDenseFullSolveContext,
+    HostDenseReducedSolveContext,
+    solve_host_dense_full,
+    solve_host_dense_reduced,
+)
 from .problems.profile_response.linear_solve import (
     ProfileLinearSolveContext,
     profile_solver_kind,
@@ -22201,28 +22206,13 @@ def solve_v3_full_system_linear_gmres(
             )
 
             def _solve_host_dense_full(*, x0_dense: jnp.ndarray | None = None) -> tuple[GMRESSolveResult, jnp.ndarray]:
-                import scipy.linalg as sla  # noqa: PLC0415
-
-                a_dense_jnp = assemble_dense_matrix_from_matvec(matvec=mv, n=int(op.total_size), dtype=rhs.dtype)
-                a_np = np.asarray(a_dense_jnp, dtype=np.float64)
-                a_np = np.array(a_np, dtype=np.float64, copy=True)
-                if a_np.ndim != 2:
-                    a_np = np.squeeze(a_np)
-                if a_np.ndim != 2 or a_np.shape[0] != a_np.shape[1]:
-                    x_np = np.asarray(
-                        np.linalg.lstsq(a_np, np.asarray(rhs, dtype=np.float64), rcond=None)[0],
-                        dtype=np.float64,
-                    )
-                else:
-                    lu, piv = sla.lu_factor(a_np)
-                    x_np = np.asarray(sla.lu_solve((lu, piv), np.asarray(rhs, dtype=np.float64)), dtype=np.float64)
-                if x0_dense is not None and x0_dense.shape == rhs.shape:
-                    x_np = x_np + 0.0 * np.asarray(x0_dense, dtype=np.float64)
-                x_dense = jnp.asarray(x_np, dtype=jnp.float64)
-                residual_vec_dense = rhs - mv(x_dense)
-                return (
-                    GMRESSolveResult(x=x_dense, residual_norm=jnp.linalg.norm(residual_vec_dense)),
-                    residual_vec_dense,
+                return solve_host_dense_full(
+                    context=HostDenseFullSolveContext(
+                        matvec=mv,
+                        rhs=rhs,
+                        total_size=int(op.total_size),
+                    ),
+                    x0=x0_dense,
                 )
 
             if rhs1_bicgstab_kind is not None:

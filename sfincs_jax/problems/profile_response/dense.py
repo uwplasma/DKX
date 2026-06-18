@@ -23,6 +23,15 @@ class HostDenseReducedSolveContext:
     dense_matrix_cache: np.ndarray | None = None
 
 
+@dataclass(frozen=True)
+class HostDenseFullSolveContext:
+    """Solve-local inputs for a host dense full-system RHSMode=1 solve."""
+
+    matvec: Callable[[jnp.ndarray], jnp.ndarray]
+    rhs: jnp.ndarray
+    total_size: int
+
+
 def solve_host_dense_reduced(
     *,
     context: HostDenseReducedSolveContext,
@@ -79,4 +88,42 @@ def solve_host_dense_reduced(
     return GMRESSolveResult(x=x_dense, residual_norm=jnp.linalg.norm(r_dense))
 
 
-__all__ = ["HostDenseReducedSolveContext", "solve_host_dense_reduced"]
+def solve_host_dense_full(
+    *,
+    context: HostDenseFullSolveContext,
+    x0: jnp.ndarray | None = None,
+) -> tuple[GMRESSolveResult, jnp.ndarray]:
+    """Solve the full system on the host using LU or least squares."""
+
+    import scipy.linalg as sla  # noqa: PLC0415
+
+    a_dense_jnp = assemble_dense_matrix_from_matvec(
+        matvec=context.matvec,
+        n=int(context.total_size),
+        dtype=context.rhs.dtype,
+    )
+    a_np = np.asarray(a_dense_jnp, dtype=np.float64)
+    a_np = np.array(a_np, dtype=np.float64, copy=True)
+    if a_np.ndim != 2:
+        a_np = np.squeeze(a_np)
+    if a_np.ndim != 2 or a_np.shape[0] != a_np.shape[1]:
+        x_np = np.asarray(
+            np.linalg.lstsq(a_np, np.asarray(context.rhs, dtype=np.float64), rcond=None)[0],
+            dtype=np.float64,
+        )
+    else:
+        lu, piv = sla.lu_factor(a_np)
+        x_np = np.asarray(sla.lu_solve((lu, piv), np.asarray(context.rhs, dtype=np.float64)), dtype=np.float64)
+    if x0 is not None and x0.shape == context.rhs.shape:
+        x_np = x_np + 0.0 * np.asarray(x0, dtype=np.float64)
+    x_dense = jnp.asarray(x_np, dtype=jnp.float64)
+    residual_vec = context.rhs - context.matvec(x_dense)
+    return GMRESSolveResult(x=x_dense, residual_norm=jnp.linalg.norm(residual_vec)), residual_vec
+
+
+__all__ = [
+    "HostDenseFullSolveContext",
+    "HostDenseReducedSolveContext",
+    "solve_host_dense_full",
+    "solve_host_dense_reduced",
+]

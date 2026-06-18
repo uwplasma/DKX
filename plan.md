@@ -32663,3 +32663,47 @@ Validation so far:
   tests/test_rhs1_handoff.py
   tests/test_audit_rhs1_solver_stack.py``:
   ``196 passed in 56.93 s``.
+
+### 19.62 Host dense full-system solve extraction
+
+Goal:
+
+- Move the remaining full-system host dense shortcut out of the non-active
+  RHSMode=1 branch and into the profile-response dense helper module.
+
+Implementation:
+
+- Extended ``sfincs_jax/problems/profile_response/dense.py`` with
+  ``HostDenseFullSolveContext`` and ``solve_host_dense_full``.
+- ``v3_driver.py`` now keeps a thin full-system dense wrapper that delegates
+  dense matrix assembly, LU/least-squares solve, and residual-vector reporting
+  to the domain helper.
+- Extended ``tests/test_profile_response_dense.py`` with full-system LU and
+  rectangular least-squares coverage.
+
+Validation so far:
+
+- ``python -m ruff check sfincs_jax/problems/profile_response/dense.py
+  sfincs_jax/v3_driver.py tests/test_profile_response_dense.py``: passed.
+- ``python -m compileall -q sfincs_jax/problems/profile_response/dense.py
+  sfincs_jax/v3_driver.py tests/test_profile_response_dense.py``: passed.
+- ``PYTHONDONTWRITEBYTECODE=1 pytest -q -p no:cacheprovider
+  tests/test_profile_response_dense.py
+  tests/test_schur_precond_heuristic.py
+  tests/test_v3_driver_rhs1_dispatch_coverage.py``:
+  ``64 passed in 50.50 s``.
+- ``SPHINXOPTS='-W --keep-going' python -m sphinx -b html docs
+  docs/_build/html``: passed.
+- ``git diff --check``: passed.
+- Broader RHSMode dense/preconditioner subset:
+  ``PYTHONDONTWRITEBYTECODE=1 pytest -q -p no:cacheprovider
+  tests/test_example_auto_selection_paths.py
+  tests/test_pas_projection_heuristic.py
+  tests/test_rhs1_full_assembly.py
+  tests/test_schur_precond_heuristic.py
+  tests/test_v3_driver_rhs1_dispatch_coverage.py
+  tests/test_profile_response_dense.py
+  tests/test_profile_response_preconditioner_build.py
+  tests/test_profile_response_sparse_pc.py
+  tests/test_v3_sparse_pattern.py``:
+  ``307 passed in 141.49 s``.
