@@ -34576,3 +34576,42 @@ Next refactor target:
   remaining correction-diagnostics object construction. Keep tests close to the
   extracted helper and defer solver/default changes until this simplification
   layer is stable.
+
+### 19.102 X-block assembled-operator diagnostics payload extraction
+
+Goal:
+
+- Remove the assembled-operator, device-resident operator, and row/column
+  equilibration diagnostics payload from the sparse-PC result dictionary in
+  ``v3_driver.py`` while preserving all metadata keys and assembled-operator
+  behavior.
+
+Implementation:
+
+- Added ``xblock_assembled_operator_diagnostics`` to
+  ``problems/profile_response/sparse_pc.py``.
+- Replaced the inline ``xblock_assembled_operator_*`` result payload in
+  ``v3_driver.py`` with
+  ``**xblock_assembled_operator_diagnostics(locals())``.
+- Added direct unit coverage for operator enabled/built flags, active-DOF
+  status, preflight estimates, matrix/pattern sizes, device residency and
+  validation errors, row-equilibration fields, column-equilibration fields,
+  validation errors, and error propagation.
+- ``v3_driver.py`` is now about ``21581`` lines and
+  ``solve_v3_full_system_linear_gmres`` is about ``16289`` lines.
+
+Validation:
+
+- ``python -m ruff check`` on touched source/tests: passed.
+- ``python -m compileall -q`` on touched source/tests: passed.
+- ``tests/test_profile_response_sparse_pc.py``: ``63 passed``.
+- Broader current profile-response/x-block/sparse-pattern shard:
+  ``327 passed in 113.13 s``.
+
+Next refactor target:
+
+- Continue splitting sparse-PC result construction by extracting the remaining
+  large preconditioner-family diagnostics payloads, starting with moment-Schur,
+  two-level, global-coupling, or QI coarse-seed metadata. Prefer helpers with
+  explicit typed diagnostics objects over growing ``locals()`` usage once the
+  pure key-mapping layer is stable.

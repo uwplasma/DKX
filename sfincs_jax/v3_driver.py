@@ -203,6 +203,7 @@ from .problems.profile_response.sparse_pc import (
     SparsePCGMRESContext,
     SparsePCPostMinresContext,
     apply_sparse_pc_post_minres,
+    xblock_assembled_operator_diagnostics,
     build_xblock_krylov_matvec_setup,
     build_xblock_assembled_equilibration_setup,
     build_xblock_assembled_device_setup,
@@ -7080,109 +7081,7 @@ def solve_v3_full_system_linear_gmres(
                     "xblock_active_dof": bool(xblock_use_active_dof),
                     "xblock_linear_size": int(xblock_linear_size),
                     "xblock_full_size": int(op.total_size),
-                    "xblock_assembled_operator_enabled": bool(assembled_operator_enabled),
-                    "xblock_assembled_operator_built": bool(assembled_operator_built),
-                    "xblock_assembled_operator_active_dof": assembled_operator_metadata.get("active_dof", False),
-                    "xblock_assembled_operator_preflight_scope": assembled_operator_metadata.get("preflight_scope"),
-                    "xblock_assembled_operator_setup_s": assembled_operator_metadata.get("setup_s"),
-                    "xblock_assembled_operator_preflight_rejected": assembled_operator_metadata.get(
-                        "preflight_rejected", False
-                    ),
-                    "xblock_assembled_operator_preflight_pattern_nnz_estimate": assembled_operator_metadata.get(
-                        "preflight_pattern_nnz_estimate"
-                    ),
-                    "xblock_assembled_operator_preflight_peak_nbytes_estimate": assembled_operator_metadata.get(
-                        "preflight_peak_nbytes_estimate"
-                    ),
-                    "xblock_assembled_operator_preflight_full_csr_nbytes_estimate": assembled_operator_metadata.get(
-                        "preflight_full_csr_nbytes_estimate"
-                    ),
-                    "xblock_assembled_operator_preflight_active_csr_nbytes_estimate": assembled_operator_metadata.get(
-                        "preflight_active_csr_nbytes_estimate"
-                    ),
-                    "xblock_assembled_operator_pattern_nnz": assembled_operator_metadata.get("pattern_nnz"),
-                    "xblock_assembled_operator_matrix_nnz": assembled_operator_metadata.get("matrix_nnz"),
-                    "xblock_assembled_operator_csr_nbytes_estimate": assembled_operator_metadata.get(
-                        "csr_nbytes_estimate"
-                    ),
-                    "xblock_assembled_operator_device_enabled": bool(
-                        assembled_operator_metadata.get("device_enabled", False)
-                    ),
-                    "xblock_assembled_operator_device_required": bool(
-                        assembled_operator_metadata.get("device_required", False)
-                    ),
-                    "xblock_assembled_operator_device_resident": bool(
-                        assembled_operator_metadata.get("device_resident", False)
-                    ),
-                    "xblock_assembled_operator_device_nnz": assembled_operator_metadata.get("device_nnz"),
-                    "xblock_assembled_operator_device_csr_nbytes_estimate": assembled_operator_metadata.get(
-                        "device_csr_nbytes_estimate"
-                    ),
-                    "xblock_assembled_operator_device_validation_rel_errors": assembled_operator_metadata.get(
-                        "device_validation_rel_errors",
-                        (),
-                    ),
-                    "xblock_assembled_operator_device_error": assembled_operator_metadata.get("device_error"),
-                    "xblock_assembled_operator_row_equilibration_enabled": bool(
-                        xblock_row_equilibration_enabled
-                    ),
-                    "xblock_assembled_operator_row_equilibration_built": bool(
-                        xblock_row_equilibration_built
-                    ),
-                    "xblock_assembled_operator_row_equilibration_norm": xblock_row_equilibration_metadata.get(
-                        "norm"
-                    ),
-                    "xblock_assembled_operator_row_equilibration_setup_s": xblock_row_equilibration_metadata.get(
-                        "setup_s"
-                    ),
-                    "xblock_assembled_operator_row_equilibration_zero_or_tiny_rows": (
-                        xblock_row_equilibration_metadata.get("zero_or_tiny_rows")
-                    ),
-                    "xblock_assembled_operator_row_equilibration_row_norm_min": (
-                        xblock_row_equilibration_metadata.get("row_norm_min")
-                    ),
-                    "xblock_assembled_operator_row_equilibration_row_norm_max": (
-                        xblock_row_equilibration_metadata.get("row_norm_max")
-                    ),
-                    "xblock_assembled_operator_row_equilibration_scale_min": (
-                        xblock_row_equilibration_metadata.get("row_scale_min")
-                    ),
-                    "xblock_assembled_operator_row_equilibration_scale_max": (
-                        xblock_row_equilibration_metadata.get("row_scale_max")
-                    ),
-                    "xblock_assembled_operator_col_equilibration_enabled": bool(
-                        xblock_col_equilibration_enabled
-                    ),
-                    "xblock_assembled_operator_col_equilibration_built": bool(
-                        xblock_col_equilibration_built
-                    ),
-                    "xblock_assembled_operator_col_equilibration_norm": xblock_col_equilibration_metadata.get(
-                        "norm"
-                    ),
-                    "xblock_assembled_operator_col_equilibration_setup_s": xblock_col_equilibration_metadata.get(
-                        "setup_s"
-                    ),
-                    "xblock_assembled_operator_col_equilibration_zero_or_tiny_columns": (
-                        xblock_col_equilibration_metadata.get("zero_or_tiny_columns")
-                    ),
-                    "xblock_assembled_operator_col_equilibration_col_norm_min": (
-                        xblock_col_equilibration_metadata.get("col_norm_min")
-                    ),
-                    "xblock_assembled_operator_col_equilibration_col_norm_max": (
-                        xblock_col_equilibration_metadata.get("col_norm_max")
-                    ),
-                    "xblock_assembled_operator_col_equilibration_scale_min": (
-                        xblock_col_equilibration_metadata.get("col_scale_min")
-                    ),
-                    "xblock_assembled_operator_col_equilibration_scale_max": (
-                        xblock_col_equilibration_metadata.get("col_scale_max")
-                    ),
-                    "xblock_assembled_operator_max_colors": assembled_operator_metadata.get("max_colors"),
-                    "xblock_assembled_operator_validation_rel_errors": assembled_operator_metadata.get(
-                        "validation_rel_errors",
-                        (),
-                    ),
-                    "xblock_assembled_operator_error": assembled_operator_metadata.get("error"),
+                    **xblock_assembled_operator_diagnostics(locals()),
                     "xblock_moment_schur_enabled": bool(moment_schur_enabled),
                     "xblock_moment_schur_built": bool(moment_schur_built),
                     "xblock_moment_schur_used": bool(moment_schur_used),

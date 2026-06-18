@@ -12,6 +12,7 @@ from sfincs_jax.problems.profile_response.sparse_pc import (
     SparsePCPostMinresContext,
     XBlockAssembledPreflightError,
     apply_sparse_pc_post_minres,
+    xblock_assembled_operator_diagnostics,
     build_xblock_assembled_equilibration_setup,
     build_xblock_assembled_device_setup,
     build_xblock_assembled_matvec_setup,
@@ -920,6 +921,82 @@ def test_finalize_xblock_assembled_operator_metadata_normalizes_fields() -> None
     assert metadata["pattern_avg_row_nnz"] == pytest.approx(1.5)
     assert metadata["device_nnz"] == 3
     assert metadata["device_validation_rel_errors"] == (2.0e-12,)
+
+
+def test_xblock_assembled_operator_diagnostics_preserve_payload() -> None:
+    metadata = xblock_assembled_operator_diagnostics(
+        {
+            "assembled_operator_enabled": 1,
+            "assembled_operator_built": True,
+            "assembled_operator_metadata": {
+                "active_dof": True,
+                "preflight_scope": "active",
+                "setup_s": 1.25,
+                "preflight_rejected": False,
+                "preflight_pattern_nnz_estimate": 50,
+                "preflight_peak_nbytes_estimate": 2048,
+                "preflight_full_csr_nbytes_estimate": 4096,
+                "preflight_active_csr_nbytes_estimate": 1024,
+                "pattern_nnz": 45,
+                "matrix_nnz": 43,
+                "csr_nbytes_estimate": 512,
+                "device_enabled": True,
+                "device_required": False,
+                "device_resident": True,
+                "device_nnz": 43,
+                "device_csr_nbytes_estimate": 400,
+                "device_validation_rel_errors": (1.0e-12,),
+                "device_error": None,
+                "max_colors": 7,
+                "validation_rel_errors": (2.0e-12,),
+                "error": None,
+            },
+            "xblock_row_equilibration_enabled": 1,
+            "xblock_row_equilibration_built": True,
+            "xblock_row_equilibration_metadata": {
+                "norm": "inf",
+                "setup_s": 0.1,
+                "zero_or_tiny_rows": 2,
+                "row_norm_min": 0.5,
+                "row_norm_max": 4.0,
+                "row_scale_min": 0.25,
+                "row_scale_max": 2.0,
+            },
+            "xblock_col_equilibration_enabled": 1,
+            "xblock_col_equilibration_built": False,
+            "xblock_col_equilibration_metadata": {
+                "norm": "two",
+                "setup_s": 0.2,
+                "zero_or_tiny_columns": 3,
+                "col_norm_min": 0.25,
+                "col_norm_max": 5.0,
+                "col_scale_min": 0.2,
+                "col_scale_max": 4.0,
+            },
+        }
+    )
+
+    assert metadata["xblock_assembled_operator_enabled"] is True
+    assert metadata["xblock_assembled_operator_built"] is True
+    assert metadata["xblock_assembled_operator_active_dof"] is True
+    assert metadata["xblock_assembled_operator_preflight_scope"] == "active"
+    assert metadata["xblock_assembled_operator_preflight_pattern_nnz_estimate"] == 50
+    assert metadata["xblock_assembled_operator_matrix_nnz"] == 43
+    assert metadata["xblock_assembled_operator_device_enabled"] is True
+    assert metadata["xblock_assembled_operator_device_resident"] is True
+    assert metadata["xblock_assembled_operator_device_validation_rel_errors"] == (
+        1.0e-12,
+    )
+    assert metadata["xblock_assembled_operator_row_equilibration_enabled"] is True
+    assert metadata["xblock_assembled_operator_row_equilibration_built"] is True
+    assert metadata["xblock_assembled_operator_row_equilibration_norm"] == "inf"
+    assert metadata["xblock_assembled_operator_row_equilibration_zero_or_tiny_rows"] == 2
+    assert metadata["xblock_assembled_operator_col_equilibration_enabled"] is True
+    assert metadata["xblock_assembled_operator_col_equilibration_built"] is False
+    assert metadata["xblock_assembled_operator_col_equilibration_norm"] == "two"
+    assert metadata["xblock_assembled_operator_col_equilibration_zero_or_tiny_columns"] == 3
+    assert metadata["xblock_assembled_operator_max_colors"] == 7
+    assert metadata["xblock_assembled_operator_validation_rel_errors"] == (2.0e-12,)
 
 
 def test_xblock_moment_schur_policy_defaults_on_for_constraint1_device_krylov() -> None:

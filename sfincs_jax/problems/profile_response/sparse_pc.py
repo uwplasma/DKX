@@ -796,6 +796,125 @@ def xblock_side_probe_diagnostics(scope: Mapping[str, object]) -> dict[str, obje
     }
 
 
+def xblock_assembled_operator_diagnostics(scope: Mapping[str, object]) -> dict[str, object]:
+    """Return assembled-operator and equilibration diagnostics for x-block solves."""
+
+    metadata = scope["assembled_operator_metadata"]
+    row_metadata = scope["xblock_row_equilibration_metadata"]
+    col_metadata = scope["xblock_col_equilibration_metadata"]
+    if not isinstance(metadata, Mapping):
+        raise TypeError("assembled_operator_metadata must be a mapping")
+    if not isinstance(row_metadata, Mapping):
+        raise TypeError("xblock_row_equilibration_metadata must be a mapping")
+    if not isinstance(col_metadata, Mapping):
+        raise TypeError("xblock_col_equilibration_metadata must be a mapping")
+
+    return {
+        "xblock_assembled_operator_enabled": bool(
+            scope["assembled_operator_enabled"]
+        ),
+        "xblock_assembled_operator_built": bool(scope["assembled_operator_built"]),
+        "xblock_assembled_operator_active_dof": metadata.get("active_dof", False),
+        "xblock_assembled_operator_preflight_scope": metadata.get("preflight_scope"),
+        "xblock_assembled_operator_setup_s": metadata.get("setup_s"),
+        "xblock_assembled_operator_preflight_rejected": metadata.get(
+            "preflight_rejected",
+            False,
+        ),
+        "xblock_assembled_operator_preflight_pattern_nnz_estimate": metadata.get(
+            "preflight_pattern_nnz_estimate"
+        ),
+        "xblock_assembled_operator_preflight_peak_nbytes_estimate": metadata.get(
+            "preflight_peak_nbytes_estimate"
+        ),
+        "xblock_assembled_operator_preflight_full_csr_nbytes_estimate": metadata.get(
+            "preflight_full_csr_nbytes_estimate"
+        ),
+        "xblock_assembled_operator_preflight_active_csr_nbytes_estimate": metadata.get(
+            "preflight_active_csr_nbytes_estimate"
+        ),
+        "xblock_assembled_operator_pattern_nnz": metadata.get("pattern_nnz"),
+        "xblock_assembled_operator_matrix_nnz": metadata.get("matrix_nnz"),
+        "xblock_assembled_operator_csr_nbytes_estimate": metadata.get(
+            "csr_nbytes_estimate"
+        ),
+        "xblock_assembled_operator_device_enabled": bool(
+            metadata.get("device_enabled", False)
+        ),
+        "xblock_assembled_operator_device_required": bool(
+            metadata.get("device_required", False)
+        ),
+        "xblock_assembled_operator_device_resident": bool(
+            metadata.get("device_resident", False)
+        ),
+        "xblock_assembled_operator_device_nnz": metadata.get("device_nnz"),
+        "xblock_assembled_operator_device_csr_nbytes_estimate": metadata.get(
+            "device_csr_nbytes_estimate"
+        ),
+        "xblock_assembled_operator_device_validation_rel_errors": metadata.get(
+            "device_validation_rel_errors",
+            (),
+        ),
+        "xblock_assembled_operator_device_error": metadata.get("device_error"),
+        "xblock_assembled_operator_row_equilibration_enabled": bool(
+            scope["xblock_row_equilibration_enabled"]
+        ),
+        "xblock_assembled_operator_row_equilibration_built": bool(
+            scope["xblock_row_equilibration_built"]
+        ),
+        "xblock_assembled_operator_row_equilibration_norm": row_metadata.get("norm"),
+        "xblock_assembled_operator_row_equilibration_setup_s": row_metadata.get(
+            "setup_s"
+        ),
+        "xblock_assembled_operator_row_equilibration_zero_or_tiny_rows": (
+            row_metadata.get("zero_or_tiny_rows")
+        ),
+        "xblock_assembled_operator_row_equilibration_row_norm_min": row_metadata.get(
+            "row_norm_min"
+        ),
+        "xblock_assembled_operator_row_equilibration_row_norm_max": row_metadata.get(
+            "row_norm_max"
+        ),
+        "xblock_assembled_operator_row_equilibration_scale_min": row_metadata.get(
+            "row_scale_min"
+        ),
+        "xblock_assembled_operator_row_equilibration_scale_max": row_metadata.get(
+            "row_scale_max"
+        ),
+        "xblock_assembled_operator_col_equilibration_enabled": bool(
+            scope["xblock_col_equilibration_enabled"]
+        ),
+        "xblock_assembled_operator_col_equilibration_built": bool(
+            scope["xblock_col_equilibration_built"]
+        ),
+        "xblock_assembled_operator_col_equilibration_norm": col_metadata.get("norm"),
+        "xblock_assembled_operator_col_equilibration_setup_s": col_metadata.get(
+            "setup_s"
+        ),
+        "xblock_assembled_operator_col_equilibration_zero_or_tiny_columns": (
+            col_metadata.get("zero_or_tiny_columns")
+        ),
+        "xblock_assembled_operator_col_equilibration_col_norm_min": col_metadata.get(
+            "col_norm_min"
+        ),
+        "xblock_assembled_operator_col_equilibration_col_norm_max": col_metadata.get(
+            "col_norm_max"
+        ),
+        "xblock_assembled_operator_col_equilibration_scale_min": col_metadata.get(
+            "col_scale_min"
+        ),
+        "xblock_assembled_operator_col_equilibration_scale_max": col_metadata.get(
+            "col_scale_max"
+        ),
+        "xblock_assembled_operator_max_colors": metadata.get("max_colors"),
+        "xblock_assembled_operator_validation_rel_errors": metadata.get(
+            "validation_rel_errors",
+            (),
+        ),
+        "xblock_assembled_operator_error": metadata.get("error"),
+    }
+
+
 class MatvecCounter:
     """Mutable matvec counter that preserves ``int(counter)`` call sites."""
 
