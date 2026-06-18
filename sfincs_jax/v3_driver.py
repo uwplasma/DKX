@@ -253,6 +253,7 @@ from .problems.profile_response.policies import (
     rhs1_qi_device_progress_messages as _rhs1_qi_device_progress_messages,
     rhs1_qi_device_rank_budget as _rhs1_qi_device_rank_budget,
     rhs1_qi_device_residual_correction_controls as _rhs1_qi_device_residual_correction_controls,
+    rhs1_qi_device_setup_summary as _rhs1_qi_device_setup_summary,
     rhs1_resolved_sparse_rescue_ordering,
     rhs1_sparse_enabled_initial,
     rhs1_sparse_kind_use,
@@ -5175,76 +5176,20 @@ def solve_v3_full_system_linear_gmres(
                 qi_device_active_pattern_coarse_include_species = bool(
                     qi_device_extra_coarse_controls["active_pattern_coarse_include_species"]
                 )
-                qi_device_rank_budget_setup = _rhs1_qi_device_rank_budget(
+                qi_device_setup_summary = _rhs1_qi_device_setup_summary(
                     seed_max_rank=int(qi_seed_max_rank),
                     n_species=int(getattr(op, "n_species", 1)),
-                    residual_enrichment=bool(qi_device_residual_enrichment),
-                    residual_enrichment_depth=int(qi_device_residual_enrichment_depth),
-                    residual_enrichment_include_residual=bool(
-                        qi_device_residual_enrichment_include_residual
+                    assembled_device_operator_available=(
+                        assembled_device_operator is not None
                     ),
-                    recycle_enrichment=bool(qi_device_recycle_enrichment),
-                    recycle_cycles=int(qi_device_recycle_cycles),
-                    operator_krylov_enrichment=bool(qi_device_operator_krylov_enrichment),
-                    operator_krylov_depth=int(qi_device_operator_krylov_depth),
-                    adjoint_krylov_enrichment=bool(qi_device_adjoint_krylov_enrichment),
-                    adjoint_krylov_depth=int(qi_device_adjoint_krylov_depth),
-                    operator_action_enrichment=bool(qi_device_operator_action_enrichment),
-                    operator_action_depth=int(qi_device_operator_action_depth),
-                    multilevel_coarse=bool(qi_device_multilevel_coarse),
+                    enrichment_config=qi_device_enrichment_config,
+                    multilevel_config=qi_device_multilevel_config,
                     multilevel_max_rank=qi_device_multilevel_max_rank,
-                    multilevel_current_moments=bool(qi_device_multilevel_current_moments),
-                    multilevel_current_max_pitch_degree=int(
-                        qi_device_multilevel_current_max_pitch_degree
-                    ),
-                    multilevel_residual_equation=bool(qi_device_multilevel_residual_equation),
-                    multilevel_residual_equation_max_level_rank=int(
-                        qi_device_multilevel_residual_equation_max_level_rank
-                    ),
-                    multilevel_max_levels=int(qi_device_multilevel_max_levels),
-                    global_moment_residual_equation=bool(
-                        qi_device_global_moment_residual_equation
-                    ),
-                    global_moment_residual_equation_max_rank=int(
-                        qi_device_global_moment_residual_equation_max_rank
-                    ),
-                    residual_galerkin_equation=bool(qi_device_residual_galerkin_equation),
-                    residual_galerkin_equation_max_rank=int(
-                        qi_device_residual_galerkin_equation_max_rank
-                    ),
-                    phase_space_residual_equation=bool(qi_device_phase_space_residual_equation),
-                    phase_space_residual_equation_max_rank=int(
-                        qi_device_phase_space_residual_equation_max_rank
-                    ),
-                    residual_region_bounce_coarse=bool(qi_device_residual_region_bounce_coarse),
-                    residual_region_bounce_coarse_max_rank=int(
-                        qi_device_residual_region_bounce_coarse_max_rank
-                    ),
-                    active_pattern_coarse=bool(qi_device_active_pattern_coarse),
-                    active_pattern_coarse_max_rank=int(qi_device_active_pattern_coarse_max_rank),
-                    block_schur_residual_equation=bool(qi_device_block_schur_residual_equation),
-                    block_schur_residual_equation_max_rank=int(
-                        qi_device_block_schur_residual_equation_max_rank
-                    ),
-                    coupled_residual_equation=bool(qi_device_coupled_residual_equation),
-                    coupled_residual_equation_max_rank=int(
-                        qi_device_coupled_residual_equation_max_rank
-                    ),
-                    residual_snapshot_enrichment=bool(qi_device_residual_snapshot_enrichment),
-                    residual_snapshot_max_rank=int(qi_device_residual_snapshot_max_rank),
-                    residual_snapshot_residual_equation=bool(
-                        qi_device_residual_snapshot_residual_equation
-                    ),
-                    residual_snapshot_residual_equation_max_rank=int(
-                        qi_device_residual_snapshot_residual_equation_max_rank
-                    ),
-                    block_schur_residual_enrichment=bool(
-                        qi_device_block_schur_residual_enrichment
-                    ),
-                    block_schur_residual_max_rank=int(qi_device_block_schur_residual_max_rank),
+                    extra_coarse_controls=qi_device_extra_coarse_controls,
+                    residual_correction_controls=qi_device_residual_correction_controls,
                 )
-                qi_device_rank_budget = int(qi_device_rank_budget_setup.rank_budget)
-                qi_device_max_rank = qi_device_rank_budget_setup.max_rank
+                qi_device_rank_budget = int(qi_device_setup_summary.rank_budget)
+                qi_device_max_rank = qi_device_setup_summary.max_rank
                 try:
                     if assembled_device_operator is None and not bool(qi_device_matrix_free_enabled):
                         raise RuntimeError("missing assembled device CSR operator and matrix-free fallback disabled")
@@ -5272,234 +5217,13 @@ def solve_v3_full_system_linear_gmres(
                         else jnp.asarray(x0_full, dtype=jnp.float64)
                     )
                     qi_device_residual_seed = None
-                    if (
-                        bool(qi_device_residual_enrichment)
-                        or bool(qi_device_recycle_enrichment)
-                        or bool(qi_device_operator_krylov_enrichment)
-                        or bool(qi_device_multilevel_residual_equation)
-                        or bool(qi_device_global_moment_residual_equation)
-                        or bool(qi_device_residual_galerkin_equation)
-                        or bool(qi_device_phase_space_residual_equation)
-                        or bool(qi_device_residual_region_bounce_coarse)
-                        or bool(qi_device_active_pattern_coarse)
-                        or bool(qi_device_block_schur_residual_equation)
-                        or bool(qi_device_coupled_residual_equation)
-                        or bool(qi_device_residual_snapshot_enrichment)
-                        or bool(qi_device_residual_snapshot_residual_equation)
-                        or bool(qi_device_block_schur_residual_enrichment)
-                    ):
+                    if bool(qi_device_setup_summary.residual_seed_required):
                         qi_device_residual_seed = xblock_rhs - _mv_true_no_count(qi_current)
                     qi_operator_for_setup = (
                         assembled_device_operator if assembled_device_operator is not None else _mv_true_no_count
                     )
                     if emit is not None:
-                        for qi_device_message in _rhs1_qi_device_progress_messages(
-                            assembled_device_operator_available=assembled_device_operator is not None,
-                            residual_enrichment=bool(qi_device_residual_enrichment),
-                            residual_enrichment_depth=int(qi_device_residual_enrichment_depth),
-                            operator_action_enrichment=bool(qi_device_operator_action_enrichment),
-                            operator_action_depth=int(qi_device_operator_action_depth),
-                            operator_krylov_enrichment=bool(qi_device_operator_krylov_enrichment),
-                            operator_krylov_depth=int(qi_device_operator_krylov_depth),
-                            adjoint_krylov_enrichment=bool(qi_device_adjoint_krylov_enrichment),
-                            adjoint_krylov_depth=int(qi_device_adjoint_krylov_depth),
-                            adjoint_krylov_transpose_source=qi_device_adjoint_krylov_transpose_source,
-                            max_rank=qi_device_max_rank,
-                            multilevel_coarse=bool(qi_device_multilevel_coarse),
-                            multilevel_max_levels=int(qi_device_multilevel_max_levels),
-                            multilevel_aggregate_factor=int(qi_device_multilevel_aggregate_factor),
-                            multilevel_max_pitch_degree=int(qi_device_multilevel_max_pitch_degree),
-                            multilevel_current_moments=bool(qi_device_multilevel_current_moments),
-                            multilevel_max_rank=qi_device_multilevel_max_rank,
-                            multilevel_residual_equation=bool(qi_device_multilevel_residual_equation),
-                            multilevel_residual_equation_max_level_rank=int(
-                                qi_device_multilevel_residual_equation_max_level_rank
-                            ),
-                            multilevel_residual_equation_order=(
-                                qi_device_multilevel_residual_equation_order
-                            ),
-                            multilevel_residual_equation_solver=(
-                                qi_device_multilevel_residual_equation_solver
-                            ),
-                            multilevel_residual_equation_include_global=bool(
-                                qi_device_multilevel_residual_equation_include_global
-                            ),
-                            global_moment_residual_equation=bool(
-                                qi_device_global_moment_residual_equation
-                            ),
-                            global_moment_residual_equation_max_rank=int(
-                                qi_device_global_moment_residual_equation_max_rank
-                            ),
-                            global_moment_residual_equation_solver=(
-                                qi_device_global_moment_residual_equation_solver
-                            ),
-                            global_moment_residual_equation_include_profile=bool(
-                                qi_device_global_moment_residual_equation_include_profile
-                            ),
-                            global_moment_residual_equation_include_current=bool(
-                                qi_device_global_moment_residual_equation_include_current
-                            ),
-                            global_moment_residual_equation_include_tail=bool(
-                                qi_device_global_moment_residual_equation_include_tail
-                            ),
-                            residual_galerkin_equation=bool(qi_device_residual_galerkin_equation),
-                            residual_galerkin_equation_max_stages=int(
-                                qi_device_residual_galerkin_equation_max_stages
-                            ),
-                            residual_galerkin_equation_max_stage_rank=int(
-                                qi_device_residual_galerkin_equation_max_stage_rank
-                            ),
-                            residual_galerkin_equation_max_rank=int(
-                                qi_device_residual_galerkin_equation_max_rank
-                            ),
-                            residual_galerkin_equation_solver=(
-                                qi_device_residual_galerkin_equation_solver
-                            ),
-                            residual_galerkin_equation_include_global_residual=bool(
-                                qi_device_residual_galerkin_equation_include_global_residual
-                            ),
-                            residual_galerkin_equation_include_block_residuals=bool(
-                                qi_device_residual_galerkin_equation_include_block_residuals
-                            ),
-                            residual_galerkin_equation_include_operator_images=bool(
-                                qi_device_residual_galerkin_equation_include_operator_images
-                            ),
-                            phase_space_residual_equation=bool(
-                                qi_device_phase_space_residual_equation
-                            ),
-                            phase_space_residual_equation_max_rank=int(
-                                qi_device_phase_space_residual_equation_max_rank
-                            ),
-                            phase_space_residual_equation_solver=(
-                                qi_device_phase_space_residual_equation_solver
-                            ),
-                            phase_space_residual_equation_boundary=float(
-                                qi_device_phase_space_residual_equation_boundary
-                            ),
-                            phase_space_residual_equation_include_global=bool(
-                                qi_device_phase_space_residual_equation_include_global
-                            ),
-                            phase_space_residual_equation_include_radial=bool(
-                                qi_device_phase_space_residual_equation_include_radial
-                            ),
-                            phase_space_residual_equation_include_species=bool(
-                                qi_device_phase_space_residual_equation_include_species
-                            ),
-                            residual_region_bounce_coarse=bool(
-                                qi_device_residual_region_bounce_coarse
-                            ),
-                            residual_region_bounce_coarse_max_rank=int(
-                                qi_device_residual_region_bounce_coarse_max_rank
-                            ),
-                            residual_region_bounce_coarse_solver=(
-                                qi_device_residual_region_bounce_coarse_solver
-                            ),
-                            residual_region_bounce_coarse_boundary=float(
-                                qi_device_residual_region_bounce_coarse_boundary
-                            ),
-                            residual_region_bounce_coarse_min_energy=float(
-                                qi_device_residual_region_bounce_coarse_min_energy
-                            ),
-                            residual_region_bounce_coarse_include_global=bool(
-                                qi_device_residual_region_bounce_coarse_include_global
-                            ),
-                            residual_region_bounce_coarse_include_radial=bool(
-                                qi_device_residual_region_bounce_coarse_include_radial
-                            ),
-                            residual_region_bounce_coarse_include_species=bool(
-                                qi_device_residual_region_bounce_coarse_include_species
-                            ),
-                            residual_region_bounce_coarse_region_bands=(
-                                qi_device_residual_region_bounce_coarse_region_bands
-                            ),
-                            active_pattern_coarse=bool(qi_device_active_pattern_coarse),
-                            active_pattern_coarse_max_rank=int(
-                                qi_device_active_pattern_coarse_max_rank
-                            ),
-                            active_pattern_coarse_max_candidates=int(
-                                qi_device_active_pattern_coarse_max_candidates
-                            ),
-                            active_pattern_coarse_solver=qi_device_active_pattern_coarse_solver,
-                            active_pattern_coarse_min_chunk_energy=float(
-                                qi_device_active_pattern_coarse_min_chunk_energy
-                            ),
-                            active_pattern_coarse_include_global=bool(
-                                qi_device_active_pattern_coarse_include_global
-                            ),
-                            block_schur_residual_equation=bool(
-                                qi_device_block_schur_residual_equation
-                            ),
-                            block_schur_residual_equation_max_rank=int(
-                                qi_device_block_schur_residual_equation_max_rank
-                            ),
-                            block_schur_residual_equation_include_global=bool(
-                                qi_device_block_schur_residual_equation_include_global
-                            ),
-                            block_schur_residual_equation_include_blocks=bool(
-                                qi_device_block_schur_residual_equation_include_blocks
-                            ),
-                            block_schur_residual_equation_include_aggregates=bool(
-                                qi_device_block_schur_residual_equation_include_aggregates
-                            ),
-                            coupled_residual_equation=bool(qi_device_coupled_residual_equation),
-                            coupled_residual_equation_max_rank=int(
-                                qi_device_coupled_residual_equation_max_rank
-                            ),
-                            coupled_residual_equation_solver=qi_device_coupled_residual_equation_solver,
-                            coupled_residual_equation_include_flat=bool(
-                                qi_device_coupled_residual_equation_include_flat
-                            ),
-                            coupled_residual_equation_install_on_reject=bool(
-                                qi_device_coupled_residual_equation_install_on_reject
-                            ),
-                            coupled_residual_equation_min_improvement=float(
-                                qi_device_coupled_residual_equation_min_improvement
-                            ),
-                            residual_snapshot_enrichment=bool(
-                                qi_device_residual_snapshot_enrichment
-                            ),
-                            residual_snapshot_max_rank=int(qi_device_residual_snapshot_max_rank),
-                            residual_snapshot_include_primal=bool(
-                                qi_device_residual_snapshot_include_primal
-                            ),
-                            residual_snapshot_use_adjoint=bool(
-                                qi_device_residual_snapshot_use_adjoint
-                            ),
-                            residual_snapshot_include_global=bool(
-                                qi_device_residual_snapshot_include_global
-                            ),
-                            residual_snapshot_include_blocks=bool(
-                                qi_device_residual_snapshot_include_blocks
-                            ),
-                            residual_snapshot_include_aggregates=bool(
-                                qi_device_residual_snapshot_include_aggregates
-                            ),
-                            residual_snapshot_residual_equation=bool(
-                                qi_device_residual_snapshot_residual_equation
-                            ),
-                            residual_snapshot_residual_equation_max_rank=int(
-                                qi_device_residual_snapshot_residual_equation_max_rank
-                            ),
-                            residual_snapshot_residual_equation_solver=(
-                                qi_device_residual_snapshot_residual_equation_solver
-                            ),
-                            residual_snapshot_residual_equation_include_global=bool(
-                                qi_device_residual_snapshot_residual_equation_include_global
-                            ),
-                            block_schur_residual_enrichment=bool(
-                                qi_device_block_schur_residual_enrichment
-                            ),
-                            block_schur_residual_max_rank=int(qi_device_block_schur_residual_max_rank),
-                            block_schur_residual_include_global=bool(
-                                qi_device_block_schur_residual_include_global
-                            ),
-                            block_schur_residual_include_blocks=bool(
-                                qi_device_block_schur_residual_include_blocks
-                            ),
-                            block_schur_residual_include_aggregates=bool(
-                                qi_device_block_schur_residual_include_aggregates
-                            ),
-                        ):
+                        for qi_device_message in qi_device_setup_summary.progress_messages:
                             emit(1, qi_device_message)
                     qi_device_state = setup_rhs1_qi_device_preconditioner(
                         operator=qi_operator_for_setup,

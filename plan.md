@@ -34137,3 +34137,55 @@ Next refactor target:
   preconditioner setup arguments. The current driver call-site still exposes
   too many individual QI-device variables; a context object should shrink the
   solve block without introducing new solver behavior.
+
+### 19.92 RHSMode=1 x-block QI-device setup-summary extraction
+
+Goal:
+
+- Remove the largest remaining QI-device policy argument cascades from the main
+  RHSMode=1 solve branch by deriving rank budget, progress messages, and
+  residual-seed admission from one pure setup-summary helper.
+
+Implementation:
+
+- Added ``RHS1QIDeviceSetupSummary`` and
+  ``rhs1_qi_device_setup_summary`` to
+  ``sfincs_jax/problems/profile_response/policies.py`` and exported them.
+- Wired ``v3_driver.py`` to call the summary helper with the already-resolved
+  enrichment config, multilevel config, extra coarse controls, and residual
+  correction controls.
+- Replaced the in-driver rank-budget cascade, progress-message cascade, and
+  residual-seed boolean cascade with fields on the setup summary.
+- Kept existing private aliases for ``rhs1_qi_device_rank_budget`` and
+  ``rhs1_qi_device_progress_messages`` so direct tests and compatibility seams
+  still exercise those lower-level helpers.
+- Added direct tests for summary rank/progress/residual-seed behavior and the
+  adjoint-only compatibility path where progress is logged without forcing a
+  residual seed or max-rank cap.
+- ``solve_v3_full_system_linear_gmres`` is now about ``18597`` lines and
+  ``v3_driver.py`` is about ``23874`` lines.
+
+Validation so far:
+
+- ``python -m ruff check sfincs_jax/problems/profile_response/policies.py
+  sfincs_jax/v3_driver.py tests/test_rhs1_xblock_fallback_initial_guess.py``:
+  passed.
+- ``python -m compileall -q
+  sfincs_jax/problems/profile_response/policies.py sfincs_jax/v3_driver.py
+  tests/test_rhs1_xblock_fallback_initial_guess.py``: passed.
+- Focused policy/helper and QI-device metadata regressions:
+  ``33 passed in 14.02 s``.
+- Broader current profile-response/x-block/sparse-pattern shard:
+  ``314 passed in 114.01 s``.
+- ``git diff --check``: passed.
+- Latest remote docs snapshot after the previous pushed checkpoint is green;
+  PR CI is still in progress and should be checked after more refactor work
+  rather than watched continuously.
+
+Next refactor target:
+
+- Extract a typed view object for extra coarse controls and residual correction
+  controls, then replace the repeated dictionary-to-local expansion in both the
+  main driver path and ``problems/profile_response/qi_device_seed.py``. This is
+  the next high-ROI cleanup because it removes duplicated policy unpacking
+  without changing solver construction.

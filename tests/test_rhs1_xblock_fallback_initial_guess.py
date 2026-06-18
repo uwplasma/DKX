@@ -1,3 +1,5 @@
+from types import SimpleNamespace
+
 import jax.numpy as jnp
 import numpy as np
 import pytest
@@ -10,6 +12,7 @@ from sfincs_jax.problems.profile_response.policies import (
     rhs1_qi_device_progress_messages,
     rhs1_qi_device_rank_budget,
     rhs1_qi_device_residual_correction_controls,
+    rhs1_qi_device_setup_summary,
     rhs1_xblock_fallback_initial_guess,
 )
 
@@ -31,6 +34,7 @@ def test_driver_private_policy_helpers_alias_canonical_profile_response_helpers(
         vd._rhs1_qi_device_residual_correction_controls
         is rhs1_qi_device_residual_correction_controls
     )
+    assert vd._rhs1_qi_device_setup_summary is rhs1_qi_device_setup_summary
     assert vd._rhs1_qi_device_rank_budget is rhs1_qi_device_rank_budget
     assert vd._rhs1_xblock_fallback_initial_guess is rhs1_xblock_fallback_initial_guess
 
@@ -464,3 +468,167 @@ def test_qi_device_progress_messages_reports_enabled_feature_parameters() -> Non
         "include_global=1 include_primal=1 use_adjoint=1 include_blocks=1 "
         "include_aggregates=1)"
     ) in messages[2]
+
+
+def _enrichment_config(**overrides):
+    defaults = {
+        "residual_enrichment": False,
+        "residual_enrichment_depth": 2,
+        "residual_enrichment_include_residual": True,
+        "recycle_enrichment": False,
+        "recycle_cycles": 1,
+        "operator_krylov_enrichment": False,
+        "operator_krylov_depth": 3,
+        "adjoint_krylov_enrichment": False,
+        "adjoint_krylov_depth": 4,
+        "adjoint_krylov_transpose_source": "csr",
+        "operator_action_enrichment": False,
+        "operator_action_depth": 1,
+    }
+    defaults.update(overrides)
+    return SimpleNamespace(**defaults)
+
+
+def _multilevel_config(**overrides):
+    defaults = {
+        "multilevel_coarse": False,
+        "multilevel_max_levels": 2,
+        "multilevel_aggregate_factor": 2,
+        "multilevel_max_pitch_degree": 1,
+        "multilevel_current_moments": False,
+        "multilevel_current_max_pitch_degree": 1,
+        "multilevel_residual_equation": False,
+        "multilevel_residual_equation_max_level_rank": 5,
+        "multilevel_residual_equation_order": "coarse_to_fine",
+        "multilevel_residual_equation_solver": "galerkin",
+        "multilevel_residual_equation_include_global": True,
+    }
+    defaults.update(overrides)
+    return SimpleNamespace(**defaults)
+
+
+def _extra_coarse_controls_for_summary(**overrides):
+    controls = rhs1_qi_device_extra_coarse_controls()
+    controls.update(
+        {
+            "global_moment_residual_equation": False,
+            "global_moment_residual_equation_max_rank": 7,
+            "global_moment_residual_equation_solver": "action_lstsq",
+            "global_moment_residual_equation_include_profile": True,
+            "global_moment_residual_equation_include_current": True,
+            "global_moment_residual_equation_include_tail": False,
+            "residual_galerkin_equation": False,
+            "residual_galerkin_equation_max_stages": 2,
+            "residual_galerkin_equation_max_stage_rank": 3,
+            "residual_galerkin_equation_max_rank": 11,
+            "residual_galerkin_equation_solver": "galerkin",
+            "residual_galerkin_equation_include_global_residual": True,
+            "residual_galerkin_equation_include_block_residuals": True,
+            "residual_galerkin_equation_include_operator_images": False,
+            "phase_space_residual_equation": False,
+            "phase_space_residual_equation_max_rank": 13,
+            "phase_space_residual_equation_solver": "action_lstsq",
+            "phase_space_residual_equation_boundary": 0.35,
+            "phase_space_residual_equation_include_global": False,
+            "phase_space_residual_equation_include_radial": True,
+            "phase_space_residual_equation_include_species": True,
+            "residual_region_bounce_coarse": False,
+            "residual_region_bounce_coarse_max_rank": 17,
+            "residual_region_bounce_coarse_solver": "galerkin",
+            "residual_region_bounce_coarse_boundary": 0.25,
+            "residual_region_bounce_coarse_min_energy": 0.02,
+            "residual_region_bounce_coarse_include_global": True,
+            "residual_region_bounce_coarse_include_radial": False,
+            "residual_region_bounce_coarse_include_species": True,
+            "residual_region_bounce_coarse_region_bands": "bounce,trapped",
+            "active_pattern_coarse": False,
+            "active_pattern_coarse_max_rank": 19,
+            "active_pattern_coarse_max_candidates": 23,
+            "active_pattern_coarse_solver": "action_lstsq",
+            "active_pattern_coarse_min_chunk_energy": 0.03,
+            "active_pattern_coarse_include_global": True,
+        }
+    )
+    controls.update(overrides)
+    return controls
+
+
+def _residual_controls_for_summary(**overrides):
+    controls = rhs1_qi_device_residual_correction_controls()
+    controls.update(
+        {
+            "block_schur_residual_equation": False,
+            "block_schur_residual_equation_max_rank": 29,
+            "block_schur_residual_equation_include_global": True,
+            "block_schur_residual_equation_include_blocks": True,
+            "block_schur_residual_equation_include_aggregates": False,
+            "coupled_residual_equation": False,
+            "coupled_residual_equation_max_rank": 31,
+            "coupled_residual_equation_solver": "galerkin",
+            "coupled_residual_equation_include_flat": True,
+            "coupled_residual_equation_install_on_reject": False,
+            "coupled_residual_equation_min_improvement": 0.1,
+            "residual_snapshot_enrichment": False,
+            "residual_snapshot_max_rank": 37,
+            "residual_snapshot_include_primal": True,
+            "residual_snapshot_use_adjoint": True,
+            "residual_snapshot_include_global": True,
+            "residual_snapshot_include_blocks": False,
+            "residual_snapshot_include_aggregates": True,
+            "residual_snapshot_residual_equation": False,
+            "residual_snapshot_residual_equation_max_rank": 41,
+            "residual_snapshot_residual_equation_solver": "action_lstsq",
+            "residual_snapshot_residual_equation_include_global": True,
+            "block_schur_residual_enrichment": False,
+            "block_schur_residual_max_rank": 43,
+            "block_schur_residual_include_global": True,
+            "block_schur_residual_include_blocks": True,
+            "block_schur_residual_include_aggregates": True,
+        }
+    )
+    controls.update(overrides)
+    return controls
+
+
+def test_qi_device_setup_summary_matches_rank_progress_and_seed_policy() -> None:
+    summary = rhs1_qi_device_setup_summary(
+        seed_max_rank=4,
+        n_species=2,
+        assembled_device_operator_available=False,
+        enrichment_config=_enrichment_config(
+            residual_enrichment=True,
+            residual_enrichment_depth=3,
+        ),
+        multilevel_config=_multilevel_config(),
+        multilevel_max_rank=None,
+        extra_coarse_controls=_extra_coarse_controls_for_summary(),
+        residual_correction_controls=_residual_controls_for_summary(),
+        max_rank_env_value="",
+    )
+
+    assert summary.rank_budget == 8
+    assert summary.max_rank == 8
+    assert summary.residual_seed_required is True
+    assert len(summary.progress_messages) == 2
+    assert "matrix-free coarse-only" in summary.progress_messages[0]
+    assert "residual enrichment (depth=3 max_rank=8)" in summary.progress_messages[1]
+
+
+def test_qi_device_setup_summary_preserves_adjoint_only_compatibility() -> None:
+    summary = rhs1_qi_device_setup_summary(
+        seed_max_rank=4,
+        n_species=1,
+        assembled_device_operator_available=True,
+        enrichment_config=_enrichment_config(adjoint_krylov_enrichment=True),
+        multilevel_config=_multilevel_config(),
+        multilevel_max_rank=None,
+        extra_coarse_controls=_extra_coarse_controls_for_summary(),
+        residual_correction_controls=_residual_controls_for_summary(),
+        max_rank_env_value="",
+    )
+
+    assert summary.rank_budget == 9
+    assert summary.max_rank is None
+    assert summary.residual_seed_required is False
+    assert len(summary.progress_messages) == 1
+    assert "adjoint-normal Krylov coarse enrichment" in summary.progress_messages[0]

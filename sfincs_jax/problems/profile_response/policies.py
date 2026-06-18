@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import os
-from typing import Any
+from typing import Any, Mapping
 
 import jax.numpy as jnp
 import numpy as np
@@ -437,6 +437,16 @@ class RHS1QIDeviceRankBudget:
     max_rank: int | None
 
 
+@dataclass(frozen=True)
+class RHS1QIDeviceSetupSummary:
+    """Derived QI-device setup policy shared by the main RHSMode=1 branch."""
+
+    rank_budget: int
+    max_rank: int | None
+    progress_messages: tuple[str, ...]
+    residual_seed_required: bool
+
+
 def rhs1_qi_device_rank_budget(
     *,
     seed_max_rank: int,
@@ -563,6 +573,370 @@ def rhs1_qi_device_rank_budget(
         max_rank = None
 
     return RHS1QIDeviceRankBudget(rank_budget=max(1, int(rank_budget)), max_rank=max_rank)
+
+
+def rhs1_qi_device_setup_summary(
+    *,
+    seed_max_rank: int,
+    n_species: int,
+    assembled_device_operator_available: bool,
+    enrichment_config: Any,
+    multilevel_config: Any,
+    multilevel_max_rank: int | None,
+    extra_coarse_controls: Mapping[str, object],
+    residual_correction_controls: Mapping[str, object],
+    max_rank_env_value: str | None = None,
+) -> RHS1QIDeviceSetupSummary:
+    """Return rank, progress, and residual-seed policy from resolved controls."""
+
+    rank_budget_setup = rhs1_qi_device_rank_budget(
+        seed_max_rank=int(seed_max_rank),
+        n_species=int(n_species),
+        residual_enrichment=bool(enrichment_config.residual_enrichment),
+        residual_enrichment_depth=int(enrichment_config.residual_enrichment_depth),
+        residual_enrichment_include_residual=bool(
+            enrichment_config.residual_enrichment_include_residual
+        ),
+        recycle_enrichment=bool(enrichment_config.recycle_enrichment),
+        recycle_cycles=int(enrichment_config.recycle_cycles),
+        operator_krylov_enrichment=bool(enrichment_config.operator_krylov_enrichment),
+        operator_krylov_depth=int(enrichment_config.operator_krylov_depth),
+        adjoint_krylov_enrichment=bool(enrichment_config.adjoint_krylov_enrichment),
+        adjoint_krylov_depth=int(enrichment_config.adjoint_krylov_depth),
+        operator_action_enrichment=bool(enrichment_config.operator_action_enrichment),
+        operator_action_depth=int(enrichment_config.operator_action_depth),
+        multilevel_coarse=bool(multilevel_config.multilevel_coarse),
+        multilevel_max_rank=multilevel_max_rank,
+        multilevel_current_moments=bool(multilevel_config.multilevel_current_moments),
+        multilevel_current_max_pitch_degree=int(
+            multilevel_config.multilevel_current_max_pitch_degree
+        ),
+        multilevel_residual_equation=bool(
+            multilevel_config.multilevel_residual_equation
+        ),
+        multilevel_residual_equation_max_level_rank=int(
+            multilevel_config.multilevel_residual_equation_max_level_rank
+        ),
+        multilevel_max_levels=int(multilevel_config.multilevel_max_levels),
+        global_moment_residual_equation=bool(
+            extra_coarse_controls["global_moment_residual_equation"]
+        ),
+        global_moment_residual_equation_max_rank=int(
+            extra_coarse_controls["global_moment_residual_equation_max_rank"]
+        ),
+        residual_galerkin_equation=bool(
+            extra_coarse_controls["residual_galerkin_equation"]
+        ),
+        residual_galerkin_equation_max_rank=int(
+            extra_coarse_controls["residual_galerkin_equation_max_rank"]
+        ),
+        phase_space_residual_equation=bool(
+            extra_coarse_controls["phase_space_residual_equation"]
+        ),
+        phase_space_residual_equation_max_rank=int(
+            extra_coarse_controls["phase_space_residual_equation_max_rank"]
+        ),
+        residual_region_bounce_coarse=bool(
+            extra_coarse_controls["residual_region_bounce_coarse"]
+        ),
+        residual_region_bounce_coarse_max_rank=int(
+            extra_coarse_controls["residual_region_bounce_coarse_max_rank"]
+        ),
+        active_pattern_coarse=bool(extra_coarse_controls["active_pattern_coarse"]),
+        active_pattern_coarse_max_rank=int(
+            extra_coarse_controls["active_pattern_coarse_max_rank"]
+        ),
+        block_schur_residual_equation=bool(
+            residual_correction_controls["block_schur_residual_equation"]
+        ),
+        block_schur_residual_equation_max_rank=int(
+            residual_correction_controls["block_schur_residual_equation_max_rank"]
+        ),
+        coupled_residual_equation=bool(
+            residual_correction_controls["coupled_residual_equation"]
+        ),
+        coupled_residual_equation_max_rank=int(
+            residual_correction_controls["coupled_residual_equation_max_rank"]
+        ),
+        residual_snapshot_enrichment=bool(
+            residual_correction_controls["residual_snapshot_enrichment"]
+        ),
+        residual_snapshot_max_rank=int(
+            residual_correction_controls["residual_snapshot_max_rank"]
+        ),
+        residual_snapshot_residual_equation=bool(
+            residual_correction_controls["residual_snapshot_residual_equation"]
+        ),
+        residual_snapshot_residual_equation_max_rank=int(
+            residual_correction_controls["residual_snapshot_residual_equation_max_rank"]
+        ),
+        block_schur_residual_enrichment=bool(
+            residual_correction_controls["block_schur_residual_enrichment"]
+        ),
+        block_schur_residual_max_rank=int(
+            residual_correction_controls["block_schur_residual_max_rank"]
+        ),
+        max_rank_env_value=max_rank_env_value,
+    )
+    progress_messages = rhs1_qi_device_progress_messages(
+        assembled_device_operator_available=bool(assembled_device_operator_available),
+        residual_enrichment=bool(enrichment_config.residual_enrichment),
+        residual_enrichment_depth=int(enrichment_config.residual_enrichment_depth),
+        operator_action_enrichment=bool(enrichment_config.operator_action_enrichment),
+        operator_action_depth=int(enrichment_config.operator_action_depth),
+        operator_krylov_enrichment=bool(enrichment_config.operator_krylov_enrichment),
+        operator_krylov_depth=int(enrichment_config.operator_krylov_depth),
+        adjoint_krylov_enrichment=bool(enrichment_config.adjoint_krylov_enrichment),
+        adjoint_krylov_depth=int(enrichment_config.adjoint_krylov_depth),
+        adjoint_krylov_transpose_source=str(
+            enrichment_config.adjoint_krylov_transpose_source
+        ),
+        max_rank=rank_budget_setup.max_rank,
+        multilevel_coarse=bool(multilevel_config.multilevel_coarse),
+        multilevel_max_levels=int(multilevel_config.multilevel_max_levels),
+        multilevel_aggregate_factor=int(multilevel_config.multilevel_aggregate_factor),
+        multilevel_max_pitch_degree=int(multilevel_config.multilevel_max_pitch_degree),
+        multilevel_current_moments=bool(multilevel_config.multilevel_current_moments),
+        multilevel_max_rank=multilevel_max_rank,
+        multilevel_residual_equation=bool(
+            multilevel_config.multilevel_residual_equation
+        ),
+        multilevel_residual_equation_max_level_rank=int(
+            multilevel_config.multilevel_residual_equation_max_level_rank
+        ),
+        multilevel_residual_equation_order=str(
+            multilevel_config.multilevel_residual_equation_order
+        ),
+        multilevel_residual_equation_solver=str(
+            multilevel_config.multilevel_residual_equation_solver
+        ),
+        multilevel_residual_equation_include_global=bool(
+            multilevel_config.multilevel_residual_equation_include_global
+        ),
+        global_moment_residual_equation=bool(
+            extra_coarse_controls["global_moment_residual_equation"]
+        ),
+        global_moment_residual_equation_max_rank=int(
+            extra_coarse_controls["global_moment_residual_equation_max_rank"]
+        ),
+        global_moment_residual_equation_solver=str(
+            extra_coarse_controls["global_moment_residual_equation_solver"]
+        ),
+        global_moment_residual_equation_include_profile=bool(
+            extra_coarse_controls["global_moment_residual_equation_include_profile"]
+        ),
+        global_moment_residual_equation_include_current=bool(
+            extra_coarse_controls["global_moment_residual_equation_include_current"]
+        ),
+        global_moment_residual_equation_include_tail=bool(
+            extra_coarse_controls["global_moment_residual_equation_include_tail"]
+        ),
+        residual_galerkin_equation=bool(
+            extra_coarse_controls["residual_galerkin_equation"]
+        ),
+        residual_galerkin_equation_max_stages=int(
+            extra_coarse_controls["residual_galerkin_equation_max_stages"]
+        ),
+        residual_galerkin_equation_max_stage_rank=int(
+            extra_coarse_controls["residual_galerkin_equation_max_stage_rank"]
+        ),
+        residual_galerkin_equation_max_rank=int(
+            extra_coarse_controls["residual_galerkin_equation_max_rank"]
+        ),
+        residual_galerkin_equation_solver=str(
+            extra_coarse_controls["residual_galerkin_equation_solver"]
+        ),
+        residual_galerkin_equation_include_global_residual=bool(
+            extra_coarse_controls[
+                "residual_galerkin_equation_include_global_residual"
+            ]
+        ),
+        residual_galerkin_equation_include_block_residuals=bool(
+            extra_coarse_controls["residual_galerkin_equation_include_block_residuals"]
+        ),
+        residual_galerkin_equation_include_operator_images=bool(
+            extra_coarse_controls[
+                "residual_galerkin_equation_include_operator_images"
+            ]
+        ),
+        phase_space_residual_equation=bool(
+            extra_coarse_controls["phase_space_residual_equation"]
+        ),
+        phase_space_residual_equation_max_rank=int(
+            extra_coarse_controls["phase_space_residual_equation_max_rank"]
+        ),
+        phase_space_residual_equation_solver=str(
+            extra_coarse_controls["phase_space_residual_equation_solver"]
+        ),
+        phase_space_residual_equation_boundary=float(
+            extra_coarse_controls["phase_space_residual_equation_boundary"]
+        ),
+        phase_space_residual_equation_include_global=bool(
+            extra_coarse_controls["phase_space_residual_equation_include_global"]
+        ),
+        phase_space_residual_equation_include_radial=bool(
+            extra_coarse_controls["phase_space_residual_equation_include_radial"]
+        ),
+        phase_space_residual_equation_include_species=bool(
+            extra_coarse_controls["phase_space_residual_equation_include_species"]
+        ),
+        residual_region_bounce_coarse=bool(
+            extra_coarse_controls["residual_region_bounce_coarse"]
+        ),
+        residual_region_bounce_coarse_max_rank=int(
+            extra_coarse_controls["residual_region_bounce_coarse_max_rank"]
+        ),
+        residual_region_bounce_coarse_solver=str(
+            extra_coarse_controls["residual_region_bounce_coarse_solver"]
+        ),
+        residual_region_bounce_coarse_boundary=float(
+            extra_coarse_controls["residual_region_bounce_coarse_boundary"]
+        ),
+        residual_region_bounce_coarse_min_energy=float(
+            extra_coarse_controls["residual_region_bounce_coarse_min_energy"]
+        ),
+        residual_region_bounce_coarse_include_global=bool(
+            extra_coarse_controls["residual_region_bounce_coarse_include_global"]
+        ),
+        residual_region_bounce_coarse_include_radial=bool(
+            extra_coarse_controls["residual_region_bounce_coarse_include_radial"]
+        ),
+        residual_region_bounce_coarse_include_species=bool(
+            extra_coarse_controls["residual_region_bounce_coarse_include_species"]
+        ),
+        residual_region_bounce_coarse_region_bands=str(
+            extra_coarse_controls["residual_region_bounce_coarse_region_bands"]
+        ),
+        active_pattern_coarse=bool(extra_coarse_controls["active_pattern_coarse"]),
+        active_pattern_coarse_max_rank=int(
+            extra_coarse_controls["active_pattern_coarse_max_rank"]
+        ),
+        active_pattern_coarse_max_candidates=int(
+            extra_coarse_controls["active_pattern_coarse_max_candidates"]
+        ),
+        active_pattern_coarse_solver=str(
+            extra_coarse_controls["active_pattern_coarse_solver"]
+        ),
+        active_pattern_coarse_min_chunk_energy=float(
+            extra_coarse_controls["active_pattern_coarse_min_chunk_energy"]
+        ),
+        active_pattern_coarse_include_global=bool(
+            extra_coarse_controls["active_pattern_coarse_include_global"]
+        ),
+        block_schur_residual_equation=bool(
+            residual_correction_controls["block_schur_residual_equation"]
+        ),
+        block_schur_residual_equation_max_rank=int(
+            residual_correction_controls["block_schur_residual_equation_max_rank"]
+        ),
+        block_schur_residual_equation_include_global=bool(
+            residual_correction_controls[
+                "block_schur_residual_equation_include_global"
+            ]
+        ),
+        block_schur_residual_equation_include_blocks=bool(
+            residual_correction_controls[
+                "block_schur_residual_equation_include_blocks"
+            ]
+        ),
+        block_schur_residual_equation_include_aggregates=bool(
+            residual_correction_controls[
+                "block_schur_residual_equation_include_aggregates"
+            ]
+        ),
+        coupled_residual_equation=bool(
+            residual_correction_controls["coupled_residual_equation"]
+        ),
+        coupled_residual_equation_max_rank=int(
+            residual_correction_controls["coupled_residual_equation_max_rank"]
+        ),
+        coupled_residual_equation_solver=str(
+            residual_correction_controls["coupled_residual_equation_solver"]
+        ),
+        coupled_residual_equation_include_flat=bool(
+            residual_correction_controls["coupled_residual_equation_include_flat"]
+        ),
+        coupled_residual_equation_install_on_reject=bool(
+            residual_correction_controls[
+                "coupled_residual_equation_install_on_reject"
+            ]
+        ),
+        coupled_residual_equation_min_improvement=float(
+            residual_correction_controls["coupled_residual_equation_min_improvement"]
+        ),
+        residual_snapshot_enrichment=bool(
+            residual_correction_controls["residual_snapshot_enrichment"]
+        ),
+        residual_snapshot_max_rank=int(
+            residual_correction_controls["residual_snapshot_max_rank"]
+        ),
+        residual_snapshot_include_primal=bool(
+            residual_correction_controls["residual_snapshot_include_primal"]
+        ),
+        residual_snapshot_use_adjoint=bool(
+            residual_correction_controls["residual_snapshot_use_adjoint"]
+        ),
+        residual_snapshot_include_global=bool(
+            residual_correction_controls["residual_snapshot_include_global"]
+        ),
+        residual_snapshot_include_blocks=bool(
+            residual_correction_controls["residual_snapshot_include_blocks"]
+        ),
+        residual_snapshot_include_aggregates=bool(
+            residual_correction_controls["residual_snapshot_include_aggregates"]
+        ),
+        residual_snapshot_residual_equation=bool(
+            residual_correction_controls["residual_snapshot_residual_equation"]
+        ),
+        residual_snapshot_residual_equation_max_rank=int(
+            residual_correction_controls["residual_snapshot_residual_equation_max_rank"]
+        ),
+        residual_snapshot_residual_equation_solver=str(
+            residual_correction_controls["residual_snapshot_residual_equation_solver"]
+        ),
+        residual_snapshot_residual_equation_include_global=bool(
+            residual_correction_controls[
+                "residual_snapshot_residual_equation_include_global"
+            ]
+        ),
+        block_schur_residual_enrichment=bool(
+            residual_correction_controls["block_schur_residual_enrichment"]
+        ),
+        block_schur_residual_max_rank=int(
+            residual_correction_controls["block_schur_residual_max_rank"]
+        ),
+        block_schur_residual_include_global=bool(
+            residual_correction_controls["block_schur_residual_include_global"]
+        ),
+        block_schur_residual_include_blocks=bool(
+            residual_correction_controls["block_schur_residual_include_blocks"]
+        ),
+        block_schur_residual_include_aggregates=bool(
+            residual_correction_controls["block_schur_residual_include_aggregates"]
+        ),
+    )
+    residual_seed_required = (
+        bool(enrichment_config.residual_enrichment)
+        or bool(enrichment_config.recycle_enrichment)
+        or bool(enrichment_config.operator_krylov_enrichment)
+        or bool(multilevel_config.multilevel_residual_equation)
+        or bool(extra_coarse_controls["global_moment_residual_equation"])
+        or bool(extra_coarse_controls["residual_galerkin_equation"])
+        or bool(extra_coarse_controls["phase_space_residual_equation"])
+        or bool(extra_coarse_controls["residual_region_bounce_coarse"])
+        or bool(extra_coarse_controls["active_pattern_coarse"])
+        or bool(residual_correction_controls["block_schur_residual_equation"])
+        or bool(residual_correction_controls["coupled_residual_equation"])
+        or bool(residual_correction_controls["residual_snapshot_enrichment"])
+        or bool(residual_correction_controls["residual_snapshot_residual_equation"])
+        or bool(residual_correction_controls["block_schur_residual_enrichment"])
+    )
+    return RHS1QIDeviceSetupSummary(
+        rank_budget=int(rank_budget_setup.rank_budget),
+        max_rank=rank_budget_setup.max_rank,
+        progress_messages=progress_messages,
+        residual_seed_required=bool(residual_seed_required),
+    )
 
 
 def rhs1_qi_device_progress_messages(
@@ -1651,6 +2025,7 @@ def rhs1_pas_tz_guarded_stage2_retry() -> bool:
 
 __all__ = (
     "RHS1QIDeviceRankBudget",
+    "RHS1QIDeviceSetupSummary",
     "RHS1SparseRescueOrdering",
     "parse_rhs1_pas_tz_guarded_structured_levels",
     "rhs1_constraint0_dense_fallback_allowed",
@@ -1673,6 +2048,7 @@ __all__ = (
     "rhs1_qi_device_progress_messages",
     "rhs1_qi_device_rank_budget",
     "rhs1_qi_device_residual_correction_controls",
+    "rhs1_qi_device_setup_summary",
     "rhs1_resolved_sparse_rescue_ordering",
     "rhs1_scipy_rescue_abs_floor_after_xblock",
     "rhs1_scipy_rescue_active_size_allowed",
