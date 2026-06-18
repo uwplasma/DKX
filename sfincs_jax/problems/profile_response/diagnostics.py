@@ -1353,3 +1353,121 @@ def xblock_sparse_pc_core_diagnostics(
         "xblock_lower_fill_requested": lower_fill_mode in {"probe", "force"},
         "xblock_lower_fill_ignored_env": bool(context.lower_fill_ignored_env),
     }
+
+
+def xblock_sparse_pc_result_diagnostics_from_driver_state(
+    state: Mapping[str, object],
+    *,
+    full_size: object,
+) -> dict[str, object]:
+    """Build final x-block sparse-PC diagnostics from the driver solve state.
+
+    This is a transitional boundary: the driver now has one explicit metadata
+    handoff instead of many scattered ``locals()`` calls, while the component
+    helpers keep the stable public keys and the remaining coarse/QI payloads
+    can be typed incrementally.
+    """
+
+    return {
+        **xblock_sparse_pc_core_diagnostics(
+            XBlockSparsePCCoreDiagnosticsContext(
+                solver_kind=state["xblock_solver_kind"],
+                accepted_converged=state["accepted_converged_xblock"],
+                reported_iterations=state["reported_iterations"],
+                reported_matvecs=state["reported_matvecs"],
+                python_matvecs=state["mv_count"],
+                device_cycle_estimated_matvecs=state[
+                    "device_krylov_estimated_matvecs"
+                ],
+                krylov_method=state["xblock_krylov_method"],
+                candidate_krylov_method=state["candidate_krylov_method"],
+                candidate_iterations=state["candidate_iterations"],
+                candidate_matvecs=state["candidate_matvecs"],
+                candidate_residual_norm=state["candidate_residual_norm"],
+                fallback_started_from_candidate=state[
+                    "fallback_started_from_candidate"
+                ],
+                fallback_candidate_improved_rhs=state[
+                    "fallback_candidate_improved_rhs"
+                ],
+                precondition_side=state["precondition_side"],
+                default_right_preconditioned=state["xblock_default_right_pc"],
+                default_short_restart_capped=state["xblock_default_restart_capped"],
+                gmres_restart=state["pc_restart"],
+                gmres_maxiter=state["pc_maxiter"],
+                setup_s=state["setup_s"],
+                solve_s=state["solve_s"],
+                elapsed_s=state["sparse_timer"].elapsed_s(),
+                sparse_pc_factor_s=state["pc_factor_s"],
+                preconditioner_xi=state["xblock_preconditioner_xi"],
+                preconditioner_built=state["xblock_preconditioner_built"],
+                assembled_host=state["xblock_assembled_host_fp"],
+                jax_factors=state["xblock_jax_factors"],
+                jax_factor_format=state["xblock_jax_factor_format"],
+                jax_factor_apply=state["xblock_jax_factor_apply"],
+                lower_fill_mode=state["xblock_lower_fill_mode"],
+                lower_fill_ignored_env=state["xblock_lower_fill_ignored_env"],
+            )
+        ),
+        **xblock_device_krylov_diagnostics(state),
+        "xblock_active_dof": bool(state["xblock_use_active_dof"]),
+        "xblock_linear_size": int(state["xblock_linear_size"]),
+        "xblock_full_size": int(full_size),
+        **xblock_assembled_operator_diagnostics(
+            XBlockAssembledOperatorDiagnosticsContext(
+                enabled=state["assembled_operator_enabled"],
+                built=state["assembled_operator_built"],
+                metadata=state["assembled_operator_metadata"],
+                row_equilibration_enabled=state[
+                    "xblock_row_equilibration_enabled"
+                ],
+                row_equilibration_built=state["xblock_row_equilibration_built"],
+                row_equilibration_metadata=state[
+                    "xblock_row_equilibration_metadata"
+                ],
+                col_equilibration_enabled=state[
+                    "xblock_col_equilibration_enabled"
+                ],
+                col_equilibration_built=state["xblock_col_equilibration_built"],
+                col_equilibration_metadata=state[
+                    "xblock_col_equilibration_metadata"
+                ],
+            )
+        ),
+        **xblock_coarse_correction_diagnostics(state),
+        **xblock_qi_seed_preconditioner_diagnostics(state),
+        **xblock_qi_device_preconditioner_diagnostics(state),
+        **xblock_qi_deflated_preconditioner_diagnostics(state),
+        **xblock_side_probe_diagnostics(
+            XBlockSideProbeDiagnosticsContext(
+                enabled=state["xblock_side_probe_enabled"],
+                used=state["xblock_side_probe_used"],
+                switched=state["xblock_side_probe_switched"],
+                switch_suppressed_by_global_coupling=state[
+                    "xblock_side_probe_switch_suppressed_by_global_coupling"
+                ],
+                switch_suppressed_by_explicit_side=state[
+                    "xblock_side_probe_switch_suppressed_by_explicit_side"
+                ],
+                physical_seed_preserved_after_switch=state[
+                    "xblock_side_probe_physical_seed_preserved_after_switch"
+                ],
+                seed_used=state["xblock_side_probe_seed_used"],
+                seed_residual_norm=state["xblock_side_probe_seed_residual_norm"],
+                initial_side=state["xblock_side_probe_initial_side"],
+                selected_side=state["xblock_side_probe_selected_side"],
+                initial_method=state["xblock_side_probe_initial_method"],
+                selected_method=state["xblock_side_probe_selected_method"],
+                lgmres_rescue=state["xblock_side_probe_lgmres_rescue"],
+                lgmres_rescue_maxiter_capped=state[
+                    "xblock_lgmres_rescue_maxiter_capped"
+                ],
+                lgmres_rescue_outer_k=state["xblock_lgmres_rescue_outer_k"],
+                residual_norm=state["xblock_side_probe_residual_norm"],
+                residual_ratio=state["xblock_side_probe_residual_ratio"],
+                iterations=state["xblock_side_probe_iterations"],
+                matvecs=state["xblock_side_probe_matvecs"],
+                elapsed_s=state["xblock_side_probe_s"],
+            )
+        ),
+    }

@@ -24,6 +24,7 @@ from .diagnostics import (
     xblock_qi_device_preconditioner_diagnostics,
     xblock_qi_seed_preconditioner_diagnostics,
     xblock_sparse_pc_core_diagnostics,
+    xblock_sparse_pc_result_diagnostics_from_driver_state,
     xblock_side_probe_diagnostics,
 )
 from .setup import (
@@ -3110,5 +3111,6 @@ __all__ = [
     "xblock_qi_device_preconditioner_diagnostics",
     "xblock_qi_seed_preconditioner_diagnostics",
     "xblock_sparse_pc_core_diagnostics",
+    "xblock_sparse_pc_result_diagnostics_from_driver_state",
     "xblock_side_probe_diagnostics",
 ]

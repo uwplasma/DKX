@@ -34929,3 +34929,42 @@ Next refactor target:
   wrapper that groups the typed diagnostics contexts outside ``v3_driver.py``.
   That should reduce the driver line count instead of adding more inline
   context construction.
+
+### 19.111 X-block sparse-PC result diagnostics builder
+
+Goal:
+
+- Move the final x-block sparse-PC result metadata assembly out of
+  ``v3_driver.py`` so the driver starts shrinking after the typed-context
+  staging work.
+
+Implementation:
+
+- Added ``xblock_sparse_pc_result_diagnostics_from_driver_state`` to
+  ``problems/profile_response/diagnostics.py``.
+- The builder creates the typed core, assembled-operator, and side-probe
+  contexts internally, composes the remaining device/coarse/QI diagnostics,
+  and preserves the existing public metadata keys.
+- Replaced the large inline metadata fragment in ``v3_driver.py`` with one
+  result-diagnostics handoff plus the existing correction-metadata block.
+- Removed now-unused component diagnostics imports from ``v3_driver.py``.
+- Re-exported the grouped builder from ``profile_response/sparse_pc.py`` for
+  compatibility.
+- ``v3_driver.py`` is now about ``21194`` lines and
+  ``solve_v3_full_system_linear_gmres`` about ``15903`` lines, reversing the
+  intermediate line-count increase from the explicit-context staging.
+
+Validation:
+
+- ``python -m ruff check`` on touched source/tests: passed.
+- ``python -m compileall -q`` on touched source/tests: passed.
+- ``tests/test_profile_response_diagnostics.py`` plus
+  ``tests/test_profile_response_sparse_pc.py``: ``67 passed``.
+- Broader current profile-response/x-block/sparse-pattern shard:
+  ``331 passed in 82.89 s``.
+
+Next refactor target:
+
+- Apply the same pattern to the remaining correction-metadata block at the
+  x-block return boundary, then continue moving sparse-PC orchestration out of
+  ``solve_v3_full_system_linear_gmres``.

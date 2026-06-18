@@ -200,21 +200,11 @@ from .problems.profile_response.qi_device_seed import (
     attempt_matrixfree_qi_device_seed,
 )
 from .problems.profile_response.diagnostics import (
-    XBlockAssembledOperatorDiagnosticsContext,
-    XBlockSparsePCCoreDiagnosticsContext,
-    XBlockSideProbeDiagnosticsContext,
     fp_xblock_global_correction_metadata,
     fp_xblock_highx_residual_correction_metadata,
     sparse_rescue_tail_metadata,
     sparse_xblock_rescue_metadata,
-    xblock_assembled_operator_diagnostics,
-    xblock_coarse_correction_diagnostics,
-    xblock_device_krylov_diagnostics,
-    xblock_qi_deflated_preconditioner_diagnostics,
-    xblock_qi_device_preconditioner_diagnostics,
-    xblock_qi_seed_preconditioner_diagnostics,
-    xblock_sparse_pc_core_diagnostics,
-    xblock_side_probe_diagnostics,
+    xblock_sparse_pc_result_diagnostics_from_driver_state,
 )
 from .problems.profile_response.sparse_pc import (
     SparsePCGMRESContext,
@@ -6902,106 +6892,9 @@ def solve_v3_full_system_linear_gmres(
                     residual_norm=jnp.asarray(residual_norm_xblock_pc, dtype=jnp.float64),
                 ),
                 metadata={
-                    **xblock_sparse_pc_core_diagnostics(
-                        XBlockSparsePCCoreDiagnosticsContext(
-                            solver_kind=xblock_solver_kind,
-                            accepted_converged=accepted_converged_xblock,
-                            reported_iterations=reported_iterations,
-                            reported_matvecs=reported_matvecs,
-                            python_matvecs=mv_count,
-                            device_cycle_estimated_matvecs=(
-                                device_krylov_estimated_matvecs
-                            ),
-                            krylov_method=xblock_krylov_method,
-                            candidate_krylov_method=candidate_krylov_method,
-                            candidate_iterations=candidate_iterations,
-                            candidate_matvecs=candidate_matvecs,
-                            candidate_residual_norm=candidate_residual_norm,
-                            fallback_started_from_candidate=(
-                                fallback_started_from_candidate
-                            ),
-                            fallback_candidate_improved_rhs=(
-                                fallback_candidate_improved_rhs
-                            ),
-                            precondition_side=precondition_side,
-                            default_right_preconditioned=xblock_default_right_pc,
-                            default_short_restart_capped=xblock_default_restart_capped,
-                            gmres_restart=pc_restart,
-                            gmres_maxiter=pc_maxiter,
-                            setup_s=setup_s,
-                            solve_s=solve_s,
-                            elapsed_s=sparse_timer.elapsed_s(),
-                            sparse_pc_factor_s=pc_factor_s,
-                            preconditioner_xi=xblock_preconditioner_xi,
-                            preconditioner_built=xblock_preconditioner_built,
-                            assembled_host=xblock_assembled_host_fp,
-                            jax_factors=xblock_jax_factors,
-                            jax_factor_format=xblock_jax_factor_format,
-                            jax_factor_apply=xblock_jax_factor_apply,
-                            lower_fill_mode=xblock_lower_fill_mode,
-                            lower_fill_ignored_env=xblock_lower_fill_ignored_env,
-                        )
-                    ),
-                    **xblock_device_krylov_diagnostics(locals()),
-                    "xblock_active_dof": bool(xblock_use_active_dof),
-                    "xblock_linear_size": int(xblock_linear_size),
-                    "xblock_full_size": int(op.total_size),
-                    **xblock_assembled_operator_diagnostics(
-                        XBlockAssembledOperatorDiagnosticsContext(
-                            enabled=assembled_operator_enabled,
-                            built=assembled_operator_built,
-                            metadata=assembled_operator_metadata,
-                            row_equilibration_enabled=(
-                                xblock_row_equilibration_enabled
-                            ),
-                            row_equilibration_built=xblock_row_equilibration_built,
-                            row_equilibration_metadata=(
-                                xblock_row_equilibration_metadata
-                            ),
-                            col_equilibration_enabled=(
-                                xblock_col_equilibration_enabled
-                            ),
-                            col_equilibration_built=xblock_col_equilibration_built,
-                            col_equilibration_metadata=(
-                                xblock_col_equilibration_metadata
-                            ),
-                        )
-                    ),
-                    **xblock_coarse_correction_diagnostics(locals()),
-                    **xblock_qi_seed_preconditioner_diagnostics(locals()),
-                    **xblock_qi_device_preconditioner_diagnostics(locals()),
-                    **xblock_qi_deflated_preconditioner_diagnostics(locals()),
-                    **xblock_side_probe_diagnostics(
-                        XBlockSideProbeDiagnosticsContext(
-                            enabled=xblock_side_probe_enabled,
-                            used=xblock_side_probe_used,
-                            switched=xblock_side_probe_switched,
-                            switch_suppressed_by_global_coupling=(
-                                xblock_side_probe_switch_suppressed_by_global_coupling
-                            ),
-                            switch_suppressed_by_explicit_side=(
-                                xblock_side_probe_switch_suppressed_by_explicit_side
-                            ),
-                            physical_seed_preserved_after_switch=(
-                                xblock_side_probe_physical_seed_preserved_after_switch
-                            ),
-                            seed_used=xblock_side_probe_seed_used,
-                            seed_residual_norm=xblock_side_probe_seed_residual_norm,
-                            initial_side=xblock_side_probe_initial_side,
-                            selected_side=xblock_side_probe_selected_side,
-                            initial_method=xblock_side_probe_initial_method,
-                            selected_method=xblock_side_probe_selected_method,
-                            lgmres_rescue=xblock_side_probe_lgmres_rescue,
-                            lgmres_rescue_maxiter_capped=(
-                                xblock_lgmres_rescue_maxiter_capped
-                            ),
-                            lgmres_rescue_outer_k=xblock_lgmres_rescue_outer_k,
-                            residual_norm=xblock_side_probe_residual_norm,
-                            residual_ratio=xblock_side_probe_residual_ratio,
-                            iterations=xblock_side_probe_iterations,
-                            matvecs=xblock_side_probe_matvecs,
-                            elapsed_s=xblock_side_probe_s,
-                        )
+                    **xblock_sparse_pc_result_diagnostics_from_driver_state(
+                        locals(),
+                        full_size=op.total_size,
                     ),
                     **build_rhs1_xblock_correction_metadata(
                         probe_coarse=RHS1SubspaceCorrectionDiagnostics(
