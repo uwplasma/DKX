@@ -33961,3 +33961,44 @@ Next refactor target:
   residual-region/active-pattern parser with the existing policy helper, then
   run the broader sparse-PC/x-block/dispatch shard before committing the next
   tranche.
+
+### 19.88 RHSMode=1 x-block QI-device shared coarse-policy wiring
+
+Goal:
+
+- Replace the remaining live inline parser for QI-device global/residual/phase
+  coarse controls with the existing ``rhs1_qi_device_extra_coarse_controls``
+  helper already used by the seed/reuse path.
+
+Implementation:
+
+- Wired the main RHSMode=1 QI-device path to
+  ``_rhs1_qi_device_extra_coarse_controls`` after multilevel max-rank parsing.
+- Preserved all downstream variable names for global-moment residual equations,
+  residual-Galerkin equations, phase-space residual equations,
+  residual-region bounce coarse controls, and active-pattern coarse controls.
+- Removed the authoritative inline parser now covered by the shared policy
+  helper. This leaves one source of truth for those env controls across the
+  main solver and the seed/reuse path.
+- ``solve_v3_full_system_linear_gmres`` is now about ``18877`` lines and
+  ``v3_driver.py`` is about ``24157`` lines.
+
+Validation so far:
+
+- ``python -m ruff check sfincs_jax/v3_driver.py
+  tests/test_rhs1_xblock_fallback_initial_guess.py``: passed.
+- ``python -m compileall -q sfincs_jax/v3_driver.py
+  tests/test_rhs1_xblock_fallback_initial_guess.py``: passed.
+- Focused policy/helper and QI-device driver regressions:
+  ``23 passed in 14.11 s``.
+- Broader sparse-PC/x-block/dispatch subset:
+  ``173 passed in 59.17 s``.
+- ``git diff --check``: passed.
+
+Next refactor target:
+
+- Extract the remaining QI-device block-Schur, coupled-residual, residual
+  snapshot, and block-Schur-residual enrichment controls into a shared policy
+  surface. Keep construction/probe/admission logic in ``v3_driver.py`` until
+  direct policy tests and focused driver metadata regressions cover those
+  controls.

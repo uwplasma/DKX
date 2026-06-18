@@ -5044,306 +5044,170 @@ def solve_v3_full_system_linear_gmres(
                         qi_device_multilevel_max_rank = max(1, int(qi_device_multilevel_max_rank_env))
                     except ValueError:
                         qi_device_multilevel_max_rank = None
-                qi_device_global_moment_residual_equation = _rhs1_bool_env(
-                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_GLOBAL_MOMENT_RESIDUAL_EQUATION",
-                    default=False,
+                qi_device_extra_coarse_controls = _rhs1_qi_device_extra_coarse_controls()
+                qi_device_global_moment_residual_equation = bool(
+                    qi_device_extra_coarse_controls["global_moment_residual_equation"]
                 )
-                qi_device_global_moment_residual_equation_max_rank = _rhs1_int_env(
-                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_GLOBAL_MOMENT_RESIDUAL_EQUATION_MAX_RANK",
-                    default=16,
-                    minimum=1,
+                qi_device_global_moment_residual_equation_max_rank = int(
+                    qi_device_extra_coarse_controls["global_moment_residual_equation_max_rank"]
                 )
-                qi_device_global_moment_residual_equation_solver = (
-                    os.environ.get(
-                        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_GLOBAL_MOMENT_RESIDUAL_EQUATION_SOLVER",
-                        "galerkin",
-                    )
-                    .strip()
-                    .lower()
-                    .replace("-", "_")
+                qi_device_global_moment_residual_equation_solver = str(
+                    qi_device_extra_coarse_controls["global_moment_residual_equation_solver"]
                 )
-                if qi_device_global_moment_residual_equation_solver in {
-                    "action",
-                    "action_ls",
-                    "least_squares",
-                    "lstsq",
-                    "staged",
-                }:
-                    qi_device_global_moment_residual_equation_solver = "action_lstsq"
-                elif qi_device_global_moment_residual_equation_solver in {
-                    "galerkin",
-                    "projected",
-                    "qtaq",
-                    "coarse_grid",
-                    "schur",
-                }:
-                    qi_device_global_moment_residual_equation_solver = "galerkin"
-                else:
-                    qi_device_global_moment_residual_equation_solver = "galerkin"
-                qi_device_global_moment_residual_equation_include_profile = _rhs1_bool_env(
-                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_GLOBAL_MOMENT_RESIDUAL_EQUATION_INCLUDE_PROFILE",
-                    default=True,
+                qi_device_global_moment_residual_equation_include_profile = bool(
+                    qi_device_extra_coarse_controls[
+                        "global_moment_residual_equation_include_profile"
+                    ]
                 )
-                qi_device_global_moment_residual_equation_include_current = _rhs1_bool_env(
-                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_GLOBAL_MOMENT_RESIDUAL_EQUATION_INCLUDE_CURRENT",
-                    default=True,
+                qi_device_global_moment_residual_equation_include_current = bool(
+                    qi_device_extra_coarse_controls[
+                        "global_moment_residual_equation_include_current"
+                    ]
                 )
-                qi_device_global_moment_residual_equation_include_tail = _rhs1_bool_env(
-                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_GLOBAL_MOMENT_RESIDUAL_EQUATION_INCLUDE_TAIL",
-                    default=True,
+                qi_device_global_moment_residual_equation_include_tail = bool(
+                    qi_device_extra_coarse_controls["global_moment_residual_equation_include_tail"]
                 )
-                qi_device_residual_galerkin_equation = _rhs1_bool_env(
-                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RESIDUAL_GALERKIN_EQUATION",
-                    default=False,
+                qi_device_residual_galerkin_equation = bool(
+                    qi_device_extra_coarse_controls["residual_galerkin_equation"]
                 )
-                qi_device_residual_galerkin_equation_max_stages = _rhs1_int_env(
-                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RESIDUAL_GALERKIN_EQUATION_MAX_STAGES",
-                    default=3,
-                    minimum=1,
+                qi_device_residual_galerkin_equation_max_stages = int(
+                    qi_device_extra_coarse_controls["residual_galerkin_equation_max_stages"]
                 )
-                qi_device_residual_galerkin_equation_max_stage_rank = _rhs1_int_env(
-                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RESIDUAL_GALERKIN_EQUATION_MAX_STAGE_RANK",
-                    default=4,
-                    minimum=1,
+                qi_device_residual_galerkin_equation_max_stage_rank = int(
+                    qi_device_extra_coarse_controls["residual_galerkin_equation_max_stage_rank"]
                 )
-                qi_device_residual_galerkin_equation_max_rank = _rhs1_int_env(
-                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RESIDUAL_GALERKIN_EQUATION_MAX_RANK",
-                    default=24,
-                    minimum=1,
+                qi_device_residual_galerkin_equation_max_rank = int(
+                    qi_device_extra_coarse_controls["residual_galerkin_equation_max_rank"]
                 )
-                qi_device_residual_galerkin_equation_solver = (
-                    os.environ.get(
-                        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RESIDUAL_GALERKIN_EQUATION_SOLVER",
-                        "action_lstsq",
-                    )
-                    .strip()
-                    .lower()
-                    .replace("-", "_")
+                qi_device_residual_galerkin_equation_solver = str(
+                    qi_device_extra_coarse_controls["residual_galerkin_equation_solver"]
                 )
-                if qi_device_residual_galerkin_equation_solver in {
-                    "action",
-                    "action_ls",
-                    "least_squares",
-                    "lstsq",
-                    "staged",
-                }:
-                    qi_device_residual_galerkin_equation_solver = "action_lstsq"
-                elif qi_device_residual_galerkin_equation_solver in {
-                    "galerkin",
-                    "projected",
-                    "qtaq",
-                    "coarse_grid",
-                    "schur",
-                }:
-                    qi_device_residual_galerkin_equation_solver = "galerkin"
-                else:
-                    qi_device_residual_galerkin_equation_solver = "action_lstsq"
-                qi_device_residual_galerkin_equation_include_global_residual = _rhs1_bool_env(
-                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RESIDUAL_GALERKIN_EQUATION_INCLUDE_GLOBAL_RESIDUAL",
-                    default=True,
+                qi_device_residual_galerkin_equation_include_global_residual = bool(
+                    qi_device_extra_coarse_controls[
+                        "residual_galerkin_equation_include_global_residual"
+                    ]
                 )
-                qi_device_residual_galerkin_equation_include_block_residuals = _rhs1_bool_env(
-                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RESIDUAL_GALERKIN_EQUATION_INCLUDE_BLOCK_RESIDUALS",
-                    default=True,
+                qi_device_residual_galerkin_equation_include_block_residuals = bool(
+                    qi_device_extra_coarse_controls[
+                        "residual_galerkin_equation_include_block_residuals"
+                    ]
                 )
-                qi_device_residual_galerkin_equation_include_operator_images = _rhs1_bool_env(
-                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RESIDUAL_GALERKIN_EQUATION_INCLUDE_OPERATOR_IMAGES",
-                    default=False,
+                qi_device_residual_galerkin_equation_include_operator_images = bool(
+                    qi_device_extra_coarse_controls[
+                        "residual_galerkin_equation_include_operator_images"
+                    ]
                 )
-                qi_device_phase_space_residual_equation = _rhs1_bool_env(
-                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_PHASE_SPACE_RESIDUAL_EQUATION",
-                    default=False,
+                qi_device_phase_space_residual_equation = bool(
+                    qi_device_extra_coarse_controls["phase_space_residual_equation"]
                 )
-                qi_device_phase_space_residual_equation_max_rank = _rhs1_int_env(
-                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_PHASE_SPACE_RESIDUAL_EQUATION_MAX_RANK",
-                    default=24,
-                    minimum=1,
+                qi_device_phase_space_residual_equation_max_rank = int(
+                    qi_device_extra_coarse_controls["phase_space_residual_equation_max_rank"]
                 )
-                qi_device_phase_space_residual_equation_solver = (
-                    os.environ.get(
-                        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_PHASE_SPACE_RESIDUAL_EQUATION_SOLVER",
-                        "action_lstsq",
-                    )
-                    .strip()
-                    .lower()
-                    .replace("-", "_")
+                qi_device_phase_space_residual_equation_solver = str(
+                    qi_device_extra_coarse_controls["phase_space_residual_equation_solver"]
                 )
-                if qi_device_phase_space_residual_equation_solver in {
-                    "action",
-                    "action_ls",
-                    "least_squares",
-                    "lstsq",
-                    "staged",
-                }:
-                    qi_device_phase_space_residual_equation_solver = "action_lstsq"
-                elif qi_device_phase_space_residual_equation_solver in {
-                    "galerkin",
-                    "projected",
-                    "qtaq",
-                    "coarse_grid",
-                }:
-                    qi_device_phase_space_residual_equation_solver = "galerkin"
-                else:
-                    qi_device_phase_space_residual_equation_solver = "action_lstsq"
-                qi_device_phase_space_residual_equation_include_global = _rhs1_bool_env(
-                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_PHASE_SPACE_RESIDUAL_EQUATION_INCLUDE_GLOBAL",
-                    default=False,
+                qi_device_phase_space_residual_equation_include_global = bool(
+                    qi_device_extra_coarse_controls[
+                        "phase_space_residual_equation_include_global"
+                    ]
                 )
-                qi_device_phase_space_residual_equation_boundary = _rhs1_float_env(
-                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_PHASE_SPACE_RESIDUAL_EQUATION_BOUNDARY",
-                    default=0.35,
-                    minimum=1.0e-6,
+                qi_device_phase_space_residual_equation_boundary = float(
+                    qi_device_extra_coarse_controls["phase_space_residual_equation_boundary"]
                 )
-                qi_device_phase_space_residual_equation_include_radial = _rhs1_bool_env(
-                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_PHASE_SPACE_RESIDUAL_EQUATION_INCLUDE_RADIAL",
-                    default=True,
+                qi_device_phase_space_residual_equation_include_radial = bool(
+                    qi_device_extra_coarse_controls[
+                        "phase_space_residual_equation_include_radial"
+                    ]
                 )
-                qi_device_phase_space_residual_equation_include_species = _rhs1_bool_env(
-                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_PHASE_SPACE_RESIDUAL_EQUATION_INCLUDE_SPECIES",
-                    default=True,
+                qi_device_phase_space_residual_equation_include_species = bool(
+                    qi_device_extra_coarse_controls[
+                        "phase_space_residual_equation_include_species"
+                    ]
                 )
-                qi_device_residual_region_bounce_coarse = _rhs1_bool_env(
-                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RESIDUAL_REGION_BOUNCE_COARSE",
-                    default=False,
+                qi_device_residual_region_bounce_coarse = bool(
+                    qi_device_extra_coarse_controls["residual_region_bounce_coarse"]
                 )
-                qi_device_residual_region_bounce_coarse_max_rank = _rhs1_int_env(
-                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RESIDUAL_REGION_BOUNCE_COARSE_MAX_RANK",
-                    default=32,
-                    minimum=1,
+                qi_device_residual_region_bounce_coarse_max_rank = int(
+                    qi_device_extra_coarse_controls["residual_region_bounce_coarse_max_rank"]
                 )
-                qi_device_residual_region_bounce_coarse_max_candidates = _rhs1_int_env(
-                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RESIDUAL_REGION_BOUNCE_COARSE_MAX_CANDIDATES",
-                    default=48,
-                    minimum=1,
+                qi_device_residual_region_bounce_coarse_max_candidates = int(
+                    qi_device_extra_coarse_controls[
+                        "residual_region_bounce_coarse_max_candidates"
+                    ]
                 )
-                qi_device_residual_region_bounce_coarse_solver = (
-                    os.environ.get(
-                        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RESIDUAL_REGION_BOUNCE_COARSE_SOLVER",
-                        "action_lstsq",
-                    )
-                    .strip()
-                    .lower()
-                    .replace("-", "_")
+                qi_device_residual_region_bounce_coarse_solver = str(
+                    qi_device_extra_coarse_controls["residual_region_bounce_coarse_solver"]
                 )
-                if qi_device_residual_region_bounce_coarse_solver in {
-                    "action",
-                    "action_ls",
-                    "least_squares",
-                    "lstsq",
-                    "staged",
-                }:
-                    qi_device_residual_region_bounce_coarse_solver = "action_lstsq"
-                elif qi_device_residual_region_bounce_coarse_solver in {
-                    "galerkin",
-                    "projected",
-                    "qtaq",
-                    "coarse_grid",
-                }:
-                    qi_device_residual_region_bounce_coarse_solver = "galerkin"
-                else:
-                    qi_device_residual_region_bounce_coarse_solver = "action_lstsq"
-                qi_device_residual_region_bounce_coarse_include_global = _rhs1_bool_env(
-                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RESIDUAL_REGION_BOUNCE_COARSE_INCLUDE_GLOBAL",
-                    default=True,
+                qi_device_residual_region_bounce_coarse_include_global = bool(
+                    qi_device_extra_coarse_controls[
+                        "residual_region_bounce_coarse_include_global"
+                    ]
                 )
-                qi_device_residual_region_bounce_coarse_include_radial = _rhs1_bool_env(
-                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RESIDUAL_REGION_BOUNCE_COARSE_INCLUDE_RADIAL",
-                    default=True,
+                qi_device_residual_region_bounce_coarse_include_radial = bool(
+                    qi_device_extra_coarse_controls[
+                        "residual_region_bounce_coarse_include_radial"
+                    ]
                 )
-                qi_device_residual_region_bounce_coarse_include_species = _rhs1_bool_env(
-                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RESIDUAL_REGION_BOUNCE_COARSE_INCLUDE_SPECIES",
-                    default=True,
+                qi_device_residual_region_bounce_coarse_include_species = bool(
+                    qi_device_extra_coarse_controls[
+                        "residual_region_bounce_coarse_include_species"
+                    ]
                 )
-                qi_device_residual_region_bounce_coarse_boundary = _rhs1_float_env(
-                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RESIDUAL_REGION_BOUNCE_COARSE_BOUNCE_BOUNDARY",
-                    default=0.35,
-                    minimum=1.0e-6,
+                qi_device_residual_region_bounce_coarse_boundary = float(
+                    qi_device_extra_coarse_controls["residual_region_bounce_coarse_boundary"]
                 )
-                qi_device_residual_region_bounce_coarse_min_energy = _rhs1_float_env(
-                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RESIDUAL_REGION_BOUNCE_COARSE_MIN_REGION_ENERGY_FRACTION",
-                    default=1.0e-2,
-                    minimum=0.0,
+                qi_device_residual_region_bounce_coarse_min_energy = float(
+                    qi_device_extra_coarse_controls["residual_region_bounce_coarse_min_energy"]
                 )
-                qi_device_residual_region_bounce_coarse_region_bands = os.environ.get(
-                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RESIDUAL_REGION_BOUNCE_COARSE_REGION_BANDS",
-                    "bounce,trapped,passing",
-                ).strip()
-                qi_device_active_pattern_coarse = _rhs1_bool_env(
-                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_ACTIVE_PATTERN_COARSE",
-                    default=False,
+                qi_device_residual_region_bounce_coarse_region_bands = str(
+                    qi_device_extra_coarse_controls["residual_region_bounce_coarse_region_bands"]
                 )
-                qi_device_active_pattern_coarse_max_rank = _rhs1_int_env(
-                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_ACTIVE_PATTERN_COARSE_MAX_RANK",
-                    default=32,
-                    minimum=1,
+                qi_device_active_pattern_coarse = bool(
+                    qi_device_extra_coarse_controls["active_pattern_coarse"]
                 )
-                qi_device_active_pattern_coarse_max_candidates = _rhs1_int_env(
-                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_ACTIVE_PATTERN_COARSE_MAX_CANDIDATES",
-                    default=64,
-                    minimum=1,
+                qi_device_active_pattern_coarse_max_rank = int(
+                    qi_device_extra_coarse_controls["active_pattern_coarse_max_rank"]
                 )
-                qi_device_active_pattern_coarse_solver = (
-                    os.environ.get(
-                        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_ACTIVE_PATTERN_COARSE_SOLVER",
-                        "action_lstsq",
-                    )
-                    .strip()
-                    .lower()
-                    .replace("-", "_")
+                qi_device_active_pattern_coarse_max_candidates = int(
+                    qi_device_extra_coarse_controls["active_pattern_coarse_max_candidates"]
                 )
-                if qi_device_active_pattern_coarse_solver in {
-                    "action",
-                    "action_ls",
-                    "least_squares",
-                    "lstsq",
-                    "staged",
-                }:
-                    qi_device_active_pattern_coarse_solver = "action_lstsq"
-                elif qi_device_active_pattern_coarse_solver in {
-                    "galerkin",
-                    "projected",
-                    "qtaq",
-                    "coarse_grid",
-                }:
-                    qi_device_active_pattern_coarse_solver = "galerkin"
-                else:
-                    qi_device_active_pattern_coarse_solver = "action_lstsq"
-                qi_device_active_pattern_coarse_include_global = _rhs1_bool_env(
-                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_ACTIVE_PATTERN_COARSE_INCLUDE_GLOBAL",
-                    default=True,
+                qi_device_active_pattern_coarse_solver = str(
+                    qi_device_extra_coarse_controls["active_pattern_coarse_solver"]
                 )
-                qi_device_active_pattern_coarse_min_chunk_energy = _rhs1_float_env(
-                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_ACTIVE_PATTERN_COARSE_MIN_CHUNK_ENERGY_FRACTION",
-                    default=1.0e-2,
-                    minimum=0.0,
+                qi_device_active_pattern_coarse_include_global = bool(
+                    qi_device_extra_coarse_controls["active_pattern_coarse_include_global"]
                 )
-                qi_device_active_pattern_coarse_include_block_pitch = _rhs1_bool_env(
-                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_ACTIVE_PATTERN_COARSE_INCLUDE_BLOCK_PITCH",
-                    default=True,
+                qi_device_active_pattern_coarse_min_chunk_energy = float(
+                    qi_device_extra_coarse_controls["active_pattern_coarse_min_chunk_energy"]
                 )
-                qi_device_active_pattern_coarse_include_block_angular = _rhs1_bool_env(
-                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_ACTIVE_PATTERN_COARSE_INCLUDE_BLOCK_ANGULAR",
-                    default=True,
+                qi_device_active_pattern_coarse_include_block_pitch = bool(
+                    qi_device_extra_coarse_controls[
+                        "active_pattern_coarse_include_block_pitch"
+                    ]
                 )
-                qi_device_active_pattern_coarse_include_radial_pitch = _rhs1_bool_env(
-                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_ACTIVE_PATTERN_COARSE_INCLUDE_RADIAL_PITCH",
-                    default=True,
+                qi_device_active_pattern_coarse_include_block_angular = bool(
+                    qi_device_extra_coarse_controls[
+                        "active_pattern_coarse_include_block_angular"
+                    ]
                 )
-                qi_device_active_pattern_coarse_include_radial_angular = _rhs1_bool_env(
-                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_ACTIVE_PATTERN_COARSE_INCLUDE_RADIAL_ANGULAR",
-                    default=True,
+                qi_device_active_pattern_coarse_include_radial_pitch = bool(
+                    qi_device_extra_coarse_controls[
+                        "active_pattern_coarse_include_radial_pitch"
+                    ]
                 )
-                qi_device_active_pattern_coarse_include_block = _rhs1_bool_env(
-                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_ACTIVE_PATTERN_COARSE_INCLUDE_BLOCK",
-                    default=True,
+                qi_device_active_pattern_coarse_include_radial_angular = bool(
+                    qi_device_extra_coarse_controls[
+                        "active_pattern_coarse_include_radial_angular"
+                    ]
                 )
-                qi_device_active_pattern_coarse_include_radial = _rhs1_bool_env(
-                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_ACTIVE_PATTERN_COARSE_INCLUDE_RADIAL",
-                    default=True,
+                qi_device_active_pattern_coarse_include_block = bool(
+                    qi_device_extra_coarse_controls["active_pattern_coarse_include_block"]
                 )
-                qi_device_active_pattern_coarse_include_species = _rhs1_bool_env(
-                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_ACTIVE_PATTERN_COARSE_INCLUDE_SPECIES",
-                    default=True,
+                qi_device_active_pattern_coarse_include_radial = bool(
+                    qi_device_extra_coarse_controls["active_pattern_coarse_include_radial"]
+                )
+                qi_device_active_pattern_coarse_include_species = bool(
+                    qi_device_extra_coarse_controls["active_pattern_coarse_include_species"]
                 )
                 qi_device_max_rank_env = os.environ.get(
                     "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MAX_RANK",
