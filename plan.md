@@ -32538,3 +32538,70 @@ Validation so far:
 - Full-suite checkpoint:
   ``PYTHONDONTWRITEBYTECODE=1 pytest -q -p no:cacheprovider``:
   ``2727 passed in 923.04 s``.
+
+### 19.60 Full-system RHSMode=1 preconditioner build extraction
+
+Goal:
+
+- Move the full-system RHSMode=1 preconditioner builder out of
+  ``solve_v3_full_system_linear_gmres`` while preserving the same selected
+  preconditioner kind, domain-decomposition defaults, option parsing, progress
+  messages, and structured metadata recording.
+
+Implementation:
+
+- Extended ``sfincs_jax/problems/profile_response/preconditioner_build.py`` with
+  ``RHS1FullPreconditionerBuildContext`` and
+  ``build_rhs1_full_preconditioner``.
+- Shared ADI-sweep and ``xblock_tz_lmax`` environment parsing between the
+  reduced and full preconditioner build paths.
+- ``v3_driver.py`` now keeps only a thin full-preconditioner wrapper that builds
+  the context and delegates to the profile-response helper.
+- Extended ``tests/test_profile_response_preconditioner_build.py`` to cover
+  full-system dispatch arguments, environment-driven lmax/sweep parsing,
+  domain-decomposition overlap defaults, progress hooks, and structured
+  metadata recording.
+
+Validation so far:
+
+- ``python -m ruff check
+  sfincs_jax/problems/profile_response/preconditioner_build.py
+  sfincs_jax/v3_driver.py
+  tests/test_profile_response_preconditioner_build.py``: passed.
+- ``python -m compileall -q
+  sfincs_jax/problems/profile_response/preconditioner_build.py
+  sfincs_jax/v3_driver.py
+  tests/test_profile_response_preconditioner_build.py``: passed.
+- ``PYTHONDONTWRITEBYTECODE=1 pytest -q -p no:cacheprovider
+  tests/test_profile_response_preconditioner_build.py``:
+  ``4 passed in 0.31 s``.
+- ``PYTHONDONTWRITEBYTECODE=1 pytest -q -p no:cacheprovider
+  tests/test_profile_response_preconditioner_build.py
+  tests/test_v3_driver_strong_fallback_coverage.py
+  tests/test_rhs1_strong_auto_kind.py
+  tests/test_schur_precond_heuristic.py
+  tests/test_v3_driver_rhs1_dispatch_coverage.py``:
+  ``73 passed in 52.03 s``.
+- ``SPHINXOPTS='-W --keep-going' python -m sphinx -b html docs
+  docs/_build/html``: passed.
+- ``git diff --check``: passed.
+- Broader RHSMode/preconditioner subset:
+  ``PYTHONDONTWRITEBYTECODE=1 pytest -q -p no:cacheprovider
+  tests/test_example_auto_selection_paths.py
+  tests/test_pas_projection_heuristic.py
+  tests/test_rhs1_full_assembly.py
+  tests/test_rhs1_schwarz_heuristic.py
+  tests/test_schur_precond_heuristic.py
+  tests/test_sparse_precond_jax.py
+  tests/test_v3_driver_rhs1_dispatch_coverage.py
+  tests/test_xblock_tz_precond_heuristic.py
+  tests/test_profile_response_preconditioner_build.py
+  tests/test_profile_response_sparse_pc.py
+  tests/test_profile_response_dense.py
+  tests/test_v3_sparse_pattern.py
+  tests/test_v3_driver_strong_fallback_coverage.py
+  tests/test_rhs1_strong_auto_kind.py``:
+  ``332 passed in 147.23 s``.
+- Full-suite checkpoint:
+  ``PYTHONDONTWRITEBYTECODE=1 pytest -q -p no:cacheprovider``:
+  ``2728 passed in 571.14 s``.

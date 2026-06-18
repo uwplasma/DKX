@@ -78,6 +78,33 @@ def _context(**overrides) -> pb.RHS1ReducedPreconditionerBuildContext:
     )
 
 
+def _full_context(**overrides) -> pb.RHS1FullPreconditionerBuildContext:
+    calls = overrides.pop("calls", {})
+
+    def build_from_kind(**kwargs):
+        calls["build_from_kind"] = kwargs
+        return overrides.get("precond", _identity)
+
+    return pb.RHS1FullPreconditionerBuildContext(
+        op=overrides.get("op", FakeOperator(fblock=FakeFBlock())),
+        emit=overrides.get("emit"),
+        mark=overrides.get("mark", lambda name: calls.setdefault("marks", []).append(name)),
+        progress_preconditioner_build=overrides.get(
+            "progress",
+            lambda kind: calls.setdefault("progress", []).append(kind),
+        ),
+        record_structured_metadata=overrides.get(
+            "record",
+            lambda precond: calls.setdefault("recorded", []).append(precond),
+        ),
+        dd_setup=FakeDDSetup(),
+        preconditioner_species=4,
+        preconditioner_x=5,
+        preconditioner_xi=6,
+        build_from_kind=build_from_kind,
+    )
+
+
 def test_reduced_preconditioner_build_passes_policy_inputs() -> None:
     calls: dict[str, object] = {}
     result = pb.build_rhs1_reduced_preconditioner(
@@ -98,6 +125,33 @@ def test_reduced_preconditioner_build_passes_policy_inputs() -> None:
     assert calls["progress"] == ["theta_schwarz"]
     assert result.preconditioner is _identity
     assert not result.pas_tz_guarded_fallback
+
+
+def test_full_preconditioner_build_passes_policy_inputs(monkeypatch) -> None:
+    calls: dict[str, object] = {}
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_ADI_SWEEPS", "4")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_TZ_LMAX", "3")
+
+    result = pb.build_rhs1_full_preconditioner(
+        context=_full_context(calls=calls, emit=lambda _level, _msg: None),
+        rhs1_precond_kind="xblock_tz_lmax",
+        rhs1_xblock_tz_lmax=None,
+    )
+
+    kwargs = calls["build_from_kind"]
+    assert kwargs["preconditioner_species"] == 4
+    assert kwargs["preconditioner_x"] == 5
+    assert kwargs["preconditioner_xi"] == 6
+    assert kwargs["rhs1_xblock_tz_lmax"] == 3
+    assert kwargs["dd_block_theta"] == 7
+    assert kwargs["dd_overlap_theta"] == 10
+    assert kwargs["dd_block_zeta"] == 9
+    assert kwargs["dd_overlap_zeta"] == 20
+    assert kwargs["adi_sweeps"] == 4
+    assert calls["marks"] == ["rhs1_precond_build_start", "rhs1_precond_build_done"]
+    assert calls["progress"] == ["xblock_tz_lmax"]
+    assert calls["recorded"] == [_identity]
+    assert result is _identity
 
 
 def test_pas_tz_guarded_overlay_uses_structured_correction(monkeypatch) -> None:

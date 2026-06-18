@@ -177,7 +177,9 @@ from .problems.profile_response.linear_solve import (
     solve_profile_linear_with_residual,
 )
 from .problems.profile_response.preconditioner_build import (
+    RHS1FullPreconditionerBuildContext,
     RHS1ReducedPreconditionerBuildContext,
+    build_rhs1_full_preconditioner,
     build_rhs1_reduced_preconditioner_with_fallback,
 )
 from .problems.profile_response.qi_device_seed import (
@@ -22288,45 +22290,22 @@ def solve_v3_full_system_linear_gmres(
                     bicgstab_preconditioner_full = _build_rhsmode1_collision_preconditioner(op=op)
 
             def _build_rhs1_preconditioner_full():
-                _mark("rhs1_precond_build_start")
-                if emit is not None:
-                    emit(1, f"solve_v3_full_system_linear_gmres: building RHSMode=1 preconditioner={rhs1_precond_kind}")
-                    rhs1_progress_notes.preconditioner_build(rhs1_precond_kind)
-                sweeps_env = os.environ.get("SFINCS_JAX_RHSMODE1_ADI_SWEEPS", "").strip()
-                try:
-                    sweeps = int(sweeps_env) if sweeps_env else 2
-                except ValueError:
-                    sweeps = 2
-                lmax_use = rhs1_xblock_tz_lmax or 0
-                if rhs1_precond_kind == "xblock_tz_lmax" and lmax_use <= 0:
-                    lmax_env = os.environ.get("SFINCS_JAX_RHSMODE1_XBLOCK_TZ_LMAX", "").strip()
-                    try:
-                        lmax_use = int(lmax_env) if lmax_env else 0
-                    except ValueError:
-                        lmax_use = 0
-                precond = _build_rhs1_preconditioner_from_kind(
-                    op=op,
+                return build_rhs1_full_preconditioner(
+                    context=RHS1FullPreconditionerBuildContext(
+                        op=op,
+                        emit=emit,
+                        mark=_mark,
+                        progress_preconditioner_build=rhs1_progress_notes.preconditioner_build,
+                        record_structured_metadata=_record_structured_fblock_preconditioner_metadata,
+                        dd_setup=rhs1_dd_setup,
+                        preconditioner_species=int(preconditioner_species),
+                        preconditioner_x=int(preconditioner_x),
+                        preconditioner_xi=int(preconditioner_xi),
+                        build_from_kind=_build_rhs1_preconditioner_from_kind,
+                    ),
                     rhs1_precond_kind=rhs1_precond_kind,
-                    preconditioner_species=preconditioner_species,
-                    preconditioner_x=preconditioner_x,
-                    preconditioner_xi=preconditioner_xi,
-                    rhs1_xblock_tz_lmax=lmax_use,
-                    dd_block_theta=rhs1_dd_setup.block("theta"),
-                    dd_overlap_theta=rhs1_dd_setup.overlap(
-                        "theta",
-                        default=1 if rhs1_precond_kind == "theta_schwarz" else 0,
-                    ),
-                    dd_block_zeta=rhs1_dd_setup.block("zeta"),
-                    dd_overlap_zeta=rhs1_dd_setup.overlap(
-                        "zeta",
-                        default=1 if rhs1_precond_kind == "zeta_schwarz" else 0,
-                    ),
-                    adi_sweeps=max(1, sweeps),
-                    emit=emit,
+                    rhs1_xblock_tz_lmax=rhs1_xblock_tz_lmax,
                 )
-                _record_structured_fblock_preconditioner_metadata(precond)
-                _mark("rhs1_precond_build_done")
-                return precond
 
             if rhs1_precond_enabled and (not host_dense_shortcut_full):
                 solver_kind = _solver_kind(solve_method)[0]

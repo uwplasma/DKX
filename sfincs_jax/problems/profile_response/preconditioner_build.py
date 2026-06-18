@@ -43,6 +43,22 @@ class RHS1ReducedPreconditionerBuildContext:
 
 
 @dataclass(frozen=True)
+class RHS1FullPreconditionerBuildContext:
+    """Solve-local dependencies needed to build full RHSMode=1 preconditioners."""
+
+    op: Any
+    emit: Callable[[int, str], None] | None
+    mark: Callable[[str], None]
+    progress_preconditioner_build: Callable[[str | None], None] | None
+    record_structured_metadata: Callable[[Preconditioner], None]
+    dd_setup: Any
+    preconditioner_species: int
+    preconditioner_x: int
+    preconditioner_xi: int
+    build_from_kind: Callable[..., Preconditioner]
+
+
+@dataclass(frozen=True)
 class RHS1ReducedPreconditionerBuildResult:
     """Result of a reduced preconditioner build attempt."""
 
@@ -52,6 +68,29 @@ class RHS1ReducedPreconditionerBuildResult:
     bicgstab_preconditioner: Preconditioner | None
     pas_tz_guarded_fallback: bool
     pas_tz_guarded_axis: str | None
+
+
+def _parse_adi_sweeps() -> int:
+    sweeps_env = os.environ.get("SFINCS_JAX_RHSMODE1_ADI_SWEEPS", "").strip()
+    try:
+        return int(sweeps_env) if sweeps_env else 2
+    except ValueError:
+        return 2
+
+
+def _parse_xblock_tz_lmax(
+    *,
+    rhs1_precond_kind: str | None,
+    rhs1_xblock_tz_lmax: int | None,
+) -> int:
+    lmax_use = rhs1_xblock_tz_lmax or 0
+    if rhs1_precond_kind == "xblock_tz_lmax" and lmax_use <= 0:
+        lmax_env = os.environ.get("SFINCS_JAX_RHSMODE1_XBLOCK_TZ_LMAX", "").strip()
+        try:
+            lmax_use = int(lmax_env) if lmax_env else 0
+        except ValueError:
+            lmax_use = 0
+    return int(lmax_use)
 
 
 def _wrap_if_needed(context: RHS1ReducedPreconditionerBuildContext, precond: Preconditioner) -> Preconditioner:
@@ -76,18 +115,11 @@ def build_rhs1_reduced_preconditioner(
         if context.progress_preconditioner_build is not None:
             context.progress_preconditioner_build(rhs1_precond_kind)
 
-    sweeps_env = os.environ.get("SFINCS_JAX_RHSMODE1_ADI_SWEEPS", "").strip()
-    try:
-        sweeps = int(sweeps_env) if sweeps_env else 2
-    except ValueError:
-        sweeps = 2
-    lmax_use = rhs1_xblock_tz_lmax or 0
-    if rhs1_precond_kind == "xblock_tz_lmax" and lmax_use <= 0:
-        lmax_env = os.environ.get("SFINCS_JAX_RHSMODE1_XBLOCK_TZ_LMAX", "").strip()
-        try:
-            lmax_use = int(lmax_env) if lmax_env else 0
-        except ValueError:
-            lmax_use = 0
+    sweeps = _parse_adi_sweeps()
+    lmax_use = _parse_xblock_tz_lmax(
+        rhs1_precond_kind=rhs1_precond_kind,
+        rhs1_xblock_tz_lmax=rhs1_xblock_tz_lmax,
+    )
 
     precond = context.build_from_kind(
         op=context.op,
@@ -138,6 +170,53 @@ def build_rhs1_reduced_preconditioner(
         pas_tz_guarded_fallback=bool(pas_tz_guarded_fallback),
         pas_tz_guarded_axis=pas_tz_guarded_axis,
     )
+
+
+def build_rhs1_full_preconditioner(
+    *,
+    context: RHS1FullPreconditionerBuildContext,
+    rhs1_precond_kind: str | None,
+    rhs1_xblock_tz_lmax: int | None,
+) -> Preconditioner:
+    """Build the requested full-system RHSMode=1 preconditioner."""
+
+    context.mark("rhs1_precond_build_start")
+    if context.emit is not None:
+        context.emit(
+            1,
+            f"solve_v3_full_system_linear_gmres: building RHSMode=1 preconditioner={rhs1_precond_kind}",
+        )
+        if context.progress_preconditioner_build is not None:
+            context.progress_preconditioner_build(rhs1_precond_kind)
+
+    sweeps = _parse_adi_sweeps()
+    lmax_use = _parse_xblock_tz_lmax(
+        rhs1_precond_kind=rhs1_precond_kind,
+        rhs1_xblock_tz_lmax=rhs1_xblock_tz_lmax,
+    )
+    precond = context.build_from_kind(
+        op=context.op,
+        rhs1_precond_kind=rhs1_precond_kind,
+        preconditioner_species=int(context.preconditioner_species),
+        preconditioner_x=int(context.preconditioner_x),
+        preconditioner_xi=int(context.preconditioner_xi),
+        rhs1_xblock_tz_lmax=int(lmax_use),
+        dd_block_theta=context.dd_setup.block("theta"),
+        dd_overlap_theta=context.dd_setup.overlap(
+            "theta",
+            default=1 if rhs1_precond_kind == "theta_schwarz" else 0,
+        ),
+        dd_block_zeta=context.dd_setup.block("zeta"),
+        dd_overlap_zeta=context.dd_setup.overlap(
+            "zeta",
+            default=1 if rhs1_precond_kind == "zeta_schwarz" else 0,
+        ),
+        adi_sweeps=max(1, int(sweeps)),
+        emit=context.emit,
+    )
+    context.record_structured_metadata(precond)
+    context.mark("rhs1_precond_build_done")
+    return precond
 
 
 def build_rhs1_reduced_preconditioner_with_fallback(
@@ -302,8 +381,10 @@ def _apply_pas_tz_guarded_overlays(
 
 
 __all__ = [
+    "RHS1FullPreconditionerBuildContext",
     "RHS1ReducedPreconditionerBuildContext",
     "RHS1ReducedPreconditionerBuildResult",
+    "build_rhs1_full_preconditioner",
     "build_rhs1_reduced_preconditioner",
     "build_rhs1_reduced_preconditioner_with_fallback",
 ]
