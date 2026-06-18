@@ -32940,3 +32940,57 @@ Next refactor target:
   and an implementation stage. The first cut should extract classification of
   constrained PAS, tokamak PAS/FP Er/no-Er, active-DOF admission, and sparse-PC
   GMRES budget parsing, leaving actual preconditioner construction in place.
+
+### 19.67 RHSMode=1 sparse-PC entry policy extraction
+
+Goal:
+
+- Split the first pure policy layer from the sparse-PC GMRES branch while
+  leaving preconditioner construction, operator assembly, and Krylov execution
+  unchanged.
+
+Implementation:
+
+- Extended ``sfincs_jax/problems/profile_response/sparse_pc.py`` with
+  ``SparsePCEntryPolicySetup`` and ``resolve_sparse_pc_entry_policy``.
+- Moved sparse-PC entry classification out of ``v3_driver.py``:
+  constrained PAS, tokamak PAS Er/no-Er, tokamak FP Er/no-Er, x-block vs
+  Fortran-reduced sparse-PC, active-DOF admission, FP dense-velocity block
+  option parsing, and sparse-PC GMRES restart/maxiter setup.
+- Kept downstream local variable names in the driver so the heavy sparse-PC
+  implementation branch remained untouched.
+- Added direct tests for PAS+Er active-DOF admission, dense-velocity option
+  parsing, restart callback use, and x-block active-map admission.
+- ``solve_v3_full_system_linear_gmres`` is now about ``20268`` lines and
+  ``v3_driver.py`` is about ``25511`` lines.
+
+Validation so far:
+
+- ``python -m ruff check sfincs_jax/problems/profile_response/sparse_pc.py
+  sfincs_jax/v3_driver.py tests/test_profile_response_sparse_pc.py``: passed.
+- ``python -m compileall -q
+  sfincs_jax/problems/profile_response/sparse_pc.py sfincs_jax/v3_driver.py
+  tests/test_profile_response_sparse_pc.py``: passed.
+- ``PYTHONDONTWRITEBYTECODE=1 JAX_ENABLE_X64=True pytest -q
+  -p no:cacheprovider tests/test_profile_response_sparse_pc.py``:
+  ``5 passed in 0.43 s``.
+- Broader sparse-PC/dispatch subset:
+  ``PYTHONDONTWRITEBYTECODE=1 JAX_ENABLE_X64=True pytest -q
+  -p no:cacheprovider tests/test_profile_response_sparse_pc.py
+  tests/test_profile_response_auto_solve.py tests/test_profile_response_setup.py
+  tests/test_v3_driver_sparse_helper_coverage.py
+  tests/test_v3_sparse_pattern.py::test_sparse_pc_gmres_active_dof_reduces_truncated_pas_system
+  tests/test_v3_sparse_pattern.py::test_fortran_reduced_pc_auto_uses_active_dof_for_truncated_modes
+  tests/test_v3_sparse_pattern.py::test_fortran_reduced_pc_gmres_direct_tail_solves_tiny_rhs1_system
+  tests/test_v3_sparse_pattern.py::test_fortran_reduced_pc_gmres_direct_tail_can_fallback_to_pattern_probe
+  tests/test_v3_sparse_pattern.py::test_fortran_reduced_pc_gmres_xblock_backend_solves_tiny_rhs1_system
+  tests/test_v3_driver_rhs1_dispatch_coverage.py``:
+  ``80 passed in 31.73 s``.
+- ``git diff --check``: passed.
+
+Next refactor target:
+
+- Continue sparse-PC extraction with x-block setup controls:
+  lower-fill policy, assembled-host admission, x-block Krylov choice, and
+  device-host fallback admission. This should stay in the sparse-PC domain
+  helper and retain all existing x-block regression tests as gates.

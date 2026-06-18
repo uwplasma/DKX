@@ -2,12 +2,17 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 
 import jax
 import jax.numpy as jnp
 import numpy as np
+
+from .setup import (
+    SPARSE_HOST_FORTRAN_REDUCED_PC_GMRES_SOLVE_METHODS,
+    SPARSE_HOST_XBLOCK_PC_GMRES_SOLVE_METHODS,
+)
 
 
 ArrayFn = Callable[[jnp.ndarray], jnp.ndarray]
@@ -78,6 +83,166 @@ class SparsePCPostMinresResult:
     residual_after: float | None
     error: str | None
     solve_s: float
+
+
+@dataclass(frozen=True)
+class SparsePCEntryPolicySetup:
+    """Physics classification and GMRES budget for RHSMode=1 sparse-PC paths."""
+
+    constrained_pas_pc: bool
+    tokamak_pas_noer_pc: bool
+    tokamak_pas_er_pc: bool
+    tokamak_fp_er_pc: bool
+    tokamak_fp_noer_pc: bool
+    tokamak_fp_pc: bool
+    xblock_sparse_pc: bool
+    fortran_reduced_sparse_pc: bool
+    sparse_pc_use_active_dof: bool
+    xblock_use_active_dof: bool
+    sparse_pc_fp_dense_velocity_block: bool | None
+    pc_restart_env: str
+    pc_restart: int
+    pc_maxiter: int
+
+
+def _env_value(env: Mapping[str, str] | None, key: str) -> str:
+    source = env if env is not None else {}
+    return str(source.get(key, "")).strip()
+
+
+def resolve_sparse_pc_entry_policy(
+    *,
+    op: object,
+    solve_method_kind: str,
+    has_reduced_modes: bool,
+    use_active_dof_mode: bool,
+    xblock_active_dof_requested: bool,
+    active_maps_available: bool,
+    use_dkes: bool,
+    include_xdot_sparse_pc: bool,
+    include_electric_field_xi_sparse_pc: bool,
+    er_abs_sparse_pc: float,
+    restart: int,
+    maxiter: int | None,
+    parse_polish_gmres_config: Callable[..., tuple[int, int]],
+    sparse_pc_default_restart: Callable[..., int],
+    env: Mapping[str, str] | None = None,
+) -> SparsePCEntryPolicySetup:
+    """Resolve the entry policy for host sparse-PC GMRES RHSMode=1 solves."""
+
+    constrained_pas_pc = bool(
+        int(op.rhs_mode) == 1
+        and int(op.constraint_scheme) == 2
+        and (not bool(op.include_phi1))
+        and op.fblock.pas is not None
+        and op.fblock.fp is None
+    )
+    tokamak_pas_noer_pc = bool(
+        constrained_pas_pc
+        and int(getattr(op, "n_zeta", 1)) == 1
+        and float(er_abs_sparse_pc) == 0.0
+    )
+    tokamak_pas_er_pc = bool(
+        constrained_pas_pc
+        and int(getattr(op, "n_zeta", 1)) == 1
+        and float(er_abs_sparse_pc) > 0.0
+        and (bool(use_dkes) or bool(include_xdot_sparse_pc) or bool(include_electric_field_xi_sparse_pc))
+    )
+    tokamak_fp_er_pc = bool(
+        int(op.rhs_mode) == 1
+        and int(op.constraint_scheme) == 1
+        and (not bool(op.include_phi1))
+        and op.fblock.fp is not None
+        and op.fblock.pas is None
+        and int(getattr(op, "n_zeta", 1)) == 1
+        and float(er_abs_sparse_pc) > 0.0
+        and (bool(use_dkes) or bool(include_xdot_sparse_pc) or bool(include_electric_field_xi_sparse_pc))
+    )
+    tokamak_fp_noer_pc = bool(
+        int(op.rhs_mode) == 1
+        and int(op.constraint_scheme) == 0
+        and (not bool(op.include_phi1))
+        and op.fblock.fp is not None
+        and op.fblock.pas is None
+        and int(getattr(op, "n_zeta", 1)) == 1
+        and float(er_abs_sparse_pc) == 0.0
+    )
+    tokamak_fp_pc = bool(tokamak_fp_er_pc or tokamak_fp_noer_pc)
+    xblock_sparse_pc = solve_method_kind in SPARSE_HOST_XBLOCK_PC_GMRES_SOLVE_METHODS
+    fortran_reduced_sparse_pc = solve_method_kind in SPARSE_HOST_FORTRAN_REDUCED_PC_GMRES_SOLVE_METHODS
+
+    sparse_pc_active_env = _env_value(env, "SFINCS_JAX_RHSMODE1_SPARSE_PC_ACTIVE_DOF").lower()
+    sparse_pc_active_forced_on = sparse_pc_active_env in {"1", "true", "t", "yes", "on", ".true.", ".t."}
+    sparse_pc_active_forced_off = sparse_pc_active_env in {"0", "false", "f", "no", "off", ".false.", ".f."}
+    sparse_pc_active_auto = sparse_pc_active_env in {"", "auto"}
+    sparse_pc_use_active_dof = bool(
+        (not xblock_sparse_pc)
+        and bool(has_reduced_modes)
+        and int(op.rhs_mode) == 1
+        and (not bool(op.include_phi1))
+        and (
+            sparse_pc_active_forced_on
+            or (
+                sparse_pc_active_auto
+                and (tokamak_pas_er_pc or tokamak_pas_noer_pc or fortran_reduced_sparse_pc)
+            )
+        )
+        and (not sparse_pc_active_forced_off)
+    )
+    xblock_use_active_dof = bool(
+        xblock_sparse_pc
+        and bool(use_active_dof_mode)
+        and bool(xblock_active_dof_requested)
+        and bool(active_maps_available)
+    )
+    if bool(use_active_dof_mode) and not (sparse_pc_use_active_dof or xblock_use_active_dof):
+        raise NotImplementedError(
+            "solve_method='sparse_pc_gmres'/'xblock_sparse_pc_gmres' active-DOF mode is only implemented "
+            "for the generic sparse_pc_gmres branch or opt-in x-block branch. Set "
+            "SFINCS_JAX_RHSMODE1_SPARSE_PC_ACTIVE_DOF=1, "
+            "SFINCS_JAX_RHSMODE1_XBLOCK_ACTIVE_DOF=1, or SFINCS_JAX_ACTIVE_DOF=0."
+        )
+
+    fp_dense_velocity_env = _env_value(env, "SFINCS_JAX_RHSMODE1_SPARSE_PC_FP_DENSE_VELOCITY_BLOCK").lower()
+    if fp_dense_velocity_env in {"0", "false", "f", "no", "off", ".false.", ".f."}:
+        sparse_pc_fp_dense_velocity_block: bool | None = False
+    elif fp_dense_velocity_env in {"1", "true", "t", "yes", "on", ".true.", ".t."}:
+        sparse_pc_fp_dense_velocity_block = True
+    else:
+        sparse_pc_fp_dense_velocity_block = None
+
+    pc_restart_env = _env_value(env, "SFINCS_JAX_RHSMODE1_SPARSE_PC_GMRES_RESTART")
+    pc_restart, pc_maxiter = parse_polish_gmres_config(
+        restart_env_name="SFINCS_JAX_RHSMODE1_SPARSE_PC_GMRES_RESTART",
+        maxiter_env_name="SFINCS_JAX_RHSMODE1_SPARSE_PC_GMRES_MAXITER",
+        default_restart=max(20, int(restart)),
+        default_maxiter=max(100, int(maxiter) if maxiter is not None else 400),
+        min_restart=2,
+        min_maxiter=1,
+    )
+    pc_restart = sparse_pc_default_restart(
+        requested_restart=int(pc_restart),
+        restart_env_value=pc_restart_env,
+        tokamak_pas_er_pc=bool(tokamak_pas_er_pc),
+        n_species=int(op.n_species),
+    )
+
+    return SparsePCEntryPolicySetup(
+        constrained_pas_pc=bool(constrained_pas_pc),
+        tokamak_pas_noer_pc=bool(tokamak_pas_noer_pc),
+        tokamak_pas_er_pc=bool(tokamak_pas_er_pc),
+        tokamak_fp_er_pc=bool(tokamak_fp_er_pc),
+        tokamak_fp_noer_pc=bool(tokamak_fp_noer_pc),
+        tokamak_fp_pc=bool(tokamak_fp_pc),
+        xblock_sparse_pc=bool(xblock_sparse_pc),
+        fortran_reduced_sparse_pc=bool(fortran_reduced_sparse_pc),
+        sparse_pc_use_active_dof=bool(sparse_pc_use_active_dof),
+        xblock_use_active_dof=bool(xblock_use_active_dof),
+        sparse_pc_fp_dense_velocity_block=sparse_pc_fp_dense_velocity_block,
+        pc_restart_env=str(pc_restart_env),
+        pc_restart=int(pc_restart),
+        pc_maxiter=int(pc_maxiter),
+    )
 
 
 def run_sparse_pc_gmres_once(

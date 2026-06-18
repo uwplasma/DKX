@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from types import SimpleNamespace
+
 import numpy as np
 import pytest
 import jax.numpy as jnp
@@ -8,12 +10,86 @@ from sfincs_jax.problems.profile_response.sparse_pc import (
     SparsePCGMRESContext,
     SparsePCPostMinresContext,
     apply_sparse_pc_post_minres,
+    resolve_sparse_pc_entry_policy,
     run_sparse_pc_gmres_once,
 )
 
 
 def _identity(v: jnp.ndarray) -> jnp.ndarray:
     return v
+
+
+def _op(*, fp=False, pas=False, constraint_scheme=1, n_zeta=1, n_species=1) -> SimpleNamespace:
+    return SimpleNamespace(
+        rhs_mode=1,
+        constraint_scheme=constraint_scheme,
+        include_phi1=False,
+        n_zeta=n_zeta,
+        n_species=n_species,
+        fblock=SimpleNamespace(
+            fp=object() if fp else None,
+            pas=object() if pas else None,
+        ),
+    )
+
+
+def test_sparse_pc_entry_policy_classifies_pas_er_and_active_dof() -> None:
+    def parse_config(**kwargs):
+        assert kwargs["default_restart"] == 50
+        assert kwargs["default_maxiter"] == 100
+        return 50, 100
+
+    setup = resolve_sparse_pc_entry_policy(
+        op=_op(pas=True, constraint_scheme=2, n_zeta=1, n_species=1),
+        solve_method_kind="sparse_pc_gmres",
+        has_reduced_modes=True,
+        use_active_dof_mode=False,
+        xblock_active_dof_requested=False,
+        active_maps_available=False,
+        use_dkes=True,
+        include_xdot_sparse_pc=False,
+        include_electric_field_xi_sparse_pc=True,
+        er_abs_sparse_pc=0.2,
+        restart=50,
+        maxiter=80,
+        parse_polish_gmres_config=parse_config,
+        sparse_pc_default_restart=lambda **kwargs: kwargs["requested_restart"] - 5,
+        env={"SFINCS_JAX_RHSMODE1_SPARSE_PC_FP_DENSE_VELOCITY_BLOCK": "1"},
+    )
+
+    assert setup.constrained_pas_pc
+    assert setup.tokamak_pas_er_pc
+    assert not setup.tokamak_pas_noer_pc
+    assert setup.sparse_pc_use_active_dof
+    assert setup.sparse_pc_fp_dense_velocity_block is True
+    assert setup.pc_restart == 45
+    assert setup.pc_maxiter == 100
+
+
+def test_sparse_pc_entry_policy_classifies_xblock_active_maps() -> None:
+    setup = resolve_sparse_pc_entry_policy(
+        op=_op(fp=True, constraint_scheme=1, n_zeta=3, n_species=2),
+        solve_method_kind="xblock_sparse_pc_gmres",
+        has_reduced_modes=True,
+        use_active_dof_mode=True,
+        xblock_active_dof_requested=True,
+        active_maps_available=True,
+        use_dkes=False,
+        include_xdot_sparse_pc=False,
+        include_electric_field_xi_sparse_pc=False,
+        er_abs_sparse_pc=0.0,
+        restart=10,
+        maxiter=None,
+        parse_polish_gmres_config=lambda **_kwargs: (20, 400),
+        sparse_pc_default_restart=lambda **kwargs: kwargs["requested_restart"],
+        env={},
+    )
+
+    assert setup.xblock_sparse_pc
+    assert setup.xblock_use_active_dof
+    assert not setup.sparse_pc_use_active_dof
+    assert setup.pc_restart == 20
+    assert setup.pc_maxiter == 400
 
 
 def test_sparse_pc_gmres_once_explicit_left_recomputes_true_residual() -> None:
