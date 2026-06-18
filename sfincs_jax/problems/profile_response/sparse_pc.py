@@ -409,6 +409,19 @@ class SparsePCPatternSetupResult:
 
 
 @dataclass(frozen=True)
+class SparsePCMemoryBudgetPreflightContext:
+    """Inputs for the optional generic sparse-PC memory-budget guard."""
+
+    env: Mapping[str, str] | None
+    unknowns: int
+    gmres_restart: int
+    csr_nnz: int
+    dtype: object
+    device_count: int
+    estimate_sparse_pc_memory: Callable[..., object]
+
+
+@dataclass(frozen=True)
 class XBlockSparsePCSetup:
     """Setup controls for RHSMode=1 x-block sparse-PC solves."""
 
@@ -2177,6 +2190,55 @@ def resolve_sparse_pc_factor_policy(
         fp32_probe_maxiter=int(fp32_probe_maxiter),
         first_attempt_maxiter=int(first_attempt_maxiter),
     )
+
+
+def enforce_sparse_pc_memory_budget(
+    context: SparsePCMemoryBudgetPreflightContext,
+) -> None:
+    """Apply the optional sparse-PC memory budget guard before factor setup."""
+
+    budget_env = _env_value(
+        context.env,
+        "SFINCS_JAX_RHSMODE1_SPARSE_PC_MAX_ESTIMATED_MB",
+    )
+    if not budget_env:
+        return
+    try:
+        budget_mb = float(budget_env)
+    except ValueError:
+        budget_mb = 0.0
+    if budget_mb <= 0.0:
+        return
+
+    fill_env = _env_value(
+        context.env,
+        "SFINCS_JAX_RHSMODE1_SPARSE_PC_FACTOR_FILL_ESTIMATE",
+    )
+    try:
+        fill_estimate = float(fill_env) if fill_env else 8.0
+    except ValueError:
+        fill_estimate = 8.0
+    memory_estimate = context.estimate_sparse_pc_memory(
+        unknowns=int(context.unknowns),
+        gmres_restart=int(context.gmres_restart),
+        csr_nnz=int(context.csr_nnz),
+        dtype=context.dtype,
+        factor_fill_estimate=float(fill_estimate),
+        device_count=max(1, int(context.device_count)),
+    )
+    estimated_mb = (
+        float(memory_estimate.csr_total_nbytes or memory_estimate.dense_total_nbytes)
+        / 1.0e6
+    )
+    if estimated_mb > float(budget_mb):
+        raise MemoryError(
+            "sparse_pc_gmres memory preflight exceeds "
+            "SFINCS_JAX_RHSMODE1_SPARSE_PC_MAX_ESTIMATED_MB: "
+            f"estimated={estimated_mb:.3f} MB budget={float(budget_mb):.3f} MB "
+            f"unknowns={int(context.unknowns)} csr_nnz={int(context.csr_nnz)} "
+            f"restart={int(context.gmres_restart)} factor_fill_estimate={float(fill_estimate):.3g}. "
+            "Raise the budget, lower the resolution, or use a lower-memory matrix-free route."
+        )
 
 
 def _xblock_device_flags(method: str) -> tuple[bool, bool, bool, bool, bool]:
@@ -4633,6 +4695,7 @@ __all__ = [
     "XBlockSideProbeDiagnosticsContext",
     "SparsePCActiveDOFSetup",
     "SparsePCFactorPolicySetup",
+    "SparsePCMemoryBudgetPreflightContext",
     "SparsePCPatternSetupContext",
     "SparsePCPatternSetupResult",
     "SparsePCGMRESContext",
@@ -4647,6 +4710,7 @@ __all__ = [
     "build_fortran_reduced_xblock_krylov_setup",
     "build_sparse_pc_active_dof_setup",
     "build_sparse_pc_pattern_setup",
+    "enforce_sparse_pc_memory_budget",
     "fp_xblock_global_correction_metadata",
     "fp_xblock_highx_residual_correction_metadata",
     "prepare_fortran_reduced_xblock_initial_guess",

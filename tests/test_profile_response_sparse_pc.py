@@ -22,6 +22,7 @@ from sfincs_jax.problems.profile_response.sparse_pc import (
     FortranReducedXBlockMomentSchurStageContext,
     MatvecCounter,
     SparsePCGMRESContext,
+    SparsePCMemoryBudgetPreflightContext,
     SparsePCPatternSetupContext,
     SparsePCPostMinresContext,
     XBlockAssembledPreflightError,
@@ -38,6 +39,7 @@ from sfincs_jax.problems.profile_response.sparse_pc import (
     build_xblock_assembled_matvec_setup,
     build_xblock_assembled_operator_preflight_setup,
     build_xblock_krylov_matvec_setup,
+    enforce_sparse_pc_memory_budget,
     evaluate_xblock_moment_schur_probe_result,
     failed_xblock_global_coupling_metadata,
     failed_xblock_two_level_metadata,
@@ -402,6 +404,84 @@ def test_sparse_pc_factor_policy_can_defer_dtype_to_host_policy() -> None:
             "use_implicit": False,
         }
     ]
+
+
+def test_sparse_pc_memory_budget_preflight_is_noop_without_positive_budget() -> None:
+    calls = 0
+
+    def estimate(**_kwargs):
+        nonlocal calls
+        calls += 1
+        return SimpleNamespace(csr_total_nbytes=10**9, dense_total_nbytes=0)
+
+    enforce_sparse_pc_memory_budget(
+        SparsePCMemoryBudgetPreflightContext(
+            env={"SFINCS_JAX_RHSMODE1_SPARSE_PC_MAX_ESTIMATED_MB": "bad"},
+            unknowns=10,
+            gmres_restart=20,
+            csr_nnz=30,
+            dtype=np.dtype(np.float64),
+            device_count=1,
+            estimate_sparse_pc_memory=estimate,
+        )
+    )
+
+    assert calls == 0
+
+
+def test_sparse_pc_memory_budget_preflight_passes_estimator_inputs() -> None:
+    calls: list[dict[str, object]] = []
+
+    def estimate(**kwargs):
+        calls.append(kwargs)
+        return SimpleNamespace(csr_total_nbytes=2_000_000, dense_total_nbytes=0)
+
+    enforce_sparse_pc_memory_budget(
+        SparsePCMemoryBudgetPreflightContext(
+            env={
+                "SFINCS_JAX_RHSMODE1_SPARSE_PC_MAX_ESTIMATED_MB": "3",
+                "SFINCS_JAX_RHSMODE1_SPARSE_PC_FACTOR_FILL_ESTIMATE": "4.5",
+            },
+            unknowns=10,
+            gmres_restart=20,
+            csr_nnz=30,
+            dtype=np.dtype(np.float32),
+            device_count=0,
+            estimate_sparse_pc_memory=estimate,
+        )
+    )
+
+    assert calls == [
+        {
+            "unknowns": 10,
+            "gmres_restart": 20,
+            "csr_nnz": 30,
+            "dtype": np.dtype(np.float32),
+            "factor_fill_estimate": 4.5,
+            "device_count": 1,
+        }
+    ]
+
+
+def test_sparse_pc_memory_budget_preflight_raises_same_budget_error() -> None:
+    def estimate(**_kwargs):
+        return SimpleNamespace(csr_total_nbytes=0, dense_total_nbytes=5_500_000)
+
+    with pytest.raises(MemoryError, match="estimated=5.500 MB budget=5.000 MB"):
+        enforce_sparse_pc_memory_budget(
+            SparsePCMemoryBudgetPreflightContext(
+                env={
+                    "SFINCS_JAX_RHSMODE1_SPARSE_PC_MAX_ESTIMATED_MB": "5",
+                    "SFINCS_JAX_RHSMODE1_SPARSE_PC_FACTOR_FILL_ESTIMATE": "bad",
+                },
+                unknowns=11,
+                gmres_restart=22,
+                csr_nnz=33,
+                dtype=np.dtype(np.float64),
+                device_count=2,
+                estimate_sparse_pc_memory=estimate,
+            )
+        )
 
 
 def test_fortran_reduced_xblock_factor_policy_uses_specific_env_before_generic() -> None:

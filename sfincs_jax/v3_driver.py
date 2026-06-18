@@ -214,6 +214,7 @@ from .problems.profile_response.sparse_pc import (
     FortranReducedXBlockKrylovSetupContext,
     FortranReducedXBlockKrylovSolveContext,
     FortranReducedXBlockMomentSchurStageContext,
+    SparsePCMemoryBudgetPreflightContext,
     SparsePCPatternSetupContext,
     SparsePCGMRESContext,
     SparsePCPostMinresContext,
@@ -231,6 +232,7 @@ from .problems.profile_response.sparse_pc import (
     build_xblock_assembled_operator_preflight_setup,
     build_sparse_pc_active_dof_setup,
     evaluate_xblock_moment_schur_probe_result,
+    enforce_sparse_pc_memory_budget,
     failed_xblock_global_coupling_metadata,
     failed_xblock_moment_schur_metadata,
     failed_xblock_two_level_metadata,
@@ -7246,39 +7248,17 @@ def solve_v3_full_system_linear_gmres(
         sparse_pc_permc_spec = str(sparse_pc_factor_policy.permc_spec)
         fp32_probe_maxiter = int(sparse_pc_factor_policy.fp32_probe_maxiter)
         sparse_pc_first_attempt_maxiter = int(sparse_pc_factor_policy.first_attempt_maxiter)
-        budget_env = os.environ.get("SFINCS_JAX_RHSMODE1_SPARSE_PC_MAX_ESTIMATED_MB", "").strip()
-        if budget_env:
-            try:
-                budget_mb = float(budget_env)
-            except ValueError:
-                budget_mb = 0.0
-            if budget_mb > 0.0:
-                fill_env = os.environ.get("SFINCS_JAX_RHSMODE1_SPARSE_PC_FACTOR_FILL_ESTIMATE", "").strip()
-                try:
-                    fill_estimate = float(fill_env) if fill_env else 8.0
-                except ValueError:
-                    fill_estimate = 8.0
-                memory_estimate = estimate_sparse_pc_memory(
-                    unknowns=int(sparse_pc_linear_size),
-                    gmres_restart=int(pc_restart),
-                    csr_nnz=int(summary.nnz),
-                    dtype=sparse_pc_factor_dtype_initial,
-                    factor_fill_estimate=float(fill_estimate),
-                    device_count=max(1, int(jax.device_count())),
-                )
-                estimated_mb = (
-                    float(memory_estimate.csr_total_nbytes or memory_estimate.dense_total_nbytes)
-                    / 1.0e6
-                )
-                if estimated_mb > float(budget_mb):
-                    raise MemoryError(
-                        "sparse_pc_gmres memory preflight exceeds "
-                        "SFINCS_JAX_RHSMODE1_SPARSE_PC_MAX_ESTIMATED_MB: "
-                        f"estimated={estimated_mb:.3f} MB budget={float(budget_mb):.3f} MB "
-                        f"unknowns={int(sparse_pc_linear_size)} csr_nnz={int(summary.nnz)} "
-                        f"restart={int(pc_restart)} factor_fill_estimate={float(fill_estimate):.3g}. "
-                        "Raise the budget, lower the resolution, or use a lower-memory matrix-free route."
-                    )
+        enforce_sparse_pc_memory_budget(
+            SparsePCMemoryBudgetPreflightContext(
+                env=os.environ,
+                unknowns=int(sparse_pc_linear_size),
+                gmres_restart=int(pc_restart),
+                csr_nnz=int(summary.nnz),
+                dtype=sparse_pc_factor_dtype_initial,
+                device_count=max(1, int(jax.device_count())),
+                estimate_sparse_pc_memory=estimate_sparse_pc_memory,
+            )
+        )
 
         def _sparse_pc_factor_mv(x_np: np.ndarray) -> jnp.ndarray:
             x_jnp = _sparse_pc_expand_reduced(jnp.asarray(x_np, dtype=rhs.dtype))

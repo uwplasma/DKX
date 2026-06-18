@@ -35661,3 +35661,38 @@ Next refactor target:
   direct-tail materialization setup in separate typed helpers, keeping
   structured-PC construction/admission behavior unchanged until covered by
   targeted tests.
+
+### 19.130 Generic sparse-PC memory-budget preflight extraction
+
+Goal:
+
+- Remove the optional generic sparse-PC memory-budget guard from
+  ``solve_v3_full_system_linear_gmres`` without changing the environment
+  variables, estimator arguments, or ``MemoryError`` message used by production
+  memory-gate tests.
+
+Implementation:
+
+- Added ``SparsePCMemoryBudgetPreflightContext`` and
+  ``enforce_sparse_pc_memory_budget`` to
+  ``problems/profile_response/sparse_pc.py``.
+- Updated ``v3_driver.py`` to call the helper with the same linear size,
+  GMRES restart, pattern nnz, factor dtype, device count, and memory estimator.
+- Added focused tests covering no-op behavior for absent/invalid budgets,
+  estimator argument forwarding, device-count clamping, custom fill estimates,
+  fallback fill estimates, and the preserved over-budget error text.
+- ``v3_driver.py`` is now about ``20113`` lines and
+  ``solve_v3_full_system_linear_gmres`` about ``14801`` lines.
+
+Validation:
+
+- ``python -m ruff check`` on touched source/tests: passed.
+- ``python -m compileall -q`` on touched source/tests: passed.
+- ``tests/test_profile_response_sparse_pc.py``: ``102 passed``.
+- Broader current profile-response/x-block/sparse-pattern shard:
+  ``380 passed in 112.28 s``.
+
+Next refactor target:
+
+- Extract the direct-tail materialization setup and then the structured
+  direct-tail preconditioner admission path as separately tested helpers.
