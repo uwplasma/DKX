@@ -35564,6 +35564,9 @@ Implementation:
 - Added a focused diagnostics test covering direct-tail operator metadata,
   byte-to-MB conversion, nullable species counts, window-spec normalization,
   and pass-through metadata payloads.
+- Compacted the direct-tail helper into a table-driven metadata builder after
+  the first extraction commit, cutting the diagnostics helper by about 300
+  lines while preserving the same tested keys and conversions.
 - ``v3_driver.py`` is now about ``20207`` lines and
   ``solve_v3_full_system_linear_gmres`` about ``14900`` lines.
 
@@ -35574,7 +35577,7 @@ Validation:
 - Focused diagnostics/sparse-PC shard, including the previously regressed
   direct-tail production tests: ``104 passed``.
 - Broader current profile-response/x-block/sparse-pattern shard:
-  ``370 passed in 113.87 s``.
+  ``370 passed in 113.74 s`` after the table-driven compaction.
 
 Next refactor target:
 
