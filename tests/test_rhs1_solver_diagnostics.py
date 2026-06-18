@@ -8,6 +8,7 @@ from sfincs_jax.rhs1_solver_diagnostics import (
     RHS1PreflightDiagnostics,
     RHS1SubspaceCorrectionDiagnostics,
     build_rhs1_xblock_correction_metadata,
+    build_rhs1_xblock_correction_metadata_from_driver_state,
     emit_profile_response_ksp_history,
     emit_profile_response_ksp_iter_stats,
 )
@@ -144,6 +145,105 @@ def test_rhs1_xblock_correction_metadata_defaults_are_output_safe() -> None:
     assert metadata["xblock_post_coarse_direction_names"] == ()
     assert metadata["xblock_post_residual_equation_direction_count"] == 0
     assert metadata["xblock_post_residual_equation_include_qi_basis"] is False
+
+
+def test_rhs1_xblock_correction_metadata_from_driver_state_matches_typed_builder() -> None:
+    state = {
+        "probe_coarse_steps_requested": 2,
+        "probe_coarse_direction_counts": (3, 4),
+        "probe_coarse_direction_names": ("fsavg", "angular"),
+        "probe_coarse_residual_before": 5.0,
+        "probe_coarse_residual_after": 2.0,
+        "probe_coarse_history": (4.0, 2.0),
+        "probe_coarse_fsavg_lmax": 3,
+        "probe_coarse_angular_lmax": 2,
+        "probe_coarse_include_angular_residual": True,
+        "probe_coarse_seed_initialized": True,
+        "probe_coarse_s": 0.125,
+        "preflight_min_improvement": 1.0e-3,
+        "preflight_required": True,
+        "preflight_residual_norm": 3.0,
+        "preflight_improvement": 0.2,
+        "preflight_passed": True,
+        "post_minres_steps_requested": 3,
+        "post_minres_alphas": (0.5, -0.25),
+        "post_minres_history": (1.7, 1.2),
+        "post_minres_residual_before": 2.0,
+        "post_minres_residual_after": 1.2,
+        "post_coarse_steps_requested": 4,
+        "post_coarse_direction_counts": (2,),
+        "post_coarse_direction_names": ("post-fsavg",),
+        "post_coarse_residual_before": 1.2,
+        "post_coarse_residual_after": 0.8,
+        "post_coarse_history": (1.0, 0.8),
+        "post_coarse_fsavg_lmax": 1,
+        "post_coarse_angular_lmax": 0,
+        "post_coarse_include_angular_residual": False,
+        "post_residual_equation_steps_requested": 1,
+        "post_residual_equation_direction_counts": (5, 6),
+        "post_residual_equation_direction_names": ("qi", "residual"),
+        "post_residual_equation_residual_before": 0.8,
+        "post_residual_equation_residual_after": 0.3,
+        "post_residual_equation_history": (0.6, 0.3),
+        "post_residual_equation_fsavg_lmax": 4,
+        "post_residual_equation_angular_lmax": 3,
+        "post_residual_equation_include_angular_residual": True,
+        "post_residual_equation_include_qi_basis": True,
+    }
+    expected = build_rhs1_xblock_correction_metadata(
+        probe_coarse=RHS1SubspaceCorrectionDiagnostics(
+            steps_requested=2,
+            direction_counts=(3, 4),
+            direction_names=("fsavg", "angular"),
+            residual_before=5.0,
+            residual_after=2.0,
+            history=(4.0, 2.0),
+            fsavg_lmax=3,
+            angular_lmax=2,
+            angular_residual=True,
+            seed_initialized=True,
+            setup_s=0.125,
+        ),
+        preflight=RHS1PreflightDiagnostics(
+            min_improvement=1.0e-3,
+            required=True,
+            residual_norm=3.0,
+            improvement=0.2,
+            passed=True,
+        ),
+        post_minres=RHS1PostMinresDiagnostics(
+            steps_requested=3,
+            alphas=(0.5, -0.25),
+            history=(1.7, 1.2),
+            residual_before=2.0,
+            residual_after=1.2,
+        ),
+        post_coarse=RHS1SubspaceCorrectionDiagnostics(
+            steps_requested=4,
+            direction_counts=(2,),
+            direction_names=("post-fsavg",),
+            residual_before=1.2,
+            residual_after=0.8,
+            history=(1.0, 0.8),
+            fsavg_lmax=1,
+            angular_lmax=0,
+            angular_residual=False,
+        ),
+        post_residual_equation=RHS1SubspaceCorrectionDiagnostics(
+            steps_requested=1,
+            direction_counts=(5, 6),
+            direction_names=("qi", "residual"),
+            residual_before=0.8,
+            residual_after=0.3,
+            history=(0.6, 0.3),
+            fsavg_lmax=4,
+            angular_lmax=3,
+            angular_residual=True,
+            include_qi_basis=True,
+        ),
+    )
+
+    assert build_rhs1_xblock_correction_metadata_from_driver_state(state) == expected
 
 
 def test_profile_response_ksp_diagnostics_forward_context(monkeypatch) -> None:

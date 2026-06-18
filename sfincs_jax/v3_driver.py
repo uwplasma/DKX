@@ -417,10 +417,7 @@ from .rhs1_true_operator_rescue import (
 )
 from .problems.profile_response.solver_diagnostics import (
     RHS1KSPDiagnosticsContext,
-    RHS1PostMinresDiagnostics,
-    RHS1PreflightDiagnostics,
-    RHS1SubspaceCorrectionDiagnostics,
-    build_rhs1_xblock_correction_metadata,
+    build_rhs1_xblock_correction_metadata_from_driver_state,
     emit_profile_response_ksp_history,
     emit_profile_response_ksp_iter_stats,
 )
@@ -6896,59 +6893,8 @@ def solve_v3_full_system_linear_gmres(
                         locals(),
                         full_size=op.total_size,
                     ),
-                    **build_rhs1_xblock_correction_metadata(
-                        probe_coarse=RHS1SubspaceCorrectionDiagnostics(
-                            steps_requested=int(probe_coarse_steps_requested),
-                            direction_counts=probe_coarse_direction_counts,
-                            direction_names=probe_coarse_direction_names,
-                            residual_before=probe_coarse_residual_before,
-                            residual_after=probe_coarse_residual_after,
-                            history=probe_coarse_history,
-                            fsavg_lmax=int(probe_coarse_fsavg_lmax),
-                            angular_lmax=int(probe_coarse_angular_lmax),
-                            angular_residual=bool(probe_coarse_include_angular_residual),
-                            seed_initialized=bool(probe_coarse_seed_initialized),
-                            setup_s=float(probe_coarse_s),
-                        ),
-                        preflight=RHS1PreflightDiagnostics(
-                            min_improvement=float(preflight_min_improvement),
-                            required=bool(preflight_required),
-                            residual_norm=preflight_residual_norm,
-                            improvement=preflight_improvement,
-                            passed=preflight_passed,
-                        ),
-                        post_minres=RHS1PostMinresDiagnostics(
-                            steps_requested=int(post_minres_steps_requested),
-                            alphas=post_minres_alphas,
-                            history=post_minres_history,
-                            residual_before=post_minres_residual_before,
-                            residual_after=post_minres_residual_after,
-                        ),
-                        post_coarse=RHS1SubspaceCorrectionDiagnostics(
-                            steps_requested=int(post_coarse_steps_requested),
-                            direction_counts=post_coarse_direction_counts,
-                            direction_names=post_coarse_direction_names,
-                            residual_before=post_coarse_residual_before,
-                            residual_after=post_coarse_residual_after,
-                            history=post_coarse_history,
-                            fsavg_lmax=int(post_coarse_fsavg_lmax),
-                            angular_lmax=int(post_coarse_angular_lmax),
-                            angular_residual=bool(post_coarse_include_angular_residual),
-                        ),
-                        post_residual_equation=RHS1SubspaceCorrectionDiagnostics(
-                            steps_requested=int(post_residual_equation_steps_requested),
-                            direction_counts=post_residual_equation_direction_counts,
-                            direction_names=post_residual_equation_direction_names,
-                            residual_before=post_residual_equation_residual_before,
-                            residual_after=post_residual_equation_residual_after,
-                            history=post_residual_equation_history,
-                            fsavg_lmax=int(post_residual_equation_fsavg_lmax),
-                            angular_lmax=int(post_residual_equation_angular_lmax),
-                            angular_residual=bool(
-                                post_residual_equation_include_angular_residual
-                            ),
-                            include_qi_basis=bool(post_residual_equation_include_qi_basis),
-                        ),
+                    **build_rhs1_xblock_correction_metadata_from_driver_state(
+                        locals()
                     ),
                 },
             )

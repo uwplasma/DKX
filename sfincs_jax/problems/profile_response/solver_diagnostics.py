@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 
 import jax.numpy as jnp
 
@@ -229,3 +229,70 @@ def build_rhs1_xblock_correction_metadata(
         ),
     }
     return metadata
+
+
+def build_rhs1_xblock_correction_metadata_from_driver_state(
+    state: Mapping[str, object],
+) -> dict[str, object]:
+    """Build x-block correction metadata from the driver solve state.
+
+    This keeps the long correction-diagnostics object assembly next to the
+    stable metadata schema instead of in the main solve routine.
+    """
+
+    return build_rhs1_xblock_correction_metadata(
+        probe_coarse=RHS1SubspaceCorrectionDiagnostics(
+            steps_requested=int(state["probe_coarse_steps_requested"]),
+            direction_counts=state["probe_coarse_direction_counts"],
+            direction_names=state["probe_coarse_direction_names"],
+            residual_before=state["probe_coarse_residual_before"],
+            residual_after=state["probe_coarse_residual_after"],
+            history=state["probe_coarse_history"],
+            fsavg_lmax=int(state["probe_coarse_fsavg_lmax"]),
+            angular_lmax=int(state["probe_coarse_angular_lmax"]),
+            angular_residual=bool(state["probe_coarse_include_angular_residual"]),
+            seed_initialized=bool(state["probe_coarse_seed_initialized"]),
+            setup_s=float(state["probe_coarse_s"]),
+        ),
+        preflight=RHS1PreflightDiagnostics(
+            min_improvement=float(state["preflight_min_improvement"]),
+            required=bool(state["preflight_required"]),
+            residual_norm=state["preflight_residual_norm"],
+            improvement=state["preflight_improvement"],
+            passed=state["preflight_passed"],
+        ),
+        post_minres=RHS1PostMinresDiagnostics(
+            steps_requested=int(state["post_minres_steps_requested"]),
+            alphas=state["post_minres_alphas"],
+            history=state["post_minres_history"],
+            residual_before=state["post_minres_residual_before"],
+            residual_after=state["post_minres_residual_after"],
+        ),
+        post_coarse=RHS1SubspaceCorrectionDiagnostics(
+            steps_requested=int(state["post_coarse_steps_requested"]),
+            direction_counts=state["post_coarse_direction_counts"],
+            direction_names=state["post_coarse_direction_names"],
+            residual_before=state["post_coarse_residual_before"],
+            residual_after=state["post_coarse_residual_after"],
+            history=state["post_coarse_history"],
+            fsavg_lmax=int(state["post_coarse_fsavg_lmax"]),
+            angular_lmax=int(state["post_coarse_angular_lmax"]),
+            angular_residual=bool(state["post_coarse_include_angular_residual"]),
+        ),
+        post_residual_equation=RHS1SubspaceCorrectionDiagnostics(
+            steps_requested=int(state["post_residual_equation_steps_requested"]),
+            direction_counts=state["post_residual_equation_direction_counts"],
+            direction_names=state["post_residual_equation_direction_names"],
+            residual_before=state["post_residual_equation_residual_before"],
+            residual_after=state["post_residual_equation_residual_after"],
+            history=state["post_residual_equation_history"],
+            fsavg_lmax=int(state["post_residual_equation_fsavg_lmax"]),
+            angular_lmax=int(state["post_residual_equation_angular_lmax"]),
+            angular_residual=bool(
+                state["post_residual_equation_include_angular_residual"]
+            ),
+            include_qi_basis=bool(
+                state["post_residual_equation_include_qi_basis"]
+            ),
+        ),
+    )

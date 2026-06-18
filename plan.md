@@ -34968,3 +34968,40 @@ Next refactor target:
 - Apply the same pattern to the remaining correction-metadata block at the
   x-block return boundary, then continue moving sparse-PC orchestration out of
   ``solve_v3_full_system_linear_gmres``.
+
+### 19.112 X-block correction metadata driver-state builder
+
+Goal:
+
+- Remove the remaining long correction-diagnostics object construction from
+  the x-block sparse-PC return boundary in ``v3_driver.py``.
+
+Implementation:
+
+- Added ``build_rhs1_xblock_correction_metadata_from_driver_state`` to
+  ``problems/profile_response/solver_diagnostics.py``.
+- The new wrapper constructs the existing typed correction/preflight/minres
+  diagnostics next to the stable metadata schema instead of in the main solve
+  routine.
+- Replaced the inline correction metadata block in ``v3_driver.py`` with a
+  single driver-state handoff.
+- Added a unit test proving the wrapper output is identical to the existing
+  typed ``build_rhs1_xblock_correction_metadata`` path.
+- ``v3_driver.py`` is now about ``21140`` lines and
+  ``solve_v3_full_system_linear_gmres`` about ``15852`` lines.
+
+Validation:
+
+- ``python -m ruff check`` on touched source/tests: passed.
+- ``python -m compileall -q`` on touched source/tests: passed.
+- Focused solver/profile diagnostics and sparse-PC tests:
+  ``71 passed``.
+- Broader current profile-response/x-block/sparse-pattern shard:
+  ``335 passed in 110.50 s``.
+
+Next refactor target:
+
+- Move the next coherent sparse-PC orchestration slice out of
+  ``solve_v3_full_system_linear_gmres``: either the active-DOF/reduced-map
+  setup or the x-block result construction itself, keeping the same broad
+  validation shard.
