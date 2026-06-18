@@ -210,6 +210,7 @@ from .problems.profile_response.diagnostics import (
 )
 from .problems.profile_response.sparse_pc import (
     DirectTailMaterializationContext,
+    DirectTailStructuredAdmissionContext,
     FortranReducedXBlockFactorBuildContext,
     FortranReducedXBlockGlobalCouplingStageContext,
     FortranReducedXBlockKrylovSetupContext,
@@ -245,6 +246,7 @@ from .problems.profile_response.sparse_pc import (
     prepare_xblock_initial_guess,
     resolve_sparse_pc_entry_policy,
     resolve_sparse_pc_factor_policy,
+    resolve_direct_tail_structured_admission,
     resolve_fortran_reduced_sparse_pc_backend,
     resolve_fortran_reduced_xblock_factor_policy,
     resolve_fortran_reduced_xblock_global_coupling_policy,
@@ -7316,42 +7318,22 @@ def solve_v3_full_system_linear_gmres(
             direct_tail_materialization.direct_reduced_pmat_requested
         )
         factor_start_s = sparse_timer.elapsed_s()
-        direct_tail_pc_env = (
-            os.environ.get("SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_PRECONDITIONER", "")
-            .strip()
-            .lower()
-            .replace("-", "_")
+        direct_tail_structured_admission = resolve_direct_tail_structured_admission(
+            DirectTailStructuredAdmissionContext(
+                env=os.environ,
+                pc_env=str(direct_tail_materialization.pc_env),
+                operator_bundle=direct_tail_operator_bundle,
+                direct_reduced_pmat_requested=bool(direct_tail_direct_reduced_pmat_requested),
+                sparse_pc_linear_size=int(sparse_pc_linear_size),
+                default_max_mb=_rhsmode1_fortran_reduced_direct_tail_pc_default_max_mb,
+            )
         )
-        direct_tail_pc_auto_default = bool(
-            direct_tail_pc_env == ""
-            and direct_tail_operator_bundle is not None
-            and int(sparse_pc_linear_size) >= 100_000
-        )
-        if direct_tail_pc_env in {"", "factor", "host_factor", "legacy", "default"}:
-            direct_tail_structured_pc_requested = "auto" if bool(direct_tail_pc_auto_default) else None
-        elif direct_tail_pc_env in {"auto", "active_auto", "structured"}:
-            direct_tail_structured_pc_requested = "auto"
-        else:
-            direct_tail_structured_pc_requested = direct_tail_pc_env
-        direct_tail_fail_closed_size = _rhs1_int_env(
-            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_STRUCTURED_PC_FAIL_CLOSED_SIZE",
-            default=300_000,
-        )
-        direct_tail_auto_large_fail_closed = bool(
-            direct_tail_structured_pc_requested is not None
-            and direct_tail_pc_env in {"", "auto", "active_auto", "structured"}
-            and int(sparse_pc_linear_size) >= int(direct_tail_fail_closed_size)
-        )
-        direct_tail_structured_pc_required = _rhs1_bool_env(
-            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_STRUCTURED_PC_REQUIRED",
-            default=bool(
-                direct_tail_auto_large_fail_closed
-                or (
-                    direct_tail_structured_pc_requested is not None
-                    and direct_tail_pc_env not in {"auto", "active_auto", "structured"}
-                )
-            ),
-        )
+        direct_tail_pc_env = str(direct_tail_structured_admission.pc_env)
+        direct_tail_pc_auto_default = bool(direct_tail_structured_admission.auto_default)
+        direct_tail_structured_pc_requested = direct_tail_structured_admission.requested
+        direct_tail_fail_closed_size = int(direct_tail_structured_admission.fail_closed_size)
+        direct_tail_auto_large_fail_closed = bool(direct_tail_structured_admission.auto_large_fail_closed)
+        direct_tail_structured_pc_required = bool(direct_tail_structured_admission.required)
         if emit is not None:
             emit(
                 1,
@@ -7369,29 +7351,10 @@ def solve_v3_full_system_linear_gmres(
         direct_tail_support_mode_preflight_selected = False
         direct_tail_support_mode_preflight_metadata: dict[str, object] | None = None
         direct_tail_support_mode_preflight_error: str | None = None
-        direct_tail_structured_pc_max_mb_auto = False
-        if direct_tail_structured_pc_requested is not None and (
-            direct_tail_operator_bundle is not None or bool(direct_tail_direct_reduced_pmat_requested)
-        ):
-            pc_max_mb_env = os.environ.get(
-                "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_PC_MAX_MB",
-                "",
-            ).strip()
-            if pc_max_mb_env:
-                pc_max_mb = _rhs1_float_env(
-                    "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_PC_MAX_MB",
-                    default=512.0,
-                )
-            else:
-                direct_tail_structured_pc_max_mb_auto = True
-                pc_max_mb = _rhsmode1_fortran_reduced_direct_tail_pc_default_max_mb(
-                    requested_kind=direct_tail_structured_pc_requested,
-                    active_size=int(sparse_pc_linear_size),
-                )
-            pc_reg = _rhs1_float_env(
-                "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_PC_REGULARIZATION",
-                default=1.0e-12,
-            )
+        direct_tail_structured_pc_max_mb_auto = bool(direct_tail_structured_admission.max_mb_auto)
+        pc_max_mb = float(direct_tail_structured_admission.max_mb)
+        pc_reg = float(direct_tail_structured_admission.regularization)
+        if bool(direct_tail_structured_admission.setup_allowed):
             direct_tail_structured_pc_start_s = sparse_timer.elapsed_s()
             if emit is not None:
                 emit(

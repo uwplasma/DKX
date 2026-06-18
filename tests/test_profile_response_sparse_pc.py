@@ -16,6 +16,7 @@ from sfincs_jax.problems.profile_response.diagnostics import (
 )
 from sfincs_jax.problems.profile_response.sparse_pc import (
     DirectTailMaterializationContext,
+    DirectTailStructuredAdmissionContext,
     FortranReducedXBlockFactorBuildContext,
     FortranReducedXBlockGlobalCouplingStageContext,
     FortranReducedXBlockKrylovSetupContext,
@@ -59,6 +60,7 @@ from sfincs_jax.problems.profile_response.sparse_pc import (
     resolve_fortran_reduced_xblock_moment_schur_policy,
     resolve_sparse_pc_entry_policy,
     resolve_sparse_pc_factor_policy,
+    resolve_direct_tail_structured_admission,
     resolve_xblock_qi_device_admission_setup,
     resolve_xblock_qi_device_base_config_setup,
     resolve_xblock_qi_device_enrichment_config_setup,
@@ -642,6 +644,122 @@ def test_direct_tail_materialization_records_not_selected_and_exception() -> Non
     assert err_result.operator_bundle is None
     assert err_result.error == "RuntimeError: boom"
     assert "materialization disabled after failure elapsed_s=0.250" in err_messages[1][1]
+
+
+def test_direct_tail_structured_admission_auto_defaults_when_large_bundle_exists() -> None:
+    calls: list[dict[str, object]] = []
+
+    def default_max_mb(**kwargs):
+        calls.append(kwargs)
+        return 768.0
+
+    result = resolve_direct_tail_structured_admission(
+        DirectTailStructuredAdmissionContext(
+            env={},
+            pc_env="",
+            operator_bundle=object(),
+            direct_reduced_pmat_requested=False,
+            sparse_pc_linear_size=100000,
+            default_max_mb=default_max_mb,
+        )
+    )
+
+    assert result.pc_env == ""
+    assert result.requested == "auto"
+    assert result.auto_default is True
+    assert result.required is True
+    assert result.setup_allowed is True
+    assert result.max_mb_auto is True
+    assert result.max_mb == 768.0
+    assert result.regularization == 1.0e-12
+    assert calls == [{"requested_kind": "auto", "active_size": 100000}]
+
+
+def test_direct_tail_structured_admission_explicit_kind_is_required_and_uses_env_caps() -> None:
+    result = resolve_direct_tail_structured_admission(
+        DirectTailStructuredAdmissionContext(
+            env={
+                "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_PC_MAX_MB": "12.5",
+                "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_PC_REGULARIZATION": "4e-9",
+            },
+            pc_env="active-fortran-v3-reduced-lu",
+            operator_bundle=object(),
+            direct_reduced_pmat_requested=False,
+            sparse_pc_linear_size=9,
+            default_max_mb=lambda **_kwargs: pytest.fail("unexpected default cap"),
+        )
+    )
+
+    assert result.requested == "active_fortran_v3_reduced_lu"
+    assert result.required is True
+    assert result.setup_allowed is True
+    assert result.max_mb_auto is False
+    assert result.max_mb == 12.5
+    assert result.regularization == 4.0e-9
+
+
+def test_direct_tail_structured_admission_fail_closed_and_overrides() -> None:
+    result = resolve_direct_tail_structured_admission(
+        DirectTailStructuredAdmissionContext(
+            env={
+                "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_STRUCTURED_PC_FAIL_CLOSED_SIZE": "10",
+                "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_STRUCTURED_PC_REQUIRED": "0",
+            },
+            pc_env="auto",
+            operator_bundle=object(),
+            direct_reduced_pmat_requested=False,
+            sparse_pc_linear_size=12,
+            default_max_mb=lambda **_kwargs: 512.0,
+        )
+    )
+
+    assert result.requested == "auto"
+    assert result.fail_closed_size == 10
+    assert result.auto_large_fail_closed is True
+    assert result.required is False
+    assert result.setup_allowed is True
+
+
+def test_direct_tail_structured_admission_allows_direct_reduced_pmat_without_bundle() -> None:
+    result = resolve_direct_tail_structured_admission(
+        DirectTailStructuredAdmissionContext(
+            env={
+                "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_PC_MAX_MB": "bad",
+                "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_PC_REGULARIZATION": "bad",
+            },
+            pc_env="direct-pmat",
+            operator_bundle=None,
+            direct_reduced_pmat_requested=True,
+            sparse_pc_linear_size=5,
+            default_max_mb=lambda **_kwargs: pytest.fail("unexpected default cap"),
+        )
+    )
+
+    assert result.requested == "direct_pmat"
+    assert result.setup_allowed is True
+    assert result.required is True
+    assert result.max_mb_auto is False
+    assert result.max_mb == 512.0
+    assert result.regularization == 1.0e-12
+
+
+def test_direct_tail_structured_admission_no_bundle_blocks_default_setup() -> None:
+    result = resolve_direct_tail_structured_admission(
+        DirectTailStructuredAdmissionContext(
+            env={},
+            pc_env="",
+            operator_bundle=None,
+            direct_reduced_pmat_requested=False,
+            sparse_pc_linear_size=100000,
+            default_max_mb=lambda **_kwargs: pytest.fail("unexpected default cap"),
+        )
+    )
+
+    assert result.auto_default is False
+    assert result.requested is None
+    assert result.setup_allowed is False
+    assert result.max_mb_auto is False
+    assert result.max_mb == 0.0
 
 
 def test_fortran_reduced_xblock_factor_policy_uses_specific_env_before_generic() -> None:

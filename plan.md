@@ -42,23 +42,24 @@ Make `sfincs_jax` research-grade while preserving the public user contract:
 
 Recent checkpoints:
 
+- Direct-tail structured preconditioner admission extraction (current checkpoint).
 - Direct-tail materialization extraction (current checkpoint).
 - `0e9b5fb` Compact active plan.
 - `a1721b8` Extract sparse memory preflight.
 - `cb295ce` Extract sparse pattern setup.
 - `4b6a5b4` Extract sparse factor policy.
 
-Current source-size snapshot after the direct-tail materialization extraction:
+Current source-size snapshot after the structured admission extraction:
 
-- `sfincs_jax/v3_driver.py`: about `20044` lines.
-- `solve_v3_full_system_linear_gmres`: about `14730` lines.
+- `sfincs_jax/v3_driver.py`: `20007` lines.
+- `solve_v3_full_system_linear_gmres`: `14691` lines.
 
 Recent local validation:
 
-- Focused sparse-PC/direct-tail/materialization and repo-size shards:
-  `108 passed`.
+- Focused sparse-PC/direct-tail/structured-admission and repo-size shards:
+  `113 passed in 1.50 s`.
 - Latest broad profile-response/x-block/sparse-pattern shard:
-  `384 passed in 113.47 s`.
+  `389 passed in 114.79 s`.
 
 Known CI issue fixed by this rewrite:
 
@@ -69,7 +70,7 @@ Known CI issue fixed by this rewrite:
 
 ### 1. `v3_driver.py` Architecture Refactor
 
-Completion estimate: 68%.
+Completion estimate: 69%.
 
 Goal:
 
@@ -85,11 +86,12 @@ Completed recent boundaries:
 - Generic sparse-PC pattern setup.
 - Generic sparse-PC memory-budget preflight.
 - Direct-tail materialization setup.
+- Structured direct-tail preconditioner admission policy.
 
 Next steps:
 
-- Extract structured direct-tail preconditioner admission into a separately
-  tested helper.
+- Extract structured direct-tail preconditioner construction/cache setup into a
+  separately tested helper.
 - Move remaining generic sparse-PC solve/result assembly into cohesive
   `profile_response` helpers.
 - Continue shrinking `solve_v3_full_system_linear_gmres` in behavior-preserving
@@ -149,12 +151,12 @@ Next steps:
 
 ## Immediate Next Steps
 
-1. Re-run the repo-size audit and focused checks after this compact plan rewrite.
-2. Commit and push the size-policy fix.
-3. Continue with direct-tail materialization setup extraction.
-4. Run focused sparse-PC tests and the broad profile-response/x-block/sparse
+1. Commit and push the structured admission extraction after a final clean diff.
+2. Continue with structured direct-tail preconditioner construction/cache setup
+   extraction.
+3. Run focused sparse-PC tests and the broad profile-response/x-block/sparse
    shard after each extraction.
-5. Snapshot CI but do not wait on queued runs unless a completed failure appears.
+4. Snapshot CI but do not wait on queued runs unless a completed failure appears.
 
 ## Completion Criteria
 

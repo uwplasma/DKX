@@ -459,6 +459,34 @@ class DirectTailMaterializationResult:
 
 
 @dataclass(frozen=True)
+class DirectTailStructuredAdmissionContext:
+    """Inputs for direct-tail structured preconditioner admission policy."""
+
+    env: Mapping[str, str] | None
+    pc_env: str
+    operator_bundle: object | None
+    direct_reduced_pmat_requested: bool
+    sparse_pc_linear_size: int
+    default_max_mb: Callable[..., float]
+
+
+@dataclass(frozen=True)
+class DirectTailStructuredAdmissionResult:
+    """Resolved structured direct-tail preconditioner admission controls."""
+
+    pc_env: str
+    requested: str | None
+    auto_default: bool
+    fail_closed_size: int
+    auto_large_fail_closed: bool
+    required: bool
+    setup_allowed: bool
+    max_mb_auto: bool
+    max_mb: float
+    regularization: float
+
+
+@dataclass(frozen=True)
 class XBlockSparsePCSetup:
     """Setup controls for RHSMode=1 x-block sparse-PC solves."""
 
@@ -2419,6 +2447,92 @@ def build_direct_tail_materialization_setup(
         operator_bundle=direct_tail_operator_bundle,
         pc_env=str(direct_tail_pc_env),
         direct_reduced_pmat_requested=bool(direct_reduced_pmat_requested),
+    )
+
+
+def resolve_direct_tail_structured_admission(
+    context: DirectTailStructuredAdmissionContext,
+) -> DirectTailStructuredAdmissionResult:
+    """Resolve structured direct-tail preconditioner admission controls."""
+
+    pc_env = str(context.pc_env).strip().lower().replace("-", "_")
+    auto_default = bool(
+        pc_env == ""
+        and context.operator_bundle is not None
+        and int(context.sparse_pc_linear_size) >= 100_000
+    )
+    if pc_env in {"", "factor", "host_factor", "legacy", "default"}:
+        requested = "auto" if bool(auto_default) else None
+    elif pc_env in {"auto", "active_auto", "structured"}:
+        requested = "auto"
+    else:
+        requested = pc_env
+
+    fail_closed_size = _env_int(
+        context.env,
+        "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_STRUCTURED_PC_FAIL_CLOSED_SIZE",
+        300_000,
+    )
+    auto_large_fail_closed = bool(
+        requested is not None
+        and pc_env in {"", "auto", "active_auto", "structured"}
+        and int(context.sparse_pc_linear_size) >= int(fail_closed_size)
+    )
+    required = _env_bool(
+        context.env,
+        "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_STRUCTURED_PC_REQUIRED",
+        default=bool(
+            auto_large_fail_closed
+            or (
+                requested is not None
+                and pc_env not in {"auto", "active_auto", "structured"}
+            )
+        ),
+    )
+    setup_allowed = bool(
+        requested is not None
+        and (context.operator_bundle is not None or bool(context.direct_reduced_pmat_requested))
+    )
+
+    max_mb_auto = False
+    max_mb = 0.0
+    regularization = 1.0e-12
+    if bool(setup_allowed):
+        max_mb_env = _env_value(
+            context.env,
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_PC_MAX_MB",
+        )
+        if max_mb_env:
+            max_mb = _env_float(
+                context.env,
+                "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_PC_MAX_MB",
+                512.0,
+            )
+        else:
+            max_mb_auto = True
+            max_mb = float(
+                context.default_max_mb(
+                    requested_kind=requested,
+                    active_size=int(context.sparse_pc_linear_size),
+                )
+            )
+        regularization = _env_float(
+            context.env,
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_PC_REGULARIZATION",
+            1.0e-12,
+        )
+
+    return DirectTailStructuredAdmissionResult(
+        pc_env=str(pc_env),
+        requested=requested,
+        auto_default=bool(auto_default),
+        fail_closed_size=int(fail_closed_size),
+        auto_large_fail_closed=bool(auto_large_fail_closed),
+        required=bool(required),
+        setup_allowed=bool(setup_allowed),
+        max_mb_auto=bool(max_mb_auto),
+        max_mb=float(max_mb),
+        regularization=float(regularization),
     )
 
 
@@ -4872,6 +4986,8 @@ __all__ = [
     "FortranReducedXBlockMomentSchurStageResult",
     "DirectTailMaterializationContext",
     "DirectTailMaterializationResult",
+    "DirectTailStructuredAdmissionContext",
+    "DirectTailStructuredAdmissionResult",
     "MatvecCounter",
     "XBlockAssembledOperatorDiagnosticsContext",
     "XBlockSparsePCCoreDiagnosticsContext",
@@ -4895,6 +5011,7 @@ __all__ = [
     "build_sparse_pc_pattern_setup",
     "build_direct_tail_materialization_setup",
     "enforce_sparse_pc_memory_budget",
+    "resolve_direct_tail_structured_admission",
     "fp_xblock_global_correction_metadata",
     "fp_xblock_highx_residual_correction_metadata",
     "prepare_fortran_reduced_xblock_initial_guess",
