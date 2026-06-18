@@ -200,6 +200,7 @@ from .problems.profile_response.qi_device_seed import (
     attempt_matrixfree_qi_device_seed,
 )
 from .problems.profile_response.diagnostics import (
+    XBlockSparsePCCoreDiagnosticsContext,
     fp_xblock_global_correction_metadata,
     fp_xblock_highx_residual_correction_metadata,
     sparse_rescue_tail_metadata,
@@ -6899,7 +6900,46 @@ def solve_v3_full_system_linear_gmres(
                     residual_norm=jnp.asarray(residual_norm_xblock_pc, dtype=jnp.float64),
                 ),
                 metadata={
-                    **xblock_sparse_pc_core_diagnostics(locals()),
+                    **xblock_sparse_pc_core_diagnostics(
+                        XBlockSparsePCCoreDiagnosticsContext(
+                            solver_kind=xblock_solver_kind,
+                            accepted_converged=accepted_converged_xblock,
+                            reported_iterations=reported_iterations,
+                            reported_matvecs=reported_matvecs,
+                            python_matvecs=mv_count,
+                            device_cycle_estimated_matvecs=(
+                                device_krylov_estimated_matvecs
+                            ),
+                            krylov_method=xblock_krylov_method,
+                            candidate_krylov_method=candidate_krylov_method,
+                            candidate_iterations=candidate_iterations,
+                            candidate_matvecs=candidate_matvecs,
+                            candidate_residual_norm=candidate_residual_norm,
+                            fallback_started_from_candidate=(
+                                fallback_started_from_candidate
+                            ),
+                            fallback_candidate_improved_rhs=(
+                                fallback_candidate_improved_rhs
+                            ),
+                            precondition_side=precondition_side,
+                            default_right_preconditioned=xblock_default_right_pc,
+                            default_short_restart_capped=xblock_default_restart_capped,
+                            gmres_restart=pc_restart,
+                            gmres_maxiter=pc_maxiter,
+                            setup_s=setup_s,
+                            solve_s=solve_s,
+                            elapsed_s=sparse_timer.elapsed_s(),
+                            sparse_pc_factor_s=pc_factor_s,
+                            preconditioner_xi=xblock_preconditioner_xi,
+                            preconditioner_built=xblock_preconditioner_built,
+                            assembled_host=xblock_assembled_host_fp,
+                            jax_factors=xblock_jax_factors,
+                            jax_factor_format=xblock_jax_factor_format,
+                            jax_factor_apply=xblock_jax_factor_apply,
+                            lower_fill_mode=xblock_lower_fill_mode,
+                            lower_fill_ignored_env=xblock_lower_fill_ignored_env,
+                        )
+                    ),
                     **xblock_device_krylov_diagnostics(locals()),
                     "xblock_active_dof": bool(xblock_use_active_dof),
                     "xblock_linear_size": int(xblock_linear_size),

@@ -3,18 +3,15 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
+from dataclasses import dataclass
 
 
 def sparse_xblock_rescue_metadata(scope: Mapping[str, object]) -> dict[str, object]:
     """Return stable diagnostics for the sparse x-block rescue tail."""
 
     return {
-        "sparse_xblock_rescue_active": bool(
-            scope["sparse_xblock_rescue_active"]
-        ),
-        "sparse_xblock_rescue_attempted": bool(
-            scope["sparse_xblock_rescue_attempted"]
-        ),
+        "sparse_xblock_rescue_active": bool(scope["sparse_xblock_rescue_active"]),
+        "sparse_xblock_rescue_attempted": bool(scope["sparse_xblock_rescue_attempted"]),
         "sparse_xblock_rescue_built": bool(scope["sparse_xblock_rescue_built"]),
         "sparse_xblock_rescue_error": scope["sparse_xblock_rescue_error"],
         "sparse_xblock_rescue_reason": str(scope["sparse_xblock_rescue_reason"]),
@@ -66,15 +63,11 @@ def fp_xblock_global_correction_metadata(
         "fp_xblock_global_correction_reason": str(
             scope["fp_xblock_global_correction_reason"]
         ),
-        "fp_xblock_global_correction_error": scope[
-            "fp_xblock_global_correction_error"
-        ],
+        "fp_xblock_global_correction_error": scope["fp_xblock_global_correction_error"],
         "fp_xblock_global_correction_preconditioner": scope[
             "fp_xblock_global_correction_preconditioner"
         ],
-        "fp_xblock_global_correction_steps": scope[
-            "fp_xblock_global_correction_steps"
-        ],
+        "fp_xblock_global_correction_steps": scope["fp_xblock_global_correction_steps"],
         "fp_xblock_global_correction_accepted_steps": scope[
             "fp_xblock_global_correction_accepted_steps"
         ],
@@ -290,7 +283,9 @@ def xblock_qi_device_preconditioner_diagnostics(
             metadata.get("global_moment_residual_equation_candidate_count", 0)
         ),
         "xblock_qi_device_preconditioner_global_moment_residual_equation_condition_estimate": float(
-            metadata.get("global_moment_residual_equation_condition_estimate", float("inf"))
+            metadata.get(
+                "global_moment_residual_equation_condition_estimate", float("inf")
+            )
         ),
         "xblock_qi_device_preconditioner_residual_galerkin_equation": bool(
             metadata.get("residual_galerkin_equation_enabled", False)
@@ -333,7 +328,9 @@ def xblock_qi_device_preconditioner_diagnostics(
             metadata.get("phase_space_residual_equation_stage_count", 0)
         ),
         "xblock_qi_device_preconditioner_phase_space_residual_equation_condition_estimate": float(
-            metadata.get("phase_space_residual_equation_condition_estimate", float("inf"))
+            metadata.get(
+                "phase_space_residual_equation_condition_estimate", float("inf")
+            )
         ),
         "xblock_qi_device_preconditioner_phase_space_residual_equation_residual_before": float(
             metadata.get("phase_space_residual_equation_residual_before", float("inf"))
@@ -379,7 +376,9 @@ def xblock_qi_device_preconditioner_diagnostics(
             metadata.get("residual_region_bounce_coarse_stage_count", 0)
         ),
         "xblock_qi_device_preconditioner_residual_region_bounce_coarse_condition_estimate": float(
-            metadata.get("residual_region_bounce_coarse_condition_estimate", float("inf"))
+            metadata.get(
+                "residual_region_bounce_coarse_condition_estimate", float("inf")
+            )
         ),
         "xblock_qi_device_preconditioner_residual_region_bounce_coarse_residual_before": float(
             metadata.get("residual_region_bounce_coarse_residual_before", float("inf"))
@@ -446,7 +445,9 @@ def xblock_qi_device_preconditioner_diagnostics(
             metadata.get("active_pattern_coarse_include_global", False)
         ),
         "xblock_qi_device_preconditioner_active_pattern_coarse_min_chunk_energy_fraction": float(
-            metadata.get("active_pattern_coarse_min_chunk_energy_fraction", float("nan"))
+            metadata.get(
+                "active_pattern_coarse_min_chunk_energy_fraction", float("nan")
+            )
         ),
         "xblock_qi_device_preconditioner_block_schur_residual_equation": bool(
             metadata.get("block_schur_residual_equation_enabled", False)
@@ -633,7 +634,9 @@ def xblock_side_probe_diagnostics(scope: Mapping[str, object]) -> dict[str, obje
     }
 
 
-def xblock_assembled_operator_diagnostics(scope: Mapping[str, object]) -> dict[str, object]:
+def xblock_assembled_operator_diagnostics(
+    scope: Mapping[str, object],
+) -> dict[str, object]:
     """Return assembled-operator and equilibration diagnostics for x-block solves."""
 
     metadata = scope["assembled_operator_metadata"]
@@ -647,9 +650,7 @@ def xblock_assembled_operator_diagnostics(scope: Mapping[str, object]) -> dict[s
         raise TypeError("xblock_col_equilibration_metadata must be a mapping")
 
     return {
-        "xblock_assembled_operator_enabled": bool(
-            scope["assembled_operator_enabled"]
-        ),
+        "xblock_assembled_operator_enabled": bool(scope["assembled_operator_enabled"]),
         "xblock_assembled_operator_built": bool(scope["assembled_operator_built"]),
         "xblock_assembled_operator_active_dof": metadata.get("active_dof", False),
         "xblock_assembled_operator_preflight_scope": metadata.get("preflight_scope"),
@@ -752,7 +753,9 @@ def xblock_assembled_operator_diagnostics(scope: Mapping[str, object]) -> dict[s
     }
 
 
-def xblock_coarse_correction_diagnostics(scope: Mapping[str, object]) -> dict[str, object]:
+def xblock_coarse_correction_diagnostics(
+    scope: Mapping[str, object],
+) -> dict[str, object]:
     """Return moment-Schur, two-level, and global-coupling diagnostics."""
 
     moment_metadata = scope["moment_schur_metadata"]
@@ -804,9 +807,7 @@ def xblock_coarse_correction_diagnostics(scope: Mapping[str, object]) -> dict[st
         ],
         "xblock_moment_schur_error": moment_metadata.get("error"),
         "xblock_moment_schur_applies": int(moment_stats.get("applies", 0)),
-        "xblock_moment_schur_base_applies": int(
-            moment_stats.get("base_applies", 0)
-        ),
+        "xblock_moment_schur_base_applies": int(moment_stats.get("base_applies", 0)),
         "xblock_two_level_enabled": bool(scope["two_level_enabled"]),
         "xblock_two_level_built": bool(scope["two_level_built"]),
         "xblock_two_level_mode": two_level_metadata.get("mode"),
@@ -873,9 +874,7 @@ def xblock_qi_seed_preconditioner_diagnostics(
 
     return {
         "xblock_initial_seed_used": bool(scope["xblock_initial_seed_used"]),
-        "xblock_initial_seed_residual_norm": scope[
-            "xblock_initial_seed_residual_norm"
-        ],
+        "xblock_initial_seed_residual_norm": scope["xblock_initial_seed_residual_norm"],
         "xblock_initial_seed_residual_ratio": scope[
             "xblock_initial_seed_residual_ratio"
         ],
@@ -892,9 +891,7 @@ def xblock_qi_seed_preconditioner_diagnostics(
         "xblock_qi_coarse_seed_residual_before": scope[
             "qi_coarse_seed_residual_before"
         ],
-        "xblock_qi_coarse_seed_residual_after": scope[
-            "qi_coarse_seed_residual_after"
-        ],
+        "xblock_qi_coarse_seed_residual_after": scope["qi_coarse_seed_residual_after"],
         "xblock_qi_coarse_seed_improvement_ratio": scope[
             "qi_coarse_seed_improvement_ratio"
         ],
@@ -1222,64 +1219,98 @@ def xblock_device_krylov_diagnostics(scope: Mapping[str, object]) -> dict[str, o
     }
 
 
-def xblock_sparse_pc_core_diagnostics(scope: Mapping[str, object]) -> dict[str, object]:
+@dataclass(frozen=True, slots=True)
+class XBlockSparsePCCoreDiagnosticsContext:
+    """Explicit inputs for top-level x-block sparse-PC diagnostics."""
+
+    solver_kind: object
+    accepted_converged: object
+    reported_iterations: object
+    reported_matvecs: object
+    python_matvecs: object
+    device_cycle_estimated_matvecs: object
+    krylov_method: object
+    candidate_krylov_method: object
+    candidate_iterations: object
+    candidate_matvecs: object
+    candidate_residual_norm: object
+    fallback_started_from_candidate: object
+    fallback_candidate_improved_rhs: object
+    precondition_side: object
+    default_right_preconditioned: object
+    default_short_restart_capped: object
+    gmres_restart: object
+    gmres_maxiter: object
+    setup_s: object
+    solve_s: object
+    elapsed_s: object
+    sparse_pc_factor_s: object
+    preconditioner_xi: object
+    preconditioner_built: object
+    assembled_host: object
+    jax_factors: object
+    jax_factor_format: object
+    jax_factor_apply: object
+    lower_fill_mode: object
+    lower_fill_ignored_env: object
+
+
+def xblock_sparse_pc_core_diagnostics(
+    context: XBlockSparsePCCoreDiagnosticsContext,
+) -> dict[str, object]:
     """Return top-level x-block sparse-PC solve diagnostics."""
 
-    method = str(scope["xblock_krylov_method"])
-    candidate_method = str(scope["candidate_krylov_method"])
-    device_estimated_matvecs = scope["device_krylov_estimated_matvecs"]
-    jax_factors = bool(scope["xblock_jax_factors"])
-    lower_fill_mode = str(scope["xblock_lower_fill_mode"])
+    method = str(context.krylov_method)
+    candidate_method = str(context.candidate_krylov_method)
+    device_estimated_matvecs = context.device_cycle_estimated_matvecs
+    jax_factors = bool(context.jax_factors)
+    lower_fill_mode = str(context.lower_fill_mode)
 
     return {
-        "solver_kind": scope["xblock_solver_kind"],
+        "solver_kind": context.solver_kind,
         "residual_kind": "true_residual",
-        "accepted_converged": bool(scope["accepted_converged_xblock"]),
+        "accepted_converged": bool(context.accepted_converged),
         "acceptance_criterion": "true_residual",
-        "iterations": int(scope["reported_iterations"]),
-        "matvecs": int(scope["reported_matvecs"]),
-        "python_matvecs": int(scope["mv_count"]),
+        "iterations": int(context.reported_iterations),
+        "matvecs": int(context.reported_matvecs),
+        "python_matvecs": int(context.python_matvecs),
         "device_cycle_estimated_matvecs": (
             None if device_estimated_matvecs is None else int(device_estimated_matvecs)
         ),
         "krylov_method": method,
         "candidate_krylov_method": candidate_method,
-        "candidate_iterations": int(scope["candidate_iterations"]),
-        "candidate_matvecs": int(scope["candidate_matvecs"]),
-        "candidate_residual_norm": float(scope["candidate_residual_norm"]),
+        "candidate_iterations": int(context.candidate_iterations),
+        "candidate_matvecs": int(context.candidate_matvecs),
+        "candidate_residual_norm": float(context.candidate_residual_norm),
         "fallback_from_krylov_method": (
             candidate_method if candidate_method != method else None
         ),
         "fallback_started_from_candidate": bool(
-            scope["fallback_started_from_candidate"]
+            context.fallback_started_from_candidate
         ),
         "fallback_candidate_improved_rhs": bool(
-            scope["fallback_candidate_improved_rhs"]
+            context.fallback_candidate_improved_rhs
         ),
-        "precondition_side": str(scope["precondition_side"]),
-        "default_right_preconditioned": bool(scope["xblock_default_right_pc"]),
-        "default_short_restart_capped": bool(scope["xblock_default_restart_capped"]),
-        "gmres_restart": int(scope["pc_restart"]),
-        "gmres_maxiter": int(scope["pc_maxiter"]),
-        "setup_s": float(scope["setup_s"]),
-        "solve_s": float(scope["solve_s"]),
-        "elapsed_s": float(scope["sparse_timer"].elapsed_s()),
-        "sparse_pc_factor_s": float(scope["pc_factor_s"]),
-        "sparse_pc_xblock_preconditioner_xi": int(
-            scope["xblock_preconditioner_xi"]
-        ),
-        "sparse_pc_xblock_preconditioner_built": bool(
-            scope["xblock_preconditioner_built"]
-        ),
-        "sparse_pc_xblock_assembled_host": bool(scope["xblock_assembled_host_fp"]),
+        "precondition_side": str(context.precondition_side),
+        "default_right_preconditioned": bool(context.default_right_preconditioned),
+        "default_short_restart_capped": bool(context.default_short_restart_capped),
+        "gmres_restart": int(context.gmres_restart),
+        "gmres_maxiter": int(context.gmres_maxiter),
+        "setup_s": float(context.setup_s),
+        "solve_s": float(context.solve_s),
+        "elapsed_s": float(context.elapsed_s),
+        "sparse_pc_factor_s": float(context.sparse_pc_factor_s),
+        "sparse_pc_xblock_preconditioner_xi": int(context.preconditioner_xi),
+        "sparse_pc_xblock_preconditioner_built": bool(context.preconditioner_built),
+        "sparse_pc_xblock_assembled_host": bool(context.assembled_host),
         "sparse_pc_xblock_jax_factors": jax_factors,
         "sparse_pc_xblock_jax_factor_format": (
-            str(scope["xblock_jax_factor_format"]) if jax_factors else None
+            str(context.jax_factor_format) if jax_factors else None
         ),
         "sparse_pc_xblock_jax_factor_apply": (
-            str(scope["xblock_jax_factor_apply"]) if jax_factors else None
+            str(context.jax_factor_apply) if jax_factors else None
         ),
         "xblock_lower_fill_mode": lower_fill_mode,
         "xblock_lower_fill_requested": lower_fill_mode in {"probe", "force"},
-        "xblock_lower_fill_ignored_env": bool(scope["xblock_lower_fill_ignored_env"]),
+        "xblock_lower_fill_ignored_env": bool(context.lower_fill_ignored_env),
     }

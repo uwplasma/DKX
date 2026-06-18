@@ -10,6 +10,7 @@ import jax.numpy as jnp
 import numpy as np
 
 from .diagnostics import (
+    XBlockSparsePCCoreDiagnosticsContext,
     fp_xblock_global_correction_metadata,
     fp_xblock_highx_residual_correction_metadata,
     sparse_rescue_tail_metadata,
@@ -20,6 +21,7 @@ from .diagnostics import (
     xblock_qi_deflated_preconditioner_diagnostics,
     xblock_qi_device_preconditioner_diagnostics,
     xblock_qi_seed_preconditioner_diagnostics,
+    xblock_sparse_pc_core_diagnostics,
     xblock_side_probe_diagnostics,
 )
 from .setup import (
@@ -3086,6 +3088,7 @@ def apply_sparse_pc_post_minres(
 
 
 __all__ = [
+    "XBlockSparsePCCoreDiagnosticsContext",
     "SparsePCGMRESContext",
     "SparsePCGMRESResult",
     "SparsePCPostMinresContext",
@@ -3102,5 +3105,6 @@ __all__ = [
     "xblock_qi_deflated_preconditioner_diagnostics",
     "xblock_qi_device_preconditioner_diagnostics",
     "xblock_qi_seed_preconditioner_diagnostics",
+    "xblock_sparse_pc_core_diagnostics",
     "xblock_side_probe_diagnostics",
 ]

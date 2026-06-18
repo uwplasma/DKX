@@ -5,6 +5,7 @@ from types import SimpleNamespace
 import numpy as np
 
 from sfincs_jax.problems.profile_response.diagnostics import (
+    XBlockSparsePCCoreDiagnosticsContext,
     fp_xblock_global_correction_metadata,
     fp_xblock_highx_residual_correction_metadata,
     sparse_rescue_tail_metadata,
@@ -653,40 +654,39 @@ def test_xblock_device_krylov_diagnostics_preserve_transfer_free_logic() -> None
 
 
 def test_xblock_sparse_pc_core_diagnostics_preserve_payload() -> None:
-    timer = SimpleNamespace(elapsed_s=lambda: 12.5)
     metadata = xblock_sparse_pc_core_diagnostics(
-        {
-            "xblock_solver_kind": "sparse_pc_gmres",
-            "accepted_converged_xblock": True,
-            "reported_iterations": np.int64(12),
-            "reported_matvecs": np.int64(34),
-            "mv_count": np.int64(56),
-            "device_krylov_estimated_matvecs": np.int64(78),
-            "xblock_krylov_method": "fgmres_jax",
-            "candidate_krylov_method": "gmres_jax",
-            "candidate_iterations": 9,
-            "candidate_matvecs": 10,
-            "candidate_residual_norm": 1.0e-5,
-            "fallback_started_from_candidate": True,
-            "fallback_candidate_improved_rhs": False,
-            "precondition_side": "right",
-            "xblock_default_right_pc": True,
-            "xblock_default_restart_capped": False,
-            "pc_restart": 40,
-            "pc_maxiter": 80,
-            "setup_s": 0.5,
-            "solve_s": 1.5,
-            "sparse_timer": timer,
-            "pc_factor_s": 0.25,
-            "xblock_preconditioner_xi": 3,
-            "xblock_preconditioner_built": True,
-            "xblock_assembled_host_fp": False,
-            "xblock_jax_factors": True,
-            "xblock_jax_factor_format": "padded",
-            "xblock_jax_factor_apply": "vmap",
-            "xblock_lower_fill_mode": "probe",
-            "xblock_lower_fill_ignored_env": True,
-        }
+        XBlockSparsePCCoreDiagnosticsContext(
+            solver_kind="sparse_pc_gmres",
+            accepted_converged=True,
+            reported_iterations=np.int64(12),
+            reported_matvecs=np.int64(34),
+            python_matvecs=np.int64(56),
+            device_cycle_estimated_matvecs=np.int64(78),
+            krylov_method="fgmres_jax",
+            candidate_krylov_method="gmres_jax",
+            candidate_iterations=9,
+            candidate_matvecs=10,
+            candidate_residual_norm=1.0e-5,
+            fallback_started_from_candidate=True,
+            fallback_candidate_improved_rhs=False,
+            precondition_side="right",
+            default_right_preconditioned=True,
+            default_short_restart_capped=False,
+            gmres_restart=40,
+            gmres_maxiter=80,
+            setup_s=0.5,
+            solve_s=1.5,
+            elapsed_s=12.5,
+            sparse_pc_factor_s=0.25,
+            preconditioner_xi=3,
+            preconditioner_built=True,
+            assembled_host=False,
+            jax_factors=True,
+            jax_factor_format="padded",
+            jax_factor_apply="vmap",
+            lower_fill_mode="probe",
+            lower_fill_ignored_env=True,
+        )
     )
 
     assert metadata["solver_kind"] == "sparse_pc_gmres"

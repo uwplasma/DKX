@@ -34846,3 +34846,43 @@ Next refactor target:
 - Continue reducing ``v3_driver.py`` by moving the remaining sparse-PC
   orchestration into typed context/result builders, while keeping diagnostics
   and solver mechanics in separate modules.
+
+### 19.109 X-block sparse-PC core diagnostics typed context
+
+Goal:
+
+- Remove one high-value ``locals()`` dependency from the x-block sparse-PC
+  metadata path before moving larger sparse-PC orchestration out of
+  ``v3_driver.py``.
+
+Implementation:
+
+- Added ``XBlockSparsePCCoreDiagnosticsContext`` in
+  ``problems/profile_response/diagnostics.py``.
+- Updated ``xblock_sparse_pc_core_diagnostics`` to accept explicit typed
+  fields instead of the driver's full local frame.
+- Updated ``v3_driver.py`` to construct the context at the final
+  ``V3LinearSolveResult`` boundary while preserving the existing metadata
+  keys and values.
+- Re-exported the context/helper from ``profile_response/sparse_pc.py`` for
+  compatibility with earlier internal imports.
+- Updated the diagnostics unit test to assert the same public metadata payload
+  through the typed context.
+- Avoided full-file formatting churn in ``v3_driver.py``; the driver remains
+  about ``21248`` lines and ``solve_v3_full_system_linear_gmres`` about
+  ``15949`` lines.
+
+Validation:
+
+- ``python -m ruff check`` on touched source/tests: passed.
+- ``python -m compileall -q`` on touched source/tests: passed.
+- ``tests/test_profile_response_diagnostics.py`` plus
+  ``tests/test_profile_response_sparse_pc.py``: ``67 passed``.
+- Broader current profile-response/x-block/sparse-pattern shard:
+  ``331 passed in 85.06 s``.
+
+Next refactor target:
+
+- Continue replacing ``locals()`` diagnostics calls with explicit contexts,
+  prioritizing ``xblock_device_krylov_diagnostics`` or the assembled/coarse
+  diagnostics payloads before extracting a larger sparse-PC result builder.
