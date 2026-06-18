@@ -469,6 +469,11 @@ the historical private driver name and test the focused module directly. This ke
   GMRES, and BiCGStab solve attempts. This mirrors the transport linear-solve
   module so solver-family selection is directly testable and no longer embedded
   as a large nested body in ``v3_driver.py``.
+- ``sfincs_jax/problems/profile_response/preconditioner_build.py``:
+  RHSMode=1/profile-response reduced preconditioner build orchestration. The
+  driver passes solve-local builders and projection functions through a typed
+  context, and the helper returns explicit state for PAS-TZ guard metadata,
+  collision fallback admission, and optional BiCGStab preconditioner reuse.
 - ``sfincs_jax/problems/profile_response/qi_device_seed.py``:
   matrix-free QI device seed correction for RHSMode=1 active-DOF solves. The
   driver passes solve-local state through a typed context while the module owns
