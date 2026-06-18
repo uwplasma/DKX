@@ -11,6 +11,7 @@ from sfincs_jax.problems.profile_response.sparse_pc import (
     SparsePCPostMinresContext,
     apply_sparse_pc_post_minres,
     resolve_sparse_pc_entry_policy,
+    resolve_xblock_sparse_pc_setup,
     run_sparse_pc_gmres_once,
 )
 
@@ -26,6 +27,7 @@ def _op(*, fp=False, pas=False, constraint_scheme=1, n_zeta=1, n_species=1) -> S
         include_phi1=False,
         n_zeta=n_zeta,
         n_species=n_species,
+        point_at_x0=False,
         fblock=SimpleNamespace(
             fp=object() if fp else None,
             pas=object() if pas else None,
@@ -90,6 +92,94 @@ def test_sparse_pc_entry_policy_classifies_xblock_active_maps() -> None:
     assert not setup.sparse_pc_use_active_dof
     assert setup.pc_restart == 20
     assert setup.pc_maxiter == 400
+
+
+def test_xblock_sparse_pc_setup_resolves_host_assembly_and_device_fallback() -> None:
+    fallback_calls: list[dict[str, object]] = []
+
+    def fallback_decision(**kwargs):
+        fallback_calls.append(kwargs)
+        return SimpleNamespace(
+            used=True,
+            ignored_env=False,
+            mode="host",
+            reason="forced",
+            requested_method=kwargs["requested_krylov_method"],
+            effective_krylov_env_value="auto",
+            min_active_size=1,
+            qi_like_full_fp_3d=False,
+            non_autodiff=True,
+        )
+
+    setup = resolve_xblock_sparse_pc_setup(
+        op=_op(fp=True, constraint_scheme=1, n_zeta=7, n_species=1),
+        preconditioner_species=0,
+        preconditioner_xi=0,
+        active_size=1000,
+        lower_fill_mode=lambda value: ("force", value == "bad"),
+        species_decoupled_for_host_assembly=lambda **_kwargs: True,
+        assembled_host_allowed=lambda **_kwargs: False,
+        krylov_method=lambda value: ("gmres_jax" if value == "gmres_jax" else "gmres", False),
+        device_host_fallback_decision=fallback_decision,
+        env={
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_DROP_TOL": "1e-5",
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_LOWER_FILL": "force",
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_KRYLOV": "gmres_jax",
+            "SFINCS_JAX_RHSMODE1_XBLOCK_DEVICE_HOST_FALLBACK": "host",
+        },
+    )
+
+    assert setup.xblock_drop_tol == pytest.approx(1.0e-5)
+    assert setup.xblock_lower_fill_mode == "force"
+    assert setup.xblock_preconditioner_xi == 1
+    assert setup.force_assembled_host_fp
+    assert setup.xblock_assembled_host_fp
+    assert setup.xblock_krylov_env_requested == "gmres_jax"
+    assert setup.xblock_krylov_env == "auto"
+    assert setup.xblock_krylov_requested == "gmres"
+    assert not setup.xblock_device_krylov_requested
+    assert setup.xblock_device_host_fallback_decision.used
+    assert any("non-autodiff host x-block fallback" in message for _, message in setup.messages)
+    assert fallback_calls[0]["requested_krylov_method"] == "gmres_jax"
+
+
+def test_xblock_sparse_pc_setup_disables_auto_host_fallback_for_qi_device_request() -> None:
+    def fallback_decision(**kwargs):
+        assert kwargs["env_value"] == "off"
+        return SimpleNamespace(
+            used=False,
+            ignored_env=False,
+            mode="disabled",
+            reason="disabled",
+            requested_method=kwargs["requested_krylov_method"],
+            effective_krylov_env_value=kwargs["env_value"],
+            min_active_size=1,
+            qi_like_full_fp_3d=False,
+            non_autodiff=False,
+        )
+
+    setup = resolve_xblock_sparse_pc_setup(
+        op=_op(fp=True, constraint_scheme=1, n_zeta=5, n_species=1),
+        preconditioner_species=1,
+        preconditioner_xi=1,
+        active_size=2000,
+        lower_fill_mode=lambda _value: ("off", False),
+        species_decoupled_for_host_assembly=lambda **_kwargs: False,
+        assembled_host_allowed=lambda **_kwargs: False,
+        krylov_method=lambda value: ("gmres_jax" if value == "gmres_jax" else "gmres", False),
+        device_host_fallback_decision=fallback_decision,
+        env={
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_KRYLOV": "gmres_jax",
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER": "1",
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MATRIX_FREE": "1",
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_USE_IN_KRYLOV": "1",
+        },
+    )
+
+    assert setup.xblock_device_krylov_requested
+    assert setup.xblock_device_host_fallback_auto_disabled_by_qi_device
+    assert setup.qi_device_preconditioner_requested_for_fallback
+    assert any("fallback disabled by explicit matrix-free" in message for _, message in setup.messages)
 
 
 def test_sparse_pc_gmres_once_explicit_left_recomputes_true_residual() -> None:

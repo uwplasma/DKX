@@ -204,6 +204,7 @@ from .problems.profile_response.sparse_pc import (
     SparsePCPostMinresContext,
     apply_sparse_pc_post_minres,
     resolve_sparse_pc_entry_policy,
+    resolve_xblock_sparse_pc_setup,
     run_sparse_pc_gmres_once,
 )
 from .rhs1_strong_fallback import build_rhs1_strong_preconditioner_full_from_kind
@@ -3424,152 +3425,51 @@ def solve_v3_full_system_linear_gmres(
         pc_maxiter = int(sparse_pc_entry_policy.pc_maxiter)
 
         if xblock_sparse_pc:
-            if op.fblock.fp is None or op.fblock.pas is not None:
-                raise NotImplementedError("solve_method='xblock_sparse_pc_gmres' currently targets full-FP RHSMode=1 systems.")
-
-            def _env_float(name: str, default: float) -> float:
-                raw = os.environ.get(name, "").strip()
-                try:
-                    return float(raw) if raw else float(default)
-                except ValueError:
-                    return float(default)
-
-            xblock_drop_tol = _env_float("SFINCS_JAX_RHSMODE1_XBLOCK_PC_DROP_TOL", 0.0)
-            xblock_drop_rel = _env_float("SFINCS_JAX_RHSMODE1_XBLOCK_PC_DROP_REL", 1.0e-8)
-            xblock_ilu_drop_tol = _env_float("SFINCS_JAX_RHSMODE1_XBLOCK_PC_ILU_DROP_TOL", 1.0e-4)
-            xblock_fill_factor = _env_float("SFINCS_JAX_RHSMODE1_XBLOCK_PC_FILL_FACTOR", 10.0)
-            xblock_lower_fill_env = os.environ.get("SFINCS_JAX_RHSMODE1_XBLOCK_PC_LOWER_FILL", "").strip()
-            xblock_lower_fill_mode, xblock_lower_fill_ignored_env = (
-                _rhs1_xblock_policy.rhs1_xblock_lower_fill_mode(xblock_lower_fill_env)
+            xblock_setup = resolve_xblock_sparse_pc_setup(
+                op=op,
+                preconditioner_species=int(preconditioner_species),
+                preconditioner_xi=int(preconditioner_xi),
+                active_size=int(active_size),
+                lower_fill_mode=_rhs1_xblock_policy.rhs1_xblock_lower_fill_mode,
+                species_decoupled_for_host_assembly=_rhsmode1_fp_xblock_species_decoupled_for_host_assembly,
+                assembled_host_allowed=_rhsmode1_fp_xblock_assembled_host_allowed,
+                krylov_method=_rhs1_xblock_policy.rhs1_xblock_krylov_method,
+                device_host_fallback_decision=_rhs1_xblock_policy.rhs1_xblock_device_host_fallback_decision,
+                env=os.environ,
             )
-            xblock_preconditioner_xi = int(preconditioner_xi)
-            if xblock_preconditioner_xi == 0:
-                xblock_preconditioner_xi = 1
-            force_assembled_env = os.environ.get(
-                "SFINCS_JAX_RHSMODE1_XBLOCK_PC_ASSEMBLED_HOST",
-                "",
-            ).strip().lower()
-            force_assembled_host_fp = force_assembled_env not in {"0", "false", "f", "no", "off", ".false.", ".f."}
-            xblock_assembled_host_fp = bool(
-                (
-                    bool(force_assembled_host_fp)
-                    and int(op.rhs_mode) == 1
-                    and (not bool(op.include_phi1))
-                    and op.fblock.fp is not None
-                    and op.fblock.pas is None
-                    and _rhsmode1_fp_xblock_species_decoupled_for_host_assembly(
-                        op=op,
-                        preconditioner_species=preconditioner_species,
-                    )
-                    and int(xblock_preconditioner_xi) == 1
-                    and (not bool(op.point_at_x0))
-                )
-                or _rhsmode1_fp_xblock_assembled_host_allowed(
-                    op=op,
-                    preconditioner_species=preconditioner_species,
-                    preconditioner_xi=xblock_preconditioner_xi,
-                    use_implicit=False,
-                )
+            xblock_drop_tol = float(xblock_setup.xblock_drop_tol)
+            xblock_drop_rel = float(xblock_setup.xblock_drop_rel)
+            xblock_ilu_drop_tol = float(xblock_setup.xblock_ilu_drop_tol)
+            xblock_fill_factor = float(xblock_setup.xblock_fill_factor)
+            xblock_lower_fill_mode = str(xblock_setup.xblock_lower_fill_mode)
+            xblock_lower_fill_ignored_env = bool(xblock_setup.xblock_lower_fill_ignored_env)
+            xblock_preconditioner_xi = int(xblock_setup.xblock_preconditioner_xi)
+            force_assembled_host_fp = bool(xblock_setup.force_assembled_host_fp)
+            xblock_assembled_host_fp = bool(xblock_setup.xblock_assembled_host_fp)
+            xblock_krylov_env_requested = str(xblock_setup.xblock_krylov_env_requested)
+            xblock_krylov_env = str(xblock_setup.xblock_krylov_env)
+            xblock_krylov_requested = str(xblock_setup.xblock_krylov_requested)
+            xblock_device_fgmres_requested = bool(xblock_setup.xblock_device_fgmres_requested)
+            xblock_device_gmres_requested = bool(xblock_setup.xblock_device_gmres_requested)
+            xblock_device_bicgstab_requested = bool(xblock_setup.xblock_device_bicgstab_requested)
+            xblock_device_tfqmr_requested = bool(xblock_setup.xblock_device_tfqmr_requested)
+            xblock_device_krylov_requested = bool(xblock_setup.xblock_device_krylov_requested)
+            xblock_device_host_fallback_decision = xblock_setup.xblock_device_host_fallback_decision
+            xblock_device_host_fallback_auto_disabled_by_qi_device = bool(
+                xblock_setup.xblock_device_host_fallback_auto_disabled_by_qi_device
             )
-            xblock_krylov_env_requested = os.environ.get(
-                "SFINCS_JAX_RHSMODE1_XBLOCK_PC_KRYLOV",
-                "",
-            ).strip().lower()
-            xblock_krylov_env = xblock_krylov_env_requested
-            xblock_krylov_requested, _xblock_krylov_unknown_early = _rhs1_xblock_policy.rhs1_xblock_krylov_method(
-                xblock_krylov_env
+            qi_device_preconditioner_requested_for_fallback = bool(
+                xblock_setup.qi_device_preconditioner_requested_for_fallback
             )
-            xblock_device_fgmres_requested = str(xblock_krylov_requested) == "fgmres_jax"
-            xblock_device_gmres_requested = str(xblock_krylov_requested) == "gmres_jax"
-            xblock_device_bicgstab_requested = str(xblock_krylov_requested) == "bicgstab_jax"
-            xblock_device_tfqmr_requested = str(xblock_krylov_requested) == "tfqmr_jax"
-            xblock_device_krylov_requested = bool(
-                xblock_device_fgmres_requested
-                or xblock_device_gmres_requested
-                or xblock_device_bicgstab_requested
-                or xblock_device_tfqmr_requested
+            qi_device_matrix_free_requested_for_fallback = bool(
+                xblock_setup.qi_device_matrix_free_requested_for_fallback
             )
-            xblock_device_host_fallback_env = os.environ.get(
-                "SFINCS_JAX_RHSMODE1_XBLOCK_DEVICE_HOST_FALLBACK",
-                "",
+            qi_device_use_in_krylov_requested_for_fallback = bool(
+                xblock_setup.qi_device_use_in_krylov_requested_for_fallback
             )
-            xblock_device_host_fallback_auto_disabled_by_qi_device = False
-            qi_device_preconditioner_requested_for_fallback = _rhs1_bool_env(
-                "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER",
-                default=False,
-            )
-            qi_device_matrix_free_requested_for_fallback = _rhs1_bool_env(
-                "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MATRIX_FREE",
-                default=False,
-            )
-            qi_device_use_in_krylov_requested_for_fallback = _rhs1_bool_env(
-                "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_USE_IN_KRYLOV",
-                default=False,
-            )
-            precondition_side_env_for_fallback = (
-                os.environ.get("SFINCS_JAX_GMRES_PRECONDITION_SIDE", "").strip().lower()
-            )
-            fallback_env_token = xblock_device_host_fallback_env.strip().lower().replace("-", "_")
-            if (
-                bool(xblock_device_krylov_requested)
-                and bool(qi_device_preconditioner_requested_for_fallback)
-                and bool(qi_device_matrix_free_requested_for_fallback)
-                and bool(qi_device_use_in_krylov_requested_for_fallback)
-                and precondition_side_env_for_fallback != "none"
-                and fallback_env_token in {"", "auto", "default"}
-            ):
-                xblock_device_host_fallback_env = "off"
-                xblock_device_host_fallback_auto_disabled_by_qi_device = True
-            xblock_device_host_fallback_decision = (
-                _rhs1_xblock_policy.rhs1_xblock_device_host_fallback_decision(
-                    env_value=xblock_device_host_fallback_env,
-                    requested_krylov_method=str(xblock_krylov_requested),
-                    active_size=int(active_size),
-                    min_active_size_env_value=os.environ.get(
-                        "SFINCS_JAX_RHSMODE1_XBLOCK_DEVICE_HOST_FALLBACK_MIN_ACTIVE",
-                        "",
-                    ),
-                    rhs_mode=int(op.rhs_mode),
-                    constraint_scheme=int(op.constraint_scheme),
-                    include_phi1=bool(op.include_phi1),
-                    has_fp=op.fblock.fp is not None,
-                    has_pas=op.fblock.pas is not None,
-                    n_zeta=int(getattr(op, "n_zeta", 1)),
-                )
-            )
-            if bool(xblock_device_host_fallback_decision.used):
-                xblock_krylov_env = str(xblock_device_host_fallback_decision.effective_krylov_env_value)
-                xblock_krylov_requested, _xblock_krylov_unknown_early = (
-                    _rhs1_xblock_policy.rhs1_xblock_krylov_method(xblock_krylov_env)
-                )
-                xblock_device_fgmres_requested = str(xblock_krylov_requested) == "fgmres_jax"
-                xblock_device_gmres_requested = str(xblock_krylov_requested) == "gmres_jax"
-                xblock_device_bicgstab_requested = str(xblock_krylov_requested) == "bicgstab_jax"
-                xblock_device_tfqmr_requested = str(xblock_krylov_requested) == "tfqmr_jax"
-                xblock_device_krylov_requested = False
-                if emit is not None:
-                    emit(
-                        0,
-                        "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
-                        "using non-autodiff host x-block fallback for requested device Krylov "
-                        f"method={xblock_device_host_fallback_decision.requested_method} "
-                        f"reason={xblock_device_host_fallback_decision.reason} "
-                        f"active_size={int(active_size)}",
-                    )
-            elif bool(xblock_device_host_fallback_decision.ignored_env) and emit is not None:
-                emit(
-                    1,
-                    "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
-                    "ignoring unknown SFINCS_JAX_RHSMODE1_XBLOCK_DEVICE_HOST_FALLBACK value; "
-                    f"using auto policy reason={xblock_device_host_fallback_decision.reason}",
-                )
-            elif bool(xblock_device_host_fallback_auto_disabled_by_qi_device) and emit is not None:
-                emit(
-                    1,
-                    "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
-                    "automatic non-autodiff host fallback disabled by explicit matrix-free "
-                    "QI-device Krylov preconditioner request",
-                )
+            if emit is not None:
+                for level, message in xblock_setup.messages:
+                    emit(int(level), str(message))
             xblock_jax_factors_env = os.environ.get("SFINCS_JAX_RHSMODE1_XBLOCK_PC_JAX_FACTORS", "").strip().lower()
             xblock_jax_factors_requested = _rhs1_bool_env(
                 "SFINCS_JAX_RHSMODE1_XBLOCK_PC_JAX_FACTORS",
