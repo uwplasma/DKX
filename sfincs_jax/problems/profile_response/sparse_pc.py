@@ -322,6 +322,31 @@ class XBlockGlobalCouplingPolicySetup:
     setup_max_s: float
 
 
+@dataclass(frozen=True)
+class XBlockQISeedPolicySetup:
+    """Shared QI coarse-basis admission and seed/preconditioner settings."""
+
+    coarse_seed_enabled: bool
+    galerkin_preconditioner_enabled: bool
+    two_level_preconditioner_enabled: bool
+    device_preconditioner_enabled: bool
+    deflated_preconditioner_enabled: bool
+    shared_basis_required: bool
+    max_rank: int
+    max_candidates: int
+    max_angular_mode: int
+    rank_rtol: float
+    min_improvement: float
+    rcond: float
+    include_angular: bool
+    include_blocks: bool
+    include_radial: bool
+    include_radial_angular: bool
+    include_constraint_moments: bool
+    include_schur: bool
+    basis_kind: str | None
+
+
 def _env_value(env: Mapping[str, str] | None, key: str) -> str:
     source = env if env is not None else {}
     return str(source.get(key, "")).strip()
@@ -1741,6 +1766,149 @@ def failed_xblock_global_coupling_metadata(
         "error": f"{type(exc).__name__}: {exc}",
         "setup_s": float(setup_s),
     }
+
+
+def resolve_xblock_qi_seed_policy_setup(env: Mapping[str, str] | None = None) -> XBlockQISeedPolicySetup:
+    """Resolve QI seed and coarse-basis controls shared by RHSMode=1 x-block policies."""
+
+    coarse_seed_enabled = _env_bool(
+        env,
+        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_COARSE_SEED",
+        default=False,
+    )
+    galerkin_enabled = _env_bool(
+        env,
+        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_GALERKIN_PRECONDITIONER",
+        default=False,
+    )
+    two_level_enabled = _env_bool(
+        env,
+        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_TWO_LEVEL_PRECONDITIONER",
+        default=False,
+    )
+    device_enabled = _env_bool(
+        env,
+        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER",
+        default=False,
+    )
+    deflated_enabled = _env_bool(
+        env,
+        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEFLATED_PRECONDITIONER",
+        default=False,
+    )
+    shared_basis_required = bool(
+        coarse_seed_enabled
+        or galerkin_enabled
+        or two_level_enabled
+        or device_enabled
+    )
+    if not bool(shared_basis_required):
+        return XBlockQISeedPolicySetup(
+            coarse_seed_enabled=bool(coarse_seed_enabled),
+            galerkin_preconditioner_enabled=bool(galerkin_enabled),
+            two_level_preconditioner_enabled=bool(two_level_enabled),
+            device_preconditioner_enabled=bool(device_enabled),
+            deflated_preconditioner_enabled=bool(deflated_enabled),
+            shared_basis_required=False,
+            max_rank=0,
+            max_candidates=0,
+            max_angular_mode=0,
+            rank_rtol=0.0,
+            min_improvement=0.0,
+            rcond=0.0,
+            include_angular=False,
+            include_blocks=False,
+            include_radial=False,
+            include_radial_angular=False,
+            include_constraint_moments=False,
+            include_schur=False,
+            basis_kind=None,
+        )
+
+    basis_kind = (
+        _env_value(env, "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_COARSE_SEED_BASIS") or "legacy"
+    ).lower().replace("-", "_")
+    return XBlockQISeedPolicySetup(
+        coarse_seed_enabled=bool(coarse_seed_enabled),
+        galerkin_preconditioner_enabled=bool(galerkin_enabled),
+        two_level_preconditioner_enabled=bool(two_level_enabled),
+        device_preconditioner_enabled=bool(device_enabled),
+        deflated_preconditioner_enabled=bool(deflated_enabled),
+        shared_basis_required=True,
+        max_rank=_env_int(
+            env,
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_COARSE_SEED_MAX_RANK",
+            default=24,
+            minimum=1,
+        ),
+        max_candidates=_env_int(
+            env,
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_COARSE_SEED_MAX_CANDIDATES",
+            default=96,
+            minimum=1,
+        ),
+        max_angular_mode=_env_int(
+            env,
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_COARSE_SEED_MAX_ANGULAR_MODE",
+            default=2,
+            minimum=0,
+        ),
+        rank_rtol=max(
+            0.0,
+            _env_float(
+                env,
+                "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_COARSE_SEED_RANK_RTOL",
+                default=1.0e-10,
+            ),
+        ),
+        min_improvement=max(
+            0.0,
+            _env_float(
+                env,
+                "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_COARSE_SEED_MIN_IMPROVEMENT",
+                default=0.0,
+            ),
+        ),
+        rcond=max(
+            0.0,
+            _env_float(
+                env,
+                "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_COARSE_SEED_RCOND",
+                default=1.0e-12,
+            ),
+        ),
+        include_angular=_env_bool(
+            env,
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_COARSE_SEED_INCLUDE_ANGULAR",
+            default=True,
+        ),
+        include_blocks=_env_bool(
+            env,
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_COARSE_SEED_INCLUDE_BLOCKS",
+            default=True,
+        ),
+        include_radial=_env_bool(
+            env,
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_COARSE_SEED_INCLUDE_RADIAL",
+            default=True,
+        ),
+        include_radial_angular=_env_bool(
+            env,
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_COARSE_SEED_INCLUDE_RADIAL_ANGULAR",
+            default=True,
+        ),
+        include_constraint_moments=_env_bool(
+            env,
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_COARSE_SEED_INCLUDE_CONSTRAINT_MOMENTS",
+            default=True,
+        ),
+        include_schur=_env_bool(
+            env,
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_COARSE_SEED_INCLUDE_SCHUR",
+            default=True,
+        ),
+        basis_kind=str(basis_kind),
+    )
 
 
 def run_sparse_pc_gmres_once(

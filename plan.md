@@ -33569,3 +33569,54 @@ Next refactor target:
   the remaining x-block branch, then reassess whether to continue routing
   extraction or start moving repeated transport/RHSMode=2/3 sparse-policy
   helpers.
+
+### 19.80 RHSMode=1 x-block QI seed policy extraction
+
+Goal:
+
+- Move the shared QI coarse-seed/preconditioner feature flags and coarse-basis
+  admission parameters out of ``v3_driver.py`` without changing any QI coarse
+  basis construction, residual correction, Krylov, or preconditioner behavior.
+
+Implementation:
+
+- Added ``XBlockQISeedPolicySetup`` and
+  ``resolve_xblock_qi_seed_policy_setup`` to
+  ``sfincs_jax/problems/profile_response/sparse_pc.py``.
+- Centralized the QI coarse seed, Galerkin, two-level, device, and deflated
+  preconditioner flags plus shared coarse-basis controls:
+  max rank/candidates/angular mode, rank tolerance, seed-improvement gate,
+  coarse solve rcond, basis kind, and angular/radial/constraint/Schur basis
+  inclusion switches.
+- Preserved the previous deflated-only behavior: enabling only the deflated QI
+  preconditioner does not force shared coarse-basis parameter parsing.
+- Replaced the duplicated env parsing block in
+  ``solve_v3_full_system_linear_gmres`` with a single policy object while
+  leaving all numerical QI seed/preconditioner construction in the driver.
+- Added direct tests for default-off behavior, deflated-only behavior, and
+  fully parsed shared-basis controls.
+- ``solve_v3_full_system_linear_gmres`` is now about ``19605`` lines and
+  ``v3_driver.py`` is about ``24877`` lines.
+
+Validation so far:
+
+- ``python -m ruff check sfincs_jax/problems/profile_response/sparse_pc.py
+  sfincs_jax/v3_driver.py tests/test_profile_response_sparse_pc.py``: passed.
+- ``python -m compileall -q
+  sfincs_jax/problems/profile_response/sparse_pc.py sfincs_jax/v3_driver.py
+  tests/test_profile_response_sparse_pc.py``: passed.
+- ``PYTHONDONTWRITEBYTECODE=1 JAX_ENABLE_X64=True pytest -q
+  -p no:cacheprovider tests/test_profile_response_sparse_pc.py``:
+  ``40 passed in 0.78 s``.
+- Focused QI seed/Galerkin/two-level/device regression subset:
+  ``44 passed in 12.39 s``.
+- Broader sparse-PC/x-block/dispatch subset:
+  ``122 passed in 47.55 s``.
+- ``git diff --check``: passed.
+
+Next refactor target:
+
+- Extract the remaining generic x-block initial-seed admission and
+  moment-Schur seed gate into sparse-PC helpers, then continue with the QI
+  Galerkin/two-level/device admission metadata before moving repeated
+  RHSMode=2/3 sparse-policy helpers.

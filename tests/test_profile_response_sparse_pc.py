@@ -26,6 +26,7 @@ from sfincs_jax.problems.profile_response.sparse_pc import (
     finalize_xblock_moment_schur_metadata,
     resolve_sparse_pc_entry_policy,
     resolve_xblock_qi_device_operator_reuse_setup,
+    resolve_xblock_qi_seed_policy_setup,
     resolve_xblock_global_coupling_policy_setup,
     resolve_xblock_moment_schur_policy_setup,
     resolve_xblock_sparse_pc_setup,
@@ -879,6 +880,76 @@ def test_xblock_global_coupling_metadata_helpers_normalize_success_and_failure()
 
     assert success == {"mode": "additive", "setup_s": 0.75}
     assert failure == {"error": "RuntimeError: timeout", "setup_s": 1.5}
+
+
+def test_xblock_qi_seed_policy_defaults_off_without_shared_basis() -> None:
+    setup = resolve_xblock_qi_seed_policy_setup(env={})
+
+    assert not setup.coarse_seed_enabled
+    assert not setup.galerkin_preconditioner_enabled
+    assert not setup.two_level_preconditioner_enabled
+    assert not setup.device_preconditioner_enabled
+    assert not setup.deflated_preconditioner_enabled
+    assert not setup.shared_basis_required
+    assert setup.max_rank == 0
+    assert setup.basis_kind is None
+
+
+def test_xblock_qi_seed_policy_deflated_only_does_not_parse_shared_basis() -> None:
+    setup = resolve_xblock_qi_seed_policy_setup(
+        env={
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEFLATED_PRECONDITIONER": "1",
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_COARSE_SEED_MAX_RANK": "48",
+        },
+    )
+
+    assert setup.deflated_preconditioner_enabled
+    assert not setup.shared_basis_required
+    assert setup.max_rank == 0
+    assert setup.max_candidates == 0
+
+
+def test_xblock_qi_seed_policy_parses_shared_basis_parameters() -> None:
+    setup = resolve_xblock_qi_seed_policy_setup(
+        env={
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_COARSE_SEED": "1",
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_GALERKIN_PRECONDITIONER": "1",
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_TWO_LEVEL_PRECONDITIONER": "1",
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER": "1",
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_COARSE_SEED_MAX_RANK": "10",
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_COARSE_SEED_MAX_CANDIDATES": "24",
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_COARSE_SEED_MAX_ANGULAR_MODE": "4",
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_COARSE_SEED_RANK_RTOL": "1e-8",
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_COARSE_SEED_MIN_IMPROVEMENT": "0.15",
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_COARSE_SEED_RCOND": "1e-9",
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_COARSE_SEED_INCLUDE_ANGULAR": "0",
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_COARSE_SEED_INCLUDE_BLOCKS": "0",
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_COARSE_SEED_INCLUDE_RADIAL": "0",
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_COARSE_SEED_INCLUDE_RADIAL_ANGULAR": "0",
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_COARSE_SEED_INCLUDE_CONSTRAINT_MOMENTS": "0",
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_COARSE_SEED_INCLUDE_SCHUR": "0",
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_COARSE_SEED_BASIS": "Residual-Enriched",
+        },
+    )
+
+    assert setup.coarse_seed_enabled
+    assert setup.galerkin_preconditioner_enabled
+    assert setup.two_level_preconditioner_enabled
+    assert setup.device_preconditioner_enabled
+    assert setup.shared_basis_required
+    assert setup.max_rank == 10
+    assert setup.max_candidates == 24
+    assert setup.max_angular_mode == 4
+    assert setup.rank_rtol == pytest.approx(1.0e-8)
+    assert setup.min_improvement == pytest.approx(0.15)
+    assert setup.rcond == pytest.approx(1.0e-9)
+    assert not setup.include_angular
+    assert not setup.include_blocks
+    assert not setup.include_radial
+    assert not setup.include_radial_angular
+    assert not setup.include_constraint_moments
+    assert not setup.include_schur
+    assert setup.basis_kind == "residual_enriched"
 
 
 def test_sparse_pc_gmres_once_explicit_left_recomputes_true_residual() -> None:

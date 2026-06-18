@@ -217,6 +217,7 @@ from .problems.profile_response.sparse_pc import (
     finalize_xblock_two_level_metadata,
     resolve_sparse_pc_entry_policy,
     resolve_xblock_qi_device_operator_reuse_setup,
+    resolve_xblock_qi_seed_policy_setup,
     resolve_xblock_global_coupling_policy_setup,
     resolve_xblock_moment_schur_policy_setup,
     resolve_xblock_sparse_pc_setup,
@@ -4089,10 +4090,8 @@ def solve_v3_full_system_linear_gmres(
                             "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
                             f"constraint1 moment-Schur seed failed ({type(exc).__name__}: {exc})",
                         )
-            qi_coarse_seed_enabled = _rhs1_bool_env(
-                "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_COARSE_SEED",
-                default=False,
-            )
+            qi_seed_policy = resolve_xblock_qi_seed_policy_setup(env=os.environ)
+            qi_coarse_seed_enabled = bool(qi_seed_policy.coarse_seed_enabled)
             qi_coarse_seed_used = False
             qi_coarse_seed_residual_before: float | None = None
             qi_coarse_seed_residual_after: float | None = None
@@ -4102,14 +4101,21 @@ def solve_v3_full_system_linear_gmres(
             qi_coarse_seed_reason: str | None = None
             qi_coarse_seed_labels: tuple[str, ...] = ()
             qi_coarse_seed_s = 0.0
-            qi_seed_basis_kind: str | None = None
-            qi_seed_max_candidates = 0
-            qi_seed_max_angular_mode = 0
+            qi_seed_max_rank = int(qi_seed_policy.max_rank)
+            qi_seed_max_candidates = int(qi_seed_policy.max_candidates)
+            qi_seed_max_angular_mode = int(qi_seed_policy.max_angular_mode)
+            qi_seed_rank_rtol = float(qi_seed_policy.rank_rtol)
+            qi_seed_min_improvement = float(qi_seed_policy.min_improvement)
+            qi_seed_rcond = float(qi_seed_policy.rcond)
+            qi_seed_include_angular = bool(qi_seed_policy.include_angular)
+            qi_seed_include_blocks = bool(qi_seed_policy.include_blocks)
+            qi_seed_include_radial = bool(qi_seed_policy.include_radial)
+            qi_seed_include_radial_angular = bool(qi_seed_policy.include_radial_angular)
+            qi_seed_include_constraint_moments = bool(qi_seed_policy.include_constraint_moments)
+            qi_seed_include_schur = bool(qi_seed_policy.include_schur)
+            qi_seed_basis_kind: str | None = qi_seed_policy.basis_kind
             qi_seed_basis_for_galerkin: RHS1QICoarseBasis | None = None
-            qi_galerkin_preconditioner_enabled = _rhs1_bool_env(
-                "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_GALERKIN_PRECONDITIONER",
-                default=False,
-            )
+            qi_galerkin_preconditioner_enabled = bool(qi_seed_policy.galerkin_preconditioner_enabled)
             qi_galerkin_preconditioner_built = False
             qi_galerkin_preconditioner_used = False
             qi_galerkin_preconditioner_reason: str | None = None
@@ -4129,10 +4135,7 @@ def solve_v3_full_system_linear_gmres(
             qi_galerkin_preconditioner_probe_candidates: list[dict[str, object]] = []
             qi_galerkin_preconditioner_selected_index: int | None = None
             qi_galerkin_stats = {"applies": 0, "coarse_applies": 0, "base_applies": 0}
-            qi_two_level_preconditioner_enabled = _rhs1_bool_env(
-                "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_TWO_LEVEL_PRECONDITIONER",
-                default=False,
-            )
+            qi_two_level_preconditioner_enabled = bool(qi_seed_policy.two_level_preconditioner_enabled)
             qi_two_level_preconditioner_built = False
             qi_two_level_preconditioner_used = False
             qi_two_level_preconditioner_reason: str | None = None
@@ -4161,10 +4164,7 @@ def solve_v3_full_system_linear_gmres(
             qi_two_level_preconditioner_probe_candidates: list[dict[str, object]] = []
             qi_two_level_preconditioner_selected_index: int | None = None
             qi_two_level_stats = {"applies": 0, "local_applies": 0}
-            qi_device_preconditioner_enabled = _rhs1_bool_env(
-                "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER",
-                default=False,
-            )
+            qi_device_preconditioner_enabled = bool(qi_seed_policy.device_preconditioner_enabled)
             qi_device_preconditioner_built = False
             qi_device_preconditioner_used = False
             qi_device_preconditioner_used_in_krylov = False
@@ -4199,10 +4199,7 @@ def solve_v3_full_system_linear_gmres(
             qi_device_augmented_seed_labels: tuple[str, ...] = ()
             qi_device_augmented_seed_basis_for_krylov = None
             qi_device_augmented_seed_action_for_krylov = None
-            qi_deflated_preconditioner_enabled = _rhs1_bool_env(
-                "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEFLATED_PRECONDITIONER",
-                default=False,
-            )
+            qi_deflated_preconditioner_enabled = bool(qi_seed_policy.deflated_preconditioner_enabled)
             qi_deflated_preconditioner_built = False
             qi_deflated_preconditioner_used = False
             qi_deflated_preconditioner_used_in_krylov = False
@@ -4215,72 +4212,6 @@ def solve_v3_full_system_linear_gmres(
             qi_deflated_preconditioner_metadata: dict[str, object] = {}
             qi_deflated_preconditioner_setup_s = 0.0
             qi_deflated_stats = {"applies": 0, "local_applies": 0}
-            if (
-                qi_coarse_seed_enabled
-                or qi_galerkin_preconditioner_enabled
-                or qi_two_level_preconditioner_enabled
-                or qi_device_preconditioner_enabled
-            ):
-                qi_seed_max_rank = _rhs1_int_env(
-                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_COARSE_SEED_MAX_RANK",
-                    default=24,
-                    minimum=1,
-                )
-                qi_seed_max_candidates = _rhs1_int_env(
-                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_COARSE_SEED_MAX_CANDIDATES",
-                    default=96,
-                    minimum=1,
-                )
-                qi_seed_max_angular_mode = _rhs1_int_env(
-                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_COARSE_SEED_MAX_ANGULAR_MODE",
-                    default=2,
-                    minimum=0,
-                )
-                qi_seed_rank_rtol = _rhs1_float_env(
-                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_COARSE_SEED_RANK_RTOL",
-                    default=1.0e-10,
-                    minimum=0.0,
-                )
-                qi_seed_min_improvement = _rhs1_float_env(
-                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_COARSE_SEED_MIN_IMPROVEMENT",
-                    default=0.0,
-                    minimum=0.0,
-                )
-                qi_seed_rcond = _rhs1_float_env(
-                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_COARSE_SEED_RCOND",
-                    default=1.0e-12,
-                    minimum=0.0,
-                )
-                qi_seed_include_angular = _rhs1_bool_env(
-                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_COARSE_SEED_INCLUDE_ANGULAR",
-                    default=True,
-                )
-                qi_seed_include_blocks = _rhs1_bool_env(
-                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_COARSE_SEED_INCLUDE_BLOCKS",
-                    default=True,
-                )
-                qi_seed_include_radial = _rhs1_bool_env(
-                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_COARSE_SEED_INCLUDE_RADIAL",
-                    default=True,
-                )
-                qi_seed_include_radial_angular = _rhs1_bool_env(
-                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_COARSE_SEED_INCLUDE_RADIAL_ANGULAR",
-                    default=True,
-                )
-                qi_seed_include_constraint_moments = _rhs1_bool_env(
-                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_COARSE_SEED_INCLUDE_CONSTRAINT_MOMENTS",
-                    default=True,
-                )
-                qi_seed_include_schur = _rhs1_bool_env(
-                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_COARSE_SEED_INCLUDE_SCHUR",
-                    default=True,
-                )
-                qi_seed_basis_kind = (
-                    os.environ.get("SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_COARSE_SEED_BASIS", "legacy")
-                    .strip()
-                    .lower()
-                    .replace("-", "_")
-                )
             if qi_coarse_seed_enabled:
                 qi_seed_start_s = sparse_timer.elapsed_s()
                 try:
