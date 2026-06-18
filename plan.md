@@ -34810,3 +34810,39 @@ Next refactor target:
   dependencies into explicit typed diagnostics inputs, starting with the core
   sparse-PC metadata or device-Krylov metadata helpers. This should happen
   incrementally with the same focused and broad shards.
+
+### 19.108 Profile-response diagnostics test split
+
+Goal:
+
+- Keep tests aligned with the new module structure by separating pure
+  diagnostics tests from sparse-PC setup/solve tests.
+
+Implementation:
+
+- Added ``tests/test_profile_response_diagnostics.py`` for diagnostics-only
+  metadata helper tests.
+- Moved sparse-rescue, QI-device, QI-deflated, side-probe,
+  assembled-operator, coarse-correction, QI seed/preconditioner,
+  device-Krylov, and core sparse-PC diagnostics tests out of
+  ``tests/test_profile_response_sparse_pc.py``.
+- ``tests/test_profile_response_sparse_pc.py`` now focuses on sparse-PC policy,
+  setup, assembled-operator mechanics, GMRES, and post-minres behavior.
+- ``tests/test_profile_response_sparse_pc.py`` is now about ``1718`` lines with
+  ``58`` tests; ``tests/test_profile_response_diagnostics.py`` is about ``705``
+  lines with ``9`` tests.
+
+Validation:
+
+- ``python -m ruff check`` on touched source/tests: passed.
+- ``python -m compileall -q`` on touched source/tests: passed.
+- ``tests/test_profile_response_diagnostics.py`` plus
+  ``tests/test_profile_response_sparse_pc.py``: ``67 passed``.
+- Broader current profile-response/x-block/sparse-pattern shard including the
+  new diagnostics test file: ``331 passed in 85.70 s``.
+
+Next refactor target:
+
+- Continue reducing ``v3_driver.py`` by moving the remaining sparse-PC
+  orchestration into typed context/result builders, while keeping diagnostics
+  and solver mechanics in separate modules.
