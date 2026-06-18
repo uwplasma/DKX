@@ -474,6 +474,10 @@ the historical private driver name and test the focused module directly. This ke
   driver passes solve-local builders and projection functions through a typed
   context, and the helper returns explicit state for PAS-TZ guard metadata,
   collision fallback admission, and optional BiCGStab preconditioner reuse.
+- ``sfincs_jax/problems/profile_response/sparse_pc.py``:
+  RHSMode=1/profile-response host sparse-PC Krylov attempt helpers. This module
+  owns sparse-PC GMRES progress/stagnation handling and optional post-minres
+  residual polish while the driver keeps only solve-local context assembly.
 - ``sfincs_jax/problems/profile_response/qi_device_seed.py``:
   matrix-free QI device seed correction for RHSMode=1 active-DOF solves. The
   driver passes solve-local state through a typed context while the module owns
