@@ -12,6 +12,7 @@ from sfincs_jax.problems.profile_response.sparse_pc import (
     apply_sparse_pc_post_minres,
     resolve_sparse_pc_entry_policy,
     resolve_xblock_sparse_pc_setup,
+    resolve_xblock_sparse_pc_side_policy_setup,
     run_sparse_pc_gmres_once,
 )
 
@@ -180,6 +181,84 @@ def test_xblock_sparse_pc_setup_disables_auto_host_fallback_for_qi_device_reques
     assert setup.xblock_device_host_fallback_auto_disabled_by_qi_device
     assert setup.qi_device_preconditioner_requested_for_fallback
     assert any("fallback disabled by explicit matrix-free" in message for _, message in setup.messages)
+
+
+def test_xblock_sparse_pc_side_policy_parses_jax_factors_and_forces_fgmres_right_pc() -> None:
+    def side_policy(**kwargs):
+        assert kwargs["krylov_env_value"] == "fgmres_jax"
+        assert kwargs["full_fp_3d_pc"] is True
+        return SimpleNamespace(
+            precondition_side="left",
+            default_right_preconditioned=False,
+            krylov_method="fgmres_jax",
+            gmres_restart=33,
+            restart_capped=True,
+            ignored_krylov_env=True,
+        )
+
+    setup = resolve_xblock_sparse_pc_side_policy_setup(
+        op=_op(fp=True, constraint_scheme=1, n_zeta=7, n_species=1),
+        xblock_device_krylov_requested=True,
+        xblock_device_host_fallback_decision=SimpleNamespace(used=False),
+        xblock_krylov_env="fgmres_jax",
+        pc_restart=50,
+        pc_restart_env="50",
+        tokamak_fp_er_pc=False,
+        active_size=4000,
+        use_dkes=False,
+        include_xdot_sparse_pc=False,
+        include_electric_field_xi_sparse_pc=False,
+        resolve_xblock_policy=side_policy,
+        env={
+            "SFINCS_JAX_RHSMODE1_XBLOCK_SPARSE_JAX_FACTOR_FORMAT": "compact-csr",
+            "SFINCS_JAX_RHSMODE1_XBLOCK_SPARSE_JAX_FACTOR_APPLY": "jacobi",
+        },
+    )
+
+    assert setup.xblock_jax_factors
+    assert not setup.xblock_jax_factors_requested
+    assert setup.xblock_device_krylov_forced_jax_factors
+    assert setup.xblock_jax_factor_format == "csr"
+    assert setup.xblock_jax_factor_apply == "diagonal"
+    assert setup.precondition_side == "right"
+    assert setup.xblock_device_fgmres_forced_right_pc
+    assert setup.pc_restart == 33
+    assert setup.xblock_default_restart_capped
+    assert any("ignoring unknown" in message for _, message in setup.messages)
+
+
+def test_xblock_sparse_pc_side_policy_uses_host_factors_when_fallback_is_used() -> None:
+    def side_policy(**kwargs):
+        return SimpleNamespace(
+            precondition_side="right",
+            default_right_preconditioned=True,
+            krylov_method=kwargs["krylov_env_value"],
+            gmres_restart=kwargs["requested_restart"],
+            restart_capped=False,
+            ignored_krylov_env=False,
+        )
+
+    setup = resolve_xblock_sparse_pc_side_policy_setup(
+        op=_op(fp=True, constraint_scheme=1, n_zeta=5, n_species=1),
+        xblock_device_krylov_requested=True,
+        xblock_device_host_fallback_decision=SimpleNamespace(used=True),
+        xblock_krylov_env="gmres",
+        pc_restart=20,
+        pc_restart_env="",
+        tokamak_fp_er_pc=False,
+        active_size=2000,
+        use_dkes=False,
+        include_xdot_sparse_pc=False,
+        include_electric_field_xi_sparse_pc=False,
+        resolve_xblock_policy=side_policy,
+        env={"SFINCS_JAX_RHSMODE1_XBLOCK_PC_JAX_FACTORS": "1"},
+    )
+
+    assert setup.xblock_jax_factors_requested
+    assert not setup.xblock_jax_factors
+    assert setup.xblock_jax_factor_format == "padded"
+    assert setup.xblock_jax_factor_apply == "exact"
+    assert any("requires host sparse factors" in message for _, message in setup.messages)
 
 
 def test_sparse_pc_gmres_once_explicit_left_recomputes_true_residual() -> None:

@@ -33065,3 +33065,53 @@ Next refactor target:
   ``resolve_rhs1_xblock_sparse_pc_policy``. Keep the actual x-block factor
   construction and Krylov solve in the driver until this policy layer is fully
   covered.
+
+### 19.69 RHSMode=1 x-block sparse-PC side-policy extraction
+
+Goal:
+
+- Move x-block JAX-factor parsing and preconditioner-side policy out of
+  ``v3_driver.py`` without changing factor construction, QI-device reuse,
+  assembled-operator setup, or Krylov execution.
+
+Implementation:
+
+- Extended ``sfincs_jax/problems/profile_response/sparse_pc.py`` with
+  ``XBlockSparsePCSidePolicySetup`` and
+  ``resolve_xblock_sparse_pc_side_policy_setup``.
+- Moved parsing for ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_JAX_FACTORS``, compact
+  JAX-factor format, triangular/diagonal factor-apply selection, device-Krylov
+  forced-JAX-factor metadata, full-FP 3D classification, preconditioner-side
+  selection, FGMRES right-preconditioner forcing, and restart capping into the
+  sparse-PC domain helper.
+- Kept the raw explicit side token available to downstream side-probe logic so
+  existing explicit-user-choice safeguards remain unchanged.
+- Added direct tests for compact CSR/Jacobi parsing, device-Krylov forced JAX
+  factors, FGMRES left-to-right side correction, ignored Krylov messages, and
+  host-fallback suppression of JAX factors.
+- ``solve_v3_full_system_linear_gmres`` is now about ``20112`` lines and
+  ``v3_driver.py`` is about ``25357`` lines.
+
+Validation so far:
+
+- ``python -m ruff check sfincs_jax/problems/profile_response/sparse_pc.py
+  sfincs_jax/v3_driver.py tests/test_profile_response_sparse_pc.py``: passed.
+- ``python -m compileall -q
+  sfincs_jax/problems/profile_response/sparse_pc.py sfincs_jax/v3_driver.py
+  tests/test_profile_response_sparse_pc.py``: passed.
+- ``PYTHONDONTWRITEBYTECODE=1 JAX_ENABLE_X64=True pytest -q
+  -p no:cacheprovider tests/test_profile_response_sparse_pc.py``:
+  ``9 passed in 0.41 s``.
+- Focused x-block regression subset covering host fallback, active-DOF,
+  assembled operator, two-level projection, device Krylov, compact CSR factors,
+  and diagonal factor apply:
+  ``20 passed in 18.40 s``.
+- Broader sparse-PC/x-block/dispatch subset:
+  ``87 passed in 40.32 s``.
+
+Next refactor target:
+
+- Continue in the x-block sparse-PC branch by extracting QI-device operator
+  reuse admission and factor-build/skip routing. Keep actual factor
+  construction and Krylov solves in the driver until the admission policy is
+  isolated and covered by direct tests.

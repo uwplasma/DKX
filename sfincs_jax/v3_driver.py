@@ -205,6 +205,7 @@ from .problems.profile_response.sparse_pc import (
     apply_sparse_pc_post_minres,
     resolve_sparse_pc_entry_policy,
     resolve_xblock_sparse_pc_setup,
+    resolve_xblock_sparse_pc_side_policy_setup,
     run_sparse_pc_gmres_once,
 )
 from .rhs1_strong_fallback import build_rhs1_strong_preconditioner_full_from_kind
@@ -3470,95 +3471,40 @@ def solve_v3_full_system_linear_gmres(
             if emit is not None:
                 for level, message in xblock_setup.messages:
                     emit(int(level), str(message))
-            xblock_jax_factors_env = os.environ.get("SFINCS_JAX_RHSMODE1_XBLOCK_PC_JAX_FACTORS", "").strip().lower()
-            xblock_jax_factors_requested = _rhs1_bool_env(
-                "SFINCS_JAX_RHSMODE1_XBLOCK_PC_JAX_FACTORS",
-                default=False,
-            )
-            xblock_jax_factors = (
-                bool(xblock_jax_factors_requested) or bool(xblock_device_krylov_requested)
-            ) and not bool(xblock_device_host_fallback_decision.used)
-            if (
-                bool(xblock_device_host_fallback_decision.used)
-                and bool(xblock_jax_factors_requested)
-                and emit is not None
-            ):
-                emit(
-                    1,
-                    "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
-                    "ignoring SFINCS_JAX_RHSMODE1_XBLOCK_PC_JAX_FACTORS=1 because "
-                    "the non-autodiff host fallback requires host sparse factors",
-                )
-            xblock_jax_factor_format_env = (
-                os.environ.get("SFINCS_JAX_RHSMODE1_XBLOCK_SPARSE_JAX_FACTOR_FORMAT", "padded")
-                .strip()
-                .lower()
-                .replace("-", "_")
-            )
-            xblock_jax_factor_format = (
-                "csr"
-                if xblock_jax_factor_format_env in {"csr", "compact", "compact_csr", "ragged_csr"}
-                else "padded"
-            )
-            xblock_jax_factor_apply_env = (
-                os.environ.get("SFINCS_JAX_RHSMODE1_XBLOCK_SPARSE_JAX_FACTOR_APPLY", "exact")
-                .strip()
-                .lower()
-                .replace("-", "_")
-            )
-            xblock_jax_factor_apply = (
-                "diagonal"
-                if xblock_jax_factor_apply_env in {"diag", "diagonal", "jacobi", "factor_diag", "factor_diagonal"}
-                else "identity"
-                if xblock_jax_factor_apply_env in {"identity", "none", "skip"}
-                else "upper"
-                if xblock_jax_factor_apply_env in {"upper", "upper_only", "u", "u_only"}
-                else "lower"
-                if xblock_jax_factor_apply_env in {"lower", "lower_only", "l", "l_only"}
-                else "exact"
-            )
-            xblock_device_krylov_forced_jax_factors = bool(
-                xblock_device_krylov_requested
-                and xblock_jax_factors_env not in {"1", "true", "t", "yes", "on", ".true.", ".t."}
-            )
-            side_env = os.environ.get("SFINCS_JAX_GMRES_PRECONDITION_SIDE", "").strip().lower()
-            full_fp_3d_right_pc_max_env = os.environ.get(
-                "SFINCS_JAX_RHSMODE1_XBLOCK_RIGHT_PC_MAX", ""
-            ).strip()
-            full_fp_3d_pc = bool(
-                op.fblock.fp is not None
-                and op.fblock.pas is None
-                and int(getattr(op, "n_zeta", 1)) > 1
-            )
-            xblock_policy = resolve_rhs1_xblock_sparse_pc_policy(
-                precondition_side_env_value=side_env,
-                krylov_env_value=xblock_krylov_env,
-                requested_restart=int(pc_restart),
-                restart_env_value=pc_restart_env,
+            xblock_side_policy = resolve_xblock_sparse_pc_side_policy_setup(
+                op=op,
+                xblock_device_krylov_requested=bool(xblock_device_krylov_requested),
+                xblock_device_host_fallback_decision=xblock_device_host_fallback_decision,
+                xblock_krylov_env=str(xblock_krylov_env),
+                pc_restart=int(pc_restart),
+                pc_restart_env=str(pc_restart_env),
                 tokamak_fp_er_pc=bool(tokamak_fp_er_pc),
-                full_fp_3d_pc=bool(full_fp_3d_pc),
                 active_size=int(active_size),
-                full_fp_3d_right_pc_max_env_value=full_fp_3d_right_pc_max_env,
                 use_dkes=bool(use_dkes),
-                include_xdot=bool(include_xdot_sparse_pc),
-                include_electric_field_xi=bool(include_electric_field_xi_sparse_pc),
+                include_xdot_sparse_pc=bool(include_xdot_sparse_pc),
+                include_electric_field_xi_sparse_pc=bool(include_electric_field_xi_sparse_pc),
+                resolve_xblock_policy=resolve_rhs1_xblock_sparse_pc_policy,
+                env=os.environ,
             )
-            precondition_side = xblock_policy.precondition_side
-            xblock_default_right_pc = xblock_policy.default_right_preconditioned
-            xblock_krylov_method = xblock_policy.krylov_method
-            xblock_device_fgmres_forced_right_pc = False
-            if str(xblock_krylov_method) == "fgmres_jax" and str(precondition_side) == "left":
-                precondition_side = "right"
-                xblock_device_fgmres_forced_right_pc = True
-            pc_restart = xblock_policy.gmres_restart
-            xblock_default_restart_capped = xblock_policy.restart_capped
-            if xblock_policy.ignored_krylov_env:
-                if emit is not None:
-                    emit(
-                        1,
-                        "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
-                        f"ignoring unknown SFINCS_JAX_RHSMODE1_XBLOCK_PC_KRYLOV={xblock_krylov_env!r}",
-                    )
+            xblock_jax_factors = bool(xblock_side_policy.xblock_jax_factors)
+            xblock_jax_factor_format = str(xblock_side_policy.xblock_jax_factor_format)
+            xblock_jax_factor_apply = str(xblock_side_policy.xblock_jax_factor_apply)
+            xblock_device_krylov_forced_jax_factors = bool(
+                xblock_side_policy.xblock_device_krylov_forced_jax_factors
+            )
+            full_fp_3d_pc = bool(xblock_side_policy.full_fp_3d_pc)
+            side_env = str(xblock_side_policy.side_env)
+            precondition_side = str(xblock_side_policy.precondition_side)
+            xblock_default_right_pc = bool(xblock_side_policy.xblock_default_right_pc)
+            xblock_krylov_method = str(xblock_side_policy.xblock_krylov_method)
+            xblock_device_fgmres_forced_right_pc = bool(
+                xblock_side_policy.xblock_device_fgmres_forced_right_pc
+            )
+            pc_restart = int(xblock_side_policy.pc_restart)
+            xblock_default_restart_capped = bool(xblock_side_policy.xblock_default_restart_capped)
+            if emit is not None:
+                for level, message in xblock_side_policy.messages:
+                    emit(int(level), str(message))
             xblock_qi_device_operator_reuse_decision = (
                 _rhs1_xblock_policy.rhs1_xblock_qi_device_operator_reuse_decision(
                     env_value=os.environ.get(
