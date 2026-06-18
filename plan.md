@@ -34089,3 +34089,51 @@ Next refactor target:
   deterministic message strings from the already-resolved policy state. Keep
   emission timing in ``v3_driver.py`` and cover the helper with direct tests
   plus the existing focused driver metadata regressions.
+
+### 19.91 RHSMode=1 x-block QI-device progress-message extraction
+
+Goal:
+
+- Move the long QI-device progress-message construction cascade out of the main
+  ``v3_driver.py`` solve block while preserving message text, message order,
+  and emission timing.
+
+Implementation:
+
+- Added ``rhs1_qi_device_progress_messages`` to
+  ``sfincs_jax/problems/profile_response/policies.py`` and exported it.
+- Wired ``v3_driver.py`` to build the deterministic message tuple from the
+  already-resolved QI-device policy state, then emit the messages at the same
+  point in the solve branch as before.
+- Kept ``emit`` ownership in ``v3_driver.py`` so the policy layer remains pure,
+  side-effect-free, and easy to test.
+- Added direct tests for the quiet default case, matrix-free fallback message,
+  representative residual-enrichment/coupled-equation/snapshot-equation
+  messages, and the private-driver alias seam.
+- ``solve_v3_full_system_linear_gmres`` is now about ``18874`` lines and
+  ``v3_driver.py`` is about ``24150`` lines. This tranche intentionally trades
+  a larger explicit helper call for removal of untestable in-driver string
+  branching; the next tranche should extract a higher-level QI-device setup
+  bundle to reduce driver call-site bulk.
+
+Validation so far:
+
+- ``python -m ruff check sfincs_jax/problems/profile_response/policies.py
+  sfincs_jax/v3_driver.py tests/test_rhs1_xblock_fallback_initial_guess.py``:
+  passed.
+- ``python -m compileall -q
+  sfincs_jax/problems/profile_response/policies.py sfincs_jax/v3_driver.py
+  tests/test_rhs1_xblock_fallback_initial_guess.py``: passed.
+- Focused policy/helper and QI-device metadata regressions:
+  ``31 passed in 14.16 s``.
+- Broader current profile-response/x-block/sparse-pattern shard:
+  ``312 passed in 115.39 s``.
+- ``git diff --check``: passed.
+
+Next refactor target:
+
+- Extract a cohesive QI-device setup-context object or builder that groups the
+  resolved policy state, rank budget, progress messages, metadata flags, and
+  preconditioner setup arguments. The current driver call-site still exposes
+  too many individual QI-device variables; a context object should shrink the
+  solve block without introducing new solver behavior.

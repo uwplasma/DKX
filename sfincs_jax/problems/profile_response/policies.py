@@ -565,6 +565,258 @@ def rhs1_qi_device_rank_budget(
     return RHS1QIDeviceRankBudget(rank_budget=max(1, int(rank_budget)), max_rank=max_rank)
 
 
+def rhs1_qi_device_progress_messages(
+    *,
+    assembled_device_operator_available: bool,
+    residual_enrichment: bool,
+    residual_enrichment_depth: int,
+    operator_action_enrichment: bool,
+    operator_action_depth: int,
+    operator_krylov_enrichment: bool,
+    operator_krylov_depth: int,
+    adjoint_krylov_enrichment: bool,
+    adjoint_krylov_depth: int,
+    adjoint_krylov_transpose_source: str,
+    max_rank: int | None,
+    multilevel_coarse: bool,
+    multilevel_max_levels: int,
+    multilevel_aggregate_factor: int,
+    multilevel_max_pitch_degree: int,
+    multilevel_current_moments: bool,
+    multilevel_max_rank: int | None,
+    multilevel_residual_equation: bool,
+    multilevel_residual_equation_max_level_rank: int,
+    multilevel_residual_equation_order: str,
+    multilevel_residual_equation_solver: str,
+    multilevel_residual_equation_include_global: bool,
+    global_moment_residual_equation: bool,
+    global_moment_residual_equation_max_rank: int,
+    global_moment_residual_equation_solver: str,
+    global_moment_residual_equation_include_profile: bool,
+    global_moment_residual_equation_include_current: bool,
+    global_moment_residual_equation_include_tail: bool,
+    residual_galerkin_equation: bool,
+    residual_galerkin_equation_max_stages: int,
+    residual_galerkin_equation_max_stage_rank: int,
+    residual_galerkin_equation_max_rank: int,
+    residual_galerkin_equation_solver: str,
+    residual_galerkin_equation_include_global_residual: bool,
+    residual_galerkin_equation_include_block_residuals: bool,
+    residual_galerkin_equation_include_operator_images: bool,
+    phase_space_residual_equation: bool,
+    phase_space_residual_equation_max_rank: int,
+    phase_space_residual_equation_solver: str,
+    phase_space_residual_equation_boundary: float,
+    phase_space_residual_equation_include_global: bool,
+    phase_space_residual_equation_include_radial: bool,
+    phase_space_residual_equation_include_species: bool,
+    residual_region_bounce_coarse: bool,
+    residual_region_bounce_coarse_max_rank: int,
+    residual_region_bounce_coarse_solver: str,
+    residual_region_bounce_coarse_boundary: float,
+    residual_region_bounce_coarse_min_energy: float,
+    residual_region_bounce_coarse_include_global: bool,
+    residual_region_bounce_coarse_include_radial: bool,
+    residual_region_bounce_coarse_include_species: bool,
+    residual_region_bounce_coarse_region_bands: str,
+    active_pattern_coarse: bool,
+    active_pattern_coarse_max_rank: int,
+    active_pattern_coarse_max_candidates: int,
+    active_pattern_coarse_solver: str,
+    active_pattern_coarse_min_chunk_energy: float,
+    active_pattern_coarse_include_global: bool,
+    block_schur_residual_equation: bool,
+    block_schur_residual_equation_max_rank: int,
+    block_schur_residual_equation_include_global: bool,
+    block_schur_residual_equation_include_blocks: bool,
+    block_schur_residual_equation_include_aggregates: bool,
+    coupled_residual_equation: bool,
+    coupled_residual_equation_max_rank: int,
+    coupled_residual_equation_solver: str,
+    coupled_residual_equation_include_flat: bool,
+    coupled_residual_equation_install_on_reject: bool,
+    coupled_residual_equation_min_improvement: float,
+    residual_snapshot_enrichment: bool,
+    residual_snapshot_max_rank: int,
+    residual_snapshot_include_primal: bool,
+    residual_snapshot_use_adjoint: bool,
+    residual_snapshot_include_global: bool,
+    residual_snapshot_include_blocks: bool,
+    residual_snapshot_include_aggregates: bool,
+    residual_snapshot_residual_equation: bool,
+    residual_snapshot_residual_equation_max_rank: int,
+    residual_snapshot_residual_equation_solver: str,
+    residual_snapshot_residual_equation_include_global: bool,
+    block_schur_residual_enrichment: bool,
+    block_schur_residual_max_rank: int,
+    block_schur_residual_include_global: bool,
+    block_schur_residual_include_blocks: bool,
+    block_schur_residual_include_aggregates: bool,
+) -> tuple[str, ...]:
+    """Return progress messages for optional QI-device coarse/residual features."""
+
+    prefix = "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
+    messages: list[str] = []
+    if not bool(assembled_device_operator_available):
+        messages.append(
+            prefix
+            + "QI device preconditioner using matrix-free coarse-only operator-on-basis fallback"
+        )
+    if bool(residual_enrichment):
+        messages.append(
+            prefix
+            + "QI device preconditioner residual enrichment "
+            f"(depth={int(residual_enrichment_depth)} max_rank={max_rank})"
+        )
+    if bool(operator_action_enrichment):
+        messages.append(
+            prefix
+            + "QI device preconditioner operator-action coarse enrichment "
+            f"(depth={int(operator_action_depth)} max_rank={max_rank})"
+        )
+    if bool(operator_krylov_enrichment):
+        messages.append(
+            prefix
+            + "QI device preconditioner operator-Krylov coarse enrichment "
+            f"(depth={int(operator_krylov_depth)} max_rank={max_rank})"
+        )
+    if bool(adjoint_krylov_enrichment):
+        messages.append(
+            prefix
+            + "QI device preconditioner adjoint-normal Krylov coarse enrichment "
+            f"(depth={int(adjoint_krylov_depth)} transpose={adjoint_krylov_transpose_source} "
+            f"max_rank={max_rank})"
+        )
+    if bool(multilevel_coarse):
+        messages.append(
+            prefix
+            + "QI device preconditioner multilevel angular-radial coarse reuse "
+            f"(levels={int(multilevel_max_levels)} "
+            f"aggregate_factor={int(multilevel_aggregate_factor)} "
+            f"pitch_degree={int(multilevel_max_pitch_degree)} "
+            f"current_moments={int(bool(multilevel_current_moments))} "
+            f"max_rank={multilevel_max_rank})"
+        )
+    if bool(multilevel_residual_equation):
+        messages.append(
+            prefix
+            + "QI device preconditioner multilevel residual equation "
+            f"(levels={int(multilevel_max_levels)} "
+            f"stage_rank={int(multilevel_residual_equation_max_level_rank)} "
+            f"order={multilevel_residual_equation_order} "
+            f"solver={multilevel_residual_equation_solver} "
+            f"include_global={int(bool(multilevel_residual_equation_include_global))})"
+        )
+    if bool(global_moment_residual_equation):
+        messages.append(
+            prefix
+            + "QI device preconditioner global moment residual equation "
+            f"(max_rank={int(global_moment_residual_equation_max_rank)} "
+            f"solver={global_moment_residual_equation_solver} "
+            f"profile={int(bool(global_moment_residual_equation_include_profile))} "
+            f"current={int(bool(global_moment_residual_equation_include_current))} "
+            f"tail={int(bool(global_moment_residual_equation_include_tail))})"
+        )
+    if bool(residual_galerkin_equation):
+        messages.append(
+            prefix
+            + "QI device preconditioner residual Galerkin equation "
+            f"(max_stages={int(residual_galerkin_equation_max_stages)} "
+            f"stage_rank={int(residual_galerkin_equation_max_stage_rank)} "
+            f"max_rank={int(residual_galerkin_equation_max_rank)} "
+            f"solver={residual_galerkin_equation_solver} "
+            f"global={int(bool(residual_galerkin_equation_include_global_residual))} "
+            f"blocks={int(bool(residual_galerkin_equation_include_block_residuals))} "
+            f"images={int(bool(residual_galerkin_equation_include_operator_images))})"
+        )
+    if bool(phase_space_residual_equation):
+        messages.append(
+            prefix
+            + "QI device preconditioner phase-space residual equation "
+            f"(max_rank={int(phase_space_residual_equation_max_rank)} "
+            f"solver={phase_space_residual_equation_solver} "
+            f"boundary={float(phase_space_residual_equation_boundary):.3e} "
+            f"include_global={int(bool(phase_space_residual_equation_include_global))} "
+            f"radial={int(bool(phase_space_residual_equation_include_radial))} "
+            f"species={int(bool(phase_space_residual_equation_include_species))})"
+        )
+    if bool(residual_region_bounce_coarse):
+        messages.append(
+            prefix
+            + "QI device preconditioner residual-region/bounce coarse "
+            f"(max_rank={int(residual_region_bounce_coarse_max_rank)} "
+            f"solver={residual_region_bounce_coarse_solver} "
+            f"boundary={float(residual_region_bounce_coarse_boundary):.3e} "
+            f"min_energy={float(residual_region_bounce_coarse_min_energy):.3e} "
+            f"include_global={int(bool(residual_region_bounce_coarse_include_global))} "
+            f"radial={int(bool(residual_region_bounce_coarse_include_radial))} "
+            f"species={int(bool(residual_region_bounce_coarse_include_species))} "
+            f"bands={residual_region_bounce_coarse_region_bands})"
+        )
+    if bool(active_pattern_coarse):
+        messages.append(
+            prefix
+            + "QI device preconditioner active-pattern coarse "
+            f"(max_rank={int(active_pattern_coarse_max_rank)} "
+            f"max_candidates={int(active_pattern_coarse_max_candidates)} "
+            f"solver={active_pattern_coarse_solver} "
+            f"min_energy={float(active_pattern_coarse_min_chunk_energy):.3e} "
+            f"include_global={int(bool(active_pattern_coarse_include_global))})"
+        )
+    if bool(block_schur_residual_equation):
+        messages.append(
+            prefix
+            + "QI device preconditioner block-Schur residual equation "
+            f"(max_rank={int(block_schur_residual_equation_max_rank)} "
+            f"include_global={int(bool(block_schur_residual_equation_include_global))} "
+            f"include_blocks={int(bool(block_schur_residual_equation_include_blocks))} "
+            f"include_aggregates={int(bool(block_schur_residual_equation_include_aggregates))})"
+        )
+    if bool(coupled_residual_equation):
+        messages.append(
+            prefix
+            + "QI device preconditioner coupled residual equation "
+            f"(max_rank={int(coupled_residual_equation_max_rank)} "
+            f"solver={coupled_residual_equation_solver} "
+            f"include_flat={int(bool(coupled_residual_equation_include_flat))} "
+            f"install_on_reject={int(bool(coupled_residual_equation_install_on_reject))} "
+            f"min_improvement={float(coupled_residual_equation_min_improvement):.3e})"
+        )
+    if bool(residual_snapshot_enrichment):
+        messages.append(
+            prefix
+            + "QI device preconditioner residual-snapshot coarse enrichment "
+            f"(max_rank={int(residual_snapshot_max_rank)} "
+            f"include_primal={int(bool(residual_snapshot_include_primal))} "
+            f"use_adjoint={int(bool(residual_snapshot_use_adjoint))} "
+            f"include_global={int(bool(residual_snapshot_include_global))} "
+            f"include_blocks={int(bool(residual_snapshot_include_blocks))} "
+            f"include_aggregates={int(bool(residual_snapshot_include_aggregates))})"
+        )
+    if bool(residual_snapshot_residual_equation):
+        messages.append(
+            prefix
+            + "QI device preconditioner residual-snapshot residual equation "
+            f"(max_rank={int(residual_snapshot_residual_equation_max_rank)} "
+            f"solver={residual_snapshot_residual_equation_solver} "
+            f"include_global={int(bool(residual_snapshot_residual_equation_include_global))} "
+            f"include_primal={int(bool(residual_snapshot_include_primal))} "
+            f"use_adjoint={int(bool(residual_snapshot_use_adjoint))} "
+            f"include_blocks={int(bool(residual_snapshot_include_blocks))} "
+            f"include_aggregates={int(bool(residual_snapshot_include_aggregates))})"
+        )
+    if bool(block_schur_residual_enrichment):
+        messages.append(
+            prefix
+            + "QI device preconditioner block-Schur residual coarse enrichment "
+            f"(max_rank={int(block_schur_residual_max_rank)} "
+            f"include_global={int(bool(block_schur_residual_include_global))} "
+            f"include_blocks={int(bool(block_schur_residual_include_blocks))} "
+            f"include_aggregates={int(bool(block_schur_residual_include_aggregates))})"
+        )
+    return tuple(messages)
+
+
 def rhs1_qi_device_probe_uses_minres_step() -> bool:
     """Return whether QI-device seed probes should line-search each correction."""
 
@@ -1418,6 +1670,7 @@ __all__ = (
     "rhs1_prefer_sparse_over_dense_shortcut",
     "rhs1_qi_device_extra_coarse_controls",
     "rhs1_qi_device_probe_uses_minres_step",
+    "rhs1_qi_device_progress_messages",
     "rhs1_qi_device_rank_budget",
     "rhs1_qi_device_residual_correction_controls",
     "rhs1_resolved_sparse_rescue_ordering",

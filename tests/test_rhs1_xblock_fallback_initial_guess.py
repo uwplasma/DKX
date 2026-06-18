@@ -7,6 +7,7 @@ from sfincs_jax.problems.profile_response.policies import (
     parse_rhs1_pas_tz_guarded_structured_levels,
     rhs1_qi_device_extra_coarse_controls,
     rhs1_qi_device_probe_uses_minres_step,
+    rhs1_qi_device_progress_messages,
     rhs1_qi_device_rank_budget,
     rhs1_qi_device_residual_correction_controls,
     rhs1_xblock_fallback_initial_guess,
@@ -25,6 +26,7 @@ def test_driver_private_policy_helpers_alias_canonical_profile_response_helpers(
         vd._rhs1_qi_device_probe_uses_minres_step
         is rhs1_qi_device_probe_uses_minres_step
     )
+    assert vd._rhs1_qi_device_progress_messages is rhs1_qi_device_progress_messages
     assert (
         vd._rhs1_qi_device_residual_correction_controls
         is rhs1_qi_device_residual_correction_controls
@@ -331,3 +333,134 @@ def test_qi_device_rank_budget_preserves_adjoint_only_no_cap_behavior() -> None:
 
     assert setup.rank_budget == 8
     assert setup.max_rank is None
+
+
+def _progress_messages(**overrides) -> tuple[str, ...]:
+    defaults = {
+        "assembled_device_operator_available": True,
+        "residual_enrichment": False,
+        "residual_enrichment_depth": 2,
+        "operator_action_enrichment": False,
+        "operator_action_depth": 1,
+        "operator_krylov_enrichment": False,
+        "operator_krylov_depth": 3,
+        "adjoint_krylov_enrichment": False,
+        "adjoint_krylov_depth": 4,
+        "adjoint_krylov_transpose_source": "csr",
+        "max_rank": None,
+        "multilevel_coarse": False,
+        "multilevel_max_levels": 2,
+        "multilevel_aggregate_factor": 3,
+        "multilevel_max_pitch_degree": 1,
+        "multilevel_current_moments": False,
+        "multilevel_max_rank": None,
+        "multilevel_residual_equation": False,
+        "multilevel_residual_equation_max_level_rank": 5,
+        "multilevel_residual_equation_order": "coarse_to_fine",
+        "multilevel_residual_equation_solver": "galerkin",
+        "multilevel_residual_equation_include_global": True,
+        "global_moment_residual_equation": False,
+        "global_moment_residual_equation_max_rank": 7,
+        "global_moment_residual_equation_solver": "action_lstsq",
+        "global_moment_residual_equation_include_profile": True,
+        "global_moment_residual_equation_include_current": True,
+        "global_moment_residual_equation_include_tail": False,
+        "residual_galerkin_equation": False,
+        "residual_galerkin_equation_max_stages": 2,
+        "residual_galerkin_equation_max_stage_rank": 3,
+        "residual_galerkin_equation_max_rank": 11,
+        "residual_galerkin_equation_solver": "galerkin",
+        "residual_galerkin_equation_include_global_residual": True,
+        "residual_galerkin_equation_include_block_residuals": True,
+        "residual_galerkin_equation_include_operator_images": False,
+        "phase_space_residual_equation": False,
+        "phase_space_residual_equation_max_rank": 13,
+        "phase_space_residual_equation_solver": "action_lstsq",
+        "phase_space_residual_equation_boundary": 0.35,
+        "phase_space_residual_equation_include_global": False,
+        "phase_space_residual_equation_include_radial": True,
+        "phase_space_residual_equation_include_species": True,
+        "residual_region_bounce_coarse": False,
+        "residual_region_bounce_coarse_max_rank": 17,
+        "residual_region_bounce_coarse_solver": "galerkin",
+        "residual_region_bounce_coarse_boundary": 0.25,
+        "residual_region_bounce_coarse_min_energy": 0.02,
+        "residual_region_bounce_coarse_include_global": True,
+        "residual_region_bounce_coarse_include_radial": False,
+        "residual_region_bounce_coarse_include_species": True,
+        "residual_region_bounce_coarse_region_bands": "bounce,trapped",
+        "active_pattern_coarse": False,
+        "active_pattern_coarse_max_rank": 19,
+        "active_pattern_coarse_max_candidates": 23,
+        "active_pattern_coarse_solver": "action_lstsq",
+        "active_pattern_coarse_min_chunk_energy": 0.03,
+        "active_pattern_coarse_include_global": True,
+        "block_schur_residual_equation": False,
+        "block_schur_residual_equation_max_rank": 29,
+        "block_schur_residual_equation_include_global": True,
+        "block_schur_residual_equation_include_blocks": True,
+        "block_schur_residual_equation_include_aggregates": False,
+        "coupled_residual_equation": False,
+        "coupled_residual_equation_max_rank": 31,
+        "coupled_residual_equation_solver": "galerkin",
+        "coupled_residual_equation_include_flat": True,
+        "coupled_residual_equation_install_on_reject": False,
+        "coupled_residual_equation_min_improvement": 0.1,
+        "residual_snapshot_enrichment": False,
+        "residual_snapshot_max_rank": 37,
+        "residual_snapshot_include_primal": True,
+        "residual_snapshot_use_adjoint": True,
+        "residual_snapshot_include_global": True,
+        "residual_snapshot_include_blocks": False,
+        "residual_snapshot_include_aggregates": True,
+        "residual_snapshot_residual_equation": False,
+        "residual_snapshot_residual_equation_max_rank": 41,
+        "residual_snapshot_residual_equation_solver": "action_lstsq",
+        "residual_snapshot_residual_equation_include_global": True,
+        "block_schur_residual_enrichment": False,
+        "block_schur_residual_max_rank": 43,
+        "block_schur_residual_include_global": True,
+        "block_schur_residual_include_blocks": True,
+        "block_schur_residual_include_aggregates": True,
+    }
+    defaults.update(overrides)
+    return rhs1_qi_device_progress_messages(**defaults)
+
+
+def test_qi_device_progress_messages_stays_quiet_without_active_features() -> None:
+    assert _progress_messages() == ()
+
+
+def test_qi_device_progress_messages_reports_matrix_free_fallback() -> None:
+    messages = _progress_messages(assembled_device_operator_available=False)
+
+    assert len(messages) == 1
+    assert "matrix-free coarse-only operator-on-basis fallback" in messages[0]
+
+
+def test_qi_device_progress_messages_reports_enabled_feature_parameters() -> None:
+    messages = _progress_messages(
+        residual_enrichment=True,
+        residual_enrichment_depth=5,
+        max_rank=9,
+        coupled_residual_equation=True,
+        coupled_residual_equation_max_rank=15,
+        coupled_residual_equation_include_flat=False,
+        coupled_residual_equation_install_on_reject=True,
+        coupled_residual_equation_min_improvement=0.25,
+        residual_snapshot_residual_equation=True,
+        residual_snapshot_residual_equation_max_rank=21,
+        residual_snapshot_include_blocks=True,
+    )
+
+    assert len(messages) == 3
+    assert "residual enrichment (depth=5 max_rank=9)" in messages[0]
+    assert (
+        "coupled residual equation (max_rank=15 solver=galerkin include_flat=0 "
+        "install_on_reject=1 min_improvement=2.500e-01)"
+    ) in messages[1]
+    assert (
+        "residual-snapshot residual equation (max_rank=21 solver=action_lstsq "
+        "include_global=1 include_primal=1 use_adjoint=1 include_blocks=1 "
+        "include_aggregates=1)"
+    ) in messages[2]
