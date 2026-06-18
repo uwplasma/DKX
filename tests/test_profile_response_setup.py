@@ -7,6 +7,7 @@ from sfincs_jax.problems.profile_response.setup import (
     equilibrium_name_hint_from_namelist,
     geometry_scheme_hint_from_namelist,
     resolve_rhs1_gmres_budget_setup,
+    resolve_rhs1_preconditioner_option_setup,
     resolve_rhs1_tolerance_setup,
     resolve_solve_method_request_flags,
 )
@@ -32,6 +33,7 @@ class FakeOperator:
     include_phi1: bool
     constraint_scheme: int
     total_size: int
+    phi1_size: int
     fblock: FakeFBlock
 
 
@@ -68,6 +70,7 @@ def test_rhs1_tolerance_setup_tightens_only_matching_physics_lanes() -> None:
         include_phi1=False,
         constraint_scheme=1,
         total_size=90000,
+        phi1_size=0,
         fblock=FakeFBlock(fp=object(), pas=None),
     )
     fp_setup = resolve_rhs1_tolerance_setup(op=fp_op, tol=1e-6, env={})
@@ -81,6 +84,7 @@ def test_rhs1_tolerance_setup_tightens_only_matching_physics_lanes() -> None:
         include_phi1=False,
         constraint_scheme=2,
         total_size=2000,
+        phi1_size=0,
         fblock=FakeFBlock(fp=None, pas=object()),
     )
     pas_setup = resolve_rhs1_tolerance_setup(
@@ -118,3 +122,61 @@ def test_solve_method_request_flags_preserve_driver_aliases() -> None:
         xblock_active_dof_env="maybe",
     )
     assert not invalid_env.xblock_active_dof_requested
+
+
+def test_preconditioner_option_setup_controls_pas_projection() -> None:
+    nml = FakeNamelist(
+        {
+            "preconditionerOptions": {
+                "PRECONDITIONER_SPECIES": "1",
+                "PRECONDITIONER_X": "1",
+                "PRECONDITIONER_XI": "1",
+                "PRECONDITIONER_X_MIN_L": "2",
+            },
+            "geometryParameters": {"geometryScheme": "5"},
+        }
+    )
+    op = FakeOperator(
+        rhs_mode=1,
+        include_phi1=False,
+        constraint_scheme=2,
+        total_size=3000,
+        phi1_size=0,
+        fblock=FakeFBlock(fp=None, pas=object()),
+    )
+
+    setup = resolve_rhs1_preconditioner_option_setup(
+        nml=nml,
+        op=op,
+        sparse_host_like_requested=False,
+        use_active_dof_mode=False,
+        env={},
+    )
+
+    assert setup.preconditioner_x_min_l == 2
+    assert setup.geom_scheme == 5
+    assert setup.pas_project_mode == "auto"
+    assert setup.use_pas_projection
+    assert setup.use_active_dof_mode
+
+    full_precond = FakeNamelist(
+        {
+            "preconditionerOptions": {
+                "PRECONDITIONER_SPECIES": "0",
+                "PRECONDITIONER_X": "0",
+                "PRECONDITIONER_XI": "0",
+            },
+            "geometryParameters": {"geometryScheme": "5"},
+        }
+    )
+    disabled = resolve_rhs1_preconditioner_option_setup(
+        nml=full_precond,
+        op=op,
+        sparse_host_like_requested=False,
+        use_active_dof_mode=False,
+        env={},
+    )
+
+    assert disabled.full_preconditioner_requested
+    assert not disabled.pas_project_enabled
+    assert not disabled.use_pas_projection

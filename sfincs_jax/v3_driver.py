@@ -200,6 +200,7 @@ from .problems.profile_response.setup import (
     equilibrium_name_hint_from_namelist,
     geometry_scheme_hint_from_namelist,
     resolve_rhs1_gmres_budget_setup,
+    resolve_rhs1_preconditioner_option_setup,
     resolve_rhs1_tolerance_setup,
     resolve_solve_method_request_flags,
 )
@@ -3497,61 +3498,21 @@ def solve_v3_full_system_linear_gmres(
     use_active_dof_mode = bool(active_dof_decision.use_active_dof_mode)
 
     precond_opts = nml.group("preconditionerOptions")
-    pas_project_env = os.environ.get("SFINCS_JAX_PAS_PROJECT_CONSTRAINTS", "").strip().lower()
-    if pas_project_env in {"1", "true", "yes", "on"}:
-        pas_project_mode = "on"
-    elif pas_project_env in {"0", "false", "no", "off"}:
-        pas_project_mode = "off"
-    elif pas_project_env in {"", "auto"}:
-        pas_project_mode = "auto"
-    else:
-        pas_project_mode = "off"
-    def _precond_opt_int(key: str, default: int) -> int:
-        val = precond_opts.get(key, None)
-        if val is None:
-            return default
-        try:
-            return int(val)
-        except (TypeError, ValueError):
-            return default
-
-    preconditioner_species = _precond_opt_int("PRECONDITIONER_SPECIES", 1)
-    preconditioner_x = _precond_opt_int("PRECONDITIONER_X", 1)
-    preconditioner_x_min_l = _precond_opt_int("PRECONDITIONER_X_MIN_L", 0)
-    preconditioner_xi = _precond_opt_int("PRECONDITIONER_XI", 1)
-    full_precond_requested = (
-        preconditioner_species == 0 and preconditioner_x == 0 and preconditioner_xi == 0
+    precond_option_setup = resolve_rhs1_preconditioner_option_setup(
+        nml=nml,
+        op=op,
+        sparse_host_like_requested=bool(sparse_host_like_requested),
+        use_active_dof_mode=bool(use_active_dof_mode),
+        env=os.environ,
     )
-    geom_params = nml.group("geometryParameters")
-    geom_scheme = int(_nml_get(geom_params, "geometryScheme", -1) or -1)
-    pas_project_enabled = bool(
-        pas_project_mode == "on"
-        or (
-            pas_project_mode == "auto"
-            and not full_precond_requested
-            and geom_scheme != 1
-        )
-    )
-    use_pas_projection = bool(
-        (not sparse_host_like_requested)
-        and pas_project_enabled
-        and int(op.rhs_mode) == 1
-        and (not bool(op.include_phi1))
-        and int(op.constraint_scheme) == 2
-        and op.fblock.pas is not None
-        and int(op.phi1_size) == 0
-    )
-    if use_pas_projection:
-        pas_project_min_env = os.environ.get("SFINCS_JAX_PAS_PROJECT_MIN", "").strip()
-        try:
-            pas_project_min = int(pas_project_min_env) if pas_project_min_env else 2000
-        except ValueError:
-            pas_project_min = 2000
-        if int(op.total_size) < max(0, int(pas_project_min)):
-            use_pas_projection = False
-    if use_pas_projection:
-        # Force a reduced system when projecting out constraintScheme=2 sources.
-        use_active_dof_mode = True
+    preconditioner_species = int(precond_option_setup.preconditioner_species)
+    preconditioner_x = int(precond_option_setup.preconditioner_x)
+    preconditioner_x_min_l = int(precond_option_setup.preconditioner_x_min_l)
+    preconditioner_xi = int(precond_option_setup.preconditioner_xi)
+    full_precond_requested = bool(precond_option_setup.full_preconditioner_requested)
+    geom_scheme = int(precond_option_setup.geom_scheme)
+    use_pas_projection = bool(precond_option_setup.use_pas_projection)
+    use_active_dof_mode = bool(precond_option_setup.use_active_dof_mode)
 
     active_idx_jnp: jnp.ndarray | None = None
     full_to_active_jnp: jnp.ndarray | None = None

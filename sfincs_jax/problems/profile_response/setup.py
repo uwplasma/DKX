@@ -121,6 +121,22 @@ class SolveMethodRequestFlags:
     structured_full_csr_explicit_requested: bool
 
 
+@dataclass(frozen=True)
+class RHS1PreconditionerOptionSetup:
+    """Parsed RHSMode=1 preconditioner options and PAS projection admission."""
+
+    preconditioner_species: int
+    preconditioner_x: int
+    preconditioner_x_min_l: int
+    preconditioner_xi: int
+    full_preconditioner_requested: bool
+    geom_scheme: int
+    pas_project_mode: str
+    pas_project_enabled: bool
+    use_pas_projection: bool
+    use_active_dof_mode: bool
+
+
 def _env_value(env: Mapping[str, str] | None, key: str) -> str:
     source = env if env is not None else {}
     return str(source.get(key, "")).strip()
@@ -139,6 +155,28 @@ def _read_int(env: Mapping[str, str] | None, key: str, default: int) -> int:
     try:
         return int(raw) if raw else int(default)
     except ValueError:
+        return int(default)
+
+
+def _nml_get(group: Mapping[str, object], key: str, default: object | None = None) -> object | None:
+    if key in group:
+        return group[key]
+    key_upper = key.upper()
+    if key_upper in group:
+        return group[key_upper]
+    key_lower = key.lower()
+    if key_lower in group:
+        return group[key_lower]
+    return default
+
+
+def _preconditioner_option_int(options: Mapping[str, object], key: str, default: int) -> int:
+    value = options.get(key, None)
+    if value is None:
+        return int(default)
+    try:
+        return int(value)
+    except (TypeError, ValueError):
         return int(default)
 
 
@@ -305,8 +343,78 @@ def resolve_solve_method_request_flags(
     )
 
 
+def resolve_rhs1_preconditioner_option_setup(
+    *,
+    nml: Any,
+    op: Any,
+    sparse_host_like_requested: bool,
+    use_active_dof_mode: bool,
+    env: Mapping[str, str] | None = None,
+) -> RHS1PreconditionerOptionSetup:
+    """Parse preconditioner options and PAS projection admission.
+
+    This is intentionally pure: it does not build active indices or
+    preconditioners.  It only mirrors the driver's historical setup decisions.
+    """
+
+    precond_opts = nml.group("preconditionerOptions")
+    preconditioner_species = _preconditioner_option_int(precond_opts, "PRECONDITIONER_SPECIES", 1)
+    preconditioner_x = _preconditioner_option_int(precond_opts, "PRECONDITIONER_X", 1)
+    preconditioner_x_min_l = _preconditioner_option_int(precond_opts, "PRECONDITIONER_X_MIN_L", 0)
+    preconditioner_xi = _preconditioner_option_int(precond_opts, "PRECONDITIONER_XI", 1)
+    full_precond_requested = bool(
+        preconditioner_species == 0 and preconditioner_x == 0 and preconditioner_xi == 0
+    )
+    pas_project_env = _env_value(env, "SFINCS_JAX_PAS_PROJECT_CONSTRAINTS").lower()
+    if pas_project_env in {"1", "true", "yes", "on"}:
+        pas_project_mode = "on"
+    elif pas_project_env in {"0", "false", "no", "off"}:
+        pas_project_mode = "off"
+    elif pas_project_env in {"", "auto"}:
+        pas_project_mode = "auto"
+    else:
+        pas_project_mode = "off"
+    geom_params = nml.group("geometryParameters")
+    geom_scheme = int(_nml_get(geom_params, "geometryScheme", -1) or -1)
+    pas_project_enabled = bool(
+        pas_project_mode == "on"
+        or (
+            pas_project_mode == "auto"
+            and not full_precond_requested
+            and geom_scheme != 1
+        )
+    )
+    use_pas_projection = bool(
+        (not sparse_host_like_requested)
+        and pas_project_enabled
+        and int(op.rhs_mode) == 1
+        and (not bool(op.include_phi1))
+        and int(op.constraint_scheme) == 2
+        and op.fblock.pas is not None
+        and int(op.phi1_size) == 0
+    )
+    if use_pas_projection:
+        pas_project_min = _read_int(env, "SFINCS_JAX_PAS_PROJECT_MIN", 2000)
+        if int(op.total_size) < max(0, int(pas_project_min)):
+            use_pas_projection = False
+    use_active = bool(use_active_dof_mode or use_pas_projection)
+    return RHS1PreconditionerOptionSetup(
+        preconditioner_species=int(preconditioner_species),
+        preconditioner_x=int(preconditioner_x),
+        preconditioner_x_min_l=int(preconditioner_x_min_l),
+        preconditioner_xi=int(preconditioner_xi),
+        full_preconditioner_requested=bool(full_precond_requested),
+        geom_scheme=int(geom_scheme),
+        pas_project_mode=str(pas_project_mode),
+        pas_project_enabled=bool(pas_project_enabled),
+        use_pas_projection=bool(use_pas_projection),
+        use_active_dof_mode=bool(use_active),
+    )
+
+
 __all__ = (
     "RHS1GmresBudgetSetup",
+    "RHS1PreconditionerOptionSetup",
     "RHS1ToleranceSetup",
     "SPARSE_HOST_DIRECT_SOLVE_METHODS",
     "SPARSE_HOST_FORTRAN_REDUCED_PC_GMRES_SOLVE_METHODS",
@@ -321,6 +429,7 @@ __all__ = (
     "geometry_scheme_hint_from_namelist",
     "normalize_profile_solve_method_kind",
     "resolve_rhs1_gmres_budget_setup",
+    "resolve_rhs1_preconditioner_option_setup",
     "resolve_rhs1_tolerance_setup",
     "resolve_solve_method_request_flags",
 )

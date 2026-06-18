@@ -32168,15 +32168,18 @@ Implementation:
 
 - Added ``sfincs_jax/problems/profile_response/setup.py`` with typed helpers for
   GMRES restart/maxiter environment overrides, geometry/equilibrium progress
-  hints, FP/PAS tolerance tightening, and solve-method request classification.
+  hints, FP/PAS tolerance tightening, solve-method request classification, and
+  preconditioner-option/PAS-projection admission.
 - Moved RHSMode=1 sparse/structured solve-method alias sets into that setup
   module and imported them back into ``v3_driver.py`` as the historical private
   names.
 - Replaced duplicated restart/maxiter parsing, geometry hint parsing,
-  tolerance-tightening, and solve-method classification in
+  tolerance-tightening, solve-method classification, preconditioner-option
+  parsing, and PAS-projection admission in
   ``solve_v3_full_system_linear_gmres`` with setup-helper calls.
 - Added focused unit tests for the setup helpers, including invalid-env behavior
-  and preservation of the original safe-sparse alias set.
+  preservation of the original safe-sparse alias set, and PAS-projection
+  enable/disable behavior.
 
 Validation so far:
 
@@ -32189,5 +32192,6 @@ Validation so far:
   tests/test_v3_sparse_pattern.py::test_fortran_reduced_pc_gmres_solve_method_solves_tiny_rhs1_system
   tests/test_v3_sparse_pattern.py::test_auto_selects_fortran_reduced_pc_gmres_for_large_full_fp_rhs1
   tests/test_v3_sparse_pattern.py::test_fortran_reduced_pc_auto_uses_active_dof_for_truncated_modes
-  tests/test_v3_driver_pas_precond_policy_coverage.py``:
-  ``22 passed in 3.81 s``.
+  tests/test_v3_driver_pas_precond_policy_coverage.py
+  tests/test_rhs1_schur_policy.py``:
+  ``29 passed in 3.87 s``.
