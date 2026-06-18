@@ -35544,3 +35544,40 @@ Next refactor target:
 
 - Move generic sparse-PC result metadata into diagnostics, or extract the
   generic sparse-PC pattern/factor setup in the same incremental style.
+
+### 19.127 Generic sparse-PC direct-tail metadata extraction
+
+Goal:
+
+- Remove the direct-tail production-path metadata block from
+  ``solve_v3_full_system_linear_gmres`` without changing solver selection,
+  preconditioner construction, residual admission, or report keys.
+
+Implementation:
+
+- Added ``sparse_pc_direct_tail_result_metadata`` to
+  ``problems/profile_response/diagnostics.py`` as the stable metadata builder
+  for the generic RHSMode=1 direct-tail sparse-PC diagnostics.
+- Updated ``v3_driver.py`` to call the diagnostics helper from the
+  ``sparse_pc_gmres``/``fortran_reduced_pc_gmres`` return metadata while
+  keeping the factor-preflight diagnostics in the driver-owned metadata.
+- Added a focused diagnostics test covering direct-tail operator metadata,
+  byte-to-MB conversion, nullable species counts, window-spec normalization,
+  and pass-through metadata payloads.
+- ``v3_driver.py`` is now about ``20207`` lines and
+  ``solve_v3_full_system_linear_gmres`` about ``14900`` lines.
+
+Validation:
+
+- ``python -m ruff check`` on touched source/tests: passed.
+- ``python -m compileall -q`` on touched source/tests: passed.
+- Focused diagnostics/sparse-PC shard, including the previously regressed
+  direct-tail production tests: ``104 passed``.
+- Broader current profile-response/x-block/sparse-pattern shard:
+  ``370 passed in 113.87 s``.
+
+Next refactor target:
+
+- Extract the generic sparse-PC factor/pattern setup boundary, then continue
+  moving remaining generic sparse-PC result metadata into diagnostics in
+  smaller typed helpers.

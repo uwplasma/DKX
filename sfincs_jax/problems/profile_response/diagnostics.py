@@ -138,6 +138,603 @@ def sparse_rescue_tail_metadata(scope: Mapping[str, object]) -> dict[str, object
     }
 
 
+def _state_bool(state: Mapping[str, object], name: str) -> bool:
+    return bool(state[name])
+
+
+def _state_int(state: Mapping[str, object], name: str) -> int:
+    return int(state[name])
+
+
+def _state_float(state: Mapping[str, object], name: str) -> float:
+    return float(state[name])
+
+
+def _state_str(state: Mapping[str, object], name: str) -> str:
+    return str(state[name])
+
+
+def sparse_pc_direct_tail_result_metadata(
+    state: Mapping[str, object],
+) -> dict[str, object]:
+    """Return direct-tail sparse-PC diagnostics for RHSMode=1 solve metadata.
+
+    The direct-tail production path has many setup knobs and admission results.
+    Keeping these conversions in one pure metadata helper makes the driver
+    smaller while preserving the stable keys consumed by benchmark and handoff
+    reports.
+    """
+
+    direct_tail_operator_bundle = state["direct_tail_operator_bundle"]
+    direct_tail_structured_max_nbytes = state["direct_tail_structured_max_nbytes"]
+    operator_metadata = (
+        None
+        if direct_tail_operator_bundle is None
+        else direct_tail_operator_bundle.metadata
+    )
+
+    return {
+        "sparse_pc_direct_tail_structured_pc_preflight_required": _state_bool(
+            state,
+            "structured_pc_preflight_required",
+        ),
+        "sparse_pc_direct_tail_structured_pc_preflight_required_min_size": _state_int(
+            state,
+            "structured_pc_preflight_required_min_size",
+        ),
+        "sparse_pc_direct_tail_residual_coarse_requested": _state_bool(
+            state,
+            "direct_tail_residual_coarse_requested",
+        ),
+        "sparse_pc_direct_tail_residual_coarse_selected": _state_bool(
+            state,
+            "direct_tail_residual_coarse_selected",
+        ),
+        "sparse_pc_direct_tail_residual_coarse_rank": _state_int(
+            state,
+            "direct_tail_residual_coarse_rank",
+        ),
+        "sparse_pc_direct_tail_residual_coarse_max_mb": _state_float(
+            state,
+            "direct_tail_residual_coarse_max_mb",
+        ),
+        "sparse_pc_direct_tail_residual_coarse_regularization": _state_float(
+            state,
+            "direct_tail_residual_coarse_regularization",
+        ),
+        "sparse_pc_direct_tail_residual_coarse_residual_after": state[
+            "direct_tail_residual_coarse_residual_after"
+        ],
+        "sparse_pc_direct_tail_residual_coarse_error": state[
+            "direct_tail_residual_coarse_error"
+        ],
+        "sparse_pc_direct_tail_residual_coarse_metadata": state[
+            "direct_tail_residual_coarse_metadata"
+        ],
+        "sparse_pc_direct_tail_true_coupled_coarse_requested": _state_bool(
+            state,
+            "direct_tail_true_coupled_coarse_requested",
+        ),
+        "sparse_pc_direct_tail_true_coupled_coarse_explicit_requested": _state_bool(
+            state,
+            "direct_tail_true_coupled_coarse_explicit_requested",
+        ),
+        "sparse_pc_direct_tail_true_coupled_coarse_auto_enabled": _state_bool(
+            state,
+            "direct_tail_true_coupled_coarse_auto_enabled",
+        ),
+        "sparse_pc_direct_tail_true_coupled_coarse_auto_native_enabled": _state_bool(
+            state,
+            "direct_tail_true_coupled_coarse_auto_native_enabled",
+        ),
+        "sparse_pc_direct_tail_true_coupled_coarse_auto_selected": _state_bool(
+            state,
+            "direct_tail_true_coupled_coarse_auto_selected",
+        ),
+        "sparse_pc_direct_tail_true_coupled_coarse_auto_target_ratio": _state_float(
+            state,
+            "direct_tail_true_coupled_coarse_auto_target_ratio",
+        ),
+        "sparse_pc_direct_tail_true_coupled_coarse_auto_min_size": _state_int(
+            state,
+            "direct_tail_true_coupled_coarse_auto_min_size",
+        ),
+        "sparse_pc_direct_tail_true_coupled_coarse_selected": _state_bool(
+            state,
+            "direct_tail_true_coupled_coarse_selected",
+        ),
+        "sparse_pc_direct_tail_true_coupled_coarse_max_windows": _state_int(
+            state,
+            "direct_tail_true_coupled_coarse_max_windows",
+        ),
+        "sparse_pc_direct_tail_true_coupled_coarse_x_radius": _state_int(
+            state,
+            "direct_tail_true_coupled_coarse_x_radius",
+        ),
+        "sparse_pc_direct_tail_true_coupled_coarse_ell_radius": _state_int(
+            state,
+            "direct_tail_true_coupled_coarse_ell_radius",
+        ),
+        "sparse_pc_direct_tail_true_coupled_coarse_max_mb": _state_float(
+            state,
+            "direct_tail_true_coupled_coarse_max_mb",
+        ),
+        "sparse_pc_direct_tail_true_coupled_coarse_regularization": _state_float(
+            state,
+            "direct_tail_true_coupled_coarse_regularization",
+        ),
+        "sparse_pc_direct_tail_true_coupled_coarse_max_size": _state_int(
+            state,
+            "direct_tail_true_coupled_coarse_max_size",
+        ),
+        "sparse_pc_direct_tail_true_coupled_coarse_column_batch": _state_int(
+            state,
+            "direct_tail_true_coupled_coarse_column_batch",
+        ),
+        "sparse_pc_direct_tail_true_coupled_coarse_drop_tol": _state_float(
+            state,
+            "direct_tail_true_coupled_coarse_drop_tol",
+        ),
+        "sparse_pc_direct_tail_true_coupled_coarse_low_lmax": _state_int(
+            state,
+            "direct_tail_true_coupled_coarse_low_lmax",
+        ),
+        "sparse_pc_direct_tail_true_coupled_coarse_profile_moment_count": _state_int(
+            state,
+            "direct_tail_true_coupled_coarse_profile_moment_count",
+        ),
+        "sparse_pc_direct_tail_true_coupled_coarse_angular_lmax": _state_int(
+            state,
+            "direct_tail_true_coupled_coarse_angular_lmax",
+        ),
+        "sparse_pc_direct_tail_true_coupled_coarse_angular_mode_max": _state_int(
+            state,
+            "direct_tail_true_coupled_coarse_angular_mode_max",
+        ),
+        "sparse_pc_direct_tail_true_coupled_coarse_max_tail_units": _state_int(
+            state,
+            "direct_tail_true_coupled_coarse_max_tail_units",
+        ),
+        "sparse_pc_direct_tail_true_coupled_coarse_include_tail": _state_bool(
+            state,
+            "direct_tail_true_coupled_coarse_include_tail",
+        ),
+        "sparse_pc_direct_tail_true_coupled_coarse_include_constraint_sources": _state_bool(
+            state,
+            "direct_tail_true_coupled_coarse_include_constraint_sources",
+        ),
+        "sparse_pc_direct_tail_true_coupled_coarse_include_fsavg": _state_bool(
+            state,
+            "direct_tail_true_coupled_coarse_include_fsavg",
+        ),
+        "sparse_pc_direct_tail_true_coupled_coarse_include_window_residual": _state_bool(
+            state,
+            "direct_tail_true_coupled_coarse_include_window_residual",
+        ),
+        "sparse_pc_direct_tail_true_coupled_coarse_include_profile_moments": _state_bool(
+            state,
+            "direct_tail_true_coupled_coarse_include_profile_moments",
+        ),
+        "sparse_pc_direct_tail_true_coupled_coarse_include_angular_residual": _state_bool(
+            state,
+            "direct_tail_true_coupled_coarse_include_angular_residual",
+        ),
+        "sparse_pc_direct_tail_true_coupled_coarse_include_angular_basis": _state_bool(
+            state,
+            "direct_tail_true_coupled_coarse_include_angular_basis",
+        ),
+        "sparse_pc_direct_tail_true_coupled_coarse_include_preconditioned_loads": _state_bool(
+            state,
+            "direct_tail_true_coupled_coarse_include_preconditioned_loads",
+        ),
+        "sparse_pc_direct_tail_true_coupled_coarse_preconditioned_load_max_columns": _state_int(
+            state,
+            "direct_tail_true_coupled_coarse_preconditioned_load_max_columns",
+        ),
+        "sparse_pc_direct_tail_true_coupled_coarse_preconditioned_load_max_nnz": _state_int(
+            state,
+            "direct_tail_true_coupled_coarse_preconditioned_load_max_nnz",
+        ),
+        "sparse_pc_direct_tail_true_coupled_coarse_preconditioned_load_drop_tol": _state_float(
+            state,
+            "direct_tail_true_coupled_coarse_preconditioned_load_drop_tol",
+        ),
+        "sparse_pc_direct_tail_true_coupled_coarse_damping": _state_bool(
+            state,
+            "direct_tail_true_coupled_coarse_damping",
+        ),
+        "sparse_pc_direct_tail_true_coupled_coarse_beta_max": _state_float(
+            state,
+            "direct_tail_true_coupled_coarse_beta_max",
+        ),
+        "sparse_pc_direct_tail_true_coupled_coarse_accept_base_improvement": _state_bool(
+            state,
+            "direct_tail_true_coupled_coarse_accept_base_improvement",
+        ),
+        "sparse_pc_direct_tail_true_coupled_coarse_base_improvement_override_used": _state_bool(
+            state,
+            "direct_tail_true_coupled_coarse_base_improvement_override_used",
+        ),
+        "sparse_pc_direct_tail_true_coupled_coarse_residual_after": state[
+            "direct_tail_true_coupled_coarse_residual_after"
+        ],
+        "sparse_pc_direct_tail_true_coupled_coarse_error": state[
+            "direct_tail_true_coupled_coarse_error"
+        ],
+        "sparse_pc_direct_tail_true_coupled_coarse_metadata": state[
+            "direct_tail_true_coupled_coarse_metadata"
+        ],
+        "sparse_pc_direct_tail_true_active_submatrix_requested": _state_bool(
+            state,
+            "direct_tail_true_active_submatrix_requested",
+        ),
+        "sparse_pc_direct_tail_true_active_submatrix_selected": _state_bool(
+            state,
+            "direct_tail_true_active_submatrix_selected",
+        ),
+        "sparse_pc_direct_tail_true_active_submatrix_damping": _state_bool(
+            state,
+            "direct_tail_true_active_submatrix_damping",
+        ),
+        "sparse_pc_direct_tail_true_active_submatrix_alpha_clip": _state_float(
+            state,
+            "direct_tail_true_active_submatrix_alpha_clip",
+        ),
+        "sparse_pc_direct_tail_true_active_submatrix_min_improvement": _state_float(
+            state,
+            "direct_tail_true_active_submatrix_min_improvement",
+        ),
+        "sparse_pc_direct_tail_true_active_submatrix_residual_after": state[
+            "direct_tail_true_active_submatrix_residual_after"
+        ],
+        "sparse_pc_direct_tail_true_active_submatrix_error": state[
+            "direct_tail_true_active_submatrix_error"
+        ],
+        "sparse_pc_direct_tail_true_active_submatrix_metadata": state[
+            "direct_tail_true_active_submatrix_metadata"
+        ],
+        "sparse_pc_direct_tail_true_active_column_cache_requested": _state_bool(
+            state,
+            "direct_tail_true_active_column_cache_requested",
+        ),
+        "sparse_pc_direct_tail_true_active_column_cache_max_mb": _state_float(
+            state,
+            "direct_tail_true_active_column_cache_max_mb",
+        ),
+        "sparse_pc_direct_tail_true_active_column_cache_metadata": state[
+            "direct_tail_true_active_column_cache_metadata"
+        ],
+        "sparse_pc_direct_tail_true_active_block_requested": _state_bool(
+            state,
+            "direct_tail_true_active_block_requested",
+        ),
+        "sparse_pc_direct_tail_true_active_block_selected": _state_bool(
+            state,
+            "direct_tail_true_active_block_selected",
+        ),
+        "sparse_pc_direct_tail_true_active_block_x_count": _state_int(
+            state,
+            "direct_tail_true_active_block_x_count",
+        ),
+        "sparse_pc_direct_tail_true_active_block_ell_count": _state_int(
+            state,
+            "direct_tail_true_active_block_ell_count",
+        ),
+        "sparse_pc_direct_tail_true_active_block_species_count": (
+            None
+            if state["direct_tail_true_active_block_species_count"] is None
+            else int(state["direct_tail_true_active_block_species_count"])
+        ),
+        "sparse_pc_direct_tail_true_active_block_theta_stride": _state_int(
+            state,
+            "direct_tail_true_active_block_theta_stride",
+        ),
+        "sparse_pc_direct_tail_true_active_block_zeta_stride": _state_int(
+            state,
+            "direct_tail_true_active_block_zeta_stride",
+        ),
+        "sparse_pc_direct_tail_true_active_block_max_mb": _state_float(
+            state,
+            "direct_tail_true_active_block_max_mb",
+        ),
+        "sparse_pc_direct_tail_true_active_block_regularization": _state_float(
+            state,
+            "direct_tail_true_active_block_regularization",
+        ),
+        "sparse_pc_direct_tail_true_active_block_max_size": _state_int(
+            state,
+            "direct_tail_true_active_block_max_size",
+        ),
+        "sparse_pc_direct_tail_true_active_block_column_batch": _state_int(
+            state,
+            "direct_tail_true_active_block_column_batch",
+        ),
+        "sparse_pc_direct_tail_true_active_block_drop_tol": _state_float(
+            state,
+            "direct_tail_true_active_block_drop_tol",
+        ),
+        "sparse_pc_direct_tail_true_active_block_include_tail": _state_bool(
+            state,
+            "direct_tail_true_active_block_include_tail",
+        ),
+        "sparse_pc_direct_tail_true_active_block_max_tail": _state_int(
+            state,
+            "direct_tail_true_active_block_max_tail",
+        ),
+        "sparse_pc_direct_tail_true_active_block_damping": _state_bool(
+            state,
+            "direct_tail_true_active_block_damping",
+        ),
+        "sparse_pc_direct_tail_true_active_block_beta_max": _state_float(
+            state,
+            "direct_tail_true_active_block_beta_max",
+        ),
+        "sparse_pc_direct_tail_true_active_block_residual_after": state[
+            "direct_tail_true_active_block_residual_after"
+        ],
+        "sparse_pc_direct_tail_true_active_block_error": state[
+            "direct_tail_true_active_block_error"
+        ],
+        "sparse_pc_direct_tail_true_active_block_metadata": state[
+            "direct_tail_true_active_block_metadata"
+        ],
+        "sparse_pc_direct_tail_true_active_residual_block_requested": _state_bool(
+            state,
+            "direct_tail_true_active_residual_block_requested",
+        ),
+        "sparse_pc_direct_tail_true_active_residual_block_selected": _state_bool(
+            state,
+            "direct_tail_true_active_residual_block_selected",
+        ),
+        "sparse_pc_direct_tail_true_active_residual_block_max_mb": _state_float(
+            state,
+            "direct_tail_true_active_residual_block_max_mb",
+        ),
+        "sparse_pc_direct_tail_true_active_residual_block_regularization": _state_float(
+            state,
+            "direct_tail_true_active_residual_block_regularization",
+        ),
+        "sparse_pc_direct_tail_true_active_residual_block_max_size": _state_int(
+            state,
+            "direct_tail_true_active_residual_block_max_size",
+        ),
+        "sparse_pc_direct_tail_true_active_residual_block_column_batch": _state_int(
+            state,
+            "direct_tail_true_active_residual_block_column_batch",
+        ),
+        "sparse_pc_direct_tail_true_active_residual_block_drop_tol": _state_float(
+            state,
+            "direct_tail_true_active_residual_block_drop_tol",
+        ),
+        "sparse_pc_direct_tail_true_active_residual_block_include_tail": _state_bool(
+            state,
+            "direct_tail_true_active_residual_block_include_tail",
+        ),
+        "sparse_pc_direct_tail_true_active_residual_block_max_tail": _state_int(
+            state,
+            "direct_tail_true_active_residual_block_max_tail",
+        ),
+        "sparse_pc_direct_tail_true_active_residual_block_kinetic_only": _state_bool(
+            state,
+            "direct_tail_true_active_residual_block_kinetic_only",
+        ),
+        "sparse_pc_direct_tail_true_active_residual_block_damping": _state_bool(
+            state,
+            "direct_tail_true_active_residual_block_damping",
+        ),
+        "sparse_pc_direct_tail_true_active_residual_block_beta_max": _state_float(
+            state,
+            "direct_tail_true_active_residual_block_beta_max",
+        ),
+        "sparse_pc_direct_tail_true_active_residual_block_min_improvement": _state_float(
+            state,
+            "direct_tail_true_active_residual_block_min_improvement",
+        ),
+        "sparse_pc_direct_tail_true_active_residual_block_accept_base_improvement": _state_bool(
+            state,
+            "direct_tail_true_active_residual_block_accept_base_improvement",
+        ),
+        "sparse_pc_direct_tail_true_active_residual_block_base_improvement_override_used": _state_bool(
+            state,
+            "direct_tail_true_active_residual_block_base_improvement_override_used",
+        ),
+        "sparse_pc_direct_tail_true_active_residual_block_residual_after": state[
+            "direct_tail_true_active_residual_block_residual_after"
+        ],
+        "sparse_pc_direct_tail_true_active_residual_block_error": state[
+            "direct_tail_true_active_residual_block_error"
+        ],
+        "sparse_pc_direct_tail_true_active_residual_block_metadata": state[
+            "direct_tail_true_active_residual_block_metadata"
+        ],
+        "sparse_pc_direct_tail_true_window_requested": _state_bool(
+            state,
+            "direct_tail_true_window_requested",
+        ),
+        "sparse_pc_direct_tail_true_window_selected": _state_bool(
+            state,
+            "direct_tail_true_window_selected",
+        ),
+        "sparse_pc_direct_tail_true_window_max_windows": _state_int(
+            state,
+            "direct_tail_true_window_max_windows",
+        ),
+        "sparse_pc_direct_tail_true_window_x_radius": _state_int(
+            state,
+            "direct_tail_true_window_x_radius",
+        ),
+        "sparse_pc_direct_tail_true_window_ell_radius": _state_int(
+            state,
+            "direct_tail_true_window_ell_radius",
+        ),
+        "sparse_pc_direct_tail_true_window_max_mb": _state_float(
+            state,
+            "direct_tail_true_window_max_mb",
+        ),
+        "sparse_pc_direct_tail_true_window_regularization": _state_float(
+            state,
+            "direct_tail_true_window_regularization",
+        ),
+        "sparse_pc_direct_tail_true_window_max_size": _state_int(
+            state,
+            "direct_tail_true_window_max_size",
+        ),
+        "sparse_pc_direct_tail_true_window_column_batch": _state_int(
+            state,
+            "direct_tail_true_window_column_batch",
+        ),
+        "sparse_pc_direct_tail_true_window_drop_tol": _state_float(
+            state,
+            "direct_tail_true_window_drop_tol",
+        ),
+        "sparse_pc_direct_tail_true_window_include_tail": _state_bool(
+            state,
+            "direct_tail_true_window_include_tail",
+        ),
+        "sparse_pc_direct_tail_true_window_damping": _state_bool(
+            state,
+            "direct_tail_true_window_damping",
+        ),
+        "sparse_pc_direct_tail_true_window_beta_max": _state_float(
+            state,
+            "direct_tail_true_window_beta_max",
+        ),
+        "sparse_pc_direct_tail_true_window_specs": tuple(
+            tuple(int(v) for v in spec)
+            for spec in state["direct_tail_true_window_specs"]
+        ),
+        "sparse_pc_direct_tail_true_window_residual_after": state[
+            "direct_tail_true_window_residual_after"
+        ],
+        "sparse_pc_direct_tail_true_window_error": state[
+            "direct_tail_true_window_error"
+        ],
+        "sparse_pc_direct_tail_true_window_metadata": state[
+            "direct_tail_true_window_metadata"
+        ],
+        "sparse_pc_direct_tail_residual_window_requested": _state_bool(
+            state,
+            "direct_tail_residual_window_requested",
+        ),
+        "sparse_pc_direct_tail_residual_window_selected": _state_bool(
+            state,
+            "direct_tail_residual_window_selected",
+        ),
+        "sparse_pc_direct_tail_residual_window_max_windows": _state_int(
+            state,
+            "direct_tail_residual_window_max_windows",
+        ),
+        "sparse_pc_direct_tail_residual_window_x_radius": _state_int(
+            state,
+            "direct_tail_residual_window_x_radius",
+        ),
+        "sparse_pc_direct_tail_residual_window_ell_radius": _state_int(
+            state,
+            "direct_tail_residual_window_ell_radius",
+        ),
+        "sparse_pc_direct_tail_residual_window_max_mb": _state_float(
+            state,
+            "direct_tail_residual_window_max_mb",
+        ),
+        "sparse_pc_direct_tail_residual_window_regularization": _state_float(
+            state,
+            "direct_tail_residual_window_regularization",
+        ),
+        "sparse_pc_direct_tail_residual_window_coefficient_mode": _state_str(
+            state,
+            "direct_tail_residual_window_coefficient_mode",
+        ),
+        "sparse_pc_direct_tail_residual_window_combine_mode": _state_str(
+            state,
+            "direct_tail_residual_window_combine_mode",
+        ),
+        "sparse_pc_direct_tail_residual_window_interface_depth": _state_int(
+            state,
+            "direct_tail_residual_window_interface_depth",
+        ),
+        "sparse_pc_direct_tail_residual_window_max_size": _state_int(
+            state,
+            "direct_tail_residual_window_max_size",
+        ),
+        "sparse_pc_direct_tail_residual_window_residual_after": state[
+            "direct_tail_residual_window_residual_after"
+        ],
+        "sparse_pc_direct_tail_residual_window_error": state[
+            "direct_tail_residual_window_error"
+        ],
+        "sparse_pc_direct_tail_residual_window_metadata": state[
+            "direct_tail_residual_window_metadata"
+        ],
+        "sparse_pc_fortran_reduced_direct_tail_enabled": _state_bool(
+            state,
+            "direct_tail_enabled",
+        ),
+        "sparse_pc_fortran_reduced_direct_pmat_requested": _state_bool(
+            state,
+            "direct_tail_direct_reduced_pmat_requested",
+        ),
+        "sparse_pc_fortran_reduced_direct_tail_built": _state_bool(
+            state,
+            "direct_tail_built",
+        ),
+        "sparse_pc_fortran_reduced_direct_tail_error": state["direct_tail_error"],
+        "sparse_pc_fortran_reduced_direct_tail_operator_reason": (
+            None if operator_metadata is None else str(operator_metadata.reason)
+        ),
+        "sparse_pc_fortran_reduced_direct_tail_nnz": (
+            None if operator_metadata is None else operator_metadata.nnz_estimate
+        ),
+        "sparse_pc_fortran_reduced_direct_tail_csr_nbytes_estimate": (
+            None
+            if operator_metadata is None
+            else int(operator_metadata.csr_nbytes_estimate)
+        ),
+        "sparse_pc_fortran_reduced_direct_tail_structured_pc_requested": state[
+            "direct_tail_structured_pc_requested"
+        ],
+        "sparse_pc_fortran_reduced_direct_tail_structured_pc_required": _state_bool(
+            state,
+            "direct_tail_structured_pc_required",
+        ),
+        "sparse_pc_fortran_reduced_direct_tail_structured_pc_selected": _state_bool(
+            state,
+            "direct_tail_structured_pc_selected",
+        ),
+        "sparse_pc_fortran_reduced_direct_tail_structured_pc_reason": state[
+            "direct_tail_structured_pc_reason"
+        ],
+        "sparse_pc_fortran_reduced_direct_tail_structured_pc_error": state[
+            "direct_tail_structured_pc_error"
+        ],
+        "sparse_pc_fortran_reduced_direct_tail_structured_pc_max_mb": (
+            None
+            if direct_tail_structured_max_nbytes is None
+            else float(direct_tail_structured_max_nbytes) / (1024.0 * 1024.0)
+        ),
+        "sparse_pc_fortran_reduced_direct_tail_structured_pc_max_mb_auto": _state_bool(
+            state,
+            "direct_tail_structured_pc_max_mb_auto",
+        ),
+        "sparse_pc_fortran_reduced_direct_tail_structured_pc_metadata": state[
+            "direct_tail_structured_pc_metadata"
+        ],
+        "sparse_pc_fortran_reduced_direct_tail_support_mode_preflight_requested": _state_bool(
+            state,
+            "direct_tail_support_mode_preflight_requested",
+        ),
+        "sparse_pc_fortran_reduced_direct_tail_support_mode_preflight_selected": _state_bool(
+            state,
+            "direct_tail_support_mode_preflight_selected",
+        ),
+        "sparse_pc_fortran_reduced_direct_tail_support_mode_preflight_error": state[
+            "direct_tail_support_mode_preflight_error"
+        ],
+        "sparse_pc_fortran_reduced_direct_tail_support_mode_preflight_metadata": state[
+            "direct_tail_support_mode_preflight_metadata"
+        ],
+    }
+
+
 def fortran_reduced_xblock_result_metadata(
     state: Mapping[str, object],
 ) -> dict[str, object]:

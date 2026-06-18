@@ -10,6 +10,7 @@ from sfincs_jax.problems.profile_response.diagnostics import (
     XBlockSideProbeDiagnosticsContext,
     fp_xblock_global_correction_metadata,
     fp_xblock_highx_residual_correction_metadata,
+    sparse_pc_direct_tail_result_metadata,
     sparse_rescue_tail_metadata,
     sparse_xblock_rescue_metadata,
     xblock_assembled_operator_diagnostics,
@@ -685,6 +686,76 @@ def test_xblock_device_krylov_diagnostics_preserve_transfer_free_logic() -> None
     assert metadata["xblock_device_fgmres_host_transfer_free"] is True
     assert metadata["xblock_device_bicgstab_host_transfer_free"] is False
     assert metadata["xblock_device_tfqmr_host_transfer_free"] is False
+
+
+class _DefaultDirectTailState(dict):
+    def __missing__(self, key: str) -> object:
+        self[key] = 1
+        return self[key]
+
+
+def test_sparse_pc_direct_tail_result_metadata_preserves_driver_conversions() -> None:
+    structured_metadata = {"kind": "native"}
+    support_metadata = {"accepted": True}
+    coupled_metadata = {"rank": 5}
+    state = _DefaultDirectTailState(
+        {
+            "direct_tail_operator_bundle": SimpleNamespace(
+                metadata=SimpleNamespace(
+                    reason="direct_pmat",
+                    nnz_estimate=np.int64(123),
+                    csr_nbytes_estimate=np.int64(456),
+                )
+            ),
+            "direct_tail_structured_max_nbytes": 2 * 1024 * 1024,
+            "direct_tail_true_window_specs": ((np.int64(1), np.int64(2)),),
+            "direct_tail_true_active_block_species_count": None,
+            "direct_tail_structured_pc_metadata": structured_metadata,
+            "direct_tail_support_mode_preflight_metadata": support_metadata,
+            "direct_tail_true_coupled_coarse_metadata": coupled_metadata,
+            "direct_tail_residual_window_coefficient_mode": "normal",
+            "direct_tail_residual_window_combine_mode": "additive",
+            "direct_tail_error": "not_selected",
+            "direct_tail_structured_pc_requested": "auto",
+            "direct_tail_structured_pc_reason": "admitted",
+            "direct_tail_structured_pc_error": None,
+            "direct_tail_support_mode_preflight_error": None,
+        }
+    )
+
+    metadata = sparse_pc_direct_tail_result_metadata(state)
+
+    assert metadata["sparse_pc_direct_tail_true_window_specs"] == ((1, 2),)
+    assert metadata["sparse_pc_direct_tail_true_active_block_species_count"] is None
+    assert (
+        metadata["sparse_pc_fortran_reduced_direct_tail_structured_pc_max_mb"]
+        == 2.0
+    )
+    assert (
+        metadata["sparse_pc_fortran_reduced_direct_tail_operator_reason"]
+        == "direct_pmat"
+    )
+    assert metadata["sparse_pc_fortran_reduced_direct_tail_nnz"] == 123
+    assert (
+        metadata["sparse_pc_fortran_reduced_direct_tail_csr_nbytes_estimate"]
+        == 456
+    )
+    assert (
+        metadata["sparse_pc_fortran_reduced_direct_tail_structured_pc_metadata"]
+        is structured_metadata
+    )
+    assert (
+        metadata[
+            "sparse_pc_fortran_reduced_direct_tail_support_mode_preflight_metadata"
+        ]
+        is support_metadata
+    )
+    assert (
+        metadata["sparse_pc_direct_tail_true_coupled_coarse_metadata"]
+        is coupled_metadata
+    )
+    assert metadata["sparse_pc_direct_tail_residual_window_coefficient_mode"] == "normal"
+    assert metadata["sparse_pc_direct_tail_residual_window_combine_mode"] == "additive"
 
 
 def test_xblock_sparse_pc_core_diagnostics_preserve_payload() -> None:
