@@ -647,6 +647,235 @@ def rhs1_qi_device_residual_correction_setup_kwargs(
     }
 
 
+def rhs1_qi_device_extra_coarse_metadata(
+    controls: Mapping[str, object],
+) -> dict[str, object]:
+    """Return requested-control metadata for QI-device extra coarse spaces."""
+
+    return {
+        "global_moment_residual_equation_requested": bool(
+            controls["global_moment_residual_equation"]
+        ),
+        "global_moment_residual_equation_max_rank_requested": int(
+            controls["global_moment_residual_equation_max_rank"]
+        ),
+        "global_moment_residual_equation_solver_requested": str(
+            controls["global_moment_residual_equation_solver"]
+        ),
+        "global_moment_residual_equation_include_profile_requested": bool(
+            controls["global_moment_residual_equation_include_profile"]
+        ),
+        "global_moment_residual_equation_include_current_requested": bool(
+            controls["global_moment_residual_equation_include_current"]
+        ),
+        "global_moment_residual_equation_include_tail_requested": bool(
+            controls["global_moment_residual_equation_include_tail"]
+        ),
+        "residual_galerkin_equation_requested": bool(
+            controls["residual_galerkin_equation"]
+        ),
+        "residual_galerkin_equation_max_stages_requested": int(
+            controls["residual_galerkin_equation_max_stages"]
+        ),
+        "residual_galerkin_equation_max_stage_rank_requested": int(
+            controls["residual_galerkin_equation_max_stage_rank"]
+        ),
+        "residual_galerkin_equation_max_rank_requested": int(
+            controls["residual_galerkin_equation_max_rank"]
+        ),
+        "residual_galerkin_equation_solver_requested": str(
+            controls["residual_galerkin_equation_solver"]
+        ),
+        "residual_galerkin_equation_include_global_residual_requested": bool(
+            controls["residual_galerkin_equation_include_global_residual"]
+        ),
+        "residual_galerkin_equation_include_block_residuals_requested": bool(
+            controls["residual_galerkin_equation_include_block_residuals"]
+        ),
+        "residual_galerkin_equation_include_operator_images_requested": bool(
+            controls["residual_galerkin_equation_include_operator_images"]
+        ),
+        "phase_space_residual_equation_requested": bool(
+            controls["phase_space_residual_equation"]
+        ),
+        "phase_space_residual_equation_max_rank_requested": int(
+            controls["phase_space_residual_equation_max_rank"]
+        ),
+        "phase_space_residual_equation_solver_requested": str(
+            controls["phase_space_residual_equation_solver"]
+        ),
+        "phase_space_residual_equation_include_global_requested": bool(
+            controls["phase_space_residual_equation_include_global"]
+        ),
+        "phase_space_residual_equation_boundary_requested": float(
+            controls["phase_space_residual_equation_boundary"]
+        ),
+        "phase_space_residual_equation_include_radial_requested": bool(
+            controls["phase_space_residual_equation_include_radial"]
+        ),
+        "phase_space_residual_equation_include_species_requested": bool(
+            controls["phase_space_residual_equation_include_species"]
+        ),
+        "residual_region_bounce_coarse_requested": bool(
+            controls["residual_region_bounce_coarse"]
+        ),
+        "residual_region_bounce_coarse_max_rank_requested": int(
+            controls["residual_region_bounce_coarse_max_rank"]
+        ),
+        "residual_region_bounce_coarse_max_candidates_requested": int(
+            controls["residual_region_bounce_coarse_max_candidates"]
+        ),
+        "residual_region_bounce_coarse_solver_requested": str(
+            controls["residual_region_bounce_coarse_solver"]
+        ),
+        "residual_region_bounce_coarse_include_global_requested": bool(
+            controls["residual_region_bounce_coarse_include_global"]
+        ),
+        "residual_region_bounce_coarse_include_radial_requested": bool(
+            controls["residual_region_bounce_coarse_include_radial"]
+        ),
+        "residual_region_bounce_coarse_include_species_requested": bool(
+            controls["residual_region_bounce_coarse_include_species"]
+        ),
+        "residual_region_bounce_coarse_boundary_requested": float(
+            controls["residual_region_bounce_coarse_boundary"]
+        ),
+        "residual_region_bounce_coarse_min_region_energy_fraction_requested": float(
+            controls["residual_region_bounce_coarse_min_energy"]
+        ),
+        "residual_region_bounce_coarse_region_bands_requested": str(
+            controls["residual_region_bounce_coarse_region_bands"]
+        ),
+        "active_pattern_coarse_requested": bool(controls["active_pattern_coarse"]),
+        "active_pattern_coarse_max_rank_requested": int(
+            controls["active_pattern_coarse_max_rank"]
+        ),
+        "active_pattern_coarse_max_candidates_requested": int(
+            controls["active_pattern_coarse_max_candidates"]
+        ),
+        "active_pattern_coarse_solver_requested": str(
+            controls["active_pattern_coarse_solver"]
+        ),
+        "active_pattern_coarse_include_global_requested": bool(
+            controls["active_pattern_coarse_include_global"]
+        ),
+        "active_pattern_coarse_min_chunk_energy_fraction_requested": float(
+            controls["active_pattern_coarse_min_chunk_energy"]
+        ),
+        "active_pattern_coarse_include_block_pitch_requested": bool(
+            controls["active_pattern_coarse_include_block_pitch"]
+        ),
+        "active_pattern_coarse_include_block_angular_requested": bool(
+            controls["active_pattern_coarse_include_block_angular"]
+        ),
+        "active_pattern_coarse_include_radial_pitch_requested": bool(
+            controls["active_pattern_coarse_include_radial_pitch"]
+        ),
+        "active_pattern_coarse_include_radial_angular_requested": bool(
+            controls["active_pattern_coarse_include_radial_angular"]
+        ),
+        "active_pattern_coarse_include_block_requested": bool(
+            controls["active_pattern_coarse_include_block"]
+        ),
+        "active_pattern_coarse_include_radial_requested": bool(
+            controls["active_pattern_coarse_include_radial"]
+        ),
+        "active_pattern_coarse_include_species_requested": bool(
+            controls["active_pattern_coarse_include_species"]
+        ),
+    }
+
+
+def rhs1_qi_device_residual_correction_metadata(
+    controls: Mapping[str, object],
+) -> dict[str, object]:
+    """Return requested-control metadata for QI-device residual corrections."""
+
+    return {
+        "block_schur_residual_equation_requested": bool(
+            controls["block_schur_residual_equation"]
+        ),
+        "block_schur_residual_equation_max_rank_requested": int(
+            controls["block_schur_residual_equation_max_rank"]
+        ),
+        "block_schur_residual_equation_include_global_requested": bool(
+            controls["block_schur_residual_equation_include_global"]
+        ),
+        "block_schur_residual_equation_include_blocks_requested": bool(
+            controls["block_schur_residual_equation_include_blocks"]
+        ),
+        "block_schur_residual_equation_include_aggregates_requested": bool(
+            controls["block_schur_residual_equation_include_aggregates"]
+        ),
+        "coupled_residual_equation_requested": bool(
+            controls["coupled_residual_equation"]
+        ),
+        "coupled_residual_equation_max_rank_requested": int(
+            controls["coupled_residual_equation_max_rank"]
+        ),
+        "coupled_residual_equation_solver_requested": str(
+            controls["coupled_residual_equation_solver"]
+        ),
+        "coupled_residual_equation_include_flat_requested": bool(
+            controls["coupled_residual_equation_include_flat"]
+        ),
+        "coupled_residual_equation_min_relative_improvement_requested": float(
+            controls["coupled_residual_equation_min_improvement"]
+        ),
+        "coupled_residual_equation_install_in_krylov_on_reject_requested": bool(
+            controls["coupled_residual_equation_install_on_reject"]
+        ),
+        "residual_snapshot_enrichment_requested": bool(
+            controls["residual_snapshot_enrichment"]
+        ),
+        "residual_snapshot_max_rank_requested": int(
+            controls["residual_snapshot_max_rank"]
+        ),
+        "residual_snapshot_include_primal_requested": bool(
+            controls["residual_snapshot_include_primal"]
+        ),
+        "residual_snapshot_use_adjoint_requested": bool(
+            controls["residual_snapshot_use_adjoint"]
+        ),
+        "residual_snapshot_include_global_requested": bool(
+            controls["residual_snapshot_include_global"]
+        ),
+        "residual_snapshot_include_blocks_requested": bool(
+            controls["residual_snapshot_include_blocks"]
+        ),
+        "residual_snapshot_include_aggregates_requested": bool(
+            controls["residual_snapshot_include_aggregates"]
+        ),
+        "residual_snapshot_residual_equation_requested": bool(
+            controls["residual_snapshot_residual_equation"]
+        ),
+        "residual_snapshot_residual_equation_max_rank_requested": int(
+            controls["residual_snapshot_residual_equation_max_rank"]
+        ),
+        "residual_snapshot_residual_equation_solver_requested": str(
+            controls["residual_snapshot_residual_equation_solver"]
+        ),
+        "residual_snapshot_residual_equation_include_global_requested": bool(
+            controls["residual_snapshot_residual_equation_include_global"]
+        ),
+        "block_schur_residual_enrichment_requested": bool(
+            controls["block_schur_residual_enrichment"]
+        ),
+        "block_schur_residual_max_rank_requested": int(
+            controls["block_schur_residual_max_rank"]
+        ),
+        "block_schur_residual_include_global_requested": bool(
+            controls["block_schur_residual_include_global"]
+        ),
+        "block_schur_residual_include_blocks_requested": bool(
+            controls["block_schur_residual_include_blocks"]
+        ),
+        "block_schur_residual_include_aggregates_requested": bool(
+            controls["block_schur_residual_include_aggregates"]
+        ),
+    }
+
+
 @dataclass(frozen=True)
 class RHS1QIDeviceRankBudget:
     """Rank budget and optional rank cap for a QI-device coarse space."""
@@ -2262,11 +2491,13 @@ __all__ = (
     "rhs1_polish_enabled",
     "rhs1_prefer_sparse_over_dense_shortcut",
     "rhs1_qi_device_extra_coarse_controls",
+    "rhs1_qi_device_extra_coarse_metadata",
     "rhs1_qi_device_extra_coarse_setup_kwargs",
     "rhs1_qi_device_probe_uses_minres_step",
     "rhs1_qi_device_progress_messages",
     "rhs1_qi_device_rank_budget",
     "rhs1_qi_device_residual_correction_controls",
+    "rhs1_qi_device_residual_correction_metadata",
     "rhs1_qi_device_residual_correction_setup_kwargs",
     "rhs1_qi_device_setup_summary",
     "rhs1_resolved_sparse_rescue_ordering",

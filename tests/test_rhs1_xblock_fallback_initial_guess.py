@@ -8,11 +8,13 @@ from sfincs_jax import v3_driver as vd
 from sfincs_jax.problems.profile_response.policies import (
     parse_rhs1_pas_tz_guarded_structured_levels,
     rhs1_qi_device_extra_coarse_controls,
+    rhs1_qi_device_extra_coarse_metadata,
     rhs1_qi_device_extra_coarse_setup_kwargs,
     rhs1_qi_device_probe_uses_minres_step,
     rhs1_qi_device_progress_messages,
     rhs1_qi_device_rank_budget,
     rhs1_qi_device_residual_correction_controls,
+    rhs1_qi_device_residual_correction_metadata,
     rhs1_qi_device_residual_correction_setup_kwargs,
     rhs1_qi_device_setup_summary,
     rhs1_xblock_fallback_initial_guess,
@@ -32,6 +34,10 @@ def test_driver_private_policy_helpers_alias_canonical_profile_response_helpers(
         is rhs1_qi_device_extra_coarse_setup_kwargs
     )
     assert (
+        vd._rhs1_qi_device_extra_coarse_metadata
+        is rhs1_qi_device_extra_coarse_metadata
+    )
+    assert (
         vd._rhs1_qi_device_probe_uses_minres_step
         is rhs1_qi_device_probe_uses_minres_step
     )
@@ -43,6 +49,10 @@ def test_driver_private_policy_helpers_alias_canonical_profile_response_helpers(
     assert (
         vd._rhs1_qi_device_residual_correction_setup_kwargs
         is rhs1_qi_device_residual_correction_setup_kwargs
+    )
+    assert (
+        vd._rhs1_qi_device_residual_correction_metadata
+        is rhs1_qi_device_residual_correction_metadata
     )
     assert vd._rhs1_qi_device_setup_summary is rhs1_qi_device_setup_summary
     assert vd._rhs1_qi_device_rank_budget is rhs1_qi_device_rank_budget
@@ -677,3 +687,37 @@ def test_qi_device_residual_correction_setup_kwargs_map_solver_parameters() -> N
     assert kwargs["coupled_residual_equation_min_relative_improvement"] == 0.2
     assert kwargs["residual_snapshot_residual_equation"] is True
     assert "coupled_residual_equation_install_on_reject" not in kwargs
+
+
+def test_qi_device_extra_coarse_metadata_uses_requested_key_names() -> None:
+    metadata = rhs1_qi_device_extra_coarse_metadata(
+        _extra_coarse_controls_for_summary(
+            global_moment_residual_equation=True,
+            residual_region_bounce_coarse_min_energy=0.04,
+            active_pattern_coarse_include_species=False,
+        )
+    )
+
+    assert metadata["global_moment_residual_equation_requested"] is True
+    assert (
+        metadata["residual_region_bounce_coarse_min_region_energy_fraction_requested"]
+        == 0.04
+    )
+    assert metadata["active_pattern_coarse_include_species_requested"] is False
+
+
+def test_qi_device_residual_correction_metadata_uses_requested_key_names() -> None:
+    metadata = rhs1_qi_device_residual_correction_metadata(
+        _residual_controls_for_summary(
+            coupled_residual_equation_install_on_reject=True,
+            residual_snapshot_use_adjoint=False,
+            block_schur_residual_include_aggregates=False,
+        )
+    )
+
+    assert (
+        metadata["coupled_residual_equation_install_in_krylov_on_reject_requested"]
+        is True
+    )
+    assert metadata["residual_snapshot_use_adjoint_requested"] is False
+    assert metadata["block_schur_residual_include_aggregates_requested"] is False

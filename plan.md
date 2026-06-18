@@ -34240,3 +34240,52 @@ Next refactor target:
   locals only feed metadata dictionaries and progress strings. After that,
   mirror the same typed/control-helper approach in
   ``problems/profile_response/qi_device_seed.py``.
+
+### 19.94 RHSMode=1 x-block QI-device metadata adapters
+
+Goal:
+
+- Remove the repeated QI-device requested-control metadata construction from
+  the main RHSMode=1 solve branch while preserving metadata keys and values.
+
+Implementation:
+
+- Added ``rhs1_qi_device_extra_coarse_metadata`` and
+  ``rhs1_qi_device_residual_correction_metadata`` to
+  ``sfincs_jax/problems/profile_response/policies.py`` and exported them.
+- Wired ``v3_driver.py`` to build grouped metadata dictionaries next to the
+  grouped setup kwargs and expand them into ``qi_device_preconditioner_metadata``.
+- Preserved the existing local variables for status strings and the small
+  number of branch predicates that still use them. The next cleanup should
+  target those status/predicate users rather than the already-collapsed setup
+  and metadata call sites.
+- Added direct tests for private-driver aliases and representative metadata
+  key mappings, including the renamed ``*_requested`` fields.
+- ``solve_v3_full_system_linear_gmres`` is now about ``18214`` lines and
+  ``v3_driver.py`` is about ``23495`` lines.
+
+Validation so far:
+
+- ``python -m ruff check sfincs_jax/problems/profile_response/policies.py
+  sfincs_jax/v3_driver.py tests/test_rhs1_xblock_fallback_initial_guess.py``:
+  passed.
+- ``python -m compileall -q
+  sfincs_jax/problems/profile_response/policies.py sfincs_jax/v3_driver.py
+  tests/test_rhs1_xblock_fallback_initial_guess.py``: passed.
+- Focused policy/helper and QI-device metadata regressions:
+  ``37 passed in 14.17 s``.
+- Broader current profile-response/x-block/sparse-pattern shard:
+  ``318 passed in 114.10 s``.
+- ``git diff --check``: passed.
+- Remote docs for the latest pushed checkpoint are green; PR CI is still in
+  progress and should be checked after the next pushed checkpoint rather than
+  watched continuously.
+
+Next refactor target:
+
+- Remove the now-mostly-redundant local-variable expansion for extra-coarse and
+  residual-correction controls in the main driver by replacing the remaining
+  status/predicate uses with small policy helpers or direct grouped-control
+  access. Then apply the same grouped-control pattern to
+  ``problems/profile_response/qi_device_seed.py`` so seed reuse and main solve
+  use one policy surface.
