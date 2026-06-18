@@ -452,6 +452,24 @@ class XBlockQIDeviceBaseConfigSetup:
     compose_mode: str
 
 
+@dataclass(frozen=True)
+class XBlockQIDeviceEnrichmentConfigSetup:
+    """QI-device residual/recycle/operator enrichment settings."""
+
+    residual_enrichment: bool
+    residual_enrichment_depth: int
+    residual_enrichment_include_residual: bool
+    recycle_enrichment: bool
+    recycle_cycles: int
+    operator_krylov_enrichment: bool
+    operator_krylov_depth: int
+    adjoint_krylov_enrichment: bool
+    adjoint_krylov_depth: int
+    adjoint_krylov_transpose_source: str
+    operator_action_enrichment: bool
+    operator_action_depth: int
+
+
 def _env_value(env: Mapping[str, str] | None, key: str) -> str:
     source = env if env is not None else {}
     return str(source.get(key, "")).strip()
@@ -2639,6 +2657,86 @@ def resolve_xblock_qi_device_base_config_setup(
             default=False,
         ),
         compose_mode=str(compose_mode),
+    )
+
+
+def resolve_xblock_qi_device_enrichment_config_setup(
+    *,
+    matrix_free_enabled: bool,
+    env: Mapping[str, str] | None = None,
+) -> XBlockQIDeviceEnrichmentConfigSetup:
+    """Resolve QI-device residual, recycle, and operator-enrichment controls."""
+
+    residual_enrichment = _env_bool(
+        env,
+        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RESIDUAL_ENRICHMENT",
+        default=bool(matrix_free_enabled),
+    )
+    recycle_enrichment = _env_bool(
+        env,
+        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RECYCLE_ENRICHMENT",
+        default=False,
+    )
+    operator_krylov_enrichment = _env_bool(
+        env,
+        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_OPERATOR_KRYLOV_ENRICHMENT",
+        default=False,
+    )
+    adjoint_krylov_enrichment = _env_bool(
+        env,
+        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_ADJOINT_KRYLOV_ENRICHMENT",
+        default=False,
+    )
+    operator_action_enrichment = _env_bool(
+        env,
+        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_OPERATOR_ACTION_ENRICHMENT",
+        default=False,
+    )
+    return XBlockQIDeviceEnrichmentConfigSetup(
+        residual_enrichment=bool(residual_enrichment),
+        residual_enrichment_depth=_env_int(
+            env,
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RESIDUAL_ENRICHMENT_DEPTH",
+            default=2 if bool(residual_enrichment) else 0,
+            minimum=0,
+        ),
+        residual_enrichment_include_residual=_env_bool(
+            env,
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RESIDUAL_ENRICHMENT_INCLUDE_RESIDUAL",
+            default=True,
+        ),
+        recycle_enrichment=bool(recycle_enrichment),
+        recycle_cycles=_env_int(
+            env,
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RECYCLE_CYCLES",
+            default=1 if bool(recycle_enrichment) else 0,
+            minimum=0,
+        ),
+        operator_krylov_enrichment=bool(operator_krylov_enrichment),
+        operator_krylov_depth=_env_int(
+            env,
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_OPERATOR_KRYLOV_DEPTH",
+            default=4 if bool(operator_krylov_enrichment) else 0,
+            minimum=0,
+        ),
+        adjoint_krylov_enrichment=bool(adjoint_krylov_enrichment),
+        adjoint_krylov_depth=_env_int(
+            env,
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_ADJOINT_KRYLOV_DEPTH",
+            default=4 if bool(adjoint_krylov_enrichment) else 0,
+            minimum=0,
+        ),
+        adjoint_krylov_transpose_source=(
+            _env_value(env, "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_ADJOINT_KRYLOV_TRANSPOSE")
+            or "autodiff"
+        ).lower().replace("-", "_"),
+        operator_action_enrichment=bool(operator_action_enrichment),
+        operator_action_depth=_env_int(
+            env,
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_OPERATOR_ACTION_DEPTH",
+            default=1 if bool(operator_action_enrichment) else 0,
+            minimum=0,
+        ),
     )
 
 

@@ -33824,3 +33824,52 @@ Next refactor target:
   multilevel/global-moment/residual-Galerkin/phase-space/region-coarse controls.
   Continue to keep actual preconditioner construction and residual probes in
   the driver until the policy layer is fully covered.
+
+### 19.85 RHSMode=1 x-block QI-device enrichment config extraction
+
+Goal:
+
+- Move QI-device residual/recycle/operator enrichment settings out of
+  ``v3_driver.py`` while keeping all enrichment construction, preconditioner
+  building, residual probes, and residual acceptance unchanged.
+
+Implementation:
+
+- Added ``XBlockQIDeviceEnrichmentConfigSetup`` and
+  ``resolve_xblock_qi_device_enrichment_config_setup`` to
+  ``sfincs_jax/problems/profile_response/sparse_pc.py``.
+- Centralized residual enrichment, residual enrichment depth, residual-vector
+  inclusion, recycle enrichment/cycles, operator-Krylov enrichment/depth,
+  adjoint-Krylov enrichment/depth/transpose source, and operator-action
+  enrichment/depth.
+- Preserved the matrix-free default: residual enrichment defaults on for
+  matrix-free QI-device preconditioners and off otherwise.
+- Replaced the in-driver enrichment env block with a policy object while
+  retaining downstream variable names used by rank budgeting, device-state
+  construction, diagnostics, and metadata.
+- Added direct tests for matrix-free defaults and explicit enrichment settings.
+- ``solve_v3_full_system_linear_gmres`` is now about ``19366`` lines and
+  ``v3_driver.py`` is about ``24645`` lines.
+
+Validation so far:
+
+- ``python -m ruff check sfincs_jax/problems/profile_response/sparse_pc.py
+  sfincs_jax/v3_driver.py tests/test_profile_response_sparse_pc.py``: passed.
+- ``python -m compileall -q
+  sfincs_jax/problems/profile_response/sparse_pc.py sfincs_jax/v3_driver.py
+  tests/test_profile_response_sparse_pc.py``: passed.
+- ``PYTHONDONTWRITEBYTECODE=1 JAX_ENABLE_X64=True pytest -q
+  -p no:cacheprovider tests/test_profile_response_sparse_pc.py``:
+  ``54 passed in 0.91 s``.
+- Focused enrichment-related QI-device regression subset:
+  ``57 passed in 12.01 s``.
+- Broader sparse-PC/x-block/dispatch subset:
+  ``147 passed in 53.16 s``.
+- ``git diff --check``: passed.
+
+Next refactor target:
+
+- Extract QI-device multilevel/global-moment/residual-equation configuration in
+  small pieces. Normalize repeated solver aliases in helper functions and keep
+  the actual coarse-basis/probe code in ``v3_driver.py`` until this policy
+  layer is covered by direct tests and focused regressions.

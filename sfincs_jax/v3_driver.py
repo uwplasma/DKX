@@ -219,6 +219,7 @@ from .problems.profile_response.sparse_pc import (
     resolve_sparse_pc_entry_policy,
     resolve_xblock_qi_device_admission_setup,
     resolve_xblock_qi_device_base_config_setup,
+    resolve_xblock_qi_device_enrichment_config_setup,
     resolve_xblock_qi_device_operator_reuse_setup,
     resolve_xblock_qi_galerkin_policy_setup,
     resolve_xblock_qi_seed_policy_setup,
@@ -4794,64 +4795,34 @@ def solve_v3_full_system_linear_gmres(
                 qi_device_preconditioner_use_in_krylov = bool(qi_device_base_config.use_in_krylov)
                 qi_device_compose_with_base = bool(qi_device_base_config.compose_with_base)
                 qi_device_compose_mode = qi_device_base_config.compose_mode
-                qi_device_residual_enrichment = _rhs1_bool_env(
-                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RESIDUAL_ENRICHMENT",
-                    default=bool(qi_device_matrix_free_enabled),
+                qi_device_enrichment_config = resolve_xblock_qi_device_enrichment_config_setup(
+                    matrix_free_enabled=bool(qi_device_matrix_free_enabled),
+                    env=os.environ,
                 )
-                qi_device_residual_enrichment_depth = _rhs1_int_env(
-                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RESIDUAL_ENRICHMENT_DEPTH",
-                    default=2 if bool(qi_device_residual_enrichment) else 0,
-                    minimum=0,
+                qi_device_residual_enrichment = bool(qi_device_enrichment_config.residual_enrichment)
+                qi_device_residual_enrichment_depth = int(
+                    qi_device_enrichment_config.residual_enrichment_depth
                 )
-                qi_device_residual_enrichment_include_residual = _rhs1_bool_env(
-                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RESIDUAL_ENRICHMENT_INCLUDE_RESIDUAL",
-                    default=True,
+                qi_device_residual_enrichment_include_residual = bool(
+                    qi_device_enrichment_config.residual_enrichment_include_residual
                 )
-                qi_device_recycle_enrichment = _rhs1_bool_env(
-                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RECYCLE_ENRICHMENT",
-                    default=False,
+                qi_device_recycle_enrichment = bool(qi_device_enrichment_config.recycle_enrichment)
+                qi_device_recycle_cycles = int(qi_device_enrichment_config.recycle_cycles)
+                qi_device_operator_krylov_enrichment = bool(
+                    qi_device_enrichment_config.operator_krylov_enrichment
                 )
-                qi_device_recycle_cycles = _rhs1_int_env(
-                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RECYCLE_CYCLES",
-                    default=1 if bool(qi_device_recycle_enrichment) else 0,
-                    minimum=0,
+                qi_device_operator_krylov_depth = int(qi_device_enrichment_config.operator_krylov_depth)
+                qi_device_adjoint_krylov_enrichment = bool(
+                    qi_device_enrichment_config.adjoint_krylov_enrichment
                 )
-                qi_device_operator_krylov_enrichment = _rhs1_bool_env(
-                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_OPERATOR_KRYLOV_ENRICHMENT",
-                    default=False,
-                )
-                qi_device_operator_krylov_depth = _rhs1_int_env(
-                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_OPERATOR_KRYLOV_DEPTH",
-                    default=4 if bool(qi_device_operator_krylov_enrichment) else 0,
-                    minimum=0,
-                )
-                qi_device_adjoint_krylov_enrichment = _rhs1_bool_env(
-                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_ADJOINT_KRYLOV_ENRICHMENT",
-                    default=False,
-                )
-                qi_device_adjoint_krylov_depth = _rhs1_int_env(
-                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_ADJOINT_KRYLOV_DEPTH",
-                    default=4 if bool(qi_device_adjoint_krylov_enrichment) else 0,
-                    minimum=0,
-                )
+                qi_device_adjoint_krylov_depth = int(qi_device_enrichment_config.adjoint_krylov_depth)
                 qi_device_adjoint_krylov_transpose_source = (
-                    os.environ.get(
-                        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_ADJOINT_KRYLOV_TRANSPOSE",
-                        "autodiff",
-                    )
-                    .strip()
-                    .lower()
-                    .replace("-", "_")
+                    qi_device_enrichment_config.adjoint_krylov_transpose_source
                 )
-                qi_device_operator_action_enrichment = _rhs1_bool_env(
-                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_OPERATOR_ACTION_ENRICHMENT",
-                    default=False,
+                qi_device_operator_action_enrichment = bool(
+                    qi_device_enrichment_config.operator_action_enrichment
                 )
-                qi_device_operator_action_depth = _rhs1_int_env(
-                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_OPERATOR_ACTION_DEPTH",
-                    default=1 if bool(qi_device_operator_action_enrichment) else 0,
-                    minimum=0,
-                )
+                qi_device_operator_action_depth = int(qi_device_enrichment_config.operator_action_depth)
                 qi_device_multilevel_coarse = _rhs1_bool_env(
                     "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_COARSE",
                     default=_rhs1_bool_env(

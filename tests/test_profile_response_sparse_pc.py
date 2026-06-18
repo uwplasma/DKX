@@ -28,6 +28,7 @@ from sfincs_jax.problems.profile_response.sparse_pc import (
     resolve_sparse_pc_entry_policy,
     resolve_xblock_qi_device_admission_setup,
     resolve_xblock_qi_device_base_config_setup,
+    resolve_xblock_qi_device_enrichment_config_setup,
     resolve_xblock_qi_device_operator_reuse_setup,
     resolve_xblock_qi_galerkin_policy_setup,
     resolve_xblock_qi_seed_policy_setup,
@@ -1326,6 +1327,59 @@ def test_xblock_qi_device_base_config_parses_matrix_free_and_composition_setting
     assert not setup.use_in_krylov
     assert setup.compose_with_base
     assert setup.compose_mode == "multiplicative"
+
+
+def test_xblock_qi_device_enrichment_config_defaults_follow_matrix_free() -> None:
+    off = resolve_xblock_qi_device_enrichment_config_setup(matrix_free_enabled=False, env={})
+    matrix_free = resolve_xblock_qi_device_enrichment_config_setup(matrix_free_enabled=True, env={})
+
+    assert not off.residual_enrichment
+    assert off.residual_enrichment_depth == 0
+    assert matrix_free.residual_enrichment
+    assert matrix_free.residual_enrichment_depth == 2
+    assert matrix_free.residual_enrichment_include_residual
+    assert not matrix_free.recycle_enrichment
+    assert matrix_free.recycle_cycles == 0
+    assert not matrix_free.operator_krylov_enrichment
+    assert matrix_free.operator_krylov_depth == 0
+    assert not matrix_free.adjoint_krylov_enrichment
+    assert matrix_free.adjoint_krylov_depth == 0
+    assert matrix_free.adjoint_krylov_transpose_source == "autodiff"
+    assert not matrix_free.operator_action_enrichment
+    assert matrix_free.operator_action_depth == 0
+
+
+def test_xblock_qi_device_enrichment_config_parses_explicit_settings() -> None:
+    setup = resolve_xblock_qi_device_enrichment_config_setup(
+        matrix_free_enabled=False,
+        env={
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RESIDUAL_ENRICHMENT": "1",
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RESIDUAL_ENRICHMENT_DEPTH": "5",
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RESIDUAL_ENRICHMENT_INCLUDE_RESIDUAL": "0",
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RECYCLE_ENRICHMENT": "1",
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RECYCLE_CYCLES": "3",
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_OPERATOR_KRYLOV_ENRICHMENT": "1",
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_OPERATOR_KRYLOV_DEPTH": "2",
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_ADJOINT_KRYLOV_ENRICHMENT": "1",
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_ADJOINT_KRYLOV_DEPTH": "4",
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_ADJOINT_KRYLOV_TRANSPOSE": "Finite-Difference",
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_OPERATOR_ACTION_ENRICHMENT": "1",
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_OPERATOR_ACTION_DEPTH": "6",
+        },
+    )
+
+    assert setup.residual_enrichment
+    assert setup.residual_enrichment_depth == 5
+    assert not setup.residual_enrichment_include_residual
+    assert setup.recycle_enrichment
+    assert setup.recycle_cycles == 3
+    assert setup.operator_krylov_enrichment
+    assert setup.operator_krylov_depth == 2
+    assert setup.adjoint_krylov_enrichment
+    assert setup.adjoint_krylov_depth == 4
+    assert setup.adjoint_krylov_transpose_source == "finite_difference"
+    assert setup.operator_action_enrichment
+    assert setup.operator_action_depth == 6
 
 
 def test_sparse_pc_gmres_once_explicit_left_recomputes_true_residual() -> None:
