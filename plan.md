@@ -33160,3 +33160,48 @@ Next refactor target:
   true-matvec/progress setup. Keep assembled-operator setup, moment-Schur/QI
   coarse layers, and Krylov execution in the driver until the matvec context is
   isolated and covered by direct tests.
+
+### 19.71 RHSMode=1 x-block active-DOF matvec setup extraction
+
+Goal:
+
+- Move x-block active-DOF reduction, true-matvec closures, and progress
+  matvec accounting out of ``v3_driver.py`` while preserving downstream
+  assembled-operator and solver metadata behavior.
+
+Implementation:
+
+- Extended ``sfincs_jax/problems/profile_response/sparse_pc.py`` with
+  ``MatvecCounter``, ``XBlockKrylovMatvecSetup``, and
+  ``build_xblock_krylov_matvec_setup``.
+- The helper now owns progress interval parsing, active-index slicing,
+  reduced/full projection closures, the counted true matvec, and active-DOF
+  status messages.
+- Kept the mutable counter compatible with existing downstream
+  ``int(mv_count)`` and assembled-operator ``mv_count += 1`` call sites so this
+  refactor does not alter Krylov accounting or metadata.
+- Added direct tests for active-DOF reduction, full-space identity mapping,
+  progress emission, and counter increments.
+- ``solve_v3_full_system_linear_gmres`` is now about ``20062`` lines and
+  ``v3_driver.py`` is about ``25309`` lines.
+
+Validation so far:
+
+- ``python -m ruff check sfincs_jax/problems/profile_response/sparse_pc.py
+  sfincs_jax/v3_driver.py tests/test_profile_response_sparse_pc.py``: passed.
+- ``python -m compileall -q
+  sfincs_jax/problems/profile_response/sparse_pc.py sfincs_jax/v3_driver.py
+  tests/test_profile_response_sparse_pc.py``: passed.
+- ``PYTHONDONTWRITEBYTECODE=1 JAX_ENABLE_X64=True pytest -q
+  -p no:cacheprovider tests/test_profile_response_sparse_pc.py``:
+  ``13 passed in 1.09 s``.
+- Focused x-block active-DOF regression subset:
+  ``21 passed in 16.89 s``.
+- Broader sparse-PC/x-block/dispatch subset:
+  ``91 passed in 42.29 s``.
+
+Next refactor target:
+
+- Extract x-block row/column equilibration option parsing and setup metadata
+  defaults, keeping assembled-operator construction and the actual scaling
+  application in the driver until covered by direct policy tests.

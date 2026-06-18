@@ -203,6 +203,7 @@ from .problems.profile_response.sparse_pc import (
     SparsePCGMRESContext,
     SparsePCPostMinresContext,
     apply_sparse_pc_post_minres,
+    build_xblock_krylov_matvec_setup,
     resolve_sparse_pc_entry_policy,
     resolve_xblock_qi_device_operator_reuse_setup,
     resolve_xblock_sparse_pc_setup,
@@ -3553,57 +3554,31 @@ def solve_v3_full_system_linear_gmres(
                 pc_factor_s = sparse_timer.elapsed_s() - factor_start_s
                 xblock_preconditioner_built = True
             setup_s = sparse_timer.elapsed_s()
-            progress_every_env = os.environ.get("SFINCS_JAX_SPARSE_PC_PROGRESS_EVERY", "").strip()
-            try:
-                progress_every = int(progress_every_env) if progress_every_env else 25
-            except ValueError:
-                progress_every = 25
-            progress_every = max(0, int(progress_every))
-            mv_count = 0
-
-            xblock_linear_size = int(op.total_size)
-            xblock_active_idx_np: np.ndarray | None = None
-            xblock_rhs = rhs
-            if xblock_use_active_dof:
-                assert active_idx_jnp is not None
-                assert full_to_active_jnp is not None
-                xblock_active_idx_np = np.asarray(jax.device_get(active_idx_jnp), dtype=np.int32)
-                xblock_linear_size = int(xblock_active_idx_np.shape[0])
-                xblock_rhs = rhs[active_idx_jnp]
-                if emit is not None:
-                    emit(
-                        1,
-                        "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres active-DOF reduction "
-                        f"enabled (size={int(xblock_linear_size)}/{int(op.total_size)})",
-                    )
-
-            def _xblock_reduce_full(v_full: jnp.ndarray) -> jnp.ndarray:
-                if not xblock_use_active_dof:
-                    return v_full
-                assert active_idx_jnp is not None
-                return reduce_full_with_indices(v_full, active_idx_jnp)
-
-            def _xblock_expand_reduced(v_vec: jnp.ndarray) -> jnp.ndarray:
-                if not xblock_use_active_dof:
-                    return v_vec
-                assert full_to_active_jnp is not None
-                return expand_reduced_with_map(v_vec, full_to_active_jnp)
-
-            def _mv_true_no_count(v: jnp.ndarray) -> jnp.ndarray:
-                x_full = _xblock_expand_reduced(jnp.asarray(v, dtype=rhs.dtype))
-                y_full = apply_v3_full_system_operator_cached(op, x_full)
-                return _xblock_reduce_full(y_full)
-
-            def _mv_true(v: jnp.ndarray) -> jnp.ndarray:
-                nonlocal mv_count
-                mv_count += 1
-                if emit is not None and progress_every > 0 and mv_count % progress_every == 0:
-                    emit(
-                        1,
-                        "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
-                        f"matvecs={int(mv_count)} elapsed_s={sparse_timer.elapsed_s():.3f}",
-                    )
-                return _mv_true_no_count(v)
+            xblock_matvec_setup = build_xblock_krylov_matvec_setup(
+                op=op,
+                rhs=rhs,
+                xblock_use_active_dof=bool(xblock_use_active_dof),
+                active_idx=active_idx_jnp,
+                full_to_active=full_to_active_jnp,
+                reduce_full_with_indices=reduce_full_with_indices,
+                expand_reduced_with_map=expand_reduced_with_map,
+                operator_matvec=lambda x_full: apply_v3_full_system_operator_cached(op, x_full),
+                elapsed_s=sparse_timer.elapsed_s,
+                emit=emit,
+                env=os.environ,
+            )
+            progress_every = int(xblock_matvec_setup.progress_every)
+            mv_count = xblock_matvec_setup.mv_count
+            xblock_linear_size = int(xblock_matvec_setup.xblock_linear_size)
+            xblock_active_idx_np = xblock_matvec_setup.xblock_active_idx_np
+            xblock_rhs = xblock_matvec_setup.xblock_rhs
+            _xblock_reduce_full = xblock_matvec_setup.reduce_full
+            _xblock_expand_reduced = xblock_matvec_setup.expand_reduced
+            _mv_true_no_count = xblock_matvec_setup.matvec_no_count
+            _mv_true = xblock_matvec_setup.matvec
+            if emit is not None:
+                for level, message in xblock_matvec_setup.messages:
+                    emit(int(level), str(message))
 
             _mv_xblock_krylov = _mv_true
 

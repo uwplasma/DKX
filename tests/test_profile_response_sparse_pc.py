@@ -10,6 +10,7 @@ from sfincs_jax.problems.profile_response.sparse_pc import (
     SparsePCGMRESContext,
     SparsePCPostMinresContext,
     apply_sparse_pc_post_minres,
+    build_xblock_krylov_matvec_setup,
     resolve_sparse_pc_entry_policy,
     resolve_xblock_qi_device_operator_reuse_setup,
     resolve_xblock_sparse_pc_setup,
@@ -316,6 +317,61 @@ def test_xblock_qi_device_operator_reuse_setup_reports_factor_build_route() -> N
     assert setup.factor_backend == "jax"
     assert setup.factor_reason == " device-krylov"
     assert any("building jax x-block preconditioner" in message for _, message in setup.messages)
+
+
+def test_xblock_krylov_matvec_setup_reduces_active_dofs_and_counts_progress() -> None:
+    messages: list[str] = []
+    active_idx = jnp.asarray([0, 2], dtype=jnp.int32)
+    full_to_active = jnp.asarray([0, -1, 1, -1], dtype=jnp.int32)
+    setup = build_xblock_krylov_matvec_setup(
+        op=SimpleNamespace(total_size=4),
+        rhs=jnp.asarray([1.0, 2.0, 3.0, 4.0]),
+        xblock_use_active_dof=True,
+        active_idx=active_idx,
+        full_to_active=full_to_active,
+        reduce_full_with_indices=lambda v, idx: v[idx],
+        expand_reduced_with_map=lambda v, fmap: jnp.where(fmap >= 0, v[jnp.maximum(fmap, 0)], 0.0),
+        operator_matvec=lambda v: 2.0 * v,
+        elapsed_s=lambda: 12.5,
+        emit=lambda _level, msg: messages.append(msg),
+        env={"SFINCS_JAX_SPARSE_PC_PROGRESS_EVERY": "2"},
+    )
+
+    assert setup.xblock_linear_size == 2
+    assert setup.xblock_active_idx_np.tolist() == [0, 2]
+    assert setup.xblock_rhs.tolist() == [1.0, 3.0]
+    assert setup.matvec_no_count(jnp.asarray([5.0, 7.0])).tolist() == [10.0, 14.0]
+    assert int(setup.mv_count) == 0
+    assert setup.matvec(jnp.asarray([1.0, 2.0])).tolist() == [2.0, 4.0]
+    assert int(setup.mv_count) == 1
+    assert setup.matvec(jnp.asarray([2.0, 3.0])).tolist() == [4.0, 6.0]
+    assert int(setup.mv_count) == 2
+    assert any("active-DOF reduction" in message for _, message in setup.messages)
+    assert any("matvecs=2" in message for message in messages)
+
+
+def test_xblock_krylov_matvec_setup_full_space_is_identity_mapping() -> None:
+    setup = build_xblock_krylov_matvec_setup(
+        op=SimpleNamespace(total_size=3),
+        rhs=jnp.asarray([1.0, 2.0, 3.0]),
+        xblock_use_active_dof=False,
+        active_idx=None,
+        full_to_active=None,
+        reduce_full_with_indices=lambda _v, _idx: (_ for _ in ()).throw(AssertionError("unused")),
+        expand_reduced_with_map=lambda _v, _idx: (_ for _ in ()).throw(AssertionError("unused")),
+        operator_matvec=lambda v: v + 1.0,
+        elapsed_s=lambda: 0.0,
+        emit=None,
+        env={"SFINCS_JAX_SPARSE_PC_PROGRESS_EVERY": "bad"},
+    )
+
+    assert setup.progress_every == 25
+    assert setup.xblock_linear_size == 3
+    assert setup.xblock_active_idx_np is None
+    assert setup.reduce_full(jnp.asarray([1.0, 2.0])).tolist() == [1.0, 2.0]
+    assert setup.expand_reduced(jnp.asarray([1.0, 2.0])).tolist() == [1.0, 2.0]
+    assert setup.matvec(jnp.asarray([1.0, 2.0, 3.0])).tolist() == [2.0, 3.0, 4.0]
+    assert int(setup.mv_count) == 1
 
 
 def test_sparse_pc_gmres_once_explicit_left_recomputes_true_residual() -> None:
