@@ -35467,3 +35467,42 @@ Next refactor target:
 - Extract the remaining fortran-reduced x-block setup context around factor
   build and policy resolution, or move generic sparse-PC result metadata into
   diagnostics.
+
+### 19.125 Fortran-reduced x-block factor-build extraction
+
+Goal:
+
+- Remove the fortran-reduced x-block factor-policy resolution, assembled-host
+  admission, build logging, local preconditioner construction, and timing from
+  ``v3_driver.py``.
+
+Implementation:
+
+- Added ``FortranReducedXBlockFactorBuildContext`` and
+  ``FortranReducedXBlockFactorBuildResult`` to
+  ``problems/profile_response/sparse_pc.py``.
+- Added ``build_fortran_reduced_xblock_factor_stage`` to resolve the existing
+  factor controls, call the assembled-host admission callback, emit the same
+  branch diagnostics, build the x-block preconditioner, and return factor
+  timing/metadata values consumed later by solve metadata.
+- Updated ``v3_driver.py`` to consume the stage result while leaving the
+  full-FP/PAS validation in the driver.
+- Added focused tests covering Xi promotion, environment overrides,
+  assembled-host callback arguments, builder arguments, emitted diagnostics,
+  returned preconditioner behavior, and factor timing.
+- ``v3_driver.py`` is now about ``20585`` lines and
+  ``solve_v3_full_system_linear_gmres`` about ``15280`` lines.
+
+Validation:
+
+- ``python -m ruff check`` on touched source/tests: passed.
+- ``python -m compileall -q`` on touched source/tests: passed.
+- ``tests/test_profile_response_sparse_pc.py``: ``91 passed``.
+- Broader current profile-response/x-block/sparse-pattern shard:
+  ``368 passed in 114.68 s``.
+
+Next refactor target:
+
+- Extract the remaining fortran-reduced x-block matvec/Krylov policy setup
+  into a cohesive setup object, then continue moving generic sparse-PC
+  metadata and pattern/factor setup out of the monolithic solver.

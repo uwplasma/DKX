@@ -208,6 +208,7 @@ from .problems.profile_response.diagnostics import (
     xblock_sparse_pc_result_diagnostics_from_driver_state,
 )
 from .problems.profile_response.sparse_pc import (
+    FortranReducedXBlockFactorBuildContext,
     FortranReducedXBlockGlobalCouplingStageContext,
     FortranReducedXBlockKrylovSolveContext,
     FortranReducedXBlockMomentSchurStageContext,
@@ -217,6 +218,7 @@ from .problems.profile_response.sparse_pc import (
     apply_fortran_reduced_xblock_initial_seed,
     apply_fortran_reduced_xblock_moment_schur_stage,
     apply_sparse_pc_post_minres,
+    build_fortran_reduced_xblock_factor_stage,
     build_xblock_krylov_matvec_setup,
     build_xblock_assembled_equilibration_setup,
     build_xblock_assembled_device_setup,
@@ -6981,51 +6983,30 @@ def solve_v3_full_system_linear_gmres(
                     "full-FP RHSMode=1 systems."
                 )
 
-            xblock_factor_policy = resolve_fortran_reduced_xblock_factor_policy(
-                env=os.environ,
-                preconditioner_xi=int(preconditioner_xi),
-            )
-            xblock_drop_tol = xblock_factor_policy.drop_tol
-            xblock_drop_rel = xblock_factor_policy.drop_rel
-            xblock_ilu_drop_tol = xblock_factor_policy.ilu_drop_tol
-            xblock_fill_factor = xblock_factor_policy.fill_factor
-            xblock_preconditioner_xi = xblock_factor_policy.preconditioner_xi
-            if emit is not None:
-                for level, message in xblock_factor_policy.messages:
-                    emit(level, message)
-            force_assembled_host_fp = _rhsmode1_fp_xblock_assembled_host_allowed(
-                op=op_pc,
-                preconditioner_species=preconditioner_species,
-                preconditioner_xi=xblock_preconditioner_xi,
-                use_implicit=False,
-                active_size=int(sparse_pc_linear_size),
-            )
-            if emit is not None:
-                emit(
-                    1,
-                    "solve_v3_full_system_linear_gmres: fortran_reduced_pc_gmres "
-                    "using x-block backend instead of monolithic CSR factor "
-                    f"(reason={fortran_reduced_sparse_pc_backend_reason} "
-                    f"size={int(sparse_pc_linear_size)} "
-                    f"preconditioner_xi={int(xblock_preconditioner_xi)} "
-                    f"assembled_host_fp={bool(force_assembled_host_fp)})",
+            xblock_factor_build = build_fortran_reduced_xblock_factor_stage(
+                context=FortranReducedXBlockFactorBuildContext(
+                    op_pc=op_pc,
+                    reduce_full=_sparse_pc_reduce_full,
+                    expand_reduced=_sparse_pc_expand_reduced,
+                    preconditioner_species=int(preconditioner_species),
+                    preconditioner_xi=int(preconditioner_xi),
+                    sparse_pc_linear_size=int(sparse_pc_linear_size),
+                    backend_reason=str(fortran_reduced_sparse_pc_backend_reason),
+                    elapsed_s=sparse_timer.elapsed_s,
+                    emit=emit,
+                    env=os.environ,
+                    assembled_host_allowed=_rhsmode1_fp_xblock_assembled_host_allowed,
+                    builder=_build_rhsmode1_xblock_tz_sparse_preconditioner,
                 )
-            factor_start_s = sparse_timer.elapsed_s()
-            precond_xblock = _build_rhsmode1_xblock_tz_sparse_preconditioner(
-                op=op_pc,
-                reduce_full=_sparse_pc_reduce_full,
-                expand_reduced=_sparse_pc_expand_reduced,
-                build_jax_factors=False,
-                preconditioner_species=preconditioner_species,
-                preconditioner_xi=xblock_preconditioner_xi,
-                drop_tol=float(xblock_drop_tol),
-                drop_rel=float(xblock_drop_rel),
-                ilu_drop_tol=float(xblock_ilu_drop_tol),
-                fill_factor=float(xblock_fill_factor),
-                force_assembled_host_fp=bool(force_assembled_host_fp),
-                emit=emit,
             )
-            pc_factor_s = sparse_timer.elapsed_s() - factor_start_s
+            precond_xblock = xblock_factor_build.preconditioner
+            xblock_drop_tol = float(xblock_factor_build.drop_tol)
+            xblock_drop_rel = float(xblock_factor_build.drop_rel)
+            xblock_ilu_drop_tol = float(xblock_factor_build.ilu_drop_tol)
+            xblock_fill_factor = float(xblock_factor_build.fill_factor)
+            xblock_preconditioner_xi = int(xblock_factor_build.preconditioner_xi)
+            force_assembled_host_fp = bool(xblock_factor_build.force_assembled_host_fp)
+            pc_factor_s = float(xblock_factor_build.factor_s)
             setup_s = sparse_timer.elapsed_s()
 
             xblock_krylov_policy = resolve_fortran_reduced_xblock_krylov_policy(

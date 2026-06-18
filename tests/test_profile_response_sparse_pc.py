@@ -15,6 +15,7 @@ from sfincs_jax.problems.profile_response.diagnostics import (
     fortran_reduced_xblock_result_metadata,
 )
 from sfincs_jax.problems.profile_response.sparse_pc import (
+    FortranReducedXBlockFactorBuildContext,
     FortranReducedXBlockGlobalCouplingStageContext,
     FortranReducedXBlockKrylovSolveContext,
     FortranReducedXBlockMomentSchurStageContext,
@@ -26,6 +27,7 @@ from sfincs_jax.problems.profile_response.sparse_pc import (
     apply_fortran_reduced_xblock_initial_seed,
     apply_fortran_reduced_xblock_moment_schur_stage,
     apply_sparse_pc_post_minres,
+    build_fortran_reduced_xblock_factor_stage,
     build_sparse_pc_active_dof_setup,
     build_xblock_assembled_equilibration_setup,
     build_xblock_assembled_device_setup,
@@ -265,6 +267,52 @@ def test_fortran_reduced_xblock_factor_policy_can_disable_xi_promotion() -> None
     assert setup.preconditioner_xi == 0
     assert not setup.promote_xi
     assert setup.messages == ()
+
+
+def test_fortran_reduced_xblock_factor_stage_builds_with_policy_and_timing() -> None:
+    messages: list[str] = []
+    times = iter([2.0, 2.75])
+    calls: dict[str, object] = {}
+
+    def assembled_allowed(**kwargs) -> bool:
+        calls["assembled"] = kwargs
+        return True
+
+    def builder(**kwargs):
+        calls["builder"] = kwargs
+        return lambda v: 3.0 * v
+
+    result = build_fortran_reduced_xblock_factor_stage(
+        context=FortranReducedXBlockFactorBuildContext(
+            op_pc=SimpleNamespace(),
+            reduce_full=_identity,
+            expand_reduced=_identity,
+            preconditioner_species=1,
+            preconditioner_xi=0,
+            sparse_pc_linear_size=42,
+            backend_reason="auto_large_full_fp",
+            elapsed_s=lambda: next(times),
+            emit=lambda _level, msg: messages.append(msg),
+            env={
+                "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_XBLOCK_PC_DROP_REL": "2e-7",
+                "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_XBLOCK_PC_FILL_FACTOR": "6",
+            },
+            assembled_host_allowed=assembled_allowed,
+            builder=builder,
+        )
+    )
+
+    assert result.preconditioner_xi == 1
+    assert result.drop_rel == pytest.approx(2.0e-7)
+    assert result.fill_factor == pytest.approx(6.0)
+    assert result.force_assembled_host_fp is True
+    assert result.factor_s == pytest.approx(0.75)
+    assert result.preconditioner(jnp.asarray([2.0])).tolist() == [6.0]
+    assert calls["assembled"]["preconditioner_xi"] == 1
+    assert calls["builder"]["preconditioner_species"] == 1
+    assert calls["builder"]["force_assembled_host_fp"] is True
+    assert any("promoting x-block backend preconditioner_xi 0 -> 1" in message for message in messages)
+    assert any("using x-block backend instead of monolithic CSR factor" in message for message in messages)
 
 
 def test_fortran_reduced_xblock_krylov_policy_defaults_and_counter() -> None:

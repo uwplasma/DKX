@@ -212,6 +212,38 @@ class FortranReducedXBlockKrylovSolveContext:
 
 
 @dataclass(frozen=True)
+class FortranReducedXBlockFactorBuildContext:
+    """Dependencies for the fortran-reduced x-block factor build stage."""
+
+    op_pc: object
+    reduce_full: ArrayFn
+    expand_reduced: ArrayFn
+    preconditioner_species: int
+    preconditioner_xi: int
+    sparse_pc_linear_size: int
+    backend_reason: str
+    elapsed_s: Callable[[], float]
+    emit: EmitFn | None
+    env: Mapping[str, str] | None
+    assembled_host_allowed: Callable[..., bool]
+    builder: Callable[..., ArrayFn]
+
+
+@dataclass(frozen=True)
+class FortranReducedXBlockFactorBuildResult:
+    """Result from building the local fortran-reduced x-block preconditioner."""
+
+    preconditioner: ArrayFn
+    drop_tol: float
+    drop_rel: float
+    ilu_drop_tol: float
+    fill_factor: float
+    preconditioner_xi: int
+    force_assembled_host_fp: bool
+    factor_s: float
+
+
+@dataclass(frozen=True)
 class FortranReducedXBlockMomentSchurStageContext:
     """Dependencies for the optional fortran-reduced moment-Schur stage."""
 
@@ -1305,6 +1337,65 @@ def run_fortran_reduced_xblock_krylov_solve(
         preconditioned_residual_norm=float(rn_pc),
         history=history_tuple,
         solve_s=float(solve_s),
+    )
+
+
+def build_fortran_reduced_xblock_factor_stage(
+    *,
+    context: FortranReducedXBlockFactorBuildContext,
+) -> FortranReducedXBlockFactorBuildResult:
+    """Resolve and build the fortran-reduced x-block local preconditioner."""
+
+    policy = resolve_fortran_reduced_xblock_factor_policy(
+        env=context.env,
+        preconditioner_xi=int(context.preconditioner_xi),
+    )
+    if context.emit is not None:
+        for level, message in policy.messages:
+            context.emit(level, message)
+    force_assembled_host_fp = bool(
+        context.assembled_host_allowed(
+            op=context.op_pc,
+            preconditioner_species=int(context.preconditioner_species),
+            preconditioner_xi=int(policy.preconditioner_xi),
+            use_implicit=False,
+            active_size=int(context.sparse_pc_linear_size),
+        )
+    )
+    if context.emit is not None:
+        context.emit(
+            1,
+            "solve_v3_full_system_linear_gmres: fortran_reduced_pc_gmres "
+            "using x-block backend instead of monolithic CSR factor "
+            f"(reason={context.backend_reason} "
+            f"size={int(context.sparse_pc_linear_size)} "
+            f"preconditioner_xi={int(policy.preconditioner_xi)} "
+            f"assembled_host_fp={bool(force_assembled_host_fp)})",
+        )
+    factor_start_s = float(context.elapsed_s())
+    preconditioner = context.builder(
+        op=context.op_pc,
+        reduce_full=context.reduce_full,
+        expand_reduced=context.expand_reduced,
+        build_jax_factors=False,
+        preconditioner_species=int(context.preconditioner_species),
+        preconditioner_xi=int(policy.preconditioner_xi),
+        drop_tol=float(policy.drop_tol),
+        drop_rel=float(policy.drop_rel),
+        ilu_drop_tol=float(policy.ilu_drop_tol),
+        fill_factor=float(policy.fill_factor),
+        force_assembled_host_fp=bool(force_assembled_host_fp),
+        emit=context.emit,
+    )
+    return FortranReducedXBlockFactorBuildResult(
+        preconditioner=preconditioner,
+        drop_tol=float(policy.drop_tol),
+        drop_rel=float(policy.drop_rel),
+        ilu_drop_tol=float(policy.ilu_drop_tol),
+        fill_factor=float(policy.fill_factor),
+        preconditioner_xi=int(policy.preconditioner_xi),
+        force_assembled_host_fp=bool(force_assembled_host_fp),
+        factor_s=float(context.elapsed_s()) - factor_start_s,
     )
 
 
@@ -4215,6 +4306,8 @@ def apply_sparse_pc_post_minres(
 __all__ = [
     "FortranReducedSparsePCBackendSetup",
     "FortranReducedXBlockFactorPolicySetup",
+    "FortranReducedXBlockFactorBuildContext",
+    "FortranReducedXBlockFactorBuildResult",
     "FortranReducedXBlockInitialSeedPolicySetup",
     "FortranReducedXBlockInitialSeedResult",
     "FortranReducedXBlockGlobalCouplingStageContext",
@@ -4236,6 +4329,7 @@ __all__ = [
     "apply_fortran_reduced_xblock_initial_seed",
     "apply_fortran_reduced_xblock_moment_schur_stage",
     "apply_sparse_pc_post_minres",
+    "build_fortran_reduced_xblock_factor_stage",
     "build_sparse_pc_active_dof_setup",
     "fp_xblock_global_correction_metadata",
     "fp_xblock_highx_residual_correction_metadata",
