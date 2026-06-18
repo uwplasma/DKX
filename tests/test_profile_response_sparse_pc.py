@@ -45,6 +45,7 @@ from sfincs_jax.problems.profile_response.sparse_pc import (
     run_sparse_pc_gmres_once,
     sparse_rescue_tail_metadata,
     sparse_xblock_rescue_metadata,
+    xblock_qi_deflated_preconditioner_diagnostics,
     xblock_qi_device_preconditioner_diagnostics,
     finalize_xblock_assembled_operator_metadata,
 )
@@ -233,6 +234,55 @@ def test_xblock_qi_device_preconditioner_diagnostics_preserve_payload() -> None:
         is True
     )
     assert metadata["xblock_qi_device_preconditioner_block_schur_residual_enrichment"] is True
+
+
+def _qi_deflated_preconditioner_scope() -> dict[str, object]:
+    return {
+        "qi_deflated_preconditioner_enabled": 1,
+        "qi_deflated_preconditioner_built": True,
+        "qi_deflated_preconditioner_used": False,
+        "qi_deflated_preconditioner_used_in_krylov": True,
+        "qi_deflated_preconditioner_reason": "seed_rejected",
+        "qi_deflated_preconditioner_rank": 5,
+        "qi_deflated_preconditioner_candidate_count": 8,
+        "qi_deflated_preconditioner_residual_before": 3.0,
+        "qi_deflated_preconditioner_residual_after": 1.5,
+        "qi_deflated_preconditioner_improvement_ratio": 2.0,
+        "qi_deflated_preconditioner_setup_s": 0.125,
+        "qi_deflated_stats": {"applies": 4, "local_applies": 6},
+        "qi_deflated_preconditioner_metadata": {
+            "correction_cycles": 3,
+            "seed_solver": "minres",
+            "cycle_residual_history": (3.0, 2.0, 1.5),
+            "cycle_coefficients": (0.25, 0.5),
+        },
+    }
+
+
+def test_xblock_qi_deflated_preconditioner_diagnostics_preserve_payload() -> None:
+    metadata = xblock_qi_deflated_preconditioner_diagnostics(
+        _qi_deflated_preconditioner_scope()
+    )
+
+    assert metadata["xblock_qi_deflated_preconditioner_enabled"] is True
+    assert metadata["xblock_qi_deflated_preconditioner_used"] is False
+    assert metadata["xblock_qi_deflated_preconditioner_use_in_krylov"] is True
+    assert metadata["xblock_qi_deflated_preconditioner_rank"] == 5
+    assert metadata["xblock_qi_deflated_preconditioner_candidate_count"] == 8
+    assert metadata["xblock_qi_deflated_preconditioner_setup_s"] == 0.125
+    assert metadata["xblock_qi_deflated_preconditioner_applies"] == 4
+    assert metadata["xblock_qi_deflated_preconditioner_local_applies"] == 6
+    assert metadata["xblock_qi_deflated_preconditioner_cycles"] == 3
+    assert metadata["xblock_qi_deflated_preconditioner_seed_solver"] == "minres"
+    assert metadata["xblock_qi_deflated_preconditioner_cycle_residual_history"] == (
+        3.0,
+        2.0,
+        1.5,
+    )
+    assert metadata["xblock_qi_deflated_preconditioner_cycle_coefficients"] == (
+        0.25,
+        0.5,
+    )
 
 
 def test_sparse_pc_entry_policy_classifies_pas_er_and_active_dof() -> None:

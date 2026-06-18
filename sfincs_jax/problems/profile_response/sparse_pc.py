@@ -691,6 +691,72 @@ def xblock_qi_device_preconditioner_diagnostics(
     return out
 
 
+def xblock_qi_deflated_preconditioner_diagnostics(
+    scope: Mapping[str, object],
+) -> dict[str, object]:
+    """Return the x-block QI residual-deflation preconditioner diagnostics."""
+
+    metadata = scope["qi_deflated_preconditioner_metadata"]
+    stats = scope["qi_deflated_stats"]
+    if not isinstance(metadata, Mapping):
+        raise TypeError("qi_deflated_preconditioner_metadata must be a mapping")
+    if not isinstance(stats, Mapping):
+        raise TypeError("qi_deflated_stats must be a mapping")
+
+    return {
+        "xblock_qi_deflated_preconditioner_enabled": bool(
+            scope["qi_deflated_preconditioner_enabled"]
+        ),
+        "xblock_qi_deflated_preconditioner_built": bool(
+            scope["qi_deflated_preconditioner_built"]
+        ),
+        "xblock_qi_deflated_preconditioner_used": bool(
+            scope["qi_deflated_preconditioner_used"]
+        ),
+        "xblock_qi_deflated_preconditioner_reason": scope[
+            "qi_deflated_preconditioner_reason"
+        ],
+        "xblock_qi_deflated_preconditioner_rank": int(
+            scope["qi_deflated_preconditioner_rank"]
+        ),
+        "xblock_qi_deflated_preconditioner_candidate_count": int(
+            scope["qi_deflated_preconditioner_candidate_count"]
+        ),
+        "xblock_qi_deflated_preconditioner_residual_before": scope[
+            "qi_deflated_preconditioner_residual_before"
+        ],
+        "xblock_qi_deflated_preconditioner_residual_after": scope[
+            "qi_deflated_preconditioner_residual_after"
+        ],
+        "xblock_qi_deflated_preconditioner_improvement_ratio": scope[
+            "qi_deflated_preconditioner_improvement_ratio"
+        ],
+        "xblock_qi_deflated_preconditioner_metadata": metadata,
+        "xblock_qi_deflated_preconditioner_setup_s": float(
+            scope["qi_deflated_preconditioner_setup_s"]
+        ),
+        "xblock_qi_deflated_preconditioner_applies": int(stats.get("applies", 0)),
+        "xblock_qi_deflated_preconditioner_local_applies": int(
+            stats.get("local_applies", 0)
+        ),
+        "xblock_qi_deflated_preconditioner_cycles": int(
+            metadata.get("correction_cycles", 0)
+        ),
+        "xblock_qi_deflated_preconditioner_seed_solver": metadata.get("seed_solver"),
+        "xblock_qi_deflated_preconditioner_cycle_residual_history": metadata.get(
+            "cycle_residual_history",
+            (),
+        ),
+        "xblock_qi_deflated_preconditioner_cycle_coefficients": metadata.get(
+            "cycle_coefficients",
+            (),
+        ),
+        "xblock_qi_deflated_preconditioner_use_in_krylov": bool(
+            scope["qi_deflated_preconditioner_used_in_krylov"]
+        ),
+    }
+
+
 class MatvecCounter:
     """Mutable matvec counter that preserves ``int(counter)`` call sites."""
 

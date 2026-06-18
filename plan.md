@@ -34501,3 +34501,40 @@ Next refactor target:
   next targeting the adjacent QI-deflated preconditioner diagnostics payload or
   the assembled-operator/equilibration metadata payload. Keep each extraction
   independently tested and avoid changing algorithm selection.
+
+### 19.100 X-block QI-deflated diagnostics payload extraction
+
+Goal:
+
+- Remove the adjacent x-block QI residual-deflation preconditioner diagnostics
+  payload from the main sparse-PC result dictionary in ``v3_driver.py`` while
+  preserving all metadata keys and solver behavior.
+
+Implementation:
+
+- Added ``xblock_qi_deflated_preconditioner_diagnostics`` to
+  ``problems/profile_response/sparse_pc.py``.
+- Replaced the inline ``xblock_qi_deflated_preconditioner_*`` result payload in
+  ``v3_driver.py`` with
+  ``**xblock_qi_deflated_preconditioner_diagnostics(locals())``.
+- Added direct unit coverage for enabled/built/used flags, rank/candidate
+  counters, setup timing, apply counters, correction-cycle metadata, seed
+  solver, residual history, and cycle coefficients.
+- ``v3_driver.py`` is now about ``21706`` lines and
+  ``solve_v3_full_system_linear_gmres`` is about ``16416`` lines.
+
+Validation:
+
+- ``python -m ruff check`` on touched source/tests: passed.
+- ``python -m compileall -q`` on touched source/tests: passed.
+- ``tests/test_profile_response_sparse_pc.py``: ``61 passed``.
+- Broader current profile-response/x-block/sparse-pattern shard:
+  ``325 passed in 112.12 s``.
+
+Next refactor target:
+
+- Continue extracting pure diagnostics construction from the sparse-PC result,
+  next targeting the adjacent side-probe diagnostics payload or the assembled
+  operator/equilibration metadata payload. Keep the changes behavior-preserving
+  and independently tested before moving larger solver orchestration out of the
+  monolithic driver.

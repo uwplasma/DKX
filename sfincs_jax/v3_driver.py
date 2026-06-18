@@ -237,6 +237,7 @@ from .problems.profile_response.sparse_pc import (
     sparse_rescue_tail_metadata,
     sparse_xblock_rescue_metadata,
     XBlockAssembledPreflightError,
+    xblock_qi_deflated_preconditioner_diagnostics,
     xblock_qi_device_preconditioner_diagnostics,
     finalize_xblock_assembled_operator_metadata,
 )
@@ -7380,44 +7381,7 @@ def solve_v3_full_system_linear_gmres(
                         qi_two_level_stats.get("local_applies", 0)
                     ),
                     **xblock_qi_device_preconditioner_diagnostics(locals()),
-                    "xblock_qi_deflated_preconditioner_enabled": bool(qi_deflated_preconditioner_enabled),
-                    "xblock_qi_deflated_preconditioner_built": bool(qi_deflated_preconditioner_built),
-                    "xblock_qi_deflated_preconditioner_used": bool(qi_deflated_preconditioner_used),
-                    "xblock_qi_deflated_preconditioner_reason": qi_deflated_preconditioner_reason,
-                    "xblock_qi_deflated_preconditioner_rank": int(qi_deflated_preconditioner_rank),
-                    "xblock_qi_deflated_preconditioner_candidate_count": int(
-                        qi_deflated_preconditioner_candidate_count
-                    ),
-                    "xblock_qi_deflated_preconditioner_residual_before": (
-                        qi_deflated_preconditioner_residual_before
-                    ),
-                    "xblock_qi_deflated_preconditioner_residual_after": (
-                        qi_deflated_preconditioner_residual_after
-                    ),
-                    "xblock_qi_deflated_preconditioner_improvement_ratio": (
-                        qi_deflated_preconditioner_improvement_ratio
-                    ),
-                    "xblock_qi_deflated_preconditioner_metadata": qi_deflated_preconditioner_metadata,
-                    "xblock_qi_deflated_preconditioner_setup_s": float(qi_deflated_preconditioner_setup_s),
-                    "xblock_qi_deflated_preconditioner_applies": int(qi_deflated_stats.get("applies", 0)),
-                    "xblock_qi_deflated_preconditioner_local_applies": int(
-                        qi_deflated_stats.get("local_applies", 0)
-                    ),
-                    "xblock_qi_deflated_preconditioner_cycles": int(
-                        qi_deflated_preconditioner_metadata.get("correction_cycles", 0)
-                    ),
-                    "xblock_qi_deflated_preconditioner_seed_solver": (
-                        qi_deflated_preconditioner_metadata.get("seed_solver")
-                    ),
-                    "xblock_qi_deflated_preconditioner_cycle_residual_history": (
-                        qi_deflated_preconditioner_metadata.get("cycle_residual_history", ())
-                    ),
-                    "xblock_qi_deflated_preconditioner_cycle_coefficients": (
-                        qi_deflated_preconditioner_metadata.get("cycle_coefficients", ())
-                    ),
-                    "xblock_qi_deflated_preconditioner_use_in_krylov": bool(
-                        qi_deflated_preconditioner_used_in_krylov
-                    ),
+                    **xblock_qi_deflated_preconditioner_diagnostics(locals()),
                     "xblock_side_probe_enabled": bool(xblock_side_probe_enabled),
                     "xblock_side_probe_used": bool(xblock_side_probe_used),
                     "xblock_side_probe_switched": bool(xblock_side_probe_switched),
