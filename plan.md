@@ -33926,3 +33926,38 @@ Next refactor target:
   correct fallbacks for each policy. Keep construction/probe/residual-admission
   code in ``v3_driver.py`` until direct policy tests and focused driver
   regressions cover the extracted surfaces.
+
+### 19.87 RHSMode=1 x-block QI-device dead coarse-parser removal
+
+Goal:
+
+- Remove duplicated QI-device coarse parser code that was overwritten before
+  any downstream use, without changing the live policy values used by
+  rank-budgeting, preconditioner construction, metadata, or progress logging.
+
+Implementation:
+
+- Deleted the first duplicated inline parser for global-moment residual
+  equations, residual-Galerkin equations, phase-space residual equations,
+  residual-region bounce coarse controls, and active-pattern coarse controls in
+  the main RHSMode=1 QI-device branch.
+- Kept the later authoritative parser unchanged for now. The next extraction
+  should replace that live parser with the existing
+  ``rhs1_qi_device_extra_coarse_controls`` policy helper, which is already used
+  by the seed/reuse path.
+- ``solve_v3_full_system_linear_gmres`` is now about ``19013`` lines and
+  ``v3_driver.py`` is about ``24293`` lines.
+
+Validation so far:
+
+- ``python -m ruff check sfincs_jax/v3_driver.py``: passed.
+- ``python -m compileall -q sfincs_jax/v3_driver.py``: passed.
+- Focused QI-device driver regressions:
+  ``3 passed in 10.75 s``.
+
+Next refactor target:
+
+- Replace the remaining live global-moment/residual-Galerkin/phase-space/
+  residual-region/active-pattern parser with the existing policy helper, then
+  run the broader sparse-PC/x-block/dispatch shard before committing the next
+  tranche.
