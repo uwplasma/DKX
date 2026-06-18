@@ -284,6 +284,29 @@ PRECONDITIONER_COMPATIBILITY_IMPORTS = (
     ),
 )
 
+PRECONDITIONER_IMPLEMENTATION_IMPORTS = (
+    (
+        "sfincs_jax.solvers.preconditioners.transport_matrix",
+        "build_rhsmode23_block_preconditioner",
+    ),
+    (
+        "sfincs_jax.solvers.preconditioners.transport_matrix",
+        "build_rhsmode23_collision_preconditioner",
+    ),
+    (
+        "sfincs_jax.solvers.preconditioners.transport_matrix",
+        "build_rhsmode23_sxblock_preconditioner",
+    ),
+    (
+        "sfincs_jax.solvers.preconditioners.transport_matrix",
+        "build_rhsmode23_tzfft_preconditioner",
+    ),
+    (
+        "sfincs_jax.solvers.preconditioners.transport_matrix",
+        "build_rhsmode23_xmg_preconditioner",
+    ),
+)
+
 PROFILE_RESPONSE_COMPATIBILITY_IMPORTS = (
     (
         "sfincs_jax.rhs1_acceptance_policy",
@@ -416,6 +439,15 @@ def test_preconditioner_package_moves_preserve_legacy_imports() -> None:
         new_module = _import_module(new_name)
         assert legacy_module is new_module
         assert getattr(legacy_module, public_name) is getattr(new_module, public_name)
+
+
+def test_preconditioner_implementation_modules_expose_expected_builders() -> None:
+    """Implementation modules should keep the moved numerical builders importable."""
+
+    for module_name, public_name in PRECONDITIONER_IMPLEMENTATION_IMPORTS:
+        module = _import_module(module_name)
+        assert public_name in getattr(module, "__all__", ()), module_name
+        assert hasattr(module, public_name), f"{module_name}.{public_name}"
 
 
 def test_profile_response_package_moves_preserve_legacy_imports() -> None:
