@@ -427,6 +427,13 @@ the historical private driver name and test the focused module directly. This ke
   importable and tested.  ``v3_driver.py`` re-exports the same registry objects
   under the old private names so existing debugging scripts and tests keep
   clearing the real caches.
+- ``sfincs_jax/solvers/preconditioners/transport_matrix.py``:
+  numerical builder implementations for the common RHSMode=2/3 transport
+  preconditioners: collision diagonal, species/speed block, x-grid coarse
+  correction, angular FFT/tridiagonal solve, and point-block transport
+  preconditioners.  ``v3_driver.py`` keeps historical private wrapper names so
+  monkeypatch-based dispatch tests and user debug scripts continue to exercise
+  the same facade.
 - ``sfincs_jax/rhs1_pas_policy.py``:
   PAS applicability, PAS-TZ memory safety, PAS fallback routing, and PAS
   adaptive-smoother eligibility.
