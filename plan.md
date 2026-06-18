@@ -23368,6 +23368,54 @@ Validation:
 - ``python -m ruff check sfincs_jax/solver.py sfincs_jax/v3_driver.py scripts/run_zenodo_vmec_parity_campaign.py tests/test_solver_gmres.py tests/test_run_zenodo_vmec_parity_campaign.py``:
   passed.
 - ``git diff --check``: passed.
+
+### 19.50 RHSMode=2/3 FP transport-preconditioner extraction
+
+Goal:
+
+- Move the large FP-specific RHSMode=2/3 transport preconditioner builders out
+  of ``v3_driver.py`` while keeping a single coherent transport-preconditioner
+  implementation module instead of proliferating narrowly named files.
+
+Usage audit:
+
+- The FP builders are reached through
+  ``problems.transport_matrix.preconditioner_dispatch`` via driver-private
+  builder wrappers, and several focused tests import those private driver names
+  directly.
+- The direct-active block-Schur and Fortran-reduced LU wrappers still inject
+  driver-local host-factor callbacks, so this tranche leaves those two tiny
+  compatibility wrappers in ``v3_driver.py``.
+
+Implementation:
+
+- Extended ``sfincs_jax/solvers/preconditioners/transport_matrix.py`` to own
+  dense Fourier FP, block-Thomas Fourier line factors, line-Schur overlays,
+  local-geometry line factors, x-block angular sparse LU, x-block Schur
+  correction, and structured f-block LU builders.
+- ``v3_driver.py`` now keeps thin wrappers for those FP builders, preserving
+  private import paths and monkeypatch seams while removing the numerical setup
+  bodies from the driver.
+- Updated the source map and import-contract tests for every moved FP builder.
+
+Validation so far:
+
+- ``python -m ruff check sfincs_jax/v3_driver.py
+  sfincs_jax/solvers/preconditioners/transport_matrix.py
+  tests/test_domain_package_import_contracts.py tests/test_transport_sparse_direct.py
+  tests/test_fortran_reduced_preconditioner.py``: passed.
+- ``python -m compileall -q sfincs_jax/v3_driver.py
+  sfincs_jax/solvers/preconditioners/transport_matrix.py
+  tests/test_domain_package_import_contracts.py tests/test_transport_sparse_direct.py
+  tests/test_fortran_reduced_preconditioner.py``: passed.
+- ``PYTHONDONTWRITEBYTECODE=1 pytest -q -p no:cacheprovider
+  tests/test_domain_package_import_contracts.py tests/test_transport_sparse_direct.py
+  tests/test_fortran_reduced_preconditioner.py
+  tests/test_transport_matrix_rhsmode2_parity.py
+  tests/test_transport_matrix_rhsmode3_parity.py``: ``105 passed in 25.71 s``.
+- ``SPHINXOPTS='-W --keep-going' python -m sphinx -b html docs
+  docs/_build/html``: passed.
+- ``git diff --check``: passed.
 - Documentation follow-up updated README, usage, and performance-technique notes
   so the public recommendation remains ``--solve-method auto`` and the promoted
   Fortran-reduced host route is visible without requiring users to know hidden

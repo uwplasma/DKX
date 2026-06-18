@@ -295,6 +295,34 @@ PRECONDITIONER_IMPLEMENTATION_IMPORTS = (
     ),
     (
         "sfincs_jax.solvers.preconditioners.transport_matrix",
+        "build_rhsmode23_fp_local_geom_line_preconditioner",
+    ),
+    (
+        "sfincs_jax.solvers.preconditioners.transport_matrix",
+        "build_rhsmode23_fp_structured_fblock_lu_preconditioner",
+    ),
+    (
+        "sfincs_jax.solvers.preconditioners.transport_matrix",
+        "build_rhsmode23_fp_tzfft_line_preconditioner",
+    ),
+    (
+        "sfincs_jax.solvers.preconditioners.transport_matrix",
+        "build_rhsmode23_fp_tzfft_line_schur_preconditioner",
+    ),
+    (
+        "sfincs_jax.solvers.preconditioners.transport_matrix",
+        "build_rhsmode23_fp_tzfft_preconditioner",
+    ),
+    (
+        "sfincs_jax.solvers.preconditioners.transport_matrix",
+        "build_rhsmode23_fp_xblock_tz_lu_preconditioner",
+    ),
+    (
+        "sfincs_jax.solvers.preconditioners.transport_matrix",
+        "build_rhsmode23_fp_xblock_tz_lu_schur_preconditioner",
+    ),
+    (
+        "sfincs_jax.solvers.preconditioners.transport_matrix",
         "build_rhsmode23_sxblock_preconditioner",
     ),
     (
