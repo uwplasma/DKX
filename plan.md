@@ -34692,3 +34692,44 @@ Next refactor target:
   ``sparse_pc/diagnostics.py`` module once the diagnostics helpers have fully
   stabilized. Avoid adding algorithm changes until the current refactor
   checkpoints are green on CI.
+
+### 19.105 X-block device-Krylov diagnostics extraction
+
+Goal:
+
+- Remove the device-Krylov, host-fallback, operator-reuse, augmented-seed, and
+  host-transfer-free diagnostics payload from the sparse-PC result dictionary
+  in ``v3_driver.py`` without changing any Krylov method selection, fallback,
+  or device-residency behavior.
+
+Implementation:
+
+- Added ``xblock_device_krylov_diagnostics`` to
+  ``problems/profile_response/sparse_pc.py``.
+- Replaced the inline ``xblock_device_*``, ``xblock_qi_device_operator_reuse_*``,
+  and ``xblock_estimated_*`` result payload in ``v3_driver.py`` with
+  ``**xblock_device_krylov_diagnostics(locals())``.
+- Kept the original host-transfer-free logic by recomputing the same device
+  method, JAX-factor, assembled-operator, two-level, and global-coupling
+  device-residency gates inside the helper.
+- Added direct unit coverage for host-fallback metadata, QI operator reuse,
+  FGMRES/JIT metadata, augmented-Krylov/seed metadata, work-memory estimates,
+  and transfer-free booleans.
+- ``v3_driver.py`` is now about ``21245`` lines and
+  ``solve_v3_full_system_linear_gmres`` is about ``15950`` lines.
+
+Validation:
+
+- ``python -m ruff check`` on touched source/tests: passed.
+- ``python -m compileall -q`` on touched source/tests: passed.
+- ``tests/test_profile_response_sparse_pc.py``: ``66 passed``.
+- Broader current profile-response/x-block/sparse-pattern shard:
+  ``330 passed in 112.10 s``.
+
+Next refactor target:
+
+- The sparse-PC result mapping is now much smaller. Next, either extract the
+  remaining top-level sparse-PC metadata into a typed result builder or split
+  the growing diagnostics helpers from ``sparse_pc.py`` into a
+  ``profile_response/diagnostics.py`` module to keep file structure simple
+  before moving larger orchestration out of ``v3_driver.py``.

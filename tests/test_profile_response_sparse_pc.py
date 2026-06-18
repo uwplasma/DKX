@@ -14,6 +14,7 @@ from sfincs_jax.problems.profile_response.sparse_pc import (
     apply_sparse_pc_post_minres,
     xblock_assembled_operator_diagnostics,
     xblock_coarse_correction_diagnostics,
+    xblock_device_krylov_diagnostics,
     xblock_qi_seed_preconditioner_diagnostics,
     build_xblock_assembled_equilibration_setup,
     build_xblock_assembled_device_setup,
@@ -1182,6 +1183,91 @@ def test_xblock_qi_seed_preconditioner_diagnostics_preserve_payload() -> None:
         "rank": 2
     }
     assert metadata["xblock_qi_two_level_preconditioner_local_applies"] == 5
+
+
+def test_xblock_device_krylov_diagnostics_preserve_transfer_free_logic() -> None:
+    fallback = SimpleNamespace(
+        mode="auto",
+        used=False,
+        reason="device_ok",
+        requested_method="fgmres_jax",
+        effective_krylov_env_value="fgmres_jax",
+        min_active_size=128,
+        qi_like_full_fp_3d=True,
+        ignored_env=False,
+        non_autodiff=False,
+    )
+    operator_reuse = SimpleNamespace(
+        enabled=True,
+        reason="shape_reusable",
+        skip_xblock_factors=True,
+        to_metadata=lambda: {"enabled": True, "reason": "shape_reusable"},
+    )
+
+    metadata = xblock_device_krylov_diagnostics(
+        {
+            "xblock_krylov_method": "fgmres_jax",
+            "xblock_device_krylov_methods": {"gmres_jax", "fgmres_jax"},
+            "xblock_jax_factors": True,
+            "assembled_operator_built": True,
+            "assembled_operator_device_resident": True,
+            "two_level_built": False,
+            "global_coupling_built": True,
+            "global_coupling_metadata": {"device_resident": True},
+            "xblock_device_host_fallback_decision": fallback,
+            "xblock_krylov_env_requested": "auto",
+            "xblock_device_host_fallback_auto_disabled_by_qi_device": True,
+            "xblock_qi_device_operator_reuse_decision": operator_reuse,
+            "xblock_device_fgmres_jit": True,
+            "xblock_device_fgmres_jit_mode": "cycle",
+            "xblock_device_fgmres_jit_outer_k": 7,
+            "qi_device_augmented_krylov_requested": True,
+            "qi_device_augmented_krylov_used": False,
+            "qi_device_augmented_krylov_rank": 3,
+            "qi_device_augmented_krylov_reason": "seed_only",
+            "qi_device_augmented_krylov_mode": "right",
+            "qi_device_augmented_seed_requested": True,
+            "qi_device_augmented_seed_available": True,
+            "qi_device_augmented_seed_used": False,
+            "qi_device_augmented_seed_rank": 2,
+            "qi_device_augmented_seed_max_rank": 5,
+            "qi_device_augmented_seed_reason": "accepted",
+            "qi_device_augmented_seed_projection_residual": 1.0e-4,
+            "qi_device_augmented_seed_labels": ("constant", "current"),
+            "tfqmr_replacement_interval": 11,
+            "xblock_device_krylov_forced_jax_factors": True,
+            "xblock_device_fgmres_forced_right_pc": True,
+            "fgmres_block_between_cycles": True,
+            "xblock_estimated_gmres_basis_nbytes": 100,
+            "xblock_estimated_bicgstab_work_nbytes": 200,
+            "xblock_estimated_tfqmr_work_nbytes": 300,
+        }
+    )
+
+    assert metadata["xblock_device_krylov_method"] == "fgmres_jax"
+    assert metadata["xblock_device_host_fallback_mode"] == "auto"
+    assert metadata["xblock_device_host_fallback_used"] is False
+    assert metadata["xblock_device_host_fallback_auto_disabled_by_qi_device"] is True
+    assert metadata["xblock_qi_device_operator_reuse"] == {
+        "enabled": True,
+        "reason": "shape_reusable",
+    }
+    assert metadata["xblock_qi_device_operator_reuse_skip_xblock_factors"] is True
+    assert metadata["xblock_device_fgmres_enabled"] is True
+    assert metadata["xblock_device_fgmres_jit_enabled"] is True
+    assert metadata["xblock_device_fgmres_jit_mode"] == "cycle"
+    assert metadata["xblock_device_fgmres_jit_outer_k"] == 7
+    assert metadata["xblock_device_fgmres_qi_augmented_seed_labels"] == (
+        "constant",
+        "current",
+    )
+    assert metadata["xblock_device_tfqmr_replacement_interval"] == 11
+    assert metadata["xblock_device_fgmres_forced_jax_factors"] is True
+    assert metadata["xblock_estimated_tfqmr_work_nbytes"] == 300
+    assert metadata["xblock_device_krylov_host_transfer_free"] is True
+    assert metadata["xblock_device_fgmres_host_transfer_free"] is True
+    assert metadata["xblock_device_bicgstab_host_transfer_free"] is False
+    assert metadata["xblock_device_tfqmr_host_transfer_free"] is False
 
 
 def test_xblock_moment_schur_policy_defaults_on_for_constraint1_device_krylov() -> None:

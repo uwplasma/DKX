@@ -205,6 +205,7 @@ from .problems.profile_response.sparse_pc import (
     apply_sparse_pc_post_minres,
     xblock_assembled_operator_diagnostics,
     xblock_coarse_correction_diagnostics,
+    xblock_device_krylov_diagnostics,
     xblock_qi_seed_preconditioner_diagnostics,
     build_xblock_krylov_matvec_setup,
     build_xblock_assembled_equilibration_setup,
@@ -6936,150 +6937,7 @@ def solve_v3_full_system_linear_gmres(
                     "xblock_lower_fill_mode": str(xblock_lower_fill_mode),
                     "xblock_lower_fill_requested": str(xblock_lower_fill_mode) in {"probe", "force"},
                     "xblock_lower_fill_ignored_env": bool(xblock_lower_fill_ignored_env),
-                    "xblock_device_krylov_method": (
-                        str(xblock_krylov_method)
-                        if str(xblock_krylov_method) in xblock_device_krylov_methods
-                        else None
-                    ),
-                    "xblock_device_host_fallback_mode": str(xblock_device_host_fallback_decision.mode),
-                    "xblock_device_host_fallback_used": bool(xblock_device_host_fallback_decision.used),
-                    "xblock_device_host_fallback_reason": str(xblock_device_host_fallback_decision.reason),
-                    "xblock_device_host_fallback_requested_method": str(
-                        xblock_device_host_fallback_decision.requested_method
-                    ),
-                    "xblock_device_host_fallback_requested_env": str(xblock_krylov_env_requested),
-                    "xblock_device_host_fallback_effective_krylov_env_value": str(
-                        xblock_device_host_fallback_decision.effective_krylov_env_value
-                    ),
-                    "xblock_device_host_fallback_min_active_size": int(
-                        xblock_device_host_fallback_decision.min_active_size
-                    ),
-                    "xblock_device_host_fallback_qi_like_full_fp_3d": bool(
-                        xblock_device_host_fallback_decision.qi_like_full_fp_3d
-                    ),
-                    "xblock_device_host_fallback_ignored_env": bool(
-                        xblock_device_host_fallback_decision.ignored_env
-                    ),
-                    "xblock_device_host_fallback_auto_disabled_by_qi_device": bool(
-                        xblock_device_host_fallback_auto_disabled_by_qi_device
-                    ),
-                    "xblock_device_host_fallback_non_autodiff": bool(
-                        xblock_device_host_fallback_decision.non_autodiff
-                    ),
-                    "xblock_qi_device_operator_reuse": (
-                        xblock_qi_device_operator_reuse_decision.to_metadata()
-                    ),
-                    "xblock_qi_device_operator_reuse_enabled": bool(
-                        xblock_qi_device_operator_reuse_decision.enabled
-                    ),
-                    "xblock_qi_device_operator_reuse_reason": str(
-                        xblock_qi_device_operator_reuse_decision.reason
-                    ),
-                    "xblock_qi_device_operator_reuse_skip_xblock_factors": bool(
-                        xblock_qi_device_operator_reuse_decision.skip_xblock_factors
-                    ),
-                    "xblock_device_gmres_enabled": bool(str(xblock_krylov_method) == "gmres_jax"),
-                    "xblock_device_fgmres_enabled": bool(str(xblock_krylov_method) == "fgmres_jax"),
-                    "xblock_device_fgmres_jit_enabled": bool(
-                        str(xblock_krylov_method) in {"fgmres_jax", "gmres_jax"}
-                        and bool(xblock_device_fgmres_jit)
-                    ),
-                    "xblock_device_fgmres_jit_mode": (
-                        xblock_device_fgmres_jit_mode
-                        if str(xblock_krylov_method) in {"fgmres_jax", "gmres_jax"}
-                        and bool(xblock_device_fgmres_jit)
-                        else None
-                    ),
-                    "xblock_device_fgmres_jit_outer_k": (
-                        int(xblock_device_fgmres_jit_outer_k)
-                        if str(xblock_krylov_method) in {"fgmres_jax", "gmres_jax"}
-                        and bool(xblock_device_fgmres_jit)
-                        and xblock_device_fgmres_jit_mode == "cycle"
-                        else 0
-                    ),
-                    "xblock_device_fgmres_qi_augmented_krylov_requested": bool(
-                        qi_device_augmented_krylov_requested
-                    ),
-                    "xblock_device_fgmres_qi_augmented_krylov_used": bool(qi_device_augmented_krylov_used),
-                    "xblock_device_fgmres_qi_augmented_krylov_rank": int(qi_device_augmented_krylov_rank),
-                    "xblock_device_fgmres_qi_augmented_krylov_reason": qi_device_augmented_krylov_reason,
-                    "xblock_device_fgmres_qi_augmented_krylov_mode": qi_device_augmented_krylov_mode,
-                    "xblock_device_fgmres_qi_augmented_seed_requested": bool(
-                        qi_device_augmented_seed_requested
-                    ),
-                    "xblock_device_fgmres_qi_augmented_seed_available": bool(
-                        qi_device_augmented_seed_available
-                    ),
-                    "xblock_device_fgmres_qi_augmented_seed_used": bool(qi_device_augmented_seed_used),
-                    "xblock_device_fgmres_qi_augmented_seed_rank": int(qi_device_augmented_seed_rank),
-                    "xblock_device_fgmres_qi_augmented_seed_max_rank": int(qi_device_augmented_seed_max_rank),
-                    "xblock_device_fgmres_qi_augmented_seed_reason": qi_device_augmented_seed_reason,
-                    "xblock_device_fgmres_qi_augmented_seed_projection_residual_norm": (
-                        qi_device_augmented_seed_projection_residual
-                    ),
-                    "xblock_device_fgmres_qi_augmented_seed_labels": qi_device_augmented_seed_labels,
-                    "xblock_device_bicgstab_enabled": bool(str(xblock_krylov_method) == "bicgstab_jax"),
-                    "xblock_device_tfqmr_enabled": bool(str(xblock_krylov_method) == "tfqmr_jax"),
-                    "xblock_device_tfqmr_replacement_interval": int(tfqmr_replacement_interval),
-                    "xblock_device_krylov_forced_jax_factors": bool(xblock_device_krylov_forced_jax_factors),
-                    "xblock_device_fgmres_forced_jax_factors": bool(xblock_device_krylov_forced_jax_factors),
-                    "xblock_device_fgmres_forced_right_pc": bool(xblock_device_fgmres_forced_right_pc),
-                    "xblock_device_fgmres_block_between_cycles": bool(fgmres_block_between_cycles),
-                    "xblock_estimated_gmres_basis_nbytes": int(xblock_estimated_gmres_basis_nbytes),
-                    "xblock_estimated_bicgstab_work_nbytes": int(xblock_estimated_bicgstab_work_nbytes),
-                    "xblock_estimated_tfqmr_work_nbytes": int(xblock_estimated_tfqmr_work_nbytes),
-                    "xblock_device_krylov_host_transfer_free": bool(
-                        str(xblock_krylov_method) in xblock_device_krylov_methods
-                        and bool(xblock_jax_factors)
-                        and (
-                            not bool(assembled_operator_built)
-                            or bool(assembled_operator_device_resident)
-                        )
-                        and not bool(two_level_built)
-                        and (
-                            not bool(global_coupling_built)
-                            or bool(global_coupling_metadata.get("device_resident", False))
-                        )
-                    ),
-                    "xblock_device_fgmres_host_transfer_free": bool(
-                        str(xblock_krylov_method) == "fgmres_jax"
-                        and bool(xblock_jax_factors)
-                        and (
-                            not bool(assembled_operator_built)
-                            or bool(assembled_operator_device_resident)
-                        )
-                        and not bool(two_level_built)
-                        and (
-                            not bool(global_coupling_built)
-                            or bool(global_coupling_metadata.get("device_resident", False))
-                        )
-                    ),
-                    "xblock_device_bicgstab_host_transfer_free": bool(
-                        str(xblock_krylov_method) == "bicgstab_jax"
-                        and bool(xblock_jax_factors)
-                        and (
-                            not bool(assembled_operator_built)
-                            or bool(assembled_operator_device_resident)
-                        )
-                        and not bool(two_level_built)
-                        and (
-                            not bool(global_coupling_built)
-                            or bool(global_coupling_metadata.get("device_resident", False))
-                        )
-                    ),
-                    "xblock_device_tfqmr_host_transfer_free": bool(
-                        str(xblock_krylov_method) == "tfqmr_jax"
-                        and bool(xblock_jax_factors)
-                        and (
-                            not bool(assembled_operator_built)
-                            or bool(assembled_operator_device_resident)
-                        )
-                        and not bool(two_level_built)
-                        and (
-                            not bool(global_coupling_built)
-                            or bool(global_coupling_metadata.get("device_resident", False))
-                        )
-                    ),
+                    **xblock_device_krylov_diagnostics(locals()),
                     "xblock_active_dof": bool(xblock_use_active_dof),
                     "xblock_linear_size": int(xblock_linear_size),
                     "xblock_full_size": int(op.total_size),

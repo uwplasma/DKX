@@ -1232,6 +1232,159 @@ def xblock_qi_seed_preconditioner_diagnostics(
     }
 
 
+def xblock_device_krylov_diagnostics(scope: Mapping[str, object]) -> dict[str, object]:
+    """Return device-Krylov, host-fallback, and transfer-free diagnostics."""
+
+    method = str(scope["xblock_krylov_method"])
+    device_methods = scope["xblock_device_krylov_methods"]
+    global_metadata = scope["global_coupling_metadata"]
+    if not isinstance(global_metadata, Mapping):
+        raise TypeError("global_coupling_metadata must be a mapping")
+
+    host_transfer_free_base = bool(
+        method in device_methods
+        and bool(scope["xblock_jax_factors"])
+        and (
+            not bool(scope["assembled_operator_built"])
+            or bool(scope["assembled_operator_device_resident"])
+        )
+        and not bool(scope["two_level_built"])
+        and (
+            not bool(scope["global_coupling_built"])
+            or bool(global_metadata.get("device_resident", False))
+        )
+    )
+    fallback_decision = scope["xblock_device_host_fallback_decision"]
+    operator_reuse_decision = scope["xblock_qi_device_operator_reuse_decision"]
+    fgmres_jit_active = bool(
+        method in {"fgmres_jax", "gmres_jax"}
+        and bool(scope["xblock_device_fgmres_jit"])
+    )
+
+    return {
+        "xblock_device_krylov_method": method if method in device_methods else None,
+        "xblock_device_host_fallback_mode": str(fallback_decision.mode),
+        "xblock_device_host_fallback_used": bool(fallback_decision.used),
+        "xblock_device_host_fallback_reason": str(fallback_decision.reason),
+        "xblock_device_host_fallback_requested_method": str(
+            fallback_decision.requested_method
+        ),
+        "xblock_device_host_fallback_requested_env": str(
+            scope["xblock_krylov_env_requested"]
+        ),
+        "xblock_device_host_fallback_effective_krylov_env_value": str(
+            fallback_decision.effective_krylov_env_value
+        ),
+        "xblock_device_host_fallback_min_active_size": int(
+            fallback_decision.min_active_size
+        ),
+        "xblock_device_host_fallback_qi_like_full_fp_3d": bool(
+            fallback_decision.qi_like_full_fp_3d
+        ),
+        "xblock_device_host_fallback_ignored_env": bool(fallback_decision.ignored_env),
+        "xblock_device_host_fallback_auto_disabled_by_qi_device": bool(
+            scope["xblock_device_host_fallback_auto_disabled_by_qi_device"]
+        ),
+        "xblock_device_host_fallback_non_autodiff": bool(
+            fallback_decision.non_autodiff
+        ),
+        "xblock_qi_device_operator_reuse": operator_reuse_decision.to_metadata(),
+        "xblock_qi_device_operator_reuse_enabled": bool(
+            operator_reuse_decision.enabled
+        ),
+        "xblock_qi_device_operator_reuse_reason": str(operator_reuse_decision.reason),
+        "xblock_qi_device_operator_reuse_skip_xblock_factors": bool(
+            operator_reuse_decision.skip_xblock_factors
+        ),
+        "xblock_device_gmres_enabled": bool(method == "gmres_jax"),
+        "xblock_device_fgmres_enabled": bool(method == "fgmres_jax"),
+        "xblock_device_fgmres_jit_enabled": fgmres_jit_active,
+        "xblock_device_fgmres_jit_mode": (
+            scope["xblock_device_fgmres_jit_mode"] if fgmres_jit_active else None
+        ),
+        "xblock_device_fgmres_jit_outer_k": (
+            int(scope["xblock_device_fgmres_jit_outer_k"])
+            if fgmres_jit_active and scope["xblock_device_fgmres_jit_mode"] == "cycle"
+            else 0
+        ),
+        "xblock_device_fgmres_qi_augmented_krylov_requested": bool(
+            scope["qi_device_augmented_krylov_requested"]
+        ),
+        "xblock_device_fgmres_qi_augmented_krylov_used": bool(
+            scope["qi_device_augmented_krylov_used"]
+        ),
+        "xblock_device_fgmres_qi_augmented_krylov_rank": int(
+            scope["qi_device_augmented_krylov_rank"]
+        ),
+        "xblock_device_fgmres_qi_augmented_krylov_reason": scope[
+            "qi_device_augmented_krylov_reason"
+        ],
+        "xblock_device_fgmres_qi_augmented_krylov_mode": scope[
+            "qi_device_augmented_krylov_mode"
+        ],
+        "xblock_device_fgmres_qi_augmented_seed_requested": bool(
+            scope["qi_device_augmented_seed_requested"]
+        ),
+        "xblock_device_fgmres_qi_augmented_seed_available": bool(
+            scope["qi_device_augmented_seed_available"]
+        ),
+        "xblock_device_fgmres_qi_augmented_seed_used": bool(
+            scope["qi_device_augmented_seed_used"]
+        ),
+        "xblock_device_fgmres_qi_augmented_seed_rank": int(
+            scope["qi_device_augmented_seed_rank"]
+        ),
+        "xblock_device_fgmres_qi_augmented_seed_max_rank": int(
+            scope["qi_device_augmented_seed_max_rank"]
+        ),
+        "xblock_device_fgmres_qi_augmented_seed_reason": scope[
+            "qi_device_augmented_seed_reason"
+        ],
+        "xblock_device_fgmres_qi_augmented_seed_projection_residual_norm": scope[
+            "qi_device_augmented_seed_projection_residual"
+        ],
+        "xblock_device_fgmres_qi_augmented_seed_labels": scope[
+            "qi_device_augmented_seed_labels"
+        ],
+        "xblock_device_bicgstab_enabled": bool(method == "bicgstab_jax"),
+        "xblock_device_tfqmr_enabled": bool(method == "tfqmr_jax"),
+        "xblock_device_tfqmr_replacement_interval": int(
+            scope["tfqmr_replacement_interval"]
+        ),
+        "xblock_device_krylov_forced_jax_factors": bool(
+            scope["xblock_device_krylov_forced_jax_factors"]
+        ),
+        "xblock_device_fgmres_forced_jax_factors": bool(
+            scope["xblock_device_krylov_forced_jax_factors"]
+        ),
+        "xblock_device_fgmres_forced_right_pc": bool(
+            scope["xblock_device_fgmres_forced_right_pc"]
+        ),
+        "xblock_device_fgmres_block_between_cycles": bool(
+            scope["fgmres_block_between_cycles"]
+        ),
+        "xblock_estimated_gmres_basis_nbytes": int(
+            scope["xblock_estimated_gmres_basis_nbytes"]
+        ),
+        "xblock_estimated_bicgstab_work_nbytes": int(
+            scope["xblock_estimated_bicgstab_work_nbytes"]
+        ),
+        "xblock_estimated_tfqmr_work_nbytes": int(
+            scope["xblock_estimated_tfqmr_work_nbytes"]
+        ),
+        "xblock_device_krylov_host_transfer_free": host_transfer_free_base,
+        "xblock_device_fgmres_host_transfer_free": bool(
+            method == "fgmres_jax" and host_transfer_free_base
+        ),
+        "xblock_device_bicgstab_host_transfer_free": bool(
+            method == "bicgstab_jax" and host_transfer_free_base
+        ),
+        "xblock_device_tfqmr_host_transfer_free": bool(
+            method == "tfqmr_jax" and host_transfer_free_base
+        ),
+    }
+
+
 class MatvecCounter:
     """Mutable matvec counter that preserves ``int(counter)`` call sites."""
 
