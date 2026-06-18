@@ -151,6 +151,19 @@ class FortranReducedXBlockFactorPolicySetup:
 
 
 @dataclass(frozen=True)
+class FortranReducedXBlockKrylovPolicySetup:
+    """Krylov-side, method, progress, and matvec-counter controls."""
+
+    side_env: str
+    precondition_side: str
+    pc_form: str
+    krylov_method: str
+    progress_every: int
+    mv_count: "MatvecCounter"
+    messages: tuple[tuple[int, str], ...]
+
+
+@dataclass(frozen=True)
 class SparsePCEntryPolicySetup:
     """Physics classification and GMRES budget for RHSMode=1 sparse-PC paths."""
 
@@ -890,6 +903,61 @@ def resolve_fortran_reduced_xblock_factor_policy(
         preconditioner_xi=int(xblock_preconditioner_xi),
         promote_xi=bool(promote_xi),
         messages=messages,
+    )
+
+
+def resolve_fortran_reduced_xblock_krylov_policy(
+    *,
+    env: Mapping[str, str] | None,
+) -> FortranReducedXBlockKrylovPolicySetup:
+    """Resolve fortran-reduced x-block Krylov method and progress controls."""
+
+    side_env = _env_value(env, "SFINCS_JAX_GMRES_PRECONDITION_SIDE").lower()
+    precondition_side = side_env if side_env in {"left", "right", "none"} else "left"
+
+    pc_form = _env_value(env, "SFINCS_JAX_RHSMODE1_SPARSE_PC_FORM").lower()
+    if pc_form not in {"", "scipy_left", "scipy", "explicit_left", "petsc_left"}:
+        pc_form = ""
+    pc_form = pc_form or "scipy_left"
+
+    krylov_method = (
+        _env_value(env, "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_XBLOCK_KRYLOV")
+        or "gmres"
+    )
+    krylov_method = krylov_method.lower().replace("-", "_")
+    messages: list[tuple[int, str]] = []
+    if krylov_method in {"lgmres_scipy"}:
+        krylov_method = "lgmres"
+    elif krylov_method in {"gcrot", "gcrotmk_scipy"}:
+        krylov_method = "gcrotmk"
+    elif krylov_method in {"bicgstab_scipy", "bi_cgstab"}:
+        krylov_method = "bicgstab"
+    elif krylov_method not in {"gmres", "lgmres", "gcrotmk", "bicgstab"}:
+        messages.append(
+            (
+                1,
+                "solve_v3_full_system_linear_gmres: fortran_reduced_pc_gmres xblock "
+                "ignoring unknown SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_XBLOCK_KRYLOV="
+                f"{krylov_method!r}; using gmres",
+            )
+        )
+        krylov_method = "gmres"
+
+    progress_every_env = _env_value(env, "SFINCS_JAX_SPARSE_PC_PROGRESS_EVERY")
+    try:
+        progress_every = int(progress_every_env) if progress_every_env else 25
+    except ValueError:
+        progress_every = 25
+    progress_every = max(0, int(progress_every))
+
+    return FortranReducedXBlockKrylovPolicySetup(
+        side_env=side_env,
+        precondition_side=precondition_side,
+        pc_form=pc_form,
+        krylov_method=krylov_method,
+        progress_every=int(progress_every),
+        mv_count=MatvecCounter(0),
+        messages=tuple(messages),
     )
 
 
@@ -3443,6 +3511,7 @@ def apply_sparse_pc_post_minres(
 __all__ = [
     "FortranReducedSparsePCBackendSetup",
     "FortranReducedXBlockFactorPolicySetup",
+    "FortranReducedXBlockKrylovPolicySetup",
     "XBlockAssembledOperatorDiagnosticsContext",
     "XBlockSparsePCCoreDiagnosticsContext",
     "XBlockSideProbeDiagnosticsContext",
@@ -3457,6 +3526,7 @@ __all__ = [
     "fp_xblock_highx_residual_correction_metadata",
     "resolve_fortran_reduced_sparse_pc_backend",
     "resolve_fortran_reduced_xblock_factor_policy",
+    "resolve_fortran_reduced_xblock_krylov_policy",
     "run_sparse_pc_gmres_once",
     "sparse_rescue_tail_metadata",
     "sparse_xblock_rescue_metadata",

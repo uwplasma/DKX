@@ -35121,3 +35121,43 @@ Next refactor target:
 - Extract the remaining fortran-reduced x-block Krylov/GMRES policy setup
   around side selection, method normalization, progress cadence, and matvec
   counter setup, or pause to check CI if a non-cancelled failure appears.
+
+### 19.116 Fortran-reduced x-block Krylov-policy extraction
+
+Goal:
+
+- Remove the fortran-reduced x-block side/form/method/progress parser and
+  matvec-counter setup from ``v3_driver.py``.
+
+Implementation:
+
+- Added ``FortranReducedXBlockKrylovPolicySetup`` and
+  ``resolve_fortran_reduced_xblock_krylov_policy`` to
+  ``problems/profile_response/sparse_pc.py``.
+- The resolver preserves the existing defaults and aliases for
+  ``SFINCS_JAX_GMRES_PRECONDITION_SIDE``,
+  ``SFINCS_JAX_RHSMODE1_SPARSE_PC_FORM``,
+  ``SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_XBLOCK_KRYLOV``, and
+  ``SFINCS_JAX_SPARSE_PC_PROGRESS_EVERY``.
+- Reused the existing ``MatvecCounter`` abstraction so the driver no longer
+  owns a mutable integer/nonlocal counter for this branch.
+- Updated ``v3_driver.py`` to consume the policy object while leaving the
+  operator-dependent matvec closures in place.
+- Added focused tests for defaults, counter behavior, alias normalization,
+  invalid-value fallback, progress clamping, and unknown-method diagnostics.
+- ``v3_driver.py`` is now about ``20963`` lines and
+  ``solve_v3_full_system_linear_gmres`` about ``15671`` lines.
+
+Validation:
+
+- ``python -m ruff check`` on touched source/tests: passed.
+- ``python -m compileall -q`` on touched source/tests: passed.
+- ``tests/test_profile_response_sparse_pc.py``: ``70 passed``.
+- Broader current profile-response/x-block/sparse-pattern shard:
+  ``347 passed in 107.28 s``.
+
+Next refactor target:
+
+- Continue with the fortran-reduced x-block branch by extracting the
+  preconditioner/matvec closure setup or the moment-Schur policy slice, keeping
+  the broad sparse-pattern route tests green.

@@ -32,6 +32,7 @@ from sfincs_jax.problems.profile_response.sparse_pc import (
     prepare_xblock_initial_guess,
     resolve_fortran_reduced_sparse_pc_backend,
     resolve_fortran_reduced_xblock_factor_policy,
+    resolve_fortran_reduced_xblock_krylov_policy,
     resolve_sparse_pc_entry_policy,
     resolve_xblock_qi_device_admission_setup,
     resolve_xblock_qi_device_base_config_setup,
@@ -249,6 +250,62 @@ def test_fortran_reduced_xblock_factor_policy_can_disable_xi_promotion() -> None
     assert setup.preconditioner_xi == 0
     assert not setup.promote_xi
     assert setup.messages == ()
+
+
+def test_fortran_reduced_xblock_krylov_policy_defaults_and_counter() -> None:
+    setup = resolve_fortran_reduced_xblock_krylov_policy(env={})
+
+    assert setup.side_env == ""
+    assert setup.precondition_side == "left"
+    assert setup.pc_form == "scipy_left"
+    assert setup.krylov_method == "gmres"
+    assert setup.progress_every == 25
+    assert int(setup.mv_count) == 0
+    setup.mv_count.increment()
+    assert int(setup.mv_count) == 1
+    assert setup.messages == ()
+
+
+def test_fortran_reduced_xblock_krylov_policy_normalizes_aliases() -> None:
+    setup = resolve_fortran_reduced_xblock_krylov_policy(
+        env={
+            "SFINCS_JAX_GMRES_PRECONDITION_SIDE": "right",
+            "SFINCS_JAX_RHSMODE1_SPARSE_PC_FORM": "explicit_left",
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_XBLOCK_KRYLOV": "gcrotmk-scipy",
+            "SFINCS_JAX_SPARSE_PC_PROGRESS_EVERY": "7",
+        }
+    )
+
+    assert setup.precondition_side == "right"
+    assert setup.pc_form == "explicit_left"
+    assert setup.krylov_method == "gcrotmk"
+    assert setup.progress_every == 7
+    assert setup.messages == ()
+
+
+def test_fortran_reduced_xblock_krylov_policy_falls_back_invalid_values() -> None:
+    setup = resolve_fortran_reduced_xblock_krylov_policy(
+        env={
+            "SFINCS_JAX_GMRES_PRECONDITION_SIDE": "bad-side",
+            "SFINCS_JAX_RHSMODE1_SPARSE_PC_FORM": "bad-form",
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_XBLOCK_KRYLOV": "bad-method",
+            "SFINCS_JAX_SPARSE_PC_PROGRESS_EVERY": "-5",
+        }
+    )
+
+    assert setup.side_env == "bad-side"
+    assert setup.precondition_side == "left"
+    assert setup.pc_form == "scipy_left"
+    assert setup.krylov_method == "gmres"
+    assert setup.progress_every == 0
+    assert setup.messages == (
+        (
+            1,
+            "solve_v3_full_system_linear_gmres: fortran_reduced_pc_gmres xblock "
+            "ignoring unknown SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_XBLOCK_KRYLOV="
+            "'bad_method'; using gmres",
+        ),
+    )
 
 
 def test_sparse_pc_entry_policy_classifies_pas_er_and_active_dof() -> None:

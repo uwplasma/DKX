@@ -227,6 +227,7 @@ from .problems.profile_response.sparse_pc import (
     resolve_sparse_pc_entry_policy,
     resolve_fortran_reduced_sparse_pc_backend,
     resolve_fortran_reduced_xblock_factor_policy,
+    resolve_fortran_reduced_xblock_krylov_policy,
     resolve_xblock_qi_device_admission_setup,
     resolve_xblock_qi_device_base_config_setup,
     resolve_xblock_qi_device_enrichment_config_setup,
@@ -7013,40 +7014,18 @@ def solve_v3_full_system_linear_gmres(
             pc_factor_s = sparse_timer.elapsed_s() - factor_start_s
             setup_s = sparse_timer.elapsed_s()
 
-            side_env = os.environ.get("SFINCS_JAX_GMRES_PRECONDITION_SIDE", "").strip().lower()
-            precondition_side = side_env if side_env in {"left", "right", "none"} else "left"
-            pc_form = os.environ.get("SFINCS_JAX_RHSMODE1_SPARSE_PC_FORM", "").strip().lower()
-            if pc_form not in {"", "scipy_left", "scipy", "explicit_left", "petsc_left"}:
-                pc_form = ""
-            pc_form = pc_form or "scipy_left"
-            xblock_krylov_method = (
-                os.environ.get("SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_XBLOCK_KRYLOV", "gmres")
-                .strip()
-                .lower()
-                .replace("-", "_")
+            xblock_krylov_policy = resolve_fortran_reduced_xblock_krylov_policy(
+                env=os.environ,
             )
-            if xblock_krylov_method in {"lgmres_scipy"}:
-                xblock_krylov_method = "lgmres"
-            elif xblock_krylov_method in {"gcrot", "gcrotmk_scipy"}:
-                xblock_krylov_method = "gcrotmk"
-            elif xblock_krylov_method in {"bicgstab_scipy", "bi_cgstab"}:
-                xblock_krylov_method = "bicgstab"
-            elif xblock_krylov_method not in {"gmres", "lgmres", "gcrotmk", "bicgstab"}:
-                if emit is not None:
-                    emit(
-                        1,
-                        "solve_v3_full_system_linear_gmres: fortran_reduced_pc_gmres xblock "
-                        "ignoring unknown SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_XBLOCK_KRYLOV="
-                        f"{xblock_krylov_method!r}; using gmres",
-                    )
-                xblock_krylov_method = "gmres"
-            progress_every_env = os.environ.get("SFINCS_JAX_SPARSE_PC_PROGRESS_EVERY", "").strip()
-            try:
-                progress_every = int(progress_every_env) if progress_every_env else 25
-            except ValueError:
-                progress_every = 25
-            progress_every = max(0, int(progress_every))
-            mv_count = 0
+            side_env = xblock_krylov_policy.side_env
+            precondition_side = xblock_krylov_policy.precondition_side
+            pc_form = xblock_krylov_policy.pc_form
+            xblock_krylov_method = xblock_krylov_policy.krylov_method
+            progress_every = xblock_krylov_policy.progress_every
+            mv_count = xblock_krylov_policy.mv_count
+            if emit is not None:
+                for level, message in xblock_krylov_policy.messages:
+                    emit(level, message)
 
             def _mv_true_no_count(v: jnp.ndarray) -> jnp.ndarray:
                 x_full = _sparse_pc_expand_reduced(jnp.asarray(v, dtype=rhs.dtype))
@@ -7054,8 +7033,7 @@ def solve_v3_full_system_linear_gmres(
                 return _sparse_pc_reduce_full(y_full)
 
             def _mv_true(v: jnp.ndarray) -> jnp.ndarray:
-                nonlocal mv_count
-                mv_count += 1
+                mv_count.increment()
                 if emit is not None and progress_every > 0 and mv_count % progress_every == 0:
                     emit(
                         1,
