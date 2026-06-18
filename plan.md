@@ -32269,3 +32269,36 @@ Validation so far:
   tests/test_v3_sparse_pattern.py::test_auto_selects_fortran_reduced_pc_gmres_for_large_full_fp_rhs1
   tests/test_rhs1_schur_policy.py``:
   ``18 passed in 2.84 s``.
+
+### 19.55 Shared recycled-Krylov initial guess
+
+Goal:
+
+- Remove duplicate recycled initial-guess logic from RHSMode=1 and transport
+  loops while keeping the small regularized least-squares backend directly
+  tested.
+
+Implementation:
+
+- Added ``recycled_initial_guess`` to ``sfincs_jax/linear_algebra.py`` next to
+  ``small_regularized_lstsq``.
+- Removed the local RHSMode=1 ``_recycled_initial_guess`` implementation from
+  ``v3_driver.py`` and routed it through the shared helper.
+- Kept ``recycled_transport_initial_guess`` as the transport-loop compatibility
+  name but changed it to delegate to the shared helper.
+- Extended ``tests/test_small_regularized_lstsq.py`` with direct recycled-guess
+  accuracy, empty-basis, and non-finite-basis coverage.
+
+Validation so far:
+
+- ``python -m ruff check sfincs_jax/linear_algebra.py
+  sfincs_jax/problems/transport_matrix/loop.py sfincs_jax/v3_driver.py
+  tests/test_small_regularized_lstsq.py``: passed.
+- ``python -m compileall -q sfincs_jax/linear_algebra.py
+  sfincs_jax/problems/transport_matrix/loop.py sfincs_jax/v3_driver.py
+  tests/test_small_regularized_lstsq.py``: passed.
+- ``PYTHONDONTWRITEBYTECODE=1 pytest -q -p no:cacheprovider
+  tests/test_small_regularized_lstsq.py tests/test_transport_loop_support.py
+  tests/test_profile_response_linear_solve.py
+  tests/test_v3_sparse_pattern.py::test_auto_selects_fortran_reduced_pc_gmres_for_large_full_fp_rhs1``:
+  ``16 passed in 4.37 s``.

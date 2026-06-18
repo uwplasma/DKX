@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 import os
 
 import jax.numpy as jnp
@@ -59,3 +60,21 @@ def small_regularized_lstsq(a: jnp.ndarray, b: jnp.ndarray) -> jnp.ndarray:
         rz = rz_new
 
     return x
+
+
+def recycled_initial_guess(
+    rhs_vec: jnp.ndarray,
+    basis: Sequence[jnp.ndarray],
+    basis_au: Sequence[jnp.ndarray],
+) -> jnp.ndarray | None:
+    """Return a residual-minimizing initial guess from recycled Krylov vectors."""
+
+    if not basis or not basis_au:
+        return None
+    u = jnp.stack(list(basis), axis=1)
+    au = jnp.stack(list(basis_au), axis=1)
+    coeff = small_regularized_lstsq(au, rhs_vec)
+    x0_guess = u @ coeff
+    if not bool(jnp.all(jnp.isfinite(x0_guess))):
+        return None
+    return x0_guess

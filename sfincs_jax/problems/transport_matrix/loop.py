@@ -10,7 +10,7 @@ from typing import Any
 
 import jax.numpy as jnp
 
-from sfincs_jax.linear_algebra import small_regularized_lstsq
+from sfincs_jax.linear_algebra import recycled_initial_guess
 from sfincs_jax.solver_progress import transport_progress_message
 from sfincs_jax.problems.transport_matrix.residual_quality import transport_residual_gate_failure
 from sfincs_jax.v3_system import _operator_signature_cached, apply_v3_full_system_operator_cached
@@ -70,15 +70,7 @@ def recycled_transport_initial_guess(
     basis_au: Sequence[jnp.ndarray],
 ) -> jnp.ndarray | None:
     """Return a residual-minimizing recycled initial guess for one transport RHS."""
-    if not basis or not basis_au:
-        return None
-    u = jnp.stack(list(basis), axis=1)
-    au = jnp.stack(list(basis_au), axis=1)
-    coeff = small_regularized_lstsq(au, rhs_vec)
-    x0 = u @ coeff
-    if not bool(jnp.all(jnp.isfinite(x0))):
-        return None
-    return x0
+    return recycled_initial_guess(rhs_vec, basis, basis_au)
 
 
 @dataclass

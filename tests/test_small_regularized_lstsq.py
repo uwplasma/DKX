@@ -7,7 +7,7 @@ import jax.numpy as jnp
 
 jax_config.update("jax_enable_x64", True)
 
-from sfincs_jax.linear_algebra import small_regularized_lstsq  # noqa: E402
+from sfincs_jax.linear_algebra import recycled_initial_guess, small_regularized_lstsq  # noqa: E402
 
 
 def test_small_regularized_lstsq_matches_numpy_tall_system() -> None:
@@ -73,6 +73,34 @@ def test_small_regularized_lstsq_handles_empty_basis_and_gradients() -> None:
 
     assert grad.shape == (15,)
     assert np.all(np.isfinite(np.asarray(grad)))
+
+
+def test_recycled_initial_guess_minimizes_residual_over_basis() -> None:
+    basis = [
+        jnp.asarray([1.0, 0.0, 0.0], dtype=jnp.float64),
+        jnp.asarray([0.0, 1.0, 0.0], dtype=jnp.float64),
+    ]
+    basis_au = [
+        jnp.asarray([2.0, 0.0, 0.0], dtype=jnp.float64),
+        jnp.asarray([0.0, 3.0, 0.0], dtype=jnp.float64),
+    ]
+    rhs = jnp.asarray([4.0, 9.0, 1.0], dtype=jnp.float64)
+
+    x0 = recycled_initial_guess(rhs, basis, basis_au)
+
+    assert x0 is not None
+    assert np.allclose(np.asarray(x0), np.asarray([2.0, 3.0, 0.0]), rtol=1e-9, atol=1e-9)
+
+
+def test_recycled_initial_guess_handles_empty_or_nonfinite_basis() -> None:
+    rhs = jnp.asarray([1.0, 2.0], dtype=jnp.float64)
+
+    assert recycled_initial_guess(rhs, [], []) is None
+    assert recycled_initial_guess(
+        rhs,
+        [jnp.asarray([jnp.nan, 0.0], dtype=jnp.float64)],
+        [jnp.asarray([1.0, 0.0], dtype=jnp.float64)],
+    ) is None
 
 
 def test_v3_driver_keeps_small_lstsq_compatibility_alias() -> None:

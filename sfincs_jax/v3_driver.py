@@ -51,7 +51,10 @@ from .solver import (
     lgmres_solve_with_history_scipy,
     tfqmr_solve_with_residual,
 )
-from .linear_algebra import small_regularized_lstsq as _small_regularized_lstsq
+from .linear_algebra import (
+    recycled_initial_guess as _recycled_initial_guess,
+    small_regularized_lstsq as _small_regularized_lstsq,
+)
 from .constraint_projection import (
     project_constraint_scheme1_nullspace_solution as _project_constraint_scheme1_nullspace_solution,
     project_constraint_scheme1_nullspace_solution_with_residual as _project_constraint_scheme1_nullspace_solution_with_residual,
@@ -3377,21 +3380,6 @@ def solve_v3_full_system_linear_gmres(
                 recycle_basis_use.append(v)
         if len(recycle_basis_use) > recycle_k:
             recycle_basis_use = recycle_basis_use[-recycle_k:]
-
-    def _recycled_initial_guess(
-        rhs_vec: jnp.ndarray,
-        basis: list[jnp.ndarray],
-        basis_au: list[jnp.ndarray],
-    ) -> jnp.ndarray | None:
-        if not basis or not basis_au:
-            return None
-        u = jnp.stack(basis, axis=1)  # (N, k)
-        au = jnp.stack(basis_au, axis=1)  # (N, k)
-        coeff = _small_regularized_lstsq(au, rhs_vec)
-        x0_guess = u @ coeff
-        if not jnp.all(jnp.isfinite(x0_guess)):
-            return None
-        return x0_guess
 
     active_env = os.environ.get("SFINCS_JAX_ACTIVE_DOF", "").strip().lower()
     nxi_for_x = np.asarray(op.fblock.collisionless.n_xi_for_x, dtype=np.int32)
