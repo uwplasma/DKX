@@ -119,6 +119,29 @@ class RHS1PhysicsFlagSetup:
 
 
 @dataclass(frozen=True)
+class RHS1DKESAdjustmentSetup:
+    """Tolerance and GMRES-budget adjustments for DKES RHSMode=1 lanes."""
+
+    tol: float
+    restart: int
+    maxiter: int | None
+    messages: tuple[tuple[int, str], ...]
+
+
+@dataclass(frozen=True)
+class RHS1PostActiveSolvePolicySetup:
+    """Solve method and budget after active-DOF size is known."""
+
+    restart: int
+    maxiter: int | None
+    solve_method: str
+    tokamak_pas: bool
+    pas_large_bicgstab_fastpath: bool
+    pas_large_fastpath_min: int
+    messages: tuple[tuple[int, str], ...]
+
+
+@dataclass(frozen=True)
 class SolveMethodRequestFlags:
     """Normalized solve-method token plus coarse branch classifications."""
 
@@ -400,6 +423,222 @@ def resolve_rhs1_physics_flag_setup(nml: Any) -> RHS1PhysicsFlagSetup:
         include_xdot_sparse_pc=bool(include_xdot),
         include_electric_field_xi_sparse_pc=bool(include_electric_field_xi),
         er_abs_sparse_pc=float(er_abs),
+    )
+
+
+def resolve_rhs1_dkes_adjustment_setup(
+    *,
+    op: Any,
+    tol: float,
+    fp_tol: float,
+    restart: int,
+    maxiter: int | None,
+    restart_env_forced: bool,
+    maxiter_env_forced: bool,
+    use_dkes: bool,
+    dkes_gmres_budget: Any,
+    env: Mapping[str, str] | None = None,
+) -> RHS1DKESAdjustmentSetup:
+    """Apply DKES-specific tolerance and GMRES-budget rules."""
+
+    tol_use = float(tol)
+    restart_use = int(restart)
+    maxiter_use = None if maxiter is None else int(maxiter)
+    messages: list[tuple[int, str]] = []
+
+    if (
+        int(op.rhs_mode) == 1
+        and (not bool(op.include_phi1))
+        and op.fblock.fp is not None
+        and op.fblock.pas is None
+        and bool(use_dkes)
+        and float(fp_tol) > 0.0
+    ):
+        tol_old = float(tol_use)
+        tol_use = min(float(tol_use), float(fp_tol))
+        if float(tol_use) < tol_old:
+            messages.append(
+                (
+                    1,
+                    "solve_v3_full_system_linear_gmres: FP DKES tol tightened "
+                    f"{tol_old:.1e} -> {float(tol_use):.1e}",
+                )
+            )
+
+    if op.fblock.pas is not None and bool(use_dkes):
+        restart_use, maxiter_use, restart_defaulted, maxiter_defaulted = dkes_gmres_budget(
+            restart=int(restart_use),
+            maxiter=maxiter_use,
+            restart_forced=bool(restart_env_forced),
+            maxiter_forced=bool(maxiter_env_forced),
+            restart_cap_env=_env_value(env, "SFINCS_JAX_RHSMODE1_DKES_RESTART_CAP"),
+        )
+        if bool(restart_env_forced) or bool(maxiter_env_forced):
+            messages.append(
+                (
+                    1,
+                    "solve_v3_full_system_linear_gmres: PAS DKES respecting explicit GMRES budget "
+                    f"restart={int(restart_use)} maxiter={maxiter_use}",
+                )
+            )
+        elif bool(restart_defaulted) or bool(maxiter_defaulted):
+            messages.append(
+                (
+                    1,
+                    "solve_v3_full_system_linear_gmres: PAS DKES default GMRES budget "
+                    f"restart={int(restart_use)} maxiter={maxiter_use}",
+                )
+            )
+
+    return RHS1DKESAdjustmentSetup(
+        tol=float(tol_use),
+        restart=int(restart_use),
+        maxiter=maxiter_use,
+        messages=tuple(messages),
+    )
+
+
+def resolve_rhs1_post_active_solve_policy_setup(
+    *,
+    op: Any,
+    restart: int,
+    maxiter: int | None,
+    solve_method: str,
+    active_size: int,
+    use_active_dof_mode: bool,
+    full_precond_requested: bool,
+    geom_scheme: int,
+    dense_backend_allowed: bool,
+    backend: str,
+    sharded_axis_hint: str | None,
+    device_count: int,
+    env: Mapping[str, str] | None = None,
+) -> RHS1PostActiveSolvePolicySetup:
+    """Resolve active-size-dependent RHSMode=1 solve-method policy."""
+
+    restart_use = int(restart)
+    maxiter_use = None if maxiter is None else int(maxiter)
+    solve_method_use = str(solve_method)
+    messages: list[tuple[int, str]] = []
+
+    pas_full_gmres_max = _read_int(env, "SFINCS_JAX_PAS_FULL_GMRES_MAX", 1200)
+    if op.fblock.pas is not None and int(active_size) <= max(0, int(pas_full_gmres_max)):
+        restart_use = max(int(restart_use), int(active_size))
+        if maxiter_use is None or int(maxiter_use) < int(active_size):
+            maxiter_use = int(active_size)
+
+    full_precond_env = _env_value(env, "SFINCS_JAX_RHSMODE1_FULL_PRECOND").lower()
+    if full_precond_env in {"0", "false", "no", "off"}:
+        full_precond_mode = "off"
+    elif full_precond_env in {"dense", "dense_ksp"}:
+        full_precond_mode = full_precond_env
+    else:
+        full_precond_mode = "auto"
+
+    full_precond_dense_max = _read_int(env, "SFINCS_JAX_RHSMODE1_FULL_PRECOND_DENSE_MAX", 2500)
+    full_precond_size = int(active_size) if bool(use_active_dof_mode) else int(op.total_size)
+    method_auto = str(solve_method_use).strip().lower() in {"auto", "default"}
+    auto_dense_full_precond = bool(
+        full_precond_mode == "auto"
+        and bool(full_precond_requested)
+        and int(op.rhs_mode) == 1
+        and (not bool(op.include_phi1))
+        and int(op.constraint_scheme) != 0
+        and int(full_precond_dense_max) > 0
+        and int(full_precond_size) <= int(full_precond_dense_max)
+        and bool(dense_backend_allowed)
+        and method_auto
+    )
+    if (
+        bool(full_precond_requested)
+        and (full_precond_mode in {"dense", "dense_ksp"} or auto_dense_full_precond)
+        and int(op.rhs_mode) == 1
+        and (not bool(op.include_phi1))
+        and int(full_precond_dense_max) > 0
+        and int(full_precond_size) <= int(full_precond_dense_max)
+        and method_auto
+    ):
+        solve_method_use = "dense" if (full_precond_mode != "dense_ksp" or bool(use_active_dof_mode)) else "dense_ksp"
+        messages.append(
+            (
+                0,
+                "solve_v3_full_system_linear_gmres: full preconditioner requested; "
+                f"using solve_method={solve_method_use} (size={int(full_precond_size)})",
+            )
+        )
+    elif (
+        bool(full_precond_requested)
+        and full_precond_mode == "auto"
+        and int(op.rhs_mode) == 1
+        and (not bool(op.include_phi1))
+        and int(op.constraint_scheme) != 0
+        and int(full_precond_dense_max) > 0
+        and int(full_precond_size) <= int(full_precond_dense_max)
+        and (not bool(dense_backend_allowed))
+        and method_auto
+    ):
+        messages.append(
+            (
+                0,
+                "solve_v3_full_system_linear_gmres: full preconditioner requested; "
+                f"skipping dense auto mode on backend={backend}",
+            )
+        )
+
+    tokamak_pas = bool(
+        op.fblock.pas is not None
+        and int(op.rhs_mode) == 1
+        and (not bool(op.include_phi1))
+        and (int(geom_scheme) == 1 or int(op.n_zeta) <= 5)
+    )
+    pas_large_fastpath_env = _env_value(env, "SFINCS_JAX_PAS_LARGE_BICGSTAB_FASTPATH").lower()
+    pas_large_fastpath_min = max(1, _read_int(env, "SFINCS_JAX_PAS_LARGE_BICGSTAB_FASTPATH_MIN", 80000))
+    pas_large_fastpath_max = _read_int(env, "SFINCS_JAX_PAS_LARGE_BICGSTAB_FASTPATH_MAX", 300000)
+    pas_large_fastpath_auto = pas_large_fastpath_env in {"", "auto"}
+    pas_large_fastpath_on = pas_large_fastpath_env in {"1", "true", "yes", "on"}
+    pas_large_fastpath_off = pas_large_fastpath_env in {"0", "false", "no", "off"}
+    pas_large_bicgstab_fastpath = bool(
+        (pas_large_fastpath_on or pas_large_fastpath_auto)
+        and (not pas_large_fastpath_off)
+        and tokamak_pas
+        and int(geom_scheme) == 1
+        and int(op.n_species) == 1
+        and int(op.n_zeta) == 1
+        and int(active_size) >= int(pas_large_fastpath_min)
+        and (int(pas_large_fastpath_max) <= 0 or int(active_size) <= int(pas_large_fastpath_max))
+    )
+
+    if int(op.rhs_mode) == 1 and str(solve_method_use).strip().lower() in {"auto", "default"}:
+        sharded_multidevice_hint = sharded_axis_hint in {"theta", "zeta"} and int(device_count) > 1
+        if pas_large_bicgstab_fastpath:
+            solve_method_use = "bicgstab"
+            messages.append(
+                (
+                    1,
+                    "solve_v3_full_system_linear_gmres: enabling PAS-large BiCGStab fastpath "
+                    f"(active_size={int(active_size)} >= {int(pas_large_fastpath_min)})",
+                )
+            )
+        elif sharded_multidevice_hint:
+            solve_method_use = "auto"
+            messages.append(
+                (
+                    1,
+                    "solve_v3_full_system_linear_gmres: preserving auto solver selection for "
+                    f"multi-device sharded axis={sharded_axis_hint}",
+                )
+            )
+        else:
+            solve_method_use = "incremental"
+
+    return RHS1PostActiveSolvePolicySetup(
+        restart=int(restart_use),
+        maxiter=maxiter_use,
+        solve_method=str(solve_method_use),
+        tokamak_pas=bool(tokamak_pas),
+        pas_large_bicgstab_fastpath=bool(pas_large_bicgstab_fastpath),
+        pas_large_fastpath_min=int(pas_large_fastpath_min),
+        messages=tuple(messages),
     )
 
 

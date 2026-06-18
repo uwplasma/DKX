@@ -7,8 +7,10 @@ from sfincs_jax.problems.profile_response.setup import (
     equilibrium_name_hint_from_namelist,
     geometry_scheme_hint_from_namelist,
     resolve_rhs1_domain_decomposition_setup,
+    resolve_rhs1_dkes_adjustment_setup,
     resolve_rhs1_gmres_budget_setup,
     resolve_rhs1_physics_flag_setup,
+    resolve_rhs1_post_active_solve_policy_setup,
     resolve_rhs1_preconditioner_option_setup,
     resolve_rhs1_tolerance_setup,
     resolve_solve_method_request_flags,
@@ -37,6 +39,8 @@ class FakeOperator:
     total_size: int
     phi1_size: int
     fblock: FakeFBlock
+    n_zeta: int = 1
+    n_species: int = 1
 
 
 def test_rhs1_gmres_budget_setup_applies_only_valid_env_overrides() -> None:
@@ -119,6 +123,62 @@ def test_rhs1_tolerance_setup_tightens_only_matching_physics_lanes() -> None:
     assert pas_setup.tol == 5e-9
     assert pas_setup.pas_tightened
     assert not pas_setup.fp_tightened
+
+
+def test_rhs1_dkes_adjustment_setup_tightens_fp_tol_and_pas_budget() -> None:
+    fp_op = FakeOperator(
+        rhs_mode=1,
+        include_phi1=False,
+        constraint_scheme=1,
+        total_size=100,
+        phi1_size=0,
+        fblock=FakeFBlock(fp=object(), pas=None),
+    )
+    fp_setup = resolve_rhs1_dkes_adjustment_setup(
+        op=fp_op,
+        tol=1.0e-6,
+        fp_tol=1.0e-9,
+        restart=40,
+        maxiter=80,
+        restart_env_forced=False,
+        maxiter_env_forced=False,
+        use_dkes=True,
+        dkes_gmres_budget=lambda **kwargs: (kwargs["restart"], kwargs["maxiter"], False, False),
+        env={},
+    )
+
+    assert fp_setup.tol == 1.0e-9
+    assert fp_setup.restart == 40
+    assert any("FP DKES tol tightened" in message for _, message in fp_setup.messages)
+
+    pas_op = FakeOperator(
+        rhs_mode=1,
+        include_phi1=False,
+        constraint_scheme=2,
+        total_size=100,
+        phi1_size=0,
+        fblock=FakeFBlock(fp=None, pas=object()),
+    )
+
+    def budget(**_kwargs):
+        return 32, 64, True, True
+
+    pas_setup = resolve_rhs1_dkes_adjustment_setup(
+        op=pas_op,
+        tol=1.0e-6,
+        fp_tol=1.0e-9,
+        restart=20,
+        maxiter=40,
+        restart_env_forced=False,
+        maxiter_env_forced=False,
+        use_dkes=True,
+        dkes_gmres_budget=budget,
+        env={},
+    )
+
+    assert pas_setup.restart == 32
+    assert pas_setup.maxiter == 64
+    assert any("PAS DKES default GMRES budget" in message for _, message in pas_setup.messages)
 
 
 def test_solve_method_request_flags_preserve_driver_aliases() -> None:
@@ -250,3 +310,86 @@ def test_rhs1_domain_decomposition_setup_auto_blocks_and_overlaps_for_sharded_ax
     assert 1 <= setup.block("zeta") <= 39
     assert setup.overlap("theta", default=0) == 0
     assert setup.overlap("zeta", default=0) >= 1
+
+
+def test_rhs1_post_active_solve_policy_selects_dense_and_sharded_auto() -> None:
+    op = FakeOperator(
+        rhs_mode=1,
+        include_phi1=False,
+        constraint_scheme=1,
+        total_size=100,
+        phi1_size=0,
+        fblock=FakeFBlock(fp=object(), pas=None),
+        n_zeta=9,
+        n_species=2,
+    )
+    dense = resolve_rhs1_post_active_solve_policy_setup(
+        op=op,
+        restart=20,
+        maxiter=40,
+        solve_method="auto",
+        active_size=50,
+        use_active_dof_mode=True,
+        full_precond_requested=True,
+        geom_scheme=5,
+        dense_backend_allowed=True,
+        backend="cpu",
+        sharded_axis_hint=None,
+        device_count=1,
+        env={},
+    )
+
+    assert dense.solve_method == "dense"
+    assert any("full preconditioner requested" in message for _, message in dense.messages)
+
+    sharded = resolve_rhs1_post_active_solve_policy_setup(
+        op=op,
+        restart=20,
+        maxiter=40,
+        solve_method="auto",
+        active_size=5000,
+        use_active_dof_mode=False,
+        full_precond_requested=False,
+        geom_scheme=5,
+        dense_backend_allowed=True,
+        backend="cpu",
+        sharded_axis_hint="theta",
+        device_count=2,
+        env={},
+    )
+
+    assert sharded.solve_method == "auto"
+    assert any("preserving auto solver selection" in message for _, message in sharded.messages)
+
+
+def test_rhs1_post_active_solve_policy_selects_pas_large_bicgstab() -> None:
+    op = FakeOperator(
+        rhs_mode=1,
+        include_phi1=False,
+        constraint_scheme=2,
+        total_size=100000,
+        phi1_size=0,
+        fblock=FakeFBlock(fp=None, pas=object()),
+        n_zeta=1,
+        n_species=1,
+    )
+    setup = resolve_rhs1_post_active_solve_policy_setup(
+        op=op,
+        restart=20,
+        maxiter=40,
+        solve_method="auto",
+        active_size=90000,
+        use_active_dof_mode=False,
+        full_precond_requested=False,
+        geom_scheme=1,
+        dense_backend_allowed=True,
+        backend="cpu",
+        sharded_axis_hint=None,
+        device_count=1,
+        env={"SFINCS_JAX_PAS_LARGE_BICGSTAB_FASTPATH_MIN": "80000"},
+    )
+
+    assert setup.tokamak_pas
+    assert setup.pas_large_bicgstab_fastpath
+    assert setup.solve_method == "bicgstab"
+    assert setup.pas_large_fastpath_min == 80000

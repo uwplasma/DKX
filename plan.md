@@ -32830,3 +32830,64 @@ Next refactor target:
   shortcut selection, PAS-large BiCGStab fastpath selection, and sharded-auto
   preservation. This is the next coherent policy stage before the large
   sparse-PC implementation branch.
+
+### 19.65 RHSMode=1 DKES and post-active solve-policy extraction
+
+Goal:
+
+- Continue reducing the RHSMode=1 monolith by moving active-size-dependent
+  solve-method policy into the profile-response setup module without changing
+  solver defaults, progress messages, or downstream fallback metadata.
+
+Implementation:
+
+- Extended ``sfincs_jax/problems/profile_response/setup.py`` with:
+  ``RHS1DKESAdjustmentSetup``, ``resolve_rhs1_dkes_adjustment_setup``,
+  ``RHS1PostActiveSolvePolicySetup``, and
+  ``resolve_rhs1_post_active_solve_policy_setup``.
+- Moved DKES-specific FP tolerance tightening and PAS DKES GMRES budget
+  selection out of ``v3_driver.py``.
+- Moved post-active solve-method policy out of ``v3_driver.py``:
+  tiny-PAS full-restart sizing, full-preconditioner dense shortcut selection,
+  dense-backend skip messages, PAS-large BiCGStab fastpath selection, and
+  multi-device sharded-auto preservation.
+- Kept ``tokamak_pas``, ``pas_large_bicgstab_fastpath``, and
+  ``pas_large_fastpath_min`` as explicit setup outputs because later fallback
+  stages still use them.
+- Added direct tests for FP DKES tolerance tightening, PAS DKES budget
+  messages, dense full-preconditioner selection, sharded-auto preservation, and
+  PAS-large BiCGStab selection.
+- ``solve_v3_full_system_linear_gmres`` is now about ``20392`` lines and
+  ``v3_driver.py`` is about ``25632`` lines.
+
+Validation so far:
+
+- ``python -m ruff check sfincs_jax/problems/profile_response/setup.py
+  sfincs_jax/v3_driver.py tests/test_profile_response_setup.py``: passed.
+- ``python -m compileall -q sfincs_jax/problems/profile_response/setup.py
+  sfincs_jax/v3_driver.py tests/test_profile_response_setup.py``: passed.
+- ``PYTHONDONTWRITEBYTECODE=1 JAX_ENABLE_X64=True pytest -q
+  -p no:cacheprovider tests/test_profile_response_setup.py``:
+  ``11 passed in 0.36 s``.
+- Broader RHSMode policy/sparse subset:
+  ``PYTHONDONTWRITEBYTECODE=1 JAX_ENABLE_X64=True pytest -q
+  -p no:cacheprovider tests/test_profile_response_setup.py
+  tests/test_profile_response_auto_solve.py tests/test_profile_response_dense.py
+  tests/test_profile_response_preconditioner_build.py
+  tests/test_profile_response_sparse_pc.py tests/test_rhs1_active_dof.py
+  tests/test_rhs1_full_assembly.py tests/test_v3_driver_rhs1_dispatch_coverage.py
+  tests/test_v3_driver_sparse_helper_coverage.py
+  tests/test_v3_sparse_pattern.py::test_auto_selects_fortran_reduced_pc_gmres_for_large_full_fp_rhs1
+  tests/test_v3_sparse_pattern.py::test_fortran_reduced_pc_gmres_direct_tail_solves_tiny_rhs1_system
+  tests/test_v3_sparse_pattern.py::test_sparse_pc_gmres_active_dof_reduces_truncated_pas_system
+  tests/test_v3_sparse_pattern.py::test_fortran_reduced_pc_auto_uses_active_dof_for_truncated_modes``:
+  ``188 passed in 63.02 s``.
+- ``git diff --check``: passed.
+
+Next refactor target:
+
+- Extract the sparse-host-safe fallback and sparse-PC GMRES entry
+  classification into a profile-response sparse-solve orchestration helper.
+  This is the next largest branch before the core sparse-PC implementation, and
+  it should be split carefully so existing sparse-PC tests remain the primary
+  validation gate.

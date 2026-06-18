@@ -235,8 +235,10 @@ from .problems.profile_response.setup import (
     equilibrium_name_hint_from_namelist,
     geometry_scheme_hint_from_namelist,
     resolve_rhs1_domain_decomposition_setup,
+    resolve_rhs1_dkes_adjustment_setup,
     resolve_rhs1_gmres_budget_setup,
     resolve_rhs1_physics_flag_setup,
+    resolve_rhs1_post_active_solve_policy_setup,
     resolve_rhs1_preconditioner_option_setup,
     resolve_rhs1_tolerance_setup,
     resolve_solve_method_request_flags,
@@ -3225,43 +3227,24 @@ def solve_v3_full_system_linear_gmres(
     include_xdot_sparse_pc = bool(physics_flag_setup.include_xdot_sparse_pc)
     include_electric_field_xi_sparse_pc = bool(physics_flag_setup.include_electric_field_xi_sparse_pc)
     er_abs_sparse_pc = float(physics_flag_setup.er_abs_sparse_pc)
-    if (
-        int(op.rhs_mode) == 1
-        and (not bool(op.include_phi1))
-        and op.fblock.fp is not None
-        and op.fblock.pas is None
-        and use_dkes
-        and fp_tol > 0.0
-    ):
-        tol_old = float(tol)
-        tol = min(float(tol), float(fp_tol))
-        if emit is not None and float(tol) < tol_old:
-            emit(1, f"solve_v3_full_system_linear_gmres: FP DKES tol tightened {tol_old:.1e} -> {float(tol):.1e}")
-    if op.fblock.pas is not None and use_dkes:
-        # DKES trajectory runs can be stiff, but very large GMRES restart/maxiter
-        # values are expensive in JAX (memory + orthogonalization cost). Prefer
-        # moderate defaults and let stage2/strong-preconditioner fallbacks handle the
-        # truly difficult cases. Explicit GMRES env/CLI budgets are respected so
-        # profiling and bounded production probes cannot be silently escalated.
-        restart, maxiter, restart_defaulted, maxiter_defaulted = _rhs1_dkes_gmres_budget(
-            restart=int(restart),
-            maxiter=maxiter,
-            restart_forced=bool(restart_env_forced),
-            maxiter_forced=bool(maxiter_env_forced),
-            restart_cap_env=os.environ.get("SFINCS_JAX_RHSMODE1_DKES_RESTART_CAP", "").strip(),
-        )
-        if emit is not None and (restart_env_forced or maxiter_env_forced):
-            emit(
-                1,
-                "solve_v3_full_system_linear_gmres: PAS DKES respecting explicit GMRES budget "
-                f"restart={int(restart)} maxiter={maxiter}",
-            )
-        elif emit is not None and (restart_defaulted or maxiter_defaulted):
-            emit(
-                1,
-                "solve_v3_full_system_linear_gmres: PAS DKES default GMRES budget "
-                f"restart={int(restart)} maxiter={maxiter}",
-            )
+    dkes_adjustment_setup = resolve_rhs1_dkes_adjustment_setup(
+        op=op,
+        tol=float(tol),
+        fp_tol=float(fp_tol),
+        restart=int(restart),
+        maxiter=maxiter,
+        restart_env_forced=bool(restart_env_forced),
+        maxiter_env_forced=bool(maxiter_env_forced),
+        use_dkes=bool(use_dkes),
+        dkes_gmres_budget=_rhs1_dkes_gmres_budget,
+        env=os.environ,
+    )
+    tol = float(dkes_adjustment_setup.tol)
+    restart = int(dkes_adjustment_setup.restart)
+    maxiter = dkes_adjustment_setup.maxiter
+    if emit is not None:
+        for level, message in dkes_adjustment_setup.messages:
+            emit(int(level), str(message))
     dkes_active_env = os.environ.get("SFINCS_JAX_ACTIVE_DOF_DKES", "").strip().lower()
     active_dof_decision = resolve_rhs1_active_dof_mode(
         active_dof_env=active_env,
@@ -3342,135 +3325,30 @@ def solve_v3_full_system_linear_gmres(
                 f"(size={active_size}/{int(op.total_size)})",
             )
 
-    # Tiny PAS systems can be ill-conditioned; allow full-restart GMRES to reach
-    # the tight PETSc-style tolerances used in parity fixtures.
-    pas_full_gmres_env = os.environ.get("SFINCS_JAX_PAS_FULL_GMRES_MAX", "").strip()
-    try:
-        pas_full_gmres_max = int(pas_full_gmres_env) if pas_full_gmres_env else 1200
-    except ValueError:
-        pas_full_gmres_max = 1200
-    if op.fblock.pas is not None and int(active_size) <= max(0, int(pas_full_gmres_max)):
-        restart = max(int(restart), int(active_size))
-        if maxiter is None or int(maxiter) < int(active_size):
-            maxiter = int(active_size)
-
-    full_precond_env = os.environ.get("SFINCS_JAX_RHSMODE1_FULL_PRECOND", "").strip().lower()
-    if full_precond_env in {"0", "false", "no", "off"}:
-        full_precond_mode = "off"
-    elif full_precond_env in {"dense", "dense_ksp"}:
-        full_precond_mode = full_precond_env
-    else:
-        full_precond_mode = "auto"
-
-    full_precond_max_env = os.environ.get("SFINCS_JAX_RHSMODE1_FULL_PRECOND_DENSE_MAX", "").strip()
-    try:
-        full_precond_dense_max = int(full_precond_max_env) if full_precond_max_env else 2500
-    except ValueError:
-        full_precond_dense_max = 2500
-
-    full_precond_size = active_size if use_active_dof_mode else int(op.total_size)
-    auto_dense_full_precond = bool(
-        full_precond_mode == "auto"
-        and full_precond_requested
-        and int(op.rhs_mode) == 1
-        and (not bool(op.include_phi1))
-        and int(op.constraint_scheme) != 0
-        and full_precond_dense_max > 0
-        and int(full_precond_size) <= int(full_precond_dense_max)
-        and _rhsmode1_dense_backend_allowed()
-        and str(solve_method).strip().lower() in {"auto", "default"}
+    post_active_solve_policy_setup = resolve_rhs1_post_active_solve_policy_setup(
+        op=op,
+        restart=int(restart),
+        maxiter=maxiter,
+        solve_method=str(solve_method),
+        active_size=int(active_size),
+        use_active_dof_mode=bool(use_active_dof_mode),
+        full_precond_requested=bool(full_precond_requested),
+        geom_scheme=int(geom_scheme),
+        dense_backend_allowed=bool(_rhsmode1_dense_backend_allowed()),
+        backend=str(jax.default_backend()),
+        sharded_axis_hint=_matvec_shard_axis(op),
+        device_count=int(jax.device_count()),
+        env=os.environ,
     )
-    if (
-        full_precond_requested
-        and (full_precond_mode in {"dense", "dense_ksp"} or auto_dense_full_precond)
-        and int(op.rhs_mode) == 1
-        and (not bool(op.include_phi1))
-        and full_precond_dense_max > 0
-        and int(full_precond_size) <= int(full_precond_dense_max)
-        and str(solve_method).strip().lower() in {"auto", "default"}
-    ):
-        solve_method = "dense" if (full_precond_mode != "dense_ksp" or use_active_dof_mode) else "dense_ksp"
-        if emit is not None:
-            emit(
-                0,
-                "solve_v3_full_system_linear_gmres: full preconditioner requested; "
-                f"using solve_method={solve_method} (size={int(full_precond_size)})",
-            )
-    elif (
-        full_precond_requested
-        and full_precond_mode == "auto"
-        and int(op.rhs_mode) == 1
-        and (not bool(op.include_phi1))
-        and int(op.constraint_scheme) != 0
-        and full_precond_dense_max > 0
-        and int(full_precond_size) <= int(full_precond_dense_max)
-        and (not _rhsmode1_dense_backend_allowed())
-        and str(solve_method).strip().lower() in {"auto", "default"}
-    ):
-        if emit is not None:
-            emit(
-                0,
-                "solve_v3_full_system_linear_gmres: full preconditioner requested; "
-                f"skipping dense auto mode on backend={jax.default_backend()}",
-            )
-
-    tokamak_pas = bool(
-        op.fblock.pas is not None
-        and int(op.rhs_mode) == 1
-        and (not bool(op.include_phi1))
-        and (geom_scheme == 1 or int(op.n_zeta) <= 5)
-    )
-    pas_large_fastpath_env = os.environ.get("SFINCS_JAX_PAS_LARGE_BICGSTAB_FASTPATH", "").strip().lower()
-    try:
-        pas_large_fastpath_min = int(
-            os.environ.get("SFINCS_JAX_PAS_LARGE_BICGSTAB_FASTPATH_MIN", "").strip() or 80000
-        )
-    except ValueError:
-        pas_large_fastpath_min = 80000
-    try:
-        pas_large_fastpath_max = int(
-            os.environ.get("SFINCS_JAX_PAS_LARGE_BICGSTAB_FASTPATH_MAX", "").strip() or 300_000
-        )
-    except ValueError:
-        pas_large_fastpath_max = 300_000
-    pas_large_fastpath_auto = pas_large_fastpath_env in {"", "auto"}
-    pas_large_fastpath_on = pas_large_fastpath_env in {"1", "true", "yes", "on"}
-    pas_large_fastpath_off = pas_large_fastpath_env in {"0", "false", "no", "off"}
-    pas_large_bicgstab_fastpath = bool(
-        (pas_large_fastpath_on or pas_large_fastpath_auto)
-        and (not pas_large_fastpath_off)
-        and tokamak_pas
-        and geom_scheme == 1
-        and int(op.n_species) == 1
-        and int(op.n_zeta) == 1
-        and int(active_size) >= max(1, int(pas_large_fastpath_min))
-        and (int(pas_large_fastpath_max) <= 0 or int(active_size) <= int(pas_large_fastpath_max))
-    )
-
-    if int(op.rhs_mode) == 1 and str(solve_method).strip().lower() in {"auto", "default"}:
-        # Keep `auto` intact on explicit multi-device sharded runs so the later
-        # distributed solver dispatch can choose a short-recurrence Krylov method.
-        sharded_axis_hint = _matvec_shard_axis(op)
-        sharded_multidevice_hint = sharded_axis_hint in {"theta", "zeta"} and jax.device_count() > 1
-        if pas_large_bicgstab_fastpath:
-            solve_method = "bicgstab"
-            if emit is not None:
-                emit(
-                    1,
-                    "solve_v3_full_system_linear_gmres: enabling PAS-large BiCGStab fastpath "
-                    f"(active_size={int(active_size)} >= {int(pas_large_fastpath_min)})",
-                )
-        elif sharded_multidevice_hint:
-            solve_method = "auto"
-            if emit is not None:
-                emit(
-                    1,
-                    "solve_v3_full_system_linear_gmres: preserving auto solver selection for "
-                    f"multi-device sharded axis={sharded_axis_hint}",
-                )
-        else:
-            # Default RHSMode=1 to parity-robust GMRES on non-sharded paths.
-            solve_method = "incremental"
+    restart = int(post_active_solve_policy_setup.restart)
+    maxiter = post_active_solve_policy_setup.maxiter
+    solve_method = str(post_active_solve_policy_setup.solve_method)
+    tokamak_pas = bool(post_active_solve_policy_setup.tokamak_pas)
+    pas_large_bicgstab_fastpath = bool(post_active_solve_policy_setup.pas_large_bicgstab_fastpath)
+    pas_large_fastpath_min = int(post_active_solve_policy_setup.pas_large_fastpath_min)
+    if emit is not None:
+        for level, message in post_active_solve_policy_setup.messages:
+            emit(int(level), str(message))
     if emit is not None:
         emit(1, f"solve_v3_full_system_linear_gmres: GMRES tol={tol} atol={atol} restart={restart} maxiter={maxiter} solve_method={solve_method}")
         emit(1, "solve_v3_full_system_linear_gmres: evaluateJacobian called (matrix-free)")
