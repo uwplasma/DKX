@@ -18,12 +18,15 @@ from sfincs_jax.problems.profile_response.sparse_pc import (
     build_xblock_assembled_operator_preflight_setup,
     build_xblock_krylov_matvec_setup,
     evaluate_xblock_moment_schur_probe_result,
+    failed_xblock_global_coupling_metadata,
     failed_xblock_two_level_metadata,
     failed_xblock_moment_schur_metadata,
+    finalize_xblock_global_coupling_metadata,
     finalize_xblock_two_level_metadata,
     finalize_xblock_moment_schur_metadata,
     resolve_sparse_pc_entry_policy,
     resolve_xblock_qi_device_operator_reuse_setup,
+    resolve_xblock_global_coupling_policy_setup,
     resolve_xblock_moment_schur_policy_setup,
     resolve_xblock_sparse_pc_setup,
     resolve_xblock_sparse_pc_side_policy_setup,
@@ -809,6 +812,73 @@ def test_xblock_two_level_metadata_helpers_normalize_success_and_failure() -> No
 
     assert success == {"mode": "additive", "setup_s": 0.25}
     assert failure == {"error": "RuntimeError: bad coarse", "setup_s": 0.5}
+
+
+def test_xblock_global_coupling_policy_defaults_off_and_selects_builder_defaults() -> None:
+    off = resolve_xblock_global_coupling_policy_setup(
+        precondition_side="right",
+        xblock_krylov_method="gmres",
+        env={},
+    )
+    device = resolve_xblock_global_coupling_policy_setup(
+        precondition_side="right",
+        xblock_krylov_method="gmres_jax",
+        env={"SFINCS_JAX_RHSMODE1_XBLOCK_PC_GLOBAL_COUPLING": "1"},
+    )
+    no_side = resolve_xblock_global_coupling_policy_setup(
+        precondition_side="none",
+        xblock_krylov_method="gmres_jax",
+        env={"SFINCS_JAX_RHSMODE1_XBLOCK_PC_GLOBAL_COUPLING": "1"},
+    )
+
+    assert not off.enabled
+    assert not off.should_build
+    assert not off.use_device_builder
+    assert off.setup_max_s == 0.0
+    assert device.enabled
+    assert device.should_build
+    assert device.use_device_builder
+    assert device.setup_max_s == pytest.approx(180.0)
+    assert no_side.enabled
+    assert not no_side.should_build
+
+
+def test_xblock_global_coupling_policy_parses_build_parameters() -> None:
+    setup = resolve_xblock_global_coupling_policy_setup(
+        precondition_side="left",
+        xblock_krylov_method="bicgstab_jax",
+        env={
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_GLOBAL_COUPLING": "1",
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_GLOBAL_COUPLING_MODE": "multiplicative",
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_GLOBAL_COUPLING_MAX_DIRECTIONS": "9",
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_GLOBAL_COUPLING_FSAVG_LMAX": "3",
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_GLOBAL_COUPLING_ANGULAR_LMAX": "4",
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_GLOBAL_COUPLING_MAX_EXTRA_UNITS": "5",
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_GLOBAL_COUPLING_RCOND": "1e-7",
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_GLOBAL_COUPLING_INCLUDE_RHS": "0",
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_GLOBAL_COUPLING_SETUP_MAX_S": "12.5",
+        },
+    )
+
+    assert setup.enabled
+    assert setup.should_build
+    assert setup.use_device_builder
+    assert setup.mode == "multiplicative"
+    assert setup.max_directions == 9
+    assert setup.fsavg_lmax == 3
+    assert setup.angular_lmax == 4
+    assert setup.max_extra_units == 5
+    assert setup.rcond == pytest.approx(1.0e-7)
+    assert not setup.include_rhs
+    assert setup.setup_max_s == pytest.approx(12.5)
+
+
+def test_xblock_global_coupling_metadata_helpers_normalize_success_and_failure() -> None:
+    success = finalize_xblock_global_coupling_metadata(metadata={"mode": "additive"}, setup_s=0.75)
+    failure = failed_xblock_global_coupling_metadata(exc=RuntimeError("timeout"), setup_s=1.5)
+
+    assert success == {"mode": "additive", "setup_s": 0.75}
+    assert failure == {"error": "RuntimeError: timeout", "setup_s": 1.5}
 
 
 def test_sparse_pc_gmres_once_explicit_left_recomputes_true_residual() -> None:

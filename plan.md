@@ -33520,3 +33520,52 @@ Next refactor target:
 
 - Extract x-block global-coupling policy/admission settings and setup/failure
   metadata shaping, then continue to seed and QI-specific routing layers.
+
+### 19.79 RHSMode=1 x-block global-coupling policy extraction
+
+Goal:
+
+- Move x-block global-coupling admission, builder-selection policy, env
+  parsing, and setup/failure metadata shaping out of ``v3_driver.py`` while
+  preserving the numerical global-coupling builders.
+
+Implementation:
+
+- Extended ``sfincs_jax/problems/profile_response/sparse_pc.py`` with
+  ``XBlockGlobalCouplingPolicySetup``,
+  ``resolve_xblock_global_coupling_policy_setup``,
+  ``finalize_xblock_global_coupling_metadata``, and
+  ``failed_xblock_global_coupling_metadata``.
+- Moved global-coupling enablement, preconditioner-side admission,
+  device-vs-smoothed builder selection, mode/max-direction/fsavg/angular
+  rank/rcond/include-RHS/setup-budget parsing, and success/failure setup timing
+  normalization into sparse-PC helpers.
+- Kept the actual global-coupling preconditioner builders and application in
+  ``v3_driver.py``.
+- Added direct tests for default-off behavior, device-builder defaults,
+  disabled preconditioner side, build-parameter parsing, and metadata
+  normalization.
+- ``solve_v3_full_system_linear_gmres`` is now about ``19683`` lines and
+  ``v3_driver.py`` is about ``24946`` lines.
+
+Validation so far:
+
+- ``python -m ruff check sfincs_jax/problems/profile_response/sparse_pc.py
+  sfincs_jax/v3_driver.py tests/test_profile_response_sparse_pc.py``: passed.
+- ``python -m compileall -q
+  sfincs_jax/problems/profile_response/sparse_pc.py sfincs_jax/v3_driver.py
+  tests/test_profile_response_sparse_pc.py``: passed.
+- ``PYTHONDONTWRITEBYTECODE=1 JAX_ENABLE_X64=True pytest -q
+  -p no:cacheprovider tests/test_profile_response_sparse_pc.py``:
+  ``37 passed in 0.80 s``.
+- Focused global-coupling regression subset:
+  ``40 passed in 7.55 s``.
+- Broader sparse-PC/x-block/dispatch subset:
+  ``115 passed in 43.25 s``.
+
+Next refactor target:
+
+- Extract seed-preconditioner and QI-specific admission-policy layers around
+  the remaining x-block branch, then reassess whether to continue routing
+  extraction or start moving repeated transport/RHSMode=2/3 sparse-policy
+  helpers.

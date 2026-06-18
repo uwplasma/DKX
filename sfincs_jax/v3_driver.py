@@ -209,12 +209,15 @@ from .problems.profile_response.sparse_pc import (
     build_xblock_assembled_matvec_setup,
     build_xblock_assembled_operator_preflight_setup,
     evaluate_xblock_moment_schur_probe_result,
+    failed_xblock_global_coupling_metadata,
     failed_xblock_moment_schur_metadata,
     failed_xblock_two_level_metadata,
+    finalize_xblock_global_coupling_metadata,
     finalize_xblock_moment_schur_metadata,
     finalize_xblock_two_level_metadata,
     resolve_sparse_pc_entry_policy,
     resolve_xblock_qi_device_operator_reuse_setup,
+    resolve_xblock_global_coupling_policy_setup,
     resolve_xblock_moment_schur_policy_setup,
     resolve_xblock_sparse_pc_setup,
     resolve_xblock_sparse_pc_side_policy_setup,
@@ -3920,59 +3923,21 @@ def solve_v3_full_system_linear_gmres(
                             f"two-level coarse disabled after build failure ({type(exc).__name__}: {exc})",
                         )
 
-            global_coupling_enabled = _rhs1_bool_env(
-                "SFINCS_JAX_RHSMODE1_XBLOCK_PC_GLOBAL_COUPLING",
-                default=False,
+            global_coupling_policy = resolve_xblock_global_coupling_policy_setup(
+                precondition_side=str(precondition_side),
+                xblock_krylov_method=str(xblock_krylov_method),
+                env=os.environ,
             )
+            global_coupling_enabled = bool(global_coupling_policy.enabled)
             global_coupling_built = False
             global_coupling_metadata: dict[str, object] = {}
             global_coupling_stats = {"applies": 0, "coarse_applies": 0}
-            if global_coupling_enabled and precondition_side != "none":
+            if bool(global_coupling_policy.should_build):
                 global_coupling_start_s = sparse_timer.elapsed_s()
-                global_coupling_mode = os.environ.get(
-                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_GLOBAL_COUPLING_MODE",
-                    "additive",
-                ).strip()
-                global_coupling_max_directions = _rhs1_int_env(
-                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_GLOBAL_COUPLING_MAX_DIRECTIONS",
-                    default=96,
-                    minimum=1,
-                )
-                global_coupling_fsavg_lmax = _rhs1_int_env(
-                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_GLOBAL_COUPLING_FSAVG_LMAX",
-                    default=12,
-                    minimum=0,
-                )
-                global_coupling_angular_lmax = _rhs1_int_env(
-                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_GLOBAL_COUPLING_ANGULAR_LMAX",
-                    default=2,
-                    minimum=0,
-                )
-                global_coupling_max_extra_units = _rhs1_int_env(
-                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_GLOBAL_COUPLING_MAX_EXTRA_UNITS",
-                    default=8,
-                    minimum=0,
-                )
-                global_coupling_rcond = _rhs1_float_env(
-                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_GLOBAL_COUPLING_RCOND",
-                    default=1.0e-11,
-                    minimum=0.0,
-                )
-                global_coupling_include_rhs = _rhs1_bool_env(
-                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_GLOBAL_COUPLING_INCLUDE_RHS",
-                    default=True,
-                )
-                global_coupling_setup_max_s = _rhs1_float_env(
-                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_GLOBAL_COUPLING_SETUP_MAX_S",
-                    default=180.0
-                    if str(xblock_krylov_method) in {"fgmres_jax", "gmres_jax", "bicgstab_jax", "tfqmr_jax"}
-                    else 0.0,
-                    minimum=0.0,
-                )
                 try:
                     global_builder = (
                         _build_rhs1_xblock_device_global_coupling_preconditioner
-                        if str(xblock_krylov_method) in {"fgmres_jax", "gmres_jax", "bicgstab_jax", "tfqmr_jax"}
+                        if bool(global_coupling_policy.use_device_builder)
                         else _build_rhs1_xblock_smoothed_global_coupling_preconditioner
                     )
                     precond_xblock_krylov, global_coupling_metadata, global_coupling_stats = (
@@ -3983,25 +3948,28 @@ def solve_v3_full_system_linear_gmres(
                             base_preconditioner=precond_xblock_krylov,
                             direction_projector=_xblock_reduce_full if xblock_use_active_dof else None,
                             expected_size=int(xblock_linear_size),
-                            mode=global_coupling_mode,
-                            fsavg_lmax=global_coupling_fsavg_lmax,
-                            angular_lmax=global_coupling_angular_lmax,
-                            max_extra_units=global_coupling_max_extra_units,
-                            max_directions=global_coupling_max_directions,
-                            rcond=global_coupling_rcond,
-                            include_rhs=global_coupling_include_rhs,
-                            max_setup_s=global_coupling_setup_max_s,
+                            mode=global_coupling_policy.mode,
+                            fsavg_lmax=int(global_coupling_policy.fsavg_lmax),
+                            angular_lmax=int(global_coupling_policy.angular_lmax),
+                            max_extra_units=int(global_coupling_policy.max_extra_units),
+                            max_directions=int(global_coupling_policy.max_directions),
+                            rcond=float(global_coupling_policy.rcond),
+                            include_rhs=bool(global_coupling_policy.include_rhs),
+                            max_setup_s=float(global_coupling_policy.setup_max_s),
                             emit=emit,
                         )
                     )
                     global_coupling_built = True
-                    global_coupling_metadata["setup_s"] = float(sparse_timer.elapsed_s() - global_coupling_start_s)
+                    global_coupling_metadata = finalize_xblock_global_coupling_metadata(
+                        metadata=global_coupling_metadata,
+                        setup_s=float(sparse_timer.elapsed_s() - global_coupling_start_s),
+                    )
                     pc_factor_s += float(global_coupling_metadata["setup_s"])
                 except Exception as exc:  # noqa: BLE001
-                    global_coupling_metadata = {
-                        "error": f"{type(exc).__name__}: {exc}",
-                        "setup_s": float(sparse_timer.elapsed_s() - global_coupling_start_s),
-                    }
+                    global_coupling_metadata = failed_xblock_global_coupling_metadata(
+                        exc=exc,
+                        setup_s=float(sparse_timer.elapsed_s() - global_coupling_start_s),
+                    )
                     if emit is not None:
                         emit(
                             1,

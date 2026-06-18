@@ -305,6 +305,23 @@ class XBlockTwoLevelPolicySetup:
     include_rhs: bool
 
 
+@dataclass(frozen=True)
+class XBlockGlobalCouplingPolicySetup:
+    """Admission and build parameters for x-block global-coupling correction."""
+
+    enabled: bool
+    should_build: bool
+    use_device_builder: bool
+    mode: str
+    max_directions: int
+    fsavg_lmax: int
+    angular_lmax: int
+    max_extra_units: int
+    rcond: float
+    include_rhs: bool
+    setup_max_s: float
+
+
 def _env_value(env: Mapping[str, str] | None, key: str) -> str:
     source = env if env is not None else {}
     return str(source.get(key, "")).strip()
@@ -1623,6 +1640,102 @@ def failed_xblock_two_level_metadata(
     setup_s: float,
 ) -> dict[str, object]:
     """Return normalized two-level failure metadata."""
+
+    return {
+        "error": f"{type(exc).__name__}: {exc}",
+        "setup_s": float(setup_s),
+    }
+
+
+def _xblock_device_krylov_method(method: str) -> bool:
+    return str(method) in {"fgmres_jax", "gmres_jax", "bicgstab_jax", "tfqmr_jax"}
+
+
+def resolve_xblock_global_coupling_policy_setup(
+    *,
+    precondition_side: str,
+    xblock_krylov_method: str,
+    env: Mapping[str, str] | None = None,
+) -> XBlockGlobalCouplingPolicySetup:
+    """Resolve x-block global-coupling admission and build parameters."""
+
+    enabled = _env_bool(
+        env,
+        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_GLOBAL_COUPLING",
+        default=False,
+    )
+    use_device_builder = _xblock_device_krylov_method(str(xblock_krylov_method))
+    return XBlockGlobalCouplingPolicySetup(
+        enabled=bool(enabled),
+        should_build=bool(enabled and str(precondition_side) != "none"),
+        use_device_builder=bool(use_device_builder),
+        mode=_env_value(env, "SFINCS_JAX_RHSMODE1_XBLOCK_PC_GLOBAL_COUPLING_MODE") or "additive",
+        max_directions=_env_int(
+            env,
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_GLOBAL_COUPLING_MAX_DIRECTIONS",
+            default=96,
+            minimum=1,
+        ),
+        fsavg_lmax=_env_int(
+            env,
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_GLOBAL_COUPLING_FSAVG_LMAX",
+            default=12,
+            minimum=0,
+        ),
+        angular_lmax=_env_int(
+            env,
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_GLOBAL_COUPLING_ANGULAR_LMAX",
+            default=2,
+            minimum=0,
+        ),
+        max_extra_units=_env_int(
+            env,
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_GLOBAL_COUPLING_MAX_EXTRA_UNITS",
+            default=8,
+            minimum=0,
+        ),
+        rcond=max(
+            0.0,
+            _env_float(
+                env,
+                "SFINCS_JAX_RHSMODE1_XBLOCK_PC_GLOBAL_COUPLING_RCOND",
+                default=1.0e-11,
+            ),
+        ),
+        include_rhs=_env_bool(
+            env,
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_GLOBAL_COUPLING_INCLUDE_RHS",
+            default=True,
+        ),
+        setup_max_s=max(
+            0.0,
+            _env_float(
+                env,
+                "SFINCS_JAX_RHSMODE1_XBLOCK_PC_GLOBAL_COUPLING_SETUP_MAX_S",
+                default=180.0 if bool(use_device_builder) else 0.0,
+            ),
+        ),
+    )
+
+
+def finalize_xblock_global_coupling_metadata(
+    *,
+    metadata: Mapping[str, object],
+    setup_s: float,
+) -> dict[str, object]:
+    """Return global-coupling metadata with normalized setup timing."""
+
+    out = dict(metadata)
+    out["setup_s"] = float(setup_s)
+    return out
+
+
+def failed_xblock_global_coupling_metadata(
+    *,
+    exc: BaseException,
+    setup_s: float,
+) -> dict[str, object]:
+    """Return normalized global-coupling failure metadata."""
 
     return {
         "error": f"{type(exc).__name__}: {exc}",
