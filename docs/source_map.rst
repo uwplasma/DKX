@@ -227,9 +227,10 @@ the historical private driver name and test the focused module directly. This ke
   local-coupling tests.
 - ``sfincs_jax/linear_algebra.py``:
   small differentiable JAX-native linear algebra kernels used by solver
-  infrastructure. The current exported kernel is the regularized tiny
-  least-squares solve used by recycled initial guesses and coarse/residual
-  correction paths when backend LAPACK/SVD calls are unavailable.
+  infrastructure. The current exported kernels are the regularized tiny
+  least-squares solve and the shared recycled Krylov initial-guess builder used
+  by RHSMode=1 and transport solves when backend LAPACK/SVD calls are
+  unavailable.
 - ``sfincs_jax/constraint_projection.py``:
   constraintScheme=1 nullspace/source-row projection used by RHSMode=1 and
   RHSMode=2/3 solves after iterative branches. It builds the small
