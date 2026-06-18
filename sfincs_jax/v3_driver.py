@@ -220,6 +220,7 @@ from .problems.profile_response.sparse_pc import (
     resolve_xblock_qi_device_admission_setup,
     resolve_xblock_qi_device_base_config_setup,
     resolve_xblock_qi_device_enrichment_config_setup,
+    resolve_xblock_qi_device_multilevel_config_setup,
     resolve_xblock_qi_device_operator_reuse_setup,
     resolve_xblock_qi_galerkin_policy_setup,
     resolve_xblock_qi_seed_policy_setup,
@@ -4823,108 +4824,56 @@ def solve_v3_full_system_linear_gmres(
                     qi_device_enrichment_config.operator_action_enrichment
                 )
                 qi_device_operator_action_depth = int(qi_device_enrichment_config.operator_action_depth)
-                qi_device_multilevel_coarse = _rhs1_bool_env(
-                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_COARSE",
-                    default=_rhs1_bool_env(
-                        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_REUSE_COARSE_OPERATOR",
-                        default=False,
-                    ),
+                qi_device_multilevel_config = resolve_xblock_qi_device_multilevel_config_setup(
+                    env=os.environ
                 )
-                qi_device_multilevel_max_levels = _rhs1_int_env(
-                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_MAX_LEVELS",
-                    default=3 if bool(qi_device_multilevel_coarse) else 1,
-                    minimum=1,
+                qi_device_multilevel_coarse = bool(
+                    qi_device_multilevel_config.multilevel_coarse
                 )
-                qi_device_multilevel_aggregate_factor = _rhs1_int_env(
-                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_AGGREGATE_FACTOR",
-                    default=2,
-                    minimum=2,
+                qi_device_multilevel_max_levels = int(
+                    qi_device_multilevel_config.multilevel_max_levels
                 )
-                qi_device_multilevel_max_angular_mode = _rhs1_int_env(
-                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_MAX_ANGULAR_MODE",
-                    default=1,
-                    minimum=0,
+                qi_device_multilevel_aggregate_factor = int(
+                    qi_device_multilevel_config.multilevel_aggregate_factor
                 )
-                qi_device_multilevel_max_radial_degree = _rhs1_int_env(
-                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_MAX_RADIAL_DEGREE",
-                    default=2,
-                    minimum=0,
+                qi_device_multilevel_max_angular_mode = int(
+                    qi_device_multilevel_config.multilevel_max_angular_mode
                 )
-                qi_device_multilevel_max_pitch_degree = _rhs1_int_env(
-                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_MAX_PITCH_DEGREE",
-                    default=0,
-                    minimum=0,
+                qi_device_multilevel_max_radial_degree = int(
+                    qi_device_multilevel_config.multilevel_max_radial_degree
                 )
-                qi_device_multilevel_current_moments = _rhs1_bool_env(
-                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_CURRENT_MOMENTS",
-                    default=False,
+                qi_device_multilevel_max_pitch_degree = int(
+                    qi_device_multilevel_config.multilevel_max_pitch_degree
                 )
-                qi_device_multilevel_species_current_moments = _rhs1_bool_env(
-                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_SPECIES_CURRENT_MOMENTS",
-                    default=True,
+                qi_device_multilevel_current_moments = bool(
+                    qi_device_multilevel_config.multilevel_current_moments
                 )
-                qi_device_multilevel_radial_current_moments = _rhs1_bool_env(
-                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_RADIAL_CURRENT_MOMENTS",
-                    default=True,
+                qi_device_multilevel_species_current_moments = bool(
+                    qi_device_multilevel_config.multilevel_species_current_moments
                 )
-                qi_device_multilevel_tail_constraint_moments = _rhs1_bool_env(
-                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_TAIL_CONSTRAINT_MOMENTS",
-                    default=True,
+                qi_device_multilevel_radial_current_moments = bool(
+                    qi_device_multilevel_config.multilevel_radial_current_moments
                 )
-                qi_device_multilevel_current_max_pitch_degree = _rhs1_int_env(
-                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_CURRENT_MAX_PITCH_DEGREE",
-                    default=1,
-                    minimum=0,
+                qi_device_multilevel_tail_constraint_moments = bool(
+                    qi_device_multilevel_config.multilevel_tail_constraint_moments
                 )
-                qi_device_multilevel_residual_equation = _rhs1_bool_env(
-                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_RESIDUAL_EQUATION",
-                    default=False,
+                qi_device_multilevel_current_max_pitch_degree = int(
+                    qi_device_multilevel_config.multilevel_current_max_pitch_degree
                 )
-                qi_device_multilevel_residual_equation_max_level_rank = _rhs1_int_env(
-                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_RESIDUAL_EQUATION_MAX_LEVEL_RANK",
-                    default=16,
-                    minimum=1,
+                qi_device_multilevel_residual_equation = bool(
+                    qi_device_multilevel_config.multilevel_residual_equation
                 )
-                qi_device_multilevel_residual_equation_order = (
-                    os.environ.get(
-                        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_RESIDUAL_EQUATION_ORDER",
-                        "coarse_to_fine",
-                    )
-                    .strip()
-                    .lower()
-                    .replace("-", "_")
+                qi_device_multilevel_residual_equation_max_level_rank = int(
+                    qi_device_multilevel_config.multilevel_residual_equation_max_level_rank
                 )
-                if qi_device_multilevel_residual_equation_order not in {"coarse_to_fine", "fine_to_coarse"}:
-                    qi_device_multilevel_residual_equation_order = "coarse_to_fine"
-                qi_device_multilevel_residual_equation_solver = (
-                    os.environ.get(
-                        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_RESIDUAL_EQUATION_SOLVER",
-                        "action_lstsq",
-                    )
-                    .strip()
-                    .lower()
-                    .replace("-", "_")
+                qi_device_multilevel_residual_equation_order = str(
+                    qi_device_multilevel_config.multilevel_residual_equation_order
                 )
-                if qi_device_multilevel_residual_equation_solver in {
-                    "action",
-                    "action_ls",
-                    "least_squares",
-                    "lstsq",
-                    "staged",
-                }:
-                    qi_device_multilevel_residual_equation_solver = "action_lstsq"
-                elif qi_device_multilevel_residual_equation_solver in {
-                    "galerkin",
-                    "projected",
-                    "qtaq",
-                    "coarse_grid",
-                }:
-                    qi_device_multilevel_residual_equation_solver = "galerkin"
-                else:
-                    qi_device_multilevel_residual_equation_solver = "action_lstsq"
-                qi_device_multilevel_residual_equation_include_global = _rhs1_bool_env(
-                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_RESIDUAL_EQUATION_INCLUDE_GLOBAL",
-                    default=True,
+                qi_device_multilevel_residual_equation_solver = str(
+                    qi_device_multilevel_config.multilevel_residual_equation_solver
+                )
+                qi_device_multilevel_residual_equation_include_global = bool(
+                    qi_device_multilevel_config.multilevel_residual_equation_include_global
                 )
                 qi_device_global_moment_residual_equation = _rhs1_bool_env(
                     "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_GLOBAL_MOMENT_RESIDUAL_EQUATION",

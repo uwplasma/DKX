@@ -29,6 +29,7 @@ from sfincs_jax.problems.profile_response.sparse_pc import (
     resolve_xblock_qi_device_admission_setup,
     resolve_xblock_qi_device_base_config_setup,
     resolve_xblock_qi_device_enrichment_config_setup,
+    resolve_xblock_qi_device_multilevel_config_setup,
     resolve_xblock_qi_device_operator_reuse_setup,
     resolve_xblock_qi_galerkin_policy_setup,
     resolve_xblock_qi_seed_policy_setup,
@@ -1380,6 +1381,104 @@ def test_xblock_qi_device_enrichment_config_parses_explicit_settings() -> None:
     assert setup.adjoint_krylov_transpose_source == "finite_difference"
     assert setup.operator_action_enrichment
     assert setup.operator_action_depth == 6
+
+
+def test_xblock_qi_device_multilevel_config_defaults_disabled() -> None:
+    setup = resolve_xblock_qi_device_multilevel_config_setup(env={})
+
+    assert not setup.multilevel_coarse
+    assert setup.multilevel_max_levels == 1
+    assert setup.multilevel_aggregate_factor == 2
+    assert setup.multilevel_max_angular_mode == 1
+    assert setup.multilevel_max_radial_degree == 2
+    assert setup.multilevel_max_pitch_degree == 0
+    assert not setup.multilevel_current_moments
+    assert setup.multilevel_species_current_moments
+    assert setup.multilevel_radial_current_moments
+    assert setup.multilevel_tail_constraint_moments
+    assert setup.multilevel_current_max_pitch_degree == 1
+    assert not setup.multilevel_residual_equation
+    assert setup.multilevel_residual_equation_max_level_rank == 16
+    assert setup.multilevel_residual_equation_order == "coarse_to_fine"
+    assert setup.multilevel_residual_equation_solver == "action_lstsq"
+    assert setup.multilevel_residual_equation_include_global
+
+
+def test_xblock_qi_device_multilevel_config_reuses_coarse_operator_alias() -> None:
+    alias = resolve_xblock_qi_device_multilevel_config_setup(
+        env={
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_REUSE_COARSE_OPERATOR": "1",
+        }
+    )
+    explicit_off = resolve_xblock_qi_device_multilevel_config_setup(
+        env={
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_REUSE_COARSE_OPERATOR": "1",
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_COARSE": "0",
+        }
+    )
+
+    assert alias.multilevel_coarse
+    assert alias.multilevel_max_levels == 3
+    assert not explicit_off.multilevel_coarse
+    assert explicit_off.multilevel_max_levels == 1
+
+
+def test_xblock_qi_device_multilevel_config_parses_explicit_controls() -> None:
+    setup = resolve_xblock_qi_device_multilevel_config_setup(
+        env={
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_COARSE": "1",
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_MAX_LEVELS": "4",
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_AGGREGATE_FACTOR": "5",
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_MAX_ANGULAR_MODE": "3",
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_MAX_RADIAL_DEGREE": "6",
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_MAX_PITCH_DEGREE": "2",
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_CURRENT_MOMENTS": "1",
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_SPECIES_CURRENT_MOMENTS": "0",
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_RADIAL_CURRENT_MOMENTS": "0",
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_TAIL_CONSTRAINT_MOMENTS": "0",
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_CURRENT_MAX_PITCH_DEGREE": "4",
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_RESIDUAL_EQUATION": "1",
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_RESIDUAL_EQUATION_MAX_LEVEL_RANK": "7",
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_RESIDUAL_EQUATION_ORDER": "fine-to-coarse",
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_RESIDUAL_EQUATION_SOLVER": "qtaq",
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_RESIDUAL_EQUATION_INCLUDE_GLOBAL": "0",
+        }
+    )
+
+    assert setup.multilevel_coarse
+    assert setup.multilevel_max_levels == 4
+    assert setup.multilevel_aggregate_factor == 5
+    assert setup.multilevel_max_angular_mode == 3
+    assert setup.multilevel_max_radial_degree == 6
+    assert setup.multilevel_max_pitch_degree == 2
+    assert setup.multilevel_current_moments
+    assert not setup.multilevel_species_current_moments
+    assert not setup.multilevel_radial_current_moments
+    assert not setup.multilevel_tail_constraint_moments
+    assert setup.multilevel_current_max_pitch_degree == 4
+    assert setup.multilevel_residual_equation
+    assert setup.multilevel_residual_equation_max_level_rank == 7
+    assert setup.multilevel_residual_equation_order == "fine_to_coarse"
+    assert setup.multilevel_residual_equation_solver == "galerkin"
+    assert not setup.multilevel_residual_equation_include_global
+
+
+def test_xblock_qi_device_multilevel_config_normalizes_invalid_residual_controls() -> None:
+    setup = resolve_xblock_qi_device_multilevel_config_setup(
+        env={
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_RESIDUAL_EQUATION_ORDER": "inside-out",
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_RESIDUAL_EQUATION_SOLVER": "least-squares",
+        }
+    )
+    invalid_solver = resolve_xblock_qi_device_multilevel_config_setup(
+        env={
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_RESIDUAL_EQUATION_SOLVER": "unknown",
+        }
+    )
+
+    assert setup.multilevel_residual_equation_order == "coarse_to_fine"
+    assert setup.multilevel_residual_equation_solver == "action_lstsq"
+    assert invalid_solver.multilevel_residual_equation_solver == "action_lstsq"
 
 
 def test_sparse_pc_gmres_once_explicit_left_recomputes_true_residual() -> None:

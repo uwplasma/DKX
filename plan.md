@@ -33873,3 +33873,56 @@ Next refactor target:
   small pieces. Normalize repeated solver aliases in helper functions and keep
   the actual coarse-basis/probe code in ``v3_driver.py`` until this policy
   layer is covered by direct tests and focused regressions.
+
+### 19.86 RHSMode=1 x-block QI-device multilevel config extraction
+
+Goal:
+
+- Move the first QI-device multilevel coarse-space/residual-equation settings
+  out of ``v3_driver.py`` while keeping global-moment, residual-Galerkin,
+  phase-space, region, active-pattern, block-Schur, coupled-residual, and
+  snapshot controls in place for later policy extractions.
+
+Implementation:
+
+- Added ``XBlockQIDeviceMultilevelConfigSetup`` and
+  ``resolve_xblock_qi_device_multilevel_config_setup`` to
+  ``sfincs_jax/problems/profile_response/sparse_pc.py``.
+- Added a shared private alias normalizer for QI-device residual-equation
+  solvers. The extracted multilevel path preserves the previous
+  ``action_lstsq`` and ``galerkin`` aliases and fails invalid values back to
+  ``action_lstsq``.
+- Preserved the existing ``REUSE_COARSE_OPERATOR`` alias for
+  ``MULTILEVEL_COARSE`` and the explicit ``MULTILEVEL_COARSE=0`` override.
+- Replaced the in-driver multilevel env parsing block with a policy object
+  while retaining all downstream variable names used by rank budgeting,
+  preconditioner construction, metadata, and progress logging.
+- Added direct policy tests for defaults, reuse alias behavior, explicit
+  multilevel controls, invalid residual-order normalization, and solver alias
+  normalization.
+- ``solve_v3_full_system_linear_gmres`` is now about ``19314`` lines and
+  ``v3_driver.py`` is about ``24594`` lines.
+
+Validation so far:
+
+- ``python -m ruff check sfincs_jax/problems/profile_response/sparse_pc.py
+  sfincs_jax/v3_driver.py tests/test_profile_response_sparse_pc.py``: passed.
+- ``python -m compileall -q
+  sfincs_jax/problems/profile_response/sparse_pc.py sfincs_jax/v3_driver.py
+  tests/test_profile_response_sparse_pc.py``: passed.
+- ``PYTHONDONTWRITEBYTECODE=1 JAX_ENABLE_X64=True pytest -q
+  -p no:cacheprovider tests/test_profile_response_sparse_pc.py``:
+  ``58 passed in 0.94 s``.
+- Focused QI-device multilevel regression subset:
+  ``59 passed in 5.00 s``.
+- Broader sparse-PC/x-block/dispatch subset:
+  ``152 passed in 54.46 s``.
+- ``git diff --check``: passed.
+
+Next refactor target:
+
+- Extract QI-device global-moment and residual-Galerkin equation configuration
+  next, using the new residual-equation solver alias normalizer with the
+  correct fallbacks for each policy. Keep construction/probe/residual-admission
+  code in ``v3_driver.py`` until direct policy tests and focused driver
+  regressions cover the extracted surfaces.
