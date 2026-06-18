@@ -247,6 +247,17 @@ class XBlockAssembledOperatorPreflightSetup:
     metadata: dict[str, object]
 
 
+@dataclass(frozen=True)
+class XBlockAssembledDeviceSetup:
+    """Optional device-resident CSR operator setup for assembled x-block matvecs."""
+
+    device_operator: object | None
+    device_resident: bool
+    validation_errors: tuple[float, ...]
+    error: str | None
+    messages: tuple[tuple[int, str], ...]
+
+
 def _env_value(env: Mapping[str, str] | None, key: str) -> str:
     source = env if env is not None else {}
     return str(source.get(key, "")).strip()
@@ -1199,6 +1210,70 @@ def build_xblock_assembled_operator_preflight_setup(
         summary=summary,
         metadata=metadata,
     )
+
+
+def build_xblock_assembled_device_setup(
+    *,
+    assembled_matrix: object,
+    assembled_matvec: Callable[[np.ndarray], np.ndarray],
+    csr_cap_nbytes: int,
+    device_enabled: bool,
+    device_required: bool,
+    validation_samples: int,
+    validation_tol: float,
+    device_csr_from_matrix: Callable[..., object],
+    validate_device_csr_matvec: Callable[..., Sequence[float]],
+) -> XBlockAssembledDeviceSetup:
+    """Optionally build and validate a device CSR matvec for an assembled operator."""
+
+    if not bool(device_enabled):
+        return XBlockAssembledDeviceSetup(
+            device_operator=None,
+            device_resident=False,
+            validation_errors=(),
+            error=None,
+            messages=(),
+        )
+    messages: list[tuple[int, str]] = []
+    try:
+        device_operator = device_csr_from_matrix(
+            assembled_matrix,
+            dtype=np.float64,
+            max_nbytes=int(csr_cap_nbytes),
+        )
+        validation_errors = validate_device_csr_matvec(
+            device_operator,
+            assembled_matvec,
+            samples=int(validation_samples),
+            rtol=float(validation_tol),
+            seed=1730,
+        )
+        return XBlockAssembledDeviceSetup(
+            device_operator=device_operator,
+            device_resident=True,
+            validation_errors=tuple(float(v) for v in validation_errors),
+            error=None,
+            messages=(),
+        )
+    except Exception as exc:  # noqa: BLE001
+        error = f"{type(exc).__name__}: {exc}"
+        if bool(device_required):
+            raise RuntimeError(f"assembled x-block device CSR operator failed ({error})") from exc
+        messages.append(
+            (
+                1,
+                "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
+                "assembled device operator disabled after build failure "
+                f"({error})",
+            )
+        )
+        return XBlockAssembledDeviceSetup(
+            device_operator=None,
+            device_resident=False,
+            validation_errors=(),
+            error=error,
+            messages=tuple(messages),
+        )
 
 
 def run_sparse_pc_gmres_once(

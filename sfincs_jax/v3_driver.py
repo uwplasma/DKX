@@ -205,6 +205,7 @@ from .problems.profile_response.sparse_pc import (
     apply_sparse_pc_post_minres,
     build_xblock_krylov_matvec_setup,
     build_xblock_assembled_equilibration_setup,
+    build_xblock_assembled_device_setup,
     build_xblock_assembled_operator_preflight_setup,
     resolve_sparse_pc_entry_policy,
     resolve_xblock_qi_device_operator_reuse_setup,
@@ -3713,35 +3714,24 @@ def solve_v3_full_system_linear_gmres(
                             emit(int(level), str(message))
                     assembled_device_validation_errors: tuple[float, ...] = ()
                     assembled_device_error = None
-                    if bool(assembled_device_enabled):
-                        try:
-                            assembled_device_operator = device_csr_from_matrix(
-                                assembled_matrix,
-                                dtype=np.float64,
-                                max_nbytes=int(assembled_csr_cap_nbytes),
-                            )
-                            assembled_device_validation_errors = validate_device_csr_matvec(
-                                assembled_device_operator,
-                                assembled_bundle.matvec,
-                                samples=int(validation_samples),
-                                rtol=float(validation_tol),
-                                seed=1730,
-                            )
-                            assembled_operator_device_resident = True
-                        except Exception as device_exc:  # noqa: BLE001
-                            assembled_device_error = f"{type(device_exc).__name__}: {device_exc}"
-                            if bool(assembled_device_required):
-                                raise RuntimeError(
-                                    "assembled x-block device CSR operator failed "
-                                    f"({assembled_device_error})"
-                                ) from device_exc
-                            if emit is not None:
-                                emit(
-                                    1,
-                                    "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
-                                    "assembled device operator disabled after build failure "
-                                    f"({assembled_device_error})",
-                                )
+                    assembled_device_setup = build_xblock_assembled_device_setup(
+                        assembled_matrix=assembled_matrix,
+                        assembled_matvec=assembled_bundle.matvec,
+                        csr_cap_nbytes=int(assembled_csr_cap_nbytes),
+                        device_enabled=bool(assembled_device_enabled),
+                        device_required=bool(assembled_device_required),
+                        validation_samples=int(validation_samples),
+                        validation_tol=float(validation_tol),
+                        device_csr_from_matrix=device_csr_from_matrix,
+                        validate_device_csr_matvec=validate_device_csr_matvec,
+                    )
+                    assembled_device_operator = assembled_device_setup.device_operator
+                    assembled_device_validation_errors = tuple(assembled_device_setup.validation_errors)
+                    assembled_device_error = assembled_device_setup.error
+                    assembled_operator_device_resident = bool(assembled_device_setup.device_resident)
+                    if emit is not None:
+                        for level, message in assembled_device_setup.messages:
+                            emit(int(level), str(message))
 
                     if assembled_device_operator is not None:
                         assembled_device_matvec = assembled_device_operator.jitted_matvec()

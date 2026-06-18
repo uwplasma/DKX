@@ -33297,3 +33297,47 @@ Next refactor target:
 - Extract assembled-operator validation/device-CSR admission and metadata
   normalization after materialization. Keep the actual materialization call and
   row/column transformed Krylov solve in the driver until covered directly.
+
+### 19.74 RHSMode=1 x-block assembled device-CSR setup extraction
+
+Goal:
+
+- Move optional device-resident CSR construction and validation for assembled
+  x-block operators out of ``v3_driver.py`` while preserving optional-failure
+  behavior and required-device failure semantics.
+
+Implementation:
+
+- Extended ``sfincs_jax/problems/profile_response/sparse_pc.py`` with
+  ``XBlockAssembledDeviceSetup`` and
+  ``build_xblock_assembled_device_setup``.
+- Moved device CSR construction, validation error capture, optional fallback
+  messages, and required-device failure wrapping into the sparse-PC helper.
+- Kept assembled operator materialization, host/device matvec closure
+  selection, and downstream metadata assembly in ``v3_driver.py``.
+- Added direct tests for device setup success, optional build failure, and
+  required build failure.
+- ``solve_v3_full_system_linear_gmres`` is now about ``19837`` lines and
+  ``v3_driver.py`` is about ``25088`` lines.
+
+Validation so far:
+
+- ``python -m ruff check sfincs_jax/problems/profile_response/sparse_pc.py
+  sfincs_jax/v3_driver.py tests/test_profile_response_sparse_pc.py``: passed.
+- ``python -m compileall -q
+  sfincs_jax/problems/profile_response/sparse_pc.py sfincs_jax/v3_driver.py
+  tests/test_profile_response_sparse_pc.py``: passed.
+- ``PYTHONDONTWRITEBYTECODE=1 JAX_ENABLE_X64=True pytest -q
+  -p no:cacheprovider tests/test_profile_response_sparse_pc.py``:
+  ``21 passed in 0.99 s``.
+- Focused assembled-operator regression subset:
+  ``25 passed in 11.40 s``.
+- Broader sparse-PC/x-block/dispatch subset:
+  ``99 passed in 40.56 s``.
+
+Next refactor target:
+
+- Extract assembled host/device matvec closure selection and assembled
+  operator metadata finalization, then move on to moment-Schur admission
+  policy. Keep numerical Krylov execution in the driver until these routing
+  layers are fully covered.

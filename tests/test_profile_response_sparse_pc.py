@@ -13,6 +13,7 @@ from sfincs_jax.problems.profile_response.sparse_pc import (
     XBlockAssembledPreflightError,
     apply_sparse_pc_post_minres,
     build_xblock_assembled_equilibration_setup,
+    build_xblock_assembled_device_setup,
     build_xblock_assembled_operator_preflight_setup,
     build_xblock_krylov_matvec_setup,
     resolve_sparse_pc_entry_policy,
@@ -486,6 +487,61 @@ def test_xblock_assembled_operator_preflight_rejection_carries_metadata() -> Non
     assert excinfo.value.metadata["preflight_rejected"] is True
     assert excinfo.value.metadata["preflight_pattern_nnz_estimate"] == 10
     assert "non-positive CSR memory budget" in str(excinfo.value)
+
+
+def test_xblock_assembled_device_setup_builds_and_validates_operator() -> None:
+    device_operator = SimpleNamespace(nnz=2, nbytes_estimate=64)
+
+    setup = build_xblock_assembled_device_setup(
+        assembled_matrix=object(),
+        assembled_matvec=lambda x: x,
+        csr_cap_nbytes=1024,
+        device_enabled=True,
+        device_required=False,
+        validation_samples=2,
+        validation_tol=1.0e-8,
+        device_csr_from_matrix=lambda *_args, **_kwargs: device_operator,
+        validate_device_csr_matvec=lambda *_args, **_kwargs: (0.0, 1.0e-12),
+    )
+
+    assert setup.device_operator is device_operator
+    assert setup.device_resident
+    assert setup.validation_errors == (0.0, 1.0e-12)
+    assert setup.error is None
+
+
+def test_xblock_assembled_device_setup_optional_failure_returns_message() -> None:
+    setup = build_xblock_assembled_device_setup(
+        assembled_matrix=object(),
+        assembled_matvec=lambda x: x,
+        csr_cap_nbytes=1,
+        device_enabled=True,
+        device_required=False,
+        validation_samples=1,
+        validation_tol=1.0e-8,
+        device_csr_from_matrix=lambda *_args, **_kwargs: (_ for _ in ()).throw(MemoryError("too large")),
+        validate_device_csr_matvec=lambda *_args, **_kwargs: (),
+    )
+
+    assert setup.device_operator is None
+    assert not setup.device_resident
+    assert "MemoryError" in str(setup.error)
+    assert any("disabled after build failure" in message for _, message in setup.messages)
+
+
+def test_xblock_assembled_device_setup_required_failure_raises() -> None:
+    with pytest.raises(RuntimeError, match="device CSR operator failed"):
+        build_xblock_assembled_device_setup(
+            assembled_matrix=object(),
+            assembled_matvec=lambda x: x,
+            csr_cap_nbytes=1,
+            device_enabled=True,
+            device_required=True,
+            validation_samples=1,
+            validation_tol=1.0e-8,
+            device_csr_from_matrix=lambda *_args, **_kwargs: (_ for _ in ()).throw(MemoryError("too large")),
+            validate_device_csr_matvec=lambda *_args, **_kwargs: (),
+        )
 
 
 def test_sparse_pc_gmres_once_explicit_left_recomputes_true_residual() -> None:
