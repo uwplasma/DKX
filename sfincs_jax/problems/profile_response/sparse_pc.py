@@ -357,6 +357,25 @@ class SparsePCEntryPolicySetup:
 
 
 @dataclass(frozen=True)
+class SparsePCFactorPolicySetup:
+    """Host sparse-PC factor policy resolved before materializing the matrix."""
+
+    pc_shift: float
+    factorization: str
+    default_factor_kind: str
+    default_ilu_fill_factor: float
+    default_ilu_drop_tol: float
+    default_pattern_color_batch: int
+    factor_dtype_initial: np.dtype
+    factor_dtype_used: np.dtype
+    factor_dtype_retry: str | None
+    default_permc_spec: str
+    permc_spec: str
+    fp32_probe_maxiter: int
+    first_attempt_maxiter: int
+
+
+@dataclass(frozen=True)
 class XBlockSparsePCSetup:
     """Setup controls for RHSMode=1 x-block sparse-PC solves."""
 
@@ -1948,6 +1967,114 @@ def resolve_sparse_pc_entry_policy(
         pc_restart_env=str(pc_restart_env),
         pc_restart=int(pc_restart),
         pc_maxiter=int(pc_maxiter),
+    )
+
+
+def resolve_sparse_pc_factor_policy(
+    *,
+    env: Mapping[str, str] | None,
+    constrained_pas_pc: bool,
+    tokamak_fp_pc: bool,
+    fortran_reduced_sparse_pc: bool,
+    sparse_pc_linear_size: int,
+    pc_maxiter: int,
+    default_permc_spec: str,
+    host_sparse_factor_dtype: Callable[..., np.dtype],
+) -> SparsePCFactorPolicySetup:
+    """Resolve host sparse-PC factor controls before matrix materialization."""
+
+    shift_env = _env_value(env, "SFINCS_JAX_RHSMODE1_SPARSE_PC_SHIFT")
+    default_shift = (
+        1.0e-8
+        if (bool(constrained_pas_pc) or bool(tokamak_fp_pc) or bool(fortran_reduced_sparse_pc))
+        else 0.0
+    )
+    try:
+        pc_shift = float(shift_env) if shift_env else float(default_shift)
+    except ValueError:
+        pc_shift = float(default_shift)
+
+    factor_kind_env = _env_value(env, "SFINCS_JAX_EXPLICIT_SPARSE_FACTOR_KIND").lower()
+    default_factor_kind = (
+        "ilu"
+        if bool(fortran_reduced_sparse_pc) and int(sparse_pc_linear_size) >= 100000
+        else "lu"
+    )
+    if factor_kind_env in {"jacobi", "diagonal", "diag", "none"}:
+        factorization = "jacobi"
+    elif factor_kind_env in {"ilu", "spilu"}:
+        factorization = "ilu"
+    elif factor_kind_env in {"lu", "splu"}:
+        factorization = "lu"
+    else:
+        factorization = str(default_factor_kind)
+
+    default_ilu_fill_factor = (
+        2.0
+        if bool(fortran_reduced_sparse_pc) and int(sparse_pc_linear_size) >= 100000
+        else 10.0
+    )
+    default_ilu_drop_tol = (
+        1.0e-3
+        if bool(fortran_reduced_sparse_pc) and int(sparse_pc_linear_size) >= 100000
+        else 1.0e-4
+    )
+    default_pattern_color_batch = (
+        16
+        if bool(fortran_reduced_sparse_pc) and int(sparse_pc_linear_size) >= 100000
+        else 1
+    )
+
+    dtype_env = _env_value(env, "SFINCS_JAX_RHSMODE1_SPARSE_PC_FACTOR_DTYPE").lower()
+    if dtype_env in {"float32", "fp32", "32"}:
+        factor_dtype_initial = np.dtype(np.float32)
+    elif dtype_env in {"float64", "fp64", "64"}:
+        factor_dtype_initial = np.dtype(np.float64)
+    elif _env_value(env, "SFINCS_JAX_HOST_SPARSE_FACTOR_DTYPE"):
+        factor_dtype_initial = np.dtype(
+            host_sparse_factor_dtype(
+                size=int(sparse_pc_linear_size),
+                factorization=str(factorization),
+                use_implicit=False,
+            )
+        )
+    else:
+        # Sparse-PC GMRES is more sensitive to factor quality than direct
+        # fallback solves, so default to FP64 unless a memory experiment opts in.
+        factor_dtype_initial = np.dtype(np.float64)
+
+    permc_env = _env_value(env, "SFINCS_JAX_EXPLICIT_SPARSE_PERMC_SPEC").upper()
+    permc_spec = (
+        permc_env
+        if permc_env in {"NATURAL", "MMD_ATA", "MMD_AT_PLUS_A", "COLAMD"}
+        else str(default_permc_spec)
+    )
+    fp32_probe_maxiter = _env_int(
+        env,
+        "SFINCS_JAX_RHSMODE1_SPARSE_PC_FP32_PROBE_MAXITER",
+        2,
+        minimum=1,
+    )
+    first_attempt_maxiter = (
+        min(int(pc_maxiter), int(fp32_probe_maxiter))
+        if factor_dtype_initial == np.dtype(np.float32)
+        else int(pc_maxiter)
+    )
+
+    return SparsePCFactorPolicySetup(
+        pc_shift=float(pc_shift),
+        factorization=str(factorization),
+        default_factor_kind=str(default_factor_kind),
+        default_ilu_fill_factor=float(default_ilu_fill_factor),
+        default_ilu_drop_tol=float(default_ilu_drop_tol),
+        default_pattern_color_batch=int(default_pattern_color_batch),
+        factor_dtype_initial=np.dtype(factor_dtype_initial),
+        factor_dtype_used=np.dtype(factor_dtype_initial),
+        factor_dtype_retry=None,
+        default_permc_spec=str(default_permc_spec),
+        permc_spec=str(permc_spec),
+        fp32_probe_maxiter=int(fp32_probe_maxiter),
+        first_attempt_maxiter=int(first_attempt_maxiter),
     )
 
 
@@ -4404,6 +4531,7 @@ __all__ = [
     "XBlockSparsePCCoreDiagnosticsContext",
     "XBlockSideProbeDiagnosticsContext",
     "SparsePCActiveDOFSetup",
+    "SparsePCFactorPolicySetup",
     "SparsePCGMRESContext",
     "SparsePCGMRESResult",
     "SparsePCPostMinresContext",
@@ -4424,6 +4552,7 @@ __all__ = [
     "resolve_fortran_reduced_xblock_initial_seed_policy",
     "resolve_fortran_reduced_xblock_krylov_policy",
     "resolve_fortran_reduced_xblock_moment_schur_policy",
+    "resolve_sparse_pc_factor_policy",
     "run_fortran_reduced_xblock_krylov_solve",
     "run_sparse_pc_gmres_once",
     "sparse_rescue_tail_metadata",

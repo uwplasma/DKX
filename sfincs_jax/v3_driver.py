@@ -238,6 +238,7 @@ from .problems.profile_response.sparse_pc import (
     prepare_fortran_reduced_xblock_initial_guess,
     prepare_xblock_initial_guess,
     resolve_sparse_pc_entry_policy,
+    resolve_sparse_pc_factor_policy,
     resolve_fortran_reduced_sparse_pc_backend,
     resolve_fortran_reduced_xblock_factor_policy,
     resolve_fortran_reduced_xblock_global_coupling_policy,
@@ -7236,90 +7237,33 @@ def solve_v3_full_system_linear_gmres(
                 f"scope={sparse_pattern_scope} nnz={summary.nnz} "
                 f"avg_row_nnz={summary.avg_row_nnz:.3g} max_row_nnz={summary.max_row_nnz}",
             )
-        pc_shift_env = os.environ.get("SFINCS_JAX_RHSMODE1_SPARSE_PC_SHIFT", "").strip()
-        try:
-            pc_shift = (
-                float(pc_shift_env)
-                if pc_shift_env
-                else (1.0e-8 if (constrained_pas_pc or tokamak_fp_pc or fortran_reduced_sparse_pc) else 0.0)
-            )
-        except ValueError:
-            pc_shift = 1.0e-8 if (constrained_pas_pc or tokamak_fp_pc or fortran_reduced_sparse_pc) else 0.0
-        factor_kind_env = os.environ.get("SFINCS_JAX_EXPLICIT_SPARSE_FACTOR_KIND", "").strip().lower()
-        sparse_pc_default_factor_kind = (
-            "ilu"
-            if bool(fortran_reduced_sparse_pc) and int(sparse_pc_linear_size) >= 100000
-            else "lu"
-        )
-        if factor_kind_env in {"jacobi", "diagonal", "diag", "none"}:
-            sparse_pc_factorization = "jacobi"
-        elif factor_kind_env in {"ilu", "spilu"}:
-            sparse_pc_factorization = "ilu"
-        elif factor_kind_env in {"lu", "splu"}:
-            sparse_pc_factorization = "lu"
-        elif sparse_pc_default_factor_kind == "jacobi":
-            sparse_pc_factorization = "jacobi"
-        elif sparse_pc_default_factor_kind == "ilu":
-            sparse_pc_factorization = "ilu"
-        else:
-            sparse_pc_factorization = "lu"
-        sparse_pc_default_ilu_fill_factor = (
-            2.0
-            if bool(fortran_reduced_sparse_pc) and int(sparse_pc_linear_size) >= 100000
-            else 10.0
-        )
-        sparse_pc_default_ilu_drop_tol = (
-            1.0e-3
-            if bool(fortran_reduced_sparse_pc) and int(sparse_pc_linear_size) >= 100000
-            else 1.0e-4
-        )
-        sparse_pc_default_pattern_color_batch = (
-            16
-            if bool(fortran_reduced_sparse_pc) and int(sparse_pc_linear_size) >= 100000
-            else 1
-        )
-        sparse_pc_dtype_env = os.environ.get("SFINCS_JAX_RHSMODE1_SPARSE_PC_FACTOR_DTYPE", "").strip().lower()
-        if sparse_pc_dtype_env in {"float32", "fp32", "32"}:
-            sparse_pc_factor_dtype_initial = np.dtype(np.float32)
-        elif sparse_pc_dtype_env in {"float64", "fp64", "64"}:
-            sparse_pc_factor_dtype_initial = np.dtype(np.float64)
-        elif os.environ.get("SFINCS_JAX_HOST_SPARSE_FACTOR_DTYPE", "").strip():
-            sparse_pc_factor_dtype_initial = _host_sparse_factor_dtype(
-                size=int(sparse_pc_linear_size),
-                factorization=sparse_pc_factorization,
-                use_implicit=False,
-            )
-        else:
-            # Unlike direct-solve fallbacks, sparse-PC GMRES is very sensitive to
-            # preconditioner quality. Single-precision SuperLU can reduce factor
-            # storage but has caused thousands of extra Krylov matvecs on
-            # production PAS+Er systems, so keep this path FP64 unless explicitly
-            # requested for a memory experiment.
-            sparse_pc_factor_dtype_initial = np.dtype(np.float64)
-        sparse_pc_factor_dtype_used = sparse_pc_factor_dtype_initial
-        sparse_pc_factor_dtype_retry: str | None = None
-        sparse_pc_default_permc_spec = _rhsmode1_sparse_pc_default_permc_spec(
+        sparse_pc_factor_policy = resolve_sparse_pc_factor_policy(
+            env=os.environ,
             constrained_pas_pc=bool(constrained_pas_pc),
-            tokamak_pas_er_pc=bool(tokamak_pas_er_pc),
-            n_species=int(op.n_species),
+            tokamak_fp_pc=bool(tokamak_fp_pc),
+            fortran_reduced_sparse_pc=bool(fortran_reduced_sparse_pc),
+            sparse_pc_linear_size=int(sparse_pc_linear_size),
+            pc_maxiter=int(pc_maxiter),
+            default_permc_spec=_rhsmode1_sparse_pc_default_permc_spec(
+                constrained_pas_pc=bool(constrained_pas_pc),
+                tokamak_pas_er_pc=bool(tokamak_pas_er_pc),
+                n_species=int(op.n_species),
+            ),
+            host_sparse_factor_dtype=_host_sparse_factor_dtype,
         )
-        sparse_pc_permc_env = os.environ.get("SFINCS_JAX_EXPLICIT_SPARSE_PERMC_SPEC", "").strip().upper()
-        sparse_pc_permc_spec = (
-            sparse_pc_permc_env
-            if sparse_pc_permc_env in {"NATURAL", "MMD_ATA", "MMD_AT_PLUS_A", "COLAMD"}
-            else sparse_pc_default_permc_spec
-        )
-        fp32_probe_maxiter_env = os.environ.get("SFINCS_JAX_RHSMODE1_SPARSE_PC_FP32_PROBE_MAXITER", "").strip()
-        try:
-            fp32_probe_maxiter = int(fp32_probe_maxiter_env) if fp32_probe_maxiter_env else 2
-        except ValueError:
-            fp32_probe_maxiter = 2
-        fp32_probe_maxiter = max(1, int(fp32_probe_maxiter))
-        sparse_pc_first_attempt_maxiter = (
-            min(int(pc_maxiter), int(fp32_probe_maxiter))
-            if sparse_pc_factor_dtype_initial == np.dtype(np.float32)
-            else int(pc_maxiter)
-        )
+        pc_shift = float(sparse_pc_factor_policy.pc_shift)
+        sparse_pc_factorization = str(sparse_pc_factor_policy.factorization)
+        sparse_pc_default_factor_kind = str(sparse_pc_factor_policy.default_factor_kind)
+        sparse_pc_default_ilu_fill_factor = float(sparse_pc_factor_policy.default_ilu_fill_factor)
+        sparse_pc_default_ilu_drop_tol = float(sparse_pc_factor_policy.default_ilu_drop_tol)
+        sparse_pc_default_pattern_color_batch = int(sparse_pc_factor_policy.default_pattern_color_batch)
+        sparse_pc_factor_dtype_initial = np.dtype(sparse_pc_factor_policy.factor_dtype_initial)
+        sparse_pc_factor_dtype_used = np.dtype(sparse_pc_factor_policy.factor_dtype_used)
+        sparse_pc_factor_dtype_retry = sparse_pc_factor_policy.factor_dtype_retry
+        sparse_pc_default_permc_spec = str(sparse_pc_factor_policy.default_permc_spec)
+        sparse_pc_permc_spec = str(sparse_pc_factor_policy.permc_spec)
+        fp32_probe_maxiter = int(sparse_pc_factor_policy.fp32_probe_maxiter)
+        sparse_pc_first_attempt_maxiter = int(sparse_pc_factor_policy.first_attempt_maxiter)
         budget_env = os.environ.get("SFINCS_JAX_RHSMODE1_SPARSE_PC_MAX_ESTIMATED_MB", "").strip()
         if budget_env:
             try:

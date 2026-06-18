@@ -35584,3 +35584,41 @@ Next refactor target:
 - Extract the generic sparse-PC factor/pattern setup boundary, then continue
   moving remaining generic sparse-PC result metadata into diagnostics in
   smaller typed helpers.
+
+### 19.128 Generic sparse-PC factor-policy extraction
+
+Goal:
+
+- Remove the generic RHSMode=1 sparse-PC factor-policy resolution from
+  ``solve_v3_full_system_linear_gmres`` while preserving the existing host
+  sparse factor construction, memory preflight, retry behavior, and result
+  metadata variable names.
+
+Implementation:
+
+- Added ``SparsePCFactorPolicySetup`` and
+  ``resolve_sparse_pc_factor_policy`` to
+  ``problems/profile_response/sparse_pc.py``.
+- Moved shift, factor-kind, ILU default, color-batch, factor dtype, SuperLU
+  ordering, and FP32 probe-budget resolution out of ``v3_driver.py``.
+- Updated ``v3_driver.py`` to consume the policy object while keeping the same
+  local variables used by factor construction and metadata assembly.
+- Added focused policy tests for large fortran-reduced defaults, explicit
+  environment overrides, invalid environment fallback, and delegation to the
+  existing host sparse dtype policy.
+- ``v3_driver.py`` is now about ``20151`` lines and
+  ``solve_v3_full_system_linear_gmres`` about ``14843`` lines.
+
+Validation:
+
+- ``python -m ruff check`` on touched source/tests: passed.
+- ``python -m compileall -q`` on touched source/tests: passed.
+- Focused sparse-PC/direct-tail shard: ``97 passed``.
+- Broader current profile-response/x-block/sparse-pattern shard:
+  ``373 passed in 112.37 s``.
+
+Next refactor target:
+
+- Extract the remaining generic sparse-PC pattern/materialization setup in a
+  typed boundary, keeping direct-tail structured preconditioner construction
+  and admission gates unchanged until that larger path has dedicated tests.

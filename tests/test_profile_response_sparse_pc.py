@@ -52,6 +52,7 @@ from sfincs_jax.problems.profile_response.sparse_pc import (
     resolve_fortran_reduced_xblock_krylov_policy,
     resolve_fortran_reduced_xblock_moment_schur_policy,
     resolve_sparse_pc_entry_policy,
+    resolve_sparse_pc_factor_policy,
     resolve_xblock_qi_device_admission_setup,
     resolve_xblock_qi_device_base_config_setup,
     resolve_xblock_qi_device_enrichment_config_setup,
@@ -220,6 +221,99 @@ def test_fortran_reduced_backend_policy_ignored_env_reports_message() -> None:
             "'unknown_backend'; using global",
         ),
     )
+
+
+def test_sparse_pc_factor_policy_uses_large_fortran_reduced_defaults() -> None:
+    setup = resolve_sparse_pc_factor_policy(
+        env={},
+        constrained_pas_pc=False,
+        tokamak_fp_pc=False,
+        fortran_reduced_sparse_pc=True,
+        sparse_pc_linear_size=100000,
+        pc_maxiter=120,
+        default_permc_spec="MMD_ATA",
+        host_sparse_factor_dtype=lambda **_kwargs: np.dtype(np.float32),
+    )
+
+    assert setup.pc_shift == 1.0e-8
+    assert setup.factorization == "ilu"
+    assert setup.default_factor_kind == "ilu"
+    assert setup.default_ilu_fill_factor == 2.0
+    assert setup.default_ilu_drop_tol == 1.0e-3
+    assert setup.default_pattern_color_batch == 16
+    assert setup.factor_dtype_initial == np.dtype(np.float64)
+    assert setup.factor_dtype_used == np.dtype(np.float64)
+    assert setup.factor_dtype_retry is None
+    assert setup.default_permc_spec == "MMD_ATA"
+    assert setup.permc_spec == "MMD_ATA"
+    assert setup.fp32_probe_maxiter == 2
+    assert setup.first_attempt_maxiter == 120
+
+
+def test_sparse_pc_factor_policy_honors_env_overrides_and_fp32_probe() -> None:
+    setup = resolve_sparse_pc_factor_policy(
+        env={
+            "SFINCS_JAX_RHSMODE1_SPARSE_PC_SHIFT": "2e-4",
+            "SFINCS_JAX_EXPLICIT_SPARSE_FACTOR_KIND": "diagonal",
+            "SFINCS_JAX_RHSMODE1_SPARSE_PC_FACTOR_DTYPE": "fp32",
+            "SFINCS_JAX_EXPLICIT_SPARSE_PERMC_SPEC": "COLAMD",
+            "SFINCS_JAX_RHSMODE1_SPARSE_PC_FP32_PROBE_MAXITER": "7",
+        },
+        constrained_pas_pc=True,
+        tokamak_fp_pc=False,
+        fortran_reduced_sparse_pc=False,
+        sparse_pc_linear_size=9,
+        pc_maxiter=20,
+        default_permc_spec="MMD_AT_PLUS_A",
+        host_sparse_factor_dtype=lambda **_kwargs: np.dtype(np.float64),
+    )
+
+    assert setup.pc_shift == 2.0e-4
+    assert setup.factorization == "jacobi"
+    assert setup.factor_dtype_initial == np.dtype(np.float32)
+    assert setup.factor_dtype_used == np.dtype(np.float32)
+    assert setup.permc_spec == "COLAMD"
+    assert setup.fp32_probe_maxiter == 7
+    assert setup.first_attempt_maxiter == 7
+
+
+def test_sparse_pc_factor_policy_can_defer_dtype_to_host_policy() -> None:
+    calls: list[dict[str, object]] = []
+
+    def host_dtype(**kwargs):
+        calls.append(kwargs)
+        return np.dtype(np.float32)
+
+    setup = resolve_sparse_pc_factor_policy(
+        env={
+            "SFINCS_JAX_HOST_SPARSE_FACTOR_DTYPE": "auto",
+            "SFINCS_JAX_EXPLICIT_SPARSE_FACTOR_KIND": "ilu",
+            "SFINCS_JAX_RHSMODE1_SPARSE_PC_SHIFT": "bad",
+            "SFINCS_JAX_EXPLICIT_SPARSE_PERMC_SPEC": "bad",
+            "SFINCS_JAX_RHSMODE1_SPARSE_PC_FP32_PROBE_MAXITER": "bad",
+        },
+        constrained_pas_pc=False,
+        tokamak_fp_pc=True,
+        fortran_reduced_sparse_pc=False,
+        sparse_pc_linear_size=33,
+        pc_maxiter=5,
+        default_permc_spec="NATURAL",
+        host_sparse_factor_dtype=host_dtype,
+    )
+
+    assert setup.pc_shift == 1.0e-8
+    assert setup.factorization == "ilu"
+    assert setup.factor_dtype_initial == np.dtype(np.float32)
+    assert setup.permc_spec == "NATURAL"
+    assert setup.fp32_probe_maxiter == 2
+    assert setup.first_attempt_maxiter == 2
+    assert calls == [
+        {
+            "size": 33,
+            "factorization": "ilu",
+            "use_implicit": False,
+        }
+    ]
 
 
 def test_fortran_reduced_xblock_factor_policy_uses_specific_env_before_generic() -> None:
