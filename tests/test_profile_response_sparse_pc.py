@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import dataclass, field, replace
 from types import SimpleNamespace
 
 import numpy as np
@@ -17,6 +18,7 @@ from sfincs_jax.problems.profile_response.diagnostics import (
 from sfincs_jax.problems.profile_response.sparse_pc import (
     DirectTailMaterializationContext,
     DirectTailStructuredAdmissionContext,
+    DirectTailStructuredBuildContext,
     FortranReducedXBlockFactorBuildContext,
     FortranReducedXBlockGlobalCouplingStageContext,
     FortranReducedXBlockKrylovSetupContext,
@@ -37,6 +39,7 @@ from sfincs_jax.problems.profile_response.sparse_pc import (
     build_sparse_pc_active_dof_setup,
     build_sparse_pc_pattern_setup,
     build_direct_tail_materialization_setup,
+    build_direct_tail_structured_preconditioner_setup,
     build_xblock_assembled_equilibration_setup,
     build_xblock_assembled_device_setup,
     build_xblock_assembled_matvec_setup,
@@ -646,6 +649,49 @@ def test_direct_tail_materialization_records_not_selected_and_exception() -> Non
     assert "materialization disabled after failure elapsed_s=0.250" in err_messages[1][1]
 
 
+@dataclass(frozen=True)
+class _FakeStructuredPreconditioner:
+    operator: object | None = object()
+    selected: bool = True
+    kind: str = "fake_lu"
+    reason: str = "ok"
+    setup_s: float = 0.25
+    metadata: dict[str, object] = field(default_factory=dict)
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "selected": bool(self.selected),
+            "kind": str(self.kind),
+            "reason": str(self.reason),
+            "setup_s": float(self.setup_s),
+            "metadata": dict(self.metadata),
+        }
+
+
+class _FakeLayout:
+    total_size = 3
+    f_size = 2
+
+    def to_dict(self) -> dict[str, int]:
+        return {"total_size": 3, "f_size": 2}
+
+
+def _fake_cache_metadata(
+    preconditioner: _FakeStructuredPreconditioner,
+    *,
+    cache_hit: bool,
+    cache_key: tuple[object, ...],
+) -> _FakeStructuredPreconditioner:
+    metadata = dict(preconditioner.metadata)
+    metadata["cache_hit"] = bool(cache_hit)
+    metadata["cache_key"] = cache_key
+    return replace(preconditioner, metadata=metadata)
+
+
+def _fake_factor_bundle(**kwargs) -> SimpleNamespace:
+    return SimpleNamespace(**kwargs)
+
+
 def test_direct_tail_structured_admission_auto_defaults_when_large_bundle_exists() -> None:
     calls: list[dict[str, object]] = []
 
@@ -760,6 +806,165 @@ def test_direct_tail_structured_admission_no_bundle_blocks_default_setup() -> No
     assert result.setup_allowed is False
     assert result.max_mb_auto is False
     assert result.max_mb == 0.0
+
+
+def test_direct_tail_structured_build_uses_direct_reduced_pmat_builder() -> None:
+    calls: dict[str, object] = {}
+    active_indices = np.array([0, 2], dtype=np.int64)
+
+    def direct_builder(**kwargs) -> _FakeStructuredPreconditioner:
+        calls.update(kwargs)
+        return _FakeStructuredPreconditioner(metadata={"factor_nbytes_actual": 123})
+
+    result = build_direct_tail_structured_preconditioner_setup(
+        DirectTailStructuredBuildContext(
+            env={},
+            op=object(),
+            operator_bundle=None,
+            active_indices=active_indices,
+            requested_kind="direct_reduced_pmat_lu",
+            direct_reduced_pmat_requested=True,
+            sparse_pc_linear_size=9,
+            max_mb=2.0,
+            regularization=1.0e-9,
+            preconditioner_x=1,
+            preconditioner_xi=2,
+            preconditioner_species=3,
+            preconditioner_x_min_l=4,
+            layout_from_operator=lambda _op: _FakeLayout(),
+            build_direct_active_preconditioner=direct_builder,
+            build_active_projected_preconditioner=lambda **_kwargs: pytest.fail("unexpected active builder"),
+            cache={},
+            cache_key=lambda **_kwargs: pytest.fail("unexpected cache key"),
+            with_cache_metadata=_fake_cache_metadata,
+            factor_bundle=_fake_factor_bundle,
+        )
+    )
+
+    assert result.ready is True
+    assert result.selected is True
+    assert result.error is None
+    assert result.max_nbytes == 2 * 1024 * 1024
+    assert result.cache_hit is False
+    assert result.cache_key == ("direct_reduced_pmat_pc_cache_disabled", "direct_reduced_pmat_lu", 9, (1, 2, 3, 4))
+    assert result.factor_bundle.factor_nbytes_estimate == 123
+    assert calls["active_indices"] is active_indices
+    assert calls["max_factor_nbytes"] == 2 * 1024 * 1024
+    assert calls["max_csr_nbytes"] == 2 * 1024 * 1024
+    assert calls["include_jacobian_terms"] is True
+
+
+def test_direct_tail_structured_build_reuses_cached_active_preconditioner() -> None:
+    cache: dict[tuple[object, ...], object] = {
+        ("cached",): _FakeStructuredPreconditioner(metadata={"factor_nbytes_estimate": 77})
+    }
+    bundle = SimpleNamespace(matrix=scipy_sparse.eye(3, format="csr"))
+
+    result = build_direct_tail_structured_preconditioner_setup(
+        DirectTailStructuredBuildContext(
+            env={},
+            op=object(),
+            operator_bundle=bundle,
+            active_indices=None,
+            requested_kind="active_fortran_v3_reduced_lu",
+            direct_reduced_pmat_requested=False,
+            sparse_pc_linear_size=3,
+            max_mb=1.0,
+            regularization=1.0e-12,
+            preconditioner_x=0,
+            preconditioner_xi=1,
+            preconditioner_species=0,
+            preconditioner_x_min_l=0,
+            layout_from_operator=lambda _op: _FakeLayout(),
+            build_direct_active_preconditioner=lambda **_kwargs: pytest.fail("unexpected direct builder"),
+            build_active_projected_preconditioner=lambda **_kwargs: pytest.fail("unexpected active builder"),
+            cache=cache,
+            cache_key=lambda **_kwargs: ("cached",),
+            with_cache_metadata=_fake_cache_metadata,
+            factor_bundle=_fake_factor_bundle,
+        )
+    )
+
+    assert result.ready is True
+    assert result.cache_hit is True
+    assert result.factor_bundle.operator is bundle
+    assert result.factor_bundle.factor_nbytes_estimate == 77
+    assert result.preconditioner.metadata["cache_hit"] is True
+
+
+def test_direct_tail_structured_build_can_disable_active_cache() -> None:
+    calls: dict[str, object] = {}
+    cache: dict[tuple[object, ...], object] = {}
+    bundle = SimpleNamespace(matrix=scipy_sparse.eye(3, format="csr"))
+
+    def active_builder(**kwargs) -> _FakeStructuredPreconditioner:
+        calls.update(kwargs)
+        return _FakeStructuredPreconditioner(selected=False, operator=None, reason="memory_cap")
+
+    result = build_direct_tail_structured_preconditioner_setup(
+        DirectTailStructuredBuildContext(
+            env={"SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_PC_CACHE": "0"},
+            op=object(),
+            operator_bundle=bundle,
+            active_indices=np.array([1], dtype=np.int64),
+            requested_kind="active_fortran_v3_reduced_ilu",
+            direct_reduced_pmat_requested=False,
+            sparse_pc_linear_size=3,
+            max_mb=0.5,
+            regularization=2.0e-8,
+            preconditioner_x=0,
+            preconditioner_xi=1,
+            preconditioner_species=0,
+            preconditioner_x_min_l=0,
+            layout_from_operator=lambda _op: _FakeLayout(),
+            build_direct_active_preconditioner=lambda **_kwargs: pytest.fail("unexpected direct builder"),
+            build_active_projected_preconditioner=active_builder,
+            cache=cache,
+            cache_key=lambda **_kwargs: pytest.fail("unexpected cache key"),
+            with_cache_metadata=_fake_cache_metadata,
+            factor_bundle=_fake_factor_bundle,
+        )
+    )
+
+    assert result.ready is False
+    assert result.selected is False
+    assert result.reason == "memory_cap"
+    assert result.error is None
+    assert result.cache_key == ("direct_tail_structured_pc_cache_disabled", "active_fortran_v3_reduced_ilu", (0, 1, 0, 0))
+    assert cache == {}
+    assert calls["regularization"] == 2.0e-8
+
+
+def test_direct_tail_structured_build_reports_missing_matrix_exception() -> None:
+    result = build_direct_tail_structured_preconditioner_setup(
+        DirectTailStructuredBuildContext(
+            env={},
+            op=object(),
+            operator_bundle=None,
+            active_indices=None,
+            requested_kind="active_fortran_v3_reduced_lu",
+            direct_reduced_pmat_requested=False,
+            sparse_pc_linear_size=3,
+            max_mb=1.0,
+            regularization=1.0e-12,
+            preconditioner_x=0,
+            preconditioner_xi=0,
+            preconditioner_species=0,
+            preconditioner_x_min_l=0,
+            layout_from_operator=lambda _op: _FakeLayout(),
+            build_direct_active_preconditioner=lambda **_kwargs: pytest.fail("unexpected direct builder"),
+            build_active_projected_preconditioner=lambda **_kwargs: pytest.fail("unexpected active builder"),
+            cache={},
+            cache_key=lambda **_kwargs: pytest.fail("unexpected cache key"),
+            with_cache_metadata=_fake_cache_metadata,
+            factor_bundle=_fake_factor_bundle,
+        )
+    )
+
+    assert result.ready is False
+    assert result.selected is False
+    assert result.reason == "structured_pc_exception"
+    assert result.error == "RuntimeError: direct-tail structured cache requested without a direct-tail matrix"
 
 
 def test_fortran_reduced_xblock_factor_policy_uses_specific_env_before_generic() -> None:

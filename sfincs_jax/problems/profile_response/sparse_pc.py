@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Mapping, MutableMapping, Sequence
 from dataclasses import dataclass
+from typing import Any
 
 import jax
 import jax.numpy as jnp
@@ -484,6 +485,51 @@ class DirectTailStructuredAdmissionResult:
     max_mb_auto: bool
     max_mb: float
     regularization: float
+
+
+@dataclass(frozen=True)
+class DirectTailStructuredBuildContext:
+    """Inputs for one direct-tail structured preconditioner construction attempt."""
+
+    env: Mapping[str, str] | None
+    op: Any
+    operator_bundle: Any | None
+    active_indices: np.ndarray | None
+    requested_kind: str | None
+    direct_reduced_pmat_requested: bool
+    sparse_pc_linear_size: int
+    max_mb: float
+    regularization: float
+    preconditioner_x: int
+    preconditioner_xi: int
+    preconditioner_species: int
+    preconditioner_x_min_l: int
+    layout_from_operator: Callable[[Any], Any]
+    build_direct_active_preconditioner: Callable[..., Any]
+    build_active_projected_preconditioner: Callable[..., Any]
+    cache: MutableMapping[tuple[object, ...], Any]
+    cache_key: Callable[..., tuple[object, ...]]
+    with_cache_metadata: Callable[..., Any]
+    factor_bundle: Callable[..., Any]
+
+
+@dataclass(frozen=True)
+class DirectTailStructuredBuildResult:
+    """Result of direct-tail structured preconditioner construction."""
+
+    layout: Any | None
+    active_indices: np.ndarray | None
+    max_nbytes: int | None
+    preconditioner: Any | None
+    factor_bundle: Any | None
+    operator_bundle_pc: Any | None
+    ready: bool
+    selected: bool
+    reason: str | None
+    metadata: dict[str, object] | None
+    error: str | None
+    cache_hit: bool
+    cache_key: tuple[object, ...] | None
 
 
 @dataclass(frozen=True)
@@ -2533,6 +2579,190 @@ def resolve_direct_tail_structured_admission(
         max_mb_auto=bool(max_mb_auto),
         max_mb=float(max_mb),
         regularization=float(regularization),
+    )
+
+
+def build_direct_tail_structured_preconditioner_setup(
+    context: DirectTailStructuredBuildContext,
+) -> DirectTailStructuredBuildResult:
+    """Build or retrieve the direct-tail structured preconditioner.
+
+    This helper owns only setup and cache plumbing. The driver keeps the
+    residual-admission and retry logic that depend on the live true operator.
+    """
+
+    layout = None
+    active_indices = context.active_indices
+    max_nbytes: int | None = None
+    preconditioner = None
+    factor_bundle = None
+    operator_bundle_pc = None
+    cache_hit = False
+    cache_key: tuple[object, ...] | None = None
+    selected = False
+    ready = False
+    reason: str | None = None
+    metadata: dict[str, object] | None = None
+    error: str | None = None
+
+    try:
+        layout = context.layout_from_operator(context.op)
+        max_nbytes = int(max(0.0, float(context.max_mb)) * 1024.0 * 1024.0)
+        support_modes = (
+            int(context.preconditioner_x),
+            int(context.preconditioner_xi),
+            int(context.preconditioner_species),
+            int(context.preconditioner_x_min_l),
+        )
+        requested_kind = str(context.requested_kind)
+        if bool(context.direct_reduced_pmat_requested):
+            preconditioner = context.build_direct_active_preconditioner(
+                op=context.op,
+                active_indices=active_indices,
+                requested_kind=requested_kind,
+                regularization=float(context.regularization),
+                max_factor_nbytes=int(max_nbytes),
+                max_csr_nbytes=int(max_nbytes),
+                include_identity_shift=True,
+                include_jacobian_terms=True,
+                drop_tol=0.0,
+                preconditioner_x=int(context.preconditioner_x),
+                preconditioner_xi=int(context.preconditioner_xi),
+                preconditioner_species=int(context.preconditioner_species),
+                preconditioner_x_min_l=int(context.preconditioner_x_min_l),
+            )
+            cache_key = (
+                "direct_reduced_pmat_pc_cache_disabled",
+                requested_kind,
+                int(context.sparse_pc_linear_size),
+                support_modes,
+            )
+            preconditioner = context.with_cache_metadata(
+                preconditioner,
+                cache_hit=False,
+                cache_key=cache_key,
+            )
+        else:
+            cache_enabled = _env_bool(
+                context.env,
+                "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_PC_CACHE",
+                True,
+            )
+            if context.operator_bundle is None:
+                if bool(cache_enabled):
+                    raise RuntimeError("direct-tail structured cache requested without a direct-tail matrix")
+                raise RuntimeError("direct-tail structured preconditioner requested without a direct-tail matrix")
+
+            if bool(cache_enabled):
+                cache_key = context.cache_key(
+                    matrix=context.operator_bundle.matrix,
+                    layout=layout,
+                    active_indices=active_indices,
+                    kind=requested_kind,
+                    max_factor_nbytes=int(max_nbytes),
+                    regularization=float(context.regularization),
+                    support_modes=support_modes,
+                )
+                cached_preconditioner = context.cache.get(cache_key)
+                if cached_preconditioner is not None:
+                    cache_hit = True
+                    preconditioner = context.with_cache_metadata(
+                        cached_preconditioner,
+                        cache_hit=True,
+                        cache_key=cache_key,
+                    )
+                else:
+                    preconditioner = context.build_active_projected_preconditioner(
+                        matrix=context.operator_bundle.matrix,
+                        layout=layout,
+                        active_indices=active_indices,
+                        kind=requested_kind,
+                        max_factor_nbytes=int(max_nbytes),
+                        regularization=float(context.regularization),
+                        preconditioner_x=int(context.preconditioner_x),
+                        preconditioner_xi=int(context.preconditioner_xi),
+                        preconditioner_species=int(context.preconditioner_species),
+                        preconditioner_x_min_l=int(context.preconditioner_x_min_l),
+                    )
+                    preconditioner = context.with_cache_metadata(
+                        preconditioner,
+                        cache_hit=False,
+                        cache_key=cache_key,
+                    )
+                    context.cache[cache_key] = preconditioner
+            else:
+                preconditioner = context.build_active_projected_preconditioner(
+                    matrix=context.operator_bundle.matrix,
+                    layout=layout,
+                    active_indices=active_indices,
+                    kind=requested_kind,
+                    max_factor_nbytes=int(max_nbytes),
+                    regularization=float(context.regularization),
+                    preconditioner_x=int(context.preconditioner_x),
+                    preconditioner_xi=int(context.preconditioner_xi),
+                    preconditioner_species=int(context.preconditioner_species),
+                    preconditioner_x_min_l=int(context.preconditioner_x_min_l),
+                )
+                cache_key = (
+                    "direct_tail_structured_pc_cache_disabled",
+                    requested_kind,
+                    support_modes,
+                )
+                preconditioner = context.with_cache_metadata(
+                    preconditioner,
+                    cache_hit=False,
+                    cache_key=cache_key,
+                )
+
+        selected = bool(getattr(preconditioner, "selected", False))
+        reason = str(getattr(preconditioner, "reason", None))
+        if hasattr(preconditioner, "to_dict"):
+            metadata = dict(preconditioner.to_dict())
+        else:
+            metadata = {
+                "selected": bool(selected),
+                "kind": str(getattr(preconditioner, "kind", requested_kind)),
+                "reason": str(reason),
+                "setup_s": float(getattr(preconditioner, "setup_s", 0.0) or 0.0),
+                "metadata": dict(getattr(preconditioner, "metadata", None) or {}),
+            }
+        preconditioner_operator = getattr(preconditioner, "operator", None)
+        if bool(selected) and preconditioner_operator is not None:
+            factor_nbytes = dict(getattr(preconditioner, "metadata", None) or {}).get("factor_nbytes_actual")
+            if factor_nbytes is None:
+                factor_nbytes = dict(getattr(preconditioner, "metadata", None) or {}).get(
+                    "factor_nbytes_estimate"
+                )
+            factor_bundle = context.factor_bundle(
+                preconditioner=preconditioner,
+                operator=context.operator_bundle,
+                kind=str(getattr(preconditioner, "kind", requested_kind)),
+                factor_nbytes_estimate=None if factor_nbytes is None else int(factor_nbytes),
+                factor_nnz_estimate=None,
+                factor_s=float(getattr(preconditioner, "setup_s", 0.0) or 0.0),
+            )
+            operator_bundle_pc = context.operator_bundle
+            ready = True
+    except Exception as exc:  # noqa: BLE001
+        error = f"{type(exc).__name__}: {exc}"
+        selected = False
+        ready = False
+        reason = "structured_pc_exception"
+
+    return DirectTailStructuredBuildResult(
+        layout=layout,
+        active_indices=active_indices,
+        max_nbytes=max_nbytes,
+        preconditioner=preconditioner,
+        factor_bundle=factor_bundle,
+        operator_bundle_pc=operator_bundle_pc,
+        ready=bool(ready),
+        selected=bool(selected),
+        reason=reason,
+        metadata=metadata,
+        error=error,
+        cache_hit=bool(cache_hit),
+        cache_key=cache_key,
     )
 
 
@@ -4988,6 +5218,8 @@ __all__ = [
     "DirectTailMaterializationResult",
     "DirectTailStructuredAdmissionContext",
     "DirectTailStructuredAdmissionResult",
+    "DirectTailStructuredBuildContext",
+    "DirectTailStructuredBuildResult",
     "MatvecCounter",
     "XBlockAssembledOperatorDiagnosticsContext",
     "XBlockSparsePCCoreDiagnosticsContext",
@@ -5010,6 +5242,7 @@ __all__ = [
     "build_sparse_pc_active_dof_setup",
     "build_sparse_pc_pattern_setup",
     "build_direct_tail_materialization_setup",
+    "build_direct_tail_structured_preconditioner_setup",
     "enforce_sparse_pc_memory_budget",
     "resolve_direct_tail_structured_admission",
     "fp_xblock_global_correction_metadata",
