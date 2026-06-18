@@ -430,8 +430,11 @@ the historical private driver name and test the focused module directly. This ke
 - ``sfincs_jax/solvers/preconditioners/transport_matrix.py``:
   numerical builder implementations for the common RHSMode=2/3 transport
   preconditioners: collision diagonal, species/speed block, x-grid coarse
-  correction, angular FFT/tridiagonal solve, and point-block transport
-  preconditioners.  ``v3_driver.py`` keeps historical private wrapper names so
+  correction, angular FFT/tridiagonal solve, point-block transport
+  preconditioners, and the FP transport family: dense Fourier FP,
+  block-Thomas Fourier line factors, Schur overlays, local-geometry line
+  factors, x-block angular sparse LU, x-block Schur correction, and structured
+  f-block LU.  ``v3_driver.py`` keeps historical private wrapper names so
   monkeypatch-based dispatch tests and user debug scripts continue to exercise
   the same facade.
 - ``sfincs_jax/rhs1_pas_policy.py``:
