@@ -33115,3 +33115,48 @@ Next refactor target:
   reuse admission and factor-build/skip routing. Keep actual factor
   construction and Krylov solves in the driver until the admission policy is
   isolated and covered by direct tests.
+
+### 19.70 RHSMode=1 x-block QI-device reuse admission extraction
+
+Goal:
+
+- Move QI-device operator-reuse admission and local x-block factor-build/skip
+  routing out of ``v3_driver.py`` while preserving the same reuse-decision
+  object and solver metadata.
+
+Implementation:
+
+- Extended ``sfincs_jax/problems/profile_response/sparse_pc.py`` with
+  ``XBlockQIDeviceOperatorReuseSetup`` and
+  ``resolve_xblock_qi_device_operator_reuse_setup``.
+- Moved matrix-free QI-device reuse admission, host-fallback interaction,
+  local-factor skip handling, JAX-factor suppression, and factor-build status
+  messages into the sparse-PC domain helper.
+- Kept the actual identity fallback, local x-block factor construction, and
+  Krylov execution in ``v3_driver.py`` for now.
+- Added direct tests for matrix-free QI-device reuse skipping local factors
+  and for JAX/device-Krylov factor-build route reporting.
+- ``solve_v3_full_system_linear_gmres`` is now about ``20088`` lines and
+  ``v3_driver.py`` is about ``25334`` lines.
+
+Validation so far:
+
+- ``python -m ruff check sfincs_jax/problems/profile_response/sparse_pc.py
+  sfincs_jax/v3_driver.py tests/test_profile_response_sparse_pc.py``: passed.
+- ``python -m compileall -q
+  sfincs_jax/problems/profile_response/sparse_pc.py sfincs_jax/v3_driver.py
+  tests/test_profile_response_sparse_pc.py``: passed.
+- ``PYTHONDONTWRITEBYTECODE=1 JAX_ENABLE_X64=True pytest -q
+  -p no:cacheprovider tests/test_profile_response_sparse_pc.py``:
+  ``11 passed in 0.41 s``.
+- Focused QI/x-block regression subset:
+  ``16 passed in 3.97 s``.
+- Broader sparse-PC/x-block/dispatch subset:
+  ``89 passed in 41.27 s``.
+
+Next refactor target:
+
+- Continue in the x-block branch by extracting active-DOF reduction and
+  true-matvec/progress setup. Keep assembled-operator setup, moment-Schur/QI
+  coarse layers, and Krylov execution in the driver until the matvec context is
+  isolated and covered by direct tests.

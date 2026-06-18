@@ -155,6 +155,19 @@ class XBlockSparsePCSidePolicySetup:
     messages: tuple[tuple[int, str], ...]
 
 
+@dataclass(frozen=True)
+class XBlockQIDeviceOperatorReuseSetup:
+    """QI-device operator-reuse admission and x-block factor-build routing."""
+
+    decision: object
+    skip_xblock_factors: bool
+    xblock_jax_factors: bool
+    xblock_device_krylov_forced_jax_factors: bool
+    factor_backend: str
+    factor_reason: str
+    messages: tuple[tuple[int, str], ...]
+
+
 def _env_value(env: Mapping[str, str] | None, key: str) -> str:
     source = env if env is not None else {}
     return str(source.get(key, "")).strip()
@@ -611,6 +624,77 @@ def resolve_xblock_sparse_pc_side_policy_setup(
         xblock_device_fgmres_forced_right_pc=bool(device_fgmres_forced_right_pc),
         pc_restart=int(xblock_policy.gmres_restart),
         xblock_default_restart_capped=bool(xblock_policy.restart_capped),
+        messages=tuple(messages),
+    )
+
+
+def resolve_xblock_qi_device_operator_reuse_setup(
+    *,
+    op: object,
+    xblock_krylov_method: str,
+    xblock_device_host_fallback_decision: object,
+    qi_device_preconditioner_requested: bool,
+    qi_device_matrix_free_requested: bool,
+    qi_device_use_in_krylov_requested: bool,
+    precondition_side: str,
+    xblock_jax_factors: bool,
+    xblock_device_krylov_forced_jax_factors: bool,
+    xblock_preconditioner_xi: int,
+    reuse_decision: Callable[..., object],
+    env: Mapping[str, str] | None = None,
+) -> XBlockQIDeviceOperatorReuseSetup:
+    """Resolve QI-device reuse admission before local x-block factor setup."""
+
+    decision = reuse_decision(
+        env_value=_env_value(env, "SFINCS_JAX_RHSMODE1_XBLOCK_QI_DEVICE_OPERATOR_REUSE"),
+        requested_krylov_method=str(xblock_krylov_method),
+        host_fallback_used=bool(getattr(xblock_device_host_fallback_decision, "used", False)),
+        rhs_mode=int(op.rhs_mode),
+        constraint_scheme=int(op.constraint_scheme),
+        include_phi1=bool(op.include_phi1),
+        has_fp=op.fblock.fp is not None,
+        has_pas=op.fblock.pas is not None,
+        n_zeta=int(getattr(op, "n_zeta", 1)),
+        qi_device_preconditioner_requested=bool(qi_device_preconditioner_requested),
+        qi_device_matrix_free_requested=bool(qi_device_matrix_free_requested),
+        qi_device_use_in_krylov_requested=bool(qi_device_use_in_krylov_requested),
+        precondition_side=str(precondition_side),
+    )
+    skip_factors = bool(getattr(decision, "skip_xblock_factors", False))
+    jax_factors = bool(xblock_jax_factors)
+    forced_jax_factors = bool(xblock_device_krylov_forced_jax_factors)
+    messages: list[tuple[int, str]] = []
+    if skip_factors:
+        jax_factors = False
+        forced_jax_factors = False
+        messages.append(
+            (
+                1,
+                "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
+                "using matrix-free QI-device operator reuse; skipping local x-block factors",
+            )
+        )
+    else:
+        factor_backend = "jax" if bool(jax_factors) else "host"
+        factor_reason = " device-krylov" if bool(forced_jax_factors) else ""
+        messages.append(
+            (
+                1,
+                "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres building "
+                f"{factor_backend} x-block preconditioner preconditioner_xi={int(xblock_preconditioner_xi)}"
+                f"{factor_reason}",
+            )
+        )
+
+    factor_backend = "jax" if bool(jax_factors) else "host"
+    factor_reason = " device-krylov" if bool(forced_jax_factors) else ""
+    return XBlockQIDeviceOperatorReuseSetup(
+        decision=decision,
+        skip_xblock_factors=bool(skip_factors),
+        xblock_jax_factors=bool(jax_factors),
+        xblock_device_krylov_forced_jax_factors=bool(forced_jax_factors),
+        factor_backend=str(factor_backend),
+        factor_reason=str(factor_reason),
         messages=tuple(messages),
     )
 

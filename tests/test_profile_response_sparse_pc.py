@@ -11,6 +11,7 @@ from sfincs_jax.problems.profile_response.sparse_pc import (
     SparsePCPostMinresContext,
     apply_sparse_pc_post_minres,
     resolve_sparse_pc_entry_policy,
+    resolve_xblock_qi_device_operator_reuse_setup,
     resolve_xblock_sparse_pc_setup,
     resolve_xblock_sparse_pc_side_policy_setup,
     run_sparse_pc_gmres_once,
@@ -259,6 +260,62 @@ def test_xblock_sparse_pc_side_policy_uses_host_factors_when_fallback_is_used() 
     assert setup.xblock_jax_factor_format == "padded"
     assert setup.xblock_jax_factor_apply == "exact"
     assert any("requires host sparse factors" in message for _, message in setup.messages)
+
+
+def test_xblock_qi_device_operator_reuse_setup_skips_local_factors() -> None:
+    calls: list[dict[str, object]] = []
+
+    def reuse_decision(**kwargs):
+        calls.append(kwargs)
+        return SimpleNamespace(skip_xblock_factors=True)
+
+    setup = resolve_xblock_qi_device_operator_reuse_setup(
+        op=_op(fp=True, constraint_scheme=1, n_zeta=5, n_species=1),
+        xblock_krylov_method="fgmres_jax",
+        xblock_device_host_fallback_decision=SimpleNamespace(used=False),
+        qi_device_preconditioner_requested=True,
+        qi_device_matrix_free_requested=True,
+        qi_device_use_in_krylov_requested=True,
+        precondition_side="right",
+        xblock_jax_factors=True,
+        xblock_device_krylov_forced_jax_factors=True,
+        xblock_preconditioner_xi=3,
+        reuse_decision=reuse_decision,
+        env={"SFINCS_JAX_RHSMODE1_XBLOCK_QI_DEVICE_OPERATOR_REUSE": "auto"},
+    )
+
+    assert setup.skip_xblock_factors
+    assert not setup.xblock_jax_factors
+    assert not setup.xblock_device_krylov_forced_jax_factors
+    assert calls[0]["env_value"] == "auto"
+    assert calls[0]["requested_krylov_method"] == "fgmres_jax"
+    assert any("skipping local x-block factors" in message for _, message in setup.messages)
+
+
+def test_xblock_qi_device_operator_reuse_setup_reports_factor_build_route() -> None:
+    def reuse_decision(**_kwargs):
+        return SimpleNamespace(skip_xblock_factors=False)
+
+    setup = resolve_xblock_qi_device_operator_reuse_setup(
+        op=_op(fp=True, constraint_scheme=1, n_zeta=3, n_species=1),
+        xblock_krylov_method="gmres_jax",
+        xblock_device_host_fallback_decision=SimpleNamespace(used=False),
+        qi_device_preconditioner_requested=False,
+        qi_device_matrix_free_requested=False,
+        qi_device_use_in_krylov_requested=False,
+        precondition_side="right",
+        xblock_jax_factors=True,
+        xblock_device_krylov_forced_jax_factors=True,
+        xblock_preconditioner_xi=1,
+        reuse_decision=reuse_decision,
+        env={},
+    )
+
+    assert not setup.skip_xblock_factors
+    assert setup.xblock_jax_factors
+    assert setup.factor_backend == "jax"
+    assert setup.factor_reason == " device-krylov"
+    assert any("building jax x-block preconditioner" in message for _, message in setup.messages)
 
 
 def test_sparse_pc_gmres_once_explicit_left_recomputes_true_residual() -> None:

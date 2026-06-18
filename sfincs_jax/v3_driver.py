@@ -204,6 +204,7 @@ from .problems.profile_response.sparse_pc import (
     SparsePCPostMinresContext,
     apply_sparse_pc_post_minres,
     resolve_sparse_pc_entry_policy,
+    resolve_xblock_qi_device_operator_reuse_setup,
     resolve_xblock_sparse_pc_setup,
     resolve_xblock_sparse_pc_side_policy_setup,
     run_sparse_pc_gmres_once,
@@ -3505,53 +3506,29 @@ def solve_v3_full_system_linear_gmres(
             if emit is not None:
                 for level, message in xblock_side_policy.messages:
                     emit(int(level), str(message))
-            xblock_qi_device_operator_reuse_decision = (
-                _rhs1_xblock_policy.rhs1_xblock_qi_device_operator_reuse_decision(
-                    env_value=os.environ.get(
-                        "SFINCS_JAX_RHSMODE1_XBLOCK_QI_DEVICE_OPERATOR_REUSE",
-                        "",
-                    ),
-                    requested_krylov_method=str(xblock_krylov_method),
-                    host_fallback_used=bool(xblock_device_host_fallback_decision.used),
-                    rhs_mode=int(op.rhs_mode),
-                    constraint_scheme=int(op.constraint_scheme),
-                    include_phi1=bool(op.include_phi1),
-                    has_fp=op.fblock.fp is not None,
-                    has_pas=op.fblock.pas is not None,
-                    n_zeta=int(getattr(op, "n_zeta", 1)),
-                    qi_device_preconditioner_requested=bool(
-                        qi_device_preconditioner_requested_for_fallback
-                    ),
-                    qi_device_matrix_free_requested=bool(
-                        qi_device_matrix_free_requested_for_fallback
-                    ),
-                    qi_device_use_in_krylov_requested=bool(
-                        qi_device_use_in_krylov_requested_for_fallback
-                    ),
-                    precondition_side=str(precondition_side),
-                )
+            xblock_qi_reuse_setup = resolve_xblock_qi_device_operator_reuse_setup(
+                op=op,
+                xblock_krylov_method=str(xblock_krylov_method),
+                xblock_device_host_fallback_decision=xblock_device_host_fallback_decision,
+                qi_device_preconditioner_requested=bool(qi_device_preconditioner_requested_for_fallback),
+                qi_device_matrix_free_requested=bool(qi_device_matrix_free_requested_for_fallback),
+                qi_device_use_in_krylov_requested=bool(qi_device_use_in_krylov_requested_for_fallback),
+                precondition_side=str(precondition_side),
+                xblock_jax_factors=bool(xblock_jax_factors),
+                xblock_device_krylov_forced_jax_factors=bool(xblock_device_krylov_forced_jax_factors),
+                xblock_preconditioner_xi=int(xblock_preconditioner_xi),
+                reuse_decision=_rhs1_xblock_policy.rhs1_xblock_qi_device_operator_reuse_decision,
+                env=os.environ,
             )
-            xblock_qi_device_operator_reuse_skip_factors = bool(
-                xblock_qi_device_operator_reuse_decision.skip_xblock_factors
+            xblock_qi_device_operator_reuse_decision = xblock_qi_reuse_setup.decision
+            xblock_qi_device_operator_reuse_skip_factors = bool(xblock_qi_reuse_setup.skip_xblock_factors)
+            xblock_jax_factors = bool(xblock_qi_reuse_setup.xblock_jax_factors)
+            xblock_device_krylov_forced_jax_factors = bool(
+                xblock_qi_reuse_setup.xblock_device_krylov_forced_jax_factors
             )
-            if xblock_qi_device_operator_reuse_skip_factors:
-                xblock_jax_factors = False
-                xblock_device_krylov_forced_jax_factors = False
-                if emit is not None:
-                    emit(
-                        1,
-                        "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
-                        "using matrix-free QI-device operator reuse; skipping local x-block factors",
-                    )
-            elif emit is not None:
-                factor_backend = "jax" if bool(xblock_jax_factors) else "host"
-                factor_reason = " device-krylov" if bool(xblock_device_krylov_forced_jax_factors) else ""
-                emit(
-                    1,
-                    "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres building "
-                    f"{factor_backend} x-block preconditioner preconditioner_xi={int(xblock_preconditioner_xi)}"
-                    f"{factor_reason}",
-                )
+            if emit is not None:
+                for level, message in xblock_qi_reuse_setup.messages:
+                    emit(int(level), str(message))
             factor_start_s = sparse_timer.elapsed_s()
             xblock_preconditioner_built = False
             if xblock_qi_device_operator_reuse_skip_factors:
