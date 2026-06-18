@@ -30603,6 +30603,7 @@ Validation:
   tests/test_audit_rhs1_solver_stack.py``: ``62 passed in 24.54 s``.
 - ``SPHINXOPTS='-W --keep-going' python -m sphinx -b html docs
   docs/_build/html``: passed.
+
 - Broader RHSMode=1/regression guard:
   ``PYTHONDONTWRITEBYTECODE=1 pytest -q -p no:cacheprovider
   tests/test_benchmark_case_variants.py tests/test_er_scan_and_ambipolar.py
@@ -32363,3 +32364,62 @@ Validation so far:
   ``12 passed in 2.47 s``.
 - ``SPHINXOPTS='-W --keep-going' python -m sphinx -b html docs
   docs/_build/html``: passed.
+
+### 19.57 RHSMode=1 reduced-preconditioner build extraction
+
+Goal:
+
+- Move the active-DOF RHSMode=1 reduced-preconditioner build orchestration out
+  of ``solve_v3_full_system_linear_gmres`` while preserving the existing
+  solver-policy behavior, PAS projection wrapping, guarded structured fallback,
+  and accelerator out-of-memory fallback semantics.
+
+Implementation:
+
+- Added ``sfincs_jax/problems/profile_response/preconditioner_build.py`` with
+  ``RHS1ReducedPreconditionerBuildContext``,
+  ``RHS1ReducedPreconditionerBuildResult``, and
+  ``build_rhs1_reduced_preconditioner_with_fallback``.
+- The extracted module now owns ADI/xblock option parsing, preconditioner-kind
+  dispatch, PAS-TZ guarded fallback metadata, guarded polynomial overlays,
+  structured correction overlays, PAS projection wrapping, and accelerator
+  PAS-to-collision fallback.
+- ``v3_driver.py`` keeps only a small compatibility wrapper that updates
+  solve-local state after the extracted build returns.
+- Added direct unit coverage for policy input forwarding, guarded structured
+  correction application, and GPU/resource-exhaustion fallback behavior.
+- Fixed the extraction-order bug found by the PAS heuristic subset by providing
+  an identity PAS-wrapper binding for non-projection branches before the
+  projection-specific wrapper overrides it.
+
+Validation so far:
+
+- ``python -m ruff check
+  sfincs_jax/problems/profile_response/preconditioner_build.py
+  sfincs_jax/v3_driver.py
+  tests/test_profile_response_preconditioner_build.py``: passed.
+- ``PYTHONDONTWRITEBYTECODE=1 pytest -q -p no:cacheprovider
+  tests/test_schur_precond_heuristic.py::test_gpu_pas_tokamak_er_path_does_not_promote_to_pas_schur
+  tests/test_schur_precond_heuristic.py::test_cpu_pas_tokamak_er_path_prefers_xblock_tz``:
+  ``2 passed in 8.75 s`` after the wrapper-binding fix.
+- ``PYTHONDONTWRITEBYTECODE=1 pytest -q -p no:cacheprovider
+  tests/test_example_auto_selection_paths.py
+  tests/test_pas_projection_heuristic.py
+  tests/test_rhs1_full_assembly.py
+  tests/test_rhs1_schwarz_heuristic.py
+  tests/test_schur_precond_heuristic.py
+  tests/test_sparse_precond_jax.py
+  tests/test_v3_driver_rhs1_dispatch_coverage.py
+  tests/test_xblock_tz_precond_heuristic.py
+  tests/test_profile_response_preconditioner_build.py``:
+  ``185 passed in 55.59 s``.
+- ``python -m compileall -q
+  sfincs_jax/problems/profile_response/preconditioner_build.py
+  sfincs_jax/v3_driver.py
+  tests/test_profile_response_preconditioner_build.py``: passed.
+- ``SPHINXOPTS='-W --keep-going' python -m sphinx -b html docs
+  docs/_build/html``: passed.
+- ``git diff --check``: passed.
+- Full-suite checkpoint:
+  ``PYTHONDONTWRITEBYTECODE=1 pytest -q -p no:cacheprovider``:
+  ``2722 passed in 540.97 s``.

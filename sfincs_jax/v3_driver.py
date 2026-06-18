@@ -175,6 +175,10 @@ from .problems.profile_response.linear_solve import (
     solve_profile_linear,
     solve_profile_linear_with_residual,
 )
+from .problems.profile_response.preconditioner_build import (
+    RHS1ReducedPreconditionerBuildContext,
+    build_rhs1_reduced_preconditioner_with_fallback,
+)
 from .problems.profile_response.qi_device_seed import (
     MatrixFreeQIDeviceSeedContext,
     attempt_matrixfree_qi_device_seed,
@@ -16754,6 +16758,9 @@ def solve_v3_full_system_linear_gmres(
         def reduce_full(v_full: jnp.ndarray) -> jnp.ndarray:
             return reduce_full_with_indices(v_full, active_idx_jnp)
 
+        def _wrap_pas_precond(precond_fn: Callable[[jnp.ndarray], jnp.ndarray]) -> Callable[[jnp.ndarray], jnp.ndarray]:
+            return precond_fn
+
         if use_pas_projection:
             fs_factor = _fs_average_factor(op.theta_weights, op.zeta_weights, op.d_hat)
             fs_sum = jnp.sum(fs_factor)
@@ -17153,199 +17160,48 @@ def solve_v3_full_system_linear_gmres(
                 if rhs1_bicgstab_kind == "rhs1":
                     bicgstab_preconditioner_reduced = preconditioner_reduced
 
-        def _build_rhs1_preconditioner_reduced():
-            nonlocal rhs1_pas_tz_guarded_axis, rhs1_pas_tz_guarded_fallback
-            _mark("rhs1_precond_build_start")
-            if emit is not None:
-                emit(
-                    1,
-                    "solve_v3_full_system_linear_gmres: building RHSMode=1 preconditioner="
-                    f"{rhs1_precond_kind} (active-DOF)",
-                )
-                rhs1_progress_notes.preconditioner_build(rhs1_precond_kind)
-            sweeps_env = os.environ.get("SFINCS_JAX_RHSMODE1_ADI_SWEEPS", "").strip()
-            try:
-                sweeps = int(sweeps_env) if sweeps_env else 2
-            except ValueError:
-                sweeps = 2
-            lmax_use = rhs1_xblock_tz_lmax or 0
-            if rhs1_precond_kind == "xblock_tz_lmax" and lmax_use <= 0:
-                lmax_env = os.environ.get("SFINCS_JAX_RHSMODE1_XBLOCK_TZ_LMAX", "").strip()
-                try:
-                    lmax_use = int(lmax_env) if lmax_env else 0
-                except ValueError:
-                    lmax_use = 0
-            precond = _build_rhs1_preconditioner_from_kind(
-                op=op,
-                rhs1_precond_kind=rhs1_precond_kind,
-                reduce_full=reduce_full,
-                expand_reduced=expand_reduced,
-                preconditioner_species=preconditioner_species,
-                preconditioner_x=preconditioner_x,
-                preconditioner_xi=preconditioner_xi,
-                rhs1_xblock_tz_lmax=lmax_use,
-                dd_block_theta=rhs1_dd_setup.block("theta"),
-                dd_overlap_theta=rhs1_dd_setup.overlap(
-                    "theta",
-                    default=1 if rhs1_precond_kind == "theta_schwarz" else 0,
-                ),
-                dd_block_zeta=rhs1_dd_setup.block("zeta"),
-                dd_overlap_zeta=rhs1_dd_setup.overlap(
-                    "zeta",
-                    default=1 if rhs1_precond_kind == "zeta_schwarz" else 0,
-                ),
-                adi_sweeps=max(1, sweeps),
-                emit=emit,
-            )
-            _record_structured_fblock_preconditioner_metadata(precond)
-            rhs1_pas_tz_guarded_fallback = bool(getattr(precond, "_sfincs_jax_pas_tz_guarded_fallback", False))
-            if rhs1_pas_tz_guarded_fallback:
-                rhs1_pas_tz_guarded_axis = str(getattr(precond, "_sfincs_jax_pas_tz_guarded_axis", "unknown"))
-            if rhs1_pas_tz_guarded_fallback and emit is not None:
-                emit(
-                    1,
-                    "solve_v3_full_system_linear_gmres: PAS-TZ structured fallback "
-                    f"guarded out (axis={rhs1_pas_tz_guarded_axis}); using cheap fallback",
-                )
-            precond = _wrap_pas_precond(precond) if use_pas_projection else precond
-            if rhs1_pas_tz_guarded_fallback:
-                poly_steps_env = os.environ.get("SFINCS_JAX_RHSMODE1_PAS_TZ_GUARDED_POLY_STEPS", "").strip()
-                poly_damping_env = os.environ.get("SFINCS_JAX_RHSMODE1_PAS_TZ_GUARDED_POLY_DAMPING", "").strip()
-                try:
-                    poly_steps = int(poly_steps_env) if poly_steps_env else 0
-                except ValueError:
-                    poly_steps = 0
-                try:
-                    poly_damping = float(poly_damping_env) if poly_damping_env else 0.5
-                except ValueError:
-                    poly_damping = 0.5
-                if poly_steps > 0:
-                    precond = _compose_residual_correction_preconditioner(
-                        base=precond,
-                        coarse=precond,
-                        matvec=mv_reduced,
-                        damping=float(poly_damping),
-                        steps=int(poly_steps),
-                    )
-                    if emit is not None:
-                        emit(
-                            1,
-                            "solve_v3_full_system_linear_gmres: PAS-TZ guarded matrix-free "
-                            f"polynomial correction steps={int(poly_steps)} damping={float(poly_damping):.3g}",
-                        )
-                structured_levels = _rhs1_pas_tz_guarded_structured_levels(
-                    os.environ.get("SFINCS_JAX_RHSMODE1_PAS_TZ_GUARDED_STRUCTURED_LEVELS", "")
-                )
-                if structured_levels:
-                    coarse_preconditioners: list[Callable[[jnp.ndarray], jnp.ndarray]] = []
-                    for level in structured_levels:
-                        if level == "xmg":
-                            coarse = _build_rhsmode1_xmg_preconditioner(
-                                op=op, reduce_full=reduce_full, expand_reduced=expand_reduced
-                            )
-                        elif level == "collision":
-                            coarse = _build_rhsmode1_collision_preconditioner(
-                                op=op, reduce_full=reduce_full, expand_reduced=expand_reduced
-                            )
-                        else:
-                            continue
-                        coarse_preconditioners.append(_wrap_pas_precond(coarse) if use_pas_projection else coarse)
-                    structured_steps_env = os.environ.get(
-                        "SFINCS_JAX_RHSMODE1_PAS_TZ_GUARDED_STRUCTURED_STEPS", ""
-                    ).strip()
-                    structured_damping_env = os.environ.get(
-                        "SFINCS_JAX_RHSMODE1_PAS_TZ_GUARDED_STRUCTURED_DAMPING", ""
-                    ).strip()
-                    structured_mode = (
-                        os.environ.get("SFINCS_JAX_RHSMODE1_PAS_TZ_GUARDED_STRUCTURED_MODE", "")
-                        .strip()
-                        .lower()
-                        .replace("-", "_")
-                    )
-                    try:
-                        structured_steps = int(structured_steps_env) if structured_steps_env else 1
-                    except ValueError:
-                        structured_steps = 1
-                    try:
-                        structured_damping = float(structured_damping_env) if structured_damping_env else 0.7
-                    except ValueError:
-                        structured_damping = 0.7
-                    if coarse_preconditioners and structured_steps > 0:
-                        if structured_mode in {"fixed", "damped", "residual"}:
-                            precond = _compose_multilevel_residual_correction_preconditioner(
-                                base=precond,
-                                coarse_levels=tuple(coarse_preconditioners),
-                                matvec=mv_reduced,
-                                damping=float(structured_damping),
-                                steps=int(structured_steps),
-                            )
-                            structured_mode_label = f"fixed damping={float(structured_damping):.3g}"
-                        else:
-                            alpha_clip_env = os.environ.get(
-                                "SFINCS_JAX_RHSMODE1_PAS_TZ_GUARDED_STRUCTURED_ALPHA_CLIP", ""
-                            ).strip()
-                            min_improve_env = os.environ.get(
-                                "SFINCS_JAX_RHSMODE1_PAS_TZ_GUARDED_STRUCTURED_MIN_IMPROVEMENT", ""
-                            ).strip()
-                            try:
-                                alpha_clip = float(alpha_clip_env) if alpha_clip_env else 1.0
-                            except ValueError:
-                                alpha_clip = 1.0
-                            try:
-                                min_improve = float(min_improve_env) if min_improve_env else 0.0
-                            except ValueError:
-                                min_improve = 0.0
-                            precond = _compose_multilevel_minres_correction_preconditioner(
-                                base=precond,
-                                coarse_levels=tuple(coarse_preconditioners),
-                                matvec=mv_reduced,
-                                alpha_clip=float(alpha_clip),
-                                min_improvement=float(min_improve),
-                                steps=int(structured_steps),
-                            )
-                            structured_mode_label = (
-                                f"minres alpha_clip={float(alpha_clip):.3g} "
-                                f"min_improvement={float(min_improve):.3g}"
-                            )
-                        if emit is not None:
-                            emit(
-                                1,
-                                "solve_v3_full_system_linear_gmres: PAS-TZ guarded structured "
-                                "residual correction levels="
-                                f"{','.join(structured_levels)} steps={int(structured_steps)} "
-                                f"mode={structured_mode_label}",
-                            )
-            _mark("rhs1_precond_build_done")
-            return precond
+        rhs1_reduced_preconditioner_build_context = RHS1ReducedPreconditionerBuildContext(
+            op=op,
+            reduce_full=reduce_full,
+            expand_reduced=expand_reduced,
+            mv_reduced=mv_reduced,
+            emit=emit,
+            mark=_mark,
+            progress_preconditioner_build=rhs1_progress_notes.preconditioner_build,
+            record_structured_metadata=_record_structured_fblock_preconditioner_metadata,
+            wrap_pas_preconditioner=_wrap_pas_precond,
+            dd_setup=rhs1_dd_setup,
+            use_pas_projection=bool(use_pas_projection),
+            preconditioner_species=int(preconditioner_species),
+            preconditioner_x=int(preconditioner_x),
+            preconditioner_xi=int(preconditioner_xi),
+            build_from_kind=_build_rhs1_preconditioner_from_kind,
+            build_collision=_build_rhsmode1_collision_preconditioner,
+            build_xmg=_build_rhsmode1_xmg_preconditioner,
+            compose_residual_correction=_compose_residual_correction_preconditioner,
+            compose_multilevel_residual_correction=_compose_multilevel_residual_correction_preconditioner,
+            compose_multilevel_minres_correction=_compose_multilevel_minres_correction_preconditioner,
+            parse_guarded_structured_levels=_rhs1_pas_tz_guarded_structured_levels,
+            resource_exhausted_error=_is_resource_exhausted_error,
+        )
 
         def _build_rhs1_preconditioner_reduced_with_fallback():
-            nonlocal rhs1_precond_kind, pas_precond_force_collision, bicgstab_preconditioner_reduced
-            try:
-                return _build_rhs1_preconditioner_reduced()
-            except Exception as exc:  # noqa: BLE001
-                if (
-                    jax.default_backend() != "cpu"
-                    and op.fblock.pas is not None
-                    and rhs1_precond_kind not in {"collision", "point"}
-                    and _is_resource_exhausted_error(exc)
-                ):
-                    if emit is not None:
-                        emit(
-                            0,
-                            "solve_v3_full_system_linear_gmres: accelerator PAS preconditioner "
-                            f"OOM for kind={rhs1_precond_kind}; falling back to collision preconditioner",
-                        )
-                    rhs1_precond_kind = "collision"
-                    pas_precond_force_collision = True
-                    precond = _build_rhsmode1_collision_preconditioner(
-                        op=op, reduce_full=reduce_full, expand_reduced=expand_reduced
-                    )
-                    if use_pas_projection:
-                        precond = _wrap_pas_precond(precond)
-                    if rhs1_bicgstab_kind == "rhs1":
-                        bicgstab_preconditioner_reduced = precond
-                    return precond
-                raise
+            nonlocal rhs1_precond_kind, pas_precond_force_collision
+            nonlocal bicgstab_preconditioner_reduced, rhs1_pas_tz_guarded_axis
+            nonlocal rhs1_pas_tz_guarded_fallback
+            precond_build = build_rhs1_reduced_preconditioner_with_fallback(
+                context=rhs1_reduced_preconditioner_build_context,
+                rhs1_precond_kind=rhs1_precond_kind,
+                rhs1_xblock_tz_lmax=rhs1_xblock_tz_lmax,
+                rhs1_bicgstab_kind=rhs1_bicgstab_kind,
+            )
+            rhs1_precond_kind = precond_build.rhs1_precond_kind
+            rhs1_pas_tz_guarded_fallback = bool(precond_build.pas_tz_guarded_fallback)
+            rhs1_pas_tz_guarded_axis = precond_build.pas_tz_guarded_axis
+            pas_precond_force_collision = bool(precond_build.pas_precond_force_collision)
+            if precond_build.bicgstab_preconditioner is not None:
+                bicgstab_preconditioner_reduced = precond_build.bicgstab_preconditioner
+            return precond_build.preconditioner
 
         if rhs1_precond_enabled and (not host_dense_shortcut):
             solver_kind = _solver_kind(solve_method)[0]
