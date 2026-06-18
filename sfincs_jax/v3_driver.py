@@ -31,7 +31,6 @@ from .solver import (
     GMRESSolveResult,
     assemble_dense_matrix_from_matvec,
     bicgstab_solve_with_residual,
-    bicgstab_solve_with_residual_jit,
     bicgstab_solve_with_history_scipy,
     dense_krylov_solve_from_matrix_with_residual,
     dense_solve_from_matrix,
@@ -52,7 +51,6 @@ from .solver import (
     lgmres_solve_with_history_scipy,
     tfqmr_solve_with_residual,
 )
-from .implicit_solve import linear_custom_solve, linear_custom_solve_with_residual
 from .linear_algebra import small_regularized_lstsq as _small_regularized_lstsq
 from .constraint_projection import (
     project_constraint_scheme1_nullspace_solution as _project_constraint_scheme1_nullspace_solution,
@@ -161,6 +159,12 @@ from .rhs1_preconditioner_auto_policy import (
 )
 from .rhs1_schur_policy import resolve_rhs1_schur_base_kind
 from .problems.profile_response.handoff import rhs1_accept_candidate
+from .problems.profile_response.linear_solve import (
+    ProfileLinearSolveContext,
+    profile_solver_kind,
+    solve_profile_linear,
+    solve_profile_linear_with_residual,
+)
 from .rhs1_strong_fallback import build_rhs1_strong_preconditioner_full_from_kind
 from .problems.profile_response.strong_preconditioning import (
     adjust_rhs1_reduced_auto_kind,
@@ -16527,29 +16531,23 @@ def solve_v3_full_system_linear_gmres(
                 f"(size={int(active_size)})",
             )
 
+    small_gmres_env = os.environ.get("SFINCS_JAX_RHSMODE1_GMRES_SMALL_MAX", "").strip()
+    try:
+        small_gmres_max = int(small_gmres_env) if small_gmres_env else 600
+    except ValueError:
+        small_gmres_max = 600
+    profile_linear_context = ProfileLinearSolveContext(
+        rhs_mode=int(op.rhs_mode),
+        total_size=int(op.total_size),
+        use_implicit=bool(use_implicit),
+        use_solver_jit=bool(_use_solver_jit()),
+        distributed_axis=distributed_axis,
+        distributed_auto_solver=distributed_auto_solver,
+        small_gmres_max=int(small_gmres_max),
+    )
+
     def _solver_kind(method: str) -> tuple[str, str]:
-        method_l = str(method).strip().lower()
-        if method_l in {"auto", "default"}:
-            # On distributed/sharded single-RHS solves, prefer short-recurrence
-            # Krylov by default to reduce synchronization pressure.
-            if distributed_axis is not None and int(op.rhs_mode) == 1 and distributed_auto_solver == "bicgstab":
-                return "bicgstab", "batched"
-            # Transport matrices involve constrained/near-singular systems; GMRES is
-            # generally more reliable for parity, while BiCGStab remains available.
-            if int(op.rhs_mode) in {2, 3}:
-                return "gmres", "incremental"
-            small_gmres_env = os.environ.get("SFINCS_JAX_RHSMODE1_GMRES_SMALL_MAX", "").strip()
-            try:
-                small_gmres_max = int(small_gmres_env) if small_gmres_env else 600
-            except ValueError:
-                small_gmres_max = 600
-            if small_gmres_max > 0 and int(op.total_size) <= small_gmres_max:
-                return "gmres", "incremental"
-            # Default RHSMode=1 to GMRES to match PETSc/KSP parity.
-            return "gmres", "incremental"
-        if method_l in {"bicgstab", "bicgstab_jax"}:
-            return "bicgstab", "batched"
-        return "gmres", method_l
+        return profile_solver_kind(method, context=profile_linear_context)
 
     stage2_env = os.environ.get("SFINCS_JAX_LINEAR_STAGE2", "").strip().lower()
     if stage2_env in {"0", "false", "no", "off"}:
@@ -16594,43 +16592,18 @@ def solve_v3_full_system_linear_gmres(
         solve_method_val: str,
         precond_side: str,
     ):
-        if use_implicit:
-            solver_kind, gmres_method = _solver_kind(solve_method_val)
-            return linear_custom_solve(
-                matvec=matvec_fn,
-                b=b_vec,
-                preconditioner=precond_fn,
-                x0=x0_vec,
-                tol=tol_val,
-                atol=atol_val,
-                restart=restart_val,
-                maxiter=maxiter_val,
-                solve_method=gmres_method,
-                solver=solver_kind,
-                precondition_side=precond_side,
-                # Use the *actual* system size (active/reduced sizing) for solver-JIT heuristics.
-                size_hint=int(b_vec.shape[0]),
-            )
-        solver_kind, gmres_method = _solver_kind(solve_method_val)
-        solver_jit_active = _use_solver_jit()
-        solve_method_dispatch = "bicgstab" if solver_kind == "bicgstab" else _rhs_krylov_method_for_context(
-            gmres_method=gmres_method,
-            use_implicit=use_implicit,
-            distributed_axis=distributed_axis,
-            solver_jit=solver_jit_active,
-        )
-        return _gmres_solve_dispatch(
+        return solve_profile_linear(
+            context=profile_linear_context,
             matvec=matvec_fn,
             b=b_vec,
-            preconditioner=precond_fn,
-            x0=x0_vec,
-            tol=tol_val,
-            atol=atol_val,
-            restart=restart_val,
-            maxiter=maxiter_val,
-            solve_method=solve_method_dispatch,
-            distributed_axis=distributed_axis,
-            precondition_side=precond_side,
+            precond_fn=precond_fn,
+            x0_vec=x0_vec,
+            tol_val=tol_val,
+            atol_val=atol_val,
+            restart_val=restart_val,
+            maxiter_val=maxiter_val,
+            solve_method_val=solve_method_val,
+            precond_side=precond_side,
         )
 
     def _solve_linear_with_residual(
@@ -16646,83 +16619,18 @@ def solve_v3_full_system_linear_gmres(
         solve_method_val: str,
         precond_side: str,
     ) -> tuple[GMRESSolveResult, jnp.ndarray]:
-        solver_kind, gmres_method = _solver_kind(solve_method_val)
-        if use_implicit:
-            return linear_custom_solve_with_residual(
-                matvec=matvec_fn,
-                b=b_vec,
-                preconditioner=precond_fn,
-                x0=x0_vec,
-                tol=tol_val,
-                atol=atol_val,
-                restart=restart_val,
-                maxiter=maxiter_val,
-                solve_method=gmres_method,
-                solver=solver_kind,
-                precondition_side=precond_side,
-                size_hint=int(b_vec.shape[0]),
-            )
-        if solver_kind == "bicgstab":
-            if distributed_axis is not None:
-                with sharding_constraints(True):
-                    return gmres_solve_with_residual_distributed(
-                        matvec=matvec_fn,
-                        b=b_vec,
-                        preconditioner=precond_fn,
-                        x0=x0_vec,
-                        tol=tol_val,
-                        atol=atol_val,
-                        restart=restart_val,
-                        maxiter=maxiter_val,
-                        solve_method="bicgstab",
-                        precondition_side=precond_side,
-                        axis_name=distributed_axis,
-                    )
-            solver_fn = bicgstab_solve_with_residual_jit if _use_solver_jit() else bicgstab_solve_with_residual
-            return solver_fn(
-                matvec=matvec_fn,
-                b=b_vec,
-                preconditioner=precond_fn,
-                x0=x0_vec,
-                tol=tol_val,
-                atol=atol_val,
-                maxiter=maxiter_val,
-                precondition_side=precond_side,
-            )
-        solver_jit_active = _use_solver_jit()
-        gmres_method_dispatch = _rhs_krylov_method_for_context(
-            gmres_method=gmres_method,
-            use_implicit=use_implicit,
-            distributed_axis=distributed_axis,
-            solver_jit=solver_jit_active,
-        )
-        if distributed_axis is not None:
-            with sharding_constraints(True):
-                return gmres_solve_with_residual_distributed(
-                    matvec=matvec_fn,
-                    b=b_vec,
-                    preconditioner=precond_fn,
-                    x0=x0_vec,
-                    tol=tol_val,
-                    atol=atol_val,
-                    restart=restart_val,
-                    maxiter=maxiter_val,
-                    solve_method=gmres_method_dispatch,
-                    precondition_side=precond_side,
-                    axis_name=distributed_axis,
-                )
-        solver_fn = gmres_solve_with_residual_jit if solver_jit_active else gmres_solve_with_residual
-        return solver_fn(
+        return solve_profile_linear_with_residual(
+            context=profile_linear_context,
             matvec=matvec_fn,
             b=b_vec,
-            preconditioner=precond_fn,
-            x0=x0_vec,
-            tol=tol_val,
-            atol=atol_val,
-            restart=restart_val,
-            maxiter=maxiter_val,
-            solve_method=gmres_method_dispatch,
-            precondition_side=precond_side,
+            precond_fn=precond_fn,
+            x0_vec=x0_vec,
+            tol_val=tol_val,
+            atol_val=atol_val,
+            restart_val=restart_val,
+            maxiter_val=maxiter_val,
+            solve_method_val=solve_method_val,
+            precond_side=precond_side,
         )
 
     fortran_stdout_env = os.environ.get("SFINCS_JAX_FORTRAN_STDOUT", "").strip().lower()

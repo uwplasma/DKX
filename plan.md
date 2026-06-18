@@ -32233,3 +32233,39 @@ Validation so far:
   tests/test_rhs1_schur_policy.py
   tests/test_v3_sparse_pattern.py::test_auto_selects_fortran_reduced_pc_gmres_for_large_full_fp_rhs1``:
   ``30 passed in 2.16 s``.
+
+### 19.54 Profile-response linear-solve extraction
+
+Goal:
+
+- Match the transport-matrix refactor pattern by moving RHSMode=1 Krylov
+  solver-family routing and residual/no-residual solve dispatch out of the
+  monolithic driver while preserving the existing call-site behavior.
+
+Implementation:
+
+- Added ``sfincs_jax/problems/profile_response/linear_solve.py`` with
+  ``ProfileLinearSolveContext``, ``profile_solver_kind``,
+  ``solve_profile_linear``, and ``solve_profile_linear_with_residual``.
+- The new module owns RHSMode=1 GMRES/BiCGStab/implicit/JIT/distributed routing
+  and keeps the small-system GMRES and distributed short-recurrence defaults
+  directly testable.
+- ``v3_driver.py`` now builds a typed linear-solve context once and keeps only
+  thin local wrappers so the many existing solve attempts can be migrated
+  incrementally without changing their call sites.
+- Added a focused test module covering solver-kind defaults, distributed-auto
+  BiCGStab selection, and a real tiny identity-system residual solve.
+
+Validation so far:
+
+- ``python -m ruff check sfincs_jax/problems/profile_response/linear_solve.py
+  sfincs_jax/v3_driver.py tests/test_profile_response_linear_solve.py``:
+  passed.
+- ``python -m compileall -q sfincs_jax/problems/profile_response/linear_solve.py
+  sfincs_jax/v3_driver.py tests/test_profile_response_linear_solve.py``:
+  passed.
+- ``PYTHONDONTWRITEBYTECODE=1 pytest -q -p no:cacheprovider
+  tests/test_profile_response_linear_solve.py tests/test_profile_response_setup.py
+  tests/test_v3_sparse_pattern.py::test_auto_selects_fortran_reduced_pc_gmres_for_large_full_fp_rhs1
+  tests/test_rhs1_schur_policy.py``:
+  ``18 passed in 2.84 s``.
