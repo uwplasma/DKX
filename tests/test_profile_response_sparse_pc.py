@@ -15,12 +15,16 @@ from sfincs_jax.problems.profile_response.diagnostics import (
     fortran_reduced_xblock_result_metadata,
 )
 from sfincs_jax.problems.profile_response.sparse_pc import (
+    FortranReducedXBlockGlobalCouplingStageContext,
     FortranReducedXBlockKrylovSolveContext,
+    FortranReducedXBlockMomentSchurStageContext,
     MatvecCounter,
     SparsePCGMRESContext,
     SparsePCPostMinresContext,
     XBlockAssembledPreflightError,
+    apply_fortran_reduced_xblock_global_coupling_stage,
     apply_fortran_reduced_xblock_initial_seed,
+    apply_fortran_reduced_xblock_moment_schur_stage,
     apply_sparse_pc_post_minres,
     build_sparse_pc_active_dof_setup,
     build_xblock_assembled_equilibration_setup,
@@ -569,6 +573,185 @@ def test_fortran_reduced_xblock_result_metadata_formats_branch_payload() -> None
     assert metadata["sparse_pc_xblock_global_coupling_basis_names"] == ("rhs", "fsavg")
     assert metadata["sparse_pc_residual_ratio_to_target"] == pytest.approx(0.5)
     assert metadata["sparse_pc_factor_quality_rejected"] is False
+
+
+def test_fortran_reduced_xblock_moment_schur_stage_accepts_probe() -> None:
+    policy = resolve_fortran_reduced_xblock_moment_schur_policy(
+        precondition_side="left",
+        env={
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_XBLOCK_MOMENT_SCHUR": "1",
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_XBLOCK_MOMENT_SCHUR_PROBE": "1",
+        },
+    )
+    messages: list[str] = []
+    stats = {"applies": 2, "base_applies": 3}
+
+    def builder(**_kwargs):
+        return (lambda v: v), {"rank": 1}, stats
+
+    result = apply_fortran_reduced_xblock_moment_schur_stage(
+        context=FortranReducedXBlockMomentSchurStageContext(
+            op=SimpleNamespace(),
+            base_preconditioner=lambda v: jnp.zeros_like(v),
+            reduce_full=None,
+            expand_reduced=None,
+            policy=policy,
+            precondition_side="left",
+            rhs=jnp.asarray([1.0]),
+            matvec_no_count=lambda v: v,
+            elapsed_s=lambda: 2.0,
+            emit=lambda _level, msg: messages.append(msg),
+            builder=builder,
+        )
+    )
+
+    assert result.built
+    assert result.used
+    assert result.reason == "probe_reduced"
+    assert result.metadata["setup_s"] == pytest.approx(0.0)
+    assert result.probe_residual_after == pytest.approx(0.0)
+    assert result.stats is stats
+    stats["applies"] = 7
+    assert result.stats["applies"] == 7
+    assert result.preconditioner(jnp.asarray([4.0])).tolist() == [4.0]
+    assert any("constraint1 moment-Schur accepted" in message for message in messages)
+
+
+def test_fortran_reduced_xblock_moment_schur_stage_rejects_probe() -> None:
+    policy = resolve_fortran_reduced_xblock_moment_schur_policy(
+        precondition_side="left",
+        env={
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_XBLOCK_MOMENT_SCHUR": "1",
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_XBLOCK_MOMENT_SCHUR_PROBE": "1",
+        },
+    )
+    def base(v: jnp.ndarray) -> jnp.ndarray:
+        return 0.5 * v
+
+    def builder(**_kwargs):
+        return (lambda v: jnp.zeros_like(v)), {}, {}
+
+    result = apply_fortran_reduced_xblock_moment_schur_stage(
+        context=FortranReducedXBlockMomentSchurStageContext(
+            op=SimpleNamespace(),
+            base_preconditioner=base,
+            reduce_full=None,
+            expand_reduced=None,
+            policy=policy,
+            precondition_side="left",
+            rhs=jnp.asarray([1.0]),
+            matvec_no_count=lambda v: v,
+            elapsed_s=lambda: 0.0,
+            emit=None,
+            builder=builder,
+        )
+    )
+
+    assert result.built
+    assert not result.used
+    assert result.reason == "probe_not_reduced"
+    assert result.preconditioner is base
+    assert result.probe_improvement_ratio == pytest.approx(1.0)
+
+
+def test_fortran_reduced_xblock_moment_schur_stage_records_failure() -> None:
+    policy = resolve_fortran_reduced_xblock_moment_schur_policy(
+        precondition_side="left",
+        env={"SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_XBLOCK_MOMENT_SCHUR": "1"},
+    )
+
+    def builder(**_kwargs):
+        raise RuntimeError("boom")
+
+    result = apply_fortran_reduced_xblock_moment_schur_stage(
+        context=FortranReducedXBlockMomentSchurStageContext(
+            op=SimpleNamespace(),
+            base_preconditioner=_identity,
+            reduce_full=None,
+            expand_reduced=None,
+            policy=policy,
+            precondition_side="left",
+            rhs=jnp.asarray([1.0]),
+            matvec_no_count=lambda v: v,
+            elapsed_s=lambda: 0.0,
+            emit=None,
+            builder=builder,
+        )
+    )
+
+    assert not result.built
+    assert not result.used
+    assert "RuntimeError: boom" in str(result.reason)
+    assert result.metadata["error"] == "RuntimeError: boom"
+    assert result.preconditioner is _identity
+
+
+def test_fortran_reduced_xblock_global_coupling_stage_builds_and_records_stats() -> None:
+    policy = resolve_fortran_reduced_xblock_global_coupling_policy(
+        precondition_side="left",
+        env={"SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_XBLOCK_GLOBAL_COUPLING": "1"},
+    )
+    messages: list[str] = []
+    stats = {"applies": 4, "coarse_applies": 5}
+
+    def builder(**kwargs):
+        assert kwargs["expected_size"] == 3
+        assert kwargs["mode"] == "additive"
+        return (lambda v: 2.0 * v), {"rank": 2}, stats
+
+    result = apply_fortran_reduced_xblock_global_coupling_stage(
+        context=FortranReducedXBlockGlobalCouplingStageContext(
+            op=SimpleNamespace(),
+            rhs=jnp.asarray([1.0, 2.0, 3.0]),
+            matvec=lambda v: v,
+            base_preconditioner=_identity,
+            direction_projector=None,
+            expected_size=3,
+            policy=policy,
+            elapsed_s=lambda: 1.0,
+            emit=lambda _level, msg: messages.append(msg),
+            builder=builder,
+        )
+    )
+
+    assert result.built
+    assert result.metadata["rank"] == 2
+    assert result.metadata["setup_s"] == pytest.approx(0.0)
+    assert result.stats is stats
+    stats["applies"] = 6
+    assert result.stats["applies"] == 6
+    assert result.preconditioner(jnp.asarray([3.0])).tolist() == [6.0]
+    assert any("global-coupling build start" in message for message in messages)
+
+
+def test_fortran_reduced_xblock_global_coupling_stage_records_failure() -> None:
+    policy = resolve_fortran_reduced_xblock_global_coupling_policy(
+        precondition_side="left",
+        env={"SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_XBLOCK_GLOBAL_COUPLING": "1"},
+    )
+
+    def builder(**_kwargs):
+        raise ValueError("bad basis")
+
+    result = apply_fortran_reduced_xblock_global_coupling_stage(
+        context=FortranReducedXBlockGlobalCouplingStageContext(
+            op=SimpleNamespace(),
+            rhs=jnp.asarray([1.0]),
+            matvec=lambda v: v,
+            base_preconditioner=_identity,
+            direction_projector=None,
+            expected_size=1,
+            policy=policy,
+            elapsed_s=lambda: 0.0,
+            emit=None,
+            builder=builder,
+        )
+    )
+
+    assert not result.built
+    assert result.preconditioner is _identity
+    assert result.metadata["error"] == "ValueError: bad basis"
+    assert result.stats == {"applies": 0, "coarse_applies": 0}
 
 
 def test_fortran_reduced_xblock_moment_schur_policy_defaults_disabled() -> None:

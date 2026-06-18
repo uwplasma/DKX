@@ -212,6 +212,66 @@ class FortranReducedXBlockKrylovSolveContext:
 
 
 @dataclass(frozen=True)
+class FortranReducedXBlockMomentSchurStageContext:
+    """Dependencies for the optional fortran-reduced moment-Schur stage."""
+
+    op: object
+    base_preconditioner: ArrayFn
+    reduce_full: ArrayFn | None
+    expand_reduced: ArrayFn | None
+    policy: XBlockMomentSchurPolicySetup
+    precondition_side: str
+    rhs: jnp.ndarray
+    matvec_no_count: ArrayFn
+    elapsed_s: Callable[[], float]
+    emit: EmitFn | None
+    builder: Callable[..., tuple[ArrayFn, dict[str, object], dict[str, int]]]
+
+
+@dataclass(frozen=True)
+class FortranReducedXBlockMomentSchurStageResult:
+    """Result from the optional fortran-reduced moment-Schur stage."""
+
+    preconditioner: ArrayFn
+    built: bool
+    used: bool
+    reason: str | None
+    metadata: dict[str, object]
+    stats: dict[str, int]
+    probe_residual_before: float | None
+    probe_residual_after: float | None
+    probe_improvement_ratio: float | None
+    setup_s: float
+
+
+@dataclass(frozen=True)
+class FortranReducedXBlockGlobalCouplingStageContext:
+    """Dependencies for the optional fortran-reduced global-coupling stage."""
+
+    op: object
+    rhs: jnp.ndarray
+    matvec: ArrayFn
+    base_preconditioner: ArrayFn
+    direction_projector: ArrayFn | None
+    expected_size: int
+    policy: XBlockGlobalCouplingPolicySetup
+    elapsed_s: Callable[[], float]
+    emit: EmitFn | None
+    builder: Callable[..., tuple[ArrayFn, dict[str, object], dict[str, int]]]
+
+
+@dataclass(frozen=True)
+class FortranReducedXBlockGlobalCouplingStageResult:
+    """Result from the optional fortran-reduced global-coupling stage."""
+
+    preconditioner: ArrayFn
+    built: bool
+    metadata: dict[str, object]
+    stats: dict[str, int]
+    setup_s: float
+
+
+@dataclass(frozen=True)
 class SparsePCEntryPolicySetup:
     """Physics classification and GMRES budget for RHSMode=1 sparse-PC paths."""
 
@@ -1246,6 +1306,189 @@ def run_fortran_reduced_xblock_krylov_solve(
         history=history_tuple,
         solve_s=float(solve_s),
     )
+
+
+def apply_fortran_reduced_xblock_moment_schur_stage(
+    *,
+    context: FortranReducedXBlockMomentSchurStageContext,
+) -> FortranReducedXBlockMomentSchurStageResult:
+    """Build and optionally probe the fortran-reduced moment-Schur stage."""
+
+    if (not bool(context.policy.enabled)) or str(context.precondition_side) == "none":
+        return FortranReducedXBlockMomentSchurStageResult(
+            preconditioner=context.base_preconditioner,
+            built=False,
+            used=False,
+            reason=None,
+            metadata={},
+            stats={"applies": 0, "base_applies": 0},
+            probe_residual_before=None,
+            probe_residual_after=None,
+            probe_improvement_ratio=None,
+            setup_s=0.0,
+        )
+
+    start_s = float(context.elapsed_s())
+    if context.emit is not None:
+        for level, message in context.policy.messages:
+            context.emit(level, message)
+    try:
+        candidate, metadata, stats = context.builder(
+            op=context.op,
+            base_preconditioner=context.base_preconditioner,
+            reduce_full=context.reduce_full,
+            expand_reduced=context.expand_reduced,
+            rcond=context.policy.rcond,
+            emit=context.emit,
+        )
+        built = True
+        used = True
+        reason: str | None = "built"
+        probe_residual_before: float | None = None
+        probe_residual_after: float | None = None
+        probe_improvement_ratio: float | None = None
+        if bool(context.policy.probe_enabled):
+            seed_candidate = jnp.asarray(candidate(context.rhs), dtype=jnp.float64)
+            seed_residual = context.rhs - jnp.asarray(
+                context.matvec_no_count(seed_candidate),
+                dtype=jnp.float64,
+            )
+            probe_residual_after = float(jnp.linalg.norm(seed_residual))
+            probe_residual_before = float(jnp.linalg.norm(context.rhs))
+            if probe_residual_before > 0.0:
+                probe_improvement_ratio = probe_residual_after / probe_residual_before
+                required = float(probe_residual_before) * max(
+                    0.0,
+                    1.0 - float(context.policy.probe_min_improvement),
+                )
+                used = bool(
+                    np.isfinite(float(probe_residual_after))
+                    and float(probe_residual_after) < float(required)
+                )
+            else:
+                probe_improvement_ratio = (
+                    0.0 if probe_residual_after == 0.0 else float("inf")
+                )
+                used = bool(
+                    np.isfinite(float(probe_residual_after))
+                    and float(probe_residual_after) <= 0.0
+                )
+            reason = "probe_reduced" if bool(used) else "probe_not_reduced"
+            if context.emit is not None:
+                context.emit(
+                    0 if bool(used) else 1,
+                    "solve_v3_full_system_linear_gmres: fortran_reduced_pc_gmres xblock "
+                    "constraint1 moment-Schur "
+                    f"{'accepted' if bool(used) else 'rejected'} "
+                    f"seed residual {float(probe_residual_before):.6e} "
+                    f"-> {float(probe_residual_after):.6e} "
+                    f"(ratio={float(probe_improvement_ratio):.6e})",
+                )
+        preconditioner = candidate if bool(used) else context.base_preconditioner
+        setup_s = float(context.elapsed_s()) - start_s
+        metadata = dict(metadata)
+        metadata["setup_s"] = float(setup_s)
+        return FortranReducedXBlockMomentSchurStageResult(
+            preconditioner=preconditioner,
+            built=bool(built),
+            used=bool(used),
+            reason=reason,
+            metadata=metadata,
+            stats=stats,
+            probe_residual_before=probe_residual_before,
+            probe_residual_after=probe_residual_after,
+            probe_improvement_ratio=probe_improvement_ratio,
+            setup_s=float(setup_s),
+        )
+    except Exception as exc:  # noqa: BLE001
+        setup_s = float(context.elapsed_s()) - start_s
+        reason = f"{type(exc).__name__}: {exc}"
+        if context.emit is not None:
+            context.emit(
+                1,
+                "solve_v3_full_system_linear_gmres: fortran_reduced_pc_gmres xblock "
+                f"constraint1 moment-Schur disabled after build failure ({type(exc).__name__}: {exc})",
+            )
+        return FortranReducedXBlockMomentSchurStageResult(
+            preconditioner=context.base_preconditioner,
+            built=False,
+            used=False,
+            reason=reason,
+            metadata={"error": reason, "setup_s": float(setup_s)},
+            stats={"applies": 0, "base_applies": 0},
+            probe_residual_before=None,
+            probe_residual_after=None,
+            probe_improvement_ratio=None,
+            setup_s=float(setup_s),
+        )
+
+
+def apply_fortran_reduced_xblock_global_coupling_stage(
+    *,
+    context: FortranReducedXBlockGlobalCouplingStageContext,
+) -> FortranReducedXBlockGlobalCouplingStageResult:
+    """Build the optional fortran-reduced global-coupling stage."""
+
+    if not bool(context.policy.should_build):
+        return FortranReducedXBlockGlobalCouplingStageResult(
+            preconditioner=context.base_preconditioner,
+            built=False,
+            metadata={},
+            stats={"applies": 0, "coarse_applies": 0},
+            setup_s=0.0,
+        )
+
+    start_s = float(context.elapsed_s())
+    if context.emit is not None:
+        context.emit(
+            0,
+            "solve_v3_full_system_linear_gmres: fortran_reduced_pc_gmres xblock "
+            "global-coupling build start",
+        )
+    try:
+        preconditioner, metadata, stats = context.builder(
+            op=context.op,
+            rhs=context.rhs,
+            matvec=context.matvec,
+            base_preconditioner=context.base_preconditioner,
+            direction_projector=context.direction_projector,
+            expected_size=int(context.expected_size),
+            mode=context.policy.mode,
+            fsavg_lmax=context.policy.fsavg_lmax,
+            angular_lmax=context.policy.angular_lmax,
+            max_extra_units=context.policy.max_extra_units,
+            max_directions=context.policy.max_directions,
+            rcond=context.policy.rcond,
+            include_rhs=context.policy.include_rhs,
+            max_setup_s=context.policy.setup_max_s,
+            emit=context.emit,
+        )
+        setup_s = float(context.elapsed_s()) - start_s
+        metadata = dict(metadata)
+        metadata["setup_s"] = float(setup_s)
+        return FortranReducedXBlockGlobalCouplingStageResult(
+            preconditioner=preconditioner,
+            built=True,
+            metadata=metadata,
+            stats=stats,
+            setup_s=float(setup_s),
+        )
+    except Exception as exc:  # noqa: BLE001
+        setup_s = float(context.elapsed_s()) - start_s
+        error = f"{type(exc).__name__}: {exc}"
+        if context.emit is not None:
+            context.emit(
+                1,
+                "solve_v3_full_system_linear_gmres: fortran_reduced_pc_gmres xblock "
+                f"global-coupling disabled after build failure ({type(exc).__name__}: {exc})",
+            )
+        return FortranReducedXBlockGlobalCouplingStageResult(
+            preconditioner=context.base_preconditioner,
+            built=False,
+            metadata={"error": error, "setup_s": float(setup_s)},
+            stats={"applies": 0, "coarse_applies": 0},
+            setup_s=float(setup_s),
+        )
 
 
 def resolve_fortran_reduced_xblock_moment_schur_policy(
@@ -3942,8 +4185,12 @@ __all__ = [
     "FortranReducedXBlockFactorPolicySetup",
     "FortranReducedXBlockInitialSeedPolicySetup",
     "FortranReducedXBlockInitialSeedResult",
+    "FortranReducedXBlockGlobalCouplingStageContext",
+    "FortranReducedXBlockGlobalCouplingStageResult",
     "FortranReducedXBlockKrylovSolveContext",
     "FortranReducedXBlockKrylovPolicySetup",
+    "FortranReducedXBlockMomentSchurStageContext",
+    "FortranReducedXBlockMomentSchurStageResult",
     "MatvecCounter",
     "XBlockAssembledOperatorDiagnosticsContext",
     "XBlockSparsePCCoreDiagnosticsContext",
@@ -3953,7 +4200,9 @@ __all__ = [
     "SparsePCGMRESResult",
     "SparsePCPostMinresContext",
     "SparsePCPostMinresResult",
+    "apply_fortran_reduced_xblock_global_coupling_stage",
     "apply_fortran_reduced_xblock_initial_seed",
+    "apply_fortran_reduced_xblock_moment_schur_stage",
     "apply_sparse_pc_post_minres",
     "build_sparse_pc_active_dof_setup",
     "fp_xblock_global_correction_metadata",

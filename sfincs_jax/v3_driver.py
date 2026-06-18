@@ -208,10 +208,14 @@ from .problems.profile_response.diagnostics import (
     xblock_sparse_pc_result_diagnostics_from_driver_state,
 )
 from .problems.profile_response.sparse_pc import (
+    FortranReducedXBlockGlobalCouplingStageContext,
     FortranReducedXBlockKrylovSolveContext,
+    FortranReducedXBlockMomentSchurStageContext,
     SparsePCGMRESContext,
     SparsePCPostMinresContext,
+    apply_fortran_reduced_xblock_global_coupling_stage,
     apply_fortran_reduced_xblock_initial_seed,
+    apply_fortran_reduced_xblock_moment_schur_stage,
     apply_sparse_pc_post_minres,
     build_xblock_krylov_matvec_setup,
     build_xblock_assembled_equilibration_setup,
@@ -7065,96 +7069,31 @@ def solve_v3_full_system_linear_gmres(
                 env=os.environ,
             )
             moment_schur_enabled = bool(moment_schur_policy.enabled)
-            moment_schur_built = False
-            moment_schur_used = False
-            moment_schur_reason: str | None = None
-            moment_schur_metadata: dict[str, object] = {}
-            moment_schur_stats = {"applies": 0, "base_applies": 0}
-            moment_schur_probe_residual_before: float | None = None
-            moment_schur_probe_residual_after: float | None = None
-            moment_schur_probe_improvement_ratio: float | None = None
-            if bool(moment_schur_enabled) and precondition_side != "none":
-                moment_schur_start_s = sparse_timer.elapsed_s()
-                if emit is not None:
-                    for level, message in moment_schur_policy.messages:
-                        emit(level, message)
-                try:
-                    base_precond_before_moment_schur = precond_xblock_krylov
-                    moment_schur_candidate, moment_schur_metadata, moment_schur_stats = (
-                        _build_rhs1_xblock_constraint1_moment_schur_preconditioner(
-                            op=op,
-                            base_preconditioner=base_precond_before_moment_schur,
-                            reduce_full=_sparse_pc_reduce_full if sparse_pc_use_active_dof else None,
-                            expand_reduced=_sparse_pc_expand_reduced if sparse_pc_use_active_dof else None,
-                            rcond=moment_schur_policy.rcond,
-                            emit=emit,
-                        )
-                    )
-                    moment_schur_built = True
-                    moment_schur_used = True
-                    moment_schur_reason = "built"
-                    if bool(moment_schur_policy.probe_enabled):
-                        seed_candidate = jnp.asarray(
-                            moment_schur_candidate(sparse_pc_rhs),
-                            dtype=jnp.float64,
-                        )
-                        seed_residual = sparse_pc_rhs - jnp.asarray(
-                            _mv_true_no_count(seed_candidate),
-                            dtype=jnp.float64,
-                        )
-                        moment_schur_probe_residual_after = float(jnp.linalg.norm(seed_residual))
-                        moment_schur_probe_residual_before = float(jnp.linalg.norm(sparse_pc_rhs))
-                        if moment_schur_probe_residual_before > 0.0:
-                            moment_schur_probe_improvement_ratio = (
-                                moment_schur_probe_residual_after / moment_schur_probe_residual_before
-                            )
-                            required = float(moment_schur_probe_residual_before) * max(
-                                0.0,
-                                1.0 - float(moment_schur_policy.probe_min_improvement),
-                            )
-                            moment_schur_used = bool(
-                                np.isfinite(float(moment_schur_probe_residual_after))
-                                and float(moment_schur_probe_residual_after) < float(required)
-                            )
-                        else:
-                            moment_schur_probe_improvement_ratio = (
-                                0.0 if moment_schur_probe_residual_after == 0.0 else float("inf")
-                            )
-                            moment_schur_used = bool(
-                                np.isfinite(float(moment_schur_probe_residual_after))
-                                and float(moment_schur_probe_residual_after) <= 0.0
-                            )
-                        moment_schur_reason = (
-                            "probe_reduced" if bool(moment_schur_used) else "probe_not_reduced"
-                        )
-                        if emit is not None:
-                            emit(
-                                0 if bool(moment_schur_used) else 1,
-                                "solve_v3_full_system_linear_gmres: fortran_reduced_pc_gmres xblock "
-                                "constraint1 moment-Schur "
-                                f"{'accepted' if bool(moment_schur_used) else 'rejected'} "
-                                f"seed residual {moment_schur_probe_residual_before:.6e} "
-                                f"-> {moment_schur_probe_residual_after:.6e} "
-                                f"(ratio={float(moment_schur_probe_improvement_ratio):.6e})",
-                            )
-                    precond_xblock_krylov = (
-                        moment_schur_candidate if bool(moment_schur_used) else base_precond_before_moment_schur
-                    )
-                    moment_schur_metadata["setup_s"] = float(sparse_timer.elapsed_s() - moment_schur_start_s)
-                    pc_factor_s += float(moment_schur_metadata["setup_s"])
-                except Exception as exc:  # noqa: BLE001
-                    moment_schur_used = False
-                    moment_schur_reason = f"{type(exc).__name__}: {exc}"
-                    moment_schur_metadata = {
-                        "error": f"{type(exc).__name__}: {exc}",
-                        "setup_s": float(sparse_timer.elapsed_s() - moment_schur_start_s),
-                    }
-                    if emit is not None:
-                        emit(
-                            1,
-                            "solve_v3_full_system_linear_gmres: fortran_reduced_pc_gmres xblock "
-                            f"constraint1 moment-Schur disabled after build failure ({type(exc).__name__}: {exc})",
-                        )
+            moment_schur_result = apply_fortran_reduced_xblock_moment_schur_stage(
+                context=FortranReducedXBlockMomentSchurStageContext(
+                    op=op,
+                    base_preconditioner=precond_xblock_krylov,
+                    reduce_full=_sparse_pc_reduce_full if sparse_pc_use_active_dof else None,
+                    expand_reduced=_sparse_pc_expand_reduced if sparse_pc_use_active_dof else None,
+                    policy=moment_schur_policy,
+                    precondition_side=str(precondition_side),
+                    rhs=sparse_pc_rhs,
+                    matvec_no_count=_mv_true_no_count,
+                    elapsed_s=sparse_timer.elapsed_s,
+                    emit=emit,
+                    builder=_build_rhs1_xblock_constraint1_moment_schur_preconditioner,
+                )
+            )
+            precond_xblock_krylov = moment_schur_result.preconditioner
+            moment_schur_built = bool(moment_schur_result.built)
+            moment_schur_used = bool(moment_schur_result.used)
+            moment_schur_reason = moment_schur_result.reason
+            moment_schur_metadata = moment_schur_result.metadata
+            moment_schur_stats = moment_schur_result.stats
+            moment_schur_probe_residual_before = moment_schur_result.probe_residual_before
+            moment_schur_probe_residual_after = moment_schur_result.probe_residual_after
+            moment_schur_probe_improvement_ratio = moment_schur_result.probe_improvement_ratio
+            pc_factor_s += float(moment_schur_result.setup_s)
 
             global_coupling_policy = (
                 resolve_fortran_reduced_xblock_global_coupling_policy(
@@ -7163,51 +7102,25 @@ def solve_v3_full_system_linear_gmres(
                 )
             )
             global_coupling_enabled = bool(global_coupling_policy.enabled)
-            global_coupling_built = False
-            global_coupling_metadata: dict[str, object] = {}
-            global_coupling_stats = {"applies": 0, "coarse_applies": 0}
-            if bool(global_coupling_policy.should_build):
-                global_coupling_start_s = sparse_timer.elapsed_s()
-                if emit is not None:
-                    emit(
-                        0,
-                        "solve_v3_full_system_linear_gmres: fortran_reduced_pc_gmres xblock "
-                        "global-coupling build start",
-                    )
-                try:
-                    precond_xblock_krylov, global_coupling_metadata, global_coupling_stats = (
-                        _build_rhs1_xblock_smoothed_global_coupling_preconditioner(
-                            op=op,
-                            rhs=rhs,
-                            matvec=_mv_true_no_count,
-                            base_preconditioner=precond_xblock_krylov,
-                            direction_projector=_sparse_pc_reduce_full if sparse_pc_use_active_dof else None,
-                            expected_size=int(sparse_pc_linear_size),
-                            mode=global_coupling_policy.mode,
-                            fsavg_lmax=global_coupling_policy.fsavg_lmax,
-                            angular_lmax=global_coupling_policy.angular_lmax,
-                            max_extra_units=global_coupling_policy.max_extra_units,
-                            max_directions=global_coupling_policy.max_directions,
-                            rcond=global_coupling_policy.rcond,
-                            include_rhs=global_coupling_policy.include_rhs,
-                            max_setup_s=global_coupling_policy.setup_max_s,
-                            emit=emit,
-                        )
-                    )
-                    global_coupling_built = True
-                    global_coupling_metadata["setup_s"] = float(sparse_timer.elapsed_s() - global_coupling_start_s)
-                    pc_factor_s += float(global_coupling_metadata["setup_s"])
-                except Exception as exc:  # noqa: BLE001
-                    global_coupling_metadata = {
-                        "error": f"{type(exc).__name__}: {exc}",
-                        "setup_s": float(sparse_timer.elapsed_s() - global_coupling_start_s),
-                    }
-                    if emit is not None:
-                        emit(
-                            1,
-                            "solve_v3_full_system_linear_gmres: fortran_reduced_pc_gmres xblock "
-                            f"global-coupling disabled after build failure ({type(exc).__name__}: {exc})",
-                        )
+            global_coupling_result = apply_fortran_reduced_xblock_global_coupling_stage(
+                context=FortranReducedXBlockGlobalCouplingStageContext(
+                    op=op,
+                    rhs=rhs,
+                    matvec=_mv_true_no_count,
+                    base_preconditioner=precond_xblock_krylov,
+                    direction_projector=_sparse_pc_reduce_full if sparse_pc_use_active_dof else None,
+                    expected_size=int(sparse_pc_linear_size),
+                    policy=global_coupling_policy,
+                    elapsed_s=sparse_timer.elapsed_s,
+                    emit=emit,
+                    builder=_build_rhs1_xblock_smoothed_global_coupling_preconditioner,
+                )
+            )
+            precond_xblock_krylov = global_coupling_result.preconditioner
+            global_coupling_built = bool(global_coupling_result.built)
+            global_coupling_metadata = global_coupling_result.metadata
+            global_coupling_stats = global_coupling_result.stats
+            pc_factor_s += float(global_coupling_result.setup_s)
 
             x0_sparse = None
             if x0 is not None:

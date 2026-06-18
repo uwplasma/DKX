@@ -35389,3 +35389,45 @@ Next refactor target:
 - Extract the fortran-reduced moment-Schur/global-coupling build-result
   normalization or continue moving sparse-PC metadata builders out of the
   monolithic solve function.
+
+### 19.123 Fortran-reduced x-block stage extraction
+
+Goal:
+
+- Remove the fortran-reduced x-block moment-Schur and global-coupling
+  build/probe/failure-normalization blocks from ``v3_driver.py``.
+
+Implementation:
+
+- Added ``FortranReducedXBlockMomentSchurStageContext`` /
+  ``FortranReducedXBlockMomentSchurStageResult`` and
+  ``apply_fortran_reduced_xblock_moment_schur_stage`` to
+  ``problems/profile_response/sparse_pc.py``.
+- Added ``FortranReducedXBlockGlobalCouplingStageContext`` /
+  ``FortranReducedXBlockGlobalCouplingStageResult`` and
+  ``apply_fortran_reduced_xblock_global_coupling_stage``.
+- Updated ``v3_driver.py`` to consume stage results while preserving the
+  existing local variable names used by result metadata.
+- Preserved live stats dictionaries returned by the stage builders. This is
+  required because the installed preconditioner mutates ``applies`` counters
+  during Krylov iterations before result metadata is assembled.
+- Added focused tests for moment-Schur accepted probes, rejected probes,
+  build failures, global-coupling builds, global-coupling failures, and live
+  stats mutation behavior.
+- ``v3_driver.py`` is now about ``20607`` lines and
+  ``solve_v3_full_system_linear_gmres`` about ``15305`` lines.
+
+Validation:
+
+- ``python -m ruff check`` on touched source/tests: passed.
+- ``python -m compileall -q`` on touched source/tests: passed.
+- Focused sparse-PC plus the previously failing global-coupling metadata test:
+  ``89 passed``.
+- Broader current profile-response/x-block/sparse-pattern shard:
+  ``365 passed in 114.47 s``.
+
+Next refactor target:
+
+- Continue extracting sparse-PC branch helpers around x0 routing and
+  fortran-reduced x-block solve setup, or move the generic sparse-PC metadata
+  block into diagnostics.
