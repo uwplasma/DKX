@@ -33669,3 +33669,55 @@ Next refactor target:
   configuration helpers. Keep numerical basis construction, preconditioner
   application, and residual probes in the driver until the surrounding policy
   layer is fully covered.
+
+### 19.82 RHSMode=1 x-block QI Galerkin/two-level policy extraction
+
+Goal:
+
+- Move QI Galerkin and QI two-level admission/configuration parsing out of
+  ``v3_driver.py`` while keeping the actual basis construction, residual
+  probes, adaptive augmentation, smoothed-load basis construction, and
+  preconditioner application unchanged.
+
+Implementation:
+
+- Added ``XBlockQIGalerkinPolicySetup`` and
+  ``resolve_xblock_qi_galerkin_policy_setup`` to
+  ``sfincs_jax/problems/profile_response/sparse_pc.py``.
+- Added ``XBlockQITwoLevelPolicySetup`` and
+  ``resolve_xblock_qi_two_level_policy_setup`` to the same helper module.
+- Centralized Galerkin disabled-by-host-fallback, disabled-by-precondition-side,
+  mode parsing, rcond, damping candidates, and probe enablement.
+- Centralized two-level disabled-by-host-fallback, disabled-by-precondition-side,
+  rcond, damping candidates, minimum-improvement gate, coarse-solver name,
+  residual-augmentation settings, and smoothed-load basis settings.
+- Kept parser functions injectable so ``sparse_pc.py`` does not depend on QI
+  numerical modules and the helper remains a policy layer.
+- Replaced the in-driver env parsing/admission branches with policy objects.
+- Added direct tests for disabled/fallback/side-none behavior and full build
+  parameter parsing for both Galerkin and two-level paths.
+- ``solve_v3_full_system_linear_gmres`` is now about ``19518`` lines and
+  ``v3_driver.py`` is about ``24794`` lines.
+
+Validation so far:
+
+- ``python -m ruff check sfincs_jax/problems/profile_response/sparse_pc.py
+  sfincs_jax/v3_driver.py tests/test_profile_response_sparse_pc.py``: passed.
+- ``python -m compileall -q
+  sfincs_jax/problems/profile_response/sparse_pc.py sfincs_jax/v3_driver.py
+  tests/test_profile_response_sparse_pc.py``: passed.
+- ``PYTHONDONTWRITEBYTECODE=1 JAX_ENABLE_X64=True pytest -q
+  -p no:cacheprovider tests/test_profile_response_sparse_pc.py``:
+  ``47 passed in 0.89 s``.
+- Focused QI Galerkin/two-level regression subset:
+  ``52 passed in 8.40 s``.
+- Broader sparse-PC/x-block/dispatch subset:
+  ``135 passed in 49.29 s``.
+- ``git diff --check``: passed.
+
+Next refactor target:
+
+- Extract QI-device admission/config parsing into a helper object. This block
+  contains many GPU/device and matrix-free controls, so it should be split into
+  an admission/config extraction first, followed by separate probe/metadata
+  consolidation only after the direct tests cover the policy surface.

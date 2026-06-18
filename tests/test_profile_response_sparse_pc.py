@@ -27,7 +27,9 @@ from sfincs_jax.problems.profile_response.sparse_pc import (
     prepare_xblock_initial_guess,
     resolve_sparse_pc_entry_policy,
     resolve_xblock_qi_device_operator_reuse_setup,
+    resolve_xblock_qi_galerkin_policy_setup,
     resolve_xblock_qi_seed_policy_setup,
+    resolve_xblock_qi_two_level_policy_setup,
     resolve_xblock_global_coupling_policy_setup,
     resolve_xblock_moment_schur_policy_setup,
     resolve_xblock_seed_policy_setup,
@@ -1010,6 +1012,147 @@ def test_xblock_qi_seed_policy_parses_shared_basis_parameters() -> None:
     assert not setup.include_constraint_moments
     assert not setup.include_schur
     assert setup.basis_kind == "residual_enriched"
+
+
+def test_xblock_qi_galerkin_policy_handles_disabled_and_fallback_cases() -> None:
+    def parse_modes(raw, *, default="auto"):
+        return ("additive", "multiplicative") if (raw or default) == "auto" else (raw,)
+
+    def parse_dampings(raw, *, default=1.0, auto_defaults=(1.0, 0.5, 0.25)):
+        return tuple(auto_defaults) if not raw else tuple(float(v) for v in str(raw).split(","))
+
+    off = resolve_xblock_qi_galerkin_policy_setup(
+        enabled=False,
+        host_fallback_used=False,
+        precondition_side="right",
+        parse_modes=parse_modes,
+        parse_dampings=parse_dampings,
+        env={},
+    )
+    fallback = resolve_xblock_qi_galerkin_policy_setup(
+        enabled=True,
+        host_fallback_used=True,
+        precondition_side="right",
+        parse_modes=parse_modes,
+        parse_dampings=parse_dampings,
+        env={},
+    )
+
+    assert not off.should_build
+    assert off.reason is None
+    assert fallback.enabled
+    assert not fallback.should_build
+    assert fallback.reason == "disabled_by_device_host_fallback"
+    assert any("device-host fallback" in message for _level, message in fallback.messages)
+
+
+def test_xblock_qi_galerkin_policy_parses_build_parameters() -> None:
+    def parse_modes(raw, *, default="auto"):
+        return tuple(str(raw or default).split(","))
+
+    def parse_dampings(raw, *, default=1.0, auto_defaults=(1.0, 0.5, 0.25)):
+        return tuple(auto_defaults) if not raw else tuple(float(v) for v in str(raw).split(","))
+
+    setup = resolve_xblock_qi_galerkin_policy_setup(
+        enabled=True,
+        host_fallback_used=False,
+        precondition_side="right",
+        parse_modes=parse_modes,
+        parse_dampings=parse_dampings,
+        env={
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_GALERKIN_PRECONDITIONER_MODE": "multiplicative",
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_GALERKIN_PRECONDITIONER_RCOND": "1e-8",
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_GALERKIN_PRECONDITIONER_DAMPING": "0.6",
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_GALERKIN_PRECONDITIONER_DAMPINGS": "0.6,0.3",
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_GALERKIN_PRECONDITIONER_PROBE": "0",
+        },
+    )
+
+    assert setup.should_build
+    assert setup.preconditioner_mode == "multiplicative"
+    assert setup.candidate_modes == ("multiplicative",)
+    assert setup.rcond == pytest.approx(1.0e-8)
+    assert setup.damping == pytest.approx(0.6)
+    assert setup.candidate_dampings == (0.6, 0.3)
+    assert not setup.probe_enabled
+
+
+def test_xblock_qi_two_level_policy_handles_disabled_and_side_none_cases() -> None:
+    def parse_dampings(raw, *, default=1.0, auto_defaults=(1.0,)):
+        return tuple(auto_defaults) if not raw else tuple(float(v) for v in str(raw).split(","))
+
+    off = resolve_xblock_qi_two_level_policy_setup(
+        enabled=False,
+        host_fallback_used=False,
+        precondition_side="right",
+        seed_max_rank=8,
+        parse_dampings=parse_dampings,
+        env={},
+    )
+    side_none = resolve_xblock_qi_two_level_policy_setup(
+        enabled=True,
+        host_fallback_used=False,
+        precondition_side="none",
+        seed_max_rank=8,
+        parse_dampings=parse_dampings,
+        env={},
+    )
+
+    assert not off.should_build
+    assert off.smoothed_load_max_rank == 8
+    assert not side_none.should_build
+    assert side_none.reason == "disabled_by_precondition_side_none"
+
+
+def test_xblock_qi_two_level_policy_parses_build_parameters() -> None:
+    def parse_dampings(raw, *, default=1.0, auto_defaults=(1.0,)):
+        return tuple(auto_defaults) if not raw else tuple(float(v) for v in str(raw).split(","))
+
+    setup = resolve_xblock_qi_two_level_policy_setup(
+        enabled=True,
+        host_fallback_used=False,
+        precondition_side="right",
+        seed_max_rank=8,
+        parse_dampings=parse_dampings,
+        env={
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_TWO_LEVEL_PRECONDITIONER_RCOND": "1e-9",
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_TWO_LEVEL_PRECONDITIONER_DAMPING": "0.7",
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_TWO_LEVEL_PRECONDITIONER_DAMPINGS": "0.7,0.35",
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_TWO_LEVEL_PRECONDITIONER_MIN_IMPROVEMENT": "0.2",
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_TWO_LEVEL_PRECONDITIONER_COARSE_SOLVER": "Action-Lstsq",
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_TWO_LEVEL_PRECONDITIONER_RESIDUAL_AUGMENT": "1",
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_TWO_LEVEL_PRECONDITIONER_RESIDUAL_AUGMENT_MAX_EXTRA": "2",
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_TWO_LEVEL_PRECONDITIONER_RESIDUAL_AUGMENT_STEPS": "3",
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_TWO_LEVEL_PRECONDITIONER_RESIDUAL_AUGMENT_INCLUDE_RESIDUALS": "0",
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_TWO_LEVEL_PRECONDITIONER_SMOOTHED_LOAD_BASIS": "1",
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_TWO_LEVEL_PRECONDITIONER_SMOOTHED_LOAD_BASIS_COMBINE": "0",
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_TWO_LEVEL_PRECONDITIONER_SMOOTHED_LOAD_MAX_DIRECTIONS": "12",
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_TWO_LEVEL_PRECONDITIONER_SMOOTHED_LOAD_MAX_RANK": "5",
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_TWO_LEVEL_PRECONDITIONER_SMOOTHED_LOAD_FSAVG_LMAX": "2",
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_TWO_LEVEL_PRECONDITIONER_SMOOTHED_LOAD_ANGULAR_LMAX": "3",
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_TWO_LEVEL_PRECONDITIONER_SMOOTHED_LOAD_MAX_EXTRA_UNITS": "4",
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_TWO_LEVEL_PRECONDITIONER_SMOOTHED_LOAD_INCLUDE_RHS": "0",
+        },
+    )
+
+    assert setup.should_build
+    assert setup.rcond == pytest.approx(1.0e-9)
+    assert setup.damping == pytest.approx(0.7)
+    assert setup.candidate_dampings == (0.7, 0.35)
+    assert setup.min_improvement == pytest.approx(0.2)
+    assert setup.coarse_solver == "action_lstsq"
+    assert setup.residual_augment
+    assert setup.residual_augment_max_extra == 2
+    assert setup.residual_augment_steps == 3
+    assert not setup.residual_augment_include_residuals
+    assert setup.smoothed_load_basis
+    assert not setup.smoothed_load_basis_combine
+    assert setup.smoothed_load_max_directions == 12
+    assert setup.smoothed_load_max_rank == 5
+    assert setup.smoothed_load_fsavg_lmax == 2
+    assert setup.smoothed_load_angular_lmax == 3
+    assert setup.smoothed_load_max_extra_units == 4
+    assert not setup.smoothed_load_include_rhs
 
 
 def test_sparse_pc_gmres_once_explicit_left_recomputes_true_residual() -> None:

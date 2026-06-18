@@ -363,6 +363,50 @@ class XBlockSeedPolicySetup:
     moment_schur_seed_enabled: bool
 
 
+@dataclass(frozen=True)
+class XBlockQIGalerkinPolicySetup:
+    """Admission and build controls for the QI Galerkin x-block preconditioner."""
+
+    enabled: bool
+    should_build: bool
+    reason: str | None
+    mode_raw: str
+    candidate_modes: tuple[str, ...]
+    preconditioner_mode: str | None
+    rcond: float
+    damping: float
+    candidate_dampings: tuple[float, ...]
+    probe_enabled: bool
+    messages: tuple[tuple[int, str], ...]
+
+
+@dataclass(frozen=True)
+class XBlockQITwoLevelPolicySetup:
+    """Admission and build controls for the QI two-level x-block preconditioner."""
+
+    enabled: bool
+    should_build: bool
+    reason: str | None
+    rcond: float
+    damping: float
+    candidate_dampings: tuple[float, ...]
+    min_improvement: float
+    coarse_solver: str | None
+    residual_augment: bool
+    residual_augment_max_extra: int
+    residual_augment_steps: int
+    residual_augment_include_residuals: bool
+    smoothed_load_basis: bool
+    smoothed_load_basis_combine: bool
+    smoothed_load_max_directions: int
+    smoothed_load_max_rank: int
+    smoothed_load_fsavg_lmax: int
+    smoothed_load_angular_lmax: int
+    smoothed_load_max_extra_units: int
+    smoothed_load_include_rhs: bool
+    messages: tuple[tuple[int, str], ...]
+
+
 def _env_value(env: Mapping[str, str] | None, key: str) -> str:
     source = env if env is not None else {}
     return str(source.get(key, "")).strip()
@@ -1980,6 +2024,318 @@ def resolve_xblock_qi_seed_policy_setup(env: Mapping[str, str] | None = None) ->
             default=True,
         ),
         basis_kind=str(basis_kind),
+    )
+
+
+def resolve_xblock_qi_galerkin_policy_setup(
+    *,
+    enabled: bool,
+    host_fallback_used: bool,
+    precondition_side: str,
+    parse_modes: Callable[..., tuple[str, ...]],
+    parse_dampings: Callable[..., tuple[float, ...]],
+    env: Mapping[str, str] | None = None,
+) -> XBlockQIGalerkinPolicySetup:
+    """Resolve QI Galerkin admission and build parameters."""
+
+    messages: list[tuple[int, str]] = []
+    if not bool(enabled):
+        return XBlockQIGalerkinPolicySetup(
+            enabled=False,
+            should_build=False,
+            reason=None,
+            mode_raw="auto",
+            candidate_modes=("auto",),
+            preconditioner_mode=None,
+            rcond=0.0,
+            damping=1.0,
+            candidate_dampings=(1.0,),
+            probe_enabled=False,
+            messages=(),
+        )
+    if bool(host_fallback_used):
+        reason = "disabled_by_device_host_fallback"
+        messages.append(
+            (
+                1,
+                "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
+                "QI Galerkin preconditioner disabled because device-host fallback is active",
+            )
+        )
+        return XBlockQIGalerkinPolicySetup(
+            enabled=True,
+            should_build=False,
+            reason=reason,
+            mode_raw="auto",
+            candidate_modes=("auto",),
+            preconditioner_mode=None,
+            rcond=0.0,
+            damping=1.0,
+            candidate_dampings=(1.0,),
+            probe_enabled=False,
+            messages=tuple(messages),
+        )
+    if str(precondition_side) == "none":
+        return XBlockQIGalerkinPolicySetup(
+            enabled=True,
+            should_build=False,
+            reason="disabled_by_precondition_side_none",
+            mode_raw="auto",
+            candidate_modes=("auto",),
+            preconditioner_mode=None,
+            rcond=0.0,
+            damping=1.0,
+            candidate_dampings=(1.0,),
+            probe_enabled=False,
+            messages=(),
+        )
+
+    mode_raw = (
+        _env_value(env, "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_GALERKIN_PRECONDITIONER_MODE") or "auto"
+    ).lower().replace("-", "_")
+    damping = max(
+        0.0,
+        _env_float(
+            env,
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_GALERKIN_PRECONDITIONER_DAMPING",
+            default=1.0,
+        ),
+    )
+    return XBlockQIGalerkinPolicySetup(
+        enabled=True,
+        should_build=True,
+        reason=None,
+        mode_raw=str(mode_raw),
+        candidate_modes=tuple(str(mode) for mode in parse_modes(str(mode_raw), default="auto")),
+        preconditioner_mode=str(mode_raw) if str(mode_raw) in {"additive", "multiplicative"} else "auto",
+        rcond=max(
+            0.0,
+            _env_float(
+                env,
+                "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_GALERKIN_PRECONDITIONER_RCOND",
+                default=1.0e-12,
+            ),
+        ),
+        damping=float(damping),
+        candidate_dampings=tuple(
+            float(value)
+            for value in parse_dampings(
+                _env_value(env, "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_GALERKIN_PRECONDITIONER_DAMPINGS"),
+                default=float(damping),
+            )
+        ),
+        probe_enabled=_env_bool(
+            env,
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_GALERKIN_PRECONDITIONER_PROBE",
+            default=True,
+        ),
+        messages=(),
+    )
+
+
+def resolve_xblock_qi_two_level_policy_setup(
+    *,
+    enabled: bool,
+    host_fallback_used: bool,
+    precondition_side: str,
+    seed_max_rank: int,
+    parse_dampings: Callable[..., tuple[float, ...]],
+    env: Mapping[str, str] | None = None,
+) -> XBlockQITwoLevelPolicySetup:
+    """Resolve QI two-level admission and build parameters."""
+
+    messages: list[tuple[int, str]] = []
+    if not bool(enabled):
+        return XBlockQITwoLevelPolicySetup(
+            enabled=False,
+            should_build=False,
+            reason=None,
+            rcond=0.0,
+            damping=1.0,
+            candidate_dampings=(1.0,),
+            min_improvement=0.0,
+            coarse_solver=None,
+            residual_augment=False,
+            residual_augment_max_extra=0,
+            residual_augment_steps=1,
+            residual_augment_include_residuals=False,
+            smoothed_load_basis=False,
+            smoothed_load_basis_combine=True,
+            smoothed_load_max_directions=48,
+            smoothed_load_max_rank=max(1, int(seed_max_rank)),
+            smoothed_load_fsavg_lmax=8,
+            smoothed_load_angular_lmax=1,
+            smoothed_load_max_extra_units=8,
+            smoothed_load_include_rhs=True,
+            messages=(),
+        )
+    if bool(host_fallback_used):
+        reason = "disabled_by_device_host_fallback"
+        messages.append(
+            (
+                1,
+                "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
+                "QI two-level preconditioner disabled because device-host fallback is active",
+            )
+        )
+        return XBlockQITwoLevelPolicySetup(
+            enabled=True,
+            should_build=False,
+            reason=reason,
+            rcond=0.0,
+            damping=1.0,
+            candidate_dampings=(1.0,),
+            min_improvement=0.0,
+            coarse_solver=None,
+            residual_augment=False,
+            residual_augment_max_extra=0,
+            residual_augment_steps=1,
+            residual_augment_include_residuals=False,
+            smoothed_load_basis=False,
+            smoothed_load_basis_combine=True,
+            smoothed_load_max_directions=48,
+            smoothed_load_max_rank=max(1, int(seed_max_rank)),
+            smoothed_load_fsavg_lmax=8,
+            smoothed_load_angular_lmax=1,
+            smoothed_load_max_extra_units=8,
+            smoothed_load_include_rhs=True,
+            messages=tuple(messages),
+        )
+    if str(precondition_side) == "none":
+        return XBlockQITwoLevelPolicySetup(
+            enabled=True,
+            should_build=False,
+            reason="disabled_by_precondition_side_none",
+            rcond=0.0,
+            damping=1.0,
+            candidate_dampings=(1.0,),
+            min_improvement=0.0,
+            coarse_solver=None,
+            residual_augment=False,
+            residual_augment_max_extra=0,
+            residual_augment_steps=1,
+            residual_augment_include_residuals=False,
+            smoothed_load_basis=False,
+            smoothed_load_basis_combine=True,
+            smoothed_load_max_directions=48,
+            smoothed_load_max_rank=max(1, int(seed_max_rank)),
+            smoothed_load_fsavg_lmax=8,
+            smoothed_load_angular_lmax=1,
+            smoothed_load_max_extra_units=8,
+            smoothed_load_include_rhs=True,
+            messages=(),
+        )
+
+    damping = max(
+        0.0,
+        _env_float(
+            env,
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_TWO_LEVEL_PRECONDITIONER_DAMPING",
+            default=1.0,
+        ),
+    )
+    coarse_solver = (
+        _env_value(env, "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_TWO_LEVEL_PRECONDITIONER_COARSE_SOLVER")
+        or "action_lstsq"
+    ).lower().replace("-", "_")
+    return XBlockQITwoLevelPolicySetup(
+        enabled=True,
+        should_build=True,
+        reason=None,
+        rcond=max(
+            0.0,
+            _env_float(
+                env,
+                "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_TWO_LEVEL_PRECONDITIONER_RCOND",
+                default=1.0e-12,
+            ),
+        ),
+        damping=float(damping),
+        candidate_dampings=tuple(
+            float(value)
+            for value in parse_dampings(
+                _env_value(env, "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_TWO_LEVEL_PRECONDITIONER_DAMPINGS"),
+                default=float(damping),
+                auto_defaults=(float(damping),),
+            )
+        ),
+        min_improvement=max(
+            0.0,
+            _env_float(
+                env,
+                "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_TWO_LEVEL_PRECONDITIONER_MIN_IMPROVEMENT",
+                default=0.05,
+            ),
+        ),
+        coarse_solver=str(coarse_solver),
+        residual_augment=_env_bool(
+            env,
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_TWO_LEVEL_PRECONDITIONER_RESIDUAL_AUGMENT",
+            default=False,
+        ),
+        residual_augment_max_extra=_env_int(
+            env,
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_TWO_LEVEL_PRECONDITIONER_RESIDUAL_AUGMENT_MAX_EXTRA",
+            default=3,
+            minimum=0,
+        ),
+        residual_augment_steps=_env_int(
+            env,
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_TWO_LEVEL_PRECONDITIONER_RESIDUAL_AUGMENT_STEPS",
+            default=1,
+            minimum=1,
+        ),
+        residual_augment_include_residuals=_env_bool(
+            env,
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_TWO_LEVEL_PRECONDITIONER_RESIDUAL_AUGMENT_INCLUDE_RESIDUALS",
+            default=True,
+        ),
+        smoothed_load_basis=_env_bool(
+            env,
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_TWO_LEVEL_PRECONDITIONER_SMOOTHED_LOAD_BASIS",
+            default=False,
+        ),
+        smoothed_load_basis_combine=_env_bool(
+            env,
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_TWO_LEVEL_PRECONDITIONER_SMOOTHED_LOAD_BASIS_COMBINE",
+            default=True,
+        ),
+        smoothed_load_max_directions=_env_int(
+            env,
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_TWO_LEVEL_PRECONDITIONER_SMOOTHED_LOAD_MAX_DIRECTIONS",
+            default=48,
+            minimum=1,
+        ),
+        smoothed_load_max_rank=_env_int(
+            env,
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_TWO_LEVEL_PRECONDITIONER_SMOOTHED_LOAD_MAX_RANK",
+            default=max(1, int(seed_max_rank)),
+            minimum=1,
+        ),
+        smoothed_load_fsavg_lmax=_env_int(
+            env,
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_TWO_LEVEL_PRECONDITIONER_SMOOTHED_LOAD_FSAVG_LMAX",
+            default=8,
+            minimum=0,
+        ),
+        smoothed_load_angular_lmax=_env_int(
+            env,
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_TWO_LEVEL_PRECONDITIONER_SMOOTHED_LOAD_ANGULAR_LMAX",
+            default=1,
+            minimum=0,
+        ),
+        smoothed_load_max_extra_units=_env_int(
+            env,
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_TWO_LEVEL_PRECONDITIONER_SMOOTHED_LOAD_MAX_EXTRA_UNITS",
+            default=8,
+            minimum=0,
+        ),
+        smoothed_load_include_rhs=_env_bool(
+            env,
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_TWO_LEVEL_PRECONDITIONER_SMOOTHED_LOAD_INCLUDE_RHS",
+            default=True,
+        ),
+        messages=(),
     )
 
 

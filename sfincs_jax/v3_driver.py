@@ -218,7 +218,9 @@ from .problems.profile_response.sparse_pc import (
     prepare_xblock_initial_guess,
     resolve_sparse_pc_entry_policy,
     resolve_xblock_qi_device_operator_reuse_setup,
+    resolve_xblock_qi_galerkin_policy_setup,
     resolve_xblock_qi_seed_policy_setup,
+    resolve_xblock_qi_two_level_policy_setup,
     resolve_xblock_global_coupling_policy_setup,
     resolve_xblock_moment_schur_policy_setup,
     resolve_xblock_seed_policy_setup,
@@ -4279,49 +4281,27 @@ def solve_v3_full_system_linear_gmres(
                             f"QI coarse seed failed ({type(exc).__name__}: {exc})",
                         )
                 qi_coarse_seed_s = float(sparse_timer.elapsed_s() - qi_seed_start_s)
-            if qi_galerkin_preconditioner_enabled and bool(xblock_device_host_fallback_decision.used):
-                qi_galerkin_preconditioner_reason = "disabled_by_device_host_fallback"
+            qi_galerkin_policy = resolve_xblock_qi_galerkin_policy_setup(
+                enabled=bool(qi_galerkin_preconditioner_enabled),
+                host_fallback_used=bool(xblock_device_host_fallback_decision.used),
+                precondition_side=str(precondition_side),
+                parse_modes=parse_rhs1_qi_galerkin_modes,
+                parse_dampings=parse_rhs1_qi_galerkin_dampings,
+                env=os.environ,
+            )
+            if qi_galerkin_policy.reason is not None and not qi_galerkin_policy.should_build:
+                qi_galerkin_preconditioner_reason = qi_galerkin_policy.reason
+            for level, message in qi_galerkin_policy.messages:
                 if emit is not None:
-                    emit(
-                        1,
-                        "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
-                        "QI Galerkin preconditioner disabled because device-host fallback is active",
-                    )
-            elif qi_galerkin_preconditioner_enabled and precondition_side == "none":
-                qi_galerkin_preconditioner_reason = "disabled_by_precondition_side_none"
-            elif qi_galerkin_preconditioner_enabled:
+                    emit(level, message)
+            if qi_galerkin_policy.should_build:
                 qi_galerkin_start_s = sparse_timer.elapsed_s()
-                qi_galerkin_mode_raw = (
-                    os.environ.get(
-                        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_GALERKIN_PRECONDITIONER_MODE",
-                        "auto",
-                    )
-                    .strip()
-                    .lower()
-                    .replace("-", "_")
-                )
-                qi_galerkin_candidate_modes = parse_rhs1_qi_galerkin_modes(qi_galerkin_mode_raw, default="auto")
-                qi_galerkin_preconditioner_mode = (
-                    qi_galerkin_mode_raw if qi_galerkin_mode_raw in {"additive", "multiplicative"} else "auto"
-                )
-                qi_galerkin_preconditioner_rcond = _rhs1_float_env(
-                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_GALERKIN_PRECONDITIONER_RCOND",
-                    default=1.0e-12,
-                    minimum=0.0,
-                )
-                qi_galerkin_preconditioner_damping = _rhs1_float_env(
-                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_GALERKIN_PRECONDITIONER_DAMPING",
-                    default=1.0,
-                    minimum=0.0,
-                )
-                qi_galerkin_candidate_dampings = parse_rhs1_qi_galerkin_dampings(
-                    os.environ.get("SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_GALERKIN_PRECONDITIONER_DAMPINGS", ""),
-                    default=float(qi_galerkin_preconditioner_damping),
-                )
-                qi_galerkin_probe = _rhs1_bool_env(
-                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_GALERKIN_PRECONDITIONER_PROBE",
-                    default=True,
-                )
+                qi_galerkin_candidate_modes = qi_galerkin_policy.candidate_modes
+                qi_galerkin_preconditioner_mode = qi_galerkin_policy.preconditioner_mode
+                qi_galerkin_preconditioner_rcond = float(qi_galerkin_policy.rcond)
+                qi_galerkin_preconditioner_damping = float(qi_galerkin_policy.damping)
+                qi_galerkin_candidate_dampings = qi_galerkin_policy.candidate_dampings
+                qi_galerkin_probe = bool(qi_galerkin_policy.probe_enabled)
                 try:
                     qi_galerkin_preconditioner_basis_reused_from_seed = qi_seed_basis_for_galerkin is not None
                     if qi_seed_basis_for_galerkin is None:
@@ -4457,109 +4437,47 @@ def solve_v3_full_system_linear_gmres(
                         )
                 qi_galerkin_preconditioner_setup_s = float(sparse_timer.elapsed_s() - qi_galerkin_start_s)
                 pc_factor_s += float(qi_galerkin_preconditioner_setup_s)
-            if qi_two_level_preconditioner_enabled and bool(xblock_device_host_fallback_decision.used):
-                qi_two_level_preconditioner_reason = "disabled_by_device_host_fallback"
+            qi_two_level_policy = resolve_xblock_qi_two_level_policy_setup(
+                enabled=bool(qi_two_level_preconditioner_enabled),
+                host_fallback_used=bool(xblock_device_host_fallback_decision.used),
+                precondition_side=str(precondition_side),
+                seed_max_rank=int(qi_seed_max_rank),
+                parse_dampings=parse_rhs1_qi_galerkin_dampings,
+                env=os.environ,
+            )
+            if qi_two_level_policy.reason is not None and not qi_two_level_policy.should_build:
+                qi_two_level_preconditioner_reason = qi_two_level_policy.reason
+            for level, message in qi_two_level_policy.messages:
                 if emit is not None:
-                    emit(
-                        1,
-                        "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
-                        "QI two-level preconditioner disabled because device-host fallback is active",
-                    )
-            elif qi_two_level_preconditioner_enabled and precondition_side == "none":
-                qi_two_level_preconditioner_reason = "disabled_by_precondition_side_none"
-            elif qi_two_level_preconditioner_enabled:
+                    emit(level, message)
+            if qi_two_level_policy.should_build:
                 qi_two_level_start_s = sparse_timer.elapsed_s()
-                qi_two_level_preconditioner_rcond = _rhs1_float_env(
-                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_TWO_LEVEL_PRECONDITIONER_RCOND",
-                    default=1.0e-12,
-                    minimum=0.0,
-                )
-                qi_two_level_preconditioner_damping = _rhs1_float_env(
-                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_TWO_LEVEL_PRECONDITIONER_DAMPING",
-                    default=1.0,
-                    minimum=0.0,
-                )
-                qi_two_level_candidate_dampings = parse_rhs1_qi_galerkin_dampings(
-                    os.environ.get("SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_TWO_LEVEL_PRECONDITIONER_DAMPINGS", ""),
-                    default=float(qi_two_level_preconditioner_damping),
-                    auto_defaults=(float(qi_two_level_preconditioner_damping),),
-                )
-                qi_two_level_min_improvement = _rhs1_float_env(
-                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_TWO_LEVEL_PRECONDITIONER_MIN_IMPROVEMENT",
-                    default=0.05,
-                    minimum=0.0,
-                )
-                qi_two_level_preconditioner_coarse_solver = (
-                    os.environ.get(
-                        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_TWO_LEVEL_PRECONDITIONER_COARSE_SOLVER",
-                        "action_lstsq",
-                    )
-                    .strip()
-                    .lower()
-                    .replace("-", "_")
-                )
-                qi_two_level_residual_augment = _rhs1_bool_env(
-                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_TWO_LEVEL_PRECONDITIONER_RESIDUAL_AUGMENT",
-                    default=False,
-                )
-                qi_two_level_residual_augment_max_extra = _rhs1_int_env(
-                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_TWO_LEVEL_PRECONDITIONER_RESIDUAL_AUGMENT_MAX_EXTRA",
-                    default=3,
-                    minimum=0,
-                )
+                qi_two_level_preconditioner_rcond = float(qi_two_level_policy.rcond)
+                qi_two_level_preconditioner_damping = float(qi_two_level_policy.damping)
+                qi_two_level_candidate_dampings = qi_two_level_policy.candidate_dampings
+                qi_two_level_min_improvement = float(qi_two_level_policy.min_improvement)
+                qi_two_level_preconditioner_coarse_solver = qi_two_level_policy.coarse_solver
+                qi_two_level_residual_augment = bool(qi_two_level_policy.residual_augment)
+                qi_two_level_residual_augment_max_extra = int(qi_two_level_policy.residual_augment_max_extra)
                 qi_two_level_preconditioner_residual_augment_max_extra = int(
                     qi_two_level_residual_augment_max_extra
                 )
-                qi_two_level_residual_augment_steps = _rhs1_int_env(
-                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_TWO_LEVEL_PRECONDITIONER_RESIDUAL_AUGMENT_STEPS",
-                    default=1,
-                    minimum=1,
-                )
+                qi_two_level_residual_augment_steps = int(qi_two_level_policy.residual_augment_steps)
                 qi_two_level_preconditioner_residual_augment_steps = int(qi_two_level_residual_augment_steps)
-                qi_two_level_residual_augment_include_residuals = _rhs1_bool_env(
-                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_TWO_LEVEL_PRECONDITIONER_RESIDUAL_AUGMENT_INCLUDE_RESIDUALS",
-                    default=True,
+                qi_two_level_residual_augment_include_residuals = bool(
+                    qi_two_level_policy.residual_augment_include_residuals
                 )
                 qi_two_level_preconditioner_residual_augment_include_residuals = bool(
                     qi_two_level_residual_augment_include_residuals
                 )
-                qi_two_level_smoothed_load_basis = _rhs1_bool_env(
-                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_TWO_LEVEL_PRECONDITIONER_SMOOTHED_LOAD_BASIS",
-                    default=False,
-                )
-                qi_two_level_smoothed_load_basis_combine = _rhs1_bool_env(
-                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_TWO_LEVEL_PRECONDITIONER_SMOOTHED_LOAD_BASIS_COMBINE",
-                    default=True,
-                )
-                qi_two_level_smoothed_load_max_directions = _rhs1_int_env(
-                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_TWO_LEVEL_PRECONDITIONER_SMOOTHED_LOAD_MAX_DIRECTIONS",
-                    default=48,
-                    minimum=1,
-                )
-                qi_two_level_smoothed_load_max_rank = _rhs1_int_env(
-                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_TWO_LEVEL_PRECONDITIONER_SMOOTHED_LOAD_MAX_RANK",
-                    default=int(qi_seed_max_rank),
-                    minimum=1,
-                )
-                qi_two_level_smoothed_load_fsavg_lmax = _rhs1_int_env(
-                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_TWO_LEVEL_PRECONDITIONER_SMOOTHED_LOAD_FSAVG_LMAX",
-                    default=8,
-                    minimum=0,
-                )
-                qi_two_level_smoothed_load_angular_lmax = _rhs1_int_env(
-                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_TWO_LEVEL_PRECONDITIONER_SMOOTHED_LOAD_ANGULAR_LMAX",
-                    default=1,
-                    minimum=0,
-                )
-                qi_two_level_smoothed_load_max_extra_units = _rhs1_int_env(
-                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_TWO_LEVEL_PRECONDITIONER_SMOOTHED_LOAD_MAX_EXTRA_UNITS",
-                    default=8,
-                    minimum=0,
-                )
-                qi_two_level_smoothed_load_include_rhs = _rhs1_bool_env(
-                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_TWO_LEVEL_PRECONDITIONER_SMOOTHED_LOAD_INCLUDE_RHS",
-                    default=True,
-                )
+                qi_two_level_smoothed_load_basis = bool(qi_two_level_policy.smoothed_load_basis)
+                qi_two_level_smoothed_load_basis_combine = bool(qi_two_level_policy.smoothed_load_basis_combine)
+                qi_two_level_smoothed_load_max_directions = int(qi_two_level_policy.smoothed_load_max_directions)
+                qi_two_level_smoothed_load_max_rank = int(qi_two_level_policy.smoothed_load_max_rank)
+                qi_two_level_smoothed_load_fsavg_lmax = int(qi_two_level_policy.smoothed_load_fsavg_lmax)
+                qi_two_level_smoothed_load_angular_lmax = int(qi_two_level_policy.smoothed_load_angular_lmax)
+                qi_two_level_smoothed_load_max_extra_units = int(qi_two_level_policy.smoothed_load_max_extra_units)
+                qi_two_level_smoothed_load_include_rhs = bool(qi_two_level_policy.smoothed_load_include_rhs)
                 try:
                     qi_two_level_preconditioner_basis_reused_from_seed = qi_seed_basis_for_galerkin is not None
                     if qi_seed_basis_for_galerkin is None:
