@@ -35431,3 +35431,39 @@ Next refactor target:
 - Continue extracting sparse-PC branch helpers around x0 routing and
   fortran-reduced x-block solve setup, or move the generic sparse-PC metadata
   block into diagnostics.
+
+### 19.124 Fortran-reduced x-block x0 routing extraction
+
+Goal:
+
+- Remove the fortran-reduced x-block initial-guess shape routing from
+  ``v3_driver.py`` while preserving the exact reduced/full-shape behavior and
+  diagnostic message.
+
+Implementation:
+
+- Added ``prepare_fortran_reduced_xblock_initial_guess`` to
+  ``problems/profile_response/sparse_pc.py``.
+- The helper accepts already-reduced guesses, reduces full-size guesses through
+  the branch reduction map, handles ``None`` without diagnostics, and emits the
+  existing incompatible-shape message for rejected guesses.
+- Updated ``v3_driver.py`` to consume the helper before the existing seed
+  refinement stage.
+- Added focused tests for reduced-shape guesses, full-shape guesses,
+  ``None``, and incompatible shapes.
+- ``v3_driver.py`` is now about ``20604`` lines and
+  ``solve_v3_full_system_linear_gmres`` about ``15301`` lines.
+
+Validation:
+
+- ``python -m ruff check`` on touched source/tests: passed.
+- ``python -m compileall -q`` on touched source/tests: passed.
+- ``tests/test_profile_response_sparse_pc.py``: ``90 passed``.
+- Broader current profile-response/x-block/sparse-pattern shard:
+  ``367 passed in 114.92 s``.
+
+Next refactor target:
+
+- Extract the remaining fortran-reduced x-block setup context around factor
+  build and policy resolution, or move generic sparse-PC result metadata into
+  diagnostics.

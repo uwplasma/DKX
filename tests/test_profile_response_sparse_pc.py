@@ -39,6 +39,7 @@ from sfincs_jax.problems.profile_response.sparse_pc import (
     finalize_xblock_global_coupling_metadata,
     finalize_xblock_two_level_metadata,
     finalize_xblock_moment_schur_metadata,
+    prepare_fortran_reduced_xblock_initial_guess,
     prepare_xblock_initial_guess,
     resolve_fortran_reduced_sparse_pc_backend,
     resolve_fortran_reduced_xblock_factor_policy,
@@ -1853,6 +1854,55 @@ def test_prepare_xblock_initial_guess_rejects_incompatible_shape_with_message() 
     assert len(result.messages) == 1
     assert "ignoring incompatible x0 shape=(3,)" in result.messages[0][1]
     assert "expected=(2,) or (4,)" in result.messages[0][1]
+
+
+def test_prepare_fortran_reduced_xblock_initial_guess_routes_reduced_and_full_shapes() -> None:
+    reduced = jnp.asarray([1.0, 2.0])
+    full = jnp.asarray([10.0, 11.0, 12.0, 13.0])
+    rhs_reduced = jnp.zeros(2)
+    rhs_full = jnp.zeros(4)
+
+    reduced_result = prepare_fortran_reduced_xblock_initial_guess(
+        x0=reduced,
+        sparse_pc_rhs=rhs_reduced,
+        full_rhs=rhs_full,
+        reduce_full=lambda v: v[jnp.asarray([1, 3])],
+    )
+    full_result = prepare_fortran_reduced_xblock_initial_guess(
+        x0=full,
+        sparse_pc_rhs=rhs_reduced,
+        full_rhs=rhs_full,
+        reduce_full=lambda v: v[jnp.asarray([1, 3])],
+    )
+
+    assert reduced_result.messages == ()
+    assert jnp.asarray(reduced_result.x0_full).tolist() == [1.0, 2.0]
+    assert full_result.messages == ()
+    assert jnp.asarray(full_result.x0_full).tolist() == [11.0, 13.0]
+
+
+def test_prepare_fortran_reduced_xblock_initial_guess_handles_none_and_bad_shape() -> None:
+    none_result = prepare_fortran_reduced_xblock_initial_guess(
+        x0=None,
+        sparse_pc_rhs=jnp.zeros(2),
+        full_rhs=jnp.zeros(4),
+        reduce_full=lambda v: v,
+    )
+    bad_result = prepare_fortran_reduced_xblock_initial_guess(
+        x0=jnp.ones(3),
+        sparse_pc_rhs=jnp.zeros(2),
+        full_rhs=jnp.zeros(4),
+        reduce_full=lambda v: v,
+    )
+
+    assert none_result.x0_full is None
+    assert none_result.messages == ()
+    assert bad_result.x0_full is None
+    assert len(bad_result.messages) == 1
+    assert "fortran_reduced_pc_gmres xblock ignoring incompatible x0 shape=(3,)" in (
+        bad_result.messages[0][1]
+    )
+    assert "expected=(2,) or (4,)" in bad_result.messages[0][1]
 
 
 def test_xblock_seed_policy_defaults_and_env_overrides() -> None:

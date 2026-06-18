@@ -3074,6 +3074,38 @@ def prepare_xblock_initial_guess(
     )
 
 
+def prepare_fortran_reduced_xblock_initial_guess(
+    *,
+    x0: object | None,
+    sparse_pc_rhs: jnp.ndarray,
+    full_rhs: jnp.ndarray,
+    reduce_full: ArrayFn,
+) -> XBlockInitialGuessSetup:
+    """Route user-provided x0 into the fortran-reduced x-block solve space."""
+
+    if x0 is None:
+        return XBlockInitialGuessSetup(x0_full=None, messages=())
+    x0_arr = jnp.asarray(x0, dtype=jnp.float64)
+    if x0_arr.shape == sparse_pc_rhs.shape:
+        return XBlockInitialGuessSetup(x0_full=x0_arr, messages=())
+    if x0_arr.shape == full_rhs.shape:
+        return XBlockInitialGuessSetup(
+            x0_full=jnp.asarray(reduce_full(x0_arr), dtype=jnp.float64),
+            messages=(),
+        )
+    return XBlockInitialGuessSetup(
+        x0_full=None,
+        messages=(
+            (
+                1,
+                "solve_v3_full_system_linear_gmres: fortran_reduced_pc_gmres xblock "
+                f"ignoring incompatible x0 shape={tuple(x0_arr.shape)} "
+                f"expected={tuple(sparse_pc_rhs.shape)} or {tuple(full_rhs.shape)}",
+            ),
+        ),
+    )
+
+
 def resolve_xblock_seed_policy_setup(
     *,
     moment_schur_used: bool,
@@ -4207,6 +4239,7 @@ __all__ = [
     "build_sparse_pc_active_dof_setup",
     "fp_xblock_global_correction_metadata",
     "fp_xblock_highx_residual_correction_metadata",
+    "prepare_fortran_reduced_xblock_initial_guess",
     "resolve_fortran_reduced_sparse_pc_backend",
     "resolve_fortran_reduced_xblock_factor_policy",
     "resolve_fortran_reduced_xblock_global_coupling_policy",

@@ -230,6 +230,7 @@ from .problems.profile_response.sparse_pc import (
     finalize_xblock_global_coupling_metadata,
     finalize_xblock_moment_schur_metadata,
     finalize_xblock_two_level_metadata,
+    prepare_fortran_reduced_xblock_initial_guess,
     prepare_xblock_initial_guess,
     resolve_sparse_pc_entry_policy,
     resolve_fortran_reduced_sparse_pc_backend,
@@ -7122,20 +7123,16 @@ def solve_v3_full_system_linear_gmres(
             global_coupling_stats = global_coupling_result.stats
             pc_factor_s += float(global_coupling_result.setup_s)
 
-            x0_sparse = None
-            if x0 is not None:
-                x0_arr = jnp.asarray(x0, dtype=jnp.float64)
-                if x0_arr.shape == sparse_pc_rhs.shape:
-                    x0_sparse = x0_arr
-                elif x0_arr.shape == rhs.shape:
-                    x0_sparse = _sparse_pc_reduce_full(x0_arr)
-                elif emit is not None:
-                    emit(
-                        1,
-                        "solve_v3_full_system_linear_gmres: fortran_reduced_pc_gmres xblock "
-                        f"ignoring incompatible x0 shape={tuple(x0_arr.shape)} "
-                        f"expected={tuple(sparse_pc_rhs.shape)} or {tuple(rhs.shape)}",
-                    )
+            fortran_x0_setup = prepare_fortran_reduced_xblock_initial_guess(
+                x0=x0,
+                sparse_pc_rhs=sparse_pc_rhs,
+                full_rhs=rhs,
+                reduce_full=_sparse_pc_reduce_full,
+            )
+            x0_sparse = fortran_x0_setup.x0_full
+            if emit is not None:
+                for level, message in fortran_x0_setup.messages:
+                    emit(level, message)
 
             sparse_pc_rhs_norm = rhs1_l2_norm_float(sparse_pc_rhs)
             target = rhs1_residual_target(
