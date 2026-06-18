@@ -8,9 +8,11 @@ import pytest
 
 from sfincs_jax.problems.profile_response.auto_solve import (
     RHS1AutoHostSolveContext,
+    RHS1SparseHostSafeSolveContext,
     RHS1StructuredCSRSolveContext,
     solve_rhs1_structured_full_csr_explicit,
     try_rhs1_auto_host_solve,
+    try_rhs1_sparse_host_safe_solve,
 )
 
 
@@ -32,6 +34,16 @@ def _full_fp_op(*, total_size: int = 20, constraint_scheme: int = 1) -> SimpleNa
         include_phi1=False,
         constraint_scheme=constraint_scheme,
         fblock=SimpleNamespace(fp=object(), pas=None),
+    )
+
+
+def _constrained_pas_op() -> SimpleNamespace:
+    return SimpleNamespace(
+        total_size=12,
+        rhs_mode=1,
+        include_phi1=False,
+        constraint_scheme=2,
+        fblock=SimpleNamespace(fp=None, pas=object()),
     )
 
 
@@ -196,3 +208,75 @@ def test_structured_full_csr_explicit_normalizes_metadata(monkeypatch: pytest.Mo
     assert result.metadata["csr_nnz"] == 17
     assert result.metadata["sparse_pc_factor_nbytes_estimate"] == 2048
     assert result.metadata["structured_active_size"] == 7
+
+
+def test_sparse_host_safe_returns_direct_sparse_host_result() -> None:
+    calls: list[dict[str, Any]] = []
+
+    def solve_driver(**kwargs: Any) -> _FakeResult:
+        calls.append(kwargs)
+        return _FakeResult(gmres=_FakeGMRES(residual_norm=1.0e-12), metadata={})
+
+    result = try_rhs1_sparse_host_safe_solve(
+        RHS1SparseHostSafeSolveContext(
+            nml=object(),
+            which_rhs=None,
+            op=_full_fp_op(),
+            x0=None,
+            tol=1.0e-10,
+            atol=0.0,
+            restart=20,
+            maxiter=50,
+            identity_shift=0.0,
+            phi1_hat_base=None,
+            differentiable=False,
+            emit=None,
+            recycle_basis=None,
+            solve_driver=solve_driver,
+            solve_method_kind_explicit="sparse_host_safe",
+            requested=True,
+        )
+    )
+
+    assert len(calls) == 1
+    assert calls[0]["solve_method"] == "sparse_host"
+    assert result.metadata["safe_sparse_host_fallback_used"] is False
+    assert result.metadata["requested_solve_method"] == "sparse_host_safe"
+    assert result.metadata["accepted_converged"] is True
+
+
+def test_sparse_host_safe_falls_back_for_constrained_pas_sparse_lu_failure() -> None:
+    calls: list[str] = []
+    messages: list[str] = []
+
+    def solve_driver(**kwargs: Any) -> _FakeResult:
+        calls.append(str(kwargs["solve_method"]))
+        if kwargs["solve_method"] == "sparse_host":
+            raise RuntimeError("Host sparse factorization failed: singular")
+        return _FakeResult(gmres=_FakeGMRES(residual_norm=1.0e-11), metadata={})
+
+    result = try_rhs1_sparse_host_safe_solve(
+        RHS1SparseHostSafeSolveContext(
+            nml=object(),
+            which_rhs=None,
+            op=_constrained_pas_op(),
+            x0=None,
+            tol=1.0e-10,
+            atol=0.0,
+            restart=20,
+            maxiter=50,
+            identity_shift=0.0,
+            phi1_hat_base=None,
+            differentiable=False,
+            emit=lambda _level, msg: messages.append(msg),
+            recycle_basis=None,
+            solve_driver=solve_driver,
+            solve_method_kind_explicit="sparse_host_safe",
+            requested=True,
+        )
+    )
+
+    assert calls == ["sparse_host", "petsc_compat"]
+    assert result.metadata["safe_sparse_host_fallback_used"] is True
+    assert "Host sparse factorization failed" in result.metadata["sparse_host_failure"]
+    assert any("PETSc-compatible minimum-norm" in message for message in messages)

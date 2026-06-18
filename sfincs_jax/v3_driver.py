@@ -171,9 +171,11 @@ from .rhs1_schur_policy import resolve_rhs1_schur_base_kind
 from .problems.profile_response.handoff import rhs1_accept_candidate
 from .problems.profile_response.auto_solve import (
     RHS1AutoHostSolveContext,
+    RHS1SparseHostSafeSolveContext,
     RHS1StructuredCSRSolveContext,
     solve_rhs1_structured_full_csr_explicit,
     try_rhs1_auto_host_solve,
+    try_rhs1_sparse_host_safe_solve,
 )
 from .problems.profile_response.dense import (
     HostDenseFullSolveContext,
@@ -3353,75 +3355,28 @@ def solve_v3_full_system_linear_gmres(
         emit(1, f"solve_v3_full_system_linear_gmres: GMRES tol={tol} atol={atol} restart={restart} maxiter={maxiter} solve_method={solve_method}")
         emit(1, "solve_v3_full_system_linear_gmres: evaluateJacobian called (matrix-free)")
     solve_method_kind_explicit = str(solve_method).strip().lower().replace("-", "_")
-    if solve_method_kind_explicit in _SPARSE_HOST_SAFE_SOLVE_METHODS:
-        try:
-            direct_result = solve_v3_full_system_linear_gmres(
-                nml=nml,
-                which_rhs=which_rhs,
-                op=op,
-                x0=x0,
-                tol=tol,
-                atol=atol,
-                restart=restart,
-                maxiter=maxiter,
-                solve_method="sparse_host",
-                identity_shift=identity_shift,
-                phi1_hat_base=phi1_hat_base,
-                differentiable=differentiable,
-                emit=emit,
-                recycle_basis=recycle_basis,
-            )
-            metadata = dict(getattr(direct_result, "metadata", None) or {})
-            metadata.update(
-                {
-                    "requested_solve_method": solve_method_kind_explicit,
-                    "safe_sparse_host_fallback_used": False,
-                    "accepted_converged": bool(metadata.get("accepted_converged", True)),
-                    "acceptance_criterion": metadata.get("acceptance_criterion", "true_residual"),
-                }
-            )
-            return replace(direct_result, metadata=metadata)
-        except RuntimeError as exc:
-            if "Host sparse factorization failed" not in str(exc):
-                raise
-            if not (
-                int(op.rhs_mode) == 1
-                and int(op.constraint_scheme) == 2
-                and (not bool(op.include_phi1))
-                and op.fblock.pas is not None
-            ):
-                raise
-            if emit is not None:
-                emit(
-                    0,
-                    "solve_v3_full_system_linear_gmres: sparse_host_safe falling back to "
-                    "PETSc-compatible minimum-norm constrained-PAS branch after sparse LU failure",
-                )
-            compat_result = solve_v3_full_system_linear_gmres(
-                nml=nml,
-                which_rhs=which_rhs,
-                op=op,
-                x0=x0,
-                tol=tol,
-                atol=atol,
-                restart=restart,
-                maxiter=maxiter,
-                solve_method="petsc_compat",
-                identity_shift=identity_shift,
-                phi1_hat_base=phi1_hat_base,
-                differentiable=differentiable,
-                emit=emit,
-                recycle_basis=recycle_basis,
-            )
-            metadata = dict(getattr(compat_result, "metadata", None) or {})
-            metadata.update(
-                {
-                    "requested_solve_method": solve_method_kind_explicit,
-                    "safe_sparse_host_fallback_used": True,
-                    "sparse_host_failure": str(exc),
-                }
-            )
-            return replace(compat_result, metadata=metadata)
+    sparse_host_safe_result = try_rhs1_sparse_host_safe_solve(
+        RHS1SparseHostSafeSolveContext(
+            nml=nml,
+            which_rhs=which_rhs,
+            op=op,
+            x0=x0,
+            tol=float(tol),
+            atol=float(atol),
+            restart=int(restart),
+            maxiter=maxiter,
+            identity_shift=float(identity_shift),
+            phi1_hat_base=phi1_hat_base,
+            differentiable=differentiable,
+            emit=emit,
+            recycle_basis=recycle_basis,
+            solve_driver=solve_v3_full_system_linear_gmres,
+            solve_method_kind_explicit=solve_method_kind_explicit,
+            requested=solve_method_kind_explicit in _SPARSE_HOST_SAFE_SOLVE_METHODS,
+        )
+    )
+    if sparse_host_safe_result is not None:
+        return sparse_host_safe_result
     if (
         solve_method_kind_explicit in _SPARSE_HOST_PC_GMRES_SOLVE_METHODS
         or solve_method_kind_explicit in _SPARSE_HOST_XBLOCK_PC_GMRES_SOLVE_METHODS

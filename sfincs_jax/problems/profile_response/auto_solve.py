@@ -65,6 +65,28 @@ class RHS1StructuredCSRSolveContext:
     structured_solver: Callable[..., Any]
 
 
+@dataclass(frozen=True)
+class RHS1SparseHostSafeSolveContext:
+    """Inputs for the host sparse solve with constrained-PAS safe fallback."""
+
+    nml: Any
+    which_rhs: int | None
+    op: Any
+    x0: Any
+    tol: float
+    atol: float
+    restart: int
+    maxiter: int | None
+    identity_shift: float
+    phi1_hat_base: Any
+    differentiable: bool | None
+    emit: Callable[[int, str], None] | None
+    recycle_basis: Sequence[Any] | None
+    solve_driver: Callable[..., Any]
+    solve_method_kind_explicit: str
+    requested: bool
+
+
 def _env_float(name: str, default: float) -> float:
     raw = os.environ.get(name, "").strip()
     try:
@@ -329,9 +351,88 @@ def solve_rhs1_structured_full_csr_explicit(context: RHS1StructuredCSRSolveConte
     return replace(structured_result, metadata=structured_metadata)
 
 
+def try_rhs1_sparse_host_safe_solve(context: RHS1SparseHostSafeSolveContext) -> Any | None:
+    """Run ``sparse_host_safe`` or return ``None`` when it was not requested."""
+
+    if not bool(context.requested):
+        return None
+    try:
+        direct_result = context.solve_driver(
+            nml=context.nml,
+            which_rhs=context.which_rhs,
+            op=context.op,
+            x0=context.x0,
+            tol=context.tol,
+            atol=context.atol,
+            restart=context.restart,
+            maxiter=context.maxiter,
+            solve_method="sparse_host",
+            identity_shift=context.identity_shift,
+            phi1_hat_base=context.phi1_hat_base,
+            differentiable=context.differentiable,
+            emit=context.emit,
+            recycle_basis=context.recycle_basis,
+        )
+    except RuntimeError as exc:
+        if "Host sparse factorization failed" not in str(exc):
+            raise
+        op = context.op
+        constrained_pas = bool(
+            int(op.rhs_mode) == 1
+            and int(op.constraint_scheme) == 2
+            and (not bool(op.include_phi1))
+            and op.fblock.pas is not None
+        )
+        if not constrained_pas:
+            raise
+        if context.emit is not None:
+            context.emit(
+                0,
+                "solve_v3_full_system_linear_gmres: sparse_host_safe falling back to "
+                "PETSc-compatible minimum-norm constrained-PAS branch after sparse LU failure",
+            )
+        compat_result = context.solve_driver(
+            nml=context.nml,
+            which_rhs=context.which_rhs,
+            op=op,
+            x0=context.x0,
+            tol=context.tol,
+            atol=context.atol,
+            restart=context.restart,
+            maxiter=context.maxiter,
+            solve_method="petsc_compat",
+            identity_shift=context.identity_shift,
+            phi1_hat_base=context.phi1_hat_base,
+            differentiable=context.differentiable,
+            emit=context.emit,
+            recycle_basis=context.recycle_basis,
+        )
+        return _annotate_auto_result(
+            compat_result,
+            {
+                "requested_solve_method": str(context.solve_method_kind_explicit),
+                "safe_sparse_host_fallback_used": True,
+                "sparse_host_failure": str(exc),
+            },
+        )
+
+    metadata = dict(getattr(direct_result, "metadata", None) or {})
+    metadata.update(
+        {
+            "requested_solve_method": str(context.solve_method_kind_explicit),
+            "safe_sparse_host_fallback_used": False,
+            "accepted_converged": bool(metadata.get("accepted_converged", True)),
+            "acceptance_criterion": metadata.get("acceptance_criterion", "true_residual"),
+        }
+    )
+    return replace(direct_result, metadata=metadata)
+
+
 __all__ = [
     "RHS1AutoHostSolveContext",
+    "RHS1SparseHostSafeSolveContext",
     "RHS1StructuredCSRSolveContext",
     "solve_rhs1_structured_full_csr_explicit",
+    "try_rhs1_sparse_host_safe_solve",
     "try_rhs1_auto_host_solve",
 ]
