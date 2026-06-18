@@ -33205,3 +33205,47 @@ Next refactor target:
 - Extract x-block row/column equilibration option parsing and setup metadata
   defaults, keeping assembled-operator construction and the actual scaling
   application in the driver until covered by direct policy tests.
+
+### 19.72 RHSMode=1 x-block assembled equilibration extraction
+
+Goal:
+
+- Move assembled-operator row/column equilibration construction out of
+  ``v3_driver.py`` while preserving the same scaling vectors, metadata fields,
+  and row/column transformed solve behavior.
+
+Implementation:
+
+- Extended ``sfincs_jax/problems/profile_response/sparse_pc.py`` with
+  ``XBlockAssembledEquilibrationSetup`` and
+  ``build_xblock_assembled_equilibration_setup``.
+- Moved row/column equilibration env parsing, norm normalization, sparse row
+  and column norm computation, clipped scale construction, finite/shape gates,
+  metadata dictionaries, and status messages into the sparse-PC helper.
+- Kept assembled-operator construction, device CSR construction, and the
+  actual row/column transformed Krylov solve in ``v3_driver.py``.
+- Added direct tests for row-only and row+column equilibration scale/metadata
+  behavior.
+- ``solve_v3_full_system_linear_gmres`` is now about ``19931`` lines and
+  ``v3_driver.py`` is about ``25179`` lines.
+
+Validation so far:
+
+- ``python -m ruff check sfincs_jax/problems/profile_response/sparse_pc.py
+  sfincs_jax/v3_driver.py tests/test_profile_response_sparse_pc.py``: passed.
+- ``python -m compileall -q
+  sfincs_jax/problems/profile_response/sparse_pc.py sfincs_jax/v3_driver.py
+  tests/test_profile_response_sparse_pc.py``: passed.
+- ``PYTHONDONTWRITEBYTECODE=1 JAX_ENABLE_X64=True pytest -q
+  -p no:cacheprovider tests/test_profile_response_sparse_pc.py``:
+  ``15 passed in 0.75 s``.
+- Focused assembled row/column equilibration regression subset:
+  ``18 passed in 11.22 s``.
+- Broader sparse-PC/x-block/dispatch subset:
+  ``93 passed in 40.82 s``.
+
+Next refactor target:
+
+- Extract assembled-operator preflight/memory-budget metadata and conservative
+  active-pattern selection from the x-block branch, keeping materialization and
+  validation in the driver until the preflight policy is covered directly.

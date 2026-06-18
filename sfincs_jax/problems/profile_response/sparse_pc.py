@@ -204,6 +204,23 @@ class XBlockKrylovMatvecSetup:
     messages: tuple[tuple[int, str], ...]
 
 
+@dataclass(frozen=True)
+class XBlockAssembledEquilibrationSetup:
+    """Row/column equilibration state for an assembled x-block operator."""
+
+    row_enabled: bool
+    row_built: bool
+    row_metadata: dict[str, object]
+    row_scale: jnp.ndarray | None
+    inv_row_scale: jnp.ndarray | None
+    col_enabled: bool
+    col_built: bool
+    col_metadata: dict[str, object]
+    col_scale: jnp.ndarray | None
+    inv_col_scale: jnp.ndarray | None
+    messages: tuple[tuple[int, str], ...]
+
+
 def _env_value(env: Mapping[str, str] | None, key: str) -> str:
     source = env if env is not None else {}
     return str(source.get(key, "")).strip()
@@ -814,6 +831,195 @@ def build_xblock_krylov_matvec_setup(
         expand_reduced=expand_reduced,
         matvec_no_count=matvec_no_count,
         matvec=matvec,
+        messages=tuple(messages),
+    )
+
+
+def _normalized_equilibration_norm(value: str) -> str:
+    norm = str(value).strip().lower().replace("-", "_")
+    if norm in {"inf", "max", "maximum"}:
+        return "linf"
+    if norm in {"linf", "l1", "l2"}:
+        return norm
+    return "linf"
+
+
+def build_xblock_assembled_equilibration_setup(
+    *,
+    assembled_matrix: object,
+    xblock_linear_size: int,
+    elapsed_s: Callable[[], float],
+    env: Mapping[str, str] | None = None,
+) -> XBlockAssembledEquilibrationSetup:
+    """Build optional row/column scaling for assembled x-block Krylov operators."""
+
+    col_enabled = _env_bool(
+        env,
+        "SFINCS_JAX_RHSMODE1_XBLOCK_ASSEMBLED_OPERATOR_COL_EQUILIBRATE",
+        default=False,
+    )
+    row_enabled = _env_bool(
+        env,
+        "SFINCS_JAX_RHSMODE1_XBLOCK_ASSEMBLED_OPERATOR_ROW_EQUILIBRATE",
+        default=bool(col_enabled),
+    )
+    row_metadata: dict[str, object] = {}
+    col_metadata: dict[str, object] = {}
+    row_scale_jnp: jnp.ndarray | None = None
+    inv_row_scale_jnp: jnp.ndarray | None = None
+    col_scale_jnp: jnp.ndarray | None = None
+    inv_col_scale_jnp: jnp.ndarray | None = None
+    messages: list[tuple[int, str]] = []
+    row_built = False
+    col_built = False
+    if not bool(row_enabled):
+        return XBlockAssembledEquilibrationSetup(
+            row_enabled=bool(row_enabled),
+            row_built=False,
+            row_metadata=row_metadata,
+            row_scale=None,
+            inv_row_scale=None,
+            col_enabled=bool(col_enabled),
+            col_built=False,
+            col_metadata=col_metadata,
+            col_scale=None,
+            inv_col_scale=None,
+            messages=(),
+        )
+
+    row_start_s = float(elapsed_s())
+    norm = _normalized_equilibration_norm(
+        _env_value(env, "SFINCS_JAX_RHSMODE1_XBLOCK_ASSEMBLED_OPERATOR_ROW_EQUILIBRATE_NORM") or "linf"
+    )
+    floor = _env_float(
+        env,
+        "SFINCS_JAX_RHSMODE1_XBLOCK_ASSEMBLED_OPERATOR_ROW_EQUILIBRATE_FLOOR",
+        default=1.0e-14,
+    )
+    floor = max(0.0, float(floor))
+    max_scale = max(
+        1.0,
+        _env_float(
+            env,
+            "SFINCS_JAX_RHSMODE1_XBLOCK_ASSEMBLED_OPERATOR_ROW_EQUILIBRATE_MAX_SCALE",
+            default=1.0e8,
+        ),
+    )
+    assembled_csr = assembled_matrix.tocsr()
+    abs_csr = abs(assembled_csr)
+    if norm == "l1":
+        row_norm = np.asarray(abs_csr.sum(axis=1), dtype=np.float64).reshape((-1,))
+    elif norm == "l2":
+        squared_csr = assembled_csr.copy()
+        squared_csr.data = np.asarray(np.abs(squared_csr.data) ** 2, dtype=np.float64)
+        row_norm = np.sqrt(np.asarray(squared_csr.sum(axis=1), dtype=np.float64).reshape((-1,)))
+    else:
+        row_norm = np.asarray(abs_csr.max(axis=1).toarray(), dtype=np.float64).reshape((-1,))
+    row_norm = np.asarray(row_norm, dtype=np.float64)
+    finite_positive = np.isfinite(row_norm) & (row_norm > float(floor))
+    raw_scale = np.ones_like(row_norm, dtype=np.float64)
+    raw_scale[finite_positive] = 1.0 / row_norm[finite_positive]
+    row_scale_np = np.clip(raw_scale, 1.0 / float(max_scale), float(max_scale))
+    inv_row_scale_np = 1.0 / row_scale_np
+    expected_shape = (int(xblock_linear_size),)
+    if (
+        row_scale_np.shape != expected_shape
+        or not np.all(np.isfinite(row_scale_np))
+        or not np.all(np.isfinite(inv_row_scale_np))
+    ):
+        raise RuntimeError("assembled x-block row equilibration produced invalid row scales")
+    row_scale_jnp = jnp.asarray(row_scale_np, dtype=jnp.float64)
+    inv_row_scale_jnp = jnp.asarray(inv_row_scale_np, dtype=jnp.float64)
+    row_built = True
+
+    if bool(col_enabled):
+        col_start_s = float(elapsed_s())
+        row_scaled_abs = abs_csr.multiply(row_scale_np[:, None])
+        if norm == "l1":
+            col_norm = np.asarray(row_scaled_abs.sum(axis=0), dtype=np.float64).reshape((-1,))
+        elif norm == "l2":
+            row_scaled_squared = assembled_csr.copy()
+            row_scaled_squared.data = np.asarray(row_scaled_squared.data, dtype=np.float64) ** 2
+            row_scaled_squared = row_scaled_squared.multiply((row_scale_np**2)[:, None])
+            col_norm = np.sqrt(np.asarray(row_scaled_squared.sum(axis=0), dtype=np.float64).reshape((-1,)))
+        else:
+            col_norm = np.asarray(row_scaled_abs.max(axis=0).toarray(), dtype=np.float64).reshape((-1,))
+        col_norm = np.asarray(col_norm, dtype=np.float64)
+        col_finite_positive = np.isfinite(col_norm) & (col_norm > float(floor))
+        raw_col_scale = np.ones_like(col_norm, dtype=np.float64)
+        raw_col_scale[col_finite_positive] = 1.0 / col_norm[col_finite_positive]
+        col_scale_np = np.clip(raw_col_scale, 1.0 / float(max_scale), float(max_scale))
+        inv_col_scale_np = 1.0 / col_scale_np
+        if (
+            col_scale_np.shape != expected_shape
+            or not np.all(np.isfinite(col_scale_np))
+            or not np.all(np.isfinite(inv_col_scale_np))
+        ):
+            raise RuntimeError("assembled x-block column equilibration produced invalid column scales")
+        col_scale_jnp = jnp.asarray(col_scale_np, dtype=jnp.float64)
+        inv_col_scale_jnp = jnp.asarray(inv_col_scale_np, dtype=jnp.float64)
+        col_built = True
+        col_norm_positive = col_norm[col_finite_positive]
+        col_metadata = {
+            "enabled": True,
+            "built": True,
+            "norm": norm,
+            "floor": float(floor),
+            "max_scale": float(max_scale),
+            "setup_s": float(elapsed_s()) - col_start_s,
+            "zero_or_tiny_columns": int(col_norm.size - np.count_nonzero(col_finite_positive)),
+            "col_norm_min": float(np.min(col_norm_positive)) if col_norm_positive.size else 0.0,
+            "col_norm_max": float(np.max(col_norm_positive)) if col_norm_positive.size else 0.0,
+            "col_scale_min": float(np.min(col_scale_np)) if col_scale_np.size else 0.0,
+            "col_scale_max": float(np.max(col_scale_np)) if col_scale_np.size else 0.0,
+        }
+
+    row_norm_positive = row_norm[finite_positive]
+    row_metadata = {
+        "enabled": True,
+        "built": True,
+        "norm": norm,
+        "floor": float(floor),
+        "max_scale": float(max_scale),
+        "setup_s": float(elapsed_s()) - row_start_s,
+        "zero_or_tiny_rows": int(row_norm.size - np.count_nonzero(finite_positive)),
+        "row_norm_min": float(np.min(row_norm_positive)) if row_norm_positive.size else 0.0,
+        "row_norm_max": float(np.max(row_norm_positive)) if row_norm_positive.size else 0.0,
+        "row_scale_min": float(np.min(row_scale_np)) if row_scale_np.size else 0.0,
+        "row_scale_max": float(np.max(row_scale_np)) if row_scale_np.size else 0.0,
+        "column_equilibration": bool(col_built),
+    }
+    messages.append(
+        (
+            0,
+            "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
+            "assembled row equilibration built "
+            f"norm={norm} "
+            f"scale_range=[{float(np.min(row_scale_np)):.3e}, {float(np.max(row_scale_np)):.3e}]",
+        )
+    )
+    if bool(col_built):
+        messages.append(
+            (
+                0,
+                "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
+                "assembled column equilibration built "
+                f"norm={norm} "
+                f"scale_range=[{col_metadata['col_scale_min']:.3e}, {col_metadata['col_scale_max']:.3e}]",
+            )
+        )
+
+    return XBlockAssembledEquilibrationSetup(
+        row_enabled=bool(row_enabled),
+        row_built=bool(row_built),
+        row_metadata=row_metadata,
+        row_scale=row_scale_jnp,
+        inv_row_scale=inv_row_scale_jnp,
+        col_enabled=bool(col_enabled),
+        col_built=bool(col_built),
+        col_metadata=col_metadata,
+        col_scale=col_scale_jnp,
+        inv_col_scale=inv_col_scale_jnp,
         messages=tuple(messages),
     )
 

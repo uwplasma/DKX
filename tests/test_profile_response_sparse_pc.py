@@ -5,11 +5,13 @@ from types import SimpleNamespace
 import numpy as np
 import pytest
 import jax.numpy as jnp
+from scipy import sparse as scipy_sparse
 
 from sfincs_jax.problems.profile_response.sparse_pc import (
     SparsePCGMRESContext,
     SparsePCPostMinresContext,
     apply_sparse_pc_post_minres,
+    build_xblock_assembled_equilibration_setup,
     build_xblock_krylov_matvec_setup,
     resolve_sparse_pc_entry_policy,
     resolve_xblock_qi_device_operator_reuse_setup,
@@ -372,6 +374,49 @@ def test_xblock_krylov_matvec_setup_full_space_is_identity_mapping() -> None:
     assert setup.expand_reduced(jnp.asarray([1.0, 2.0])).tolist() == [1.0, 2.0]
     assert setup.matvec(jnp.asarray([1.0, 2.0, 3.0])).tolist() == [2.0, 3.0, 4.0]
     assert int(setup.mv_count) == 1
+
+
+def test_xblock_assembled_equilibration_setup_builds_row_scales() -> None:
+    matrix = scipy_sparse.csr_matrix([[2.0, -1.0], [0.0, 4.0]])
+    setup = build_xblock_assembled_equilibration_setup(
+        assembled_matrix=matrix,
+        xblock_linear_size=2,
+        elapsed_s=lambda: 3.0,
+        env={"SFINCS_JAX_RHSMODE1_XBLOCK_ASSEMBLED_OPERATOR_ROW_EQUILIBRATE": "1"},
+    )
+
+    assert setup.row_enabled
+    assert setup.row_built
+    assert not setup.col_enabled
+    assert not setup.col_built
+    assert setup.row_metadata["norm"] == "linf"
+    assert np.asarray(setup.row_scale).tolist() == pytest.approx([0.5, 0.25])
+    assert np.asarray(setup.inv_row_scale).tolist() == pytest.approx([2.0, 4.0])
+    assert any("assembled row equilibration built" in message for _, message in setup.messages)
+
+
+def test_xblock_assembled_equilibration_setup_builds_row_and_column_scales() -> None:
+    matrix = scipy_sparse.csr_matrix([[2.0, 0.0], [1.0, 4.0]])
+    setup = build_xblock_assembled_equilibration_setup(
+        assembled_matrix=matrix,
+        xblock_linear_size=2,
+        elapsed_s=lambda: 5.0,
+        env={
+            "SFINCS_JAX_RHSMODE1_XBLOCK_ASSEMBLED_OPERATOR_COL_EQUILIBRATE": "1",
+            "SFINCS_JAX_RHSMODE1_XBLOCK_ASSEMBLED_OPERATOR_ROW_EQUILIBRATE_NORM": "l1",
+        },
+    )
+
+    assert setup.row_enabled
+    assert setup.row_built
+    assert setup.col_enabled
+    assert setup.col_built
+    assert setup.row_metadata["norm"] == "l1"
+    assert setup.col_metadata["norm"] == "l1"
+    assert setup.row_metadata["column_equilibration"] is True
+    assert np.all(np.isfinite(np.asarray(setup.col_scale)))
+    assert np.all(np.asarray(setup.col_scale) > 0.0)
+    assert any("assembled column equilibration built" in message for _, message in setup.messages)
 
 
 def test_sparse_pc_gmres_once_explicit_left_recomputes_true_residual() -> None:
