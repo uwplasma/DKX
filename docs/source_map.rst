@@ -463,6 +463,11 @@ the historical private driver name and test the focused module directly. This ke
   classification, preconditioner-option admission, and domain-decomposition
   block/overlap parsing. The driver consumes these typed setup results before
   entering the numerical solve loop.
+- ``sfincs_jax/problems/profile_response/linear_solve.py``:
+  RHSMode=1/profile-response Krylov routing for implicit, JIT, distributed,
+  GMRES, and BiCGStab solve attempts. This mirrors the transport linear-solve
+  module so solver-family selection is directly testable and no longer embedded
+  as a large nested body in ``v3_driver.py``.
 - ``sfincs_jax/problems/profile_response/solver_diagnostics.py``
   (legacy alias: ``sfincs_jax/rhs1_solver_diagnostics.py``):
   typed RHSMode=1 x-block correction diagnostic records and historical solver
