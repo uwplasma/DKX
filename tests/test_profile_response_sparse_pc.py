@@ -18,13 +18,16 @@ from sfincs_jax.problems.profile_response.sparse_pc import (
     build_xblock_assembled_operator_preflight_setup,
     build_xblock_krylov_matvec_setup,
     evaluate_xblock_moment_schur_probe_result,
+    failed_xblock_two_level_metadata,
     failed_xblock_moment_schur_metadata,
+    finalize_xblock_two_level_metadata,
     finalize_xblock_moment_schur_metadata,
     resolve_sparse_pc_entry_policy,
     resolve_xblock_qi_device_operator_reuse_setup,
     resolve_xblock_moment_schur_policy_setup,
     resolve_xblock_sparse_pc_setup,
     resolve_xblock_sparse_pc_side_policy_setup,
+    resolve_xblock_two_level_policy_setup,
     run_sparse_pc_gmres_once,
     finalize_xblock_assembled_operator_metadata,
 )
@@ -760,6 +763,52 @@ def test_xblock_moment_schur_metadata_helpers_normalize_success_and_failure() ->
     assert success == {"rank": 3, "setup_s": 1.5}
     assert failure["setup_s"] == 2.5
     assert failure["error"] == "ValueError: bad factor"
+
+
+def test_xblock_two_level_policy_defaults_off_and_honors_disabled_side() -> None:
+    off = resolve_xblock_two_level_policy_setup(precondition_side="right", env={})
+    no_side = resolve_xblock_two_level_policy_setup(
+        precondition_side="none",
+        env={"SFINCS_JAX_RHSMODE1_XBLOCK_PC_TWO_LEVEL": "1"},
+    )
+
+    assert not off.enabled
+    assert not off.should_build
+    assert off.mode == "additive"
+    assert no_side.enabled
+    assert not no_side.should_build
+
+
+def test_xblock_two_level_policy_parses_build_parameters() -> None:
+    setup = resolve_xblock_two_level_policy_setup(
+        precondition_side="left",
+        env={
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_TWO_LEVEL": "1",
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_TWO_LEVEL_MODE": "multiplicative",
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_TWO_LEVEL_MAX_DIRECTIONS": "7",
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_TWO_LEVEL_FSAVG_LMAX": "3",
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_TWO_LEVEL_MAX_EXTRA_UNITS": "2",
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_TWO_LEVEL_RCOND": "1e-8",
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_TWO_LEVEL_INCLUDE_RHS": "0",
+        },
+    )
+
+    assert setup.enabled
+    assert setup.should_build
+    assert setup.mode == "multiplicative"
+    assert setup.max_directions == 7
+    assert setup.fsavg_lmax == 3
+    assert setup.max_extra_units == 2
+    assert setup.rcond == pytest.approx(1.0e-8)
+    assert not setup.include_rhs
+
+
+def test_xblock_two_level_metadata_helpers_normalize_success_and_failure() -> None:
+    success = finalize_xblock_two_level_metadata(metadata={"mode": "additive"}, setup_s=0.25)
+    failure = failed_xblock_two_level_metadata(exc=RuntimeError("bad coarse"), setup_s=0.5)
+
+    assert success == {"mode": "additive", "setup_s": 0.25}
+    assert failure == {"error": "RuntimeError: bad coarse", "setup_s": 0.5}
 
 
 def test_sparse_pc_gmres_once_explicit_left_recomputes_true_residual() -> None:

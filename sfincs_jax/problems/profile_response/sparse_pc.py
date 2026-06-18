@@ -291,6 +291,20 @@ class XBlockMomentSchurProbeResult:
     messages: tuple[tuple[int, str], ...]
 
 
+@dataclass(frozen=True)
+class XBlockTwoLevelPolicySetup:
+    """Admission and build parameters for x-block two-level correction."""
+
+    enabled: bool
+    should_build: bool
+    mode: str
+    max_directions: int
+    fsavg_lmax: int
+    max_extra_units: int
+    rcond: float
+    include_rhs: bool
+
+
 def _env_value(env: Mapping[str, str] | None, key: str) -> str:
     source = env if env is not None else {}
     return str(source.get(key, "")).strip()
@@ -1534,6 +1548,81 @@ def failed_xblock_moment_schur_metadata(
     setup_s: float,
 ) -> dict[str, object]:
     """Return normalized moment-Schur failure metadata."""
+
+    return {
+        "error": f"{type(exc).__name__}: {exc}",
+        "setup_s": float(setup_s),
+    }
+
+
+def resolve_xblock_two_level_policy_setup(
+    *,
+    precondition_side: str,
+    env: Mapping[str, str] | None = None,
+) -> XBlockTwoLevelPolicySetup:
+    """Resolve x-block two-level correction admission and build parameters."""
+
+    enabled = _env_bool(
+        env,
+        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_TWO_LEVEL",
+        default=False,
+    )
+    return XBlockTwoLevelPolicySetup(
+        enabled=bool(enabled),
+        should_build=bool(enabled and str(precondition_side) != "none"),
+        mode=_env_value(env, "SFINCS_JAX_RHSMODE1_XBLOCK_PC_TWO_LEVEL_MODE") or "additive",
+        max_directions=_env_int(
+            env,
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_TWO_LEVEL_MAX_DIRECTIONS",
+            default=48,
+            minimum=1,
+        ),
+        fsavg_lmax=_env_int(
+            env,
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_TWO_LEVEL_FSAVG_LMAX",
+            default=8,
+            minimum=0,
+        ),
+        max_extra_units=_env_int(
+            env,
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_TWO_LEVEL_MAX_EXTRA_UNITS",
+            default=8,
+            minimum=0,
+        ),
+        rcond=max(
+            0.0,
+            _env_float(
+                env,
+                "SFINCS_JAX_RHSMODE1_XBLOCK_PC_TWO_LEVEL_RCOND",
+                default=1.0e-11,
+            ),
+        ),
+        include_rhs=_env_bool(
+            env,
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_TWO_LEVEL_INCLUDE_RHS",
+            default=True,
+        ),
+    )
+
+
+def finalize_xblock_two_level_metadata(
+    *,
+    metadata: Mapping[str, object],
+    setup_s: float,
+) -> dict[str, object]:
+    """Return two-level metadata with normalized setup timing."""
+
+    out = dict(metadata)
+    out["setup_s"] = float(setup_s)
+    return out
+
+
+def failed_xblock_two_level_metadata(
+    *,
+    exc: BaseException,
+    setup_s: float,
+) -> dict[str, object]:
+    """Return normalized two-level failure metadata."""
 
     return {
         "error": f"{type(exc).__name__}: {exc}",

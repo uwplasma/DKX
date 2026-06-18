@@ -33475,3 +33475,48 @@ Next refactor target:
 - Extract x-block two-level preconditioner policy/admission settings into the
   sparse-PC helper layer, then continue with global-coupling and seed policy
   routing before moving deeper numerical construction out of the driver.
+
+### 19.78 RHSMode=1 x-block two-level policy extraction
+
+Goal:
+
+- Move x-block two-level admission, env parsing, and setup/failure metadata
+  shaping out of ``v3_driver.py`` while preserving the actual two-level
+  preconditioner construction and application behavior.
+
+Implementation:
+
+- Extended ``sfincs_jax/problems/profile_response/sparse_pc.py`` with
+  ``XBlockTwoLevelPolicySetup``,
+  ``resolve_xblock_two_level_policy_setup``,
+  ``finalize_xblock_two_level_metadata``, and
+  ``failed_xblock_two_level_metadata``.
+- Moved two-level enablement, preconditioner-side admission, mode parsing,
+  max-direction/fsavg/extra-unit/rcond/include-RHS parsing, and success/failure
+  setup timing normalization into sparse-PC helpers.
+- Kept ``_build_rhs1_xblock_two_level_preconditioner`` and all numerical
+  application in ``v3_driver.py``.
+- Added direct tests for default-off behavior, disabled preconditioner side,
+  build-parameter parsing, and metadata normalization.
+- ``solve_v3_full_system_linear_gmres`` is now about ``19718`` lines and
+  ``v3_driver.py`` is about ``24978`` lines.
+
+Validation so far:
+
+- ``python -m ruff check sfincs_jax/problems/profile_response/sparse_pc.py
+  sfincs_jax/v3_driver.py tests/test_profile_response_sparse_pc.py``: passed.
+- ``python -m compileall -q
+  sfincs_jax/problems/profile_response/sparse_pc.py sfincs_jax/v3_driver.py
+  tests/test_profile_response_sparse_pc.py``: passed.
+- ``PYTHONDONTWRITEBYTECODE=1 JAX_ENABLE_X64=True pytest -q
+  -p no:cacheprovider tests/test_profile_response_sparse_pc.py``:
+  ``34 passed in 0.75 s``.
+- Focused two-level regression subset:
+  ``37 passed in 5.83 s``.
+- Broader sparse-PC/x-block/dispatch subset:
+  ``112 passed in 40.35 s``.
+
+Next refactor target:
+
+- Extract x-block global-coupling policy/admission settings and setup/failure
+  metadata shaping, then continue to seed and QI-specific routing layers.

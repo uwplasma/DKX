@@ -210,12 +210,15 @@ from .problems.profile_response.sparse_pc import (
     build_xblock_assembled_operator_preflight_setup,
     evaluate_xblock_moment_schur_probe_result,
     failed_xblock_moment_schur_metadata,
+    failed_xblock_two_level_metadata,
     finalize_xblock_moment_schur_metadata,
+    finalize_xblock_two_level_metadata,
     resolve_sparse_pc_entry_policy,
     resolve_xblock_qi_device_operator_reuse_setup,
     resolve_xblock_moment_schur_policy_setup,
     resolve_xblock_sparse_pc_setup,
     resolve_xblock_sparse_pc_side_policy_setup,
+    resolve_xblock_two_level_policy_setup,
     run_sparse_pc_gmres_once,
     XBlockAssembledPreflightError,
     finalize_xblock_assembled_operator_metadata,
@@ -3871,40 +3874,16 @@ def solve_v3_full_system_linear_gmres(
                             "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
                             f"constraint1 moment-Schur disabled after build failure ({type(exc).__name__}: {exc})",
                         )
-            two_level_enabled = _rhs1_bool_env("SFINCS_JAX_RHSMODE1_XBLOCK_PC_TWO_LEVEL", default=False)
+            two_level_policy = resolve_xblock_two_level_policy_setup(
+                precondition_side=str(precondition_side),
+                env=os.environ,
+            )
+            two_level_enabled = bool(two_level_policy.enabled)
             two_level_built = False
             two_level_metadata: dict[str, object] = {}
             two_level_stats = {"applies": 0, "coarse_applies": 0}
-            if two_level_enabled and precondition_side != "none":
+            if bool(two_level_policy.should_build):
                 two_level_start_s = sparse_timer.elapsed_s()
-                two_level_mode = os.environ.get(
-                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_TWO_LEVEL_MODE",
-                    "additive",
-                ).strip()
-                two_level_max_directions = _rhs1_int_env(
-                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_TWO_LEVEL_MAX_DIRECTIONS",
-                    default=48,
-                    minimum=1,
-                )
-                two_level_fsavg_lmax = _rhs1_int_env(
-                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_TWO_LEVEL_FSAVG_LMAX",
-                    default=8,
-                    minimum=0,
-                )
-                two_level_max_extra_units = _rhs1_int_env(
-                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_TWO_LEVEL_MAX_EXTRA_UNITS",
-                    default=8,
-                    minimum=0,
-                )
-                two_level_rcond = _rhs1_float_env(
-                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_TWO_LEVEL_RCOND",
-                    default=1.0e-11,
-                    minimum=0.0,
-                )
-                two_level_include_rhs = _rhs1_bool_env(
-                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_TWO_LEVEL_INCLUDE_RHS",
-                    default=True,
-                )
                 try:
                     precond_xblock_krylov, two_level_metadata, two_level_stats = (
                         _build_rhs1_xblock_two_level_preconditioner(
@@ -3914,23 +3893,26 @@ def solve_v3_full_system_linear_gmres(
                             base_preconditioner=precond_xblock_krylov,
                             direction_projector=_xblock_reduce_full if xblock_use_active_dof else None,
                             expected_size=int(xblock_linear_size),
-                            mode=two_level_mode,
-                            fsavg_lmax=two_level_fsavg_lmax,
-                            max_extra_units=two_level_max_extra_units,
-                            max_directions=two_level_max_directions,
-                            rcond=two_level_rcond,
-                            include_rhs=two_level_include_rhs,
+                            mode=two_level_policy.mode,
+                            fsavg_lmax=int(two_level_policy.fsavg_lmax),
+                            max_extra_units=int(two_level_policy.max_extra_units),
+                            max_directions=int(two_level_policy.max_directions),
+                            rcond=float(two_level_policy.rcond),
+                            include_rhs=bool(two_level_policy.include_rhs),
                             emit=emit,
                         )
                     )
                     two_level_built = True
-                    two_level_metadata["setup_s"] = float(sparse_timer.elapsed_s() - two_level_start_s)
+                    two_level_metadata = finalize_xblock_two_level_metadata(
+                        metadata=two_level_metadata,
+                        setup_s=float(sparse_timer.elapsed_s() - two_level_start_s),
+                    )
                     pc_factor_s += float(two_level_metadata["setup_s"])
                 except Exception as exc:  # noqa: BLE001
-                    two_level_metadata = {
-                        "error": f"{type(exc).__name__}: {exc}",
-                        "setup_s": float(sparse_timer.elapsed_s() - two_level_start_s),
-                    }
+                    two_level_metadata = failed_xblock_two_level_metadata(
+                        exc=exc,
+                        setup_s=float(sparse_timer.elapsed_s() - two_level_start_s),
+                    )
                     if emit is not None:
                         emit(
                             1,
