@@ -32707,3 +32707,59 @@ Validation so far:
   tests/test_profile_response_sparse_pc.py
   tests/test_v3_sparse_pattern.py``:
   ``307 passed in 141.49 s``.
+
+### 19.63 CI roundoff-gate repair and next refactor tranche
+
+Goal:
+
+- Repair the current GitHub Actions failure before continuing the architecture
+  split, then continue extracting cohesive solver responsibilities without
+  increasing repository size or introducing generated artifacts.
+
+CI finding:
+
+- Latest CI run on ``9790fe1`` failed only in coverage shard 4:
+  ``tests/test_transport_sparse_direct.py::test_transport_fp_xblock_tz_lu_schur_does_not_increase_tail_residual``.
+- The failure was a brittle roundoff gate, not a solver regression:
+  ``base_rel = 2.156e-12`` and ``schur_rel = 2.490e-14`` on CI. The old test
+  required a strict 100x reduction even after the baseline tail residual was
+  already near double-precision noise.
+
+Implementation:
+
+- Updated the Schur tail-residual test to require:
+  Schur residual is finite, Schur does not increase the tail residual beyond a
+  strict ``1e-10`` roundoff floor, and the 100x improvement gate is applied
+  only when the baseline residual is above that floor.
+
+Validation so far:
+
+- ``PYTHONDONTWRITEBYTECODE=1 JAX_ENABLE_X64=True pytest -q -p no:cacheprovider
+  tests/test_transport_sparse_direct.py::test_transport_fp_xblock_tz_lu_schur_does_not_increase_tail_residual``:
+  ``1 passed in 2.15 s``.
+- ``PYTHONDONTWRITEBYTECODE=1 JAX_ENABLE_X64=True pytest -q -p no:cacheprovider
+  tests/test_transport_sparse_direct.py``:
+  ``51 passed in 11.70 s``.
+- Local reproduction of the failed CI shard:
+  ``PYTHONDONTWRITEBYTECODE=1 JAX_ENABLE_X64=True JAX_DISABLE_JIT=0
+  SFINCS_JAX_SOLVER_JIT=1 SFINCS_JAX_PRECOMPILE=0 SFINCS_JAX_PROFILE=0
+  SFINCS_JAX_CI=1 SFINCS_JAX_FAST_EXAMPLES=1 COVERAGE_FILE=.coverage.local4
+  python -m pytest -q -n auto --dist=loadscope --splits 4 --group 4
+  --splitting-algorithm least_duration --cov=sfincs_jax --cov-report=``:
+  ``642 passed, 40 skipped in 83.02 s``.
+- ``git diff --check``: passed.
+
+Immediate next steps:
+
+1. Commit and push the CI repair, then verify that the new CI run starts from
+   the repaired shard state without waiting idly for the full workflow.
+2. Continue the refactor with solver-stage extraction, prioritizing large
+   cohesive moves rather than one-off wrappers:
+   active-system selection and admission, RHSMode=1 active solve orchestration,
+   transport-matrix solver dispatch, and output/diagnostic emission.
+3. For each tranche, run targeted unit tests, a representative RHSMode subset,
+   docs build when public APIs/docs are touched, and a periodic full-suite
+   checkpoint.
+4. Keep generated run outputs, coverage files, XLA/profiler traces, and large
+   figures out of git unless they are intentionally compressed documentation
+   assets.

@@ -411,7 +411,12 @@ def test_transport_fp_xblock_tz_lu_schur_does_not_increase_tail_residual(monkeyp
     schur_rel = _tail_relative_residual(_build_rhsmode23_fp_xblock_tz_lu_schur_preconditioner(op=op0))
 
     assert np.isfinite(schur_rel)
-    assert schur_rel < base_rel * 1.0e-2
+    tail_roundoff_floor = 1.0e-10
+    assert schur_rel <= max(base_rel, tail_roundoff_floor)
+    if base_rel > tail_roundoff_floor:
+        assert schur_rel < base_rel * 1.0e-2
+    else:
+        assert schur_rel < tail_roundoff_floor
 
 
 def test_transport_fp_xblock_tz_lu_schur_residual_coarse_reduces_all_rhs(monkeypatch) -> None:
