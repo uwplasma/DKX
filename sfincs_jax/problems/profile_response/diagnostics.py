@@ -1220,3 +1220,66 @@ def xblock_device_krylov_diagnostics(scope: Mapping[str, object]) -> dict[str, o
             method == "tfqmr_jax" and host_transfer_free_base
         ),
     }
+
+
+def xblock_sparse_pc_core_diagnostics(scope: Mapping[str, object]) -> dict[str, object]:
+    """Return top-level x-block sparse-PC solve diagnostics."""
+
+    method = str(scope["xblock_krylov_method"])
+    candidate_method = str(scope["candidate_krylov_method"])
+    device_estimated_matvecs = scope["device_krylov_estimated_matvecs"]
+    jax_factors = bool(scope["xblock_jax_factors"])
+    lower_fill_mode = str(scope["xblock_lower_fill_mode"])
+
+    return {
+        "solver_kind": scope["xblock_solver_kind"],
+        "residual_kind": "true_residual",
+        "accepted_converged": bool(scope["accepted_converged_xblock"]),
+        "acceptance_criterion": "true_residual",
+        "iterations": int(scope["reported_iterations"]),
+        "matvecs": int(scope["reported_matvecs"]),
+        "python_matvecs": int(scope["mv_count"]),
+        "device_cycle_estimated_matvecs": (
+            None if device_estimated_matvecs is None else int(device_estimated_matvecs)
+        ),
+        "krylov_method": method,
+        "candidate_krylov_method": candidate_method,
+        "candidate_iterations": int(scope["candidate_iterations"]),
+        "candidate_matvecs": int(scope["candidate_matvecs"]),
+        "candidate_residual_norm": float(scope["candidate_residual_norm"]),
+        "fallback_from_krylov_method": (
+            candidate_method if candidate_method != method else None
+        ),
+        "fallback_started_from_candidate": bool(
+            scope["fallback_started_from_candidate"]
+        ),
+        "fallback_candidate_improved_rhs": bool(
+            scope["fallback_candidate_improved_rhs"]
+        ),
+        "precondition_side": str(scope["precondition_side"]),
+        "default_right_preconditioned": bool(scope["xblock_default_right_pc"]),
+        "default_short_restart_capped": bool(scope["xblock_default_restart_capped"]),
+        "gmres_restart": int(scope["pc_restart"]),
+        "gmres_maxiter": int(scope["pc_maxiter"]),
+        "setup_s": float(scope["setup_s"]),
+        "solve_s": float(scope["solve_s"]),
+        "elapsed_s": float(scope["sparse_timer"].elapsed_s()),
+        "sparse_pc_factor_s": float(scope["pc_factor_s"]),
+        "sparse_pc_xblock_preconditioner_xi": int(
+            scope["xblock_preconditioner_xi"]
+        ),
+        "sparse_pc_xblock_preconditioner_built": bool(
+            scope["xblock_preconditioner_built"]
+        ),
+        "sparse_pc_xblock_assembled_host": bool(scope["xblock_assembled_host_fp"]),
+        "sparse_pc_xblock_jax_factors": jax_factors,
+        "sparse_pc_xblock_jax_factor_format": (
+            str(scope["xblock_jax_factor_format"]) if jax_factors else None
+        ),
+        "sparse_pc_xblock_jax_factor_apply": (
+            str(scope["xblock_jax_factor_apply"]) if jax_factors else None
+        ),
+        "xblock_lower_fill_mode": lower_fill_mode,
+        "xblock_lower_fill_requested": lower_fill_mode in {"probe", "force"},
+        "xblock_lower_fill_ignored_env": bool(scope["xblock_lower_fill_ignored_env"]),
+    }

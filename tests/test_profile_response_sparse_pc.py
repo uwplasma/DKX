@@ -18,6 +18,7 @@ from sfincs_jax.problems.profile_response.diagnostics import (
     xblock_qi_deflated_preconditioner_diagnostics,
     xblock_qi_device_preconditioner_diagnostics,
     xblock_qi_seed_preconditioner_diagnostics,
+    xblock_sparse_pc_core_diagnostics,
     xblock_side_probe_diagnostics,
 )
 from sfincs_jax.problems.profile_response.sparse_pc import (
@@ -1270,6 +1271,59 @@ def test_xblock_device_krylov_diagnostics_preserve_transfer_free_logic() -> None
     assert metadata["xblock_device_fgmres_host_transfer_free"] is True
     assert metadata["xblock_device_bicgstab_host_transfer_free"] is False
     assert metadata["xblock_device_tfqmr_host_transfer_free"] is False
+
+
+def test_xblock_sparse_pc_core_diagnostics_preserve_payload() -> None:
+    timer = SimpleNamespace(elapsed_s=lambda: 12.5)
+    metadata = xblock_sparse_pc_core_diagnostics(
+        {
+            "xblock_solver_kind": "sparse_pc_gmres",
+            "accepted_converged_xblock": True,
+            "reported_iterations": np.int64(12),
+            "reported_matvecs": np.int64(34),
+            "mv_count": np.int64(56),
+            "device_krylov_estimated_matvecs": np.int64(78),
+            "xblock_krylov_method": "fgmres_jax",
+            "candidate_krylov_method": "gmres_jax",
+            "candidate_iterations": 9,
+            "candidate_matvecs": 10,
+            "candidate_residual_norm": 1.0e-5,
+            "fallback_started_from_candidate": True,
+            "fallback_candidate_improved_rhs": False,
+            "precondition_side": "right",
+            "xblock_default_right_pc": True,
+            "xblock_default_restart_capped": False,
+            "pc_restart": 40,
+            "pc_maxiter": 80,
+            "setup_s": 0.5,
+            "solve_s": 1.5,
+            "sparse_timer": timer,
+            "pc_factor_s": 0.25,
+            "xblock_preconditioner_xi": 3,
+            "xblock_preconditioner_built": True,
+            "xblock_assembled_host_fp": False,
+            "xblock_jax_factors": True,
+            "xblock_jax_factor_format": "padded",
+            "xblock_jax_factor_apply": "vmap",
+            "xblock_lower_fill_mode": "probe",
+            "xblock_lower_fill_ignored_env": True,
+        }
+    )
+
+    assert metadata["solver_kind"] == "sparse_pc_gmres"
+    assert metadata["residual_kind"] == "true_residual"
+    assert metadata["accepted_converged"] is True
+    assert metadata["iterations"] == 12
+    assert metadata["python_matvecs"] == 56
+    assert metadata["device_cycle_estimated_matvecs"] == 78
+    assert metadata["fallback_from_krylov_method"] == "gmres_jax"
+    assert metadata["fallback_started_from_candidate"] is True
+    assert metadata["precondition_side"] == "right"
+    assert metadata["elapsed_s"] == 12.5
+    assert metadata["sparse_pc_xblock_preconditioner_xi"] == 3
+    assert metadata["sparse_pc_xblock_jax_factor_format"] == "padded"
+    assert metadata["xblock_lower_fill_requested"] is True
+    assert metadata["xblock_lower_fill_ignored_env"] is True
 
 
 def test_xblock_moment_schur_policy_defaults_on_for_constraint1_device_krylov() -> None:

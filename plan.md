@@ -34772,3 +34772,41 @@ Next refactor target:
   dataclasses or explicit result-builder inputs for the remaining sparse-PC
   result construction. This keeps the code easier to reason about while
   preserving the validated behavior.
+
+### 19.107 X-block sparse-PC core diagnostics extraction
+
+Goal:
+
+- Remove the remaining top-level x-block sparse-PC solve metadata from the
+  sparse-PC result dictionary in ``v3_driver.py`` while preserving convergence,
+  timing, fallback, factor, and lower-fill diagnostics.
+
+Implementation:
+
+- Added ``xblock_sparse_pc_core_diagnostics`` to
+  ``problems/profile_response/diagnostics.py``.
+- Replaced the inline core metadata payload in ``v3_driver.py`` with
+  ``**xblock_sparse_pc_core_diagnostics(locals())``.
+- Precomputed only ``accepted_converged_xblock`` in the driver so the helper
+  stays independent of solver logic; elapsed time is still read at metadata
+  construction time through the existing sparse timer.
+- Added direct unit coverage for convergence status, iteration/matvec counts,
+  candidate fallback metadata, preconditioner side/defaults, elapsed time,
+  factor metadata, JAX factor format/apply metadata, and lower-fill flags.
+- ``v3_driver.py`` is now about ``21208`` lines and
+  ``solve_v3_full_system_linear_gmres`` is about ``15910`` lines.
+
+Validation:
+
+- ``python -m ruff check`` on touched source/tests: passed.
+- ``python -m compileall -q`` on touched source/tests: passed.
+- ``tests/test_profile_response_sparse_pc.py``: ``67 passed``.
+- Broader current profile-response/x-block/sparse-pattern shard:
+  ``331 passed in 113.08 s``.
+
+Next refactor target:
+
+- Continue converting diagnostics helpers away from broad ``locals()`` scope
+  dependencies into explicit typed diagnostics inputs, starting with the core
+  sparse-PC metadata or device-Krylov metadata helpers. This should happen
+  incrementally with the same focused and broad shards.

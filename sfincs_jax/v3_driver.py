@@ -210,6 +210,7 @@ from .problems.profile_response.diagnostics import (
     xblock_qi_deflated_preconditioner_diagnostics,
     xblock_qi_device_preconditioner_diagnostics,
     xblock_qi_seed_preconditioner_diagnostics,
+    xblock_sparse_pc_core_diagnostics,
     xblock_side_probe_diagnostics,
 )
 from .problems.profile_response.sparse_pc import (
@@ -6886,6 +6887,10 @@ def solve_v3_full_system_linear_gmres(
                 int(xblock_linear_size),
                 dtype=np.float64,
             )
+            accepted_converged_xblock = rhs1_residual_converged(
+                residual_norm_xblock_pc,
+                target_xblock,
+            )
             return V3LinearSolveResult(
                 op=op,
                 rhs=rhs,
@@ -6894,51 +6899,7 @@ def solve_v3_full_system_linear_gmres(
                     residual_norm=jnp.asarray(residual_norm_xblock_pc, dtype=jnp.float64),
                 ),
                 metadata={
-                    "solver_kind": xblock_solver_kind,
-                    "residual_kind": "true_residual",
-                    "accepted_converged": rhs1_residual_converged(
-                        residual_norm_xblock_pc,
-                        target_xblock,
-                    ),
-                    "acceptance_criterion": "true_residual",
-                    "iterations": int(reported_iterations),
-                    "matvecs": int(reported_matvecs),
-                    "python_matvecs": int(mv_count),
-                    "device_cycle_estimated_matvecs": (
-                        None if device_krylov_estimated_matvecs is None else int(device_krylov_estimated_matvecs)
-                    ),
-                    "krylov_method": str(xblock_krylov_method),
-                    "candidate_krylov_method": str(candidate_krylov_method),
-                    "candidate_iterations": int(candidate_iterations),
-                    "candidate_matvecs": int(candidate_matvecs),
-                    "candidate_residual_norm": float(candidate_residual_norm),
-                    "fallback_from_krylov_method": (
-                        str(candidate_krylov_method) if candidate_krylov_method != str(xblock_krylov_method) else None
-                    ),
-                    "fallback_started_from_candidate": bool(fallback_started_from_candidate),
-                    "fallback_candidate_improved_rhs": bool(fallback_candidate_improved_rhs),
-                    "precondition_side": str(precondition_side),
-                    "default_right_preconditioned": bool(xblock_default_right_pc),
-                    "default_short_restart_capped": bool(xblock_default_restart_capped),
-                    "gmres_restart": int(pc_restart),
-                    "gmres_maxiter": int(pc_maxiter),
-                    "setup_s": float(setup_s),
-                    "solve_s": float(solve_s),
-                    "elapsed_s": float(sparse_timer.elapsed_s()),
-                    "sparse_pc_factor_s": float(pc_factor_s),
-                    "sparse_pc_xblock_preconditioner_xi": int(xblock_preconditioner_xi),
-                    "sparse_pc_xblock_preconditioner_built": bool(xblock_preconditioner_built),
-                    "sparse_pc_xblock_assembled_host": bool(xblock_assembled_host_fp),
-                    "sparse_pc_xblock_jax_factors": bool(xblock_jax_factors),
-                    "sparse_pc_xblock_jax_factor_format": (
-                        str(xblock_jax_factor_format) if bool(xblock_jax_factors) else None
-                    ),
-                    "sparse_pc_xblock_jax_factor_apply": (
-                        str(xblock_jax_factor_apply) if bool(xblock_jax_factors) else None
-                    ),
-                    "xblock_lower_fill_mode": str(xblock_lower_fill_mode),
-                    "xblock_lower_fill_requested": str(xblock_lower_fill_mode) in {"probe", "force"},
-                    "xblock_lower_fill_ignored_env": bool(xblock_lower_fill_ignored_env),
+                    **xblock_sparse_pc_core_diagnostics(locals()),
                     **xblock_device_krylov_diagnostics(locals()),
                     "xblock_active_dof": bool(xblock_use_active_dof),
                     "xblock_linear_size": int(xblock_linear_size),
