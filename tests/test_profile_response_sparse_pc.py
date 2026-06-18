@@ -47,6 +47,7 @@ from sfincs_jax.problems.profile_response.sparse_pc import (
     sparse_xblock_rescue_metadata,
     xblock_qi_deflated_preconditioner_diagnostics,
     xblock_qi_device_preconditioner_diagnostics,
+    xblock_side_probe_diagnostics,
     finalize_xblock_assembled_operator_metadata,
 )
 
@@ -283,6 +284,51 @@ def test_xblock_qi_deflated_preconditioner_diagnostics_preserve_payload() -> Non
         0.25,
         0.5,
     )
+
+
+def _xblock_side_probe_scope() -> dict[str, object]:
+    return {
+        "xblock_side_probe_enabled": 1,
+        "xblock_side_probe_used": True,
+        "xblock_side_probe_switched": False,
+        "xblock_side_probe_switch_suppressed_by_global_coupling": True,
+        "xblock_side_probe_switch_suppressed_by_explicit_side": False,
+        "xblock_side_probe_physical_seed_preserved_after_switch": True,
+        "xblock_side_probe_seed_used": 1,
+        "xblock_side_probe_seed_residual_norm": 1.0e-4,
+        "xblock_side_probe_initial_side": "left",
+        "xblock_side_probe_selected_side": "right",
+        "xblock_side_probe_initial_method": "gmres",
+        "xblock_side_probe_selected_method": "lgmres",
+        "xblock_side_probe_lgmres_rescue": True,
+        "xblock_lgmres_rescue_maxiter_capped": 1,
+        "xblock_lgmres_rescue_outer_k": 12,
+        "xblock_side_probe_residual_norm": 2.0e-5,
+        "xblock_side_probe_residual_ratio": 3.5,
+        "xblock_side_probe_iterations": np.int64(9),
+        "xblock_side_probe_matvecs": np.int64(14),
+        "xblock_side_probe_s": np.float64(0.375),
+    }
+
+
+def test_xblock_side_probe_diagnostics_preserve_payload() -> None:
+    metadata = xblock_side_probe_diagnostics(_xblock_side_probe_scope())
+
+    assert metadata["xblock_side_probe_enabled"] is True
+    assert metadata["xblock_side_probe_switched"] is False
+    assert metadata["xblock_side_probe_switch_suppressed_by_global_coupling"] is True
+    assert metadata["xblock_side_probe_physical_seed_preserved_after_switch"] is True
+    assert metadata["xblock_side_probe_seed_used"] is True
+    assert metadata["xblock_side_probe_initial_side"] == "left"
+    assert metadata["xblock_side_probe_selected_side"] == "right"
+    assert metadata["xblock_side_probe_selected_method"] == "lgmres"
+    assert metadata["xblock_side_probe_lgmres_rescue"] is True
+    assert metadata["xblock_lgmres_rescue_maxiter_capped"] is True
+    assert metadata["xblock_lgmres_rescue_outer_k"] == 12
+    assert metadata["xblock_side_probe_residual_ratio"] == 3.5
+    assert metadata["xblock_side_probe_iterations"] == 9
+    assert metadata["xblock_side_probe_matvecs"] == 14
+    assert metadata["xblock_side_probe_s"] == 0.375
 
 
 def test_sparse_pc_entry_policy_classifies_pas_er_and_active_dof() -> None:

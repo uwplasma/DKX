@@ -757,6 +757,45 @@ def xblock_qi_deflated_preconditioner_diagnostics(
     }
 
 
+def xblock_side_probe_diagnostics(scope: Mapping[str, object]) -> dict[str, object]:
+    """Return side-probe and LGMRES-rescue diagnostics for x-block solves."""
+
+    return {
+        "xblock_side_probe_enabled": bool(scope["xblock_side_probe_enabled"]),
+        "xblock_side_probe_used": bool(scope["xblock_side_probe_used"]),
+        "xblock_side_probe_switched": bool(scope["xblock_side_probe_switched"]),
+        "xblock_side_probe_switch_suppressed_by_global_coupling": bool(
+            scope["xblock_side_probe_switch_suppressed_by_global_coupling"]
+        ),
+        "xblock_side_probe_switch_suppressed_by_explicit_side": bool(
+            scope["xblock_side_probe_switch_suppressed_by_explicit_side"]
+        ),
+        "xblock_side_probe_physical_seed_preserved_after_switch": bool(
+            scope["xblock_side_probe_physical_seed_preserved_after_switch"]
+        ),
+        "xblock_side_probe_seed_used": bool(scope["xblock_side_probe_seed_used"]),
+        "xblock_side_probe_seed_residual_norm": scope[
+            "xblock_side_probe_seed_residual_norm"
+        ],
+        "xblock_side_probe_initial_side": scope["xblock_side_probe_initial_side"],
+        "xblock_side_probe_selected_side": scope["xblock_side_probe_selected_side"],
+        "xblock_side_probe_initial_method": scope["xblock_side_probe_initial_method"],
+        "xblock_side_probe_selected_method": scope["xblock_side_probe_selected_method"],
+        "xblock_side_probe_lgmres_rescue": bool(
+            scope["xblock_side_probe_lgmres_rescue"]
+        ),
+        "xblock_lgmres_rescue_maxiter_capped": bool(
+            scope["xblock_lgmres_rescue_maxiter_capped"]
+        ),
+        "xblock_lgmres_rescue_outer_k": scope["xblock_lgmres_rescue_outer_k"],
+        "xblock_side_probe_residual_norm": scope["xblock_side_probe_residual_norm"],
+        "xblock_side_probe_residual_ratio": scope["xblock_side_probe_residual_ratio"],
+        "xblock_side_probe_iterations": int(scope["xblock_side_probe_iterations"]),
+        "xblock_side_probe_matvecs": int(scope["xblock_side_probe_matvecs"]),
+        "xblock_side_probe_s": float(scope["xblock_side_probe_s"]),
+    }
+
+
 class MatvecCounter:
     """Mutable matvec counter that preserves ``int(counter)`` call sites."""
 

@@ -239,6 +239,7 @@ from .problems.profile_response.sparse_pc import (
     XBlockAssembledPreflightError,
     xblock_qi_deflated_preconditioner_diagnostics,
     xblock_qi_device_preconditioner_diagnostics,
+    xblock_side_probe_diagnostics,
     finalize_xblock_assembled_operator_metadata,
 )
 from .rhs1_strong_fallback import build_rhs1_strong_preconditioner_full_from_kind
@@ -7382,32 +7383,7 @@ def solve_v3_full_system_linear_gmres(
                     ),
                     **xblock_qi_device_preconditioner_diagnostics(locals()),
                     **xblock_qi_deflated_preconditioner_diagnostics(locals()),
-                    "xblock_side_probe_enabled": bool(xblock_side_probe_enabled),
-                    "xblock_side_probe_used": bool(xblock_side_probe_used),
-                    "xblock_side_probe_switched": bool(xblock_side_probe_switched),
-                    "xblock_side_probe_switch_suppressed_by_global_coupling": bool(
-                        xblock_side_probe_switch_suppressed_by_global_coupling
-                    ),
-                    "xblock_side_probe_switch_suppressed_by_explicit_side": bool(
-                        xblock_side_probe_switch_suppressed_by_explicit_side
-                    ),
-                    "xblock_side_probe_physical_seed_preserved_after_switch": bool(
-                        xblock_side_probe_physical_seed_preserved_after_switch
-                    ),
-                    "xblock_side_probe_seed_used": bool(xblock_side_probe_seed_used),
-                    "xblock_side_probe_seed_residual_norm": xblock_side_probe_seed_residual_norm,
-                    "xblock_side_probe_initial_side": xblock_side_probe_initial_side,
-                    "xblock_side_probe_selected_side": xblock_side_probe_selected_side,
-                    "xblock_side_probe_initial_method": xblock_side_probe_initial_method,
-                    "xblock_side_probe_selected_method": xblock_side_probe_selected_method,
-                    "xblock_side_probe_lgmres_rescue": bool(xblock_side_probe_lgmres_rescue),
-                    "xblock_lgmres_rescue_maxiter_capped": bool(xblock_lgmres_rescue_maxiter_capped),
-                    "xblock_lgmres_rescue_outer_k": xblock_lgmres_rescue_outer_k,
-                    "xblock_side_probe_residual_norm": xblock_side_probe_residual_norm,
-                    "xblock_side_probe_residual_ratio": xblock_side_probe_residual_ratio,
-                    "xblock_side_probe_iterations": int(xblock_side_probe_iterations),
-                    "xblock_side_probe_matvecs": int(xblock_side_probe_matvecs),
-                    "xblock_side_probe_s": float(xblock_side_probe_s),
+                    **xblock_side_probe_diagnostics(locals()),
                     **build_rhs1_xblock_correction_metadata(
                         probe_coarse=RHS1SubspaceCorrectionDiagnostics(
                             steps_requested=int(probe_coarse_steps_requested),

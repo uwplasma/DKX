@@ -34538,3 +34538,41 @@ Next refactor target:
   operator/equilibration metadata payload. Keep the changes behavior-preserving
   and independently tested before moving larger solver orchestration out of the
   monolithic driver.
+
+### 19.101 X-block side-probe diagnostics payload extraction
+
+Goal:
+
+- Remove the adjacent x-block side-probe and LGMRES-rescue diagnostics payload
+  from the sparse-PC result dictionary in ``v3_driver.py`` without changing any
+  side-selection, rescue, or Krylov behavior.
+
+Implementation:
+
+- Added ``xblock_side_probe_diagnostics`` to
+  ``problems/profile_response/sparse_pc.py``.
+- Replaced the inline ``xblock_side_probe_*`` and
+  ``xblock_lgmres_rescue_*`` result payload in ``v3_driver.py`` with
+  ``**xblock_side_probe_diagnostics(locals())``.
+- Added unit coverage for side-probe enabled/used/switched flags, switch
+  suppression flags, physical-seed preservation, selected side/method strings,
+  LGMRES rescue metadata, residual values, iteration/matvec counters, and
+  timing conversion.
+- ``v3_driver.py`` is now about ``21682`` lines and
+  ``solve_v3_full_system_linear_gmres`` is about ``16391`` lines.
+
+Validation:
+
+- ``python -m ruff check`` on touched source/tests: passed.
+- ``python -m compileall -q`` on touched source/tests: passed.
+- ``tests/test_profile_response_sparse_pc.py``: ``62 passed``.
+- Broader current profile-response/x-block/sparse-pattern shard:
+  ``326 passed in 117.33 s``.
+
+Next refactor target:
+
+- Continue extracting pure result construction from the sparse-PC result, next
+  targeting the assembled-operator/equilibration diagnostics payload or the
+  remaining correction-diagnostics object construction. Keep tests close to the
+  extracted helper and defer solver/default changes until this simplification
+  layer is stable.
