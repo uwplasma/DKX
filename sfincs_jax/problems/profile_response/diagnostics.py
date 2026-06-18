@@ -138,6 +138,191 @@ def sparse_rescue_tail_metadata(scope: Mapping[str, object]) -> dict[str, object
     }
 
 
+def fortran_reduced_xblock_result_metadata(
+    state: Mapping[str, object],
+) -> dict[str, object]:
+    """Return final metadata for the fortran-reduced x-block sparse-PC solve."""
+
+    moment_metadata = state["moment_schur_metadata"]
+    moment_stats = state["moment_schur_stats"]
+    global_metadata = state["global_coupling_metadata"]
+    global_stats = state["global_coupling_stats"]
+    if not isinstance(moment_metadata, Mapping):
+        raise TypeError("moment_schur_metadata must be a mapping")
+    if not isinstance(moment_stats, Mapping):
+        raise TypeError("moment_schur_stats must be a mapping")
+    if not isinstance(global_metadata, Mapping):
+        raise TypeError("global_coupling_metadata must be a mapping")
+    if not isinstance(global_stats, Mapping):
+        raise TypeError("global_coupling_stats must be a mapping")
+
+    op = state["op"]
+    sparse_pc_fp_dense_velocity_block = state["sparse_pc_fp_dense_velocity_block"]
+    target = float(state["target"])
+    residual_norm = float(state["residual_norm_sparse_pc"])
+
+    return {
+        "solver_kind": "fortran_reduced_pc_gmres",
+        "residual_kind": "true_residual",
+        "accepted_converged": bool(
+            state["fortran_reduced_xblock_accepted_converged"]
+        ),
+        "acceptance_criterion": "true_residual",
+        "iterations": int(len(state["history"] or ())),
+        "matvecs": int(state["mv_count"]),
+        "gmres_restart": int(state["pc_restart"]),
+        "gmres_maxiter": int(state["pc_maxiter"]),
+        "sparse_pc_backend": "xblock",
+        "sparse_pc_backend_reason": str(
+            state["fortran_reduced_sparse_pc_backend_reason"]
+        ),
+        "sparse_pc_xblock_min_size": int(state["fortran_reduced_xblock_min_size"]),
+        "sparse_pc_preconditioner_operator": "fortran_reduced_xblock",
+        "sparse_pc_factorization": "xblock_host_sparse",
+        "sparse_pc_default_factorization": "xblock_host_sparse",
+        "sparse_pc_fortran_reduced": True,
+        "sparse_pc_fortran_reduced_keeps_theta_zeta": True,
+        "sparse_pc_fortran_reduced_preconditioner_x": int(
+            state["preconditioner_x"]
+        ),
+        "sparse_pc_fortran_reduced_preconditioner_x_min_L": int(
+            state["preconditioner_x_min_l"]
+        ),
+        "sparse_pc_fortran_reduced_preconditioner_xi": int(
+            state["preconditioner_xi"]
+        ),
+        "sparse_pc_fortran_reduced_preconditioner_species": int(
+            state["preconditioner_species"]
+        ),
+        "sparse_pc_xblock_preconditioner_xi": int(
+            state["xblock_preconditioner_xi"]
+        ),
+        "sparse_pc_xblock_assembled_host_fp": bool(state["force_assembled_host_fp"]),
+        "sparse_pc_xblock_krylov_method": str(state["xblock_krylov_method"]),
+        "sparse_pc_xblock_initial_seed_enabled": bool(state["seed_enabled"]),
+        "sparse_pc_xblock_initial_seed_used": bool(state["seed_used"]),
+        "sparse_pc_xblock_initial_seed_residual_norm": state[
+            "seed_residual_norm"
+        ],
+        "sparse_pc_xblock_initial_seed_improvement_ratio": state[
+            "seed_improvement_ratio"
+        ],
+        "sparse_pc_xblock_initial_seed_accept_ratio": float(
+            state["seed_accept_ratio"]
+        ),
+        "sparse_pc_xblock_initial_seed_refine_steps": int(
+            state["seed_refine_steps"]
+        ),
+        "sparse_pc_xblock_initial_seed_refines_performed": int(
+            state["seed_refines_performed"]
+        ),
+        "sparse_pc_xblock_moment_schur_enabled": bool(
+            state["moment_schur_enabled"]
+        ),
+        "sparse_pc_xblock_moment_schur_built": bool(state["moment_schur_built"]),
+        "sparse_pc_xblock_moment_schur_used": bool(state["moment_schur_used"]),
+        "sparse_pc_xblock_moment_schur_reason": state["moment_schur_reason"],
+        "sparse_pc_xblock_moment_schur_mode": moment_metadata.get("mode"),
+        "sparse_pc_xblock_moment_schur_rank": moment_metadata.get("rank"),
+        "sparse_pc_xblock_moment_schur_extra_size": moment_metadata.get(
+            "extra_size"
+        ),
+        "sparse_pc_xblock_moment_schur_setup_s": moment_metadata.get("setup_s"),
+        "sparse_pc_xblock_moment_schur_expected_size": moment_metadata.get(
+            "expected_size"
+        ),
+        "sparse_pc_xblock_moment_schur_rcond": moment_metadata.get("rcond"),
+        "sparse_pc_xblock_moment_schur_singular_value_proxy": moment_metadata.get(
+            "singular_value_proxy",
+            (),
+        ),
+        "sparse_pc_xblock_moment_schur_device_resident": bool(
+            moment_metadata.get("device_resident", False)
+        ),
+        "sparse_pc_xblock_moment_schur_probe_residual_before": state[
+            "moment_schur_probe_residual_before"
+        ],
+        "sparse_pc_xblock_moment_schur_probe_residual_after": state[
+            "moment_schur_probe_residual_after"
+        ],
+        "sparse_pc_xblock_moment_schur_probe_improvement_ratio": state[
+            "moment_schur_probe_improvement_ratio"
+        ],
+        "sparse_pc_xblock_moment_schur_error": moment_metadata.get("error"),
+        "sparse_pc_xblock_moment_schur_applies": int(
+            moment_stats.get("applies", 0)
+        ),
+        "sparse_pc_xblock_moment_schur_base_applies": int(
+            moment_stats.get("base_applies", 0)
+        ),
+        "sparse_pc_xblock_global_coupling_enabled": bool(
+            state["global_coupling_enabled"]
+        ),
+        "sparse_pc_xblock_global_coupling_built": bool(
+            state["global_coupling_built"]
+        ),
+        "sparse_pc_xblock_global_coupling_mode": global_metadata.get("mode"),
+        "sparse_pc_xblock_global_coupling_load_basis_size": global_metadata.get(
+            "load_basis_size"
+        ),
+        "sparse_pc_xblock_global_coupling_basis_size": global_metadata.get(
+            "basis_size"
+        ),
+        "sparse_pc_xblock_global_coupling_rank": global_metadata.get("rank"),
+        "sparse_pc_xblock_global_coupling_setup_s": global_metadata.get("setup_s"),
+        "sparse_pc_xblock_global_coupling_setup_budget_s": global_metadata.get(
+            "setup_budget_s"
+        ),
+        "sparse_pc_xblock_global_coupling_setup_budget_reached": bool(
+            global_metadata.get("setup_budget_reached", False)
+        ),
+        "sparse_pc_xblock_global_coupling_rcond": global_metadata.get("rcond"),
+        "sparse_pc_xblock_global_coupling_smoother": global_metadata.get("smoother"),
+        "sparse_pc_xblock_global_coupling_basis_names": global_metadata.get(
+            "basis_names",
+            (),
+        ),
+        "sparse_pc_xblock_global_coupling_error": global_metadata.get("error"),
+        "sparse_pc_xblock_global_coupling_applies": int(
+            global_stats.get("applies", 0)
+        ),
+        "sparse_pc_xblock_global_coupling_coarse_applies": int(
+            global_stats.get("coarse_applies", 0)
+        ),
+        "sparse_pc_xblock_drop_tol": float(state["xblock_drop_tol"]),
+        "sparse_pc_xblock_drop_rel": float(state["xblock_drop_rel"]),
+        "sparse_pc_xblock_ilu_drop_tol": float(state["xblock_ilu_drop_tol"]),
+        "sparse_pc_xblock_fill_factor": float(state["xblock_fill_factor"]),
+        "sparse_pc_active_dof": bool(state["sparse_pc_use_active_dof"]),
+        "sparse_pc_linear_size": int(state["sparse_pc_linear_size"]),
+        "sparse_pc_full_size": int(getattr(op, "total_size")),
+        "sparse_pc_fp_dense_velocity_block": (
+            None
+            if sparse_pc_fp_dense_velocity_block is None
+            else bool(sparse_pc_fp_dense_velocity_block)
+        ),
+        "setup_s": float(state["setup_s"]),
+        "solve_s": float(state["solve_s"]),
+        "elapsed_s": float(state["sparse_timer"].elapsed_s()),
+        "sparse_pattern_nnz": 0,
+        "sparse_pattern_avg_row_nnz": 0.0,
+        "sparse_pattern_max_row_nnz": 0,
+        "sparse_pattern_scope": "fortran_reduced_xblock_no_global_pattern",
+        "sparse_pattern_build_s": 0.0,
+        "sparse_pc_factor_s": float(state["pc_factor_s"]),
+        "sparse_pc_factor_elapsed_s": float(state["pc_factor_s"]),
+        "sparse_pc_factor_nbytes_estimate": None,
+        "sparse_pc_factor_nnz_estimate": None,
+        "sparse_pc_residual_target": float(target),
+        "sparse_pc_residual_ratio_to_target": (
+            residual_norm / float(target) if float(target) > 0.0 else float("inf")
+        ),
+        "sparse_pc_factor_quality_rejected": bool(
+            state["fortran_reduced_xblock_factor_quality_rejected"]
+        ),
+    }
+
+
 def xblock_qi_device_preconditioner_diagnostics(
     scope: Mapping[str, object],
 ) -> dict[str, object]:

@@ -35353,3 +35353,39 @@ Next refactor target:
 - Consolidate the fortran-reduced x-block return metadata builder or the
   moment/global preconditioner build-result normalization so the driver branch
   keeps shrinking without changing numerical behavior.
+
+### 19.122 Fortran-reduced x-block result-metadata extraction
+
+Goal:
+
+- Remove the long fortran-reduced x-block result-metadata dictionary from
+  ``v3_driver.py`` while preserving every metadata key consumed by tests,
+  HDF5 export, benchmarks, and docs tooling.
+
+Implementation:
+
+- Added ``fortran_reduced_xblock_result_metadata`` to
+  ``problems/profile_response/diagnostics.py``.
+- Kept the two residual gates in ``v3_driver.py`` so the helper only formats
+  metadata and does not duplicate solver acceptance policy.
+- Updated the fortran-reduced x-block return path to call the diagnostics
+  builder with the local solve state.
+- Added a focused metadata-builder test that checks representative solver,
+  seed, moment-Schur, global-coupling, residual-ratio, and factor-quality
+  fields.
+- ``v3_driver.py`` is now about ``20694`` lines and
+  ``solve_v3_full_system_linear_gmres`` about ``15396`` lines.
+
+Validation:
+
+- ``python -m ruff check`` on touched source/tests: passed.
+- ``python -m compileall -q`` on touched source/tests: passed.
+- ``tests/test_profile_response_sparse_pc.py``: ``83 passed``.
+- Broader current profile-response/x-block/sparse-pattern shard:
+  ``360 passed in 112.78 s``.
+
+Next refactor target:
+
+- Extract the fortran-reduced moment-Schur/global-coupling build-result
+  normalization or continue moving sparse-PC metadata builders out of the
+  monolithic solve function.

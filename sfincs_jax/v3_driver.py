@@ -200,6 +200,7 @@ from .problems.profile_response.qi_device_seed import (
     attempt_matrixfree_qi_device_seed,
 )
 from .problems.profile_response.diagnostics import (
+    fortran_reduced_xblock_result_metadata,
     fp_xblock_global_correction_metadata,
     fp_xblock_highx_residual_correction_metadata,
     sparse_rescue_tail_metadata,
@@ -7285,6 +7286,18 @@ def solve_v3_full_system_linear_gmres(
             residual_norm_sparse_pc = float(xblock_krylov_result.residual_norm)
             history = tuple(xblock_krylov_result.history)
             solve_s = float(xblock_krylov_result.solve_s)
+            fortran_reduced_xblock_accepted_converged = rhs1_residual_converged(
+                float(residual_norm_sparse_pc),
+                rhs1_residual_target(
+                    atol=float(atol),
+                    tol=float(tol),
+                    rhs_norm=float(rhs_norm),
+                ),
+            )
+            fortran_reduced_xblock_factor_quality_rejected = not rhs1_residual_converged(
+                float(residual_norm_sparse_pc),
+                float(target),
+            )
             return V3LinearSolveResult(
                 op=op,
                 rhs=rhs,
@@ -7292,132 +7305,7 @@ def solve_v3_full_system_linear_gmres(
                     x=_sparse_pc_expand_reduced(jnp.asarray(x_np, dtype=jnp.float64)),
                     residual_norm=jnp.asarray(residual_norm_sparse_pc, dtype=jnp.float64),
                 ),
-                metadata={
-                    "solver_kind": "fortran_reduced_pc_gmres",
-                    "residual_kind": "true_residual",
-                    "accepted_converged": rhs1_residual_converged(
-                        float(residual_norm_sparse_pc),
-                        rhs1_residual_target(
-                            atol=float(atol),
-                            tol=float(tol),
-                            rhs_norm=float(rhs_norm),
-                        ),
-                    ),
-                    "acceptance_criterion": "true_residual",
-                    "iterations": int(len(history or [])),
-                    "matvecs": int(mv_count),
-                    "gmres_restart": int(pc_restart),
-                    "gmres_maxiter": int(pc_maxiter),
-                    "sparse_pc_backend": "xblock",
-                    "sparse_pc_backend_reason": str(fortran_reduced_sparse_pc_backend_reason),
-                    "sparse_pc_xblock_min_size": int(fortran_reduced_xblock_min_size),
-                    "sparse_pc_preconditioner_operator": "fortran_reduced_xblock",
-                    "sparse_pc_factorization": "xblock_host_sparse",
-                    "sparse_pc_default_factorization": "xblock_host_sparse",
-                    "sparse_pc_fortran_reduced": True,
-                    "sparse_pc_fortran_reduced_keeps_theta_zeta": True,
-                    "sparse_pc_fortran_reduced_preconditioner_x": int(preconditioner_x),
-                    "sparse_pc_fortran_reduced_preconditioner_x_min_L": int(preconditioner_x_min_l),
-                    "sparse_pc_fortran_reduced_preconditioner_xi": int(preconditioner_xi),
-                    "sparse_pc_fortran_reduced_preconditioner_species": int(preconditioner_species),
-                    "sparse_pc_xblock_preconditioner_xi": int(xblock_preconditioner_xi),
-                    "sparse_pc_xblock_assembled_host_fp": bool(force_assembled_host_fp),
-                    "sparse_pc_xblock_krylov_method": str(xblock_krylov_method),
-                    "sparse_pc_xblock_initial_seed_enabled": bool(seed_enabled),
-                    "sparse_pc_xblock_initial_seed_used": bool(seed_used),
-                    "sparse_pc_xblock_initial_seed_residual_norm": seed_residual_norm,
-                    "sparse_pc_xblock_initial_seed_improvement_ratio": seed_improvement_ratio,
-                    "sparse_pc_xblock_initial_seed_accept_ratio": float(seed_accept_ratio),
-                    "sparse_pc_xblock_initial_seed_refine_steps": int(seed_refine_steps),
-                    "sparse_pc_xblock_initial_seed_refines_performed": int(seed_refines_performed),
-                    "sparse_pc_xblock_moment_schur_enabled": bool(moment_schur_enabled),
-                    "sparse_pc_xblock_moment_schur_built": bool(moment_schur_built),
-                    "sparse_pc_xblock_moment_schur_used": bool(moment_schur_used),
-                    "sparse_pc_xblock_moment_schur_reason": moment_schur_reason,
-                    "sparse_pc_xblock_moment_schur_mode": moment_schur_metadata.get("mode"),
-                    "sparse_pc_xblock_moment_schur_rank": moment_schur_metadata.get("rank"),
-                    "sparse_pc_xblock_moment_schur_extra_size": moment_schur_metadata.get("extra_size"),
-                    "sparse_pc_xblock_moment_schur_setup_s": moment_schur_metadata.get("setup_s"),
-                    "sparse_pc_xblock_moment_schur_expected_size": moment_schur_metadata.get("expected_size"),
-                    "sparse_pc_xblock_moment_schur_rcond": moment_schur_metadata.get("rcond"),
-                    "sparse_pc_xblock_moment_schur_singular_value_proxy": moment_schur_metadata.get(
-                        "singular_value_proxy",
-                        (),
-                    ),
-                    "sparse_pc_xblock_moment_schur_device_resident": bool(
-                        moment_schur_metadata.get("device_resident", False)
-                    ),
-                    "sparse_pc_xblock_moment_schur_probe_residual_before": moment_schur_probe_residual_before,
-                    "sparse_pc_xblock_moment_schur_probe_residual_after": moment_schur_probe_residual_after,
-                    "sparse_pc_xblock_moment_schur_probe_improvement_ratio": (
-                        moment_schur_probe_improvement_ratio
-                    ),
-                    "sparse_pc_xblock_moment_schur_error": moment_schur_metadata.get("error"),
-                    "sparse_pc_xblock_moment_schur_applies": int(moment_schur_stats.get("applies", 0)),
-                    "sparse_pc_xblock_moment_schur_base_applies": int(
-                        moment_schur_stats.get("base_applies", 0)
-                    ),
-                    "sparse_pc_xblock_global_coupling_enabled": bool(global_coupling_enabled),
-                    "sparse_pc_xblock_global_coupling_built": bool(global_coupling_built),
-                    "sparse_pc_xblock_global_coupling_mode": global_coupling_metadata.get("mode"),
-                    "sparse_pc_xblock_global_coupling_load_basis_size": global_coupling_metadata.get(
-                        "load_basis_size"
-                    ),
-                    "sparse_pc_xblock_global_coupling_basis_size": global_coupling_metadata.get("basis_size"),
-                    "sparse_pc_xblock_global_coupling_rank": global_coupling_metadata.get("rank"),
-                    "sparse_pc_xblock_global_coupling_setup_s": global_coupling_metadata.get("setup_s"),
-                    "sparse_pc_xblock_global_coupling_setup_budget_s": global_coupling_metadata.get(
-                        "setup_budget_s"
-                    ),
-                    "sparse_pc_xblock_global_coupling_setup_budget_reached": bool(
-                        global_coupling_metadata.get("setup_budget_reached", False)
-                    ),
-                    "sparse_pc_xblock_global_coupling_rcond": global_coupling_metadata.get("rcond"),
-                    "sparse_pc_xblock_global_coupling_smoother": global_coupling_metadata.get("smoother"),
-                    "sparse_pc_xblock_global_coupling_basis_names": global_coupling_metadata.get(
-                        "basis_names",
-                        (),
-                    ),
-                    "sparse_pc_xblock_global_coupling_error": global_coupling_metadata.get("error"),
-                    "sparse_pc_xblock_global_coupling_applies": int(global_coupling_stats.get("applies", 0)),
-                    "sparse_pc_xblock_global_coupling_coarse_applies": int(
-                        global_coupling_stats.get("coarse_applies", 0)
-                    ),
-                    "sparse_pc_xblock_drop_tol": float(xblock_drop_tol),
-                    "sparse_pc_xblock_drop_rel": float(xblock_drop_rel),
-                    "sparse_pc_xblock_ilu_drop_tol": float(xblock_ilu_drop_tol),
-                    "sparse_pc_xblock_fill_factor": float(xblock_fill_factor),
-                    "sparse_pc_active_dof": bool(sparse_pc_use_active_dof),
-                    "sparse_pc_linear_size": int(sparse_pc_linear_size),
-                    "sparse_pc_full_size": int(op.total_size),
-                    "sparse_pc_fp_dense_velocity_block": (
-                        None
-                        if sparse_pc_fp_dense_velocity_block is None
-                        else bool(sparse_pc_fp_dense_velocity_block)
-                    ),
-                    "setup_s": float(setup_s),
-                    "solve_s": float(solve_s),
-                    "elapsed_s": float(sparse_timer.elapsed_s()),
-                    "sparse_pattern_nnz": 0,
-                    "sparse_pattern_avg_row_nnz": 0.0,
-                    "sparse_pattern_max_row_nnz": 0,
-                    "sparse_pattern_scope": "fortran_reduced_xblock_no_global_pattern",
-                    "sparse_pattern_build_s": 0.0,
-                    "sparse_pc_factor_s": float(pc_factor_s),
-                    "sparse_pc_factor_elapsed_s": float(pc_factor_s),
-                    "sparse_pc_factor_nbytes_estimate": None,
-                    "sparse_pc_factor_nnz_estimate": None,
-                    "sparse_pc_residual_target": float(target),
-                    "sparse_pc_residual_ratio_to_target": (
-                        float(residual_norm_sparse_pc) / float(target)
-                        if float(target) > 0.0
-                        else float("inf")
-                    ),
-                    "sparse_pc_factor_quality_rejected": not rhs1_residual_converged(
-                        float(residual_norm_sparse_pc),
-                        float(target),
-                    ),
-                },
+                metadata=fortran_reduced_xblock_result_metadata(locals()),
             )
 
         pattern_start_s = sparse_timer.elapsed_s()

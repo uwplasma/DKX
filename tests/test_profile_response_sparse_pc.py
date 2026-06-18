@@ -11,6 +11,9 @@ from sfincs_jax.problems.profile_response.active_projection import (
     expand_reduced_with_map,
     reduce_full_with_indices,
 )
+from sfincs_jax.problems.profile_response.diagnostics import (
+    fortran_reduced_xblock_result_metadata,
+)
 from sfincs_jax.problems.profile_response.sparse_pc import (
     FortranReducedXBlockKrylovSolveContext,
     MatvecCounter,
@@ -479,6 +482,93 @@ def test_fortran_reduced_xblock_krylov_solve_explicit_left_reports_pc_residual()
     assert result.residual_norm == pytest.approx(0.0)
     assert result.preconditioned_residual_norm == pytest.approx(0.125)
     assert any("preconditioned_residual=1.250000e-01" in message for message in messages)
+
+
+def test_fortran_reduced_xblock_result_metadata_formats_branch_payload() -> None:
+    state = {
+        "op": SimpleNamespace(total_size=12),
+        "fortran_reduced_xblock_accepted_converged": True,
+        "history": (0.5, 0.25),
+        "mv_count": MatvecCounter(7),
+        "pc_restart": 8,
+        "pc_maxiter": 3,
+        "fortran_reduced_sparse_pc_backend_reason": "auto_large_full_fp",
+        "fortran_reduced_xblock_min_size": 100,
+        "preconditioner_x": 4,
+        "preconditioner_x_min_l": 2,
+        "preconditioner_xi": 1,
+        "preconditioner_species": 0,
+        "xblock_preconditioner_xi": 1,
+        "force_assembled_host_fp": True,
+        "xblock_krylov_method": "gmres",
+        "seed_enabled": True,
+        "seed_used": True,
+        "seed_residual_norm": 1.0e-4,
+        "seed_improvement_ratio": 10.0,
+        "seed_accept_ratio": 1.0,
+        "seed_refine_steps": 2,
+        "seed_refines_performed": 1,
+        "moment_schur_enabled": True,
+        "moment_schur_built": True,
+        "moment_schur_used": False,
+        "moment_schur_reason": "probe_not_reduced",
+        "moment_schur_metadata": {
+            "mode": "additive",
+            "rank": 3,
+            "extra_size": 2,
+            "setup_s": 0.25,
+            "expected_size": 10,
+            "rcond": 1.0e-12,
+            "singular_value_proxy": (1.0, 0.1),
+            "device_resident": False,
+        },
+        "moment_schur_probe_residual_before": 2.0,
+        "moment_schur_probe_residual_after": 1.5,
+        "moment_schur_probe_improvement_ratio": 0.75,
+        "moment_schur_stats": {"applies": 4, "base_applies": 5},
+        "global_coupling_enabled": True,
+        "global_coupling_built": True,
+        "global_coupling_metadata": {
+            "mode": "multiplicative",
+            "load_basis_size": 6,
+            "basis_size": 5,
+            "rank": 4,
+            "setup_s": 0.5,
+            "setup_budget_s": 1.0,
+            "setup_budget_reached": False,
+            "rcond": 1.0e-11,
+            "smoother": "xblock",
+            "basis_names": ("rhs", "fsavg"),
+        },
+        "global_coupling_stats": {"applies": 8, "coarse_applies": 9},
+        "xblock_drop_tol": 0.0,
+        "xblock_drop_rel": 1.0e-8,
+        "xblock_ilu_drop_tol": 1.0e-4,
+        "xblock_fill_factor": 10.0,
+        "sparse_pc_use_active_dof": False,
+        "sparse_pc_linear_size": 10,
+        "sparse_pc_fp_dense_velocity_block": None,
+        "setup_s": 0.75,
+        "solve_s": 1.25,
+        "sparse_timer": SimpleNamespace(elapsed_s=lambda: 2.5),
+        "pc_factor_s": 0.5,
+        "target": 0.2,
+        "residual_norm_sparse_pc": 0.1,
+        "fortran_reduced_xblock_factor_quality_rejected": False,
+    }
+
+    metadata = fortran_reduced_xblock_result_metadata(state)
+
+    assert metadata["solver_kind"] == "fortran_reduced_pc_gmres"
+    assert metadata["accepted_converged"] is True
+    assert metadata["iterations"] == 2
+    assert metadata["matvecs"] == 7
+    assert metadata["sparse_pc_backend"] == "xblock"
+    assert metadata["sparse_pc_xblock_initial_seed_used"] is True
+    assert metadata["sparse_pc_xblock_moment_schur_rank"] == 3
+    assert metadata["sparse_pc_xblock_global_coupling_basis_names"] == ("rhs", "fsavg")
+    assert metadata["sparse_pc_residual_ratio_to_target"] == pytest.approx(0.5)
+    assert metadata["sparse_pc_factor_quality_rejected"] is False
 
 
 def test_fortran_reduced_xblock_moment_schur_policy_defaults_disabled() -> None:
