@@ -608,6 +608,7 @@ from .problems.profile_response.policies import (
     rhs1_fp_force_stage2,
     rhs1_pas_stage2_skip,
     rhs1_pas_tz_guarded_stage2_retry,
+    rhs1_stage2_admission_controls_from_env,
     rhs1_stage2_retry_controls_from_env,
     rhs1_stage2_trigger,
 )
@@ -10287,35 +10288,18 @@ def solve_v3_full_system_linear_gmres(
     def _solver_kind(method: str) -> tuple[str, str]:
         return profile_solver_kind(method, context=profile_linear_context)
 
-    stage2_env = os.environ.get("SFINCS_JAX_LINEAR_STAGE2", "").strip().lower()
-    if stage2_env in {"0", "false", "no", "off"}:
-        stage2_enabled = False
-    elif stage2_env in {"1", "true", "yes", "on"}:
-        stage2_enabled = True
-    else:
-        solver_kind_default = _solver_kind(solve_method)[0]
-        stage2_enabled = (
-            int(op.rhs_mode) == 1
-            and (not bool(op.include_phi1))
-            and solver_kind_default in {"gmres", "bicgstab"}
-        )
-    if pas_large_bicgstab_fastpath and stage2_env == "":
-        stage2_enabled = False
-    # Stage-2 is a "stronger" fallback solve for difficult cases. The default time cap
-    # must be large enough to still trigger after any one-time preconditioner setup,
-    # while remaining bounded for interactive use and CI.
-    stage2_time_cap_s = float(os.environ.get("SFINCS_JAX_LINEAR_STAGE2_MAX_ELAPSED_S", "30.0"))
-    if tokamak_pas and stage2_time_cap_s < 120.0:
-        stage2_time_cap_s = 120.0
-    if op.fblock.fp is not None and use_dkes and stage2_time_cap_s < 120.0:
-        stage2_time_cap_s = 120.0
-    if op.fblock.fp is not None and int(op.total_size) >= 300000 and stage2_time_cap_s < 1200.0:
-        # Large FP systems can spend most of this budget in preconditioner setup;
-        # keep stage2 available by default so validation does not depend on external
-        # reference files and so difficult high-resolution cases can still polish.
-        stage2_time_cap_s = 1200.0
-    if op.fblock.fp is not None and int(op.total_size) >= 600000 and stage2_time_cap_s < 2400.0:
-        stage2_time_cap_s = 2400.0
+    stage2_admission = rhs1_stage2_admission_controls_from_env(
+        rhs_mode=int(op.rhs_mode),
+        include_phi1=bool(op.include_phi1),
+        solver_kind_default=_solver_kind(solve_method)[0],
+        pas_large_bicgstab_fastpath=bool(pas_large_bicgstab_fastpath),
+        tokamak_pas=bool(tokamak_pas),
+        has_fp=op.fblock.fp is not None,
+        use_dkes=bool(use_dkes),
+        total_size=int(op.total_size),
+    )
+    stage2_enabled = bool(stage2_admission.enabled)
+    stage2_time_cap_s = float(stage2_admission.time_cap_s)
 
     def _solve_linear(
         *,

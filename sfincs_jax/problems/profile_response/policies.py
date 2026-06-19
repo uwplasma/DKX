@@ -3197,6 +3197,14 @@ class RHS1Stage2RetryControls:
     method: str
 
 
+@dataclass(frozen=True)
+class RHS1Stage2AdmissionControls:
+    """Admission and elapsed-time budget controls for Stage-2 fallback solves."""
+
+    enabled: bool
+    time_cap_s: float
+
+
 def rhs1_stage2_ratio(*, use_dkes: bool) -> float:
     """Return the stage-2 residual-ratio trigger with DKES tightening."""
     stage2_ratio_env = os.environ.get("SFINCS_JAX_LINEAR_STAGE2_RATIO", "").strip()
@@ -3213,6 +3221,48 @@ def rhs1_stage2_trigger(*, res_ratio: float, use_dkes: bool) -> bool:
     """Return whether stage-2 should be considered from the residual ratio."""
     ratio = rhs1_stage2_ratio(use_dkes=use_dkes)
     return bool(res_ratio > ratio) if ratio > 0 else True
+
+
+def rhs1_stage2_admission_controls_from_env(
+    *,
+    rhs_mode: int,
+    include_phi1: bool,
+    solver_kind_default: str,
+    pas_large_bicgstab_fastpath: bool,
+    tokamak_pas: bool,
+    has_fp: bool,
+    use_dkes: bool,
+    total_size: int,
+) -> RHS1Stage2AdmissionControls:
+    """Resolve whether Stage-2 is available and how long it may run."""
+
+    stage2_env = os.environ.get("SFINCS_JAX_LINEAR_STAGE2", "").strip().lower()
+    if stage2_env in {"0", "false", "no", "off"}:
+        enabled = False
+    elif stage2_env in {"1", "true", "yes", "on"}:
+        enabled = True
+    else:
+        enabled = (
+            int(rhs_mode) == 1
+            and (not bool(include_phi1))
+            and str(solver_kind_default) in {"gmres", "bicgstab"}
+        )
+    if pas_large_bicgstab_fastpath and stage2_env == "":
+        enabled = False
+
+    # Stage-2 is a stronger fallback solve for difficult cases. The default
+    # time cap must be large enough to include one-time preconditioner setup,
+    # while remaining bounded for interactive use and CI.
+    time_cap_s = float(os.environ.get("SFINCS_JAX_LINEAR_STAGE2_MAX_ELAPSED_S", "30.0"))
+    if tokamak_pas and time_cap_s < 120.0:
+        time_cap_s = 120.0
+    if has_fp and use_dkes and time_cap_s < 120.0:
+        time_cap_s = 120.0
+    if has_fp and int(total_size) >= 300000 and time_cap_s < 1200.0:
+        time_cap_s = 1200.0
+    if has_fp and int(total_size) >= 600000 and time_cap_s < 2400.0:
+        time_cap_s = 2400.0
+    return RHS1Stage2AdmissionControls(enabled=bool(enabled), time_cap_s=float(time_cap_s))
 
 
 def rhs1_stage2_retry_controls_from_env(
@@ -3345,6 +3395,7 @@ __all__ = (
     "RHS1SparsePreconditionerConfig",
     "RHS1SparseRescueOrdering",
     "RHS1SparseRescuePolicySetup",
+    "RHS1Stage2AdmissionControls",
     "RHS1Stage2RetryControls",
     "parse_rhs1_pas_tz_guarded_structured_levels",
     "rhs1_bicgstab_fallback_controls_from_env",
@@ -3405,6 +3456,7 @@ __all__ = (
     "rhs1_sparse_rescue_policy_setup",
     "rhs1_sparse_rescue_tail_skip_messages",
     "rhs1_stage2_ratio",
+    "rhs1_stage2_admission_controls_from_env",
     "rhs1_stage2_retry_controls_from_env",
     "rhs1_stage2_trigger",
     "rhs1_xblock_fallback_initial_guess",

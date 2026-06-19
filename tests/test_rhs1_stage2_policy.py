@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 from sfincs_jax.rhs1_stage2_policy import (
+    RHS1Stage2AdmissionControls,
     RHS1Stage2RetryControls,
     rhs1_fp_force_stage2,
     rhs1_pas_stage2_skip,
     rhs1_pas_tz_guarded_stage2_retry,
+    rhs1_stage2_admission_controls_from_env,
     rhs1_stage2_ratio,
     rhs1_stage2_retry_controls_from_env,
     rhs1_stage2_trigger,
@@ -25,6 +27,150 @@ def test_rhs1_stage2_trigger_uses_ratio_policy(monkeypatch) -> None:
     assert not rhs1_stage2_trigger(res_ratio=9.0, use_dkes=False)
     assert rhs1_stage2_trigger(res_ratio=1.1, use_dkes=True)
     assert not rhs1_stage2_trigger(res_ratio=0.9, use_dkes=True)
+
+
+def test_rhs1_stage2_admission_controls_preserve_default_gate(monkeypatch) -> None:
+    monkeypatch.delenv("SFINCS_JAX_LINEAR_STAGE2", raising=False)
+    monkeypatch.delenv("SFINCS_JAX_LINEAR_STAGE2_MAX_ELAPSED_S", raising=False)
+
+    assert rhs1_stage2_admission_controls_from_env(
+        rhs_mode=1,
+        include_phi1=False,
+        solver_kind_default="gmres",
+        pas_large_bicgstab_fastpath=False,
+        tokamak_pas=False,
+        has_fp=False,
+        use_dkes=False,
+        total_size=1000,
+    ) == RHS1Stage2AdmissionControls(enabled=True, time_cap_s=30.0)
+
+    assert not rhs1_stage2_admission_controls_from_env(
+        rhs_mode=1,
+        include_phi1=True,
+        solver_kind_default="gmres",
+        pas_large_bicgstab_fastpath=False,
+        tokamak_pas=False,
+        has_fp=False,
+        use_dkes=False,
+        total_size=1000,
+    ).enabled
+
+    assert not rhs1_stage2_admission_controls_from_env(
+        rhs_mode=1,
+        include_phi1=False,
+        solver_kind_default="dense",
+        pas_large_bicgstab_fastpath=False,
+        tokamak_pas=False,
+        has_fp=False,
+        use_dkes=False,
+        total_size=1000,
+    ).enabled
+
+
+def test_rhs1_stage2_admission_controls_respect_env_and_fastpath(monkeypatch) -> None:
+    monkeypatch.setenv("SFINCS_JAX_LINEAR_STAGE2", "off")
+    assert not rhs1_stage2_admission_controls_from_env(
+        rhs_mode=1,
+        include_phi1=False,
+        solver_kind_default="gmres",
+        pas_large_bicgstab_fastpath=False,
+        tokamak_pas=False,
+        has_fp=False,
+        use_dkes=False,
+        total_size=1000,
+    ).enabled
+
+    monkeypatch.setenv("SFINCS_JAX_LINEAR_STAGE2", "on")
+    assert rhs1_stage2_admission_controls_from_env(
+        rhs_mode=2,
+        include_phi1=True,
+        solver_kind_default="dense",
+        pas_large_bicgstab_fastpath=True,
+        tokamak_pas=False,
+        has_fp=False,
+        use_dkes=False,
+        total_size=1000,
+    ).enabled
+
+    monkeypatch.delenv("SFINCS_JAX_LINEAR_STAGE2", raising=False)
+    assert not rhs1_stage2_admission_controls_from_env(
+        rhs_mode=1,
+        include_phi1=False,
+        solver_kind_default="bicgstab",
+        pas_large_bicgstab_fastpath=True,
+        tokamak_pas=False,
+        has_fp=False,
+        use_dkes=False,
+        total_size=1000,
+    ).enabled
+
+
+def test_rhs1_stage2_admission_controls_raise_time_budget_floors(monkeypatch) -> None:
+    monkeypatch.setenv("SFINCS_JAX_LINEAR_STAGE2_MAX_ELAPSED_S", "10")
+
+    assert rhs1_stage2_admission_controls_from_env(
+        rhs_mode=1,
+        include_phi1=False,
+        solver_kind_default="gmres",
+        pas_large_bicgstab_fastpath=False,
+        tokamak_pas=True,
+        has_fp=False,
+        use_dkes=False,
+        total_size=1000,
+    ).time_cap_s == 120.0
+
+    assert rhs1_stage2_admission_controls_from_env(
+        rhs_mode=1,
+        include_phi1=False,
+        solver_kind_default="gmres",
+        pas_large_bicgstab_fastpath=False,
+        tokamak_pas=False,
+        has_fp=True,
+        use_dkes=True,
+        total_size=1000,
+    ).time_cap_s == 120.0
+
+    assert rhs1_stage2_admission_controls_from_env(
+        rhs_mode=1,
+        include_phi1=False,
+        solver_kind_default="gmres",
+        pas_large_bicgstab_fastpath=False,
+        tokamak_pas=False,
+        has_fp=True,
+        use_dkes=False,
+        total_size=300000,
+    ).time_cap_s == 1200.0
+
+    assert rhs1_stage2_admission_controls_from_env(
+        rhs_mode=1,
+        include_phi1=False,
+        solver_kind_default="gmres",
+        pas_large_bicgstab_fastpath=False,
+        tokamak_pas=False,
+        has_fp=True,
+        use_dkes=False,
+        total_size=600000,
+    ).time_cap_s == 2400.0
+
+
+def test_rhs1_stage2_admission_controls_preserve_invalid_time_cap_error(monkeypatch) -> None:
+    monkeypatch.setenv("SFINCS_JAX_LINEAR_STAGE2_MAX_ELAPSED_S", "bad")
+
+    try:
+        rhs1_stage2_admission_controls_from_env(
+            rhs_mode=1,
+            include_phi1=False,
+            solver_kind_default="gmres",
+            pas_large_bicgstab_fastpath=False,
+            tokamak_pas=False,
+            has_fp=False,
+            use_dkes=False,
+            total_size=1000,
+        )
+    except ValueError:
+        pass
+    else:  # pragma: no cover - defensive clarity for this legacy contract
+        raise AssertionError("invalid Stage-2 elapsed-time env should still raise ValueError")
 
 
 def test_rhs1_stage2_retry_controls_preserve_defaults(monkeypatch) -> None:
