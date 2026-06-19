@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 from sfincs_jax.rhs1_strong_control import (
+    RHS1FPStrongSizeGuard,
     RHS1StrongRetryControls,
     RHS1StrongTriggerControls,
     rhs1_collision_retry_allowed,
+    rhs1_fp_strong_size_guard_from_env,
     rhs1_pas_force_strong_ratio_from_env,
     rhs1_resolved_strong_preconditioner_control,
     rhs1_strong_preconditioner_env_from_env,
@@ -194,6 +196,48 @@ def test_rhs1_collision_retry_allowed_requires_point_rhs1_nonphi1_and_trigger() 
     assert not rhs1_collision_retry_allowed(**{**kwargs, "has_fp": False, "has_pas": False})
     assert not rhs1_collision_retry_allowed(**{**kwargs, "strong_precond_trigger": False})
     assert rhs1_collision_retry_allowed(**{**kwargs, "has_fp": False, "has_pas": True})
+
+
+def test_rhs1_fp_strong_size_guard_preserves_defaults(monkeypatch) -> None:
+    monkeypatch.delenv("SFINCS_JAX_RHSMODE1_FP_STRONG_PRECOND_MAX", raising=False)
+
+    assert rhs1_fp_strong_size_guard_from_env(
+        active_size=120000,
+        strong_precond_kind="xblock_tz",
+        has_fp=True,
+        has_pas=False,
+    ) == RHS1FPStrongSizeGuard(skip=False, max_active_size=120000)
+    assert rhs1_fp_strong_size_guard_from_env(
+        active_size=120001,
+        strong_precond_kind="xblock_tz",
+        has_fp=True,
+        has_pas=False,
+    ) == RHS1FPStrongSizeGuard(skip=True, max_active_size=120000)
+
+
+def test_rhs1_fp_strong_size_guard_respects_env_and_problem_guards(monkeypatch) -> None:
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_FP_STRONG_PRECOND_MAX", "42")
+
+    kwargs = dict(
+        active_size=43,
+        strong_precond_kind="theta_zeta",
+        has_fp=True,
+        has_pas=False,
+    )
+    assert rhs1_fp_strong_size_guard_from_env(**kwargs) == RHS1FPStrongSizeGuard(
+        skip=True,
+        max_active_size=42,
+    )
+    assert not rhs1_fp_strong_size_guard_from_env(**{**kwargs, "active_size": 42}).skip
+    assert not rhs1_fp_strong_size_guard_from_env(**{**kwargs, "strong_precond_kind": "point"}).skip
+    assert not rhs1_fp_strong_size_guard_from_env(**{**kwargs, "has_fp": False}).skip
+    assert not rhs1_fp_strong_size_guard_from_env(**{**kwargs, "has_pas": True}).skip
+
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_FP_STRONG_PRECOND_MAX", "bad")
+    assert rhs1_fp_strong_size_guard_from_env(**kwargs) == RHS1FPStrongSizeGuard(
+        skip=False,
+        max_active_size=120000,
+    )
 
 
 def test_rhs1_resolved_strong_preconditioner_control_enables_auto_on_default_problem_families() -> None:

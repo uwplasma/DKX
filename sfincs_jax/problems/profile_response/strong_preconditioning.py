@@ -22,6 +22,19 @@ _PAS_STRONG_DELAY_BASE_KINDS = frozenset(
         "pas_tokamak_theta",
     }
 )
+_FP_STRONG_SIZE_GUARD_KINDS = frozenset(
+    {
+        "theta_line",
+        "theta_line_xdiag",
+        "zeta_line",
+        "theta_zeta",
+        "xblock_tz",
+        "xblock_tz_lmax",
+        "species_block",
+        "sxblock",
+        "sxblock_tz",
+    }
+)
 
 
 @dataclass(frozen=True)
@@ -41,6 +54,14 @@ class RHS1StrongRetryControls:
 
     restart: int
     maxiter: int
+
+
+@dataclass(frozen=True)
+class RHS1FPStrongSizeGuard:
+    """Admission result for FP-only strong preconditioners on large systems."""
+
+    skip: bool
+    max_active_size: int
 
 
 def requested_rhs1_strong_preconditioner_kind(
@@ -201,6 +222,30 @@ def rhs1_collision_retry_allowed(
         and (bool(has_fp) or bool(has_pas))
         and bool(strong_precond_trigger)
     )
+
+
+def rhs1_fp_strong_size_guard_from_env(
+    *,
+    active_size: int,
+    strong_precond_kind: str | None,
+    has_fp: bool,
+    has_pas: bool,
+) -> RHS1FPStrongSizeGuard:
+    """Return whether an FP-only strong preconditioner exceeds its size cap."""
+
+    raw = os.environ.get("SFINCS_JAX_RHSMODE1_FP_STRONG_PRECOND_MAX", "").strip()
+    try:
+        max_active_size = int(raw) if raw else 120000
+    except ValueError:
+        max_active_size = 120000
+    cap = max(0, int(max_active_size))
+    skip = bool(
+        has_fp
+        and not bool(has_pas)
+        and strong_precond_kind in _FP_STRONG_SIZE_GUARD_KINDS
+        and int(active_size) > cap
+    )
+    return RHS1FPStrongSizeGuard(skip=bool(skip), max_active_size=int(max_active_size))
 
 
 def rhs1_pas_weak_strong_retry_skip(
@@ -641,6 +686,7 @@ def adjust_rhs1_theta_line_auto_kind(
 
 __all__ = (
     "RHS1StrongAutoSelection",
+    "RHS1FPStrongSizeGuard",
     "RHS1StrongPreconditionerControl",
     "RHS1StrongRetryControls",
     "RHS1StrongTriggerControls",
@@ -650,6 +696,7 @@ __all__ = (
     "auto_rhs1_reduced_strong_kind",
     "requested_rhs1_strong_preconditioner_kind",
     "rhs1_collision_retry_allowed",
+    "rhs1_fp_strong_size_guard_from_env",
     "rhs1_pas_force_strong_ratio_from_env",
     "rhs1_pas_lite_min",
     "rhs1_pas_strong_lmax",

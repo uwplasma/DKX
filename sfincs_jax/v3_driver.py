@@ -339,6 +339,7 @@ from .problems.profile_response.strong_preconditioning import (
     auto_rhs1_reduced_strong_kind,
     requested_rhs1_strong_preconditioner_kind,
     rhs1_collision_retry_allowed,
+    rhs1_fp_strong_size_guard_from_env,
     rhs1_pas_force_strong_ratio_from_env,
     rhs1_pas_weak_minres_steps,
     rhs1_pas_weak_strong_retry_skip,
@@ -12005,31 +12006,21 @@ def solve_v3_full_system_linear_gmres(
             and strong_precond_trigger
             and not early_dense_shortcut
         ):
-            if op.fblock.fp is not None and op.fblock.pas is None:
-                fp_strong_max_env = os.environ.get("SFINCS_JAX_RHSMODE1_FP_STRONG_PRECOND_MAX", "").strip()
-                try:
-                    fp_strong_max = int(fp_strong_max_env) if fp_strong_max_env else 120000
-                except ValueError:
-                    fp_strong_max = 120000
-                fp_heavy_kinds = {
-                    "theta_line",
-                    "theta_line_xdiag",
-                    "zeta_line",
-                    "theta_zeta",
-                    "xblock_tz",
-                    "xblock_tz_lmax",
-                    "species_block",
-                    "sxblock",
-                    "sxblock_tz",
-                }
-                if int(active_size) > max(0, int(fp_strong_max)) and strong_precond_kind in fp_heavy_kinds:
-                    if emit is not None:
-                        emit(
-                            1,
-                            "solve_v3_full_system_linear_gmres: skipping strong preconditioner "
-                            f"(kind={strong_precond_kind}, size={int(active_size)} > fp_max={int(fp_strong_max)})",
-                        )
-                    strong_precond_kind = None
+            fp_size_guard = rhs1_fp_strong_size_guard_from_env(
+                active_size=int(active_size),
+                strong_precond_kind=strong_precond_kind,
+                has_fp=op.fblock.fp is not None,
+                has_pas=op.fblock.pas is not None,
+            )
+            if fp_size_guard.skip:
+                if emit is not None:
+                    emit(
+                        1,
+                        "solve_v3_full_system_linear_gmres: skipping strong preconditioner "
+                        f"(kind={strong_precond_kind}, size={int(active_size)} "
+                        f"> fp_max={int(fp_size_guard.max_active_size)})",
+                    )
+                strong_precond_kind = None
         if (
             strong_precond_kind is not None
             and _rhs1_residual_needs_rescue(
