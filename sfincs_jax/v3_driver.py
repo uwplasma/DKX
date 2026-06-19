@@ -209,6 +209,7 @@ from .problems.profile_response.linear_solve import (
     ProfileLinearSolveContext,
     RHS1ScipyRescueContext,
     profile_solver_kind,
+    rhs1_small_gmres_max_from_env,
     run_rhs1_scipy_rescue,
     solve_profile_linear,
     solve_profile_linear_with_residual,
@@ -10270,11 +10271,6 @@ def solve_v3_full_system_linear_gmres(
                 f"(size={int(active_size)})",
             )
 
-    small_gmres_env = os.environ.get("SFINCS_JAX_RHSMODE1_GMRES_SMALL_MAX", "").strip()
-    try:
-        small_gmres_max = int(small_gmres_env) if small_gmres_env else 600
-    except ValueError:
-        small_gmres_max = 600
     profile_linear_context = ProfileLinearSolveContext(
         rhs_mode=int(op.rhs_mode),
         total_size=int(op.total_size),
@@ -10282,7 +10278,7 @@ def solve_v3_full_system_linear_gmres(
         use_solver_jit=bool(_use_solver_jit()),
         distributed_axis=distributed_axis,
         distributed_auto_solver=distributed_auto_solver,
-        small_gmres_max=int(small_gmres_max),
+        small_gmres_max=rhs1_small_gmres_max_from_env(),
     )
 
     def _solver_kind(method: str) -> tuple[str, str]:

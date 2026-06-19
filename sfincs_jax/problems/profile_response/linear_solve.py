@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
+import os
 
 import jax.numpy as jnp
 
@@ -63,6 +64,16 @@ class RHS1ScipyRescueOutcome:
     reported_residual: float
     history_len: int
     preconditioned_residual: float | None = None
+
+
+def rhs1_small_gmres_max_from_env(*, default: int = 600) -> int:
+    """Return the size cutoff for small-system GMRES auto routing."""
+
+    env = os.environ.get("SFINCS_JAX_RHSMODE1_GMRES_SMALL_MAX", "").strip()
+    try:
+        return int(env) if env else int(default)
+    except ValueError:
+        return int(default)
 
 
 def profile_solver_kind(method: str, *, context: ProfileLinearSolveContext) -> tuple[str, str]:
@@ -321,6 +332,7 @@ __all__ = [
     "RHS1ScipyRescueContext",
     "RHS1ScipyRescueOutcome",
     "profile_solver_kind",
+    "rhs1_small_gmres_max_from_env",
     "run_rhs1_scipy_rescue",
     "solve_profile_linear",
     "solve_profile_linear_with_residual",

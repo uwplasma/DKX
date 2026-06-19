@@ -6,6 +6,7 @@ from sfincs_jax.problems.profile_response.linear_solve import (
     ProfileLinearSolveContext,
     RHS1ScipyRescueContext,
     profile_solver_kind,
+    rhs1_small_gmres_max_from_env,
     run_rhs1_scipy_rescue,
     solve_profile_linear_with_residual,
 )
@@ -43,6 +44,17 @@ def test_profile_solver_kind_prefers_bicgstab_for_distributed_auto() -> None:
     context = _context(distributed_axis="theta", distributed_auto_solver="bicgstab")
 
     assert profile_solver_kind("auto", context=context) == ("bicgstab", "batched")
+
+
+def test_rhs1_small_gmres_max_env_preserves_defaults(monkeypatch) -> None:
+    monkeypatch.delenv("SFINCS_JAX_RHSMODE1_GMRES_SMALL_MAX", raising=False)
+    assert rhs1_small_gmres_max_from_env() == 600
+
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_GMRES_SMALL_MAX", "42")
+    assert rhs1_small_gmres_max_from_env() == 42
+
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_GMRES_SMALL_MAX", "bad")
+    assert rhs1_small_gmres_max_from_env(default=17) == 17
 
 
 def test_solve_profile_linear_with_residual_solves_tiny_identity_system() -> None:
