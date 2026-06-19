@@ -504,6 +504,7 @@ from .problems.profile_response.residual import (
     compose_multilevel_residual_correction_preconditioner as _compose_multilevel_residual_correction_preconditioner,
     compose_residual_correction_preconditioner as _compose_residual_correction_preconditioner,
     l2_norm_float as rhs1_l2_norm_float,
+    recompute_true_residual_result as rhs1_recompute_true_residual_result,
     residual_converged as rhs1_residual_converged,
     residual_target as rhs1_residual_target,
     safe_preconditioner as _safe_preconditioner,
@@ -11687,19 +11688,15 @@ def solve_v3_full_system_linear_gmres(
                     precond_side=gmres_precond_side,
                     solver_kind=_solver_kind("incremental")[0],
                 )
-        residual_norm_check = float(res_reduced.residual_norm)
-        residual_norm_true = residual_norm_check
-        try:
-            r_vec = rhs_reduced - mv_reduced(res_reduced.x)
-            residual_norm_true = float(jnp.linalg.norm(r_vec))
-            if not np.isfinite(residual_norm_true):
-                residual_norm_true = residual_norm_check
-        except Exception:
-            residual_norm_true = residual_norm_check
-        if np.isfinite(residual_norm_true):
-            res_reduced = GMRESSolveResult(
-                x=res_reduced.x, residual_norm=jnp.asarray(residual_norm_true, dtype=jnp.float64)
+        res_reduced, residual_vec, residual_norm_true = (
+            rhs1_recompute_true_residual_result(
+                result=res_reduced,
+                rhs=rhs_reduced,
+                matvec=mv_reduced,
+                residual_vec=residual_vec,
+                update_residual_vec=False,
             )
+        )
         if (
             rhs1_pas_tz_guarded_fallback
             and preconditioner_reduced is not None
@@ -15465,14 +15462,13 @@ def solve_v3_full_system_linear_gmres(
         # norm. Recompute the true residual before deciding whether to escalate to a
         # stronger preconditioner or dense fallback so those decisions track the
         # printed residual and H5 parity behavior.
-        try:
-            residual_vec_true = residual_vec if residual_vec is not None else rhs - mv(result.x)
-            residual_norm_true = float(jnp.linalg.norm(residual_vec_true))
-            if np.isfinite(residual_norm_true):
-                result = GMRESSolveResult(x=result.x, residual_norm=jnp.asarray(residual_norm_true, dtype=jnp.float64))
-                residual_vec = residual_vec_true
-        except Exception:
-            pass
+        result, residual_vec, _residual_norm_true = rhs1_recompute_true_residual_result(
+            result=result,
+            rhs=rhs,
+            matvec=mv,
+            residual_vec=residual_vec,
+            update_residual_vec=True,
+        )
         pas_fast_accept = _rhsmode1_pas_fast_accept(
             op=op,
             active_size=int(op.total_size),

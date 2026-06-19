@@ -610,6 +610,45 @@ def l2_norm_float(values: jnp.ndarray) -> float:
     return float(jax.device_get(jnp.linalg.norm(jnp.asarray(values))))
 
 
+def recompute_true_residual_result(
+    *,
+    result: Any,
+    rhs: jnp.ndarray,
+    matvec: Callable[[jnp.ndarray], jnp.ndarray],
+    residual_vec: jnp.ndarray | None = None,
+    update_residual_vec: bool,
+) -> tuple[Any, jnp.ndarray | None, float]:
+    """Replace a Krylov-reported residual with the measured true residual.
+
+    Left-preconditioned Krylov methods may report a preconditioned norm. The
+    production RHSMode=1 driver uses this helper before rescue-path decisions so
+    escalation follows the same true residual that is written to diagnostics.
+    If the true residual cannot be evaluated or is non-finite, the original
+    result and residual vector are kept.
+    """
+
+    current_norm = float(result.residual_norm)
+    try:
+        if residual_vec is not None:
+            true_vec = jnp.asarray(residual_vec, dtype=jnp.float64)
+        else:
+            true_vec = jnp.asarray(rhs, dtype=jnp.float64) - jnp.asarray(
+                matvec(result.x), dtype=jnp.float64
+            )
+        true_norm = float(jnp.linalg.norm(true_vec))
+    except Exception:
+        return result, residual_vec, current_norm
+
+    if not math.isfinite(true_norm):
+        return result, residual_vec, current_norm
+
+    updated = result.__class__(
+        x=result.x,
+        residual_norm=jnp.asarray(true_norm, dtype=jnp.float64),
+    )
+    return updated, true_vec if update_residual_vec else residual_vec, true_norm
+
+
 def residual_target(*, atol: float, tol: float, rhs_norm: float) -> float:
     """Return the absolute residual target used by PETSc-style relative gates."""
 
@@ -645,6 +684,7 @@ __all__ = [
     "compose_multilevel_residual_correction_preconditioner",
     "compose_residual_correction_preconditioner",
     "l2_norm_float",
+    "recompute_true_residual_result",
     "residual_converged",
     "residual_target",
     "safe_preconditioner",

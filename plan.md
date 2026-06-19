@@ -42,8 +42,10 @@ Make `sfincs_jax` research-grade while preserving the public user contract:
 
 Recent checkpoints:
 
-- RHSMode=1 candidate accept-and-replay handoff consolidation
+- RHSMode=1 true-residual recomputation helper extraction
   (current checkpoint).
+- RHSMode=1 candidate accept-and-replay handoff consolidation
+  (`7d31161`).
 - Implicit-solve host-only Krylov downgrade contract and gradient tests
   (`04555a5`).
 - Generic sparse-PC dtype-retry/finalization handoff extraction
@@ -71,16 +73,21 @@ Recent checkpoints:
 - `cb295ce` Extract sparse pattern setup.
 - `4b6a5b4` Extract sparse factor policy.
 
-Current source-size snapshot after RHSMode=1 candidate accept-and-replay
-handoff consolidation:
+Current source-size snapshot after RHSMode=1 true-residual recomputation helper
+extraction:
 
-- `sfincs_jax/v3_driver.py`: `18868` lines.
-- `solve_v3_full_system_linear_gmres`: `13582` lines.
+- `sfincs_jax/v3_driver.py`: `18862` lines.
+- `solve_v3_full_system_linear_gmres`: `13577` lines.
+- `sfincs_jax/problems/profile_response/residual.py`: `692` lines.
 - `sfincs_jax/problems/profile_response/handoff.py`: `290` lines.
 - `sfincs_jax/problems/profile_response/sparse_pc.py`: `7826` lines.
 
 Recent local validation:
 
+- RHSMode=1 residual/refactor focused shard:
+  `31 passed in 9.48 s`.
+- Profile-response residual/handoff/sparse-PC shard:
+  `208 passed in 1.84 s`.
 - RHSMode=1 accept-and-replay handoff shard:
   `70 passed in 14.17 s`.
 - Broad profile-response/x-block/sparse-pattern handoff shard:
@@ -200,6 +207,8 @@ Completed recent boundaries:
   final payload construction consolidated into one profile-response helper.
 - RHSMode=1 rescue/refinement candidate acceptance and KSP replay-state updates
   consolidated into profile-response handoff helpers.
+- RHSMode=1 true-residual recomputation before fallback decisions consolidated
+  into a tested profile-response residual helper.
 
 Next steps:
 
@@ -268,7 +277,7 @@ Next steps:
 
 ## Immediate Next Steps
 
-1. Commit and push the implicit-solve host-only downgrade guard.
+1. Commit and push the RHSMode=1 true-residual helper extraction.
 2. Continue with remaining generic sparse-PC solve/result assembly extraction
    where behavior and cache boundaries remain clean.
 3. Run focused implicit/sparse-PC/profile-response shards after each extraction,
