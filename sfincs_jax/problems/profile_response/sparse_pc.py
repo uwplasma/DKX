@@ -40,6 +40,11 @@ from .setup import (
     SPARSE_HOST_XBLOCK_PC_GMRES_SOLVE_METHODS,
 )
 from .solver_diagnostics import build_rhs1_xblock_correction_metadata_from_driver_state
+from ...memory_model import (
+    bicgstab_work_nbytes,
+    gmres_basis_nbytes,
+    tfqmr_work_nbytes,
+)
 from ...sparse_triangular import (
     triangular_solve_lower_padded,
     triangular_solve_upper_padded,
@@ -99,6 +104,17 @@ class XBlockGMRESFallbackDecision:
     """Admission result for a non-GMRES xblock solve retrying with GMRES."""
 
     run: bool
+
+
+@dataclass(frozen=True)
+class XBlockSparsePCWorkEstimates:
+    """User-facing solver-kind and Krylov work-memory estimates."""
+
+    solver_kind: str
+    device_krylov_methods: frozenset[str]
+    gmres_basis_nbytes: int
+    bicgstab_work_nbytes: int
+    tfqmr_work_nbytes: int
 
 
 @dataclass(frozen=True)
@@ -173,6 +189,35 @@ def xblock_gmres_fallback_decision(
         and ((not np.isfinite(residual)) or residual > float(target))
     )
     return XBlockGMRESFallbackDecision(run=bool(should_retry))
+
+
+def xblock_sparse_pc_work_estimates(
+    *,
+    krylov_method: str,
+    linear_size: int,
+    restart: int,
+    dtype: Any = np.float64,
+) -> XBlockSparsePCWorkEstimates:
+    """Return xblock sparse-PC method labels and Krylov work estimates."""
+
+    method = str(krylov_method)
+    return XBlockSparsePCWorkEstimates(
+        solver_kind=(
+            "xblock_sparse_pc_gmres"
+            if method == "gmres"
+            else f"xblock_sparse_pc_{method}"
+        ),
+        device_krylov_methods=frozenset(
+            {"fgmres_jax", "gmres_jax", "bicgstab_jax", "tfqmr_jax"}
+        ),
+        gmres_basis_nbytes=gmres_basis_nbytes(
+            int(linear_size),
+            int(restart),
+            dtype=dtype,
+        ),
+        bicgstab_work_nbytes=bicgstab_work_nbytes(int(linear_size), dtype=dtype),
+        tfqmr_work_nbytes=tfqmr_work_nbytes(int(linear_size), dtype=dtype),
+    )
 
 
 def xblock_physical_solution_and_residual(
@@ -8598,6 +8643,7 @@ __all__ = [
     "SparsePCGMRESResult",
     "XBlockKrylovReport",
     "XBlockGMRESFallbackDecision",
+    "XBlockSparsePCWorkEstimates",
     "XBlockPhysicalResidual",
     "SparsePCGMRESFinalPayload",
     "SparseMinimumNormPolicy",
@@ -8668,6 +8714,7 @@ __all__ = [
     "xblock_gmres_fallback_decision",
     "xblock_krylov_report",
     "xblock_physical_solution_and_residual",
+    "xblock_sparse_pc_work_estimates",
     "sparse_pc_gmres_completion_message",
     "emit_sparse_pc_gmres_completion_from_driver_state",
     "sparse_pc_gmres_final_payload_from_driver_state",

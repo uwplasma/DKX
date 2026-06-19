@@ -63,6 +63,7 @@ from sfincs_jax.problems.profile_response.sparse_pc import (
     XBlockGMRESFallbackDecision,
     XBlockKrylovReport,
     XBlockPhysicalResidual,
+    XBlockSparsePCWorkEstimates,
     XBlockAssembledPreflightError,
     apply_fortran_reduced_xblock_global_coupling_stage,
     apply_fortran_reduced_xblock_initial_seed,
@@ -141,6 +142,7 @@ from sfincs_jax.problems.profile_response.sparse_pc import (
     xblock_gmres_fallback_decision,
     xblock_krylov_report,
     xblock_physical_solution_and_residual,
+    xblock_sparse_pc_work_estimates,
     retry_sparse_pc_factor_dtype_from_driver_state,
     retry_sparse_pc_factor_dtype_if_needed,
     sparse_pc_gmres_completion_message,
@@ -224,6 +226,39 @@ def test_xblock_gmres_fallback_decision_skips_converged_non_gmres() -> None:
         residual_norm=0.5,
         target=1.0,
     ).run
+
+
+def test_xblock_sparse_pc_work_estimates_report_gmres_metadata() -> None:
+    result = xblock_sparse_pc_work_estimates(
+        krylov_method="gmres",
+        linear_size=100,
+        restart=7,
+        dtype=np.float64,
+    )
+
+    assert result == XBlockSparsePCWorkEstimates(
+        solver_kind="xblock_sparse_pc_gmres",
+        device_krylov_methods=frozenset(
+            {"fgmres_jax", "gmres_jax", "bicgstab_jax", "tfqmr_jax"}
+        ),
+        gmres_basis_nbytes=100 * (7 + 1 + 4) * 8,
+        bicgstab_work_nbytes=100 * 8 * 8,
+        tfqmr_work_nbytes=100 * 10 * 8,
+    )
+
+
+def test_xblock_sparse_pc_work_estimates_report_non_gmres_solver_kind() -> None:
+    result = xblock_sparse_pc_work_estimates(
+        krylov_method="tfqmr_jax",
+        linear_size=10,
+        restart=3,
+        dtype=np.float32,
+    )
+
+    assert result.solver_kind == "xblock_sparse_pc_tfqmr_jax"
+    assert result.gmres_basis_nbytes == 10 * (3 + 1 + 4) * 4
+    assert result.bicgstab_work_nbytes == 10 * 8 * 4
+    assert result.tfqmr_work_nbytes == 10 * 10 * 4
 
 
 def test_xblock_physical_solution_and_residual_measures_true_residual() -> None:

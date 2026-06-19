@@ -122,7 +122,7 @@ from .rhs1_qi_two_level import (
     build_rhs1_xblock_smoothed_global_coupling_preconditioner as _build_rhs1_xblock_smoothed_global_coupling_preconditioner,
     build_rhs1_xblock_two_level_preconditioner as _build_rhs1_xblock_two_level_preconditioner,
 )
-from .memory_model import bicgstab_work_nbytes, estimate_sparse_pc_memory, gmres_basis_nbytes, tfqmr_work_nbytes
+from .memory_model import estimate_sparse_pc_memory
 from .rhs1_pas_policy import (
     build_pas_tz_memory_fallback,
     estimate_rhs1_pas_tz_build_bytes as _estimate_rhs1_pas_tz_build_bytes,
@@ -322,6 +322,7 @@ from .problems.profile_response.sparse_pc import (
     xblock_gmres_fallback_decision,
     xblock_krylov_report,
     xblock_physical_solution_and_residual,
+    xblock_sparse_pc_work_estimates,
     build_sparse_host_or_ilu_factor,
     build_sparse_ilu_preconditioner_from_cache,
     build_sparse_host_scipy_preconditioner,
@@ -6799,29 +6800,22 @@ def solve_v3_full_system_linear_gmres(
                     f"matvecs={int(reported_matvecs)} residual={float(residual_norm_xblock_pc):.6e} "
                     f"target={float(target_xblock):.6e}{ksp_suffix}",
                 )
-            xblock_solver_kind = (
-                "xblock_sparse_pc_gmres"
-                if xblock_krylov_method == "gmres"
-                else f"xblock_sparse_pc_{xblock_krylov_method}"
-            )
-            xblock_device_krylov_methods = {
-                "fgmres_jax",
-                "gmres_jax",
-                "bicgstab_jax",
-                "tfqmr_jax",
-            }
-            xblock_estimated_gmres_basis_nbytes = gmres_basis_nbytes(
-                int(xblock_linear_size),
-                int(pc_restart),
+            xblock_work_estimates = xblock_sparse_pc_work_estimates(
+                krylov_method=str(xblock_krylov_method),
+                linear_size=int(xblock_linear_size),
+                restart=int(pc_restart),
                 dtype=np.float64,
             )
-            xblock_estimated_bicgstab_work_nbytes = bicgstab_work_nbytes(
-                int(xblock_linear_size),
-                dtype=np.float64,
+            xblock_solver_kind = xblock_work_estimates.solver_kind
+            xblock_device_krylov_methods = set(xblock_work_estimates.device_krylov_methods)
+            xblock_estimated_gmres_basis_nbytes = (
+                xblock_work_estimates.gmres_basis_nbytes
             )
-            xblock_estimated_tfqmr_work_nbytes = tfqmr_work_nbytes(
-                int(xblock_linear_size),
-                dtype=np.float64,
+            xblock_estimated_bicgstab_work_nbytes = (
+                xblock_work_estimates.bicgstab_work_nbytes
+            )
+            xblock_estimated_tfqmr_work_nbytes = (
+                xblock_work_estimates.tfqmr_work_nbytes
             )
             xblock_sparse_pc_final_payload = xblock_sparse_pc_final_payload_from_driver_state(
                 locals(),

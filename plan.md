@@ -774,6 +774,16 @@ Recent local validation:
 - Hygiene:
   `py_compile`, `ruff`, `compileall`, `git diff --check`, and
   `scripts/check_repo_size.py` passed.
+- Sparse-PC helper shard after xblock sparse-PC work-estimate extraction:
+  `200 passed in 1.91 s`.
+- Sparse-host/minimum-norm/direct-tail driver shard:
+  `32 passed, 100 deselected in 36.13 s`.
+- Broad profile-response/RHSMode=1 policy, setup, diagnostics, solver, and
+  helper sweep after xblock sparse-PC work-estimate extraction:
+  `1157 passed in 48.36 s`.
+- Hygiene:
+  `py_compile`, `ruff`, `compileall`, `git diff --check`, and
+  `scripts/check_repo_size.py` passed.
 - Older focused and broad validation checkpoints are intentionally omitted from
   this active plan; they remain available in git history.
 
@@ -980,6 +990,9 @@ Completed recent boundaries:
 - X-block post-residual-equation cached QI-basis setup now uses a tested
   solver-diagnostics helper, keeping the driver focused on applying the
   correction rather than preparing diagnostic/cache payloads.
+- X-block sparse-PC solver-kind labels and Krylov work-memory estimates now
+  use a tested profile-response helper, and `v3_driver.py` no longer imports
+  low-level Krylov memory estimators directly for xblock metadata.
 
 Next steps:
 
