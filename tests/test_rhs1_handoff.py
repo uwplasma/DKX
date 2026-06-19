@@ -13,6 +13,7 @@ from sfincs_jax.rhs1_handoff import (
     rhs1_accept_measured_candidate,
     rhs1_accept_measured_candidate_and_update_replay,
     rhs1_residual_improves,
+    rhs1_run_fast_post_xblock_polish,
     rhs1_solver_candidate_metrics,
 )
 from sfincs_jax.solver_selection_policy import SolverCandidateMetrics
@@ -491,3 +492,79 @@ def test_rhs1_apply_handoff_to_replay_state_updates_all_replay_fields() -> None:
     assert replay.maxiter == 90
     assert replay.precond_side == "left"
     assert replay.solver_kind == "incremental"
+
+
+def test_rhs1_run_fast_post_xblock_polish_accepts_improved_candidate() -> None:
+    messages: list[tuple[int, str]] = []
+    calls: list[dict[str, object]] = []
+    current = _result(1.0, x="x0")
+    candidate = _result(0.25, x="x1")
+
+    def solve_linear(**kwargs):
+        calls.append(kwargs)
+        return candidate
+
+    result, accepted = rhs1_run_fast_post_xblock_polish(
+        current_result=current,
+        matvec_fn="mv",
+        b_vec="rhs",
+        precond_fn="pc",
+        tol=1.0e-10,
+        atol=1.0e-12,
+        restart=17,
+        maxiter=33,
+        precond_side="left",
+        solve_linear=solve_linear,
+        emit=lambda level, message: messages.append((level, message)),
+    )
+
+    assert accepted
+    assert result is candidate
+    assert calls == [
+        {
+            "matvec_fn": "mv",
+            "b_vec": "rhs",
+            "precond_fn": "pc",
+            "x0_vec": "x0",
+            "tol_val": 1.0e-10,
+            "atol_val": 1.0e-12,
+            "restart_val": 17,
+            "maxiter_val": 33,
+            "solve_method_val": "incremental",
+            "precond_side": "left",
+        }
+    ]
+    assert messages == [
+        (
+            1,
+            "solve_v3_full_system_linear_gmres: fast post-xblock polish "
+            "(restart=17 maxiter=33 residual=1.000e+00)",
+        ),
+        (
+            1,
+            "solve_v3_full_system_linear_gmres: fast post-xblock polish improved residual "
+            "1.000e+00 -> 2.500e-01",
+        ),
+    ]
+
+
+def test_rhs1_run_fast_post_xblock_polish_rejects_nonimproving_candidate() -> None:
+    current = _result(1.0, x="x0")
+    candidate = _result(2.0, x="x1")
+
+    result, accepted = rhs1_run_fast_post_xblock_polish(
+        current_result=current,
+        matvec_fn="mv",
+        b_vec="rhs",
+        precond_fn="pc",
+        tol=1.0e-10,
+        atol=1.0e-12,
+        restart=17,
+        maxiter=None,
+        precond_side="right",
+        solve_linear=lambda **_kwargs: candidate,
+        emit=None,
+    )
+
+    assert not accepted
+    assert result is current

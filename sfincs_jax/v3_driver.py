@@ -172,6 +172,7 @@ from .problems.profile_response.handoff import (
     RHS1KSPReplayState,
     rhs1_accept_candidate_and_update_replay,
     rhs1_accept_measured_candidate_and_update_replay,
+    rhs1_run_fast_post_xblock_polish,
 )
 from .problems.profile_response.auto_solve import (
     RHS1AutoHostSolveContext,
@@ -14178,33 +14179,19 @@ def solve_v3_full_system_linear_gmres(
                 polish_tol = min(float(tol), 1.0e-10)
             polish_restart = max(5, int(polish_restart))
             polish_maxiter = max(5, int(polish_maxiter))
-            if emit is not None:
-                emit(
-                    1,
-                    "solve_v3_full_system_linear_gmres: fast post-xblock polish "
-                    f"(restart={polish_restart} maxiter={polish_maxiter} "
-                    f"residual={float(res_reduced.residual_norm):.3e})",
-                )
-            res_polish = _solve_linear(
+            res_reduced, _accepted = rhs1_run_fast_post_xblock_polish(
+                current_result=res_reduced,
                 matvec_fn=mv_reduced,
                 b_vec=rhs_reduced,
                 precond_fn=preconditioner_reduced,
-                x0_vec=res_reduced.x,
-                tol_val=polish_tol,
-                atol_val=atol,
-                restart_val=polish_restart,
-                maxiter_val=polish_maxiter,
-                solve_method_val="incremental",
+                tol=polish_tol,
+                atol=atol,
+                restart=polish_restart,
+                maxiter=polish_maxiter,
                 precond_side=gmres_precond_side,
+                solve_linear=_solve_linear,
+                emit=emit,
             )
-            if float(res_polish.residual_norm) < float(res_reduced.residual_norm):
-                if emit is not None:
-                    emit(
-                        1,
-                        "solve_v3_full_system_linear_gmres: fast post-xblock polish improved residual "
-                        f"{float(res_reduced.residual_norm):.3e} -> {float(res_polish.residual_norm):.3e}",
-                    )
-                res_reduced = res_polish
         # Cheap post-solve polish for large FP systems:
         # Apply a few damped preconditioned-residual correction steps to improve
         # low-order moments (flow/Mach/jHat) without paying for a full second GMRES pass.

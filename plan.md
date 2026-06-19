@@ -42,8 +42,10 @@ Make `sfincs_jax` research-grade while preserving the public user contract:
 
 Recent checkpoints:
 
-- RHSMode=1 true-residual `GMRESSolveResult` helper extraction
+- RHSMode=1 fast post-xblock polish handoff extraction
   (current checkpoint).
+- RHSMode=1 true-residual `GMRESSolveResult` helper extraction
+  (`62948d0`).
 - Payload-to-`V3LinearSolveResult` result-layer wrapper extraction
   (`7652c24`).
 - Explicit sparse-host direct factor/solve orchestration extraction
@@ -89,18 +91,25 @@ Recent checkpoints:
 - `cb295ce` Extract sparse pattern setup.
 - `4b6a5b4` Extract sparse factor policy.
 
-Current source-size snapshot after RHSMode=1 true-residual result helper
+Current source-size snapshot after RHSMode=1 fast post-xblock polish handoff
 extraction:
 
-- `sfincs_jax/v3_driver.py`: `18759` lines.
-- `solve_v3_full_system_linear_gmres`: `13471` lines.
+- `sfincs_jax/v3_driver.py`: `18746` lines.
+- `solve_v3_full_system_linear_gmres`: `13457` lines.
 - `sfincs_jax/v3_results.py`: `119` lines.
 - `sfincs_jax/problems/profile_response/residual.py`: `773` lines.
-- `sfincs_jax/problems/profile_response/handoff.py`: `290` lines.
+- `sfincs_jax/problems/profile_response/handoff.py`: `340` lines.
 - `sfincs_jax/problems/profile_response/sparse_pc.py`: `8034` lines.
 
 Recent local validation:
 
+- RHSMode=1 handoff helper unit shard:
+  `24 passed in 0.31 s`.
+- Sparse-host/minimum-norm/direct-tail driver shard:
+  `32 passed, 124 deselected in 31.16 s`.
+- Hygiene:
+  `ruff`, `compileall`, `git diff --check`, and `scripts/check_repo_size.py`
+  passed.
 - RHSMode=1 residual helper unit shard:
   `13 passed in 0.74 s`.
 - Sparse-host/minimum-norm/direct-tail driver shard:
@@ -298,6 +307,9 @@ Completed recent boundaries:
   x-block, and explicit host sparse payloads.
 - RHSMode=1 true-residual result/vector construction consolidated in the
   profile-response residual module and reused by dense and SciPy rescue paths.
+- RHSMode=1 fast post-xblock polish execution, progress emission, and
+  strict residual-improvement acceptance consolidated into a tested
+  profile-response handoff helper.
 
 Next steps:
 

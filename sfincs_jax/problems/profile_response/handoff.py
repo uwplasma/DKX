@@ -277,6 +277,55 @@ def rhs1_accept_measured_candidate_and_update_replay(
     return result, residual_vec, accepted
 
 
+def rhs1_run_fast_post_xblock_polish(
+    *,
+    current_result: Any,
+    matvec_fn: Any,
+    b_vec: Any,
+    precond_fn: Any,
+    tol: float,
+    atol: float,
+    restart: int,
+    maxiter: int | None,
+    precond_side: str,
+    solve_linear: Any,
+    emit: Any = None,
+) -> tuple[Any, bool]:
+    """Run the bounded post-xblock polish and retain it only if it improves."""
+
+    current_residual = float(current_result.residual_norm)
+    if emit is not None:
+        emit(
+            1,
+            "solve_v3_full_system_linear_gmres: fast post-xblock polish "
+            f"(restart={int(restart)} maxiter={maxiter} residual={current_residual:.3e})",
+        )
+    candidate = solve_linear(
+        matvec_fn=matvec_fn,
+        b_vec=b_vec,
+        precond_fn=precond_fn,
+        x0_vec=current_result.x,
+        tol_val=float(tol),
+        atol_val=float(atol),
+        restart_val=int(restart),
+        maxiter_val=maxiter,
+        solve_method_val="incremental",
+        precond_side=str(precond_side),
+    )
+    if rhs1_residual_improves(
+        current_residual=current_residual,
+        candidate_residual=float(candidate.residual_norm),
+    ):
+        if emit is not None:
+            emit(
+                1,
+                "solve_v3_full_system_linear_gmres: fast post-xblock polish improved residual "
+                f"{current_residual:.3e} -> {float(candidate.residual_norm):.3e}",
+            )
+        return candidate, True
+    return current_result, False
+
+
 __all__ = [
     "RHS1KSPHandoffState",
     "RHS1KSPReplayState",
@@ -286,5 +335,6 @@ __all__ = [
     "rhs1_accept_measured_candidate",
     "rhs1_accept_measured_candidate_and_update_replay",
     "rhs1_residual_improves",
+    "rhs1_run_fast_post_xblock_polish",
     "rhs1_solver_candidate_metrics",
 ]
