@@ -595,6 +595,43 @@ class SparsePCFactorPreflightPolicy:
 
 
 @dataclass(frozen=True)
+class DirectTailResidualRescuePolicy:
+    """Resolved direct-tail residual rescue controls."""
+
+    residual_coarse_requested: bool
+    residual_coarse_rank: int
+    residual_coarse_max_mb: float
+    residual_coarse_regularization: float
+    residual_window_requested: bool
+    residual_window_max_windows: int
+    residual_window_x_radius: int
+    residual_window_ell_radius: int
+    residual_window_max_mb: float
+    residual_window_regularization: float
+    residual_window_coefficient_mode: str
+    residual_window_combine_mode: str
+    residual_window_interface_depth: int
+    residual_window_max_size: int
+    true_window_requested: bool
+    true_window_max_windows: int
+    true_window_x_radius: int
+    true_window_ell_radius: int
+    true_window_max_mb: float
+    true_window_regularization: float
+    true_window_max_size: int
+    true_window_column_batch: int
+    true_window_drop_tol: float
+    true_window_include_tail: bool
+    true_window_damping: bool
+    true_window_beta_max: float
+    true_coupled_coarse_explicit_requested: bool
+    true_coupled_coarse_auto_enabled: bool
+    true_coupled_coarse_auto_native_enabled: bool
+    true_coupled_coarse_auto_target_ratio: float
+    true_coupled_coarse_auto_min_size: int
+
+
+@dataclass(frozen=True)
 class XBlockSparsePCSetup:
     """Setup controls for RHSMode=1 x-block sparse-PC solves."""
 
@@ -3030,6 +3067,231 @@ def resolve_sparse_pc_factor_preflight_policy(
         ),
         structured_pc_preflight_required=bool(structured_pc_preflight_required),
         factor_preflight_max_target_ratio=float(factor_preflight_max_target_ratio),
+    )
+
+
+def resolve_direct_tail_residual_rescue_policy(
+    env: Mapping[str, str] | None,
+) -> DirectTailResidualRescuePolicy:
+    """Resolve direct-tail residual rescue controls without building rescues."""
+
+    residual_window_coefficient_mode = (
+        _env_value(
+            env,
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_RESIDUAL_WINDOW_COEFFICIENTS",
+        )
+        or "additive"
+    ).lower().replace("-", "_")
+    if residual_window_coefficient_mode not in {
+        "additive",
+        "least_squares",
+        "normal",
+        "normal_equations",
+    }:
+        residual_window_coefficient_mode = "additive"
+    residual_window_combine_mode = (
+        _env_value(
+            env,
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_RESIDUAL_WINDOW_COMBINE",
+        )
+        or "independent"
+    ).lower().replace("-", "_")
+    if residual_window_combine_mode not in {
+        "independent",
+        "union",
+        "coupled",
+        "interface",
+        "graph_interface",
+    }:
+        residual_window_combine_mode = "independent"
+
+    return DirectTailResidualRescuePolicy(
+        residual_coarse_requested=_env_bool(
+            env,
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_RESIDUAL_COARSE",
+            default=False,
+        ),
+        residual_coarse_rank=_env_int(
+            env,
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_RESIDUAL_COARSE_RANK",
+            4,
+            minimum=1,
+        ),
+        residual_coarse_max_mb=max(
+            0.0,
+            _env_float(
+                env,
+                "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_RESIDUAL_COARSE_MAX_MB",
+                512.0,
+            ),
+        ),
+        residual_coarse_regularization=max(
+            0.0,
+            _env_float(
+                env,
+                "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_RESIDUAL_COARSE_REGULARIZATION",
+                1.0e-12,
+            ),
+        ),
+        residual_window_requested=_env_bool(
+            env,
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_RESIDUAL_WINDOW",
+            default=False,
+        ),
+        residual_window_max_windows=_env_int(
+            env,
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_RESIDUAL_WINDOW_MAX_WINDOWS",
+            2,
+            minimum=1,
+        ),
+        residual_window_x_radius=_env_int(
+            env,
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_RESIDUAL_WINDOW_X_RADIUS",
+            0,
+            minimum=0,
+        ),
+        residual_window_ell_radius=_env_int(
+            env,
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_RESIDUAL_WINDOW_ELL_RADIUS",
+            1,
+            minimum=0,
+        ),
+        residual_window_max_mb=max(
+            0.0,
+            _env_float(
+                env,
+                "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_RESIDUAL_WINDOW_MAX_MB",
+                512.0,
+            ),
+        ),
+        residual_window_regularization=max(
+            0.0,
+            _env_float(
+                env,
+                "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_RESIDUAL_WINDOW_REGULARIZATION",
+                1.0e-12,
+            ),
+        ),
+        residual_window_coefficient_mode=str(residual_window_coefficient_mode),
+        residual_window_combine_mode=str(residual_window_combine_mode),
+        residual_window_interface_depth=_env_int(
+            env,
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_RESIDUAL_WINDOW_INTERFACE_DEPTH",
+            0,
+            minimum=0,
+        ),
+        residual_window_max_size=_env_int(
+            env,
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_RESIDUAL_WINDOW_MAX_SIZE",
+            100_000,
+            minimum=1,
+        ),
+        true_window_requested=_env_bool(
+            env,
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_WINDOW",
+            default=False,
+        ),
+        true_window_max_windows=_env_int(
+            env,
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_WINDOW_MAX_WINDOWS",
+            1,
+            minimum=1,
+        ),
+        true_window_x_radius=_env_int(
+            env,
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_WINDOW_X_RADIUS",
+            0,
+            minimum=0,
+        ),
+        true_window_ell_radius=_env_int(
+            env,
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_WINDOW_ELL_RADIUS",
+            1,
+            minimum=0,
+        ),
+        true_window_max_mb=max(
+            0.0,
+            _env_float(
+                env,
+                "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_WINDOW_MAX_MB",
+                512.0,
+            ),
+        ),
+        true_window_regularization=max(
+            0.0,
+            _env_float(
+                env,
+                "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_WINDOW_REGULARIZATION",
+                1.0e-12,
+            ),
+        ),
+        true_window_max_size=_env_int(
+            env,
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_WINDOW_MAX_SIZE",
+            4096,
+            minimum=1,
+        ),
+        true_window_column_batch=_env_int(
+            env,
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_WINDOW_COLUMN_BATCH",
+            4,
+            minimum=1,
+        ),
+        true_window_drop_tol=max(
+            0.0,
+            _env_float(
+                env,
+                "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_WINDOW_DROP_TOL",
+                1.0e-14,
+            ),
+        ),
+        true_window_include_tail=_env_bool(
+            env,
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_WINDOW_INCLUDE_TAIL",
+            default=True,
+        ),
+        true_window_damping=_env_bool(
+            env,
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_WINDOW_DAMPING",
+            default=False,
+        ),
+        true_window_beta_max=max(
+            0.0,
+            _env_float(
+                env,
+                "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_WINDOW_BETA_MAX",
+                10.0,
+            ),
+        ),
+        true_coupled_coarse_explicit_requested=_env_bool(
+            env,
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_COUPLED_COARSE",
+            default=False,
+        ),
+        true_coupled_coarse_auto_enabled=_env_bool(
+            env,
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_COUPLED_COARSE_AUTO",
+            default=True,
+        ),
+        true_coupled_coarse_auto_native_enabled=_env_bool(
+            env,
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_COUPLED_AUTO_NATIVE",
+            default=False,
+        ),
+        true_coupled_coarse_auto_target_ratio=max(
+            1.0,
+            _env_float(
+                env,
+                "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_COUPLED_AUTO_TARGET_RATIO",
+                10.0,
+            ),
+        ),
+        true_coupled_coarse_auto_min_size=_env_int(
+            env,
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_COUPLED_AUTO_MIN_SIZE",
+            300_000,
+            minimum=1,
+        ),
     )
 
 
@@ -5491,6 +5753,7 @@ __all__ = [
     "DirectTailSupportModePreflightResult",
     "SparsePCFactorPreflightPolicyContext",
     "SparsePCFactorPreflightPolicy",
+    "DirectTailResidualRescuePolicy",
     "MatvecCounter",
     "XBlockAssembledOperatorDiagnosticsContext",
     "XBlockSparsePCCoreDiagnosticsContext",
@@ -5516,6 +5779,7 @@ __all__ = [
     "build_direct_tail_structured_preconditioner_setup",
     "enforce_sparse_pc_memory_budget",
     "resolve_sparse_pc_factor_preflight_policy",
+    "resolve_direct_tail_residual_rescue_policy",
     "run_direct_tail_support_mode_preflight",
     "resolve_direct_tail_structured_admission",
     "fp_xblock_global_correction_metadata",

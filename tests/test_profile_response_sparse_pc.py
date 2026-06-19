@@ -20,6 +20,7 @@ from sfincs_jax.problems.profile_response.sparse_pc import (
     DirectTailStructuredAdmissionContext,
     DirectTailStructuredBuildContext,
     DirectTailSupportModePreflightContext,
+    DirectTailResidualRescuePolicy,
     SparsePCFactorPreflightPolicyContext,
     FortranReducedXBlockFactorBuildContext,
     FortranReducedXBlockGlobalCouplingStageContext,
@@ -67,6 +68,7 @@ from sfincs_jax.problems.profile_response.sparse_pc import (
     resolve_sparse_pc_factor_policy,
     resolve_sparse_pc_factor_preflight_policy,
     resolve_direct_tail_structured_admission,
+    resolve_direct_tail_residual_rescue_policy,
     run_direct_tail_support_mode_preflight,
     resolve_xblock_qi_device_admission_setup,
     resolve_xblock_qi_device_base_config_setup,
@@ -1148,6 +1150,86 @@ def test_sparse_pc_factor_preflight_policy_uses_size_trigger_and_overrides() -> 
     assert policy.direct_tail_structured_pc_size_requires_preflight is True
     assert policy.structured_pc_preflight_required is False
     assert policy.factor_preflight_max_target_ratio == 1.0
+
+
+def test_direct_tail_residual_rescue_policy_defaults() -> None:
+    policy = resolve_direct_tail_residual_rescue_policy({})
+
+    assert isinstance(policy, DirectTailResidualRescuePolicy)
+    assert policy.residual_coarse_requested is False
+    assert policy.residual_coarse_rank == 4
+    assert policy.residual_coarse_max_mb == 512.0
+    assert policy.residual_window_requested is False
+    assert policy.residual_window_max_windows == 2
+    assert policy.residual_window_coefficient_mode == "additive"
+    assert policy.residual_window_combine_mode == "independent"
+    assert policy.true_window_requested is False
+    assert policy.true_window_max_windows == 1
+    assert policy.true_window_column_batch == 4
+    assert policy.true_window_include_tail is True
+    assert policy.true_coupled_coarse_explicit_requested is False
+    assert policy.true_coupled_coarse_auto_enabled is True
+    assert policy.true_coupled_coarse_auto_native_enabled is False
+    assert policy.true_coupled_coarse_auto_target_ratio == 10.0
+    assert policy.true_coupled_coarse_auto_min_size == 300000
+
+
+def test_direct_tail_residual_rescue_policy_normalizes_modes_and_clamps() -> None:
+    policy = resolve_direct_tail_residual_rescue_policy(
+        {
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_RESIDUAL_COARSE": "1",
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_RESIDUAL_COARSE_RANK": "0",
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_RESIDUAL_COARSE_MAX_MB": "-5",
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_RESIDUAL_WINDOW": "1",
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_RESIDUAL_WINDOW_MAX_WINDOWS": "0",
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_RESIDUAL_WINDOW_X_RADIUS": "-1",
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_RESIDUAL_WINDOW_ELL_RADIUS": "-1",
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_RESIDUAL_WINDOW_COEFFICIENTS": "NORMAL-EQUATIONS",
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_RESIDUAL_WINDOW_COMBINE": "graph-interface",
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_WINDOW": "1",
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_WINDOW_DROP_TOL": "-1e-4",
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_WINDOW_INCLUDE_TAIL": "0",
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_WINDOW_DAMPING": "1",
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_WINDOW_BETA_MAX": "-2",
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_COUPLED_COARSE": "1",
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_COUPLED_COARSE_AUTO": "0",
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_COUPLED_AUTO_NATIVE": "1",
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_COUPLED_AUTO_TARGET_RATIO": "0",
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_COUPLED_AUTO_MIN_SIZE": "0",
+        }
+    )
+
+    assert policy.residual_coarse_requested is True
+    assert policy.residual_coarse_rank == 1
+    assert policy.residual_coarse_max_mb == 0.0
+    assert policy.residual_window_requested is True
+    assert policy.residual_window_max_windows == 1
+    assert policy.residual_window_x_radius == 0
+    assert policy.residual_window_ell_radius == 0
+    assert policy.residual_window_coefficient_mode == "normal_equations"
+    assert policy.residual_window_combine_mode == "graph_interface"
+    assert policy.true_window_requested is True
+    assert policy.true_window_drop_tol == 0.0
+    assert policy.true_window_include_tail is False
+    assert policy.true_window_damping is True
+    assert policy.true_window_beta_max == 0.0
+    assert policy.true_coupled_coarse_explicit_requested is True
+    assert policy.true_coupled_coarse_auto_enabled is False
+    assert policy.true_coupled_coarse_auto_native_enabled is True
+    assert policy.true_coupled_coarse_auto_target_ratio == 1.0
+    assert policy.true_coupled_coarse_auto_min_size == 1
+
+
+def test_direct_tail_residual_rescue_policy_falls_back_for_bad_modes() -> None:
+    policy = resolve_direct_tail_residual_rescue_policy(
+        {
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_RESIDUAL_WINDOW_COEFFICIENTS": "bad",
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_RESIDUAL_WINDOW_COMBINE": "bad",
+        }
+    )
+
+    assert policy.residual_window_coefficient_mode == "additive"
+    assert policy.residual_window_combine_mode == "independent"
 
 
 def test_fortran_reduced_xblock_factor_policy_uses_specific_env_before_generic() -> None:

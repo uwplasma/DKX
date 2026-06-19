@@ -252,6 +252,7 @@ from .problems.profile_response.sparse_pc import (
     resolve_sparse_pc_factor_policy,
     resolve_sparse_pc_factor_preflight_policy,
     resolve_direct_tail_structured_admission,
+    resolve_direct_tail_residual_rescue_policy,
     resolve_fortran_reduced_sparse_pc_backend,
     run_direct_tail_support_mode_preflight,
     resolve_fortran_reduced_xblock_factor_policy,
@@ -7695,58 +7696,37 @@ def solve_v3_full_system_linear_gmres(
         factor_preflight_seed_used = False
         factor_preflight_passed: bool | None = None
         factor_preflight_error: str | None = None
-        direct_tail_residual_coarse_requested = _rhs1_bool_env(
-            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_RESIDUAL_COARSE",
-            default=False,
+        direct_tail_residual_rescue_policy = resolve_direct_tail_residual_rescue_policy(os.environ)
+        direct_tail_residual_coarse_requested = bool(
+            direct_tail_residual_rescue_policy.residual_coarse_requested
         )
         direct_tail_residual_coarse_selected = False
         direct_tail_residual_coarse_metadata: dict[str, object] | None = None
         direct_tail_residual_coarse_error: str | None = None
         direct_tail_residual_coarse_residual_after: float | None = None
-        direct_tail_residual_coarse_rank = _rhs1_int_env(
-            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_RESIDUAL_COARSE_RANK",
-            default=4,
-            minimum=1,
+        direct_tail_residual_coarse_rank = int(direct_tail_residual_rescue_policy.residual_coarse_rank)
+        direct_tail_residual_coarse_max_mb = float(direct_tail_residual_rescue_policy.residual_coarse_max_mb)
+        direct_tail_residual_coarse_regularization = float(
+            direct_tail_residual_rescue_policy.residual_coarse_regularization
         )
-        direct_tail_residual_coarse_max_mb = _rhs1_float_env(
-            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_RESIDUAL_COARSE_MAX_MB",
-            default=512.0,
-            minimum=0.0,
+        direct_tail_residual_window_requested = bool(
+            direct_tail_residual_rescue_policy.residual_window_requested
         )
-        direct_tail_residual_coarse_regularization = _rhs1_float_env(
-            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_RESIDUAL_COARSE_REGULARIZATION",
-            default=1.0e-12,
-            minimum=0.0,
+        direct_tail_true_window_requested = bool(direct_tail_residual_rescue_policy.true_window_requested)
+        direct_tail_true_coupled_coarse_explicit_requested = bool(
+            direct_tail_residual_rescue_policy.true_coupled_coarse_explicit_requested
         )
-        direct_tail_residual_window_requested = _rhs1_bool_env(
-            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_RESIDUAL_WINDOW",
-            default=False,
+        direct_tail_true_coupled_coarse_auto_enabled = bool(
+            direct_tail_residual_rescue_policy.true_coupled_coarse_auto_enabled
         )
-        direct_tail_true_window_requested = _rhs1_bool_env(
-            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_WINDOW",
-            default=False,
+        direct_tail_true_coupled_coarse_auto_native_enabled = bool(
+            direct_tail_residual_rescue_policy.true_coupled_coarse_auto_native_enabled
         )
-        direct_tail_true_coupled_coarse_explicit_requested = _rhs1_bool_env(
-            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_COUPLED_COARSE",
-            default=False,
+        direct_tail_true_coupled_coarse_auto_target_ratio = float(
+            direct_tail_residual_rescue_policy.true_coupled_coarse_auto_target_ratio
         )
-        direct_tail_true_coupled_coarse_auto_enabled = _rhs1_bool_env(
-            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_COUPLED_COARSE_AUTO",
-            default=True,
-        )
-        direct_tail_true_coupled_coarse_auto_native_enabled = _rhs1_bool_env(
-            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_COUPLED_AUTO_NATIVE",
-            default=False,
-        )
-        direct_tail_true_coupled_coarse_auto_target_ratio = _rhs1_float_env(
-            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_COUPLED_AUTO_TARGET_RATIO",
-            default=10.0,
-            minimum=1.0,
-        )
-        direct_tail_true_coupled_coarse_auto_min_size = _rhs1_int_env(
-            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_COUPLED_AUTO_MIN_SIZE",
-            default=300_000,
-            minimum=1,
+        direct_tail_true_coupled_coarse_auto_min_size = int(
+            direct_tail_residual_rescue_policy.true_coupled_coarse_auto_min_size
         )
         direct_tail_true_coupled_coarse_requested = bool(direct_tail_true_coupled_coarse_explicit_requested)
         direct_tail_true_coupled_coarse_auto_selected = False
@@ -7762,127 +7742,40 @@ def solve_v3_full_system_linear_gmres(
         direct_tail_residual_window_metadata: dict[str, object] | None = None
         direct_tail_residual_window_error: str | None = None
         direct_tail_residual_window_residual_after: float | None = None
-        direct_tail_residual_window_max_windows = _rhs1_int_env(
-            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_RESIDUAL_WINDOW_MAX_WINDOWS",
-            default=2,
-            minimum=1,
+        direct_tail_residual_window_max_windows = int(
+            direct_tail_residual_rescue_policy.residual_window_max_windows
         )
-        direct_tail_residual_window_x_radius = _rhs1_int_env(
-            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_RESIDUAL_WINDOW_X_RADIUS",
-            default=0,
-            minimum=0,
+        direct_tail_residual_window_x_radius = int(direct_tail_residual_rescue_policy.residual_window_x_radius)
+        direct_tail_residual_window_ell_radius = int(
+            direct_tail_residual_rescue_policy.residual_window_ell_radius
         )
-        direct_tail_residual_window_ell_radius = _rhs1_int_env(
-            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_RESIDUAL_WINDOW_ELL_RADIUS",
-            default=1,
-            minimum=0,
+        direct_tail_residual_window_max_mb = float(direct_tail_residual_rescue_policy.residual_window_max_mb)
+        direct_tail_residual_window_regularization = float(
+            direct_tail_residual_rescue_policy.residual_window_regularization
         )
-        direct_tail_residual_window_max_mb = _rhs1_float_env(
-            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_RESIDUAL_WINDOW_MAX_MB",
-            default=512.0,
-            minimum=0.0,
+        direct_tail_residual_window_coefficient_mode = str(
+            direct_tail_residual_rescue_policy.residual_window_coefficient_mode
         )
-        direct_tail_residual_window_regularization = _rhs1_float_env(
-            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_RESIDUAL_WINDOW_REGULARIZATION",
-            default=1.0e-12,
-            minimum=0.0,
+        direct_tail_residual_window_combine_mode = str(
+            direct_tail_residual_rescue_policy.residual_window_combine_mode
         )
-        direct_tail_residual_window_coefficient_mode = (
-            os.environ.get(
-                "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_RESIDUAL_WINDOW_COEFFICIENTS",
-                "additive",
-            )
-            .strip()
-            .lower()
-            .replace("-", "_")
+        direct_tail_residual_window_interface_depth = int(
+            direct_tail_residual_rescue_policy.residual_window_interface_depth
         )
-        if direct_tail_residual_window_coefficient_mode not in {
-            "additive",
-            "least_squares",
-            "normal",
-            "normal_equations",
-        }:
-            direct_tail_residual_window_coefficient_mode = "additive"
-        direct_tail_residual_window_combine_mode = (
-            os.environ.get(
-                "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_RESIDUAL_WINDOW_COMBINE",
-                "independent",
-            )
-            .strip()
-            .lower()
-            .replace("-", "_")
+        direct_tail_residual_window_max_size = int(direct_tail_residual_rescue_policy.residual_window_max_size)
+        direct_tail_true_window_max_windows = int(direct_tail_residual_rescue_policy.true_window_max_windows)
+        direct_tail_true_window_x_radius = int(direct_tail_residual_rescue_policy.true_window_x_radius)
+        direct_tail_true_window_ell_radius = int(direct_tail_residual_rescue_policy.true_window_ell_radius)
+        direct_tail_true_window_max_mb = float(direct_tail_residual_rescue_policy.true_window_max_mb)
+        direct_tail_true_window_regularization = float(
+            direct_tail_residual_rescue_policy.true_window_regularization
         )
-        if direct_tail_residual_window_combine_mode not in {
-            "independent",
-            "union",
-            "coupled",
-            "interface",
-            "graph_interface",
-        }:
-            direct_tail_residual_window_combine_mode = "independent"
-        direct_tail_residual_window_interface_depth = _rhs1_int_env(
-            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_RESIDUAL_WINDOW_INTERFACE_DEPTH",
-            default=0,
-            minimum=0,
-        )
-        direct_tail_residual_window_max_size = _rhs1_int_env(
-            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_RESIDUAL_WINDOW_MAX_SIZE",
-            default=100_000,
-            minimum=1,
-        )
-        direct_tail_true_window_max_windows = _rhs1_int_env(
-            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_WINDOW_MAX_WINDOWS",
-            default=1,
-            minimum=1,
-        )
-        direct_tail_true_window_x_radius = _rhs1_int_env(
-            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_WINDOW_X_RADIUS",
-            default=0,
-            minimum=0,
-        )
-        direct_tail_true_window_ell_radius = _rhs1_int_env(
-            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_WINDOW_ELL_RADIUS",
-            default=1,
-            minimum=0,
-        )
-        direct_tail_true_window_max_mb = _rhs1_float_env(
-            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_WINDOW_MAX_MB",
-            default=512.0,
-            minimum=0.0,
-        )
-        direct_tail_true_window_regularization = _rhs1_float_env(
-            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_WINDOW_REGULARIZATION",
-            default=1.0e-12,
-            minimum=0.0,
-        )
-        direct_tail_true_window_max_size = _rhs1_int_env(
-            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_WINDOW_MAX_SIZE",
-            default=4096,
-            minimum=1,
-        )
-        direct_tail_true_window_column_batch = _rhs1_int_env(
-            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_WINDOW_COLUMN_BATCH",
-            default=4,
-            minimum=1,
-        )
-        direct_tail_true_window_drop_tol = _rhs1_float_env(
-            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_WINDOW_DROP_TOL",
-            default=1.0e-14,
-            minimum=0.0,
-        )
-        direct_tail_true_window_include_tail = _rhs1_bool_env(
-            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_WINDOW_INCLUDE_TAIL",
-            default=True,
-        )
-        direct_tail_true_window_damping = _rhs1_bool_env(
-            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_WINDOW_DAMPING",
-            default=False,
-        )
-        direct_tail_true_window_beta_max = _rhs1_float_env(
-            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_WINDOW_BETA_MAX",
-            default=10.0,
-            minimum=0.0,
-        )
+        direct_tail_true_window_max_size = int(direct_tail_residual_rescue_policy.true_window_max_size)
+        direct_tail_true_window_column_batch = int(direct_tail_residual_rescue_policy.true_window_column_batch)
+        direct_tail_true_window_drop_tol = float(direct_tail_residual_rescue_policy.true_window_drop_tol)
+        direct_tail_true_window_include_tail = bool(direct_tail_residual_rescue_policy.true_window_include_tail)
+        direct_tail_true_window_damping = bool(direct_tail_residual_rescue_policy.true_window_damping)
+        direct_tail_true_window_beta_max = float(direct_tail_residual_rescue_policy.true_window_beta_max)
         direct_tail_true_window_specs_env = (
             os.environ.get("SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_WINDOW_SPECS", "").strip()
             or os.environ.get("SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_WINDOW_SPEC", "").strip()
