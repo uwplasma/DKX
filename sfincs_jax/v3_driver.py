@@ -193,6 +193,7 @@ from .problems.profile_response.dense import (
     rhs1_dense_probe_admission,
     rhs1_dense_probe_enabled_from_env,
     rhs1_dense_probe_shortcut_decision,
+    rhs1_dense_shortcut_setup_from_env,
     solve_host_dense_full,
     solve_host_dense_reduced,
     solve_rhs1_reduced_dense_fallback_candidate,
@@ -10566,46 +10567,27 @@ def solve_v3_full_system_linear_gmres(
             # stage2/strong-preconditioner decisions to avoid premature convergence
             # with loose relative norms.
             target_stage2 = min(float(target_stage2), max(float(atol), float(tol)))
-        dense_shortcut_ratio_env = os.environ.get("SFINCS_JAX_RHSMODE1_DENSE_SHORTCUT_RATIO", "").strip()
-        try:
-            dense_shortcut_ratio = float(dense_shortcut_ratio_env) if dense_shortcut_ratio_env else 1.0e6
-        except ValueError:
-            dense_shortcut_ratio = 1.0e6
-        disable_dense_pas = (
-            op.fblock.pas is not None
-            and (not bool(op.include_phi1))
-            and int(op.constraint_scheme) != 0
-        )
-        pas_dense_allow_env = os.environ.get("SFINCS_JAX_RHSMODE1_PAS_DENSE_ALLOW_MAX", "").strip()
-        try:
-            pas_dense_allow_max = int(pas_dense_allow_env) if pas_dense_allow_env else 4000
-        except ValueError:
-            pas_dense_allow_max = 4000
-        if disable_dense_pas and int(active_size) <= max(0, int(pas_dense_allow_max)):
-            disable_dense_pas = False
-        if disable_dense_pas or op.fblock.pas is not None:
-            dense_shortcut_ratio = 0.0
         dense_fallback_max = _rhsmode1_dense_fallback_max(op)
-        if disable_dense_pas:
-            dense_fallback_max = 0
         dense_backend_allowed = _rhsmode1_dense_backend_allowed()
         host_dense_fallback_allowed = _rhsmode1_host_dense_fallback_allowed()
         dense_krylov_allowed = _rhsmode1_dense_krylov_allowed()
-        if not dense_backend_allowed:
-            dense_shortcut_ratio = 0.0
-            if not host_dense_fallback_allowed and not dense_krylov_allowed:
-                dense_fallback_max = 0
-            if emit is not None:
-                dense_note = "dense shortcut/fallback"
-                if host_dense_fallback_allowed:
-                    dense_note = "dense shortcut (host dense fallback kept)"
-                elif dense_krylov_allowed:
-                    dense_note = "dense shortcut disabled (dense Krylov fallback kept)"
-                emit(
-                    1,
-                    f"solve_v3_full_system_linear_gmres: disabling RHSMode=1 {dense_note} "
-                    f"on backend={jax.default_backend()}",
-                )
+        dense_shortcut_setup = rhs1_dense_shortcut_setup_from_env(
+            has_pas=op.fblock.pas is not None,
+            include_phi1=bool(op.include_phi1),
+            constraint_scheme=int(op.constraint_scheme),
+            active_size=int(active_size),
+            dense_fallback_max=int(dense_fallback_max),
+            dense_backend_allowed=bool(dense_backend_allowed),
+            host_dense_fallback_allowed=bool(host_dense_fallback_allowed),
+            dense_krylov_allowed=bool(dense_krylov_allowed),
+            backend=str(jax.default_backend()),
+        )
+        dense_shortcut_ratio = float(dense_shortcut_setup.dense_shortcut_ratio)
+        dense_fallback_max = int(dense_shortcut_setup.dense_fallback_max)
+        disable_dense_pas = bool(dense_shortcut_setup.disable_dense_pas)
+        if emit is not None:
+            for _level, _message in dense_shortcut_setup.messages:
+                emit(_level, _message)
         # FP dense-fallback probe shortcut: for medium FP systems where the probe is
         # likely to trigger a direct solve, avoid building heavy block preconditioners
         # that can allocate O(GB) of scratch. Use the cheap collision preconditioner

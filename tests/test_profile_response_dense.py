@@ -11,10 +11,141 @@ from sfincs_jax.problems.profile_response.dense import (
     rhs1_dense_probe_admission,
     rhs1_dense_probe_enabled_from_env,
     rhs1_dense_probe_shortcut_decision,
+    rhs1_dense_shortcut_setup_from_env,
     solve_rhs1_reduced_dense_fallback_candidate,
     solve_host_dense_full,
     solve_host_dense_reduced,
 )
+
+
+def test_rhs1_dense_shortcut_setup_from_env_uses_default_ratio(monkeypatch) -> None:
+    monkeypatch.delenv("SFINCS_JAX_RHSMODE1_DENSE_SHORTCUT_RATIO", raising=False)
+    monkeypatch.delenv("SFINCS_JAX_RHSMODE1_PAS_DENSE_ALLOW_MAX", raising=False)
+
+    setup = rhs1_dense_shortcut_setup_from_env(
+        has_pas=False,
+        include_phi1=False,
+        constraint_scheme=0,
+        active_size=1000,
+        dense_fallback_max=5000,
+        dense_backend_allowed=True,
+        host_dense_fallback_allowed=False,
+        dense_krylov_allowed=False,
+        backend="cpu",
+    )
+    assert setup.dense_shortcut_ratio == 1.0e6
+    assert setup.dense_fallback_max == 5000
+    assert not setup.disable_dense_pas
+    assert setup.messages == ()
+
+
+def test_rhs1_dense_shortcut_setup_from_env_handles_pas_dense_gate(monkeypatch) -> None:
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_DENSE_SHORTCUT_RATIO", "bad")
+    monkeypatch.delenv("SFINCS_JAX_RHSMODE1_PAS_DENSE_ALLOW_MAX", raising=False)
+
+    setup = rhs1_dense_shortcut_setup_from_env(
+        has_pas=True,
+        include_phi1=False,
+        constraint_scheme=1,
+        active_size=3000,
+        dense_fallback_max=5000,
+        dense_backend_allowed=True,
+        host_dense_fallback_allowed=False,
+        dense_krylov_allowed=False,
+        backend="gpu",
+    )
+    assert setup.dense_shortcut_ratio == 0.0
+    assert setup.dense_fallback_max == 5000
+    assert not setup.disable_dense_pas
+
+    setup = rhs1_dense_shortcut_setup_from_env(
+        has_pas=True,
+        include_phi1=False,
+        constraint_scheme=1,
+        active_size=5000,
+        dense_fallback_max=5000,
+        dense_backend_allowed=True,
+        host_dense_fallback_allowed=False,
+        dense_krylov_allowed=False,
+        backend="gpu",
+    )
+    assert setup.dense_shortcut_ratio == 0.0
+    assert setup.dense_fallback_max == 0
+    assert setup.disable_dense_pas
+
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_PAS_DENSE_ALLOW_MAX", "6000")
+    setup = rhs1_dense_shortcut_setup_from_env(
+        has_pas=True,
+        include_phi1=False,
+        constraint_scheme=1,
+        active_size=5000,
+        dense_fallback_max=5000,
+        dense_backend_allowed=True,
+        host_dense_fallback_allowed=False,
+        dense_krylov_allowed=False,
+        backend="gpu",
+    )
+    assert setup.dense_fallback_max == 5000
+    assert not setup.disable_dense_pas
+
+
+def test_rhs1_dense_shortcut_setup_from_env_reports_backend_disable(monkeypatch) -> None:
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_DENSE_SHORTCUT_RATIO", "12")
+
+    setup = rhs1_dense_shortcut_setup_from_env(
+        has_pas=False,
+        include_phi1=False,
+        constraint_scheme=0,
+        active_size=1000,
+        dense_fallback_max=5000,
+        dense_backend_allowed=False,
+        host_dense_fallback_allowed=False,
+        dense_krylov_allowed=False,
+        backend="gpu",
+    )
+    assert setup.dense_shortcut_ratio == 0.0
+    assert setup.dense_fallback_max == 0
+    assert setup.messages == ((
+        1,
+        "solve_v3_full_system_linear_gmres: disabling RHSMode=1 "
+        "dense shortcut/fallback on backend=gpu",
+    ),)
+
+    setup = rhs1_dense_shortcut_setup_from_env(
+        has_pas=False,
+        include_phi1=False,
+        constraint_scheme=0,
+        active_size=1000,
+        dense_fallback_max=5000,
+        dense_backend_allowed=False,
+        host_dense_fallback_allowed=True,
+        dense_krylov_allowed=False,
+        backend="gpu",
+    )
+    assert setup.dense_fallback_max == 5000
+    assert setup.messages == ((
+        1,
+        "solve_v3_full_system_linear_gmres: disabling RHSMode=1 "
+        "dense shortcut (host dense fallback kept) on backend=gpu",
+    ),)
+
+    setup = rhs1_dense_shortcut_setup_from_env(
+        has_pas=False,
+        include_phi1=False,
+        constraint_scheme=0,
+        active_size=1000,
+        dense_fallback_max=5000,
+        dense_backend_allowed=False,
+        host_dense_fallback_allowed=False,
+        dense_krylov_allowed=True,
+        backend="gpu",
+    )
+    assert setup.dense_fallback_max == 5000
+    assert setup.messages == ((
+        1,
+        "solve_v3_full_system_linear_gmres: disabling RHSMode=1 "
+        "dense shortcut disabled (dense Krylov fallback kept) on backend=gpu",
+    ),)
 
 
 def test_host_dense_reduced_row_scaled_lu_solves_square_system() -> None:

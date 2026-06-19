@@ -87,6 +87,89 @@ class RHS1DenseProbeShortcutDecision:
     messages: tuple[tuple[int, str], ...] = ()
 
 
+@dataclass(frozen=True)
+class RHS1DenseShortcutSetup:
+    """Dense shortcut/fallback controls after env and backend gates."""
+
+    dense_shortcut_ratio: float
+    dense_fallback_max: int
+    disable_dense_pas: bool
+    messages: tuple[tuple[int, str], ...] = ()
+
+
+def _env_float(name: str, default: float) -> float:
+    raw = str(os.environ.get(name, "")).strip()
+    try:
+        return float(raw) if raw else float(default)
+    except ValueError:
+        return float(default)
+
+
+def _env_int(name: str, default: int) -> int:
+    raw = str(os.environ.get(name, "")).strip()
+    try:
+        return int(raw) if raw else int(default)
+    except ValueError:
+        return int(default)
+
+
+def rhs1_dense_shortcut_setup_from_env(
+    *,
+    has_pas: bool,
+    include_phi1: bool,
+    constraint_scheme: int,
+    active_size: int,
+    dense_fallback_max: int,
+    dense_backend_allowed: bool,
+    host_dense_fallback_allowed: bool,
+    dense_krylov_allowed: bool,
+    backend: str,
+) -> RHS1DenseShortcutSetup:
+    """Resolve dense shortcut/fallback controls with legacy PAS/backend guards."""
+
+    dense_shortcut_ratio = _env_float(
+        "SFINCS_JAX_RHSMODE1_DENSE_SHORTCUT_RATIO",
+        1.0e6,
+    )
+    disable_dense_pas = (
+        bool(has_pas) and (not bool(include_phi1)) and int(constraint_scheme) != 0
+    )
+    pas_dense_allow_max = _env_int("SFINCS_JAX_RHSMODE1_PAS_DENSE_ALLOW_MAX", 4000)
+    if disable_dense_pas and int(active_size) <= max(0, int(pas_dense_allow_max)):
+        disable_dense_pas = False
+    if disable_dense_pas or bool(has_pas):
+        dense_shortcut_ratio = 0.0
+
+    dense_fallback_max_use = int(dense_fallback_max)
+    if disable_dense_pas:
+        dense_fallback_max_use = 0
+
+    messages: list[tuple[int, str]] = []
+    if not bool(dense_backend_allowed):
+        dense_shortcut_ratio = 0.0
+        if not bool(host_dense_fallback_allowed) and not bool(dense_krylov_allowed):
+            dense_fallback_max_use = 0
+        dense_note = "dense shortcut/fallback"
+        if bool(host_dense_fallback_allowed):
+            dense_note = "dense shortcut (host dense fallback kept)"
+        elif bool(dense_krylov_allowed):
+            dense_note = "dense shortcut disabled (dense Krylov fallback kept)"
+        messages.append(
+            (
+                1,
+                "solve_v3_full_system_linear_gmres: disabling RHSMode=1 "
+                f"{dense_note} on backend={backend}",
+            )
+        )
+
+    return RHS1DenseShortcutSetup(
+        dense_shortcut_ratio=float(dense_shortcut_ratio),
+        dense_fallback_max=int(dense_fallback_max_use),
+        disable_dense_pas=bool(disable_dense_pas),
+        messages=tuple(messages),
+    )
+
+
 def rhs1_dense_probe_enabled_from_env() -> bool:
     """Return whether the reduced dense probe is globally enabled."""
 
@@ -499,12 +582,14 @@ def _solve_rhs1_reduced_dense_fallback_host_candidate(
 __all__ = [
     "RHS1DenseProbeAdmission",
     "RHS1DenseProbeShortcutDecision",
+    "RHS1DenseShortcutSetup",
     "HostDenseFullSolveContext",
     "HostDenseReducedSolveContext",
     "RHS1ReducedDenseFallbackCandidateContext",
     "rhs1_dense_probe_admission",
     "rhs1_dense_probe_enabled_from_env",
     "rhs1_dense_probe_shortcut_decision",
+    "rhs1_dense_shortcut_setup_from_env",
     "solve_rhs1_reduced_dense_fallback_candidate",
     "solve_host_dense_full",
     "solve_host_dense_reduced",
