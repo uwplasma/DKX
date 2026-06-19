@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from sfincs_jax.rhs1_sparse_rescue_policy import (
     rhs1_resolved_sparse_rescue_ordering,
+    rhs1_sparse_jax_config_from_env,
     rhs1_sparse_rescue_initial_messages,
     rhs1_sparse_rescue_policy_setup,
     rhs1_sparse_rescue_tail_skip_messages,
@@ -61,6 +62,50 @@ def test_rhs1_sparse_enabled_initial_follows_mode_and_rhsmode_guards() -> None:
 def test_rhs1_sparse_kind_use_normalizes_auto_to_scipy() -> None:
     assert rhs1_sparse_kind_use(sparse_precond_kind="auto") == "scipy"
     assert rhs1_sparse_kind_use(sparse_precond_kind="jax") == "jax"
+
+
+def test_rhs1_sparse_jax_config_from_env_uses_stable_defaults(monkeypatch) -> None:
+    for name in (
+        "SFINCS_JAX_RHSMODE1_SPARSE_JAX_MAX_MB",
+        "SFINCS_JAX_RHSMODE1_SPARSE_JAX_SWEEPS",
+        "SFINCS_JAX_RHSMODE1_SPARSE_JAX_OMEGA",
+        "SFINCS_JAX_RHSMODE1_SPARSE_JAX_REG",
+    ):
+        monkeypatch.delenv(name, raising=False)
+
+    config = rhs1_sparse_jax_config_from_env()
+    assert config.max_mb == 128.0
+    assert config.sweeps == 2
+    assert config.omega == 0.8
+    assert config.reg == 1.0e-10
+
+
+def test_rhs1_sparse_jax_config_from_env_parses_values_and_bounds_sweeps(
+    monkeypatch,
+) -> None:
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_SPARSE_JAX_MAX_MB", "64")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_SPARSE_JAX_SWEEPS", "0")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_SPARSE_JAX_OMEGA", "0.65")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_SPARSE_JAX_REG", "1e-8")
+
+    config = rhs1_sparse_jax_config_from_env()
+    assert config.max_mb == 64.0
+    assert config.sweeps == 1
+    assert config.omega == 0.65
+    assert config.reg == 1.0e-8
+
+
+def test_rhs1_sparse_jax_config_from_env_ignores_invalid_values(monkeypatch) -> None:
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_SPARSE_JAX_MAX_MB", "bad")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_SPARSE_JAX_SWEEPS", "bad")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_SPARSE_JAX_OMEGA", "bad")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_SPARSE_JAX_REG", "bad")
+
+    config = rhs1_sparse_jax_config_from_env()
+    assert config.max_mb == 128.0
+    assert config.sweeps == 2
+    assert config.omega == 0.8
+    assert config.reg == 1.0e-10
 
 
 def test_rhs1_sparse_rescue_ordering_handles_dense_shortcut_and_exact_preference() -> None:

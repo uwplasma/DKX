@@ -42,9 +42,12 @@ Make `sfincs_jax` research-grade while preserving the public user contract:
 
 Recent checkpoints:
 
+- RHSMode=1 sparse-JAX retry env/config parsing now uses a tested
+  profile-response policy config object instead of driver-local parsing
+  (current checkpoint).
 - Sparse rescue trace-message formatting for reduced and full branches now uses
   tested side-effect-free policy helpers while preserving driver emission order
-  (current checkpoint).
+  (`049d39e`).
 - Sparse rescue enable/kind/order setup and sparse-JAX memory-admission
   messaging for reduced and full branches now uses one tested policy helper;
   solve execution and cache policy remain driver-owned (`bb99065`).
@@ -150,14 +153,14 @@ Recent checkpoints:
 - `cb295ce` Extract sparse pattern setup.
 - `4b6a5b4` Extract sparse factor policy.
 
-Current source-size snapshot after sparse rescue message extraction:
+Current source-size snapshot after sparse-JAX config extraction:
 
-- `sfincs_jax/v3_driver.py`: `18145` lines.
-- `solve_v3_full_system_linear_gmres`: `12823` lines.
+- `sfincs_jax/v3_driver.py`: `18126` lines.
+- `solve_v3_full_system_linear_gmres`: `12803` lines.
 - `sfincs_jax/v3_results.py`: `119` lines.
 - `sfincs_jax/problems/profile_response/residual.py`: `981` lines.
 - `sfincs_jax/problems/profile_response/handoff.py`: `598` lines.
-- `sfincs_jax/problems/profile_response/policies.py`: `2755` lines.
+- `sfincs_jax/problems/profile_response/policies.py`: `2782` lines.
 - `sfincs_jax/problems/profile_response/dense.py`: `407` lines.
 - `sfincs_jax/problems/profile_response/linear_solve.py`: `327` lines.
 - `sfincs_jax/problems/profile_response/active_projection.py`: `116` lines.
@@ -165,6 +168,16 @@ Current source-size snapshot after sparse rescue message extraction:
 
 Recent local validation:
 
+- Sparse rescue policy/docstring shard after sparse-JAX config extraction:
+  `16 passed in 0.64 s`.
+- Sparse-host/minimum-norm/direct-tail driver shard:
+  `32 passed, 100 deselected in 37.85 s`.
+- Broad profile-response/RHSMode=1 policy, setup, diagnostics, solver, and
+  helper sweep after sparse-JAX config extraction:
+  `1036 passed in 50.04 s`.
+- Hygiene:
+  `ruff`, `compileall`, `git diff --check`, and `scripts/check_repo_size.py`
+  passed.
 - Sparse rescue policy shard after sparse rescue message extraction:
   `10 passed in 0.34 s`.
 - Sparse-host/minimum-norm/direct-tail driver shard:
@@ -402,6 +415,8 @@ Completed recent boundaries:
   full-system branches.
 - Sparse rescue initial and tail skip trace-message formatting now uses tested
   policy helpers while preserving driver emission order.
+- RHSMode=1 sparse-JAX retry max-memory, sweep count, damping, and
+  regularization env parsing now uses a tested profile-response config object.
 
 Next steps:
 

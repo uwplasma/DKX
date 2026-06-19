@@ -2230,6 +2230,16 @@ class RHS1SparseRescuePolicySetup:
     sparse_jax_memory_disabled_message: str | None = None
 
 
+@dataclass(frozen=True)
+class RHS1SparseJAXConfig:
+    """Environment-controlled sparse-JAX retry controls for RHSMode=1."""
+
+    max_mb: float
+    sweeps: int
+    omega: float
+    reg: float
+
+
 def rhs1_sparse_enabled_initial(
     *,
     sparse_precond_mode: str,
@@ -2251,6 +2261,21 @@ def rhs1_sparse_enabled_initial(
     if enabled:
         enabled = int(rhs_mode) == 1 and (not bool(include_phi1))
     return bool(enabled)
+
+
+def rhs1_sparse_jax_config_from_env() -> RHS1SparseJAXConfig:
+    """Parse sparse-JAX retry controls with bounded, stable defaults."""
+
+    max_mb = _env_float("SFINCS_JAX_RHSMODE1_SPARSE_JAX_MAX_MB", 128.0)
+    sweeps = max(1, _env_int("SFINCS_JAX_RHSMODE1_SPARSE_JAX_SWEEPS", 2))
+    omega = _env_float("SFINCS_JAX_RHSMODE1_SPARSE_JAX_OMEGA", 0.8)
+    reg = _env_float("SFINCS_JAX_RHSMODE1_SPARSE_JAX_REG", 1.0e-10)
+    return RHS1SparseJAXConfig(
+        max_mb=float(max_mb),
+        sweeps=int(sweeps),
+        omega=float(omega),
+        reg=float(reg),
+    )
 
 
 def rhs1_sparse_kind_use(*, sparse_precond_kind: str) -> str:
@@ -2707,6 +2732,7 @@ def rhs1_pas_tz_guarded_stage2_retry() -> bool:
 __all__ = (
     "RHS1QIDeviceRankBudget",
     "RHS1QIDeviceSetupSummary",
+    "RHS1SparseJAXConfig",
     "RHS1SparseRescueOrdering",
     "RHS1SparseRescuePolicySetup",
     "parse_rhs1_pas_tz_guarded_structured_levels",
@@ -2744,6 +2770,7 @@ __all__ = (
     "rhs1_skip_global_sparse_after_xblock_allowed",
     "rhs1_sparse_enabled_initial",
     "rhs1_sparse_exact_lu_requested",
+    "rhs1_sparse_jax_config_from_env",
     "rhs1_sparse_rescue_initial_messages",
     "rhs1_sparse_kind_use",
     "rhs1_sparse_prefer_skips_stage2",

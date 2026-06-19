@@ -341,6 +341,7 @@ from .problems.profile_response.policies import (
     rhs1_qi_device_setup_summary as _rhs1_qi_device_setup_summary,
     rhs1_qi_device_status_fields as _rhs1_qi_device_status_fields,
     rhs1_qi_device_tail_block_required as _rhs1_qi_device_tail_block_required,
+    rhs1_sparse_jax_config_from_env,
     rhs1_sparse_rescue_initial_messages,
     rhs1_sparse_rescue_policy_setup,
     rhs1_sparse_rescue_tail_skip_messages,
@@ -10271,27 +10272,7 @@ def solve_v3_full_system_linear_gmres(
         sparse_dense_cache_max = int(sparse_dense_cache_env) if sparse_dense_cache_env else 3000
     except ValueError:
         sparse_dense_cache_max = 3000
-    sparse_jax_max_env = os.environ.get("SFINCS_JAX_RHSMODE1_SPARSE_JAX_MAX_MB", "").strip()
-    try:
-        sparse_jax_max_mb = float(sparse_jax_max_env) if sparse_jax_max_env else 128.0
-    except ValueError:
-        sparse_jax_max_mb = 128.0
-    sparse_jax_sweeps_env = os.environ.get("SFINCS_JAX_RHSMODE1_SPARSE_JAX_SWEEPS", "").strip()
-    try:
-        sparse_jax_sweeps = int(sparse_jax_sweeps_env) if sparse_jax_sweeps_env else 2
-    except ValueError:
-        sparse_jax_sweeps = 2
-    sparse_jax_sweeps = max(1, sparse_jax_sweeps)
-    sparse_jax_omega_env = os.environ.get("SFINCS_JAX_RHSMODE1_SPARSE_JAX_OMEGA", "").strip()
-    try:
-        sparse_jax_omega = float(sparse_jax_omega_env) if sparse_jax_omega_env else 0.8
-    except ValueError:
-        sparse_jax_omega = 0.8
-    sparse_jax_reg_env = os.environ.get("SFINCS_JAX_RHSMODE1_SPARSE_JAX_REG", "").strip()
-    try:
-        sparse_jax_reg = float(sparse_jax_reg_env) if sparse_jax_reg_env else 1e-10
-    except ValueError:
-        sparse_jax_reg = 1e-10
+    sparse_jax_config = rhs1_sparse_jax_config_from_env()
     sparse_exact_lu = _rhsmode1_sparse_exact_lu_requested(
         op=op,
         solve_method_kind=solve_method_kind,
@@ -12590,7 +12571,7 @@ def solve_v3_full_system_linear_gmres(
             large_cpu_sparse_rescue=bool(large_cpu_sparse_rescue_active),
             sparse_xblock_rescue_active=bool(sparse_xblock_rescue_active),
             sparse_sxblock_rescue_active=bool(sparse_sxblock_rescue_active),
-            sparse_jax_max_mb=float(sparse_jax_max_mb),
+            sparse_jax_max_mb=float(sparse_jax_config.max_mb),
             pas_fast_accept=bool(pas_fast_accept),
             gpu_sparse_skip=bool(
                 _rhs1_gpu_sparse_fallback_skip_allowed(
@@ -13416,9 +13397,9 @@ def solve_v3_full_system_linear_gmres(
                             cache_key=cache_key,
                             drop_tol=sparse_drop_tol,
                             drop_rel=sparse_drop_rel,
-                            reg=sparse_jax_reg,
-                            omega=sparse_jax_omega,
-                            sweeps=sparse_jax_sweeps,
+                            reg=sparse_jax_config.reg,
+                            omega=sparse_jax_config.omega,
+                            sweeps=sparse_jax_config.sweeps,
                             emit=emit,
                             builder=_build_sparse_jax_preconditioner_from_matvec,
                         )
@@ -15266,7 +15247,7 @@ def solve_v3_full_system_linear_gmres(
             precond_dtype=_precond_dtype(int(op.total_size)),
             sparse_exact_direct=bool(sparse_exact_direct),
             large_cpu_sparse_rescue=bool(large_cpu_sparse_rescue_full),
-            sparse_jax_max_mb=float(sparse_jax_max_mb),
+            sparse_jax_max_mb=float(sparse_jax_config.max_mb),
             pas_fast_accept=bool(pas_fast_accept),
             gpu_sparse_skip=bool(
                 _rhs1_gpu_sparse_fallback_skip_allowed(
@@ -15327,9 +15308,9 @@ def solve_v3_full_system_linear_gmres(
                             cache_key=cache_key,
                             drop_tol=sparse_drop_tol,
                             drop_rel=sparse_drop_rel,
-                            reg=sparse_jax_reg,
-                            omega=sparse_jax_omega,
-                            sweeps=sparse_jax_sweeps,
+                            reg=sparse_jax_config.reg,
+                            omega=sparse_jax_config.omega,
+                            sweeps=sparse_jax_config.sweeps,
                             emit=emit,
                             builder=_build_sparse_jax_preconditioner_from_matvec,
                         )
