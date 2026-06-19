@@ -4,7 +4,9 @@ import jax.numpy as jnp
 
 from sfincs_jax.problems.profile_response.linear_solve import (
     ProfileLinearSolveContext,
+    RHS1ScipyRescueContext,
     profile_solver_kind,
+    run_rhs1_scipy_rescue,
     solve_profile_linear_with_residual,
 )
 
@@ -62,3 +64,54 @@ def test_solve_profile_linear_with_residual_solves_tiny_identity_system() -> Non
 
     assert jnp.linalg.norm(result.x - b) < 1.0e-10
     assert jnp.linalg.norm(residual) < 1.0e-10
+
+
+def test_run_rhs1_scipy_rescue_gmres_recomputes_true_residual() -> None:
+    a = jnp.asarray([[4.0, 1.0], [1.0, 3.0]], dtype=jnp.float64)
+    b = jnp.asarray([1.0, 2.0], dtype=jnp.float64)
+
+    outcome = run_rhs1_scipy_rescue(
+        context=RHS1ScipyRescueContext(
+            matvec=lambda x: a @ x,
+            rhs=b,
+            x0=jnp.zeros_like(b),
+            preconditioner=None,
+            method="gmres",
+            tol=1.0e-12,
+            atol=1.0e-12,
+            restart=4,
+            maxiter=12,
+            precond_side="left",
+        )
+    )
+
+    assert jnp.linalg.norm(a @ outcome.result.x - b) < 1.0e-10
+    assert jnp.linalg.norm(outcome.residual_vec) < 1.0e-10
+    assert outcome.reported_residual < 1.0e-10
+    assert outcome.history_len >= 1
+    assert outcome.preconditioned_residual is None
+
+
+def test_run_rhs1_scipy_rescue_bicgstab_recomputes_true_residual() -> None:
+    a = jnp.asarray([[5.0, 0.5], [0.25, 2.0]], dtype=jnp.float64)
+    b = jnp.asarray([2.0, -1.0], dtype=jnp.float64)
+
+    outcome = run_rhs1_scipy_rescue(
+        context=RHS1ScipyRescueContext(
+            matvec=lambda x: a @ x,
+            rhs=b,
+            x0=jnp.zeros_like(b),
+            preconditioner=None,
+            method="bicgstab",
+            tol=1.0e-12,
+            atol=1.0e-12,
+            restart=4,
+            maxiter=20,
+            precond_side="left",
+        )
+    )
+
+    assert jnp.linalg.norm(a @ outcome.result.x - b) < 1.0e-10
+    assert jnp.linalg.norm(outcome.residual_vec) < 1.0e-10
+    assert outcome.reported_residual < 1.0e-10
+    assert outcome.history_len >= 1

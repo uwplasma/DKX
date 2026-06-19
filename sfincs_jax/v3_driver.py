@@ -192,7 +192,9 @@ from .problems.profile_response.dense import (
 )
 from .problems.profile_response.linear_solve import (
     ProfileLinearSolveContext,
+    RHS1ScipyRescueContext,
     profile_solver_kind,
+    run_rhs1_scipy_rescue,
     solve_profile_linear,
     solve_profile_linear_with_residual,
 )
@@ -14631,52 +14633,23 @@ def solve_v3_full_system_linear_gmres(
                                 f"method={rescue_method} restart={int(scipy_restart)} maxiter={int(scipy_maxiter)} "
                                 f"preconditioner={rescue_precond_name})",
                             )
-                        side = str(gmres_precond_side).strip().lower()
-                        if rescue_method == "bicgstab":
-                            x_np, rn_scipy, _history = bicgstab_solve_with_history_scipy(
+                        scipy_outcome = run_rhs1_scipy_rescue(
+                            context=RHS1ScipyRescueContext(
                                 matvec=mv_reduced,
-                                b=rhs_reduced,
-                                preconditioner=rescue_preconditioner,
+                                rhs=rhs_reduced,
                                 x0=res_reduced.x,
-                                tol=float(tol),
-                                atol=float(atol),
-                                maxiter=int(scipy_maxiter),
-                                precondition_side=gmres_precond_side,
-                            )
-                            scipy_history_len = len(_history or [])
-                        elif rescue_preconditioner is not None and side == "left":
-                            x_np, rn_scipy, rn_pc_scipy, _history = explicit_left_preconditioned_gmres_scipy(
-                                matvec=mv_reduced,
-                                b=rhs_reduced,
                                 preconditioner=rescue_preconditioner,
-                                x0=res_reduced.x,
+                                method=rescue_method,
                                 tol=float(tol),
                                 atol=float(atol),
                                 restart=int(scipy_restart),
                                 maxiter=int(scipy_maxiter),
-                            )
-                            scipy_history_len = len(_history or [])
-                            if emit is not None:
-                                emit(
-                                    1,
-                                    "solve_v3_full_system_linear_gmres: SciPy rescue residuals "
-                                    f"true={float(rn_scipy):.3e} preconditioned={float(rn_pc_scipy):.3e}",
-                                )
-                        else:
-                            x_np, rn_scipy, _history = gmres_solve_with_history_scipy(
-                                matvec=mv_reduced,
-                                b=rhs_reduced,
-                                preconditioner=rescue_preconditioner,
-                                x0=res_reduced.x,
-                                tol=float(tol),
-                                atol=float(atol),
-                                restart=int(scipy_restart),
-                                maxiter=int(scipy_maxiter),
-                                precondition_side=gmres_precond_side,
-                            )
-                            scipy_history_len = len(_history or [])
-                        x_scipy = jnp.asarray(x_np, dtype=jnp.float64)
-                        res_scipy, r_scipy = rhs1_result_with_true_residual(x=x_scipy, rhs=rhs_reduced, matvec=mv_reduced)
+                                precond_side=gmres_precond_side,
+                            ),
+                            emit=emit,
+                        )
+                        res_scipy = scipy_outcome.result
+                        r_scipy = scipy_outcome.residual_vec
                         scipy_rescue_elapsed_s = float(t.elapsed_s() - scipy_rescue_start_s)
                         scipy_rescue_final_residual = float(res_scipy.residual_norm)
                         _mark("rhs1_scipy_rescue_done")
@@ -14684,8 +14657,8 @@ def solve_v3_full_system_linear_gmres(
                             {
                                 "scipy_rescue_elapsed_s": float(scipy_rescue_elapsed_s),
                                 "scipy_rescue_final_residual": float(scipy_rescue_final_residual),
-                                "scipy_rescue_reported_residual": float(rn_scipy),
-                                "scipy_rescue_history_len": int(scipy_history_len),
+                                "scipy_rescue_reported_residual": float(scipy_outcome.reported_residual),
+                                "scipy_rescue_history_len": int(scipy_outcome.history_len),
                                 "scipy_rescue_improved": bool(
                                     scipy_rescue_final_residual < scipy_rescue_initial_residual
                                 ),

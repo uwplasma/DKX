@@ -11,13 +11,18 @@ from sfincs_jax.implicit_solve import linear_custom_solve, linear_custom_solve_w
 from sfincs_jax.krylov_dispatch import gmres_solve_dispatch, rhs_krylov_method_for_context
 from sfincs_jax.solver import (
     GMRESSolveResult,
+    bicgstab_solve_with_history_scipy,
     bicgstab_solve_with_residual,
     bicgstab_solve_with_residual_jit,
+    explicit_left_preconditioned_gmres_scipy,
     gmres_solve_with_residual,
     gmres_solve_with_residual_distributed,
     gmres_solve_with_residual_jit,
+    gmres_solve_with_history_scipy,
 )
 from sfincs_jax.v3_system import sharding_constraints
+
+from .residual import result_with_true_residual
 
 
 @dataclass(frozen=True)
@@ -31,6 +36,33 @@ class ProfileLinearSolveContext:
     distributed_axis: str | None
     distributed_auto_solver: str
     small_gmres_max: int
+
+
+@dataclass(frozen=True)
+class RHS1ScipyRescueContext:
+    """Host-only SciPy rescue solve inputs for stalled RHSMode=1 systems."""
+
+    matvec: Callable[[jnp.ndarray], jnp.ndarray]
+    rhs: jnp.ndarray
+    x0: jnp.ndarray
+    preconditioner: Callable[[jnp.ndarray], jnp.ndarray] | None
+    method: str
+    tol: float
+    atol: float
+    restart: int
+    maxiter: int
+    precond_side: str
+
+
+@dataclass(frozen=True)
+class RHS1ScipyRescueOutcome:
+    """Result payload and measured diagnostics from a SciPy rescue attempt."""
+
+    result: GMRESSolveResult
+    residual_vec: jnp.ndarray
+    reported_residual: float
+    history_len: int
+    preconditioned_residual: float | None = None
 
 
 def profile_solver_kind(method: str, *, context: ProfileLinearSolveContext) -> tuple[str, str]:
@@ -203,9 +235,93 @@ def solve_profile_linear_with_residual(
     )
 
 
+def run_rhs1_scipy_rescue(
+    *,
+    context: RHS1ScipyRescueContext,
+    emit: Callable[[int, str], None] | None = None,
+) -> RHS1ScipyRescueOutcome:
+    """Run the host-only SciPy rescue and recompute its true residual.
+
+    This is intentionally non-differentiable and should only be called by
+    CLI/host production lanes. The driver owns the size, timeout, and residual
+    admission policy; this helper only executes the selected SciPy Krylov
+    method and returns a true-residual payload.
+    """
+
+    method = str(context.method).strip().lower()
+    if method not in {"gmres", "bicgstab"}:
+        method = "gmres"
+    side = str(context.precond_side).strip().lower()
+    if method == "bicgstab":
+        x_np, reported_residual, history = bicgstab_solve_with_history_scipy(
+            matvec=context.matvec,
+            b=context.rhs,
+            preconditioner=context.preconditioner,
+            x0=context.x0,
+            tol=float(context.tol),
+            atol=float(context.atol),
+            maxiter=int(context.maxiter),
+            precondition_side=context.precond_side,
+        )
+        preconditioned_residual = None
+    elif context.preconditioner is not None and side == "left":
+        x_np, reported_residual, preconditioned_residual, history = (
+            explicit_left_preconditioned_gmres_scipy(
+                matvec=context.matvec,
+                b=context.rhs,
+                preconditioner=context.preconditioner,
+                x0=context.x0,
+                tol=float(context.tol),
+                atol=float(context.atol),
+                restart=int(context.restart),
+                maxiter=int(context.maxiter),
+            )
+        )
+        if emit is not None:
+            emit(
+                1,
+                "solve_v3_full_system_linear_gmres: SciPy rescue residuals "
+                f"true={float(reported_residual):.3e} "
+                f"preconditioned={float(preconditioned_residual):.3e}",
+            )
+    else:
+        x_np, reported_residual, history = gmres_solve_with_history_scipy(
+            matvec=context.matvec,
+            b=context.rhs,
+            preconditioner=context.preconditioner,
+            x0=context.x0,
+            tol=float(context.tol),
+            atol=float(context.atol),
+            restart=int(context.restart),
+            maxiter=int(context.maxiter),
+            precondition_side=context.precond_side,
+        )
+        preconditioned_residual = None
+    x_scipy = jnp.asarray(x_np, dtype=jnp.float64)
+    result, residual_vec = result_with_true_residual(
+        x=x_scipy,
+        rhs=context.rhs,
+        matvec=context.matvec,
+    )
+    return RHS1ScipyRescueOutcome(
+        result=result,
+        residual_vec=residual_vec,
+        reported_residual=float(reported_residual),
+        history_len=len(history or []),
+        preconditioned_residual=(
+            None
+            if preconditioned_residual is None
+            else float(preconditioned_residual)
+        ),
+    )
+
+
 __all__ = [
     "ProfileLinearSolveContext",
+    "RHS1ScipyRescueContext",
+    "RHS1ScipyRescueOutcome",
     "profile_solver_kind",
+    "run_rhs1_scipy_rescue",
     "solve_profile_linear",
     "solve_profile_linear_with_residual",
 ]
