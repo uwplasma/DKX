@@ -12585,40 +12585,29 @@ def solve_v3_full_system_linear_gmres(
                 strong_maxiter = int(strong_maxiter_env) if strong_maxiter_env else max(800, int(maxiter or 400) * 2)
             except ValueError:
                 strong_maxiter = max(800, int(maxiter or 400) * 2)
-            strong_timer = Timer()
-            res_strong = _solve_linear(
-                matvec_fn=mv_reduced,
-                b_vec=rhs_reduced,
-                precond_fn=strong_preconditioner_reduced,
-                x0_vec=res_reduced.x,
-                tol_val=tol,
-                atol_val=atol,
-                restart_val=strong_restart,
-                maxiter_val=strong_maxiter,
-                solve_method_val="incremental",
-                precond_side=gmres_precond_side,
-            )
-            res_strong = _block_gmres_result_ready(res_strong)
-            strong_elapsed_s = strong_timer.elapsed_s()
-            res_reduced, residual_vec, _accepted = rhs1_accept_measured_candidate_and_update_replay(
-                replay_state=ksp_replay,
-                current_result=res_reduced,
-                candidate_result=res_strong,
-                current_residual_vec=residual_vec,
-                candidate_residual_vec=residual_vec,
-                matvec_fn=mv_reduced,
-                b_vec=rhs_reduced,
-                precond_fn=strong_preconditioner_reduced,
-                x0_vec=res_strong.x,
-                restart=strong_restart,
-                maxiter=strong_maxiter,
-                precond_side=gmres_precond_side,
-                solver_kind=_solver_kind("incremental")[0],
-                candidate_name="strong_reduced",
-                baseline_name="current_reduced",
-                target_value=target_reduced,
-                solve_s=strong_elapsed_s,
-                peak_rss_mb=_rss_mb(),
+            res_reduced, residual_vec, _accepted, _strong_elapsed_s = (
+                rhs1_run_measured_linear_candidate_and_update_replay(
+                    replay_state=ksp_replay,
+                    current_result=res_reduced,
+                    current_residual_vec=residual_vec,
+                    matvec_fn=mv_reduced,
+                    b_vec=rhs_reduced,
+                    precond_fn=strong_preconditioner_reduced,
+                    tol=float(tol),
+                    atol=float(atol),
+                    restart=int(strong_restart),
+                    maxiter=int(strong_maxiter),
+                    solve_method="incremental",
+                    precond_side=gmres_precond_side,
+                    solve_linear=_solve_linear,
+                    solver_kind=_solver_kind("incremental")[0],
+                    candidate_name="strong_reduced",
+                    baseline_name="current_reduced",
+                    target_value=float(target_reduced),
+                    peak_rss_mb=_rss_mb(),
+                    returns_residual_vec=False,
+                    result_ready=_block_gmres_result_ready,
+                )
             )
 
         # Only treat the probe as a "dense shortcut" when the dense branch is
@@ -15378,39 +15367,28 @@ def solve_v3_full_system_linear_gmres(
                 strong_maxiter = int(strong_maxiter_env) if strong_maxiter_env else max(800, int(maxiter or 400) * 2)
             except ValueError:
                 strong_maxiter = max(800, int(maxiter or 400) * 2)
-            strong_timer = Timer()
-            res_strong, residual_vec_strong = _solve_linear_with_residual(
-                matvec_fn=mv,
-                b_vec=rhs,
-                precond_fn=strong_preconditioner_full,
-                x0_vec=result.x,
-                tol_val=tol,
-                atol_val=atol,
-                restart_val=strong_restart,
-                maxiter_val=strong_maxiter,
-                solve_method_val="incremental",
-                precond_side=gmres_precond_side,
-            )
-            strong_elapsed_s = strong_timer.elapsed_s()
-            result, residual_vec, _accepted = rhs1_accept_measured_candidate_and_update_replay(
-                replay_state=ksp_replay,
-                current_result=result,
-                candidate_result=res_strong,
-                current_residual_vec=residual_vec,
-                candidate_residual_vec=residual_vec_strong,
-                matvec_fn=mv,
-                b_vec=rhs,
-                precond_fn=strong_preconditioner_full,
-                x0_vec=res_strong.x,
-                restart=strong_restart,
-                maxiter=strong_maxiter,
-                precond_side=gmres_precond_side,
-                solver_kind=_solver_kind("incremental")[0],
-                candidate_name="strong_full",
-                baseline_name="current_full",
-                target_value=target,
-                solve_s=strong_elapsed_s,
-                peak_rss_mb=_rss_mb(),
+            result, residual_vec, _accepted, _strong_elapsed_s = (
+                rhs1_run_measured_linear_candidate_and_update_replay(
+                    replay_state=ksp_replay,
+                    current_result=result,
+                    current_residual_vec=residual_vec,
+                    matvec_fn=mv,
+                    b_vec=rhs,
+                    precond_fn=strong_preconditioner_full,
+                    tol=float(tol),
+                    atol=float(atol),
+                    restart=int(strong_restart),
+                    maxiter=int(strong_maxiter),
+                    solve_method="incremental",
+                    precond_side=gmres_precond_side,
+                    solve_linear=_solve_linear_with_residual,
+                    solver_kind=_solver_kind("incremental")[0],
+                    candidate_name="strong_full",
+                    baseline_name="current_full",
+                    target_value=float(target),
+                    peak_rss_mb=_rss_mb(),
+                    returns_residual_vec=True,
+                )
             )
         if (
             int(op.rhs_mode) == 1
