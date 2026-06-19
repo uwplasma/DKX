@@ -42,7 +42,8 @@ Make `sfincs_jax` research-grade while preserving the public user contract:
 
 Recent checkpoints:
 
-- Direct-tail support-mode preflight extraction (current checkpoint).
+- Sparse-PC factor-preflight policy extraction (current checkpoint).
+- Direct-tail support-mode preflight extraction.
 - Direct-tail structured preconditioner construction/cache extraction.
 - Direct-tail structured preconditioner admission extraction.
 - Direct-tail materialization extraction.
@@ -51,17 +52,17 @@ Recent checkpoints:
 - `cb295ce` Extract sparse pattern setup.
 - `4b6a5b4` Extract sparse factor policy.
 
-Current source-size snapshot after the support-mode preflight extraction:
+Current source-size snapshot after the factor-preflight policy extraction:
 
-- `sfincs_jax/v3_driver.py`: `19899` lines.
-- `solve_v3_full_system_linear_gmres`: `14579` lines.
+- `sfincs_jax/v3_driver.py`: `19873` lines.
+- `solve_v3_full_system_linear_gmres`: `14551` lines.
 
 Recent local validation:
 
-- Focused sparse-PC/direct-tail/support-mode shard:
-  `118 passed in 1.35 s`.
+- Focused sparse-PC/direct-tail/factor-preflight-policy shard:
+  `120 passed in 1.35 s`.
 - Latest broad profile-response/x-block/sparse-pattern shard:
-  `396 passed in 114.09 s`.
+  `398 passed in 116.50 s`.
 
 Known CI issue fixed by this rewrite:
 
@@ -72,7 +73,7 @@ Known CI issue fixed by this rewrite:
 
 ### 1. `v3_driver.py` Architecture Refactor
 
-Completion estimate: 71%.
+Completion estimate: 72%.
 
 Goal:
 
@@ -91,11 +92,12 @@ Completed recent boundaries:
 - Structured direct-tail preconditioner admission policy.
 - Structured direct-tail preconditioner construction and cache setup.
 - Structured direct-tail support-mode preflight setup.
+- Sparse-PC factor-preflight policy parsing.
 
 Next steps:
 
-- Extract structured direct-tail residual-preflight setup into separately
-  tested helpers.
+- Extract structured direct-tail residual rescue and preflight setup into
+  separately tested helpers.
 - Move remaining generic sparse-PC solve/result assembly into cohesive
   `profile_response` helpers.
 - Continue shrinking `solve_v3_full_system_linear_gmres` in behavior-preserving
@@ -155,9 +157,9 @@ Next steps:
 
 ## Immediate Next Steps
 
-1. Commit and push the support-mode preflight extraction after a final clean
+1. Commit and push the factor-preflight policy extraction after a final clean
    diff.
-2. Continue with direct-tail residual-preflight setup extraction.
+2. Continue with direct-tail residual rescue and preflight setup extraction.
 3. Run focused sparse-PC tests and the broad profile-response/x-block/sparse
    shard after each extraction.
 4. Snapshot CI but do not wait on queued runs unless a completed failure appears.

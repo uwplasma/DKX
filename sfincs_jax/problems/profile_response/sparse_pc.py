@@ -569,6 +569,32 @@ class DirectTailSupportModePreflightResult:
 
 
 @dataclass(frozen=True)
+class SparsePCFactorPreflightPolicyContext:
+    """Inputs for sparse-PC factor residual-preflight policy parsing."""
+
+    env: Mapping[str, str] | None
+    fortran_reduced_sparse_pc: bool
+    structured_pc_ready: bool
+    structured_pc_metadata: dict[str, object] | None
+    sparse_pc_linear_size: int
+
+
+@dataclass(frozen=True)
+class SparsePCFactorPreflightPolicy:
+    """Resolved sparse-PC factor residual-preflight controls."""
+
+    factor_preflight_enabled: bool
+    factor_preflight_required: bool
+    factor_preflight_seed_enabled: bool
+    structured_pc_preflight_required_min_size: int
+    direct_tail_structured_pc_requires_preflight: bool
+    direct_tail_structured_pc_kind_for_preflight: str
+    direct_tail_structured_pc_size_requires_preflight: bool
+    structured_pc_preflight_required: bool
+    factor_preflight_max_target_ratio: float
+
+
+@dataclass(frozen=True)
 class XBlockSparsePCSetup:
     """Setup controls for RHSMode=1 x-block sparse-PC solves."""
 
@@ -2925,6 +2951,86 @@ def run_direct_tail_support_mode_preflight(
             error=f"{type(exc).__name__}: {exc}",
             factor_kind=factor_kind,
         )
+
+
+def resolve_sparse_pc_factor_preflight_policy(
+    context: SparsePCFactorPreflightPolicyContext,
+) -> SparsePCFactorPreflightPolicy:
+    """Resolve factor-preflight gates for sparse-PC production solves."""
+
+    factor_preflight_enabled = _env_bool(
+        context.env,
+        "SFINCS_JAX_RHSMODE1_SPARSE_PC_FACTOR_PREFLIGHT",
+        default=bool(context.fortran_reduced_sparse_pc),
+    )
+    factor_preflight_required = _env_bool(
+        context.env,
+        "SFINCS_JAX_RHSMODE1_SPARSE_PC_FACTOR_PREFLIGHT_REQUIRED",
+        default=False,
+    )
+    factor_preflight_seed_enabled = _env_bool(
+        context.env,
+        "SFINCS_JAX_RHSMODE1_SPARSE_PC_FACTOR_PREFLIGHT_SEED",
+        default=True,
+    )
+    structured_pc_preflight_required_min_size = _env_int(
+        context.env,
+        "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_STRUCTURED_PC_PREFLIGHT_REQUIRED_MIN_SIZE",
+        100_000,
+        minimum=1,
+    )
+    direct_tail_structured_pc_requires_preflight = False
+    direct_tail_structured_pc_kind_for_preflight = ""
+    if bool(context.structured_pc_ready) and isinstance(context.structured_pc_metadata, dict):
+        direct_tail_structured_pc_kind_for_preflight = (
+            str(context.structured_pc_metadata.get("kind", "")).strip().lower().replace("-", "_")
+        )
+        structured_pc_metadata_inner = context.structured_pc_metadata.get("metadata")
+        if isinstance(structured_pc_metadata_inner, dict):
+            direct_tail_structured_pc_requires_preflight = bool(
+                structured_pc_metadata_inner.get("requires_preflight", False)
+            )
+            if not direct_tail_structured_pc_kind_for_preflight:
+                direct_tail_structured_pc_kind_for_preflight = (
+                    str(structured_pc_metadata_inner.get("requested_kind", "")).strip().lower().replace("-", "_")
+                )
+    direct_tail_structured_pc_size_requires_preflight = bool(
+        context.structured_pc_ready
+        and int(context.sparse_pc_linear_size) >= int(structured_pc_preflight_required_min_size)
+        and direct_tail_structured_pc_kind_for_preflight != "active_fortran_v3_reduced_lu"
+    )
+    structured_pc_preflight_required = _env_bool(
+        context.env,
+        "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_STRUCTURED_PC_PREFLIGHT_REQUIRED",
+        default=bool(
+            context.structured_pc_ready
+            and (
+                bool(direct_tail_structured_pc_requires_preflight)
+                or bool(direct_tail_structured_pc_size_requires_preflight)
+            )
+        ),
+    )
+    factor_preflight_max_target_ratio = max(
+        1.0,
+        _env_float(
+            context.env,
+            "SFINCS_JAX_RHSMODE1_SPARSE_PC_FACTOR_PREFLIGHT_MAX_TARGET_RATIO",
+            1.0e6,
+        ),
+    )
+    return SparsePCFactorPreflightPolicy(
+        factor_preflight_enabled=bool(factor_preflight_enabled),
+        factor_preflight_required=bool(factor_preflight_required),
+        factor_preflight_seed_enabled=bool(factor_preflight_seed_enabled),
+        structured_pc_preflight_required_min_size=int(structured_pc_preflight_required_min_size),
+        direct_tail_structured_pc_requires_preflight=bool(direct_tail_structured_pc_requires_preflight),
+        direct_tail_structured_pc_kind_for_preflight=str(direct_tail_structured_pc_kind_for_preflight),
+        direct_tail_structured_pc_size_requires_preflight=bool(
+            direct_tail_structured_pc_size_requires_preflight
+        ),
+        structured_pc_preflight_required=bool(structured_pc_preflight_required),
+        factor_preflight_max_target_ratio=float(factor_preflight_max_target_ratio),
+    )
 
 
 def _xblock_device_flags(method: str) -> tuple[bool, bool, bool, bool, bool]:
@@ -5383,6 +5489,8 @@ __all__ = [
     "DirectTailStructuredBuildResult",
     "DirectTailSupportModePreflightContext",
     "DirectTailSupportModePreflightResult",
+    "SparsePCFactorPreflightPolicyContext",
+    "SparsePCFactorPreflightPolicy",
     "MatvecCounter",
     "XBlockAssembledOperatorDiagnosticsContext",
     "XBlockSparsePCCoreDiagnosticsContext",
@@ -5407,6 +5515,7 @@ __all__ = [
     "build_direct_tail_materialization_setup",
     "build_direct_tail_structured_preconditioner_setup",
     "enforce_sparse_pc_memory_budget",
+    "resolve_sparse_pc_factor_preflight_policy",
     "run_direct_tail_support_mode_preflight",
     "resolve_direct_tail_structured_admission",
     "fp_xblock_global_correction_metadata",

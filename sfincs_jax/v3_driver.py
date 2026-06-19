@@ -219,6 +219,7 @@ from .problems.profile_response.sparse_pc import (
     FortranReducedXBlockKrylovSolveContext,
     FortranReducedXBlockMomentSchurStageContext,
     SparsePCMemoryBudgetPreflightContext,
+    SparsePCFactorPreflightPolicyContext,
     SparsePCPatternSetupContext,
     SparsePCGMRESContext,
     SparsePCPostMinresContext,
@@ -249,6 +250,7 @@ from .problems.profile_response.sparse_pc import (
     prepare_xblock_initial_guess,
     resolve_sparse_pc_entry_policy,
     resolve_sparse_pc_factor_policy,
+    resolve_sparse_pc_factor_preflight_policy,
     resolve_direct_tail_structured_admission,
     resolve_fortran_reduced_sparse_pc_backend,
     run_direct_tail_support_mode_preflight,
@@ -7655,64 +7657,36 @@ def solve_v3_full_system_linear_gmres(
                     f"support-mode preflight failed ({direct_tail_support_mode_preflight_error}); "
                     "continuing with existing structured preconditioner",
                 )
-        factor_preflight_enabled = _rhs1_bool_env(
-            "SFINCS_JAX_RHSMODE1_SPARSE_PC_FACTOR_PREFLIGHT",
-            default=bool(fortran_reduced_sparse_pc),
-        )
-        factor_preflight_required = _rhs1_bool_env(
-            "SFINCS_JAX_RHSMODE1_SPARSE_PC_FACTOR_PREFLIGHT_REQUIRED",
-            default=False,
-        )
-        factor_preflight_seed_enabled = _rhs1_bool_env(
-            "SFINCS_JAX_RHSMODE1_SPARSE_PC_FACTOR_PREFLIGHT_SEED",
-            default=True,
-        )
-        structured_pc_preflight_required_min_size = _rhs1_int_env(
-            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_STRUCTURED_PC_PREFLIGHT_REQUIRED_MIN_SIZE",
-            default=100_000,
-            minimum=1,
-        )
-        direct_tail_structured_pc_requires_preflight = False
-        direct_tail_structured_pc_kind_for_preflight = ""
-        if bool(structured_pc_ready) and isinstance(direct_tail_structured_pc_metadata, dict):
-            direct_tail_structured_pc_kind_for_preflight = (
-                str(direct_tail_structured_pc_metadata.get("kind", ""))
-                .strip()
-                .lower()
-                .replace("-", "_")
+        factor_preflight_policy = resolve_sparse_pc_factor_preflight_policy(
+            SparsePCFactorPreflightPolicyContext(
+                env=os.environ,
+                fortran_reduced_sparse_pc=bool(fortran_reduced_sparse_pc),
+                structured_pc_ready=bool(structured_pc_ready),
+                structured_pc_metadata=(
+                    direct_tail_structured_pc_metadata
+                    if isinstance(direct_tail_structured_pc_metadata, dict)
+                    else None
+                ),
+                sparse_pc_linear_size=int(sparse_pc_linear_size),
             )
-            structured_pc_metadata_inner = direct_tail_structured_pc_metadata.get("metadata")
-            if isinstance(structured_pc_metadata_inner, dict):
-                direct_tail_structured_pc_requires_preflight = bool(
-                    structured_pc_metadata_inner.get("requires_preflight", False)
-                )
-                if not direct_tail_structured_pc_kind_for_preflight:
-                    direct_tail_structured_pc_kind_for_preflight = (
-                        str(structured_pc_metadata_inner.get("requested_kind", ""))
-                        .strip()
-                        .lower()
-                        .replace("-", "_")
-                    )
+        )
+        factor_preflight_enabled = bool(factor_preflight_policy.factor_preflight_enabled)
+        factor_preflight_required = bool(factor_preflight_policy.factor_preflight_required)
+        factor_preflight_seed_enabled = bool(factor_preflight_policy.factor_preflight_seed_enabled)
+        structured_pc_preflight_required_min_size = int(
+            factor_preflight_policy.structured_pc_preflight_required_min_size
+        )
+        direct_tail_structured_pc_requires_preflight = bool(
+            factor_preflight_policy.direct_tail_structured_pc_requires_preflight
+        )
+        direct_tail_structured_pc_kind_for_preflight = str(
+            factor_preflight_policy.direct_tail_structured_pc_kind_for_preflight
+        )
         direct_tail_structured_pc_size_requires_preflight = bool(
-            structured_pc_ready
-            and int(sparse_pc_linear_size) >= int(structured_pc_preflight_required_min_size)
-            and direct_tail_structured_pc_kind_for_preflight != "active_fortran_v3_reduced_lu"
+            factor_preflight_policy.direct_tail_structured_pc_size_requires_preflight
         )
-        structured_pc_preflight_required = _rhs1_bool_env(
-            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_STRUCTURED_PC_PREFLIGHT_REQUIRED",
-            default=bool(
-                structured_pc_ready
-                and (
-                    bool(direct_tail_structured_pc_requires_preflight)
-                    or bool(direct_tail_structured_pc_size_requires_preflight)
-                )
-            ),
-        )
-        factor_preflight_max_target_ratio = _rhs1_float_env(
-            "SFINCS_JAX_RHSMODE1_SPARSE_PC_FACTOR_PREFLIGHT_MAX_TARGET_RATIO",
-            default=1.0e6,
-            minimum=1.0,
-        )
+        structured_pc_preflight_required = bool(factor_preflight_policy.structured_pc_preflight_required)
+        factor_preflight_max_target_ratio = float(factor_preflight_policy.factor_preflight_max_target_ratio)
         factor_preflight_residual_before: float | None = None
         factor_preflight_residual_after: float | None = None
         factor_preflight_improvement_ratio: float | None = None

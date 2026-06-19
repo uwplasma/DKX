@@ -20,6 +20,7 @@ from sfincs_jax.problems.profile_response.sparse_pc import (
     DirectTailStructuredAdmissionContext,
     DirectTailStructuredBuildContext,
     DirectTailSupportModePreflightContext,
+    SparsePCFactorPreflightPolicyContext,
     FortranReducedXBlockFactorBuildContext,
     FortranReducedXBlockGlobalCouplingStageContext,
     FortranReducedXBlockKrylovSetupContext,
@@ -64,6 +65,7 @@ from sfincs_jax.problems.profile_response.sparse_pc import (
     resolve_fortran_reduced_xblock_moment_schur_policy,
     resolve_sparse_pc_entry_policy,
     resolve_sparse_pc_factor_policy,
+    resolve_sparse_pc_factor_preflight_policy,
     resolve_direct_tail_structured_admission,
     run_direct_tail_support_mode_preflight,
     resolve_xblock_qi_device_admission_setup,
@@ -1088,6 +1090,64 @@ def test_direct_tail_support_mode_preflight_reports_selector_exception() -> None
     assert result.selected is False
     assert result.metadata is None
     assert result.error == "RuntimeError: selector failed"
+
+
+def test_sparse_pc_factor_preflight_policy_uses_metadata_trigger() -> None:
+    policy = resolve_sparse_pc_factor_preflight_policy(
+        SparsePCFactorPreflightPolicyContext(
+            env={},
+            fortran_reduced_sparse_pc=True,
+            structured_pc_ready=True,
+            structured_pc_metadata={
+                "kind": "",
+                "metadata": {
+                    "requested_kind": "active-fortran-v3-reduced-ilu",
+                    "requires_preflight": True,
+                },
+            },
+            sparse_pc_linear_size=10,
+        )
+    )
+
+    assert policy.factor_preflight_enabled is True
+    assert policy.factor_preflight_required is False
+    assert policy.factor_preflight_seed_enabled is True
+    assert policy.direct_tail_structured_pc_requires_preflight is True
+    assert policy.direct_tail_structured_pc_kind_for_preflight == "active_fortran_v3_reduced_ilu"
+    assert policy.direct_tail_structured_pc_size_requires_preflight is False
+    assert policy.structured_pc_preflight_required is True
+    assert policy.factor_preflight_max_target_ratio == 1.0e6
+
+
+def test_sparse_pc_factor_preflight_policy_uses_size_trigger_and_overrides() -> None:
+    policy = resolve_sparse_pc_factor_preflight_policy(
+        SparsePCFactorPreflightPolicyContext(
+            env={
+                "SFINCS_JAX_RHSMODE1_SPARSE_PC_FACTOR_PREFLIGHT": "0",
+                "SFINCS_JAX_RHSMODE1_SPARSE_PC_FACTOR_PREFLIGHT_REQUIRED": "1",
+                "SFINCS_JAX_RHSMODE1_SPARSE_PC_FACTOR_PREFLIGHT_SEED": "0",
+                "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_STRUCTURED_PC_PREFLIGHT_REQUIRED_MIN_SIZE": "20",
+                "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_STRUCTURED_PC_PREFLIGHT_REQUIRED": "0",
+                "SFINCS_JAX_RHSMODE1_SPARSE_PC_FACTOR_PREFLIGHT_MAX_TARGET_RATIO": "0.5",
+            },
+            fortran_reduced_sparse_pc=True,
+            structured_pc_ready=True,
+            structured_pc_metadata={
+                "kind": "active-fortran-v3-reduced-ilu",
+                "metadata": {},
+            },
+            sparse_pc_linear_size=25,
+        )
+    )
+
+    assert policy.factor_preflight_enabled is False
+    assert policy.factor_preflight_required is True
+    assert policy.factor_preflight_seed_enabled is False
+    assert policy.structured_pc_preflight_required_min_size == 20
+    assert policy.direct_tail_structured_pc_kind_for_preflight == "active_fortran_v3_reduced_ilu"
+    assert policy.direct_tail_structured_pc_size_requires_preflight is True
+    assert policy.structured_pc_preflight_required is False
+    assert policy.factor_preflight_max_target_ratio == 1.0
 
 
 def test_fortran_reduced_xblock_factor_policy_uses_specific_env_before_generic() -> None:
