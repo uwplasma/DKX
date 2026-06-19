@@ -6583,9 +6583,13 @@ def test_xblock_sparse_pc_final_payload_from_driver_state_sets_gate_and_expands(
     def fake_result_metadata(arg_state, *, full_size):
         calls["accepted"] = arg_state["accepted_converged_xblock"]
         calls["full_size"] = full_size
+        calls["solver_kind"] = arg_state["xblock_solver_kind"]
+        calls["gmres_basis_nbytes"] = arg_state["xblock_estimated_gmres_basis_nbytes"]
+        calls["device_methods"] = arg_state["xblock_device_krylov_methods"]
         return {"core": 1}
 
-    def fake_correction_metadata(_arg_state):
+    def fake_correction_metadata(arg_state):
+        calls["post_minres_alphas"] = arg_state["post_minres_alphas"]
         return {"correction": 2}
 
     monkeypatch.setattr(
@@ -6605,14 +6609,27 @@ def test_xblock_sparse_pc_final_payload_from_driver_state_sets_gate_and_expands(
             "x_np": np.asarray([3.0, 4.0]),
             "residual_norm_xblock_pc": 0.25,
             "target_xblock": 0.5,
+            "xblock_krylov_method": "tfqmr_jax",
+            "xblock_linear_size": 10,
+            "pc_restart": 3,
         },
         expand_reduced=lambda x: jnp.concatenate(
             [jnp.asarray([0.0], dtype=x.dtype), x]
+        ),
+        post_corrections=SimpleNamespace(
+            driver_state=lambda: {"post_minres_alphas": (0.5,)}
         ),
     )
 
     assert isinstance(payload, SparsePCGMRESFinalPayload)
     np.testing.assert_allclose(np.asarray(payload.x), np.asarray([0.0, 3.0, 4.0]))
     assert float(payload.residual_norm) == pytest.approx(0.25)
-    assert calls == {"accepted": True, "full_size": 7}
+    assert calls == {
+        "accepted": True,
+        "full_size": 7,
+        "solver_kind": "xblock_sparse_pc_tfqmr_jax",
+        "gmres_basis_nbytes": 10 * (3 + 1 + 4) * 8,
+        "device_methods": {"fgmres_jax", "gmres_jax", "bicgstab_jax", "tfqmr_jax"},
+        "post_minres_alphas": (0.5,),
+    }
     assert payload.metadata == {"core": 1, "correction": 2}

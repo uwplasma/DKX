@@ -321,7 +321,6 @@ from .problems.profile_response.sparse_pc import (
     xblock_gmres_fallback_decision,
     xblock_krylov_report,
     xblock_physical_solution_and_residual,
-    xblock_sparse_pc_work_estimates,
     build_sparse_host_or_ilu_factor,
     build_sparse_ilu_preconditioner_from_cache,
     build_sparse_host_scipy_preconditioner,
@@ -6624,28 +6623,10 @@ def solve_v3_full_system_linear_gmres(
             residual_norm_xblock_pc = float(post_corrections.residual_norm)
             solve_s = float(post_corrections.solve_s)
             emit_xblock_sparse_pc_completion_from_driver_state(locals())
-            xblock_work_estimates = xblock_sparse_pc_work_estimates(
-                krylov_method=str(xblock_krylov_method),
-                linear_size=int(xblock_linear_size),
-                restart=int(pc_restart),
-                dtype=np.float64,
-            )
-            xblock_solver_kind = xblock_work_estimates.solver_kind
-            xblock_device_krylov_methods = set(xblock_work_estimates.device_krylov_methods)
-            xblock_estimated_gmres_basis_nbytes = (
-                xblock_work_estimates.gmres_basis_nbytes
-            )
-            xblock_estimated_bicgstab_work_nbytes = (
-                xblock_work_estimates.bicgstab_work_nbytes
-            )
-            xblock_estimated_tfqmr_work_nbytes = (
-                xblock_work_estimates.tfqmr_work_nbytes
-            )
-            xblock_sparse_pc_state = dict(locals())
-            xblock_sparse_pc_state.update(post_corrections.driver_state())
             xblock_sparse_pc_final_payload = xblock_sparse_pc_final_payload_from_driver_state(
-                xblock_sparse_pc_state,
+                locals(),
                 expand_reduced=_xblock_expand_reduced,
+                post_corrections=post_corrections,
             )
             return v3_linear_solve_result_from_payload(
                 op=op,

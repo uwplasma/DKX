@@ -803,6 +803,16 @@ Recent local validation:
 - Hygiene:
   `py_compile`, `ruff`, `compileall`, `git diff --check`, and
   `scripts/check_repo_size.py` passed.
+- Sparse-PC helper shard after xblock final payload state consolidation:
+  `206 passed in 1.92 s`.
+- Sparse-host/minimum-norm/direct-tail driver shard:
+  `32 passed, 100 deselected in 36.25 s`.
+- Broad profile-response/RHSMode=1 policy, setup, diagnostics, solver, and
+  helper sweep after xblock final payload state consolidation:
+  `1163 passed in 48.15 s`.
+- Hygiene:
+  `py_compile`, `ruff`, `compileall`, `git diff --check`, and
+  `scripts/check_repo_size.py` passed.
 - Older focused and broad validation checkpoints are intentionally omitted from
   this active plan; they remain available in git history.
 
@@ -1018,12 +1028,15 @@ Completed recent boundaries:
 - X-block sparse-PC post-residual-equation, post-minres, and post-coarse
   correction orchestration now uses one tested profile-response helper with a
   compatibility state map for the existing final metadata payload.
+- X-block sparse-PC final payload assembly now owns work-estimate metadata and
+  post-correction state merging, leaving the driver to pass the current solve
+  state plus the correction result object.
 
 Next steps:
 
-- Move remaining generic sparse-PC final payload/result assembly into cohesive
-  `profile_response` helpers now that the xblock post-solve state handoff is
-  explicit.
+- Continue moving remaining generic sparse-PC final payload/result assembly
+  into cohesive `profile_response` helpers, using explicit result objects
+  instead of driver-local metadata scalar plumbing.
 - Continue extracting sparse-PC state/metadata seams after the source split
   stabilizes; avoid moving driver-specific direction builders or caches into
   generic helpers.

@@ -7598,11 +7598,35 @@ def xblock_sparse_pc_final_payload_from_driver_state(
     state: Mapping[str, object],
     *,
     expand_reduced: ArrayFn,
+    post_corrections: object | None = None,
 ) -> SparsePCGMRESFinalPayload:
     """Build the final payload for the x-block sparse-PC branch."""
 
     residual_norm = float(state["residual_norm_xblock_pc"])
     metadata_state = state.__class__(state) if isinstance(state, MutableMapping) else dict(state)
+    if post_corrections is not None:
+        metadata_state.update(post_corrections.driver_state())
+    if (
+        "xblock_solver_kind" not in metadata_state
+        and "xblock_krylov_method" in metadata_state
+        and "xblock_linear_size" in metadata_state
+        and "pc_restart" in metadata_state
+    ):
+        work_estimates = xblock_sparse_pc_work_estimates(
+            krylov_method=str(metadata_state["xblock_krylov_method"]),
+            linear_size=int(metadata_state["xblock_linear_size"]),
+            restart=int(metadata_state["pc_restart"]),
+            dtype=np.float64,
+        )
+        metadata_state.update(
+            {
+                "xblock_solver_kind": work_estimates.solver_kind,
+                "xblock_device_krylov_methods": set(work_estimates.device_krylov_methods),
+                "xblock_estimated_gmres_basis_nbytes": work_estimates.gmres_basis_nbytes,
+                "xblock_estimated_bicgstab_work_nbytes": work_estimates.bicgstab_work_nbytes,
+                "xblock_estimated_tfqmr_work_nbytes": work_estimates.tfqmr_work_nbytes,
+            }
+        )
     metadata_state["accepted_converged_xblock"] = profile_residual_converged(
         residual_norm,
         float(state["target_xblock"]),
