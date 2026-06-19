@@ -10,6 +10,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
+from ...solver import GMRESSolveResult
 from ...v3_system import _fs_average_factor, _ix_min, _source_basis_constraint_scheme_1
 
 
@@ -623,6 +624,27 @@ def true_residual_norm_or_inf(
     )
     norm = float(jnp.linalg.norm(residual))
     return norm if math.isfinite(norm) else float("inf")
+
+
+def result_with_true_residual(
+    *,
+    x: jnp.ndarray,
+    rhs: jnp.ndarray,
+    matvec: Callable[[jnp.ndarray], jnp.ndarray],
+) -> tuple[GMRESSolveResult, jnp.ndarray]:
+    """Build a GMRES-style result and residual vector using the true residual."""
+
+    x_use = jnp.asarray(x, dtype=jnp.float64)
+    residual = jnp.asarray(rhs, dtype=jnp.float64) - jnp.asarray(
+        matvec(x_use), dtype=jnp.float64
+    )
+    return (
+        GMRESSolveResult(
+            x=x_use,
+            residual_norm=jnp.linalg.norm(residual),
+        ),
+        residual,
+    )
 
 
 def recompute_true_residual_result(

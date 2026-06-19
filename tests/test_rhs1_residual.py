@@ -10,6 +10,7 @@ from sfincs_jax.rhs1_residual import (
     replay_left_preconditioned_residual_norms,
     residual_converged,
     residual_target,
+    result_with_true_residual,
     safe_ratio,
     true_residual_norm_or_inf,
 )
@@ -57,6 +58,19 @@ def test_true_residual_norm_or_inf_maps_nonfinite_norm_to_infinity() -> None:
     )
 
     assert norm == math.inf
+
+
+def test_result_with_true_residual_returns_result_and_vector() -> None:
+    result, residual = result_with_true_residual(
+        x=jnp.asarray([1.0, -1.0], dtype=jnp.float64),
+        rhs=jnp.asarray([1.0, 2.0], dtype=jnp.float64),
+        matvec=lambda x: jnp.asarray([x[0], 2.0 * x[1]], dtype=jnp.float64),
+    )
+
+    assert isinstance(result, GMRESSolveResult)
+    assert float(result.residual_norm) == 4.0
+    assert jnp.array_equal(residual, jnp.asarray([0.0, 4.0], dtype=jnp.float64))
+    assert jnp.array_equal(result.x, jnp.asarray([1.0, -1.0], dtype=jnp.float64))
 
 
 def test_recompute_true_residual_result_replaces_reported_krylov_norm() -> None:

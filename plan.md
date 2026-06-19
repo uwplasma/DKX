@@ -42,8 +42,10 @@ Make `sfincs_jax` research-grade while preserving the public user contract:
 
 Recent checkpoints:
 
-- Payload-to-`V3LinearSolveResult` result-layer wrapper extraction
+- RHSMode=1 true-residual `GMRESSolveResult` helper extraction
   (current checkpoint).
+- Payload-to-`V3LinearSolveResult` result-layer wrapper extraction
+  (`7652c24`).
 - Explicit sparse-host direct factor/solve orchestration extraction
   (`1d43c2d`).
 - Explicit sparse minimum-norm materialization/solve orchestration extraction
@@ -87,17 +89,25 @@ Recent checkpoints:
 - `cb295ce` Extract sparse pattern setup.
 - `4b6a5b4` Extract sparse factor policy.
 
-Current source-size snapshot after payload-to-result wrapper extraction:
+Current source-size snapshot after RHSMode=1 true-residual result helper
+extraction:
 
-- `sfincs_jax/v3_driver.py`: `18763` lines.
-- `solve_v3_full_system_linear_gmres`: `13476` lines.
+- `sfincs_jax/v3_driver.py`: `18759` lines.
+- `solve_v3_full_system_linear_gmres`: `13471` lines.
 - `sfincs_jax/v3_results.py`: `119` lines.
-- `sfincs_jax/problems/profile_response/residual.py`: `751` lines.
+- `sfincs_jax/problems/profile_response/residual.py`: `773` lines.
 - `sfincs_jax/problems/profile_response/handoff.py`: `290` lines.
 - `sfincs_jax/problems/profile_response/sparse_pc.py`: `8034` lines.
 
 Recent local validation:
 
+- RHSMode=1 residual helper unit shard:
+  `13 passed in 0.74 s`.
+- Sparse-host/minimum-norm/direct-tail driver shard:
+  `32 passed, 113 deselected in 35.30 s`.
+- Hygiene:
+  `ruff`, `compileall`, `git diff --check`, and `scripts/check_repo_size.py`
+  passed.
 - Result-wrapper/profile-response sparse-PC focused shard:
   `177 passed in 1.77 s`.
 - Sparse-host/minimum-norm/direct-tail driver shard:
@@ -286,6 +296,8 @@ Completed recent boundaries:
 - Payload-to-`V3LinearSolveResult` conversion consolidated in the result layer,
   removing repeated driver-side `GMRESSolveResult` wrapping for sparse-PC,
   x-block, and explicit host sparse payloads.
+- RHSMode=1 true-residual result/vector construction consolidated in the
+  profile-response residual module and reused by dense and SciPy rescue paths.
 
 Next steps:
 

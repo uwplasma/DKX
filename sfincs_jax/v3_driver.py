@@ -503,6 +503,7 @@ from .problems.profile_response.residual import (
     replay_left_preconditioned_residual_norms as rhs1_replay_left_preconditioned_residual_norms,
     residual_converged as rhs1_residual_converged,
     residual_target as rhs1_residual_target,
+    result_with_true_residual as rhs1_result_with_true_residual,
     safe_preconditioner as _safe_preconditioner,
     safe_ratio as rhs1_safe_ratio,
     true_residual_norm_or_inf as rhs1_true_residual_norm_or_inf,
@@ -14030,8 +14031,7 @@ def solve_v3_full_system_linear_gmres(
                         if not use_implicit:
                             x_np = np.asarray(np.linalg.lstsq(a_np, np.asarray(b_dense, dtype=np.float64), rcond=None)[0], dtype=np.float64)
                             x_dense = jnp.asarray(x_np, dtype=jnp.float64)
-                            r_dense = rhs_reduced - mv_reduced(x_dense)
-                            res_dense = GMRESSolveResult(x=x_dense, residual_norm=jnp.linalg.norm(r_dense))
+                            res_dense, r_dense = rhs1_result_with_true_residual(x=x_dense, rhs=rhs_reduced, matvec=mv_reduced)
                         else:
                             def _solve_cb(rhs_np: np.ndarray) -> np.ndarray:
                                 rhs_np = np.asarray(rhs_np, dtype=np.float64)
@@ -14039,8 +14039,7 @@ def solve_v3_full_system_linear_gmres(
 
                             out_spec = jax.ShapeDtypeStruct(b_dense.shape, jnp.float64)
                             x_dense = jax.pure_callback(_solve_cb, out_spec, b_dense)
-                            r_dense = rhs_reduced - mv_reduced(x_dense)
-                            res_dense = GMRESSolveResult(x=x_dense, residual_norm=jnp.linalg.norm(r_dense))
+                            res_dense, r_dense = rhs1_result_with_true_residual(x=x_dense, rhs=rhs_reduced, matvec=mv_reduced)
                         lu = None
                         piv = None
                     else:
@@ -14092,16 +14091,14 @@ def solve_v3_full_system_linear_gmres(
                                 transpose_solve=_transpose_solve_host,
                                 symmetric=False,
                             )
-                        r_dense = rhs_reduced - mv_reduced(x_dense)
-                        res_dense = GMRESSolveResult(x=x_dense, residual_norm=jnp.linalg.norm(r_dense))
+                        res_dense, r_dense = rhs1_result_with_true_residual(x=x_dense, rhs=rhs_reduced, matvec=mv_reduced)
                 elif dense_backend_allowed and dense_matrix_cache is not None:
                     a_dense_jnp = jnp.asarray(dense_matrix_cache, dtype=rhs_reduced.dtype)
                     if use_row_scaled:
                         x_dense, _rn = dense_solve_from_matrix_row_scaled(a=a_dense_jnp, b=rhs_reduced)
                     else:
                         x_dense, _rn = dense_solve_from_matrix(a=a_dense_jnp, b=rhs_reduced)
-                    r_dense = rhs_reduced - mv_reduced(x_dense)
-                    res_dense = GMRESSolveResult(x=x_dense, residual_norm=jnp.linalg.norm(r_dense))
+                    res_dense, r_dense = rhs1_result_with_true_residual(x=x_dense, rhs=rhs_reduced, matvec=mv_reduced)
                 else:
                     if dense_matrix_cache is not None:
                         a_dense_jnp = jnp.asarray(dense_matrix_cache, dtype=rhs_reduced.dtype)
@@ -14918,8 +14915,7 @@ def solve_v3_full_system_linear_gmres(
                             )
                             scipy_history_len = len(_history or [])
                         x_scipy = jnp.asarray(x_np, dtype=jnp.float64)
-                        r_scipy = rhs_reduced - mv_reduced(x_scipy)
-                        res_scipy = GMRESSolveResult(x=x_scipy, residual_norm=jnp.linalg.norm(r_scipy))
+                        res_scipy, r_scipy = rhs1_result_with_true_residual(x=x_scipy, rhs=rhs_reduced, matvec=mv_reduced)
                         scipy_rescue_elapsed_s = float(t.elapsed_s() - scipy_rescue_start_s)
                         scipy_rescue_final_residual = float(res_scipy.residual_norm)
                         _mark("rhs1_scipy_rescue_done")
