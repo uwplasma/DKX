@@ -253,6 +253,7 @@ from .problems.profile_response.sparse_pc import (
     resolve_sparse_pc_factor_preflight_policy,
     resolve_direct_tail_structured_admission,
     resolve_direct_tail_residual_rescue_policy,
+    resolve_direct_tail_true_active_rescue_policy,
     resolve_fortran_reduced_sparse_pc_backend,
     run_direct_tail_support_mode_preflight,
     resolve_fortran_reduced_xblock_factor_policy,
@@ -7794,17 +7795,13 @@ def solve_v3_full_system_linear_gmres(
                         "fortran_reduced_direct_tail_true_window: "
                         f"skipped explicit specs ({type(exc).__name__}: {exc})",
                     )
-        direct_tail_true_active_block_requested = _rhs1_bool_env(
-            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_ACTIVE_BLOCK",
-            default=False,
+        direct_tail_true_active_rescue_policy = resolve_direct_tail_true_active_rescue_policy(os.environ)
+        direct_tail_true_active_block_requested = bool(direct_tail_true_active_rescue_policy.active_block_requested)
+        direct_tail_true_active_residual_block_requested = bool(
+            direct_tail_true_active_rescue_policy.active_residual_block_requested
         )
-        direct_tail_true_active_residual_block_requested = _rhs1_bool_env(
-            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_ACTIVE_RESIDUAL_BLOCK",
-            default=False,
-        )
-        direct_tail_true_active_submatrix_requested = _rhs1_bool_env(
-            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_ACTIVE_SUBMATRIX",
-            default=False,
+        direct_tail_true_active_submatrix_requested = bool(
+            direct_tail_true_active_rescue_policy.active_submatrix_requested
         )
         direct_tail_true_active_submatrix_selected = False
         direct_tail_true_active_submatrix_metadata: dict[str, object] | None = None
@@ -7818,159 +7815,86 @@ def solve_v3_full_system_linear_gmres(
         direct_tail_true_active_residual_block_metadata: dict[str, object] | None = None
         direct_tail_true_active_residual_block_error: str | None = None
         direct_tail_true_active_residual_block_residual_after: float | None = None
-        direct_tail_true_active_column_cache_requested = _rhs1_bool_env(
-            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_ACTIVE_COLUMN_CACHE",
-            default=True,
+        direct_tail_true_active_column_cache_requested = bool(
+            direct_tail_true_active_rescue_policy.active_column_cache_requested
         )
-        direct_tail_true_active_column_cache_max_mb = _rhs1_float_env(
-            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_ACTIVE_COLUMN_CACHE_MAX_MB",
-            default=512.0,
-            minimum=0.0,
+        direct_tail_true_active_column_cache_max_mb = float(
+            direct_tail_true_active_rescue_policy.active_column_cache_max_mb
         )
         direct_tail_true_active_column_cache_metadata: dict[str, object] | None = None
-        direct_tail_true_active_block_x_count = _rhs1_int_env(
-            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_ACTIVE_BLOCK_X_COUNT",
-            default=1,
-            minimum=0,
+        direct_tail_true_active_block_x_count = int(direct_tail_true_active_rescue_policy.active_block_x_count)
+        direct_tail_true_active_block_ell_count = int(direct_tail_true_active_rescue_policy.active_block_ell_count)
+        direct_tail_true_active_block_species_count = (
+            None
+            if direct_tail_true_active_rescue_policy.active_block_species_count is None
+            else int(direct_tail_true_active_rescue_policy.active_block_species_count)
         )
-        direct_tail_true_active_block_ell_count = _rhs1_int_env(
-            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_ACTIVE_BLOCK_ELL_COUNT",
-            default=8,
-            minimum=0,
+        direct_tail_true_active_block_theta_stride = int(
+            direct_tail_true_active_rescue_policy.active_block_theta_stride
         )
-        species_count_env = os.environ.get(
-            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_ACTIVE_BLOCK_SPECIES_COUNT",
-            "",
-        ).strip()
-        direct_tail_true_active_block_species_count: int | None = None
-        if species_count_env:
-            try:
-                direct_tail_true_active_block_species_count = max(0, int(species_count_env))
-            except ValueError:
-                direct_tail_true_active_block_species_count = None
-        direct_tail_true_active_block_theta_stride = _rhs1_int_env(
-            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_ACTIVE_BLOCK_THETA_STRIDE",
-            default=1,
-            minimum=1,
+        direct_tail_true_active_block_zeta_stride = int(
+            direct_tail_true_active_rescue_policy.active_block_zeta_stride
         )
-        direct_tail_true_active_block_zeta_stride = _rhs1_int_env(
-            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_ACTIVE_BLOCK_ZETA_STRIDE",
-            default=1,
-            minimum=1,
+        direct_tail_true_active_block_max_mb = float(direct_tail_true_active_rescue_policy.active_block_max_mb)
+        direct_tail_true_active_block_regularization = float(
+            direct_tail_true_active_rescue_policy.active_block_regularization
         )
-        direct_tail_true_active_block_max_mb = _rhs1_float_env(
-            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_ACTIVE_BLOCK_MAX_MB",
-            default=1024.0,
-            minimum=0.0,
+        direct_tail_true_active_block_max_size = int(direct_tail_true_active_rescue_policy.active_block_max_size)
+        direct_tail_true_active_block_column_batch = int(
+            direct_tail_true_active_rescue_policy.active_block_column_batch
         )
-        direct_tail_true_active_block_regularization = _rhs1_float_env(
-            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_ACTIVE_BLOCK_REGULARIZATION",
-            default=1.0e-12,
-            minimum=0.0,
+        direct_tail_true_active_block_drop_tol = float(direct_tail_true_active_rescue_policy.active_block_drop_tol)
+        direct_tail_true_active_block_include_tail = bool(
+            direct_tail_true_active_rescue_policy.active_block_include_tail
         )
-        direct_tail_true_active_block_max_size = _rhs1_int_env(
-            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_ACTIVE_BLOCK_MAX_SIZE",
-            default=4096,
-            minimum=1,
+        direct_tail_true_active_block_max_tail = int(direct_tail_true_active_rescue_policy.active_block_max_tail)
+        direct_tail_true_active_block_damping = bool(direct_tail_true_active_rescue_policy.active_block_damping)
+        direct_tail_true_active_block_beta_max = float(direct_tail_true_active_rescue_policy.active_block_beta_max)
+        direct_tail_true_active_residual_block_max_mb = float(
+            direct_tail_true_active_rescue_policy.active_residual_block_max_mb
         )
-        direct_tail_true_active_block_column_batch = _rhs1_int_env(
-            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_ACTIVE_BLOCK_COLUMN_BATCH",
-            default=8,
-            minimum=1,
+        direct_tail_true_active_residual_block_regularization = float(
+            direct_tail_true_active_rescue_policy.active_residual_block_regularization
         )
-        direct_tail_true_active_block_drop_tol = _rhs1_float_env(
-            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_ACTIVE_BLOCK_DROP_TOL",
-            default=1.0e-14,
-            minimum=0.0,
+        direct_tail_true_active_residual_block_max_size = int(
+            direct_tail_true_active_rescue_policy.active_residual_block_max_size
         )
-        direct_tail_true_active_block_include_tail = _rhs1_bool_env(
-            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_ACTIVE_BLOCK_INCLUDE_TAIL",
-            default=True,
+        direct_tail_true_active_residual_block_column_batch = int(
+            direct_tail_true_active_rescue_policy.active_residual_block_column_batch
         )
-        direct_tail_true_active_block_max_tail = _rhs1_int_env(
-            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_ACTIVE_BLOCK_MAX_TAIL",
-            default=512,
-            minimum=0,
+        direct_tail_true_active_residual_block_drop_tol = float(
+            direct_tail_true_active_rescue_policy.active_residual_block_drop_tol
         )
-        direct_tail_true_active_block_damping = _rhs1_bool_env(
-            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_ACTIVE_BLOCK_DAMPING",
-            default=False,
+        direct_tail_true_active_residual_block_include_tail = bool(
+            direct_tail_true_active_rescue_policy.active_residual_block_include_tail
         )
-        direct_tail_true_active_block_beta_max = _rhs1_float_env(
-            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_ACTIVE_BLOCK_BETA_MAX",
-            default=10.0,
-            minimum=0.0,
+        direct_tail_true_active_residual_block_max_tail = int(
+            direct_tail_true_active_rescue_policy.active_residual_block_max_tail
         )
-        direct_tail_true_active_residual_block_max_mb = _rhs1_float_env(
-            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_ACTIVE_RESIDUAL_BLOCK_MAX_MB",
-            default=float(direct_tail_true_active_block_max_mb),
-            minimum=0.0,
+        direct_tail_true_active_residual_block_kinetic_only = bool(
+            direct_tail_true_active_rescue_policy.active_residual_block_kinetic_only
         )
-        direct_tail_true_active_residual_block_regularization = _rhs1_float_env(
-            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_ACTIVE_RESIDUAL_BLOCK_REGULARIZATION",
-            default=float(direct_tail_true_active_block_regularization),
-            minimum=0.0,
+        direct_tail_true_active_residual_block_damping = bool(
+            direct_tail_true_active_rescue_policy.active_residual_block_damping
         )
-        direct_tail_true_active_residual_block_max_size = _rhs1_int_env(
-            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_ACTIVE_RESIDUAL_BLOCK_MAX_SIZE",
-            default=int(direct_tail_true_active_block_max_size),
-            minimum=1,
+        direct_tail_true_active_residual_block_beta_max = float(
+            direct_tail_true_active_rescue_policy.active_residual_block_beta_max
         )
-        direct_tail_true_active_residual_block_column_batch = _rhs1_int_env(
-            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_ACTIVE_RESIDUAL_BLOCK_COLUMN_BATCH",
-            default=int(direct_tail_true_active_block_column_batch),
-            minimum=1,
+        direct_tail_true_active_residual_block_min_improvement = float(
+            direct_tail_true_active_rescue_policy.active_residual_block_min_improvement
         )
-        direct_tail_true_active_residual_block_drop_tol = _rhs1_float_env(
-            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_ACTIVE_RESIDUAL_BLOCK_DROP_TOL",
-            default=float(direct_tail_true_active_block_drop_tol),
-            minimum=0.0,
-        )
-        direct_tail_true_active_residual_block_include_tail = _rhs1_bool_env(
-            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_ACTIVE_RESIDUAL_BLOCK_INCLUDE_TAIL",
-            default=bool(direct_tail_true_active_block_include_tail),
-        )
-        direct_tail_true_active_residual_block_max_tail = _rhs1_int_env(
-            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_ACTIVE_RESIDUAL_BLOCK_MAX_TAIL",
-            default=int(direct_tail_true_active_block_max_tail),
-            minimum=0,
-        )
-        direct_tail_true_active_residual_block_kinetic_only = _rhs1_bool_env(
-            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_ACTIVE_RESIDUAL_BLOCK_KINETIC_ONLY",
-            default=True,
-        )
-        direct_tail_true_active_residual_block_damping = _rhs1_bool_env(
-            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_ACTIVE_RESIDUAL_BLOCK_DAMPING",
-            default=bool(direct_tail_true_active_block_damping),
-        )
-        direct_tail_true_active_residual_block_beta_max = _rhs1_float_env(
-            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_ACTIVE_RESIDUAL_BLOCK_BETA_MAX",
-            default=float(direct_tail_true_active_block_beta_max),
-            minimum=0.0,
-        )
-        direct_tail_true_active_residual_block_min_improvement = _rhs1_float_env(
-            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_ACTIVE_RESIDUAL_BLOCK_MIN_IMPROVEMENT",
-            default=1.0e-6,
-            minimum=0.0,
-        )
-        direct_tail_true_active_residual_block_accept_base_improvement = _rhs1_bool_env(
-            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_ACTIVE_RESIDUAL_BLOCK_ACCEPT_BASE_IMPROVEMENT",
-            default=False,
+        direct_tail_true_active_residual_block_accept_base_improvement = bool(
+            direct_tail_true_active_rescue_policy.active_residual_block_accept_base_improvement
         )
         direct_tail_true_active_residual_block_base_improvement_override_used = False
-        direct_tail_true_active_submatrix_damping = _rhs1_bool_env(
-            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_ACTIVE_SUBMATRIX_DAMPING",
-            default=True,
+        direct_tail_true_active_submatrix_damping = bool(
+            direct_tail_true_active_rescue_policy.active_submatrix_damping
         )
-        direct_tail_true_active_submatrix_alpha_clip = _rhs1_float_env(
-            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_ACTIVE_SUBMATRIX_ALPHA_CLIP",
-            default=10.0,
-            minimum=0.0,
+        direct_tail_true_active_submatrix_alpha_clip = float(
+            direct_tail_true_active_rescue_policy.active_submatrix_alpha_clip
         )
-        direct_tail_true_active_submatrix_min_improvement = _rhs1_float_env(
-            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_ACTIVE_SUBMATRIX_MIN_IMPROVEMENT",
-            default=1.0e-6,
-            minimum=0.0,
+        direct_tail_true_active_submatrix_min_improvement = float(
+            direct_tail_true_active_rescue_policy.active_submatrix_min_improvement
         )
         direct_tail_true_coupled_coarse_max_windows = _rhs1_int_env(
             "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_COUPLED_MAX_WINDOWS",

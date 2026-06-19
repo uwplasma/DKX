@@ -632,6 +632,46 @@ class DirectTailResidualRescuePolicy:
 
 
 @dataclass(frozen=True)
+class DirectTailTrueActiveRescuePolicy:
+    """Resolved direct-tail true-operator active rescue controls."""
+
+    active_block_requested: bool
+    active_residual_block_requested: bool
+    active_submatrix_requested: bool
+    active_column_cache_requested: bool
+    active_column_cache_max_mb: float
+    active_block_x_count: int
+    active_block_ell_count: int
+    active_block_species_count: int | None
+    active_block_theta_stride: int
+    active_block_zeta_stride: int
+    active_block_max_mb: float
+    active_block_regularization: float
+    active_block_max_size: int
+    active_block_column_batch: int
+    active_block_drop_tol: float
+    active_block_include_tail: bool
+    active_block_max_tail: int
+    active_block_damping: bool
+    active_block_beta_max: float
+    active_residual_block_max_mb: float
+    active_residual_block_regularization: float
+    active_residual_block_max_size: int
+    active_residual_block_column_batch: int
+    active_residual_block_drop_tol: float
+    active_residual_block_include_tail: bool
+    active_residual_block_max_tail: int
+    active_residual_block_kinetic_only: bool
+    active_residual_block_damping: bool
+    active_residual_block_beta_max: float
+    active_residual_block_min_improvement: float
+    active_residual_block_accept_base_improvement: bool
+    active_submatrix_damping: bool
+    active_submatrix_alpha_clip: float
+    active_submatrix_min_improvement: float
+
+
+@dataclass(frozen=True)
 class XBlockSparsePCSetup:
     """Setup controls for RHSMode=1 x-block sparse-PC solves."""
 
@@ -3295,6 +3335,248 @@ def resolve_direct_tail_residual_rescue_policy(
     )
 
 
+def resolve_direct_tail_true_active_rescue_policy(
+    env: Mapping[str, str] | None,
+) -> DirectTailTrueActiveRescuePolicy:
+    """Resolve true-operator active-block rescue controls."""
+
+    species_count_raw = _env_value(
+        env,
+        "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_ACTIVE_BLOCK_SPECIES_COUNT",
+    )
+    active_block_species_count: int | None = None
+    if species_count_raw:
+        try:
+            active_block_species_count = max(0, int(species_count_raw))
+        except ValueError:
+            active_block_species_count = None
+
+    active_block_max_mb = max(
+        0.0,
+        _env_float(
+            env,
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_ACTIVE_BLOCK_MAX_MB",
+            1024.0,
+        ),
+    )
+    active_block_regularization = max(
+        0.0,
+        _env_float(
+            env,
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_ACTIVE_BLOCK_REGULARIZATION",
+            1.0e-12,
+        ),
+    )
+    active_block_max_size = _env_int(
+        env,
+        "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_ACTIVE_BLOCK_MAX_SIZE",
+        4096,
+        minimum=1,
+    )
+    active_block_column_batch = _env_int(
+        env,
+        "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_ACTIVE_BLOCK_COLUMN_BATCH",
+        8,
+        minimum=1,
+    )
+    active_block_drop_tol = max(
+        0.0,
+        _env_float(
+            env,
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_ACTIVE_BLOCK_DROP_TOL",
+            1.0e-14,
+        ),
+    )
+    active_block_include_tail = _env_bool(
+        env,
+        "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_ACTIVE_BLOCK_INCLUDE_TAIL",
+        default=True,
+    )
+    active_block_max_tail = _env_int(
+        env,
+        "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_ACTIVE_BLOCK_MAX_TAIL",
+        512,
+        minimum=0,
+    )
+    active_block_damping = _env_bool(
+        env,
+        "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_ACTIVE_BLOCK_DAMPING",
+        default=False,
+    )
+    active_block_beta_max = max(
+        0.0,
+        _env_float(
+            env,
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_ACTIVE_BLOCK_BETA_MAX",
+            10.0,
+        ),
+    )
+
+    return DirectTailTrueActiveRescuePolicy(
+        active_block_requested=_env_bool(
+            env,
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_ACTIVE_BLOCK",
+            default=False,
+        ),
+        active_residual_block_requested=_env_bool(
+            env,
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_ACTIVE_RESIDUAL_BLOCK",
+            default=False,
+        ),
+        active_submatrix_requested=_env_bool(
+            env,
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_ACTIVE_SUBMATRIX",
+            default=False,
+        ),
+        active_column_cache_requested=_env_bool(
+            env,
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_ACTIVE_COLUMN_CACHE",
+            default=True,
+        ),
+        active_column_cache_max_mb=max(
+            0.0,
+            _env_float(
+                env,
+                "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_ACTIVE_COLUMN_CACHE_MAX_MB",
+                512.0,
+            ),
+        ),
+        active_block_x_count=_env_int(
+            env,
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_ACTIVE_BLOCK_X_COUNT",
+            1,
+            minimum=0,
+        ),
+        active_block_ell_count=_env_int(
+            env,
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_ACTIVE_BLOCK_ELL_COUNT",
+            8,
+            minimum=0,
+        ),
+        active_block_species_count=active_block_species_count,
+        active_block_theta_stride=_env_int(
+            env,
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_ACTIVE_BLOCK_THETA_STRIDE",
+            1,
+            minimum=1,
+        ),
+        active_block_zeta_stride=_env_int(
+            env,
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_ACTIVE_BLOCK_ZETA_STRIDE",
+            1,
+            minimum=1,
+        ),
+        active_block_max_mb=float(active_block_max_mb),
+        active_block_regularization=float(active_block_regularization),
+        active_block_max_size=int(active_block_max_size),
+        active_block_column_batch=int(active_block_column_batch),
+        active_block_drop_tol=float(active_block_drop_tol),
+        active_block_include_tail=bool(active_block_include_tail),
+        active_block_max_tail=int(active_block_max_tail),
+        active_block_damping=bool(active_block_damping),
+        active_block_beta_max=float(active_block_beta_max),
+        active_residual_block_max_mb=max(
+            0.0,
+            _env_float(
+                env,
+                "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_ACTIVE_RESIDUAL_BLOCK_MAX_MB",
+                float(active_block_max_mb),
+            ),
+        ),
+        active_residual_block_regularization=max(
+            0.0,
+            _env_float(
+                env,
+                "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_ACTIVE_RESIDUAL_BLOCK_REGULARIZATION",
+                float(active_block_regularization),
+            ),
+        ),
+        active_residual_block_max_size=_env_int(
+            env,
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_ACTIVE_RESIDUAL_BLOCK_MAX_SIZE",
+            int(active_block_max_size),
+            minimum=1,
+        ),
+        active_residual_block_column_batch=_env_int(
+            env,
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_ACTIVE_RESIDUAL_BLOCK_COLUMN_BATCH",
+            int(active_block_column_batch),
+            minimum=1,
+        ),
+        active_residual_block_drop_tol=max(
+            0.0,
+            _env_float(
+                env,
+                "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_ACTIVE_RESIDUAL_BLOCK_DROP_TOL",
+                float(active_block_drop_tol),
+            ),
+        ),
+        active_residual_block_include_tail=_env_bool(
+            env,
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_ACTIVE_RESIDUAL_BLOCK_INCLUDE_TAIL",
+            default=bool(active_block_include_tail),
+        ),
+        active_residual_block_max_tail=_env_int(
+            env,
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_ACTIVE_RESIDUAL_BLOCK_MAX_TAIL",
+            int(active_block_max_tail),
+            minimum=0,
+        ),
+        active_residual_block_kinetic_only=_env_bool(
+            env,
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_ACTIVE_RESIDUAL_BLOCK_KINETIC_ONLY",
+            default=True,
+        ),
+        active_residual_block_damping=_env_bool(
+            env,
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_ACTIVE_RESIDUAL_BLOCK_DAMPING",
+            default=bool(active_block_damping),
+        ),
+        active_residual_block_beta_max=max(
+            0.0,
+            _env_float(
+                env,
+                "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_ACTIVE_RESIDUAL_BLOCK_BETA_MAX",
+                float(active_block_beta_max),
+            ),
+        ),
+        active_residual_block_min_improvement=max(
+            0.0,
+            _env_float(
+                env,
+                "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_ACTIVE_RESIDUAL_BLOCK_MIN_IMPROVEMENT",
+                1.0e-6,
+            ),
+        ),
+        active_residual_block_accept_base_improvement=_env_bool(
+            env,
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_ACTIVE_RESIDUAL_BLOCK_ACCEPT_BASE_IMPROVEMENT",
+            default=False,
+        ),
+        active_submatrix_damping=_env_bool(
+            env,
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_ACTIVE_SUBMATRIX_DAMPING",
+            default=True,
+        ),
+        active_submatrix_alpha_clip=max(
+            0.0,
+            _env_float(
+                env,
+                "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_ACTIVE_SUBMATRIX_ALPHA_CLIP",
+                10.0,
+            ),
+        ),
+        active_submatrix_min_improvement=max(
+            0.0,
+            _env_float(
+                env,
+                "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_ACTIVE_SUBMATRIX_MIN_IMPROVEMENT",
+                1.0e-6,
+            ),
+        ),
+    )
+
+
 def _xblock_device_flags(method: str) -> tuple[bool, bool, bool, bool, bool]:
     method_s = str(method)
     fgmres = method_s == "fgmres_jax"
@@ -5754,6 +6036,7 @@ __all__ = [
     "SparsePCFactorPreflightPolicyContext",
     "SparsePCFactorPreflightPolicy",
     "DirectTailResidualRescuePolicy",
+    "DirectTailTrueActiveRescuePolicy",
     "MatvecCounter",
     "XBlockAssembledOperatorDiagnosticsContext",
     "XBlockSparsePCCoreDiagnosticsContext",
@@ -5780,6 +6063,7 @@ __all__ = [
     "enforce_sparse_pc_memory_budget",
     "resolve_sparse_pc_factor_preflight_policy",
     "resolve_direct_tail_residual_rescue_policy",
+    "resolve_direct_tail_true_active_rescue_policy",
     "run_direct_tail_support_mode_preflight",
     "resolve_direct_tail_structured_admission",
     "fp_xblock_global_correction_metadata",

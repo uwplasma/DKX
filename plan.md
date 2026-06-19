@@ -42,7 +42,8 @@ Make `sfincs_jax` research-grade while preserving the public user contract:
 
 Recent checkpoints:
 
-- Direct-tail residual-rescue policy extraction (current checkpoint).
+- Direct-tail true-active rescue policy extraction (current checkpoint).
+- Direct-tail residual-rescue policy extraction.
 - Sparse-PC factor-preflight policy extraction.
 - Direct-tail support-mode preflight extraction.
 - Direct-tail structured preconditioner construction/cache extraction.
@@ -53,17 +54,17 @@ Recent checkpoints:
 - `cb295ce` Extract sparse pattern setup.
 - `4b6a5b4` Extract sparse factor policy.
 
-Current source-size snapshot after the residual-rescue policy extraction:
+Current source-size snapshot after the true-active rescue policy extraction:
 
-- `sfincs_jax/v3_driver.py`: `19766` lines.
-- `solve_v3_full_system_linear_gmres`: `14443` lines.
+- `sfincs_jax/v3_driver.py`: `19690` lines.
+- `solve_v3_full_system_linear_gmres`: `14366` lines.
 
 Recent local validation:
 
-- Focused sparse-PC/direct-tail/residual-rescue-policy shard:
-  `123 passed in 1.36 s`.
+- Focused sparse-PC/direct-tail/true-active-rescue-policy shard:
+  `126 passed in 1.35 s`.
 - Latest broad profile-response/x-block/sparse-pattern shard:
-  `401 passed in 115.21 s`.
+  `404 passed in 115.35 s`.
 
 Known CI issue fixed by this rewrite:
 
@@ -74,7 +75,7 @@ Known CI issue fixed by this rewrite:
 
 ### 1. `v3_driver.py` Architecture Refactor
 
-Completion estimate: 73%.
+Completion estimate: 74%.
 
 Goal:
 
@@ -95,11 +96,12 @@ Completed recent boundaries:
 - Structured direct-tail support-mode preflight setup.
 - Sparse-PC factor-preflight policy parsing.
 - Direct-tail residual-rescue policy parsing.
+- Direct-tail true-active rescue policy parsing.
 
 Next steps:
 
-- Extract true-active block and coupled-coarse residual rescue policy parsing
-  into separately tested helpers.
+- Extract coupled-coarse residual rescue policy parsing into separately tested
+  helpers.
 - Move remaining generic sparse-PC solve/result assembly into cohesive
   `profile_response` helpers.
 - Continue shrinking `solve_v3_full_system_linear_gmres` in behavior-preserving
@@ -159,10 +161,9 @@ Next steps:
 
 ## Immediate Next Steps
 
-1. Commit and push the residual-rescue policy extraction after a final clean
+1. Commit and push the true-active rescue policy extraction after a final clean
    diff.
-2. Continue with true-active block and coupled-coarse residual rescue policy
-   extraction.
+2. Continue with coupled-coarse residual rescue policy extraction.
 3. Run focused sparse-PC tests and the broad profile-response/x-block/sparse
    shard after each extraction.
 4. Snapshot CI but do not wait on queued runs unless a completed failure appears.

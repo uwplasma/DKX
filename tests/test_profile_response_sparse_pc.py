@@ -21,6 +21,7 @@ from sfincs_jax.problems.profile_response.sparse_pc import (
     DirectTailStructuredBuildContext,
     DirectTailSupportModePreflightContext,
     DirectTailResidualRescuePolicy,
+    DirectTailTrueActiveRescuePolicy,
     SparsePCFactorPreflightPolicyContext,
     FortranReducedXBlockFactorBuildContext,
     FortranReducedXBlockGlobalCouplingStageContext,
@@ -69,6 +70,7 @@ from sfincs_jax.problems.profile_response.sparse_pc import (
     resolve_sparse_pc_factor_preflight_policy,
     resolve_direct_tail_structured_admission,
     resolve_direct_tail_residual_rescue_policy,
+    resolve_direct_tail_true_active_rescue_policy,
     run_direct_tail_support_mode_preflight,
     resolve_xblock_qi_device_admission_setup,
     resolve_xblock_qi_device_base_config_setup,
@@ -1230,6 +1232,132 @@ def test_direct_tail_residual_rescue_policy_falls_back_for_bad_modes() -> None:
 
     assert policy.residual_window_coefficient_mode == "additive"
     assert policy.residual_window_combine_mode == "independent"
+
+
+def test_direct_tail_true_active_rescue_policy_defaults_and_inheritance() -> None:
+    policy = resolve_direct_tail_true_active_rescue_policy({})
+
+    assert isinstance(policy, DirectTailTrueActiveRescuePolicy)
+    assert policy.active_block_requested is False
+    assert policy.active_residual_block_requested is False
+    assert policy.active_submatrix_requested is False
+    assert policy.active_column_cache_requested is True
+    assert policy.active_column_cache_max_mb == 512.0
+    assert policy.active_block_x_count == 1
+    assert policy.active_block_ell_count == 8
+    assert policy.active_block_species_count is None
+    assert policy.active_block_theta_stride == 1
+    assert policy.active_block_zeta_stride == 1
+    assert policy.active_block_max_mb == 1024.0
+    assert policy.active_block_regularization == 1.0e-12
+    assert policy.active_block_max_size == 4096
+    assert policy.active_block_column_batch == 8
+    assert policy.active_block_drop_tol == 1.0e-14
+    assert policy.active_block_include_tail is True
+    assert policy.active_block_max_tail == 512
+    assert policy.active_block_damping is False
+    assert policy.active_block_beta_max == 10.0
+    assert policy.active_residual_block_max_mb == policy.active_block_max_mb
+    assert policy.active_residual_block_regularization == policy.active_block_regularization
+    assert policy.active_residual_block_max_size == policy.active_block_max_size
+    assert policy.active_residual_block_column_batch == policy.active_block_column_batch
+    assert policy.active_residual_block_drop_tol == policy.active_block_drop_tol
+    assert policy.active_residual_block_include_tail == policy.active_block_include_tail
+    assert policy.active_residual_block_max_tail == policy.active_block_max_tail
+    assert policy.active_residual_block_damping == policy.active_block_damping
+    assert policy.active_residual_block_beta_max == policy.active_block_beta_max
+    assert policy.active_residual_block_kinetic_only is True
+    assert policy.active_residual_block_min_improvement == 1.0e-6
+    assert policy.active_residual_block_accept_base_improvement is False
+    assert policy.active_submatrix_damping is True
+    assert policy.active_submatrix_alpha_clip == 10.0
+    assert policy.active_submatrix_min_improvement == 1.0e-6
+
+
+def test_direct_tail_true_active_rescue_policy_clamps_and_overrides() -> None:
+    policy = resolve_direct_tail_true_active_rescue_policy(
+        {
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_ACTIVE_BLOCK": "1",
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_ACTIVE_RESIDUAL_BLOCK": "1",
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_ACTIVE_SUBMATRIX": "1",
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_ACTIVE_COLUMN_CACHE": "0",
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_ACTIVE_COLUMN_CACHE_MAX_MB": "-1",
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_ACTIVE_BLOCK_X_COUNT": "-1",
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_ACTIVE_BLOCK_ELL_COUNT": "-1",
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_ACTIVE_BLOCK_SPECIES_COUNT": "3",
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_ACTIVE_BLOCK_THETA_STRIDE": "0",
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_ACTIVE_BLOCK_ZETA_STRIDE": "0",
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_ACTIVE_BLOCK_MAX_MB": "-5",
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_ACTIVE_BLOCK_REGULARIZATION": "-1",
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_ACTIVE_BLOCK_MAX_SIZE": "0",
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_ACTIVE_BLOCK_COLUMN_BATCH": "0",
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_ACTIVE_BLOCK_DROP_TOL": "-1e-5",
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_ACTIVE_BLOCK_INCLUDE_TAIL": "0",
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_ACTIVE_BLOCK_MAX_TAIL": "-1",
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_ACTIVE_BLOCK_DAMPING": "1",
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_ACTIVE_BLOCK_BETA_MAX": "-10",
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_ACTIVE_RESIDUAL_BLOCK_MAX_MB": "9",
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_ACTIVE_RESIDUAL_BLOCK_REGULARIZATION": "2e-8",
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_ACTIVE_RESIDUAL_BLOCK_MAX_SIZE": "11",
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_ACTIVE_RESIDUAL_BLOCK_COLUMN_BATCH": "12",
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_ACTIVE_RESIDUAL_BLOCK_DROP_TOL": "3e-4",
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_ACTIVE_RESIDUAL_BLOCK_INCLUDE_TAIL": "1",
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_ACTIVE_RESIDUAL_BLOCK_MAX_TAIL": "13",
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_ACTIVE_RESIDUAL_BLOCK_KINETIC_ONLY": "0",
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_ACTIVE_RESIDUAL_BLOCK_DAMPING": "0",
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_ACTIVE_RESIDUAL_BLOCK_BETA_MAX": "14",
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_ACTIVE_RESIDUAL_BLOCK_MIN_IMPROVEMENT": "-1",
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_ACTIVE_RESIDUAL_BLOCK_ACCEPT_BASE_IMPROVEMENT": "1",
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_ACTIVE_SUBMATRIX_DAMPING": "0",
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_ACTIVE_SUBMATRIX_ALPHA_CLIP": "-1",
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_ACTIVE_SUBMATRIX_MIN_IMPROVEMENT": "-1",
+        }
+    )
+
+    assert policy.active_block_requested is True
+    assert policy.active_residual_block_requested is True
+    assert policy.active_submatrix_requested is True
+    assert policy.active_column_cache_requested is False
+    assert policy.active_column_cache_max_mb == 0.0
+    assert policy.active_block_x_count == 0
+    assert policy.active_block_ell_count == 0
+    assert policy.active_block_species_count == 3
+    assert policy.active_block_theta_stride == 1
+    assert policy.active_block_zeta_stride == 1
+    assert policy.active_block_max_mb == 0.0
+    assert policy.active_block_regularization == 0.0
+    assert policy.active_block_max_size == 1
+    assert policy.active_block_column_batch == 1
+    assert policy.active_block_drop_tol == 0.0
+    assert policy.active_block_include_tail is False
+    assert policy.active_block_max_tail == 0
+    assert policy.active_block_damping is True
+    assert policy.active_block_beta_max == 0.0
+    assert policy.active_residual_block_max_mb == 9.0
+    assert policy.active_residual_block_regularization == 2.0e-8
+    assert policy.active_residual_block_max_size == 11
+    assert policy.active_residual_block_column_batch == 12
+    assert policy.active_residual_block_drop_tol == 3.0e-4
+    assert policy.active_residual_block_include_tail is True
+    assert policy.active_residual_block_max_tail == 13
+    assert policy.active_residual_block_kinetic_only is False
+    assert policy.active_residual_block_damping is False
+    assert policy.active_residual_block_beta_max == 14.0
+    assert policy.active_residual_block_min_improvement == 0.0
+    assert policy.active_residual_block_accept_base_improvement is True
+    assert policy.active_submatrix_damping is False
+    assert policy.active_submatrix_alpha_clip == 0.0
+    assert policy.active_submatrix_min_improvement == 0.0
+
+
+def test_direct_tail_true_active_rescue_policy_bad_species_count_is_none() -> None:
+    policy = resolve_direct_tail_true_active_rescue_policy(
+        {
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_ACTIVE_BLOCK_SPECIES_COUNT": "bad",
+        }
+    )
+
+    assert policy.active_block_species_count is None
 
 
 def test_fortran_reduced_xblock_factor_policy_uses_specific_env_before_generic() -> None:
