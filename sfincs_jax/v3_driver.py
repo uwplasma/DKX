@@ -318,6 +318,7 @@ from .problems.profile_response.sparse_pc import (
     build_sparse_host_scipy_preconditioner,
     run_sparse_host_scipy_gmres,
     build_sparse_jax_retry_preconditioner,
+    resolve_sparse_host_or_ilu_factor_controls,
     sparse_host_direct_fallback_payload,
     sparse_host_direct_solve_from_pattern,
     sparse_minimum_norm_solve_from_pattern,
@@ -13288,53 +13289,39 @@ def solve_v3_full_system_linear_gmres(
                         ilu_drop_tol=sparse_ilu_drop_tol,
                         fill_factor=sparse_ilu_fill,
                     )
-                    host_sparse_direct_wanted = _rhsmode1_host_sparse_direct_allowed(
-                        sparse_exact_lu=sparse_exact_lu,
+                    sparse_factor_controls = resolve_sparse_host_or_ilu_factor_controls(
+                        n=int(active_size),
+                        cache_key=cache_key,
+                        sparse_exact_lu=bool(sparse_exact_lu),
                         use_implicit=bool(use_implicit),
+                        force_host_sparse_direct=bool(large_cpu_sparse_rescue_active),
+                        sparse_ilu_dense_max=int(sparse_ilu_dense_max),
+                        sparse_dense_cache_max=int(sparse_dense_cache_max),
+                        host_sparse_direct_allowed=_rhsmode1_host_sparse_direct_allowed,
+                        host_sparse_factor_dtype=_host_sparse_factor_dtype,
+                        sparse_factor_cache_key=_sparse_factor_cache_key,
+                        explicit_sparse_host_direct_allowed=_rhsmode1_explicit_sparse_host_direct_allowed,
                     )
-                    if large_cpu_sparse_rescue_active and sparse_exact_lu:
-                        host_sparse_direct_wanted = True
-                    factor_dtype = _host_sparse_factor_dtype(
-                        size=int(active_size),
-                        factorization="lu" if sparse_exact_lu else "ilu",
-                        use_implicit=bool(use_implicit),
-                    ) if host_sparse_direct_wanted else np.dtype(np.float64)
-                    cache_key_use = (
-                        _sparse_factor_cache_key(cache_key, factor_dtype)
-                        if host_sparse_direct_wanted
-                        else cache_key
-                    )
-                    build_dense_factors = (
-                        bool(use_implicit)
-                        and (not host_sparse_direct_wanted)
-                        and int(active_size) <= int(sparse_ilu_dense_max)
-                    )
-                    store_dense = int(active_size) <= int(sparse_dense_cache_max)
-                    explicit_sparse_allowed = _rhsmode1_explicit_sparse_host_direct_allowed(
-                        sparse_exact_lu=sparse_exact_lu,
-                        use_implicit=bool(use_implicit),
-                        active_size=int(active_size),
-                    )
+                    host_sparse_direct_wanted = sparse_factor_controls.host_sparse_direct_wanted
+                    factor_dtype = sparse_factor_controls.factor_dtype
                     sparse_factor_build = build_sparse_host_or_ilu_factor(
                         SparseHostOrILUFactorBuildContext(
                             matvec=mv_reduced,
                             n=int(active_size),
                             dtype=rhs_reduced.dtype,
-                            cache_key=cache_key_use,
-                            factor_dtype=factor_dtype,
+                            cache_key=sparse_factor_controls.cache_key_use,
+                            factor_dtype=sparse_factor_controls.factor_dtype,
                             drop_tol=sparse_drop_tol,
                             drop_rel=sparse_drop_rel,
                             ilu_drop_tol=sparse_ilu_drop_tol,
                             fill_factor=sparse_ilu_fill,
-                            build_dense_factors=build_dense_factors,
-                            build_jax_factors=bool(use_implicit) and (not host_sparse_direct_wanted),
-                            store_dense=store_dense,
+                            build_dense_factors=sparse_factor_controls.build_dense_factors,
+                            build_jax_factors=sparse_factor_controls.build_jax_factors,
+                            store_dense=sparse_factor_controls.store_dense,
                             factorization="lu" if sparse_exact_lu else "ilu",
                             emit=emit,
-                            host_sparse_direct_wanted=bool(host_sparse_direct_wanted),
-                            explicit_sparse_allowed=bool(
-                                host_sparse_direct_wanted and explicit_sparse_allowed
-                            ),
+                            host_sparse_direct_wanted=sparse_factor_controls.host_sparse_direct_wanted,
+                            explicit_sparse_allowed=sparse_factor_controls.explicit_sparse_allowed,
                             build_host_sparse_direct_factor_from_matvec=_build_host_sparse_direct_factor_from_matvec,
                             build_sparse_ilu_from_matvec=_build_sparse_ilu_from_matvec,
                         )
@@ -15211,11 +15198,6 @@ def solve_v3_full_system_linear_gmres(
                         sparse_exact_lu=sparse_exact_lu,
                         host_sparse_direct_wanted=host_sparse_direct_wanted,
                     )
-                    factor_dtype = _host_sparse_factor_dtype(
-                        size=int(op.total_size),
-                        factorization="lu" if sparse_exact_lu else "ilu",
-                        use_implicit=bool(use_implicit),
-                    ) if host_sparse_direct_wanted else np.dtype(np.float64)
                     sparse_factor_matvec = mv
                     if sparse_operator_preconditioned_rescue:
                         op_sparse_pc = _build_rhsmode1_preconditioner_operator_point(op)
@@ -15224,40 +15206,37 @@ def solve_v3_full_system_linear_gmres(
                             return apply_v3_full_system_operator_cached(op_pc, v)
 
                         sparse_factor_matvec = _mv_sparse_factor
-                    cache_key_use = (
-                        _sparse_factor_cache_key(cache_key, factor_dtype)
-                        if host_sparse_direct_wanted
-                        else cache_key
-                    )
+                    cache_key_for_factor = cache_key
                     if sparse_operator_preconditioned_rescue:
-                        cache_key_use = _sparse_factor_cache_key(
-                            _rhsmode1_sparse_cache_key(
-                                op,
-                                kind="sparse_lu_pc_point",
-                                active_size=int(active_size),
-                                use_active_dof_mode=False,
-                                use_pas_projection=use_pas_projection,
-                                drop_tol=sparse_drop_tol,
-                                drop_rel=sparse_drop_rel,
-                                ilu_drop_tol=sparse_ilu_drop_tol,
-                                fill_factor=sparse_ilu_fill,
-                            ),
-                            factor_dtype,
+                        cache_key_for_factor = _rhsmode1_sparse_cache_key(
+                            op,
+                            kind="sparse_lu_pc_point",
+                            active_size=int(active_size),
+                            use_active_dof_mode=False,
+                            use_pas_projection=use_pas_projection,
+                            drop_tol=sparse_drop_tol,
+                            drop_rel=sparse_drop_rel,
+                            ilu_drop_tol=sparse_ilu_drop_tol,
+                            fill_factor=sparse_ilu_fill,
                         )
-                    build_dense_factors = (
-                        bool(use_implicit)
-                        and (not host_sparse_direct_wanted)
-                        and int(op.total_size) <= int(sparse_ilu_dense_max)
-                    )
-                    store_dense = int(op.total_size) <= int(sparse_dense_cache_max)
-                    explicit_sparse_allowed = _rhsmode1_explicit_sparse_host_direct_allowed(
-                        sparse_exact_lu=sparse_exact_lu,
+                    sparse_factor_controls = resolve_sparse_host_or_ilu_factor_controls(
+                        n=int(op.total_size),
+                        cache_key=cache_key_for_factor,
+                        sparse_exact_lu=bool(sparse_exact_lu),
                         use_implicit=bool(use_implicit),
-                        active_size=int(op.total_size),
+                        force_host_sparse_direct=False,
+                        sparse_ilu_dense_max=int(sparse_ilu_dense_max),
+                        sparse_dense_cache_max=int(sparse_dense_cache_max),
+                        host_sparse_direct_wanted=host_sparse_direct_wanted,
+                        host_sparse_direct_allowed=_rhsmode1_host_sparse_direct_allowed,
+                        host_sparse_factor_dtype=_host_sparse_factor_dtype,
+                        sparse_factor_cache_key=_sparse_factor_cache_key,
+                        explicit_sparse_host_direct_allowed=_rhsmode1_explicit_sparse_host_direct_allowed,
                     )
+                    factor_dtype = sparse_factor_controls.factor_dtype
                     explicit_sparse_pattern = (
                         _maybe_rhsmode1_full_sparse_pattern(op, emit=emit)
-                        if host_sparse_direct_wanted and explicit_sparse_allowed
+                        if sparse_factor_controls.explicit_sparse_allowed
                         else None
                     )
                     sparse_factor_build = build_sparse_host_or_ilu_factor(
@@ -15265,21 +15244,19 @@ def solve_v3_full_system_linear_gmres(
                             matvec=sparse_factor_matvec,
                             n=int(op.total_size),
                             dtype=rhs.dtype,
-                            cache_key=cache_key_use,
-                            factor_dtype=factor_dtype,
+                            cache_key=sparse_factor_controls.cache_key_use,
+                            factor_dtype=sparse_factor_controls.factor_dtype,
                             drop_tol=sparse_drop_tol,
                             drop_rel=sparse_drop_rel,
                             ilu_drop_tol=sparse_ilu_drop_tol,
                             fill_factor=sparse_ilu_fill,
-                            build_dense_factors=build_dense_factors,
-                            build_jax_factors=bool(use_implicit) and (not host_sparse_direct_wanted),
-                            store_dense=store_dense,
+                            build_dense_factors=sparse_factor_controls.build_dense_factors,
+                            build_jax_factors=sparse_factor_controls.build_jax_factors,
+                            store_dense=sparse_factor_controls.store_dense,
                             factorization="lu" if sparse_exact_lu else "ilu",
                             emit=emit,
-                            host_sparse_direct_wanted=bool(host_sparse_direct_wanted),
-                            explicit_sparse_allowed=bool(
-                                host_sparse_direct_wanted and explicit_sparse_allowed
-                            ),
+                            host_sparse_direct_wanted=sparse_factor_controls.host_sparse_direct_wanted,
+                            explicit_sparse_allowed=sparse_factor_controls.explicit_sparse_allowed,
                             explicit_sparse_pattern=explicit_sparse_pattern,
                             build_host_sparse_direct_factor_from_matvec=_build_host_sparse_direct_factor_from_matvec,
                             build_sparse_ilu_from_matvec=_build_sparse_ilu_from_matvec,

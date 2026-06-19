@@ -191,6 +191,19 @@ class SparseHostOrILUFactorBuildContext:
 
 
 @dataclass(frozen=True)
+class SparseHostOrILUFactorControls:
+    """Resolved routing controls for a host sparse direct/ILU factor build."""
+
+    host_sparse_direct_wanted: bool
+    factor_dtype: np.dtype
+    cache_key_use: object
+    build_dense_factors: bool
+    build_jax_factors: bool
+    store_dense: bool
+    explicit_sparse_allowed: bool
+
+
+@dataclass(frozen=True)
 class SparseHostOrILUFactorBuildResult:
     """Factor objects and matrix caches returned by sparse host/ILU setup."""
 
@@ -7960,6 +7973,67 @@ def build_sparse_host_or_ilu_factor(
     )
 
 
+def resolve_sparse_host_or_ilu_factor_controls(
+    *,
+    n: int,
+    cache_key: object,
+    sparse_exact_lu: bool,
+    use_implicit: bool,
+    force_host_sparse_direct: bool,
+    sparse_ilu_dense_max: int,
+    sparse_dense_cache_max: int,
+    host_sparse_direct_wanted: bool | None = None,
+    host_sparse_direct_allowed: Callable[..., bool],
+    host_sparse_factor_dtype: Callable[..., np.dtype],
+    sparse_factor_cache_key: Callable[..., object],
+    explicit_sparse_host_direct_allowed: Callable[..., bool],
+) -> SparseHostOrILUFactorControls:
+    """Resolve host sparse direct/ILU build controls shared by reduced/full paths."""
+
+    direct_wanted = (
+        bool(host_sparse_direct_wanted)
+        if host_sparse_direct_wanted is not None
+        else bool(
+            host_sparse_direct_allowed(
+                sparse_exact_lu=bool(sparse_exact_lu),
+                use_implicit=bool(use_implicit),
+            )
+        )
+    )
+    if bool(force_host_sparse_direct) and bool(sparse_exact_lu):
+        direct_wanted = True
+    factorization = "lu" if bool(sparse_exact_lu) else "ilu"
+    factor_dtype = (
+        host_sparse_factor_dtype(
+            size=int(n),
+            factorization=factorization,
+            use_implicit=bool(use_implicit),
+        )
+        if direct_wanted
+        else np.dtype(np.float64)
+    )
+    cache_key_use = sparse_factor_cache_key(cache_key, factor_dtype) if direct_wanted else cache_key
+    build_dense_factors = bool(use_implicit) and (not direct_wanted) and int(n) <= int(sparse_ilu_dense_max)
+    build_jax_factors = bool(use_implicit) and (not direct_wanted)
+    store_dense = int(n) <= int(sparse_dense_cache_max)
+    explicit_sparse_allowed = direct_wanted and bool(
+        explicit_sparse_host_direct_allowed(
+            sparse_exact_lu=bool(sparse_exact_lu),
+            use_implicit=bool(use_implicit),
+            active_size=int(n),
+        )
+    )
+    return SparseHostOrILUFactorControls(
+        host_sparse_direct_wanted=bool(direct_wanted),
+        factor_dtype=np.dtype(factor_dtype),
+        cache_key_use=cache_key_use,
+        build_dense_factors=bool(build_dense_factors),
+        build_jax_factors=bool(build_jax_factors),
+        store_dense=bool(store_dense),
+        explicit_sparse_allowed=bool(explicit_sparse_allowed),
+    )
+
+
 def build_sparse_ilu_preconditioner_from_cache(
     context: SparseILUPreconditionerBuildContext,
 ) -> SparseILUPreconditionerBuildResult:
@@ -8447,6 +8521,7 @@ __all__ = [
     "SparseHostDirectFallbackPayload",
     "SparseHostOrILUFactorBuildContext",
     "SparseHostOrILUFactorBuildResult",
+    "SparseHostOrILUFactorControls",
     "SparseILUPreconditionerBuildContext",
     "SparseILUPreconditionerBuildResult",
     "SparseHostScipyPreconditionerBuildContext",
@@ -8520,6 +8595,7 @@ __all__ = [
     "apply_sparse_host_direct_polish_if_needed",
     "sparse_host_direct_fallback_payload",
     "build_sparse_host_or_ilu_factor",
+    "resolve_sparse_host_or_ilu_factor_controls",
     "build_sparse_ilu_preconditioner_from_cache",
     "build_sparse_host_scipy_preconditioner",
     "run_sparse_host_scipy_gmres",

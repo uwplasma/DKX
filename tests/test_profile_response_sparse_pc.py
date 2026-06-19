@@ -50,6 +50,7 @@ from sfincs_jax.problems.profile_response.sparse_pc import (
     SparseHostDirectPolishPayload,
     SparseHostDirectFallbackPayload,
     SparseHostOrILUFactorBuildContext,
+    SparseHostOrILUFactorControls,
     SparseILUPreconditionerBuildContext,
     SparseHostScipyPreconditionerBuildContext,
     SparseHostScipyGMRESContext,
@@ -109,6 +110,7 @@ from sfincs_jax.problems.profile_response.sparse_pc import (
     resolve_explicit_sparse_operator_build_policy,
     resolve_sparse_pc_factor_policy,
     resolve_sparse_minimum_norm_policy,
+    resolve_sparse_host_or_ilu_factor_controls,
     sparse_pc_factor_dtype_retry_initial_guess,
     resolve_sparse_pc_factor_preflight_policy,
     resolve_direct_tail_structured_admission,
@@ -5308,6 +5310,58 @@ def test_sparse_host_direct_fallback_payload_polishes_and_recomputes_residual_ve
             "restart=11 maxiter=22",
         )
     ]
+
+
+def test_sparse_host_or_ilu_factor_controls_use_direct_lu_path() -> None:
+    controls = resolve_sparse_host_or_ilu_factor_controls(
+        n=128,
+        cache_key=("base",),
+        sparse_exact_lu=True,
+        use_implicit=False,
+        force_host_sparse_direct=False,
+        sparse_ilu_dense_max=32,
+        sparse_dense_cache_max=64,
+        host_sparse_direct_allowed=lambda **kwargs: kwargs["sparse_exact_lu"],
+        host_sparse_factor_dtype=lambda **_kwargs: np.dtype(np.float32),
+        sparse_factor_cache_key=lambda cache_key, dtype: (*cache_key, np.dtype(dtype).str),
+        explicit_sparse_host_direct_allowed=lambda **kwargs: kwargs["active_size"] == 128,
+    )
+
+    assert controls == SparseHostOrILUFactorControls(
+        host_sparse_direct_wanted=True,
+        factor_dtype=np.dtype(np.float32),
+        cache_key_use=("base", "<f4"),
+        build_dense_factors=False,
+        build_jax_factors=False,
+        store_dense=False,
+        explicit_sparse_allowed=True,
+    )
+
+
+def test_sparse_host_or_ilu_factor_controls_use_implicit_ilu_path() -> None:
+    controls = resolve_sparse_host_or_ilu_factor_controls(
+        n=24,
+        cache_key=("ilu",),
+        sparse_exact_lu=False,
+        use_implicit=True,
+        force_host_sparse_direct=True,
+        sparse_ilu_dense_max=32,
+        sparse_dense_cache_max=64,
+        host_sparse_direct_allowed=lambda **_kwargs: False,
+        host_sparse_factor_dtype=lambda **_kwargs: np.dtype(np.float32),
+        sparse_factor_cache_key=lambda cache_key, dtype: (*cache_key, np.dtype(dtype).str),
+        explicit_sparse_host_direct_allowed=lambda **_kwargs: True,
+    )
+
+    assert controls == SparseHostOrILUFactorControls(
+        host_sparse_direct_wanted=False,
+        factor_dtype=np.dtype(np.float64),
+        cache_key_use=("ilu",),
+        build_dense_factors=True,
+        build_jax_factors=True,
+        store_dense=True,
+        explicit_sparse_allowed=False,
+    )
 
 
 def test_build_sparse_host_or_ilu_factor_prefers_explicit_sparse_when_allowed() -> None:
