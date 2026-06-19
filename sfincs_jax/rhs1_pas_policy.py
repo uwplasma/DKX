@@ -54,6 +54,15 @@ class RHS1PASSchurRescueControls:
     maxiter: int
 
 
+@dataclass(frozen=True)
+class RHS1PASForceFullDecision:
+    """Routing decision for forcing a full PAS preconditioner after weak collision."""
+
+    run: bool
+    ratio: float
+    forced_kind: str | None
+
+
 def _env_float(name: str, default: float) -> float:
     raw = os.environ.get(name, "").strip()
     try:
@@ -158,6 +167,40 @@ def rhs1_pas_preconditioner_probe_large_collision_skip(
 def rhs1_pas_preconditioner_probe_uses_collision(*, probe_rel: float, rel_max: float) -> bool:
     """Return whether a PAS collision-probe residual is strong enough to accept."""
     return float(probe_rel) <= float(rel_max)
+
+
+def rhs1_pas_force_full_decision_from_env(
+    *,
+    enabled: bool,
+    has_pas: bool,
+    residual_norm: float,
+    target: float,
+    active_size: int,
+    requested_kind: str | None,
+) -> RHS1PASForceFullDecision:
+    """Return whether a weak collision-PAS solve should force a full preconditioner."""
+
+    ratio = _env_float("SFINCS_JAX_PAS_FORCE_FULL_RATIO", 50.0)
+    residual_ratio = float(residual_norm) / max(float(target), 1e-300)
+    if not (
+        bool(enabled)
+        and bool(has_pas)
+        and float(residual_norm) > float(target)
+        and residual_ratio > float(ratio)
+    ):
+        return RHS1PASForceFullDecision(run=False, ratio=float(ratio), forced_kind=None)
+
+    forced_kind = str(requested_kind or "xmg")
+    if has_pas:
+        pas_lite_min = _env_int("SFINCS_JAX_PAS_LITE_MIN", 20000)
+        forced_kind = "pas_lite" if int(active_size) >= max(1, int(pas_lite_min)) else "pas_hybrid"
+    elif forced_kind in {"collision", "schur", "point"}:
+        forced_kind = "xmg"
+    return RHS1PASForceFullDecision(
+        run=True,
+        ratio=float(ratio),
+        forced_kind=str(forced_kind),
+    )
 
 
 def pas_tokamak_theta_preconditioner_applicable(op) -> bool:
@@ -791,6 +834,7 @@ def resolve_pas_tz_memory_fallback_axis(
 
 __all__ = [
     "RHS1PASAdaptiveSmootherControls",
+    "RHS1PASForceFullDecision",
     "RHS1PASPreconditionerProbeConfig",
     "RHS1PASSchurRescueControls",
     "build_pas_tz_memory_fallback",
@@ -809,6 +853,7 @@ __all__ = [
     "rhs1_pas_adaptive_smoother_allowed",
     "rhs1_pas_adaptive_smoother_controls_from_env",
     "rhs1_pas_default_preconditioner_kind",
+    "rhs1_pas_force_full_decision_from_env",
     "rhs1_pas_preconditioner_probe_admitted",
     "rhs1_pas_preconditioner_probe_config_from_env",
     "rhs1_pas_preconditioner_probe_large_collision_skip",

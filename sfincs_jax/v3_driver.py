@@ -133,6 +133,7 @@ from .rhs1_pas_policy import (
     rhs1_pas_adaptive_smoother_allowed as _rhs1_pas_adaptive_smoother_allowed_impl,
     rhs1_pas_adaptive_smoother_controls_from_env,
     rhs1_pas_default_preconditioner_kind as _rhs1_pas_default_preconditioner_kind,
+    rhs1_pas_force_full_decision_from_env,
     rhs1_pas_preconditioner_probe_admitted as _rhs1_pas_preconditioner_probe_admitted,
     rhs1_pas_preconditioner_probe_config_from_env as _rhs1_pas_preconditioner_probe_config_from_env,
     rhs1_pas_preconditioner_probe_large_collision_skip as _rhs1_pas_preconditioner_probe_large_collision_skip,
@@ -11273,61 +11274,46 @@ def solve_v3_full_system_linear_gmres(
             ksp_replay.x0_vec = x0_reduced
             ksp_replay.precond_side = gmres_precond_side
             ksp_replay.solver_kind = _solver_kind(solve_method)[0]
-        if (
-            pas_precond_force_collision
-            and op.fblock.pas is not None
-            and float(res_reduced.residual_norm) > target_reduced
-        ):
-            force_full_ratio_env = os.environ.get("SFINCS_JAX_PAS_FORCE_FULL_RATIO", "").strip()
-            try:
-                force_full_ratio = float(force_full_ratio_env) if force_full_ratio_env else 50.0
-            except ValueError:
-                force_full_ratio = 50.0
-            res_ratio_full = float(res_reduced.residual_norm) / max(float(target_reduced), 1e-300)
-            if res_ratio_full > force_full_ratio:
-                forced_kind = rhs1_precond_kind_requested or "xmg"
-                if op.fblock.pas is not None:
-                    pas_lite_min_env = os.environ.get("SFINCS_JAX_PAS_LITE_MIN", "").strip()
-                    try:
-                        pas_lite_min = int(pas_lite_min_env) if pas_lite_min_env else 20000
-                    except ValueError:
-                        pas_lite_min = 20000
-                    if int(active_size) >= max(1, int(pas_lite_min)):
-                        forced_kind = "pas_lite"
-                    else:
-                        forced_kind = "pas_hybrid"
-                elif forced_kind in {"collision", "schur", "point"}:
-                    forced_kind = "xmg"
-                if emit is not None:
-                    emit(
-                        0,
-                        "solve_v3_full_system_linear_gmres: PAS forcing full preconditioner "
-                        f"(kind={forced_kind}, residual={float(res_reduced.residual_norm):.3e} > "
-                        f"{force_full_ratio:.1f}x target)",
-                    )
-                rhs1_precond_kind = forced_kind
-                preconditioner_reduced = _build_rhs1_preconditioner_reduced_with_fallback()
-                if use_pas_projection:
-                    preconditioner_reduced = _wrap_pas_precond(preconditioner_reduced)
-                res_reduced, residual_vec, _accepted, _forced_full_elapsed_s = (
-                    rhs1_run_linear_candidate_and_update_replay(
-                        replay_state=ksp_replay,
-                        current_result=res_reduced,
-                        current_residual_vec=residual_vec,
-                        matvec_fn=mv_reduced,
-                        b_vec=rhs_reduced,
-                        precond_fn=preconditioner_reduced,
-                        tol=float(tol),
-                        atol=float(atol),
-                        restart=int(restart),
-                        maxiter=maxiter,
-                        solve_method="incremental",
-                        precond_side=gmres_precond_side,
-                        solve_linear=_solve_linear,
-                        solver_kind=_solver_kind("incremental")[0],
-                        returns_residual_vec=False,
-                    )
+        force_full_decision = rhs1_pas_force_full_decision_from_env(
+            enabled=bool(pas_precond_force_collision),
+            has_pas=op.fblock.pas is not None,
+            residual_norm=float(res_reduced.residual_norm),
+            target=float(target_reduced),
+            active_size=int(active_size),
+            requested_kind=rhs1_precond_kind_requested,
+        )
+        if force_full_decision.run:
+            forced_kind = str(force_full_decision.forced_kind or "xmg")
+            if emit is not None:
+                emit(
+                    0,
+                    "solve_v3_full_system_linear_gmres: PAS forcing full preconditioner "
+                    f"(kind={forced_kind}, residual={float(res_reduced.residual_norm):.3e} > "
+                    f"{force_full_decision.ratio:.1f}x target)",
                 )
+            rhs1_precond_kind = forced_kind
+            preconditioner_reduced = _build_rhs1_preconditioner_reduced_with_fallback()
+            if use_pas_projection:
+                preconditioner_reduced = _wrap_pas_precond(preconditioner_reduced)
+            res_reduced, residual_vec, _accepted, _forced_full_elapsed_s = (
+                rhs1_run_linear_candidate_and_update_replay(
+                    replay_state=ksp_replay,
+                    current_result=res_reduced,
+                    current_residual_vec=residual_vec,
+                    matvec_fn=mv_reduced,
+                    b_vec=rhs_reduced,
+                    precond_fn=preconditioner_reduced,
+                    tol=float(tol),
+                    atol=float(atol),
+                    restart=int(restart),
+                    maxiter=maxiter,
+                    solve_method="incremental",
+                    precond_side=gmres_precond_side,
+                    solve_linear=_solve_linear,
+                    solver_kind=_solver_kind("incremental")[0],
+                    returns_residual_vec=False,
+                )
+            )
         res_reduced, residual_vec, residual_norm_true = (
             rhs1_recompute_true_residual_result(
                 result=res_reduced,

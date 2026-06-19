@@ -4,6 +4,7 @@ from types import SimpleNamespace
 
 from sfincs_jax.rhs1_pas_policy import (
     RHS1PASAdaptiveSmootherControls,
+    RHS1PASForceFullDecision,
     RHS1PASPreconditionerProbeConfig,
     RHS1PASSchurRescueControls,
     build_pas_tz_memory_fallback,
@@ -20,6 +21,7 @@ from sfincs_jax.rhs1_pas_policy import (
     rhs1_pas_adaptive_smoother_allowed,
     rhs1_pas_adaptive_smoother_controls_from_env,
     rhs1_pas_default_preconditioner_kind,
+    rhs1_pas_force_full_decision_from_env,
     rhs1_pas_preconditioner_probe_admitted,
     rhs1_pas_preconditioner_probe_config_from_env,
     rhs1_pas_preconditioner_probe_large_collision_skip,
@@ -460,6 +462,53 @@ def test_pas_preconditioner_probe_large_collision_skip_preserves_constraint_tail
 def test_pas_preconditioner_probe_residual_decision_uses_threshold() -> None:
     assert rhs1_pas_preconditioner_probe_uses_collision(probe_rel=0.9, rel_max=0.9)
     assert not rhs1_pas_preconditioner_probe_uses_collision(probe_rel=0.9001, rel_max=0.9)
+
+
+def test_pas_force_full_decision_defaults_to_pas_lite_or_hybrid(monkeypatch) -> None:
+    monkeypatch.delenv("SFINCS_JAX_PAS_FORCE_FULL_RATIO", raising=False)
+    monkeypatch.delenv("SFINCS_JAX_PAS_LITE_MIN", raising=False)
+
+    kwargs = dict(
+        enabled=True,
+        has_pas=True,
+        residual_norm=51.0,
+        target=1.0,
+        requested_kind=None,
+    )
+    assert rhs1_pas_force_full_decision_from_env(active_size=20000, **kwargs) == RHS1PASForceFullDecision(
+        run=True,
+        ratio=50.0,
+        forced_kind="pas_lite",
+    )
+    assert rhs1_pas_force_full_decision_from_env(active_size=19999, **kwargs) == RHS1PASForceFullDecision(
+        run=True,
+        ratio=50.0,
+        forced_kind="pas_hybrid",
+    )
+
+
+def test_pas_force_full_decision_respects_guards_and_invalid_env(monkeypatch) -> None:
+    monkeypatch.setenv("SFINCS_JAX_PAS_FORCE_FULL_RATIO", "bad")
+    monkeypatch.setenv("SFINCS_JAX_PAS_LITE_MIN", "bad")
+    kwargs = dict(
+        enabled=True,
+        has_pas=True,
+        residual_norm=51.0,
+        target=1.0,
+        active_size=20000,
+        requested_kind="collision",
+    )
+    assert rhs1_pas_force_full_decision_from_env(**kwargs) == RHS1PASForceFullDecision(
+        run=True,
+        ratio=50.0,
+        forced_kind="pas_lite",
+    )
+    assert not rhs1_pas_force_full_decision_from_env(**{**kwargs, "enabled": False}).run
+    assert not rhs1_pas_force_full_decision_from_env(**{**kwargs, "has_pas": False}).run
+    assert not rhs1_pas_force_full_decision_from_env(**{**kwargs, "residual_norm": 1.0}).run
+
+    monkeypatch.setenv("SFINCS_JAX_PAS_FORCE_FULL_RATIO", "100")
+    assert not rhs1_pas_force_full_decision_from_env(**kwargs).run
 
 
 def test_pas_tz_memory_fallback_axis_preserves_default_behavior() -> None:
