@@ -54,6 +54,15 @@ class RHS1PreflightDiagnostics:
 
 
 @dataclass(frozen=True)
+class RHS1CachedQICorrectionBasis:
+    """Cached QI basis payload for post residual-equation corrections."""
+
+    vectors: jnp.ndarray | None = None
+    operator_on_basis: jnp.ndarray | None = None
+    labels: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
 class RHS1KSPDiagnosticsContext:
     """Static controls for optional RHSMode=1 KSP diagnostic replay."""
 
@@ -139,6 +148,31 @@ def emit_profile_response_ksp_iter_stats(
         emit=context.emit,
         enabled=bool(context.iter_stats_enabled),
         max_size=context.iter_stats_max_size,
+    )
+
+
+def prepare_cached_qi_correction_basis(
+    *,
+    active: bool,
+    include_qi_basis: bool,
+    qi_device_state: object | None,
+) -> RHS1CachedQICorrectionBasis:
+    """Return cached QI basis arrays when a post correction can use them."""
+
+    if not bool(active) or not bool(include_qi_basis) or qi_device_state is None:
+        return RHS1CachedQICorrectionBasis()
+    metadata = getattr(qi_device_state, "metadata", None)
+    if int(getattr(metadata, "rank", 0)) <= 0:
+        return RHS1CachedQICorrectionBasis()
+    basis = getattr(qi_device_state, "basis")
+    basis_metadata = getattr(basis, "metadata")
+    return RHS1CachedQICorrectionBasis(
+        vectors=jnp.asarray(basis.vectors, dtype=jnp.float64),
+        operator_on_basis=jnp.asarray(
+            getattr(qi_device_state, "operator_on_basis"),
+            dtype=jnp.float64,
+        ),
+        labels=tuple(str(label) for label in basis_metadata.accepted_labels),
     )
 
 

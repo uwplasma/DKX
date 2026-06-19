@@ -763,6 +763,17 @@ Recent local validation:
 - Hygiene:
   `py_compile`, `ruff`, `compileall`, `git diff --check`, and
   `scripts/check_repo_size.py` passed.
+- Profile-response diagnostics shard after cached-QI correction-basis setup
+  extraction:
+  `14 passed in 0.72 s`.
+- Combined sparse-PC/diagnostics shard:
+  `212 passed in 1.74 s`.
+- Broad profile-response/RHSMode=1 policy, setup, diagnostics, solver, and
+  helper sweep after cached-QI correction-basis setup extraction:
+  `1155 passed in 47.76 s`.
+- Hygiene:
+  `py_compile`, `ruff`, `compileall`, `git diff --check`, and
+  `scripts/check_repo_size.py` passed.
 - Older focused and broad validation checkpoints are intentionally omitted from
   this active plan; they remain available in git history.
 
@@ -966,6 +977,9 @@ Completed recent boundaries:
 - X-block sparse-PC GMRES fallback admission now uses a tested
   profile-response helper; the environment policy and retry execution remain
   behavior-compatible.
+- X-block post-residual-equation cached QI-basis setup now uses a tested
+  solver-diagnostics helper, keeping the driver focused on applying the
+  correction rather than preparing diagnostic/cache payloads.
 
 Next steps:
 

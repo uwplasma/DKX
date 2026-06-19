@@ -531,6 +531,7 @@ from .problems.profile_response.solver_diagnostics import (
     RHS1KSPDiagnosticsContext,
     emit_profile_response_ksp_history,
     emit_profile_response_ksp_iter_stats,
+    prepare_cached_qi_correction_basis,
 )
 from .problems.profile_response.active_dof import (
     build_rhs1_active_dof_state,
@@ -6680,27 +6681,14 @@ def solve_v3_full_system_linear_gmres(
                 and np.isfinite(float(residual_norm_xblock_pc))
                 and float(residual_norm_xblock_pc) > float(target_xblock)
             )
-            post_residual_equation_cached_basis = None
-            post_residual_equation_cached_action = None
-            post_residual_equation_cached_labels: tuple[str, ...] = ()
-            if (
-                post_residual_equation_active
-                and bool(post_residual_equation_include_qi_basis)
-                and qi_device_state_for_augmented_krylov is not None
-                and int(getattr(qi_device_state_for_augmented_krylov.metadata, "rank", 0)) > 0
-            ):
-                post_residual_equation_cached_basis = jnp.asarray(
-                    qi_device_state_for_augmented_krylov.basis.vectors,
-                    dtype=jnp.float64,
-                )
-                post_residual_equation_cached_action = jnp.asarray(
-                    qi_device_state_for_augmented_krylov.operator_on_basis,
-                    dtype=jnp.float64,
-                )
-                post_residual_equation_cached_labels = tuple(
-                    str(label)
-                    for label in qi_device_state_for_augmented_krylov.basis.metadata.accepted_labels
-                )
+            cached_qi_basis = prepare_cached_qi_correction_basis(
+                active=bool(post_residual_equation_active),
+                include_qi_basis=bool(post_residual_equation_include_qi_basis),
+                qi_device_state=qi_device_state_for_augmented_krylov,
+            )
+            post_residual_equation_cached_basis = cached_qi_basis.vectors
+            post_residual_equation_cached_action = cached_qi_basis.operator_on_basis
+            post_residual_equation_cached_labels = cached_qi_basis.labels
             post_residual_equation = apply_xblock_subspace_correction_if_needed(
                 XBlockSubspaceCorrectionContext(
                     matvec=_mv_true,

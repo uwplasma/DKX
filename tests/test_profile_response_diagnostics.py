@@ -3,6 +3,7 @@ from __future__ import annotations
 from types import SimpleNamespace
 
 import numpy as np
+import jax.numpy as jnp
 
 from sfincs_jax.problems.profile_response.diagnostics import (
     XBlockAssembledOperatorDiagnosticsContext,
@@ -23,6 +24,82 @@ from sfincs_jax.problems.profile_response.diagnostics import (
     xblock_sparse_pc_core_diagnostics,
     xblock_side_probe_diagnostics,
 )
+from sfincs_jax.problems.profile_response.solver_diagnostics import (
+    RHS1CachedQICorrectionBasis,
+    prepare_cached_qi_correction_basis,
+)
+
+
+def test_prepare_cached_qi_correction_basis_skips_inactive_or_disabled() -> None:
+    qi_state = SimpleNamespace(
+        metadata=SimpleNamespace(rank=2),
+        basis=SimpleNamespace(
+            vectors=jnp.ones((2, 3)),
+            metadata=SimpleNamespace(accepted_labels=("a", "b")),
+        ),
+        operator_on_basis=jnp.eye(2, 3),
+    )
+
+    assert prepare_cached_qi_correction_basis(
+        active=False,
+        include_qi_basis=True,
+        qi_device_state=qi_state,
+    ) == RHS1CachedQICorrectionBasis()
+    assert prepare_cached_qi_correction_basis(
+        active=True,
+        include_qi_basis=False,
+        qi_device_state=qi_state,
+    ) == RHS1CachedQICorrectionBasis()
+    assert prepare_cached_qi_correction_basis(
+        active=True,
+        include_qi_basis=True,
+        qi_device_state=None,
+    ) == RHS1CachedQICorrectionBasis()
+
+
+def test_prepare_cached_qi_correction_basis_skips_empty_rank() -> None:
+    qi_state = SimpleNamespace(
+        metadata=SimpleNamespace(rank=0),
+        basis=SimpleNamespace(
+            vectors=jnp.ones((2, 3)),
+            metadata=SimpleNamespace(accepted_labels=("unused",)),
+        ),
+        operator_on_basis=jnp.eye(2, 3),
+    )
+
+    assert prepare_cached_qi_correction_basis(
+        active=True,
+        include_qi_basis=True,
+        qi_device_state=qi_state,
+    ) == RHS1CachedQICorrectionBasis()
+
+
+def test_prepare_cached_qi_correction_basis_converts_active_basis() -> None:
+    qi_state = SimpleNamespace(
+        metadata=SimpleNamespace(rank=2),
+        basis=SimpleNamespace(
+            vectors=jnp.asarray([[1.0, 2.0], [3.0, 4.0]], dtype=jnp.float32),
+            metadata=SimpleNamespace(accepted_labels=(1, "tail")),
+        ),
+        operator_on_basis=jnp.asarray([[5.0, 6.0], [7.0, 8.0]], dtype=jnp.float32),
+    )
+
+    result = prepare_cached_qi_correction_basis(
+        active=True,
+        include_qi_basis=True,
+        qi_device_state=qi_state,
+    )
+
+    assert result.labels == ("1", "tail")
+    assert result.vectors is not None
+    assert result.operator_on_basis is not None
+    assert result.vectors.dtype == jnp.float64
+    assert result.operator_on_basis.dtype == jnp.float64
+    np.testing.assert_allclose(np.asarray(result.vectors), [[1.0, 2.0], [3.0, 4.0]])
+    np.testing.assert_allclose(
+        np.asarray(result.operator_on_basis),
+        [[5.0, 6.0], [7.0, 8.0]],
+    )
 
 
 def _sparse_rescue_scope() -> dict[str, object]:
