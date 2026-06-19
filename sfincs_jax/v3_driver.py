@@ -342,6 +342,7 @@ from .problems.profile_response.policies import (
     rhs1_qi_device_status_fields as _rhs1_qi_device_status_fields,
     rhs1_qi_device_tail_block_required as _rhs1_qi_device_tail_block_required,
     rhs1_sparse_jax_config_from_env,
+    rhs1_sparse_preconditioner_config_from_env,
     rhs1_sparse_rescue_initial_messages,
     rhs1_sparse_rescue_policy_setup,
     rhs1_sparse_rescue_tail_skip_messages,
@@ -10191,87 +10192,24 @@ def solve_v3_full_system_linear_gmres(
             # (e.g. during GMRES iterations and Er scans).
             return apply_v3_full_system_operator_cached(op, x)
 
-    sparse_precond_env = os.environ.get("SFINCS_JAX_RHSMODE1_SPARSE_PRECOND", "").strip().lower()
-    if sparse_precond_env in {"jax", "jax_native", "native"}:
-        sparse_precond_mode = "on"
-        sparse_precond_kind = "jax"
-    elif sparse_precond_env in {"scipy", "ilu", "spilu"}:
-        sparse_precond_mode = "on"
-        sparse_precond_kind = "scipy"
-    elif sparse_precond_env in {"1", "true", "yes", "on"}:
-        sparse_precond_mode = "on"
-        sparse_precond_kind = "auto"
-    elif sparse_precond_env in {"0", "false", "no", "off"}:
-        sparse_precond_mode = "off"
-        sparse_precond_kind = "auto"
-    else:
-        sparse_precond_mode = "auto"
-        sparse_precond_kind = "auto"
-    sparse_allow_nondiff_env = os.environ.get("SFINCS_JAX_RHSMODE1_SPARSE_ALLOW_NONDIFF", "").strip().lower()
-    sparse_allow_nondiff = sparse_allow_nondiff_env in {"1", "true", "yes", "on"}
-    sparse_matvec_env = os.environ.get("SFINCS_JAX_RHSMODE1_SPARSE_MATVEC", "").strip().lower()
-    if sparse_matvec_env in {"1", "true", "yes", "on"}:
-        sparse_use_matvec = True
-    elif sparse_matvec_env in {"0", "false", "no", "off"}:
-        sparse_use_matvec = False
-    else:
-        sparse_use_matvec = False
-    sparse_operator_env = os.environ.get("SFINCS_JAX_RHSMODE1_SPARSE_OPERATOR", "").strip().lower()
-    if sparse_operator_env in {"1", "true", "yes", "on"}:
-        sparse_operator_mode = "on"
-    elif sparse_operator_env in {"0", "false", "no", "off"}:
-        sparse_operator_mode = "off"
-    else:
-        sparse_operator_mode = "auto"
-    sparse_max_env = os.environ.get("SFINCS_JAX_RHSMODE1_SPARSE_MAX", "").strip()
-    # Assembling a sparse ILU preconditioner currently uses a dense (n^2) operator
-    # assembly, so keep the default max modest. This cap is still large enough to
-    # cover the reduced-suite FP DKES cases that otherwise trigger dense fallback.
-    default_sparse_max = 6000
-    if op.fblock.pas is not None and use_dkes:
-        default_sparse_max = 60000
-    try:
-        sparse_max_size = int(sparse_max_env) if sparse_max_env else default_sparse_max
-    except ValueError:
-        sparse_max_size = default_sparse_max
-    pas_sparse_min_env = os.environ.get("SFINCS_JAX_RHSMODE1_PAS_SPARSE_ILU_MIN", "").strip()
-    try:
-        pas_sparse_min = int(pas_sparse_min_env) if pas_sparse_min_env else 2000
-    except ValueError:
-        pas_sparse_min = 2000
-    if op.fblock.pas is not None and int(active_size) < max(0, int(pas_sparse_min)):
-        sparse_precond_mode = "off"
-    sparse_drop_tol_env = os.environ.get("SFINCS_JAX_RHSMODE1_SPARSE_DROP_TOL", "").strip()
-    sparse_drop_rel_env = os.environ.get("SFINCS_JAX_RHSMODE1_SPARSE_DROP_REL", "").strip()
-    sparse_ilu_drop_env = os.environ.get("SFINCS_JAX_RHSMODE1_SPARSE_ILU_DROP_TOL", "").strip()
-    sparse_ilu_fill_env = os.environ.get("SFINCS_JAX_RHSMODE1_SPARSE_ILU_FILL_FACTOR", "").strip()
-    sparse_ilu_dense_env = os.environ.get("SFINCS_JAX_RHSMODE1_SPARSE_ILU_DENSE_MAX", "").strip()
-    sparse_dense_cache_env = os.environ.get("SFINCS_JAX_RHSMODE1_SPARSE_DENSE_CACHE_MAX", "").strip()
-    try:
-        sparse_drop_tol = float(sparse_drop_tol_env) if sparse_drop_tol_env else 0.0
-    except ValueError:
-        sparse_drop_tol = 0.0
-    try:
-        sparse_drop_rel = float(sparse_drop_rel_env) if sparse_drop_rel_env else 1.0e-8
-    except ValueError:
-        sparse_drop_rel = 1.0e-8
-    try:
-        sparse_ilu_drop_tol = float(sparse_ilu_drop_env) if sparse_ilu_drop_env else 1.0e-4
-    except ValueError:
-        sparse_ilu_drop_tol = 1.0e-4
-    try:
-        sparse_ilu_fill = float(sparse_ilu_fill_env) if sparse_ilu_fill_env else 10.0
-    except ValueError:
-        sparse_ilu_fill = 10.0
-    default_sparse_ilu_dense_max = 3000 if jax.default_backend() != "cpu" else 2500
-    try:
-        sparse_ilu_dense_max = int(sparse_ilu_dense_env) if sparse_ilu_dense_env else default_sparse_ilu_dense_max
-    except ValueError:
-        sparse_ilu_dense_max = default_sparse_ilu_dense_max
-    try:
-        sparse_dense_cache_max = int(sparse_dense_cache_env) if sparse_dense_cache_env else 3000
-    except ValueError:
-        sparse_dense_cache_max = 3000
+    sparse_config = rhs1_sparse_preconditioner_config_from_env(
+        has_pas=op.fblock.pas is not None,
+        use_dkes=bool(use_dkes),
+        active_size=int(active_size),
+        backend=str(jax.default_backend()),
+    )
+    sparse_precond_mode = sparse_config.precond_mode
+    sparse_precond_kind = sparse_config.precond_kind
+    sparse_allow_nondiff = sparse_config.allow_nondiff
+    sparse_use_matvec = sparse_config.use_matvec
+    sparse_operator_mode = sparse_config.operator_mode
+    sparse_max_size = sparse_config.max_size
+    sparse_drop_tol = sparse_config.drop_tol
+    sparse_drop_rel = sparse_config.drop_rel
+    sparse_ilu_drop_tol = sparse_config.ilu_drop_tol
+    sparse_ilu_fill = sparse_config.ilu_fill
+    sparse_ilu_dense_max = sparse_config.ilu_dense_max
+    sparse_dense_cache_max = sparse_config.dense_cache_max
     sparse_jax_config = rhs1_sparse_jax_config_from_env()
     sparse_exact_lu = _rhsmode1_sparse_exact_lu_requested(
         op=op,

@@ -3,12 +3,34 @@ from __future__ import annotations
 from sfincs_jax.rhs1_sparse_rescue_policy import (
     rhs1_resolved_sparse_rescue_ordering,
     rhs1_sparse_jax_config_from_env,
+    rhs1_sparse_preconditioner_config_from_env,
     rhs1_sparse_rescue_initial_messages,
     rhs1_sparse_rescue_policy_setup,
     rhs1_sparse_rescue_tail_skip_messages,
     rhs1_sparse_enabled_initial,
     rhs1_sparse_kind_use,
 )
+
+
+_SPARSE_PRECONDITIONER_ENV = (
+    "SFINCS_JAX_RHSMODE1_SPARSE_PRECOND",
+    "SFINCS_JAX_RHSMODE1_SPARSE_ALLOW_NONDIFF",
+    "SFINCS_JAX_RHSMODE1_SPARSE_MATVEC",
+    "SFINCS_JAX_RHSMODE1_SPARSE_OPERATOR",
+    "SFINCS_JAX_RHSMODE1_SPARSE_MAX",
+    "SFINCS_JAX_RHSMODE1_PAS_SPARSE_ILU_MIN",
+    "SFINCS_JAX_RHSMODE1_SPARSE_DROP_TOL",
+    "SFINCS_JAX_RHSMODE1_SPARSE_DROP_REL",
+    "SFINCS_JAX_RHSMODE1_SPARSE_ILU_DROP_TOL",
+    "SFINCS_JAX_RHSMODE1_SPARSE_ILU_FILL_FACTOR",
+    "SFINCS_JAX_RHSMODE1_SPARSE_ILU_DENSE_MAX",
+    "SFINCS_JAX_RHSMODE1_SPARSE_DENSE_CACHE_MAX",
+)
+
+
+def _clear_sparse_preconditioner_env(monkeypatch) -> None:
+    for name in _SPARSE_PRECONDITIONER_ENV:
+        monkeypatch.delenv(name, raising=False)
 
 
 def test_rhs1_sparse_enabled_initial_follows_mode_and_rhsmode_guards() -> None:
@@ -62,6 +84,105 @@ def test_rhs1_sparse_enabled_initial_follows_mode_and_rhsmode_guards() -> None:
 def test_rhs1_sparse_kind_use_normalizes_auto_to_scipy() -> None:
     assert rhs1_sparse_kind_use(sparse_precond_kind="auto") == "scipy"
     assert rhs1_sparse_kind_use(sparse_precond_kind="jax") == "jax"
+
+
+def test_rhs1_sparse_preconditioner_config_from_env_uses_legacy_defaults(
+    monkeypatch,
+) -> None:
+    _clear_sparse_preconditioner_env(monkeypatch)
+
+    config = rhs1_sparse_preconditioner_config_from_env(
+        has_pas=False,
+        use_dkes=False,
+        active_size=3000,
+        backend="cpu",
+    )
+    assert config.precond_mode == "auto"
+    assert config.precond_kind == "auto"
+    assert not config.allow_nondiff
+    assert not config.use_matvec
+    assert config.operator_mode == "auto"
+    assert config.max_size == 6000
+    assert config.pas_sparse_min == 2000
+    assert config.drop_tol == 0.0
+    assert config.drop_rel == 1.0e-8
+    assert config.ilu_drop_tol == 1.0e-4
+    assert config.ilu_fill == 10.0
+    assert config.ilu_dense_max == 2500
+    assert config.dense_cache_max == 3000
+
+
+def test_rhs1_sparse_preconditioner_config_from_env_parses_aliases_and_values(
+    monkeypatch,
+) -> None:
+    _clear_sparse_preconditioner_env(monkeypatch)
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_SPARSE_PRECOND", "jax_native")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_SPARSE_ALLOW_NONDIFF", "yes")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_SPARSE_MATVEC", "on")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_SPARSE_OPERATOR", "off")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_SPARSE_MAX", "123")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_PAS_SPARSE_ILU_MIN", "17")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_SPARSE_DROP_TOL", "1e-3")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_SPARSE_DROP_REL", "2e-3")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_SPARSE_ILU_DROP_TOL", "3e-3")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_SPARSE_ILU_FILL_FACTOR", "4")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_SPARSE_ILU_DENSE_MAX", "55")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_SPARSE_DENSE_CACHE_MAX", "66")
+
+    config = rhs1_sparse_preconditioner_config_from_env(
+        has_pas=False,
+        use_dkes=False,
+        active_size=3000,
+        backend="gpu",
+    )
+    assert config.precond_mode == "on"
+    assert config.precond_kind == "jax"
+    assert config.allow_nondiff
+    assert config.use_matvec
+    assert config.operator_mode == "off"
+    assert config.max_size == 123
+    assert config.pas_sparse_min == 17
+    assert config.drop_tol == 1.0e-3
+    assert config.drop_rel == 2.0e-3
+    assert config.ilu_drop_tol == 3.0e-3
+    assert config.ilu_fill == 4.0
+    assert config.ilu_dense_max == 55
+    assert config.dense_cache_max == 66
+
+
+def test_rhs1_sparse_preconditioner_config_from_env_handles_pas_dkes_and_invalid(
+    monkeypatch,
+) -> None:
+    _clear_sparse_preconditioner_env(monkeypatch)
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_SPARSE_PRECOND", "on")
+    for name in (
+        "SFINCS_JAX_RHSMODE1_SPARSE_MAX",
+        "SFINCS_JAX_RHSMODE1_PAS_SPARSE_ILU_MIN",
+        "SFINCS_JAX_RHSMODE1_SPARSE_DROP_TOL",
+        "SFINCS_JAX_RHSMODE1_SPARSE_DROP_REL",
+        "SFINCS_JAX_RHSMODE1_SPARSE_ILU_DROP_TOL",
+        "SFINCS_JAX_RHSMODE1_SPARSE_ILU_FILL_FACTOR",
+        "SFINCS_JAX_RHSMODE1_SPARSE_ILU_DENSE_MAX",
+        "SFINCS_JAX_RHSMODE1_SPARSE_DENSE_CACHE_MAX",
+    ):
+        monkeypatch.setenv(name, "bad")
+
+    config = rhs1_sparse_preconditioner_config_from_env(
+        has_pas=True,
+        use_dkes=True,
+        active_size=1999,
+        backend="gpu",
+    )
+    assert config.precond_mode == "off"
+    assert config.precond_kind == "auto"
+    assert config.max_size == 60000
+    assert config.pas_sparse_min == 2000
+    assert config.drop_tol == 0.0
+    assert config.drop_rel == 1.0e-8
+    assert config.ilu_drop_tol == 1.0e-4
+    assert config.ilu_fill == 10.0
+    assert config.ilu_dense_max == 3000
+    assert config.dense_cache_max == 3000
 
 
 def test_rhs1_sparse_jax_config_from_env_uses_stable_defaults(monkeypatch) -> None:

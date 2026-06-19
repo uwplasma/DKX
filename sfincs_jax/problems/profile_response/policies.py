@@ -2240,6 +2240,25 @@ class RHS1SparseJAXConfig:
     reg: float
 
 
+@dataclass(frozen=True)
+class RHS1SparsePreconditionerConfig:
+    """Environment-controlled sparse preconditioner policy for RHSMode=1."""
+
+    precond_mode: str
+    precond_kind: str
+    allow_nondiff: bool
+    use_matvec: bool
+    operator_mode: str
+    max_size: int
+    pas_sparse_min: int
+    drop_tol: float
+    drop_rel: float
+    ilu_drop_tol: float
+    ilu_fill: float
+    ilu_dense_max: int
+    dense_cache_max: int
+
+
 def rhs1_sparse_enabled_initial(
     *,
     sparse_precond_mode: str,
@@ -2261,6 +2280,82 @@ def rhs1_sparse_enabled_initial(
     if enabled:
         enabled = int(rhs_mode) == 1 and (not bool(include_phi1))
     return bool(enabled)
+
+
+def rhs1_sparse_preconditioner_config_from_env(
+    *,
+    has_pas: bool,
+    use_dkes: bool,
+    active_size: int,
+    backend: str,
+) -> RHS1SparsePreconditionerConfig:
+    """Parse RHSMode=1 sparse-preconditioner controls with legacy defaults."""
+
+    sparse_precond_env = _env_token("SFINCS_JAX_RHSMODE1_SPARSE_PRECOND")
+    if sparse_precond_env in {"jax", "jax_native", "native"}:
+        sparse_precond_mode = "on"
+        sparse_precond_kind = "jax"
+    elif sparse_precond_env in {"scipy", "ilu", "spilu"}:
+        sparse_precond_mode = "on"
+        sparse_precond_kind = "scipy"
+    elif sparse_precond_env in _TRUE_VALUES:
+        sparse_precond_mode = "on"
+        sparse_precond_kind = "auto"
+    elif sparse_precond_env in _FALSE_VALUES:
+        sparse_precond_mode = "off"
+        sparse_precond_kind = "auto"
+    else:
+        sparse_precond_mode = "auto"
+        sparse_precond_kind = "auto"
+
+    sparse_allow_nondiff = (
+        _env_token("SFINCS_JAX_RHSMODE1_SPARSE_ALLOW_NONDIFF") in _TRUE_VALUES
+    )
+    sparse_matvec_env = _env_token("SFINCS_JAX_RHSMODE1_SPARSE_MATVEC")
+    if sparse_matvec_env in _TRUE_VALUES:
+        sparse_use_matvec = True
+    elif sparse_matvec_env in _FALSE_VALUES:
+        sparse_use_matvec = False
+    else:
+        sparse_use_matvec = False
+
+    sparse_operator_env = _env_token("SFINCS_JAX_RHSMODE1_SPARSE_OPERATOR")
+    if sparse_operator_env in _TRUE_VALUES:
+        sparse_operator_mode = "on"
+    elif sparse_operator_env in _FALSE_VALUES:
+        sparse_operator_mode = "off"
+    else:
+        sparse_operator_mode = "auto"
+
+    default_sparse_max = 60000 if bool(has_pas) and bool(use_dkes) else 6000
+    sparse_max_size = _env_int("SFINCS_JAX_RHSMODE1_SPARSE_MAX", default_sparse_max)
+    pas_sparse_min = _env_int("SFINCS_JAX_RHSMODE1_PAS_SPARSE_ILU_MIN", 2000)
+    if bool(has_pas) and int(active_size) < max(0, int(pas_sparse_min)):
+        sparse_precond_mode = "off"
+
+    default_sparse_ilu_dense_max = 3000 if str(backend).lower() != "cpu" else 2500
+    return RHS1SparsePreconditionerConfig(
+        precond_mode=str(sparse_precond_mode),
+        precond_kind=str(sparse_precond_kind),
+        allow_nondiff=bool(sparse_allow_nondiff),
+        use_matvec=bool(sparse_use_matvec),
+        operator_mode=str(sparse_operator_mode),
+        max_size=int(sparse_max_size),
+        pas_sparse_min=int(pas_sparse_min),
+        drop_tol=float(_env_float("SFINCS_JAX_RHSMODE1_SPARSE_DROP_TOL", 0.0)),
+        drop_rel=float(_env_float("SFINCS_JAX_RHSMODE1_SPARSE_DROP_REL", 1.0e-8)),
+        ilu_drop_tol=float(
+            _env_float("SFINCS_JAX_RHSMODE1_SPARSE_ILU_DROP_TOL", 1.0e-4)
+        ),
+        ilu_fill=float(_env_float("SFINCS_JAX_RHSMODE1_SPARSE_ILU_FILL_FACTOR", 10.0)),
+        ilu_dense_max=int(
+            _env_int(
+                "SFINCS_JAX_RHSMODE1_SPARSE_ILU_DENSE_MAX",
+                default_sparse_ilu_dense_max,
+            )
+        ),
+        dense_cache_max=int(_env_int("SFINCS_JAX_RHSMODE1_SPARSE_DENSE_CACHE_MAX", 3000)),
+    )
 
 
 def rhs1_sparse_jax_config_from_env() -> RHS1SparseJAXConfig:
@@ -2733,6 +2828,7 @@ __all__ = (
     "RHS1QIDeviceRankBudget",
     "RHS1QIDeviceSetupSummary",
     "RHS1SparseJAXConfig",
+    "RHS1SparsePreconditionerConfig",
     "RHS1SparseRescueOrdering",
     "RHS1SparseRescuePolicySetup",
     "parse_rhs1_pas_tz_guarded_structured_levels",
@@ -2774,6 +2870,7 @@ __all__ = (
     "rhs1_sparse_rescue_initial_messages",
     "rhs1_sparse_kind_use",
     "rhs1_sparse_prefer_skips_stage2",
+    "rhs1_sparse_preconditioner_config_from_env",
     "rhs1_sparse_rescue_policy_setup",
     "rhs1_sparse_rescue_tail_skip_messages",
     "rhs1_stage2_ratio",
