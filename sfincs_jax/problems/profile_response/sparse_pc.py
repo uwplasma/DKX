@@ -40,6 +40,10 @@ from .setup import (
     SPARSE_HOST_XBLOCK_PC_GMRES_SOLVE_METHODS,
 )
 from .solver_diagnostics import build_rhs1_xblock_correction_metadata_from_driver_state
+from ...sparse_triangular import (
+    triangular_solve_lower_padded,
+    triangular_solve_upper_padded,
+)
 
 
 ArrayFn = Callable[[jnp.ndarray], jnp.ndarray]
@@ -199,6 +203,26 @@ class SparseHostOrILUFactorBuildResult:
     u_dense: object | None
     l_unit_diag: bool
     used_explicit_sparse: bool
+
+
+@dataclass(frozen=True)
+class SparseILUPreconditionerBuildContext:
+    """Cached ILU factors needed to build a JAX-side sparse preconditioner."""
+
+    cache_entry: object | None
+    l_dense: object | None
+    u_dense: object | None
+    l_unit_diag: bool
+    require_lower_diag: bool = False
+
+
+@dataclass(frozen=True)
+class SparseILUPreconditionerBuildResult:
+    """JAX preconditioner selected from cached dense or padded ILU factors."""
+
+    preconditioner: ArrayFn | None
+    used_dense_triangular: bool
+    used_padded_triangular: bool
 
 
 @dataclass(frozen=True)
@@ -7882,6 +7906,92 @@ def build_sparse_host_or_ilu_factor(
     )
 
 
+def build_sparse_ilu_preconditioner_from_cache(
+    context: SparseILUPreconditionerBuildContext,
+) -> SparseILUPreconditionerBuildResult:
+    """Build a JAX ILU preconditioner from cached permutations and factors."""
+
+    cache_entry = context.cache_entry
+    perm_r = None if cache_entry is None else getattr(cache_entry, "perm_r", None)
+    inv_perm_c = (
+        None if cache_entry is None else getattr(cache_entry, "inv_perm_c", None)
+    )
+    lower_idx = None if cache_entry is None else getattr(cache_entry, "lower_idx", None)
+    lower_val = None if cache_entry is None else getattr(cache_entry, "lower_val", None)
+    lower_diag = None if cache_entry is None else getattr(cache_entry, "lower_diag", None)
+    upper_idx = None if cache_entry is None else getattr(cache_entry, "upper_idx", None)
+    upper_val = None if cache_entry is None else getattr(cache_entry, "upper_val", None)
+    upper_diag = None if cache_entry is None else getattr(cache_entry, "upper_diag", None)
+
+    if (
+        context.l_dense is not None
+        and context.u_dense is not None
+        and perm_r is not None
+        and inv_perm_c is not None
+    ):
+        import jax.scipy.linalg as jla  # noqa: PLC0415
+
+        l_jnp = jnp.asarray(context.l_dense, dtype=jnp.float64)
+        u_jnp = jnp.asarray(context.u_dense, dtype=jnp.float64)
+
+        def _preconditioner(v: jnp.ndarray) -> jnp.ndarray:
+            v = jnp.asarray(v, dtype=jnp.float64)
+            v_perm = v[perm_r]
+            y = jla.solve_triangular(
+                l_jnp,
+                v_perm,
+                lower=True,
+                unit_diagonal=bool(context.l_unit_diag),
+            )
+            z = jla.solve_triangular(u_jnp, y, lower=False)
+            return z[inv_perm_c]
+
+        return SparseILUPreconditionerBuildResult(
+            preconditioner=_preconditioner,
+            used_dense_triangular=True,
+            used_padded_triangular=False,
+        )
+
+    if (
+        perm_r is not None
+        and inv_perm_c is not None
+        and lower_idx is not None
+        and lower_val is not None
+        and (lower_diag is not None or not bool(context.require_lower_diag))
+        and upper_idx is not None
+        and upper_val is not None
+        and upper_diag is not None
+    ):
+
+        def _preconditioner(v: jnp.ndarray) -> jnp.ndarray:
+            v = jnp.asarray(v, dtype=jnp.float64)
+            v_perm = v[perm_r]
+            y = triangular_solve_lower_padded(
+                lower_idx=lower_idx,
+                lower_val=lower_val,
+                b=v_perm,
+            )
+            z = triangular_solve_upper_padded(
+                upper_idx=upper_idx,
+                upper_val=upper_val,
+                upper_diag=upper_diag,
+                b=y,
+            )
+            return z[inv_perm_c]
+
+        return SparseILUPreconditionerBuildResult(
+            preconditioner=_preconditioner,
+            used_dense_triangular=False,
+            used_padded_triangular=True,
+        )
+
+    return SparseILUPreconditionerBuildResult(
+        preconditioner=None,
+        used_dense_triangular=False,
+        used_padded_triangular=False,
+    )
+
+
 def apply_sparse_pc_post_minres(
     *,
     context: SparsePCPostMinresContext,
@@ -8199,6 +8309,8 @@ __all__ = [
     "SparseHostDirectFallbackPayload",
     "SparseHostOrILUFactorBuildContext",
     "SparseHostOrILUFactorBuildResult",
+    "SparseILUPreconditionerBuildContext",
+    "SparseILUPreconditionerBuildResult",
     "ExplicitSparseOperatorBuildPolicy",
     "ExplicitSparseOperatorBuildResult",
     "SparsePCGMRESCompletionMessageContext",
@@ -8266,6 +8378,7 @@ __all__ = [
     "apply_sparse_host_direct_polish_if_needed",
     "sparse_host_direct_fallback_payload",
     "build_sparse_host_or_ilu_factor",
+    "build_sparse_ilu_preconditioner_from_cache",
     "build_explicit_sparse_operator_from_pattern",
     "explicit_sparse_pattern_progress_messages",
     "resolve_explicit_sparse_operator_build_policy",

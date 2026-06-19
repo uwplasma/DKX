@@ -50,6 +50,7 @@ from sfincs_jax.problems.profile_response.sparse_pc import (
     SparseHostDirectPolishPayload,
     SparseHostDirectFallbackPayload,
     SparseHostOrILUFactorBuildContext,
+    SparseILUPreconditionerBuildContext,
     ExplicitSparseOperatorBuildPolicy,
     ExplicitSparseOperatorBuildResult,
     SparseMinimumNormPayload,
@@ -139,6 +140,7 @@ from sfincs_jax.problems.profile_response.sparse_pc import (
     apply_sparse_host_direct_polish_if_needed,
     sparse_host_direct_fallback_payload,
     build_sparse_host_or_ilu_factor,
+    build_sparse_ilu_preconditioner_from_cache,
     sparse_minimum_norm_solve_payload,
     sparse_minimum_norm_solve_from_pattern,
     sparse_minimum_norm_start_message,
@@ -5391,6 +5393,83 @@ def test_build_sparse_host_or_ilu_factor_uses_ilu_when_explicit_not_allowed() ->
     assert calls[0]["cache_key"] == "cache"
     assert calls[0]["build_jax_factors"] is True
     assert calls[0]["factorization"] == "ilu"
+
+
+def test_build_sparse_ilu_preconditioner_from_cache_uses_dense_triangular() -> None:
+    cache = SimpleNamespace(
+        perm_r=jnp.asarray([0, 1], dtype=jnp.int32),
+        inv_perm_c=jnp.asarray([0, 1], dtype=jnp.int32),
+        lower_idx=None,
+        lower_val=None,
+        lower_diag=None,
+        upper_idx=None,
+        upper_val=None,
+        upper_diag=None,
+    )
+    lower = np.asarray([[1.0, 0.0], [2.0, 1.0]])
+    upper = np.asarray([[3.0, 1.0], [0.0, 4.0]])
+
+    result = build_sparse_ilu_preconditioner_from_cache(
+        SparseILUPreconditionerBuildContext(
+            cache_entry=cache,
+            l_dense=lower,
+            u_dense=upper,
+            l_unit_diag=True,
+        )
+    )
+
+    assert result.preconditioner is not None
+    assert result.used_dense_triangular
+    assert not result.used_padded_triangular
+    rhs = np.asarray([7.0, 10.0])
+    expected = np.linalg.solve(upper, np.linalg.solve(lower, rhs))
+    np.testing.assert_allclose(np.asarray(result.preconditioner(jnp.asarray(rhs))), expected)
+
+
+def test_build_sparse_ilu_preconditioner_from_cache_uses_padded_triangular() -> None:
+    cache = SimpleNamespace(
+        perm_r=jnp.asarray([0, 1], dtype=jnp.int32),
+        inv_perm_c=jnp.asarray([0, 1], dtype=jnp.int32),
+        lower_idx=jnp.asarray([[-1], [0]], dtype=jnp.int32),
+        lower_val=jnp.asarray([[0.0], [2.0]], dtype=jnp.float64),
+        lower_diag=jnp.ones(2, dtype=jnp.float64),
+        upper_idx=jnp.asarray([[1], [-1]], dtype=jnp.int32),
+        upper_val=jnp.asarray([[1.0], [0.0]], dtype=jnp.float64),
+        upper_diag=jnp.asarray([3.0, 4.0], dtype=jnp.float64),
+    )
+
+    result = build_sparse_ilu_preconditioner_from_cache(
+        SparseILUPreconditionerBuildContext(
+            cache_entry=cache,
+            l_dense=None,
+            u_dense=None,
+            l_unit_diag=True,
+        )
+    )
+
+    assert result.preconditioner is not None
+    assert not result.used_dense_triangular
+    assert result.used_padded_triangular
+    lower = np.asarray([[1.0, 0.0], [2.0, 1.0]])
+    upper = np.asarray([[3.0, 1.0], [0.0, 4.0]])
+    rhs = np.asarray([7.0, 10.0])
+    expected = np.linalg.solve(upper, np.linalg.solve(lower, rhs))
+    np.testing.assert_allclose(np.asarray(result.preconditioner(jnp.asarray(rhs))), expected)
+
+
+def test_build_sparse_ilu_preconditioner_from_cache_reports_unavailable() -> None:
+    result = build_sparse_ilu_preconditioner_from_cache(
+        SparseILUPreconditionerBuildContext(
+            cache_entry=None,
+            l_dense=None,
+            u_dense=None,
+            l_unit_diag=False,
+        )
+    )
+
+    assert result.preconditioner is None
+    assert not result.used_dense_triangular
+    assert not result.used_padded_triangular
 
 
 def test_sparse_pc_post_minres_accepts_improved_residual_and_recomputes_pc_norm() -> (

@@ -232,6 +232,7 @@ from .problems.profile_response.sparse_pc import (
     SparsePCAutoPreflightRetryEvaluationContext,
     SparsePCPatternSetupContext,
     SparseHostOrILUFactorBuildContext,
+    SparseILUPreconditionerBuildContext,
     SparsePCGMRESContext,
     SparsePCPostMinresUpdateContext,
     XBlockSubspaceCorrectionContext,
@@ -299,6 +300,7 @@ from .problems.profile_response.sparse_pc import (
     run_fortran_reduced_xblock_krylov_solve,
     run_sparse_pc_gmres_once,
     build_sparse_host_or_ilu_factor,
+    build_sparse_ilu_preconditioner_from_cache,
     sparse_host_direct_fallback_payload,
     sparse_host_direct_solve_from_pattern,
     sparse_minimum_norm_solve_from_pattern,
@@ -13609,62 +13611,15 @@ def solve_v3_full_system_linear_gmres(
                         _precond_sparse = None
                     elif use_implicit:
                         ilu_cache = _RHSMODE1_SPARSE_ILU_CACHE.get(cache_key)
-                        perm_r = None if ilu_cache is None else ilu_cache.perm_r
-                        inv_perm_c = None if ilu_cache is None else ilu_cache.inv_perm_c
-                        lower_idx = None if ilu_cache is None else ilu_cache.lower_idx
-                        lower_val = None if ilu_cache is None else ilu_cache.lower_val
-                        lower_diag = None if ilu_cache is None else ilu_cache.lower_diag
-                        upper_idx = None if ilu_cache is None else ilu_cache.upper_idx
-                        upper_val = None if ilu_cache is None else ilu_cache.upper_val
-                        upper_diag = None if ilu_cache is None else ilu_cache.upper_diag
-
-                        precond_sparse = None
-                        # Prefer dense triangular solves for small systems if available.
-                        if (
-                            l_dense is not None
-                            and u_dense is not None
-                            and perm_r is not None
-                            and inv_perm_c is not None
-                        ):
-                            import jax.scipy.linalg as jla  # noqa: PLC0415
-
-                            l_jnp = jnp.asarray(l_dense, dtype=jnp.float64)
-                            u_jnp = jnp.asarray(u_dense, dtype=jnp.float64)
-
-                            def _precond_sparse(v: jnp.ndarray) -> jnp.ndarray:
-                                v = jnp.asarray(v, dtype=jnp.float64)
-                                v_perm = v[perm_r]
-                                y = jla.solve_triangular(l_jnp, v_perm, lower=True, unit_diagonal=l_unit_diag)
-                                z = jla.solve_triangular(u_jnp, y, lower=False)
-                                return z[inv_perm_c]
-
-                            precond_sparse = _precond_sparse
-                        elif (
-                            perm_r is not None
-                            and inv_perm_c is not None
-                            and lower_idx is not None
-                            and lower_val is not None
-                            and upper_idx is not None
-                            and upper_val is not None
-                            and upper_diag is not None
-                        ):
-                            def _precond_sparse(v: jnp.ndarray) -> jnp.ndarray:
-                                v = jnp.asarray(v, dtype=jnp.float64)
-                                v_perm = v[perm_r]
-                                y = _triangular_solve_lower_padded(
-                                    lower_idx=lower_idx,
-                                    lower_val=lower_val,
-                                    b=v_perm,
-                                )
-                                z = _triangular_solve_upper_padded(
-                                    upper_idx=upper_idx,
-                                    upper_val=upper_val,
-                                    upper_diag=upper_diag,
-                                    b=y,
-                                )
-                                return z[inv_perm_c]
-
-                            precond_sparse = _precond_sparse
+                        precond_build = build_sparse_ilu_preconditioner_from_cache(
+                            SparseILUPreconditionerBuildContext(
+                                cache_entry=ilu_cache,
+                                l_dense=l_dense,
+                                u_dense=u_dense,
+                                l_unit_diag=l_unit_diag,
+                            )
+                        )
+                        precond_sparse = precond_build.preconditioner
 
                         if precond_sparse is None:
                             if emit is not None:
@@ -15682,60 +15637,16 @@ def solve_v3_full_system_linear_gmres(
                             _precond_sparse = None
                     elif use_implicit:
                         ilu_cache = _RHSMODE1_SPARSE_ILU_CACHE.get(cache_key)
-                        perm_r = None if ilu_cache is None else ilu_cache.perm_r
-                        inv_perm_c = None if ilu_cache is None else ilu_cache.inv_perm_c
-                        lower_idx = None if ilu_cache is None else ilu_cache.lower_idx
-                        lower_val = None if ilu_cache is None else ilu_cache.lower_val
-                        upper_idx = None if ilu_cache is None else ilu_cache.upper_idx
-                        upper_val = None if ilu_cache is None else ilu_cache.upper_val
-                        upper_diag = None if ilu_cache is None else ilu_cache.upper_diag
-
-                        precond_sparse = None
-                        if (
-                            l_dense is not None
-                            and u_dense is not None
-                            and perm_r is not None
-                            and inv_perm_c is not None
-                        ):
-                            import jax.scipy.linalg as jla  # noqa: PLC0415
-
-                            l_jnp = jnp.asarray(l_dense, dtype=jnp.float64)
-                            u_jnp = jnp.asarray(u_dense, dtype=jnp.float64)
-
-                            def _precond_sparse(v: jnp.ndarray) -> jnp.ndarray:
-                                v = jnp.asarray(v, dtype=jnp.float64)
-                                v_perm = v[perm_r]
-                                y = jla.solve_triangular(l_jnp, v_perm, lower=True, unit_diagonal=l_unit_diag)
-                                z = jla.solve_triangular(u_jnp, y, lower=False)
-                                return z[inv_perm_c]
-
-                            precond_sparse = _precond_sparse
-                        elif (
-                            perm_r is not None
-                            and inv_perm_c is not None
-                            and lower_idx is not None
-                            and lower_val is not None
-                            and upper_idx is not None
-                            and upper_val is not None
-                            and upper_diag is not None
-                        ):
-                            def _precond_sparse(v: jnp.ndarray) -> jnp.ndarray:
-                                v = jnp.asarray(v, dtype=jnp.float64)
-                                v_perm = v[perm_r]
-                                y = _triangular_solve_lower_padded(
-                                    lower_idx=lower_idx,
-                                    lower_val=lower_val,
-                                    b=v_perm,
-                                )
-                                z = _triangular_solve_upper_padded(
-                                    upper_idx=upper_idx,
-                                    upper_val=upper_val,
-                                    upper_diag=upper_diag,
-                                    b=y,
-                                )
-                                return z[inv_perm_c]
-
-                            precond_sparse = _precond_sparse
+                        precond_build = build_sparse_ilu_preconditioner_from_cache(
+                            SparseILUPreconditionerBuildContext(
+                                cache_entry=ilu_cache,
+                                l_dense=l_dense,
+                                u_dense=u_dense,
+                                l_unit_diag=l_unit_diag,
+                                require_lower_diag=True,
+                            )
+                        )
+                        precond_sparse = precond_build.preconditioner
 
                         if precond_sparse is None:
                             if emit is not None:

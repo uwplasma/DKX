@@ -42,9 +42,14 @@ Make `sfincs_jax` research-grade while preserving the public user contract:
 
 Recent checkpoints:
 
+- Reduced active-DOF and full-system implicit sparse-ILU preconditioner
+  construction now uses a tested profile-response helper with explicit
+  dense-vs-padded triangular factor modes; legacy private triangular helper
+  exports in `v3_driver.py` remain available for tests/debug scripts
+  (current checkpoint).
 - Reduced active-DOF and full-system sparse host/direct-vs-ILU factor setup now
   uses a tested profile-response helper; cache keys, matvecs, explicit sparse
-  patterns, and host-only callbacks remain driver-owned (current checkpoint).
+  patterns, and host-only callbacks remain driver-owned (`c5cccef`).
 - RHSMode=1 PAS adaptive smoother handoff now uses a tested replay-aware
   helper while preserving explicit reduced/full residual-vector routing
   (`33aba27`).
@@ -122,21 +127,31 @@ Recent checkpoints:
 - `cb295ce` Extract sparse pattern setup.
 - `4b6a5b4` Extract sparse factor policy.
 
-Current source-size snapshot after sparse host/direct-vs-ILU factor setup
-extraction:
+Current source-size snapshot after implicit sparse-ILU preconditioner
+construction extraction:
 
-- `sfincs_jax/v3_driver.py`: `18327` lines.
-- `solve_v3_full_system_linear_gmres`: `13145` lines.
+- `sfincs_jax/v3_driver.py`: `18238` lines.
+- `solve_v3_full_system_linear_gmres`: `12931` lines.
 - `sfincs_jax/v3_results.py`: `119` lines.
 - `sfincs_jax/problems/profile_response/residual.py`: `981` lines.
 - `sfincs_jax/problems/profile_response/handoff.py`: `552` lines.
 - `sfincs_jax/problems/profile_response/dense.py`: `407` lines.
 - `sfincs_jax/problems/profile_response/linear_solve.py`: `327` lines.
 - `sfincs_jax/problems/profile_response/active_projection.py`: `116` lines.
-- `sfincs_jax/problems/profile_response/sparse_pc.py`: `8285` lines.
+- `sfincs_jax/problems/profile_response/sparse_pc.py`: `8398` lines.
 
 Recent local validation:
 
+- Sparse-PC helper shard after implicit ILU preconditioner extraction:
+  `181 passed in 2.00 s`.
+- Sparse-host/minimum-norm/direct-tail driver shard:
+  `32 passed, 100 deselected in 38.32 s`.
+- Broad profile-response/RHSMode=1 policy, setup, diagnostics, solver, and
+  helper sweep after implicit ILU preconditioner extraction:
+  `1021 passed in 49.78 s`.
+- Hygiene:
+  `ruff`, `compileall`, `git diff --check`, and `scripts/check_repo_size.py`
+  passed.
 - Sparse host/direct-vs-ILU factor setup helper shard:
   `178 passed in 1.47 s`.
 - Sparse-host/minimum-norm/direct-tail driver shard:
@@ -464,6 +479,10 @@ Completed recent boundaries:
   uses a tested helper; explicit sparse patterns, cache keys, and matrix-free
   callbacks stay in the driver while the generic factor-selection result
   schema lives in `profile_response.sparse_pc`.
+- Reduced active-DOF and full-system implicit sparse-ILU preconditioner
+  construction now uses a tested helper; dense triangular and padded sparse
+  triangular modes are tested, and branch-specific lower-diagonal admission is
+  explicit.
 
 Next steps:
 
