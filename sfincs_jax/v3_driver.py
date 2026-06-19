@@ -590,10 +590,12 @@ from .problems.profile_response.policies import (
     rhs1_fp_residual_polish_controls_from_env,
     rhs1_fp_xblock_global_correction_allowed as _rhs1_fp_xblock_global_correction_allowed_impl,
     rhs1_fp_targeted_polish_allowed as _rhs1_fp_targeted_polish_allowed_impl,
+    rhs1_gmres_precondition_side_from_env,
+    rhs1_krylov_routing_controls_from_env,
+    rhs1_pas_source_zero_tolerance_from_env,
     rhs1_scipy_rescue_abs_floor_after_xblock as _rhs1_scipy_rescue_abs_floor_after_xblock_impl,
     rhs1_scipy_rescue_active_size_allowed as _rhs1_scipy_rescue_active_size_allowed_impl,
     rhs1_scipy_rescue_controls_from_env,
-    rhs1_pas_source_zero_tolerance_from_env,
     rhs1_skip_global_sparse_after_xblock_allowed as _rhs1_skip_global_sparse_after_xblock_allowed_impl,
 )
 from .problems.profile_response.policies import rhs1_pas_fast_accept as _rhs1_pas_fast_accept_impl
@@ -7387,8 +7389,7 @@ def solve_v3_full_system_linear_gmres(
             )
         setup_s = sparse_timer.elapsed_s()
 
-        side_env = os.environ.get("SFINCS_JAX_GMRES_PRECONDITION_SIDE", "").strip().lower()
-        precondition_side = side_env if side_env in {"left", "right", "none"} else "left"
+        precondition_side = rhs1_gmres_precondition_side_from_env()
         pc_form = os.environ.get("SFINCS_JAX_RHSMODE1_SPARSE_PC_FORM", "").strip().lower()
         if pc_form not in {"", "scipy_left", "scipy", "explicit_left", "petsc_left"}:
             pc_form = ""
@@ -10149,13 +10150,11 @@ def solve_v3_full_system_linear_gmres(
     if solve_method_kind == "dense_ksp":
         # `dense_ksp` uses its own PETSc-like block preconditioner on the assembled dense system.
         rhs1_precond_enabled = False
-    gmres_precond_side_env = os.environ.get("SFINCS_JAX_GMRES_PRECONDITION_SIDE", "").strip().lower()
-    if gmres_precond_side_env not in {"", "left", "right", "none"}:
-        gmres_precond_side_env = ""
     # Upstream SFINCS v3 reports KSP residual norms for the *preconditioned* residual, matching
     # a left-preconditioned solve. Default to left to align solver-branch parity and to avoid
     # JAX transpose-rule limitations in the right-preconditioned path.
-    gmres_precond_side = gmres_precond_side_env or "left"
+    krylov_routing_controls = rhs1_krylov_routing_controls_from_env()
+    gmres_precond_side = str(krylov_routing_controls.gmres_precondition_side)
 
     bicgstab_fallback_controls = rhs1_bicgstab_fallback_controls_from_env(
         pas_large_bicgstab_fastpath=bool(pas_large_bicgstab_fastpath),
@@ -10163,13 +10162,7 @@ def solve_v3_full_system_linear_gmres(
     bicgstab_fallback_strict = bool(bicgstab_fallback_controls.strict)
     distributed_axis = _resolve_distributed_gmres_axis(op=op, emit=emit)
     use_sharded_matvec = distributed_axis in {"theta", "zeta"} and (not use_implicit)
-    distributed_auto_solver_env = os.environ.get("SFINCS_JAX_DISTRIBUTED_KRYLOV", "").strip().lower()
-    if distributed_auto_solver_env in {"", "auto", "comm_reduced", "short_recurrence", "bicgstab", "bicgstab_jax"}:
-        distributed_auto_solver = "bicgstab"
-    elif distributed_auto_solver_env in {"gmres", "incremental", "batched"}:
-        distributed_auto_solver = "gmres"
-    else:
-        distributed_auto_solver = "bicgstab"
+    distributed_auto_solver = str(krylov_routing_controls.distributed_auto_solver)
     if use_sharded_matvec:
         def mv(x):
             return apply_v3_full_system_operator(op, x, allow_sharding=True)

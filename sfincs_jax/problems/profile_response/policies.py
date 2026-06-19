@@ -2123,6 +2123,14 @@ class RHS1BiCGStabFallbackControls:
     strict: bool
 
 
+@dataclass(frozen=True)
+class RHS1KrylovRoutingControls:
+    """Shared Krylov routing controls for RHSMode=1 profile-response solves."""
+
+    gmres_precondition_side: str
+    distributed_auto_solver: str
+
+
 def rhs1_fp_residual_polish_controls_from_env() -> RHS1FPResidualPolishControls:
     """Parse damped FP residual-polish controls with bounded defaults."""
 
@@ -2424,6 +2432,42 @@ def rhs1_bicgstab_fallback_target_from_env(
         default_floor = 1.0e-7
     floor = _env_float("SFINCS_JAX_BICGSTAB_FALLBACK_ABS_FLOOR", default_floor)
     return max(float(target), max(0.0, float(floor)))
+
+
+def rhs1_gmres_precondition_side_from_env() -> str:
+    """Return the validated GMRES precondition side with legacy left default."""
+
+    side = _env_token("SFINCS_JAX_GMRES_PRECONDITION_SIDE")
+    if side not in {"", "left", "right", "none"}:
+        side = ""
+    return side or "left"
+
+
+def rhs1_distributed_auto_solver_from_env() -> str:
+    """Return the distributed Krylov solver family used for sharded matvecs."""
+
+    env_value = _env_token("SFINCS_JAX_DISTRIBUTED_KRYLOV")
+    if env_value in {
+        "",
+        "auto",
+        "comm_reduced",
+        "short_recurrence",
+        "bicgstab",
+        "bicgstab_jax",
+    }:
+        return "bicgstab"
+    if env_value in {"gmres", "incremental", "batched"}:
+        return "gmres"
+    return "bicgstab"
+
+
+def rhs1_krylov_routing_controls_from_env() -> RHS1KrylovRoutingControls:
+    """Parse shared RHSMode=1 Krylov routing controls."""
+
+    return RHS1KrylovRoutingControls(
+        gmres_precondition_side=rhs1_gmres_precondition_side_from_env(),
+        distributed_auto_solver=rhs1_distributed_auto_solver_from_env(),
+    )
 
 
 def rhs1_fp_xblock_global_correction_allowed(
@@ -3246,6 +3290,7 @@ __all__ = (
     "RHS1FPL1PolishControls",
     "RHS1FPLowLPolishControls",
     "RHS1FPResidualPolishControls",
+    "RHS1KrylovRoutingControls",
     "RHS1QIDeviceRankBudget",
     "RHS1QIDeviceSetupSummary",
     "RHS1ScipyRescueControls",
@@ -3272,7 +3317,10 @@ __all__ = (
     "rhs1_fp_residual_polish_controls_from_env",
     "rhs1_fp_targeted_polish_allowed",
     "rhs1_fp_xblock_global_correction_allowed",
+    "rhs1_distributed_auto_solver_from_env",
+    "rhs1_gmres_precondition_side_from_env",
     "rhs1_host_factor_probe_ok",
+    "rhs1_krylov_routing_controls_from_env",
     "rhs1_parse_accept_ratio",
     "rhs1_parse_polish_gmres_config",
     "rhs1_pas_source_zero_tolerance_from_env",

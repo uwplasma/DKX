@@ -10,6 +10,7 @@ from sfincs_jax.rhs1_post_xblock_policy import (
     RHS1FPL1PolishControls,
     RHS1FPLowLPolishControls,
     RHS1FPResidualPolishControls,
+    RHS1KrylovRoutingControls,
     RHS1ScipyRescueControls,
     rhs1_bicgstab_fallback_controls_from_env,
     rhs1_bicgstab_fallback_target_from_env,
@@ -22,6 +23,9 @@ from sfincs_jax.rhs1_post_xblock_policy import (
     rhs1_fp_residual_polish_controls_from_env,
     rhs1_fp_xblock_global_correction_allowed,
     rhs1_fp_targeted_polish_allowed,
+    rhs1_distributed_auto_solver_from_env,
+    rhs1_gmres_precondition_side_from_env,
+    rhs1_krylov_routing_controls_from_env,
     rhs1_scipy_rescue_abs_floor_after_xblock,
     rhs1_scipy_rescue_active_size_allowed,
     rhs1_scipy_rescue_controls_from_env,
@@ -202,6 +206,42 @@ def test_bicgstab_fallback_target_uses_distributed_pas_floor(monkeypatch) -> Non
         has_pas=True,
         include_phi1=False,
     ) == 1.0e-7
+
+
+def test_krylov_routing_controls_preserve_defaults(monkeypatch) -> None:
+    monkeypatch.delenv("SFINCS_JAX_GMRES_PRECONDITION_SIDE", raising=False)
+    monkeypatch.delenv("SFINCS_JAX_DISTRIBUTED_KRYLOV", raising=False)
+
+    assert rhs1_gmres_precondition_side_from_env() == "left"
+    assert rhs1_distributed_auto_solver_from_env() == "bicgstab"
+    assert rhs1_krylov_routing_controls_from_env() == RHS1KrylovRoutingControls(
+        gmres_precondition_side="left",
+        distributed_auto_solver="bicgstab",
+    )
+
+
+def test_krylov_routing_controls_respect_valid_overrides(monkeypatch) -> None:
+    for side in ("left", "right", "none"):
+        monkeypatch.setenv("SFINCS_JAX_GMRES_PRECONDITION_SIDE", side)
+        assert rhs1_gmres_precondition_side_from_env() == side
+
+    for value in ("", "auto", "comm_reduced", "short_recurrence", "bicgstab", "bicgstab_jax"):
+        monkeypatch.setenv("SFINCS_JAX_DISTRIBUTED_KRYLOV", value)
+        assert rhs1_distributed_auto_solver_from_env() == "bicgstab"
+
+    for value in ("gmres", "incremental", "batched"):
+        monkeypatch.setenv("SFINCS_JAX_DISTRIBUTED_KRYLOV", value)
+        assert rhs1_distributed_auto_solver_from_env() == "gmres"
+
+
+def test_krylov_routing_controls_invalid_values_fall_back(monkeypatch) -> None:
+    monkeypatch.setenv("SFINCS_JAX_GMRES_PRECONDITION_SIDE", "bad-side")
+    monkeypatch.setenv("SFINCS_JAX_DISTRIBUTED_KRYLOV", "unknown")
+
+    assert rhs1_krylov_routing_controls_from_env() == RHS1KrylovRoutingControls(
+        gmres_precondition_side="left",
+        distributed_auto_solver="bicgstab",
+    )
 
 
 def test_fp_targeted_polish_triggers_for_medium_large_cpu_fp(monkeypatch) -> None:
