@@ -40,11 +40,14 @@ from sfincs_jax.problems.profile_response.sparse_pc import (
     SparsePCMemoryBudgetPreflightContext,
     SparsePCPatternSetupContext,
     SparsePCPostMinresContext,
+    SparsePCPostMinresUpdateContext,
     XBlockAssembledPreflightError,
     apply_fortran_reduced_xblock_global_coupling_stage,
     apply_fortran_reduced_xblock_initial_seed,
     apply_fortran_reduced_xblock_moment_schur_stage,
     apply_sparse_pc_post_minres,
+    apply_sparse_pc_post_minres_if_needed,
+    apply_sparse_pc_post_minres_from_driver_state,
     build_fortran_reduced_xblock_factor_stage,
     build_fortran_reduced_xblock_krylov_setup,
     build_sparse_pc_active_dof_setup,
@@ -4450,3 +4453,105 @@ def test_sparse_pc_post_minres_accepts_improved_residual_and_recomputes_pc_norm(
     assert result.error is None
     assert result.solve_s == pytest.approx(0.4)
     assert any("post-minres improved residual" in msg for msg in messages)
+
+
+def test_sparse_pc_post_minres_if_needed_preserves_state_when_disabled_or_converged() -> None:
+    def minres_correction(**_kwargs):
+        raise AssertionError("post-minres should not run")
+
+    disabled = apply_sparse_pc_post_minres_if_needed(
+        SparsePCPostMinresUpdateContext(
+            matvec=_identity,
+            rhs=jnp.zeros(2),
+            preconditioner=_identity,
+            emit=None,
+            elapsed_s=lambda: 0.0,
+            pc_form="right",
+            steps=0,
+            alpha_clip=10.0,
+            min_improvement=0.0,
+            minres_correction=minres_correction,
+            x=np.asarray([1.0, 2.0]),
+            residual_norm=2.0,
+            preconditioned_residual_norm=1.0,
+            solve_s=3.0,
+            target=1.0,
+        )
+    )
+    converged = apply_sparse_pc_post_minres_if_needed(
+        SparsePCPostMinresUpdateContext(
+            matvec=_identity,
+            rhs=jnp.zeros(2),
+            preconditioner=_identity,
+            emit=None,
+            elapsed_s=lambda: 0.0,
+            pc_form="right",
+            steps=2,
+            alpha_clip=10.0,
+            min_improvement=0.0,
+            minres_correction=minres_correction,
+            x=np.asarray([1.0, 2.0]),
+            residual_norm=0.5,
+            preconditioned_residual_norm=0.25,
+            solve_s=3.0,
+            target=1.0,
+        )
+    )
+
+    np.testing.assert_allclose(disabled.x, np.asarray([1.0, 2.0]))
+    assert disabled.residual_norm == 2.0
+    assert disabled.preconditioned_residual_norm == 1.0
+    assert disabled.history == ()
+    assert disabled.alphas == ()
+    assert disabled.residual_before is None
+    assert disabled.residual_after is None
+    assert disabled.error is None
+    assert disabled.solve_s == 3.0
+    assert converged.residual_norm == 0.5
+    assert converged.solve_s == 3.0
+
+
+def test_sparse_pc_post_minres_from_driver_state_updates_solve_state() -> None:
+    times = iter((4.0, 4.6))
+
+    def minres_correction(**_kwargs):
+        return (
+            jnp.asarray([0.25, 0.75]),
+            jnp.asarray([0.1, 0.0]),
+            (1.5, 0.1),
+            (0.5,),
+        )
+
+    state = {
+        "_mv_true": _identity,
+        "sparse_pc_rhs": jnp.zeros(2),
+        "_precond_sparse": lambda v: 2.0 * v,
+        "emit": None,
+        "sparse_timer": SimpleNamespace(elapsed_s=lambda: next(times)),
+        "pc_form": "explicit_left",
+        "sparse_pc_post_minres_steps": 2,
+        "sparse_pc_post_minres_alpha_clip": 10.0,
+        "sparse_pc_post_minres_min_improvement": 0.0,
+        "x_np": np.zeros(2),
+        "residual_norm_sparse_pc": 1.0,
+        "rn_pc": float("nan"),
+        "solve_s": 7.0,
+        "target": 0.1,
+    }
+
+    result = apply_sparse_pc_post_minres_from_driver_state(
+        state,
+        minres_correction=minres_correction,
+    )
+
+    np.testing.assert_allclose(result.x, np.asarray([0.25, 0.75]))
+    assert result.residual_norm == pytest.approx(0.1)
+    assert result.preconditioned_residual_norm == pytest.approx(
+        np.linalg.norm([-0.5, -1.5])
+    )
+    assert result.history == (1.5, 0.1)
+    assert result.alphas == (0.5,)
+    assert result.residual_before == 1.0
+    assert result.residual_after == pytest.approx(0.1)
+    assert result.error is None
+    assert result.solve_s == pytest.approx(7.6)

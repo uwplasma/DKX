@@ -105,6 +105,42 @@ class SparsePCPostMinresResult:
 
 
 @dataclass(frozen=True)
+class SparsePCPostMinresUpdateContext:
+    """Current sparse-PC solve state for optional post-minres polishing."""
+
+    matvec: ArrayFn
+    rhs: jnp.ndarray
+    preconditioner: ArrayFn
+    emit: EmitFn | None
+    elapsed_s: Callable[[], float]
+    pc_form: str
+    steps: int
+    alpha_clip: float
+    min_improvement: float
+    minres_correction: Callable[..., tuple[jnp.ndarray, jnp.ndarray, Sequence[float], Sequence[float]]]
+    x: np.ndarray
+    residual_norm: float
+    preconditioned_residual_norm: float
+    solve_s: float
+    target: float
+
+
+@dataclass(frozen=True)
+class SparsePCPostMinresUpdateResult:
+    """Updated sparse-PC state and diagnostics after optional post-minres."""
+
+    x: np.ndarray
+    residual_norm: float
+    preconditioned_residual_norm: float
+    history: tuple[float, ...]
+    alphas: tuple[float, ...]
+    residual_before: float | None
+    residual_after: float | None
+    error: str | None
+    solve_s: float
+
+
+@dataclass(frozen=True)
 class SparsePCActiveDOFSetup:
     """Active-DOF maps and vector routing for the generic sparse-PC path."""
 
@@ -6840,6 +6876,86 @@ def apply_sparse_pc_post_minres(
     )
 
 
+def apply_sparse_pc_post_minres_if_needed(
+    context: SparsePCPostMinresUpdateContext,
+) -> SparsePCPostMinresUpdateResult:
+    """Apply sparse-PC post-minres only when requested and still above target."""
+
+    if (
+        int(context.steps) <= 0
+        or not np.isfinite(float(context.residual_norm))
+        or float(context.residual_norm) <= float(context.target)
+    ):
+        return SparsePCPostMinresUpdateResult(
+            x=np.asarray(context.x, dtype=np.float64),
+            residual_norm=float(context.residual_norm),
+            preconditioned_residual_norm=float(context.preconditioned_residual_norm),
+            history=(),
+            alphas=(),
+            residual_before=None,
+            residual_after=None,
+            error=None,
+            solve_s=float(context.solve_s),
+        )
+
+    post_minres = apply_sparse_pc_post_minres(
+        context=SparsePCPostMinresContext(
+            matvec=context.matvec,
+            rhs=context.rhs,
+            preconditioner=context.preconditioner,
+            emit=context.emit,
+            elapsed_s=context.elapsed_s,
+            pc_form=context.pc_form,
+            steps=int(context.steps),
+            alpha_clip=float(context.alpha_clip),
+            min_improvement=float(context.min_improvement),
+            minres_correction=context.minres_correction,
+        ),
+        x=np.asarray(context.x, dtype=np.float64),
+        residual_norm=float(context.residual_norm),
+        preconditioned_residual_norm=float(context.preconditioned_residual_norm),
+    )
+    return SparsePCPostMinresUpdateResult(
+        x=post_minres.x,
+        residual_norm=float(post_minres.residual_norm),
+        preconditioned_residual_norm=float(post_minres.preconditioned_residual_norm),
+        history=post_minres.history,
+        alphas=post_minres.alphas,
+        residual_before=post_minres.residual_before,
+        residual_after=post_minres.residual_after,
+        error=post_minres.error,
+        solve_s=float(context.solve_s) + float(post_minres.solve_s),
+    )
+
+
+def apply_sparse_pc_post_minres_from_driver_state(
+    state: Mapping[str, object],
+    *,
+    minres_correction: Callable[..., tuple[jnp.ndarray, jnp.ndarray, Sequence[float], Sequence[float]]],
+) -> SparsePCPostMinresUpdateResult:
+    """Apply sparse-PC post-minres using the historical driver state names."""
+
+    return apply_sparse_pc_post_minres_if_needed(
+        SparsePCPostMinresUpdateContext(
+            matvec=state["_mv_true"],
+            rhs=state["sparse_pc_rhs"],
+            preconditioner=state["_precond_sparse"],
+            emit=state["emit"],
+            elapsed_s=state["sparse_timer"].elapsed_s,
+            pc_form=str(state["pc_form"]),
+            steps=int(state["sparse_pc_post_minres_steps"]),
+            alpha_clip=float(state["sparse_pc_post_minres_alpha_clip"]),
+            min_improvement=float(state["sparse_pc_post_minres_min_improvement"]),
+            minres_correction=minres_correction,
+            x=np.asarray(state["x_np"], dtype=np.float64),
+            residual_norm=float(state["residual_norm_sparse_pc"]),
+            preconditioned_residual_norm=float(state["rn_pc"]),
+            solve_s=float(state["solve_s"]),
+            target=float(state["target"]),
+        )
+    )
+
+
 __all__ = [
     "FortranReducedSparsePCBackendSetup",
     "FortranReducedXBlockFactorPolicySetup",
@@ -6893,10 +7009,14 @@ __all__ = [
     "SparsePCGMRESResult",
     "SparsePCPostMinresContext",
     "SparsePCPostMinresResult",
+    "SparsePCPostMinresUpdateContext",
+    "SparsePCPostMinresUpdateResult",
     "apply_fortran_reduced_xblock_global_coupling_stage",
     "apply_fortran_reduced_xblock_initial_seed",
     "apply_fortran_reduced_xblock_moment_schur_stage",
     "apply_sparse_pc_post_minres",
+    "apply_sparse_pc_post_minres_if_needed",
+    "apply_sparse_pc_post_minres_from_driver_state",
     "build_fortran_reduced_xblock_factor_stage",
     "build_fortran_reduced_xblock_krylov_setup",
     "build_sparse_pc_active_dof_setup",

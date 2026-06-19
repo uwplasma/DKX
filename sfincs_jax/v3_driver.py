@@ -226,11 +226,10 @@ from .problems.profile_response.sparse_pc import (
     SparsePCAutoPreflightRetryEvaluationContext,
     SparsePCPatternSetupContext,
     SparsePCGMRESContext,
-    SparsePCPostMinresContext,
     apply_fortran_reduced_xblock_global_coupling_stage,
     apply_fortran_reduced_xblock_initial_seed,
     apply_fortran_reduced_xblock_moment_schur_stage,
-    apply_sparse_pc_post_minres,
+    apply_sparse_pc_post_minres_from_driver_state,
     build_fortran_reduced_xblock_factor_stage,
     build_fortran_reduced_xblock_krylov_setup,
     build_sparse_pc_pattern_setup,
@@ -9242,42 +9241,19 @@ def solve_v3_full_system_linear_gmres(
         rn_pc = float(factor_dtype_retry_result.preconditioned_residual_norm)
         history = factor_dtype_retry_result.history
         solve_s = float(factor_dtype_retry_result.solve_s)
-        sparse_pc_post_minres_history: tuple[float, ...] = ()
-        sparse_pc_post_minres_alphas: tuple[float, ...] = ()
-        sparse_pc_post_minres_residual_before: float | None = None
-        sparse_pc_post_minres_residual_after: float | None = None
-        sparse_pc_post_minres_error: str | None = None
-        if (
-            int(sparse_pc_post_minres_steps) > 0
-            and np.isfinite(float(residual_norm_sparse_pc))
-            and float(residual_norm_sparse_pc) > float(target)
-        ):
-            sparse_pc_post_minres = apply_sparse_pc_post_minres(
-                context=SparsePCPostMinresContext(
-                    matvec=_mv_true,
-                    rhs=sparse_pc_rhs,
-                    preconditioner=_precond_sparse,
-                    emit=emit,
-                    elapsed_s=sparse_timer.elapsed_s,
-                    pc_form=pc_form,
-                    steps=int(sparse_pc_post_minres_steps),
-                    alpha_clip=float(sparse_pc_post_minres_alpha_clip),
-                    min_improvement=float(sparse_pc_post_minres_min_improvement),
-                    minres_correction=_apply_preconditioned_minres_correction,
-                ),
-                x=np.asarray(x_np, dtype=np.float64),
-                residual_norm=float(residual_norm_sparse_pc),
-                preconditioned_residual_norm=float(rn_pc),
-            )
-            x_np = sparse_pc_post_minres.x
-            residual_norm_sparse_pc = float(sparse_pc_post_minres.residual_norm)
-            rn_pc = float(sparse_pc_post_minres.preconditioned_residual_norm)
-            sparse_pc_post_minres_history = sparse_pc_post_minres.history
-            sparse_pc_post_minres_alphas = sparse_pc_post_minres.alphas
-            sparse_pc_post_minres_residual_before = sparse_pc_post_minres.residual_before
-            sparse_pc_post_minres_residual_after = sparse_pc_post_minres.residual_after
-            sparse_pc_post_minres_error = sparse_pc_post_minres.error
-            solve_s += float(sparse_pc_post_minres.solve_s)
+        sparse_pc_post_minres = apply_sparse_pc_post_minres_from_driver_state(
+            locals(),
+            minres_correction=_apply_preconditioned_minres_correction,
+        )
+        x_np = sparse_pc_post_minres.x
+        residual_norm_sparse_pc = float(sparse_pc_post_minres.residual_norm)
+        rn_pc = float(sparse_pc_post_minres.preconditioned_residual_norm)
+        sparse_pc_post_minres_history = sparse_pc_post_minres.history
+        sparse_pc_post_minres_alphas = sparse_pc_post_minres.alphas
+        sparse_pc_post_minres_residual_before = sparse_pc_post_minres.residual_before
+        sparse_pc_post_minres_residual_after = sparse_pc_post_minres.residual_after
+        sparse_pc_post_minres_error = sparse_pc_post_minres.error
+        solve_s = float(sparse_pc_post_minres.solve_s)
         if emit is not None:
             pc_suffix = f" preconditioned_residual={float(rn_pc):.6e}" if np.isfinite(rn_pc) else ""
             if history:

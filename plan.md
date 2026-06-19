@@ -56,17 +56,17 @@ Recent checkpoints:
 - `cb295ce` Extract sparse pattern setup.
 - `4b6a5b4` Extract sparse factor policy.
 
-Current source-size snapshot after the sparse-PC factor-dtype retry extraction:
+Current source-size snapshot after the sparse-PC post-minres extraction:
 
-- `sfincs_jax/v3_driver.py`: `19267` lines.
-- `solve_v3_full_system_linear_gmres`: `13932` lines.
+- `sfincs_jax/v3_driver.py`: `19243` lines.
+- `solve_v3_full_system_linear_gmres`: `13909` lines.
 
 Recent local validation:
 
 - Focused sparse-PC shard:
-  `147 passed in 1.45 s`.
+  `149 passed in 1.51 s`.
 - Latest broad profile-response/x-block/sparse-pattern shard:
-  `426 passed in 117.30 s`.
+  `428 passed in 116.89 s`.
 
 Known CI issue fixed by this rewrite:
 
@@ -77,7 +77,7 @@ Known CI issue fixed by this rewrite:
 
 ### 1. `v3_driver.py` Architecture Refactor
 
-Completion estimate: 81%.
+Completion estimate: 82%.
 
 Goal:
 
@@ -108,10 +108,12 @@ Completed recent boundaries:
 - Sparse-PC GMRES result metadata schema extraction.
 - Sparse-PC factor-dtype retry decision, seed selection, and driver-state
   orchestration extraction.
+- Sparse-PC post-minres default/update bookkeeping and driver-state
+  orchestration extraction.
 
 Next steps:
 
-- Extract remaining sparse-PC post-minres state/update bookkeeping into
+- Extract remaining sparse-PC completion/progress message formatting into
   separately tested helpers.
 - Move remaining generic sparse-PC solve/result assembly into cohesive
   `profile_response` helpers.
@@ -172,9 +174,9 @@ Next steps:
 
 ## Immediate Next Steps
 
-1. Commit and push the sparse-PC factor-dtype retry extraction after final
+1. Commit and push the sparse-PC post-minres extraction after final
    cleanup.
-2. Continue with sparse-PC post-minres state/update extraction.
+2. Continue with sparse-PC completion/progress message formatting extraction.
 3. Run focused sparse-PC tests and the broad profile-response/x-block/sparse
    shard after each extraction.
 4. Snapshot CI but do not wait on queued runs unless a completed failure appears.
