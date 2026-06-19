@@ -194,6 +194,7 @@ from .problems.profile_response.dense import (
     rhs1_dense_probe_enabled_from_env,
     rhs1_dense_probe_shortcut_decision,
     rhs1_dense_shortcut_setup_from_env,
+    rhs1_fp_preconditioner_probe_kind_from_env,
     solve_host_dense_full,
     solve_host_dense_reduced,
     solve_rhs1_reduced_dense_fallback_candidate,
@@ -10588,46 +10589,17 @@ def solve_v3_full_system_linear_gmres(
         if emit is not None:
             for _level, _message in dense_shortcut_setup.messages:
                 emit(_level, _message)
-        # FP dense-fallback probe shortcut: for medium FP systems where the probe is
-        # likely to trigger a direct solve, avoid building heavy block preconditioners
-        # that can allocate O(GB) of scratch. Use the cheap collision preconditioner
-        # for the probe instead.
-        fp_probe_env = os.environ.get("SFINCS_JAX_RHSMODE1_FP_PRECOND_PROBE", "").strip().lower()
-        fp_probe_enabled = fp_probe_env not in {"0", "false", "no", "off"}
-        if op.fblock.fp is not None and (not use_dkes):
-            fp_probe_enabled = False
-        fp_probe_min_env = os.environ.get("SFINCS_JAX_RHSMODE1_FP_PRECOND_PROBE_MIN", "").strip()
-        try:
-            fp_probe_min = int(fp_probe_min_env) if fp_probe_min_env else 2500
-        except ValueError:
-            fp_probe_min = 2500
-        heavy_precond_kinds_fp = {
-            "point",
-            "theta_line",
-            "theta_schwarz",
-            "zeta_line",
-            "zeta_schwarz",
-            "theta_zeta",
-            "adi",
-            "xblock_tz",
-            "sxblock_tz",
-            "species_block",
-            "schur",
-            "pas_hybrid",
-        }
-        if (
-            fp_probe_enabled
-            and (not rhs1_precond_env)
-            and op.fblock.fp is not None
-            and (not bool(op.include_phi1))
-            and dense_fallback_max > 0
-            and int(active_size) >= int(fp_probe_min)
-            and int(active_size) <= int(dense_fallback_max)
-            and rhs1_precond_enabled
-            and solve_method_kind not in {"dense", "dense_ksp"}
-            and rhs1_precond_kind in heavy_precond_kinds_fp
-        ):
-            rhs1_precond_kind = "collision"
+        rhs1_precond_kind = rhs1_fp_preconditioner_probe_kind_from_env(
+            rhs1_precond_kind=rhs1_precond_kind,
+            rhs1_precond_env=str(rhs1_precond_env),
+            has_fp=op.fblock.fp is not None,
+            use_dkes=bool(use_dkes),
+            include_phi1=bool(op.include_phi1),
+            dense_fallback_max=int(dense_fallback_max),
+            active_size=int(active_size),
+            rhs1_precond_enabled=bool(rhs1_precond_enabled),
+            solve_method_kind=solve_method_kind,
+        )
         early_dense_shortcut = False
         probe_shortcut = False
         probe_x0: jnp.ndarray | None = None

@@ -12,6 +12,7 @@ from sfincs_jax.problems.profile_response.dense import (
     rhs1_dense_probe_enabled_from_env,
     rhs1_dense_probe_shortcut_decision,
     rhs1_dense_shortcut_setup_from_env,
+    rhs1_fp_preconditioner_probe_kind_from_env,
     solve_rhs1_reduced_dense_fallback_candidate,
     solve_host_dense_full,
     solve_host_dense_reduced,
@@ -146,6 +147,103 @@ def test_rhs1_dense_shortcut_setup_from_env_reports_backend_disable(monkeypatch)
         "solve_v3_full_system_linear_gmres: disabling RHSMode=1 "
         "dense shortcut disabled (dense Krylov fallback kept) on backend=gpu",
     ),)
+
+
+def test_rhs1_fp_preconditioner_probe_kind_from_env_selects_collision(monkeypatch) -> None:
+    monkeypatch.delenv("SFINCS_JAX_RHSMODE1_FP_PRECOND_PROBE", raising=False)
+    monkeypatch.delenv("SFINCS_JAX_RHSMODE1_FP_PRECOND_PROBE_MIN", raising=False)
+
+    assert (
+        rhs1_fp_preconditioner_probe_kind_from_env(
+            rhs1_precond_kind="theta_line",
+            rhs1_precond_env="",
+            has_fp=True,
+            use_dkes=True,
+            include_phi1=False,
+            dense_fallback_max=6000,
+            active_size=3000,
+            rhs1_precond_enabled=True,
+            solve_method_kind="incremental",
+        )
+        == "collision"
+    )
+
+
+def test_rhs1_fp_preconditioner_probe_kind_from_env_respects_guards(monkeypatch) -> None:
+    monkeypatch.delenv("SFINCS_JAX_RHSMODE1_FP_PRECOND_PROBE", raising=False)
+    base = dict(
+        rhs1_precond_kind="theta_line",
+        rhs1_precond_env="",
+        has_fp=True,
+        use_dkes=True,
+        include_phi1=False,
+        dense_fallback_max=6000,
+        active_size=3000,
+        rhs1_precond_enabled=True,
+        solve_method_kind="incremental",
+    )
+    assert rhs1_fp_preconditioner_probe_kind_from_env(**{**base, "use_dkes": False}) == "theta_line"
+    assert rhs1_fp_preconditioner_probe_kind_from_env(**{**base, "include_phi1": True}) == "theta_line"
+    assert rhs1_fp_preconditioner_probe_kind_from_env(**{**base, "dense_fallback_max": 0}) == "theta_line"
+    assert rhs1_fp_preconditioner_probe_kind_from_env(**{**base, "active_size": 2000}) == "theta_line"
+    assert rhs1_fp_preconditioner_probe_kind_from_env(**{**base, "active_size": 7000}) == "theta_line"
+    assert not rhs1_fp_preconditioner_probe_kind_from_env(**{**base, "rhs1_precond_kind": None})
+    assert rhs1_fp_preconditioner_probe_kind_from_env(**{**base, "rhs1_precond_kind": "collision"}) == "collision"
+    assert rhs1_fp_preconditioner_probe_kind_from_env(**{**base, "rhs1_precond_env": "schur"}) == "theta_line"
+    assert rhs1_fp_preconditioner_probe_kind_from_env(**{**base, "has_fp": False}) == "theta_line"
+    assert rhs1_fp_preconditioner_probe_kind_from_env(**{**base, "rhs1_precond_enabled": False}) == "theta_line"
+    assert rhs1_fp_preconditioner_probe_kind_from_env(**{**base, "solve_method_kind": "dense"}) == "theta_line"
+
+
+def test_rhs1_fp_preconditioner_probe_kind_from_env_respects_env(monkeypatch) -> None:
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_FP_PRECOND_PROBE", "off")
+    assert (
+        rhs1_fp_preconditioner_probe_kind_from_env(
+            rhs1_precond_kind="theta_line",
+            rhs1_precond_env="",
+            has_fp=True,
+            use_dkes=True,
+            include_phi1=False,
+            dense_fallback_max=6000,
+            active_size=3000,
+            rhs1_precond_enabled=True,
+            solve_method_kind="incremental",
+        )
+        == "theta_line"
+    )
+
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_FP_PRECOND_PROBE", "on")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_FP_PRECOND_PROBE_MIN", "bad")
+    assert (
+        rhs1_fp_preconditioner_probe_kind_from_env(
+            rhs1_precond_kind="theta_line",
+            rhs1_precond_env="",
+            has_fp=True,
+            use_dkes=True,
+            include_phi1=False,
+            dense_fallback_max=6000,
+            active_size=3000,
+            rhs1_precond_enabled=True,
+            solve_method_kind="incremental",
+        )
+        == "collision"
+    )
+
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_FP_PRECOND_PROBE_MIN", "3500")
+    assert (
+        rhs1_fp_preconditioner_probe_kind_from_env(
+            rhs1_precond_kind="theta_line",
+            rhs1_precond_env="",
+            has_fp=True,
+            use_dkes=True,
+            include_phi1=False,
+            dense_fallback_max=6000,
+            active_size=3000,
+            rhs1_precond_enabled=True,
+            solve_method_kind="incremental",
+        )
+        == "theta_line"
+    )
 
 
 def test_host_dense_reduced_row_scaled_lu_solves_square_system() -> None:

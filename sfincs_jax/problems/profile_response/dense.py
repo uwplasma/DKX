@@ -170,6 +170,61 @@ def rhs1_dense_shortcut_setup_from_env(
     )
 
 
+_RHS1_FP_PROBE_HEAVY_PRECONDITIONERS = frozenset(
+    {
+        "point",
+        "theta_line",
+        "theta_schwarz",
+        "zeta_line",
+        "zeta_schwarz",
+        "theta_zeta",
+        "adi",
+        "xblock_tz",
+        "sxblock_tz",
+        "species_block",
+        "schur",
+        "pas_hybrid",
+    }
+)
+
+
+def rhs1_fp_preconditioner_probe_kind_from_env(
+    *,
+    rhs1_precond_kind: str | None,
+    rhs1_precond_env: str,
+    has_fp: bool,
+    use_dkes: bool,
+    include_phi1: bool,
+    dense_fallback_max: int,
+    active_size: int,
+    rhs1_precond_enabled: bool,
+    solve_method_kind: str,
+) -> str | None:
+    """Downgrade heavy FP preconditioners to collision for dense-probe setup."""
+
+    fp_probe_env = (
+        os.environ.get("SFINCS_JAX_RHSMODE1_FP_PRECOND_PROBE", "").strip().lower()
+    )
+    fp_probe_enabled = fp_probe_env not in {"0", "false", "no", "off"}
+    if bool(has_fp) and (not bool(use_dkes)):
+        fp_probe_enabled = False
+    fp_probe_min = _env_int("SFINCS_JAX_RHSMODE1_FP_PRECOND_PROBE_MIN", 2500)
+    if (
+        fp_probe_enabled
+        and (not rhs1_precond_env)
+        and bool(has_fp)
+        and (not bool(include_phi1))
+        and int(dense_fallback_max) > 0
+        and int(active_size) >= int(fp_probe_min)
+        and int(active_size) <= int(dense_fallback_max)
+        and bool(rhs1_precond_enabled)
+        and str(solve_method_kind) not in {"dense", "dense_ksp"}
+        and rhs1_precond_kind in _RHS1_FP_PROBE_HEAVY_PRECONDITIONERS
+    ):
+        return "collision"
+    return rhs1_precond_kind
+
+
 def rhs1_dense_probe_enabled_from_env() -> bool:
     """Return whether the reduced dense probe is globally enabled."""
 
@@ -590,6 +645,7 @@ __all__ = [
     "rhs1_dense_probe_enabled_from_env",
     "rhs1_dense_probe_shortcut_decision",
     "rhs1_dense_shortcut_setup_from_env",
+    "rhs1_fp_preconditioner_probe_kind_from_env",
     "solve_rhs1_reduced_dense_fallback_candidate",
     "solve_host_dense_full",
     "solve_host_dense_reduced",
