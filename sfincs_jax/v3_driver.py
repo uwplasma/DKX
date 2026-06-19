@@ -332,7 +332,10 @@ from .problems.profile_response.sparse_pc import (
     XBlockAssembledPreflightError,
     finalize_xblock_assembled_operator_metadata,
 )
-from .rhs1_strong_fallback import build_rhs1_strong_preconditioner_full_from_kind
+from .rhs1_strong_fallback import (
+    build_rhs1_strong_preconditioner_full_from_kind,
+    build_rhs1_strong_preconditioner_reduced_from_kind,
+)
 from .problems.profile_response.strong_preconditioning import (
     adjust_rhs1_reduced_auto_kind,
     adjust_rhs1_pas_schur_strong_kind_from_env,
@@ -3010,6 +3013,33 @@ def _build_rhs1_strong_preconditioner_full_from_kind(
         dd_block_zeta=dd_block_zeta,
         dd_overlap_zeta=dd_overlap_zeta,
         adi_sweeps=adi_sweeps,
+        dispatch_builder=_build_rhs1_preconditioner_from_kind,
+    )
+
+
+def _build_rhs1_strong_preconditioner_reduced_from_kind(
+    *,
+    op: V3FullSystemOperator,
+    strong_precond_kind: str | None,
+    reduce_full: Callable[[jnp.ndarray], jnp.ndarray],
+    expand_reduced: Callable[[jnp.ndarray], jnp.ndarray],
+    rhs1_xblock_tz_lmax: int | None = None,
+    dd_block_theta: int = 8,
+    dd_overlap_theta: int = 1,
+    dd_block_zeta: int = 8,
+    dd_overlap_zeta: int = 1,
+) -> Callable[[jnp.ndarray], jnp.ndarray] | None:
+    """Build the reduced active-DOF strong fallback preconditioner via dispatch."""
+    return build_rhs1_strong_preconditioner_reduced_from_kind(
+        op=op,
+        strong_precond_kind=strong_precond_kind,
+        reduce_full=reduce_full,
+        expand_reduced=expand_reduced,
+        rhs1_xblock_tz_lmax=rhs1_xblock_tz_lmax,
+        dd_block_theta=int(dd_block_theta),
+        dd_overlap_theta=int(dd_overlap_theta),
+        dd_block_zeta=int(dd_block_zeta),
+        dd_overlap_zeta=int(dd_overlap_zeta),
         dispatch_builder=_build_rhs1_preconditioner_from_kind,
     )
 
@@ -12012,114 +12042,17 @@ def solve_v3_full_system_linear_gmres(
                     f"kind={strong_precond_kind} (residual={float(res_reduced.residual_norm):.3e} > target={target_reduced:.3e})",
                 )
 
-            if strong_precond_kind == "theta_line":
-                strong_preconditioner_reduced = _build_rhsmode1_theta_line_preconditioner(
-                    op=op, reduce_full=reduce_full, expand_reduced=expand_reduced
-                )
-            elif strong_precond_kind == "theta_schwarz":
-                dd_block = rhs1_dd_setup.block("theta")
-                dd_overlap = rhs1_dd_setup.overlap("theta", default=1)
-                strong_preconditioner_reduced = _build_rhsmode1_theta_schwarz_preconditioner(
-                    op=op,
-                    block=dd_block,
-                    overlap=dd_overlap,
-                    reduce_full=reduce_full,
-                    expand_reduced=expand_reduced,
-                )
-            elif strong_precond_kind == "theta_line_xdiag":
-                strong_preconditioner_reduced = _build_rhsmode1_theta_line_xdiag_preconditioner(
-                    op=op, reduce_full=reduce_full, expand_reduced=expand_reduced
-                )
-                if op.fblock.fp is not None or op.fblock.pas is not None:
-                    collision_precond = _build_rhsmode1_collision_preconditioner(
-                        op=op, reduce_full=reduce_full, expand_reduced=expand_reduced
-                    )
-                    strong_preconditioner_reduced = _compose_preconditioners(
-                        collision_precond, strong_preconditioner_reduced
-                    )
-            elif strong_precond_kind == "species_block":
-                strong_preconditioner_reduced = _build_rhsmode1_species_block_preconditioner(
-                    op=op, reduce_full=reduce_full, expand_reduced=expand_reduced
-                )
-            elif strong_precond_kind == "sxblock":
-                strong_preconditioner_reduced = _build_rhsmode1_species_xblock_preconditioner(
-                    op=op, reduce_full=reduce_full, expand_reduced=expand_reduced
-                )
-            elif strong_precond_kind == "sxblock_tz":
-                strong_preconditioner_reduced = _build_rhsmode1_sxblock_tz_preconditioner(
-                    op=op, reduce_full=reduce_full, expand_reduced=expand_reduced
-                )
-            elif strong_precond_kind == "theta_zeta":
-                strong_preconditioner_reduced = _build_rhsmode1_theta_zeta_preconditioner(
-                    op=op, reduce_full=reduce_full, expand_reduced=expand_reduced
-                )
-            elif strong_precond_kind == "xmg":
-                strong_preconditioner_reduced = _build_rhsmode1_xmg_preconditioner(
-                    op=op, reduce_full=reduce_full, expand_reduced=expand_reduced
-                )
-            elif strong_precond_kind == "pas_lite":
-                strong_preconditioner_reduced = _build_rhsmode1_pas_lite_preconditioner(
-                    op=op, reduce_full=reduce_full, expand_reduced=expand_reduced
-                )
-            elif strong_precond_kind == "pas_hybrid":
-                strong_preconditioner_reduced = _build_rhsmode1_pas_hybrid_preconditioner(
-                    op=op, reduce_full=reduce_full, expand_reduced=expand_reduced
-                )
-            elif strong_precond_kind == "xblock_tz":
-                strong_preconditioner_reduced = _build_rhsmode1_xblock_tz_preconditioner(
-                    op=op, reduce_full=reduce_full, expand_reduced=expand_reduced
-                )
-            elif strong_precond_kind == "xblock_tz_lmax":
-                lmax_use = strong_xblock_tz_lmax or 0
-                if lmax_use <= 0:
-                    lmax_env = os.environ.get("SFINCS_JAX_RHSMODE1_XBLOCK_TZ_LMAX", "").strip()
-                    try:
-                        lmax_use = int(lmax_env) if lmax_env else 0
-                    except ValueError:
-                        lmax_use = 0
-                strong_preconditioner_reduced = _build_rhsmode1_xblock_tz_lmax_preconditioner(
-                    op=op,
-                    lmax=int(lmax_use),
-                    reduce_full=reduce_full,
-                    expand_reduced=expand_reduced,
-                )
-            elif strong_precond_kind == "zeta_line":
-                strong_preconditioner_reduced = _build_rhsmode1_zeta_line_preconditioner(
-                    op=op, reduce_full=reduce_full, expand_reduced=expand_reduced
-                )
-            elif strong_precond_kind == "zeta_schwarz":
-                dd_block = rhs1_dd_setup.block("zeta")
-                dd_overlap = rhs1_dd_setup.overlap("zeta", default=1)
-                strong_preconditioner_reduced = _build_rhsmode1_zeta_schwarz_preconditioner(
-                    op=op,
-                    block=dd_block,
-                    overlap=dd_overlap,
-                    reduce_full=reduce_full,
-                    expand_reduced=expand_reduced,
-                )
-            elif strong_precond_kind == "schur":
-                strong_preconditioner_reduced = _build_rhsmode1_schur_preconditioner(
-                    op=op, reduce_full=reduce_full, expand_reduced=expand_reduced
-                )
-            else:
-                pre_theta = _build_rhsmode1_theta_line_preconditioner(
-                    op=op, reduce_full=reduce_full, expand_reduced=expand_reduced
-                )
-                pre_zeta = _build_rhsmode1_zeta_line_preconditioner(
-                    op=op, reduce_full=reduce_full, expand_reduced=expand_reduced
-                )
-                sweeps_env = os.environ.get("SFINCS_JAX_RHSMODE1_ADI_SWEEPS", "").strip()
-                try:
-                    sweeps = int(sweeps_env) if sweeps_env else 2
-                except ValueError:
-                    sweeps = 2
-                sweeps = max(1, sweeps)
-
-                def strong_preconditioner_reduced(v: jnp.ndarray) -> jnp.ndarray:
-                    out = v
-                    for _ in range(sweeps):
-                        out = pre_zeta(pre_theta(out))
-                    return out
+            strong_preconditioner_reduced = _build_rhs1_strong_preconditioner_reduced_from_kind(
+                op=op,
+                strong_precond_kind=strong_precond_kind,
+                reduce_full=reduce_full,
+                expand_reduced=expand_reduced,
+                rhs1_xblock_tz_lmax=strong_xblock_tz_lmax,
+                dd_block_theta=rhs1_dd_setup.block("theta"),
+                dd_overlap_theta=rhs1_dd_setup.overlap("theta", default=1),
+                dd_block_zeta=rhs1_dd_setup.block("zeta"),
+                dd_overlap_zeta=rhs1_dd_setup.overlap("zeta", default=1),
+            )
             _mark("rhs1_strong_precond_build_done")
             if use_pas_projection:
                 strong_preconditioner_reduced = _wrap_pas_precond(strong_preconditioner_reduced)
