@@ -43,6 +43,7 @@ from sfincs_jax.problems.profile_response.sparse_pc import (
     SparsePCPatternSetupContext,
     SparsePCPostMinresContext,
     SparsePCPostMinresUpdateContext,
+    SparseHostDirectPayload,
     SparseMinimumNormPayload,
     SparseMinimumNormPolicy,
     XBlockAssembledPreflightError,
@@ -116,6 +117,7 @@ from sfincs_jax.problems.profile_response.sparse_pc import (
     retry_sparse_pc_factor_dtype_if_needed,
     sparse_pc_gmres_completion_message,
     sparse_pc_gmres_final_payload_from_driver_state,
+    sparse_host_direct_solve_payload,
     sparse_minimum_norm_solve_payload,
     sparse_minimum_norm_start_message,
     finalize_xblock_assembled_operator_metadata,
@@ -4684,6 +4686,43 @@ def test_sparse_minimum_norm_solve_payload_solves_tiny_identity_system() -> None
     assert payload.metadata["accepted_converged"] is True
     assert payload.metadata["acceptance_criterion"] == "true_residual"
     assert "accepted=True criterion=true_residual" in payload.completion_message
+
+
+def test_sparse_host_direct_solve_payload_recomputes_true_residual_and_metadata() -> None:
+    calls: list[dict[str, object]] = []
+
+    def direct_solve_with_refinement(**kwargs):
+        calls.append(kwargs)
+        return np.asarray([3.0, -1.0]), 99.0
+
+    payload = sparse_host_direct_solve_payload(
+        factor_solve=lambda rhs: rhs,
+        operator_matrix=scipy_sparse.eye(2, format="csr"),
+        rhs=jnp.asarray([3.0, -1.0], dtype=jnp.float64),
+        factor_dtype=np.dtype(np.float64),
+        refine_steps=2,
+        matvec=lambda x: jnp.asarray(x, dtype=jnp.float64),
+        atol=1.0e-12,
+        tol=1.0e-12,
+        rhs_norm=float(np.linalg.norm([3.0, -1.0])),
+        elapsed_s=lambda: 0.75,
+        direct_solve_with_refinement=direct_solve_with_refinement,
+    )
+
+    assert isinstance(payload, SparseHostDirectPayload)
+    assert calls[0]["refine_steps"] == 2
+    np.testing.assert_allclose(np.asarray(payload.x), np.asarray([3.0, -1.0]))
+    assert float(payload.residual_norm) == pytest.approx(0.0)
+    assert payload.metadata == {
+        "solver_kind": "sparse_host",
+        "residual_kind": "true_residual",
+        "accepted_converged": True,
+        "acceptance_criterion": "true_residual",
+    }
+    assert payload.completion_message == (
+        "solve_v3_full_system_linear_gmres: sparse_host complete "
+        "elapsed_s=0.750 residual=0.000000e+00"
+    )
 
 
 def test_sparse_pc_post_minres_accepts_improved_residual_and_recomputes_pc_norm() -> (

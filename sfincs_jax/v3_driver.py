@@ -288,6 +288,7 @@ from .problems.profile_response.sparse_pc import (
     resolve_xblock_two_level_policy_setup,
     run_fortran_reduced_xblock_krylov_solve,
     run_sparse_pc_gmres_once,
+    sparse_host_direct_solve_payload,
     sparse_minimum_norm_solve_payload,
     sparse_minimum_norm_start_message,
     XBlockAssembledPreflightError,
@@ -9392,50 +9393,32 @@ def solve_v3_full_system_linear_gmres(
             pattern=pattern,
             emit=emit,
         )
-        x_np, residual_norm_sparse = _host_direct_solve_with_refinement(
+        sparse_host_direct_payload = sparse_host_direct_solve_payload(
             factor_solve=factor_bundle.solve,
             operator_matrix=operator_bundle.matrix,
-            rhs_vec=rhs,
+            rhs=rhs,
             factor_dtype=np.dtype(np.float64),
             refine_steps=_host_sparse_direct_refine_steps(
                 "SFINCS_JAX_RHSMODE1_SPARSE_DIRECT_REFINE",
                 default=2,
             ),
+            matvec=_sparse_host_mv,
+            atol=float(atol),
+            tol=float(tol),
+            rhs_norm=float(rhs_norm),
+            elapsed_s=sparse_timer.elapsed_s,
+            direct_solve_with_refinement=_host_direct_solve_with_refinement,
         )
-        try:
-            residual_true = np.asarray(rhs, dtype=np.float64) - np.asarray(
-                jax.device_get(_sparse_host_mv(x_np)),
-                dtype=np.float64,
-            )
-            residual_norm_sparse = float(np.linalg.norm(residual_true))
-        except Exception:
-            residual_norm_sparse = float(residual_norm_sparse)
         if emit is not None:
-            emit(
-                0,
-                "solve_v3_full_system_linear_gmres: sparse_host complete "
-                f"elapsed_s={sparse_timer.elapsed_s():.3f} residual={float(residual_norm_sparse):.6e}",
-            )
+            emit(0, sparse_host_direct_payload.completion_message)
         return V3LinearSolveResult(
             op=op,
             rhs=rhs,
             gmres=GMRESSolveResult(
-                x=jnp.asarray(x_np, dtype=jnp.float64),
-                residual_norm=jnp.asarray(residual_norm_sparse, dtype=jnp.float64),
+                x=sparse_host_direct_payload.x,
+                residual_norm=sparse_host_direct_payload.residual_norm,
             ),
-            metadata={
-                "solver_kind": "sparse_host",
-                "residual_kind": "true_residual",
-                "accepted_converged": rhs1_residual_converged(
-                    residual_norm_sparse,
-                    rhs1_residual_target(
-                        atol=float(atol),
-                        tol=float(tol),
-                        rhs_norm=float(rhs_norm),
-                    ),
-                ),
-                "acceptance_criterion": "true_residual",
-            },
+            metadata=sparse_host_direct_payload.metadata,
         )
     rhs1_precond_env = os.environ.get("SFINCS_JAX_RHSMODE1_PRECONDITIONER", "").strip().lower()
     rhs1_precond_env_user = rhs1_precond_env

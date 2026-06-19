@@ -114,6 +114,16 @@ class SparseMinimumNormPayload:
 
 
 @dataclass(frozen=True)
+class SparseHostDirectPayload:
+    """Driver-independent payload for an explicit host sparse direct solve."""
+
+    x: jnp.ndarray
+    residual_norm: jnp.ndarray
+    metadata: dict[str, object]
+    completion_message: str
+
+
+@dataclass(frozen=True)
 class SparsePCGMRESCompletionMessageContext:
     """Fields used to format the sparse-PC GMRES completion progress line."""
 
@@ -7045,6 +7055,61 @@ def sparse_minimum_norm_solve_payload(
     )
 
 
+def sparse_host_direct_solve_payload(
+    *,
+    factor_solve: Callable[[Any], Any],
+    operator_matrix: Any,
+    rhs: jnp.ndarray,
+    factor_dtype: np.dtype,
+    refine_steps: int,
+    matvec: Callable[[np.ndarray], jnp.ndarray],
+    atol: float,
+    tol: float,
+    rhs_norm: float,
+    elapsed_s: Callable[[], float],
+    direct_solve_with_refinement: Callable[..., tuple[np.ndarray, float]],
+) -> SparseHostDirectPayload:
+    """Solve with a host sparse direct factor and return stable result metadata."""
+
+    x_np, residual_norm = direct_solve_with_refinement(
+        factor_solve=factor_solve,
+        operator_matrix=operator_matrix,
+        rhs_vec=rhs,
+        factor_dtype=factor_dtype,
+        refine_steps=int(refine_steps),
+    )
+    try:
+        residual_true = np.asarray(rhs, dtype=np.float64) - np.asarray(
+            jax.device_get(matvec(np.asarray(x_np, dtype=np.float64))),
+            dtype=np.float64,
+        )
+        residual_norm = float(np.linalg.norm(residual_true))
+    except Exception:
+        residual_norm = float(residual_norm)
+
+    target = profile_residual_target(
+        atol=float(atol),
+        tol=float(tol),
+        rhs_norm=float(rhs_norm),
+    )
+    accepted_converged = profile_residual_converged(float(residual_norm), target)
+    completion_message = (
+        "solve_v3_full_system_linear_gmres: sparse_host complete "
+        f"elapsed_s={float(elapsed_s()):.3f} residual={float(residual_norm):.6e}"
+    )
+    return SparseHostDirectPayload(
+        x=jnp.asarray(x_np, dtype=jnp.float64),
+        residual_norm=jnp.asarray(residual_norm, dtype=jnp.float64),
+        metadata={
+            "solver_kind": "sparse_host",
+            "residual_kind": "true_residual",
+            "accepted_converged": bool(accepted_converged),
+            "acceptance_criterion": "true_residual",
+        },
+        completion_message=completion_message,
+    )
+
+
 def apply_sparse_pc_post_minres(
     *,
     context: SparsePCPostMinresContext,
@@ -7259,6 +7324,7 @@ __all__ = [
     "SparsePCGMRESFinalPayload",
     "SparseMinimumNormPolicy",
     "SparseMinimumNormPayload",
+    "SparseHostDirectPayload",
     "SparsePCGMRESCompletionMessageContext",
     "SparsePCPostMinresContext",
     "SparsePCPostMinresResult",
@@ -7310,6 +7376,7 @@ __all__ = [
     "resolve_sparse_minimum_norm_policy",
     "sparse_minimum_norm_solve_payload",
     "sparse_minimum_norm_start_message",
+    "sparse_host_direct_solve_payload",
     "sparse_rescue_tail_metadata",
     "sparse_xblock_rescue_metadata",
     "xblock_assembled_operator_diagnostics",
