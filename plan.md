@@ -263,7 +263,7 @@ Known CI issue fixed by this rewrite:
 
 ### 1. `v3_driver.py` Architecture Refactor
 
-Completion estimate: 97%.
+Completion estimate: 98%.
 
 Goal:
 
@@ -362,6 +362,15 @@ Completed recent boundaries:
 - RHSMode=1 fast post-xblock polish execution, progress emission, and
   strict residual-improvement acceptance consolidated into a tested
   profile-response handoff helper.
+- RHSMode=1 reduced dense fallback candidate execution consolidated into
+  `profile_response.dense` while driver-side measured acceptance remains
+  unchanged.
+- RHSMode=1 damped preconditioned residual polish consolidated into a tested
+  residual helper.
+- FP low-L/L1 active mode index construction consolidated into active
+  projection helpers, removing duplicated flattened-index loops.
+- FP L1 and global low-L projected residual polish consolidated into a tested
+  residual-equation helper with explicit projected/full residual gates.
 
 Next steps:
 
@@ -377,7 +386,7 @@ Next steps:
 
 ### 2. Differentiability And Solver-Lane Separation
 
-Completion estimate: 72%.
+Completion estimate: 73%.
 
 Goal:
 
@@ -412,7 +421,7 @@ Next steps:
 
 ### 4. Validation, Coverage, And Documentation
 
-Completion estimate: 63%.
+Completion estimate: 64%.
 
 Goal:
 
