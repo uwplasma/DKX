@@ -866,6 +866,13 @@ Recent local validation:
 - Broad profile-response/RHSMode=1 policy, setup, diagnostics, solver, and
   helper sweep after xblock sparse-PC progress-message formatting extraction:
   `1179 passed in 48.56 s`.
+- Sparse-PC helper shard after xblock solve-state/fallback-state extraction:
+  `224 passed in 2.24 s`.
+- Sparse-host/minimum-norm/direct-tail driver shard:
+  `32 passed, 100 deselected in 35.40 s`.
+- Broad profile-response/RHSMode=1 policy, setup, diagnostics, solver, and
+  helper sweep after xblock solve-state/fallback-state extraction:
+  `1181 passed in 48.58 s`.
 - Older focused and broad validation checkpoints are intentionally omitted from
   this active plan; they remain available in git history.
 
@@ -1105,14 +1112,19 @@ Completed recent boundaries:
 - X-block sparse-PC device-cycle and host-Krylov progress message formatting
   now uses tested profile-response helpers, preserving elapsed-time and
   residual formatting.
+- X-block sparse-PC first-attempt physical solve-state construction and
+  optional GMRES fallback-state reporting now use tested profile-response
+  helpers while true-residual callbacks remain explicit at the driver call
+  site.
 
 Next steps:
 
 - Continue moving remaining generic sparse-PC final payload/result assembly
   into cohesive `profile_response` helpers, using explicit result objects
   instead of driver-local metadata scalar plumbing.
-- Extract xblock sparse-PC solve-result/fallback state updates only where the
-  true-residual recomputation and metadata handoff remain explicit.
+- Extract the next sparse-PC result/metadata seam only when it removes
+  duplicated state plumbing without hiding driver-owned cache or residual
+  callbacks.
 - Continue extracting sparse-PC state/metadata seams after the source split
   stabilizes; avoid moving driver-specific direction builders or caches into
   generic helpers.

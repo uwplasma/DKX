@@ -256,6 +256,7 @@ from .problems.profile_response.sparse_pc import (
     SparsePCGMRESContext,
     XBlockAugmentedKrylovBasisContext,
     XBlockFirstKrylovAttemptContext,
+    XBlockFirstKrylovSolveStateContext,
     XBlockGMRESFallbackContext,
     XBlockKrylovSolveSpaceContext,
     XBlockPostSolveCorrectionContext,
@@ -327,9 +328,9 @@ from .problems.profile_response.sparse_pc import (
     run_xblock_gmres_fallback_if_needed,
     run_xblock_post_solve_corrections,
     xblock_device_cycle_progress_message,
-    xblock_krylov_report,
+    xblock_krylov_state_from_first_attempt,
+    xblock_krylov_state_from_gmres_fallback,
     xblock_host_krylov_progress_message,
-    xblock_physical_solution_and_residual,
     build_sparse_host_or_ilu_factor,
     build_sparse_ilu_preconditioner_from_cache,
     build_sparse_host_scipy_preconditioner,
@@ -6326,32 +6327,28 @@ def solve_v3_full_system_linear_gmres(
                     tfqmr_jax_solver=tfqmr_solve_with_residual,
                 )
             )
-            x_np = first_krylov.x
-            residual_norm_xblock_pc = float(first_krylov.residual_norm)
-            history = first_krylov.history
-            device_krylov_iterations = first_krylov.device_iterations
-            device_krylov_estimated_matvecs = first_krylov.device_estimated_matvecs
             solve_s = (sparse_timer.elapsed_s() - solve_start_s) + float(xblock_side_probe_s) + float(probe_coarse_s)
-            x_solution_np = np.asarray(x_np, dtype=np.float64)
-            physical_residual = xblock_physical_solution_and_residual(
-                x=x_solution_np,
-                solution_to_physical=solve_solution_to_physical,
-                rhs=xblock_rhs,
-                matvec=_mv_true,
-                fallback_residual_norm=float(residual_norm_xblock_pc),
+            solve_state = xblock_krylov_state_from_first_attempt(
+                XBlockFirstKrylovSolveStateContext(
+                    krylov_method=str(xblock_krylov_method),
+                    first_attempt=first_krylov,
+                    solve_s=float(solve_s),
+                    solution_to_physical=solve_solution_to_physical,
+                    physical_rhs=xblock_rhs,
+                    physical_matvec=_mv_true,
+                    mv_count=int(mv_count),
+                )
             )
-            x_physical_np = physical_residual.x_physical
-            residual_norm_xblock_pc = float(physical_residual.residual_norm)
-            candidate_krylov_method = str(xblock_krylov_method)
+            x_solution_np = solve_state.x_solution
+            x_physical_np = solve_state.x_physical
+            residual_norm_xblock_pc = float(solve_state.residual_norm)
+            history = solve_state.history
+            candidate_krylov_method = str(solve_state.krylov_method)
             candidate_residual_norm = float(residual_norm_xblock_pc)
-            krylov_report = xblock_krylov_report(
-                device_iterations=device_krylov_iterations,
-                device_estimated_matvecs=device_krylov_estimated_matvecs,
-                history=history,
-                mv_count=int(mv_count),
-            )
-            candidate_iterations = int(krylov_report.iterations)
-            candidate_matvecs = int(krylov_report.matvecs)
+            device_krylov_iterations = solve_state.device_iterations
+            device_krylov_estimated_matvecs = solve_state.device_estimated_matvecs
+            candidate_iterations = int(solve_state.reported_iterations)
+            candidate_matvecs = int(solve_state.reported_matvecs)
             fallback_started_from_candidate = False
             fallback_candidate_improved_rhs = False
             fallback_to_gmres = _rhs1_xblock_policy.rhs1_xblock_fallback_to_gmres_enabled(
@@ -6391,25 +6388,23 @@ def solve_v3_full_system_linear_gmres(
                     device_estimated_matvecs=device_krylov_estimated_matvecs,
                 )
             )
-            xblock_krylov_method = fallback_result.krylov_method
-            x_solution_np = fallback_result.x_solution
-            x_physical_np = fallback_result.x_physical
-            residual_norm_xblock_pc = float(fallback_result.residual_norm)
-            history = fallback_result.history
-            solve_s = float(fallback_result.solve_s)
-            device_krylov_iterations = fallback_result.device_iterations
-            device_krylov_estimated_matvecs = fallback_result.device_estimated_matvecs
-            fallback_started_from_candidate = fallback_result.fallback_started_from_candidate
-            fallback_candidate_improved_rhs = fallback_result.fallback_candidate_improved_rhs
-            krylov_report = xblock_krylov_report(
-                device_iterations=device_krylov_iterations,
-                device_estimated_matvecs=device_krylov_estimated_matvecs,
-                history=history,
+            solve_state = xblock_krylov_state_from_gmres_fallback(
+                fallback=fallback_result,
                 mv_count=int(mv_count),
             )
-            reported_iterations = int(krylov_report.iterations)
-            reported_matvecs = int(krylov_report.matvecs)
-            x_np = x_physical_np
+            xblock_krylov_method = str(solve_state.krylov_method)
+            x_solution_np = solve_state.x_solution
+            x_physical_np = solve_state.x_physical
+            residual_norm_xblock_pc = float(solve_state.residual_norm)
+            history = solve_state.history
+            solve_s = float(solve_state.solve_s)
+            device_krylov_iterations = solve_state.device_iterations
+            device_krylov_estimated_matvecs = solve_state.device_estimated_matvecs
+            fallback_started_from_candidate = solve_state.fallback_started_from_candidate
+            fallback_candidate_improved_rhs = solve_state.fallback_candidate_improved_rhs
+            reported_iterations = int(solve_state.reported_iterations)
+            reported_matvecs = int(solve_state.reported_matvecs)
+            x_np = solve_state.x_physical
             post_corrections = run_xblock_post_solve_corrections(
                 XBlockPostSolveCorrectionContext(
                     matvec=_mv_true,

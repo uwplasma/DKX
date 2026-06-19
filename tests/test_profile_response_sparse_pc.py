@@ -65,9 +65,11 @@ from sfincs_jax.problems.profile_response.sparse_pc import (
     XBlockDeviceKrylovState,
     XBlockFirstKrylovAttemptContext,
     XBlockFirstKrylovAttemptResult,
+    XBlockFirstKrylovSolveStateContext,
     XBlockGMRESFallbackDecision,
     XBlockGMRESFallbackContext,
     XBlockGMRESFallbackResult,
+    XBlockKrylovSolveState,
     XBlockKrylovSolveSpaceContext,
     XBlockKrylovReport,
     XBlockPostSolveCorrectionContext,
@@ -158,6 +160,8 @@ from sfincs_jax.problems.profile_response.sparse_pc import (
     xblock_device_krylov_state,
     xblock_device_cycle_progress_message,
     xblock_host_krylov_progress_message,
+    xblock_krylov_state_from_first_attempt,
+    xblock_krylov_state_from_gmres_fallback,
     xblock_sparse_pc_completion_message,
     xblock_gmres_fallback_decision,
     xblock_krylov_report,
@@ -487,6 +491,70 @@ def test_xblock_host_krylov_progress_message_formats_residual_and_elapsed_time()
         "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
         "iters=20 ksp_residual=4.250000e-07 elapsed_s=8.000"
     )
+
+
+def test_xblock_krylov_state_from_first_attempt_measures_physical_residual() -> None:
+    first_attempt = XBlockFirstKrylovAttemptResult(
+        x=np.asarray([1.0, 2.0], dtype=np.float64),
+        residual_norm=99.0,
+        history=(3.0, 1.0),
+        device_iterations=4,
+        device_estimated_matvecs=8,
+    )
+
+    state = xblock_krylov_state_from_first_attempt(
+        XBlockFirstKrylovSolveStateContext(
+            krylov_method="fgmres_jax",
+            first_attempt=first_attempt,
+            solve_s=1.25,
+            solution_to_physical=lambda v: 2.0 * jnp.asarray(v, dtype=jnp.float64),
+            physical_rhs=jnp.asarray([1.0, 1.0], dtype=jnp.float64),
+            physical_matvec=lambda v: jnp.asarray(v, dtype=jnp.float64),
+            mv_count=123,
+        )
+    )
+
+    assert isinstance(state, XBlockKrylovSolveState)
+    assert state.krylov_method == "fgmres_jax"
+    np.testing.assert_allclose(state.x_solution, np.asarray([1.0, 2.0]))
+    np.testing.assert_allclose(state.x_physical, np.asarray([2.0, 4.0]))
+    assert state.residual_norm == pytest.approx(np.linalg.norm(np.asarray([1.0, 3.0])))
+    assert state.history == (3.0, 1.0)
+    assert state.solve_s == pytest.approx(1.25)
+    assert state.device_iterations == 4
+    assert state.device_estimated_matvecs == 8
+    assert state.reported_iterations == 4
+    assert state.reported_matvecs == 8
+    assert not state.fallback_started_from_candidate
+    assert not state.fallback_candidate_improved_rhs
+
+
+def test_xblock_krylov_state_from_gmres_fallback_preserves_fallback_flags_and_host_report() -> None:
+    fallback = XBlockGMRESFallbackResult(
+        krylov_method="gmres",
+        x_solution=np.asarray([3.0, 4.0], dtype=np.float64),
+        x_physical=np.asarray([6.0, 8.0], dtype=np.float64),
+        residual_norm=0.125,
+        history=(1.0, 0.5, 0.125),
+        solve_s=2.5,
+        device_iterations=None,
+        device_estimated_matvecs=None,
+        fallback_started_from_candidate=True,
+        fallback_candidate_improved_rhs=True,
+    )
+
+    state = xblock_krylov_state_from_gmres_fallback(fallback=fallback, mv_count=17)
+
+    assert state.krylov_method == "gmres"
+    np.testing.assert_allclose(state.x_solution, np.asarray([3.0, 4.0]))
+    np.testing.assert_allclose(state.x_physical, np.asarray([6.0, 8.0]))
+    assert state.residual_norm == pytest.approx(0.125)
+    assert state.history == (1.0, 0.5, 0.125)
+    assert state.solve_s == pytest.approx(2.5)
+    assert state.reported_iterations == 3
+    assert state.reported_matvecs == 17
+    assert state.fallback_started_from_candidate
+    assert state.fallback_candidate_improved_rhs
 
 
 def test_xblock_device_krylov_state_transfers_finite_history() -> None:

@@ -221,6 +221,37 @@ class XBlockFirstKrylovAttemptResult:
 
 
 @dataclass(frozen=True)
+class XBlockKrylovSolveState:
+    """Physical-space xblock Krylov solve state used by downstream metadata."""
+
+    krylov_method: str
+    x_solution: np.ndarray
+    x_physical: np.ndarray
+    residual_norm: float
+    history: tuple[float, ...]
+    solve_s: float
+    device_iterations: int | None
+    device_estimated_matvecs: int | None
+    reported_iterations: int
+    reported_matvecs: int
+    fallback_started_from_candidate: bool = False
+    fallback_candidate_improved_rhs: bool = False
+
+
+@dataclass(frozen=True)
+class XBlockFirstKrylovSolveStateContext:
+    """Inputs for converting a first xblock Krylov attempt to physical state."""
+
+    krylov_method: str
+    first_attempt: XBlockFirstKrylovAttemptResult
+    solve_s: float
+    solution_to_physical: ArrayFn
+    physical_rhs: jnp.ndarray
+    physical_matvec: ArrayFn
+    mv_count: int
+
+
+@dataclass(frozen=True)
 class XBlockKrylovSolveSpaceContext:
     """Prepared physical/equilibrated xblock Krylov solve-space inputs."""
 
@@ -344,6 +375,68 @@ def xblock_krylov_report(
     iterations = int(device_iterations) if device_iterations is not None else int(len(history or ()))
     matvecs = int(device_estimated_matvecs) if device_estimated_matvecs is not None else int(mv_count)
     return XBlockKrylovReport(iterations=int(iterations), matvecs=int(matvecs))
+
+
+def xblock_krylov_state_from_first_attempt(
+    context: XBlockFirstKrylovSolveStateContext,
+) -> XBlockKrylovSolveState:
+    """Convert a first xblock Krylov attempt to physical-space solve state."""
+
+    x_solution = np.asarray(context.first_attempt.x, dtype=np.float64)
+    physical_residual = xblock_physical_solution_and_residual(
+        x=x_solution,
+        solution_to_physical=context.solution_to_physical,
+        rhs=context.physical_rhs,
+        matvec=context.physical_matvec,
+        fallback_residual_norm=float(context.first_attempt.residual_norm),
+    )
+    report = xblock_krylov_report(
+        device_iterations=context.first_attempt.device_iterations,
+        device_estimated_matvecs=context.first_attempt.device_estimated_matvecs,
+        history=context.first_attempt.history,
+        mv_count=int(context.mv_count),
+    )
+    return XBlockKrylovSolveState(
+        krylov_method=str(context.krylov_method),
+        x_solution=x_solution,
+        x_physical=physical_residual.x_physical,
+        residual_norm=float(physical_residual.residual_norm),
+        history=tuple(float(v) for v in context.first_attempt.history),
+        solve_s=float(context.solve_s),
+        device_iterations=context.first_attempt.device_iterations,
+        device_estimated_matvecs=context.first_attempt.device_estimated_matvecs,
+        reported_iterations=int(report.iterations),
+        reported_matvecs=int(report.matvecs),
+    )
+
+
+def xblock_krylov_state_from_gmres_fallback(
+    *,
+    fallback: XBlockGMRESFallbackResult,
+    mv_count: int,
+) -> XBlockKrylovSolveState:
+    """Convert an optional GMRES fallback result to physical-space solve state."""
+
+    report = xblock_krylov_report(
+        device_iterations=fallback.device_iterations,
+        device_estimated_matvecs=fallback.device_estimated_matvecs,
+        history=fallback.history,
+        mv_count=int(mv_count),
+    )
+    return XBlockKrylovSolveState(
+        krylov_method=str(fallback.krylov_method),
+        x_solution=np.asarray(fallback.x_solution, dtype=np.float64),
+        x_physical=np.asarray(fallback.x_physical, dtype=np.float64),
+        residual_norm=float(fallback.residual_norm),
+        history=tuple(float(v) for v in fallback.history),
+        solve_s=float(fallback.solve_s),
+        device_iterations=fallback.device_iterations,
+        device_estimated_matvecs=fallback.device_estimated_matvecs,
+        reported_iterations=int(report.iterations),
+        reported_matvecs=int(report.matvecs),
+        fallback_started_from_candidate=bool(fallback.fallback_started_from_candidate),
+        fallback_candidate_improved_rhs=bool(fallback.fallback_candidate_improved_rhs),
+    )
 
 
 def xblock_device_cycle_progress_message(
@@ -9720,6 +9813,8 @@ __all__ = [
     "XBlockDeviceKrylovState",
     "XBlockFirstKrylovAttemptContext",
     "XBlockFirstKrylovAttemptResult",
+    "XBlockFirstKrylovSolveStateContext",
+    "XBlockKrylovSolveState",
     "XBlockAugmentedKrylovBasisContext",
     "XBlockAugmentedKrylovBasisResult",
     "XBlockKrylovSolveSpace",
@@ -9803,6 +9898,8 @@ __all__ = [
     "xblock_device_krylov_state",
     "xblock_device_cycle_progress_message",
     "xblock_host_krylov_progress_message",
+    "xblock_krylov_state_from_first_attempt",
+    "xblock_krylov_state_from_gmres_fallback",
     "xblock_sparse_pc_completion_message",
     "xblock_gmres_fallback_decision",
     "xblock_krylov_report",
