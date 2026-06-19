@@ -42,8 +42,11 @@ Make `sfincs_jax` research-grade while preserving the public user contract:
 
 Recent checkpoints:
 
+- X-block sparse-PC post-coarse correction now uses a tested subspace
+  correction helper while keeping direction construction driver-local
+  (current checkpoint).
 - X-block sparse-PC post-minres now reuses the generic sparse-PC post-minres
-  helper with a solver-label parameter (current checkpoint).
+  helper with a solver-label parameter (`892beaf`).
 - RHSMode=1 strict linear retry handoff extraction for forced full,
   collision-preconditioner, and PAS Schur rescue branches
   (`353851c`).
@@ -428,6 +431,9 @@ Completed recent boundaries:
 - X-block sparse-PC post-minres residual-polish orchestration now uses the
   same tested helper as generic sparse-PC GMRES, with stable x-block progress
   labels and unchanged metadata variables.
+- X-block sparse-PC post-coarse residual-polish orchestration now uses a
+  reusable subspace-correction helper with explicit driver-provided direction
+  builders, stable progress labels, and unchanged metadata variables.
 
 Next steps:
 

@@ -44,6 +44,7 @@ from sfincs_jax.problems.profile_response.sparse_pc import (
     SparsePCPatternSetupContext,
     SparsePCPostMinresContext,
     SparsePCPostMinresUpdateContext,
+    XBlockSubspaceCorrectionContext,
     SparseHostDirectPayload,
     SparseHostDirectFactorSolvePayload,
     SparseHostDirectPolishPayload,
@@ -60,6 +61,7 @@ from sfincs_jax.problems.profile_response.sparse_pc import (
     apply_sparse_pc_post_minres,
     apply_sparse_pc_post_minres_if_needed,
     apply_sparse_pc_post_minres_from_driver_state,
+    apply_xblock_subspace_correction_if_needed,
     build_fortran_reduced_xblock_factor_stage,
     build_explicit_sparse_operator_from_pattern,
     build_fortran_reduced_xblock_krylov_setup,
@@ -5434,6 +5436,91 @@ def test_sparse_pc_post_minres_if_needed_preserves_state_when_disabled_or_conver
     assert disabled.solve_s == 3.0
     assert converged.residual_norm == 0.5
     assert converged.solve_s == 3.0
+
+
+def test_xblock_subspace_correction_accepts_improved_residual() -> None:
+    messages: list[str] = []
+    times = iter((2.0, 2.25))
+
+    def direction_builder(residual_vec):
+        return (("fsavg", residual_vec),)
+
+    def correction(**kwargs):
+        assert kwargs["steps"] == 2
+        assert kwargs["max_directions"] == 4
+        return (
+            jnp.asarray([0.5, 0.5]),
+            jnp.asarray([0.1, 0.2]),
+            (0.5, 0.25),
+            (1, 2),
+            ("fsavg", "angular"),
+        )
+
+    result = apply_xblock_subspace_correction_if_needed(
+        XBlockSubspaceCorrectionContext(
+            matvec=_identity,
+            rhs=jnp.zeros(2),
+            x=np.zeros(2),
+            residual_norm=1.0,
+            target=1.0e-6,
+            direction_builder=direction_builder,
+            steps=2,
+            max_directions=4,
+            alpha_clip=10.0,
+            rcond=1.0e-12,
+            min_improvement=0.0,
+            emit=lambda _level, msg: messages.append(msg),
+            elapsed_s=lambda: next(times),
+            correction=correction,
+        )
+    )
+
+    assert result.x.tolist() == [0.5, 0.5]
+    assert result.residual_norm == pytest.approx(np.linalg.norm([0.1, 0.2]))
+    assert result.history == (0.5, 0.25)
+    assert result.direction_counts == (1, 2)
+    assert result.direction_names == ("fsavg", "angular")
+    assert result.residual_before == 1.0
+    assert result.solve_s == pytest.approx(0.25)
+    assert any("xblock_sparse_pc_gmres post-coarse improved" in msg for msg in messages)
+
+
+def test_xblock_subspace_correction_rejects_nonimproving_residual() -> None:
+    messages: list[str] = []
+    times = iter((2.0, 2.25))
+
+    def correction(**_kwargs):
+        return (
+            jnp.asarray([2.0, 2.0]),
+            jnp.asarray([2.0, 0.0]),
+            (2.0,),
+            (1,),
+            ("fsavg",),
+        )
+
+    result = apply_xblock_subspace_correction_if_needed(
+        XBlockSubspaceCorrectionContext(
+            matvec=_identity,
+            rhs=jnp.zeros(2),
+            x=np.asarray([1.0, 1.0]),
+            residual_norm=1.0,
+            target=1.0e-6,
+            direction_builder=lambda residual_vec: (("fsavg", residual_vec),),
+            steps=1,
+            max_directions=4,
+            alpha_clip=10.0,
+            rcond=1.0e-12,
+            min_improvement=0.0,
+            emit=lambda _level, msg: messages.append(msg),
+            elapsed_s=lambda: next(times),
+            correction=correction,
+        )
+    )
+
+    assert result.x.tolist() == [1.0, 1.0]
+    assert result.residual_norm == 1.0
+    assert result.residual_after == 2.0
+    assert any("xblock_sparse_pc_gmres post-coarse rejected" in msg for msg in messages)
 
 
 def test_sparse_pc_post_minres_from_driver_state_updates_solve_state() -> None:

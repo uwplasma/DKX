@@ -232,10 +232,12 @@ from .problems.profile_response.sparse_pc import (
     SparsePCPatternSetupContext,
     SparsePCGMRESContext,
     SparsePCPostMinresUpdateContext,
+    XBlockSubspaceCorrectionContext,
     apply_fortran_reduced_xblock_global_coupling_stage,
     apply_fortran_reduced_xblock_initial_seed,
     apply_fortran_reduced_xblock_moment_schur_stage,
     apply_sparse_pc_post_minres_if_needed,
+    apply_xblock_subspace_correction_if_needed,
     build_fortran_reduced_xblock_factor_stage,
     build_fortran_reduced_xblock_krylov_setup,
     build_sparse_pc_pattern_setup,
@@ -6734,78 +6736,45 @@ def solve_v3_full_system_linear_gmres(
             post_minres_alphas = post_minres.alphas
             post_minres_residual_before = post_minres.residual_before
             post_minres_residual_after = post_minres.residual_after
-            if (
-                post_coarse_steps_requested > 0
-                and np.isfinite(float(residual_norm_xblock_pc))
-                and float(residual_norm_xblock_pc) > float(target_xblock)
-            ):
-                post_coarse_residual_before = float(residual_norm_xblock_pc)
-                post_coarse_start_s = sparse_timer.elapsed_s()
+            def _post_coarse_direction_builder(residual_vec: jnp.ndarray) -> tuple[tuple[str, jnp.ndarray], ...]:
+                return _xblock_coarse_direction_builder(
+                    residual_vec,
+                    include_raw=bool(post_coarse_include_raw),
+                    fsavg_lmax=int(post_coarse_fsavg_lmax),
+                    angular_lmax=int(post_coarse_angular_lmax),
+                    max_extra_units=int(post_coarse_max_extra_units),
+                    max_directions=int(post_coarse_max_directions),
+                    include_angular_residual=bool(post_coarse_include_angular_residual),
+                )
 
-                def _post_coarse_direction_builder(residual_vec: jnp.ndarray) -> tuple[tuple[str, jnp.ndarray], ...]:
-                    return _xblock_coarse_direction_builder(
-                        residual_vec,
-                        include_raw=bool(post_coarse_include_raw),
-                        fsavg_lmax=int(post_coarse_fsavg_lmax),
-                        angular_lmax=int(post_coarse_angular_lmax),
-                        max_extra_units=int(post_coarse_max_extra_units),
-                        max_directions=int(post_coarse_max_directions),
-                        include_angular_residual=bool(post_coarse_include_angular_residual),
-                    )
-
-                try:
-                    (
-                        x_coarse,
-                        residual_coarse,
-                        post_coarse_history,
-                        post_coarse_direction_counts,
-                        post_coarse_direction_names,
-                    ) = _apply_subspace_minres_correction(
-                        matvec=_mv_true,
-                        rhs=xblock_rhs,
-                        x0=jnp.asarray(x_np, dtype=jnp.float64),
-                        direction_builder=_post_coarse_direction_builder,
-                        steps=post_coarse_steps_requested,
-                        max_directions=post_coarse_max_directions,
-                        alpha_clip=post_coarse_alpha_clip,
-                        rcond=post_coarse_rcond,
-                        min_improvement=post_coarse_min_improvement,
-                    )
-                    post_coarse_residual_after = float(jnp.linalg.norm(residual_coarse))
-                    if (
-                        np.isfinite(float(post_coarse_residual_after))
-                        and float(post_coarse_residual_after) < float(residual_norm_xblock_pc)
-                    ):
-                        x_np = np.asarray(x_coarse, dtype=np.float64)
-                        residual_norm_xblock_pc = float(post_coarse_residual_after)
-                        if emit is not None:
-                            emit(
-                                0,
-                                "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
-                                f"post-coarse improved residual {post_coarse_residual_before:.6e} "
-                                f"-> {post_coarse_residual_after:.6e} "
-                                f"(steps={len(post_coarse_direction_counts)} "
-                                f"directions={sum(post_coarse_direction_counts)})",
-                            )
-                    elif emit is not None:
-                        after = (
-                            float(post_coarse_residual_after)
-                            if post_coarse_residual_after is not None
-                            else float("nan")
-                        )
-                        emit(
-                            1,
-                            "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
-                            f"post-coarse rejected residual {post_coarse_residual_before:.6e} -> {after:.6e}",
-                        )
-                except Exception as exc:  # noqa: BLE001
-                    if emit is not None:
-                        emit(
-                            1,
-                            "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
-                            f"post-coarse failed ({type(exc).__name__}: {exc})",
-                        )
-                solve_s += sparse_timer.elapsed_s() - post_coarse_start_s
+            post_coarse = apply_xblock_subspace_correction_if_needed(
+                XBlockSubspaceCorrectionContext(
+                    matvec=_mv_true,
+                    rhs=xblock_rhs,
+                    x=np.asarray(x_np, dtype=np.float64),
+                    residual_norm=float(residual_norm_xblock_pc),
+                    target=float(target_xblock),
+                    direction_builder=_post_coarse_direction_builder,
+                    steps=int(post_coarse_steps_requested),
+                    max_directions=int(post_coarse_max_directions),
+                    alpha_clip=float(post_coarse_alpha_clip),
+                    rcond=float(post_coarse_rcond),
+                    min_improvement=float(post_coarse_min_improvement),
+                    emit=emit,
+                    elapsed_s=sparse_timer.elapsed_s,
+                    correction=_apply_subspace_minres_correction,
+                    solver_label="xblock_sparse_pc_gmres",
+                    correction_label="post-coarse",
+                )
+            )
+            x_np = np.asarray(post_coarse.x, dtype=np.float64)
+            residual_norm_xblock_pc = float(post_coarse.residual_norm)
+            solve_s += float(post_coarse.solve_s)
+            post_coarse_history = post_coarse.history
+            post_coarse_direction_counts = post_coarse.direction_counts
+            post_coarse_direction_names = post_coarse.direction_names
+            post_coarse_residual_before = post_coarse.residual_before
+            post_coarse_residual_after = post_coarse.residual_after
             if emit is not None:
                 ksp_suffix = f" ksp_residual={float(history[-1]):.6e}" if history else ""
                 emit(

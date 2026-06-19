@@ -260,6 +260,43 @@ class SparsePCPostMinresUpdateResult:
 
 
 @dataclass(frozen=True)
+class XBlockSubspaceCorrectionContext:
+    """Dependencies for an x-block sparse-PC subspace correction."""
+
+    matvec: ArrayFn
+    rhs: jnp.ndarray
+    x: np.ndarray
+    residual_norm: float
+    target: float
+    direction_builder: Callable[[jnp.ndarray], tuple[tuple[str, jnp.ndarray], ...]]
+    steps: int
+    max_directions: int
+    alpha_clip: float
+    rcond: float
+    min_improvement: float
+    emit: EmitFn | None
+    elapsed_s: Callable[[], float]
+    correction: Callable[..., tuple[jnp.ndarray, jnp.ndarray, Sequence[float], Sequence[int], Sequence[str]]]
+    solver_label: str = "xblock_sparse_pc_gmres"
+    correction_label: str = "post-coarse"
+
+
+@dataclass(frozen=True)
+class XBlockSubspaceCorrectionResult:
+    """Accepted x-block subspace correction state and diagnostics."""
+
+    x: np.ndarray
+    residual_norm: float
+    history: tuple[float, ...]
+    direction_counts: tuple[int, ...]
+    direction_names: tuple[str, ...]
+    residual_before: float | None
+    residual_after: float | None
+    error: str | None
+    solve_s: float
+
+
+@dataclass(frozen=True)
 class SparsePCActiveDOFSetup:
     """Active-DOF maps and vector routing for the generic sparse-PC path."""
 
@@ -7897,6 +7934,99 @@ def apply_sparse_pc_post_minres_from_driver_state(
     )
 
 
+def apply_xblock_subspace_correction_if_needed(
+    context: XBlockSubspaceCorrectionContext,
+) -> XBlockSubspaceCorrectionResult:
+    """Apply one x-block subspace correction and accept only residual improvement."""
+
+    x_out = np.asarray(context.x, dtype=np.float64)
+    residual_current = float(context.residual_norm)
+    if (
+        int(context.steps) <= 0
+        or not np.isfinite(residual_current)
+        or residual_current <= float(context.target)
+    ):
+        return XBlockSubspaceCorrectionResult(
+            x=x_out,
+            residual_norm=residual_current,
+            history=(),
+            direction_counts=(),
+            direction_names=(),
+            residual_before=None,
+            residual_after=None,
+            error=None,
+            solve_s=0.0,
+        )
+
+    residual_before = residual_current
+    start_s = float(context.elapsed_s())
+    history: tuple[float, ...] = ()
+    direction_counts: tuple[int, ...] = ()
+    direction_names: tuple[str, ...] = ()
+    residual_after: float | None = None
+    error: str | None = None
+    try:
+        (
+            x_candidate,
+            residual_candidate,
+            correction_history,
+            correction_direction_counts,
+            correction_direction_names,
+        ) = context.correction(
+            matvec=context.matvec,
+            rhs=context.rhs,
+            x0=jnp.asarray(x_out, dtype=jnp.float64),
+            direction_builder=context.direction_builder,
+            steps=int(context.steps),
+            max_directions=int(context.max_directions),
+            alpha_clip=float(context.alpha_clip),
+            rcond=float(context.rcond),
+            min_improvement=float(context.min_improvement),
+        )
+        history = tuple(float(v) for v in correction_history)
+        direction_counts = tuple(int(v) for v in correction_direction_counts)
+        direction_names = tuple(str(v) for v in correction_direction_names)
+        residual_after = float(jnp.linalg.norm(residual_candidate))
+        if np.isfinite(float(residual_after)) and float(residual_after) < residual_current:
+            x_out = np.asarray(x_candidate, dtype=np.float64)
+            residual_current = float(residual_after)
+            if context.emit is not None:
+                context.emit(
+                    0,
+                    f"solve_v3_full_system_linear_gmres: {context.solver_label} "
+                    f"{context.correction_label} improved residual {residual_before:.6e} "
+                    f"-> {residual_after:.6e} "
+                    f"(steps={len(direction_counts)} directions={sum(direction_counts)})",
+                )
+        elif context.emit is not None:
+            after = float(residual_after) if residual_after is not None else float("nan")
+            context.emit(
+                1,
+                f"solve_v3_full_system_linear_gmres: {context.solver_label} "
+                f"{context.correction_label} rejected residual {residual_before:.6e} -> {after:.6e}",
+            )
+    except Exception as exc:  # noqa: BLE001
+        error = f"{type(exc).__name__}: {exc}"
+        if context.emit is not None:
+            context.emit(
+                1,
+                f"solve_v3_full_system_linear_gmres: {context.solver_label} "
+                f"{context.correction_label} failed ({error})",
+            )
+
+    return XBlockSubspaceCorrectionResult(
+        x=x_out,
+        residual_norm=float(residual_current),
+        history=history,
+        direction_counts=direction_counts,
+        direction_names=direction_names,
+        residual_before=float(residual_before),
+        residual_after=residual_after,
+        error=error,
+        solve_s=float(context.elapsed_s()) - start_s,
+    )
+
+
 __all__ = [
     "FortranReducedSparsePCBackendSetup",
     "FortranReducedXBlockFactorPolicySetup",
@@ -7962,12 +8092,15 @@ __all__ = [
     "SparsePCPostMinresResult",
     "SparsePCPostMinresUpdateContext",
     "SparsePCPostMinresUpdateResult",
+    "XBlockSubspaceCorrectionContext",
+    "XBlockSubspaceCorrectionResult",
     "apply_fortran_reduced_xblock_global_coupling_stage",
     "apply_fortran_reduced_xblock_initial_seed",
     "apply_fortran_reduced_xblock_moment_schur_stage",
     "apply_sparse_pc_post_minres",
     "apply_sparse_pc_post_minres_if_needed",
     "apply_sparse_pc_post_minres_from_driver_state",
+    "apply_xblock_subspace_correction_if_needed",
     "build_fortran_reduced_xblock_factor_stage",
     "build_fortran_reduced_xblock_krylov_setup",
     "build_sparse_pc_active_dof_setup",
