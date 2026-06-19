@@ -220,6 +220,7 @@ from .problems.profile_response.sparse_pc import (
     FortranReducedXBlockMomentSchurStageContext,
     SparsePCMemoryBudgetPreflightContext,
     SparsePCFactorPreflightPolicyContext,
+    SparsePCFactorPreflightEvaluationContext,
     SparsePCPatternSetupContext,
     SparsePCGMRESContext,
     SparsePCPostMinresContext,
@@ -239,6 +240,7 @@ from .problems.profile_response.sparse_pc import (
     build_sparse_pc_active_dof_setup,
     build_direct_tail_materialization_setup,
     evaluate_xblock_moment_schur_probe_result,
+    evaluate_sparse_pc_factor_preflight,
     enforce_sparse_pc_memory_budget,
     failed_xblock_global_coupling_metadata,
     failed_xblock_moment_schur_metadata,
@@ -7957,46 +7959,30 @@ def solve_v3_full_system_linear_gmres(
 
         if bool(factor_preflight_enabled) and x0_sparse is None:
             try:
-                factor_preflight_residual_before = float(sparse_pc_rhs_norm)
-                x_seed_sparse = jnp.asarray(_precond_sparse(sparse_pc_rhs), dtype=jnp.float64)
-                residual_vec_seed = sparse_pc_rhs - jnp.asarray(_mv_true(x_seed_sparse), dtype=jnp.float64)
-                residual_vec_current = residual_vec_seed
-                factor_preflight_residual_after = float(jnp.linalg.norm(residual_vec_seed))
-                factor_preflight_residual_diagnostics = _rhs1_active_reduced_residual_diagnostics(
-                    residual=residual_vec_seed,
-                    layout=RHS1BlockLayout.from_operator(op),
-                    active_indices=sparse_pc_active_idx_np if sparse_pc_use_active_dof else None,
-                )
-                if (
-                    factor_preflight_residual_before is not None
-                    and float(factor_preflight_residual_before) > 0.0
-                    and np.isfinite(float(factor_preflight_residual_after))
-                ):
-                    factor_preflight_improvement_ratio = (
-                        float(factor_preflight_residual_before)
-                        / max(float(factor_preflight_residual_after), 1.0e-300)
-                    )
-                if float(target) > 0.0:
-                    factor_preflight_target_ratio = (
-                        float(factor_preflight_residual_after) / float(target)
-                        if np.isfinite(float(factor_preflight_residual_after))
-                        else float("inf")
-                    )
-                factor_preflight_passed = bool(
-                    np.isfinite(float(factor_preflight_residual_after))
-                    and float(factor_preflight_residual_after) < float(factor_preflight_residual_before)
-                    and (
-                        factor_preflight_target_ratio is None
-                        or float(factor_preflight_target_ratio) <= float(factor_preflight_max_target_ratio)
+                factor_preflight_evaluation = evaluate_sparse_pc_factor_preflight(
+                    SparsePCFactorPreflightEvaluationContext(
+                        rhs=sparse_pc_rhs,
+                        rhs_norm=float(sparse_pc_rhs_norm),
+                        target=float(target),
+                        preconditioner=_precond_sparse,
+                        matvec=_mv_true,
+                        diagnostics=_rhs1_active_reduced_residual_diagnostics,
+                        layout=RHS1BlockLayout.from_operator(op),
+                        active_indices=sparse_pc_active_idx_np if sparse_pc_use_active_dof else None,
+                        seed_enabled=bool(factor_preflight_seed_enabled),
+                        max_target_ratio=float(factor_preflight_max_target_ratio),
                     )
                 )
-                if (
-                    bool(factor_preflight_seed_enabled)
-                    and np.isfinite(float(factor_preflight_residual_after))
-                    and float(factor_preflight_residual_after) < float(factor_preflight_residual_before)
-                ):
-                    x0_sparse = x_seed_sparse
-                    factor_preflight_seed_used = True
+                factor_preflight_residual_before = float(factor_preflight_evaluation.residual_before)
+                factor_preflight_residual_after = float(factor_preflight_evaluation.residual_after)
+                factor_preflight_residual_diagnostics = factor_preflight_evaluation.diagnostics
+                factor_preflight_improvement_ratio = factor_preflight_evaluation.improvement_ratio
+                factor_preflight_target_ratio = factor_preflight_evaluation.target_ratio
+                factor_preflight_passed = bool(factor_preflight_evaluation.passed)
+                factor_preflight_seed_used = bool(factor_preflight_evaluation.seed_used)
+                residual_vec_current = factor_preflight_evaluation.residual_vec
+                if factor_preflight_evaluation.x0_seed is not None:
+                    x0_sparse = factor_preflight_evaluation.x0_seed
                 if emit is not None:
                     emit(
                         1,

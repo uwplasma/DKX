@@ -595,6 +595,38 @@ class SparsePCFactorPreflightPolicy:
 
 
 @dataclass(frozen=True)
+class SparsePCFactorPreflightEvaluationContext:
+    """Callbacks and controls for one sparse-PC factor residual preflight."""
+
+    rhs: jnp.ndarray
+    rhs_norm: float
+    target: float
+    preconditioner: ArrayFn
+    matvec: ArrayFn
+    diagnostics: Callable[..., dict[str, object]]
+    layout: Any
+    active_indices: np.ndarray | None
+    seed_enabled: bool
+    max_target_ratio: float
+
+
+@dataclass(frozen=True)
+class SparsePCFactorPreflightEvaluationResult:
+    """Residual-preflight result for sparse-PC factor admission."""
+
+    residual_before: float
+    residual_after: float
+    improvement_ratio: float | None
+    target_ratio: float | None
+    diagnostics: dict[str, object] | None
+    seed_used: bool
+    passed: bool
+    x_seed: jnp.ndarray
+    residual_vec: jnp.ndarray
+    x0_seed: jnp.ndarray | None
+
+
+@dataclass(frozen=True)
 class DirectTailResidualRescuePolicy:
     """Resolved direct-tail residual rescue controls."""
 
@@ -3140,6 +3172,58 @@ def resolve_sparse_pc_factor_preflight_policy(
         ),
         structured_pc_preflight_required=bool(structured_pc_preflight_required),
         factor_preflight_max_target_ratio=float(factor_preflight_max_target_ratio),
+    )
+
+
+def evaluate_sparse_pc_factor_preflight(
+    context: SparsePCFactorPreflightEvaluationContext,
+) -> SparsePCFactorPreflightEvaluationResult:
+    """Evaluate whether the current sparse factor is a useful seed."""
+
+    residual_before = float(context.rhs_norm)
+    rhs = jnp.asarray(context.rhs, dtype=jnp.float64)
+    x_seed = jnp.asarray(context.preconditioner(rhs), dtype=jnp.float64)
+    residual_vec = rhs - jnp.asarray(context.matvec(x_seed), dtype=jnp.float64)
+    residual_after = float(jnp.linalg.norm(residual_vec))
+    residual_diagnostics = context.diagnostics(
+        residual=residual_vec,
+        layout=context.layout,
+        active_indices=context.active_indices,
+    )
+    improvement_ratio: float | None = None
+    if residual_before > 0.0 and np.isfinite(float(residual_after)):
+        improvement_ratio = float(residual_before) / max(float(residual_after), 1.0e-300)
+    target_ratio: float | None = None
+    if float(context.target) > 0.0:
+        target_ratio = (
+            float(residual_after) / float(context.target)
+            if np.isfinite(float(residual_after))
+            else float("inf")
+        )
+    passed = bool(
+        np.isfinite(float(residual_after))
+        and float(residual_after) < float(residual_before)
+        and (
+            target_ratio is None
+            or float(target_ratio) <= float(context.max_target_ratio)
+        )
+    )
+    seed_used = bool(
+        context.seed_enabled
+        and np.isfinite(float(residual_after))
+        and float(residual_after) < float(residual_before)
+    )
+    return SparsePCFactorPreflightEvaluationResult(
+        residual_before=float(residual_before),
+        residual_after=float(residual_after),
+        improvement_ratio=improvement_ratio,
+        target_ratio=target_ratio,
+        diagnostics=residual_diagnostics,
+        seed_used=bool(seed_used),
+        passed=bool(passed),
+        x_seed=x_seed,
+        residual_vec=residual_vec,
+        x0_seed=x_seed if bool(seed_used) else None,
     )
 
 
@@ -6239,6 +6323,8 @@ __all__ = [
     "DirectTailSupportModePreflightResult",
     "SparsePCFactorPreflightPolicyContext",
     "SparsePCFactorPreflightPolicy",
+    "SparsePCFactorPreflightEvaluationContext",
+    "SparsePCFactorPreflightEvaluationResult",
     "DirectTailResidualRescuePolicy",
     "DirectTailTrueActiveRescuePolicy",
     "DirectTailCoupledCoarseRescuePolicy",
@@ -6266,6 +6352,7 @@ __all__ = [
     "build_direct_tail_materialization_setup",
     "build_direct_tail_structured_preconditioner_setup",
     "enforce_sparse_pc_memory_budget",
+    "evaluate_sparse_pc_factor_preflight",
     "resolve_sparse_pc_factor_preflight_policy",
     "resolve_direct_tail_residual_rescue_policy",
     "resolve_direct_tail_true_active_rescue_policy",

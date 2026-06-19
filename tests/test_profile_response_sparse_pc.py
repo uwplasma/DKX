@@ -24,6 +24,7 @@ from sfincs_jax.problems.profile_response.sparse_pc import (
     DirectTailTrueActiveRescuePolicy,
     DirectTailCoupledCoarseRescuePolicy,
     SparsePCFactorPreflightPolicyContext,
+    SparsePCFactorPreflightEvaluationContext,
     FortranReducedXBlockFactorBuildContext,
     FortranReducedXBlockGlobalCouplingStageContext,
     FortranReducedXBlockKrylovSetupContext,
@@ -52,6 +53,7 @@ from sfincs_jax.problems.profile_response.sparse_pc import (
     build_xblock_krylov_matvec_setup,
     enforce_sparse_pc_memory_budget,
     evaluate_xblock_moment_schur_probe_result,
+    evaluate_sparse_pc_factor_preflight,
     failed_xblock_global_coupling_metadata,
     failed_xblock_two_level_metadata,
     failed_xblock_moment_schur_metadata,
@@ -1154,6 +1156,64 @@ def test_sparse_pc_factor_preflight_policy_uses_size_trigger_and_overrides() -> 
     assert policy.direct_tail_structured_pc_size_requires_preflight is True
     assert policy.structured_pc_preflight_required is False
     assert policy.factor_preflight_max_target_ratio == 1.0
+
+
+def test_sparse_pc_factor_preflight_evaluation_passes_and_seeds() -> None:
+    diagnostics_calls: list[dict[str, object]] = []
+
+    def diagnostics(**kwargs):
+        diagnostics_calls.append(kwargs)
+        return {"selected": True}
+
+    result = evaluate_sparse_pc_factor_preflight(
+        SparsePCFactorPreflightEvaluationContext(
+            rhs=jnp.asarray([2.0]),
+            rhs_norm=2.0,
+            target=0.1,
+            preconditioner=lambda _rhs: jnp.asarray([1.0]),
+            matvec=lambda _x: jnp.asarray([1.5]),
+            diagnostics=diagnostics,
+            layout=_FakeLayout(),
+            active_indices=np.array([0], dtype=np.int64),
+            seed_enabled=True,
+            max_target_ratio=10.0,
+        )
+    )
+
+    assert result.residual_before == 2.0
+    assert result.residual_after == 0.5
+    assert result.improvement_ratio == 4.0
+    assert result.target_ratio == 5.0
+    assert result.passed is True
+    assert result.seed_used is True
+    np.testing.assert_allclose(np.asarray(result.x0_seed), np.asarray([1.0]))
+    np.testing.assert_allclose(np.asarray(result.residual_vec), np.asarray([0.5]))
+    assert result.diagnostics == {"selected": True}
+    assert diagnostics_calls[0]["layout"].to_dict() == {"total_size": 3, "f_size": 2}
+    np.testing.assert_array_equal(diagnostics_calls[0]["active_indices"], np.array([0]))
+
+
+def test_sparse_pc_factor_preflight_evaluation_rejects_large_target_ratio() -> None:
+    result = evaluate_sparse_pc_factor_preflight(
+        SparsePCFactorPreflightEvaluationContext(
+            rhs=jnp.asarray([2.0]),
+            rhs_norm=2.0,
+            target=0.1,
+            preconditioner=lambda _rhs: jnp.asarray([1.0]),
+            matvec=lambda _x: jnp.asarray([1.5]),
+            diagnostics=lambda **_kwargs: {},
+            layout=_FakeLayout(),
+            active_indices=None,
+            seed_enabled=False,
+            max_target_ratio=2.0,
+        )
+    )
+
+    assert result.residual_after == 0.5
+    assert result.target_ratio == 5.0
+    assert result.passed is False
+    assert result.seed_used is False
+    assert result.x0_seed is None
 
 
 def test_direct_tail_residual_rescue_policy_defaults() -> None:
