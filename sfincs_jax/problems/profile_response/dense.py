@@ -71,6 +71,105 @@ class RHS1ReducedDenseFallbackCandidateContext:
     backend: str | None = None
 
 
+@dataclass(frozen=True)
+class RHS1DenseProbeAdmission:
+    """Whether the reduced-system dense probe should run."""
+
+    enabled: bool
+
+
+@dataclass(frozen=True)
+class RHS1DenseProbeShortcutDecision:
+    """Dense-probe shortcut decision after the probe residual is known."""
+
+    accept_shortcut: bool
+    seed_x0_if_missing: bool
+    messages: tuple[tuple[int, str], ...] = ()
+
+
+def rhs1_dense_probe_enabled_from_env() -> bool:
+    """Return whether the reduced dense probe is globally enabled."""
+
+    probe_env = os.environ.get("SFINCS_JAX_RHSMODE1_DENSE_PROBE", "").strip().lower()
+    return probe_env not in {"0", "false", "no", "off"}
+
+
+def rhs1_dense_probe_admission(
+    *,
+    probe_enabled: bool,
+    probe_shortcut: bool,
+    cs0_petsc_compat: bool,
+    cs0_sparse_first: bool,
+    cs0_dense_fallback_allowed: bool,
+    constraint_scheme: int,
+    has_preconditioner: bool,
+    solve_method_kind: str,
+) -> RHS1DenseProbeAdmission:
+    """Apply cheap guards before evaluating a reduced dense fallback probe."""
+
+    enabled = (
+        bool(probe_enabled)
+        and (not bool(probe_shortcut))
+        and (not bool(cs0_petsc_compat))
+        and (not bool(cs0_sparse_first))
+        and (bool(cs0_dense_fallback_allowed) or int(constraint_scheme) != 0)
+        and bool(has_preconditioner)
+        and str(solve_method_kind) not in {"dense", "dense_ksp"}
+    )
+    return RHS1DenseProbeAdmission(enabled=bool(enabled))
+
+
+def rhs1_dense_probe_shortcut_decision(
+    *,
+    dense_shortcut_ratio: float,
+    probe_ratio: float,
+    dense_fallback_max: int,
+    active_size: int,
+    sparse_prefer_over_dense_shortcut: bool,
+) -> RHS1DenseProbeShortcutDecision:
+    """Resolve whether a dense probe should become an early dense shortcut."""
+
+    if float(dense_shortcut_ratio) <= 0.0 or float(probe_ratio) < float(
+        dense_shortcut_ratio
+    ):
+        return RHS1DenseProbeShortcutDecision(
+            accept_shortcut=False,
+            seed_x0_if_missing=True,
+        )
+
+    allow_probe_shortcut = int(dense_fallback_max) > 0 and int(active_size) <= int(
+        dense_fallback_max
+    )
+    if allow_probe_shortcut and (not bool(sparse_prefer_over_dense_shortcut)):
+        return RHS1DenseProbeShortcutDecision(
+            accept_shortcut=True,
+            seed_x0_if_missing=False,
+            messages=(
+                (
+                    0,
+                    "solve_v3_full_system_linear_gmres: dense fallback shortcut (probe) "
+                    f"(ratio={float(probe_ratio):.3e} >= {float(dense_shortcut_ratio):.1e})",
+                ),
+            ),
+        )
+
+    if bool(sparse_prefer_over_dense_shortcut) and allow_probe_shortcut:
+        message = (
+            "solve_v3_full_system_linear_gmres: probe shortcut skipped "
+            "(preferring sparse rescue over dense shortcut)"
+        )
+    else:
+        message = (
+            "solve_v3_full_system_linear_gmres: probe shortcut skipped "
+            f"(size={int(active_size)} > dense_max={int(dense_fallback_max)})"
+        )
+    return RHS1DenseProbeShortcutDecision(
+        accept_shortcut=False,
+        seed_x0_if_missing=True,
+        messages=((1, message),),
+    )
+
+
 def solve_host_dense_reduced(
     *,
     context: HostDenseReducedSolveContext,
@@ -398,9 +497,14 @@ def _solve_rhs1_reduced_dense_fallback_host_candidate(
 
 
 __all__ = [
+    "RHS1DenseProbeAdmission",
+    "RHS1DenseProbeShortcutDecision",
     "HostDenseFullSolveContext",
     "HostDenseReducedSolveContext",
     "RHS1ReducedDenseFallbackCandidateContext",
+    "rhs1_dense_probe_admission",
+    "rhs1_dense_probe_enabled_from_env",
+    "rhs1_dense_probe_shortcut_decision",
     "solve_rhs1_reduced_dense_fallback_candidate",
     "solve_host_dense_full",
     "solve_host_dense_reduced",

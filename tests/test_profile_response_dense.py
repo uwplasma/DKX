@@ -8,6 +8,9 @@ from sfincs_jax.problems.profile_response.dense import (
     HostDenseFullSolveContext,
     HostDenseReducedSolveContext,
     RHS1ReducedDenseFallbackCandidateContext,
+    rhs1_dense_probe_admission,
+    rhs1_dense_probe_enabled_from_env,
+    rhs1_dense_probe_shortcut_decision,
     solve_rhs1_reduced_dense_fallback_candidate,
     solve_host_dense_full,
     solve_host_dense_reduced,
@@ -92,6 +95,102 @@ def test_host_dense_full_lstsq_handles_rectangular_operator(monkeypatch) -> None
     assert result.x.tolist() == pytest.approx(expected.tolist())
     assert residual.tolist() == pytest.approx((np.asarray(rhs) - a_np @ expected).tolist())
     assert float(result.residual_norm) == pytest.approx(float(np.linalg.norm(np.asarray(residual))))
+
+
+def test_rhs1_dense_probe_enabled_from_env_defaults_on_and_respects_false(
+    monkeypatch,
+) -> None:
+    monkeypatch.delenv("SFINCS_JAX_RHSMODE1_DENSE_PROBE", raising=False)
+    assert rhs1_dense_probe_enabled_from_env()
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_DENSE_PROBE", "off")
+    assert not rhs1_dense_probe_enabled_from_env()
+
+
+def test_rhs1_dense_probe_admission_applies_driver_guards() -> None:
+    base = dict(
+        probe_enabled=True,
+        probe_shortcut=False,
+        cs0_petsc_compat=False,
+        cs0_sparse_first=False,
+        cs0_dense_fallback_allowed=True,
+        constraint_scheme=0,
+        has_preconditioner=True,
+        solve_method_kind="incremental",
+    )
+    assert rhs1_dense_probe_admission(**base).enabled
+    assert not rhs1_dense_probe_admission(**{**base, "probe_enabled": False}).enabled
+    assert not rhs1_dense_probe_admission(**{**base, "probe_shortcut": True}).enabled
+    assert not rhs1_dense_probe_admission(**{**base, "cs0_petsc_compat": True}).enabled
+    assert not rhs1_dense_probe_admission(**{**base, "cs0_sparse_first": True}).enabled
+    assert not rhs1_dense_probe_admission(
+        **{**base, "cs0_dense_fallback_allowed": False, "constraint_scheme": 0}
+    ).enabled
+    assert rhs1_dense_probe_admission(
+        **{**base, "cs0_dense_fallback_allowed": False, "constraint_scheme": 1}
+    ).enabled
+    assert not rhs1_dense_probe_admission(**{**base, "has_preconditioner": False}).enabled
+    assert not rhs1_dense_probe_admission(**{**base, "solve_method_kind": "dense"}).enabled
+    assert not rhs1_dense_probe_admission(**{**base, "solve_method_kind": "dense_ksp"}).enabled
+
+
+def test_rhs1_dense_probe_shortcut_decision_accepts_or_seeds_probe() -> None:
+    decision = rhs1_dense_probe_shortcut_decision(
+        dense_shortcut_ratio=10.0,
+        probe_ratio=12.0,
+        dense_fallback_max=200,
+        active_size=100,
+        sparse_prefer_over_dense_shortcut=False,
+    )
+    assert decision.accept_shortcut
+    assert not decision.seed_x0_if_missing
+    assert decision.messages == ((
+        0,
+        "solve_v3_full_system_linear_gmres: dense fallback shortcut (probe) "
+        "(ratio=1.200e+01 >= 1.0e+01)",
+    ),)
+
+    decision = rhs1_dense_probe_shortcut_decision(
+        dense_shortcut_ratio=10.0,
+        probe_ratio=8.0,
+        dense_fallback_max=200,
+        active_size=100,
+        sparse_prefer_over_dense_shortcut=False,
+    )
+    assert not decision.accept_shortcut
+    assert decision.seed_x0_if_missing
+    assert decision.messages == ()
+
+
+def test_rhs1_dense_probe_shortcut_decision_reports_skip_reasons() -> None:
+    decision = rhs1_dense_probe_shortcut_decision(
+        dense_shortcut_ratio=10.0,
+        probe_ratio=12.0,
+        dense_fallback_max=200,
+        active_size=100,
+        sparse_prefer_over_dense_shortcut=True,
+    )
+    assert not decision.accept_shortcut
+    assert decision.seed_x0_if_missing
+    assert decision.messages == ((
+        1,
+        "solve_v3_full_system_linear_gmres: probe shortcut skipped "
+        "(preferring sparse rescue over dense shortcut)",
+    ),)
+
+    decision = rhs1_dense_probe_shortcut_decision(
+        dense_shortcut_ratio=10.0,
+        probe_ratio=12.0,
+        dense_fallback_max=50,
+        active_size=100,
+        sparse_prefer_over_dense_shortcut=False,
+    )
+    assert not decision.accept_shortcut
+    assert decision.seed_x0_if_missing
+    assert decision.messages == ((
+        1,
+        "solve_v3_full_system_linear_gmres: probe shortcut skipped "
+        "(size=100 > dense_max=50)",
+    ),)
 
 
 def test_rhs1_reduced_dense_fallback_candidate_host_lu(monkeypatch) -> None:

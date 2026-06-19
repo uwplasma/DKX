@@ -42,10 +42,13 @@ Make `sfincs_jax` research-grade while preserving the public user contract:
 
 Recent checkpoints:
 
+- RHSMode=1 reduced dense-probe enable/admission and shortcut/skip decision
+  logic now uses tested dense profile-response helpers while probe execution
+  and KSP replay updates remain driver-owned (current checkpoint).
 - RHSMode=1 constraintScheme=0 PETSc-compatible sparse-ILU controls and
   diagonal regularization parsing now use tested policy helpers while matrix
   assembly, ordering, factorization, and solve execution remain driver-owned
-  (current checkpoint).
+  (`29d0ca6`).
 - RHSMode=1 reduced sparse-operator matvec admission now uses a tested
   side-effect-free policy helper, including implicit-solve and size rejection
   messages while driver-local operator materialization remains unchanged
@@ -165,21 +168,31 @@ Recent checkpoints:
 - `cb295ce` Extract sparse pattern setup.
 - `4b6a5b4` Extract sparse factor policy.
 
-Current source-size snapshot after constraintScheme=0 PETSc config extraction:
+Current source-size snapshot after dense-probe policy extraction:
 
-- `sfincs_jax/v3_driver.py`: `18045` lines.
-- `solve_v3_full_system_linear_gmres`: `12718` lines.
+- `sfincs_jax/v3_driver.py`: `18034` lines.
+- `solve_v3_full_system_linear_gmres`: `12704` lines.
 - `sfincs_jax/v3_results.py`: `119` lines.
 - `sfincs_jax/problems/profile_response/residual.py`: `981` lines.
 - `sfincs_jax/problems/profile_response/handoff.py`: `598` lines.
 - `sfincs_jax/problems/profile_response/policies.py`: `2985` lines.
-- `sfincs_jax/problems/profile_response/dense.py`: `407` lines.
+- `sfincs_jax/problems/profile_response/dense.py`: `511` lines.
 - `sfincs_jax/problems/profile_response/linear_solve.py`: `327` lines.
 - `sfincs_jax/problems/profile_response/active_projection.py`: `116` lines.
 - `sfincs_jax/problems/profile_response/sparse_pc.py`: `8543` lines.
 
 Recent local validation:
 
+- Dense profile-response shard after dense-probe policy extraction:
+  `10 passed in 1.12 s`.
+- Sparse-host/minimum-norm/direct-tail driver shard:
+  `32 passed, 100 deselected in 36.30 s`.
+- Broad profile-response/RHSMode=1 policy, setup, diagnostics, solver, and
+  helper sweep after dense-probe policy extraction:
+  `1050 passed in 49.59 s`.
+- Hygiene:
+  `ruff`, `compileall`, `git diff --check`, and `scripts/check_repo_size.py`
+  passed.
 - ConstraintScheme=0 policy/docstring shard after PETSc-compat config
   extraction:
   `13 passed in 0.63 s`.
@@ -471,6 +484,9 @@ Completed recent boundaries:
 - RHSMode=1 constraintScheme=0 PETSc-compatible sparse-ILU controls and
   diagonal regularization parsing now use tested profile-response policy
   helpers while preserving driver-local SciPy sparse execution.
+- RHSMode=1 reduced dense-probe global enable, admission guards, shortcut
+  acceptance, seed decision, and skip-message formatting now use tested dense
+  profile-response helpers.
 
 Next steps:
 

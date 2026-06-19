@@ -190,6 +190,9 @@ from .problems.profile_response.dense import (
     HostDenseFullSolveContext,
     HostDenseReducedSolveContext,
     RHS1ReducedDenseFallbackCandidateContext,
+    rhs1_dense_probe_admission,
+    rhs1_dense_probe_enabled_from_env,
+    rhs1_dense_probe_shortcut_decision,
     solve_host_dense_full,
     solve_host_dense_reduced,
     solve_rhs1_reduced_dense_fallback_candidate,
@@ -11154,58 +11157,44 @@ def solve_v3_full_system_linear_gmres(
                         "solve_v3_full_system_linear_gmres: constraintScheme=0 PETSc-compat solve failed "
                         f"({type(exc).__name__}: {exc})",
                     )
-        probe_env = os.environ.get("SFINCS_JAX_RHSMODE1_DENSE_PROBE", "").strip().lower()
-        probe_enabled = probe_env not in {"0", "false", "no", "off"}
-        if (
-            probe_enabled
-            and (not probe_shortcut)
-            and (not cs0_petsc_compat)
-            and (not cs0_sparse_first)
-            and (cs0_dense_fallback_allowed or int(op.constraint_scheme) != 0)
-            and preconditioner_reduced is not None
-            and solve_method_kind not in {"dense", "dense_ksp"}
-        ):
+        dense_probe_admission = rhs1_dense_probe_admission(
+            probe_enabled=rhs1_dense_probe_enabled_from_env(),
+            probe_shortcut=bool(probe_shortcut),
+            cs0_petsc_compat=bool(cs0_petsc_compat),
+            cs0_sparse_first=bool(cs0_sparse_first),
+            cs0_dense_fallback_allowed=bool(cs0_dense_fallback_allowed),
+            constraint_scheme=int(op.constraint_scheme),
+            has_preconditioner=preconditioner_reduced is not None,
+            solve_method_kind=solve_method_kind,
+        )
+        if dense_probe_admission.enabled:
             try:
                 probe_x0 = preconditioner_reduced(rhs_reduced)
                 probe_r = rhs_reduced - mv_reduced(probe_x0)
                 probe_norm = float(jnp.linalg.norm(probe_r))
                 probe_ratio = probe_norm / max(float(target_reduced), 1e-300)
-                if dense_shortcut_ratio > 0 and probe_ratio >= dense_shortcut_ratio:
-                    allow_probe_shortcut = dense_fallback_max > 0 and int(active_size) <= dense_fallback_max
-                    if allow_probe_shortcut and (not sparse_prefer_over_dense_shortcut):
-                        early_dense_shortcut = True
-                        probe_shortcut = True
-                        res_reduced = GMRESSolveResult(x=probe_x0, residual_norm=jnp.asarray(probe_norm))
-                        ksp_replay.matvec_fn = mv_reduced
-                        ksp_replay.b_vec = rhs_reduced
-                        ksp_replay.precond_fn = preconditioner_reduced
-                        ksp_replay.x0_vec = probe_x0
-                        ksp_replay.precond_side = gmres_precond_side
-                        ksp_replay.solver_kind = _solver_kind(solve_method)[0]
-                        if emit is not None:
-                            emit(
-                                0,
-                                "solve_v3_full_system_linear_gmres: dense fallback shortcut (probe) "
-                                f"(ratio={probe_ratio:.3e} >= {dense_shortcut_ratio:.1e})",
-                            )
-                    else:
-                        if emit is not None:
-                            if sparse_prefer_over_dense_shortcut and allow_probe_shortcut:
-                                emit(
-                                    1,
-                                    "solve_v3_full_system_linear_gmres: probe shortcut skipped "
-                                    "(preferring sparse rescue over dense shortcut)",
-                                )
-                            else:
-                                emit(
-                                    1,
-                                    "solve_v3_full_system_linear_gmres: probe shortcut skipped "
-                                    f"(size={int(active_size)} > dense_max={dense_fallback_max})",
-                                )
-                        if x0_reduced is None:
-                            x0_reduced = probe_x0
-                elif x0_reduced is None:
+                dense_probe_decision = rhs1_dense_probe_shortcut_decision(
+                    dense_shortcut_ratio=float(dense_shortcut_ratio),
+                    probe_ratio=float(probe_ratio),
+                    dense_fallback_max=int(dense_fallback_max),
+                    active_size=int(active_size),
+                    sparse_prefer_over_dense_shortcut=bool(sparse_prefer_over_dense_shortcut),
+                )
+                if dense_probe_decision.accept_shortcut:
+                    early_dense_shortcut = True
+                    probe_shortcut = True
+                    res_reduced = GMRESSolveResult(x=probe_x0, residual_norm=jnp.asarray(probe_norm))
+                    ksp_replay.matvec_fn = mv_reduced
+                    ksp_replay.b_vec = rhs_reduced
+                    ksp_replay.precond_fn = preconditioner_reduced
+                    ksp_replay.x0_vec = probe_x0
+                    ksp_replay.precond_side = gmres_precond_side
+                    ksp_replay.solver_kind = _solver_kind(solve_method)[0]
+                elif dense_probe_decision.seed_x0_if_missing and x0_reduced is None:
                     x0_reduced = probe_x0
+                if emit is not None:
+                    for _level, _message in dense_probe_decision.messages:
+                        emit(_level, _message)
             except Exception as exc:  # noqa: BLE001
                 if emit is not None:
                     emit(1, f"solve_v3_full_system_linear_gmres: probe failed ({type(exc).__name__}: {exc})")
