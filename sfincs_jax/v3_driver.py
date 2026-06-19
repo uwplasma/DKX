@@ -335,6 +335,7 @@ from .problems.profile_response.sparse_pc import (
 from .rhs1_strong_fallback import build_rhs1_strong_preconditioner_full_from_kind
 from .problems.profile_response.strong_preconditioning import (
     adjust_rhs1_reduced_auto_kind,
+    adjust_rhs1_pas_schur_strong_kind_from_env,
     adjust_rhs1_theta_line_auto_kind,
     auto_rhs1_full_strong_kind,
     auto_rhs1_reduced_strong_kind,
@@ -11996,21 +11997,13 @@ def solve_v3_full_system_linear_gmres(
             and strong_precond_trigger
             and not early_dense_shortcut
         ):
-            if (
-                strong_precond_kind == "schur"
-                and op.fblock.pas is not None
-                and rhs1_precond_kind in {"pas_lite", "pas_hybrid", "pas_tz"}
-                and np.isfinite(float(res_reduced.residual_norm))
-            ):
-                pas_schur_small_env = os.environ.get("SFINCS_JAX_PAS_SCHUR_SMALL_MAX", "").strip()
-                try:
-                    pas_schur_small_max = int(pas_schur_small_env) if pas_schur_small_env else 2000
-                except ValueError:
-                    pas_schur_small_max = 2000
-                if int(active_size) > max(0, int(pas_schur_small_max)):
-                    # Avoid expensive Schur builds when PAS-lite/hybrid is already active
-                    # and the residual is finite; keep PAS-specific strong preconditioner instead.
-                    strong_precond_kind = "pas_hybrid"
+            strong_precond_kind = adjust_rhs1_pas_schur_strong_kind_from_env(
+                kind=strong_precond_kind,
+                has_pas=op.fblock.pas is not None,
+                base_kind=rhs1_precond_kind,
+                residual_norm=float(res_reduced.residual_norm),
+                active_size=int(active_size),
+            )
             _mark("rhs1_strong_precond_build_start")
             if emit is not None:
                 emit(

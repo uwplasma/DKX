@@ -42,10 +42,13 @@ Make `sfincs_jax` research-grade while preserving the public user contract:
 
 Recent checkpoints:
 
+- RHSMode=1 reduced PAS-Schur strong-retry size downgrade now uses a tested
+  profile-response strong-preconditioning helper while strong preconditioner
+  construction and solve execution remain driver-owned (current checkpoint).
 - RHSMode=1 PAS force-full routing after weak collision-preconditioned solves
   now uses a tested `rhs1_pas_policy` decision helper while fallback
   preconditioner construction and replay remain driver-owned
-  (current checkpoint).
+  (`862451f`).
 - RHSMode=1 guarded PAS-TZ and weak PAS MINRES correction controls now use
   tested profile-response strong-preconditioning policy helpers while
   correction application and residual acceptance remain driver-owned
@@ -283,14 +286,15 @@ Recent checkpoints:
 - `cb295ce` Extract sparse pattern setup.
 - `4b6a5b4` Extract sparse factor policy.
 
-Current source-size snapshot after RHSMode=1 PAS force-full routing extraction:
+Current source-size snapshot after RHSMode=1 reduced PAS-Schur strong-size
+downgrade extraction:
 
-- `sfincs_jax/v3_driver.py`: `17534` lines.
-- `solve_v3_full_system_linear_gmres`: `12187` lines.
+- `sfincs_jax/v3_driver.py`: `17527` lines.
+- `solve_v3_full_system_linear_gmres`: `12179` lines.
 - `sfincs_jax/v3_results.py`: `119` lines.
 - `sfincs_jax/rhs1_ksp_diagnostics.py`: `306` lines.
 - `sfincs_jax/rhs1_pas_policy.py`: `864` lines.
-- `sfincs_jax/problems/profile_response/strong_preconditioning.py`: `774` lines.
+- `sfincs_jax/problems/profile_response/strong_preconditioning.py`: `803` lines.
 - `sfincs_jax/problems/profile_response/residual.py`: `981` lines.
 - `sfincs_jax/problems/profile_response/handoff.py`: `598` lines.
 - `sfincs_jax/problems/profile_response/policies.py`: `3463` lines.
@@ -302,6 +306,15 @@ Current source-size snapshot after RHSMode=1 PAS force-full routing extraction:
 
 Recent local validation:
 
+- Strong policy shard after reduced PAS-Schur strong-size downgrade
+  extraction: `7 passed in 0.32 s`.
+- Sparse-host/minimum-norm/direct-tail driver shard:
+  `32 passed, 100 deselected in 35.56 s`.
+- Broad profile-response/RHSMode=1 policy, setup, diagnostics, solver, and
+  helper sweep after reduced PAS-Schur strong-size downgrade extraction:
+  `1143 passed in 48.09 s`.
+- Hygiene:
+  `py_compile` and `ruff` passed before the broad shards.
 - PAS policy shard after force-full routing extraction:
   `33 passed in 0.32 s`.
 - Sparse-host/minimum-norm/direct-tail driver shard:

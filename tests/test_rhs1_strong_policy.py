@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from sfincs_jax.rhs1_strong_policy import (
     RHS1MinresCorrectionControls,
+    adjust_rhs1_pas_schur_strong_kind_from_env,
     requested_rhs1_strong_preconditioner_kind,
     rhs1_pas_tz_guarded_minres_controls_from_env,
     rhs1_pas_weak_minres_controls_from_env,
@@ -118,4 +119,33 @@ def test_rhs1_pas_weak_minres_controls_from_env(monkeypatch) -> None:
         steps=2,
         alpha_clip=10.0,
         min_improvement=0.0,
+    )
+
+
+def test_adjust_rhs1_pas_schur_strong_kind_from_env(monkeypatch) -> None:
+    monkeypatch.delenv("SFINCS_JAX_PAS_SCHUR_SMALL_MAX", raising=False)
+    kwargs = dict(
+        kind="schur",
+        has_pas=True,
+        base_kind="pas_lite",
+        residual_norm=1.0,
+        active_size=2001,
+    )
+    assert adjust_rhs1_pas_schur_strong_kind_from_env(**kwargs) == "pas_hybrid"
+    assert (
+        adjust_rhs1_pas_schur_strong_kind_from_env(**{**kwargs, "active_size": 2000})
+        == "schur"
+    )
+    assert adjust_rhs1_pas_schur_strong_kind_from_env(**{**kwargs, "kind": "theta_line"}) == "theta_line"
+    assert adjust_rhs1_pas_schur_strong_kind_from_env(**{**kwargs, "has_pas": False}) == "schur"
+    assert adjust_rhs1_pas_schur_strong_kind_from_env(**{**kwargs, "base_kind": "point"}) == "schur"
+    assert adjust_rhs1_pas_schur_strong_kind_from_env(**{**kwargs, "residual_norm": float("inf")}) == "schur"
+
+    monkeypatch.setenv("SFINCS_JAX_PAS_SCHUR_SMALL_MAX", "10")
+    assert adjust_rhs1_pas_schur_strong_kind_from_env(**{**kwargs, "active_size": 11}) == "pas_hybrid"
+
+    monkeypatch.setenv("SFINCS_JAX_PAS_SCHUR_SMALL_MAX", "bad")
+    assert (
+        adjust_rhs1_pas_schur_strong_kind_from_env(**{**kwargs, "active_size": 2001})
+        == "pas_hybrid"
     )

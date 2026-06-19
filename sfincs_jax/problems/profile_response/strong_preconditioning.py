@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import math
 import os
 
 # From sfincs_jax.rhs1_strong_policy
@@ -727,6 +728,33 @@ def adjust_rhs1_reduced_auto_kind(
     return RHS1StrongAutoSelection(kind=selected, xblock_tz_lmax=selected_lmax)
 
 
+def adjust_rhs1_pas_schur_strong_kind_from_env(
+    *,
+    kind: str | None,
+    has_pas: bool,
+    base_kind: str | None,
+    residual_norm: float,
+    active_size: int,
+) -> str | None:
+    """Downgrade oversized reduced PAS Schur retries to the bounded PAS hybrid."""
+
+    if not (
+        kind == "schur"
+        and bool(has_pas)
+        and base_kind in {"pas_lite", "pas_hybrid", "pas_tz"}
+        and math.isfinite(float(residual_norm))
+    ):
+        return kind
+    raw = os.environ.get("SFINCS_JAX_PAS_SCHUR_SMALL_MAX", "").strip()
+    try:
+        max_active_size = int(raw) if raw else 2000
+    except ValueError:
+        max_active_size = 2000
+    if int(active_size) > max(0, int(max_active_size)):
+        return "pas_hybrid"
+    return kind
+
+
 def adjust_rhs1_theta_line_auto_kind(
     *, kind: str | None, n_theta: int, nxi_for_x_sum: int
 ) -> RHS1StrongAutoSelection:
@@ -748,6 +776,7 @@ __all__ = (
     "RHS1StrongRetryControls",
     "RHS1StrongTriggerControls",
     "adjust_rhs1_reduced_auto_kind",
+    "adjust_rhs1_pas_schur_strong_kind_from_env",
     "adjust_rhs1_theta_line_auto_kind",
     "auto_rhs1_full_strong_kind",
     "auto_rhs1_reduced_strong_kind",
