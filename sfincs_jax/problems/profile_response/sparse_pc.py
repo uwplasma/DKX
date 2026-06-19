@@ -95,6 +95,13 @@ class XBlockKrylovReport:
 
 
 @dataclass(frozen=True)
+class XBlockGMRESFallbackDecision:
+    """Admission result for a non-GMRES xblock solve retrying with GMRES."""
+
+    run: bool
+
+
+@dataclass(frozen=True)
 class XBlockPhysicalResidual:
     """Physical-space xblock solution and true residual norm."""
 
@@ -148,6 +155,24 @@ def xblock_krylov_report(
     iterations = int(device_iterations) if device_iterations is not None else int(len(history or ()))
     matvecs = int(device_estimated_matvecs) if device_estimated_matvecs is not None else int(mv_count)
     return XBlockKrylovReport(iterations=int(iterations), matvecs=int(matvecs))
+
+
+def xblock_gmres_fallback_decision(
+    *,
+    krylov_method: str,
+    fallback_enabled: bool,
+    residual_norm: float,
+    target: float,
+) -> XBlockGMRESFallbackDecision:
+    """Decide whether a non-GMRES xblock solve needs a GMRES fallback."""
+
+    residual = float(residual_norm)
+    should_retry = (
+        str(krylov_method) != "gmres"
+        and bool(fallback_enabled)
+        and ((not np.isfinite(residual)) or residual > float(target))
+    )
+    return XBlockGMRESFallbackDecision(run=bool(should_retry))
 
 
 def xblock_physical_solution_and_residual(
@@ -8572,6 +8597,7 @@ __all__ = [
     "SparsePCGMRESContext",
     "SparsePCGMRESResult",
     "XBlockKrylovReport",
+    "XBlockGMRESFallbackDecision",
     "XBlockPhysicalResidual",
     "SparsePCGMRESFinalPayload",
     "SparseMinimumNormPolicy",
@@ -8639,6 +8665,7 @@ __all__ = [
     "retry_sparse_pc_factor_dtype_from_driver_state",
     "run_fortran_reduced_xblock_krylov_solve",
     "run_sparse_pc_gmres_once",
+    "xblock_gmres_fallback_decision",
     "xblock_krylov_report",
     "xblock_physical_solution_and_residual",
     "sparse_pc_gmres_completion_message",

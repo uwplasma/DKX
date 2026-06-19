@@ -752,6 +752,17 @@ Recent local validation:
   `181 passed in 2.00 s`.
 - Sparse host/direct-vs-ILU factor setup helper shard:
   `178 passed in 1.47 s`.
+- Sparse-PC helper shard after xblock sparse-PC reporting/fallback-admission
+  extraction:
+  `198 passed in 1.97 s`.
+- Sparse-host/minimum-norm/direct-tail driver shard:
+  `32 passed, 100 deselected in 37.30 s`.
+- Broad profile-response/RHSMode=1 policy, setup, diagnostics, solver, and
+  helper sweep after xblock sparse-PC reporting/fallback-admission extraction:
+  `1152 passed in 48.65 s`.
+- Hygiene:
+  `py_compile`, `ruff`, `compileall`, `git diff --check`, and
+  `scripts/check_repo_size.py` passed.
 - Older focused and broad validation checkpoints are intentionally omitted from
   this active plan; they remain available in git history.
 
@@ -943,6 +954,18 @@ Completed recent boundaries:
 - RHSMode=1 FP dense-probe preconditioner-kind downgrades to collision now use
   a tested dense profile-response policy helper while preserving driver-local
   preconditioner construction.
+- RHSMode=1 PAS Schur downgrade decisions now use a tested strong-fallback
+  policy helper; the driver still owns the actual preconditioner construction
+  and replay ordering.
+- RHSMode=1 reduced/full strong fallback dispatch now uses one tested helper
+  for ADI seed retries, ADI combo retries, and fallback replay metadata.
+- RHSMode=1 full strong-ADI combo controls now use a tested policy helper
+  instead of in-line environment parsing in the driver.
+- X-block sparse-PC Krylov work reporting and physical-space true-residual
+  measurement now use tested profile-response helpers.
+- X-block sparse-PC GMRES fallback admission now uses a tested
+  profile-response helper; the environment policy and retry execution remain
+  behavior-compatible.
 
 Next steps:
 

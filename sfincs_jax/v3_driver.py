@@ -319,6 +319,7 @@ from .problems.profile_response.sparse_pc import (
     resolve_xblock_two_level_policy_setup,
     run_fortran_reduced_xblock_krylov_solve,
     run_sparse_pc_gmres_once,
+    xblock_gmres_fallback_decision,
     xblock_krylov_report,
     xblock_physical_solution_and_residual,
     build_sparse_host_or_ilu_factor,
@@ -6535,14 +6536,13 @@ def solve_v3_full_system_linear_gmres(
                 xblock_side_probe_lgmres_rescue=bool(xblock_side_probe_lgmres_rescue),
                 xblock_krylov_method=str(xblock_krylov_method),
             )
-            if (
-                xblock_krylov_method != "gmres"
-                and fallback_to_gmres
-                and (
-                    (not np.isfinite(float(residual_norm_xblock_pc)))
-                    or float(residual_norm_xblock_pc) > float(target_xblock)
-                )
-            ):
+            fallback_decision = xblock_gmres_fallback_decision(
+                krylov_method=str(xblock_krylov_method),
+                fallback_enabled=bool(fallback_to_gmres),
+                residual_norm=float(residual_norm_xblock_pc),
+                target=float(target_xblock),
+            )
+            if fallback_decision.run:
                 if emit is not None:
                     emit(
                         0,

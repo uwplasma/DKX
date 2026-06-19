@@ -60,6 +60,7 @@ from sfincs_jax.problems.profile_response.sparse_pc import (
     SparseMinimumNormPayload,
     SparseMinimumNormPolicy,
     SparsePCGMRESResult,
+    XBlockGMRESFallbackDecision,
     XBlockKrylovReport,
     XBlockPhysicalResidual,
     XBlockAssembledPreflightError,
@@ -137,6 +138,7 @@ from sfincs_jax.problems.profile_response.sparse_pc import (
     fortran_reduced_xblock_final_payload_from_driver_state,
     run_fortran_reduced_xblock_krylov_solve,
     run_sparse_pc_gmres_once,
+    xblock_gmres_fallback_decision,
     xblock_krylov_report,
     xblock_physical_solution_and_residual,
     retry_sparse_pc_factor_dtype_from_driver_state,
@@ -183,6 +185,45 @@ def test_xblock_krylov_report_falls_back_to_host_history_and_matvec_count() -> N
         history=(1.0, 0.5, 0.25),
         mv_count=13,
     ) == XBlockKrylovReport(iterations=3, matvecs=13)
+
+
+@pytest.mark.parametrize("residual_norm", [1.1, np.nan])
+def test_xblock_gmres_fallback_decision_retries_failed_non_gmres(
+    residual_norm: float,
+) -> None:
+    assert xblock_gmres_fallback_decision(
+        krylov_method="lgmres",
+        fallback_enabled=True,
+        residual_norm=residual_norm,
+        target=1.0,
+    ) == XBlockGMRESFallbackDecision(run=True)
+
+
+def test_xblock_gmres_fallback_decision_skips_gmres_method() -> None:
+    assert not xblock_gmres_fallback_decision(
+        krylov_method="gmres",
+        fallback_enabled=True,
+        residual_norm=2.0,
+        target=1.0,
+    ).run
+
+
+def test_xblock_gmres_fallback_decision_skips_disabled_policy() -> None:
+    assert not xblock_gmres_fallback_decision(
+        krylov_method="bicgstab",
+        fallback_enabled=False,
+        residual_norm=2.0,
+        target=1.0,
+    ).run
+
+
+def test_xblock_gmres_fallback_decision_skips_converged_non_gmres() -> None:
+    assert not xblock_gmres_fallback_decision(
+        krylov_method="tfqmr",
+        fallback_enabled=True,
+        residual_norm=0.5,
+        target=1.0,
+    ).run
 
 
 def test_xblock_physical_solution_and_residual_measures_true_residual() -> None:
