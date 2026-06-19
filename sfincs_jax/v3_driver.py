@@ -231,6 +231,7 @@ from .problems.profile_response.sparse_pc import (
     SparsePCAutoPreflightRetrySelectionContext,
     SparsePCAutoPreflightRetryEvaluationContext,
     SparsePCPatternSetupContext,
+    SparseHostOrILUFactorBuildContext,
     SparsePCGMRESContext,
     SparsePCPostMinresUpdateContext,
     XBlockSubspaceCorrectionContext,
@@ -297,6 +298,7 @@ from .problems.profile_response.sparse_pc import (
     resolve_xblock_two_level_policy_setup,
     run_fortran_reduced_xblock_krylov_solve,
     run_sparse_pc_gmres_once,
+    build_sparse_host_or_ilu_factor,
     sparse_host_direct_fallback_payload,
     sparse_host_direct_solve_from_pattern,
     sparse_minimum_norm_solve_from_pattern,
@@ -13527,29 +13529,13 @@ def solve_v3_full_system_linear_gmres(
                         and int(active_size) <= int(sparse_ilu_dense_max)
                     )
                     store_dense = int(active_size) <= int(sparse_dense_cache_max)
-                    explicit_sparse_operator = None
-                    explicit_sparse_factor = None
-                    if host_sparse_direct_wanted and _rhsmode1_explicit_sparse_host_direct_allowed(
+                    explicit_sparse_allowed = _rhsmode1_explicit_sparse_host_direct_allowed(
                         sparse_exact_lu=sparse_exact_lu,
                         use_implicit=bool(use_implicit),
                         active_size=int(active_size),
-                    ):
-                        explicit_sparse_operator, explicit_sparse_factor = _build_host_sparse_direct_factor_from_matvec(
-                            matvec=mv_reduced,
-                            n=int(active_size),
-                            dtype=rhs_reduced.dtype,
-                            factor_dtype=factor_dtype,
-                            emit=emit,
-                        )
-                        a_csr_full = explicit_sparse_operator.matrix
-                        _a_csr_drop = a_csr_full
-                        ilu = explicit_sparse_factor.factor
-                        a_dense_cache = None
-                        l_dense = None
-                        u_dense = None
-                        l_unit_diag = False
-                    else:
-                        a_csr_full, _a_csr_drop, ilu, a_dense_cache, l_dense, u_dense, l_unit_diag = _build_sparse_ilu_from_matvec(
+                    )
+                    sparse_factor_build = build_sparse_host_or_ilu_factor(
+                        SparseHostOrILUFactorBuildContext(
                             matvec=mv_reduced,
                             n=int(active_size),
                             dtype=rhs_reduced.dtype,
@@ -13561,11 +13547,26 @@ def solve_v3_full_system_linear_gmres(
                             fill_factor=sparse_ilu_fill,
                             build_dense_factors=build_dense_factors,
                             build_jax_factors=bool(use_implicit) and (not host_sparse_direct_wanted),
-                            build_ilu=True,
                             store_dense=store_dense,
                             factorization="lu" if sparse_exact_lu else "ilu",
                             emit=emit,
+                            host_sparse_direct_wanted=bool(host_sparse_direct_wanted),
+                            explicit_sparse_allowed=bool(
+                                host_sparse_direct_wanted and explicit_sparse_allowed
+                            ),
+                            build_host_sparse_direct_factor_from_matvec=_build_host_sparse_direct_factor_from_matvec,
+                            build_sparse_ilu_from_matvec=_build_sparse_ilu_from_matvec,
                         )
+                    )
+                    explicit_sparse_operator = sparse_factor_build.explicit_sparse_operator
+                    explicit_sparse_factor = sparse_factor_build.explicit_sparse_factor
+                    a_csr_full = sparse_factor_build.a_csr_full
+                    _a_csr_drop = sparse_factor_build.a_csr_drop
+                    ilu = sparse_factor_build.ilu
+                    a_dense_cache = sparse_factor_build.a_dense_cache
+                    l_dense = sparse_factor_build.l_dense
+                    u_dense = sparse_factor_build.u_dense
+                    l_unit_diag = sparse_factor_build.l_unit_diag
                     dense_matrix_cache = a_dense_cache
                     _mark("rhs1_sparse_precond_build_done")
                     host_sparse_direct = host_sparse_direct_wanted
@@ -15559,31 +15560,18 @@ def solve_v3_full_system_linear_gmres(
                         and int(op.total_size) <= int(sparse_ilu_dense_max)
                     )
                     store_dense = int(op.total_size) <= int(sparse_dense_cache_max)
-                    explicit_sparse_operator = None
-                    explicit_sparse_factor = None
-                    if host_sparse_direct_wanted and _rhsmode1_explicit_sparse_host_direct_allowed(
+                    explicit_sparse_allowed = _rhsmode1_explicit_sparse_host_direct_allowed(
                         sparse_exact_lu=sparse_exact_lu,
                         use_implicit=bool(use_implicit),
                         active_size=int(op.total_size),
-                    ):
-                        explicit_sparse_pattern = _maybe_rhsmode1_full_sparse_pattern(op, emit=emit)
-                        explicit_sparse_operator, explicit_sparse_factor = _build_host_sparse_direct_factor_from_matvec(
-                            matvec=sparse_factor_matvec,
-                            n=int(op.total_size),
-                            dtype=rhs.dtype,
-                            factor_dtype=factor_dtype,
-                            pattern=explicit_sparse_pattern,
-                            emit=emit,
-                        )
-                        a_csr_full = explicit_sparse_operator.matrix
-                        _a_csr_drop = a_csr_full
-                        ilu = explicit_sparse_factor.factor
-                        a_dense_cache = None
-                        l_dense = None
-                        u_dense = None
-                        l_unit_diag = False
-                    else:
-                        a_csr_full, _a_csr_drop, ilu, a_dense_cache, l_dense, u_dense, l_unit_diag = _build_sparse_ilu_from_matvec(
+                    )
+                    explicit_sparse_pattern = (
+                        _maybe_rhsmode1_full_sparse_pattern(op, emit=emit)
+                        if host_sparse_direct_wanted and explicit_sparse_allowed
+                        else None
+                    )
+                    sparse_factor_build = build_sparse_host_or_ilu_factor(
+                        SparseHostOrILUFactorBuildContext(
                             matvec=sparse_factor_matvec,
                             n=int(op.total_size),
                             dtype=rhs.dtype,
@@ -15595,11 +15583,27 @@ def solve_v3_full_system_linear_gmres(
                             fill_factor=sparse_ilu_fill,
                             build_dense_factors=build_dense_factors,
                             build_jax_factors=bool(use_implicit) and (not host_sparse_direct_wanted),
-                            build_ilu=True,
                             store_dense=store_dense,
                             factorization="lu" if sparse_exact_lu else "ilu",
                             emit=emit,
+                            host_sparse_direct_wanted=bool(host_sparse_direct_wanted),
+                            explicit_sparse_allowed=bool(
+                                host_sparse_direct_wanted and explicit_sparse_allowed
+                            ),
+                            explicit_sparse_pattern=explicit_sparse_pattern,
+                            build_host_sparse_direct_factor_from_matvec=_build_host_sparse_direct_factor_from_matvec,
+                            build_sparse_ilu_from_matvec=_build_sparse_ilu_from_matvec,
                         )
+                    )
+                    explicit_sparse_operator = sparse_factor_build.explicit_sparse_operator
+                    explicit_sparse_factor = sparse_factor_build.explicit_sparse_factor
+                    a_csr_full = sparse_factor_build.a_csr_full
+                    _a_csr_drop = sparse_factor_build.a_csr_drop
+                    ilu = sparse_factor_build.ilu
+                    a_dense_cache = sparse_factor_build.a_dense_cache
+                    l_dense = sparse_factor_build.l_dense
+                    u_dense = sparse_factor_build.u_dense
+                    l_unit_diag = sparse_factor_build.l_unit_diag
                     dense_matrix_cache = a_dense_cache
                     _mark("rhs1_sparse_precond_build_done")
                     host_sparse_direct = host_sparse_direct_wanted

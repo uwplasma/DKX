@@ -161,6 +161,47 @@ class SparseHostDirectFallbackPayload:
 
 
 @dataclass(frozen=True)
+class SparseHostOrILUFactorBuildContext:
+    """Inputs for choosing explicit host sparse direct factorization or ILU."""
+
+    matvec: ArrayFn
+    n: int
+    dtype: object
+    cache_key: object
+    factor_dtype: np.dtype
+    drop_tol: float
+    drop_rel: float
+    ilu_drop_tol: float
+    fill_factor: float
+    build_dense_factors: bool
+    build_jax_factors: bool
+    store_dense: bool
+    factorization: str
+    emit: EmitFn | None
+    host_sparse_direct_wanted: bool
+    explicit_sparse_allowed: bool
+    explicit_sparse_pattern: object | None = None
+    build_host_sparse_direct_factor_from_matvec: Callable[..., tuple[object, object]] | None = None
+    build_sparse_ilu_from_matvec: Callable[..., tuple[Any, Any, Any, Any, Any, Any, bool]] | None = None
+
+
+@dataclass(frozen=True)
+class SparseHostOrILUFactorBuildResult:
+    """Factor objects and matrix caches returned by sparse host/ILU setup."""
+
+    explicit_sparse_operator: object | None
+    explicit_sparse_factor: object | None
+    a_csr_full: object
+    a_csr_drop: object
+    ilu: object
+    a_dense_cache: object | None
+    l_dense: object | None
+    u_dense: object | None
+    l_unit_diag: bool
+    used_explicit_sparse: bool
+
+
+@dataclass(frozen=True)
 class ExplicitSparseOperatorBuildPolicy:
     """Materialization controls shared by explicit host sparse solve paths."""
 
@@ -7775,6 +7816,72 @@ def sparse_host_direct_fallback_payload(
     )
 
 
+def build_sparse_host_or_ilu_factor(
+    context: SparseHostOrILUFactorBuildContext,
+) -> SparseHostOrILUFactorBuildResult:
+    """Build either an explicit host sparse direct factor or the ILU fallback."""
+
+    if bool(context.host_sparse_direct_wanted) and bool(context.explicit_sparse_allowed):
+        if context.build_host_sparse_direct_factor_from_matvec is None:
+            raise ValueError("explicit sparse host factor requested without a build callback")
+        explicit_sparse_operator, explicit_sparse_factor = (
+            context.build_host_sparse_direct_factor_from_matvec(
+                matvec=context.matvec,
+                n=int(context.n),
+                dtype=context.dtype,
+                factor_dtype=context.factor_dtype,
+                pattern=context.explicit_sparse_pattern,
+                emit=context.emit,
+            )
+        )
+        return SparseHostOrILUFactorBuildResult(
+            explicit_sparse_operator=explicit_sparse_operator,
+            explicit_sparse_factor=explicit_sparse_factor,
+            a_csr_full=explicit_sparse_operator.matrix,
+            a_csr_drop=explicit_sparse_operator.matrix,
+            ilu=explicit_sparse_factor.factor,
+            a_dense_cache=None,
+            l_dense=None,
+            u_dense=None,
+            l_unit_diag=False,
+            used_explicit_sparse=True,
+        )
+
+    if context.build_sparse_ilu_from_matvec is None:
+        raise ValueError("ILU factor requested without a build callback")
+    a_csr_full, a_csr_drop, ilu, a_dense_cache, l_dense, u_dense, l_unit_diag = (
+        context.build_sparse_ilu_from_matvec(
+            matvec=context.matvec,
+            n=int(context.n),
+            dtype=context.dtype,
+            cache_key=context.cache_key,
+            factor_dtype=context.factor_dtype,
+            drop_tol=float(context.drop_tol),
+            drop_rel=float(context.drop_rel),
+            ilu_drop_tol=float(context.ilu_drop_tol),
+            fill_factor=float(context.fill_factor),
+            build_dense_factors=bool(context.build_dense_factors),
+            build_jax_factors=bool(context.build_jax_factors),
+            build_ilu=True,
+            store_dense=bool(context.store_dense),
+            factorization=str(context.factorization),
+            emit=context.emit,
+        )
+    )
+    return SparseHostOrILUFactorBuildResult(
+        explicit_sparse_operator=None,
+        explicit_sparse_factor=None,
+        a_csr_full=a_csr_full,
+        a_csr_drop=a_csr_drop,
+        ilu=ilu,
+        a_dense_cache=a_dense_cache,
+        l_dense=l_dense,
+        u_dense=u_dense,
+        l_unit_diag=bool(l_unit_diag),
+        used_explicit_sparse=False,
+    )
+
+
 def apply_sparse_pc_post_minres(
     *,
     context: SparsePCPostMinresContext,
@@ -8090,6 +8197,8 @@ __all__ = [
     "SparseHostDirectFactorSolvePayload",
     "SparseHostDirectPolishPayload",
     "SparseHostDirectFallbackPayload",
+    "SparseHostOrILUFactorBuildContext",
+    "SparseHostOrILUFactorBuildResult",
     "ExplicitSparseOperatorBuildPolicy",
     "ExplicitSparseOperatorBuildResult",
     "SparsePCGMRESCompletionMessageContext",
@@ -8156,6 +8265,7 @@ __all__ = [
     "solve_sparse_host_direct_from_available_factor",
     "apply_sparse_host_direct_polish_if_needed",
     "sparse_host_direct_fallback_payload",
+    "build_sparse_host_or_ilu_factor",
     "build_explicit_sparse_operator_from_pattern",
     "explicit_sparse_pattern_progress_messages",
     "resolve_explicit_sparse_operator_build_policy",

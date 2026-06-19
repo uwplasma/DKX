@@ -49,6 +49,7 @@ from sfincs_jax.problems.profile_response.sparse_pc import (
     SparseHostDirectFactorSolvePayload,
     SparseHostDirectPolishPayload,
     SparseHostDirectFallbackPayload,
+    SparseHostOrILUFactorBuildContext,
     ExplicitSparseOperatorBuildPolicy,
     ExplicitSparseOperatorBuildResult,
     SparseMinimumNormPayload,
@@ -137,6 +138,7 @@ from sfincs_jax.problems.profile_response.sparse_pc import (
     solve_sparse_host_direct_from_available_factor,
     apply_sparse_host_direct_polish_if_needed,
     sparse_host_direct_fallback_payload,
+    build_sparse_host_or_ilu_factor,
     sparse_minimum_norm_solve_payload,
     sparse_minimum_norm_solve_from_pattern,
     sparse_minimum_norm_start_message,
@@ -5298,6 +5300,97 @@ def test_sparse_host_direct_fallback_payload_polishes_and_recomputes_residual_ve
             "restart=11 maxiter=22",
         )
     ]
+
+
+def test_build_sparse_host_or_ilu_factor_prefers_explicit_sparse_when_allowed() -> None:
+    calls: list[dict[str, object]] = []
+    explicit_operator = SimpleNamespace(matrix="csr")
+    explicit_factor = SimpleNamespace(factor="lu")
+
+    def build_host(**kwargs):
+        calls.append(kwargs)
+        return explicit_operator, explicit_factor
+
+    result = build_sparse_host_or_ilu_factor(
+        SparseHostOrILUFactorBuildContext(
+            matvec=_identity,
+            n=3,
+            dtype=np.float64,
+            cache_key="cache",
+            factor_dtype=np.dtype(np.float64),
+            drop_tol=0.0,
+            drop_rel=0.0,
+            ilu_drop_tol=1.0e-6,
+            fill_factor=10.0,
+            build_dense_factors=False,
+            build_jax_factors=False,
+            store_dense=False,
+            factorization="lu",
+            emit=None,
+            host_sparse_direct_wanted=True,
+            explicit_sparse_allowed=True,
+            explicit_sparse_pattern="pattern",
+            build_host_sparse_direct_factor_from_matvec=build_host,
+            build_sparse_ilu_from_matvec=lambda **_kwargs: (_ for _ in ()).throw(
+                AssertionError("ILU should not be built")
+            ),
+        )
+    )
+
+    assert result.used_explicit_sparse
+    assert result.explicit_sparse_operator is explicit_operator
+    assert result.explicit_sparse_factor is explicit_factor
+    assert result.a_csr_full == "csr"
+    assert result.ilu == "lu"
+    assert calls[0]["pattern"] == "pattern"
+    assert calls[0]["n"] == 3
+
+
+def test_build_sparse_host_or_ilu_factor_uses_ilu_when_explicit_not_allowed() -> None:
+    calls: list[dict[str, object]] = []
+
+    def build_ilu(**kwargs):
+        calls.append(kwargs)
+        return "csr", "drop", "ilu", "dense", "l", "u", True
+
+    result = build_sparse_host_or_ilu_factor(
+        SparseHostOrILUFactorBuildContext(
+            matvec=_identity,
+            n=4,
+            dtype=np.float64,
+            cache_key="cache",
+            factor_dtype=np.dtype(np.float32),
+            drop_tol=1.0e-4,
+            drop_rel=1.0e-5,
+            ilu_drop_tol=1.0e-6,
+            fill_factor=8.0,
+            build_dense_factors=True,
+            build_jax_factors=True,
+            store_dense=True,
+            factorization="ilu",
+            emit=None,
+            host_sparse_direct_wanted=True,
+            explicit_sparse_allowed=False,
+            build_host_sparse_direct_factor_from_matvec=lambda **_kwargs: (_ for _ in ()).throw(
+                AssertionError("explicit host factor should not be built")
+            ),
+            build_sparse_ilu_from_matvec=build_ilu,
+        )
+    )
+
+    assert not result.used_explicit_sparse
+    assert result.explicit_sparse_operator is None
+    assert result.explicit_sparse_factor is None
+    assert result.a_csr_full == "csr"
+    assert result.a_csr_drop == "drop"
+    assert result.ilu == "ilu"
+    assert result.a_dense_cache == "dense"
+    assert result.l_dense == "l"
+    assert result.u_dense == "u"
+    assert result.l_unit_diag
+    assert calls[0]["cache_key"] == "cache"
+    assert calls[0]["build_jax_factors"] is True
+    assert calls[0]["factorization"] == "ilu"
 
 
 def test_sparse_pc_post_minres_accepts_improved_residual_and_recomputes_pc_norm() -> (

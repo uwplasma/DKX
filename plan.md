@@ -42,9 +42,12 @@ Make `sfincs_jax` research-grade while preserving the public user contract:
 
 Recent checkpoints:
 
+- Reduced active-DOF and full-system sparse host/direct-vs-ILU factor setup now
+  uses a tested profile-response helper; cache keys, matvecs, explicit sparse
+  patterns, and host-only callbacks remain driver-owned (current checkpoint).
 - RHSMode=1 PAS adaptive smoother handoff now uses a tested replay-aware
   helper while preserving explicit reduced/full residual-vector routing
-  (current checkpoint).
+  (`33aba27`).
 - X-block sparse-PC post-residual-equation correction now shares the same
   subspace-correction helper, preserving cached-QI progress diagnostics
   (`d45d9f8`).
@@ -119,21 +122,31 @@ Recent checkpoints:
 - `cb295ce` Extract sparse pattern setup.
 - `4b6a5b4` Extract sparse factor policy.
 
-Current source-size snapshot after RHSMode=1 strong-retry measured handoff
-reuse:
+Current source-size snapshot after sparse host/direct-vs-ILU factor setup
+extraction:
 
-- `sfincs_jax/v3_driver.py`: `18450` lines.
+- `sfincs_jax/v3_driver.py`: `18327` lines.
 - `solve_v3_full_system_linear_gmres`: `13145` lines.
 - `sfincs_jax/v3_results.py`: `119` lines.
 - `sfincs_jax/problems/profile_response/residual.py`: `981` lines.
-- `sfincs_jax/problems/profile_response/handoff.py`: `417` lines.
+- `sfincs_jax/problems/profile_response/handoff.py`: `552` lines.
 - `sfincs_jax/problems/profile_response/dense.py`: `407` lines.
 - `sfincs_jax/problems/profile_response/linear_solve.py`: `327` lines.
 - `sfincs_jax/problems/profile_response/active_projection.py`: `116` lines.
-- `sfincs_jax/problems/profile_response/sparse_pc.py`: `8034` lines.
+- `sfincs_jax/problems/profile_response/sparse_pc.py`: `8285` lines.
 
 Recent local validation:
 
+- Sparse host/direct-vs-ILU factor setup helper shard:
+  `178 passed in 1.47 s`.
+- Sparse-host/minimum-norm/direct-tail driver shard:
+  `32 passed, 100 deselected in 36.28 s`.
+- Broad profile-response/RHSMode=1 policy, setup, diagnostics, solver, and
+  helper sweep after sparse factor setup extraction:
+  `1018 passed in 49.46 s`.
+- Hygiene:
+  `ruff`, `compileall`, `git diff --check`, and `scripts/check_repo_size.py`
+  passed.
 - RHSMode=1 handoff helper shard:
   `27 passed in 0.33 s`.
 - Sparse-host/minimum-norm/direct-tail driver shard:
@@ -447,6 +460,10 @@ Completed recent boundaries:
   candidate/replay handoff now uses a tested helper; the reduced branch keeps
   the current residual vector and the full branch still explicitly recomputes
   `rhs - A x` at the call site.
+- Reduced active-DOF and full-system sparse host/direct-vs-ILU factor setup now
+  uses a tested helper; explicit sparse patterns, cache keys, and matrix-free
+  callbacks stay in the driver while the generic factor-selection result
+  schema lives in `profile_response.sparse_pc`.
 
 Next steps:
 
@@ -455,9 +472,6 @@ Next steps:
 - Continue extracting sparse-PC state/metadata seams after the source split
   stabilizes; avoid moving driver-specific direction builders or caches into
   generic helpers.
-- Extract remaining explicit sparse-host direct factor-setup policy seams only
-  where this can be done without pulling driver-specific caches into domain
-  modules.
 - Continue consolidating duplicated host sparse fallback acceptance/metadata
   seams behind tested profile-response helpers.
 - Continue shrinking `solve_v3_full_system_linear_gmres` in behavior-preserving
