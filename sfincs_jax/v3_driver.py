@@ -341,9 +341,7 @@ from .problems.profile_response.policies import (
     rhs1_qi_device_setup_summary as _rhs1_qi_device_setup_summary,
     rhs1_qi_device_status_fields as _rhs1_qi_device_status_fields,
     rhs1_qi_device_tail_block_required as _rhs1_qi_device_tail_block_required,
-    rhs1_resolved_sparse_rescue_ordering,
-    rhs1_sparse_enabled_initial,
-    rhs1_sparse_kind_use,
+    rhs1_sparse_rescue_policy_setup,
     rhs1_xblock_fallback_initial_guess as _rhs1_xblock_fallback_initial_guess,
 )
 from .problems.profile_response.setup import (
@@ -12573,32 +12571,23 @@ def solve_v3_full_system_linear_gmres(
                                 f"(ratio={res_ratio:.3e} >= {dense_shortcut_ratio:.1e})",
                             )
 
-        sparse_enabled = rhs1_sparse_enabled_initial(
+        sparse_policy = rhs1_sparse_rescue_policy_setup(
             sparse_precond_mode=sparse_precond_mode,
+            sparse_precond_kind=sparse_precond_kind,
             has_fp=op.fblock.fp is not None,
             has_pas=op.fblock.pas is not None,
             residual_norm=float(res_reduced.residual_norm),
             target=float(target_reduced),
             rhs_mode=int(op.rhs_mode),
             include_phi1=bool(op.include_phi1),
-        )
-        sparse_kind_use = rhs1_sparse_kind_use(sparse_precond_kind=sparse_precond_kind)
-        sparse_jax_est_mb: float | None = None
-        if sparse_enabled and sparse_kind_use == "jax" and int(active_size) <= int(sparse_max_size):
-            precond_dtype = _precond_dtype(int(active_size))
-            bytes_per = 4.0 if precond_dtype == jnp.float32 else 8.0
-            sparse_jax_est_mb = (int(active_size) ** 2) * bytes_per / 1.0e6
-        sparse_order = rhs1_resolved_sparse_rescue_ordering(
-            sparse_enabled=bool(sparse_enabled),
-            sparse_kind_use=sparse_kind_use,
-            dense_shortcut=bool(dense_shortcut),
-            sparse_exact_direct=bool(sparse_exact_direct),
             size=int(active_size),
             sparse_max_size=int(sparse_max_size),
+            precond_dtype=_precond_dtype(int(active_size)),
+            dense_shortcut=bool(dense_shortcut),
+            sparse_exact_direct=bool(sparse_exact_direct),
             large_cpu_sparse_rescue=bool(large_cpu_sparse_rescue_active),
             sparse_xblock_rescue_active=bool(sparse_xblock_rescue_active),
             sparse_sxblock_rescue_active=bool(sparse_sxblock_rescue_active),
-            sparse_jax_est_mb=sparse_jax_est_mb,
             sparse_jax_max_mb=float(sparse_jax_max_mb),
             pas_fast_accept=bool(pas_fast_accept),
             gpu_sparse_skip=bool(
@@ -12611,8 +12600,9 @@ def solve_v3_full_system_linear_gmres(
                 )
             ),
         )
-        sparse_enabled = bool(sparse_order.enabled)
-        sparse_kind_use = str(sparse_order.kind_use)
+        sparse_order = sparse_policy.ordering
+        sparse_enabled = bool(sparse_policy.enabled)
+        sparse_kind_use = str(sparse_policy.kind_use)
         sparse_xblock_rescue_active = bool(sparse_order.xblock_rescue_active)
         sparse_sxblock_rescue_active = bool(sparse_order.sxblock_rescue_active)
         if sparse_order.prefer_sparse_exact_over_dense_shortcut and emit is not None:
@@ -12645,12 +12635,8 @@ def solve_v3_full_system_linear_gmres(
             )
         elif sparse_order.reason_size_disabled and emit is not None:
             emit(1, f"sparse_ilu: disabled (size={int(active_size)} > max={int(sparse_max_size)})")
-        if sparse_order.reason_sparse_jax_mem_disabled and sparse_jax_est_mb is not None and emit is not None:
-            emit(
-                1,
-                "sparse_jax: disabled "
-                f"(est_mem={sparse_jax_est_mb:.1f} MB > max_mb={sparse_jax_max_mb:.1f})",
-            )
+        if sparse_policy.sparse_jax_memory_disabled_message is not None and emit is not None:
+            emit(1, sparse_policy.sparse_jax_memory_disabled_message)
 
         host_sparse_direct_used = False
         precond_sparse_xblock_current = None
@@ -15289,29 +15275,20 @@ def solve_v3_full_system_linear_gmres(
             sparse_exact_lu=sparse_exact_lu,
             use_implicit=bool(use_implicit),
         )
-        sparse_enabled = rhs1_sparse_enabled_initial(
+        sparse_policy = rhs1_sparse_rescue_policy_setup(
             sparse_precond_mode=sparse_precond_mode,
+            sparse_precond_kind=sparse_precond_kind,
             has_fp=op.fblock.fp is not None,
             has_pas=op.fblock.pas is not None,
             residual_norm=float(result.residual_norm),
             target=float(target),
             rhs_mode=int(op.rhs_mode),
             include_phi1=bool(op.include_phi1),
-        )
-        sparse_kind_use = rhs1_sparse_kind_use(sparse_precond_kind=sparse_precond_kind)
-        sparse_jax_est_mb: float | None = None
-        if sparse_enabled and sparse_kind_use == "jax" and int(op.total_size) <= int(sparse_max_size):
-            precond_dtype = _precond_dtype(int(op.total_size))
-            bytes_per = 4.0 if precond_dtype == jnp.float32 else 8.0
-            sparse_jax_est_mb = (int(op.total_size) ** 2) * bytes_per / 1.0e6
-        sparse_order = rhs1_resolved_sparse_rescue_ordering(
-            sparse_enabled=bool(sparse_enabled),
-            sparse_kind_use=sparse_kind_use,
-            sparse_exact_direct=bool(sparse_exact_direct),
             size=int(op.total_size),
             sparse_max_size=int(sparse_max_size),
+            precond_dtype=_precond_dtype(int(op.total_size)),
+            sparse_exact_direct=bool(sparse_exact_direct),
             large_cpu_sparse_rescue=bool(large_cpu_sparse_rescue_full),
-            sparse_jax_est_mb=sparse_jax_est_mb,
             sparse_jax_max_mb=float(sparse_jax_max_mb),
             pas_fast_accept=bool(pas_fast_accept),
             gpu_sparse_skip=bool(
@@ -15324,8 +15301,9 @@ def solve_v3_full_system_linear_gmres(
                 )
             ),
         )
-        sparse_enabled = bool(sparse_order.enabled)
-        sparse_kind_use = str(sparse_order.kind_use)
+        sparse_order = sparse_policy.ordering
+        sparse_enabled = bool(sparse_policy.enabled)
+        sparse_kind_use = str(sparse_policy.kind_use)
         if sparse_order.reason_size_large_cpu:
             sparse_exact_lu = _rhsmode1_large_cpu_sparse_exact_lu_allowed(active_size=int(op.total_size))
             if emit is not None:
@@ -15342,12 +15320,8 @@ def solve_v3_full_system_linear_gmres(
             )
         elif sparse_order.reason_size_disabled and emit is not None:
             emit(1, f"sparse_ilu: disabled (size={int(op.total_size)} > max={int(sparse_max_size)})")
-        if sparse_order.reason_sparse_jax_mem_disabled and sparse_jax_est_mb is not None and emit is not None:
-            emit(
-                1,
-                "sparse_jax: disabled "
-                f"(est_mem={sparse_jax_est_mb:.1f} MB > max_mb={sparse_jax_max_mb:.1f})",
-            )
+        if sparse_policy.sparse_jax_memory_disabled_message is not None and emit is not None:
+            emit(1, sparse_policy.sparse_jax_memory_disabled_message)
 
         dense_matrix_cache: np.ndarray | None = None
         host_sparse_direct_used = False

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from sfincs_jax.rhs1_sparse_rescue_policy import (
     rhs1_resolved_sparse_rescue_ordering,
+    rhs1_sparse_rescue_policy_setup,
     rhs1_sparse_enabled_initial,
     rhs1_sparse_kind_use,
 )
@@ -149,3 +150,54 @@ def test_rhs1_sparse_rescue_ordering_disables_after_pas_fast_accept_or_gpu_skip(
     )
     assert not decision.enabled
     assert decision.reason_gpu_sparse_skip
+
+
+def test_rhs1_sparse_rescue_policy_setup_computes_jax_memory_admission() -> None:
+    setup = rhs1_sparse_rescue_policy_setup(
+        sparse_precond_mode="on",
+        sparse_precond_kind="jax",
+        has_fp=True,
+        has_pas=False,
+        residual_norm=1.0,
+        target=1.0e-8,
+        rhs_mode=1,
+        include_phi1=False,
+        size=1000,
+        sparse_max_size=2000,
+        precond_dtype="float32",
+        sparse_jax_max_mb=1.0,
+    )
+    assert not setup.enabled
+    assert setup.kind_use == "jax"
+    assert setup.sparse_jax_est_mb == 4.0
+    assert setup.ordering.reason_sparse_jax_mem_disabled
+    assert setup.sparse_jax_memory_disabled_message == (
+        "sparse_jax: disabled (est_mem=4.0 MB > max_mb=1.0)"
+    )
+
+
+def test_rhs1_sparse_rescue_policy_setup_keeps_ordering_flags() -> None:
+    setup = rhs1_sparse_rescue_policy_setup(
+        sparse_precond_mode="on",
+        sparse_precond_kind="auto",
+        has_fp=True,
+        has_pas=False,
+        residual_norm=1.0,
+        target=1.0e-8,
+        rhs_mode=1,
+        include_phi1=False,
+        size=4096,
+        sparse_max_size=1024,
+        precond_dtype="float64",
+        dense_shortcut=True,
+        sparse_exact_direct=True,
+        large_cpu_sparse_rescue=True,
+        sparse_xblock_rescue_active=True,
+    )
+    assert setup.enabled
+    assert setup.kind_use == "scipy"
+    assert setup.sparse_jax_est_mb is None
+    assert setup.ordering.prefer_sparse_exact_over_dense_shortcut
+    assert setup.ordering.reason_size_large_cpu
+    assert setup.ordering.reason_large_cpu_exact_skips_targeted
+    assert not setup.ordering.xblock_rescue_active

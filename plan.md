@@ -42,9 +42,12 @@ Make `sfincs_jax` research-grade while preserving the public user contract:
 
 Recent checkpoints:
 
+- Sparse rescue enable/kind/order setup and sparse-JAX memory-admission
+  messaging for reduced and full branches now uses one tested policy helper;
+  solve execution and cache policy remain driver-owned (current checkpoint).
 - Sparse-JAX retry preconditioner build/progress emission for reduced and full
   branches now uses a tested sparse-PC helper while cache-key policy remains
-  driver-owned (current checkpoint).
+  driver-owned (`60b18f6`).
 - Sparse-JAX Jacobi retry branches now reuse the existing measured
   linear-candidate handoff helper instead of manual timer/solve/accept blocks
   (`ac48e62`).
@@ -144,13 +147,14 @@ Recent checkpoints:
 - `cb295ce` Extract sparse pattern setup.
 - `4b6a5b4` Extract sparse factor policy.
 
-Current source-size snapshot after sparse-JAX build/progress extraction:
+Current source-size snapshot after sparse rescue policy setup extraction:
 
-- `sfincs_jax/v3_driver.py`: `18205` lines.
-- `solve_v3_full_system_linear_gmres`: `12891` lines.
+- `sfincs_jax/v3_driver.py`: `18179` lines.
+- `solve_v3_full_system_linear_gmres`: `12859` lines.
 - `sfincs_jax/v3_results.py`: `119` lines.
 - `sfincs_jax/problems/profile_response/residual.py`: `981` lines.
 - `sfincs_jax/problems/profile_response/handoff.py`: `598` lines.
+- `sfincs_jax/problems/profile_response/policies.py`: `2659` lines.
 - `sfincs_jax/problems/profile_response/dense.py`: `407` lines.
 - `sfincs_jax/problems/profile_response/linear_solve.py`: `327` lines.
 - `sfincs_jax/problems/profile_response/active_projection.py`: `116` lines.
@@ -158,6 +162,16 @@ Current source-size snapshot after sparse-JAX build/progress extraction:
 
 Recent local validation:
 
+- Sparse rescue policy shard after sparse rescue policy setup extraction:
+  `8 passed in 0.35 s`.
+- Sparse-host/minimum-norm/direct-tail driver shard:
+  `32 passed, 100 deselected in 36.81 s`.
+- Broad profile-response/RHSMode=1 policy, setup, diagnostics, solver, and
+  helper sweep after sparse rescue policy setup extraction:
+  `1031 passed in 49.48 s`.
+- Hygiene:
+  `ruff`, `compileall`, `git diff --check`, and `scripts/check_repo_size.py`
+  passed.
 - Sparse-PC helper shard after sparse-JAX build/progress extraction:
   `187 passed in 1.96 s`.
 - Sparse-host/minimum-norm/direct-tail driver shard:
@@ -370,6 +384,9 @@ Completed recent boundaries:
   handoff helper, preserving reduced/full residual-vector routing.
 - Sparse-JAX retry preconditioner build/progress emission now uses a tested
   helper with driver-provided cache keys and builder callback.
+- Sparse rescue enable/kind/order setup and sparse-JAX memory-admission
+  messaging now uses a tested policy helper shared by reduced active-DOF and
+  full-system branches.
 
 Next steps:
 

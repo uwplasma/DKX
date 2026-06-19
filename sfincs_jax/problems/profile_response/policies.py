@@ -2219,6 +2219,17 @@ class RHS1SparseRescueOrdering:
     reason_gpu_sparse_skip: bool = False
 
 
+@dataclass(frozen=True)
+class RHS1SparseRescuePolicySetup:
+    """Complete sparse-rescue policy setup shared by full and active systems."""
+
+    enabled: bool
+    kind_use: str
+    ordering: RHS1SparseRescueOrdering
+    sparse_jax_est_mb: float | None = None
+    sparse_jax_memory_disabled_message: str | None = None
+
+
 def rhs1_sparse_enabled_initial(
     *,
     sparse_precond_mode: str,
@@ -2329,6 +2340,75 @@ def rhs1_resolved_sparse_rescue_ordering(
         ),
         reason_pas_fast_accept=bool(reason_pas_fast_accept),
         reason_gpu_sparse_skip=bool(reason_gpu_sparse_skip),
+    )
+
+
+def rhs1_sparse_rescue_policy_setup(
+    *,
+    sparse_precond_mode: str,
+    sparse_precond_kind: str,
+    has_fp: bool,
+    has_pas: bool,
+    residual_norm: float,
+    target: float,
+    rhs_mode: int,
+    include_phi1: bool,
+    size: int,
+    sparse_max_size: int,
+    precond_dtype: Any,
+    dense_shortcut: bool = False,
+    sparse_exact_direct: bool = False,
+    large_cpu_sparse_rescue: bool = False,
+    sparse_xblock_rescue_active: bool = False,
+    sparse_sxblock_rescue_active: bool = False,
+    sparse_jax_max_mb: float = 0.0,
+    pas_fast_accept: bool = False,
+    gpu_sparse_skip: bool = False,
+) -> RHS1SparseRescuePolicySetup:
+    """Resolve sparse-rescue policy and its JAX dense-memory admission estimate."""
+
+    sparse_enabled = rhs1_sparse_enabled_initial(
+        sparse_precond_mode=sparse_precond_mode,
+        has_fp=bool(has_fp),
+        has_pas=bool(has_pas),
+        residual_norm=float(residual_norm),
+        target=float(target),
+        rhs_mode=int(rhs_mode),
+        include_phi1=bool(include_phi1),
+    )
+    sparse_kind_use = rhs1_sparse_kind_use(sparse_precond_kind=sparse_precond_kind)
+    sparse_jax_est_mb: float | None = None
+    if sparse_enabled and sparse_kind_use == "jax" and int(size) <= int(sparse_max_size):
+        bytes_per = float(np.dtype(precond_dtype).itemsize)
+        sparse_jax_est_mb = (int(size) ** 2) * bytes_per / 1.0e6
+
+    ordering = rhs1_resolved_sparse_rescue_ordering(
+        sparse_enabled=bool(sparse_enabled),
+        sparse_kind_use=sparse_kind_use,
+        dense_shortcut=bool(dense_shortcut),
+        sparse_exact_direct=bool(sparse_exact_direct),
+        size=int(size),
+        sparse_max_size=int(sparse_max_size),
+        large_cpu_sparse_rescue=bool(large_cpu_sparse_rescue),
+        sparse_xblock_rescue_active=bool(sparse_xblock_rescue_active),
+        sparse_sxblock_rescue_active=bool(sparse_sxblock_rescue_active),
+        sparse_jax_est_mb=sparse_jax_est_mb,
+        sparse_jax_max_mb=float(sparse_jax_max_mb),
+        pas_fast_accept=bool(pas_fast_accept),
+        gpu_sparse_skip=bool(gpu_sparse_skip),
+    )
+    sparse_jax_memory_disabled_message: str | None = None
+    if ordering.reason_sparse_jax_mem_disabled and sparse_jax_est_mb is not None:
+        sparse_jax_memory_disabled_message = (
+            "sparse_jax: disabled "
+            f"(est_mem={sparse_jax_est_mb:.1f} MB > max_mb={float(sparse_jax_max_mb):.1f})"
+        )
+    return RHS1SparseRescuePolicySetup(
+        enabled=bool(ordering.enabled),
+        kind_use=str(ordering.kind_use),
+        ordering=ordering,
+        sparse_jax_est_mb=sparse_jax_est_mb,
+        sparse_jax_memory_disabled_message=sparse_jax_memory_disabled_message,
     )
 
 
@@ -2536,6 +2616,7 @@ __all__ = (
     "RHS1QIDeviceRankBudget",
     "RHS1QIDeviceSetupSummary",
     "RHS1SparseRescueOrdering",
+    "RHS1SparseRescuePolicySetup",
     "parse_rhs1_pas_tz_guarded_structured_levels",
     "rhs1_constraint0_dense_fallback_allowed",
     "rhs1_constraint0_petsc_compat",
@@ -2573,6 +2654,7 @@ __all__ = (
     "rhs1_sparse_exact_lu_requested",
     "rhs1_sparse_kind_use",
     "rhs1_sparse_prefer_skips_stage2",
+    "rhs1_sparse_rescue_policy_setup",
     "rhs1_stage2_ratio",
     "rhs1_stage2_trigger",
     "rhs1_xblock_fallback_initial_guess",
