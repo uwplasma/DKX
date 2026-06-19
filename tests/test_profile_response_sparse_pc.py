@@ -136,6 +136,7 @@ from sfincs_jax.problems.profile_response.sparse_pc import (
     validate_explicit_sparse_host_request,
     finalize_xblock_assembled_operator_metadata,
     xblock_sparse_pc_final_metadata_from_driver_state,
+    xblock_sparse_pc_final_payload_from_driver_state,
 )
 
 
@@ -5389,3 +5390,46 @@ def test_xblock_sparse_pc_final_metadata_from_driver_state_merges_components(
         "correction_state": state,
     }
     assert metadata == {"core": 1, "correction": 2, "shared": "correction"}
+
+
+def test_xblock_sparse_pc_final_payload_from_driver_state_sets_gate_and_expands(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: dict[str, object] = {}
+
+    def fake_result_metadata(arg_state, *, full_size):
+        calls["accepted"] = arg_state["accepted_converged_xblock"]
+        calls["full_size"] = full_size
+        return {"core": 1}
+
+    def fake_correction_metadata(_arg_state):
+        return {"correction": 2}
+
+    monkeypatch.setattr(
+        sparse_pc_module,
+        "xblock_sparse_pc_result_diagnostics_from_driver_state",
+        fake_result_metadata,
+    )
+    monkeypatch.setattr(
+        sparse_pc_module,
+        "build_rhs1_xblock_correction_metadata_from_driver_state",
+        fake_correction_metadata,
+    )
+
+    payload = xblock_sparse_pc_final_payload_from_driver_state(
+        {
+            "op": SimpleNamespace(total_size=7),
+            "x_np": np.asarray([3.0, 4.0]),
+            "residual_norm_xblock_pc": 0.25,
+            "target_xblock": 0.5,
+        },
+        expand_reduced=lambda x: jnp.concatenate(
+            [jnp.asarray([0.0], dtype=x.dtype), x]
+        ),
+    )
+
+    assert isinstance(payload, SparsePCGMRESFinalPayload)
+    np.testing.assert_allclose(np.asarray(payload.x), np.asarray([0.0, 3.0, 4.0]))
+    assert float(payload.residual_norm) == pytest.approx(0.25)
+    assert calls == {"accepted": True, "full_size": 7}
+    assert payload.metadata == {"core": 1, "correction": 2}

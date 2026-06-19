@@ -242,7 +242,7 @@ from .problems.profile_response.sparse_pc import (
     build_direct_tail_materialization_setup,
     finalize_sparse_pc_gmres_from_driver_state,
     fortran_reduced_xblock_final_payload_from_driver_state,
-    xblock_sparse_pc_final_metadata_from_driver_state,
+    xblock_sparse_pc_final_payload_from_driver_state,
     evaluate_xblock_moment_schur_probe_result,
     evaluate_sparse_pc_factor_preflight,
     evaluate_sparse_pc_residual_candidate_acceptance,
@@ -6852,21 +6852,18 @@ def solve_v3_full_system_linear_gmres(
                 int(xblock_linear_size),
                 dtype=np.float64,
             )
-            accepted_converged_xblock = rhs1_residual_converged(
-                residual_norm_xblock_pc,
-                target_xblock,
+            xblock_sparse_pc_final_payload = xblock_sparse_pc_final_payload_from_driver_state(
+                locals(),
+                expand_reduced=_xblock_expand_reduced,
             )
             return V3LinearSolveResult(
                 op=op,
                 rhs=rhs,
                 gmres=GMRESSolveResult(
-                    x=_xblock_expand_reduced(jnp.asarray(x_np, dtype=jnp.float64)),
-                    residual_norm=jnp.asarray(residual_norm_xblock_pc, dtype=jnp.float64),
+                    x=xblock_sparse_pc_final_payload.x,
+                    residual_norm=xblock_sparse_pc_final_payload.residual_norm,
                 ),
-                metadata=xblock_sparse_pc_final_metadata_from_driver_state(
-                    locals(),
-                    full_size=op.total_size,
-                ),
+                metadata=xblock_sparse_pc_final_payload.metadata,
             )
 
         sparse_pc_active_setup = build_sparse_pc_active_dof_setup(

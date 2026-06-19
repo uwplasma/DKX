@@ -7069,6 +7069,29 @@ def xblock_sparse_pc_final_metadata_from_driver_state(
     }
 
 
+def xblock_sparse_pc_final_payload_from_driver_state(
+    state: Mapping[str, object],
+    *,
+    expand_reduced: ArrayFn,
+) -> SparsePCGMRESFinalPayload:
+    """Build the final payload for the x-block sparse-PC branch."""
+
+    residual_norm = float(state["residual_norm_xblock_pc"])
+    metadata_state = state.__class__(state) if isinstance(state, MutableMapping) else dict(state)
+    metadata_state["accepted_converged_xblock"] = profile_residual_converged(
+        residual_norm,
+        float(state["target_xblock"]),
+    )
+    return SparsePCGMRESFinalPayload(
+        x=expand_reduced(jnp.asarray(state["x_np"], dtype=jnp.float64)),
+        residual_norm=jnp.asarray(residual_norm, dtype=jnp.float64),
+        metadata=xblock_sparse_pc_final_metadata_from_driver_state(
+            metadata_state,
+            full_size=getattr(state["op"], "total_size"),
+        ),
+    )
+
+
 def explicit_sparse_pattern_progress_messages(
     *,
     solver_label: str,
@@ -7737,6 +7760,7 @@ __all__ = [
     "sparse_pc_gmres_final_payload_from_driver_state",
     "finalize_sparse_pc_gmres_from_driver_state",
     "fortran_reduced_xblock_final_payload_from_driver_state",
+    "xblock_sparse_pc_final_payload_from_driver_state",
     "resolve_sparse_minimum_norm_policy",
     "sparse_minimum_norm_solve_payload",
     "sparse_minimum_norm_start_message",

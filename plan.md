@@ -42,8 +42,8 @@ Make `sfincs_jax` research-grade while preserving the public user contract:
 
 Recent checkpoints:
 
-- Explicit-sparse factor-builder compatibility wrapper simplification
-  (current checkpoint).
+- X-block sparse-PC final-payload extraction (current checkpoint).
+- Explicit-sparse factor-builder compatibility wrapper simplification.
 - Fortran-reduced x-block final-payload extraction and duplicate sparse-rescue
   metadata cleanup.
 - X-block sparse-PC metadata helper extraction.
@@ -65,26 +65,25 @@ Recent checkpoints:
 - `cb295ce` Extract sparse pattern setup.
 - `4b6a5b4` Extract sparse factor policy.
 
-Current source-size snapshot after explicit-sparse factor-builder wrapper
-simplification:
+Current source-size snapshot after x-block sparse-PC final-payload extraction:
 
-- `sfincs_jax/v3_driver.py`: `18888` lines.
-- `solve_v3_full_system_linear_gmres`: `13602` lines.
+- `sfincs_jax/v3_driver.py`: `18885` lines.
+- `solve_v3_full_system_linear_gmres`: `13599` lines.
 - `sfincs_jax/problems/profile_response/handoff.py`: `254` lines.
-- `sfincs_jax/problems/profile_response/sparse_pc.py`: `7762` lines.
+- `sfincs_jax/problems/profile_response/sparse_pc.py`: `7786` lines.
 
 Recent local validation:
 
 - Sparse-PC helper shard:
-  `167 passed in 1.68 s`.
+  `168 passed in 1.66 s`.
 - Profile-response diagnostics plus explicit sparse/direct-tail driver checks:
-  `16 passed in 14.38 s`.
+  `16 passed in 14.31 s`.
 - Sparse helper coverage plus explicit sparse factor-builder tests:
   `18 passed in 1.22 s`.
 - End-to-end explicit sparse/direct-tail driver checks:
   `5 passed in 14.22 s`.
 - Latest broad profile-response/x-block/sparse-pattern shard:
-  `446 passed in 113.27 s`.
+  `447 passed in 112.46 s`.
 - Handoff/replay and profile-response diagnostics shard:
   `35 passed in 0.76 s`.
 - Handoff helper unit shard:
@@ -182,6 +181,8 @@ Completed recent boundaries:
 - Explicit-sparse factor-builder wrapper in `v3_driver.py` simplified to a
   patchable compatibility shim so the builder schema is defined only in
   `explicit_sparse_factor_builder.py`.
+- X-block sparse-PC final vector expansion, residual payload, and convergence
+  acceptance metadata consolidated into a profile-response helper.
 
 Next steps:
 
