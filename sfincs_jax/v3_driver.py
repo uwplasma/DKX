@@ -581,6 +581,7 @@ from .rhs1_large_cpu_policy import (
 from .problems.profile_response.policies import (
     rhs1_fast_post_xblock_polish_allowed as _rhs1_fast_post_xblock_polish_allowed_impl,
     rhs1_fast_post_xblock_polish_controls_from_env,
+    rhs1_fp_bicgstab_polish_controls_from_env,
     rhs1_fp_global_low_l_polish_controls_from_env,
     rhs1_fp_l1_polish_controls_from_env,
     rhs1_fp_low_l_polish_controls_from_env,
@@ -13925,35 +13926,20 @@ def solve_v3_full_system_linear_gmres(
                                 )
                 # Optional BiCGStab polish for large FP systems: short-recurrence Krylov
                 # can reduce residuals further when restarted GMRES stagnates.
-                fp_bi_env = os.environ.get("SFINCS_JAX_RHSMODE1_FP_BICGSTAB_POLISH", "").strip().lower()
-                fp_bi_enabled = fp_bi_env in {"1", "true", "yes", "on"}
-                fp_bi_min_env = os.environ.get("SFINCS_JAX_RHSMODE1_FP_BICGSTAB_MIN", "").strip()
-                try:
-                    fp_bi_min = int(fp_bi_min_env) if fp_bi_min_env else 80000
-                except ValueError:
-                    fp_bi_min = 80000
-                if fp_bi_enabled and int(active_size) >= max(1, int(fp_bi_min)) and float(res_reduced.residual_norm) > target_reduced:
-                    fp_bi_maxiter_env = os.environ.get("SFINCS_JAX_RHSMODE1_FP_BICGSTAB_MAXITER", "").strip()
-                    fp_bi_tol_env = os.environ.get("SFINCS_JAX_RHSMODE1_FP_BICGSTAB_TOL", "").strip()
-                    fp_bi_atol_env = os.environ.get("SFINCS_JAX_RHSMODE1_FP_BICGSTAB_ATOL", "").strip()
-                    try:
-                        fp_bi_maxiter = int(fp_bi_maxiter_env) if fp_bi_maxiter_env else 120
-                    except ValueError:
-                        fp_bi_maxiter = 120
-                    try:
-                        fp_bi_tol = float(fp_bi_tol_env) if fp_bi_tol_env else min(float(tol), 1.0e-10)
-                    except ValueError:
-                        fp_bi_tol = min(float(tol), 1.0e-10)
-                    try:
-                        fp_bi_atol = float(fp_bi_atol_env) if fp_bi_atol_env else float(atol)
-                    except ValueError:
-                        fp_bi_atol = float(atol)
-                    fp_bi_maxiter = max(5, min(int(fp_bi_maxiter), 400))
+                fp_bi_controls = rhs1_fp_bicgstab_polish_controls_from_env(
+                    tol=float(tol),
+                    atol=float(atol),
+                )
+                if (
+                    fp_bi_controls.enabled
+                    and int(active_size) >= int(fp_bi_controls.min_size)
+                    and float(res_reduced.residual_norm) > target_reduced
+                ):
                     if emit is not None:
                         emit(
                             1,
                             "solve_v3_full_system_linear_gmres: FP BiCGStab polish "
-                            f"(maxiter={fp_bi_maxiter} tol={fp_bi_tol:.1e})",
+                            f"(maxiter={fp_bi_controls.maxiter} tol={fp_bi_controls.tol:.1e})",
                         )
                     precond_bi = preconditioner_reduced
                     if precond_bi is None and fp_polish_controls.hybrid:
@@ -13963,10 +13949,10 @@ def solve_v3_full_system_linear_gmres(
                         b_vec=rhs_reduced,
                         precond_fn=precond_bi,
                         x0_vec=res_reduced.x,
-                        tol_val=fp_bi_tol,
-                        atol_val=fp_bi_atol,
+                        tol_val=fp_bi_controls.tol,
+                        atol_val=fp_bi_controls.atol,
                         restart_val=restart,
-                        maxiter_val=fp_bi_maxiter,
+                        maxiter_val=fp_bi_controls.maxiter,
                         solve_method_val="bicgstab",
                         precond_side=gmres_precond_side,
                     )

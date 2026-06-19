@@ -42,11 +42,15 @@ Make `sfincs_jax` research-grade while preserving the public user contract:
 
 Recent checkpoints:
 
+- RHSMode=1 FP BiCGStab polish controls now use a tested profile-response
+  policy helper for opt-in, min-size admission, maxiter bounds, and tolerance
+  parsing while preconditioner choice, solve execution, and residual acceptance
+  remain driver-owned (current checkpoint).
 - RHSMode=1 FP L1 and global low-L projected-polish controls now use tested
   profile-response policy helpers for enablement, Krylov bounds, residual
   thresholds, lmax/size caps, and acceptance ratios while active-index
   construction, projected solves, and result acceptance remain driver-owned
-  (current checkpoint).
+  (`8192d0f`).
 - RHSMode=1 FP low-L polish controls now use a tested profile-response policy
   helper for lmax, small-angular-grid default bump, block cap, restart, and
   maxiter while low-L preconditioner construction and solve execution remain
@@ -203,14 +207,14 @@ Recent checkpoints:
 - `cb295ce` Extract sparse pattern setup.
 - `4b6a5b4` Extract sparse factor policy.
 
-Current source-size snapshot after FP L1/global low-L polish-control extraction:
+Current source-size snapshot after FP BiCGStab polish-control extraction:
 
-- `sfincs_jax/v3_driver.py`: `17818` lines.
-- `solve_v3_full_system_linear_gmres`: `12482` lines.
+- `sfincs_jax/v3_driver.py`: `17804` lines.
+- `solve_v3_full_system_linear_gmres`: `12467` lines.
 - `sfincs_jax/v3_results.py`: `119` lines.
 - `sfincs_jax/problems/profile_response/residual.py`: `981` lines.
 - `sfincs_jax/problems/profile_response/handoff.py`: `598` lines.
-- `sfincs_jax/problems/profile_response/policies.py`: `3179` lines.
+- `sfincs_jax/problems/profile_response/policies.py`: `3211` lines.
 - `sfincs_jax/problems/profile_response/dense.py`: `701` lines.
 - `sfincs_jax/problems/profile_response/linear_solve.py`: `327` lines.
 - `sfincs_jax/problems/profile_response/active_projection.py`: `116` lines.
@@ -219,6 +223,16 @@ Current source-size snapshot after FP L1/global low-L polish-control extraction:
 
 Recent local validation:
 
+- Post-xblock policy shard after FP BiCGStab polish-control extraction:
+  `23 passed in 0.35 s`.
+- Sparse-host/minimum-norm/direct-tail driver shard:
+  `32 passed, 100 deselected in 36.51 s`.
+- Broad profile-response/RHSMode=1 policy, setup, diagnostics, solver, and
+  helper sweep after FP BiCGStab polish-control extraction:
+  `1080 passed in 48.96 s`.
+- Hygiene:
+  `py_compile`, `ruff`, `compileall`, `git diff --check`, and
+  `scripts/check_repo_size.py` passed.
 - Post-xblock policy shard after FP L1/global low-L polish-control extraction:
   `21 passed in 0.36 s`.
 - Sparse-host/minimum-norm/direct-tail driver shard:

@@ -2093,6 +2093,17 @@ class RHS1FPGlobalLowLPolishControls:
     threshold_ratio: float = 2.0
 
 
+@dataclass(frozen=True)
+class RHS1FPBiCGStabPolishControls:
+    """Controls for the optional FP BiCGStab residual-polish pass."""
+
+    enabled: bool
+    min_size: int
+    maxiter: int
+    tol: float
+    atol: float
+
+
 def rhs1_fp_residual_polish_controls_from_env() -> RHS1FPResidualPolishControls:
     """Parse damped FP residual-polish controls with bounded defaults."""
 
@@ -2188,6 +2199,25 @@ def rhs1_fp_global_low_l_polish_controls_from_env(
         maxiter=int(maxiter),
         abs_threshold=_env_float("SFINCS_JAX_RHSMODE1_FP_GLOBAL_LOW_ABS", 1.0e-8),
         full_accept_ratio=max(1.0, float(full_ratio)),
+    )
+
+
+def rhs1_fp_bicgstab_polish_controls_from_env(
+    *,
+    tol: float,
+    atol: float,
+) -> RHS1FPBiCGStabPolishControls:
+    """Parse optional FP BiCGStab polish controls with legacy bounds."""
+
+    enabled_env = _env_token("SFINCS_JAX_RHSMODE1_FP_BICGSTAB_POLISH")
+    default_tol = min(float(tol), 1.0e-10)
+    maxiter = _env_int("SFINCS_JAX_RHSMODE1_FP_BICGSTAB_MAXITER", 120)
+    return RHS1FPBiCGStabPolishControls(
+        enabled=enabled_env in _TRUE_VALUES,
+        min_size=max(1, _env_int("SFINCS_JAX_RHSMODE1_FP_BICGSTAB_MIN", 80000)),
+        maxiter=max(5, min(int(maxiter), 400)),
+        tol=_env_float("SFINCS_JAX_RHSMODE1_FP_BICGSTAB_TOL", default_tol),
+        atol=_env_float("SFINCS_JAX_RHSMODE1_FP_BICGSTAB_ATOL", float(atol)),
     )
 
 
@@ -3112,6 +3142,7 @@ def rhs1_pas_tz_guarded_stage2_retry() -> bool:
 __all__ = (
     "RHS1Constraint0PETScCompatConfig",
     "RHS1FastPostXBlockPolishControls",
+    "RHS1FPBiCGStabPolishControls",
     "RHS1FPGlobalLowLPolishControls",
     "RHS1FPL1PolishControls",
     "RHS1FPLowLPolishControls",
@@ -3132,6 +3163,7 @@ __all__ = (
     "rhs1_fast_post_xblock_polish_allowed",
     "rhs1_fast_post_xblock_polish_controls_from_env",
     "rhs1_fp_force_stage2",
+    "rhs1_fp_bicgstab_polish_controls_from_env",
     "rhs1_fp_global_low_l_polish_controls_from_env",
     "rhs1_fp_l1_polish_controls_from_env",
     "rhs1_fp_low_l_polish_controls_from_env",

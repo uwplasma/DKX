@@ -4,12 +4,14 @@ from types import SimpleNamespace
 
 from sfincs_jax.rhs1_post_xblock_policy import (
     RHS1FastPostXBlockPolishControls,
+    RHS1FPBiCGStabPolishControls,
     RHS1FPGlobalLowLPolishControls,
     RHS1FPL1PolishControls,
     RHS1FPLowLPolishControls,
     RHS1FPResidualPolishControls,
     rhs1_fast_post_xblock_polish_allowed,
     rhs1_fast_post_xblock_polish_controls_from_env,
+    rhs1_fp_bicgstab_polish_controls_from_env,
     rhs1_fp_global_low_l_polish_controls_from_env,
     rhs1_fp_l1_polish_controls_from_env,
     rhs1_fp_low_l_polish_controls_from_env,
@@ -396,6 +398,63 @@ def test_fp_global_low_l_polish_controls_respect_env_and_bounds(monkeypatch) -> 
         full_accept_ratio=1.2,
         tol=1.0e-10,
         threshold_ratio=2.0,
+    )
+
+
+def test_fp_bicgstab_polish_controls_preserve_defaults(monkeypatch) -> None:
+    for name in (
+        "SFINCS_JAX_RHSMODE1_FP_BICGSTAB_POLISH",
+        "SFINCS_JAX_RHSMODE1_FP_BICGSTAB_MIN",
+        "SFINCS_JAX_RHSMODE1_FP_BICGSTAB_MAXITER",
+        "SFINCS_JAX_RHSMODE1_FP_BICGSTAB_TOL",
+        "SFINCS_JAX_RHSMODE1_FP_BICGSTAB_ATOL",
+    ):
+        monkeypatch.delenv(name, raising=False)
+
+    assert rhs1_fp_bicgstab_polish_controls_from_env(
+        tol=1.0e-8,
+        atol=2.0e-9,
+    ) == RHS1FPBiCGStabPolishControls(
+        enabled=False,
+        min_size=80000,
+        maxiter=120,
+        tol=1.0e-10,
+        atol=2.0e-9,
+    )
+
+
+def test_fp_bicgstab_polish_controls_respect_env_and_bounds(monkeypatch) -> None:
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_FP_BICGSTAB_POLISH", "yes")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_FP_BICGSTAB_MIN", "-4")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_FP_BICGSTAB_MAXITER", "999")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_FP_BICGSTAB_TOL", "3e-12")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_FP_BICGSTAB_ATOL", "4e-13")
+
+    assert rhs1_fp_bicgstab_polish_controls_from_env(
+        tol=1.0e-8,
+        atol=2.0e-9,
+    ) == RHS1FPBiCGStabPolishControls(
+        enabled=True,
+        min_size=1,
+        maxiter=400,
+        tol=3.0e-12,
+        atol=4.0e-13,
+    )
+
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_FP_BICGSTAB_POLISH", "off")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_FP_BICGSTAB_MIN", "bad")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_FP_BICGSTAB_MAXITER", "bad")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_FP_BICGSTAB_TOL", "bad")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_FP_BICGSTAB_ATOL", "bad")
+    assert rhs1_fp_bicgstab_polish_controls_from_env(
+        tol=1.0e-12,
+        atol=2.0e-9,
+    ) == RHS1FPBiCGStabPolishControls(
+        enabled=False,
+        min_size=80000,
+        maxiter=120,
+        tol=1.0e-12,
+        atol=2.0e-9,
     )
 
 
