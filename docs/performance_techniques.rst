@@ -564,6 +564,9 @@ and memory-bounded.
 
 - ``sfincs_jax.implicit_solve.linear_custom_solve`` and
   ``linear_custom_solve_with_residual``.
+- ``sfincs_jax.implicit_solve.implicit_solve_method_for_custom_linear_solve``
+  maps host-only CLI Krylov choices such as ``lgmres_scipy`` to traced-safe
+  ``incremental`` GMRES before entering ``jax.lax.custom_linear_solve``.
 - Controlled by ``SFINCS_JAX_IMPLICIT_SOLVE``.
 
 Transport preconditioning (RHSMode=2/3)

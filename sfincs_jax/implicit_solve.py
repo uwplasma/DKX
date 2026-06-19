@@ -136,6 +136,21 @@ def _use_solver_jit(size_hint: int | None = None) -> bool:
     return size <= thresh
 
 
+def implicit_solve_method_for_custom_linear_solve(solve_method: str) -> str:
+    """Return the traced-safe Krylov method used inside implicit differentiation.
+
+    Host-only SciPy methods are valid for CLI/non-autodiff production solves, but
+    `jax.lax.custom_linear_solve` supplies traced arrays to the forward and
+    transpose callbacks. Resolve those requests to the JAX-native incremental
+    GMRES path before tracing.
+    """
+
+    method = str(solve_method).strip().lower().replace("-", "_")
+    if method in {"lgmres", "lgmres_scipy"}:
+        return "incremental"
+    return method
+
+
 def _linear_custom_solve_core(
     *,
     matvec: MatVec,
@@ -159,13 +174,7 @@ def _linear_custom_solve_core(
     if solver_kind in {"auto", "default"}:
         solver_kind = "bicgstab"
 
-    solve_method_kind = str(solve_method).lower()
-    if solve_method_kind in {"lgmres", "lgmres_scipy"}:
-        # Host-only Krylov methods cannot run from custom_linear_solve callbacks because
-        # JAX supplies traced values there. Keep the public solver rejection in solver.py,
-        # but downgrade to traced-safe GMRES inside the implicit path so CLI fast-mode
-        # overrides do not fail on cases that still route through custom linear solves.
-        solve_method_kind = "incremental"
+    solve_method_kind = implicit_solve_method_for_custom_linear_solve(solve_method)
 
     if solver_jit is None:
         use_solver_jit = _use_solver_jit(size_hint=size_hint)

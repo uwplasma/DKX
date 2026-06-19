@@ -42,8 +42,10 @@ Make `sfincs_jax` research-grade while preserving the public user contract:
 
 Recent checkpoints:
 
-- Generic sparse-PC dtype-retry/finalization handoff extraction
+- Implicit-solve host-only Krylov downgrade contract and gradient tests
   (current checkpoint).
+- Generic sparse-PC dtype-retry/finalization handoff extraction
+  (`f3af854`).
 - X-block sparse-PC final-payload extraction.
 - Explicit-sparse factor-builder compatibility wrapper simplification.
 - Fortran-reduced x-block final-payload extraction and duplicate sparse-rescue
@@ -77,6 +79,8 @@ handoff extraction:
 
 Recent local validation:
 
+- Implicit/autodiff host-only solve-method downgrade shard:
+  `15 passed in 4.91 s`.
 - Sparse-PC helper shard:
   `169 passed in 1.74 s`.
 - Profile-response diagnostics plus explicit sparse/direct-tail driver checks:
@@ -203,7 +207,7 @@ Next steps:
 
 ### 2. Differentiability And Solver-Lane Separation
 
-Completion estimate: 70%.
+Completion estimate: 72%.
 
 Goal:
 
@@ -213,7 +217,8 @@ Goal:
 Next steps:
 
 - Keep host sparse factors out of autodiff paths.
-- Document the lane split in API/docs once the driver refactor stabilizes.
+- Keep documenting the CLI/non-autodiff versus JAX/autodiff lane split as
+  behavior-facing solver controls change.
 - Add focused tests for implicit differentiation and branch-stable solver
   selection where practical.
 
@@ -237,7 +242,7 @@ Next steps:
 
 ### 4. Validation, Coverage, And Documentation
 
-Completion estimate: 62%.
+Completion estimate: 63%.
 
 Goal:
 
@@ -255,11 +260,11 @@ Next steps:
 
 ## Immediate Next Steps
 
-1. Commit and push the x-block sparse-PC metadata helper extraction.
+1. Commit and push the implicit-solve host-only downgrade guard.
 2. Continue with remaining generic sparse-PC solve/result assembly extraction
    where behavior and cache boundaries remain clean.
-3. Run focused handoff/sparse-PC tests and the broad profile-response/x-block/sparse
-   shard after each extraction.
+3. Run focused implicit/sparse-PC/profile-response shards after each extraction,
+   and broad shards only after behavior-facing seams move.
 4. Snapshot CI but do not wait on queued runs unless a completed failure appears.
 
 ## Completion Criteria

@@ -1160,6 +1160,8 @@ Linear-algebra infrastructure:
 - Krylov wrappers,
 - host-direct and sparse rescues,
 - differentiable linear solves,
+- traced-safe implicit-solve method resolution that maps host-only SciPy Krylov
+  requests to JAX-native incremental GMRES inside autodiff paths,
 - JAX-native linear solve utilities,
 - augmented FGMRES hooks that reuse a checked coarse basis and stored operator
   action ``(U, A U)`` without assembling a dense global operator.
