@@ -66,6 +66,7 @@ from sfincs_jax.problems.profile_response.sparse_pc import (
     XBlockGMRESFallbackDecision,
     XBlockGMRESFallbackContext,
     XBlockGMRESFallbackResult,
+    XBlockKrylovSolveSpaceContext,
     XBlockKrylovReport,
     XBlockPostSolveCorrectionContext,
     XBlockPostSolveCorrectionResult,
@@ -145,6 +146,7 @@ from sfincs_jax.problems.profile_response.sparse_pc import (
     resolve_xblock_sparse_pc_side_policy_setup,
     resolve_xblock_two_level_policy_setup,
     fortran_reduced_xblock_final_payload_from_driver_state,
+    prepare_xblock_krylov_solve_space,
     run_fortran_reduced_xblock_krylov_solve,
     run_xblock_first_krylov_attempt,
     run_sparse_pc_gmres_once,
@@ -241,6 +243,86 @@ def _first_krylov_context(**overrides: object) -> XBlockFirstKrylovAttemptContex
     }
     values.update(overrides)
     return XBlockFirstKrylovAttemptContext(**values)  # type: ignore[arg-type]
+
+
+def test_prepare_xblock_krylov_solve_space_unscaled_preserves_callbacks() -> None:
+    rhs = jnp.asarray([1.0, 2.0], dtype=jnp.float64)
+    x0 = jnp.asarray([0.5, 1.5], dtype=jnp.float64)
+
+    solve_space = prepare_xblock_krylov_solve_space(
+        XBlockKrylovSolveSpaceContext(
+            matvec=_identity,
+            rhs=rhs,
+            preconditioner=_identity,
+            x0=x0,
+            precondition_side="right",
+            row_equilibration_built=False,
+            col_equilibration_built=False,
+            row_scale=None,
+            inv_row_scale=None,
+            col_scale=None,
+            inv_col_scale=None,
+        )
+    )
+
+    assert solve_space.matvec is _identity
+    assert solve_space.preconditioner is _identity
+    assert solve_space.x0 is x0
+    assert solve_space.transform_label is None
+    np.testing.assert_allclose(np.asarray(solve_space.rhs), np.asarray(rhs))
+    np.testing.assert_allclose(
+        np.asarray(solve_space.solution_to_physical(jnp.asarray([3.0, 4.0]))),
+        np.asarray([3.0, 4.0]),
+    )
+
+
+def test_prepare_xblock_krylov_solve_space_row_column_scaled() -> None:
+    rhs = jnp.asarray([1.0, 2.0], dtype=jnp.float64)
+    x0 = jnp.asarray([10.0, 20.0], dtype=jnp.float64)
+    row_scale = jnp.asarray([2.0, 3.0], dtype=jnp.float64)
+    inv_row_scale = 1.0 / row_scale
+    col_scale = jnp.asarray([5.0, 7.0], dtype=jnp.float64)
+    inv_col_scale = 1.0 / col_scale
+
+    def matvec(v: jnp.ndarray) -> jnp.ndarray:
+        return 10.0 * jnp.asarray(v, dtype=jnp.float64)
+
+    def preconditioner(v: jnp.ndarray) -> jnp.ndarray:
+        return 4.0 * jnp.asarray(v, dtype=jnp.float64)
+
+    solve_space = prepare_xblock_krylov_solve_space(
+        XBlockKrylovSolveSpaceContext(
+            matvec=matvec,
+            rhs=rhs,
+            preconditioner=preconditioner,
+            x0=x0,
+            precondition_side="right",
+            row_equilibration_built=True,
+            col_equilibration_built=True,
+            row_scale=row_scale,
+            inv_row_scale=inv_row_scale,
+            col_scale=col_scale,
+            inv_col_scale=inv_col_scale,
+        )
+    )
+
+    trial = jnp.asarray([2.0, 3.0], dtype=jnp.float64)
+    residual = jnp.asarray([8.0, 12.0], dtype=jnp.float64)
+    np.testing.assert_allclose(np.asarray(solve_space.rhs), np.asarray(row_scale * rhs))
+    np.testing.assert_allclose(
+        np.asarray(solve_space.matvec(trial)),
+        np.asarray(row_scale * (10.0 * col_scale * trial)),
+    )
+    np.testing.assert_allclose(
+        np.asarray(solve_space.preconditioner(residual)),
+        np.asarray(inv_col_scale * (4.0 * inv_row_scale * residual)),
+    )
+    np.testing.assert_allclose(np.asarray(solve_space.x0), np.asarray(inv_col_scale * x0))
+    np.testing.assert_allclose(
+        np.asarray(solve_space.solution_to_physical(trial)),
+        np.asarray(col_scale * trial),
+    )
+    assert solve_space.transform_label == "row/column"
 
 
 def test_xblock_krylov_report_prefers_device_counters() -> None:

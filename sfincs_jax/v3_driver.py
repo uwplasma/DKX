@@ -256,6 +256,7 @@ from .problems.profile_response.sparse_pc import (
     SparsePCGMRESContext,
     XBlockFirstKrylovAttemptContext,
     XBlockGMRESFallbackContext,
+    XBlockKrylovSolveSpaceContext,
     XBlockPostSolveCorrectionContext,
     apply_fortran_reduced_xblock_global_coupling_stage,
     apply_fortran_reduced_xblock_initial_seed,
@@ -303,6 +304,7 @@ from .problems.profile_response.sparse_pc import (
     resolve_fortran_reduced_xblock_global_coupling_policy,
     resolve_fortran_reduced_xblock_initial_seed_policy,
     resolve_fortran_reduced_xblock_moment_schur_policy,
+    prepare_xblock_krylov_solve_space,
     resolve_xblock_qi_device_admission_setup,
     resolve_xblock_qi_device_base_config_setup,
     resolve_xblock_qi_device_enrichment_config_setup,
@@ -6179,50 +6181,32 @@ def solve_v3_full_system_linear_gmres(
             solve_preconditioner = precond_xblock_krylov if precondition_side != "none" else None
             solve_x0 = x0_full
             solve_solution_to_physical = lambda v: jnp.asarray(v, dtype=jnp.float64)
-            if bool(xblock_row_equilibration_built):
-                assert xblock_row_scale_jnp is not None
-                assert xblock_inv_row_scale_jnp is not None
-                row_scale_for_solve = xblock_row_scale_jnp
-                inv_row_scale_for_solve = xblock_inv_row_scale_jnp
-                col_scale_for_solve = xblock_col_scale_jnp if bool(xblock_col_equilibration_built) else None
-                inv_col_scale_for_solve = (
-                    xblock_inv_col_scale_jnp if bool(xblock_col_equilibration_built) else None
+            solve_space = prepare_xblock_krylov_solve_space(
+                XBlockKrylovSolveSpaceContext(
+                    matvec=solve_matvec,
+                    rhs=solve_rhs,
+                    preconditioner=solve_preconditioner,
+                    x0=solve_x0,
+                    precondition_side=str(precondition_side),
+                    row_equilibration_built=bool(xblock_row_equilibration_built),
+                    col_equilibration_built=bool(xblock_col_equilibration_built),
+                    row_scale=xblock_row_scale_jnp,
+                    inv_row_scale=xblock_inv_row_scale_jnp,
+                    col_scale=xblock_col_scale_jnp,
+                    inv_col_scale=xblock_inv_col_scale_jnp,
                 )
-                base_solve_matvec = solve_matvec
-                base_solve_preconditioner = solve_preconditioner
-
-                def _mv_row_equilibrated(v: jnp.ndarray) -> jnp.ndarray:
-                    v_j = jnp.asarray(v, dtype=jnp.float64)
-                    physical_v = col_scale_for_solve * v_j if col_scale_for_solve is not None else v_j
-                    return row_scale_for_solve * jnp.asarray(base_solve_matvec(physical_v), dtype=jnp.float64)
-
-                def _precond_row_equilibrated(v: jnp.ndarray) -> jnp.ndarray:
-                    physical_residual = inv_row_scale_for_solve * jnp.asarray(v, dtype=jnp.float64)
-                    if base_solve_preconditioner is None:
-                        physical_update = physical_residual
-                    else:
-                        physical_update = jnp.asarray(base_solve_preconditioner(physical_residual), dtype=jnp.float64)
-                    if inv_col_scale_for_solve is not None:
-                        return inv_col_scale_for_solve * physical_update
-                    return physical_update
-
-                solve_matvec = _mv_row_equilibrated
-                solve_rhs = row_scale_for_solve * jnp.asarray(xblock_rhs, dtype=jnp.float64)
-                solve_preconditioner = _precond_row_equilibrated if precondition_side != "none" else None
-                if col_scale_for_solve is not None and inv_col_scale_for_solve is not None:
-                    solve_x0 = None if x0_full is None else inv_col_scale_for_solve * jnp.asarray(x0_full, dtype=jnp.float64)
-
-                    def _solution_to_physical_col_scaled(v: jnp.ndarray) -> jnp.ndarray:
-                        return col_scale_for_solve * jnp.asarray(v, dtype=jnp.float64)
-
-                    solve_solution_to_physical = _solution_to_physical_col_scaled
-                if emit is not None:
-                    transform = "row/column" if bool(xblock_col_equilibration_built) else "row"
-                    emit(
-                        0,
-                        "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
-                        f"using {transform}-equilibrated assembled operator for Krylov solve",
-                    )
+            )
+            solve_matvec = solve_space.matvec
+            solve_rhs = solve_space.rhs
+            solve_preconditioner = solve_space.preconditioner
+            solve_x0 = solve_space.x0
+            solve_solution_to_physical = solve_space.solution_to_physical
+            if emit is not None and solve_space.transform_label is not None:
+                emit(
+                    0,
+                    "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
+                    f"using {solve_space.transform_label}-equilibrated assembled operator for Krylov solve",
+                )
             augmentation_basis_for_solve = None
             operator_on_augmentation_for_solve = None
             if bool(qi_device_augmented_krylov_requested):

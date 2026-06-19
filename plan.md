@@ -842,6 +842,14 @@ Recent local validation:
 - Broad profile-response/RHSMode=1 policy, setup, diagnostics, solver, and
   helper sweep after xblock first-attempt Krylov dispatch extraction:
   `1170 passed in 48.75 s`.
+- Sparse-PC helper shard after xblock Krylov solve-space/equilibration
+  extraction:
+  `215 passed in 2.17 s`.
+- Sparse-host/minimum-norm/direct-tail driver shard:
+  `32 passed, 100 deselected in 36.64 s`.
+- Broad profile-response/RHSMode=1 policy, setup, diagnostics, solver, and
+  helper sweep after xblock Krylov solve-space/equilibration extraction:
+  `1172 passed in 49.25 s`.
 - Older focused and broad validation checkpoints are intentionally omitted from
   this active plan; they remain available in git history.
 
@@ -1070,15 +1078,18 @@ Completed recent boundaries:
   profile-response helper for host SciPy, JAX FGMRES/GMRES, JAX BiCGStab,
   JAX TFQMR, GCROT, and fallback host GMRES/BiCGStab methods while the driver
   still owns operator preparation, true-residual recomputation, and metadata.
+- X-block sparse-PC Krylov solve-space preparation now uses a tested
+  profile-response helper for row/column equilibration, scaled RHS,
+  scaled initial guesses, preconditioner scaling, and physical-solution
+  recovery.
 
 Next steps:
 
 - Continue moving remaining generic sparse-PC final payload/result assembly
   into cohesive `profile_response` helpers, using explicit result objects
   instead of driver-local metadata scalar plumbing.
-- Extract the xblock Krylov solve-setup/equilibration state object only if the
-  scaling, augmented-QI basis, and progress callbacks can remain explicit and
-  testable.
+- Extract the xblock augmented-QI Krylov basis preparation only if the
+  scaling/projection semantics and diagnostics remain explicit and testable.
 - Continue extracting sparse-PC state/metadata seams after the source split
   stabilizes; avoid moving driver-specific direction builders or caches into
   generic helpers.

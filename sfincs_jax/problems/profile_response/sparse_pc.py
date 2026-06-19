@@ -221,6 +221,35 @@ class XBlockFirstKrylovAttemptResult:
 
 
 @dataclass(frozen=True)
+class XBlockKrylovSolveSpaceContext:
+    """Prepared physical/equilibrated xblock Krylov solve-space inputs."""
+
+    matvec: ArrayFn
+    rhs: jnp.ndarray
+    preconditioner: ArrayFn | None
+    x0: jnp.ndarray | None
+    precondition_side: str
+    row_equilibration_built: bool
+    col_equilibration_built: bool
+    row_scale: jnp.ndarray | None
+    inv_row_scale: jnp.ndarray | None
+    col_scale: jnp.ndarray | None
+    inv_col_scale: jnp.ndarray | None
+
+
+@dataclass(frozen=True)
+class XBlockKrylovSolveSpace:
+    """Krylov solve-space callbacks after optional row/column equilibration."""
+
+    matvec: ArrayFn
+    rhs: jnp.ndarray
+    preconditioner: ArrayFn | None
+    x0: jnp.ndarray | None
+    solution_to_physical: ArrayFn
+    transform_label: str | None
+
+
+@dataclass(frozen=True)
 class XBlockSparsePCWorkEstimates:
     """User-facing solver-kind and Krylov work-memory estimates."""
 
@@ -312,6 +341,85 @@ def xblock_device_krylov_state(
         history=history,
         n_iterations=int(n_iterations),
         estimated_matvecs=estimated_matvecs,
+    )
+
+
+def prepare_xblock_krylov_solve_space(
+    context: XBlockKrylovSolveSpaceContext,
+) -> XBlockKrylovSolveSpace:
+    """Apply xblock row/column equilibration to the Krylov solve callbacks."""
+
+    def _identity_solution(v: jnp.ndarray) -> jnp.ndarray:
+        return jnp.asarray(v, dtype=jnp.float64)
+
+    if not bool(context.row_equilibration_built):
+        return XBlockKrylovSolveSpace(
+            matvec=context.matvec,
+            rhs=context.rhs,
+            preconditioner=context.preconditioner if str(context.precondition_side) != "none" else None,
+            x0=context.x0,
+            solution_to_physical=_identity_solution,
+            transform_label=None,
+        )
+
+    if context.row_scale is None or context.inv_row_scale is None:
+        raise ValueError("row equilibration requires row_scale and inv_row_scale")
+    if bool(context.col_equilibration_built) and (
+        context.col_scale is None or context.inv_col_scale is None
+    ):
+        raise ValueError("column equilibration requires col_scale and inv_col_scale")
+
+    row_scale = jnp.asarray(context.row_scale, dtype=jnp.float64)
+    inv_row_scale = jnp.asarray(context.inv_row_scale, dtype=jnp.float64)
+    col_scale = (
+        jnp.asarray(context.col_scale, dtype=jnp.float64)
+        if bool(context.col_equilibration_built)
+        else None
+    )
+    inv_col_scale = (
+        jnp.asarray(context.inv_col_scale, dtype=jnp.float64)
+        if bool(context.col_equilibration_built)
+        else None
+    )
+    base_matvec = context.matvec
+    base_preconditioner = context.preconditioner
+
+    def _mv_equilibrated(v: jnp.ndarray) -> jnp.ndarray:
+        v_j = jnp.asarray(v, dtype=jnp.float64)
+        physical_v = col_scale * v_j if col_scale is not None else v_j
+        return row_scale * jnp.asarray(base_matvec(physical_v), dtype=jnp.float64)
+
+    def _precond_equilibrated(v: jnp.ndarray) -> jnp.ndarray:
+        physical_residual = inv_row_scale * jnp.asarray(v, dtype=jnp.float64)
+        if base_preconditioner is None:
+            physical_update = physical_residual
+        else:
+            physical_update = jnp.asarray(base_preconditioner(physical_residual), dtype=jnp.float64)
+        if inv_col_scale is not None:
+            return inv_col_scale * physical_update
+        return physical_update
+
+    rhs = row_scale * jnp.asarray(context.rhs, dtype=jnp.float64)
+    x0 = context.x0
+    if col_scale is not None and inv_col_scale is not None:
+        x0 = None if x0 is None else inv_col_scale * jnp.asarray(x0, dtype=jnp.float64)
+
+        def _solution_to_physical(v: jnp.ndarray) -> jnp.ndarray:
+            return col_scale * jnp.asarray(v, dtype=jnp.float64)
+
+        solution_to_physical = _solution_to_physical
+        transform_label = "row/column"
+    else:
+        solution_to_physical = _identity_solution
+        transform_label = "row"
+
+    return XBlockKrylovSolveSpace(
+        matvec=_mv_equilibrated,
+        rhs=rhs,
+        preconditioner=_precond_equilibrated if str(context.precondition_side) != "none" else None,
+        x0=x0,
+        solution_to_physical=solution_to_physical,
+        transform_label=transform_label,
     )
 
 
@@ -9460,6 +9568,8 @@ __all__ = [
     "XBlockDeviceKrylovState",
     "XBlockFirstKrylovAttemptContext",
     "XBlockFirstKrylovAttemptResult",
+    "XBlockKrylovSolveSpace",
+    "XBlockKrylovSolveSpaceContext",
     "XBlockSparsePCWorkEstimates",
     "XBlockPhysicalResidual",
     "SparsePCGMRESFinalPayload",
@@ -9531,6 +9641,7 @@ __all__ = [
     "retry_sparse_pc_factor_dtype_from_driver_state",
     "run_fortran_reduced_xblock_krylov_solve",
     "run_sparse_pc_gmres_once",
+    "prepare_xblock_krylov_solve_space",
     "run_xblock_first_krylov_attempt",
     "run_xblock_gmres_fallback_if_needed",
     "run_xblock_post_solve_corrections",
