@@ -9,7 +9,9 @@ from sfincs_jax.rhs1_handoff import (
     RHS1KSPReplayState,
     rhs1_apply_handoff_to_replay_state,
     rhs1_accept_candidate,
+    rhs1_accept_candidate_and_update_replay,
     rhs1_accept_measured_candidate,
+    rhs1_accept_measured_candidate_and_update_replay,
     rhs1_residual_improves,
     rhs1_solver_candidate_metrics,
 )
@@ -173,6 +175,62 @@ def test_rhs1_accept_candidate_keeps_current_residual_vector_when_candidate_resi
     assert handoff is not None
 
 
+def test_rhs1_accept_candidate_and_update_replay_updates_only_on_acceptance() -> None:
+    replay = RHS1KSPReplayState(matvec_fn="old_mv", solver_kind="old")
+    current = _result(1.0, x="x0")
+    candidate = _result(0.25, x="x1")
+
+    result, residual_vec, accepted = rhs1_accept_candidate_and_update_replay(
+        replay_state=replay,
+        current_result=current,
+        candidate_result=candidate,
+        current_residual_vec="r0",
+        candidate_residual_vec="r1",
+        matvec_fn="mv",
+        b_vec="rhs",
+        precond_fn="pc",
+        x0_vec="seed",
+        restart=30,
+        maxiter=90,
+        precond_side="left",
+        solver_kind="gmres",
+    )
+
+    assert accepted
+    assert result is candidate
+    assert residual_vec == "r1"
+    assert replay.matvec_fn == "mv"
+    assert replay.b_vec == "rhs"
+    assert replay.precond_fn == "pc"
+    assert replay.x0_vec == "seed"
+    assert replay.restart == 30
+    assert replay.maxiter == 90
+    assert replay.precond_side == "left"
+    assert replay.solver_kind == "gmres"
+
+    rejected, rejected_residual_vec, accepted = rhs1_accept_candidate_and_update_replay(
+        replay_state=replay,
+        current_result=candidate,
+        candidate_result=_result(0.5, x="x2"),
+        current_residual_vec="r1",
+        candidate_residual_vec="r2",
+        matvec_fn="new_mv",
+        b_vec="new_rhs",
+        precond_fn="new_pc",
+        x0_vec="new_seed",
+        restart=10,
+        maxiter=20,
+        precond_side="right",
+        solver_kind="bicgstab",
+    )
+
+    assert not accepted
+    assert rejected is candidate
+    assert rejected_residual_vec == "r1"
+    assert replay.matvec_fn == "mv"
+    assert replay.solver_kind == "gmres"
+
+
 def test_rhs1_accept_candidate_rejects_measured_runtime_memory_regression() -> None:
     current = _result(1.0e-12, x="x0")
     candidate = _result(5.0e-13, x="x1")
@@ -318,6 +376,40 @@ def test_rhs1_accept_measured_candidate_uses_standard_metrics_and_handoff() -> N
     assert residual_vec == "r1"
     assert handoff is not None
     assert handoff.solver_kind == "gmres"
+
+
+def test_rhs1_accept_measured_candidate_and_update_replay_uses_standard_metrics() -> None:
+    replay = RHS1KSPReplayState()
+    current = _result(5.0e-6, x="x0")
+    candidate = _result(5.0e-11, x="x1")
+
+    result, residual_vec, accepted = rhs1_accept_measured_candidate_and_update_replay(
+        replay_state=replay,
+        current_result=current,
+        candidate_result=candidate,
+        current_residual_vec="r0",
+        candidate_residual_vec="r1",
+        matvec_fn="mv",
+        b_vec="rhs",
+        precond_fn="pc",
+        x0_vec="seed",
+        restart=50,
+        maxiter=100,
+        precond_side="left",
+        solver_kind="gmres",
+        candidate_name="strong",
+        baseline_name="current",
+        target_value=1.0e-9,
+        solve_s=0.25,
+        peak_rss_mb=300.0,
+    )
+
+    assert accepted
+    assert result is candidate
+    assert residual_vec == "r1"
+    assert replay.matvec_fn == "mv"
+    assert replay.restart == 50
+    assert replay.solver_kind == "gmres"
 
 
 def test_rhs1_accept_measured_candidate_rejects_clean_baseline_without_win() -> None:

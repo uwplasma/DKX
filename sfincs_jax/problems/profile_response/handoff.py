@@ -163,6 +163,26 @@ def rhs1_accept_candidate(
     return current_result, current_residual_vec, None, False
 
 
+def rhs1_accept_candidate_and_update_replay(
+    *,
+    replay_state: RHS1KSPReplayState,
+    **candidate_kwargs: Any,
+) -> tuple[Any, Any, bool]:
+    """Accept a candidate and update KSP replay state if it is retained.
+
+    This is the driver-facing form for fallback/rescue branches: accepted
+    candidates must update the final KSP replay diagnostics in the same step as
+    the residual/result handoff, while rejected candidates leave the replay
+    state untouched.
+    """
+
+    result, residual_vec, handoff_state, accepted = rhs1_accept_candidate(
+        **candidate_kwargs
+    )
+    rhs1_apply_handoff_to_replay_state(replay_state, handoff_state)
+    return result, residual_vec, accepted
+
+
 def rhs1_solver_candidate_metrics(
     *,
     name: str,
@@ -243,12 +263,28 @@ def rhs1_accept_measured_candidate(
     )
 
 
+def rhs1_accept_measured_candidate_and_update_replay(
+    *,
+    replay_state: RHS1KSPReplayState,
+    **candidate_kwargs: Any,
+) -> tuple[Any, Any, bool]:
+    """Accept a measured candidate and update replay diagnostics atomically."""
+
+    result, residual_vec, handoff_state, accepted = rhs1_accept_measured_candidate(
+        **candidate_kwargs
+    )
+    rhs1_apply_handoff_to_replay_state(replay_state, handoff_state)
+    return result, residual_vec, accepted
+
+
 __all__ = [
     "RHS1KSPHandoffState",
     "RHS1KSPReplayState",
     "rhs1_apply_handoff_to_replay_state",
     "rhs1_accept_candidate",
+    "rhs1_accept_candidate_and_update_replay",
     "rhs1_accept_measured_candidate",
+    "rhs1_accept_measured_candidate_and_update_replay",
     "rhs1_residual_improves",
     "rhs1_solver_candidate_metrics",
 ]

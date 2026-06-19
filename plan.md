@@ -42,8 +42,10 @@ Make `sfincs_jax` research-grade while preserving the public user contract:
 
 Recent checkpoints:
 
-- Implicit-solve host-only Krylov downgrade contract and gradient tests
+- RHSMode=1 candidate accept-and-replay handoff consolidation
   (current checkpoint).
+- Implicit-solve host-only Krylov downgrade contract and gradient tests
+  (`04555a5`).
 - Generic sparse-PC dtype-retry/finalization handoff extraction
   (`f3af854`).
 - X-block sparse-PC final-payload extraction.
@@ -69,16 +71,20 @@ Recent checkpoints:
 - `cb295ce` Extract sparse pattern setup.
 - `4b6a5b4` Extract sparse factor policy.
 
-Current source-size snapshot after generic sparse-PC dtype-retry/finalization
-handoff extraction:
+Current source-size snapshot after RHSMode=1 candidate accept-and-replay
+handoff consolidation:
 
-- `sfincs_jax/v3_driver.py`: `18869` lines.
-- `solve_v3_full_system_linear_gmres`: `13584` lines.
-- `sfincs_jax/problems/profile_response/handoff.py`: `254` lines.
+- `sfincs_jax/v3_driver.py`: `18868` lines.
+- `solve_v3_full_system_linear_gmres`: `13582` lines.
+- `sfincs_jax/problems/profile_response/handoff.py`: `290` lines.
 - `sfincs_jax/problems/profile_response/sparse_pc.py`: `7826` lines.
 
 Recent local validation:
 
+- RHSMode=1 accept-and-replay handoff shard:
+  `70 passed in 14.17 s`.
+- Broad profile-response/x-block/sparse-pattern handoff shard:
+  `394 passed in 112.33 s`.
 - Implicit/autodiff host-only solve-method downgrade shard:
   `15 passed in 4.91 s`.
 - Sparse-PC helper shard:
@@ -121,7 +127,7 @@ Known CI issue fixed by this rewrite:
 
 ### 1. `v3_driver.py` Architecture Refactor
 
-Completion estimate: 96%.
+Completion estimate: 97%.
 
 Goal:
 
@@ -192,6 +198,8 @@ Completed recent boundaries:
   acceptance metadata consolidated into a profile-response helper.
 - Generic sparse-PC dtype retry, state handoff, post-minres finalization, and
   final payload construction consolidated into one profile-response helper.
+- RHSMode=1 rescue/refinement candidate acceptance and KSP replay-state updates
+  consolidated into profile-response handoff helpers.
 
 Next steps:
 

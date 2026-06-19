@@ -170,9 +170,10 @@ from .rhs1_preconditioner_auto_policy import (
 from .rhs1_schur_policy import resolve_rhs1_schur_base_kind
 from .problems.profile_response.handoff import (
     RHS1KSPReplayState,
-    rhs1_apply_handoff_to_replay_state,
     rhs1_accept_candidate,
+    rhs1_accept_candidate_and_update_replay,
     rhs1_accept_measured_candidate,
+    rhs1_accept_measured_candidate_and_update_replay,
 )
 from .problems.profile_response.auto_solve import (
     RHS1AutoHostSolveContext,
@@ -10625,8 +10626,6 @@ def solve_v3_full_system_linear_gmres(
         iter_stats_max_size=iter_stats_max_size,
     )
 
-    def _apply_rhs1_handoff(state) -> None:
-        rhs1_apply_handoff_to_replay_state(ksp_replay, state)
     if use_active_dof_mode:
         assert active_idx_jnp is not None
         assert full_to_active_jnp is not None
@@ -11675,7 +11674,8 @@ def solve_v3_full_system_linear_gmres(
                     solve_method_val="incremental",
                     precond_side=gmres_precond_side,
                 )
-                res_reduced, residual_vec, handoff_state, _accepted = rhs1_accept_candidate(
+                res_reduced, residual_vec, _accepted = rhs1_accept_candidate_and_update_replay(
+                    replay_state=ksp_replay,
                     current_result=res_reduced,
                     candidate_result=res_full,
                     current_residual_vec=residual_vec,
@@ -11689,7 +11689,6 @@ def solve_v3_full_system_linear_gmres(
                     precond_side=gmres_precond_side,
                     solver_kind=_solver_kind("incremental")[0],
                 )
-                _apply_rhs1_handoff(handoff_state)
         residual_norm_check = float(res_reduced.residual_norm)
         residual_norm_true = residual_norm_check
         try:
@@ -12048,7 +12047,8 @@ def solve_v3_full_system_linear_gmres(
             )
             res2 = _block_gmres_result_ready(res2)
             stage2_elapsed_s = stage2_timer.elapsed_s()
-            res_reduced, residual_vec, handoff_state, _accepted = rhs1_accept_measured_candidate(
+            res_reduced, residual_vec, _accepted = rhs1_accept_measured_candidate_and_update_replay(
+                replay_state=ksp_replay,
                 current_result=res_reduced,
                 candidate_result=res2,
                 current_residual_vec=residual_vec,
@@ -12067,7 +12067,6 @@ def solve_v3_full_system_linear_gmres(
                 solve_s=stage2_elapsed_s,
                 peak_rss_mb=_rss_mb(),
             )
-            _apply_rhs1_handoff(handoff_state)
         pas_fast_accept = _rhsmode1_pas_fast_accept(
             op=op,
             active_size=int(active_size),
@@ -12184,7 +12183,8 @@ def solve_v3_full_system_linear_gmres(
                     x=smoother.x,
                     residual_norm=jnp.asarray(smoother.residual_norm, dtype=jnp.float64),
                 )
-                res_reduced, residual_vec, handoff_state, _accepted = rhs1_accept_candidate(
+                res_reduced, residual_vec, _accepted = rhs1_accept_candidate_and_update_replay(
+                    replay_state=ksp_replay,
                     current_result=res_reduced,
                     candidate_result=smoother_result,
                     current_residual_vec=residual_vec,
@@ -12198,7 +12198,6 @@ def solve_v3_full_system_linear_gmres(
                     precond_side=gmres_precond_side,
                     solver_kind=_solver_kind("incremental")[0],
                 )
-                _apply_rhs1_handoff(handoff_state)
         if fp_force_strong:
             strong_precond_trigger = True
         if (
@@ -12232,7 +12231,8 @@ def solve_v3_full_system_linear_gmres(
                     solve_method_val="incremental",
                     precond_side=gmres_precond_side,
                 )
-                res_reduced, residual_vec, handoff_state, _accepted = rhs1_accept_candidate(
+                res_reduced, residual_vec, _accepted = rhs1_accept_candidate_and_update_replay(
+                    replay_state=ksp_replay,
                     current_result=res_reduced,
                     candidate_result=res_collision,
                     current_residual_vec=residual_vec,
@@ -12246,7 +12246,6 @@ def solve_v3_full_system_linear_gmres(
                     precond_side=gmres_precond_side,
                     solver_kind=_solver_kind("incremental")[0],
                 )
-                _apply_rhs1_handoff(handoff_state)
         large_cpu_sparse_rescue_active = _rhsmode1_large_cpu_sparse_rescue_allowed(
             op=op,
             solve_method_kind=solve_method_kind,
@@ -12664,7 +12663,8 @@ def solve_v3_full_system_linear_gmres(
             )
             res_strong = _block_gmres_result_ready(res_strong)
             strong_elapsed_s = strong_timer.elapsed_s()
-            res_reduced, residual_vec, handoff_state, _accepted = rhs1_accept_measured_candidate(
+            res_reduced, residual_vec, _accepted = rhs1_accept_measured_candidate_and_update_replay(
+                replay_state=ksp_replay,
                 current_result=res_reduced,
                 candidate_result=res_strong,
                 current_residual_vec=residual_vec,
@@ -12683,7 +12683,6 @@ def solve_v3_full_system_linear_gmres(
                 solve_s=strong_elapsed_s,
                 peak_rss_mb=_rss_mb(),
             )
-            _apply_rhs1_handoff(handoff_state)
 
         # Only treat the probe as a "dense shortcut" when the dense branch is
         # actually allowed (probe_shortcut). Otherwise we still want to try
@@ -13645,7 +13644,8 @@ def solve_v3_full_system_linear_gmres(
                     )
                     sparse_retry_elapsed_s = sparse_retry_timer.elapsed_s()
                     if res_sparse is not None:
-                        res_reduced, residual_vec, handoff_state, _accepted = rhs1_accept_measured_candidate(
+                        res_reduced, residual_vec, _accepted = rhs1_accept_measured_candidate_and_update_replay(
+                            replay_state=ksp_replay,
                             current_result=res_reduced,
                             candidate_result=res_sparse,
                             current_residual_vec=residual_vec,
@@ -13664,7 +13664,6 @@ def solve_v3_full_system_linear_gmres(
                             solve_s=sparse_retry_elapsed_s,
                             peak_rss_mb=_rss_mb(),
                         )
-                        _apply_rhs1_handoff(handoff_state)
                 except Exception as exc:  # noqa: BLE001
                     if emit is not None:
                         emit(1, f"sparse_jax: failed ({type(exc).__name__}: {exc})")
@@ -13927,7 +13926,8 @@ def solve_v3_full_system_linear_gmres(
                         )
                     if res_sparse is not None:
                         sparse_retry_elapsed_s = sparse_retry_timer.elapsed_s()
-                        res_reduced, residual_vec, handoff_state, _accepted = rhs1_accept_measured_candidate(
+                        res_reduced, residual_vec, _accepted = rhs1_accept_measured_candidate_and_update_replay(
+                            replay_state=ksp_replay,
                             current_result=res_reduced,
                             candidate_result=res_sparse,
                             current_residual_vec=residual_vec,
@@ -13946,7 +13946,6 @@ def solve_v3_full_system_linear_gmres(
                             solve_s=sparse_retry_elapsed_s,
                             peak_rss_mb=_rss_mb(),
                         )
-                        _apply_rhs1_handoff(handoff_state)
                 except Exception as exc:  # noqa: BLE001
                     if emit is not None:
                         emit(
@@ -14212,7 +14211,8 @@ def solve_v3_full_system_linear_gmres(
                         row_scaled=use_row_scaled,
                     )
                 dense_retry_elapsed_s = dense_retry_timer.elapsed_s()
-                res_reduced, residual_vec, handoff_state, _accepted = rhs1_accept_measured_candidate(
+                res_reduced, residual_vec, _accepted = rhs1_accept_measured_candidate_and_update_replay(
+                    replay_state=ksp_replay,
                     current_result=res_reduced,
                     candidate_result=res_dense,
                     current_residual_vec=residual_vec,
@@ -14231,7 +14231,6 @@ def solve_v3_full_system_linear_gmres(
                     solve_s=dense_retry_elapsed_s,
                     peak_rss_mb=_rss_mb(),
                 )
-                _apply_rhs1_handoff(handoff_state)
             except Exception as exc:  # noqa: BLE001
                 if emit is not None:
                     emit(1, f"solve_v3_full_system_linear_gmres: dense fallback failed ({type(exc).__name__}: {exc})")
@@ -15444,7 +15443,8 @@ def solve_v3_full_system_linear_gmres(
                 precond_side=gmres_precond_side,
             )
             stage2_elapsed_s = stage2_timer.elapsed_s()
-            result, residual_vec, handoff_state, _accepted = rhs1_accept_measured_candidate(
+            result, residual_vec, _accepted = rhs1_accept_measured_candidate_and_update_replay(
+                replay_state=ksp_replay,
                 current_result=result,
                 candidate_result=res2,
                 current_residual_vec=residual_vec,
@@ -15463,7 +15463,6 @@ def solve_v3_full_system_linear_gmres(
                 solve_s=stage2_elapsed_s,
                 peak_rss_mb=_rss_mb(),
             )
-            _apply_rhs1_handoff(handoff_state)
         # Krylov solvers with left preconditioning report the preconditioned residual
         # norm. Recompute the true residual before deciding whether to escalate to a
         # stronger preconditioner or dense fallback so those decisions track the
@@ -15533,7 +15532,8 @@ def solve_v3_full_system_linear_gmres(
                     x=smoother.x,
                     residual_norm=jnp.asarray(smoother.residual_norm, dtype=jnp.float64),
                 )
-                result, residual_vec, handoff_state, _accepted = rhs1_accept_candidate(
+                result, residual_vec, _accepted = rhs1_accept_candidate_and_update_replay(
+                    replay_state=ksp_replay,
                     current_result=result,
                     candidate_result=smoother_result,
                     current_residual_vec=residual_vec,
@@ -15547,7 +15547,6 @@ def solve_v3_full_system_linear_gmres(
                     precond_side=gmres_precond_side,
                     solver_kind=_solver_kind("incremental")[0],
                 )
-                _apply_rhs1_handoff(handoff_state)
         if (
             float(result.residual_norm) > target
             and int(op.rhs_mode) == 1
@@ -15577,7 +15576,8 @@ def solve_v3_full_system_linear_gmres(
                     solve_method_val="incremental",
                     precond_side=gmres_precond_side,
                 )
-                result, residual_vec, handoff_state, _accepted = rhs1_accept_candidate(
+                result, residual_vec, _accepted = rhs1_accept_candidate_and_update_replay(
+                    replay_state=ksp_replay,
                     current_result=result,
                     candidate_result=res_collision,
                     current_residual_vec=residual_vec,
@@ -15591,7 +15591,6 @@ def solve_v3_full_system_linear_gmres(
                     precond_side=gmres_precond_side,
                     solver_kind=_solver_kind("incremental")[0],
                 )
-                _apply_rhs1_handoff(handoff_state)
         strong_precond_env = os.environ.get("SFINCS_JAX_RHSMODE1_STRONG_PRECOND", "").strip().lower()
         cs0_sparse_first = _rhsmode1_constraint0_sparse_first(
             op=op,
@@ -15767,7 +15766,8 @@ def solve_v3_full_system_linear_gmres(
                 precond_side=gmres_precond_side,
             )
             strong_elapsed_s = strong_timer.elapsed_s()
-            result, residual_vec, handoff_state, _accepted = rhs1_accept_measured_candidate(
+            result, residual_vec, _accepted = rhs1_accept_measured_candidate_and_update_replay(
+                replay_state=ksp_replay,
                 current_result=result,
                 candidate_result=res_strong,
                 current_residual_vec=residual_vec,
@@ -15786,7 +15786,6 @@ def solve_v3_full_system_linear_gmres(
                 solve_s=strong_elapsed_s,
                 peak_rss_mb=_rss_mb(),
             )
-            _apply_rhs1_handoff(handoff_state)
         if (
             int(op.rhs_mode) == 1
             and (not bool(op.include_phi1))
@@ -15841,7 +15840,8 @@ def solve_v3_full_system_linear_gmres(
                         solve_method_val="incremental",
                         precond_side=gmres_precond_side,
                     )
-                    result, residual_vec, handoff_state, _accepted = rhs1_accept_candidate(
+                    result, residual_vec, _accepted = rhs1_accept_candidate_and_update_replay(
+                        replay_state=ksp_replay,
                         current_result=result,
                         candidate_result=res_schur,
                         current_residual_vec=residual_vec,
@@ -15855,7 +15855,6 @@ def solve_v3_full_system_linear_gmres(
                         precond_side=gmres_precond_side,
                         solver_kind=_solver_kind("incremental")[0],
                     )
-                    _apply_rhs1_handoff(handoff_state)
                 except Exception as exc:  # noqa: BLE001
                     if emit is not None:
                         emit(1, f"solve_v3_full_system_linear_gmres: PAS Schur rescue failed ({type(exc).__name__}: {exc})")
@@ -15996,7 +15995,8 @@ def solve_v3_full_system_linear_gmres(
                         precond_side=gmres_precond_side,
                     )
                     sparse_retry_elapsed_s = sparse_retry_timer.elapsed_s()
-                    result, residual_vec, handoff_state, _accepted = rhs1_accept_measured_candidate(
+                    result, residual_vec, _accepted = rhs1_accept_measured_candidate_and_update_replay(
+                        replay_state=ksp_replay,
                         current_result=result,
                         candidate_result=res_sparse,
                         current_residual_vec=residual_vec,
@@ -16015,7 +16015,6 @@ def solve_v3_full_system_linear_gmres(
                         solve_s=sparse_retry_elapsed_s,
                         peak_rss_mb=_rss_mb(),
                     )
-                    _apply_rhs1_handoff(handoff_state)
                 except Exception as exc:  # noqa: BLE001
                     if emit is not None:
                         emit(1, f"sparse_jax: failed ({type(exc).__name__}: {exc})")
@@ -16344,7 +16343,8 @@ def solve_v3_full_system_linear_gmres(
                         residual_vec_sparse = rhs - _mv_sparse(res_sparse.x)
                     if res_sparse is not None:
                         sparse_retry_elapsed_s = sparse_retry_timer.elapsed_s()
-                        result, residual_vec, handoff_state, _accepted = rhs1_accept_measured_candidate(
+                        result, residual_vec, _accepted = rhs1_accept_measured_candidate_and_update_replay(
+                            replay_state=ksp_replay,
                             current_result=result,
                             candidate_result=res_sparse,
                             current_residual_vec=residual_vec,
@@ -16363,7 +16363,6 @@ def solve_v3_full_system_linear_gmres(
                             solve_s=sparse_retry_elapsed_s,
                             peak_rss_mb=_rss_mb(),
                         )
-                        _apply_rhs1_handoff(handoff_state)
                 except Exception as exc:  # noqa: BLE001
                     if emit is not None:
                         emit(
@@ -16480,7 +16479,8 @@ def solve_v3_full_system_linear_gmres(
                         row_scaled=use_row_scaled,
                     )
                 dense_retry_elapsed_s = dense_retry_timer.elapsed_s()
-                result, residual_vec, handoff_state, _accepted = rhs1_accept_measured_candidate(
+                result, residual_vec, _accepted = rhs1_accept_measured_candidate_and_update_replay(
+                    replay_state=ksp_replay,
                     current_result=result,
                     candidate_result=res_dense,
                     current_residual_vec=residual_vec,
@@ -16499,7 +16499,6 @@ def solve_v3_full_system_linear_gmres(
                     solve_s=dense_retry_elapsed_s,
                     peak_rss_mb=_rss_mb(),
                 )
-                _apply_rhs1_handoff(handoff_state)
             except Exception as exc:  # noqa: BLE001
                 if emit is not None:
                     emit(1, f"solve_v3_full_system_linear_gmres: dense fallback failed ({type(exc).__name__}: {exc})")
