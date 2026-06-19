@@ -6,6 +6,7 @@ import numpy as np
 import jax.numpy as jnp
 
 from sfincs_jax.problems.profile_response.diagnostics import (
+    SparseRescueTailMetadataContext,
     XBlockAssembledOperatorDiagnosticsContext,
     XBlockSparsePCCoreDiagnosticsContext,
     XBlockSideProbeDiagnosticsContext,
@@ -14,6 +15,7 @@ from sfincs_jax.problems.profile_response.diagnostics import (
     sparse_pc_direct_tail_result_metadata,
     sparse_pc_gmres_result_metadata,
     sparse_rescue_tail_metadata,
+    sparse_rescue_tail_metadata_from_context,
     sparse_xblock_rescue_metadata,
     xblock_assembled_operator_diagnostics,
     xblock_coarse_correction_diagnostics,
@@ -144,13 +146,122 @@ def _sparse_rescue_scope() -> dict[str, object]:
     }
 
 
+def _sparse_rescue_context() -> SparseRescueTailMetadataContext:
+    scope = _sparse_rescue_scope()
+    return SparseRescueTailMetadataContext(
+        sparse_xblock_rescue_active=scope["sparse_xblock_rescue_active"],
+        sparse_xblock_rescue_attempted=scope["sparse_xblock_rescue_attempted"],
+        sparse_xblock_rescue_built=scope["sparse_xblock_rescue_built"],
+        sparse_xblock_rescue_error=scope["sparse_xblock_rescue_error"],
+        sparse_xblock_rescue_reason=scope["sparse_xblock_rescue_reason"],
+        sparse_xblock_rescue_assembled_host_fp=scope[
+            "sparse_xblock_rescue_assembled_host_fp"
+        ],
+        sparse_xblock_rescue_preconditioner_xi=scope[
+            "sparse_xblock_rescue_preconditioner_xi"
+        ],
+        sparse_xblock_rescue_seed_residual=scope[
+            "sparse_xblock_rescue_seed_residual"
+        ],
+        sparse_xblock_rescue_seed_improvement_ratio=scope[
+            "sparse_xblock_rescue_seed_improvement_ratio"
+        ],
+        sparse_xblock_rescue_seed_accept_ratio=scope[
+            "sparse_xblock_rescue_seed_accept_ratio"
+        ],
+        sparse_xblock_rescue_seed_refine_steps=scope[
+            "sparse_xblock_rescue_seed_refine_steps"
+        ],
+        sparse_xblock_rescue_seed_refines_performed=scope[
+            "sparse_xblock_rescue_seed_refines_performed"
+        ],
+        sparse_xblock_rescue_candidate_residual=scope[
+            "sparse_xblock_rescue_candidate_residual"
+        ],
+        sparse_xblock_rescue_candidate_accepted=scope[
+            "sparse_xblock_rescue_candidate_accepted"
+        ],
+        fp_xblock_global_correction_allowed=scope[
+            "fp_xblock_global_correction_allowed"
+        ],
+        fp_xblock_global_correction_attempted=scope[
+            "fp_xblock_global_correction_attempted"
+        ],
+        fp_xblock_global_correction_accepted=scope[
+            "fp_xblock_global_correction_accepted"
+        ],
+        fp_xblock_global_correction_reason=scope[
+            "fp_xblock_global_correction_reason"
+        ],
+        fp_xblock_global_correction_error=scope[
+            "fp_xblock_global_correction_error"
+        ],
+        fp_xblock_global_correction_preconditioner=scope[
+            "fp_xblock_global_correction_preconditioner"
+        ],
+        fp_xblock_global_correction_steps=scope[
+            "fp_xblock_global_correction_steps"
+        ],
+        fp_xblock_global_correction_accepted_steps=scope[
+            "fp_xblock_global_correction_accepted_steps"
+        ],
+        fp_xblock_global_correction_residual_before=scope[
+            "fp_xblock_global_correction_residual_before"
+        ],
+        fp_xblock_global_correction_residual_after=scope[
+            "fp_xblock_global_correction_residual_after"
+        ],
+        fp_xblock_global_correction_improvement_ratio=scope[
+            "fp_xblock_global_correction_improvement_ratio"
+        ],
+        fp_xblock_global_correction_elapsed_s=scope[
+            "fp_xblock_global_correction_elapsed_s"
+        ],
+        fp_xblock_highx_residual_correction_allowed=scope[
+            "fp_xblock_highx_residual_correction_allowed"
+        ],
+        fp_xblock_highx_residual_correction_attempted=scope[
+            "fp_xblock_highx_residual_correction_attempted"
+        ],
+        fp_xblock_highx_residual_correction_accepted=scope[
+            "fp_xblock_highx_residual_correction_accepted"
+        ],
+        fp_xblock_highx_residual_correction_reason=scope[
+            "fp_xblock_highx_residual_correction_reason"
+        ],
+        fp_xblock_highx_residual_correction_error=scope[
+            "fp_xblock_highx_residual_correction_error"
+        ],
+        fp_xblock_highx_residual_correction_residual_before=scope[
+            "fp_xblock_highx_residual_correction_residual_before"
+        ],
+        fp_xblock_highx_residual_correction_residual_after=scope[
+            "fp_xblock_highx_residual_correction_residual_after"
+        ],
+        fp_xblock_highx_residual_correction_improvement_ratio=scope[
+            "fp_xblock_highx_residual_correction_improvement_ratio"
+        ],
+        fp_xblock_highx_residual_correction_elapsed_s=scope[
+            "fp_xblock_highx_residual_correction_elapsed_s"
+        ],
+        fp_xblock_highx_residual_correction_direction_count=scope[
+            "fp_xblock_highx_residual_correction_direction_count"
+        ],
+        fp_xblock_highx_residual_correction_direction_names=scope[
+            "fp_xblock_highx_residual_correction_direction_names"
+        ],
+    )
+
+
 def test_sparse_rescue_metadata_helpers_preserve_driver_keys_and_types() -> None:
     scope = _sparse_rescue_scope()
+    context = _sparse_rescue_context()
 
     sparse_meta = sparse_xblock_rescue_metadata(scope)
     global_meta = fp_xblock_global_correction_metadata(scope)
     highx_meta = fp_xblock_highx_residual_correction_metadata(scope)
     combined = sparse_rescue_tail_metadata(scope)
+    combined_context = sparse_rescue_tail_metadata_from_context(context)
 
     assert sparse_meta["sparse_xblock_rescue_active"] is True
     assert sparse_meta["sparse_xblock_rescue_reason"] == "seed_rejected"
@@ -163,6 +274,7 @@ def test_sparse_rescue_metadata_helpers_preserve_driver_keys_and_types() -> None
         "b",
     )
     assert combined == {**sparse_meta, **global_meta, **highx_meta}
+    assert combined_context == combined
 
 
 def _qi_device_preconditioner_scope() -> dict[str, object]:

@@ -6,6 +6,49 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 
 
+@dataclass(frozen=True)
+class SparseRescueTailMetadataContext:
+    """Explicit inputs for final RHSMode=1 sparse-rescue tail metadata."""
+
+    sparse_xblock_rescue_active: object
+    sparse_xblock_rescue_attempted: object
+    sparse_xblock_rescue_built: object
+    sparse_xblock_rescue_error: object
+    sparse_xblock_rescue_reason: object
+    sparse_xblock_rescue_assembled_host_fp: object
+    sparse_xblock_rescue_preconditioner_xi: object
+    sparse_xblock_rescue_seed_residual: object
+    sparse_xblock_rescue_seed_improvement_ratio: object
+    sparse_xblock_rescue_seed_accept_ratio: object
+    sparse_xblock_rescue_seed_refine_steps: object
+    sparse_xblock_rescue_seed_refines_performed: object
+    sparse_xblock_rescue_candidate_residual: object
+    sparse_xblock_rescue_candidate_accepted: object
+    fp_xblock_global_correction_allowed: object
+    fp_xblock_global_correction_attempted: object
+    fp_xblock_global_correction_accepted: object
+    fp_xblock_global_correction_reason: object
+    fp_xblock_global_correction_error: object
+    fp_xblock_global_correction_preconditioner: object
+    fp_xblock_global_correction_steps: object
+    fp_xblock_global_correction_accepted_steps: object
+    fp_xblock_global_correction_residual_before: object
+    fp_xblock_global_correction_residual_after: object
+    fp_xblock_global_correction_improvement_ratio: object
+    fp_xblock_global_correction_elapsed_s: object
+    fp_xblock_highx_residual_correction_allowed: object
+    fp_xblock_highx_residual_correction_attempted: object
+    fp_xblock_highx_residual_correction_accepted: object
+    fp_xblock_highx_residual_correction_reason: object
+    fp_xblock_highx_residual_correction_error: object
+    fp_xblock_highx_residual_correction_residual_before: object
+    fp_xblock_highx_residual_correction_residual_after: object
+    fp_xblock_highx_residual_correction_improvement_ratio: object
+    fp_xblock_highx_residual_correction_elapsed_s: object
+    fp_xblock_highx_residual_correction_direction_count: object
+    fp_xblock_highx_residual_correction_direction_names: object
+
+
 def sparse_xblock_rescue_metadata(scope: Mapping[str, object]) -> dict[str, object]:
     """Return stable diagnostics for the sparse x-block rescue tail."""
 
@@ -126,6 +169,14 @@ def fp_xblock_highx_residual_correction_metadata(
             scope["fp_xblock_highx_residual_correction_direction_names"]
         ),
     }
+
+
+def sparse_rescue_tail_metadata_from_context(
+    context: SparseRescueTailMetadataContext,
+) -> dict[str, object]:
+    """Return the combined sparse-rescue tail diagnostics for final metadata."""
+
+    return sparse_rescue_tail_metadata(context.__dict__)
 
 
 def sparse_rescue_tail_metadata(scope: Mapping[str, object]) -> dict[str, object]:

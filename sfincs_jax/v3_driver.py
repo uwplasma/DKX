@@ -229,7 +229,8 @@ from .problems.profile_response.qi_device_seed import (
     attempt_matrixfree_qi_device_seed,
 )
 from .problems.profile_response.diagnostics import (
-    sparse_rescue_tail_metadata,
+    SparseRescueTailMetadataContext,
+    sparse_rescue_tail_metadata_from_context,
 )
 from .problems.profile_response.sparse_pc import (
     DirectTailMaterializationContext,
@@ -13342,7 +13343,49 @@ def solve_v3_full_system_linear_gmres(
             sparse_xblock_rescue_reason = "sparse_disabled"
         elif float(res_reduced.residual_norm) <= float(target_reduced) and not bool(sparse_xblock_rescue_attempted):
             sparse_xblock_rescue_reason = "not_needed"
-        rhsmode1_general_metadata.update(sparse_rescue_tail_metadata(locals()))
+        rhsmode1_general_metadata.update(
+            sparse_rescue_tail_metadata_from_context(
+                SparseRescueTailMetadataContext(
+                    sparse_xblock_rescue_active=sparse_xblock_rescue_active,
+                    sparse_xblock_rescue_attempted=sparse_xblock_rescue_attempted,
+                    sparse_xblock_rescue_built=sparse_xblock_rescue_built,
+                    sparse_xblock_rescue_error=sparse_xblock_rescue_error,
+                    sparse_xblock_rescue_reason=sparse_xblock_rescue_reason,
+                    sparse_xblock_rescue_assembled_host_fp=sparse_xblock_rescue_assembled_host_fp,
+                    sparse_xblock_rescue_preconditioner_xi=sparse_xblock_rescue_preconditioner_xi,
+                    sparse_xblock_rescue_seed_residual=sparse_xblock_rescue_seed_residual,
+                    sparse_xblock_rescue_seed_improvement_ratio=sparse_xblock_rescue_seed_improvement_ratio,
+                    sparse_xblock_rescue_seed_accept_ratio=sparse_xblock_rescue_seed_accept_ratio,
+                    sparse_xblock_rescue_seed_refine_steps=sparse_xblock_rescue_seed_refine_steps,
+                    sparse_xblock_rescue_seed_refines_performed=sparse_xblock_rescue_seed_refines_performed,
+                    sparse_xblock_rescue_candidate_residual=sparse_xblock_rescue_candidate_residual,
+                    sparse_xblock_rescue_candidate_accepted=sparse_xblock_rescue_candidate_accepted,
+                    fp_xblock_global_correction_allowed=fp_xblock_global_correction_allowed,
+                    fp_xblock_global_correction_attempted=fp_xblock_global_correction_attempted,
+                    fp_xblock_global_correction_accepted=fp_xblock_global_correction_accepted,
+                    fp_xblock_global_correction_reason=fp_xblock_global_correction_reason,
+                    fp_xblock_global_correction_error=fp_xblock_global_correction_error,
+                    fp_xblock_global_correction_preconditioner=fp_xblock_global_correction_preconditioner,
+                    fp_xblock_global_correction_steps=fp_xblock_global_correction_steps,
+                    fp_xblock_global_correction_accepted_steps=fp_xblock_global_correction_accepted_steps,
+                    fp_xblock_global_correction_residual_before=fp_xblock_global_correction_residual_before,
+                    fp_xblock_global_correction_residual_after=fp_xblock_global_correction_residual_after,
+                    fp_xblock_global_correction_improvement_ratio=fp_xblock_global_correction_improvement_ratio,
+                    fp_xblock_global_correction_elapsed_s=fp_xblock_global_correction_elapsed_s,
+                    fp_xblock_highx_residual_correction_allowed=fp_xblock_highx_residual_correction_allowed,
+                    fp_xblock_highx_residual_correction_attempted=fp_xblock_highx_residual_correction_attempted,
+                    fp_xblock_highx_residual_correction_accepted=fp_xblock_highx_residual_correction_accepted,
+                    fp_xblock_highx_residual_correction_reason=fp_xblock_highx_residual_correction_reason,
+                    fp_xblock_highx_residual_correction_error=fp_xblock_highx_residual_correction_error,
+                    fp_xblock_highx_residual_correction_residual_before=fp_xblock_highx_residual_correction_residual_before,
+                    fp_xblock_highx_residual_correction_residual_after=fp_xblock_highx_residual_correction_residual_after,
+                    fp_xblock_highx_residual_correction_improvement_ratio=fp_xblock_highx_residual_correction_improvement_ratio,
+                    fp_xblock_highx_residual_correction_elapsed_s=fp_xblock_highx_residual_correction_elapsed_s,
+                    fp_xblock_highx_residual_correction_direction_count=fp_xblock_highx_residual_correction_direction_count,
+                    fp_xblock_highx_residual_correction_direction_names=fp_xblock_highx_residual_correction_direction_names,
+                )
+            )
+        )
         # As a last resort on CPU, retry the reduced solve using SciPy GMRES.
         #
         # JAX's gmres can stagnate or return a poor solution for some FP operators on CPU,

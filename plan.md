@@ -906,6 +906,14 @@ Recent local validation:
   helper sweep after generic sparse-PC explicit finalization-context
   extraction:
   `1186 passed in 48.03 s`.
+- Profile-response diagnostics shard after sparse-rescue explicit tail
+  metadata context extraction:
+  `14 passed in 0.71 s`.
+- Sparse-host/minimum-norm/direct-tail driver shard:
+  `32 passed, 100 deselected in 35.98 s`.
+- Broad profile-response/RHSMode=1 policy, setup, diagnostics, solver, and
+  helper sweep after sparse-rescue explicit tail metadata context extraction:
+  `1186 passed in 47.90 s`.
 - Older focused and broad validation checkpoints are intentionally omitted from
   this active plan; they remain available in git history.
 
@@ -918,7 +926,7 @@ Known CI issue fixed by this rewrite:
 
 ### 1. `v3_driver.py` Architecture Refactor
 
-Completion estimate: 47%.
+Completion estimate: 48%.
 
 Goal:
 
@@ -1162,6 +1170,9 @@ Completed recent boundaries:
   assembly now uses a tested explicit context for current solve result and
   factor state, with the broad diagnostics mapping named separately and the
   legacy state-wrapper kept for compatibility.
+- RHSMode=1 sparse-rescue tail metadata now uses tested explicit diagnostics
+  contexts instead of a driver `locals()` handoff; the legacy mapping wrapper
+  remains covered for compatibility.
 
 Next steps:
 
