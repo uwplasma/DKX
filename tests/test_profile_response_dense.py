@@ -7,6 +7,8 @@ import jax.numpy as jnp
 from sfincs_jax.problems.profile_response.dense import (
     HostDenseFullSolveContext,
     HostDenseReducedSolveContext,
+    RHS1ReducedDenseFallbackCandidateContext,
+    solve_rhs1_reduced_dense_fallback_candidate,
     solve_host_dense_full,
     solve_host_dense_reduced,
 )
@@ -90,3 +92,66 @@ def test_host_dense_full_lstsq_handles_rectangular_operator(monkeypatch) -> None
     assert result.x.tolist() == pytest.approx(expected.tolist())
     assert residual.tolist() == pytest.approx((np.asarray(rhs) - a_np @ expected).tolist())
     assert float(result.residual_norm) == pytest.approx(float(np.linalg.norm(np.asarray(residual))))
+
+
+def test_rhs1_reduced_dense_fallback_candidate_host_lu(monkeypatch) -> None:
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_DENSE_HOST_LU", "1")
+    a_np = np.asarray([[4.0, 1.0], [2.0, 3.0]])
+    rhs = jnp.asarray([6.0, 8.0])
+
+    result, elapsed_s = solve_rhs1_reduced_dense_fallback_candidate(
+        context=RHS1ReducedDenseFallbackCandidateContext(
+            matvec=lambda x: jnp.asarray(a_np) @ x,
+            rhs=rhs,
+            x0=jnp.zeros(2),
+            active_size=2,
+            constraint_scheme=2,
+            has_fp=False,
+            has_pas=False,
+            dense_matrix_cache=a_np,
+            dense_backend_allowed=True,
+            use_implicit=False,
+            tol=1.0e-12,
+            atol=0.0,
+            restart=10,
+            maxiter=20,
+            gmres_precond_side="left",
+            backend="cpu",
+        )
+    )
+
+    expected = np.linalg.solve(a_np, np.asarray(rhs))
+    assert result.x.tolist() == pytest.approx(expected.tolist())
+    assert float(result.residual_norm) == pytest.approx(0.0, abs=1.0e-12)
+    assert elapsed_s >= 0.0
+
+
+def test_rhs1_reduced_dense_fallback_candidate_uses_cached_jax_dense(monkeypatch) -> None:
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_DENSE_HOST_LU", "0")
+    a_np = np.asarray([[2.0, 0.0], [0.0, 5.0]])
+    rhs = jnp.asarray([4.0, 15.0])
+
+    result, elapsed_s = solve_rhs1_reduced_dense_fallback_candidate(
+        context=RHS1ReducedDenseFallbackCandidateContext(
+            matvec=lambda x: jnp.asarray(a_np) @ x,
+            rhs=rhs,
+            x0=jnp.zeros(2),
+            active_size=2,
+            constraint_scheme=2,
+            has_fp=False,
+            has_pas=False,
+            dense_matrix_cache=a_np,
+            dense_backend_allowed=True,
+            use_implicit=False,
+            tol=1.0e-12,
+            atol=0.0,
+            restart=10,
+            maxiter=20,
+            gmres_precond_side="left",
+            backend="cpu",
+        )
+    )
+
+    assert result.x.tolist() == pytest.approx([2.0, 3.0])
+    assert float(result.residual_norm) == pytest.approx(0.0, abs=1.0e-12)
+    assert elapsed_s >= 0.0

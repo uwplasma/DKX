@@ -185,8 +185,10 @@ from .problems.profile_response.auto_solve import (
 from .problems.profile_response.dense import (
     HostDenseFullSolveContext,
     HostDenseReducedSolveContext,
+    RHS1ReducedDenseFallbackCandidateContext,
     solve_host_dense_full,
     solve_host_dense_reduced,
+    solve_rhs1_reduced_dense_fallback_candidate,
 )
 from .problems.profile_response.linear_solve import (
     ProfileLinearSolveContext,
@@ -13960,10 +13962,6 @@ def solve_v3_full_system_linear_gmres(
             and (float(residual_norm_true) > target_reduced or force_dense_cs0)
         ):
             _mark("rhs1_dense_fallback_start")
-            use_row_scaled = bool(
-                int(op.constraint_scheme) == 0
-                or (int(op.constraint_scheme) == 1 and op.fblock.fp is not None)
-            )
             if emit is not None:
                 emit(
                     0,
@@ -13971,162 +13969,28 @@ def solve_v3_full_system_linear_gmres(
                     f"(size={active_size} residual={float(res_reduced.residual_norm):.3e} > target={target_reduced:.3e})",
                 )
             try:
-                dense_retry_timer = Timer()
-                host_dense_env = os.environ.get("SFINCS_JAX_RHSMODE1_DENSE_HOST_LU", "").strip().lower()
-                backend = jax.default_backend()
-                if host_dense_env in {"0", "false", "no", "off"}:
-                    use_host_dense = False
-                elif host_dense_env in {"1", "true", "yes", "on"}:
-                    use_host_dense = True
-                else:
-                    # Default: avoid backend LAPACK/SVD paths on accelerators, and avoid
-                    # XLA dense-solve scratch allocations for medium/large CPU systems.
-                    use_host_dense = backend != "cpu" or (bool(use_implicit) and int(active_size) >= 2000)
-                if op.fblock.pas is not None and int(active_size) <= 2000:
-                    use_host_dense = True
-
-                if use_host_dense:
-                    import scipy.linalg as sla  # noqa: PLC0415
-                    if emit is not None and backend != "cpu" and host_dense_env in {"", "auto"}:
-                        emit(
-                            0,
-                            "solve_v3_full_system_linear_gmres: dense fallback using host LU "
-                            f"on backend={backend}",
-                        )
-
-                    if dense_matrix_cache is not None:
-                        a_np = np.asarray(dense_matrix_cache, dtype=np.float64)
-                    else:
-                        a_dense_jnp = assemble_dense_matrix_from_matvec(
-                            matvec=mv_reduced, n=int(active_size), dtype=rhs_reduced.dtype
-                        )
-                        a_np = np.asarray(a_dense_jnp, dtype=np.float64)
-                    # Make a contiguous copy for LAPACK.
-                    a_np = np.array(a_np, dtype=np.float64, copy=True)
-                    if a_np.ndim != 2:
-                        a_np = np.squeeze(a_np)
-
-                    mv_dense = mv_reduced
-                    b_dense = jnp.asarray(rhs_reduced, dtype=jnp.float64)
-                    if use_row_scaled:
-                        diag_floor = 1e-12
-                        diag = np.diag(a_np).astype(np.float64, copy=False)
-                        diag_abs = np.abs(diag)
-                        diag_safe = np.where(diag_abs > diag_floor, diag, np.sign(diag) * diag_floor)
-                        diag_safe = np.where(diag_safe != 0.0, diag_safe, diag_floor)
-                        scale = (1.0 / diag_safe).astype(np.float64, copy=False)
-                        a_np = a_np * scale[:, None]
-                        scale_jnp = jnp.asarray(scale, dtype=jnp.float64)
-                        b_dense = b_dense * scale_jnp
-
-                        def mv_dense(x: jnp.ndarray) -> jnp.ndarray:
-                            return scale_jnp * mv_reduced(x)
-
-                    if a_np.ndim != 2 or a_np.shape[0] != a_np.shape[1]:
-                        if emit is not None:
-                            emit(
-                                1,
-                                "solve_v3_full_system_linear_gmres: dense fallback "
-                                f"non-square matrix shape={a_np.shape}; using least-squares host solve",
-                            )
-                        if not use_implicit:
-                            x_np = np.asarray(np.linalg.lstsq(a_np, np.asarray(b_dense, dtype=np.float64), rcond=None)[0], dtype=np.float64)
-                            x_dense = jnp.asarray(x_np, dtype=jnp.float64)
-                            res_dense, r_dense = rhs1_result_with_true_residual(x=x_dense, rhs=rhs_reduced, matvec=mv_reduced)
-                        else:
-                            def _solve_cb(rhs_np: np.ndarray) -> np.ndarray:
-                                rhs_np = np.asarray(rhs_np, dtype=np.float64)
-                                return np.asarray(np.linalg.lstsq(a_np, rhs_np, rcond=None)[0], dtype=np.float64)
-
-                            out_spec = jax.ShapeDtypeStruct(b_dense.shape, jnp.float64)
-                            x_dense = jax.pure_callback(_solve_cb, out_spec, b_dense)
-                            res_dense, r_dense = rhs1_result_with_true_residual(x=x_dense, rhs=rhs_reduced, matvec=mv_reduced)
-                        lu = None
-                        piv = None
-                    else:
-                        lu, piv = sla.lu_factor(a_np)
-
-                    if lu is not None and piv is not None:
-                        refine_steps = 0
-                        if op.fblock.pas is not None and int(active_size) <= 2000:
-                            refine_steps = 2
-                        if not use_implicit:
-                            rhs_np = np.asarray(b_dense, dtype=np.float64)
-                            x_np = np.asarray(sla.lu_solve((lu, piv), rhs_np), dtype=np.float64)
-                            for _ in range(int(refine_steps)):
-                                r_np = rhs_np - a_np @ x_np
-                                dx_np = np.asarray(sla.lu_solve((lu, piv), r_np), dtype=np.float64)
-                                x_np = x_np + dx_np
-                            x_dense = jnp.asarray(x_np, dtype=jnp.float64)
-                        else:
-                            out_spec = jax.ShapeDtypeStruct(b_dense.shape, jnp.float64)
-
-                            def _solve_cb(rhs_np: np.ndarray) -> np.ndarray:
-                                rhs_np = np.asarray(rhs_np, dtype=np.float64)
-                                x_np = np.asarray(sla.lu_solve((lu, piv), rhs_np), dtype=np.float64)
-                                for _ in range(int(refine_steps)):
-                                    r_np = rhs_np - a_np @ x_np
-                                    dx_np = np.asarray(sla.lu_solve((lu, piv), r_np), dtype=np.float64)
-                                    x_np = x_np + dx_np
-                                return x_np
-
-                            def _solveT_cb(rhs_np: np.ndarray) -> np.ndarray:
-                                rhs_np = np.asarray(rhs_np, dtype=np.float64)
-                                x_np = np.asarray(sla.lu_solve((lu, piv), rhs_np, trans=1), dtype=np.float64)
-                                for _ in range(int(refine_steps)):
-                                    r_np = rhs_np - a_np.T @ x_np
-                                    dx_np = np.asarray(sla.lu_solve((lu, piv), r_np, trans=1), dtype=np.float64)
-                                    x_np = x_np + dx_np
-                                return x_np
-
-                            def _solve_host(_mv, rhs: jnp.ndarray) -> jnp.ndarray:
-                                return jax.pure_callback(_solve_cb, out_spec, rhs)
-
-                            def _transpose_solve_host(_mv_t, rhs: jnp.ndarray) -> jnp.ndarray:
-                                return jax.pure_callback(_solveT_cb, out_spec, rhs)
-
-                            x_dense = jax.lax.custom_linear_solve(
-                                mv_dense,
-                                b_dense,
-                                solve=_solve_host,
-                                transpose_solve=_transpose_solve_host,
-                                symmetric=False,
-                            )
-                        res_dense, r_dense = rhs1_result_with_true_residual(x=x_dense, rhs=rhs_reduced, matvec=mv_reduced)
-                elif dense_backend_allowed and dense_matrix_cache is not None:
-                    a_dense_jnp = jnp.asarray(dense_matrix_cache, dtype=rhs_reduced.dtype)
-                    if use_row_scaled:
-                        x_dense, _rn = dense_solve_from_matrix_row_scaled(a=a_dense_jnp, b=rhs_reduced)
-                    else:
-                        x_dense, _rn = dense_solve_from_matrix(a=a_dense_jnp, b=rhs_reduced)
-                    res_dense, r_dense = rhs1_result_with_true_residual(x=x_dense, rhs=rhs_reduced, matvec=mv_reduced)
-                else:
-                    if dense_matrix_cache is not None:
-                        a_dense_jnp = jnp.asarray(dense_matrix_cache, dtype=rhs_reduced.dtype)
-                    else:
-                        a_dense_jnp = assemble_dense_matrix_from_matvec(
-                            matvec=mv_reduced, n=int(active_size), dtype=rhs_reduced.dtype
-                        )
-                    if emit is not None and jax.default_backend() != "cpu":
-                        emit(
-                            0,
-                            "solve_v3_full_system_linear_gmres: dense fallback using explicit dense Krylov "
-                            f"on backend={jax.default_backend()}",
-                        )
-                    res_dense, _residual_dense = dense_krylov_solve_from_matrix_with_residual(
-                        a=a_dense_jnp,
-                        b=rhs_reduced,
-                        x0=res_reduced.x,
-                        preconditioner=None,
-                        tol=tol,
-                        atol=atol,
-                        restart=restart,
-                        maxiter=maxiter,
-                        solve_method="incremental",
-                        precondition_side="none" if use_row_scaled else gmres_precond_side,
-                        row_scaled=use_row_scaled,
+                res_dense, dense_retry_elapsed_s = (
+                    solve_rhs1_reduced_dense_fallback_candidate(
+                        context=RHS1ReducedDenseFallbackCandidateContext(
+                            matvec=mv_reduced,
+                            rhs=rhs_reduced,
+                            x0=res_reduced.x,
+                            active_size=int(active_size),
+                            constraint_scheme=int(op.constraint_scheme),
+                            has_fp=op.fblock.fp is not None,
+                            has_pas=op.fblock.pas is not None,
+                            dense_matrix_cache=dense_matrix_cache,
+                            dense_backend_allowed=bool(dense_backend_allowed),
+                            use_implicit=bool(use_implicit),
+                            tol=float(tol),
+                            atol=float(atol),
+                            restart=int(restart),
+                            maxiter=maxiter,
+                            gmres_precond_side=gmres_precond_side,
+                        ),
+                        emit=emit,
                     )
-                dense_retry_elapsed_s = dense_retry_timer.elapsed_s()
+                )
                 res_reduced, residual_vec, _accepted = rhs1_accept_measured_candidate_and_update_replay(
                     replay_state=ksp_replay,
                     current_result=res_reduced,

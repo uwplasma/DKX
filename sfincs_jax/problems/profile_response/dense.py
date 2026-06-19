@@ -4,11 +4,21 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
+import os
+import time
 
+import jax
 import jax.numpy as jnp
 import numpy as np
 
-from ...solver import GMRESSolveResult, assemble_dense_matrix_from_matvec
+from ...solver import (
+    GMRESSolveResult,
+    assemble_dense_matrix_from_matvec,
+    dense_krylov_solve_from_matrix_with_residual,
+    dense_solve_from_matrix,
+    dense_solve_from_matrix_row_scaled,
+)
+from .residual import result_with_true_residual
 
 
 @dataclass(frozen=True)
@@ -30,6 +40,35 @@ class HostDenseFullSolveContext:
     matvec: Callable[[jnp.ndarray], jnp.ndarray]
     rhs: jnp.ndarray
     total_size: int
+
+
+@dataclass(frozen=True)
+class RHS1ReducedDenseFallbackCandidateContext:
+    """Inputs for the reduced RHSMode=1 dense fallback candidate.
+
+    This is the richer post-primary fallback used by the v3 driver after a
+    matrix-free reduced solve stalls. It intentionally supports both
+    host/non-autodiff LU and JAX-visible dense Krylov lanes so the CLI can use a
+    fast host path while implicit-differentiation callers still have a JAX
+    custom-linear-solve contract.
+    """
+
+    matvec: Callable[[jnp.ndarray], jnp.ndarray]
+    rhs: jnp.ndarray
+    x0: jnp.ndarray
+    active_size: int
+    constraint_scheme: int
+    has_fp: bool
+    has_pas: bool
+    dense_matrix_cache: np.ndarray | jnp.ndarray | None
+    dense_backend_allowed: bool
+    use_implicit: bool
+    tol: float
+    atol: float
+    restart: int
+    maxiter: int | None
+    gmres_precond_side: str
+    backend: str | None = None
 
 
 def solve_host_dense_reduced(
@@ -121,9 +160,248 @@ def solve_host_dense_full(
     return GMRESSolveResult(x=x_dense, residual_norm=jnp.linalg.norm(residual_vec)), residual_vec
 
 
+def solve_rhs1_reduced_dense_fallback_candidate(
+    *,
+    context: RHS1ReducedDenseFallbackCandidateContext,
+    emit: Callable[[int, str], None] | None = None,
+) -> tuple[GMRESSolveResult, float]:
+    """Run one dense fallback candidate for a reduced RHSMode=1 system.
+
+    The caller remains responsible for residual/runtime/memory admission. This
+    keeps the policy gate in the driver while moving the dense solve mechanics
+    out of the monolithic solve function.
+    """
+
+    started = time.perf_counter()
+    use_row_scaled = bool(
+        int(context.constraint_scheme) == 0
+        or (int(context.constraint_scheme) == 1 and bool(context.has_fp))
+    )
+    host_dense_env = os.environ.get(
+        "SFINCS_JAX_RHSMODE1_DENSE_HOST_LU", ""
+    ).strip().lower()
+    backend = context.backend or jax.default_backend()
+    if host_dense_env in {"0", "false", "no", "off"}:
+        use_host_dense = False
+    elif host_dense_env in {"1", "true", "yes", "on"}:
+        use_host_dense = True
+    else:
+        # Default: avoid backend LAPACK/SVD paths on accelerators, and avoid
+        # XLA dense-solve scratch allocations for medium/large CPU systems.
+        use_host_dense = backend != "cpu" or (
+            bool(context.use_implicit) and int(context.active_size) >= 2000
+        )
+    if bool(context.has_pas) and int(context.active_size) <= 2000:
+        use_host_dense = True
+
+    if use_host_dense:
+        result = _solve_rhs1_reduced_dense_fallback_host_candidate(
+            context=context,
+            backend=backend,
+            host_dense_env=host_dense_env,
+            use_row_scaled=use_row_scaled,
+            emit=emit,
+        )
+    elif context.dense_backend_allowed and context.dense_matrix_cache is not None:
+        a_dense_jnp = jnp.asarray(context.dense_matrix_cache, dtype=context.rhs.dtype)
+        if use_row_scaled:
+            x_dense, _rn = dense_solve_from_matrix_row_scaled(
+                a=a_dense_jnp,
+                b=context.rhs,
+            )
+        else:
+            x_dense, _rn = dense_solve_from_matrix(a=a_dense_jnp, b=context.rhs)
+        result, _residual = result_with_true_residual(
+            x=x_dense,
+            rhs=context.rhs,
+            matvec=context.matvec,
+        )
+    else:
+        if context.dense_matrix_cache is not None:
+            a_dense_jnp = jnp.asarray(context.dense_matrix_cache, dtype=context.rhs.dtype)
+        else:
+            a_dense_jnp = assemble_dense_matrix_from_matvec(
+                matvec=context.matvec,
+                n=int(context.active_size),
+                dtype=context.rhs.dtype,
+            )
+        if emit is not None and jax.default_backend() != "cpu":
+            emit(
+                0,
+                "solve_v3_full_system_linear_gmres: dense fallback using explicit dense Krylov "
+                f"on backend={jax.default_backend()}",
+            )
+        result, _residual = dense_krylov_solve_from_matrix_with_residual(
+            a=a_dense_jnp,
+            b=context.rhs,
+            x0=context.x0,
+            preconditioner=None,
+            tol=float(context.tol),
+            atol=float(context.atol),
+            restart=int(context.restart),
+            maxiter=context.maxiter,
+            solve_method="incremental",
+            precondition_side=(
+                "none" if use_row_scaled else str(context.gmres_precond_side)
+            ),
+            row_scaled=use_row_scaled,
+        )
+
+    return result, time.perf_counter() - started
+
+
+def _solve_rhs1_reduced_dense_fallback_host_candidate(
+    *,
+    context: RHS1ReducedDenseFallbackCandidateContext,
+    backend: str,
+    host_dense_env: str,
+    use_row_scaled: bool,
+    emit: Callable[[int, str], None] | None,
+) -> GMRESSolveResult:
+    """Host LU/least-squares branch for the reduced dense fallback."""
+
+    import scipy.linalg as sla  # noqa: PLC0415
+
+    if emit is not None and backend != "cpu" and host_dense_env in {"", "auto"}:
+        emit(
+            0,
+            "solve_v3_full_system_linear_gmres: dense fallback using host LU "
+            f"on backend={backend}",
+        )
+
+    if context.dense_matrix_cache is not None:
+        a_np = np.asarray(context.dense_matrix_cache, dtype=np.float64)
+    else:
+        a_dense_jnp = assemble_dense_matrix_from_matvec(
+            matvec=context.matvec,
+            n=int(context.active_size),
+            dtype=context.rhs.dtype,
+        )
+        a_np = np.asarray(a_dense_jnp, dtype=np.float64)
+    a_np = np.array(a_np, dtype=np.float64, copy=True)
+    if a_np.ndim != 2:
+        a_np = np.squeeze(a_np)
+
+    mv_dense = context.matvec
+    b_dense = jnp.asarray(context.rhs, dtype=jnp.float64)
+    if use_row_scaled:
+        diag_floor = 1e-12
+        diag = np.diag(a_np).astype(np.float64, copy=False)
+        diag_abs = np.abs(diag)
+        diag_safe = np.where(
+            diag_abs > diag_floor,
+            diag,
+            np.sign(diag) * diag_floor,
+        )
+        diag_safe = np.where(diag_safe != 0.0, diag_safe, diag_floor)
+        scale = (1.0 / diag_safe).astype(np.float64, copy=False)
+        a_np = a_np * scale[:, None]
+        scale_jnp = jnp.asarray(scale, dtype=jnp.float64)
+        b_dense = b_dense * scale_jnp
+
+        def mv_dense(x: jnp.ndarray) -> jnp.ndarray:
+            return scale_jnp * context.matvec(x)
+
+    if a_np.ndim != 2 or a_np.shape[0] != a_np.shape[1]:
+        if emit is not None:
+            emit(
+                1,
+                "solve_v3_full_system_linear_gmres: dense fallback "
+                f"non-square matrix shape={a_np.shape}; using least-squares host solve",
+            )
+        if not context.use_implicit:
+            x_np = np.asarray(
+                np.linalg.lstsq(
+                    a_np,
+                    np.asarray(b_dense, dtype=np.float64),
+                    rcond=None,
+                )[0],
+                dtype=np.float64,
+            )
+            x_dense = jnp.asarray(x_np, dtype=jnp.float64)
+        else:
+
+            def _solve_cb(rhs_np: np.ndarray) -> np.ndarray:
+                rhs_np = np.asarray(rhs_np, dtype=np.float64)
+                return np.asarray(
+                    np.linalg.lstsq(a_np, rhs_np, rcond=None)[0],
+                    dtype=np.float64,
+                )
+
+            out_spec = jax.ShapeDtypeStruct(b_dense.shape, jnp.float64)
+            x_dense = jax.pure_callback(_solve_cb, out_spec, b_dense)
+        result, _residual = result_with_true_residual(
+            x=x_dense,
+            rhs=context.rhs,
+            matvec=context.matvec,
+        )
+        return result
+
+    lu, piv = sla.lu_factor(a_np)
+    refine_steps = 0
+    if bool(context.has_pas) and int(context.active_size) <= 2000:
+        refine_steps = 2
+    if not context.use_implicit:
+        rhs_np = np.asarray(b_dense, dtype=np.float64)
+        x_np = np.asarray(sla.lu_solve((lu, piv), rhs_np), dtype=np.float64)
+        for _ in range(int(refine_steps)):
+            r_np = rhs_np - a_np @ x_np
+            dx_np = np.asarray(sla.lu_solve((lu, piv), r_np), dtype=np.float64)
+            x_np = x_np + dx_np
+        x_dense = jnp.asarray(x_np, dtype=jnp.float64)
+    else:
+        out_spec = jax.ShapeDtypeStruct(b_dense.shape, jnp.float64)
+
+        def _solve_cb(rhs_np: np.ndarray) -> np.ndarray:
+            rhs_np = np.asarray(rhs_np, dtype=np.float64)
+            x_np = np.asarray(sla.lu_solve((lu, piv), rhs_np), dtype=np.float64)
+            for _ in range(int(refine_steps)):
+                r_np = rhs_np - a_np @ x_np
+                dx_np = np.asarray(sla.lu_solve((lu, piv), r_np), dtype=np.float64)
+                x_np = x_np + dx_np
+            return x_np
+
+        def _solveT_cb(rhs_np: np.ndarray) -> np.ndarray:
+            rhs_np = np.asarray(rhs_np, dtype=np.float64)
+            x_np = np.asarray(
+                sla.lu_solve((lu, piv), rhs_np, trans=1),
+                dtype=np.float64,
+            )
+            for _ in range(int(refine_steps)):
+                r_np = rhs_np - a_np.T @ x_np
+                dx_np = np.asarray(
+                    sla.lu_solve((lu, piv), r_np, trans=1),
+                    dtype=np.float64,
+                )
+                x_np = x_np + dx_np
+            return x_np
+
+        def _solve_host(_mv, rhs: jnp.ndarray) -> jnp.ndarray:
+            return jax.pure_callback(_solve_cb, out_spec, rhs)
+
+        def _transpose_solve_host(_mv_t, rhs: jnp.ndarray) -> jnp.ndarray:
+            return jax.pure_callback(_solveT_cb, out_spec, rhs)
+
+        x_dense = jax.lax.custom_linear_solve(
+            mv_dense,
+            b_dense,
+            solve=_solve_host,
+            transpose_solve=_transpose_solve_host,
+            symmetric=False,
+        )
+    result, _residual = result_with_true_residual(
+        x=x_dense,
+        rhs=context.rhs,
+        matvec=context.matvec,
+    )
+    return result
+
+
 __all__ = [
     "HostDenseFullSolveContext",
     "HostDenseReducedSolveContext",
+    "RHS1ReducedDenseFallbackCandidateContext",
+    "solve_rhs1_reduced_dense_fallback_candidate",
     "solve_host_dense_full",
     "solve_host_dense_reduced",
 ]
