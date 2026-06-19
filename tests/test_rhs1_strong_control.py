@@ -3,7 +3,9 @@ from __future__ import annotations
 from sfincs_jax.rhs1_strong_control import (
     RHS1StrongRetryControls,
     RHS1StrongTriggerControls,
+    rhs1_pas_force_strong_ratio_from_env,
     rhs1_resolved_strong_preconditioner_control,
+    rhs1_strong_preconditioner_env_from_env,
     rhs1_strong_retry_controls_from_env,
     rhs1_strong_preconditioner_min_size,
     rhs1_strong_trigger_controls_from_env,
@@ -15,6 +17,21 @@ def test_rhs1_strong_preconditioner_min_size_handles_invalid_env(monkeypatch) ->
     assert rhs1_strong_preconditioner_min_size() == 800
     monkeypatch.setenv("SFINCS_JAX_RHSMODE1_STRONG_PRECOND_MIN", "1200")
     assert rhs1_strong_preconditioner_min_size() == 1200
+
+
+def test_rhs1_strong_preconditioner_env_and_pas_force_ratio(monkeypatch) -> None:
+    monkeypatch.delenv("SFINCS_JAX_RHSMODE1_STRONG_PRECOND", raising=False)
+    monkeypatch.delenv("SFINCS_JAX_PAS_FORCE_STRONG_RATIO", raising=False)
+    assert rhs1_strong_preconditioner_env_from_env() == ""
+    assert rhs1_pas_force_strong_ratio_from_env() == 50.0
+
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_STRONG_PRECOND", " Theta_Line ")
+    monkeypatch.setenv("SFINCS_JAX_PAS_FORCE_STRONG_RATIO", "12.5")
+    assert rhs1_strong_preconditioner_env_from_env() == "theta_line"
+    assert rhs1_pas_force_strong_ratio_from_env() == 12.5
+
+    monkeypatch.setenv("SFINCS_JAX_PAS_FORCE_STRONG_RATIO", "bad")
+    assert rhs1_pas_force_strong_ratio_from_env() == 50.0
 
 
 def test_rhs1_strong_trigger_controls_preserve_default_ratio(monkeypatch) -> None:

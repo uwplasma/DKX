@@ -98,6 +98,22 @@ def requested_rhs1_strong_preconditioner_kind(
     return None
 
 
+def rhs1_strong_preconditioner_env_from_env() -> str:
+    """Return the normalized strong-preconditioner request token."""
+
+    return os.environ.get("SFINCS_JAX_RHSMODE1_STRONG_PRECOND", "").strip().lower()
+
+
+def rhs1_pas_force_strong_ratio_from_env() -> float:
+    """Return the PAS collision-probe ratio that allows strong fallback."""
+
+    env = os.environ.get("SFINCS_JAX_PAS_FORCE_STRONG_RATIO", "").strip()
+    try:
+        return float(env) if env else 50.0
+    except ValueError:
+        return 50.0
+
+
 def rhs1_strong_trigger_controls_from_env(
     *,
     residual_norm: float,
@@ -289,17 +305,7 @@ def rhs1_resolved_strong_preconditioner_control(
         auto = False
         reason_pas_fast_accept = True
     if pas_precond_force_collision and env in {"", "auto"}:
-        pas_force_strong_ratio_env = os.environ.get(
-            "SFINCS_JAX_PAS_FORCE_STRONG_RATIO", ""
-        ).strip()
-        try:
-            pas_force_strong_ratio = (
-                float(pas_force_strong_ratio_env)
-                if pas_force_strong_ratio_env
-                else 50.0
-            )
-        except ValueError:
-            pas_force_strong_ratio = 50.0
+        pas_force_strong_ratio = rhs1_pas_force_strong_ratio_from_env()
         if float(residual_norm) <= float(target) * float(pas_force_strong_ratio):
             disabled = True
             auto = False
@@ -620,6 +626,7 @@ __all__ = (
     "auto_rhs1_full_strong_kind",
     "auto_rhs1_reduced_strong_kind",
     "requested_rhs1_strong_preconditioner_kind",
+    "rhs1_pas_force_strong_ratio_from_env",
     "rhs1_pas_lite_min",
     "rhs1_pas_strong_lmax",
     "rhs1_pas_weak_minres_steps",
@@ -627,6 +634,7 @@ __all__ = (
     "rhs1_pas_xmg_min",
     "rhs1_resolved_strong_preconditioner_control",
     "rhs1_schwarz_auto_min",
+    "rhs1_strong_preconditioner_env_from_env",
     "rhs1_strong_preconditioner_min_size",
     "rhs1_strong_retry_controls_from_env",
     "rhs1_strong_trigger_controls_from_env",

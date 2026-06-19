@@ -335,9 +335,11 @@ from .problems.profile_response.strong_preconditioning import (
     auto_rhs1_full_strong_kind,
     auto_rhs1_reduced_strong_kind,
     requested_rhs1_strong_preconditioner_kind,
+    rhs1_pas_force_strong_ratio_from_env,
     rhs1_pas_weak_minres_steps,
     rhs1_pas_weak_strong_retry_skip,
     rhs1_resolved_strong_preconditioner_control,
+    rhs1_strong_preconditioner_env_from_env,
     rhs1_strong_retry_controls_from_env,
     rhs1_strong_trigger_controls_from_env,
 )
@@ -11821,7 +11823,7 @@ def solve_v3_full_system_linear_gmres(
             pre_zeta=int(pre_zeta),
             use_implicit=bool(use_implicit),
         )
-        strong_precond_env = os.environ.get("SFINCS_JAX_RHSMODE1_STRONG_PRECOND", "").strip().lower()
+        strong_precond_env = rhs1_strong_preconditioner_env_from_env()
         large_cpu_sparse_rescue_first = _rhsmode1_large_cpu_sparse_rescue_first(
             large_cpu_sparse_rescue=large_cpu_sparse_rescue_active,
             strong_precond_env=strong_precond_env,
@@ -11887,11 +11889,7 @@ def solve_v3_full_system_linear_gmres(
         if strong_control.reason_collision_probe_skip and emit is not None:
             emit(1, "solve_v3_full_system_linear_gmres: PAS collision probe disabled strong preconditioner auto")
         elif pas_precond_force_collision and strong_precond_env in {"", "auto"} and emit is not None:
-            pas_force_strong_ratio_env = os.environ.get("SFINCS_JAX_PAS_FORCE_STRONG_RATIO", "").strip()
-            try:
-                pas_force_strong_ratio = float(pas_force_strong_ratio_env) if pas_force_strong_ratio_env else 50.0
-            except ValueError:
-                pas_force_strong_ratio = 50.0
+            pas_force_strong_ratio = rhs1_pas_force_strong_ratio_from_env()
             if float(res_reduced.residual_norm) > target_reduced * pas_force_strong_ratio:
                 emit(
                     1,
@@ -14495,7 +14493,7 @@ def solve_v3_full_system_linear_gmres(
                         returns_residual_vec=True,
                     )
                 )
-        strong_precond_env = os.environ.get("SFINCS_JAX_RHSMODE1_STRONG_PRECOND", "").strip().lower()
+        strong_precond_env = rhs1_strong_preconditioner_env_from_env()
         cs0_sparse_first = _rhsmode1_constraint0_sparse_first(
             op=op,
             solve_method_kind=solve_method_kind,
