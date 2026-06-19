@@ -124,6 +124,23 @@ class SparseHostDirectPayload:
 
 
 @dataclass(frozen=True)
+class ExplicitSparseOperatorBuildPolicy:
+    """Materialization controls shared by explicit host sparse solve paths."""
+
+    csr_max_mb: float
+    drop_tol: float
+
+
+@dataclass(frozen=True)
+class ExplicitSparseOperatorBuildResult:
+    """Materialized explicit sparse operator and stable progress messages."""
+
+    operator_bundle: object
+    policy: ExplicitSparseOperatorBuildPolicy
+    messages: tuple[tuple[int, str], ...]
+
+
+@dataclass(frozen=True)
 class SparsePCGMRESCompletionMessageContext:
     """Fields used to format the sparse-PC GMRES completion progress line."""
 
@@ -6932,6 +6949,74 @@ def sparse_pc_gmres_final_payload_from_driver_state(
     )
 
 
+def explicit_sparse_pattern_progress_messages(
+    *,
+    solver_label: str,
+    summary: object,
+) -> tuple[tuple[int, str], ...]:
+    """Return stable progress lines for conservative sparse-pattern setup."""
+
+    return (
+        (
+            1,
+            f"solve_v3_full_system_linear_gmres: {solver_label} building conservative pattern",
+        ),
+        (
+            1,
+            f"solve_v3_full_system_linear_gmres: {solver_label} pattern "
+            f"nnz={int(summary.nnz)} avg_row_nnz={float(summary.avg_row_nnz):.3g} "
+            f"max_row_nnz={int(summary.max_row_nnz)}",
+        ),
+    )
+
+
+def resolve_explicit_sparse_operator_build_policy(
+    env: Mapping[str, str] | None,
+) -> ExplicitSparseOperatorBuildPolicy:
+    """Resolve explicit sparse operator materialization controls."""
+
+    return ExplicitSparseOperatorBuildPolicy(
+        csr_max_mb=_env_float(env, "SFINCS_JAX_EXPLICIT_SPARSE_CSR_MAX_MB", 512.0),
+        drop_tol=_env_float(env, "SFINCS_JAX_EXPLICIT_SPARSE_DROP_TOL", 0.0),
+    )
+
+
+def build_explicit_sparse_operator_from_pattern(
+    *,
+    matvec_np: Callable[[np.ndarray], np.ndarray],
+    pattern: object,
+    dtype: object,
+    backend: str,
+    env: Mapping[str, str] | None,
+    build_operator_from_pattern: Callable[..., object],
+    allow_operator_only: bool = False,
+) -> ExplicitSparseOperatorBuildResult:
+    """Materialize an explicit sparse operator using shared host controls."""
+
+    policy = resolve_explicit_sparse_operator_build_policy(env)
+    operator_bundle = build_operator_from_pattern(
+        matvec_np,
+        pattern=pattern,
+        dtype=dtype,
+        backend=backend,
+        csr_max_mb=float(policy.csr_max_mb),
+        drop_tol=float(policy.drop_tol),
+        allow_operator_only=bool(allow_operator_only),
+    )
+    return ExplicitSparseOperatorBuildResult(
+        operator_bundle=operator_bundle,
+        policy=policy,
+        messages=(
+            (
+                1,
+                "explicit_sparse: "
+                f"storage={operator_bundle.metadata.storage_kind} "
+                f"reason={operator_bundle.metadata.reason}",
+            ),
+        ),
+    )
+
+
 def resolve_sparse_minimum_norm_policy(
     env: Mapping[str, str],
     *,
@@ -7325,6 +7410,8 @@ __all__ = [
     "SparseMinimumNormPolicy",
     "SparseMinimumNormPayload",
     "SparseHostDirectPayload",
+    "ExplicitSparseOperatorBuildPolicy",
+    "ExplicitSparseOperatorBuildResult",
     "SparsePCGMRESCompletionMessageContext",
     "SparsePCPostMinresContext",
     "SparsePCPostMinresResult",
@@ -7377,6 +7464,9 @@ __all__ = [
     "sparse_minimum_norm_solve_payload",
     "sparse_minimum_norm_start_message",
     "sparse_host_direct_solve_payload",
+    "build_explicit_sparse_operator_from_pattern",
+    "explicit_sparse_pattern_progress_messages",
+    "resolve_explicit_sparse_operator_build_policy",
     "sparse_rescue_tail_metadata",
     "sparse_xblock_rescue_metadata",
     "xblock_assembled_operator_diagnostics",

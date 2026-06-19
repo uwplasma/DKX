@@ -44,6 +44,8 @@ from sfincs_jax.problems.profile_response.sparse_pc import (
     SparsePCPostMinresContext,
     SparsePCPostMinresUpdateContext,
     SparseHostDirectPayload,
+    ExplicitSparseOperatorBuildPolicy,
+    ExplicitSparseOperatorBuildResult,
     SparseMinimumNormPayload,
     SparseMinimumNormPolicy,
     XBlockAssembledPreflightError,
@@ -54,6 +56,7 @@ from sfincs_jax.problems.profile_response.sparse_pc import (
     apply_sparse_pc_post_minres_if_needed,
     apply_sparse_pc_post_minres_from_driver_state,
     build_fortran_reduced_xblock_factor_stage,
+    build_explicit_sparse_operator_from_pattern,
     build_fortran_reduced_xblock_krylov_setup,
     build_sparse_pc_active_dof_setup,
     build_sparse_pc_pattern_setup,
@@ -72,6 +75,7 @@ from sfincs_jax.problems.profile_response.sparse_pc import (
     select_sparse_pc_auto_preflight_retry_candidates,
     evaluate_sparse_pc_auto_preflight_retry,
     evaluate_sparse_pc_factor_dtype_retry,
+    explicit_sparse_pattern_progress_messages,
     resolve_sparse_pc_gmres_control_policy,
     failed_xblock_global_coupling_metadata,
     failed_xblock_two_level_metadata,
@@ -88,6 +92,7 @@ from sfincs_jax.problems.profile_response.sparse_pc import (
     resolve_fortran_reduced_xblock_krylov_policy,
     resolve_fortran_reduced_xblock_moment_schur_policy,
     resolve_sparse_pc_entry_policy,
+    resolve_explicit_sparse_operator_build_policy,
     resolve_sparse_pc_factor_policy,
     resolve_sparse_minimum_norm_policy,
     sparse_pc_factor_dtype_retry_initial_guess,
@@ -4609,6 +4614,72 @@ def test_sparse_pc_gmres_final_payload_from_driver_state_expands_result_and_meta
     assert payload.metadata["accepted_converged"] is True
     assert payload.metadata["sparse_pc_residual_ratio_to_target"] == pytest.approx(0.5)
     assert payload.metadata["sparse_pc_linear_size"] == 2
+
+
+def test_explicit_sparse_operator_policy_and_messages_are_stable() -> None:
+    policy = resolve_explicit_sparse_operator_build_policy(
+        {
+            "SFINCS_JAX_EXPLICIT_SPARSE_CSR_MAX_MB": "bad",
+            "SFINCS_JAX_EXPLICIT_SPARSE_DROP_TOL": "2e-4",
+        }
+    )
+    messages = explicit_sparse_pattern_progress_messages(
+        solver_label="sparse_host",
+        summary=SimpleNamespace(nnz=np.int64(9), avg_row_nnz=2.25, max_row_nnz=np.int64(4)),
+    )
+
+    assert isinstance(policy, ExplicitSparseOperatorBuildPolicy)
+    assert policy.csr_max_mb == pytest.approx(512.0)
+    assert policy.drop_tol == pytest.approx(2.0e-4)
+    assert messages == (
+        (
+            1,
+            "solve_v3_full_system_linear_gmres: sparse_host building conservative pattern",
+        ),
+        (
+            1,
+            "solve_v3_full_system_linear_gmres: sparse_host pattern "
+            "nnz=9 avg_row_nnz=2.25 max_row_nnz=4",
+        ),
+    )
+
+
+def test_build_explicit_sparse_operator_from_pattern_forwards_policy_and_reports_storage() -> None:
+    calls: list[dict[str, object]] = []
+    bundle = SimpleNamespace(
+        metadata=SimpleNamespace(storage_kind="csr", reason="materialized"),
+        matrix=scipy_sparse.eye(2, format="csr"),
+    )
+
+    def builder(matvec_np, **kwargs):
+        calls.append({"matvec_np": matvec_np, **kwargs})
+        return bundle
+
+    result = build_explicit_sparse_operator_from_pattern(
+        matvec_np=lambda x: np.asarray(x, dtype=np.float64),
+        pattern={"row": (0,)},
+        dtype=np.float64,
+        backend="cpu",
+        env={
+            "SFINCS_JAX_EXPLICIT_SPARSE_CSR_MAX_MB": "64",
+            "SFINCS_JAX_EXPLICIT_SPARSE_DROP_TOL": "1e-5",
+        },
+        build_operator_from_pattern=builder,
+        allow_operator_only=False,
+    )
+
+    assert isinstance(result, ExplicitSparseOperatorBuildResult)
+    assert result.operator_bundle is bundle
+    assert result.policy.csr_max_mb == pytest.approx(64.0)
+    assert result.policy.drop_tol == pytest.approx(1.0e-5)
+    assert calls[0]["pattern"] == {"row": (0,)}
+    assert calls[0]["backend"] == "cpu"
+    assert calls[0]["csr_max_mb"] == pytest.approx(64.0)
+    assert calls[0]["drop_tol"] == pytest.approx(1.0e-5)
+    assert calls[0]["allow_operator_only"] is False
+    assert result.messages == (
+        (1, "explicit_sparse: storage=csr reason=materialized"),
+    )
 
 
 def test_sparse_minimum_norm_policy_parses_env_and_preserves_defaults() -> None:

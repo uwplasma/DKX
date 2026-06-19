@@ -56,21 +56,20 @@ Recent checkpoints:
 - `cb295ce` Extract sparse pattern setup.
 - `4b6a5b4` Extract sparse factor policy.
 
-Current source-size snapshot after the explicit sparse-host direct extraction:
+Current source-size snapshot after shared explicit sparse operator-build
+progress/policy extraction:
 
-- `sfincs_jax/v3_driver.py`: `19122` lines.
-- `solve_v3_full_system_linear_gmres`: `13784` lines.
+- `sfincs_jax/v3_driver.py`: `19106` lines.
+- `solve_v3_full_system_linear_gmres`: `13766` lines.
 
 Recent local validation:
 
 - Focused sparse-PC shard:
-  `156 passed in 1.77 s`.
-- End-to-end sparse minimum-norm driver checks:
-  `2 passed in 2.71 s`.
-- End-to-end explicit sparse-host driver checks:
-  `2 passed in 4.24 s`.
+  `158 passed in 1.70 s`.
+- End-to-end explicit sparse driver checks:
+  `4 passed in 4.22 s`.
 - Latest broad profile-response/x-block/sparse-pattern shard:
-  `435 passed in 114.23 s`.
+  `437 passed in 113.13 s`.
 
 Known CI issue fixed by this rewrite:
 
@@ -81,7 +80,7 @@ Known CI issue fixed by this rewrite:
 
 ### 1. `v3_driver.py` Architecture Refactor
 
-Completion estimate: 86%.
+Completion estimate: 87%.
 
 Goal:
 
@@ -123,13 +122,16 @@ Completed recent boundaries:
   result-metadata extraction.
 - Explicit sparse-host direct-solve refinement, true-residual recomputation,
   completion-message, and result-metadata extraction.
+- Shared explicit sparse conservative-pattern progress, CSR/drop policy
+  parsing, and minimum-norm operator-materialization extraction.
 
 Next steps:
 
 - Move remaining generic sparse-PC solve/result assembly into cohesive
   `profile_response` helpers.
-- Extract shared explicit sparse operator-build progress/policy seams used by
-  sparse minimum-norm and sparse-host direct branches.
+- Extract remaining explicit sparse-host direct factor-setup policy seams only
+  where this can be done without pulling driver-specific caches into domain
+  modules.
 - Continue shrinking `solve_v3_full_system_linear_gmres` in behavior-preserving
   tranches.
 
@@ -187,10 +189,10 @@ Next steps:
 
 ## Immediate Next Steps
 
-1. Commit and push the explicit sparse-host direct extraction after final
-   cleanup.
-2. Continue with shared explicit sparse operator-build progress/policy
-   extraction.
+1. Commit and push the shared explicit sparse operator-build progress/policy
+   extraction after final cleanup.
+2. Continue with explicit sparse-host direct factor-setup policy extraction
+   where cache boundaries remain clean.
 3. Run focused sparse-PC tests and the broad profile-response/x-block/sparse
    shard after each extraction.
 4. Snapshot CI but do not wait on queued runs unless a completed failure appears.

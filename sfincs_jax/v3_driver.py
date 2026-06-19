@@ -230,6 +230,7 @@ from .problems.profile_response.sparse_pc import (
     apply_fortran_reduced_xblock_moment_schur_stage,
     apply_sparse_pc_post_minres_from_driver_state,
     build_fortran_reduced_xblock_factor_stage,
+    build_explicit_sparse_operator_from_pattern,
     build_fortran_reduced_xblock_krylov_setup,
     build_sparse_pc_pattern_setup,
     build_xblock_krylov_matvec_setup,
@@ -289,6 +290,7 @@ from .problems.profile_response.sparse_pc import (
     run_fortran_reduced_xblock_krylov_solve,
     run_sparse_pc_gmres_once,
     sparse_host_direct_solve_payload,
+    explicit_sparse_pattern_progress_messages,
     sparse_minimum_norm_solve_payload,
     sparse_minimum_norm_start_message,
     XBlockAssembledPreflightError,
@@ -9283,50 +9285,34 @@ def solve_v3_full_system_linear_gmres(
                 "or use the default matrix-free solver for active-DOF runs."
             )
         sparse_timer = Timer()
-        if emit is not None:
-            emit(1, "solve_v3_full_system_linear_gmres: sparse_lsmr building conservative pattern")
         pattern = v3_full_system_conservative_sparsity_pattern(op)
         if emit is not None:
             summary = summarize_v3_sparse_pattern(op, pattern)
-            emit(
-                1,
-                "solve_v3_full_system_linear_gmres: sparse_lsmr pattern "
-                f"nnz={summary.nnz} avg_row_nnz={summary.avg_row_nnz:.3g} max_row_nnz={summary.max_row_nnz}",
-            )
+            for level, message in explicit_sparse_pattern_progress_messages(
+                solver_label="sparse_lsmr",
+                summary=summary,
+            ):
+                emit(level, message)
 
         def _sparse_min_norm_mv(x_np: np.ndarray) -> jnp.ndarray:
             return apply_v3_full_system_operator_cached(op, jnp.asarray(x_np, dtype=rhs.dtype))
 
-        csr_max_env = os.environ.get("SFINCS_JAX_EXPLICIT_SPARSE_CSR_MAX_MB", "").strip()
-        drop_tol_env = os.environ.get("SFINCS_JAX_EXPLICIT_SPARSE_DROP_TOL", "").strip()
-        try:
-            csr_max_mb = float(csr_max_env) if csr_max_env else 512.0
-        except ValueError:
-            csr_max_mb = 512.0
-        try:
-            drop_tol = float(drop_tol_env) if drop_tol_env else 0.0
-        except ValueError:
-            drop_tol = 0.0
-
         def _matvec_np(x_np: np.ndarray) -> np.ndarray:
             return np.asarray(_sparse_min_norm_mv(np.asarray(x_np, dtype=np.float64)), dtype=np.float64)
 
-        operator_bundle = build_operator_from_pattern(
-            _matvec_np,
+        sparse_operator_build = build_explicit_sparse_operator_from_pattern(
+            matvec_np=_matvec_np,
             pattern=pattern,
             dtype=np.float64,
             backend=jax.default_backend(),
-            csr_max_mb=float(csr_max_mb),
-            drop_tol=float(drop_tol),
+            env=os.environ,
+            build_operator_from_pattern=build_operator_from_pattern,
             allow_operator_only=False,
         )
+        operator_bundle = sparse_operator_build.operator_bundle
         if emit is not None:
-            emit(
-                1,
-                "explicit_sparse: "
-                f"storage={operator_bundle.metadata.storage_kind} "
-                f"reason={operator_bundle.metadata.reason}",
-            )
+            for level, message in sparse_operator_build.messages:
+                emit(level, message)
         matrix = operator_bundle.matrix
         if matrix is None:
             raise RuntimeError("sparse_lsmr requires a materialized sparse matrix.")
@@ -9371,16 +9357,14 @@ def solve_v3_full_system_linear_gmres(
                 "or use the default matrix-free solver for active-DOF runs."
             )
         sparse_timer = Timer()
-        if emit is not None:
-            emit(1, "solve_v3_full_system_linear_gmres: sparse_host building conservative pattern")
         pattern = v3_full_system_conservative_sparsity_pattern(op)
         if emit is not None:
             summary = summarize_v3_sparse_pattern(op, pattern)
-            emit(
-                1,
-                "solve_v3_full_system_linear_gmres: sparse_host pattern "
-                f"nnz={summary.nnz} avg_row_nnz={summary.avg_row_nnz:.3g} max_row_nnz={summary.max_row_nnz}",
-            )
+            for level, message in explicit_sparse_pattern_progress_messages(
+                solver_label="sparse_host",
+                summary=summary,
+            ):
+                emit(level, message)
 
         def _sparse_host_mv(x_np: np.ndarray) -> jnp.ndarray:
             return apply_v3_full_system_operator(op, jnp.asarray(x_np, dtype=rhs.dtype))
