@@ -131,6 +131,11 @@ from .rhs1_pas_policy import (
     pas_tz_preconditioner_memory_safe as _pas_tz_preconditioner_memory_safe,
     resolve_pas_tz_guarded_correction_kind,
     rhs1_pas_adaptive_smoother_allowed as _rhs1_pas_adaptive_smoother_allowed_impl,
+    rhs1_pas_default_preconditioner_kind as _rhs1_pas_default_preconditioner_kind,
+    rhs1_pas_preconditioner_probe_admitted as _rhs1_pas_preconditioner_probe_admitted,
+    rhs1_pas_preconditioner_probe_config_from_env as _rhs1_pas_preconditioner_probe_config_from_env,
+    rhs1_pas_preconditioner_probe_large_collision_skip as _rhs1_pas_preconditioner_probe_large_collision_skip,
+    rhs1_pas_preconditioner_probe_uses_collision as _rhs1_pas_preconditioner_probe_uses_collision,
     rhs1_pas_tz_max_bytes as _rhs1_pas_tz_max_bytes,
 )
 from .rhs1_preconditioner_dispatch import (
@@ -10668,64 +10673,38 @@ def solve_v3_full_system_linear_gmres(
 
         # PAS probe shortcut: avoid expensive block/line preconditioner builds when a
         # cheap collision-based preconditioner already provides a strong residual drop.
-        pas_probe_env = os.environ.get("SFINCS_JAX_PAS_PRECOND_PROBE", "").strip().lower()
-        pas_probe_enabled = pas_probe_env not in {"0", "false", "no", "off"}
-        pas_probe_rel_env = os.environ.get("SFINCS_JAX_PAS_PRECOND_PROBE_REL_MAX", "").strip()
-        try:
-            pas_probe_rel_max = float(pas_probe_rel_env) if pas_probe_rel_env else 0.9
-        except ValueError:
-            pas_probe_rel_max = 0.9
-        pas_build_max_env = os.environ.get("SFINCS_JAX_PAS_PRECOND_BUILD_MAX", "").strip()
-        try:
-            pas_build_max = int(pas_build_max_env) if pas_build_max_env else 20000
-        except ValueError:
-            pas_build_max = 20000
-        heavy_precond_kinds = {
-            "point",
-            "theta_line",
-            "zeta_line",
-            "theta_zeta",
-            "adi",
-            "xblock_tz",
-            "sxblock_tz",
-            "species_block",
-            "schur",
-            "pas_hybrid",
-        }
-        if (
-            rhs1_precond_env in {"", "auto", "default"}
-            and int(op.rhs_mode) == 1
-            and (not bool(op.include_phi1))
-            and op.fblock.pas is not None
-            and int(op.n_species) >= 2
-            and (geom_scheme == 1 or int(op.n_zeta) <= 9)
-        ):
-            # Robust default for multi-species tokamak-like PAS runs:
-            # prefer Schur over pure theta/zeta line preconditioners.
-            rhs1_precond_kind = "schur"
-        if (
-            pas_probe_enabled
-            and rhs1_precond_kind in heavy_precond_kinds
-            and rhs1_precond_enabled
-            and solve_method_kind not in {"dense", "dense_ksp"}
-            and op.fblock.pas is not None
-            and (not use_dkes)
+        pas_probe_config = _rhs1_pas_preconditioner_probe_config_from_env()
+        rhs1_precond_kind = _rhs1_pas_default_preconditioner_kind(
+            requested_env=rhs1_precond_env,
+            current_kind=rhs1_precond_kind,
+            rhs_mode=int(op.rhs_mode),
+            include_phi1=bool(op.include_phi1),
+            has_pas=op.fblock.pas is not None,
+            n_species=int(op.n_species),
+            n_zeta=int(op.n_zeta),
+            geom_scheme=int(geom_scheme),
+        )
+        if _rhs1_pas_preconditioner_probe_admitted(
+            config=pas_probe_config,
+            preconditioner_kind=rhs1_precond_kind,
+            preconditioner_enabled=bool(rhs1_precond_enabled),
+            solve_method_kind=solve_method_kind,
+            has_pas=op.fblock.pas is not None,
+            use_dkes=bool(use_dkes),
         ):
             probe_key = _rhsmode1_precond_cache_key(op, "pas_probe_decision")
             use_collision_precond = _RHSMODE1_PAS_PRECOND_PROBE_CACHE.get(probe_key)
-            if (
-                use_collision_precond is None
-                and int(op.total_size) >= int(pas_build_max)
-                and not (int(op.constraint_scheme) == 2 and int(op.extra_size) > 0)
-            ):
-                use_collision_precond = True
+            use_collision_precond, skip_message = _rhs1_pas_preconditioner_probe_large_collision_skip(
+                config=pas_probe_config,
+                cached_decision=use_collision_precond,
+                total_size=int(op.total_size),
+                constraint_scheme=int(op.constraint_scheme),
+                extra_size=int(op.extra_size),
+            )
+            if skip_message is not None:
                 _RHSMODE1_PAS_PRECOND_PROBE_CACHE[probe_key] = True
                 if emit is not None:
-                    emit(
-                        1,
-                        "solve_v3_full_system_linear_gmres: PAS precond skip "
-                        f"(size={int(op.total_size)} >= {int(pas_build_max)}) -> collision",
-                    )
+                    emit(1, skip_message)
             if use_collision_precond is None:
                 try:
                     probe_precond = _build_rhsmode1_collision_preconditioner(
@@ -10737,13 +10716,16 @@ def solve_v3_full_system_linear_gmres(
                     probe_r = rhs_reduced - mv_reduced(probe_x)
                     rhs_norm = float(jnp.linalg.norm(rhs_reduced))
                     probe_rel = float(jnp.linalg.norm(probe_r)) / rhs_norm if rhs_norm > 0 else 0.0
-                    use_collision_precond = probe_rel <= pas_probe_rel_max
+                    use_collision_precond = _rhs1_pas_preconditioner_probe_uses_collision(
+                        probe_rel=probe_rel,
+                        rel_max=pas_probe_config.rel_max,
+                    )
                     _RHSMODE1_PAS_PRECOND_PROBE_CACHE[probe_key] = bool(use_collision_precond)
                     if emit is not None:
                         emit(
                             1,
                             "solve_v3_full_system_linear_gmres: PAS precond probe "
-                            f"(rel={probe_rel:.3e}, max={pas_probe_rel_max:.3e}) -> "
+                            f"(rel={probe_rel:.3e}, max={pas_probe_config.rel_max:.3e}) -> "
                             f"{'collision' if use_collision_precond else 'full'}",
                         )
                 except Exception as exc:  # noqa: BLE001

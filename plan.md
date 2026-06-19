@@ -42,9 +42,14 @@ Make `sfincs_jax` research-grade while preserving the public user contract:
 
 Recent checkpoints:
 
+- RHSMode=1 PAS preconditioner probe/default routing now uses tested
+  PAS-policy helpers for env parsing, tokamak-like Schur defaulting, heavy-path
+  admission, large-system collision skip, and residual-threshold decisions
+  while keeping probe execution and cache mutation driver-owned (current
+  checkpoint).
 - RHSMode=1 FP dense-fallback preconditioner probe selection now uses a tested
   dense profile-response helper, including DKES, size, explicit-env,
-  dense-solve, and heavy-preconditioner guards (current checkpoint).
+  dense-solve, and heavy-preconditioner guards (`4be8747`).
 - RHSMode=1 dense shortcut/fallback setup now uses a tested dense
   profile-response helper for shortcut ratio parsing, PAS dense gating, backend
   fallback caps, and backend-disabled progress messages (`6c104bb`).
@@ -174,10 +179,10 @@ Recent checkpoints:
 - `cb295ce` Extract sparse pattern setup.
 - `4b6a5b4` Extract sparse factor policy.
 
-Current source-size snapshot after FP preconditioner probe extraction:
+Current source-size snapshot after PAS preconditioner probe extraction:
 
-- `sfincs_jax/v3_driver.py`: `17988` lines.
-- `solve_v3_full_system_linear_gmres`: `12656` lines.
+- `sfincs_jax/v3_driver.py`: `17970` lines.
+- `solve_v3_full_system_linear_gmres`: `12641` lines.
 - `sfincs_jax/v3_results.py`: `119` lines.
 - `sfincs_jax/problems/profile_response/residual.py`: `981` lines.
 - `sfincs_jax/problems/profile_response/handoff.py`: `598` lines.
@@ -186,9 +191,20 @@ Current source-size snapshot after FP preconditioner probe extraction:
 - `sfincs_jax/problems/profile_response/linear_solve.py`: `327` lines.
 - `sfincs_jax/problems/profile_response/active_projection.py`: `116` lines.
 - `sfincs_jax/problems/profile_response/sparse_pc.py`: `8543` lines.
+- `sfincs_jax/rhs1_pas_policy.py`: `715` lines.
 
 Recent local validation:
 
+- PAS policy shard after PAS preconditioner probe extraction:
+  `26 passed in 0.35 s`.
+- Sparse-host/minimum-norm/direct-tail driver shard:
+  `32 passed, 100 deselected in 36.90 s`.
+- Broad profile-response/RHSMode=1 policy, setup, diagnostics, solver, and
+  helper sweep after PAS preconditioner probe extraction:
+  `1063 passed in 49.40 s`.
+- Hygiene:
+  `ruff`, `compileall`, `git diff --check`, and `scripts/check_repo_size.py`
+  passed.
 - Dense profile-response shard after FP preconditioner probe extraction:
   `16 passed in 1.11 s`.
 - Sparse-host/minimum-norm/direct-tail driver shard:

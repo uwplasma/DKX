@@ -10,12 +10,135 @@ dispatch paths without duplicating logic.
 from __future__ import annotations
 
 from collections.abc import Callable
+from dataclasses import dataclass
 import math
 import os
 
 import numpy as np
 
 from .pas_smoother import adaptive_pas_smoother_allowed
+
+_FALSE_VALUES = {"0", "false", "no", "off"}
+_RHS1_PAS_PROBE_HEAVY_PRECONDITIONERS = frozenset(
+    {
+        "point",
+        "theta_line",
+        "zeta_line",
+        "theta_zeta",
+        "adi",
+        "xblock_tz",
+        "sxblock_tz",
+        "species_block",
+        "schur",
+        "pas_hybrid",
+    }
+)
+
+
+def _env_float(name: str, default: float) -> float:
+    raw = os.environ.get(name, "").strip()
+    try:
+        return float(raw) if raw else float(default)
+    except ValueError:
+        return float(default)
+
+
+def _env_int(name: str, default: int) -> int:
+    raw = os.environ.get(name, "").strip()
+    try:
+        return int(raw) if raw else int(default)
+    except ValueError:
+        return int(default)
+
+
+@dataclass(frozen=True)
+class RHS1PASPreconditionerProbeConfig:
+    """Environment controls for the cheap PAS collision-preconditioner probe."""
+
+    enabled: bool
+    rel_max: float
+    build_max: int
+
+
+def rhs1_pas_preconditioner_probe_config_from_env() -> RHS1PASPreconditionerProbeConfig:
+    """Read PAS preconditioner-probe controls with the historical defaults."""
+    enabled = os.environ.get("SFINCS_JAX_PAS_PRECOND_PROBE", "").strip().lower() not in _FALSE_VALUES
+    return RHS1PASPreconditionerProbeConfig(
+        enabled=enabled,
+        rel_max=_env_float("SFINCS_JAX_PAS_PRECOND_PROBE_REL_MAX", 0.9),
+        build_max=_env_int("SFINCS_JAX_PAS_PRECOND_BUILD_MAX", 20000),
+    )
+
+
+def rhs1_pas_default_preconditioner_kind(
+    *,
+    requested_env: str,
+    current_kind: str,
+    rhs_mode: int,
+    include_phi1: bool,
+    has_pas: bool,
+    n_species: int,
+    n_zeta: int,
+    geom_scheme: int,
+) -> str:
+    """Return the robust default PAS preconditioner for tokamak-like multispecies runs."""
+    if (
+        str(requested_env).strip().lower() in {"", "auto", "default"}
+        and int(rhs_mode) == 1
+        and not bool(include_phi1)
+        and bool(has_pas)
+        and int(n_species) >= 2
+        and (int(geom_scheme) == 1 or int(n_zeta) <= 9)
+    ):
+        return "schur"
+    return str(current_kind)
+
+
+def rhs1_pas_preconditioner_probe_admitted(
+    *,
+    config: RHS1PASPreconditionerProbeConfig,
+    preconditioner_kind: str,
+    preconditioner_enabled: bool,
+    solve_method_kind: str,
+    has_pas: bool,
+    use_dkes: bool,
+) -> bool:
+    """Return whether the cheap collision probe should run before heavy PAS builders."""
+    return (
+        bool(config.enabled)
+        and str(preconditioner_kind).strip().lower() in _RHS1_PAS_PROBE_HEAVY_PRECONDITIONERS
+        and bool(preconditioner_enabled)
+        and str(solve_method_kind).strip().lower() not in {"dense", "dense_ksp"}
+        and bool(has_pas)
+        and not bool(use_dkes)
+    )
+
+
+def rhs1_pas_preconditioner_probe_large_collision_skip(
+    *,
+    config: RHS1PASPreconditionerProbeConfig,
+    cached_decision: bool | None,
+    total_size: int,
+    constraint_scheme: int,
+    extra_size: int,
+) -> tuple[bool | None, str | None]:
+    """Return a fail-fast collision decision for PAS systems too large to probe cheaply."""
+    if cached_decision is not None:
+        return cached_decision, None
+    if int(total_size) < int(config.build_max):
+        return None, None
+    if int(constraint_scheme) == 2 and int(extra_size) > 0:
+        return None, None
+    message = (
+        "solve_v3_full_system_linear_gmres: PAS precond skip "
+        f"(size={int(total_size)} >= {int(config.build_max)}) -> collision"
+    )
+    return True, message
+
+
+def rhs1_pas_preconditioner_probe_uses_collision(*, probe_rel: float, rel_max: float) -> bool:
+    """Return whether a PAS collision-probe residual is strong enough to accept."""
+    return float(probe_rel) <= float(rel_max)
 
 
 def pas_tokamak_theta_preconditioner_applicable(op) -> bool:
@@ -568,6 +691,7 @@ def resolve_pas_tz_memory_fallback_axis(
 
 
 __all__ = [
+    "RHS1PASPreconditionerProbeConfig",
     "build_pas_tz_memory_fallback",
     "estimate_rhs1_pas_tz_build_bytes",
     "estimate_rhs1_pas_tz_build_memory",
@@ -582,5 +706,10 @@ __all__ = [
     "resolve_pas_tz_guarded_correction_kind",
     "resolve_pas_tz_memory_fallback_axis",
     "rhs1_pas_adaptive_smoother_allowed",
+    "rhs1_pas_default_preconditioner_kind",
+    "rhs1_pas_preconditioner_probe_admitted",
+    "rhs1_pas_preconditioner_probe_config_from_env",
+    "rhs1_pas_preconditioner_probe_large_collision_skip",
+    "rhs1_pas_preconditioner_probe_uses_collision",
     "rhs1_pas_tz_max_bytes",
 ]

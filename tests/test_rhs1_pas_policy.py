@@ -3,6 +3,7 @@ from __future__ import annotations
 from types import SimpleNamespace
 
 from sfincs_jax.rhs1_pas_policy import (
+    RHS1PASPreconditionerProbeConfig,
     build_pas_tz_memory_fallback,
     estimate_rhs1_pas_tz_build_bytes,
     estimate_rhs1_pas_tz_build_memory,
@@ -15,6 +16,11 @@ from sfincs_jax.rhs1_pas_policy import (
     resolve_pas_tz_guarded_correction_kind,
     resolve_pas_tz_memory_fallback_axis,
     rhs1_pas_adaptive_smoother_allowed,
+    rhs1_pas_default_preconditioner_kind,
+    rhs1_pas_preconditioner_probe_admitted,
+    rhs1_pas_preconditioner_probe_config_from_env,
+    rhs1_pas_preconditioner_probe_large_collision_skip,
+    rhs1_pas_preconditioner_probe_uses_collision,
 )
 
 
@@ -168,6 +174,170 @@ def test_pas_adaptive_smoother_env_controls_and_invalid_min(monkeypatch) -> None
         target=1.0e-8,
         use_implicit=False,
     )
+
+
+def test_pas_preconditioner_probe_config_preserves_defaults(monkeypatch) -> None:
+    monkeypatch.delenv("SFINCS_JAX_PAS_PRECOND_PROBE", raising=False)
+    monkeypatch.delenv("SFINCS_JAX_PAS_PRECOND_PROBE_REL_MAX", raising=False)
+    monkeypatch.delenv("SFINCS_JAX_PAS_PRECOND_BUILD_MAX", raising=False)
+
+    assert rhs1_pas_preconditioner_probe_config_from_env() == RHS1PASPreconditionerProbeConfig(
+        enabled=True,
+        rel_max=0.9,
+        build_max=20000,
+    )
+
+
+def test_pas_preconditioner_probe_config_respects_env_and_invalid_values(monkeypatch) -> None:
+    monkeypatch.setenv("SFINCS_JAX_PAS_PRECOND_PROBE", "off")
+    monkeypatch.setenv("SFINCS_JAX_PAS_PRECOND_PROBE_REL_MAX", "bad")
+    monkeypatch.setenv("SFINCS_JAX_PAS_PRECOND_BUILD_MAX", "bad")
+
+    assert rhs1_pas_preconditioner_probe_config_from_env() == RHS1PASPreconditionerProbeConfig(
+        enabled=False,
+        rel_max=0.9,
+        build_max=20000,
+    )
+
+    monkeypatch.setenv("SFINCS_JAX_PAS_PRECOND_PROBE", "1")
+    monkeypatch.setenv("SFINCS_JAX_PAS_PRECOND_PROBE_REL_MAX", "0.25")
+    monkeypatch.setenv("SFINCS_JAX_PAS_PRECOND_BUILD_MAX", "1234")
+    assert rhs1_pas_preconditioner_probe_config_from_env() == RHS1PASPreconditionerProbeConfig(
+        enabled=True,
+        rel_max=0.25,
+        build_max=1234,
+    )
+
+
+def test_pas_default_preconditioner_kind_prefers_schur_for_tokamak_like_multispecies() -> None:
+    assert (
+        rhs1_pas_default_preconditioner_kind(
+            requested_env="auto",
+            current_kind="theta_line",
+            rhs_mode=1,
+            include_phi1=False,
+            has_pas=True,
+            n_species=2,
+            n_zeta=1,
+            geom_scheme=1,
+        )
+        == "schur"
+    )
+    assert (
+        rhs1_pas_default_preconditioner_kind(
+            requested_env="default",
+            current_kind="theta_line",
+            rhs_mode=1,
+            include_phi1=False,
+            has_pas=True,
+            n_species=2,
+            n_zeta=9,
+            geom_scheme=5,
+        )
+        == "schur"
+    )
+
+
+def test_pas_default_preconditioner_kind_preserves_user_and_non_pas_choices() -> None:
+    kwargs = dict(
+        current_kind="theta_line",
+        rhs_mode=1,
+        include_phi1=False,
+        has_pas=True,
+        n_species=2,
+        n_zeta=1,
+        geom_scheme=1,
+    )
+    assert rhs1_pas_default_preconditioner_kind(requested_env="xblock_tz", **kwargs) == "theta_line"
+    assert (
+        rhs1_pas_default_preconditioner_kind(
+            requested_env="auto",
+            **{**kwargs, "include_phi1": True},
+        )
+        == "theta_line"
+    )
+    assert (
+        rhs1_pas_default_preconditioner_kind(
+            requested_env="auto",
+            **{**kwargs, "has_pas": False},
+        )
+        == "theta_line"
+    )
+    assert (
+        rhs1_pas_default_preconditioner_kind(
+            requested_env="auto",
+            **{**kwargs, "n_species": 1},
+        )
+        == "theta_line"
+    )
+    assert (
+        rhs1_pas_default_preconditioner_kind(
+            requested_env="auto",
+            **{**kwargs, "geom_scheme": 5, "n_zeta": 17},
+        )
+        == "theta_line"
+    )
+
+
+def test_pas_preconditioner_probe_admission_guards_heavy_paths() -> None:
+    config = RHS1PASPreconditionerProbeConfig(enabled=True, rel_max=0.9, build_max=20000)
+    kwargs = dict(
+        config=config,
+        preconditioner_kind="schur",
+        preconditioner_enabled=True,
+        solve_method_kind="gmres",
+        has_pas=True,
+        use_dkes=False,
+    )
+
+    assert rhs1_pas_preconditioner_probe_admitted(**kwargs)
+    assert not rhs1_pas_preconditioner_probe_admitted(**{**kwargs, "config": RHS1PASPreconditionerProbeConfig(enabled=False, rel_max=0.9, build_max=20000)})
+    assert not rhs1_pas_preconditioner_probe_admitted(**{**kwargs, "preconditioner_kind": "collision"})
+    assert not rhs1_pas_preconditioner_probe_admitted(**{**kwargs, "preconditioner_enabled": False})
+    assert not rhs1_pas_preconditioner_probe_admitted(**{**kwargs, "solve_method_kind": "dense"})
+    assert not rhs1_pas_preconditioner_probe_admitted(**{**kwargs, "has_pas": False})
+    assert not rhs1_pas_preconditioner_probe_admitted(**{**kwargs, "use_dkes": True})
+
+
+def test_pas_preconditioner_probe_large_collision_skip_preserves_constraint_tail_guard() -> None:
+    config = RHS1PASPreconditionerProbeConfig(enabled=True, rel_max=0.9, build_max=100)
+
+    decision, message = rhs1_pas_preconditioner_probe_large_collision_skip(
+        config=config,
+        cached_decision=None,
+        total_size=101,
+        constraint_scheme=0,
+        extra_size=0,
+    )
+    assert decision is True
+    assert message == "solve_v3_full_system_linear_gmres: PAS precond skip (size=101 >= 100) -> collision"
+
+    assert rhs1_pas_preconditioner_probe_large_collision_skip(
+        config=config,
+        cached_decision=False,
+        total_size=101,
+        constraint_scheme=0,
+        extra_size=0,
+    ) == (False, None)
+    assert rhs1_pas_preconditioner_probe_large_collision_skip(
+        config=config,
+        cached_decision=None,
+        total_size=99,
+        constraint_scheme=0,
+        extra_size=0,
+    ) == (None, None)
+    assert rhs1_pas_preconditioner_probe_large_collision_skip(
+        config=config,
+        cached_decision=None,
+        total_size=101,
+        constraint_scheme=2,
+        extra_size=1,
+    ) == (None, None)
+
+
+def test_pas_preconditioner_probe_residual_decision_uses_threshold() -> None:
+    assert rhs1_pas_preconditioner_probe_uses_collision(probe_rel=0.9, rel_max=0.9)
+    assert not rhs1_pas_preconditioner_probe_uses_collision(probe_rel=0.9001, rel_max=0.9)
 
 
 def test_pas_tz_memory_fallback_axis_preserves_default_behavior() -> None:
