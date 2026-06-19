@@ -147,6 +147,20 @@ class SparseHostDirectPolishPayload:
 
 
 @dataclass(frozen=True)
+class SparseHostDirectFallbackPayload:
+    """Complete host sparse direct fallback result with its true residual."""
+
+    x: jnp.ndarray
+    residual_norm: jnp.ndarray
+    residual_vec: jnp.ndarray
+    used_explicit_factor: bool
+    polish_attempted: bool
+    polish_accepted: bool
+    polish_restart: int | None
+    polish_maxiter: int | None
+
+
+@dataclass(frozen=True)
 class ExplicitSparseOperatorBuildPolicy:
     """Materialization controls shared by explicit host sparse solve paths."""
 
@@ -7530,6 +7544,73 @@ def apply_sparse_host_direct_polish_if_needed(
     )
 
 
+def sparse_host_direct_fallback_payload(
+    *,
+    explicit_sparse_factor: object | None,
+    explicit_sparse_operator: object | None,
+    ilu: object,
+    a_csr_full: object,
+    rhs: jnp.ndarray,
+    factor_dtype: np.dtype,
+    refine_steps: int,
+    matvec: ArrayFn,
+    target: float,
+    tol: float,
+    atol: float,
+    restart: int,
+    maxiter: int | None,
+    precondition_side: str,
+    emit: EmitFn | None,
+    polish_enabled: Callable[..., bool],
+    parse_polish_gmres_config: Callable[..., tuple[int, int]],
+    direct_solve_with_refinement: Callable[..., tuple[np.ndarray, float]],
+    ilu_solve_with_refinement: Callable[..., tuple[np.ndarray, float]],
+    host_sparse_direct_polish: Callable[..., tuple[np.ndarray, float]],
+) -> SparseHostDirectFallbackPayload:
+    """Run a host sparse direct fallback, optional polish, and true residual check."""
+
+    factor_payload = solve_sparse_host_direct_from_available_factor(
+        explicit_sparse_factor=explicit_sparse_factor,
+        explicit_sparse_operator=explicit_sparse_operator,
+        ilu=ilu,
+        a_csr_full=a_csr_full,
+        rhs=rhs,
+        factor_dtype=factor_dtype,
+        refine_steps=int(refine_steps),
+        direct_solve_with_refinement=direct_solve_with_refinement,
+        ilu_solve_with_refinement=ilu_solve_with_refinement,
+    )
+    polish_payload = apply_sparse_host_direct_polish_if_needed(
+        x=factor_payload.x,
+        residual_norm=float(factor_payload.residual_norm),
+        factor_dtype=factor_dtype,
+        target=float(target),
+        matvec=matvec,
+        rhs=rhs,
+        ilu=ilu,
+        tol=float(tol),
+        atol=float(atol),
+        restart=int(restart),
+        maxiter=maxiter,
+        precondition_side=precondition_side,
+        emit=emit,
+        polish_enabled=polish_enabled,
+        parse_polish_gmres_config=parse_polish_gmres_config,
+        host_sparse_direct_polish=host_sparse_direct_polish,
+    )
+    residual_vec = jnp.asarray(rhs, dtype=jnp.float64) - matvec(polish_payload.x)
+    return SparseHostDirectFallbackPayload(
+        x=polish_payload.x,
+        residual_norm=polish_payload.residual_norm,
+        residual_vec=residual_vec,
+        used_explicit_factor=bool(factor_payload.used_explicit_factor),
+        polish_attempted=bool(polish_payload.attempted),
+        polish_accepted=bool(polish_payload.accepted),
+        polish_restart=polish_payload.restart,
+        polish_maxiter=polish_payload.maxiter,
+    )
+
+
 def apply_sparse_pc_post_minres(
     *,
     context: SparsePCPostMinresContext,
@@ -7747,6 +7828,7 @@ __all__ = [
     "SparseHostDirectPayload",
     "SparseHostDirectFactorSolvePayload",
     "SparseHostDirectPolishPayload",
+    "SparseHostDirectFallbackPayload",
     "ExplicitSparseOperatorBuildPolicy",
     "ExplicitSparseOperatorBuildResult",
     "SparsePCGMRESCompletionMessageContext",
@@ -7807,6 +7889,7 @@ __all__ = [
     "sparse_host_direct_solve_payload",
     "solve_sparse_host_direct_from_available_factor",
     "apply_sparse_host_direct_polish_if_needed",
+    "sparse_host_direct_fallback_payload",
     "build_explicit_sparse_operator_from_pattern",
     "explicit_sparse_pattern_progress_messages",
     "resolve_explicit_sparse_operator_build_policy",

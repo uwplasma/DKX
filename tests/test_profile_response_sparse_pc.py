@@ -47,6 +47,7 @@ from sfincs_jax.problems.profile_response.sparse_pc import (
     SparseHostDirectPayload,
     SparseHostDirectFactorSolvePayload,
     SparseHostDirectPolishPayload,
+    SparseHostDirectFallbackPayload,
     ExplicitSparseOperatorBuildPolicy,
     ExplicitSparseOperatorBuildResult,
     SparseMinimumNormPayload,
@@ -132,6 +133,7 @@ from sfincs_jax.problems.profile_response.sparse_pc import (
     sparse_host_direct_solve_payload,
     solve_sparse_host_direct_from_available_factor,
     apply_sparse_host_direct_polish_if_needed,
+    sparse_host_direct_fallback_payload,
     sparse_minimum_norm_solve_payload,
     sparse_minimum_norm_start_message,
     validate_explicit_sparse_host_request,
@@ -5090,6 +5092,64 @@ def test_apply_sparse_host_direct_polish_rejects_nonimproving_result() -> None:
     assert payload.accepted is False
     np.testing.assert_allclose(np.asarray(payload.x), np.asarray([2.0]))
     assert float(payload.residual_norm) == pytest.approx(2.0)
+
+
+def test_sparse_host_direct_fallback_payload_polishes_and_recomputes_residual_vector() -> None:
+    messages: list[tuple[int, str]] = []
+    explicit_factor = SimpleNamespace(solve=lambda rhs: rhs)
+    explicit_operator = SimpleNamespace(matrix=scipy_sparse.diags([2.0, 4.0], format="csr"))
+
+    def direct_solve(**kwargs):
+        assert kwargs["factor_solve"] is explicit_factor.solve
+        assert kwargs["operator_matrix"] is explicit_operator.matrix
+        return np.asarray([1.0, 1.0]), 8.0
+
+    def ilu_solve(**_kwargs):
+        pytest.fail("explicit factor should be preferred")
+
+    def polish(**kwargs):
+        assert kwargs["precondition_side"] == "left"
+        return np.asarray([1.0, 2.0]), 0.125
+
+    payload = sparse_host_direct_fallback_payload(
+        explicit_sparse_factor=explicit_factor,
+        explicit_sparse_operator=explicit_operator,
+        ilu=object(),
+        a_csr_full=object(),
+        rhs=jnp.asarray([3.0, 9.0], dtype=jnp.float64),
+        factor_dtype=np.dtype(np.float32),
+        refine_steps=2,
+        matvec=lambda x: jnp.asarray([2.0 * x[0], 4.0 * x[1]], dtype=jnp.float64),
+        target=1.0,
+        tol=1.0e-8,
+        atol=1.0e-8,
+        restart=80,
+        maxiter=120,
+        precondition_side="left",
+        emit=lambda level, msg: messages.append((level, msg)),
+        polish_enabled=lambda **_kwargs: True,
+        parse_polish_gmres_config=lambda **_kwargs: (11, 22),
+        direct_solve_with_refinement=direct_solve,
+        ilu_solve_with_refinement=ilu_solve,
+        host_sparse_direct_polish=polish,
+    )
+
+    assert isinstance(payload, SparseHostDirectFallbackPayload)
+    assert payload.used_explicit_factor is True
+    assert payload.polish_attempted is True
+    assert payload.polish_accepted is True
+    assert payload.polish_restart == 11
+    assert payload.polish_maxiter == 22
+    np.testing.assert_allclose(np.asarray(payload.x), np.asarray([1.0, 2.0]))
+    assert float(payload.residual_norm) == pytest.approx(0.125)
+    np.testing.assert_allclose(np.asarray(payload.residual_vec), np.asarray([1.0, 1.0]))
+    assert messages == [
+        (
+            0,
+            "solve_v3_full_system_linear_gmres: host sparse direct polish "
+            "restart=11 maxiter=22",
+        )
+    ]
 
 
 def test_sparse_pc_post_minres_accepts_improved_residual_and_recomputes_pc_norm() -> (

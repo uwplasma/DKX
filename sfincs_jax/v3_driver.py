@@ -287,10 +287,9 @@ from .problems.profile_response.sparse_pc import (
     resolve_xblock_two_level_policy_setup,
     run_fortran_reduced_xblock_krylov_solve,
     run_sparse_pc_gmres_once,
-    apply_sparse_host_direct_polish_if_needed,
+    sparse_host_direct_fallback_payload,
     sparse_host_direct_solve_payload,
     explicit_sparse_pattern_progress_messages,
-    solve_sparse_host_direct_from_available_factor,
     sparse_minimum_norm_solve_payload,
     sparse_minimum_norm_start_message,
     validate_explicit_sparse_host_request,
@@ -13753,7 +13752,7 @@ def solve_v3_full_system_linear_gmres(
                                 "solve_v3_full_system_linear_gmres: host sparse LU direct fallback "
                                 f"on backend={jax.default_backend()}",
                             )
-                        sparse_host_factor_solve = solve_sparse_host_direct_from_available_factor(
+                        sparse_host_fallback = sparse_host_direct_fallback_payload(
                             explicit_sparse_factor=explicit_sparse_factor,
                             explicit_sparse_operator=explicit_sparse_operator,
                             ilu=ilu,
@@ -13764,23 +13763,8 @@ def solve_v3_full_system_linear_gmres(
                                 "SFINCS_JAX_RHSMODE1_SPARSE_DIRECT_REFINE",
                                 default=2,
                             ),
-                            direct_solve_with_refinement=_host_direct_solve_with_refinement,
-                            ilu_solve_with_refinement=_host_sparse_direct_solve_with_refinement,
-                        )
-                        x_np = sparse_host_factor_solve.x
-                        residual_norm_sparse = sparse_host_factor_solve.residual_norm
-                        res_sparse = GMRESSolveResult(
-                            x=jnp.asarray(x_np, dtype=jnp.float64),
-                            residual_norm=jnp.asarray(residual_norm_sparse, dtype=jnp.float64),
-                        )
-                        sparse_host_polish = apply_sparse_host_direct_polish_if_needed(
-                            x=x_np,
-                            residual_norm=float(res_sparse.residual_norm),
-                            factor_dtype=factor_dtype,
-                            target=float(target_reduced),
                             matvec=mv_reduced,
-                            rhs=rhs_reduced,
-                            ilu=ilu,
+                            target=float(target_reduced),
                             tol=tol,
                             atol=atol,
                             restart=restart,
@@ -13789,13 +13773,15 @@ def solve_v3_full_system_linear_gmres(
                             emit=emit,
                             polish_enabled=rhs1_polish_enabled,
                             parse_polish_gmres_config=rhs1_parse_polish_gmres_config,
+                            direct_solve_with_refinement=_host_direct_solve_with_refinement,
+                            ilu_solve_with_refinement=_host_sparse_direct_solve_with_refinement,
                             host_sparse_direct_polish=_host_sparse_direct_polish,
                         )
                         res_sparse = GMRESSolveResult(
-                            x=sparse_host_polish.x,
-                            residual_norm=sparse_host_polish.residual_norm,
+                            x=sparse_host_fallback.x,
+                            residual_norm=sparse_host_fallback.residual_norm,
                         )
-                        residual_vec_sparse = rhs_reduced - mv_reduced(res_sparse.x)
+                        residual_vec_sparse = sparse_host_fallback.residual_vec
                         _mv_sparse = mv_reduced
                         _precond_sparse = None
                     elif use_implicit:
@@ -16166,7 +16152,7 @@ def solve_v3_full_system_linear_gmres(
                                     "solve_v3_full_system_linear_gmres: host sparse LU direct fallback "
                                     f"on backend={jax.default_backend()}",
                                 )
-                            sparse_host_factor_solve = solve_sparse_host_direct_from_available_factor(
+                            sparse_host_fallback = sparse_host_direct_fallback_payload(
                                 explicit_sparse_factor=explicit_sparse_factor,
                                 explicit_sparse_operator=explicit_sparse_operator,
                                 ilu=ilu,
@@ -16177,23 +16163,8 @@ def solve_v3_full_system_linear_gmres(
                                     "SFINCS_JAX_RHSMODE1_SPARSE_DIRECT_REFINE",
                                     default=2,
                                 ),
-                                direct_solve_with_refinement=_host_direct_solve_with_refinement,
-                                ilu_solve_with_refinement=_host_sparse_direct_solve_with_refinement,
-                            )
-                            x_np = sparse_host_factor_solve.x
-                            residual_norm_sparse = sparse_host_factor_solve.residual_norm
-                            res_sparse = GMRESSolveResult(
-                                x=jnp.asarray(x_np, dtype=jnp.float64),
-                                residual_norm=jnp.asarray(residual_norm_sparse, dtype=jnp.float64),
-                            )
-                            sparse_host_polish = apply_sparse_host_direct_polish_if_needed(
-                                x=x_np,
-                                residual_norm=float(res_sparse.residual_norm),
-                                factor_dtype=factor_dtype,
-                                target=float(target),
                                 matvec=mv,
-                                rhs=rhs,
-                                ilu=ilu,
+                                target=float(target),
                                 tol=tol,
                                 atol=atol,
                                 restart=restart,
@@ -16202,13 +16173,15 @@ def solve_v3_full_system_linear_gmres(
                                 emit=emit,
                                 polish_enabled=rhs1_polish_enabled,
                                 parse_polish_gmres_config=rhs1_parse_polish_gmres_config,
+                                direct_solve_with_refinement=_host_direct_solve_with_refinement,
+                                ilu_solve_with_refinement=_host_sparse_direct_solve_with_refinement,
                                 host_sparse_direct_polish=_host_sparse_direct_polish,
                             )
                             res_sparse = GMRESSolveResult(
-                                x=sparse_host_polish.x,
-                                residual_norm=sparse_host_polish.residual_norm,
+                                x=sparse_host_fallback.x,
+                                residual_norm=sparse_host_fallback.residual_norm,
                             )
-                            residual_vec_sparse = rhs - mv(res_sparse.x)
+                            residual_vec_sparse = sparse_host_fallback.residual_vec
                             _mv_sparse = mv
                             _precond_sparse = None
                     elif use_implicit:

@@ -42,8 +42,10 @@ Make `sfincs_jax` research-grade while preserving the public user contract:
 
 Recent checkpoints:
 
+- RHSMode=1 sparse-host direct fallback solve/polish/residual orchestration
+  extraction (current checkpoint).
 - RHSMode=1 dense-shortcut true-residual scalar helper extraction
-  (current checkpoint).
+  (`57153f9`).
 - RHSMode=1 left-preconditioned replay residual norm helper extraction
   (`9ce5c27`).
 - RHSMode=1 true-residual recomputation helper extraction
@@ -77,17 +79,26 @@ Recent checkpoints:
 - `cb295ce` Extract sparse pattern setup.
 - `4b6a5b4` Extract sparse factor policy.
 
-Current source-size snapshot after RHSMode=1 dense-shortcut true-residual scalar
-helper extraction:
+Current source-size snapshot after RHSMode=1 sparse-host direct fallback
+orchestration extraction:
 
-- `sfincs_jax/v3_driver.py`: `18858` lines.
-- `solve_v3_full_system_linear_gmres`: `13571` lines.
+- `sfincs_jax/v3_driver.py`: `18831` lines.
+- `solve_v3_full_system_linear_gmres`: `13545` lines.
 - `sfincs_jax/problems/profile_response/residual.py`: `751` lines.
 - `sfincs_jax/problems/profile_response/handoff.py`: `290` lines.
-- `sfincs_jax/problems/profile_response/sparse_pc.py`: `7826` lines.
+- `sfincs_jax/problems/profile_response/sparse_pc.py`: `7909` lines.
 
 Recent local validation:
 
+- Sparse-host fallback orchestration focused shard:
+  `170 passed in 1.61 s`.
+- RHSMode=1 residual/handoff/sparse-PC/diagnostics shard:
+  `215 passed in 1.40 s`.
+- Explicit sparse-host/direct-tail driver shard:
+  `32 passed, 100 deselected in 32.57 s`.
+- Hygiene:
+  `ruff`, `compileall`, `git diff --check`, and `scripts/check_repo_size.py`
+  passed.
 - RHSMode=1 dense-shortcut residual/refactor focused shard:
   `37 passed in 8.61 s`.
 - Profile-response dense-shortcut residual/handoff/sparse-PC shard:
@@ -225,6 +236,10 @@ Completed recent boundaries:
   dense-fallback gates consolidated into a tested residual helper.
 - RHSMode=1 dense-shortcut true-residual scalar measurement consolidated into
   a tested residual helper.
+- RHSMode=1 host sparse direct fallback solve, optional float32 polish, and
+  true-residual-vector recomputation consolidated into a tested
+  profile-response helper used by both reduced active-DOF and full-system
+  fallback branches.
 
 Next steps:
 
