@@ -3,6 +3,7 @@ from __future__ import annotations
 from sfincs_jax.rhs1_strong_control import (
     RHS1StrongRetryControls,
     RHS1StrongTriggerControls,
+    rhs1_collision_retry_allowed,
     rhs1_pas_force_strong_ratio_from_env,
     rhs1_resolved_strong_preconditioner_control,
     rhs1_strong_preconditioner_env_from_env,
@@ -172,6 +173,27 @@ def test_rhs1_strong_retry_controls_respect_env_and_invalid_fallback(monkeypatch
         restart=80,
         maxiter=None,
     ) == RHS1StrongRetryControls(restart=120, maxiter=800)
+
+
+def test_rhs1_collision_retry_allowed_requires_point_rhs1_nonphi1_and_trigger() -> None:
+    kwargs = dict(
+        residual_norm=2.0,
+        target=1.0,
+        rhs_mode=1,
+        include_phi1=False,
+        rhs1_precond_kind="point",
+        has_fp=True,
+        has_pas=False,
+        strong_precond_trigger=True,
+    )
+    assert rhs1_collision_retry_allowed(**kwargs)
+    assert not rhs1_collision_retry_allowed(**{**kwargs, "residual_norm": 0.5})
+    assert not rhs1_collision_retry_allowed(**{**kwargs, "rhs_mode": 2})
+    assert not rhs1_collision_retry_allowed(**{**kwargs, "include_phi1": True})
+    assert not rhs1_collision_retry_allowed(**{**kwargs, "rhs1_precond_kind": "xmg"})
+    assert not rhs1_collision_retry_allowed(**{**kwargs, "has_fp": False, "has_pas": False})
+    assert not rhs1_collision_retry_allowed(**{**kwargs, "strong_precond_trigger": False})
+    assert rhs1_collision_retry_allowed(**{**kwargs, "has_fp": False, "has_pas": True})
 
 
 def test_rhs1_resolved_strong_preconditioner_control_enables_auto_on_default_problem_families() -> None:

@@ -25,6 +25,7 @@ from sfincs_jax.rhs1_pas_policy import (
     rhs1_pas_preconditioner_probe_large_collision_skip,
     rhs1_pas_preconditioner_probe_uses_collision,
     rhs1_pas_schur_rescue_controls_from_env,
+    rhs1_pas_tz_guarded_strong_retry_from_env,
 )
 
 
@@ -529,6 +530,19 @@ def test_pas_tz_guarded_correction_kind_is_explicit() -> None:
     assert resolve_pas_tz_guarded_correction_kind(requested="tzfft") == "tzfft"
     assert resolve_pas_tz_guarded_correction_kind(requested="collision-tzfft-correction") == "tzfft"
     assert resolve_pas_tz_guarded_correction_kind(requested="unknown") is None
+
+
+def test_pas_tz_guarded_strong_retry_env_is_explicit(monkeypatch) -> None:
+    monkeypatch.delenv("SFINCS_JAX_RHSMODE1_PAS_TZ_GUARDED_STRONG_RETRY", raising=False)
+    assert not rhs1_pas_tz_guarded_strong_retry_from_env()
+
+    for value in ("1", "true", "yes", "on"):
+        monkeypatch.setenv("SFINCS_JAX_RHSMODE1_PAS_TZ_GUARDED_STRONG_RETRY", value)
+        assert rhs1_pas_tz_guarded_strong_retry_from_env()
+
+    for value in ("0", "false", "no", "off", "unexpected"):
+        monkeypatch.setenv("SFINCS_JAX_RHSMODE1_PAS_TZ_GUARDED_STRONG_RETRY", value)
+        assert not rhs1_pas_tz_guarded_strong_retry_from_env()
 
 
 def test_build_pas_tz_memory_fallback_can_force_zeta_schwarz(monkeypatch) -> None:

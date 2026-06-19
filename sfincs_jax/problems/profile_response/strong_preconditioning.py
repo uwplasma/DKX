@@ -180,6 +180,29 @@ def rhs1_strong_retry_controls_from_env(*, restart: int, maxiter: int | None) ->
     return RHS1StrongRetryControls(restart=int(restart_use), maxiter=int(maxiter_use))
 
 
+def rhs1_collision_retry_allowed(
+    *,
+    residual_norm: float,
+    target: float,
+    rhs_mode: int,
+    include_phi1: bool,
+    rhs1_precond_kind: str | None,
+    has_fp: bool,
+    has_pas: bool,
+    strong_precond_trigger: bool,
+) -> bool:
+    """Return whether the point-preconditioned solve should retry with collisions."""
+
+    return bool(
+        float(residual_norm) > float(target)
+        and int(rhs_mode) == 1
+        and (not bool(include_phi1))
+        and rhs1_precond_kind == "point"
+        and (bool(has_fp) or bool(has_pas))
+        and bool(strong_precond_trigger)
+    )
+
+
 def rhs1_pas_weak_strong_retry_skip(
     *, has_pas: bool, rhs1_precond_kind: str | None, res_ratio: float
 ) -> bool:
@@ -626,6 +649,7 @@ __all__ = (
     "auto_rhs1_full_strong_kind",
     "auto_rhs1_reduced_strong_kind",
     "requested_rhs1_strong_preconditioner_kind",
+    "rhs1_collision_retry_allowed",
     "rhs1_pas_force_strong_ratio_from_env",
     "rhs1_pas_lite_min",
     "rhs1_pas_strong_lmax",

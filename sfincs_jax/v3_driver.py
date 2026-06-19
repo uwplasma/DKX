@@ -138,6 +138,7 @@ from .rhs1_pas_policy import (
     rhs1_pas_preconditioner_probe_large_collision_skip as _rhs1_pas_preconditioner_probe_large_collision_skip,
     rhs1_pas_preconditioner_probe_uses_collision as _rhs1_pas_preconditioner_probe_uses_collision,
     rhs1_pas_schur_rescue_controls_from_env,
+    rhs1_pas_tz_guarded_strong_retry_from_env,
     rhs1_pas_tz_max_bytes as _rhs1_pas_tz_max_bytes,
 )
 from .rhs1_preconditioner_dispatch import (
@@ -337,6 +338,7 @@ from .problems.profile_response.strong_preconditioning import (
     auto_rhs1_full_strong_kind,
     auto_rhs1_reduced_strong_kind,
     requested_rhs1_strong_preconditioner_kind,
+    rhs1_collision_retry_allowed,
     rhs1_pas_force_strong_ratio_from_env,
     rhs1_pas_weak_minres_steps,
     rhs1_pas_weak_strong_retry_skip,
@@ -11748,13 +11750,15 @@ def solve_v3_full_system_linear_gmres(
             )
         if fp_force_strong:
             strong_precond_trigger = True
-        if (
-            float(res_reduced.residual_norm) > target_reduced
-            and int(op.rhs_mode) == 1
-            and (not bool(op.include_phi1))
-            and rhs1_precond_kind == "point"
-            and (op.fblock.fp is not None or op.fblock.pas is not None)
-            and strong_precond_trigger
+        if rhs1_collision_retry_allowed(
+            residual_norm=float(res_reduced.residual_norm),
+            target=float(target_reduced),
+            rhs_mode=int(op.rhs_mode),
+            include_phi1=bool(op.include_phi1),
+            rhs1_precond_kind=rhs1_precond_kind,
+            has_fp=op.fblock.fp is not None,
+            has_pas=op.fblock.pas is not None,
+            strong_precond_trigger=bool(strong_precond_trigger),
         ):
             if bicgstab_preconditioner_reduced is None:
                 bicgstab_preconditioner_reduced = _build_rhsmode1_collision_preconditioner(
@@ -11970,19 +11974,16 @@ def solve_v3_full_system_linear_gmres(
             strong_precond_kind = None
             strong_precond_trigger = False
 
-        if rhs1_pas_tz_guarded_fallback:
-            guarded_retry_env = os.environ.get("SFINCS_JAX_RHSMODE1_PAS_TZ_GUARDED_STRONG_RETRY", "").strip().lower()
-            guarded_retry = guarded_retry_env in {"1", "true", "yes", "on"}
-            if not guarded_retry:
-                if emit is not None and strong_precond_kind is not None:
-                    emit(
-                        1,
-                        "solve_v3_full_system_linear_gmres: skipping strong preconditioner "
-                        "after guarded PAS-TZ fallback; set "
-                        "SFINCS_JAX_RHSMODE1_PAS_TZ_GUARDED_STRONG_RETRY=1 to retry",
-                    )
-                strong_precond_kind = None
-                strong_precond_trigger = False
+        if rhs1_pas_tz_guarded_fallback and not rhs1_pas_tz_guarded_strong_retry_from_env():
+            if emit is not None and strong_precond_kind is not None:
+                emit(
+                    1,
+                    "solve_v3_full_system_linear_gmres: skipping strong preconditioner "
+                    "after guarded PAS-TZ fallback; set "
+                    "SFINCS_JAX_RHSMODE1_PAS_TZ_GUARDED_STRONG_RETRY=1 to retry",
+                )
+            strong_precond_kind = None
+            strong_precond_trigger = False
 
         if bool(qi_device_skip_strong) and strong_precond_kind is not None:
             if emit is not None:
@@ -14441,13 +14442,15 @@ def solve_v3_full_system_linear_gmres(
                     solver_kind=_solver_kind("incremental")[0],
                 )
             )
-        if (
-            float(result.residual_norm) > target
-            and int(op.rhs_mode) == 1
-            and (not bool(op.include_phi1))
-            and rhs1_precond_kind == "point"
-            and (op.fblock.fp is not None or op.fblock.pas is not None)
-            and strong_precond_trigger
+        if rhs1_collision_retry_allowed(
+            residual_norm=float(result.residual_norm),
+            target=float(target),
+            rhs_mode=int(op.rhs_mode),
+            include_phi1=bool(op.include_phi1),
+            rhs1_precond_kind=rhs1_precond_kind,
+            has_fp=op.fblock.fp is not None,
+            has_pas=op.fblock.pas is not None,
+            strong_precond_trigger=bool(strong_precond_trigger),
         ):
             if bicgstab_preconditioner_full is None:
                 bicgstab_preconditioner_full = _build_rhsmode1_collision_preconditioner(op=op)

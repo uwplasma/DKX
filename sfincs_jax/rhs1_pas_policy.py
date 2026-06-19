@@ -753,6 +753,12 @@ def resolve_pas_tz_guarded_correction_kind(*, requested: str) -> str | None:
     return None
 
 
+def rhs1_pas_tz_guarded_strong_retry_from_env() -> bool:
+    """Return whether guarded PAS-TZ fallback may retry with the strong builder."""
+    raw = os.environ.get("SFINCS_JAX_RHSMODE1_PAS_TZ_GUARDED_STRONG_RETRY", "").strip().lower()
+    return raw in {"1", "true", "yes", "on"}
+
+
 def resolve_pas_tz_memory_fallback_axis(
     *,
     op,
@@ -808,5 +814,6 @@ __all__ = [
     "rhs1_pas_preconditioner_probe_large_collision_skip",
     "rhs1_pas_preconditioner_probe_uses_collision",
     "rhs1_pas_schur_rescue_controls_from_env",
+    "rhs1_pas_tz_guarded_strong_retry_from_env",
     "rhs1_pas_tz_max_bytes",
 ]
