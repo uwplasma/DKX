@@ -233,6 +233,7 @@ from .problems.profile_response.sparse_pc import (
     SparsePCPatternSetupContext,
     SparseHostOrILUFactorBuildContext,
     SparseILUPreconditionerBuildContext,
+    SparseHostScipyPreconditionerBuildContext,
     SparsePCGMRESContext,
     SparsePCPostMinresUpdateContext,
     XBlockSubspaceCorrectionContext,
@@ -301,6 +302,7 @@ from .problems.profile_response.sparse_pc import (
     run_sparse_pc_gmres_once,
     build_sparse_host_or_ilu_factor,
     build_sparse_ilu_preconditioner_from_cache,
+    build_sparse_host_scipy_preconditioner,
     sparse_host_direct_fallback_payload,
     sparse_host_direct_solve_from_pattern,
     sparse_minimum_norm_solve_from_pattern,
@@ -13649,21 +13651,16 @@ def solve_v3_full_system_linear_gmres(
                                 precond_side=gmres_precond_side,
                             )
                     else:
-                        if ilu is None:
-                            raise RuntimeError("sparse_ilu: ILU factors unavailable")
-
-                        def _precond_sparse(v: jnp.ndarray) -> jnp.ndarray:
-                            x_np = np.asarray(v, dtype=np.float64).reshape((-1,))
-                            y_np = ilu.solve(x_np)
-                            return jnp.asarray(y_np, dtype=jnp.float64)
-
-                        if sparse_use_matvec:
-                            def _mv_sparse(v: jnp.ndarray) -> jnp.ndarray:
-                                x_np = np.asarray(v, dtype=np.float64).reshape((-1,))
-                                y_np = a_csr_full @ x_np
-                                return jnp.asarray(y_np, dtype=jnp.float64)
-                        else:
-                            _mv_sparse = mv_reduced
+                        scipy_sparse_build = build_sparse_host_scipy_preconditioner(
+                            SparseHostScipyPreconditionerBuildContext(
+                                ilu=ilu,
+                                a_csr_full=a_csr_full,
+                                base_matvec=mv_reduced,
+                                sparse_use_matvec=sparse_use_matvec,
+                            )
+                        )
+                        _precond_sparse = scipy_sparse_build.preconditioner
+                        _mv_sparse = scipy_sparse_build.matvec
 
                         if emit is not None:
                             emit(
@@ -15566,10 +15563,15 @@ def solve_v3_full_system_linear_gmres(
 
                     if host_sparse_direct and ilu is not None:
                         if sparse_operator_preconditioned_rescue:
-                            def _precond_sparse(v: jnp.ndarray) -> jnp.ndarray:
-                                x_np = np.asarray(v, dtype=np.float64).reshape((-1,))
-                                y_np = ilu.solve(x_np)
-                                return jnp.asarray(y_np, dtype=jnp.float64)
+                            scipy_sparse_build = build_sparse_host_scipy_preconditioner(
+                                SparseHostScipyPreconditionerBuildContext(
+                                    ilu=ilu,
+                                    a_csr_full=a_csr_full,
+                                    base_matvec=mv,
+                                    sparse_use_matvec=False,
+                                )
+                            )
+                            _precond_sparse = scipy_sparse_build.preconditioner
 
                             sparse_pc_restart, sparse_pc_maxiter = rhs1_parse_polish_gmres_config(
                                 restart_env_name="SFINCS_JAX_RHSMODE1_SPARSE_PC_GMRES_RESTART",
@@ -15677,21 +15679,16 @@ def solve_v3_full_system_linear_gmres(
                                 precond_side=gmres_precond_side,
                             )
                     else:
-                        if ilu is None:
-                            raise RuntimeError("sparse_ilu: ILU factors unavailable")
-
-                        def _precond_sparse(v: jnp.ndarray) -> jnp.ndarray:
-                            x_np = np.asarray(v, dtype=np.float64).reshape((-1,))
-                            y_np = ilu.solve(x_np)
-                            return jnp.asarray(y_np, dtype=jnp.float64)
-
-                        if sparse_use_matvec:
-                            def _mv_sparse(v: jnp.ndarray) -> jnp.ndarray:
-                                x_np = np.asarray(v, dtype=np.float64).reshape((-1,))
-                                y_np = a_csr_full @ x_np
-                                return jnp.asarray(y_np, dtype=jnp.float64)
-                        else:
-                            _mv_sparse = mv
+                        scipy_sparse_build = build_sparse_host_scipy_preconditioner(
+                            SparseHostScipyPreconditionerBuildContext(
+                                ilu=ilu,
+                                a_csr_full=a_csr_full,
+                                base_matvec=mv,
+                                sparse_use_matvec=sparse_use_matvec,
+                            )
+                        )
+                        _precond_sparse = scipy_sparse_build.preconditioner
+                        _mv_sparse = scipy_sparse_build.matvec
 
                         if emit is not None:
                             emit(

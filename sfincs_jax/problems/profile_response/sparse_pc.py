@@ -226,6 +226,25 @@ class SparseILUPreconditionerBuildResult:
 
 
 @dataclass(frozen=True)
+class SparseHostScipyPreconditionerBuildContext:
+    """Host ILU factor and optional explicit matrix used by SciPy Krylov."""
+
+    ilu: object | None
+    a_csr_full: object
+    base_matvec: ArrayFn
+    sparse_use_matvec: bool
+    unavailable_message: str = "sparse_ilu: ILU factors unavailable"
+
+
+@dataclass(frozen=True)
+class SparseHostScipyPreconditionerBuildResult:
+    """Host preconditioner and matrix-vector product for SciPy Krylov fallback."""
+
+    preconditioner: ArrayFn
+    matvec: ArrayFn
+
+
+@dataclass(frozen=True)
 class ExplicitSparseOperatorBuildPolicy:
     """Materialization controls shared by explicit host sparse solve paths."""
 
@@ -7992,6 +8011,35 @@ def build_sparse_ilu_preconditioner_from_cache(
     )
 
 
+def build_sparse_host_scipy_preconditioner(
+    context: SparseHostScipyPreconditionerBuildContext,
+) -> SparseHostScipyPreconditionerBuildResult:
+    """Build host callbacks for SciPy Krylov sparse fallback solves."""
+
+    if context.ilu is None:
+        raise RuntimeError(str(context.unavailable_message))
+
+    def _preconditioner(v: jnp.ndarray) -> jnp.ndarray:
+        x_np = np.asarray(v, dtype=np.float64).reshape((-1,))
+        y_np = context.ilu.solve(x_np)
+        return jnp.asarray(y_np, dtype=jnp.float64)
+
+    if bool(context.sparse_use_matvec):
+
+        def _matvec(v: jnp.ndarray) -> jnp.ndarray:
+            x_np = np.asarray(v, dtype=np.float64).reshape((-1,))
+            y_np = context.a_csr_full @ x_np
+            return jnp.asarray(y_np, dtype=jnp.float64)
+
+    else:
+        _matvec = context.base_matvec
+
+    return SparseHostScipyPreconditionerBuildResult(
+        preconditioner=_preconditioner,
+        matvec=_matvec,
+    )
+
+
 def apply_sparse_pc_post_minres(
     *,
     context: SparsePCPostMinresContext,
@@ -8311,6 +8359,8 @@ __all__ = [
     "SparseHostOrILUFactorBuildResult",
     "SparseILUPreconditionerBuildContext",
     "SparseILUPreconditionerBuildResult",
+    "SparseHostScipyPreconditionerBuildContext",
+    "SparseHostScipyPreconditionerBuildResult",
     "ExplicitSparseOperatorBuildPolicy",
     "ExplicitSparseOperatorBuildResult",
     "SparsePCGMRESCompletionMessageContext",
@@ -8379,6 +8429,7 @@ __all__ = [
     "sparse_host_direct_fallback_payload",
     "build_sparse_host_or_ilu_factor",
     "build_sparse_ilu_preconditioner_from_cache",
+    "build_sparse_host_scipy_preconditioner",
     "build_explicit_sparse_operator_from_pattern",
     "explicit_sparse_pattern_progress_messages",
     "resolve_explicit_sparse_operator_build_policy",

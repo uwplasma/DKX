@@ -51,6 +51,7 @@ from sfincs_jax.problems.profile_response.sparse_pc import (
     SparseHostDirectFallbackPayload,
     SparseHostOrILUFactorBuildContext,
     SparseILUPreconditionerBuildContext,
+    SparseHostScipyPreconditionerBuildContext,
     ExplicitSparseOperatorBuildPolicy,
     ExplicitSparseOperatorBuildResult,
     SparseMinimumNormPayload,
@@ -141,6 +142,7 @@ from sfincs_jax.problems.profile_response.sparse_pc import (
     sparse_host_direct_fallback_payload,
     build_sparse_host_or_ilu_factor,
     build_sparse_ilu_preconditioner_from_cache,
+    build_sparse_host_scipy_preconditioner,
     sparse_minimum_norm_solve_payload,
     sparse_minimum_norm_solve_from_pattern,
     sparse_minimum_norm_start_message,
@@ -5470,6 +5472,60 @@ def test_build_sparse_ilu_preconditioner_from_cache_reports_unavailable() -> Non
     assert result.preconditioner is None
     assert not result.used_dense_triangular
     assert not result.used_padded_triangular
+
+
+def test_build_sparse_host_scipy_preconditioner_uses_explicit_matrix_matvec() -> None:
+    factor = SimpleNamespace(solve=lambda rhs: 0.25 * rhs)
+    matrix = np.asarray([[2.0, 0.0], [0.0, 3.0]])
+
+    result = build_sparse_host_scipy_preconditioner(
+        SparseHostScipyPreconditionerBuildContext(
+            ilu=factor,
+            a_csr_full=matrix,
+            base_matvec=lambda v: 10.0 * v,
+            sparse_use_matvec=True,
+        )
+    )
+
+    np.testing.assert_allclose(
+        np.asarray(result.preconditioner(jnp.asarray([4.0, 8.0]))),
+        np.asarray([1.0, 2.0]),
+    )
+    np.testing.assert_allclose(
+        np.asarray(result.matvec(jnp.asarray([5.0, 7.0]))),
+        np.asarray([10.0, 21.0]),
+    )
+
+
+def test_build_sparse_host_scipy_preconditioner_can_reuse_base_matvec() -> None:
+    factor = SimpleNamespace(solve=lambda rhs: rhs)
+
+    result = build_sparse_host_scipy_preconditioner(
+        SparseHostScipyPreconditionerBuildContext(
+            ilu=factor,
+            a_csr_full=np.eye(2),
+            base_matvec=lambda v: 3.0 * v,
+            sparse_use_matvec=False,
+        )
+    )
+
+    np.testing.assert_allclose(
+        np.asarray(result.matvec(jnp.asarray([2.0, 4.0]))),
+        np.asarray([6.0, 12.0]),
+    )
+
+
+def test_build_sparse_host_scipy_preconditioner_raises_when_factor_missing() -> None:
+    with pytest.raises(RuntimeError, match="missing"):
+        build_sparse_host_scipy_preconditioner(
+            SparseHostScipyPreconditionerBuildContext(
+                ilu=None,
+                a_csr_full=np.eye(2),
+                base_matvec=_identity,
+                sparse_use_matvec=True,
+                unavailable_message="missing",
+            )
+        )
 
 
 def test_sparse_pc_post_minres_accepts_improved_residual_and_recomputes_pc_norm() -> (
