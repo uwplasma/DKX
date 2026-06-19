@@ -42,7 +42,8 @@ Make `sfincs_jax` research-grade while preserving the public user contract:
 
 Recent checkpoints:
 
-- Sparse-PC finalization helper extraction (current checkpoint).
+- X-block sparse-PC metadata helper extraction (current checkpoint).
+- Sparse-PC finalization helper extraction.
 - KSP replay-state contract extraction.
 - Measured candidate handoff consolidation.
 - Sparse fallback measured-handoff extraction.
@@ -60,21 +61,21 @@ Recent checkpoints:
 - `cb295ce` Extract sparse pattern setup.
 - `4b6a5b4` Extract sparse factor policy.
 
-Current source-size snapshot after sparse-PC finalization helper extraction:
+Current source-size snapshot after x-block sparse-PC metadata helper extraction:
 
-- `sfincs_jax/v3_driver.py`: `18968` lines.
-- `solve_v3_full_system_linear_gmres`: `13623` lines.
+- `sfincs_jax/v3_driver.py`: `18962` lines.
+- `solve_v3_full_system_linear_gmres`: `13618` lines.
 - `sfincs_jax/problems/profile_response/handoff.py`: `254` lines.
-- `sfincs_jax/problems/profile_response/sparse_pc.py`: `7700` lines.
+- `sfincs_jax/problems/profile_response/sparse_pc.py`: `7717` lines.
 
 Recent local validation:
 
 - Sparse-PC helper shard:
-  `165 passed in 1.64 s`.
+  `166 passed in 1.68 s`.
 - End-to-end explicit sparse/direct-tail driver checks:
-  `5 passed in 14.23 s`.
+  `5 passed in 14.22 s`.
 - Latest broad profile-response/x-block/sparse-pattern shard:
-  `444 passed in 112.75 s`.
+  `445 passed in 112.43 s`.
 - Handoff/replay and profile-response diagnostics shard:
   `35 passed in 0.76 s`.
 - Handoff helper unit shard:
@@ -91,6 +92,8 @@ Recent local validation:
   CI is in progress and not yet waited on.
 - Latest pushed CI/Docs for KSP replay-state contract extraction (`75ae32d`)
   are green.
+- Latest pushed Docs for sparse-PC finalization helper extraction (`e793d77`)
+  are green; CI is in progress and not yet waited on.
 
 Known CI issue fixed by this rewrite:
 
@@ -158,6 +161,8 @@ Completed recent boundaries:
   handoff contract with unit tests.
 - Sparse-PC final post-minres, completion emission, and final payload assembly
   consolidated into a single profile-response helper.
+- X-block sparse-PC result and correction metadata handoffs consolidated into
+  one profile-response helper.
 
 Next steps:
 
@@ -225,7 +230,7 @@ Next steps:
 
 ## Immediate Next Steps
 
-1. Commit and push the sparse-PC finalization helper extraction.
+1. Commit and push the x-block sparse-PC metadata helper extraction.
 2. Continue with remaining generic sparse-PC solve/result assembly extraction
    where behavior and cache boundaries remain clean.
 3. Run focused handoff/sparse-PC tests and the broad profile-response/x-block/sparse

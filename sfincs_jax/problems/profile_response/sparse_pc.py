@@ -38,6 +38,7 @@ from .setup import (
     SPARSE_HOST_PETSC_COMPAT_SOLVE_METHODS,
     SPARSE_HOST_XBLOCK_PC_GMRES_SOLVE_METHODS,
 )
+from .solver_diagnostics import build_rhs1_xblock_correction_metadata_from_driver_state
 
 
 ArrayFn = Callable[[jnp.ndarray], jnp.ndarray]
@@ -7009,6 +7010,21 @@ def finalize_sparse_pc_gmres_from_driver_state(
     )
 
 
+def xblock_sparse_pc_final_metadata_from_driver_state(
+    state: Mapping[str, object],
+    *,
+    full_size: object,
+) -> dict[str, object]:
+    """Build final x-block sparse-PC metadata from one driver-state handoff."""
+    return {
+        **xblock_sparse_pc_result_diagnostics_from_driver_state(
+            state,
+            full_size=full_size,
+        ),
+        **build_rhs1_xblock_correction_metadata_from_driver_state(state),
+    }
+
+
 def explicit_sparse_pattern_progress_messages(
     *,
     solver_label: str,
@@ -7696,5 +7712,6 @@ __all__ = [
     "xblock_qi_seed_preconditioner_diagnostics",
     "xblock_sparse_pc_core_diagnostics",
     "xblock_sparse_pc_result_diagnostics_from_driver_state",
+    "xblock_sparse_pc_final_metadata_from_driver_state",
     "xblock_side_probe_diagnostics",
 ]

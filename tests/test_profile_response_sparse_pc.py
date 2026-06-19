@@ -8,6 +8,7 @@ import pytest
 import jax.numpy as jnp
 from scipy import sparse as scipy_sparse
 
+import sfincs_jax.problems.profile_response.sparse_pc as sparse_pc_module
 from sfincs_jax.problems.profile_response.active_projection import (
     expand_reduced_with_map,
     reduce_full_with_indices,
@@ -132,6 +133,7 @@ from sfincs_jax.problems.profile_response.sparse_pc import (
     sparse_minimum_norm_start_message,
     validate_explicit_sparse_host_request,
     finalize_xblock_assembled_operator_metadata,
+    xblock_sparse_pc_final_metadata_from_driver_state,
 )
 
 
@@ -5269,3 +5271,42 @@ def test_finalize_sparse_pc_gmres_from_driver_state_applies_polish_and_payload()
     assert state["x_np"].tolist() == [1.0, 2.0]
     assert any("post-minres improved" in message for _, message in messages)
     assert any("sparse_pc_gmres complete" in message for _, message in messages)
+
+
+def test_xblock_sparse_pc_final_metadata_from_driver_state_merges_components(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: dict[str, object] = {}
+    state = {"token": object()}
+
+    def fake_result_metadata(arg_state, *, full_size):
+        calls["result_state"] = arg_state
+        calls["full_size"] = full_size
+        return {"core": 1, "shared": "core"}
+
+    def fake_correction_metadata(arg_state):
+        calls["correction_state"] = arg_state
+        return {"correction": 2, "shared": "correction"}
+
+    monkeypatch.setattr(
+        sparse_pc_module,
+        "xblock_sparse_pc_result_diagnostics_from_driver_state",
+        fake_result_metadata,
+    )
+    monkeypatch.setattr(
+        sparse_pc_module,
+        "build_rhs1_xblock_correction_metadata_from_driver_state",
+        fake_correction_metadata,
+    )
+
+    metadata = xblock_sparse_pc_final_metadata_from_driver_state(
+        state,
+        full_size=123,
+    )
+
+    assert calls == {
+        "result_state": state,
+        "full_size": 123,
+        "correction_state": state,
+    }
+    assert metadata == {"core": 1, "correction": 2, "shared": "correction"}

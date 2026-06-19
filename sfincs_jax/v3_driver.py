@@ -210,7 +210,6 @@ from .problems.profile_response.diagnostics import (
     fp_xblock_highx_residual_correction_metadata,
     sparse_rescue_tail_metadata,
     sparse_xblock_rescue_metadata,
-    xblock_sparse_pc_result_diagnostics_from_driver_state,
 )
 from .problems.profile_response.sparse_pc import (
     DirectTailMaterializationContext,
@@ -246,6 +245,7 @@ from .problems.profile_response.sparse_pc import (
     build_sparse_pc_active_dof_setup,
     build_direct_tail_materialization_setup,
     finalize_sparse_pc_gmres_from_driver_state,
+    xblock_sparse_pc_final_metadata_from_driver_state,
     evaluate_xblock_moment_schur_probe_result,
     evaluate_sparse_pc_factor_preflight,
     evaluate_sparse_pc_residual_candidate_acceptance,
@@ -476,7 +476,6 @@ from .rhs1_true_operator_rescue import (
 )
 from .problems.profile_response.solver_diagnostics import (
     RHS1KSPDiagnosticsContext,
-    build_rhs1_xblock_correction_metadata_from_driver_state,
     emit_profile_response_ksp_history,
     emit_profile_response_ksp_iter_stats,
 )
@@ -6922,15 +6921,10 @@ def solve_v3_full_system_linear_gmres(
                     x=_xblock_expand_reduced(jnp.asarray(x_np, dtype=jnp.float64)),
                     residual_norm=jnp.asarray(residual_norm_xblock_pc, dtype=jnp.float64),
                 ),
-                metadata={
-                    **xblock_sparse_pc_result_diagnostics_from_driver_state(
-                        locals(),
-                        full_size=op.total_size,
-                    ),
-                    **build_rhs1_xblock_correction_metadata_from_driver_state(
-                        locals()
-                    ),
-                },
+                metadata=xblock_sparse_pc_final_metadata_from_driver_state(
+                    locals(),
+                    full_size=op.total_size,
+                ),
             )
 
         sparse_pc_active_setup = build_sparse_pc_active_dof_setup(
