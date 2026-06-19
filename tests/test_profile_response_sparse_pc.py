@@ -125,6 +125,7 @@ from sfincs_jax.problems.profile_response.sparse_pc import (
     sparse_host_direct_solve_payload,
     sparse_minimum_norm_solve_payload,
     sparse_minimum_norm_start_message,
+    validate_explicit_sparse_host_request,
     finalize_xblock_assembled_operator_metadata,
 )
 
@@ -4680,6 +4681,41 @@ def test_build_explicit_sparse_operator_from_pattern_forwards_policy_and_reports
     assert result.messages == (
         (1, "explicit_sparse: storage=csr reason=materialized"),
     )
+
+
+def test_validate_explicit_sparse_host_request_preserves_user_facing_errors() -> None:
+    validate_explicit_sparse_host_request(
+        solve_method_label="sparse_host",
+        differentiable=False,
+        rhs_mode=1,
+        use_active_dof=False,
+        path_description="host sparse LU path",
+    )
+
+    with pytest.raises(ValueError, match="non-differentiable host sparse LU path"):
+        validate_explicit_sparse_host_request(
+            solve_method_label="sparse_host",
+            differentiable=True,
+            rhs_mode=1,
+            use_active_dof=False,
+            path_description="host sparse LU path",
+        )
+    with pytest.raises(NotImplementedError, match="RHSMode=1"):
+        validate_explicit_sparse_host_request(
+            solve_method_label="sparse_lsmr",
+            differentiable=False,
+            rhs_mode=2,
+            use_active_dof=False,
+            path_description="host sparse minimum-norm path",
+        )
+    with pytest.raises(NotImplementedError, match="ACTIVE_DOF=0"):
+        validate_explicit_sparse_host_request(
+            solve_method_label="sparse_lsmr",
+            differentiable=False,
+            rhs_mode=1,
+            use_active_dof=True,
+            path_description="host sparse minimum-norm path",
+        )
 
 
 def test_sparse_minimum_norm_policy_parses_env_and_preserves_defaults() -> None:

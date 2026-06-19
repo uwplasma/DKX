@@ -56,20 +56,19 @@ Recent checkpoints:
 - `cb295ce` Extract sparse pattern setup.
 - `4b6a5b4` Extract sparse factor policy.
 
-Current source-size snapshot after shared explicit sparse operator-build
-progress/policy extraction:
+Current source-size snapshot after explicit host request-validation extraction:
 
-- `sfincs_jax/v3_driver.py`: `19106` lines.
-- `solve_v3_full_system_linear_gmres`: `13766` lines.
+- `sfincs_jax/v3_driver.py`: `19103` lines.
+- `solve_v3_full_system_linear_gmres`: `13762` lines.
 
 Recent local validation:
 
 - Focused sparse-PC shard:
-  `158 passed in 1.70 s`.
+  `159 passed in 1.69 s`.
 - End-to-end explicit sparse driver checks:
-  `4 passed in 4.22 s`.
+  `4 passed in 4.34 s`.
 - Latest broad profile-response/x-block/sparse-pattern shard:
-  `437 passed in 113.13 s`.
+  `438 passed in 113.95 s`.
 
 Known CI issue fixed by this rewrite:
 
@@ -80,7 +79,7 @@ Known CI issue fixed by this rewrite:
 
 ### 1. `v3_driver.py` Architecture Refactor
 
-Completion estimate: 87%.
+Completion estimate: 88%.
 
 Goal:
 
@@ -124,6 +123,7 @@ Completed recent boundaries:
   completion-message, and result-metadata extraction.
 - Shared explicit sparse conservative-pattern progress, CSR/drop policy
   parsing, and minimum-norm operator-materialization extraction.
+- Explicit host sparse non-autodiff request validation extraction.
 
 Next steps:
 
@@ -189,8 +189,8 @@ Next steps:
 
 ## Immediate Next Steps
 
-1. Commit and push the shared explicit sparse operator-build progress/policy
-   extraction after final cleanup.
+1. Commit and push the explicit host request-validation extraction after final
+   cleanup.
 2. Continue with explicit sparse-host direct factor-setup policy extraction
    where cache boundaries remain clean.
 3. Run focused sparse-PC tests and the broad profile-response/x-block/sparse

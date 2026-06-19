@@ -7017,6 +7017,32 @@ def build_explicit_sparse_operator_from_pattern(
     )
 
 
+def validate_explicit_sparse_host_request(
+    *,
+    solve_method_label: str,
+    differentiable: bool | None,
+    rhs_mode: int,
+    use_active_dof: bool,
+    path_description: str,
+) -> None:
+    """Validate that an explicit host sparse solve is on the non-autodiff lane."""
+
+    if differentiable is True:
+        raise ValueError(
+            f"solve_method='{solve_method_label}' is a non-differentiable {path_description}."
+        )
+    if int(rhs_mode) != 1:
+        raise NotImplementedError(
+            f"solve_method='{solve_method_label}' is currently implemented for RHSMode=1 only."
+        )
+    if bool(use_active_dof):
+        raise NotImplementedError(
+            f"solve_method='{solve_method_label}' currently targets the full system; "
+            "set SFINCS_JAX_ACTIVE_DOF=0 or use the default matrix-free solver for "
+            "active-DOF runs."
+        )
+
+
 def resolve_sparse_minimum_norm_policy(
     env: Mapping[str, str],
     *,
@@ -7467,6 +7493,7 @@ __all__ = [
     "build_explicit_sparse_operator_from_pattern",
     "explicit_sparse_pattern_progress_messages",
     "resolve_explicit_sparse_operator_build_policy",
+    "validate_explicit_sparse_host_request",
     "sparse_rescue_tail_metadata",
     "sparse_xblock_rescue_metadata",
     "xblock_assembled_operator_diagnostics",

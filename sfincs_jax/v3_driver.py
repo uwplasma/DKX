@@ -293,6 +293,7 @@ from .problems.profile_response.sparse_pc import (
     explicit_sparse_pattern_progress_messages,
     sparse_minimum_norm_solve_payload,
     sparse_minimum_norm_start_message,
+    validate_explicit_sparse_host_request,
     XBlockAssembledPreflightError,
     finalize_xblock_assembled_operator_metadata,
 )
@@ -9275,15 +9276,13 @@ def solve_v3_full_system_linear_gmres(
             metadata=sparse_pc_final_payload.metadata,
         )
     if solve_method_kind_explicit in _SPARSE_HOST_MINIMUM_NORM_SOLVE_METHODS:
-        if differentiable is True:
-            raise ValueError("solve_method='sparse_lsmr' is a non-differentiable host sparse minimum-norm path.")
-        if int(op.rhs_mode) != 1:
-            raise NotImplementedError("solve_method='sparse_lsmr' is currently implemented for RHSMode=1 only.")
-        if use_active_dof_mode:
-            raise NotImplementedError(
-                "solve_method='sparse_lsmr' currently targets the full system; set SFINCS_JAX_ACTIVE_DOF=0 "
-                "or use the default matrix-free solver for active-DOF runs."
-            )
+        validate_explicit_sparse_host_request(
+            solve_method_label="sparse_lsmr",
+            differentiable=differentiable,
+            rhs_mode=int(op.rhs_mode),
+            use_active_dof=bool(use_active_dof_mode),
+            path_description="host sparse minimum-norm path",
+        )
         sparse_timer = Timer()
         pattern = v3_full_system_conservative_sparsity_pattern(op)
         if emit is not None:
@@ -9347,15 +9346,13 @@ def solve_v3_full_system_linear_gmres(
             metadata=sparse_minimum_norm_payload.metadata,
         )
     if solve_method_kind_explicit in _SPARSE_HOST_DIRECT_SOLVE_METHODS:
-        if differentiable is True:
-            raise ValueError("solve_method='sparse_host' is a non-differentiable host sparse LU path.")
-        if int(op.rhs_mode) != 1:
-            raise NotImplementedError("solve_method='sparse_host' is currently implemented for RHSMode=1 only.")
-        if use_active_dof_mode:
-            raise NotImplementedError(
-                "solve_method='sparse_host' currently targets the full system; set SFINCS_JAX_ACTIVE_DOF=0 "
-                "or use the default matrix-free solver for active-DOF runs."
-            )
+        validate_explicit_sparse_host_request(
+            solve_method_label="sparse_host",
+            differentiable=differentiable,
+            rhs_mode=int(op.rhs_mode),
+            use_active_dof=bool(use_active_dof_mode),
+            path_description="host sparse LU path",
+        )
         sparse_timer = Timer()
         pattern = v3_full_system_conservative_sparsity_pattern(op)
         if emit is not None:
