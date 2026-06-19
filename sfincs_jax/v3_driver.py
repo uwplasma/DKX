@@ -260,6 +260,7 @@ from .problems.profile_response.sparse_pc import (
     XBlockGMRESFallbackContext,
     XBlockKrylovSolveSpaceContext,
     XBlockPostSolveCorrectionContext,
+    XBlockSparsePCCompletionContext,
     apply_fortran_reduced_xblock_global_coupling_stage,
     apply_fortran_reduced_xblock_initial_seed,
     apply_fortran_reduced_xblock_moment_schur_stage,
@@ -282,7 +283,7 @@ from .problems.profile_response.sparse_pc import (
     evaluate_sparse_pc_residual_candidate_acceptance,
     select_sparse_pc_auto_preflight_retry_candidates,
     evaluate_sparse_pc_auto_preflight_retry,
-    emit_xblock_sparse_pc_completion_from_driver_state,
+    emit_xblock_sparse_pc_completion,
     resolve_sparse_pc_gmres_control_policy,
     enforce_sparse_pc_memory_budget,
     failed_xblock_global_coupling_metadata,
@@ -6430,7 +6431,18 @@ def solve_v3_full_system_linear_gmres(
             x_np = np.asarray(post_corrections.x, dtype=np.float64)
             residual_norm_xblock_pc = float(post_corrections.residual_norm)
             solve_s = float(post_corrections.solve_s)
-            emit_xblock_sparse_pc_completion_from_driver_state(locals())
+            emit_xblock_sparse_pc_completion(
+                XBlockSparsePCCompletionContext(
+                    emit=emit,
+                    krylov_method=str(xblock_krylov_method),
+                    elapsed_s=sparse_timer.elapsed_s(),
+                    iterations=int(reported_iterations),
+                    matvecs=int(reported_matvecs),
+                    residual_norm=float(residual_norm_xblock_pc),
+                    target=float(target_xblock),
+                    history=history,
+                )
+            )
             xblock_sparse_pc_final_payload = xblock_sparse_pc_final_payload_from_driver_state(
                 locals(),
                 expand_reduced=_xblock_expand_reduced,

@@ -75,6 +75,7 @@ from sfincs_jax.problems.profile_response.sparse_pc import (
     XBlockPostSolveCorrectionContext,
     XBlockPostSolveCorrectionResult,
     XBlockPhysicalResidual,
+    XBlockSparsePCCompletionContext,
     XBlockSparsePCWorkEstimates,
     XBlockAssembledPreflightError,
     apply_fortran_reduced_xblock_global_coupling_stage,
@@ -97,6 +98,7 @@ from sfincs_jax.problems.profile_response.sparse_pc import (
     build_xblock_assembled_operator_preflight_setup,
     build_xblock_krylov_matvec_setup,
     emit_xblock_sparse_pc_completion_from_driver_state,
+    emit_xblock_sparse_pc_completion,
     emit_sparse_pc_gmres_completion_from_driver_state,
     enforce_sparse_pc_memory_budget,
     evaluate_xblock_moment_schur_probe_result,
@@ -920,6 +922,47 @@ def test_xblock_sparse_pc_completion_message_omits_empty_ksp_residual() -> None:
         "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres complete "
         "method=gmres elapsed_s=1.000 iters=2 matvecs=3 "
         "residual=4.000000e+00 target=5.000000e+00"
+    )
+
+
+def test_emit_xblock_sparse_pc_completion_uses_explicit_context() -> None:
+    emitted: list[tuple[int, str]] = []
+
+    emit_xblock_sparse_pc_completion(
+        XBlockSparsePCCompletionContext(
+            emit=lambda level, message: emitted.append((level, message)),
+            krylov_method="gmres_jax",
+            elapsed_s=3.5,
+            iterations=6,
+            matvecs=14,
+            residual_norm=2.0e-9,
+            target=1.0e-8,
+            history=(1.0e-3, 2.0e-9),
+        )
+    )
+
+    assert emitted == [
+        (
+            0,
+            "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres complete "
+            "method=gmres_jax elapsed_s=3.500 iters=6 matvecs=14 "
+            "residual=2.000000e-09 target=1.000000e-08 ksp_residual=2.000000e-09",
+        )
+    ]
+
+
+def test_emit_xblock_sparse_pc_completion_skips_missing_emit() -> None:
+    emit_xblock_sparse_pc_completion(
+        XBlockSparsePCCompletionContext(
+            emit=None,
+            krylov_method="gmres",
+            elapsed_s=0.0,
+            iterations=0,
+            matvecs=0,
+            residual_norm=0.0,
+            target=1.0,
+            history=(),
+        )
     )
 
 

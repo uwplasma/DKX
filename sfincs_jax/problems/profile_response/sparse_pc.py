@@ -103,6 +103,20 @@ class XBlockKrylovReport:
 
 
 @dataclass(frozen=True)
+class XBlockSparsePCCompletionContext:
+    """Explicit inputs for the final xblock sparse-PC progress line."""
+
+    emit: EmitFn | None
+    krylov_method: str
+    elapsed_s: float
+    iterations: int
+    matvecs: int
+    residual_norm: float
+    target: float
+    history: Sequence[float] | None
+
+
+@dataclass(frozen=True)
 class XBlockGMRESFallbackDecision:
     """Admission result for a non-GMRES xblock solve retrying with GMRES."""
 
@@ -976,17 +990,37 @@ def xblock_sparse_pc_completion_message(
     )
 
 
+def emit_xblock_sparse_pc_completion(
+    context: XBlockSparsePCCompletionContext,
+) -> None:
+    """Emit the final xblock sparse-PC progress line from explicit inputs."""
+
+    if context.emit is None:
+        return
+    context.emit(
+        0,
+        xblock_sparse_pc_completion_message(
+            krylov_method=str(context.krylov_method),
+            elapsed_s=float(context.elapsed_s),
+            iterations=int(context.iterations),
+            matvecs=int(context.matvecs),
+            residual_norm=float(context.residual_norm),
+            target=float(context.target),
+            history=context.history,
+        ),
+    )
+
+
 def emit_xblock_sparse_pc_completion_from_driver_state(
     state: Mapping[str, object],
 ) -> None:
     """Emit the final xblock sparse-PC progress line from driver state."""
 
-    emit = state["emit"]
-    if emit is None:
+    if state["emit"] is None:
         return
-    emit(
-        0,
-        xblock_sparse_pc_completion_message(
+    emit_xblock_sparse_pc_completion(
+        XBlockSparsePCCompletionContext(
+            emit=state["emit"],
             krylov_method=str(state["xblock_krylov_method"]),
             elapsed_s=state["sparse_timer"].elapsed_s(),
             iterations=int(state["reported_iterations"]),
@@ -9807,6 +9841,7 @@ __all__ = [
     "SparsePCGMRESContext",
     "SparsePCGMRESResult",
     "XBlockKrylovReport",
+    "XBlockSparsePCCompletionContext",
     "XBlockGMRESFallbackDecision",
     "XBlockGMRESFallbackContext",
     "XBlockGMRESFallbackResult",
@@ -9862,6 +9897,7 @@ __all__ = [
     "build_direct_tail_materialization_setup",
     "build_direct_tail_structured_preconditioner_setup",
     "enforce_sparse_pc_memory_budget",
+    "emit_xblock_sparse_pc_completion",
     "emit_xblock_sparse_pc_completion_from_driver_state",
     "evaluate_sparse_pc_factor_preflight",
     "evaluate_sparse_pc_residual_candidate_acceptance",
