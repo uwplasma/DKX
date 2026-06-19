@@ -930,6 +930,18 @@ Recent local validation:
 - Broad profile-response/RHSMode=1 policy, setup, diagnostics, solver, and
   helper sweep after direct-tail metadata context extraction:
   `1186 passed in 48.83 s`.
+- Fortran-reduced xblock explicit metadata-state CI fix:
+  `python -m py_compile sfincs_jax/v3_driver.py`,
+  `ruff check sfincs_jax/v3_driver.py`, and the two xblock backend tests passed
+  after reading solve time from `SparsePCGMRESResult` and restoring the
+  required moment-Schur probe fields in the explicit final metadata state.
+- Profile-response diagnostics/sparse-PC shard after that xblock metadata CI
+  fix: `243 passed in 1.99 s`.
+- Xblock/sparse-host/minimum-norm/direct-tail driver shard after that xblock
+  metadata CI fix: `36 passed, 96 deselected in 37.66 s`.
+- Hygiene after that xblock metadata CI fix:
+  `python -m compileall -q sfincs_jax`, `git diff --check`, and
+  `python scripts/check_repo_size.py` passed.
 - Older focused and broad validation checkpoints are intentionally omitted from
   this active plan; they remain available in git history.
 

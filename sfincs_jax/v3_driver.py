@@ -6739,6 +6739,15 @@ def solve_v3_full_system_linear_gmres(
                             "moment_schur_reason": moment_schur_reason,
                             "moment_schur_metadata": moment_schur_metadata,
                             "moment_schur_stats": moment_schur_stats,
+                            "moment_schur_probe_residual_before": (
+                                moment_schur_probe_residual_before
+                            ),
+                            "moment_schur_probe_residual_after": (
+                                moment_schur_probe_residual_after
+                            ),
+                            "moment_schur_probe_improvement_ratio": (
+                                moment_schur_probe_improvement_ratio
+                            ),
                             "global_coupling_enabled": global_coupling_enabled,
                             "global_coupling_built": global_coupling_built,
                             "global_coupling_metadata": global_coupling_metadata,
@@ -6751,7 +6760,7 @@ def solve_v3_full_system_linear_gmres(
                             "sparse_pc_linear_size": sparse_pc_linear_size,
                             "sparse_pc_fp_dense_velocity_block": sparse_pc_fp_dense_velocity_block,
                             "setup_s": setup_s,
-                            "solve_s": solve_s,
+                            "solve_s": float(xblock_krylov_result.solve_s),
                             "sparse_timer": sparse_timer,
                             "pc_factor_s": pc_factor_s,
                             "target": target,
