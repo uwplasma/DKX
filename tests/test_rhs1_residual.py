@@ -3,8 +3,10 @@ from __future__ import annotations
 import math
 
 import jax.numpy as jnp
+import pytest
 
 from sfincs_jax.rhs1_residual import (
+    apply_damped_preconditioned_residual_polish,
     l2_norm_float,
     recompute_true_residual_result,
     replay_left_preconditioned_residual_norms,
@@ -71,6 +73,51 @@ def test_result_with_true_residual_returns_result_and_vector() -> None:
     assert float(result.residual_norm) == 4.0
     assert jnp.array_equal(residual, jnp.asarray([0.0, 4.0], dtype=jnp.float64))
     assert jnp.array_equal(result.x, jnp.asarray([1.0, -1.0], dtype=jnp.float64))
+
+
+def test_apply_damped_preconditioned_residual_polish_backtracks_to_improvement() -> None:
+    result = GMRESSolveResult(
+        x=jnp.asarray([0.0, 0.0], dtype=jnp.float64),
+        residual_norm=jnp.asarray(5.0, dtype=jnp.float64),
+    )
+    rhs = jnp.asarray([3.0, 4.0], dtype=jnp.float64)
+
+    polished, improved = apply_damped_preconditioned_residual_polish(
+        current_result=result,
+        rhs=rhs,
+        matvec=lambda x: 2.0 * x,
+        preconditioner=lambda r: r,
+        target=1.0e-12,
+        steps=1,
+        omega=1.5,
+        backtrack=3,
+    )
+
+    assert improved
+    assert float(polished.residual_norm) < 5.0
+    assert polished.x.tolist() == [pytest.approx(2.25), pytest.approx(3.0)]
+
+
+def test_apply_damped_preconditioned_residual_polish_rejects_bad_correction() -> None:
+    result = GMRESSolveResult(
+        x=jnp.asarray([0.0, 0.0], dtype=jnp.float64),
+        residual_norm=jnp.asarray(5.0, dtype=jnp.float64),
+    )
+    rhs = jnp.asarray([3.0, 4.0], dtype=jnp.float64)
+
+    polished, improved = apply_damped_preconditioned_residual_polish(
+        current_result=result,
+        rhs=rhs,
+        matvec=lambda x: x,
+        preconditioner=lambda r: -r,
+        target=1.0e-12,
+        steps=2,
+        omega=1.0,
+        backtrack=2,
+    )
+
+    assert not improved
+    assert polished is result
 
 
 def test_recompute_true_residual_result_replaces_reported_krylov_norm() -> None:

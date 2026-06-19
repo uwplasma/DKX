@@ -647,6 +647,74 @@ def result_with_true_residual(
     )
 
 
+def apply_damped_preconditioned_residual_polish(
+    *,
+    current_result: Any,
+    rhs: jnp.ndarray,
+    matvec: Callable[[jnp.ndarray], jnp.ndarray],
+    preconditioner: Callable[[jnp.ndarray], jnp.ndarray],
+    target: float,
+    steps: int,
+    omega: float,
+    backtrack: int,
+) -> tuple[GMRESSolveResult, bool]:
+    """Apply bounded damped residual-correction steps.
+
+    This helper captures the common post-Krylov pattern used for large
+    RHSMode=1 systems: form the true residual, apply an inexpensive
+    preconditioner as a correction, and retain only backtracked steps that
+    strictly reduce the true residual. It is intentionally deterministic and
+    finite-gated so a polish pass cannot degrade the accepted solution.
+    """
+
+    steps_use = max(0, int(steps))
+    if steps_use <= 0:
+        return current_result, False
+
+    x_polish = jnp.asarray(current_result.x, dtype=jnp.float64)
+    rn_best = float(current_result.residual_norm)
+    rn_initial = rn_best
+    omega_use = max(1.0e-3, min(float(omega), 1.5))
+    backtrack_use = max(0, min(int(backtrack), 6))
+    improved_any = False
+
+    for _ in range(steps_use):
+        residual = jnp.asarray(rhs, dtype=jnp.float64) - jnp.asarray(
+            matvec(x_polish), dtype=jnp.float64
+        )
+        residual_norm = float(jnp.linalg.norm(residual))
+        if (not np.isfinite(residual_norm)) or residual_norm <= float(target):
+            break
+        delta = jnp.asarray(preconditioner(residual), dtype=jnp.float64)
+        omega_try = float(omega_use)
+        step_accepted = False
+        for _bt in range(backtrack_use + 1):
+            x_try = x_polish + omega_try * delta
+            r_try = jnp.asarray(rhs, dtype=jnp.float64) - jnp.asarray(
+                matvec(x_try), dtype=jnp.float64
+            )
+            rn_try = float(jnp.linalg.norm(r_try))
+            if np.isfinite(rn_try) and rn_try < rn_best:
+                x_polish = x_try
+                rn_best = rn_try
+                step_accepted = True
+                improved_any = True
+                break
+            omega_try *= 0.5
+        if not step_accepted:
+            break
+
+    if improved_any and rn_best < rn_initial:
+        return (
+            GMRESSolveResult(
+                x=jnp.asarray(x_polish, dtype=jnp.float64),
+                residual_norm=jnp.asarray(rn_best, dtype=jnp.float64),
+            ),
+            True,
+        )
+    return current_result, False
+
+
 def recompute_true_residual_result(
     *,
     result: Any,
@@ -755,6 +823,7 @@ def residual_converged(residual_norm: float, target: float) -> bool:
 
 
 __all__ = [
+    "apply_damped_preconditioned_residual_polish",
     "apply_device_subspace_residual_equation_correction",
     "apply_preconditioned_minres_correction",
     "apply_subspace_minres_correction",

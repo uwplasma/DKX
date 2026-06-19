@@ -494,6 +494,7 @@ from .rhs1_lowmode_coarse import (
     _rhs1_polynomial_moment_features,
 )
 from .problems.profile_response.residual import (
+    apply_damped_preconditioned_residual_polish as _apply_damped_preconditioned_residual_polish,
     apply_device_subspace_residual_equation_correction as _apply_device_subspace_residual_equation_correction,
     apply_preconditioned_minres_correction as _apply_preconditioned_minres_correction,
     apply_subspace_minres_correction as _apply_subspace_minres_correction,
@@ -14121,41 +14122,25 @@ def solve_v3_full_system_linear_gmres(
                 except ValueError:
                     polish_backtrack = 3
                 polish_backtrack = max(0, min(int(polish_backtrack), 6))
-                x_polish = jnp.asarray(res_reduced.x, dtype=jnp.float64)
-                rn_best = float(res_reduced.residual_norm)
-                improved_any = False
-                for _ in range(polish_steps):
-                    r_polish = rhs_reduced - mv_reduced(x_polish)
-                    rn_r = float(jnp.linalg.norm(r_polish))
-                    if (not np.isfinite(rn_r)) or rn_r <= target_reduced:
-                        break
-                    delta = polish_precond(r_polish)
-                    omega_try = float(polish_omega)
-                    step_accepted = False
-                    for _bt in range(polish_backtrack + 1):
-                        x_try = x_polish + omega_try * delta
-                        r_try = rhs_reduced - mv_reduced(x_try)
-                        rn_try = float(jnp.linalg.norm(r_try))
-                        if np.isfinite(rn_try) and rn_try < rn_best:
-                            x_polish = x_try
-                            rn_best = rn_try
-                            step_accepted = True
-                            improved_any = True
-                            break
-                        omega_try *= 0.5
-                    if not step_accepted:
-                        break
-                if improved_any and rn_best < float(res_reduced.residual_norm):
+                polish_base_residual = float(res_reduced.residual_norm)
+                res_polish, polish_improved = _apply_damped_preconditioned_residual_polish(
+                    current_result=res_reduced,
+                    rhs=rhs_reduced,
+                    matvec=mv_reduced,
+                    preconditioner=polish_precond,
+                    target=float(target_reduced),
+                    steps=int(polish_steps),
+                    omega=float(polish_omega),
+                    backtrack=int(polish_backtrack),
+                )
+                if polish_improved:
                     if emit is not None:
                         emit(
                             1,
                             "solve_v3_full_system_linear_gmres: FP polish improved residual "
-                            f"{float(res_reduced.residual_norm):.3e} -> {rn_best:.3e}",
+                            f"{polish_base_residual:.3e} -> {float(res_polish.residual_norm):.3e}",
                         )
-                    res_reduced = GMRESSolveResult(
-                        x=jnp.asarray(x_polish, dtype=jnp.float64),
-                        residual_norm=jnp.asarray(rn_best, dtype=jnp.float64),
-                    )
+                    res_reduced = res_polish
             # Optional FP-specific angular/x preconditioner polish (low-L blocks).
             fp_lmax_polish_env = os.environ.get("SFINCS_JAX_RHSMODE1_FP_POLISH_LMAX", "").strip()
             fp_lmax_max_env = os.environ.get("SFINCS_JAX_RHSMODE1_FP_POLISH_LMAX_BLOCK_MAX", "").strip()

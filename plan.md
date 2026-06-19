@@ -42,8 +42,10 @@ Make `sfincs_jax` research-grade while preserving the public user contract:
 
 Recent checkpoints:
 
-- RHSMode=1 reduced dense fallback candidate extraction
+- Damped preconditioned residual-polish helper extraction
   (current checkpoint).
+- RHSMode=1 reduced dense fallback candidate extraction
+  (`fd46465`).
 - RHSMode=1 fast post-xblock polish handoff extraction
   (`029e1c5`).
 - RHSMode=1 true-residual `GMRESSolveResult` helper extraction
@@ -93,19 +95,29 @@ Recent checkpoints:
 - `cb295ce` Extract sparse pattern setup.
 - `4b6a5b4` Extract sparse factor policy.
 
-Current source-size snapshot after RHSMode=1 reduced dense fallback candidate
+Current source-size snapshot after damped preconditioned residual-polish helper
 extraction:
 
-- `sfincs_jax/v3_driver.py`: `18610` lines.
-- `solve_v3_full_system_linear_gmres`: `13311` lines.
+- `sfincs_jax/v3_driver.py`: `18595` lines.
+- `solve_v3_full_system_linear_gmres`: `13295` lines.
 - `sfincs_jax/v3_results.py`: `119` lines.
-- `sfincs_jax/problems/profile_response/residual.py`: `773` lines.
+- `sfincs_jax/problems/profile_response/residual.py`: `842` lines.
 - `sfincs_jax/problems/profile_response/handoff.py`: `340` lines.
 - `sfincs_jax/problems/profile_response/dense.py`: `407` lines.
 - `sfincs_jax/problems/profile_response/sparse_pc.py`: `8034` lines.
 
 Recent local validation:
 
+- RHSMode=1 residual helper shard:
+  `15 passed in 0.79 s`.
+- Sparse-host/minimum-norm/direct-tail driver shard:
+  `32 passed, 124 deselected in 32.34 s`.
+- Broad profile-response/RHSMode=1 policy, setup, diagnostics, solver, and
+  helper sweep:
+  `999 passed in 47.06 s`.
+- Hygiene:
+  `ruff`, `compileall`, `git diff --check`, and `scripts/check_repo_size.py`
+  passed.
 - RHSMode=1 reduced dense fallback helper shard:
   `6 passed in 1.09 s`.
 - Sparse-host/minimum-norm/direct-tail driver shard:
