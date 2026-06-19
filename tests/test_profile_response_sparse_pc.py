@@ -37,6 +37,7 @@ from sfincs_jax.problems.profile_response.sparse_pc import (
     FortranReducedXBlockMomentSchurStageContext,
     MatvecCounter,
     SparsePCGMRESContext,
+    SparsePCGMRESCompletionMessageContext,
     SparsePCMemoryBudgetPreflightContext,
     SparsePCPatternSetupContext,
     SparsePCPostMinresContext,
@@ -59,6 +60,7 @@ from sfincs_jax.problems.profile_response.sparse_pc import (
     build_xblock_assembled_matvec_setup,
     build_xblock_assembled_operator_preflight_setup,
     build_xblock_krylov_matvec_setup,
+    emit_sparse_pc_gmres_completion_from_driver_state,
     enforce_sparse_pc_memory_budget,
     evaluate_xblock_moment_schur_probe_result,
     evaluate_sparse_pc_factor_preflight,
@@ -108,6 +110,7 @@ from sfincs_jax.problems.profile_response.sparse_pc import (
     run_sparse_pc_gmres_once,
     retry_sparse_pc_factor_dtype_from_driver_state,
     retry_sparse_pc_factor_dtype_if_needed,
+    sparse_pc_gmres_completion_message,
     finalize_xblock_assembled_operator_metadata,
 )
 
@@ -4409,6 +4412,83 @@ def test_sparse_pc_gmres_once_stagnation_guard_raises() -> None:
             x0=None,
             maxiter=10,
         )
+
+
+def test_sparse_pc_gmres_completion_message_includes_pc_and_ksp_residuals() -> None:
+    message = sparse_pc_gmres_completion_message(
+        SparsePCGMRESCompletionMessageContext(
+            elapsed_s=12.3456,
+            iterations=7,
+            matvecs=13,
+            residual_norm=1.25e-4,
+            target=1.0e-6,
+            preconditioned_residual_norm=2.5e-3,
+            history=(1.0, 3.0e-3),
+        )
+    )
+
+    assert message == (
+        "solve_v3_full_system_linear_gmres: sparse_pc_gmres complete "
+        "elapsed_s=12.346 iters=7 matvecs=13 residual=1.250000e-04 "
+        "target=1.000000e-06 preconditioned_residual=2.500000e-03 "
+        "ksp_residual=3.000000e-03"
+    )
+
+
+def test_sparse_pc_gmres_completion_message_omits_nonfinite_optional_residuals() -> None:
+    message = sparse_pc_gmres_completion_message(
+        SparsePCGMRESCompletionMessageContext(
+            elapsed_s=1.0,
+            iterations=0,
+            matvecs=0,
+            residual_norm=float("inf"),
+            target=2.0,
+            preconditioned_residual_norm=float("nan"),
+            history=(),
+        )
+    )
+
+    assert message == (
+        "solve_v3_full_system_linear_gmres: sparse_pc_gmres complete "
+        "elapsed_s=1.000 iters=0 matvecs=0 residual=inf target=2.000000e+00"
+    )
+
+
+def test_emit_sparse_pc_gmres_completion_from_driver_state_uses_current_state() -> None:
+    messages: list[tuple[int, str]] = []
+
+    emit_sparse_pc_gmres_completion_from_driver_state(
+        {
+            "emit": lambda level, msg: messages.append((level, msg)),
+            "sparse_timer": SimpleNamespace(elapsed_s=lambda: 2.5),
+            "history": (1.0, 0.25),
+            "mv_count": 6,
+            "residual_norm_sparse_pc": 0.125,
+            "target": 0.01,
+            "rn_pc": 0.5,
+        }
+    )
+    emit_sparse_pc_gmres_completion_from_driver_state(
+        {
+            "emit": None,
+            "sparse_timer": SimpleNamespace(elapsed_s=lambda: 0.0),
+            "history": (),
+            "mv_count": 0,
+            "residual_norm_sparse_pc": 0.0,
+            "target": 1.0,
+            "rn_pc": float("nan"),
+        }
+    )
+
+    assert messages == [
+        (
+            0,
+            "solve_v3_full_system_linear_gmres: sparse_pc_gmres complete "
+            "elapsed_s=2.500 iters=2 matvecs=6 residual=1.250000e-01 "
+            "target=1.000000e-02 preconditioned_residual=5.000000e-01 "
+            "ksp_residual=2.500000e-01",
+        )
+    ]
 
 
 def test_sparse_pc_post_minres_accepts_improved_residual_and_recomputes_pc_norm() -> (

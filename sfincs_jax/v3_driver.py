@@ -241,6 +241,7 @@ from .problems.profile_response.sparse_pc import (
     build_xblock_assembled_operator_preflight_setup,
     build_sparse_pc_active_dof_setup,
     build_direct_tail_materialization_setup,
+    emit_sparse_pc_gmres_completion_from_driver_state,
     evaluate_xblock_moment_schur_probe_result,
     evaluate_sparse_pc_factor_preflight,
     evaluate_sparse_pc_residual_candidate_acceptance,
@@ -9254,17 +9255,7 @@ def solve_v3_full_system_linear_gmres(
         sparse_pc_post_minres_residual_after = sparse_pc_post_minres.residual_after
         sparse_pc_post_minres_error = sparse_pc_post_minres.error
         solve_s = float(sparse_pc_post_minres.solve_s)
-        if emit is not None:
-            pc_suffix = f" preconditioned_residual={float(rn_pc):.6e}" if np.isfinite(rn_pc) else ""
-            if history:
-                pc_suffix = f"{pc_suffix} ksp_residual={float(history[-1]):.6e}"
-            emit(
-                0,
-                "solve_v3_full_system_linear_gmres: sparse_pc_gmres complete "
-                f"elapsed_s={sparse_timer.elapsed_s():.3f} iters={len(history or [])} "
-                f"matvecs={int(mv_count)} residual={float(residual_norm_sparse_pc):.6e} "
-                f"target={float(target):.6e}{pc_suffix}",
-            )
+        emit_sparse_pc_gmres_completion_from_driver_state(locals())
         sparse_pc_accepted_converged = rhs1_residual_converged(
             float(residual_norm_sparse_pc),
             rhs1_residual_target(

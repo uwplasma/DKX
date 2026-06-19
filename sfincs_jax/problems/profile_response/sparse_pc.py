@@ -74,6 +74,19 @@ class SparsePCGMRESResult:
 
 
 @dataclass(frozen=True)
+class SparsePCGMRESCompletionMessageContext:
+    """Fields used to format the sparse-PC GMRES completion progress line."""
+
+    elapsed_s: float
+    iterations: int
+    matvecs: int
+    residual_norm: float
+    target: float
+    preconditioned_residual_norm: float
+    history: Sequence[float]
+
+
+@dataclass(frozen=True)
 class SparsePCPostMinresContext:
     """Solve-local dependencies for the optional sparse-PC residual polish."""
 
@@ -6796,6 +6809,51 @@ def run_sparse_pc_gmres_once(
     )
 
 
+def sparse_pc_gmres_completion_message(
+    context: SparsePCGMRESCompletionMessageContext,
+) -> str:
+    """Format the final sparse-PC GMRES progress message."""
+
+    pc_suffix = (
+        f" preconditioned_residual={float(context.preconditioned_residual_norm):.6e}"
+        if np.isfinite(float(context.preconditioned_residual_norm))
+        else ""
+    )
+    history = tuple(float(v) for v in (context.history or ()))
+    if history:
+        pc_suffix = f"{pc_suffix} ksp_residual={float(history[-1]):.6e}"
+    return (
+        "solve_v3_full_system_linear_gmres: sparse_pc_gmres complete "
+        f"elapsed_s={float(context.elapsed_s):.3f} iters={int(context.iterations)} "
+        f"matvecs={int(context.matvecs)} residual={float(context.residual_norm):.6e} "
+        f"target={float(context.target):.6e}{pc_suffix}"
+    )
+
+
+def emit_sparse_pc_gmres_completion_from_driver_state(
+    state: Mapping[str, object],
+) -> None:
+    """Emit the sparse-PC GMRES completion line from historical driver names."""
+
+    emit = state["emit"]
+    if emit is None:
+        return
+    emit(
+        0,
+        sparse_pc_gmres_completion_message(
+            SparsePCGMRESCompletionMessageContext(
+                elapsed_s=float(state["sparse_timer"].elapsed_s()),
+                iterations=int(len(state["history"] or ())),
+                matvecs=int(state["mv_count"]),
+                residual_norm=float(state["residual_norm_sparse_pc"]),
+                target=float(state["target"]),
+                preconditioned_residual_norm=float(state["rn_pc"]),
+                history=state["history"],
+            )
+        ),
+    )
+
+
 def apply_sparse_pc_post_minres(
     *,
     context: SparsePCPostMinresContext,
@@ -7007,6 +7065,7 @@ __all__ = [
     "SparsePCPatternSetupResult",
     "SparsePCGMRESContext",
     "SparsePCGMRESResult",
+    "SparsePCGMRESCompletionMessageContext",
     "SparsePCPostMinresContext",
     "SparsePCPostMinresResult",
     "SparsePCPostMinresUpdateContext",
@@ -7051,6 +7110,8 @@ __all__ = [
     "retry_sparse_pc_factor_dtype_from_driver_state",
     "run_fortran_reduced_xblock_krylov_solve",
     "run_sparse_pc_gmres_once",
+    "sparse_pc_gmres_completion_message",
+    "emit_sparse_pc_gmres_completion_from_driver_state",
     "sparse_rescue_tail_metadata",
     "sparse_xblock_rescue_metadata",
     "xblock_assembled_operator_diagnostics",
