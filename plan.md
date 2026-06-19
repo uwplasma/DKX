@@ -784,6 +784,14 @@ Recent local validation:
 - Hygiene:
   `py_compile`, `ruff`, `compileall`, `git diff --check`, and
   `scripts/check_repo_size.py` passed.
+- Sparse-PC helper shard after xblock completion-emitter extraction:
+  `204 passed in 2.15 s`.
+- Broad profile-response/RHSMode=1 policy, setup, diagnostics, solver, and
+  helper sweep after xblock completion-emitter extraction:
+  `1161 passed in 47.50 s`.
+- Hygiene:
+  `py_compile`, `ruff`, `compileall`, `git diff --check`, and
+  `scripts/check_repo_size.py` passed.
 - Older focused and broad validation checkpoints are intentionally omitted from
   this active plan; they remain available in git history.
 
@@ -993,6 +1001,9 @@ Completed recent boundaries:
 - X-block sparse-PC solver-kind labels and Krylov work-memory estimates now
   use a tested profile-response helper, and `v3_driver.py` no longer imports
   low-level Krylov memory estimators directly for xblock metadata.
+- X-block sparse-PC completion progress emission now uses a tested
+  state-based profile-response helper while preserving the user-facing message
+  format.
 
 Next steps:
 

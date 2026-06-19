@@ -84,6 +84,7 @@ from sfincs_jax.problems.profile_response.sparse_pc import (
     build_xblock_assembled_matvec_setup,
     build_xblock_assembled_operator_preflight_setup,
     build_xblock_krylov_matvec_setup,
+    emit_xblock_sparse_pc_completion_from_driver_state,
     emit_sparse_pc_gmres_completion_from_driver_state,
     enforce_sparse_pc_memory_budget,
     evaluate_xblock_moment_schur_probe_result,
@@ -139,6 +140,7 @@ from sfincs_jax.problems.profile_response.sparse_pc import (
     fortran_reduced_xblock_final_payload_from_driver_state,
     run_fortran_reduced_xblock_krylov_solve,
     run_sparse_pc_gmres_once,
+    xblock_sparse_pc_completion_message,
     xblock_gmres_fallback_decision,
     xblock_krylov_report,
     xblock_physical_solution_and_residual,
@@ -259,6 +261,68 @@ def test_xblock_sparse_pc_work_estimates_report_non_gmres_solver_kind() -> None:
     assert result.gmres_basis_nbytes == 10 * (3 + 1 + 4) * 4
     assert result.bicgstab_work_nbytes == 10 * 8 * 4
     assert result.tfqmr_work_nbytes == 10 * 10 * 4
+
+
+def test_xblock_sparse_pc_completion_message_includes_ksp_residual() -> None:
+    assert xblock_sparse_pc_completion_message(
+        krylov_method="tfqmr_jax",
+        elapsed_s=12.34567,
+        iterations=9,
+        matvecs=31,
+        residual_norm=2.0e-8,
+        target=1.0e-9,
+        history=(1.0, 3.0e-7),
+    ) == (
+        "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres complete "
+        "method=tfqmr_jax elapsed_s=12.346 iters=9 matvecs=31 "
+        "residual=2.000000e-08 target=1.000000e-09 ksp_residual=3.000000e-07"
+    )
+
+
+def test_xblock_sparse_pc_completion_message_omits_empty_ksp_residual() -> None:
+    assert xblock_sparse_pc_completion_message(
+        krylov_method="gmres",
+        elapsed_s=1.0,
+        iterations=2,
+        matvecs=3,
+        residual_norm=4.0,
+        target=5.0,
+        history=(),
+    ) == (
+        "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres complete "
+        "method=gmres elapsed_s=1.000 iters=2 matvecs=3 "
+        "residual=4.000000e+00 target=5.000000e+00"
+    )
+
+
+def test_emit_xblock_sparse_pc_completion_from_driver_state_emits_message() -> None:
+    emitted: list[tuple[int, str]] = []
+
+    emit_xblock_sparse_pc_completion_from_driver_state(
+        {
+            "emit": lambda level, message: emitted.append((level, message)),
+            "xblock_krylov_method": "bicgstab",
+            "sparse_timer": SimpleNamespace(elapsed_s=lambda: 2.25),
+            "reported_iterations": np.int64(4),
+            "reported_matvecs": np.int64(12),
+            "residual_norm_xblock_pc": 6.0e-7,
+            "target_xblock": 1.0e-8,
+            "history": (2.0, 1.0e-6),
+        }
+    )
+
+    assert emitted == [
+        (
+            0,
+            "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres complete "
+            "method=bicgstab elapsed_s=2.250 iters=4 matvecs=12 "
+            "residual=6.000000e-07 target=1.000000e-08 ksp_residual=1.000000e-06",
+        )
+    ]
+
+
+def test_emit_xblock_sparse_pc_completion_from_driver_state_skips_missing_emit() -> None:
+    emit_xblock_sparse_pc_completion_from_driver_state({"emit": None})
 
 
 def test_xblock_physical_solution_and_residual_measures_true_residual() -> None:

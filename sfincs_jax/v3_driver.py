@@ -280,6 +280,7 @@ from .problems.profile_response.sparse_pc import (
     evaluate_sparse_pc_residual_candidate_acceptance,
     select_sparse_pc_auto_preflight_retry_candidates,
     evaluate_sparse_pc_auto_preflight_retry,
+    emit_xblock_sparse_pc_completion_from_driver_state,
     resolve_sparse_pc_gmres_control_policy,
     enforce_sparse_pc_memory_budget,
     failed_xblock_global_coupling_metadata,
@@ -6790,16 +6791,7 @@ def solve_v3_full_system_linear_gmres(
             post_coarse_direction_names = post_coarse.direction_names
             post_coarse_residual_before = post_coarse.residual_before
             post_coarse_residual_after = post_coarse.residual_after
-            if emit is not None:
-                ksp_suffix = f" ksp_residual={float(history[-1]):.6e}" if history else ""
-                emit(
-                    0,
-                    "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres complete "
-                    f"method={xblock_krylov_method} elapsed_s={sparse_timer.elapsed_s():.3f} "
-                    f"iters={int(reported_iterations)} "
-                    f"matvecs={int(reported_matvecs)} residual={float(residual_norm_xblock_pc):.6e} "
-                    f"target={float(target_xblock):.6e}{ksp_suffix}",
-                )
+            emit_xblock_sparse_pc_completion_from_driver_state(locals())
             xblock_work_estimates = xblock_sparse_pc_work_estimates(
                 krylov_method=str(xblock_krylov_method),
                 linear_size=int(xblock_linear_size),

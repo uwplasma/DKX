@@ -220,6 +220,52 @@ def xblock_sparse_pc_work_estimates(
     )
 
 
+def xblock_sparse_pc_completion_message(
+    *,
+    krylov_method: str,
+    elapsed_s: float,
+    iterations: int,
+    matvecs: int,
+    residual_norm: float,
+    target: float,
+    history: Sequence[float] | None,
+) -> str:
+    """Format the final xblock sparse-PC progress line shown to users."""
+
+    ksp_suffix = (
+        f" ksp_residual={float(history[-1]):.6e}" if history else ""
+    )
+    return (
+        "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres complete "
+        f"method={krylov_method} elapsed_s={float(elapsed_s):.3f} "
+        f"iters={int(iterations)} "
+        f"matvecs={int(matvecs)} residual={float(residual_norm):.6e} "
+        f"target={float(target):.6e}{ksp_suffix}"
+    )
+
+
+def emit_xblock_sparse_pc_completion_from_driver_state(
+    state: Mapping[str, object],
+) -> None:
+    """Emit the final xblock sparse-PC progress line from driver state."""
+
+    emit = state["emit"]
+    if emit is None:
+        return
+    emit(
+        0,
+        xblock_sparse_pc_completion_message(
+            krylov_method=str(state["xblock_krylov_method"]),
+            elapsed_s=state["sparse_timer"].elapsed_s(),
+            iterations=int(state["reported_iterations"]),
+            matvecs=int(state["reported_matvecs"]),
+            residual_norm=float(state["residual_norm_xblock_pc"]),
+            target=float(state["target_xblock"]),
+            history=state["history"],
+        ),
+    )
+
+
 def xblock_physical_solution_and_residual(
     *,
     x: np.ndarray,
@@ -8684,6 +8730,7 @@ __all__ = [
     "build_direct_tail_materialization_setup",
     "build_direct_tail_structured_preconditioner_setup",
     "enforce_sparse_pc_memory_budget",
+    "emit_xblock_sparse_pc_completion_from_driver_state",
     "evaluate_sparse_pc_factor_preflight",
     "evaluate_sparse_pc_residual_candidate_acceptance",
     "select_sparse_pc_auto_preflight_retry_candidates",
@@ -8711,6 +8758,7 @@ __all__ = [
     "retry_sparse_pc_factor_dtype_from_driver_state",
     "run_fortran_reduced_xblock_krylov_solve",
     "run_sparse_pc_gmres_once",
+    "xblock_sparse_pc_completion_message",
     "xblock_gmres_fallback_decision",
     "xblock_krylov_report",
     "xblock_physical_solution_and_residual",
