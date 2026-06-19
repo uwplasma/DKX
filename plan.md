@@ -42,10 +42,15 @@ Make `sfincs_jax` research-grade while preserving the public user contract:
 
 Recent checkpoints:
 
+- RHSMode=1 CPU SciPy rescue controls now use a tested profile-response policy
+  helper for enablement, residual-ratio threshold, restart/maxiter bounds,
+  strong-preconditioner preference, and method selection while threshold
+  application, active-size skip metadata, host solve execution, and result
+  acceptance remain driver-owned (current checkpoint).
 - RHSMode=1 FP BiCGStab polish controls now use a tested profile-response
   policy helper for opt-in, min-size admission, maxiter bounds, and tolerance
   parsing while preconditioner choice, solve execution, and residual acceptance
-  remain driver-owned (current checkpoint).
+  remain driver-owned (`e40c532`).
 - RHSMode=1 FP L1 and global low-L projected-polish controls now use tested
   profile-response policy helpers for enablement, Krylov bounds, residual
   thresholds, lmax/size caps, and acceptance ratios while active-index
@@ -207,14 +212,14 @@ Recent checkpoints:
 - `cb295ce` Extract sparse pattern setup.
 - `4b6a5b4` Extract sparse factor policy.
 
-Current source-size snapshot after FP BiCGStab polish-control extraction:
+Current source-size snapshot after CPU SciPy rescue-control extraction:
 
-- `sfincs_jax/v3_driver.py`: `17804` lines.
-- `solve_v3_full_system_linear_gmres`: `12467` lines.
+- `sfincs_jax/v3_driver.py`: `17788` lines.
+- `solve_v3_full_system_linear_gmres`: `12450` lines.
 - `sfincs_jax/v3_results.py`: `119` lines.
 - `sfincs_jax/problems/profile_response/residual.py`: `981` lines.
 - `sfincs_jax/problems/profile_response/handoff.py`: `598` lines.
-- `sfincs_jax/problems/profile_response/policies.py`: `3211` lines.
+- `sfincs_jax/problems/profile_response/policies.py`: `3264` lines.
 - `sfincs_jax/problems/profile_response/dense.py`: `701` lines.
 - `sfincs_jax/problems/profile_response/linear_solve.py`: `327` lines.
 - `sfincs_jax/problems/profile_response/active_projection.py`: `116` lines.
@@ -223,6 +228,16 @@ Current source-size snapshot after FP BiCGStab polish-control extraction:
 
 Recent local validation:
 
+- Post-xblock policy shard after CPU SciPy rescue-control extraction:
+  `25 passed in 0.35 s`.
+- Sparse-host/minimum-norm/direct-tail driver shard:
+  `32 passed, 100 deselected in 35.86 s`.
+- Broad profile-response/RHSMode=1 policy, setup, diagnostics, solver, and
+  helper sweep after CPU SciPy rescue-control extraction:
+  `1082 passed in 48.54 s`.
+- Hygiene:
+  `py_compile`, `ruff`, `compileall`, `git diff --check`, and
+  `scripts/check_repo_size.py` passed.
 - Post-xblock policy shard after FP BiCGStab polish-control extraction:
   `23 passed in 0.35 s`.
 - Sparse-host/minimum-norm/direct-tail driver shard:

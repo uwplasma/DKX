@@ -2104,6 +2104,18 @@ class RHS1FPBiCGStabPolishControls:
     atol: float
 
 
+@dataclass(frozen=True)
+class RHS1ScipyRescueControls:
+    """Controls for the host-only RHSMode=1 SciPy rescue pass."""
+
+    enabled: bool
+    ratio: float
+    restart: int
+    maxiter: int
+    use_strong: bool
+    method: str
+
+
 def rhs1_fp_residual_polish_controls_from_env() -> RHS1FPResidualPolishControls:
     """Parse damped FP residual-polish controls with bounded defaults."""
 
@@ -2326,6 +2338,45 @@ def rhs1_scipy_rescue_active_size_allowed(
     if int(max_active) <= 0:
         return True
     return int(active_size) <= int(max_active)
+
+
+def rhs1_scipy_rescue_controls_from_env(
+    *,
+    restart: int,
+    maxiter: int | None,
+) -> RHS1ScipyRescueControls:
+    """Parse host SciPy rescue controls with legacy defaults and bounds."""
+
+    enabled_env = _env_token("SFINCS_JAX_RHSMODE1_SCIPY_GMRES_RESCUE")
+    default_restart = max(int(restart), 120)
+    default_maxiter = max(int(maxiter or 400), 600)
+    method = _env_token("SFINCS_JAX_RHSMODE1_SCIPY_RESCUE_METHOD")
+    if method not in {"gmres", "bicgstab"}:
+        method = "auto"
+    return RHS1ScipyRescueControls(
+        enabled=enabled_env not in _FALSE_VALUES,
+        ratio=max(
+            1.0,
+            _env_float("SFINCS_JAX_RHSMODE1_SCIPY_GMRES_RESCUE_RATIO", 1.0e3),
+        ),
+        restart=max(
+            5,
+            _env_int(
+                "SFINCS_JAX_RHSMODE1_SCIPY_GMRES_RESCUE_RESTART",
+                default_restart,
+            ),
+        ),
+        maxiter=max(
+            5,
+            _env_int(
+                "SFINCS_JAX_RHSMODE1_SCIPY_GMRES_RESCUE_MAXITER",
+                default_maxiter,
+            ),
+        ),
+        use_strong=_env_token("SFINCS_JAX_RHSMODE1_SCIPY_GMRES_RESCUE_USE_STRONG")
+        not in _FALSE_VALUES,
+        method=method,
+    )
 
 
 def rhs1_fp_xblock_global_correction_allowed(
@@ -3149,6 +3200,7 @@ __all__ = (
     "RHS1FPResidualPolishControls",
     "RHS1QIDeviceRankBudget",
     "RHS1QIDeviceSetupSummary",
+    "RHS1ScipyRescueControls",
     "RHS1SparseJAXConfig",
     "RHS1SparseOperatorAdmission",
     "RHS1SparsePreconditionerConfig",
@@ -3194,6 +3246,7 @@ __all__ = (
     "rhs1_resolved_sparse_rescue_ordering",
     "rhs1_scipy_rescue_abs_floor_after_xblock",
     "rhs1_scipy_rescue_active_size_allowed",
+    "rhs1_scipy_rescue_controls_from_env",
     "rhs1_skip_global_sparse_after_xblock_allowed",
     "rhs1_sparse_enabled_initial",
     "rhs1_sparse_exact_lu_requested",

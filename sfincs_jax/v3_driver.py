@@ -590,6 +590,7 @@ from .problems.profile_response.policies import (
     rhs1_fp_targeted_polish_allowed as _rhs1_fp_targeted_polish_allowed_impl,
     rhs1_scipy_rescue_abs_floor_after_xblock as _rhs1_scipy_rescue_abs_floor_after_xblock_impl,
     rhs1_scipy_rescue_active_size_allowed as _rhs1_scipy_rescue_active_size_allowed_impl,
+    rhs1_scipy_rescue_controls_from_env,
     rhs1_skip_global_sparse_after_xblock_allowed as _rhs1_skip_global_sparse_after_xblock_allowed_impl,
 )
 from .problems.profile_response.policies import rhs1_pas_fast_accept as _rhs1_pas_fast_accept_impl
@@ -13983,14 +13984,11 @@ def solve_v3_full_system_linear_gmres(
             and float(res_reduced.residual_norm) > float(target_reduced)
             and (not skip_global_sparse_after_xblock)
         ):
-            scipy_rescue_env = os.environ.get("SFINCS_JAX_RHSMODE1_SCIPY_GMRES_RESCUE", "").strip().lower()
-            if scipy_rescue_env not in {"0", "false", "no", "off"}:
-                ratio_env = os.environ.get("SFINCS_JAX_RHSMODE1_SCIPY_GMRES_RESCUE_RATIO", "").strip()
-                try:
-                    rescue_ratio = float(ratio_env) if ratio_env else 1.0e3
-                except ValueError:
-                    rescue_ratio = 1.0e3
-                rescue_ratio = max(1.0, float(rescue_ratio))
+            scipy_rescue_controls = rhs1_scipy_rescue_controls_from_env(
+                restart=int(restart),
+                maxiter=maxiter,
+            )
+            if scipy_rescue_controls.enabled:
                 rescue_abs_floor = _rhsmode1_scipy_rescue_abs_floor_after_xblock(
                     op=op,
                     active_size=int(active_size),
@@ -13999,7 +13997,7 @@ def solve_v3_full_system_linear_gmres(
                     use_implicit=bool(use_implicit),
                 )
                 rescue_threshold = max(
-                    float(target_reduced) * float(rescue_ratio),
+                    float(target_reduced) * float(scipy_rescue_controls.ratio),
                     float(rescue_abs_floor),
                 )
                 scipy_rescue_size_allowed = _rhsmode1_scipy_rescue_active_size_allowed(
@@ -14030,30 +14028,15 @@ def solve_v3_full_system_linear_gmres(
                             "solve_v3_full_system_linear_gmres: skipping SciPy rescue "
                             f"(active_size={int(active_size)} exceeds default rescue cap; "
                             "set SFINCS_JAX_RHSMODE1_SCIPY_GMRES_RESCUE_MAX_ACTIVE=0 to force)",
-                        )
+                    )
                 elif float(res_reduced.residual_norm) > float(rescue_threshold):
-                    scipy_restart_env = os.environ.get("SFINCS_JAX_RHSMODE1_SCIPY_GMRES_RESCUE_RESTART", "").strip()
-                    scipy_maxiter_env = os.environ.get("SFINCS_JAX_RHSMODE1_SCIPY_GMRES_RESCUE_MAXITER", "").strip()
-                    scipy_strong_env = os.environ.get("SFINCS_JAX_RHSMODE1_SCIPY_GMRES_RESCUE_USE_STRONG", "").strip().lower()
-                    scipy_method_env = os.environ.get("SFINCS_JAX_RHSMODE1_SCIPY_RESCUE_METHOD", "").strip().lower()
-                    try:
-                        scipy_restart = int(scipy_restart_env) if scipy_restart_env else max(int(restart), 120)
-                    except ValueError:
-                        scipy_restart = max(int(restart), 120)
-                    try:
-                        scipy_maxiter = int(scipy_maxiter_env) if scipy_maxiter_env else max(int(maxiter or 400), 600)
-                    except ValueError:
-                        scipy_maxiter = max(int(maxiter or 400), 600)
-                    scipy_restart = max(5, int(scipy_restart))
-                    scipy_maxiter = max(5, int(scipy_maxiter))
                     rescue_preconditioner = preconditioner_reduced
                     rescue_precond_name = rhs1_precond_kind or "none"
-                    use_strong_rescue = scipy_strong_env not in {"0", "false", "no", "off"}
-                    if use_strong_rescue and strong_preconditioner_reduced is not None:
+                    if scipy_rescue_controls.use_strong and strong_preconditioner_reduced is not None:
                         rescue_preconditioner = strong_preconditioner_reduced
                         rescue_precond_name = strong_precond_kind or "strong"
-                    rescue_method = scipy_method_env
-                    if rescue_method not in {"gmres", "bicgstab"}:
+                    rescue_method = scipy_rescue_controls.method
+                    if rescue_method == "auto":
                         rescue_method = "bicgstab" if rescue_preconditioner is strong_preconditioner_reduced else "gmres"
                     try:
                         scipy_rescue_start_s = float(t.elapsed_s())
@@ -14064,8 +14047,8 @@ def solve_v3_full_system_linear_gmres(
                                 "scipy_rescue_attempted": True,
                                 "scipy_rescue_method": str(rescue_method),
                                 "scipy_rescue_preconditioner": str(rescue_precond_name),
-                                "scipy_rescue_restart": int(scipy_restart),
-                                "scipy_rescue_maxiter": int(scipy_maxiter),
+                                "scipy_rescue_restart": int(scipy_rescue_controls.restart),
+                                "scipy_rescue_maxiter": int(scipy_rescue_controls.maxiter),
                                 "scipy_rescue_initial_residual": float(scipy_rescue_initial_residual),
                                 "scipy_rescue_target": float(target_reduced),
                                 "scipy_rescue_threshold": float(rescue_threshold),
@@ -14077,8 +14060,9 @@ def solve_v3_full_system_linear_gmres(
                                 1,
                                 "solve_v3_full_system_linear_gmres: SciPy rescue "
                                 f"(residual={float(res_reduced.residual_norm):.3e} > "
-                                f"{float(rescue_ratio):.1e}x target={float(target_reduced):.3e} "
-                                f"method={rescue_method} restart={int(scipy_restart)} maxiter={int(scipy_maxiter)} "
+                                f"{float(scipy_rescue_controls.ratio):.1e}x target={float(target_reduced):.3e} "
+                                f"method={rescue_method} restart={int(scipy_rescue_controls.restart)} "
+                                f"maxiter={int(scipy_rescue_controls.maxiter)} "
                                 f"preconditioner={rescue_precond_name})",
                             )
                         scipy_outcome = run_rhs1_scipy_rescue(
@@ -14090,8 +14074,8 @@ def solve_v3_full_system_linear_gmres(
                                 method=rescue_method,
                                 tol=float(tol),
                                 atol=float(atol),
-                                restart=int(scipy_restart),
-                                maxiter=int(scipy_maxiter),
+                                restart=int(scipy_rescue_controls.restart),
+                                maxiter=int(scipy_rescue_controls.maxiter),
                                 precond_side=gmres_precond_side,
                             ),
                             emit=emit,

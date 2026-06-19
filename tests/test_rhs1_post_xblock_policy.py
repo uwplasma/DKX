@@ -9,6 +9,7 @@ from sfincs_jax.rhs1_post_xblock_policy import (
     RHS1FPL1PolishControls,
     RHS1FPLowLPolishControls,
     RHS1FPResidualPolishControls,
+    RHS1ScipyRescueControls,
     rhs1_fast_post_xblock_polish_allowed,
     rhs1_fast_post_xblock_polish_controls_from_env,
     rhs1_fp_bicgstab_polish_controls_from_env,
@@ -20,6 +21,7 @@ from sfincs_jax.rhs1_post_xblock_policy import (
     rhs1_fp_targeted_polish_allowed,
     rhs1_scipy_rescue_abs_floor_after_xblock,
     rhs1_scipy_rescue_active_size_allowed,
+    rhs1_scipy_rescue_controls_from_env,
     rhs1_skip_global_sparse_after_xblock_allowed,
 )
 
@@ -578,6 +580,75 @@ def test_scipy_rescue_active_size_cap_can_be_disabled(monkeypatch) -> None:
         use_implicit=False,
         backend="cpu",
     )
+
+
+def test_scipy_rescue_controls_preserve_defaults(monkeypatch) -> None:
+    for name in (
+        "SFINCS_JAX_RHSMODE1_SCIPY_GMRES_RESCUE",
+        "SFINCS_JAX_RHSMODE1_SCIPY_GMRES_RESCUE_RATIO",
+        "SFINCS_JAX_RHSMODE1_SCIPY_GMRES_RESCUE_RESTART",
+        "SFINCS_JAX_RHSMODE1_SCIPY_GMRES_RESCUE_MAXITER",
+        "SFINCS_JAX_RHSMODE1_SCIPY_GMRES_RESCUE_USE_STRONG",
+        "SFINCS_JAX_RHSMODE1_SCIPY_RESCUE_METHOD",
+    ):
+        monkeypatch.delenv(name, raising=False)
+
+    assert rhs1_scipy_rescue_controls_from_env(
+        restart=80,
+        maxiter=None,
+    ) == RHS1ScipyRescueControls(
+        enabled=True,
+        ratio=1.0e3,
+        restart=120,
+        maxiter=600,
+        use_strong=True,
+        method="auto",
+    )
+
+
+def test_scipy_rescue_controls_respect_env_and_invalid_values(monkeypatch) -> None:
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_SCIPY_GMRES_RESCUE", "off")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_SCIPY_GMRES_RESCUE_RATIO", "0.25")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_SCIPY_GMRES_RESCUE_RESTART", "3")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_SCIPY_GMRES_RESCUE_MAXITER", "4")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_SCIPY_GMRES_RESCUE_USE_STRONG", "0")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_SCIPY_RESCUE_METHOD", "bicgstab")
+
+    assert rhs1_scipy_rescue_controls_from_env(
+        restart=80,
+        maxiter=320,
+    ) == RHS1ScipyRescueControls(
+        enabled=False,
+        ratio=1.0,
+        restart=5,
+        maxiter=5,
+        use_strong=False,
+        method="bicgstab",
+    )
+
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_SCIPY_GMRES_RESCUE", "1")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_SCIPY_GMRES_RESCUE_RATIO", "bad")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_SCIPY_GMRES_RESCUE_RESTART", "bad")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_SCIPY_GMRES_RESCUE_MAXITER", "bad")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_SCIPY_GMRES_RESCUE_USE_STRONG", "yes")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_SCIPY_RESCUE_METHOD", "invalid")
+    assert rhs1_scipy_rescue_controls_from_env(
+        restart=160,
+        maxiter=900,
+    ) == RHS1ScipyRescueControls(
+        enabled=True,
+        ratio=1.0e3,
+        restart=160,
+        maxiter=900,
+        use_strong=True,
+        method="auto",
+    )
+
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_SCIPY_RESCUE_METHOD", "GMRES")
+    assert rhs1_scipy_rescue_controls_from_env(
+        restart=80,
+        maxiter=None,
+    ).method == "gmres"
 
 
 def test_fp_xblock_global_correction_is_opt_in_and_bounded(monkeypatch) -> None:
