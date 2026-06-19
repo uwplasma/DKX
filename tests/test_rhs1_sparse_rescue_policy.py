@@ -3,6 +3,7 @@ from __future__ import annotations
 from sfincs_jax.rhs1_sparse_rescue_policy import (
     rhs1_resolved_sparse_rescue_ordering,
     rhs1_sparse_jax_config_from_env,
+    rhs1_sparse_operator_admission,
     rhs1_sparse_preconditioner_config_from_env,
     rhs1_sparse_rescue_initial_messages,
     rhs1_sparse_rescue_policy_setup,
@@ -183,6 +184,113 @@ def test_rhs1_sparse_preconditioner_config_from_env_handles_pas_dkes_and_invalid
     assert config.ilu_fill == 10.0
     assert config.ilu_dense_max == 3000
     assert config.dense_cache_max == 3000
+
+
+def test_rhs1_sparse_operator_admission_allows_explicit_or_auto_fp_matvec() -> None:
+    admission = rhs1_sparse_operator_admission(
+        operator_mode="on",
+        use_matvec=False,
+        has_fp=False,
+        rhs_mode=1,
+        include_phi1=False,
+        use_implicit=False,
+        allow_nondiff=False,
+        active_size=100,
+        sparse_max_size=200,
+    )
+    assert admission.use_sparse_operator
+    assert admission.messages == ()
+
+    admission = rhs1_sparse_operator_admission(
+        operator_mode="auto",
+        use_matvec=True,
+        has_fp=True,
+        rhs_mode=1,
+        include_phi1=False,
+        use_implicit=False,
+        allow_nondiff=False,
+        active_size=100,
+        sparse_max_size=200,
+    )
+    assert admission.use_sparse_operator
+    assert admission.messages == ()
+
+
+def test_rhs1_sparse_operator_admission_silent_guards_match_driver_contract() -> None:
+    assert not rhs1_sparse_operator_admission(
+        operator_mode="auto",
+        use_matvec=True,
+        has_fp=False,
+        rhs_mode=1,
+        include_phi1=False,
+        use_implicit=False,
+        allow_nondiff=False,
+        active_size=100,
+        sparse_max_size=200,
+    ).use_sparse_operator
+    admission = rhs1_sparse_operator_admission(
+        operator_mode="on",
+        use_matvec=True,
+        has_fp=True,
+        rhs_mode=2,
+        include_phi1=False,
+        use_implicit=False,
+        allow_nondiff=False,
+        active_size=100,
+        sparse_max_size=200,
+    )
+    assert not admission.use_sparse_operator
+    assert admission.messages == ()
+    admission = rhs1_sparse_operator_admission(
+        operator_mode="on",
+        use_matvec=True,
+        has_fp=True,
+        rhs_mode=1,
+        include_phi1=True,
+        use_implicit=False,
+        allow_nondiff=False,
+        active_size=100,
+        sparse_max_size=200,
+    )
+    assert not admission.use_sparse_operator
+    assert admission.messages == ()
+
+
+def test_rhs1_sparse_operator_admission_reports_implicit_and_size_rejections() -> None:
+    admission = rhs1_sparse_operator_admission(
+        operator_mode="on",
+        use_matvec=False,
+        has_fp=False,
+        rhs_mode=1,
+        include_phi1=False,
+        use_implicit=True,
+        allow_nondiff=False,
+        active_size=300,
+        sparse_max_size=200,
+    )
+    assert not admission.use_sparse_operator
+    assert admission.messages == ((
+        1,
+        "sparse_operator: disabled for implicit solves "
+        "(set SFINCS_JAX_RHSMODE1_SPARSE_ALLOW_NONDIFF=1 to override)",
+    ),)
+
+    admission = rhs1_sparse_operator_admission(
+        operator_mode="on",
+        use_matvec=False,
+        has_fp=False,
+        rhs_mode=1,
+        include_phi1=False,
+        use_implicit=False,
+        allow_nondiff=False,
+        active_size=300,
+        sparse_max_size=200,
+    )
+    assert not admission.use_sparse_operator
+    assert admission.messages == ((
+        1,
+        "sparse_operator: disabled (size=300 > max=200)",
+    ),)
 
 
 def test_rhs1_sparse_jax_config_from_env_uses_stable_defaults(monkeypatch) -> None:

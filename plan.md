@@ -42,10 +42,14 @@ Make `sfincs_jax` research-grade while preserving the public user contract:
 
 Recent checkpoints:
 
+- RHSMode=1 reduced sparse-operator matvec admission now uses a tested
+  side-effect-free policy helper, including implicit-solve and size rejection
+  messages while driver-local operator materialization remains unchanged
+  (current checkpoint).
 - RHSMode=1 sparse-preconditioner env/default parsing now uses a tested
   profile-response policy config object, including sparse backend aliases,
   non-diff/matvec/operator switches, PAS/DKES size defaults, drop controls,
-  and dense-cache limits (current checkpoint).
+  and dense-cache limits (`8d90924`).
 - RHSMode=1 sparse-JAX retry env/config parsing now uses a tested
   profile-response policy config object instead of driver-local parsing
   (`908fb81`).
@@ -157,14 +161,14 @@ Recent checkpoints:
 - `cb295ce` Extract sparse pattern setup.
 - `4b6a5b4` Extract sparse factor policy.
 
-Current source-size snapshot after sparse preconditioner config extraction:
+Current source-size snapshot after sparse-operator admission extraction:
 
 - `sfincs_jax/v3_driver.py`: `18064` lines.
-- `solve_v3_full_system_linear_gmres`: `12740` lines.
+- `solve_v3_full_system_linear_gmres`: `12739` lines.
 - `sfincs_jax/v3_results.py`: `119` lines.
 - `sfincs_jax/problems/profile_response/residual.py`: `981` lines.
 - `sfincs_jax/problems/profile_response/handoff.py`: `598` lines.
-- `sfincs_jax/problems/profile_response/policies.py`: `2879` lines.
+- `sfincs_jax/problems/profile_response/policies.py`: `2937` lines.
 - `sfincs_jax/problems/profile_response/dense.py`: `407` lines.
 - `sfincs_jax/problems/profile_response/linear_solve.py`: `327` lines.
 - `sfincs_jax/problems/profile_response/active_projection.py`: `116` lines.
@@ -172,6 +176,17 @@ Current source-size snapshot after sparse preconditioner config extraction:
 
 Recent local validation:
 
+- Sparse rescue policy/docstring shard after sparse-operator admission
+  extraction:
+  `22 passed in 0.65 s`.
+- Sparse-host/minimum-norm/direct-tail driver shard:
+  `32 passed, 100 deselected in 36.14 s`.
+- Broad profile-response/RHSMode=1 policy, setup, diagnostics, solver, and
+  helper sweep after sparse-operator admission extraction:
+  `1042 passed in 49.47 s`.
+- Hygiene:
+  `ruff`, `compileall`, `git diff --check`, and `scripts/check_repo_size.py`
+  passed.
 - Sparse rescue policy/docstring shard after sparse preconditioner config
   extraction:
   `19 passed in 0.63 s`.
@@ -435,6 +450,9 @@ Completed recent boundaries:
 - RHSMode=1 sparse-preconditioner backend, non-diff/matvec/operator toggles,
   PAS/DKES sizing, drop controls, dense-factor cap, and cache cap parsing now
   uses a tested profile-response config object.
+- RHSMode=1 reduced sparse-operator matvec admission now uses a tested
+  profile-response policy helper while preserving driver-local operator
+  construction and cache-key ownership.
 
 Next steps:
 

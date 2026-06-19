@@ -342,6 +342,7 @@ from .problems.profile_response.policies import (
     rhs1_qi_device_status_fields as _rhs1_qi_device_status_fields,
     rhs1_qi_device_tail_block_required as _rhs1_qi_device_tail_block_required,
     rhs1_sparse_jax_config_from_env,
+    rhs1_sparse_operator_admission,
     rhs1_sparse_preconditioner_config_from_env,
     rhs1_sparse_rescue_initial_messages,
     rhs1_sparse_rescue_policy_setup,
@@ -10971,22 +10972,21 @@ def solve_v3_full_system_linear_gmres(
             ksp_replay.x0_vec = x0_reduced
             ksp_replay.precond_side = "none"
             ksp_replay.solver_kind = _solver_kind("incremental")[0]
-        sparse_operator_use = False
-        if sparse_operator_mode == "on":
-            sparse_operator_use = True
-        elif sparse_operator_mode == "auto":
-            sparse_operator_use = sparse_use_matvec and (op.fblock.fp is not None)
-        if sparse_operator_use:
-            sparse_operator_use = int(op.rhs_mode) == 1 and (not bool(op.include_phi1))
-        if sparse_operator_use:
-            if use_implicit and not sparse_allow_nondiff:
-                sparse_operator_use = False
-                if emit is not None:
-                    emit(1, "sparse_operator: disabled for implicit solves (set SFINCS_JAX_RHSMODE1_SPARSE_ALLOW_NONDIFF=1 to override)")
-            elif int(active_size) > sparse_max_size:
-                sparse_operator_use = False
-                if emit is not None:
-                    emit(1, f"sparse_operator: disabled (size={int(active_size)} > max={int(sparse_max_size)})")
+        sparse_operator_admission = rhs1_sparse_operator_admission(
+            operator_mode=sparse_operator_mode,
+            use_matvec=bool(sparse_use_matvec),
+            has_fp=op.fblock.fp is not None,
+            rhs_mode=int(op.rhs_mode),
+            include_phi1=bool(op.include_phi1),
+            use_implicit=bool(use_implicit),
+            allow_nondiff=bool(sparse_allow_nondiff),
+            active_size=int(active_size),
+            sparse_max_size=int(sparse_max_size),
+        )
+        sparse_operator_use = bool(sparse_operator_admission.use_sparse_operator)
+        if emit is not None:
+            for _level, _message in sparse_operator_admission.messages:
+                emit(_level, _message)
         if sparse_operator_use:
             try:
                 cache_key = _rhsmode1_sparse_cache_key(

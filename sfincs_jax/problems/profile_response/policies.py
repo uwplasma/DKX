@@ -2259,6 +2259,14 @@ class RHS1SparsePreconditionerConfig:
     dense_cache_max: int
 
 
+@dataclass(frozen=True)
+class RHS1SparseOperatorAdmission:
+    """Admission result for replacing a reduced matvec with a sparse operator."""
+
+    use_sparse_operator: bool
+    messages: tuple[tuple[int, str], ...] = ()
+
+
 def rhs1_sparse_enabled_initial(
     *,
     sparse_precond_mode: str,
@@ -2355,6 +2363,54 @@ def rhs1_sparse_preconditioner_config_from_env(
             )
         ),
         dense_cache_max=int(_env_int("SFINCS_JAX_RHSMODE1_SPARSE_DENSE_CACHE_MAX", 3000)),
+    )
+
+
+def rhs1_sparse_operator_admission(
+    *,
+    operator_mode: str,
+    use_matvec: bool,
+    has_fp: bool,
+    rhs_mode: int,
+    include_phi1: bool,
+    use_implicit: bool,
+    allow_nondiff: bool,
+    active_size: int,
+    sparse_max_size: int,
+) -> RHS1SparseOperatorAdmission:
+    """Decide whether to materialize the reduced sparse operator matvec."""
+
+    use_sparse_operator = False
+    if str(operator_mode) == "on":
+        use_sparse_operator = True
+    elif str(operator_mode) == "auto":
+        use_sparse_operator = bool(use_matvec) and bool(has_fp)
+    if use_sparse_operator:
+        use_sparse_operator = int(rhs_mode) == 1 and (not bool(include_phi1))
+
+    messages: list[tuple[int, str]] = []
+    if use_sparse_operator:
+        if bool(use_implicit) and not bool(allow_nondiff):
+            use_sparse_operator = False
+            messages.append(
+                (
+                    1,
+                    "sparse_operator: disabled for implicit solves "
+                    "(set SFINCS_JAX_RHSMODE1_SPARSE_ALLOW_NONDIFF=1 to override)",
+                )
+            )
+        elif int(active_size) > int(sparse_max_size):
+            use_sparse_operator = False
+            messages.append(
+                (
+                    1,
+                    f"sparse_operator: disabled (size={int(active_size)} > max={int(sparse_max_size)})",
+                )
+            )
+
+    return RHS1SparseOperatorAdmission(
+        use_sparse_operator=bool(use_sparse_operator),
+        messages=tuple(messages),
     )
 
 
@@ -2828,6 +2884,7 @@ __all__ = (
     "RHS1QIDeviceRankBudget",
     "RHS1QIDeviceSetupSummary",
     "RHS1SparseJAXConfig",
+    "RHS1SparseOperatorAdmission",
     "RHS1SparsePreconditionerConfig",
     "RHS1SparseRescueOrdering",
     "RHS1SparseRescuePolicySetup",
@@ -2867,6 +2924,7 @@ __all__ = (
     "rhs1_sparse_enabled_initial",
     "rhs1_sparse_exact_lu_requested",
     "rhs1_sparse_jax_config_from_env",
+    "rhs1_sparse_operator_admission",
     "rhs1_sparse_rescue_initial_messages",
     "rhs1_sparse_kind_use",
     "rhs1_sparse_prefer_skips_stage2",
