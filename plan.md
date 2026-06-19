@@ -56,20 +56,19 @@ Recent checkpoints:
 - `cb295ce` Extract sparse pattern setup.
 - `4b6a5b4` Extract sparse factor policy.
 
-Current source-size snapshot after host sparse direct factor-dispatch
-extraction:
+Current source-size snapshot after host sparse direct polish extraction:
 
-- `sfincs_jax/v3_driver.py`: `19092` lines.
-- `solve_v3_full_system_linear_gmres`: `13750` lines.
+- `sfincs_jax/v3_driver.py`: `19075` lines.
+- `solve_v3_full_system_linear_gmres`: `13732` lines.
 
 Recent local validation:
 
 - Focused sparse-PC shard:
-  `161 passed in 1.69 s`.
+  `164 passed in 1.68 s`.
 - End-to-end explicit sparse/direct-tail driver checks:
-  `5 passed in 14.94 s`.
+  `5 passed in 15.49 s`.
 - Latest broad profile-response/x-block/sparse-pattern shard:
-  `440 passed in 114.35 s`.
+  `443 passed in 115.41 s`.
 
 Known CI issue fixed by this rewrite:
 
@@ -80,7 +79,7 @@ Known CI issue fixed by this rewrite:
 
 ### 1. `v3_driver.py` Architecture Refactor
 
-Completion estimate: 89%.
+Completion estimate: 90%.
 
 Goal:
 
@@ -127,6 +126,8 @@ Completed recent boundaries:
 - Explicit host sparse non-autodiff request validation extraction.
 - Host sparse direct factor-dispatch extraction for explicit-factor versus
   ILU/CSR refinement fallbacks.
+- Host sparse direct float32 GMRES-polish gating, progress, and acceptance
+  extraction.
 
 Next steps:
 
@@ -135,8 +136,8 @@ Next steps:
 - Extract remaining explicit sparse-host direct factor-setup policy seams only
   where this can be done without pulling driver-specific caches into domain
   modules.
-- Continue consolidating duplicated host sparse direct fallback/polish seams
-  behind tested profile-response helpers.
+- Continue consolidating duplicated host sparse fallback acceptance/metadata
+  seams behind tested profile-response helpers.
 - Continue shrinking `solve_v3_full_system_linear_gmres` in behavior-preserving
   tranches.
 
@@ -194,10 +195,9 @@ Next steps:
 
 ## Immediate Next Steps
 
-1. Commit and push the host sparse direct factor-dispatch extraction after
-   final cleanup.
-2. Continue with duplicated host sparse direct fallback/polish seam extraction
-   where cache boundaries remain clean.
+1. Commit and push the host sparse direct polish extraction after final cleanup.
+2. Continue with host sparse fallback acceptance/metadata seam extraction where
+   cache boundaries remain clean.
 3. Run focused sparse-PC tests and the broad profile-response/x-block/sparse
    shard after each extraction.
 4. Snapshot CI but do not wait on queued runs unless a completed failure appears.

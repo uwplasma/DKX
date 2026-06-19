@@ -289,6 +289,7 @@ from .problems.profile_response.sparse_pc import (
     resolve_xblock_two_level_policy_setup,
     run_fortran_reduced_xblock_krylov_solve,
     run_sparse_pc_gmres_once,
+    apply_sparse_host_direct_polish_if_needed,
     sparse_host_direct_solve_payload,
     explicit_sparse_pattern_progress_messages,
     solve_sparse_host_direct_from_available_factor,
@@ -13939,37 +13940,28 @@ def solve_v3_full_system_linear_gmres(
                             x=jnp.asarray(x_np, dtype=jnp.float64),
                             residual_norm=jnp.asarray(residual_norm_sparse, dtype=jnp.float64),
                         )
-                        if factor_dtype == np.dtype(np.float32) and float(res_sparse.residual_norm) > float(target_reduced):
-                            if rhs1_polish_enabled(env_name="SFINCS_JAX_RHSMODE1_SPARSE_DIRECT_POLISH"):
-                                polish_restart, polish_maxiter = rhs1_parse_polish_gmres_config(
-                                    restart_env_name="SFINCS_JAX_RHSMODE1_SPARSE_DIRECT_POLISH_RESTART",
-                                    maxiter_env_name="SFINCS_JAX_RHSMODE1_SPARSE_DIRECT_POLISH_MAXITER",
-                                    default_restart=min(int(restart), 40),
-                                    default_maxiter=min(max(40, int(maxiter or 120)), 120),
-                                )
-                                if emit is not None:
-                                    emit(
-                                        0,
-                                        "solve_v3_full_system_linear_gmres: host sparse direct polish "
-                                        f"restart={polish_restart} maxiter={polish_maxiter}",
-                                    )
-                                x_polish, residual_norm_polish = _host_sparse_direct_polish(
-                                    matvec_fn=mv_reduced,
-                                    rhs_vec=rhs_reduced,
-                                    x0_np=x_np,
-                                    ilu=ilu,
-                                    factor_dtype=factor_dtype,
-                                    tol=tol,
-                                    atol=atol,
-                                    restart=polish_restart,
-                                    maxiter=polish_maxiter,
-                                    precondition_side=gmres_precond_side,
-                                )
-                                if np.isfinite(residual_norm_polish) and residual_norm_polish < float(res_sparse.residual_norm):
-                                    res_sparse = GMRESSolveResult(
-                                        x=jnp.asarray(x_polish, dtype=jnp.float64),
-                                        residual_norm=jnp.asarray(residual_norm_polish, dtype=jnp.float64),
-                                    )
+                        sparse_host_polish = apply_sparse_host_direct_polish_if_needed(
+                            x=x_np,
+                            residual_norm=float(res_sparse.residual_norm),
+                            factor_dtype=factor_dtype,
+                            target=float(target_reduced),
+                            matvec=mv_reduced,
+                            rhs=rhs_reduced,
+                            ilu=ilu,
+                            tol=tol,
+                            atol=atol,
+                            restart=restart,
+                            maxiter=maxiter,
+                            precondition_side=gmres_precond_side,
+                            emit=emit,
+                            polish_enabled=rhs1_polish_enabled,
+                            parse_polish_gmres_config=rhs1_parse_polish_gmres_config,
+                            host_sparse_direct_polish=_host_sparse_direct_polish,
+                        )
+                        res_sparse = GMRESSolveResult(
+                            x=sparse_host_polish.x,
+                            residual_norm=sparse_host_polish.residual_norm,
+                        )
                         residual_vec_sparse = rhs_reduced - mv_reduced(res_sparse.x)
                         _mv_sparse = mv_reduced
                         _precond_sparse = None
@@ -16395,37 +16387,28 @@ def solve_v3_full_system_linear_gmres(
                                 x=jnp.asarray(x_np, dtype=jnp.float64),
                                 residual_norm=jnp.asarray(residual_norm_sparse, dtype=jnp.float64),
                             )
-                            if factor_dtype == np.dtype(np.float32) and float(res_sparse.residual_norm) > float(target):
-                                if rhs1_polish_enabled(env_name="SFINCS_JAX_RHSMODE1_SPARSE_DIRECT_POLISH"):
-                                    polish_restart, polish_maxiter = rhs1_parse_polish_gmres_config(
-                                        restart_env_name="SFINCS_JAX_RHSMODE1_SPARSE_DIRECT_POLISH_RESTART",
-                                        maxiter_env_name="SFINCS_JAX_RHSMODE1_SPARSE_DIRECT_POLISH_MAXITER",
-                                        default_restart=min(int(restart), 40),
-                                        default_maxiter=min(max(40, int(maxiter or 120)), 120),
-                                    )
-                                    if emit is not None:
-                                        emit(
-                                            0,
-                                            "solve_v3_full_system_linear_gmres: host sparse direct polish "
-                                            f"restart={polish_restart} maxiter={polish_maxiter}",
-                                        )
-                                    x_polish, residual_norm_polish = _host_sparse_direct_polish(
-                                        matvec_fn=mv,
-                                        rhs_vec=rhs,
-                                        x0_np=x_np,
-                                        ilu=ilu,
-                                        factor_dtype=factor_dtype,
-                                        tol=tol,
-                                        atol=atol,
-                                        restart=polish_restart,
-                                        maxiter=polish_maxiter,
-                                        precondition_side=gmres_precond_side,
-                                    )
-                                    if np.isfinite(residual_norm_polish) and residual_norm_polish < float(res_sparse.residual_norm):
-                                        res_sparse = GMRESSolveResult(
-                                            x=jnp.asarray(x_polish, dtype=jnp.float64),
-                                            residual_norm=jnp.asarray(residual_norm_polish, dtype=jnp.float64),
-                                        )
+                            sparse_host_polish = apply_sparse_host_direct_polish_if_needed(
+                                x=x_np,
+                                residual_norm=float(res_sparse.residual_norm),
+                                factor_dtype=factor_dtype,
+                                target=float(target),
+                                matvec=mv,
+                                rhs=rhs,
+                                ilu=ilu,
+                                tol=tol,
+                                atol=atol,
+                                restart=restart,
+                                maxiter=maxiter,
+                                precondition_side=gmres_precond_side,
+                                emit=emit,
+                                polish_enabled=rhs1_polish_enabled,
+                                parse_polish_gmres_config=rhs1_parse_polish_gmres_config,
+                                host_sparse_direct_polish=_host_sparse_direct_polish,
+                            )
+                            res_sparse = GMRESSolveResult(
+                                x=sparse_host_polish.x,
+                                residual_norm=sparse_host_polish.residual_norm,
+                            )
                             residual_vec_sparse = rhs - mv(res_sparse.x)
                             _mv_sparse = mv
                             _precond_sparse = None

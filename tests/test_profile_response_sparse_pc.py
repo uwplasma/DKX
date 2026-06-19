@@ -45,6 +45,7 @@ from sfincs_jax.problems.profile_response.sparse_pc import (
     SparsePCPostMinresUpdateContext,
     SparseHostDirectPayload,
     SparseHostDirectFactorSolvePayload,
+    SparseHostDirectPolishPayload,
     ExplicitSparseOperatorBuildPolicy,
     ExplicitSparseOperatorBuildResult,
     SparseMinimumNormPayload,
@@ -125,6 +126,7 @@ from sfincs_jax.problems.profile_response.sparse_pc import (
     sparse_pc_gmres_final_payload_from_driver_state,
     sparse_host_direct_solve_payload,
     solve_sparse_host_direct_from_available_factor,
+    apply_sparse_host_direct_polish_if_needed,
     sparse_minimum_norm_solve_payload,
     sparse_minimum_norm_start_message,
     validate_explicit_sparse_host_request,
@@ -4901,6 +4903,109 @@ def test_solve_sparse_host_direct_from_available_factor_uses_ilu_without_explici
     np.testing.assert_allclose(payload.x, np.asarray([-1.0, 3.0]))
     assert payload.residual_norm == pytest.approx(0.25)
     assert payload.used_explicit_factor is False
+
+
+def test_apply_sparse_host_direct_polish_skips_non_float32_or_converged_result() -> None:
+    payload = apply_sparse_host_direct_polish_if_needed(
+        x=np.asarray([1.0]),
+        residual_norm=10.0,
+        factor_dtype=np.dtype(np.float64),
+        target=1.0,
+        matvec=_identity,
+        rhs=jnp.asarray([1.0], dtype=jnp.float64),
+        ilu=object(),
+        tol=1.0e-8,
+        atol=1.0e-8,
+        restart=80,
+        maxiter=100,
+        precondition_side="right",
+        emit=lambda *_args: pytest.fail("unexpected emit"),
+        polish_enabled=lambda **_kwargs: pytest.fail("unexpected policy"),
+        parse_polish_gmres_config=lambda **_kwargs: pytest.fail("unexpected parse"),
+        host_sparse_direct_polish=lambda **_kwargs: pytest.fail("unexpected polish"),
+    )
+
+    assert isinstance(payload, SparseHostDirectPolishPayload)
+    assert payload.attempted is False
+    assert payload.accepted is False
+    assert payload.restart is None
+    assert float(payload.residual_norm) == pytest.approx(10.0)
+
+
+def test_apply_sparse_host_direct_polish_accepts_improved_float32_result() -> None:
+    messages: list[tuple[int, str]] = []
+    parse_calls: list[dict[str, object]] = []
+    polish_calls: list[dict[str, object]] = []
+
+    def parse_config(**kwargs):
+        parse_calls.append(kwargs)
+        return 17, 33
+
+    def polish(**kwargs):
+        polish_calls.append(kwargs)
+        return np.asarray([0.5, -0.5]), 0.25
+
+    payload = apply_sparse_host_direct_polish_if_needed(
+        x=np.asarray([1.0, -1.0]),
+        residual_norm=2.0,
+        factor_dtype=np.dtype(np.float32),
+        target=1.0,
+        matvec=_identity,
+        rhs=jnp.asarray([1.0, -1.0], dtype=jnp.float64),
+        ilu=object(),
+        tol=1.0e-8,
+        atol=1.0e-8,
+        restart=80,
+        maxiter=100,
+        precondition_side="left",
+        emit=lambda level, message: messages.append((level, message)),
+        polish_enabled=lambda **kwargs: kwargs["env_name"] == "SFINCS_JAX_RHSMODE1_SPARSE_DIRECT_POLISH",
+        parse_polish_gmres_config=parse_config,
+        host_sparse_direct_polish=polish,
+    )
+
+    assert payload.attempted is True
+    assert payload.accepted is True
+    assert payload.restart == 17
+    assert payload.maxiter == 33
+    np.testing.assert_allclose(np.asarray(payload.x), np.asarray([0.5, -0.5]))
+    assert float(payload.residual_norm) == pytest.approx(0.25)
+    assert parse_calls[0]["default_restart"] == 40
+    assert parse_calls[0]["default_maxiter"] == 100
+    assert polish_calls[0]["precondition_side"] == "left"
+    assert messages == [
+        (
+            0,
+            "solve_v3_full_system_linear_gmres: host sparse direct polish "
+            "restart=17 maxiter=33",
+        )
+    ]
+
+
+def test_apply_sparse_host_direct_polish_rejects_nonimproving_result() -> None:
+    payload = apply_sparse_host_direct_polish_if_needed(
+        x=np.asarray([2.0]),
+        residual_norm=2.0,
+        factor_dtype=np.dtype(np.float32),
+        target=1.0,
+        matvec=_identity,
+        rhs=jnp.asarray([2.0], dtype=jnp.float64),
+        ilu=object(),
+        tol=1.0e-8,
+        atol=1.0e-8,
+        restart=20,
+        maxiter=None,
+        precondition_side="right",
+        emit=None,
+        polish_enabled=lambda **_kwargs: True,
+        parse_polish_gmres_config=lambda **_kwargs: (5, 6),
+        host_sparse_direct_polish=lambda **_kwargs: (np.asarray([0.0]), 3.0),
+    )
+
+    assert payload.attempted is True
+    assert payload.accepted is False
+    np.testing.assert_allclose(np.asarray(payload.x), np.asarray([2.0]))
+    assert float(payload.residual_norm) == pytest.approx(2.0)
 
 
 def test_sparse_pc_post_minres_accepts_improved_residual_and_recomputes_pc_norm() -> (

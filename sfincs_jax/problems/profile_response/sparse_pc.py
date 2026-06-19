@@ -133,6 +133,18 @@ class SparseHostDirectFactorSolvePayload:
 
 
 @dataclass(frozen=True)
+class SparseHostDirectPolishPayload:
+    """Post-direct-solve polish result for host sparse direct fallback solves."""
+
+    x: jnp.ndarray
+    residual_norm: jnp.ndarray
+    attempted: bool
+    accepted: bool
+    restart: int | None
+    maxiter: int | None
+
+
+@dataclass(frozen=True)
 class ExplicitSparseOperatorBuildPolicy:
     """Materialization controls shared by explicit host sparse solve paths."""
 
@@ -7272,6 +7284,91 @@ def solve_sparse_host_direct_from_available_factor(
     )
 
 
+def apply_sparse_host_direct_polish_if_needed(
+    *,
+    x: np.ndarray,
+    residual_norm: float,
+    factor_dtype: np.dtype,
+    target: float,
+    matvec: ArrayFn,
+    rhs: jnp.ndarray,
+    ilu: object,
+    tol: float,
+    atol: float,
+    restart: int,
+    maxiter: int | None,
+    precondition_side: str,
+    emit: EmitFn | None,
+    polish_enabled: Callable[..., bool],
+    parse_polish_gmres_config: Callable[..., tuple[int, int]],
+    host_sparse_direct_polish: Callable[..., tuple[np.ndarray, float]],
+) -> SparseHostDirectPolishPayload:
+    """Optionally polish a float32 host sparse direct solve with GMRES."""
+
+    x_current = np.asarray(x, dtype=np.float64)
+    residual_current = float(residual_norm)
+    if np.dtype(factor_dtype) != np.dtype(np.float32) or residual_current <= float(target):
+        return SparseHostDirectPolishPayload(
+            x=jnp.asarray(x_current, dtype=jnp.float64),
+            residual_norm=jnp.asarray(residual_current, dtype=jnp.float64),
+            attempted=False,
+            accepted=False,
+            restart=None,
+            maxiter=None,
+        )
+    if not polish_enabled(env_name="SFINCS_JAX_RHSMODE1_SPARSE_DIRECT_POLISH"):
+        return SparseHostDirectPolishPayload(
+            x=jnp.asarray(x_current, dtype=jnp.float64),
+            residual_norm=jnp.asarray(residual_current, dtype=jnp.float64),
+            attempted=False,
+            accepted=False,
+            restart=None,
+            maxiter=None,
+        )
+
+    polish_restart, polish_maxiter = parse_polish_gmres_config(
+        restart_env_name="SFINCS_JAX_RHSMODE1_SPARSE_DIRECT_POLISH_RESTART",
+        maxiter_env_name="SFINCS_JAX_RHSMODE1_SPARSE_DIRECT_POLISH_MAXITER",
+        default_restart=min(int(restart), 40),
+        default_maxiter=min(max(40, int(maxiter or 120)), 120),
+    )
+    if emit is not None:
+        emit(
+            0,
+            "solve_v3_full_system_linear_gmres: host sparse direct polish "
+            f"restart={polish_restart} maxiter={polish_maxiter}",
+        )
+    x_polish, residual_norm_polish = host_sparse_direct_polish(
+        matvec_fn=matvec,
+        rhs_vec=rhs,
+        x0_np=x_current,
+        ilu=ilu,
+        factor_dtype=factor_dtype,
+        tol=tol,
+        atol=atol,
+        restart=polish_restart,
+        maxiter=polish_maxiter,
+        precondition_side=precondition_side,
+    )
+    if np.isfinite(residual_norm_polish) and float(residual_norm_polish) < residual_current:
+        return SparseHostDirectPolishPayload(
+            x=jnp.asarray(x_polish, dtype=jnp.float64),
+            residual_norm=jnp.asarray(float(residual_norm_polish), dtype=jnp.float64),
+            attempted=True,
+            accepted=True,
+            restart=int(polish_restart),
+            maxiter=int(polish_maxiter),
+        )
+    return SparseHostDirectPolishPayload(
+        x=jnp.asarray(x_current, dtype=jnp.float64),
+        residual_norm=jnp.asarray(residual_current, dtype=jnp.float64),
+        attempted=True,
+        accepted=False,
+        restart=int(polish_restart),
+        maxiter=int(polish_maxiter),
+    )
+
+
 def apply_sparse_pc_post_minres(
     *,
     context: SparsePCPostMinresContext,
@@ -7488,6 +7585,7 @@ __all__ = [
     "SparseMinimumNormPayload",
     "SparseHostDirectPayload",
     "SparseHostDirectFactorSolvePayload",
+    "SparseHostDirectPolishPayload",
     "ExplicitSparseOperatorBuildPolicy",
     "ExplicitSparseOperatorBuildResult",
     "SparsePCGMRESCompletionMessageContext",
@@ -7543,6 +7641,7 @@ __all__ = [
     "sparse_minimum_norm_start_message",
     "sparse_host_direct_solve_payload",
     "solve_sparse_host_direct_from_available_factor",
+    "apply_sparse_host_direct_polish_if_needed",
     "build_explicit_sparse_operator_from_pattern",
     "explicit_sparse_pattern_progress_messages",
     "resolve_explicit_sparse_operator_build_policy",
