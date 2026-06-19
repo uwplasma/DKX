@@ -39,7 +39,10 @@ from .setup import (
     SPARSE_HOST_PETSC_COMPAT_SOLVE_METHODS,
     SPARSE_HOST_XBLOCK_PC_GMRES_SOLVE_METHODS,
 )
-from .solver_diagnostics import build_rhs1_xblock_correction_metadata_from_driver_state
+from .solver_diagnostics import (
+    build_rhs1_xblock_correction_metadata_from_driver_state,
+    prepare_cached_qi_correction_basis,
+)
 from ...memory_model import (
     bicgstab_work_nbytes,
     gmres_basis_nbytes,
@@ -603,6 +606,127 @@ class XBlockSubspaceCorrectionResult:
     residual_after: float | None
     error: str | None
     solve_s: float
+
+
+@dataclass(frozen=True)
+class XBlockPostSolveCorrectionContext:
+    """Inputs for x-block sparse-PC post-solve correction orchestration."""
+
+    matvec: ArrayFn
+    rhs: jnp.ndarray
+    x: np.ndarray
+    residual_norm: float
+    target: float
+    solve_s: float
+    preconditioner: ArrayFn
+    precondition_side: str
+    post_solve_policy: object
+    qi_device_state: object | None
+    coarse_direction_builder: Callable[..., tuple[tuple[str, jnp.ndarray], ...]]
+    emit: EmitFn | None
+    elapsed_s: Callable[[], float]
+    minres_correction: Callable[..., tuple[jnp.ndarray, jnp.ndarray, Sequence[float], Sequence[float]]]
+    residual_equation_correction: Callable[
+        ...,
+        tuple[jnp.ndarray, jnp.ndarray, Sequence[float], Sequence[int], Sequence[str]],
+    ]
+    coarse_correction: Callable[
+        ...,
+        tuple[jnp.ndarray, jnp.ndarray, Sequence[float], Sequence[int], Sequence[str]],
+    ]
+
+
+@dataclass(frozen=True)
+class XBlockPostSolveCorrectionResult:
+    """Updated x-block sparse-PC solve state and correction diagnostics."""
+
+    x: np.ndarray
+    residual_norm: float
+    solve_s: float
+    post_minres_steps_requested: int
+    post_minres_alpha_clip: float
+    post_minres_min_improvement: float
+    post_minres_history: tuple[float, ...]
+    post_minres_alphas: tuple[float, ...]
+    post_minres_residual_before: float | None
+    post_minres_residual_after: float | None
+    post_coarse_steps_requested: int
+    post_coarse_max_directions: int
+    post_coarse_max_extra_units: int
+    post_coarse_fsavg_lmax: int
+    post_coarse_angular_lmax: int
+    post_coarse_include_angular_residual: bool
+    post_coarse_include_raw: bool
+    post_coarse_alpha_clip: float
+    post_coarse_rcond: float
+    post_coarse_min_improvement: float
+    post_coarse_history: tuple[float, ...]
+    post_coarse_direction_counts: tuple[int, ...]
+    post_coarse_direction_names: tuple[str, ...]
+    post_coarse_residual_before: float | None
+    post_coarse_residual_after: float | None
+    post_residual_equation_steps_requested: int
+    post_residual_equation_max_directions: int
+    post_residual_equation_max_extra_units: int
+    post_residual_equation_fsavg_lmax: int
+    post_residual_equation_angular_lmax: int
+    post_residual_equation_include_angular_residual: bool
+    post_residual_equation_include_raw: bool
+    post_residual_equation_include_post_coarse: bool
+    post_residual_equation_include_qi_basis: bool
+    post_residual_equation_alpha_clip: float
+    post_residual_equation_rcond: float
+    post_residual_equation_min_improvement: float
+    post_residual_equation_history: tuple[float, ...]
+    post_residual_equation_direction_counts: tuple[int, ...]
+    post_residual_equation_direction_names: tuple[str, ...]
+    post_residual_equation_residual_before: float | None
+    post_residual_equation_residual_after: float | None
+
+    def driver_state(self) -> dict[str, object]:
+        """Return historical driver-state keys consumed by final metadata."""
+
+        return {
+            "post_minres_steps_requested": self.post_minres_steps_requested,
+            "post_minres_alpha_clip": self.post_minres_alpha_clip,
+            "post_minres_min_improvement": self.post_minres_min_improvement,
+            "post_minres_history": self.post_minres_history,
+            "post_minres_alphas": self.post_minres_alphas,
+            "post_minres_residual_before": self.post_minres_residual_before,
+            "post_minres_residual_after": self.post_minres_residual_after,
+            "post_coarse_steps_requested": self.post_coarse_steps_requested,
+            "post_coarse_max_directions": self.post_coarse_max_directions,
+            "post_coarse_max_extra_units": self.post_coarse_max_extra_units,
+            "post_coarse_fsavg_lmax": self.post_coarse_fsavg_lmax,
+            "post_coarse_angular_lmax": self.post_coarse_angular_lmax,
+            "post_coarse_include_angular_residual": self.post_coarse_include_angular_residual,
+            "post_coarse_include_raw": self.post_coarse_include_raw,
+            "post_coarse_alpha_clip": self.post_coarse_alpha_clip,
+            "post_coarse_rcond": self.post_coarse_rcond,
+            "post_coarse_min_improvement": self.post_coarse_min_improvement,
+            "post_coarse_history": self.post_coarse_history,
+            "post_coarse_direction_counts": self.post_coarse_direction_counts,
+            "post_coarse_direction_names": self.post_coarse_direction_names,
+            "post_coarse_residual_before": self.post_coarse_residual_before,
+            "post_coarse_residual_after": self.post_coarse_residual_after,
+            "post_residual_equation_steps_requested": self.post_residual_equation_steps_requested,
+            "post_residual_equation_max_directions": self.post_residual_equation_max_directions,
+            "post_residual_equation_max_extra_units": self.post_residual_equation_max_extra_units,
+            "post_residual_equation_fsavg_lmax": self.post_residual_equation_fsavg_lmax,
+            "post_residual_equation_angular_lmax": self.post_residual_equation_angular_lmax,
+            "post_residual_equation_include_angular_residual": self.post_residual_equation_include_angular_residual,
+            "post_residual_equation_include_raw": self.post_residual_equation_include_raw,
+            "post_residual_equation_include_post_coarse": self.post_residual_equation_include_post_coarse,
+            "post_residual_equation_include_qi_basis": self.post_residual_equation_include_qi_basis,
+            "post_residual_equation_alpha_clip": self.post_residual_equation_alpha_clip,
+            "post_residual_equation_rcond": self.post_residual_equation_rcond,
+            "post_residual_equation_min_improvement": self.post_residual_equation_min_improvement,
+            "post_residual_equation_history": self.post_residual_equation_history,
+            "post_residual_equation_direction_counts": self.post_residual_equation_direction_counts,
+            "post_residual_equation_direction_names": self.post_residual_equation_direction_names,
+            "post_residual_equation_residual_before": self.post_residual_equation_residual_before,
+            "post_residual_equation_residual_after": self.post_residual_equation_residual_after,
+        }
 
 
 @dataclass(frozen=True)
@@ -8636,6 +8760,248 @@ def apply_xblock_subspace_correction_if_needed(
     )
 
 
+def run_xblock_post_solve_corrections(
+    context: XBlockPostSolveCorrectionContext,
+) -> XBlockPostSolveCorrectionResult:
+    """Run x-block post-residual, minres, and coarse correction hooks."""
+
+    post_minres_policy = context.post_solve_policy.post_minres
+    post_minres_steps_requested = int(post_minres_policy.steps_requested)
+    post_minres_alpha_clip = float(post_minres_policy.alpha_clip)
+    post_minres_min_improvement = float(post_minres_policy.min_improvement)
+
+    post_coarse_policy = context.post_solve_policy.post_coarse
+    post_coarse_steps_requested = int(post_coarse_policy.steps_requested)
+    post_coarse_max_directions = int(post_coarse_policy.max_directions)
+    post_coarse_max_extra_units = int(post_coarse_policy.max_extra_units)
+    post_coarse_fsavg_lmax = int(post_coarse_policy.fsavg_lmax)
+    post_coarse_angular_lmax = int(post_coarse_policy.angular_lmax)
+    post_coarse_include_angular_residual = bool(
+        post_coarse_policy.include_angular_residual
+    )
+    post_coarse_include_raw = bool(post_coarse_policy.include_raw)
+    post_coarse_alpha_clip = float(post_coarse_policy.alpha_clip)
+    post_coarse_rcond = float(post_coarse_policy.rcond)
+    post_coarse_min_improvement = float(post_coarse_policy.min_improvement)
+
+    post_residual_policy = context.post_solve_policy.post_residual_equation
+    post_residual_equation_steps_requested = int(post_residual_policy.steps_requested)
+    post_residual_equation_max_directions = int(post_residual_policy.max_directions)
+    post_residual_equation_max_extra_units = int(post_residual_policy.max_extra_units)
+    post_residual_equation_fsavg_lmax = int(post_residual_policy.fsavg_lmax)
+    post_residual_equation_angular_lmax = int(post_residual_policy.angular_lmax)
+    post_residual_equation_include_angular_residual = bool(
+        post_residual_policy.include_angular_residual
+    )
+    post_residual_equation_include_raw = bool(post_residual_policy.include_raw)
+    post_residual_equation_include_post_coarse = bool(
+        post_residual_policy.include_post_coarse
+    )
+    post_residual_equation_include_qi_basis = bool(
+        post_residual_policy.include_qi_basis
+    )
+    post_residual_equation_alpha_clip = float(post_residual_policy.alpha_clip)
+    post_residual_equation_rcond = float(post_residual_policy.rcond)
+    post_residual_equation_min_improvement = float(
+        post_residual_policy.min_improvement
+    )
+
+    x_np = np.asarray(context.x, dtype=np.float64)
+    residual_norm = float(context.residual_norm)
+    solve_s = float(context.solve_s)
+
+    def _post_residual_equation_direction_builder(
+        residual_vec: jnp.ndarray,
+    ) -> tuple[tuple[str, jnp.ndarray], ...]:
+        if not bool(post_residual_equation_include_post_coarse):
+            return ()
+        return context.coarse_direction_builder(
+            residual_vec,
+            include_raw=bool(post_residual_equation_include_raw),
+            fsavg_lmax=int(post_residual_equation_fsavg_lmax),
+            angular_lmax=int(post_residual_equation_angular_lmax),
+            max_extra_units=int(post_residual_equation_max_extra_units),
+            max_directions=int(post_residual_equation_max_directions),
+            include_angular_residual=bool(
+                post_residual_equation_include_angular_residual
+            ),
+        )
+
+    post_residual_equation_active = (
+        post_residual_equation_steps_requested > 0
+        and np.isfinite(float(residual_norm))
+        and float(residual_norm) > float(context.target)
+    )
+    cached_qi_basis = prepare_cached_qi_correction_basis(
+        active=bool(post_residual_equation_active),
+        include_qi_basis=bool(post_residual_equation_include_qi_basis),
+        qi_device_state=context.qi_device_state,
+    )
+    post_residual_equation = apply_xblock_subspace_correction_if_needed(
+        XBlockSubspaceCorrectionContext(
+            matvec=context.matvec,
+            rhs=context.rhs,
+            x=np.asarray(x_np, dtype=np.float64),
+            residual_norm=float(residual_norm),
+            target=float(context.target),
+            direction_builder=_post_residual_equation_direction_builder,
+            steps=int(post_residual_equation_steps_requested),
+            max_directions=int(post_residual_equation_max_directions),
+            alpha_clip=float(post_residual_equation_alpha_clip),
+            rcond=float(post_residual_equation_rcond),
+            min_improvement=float(post_residual_equation_min_improvement),
+            emit=context.emit,
+            elapsed_s=context.elapsed_s,
+            correction=context.residual_equation_correction,
+            correction_kwargs={
+                "cached_basis": cached_qi_basis.vectors,
+                "cached_operator_on_basis": cached_qi_basis.operator_on_basis,
+                "cached_labels": cached_qi_basis.labels,
+            },
+            solver_label="xblock_sparse_pc_gmres",
+            correction_label="post-residual-equation",
+            diagnostic_suffix=f" cached_qi={int(cached_qi_basis.vectors is not None)}",
+        )
+    )
+    x_np = np.asarray(post_residual_equation.x, dtype=np.float64)
+    residual_norm = float(post_residual_equation.residual_norm)
+    solve_s += float(post_residual_equation.solve_s)
+
+    post_minres = apply_sparse_pc_post_minres_if_needed(
+        SparsePCPostMinresUpdateContext(
+            matvec=context.matvec,
+            rhs=context.rhs,
+            preconditioner=(
+                context.preconditioner
+                if str(context.precondition_side) != "none"
+                else (lambda v: v)
+            ),
+            emit=context.emit,
+            elapsed_s=context.elapsed_s,
+            pc_form="none",
+            steps=int(post_minres_steps_requested),
+            alpha_clip=float(post_minres_alpha_clip),
+            min_improvement=float(post_minres_min_improvement),
+            minres_correction=context.minres_correction,
+            x=np.asarray(x_np, dtype=np.float64),
+            residual_norm=float(residual_norm),
+            preconditioned_residual_norm=float(residual_norm),
+            solve_s=float(solve_s),
+            target=float(context.target),
+            solver_label="xblock_sparse_pc_gmres",
+        )
+    )
+    x_np = np.asarray(post_minres.x, dtype=np.float64)
+    residual_norm = float(post_minres.residual_norm)
+    solve_s = float(post_minres.solve_s)
+
+    def _post_coarse_direction_builder(
+        residual_vec: jnp.ndarray,
+    ) -> tuple[tuple[str, jnp.ndarray], ...]:
+        return context.coarse_direction_builder(
+            residual_vec,
+            include_raw=bool(post_coarse_include_raw),
+            fsavg_lmax=int(post_coarse_fsavg_lmax),
+            angular_lmax=int(post_coarse_angular_lmax),
+            max_extra_units=int(post_coarse_max_extra_units),
+            max_directions=int(post_coarse_max_directions),
+            include_angular_residual=bool(post_coarse_include_angular_residual),
+        )
+
+    post_coarse = apply_xblock_subspace_correction_if_needed(
+        XBlockSubspaceCorrectionContext(
+            matvec=context.matvec,
+            rhs=context.rhs,
+            x=np.asarray(x_np, dtype=np.float64),
+            residual_norm=float(residual_norm),
+            target=float(context.target),
+            direction_builder=_post_coarse_direction_builder,
+            steps=int(post_coarse_steps_requested),
+            max_directions=int(post_coarse_max_directions),
+            alpha_clip=float(post_coarse_alpha_clip),
+            rcond=float(post_coarse_rcond),
+            min_improvement=float(post_coarse_min_improvement),
+            emit=context.emit,
+            elapsed_s=context.elapsed_s,
+            correction=context.coarse_correction,
+            solver_label="xblock_sparse_pc_gmres",
+            correction_label="post-coarse",
+        )
+    )
+    x_np = np.asarray(post_coarse.x, dtype=np.float64)
+    residual_norm = float(post_coarse.residual_norm)
+    solve_s += float(post_coarse.solve_s)
+
+    return XBlockPostSolveCorrectionResult(
+        x=x_np,
+        residual_norm=float(residual_norm),
+        solve_s=float(solve_s),
+        post_minres_steps_requested=int(post_minres_steps_requested),
+        post_minres_alpha_clip=float(post_minres_alpha_clip),
+        post_minres_min_improvement=float(post_minres_min_improvement),
+        post_minres_history=post_minres.history,
+        post_minres_alphas=post_minres.alphas,
+        post_minres_residual_before=post_minres.residual_before,
+        post_minres_residual_after=post_minres.residual_after,
+        post_coarse_steps_requested=int(post_coarse_steps_requested),
+        post_coarse_max_directions=int(post_coarse_max_directions),
+        post_coarse_max_extra_units=int(post_coarse_max_extra_units),
+        post_coarse_fsavg_lmax=int(post_coarse_fsavg_lmax),
+        post_coarse_angular_lmax=int(post_coarse_angular_lmax),
+        post_coarse_include_angular_residual=bool(
+            post_coarse_include_angular_residual
+        ),
+        post_coarse_include_raw=bool(post_coarse_include_raw),
+        post_coarse_alpha_clip=float(post_coarse_alpha_clip),
+        post_coarse_rcond=float(post_coarse_rcond),
+        post_coarse_min_improvement=float(post_coarse_min_improvement),
+        post_coarse_history=post_coarse.history,
+        post_coarse_direction_counts=post_coarse.direction_counts,
+        post_coarse_direction_names=post_coarse.direction_names,
+        post_coarse_residual_before=post_coarse.residual_before,
+        post_coarse_residual_after=post_coarse.residual_after,
+        post_residual_equation_steps_requested=int(
+            post_residual_equation_steps_requested
+        ),
+        post_residual_equation_max_directions=int(
+            post_residual_equation_max_directions
+        ),
+        post_residual_equation_max_extra_units=int(
+            post_residual_equation_max_extra_units
+        ),
+        post_residual_equation_fsavg_lmax=int(post_residual_equation_fsavg_lmax),
+        post_residual_equation_angular_lmax=int(
+            post_residual_equation_angular_lmax
+        ),
+        post_residual_equation_include_angular_residual=bool(
+            post_residual_equation_include_angular_residual
+        ),
+        post_residual_equation_include_raw=bool(
+            post_residual_equation_include_raw
+        ),
+        post_residual_equation_include_post_coarse=bool(
+            post_residual_equation_include_post_coarse
+        ),
+        post_residual_equation_include_qi_basis=bool(
+            post_residual_equation_include_qi_basis
+        ),
+        post_residual_equation_alpha_clip=float(post_residual_equation_alpha_clip),
+        post_residual_equation_rcond=float(post_residual_equation_rcond),
+        post_residual_equation_min_improvement=float(
+            post_residual_equation_min_improvement
+        ),
+        post_residual_equation_history=post_residual_equation.history,
+        post_residual_equation_direction_counts=(
+            post_residual_equation.direction_counts
+        ),
+        post_residual_equation_direction_names=post_residual_equation.direction_names,
+        post_residual_equation_residual_before=(
+            post_residual_equation.residual_before
+        ),
+        post_residual_equation_residual_after=post_residual_equation.residual_after,
+    )
+
+
 __all__ = [
     "FortranReducedSparsePCBackendSetup",
     "FortranReducedXBlockFactorPolicySetup",
@@ -8716,6 +9082,8 @@ __all__ = [
     "SparsePCPostMinresUpdateResult",
     "XBlockSubspaceCorrectionContext",
     "XBlockSubspaceCorrectionResult",
+    "XBlockPostSolveCorrectionContext",
+    "XBlockPostSolveCorrectionResult",
     "apply_fortran_reduced_xblock_global_coupling_stage",
     "apply_fortran_reduced_xblock_initial_seed",
     "apply_fortran_reduced_xblock_moment_schur_stage",
@@ -8758,6 +9126,7 @@ __all__ = [
     "retry_sparse_pc_factor_dtype_from_driver_state",
     "run_fortran_reduced_xblock_krylov_solve",
     "run_sparse_pc_gmres_once",
+    "run_xblock_post_solve_corrections",
     "xblock_sparse_pc_completion_message",
     "xblock_gmres_fallback_decision",
     "xblock_krylov_report",
