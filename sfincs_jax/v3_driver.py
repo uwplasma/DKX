@@ -510,6 +510,7 @@ from .problems.profile_response.residual import (
     residual_target as rhs1_residual_target,
     safe_preconditioner as _safe_preconditioner,
     safe_ratio as rhs1_safe_ratio,
+    true_residual_norm_or_inf as rhs1_true_residual_norm_or_inf,
 )
 from .problems.profile_response.policies import (
     rhs1_constraint0_dense_fallback_allowed as _rhs1_constraint0_dense_fallback_allowed_impl,
@@ -12701,10 +12702,11 @@ def solve_v3_full_system_linear_gmres(
                         dense_fallback_ratio = float(dense_fallback_ratio_env) if dense_fallback_ratio_env else 1.0e2
                     except ValueError:
                         dense_fallback_ratio = 1.0e2
-                r_vec = rhs_reduced - mv_reduced(res_reduced.x)
-                residual_norm_true = float(jnp.linalg.norm(r_vec))
-                if not np.isfinite(residual_norm_true):
-                    residual_norm_true = float("inf")
+                residual_norm_true = rhs1_true_residual_norm_or_inf(
+                    rhs=rhs_reduced,
+                    matvec=mv_reduced,
+                    x=res_reduced.x,
+                )
                 res_ratio = float(residual_norm_true) / max(float(target_reduced), 1e-300)
                 dense_fallback_limit = dense_fallback_max_huge if res_ratio > dense_fallback_ratio else dense_fallback_max
                 force_dense_cs0 = bool(int(op.constraint_scheme) == 0 and (not cs0_sparse_first))

@@ -11,6 +11,7 @@ from sfincs_jax.rhs1_residual import (
     residual_converged,
     residual_target,
     safe_ratio,
+    true_residual_norm_or_inf,
 )
 from sfincs_jax.solver import GMRESSolveResult
 
@@ -36,6 +37,26 @@ def test_rhs1_residual_converged_requires_finite_residual_and_target() -> None:
     assert residual_converged(1.0e-6, 1.0e-7) is False
     assert residual_converged(math.nan, 1.0e-7) is False
     assert residual_converged(1.0e-8, math.inf) is False
+
+
+def test_true_residual_norm_or_inf_returns_finite_norm() -> None:
+    norm = true_residual_norm_or_inf(
+        rhs=jnp.asarray([1.0, 2.0], dtype=jnp.float64),
+        matvec=lambda x: jnp.asarray([x[0], 2.0 * x[1]], dtype=jnp.float64),
+        x=jnp.asarray([1.0, -1.0], dtype=jnp.float64),
+    )
+
+    assert norm == 4.0
+
+
+def test_true_residual_norm_or_inf_maps_nonfinite_norm_to_infinity() -> None:
+    norm = true_residual_norm_or_inf(
+        rhs=jnp.asarray([0.0], dtype=jnp.float64),
+        matvec=lambda _x: jnp.asarray([jnp.nan], dtype=jnp.float64),
+        x=jnp.asarray([1.0], dtype=jnp.float64),
+    )
+
+    assert norm == math.inf
 
 
 def test_recompute_true_residual_result_replaces_reported_krylov_norm() -> None:

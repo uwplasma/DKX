@@ -610,6 +610,21 @@ def l2_norm_float(values: jnp.ndarray) -> float:
     return float(jax.device_get(jnp.linalg.norm(jnp.asarray(values))))
 
 
+def true_residual_norm_or_inf(
+    *,
+    rhs: jnp.ndarray,
+    matvec: Callable[[jnp.ndarray], jnp.ndarray],
+    x: jnp.ndarray,
+) -> float:
+    """Return ``||rhs - A x||`` with non-finite norms mapped to infinity."""
+
+    residual = jnp.asarray(rhs, dtype=jnp.float64) - jnp.asarray(
+        matvec(x), dtype=jnp.float64
+    )
+    norm = float(jnp.linalg.norm(residual))
+    return norm if math.isfinite(norm) else float("inf")
+
+
 def recompute_true_residual_result(
     *,
     result: Any,
@@ -732,4 +747,5 @@ __all__ = [
     "residual_target",
     "safe_preconditioner",
     "safe_ratio",
+    "true_residual_norm_or_inf",
 ]
