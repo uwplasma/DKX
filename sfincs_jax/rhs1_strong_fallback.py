@@ -112,8 +112,8 @@ def build_rhs1_strong_preconditioner_full_from_kind(
     dd_overlap_theta: int,
     dd_block_zeta: int,
     dd_overlap_zeta: int,
-    adi_sweeps: int,
     dispatch_builder: Callable[..., Callable],
+    adi_sweeps: int | None = None,
 ) -> tuple[str | None, Callable | None]:
     """Build the full-system strong fallback preconditioner via shared dispatch."""
     effective_kind = resolve_rhs1_strong_preconditioner_kind_for_build(
@@ -132,7 +132,10 @@ def build_rhs1_strong_preconditioner_full_from_kind(
         dd_overlap_theta=dd_overlap_theta,
         dd_block_zeta=dd_block_zeta,
         dd_overlap_zeta=dd_overlap_zeta,
-        adi_sweeps=adi_sweeps,
+        adi_sweeps=max(
+            1,
+            _parse_env_int("SFINCS_JAX_RHSMODE1_ADI_SWEEPS", 2) if adi_sweeps is None else int(adi_sweeps),
+        ),
     )
     return effective_kind, preconditioner
 

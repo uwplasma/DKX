@@ -42,11 +42,14 @@ Make `sfincs_jax` research-grade while preserving the public user contract:
 
 Recent checkpoints:
 
+- RHSMode=1 full-system strong fallback ADI sweep parsing now lives in
+  `rhs1_strong_fallback`, matching the reduced strong fallback helper and
+  removing the final full-branch inline ADI env parse (current checkpoint).
 - RHSMode=1 reduced active-DOF strong fallback preconditioner construction now
   uses the shared dispatch helper through `rhs1_strong_fallback`, preserving
   xblock-lmax env parsing, ADI fallback semantics, and driver monkeypatch
   compatibility while removing the manual reduced-kind switch from the driver
-  (current checkpoint).
+  (`d8d1043`).
 - RHSMode=1 reduced PAS-Schur strong-retry size downgrade now uses a tested
   profile-response strong-preconditioning helper while strong preconditioner
   construction and solve execution remain driver-owned (`49970d5`).
@@ -291,15 +294,15 @@ Recent checkpoints:
 - `cb295ce` Extract sparse pattern setup.
 - `4b6a5b4` Extract sparse factor policy.
 
-Current source-size snapshot after RHSMode=1 reduced strong fallback dispatch
+Current source-size snapshot after RHSMode=1 full strong fallback ADI-control
 extraction:
 
-- `sfincs_jax/v3_driver.py`: `17460` lines.
-- `solve_v3_full_system_linear_gmres`: `12082` lines.
+- `sfincs_jax/v3_driver.py`: `17453` lines.
+- `solve_v3_full_system_linear_gmres`: `12075` lines.
 - `sfincs_jax/v3_results.py`: `119` lines.
 - `sfincs_jax/rhs1_ksp_diagnostics.py`: `306` lines.
 - `sfincs_jax/rhs1_pas_policy.py`: `864` lines.
-- `sfincs_jax/rhs1_strong_fallback.py`: `144` lines.
+- `sfincs_jax/rhs1_strong_fallback.py`: `147` lines.
 - `sfincs_jax/problems/profile_response/strong_preconditioning.py`: `803` lines.
 - `sfincs_jax/problems/profile_response/residual.py`: `981` lines.
 - `sfincs_jax/problems/profile_response/handoff.py`: `598` lines.
@@ -312,6 +315,15 @@ extraction:
 
 Recent local validation:
 
+- Strong fallback/preconditioner-build shard after full strong fallback
+  ADI-control extraction: `11 passed in 0.75 s`.
+- Sparse-host/minimum-norm/direct-tail driver shard:
+  `32 passed, 100 deselected in 35.61 s`.
+- Broad profile-response/RHSMode=1 policy, setup, diagnostics, solver, and
+  helper sweep after full strong fallback ADI-control extraction:
+  `1143 passed in 48.07 s`.
+- Hygiene:
+  `py_compile` and `ruff` passed before the broad shards.
 - Strong fallback/preconditioner-build shard after reduced strong fallback
   dispatch extraction: `10 passed in 0.78 s`.
 - Sparse-host/minimum-norm/direct-tail driver shard:

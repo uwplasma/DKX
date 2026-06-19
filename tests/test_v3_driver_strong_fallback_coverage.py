@@ -44,6 +44,36 @@ def test_build_rhs1_strong_preconditioner_full_from_kind_forwards_dispatch_args(
     assert seen["adi_sweeps"] == 5
 
 
+def test_build_rhs1_strong_preconditioner_full_from_kind_uses_env_adi_sweeps(monkeypatch) -> None:
+    seen: dict[str, object] = {}
+
+    def _dispatch(**kwargs):
+        seen.update(kwargs)
+        return object()
+
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_ADI_SWEEPS", "6")
+    monkeypatch.setattr(vd, "_build_rhs1_preconditioner_from_kind", _dispatch)
+
+    vd._build_rhs1_strong_preconditioner_full_from_kind(
+        op=_op(),
+        strong_precond_kind="adi",
+        rhs1_precond_kind="point",
+        residual_norm=1.0,
+    )
+
+    assert seen["rhs1_precond_kind"] == "adi"
+    assert seen["adi_sweeps"] == 6
+
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_ADI_SWEEPS", "bad")
+    vd._build_rhs1_strong_preconditioner_full_from_kind(
+        op=_op(),
+        strong_precond_kind="adi",
+        rhs1_precond_kind="point",
+        residual_norm=1.0,
+    )
+    assert seen["adi_sweeps"] == 2
+
+
 def test_build_rhs1_strong_preconditioner_reduced_from_kind_forwards_dispatch_args(monkeypatch) -> None:
     sentinel = object()
     seen: dict[str, object] = {}

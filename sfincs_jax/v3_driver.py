@@ -2999,7 +2999,7 @@ def _build_rhs1_strong_preconditioner_full_from_kind(
     dd_overlap_theta: int = 1,
     dd_block_zeta: int = 8,
     dd_overlap_zeta: int = 1,
-    adi_sweeps: int = 2,
+    adi_sweeps: int | None = None,
 ) -> tuple[str | None, Callable[[jnp.ndarray], jnp.ndarray] | None]:
     """Build the full-system strong fallback preconditioner via shared dispatch."""
     return build_rhs1_strong_preconditioner_full_from_kind(
@@ -3012,8 +3012,8 @@ def _build_rhs1_strong_preconditioner_full_from_kind(
         dd_overlap_theta=dd_overlap_theta,
         dd_block_zeta=dd_block_zeta,
         dd_overlap_zeta=dd_overlap_zeta,
-        adi_sweeps=adi_sweeps,
         dispatch_builder=_build_rhs1_preconditioner_from_kind,
+        adi_sweeps=adi_sweeps,
     )
 
 
@@ -14483,12 +14483,6 @@ def solve_v3_full_system_linear_gmres(
             dd_overlap_theta = rhs1_dd_setup.overlap("theta", default=1)
             dd_block_zeta = rhs1_dd_setup.block("zeta")
             dd_overlap_zeta = rhs1_dd_setup.overlap("zeta", default=1)
-            sweeps_env = os.environ.get("SFINCS_JAX_RHSMODE1_ADI_SWEEPS", "").strip()
-            try:
-                adi_sweeps = int(sweeps_env) if sweeps_env else 2
-            except ValueError:
-                adi_sweeps = 2
-            adi_sweeps = max(1, int(adi_sweeps))
             strong_precond_kind, strong_preconditioner_full = _build_rhs1_strong_preconditioner_full_from_kind(
                 op=op,
                 strong_precond_kind=strong_precond_kind,
@@ -14498,7 +14492,6 @@ def solve_v3_full_system_linear_gmres(
                 dd_overlap_theta=dd_overlap_theta,
                 dd_block_zeta=dd_block_zeta,
                 dd_overlap_zeta=dd_overlap_zeta,
-                adi_sweeps=adi_sweeps,
             )
         if strong_precond_kind is not None and _rhs1_residual_needs_rescue(
             float(result.residual_norm),
