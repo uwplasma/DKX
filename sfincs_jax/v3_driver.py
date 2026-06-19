@@ -13746,12 +13746,6 @@ def solve_v3_full_system_linear_gmres(
 
                     if host_sparse_direct and ilu is not None:
                         host_sparse_direct_used = True
-                        if emit is not None:
-                            emit(
-                                0,
-                                "solve_v3_full_system_linear_gmres: host sparse LU direct fallback "
-                                f"on backend={jax.default_backend()}",
-                            )
                         sparse_host_fallback = sparse_host_direct_fallback_payload(
                             explicit_sparse_factor=explicit_sparse_factor,
                             explicit_sparse_operator=explicit_sparse_operator,
@@ -13771,6 +13765,7 @@ def solve_v3_full_system_linear_gmres(
                             maxiter=maxiter,
                             precondition_side=gmres_precond_side,
                             emit=emit,
+                            backend_name=jax.default_backend(),
                             polish_enabled=rhs1_polish_enabled,
                             parse_polish_gmres_config=rhs1_parse_polish_gmres_config,
                             direct_solve_with_refinement=_host_direct_solve_with_refinement,
@@ -16146,12 +16141,6 @@ def solve_v3_full_system_linear_gmres(
                             _mv_sparse = mv
                         else:
                             host_sparse_direct_used = True
-                            if emit is not None:
-                                emit(
-                                    0,
-                                    "solve_v3_full_system_linear_gmres: host sparse LU direct fallback "
-                                    f"on backend={jax.default_backend()}",
-                                )
                             sparse_host_fallback = sparse_host_direct_fallback_payload(
                                 explicit_sparse_factor=explicit_sparse_factor,
                                 explicit_sparse_operator=explicit_sparse_operator,
@@ -16171,6 +16160,7 @@ def solve_v3_full_system_linear_gmres(
                                 maxiter=maxiter,
                                 precondition_side=gmres_precond_side,
                                 emit=emit,
+                                backend_name=jax.default_backend(),
                                 polish_enabled=rhs1_polish_enabled,
                                 parse_polish_gmres_config=rhs1_parse_polish_gmres_config,
                                 direct_solve_with_refinement=_host_direct_solve_with_refinement,

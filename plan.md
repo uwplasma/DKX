@@ -42,8 +42,10 @@ Make `sfincs_jax` research-grade while preserving the public user contract:
 
 Recent checkpoints:
 
+- RHSMode=1 sparse-host direct fallback progress emission centralization
+  (current checkpoint).
 - RHSMode=1 sparse-host direct fallback solve/polish/residual orchestration
-  extraction (current checkpoint).
+  extraction (`3fa677a`).
 - RHSMode=1 dense-shortcut true-residual scalar helper extraction
   (`57153f9`).
 - RHSMode=1 left-preconditioned replay residual norm helper extraction
@@ -79,14 +81,14 @@ Recent checkpoints:
 - `cb295ce` Extract sparse pattern setup.
 - `4b6a5b4` Extract sparse factor policy.
 
-Current source-size snapshot after RHSMode=1 sparse-host direct fallback
-orchestration extraction:
+Current source-size snapshot after RHSMode=1 sparse-host direct fallback progress
+emission centralization:
 
-- `sfincs_jax/v3_driver.py`: `18831` lines.
-- `solve_v3_full_system_linear_gmres`: `13545` lines.
+- `sfincs_jax/v3_driver.py`: `18821` lines.
+- `solve_v3_full_system_linear_gmres`: `13535` lines.
 - `sfincs_jax/problems/profile_response/residual.py`: `751` lines.
 - `sfincs_jax/problems/profile_response/handoff.py`: `290` lines.
-- `sfincs_jax/problems/profile_response/sparse_pc.py`: `7909` lines.
+- `sfincs_jax/problems/profile_response/sparse_pc.py`: `7916` lines.
 
 Recent local validation:
 
@@ -240,6 +242,8 @@ Completed recent boundaries:
   true-residual-vector recomputation consolidated into a tested
   profile-response helper used by both reduced active-DOF and full-system
   fallback branches.
+- RHSMode=1 host sparse direct fallback progress emission consolidated into
+  the same helper, removing duplicated driver-side progress-line blocks.
 
 Next steps:
 

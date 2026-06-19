@@ -5127,6 +5127,7 @@ def test_sparse_host_direct_fallback_payload_polishes_and_recomputes_residual_ve
         maxiter=120,
         precondition_side="left",
         emit=lambda level, msg: messages.append((level, msg)),
+        backend_name="cpu",
         polish_enabled=lambda **_kwargs: True,
         parse_polish_gmres_config=lambda **_kwargs: (11, 22),
         direct_solve_with_refinement=direct_solve,
@@ -5144,6 +5145,11 @@ def test_sparse_host_direct_fallback_payload_polishes_and_recomputes_residual_ve
     assert float(payload.residual_norm) == pytest.approx(0.125)
     np.testing.assert_allclose(np.asarray(payload.residual_vec), np.asarray([1.0, 1.0]))
     assert messages == [
+        (
+            0,
+            "solve_v3_full_system_linear_gmres: host sparse LU direct fallback "
+            "on backend=cpu",
+        ),
         (
             0,
             "solve_v3_full_system_linear_gmres: host sparse direct polish "

@@ -7561,6 +7561,7 @@ def sparse_host_direct_fallback_payload(
     maxiter: int | None,
     precondition_side: str,
     emit: EmitFn | None,
+    backend_name: str | None = None,
     polish_enabled: Callable[..., bool],
     parse_polish_gmres_config: Callable[..., tuple[int, int]],
     direct_solve_with_refinement: Callable[..., tuple[np.ndarray, float]],
@@ -7569,6 +7570,12 @@ def sparse_host_direct_fallback_payload(
 ) -> SparseHostDirectFallbackPayload:
     """Run a host sparse direct fallback, optional polish, and true residual check."""
 
+    if emit is not None and backend_name is not None:
+        emit(
+            0,
+            "solve_v3_full_system_linear_gmres: host sparse LU direct fallback "
+            f"on backend={backend_name}",
+        )
     factor_payload = solve_sparse_host_direct_from_available_factor(
         explicit_sparse_factor=explicit_sparse_factor,
         explicit_sparse_operator=explicit_sparse_operator,
