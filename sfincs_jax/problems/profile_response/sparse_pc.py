@@ -663,6 +663,54 @@ class SparsePCResidualCandidateAcceptanceResult:
 
 
 @dataclass(frozen=True)
+class SparsePCAutoPreflightRetrySelectionContext:
+    """Metadata and policy controls used to choose auto-preflight retry kinds."""
+
+    metadata: Mapping[str, object] | None
+    current_kind: str
+    sparse_pc_linear_size: int
+    preflight_required_min_size: int
+    skip_large_kinds_raw: str
+    max_candidates: int
+
+
+@dataclass(frozen=True)
+class SparsePCAutoPreflightRetrySelectionResult:
+    """Normalized retry candidates derived from an auto structured-PC attempt."""
+
+    selected_kind: str
+    auto_candidates: tuple[str, ...]
+    rejected_kinds: frozenset[str]
+    retry_candidates: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class SparsePCAutoPreflightRetryEvaluationContext:
+    """Scalar preflight policy inputs for one auto-retry candidate."""
+
+    residual_after: float
+    target: float
+    max_target_ratio: float
+    residual_before: float | None
+    sparse_pc_linear_size: int
+    preflight_required_min_size: int
+    retry_kind: str
+    retry_metadata: Mapping[str, object] | None
+
+
+@dataclass(frozen=True)
+class SparsePCAutoPreflightRetryEvaluationResult:
+    """Preflight decision for one auto-retry candidate."""
+
+    target_ratio: float
+    requires_metadata: bool
+    requires_size: bool
+    required: bool
+    preflight_passed: bool
+    policy_passed: bool
+
+
+@dataclass(frozen=True)
 class DirectTailResidualRescuePolicy:
     """Resolved direct-tail residual rescue controls."""
 
@@ -3344,6 +3392,106 @@ def evaluate_sparse_pc_residual_candidate_acceptance(
         target_ratio=target_ratio,
         passed=bool(passed),
         seed_used=bool(seed_used),
+    )
+
+
+def _normalize_sparse_pc_kind(value: object) -> str:
+    return str(value).strip().lower().replace("-", "_")
+
+
+def select_sparse_pc_auto_preflight_retry_candidates(
+    context: SparsePCAutoPreflightRetrySelectionContext,
+) -> SparsePCAutoPreflightRetrySelectionResult:
+    """Select bounded auto-retry candidates after a failed preflight."""
+
+    metadata = context.metadata if isinstance(context.metadata, Mapping) else {}
+    auto_candidates_raw = metadata.get("auto_candidates", ())
+    rejected_raw = metadata.get("auto_rejected_candidates", ())
+    selected_kind = _normalize_sparse_pc_kind(
+        metadata.get("auto_selected_kind", context.current_kind)
+    )
+    auto_candidates = tuple(
+        candidate
+        for candidate in (_normalize_sparse_pc_kind(candidate) for candidate in auto_candidates_raw)
+        if candidate
+    )
+
+    rejected_kinds: set[str] = set()
+    if isinstance(rejected_raw, (tuple, list)):
+        for entry in rejected_raw:
+            if isinstance(entry, Mapping):
+                rejected_kind = _normalize_sparse_pc_kind(entry.get("kind", ""))
+                if rejected_kind:
+                    rejected_kinds.add(rejected_kind)
+
+    try:
+        selected_index = auto_candidates.index(selected_kind)
+        retry_candidates = auto_candidates[selected_index + 1 :]
+    except ValueError:
+        retry_candidates = auto_candidates
+
+    retry_candidates = tuple(
+        candidate
+        for candidate in retry_candidates
+        if candidate
+        and candidate not in rejected_kinds
+        and candidate not in {"auto", "active_auto", "structured", "structured_auto"}
+    )
+    if int(context.sparse_pc_linear_size) >= int(context.preflight_required_min_size):
+        skip_large_kinds = {
+            item
+            for item in (
+                _normalize_sparse_pc_kind(raw_item)
+                for raw_item in str(context.skip_large_kinds_raw).split(",")
+            )
+            if item
+        }
+        retry_candidates = tuple(
+            candidate for candidate in retry_candidates if candidate not in skip_large_kinds
+        )
+
+    max_candidates = max(1, int(context.max_candidates))
+    return SparsePCAutoPreflightRetrySelectionResult(
+        selected_kind=str(selected_kind),
+        auto_candidates=tuple(auto_candidates),
+        rejected_kinds=frozenset(rejected_kinds),
+        retry_candidates=tuple(retry_candidates[:max_candidates]),
+    )
+
+
+def evaluate_sparse_pc_auto_preflight_retry(
+    context: SparsePCAutoPreflightRetryEvaluationContext,
+) -> SparsePCAutoPreflightRetryEvaluationResult:
+    """Evaluate one auto-preflight retry residual against its policy gate."""
+
+    residual = float(context.residual_after)
+    target_ratio = (
+        residual / float(context.target)
+        if float(context.target) > 0.0 and np.isfinite(residual)
+        else float("inf")
+    )
+    retry_kind = _normalize_sparse_pc_kind(context.retry_kind)
+    retry_metadata = context.retry_metadata if isinstance(context.retry_metadata, Mapping) else {}
+    requires_metadata = bool(retry_metadata.get("requires_preflight", False))
+    requires_size = bool(
+        int(context.sparse_pc_linear_size) >= int(context.preflight_required_min_size)
+        and retry_kind != "active_fortran_v3_reduced_lu"
+    )
+    required = bool(requires_metadata or requires_size)
+    preflight_passed = bool(
+        np.isfinite(residual)
+        and context.residual_before is not None
+        and residual < float(context.residual_before)
+        and float(target_ratio) <= float(context.max_target_ratio)
+    )
+    policy_passed = bool((not required) or preflight_passed)
+    return SparsePCAutoPreflightRetryEvaluationResult(
+        target_ratio=float(target_ratio),
+        requires_metadata=bool(requires_metadata),
+        requires_size=bool(requires_size),
+        required=bool(required),
+        preflight_passed=bool(preflight_passed),
+        policy_passed=bool(policy_passed),
     )
 
 
@@ -6447,6 +6595,10 @@ __all__ = [
     "SparsePCFactorPreflightEvaluationResult",
     "SparsePCResidualCandidateAcceptanceContext",
     "SparsePCResidualCandidateAcceptanceResult",
+    "SparsePCAutoPreflightRetrySelectionContext",
+    "SparsePCAutoPreflightRetrySelectionResult",
+    "SparsePCAutoPreflightRetryEvaluationContext",
+    "SparsePCAutoPreflightRetryEvaluationResult",
     "DirectTailResidualRescuePolicy",
     "DirectTailTrueActiveRescuePolicy",
     "DirectTailCoupledCoarseRescuePolicy",
@@ -6476,6 +6628,8 @@ __all__ = [
     "enforce_sparse_pc_memory_budget",
     "evaluate_sparse_pc_factor_preflight",
     "evaluate_sparse_pc_residual_candidate_acceptance",
+    "select_sparse_pc_auto_preflight_retry_candidates",
+    "evaluate_sparse_pc_auto_preflight_retry",
     "resolve_sparse_pc_factor_preflight_policy",
     "resolve_direct_tail_residual_rescue_policy",
     "resolve_direct_tail_true_active_rescue_policy",

@@ -26,6 +26,8 @@ from sfincs_jax.problems.profile_response.sparse_pc import (
     SparsePCFactorPreflightPolicyContext,
     SparsePCFactorPreflightEvaluationContext,
     SparsePCResidualCandidateAcceptanceContext,
+    SparsePCAutoPreflightRetrySelectionContext,
+    SparsePCAutoPreflightRetryEvaluationContext,
     FortranReducedXBlockFactorBuildContext,
     FortranReducedXBlockGlobalCouplingStageContext,
     FortranReducedXBlockKrylovSetupContext,
@@ -56,6 +58,8 @@ from sfincs_jax.problems.profile_response.sparse_pc import (
     evaluate_xblock_moment_schur_probe_result,
     evaluate_sparse_pc_factor_preflight,
     evaluate_sparse_pc_residual_candidate_acceptance,
+    select_sparse_pc_auto_preflight_retry_candidates,
+    evaluate_sparse_pc_auto_preflight_retry,
     failed_xblock_global_coupling_metadata,
     failed_xblock_two_level_metadata,
     failed_xblock_moment_schur_metadata,
@@ -1307,6 +1311,102 @@ def test_sparse_pc_residual_candidate_acceptance_rejects_nonfinite_candidate() -
     assert result.target_ratio == float("inf")
     assert result.passed is False
     assert result.seed_used is False
+
+
+def test_sparse_pc_auto_preflight_retry_selection_filters_after_selected_kind() -> None:
+    result = select_sparse_pc_auto_preflight_retry_candidates(
+        SparsePCAutoPreflightRetrySelectionContext(
+            metadata={
+                "auto_selected_kind": "active-spilu",
+                "auto_candidates": [
+                    "active-spilu",
+                    "active-ilu",
+                    "active-fortran-v3-reduced-lu",
+                    "structured",
+                    "jacobi",
+                ],
+                "auto_rejected_candidates": [{"kind": "active_ilu"}],
+            },
+            current_kind="fallback",
+            sparse_pc_linear_size=25,
+            preflight_required_min_size=20,
+            skip_large_kinds_raw="jacobi,diagonal",
+            max_candidates=3,
+        )
+    )
+
+    assert result.selected_kind == "active_spilu"
+    assert result.auto_candidates == (
+        "active_spilu",
+        "active_ilu",
+        "active_fortran_v3_reduced_lu",
+        "structured",
+        "jacobi",
+    )
+    assert result.rejected_kinds == frozenset({"active_ilu"})
+    assert result.retry_candidates == ("active_fortran_v3_reduced_lu",)
+
+
+def test_sparse_pc_auto_preflight_retry_selection_uses_current_kind_when_metadata_missing() -> None:
+    result = select_sparse_pc_auto_preflight_retry_candidates(
+        SparsePCAutoPreflightRetrySelectionContext(
+            metadata={
+                "auto_candidates": ["active_global_sparse_lu", "active_fortran_v3_reduced_lu"],
+            },
+            current_kind="active-global-sparse-lu",
+            sparse_pc_linear_size=3,
+            preflight_required_min_size=20,
+            skip_large_kinds_raw="",
+            max_candidates=1,
+        )
+    )
+
+    assert result.selected_kind == "active_global_sparse_lu"
+    assert result.retry_candidates == ("active_fortran_v3_reduced_lu",)
+
+
+def test_sparse_pc_auto_preflight_retry_evaluation_required_candidate_must_pass_gate() -> None:
+    result = evaluate_sparse_pc_auto_preflight_retry(
+        SparsePCAutoPreflightRetryEvaluationContext(
+            residual_after=0.5,
+            target=0.25,
+            max_target_ratio=3.0,
+            residual_before=2.0,
+            sparse_pc_linear_size=30,
+            preflight_required_min_size=20,
+            retry_kind="active-global-sparse-lu",
+            retry_metadata={"requires_preflight": False},
+        )
+    )
+
+    assert result.target_ratio == 2.0
+    assert result.requires_metadata is False
+    assert result.requires_size is True
+    assert result.required is True
+    assert result.preflight_passed is True
+    assert result.policy_passed is True
+
+
+def test_sparse_pc_auto_preflight_retry_evaluation_lu_can_pass_policy_without_required_preflight() -> None:
+    result = evaluate_sparse_pc_auto_preflight_retry(
+        SparsePCAutoPreflightRetryEvaluationContext(
+            residual_after=10.0,
+            target=1.0,
+            max_target_ratio=1.0,
+            residual_before=1.0,
+            sparse_pc_linear_size=30,
+            preflight_required_min_size=20,
+            retry_kind="active-fortran-v3-reduced-lu",
+            retry_metadata={},
+        )
+    )
+
+    assert result.target_ratio == 10.0
+    assert result.requires_metadata is False
+    assert result.requires_size is False
+    assert result.required is False
+    assert result.preflight_passed is False
+    assert result.policy_passed is True
 
 
 def test_direct_tail_residual_rescue_policy_defaults() -> None:

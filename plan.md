@@ -56,17 +56,19 @@ Recent checkpoints:
 - `cb295ce` Extract sparse pattern setup.
 - `4b6a5b4` Extract sparse factor policy.
 
-Current source-size snapshot after the residual-candidate acceptance extraction:
+Current source-size snapshot after the auto-preflight retry extraction:
 
-- `sfincs_jax/v3_driver.py`: `19457` lines.
-- `solve_v3_full_system_linear_gmres`: `14128` lines.
+- `sfincs_jax/v3_driver.py`: `19421` lines.
+- `solve_v3_full_system_linear_gmres`: `14088` lines.
 
 Recent local validation:
 
-- Focused sparse-PC/direct-tail/residual-acceptance shard:
-  `134 passed in 1.49 s`.
+- Focused sparse-PC/direct-tail/auto-preflight retry shard:
+  `138 passed in 1.44 s`.
+- Targeted v3 auto-preflight retry regression:
+  `1 passed in 3.28 s`.
 - Latest broad profile-response/x-block/sparse-pattern shard:
-  `412 passed in 117.63 s`.
+  `416 passed in 114.88 s`.
 
 Known CI issue fixed by this rewrite:
 
@@ -77,7 +79,7 @@ Known CI issue fixed by this rewrite:
 
 ### 1. `v3_driver.py` Architecture Refactor
 
-Completion estimate: 77%.
+Completion estimate: 78%.
 
 Goal:
 
@@ -102,11 +104,13 @@ Completed recent boundaries:
 - Direct-tail coupled-coarse rescue policy parsing.
 - Sparse-PC factor-preflight residual evaluation.
 - Sparse-PC residual-candidate acceptance/update bookkeeping.
+- Sparse-PC auto-preflight retry candidate selection and scalar policy
+  evaluation.
 
 Next steps:
 
-- Extract remaining sparse-PC retry candidate admission/update bookkeeping into
-  separately tested helpers.
+- Extract remaining sparse-PC GMRES setup/result assembly into separately
+  tested helpers.
 - Move remaining generic sparse-PC solve/result assembly into cohesive
   `profile_response` helpers.
 - Continue shrinking `solve_v3_full_system_linear_gmres` in behavior-preserving
@@ -166,9 +170,8 @@ Next steps:
 
 ## Immediate Next Steps
 
-1. Commit and push the residual-candidate acceptance extraction after final
-   cleanup.
-2. Continue with sparse-PC auto-preflight retry admission/update extraction.
+1. Commit and push the auto-preflight retry extraction after final cleanup.
+2. Continue with sparse-PC GMRES setup/result assembly extraction.
 3. Run focused sparse-PC tests and the broad profile-response/x-block/sparse
    shard after each extraction.
 4. Snapshot CI but do not wait on queued runs unless a completed failure appears.
