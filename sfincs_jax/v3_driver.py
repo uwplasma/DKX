@@ -13462,40 +13462,28 @@ def solve_v3_full_system_linear_gmres(
                             "solve_v3_full_system_linear_gmres: sparse JAX Jacobi fallback "
                             f"(sweeps={int(sparse_jax_sweeps)} omega={float(sparse_jax_omega):.2f})",
                         )
-                    sparse_retry_timer = Timer()
-                    res_sparse = _solve_linear(
-                        matvec_fn=mv_reduced,
-                        b_vec=rhs_reduced,
-                        precond_fn=precond_sparse,
-                        x0_vec=res_reduced.x,
-                        tol_val=tol,
-                        atol_val=atol,
-                        restart_val=restart,
-                        maxiter_val=maxiter,
-                        solve_method_val="incremental",
-                        precond_side=gmres_precond_side,
-                    )
-                    sparse_retry_elapsed_s = sparse_retry_timer.elapsed_s()
-                    if res_sparse is not None:
-                        res_reduced, residual_vec, _accepted = rhs1_accept_sparse_retry_candidate_and_update_replay(
+                    res_reduced, residual_vec, _accepted, _elapsed = (
+                        rhs1_run_measured_linear_candidate_and_update_replay(
                             replay_state=ksp_replay,
                             current_result=res_reduced,
-                            candidate_result=res_sparse,
                             current_residual_vec=residual_vec,
-                            candidate_residual_vec=None,
                             matvec_fn=mv_reduced,
                             b_vec=rhs_reduced,
                             precond_fn=precond_sparse,
+                            tol=tol,
+                            atol=atol,
                             restart=restart,
                             maxiter=maxiter,
+                            solve_method="incremental",
                             precond_side=gmres_precond_side,
+                            solve_linear=_solve_linear,
                             solver_kind=_solver_kind("incremental")[0],
-                            candidate_family="sparse_jax",
-                            scope="reduced",
+                            candidate_name="sparse_jax_reduced",
+                            baseline_name="current_reduced",
                             target_value=target_reduced,
-                            solve_s=sparse_retry_elapsed_s,
                             peak_rss_mb=_rss_mb(),
                         )
+                    )
                 except Exception as exc:  # noqa: BLE001
                     if emit is not None:
                         emit(1, f"sparse_jax: failed ({type(exc).__name__}: {exc})")
@@ -15411,38 +15399,28 @@ def solve_v3_full_system_linear_gmres(
                             "solve_v3_full_system_linear_gmres: sparse JAX Jacobi fallback "
                             f"(sweeps={int(sparse_jax_sweeps)} omega={float(sparse_jax_omega):.2f})",
                         )
-                    sparse_retry_timer = Timer()
-                    res_sparse, residual_vec_sparse = _solve_linear_with_residual(
-                        matvec_fn=mv,
-                        b_vec=rhs,
-                        precond_fn=precond_sparse,
-                        x0_vec=result.x,
-                        tol_val=tol,
-                        atol_val=atol,
-                        restart_val=restart,
-                        maxiter_val=maxiter,
-                        solve_method_val="incremental",
-                        precond_side=gmres_precond_side,
-                    )
-                    sparse_retry_elapsed_s = sparse_retry_timer.elapsed_s()
-                    result, residual_vec, _accepted = rhs1_accept_sparse_retry_candidate_and_update_replay(
-                        replay_state=ksp_replay,
-                        current_result=result,
-                        candidate_result=res_sparse,
-                        current_residual_vec=residual_vec,
-                        candidate_residual_vec=residual_vec_sparse,
-                        matvec_fn=mv,
-                        b_vec=rhs,
-                        precond_fn=precond_sparse,
-                        restart=restart,
-                        maxiter=maxiter,
-                        precond_side=gmres_precond_side,
-                        solver_kind=_solver_kind("incremental")[0],
-                        candidate_family="sparse_jax",
-                        scope="full",
-                        target_value=target,
-                        solve_s=sparse_retry_elapsed_s,
-                        peak_rss_mb=_rss_mb(),
+                    result, residual_vec, _accepted, _elapsed = (
+                        rhs1_run_measured_linear_candidate_and_update_replay(
+                            replay_state=ksp_replay,
+                            current_result=result,
+                            current_residual_vec=residual_vec,
+                            matvec_fn=mv,
+                            b_vec=rhs,
+                            precond_fn=precond_sparse,
+                            tol=tol,
+                            atol=atol,
+                            restart=restart,
+                            maxiter=maxiter,
+                            solve_method="incremental",
+                            precond_side=gmres_precond_side,
+                            solve_linear=_solve_linear_with_residual,
+                            solver_kind=_solver_kind("incremental")[0],
+                            candidate_name="sparse_jax_full",
+                            baseline_name="current_full",
+                            target_value=target,
+                            peak_rss_mb=_rss_mb(),
+                            returns_residual_vec=True,
+                        )
                     )
                 except Exception as exc:  # noqa: BLE001
                     if emit is not None:
