@@ -117,6 +117,21 @@ class XBlockSparsePCCompletionContext:
 
 
 @dataclass(frozen=True)
+class XBlockSparsePCFinalPayloadContext:
+    """Explicit inputs for finalizing the xblock sparse-PC payload."""
+
+    op: object
+    x: np.ndarray
+    residual_norm: float
+    target: float
+    krylov_method: str
+    linear_size: int | None
+    restart: int | None
+    diagnostic_state: Mapping[str, object]
+    post_corrections: object | None = None
+
+
+@dataclass(frozen=True)
 class XBlockGMRESFallbackDecision:
     """Admission result for a non-GMRES xblock solve retrying with GMRES."""
 
@@ -8363,22 +8378,65 @@ def xblock_sparse_pc_final_payload_from_driver_state(
     expand_reduced: ArrayFn,
     post_corrections: object | None = None,
 ) -> SparsePCGMRESFinalPayload:
+    """Build the final payload for the x-block sparse-PC branch from driver state."""
+
+    return xblock_sparse_pc_final_payload(
+        XBlockSparsePCFinalPayloadContext(
+            op=state["op"],
+            x=np.asarray(state["x_np"], dtype=np.float64),
+            residual_norm=float(state["residual_norm_xblock_pc"]),
+            target=float(state["target_xblock"]),
+            krylov_method=str(state["xblock_krylov_method"]),
+            linear_size=(
+                int(state["xblock_linear_size"])
+                if "xblock_linear_size" in state
+                else None
+            ),
+            restart=int(state["pc_restart"]) if "pc_restart" in state else None,
+            diagnostic_state=state,
+            post_corrections=post_corrections,
+        ),
+        expand_reduced=expand_reduced,
+    )
+
+
+def xblock_sparse_pc_final_payload(
+    context: XBlockSparsePCFinalPayloadContext,
+    *,
+    expand_reduced: ArrayFn,
+) -> SparsePCGMRESFinalPayload:
     """Build the final payload for the x-block sparse-PC branch."""
 
-    residual_norm = float(state["residual_norm_xblock_pc"])
-    metadata_state = state.__class__(state) if isinstance(state, MutableMapping) else dict(state)
-    if post_corrections is not None:
-        metadata_state.update(post_corrections.driver_state())
+    residual_norm = float(context.residual_norm)
+    metadata_state = (
+        context.diagnostic_state.__class__(context.diagnostic_state)
+        if isinstance(context.diagnostic_state, MutableMapping)
+        else dict(context.diagnostic_state)
+    )
+    metadata_state.update(
+        {
+            "op": context.op,
+            "x_np": np.asarray(context.x, dtype=np.float64),
+            "residual_norm_xblock_pc": residual_norm,
+            "target_xblock": float(context.target),
+            "xblock_krylov_method": str(context.krylov_method),
+        }
+    )
+    if context.linear_size is not None:
+        metadata_state["xblock_linear_size"] = int(context.linear_size)
+    if context.restart is not None:
+        metadata_state["pc_restart"] = int(context.restart)
+    if context.post_corrections is not None:
+        metadata_state.update(context.post_corrections.driver_state())
     if (
         "xblock_solver_kind" not in metadata_state
-        and "xblock_krylov_method" in metadata_state
-        and "xblock_linear_size" in metadata_state
-        and "pc_restart" in metadata_state
+        and context.linear_size is not None
+        and context.restart is not None
     ):
         work_estimates = xblock_sparse_pc_work_estimates(
-            krylov_method=str(metadata_state["xblock_krylov_method"]),
-            linear_size=int(metadata_state["xblock_linear_size"]),
-            restart=int(metadata_state["pc_restart"]),
+            krylov_method=str(context.krylov_method),
+            linear_size=int(context.linear_size),
+            restart=int(context.restart),
             dtype=np.float64,
         )
         metadata_state.update(
@@ -8392,14 +8450,14 @@ def xblock_sparse_pc_final_payload_from_driver_state(
         )
     metadata_state["accepted_converged_xblock"] = profile_residual_converged(
         residual_norm,
-        float(state["target_xblock"]),
+        float(context.target),
     )
     return SparsePCGMRESFinalPayload(
-        x=expand_reduced(jnp.asarray(state["x_np"], dtype=jnp.float64)),
+        x=expand_reduced(jnp.asarray(context.x, dtype=jnp.float64)),
         residual_norm=jnp.asarray(residual_norm, dtype=jnp.float64),
         metadata=xblock_sparse_pc_final_metadata_from_driver_state(
             metadata_state,
-            full_size=getattr(state["op"], "total_size"),
+            full_size=getattr(context.op, "total_size"),
         ),
     )
 
@@ -9842,6 +9900,7 @@ __all__ = [
     "SparsePCGMRESResult",
     "XBlockKrylovReport",
     "XBlockSparsePCCompletionContext",
+    "XBlockSparsePCFinalPayloadContext",
     "XBlockGMRESFallbackDecision",
     "XBlockGMRESFallbackContext",
     "XBlockGMRESFallbackResult",
@@ -9947,6 +10006,7 @@ __all__ = [
     "finalize_sparse_pc_gmres_from_driver_state",
     "finalize_sparse_pc_gmres_with_dtype_retry_from_driver_state",
     "fortran_reduced_xblock_final_payload_from_driver_state",
+    "xblock_sparse_pc_final_payload",
     "xblock_sparse_pc_final_payload_from_driver_state",
     "resolve_sparse_minimum_norm_policy",
     "sparse_minimum_norm_solve_payload",

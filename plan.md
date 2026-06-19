@@ -880,6 +880,14 @@ Recent local validation:
 - Broad profile-response/RHSMode=1 policy, setup, diagnostics, solver, and
   helper sweep after xblock explicit completion-emission extraction:
   `1183 passed in 48.49 s`.
+- Sparse-PC helper shard after xblock explicit final-payload context
+  extraction:
+  `227 passed in 2.22 s`.
+- Sparse-host/minimum-norm/direct-tail driver shard:
+  `32 passed, 100 deselected in 36.44 s`.
+- Broad profile-response/RHSMode=1 policy, setup, diagnostics, solver, and
+  helper sweep after xblock explicit final-payload context extraction:
+  `1184 passed in 49.00 s`.
 - Older focused and broad validation checkpoints are intentionally omitted from
   this active plan; they remain available in git history.
 
@@ -1126,14 +1134,18 @@ Completed recent boundaries:
 - X-block sparse-PC completion emission now uses a tested explicit context
   instead of a driver `locals()` handoff; the legacy state-wrapper remains
   covered for compatibility.
+- X-block sparse-PC final payload assembly now uses a tested explicit context
+  instead of a driver `locals()` handoff; the legacy state-wrapper delegates
+  to the explicit path for compatibility.
 
 Next steps:
 
 - Continue moving remaining generic sparse-PC final payload/result assembly
   into cohesive `profile_response` helpers, using explicit result objects
   instead of driver-local metadata scalar plumbing.
-- Extract the next sparse-PC final-payload state seam only when the metadata
-  inputs can be made explicit without losing current diagnostic coverage.
+- Continue extracting broad driver-state handoffs in sparse-PC branches only
+  when the replacement context has focused tests and preserves diagnostic
+  coverage.
 - Continue extracting sparse-PC state/metadata seams after the source split
   stabilizes; avoid moving driver-specific direction builders or caches into
   generic helpers.

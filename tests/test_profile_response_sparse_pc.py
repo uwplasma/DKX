@@ -76,6 +76,7 @@ from sfincs_jax.problems.profile_response.sparse_pc import (
     XBlockPostSolveCorrectionResult,
     XBlockPhysicalResidual,
     XBlockSparsePCCompletionContext,
+    XBlockSparsePCFinalPayloadContext,
     XBlockSparsePCWorkEstimates,
     XBlockAssembledPreflightError,
     apply_fortran_reduced_xblock_global_coupling_stage,
@@ -168,6 +169,7 @@ from sfincs_jax.problems.profile_response.sparse_pc import (
     xblock_gmres_fallback_decision,
     xblock_krylov_report,
     xblock_physical_solution_and_residual,
+    xblock_sparse_pc_final_payload,
     xblock_sparse_pc_work_estimates,
     retry_sparse_pc_factor_dtype_from_driver_state,
     retry_sparse_pc_factor_dtype_if_needed,
@@ -7241,6 +7243,67 @@ def test_xblock_sparse_pc_final_metadata_from_driver_state_merges_components(
         "correction_state": state,
     }
     assert metadata == {"core": 1, "correction": 2, "shared": "correction"}
+
+
+def test_xblock_sparse_pc_final_payload_uses_explicit_context(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: dict[str, object] = {}
+
+    def fake_result_metadata(arg_state, *, full_size):
+        calls["accepted"] = arg_state["accepted_converged_xblock"]
+        calls["full_size"] = full_size
+        calls["solver_kind"] = arg_state["xblock_solver_kind"]
+        calls["gmres_basis_nbytes"] = arg_state["xblock_estimated_gmres_basis_nbytes"]
+        calls["x_np"] = np.asarray(arg_state["x_np"], dtype=np.float64)
+        calls["diagnostic_token"] = arg_state["diagnostic_token"]
+        return {"core": 1}
+
+    def fake_correction_metadata(arg_state):
+        calls["post_minres_alphas"] = arg_state["post_minres_alphas"]
+        return {"correction": 2}
+
+    monkeypatch.setattr(
+        sparse_pc_module,
+        "xblock_sparse_pc_result_diagnostics_from_driver_state",
+        fake_result_metadata,
+    )
+    monkeypatch.setattr(
+        sparse_pc_module,
+        "build_rhs1_xblock_correction_metadata_from_driver_state",
+        fake_correction_metadata,
+    )
+
+    payload = xblock_sparse_pc_final_payload(
+        XBlockSparsePCFinalPayloadContext(
+            op=SimpleNamespace(total_size=9),
+            x=np.asarray([5.0, 6.0]),
+            residual_norm=0.125,
+            target=0.25,
+            krylov_method="gmres",
+            linear_size=8,
+            restart=2,
+            diagnostic_state={"diagnostic_token": "kept"},
+            post_corrections=SimpleNamespace(
+                driver_state=lambda: {"post_minres_alphas": (0.25,)}
+            ),
+        ),
+        expand_reduced=lambda x: jnp.asarray([x[1], x[0]], dtype=x.dtype),
+    )
+
+    assert isinstance(payload, SparsePCGMRESFinalPayload)
+    np.testing.assert_allclose(np.asarray(payload.x), np.asarray([6.0, 5.0]))
+    assert float(payload.residual_norm) == pytest.approx(0.125)
+    np.testing.assert_allclose(calls.pop("x_np"), np.asarray([5.0, 6.0]))
+    assert calls == {
+        "accepted": True,
+        "full_size": 9,
+        "solver_kind": "xblock_sparse_pc_gmres",
+        "gmres_basis_nbytes": 8 * (2 + 1 + 4) * 8,
+        "diagnostic_token": "kept",
+        "post_minres_alphas": (0.25,),
+    }
+    assert payload.metadata == {"core": 1, "correction": 2}
 
 
 def test_xblock_sparse_pc_final_payload_from_driver_state_sets_gate_and_expands(

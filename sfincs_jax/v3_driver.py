@@ -261,6 +261,7 @@ from .problems.profile_response.sparse_pc import (
     XBlockKrylovSolveSpaceContext,
     XBlockPostSolveCorrectionContext,
     XBlockSparsePCCompletionContext,
+    XBlockSparsePCFinalPayloadContext,
     apply_fortran_reduced_xblock_global_coupling_stage,
     apply_fortran_reduced_xblock_initial_seed,
     apply_fortran_reduced_xblock_moment_schur_stage,
@@ -277,7 +278,7 @@ from .problems.profile_response.sparse_pc import (
     build_direct_tail_materialization_setup,
     finalize_sparse_pc_gmres_with_dtype_retry_from_driver_state,
     fortran_reduced_xblock_final_payload_from_driver_state,
-    xblock_sparse_pc_final_payload_from_driver_state,
+    xblock_sparse_pc_final_payload as build_xblock_sparse_pc_final_payload,
     evaluate_xblock_moment_schur_probe_result,
     evaluate_sparse_pc_factor_preflight,
     evaluate_sparse_pc_residual_candidate_acceptance,
@@ -6443,10 +6444,19 @@ def solve_v3_full_system_linear_gmres(
                     history=history,
                 )
             )
-            xblock_sparse_pc_final_payload = xblock_sparse_pc_final_payload_from_driver_state(
-                locals(),
+            xblock_sparse_pc_final_payload = build_xblock_sparse_pc_final_payload(
+                XBlockSparsePCFinalPayloadContext(
+                    op=op,
+                    x=np.asarray(x_np, dtype=np.float64),
+                    residual_norm=float(residual_norm_xblock_pc),
+                    target=float(target_xblock),
+                    krylov_method=str(xblock_krylov_method),
+                    linear_size=int(xblock_linear_size),
+                    restart=int(pc_restart),
+                    diagnostic_state=locals(),
+                    post_corrections=post_corrections,
+                ),
                 expand_reduced=_xblock_expand_reduced,
-                post_corrections=post_corrections,
             )
             return v3_linear_solve_result_from_payload(
                 op=op,
