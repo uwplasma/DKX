@@ -240,7 +240,7 @@ from .problems.profile_response.sparse_pc import (
     build_xblock_assembled_operator_preflight_setup,
     build_sparse_pc_active_dof_setup,
     build_direct_tail_materialization_setup,
-    finalize_sparse_pc_gmres_from_driver_state,
+    finalize_sparse_pc_gmres_with_dtype_retry_from_driver_state,
     fortran_reduced_xblock_final_payload_from_driver_state,
     xblock_sparse_pc_final_payload_from_driver_state,
     evaluate_xblock_moment_schur_probe_result,
@@ -266,7 +266,6 @@ from .problems.profile_response.sparse_pc import (
     resolve_direct_tail_true_active_rescue_policy,
     resolve_direct_tail_coupled_coarse_rescue_policy,
     resolve_sparse_minimum_norm_policy,
-    retry_sparse_pc_factor_dtype_from_driver_state,
     resolve_fortran_reduced_sparse_pc_backend,
     run_direct_tail_support_mode_preflight,
     resolve_fortran_reduced_xblock_factor_policy,
@@ -9135,25 +9134,10 @@ def solve_v3_full_system_linear_gmres(
             x0_sparse,
             maxiter_arg=sparse_pc_first_attempt_maxiter,
         )
-        factor_dtype_retry_result = retry_sparse_pc_factor_dtype_from_driver_state(
+        sparse_pc_final_payload = finalize_sparse_pc_gmres_with_dtype_retry_from_driver_state(
             locals(),
             build_host_sparse_direct_factor_from_matvec=_build_host_sparse_direct_factor_from_matvec,
             run_sparse_pc_gmres_once_callback=_run_sparse_pc_gmres_once,
-        )
-        sparse_pc_factor_dtype_used = factor_dtype_retry_result.factor_dtype_used
-        sparse_pc_factor_dtype_retry = factor_dtype_retry_result.factor_dtype_retry
-        _operator_bundle_pc = factor_dtype_retry_result.operator_bundle
-        factor_bundle_pc = factor_dtype_retry_result.factor_bundle
-        pc_factor_s += float(factor_dtype_retry_result.factor_s_increment)
-        if factor_dtype_retry_result.setup_s is not None:
-            setup_s = float(factor_dtype_retry_result.setup_s)
-        x_np = factor_dtype_retry_result.x
-        residual_norm_sparse_pc = float(factor_dtype_retry_result.residual_norm)
-        rn_pc = float(factor_dtype_retry_result.preconditioned_residual_norm)
-        history = factor_dtype_retry_result.history
-        solve_s = float(factor_dtype_retry_result.solve_s)
-        sparse_pc_final_payload = finalize_sparse_pc_gmres_from_driver_state(
-            locals(),
             minres_correction=_apply_preconditioned_minres_correction,
             expand_reduced=_sparse_pc_expand_reduced,
         )

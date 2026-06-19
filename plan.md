@@ -42,7 +42,9 @@ Make `sfincs_jax` research-grade while preserving the public user contract:
 
 Recent checkpoints:
 
-- X-block sparse-PC final-payload extraction (current checkpoint).
+- Generic sparse-PC dtype-retry/finalization handoff extraction
+  (current checkpoint).
+- X-block sparse-PC final-payload extraction.
 - Explicit-sparse factor-builder compatibility wrapper simplification.
 - Fortran-reduced x-block final-payload extraction and duplicate sparse-rescue
   metadata cleanup.
@@ -65,25 +67,26 @@ Recent checkpoints:
 - `cb295ce` Extract sparse pattern setup.
 - `4b6a5b4` Extract sparse factor policy.
 
-Current source-size snapshot after x-block sparse-PC final-payload extraction:
+Current source-size snapshot after generic sparse-PC dtype-retry/finalization
+handoff extraction:
 
-- `sfincs_jax/v3_driver.py`: `18885` lines.
-- `solve_v3_full_system_linear_gmres`: `13599` lines.
+- `sfincs_jax/v3_driver.py`: `18869` lines.
+- `solve_v3_full_system_linear_gmres`: `13584` lines.
 - `sfincs_jax/problems/profile_response/handoff.py`: `254` lines.
-- `sfincs_jax/problems/profile_response/sparse_pc.py`: `7786` lines.
+- `sfincs_jax/problems/profile_response/sparse_pc.py`: `7826` lines.
 
 Recent local validation:
 
 - Sparse-PC helper shard:
-  `168 passed in 1.66 s`.
+  `169 passed in 1.74 s`.
 - Profile-response diagnostics plus explicit sparse/direct-tail driver checks:
-  `16 passed in 14.31 s`.
+  `16 passed in 15.27 s`.
 - Sparse helper coverage plus explicit sparse factor-builder tests:
   `18 passed in 1.22 s`.
 - End-to-end explicit sparse/direct-tail driver checks:
   `5 passed in 14.22 s`.
 - Latest broad profile-response/x-block/sparse-pattern shard:
-  `447 passed in 112.46 s`.
+  `448 passed in 114.37 s`.
 - Handoff/replay and profile-response diagnostics shard:
   `35 passed in 0.76 s`.
 - Handoff helper unit shard:
@@ -114,7 +117,7 @@ Known CI issue fixed by this rewrite:
 
 ### 1. `v3_driver.py` Architecture Refactor
 
-Completion estimate: 95%.
+Completion estimate: 96%.
 
 Goal:
 
@@ -183,6 +186,8 @@ Completed recent boundaries:
   `explicit_sparse_factor_builder.py`.
 - X-block sparse-PC final vector expansion, residual payload, and convergence
   acceptance metadata consolidated into a profile-response helper.
+- Generic sparse-PC dtype retry, state handoff, post-minres finalization, and
+  final payload construction consolidated into one profile-response helper.
 
 Next steps:
 

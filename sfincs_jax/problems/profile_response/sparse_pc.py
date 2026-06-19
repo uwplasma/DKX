@@ -7011,6 +7011,45 @@ def finalize_sparse_pc_gmres_from_driver_state(
     )
 
 
+def finalize_sparse_pc_gmres_with_dtype_retry_from_driver_state(
+    state: Mapping[str, object],
+    *,
+    build_host_sparse_direct_factor_from_matvec: Callable[..., tuple[Any, Any]],
+    run_sparse_pc_gmres_once_callback: Callable[..., tuple[np.ndarray, float, float, Sequence[float], float]],
+    minres_correction: Callable[..., tuple[jnp.ndarray, jnp.ndarray, Sequence[float], Sequence[float]]],
+    expand_reduced: ArrayFn,
+) -> SparsePCGMRESFinalPayload:
+    """Retry factor dtype if needed, then build the final sparse-PC payload."""
+
+    retry_result = retry_sparse_pc_factor_dtype_from_driver_state(
+        state,
+        build_host_sparse_direct_factor_from_matvec=build_host_sparse_direct_factor_from_matvec,
+        run_sparse_pc_gmres_once_callback=run_sparse_pc_gmres_once_callback,
+    )
+    final_state = state.__class__(state) if isinstance(state, MutableMapping) else dict(state)
+    final_state.update(
+        {
+            "sparse_pc_factor_dtype_used": retry_result.factor_dtype_used,
+            "sparse_pc_factor_dtype_retry": retry_result.factor_dtype_retry,
+            "_operator_bundle_pc": retry_result.operator_bundle,
+            "factor_bundle_pc": retry_result.factor_bundle,
+            "pc_factor_s": float(state["pc_factor_s"]) + float(retry_result.factor_s_increment),
+            "x_np": retry_result.x,
+            "residual_norm_sparse_pc": float(retry_result.residual_norm),
+            "rn_pc": float(retry_result.preconditioned_residual_norm),
+            "history": retry_result.history,
+            "solve_s": float(retry_result.solve_s),
+        }
+    )
+    if retry_result.setup_s is not None:
+        final_state["setup_s"] = float(retry_result.setup_s)
+    return finalize_sparse_pc_gmres_from_driver_state(
+        final_state,
+        minres_correction=minres_correction,
+        expand_reduced=expand_reduced,
+    )
+
+
 def fortran_reduced_xblock_final_payload_from_driver_state(
     state: Mapping[str, object],
     *,
@@ -7759,6 +7798,7 @@ __all__ = [
     "emit_sparse_pc_gmres_completion_from_driver_state",
     "sparse_pc_gmres_final_payload_from_driver_state",
     "finalize_sparse_pc_gmres_from_driver_state",
+    "finalize_sparse_pc_gmres_with_dtype_retry_from_driver_state",
     "fortran_reduced_xblock_final_payload_from_driver_state",
     "xblock_sparse_pc_final_payload_from_driver_state",
     "resolve_sparse_minimum_norm_policy",

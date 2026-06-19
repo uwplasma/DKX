@@ -85,6 +85,7 @@ from sfincs_jax.problems.profile_response.sparse_pc import (
     failed_xblock_two_level_metadata,
     failed_xblock_moment_schur_metadata,
     finalize_sparse_pc_gmres_from_driver_state,
+    finalize_sparse_pc_gmres_with_dtype_retry_from_driver_state,
     finalize_xblock_global_coupling_metadata,
     finalize_xblock_two_level_metadata,
     finalize_xblock_moment_schur_metadata,
@@ -5351,6 +5352,79 @@ def test_finalize_sparse_pc_gmres_from_driver_state_applies_polish_and_payload()
     assert state["x_np"].tolist() == [1.0, 2.0]
     assert any("post-minres improved" in message for _, message in messages)
     assert any("sparse_pc_gmres complete" in message for _, message in messages)
+
+
+def test_finalize_sparse_pc_gmres_with_dtype_retry_updates_copied_state(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: dict[str, object] = {}
+    state = {
+        "pc_factor_s": 2.0,
+        "x_np": np.asarray([1.0, 2.0]),
+    }
+
+    def fake_retry(arg_state, **kwargs):
+        calls["retry_state"] = arg_state
+        calls["retry_kwargs"] = kwargs
+        return sparse_pc_module.SparsePCFactorDtypeRetryResult(
+            retried=True,
+            factor_dtype_used=np.dtype(np.float64),
+            factor_dtype_retry="float64",
+            operator_bundle="operator64",
+            factor_bundle="factor64",
+            factor_s_increment=0.75,
+            setup_s=4.0,
+            x=np.asarray([3.0, 4.0]),
+            residual_norm=0.25,
+            preconditioned_residual_norm=0.125,
+            history=(1.0, 0.25),
+            solve_s=5.0,
+        )
+
+    def fake_finalize(arg_state, **kwargs):
+        calls["final_state"] = arg_state
+        calls["final_kwargs"] = kwargs
+        return SparsePCGMRESFinalPayload(
+            x=jnp.asarray([0.0, 3.0, 4.0]),
+            residual_norm=jnp.asarray(0.25),
+            metadata={"accepted_converged": True},
+        )
+
+    monkeypatch.setattr(
+        sparse_pc_module,
+        "retry_sparse_pc_factor_dtype_from_driver_state",
+        fake_retry,
+    )
+    monkeypatch.setattr(
+        sparse_pc_module,
+        "finalize_sparse_pc_gmres_from_driver_state",
+        fake_finalize,
+    )
+
+    payload = finalize_sparse_pc_gmres_with_dtype_retry_from_driver_state(
+        state,
+        build_host_sparse_direct_factor_from_matvec=lambda **_kwargs: None,
+        run_sparse_pc_gmres_once_callback=lambda *_args, **_kwargs: None,
+        minres_correction=lambda **_kwargs: None,
+        expand_reduced=lambda x: x,
+    )
+
+    assert isinstance(payload, SparsePCGMRESFinalPayload)
+    assert calls["retry_state"] is state
+    assert calls["final_state"] is not state
+    final_state = calls["final_state"]
+    assert final_state["sparse_pc_factor_dtype_used"] == np.dtype(np.float64)
+    assert final_state["sparse_pc_factor_dtype_retry"] == "float64"
+    assert final_state["_operator_bundle_pc"] == "operator64"
+    assert final_state["factor_bundle_pc"] == "factor64"
+    assert final_state["pc_factor_s"] == pytest.approx(2.75)
+    assert final_state["setup_s"] == pytest.approx(4.0)
+    np.testing.assert_allclose(final_state["x_np"], np.asarray([3.0, 4.0]))
+    assert final_state["residual_norm_sparse_pc"] == pytest.approx(0.25)
+    assert final_state["rn_pc"] == pytest.approx(0.125)
+    assert final_state["history"] == (1.0, 0.25)
+    assert final_state["solve_s"] == pytest.approx(5.0)
+    assert state["x_np"].tolist() == [1.0, 2.0]
 
 
 def test_xblock_sparse_pc_final_metadata_from_driver_state_merges_components(
