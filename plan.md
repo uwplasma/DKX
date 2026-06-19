@@ -952,6 +952,16 @@ Recent local validation:
 - Hygiene after generic sparse-PC finalization whitelist extraction:
   `python -m compileall -q sfincs_jax`, `git diff --check`, and
   `python scripts/check_repo_size.py` passed.
+- X-block whitelist final metadata-state helper focused tests:
+  `2 passed in 1.05 s`.
+- Profile-response diagnostics/sparse-PC shard after x-block final metadata
+  whitelist extraction: `245 passed in 1.97 s`.
+- Xblock/sparse-host/minimum-norm/direct-tail driver shard after x-block final
+  metadata whitelist extraction:
+  `36 passed, 96 deselected in 36.51 s`.
+- Hygiene after x-block final metadata whitelist extraction:
+  `python -m compileall -q sfincs_jax`, `git diff --check`, and
+  `python scripts/check_repo_size.py` passed.
 - Older focused and broad validation checkpoints are intentionally omitted from
   this active plan; they remain available in git history.
 
@@ -964,7 +974,7 @@ Known CI issue fixed by this rewrite:
 
 ### 1. `v3_driver.py` Architecture Refactor
 
-Completion estimate: 51%.
+Completion estimate: 52%.
 
 Goal:
 
@@ -1226,6 +1236,11 @@ Completed recent boundaries:
   compatibility boundary: the helper makes the required keys explicit while the
   next step replaces key groups with typed direct-tail, preflight, post-MinRes,
   and pattern-summary contexts.
+- X-block sparse-PC final metadata now receives a whitelisted driver-state copy
+  from a tested `profile_response.sparse_pc` helper instead of handing the
+  whole frame to `XBlockSparsePCFinalPayloadContext`. After this boundary,
+  `v3_driver.py` has no direct `diagnostic_state=locals()` handoffs; the
+  remaining local-scope copies are filtered through named key contracts.
 
 Next steps:
 
@@ -1235,9 +1250,8 @@ Next steps:
 - Replace the generic sparse-PC finalization whitelist groups with typed
   direct-tail, factor-preflight, post-MinRes, and pattern-summary contexts;
   avoid a giant inline driver dictionary.
-- Continue extracting broad driver-state handoffs in sparse-PC branches only
-  when the replacement context has focused tests and preserves diagnostic
-  coverage.
+- Replace the remaining whitelisted local-scope copies with typed sparse-PC
+  and x-block diagnostics contexts once each key group has focused tests.
 - Continue extracting sparse-PC state/metadata seams after the source split
   stabilizes; avoid moving driver-specific direction builders or caches into
   generic helpers.

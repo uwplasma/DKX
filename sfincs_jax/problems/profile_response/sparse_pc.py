@@ -514,6 +514,140 @@ def sparse_pc_gmres_finalization_state_from_driver_scope(
     return {key: scope[key] for key in _SPARSE_PC_GMRES_FINALIZATION_STATE_KEYS}
 
 
+_XBLOCK_SPARSE_PC_FINAL_METADATA_CORE_STATE_KEYS = (
+    "accepted_converged_xblock",
+    "assembled_operator_built",
+    "assembled_operator_enabled",
+    "assembled_operator_metadata",
+    "candidate_iterations",
+    "candidate_krylov_method",
+    "candidate_matvecs",
+    "candidate_residual_norm",
+    "device_krylov_estimated_matvecs",
+    "fallback_candidate_improved_rhs",
+    "fallback_started_from_candidate",
+    "mv_count",
+    "pc_factor_s",
+    "pc_maxiter",
+    "pc_restart",
+    "precondition_side",
+    "reported_iterations",
+    "reported_matvecs",
+    "setup_s",
+    "solve_s",
+    "sparse_timer",
+    "xblock_assembled_host_fp",
+    "xblock_col_equilibration_built",
+    "xblock_col_equilibration_enabled",
+    "xblock_col_equilibration_metadata",
+    "xblock_default_restart_capped",
+    "xblock_default_right_pc",
+    "xblock_jax_factor_apply",
+    "xblock_jax_factor_format",
+    "xblock_jax_factors",
+    "xblock_krylov_method",
+    "xblock_lgmres_rescue_maxiter_capped",
+    "xblock_lgmres_rescue_outer_k",
+    "xblock_linear_size",
+    "xblock_lower_fill_ignored_env",
+    "xblock_lower_fill_mode",
+    "xblock_preconditioner_built",
+    "xblock_preconditioner_xi",
+    "xblock_row_equilibration_built",
+    "xblock_row_equilibration_enabled",
+    "xblock_row_equilibration_metadata",
+    "xblock_side_probe_enabled",
+    "xblock_side_probe_initial_method",
+    "xblock_side_probe_initial_side",
+    "xblock_side_probe_iterations",
+    "xblock_side_probe_lgmres_rescue",
+    "xblock_side_probe_matvecs",
+    "xblock_side_probe_physical_seed_preserved_after_switch",
+    "xblock_side_probe_residual_norm",
+    "xblock_side_probe_residual_ratio",
+    "xblock_side_probe_s",
+    "xblock_side_probe_seed_residual_norm",
+    "xblock_side_probe_seed_used",
+    "xblock_side_probe_selected_method",
+    "xblock_side_probe_selected_side",
+    "xblock_side_probe_switch_suppressed_by_explicit_side",
+    "xblock_side_probe_switch_suppressed_by_global_coupling",
+    "xblock_side_probe_switched",
+    "xblock_side_probe_used",
+    "xblock_solver_kind",
+    "xblock_use_active_dof",
+)
+
+_XBLOCK_SPARSE_PC_FINAL_METADATA_CORRECTION_STATE_KEYS = (
+    "post_coarse_angular_lmax",
+    "post_coarse_direction_counts",
+    "post_coarse_direction_names",
+    "post_coarse_fsavg_lmax",
+    "post_coarse_history",
+    "post_coarse_include_angular_residual",
+    "post_coarse_residual_after",
+    "post_coarse_residual_before",
+    "post_coarse_steps_requested",
+    "post_minres_alphas",
+    "post_minres_history",
+    "post_minres_residual_after",
+    "post_minres_residual_before",
+    "post_minres_steps_requested",
+    "post_residual_equation_angular_lmax",
+    "post_residual_equation_direction_counts",
+    "post_residual_equation_direction_names",
+    "post_residual_equation_fsavg_lmax",
+    "post_residual_equation_history",
+    "post_residual_equation_include_angular_residual",
+    "post_residual_equation_include_qi_basis",
+    "post_residual_equation_residual_after",
+    "post_residual_equation_residual_before",
+    "post_residual_equation_steps_requested",
+    "preflight_improvement",
+    "preflight_min_improvement",
+    "preflight_passed",
+    "preflight_required",
+    "preflight_residual_norm",
+    "probe_coarse_angular_lmax",
+    "probe_coarse_direction_counts",
+    "probe_coarse_direction_names",
+    "probe_coarse_fsavg_lmax",
+    "probe_coarse_history",
+    "probe_coarse_include_angular_residual",
+    "probe_coarse_residual_after",
+    "probe_coarse_residual_before",
+    "probe_coarse_s",
+    "probe_coarse_seed_initialized",
+    "probe_coarse_steps_requested",
+)
+
+_XBLOCK_SPARSE_PC_FINAL_METADATA_STATE_KEYS = _unique_state_keys(
+    _XBLOCK_SPARSE_PC_FINAL_METADATA_CORE_STATE_KEYS,
+    _XBLOCK_SPARSE_PC_FINAL_METADATA_CORRECTION_STATE_KEYS,
+)
+
+
+def xblock_sparse_pc_final_metadata_driver_state_keys() -> tuple[str, ...]:
+    """Return driver-scope keys copied into x-block final metadata."""
+
+    return _XBLOCK_SPARSE_PC_FINAL_METADATA_STATE_KEYS
+
+
+def xblock_sparse_pc_final_metadata_state_from_driver_scope(
+    scope: Mapping[str, object],
+) -> dict[str, object]:
+    """Copy only x-block final-metadata state needed from a driver scope."""
+
+    missing = tuple(
+        key for key in _XBLOCK_SPARSE_PC_FINAL_METADATA_STATE_KEYS if key not in scope
+    )
+    if missing:
+        joined = ", ".join(missing[:8])
+        suffix = "" if len(missing) <= 8 else f", ... ({len(missing)} total)"
+        raise KeyError(f"x-block sparse-PC final metadata missing: {joined}{suffix}")
+    return {key: scope[key] for key in _XBLOCK_SPARSE_PC_FINAL_METADATA_STATE_KEYS}
+
+
 @dataclass(frozen=True)
 class SparseMinimumNormPolicy:
     """Host LSQR/LSMR controls for sparse minimum-norm solves."""
@@ -10240,6 +10374,8 @@ __all__ = [
     "xblock_device_krylov_state",
     "xblock_device_cycle_progress_message",
     "xblock_host_krylov_progress_message",
+    "xblock_sparse_pc_final_metadata_driver_state_keys",
+    "xblock_sparse_pc_final_metadata_state_from_driver_scope",
     "xblock_krylov_state_from_first_attempt",
     "xblock_krylov_state_from_gmres_fallback",
     "xblock_sparse_pc_completion_message",

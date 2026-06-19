@@ -169,6 +169,8 @@ from sfincs_jax.problems.profile_response.sparse_pc import (
     xblock_device_krylov_state,
     xblock_device_cycle_progress_message,
     xblock_host_krylov_progress_message,
+    xblock_sparse_pc_final_metadata_driver_state_keys,
+    xblock_sparse_pc_final_metadata_state_from_driver_scope,
     xblock_krylov_state_from_first_attempt,
     xblock_krylov_state_from_gmres_fallback,
     xblock_sparse_pc_completion_message,
@@ -7386,6 +7388,25 @@ def test_xblock_sparse_pc_final_metadata_from_driver_state_merges_components(
         "correction_state": state,
     }
     assert metadata == {"core": 1, "correction": 2, "shared": "correction"}
+
+
+def test_xblock_sparse_pc_final_metadata_state_from_driver_scope_filters_scope() -> None:
+    keys = xblock_sparse_pc_final_metadata_driver_state_keys()
+    scope = {key: object() for key in keys}
+    scope["unrelated_xblock_scratch"] = object()
+
+    state = xblock_sparse_pc_final_metadata_state_from_driver_scope(scope)
+
+    assert tuple(state) == keys
+    assert "unrelated_xblock_scratch" not in state
+    for key in keys:
+        assert state[key] is scope[key]
+
+    incomplete_scope = dict(scope)
+    missing = keys[-1]
+    incomplete_scope.pop(missing)
+    with pytest.raises(KeyError, match=missing):
+        xblock_sparse_pc_final_metadata_state_from_driver_scope(incomplete_scope)
 
 
 def test_xblock_sparse_pc_final_payload_uses_explicit_context(

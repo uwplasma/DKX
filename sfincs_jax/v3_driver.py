@@ -336,6 +336,7 @@ from .problems.profile_response.sparse_pc import (
     xblock_krylov_state_from_first_attempt,
     xblock_krylov_state_from_gmres_fallback,
     xblock_host_krylov_progress_message,
+    xblock_sparse_pc_final_metadata_state_from_driver_scope,
     build_sparse_host_or_ilu_factor,
     build_sparse_ilu_preconditioner_from_cache,
     build_sparse_host_scipy_preconditioner,
@@ -6458,7 +6459,9 @@ def solve_v3_full_system_linear_gmres(
                     krylov_method=str(xblock_krylov_method),
                     linear_size=int(xblock_linear_size),
                     restart=int(pc_restart),
-                    diagnostic_state=locals(),
+                    diagnostic_state=xblock_sparse_pc_final_metadata_state_from_driver_scope(
+                        locals()
+                    ),
                     post_corrections=post_corrections,
                 ),
                 expand_reduced=_xblock_expand_reduced,
