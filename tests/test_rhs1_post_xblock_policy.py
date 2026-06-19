@@ -4,9 +4,11 @@ from types import SimpleNamespace
 
 from sfincs_jax.rhs1_post_xblock_policy import (
     RHS1FastPostXBlockPolishControls,
+    RHS1FPLowLPolishControls,
     RHS1FPResidualPolishControls,
     rhs1_fast_post_xblock_polish_allowed,
     rhs1_fast_post_xblock_polish_controls_from_env,
+    rhs1_fp_low_l_polish_controls_from_env,
     rhs1_fp_residual_polish_controls_from_env,
     rhs1_fp_xblock_global_correction_allowed,
     rhs1_fp_targeted_polish_allowed,
@@ -193,6 +195,66 @@ def test_fp_residual_polish_controls_respect_env_and_bounds(monkeypatch) -> None
         hybrid=True,
         omega=1.0,
         backtrack=3,
+    )
+
+
+def test_fp_low_l_polish_controls_bump_small_fp_angular_grid(monkeypatch) -> None:
+    monkeypatch.delenv("SFINCS_JAX_RHSMODE1_FP_POLISH_LMAX", raising=False)
+    monkeypatch.delenv("SFINCS_JAX_RHSMODE1_FP_POLISH_LMAX_BLOCK_MAX", raising=False)
+    monkeypatch.delenv("SFINCS_JAX_RHSMODE1_FP_POLISH_LMAX_RESTART", raising=False)
+    monkeypatch.delenv("SFINCS_JAX_RHSMODE1_FP_POLISH_LMAX_MAXITER", raising=False)
+
+    assert rhs1_fp_low_l_polish_controls_from_env(
+        has_fp=True,
+        has_pas=False,
+        n_theta=16,
+        n_zeta=16,
+    ) == RHS1FPLowLPolishControls(
+        lmax_default=6,
+        block_max=1500,
+        restart=80,
+        maxiter=120,
+    )
+    assert rhs1_fp_low_l_polish_controls_from_env(
+        has_fp=True,
+        has_pas=True,
+        n_theta=16,
+        n_zeta=16,
+    ).lmax_default == 2
+
+
+def test_fp_low_l_polish_controls_respect_env_and_invalid_values(monkeypatch) -> None:
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_FP_POLISH_LMAX", "4")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_FP_POLISH_LMAX_BLOCK_MAX", "99")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_FP_POLISH_LMAX_RESTART", "11")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_FP_POLISH_LMAX_MAXITER", "22")
+
+    assert rhs1_fp_low_l_polish_controls_from_env(
+        has_fp=True,
+        has_pas=False,
+        n_theta=8,
+        n_zeta=8,
+    ) == RHS1FPLowLPolishControls(
+        lmax_default=4,
+        block_max=99,
+        restart=11,
+        maxiter=22,
+    )
+
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_FP_POLISH_LMAX", "bad")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_FP_POLISH_LMAX_BLOCK_MAX", "bad")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_FP_POLISH_LMAX_RESTART", "bad")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_FP_POLISH_LMAX_MAXITER", "bad")
+    assert rhs1_fp_low_l_polish_controls_from_env(
+        has_fp=True,
+        has_pas=False,
+        n_theta=8,
+        n_zeta=8,
+    ) == RHS1FPLowLPolishControls(
+        lmax_default=2,
+        block_max=1500,
+        restart=80,
+        maxiter=120,
     )
 
 

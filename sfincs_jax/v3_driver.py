@@ -581,6 +581,7 @@ from .rhs1_large_cpu_policy import (
 from .problems.profile_response.policies import (
     rhs1_fast_post_xblock_polish_allowed as _rhs1_fast_post_xblock_polish_allowed_impl,
     rhs1_fast_post_xblock_polish_controls_from_env,
+    rhs1_fp_low_l_polish_controls_from_env,
     rhs1_fp_residual_polish_controls_from_env,
     rhs1_fp_xblock_global_correction_allowed as _rhs1_fp_xblock_global_correction_allowed_impl,
     rhs1_fp_targeted_polish_allowed as _rhs1_fp_targeted_polish_allowed_impl,
@@ -13680,49 +13681,24 @@ def solve_v3_full_system_linear_gmres(
                         )
                     res_reduced = res_polish
             # Optional FP-specific angular/x preconditioner polish (low-L blocks).
-            fp_lmax_polish_env = os.environ.get("SFINCS_JAX_RHSMODE1_FP_POLISH_LMAX", "").strip()
-            fp_lmax_max_env = os.environ.get("SFINCS_JAX_RHSMODE1_FP_POLISH_LMAX_BLOCK_MAX", "").strip()
-            fp_lmax_restart_env = os.environ.get("SFINCS_JAX_RHSMODE1_FP_POLISH_LMAX_RESTART", "").strip()
-            fp_lmax_maxiter_env = os.environ.get("SFINCS_JAX_RHSMODE1_FP_POLISH_LMAX_MAXITER", "").strip()
-            try:
-                fp_lmax_default = int(fp_lmax_polish_env) if fp_lmax_polish_env else 2
-            except ValueError:
-                fp_lmax_default = 2
-            if (
-                (not fp_lmax_polish_env)
-                and op.fblock.fp is not None
-                and op.fblock.pas is None
-                and int(op.n_theta) * int(op.n_zeta) <= 256
-            ):
-                # When the angular grid is small enough that the low-L blocks are still
-                # modest, pushing lmax a bit higher can substantially improve convergence
-                # of FP moments (flow/current) without needing an expensive global sparse
-                # rescue.
-                fp_lmax_default = max(int(fp_lmax_default), 6)
-            try:
-                fp_lmax_block_max = int(fp_lmax_max_env) if fp_lmax_max_env else 1500
-            except ValueError:
-                fp_lmax_block_max = 1500
-            try:
-                fp_lmax_restart = int(fp_lmax_restart_env) if fp_lmax_restart_env else 80
-            except ValueError:
-                fp_lmax_restart = 80
-            try:
-                fp_lmax_maxiter = int(fp_lmax_maxiter_env) if fp_lmax_maxiter_env else 120
-            except ValueError:
-                fp_lmax_maxiter = 120
+            fp_lmax_controls = rhs1_fp_low_l_polish_controls_from_env(
+                has_fp=op.fblock.fp is not None,
+                has_pas=op.fblock.pas is not None,
+                n_theta=int(op.n_theta),
+                n_zeta=int(op.n_zeta),
+            )
             if fp_targeted_polish and float(res_reduced.residual_norm) > target_reduced:
                 nxi_for_x_np = np.asarray(op.fblock.collisionless.n_xi_for_x, dtype=np.int32)
                 max_l = int(np.max(nxi_for_x_np)) if nxi_for_x_np.size else 0
-                lmax_use = max(0, min(int(max_l), int(fp_lmax_default)))
+                lmax_use = max(0, min(int(max_l), int(fp_lmax_controls.lmax_default)))
                 block_size = int(lmax_use) * int(op.n_theta) * int(op.n_zeta)
-                if lmax_use > 0 and block_size > 0 and block_size <= int(fp_lmax_block_max):
+                if lmax_use > 0 and block_size > 0 and block_size <= int(fp_lmax_controls.block_max):
                     if emit is not None:
                         emit(
                             1,
                             "solve_v3_full_system_linear_gmres: FP low-L polish "
-                            f"(lmax={int(lmax_use)} block={block_size} restart={int(fp_lmax_restart)} "
-                            f"maxiter={int(fp_lmax_maxiter)})",
+                            f"(lmax={int(lmax_use)} block={block_size} restart={int(fp_lmax_controls.restart)} "
+                            f"maxiter={int(fp_lmax_controls.maxiter)})",
                         )
                     try:
                         lmax_precond = _build_rhsmode1_xblock_tz_lmax_preconditioner(
@@ -13739,8 +13715,8 @@ def solve_v3_full_system_linear_gmres(
                             x0_vec=res_reduced.x,
                             tol_val=tol,
                             atol_val=atol,
-                            restart_val=int(fp_lmax_restart),
-                            maxiter_val=int(fp_lmax_maxiter),
+                            restart_val=int(fp_lmax_controls.restart),
+                            maxiter_val=int(fp_lmax_controls.maxiter),
                             solve_method_val="incremental",
                             precond_side=gmres_precond_side,
                         )
