@@ -7,6 +7,32 @@ import os
 
 # From sfincs_jax.rhs1_strong_policy
 _PAS_WEAK_STRONG_SKIP_KINDS = frozenset({"collision", "point", "xmg"})
+_PAS_STRONG_DELAY_BASE_KINDS = frozenset(
+    {
+        "theta_line",
+        "theta_line_xdiag",
+        "theta_dd",
+        "theta_schwarz",
+        "xblock_tz",
+        "xblock_tz_lmax",
+        "pas_hybrid",
+        "pas_lite",
+        "pas_tz",
+        "pas_schur",
+        "pas_tokamak_theta",
+    }
+)
+
+
+@dataclass(frozen=True)
+class RHS1StrongTriggerControls:
+    """Resolved residual triggers for RHSMode=1 strong-preconditioner retries."""
+
+    res_ratio: float
+    ratio_threshold: float
+    trigger: bool
+    fp_force: bool
+    fp_abs_threshold: float
 
 
 def requested_rhs1_strong_preconditioner_kind(
@@ -62,6 +88,56 @@ def requested_rhs1_strong_preconditioner_kind(
     elif env in {"adi", "adi_line", "line_adi", "theta_zeta", "zeta_theta"}:
         return "adi"
     return None
+
+
+def rhs1_strong_trigger_controls_from_env(
+    *,
+    residual_norm: float,
+    target: float,
+    has_fp: bool,
+    include_phi1: bool,
+    has_pas: bool,
+    rhs1_precond_kind: str | None,
+    delay_pas_base_retries: bool,
+) -> RHS1StrongTriggerControls:
+    """Resolve strong-preconditioner residual trigger thresholds."""
+
+    res_ratio = float(residual_norm) / max(float(target), 1e-300)
+    ratio_env = os.environ.get("SFINCS_JAX_RHSMODE1_STRONG_PRECOND_RATIO", "").strip()
+    try:
+        ratio_threshold = float(ratio_env) if ratio_env else 1.0
+    except ValueError:
+        ratio_threshold = 1.0
+    if (
+        not ratio_env
+        and delay_pas_base_retries
+        and has_pas
+        and rhs1_precond_kind in _PAS_STRONG_DELAY_BASE_KINDS
+    ):
+        ratio_threshold = max(float(ratio_threshold), 1.0e2)
+        if rhs1_precond_kind == "pas_tokamak_theta":
+            # Large tokamak PAS runs usually converge with the theta
+            # preconditioner; delaying the heavy fallback avoids wasted setup.
+            ratio_threshold = max(float(ratio_threshold), 1.0e4)
+    trigger = bool(res_ratio > ratio_threshold) if ratio_threshold > 0 else True
+
+    fp_abs_env = os.environ.get("SFINCS_JAX_FP_STRONG_ABS", "").strip()
+    try:
+        fp_abs_threshold = float(fp_abs_env) if fp_abs_env else 1.0e-6
+    except ValueError:
+        fp_abs_threshold = 1.0e-6
+    fp_force = bool(
+        has_fp
+        and (not bool(include_phi1))
+        and float(residual_norm) > float(fp_abs_threshold)
+    )
+    return RHS1StrongTriggerControls(
+        res_ratio=float(res_ratio),
+        ratio_threshold=float(ratio_threshold),
+        trigger=bool(trigger),
+        fp_force=bool(fp_force),
+        fp_abs_threshold=float(fp_abs_threshold),
+    )
 
 
 def rhs1_pas_weak_strong_retry_skip(
@@ -513,6 +589,7 @@ def adjust_rhs1_theta_line_auto_kind(
 __all__ = (
     "RHS1StrongAutoSelection",
     "RHS1StrongPreconditionerControl",
+    "RHS1StrongTriggerControls",
     "adjust_rhs1_reduced_auto_kind",
     "adjust_rhs1_theta_line_auto_kind",
     "auto_rhs1_full_strong_kind",
@@ -526,6 +603,7 @@ __all__ = (
     "rhs1_resolved_strong_preconditioner_control",
     "rhs1_schwarz_auto_min",
     "rhs1_strong_preconditioner_min_size",
+    "rhs1_strong_trigger_controls_from_env",
     "rhs1_theta_line_max",
     "rhs1_tz_precond_max",
     "rhs1_xblock_tz_max",

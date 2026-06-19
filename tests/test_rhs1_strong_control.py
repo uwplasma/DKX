@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 from sfincs_jax.rhs1_strong_control import (
+    RHS1StrongTriggerControls,
     rhs1_resolved_strong_preconditioner_control,
     rhs1_strong_preconditioner_min_size,
+    rhs1_strong_trigger_controls_from_env,
 )
 
 
@@ -11,6 +13,115 @@ def test_rhs1_strong_preconditioner_min_size_handles_invalid_env(monkeypatch) ->
     assert rhs1_strong_preconditioner_min_size() == 800
     monkeypatch.setenv("SFINCS_JAX_RHSMODE1_STRONG_PRECOND_MIN", "1200")
     assert rhs1_strong_preconditioner_min_size() == 1200
+
+
+def test_rhs1_strong_trigger_controls_preserve_default_ratio(monkeypatch) -> None:
+    monkeypatch.delenv("SFINCS_JAX_RHSMODE1_STRONG_PRECOND_RATIO", raising=False)
+    monkeypatch.delenv("SFINCS_JAX_FP_STRONG_ABS", raising=False)
+
+    assert rhs1_strong_trigger_controls_from_env(
+        residual_norm=2.0,
+        target=1.0,
+        has_fp=False,
+        include_phi1=False,
+        has_pas=False,
+        rhs1_precond_kind="point",
+        delay_pas_base_retries=False,
+    ) == RHS1StrongTriggerControls(
+        res_ratio=2.0,
+        ratio_threshold=1.0,
+        trigger=True,
+        fp_force=False,
+        fp_abs_threshold=1.0e-6,
+    )
+
+
+def test_rhs1_strong_trigger_controls_delay_pas_base_retries(monkeypatch) -> None:
+    monkeypatch.delenv("SFINCS_JAX_RHSMODE1_STRONG_PRECOND_RATIO", raising=False)
+
+    pas_controls = rhs1_strong_trigger_controls_from_env(
+        residual_norm=50.0,
+        target=1.0,
+        has_fp=False,
+        include_phi1=False,
+        has_pas=True,
+        rhs1_precond_kind="pas_hybrid",
+        delay_pas_base_retries=True,
+    )
+    assert pas_controls.ratio_threshold == 1.0e2
+    assert not pas_controls.trigger
+
+    tokamak_controls = rhs1_strong_trigger_controls_from_env(
+        residual_norm=999.0,
+        target=1.0,
+        has_fp=False,
+        include_phi1=False,
+        has_pas=True,
+        rhs1_precond_kind="pas_tokamak_theta",
+        delay_pas_base_retries=True,
+    )
+    assert tokamak_controls.ratio_threshold == 1.0e4
+    assert not tokamak_controls.trigger
+
+
+def test_rhs1_strong_trigger_controls_respect_explicit_and_invalid_ratio(monkeypatch) -> None:
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_STRONG_PRECOND_RATIO", "0")
+    assert rhs1_strong_trigger_controls_from_env(
+        residual_norm=0.1,
+        target=1.0,
+        has_fp=False,
+        include_phi1=False,
+        has_pas=True,
+        rhs1_precond_kind="pas_hybrid",
+        delay_pas_base_retries=True,
+    ).trigger
+
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_STRONG_PRECOND_RATIO", "bad")
+    controls = rhs1_strong_trigger_controls_from_env(
+        residual_norm=0.5,
+        target=1.0,
+        has_fp=False,
+        include_phi1=False,
+        has_pas=True,
+        rhs1_precond_kind="pas_hybrid",
+        delay_pas_base_retries=True,
+    )
+    assert controls.ratio_threshold == 1.0
+    assert not controls.trigger
+
+
+def test_rhs1_strong_trigger_controls_fp_force(monkeypatch) -> None:
+    monkeypatch.setenv("SFINCS_JAX_FP_STRONG_ABS", "bad")
+    assert rhs1_strong_trigger_controls_from_env(
+        residual_norm=2.0e-6,
+        target=1.0,
+        has_fp=True,
+        include_phi1=False,
+        has_pas=False,
+        rhs1_precond_kind="point",
+        delay_pas_base_retries=False,
+    ).fp_force
+
+    monkeypatch.setenv("SFINCS_JAX_FP_STRONG_ABS", "1e-3")
+    assert not rhs1_strong_trigger_controls_from_env(
+        residual_norm=2.0e-6,
+        target=1.0,
+        has_fp=True,
+        include_phi1=False,
+        has_pas=False,
+        rhs1_precond_kind="point",
+        delay_pas_base_retries=False,
+    ).fp_force
+
+    assert not rhs1_strong_trigger_controls_from_env(
+        residual_norm=1.0,
+        target=1.0,
+        has_fp=True,
+        include_phi1=True,
+        has_pas=False,
+        rhs1_precond_kind="point",
+        delay_pas_base_retries=False,
+    ).fp_force
 
 
 def test_rhs1_resolved_strong_preconditioner_control_enables_auto_on_default_problem_families() -> None:

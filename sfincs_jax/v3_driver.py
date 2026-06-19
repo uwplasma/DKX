@@ -338,6 +338,7 @@ from .problems.profile_response.strong_preconditioning import (
     rhs1_pas_weak_minres_steps,
     rhs1_pas_weak_strong_retry_skip,
     rhs1_resolved_strong_preconditioner_control,
+    rhs1_strong_trigger_controls_from_env,
 )
 from .problems.profile_response.policies import (
     parse_rhs1_pas_tz_guarded_structured_levels as _rhs1_pas_tz_guarded_structured_levels,
@@ -11662,47 +11663,18 @@ def solve_v3_full_system_linear_gmres(
             target=float(target_reduced),
             use_implicit=bool(use_implicit),
         )
-        res_ratio = float(res_reduced.residual_norm) / max(float(target_reduced), 1e-300)
-        strong_ratio_env = os.environ.get("SFINCS_JAX_RHSMODE1_STRONG_PRECOND_RATIO", "").strip()
-        try:
-            strong_ratio = float(strong_ratio_env) if strong_ratio_env else 1.0
-        except ValueError:
-            strong_ratio = 1.0
-        if (
-            not strong_ratio_env
-            and op.fblock.pas is not None
-            and rhs1_precond_kind
-            in {
-                "theta_line",
-                "theta_line_xdiag",
-                "theta_dd",
-                "theta_schwarz",
-                "xblock_tz",
-                "xblock_tz_lmax",
-                "pas_hybrid",
-                "pas_lite",
-                "pas_tz",
-                "pas_schur",
-                "pas_tokamak_theta",
-            }
-        ):
-            strong_ratio = max(float(strong_ratio), 1.0e2)
-            if rhs1_precond_kind == "pas_tokamak_theta":
-                # Avoid expensive strong-preconditioner fallbacks for large tokamak PAS
-                # runs; the tokamak theta preconditioner typically converges without
-                # needing xblock_tz_lmax, and the fallback cost dominates runtime.
-                strong_ratio = max(float(strong_ratio), 1.0e4)
-        strong_precond_trigger = bool(res_ratio > strong_ratio) if strong_ratio > 0 else True
-        fp_strong_abs_env = os.environ.get("SFINCS_JAX_FP_STRONG_ABS", "").strip()
-        try:
-            fp_strong_abs = float(fp_strong_abs_env) if fp_strong_abs_env else 1.0e-6
-        except ValueError:
-            fp_strong_abs = 1.0e-6
-        fp_force_strong = bool(
-            op.fblock.fp is not None
-            and (not bool(op.include_phi1))
-            and float(res_reduced.residual_norm) > float(fp_strong_abs)
+        strong_trigger_controls = rhs1_strong_trigger_controls_from_env(
+            residual_norm=float(res_reduced.residual_norm),
+            target=float(target_reduced),
+            has_fp=op.fblock.fp is not None,
+            include_phi1=bool(op.include_phi1),
+            has_pas=op.fblock.pas is not None,
+            rhs1_precond_kind=rhs1_precond_kind,
+            delay_pas_base_retries=True,
         )
+        res_ratio = float(strong_trigger_controls.res_ratio)
+        strong_precond_trigger = bool(strong_trigger_controls.trigger)
+        fp_force_strong = bool(strong_trigger_controls.fp_force)
 
         qi_device_seed_context = MatrixFreeQIDeviceSeedContext(
             op=op,
@@ -14431,13 +14403,17 @@ def solve_v3_full_system_linear_gmres(
             target=float(target),
             use_implicit=bool(use_implicit),
         )
-        res_ratio = float(result.residual_norm) / max(float(target), 1e-300)
-        strong_ratio_env = os.environ.get("SFINCS_JAX_RHSMODE1_STRONG_PRECOND_RATIO", "").strip()
-        try:
-            strong_ratio = float(strong_ratio_env) if strong_ratio_env else 1.0
-        except ValueError:
-            strong_ratio = 1.0
-        strong_precond_trigger = bool(res_ratio > strong_ratio) if strong_ratio > 0 else True
+        strong_trigger_controls = rhs1_strong_trigger_controls_from_env(
+            residual_norm=float(result.residual_norm),
+            target=float(target),
+            has_fp=op.fblock.fp is not None,
+            include_phi1=bool(op.include_phi1),
+            has_pas=op.fblock.pas is not None,
+            rhs1_precond_kind=rhs1_precond_kind,
+            delay_pas_base_retries=False,
+        )
+        res_ratio = float(strong_trigger_controls.res_ratio)
+        strong_precond_trigger = bool(strong_trigger_controls.trigger)
         if (
             rhs1_precond_kind in {"pas_lite", "pas_hybrid", "pas_tz", "pas_schur", "pas_tokamak_theta"}
             and preconditioner_full is not None
