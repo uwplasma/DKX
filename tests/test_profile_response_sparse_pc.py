@@ -61,6 +61,8 @@ from sfincs_jax.problems.profile_response.sparse_pc import (
     SparseMinimumNormPolicy,
     SparsePCGMRESResult,
     XBlockDeviceKrylovState,
+    XBlockFirstKrylovAttemptContext,
+    XBlockFirstKrylovAttemptResult,
     XBlockGMRESFallbackDecision,
     XBlockGMRESFallbackContext,
     XBlockGMRESFallbackResult,
@@ -144,6 +146,7 @@ from sfincs_jax.problems.profile_response.sparse_pc import (
     resolve_xblock_two_level_policy_setup,
     fortran_reduced_xblock_final_payload_from_driver_state,
     run_fortran_reduced_xblock_krylov_solve,
+    run_xblock_first_krylov_attempt,
     run_sparse_pc_gmres_once,
     run_xblock_gmres_fallback_if_needed,
     run_xblock_post_solve_corrections,
@@ -179,6 +182,65 @@ from sfincs_jax.problems.profile_response.sparse_pc import (
 
 def _identity(v: jnp.ndarray) -> jnp.ndarray:
     return v
+
+
+def _unused_solver(**_kwargs: object) -> object:
+    raise AssertionError("unexpected solver call")
+
+
+def _device_result(
+    *,
+    x: list[float],
+    residual_norm: float,
+    history: list[float],
+    n_iterations: int,
+) -> SimpleNamespace:
+    return SimpleNamespace(
+        x=jnp.asarray(x, dtype=jnp.float64),
+        residual_norm=jnp.asarray(residual_norm, dtype=jnp.float64),
+        residual_history=jnp.asarray(history, dtype=jnp.float64),
+        n_iterations=jnp.asarray(n_iterations),
+    )
+
+
+def _first_krylov_context(**overrides: object) -> XBlockFirstKrylovAttemptContext:
+    values: dict[str, object] = {
+        "krylov_method": "gmres",
+        "matvec": _identity,
+        "rhs": jnp.asarray([1.0, 2.0], dtype=jnp.float64),
+        "preconditioner": None,
+        "x0": None,
+        "tol": 1e-8,
+        "atol": 1e-12,
+        "restart": 5,
+        "maxiter": 7,
+        "precondition_side": "right",
+        "lgmres_outer_k": None,
+        "fgmres_block_between_cycles": False,
+        "skip_inactive_work": True,
+        "device_fgmres_jit": False,
+        "device_fgmres_jit_mode": "cycle",
+        "device_fgmres_jit_outer_k": 0,
+        "augmented_krylov_used": False,
+        "augmentation_basis": None,
+        "operator_on_augmentation": None,
+        "augmentation_mode": "combined",
+        "tfqmr_replacement_interval": 0,
+        "mv_count": 3,
+        "host_progress_callback": None,
+        "device_cycle_progress_callback": None,
+        "gmres_solver": _unused_solver,
+        "lgmres_solver": _unused_solver,
+        "gcrotmk_solver": _unused_solver,
+        "bicgstab_solver": _unused_solver,
+        "fgmres_solver": _unused_solver,
+        "fgmres_jit_solver": _unused_solver,
+        "fgmres_cycle_jit_solver": _unused_solver,
+        "bicgstab_jax_solver": _unused_solver,
+        "tfqmr_jax_solver": _unused_solver,
+    }
+    values.update(overrides)
+    return XBlockFirstKrylovAttemptContext(**values)  # type: ignore[arg-type]
 
 
 def test_xblock_krylov_report_prefers_device_counters() -> None:
@@ -229,6 +291,100 @@ def test_xblock_device_krylov_state_estimates_cycle_matvecs() -> None:
 
     assert state.history == (1.0, 0.5, 0.25)
     assert state.estimated_matvecs == 9
+
+
+def test_run_xblock_first_krylov_attempt_dispatches_host_gmres() -> None:
+    calls: list[dict[str, object]] = []
+
+    def gmres_solver(**kwargs: object) -> tuple[np.ndarray, float, list[float]]:
+        calls.append(kwargs)
+        return np.asarray([3.0, 4.0]), 0.25, [1.0, 0.25]
+
+    def progress_callback(iteration: int, residual_norm: float) -> None:
+        del iteration, residual_norm
+
+    result = run_xblock_first_krylov_attempt(
+        _first_krylov_context(
+            krylov_method="unknown_defaults_to_gmres",
+            host_progress_callback=progress_callback,
+            gmres_solver=gmres_solver,
+        )
+    )
+
+    assert isinstance(result, XBlockFirstKrylovAttemptResult)
+    np.testing.assert_allclose(result.x, np.asarray([3.0, 4.0]))
+    assert result.residual_norm == pytest.approx(0.25)
+    assert result.history == (1.0, 0.25)
+    assert result.device_iterations is None
+    assert result.device_estimated_matvecs is None
+    assert calls[0]["progress_callback"] is progress_callback
+
+
+def test_run_xblock_first_krylov_attempt_dispatches_cycle_jit_fgmres() -> None:
+    calls: list[dict[str, object]] = []
+    basis = jnp.eye(2, dtype=jnp.float64)
+    action = 2.0 * basis
+
+    def cycle_solver(**kwargs: object) -> tuple[SimpleNamespace, None]:
+        calls.append(kwargs)
+        return _device_result(
+            x=[5.0, 6.0],
+            residual_norm=0.125,
+            history=[1.0, 0.5, 0.125],
+            n_iterations=2,
+        ), None
+
+    result = run_xblock_first_krylov_attempt(
+        _first_krylov_context(
+            krylov_method="fgmres_jax",
+            device_fgmres_jit=True,
+            device_fgmres_jit_mode="cycle",
+            device_fgmres_jit_outer_k=4,
+            augmented_krylov_used=True,
+            augmentation_basis=basis,
+            operator_on_augmentation=action,
+            augmentation_mode="projected",
+            mv_count=9,
+            fgmres_cycle_jit_solver=cycle_solver,
+        )
+    )
+
+    np.testing.assert_allclose(result.x, np.asarray([5.0, 6.0]))
+    assert result.residual_norm == pytest.approx(0.125)
+    assert result.history == (1.0, 0.5, 0.125)
+    assert result.device_iterations == 2
+    assert result.device_estimated_matvecs == 9
+    assert calls[0]["outer_k"] == 4
+    assert calls[0]["augmentation_mode"] == "projected"
+    assert calls[0]["augmentation_basis"] is basis
+    assert calls[0]["operator_on_augmentation"] is action
+
+
+def test_run_xblock_first_krylov_attempt_dispatches_tfqmr_replacement_interval() -> None:
+    calls: list[dict[str, object]] = []
+
+    def tfqmr_solver(**kwargs: object) -> tuple[SimpleNamespace, None]:
+        calls.append(kwargs)
+        return _device_result(
+            x=[7.0, 8.0],
+            residual_norm=0.0625,
+            history=[1.0, 0.25, 0.0625],
+            n_iterations=2,
+        ), None
+
+    result = run_xblock_first_krylov_attempt(
+        _first_krylov_context(
+            krylov_method="tfqmr_jax",
+            tfqmr_replacement_interval=5,
+            tfqmr_jax_solver=tfqmr_solver,
+        )
+    )
+
+    np.testing.assert_allclose(result.x, np.asarray([7.0, 8.0]))
+    assert result.residual_norm == pytest.approx(0.0625)
+    assert result.history == (1.0, 0.25, 0.0625)
+    assert result.device_iterations == 2
+    assert calls[0]["residual_replacement_interval"] == 5
 
 
 @pytest.mark.parametrize("residual_norm", [1.1, np.nan])

@@ -171,6 +171,56 @@ class XBlockDeviceKrylovState:
 
 
 @dataclass(frozen=True)
+class XBlockFirstKrylovAttemptContext:
+    """Inputs for the first xblock sparse-PC Krylov attempt."""
+
+    krylov_method: str
+    matvec: ArrayFn
+    rhs: jnp.ndarray
+    preconditioner: ArrayFn | None
+    x0: jnp.ndarray | None
+    tol: float
+    atol: float
+    restart: int
+    maxiter: int | None
+    precondition_side: str
+    lgmres_outer_k: int | None
+    fgmres_block_between_cycles: bool
+    skip_inactive_work: bool
+    device_fgmres_jit: bool
+    device_fgmres_jit_mode: str
+    device_fgmres_jit_outer_k: int
+    augmented_krylov_used: bool
+    augmentation_basis: jnp.ndarray | None
+    operator_on_augmentation: jnp.ndarray | None
+    augmentation_mode: str
+    tfqmr_replacement_interval: int
+    mv_count: int
+    host_progress_callback: Callable[[int, float], None] | None
+    device_cycle_progress_callback: Callable[..., None] | None
+    gmres_solver: Callable[..., tuple[np.ndarray, float, Sequence[float]]]
+    lgmres_solver: Callable[..., tuple[np.ndarray, float, Sequence[float]]]
+    gcrotmk_solver: Callable[..., tuple[np.ndarray, float, Sequence[float]]]
+    bicgstab_solver: Callable[..., tuple[np.ndarray, float, Sequence[float]]]
+    fgmres_solver: Callable[..., tuple[object, object]]
+    fgmres_jit_solver: Callable[..., tuple[object, object]]
+    fgmres_cycle_jit_solver: Callable[..., tuple[object, object]]
+    bicgstab_jax_solver: Callable[..., tuple[object, object]]
+    tfqmr_jax_solver: Callable[..., tuple[object, object]]
+
+
+@dataclass(frozen=True)
+class XBlockFirstKrylovAttemptResult:
+    """Result from the first xblock sparse-PC Krylov attempt."""
+
+    x: np.ndarray
+    residual_norm: float
+    history: tuple[float, ...]
+    device_iterations: int | None
+    device_estimated_matvecs: int | None
+
+
+@dataclass(frozen=True)
 class XBlockSparsePCWorkEstimates:
     """User-facing solver-kind and Krylov work-memory estimates."""
 
@@ -262,6 +312,152 @@ def xblock_device_krylov_state(
         history=history,
         n_iterations=int(n_iterations),
         estimated_matvecs=estimated_matvecs,
+    )
+
+
+def run_xblock_first_krylov_attempt(
+    context: XBlockFirstKrylovAttemptContext,
+) -> XBlockFirstKrylovAttemptResult:
+    """Run the selected first xblock sparse-PC Krylov method."""
+
+    method = str(context.krylov_method)
+    device_iterations: int | None = None
+    device_estimated_matvecs: int | None = None
+
+    if method == "lgmres":
+        x_np, residual_norm, history = context.lgmres_solver(
+            matvec=context.matvec,
+            b=context.rhs,
+            preconditioner=context.preconditioner,
+            x0=context.x0,
+            tol=float(context.tol),
+            atol=float(context.atol),
+            restart=int(context.restart),
+            maxiter=context.maxiter,
+            outer_k=context.lgmres_outer_k,
+            precondition_side=str(context.precondition_side),
+        )
+    elif method in {"gmres_jax", "fgmres_jax"}:
+        fgmres_solver = (
+            (
+                context.fgmres_cycle_jit_solver
+                if str(context.device_fgmres_jit_mode) == "cycle"
+                else context.fgmres_jit_solver
+            )
+            if bool(context.device_fgmres_jit)
+            else context.fgmres_solver
+        )
+        fgmres_kwargs: dict[str, Any] = {
+            "matvec": context.matvec,
+            "b": context.rhs,
+            "preconditioner": context.preconditioner,
+            "x0": context.x0,
+            "tol": float(context.tol),
+            "atol": float(context.atol),
+            "restart": int(context.restart),
+            "maxiter": context.maxiter,
+            "precondition_side": str(context.precondition_side),
+            "skip_inactive_work": bool(context.skip_inactive_work),
+            "block_between_cycles": bool(context.fgmres_block_between_cycles),
+        }
+        if bool(context.device_fgmres_jit) and str(context.device_fgmres_jit_mode) == "cycle":
+            fgmres_kwargs["outer_k"] = int(context.device_fgmres_jit_outer_k)
+            fgmres_kwargs["augmentation_mode"] = str(context.augmentation_mode)
+            fgmres_kwargs["progress_callback"] = context.device_cycle_progress_callback
+        if bool(context.augmented_krylov_used):
+            fgmres_kwargs["augmentation_basis"] = context.augmentation_basis
+            fgmres_kwargs["operator_on_augmentation"] = context.operator_on_augmentation
+        fgmres_result, _fgmres_residual = fgmres_solver(**fgmres_kwargs)
+        device_state = xblock_device_krylov_state(
+            fgmres_result,
+            estimated_matvecs_floor=(
+                int(context.mv_count)
+                if bool(context.device_fgmres_jit)
+                and str(context.device_fgmres_jit_mode) == "cycle"
+                else None
+            ),
+        )
+        x_np = device_state.x
+        residual_norm = float(device_state.residual_norm)
+        history = device_state.history
+        device_iterations = int(device_state.n_iterations)
+        device_estimated_matvecs = device_state.estimated_matvecs
+    elif method == "bicgstab_jax":
+        bicgstab_result, _bicgstab_residual = context.bicgstab_jax_solver(
+            matvec=context.matvec,
+            b=context.rhs,
+            preconditioner=context.preconditioner,
+            x0=context.x0,
+            tol=float(context.tol),
+            atol=float(context.atol),
+            maxiter=context.maxiter,
+            precondition_side=str(context.precondition_side),
+        )
+        device_state = xblock_device_krylov_state(bicgstab_result)
+        x_np = device_state.x
+        residual_norm = float(device_state.residual_norm)
+        history = device_state.history
+        device_iterations = int(device_state.n_iterations)
+    elif method == "tfqmr_jax":
+        tfqmr_result, _tfqmr_residual = context.tfqmr_jax_solver(
+            matvec=context.matvec,
+            b=context.rhs,
+            preconditioner=context.preconditioner,
+            x0=context.x0,
+            tol=float(context.tol),
+            atol=float(context.atol),
+            maxiter=context.maxiter,
+            precondition_side=str(context.precondition_side),
+            residual_replacement_interval=int(context.tfqmr_replacement_interval),
+        )
+        device_state = xblock_device_krylov_state(tfqmr_result)
+        x_np = device_state.x
+        residual_norm = float(device_state.residual_norm)
+        history = device_state.history
+        device_iterations = int(device_state.n_iterations)
+    elif method == "gcrotmk":
+        x_np, residual_norm, history = context.gcrotmk_solver(
+            matvec=context.matvec,
+            b=context.rhs,
+            preconditioner=context.preconditioner,
+            x0=context.x0,
+            tol=float(context.tol),
+            atol=float(context.atol),
+            restart=int(context.restart),
+            maxiter=context.maxiter,
+            precondition_side=str(context.precondition_side),
+        )
+    elif method == "bicgstab":
+        x_np, residual_norm, history = context.bicgstab_solver(
+            matvec=context.matvec,
+            b=context.rhs,
+            preconditioner=context.preconditioner,
+            x0=context.x0,
+            tol=float(context.tol),
+            atol=float(context.atol),
+            maxiter=context.maxiter,
+            precondition_side=str(context.precondition_side),
+        )
+    else:
+        x_np, residual_norm, history = context.gmres_solver(
+            matvec=context.matvec,
+            b=context.rhs,
+            preconditioner=context.preconditioner,
+            x0=context.x0,
+            tol=float(context.tol),
+            atol=float(context.atol),
+            restart=int(context.restart),
+            maxiter=context.maxiter,
+            precondition_side=str(context.precondition_side),
+            progress_callback=context.host_progress_callback,
+        )
+
+    return XBlockFirstKrylovAttemptResult(
+        x=np.asarray(x_np, dtype=np.float64),
+        residual_norm=float(residual_norm),
+        history=tuple(float(v) for v in (history or ())),
+        device_iterations=device_iterations,
+        device_estimated_matvecs=device_estimated_matvecs,
     )
 
 
@@ -9262,6 +9458,8 @@ __all__ = [
     "XBlockGMRESFallbackContext",
     "XBlockGMRESFallbackResult",
     "XBlockDeviceKrylovState",
+    "XBlockFirstKrylovAttemptContext",
+    "XBlockFirstKrylovAttemptResult",
     "XBlockSparsePCWorkEstimates",
     "XBlockPhysicalResidual",
     "SparsePCGMRESFinalPayload",
@@ -9333,6 +9531,7 @@ __all__ = [
     "retry_sparse_pc_factor_dtype_from_driver_state",
     "run_fortran_reduced_xblock_krylov_solve",
     "run_sparse_pc_gmres_once",
+    "run_xblock_first_krylov_attempt",
     "run_xblock_gmres_fallback_if_needed",
     "run_xblock_post_solve_corrections",
     "xblock_device_krylov_state",

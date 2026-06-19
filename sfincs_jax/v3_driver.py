@@ -254,6 +254,7 @@ from .problems.profile_response.sparse_pc import (
     SparseHostScipyGMRESContext,
     SparseJAXRetryPreconditionerBuildContext,
     SparsePCGMRESContext,
+    XBlockFirstKrylovAttemptContext,
     XBlockGMRESFallbackContext,
     XBlockPostSolveCorrectionContext,
     apply_fortran_reduced_xblock_global_coupling_stage,
@@ -318,9 +319,9 @@ from .problems.profile_response.sparse_pc import (
     resolve_xblock_two_level_policy_setup,
     run_fortran_reduced_xblock_krylov_solve,
     run_sparse_pc_gmres_once,
+    run_xblock_first_krylov_attempt,
     run_xblock_gmres_fallback_if_needed,
     run_xblock_post_solve_corrections,
-    xblock_device_krylov_state,
     xblock_krylov_report,
     xblock_physical_solution_and_residual,
     build_sparse_host_or_ilu_factor,
@@ -6341,178 +6342,48 @@ def solve_v3_full_system_linear_gmres(
 
             device_krylov_iterations: int | None = None
             device_krylov_estimated_matvecs: int | None = None
-            if xblock_krylov_method == "lgmres":
-                x_np, residual_norm_xblock_pc, history = lgmres_solve_with_history_scipy(
+            first_krylov = run_xblock_first_krylov_attempt(
+                XBlockFirstKrylovAttemptContext(
+                    krylov_method=str(xblock_krylov_method),
                     matvec=solve_matvec,
-                    b=solve_rhs,
+                    rhs=solve_rhs,
                     preconditioner=solve_preconditioner,
                     x0=solve_x0,
-                    tol=tol,
-                    atol=atol,
-                    restart=pc_restart,
+                    tol=float(tol),
+                    atol=float(atol),
+                    restart=int(pc_restart),
                     maxiter=pc_maxiter,
-                    outer_k=xblock_lgmres_rescue_outer_k,
-                    precondition_side=precondition_side,
+                    precondition_side=str(precondition_side),
+                    lgmres_outer_k=xblock_lgmres_rescue_outer_k,
+                    fgmres_block_between_cycles=bool(fgmres_block_between_cycles),
+                    skip_inactive_work=not bool(two_level_built),
+                    device_fgmres_jit=bool(xblock_device_fgmres_jit),
+                    device_fgmres_jit_mode=str(xblock_device_fgmres_jit_mode),
+                    device_fgmres_jit_outer_k=int(xblock_device_fgmres_jit_outer_k),
+                    augmented_krylov_used=bool(qi_device_augmented_krylov_used),
+                    augmentation_basis=augmentation_basis_for_solve,
+                    operator_on_augmentation=operator_on_augmentation_for_solve,
+                    augmentation_mode=str(qi_device_augmented_krylov_mode),
+                    tfqmr_replacement_interval=int(tfqmr_replacement_interval),
+                    mv_count=int(mv_count),
+                    host_progress_callback=_host_krylov_progress_callback,
+                    device_cycle_progress_callback=_device_cycle_progress_callback,
+                    gmres_solver=gmres_solve_with_history_scipy,
+                    lgmres_solver=lgmres_solve_with_history_scipy,
+                    gcrotmk_solver=gcrotmk_solve_with_history_scipy,
+                    bicgstab_solver=bicgstab_solve_with_history_scipy,
+                    fgmres_solver=fgmres_solve_with_residual,
+                    fgmres_jit_solver=fgmres_solve_with_residual_jit,
+                    fgmres_cycle_jit_solver=fgmres_cycle_jit_solve_with_residual,
+                    bicgstab_jax_solver=bicgstab_solve_with_residual,
+                    tfqmr_jax_solver=tfqmr_solve_with_residual,
                 )
-            elif xblock_krylov_method == "gmres_jax":
-                fgmres_solver = (
-                    (
-                        fgmres_cycle_jit_solve_with_residual
-                        if xblock_device_fgmres_jit_mode == "cycle"
-                        else fgmres_solve_with_residual_jit
-                    )
-                    if bool(xblock_device_fgmres_jit)
-                    else fgmres_solve_with_residual
-                )
-                fgmres_kwargs = {
-                    "matvec": solve_matvec,
-                    "b": solve_rhs,
-                    "preconditioner": solve_preconditioner,
-                    "x0": solve_x0,
-                    "tol": tol,
-                    "atol": atol,
-                    "restart": pc_restart,
-                    "maxiter": pc_maxiter,
-                    "precondition_side": precondition_side,
-                    "skip_inactive_work": not bool(two_level_built),
-                    "block_between_cycles": bool(fgmres_block_between_cycles),
-                }
-                if bool(xblock_device_fgmres_jit) and xblock_device_fgmres_jit_mode == "cycle":
-                    fgmres_kwargs["outer_k"] = int(xblock_device_fgmres_jit_outer_k)
-                    fgmres_kwargs["augmentation_mode"] = qi_device_augmented_krylov_mode
-                    fgmres_kwargs["progress_callback"] = _device_cycle_progress_callback
-                if bool(qi_device_augmented_krylov_used):
-                    fgmres_kwargs["augmentation_basis"] = augmentation_basis_for_solve
-                    fgmres_kwargs["operator_on_augmentation"] = operator_on_augmentation_for_solve
-                gmres_jax_result, _gmres_jax_residual = fgmres_solver(**fgmres_kwargs)
-                device_state = xblock_device_krylov_state(
-                    gmres_jax_result,
-                    estimated_matvecs_floor=(
-                        int(mv_count)
-                        if bool(xblock_device_fgmres_jit)
-                        and xblock_device_fgmres_jit_mode == "cycle"
-                        else None
-                    ),
-                )
-                x_np = device_state.x
-                residual_norm_xblock_pc = float(device_state.residual_norm)
-                history = device_state.history
-                device_krylov_iterations = int(device_state.n_iterations)
-                device_krylov_estimated_matvecs = device_state.estimated_matvecs
-            elif xblock_krylov_method == "fgmres_jax":
-                fgmres_solver = (
-                    (
-                        fgmres_cycle_jit_solve_with_residual
-                        if xblock_device_fgmres_jit_mode == "cycle"
-                        else fgmres_solve_with_residual_jit
-                    )
-                    if bool(xblock_device_fgmres_jit)
-                    else fgmres_solve_with_residual
-                )
-                fgmres_kwargs = {
-                    "matvec": solve_matvec,
-                    "b": solve_rhs,
-                    "preconditioner": solve_preconditioner,
-                    "x0": solve_x0,
-                    "tol": tol,
-                    "atol": atol,
-                    "restart": pc_restart,
-                    "maxiter": pc_maxiter,
-                    "precondition_side": precondition_side,
-                    "skip_inactive_work": not bool(two_level_built),
-                    "block_between_cycles": bool(fgmres_block_between_cycles),
-                }
-                if bool(xblock_device_fgmres_jit) and xblock_device_fgmres_jit_mode == "cycle":
-                    fgmres_kwargs["outer_k"] = int(xblock_device_fgmres_jit_outer_k)
-                    fgmres_kwargs["augmentation_mode"] = qi_device_augmented_krylov_mode
-                    fgmres_kwargs["progress_callback"] = _device_cycle_progress_callback
-                if bool(qi_device_augmented_krylov_used):
-                    fgmres_kwargs["augmentation_basis"] = augmentation_basis_for_solve
-                    fgmres_kwargs["operator_on_augmentation"] = operator_on_augmentation_for_solve
-                fgmres_result, _fgmres_residual = fgmres_solver(**fgmres_kwargs)
-                device_state = xblock_device_krylov_state(
-                    fgmres_result,
-                    estimated_matvecs_floor=(
-                        int(mv_count)
-                        if bool(xblock_device_fgmres_jit)
-                        and xblock_device_fgmres_jit_mode == "cycle"
-                        else None
-                    ),
-                )
-                x_np = device_state.x
-                residual_norm_xblock_pc = float(device_state.residual_norm)
-                history = device_state.history
-                device_krylov_iterations = int(device_state.n_iterations)
-                device_krylov_estimated_matvecs = device_state.estimated_matvecs
-            elif xblock_krylov_method == "bicgstab_jax":
-                bicgstab_jax_result, _bicgstab_jax_residual = bicgstab_solve_with_residual(
-                    matvec=solve_matvec,
-                    b=solve_rhs,
-                    preconditioner=solve_preconditioner,
-                    x0=solve_x0,
-                    tol=tol,
-                    atol=atol,
-                    maxiter=pc_maxiter,
-                    precondition_side=precondition_side,
-                )
-                device_state = xblock_device_krylov_state(bicgstab_jax_result)
-                x_np = device_state.x
-                residual_norm_xblock_pc = float(device_state.residual_norm)
-                history = device_state.history
-                device_krylov_iterations = int(device_state.n_iterations)
-            elif xblock_krylov_method == "tfqmr_jax":
-                tfqmr_jax_result, _tfqmr_jax_residual = tfqmr_solve_with_residual(
-                    matvec=solve_matvec,
-                    b=solve_rhs,
-                    preconditioner=solve_preconditioner,
-                    x0=solve_x0,
-                    tol=tol,
-                    atol=atol,
-                    maxiter=pc_maxiter,
-                    precondition_side=precondition_side,
-                    residual_replacement_interval=int(tfqmr_replacement_interval),
-                )
-                device_state = xblock_device_krylov_state(tfqmr_jax_result)
-                x_np = device_state.x
-                residual_norm_xblock_pc = float(device_state.residual_norm)
-                history = device_state.history
-                device_krylov_iterations = int(device_state.n_iterations)
-            elif xblock_krylov_method == "gcrotmk":
-                x_np, residual_norm_xblock_pc, history = gcrotmk_solve_with_history_scipy(
-                    matvec=solve_matvec,
-                    b=solve_rhs,
-                    preconditioner=solve_preconditioner,
-                    x0=solve_x0,
-                    tol=tol,
-                    atol=atol,
-                    restart=pc_restart,
-                    maxiter=pc_maxiter,
-                    precondition_side=precondition_side,
-                )
-            elif xblock_krylov_method == "bicgstab":
-                x_np, residual_norm_xblock_pc, history = bicgstab_solve_with_history_scipy(
-                    matvec=solve_matvec,
-                    b=solve_rhs,
-                    preconditioner=solve_preconditioner,
-                    x0=solve_x0,
-                    tol=tol,
-                    atol=atol,
-                    maxiter=pc_maxiter,
-                    precondition_side=precondition_side,
-                )
-            else:
-                x_np, residual_norm_xblock_pc, history = gmres_solve_with_history_scipy(
-                    matvec=solve_matvec,
-                    b=solve_rhs,
-                    preconditioner=solve_preconditioner,
-                    x0=solve_x0,
-                    tol=tol,
-                    atol=atol,
-                    restart=pc_restart,
-                    maxiter=pc_maxiter,
-                    precondition_side=precondition_side,
-                    progress_callback=_host_krylov_progress_callback,
             )
+            x_np = first_krylov.x
+            residual_norm_xblock_pc = float(first_krylov.residual_norm)
+            history = first_krylov.history
+            device_krylov_iterations = first_krylov.device_iterations
+            device_krylov_estimated_matvecs = first_krylov.device_estimated_matvecs
             solve_s = (sparse_timer.elapsed_s() - solve_start_s) + float(xblock_side_probe_s) + float(probe_coarse_s)
             x_solution_np = np.asarray(x_np, dtype=np.float64)
             physical_residual = xblock_physical_solution_and_residual(

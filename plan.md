@@ -834,6 +834,14 @@ Recent local validation:
 - Hygiene:
   `py_compile`, `ruff`, `compileall`, `git diff --check`, and
   `scripts/check_repo_size.py` passed.
+- Sparse-PC helper shard after xblock first-attempt Krylov dispatch
+  extraction:
+  `213 passed in 2.08 s`.
+- Sparse-host/minimum-norm/direct-tail driver shard:
+  `32 passed, 100 deselected in 35.83 s`.
+- Broad profile-response/RHSMode=1 policy, setup, diagnostics, solver, and
+  helper sweep after xblock first-attempt Krylov dispatch extraction:
+  `1170 passed in 48.75 s`.
 - Older focused and broad validation checkpoints are intentionally omitted from
   this active plan; they remain available in git history.
 
@@ -846,7 +854,7 @@ Known CI issue fixed by this rewrite:
 
 ### 1. `v3_driver.py` Architecture Refactor
 
-Completion estimate: 98%.
+Completion estimate: 46%.
 
 Goal:
 
@@ -1058,15 +1066,19 @@ Completed recent boundaries:
 - X-block device Krylov result unpacking now uses a tested profile-response
   helper shared by `gmres_jax`, `fgmres_jax`, `bicgstab_jax`, and
   `tfqmr_jax` branches.
+- X-block sparse-PC first-attempt Krylov dispatch now uses a tested
+  profile-response helper for host SciPy, JAX FGMRES/GMRES, JAX BiCGStab,
+  JAX TFQMR, GCROT, and fallback host GMRES/BiCGStab methods while the driver
+  still owns operator preparation, true-residual recomputation, and metadata.
 
 Next steps:
 
 - Continue moving remaining generic sparse-PC final payload/result assembly
   into cohesive `profile_response` helpers, using explicit result objects
   instead of driver-local metadata scalar plumbing.
-- Extract remaining xblock first-attempt Krylov dispatch only after the solver
-  method-specific callback contract can stay explicit and covered by focused
-  tests.
+- Extract the xblock Krylov solve-setup/equilibration state object only if the
+  scaling, augmented-QI basis, and progress callbacks can remain explicit and
+  testable.
 - Continue extracting sparse-PC state/metadata seams after the source split
   stabilizes; avoid moving driver-specific direction builders or caches into
   generic helpers.
