@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 from sfincs_jax.rhs1_stage2_policy import (
+    RHS1Stage2RetryControls,
     rhs1_fp_force_stage2,
     rhs1_pas_stage2_skip,
     rhs1_pas_tz_guarded_stage2_retry,
     rhs1_stage2_ratio,
+    rhs1_stage2_retry_controls_from_env,
     rhs1_stage2_trigger,
 )
 
@@ -23,6 +25,95 @@ def test_rhs1_stage2_trigger_uses_ratio_policy(monkeypatch) -> None:
     assert not rhs1_stage2_trigger(res_ratio=9.0, use_dkes=False)
     assert rhs1_stage2_trigger(res_ratio=1.1, use_dkes=True)
     assert not rhs1_stage2_trigger(res_ratio=0.9, use_dkes=True)
+
+
+def test_rhs1_stage2_retry_controls_preserve_defaults(monkeypatch) -> None:
+    monkeypatch.delenv("SFINCS_JAX_LINEAR_STAGE2_MAXITER", raising=False)
+    monkeypatch.delenv("SFINCS_JAX_LINEAR_STAGE2_RESTART", raising=False)
+    monkeypatch.delenv("SFINCS_JAX_LINEAR_STAGE2_METHOD", raising=False)
+
+    assert rhs1_stage2_retry_controls_from_env(
+        restart=80,
+        maxiter=300,
+        active_size=1000,
+        has_fp=False,
+        has_pas=False,
+    ) == RHS1Stage2RetryControls(restart=120, maxiter=600, method="incremental")
+
+    assert rhs1_stage2_retry_controls_from_env(
+        restart=160,
+        maxiter=500,
+        active_size=1000,
+        has_fp=False,
+        has_pas=False,
+    ) == RHS1Stage2RetryControls(restart=160, maxiter=1000, method="incremental")
+
+
+def test_rhs1_stage2_retry_controls_tokamak_pas_and_large_fp_defaults(monkeypatch) -> None:
+    monkeypatch.delenv("SFINCS_JAX_LINEAR_STAGE2_MAXITER", raising=False)
+    monkeypatch.delenv("SFINCS_JAX_LINEAR_STAGE2_RESTART", raising=False)
+
+    assert rhs1_stage2_retry_controls_from_env(
+        restart=80,
+        maxiter=300,
+        active_size=1000,
+        has_fp=False,
+        has_pas=True,
+        tokamak_pas=True,
+    ) == RHS1Stage2RetryControls(restart=160, maxiter=2000, method="incremental")
+
+    assert rhs1_stage2_retry_controls_from_env(
+        restart=160,
+        maxiter=500,
+        active_size=300000,
+        has_fp=True,
+        has_pas=False,
+    ) == RHS1Stage2RetryControls(restart=100, maxiter=600, method="incremental")
+
+
+def test_rhs1_stage2_retry_controls_respect_user_caps_and_method(monkeypatch) -> None:
+    monkeypatch.setenv("SFINCS_JAX_LINEAR_STAGE2_MAXITER", "77")
+    monkeypatch.setenv("SFINCS_JAX_LINEAR_STAGE2_RESTART", "33")
+    monkeypatch.setenv("SFINCS_JAX_LINEAR_STAGE2_METHOD", "dense")
+
+    assert rhs1_stage2_retry_controls_from_env(
+        restart=80,
+        maxiter=300,
+        active_size=300000,
+        has_fp=True,
+        has_pas=False,
+        tokamak_pas=True,
+    ) == RHS1Stage2RetryControls(restart=33, maxiter=77, method="dense")
+
+    monkeypatch.setenv("SFINCS_JAX_LINEAR_STAGE2_METHOD", "bad")
+    assert (
+        rhs1_stage2_retry_controls_from_env(
+            restart=80,
+            maxiter=300,
+            active_size=1000,
+            has_fp=False,
+            has_pas=False,
+        ).method
+        == "incremental"
+    )
+
+
+def test_rhs1_stage2_retry_controls_preserve_invalid_integer_errors(monkeypatch) -> None:
+    monkeypatch.setenv("SFINCS_JAX_LINEAR_STAGE2_MAXITER", "bad")
+    monkeypatch.delenv("SFINCS_JAX_LINEAR_STAGE2_RESTART", raising=False)
+
+    try:
+        rhs1_stage2_retry_controls_from_env(
+            restart=80,
+            maxiter=300,
+            active_size=1000,
+            has_fp=False,
+            has_pas=False,
+        )
+    except ValueError:
+        pass
+    else:  # pragma: no cover - defensive clarity for this legacy contract
+        raise AssertionError("invalid Stage-2 maxiter env should still raise ValueError")
 
 
 def test_rhs1_fp_force_stage2_respects_abs_floor_and_include_phi1(monkeypatch) -> None:

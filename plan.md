@@ -42,10 +42,14 @@ Make `sfincs_jax` research-grade while preserving the public user contract:
 
 Recent checkpoints:
 
+- RHSMode=1 Stage-2 retry restart/maxiter/method controls now use a tested
+  profile-response policy helper shared by reduced and full-system fallback
+  branches while retry admission, preconditioner construction, measured
+  acceptance, and replay updates remain driver-owned (current checkpoint).
 - Shared KSP diagnostics env parsing for RHSMode=1 and Phi1 Newton-Krylov now
   lives in `rhs1_ksp_diagnostics`, covering Fortran-style stdout, bounded KSP
   history replay, and optional iteration statistics while diagnostic replay
-  execution remains in the existing diagnostics helpers (current checkpoint).
+  execution remains in the existing diagnostics helpers (`3bc6461`).
 - RHSMode=1 Krylov routing controls now use tested profile-response policy
   helpers for GMRES precondition-side validation and distributed Krylov solver
   normalization while sharded matvec selection and solve execution remain
@@ -234,15 +238,15 @@ Recent checkpoints:
 - `cb295ce` Extract sparse pattern setup.
 - `4b6a5b4` Extract sparse factor policy.
 
-Current source-size snapshot after KSP diagnostics-control extraction:
+Current source-size snapshot after Stage-2 retry-control extraction:
 
-- `sfincs_jax/v3_driver.py`: `17695` lines.
-- `solve_v3_full_system_linear_gmres`: `12363` lines.
+- `sfincs_jax/v3_driver.py`: `17669` lines.
+- `solve_v3_full_system_linear_gmres`: `12336` lines.
 - `sfincs_jax/v3_results.py`: `119` lines.
 - `sfincs_jax/rhs1_ksp_diagnostics.py`: `306` lines.
 - `sfincs_jax/problems/profile_response/residual.py`: `981` lines.
 - `sfincs_jax/problems/profile_response/handoff.py`: `598` lines.
-- `sfincs_jax/problems/profile_response/policies.py`: `3363` lines.
+- `sfincs_jax/problems/profile_response/policies.py`: `3411` lines.
 - `sfincs_jax/problems/profile_response/dense.py`: `701` lines.
 - `sfincs_jax/problems/profile_response/linear_solve.py`: `327` lines.
 - `sfincs_jax/problems/profile_response/active_projection.py`: `116` lines.
@@ -252,6 +256,16 @@ Current source-size snapshot after KSP diagnostics-control extraction:
 
 Recent local validation:
 
+- Stage-2 policy shard after retry-control extraction:
+  `11 passed in 0.32 s`.
+- Sparse-host/minimum-norm/direct-tail driver shard:
+  `32 passed, 100 deselected in 33.59 s`.
+- Broad profile-response/RHSMode=1 policy, setup, diagnostics, solver, and
+  helper sweep after Stage-2 retry-control extraction:
+  `1105 passed in 43.76 s`.
+- Hygiene:
+  `py_compile`, `ruff`, `compileall`, `git diff --check`, and
+  `scripts/check_repo_size.py` passed.
 - KSP diagnostics and Newton-Krylov diagnostics shard after shared diagnostics
   env parsing extraction:
   `19 passed in 0.58 s`.

@@ -608,6 +608,7 @@ from .problems.profile_response.policies import (
     rhs1_fp_force_stage2,
     rhs1_pas_stage2_skip,
     rhs1_pas_tz_guarded_stage2_retry,
+    rhs1_stage2_retry_controls_from_env,
     rhs1_stage2_trigger,
 )
 from . import solver_path_policy as _solver_path_policy
@@ -11632,33 +11633,17 @@ def solve_v3_full_system_linear_gmres(
         ):
             if preconditioner_reduced is None and rhs1_precond_enabled:
                 preconditioner_reduced = _build_rhs1_preconditioner_reduced_with_fallback()
-            stage2_maxiter_env = os.environ.get("SFINCS_JAX_LINEAR_STAGE2_MAXITER", "")
-            stage2_restart_env = os.environ.get("SFINCS_JAX_LINEAR_STAGE2_RESTART", "")
-            stage2_maxiter = int(stage2_maxiter_env or str(max(600, int(maxiter or 400) * 2)))
-            stage2_restart = int(stage2_restart_env or str(max(120, int(restart))))
-            if tokamak_pas and (not stage2_maxiter_env):
-                stage2_maxiter = max(int(stage2_maxiter), 2000)
-            if tokamak_pas and (not stage2_restart_env):
-                stage2_restart = max(int(stage2_restart), 160)
-            if (
-                op.fblock.fp is not None
-                and op.fblock.pas is None
-                and int(active_size) >= 300000
-                and (not stage2_maxiter_env)
-            ):
-                # Large FP systems often need stage2 to close diagnostics, but
-                # maxiter=800 is unnecessarily expensive in practice.
-                stage2_maxiter = min(int(stage2_maxiter), 600)
-            if (
-                op.fblock.fp is not None
-                and op.fblock.pas is None
-                and int(active_size) >= 300000
-                and (not stage2_restart_env)
-            ):
-                stage2_restart = min(max(80, int(stage2_restart)), 100)
-            stage2_method = os.environ.get("SFINCS_JAX_LINEAR_STAGE2_METHOD", "incremental").strip().lower()
-            if stage2_method not in {"batched", "incremental", "dense"}:
-                stage2_method = "incremental"
+            stage2_controls = rhs1_stage2_retry_controls_from_env(
+                restart=int(restart),
+                maxiter=maxiter,
+                active_size=int(active_size),
+                has_fp=op.fblock.fp is not None,
+                has_pas=op.fblock.pas is not None,
+                tokamak_pas=bool(tokamak_pas),
+            )
+            stage2_restart = int(stage2_controls.restart)
+            stage2_maxiter = int(stage2_controls.maxiter)
+            stage2_method = str(stage2_controls.method)
             if emit is not None:
                 emit(
                     0,
@@ -14408,27 +14393,16 @@ def solve_v3_full_system_linear_gmres(
         ):
             if preconditioner_full is None and rhs1_precond_enabled:
                 preconditioner_full = _build_rhs1_preconditioner_full()
-            stage2_maxiter_env = os.environ.get("SFINCS_JAX_LINEAR_STAGE2_MAXITER", "").strip()
-            stage2_restart_env = os.environ.get("SFINCS_JAX_LINEAR_STAGE2_RESTART", "").strip()
-            stage2_maxiter = int(stage2_maxiter_env or str(max(600, int(maxiter or 400) * 2)))
-            stage2_restart = int(stage2_restart_env or str(max(120, int(restart))))
-            if (
-                op.fblock.fp is not None
-                and op.fblock.pas is None
-                and int(op.total_size) >= 300000
-                and (not stage2_maxiter_env)
-            ):
-                stage2_maxiter = min(int(stage2_maxiter), 600)
-            if (
-                op.fblock.fp is not None
-                and op.fblock.pas is None
-                and int(op.total_size) >= 300000
-                and (not stage2_restart_env)
-            ):
-                stage2_restart = min(max(80, int(stage2_restart)), 100)
-            stage2_method = os.environ.get("SFINCS_JAX_LINEAR_STAGE2_METHOD", "incremental").strip().lower()
-            if stage2_method not in {"batched", "incremental", "dense"}:
-                stage2_method = "incremental"
+            stage2_controls = rhs1_stage2_retry_controls_from_env(
+                restart=int(restart),
+                maxiter=maxiter,
+                active_size=int(op.total_size),
+                has_fp=op.fblock.fp is not None,
+                has_pas=op.fblock.pas is not None,
+            )
+            stage2_restart = int(stage2_controls.restart)
+            stage2_maxiter = int(stage2_controls.maxiter)
+            stage2_method = str(stage2_controls.method)
             if emit is not None:
                 emit(
                     0,

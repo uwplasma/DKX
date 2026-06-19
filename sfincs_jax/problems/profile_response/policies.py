@@ -3188,6 +3188,15 @@ _PAS_STAGE2_EXTENDED_SKIP_BASE_KINDS = frozenset(
 _PAS_STAGE2_WEAK_SKIP_KINDS = frozenset({"collision", "point", "xmg"})
 
 
+@dataclass(frozen=True)
+class RHS1Stage2RetryControls:
+    """Restart/maxiter/method controls for a Stage-2 RHSMode=1 Krylov retry."""
+
+    restart: int
+    maxiter: int
+    method: str
+
+
 def rhs1_stage2_ratio(*, use_dkes: bool) -> float:
     """Return the stage-2 residual-ratio trigger with DKES tightening."""
     stage2_ratio_env = os.environ.get("SFINCS_JAX_LINEAR_STAGE2_RATIO", "").strip()
@@ -3204,6 +3213,43 @@ def rhs1_stage2_trigger(*, res_ratio: float, use_dkes: bool) -> bool:
     """Return whether stage-2 should be considered from the residual ratio."""
     ratio = rhs1_stage2_ratio(use_dkes=use_dkes)
     return bool(res_ratio > ratio) if ratio > 0 else True
+
+
+def rhs1_stage2_retry_controls_from_env(
+    *,
+    restart: int,
+    maxiter: int | None,
+    active_size: int,
+    has_fp: bool,
+    has_pas: bool,
+    tokamak_pas: bool = False,
+) -> RHS1Stage2RetryControls:
+    """Resolve Stage-2 retry Krylov bounds without changing legacy defaults."""
+
+    maxiter_env = os.environ.get("SFINCS_JAX_LINEAR_STAGE2_MAXITER", "").strip()
+    restart_env = os.environ.get("SFINCS_JAX_LINEAR_STAGE2_RESTART", "").strip()
+    maxiter_use = int(maxiter_env or str(max(600, int(maxiter or 400) * 2)))
+    restart_use = int(restart_env or str(max(120, int(restart))))
+
+    if tokamak_pas and (not maxiter_env):
+        maxiter_use = max(int(maxiter_use), 2000)
+    if tokamak_pas and (not restart_env):
+        restart_use = max(int(restart_use), 160)
+    if has_fp and (not has_pas) and int(active_size) >= 300000 and (not maxiter_env):
+        # Large FP systems often need Stage-2 to close diagnostics, but the
+        # historical maxiter=800 default is unnecessarily expensive in practice.
+        maxiter_use = min(int(maxiter_use), 600)
+    if has_fp and (not has_pas) and int(active_size) >= 300000 and (not restart_env):
+        restart_use = min(max(80, int(restart_use)), 100)
+
+    method = os.environ.get("SFINCS_JAX_LINEAR_STAGE2_METHOD", "incremental").strip().lower()
+    if method not in {"batched", "incremental", "dense"}:
+        method = "incremental"
+    return RHS1Stage2RetryControls(
+        restart=int(restart_use),
+        maxiter=int(maxiter_use),
+        method=method,
+    )
 
 
 def rhs1_fp_force_stage2(
@@ -3299,6 +3345,7 @@ __all__ = (
     "RHS1SparsePreconditionerConfig",
     "RHS1SparseRescueOrdering",
     "RHS1SparseRescuePolicySetup",
+    "RHS1Stage2RetryControls",
     "parse_rhs1_pas_tz_guarded_structured_levels",
     "rhs1_bicgstab_fallback_controls_from_env",
     "rhs1_bicgstab_fallback_target_from_env",
@@ -3358,6 +3405,7 @@ __all__ = (
     "rhs1_sparse_rescue_policy_setup",
     "rhs1_sparse_rescue_tail_skip_messages",
     "rhs1_stage2_ratio",
+    "rhs1_stage2_retry_controls_from_env",
     "rhs1_stage2_trigger",
     "rhs1_xblock_fallback_initial_guess",
 )
