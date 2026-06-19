@@ -51,6 +51,7 @@ from sfincs_jax.problems.profile_response.sparse_pc import (
     ExplicitSparseOperatorBuildResult,
     SparseMinimumNormPayload,
     SparseMinimumNormPolicy,
+    SparsePCGMRESResult,
     XBlockAssembledPreflightError,
     apply_fortran_reduced_xblock_global_coupling_stage,
     apply_fortran_reduced_xblock_initial_seed,
@@ -120,6 +121,7 @@ from sfincs_jax.problems.profile_response.sparse_pc import (
     resolve_xblock_sparse_pc_setup,
     resolve_xblock_sparse_pc_side_policy_setup,
     resolve_xblock_two_level_policy_setup,
+    fortran_reduced_xblock_final_payload_from_driver_state,
     run_fortran_reduced_xblock_krylov_solve,
     run_sparse_pc_gmres_once,
     retry_sparse_pc_factor_dtype_from_driver_state,
@@ -2413,6 +2415,83 @@ def test_fortran_reduced_xblock_result_metadata_formats_branch_payload() -> None
     assert metadata["sparse_pc_xblock_global_coupling_basis_names"] == ("rhs", "fsavg")
     assert metadata["sparse_pc_residual_ratio_to_target"] == pytest.approx(0.5)
     assert metadata["sparse_pc_factor_quality_rejected"] is False
+
+
+def test_fortran_reduced_xblock_final_payload_from_driver_state_sets_gates() -> None:
+    state = _DefaultSparsePCDriverState(
+        {
+            "op": SimpleNamespace(total_size=4),
+            "atol": 0.25,
+            "tol": 0.0,
+            "rhs_norm": 1.0,
+            "target": 0.5,
+            "mv_count": MatvecCounter(4),
+            "pc_restart": 8,
+            "pc_maxiter": 3,
+            "fortran_reduced_sparse_pc_backend_reason": "auto_large_full_fp",
+            "fortran_reduced_xblock_min_size": 100,
+            "preconditioner_x": 4,
+            "preconditioner_x_min_l": 2,
+            "preconditioner_xi": 1,
+            "preconditioner_species": 0,
+            "xblock_preconditioner_xi": 1,
+            "force_assembled_host_fp": True,
+            "xblock_krylov_method": "gmres",
+            "seed_enabled": True,
+            "seed_used": False,
+            "seed_residual_norm": None,
+            "seed_improvement_ratio": None,
+            "seed_accept_ratio": 1.0,
+            "seed_refine_steps": 2,
+            "seed_refines_performed": 0,
+            "moment_schur_enabled": True,
+            "moment_schur_built": False,
+            "moment_schur_used": False,
+            "moment_schur_reason": "disabled",
+            "moment_schur_metadata": {},
+            "moment_schur_probe_residual_before": None,
+            "moment_schur_probe_residual_after": None,
+            "moment_schur_probe_improvement_ratio": None,
+            "moment_schur_stats": {},
+            "global_coupling_enabled": True,
+            "global_coupling_built": False,
+            "global_coupling_metadata": {},
+            "global_coupling_stats": {},
+            "xblock_drop_tol": 0.0,
+            "xblock_drop_rel": 1.0e-8,
+            "xblock_ilu_drop_tol": 1.0e-4,
+            "xblock_fill_factor": 10.0,
+            "sparse_pc_use_active_dof": True,
+            "sparse_pc_linear_size": 2,
+            "sparse_pc_fp_dense_velocity_block": None,
+            "setup_s": 0.75,
+            "sparse_timer": SimpleNamespace(elapsed_s=lambda: 3.0),
+            "pc_factor_s": 0.5,
+        }
+    )
+
+    payload = fortran_reduced_xblock_final_payload_from_driver_state(
+        state,
+        result=SparsePCGMRESResult(
+            x=np.asarray([1.0, 2.0]),
+            residual_norm=0.2,
+            preconditioned_residual_norm=np.nan,
+            history=(1.0, 0.4, 0.2),
+            solve_s=1.25,
+        ),
+        expand_reduced=lambda x: jnp.concatenate(
+            [jnp.asarray([0.0], dtype=x.dtype), x]
+        ),
+    )
+
+    assert isinstance(payload, SparsePCGMRESFinalPayload)
+    np.testing.assert_allclose(np.asarray(payload.x), np.asarray([0.0, 1.0, 2.0]))
+    assert float(payload.residual_norm) == pytest.approx(0.2)
+    assert payload.metadata["solver_kind"] == "fortran_reduced_pc_gmres"
+    assert payload.metadata["accepted_converged"] is True
+    assert payload.metadata["iterations"] == 3
+    assert payload.metadata["sparse_pc_factor_quality_rejected"] is False
+    assert payload.metadata["sparse_pc_residual_ratio_to_target"] == pytest.approx(0.4)
 
 
 def test_fortran_reduced_xblock_moment_schur_stage_accepts_probe() -> None:

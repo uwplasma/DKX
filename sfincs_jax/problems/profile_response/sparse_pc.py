@@ -14,6 +14,7 @@ from .diagnostics import (
     XBlockAssembledOperatorDiagnosticsContext,
     XBlockSparsePCCoreDiagnosticsContext,
     XBlockSideProbeDiagnosticsContext,
+    fortran_reduced_xblock_result_metadata,
     fp_xblock_global_correction_metadata,
     fp_xblock_highx_residual_correction_metadata,
     sparse_pc_gmres_result_metadata,
@@ -7010,6 +7011,49 @@ def finalize_sparse_pc_gmres_from_driver_state(
     )
 
 
+def fortran_reduced_xblock_final_payload_from_driver_state(
+    state: Mapping[str, object],
+    *,
+    result: SparsePCGMRESResult,
+    expand_reduced: ArrayFn,
+) -> SparsePCGMRESFinalPayload:
+    """Build the final payload for the fortran-reduced x-block sparse-PC branch.
+
+    The x-block branch has its own metadata schema, but its final convergence
+    gates are the same true-residual gates used by the generic sparse-PC path.
+    Keeping that acceptance bookkeeping here avoids duplicating target logic in
+    the driver while preserving the historical metadata keys.
+    """
+
+    residual_norm = float(result.residual_norm)
+    metadata_state = state.__class__(state) if isinstance(state, MutableMapping) else dict(state)
+    metadata_state.update(
+        {
+            "x_np": np.asarray(result.x, dtype=np.float64),
+            "residual_norm_sparse_pc": residual_norm,
+            "history": tuple(result.history),
+            "solve_s": float(result.solve_s),
+            "fortran_reduced_xblock_accepted_converged": profile_residual_converged(
+                residual_norm,
+                profile_residual_target(
+                    atol=float(state["atol"]),
+                    tol=float(state["tol"]),
+                    rhs_norm=float(state["rhs_norm"]),
+                ),
+            ),
+            "fortran_reduced_xblock_factor_quality_rejected": not profile_residual_converged(
+                residual_norm,
+                float(state["target"]),
+            ),
+        }
+    )
+    return SparsePCGMRESFinalPayload(
+        x=expand_reduced(jnp.asarray(result.x, dtype=jnp.float64)),
+        residual_norm=jnp.asarray(residual_norm, dtype=jnp.float64),
+        metadata=fortran_reduced_xblock_result_metadata(metadata_state),
+    )
+
+
 def xblock_sparse_pc_final_metadata_from_driver_state(
     state: Mapping[str, object],
     *,
@@ -7692,6 +7736,7 @@ __all__ = [
     "emit_sparse_pc_gmres_completion_from_driver_state",
     "sparse_pc_gmres_final_payload_from_driver_state",
     "finalize_sparse_pc_gmres_from_driver_state",
+    "fortran_reduced_xblock_final_payload_from_driver_state",
     "resolve_sparse_minimum_norm_policy",
     "sparse_minimum_norm_solve_payload",
     "sparse_minimum_norm_start_message",

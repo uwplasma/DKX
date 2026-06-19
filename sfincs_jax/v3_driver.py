@@ -205,11 +205,7 @@ from .problems.profile_response.qi_device_seed import (
     attempt_matrixfree_qi_device_seed,
 )
 from .problems.profile_response.diagnostics import (
-    fortran_reduced_xblock_result_metadata,
-    fp_xblock_global_correction_metadata,
-    fp_xblock_highx_residual_correction_metadata,
     sparse_rescue_tail_metadata,
-    sparse_xblock_rescue_metadata,
 )
 from .problems.profile_response.sparse_pc import (
     DirectTailMaterializationContext,
@@ -245,6 +241,7 @@ from .problems.profile_response.sparse_pc import (
     build_sparse_pc_active_dof_setup,
     build_direct_tail_materialization_setup,
     finalize_sparse_pc_gmres_from_driver_state,
+    fortran_reduced_xblock_final_payload_from_driver_state,
     xblock_sparse_pc_final_metadata_from_driver_state,
     evaluate_xblock_moment_schur_probe_result,
     evaluate_sparse_pc_factor_preflight,
@@ -7171,30 +7168,21 @@ def solve_v3_full_system_linear_gmres(
                 ),
                 x0=x0_sparse,
             )
-            x_np = xblock_krylov_result.x
-            residual_norm_sparse_pc = float(xblock_krylov_result.residual_norm)
-            history = tuple(xblock_krylov_result.history)
-            solve_s = float(xblock_krylov_result.solve_s)
-            fortran_reduced_xblock_accepted_converged = rhs1_residual_converged(
-                float(residual_norm_sparse_pc),
-                rhs1_residual_target(
-                    atol=float(atol),
-                    tol=float(tol),
-                    rhs_norm=float(rhs_norm),
-                ),
-            )
-            fortran_reduced_xblock_factor_quality_rejected = not rhs1_residual_converged(
-                float(residual_norm_sparse_pc),
-                float(target),
+            fortran_reduced_xblock_payload = (
+                fortran_reduced_xblock_final_payload_from_driver_state(
+                    locals(),
+                    result=xblock_krylov_result,
+                    expand_reduced=_sparse_pc_expand_reduced,
+                )
             )
             return V3LinearSolveResult(
                 op=op,
                 rhs=rhs,
                 gmres=GMRESSolveResult(
-                    x=_sparse_pc_expand_reduced(jnp.asarray(x_np, dtype=jnp.float64)),
-                    residual_norm=jnp.asarray(residual_norm_sparse_pc, dtype=jnp.float64),
+                    x=fortran_reduced_xblock_payload.x,
+                    residual_norm=fortran_reduced_xblock_payload.residual_norm,
                 ),
-                metadata=fortran_reduced_xblock_result_metadata(locals()),
+                metadata=fortran_reduced_xblock_payload.metadata,
             )
 
         sparse_pc_pattern_setup = build_sparse_pc_pattern_setup(
@@ -13232,7 +13220,6 @@ def solve_v3_full_system_linear_gmres(
                         emit(1, f"xblock_sparse: failed ({type(exc).__name__}: {exc})")
             else:
                 sparse_xblock_rescue_reason = "inactive_by_policy"
-            rhsmode1_general_metadata.update(sparse_xblock_rescue_metadata(locals()))
             fp_xblock_global_correction_allowed = _rhsmode1_fp_xblock_global_correction_allowed(
                 op=op,
                 active_size=int(active_size),
@@ -13346,9 +13333,6 @@ def solve_v3_full_system_linear_gmres(
                 fp_xblock_global_correction_reason = (
                     "disabled" if correction_env not in {"1", "true", "yes", "on"} else "policy_guard"
                 )
-            rhsmode1_general_metadata.update(
-                fp_xblock_global_correction_metadata(locals())
-            )
             highx_env = os.environ.get("SFINCS_JAX_RHSMODE1_FP_XBLOCK_HIGHX_RESIDUAL_CORRECTION", "").strip().lower()
             highx_enabled = highx_env in {"1", "true", "yes", "on"}
             highx_active_max = _rhs1_int_env(
@@ -13559,9 +13543,6 @@ def solve_v3_full_system_linear_gmres(
                 fp_xblock_highx_residual_correction_reason = (
                     "disabled" if not highx_enabled else "policy_guard"
                 )
-            rhsmode1_general_metadata.update(
-                fp_xblock_highx_residual_correction_metadata(locals())
-            )
             skip_global_sparse_after_xblock = _rhsmode1_skip_global_sparse_after_xblock_allowed(
                 op=op,
                 active_size=int(active_size),
