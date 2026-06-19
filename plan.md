@@ -897,6 +897,15 @@ Recent local validation:
   helper sweep after fortran-reduced xblock explicit final-payload context
   extraction:
   `1185 passed in 49.90 s`.
+- Sparse-PC helper shard after generic sparse-PC explicit finalization-context
+  extraction:
+  `229 passed in 2.19 s`.
+- Sparse-host/minimum-norm/direct-tail driver shard:
+  `32 passed, 100 deselected in 35.38 s`.
+- Broad profile-response/RHSMode=1 policy, setup, diagnostics, solver, and
+  helper sweep after generic sparse-PC explicit finalization-context
+  extraction:
+  `1186 passed in 48.03 s`.
 - Older focused and broad validation checkpoints are intentionally omitted from
   this active plan; they remain available in git history.
 
@@ -909,7 +918,7 @@ Known CI issue fixed by this rewrite:
 
 ### 1. `v3_driver.py` Architecture Refactor
 
-Completion estimate: 46%.
+Completion estimate: 47%.
 
 Goal:
 
@@ -1149,12 +1158,16 @@ Completed recent boundaries:
 - Fortran-reduced x-block sparse-PC final payload assembly now uses a tested
   explicit context for convergence-gate inputs, with the broad diagnostics
   mapping named separately and the legacy state-wrapper kept for compatibility.
+- Generic sparse-PC dtype-retry, post-minres, completion, and final payload
+  assembly now uses a tested explicit context for current solve result and
+  factor state, with the broad diagnostics mapping named separately and the
+  legacy state-wrapper kept for compatibility.
 
 Next steps:
 
-- Continue moving remaining generic sparse-PC final payload/result assembly
-  into cohesive `profile_response` helpers, using explicit result objects
-  instead of driver-local metadata scalar plumbing.
+- Continue moving remaining generic sparse-PC result/diagnostic seams into
+  cohesive `profile_response` helpers only where the replacement context can
+  stay explicit and tested.
 - Continue extracting broad driver-state handoffs in sparse-PC branches only
   when the replacement context has focused tests and preserves diagnostic
   coverage.

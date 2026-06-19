@@ -58,6 +58,7 @@ from sfincs_jax.problems.profile_response.sparse_pc import (
     SparseJAXRetryPreconditionerBuildContext,
     ExplicitSparseOperatorBuildPolicy,
     ExplicitSparseOperatorBuildResult,
+    SparsePCGMRESFinalizationContext,
     SparseMinimumNormPayload,
     SparseMinimumNormPolicy,
     SparsePCGMRESResult,
@@ -119,6 +120,7 @@ from sfincs_jax.problems.profile_response.sparse_pc import (
     finalize_xblock_global_coupling_metadata,
     finalize_xblock_two_level_metadata,
     finalize_xblock_moment_schur_metadata,
+    finalize_sparse_pc_gmres_with_dtype_retry,
     prepare_fortran_reduced_xblock_initial_guess,
     prepare_xblock_initial_guess,
     resolve_fortran_reduced_sparse_pc_backend,
@@ -7217,8 +7219,23 @@ def test_finalize_sparse_pc_gmres_with_dtype_retry_updates_copied_state(
         fake_finalize,
     )
 
-    payload = finalize_sparse_pc_gmres_with_dtype_retry_from_driver_state(
-        state,
+    payload = finalize_sparse_pc_gmres_with_dtype_retry(
+        SparsePCGMRESFinalizationContext(
+            diagnostic_state=state,
+            result=SparsePCGMRESResult(
+                x=np.asarray([1.0, 2.0]),
+                residual_norm=1.5,
+                preconditioned_residual_norm=1.25,
+                history=(2.0, 1.5),
+                solve_s=3.0,
+            ),
+            factor_dtype_used=np.dtype(np.float32),
+            factor_dtype_retry=None,
+            operator_bundle="operator32",
+            factor_bundle="factor32",
+            pc_factor_s=2.0,
+            setup_s=3.5,
+        ),
         build_host_sparse_direct_factor_from_matvec=lambda **_kwargs: None,
         run_sparse_pc_gmres_once_callback=lambda *_args, **_kwargs: None,
         minres_correction=lambda **_kwargs: None,
@@ -7226,7 +7243,17 @@ def test_finalize_sparse_pc_gmres_with_dtype_retry_updates_copied_state(
     )
 
     assert isinstance(payload, SparsePCGMRESFinalPayload)
-    assert calls["retry_state"] is state
+    assert calls["retry_state"] is not state
+    retry_state = calls["retry_state"]
+    assert retry_state["sparse_pc_factor_dtype_used"] == np.dtype(np.float32)
+    assert retry_state["sparse_pc_factor_dtype_retry"] is None
+    assert retry_state["_operator_bundle_pc"] == "operator32"
+    assert retry_state["factor_bundle_pc"] == "factor32"
+    assert retry_state["setup_s"] == pytest.approx(3.5)
+    assert retry_state["residual_norm_sparse_pc"] == pytest.approx(1.5)
+    assert retry_state["rn_pc"] == pytest.approx(1.25)
+    assert retry_state["history"] == (2.0, 1.5)
+    assert retry_state["solve_s"] == pytest.approx(3.0)
     assert calls["final_state"] is not state
     final_state = calls["final_state"]
     assert final_state["sparse_pc_factor_dtype_used"] == np.dtype(np.float64)
@@ -7241,6 +7268,64 @@ def test_finalize_sparse_pc_gmres_with_dtype_retry_updates_copied_state(
     assert final_state["history"] == (1.0, 0.25)
     assert final_state["solve_s"] == pytest.approx(5.0)
     assert state["x_np"].tolist() == [1.0, 2.0]
+
+
+def test_finalize_sparse_pc_gmres_with_dtype_retry_from_driver_state_delegates(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: dict[str, object] = {}
+
+    def fake_finalize(context, **kwargs):
+        calls["context"] = context
+        calls["kwargs"] = kwargs
+        return SparsePCGMRESFinalPayload(
+            x=jnp.asarray([1.0]),
+            residual_norm=jnp.asarray(0.5),
+            metadata={"delegated": True},
+        )
+
+    monkeypatch.setattr(
+        sparse_pc_module,
+        "finalize_sparse_pc_gmres_with_dtype_retry",
+        fake_finalize,
+    )
+    state = {
+        "x_np": np.asarray([1.0, 2.0]),
+        "residual_norm_sparse_pc": 0.5,
+        "rn_pc": 0.25,
+        "history": (1.0, 0.5),
+        "solve_s": 2.0,
+        "sparse_pc_factor_dtype_used": np.dtype(np.float64),
+        "sparse_pc_factor_dtype_retry": None,
+        "_operator_bundle_pc": "operator",
+        "factor_bundle_pc": "factor",
+        "pc_factor_s": 0.75,
+        "setup_s": 1.25,
+    }
+
+    payload = finalize_sparse_pc_gmres_with_dtype_retry_from_driver_state(
+        state,
+        build_host_sparse_direct_factor_from_matvec=lambda **_kwargs: None,
+        run_sparse_pc_gmres_once_callback=lambda *_args, **_kwargs: None,
+        minres_correction=lambda **_kwargs: None,
+        expand_reduced=lambda x: x,
+    )
+
+    assert payload.metadata == {"delegated": True}
+    context = calls["context"]
+    assert isinstance(context, SparsePCGMRESFinalizationContext)
+    assert context.diagnostic_state is state
+    np.testing.assert_allclose(context.result.x, np.asarray([1.0, 2.0]))
+    assert context.result.residual_norm == pytest.approx(0.5)
+    assert context.result.preconditioned_residual_norm == pytest.approx(0.25)
+    assert context.result.history == (1.0, 0.5)
+    assert context.result.solve_s == pytest.approx(2.0)
+    assert context.factor_dtype_used == np.dtype(np.float64)
+    assert context.factor_dtype_retry is None
+    assert context.operator_bundle == "operator"
+    assert context.factor_bundle == "factor"
+    assert context.pc_factor_s == pytest.approx(0.75)
+    assert context.setup_s == pytest.approx(1.25)
 
 
 def test_xblock_sparse_pc_final_metadata_from_driver_state_merges_components(

@@ -368,6 +368,20 @@ class SparsePCGMRESFinalPayload:
 
 
 @dataclass(frozen=True)
+class SparsePCGMRESFinalizationContext:
+    """Explicit inputs for final sparse-PC GMRES retry, polish, and payload."""
+
+    diagnostic_state: Mapping[str, object]
+    result: SparsePCGMRESResult
+    factor_dtype_used: np.dtype
+    factor_dtype_retry: str | None
+    operator_bundle: Any
+    factor_bundle: Any
+    pc_factor_s: float
+    setup_s: float | None
+
+
+@dataclass(frozen=True)
 class SparseMinimumNormPolicy:
     """Host LSQR/LSMR controls for sparse minimum-norm solves."""
 
@@ -8297,19 +8311,78 @@ def finalize_sparse_pc_gmres_with_dtype_retry_from_driver_state(
 ) -> SparsePCGMRESFinalPayload:
     """Retry factor dtype if needed, then build the final sparse-PC payload."""
 
+    return finalize_sparse_pc_gmres_with_dtype_retry(
+        SparsePCGMRESFinalizationContext(
+            diagnostic_state=state,
+            result=SparsePCGMRESResult(
+                x=np.asarray(state["x_np"], dtype=np.float64),
+                residual_norm=float(state["residual_norm_sparse_pc"]),
+                preconditioned_residual_norm=float(state["rn_pc"]),
+                history=tuple(float(v) for v in (state["history"] or ())),
+                solve_s=float(state["solve_s"]),
+            ),
+            factor_dtype_used=np.dtype(state["sparse_pc_factor_dtype_used"]),
+            factor_dtype_retry=state["sparse_pc_factor_dtype_retry"],
+            operator_bundle=state["_operator_bundle_pc"],
+            factor_bundle=state["factor_bundle_pc"],
+            pc_factor_s=float(state["pc_factor_s"]),
+            setup_s=float(state["setup_s"]) if "setup_s" in state else None,
+        ),
+        build_host_sparse_direct_factor_from_matvec=build_host_sparse_direct_factor_from_matvec,
+        run_sparse_pc_gmres_once_callback=run_sparse_pc_gmres_once_callback,
+        minres_correction=minres_correction,
+        expand_reduced=expand_reduced,
+    )
+
+
+def finalize_sparse_pc_gmres_with_dtype_retry(
+    context: SparsePCGMRESFinalizationContext,
+    *,
+    build_host_sparse_direct_factor_from_matvec: Callable[..., tuple[Any, Any]],
+    run_sparse_pc_gmres_once_callback: Callable[..., tuple[np.ndarray, float, float, Sequence[float], float]],
+    minres_correction: Callable[..., tuple[jnp.ndarray, jnp.ndarray, Sequence[float], Sequence[float]]],
+    expand_reduced: ArrayFn,
+) -> SparsePCGMRESFinalPayload:
+    """Retry factor dtype if needed from explicit solve state, then finalize."""
+
+    initial_state = (
+        context.diagnostic_state.__class__(context.diagnostic_state)
+        if isinstance(context.diagnostic_state, MutableMapping)
+        else dict(context.diagnostic_state)
+    )
+    initial_state.update(
+        {
+            "sparse_pc_factor_dtype_used": np.dtype(context.factor_dtype_used),
+            "sparse_pc_factor_dtype_retry": context.factor_dtype_retry,
+            "_operator_bundle_pc": context.operator_bundle,
+            "factor_bundle_pc": context.factor_bundle,
+            "pc_factor_s": float(context.pc_factor_s),
+            "x_np": np.asarray(context.result.x, dtype=np.float64),
+            "residual_norm_sparse_pc": float(context.result.residual_norm),
+            "rn_pc": float(context.result.preconditioned_residual_norm),
+            "history": tuple(float(v) for v in (context.result.history or ())),
+            "solve_s": float(context.result.solve_s),
+        }
+    )
+    if context.setup_s is not None:
+        initial_state["setup_s"] = float(context.setup_s)
     retry_result = retry_sparse_pc_factor_dtype_from_driver_state(
-        state,
+        initial_state,
         build_host_sparse_direct_factor_from_matvec=build_host_sparse_direct_factor_from_matvec,
         run_sparse_pc_gmres_once_callback=run_sparse_pc_gmres_once_callback,
     )
-    final_state = state.__class__(state) if isinstance(state, MutableMapping) else dict(state)
+    final_state = (
+        initial_state.__class__(initial_state)
+        if isinstance(initial_state, MutableMapping)
+        else dict(initial_state)
+    )
     final_state.update(
         {
             "sparse_pc_factor_dtype_used": retry_result.factor_dtype_used,
             "sparse_pc_factor_dtype_retry": retry_result.factor_dtype_retry,
             "_operator_bundle_pc": retry_result.operator_bundle,
             "factor_bundle_pc": retry_result.factor_bundle,
-            "pc_factor_s": float(state["pc_factor_s"]) + float(retry_result.factor_s_increment),
+            "pc_factor_s": float(context.pc_factor_s) + float(retry_result.factor_s_increment),
             "x_np": retry_result.x,
             "residual_norm_sparse_pc": float(retry_result.residual_norm),
             "rn_pc": float(retry_result.preconditioned_residual_norm),
@@ -9936,6 +10009,7 @@ __all__ = [
     "SparsePCPatternSetupResult",
     "SparsePCGMRESContext",
     "SparsePCGMRESResult",
+    "SparsePCGMRESFinalizationContext",
     "XBlockKrylovReport",
     "XBlockSparsePCCompletionContext",
     "XBlockSparsePCFinalPayloadContext",
@@ -10042,6 +10116,7 @@ __all__ = [
     "emit_sparse_pc_gmres_completion_from_driver_state",
     "sparse_pc_gmres_final_payload_from_driver_state",
     "finalize_sparse_pc_gmres_from_driver_state",
+    "finalize_sparse_pc_gmres_with_dtype_retry",
     "finalize_sparse_pc_gmres_with_dtype_retry_from_driver_state",
     "fortran_reduced_xblock_final_payload",
     "fortran_reduced_xblock_final_payload_from_driver_state",
