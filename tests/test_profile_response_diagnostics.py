@@ -6,6 +6,7 @@ import numpy as np
 import jax.numpy as jnp
 
 from sfincs_jax.problems.profile_response.diagnostics import (
+    SparsePCDirectTailMetadataContext,
     SparseRescueTailMetadataContext,
     XBlockAssembledOperatorDiagnosticsContext,
     XBlockSparsePCCoreDiagnosticsContext,
@@ -13,6 +14,7 @@ from sfincs_jax.problems.profile_response.diagnostics import (
     fp_xblock_global_correction_metadata,
     fp_xblock_highx_residual_correction_metadata,
     sparse_pc_direct_tail_result_metadata,
+    sparse_pc_direct_tail_result_metadata_from_context,
     sparse_pc_gmres_result_metadata,
     sparse_rescue_tail_metadata,
     sparse_rescue_tail_metadata_from_context,
@@ -884,6 +886,12 @@ class _DefaultDirectTailState(dict):
         return self[key]
 
 
+class _DefaultDirectTailSuffixes(dict):
+    def __missing__(self, key: str) -> object:
+        self[key] = 1
+        return self[key]
+
+
 def test_sparse_pc_direct_tail_result_metadata_preserves_driver_conversions() -> None:
     structured_metadata = {"kind": "native"}
     support_metadata = {"accepted": True}
@@ -914,6 +922,57 @@ def test_sparse_pc_direct_tail_result_metadata_preserves_driver_conversions() ->
     )
 
     metadata = sparse_pc_direct_tail_result_metadata(state)
+    suffix_values = _DefaultDirectTailSuffixes(
+        {
+            key.removeprefix("direct_tail_"): value
+            for key, value in state.items()
+            if key.startswith("direct_tail_")
+        }
+    )
+    context_metadata = sparse_pc_direct_tail_result_metadata_from_context(
+        SparsePCDirectTailMetadataContext(
+            structured_pc_preflight_required=state[
+                "structured_pc_preflight_required"
+            ],
+            structured_pc_preflight_required_min_size=state[
+                "structured_pc_preflight_required_min_size"
+            ],
+            suffix_values=suffix_values,
+            true_active_block_species_count=state[
+                "direct_tail_true_active_block_species_count"
+            ],
+            true_window_specs=state["direct_tail_true_window_specs"],
+            operator_bundle=state["direct_tail_operator_bundle"],
+            structured_max_nbytes=state["direct_tail_structured_max_nbytes"],
+            enabled=state["direct_tail_enabled"],
+            direct_reduced_pmat_requested=state[
+                "direct_tail_direct_reduced_pmat_requested"
+            ],
+            built=state["direct_tail_built"],
+            error=state["direct_tail_error"],
+            structured_pc_requested=state["direct_tail_structured_pc_requested"],
+            structured_pc_required=state["direct_tail_structured_pc_required"],
+            structured_pc_selected=state["direct_tail_structured_pc_selected"],
+            structured_pc_reason=state["direct_tail_structured_pc_reason"],
+            structured_pc_error=state["direct_tail_structured_pc_error"],
+            structured_pc_max_mb_auto=state[
+                "direct_tail_structured_pc_max_mb_auto"
+            ],
+            structured_pc_metadata=state["direct_tail_structured_pc_metadata"],
+            support_mode_preflight_requested=state[
+                "direct_tail_support_mode_preflight_requested"
+            ],
+            support_mode_preflight_selected=state[
+                "direct_tail_support_mode_preflight_selected"
+            ],
+            support_mode_preflight_error=state[
+                "direct_tail_support_mode_preflight_error"
+            ],
+            support_mode_preflight_metadata=state[
+                "direct_tail_support_mode_preflight_metadata"
+            ],
+        )
+    )
 
     assert metadata["sparse_pc_direct_tail_true_window_specs"] == ((1, 2),)
     assert metadata["sparse_pc_direct_tail_true_active_block_species_count"] is None
@@ -946,6 +1005,7 @@ def test_sparse_pc_direct_tail_result_metadata_preserves_driver_conversions() ->
     )
     assert metadata["sparse_pc_direct_tail_residual_window_coefficient_mode"] == "normal"
     assert metadata["sparse_pc_direct_tail_residual_window_combine_mode"] == "additive"
+    assert context_metadata == metadata
 
 
 def test_sparse_pc_gmres_result_metadata_preserves_driver_schema() -> None:
@@ -1062,6 +1122,27 @@ def test_sparse_pc_gmres_result_metadata_preserves_driver_schema() -> None:
     assert metadata["sparse_pc_factor_quality_rejected"] is True
     assert metadata["sparse_pc_fortran_reduced_direct_tail_structured_pc_metadata"] == {"kind": "active"}
     assert metadata["sparse_pc_direct_tail_true_active_block_species_count"] == 2
+
+    precomputed_tail_metadata = dict(sparse_pc_direct_tail_result_metadata(state))
+    precomputed_tail_metadata[
+        "sparse_pc_fortran_reduced_direct_tail_structured_pc_metadata"
+    ] = {"kind": "precomputed"}
+    precomputed_state = {
+        key: value
+        for key, value in state.items()
+        if not key.startswith("direct_tail_")
+    }
+    precomputed_state["sparse_pc_direct_tail_metadata"] = precomputed_tail_metadata
+
+    precomputed_metadata = sparse_pc_gmres_result_metadata(precomputed_state)
+
+    assert (
+        precomputed_metadata[
+            "sparse_pc_fortran_reduced_direct_tail_structured_pc_metadata"
+        ]
+        == {"kind": "precomputed"}
+    )
+    assert precomputed_metadata["sparse_pc_direct_tail_true_active_block_species_count"] == 2
 
 
 def test_xblock_sparse_pc_core_diagnostics_preserve_payload() -> None:

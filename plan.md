@@ -922,6 +922,14 @@ Recent local validation:
 - Broad profile-response/RHSMode=1 policy, setup, diagnostics, solver, and
   helper sweep after fortran-reduced xblock explicit metadata-state handoff:
   `1186 passed in 47.37 s`.
+- Profile-response diagnostics/sparse-PC shard after direct-tail metadata
+  context extraction:
+  `243 passed in 1.96 s`.
+- Sparse-host/minimum-norm/direct-tail driver shard:
+  `32 passed, 100 deselected in 36.88 s`.
+- Broad profile-response/RHSMode=1 policy, setup, diagnostics, solver, and
+  helper sweep after direct-tail metadata context extraction:
+  `1186 passed in 48.83 s`.
 - Older focused and broad validation checkpoints are intentionally omitted from
   this active plan; they remain available in git history.
 
@@ -934,7 +942,7 @@ Known CI issue fixed by this rewrite:
 
 ### 1. `v3_driver.py` Architecture Refactor
 
-Completion estimate: 49%.
+Completion estimate: 50%.
 
 Goal:
 
@@ -1186,13 +1194,18 @@ Completed recent boundaries:
   frame. The generic direct-tail metadata handoff is intentionally deferred
   until direct-tail diagnostics are typed; an inline all-key dictionary would
   make the driver less maintainable.
+- Generic sparse-PC direct-tail metadata now has a tested explicit context
+  path with named suffix groups. The legacy mapping wrapper remains compatible,
+  and generic sparse-PC result metadata can now consume precomputed direct-tail
+  metadata without carrying every raw direct-tail driver key.
 
 Next steps:
 
 - Continue moving remaining generic sparse-PC result/diagnostic seams into
   cohesive `profile_response` helpers only where the replacement context can
   stay explicit and tested.
-- Split the generic sparse-PC direct-tail metadata contract before removing
+- Build the generic sparse-PC final metadata state from typed direct-tail,
+  factor-preflight, post-minres, and pattern-summary contexts before removing
   its final broad diagnostic-state handoff; do not replace it with a giant
   inline driver dictionary.
 - Continue extracting broad driver-state handoffs in sparse-PC branches only
