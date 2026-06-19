@@ -7,6 +7,7 @@ import jax.numpy as jnp
 from sfincs_jax.rhs1_residual import (
     l2_norm_float,
     recompute_true_residual_result,
+    replay_left_preconditioned_residual_norms,
     residual_converged,
     residual_target,
     safe_ratio,
@@ -95,3 +96,89 @@ def test_recompute_true_residual_result_keeps_incumbent_on_nonfinite_true_norm()
     assert updated is result
     assert residual_vec is None
     assert residual_norm == 7.0
+
+
+def test_replay_left_preconditioned_residual_norms_noops_without_left_preconditioner() -> None:
+    result = GMRESSolveResult(
+        x=jnp.asarray([1.0], dtype=jnp.float64),
+        residual_norm=jnp.asarray(7.0, dtype=jnp.float64),
+    )
+
+    residual_vec, true_norm, check_norm = replay_left_preconditioned_residual_norms(
+        result=result,
+        rhs=jnp.asarray([0.0], dtype=jnp.float64),
+        matvec=lambda _x: (_ for _ in ()).throw(RuntimeError("should not be called")),
+        residual_vec=None,
+        preconditioner=None,
+        precondition_side="none",
+        update_residual_vec=True,
+    )
+
+    assert residual_vec is None
+    assert true_norm == 7.0
+    assert check_norm == 7.0
+
+
+def test_replay_left_preconditioned_residual_norms_reports_true_and_preconditioned_norms() -> None:
+    result = GMRESSolveResult(
+        x=jnp.asarray([1.0, -1.0], dtype=jnp.float64),
+        residual_norm=jnp.asarray(99.0, dtype=jnp.float64),
+    )
+
+    residual_vec, true_norm, check_norm = replay_left_preconditioned_residual_norms(
+        result=result,
+        rhs=jnp.asarray([1.0, 2.0], dtype=jnp.float64),
+        matvec=lambda x: jnp.asarray([x[0], 2.0 * x[1]], dtype=jnp.float64),
+        residual_vec=None,
+        preconditioner=lambda r: 0.5 * r,
+        precondition_side="left",
+        update_residual_vec=True,
+    )
+
+    assert residual_vec is not None
+    assert jnp.array_equal(residual_vec, jnp.asarray([0.0, 4.0], dtype=jnp.float64))
+    assert true_norm == 4.0
+    assert check_norm == 2.0
+
+
+def test_replay_left_preconditioned_residual_norms_keeps_supplied_residual_without_update() -> None:
+    result = GMRESSolveResult(
+        x=jnp.asarray([1.0, -1.0], dtype=jnp.float64),
+        residual_norm=jnp.asarray(99.0, dtype=jnp.float64),
+    )
+    supplied_residual = jnp.asarray([3.0, 4.0], dtype=jnp.float64)
+
+    residual_vec, true_norm, check_norm = replay_left_preconditioned_residual_norms(
+        result=result,
+        rhs=jnp.asarray([0.0, 0.0], dtype=jnp.float64),
+        matvec=lambda _x: (_ for _ in ()).throw(RuntimeError("should not be called")),
+        residual_vec=supplied_residual,
+        preconditioner=lambda r: 2.0 * r,
+        precondition_side="left",
+        update_residual_vec=False,
+    )
+
+    assert residual_vec is supplied_residual
+    assert true_norm == 5.0
+    assert check_norm == 10.0
+
+
+def test_replay_left_preconditioned_residual_norms_preserves_current_check_when_preconditioned_nonfinite() -> None:
+    result = GMRESSolveResult(
+        x=jnp.asarray([1.0], dtype=jnp.float64),
+        residual_norm=jnp.asarray(7.0, dtype=jnp.float64),
+    )
+
+    residual_vec, true_norm, check_norm = replay_left_preconditioned_residual_norms(
+        result=result,
+        rhs=jnp.asarray([0.0], dtype=jnp.float64),
+        matvec=lambda _x: jnp.asarray([jnp.nan], dtype=jnp.float64),
+        residual_vec=None,
+        preconditioner=lambda r: r,
+        precondition_side="left",
+        update_residual_vec=True,
+    )
+
+    assert residual_vec is not None
+    assert true_norm == math.inf
+    assert check_norm == 7.0

@@ -42,8 +42,10 @@ Make `sfincs_jax` research-grade while preserving the public user contract:
 
 Recent checkpoints:
 
-- RHSMode=1 true-residual recomputation helper extraction
+- RHSMode=1 left-preconditioned replay residual norm helper extraction
   (current checkpoint).
+- RHSMode=1 true-residual recomputation helper extraction
+  (`6fbd66a`).
 - RHSMode=1 candidate accept-and-replay handoff consolidation
   (`7d31161`).
 - Implicit-solve host-only Krylov downgrade contract and gradient tests
@@ -73,17 +75,21 @@ Recent checkpoints:
 - `cb295ce` Extract sparse pattern setup.
 - `4b6a5b4` Extract sparse factor policy.
 
-Current source-size snapshot after RHSMode=1 true-residual recomputation helper
+Current source-size snapshot after RHSMode=1 replay residual norm helper
 extraction:
 
-- `sfincs_jax/v3_driver.py`: `18862` lines.
-- `solve_v3_full_system_linear_gmres`: `13577` lines.
-- `sfincs_jax/problems/profile_response/residual.py`: `692` lines.
+- `sfincs_jax/v3_driver.py`: `18856` lines.
+- `solve_v3_full_system_linear_gmres`: `13570` lines.
+- `sfincs_jax/problems/profile_response/residual.py`: `735` lines.
 - `sfincs_jax/problems/profile_response/handoff.py`: `290` lines.
 - `sfincs_jax/problems/profile_response/sparse_pc.py`: `7826` lines.
 
 Recent local validation:
 
+- RHSMode=1 replay residual/refactor focused shard:
+  `35 passed in 9.78 s`.
+- Profile-response replay residual/handoff/sparse-PC shard:
+  `212 passed in 1.79 s`.
 - RHSMode=1 residual/refactor focused shard:
   `31 passed in 9.48 s`.
 - Profile-response residual/handoff/sparse-PC shard:
@@ -209,6 +215,8 @@ Completed recent boundaries:
   consolidated into profile-response handoff helpers.
 - RHSMode=1 true-residual recomputation before fallback decisions consolidated
   into a tested profile-response residual helper.
+- RHSMode=1 left-preconditioned replay residual norm measurement for
+  dense-fallback gates consolidated into a tested residual helper.
 
 Next steps:
 
@@ -277,7 +285,7 @@ Next steps:
 
 ## Immediate Next Steps
 
-1. Commit and push the RHSMode=1 true-residual helper extraction.
+1. Commit and push the RHSMode=1 replay residual norm helper extraction.
 2. Continue with remaining generic sparse-PC solve/result assembly extraction
    where behavior and cache boundaries remain clean.
 3. Run focused implicit/sparse-PC/profile-response shards after each extraction,

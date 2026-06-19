@@ -505,6 +505,7 @@ from .problems.profile_response.residual import (
     compose_residual_correction_preconditioner as _compose_residual_correction_preconditioner,
     l2_norm_float as rhs1_l2_norm_float,
     recompute_true_residual_result as rhs1_recompute_true_residual_result,
+    replay_left_preconditioned_residual_norms as rhs1_replay_left_preconditioned_residual_norms,
     residual_converged as rhs1_residual_converged,
     residual_target as rhs1_residual_target,
     safe_preconditioner as _safe_preconditioner,
@@ -13948,20 +13949,17 @@ def solve_v3_full_system_linear_gmres(
                             f"{'sparse_lu' if sparse_exact_lu else 'sparse_ilu'}: "
                             f"failed ({type(exc).__name__}: {exc})",
                         )
-        residual_norm_check = float(res_reduced.residual_norm)
-        residual_norm_true = residual_norm_check
-        if ksp_replay.precond_fn is not None and ksp_replay.precond_side == "left":
-            try:
-                r_vec = ksp_replay.b_vec - ksp_replay.matvec_fn(res_reduced.x)
-                residual_norm_true = float(jnp.linalg.norm(r_vec))
-                if not np.isfinite(residual_norm_true):
-                    residual_norm_true = float("inf")
-                r_pc = ksp_replay.precond_fn(r_vec)
-                r_pc_norm = float(jnp.linalg.norm(r_pc))
-                if np.isfinite(r_pc_norm):
-                    residual_norm_check = r_pc_norm
-            except Exception:
-                pass
+        residual_vec, residual_norm_true, residual_norm_check = (
+            rhs1_replay_left_preconditioned_residual_norms(
+                result=res_reduced,
+                rhs=ksp_replay.b_vec,
+                matvec=ksp_replay.matvec_fn,
+                residual_vec=residual_vec,
+                preconditioner=ksp_replay.precond_fn,
+                precondition_side=ksp_replay.precond_side,
+                update_residual_vec=False,
+            )
+        )
         dense_fallback_max = _rhsmode1_dense_fallback_max(op)
         if not dense_backend_allowed and not host_dense_fallback_allowed and not dense_krylov_allowed:
             dense_fallback_max = 0
@@ -16364,21 +16362,17 @@ def solve_v3_full_system_linear_gmres(
                             f"{'sparse_lu' if sparse_exact_lu else 'sparse_ilu'}: "
                             f"failed ({type(exc).__name__}: {exc})",
                         )
-        residual_norm_check = float(result.residual_norm)
-        residual_norm_true = residual_norm_check
-        if ksp_replay.precond_fn is not None and ksp_replay.precond_side == "left":
-            try:
-                if residual_vec is None:
-                    residual_vec = rhs - mv(result.x)
-                residual_norm_true = float(jnp.linalg.norm(residual_vec))
-                if not np.isfinite(residual_norm_true):
-                    residual_norm_true = float("inf")
-                r_pc = ksp_replay.precond_fn(residual_vec)
-                r_pc_norm = float(jnp.linalg.norm(r_pc))
-                if np.isfinite(r_pc_norm):
-                    residual_norm_check = r_pc_norm
-            except Exception:
-                pass
+        residual_vec, residual_norm_true, residual_norm_check = (
+            rhs1_replay_left_preconditioned_residual_norms(
+                result=result,
+                rhs=rhs,
+                matvec=mv,
+                residual_vec=residual_vec,
+                preconditioner=ksp_replay.precond_fn,
+                precondition_side=ksp_replay.precond_side,
+                update_residual_vec=True,
+            )
+        )
         dense_fallback_max = _rhsmode1_dense_fallback_max(op)
         dense_backend_allowed = _rhsmode1_dense_backend_allowed()
         host_dense_fallback_allowed = _rhsmode1_host_dense_fallback_allowed()

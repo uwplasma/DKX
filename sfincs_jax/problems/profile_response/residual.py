@@ -649,6 +649,48 @@ def recompute_true_residual_result(
     return updated, true_vec if update_residual_vec else residual_vec, true_norm
 
 
+def replay_left_preconditioned_residual_norms(
+    *,
+    result: Any,
+    rhs: jnp.ndarray,
+    matvec: Callable[[jnp.ndarray], jnp.ndarray],
+    residual_vec: jnp.ndarray | None = None,
+    preconditioner: Callable[[jnp.ndarray], jnp.ndarray] | None,
+    precondition_side: str,
+    update_residual_vec: bool,
+) -> tuple[jnp.ndarray | None, float, float]:
+    """Return true and preconditioned residual norms for fallback decisions.
+
+    Some RHSMode=1 branches replay accepted left-preconditioned Krylov solves.
+    Their reported norm can be a preconditioned residual, while dense-fallback
+    admission must use the true residual. This helper keeps that distinction
+    explicit: it returns ``(residual_vec, true_norm, check_norm)`` where
+    ``check_norm`` is the preconditioned norm when it can be measured.
+    """
+
+    current_norm = float(result.residual_norm)
+    if preconditioner is None or str(precondition_side) != "left":
+        return residual_vec, current_norm, current_norm
+
+    try:
+        true_vec = (
+            jnp.asarray(residual_vec, dtype=jnp.float64)
+            if residual_vec is not None
+            else jnp.asarray(rhs, dtype=jnp.float64)
+            - jnp.asarray(matvec(result.x), dtype=jnp.float64)
+        )
+        true_norm = float(jnp.linalg.norm(true_vec))
+        if not math.isfinite(true_norm):
+            true_norm = float("inf")
+        preconditioned = jnp.asarray(preconditioner(true_vec), dtype=jnp.float64)
+        preconditioned_norm = float(jnp.linalg.norm(preconditioned))
+        check_norm = preconditioned_norm if math.isfinite(preconditioned_norm) else current_norm
+    except Exception:
+        return residual_vec, current_norm, current_norm
+
+    return true_vec if update_residual_vec else residual_vec, true_norm, check_norm
+
+
 def residual_target(*, atol: float, tol: float, rhs_norm: float) -> float:
     """Return the absolute residual target used by PETSc-style relative gates."""
 
@@ -685,6 +727,7 @@ __all__ = [
     "compose_residual_correction_preconditioner",
     "l2_norm_float",
     "recompute_true_residual_result",
+    "replay_left_preconditioned_residual_norms",
     "residual_converged",
     "residual_target",
     "safe_preconditioner",
