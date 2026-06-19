@@ -3,6 +3,7 @@ from __future__ import annotations
 from types import SimpleNamespace
 
 from sfincs_jax.rhs1_post_xblock_policy import (
+    RHS1BiCGStabFallbackControls,
     RHS1FastPostXBlockPolishControls,
     RHS1FPBiCGStabPolishControls,
     RHS1FPGlobalLowLPolishControls,
@@ -10,6 +11,8 @@ from sfincs_jax.rhs1_post_xblock_policy import (
     RHS1FPLowLPolishControls,
     RHS1FPResidualPolishControls,
     RHS1ScipyRescueControls,
+    rhs1_bicgstab_fallback_controls_from_env,
+    rhs1_bicgstab_fallback_target_from_env,
     rhs1_fast_post_xblock_polish_allowed,
     rhs1_fast_post_xblock_polish_controls_from_env,
     rhs1_fp_bicgstab_polish_controls_from_env,
@@ -124,6 +127,81 @@ def test_fast_post_xblock_polish_controls_respect_env_and_bounds(monkeypatch) ->
         maxiter=80,
         tol=1.0e-12,
     )
+
+
+def test_bicgstab_fallback_controls_preserve_defaults_and_pas_fastpath(monkeypatch) -> None:
+    monkeypatch.delenv("SFINCS_JAX_BICGSTAB_FALLBACK", raising=False)
+
+    assert rhs1_bicgstab_fallback_controls_from_env(
+        pas_large_bicgstab_fastpath=False,
+    ) == RHS1BiCGStabFallbackControls(strict=True)
+    assert rhs1_bicgstab_fallback_controls_from_env(
+        pas_large_bicgstab_fastpath=True,
+    ) == RHS1BiCGStabFallbackControls(strict=False)
+
+
+def test_bicgstab_fallback_controls_respect_explicit_env(monkeypatch) -> None:
+    monkeypatch.setenv("SFINCS_JAX_BICGSTAB_FALLBACK", "off")
+    assert rhs1_bicgstab_fallback_controls_from_env(
+        pas_large_bicgstab_fastpath=False,
+    ) == RHS1BiCGStabFallbackControls(strict=False)
+
+    monkeypatch.setenv("SFINCS_JAX_BICGSTAB_FALLBACK", "strict")
+    assert rhs1_bicgstab_fallback_controls_from_env(
+        pas_large_bicgstab_fastpath=True,
+    ) == RHS1BiCGStabFallbackControls(strict=True)
+
+    monkeypatch.setenv("SFINCS_JAX_BICGSTAB_FALLBACK", "unexpected")
+    assert rhs1_bicgstab_fallback_controls_from_env(
+        pas_large_bicgstab_fastpath=True,
+    ) == RHS1BiCGStabFallbackControls(strict=True)
+
+
+def test_bicgstab_fallback_target_uses_distributed_pas_floor(monkeypatch) -> None:
+    monkeypatch.delenv("SFINCS_JAX_BICGSTAB_FALLBACK_ABS_FLOOR", raising=False)
+
+    assert rhs1_bicgstab_fallback_target_from_env(
+        target=1.0e-9,
+        distributed_axis="theta",
+        has_pas=True,
+        include_phi1=False,
+    ) == 1.0e-7
+    assert rhs1_bicgstab_fallback_target_from_env(
+        target=1.0e-9,
+        distributed_axis=None,
+        has_pas=True,
+        include_phi1=False,
+    ) == 1.0e-9
+    assert rhs1_bicgstab_fallback_target_from_env(
+        target=2.0e-7,
+        distributed_axis="theta",
+        has_pas=True,
+        include_phi1=False,
+    ) == 2.0e-7
+
+    monkeypatch.setenv("SFINCS_JAX_BICGSTAB_FALLBACK_ABS_FLOOR", "3e-8")
+    assert rhs1_bicgstab_fallback_target_from_env(
+        target=1.0e-9,
+        distributed_axis=None,
+        has_pas=False,
+        include_phi1=False,
+    ) == 3.0e-8
+
+    monkeypatch.setenv("SFINCS_JAX_BICGSTAB_FALLBACK_ABS_FLOOR", "-1")
+    assert rhs1_bicgstab_fallback_target_from_env(
+        target=1.0e-9,
+        distributed_axis="theta",
+        has_pas=True,
+        include_phi1=False,
+    ) == 1.0e-9
+
+    monkeypatch.setenv("SFINCS_JAX_BICGSTAB_FALLBACK_ABS_FLOOR", "bad")
+    assert rhs1_bicgstab_fallback_target_from_env(
+        target=1.0e-9,
+        distributed_axis="theta",
+        has_pas=True,
+        include_phi1=False,
+    ) == 1.0e-7
 
 
 def test_fp_targeted_polish_triggers_for_medium_large_cpu_fp(monkeypatch) -> None:

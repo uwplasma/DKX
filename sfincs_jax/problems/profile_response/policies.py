@@ -2116,6 +2116,13 @@ class RHS1ScipyRescueControls:
     method: str
 
 
+@dataclass(frozen=True)
+class RHS1BiCGStabFallbackControls:
+    """Controls for strict BiCGStab-to-GMRES fallback."""
+
+    strict: bool
+
+
 def rhs1_fp_residual_polish_controls_from_env() -> RHS1FPResidualPolishControls:
     """Parse damped FP residual-polish controls with bounded defaults."""
 
@@ -2383,6 +2390,40 @@ def rhs1_pas_source_zero_tolerance_from_env() -> float:
     """Parse the tiny PAS source cleanup tolerance shared by RHSMode=1 exits."""
 
     return _env_float("SFINCS_JAX_PAS_SOURCE_ZERO_TOL", 2.0e-9)
+
+
+def rhs1_bicgstab_fallback_controls_from_env(
+    *,
+    pas_large_bicgstab_fastpath: bool,
+) -> RHS1BiCGStabFallbackControls:
+    """Parse strict BiCGStab fallback controls with the PAS-large fastpath exception."""
+
+    env_value = _env_token("SFINCS_JAX_BICGSTAB_FALLBACK")
+    if env_value in _FALSE_VALUES:
+        strict = False
+    elif env_value in _TRUE_VALUES or env_value == "strict":
+        strict = True
+    else:
+        strict = True
+    if bool(pas_large_bicgstab_fastpath) and env_value == "":
+        strict = False
+    return RHS1BiCGStabFallbackControls(strict=bool(strict))
+
+
+def rhs1_bicgstab_fallback_target_from_env(
+    *,
+    target: float,
+    distributed_axis: str | None,
+    has_pas: bool,
+    include_phi1: bool,
+) -> float:
+    """Return the strict BiCGStab fallback target including distributed PAS floor."""
+
+    default_floor = 0.0
+    if distributed_axis is not None and bool(has_pas) and not bool(include_phi1):
+        default_floor = 1.0e-7
+    floor = _env_float("SFINCS_JAX_BICGSTAB_FALLBACK_ABS_FLOOR", default_floor)
+    return max(float(target), max(0.0, float(floor)))
 
 
 def rhs1_fp_xblock_global_correction_allowed(
@@ -3198,6 +3239,7 @@ def rhs1_pas_tz_guarded_stage2_retry() -> bool:
 
 __all__ = (
     "RHS1Constraint0PETScCompatConfig",
+    "RHS1BiCGStabFallbackControls",
     "RHS1FastPostXBlockPolishControls",
     "RHS1FPBiCGStabPolishControls",
     "RHS1FPGlobalLowLPolishControls",
@@ -3213,6 +3255,8 @@ __all__ = (
     "RHS1SparseRescueOrdering",
     "RHS1SparseRescuePolicySetup",
     "parse_rhs1_pas_tz_guarded_structured_levels",
+    "rhs1_bicgstab_fallback_controls_from_env",
+    "rhs1_bicgstab_fallback_target_from_env",
     "rhs1_constraint0_dense_fallback_allowed",
     "rhs1_constraint0_petsc_compat",
     "rhs1_constraint0_petsc_compat_config_from_env",

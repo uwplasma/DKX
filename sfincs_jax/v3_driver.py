@@ -579,6 +579,8 @@ from .rhs1_large_cpu_policy import (
     rhs1_sparse_xblock_rescue_allowed as _rhs1_sparse_xblock_rescue_allowed_impl,
 )
 from .problems.profile_response.policies import (
+    rhs1_bicgstab_fallback_controls_from_env,
+    rhs1_bicgstab_fallback_target_from_env,
     rhs1_fast_post_xblock_polish_allowed as _rhs1_fast_post_xblock_polish_allowed_impl,
     rhs1_fast_post_xblock_polish_controls_from_env,
     rhs1_fp_bicgstab_polish_controls_from_env,
@@ -10155,18 +10157,10 @@ def solve_v3_full_system_linear_gmres(
     # JAX transpose-rule limitations in the right-preconditioned path.
     gmres_precond_side = gmres_precond_side_env or "left"
 
-    bicgstab_fallback_env = os.environ.get("SFINCS_JAX_BICGSTAB_FALLBACK", "").strip().lower()
-    if bicgstab_fallback_env in {"0", "false", "no", "off"}:
-        bicgstab_fallback_strict = False
-    elif bicgstab_fallback_env in {"1", "true", "yes", "on", "strict"}:
-        bicgstab_fallback_strict = True
-    else:
-        # Default to strict fallback to preserve parity when BiCGStab stagnates.
-        bicgstab_fallback_strict = True
-    if pas_large_bicgstab_fastpath and bicgstab_fallback_env == "":
-        # PAS-large fastpath intentionally accepts the short-recurrence solution
-        # when it is already parity-accurate at our regression tolerances.
-        bicgstab_fallback_strict = False
+    bicgstab_fallback_controls = rhs1_bicgstab_fallback_controls_from_env(
+        pas_large_bicgstab_fastpath=bool(pas_large_bicgstab_fastpath),
+    )
+    bicgstab_fallback_strict = bool(bicgstab_fallback_controls.strict)
     distributed_axis = _resolve_distributed_gmres_axis(op=op, emit=emit)
     use_sharded_matvec = distributed_axis in {"theta", "zeta"} and (not use_implicit)
     distributed_auto_solver_env = os.environ.get("SFINCS_JAX_DISTRIBUTED_KRYLOV", "").strip().lower()
@@ -11601,18 +11595,15 @@ def solve_v3_full_system_linear_gmres(
         solver_kind = _solver_kind(solve_method)[0]
         bicgstab_fallback_target = float(target_reduced)
         if bicgstab_fallback_strict:
-            fallback_floor_env = os.environ.get("SFINCS_JAX_BICGSTAB_FALLBACK_ABS_FLOOR", "").strip()
-            default_floor = 0.0
-            if distributed_axis is not None and op.fblock.pas is not None and (not bool(op.include_phi1)):
-                # In distributed PAS runs, BiCGStab often reaches solutions that are
-                # already parity-accurate, but the strict relative target is tiny due to
-                # small RHS norms. Avoid an expensive GMRES polish when residual is tiny.
-                default_floor = 1.0e-7
-            try:
-                fallback_floor = float(fallback_floor_env) if fallback_floor_env else default_floor
-            except ValueError:
-                fallback_floor = default_floor
-            bicgstab_fallback_target = max(float(target_reduced), max(0.0, float(fallback_floor)))
+            # In distributed PAS runs, BiCGStab often reaches parity-accurate
+            # solutions while the strict relative target is tiny due to small
+            # RHS norms. The policy helper applies that measured floor.
+            bicgstab_fallback_target = rhs1_bicgstab_fallback_target_from_env(
+                target=float(target_reduced),
+                distributed_axis=distributed_axis,
+                has_pas=op.fblock.pas is not None,
+                include_phi1=bool(op.include_phi1),
+            )
         if (not cpu_large_sparse_shortcut) and solver_kind == "bicgstab" and (
             (not _gmres_result_is_finite(res_reduced))
             or (bicgstab_fallback_strict and float(res_reduced.residual_norm) > bicgstab_fallback_target)
@@ -14390,15 +14381,12 @@ def solve_v3_full_system_linear_gmres(
             solver_kind = _solver_kind(solve_method)[0]
             bicgstab_fallback_target = float(target)
             if bicgstab_fallback_strict:
-                fallback_floor_env = os.environ.get("SFINCS_JAX_BICGSTAB_FALLBACK_ABS_FLOOR", "").strip()
-                default_floor = 0.0
-                if distributed_axis is not None and op.fblock.pas is not None and (not bool(op.include_phi1)):
-                    default_floor = 1.0e-7
-                try:
-                    fallback_floor = float(fallback_floor_env) if fallback_floor_env else default_floor
-                except ValueError:
-                    fallback_floor = default_floor
-                bicgstab_fallback_target = max(float(target), max(0.0, float(fallback_floor)))
+                bicgstab_fallback_target = rhs1_bicgstab_fallback_target_from_env(
+                    target=float(target),
+                    distributed_axis=distributed_axis,
+                    has_pas=op.fblock.pas is not None,
+                    include_phi1=bool(op.include_phi1),
+                )
             if solver_kind == "bicgstab" and (
                 (not _gmres_result_is_finite(result))
                 or (bicgstab_fallback_strict and float(result.residual_norm) > bicgstab_fallback_target)
