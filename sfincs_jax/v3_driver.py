@@ -233,7 +233,6 @@ from .problems.profile_response.sparse_pc import (
     apply_fortran_reduced_xblock_global_coupling_stage,
     apply_fortran_reduced_xblock_initial_seed,
     apply_fortran_reduced_xblock_moment_schur_stage,
-    apply_sparse_pc_post_minres_from_driver_state,
     build_fortran_reduced_xblock_factor_stage,
     build_explicit_sparse_operator_from_pattern,
     build_fortran_reduced_xblock_krylov_setup,
@@ -246,8 +245,7 @@ from .problems.profile_response.sparse_pc import (
     build_xblock_assembled_operator_preflight_setup,
     build_sparse_pc_active_dof_setup,
     build_direct_tail_materialization_setup,
-    emit_sparse_pc_gmres_completion_from_driver_state,
-    sparse_pc_gmres_final_payload_from_driver_state,
+    finalize_sparse_pc_gmres_from_driver_state,
     evaluate_xblock_moment_schur_probe_result,
     evaluate_sparse_pc_factor_preflight,
     evaluate_sparse_pc_residual_candidate_acceptance,
@@ -9230,22 +9228,9 @@ def solve_v3_full_system_linear_gmres(
         rn_pc = float(factor_dtype_retry_result.preconditioned_residual_norm)
         history = factor_dtype_retry_result.history
         solve_s = float(factor_dtype_retry_result.solve_s)
-        sparse_pc_post_minres = apply_sparse_pc_post_minres_from_driver_state(
+        sparse_pc_final_payload = finalize_sparse_pc_gmres_from_driver_state(
             locals(),
             minres_correction=_apply_preconditioned_minres_correction,
-        )
-        x_np = sparse_pc_post_minres.x
-        residual_norm_sparse_pc = float(sparse_pc_post_minres.residual_norm)
-        rn_pc = float(sparse_pc_post_minres.preconditioned_residual_norm)
-        sparse_pc_post_minres_history = sparse_pc_post_minres.history
-        sparse_pc_post_minres_alphas = sparse_pc_post_minres.alphas
-        sparse_pc_post_minres_residual_before = sparse_pc_post_minres.residual_before
-        sparse_pc_post_minres_residual_after = sparse_pc_post_minres.residual_after
-        sparse_pc_post_minres_error = sparse_pc_post_minres.error
-        solve_s = float(sparse_pc_post_minres.solve_s)
-        emit_sparse_pc_gmres_completion_from_driver_state(locals())
-        sparse_pc_final_payload = sparse_pc_gmres_final_payload_from_driver_state(
-            locals(),
             expand_reduced=_sparse_pc_expand_reduced,
         )
         return V3LinearSolveResult(

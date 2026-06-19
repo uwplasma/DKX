@@ -82,6 +82,7 @@ from sfincs_jax.problems.profile_response.sparse_pc import (
     failed_xblock_global_coupling_metadata,
     failed_xblock_two_level_metadata,
     failed_xblock_moment_schur_metadata,
+    finalize_sparse_pc_gmres_from_driver_state,
     finalize_xblock_global_coupling_metadata,
     finalize_xblock_two_level_metadata,
     finalize_xblock_moment_schur_metadata,
@@ -5152,3 +5153,119 @@ def test_sparse_pc_post_minres_from_driver_state_updates_solve_state() -> None:
     assert result.residual_after == pytest.approx(0.1)
     assert result.error is None
     assert result.solve_s == pytest.approx(7.6)
+
+
+def test_finalize_sparse_pc_gmres_from_driver_state_applies_polish_and_payload() -> None:
+    messages: list[tuple[int, str]] = []
+
+    def minres_correction(**_kwargs):
+        return (
+            jnp.asarray([3.0, 4.0]),
+            jnp.asarray([0.25, 0.0]),
+            (1.0, 0.25),
+            (0.5,),
+        )
+
+    state = _DefaultSparsePCDriverState(
+        {
+            "op": SimpleNamespace(total_size=np.int64(3)),
+            "_mv_true": _identity,
+            "sparse_pc_rhs": jnp.zeros(2),
+            "_precond_sparse": _identity,
+            "emit": lambda level, msg: messages.append((level, msg)),
+            "sparse_timer": SimpleNamespace(elapsed_s=lambda: 2.5),
+            "pc_form": "right",
+            "x_np": np.asarray([1.0, 2.0]),
+            "residual_norm_sparse_pc": 1.0,
+            "rn_pc": 0.5,
+            "solve_s": 7.0,
+            "target": 0.5,
+            "atol": 0.5,
+            "tol": 0.0,
+            "rhs_norm": 1.0,
+            "history": (1.0,),
+            "mv_count": np.int64(3),
+            "pc_restart": np.int64(4),
+            "pc_maxiter": np.int64(5),
+            "sparse_pc_first_attempt_maxiter": np.int64(2),
+            "sparse_pc_post_minres_steps": np.int64(2),
+            "sparse_pc_post_minres_alpha_clip": 4.0,
+            "sparse_pc_post_minres_min_improvement": 0.0,
+            "sparse_pc_post_minres_alphas": (),
+            "sparse_pc_post_minres_residual_before": None,
+            "sparse_pc_post_minres_residual_after": None,
+            "sparse_pc_post_minres_history": (),
+            "sparse_pc_post_minres_error": None,
+            "pc_shift": 0.0,
+            "sparse_pc_factor_dtype_used": np.dtype(np.float64),
+            "sparse_pc_factor_dtype_initial": np.dtype(np.float64),
+            "sparse_pc_factor_dtype_retry": None,
+            "factor_preflight_enabled": False,
+            "factor_preflight_required": False,
+            "factor_preflight_seed_enabled": False,
+            "factor_preflight_seed_used": False,
+            "factor_preflight_passed": None,
+            "factor_preflight_error": None,
+            "factor_preflight_residual_before": None,
+            "factor_preflight_residual_after": None,
+            "factor_preflight_improvement_ratio": None,
+            "factor_preflight_target_ratio": None,
+            "factor_preflight_max_target_ratio": 8.0,
+            "factor_preflight_residual_diagnostics": {},
+            "fortran_reduced_sparse_pc": False,
+            "sparse_pc_preconditioner_operator": "full",
+            "sparse_pc_factorization": "lu",
+            "sparse_pc_default_factor_kind": "ilu",
+            "sparse_pc_default_ilu_fill_factor": 6.0,
+            "sparse_pc_default_ilu_drop_tol": 1.0e-5,
+            "sparse_pc_default_pattern_color_batch": np.int64(8),
+            "preconditioner_x": np.int64(1),
+            "preconditioner_x_min_l": np.int64(0),
+            "preconditioner_xi": np.int64(1),
+            "preconditioner_species": np.int64(1),
+            "sparse_pc_permc_spec": "COLAMD",
+            "sparse_pc_default_permc_spec": "COLAMD",
+            "sparse_pc_use_active_dof": True,
+            "sparse_pc_linear_size": np.int64(2),
+            "sparse_pc_fp_dense_velocity_block": None,
+            "setup_s": 0.5,
+            "summary": SimpleNamespace(
+                nnz=np.int64(7),
+                avg_row_nnz=1.75,
+                max_row_nnz=np.int64(3),
+            ),
+            "sparse_pattern_scope": "active_dof",
+            "pattern_build_s": 0.125,
+            "pc_factor_s": 0.25,
+            "factor_bundle_pc": SimpleNamespace(
+                factor_s=None,
+                factor_nbytes_estimate=None,
+                factor_nnz_estimate=None,
+            ),
+            "_operator_bundle_pc": None,
+            "direct_tail_operator_bundle": None,
+            "direct_tail_structured_max_nbytes": None,
+            "direct_tail_true_active_block_species_count": None,
+            "direct_tail_true_window_specs": (),
+        }
+    )
+
+    payload = finalize_sparse_pc_gmres_from_driver_state(
+        state,
+        minres_correction=minres_correction,
+        expand_reduced=lambda x: jnp.concatenate(
+            [jnp.asarray([0.0], dtype=x.dtype), x]
+        ),
+    )
+
+    assert isinstance(payload, SparsePCGMRESFinalPayload)
+    np.testing.assert_allclose(np.asarray(payload.x), np.asarray([0.0, 3.0, 4.0]))
+    assert float(payload.residual_norm) == pytest.approx(0.25)
+    assert payload.metadata["accepted_converged"] is True
+    assert payload.metadata["sparse_pc_post_minres_steps_accepted"] == 1
+    assert payload.metadata["sparse_pc_post_minres_residual_after"] == pytest.approx(
+        0.25
+    )
+    assert state["x_np"].tolist() == [1.0, 2.0]
+    assert any("post-minres improved" in message for _, message in messages)
+    assert any("sparse_pc_gmres complete" in message for _, message in messages)

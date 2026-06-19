@@ -42,7 +42,8 @@ Make `sfincs_jax` research-grade while preserving the public user contract:
 
 Recent checkpoints:
 
-- KSP replay-state contract extraction (current checkpoint).
+- Sparse-PC finalization helper extraction (current checkpoint).
+- KSP replay-state contract extraction.
 - Measured candidate handoff consolidation.
 - Sparse fallback measured-handoff extraction.
 - Sparse-PC factor-preflight evaluation extraction.
@@ -59,22 +60,25 @@ Recent checkpoints:
 - `cb295ce` Extract sparse pattern setup.
 - `4b6a5b4` Extract sparse factor policy.
 
-Current source-size snapshot after KSP replay-state contract extraction:
+Current source-size snapshot after sparse-PC finalization helper extraction:
 
-- `sfincs_jax/v3_driver.py`: `18983` lines.
-- `solve_v3_full_system_linear_gmres`: `13636` lines.
+- `sfincs_jax/v3_driver.py`: `18968` lines.
+- `solve_v3_full_system_linear_gmres`: `13623` lines.
 - `sfincs_jax/problems/profile_response/handoff.py`: `254` lines.
+- `sfincs_jax/problems/profile_response/sparse_pc.py`: `7700` lines.
 
 Recent local validation:
 
+- Sparse-PC helper shard:
+  `165 passed in 1.64 s`.
+- End-to-end explicit sparse/direct-tail driver checks:
+  `5 passed in 14.23 s`.
+- Latest broad profile-response/x-block/sparse-pattern shard:
+  `444 passed in 112.75 s`.
 - Handoff/replay and profile-response diagnostics shard:
   `35 passed in 0.76 s`.
 - Handoff helper unit shard:
   `20 passed in 0.34 s`.
-- End-to-end explicit sparse/direct-tail driver checks:
-  `5 passed in 14.88 s`.
-- Latest broad profile-response/x-block/sparse-pattern shard:
-  `443 passed in 114.13 s`.
 - Focused sparse-PC shard:
   `164 passed in 1.68 s`.
 - Hygiene:
@@ -85,6 +89,8 @@ Recent local validation:
   CI is in progress and not yet waited on.
 - Latest pushed Docs for measured candidate consolidation (`6ec04b2`) are green;
   CI is in progress and not yet waited on.
+- Latest pushed CI/Docs for KSP replay-state contract extraction (`75ae32d`)
+  are green.
 
 Known CI issue fixed by this rewrite:
 
@@ -95,7 +101,7 @@ Known CI issue fixed by this rewrite:
 
 ### 1. `v3_driver.py` Architecture Refactor
 
-Completion estimate: 93%.
+Completion estimate: 94%.
 
 Goal:
 
@@ -150,6 +156,8 @@ Completed recent boundaries:
   candidate handoff consolidation; driver-local metrics builder removed.
 - RHSMode=1 KSP replay diagnostics state extracted into a profile-response
   handoff contract with unit tests.
+- Sparse-PC final post-minres, completion emission, and final payload assembly
+  consolidated into a single profile-response helper.
 
 Next steps:
 
@@ -217,7 +225,7 @@ Next steps:
 
 ## Immediate Next Steps
 
-1. Commit and push the KSP replay-state contract extraction.
+1. Commit and push the sparse-PC finalization helper extraction.
 2. Continue with remaining generic sparse-PC solve/result assembly extraction
    where behavior and cache boundaries remain clean.
 3. Run focused handoff/sparse-PC tests and the broad profile-response/x-block/sparse

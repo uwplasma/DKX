@@ -6970,6 +6970,45 @@ def sparse_pc_gmres_final_payload_from_driver_state(
     )
 
 
+def finalize_sparse_pc_gmres_from_driver_state(
+    state: Mapping[str, object],
+    *,
+    minres_correction: Callable[..., tuple[jnp.ndarray, jnp.ndarray, Sequence[float], Sequence[float]]],
+    expand_reduced: ArrayFn,
+) -> SparsePCGMRESFinalPayload:
+    """Apply final sparse-PC polish, emit completion, and build solve payload.
+
+    This helper keeps the driver from manually copying the post-minres result
+    back into its local variables before constructing the final metadata. The
+    broad metadata schema is still mapping-backed for compatibility, but the
+    mutation is isolated to a copied state map instead of scattered through the
+    solve loop.
+    """
+    post_minres = apply_sparse_pc_post_minres_from_driver_state(
+        state,
+        minres_correction=minres_correction,
+    )
+    final_state = state.__class__(state) if isinstance(state, MutableMapping) else dict(state)
+    final_state.update(
+        {
+            "x_np": post_minres.x,
+            "residual_norm_sparse_pc": float(post_minres.residual_norm),
+            "rn_pc": float(post_minres.preconditioned_residual_norm),
+            "sparse_pc_post_minres_history": post_minres.history,
+            "sparse_pc_post_minres_alphas": post_minres.alphas,
+            "sparse_pc_post_minres_residual_before": post_minres.residual_before,
+            "sparse_pc_post_minres_residual_after": post_minres.residual_after,
+            "sparse_pc_post_minres_error": post_minres.error,
+            "solve_s": float(post_minres.solve_s),
+        }
+    )
+    emit_sparse_pc_gmres_completion_from_driver_state(final_state)
+    return sparse_pc_gmres_final_payload_from_driver_state(
+        final_state,
+        expand_reduced=expand_reduced,
+    )
+
+
 def explicit_sparse_pattern_progress_messages(
     *,
     solver_label: str,
@@ -7636,6 +7675,7 @@ __all__ = [
     "sparse_pc_gmres_completion_message",
     "emit_sparse_pc_gmres_completion_from_driver_state",
     "sparse_pc_gmres_final_payload_from_driver_state",
+    "finalize_sparse_pc_gmres_from_driver_state",
     "resolve_sparse_minimum_norm_policy",
     "sparse_minimum_norm_solve_payload",
     "sparse_minimum_norm_start_message",
