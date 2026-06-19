@@ -173,6 +173,7 @@ from .problems.profile_response.handoff import (
     rhs1_accept_candidate_and_update_replay,
     rhs1_accept_measured_candidate_and_update_replay,
     rhs1_run_fast_post_xblock_polish,
+    rhs1_run_linear_candidate_and_update_replay,
     rhs1_run_measured_linear_candidate_and_update_replay,
 )
 from .problems.profile_response.auto_solve import (
@@ -11614,32 +11615,24 @@ def solve_v3_full_system_linear_gmres(
                 preconditioner_reduced = _build_rhs1_preconditioner_reduced_with_fallback()
                 if use_pas_projection:
                     preconditioner_reduced = _wrap_pas_precond(preconditioner_reduced)
-                res_full = _solve_linear(
-                    matvec_fn=mv_reduced,
-                    b_vec=rhs_reduced,
-                    precond_fn=preconditioner_reduced,
-                    x0_vec=res_reduced.x,
-                    tol_val=tol,
-                    atol_val=atol,
-                    restart_val=restart,
-                    maxiter_val=maxiter,
-                    solve_method_val="incremental",
-                    precond_side=gmres_precond_side,
-                )
-                res_reduced, residual_vec, _accepted = rhs1_accept_candidate_and_update_replay(
-                    replay_state=ksp_replay,
-                    current_result=res_reduced,
-                    candidate_result=res_full,
-                    current_residual_vec=residual_vec,
-                    candidate_residual_vec=residual_vec,
-                    matvec_fn=mv_reduced,
-                    b_vec=rhs_reduced,
-                    precond_fn=preconditioner_reduced,
-                    x0_vec=res_full.x,
-                    restart=restart,
-                    maxiter=maxiter,
-                    precond_side=gmres_precond_side,
-                    solver_kind=_solver_kind("incremental")[0],
+                res_reduced, residual_vec, _accepted, _forced_full_elapsed_s = (
+                    rhs1_run_linear_candidate_and_update_replay(
+                        replay_state=ksp_replay,
+                        current_result=res_reduced,
+                        current_residual_vec=residual_vec,
+                        matvec_fn=mv_reduced,
+                        b_vec=rhs_reduced,
+                        precond_fn=preconditioner_reduced,
+                        tol=float(tol),
+                        atol=float(atol),
+                        restart=int(restart),
+                        maxiter=maxiter,
+                        solve_method="incremental",
+                        precond_side=gmres_precond_side,
+                        solve_linear=_solve_linear,
+                        solver_kind=_solver_kind("incremental")[0],
+                        returns_residual_vec=False,
+                    )
                 )
         res_reduced, residual_vec, residual_norm_true = (
             rhs1_recompute_true_residual_result(
@@ -12156,32 +12149,24 @@ def solve_v3_full_system_linear_gmres(
                         "solve_v3_full_system_linear_gmres: retry with collision preconditioner "
                         f"(residual={float(res_reduced.residual_norm):.3e} > target={target_reduced:.3e})",
                     )
-                res_collision = _solve_linear(
-                    matvec_fn=mv_reduced,
-                    b_vec=rhs_reduced,
-                    precond_fn=bicgstab_preconditioner_reduced,
-                    x0_vec=res_reduced.x,
-                    tol_val=tol,
-                    atol_val=atol,
-                    restart_val=restart,
-                    maxiter_val=maxiter,
-                    solve_method_val="incremental",
-                    precond_side=gmres_precond_side,
-                )
-                res_reduced, residual_vec, _accepted = rhs1_accept_candidate_and_update_replay(
-                    replay_state=ksp_replay,
-                    current_result=res_reduced,
-                    candidate_result=res_collision,
-                    current_residual_vec=residual_vec,
-                    candidate_residual_vec=residual_vec,
-                    matvec_fn=mv_reduced,
-                    b_vec=rhs_reduced,
-                    precond_fn=bicgstab_preconditioner_reduced,
-                    x0_vec=res_collision.x,
-                    restart=restart,
-                    maxiter=maxiter,
-                    precond_side=gmres_precond_side,
-                    solver_kind=_solver_kind("incremental")[0],
+                res_reduced, residual_vec, _accepted, _collision_elapsed_s = (
+                    rhs1_run_linear_candidate_and_update_replay(
+                        replay_state=ksp_replay,
+                        current_result=res_reduced,
+                        current_residual_vec=residual_vec,
+                        matvec_fn=mv_reduced,
+                        b_vec=rhs_reduced,
+                        precond_fn=bicgstab_preconditioner_reduced,
+                        tol=float(tol),
+                        atol=float(atol),
+                        restart=int(restart),
+                        maxiter=maxiter,
+                        solve_method="incremental",
+                        precond_side=gmres_precond_side,
+                        solve_linear=_solve_linear,
+                        solver_kind=_solver_kind("incremental")[0],
+                        returns_residual_vec=False,
+                    )
                 )
         large_cpu_sparse_rescue_active = _rhsmode1_large_cpu_sparse_rescue_allowed(
             op=op,
@@ -15178,33 +15163,25 @@ def solve_v3_full_system_linear_gmres(
                         0,
                         "solve_v3_full_system_linear_gmres: retry with collision preconditioner "
                         f"(residual={float(result.residual_norm):.3e} > target={target:.3e})",
-                    )
-                res_collision, residual_vec_collision = _solve_linear_with_residual(
-                    matvec_fn=mv,
-                    b_vec=rhs,
-                    precond_fn=bicgstab_preconditioner_full,
-                    x0_vec=result.x,
-                    tol_val=tol,
-                    atol_val=atol,
-                    restart_val=restart,
-                    maxiter_val=maxiter,
-                    solve_method_val="incremental",
-                    precond_side=gmres_precond_side,
                 )
-                result, residual_vec, _accepted = rhs1_accept_candidate_and_update_replay(
-                    replay_state=ksp_replay,
-                    current_result=result,
-                    candidate_result=res_collision,
-                    current_residual_vec=residual_vec,
-                    candidate_residual_vec=residual_vec_collision,
-                    matvec_fn=mv,
-                    b_vec=rhs,
-                    precond_fn=bicgstab_preconditioner_full,
-                    x0_vec=res_collision.x,
-                    restart=restart,
-                    maxiter=maxiter,
-                    precond_side=gmres_precond_side,
-                    solver_kind=_solver_kind("incremental")[0],
+                result, residual_vec, _accepted, _collision_elapsed_s = (
+                    rhs1_run_linear_candidate_and_update_replay(
+                        replay_state=ksp_replay,
+                        current_result=result,
+                        current_residual_vec=residual_vec,
+                        matvec_fn=mv,
+                        b_vec=rhs,
+                        precond_fn=bicgstab_preconditioner_full,
+                        tol=float(tol),
+                        atol=float(atol),
+                        restart=int(restart),
+                        maxiter=maxiter,
+                        solve_method="incremental",
+                        precond_side=gmres_precond_side,
+                        solve_linear=_solve_linear_with_residual,
+                        solver_kind=_solver_kind("incremental")[0],
+                        returns_residual_vec=True,
+                    )
                 )
         strong_precond_env = os.environ.get("SFINCS_JAX_RHSMODE1_STRONG_PRECOND", "").strip().lower()
         cs0_sparse_first = _rhsmode1_constraint0_sparse_first(
@@ -15432,32 +15409,24 @@ def solve_v3_full_system_linear_gmres(
                         )
                     except ValueError:
                         rescue_maxiter = max(1200, int(maxiter or 400) * 3)
-                    res_schur, residual_vec_schur = _solve_linear_with_residual(
-                        matvec_fn=mv,
-                        b_vec=rhs,
-                        precond_fn=schur_precond,
-                        x0_vec=result.x,
-                        tol_val=tol,
-                        atol_val=atol,
-                        restart_val=rescue_restart,
-                        maxiter_val=rescue_maxiter,
-                        solve_method_val="incremental",
-                        precond_side=gmres_precond_side,
-                    )
-                    result, residual_vec, _accepted = rhs1_accept_candidate_and_update_replay(
-                        replay_state=ksp_replay,
-                        current_result=result,
-                        candidate_result=res_schur,
-                        current_residual_vec=residual_vec,
-                        candidate_residual_vec=residual_vec_schur,
-                        matvec_fn=mv,
-                        b_vec=rhs,
-                        precond_fn=schur_precond,
-                        x0_vec=res_schur.x,
-                        restart=rescue_restart,
-                        maxiter=rescue_maxiter,
-                        precond_side=gmres_precond_side,
-                        solver_kind=_solver_kind("incremental")[0],
+                    result, residual_vec, _accepted, _schur_elapsed_s = (
+                        rhs1_run_linear_candidate_and_update_replay(
+                            replay_state=ksp_replay,
+                            current_result=result,
+                            current_residual_vec=residual_vec,
+                            matvec_fn=mv,
+                            b_vec=rhs,
+                            precond_fn=schur_precond,
+                            tol=float(tol),
+                            atol=float(atol),
+                            restart=int(rescue_restart),
+                            maxiter=int(rescue_maxiter),
+                            solve_method="incremental",
+                            precond_side=gmres_precond_side,
+                            solve_linear=_solve_linear_with_residual,
+                            solver_kind=_solver_kind("incremental")[0],
+                            returns_residual_vec=True,
+                        )
                     )
                 except Exception as exc:  # noqa: BLE001
                     if emit is not None:

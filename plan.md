@@ -42,8 +42,11 @@ Make `sfincs_jax` research-grade while preserving the public user contract:
 
 Recent checkpoints:
 
-- RHSMode=1 strong-retry reuse of measured linear handoff
+- RHSMode=1 strict linear retry handoff extraction for forced full,
+  collision-preconditioner, and PAS Schur rescue branches
   (current checkpoint).
+- RHSMode=1 strong-retry reuse of measured linear handoff
+  (`0d35c2b`).
 - RHSMode=1 measured linear retry handoff extraction for reduced/full stage2
   (`2c4d7e0`).
 - RHSMode=1 CPU SciPy rescue execution helper extraction
@@ -416,11 +419,17 @@ Completed recent boundaries:
   acceptance consolidated into a replay-aware handoff helper.
 - Reduced active-DOF and full-system strong-preconditioner retry branches now
   reuse the same measured handoff helper.
+- RHSMode=1 forced full-preconditioner, reduced/full collision-preconditioner,
+  and PAS Schur rescue linear retries now reuse a strict-improvement
+  replay-aware handoff helper, preserving their non-measured acceptance
+  contract.
 
 Next steps:
 
 - Move remaining generic sparse-PC solve/result assembly into cohesive
   `profile_response` helpers.
+- Extract the remaining adaptive smoother handoff shape only if it can preserve
+  its explicit residual-vector construction without hiding solver policy.
 - Extract remaining explicit sparse-host direct factor-setup policy seams only
   where this can be done without pulling driver-specific caches into domain
   modules.
