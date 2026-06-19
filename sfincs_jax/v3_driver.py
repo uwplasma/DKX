@@ -6607,108 +6607,82 @@ def solve_v3_full_system_linear_gmres(
             post_residual_equation_direction_names: tuple[str, ...] = ()
             post_residual_equation_residual_before: float | None = None
             post_residual_equation_residual_after: float | None = None
-            if (
+
+            def _post_residual_equation_direction_builder(
+                residual_vec: jnp.ndarray,
+            ) -> tuple[tuple[str, jnp.ndarray], ...]:
+                if not bool(post_residual_equation_include_post_coarse):
+                    return ()
+                return _xblock_coarse_direction_builder(
+                    residual_vec,
+                    include_raw=bool(post_residual_equation_include_raw),
+                    fsavg_lmax=int(post_residual_equation_fsavg_lmax),
+                    angular_lmax=int(post_residual_equation_angular_lmax),
+                    max_extra_units=int(post_residual_equation_max_extra_units),
+                    max_directions=int(post_residual_equation_max_directions),
+                    include_angular_residual=bool(post_residual_equation_include_angular_residual),
+                )
+
+            post_residual_equation_active = (
                 post_residual_equation_steps_requested > 0
                 and np.isfinite(float(residual_norm_xblock_pc))
                 and float(residual_norm_xblock_pc) > float(target_xblock)
+            )
+            post_residual_equation_cached_basis = None
+            post_residual_equation_cached_action = None
+            post_residual_equation_cached_labels: tuple[str, ...] = ()
+            if (
+                post_residual_equation_active
+                and bool(post_residual_equation_include_qi_basis)
+                and qi_device_state_for_augmented_krylov is not None
+                and int(getattr(qi_device_state_for_augmented_krylov.metadata, "rank", 0)) > 0
             ):
-                post_residual_equation_residual_before = float(residual_norm_xblock_pc)
-                post_residual_equation_start_s = sparse_timer.elapsed_s()
-
-                def _post_residual_equation_direction_builder(
-                    residual_vec: jnp.ndarray,
-                ) -> tuple[tuple[str, jnp.ndarray], ...]:
-                    if not bool(post_residual_equation_include_post_coarse):
-                        return ()
-                    return _xblock_coarse_direction_builder(
-                        residual_vec,
-                        include_raw=bool(post_residual_equation_include_raw),
-                        fsavg_lmax=int(post_residual_equation_fsavg_lmax),
-                        angular_lmax=int(post_residual_equation_angular_lmax),
-                        max_extra_units=int(post_residual_equation_max_extra_units),
-                        max_directions=int(post_residual_equation_max_directions),
-                        include_angular_residual=bool(post_residual_equation_include_angular_residual),
-                    )
-
-                post_residual_equation_cached_basis = None
-                post_residual_equation_cached_action = None
-                post_residual_equation_cached_labels: tuple[str, ...] = ()
-                if (
-                    bool(post_residual_equation_include_qi_basis)
-                    and qi_device_state_for_augmented_krylov is not None
-                    and int(getattr(qi_device_state_for_augmented_krylov.metadata, "rank", 0)) > 0
-                ):
-                    post_residual_equation_cached_basis = jnp.asarray(
-                        qi_device_state_for_augmented_krylov.basis.vectors,
-                        dtype=jnp.float64,
-                    )
-                    post_residual_equation_cached_action = jnp.asarray(
-                        qi_device_state_for_augmented_krylov.operator_on_basis,
-                        dtype=jnp.float64,
-                    )
-                    post_residual_equation_cached_labels = tuple(
-                        str(label)
-                        for label in qi_device_state_for_augmented_krylov.basis.metadata.accepted_labels
-                    )
-                try:
-                    (
-                        x_residual_equation,
-                        residual_equation_vec,
-                        post_residual_equation_history,
-                        post_residual_equation_direction_counts,
-                        post_residual_equation_direction_names,
-                    ) = _apply_device_subspace_residual_equation_correction(
-                        matvec=_mv_true,
-                        rhs=xblock_rhs,
-                        x0=jnp.asarray(x_np, dtype=jnp.float64),
-                        direction_builder=_post_residual_equation_direction_builder,
-                        steps=post_residual_equation_steps_requested,
-                        max_directions=post_residual_equation_max_directions,
-                        cached_basis=post_residual_equation_cached_basis,
-                        cached_operator_on_basis=post_residual_equation_cached_action,
-                        cached_labels=post_residual_equation_cached_labels,
-                        alpha_clip=post_residual_equation_alpha_clip,
-                        rcond=post_residual_equation_rcond,
-                        min_improvement=post_residual_equation_min_improvement,
-                    )
-                    post_residual_equation_residual_after = float(jnp.linalg.norm(residual_equation_vec))
-                    if (
-                        np.isfinite(float(post_residual_equation_residual_after))
-                        and float(post_residual_equation_residual_after) < float(residual_norm_xblock_pc)
-                    ):
-                        x_np = np.asarray(x_residual_equation, dtype=np.float64)
-                        residual_norm_xblock_pc = float(post_residual_equation_residual_after)
-                        if emit is not None:
-                            emit(
-                                0,
-                                "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
-                                f"post-residual-equation improved residual "
-                                f"{post_residual_equation_residual_before:.6e} "
-                                f"-> {post_residual_equation_residual_after:.6e} "
-                                f"(steps={len(post_residual_equation_direction_counts)} "
-                                f"directions={sum(post_residual_equation_direction_counts)} "
-                                f"cached_qi={int(post_residual_equation_cached_basis is not None)})",
-                            )
-                    elif emit is not None:
-                        after = (
-                            float(post_residual_equation_residual_after)
-                            if post_residual_equation_residual_after is not None
-                            else float("nan")
-                        )
-                        emit(
-                            1,
-                            "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
-                            f"post-residual-equation rejected residual "
-                            f"{post_residual_equation_residual_before:.6e} -> {after:.6e}",
-                        )
-                except Exception as exc:  # noqa: BLE001
-                    if emit is not None:
-                        emit(
-                            1,
-                            "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
-                            f"post-residual-equation failed ({type(exc).__name__}: {exc})",
-                        )
-                solve_s += sparse_timer.elapsed_s() - post_residual_equation_start_s
+                post_residual_equation_cached_basis = jnp.asarray(
+                    qi_device_state_for_augmented_krylov.basis.vectors,
+                    dtype=jnp.float64,
+                )
+                post_residual_equation_cached_action = jnp.asarray(
+                    qi_device_state_for_augmented_krylov.operator_on_basis,
+                    dtype=jnp.float64,
+                )
+                post_residual_equation_cached_labels = tuple(
+                    str(label)
+                    for label in qi_device_state_for_augmented_krylov.basis.metadata.accepted_labels
+                )
+            post_residual_equation = apply_xblock_subspace_correction_if_needed(
+                XBlockSubspaceCorrectionContext(
+                    matvec=_mv_true,
+                    rhs=xblock_rhs,
+                    x=np.asarray(x_np, dtype=np.float64),
+                    residual_norm=float(residual_norm_xblock_pc),
+                    target=float(target_xblock),
+                    direction_builder=_post_residual_equation_direction_builder,
+                    steps=int(post_residual_equation_steps_requested),
+                    max_directions=int(post_residual_equation_max_directions),
+                    alpha_clip=float(post_residual_equation_alpha_clip),
+                    rcond=float(post_residual_equation_rcond),
+                    min_improvement=float(post_residual_equation_min_improvement),
+                    emit=emit,
+                    elapsed_s=sparse_timer.elapsed_s,
+                    correction=_apply_device_subspace_residual_equation_correction,
+                    correction_kwargs={
+                        "cached_basis": post_residual_equation_cached_basis,
+                        "cached_operator_on_basis": post_residual_equation_cached_action,
+                        "cached_labels": post_residual_equation_cached_labels,
+                    },
+                    solver_label="xblock_sparse_pc_gmres",
+                    correction_label="post-residual-equation",
+                    diagnostic_suffix=f" cached_qi={int(post_residual_equation_cached_basis is not None)}",
+                )
+            )
+            x_np = np.asarray(post_residual_equation.x, dtype=np.float64)
+            residual_norm_xblock_pc = float(post_residual_equation.residual_norm)
+            solve_s += float(post_residual_equation.solve_s)
+            post_residual_equation_history = post_residual_equation.history
+            post_residual_equation_direction_counts = post_residual_equation.direction_counts
+            post_residual_equation_direction_names = post_residual_equation.direction_names
+            post_residual_equation_residual_before = post_residual_equation.residual_before
+            post_residual_equation_residual_after = post_residual_equation.residual_after
             post_minres = apply_sparse_pc_post_minres_if_needed(
                 SparsePCPostMinresUpdateContext(
                     matvec=_mv_true,

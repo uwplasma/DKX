@@ -5448,6 +5448,7 @@ def test_xblock_subspace_correction_accepts_improved_residual() -> None:
     def correction(**kwargs):
         assert kwargs["steps"] == 2
         assert kwargs["max_directions"] == 4
+        assert kwargs["cached_labels"] == ("qi",)
         return (
             jnp.asarray([0.5, 0.5]),
             jnp.asarray([0.1, 0.2]),
@@ -5472,6 +5473,9 @@ def test_xblock_subspace_correction_accepts_improved_residual() -> None:
             emit=lambda _level, msg: messages.append(msg),
             elapsed_s=lambda: next(times),
             correction=correction,
+            correction_kwargs={"cached_labels": ("qi",)},
+            correction_label="post-residual-equation",
+            diagnostic_suffix=" cached_qi=1",
         )
     )
 
@@ -5482,7 +5486,11 @@ def test_xblock_subspace_correction_accepts_improved_residual() -> None:
     assert result.direction_names == ("fsavg", "angular")
     assert result.residual_before == 1.0
     assert result.solve_s == pytest.approx(0.25)
-    assert any("xblock_sparse_pc_gmres post-coarse improved" in msg for msg in messages)
+    assert any(
+        "xblock_sparse_pc_gmres post-residual-equation improved" in msg
+        and "cached_qi=1" in msg
+        for msg in messages
+    )
 
 
 def test_xblock_subspace_correction_rejects_nonimproving_residual() -> None:

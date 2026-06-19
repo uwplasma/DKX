@@ -42,9 +42,12 @@ Make `sfincs_jax` research-grade while preserving the public user contract:
 
 Recent checkpoints:
 
+- X-block sparse-PC post-residual-equation correction now shares the same
+  subspace-correction helper, preserving cached-QI progress diagnostics
+  (current checkpoint).
 - X-block sparse-PC post-coarse correction now uses a tested subspace
   correction helper while keeping direction construction driver-local
-  (current checkpoint).
+  (`e99286e`).
 - X-block sparse-PC post-minres now reuses the generic sparse-PC post-minres
   helper with a solver-label parameter (`892beaf`).
 - RHSMode=1 strict linear retry handoff extraction for forced full,
@@ -434,13 +437,17 @@ Completed recent boundaries:
 - X-block sparse-PC post-coarse residual-polish orchestration now uses a
   reusable subspace-correction helper with explicit driver-provided direction
   builders, stable progress labels, and unchanged metadata variables.
+- X-block sparse-PC post-residual-equation orchestration now uses the same
+  subspace-correction helper with explicit driver-provided direction builders
+  and cached-QI kwargs/suffix diagnostics preserved.
 
 Next steps:
 
 - Move remaining generic sparse-PC solve/result assembly into cohesive
   `profile_response` helpers.
-- Continue extracting x-block post-solve correction seams only where the
-  driver-specific direction builders remain explicit at the call site.
+- Continue extracting sparse-PC state/metadata seams after the source split
+  stabilizes; avoid moving driver-specific direction builders or caches into
+  generic helpers.
 - Extract the remaining adaptive smoother handoff shape only if it can preserve
   its explicit residual-vector construction without hiding solver policy.
 - Extract remaining explicit sparse-host direct factor-setup policy seams only

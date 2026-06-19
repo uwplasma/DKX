@@ -277,8 +277,10 @@ class XBlockSubspaceCorrectionContext:
     emit: EmitFn | None
     elapsed_s: Callable[[], float]
     correction: Callable[..., tuple[jnp.ndarray, jnp.ndarray, Sequence[float], Sequence[int], Sequence[str]]]
+    correction_kwargs: Mapping[str, Any] | None = None
     solver_label: str = "xblock_sparse_pc_gmres"
     correction_label: str = "post-coarse"
+    diagnostic_suffix: str = ""
 
 
 @dataclass(frozen=True)
@@ -7966,6 +7968,7 @@ def apply_xblock_subspace_correction_if_needed(
     residual_after: float | None = None
     error: str | None = None
     try:
+        correction_kwargs = dict(context.correction_kwargs or {})
         (
             x_candidate,
             residual_candidate,
@@ -7982,6 +7985,7 @@ def apply_xblock_subspace_correction_if_needed(
             alpha_clip=float(context.alpha_clip),
             rcond=float(context.rcond),
             min_improvement=float(context.min_improvement),
+            **correction_kwargs,
         )
         history = tuple(float(v) for v in correction_history)
         direction_counts = tuple(int(v) for v in correction_direction_counts)
@@ -7996,7 +8000,8 @@ def apply_xblock_subspace_correction_if_needed(
                     f"solve_v3_full_system_linear_gmres: {context.solver_label} "
                     f"{context.correction_label} improved residual {residual_before:.6e} "
                     f"-> {residual_after:.6e} "
-                    f"(steps={len(direction_counts)} directions={sum(direction_counts)})",
+                    f"(steps={len(direction_counts)} directions={sum(direction_counts)}"
+                    f"{context.diagnostic_suffix})",
                 )
         elif context.emit is not None:
             after = float(residual_after) if residual_after is not None else float("nan")
