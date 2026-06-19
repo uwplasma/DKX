@@ -254,6 +254,7 @@ from .problems.profile_response.sparse_pc import (
     SparseHostScipyGMRESContext,
     SparseJAXRetryPreconditionerBuildContext,
     SparsePCGMRESContext,
+    XBlockAugmentedKrylovBasisContext,
     XBlockFirstKrylovAttemptContext,
     XBlockGMRESFallbackContext,
     XBlockKrylovSolveSpaceContext,
@@ -304,6 +305,7 @@ from .problems.profile_response.sparse_pc import (
     resolve_fortran_reduced_xblock_global_coupling_policy,
     resolve_fortran_reduced_xblock_initial_seed_policy,
     resolve_fortran_reduced_xblock_moment_schur_policy,
+    prepare_xblock_augmented_krylov_basis,
     prepare_xblock_krylov_solve_space,
     resolve_xblock_qi_device_admission_setup,
     resolve_xblock_qi_device_base_config_setup,
@@ -6210,74 +6212,29 @@ def solve_v3_full_system_linear_gmres(
             augmentation_basis_for_solve = None
             operator_on_augmentation_for_solve = None
             if bool(qi_device_augmented_krylov_requested):
-                qi_device_augmented_seed_available_for_krylov = bool(
-                    qi_device_augmented_seed_available
-                    and qi_device_augmented_seed_basis_for_krylov is not None
-                    and qi_device_augmented_seed_action_for_krylov is not None
-                    and int(qi_device_augmented_seed_rank) > 0
+                augmented_krylov = prepare_xblock_augmented_krylov_basis(
+                    XBlockAugmentedKrylovBasisContext(
+                        krylov_method=str(xblock_krylov_method),
+                        qi_device_state=qi_device_state_for_augmented_krylov,
+                        seed_available=bool(qi_device_augmented_seed_available),
+                        seed_rank=int(qi_device_augmented_seed_rank),
+                        seed_basis=qi_device_augmented_seed_basis_for_krylov,
+                        seed_operator_on_basis=qi_device_augmented_seed_action_for_krylov,
+                        row_equilibration_built=bool(xblock_row_equilibration_built),
+                        col_equilibration_built=bool(xblock_col_equilibration_built),
+                        row_scale=xblock_row_scale_jnp,
+                        inv_col_scale=xblock_inv_col_scale_jnp,
+                        precondition_side=str(precondition_side),
+                        solve_preconditioner=solve_preconditioner,
+                    )
                 )
-                if qi_device_state_for_augmented_krylov is None:
-                    qi_device_augmented_krylov_reason = "disabled_missing_qi_device_state"
-                elif str(xblock_krylov_method) not in {"fgmres_jax", "gmres_jax"}:
-                    qi_device_augmented_krylov_reason = "disabled_non_jax_fgmres_method"
-                elif (
-                    int(qi_device_state_for_augmented_krylov.metadata.rank) <= 0
-                    and not bool(qi_device_augmented_seed_available_for_krylov)
-                ):
-                    qi_device_augmented_krylov_reason = "disabled_empty_qi_device_basis"
-                else:
-                    try:
-                        if bool(qi_device_augmented_seed_available_for_krylov):
-                            augmentation_basis_for_solve = jnp.asarray(
-                                qi_device_augmented_seed_basis_for_krylov,
-                                dtype=jnp.float64,
-                            )
-                            operator_on_augmentation_for_solve = jnp.asarray(
-                                qi_device_augmented_seed_action_for_krylov,
-                                dtype=jnp.float64,
-                            )
-                            qi_device_augmented_krylov_reason = "enabled_from_augmented_seed"
-                        else:
-                            augmentation_basis_for_solve = jnp.asarray(
-                                qi_device_state_for_augmented_krylov.basis.vectors,
-                                dtype=jnp.float64,
-                            )
-                            operator_on_augmentation_for_solve = jnp.asarray(
-                                qi_device_state_for_augmented_krylov.operator_on_basis,
-                                dtype=jnp.float64,
-                            )
-                            qi_device_augmented_krylov_reason = "enabled"
-                        if bool(xblock_col_equilibration_built) and xblock_inv_col_scale_jnp is not None:
-                            augmentation_basis_for_solve = (
-                                jnp.asarray(xblock_inv_col_scale_jnp, dtype=jnp.float64).reshape((-1, 1))
-                                * augmentation_basis_for_solve
-                            )
-                        if bool(xblock_row_equilibration_built) and xblock_row_scale_jnp is not None:
-                            operator_on_augmentation_for_solve = (
-                                jnp.asarray(xblock_row_scale_jnp, dtype=jnp.float64).reshape((-1, 1))
-                                * operator_on_augmentation_for_solve
-                            )
-                        if str(precondition_side) == "left" and solve_preconditioner is not None:
-                            operator_on_augmentation_for_solve = jnp.stack(
-                                [
-                                    jnp.asarray(
-                                        solve_preconditioner(operator_on_augmentation_for_solve[:, idx]),
-                                        dtype=jnp.float64,
-                                    )
-                                    for idx in range(int(operator_on_augmentation_for_solve.shape[1]))
-                                ],
-                                axis=1,
-                            )
-                        qi_device_augmented_krylov_rank = int(augmentation_basis_for_solve.shape[1])
-                        qi_device_augmented_krylov_used = True
-                        if bool(qi_device_augmented_seed_available_for_krylov):
-                            qi_device_augmented_seed_used = True
-                    except Exception as exc:  # noqa: BLE001
-                        augmentation_basis_for_solve = None
-                        operator_on_augmentation_for_solve = None
-                        qi_device_augmented_krylov_rank = 0
-                        qi_device_augmented_krylov_used = False
-                        qi_device_augmented_krylov_reason = f"{type(exc).__name__}: {exc}"
+                augmentation_basis_for_solve = augmented_krylov.basis
+                operator_on_augmentation_for_solve = augmented_krylov.operator_on_basis
+                qi_device_augmented_krylov_used = bool(augmented_krylov.used)
+                qi_device_augmented_krylov_rank = int(augmented_krylov.rank)
+                qi_device_augmented_krylov_reason = str(augmented_krylov.reason)
+                if bool(augmented_krylov.seed_used):
+                    qi_device_augmented_seed_used = True
                 qi_device_preconditioner_metadata["augmented_seed_used"] = bool(
                     qi_device_augmented_seed_used
                 )

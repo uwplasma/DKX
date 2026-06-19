@@ -60,6 +60,8 @@ from sfincs_jax.problems.profile_response.sparse_pc import (
     SparseMinimumNormPayload,
     SparseMinimumNormPolicy,
     SparsePCGMRESResult,
+    XBlockAugmentedKrylovBasisContext,
+    XBlockAugmentedKrylovBasisResult,
     XBlockDeviceKrylovState,
     XBlockFirstKrylovAttemptContext,
     XBlockFirstKrylovAttemptResult,
@@ -146,6 +148,7 @@ from sfincs_jax.problems.profile_response.sparse_pc import (
     resolve_xblock_sparse_pc_side_policy_setup,
     resolve_xblock_two_level_policy_setup,
     fortran_reduced_xblock_final_payload_from_driver_state,
+    prepare_xblock_augmented_krylov_basis,
     prepare_xblock_krylov_solve_space,
     run_fortran_reduced_xblock_krylov_solve,
     run_xblock_first_krylov_attempt,
@@ -243,6 +246,122 @@ def _first_krylov_context(**overrides: object) -> XBlockFirstKrylovAttemptContex
     }
     values.update(overrides)
     return XBlockFirstKrylovAttemptContext(**values)  # type: ignore[arg-type]
+
+
+def _qi_device_state(*, rank: int = 2) -> SimpleNamespace:
+    return SimpleNamespace(
+        metadata=SimpleNamespace(rank=rank),
+        basis=SimpleNamespace(
+            vectors=jnp.asarray([[1.0, 0.0], [0.0, 1.0]], dtype=jnp.float64)[:, :rank],
+        ),
+        operator_on_basis=jnp.asarray([[2.0, 0.0], [0.0, 3.0]], dtype=jnp.float64)[:, :rank],
+    )
+
+
+def _augmented_krylov_context(**overrides: object) -> XBlockAugmentedKrylovBasisContext:
+    values: dict[str, object] = {
+        "krylov_method": "fgmres_jax",
+        "qi_device_state": _qi_device_state(),
+        "seed_available": False,
+        "seed_rank": 0,
+        "seed_basis": None,
+        "seed_operator_on_basis": None,
+        "row_equilibration_built": False,
+        "col_equilibration_built": False,
+        "row_scale": None,
+        "inv_col_scale": None,
+        "precondition_side": "right",
+        "solve_preconditioner": None,
+    }
+    values.update(overrides)
+    return XBlockAugmentedKrylovBasisContext(**values)  # type: ignore[arg-type]
+
+
+def test_prepare_xblock_augmented_krylov_basis_rejects_missing_state() -> None:
+    result = prepare_xblock_augmented_krylov_basis(
+        _augmented_krylov_context(
+            qi_device_state=None,
+            seed_available=True,
+            seed_rank=1,
+            seed_basis=jnp.ones((2, 1), dtype=jnp.float64),
+            seed_operator_on_basis=jnp.ones((2, 1), dtype=jnp.float64),
+        )
+    )
+
+    assert isinstance(result, XBlockAugmentedKrylovBasisResult)
+    assert not result.used
+    assert not result.seed_used
+    assert result.rank == 0
+    assert result.reason == "disabled_missing_qi_device_state"
+    assert result.basis is None
+    assert result.operator_on_basis is None
+
+
+def test_prepare_xblock_augmented_krylov_basis_rejects_non_jax_method() -> None:
+    result = prepare_xblock_augmented_krylov_basis(
+        _augmented_krylov_context(krylov_method="lgmres")
+    )
+
+    assert not result.used
+    assert result.reason == "disabled_non_jax_fgmres_method"
+
+
+def test_prepare_xblock_augmented_krylov_basis_rejects_empty_state_without_seed() -> None:
+    result = prepare_xblock_augmented_krylov_basis(
+        _augmented_krylov_context(qi_device_state=_qi_device_state(rank=0))
+    )
+
+    assert not result.used
+    assert result.reason == "disabled_empty_qi_device_basis"
+
+
+def test_prepare_xblock_augmented_krylov_basis_uses_state_basis() -> None:
+    result = prepare_xblock_augmented_krylov_basis(_augmented_krylov_context())
+
+    assert result.used
+    assert not result.seed_used
+    assert result.rank == 2
+    assert result.reason == "enabled"
+    np.testing.assert_allclose(np.asarray(result.basis), np.eye(2))
+    np.testing.assert_allclose(np.asarray(result.operator_on_basis), np.diag([2.0, 3.0]))
+
+
+def test_prepare_xblock_augmented_krylov_basis_prefers_seed_and_scales_left_preconditioned_action() -> None:
+    seed_basis = jnp.asarray([[10.0, 20.0], [30.0, 40.0]], dtype=jnp.float64)
+    seed_action = jnp.asarray([[1.0, 2.0], [3.0, 4.0]], dtype=jnp.float64)
+    row_scale = jnp.asarray([2.0, 3.0], dtype=jnp.float64)
+    inv_col_scale = jnp.asarray([0.5, 0.25], dtype=jnp.float64)
+
+    def left_preconditioner(v: jnp.ndarray) -> jnp.ndarray:
+        return 2.0 * jnp.asarray(v, dtype=jnp.float64)
+
+    result = prepare_xblock_augmented_krylov_basis(
+        _augmented_krylov_context(
+            seed_available=True,
+            seed_rank=2,
+            seed_basis=seed_basis,
+            seed_operator_on_basis=seed_action,
+            row_equilibration_built=True,
+            col_equilibration_built=True,
+            row_scale=row_scale,
+            inv_col_scale=inv_col_scale,
+            precondition_side="left",
+            solve_preconditioner=left_preconditioner,
+        )
+    )
+
+    assert result.used
+    assert result.seed_used
+    assert result.rank == 2
+    assert result.reason == "enabled_from_augmented_seed"
+    np.testing.assert_allclose(
+        np.asarray(result.basis),
+        np.asarray(inv_col_scale.reshape((-1, 1)) * seed_basis),
+    )
+    np.testing.assert_allclose(
+        np.asarray(result.operator_on_basis),
+        np.asarray(2.0 * row_scale.reshape((-1, 1)) * seed_action),
+    )
 
 
 def test_prepare_xblock_krylov_solve_space_unscaled_preserves_callbacks() -> None:

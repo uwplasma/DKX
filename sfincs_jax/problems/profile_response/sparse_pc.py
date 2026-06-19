@@ -250,6 +250,36 @@ class XBlockKrylovSolveSpace:
 
 
 @dataclass(frozen=True)
+class XBlockAugmentedKrylovBasisContext:
+    """Inputs for preparing a QI augmented Krylov basis in solve coordinates."""
+
+    krylov_method: str
+    qi_device_state: object | None
+    seed_available: bool
+    seed_rank: int
+    seed_basis: jnp.ndarray | None
+    seed_operator_on_basis: jnp.ndarray | None
+    row_equilibration_built: bool
+    col_equilibration_built: bool
+    row_scale: jnp.ndarray | None
+    inv_col_scale: jnp.ndarray | None
+    precondition_side: str
+    solve_preconditioner: ArrayFn | None
+
+
+@dataclass(frozen=True)
+class XBlockAugmentedKrylovBasisResult:
+    """Prepared QI augmented Krylov basis and diagnostic state."""
+
+    basis: jnp.ndarray | None
+    operator_on_basis: jnp.ndarray | None
+    used: bool
+    rank: int
+    reason: str
+    seed_used: bool
+
+
+@dataclass(frozen=True)
 class XBlockSparsePCWorkEstimates:
     """User-facing solver-kind and Krylov work-memory estimates."""
 
@@ -421,6 +451,94 @@ def prepare_xblock_krylov_solve_space(
         solution_to_physical=solution_to_physical,
         transform_label=transform_label,
     )
+
+
+def prepare_xblock_augmented_krylov_basis(
+    context: XBlockAugmentedKrylovBasisContext,
+) -> XBlockAugmentedKrylovBasisResult:
+    """Prepare the optional QI augmented Krylov basis for the solve-space operator."""
+
+    seed_available = bool(
+        context.seed_available
+        and context.seed_basis is not None
+        and context.seed_operator_on_basis is not None
+        and int(context.seed_rank) > 0
+    )
+    if context.qi_device_state is None:
+        return XBlockAugmentedKrylovBasisResult(
+            basis=None,
+            operator_on_basis=None,
+            used=False,
+            rank=0,
+            reason="disabled_missing_qi_device_state",
+            seed_used=False,
+        )
+    if str(context.krylov_method) not in {"fgmres_jax", "gmres_jax"}:
+        return XBlockAugmentedKrylovBasisResult(
+            basis=None,
+            operator_on_basis=None,
+            used=False,
+            rank=0,
+            reason="disabled_non_jax_fgmres_method",
+            seed_used=False,
+        )
+    if int(context.qi_device_state.metadata.rank) <= 0 and not seed_available:
+        return XBlockAugmentedKrylovBasisResult(
+            basis=None,
+            operator_on_basis=None,
+            used=False,
+            rank=0,
+            reason="disabled_empty_qi_device_basis",
+            seed_used=False,
+        )
+
+    try:
+        if seed_available:
+            basis = jnp.asarray(context.seed_basis, dtype=jnp.float64)
+            operator_on_basis = jnp.asarray(context.seed_operator_on_basis, dtype=jnp.float64)
+            reason = "enabled_from_augmented_seed"
+            seed_used = True
+        else:
+            basis = jnp.asarray(context.qi_device_state.basis.vectors, dtype=jnp.float64)
+            operator_on_basis = jnp.asarray(context.qi_device_state.operator_on_basis, dtype=jnp.float64)
+            reason = "enabled"
+            seed_used = False
+
+        if bool(context.col_equilibration_built) and context.inv_col_scale is not None:
+            basis = jnp.asarray(context.inv_col_scale, dtype=jnp.float64).reshape((-1, 1)) * basis
+        if bool(context.row_equilibration_built) and context.row_scale is not None:
+            operator_on_basis = (
+                jnp.asarray(context.row_scale, dtype=jnp.float64).reshape((-1, 1))
+                * operator_on_basis
+            )
+        if str(context.precondition_side) == "left" and context.solve_preconditioner is not None:
+            operator_on_basis = jnp.stack(
+                [
+                    jnp.asarray(
+                        context.solve_preconditioner(operator_on_basis[:, idx]),
+                        dtype=jnp.float64,
+                    )
+                    for idx in range(int(operator_on_basis.shape[1]))
+                ],
+                axis=1,
+            )
+        return XBlockAugmentedKrylovBasisResult(
+            basis=basis,
+            operator_on_basis=operator_on_basis,
+            used=True,
+            rank=int(basis.shape[1]),
+            reason=reason,
+            seed_used=seed_used,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return XBlockAugmentedKrylovBasisResult(
+            basis=None,
+            operator_on_basis=None,
+            used=False,
+            rank=0,
+            reason=f"{type(exc).__name__}: {exc}",
+            seed_used=False,
+        )
 
 
 def run_xblock_first_krylov_attempt(
@@ -9568,6 +9686,8 @@ __all__ = [
     "XBlockDeviceKrylovState",
     "XBlockFirstKrylovAttemptContext",
     "XBlockFirstKrylovAttemptResult",
+    "XBlockAugmentedKrylovBasisContext",
+    "XBlockAugmentedKrylovBasisResult",
     "XBlockKrylovSolveSpace",
     "XBlockKrylovSolveSpaceContext",
     "XBlockSparsePCWorkEstimates",
@@ -9641,6 +9761,7 @@ __all__ = [
     "retry_sparse_pc_factor_dtype_from_driver_state",
     "run_fortran_reduced_xblock_krylov_solve",
     "run_sparse_pc_gmres_once",
+    "prepare_xblock_augmented_krylov_basis",
     "prepare_xblock_krylov_solve_space",
     "run_xblock_first_krylov_attempt",
     "run_xblock_gmres_fallback_if_needed",
