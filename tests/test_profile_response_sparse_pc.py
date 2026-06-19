@@ -61,6 +61,8 @@ from sfincs_jax.problems.profile_response.sparse_pc import (
     SparseMinimumNormPolicy,
     SparsePCGMRESResult,
     XBlockGMRESFallbackDecision,
+    XBlockGMRESFallbackContext,
+    XBlockGMRESFallbackResult,
     XBlockKrylovReport,
     XBlockPostSolveCorrectionContext,
     XBlockPostSolveCorrectionResult,
@@ -142,6 +144,7 @@ from sfincs_jax.problems.profile_response.sparse_pc import (
     fortran_reduced_xblock_final_payload_from_driver_state,
     run_fortran_reduced_xblock_krylov_solve,
     run_sparse_pc_gmres_once,
+    run_xblock_gmres_fallback_if_needed,
     run_xblock_post_solve_corrections,
     xblock_sparse_pc_completion_message,
     xblock_gmres_fallback_decision,
@@ -231,6 +234,142 @@ def test_xblock_gmres_fallback_decision_skips_converged_non_gmres() -> None:
         residual_norm=0.5,
         target=1.0,
     ).run
+
+
+def test_run_xblock_gmres_fallback_if_needed_preserves_converged_candidate() -> None:
+    def fail_gmres(**_kwargs):
+        raise AssertionError("gmres fallback should not run")
+
+    def fail_initial_guess(**_kwargs):
+        raise AssertionError("fallback seed should not run")
+
+    result = run_xblock_gmres_fallback_if_needed(
+        XBlockGMRESFallbackContext(
+            krylov_method="tfqmr",
+            fallback_enabled=True,
+            x_solution=np.asarray([1.0, 2.0]),
+            x_physical=np.asarray([3.0, 4.0]),
+            residual_norm=0.25,
+            history=(1.0, 0.25),
+            solve_s=5.0,
+            target=1.0,
+            rhs_norm=10.0,
+            original_x0=jnp.zeros(2),
+            solve_rhs=jnp.zeros(2),
+            solve_matvec=_identity,
+            solve_preconditioner=_identity,
+            precondition_side="right",
+            tol=1.0e-8,
+            atol=1.0e-12,
+            restart=10,
+            maxiter=20,
+            progress_callback=None,
+            emit=None,
+            elapsed_s=lambda: 99.0,
+            gmres_solver=fail_gmres,
+            initial_guess_builder=fail_initial_guess,
+            solution_to_physical=_identity,
+            physical_rhs=jnp.zeros(2),
+            physical_matvec=_identity,
+            device_iterations=7,
+            device_estimated_matvecs=11,
+        )
+    )
+
+    assert isinstance(result, XBlockGMRESFallbackResult)
+    assert result.krylov_method == "tfqmr"
+    np.testing.assert_allclose(result.x_solution, np.asarray([1.0, 2.0]))
+    np.testing.assert_allclose(result.x_physical, np.asarray([3.0, 4.0]))
+    assert result.residual_norm == pytest.approx(0.25)
+    assert result.history == (1.0, 0.25)
+    assert result.solve_s == pytest.approx(5.0)
+    assert result.device_iterations == 7
+    assert result.device_estimated_matvecs == 11
+    assert result.fallback_started_from_candidate is False
+    assert result.fallback_candidate_improved_rhs is False
+
+
+def test_run_xblock_gmres_fallback_if_needed_retries_and_recomputes_residual() -> None:
+    emitted: list[tuple[int, str]] = []
+    calls: dict[str, object] = {}
+    times = iter((4.0, 4.25))
+
+    def initial_guess_builder(**kwargs):
+        calls["initial_candidate"] = np.asarray(kwargs["candidate"], dtype=np.float64)
+        calls["initial_rhs_shape"] = kwargs["rhs_shape"]
+        calls["initial_residual"] = kwargs["candidate_residual_norm"]
+        calls["initial_rhs_norm"] = kwargs["rhs_norm"]
+        calls["initial_side"] = kwargs["precondition_side"]
+        return jnp.asarray([0.1, 0.2]), True, False
+
+    def gmres_solver(**kwargs):
+        calls["gmres_x0"] = np.asarray(kwargs["x0"], dtype=np.float64)
+        calls["gmres_restart"] = kwargs["restart"]
+        calls["gmres_maxiter"] = kwargs["maxiter"]
+        calls["gmres_side"] = kwargs["precondition_side"]
+        assert kwargs["progress_callback"] is None
+        return np.asarray([3.0, 4.0]), 99.0, (2.0, 0.5)
+
+    result = run_xblock_gmres_fallback_if_needed(
+        XBlockGMRESFallbackContext(
+            krylov_method="bicgstab",
+            fallback_enabled=True,
+            x_solution=np.asarray([1.0, 2.0]),
+            x_physical=np.asarray([1.0, 2.0]),
+            residual_norm=2.0,
+            history=(3.0, 2.0),
+            solve_s=5.0,
+            target=1.0,
+            rhs_norm=10.0,
+            original_x0=jnp.zeros(2),
+            solve_rhs=jnp.asarray([1.0, 2.0]),
+            solve_matvec=_identity,
+            solve_preconditioner=_identity,
+            precondition_side="left",
+            tol=1.0e-8,
+            atol=1.0e-12,
+            restart=8,
+            maxiter=13,
+            progress_callback=None,
+            emit=lambda level, message: emitted.append((level, message)),
+            elapsed_s=lambda: next(times),
+            gmres_solver=gmres_solver,
+            initial_guess_builder=initial_guess_builder,
+            solution_to_physical=lambda value: 2.0 * value,
+            physical_rhs=jnp.asarray([6.0, 8.0]),
+            physical_matvec=_identity,
+            device_iterations=5,
+            device_estimated_matvecs=9,
+        )
+    )
+
+    assert result.krylov_method == "gmres"
+    np.testing.assert_allclose(result.x_solution, np.asarray([3.0, 4.0]))
+    np.testing.assert_allclose(result.x_physical, np.asarray([6.0, 8.0]))
+    assert result.residual_norm == pytest.approx(0.0)
+    assert result.history == (2.0, 0.5)
+    assert result.solve_s == pytest.approx(5.25)
+    assert result.device_iterations is None
+    assert result.device_estimated_matvecs is None
+    assert result.fallback_started_from_candidate is True
+    assert result.fallback_candidate_improved_rhs is False
+    assert emitted == [
+        (
+            0,
+            "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
+            "bicgstab residual=2.000000e+00 > target=1.000000e+00; "
+            "falling back to gmres",
+        )
+    ]
+    np.testing.assert_allclose(calls["initial_candidate"], np.asarray([1.0, 2.0]))
+    assert calls["initial_rhs_shape"] == (2,)
+    assert calls["initial_residual"] == pytest.approx(2.0)
+    assert calls["initial_rhs_norm"] == pytest.approx(10.0)
+    assert calls["initial_side"] == "left"
+    np.testing.assert_allclose(calls["gmres_x0"], np.asarray([0.1, 0.2]))
+    assert calls["gmres_restart"] == 8
+    assert calls["gmres_maxiter"] == 13
+    assert calls["gmres_side"] == "left"
 
 
 def test_xblock_sparse_pc_work_estimates_report_gmres_metadata() -> None:

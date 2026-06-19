@@ -813,6 +813,16 @@ Recent local validation:
 - Hygiene:
   `py_compile`, `ruff`, `compileall`, `git diff --check`, and
   `scripts/check_repo_size.py` passed.
+- Sparse-PC helper shard after xblock GMRES fallback execution extraction:
+  `208 passed in 1.95 s`.
+- Sparse-host/minimum-norm/direct-tail driver shard:
+  `32 passed, 100 deselected in 35.92 s`.
+- Broad profile-response/RHSMode=1 policy, setup, diagnostics, solver, and
+  helper sweep after xblock GMRES fallback execution extraction:
+  `1165 passed in 49.12 s`.
+- Hygiene:
+  `py_compile`, `ruff`, `compileall`, `git diff --check`, and
+  `scripts/check_repo_size.py` passed.
 - Older focused and broad validation checkpoints are intentionally omitted from
   this active plan; they remain available in git history.
 
@@ -1031,12 +1041,18 @@ Completed recent boundaries:
 - X-block sparse-PC final payload assembly now owns work-estimate metadata and
   post-correction state merging, leaving the driver to pass the current solve
   state plus the correction result object.
+- X-block sparse-PC non-GMRES to GMRES fallback execution now uses a tested
+  profile-response helper with explicit initial-guess, GMRES, and
+  physical-residual callbacks.
 
 Next steps:
 
 - Continue moving remaining generic sparse-PC final payload/result assembly
   into cohesive `profile_response` helpers, using explicit result objects
   instead of driver-local metadata scalar plumbing.
+- Extract remaining xblock first-attempt Krylov dispatch only after the solver
+  method-specific callback contract can stay explicit and covered by focused
+  tests.
 - Continue extracting sparse-PC state/metadata seams after the source split
   stabilizes; avoid moving driver-specific direction builders or caches into
   generic helpers.

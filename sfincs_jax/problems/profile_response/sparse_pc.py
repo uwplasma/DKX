@@ -110,6 +110,56 @@ class XBlockGMRESFallbackDecision:
 
 
 @dataclass(frozen=True)
+class XBlockGMRESFallbackContext:
+    """Inputs for retrying a failed non-GMRES xblock solve with GMRES."""
+
+    krylov_method: str
+    fallback_enabled: bool
+    x_solution: np.ndarray
+    x_physical: np.ndarray
+    residual_norm: float
+    history: Sequence[float] | None
+    solve_s: float
+    target: float
+    rhs_norm: float
+    original_x0: jnp.ndarray | None
+    solve_rhs: jnp.ndarray
+    solve_matvec: ArrayFn
+    solve_preconditioner: ArrayFn
+    precondition_side: str
+    tol: float
+    atol: float
+    restart: int
+    maxiter: int | None
+    progress_callback: Callable[[int, float], None] | None
+    emit: EmitFn | None
+    elapsed_s: Callable[[], float]
+    gmres_solver: Callable[..., tuple[np.ndarray, float, Sequence[float]]]
+    initial_guess_builder: Callable[..., tuple[jnp.ndarray | None, bool, bool]]
+    solution_to_physical: Callable[[jnp.ndarray], jnp.ndarray]
+    physical_rhs: jnp.ndarray
+    physical_matvec: ArrayFn
+    device_iterations: int | None = None
+    device_estimated_matvecs: int | None = None
+
+
+@dataclass(frozen=True)
+class XBlockGMRESFallbackResult:
+    """Updated xblock solve state after optional GMRES fallback."""
+
+    krylov_method: str
+    x_solution: np.ndarray
+    x_physical: np.ndarray
+    residual_norm: float
+    history: tuple[float, ...]
+    solve_s: float
+    device_iterations: int | None
+    device_estimated_matvecs: int | None
+    fallback_started_from_candidate: bool
+    fallback_candidate_improved_rhs: bool
+
+
+@dataclass(frozen=True)
 class XBlockSparsePCWorkEstimates:
     """User-facing solver-kind and Krylov work-memory estimates."""
 
@@ -192,6 +242,97 @@ def xblock_gmres_fallback_decision(
         and ((not np.isfinite(residual)) or residual > float(target))
     )
     return XBlockGMRESFallbackDecision(run=bool(should_retry))
+
+
+def run_xblock_gmres_fallback_if_needed(
+    context: XBlockGMRESFallbackContext,
+) -> XBlockGMRESFallbackResult:
+    """Retry a failed non-GMRES xblock solve with GMRES when policy permits."""
+
+    x_solution = np.asarray(context.x_solution, dtype=np.float64)
+    x_physical = np.asarray(context.x_physical, dtype=np.float64)
+    residual_norm = float(context.residual_norm)
+    history = tuple(float(v) for v in (context.history or ()))
+    krylov_method = str(context.krylov_method)
+    device_iterations = context.device_iterations
+    device_estimated_matvecs = context.device_estimated_matvecs
+    fallback_started_from_candidate = False
+    fallback_candidate_improved_rhs = False
+
+    fallback_decision = xblock_gmres_fallback_decision(
+        krylov_method=krylov_method,
+        fallback_enabled=bool(context.fallback_enabled),
+        residual_norm=float(residual_norm),
+        target=float(context.target),
+    )
+    if not fallback_decision.run:
+        return XBlockGMRESFallbackResult(
+            krylov_method=krylov_method,
+            x_solution=x_solution,
+            x_physical=x_physical,
+            residual_norm=float(residual_norm),
+            history=history,
+            solve_s=float(context.solve_s),
+            device_iterations=device_iterations,
+            device_estimated_matvecs=device_estimated_matvecs,
+            fallback_started_from_candidate=False,
+            fallback_candidate_improved_rhs=False,
+        )
+
+    if context.emit is not None:
+        context.emit(
+            0,
+            "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
+            f"{krylov_method} residual={float(residual_norm):.6e} "
+            f"> target={float(context.target):.6e}; falling back to gmres",
+        )
+
+    (
+        fallback_x0,
+        fallback_started_from_candidate,
+        fallback_candidate_improved_rhs,
+    ) = context.initial_guess_builder(
+        candidate=x_solution,
+        original_x0=context.original_x0,
+        rhs_shape=tuple(context.solve_rhs.shape),
+        candidate_residual_norm=float(residual_norm),
+        rhs_norm=float(context.rhs_norm),
+        precondition_side=str(context.precondition_side),
+    )
+    fallback_start_s = float(context.elapsed_s())
+    x_np, residual_fallback, history_fallback = context.gmres_solver(
+        matvec=context.solve_matvec,
+        b=context.solve_rhs,
+        preconditioner=context.solve_preconditioner,
+        x0=fallback_x0,
+        tol=float(context.tol),
+        atol=float(context.atol),
+        restart=int(context.restart),
+        maxiter=context.maxiter,
+        precondition_side=str(context.precondition_side),
+        progress_callback=context.progress_callback,
+    )
+    solve_s = float(context.solve_s) + (float(context.elapsed_s()) - fallback_start_s)
+    x_solution = np.asarray(x_np, dtype=np.float64)
+    physical_residual = xblock_physical_solution_and_residual(
+        x=x_solution,
+        solution_to_physical=context.solution_to_physical,
+        rhs=context.physical_rhs,
+        matvec=context.physical_matvec,
+        fallback_residual_norm=float(residual_fallback),
+    )
+    return XBlockGMRESFallbackResult(
+        krylov_method="gmres",
+        x_solution=x_solution,
+        x_physical=physical_residual.x_physical,
+        residual_norm=float(physical_residual.residual_norm),
+        history=tuple(float(v) for v in (history_fallback or ())),
+        solve_s=float(solve_s),
+        device_iterations=None,
+        device_estimated_matvecs=None,
+        fallback_started_from_candidate=bool(fallback_started_from_candidate),
+        fallback_candidate_improved_rhs=bool(fallback_candidate_improved_rhs),
+    )
 
 
 def xblock_sparse_pc_work_estimates(
@@ -9079,6 +9220,8 @@ __all__ = [
     "SparsePCGMRESResult",
     "XBlockKrylovReport",
     "XBlockGMRESFallbackDecision",
+    "XBlockGMRESFallbackContext",
+    "XBlockGMRESFallbackResult",
     "XBlockSparsePCWorkEstimates",
     "XBlockPhysicalResidual",
     "SparsePCGMRESFinalPayload",
@@ -9150,6 +9293,7 @@ __all__ = [
     "retry_sparse_pc_factor_dtype_from_driver_state",
     "run_fortran_reduced_xblock_krylov_solve",
     "run_sparse_pc_gmres_once",
+    "run_xblock_gmres_fallback_if_needed",
     "run_xblock_post_solve_corrections",
     "xblock_sparse_pc_completion_message",
     "xblock_gmres_fallback_decision",

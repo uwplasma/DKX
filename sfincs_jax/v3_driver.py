@@ -254,6 +254,7 @@ from .problems.profile_response.sparse_pc import (
     SparseHostScipyGMRESContext,
     SparseJAXRetryPreconditionerBuildContext,
     SparsePCGMRESContext,
+    XBlockGMRESFallbackContext,
     XBlockPostSolveCorrectionContext,
     apply_fortran_reduced_xblock_global_coupling_stage,
     apply_fortran_reduced_xblock_initial_seed,
@@ -317,8 +318,8 @@ from .problems.profile_response.sparse_pc import (
     resolve_xblock_two_level_policy_setup,
     run_fortran_reduced_xblock_krylov_solve,
     run_sparse_pc_gmres_once,
+    run_xblock_gmres_fallback_if_needed,
     run_xblock_post_solve_corrections,
-    xblock_gmres_fallback_decision,
     xblock_krylov_report,
     xblock_physical_solution_and_residual,
     build_sparse_host_or_ilu_factor,
@@ -6535,59 +6536,48 @@ def solve_v3_full_system_linear_gmres(
                 xblock_side_probe_lgmres_rescue=bool(xblock_side_probe_lgmres_rescue),
                 xblock_krylov_method=str(xblock_krylov_method),
             )
-            fallback_decision = xblock_gmres_fallback_decision(
-                krylov_method=str(xblock_krylov_method),
-                fallback_enabled=bool(fallback_to_gmres),
-                residual_norm=float(residual_norm_xblock_pc),
-                target=float(target_xblock),
-            )
-            if fallback_decision.run:
-                if emit is not None:
-                    emit(
-                        0,
-                        "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
-                        f"{xblock_krylov_method} residual={float(residual_norm_xblock_pc):.6e} "
-                        f"> target={float(target_xblock):.6e}; falling back to gmres",
-                    )
-                (
-                    fallback_x0,
-                    fallback_started_from_candidate,
-                    fallback_candidate_improved_rhs,
-                ) = _rhs1_xblock_fallback_initial_guess(
-                    candidate=x_solution_np,
-                    original_x0=solve_x0,
-                    rhs_shape=tuple(solve_rhs.shape),
-                    candidate_residual_norm=float(candidate_residual_norm),
+            fallback_result = run_xblock_gmres_fallback_if_needed(
+                XBlockGMRESFallbackContext(
+                    krylov_method=str(xblock_krylov_method),
+                    fallback_enabled=bool(fallback_to_gmres),
+                    x_solution=x_solution_np,
+                    x_physical=x_physical_np,
+                    residual_norm=float(residual_norm_xblock_pc),
+                    history=history,
+                    solve_s=float(solve_s),
+                    target=float(target_xblock),
                     rhs_norm=float(xblock_rhs_norm),
+                    original_x0=solve_x0,
+                    solve_rhs=solve_rhs,
+                    solve_matvec=solve_matvec,
+                    solve_preconditioner=solve_preconditioner,
                     precondition_side=str(precondition_side),
-                )
-                fallback_start_s = sparse_timer.elapsed_s()
-                x_np, residual_norm_xblock_pc, history = gmres_solve_with_history_scipy(
-                    matvec=solve_matvec,
-                    b=solve_rhs,
-                    preconditioner=solve_preconditioner,
-                    x0=fallback_x0,
-                    tol=tol,
-                    atol=atol,
-                    restart=pc_restart,
+                    tol=float(tol),
+                    atol=float(atol),
+                    restart=int(pc_restart),
                     maxiter=pc_maxiter,
-                    precondition_side=precondition_side,
                     progress_callback=_host_krylov_progress_callback,
-                )
-                solve_s += sparse_timer.elapsed_s() - fallback_start_s
-                xblock_krylov_method = "gmres"
-                device_krylov_iterations = None
-                device_krylov_estimated_matvecs = None
-                x_solution_np = np.asarray(x_np, dtype=np.float64)
-                physical_residual = xblock_physical_solution_and_residual(
-                    x=x_solution_np,
+                    emit=emit,
+                    elapsed_s=sparse_timer.elapsed_s,
+                    gmres_solver=gmres_solve_with_history_scipy,
+                    initial_guess_builder=_rhs1_xblock_fallback_initial_guess,
                     solution_to_physical=solve_solution_to_physical,
-                    rhs=xblock_rhs,
-                    matvec=_mv_true,
-                    fallback_residual_norm=float(residual_norm_xblock_pc),
+                    physical_rhs=xblock_rhs,
+                    physical_matvec=_mv_true,
+                    device_iterations=device_krylov_iterations,
+                    device_estimated_matvecs=device_krylov_estimated_matvecs,
                 )
-                x_physical_np = physical_residual.x_physical
-                residual_norm_xblock_pc = float(physical_residual.residual_norm)
+            )
+            xblock_krylov_method = fallback_result.krylov_method
+            x_solution_np = fallback_result.x_solution
+            x_physical_np = fallback_result.x_physical
+            residual_norm_xblock_pc = float(fallback_result.residual_norm)
+            history = fallback_result.history
+            solve_s = float(fallback_result.solve_s)
+            device_krylov_iterations = fallback_result.device_iterations
+            device_krylov_estimated_matvecs = fallback_result.device_estimated_matvecs
+            fallback_started_from_candidate = fallback_result.fallback_started_from_candidate
+            fallback_candidate_improved_rhs = fallback_result.fallback_candidate_improved_rhs
             krylov_report = xblock_krylov_report(
                 device_iterations=device_krylov_iterations,
                 device_estimated_matvecs=device_krylov_estimated_matvecs,
