@@ -87,6 +87,22 @@ class SparsePCGMRESResult:
 
 
 @dataclass(frozen=True)
+class XBlockKrylovReport:
+    """Reported xblock Krylov work counters after optional device execution."""
+
+    iterations: int
+    matvecs: int
+
+
+@dataclass(frozen=True)
+class XBlockPhysicalResidual:
+    """Physical-space xblock solution and true residual norm."""
+
+    x_physical: np.ndarray
+    residual_norm: float
+
+
+@dataclass(frozen=True)
 class SparsePCGMRESFinalPayload:
     """Driver-independent payload for constructing the final sparse-PC result."""
 
@@ -118,6 +134,49 @@ class SparseMinimumNormPayload:
     metadata: dict[str, object]
     start_message: str
     completion_message: str
+
+
+def xblock_krylov_report(
+    *,
+    device_iterations: int | None,
+    device_estimated_matvecs: int | None,
+    history: Sequence[float] | None,
+    mv_count: int,
+) -> XBlockKrylovReport:
+    """Return the xblock Krylov iteration/matvec counters reported to users."""
+
+    iterations = int(device_iterations) if device_iterations is not None else int(len(history or ()))
+    matvecs = int(device_estimated_matvecs) if device_estimated_matvecs is not None else int(mv_count)
+    return XBlockKrylovReport(iterations=int(iterations), matvecs=int(matvecs))
+
+
+def xblock_physical_solution_and_residual(
+    *,
+    x: np.ndarray,
+    solution_to_physical: Callable[[jnp.ndarray], jnp.ndarray],
+    rhs: jnp.ndarray,
+    matvec: Callable[[jnp.ndarray], jnp.ndarray],
+    fallback_residual_norm: float,
+) -> XBlockPhysicalResidual:
+    """Map a Krylov solution to physical coordinates and measure true residual."""
+
+    x_solution = np.asarray(x, dtype=np.float64)
+    x_physical = np.asarray(
+        jax.device_get(solution_to_physical(jnp.asarray(x_solution, dtype=jnp.float64))),
+        dtype=np.float64,
+    )
+    try:
+        residual_true = np.asarray(rhs, dtype=np.float64) - np.asarray(
+            jax.device_get(matvec(jnp.asarray(x_physical, dtype=jnp.float64))),
+            dtype=np.float64,
+        )
+        residual_norm = float(np.linalg.norm(residual_true))
+    except Exception:
+        residual_norm = float(fallback_residual_norm)
+    return XBlockPhysicalResidual(
+        x_physical=np.asarray(x_physical, dtype=np.float64),
+        residual_norm=float(residual_norm),
+    )
 
 
 @dataclass(frozen=True)
@@ -8512,6 +8571,8 @@ __all__ = [
     "SparsePCPatternSetupResult",
     "SparsePCGMRESContext",
     "SparsePCGMRESResult",
+    "XBlockKrylovReport",
+    "XBlockPhysicalResidual",
     "SparsePCGMRESFinalPayload",
     "SparseMinimumNormPolicy",
     "SparseMinimumNormPayload",
@@ -8578,6 +8639,8 @@ __all__ = [
     "retry_sparse_pc_factor_dtype_from_driver_state",
     "run_fortran_reduced_xblock_krylov_solve",
     "run_sparse_pc_gmres_once",
+    "xblock_krylov_report",
+    "xblock_physical_solution_and_residual",
     "sparse_pc_gmres_completion_message",
     "emit_sparse_pc_gmres_completion_from_driver_state",
     "sparse_pc_gmres_final_payload_from_driver_state",

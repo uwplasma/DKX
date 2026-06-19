@@ -319,6 +319,8 @@ from .problems.profile_response.sparse_pc import (
     resolve_xblock_two_level_policy_setup,
     run_fortran_reduced_xblock_krylov_solve,
     run_sparse_pc_gmres_once,
+    xblock_krylov_report,
+    xblock_physical_solution_and_residual,
     build_sparse_host_or_ilu_factor,
     build_sparse_ilu_preconditioner_from_cache,
     build_sparse_host_scipy_preconditioner,
@@ -6504,35 +6506,28 @@ def solve_v3_full_system_linear_gmres(
                     maxiter=pc_maxiter,
                     precondition_side=precondition_side,
                     progress_callback=_host_krylov_progress_callback,
-                )
+            )
             solve_s = (sparse_timer.elapsed_s() - solve_start_s) + float(xblock_side_probe_s) + float(probe_coarse_s)
             x_solution_np = np.asarray(x_np, dtype=np.float64)
-            x_physical_np = np.asarray(
-                jax.device_get(solve_solution_to_physical(jnp.asarray(x_solution_np, dtype=jnp.float64))),
-                dtype=np.float64,
+            physical_residual = xblock_physical_solution_and_residual(
+                x=x_solution_np,
+                solution_to_physical=solve_solution_to_physical,
+                rhs=xblock_rhs,
+                matvec=_mv_true,
+                fallback_residual_norm=float(residual_norm_xblock_pc),
             )
-            try:
-                residual_true = np.asarray(xblock_rhs, dtype=np.float64) - np.asarray(
-                    jax.device_get(_mv_true(jnp.asarray(x_physical_np, dtype=jnp.float64))),
-                    dtype=np.float64,
-                )
-                residual_norm_xblock_pc = float(np.linalg.norm(residual_true))
-            except Exception:
-                residual_norm_xblock_pc = float(residual_norm_xblock_pc)
+            x_physical_np = physical_residual.x_physical
+            residual_norm_xblock_pc = float(physical_residual.residual_norm)
             candidate_krylov_method = str(xblock_krylov_method)
             candidate_residual_norm = float(residual_norm_xblock_pc)
-            reported_iterations = (
-                int(device_krylov_iterations)
-                if device_krylov_iterations is not None
-                else int(len(history or []))
+            krylov_report = xblock_krylov_report(
+                device_iterations=device_krylov_iterations,
+                device_estimated_matvecs=device_krylov_estimated_matvecs,
+                history=history,
+                mv_count=int(mv_count),
             )
-            reported_matvecs = (
-                int(device_krylov_estimated_matvecs)
-                if device_krylov_estimated_matvecs is not None
-                else int(mv_count)
-            )
-            candidate_iterations = int(reported_iterations)
-            candidate_matvecs = int(reported_matvecs)
+            candidate_iterations = int(krylov_report.iterations)
+            candidate_matvecs = int(krylov_report.matvecs)
             fallback_started_from_candidate = False
             fallback_candidate_improved_rhs = False
             fallback_to_gmres = _rhs1_xblock_policy.rhs1_xblock_fallback_to_gmres_enabled(
@@ -6585,28 +6580,23 @@ def solve_v3_full_system_linear_gmres(
                 device_krylov_iterations = None
                 device_krylov_estimated_matvecs = None
                 x_solution_np = np.asarray(x_np, dtype=np.float64)
-                x_physical_np = np.asarray(
-                    jax.device_get(solve_solution_to_physical(jnp.asarray(x_solution_np, dtype=jnp.float64))),
-                    dtype=np.float64,
+                physical_residual = xblock_physical_solution_and_residual(
+                    x=x_solution_np,
+                    solution_to_physical=solve_solution_to_physical,
+                    rhs=xblock_rhs,
+                    matvec=_mv_true,
+                    fallback_residual_norm=float(residual_norm_xblock_pc),
                 )
-                try:
-                    residual_true = np.asarray(xblock_rhs, dtype=np.float64) - np.asarray(
-                        jax.device_get(_mv_true(jnp.asarray(x_physical_np, dtype=jnp.float64))),
-                        dtype=np.float64,
-                    )
-                    residual_norm_xblock_pc = float(np.linalg.norm(residual_true))
-                except Exception:
-                    residual_norm_xblock_pc = float(residual_norm_xblock_pc)
-            reported_iterations = (
-                int(device_krylov_iterations)
-                if device_krylov_iterations is not None
-                else int(len(history or []))
+                x_physical_np = physical_residual.x_physical
+                residual_norm_xblock_pc = float(physical_residual.residual_norm)
+            krylov_report = xblock_krylov_report(
+                device_iterations=device_krylov_iterations,
+                device_estimated_matvecs=device_krylov_estimated_matvecs,
+                history=history,
+                mv_count=int(mv_count),
             )
-            reported_matvecs = (
-                int(device_krylov_estimated_matvecs)
-                if device_krylov_estimated_matvecs is not None
-                else int(mv_count)
-            )
+            reported_iterations = int(krylov_report.iterations)
+            reported_matvecs = int(krylov_report.matvecs)
             x_np = x_physical_np
             post_solve_policy = _read_rhs1_post_solve_correction_policy()
             post_minres_policy = post_solve_policy.post_minres

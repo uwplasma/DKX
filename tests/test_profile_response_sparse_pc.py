@@ -60,6 +60,8 @@ from sfincs_jax.problems.profile_response.sparse_pc import (
     SparseMinimumNormPayload,
     SparseMinimumNormPolicy,
     SparsePCGMRESResult,
+    XBlockKrylovReport,
+    XBlockPhysicalResidual,
     XBlockAssembledPreflightError,
     apply_fortran_reduced_xblock_global_coupling_stage,
     apply_fortran_reduced_xblock_initial_seed,
@@ -135,6 +137,8 @@ from sfincs_jax.problems.profile_response.sparse_pc import (
     fortran_reduced_xblock_final_payload_from_driver_state,
     run_fortran_reduced_xblock_krylov_solve,
     run_sparse_pc_gmres_once,
+    xblock_krylov_report,
+    xblock_physical_solution_and_residual,
     retry_sparse_pc_factor_dtype_from_driver_state,
     retry_sparse_pc_factor_dtype_if_needed,
     sparse_pc_gmres_completion_message,
@@ -161,6 +165,54 @@ from sfincs_jax.problems.profile_response.sparse_pc import (
 
 def _identity(v: jnp.ndarray) -> jnp.ndarray:
     return v
+
+
+def test_xblock_krylov_report_prefers_device_counters() -> None:
+    assert xblock_krylov_report(
+        device_iterations=7,
+        device_estimated_matvecs=11,
+        history=(1.0, 0.5, 0.25),
+        mv_count=99,
+    ) == XBlockKrylovReport(iterations=7, matvecs=11)
+
+
+def test_xblock_krylov_report_falls_back_to_host_history_and_matvec_count() -> None:
+    assert xblock_krylov_report(
+        device_iterations=None,
+        device_estimated_matvecs=None,
+        history=(1.0, 0.5, 0.25),
+        mv_count=13,
+    ) == XBlockKrylovReport(iterations=3, matvecs=13)
+
+
+def test_xblock_physical_solution_and_residual_measures_true_residual() -> None:
+    result = xblock_physical_solution_and_residual(
+        x=np.asarray([1.0, 2.0]),
+        solution_to_physical=lambda value: 2.0 * value,
+        rhs=jnp.asarray([2.0, 4.0]),
+        matvec=lambda value: value,
+        fallback_residual_norm=99.0,
+    )
+
+    assert isinstance(result, XBlockPhysicalResidual)
+    np.testing.assert_allclose(result.x_physical, np.asarray([2.0, 4.0]))
+    assert result.residual_norm == 0.0
+
+
+def test_xblock_physical_solution_and_residual_keeps_fallback_on_matvec_error() -> None:
+    def _raise(_value):
+        raise RuntimeError("boom")
+
+    result = xblock_physical_solution_and_residual(
+        x=np.asarray([1.0, 2.0]),
+        solution_to_physical=lambda value: 2.0 * value,
+        rhs=jnp.asarray([2.0, 4.0]),
+        matvec=_raise,
+        fallback_residual_norm=99.0,
+    )
+
+    np.testing.assert_allclose(result.x_physical, np.asarray([2.0, 4.0]))
+    assert result.residual_norm == 99.0
 
 
 class _DefaultSparsePCDriverState(dict):

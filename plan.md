@@ -42,9 +42,13 @@ Make `sfincs_jax` research-grade while preserving the public user contract:
 
 Recent checkpoints:
 
+- X-block sparse-PC physical residual recomputation and reported Krylov
+  iteration/matvec counters now use tested `profile_response.sparse_pc`
+  helpers, removing duplicated reporting code from the driver while preserving
+  fallback semantics (current checkpoint).
 - RHSMode=1 full-system strong fallback ADI sweep parsing now lives in
   `rhs1_strong_fallback`, matching the reduced strong fallback helper and
-  removing the final full-branch inline ADI env parse (current checkpoint).
+  removing the final full-branch inline ADI env parse (`c20e4b1`).
 - RHSMode=1 reduced active-DOF strong fallback preconditioner construction now
   uses the shared dispatch helper through `rhs1_strong_fallback`, preserving
   xblock-lmax env parsing, ADI fallback semantics, and driver monkeypatch
@@ -294,11 +298,11 @@ Recent checkpoints:
 - `cb295ce` Extract sparse pattern setup.
 - `4b6a5b4` Extract sparse factor policy.
 
-Current source-size snapshot after RHSMode=1 full strong fallback ADI-control
+Current source-size snapshot after xblock sparse-PC reporting helper
 extraction:
 
-- `sfincs_jax/v3_driver.py`: `17453` lines.
-- `solve_v3_full_system_linear_gmres`: `12075` lines.
+- `sfincs_jax/v3_driver.py`: `17443` lines.
+- `solve_v3_full_system_linear_gmres`: `12063` lines.
 - `sfincs_jax/v3_results.py`: `119` lines.
 - `sfincs_jax/rhs1_ksp_diagnostics.py`: `306` lines.
 - `sfincs_jax/rhs1_pas_policy.py`: `864` lines.
@@ -310,11 +314,20 @@ extraction:
 - `sfincs_jax/problems/profile_response/dense.py`: `701` lines.
 - `sfincs_jax/problems/profile_response/linear_solve.py`: `339` lines.
 - `sfincs_jax/problems/profile_response/active_projection.py`: `116` lines.
-- `sfincs_jax/problems/profile_response/sparse_pc.py`: `8619` lines.
+- `sfincs_jax/problems/profile_response/sparse_pc.py`: `8682` lines.
 - `sfincs_jax/rhs1_xblock_policy.py`: `1215` lines.
 
 Recent local validation:
 
+- Sparse-PC helper shard after xblock reporting helper extraction:
+  `193 passed in 1.90 s`.
+- Sparse-host/minimum-norm/direct-tail driver shard:
+  `32 passed, 100 deselected in 35.96 s`.
+- Broad profile-response/RHSMode=1 policy, setup, diagnostics, solver, and
+  helper sweep after xblock reporting helper extraction:
+  `1147 passed in 48.76 s`.
+- Hygiene:
+  `py_compile` and `ruff` passed before the broad shards.
 - Strong fallback/preconditioner-build shard after full strong fallback
   ADI-control extraction: `11 passed in 0.75 s`.
 - Sparse-host/minimum-norm/direct-tail driver shard:
