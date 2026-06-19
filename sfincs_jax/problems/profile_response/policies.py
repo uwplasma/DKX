@@ -2379,6 +2379,12 @@ def rhs1_scipy_rescue_controls_from_env(
     )
 
 
+def rhs1_pas_source_zero_tolerance_from_env() -> float:
+    """Parse the tiny PAS source cleanup tolerance shared by RHSMode=1 exits."""
+
+    return _env_float("SFINCS_JAX_PAS_SOURCE_ZERO_TOL", 2.0e-9)
+
+
 def rhs1_fp_xblock_global_correction_allowed(
     *,
     op: Any,
@@ -3225,6 +3231,7 @@ __all__ = (
     "rhs1_host_factor_probe_ok",
     "rhs1_parse_accept_ratio",
     "rhs1_parse_polish_gmres_config",
+    "rhs1_pas_source_zero_tolerance_from_env",
     "rhs1_pas_fast_accept",
     "rhs1_pas_stage2_skip",
     "rhs1_pas_tz_guarded_stage2_retry",

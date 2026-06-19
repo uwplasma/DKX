@@ -22,6 +22,7 @@ from sfincs_jax.rhs1_post_xblock_policy import (
     rhs1_scipy_rescue_abs_floor_after_xblock,
     rhs1_scipy_rescue_active_size_allowed,
     rhs1_scipy_rescue_controls_from_env,
+    rhs1_pas_source_zero_tolerance_from_env,
     rhs1_skip_global_sparse_after_xblock_allowed,
 )
 
@@ -649,6 +650,20 @@ def test_scipy_rescue_controls_respect_env_and_invalid_values(monkeypatch) -> No
         restart=80,
         maxiter=None,
     ).method == "gmres"
+
+
+def test_pas_source_zero_tolerance_preserves_legacy_env_behavior(monkeypatch) -> None:
+    monkeypatch.delenv("SFINCS_JAX_PAS_SOURCE_ZERO_TOL", raising=False)
+    assert rhs1_pas_source_zero_tolerance_from_env() == 2.0e-9
+
+    monkeypatch.setenv("SFINCS_JAX_PAS_SOURCE_ZERO_TOL", "0")
+    assert rhs1_pas_source_zero_tolerance_from_env() == 0.0
+
+    monkeypatch.setenv("SFINCS_JAX_PAS_SOURCE_ZERO_TOL", "7e-10")
+    assert rhs1_pas_source_zero_tolerance_from_env() == 7.0e-10
+
+    monkeypatch.setenv("SFINCS_JAX_PAS_SOURCE_ZERO_TOL", "bad")
+    assert rhs1_pas_source_zero_tolerance_from_env() == 2.0e-9
 
 
 def test_fp_xblock_global_correction_is_opt_in_and_bounded(monkeypatch) -> None:
