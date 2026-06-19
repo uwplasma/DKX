@@ -962,6 +962,20 @@ Recent local validation:
 - Hygiene after x-block final metadata whitelist extraction:
   `python -m compileall -q sfincs_jax`, `git diff --check`, and
   `python scripts/check_repo_size.py` passed.
+- X-block final metadata whitelist completeness fix:
+  `tests/test_rhs1_device_operator.py::test_xblock_side_probe_switch_keeps_physical_left_probe_seed_for_right_pc`
+  passed after excluding payload/post-correction-computed fields from the
+  driver-scope whitelist and adding the nested driver-owned coarse/QI/device
+  diagnostics keys.
+- Broad profile-response/RHSMode=1 policy, setup, diagnostics, solver, and
+  helper sweep after x-block final metadata whitelist completeness fix:
+  `1188 passed in 48.40 s`.
+- Xblock/sparse-host/minimum-norm/direct-tail driver shard after x-block final
+  metadata whitelist completeness fix:
+  `36 passed, 96 deselected in 38.24 s`.
+- Hygiene after x-block final metadata whitelist completeness fix:
+  `python -m compileall -q sfincs_jax`, `git diff --check`, and
+  `python scripts/check_repo_size.py` passed.
 - Older focused and broad validation checkpoints are intentionally omitted from
   this active plan; they remain available in git history.
 
