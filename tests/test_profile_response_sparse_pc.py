@@ -5342,6 +5342,44 @@ def test_sparse_pc_post_minres_accepts_improved_residual_and_recomputes_pc_norm(
     assert any("post-minres improved residual" in msg for msg in messages)
 
 
+def test_sparse_pc_post_minres_uses_custom_solver_label() -> None:
+    messages: list[str] = []
+    times = iter((1.0, 1.1))
+
+    def minres_correction(**_kwargs):
+        return (
+            jnp.asarray([0.5, 0.5]),
+            jnp.asarray([0.1, 0.2]),
+            (0.25,),
+            (0.75,),
+        )
+
+    apply_sparse_pc_post_minres(
+        context=SparsePCPostMinresContext(
+            matvec=_identity,
+            rhs=jnp.zeros(2),
+            preconditioner=_identity,
+            emit=lambda _level, msg: messages.append(msg),
+            elapsed_s=lambda: next(times),
+            pc_form="none",
+            steps=1,
+            alpha_clip=10.0,
+            min_improvement=0.0,
+            minres_correction=minres_correction,
+            solver_label="xblock_sparse_pc_gmres",
+        ),
+        x=np.zeros(2),
+        residual_norm=1.0,
+        preconditioned_residual_norm=1.0,
+    )
+
+    assert any(
+        "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres post-minres improved"
+        in msg
+        for msg in messages
+    )
+
+
 def test_sparse_pc_post_minres_if_needed_preserves_state_when_disabled_or_converged() -> None:
     def minres_correction(**_kwargs):
         raise AssertionError("post-minres should not run")

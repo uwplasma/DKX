@@ -231,9 +231,11 @@ from .problems.profile_response.sparse_pc import (
     SparsePCAutoPreflightRetryEvaluationContext,
     SparsePCPatternSetupContext,
     SparsePCGMRESContext,
+    SparsePCPostMinresUpdateContext,
     apply_fortran_reduced_xblock_global_coupling_stage,
     apply_fortran_reduced_xblock_initial_seed,
     apply_fortran_reduced_xblock_moment_schur_stage,
+    apply_sparse_pc_post_minres_if_needed,
     build_fortran_reduced_xblock_factor_stage,
     build_fortran_reduced_xblock_krylov_setup,
     build_sparse_pc_pattern_setup,
@@ -6705,59 +6707,33 @@ def solve_v3_full_system_linear_gmres(
                             f"post-residual-equation failed ({type(exc).__name__}: {exc})",
                         )
                 solve_s += sparse_timer.elapsed_s() - post_residual_equation_start_s
-            if (
-                post_minres_steps_requested > 0
-                and np.isfinite(float(residual_norm_xblock_pc))
-                and float(residual_norm_xblock_pc) > float(target_xblock)
-            ):
-                post_minres_residual_before = float(residual_norm_xblock_pc)
-                post_minres_start_s = sparse_timer.elapsed_s()
-                try:
-                    x_corr, residual_corr, post_history, post_alphas = _apply_preconditioned_minres_correction(
-                        matvec=_mv_true,
-                        rhs=xblock_rhs,
-                        x0=jnp.asarray(x_np, dtype=jnp.float64),
-                        preconditioner=precond_xblock_krylov if precondition_side != "none" else (lambda v: v),
-                        steps=post_minres_steps_requested,
-                        alpha_clip=post_minres_alpha_clip,
-                        min_improvement=post_minres_min_improvement,
-                    )
-                    post_minres_history = tuple(float(v) for v in post_history)
-                    post_minres_alphas = tuple(float(v) for v in post_alphas)
-                    post_minres_residual_after = float(jnp.linalg.norm(residual_corr))
-                    if (
-                        np.isfinite(float(post_minres_residual_after))
-                        and float(post_minres_residual_after) < float(residual_norm_xblock_pc)
-                    ):
-                        x_np = np.asarray(x_corr, dtype=np.float64)
-                        residual_norm_xblock_pc = float(post_minres_residual_after)
-                        if emit is not None:
-                            emit(
-                                0,
-                                "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
-                                f"post-minres improved residual {post_minres_residual_before:.6e} "
-                                f"-> {post_minres_residual_after:.6e} "
-                                f"(accepted_steps={len(post_minres_alphas)})",
-                            )
-                    elif emit is not None:
-                        after = (
-                            float(post_minres_residual_after)
-                            if post_minres_residual_after is not None
-                            else float("nan")
-                        )
-                        emit(
-                            1,
-                            "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
-                            f"post-minres rejected residual {post_minres_residual_before:.6e} -> {after:.6e}",
-                        )
-                except Exception as exc:  # noqa: BLE001
-                    if emit is not None:
-                        emit(
-                            1,
-                            "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
-                            f"post-minres failed ({type(exc).__name__}: {exc})",
-                        )
-                solve_s += sparse_timer.elapsed_s() - post_minres_start_s
+            post_minres = apply_sparse_pc_post_minres_if_needed(
+                SparsePCPostMinresUpdateContext(
+                    matvec=_mv_true,
+                    rhs=xblock_rhs,
+                    preconditioner=precond_xblock_krylov if precondition_side != "none" else (lambda v: v),
+                    emit=emit,
+                    elapsed_s=sparse_timer.elapsed_s,
+                    pc_form="none",
+                    steps=int(post_minres_steps_requested),
+                    alpha_clip=float(post_minres_alpha_clip),
+                    min_improvement=float(post_minres_min_improvement),
+                    minres_correction=_apply_preconditioned_minres_correction,
+                    x=np.asarray(x_np, dtype=np.float64),
+                    residual_norm=float(residual_norm_xblock_pc),
+                    preconditioned_residual_norm=float(residual_norm_xblock_pc),
+                    solve_s=float(solve_s),
+                    target=float(target_xblock),
+                    solver_label="xblock_sparse_pc_gmres",
+                )
+            )
+            x_np = np.asarray(post_minres.x, dtype=np.float64)
+            residual_norm_xblock_pc = float(post_minres.residual_norm)
+            solve_s = float(post_minres.solve_s)
+            post_minres_history = post_minres.history
+            post_minres_alphas = post_minres.alphas
+            post_minres_residual_before = post_minres.residual_before
+            post_minres_residual_after = post_minres.residual_after
             if (
                 post_coarse_steps_requested > 0
                 and np.isfinite(float(residual_norm_xblock_pc))

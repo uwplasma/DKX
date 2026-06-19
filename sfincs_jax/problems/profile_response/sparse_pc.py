@@ -204,6 +204,7 @@ class SparsePCPostMinresContext:
     alpha_clip: float
     min_improvement: float
     minres_correction: Callable[..., tuple[jnp.ndarray, jnp.ndarray, Sequence[float], Sequence[float]]]
+    solver_label: str = "sparse_pc_gmres"
 
 
 @dataclass(frozen=True)
@@ -240,6 +241,7 @@ class SparsePCPostMinresUpdateContext:
     preconditioned_residual_norm: float
     solve_s: float
     target: float
+    solver_label: str = "sparse_pc_gmres"
 
 
 @dataclass(frozen=True)
@@ -7780,7 +7782,7 @@ def apply_sparse_pc_post_minres(
             if context.emit is not None:
                 context.emit(
                     0,
-                    "solve_v3_full_system_linear_gmres: sparse_pc_gmres post-minres "
+                    f"solve_v3_full_system_linear_gmres: {context.solver_label} post-minres "
                     f"improved residual {residual_before:.6e} "
                     f"-> {float(residual_after):.6e} "
                     f"(accepted_steps={len(alphas)})",
@@ -7789,7 +7791,7 @@ def apply_sparse_pc_post_minres(
             after = float(residual_after) if residual_after is not None else float("nan")
             context.emit(
                 1,
-                "solve_v3_full_system_linear_gmres: sparse_pc_gmres post-minres "
+                f"solve_v3_full_system_linear_gmres: {context.solver_label} post-minres "
                 f"rejected residual {residual_before:.6e} -> {after:.6e}",
             )
     except Exception as exc:  # noqa: BLE001
@@ -7797,7 +7799,7 @@ def apply_sparse_pc_post_minres(
         if context.emit is not None:
             context.emit(
                 1,
-                "solve_v3_full_system_linear_gmres: sparse_pc_gmres post-minres failed "
+                f"solve_v3_full_system_linear_gmres: {context.solver_label} post-minres failed "
                 f"({error})",
             )
 
@@ -7848,6 +7850,7 @@ def apply_sparse_pc_post_minres_if_needed(
             alpha_clip=float(context.alpha_clip),
             min_improvement=float(context.min_improvement),
             minres_correction=context.minres_correction,
+            solver_label=str(context.solver_label),
         ),
         x=np.asarray(context.x, dtype=np.float64),
         residual_norm=float(context.residual_norm),
