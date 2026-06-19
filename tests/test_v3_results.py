@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from types import SimpleNamespace
+
 import jax.numpy as jnp
 from jax import tree_util as jtu
 import numpy as np
@@ -9,6 +11,7 @@ from sfincs_jax.v3_results import (
     V3LinearSolveResult,
     V3NewtonKrylovResult,
     V3TransportMatrixSolveResult,
+    v3_linear_solve_result_from_payload,
 )
 
 
@@ -26,6 +29,23 @@ def test_v3_linear_solve_result_properties_and_pytree_metadata() -> None:
     rebuilt = jtu.tree_unflatten(treedef, children)
     assert rebuilt.metadata == {"path": "unit"}
     np.testing.assert_allclose(np.asarray(rebuilt.x), np.asarray(result.x))
+
+
+def test_v3_linear_solve_result_from_payload_preserves_payload_fields() -> None:
+    payload = SimpleNamespace(
+        x=jnp.asarray([3.0, 4.0], dtype=jnp.float64),
+        residual_norm=jnp.asarray(5.0e-7, dtype=jnp.float64),
+        metadata={"solver_kind": "unit"},
+    )
+    rhs = jnp.asarray([1.0, 2.0], dtype=jnp.float64)
+
+    result = v3_linear_solve_result_from_payload(op=None, rhs=rhs, payload=payload)
+
+    assert isinstance(result, V3LinearSolveResult)
+    assert result.metadata == {"solver_kind": "unit"}
+    np.testing.assert_allclose(np.asarray(result.rhs), np.asarray(rhs))
+    np.testing.assert_allclose(np.asarray(result.x), np.asarray([3.0, 4.0]))
+    assert float(result.residual_norm) == 5.0e-7
 
 
 def test_v3_newton_krylov_result_pytree_roundtrip() -> None:

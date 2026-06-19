@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Any
 
 import jax.numpy as jnp
 from jax import tree_util as jtu
@@ -39,6 +40,25 @@ class V3LinearSolveResult:
     @property
     def residual_norm(self) -> jnp.ndarray:
         return self.gmres.residual_norm
+
+
+def v3_linear_solve_result_from_payload(
+    *,
+    op: V3FullSystemOperator,
+    rhs: jnp.ndarray,
+    payload: Any,
+) -> V3LinearSolveResult:
+    """Wrap a typed solver payload in the public v3 linear-solve result."""
+
+    return V3LinearSolveResult(
+        op=op,
+        rhs=rhs,
+        gmres=GMRESSolveResult(
+            x=payload.x,
+            residual_norm=payload.residual_norm,
+        ),
+        metadata=payload.metadata,
+    )
 
 
 @jtu.register_pytree_node_class
@@ -95,4 +115,5 @@ __all__ = [
     "V3LinearSolveResult",
     "V3NewtonKrylovResult",
     "V3TransportMatrixSolveResult",
+    "v3_linear_solve_result_from_payload",
 ]

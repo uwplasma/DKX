@@ -832,7 +832,12 @@ from .v3_system import (
     rhs_v3_full_system_jit,
     with_transport_rhs_settings,
 )
-from .v3_results import V3LinearSolveResult, V3NewtonKrylovResult, V3TransportMatrixSolveResult
+from .v3_results import (
+    V3LinearSolveResult,
+    V3NewtonKrylovResult,
+    V3TransportMatrixSolveResult,
+    v3_linear_solve_result_from_payload,
+)
 from .v3_sparse_pattern import (
     estimate_v3_full_system_conservative_sparsity_summary,
     summarize_v3_sparse_pattern,
@@ -6852,14 +6857,10 @@ def solve_v3_full_system_linear_gmres(
                 locals(),
                 expand_reduced=_xblock_expand_reduced,
             )
-            return V3LinearSolveResult(
+            return v3_linear_solve_result_from_payload(
                 op=op,
                 rhs=rhs,
-                gmres=GMRESSolveResult(
-                    x=xblock_sparse_pc_final_payload.x,
-                    residual_norm=xblock_sparse_pc_final_payload.residual_norm,
-                ),
-                metadata=xblock_sparse_pc_final_payload.metadata,
+                payload=xblock_sparse_pc_final_payload,
             )
 
         sparse_pc_active_setup = build_sparse_pc_active_dof_setup(
@@ -7113,14 +7114,10 @@ def solve_v3_full_system_linear_gmres(
                     expand_reduced=_sparse_pc_expand_reduced,
                 )
             )
-            return V3LinearSolveResult(
+            return v3_linear_solve_result_from_payload(
                 op=op,
                 rhs=rhs,
-                gmres=GMRESSolveResult(
-                    x=fortran_reduced_xblock_payload.x,
-                    residual_norm=fortran_reduced_xblock_payload.residual_norm,
-                ),
-                metadata=fortran_reduced_xblock_payload.metadata,
+                payload=fortran_reduced_xblock_payload,
             )
 
         sparse_pc_pattern_setup = build_sparse_pc_pattern_setup(
@@ -9138,14 +9135,10 @@ def solve_v3_full_system_linear_gmres(
             minres_correction=_apply_preconditioned_minres_correction,
             expand_reduced=_sparse_pc_expand_reduced,
         )
-        return V3LinearSolveResult(
+        return v3_linear_solve_result_from_payload(
             op=op,
             rhs=rhs,
-            gmres=GMRESSolveResult(
-                x=sparse_pc_final_payload.x,
-                residual_norm=sparse_pc_final_payload.residual_norm,
-            ),
-            metadata=sparse_pc_final_payload.metadata,
+            payload=sparse_pc_final_payload,
         )
     if solve_method_kind_explicit in _SPARSE_HOST_MINIMUM_NORM_SOLVE_METHODS:
         validate_explicit_sparse_host_request(
@@ -9181,14 +9174,10 @@ def solve_v3_full_system_linear_gmres(
             emit=emit,
             build_operator_from_pattern=build_operator_from_pattern,
         )
-        return V3LinearSolveResult(
+        return v3_linear_solve_result_from_payload(
             op=op,
             rhs=rhs,
-            gmres=GMRESSolveResult(
-                x=sparse_minimum_norm_payload.x,
-                residual_norm=sparse_minimum_norm_payload.residual_norm,
-            ),
-            metadata=sparse_minimum_norm_payload.metadata,
+            payload=sparse_minimum_norm_payload,
         )
     if solve_method_kind_explicit in _SPARSE_HOST_DIRECT_SOLVE_METHODS:
         validate_explicit_sparse_host_request(
@@ -9225,14 +9214,10 @@ def solve_v3_full_system_linear_gmres(
             build_host_sparse_direct_factor_from_matvec=_build_host_sparse_direct_factor_from_matvec,
             direct_solve_with_refinement=_host_direct_solve_with_refinement,
         )
-        return V3LinearSolveResult(
+        return v3_linear_solve_result_from_payload(
             op=op,
             rhs=rhs,
-            gmres=GMRESSolveResult(
-                x=sparse_host_direct_payload.x,
-                residual_norm=sparse_host_direct_payload.residual_norm,
-            ),
-            metadata=sparse_host_direct_payload.metadata,
+            payload=sparse_host_direct_payload,
         )
     rhs1_precond_env = os.environ.get("SFINCS_JAX_RHSMODE1_PRECONDITIONER", "").strip().lower()
     rhs1_precond_env_user = rhs1_precond_env

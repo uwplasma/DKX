@@ -42,8 +42,10 @@ Make `sfincs_jax` research-grade while preserving the public user contract:
 
 Recent checkpoints:
 
-- Explicit sparse-host direct factor/solve orchestration extraction
+- Payload-to-`V3LinearSolveResult` result-layer wrapper extraction
   (current checkpoint).
+- Explicit sparse-host direct factor/solve orchestration extraction
+  (`1d43c2d`).
 - Explicit sparse minimum-norm materialization/solve orchestration extraction
   (`d802be4`).
 - RHSMode=1 sparse-host direct fallback progress emission centralization
@@ -85,17 +87,24 @@ Recent checkpoints:
 - `cb295ce` Extract sparse pattern setup.
 - `4b6a5b4` Extract sparse factor policy.
 
-Current source-size snapshot after explicit sparse-host direct orchestration
-extraction:
+Current source-size snapshot after payload-to-result wrapper extraction:
 
-- `sfincs_jax/v3_driver.py`: `18778` lines.
-- `solve_v3_full_system_linear_gmres`: `13496` lines.
+- `sfincs_jax/v3_driver.py`: `18763` lines.
+- `solve_v3_full_system_linear_gmres`: `13476` lines.
+- `sfincs_jax/v3_results.py`: `119` lines.
 - `sfincs_jax/problems/profile_response/residual.py`: `751` lines.
 - `sfincs_jax/problems/profile_response/handoff.py`: `290` lines.
 - `sfincs_jax/problems/profile_response/sparse_pc.py`: `8034` lines.
 
 Recent local validation:
 
+- Result-wrapper/profile-response sparse-PC focused shard:
+  `177 passed in 1.77 s`.
+- Sparse-host/minimum-norm/direct-tail driver shard:
+  `32 passed, 100 deselected in 37.10 s`.
+- Hygiene:
+  `ruff`, `compileall`, `git diff --check`, and `scripts/check_repo_size.py`
+  passed.
 - Explicit sparse-host direct focused sparse-PC shard:
   `173 passed in 1.68 s`.
 - Sparse-host/minimum-norm/direct-tail driver shard:
@@ -274,6 +283,9 @@ Completed recent boundaries:
 - Explicit sparse-host direct conservative-pattern progress, host factor build,
   direct refinement solve, true-residual payload, and completion emission
   consolidated into a tested profile-response helper.
+- Payload-to-`V3LinearSolveResult` conversion consolidated in the result layer,
+  removing repeated driver-side `GMRESSolveResult` wrapping for sparse-PC,
+  x-block, and explicit host sparse payloads.
 
 Next steps:
 
