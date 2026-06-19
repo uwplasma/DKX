@@ -4,7 +4,12 @@ from types import SimpleNamespace
 
 import pytest
 
-from sfincs_jax.rhs1_handoff import rhs1_accept_candidate, rhs1_residual_improves
+from sfincs_jax.rhs1_handoff import (
+    rhs1_accept_candidate,
+    rhs1_accept_measured_candidate,
+    rhs1_residual_improves,
+    rhs1_solver_candidate_metrics,
+)
 from sfincs_jax.solver_selection_policy import SolverCandidateMetrics
 
 
@@ -249,3 +254,94 @@ def test_rhs1_accept_candidate_allows_slower_candidate_when_baseline_failed() ->
     assert result is candidate
     assert residual_vec == "r1"
     assert handoff is not None
+
+
+def test_rhs1_solver_candidate_metrics_extracts_finite_result_fields() -> None:
+    metrics = rhs1_solver_candidate_metrics(
+        name="sparse_full",
+        result=_result(2.5e-10),
+        target_value=1.0e-9,
+        solve_s=0.25,
+        setup_s=0.5,
+        peak_rss_mb=123.0,
+    )
+
+    assert metrics.name == "sparse_full"
+    assert metrics.residual_norm == 2.5e-10
+    assert metrics.target == 1.0e-9
+    assert metrics.solve_s == 0.25
+    assert metrics.setup_s == 0.5
+    assert metrics.peak_rss_mb == 123.0
+    assert metrics.finite
+
+
+def test_rhs1_solver_candidate_metrics_marks_unreadable_residual_nonfinite() -> None:
+    metrics = rhs1_solver_candidate_metrics(
+        name="bad",
+        result=object(),
+        target_value=1.0e-9,
+    )
+
+    assert metrics.residual_norm is None
+    assert not metrics.finite
+
+
+def test_rhs1_accept_measured_candidate_uses_standard_metrics_and_handoff() -> None:
+    current = _result(5.0e-6, x="x0")
+    candidate = _result(5.0e-11, x="x1")
+
+    result, residual_vec, handoff, accepted = rhs1_accept_measured_candidate(
+        current_result=current,
+        candidate_result=candidate,
+        current_residual_vec="r0",
+        candidate_residual_vec="r1",
+        matvec_fn="mv",
+        b_vec="rhs",
+        precond_fn="pc",
+        x0_vec="seed",
+        restart=30,
+        maxiter=90,
+        precond_side="left",
+        solver_kind="gmres",
+        candidate_name="sparse_full",
+        baseline_name="current_full",
+        target_value=1.0e-9,
+        solve_s=0.25,
+        peak_rss_mb=456.0,
+    )
+
+    assert accepted
+    assert result is candidate
+    assert residual_vec == "r1"
+    assert handoff is not None
+    assert handoff.solver_kind == "gmres"
+
+
+def test_rhs1_accept_measured_candidate_rejects_clean_baseline_without_win() -> None:
+    current = _result(1.0e-12, x="x0")
+    candidate = _result(5.0e-13, x="x1")
+
+    result, residual_vec, handoff, accepted = rhs1_accept_measured_candidate(
+        current_result=current,
+        candidate_result=candidate,
+        current_residual_vec="r0",
+        candidate_residual_vec="r1",
+        matvec_fn="mv",
+        b_vec="rhs",
+        precond_fn="pc",
+        x0_vec="seed",
+        restart=30,
+        maxiter=90,
+        precond_side="left",
+        solver_kind="gmres",
+        candidate_name="sparse_full",
+        baseline_name="current_full",
+        target_value=1.0e-9,
+        solve_s=1.0,
+        peak_rss_mb=456.0,
+    )
+
+    assert not accepted
+    assert result is current
+    assert residual_vec == "r0"
+    assert handoff is None

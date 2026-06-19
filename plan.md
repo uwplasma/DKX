@@ -42,7 +42,8 @@ Make `sfincs_jax` research-grade while preserving the public user contract:
 
 Recent checkpoints:
 
-- Sparse-PC factor-preflight evaluation extraction (current checkpoint).
+- Sparse fallback measured-handoff extraction (current checkpoint).
+- Sparse-PC factor-preflight evaluation extraction.
 - Direct-tail coupled-coarse rescue policy extraction.
 - Direct-tail true-active rescue policy extraction.
 - Direct-tail residual-rescue policy extraction.
@@ -56,19 +57,25 @@ Recent checkpoints:
 - `cb295ce` Extract sparse pattern setup.
 - `4b6a5b4` Extract sparse factor policy.
 
-Current source-size snapshot after host sparse direct polish extraction:
+Current source-size snapshot after sparse fallback measured-handoff extraction:
 
-- `sfincs_jax/v3_driver.py`: `19075` lines.
-- `solve_v3_full_system_linear_gmres`: `13732` lines.
+- `sfincs_jax/v3_driver.py`: `19054` lines.
+- `solve_v3_full_system_linear_gmres`: `13708` lines.
 
 Recent local validation:
 
+- Handoff helper unit shard:
+  `18 passed in 0.33 s`.
+- End-to-end explicit sparse/direct-tail driver checks:
+  `5 passed in 14.20 s`.
+- Latest broad profile-response/x-block/sparse-pattern shard:
+  `443 passed in 114.36 s`.
 - Focused sparse-PC shard:
   `164 passed in 1.68 s`.
-- End-to-end explicit sparse/direct-tail driver checks:
-  `5 passed in 15.49 s`.
-- Latest broad profile-response/x-block/sparse-pattern shard:
-  `443 passed in 115.41 s`.
+- Hygiene:
+  `ruff`, `compileall`, `git diff --check`, and `scripts/check_repo_size.py`
+  passed.
+- Latest pushed CI/Docs before this tranche (`eff0ba4`) are green.
 
 Known CI issue fixed by this rewrite:
 
@@ -79,7 +86,7 @@ Known CI issue fixed by this rewrite:
 
 ### 1. `v3_driver.py` Architecture Refactor
 
-Completion estimate: 90%.
+Completion estimate: 91%.
 
 Goal:
 
@@ -128,6 +135,8 @@ Completed recent boundaries:
   ILU/CSR refinement fallbacks.
 - Host sparse direct float32 GMRES-polish gating, progress, and acceptance
   extraction.
+- RHSMode=1 measured solver-candidate metric construction and sparse host/JAX
+  fallback handoff extraction.
 
 Next steps:
 
@@ -195,10 +204,10 @@ Next steps:
 
 ## Immediate Next Steps
 
-1. Commit and push the host sparse direct polish extraction after final cleanup.
-2. Continue with host sparse fallback acceptance/metadata seam extraction where
-   cache boundaries remain clean.
-3. Run focused sparse-PC tests and the broad profile-response/x-block/sparse
+1. Commit and push the sparse fallback measured-handoff extraction.
+2. Continue with remaining measured candidate call-site consolidation where
+   behavior and cache boundaries remain clean.
+3. Run focused handoff/sparse-PC tests and the broad profile-response/x-block/sparse
    shard after each extraction.
 4. Snapshot CI but do not wait on queued runs unless a completed failure appears.
 

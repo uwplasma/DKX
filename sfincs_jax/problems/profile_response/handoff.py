@@ -119,8 +119,90 @@ def rhs1_accept_candidate(
     return current_result, current_residual_vec, None, False
 
 
+def rhs1_solver_candidate_metrics(
+    *,
+    name: str,
+    result: Any,
+    target_value: float,
+    solve_s: float | None = None,
+    setup_s: float | None = None,
+    peak_rss_mb: float | None = None,
+) -> SolverCandidateMetrics:
+    """Build measured solver-policy metrics from a real RHSMode=1 attempt."""
+    try:
+        residual_norm = float(result.residual_norm)
+    except Exception:
+        residual_norm = None
+    finite = residual_norm is not None and math.isfinite(residual_norm)
+    return SolverCandidateMetrics(
+        name=str(name),
+        residual_norm=residual_norm,
+        target=float(target_value),
+        setup_s=setup_s,
+        solve_s=solve_s,
+        peak_rss_mb=peak_rss_mb,
+        finite=finite,
+    )
+
+
+def rhs1_accept_measured_candidate(
+    *,
+    current_result: Any,
+    candidate_result: Any,
+    current_residual_vec: Any = None,
+    candidate_residual_vec: Any = None,
+    matvec_fn: Any,
+    b_vec: Any,
+    precond_fn: Any,
+    x0_vec: Any,
+    restart: int,
+    maxiter: int | None,
+    precond_side: str,
+    solver_kind: str,
+    candidate_name: str,
+    baseline_name: str,
+    target_value: float,
+    solve_s: float | None = None,
+    setup_s: float | None = None,
+    peak_rss_mb: float | None = None,
+    criteria: SolverAcceptanceCriteria | None = None,
+) -> tuple[Any, Any, RHS1KSPHandoffState | None, bool]:
+    """Accept a measured candidate while constructing standard gate metrics."""
+    return rhs1_accept_candidate(
+        current_result=current_result,
+        candidate_result=candidate_result,
+        current_residual_vec=current_residual_vec,
+        candidate_residual_vec=candidate_residual_vec,
+        matvec_fn=matvec_fn,
+        b_vec=b_vec,
+        precond_fn=precond_fn,
+        x0_vec=x0_vec,
+        restart=restart,
+        maxiter=maxiter,
+        precond_side=precond_side,
+        solver_kind=solver_kind,
+        candidate_metrics=rhs1_solver_candidate_metrics(
+            name=candidate_name,
+            result=candidate_result,
+            target_value=target_value,
+            solve_s=solve_s,
+            setup_s=setup_s,
+            peak_rss_mb=peak_rss_mb,
+        ),
+        baseline_metrics=rhs1_solver_candidate_metrics(
+            name=baseline_name,
+            result=current_result,
+            target_value=target_value,
+            peak_rss_mb=peak_rss_mb,
+        ),
+        criteria=criteria,
+    )
+
+
 __all__ = [
     "RHS1KSPHandoffState",
     "rhs1_accept_candidate",
+    "rhs1_accept_measured_candidate",
     "rhs1_residual_improves",
+    "rhs1_solver_candidate_metrics",
 ]

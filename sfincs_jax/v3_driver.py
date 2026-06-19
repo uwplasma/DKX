@@ -168,7 +168,10 @@ from .rhs1_preconditioner_auto_policy import (
     rhs1_gpu_sparse_fallback_skip_allowed as _rhs1_gpu_sparse_fallback_skip_allowed_impl,
 )
 from .rhs1_schur_policy import resolve_rhs1_schur_base_kind
-from .problems.profile_response.handoff import rhs1_accept_candidate
+from .problems.profile_response.handoff import (
+    rhs1_accept_candidate,
+    rhs1_accept_measured_candidate,
+)
 from .problems.profile_response.auto_solve import (
     RHS1AutoHostSolveContext,
     RHS1SparseHostSafeSolveContext,
@@ -13803,7 +13806,7 @@ def solve_v3_full_system_linear_gmres(
                     )
                     sparse_retry_elapsed_s = sparse_retry_timer.elapsed_s()
                     if res_sparse is not None:
-                        res_reduced, residual_vec, handoff_state, _accepted = rhs1_accept_candidate(
+                        res_reduced, residual_vec, handoff_state, _accepted = rhs1_accept_measured_candidate(
                             current_result=res_reduced,
                             candidate_result=res_sparse,
                             current_residual_vec=residual_vec,
@@ -13816,17 +13819,11 @@ def solve_v3_full_system_linear_gmres(
                             maxiter=maxiter,
                             precond_side=gmres_precond_side,
                             solver_kind=_solver_kind("incremental")[0],
-                            candidate_metrics=_rhs1_solver_candidate_metrics(
-                                name="sparse_jax_reduced",
-                                result=res_sparse,
-                                target_value=target_reduced,
-                                solve_s=sparse_retry_elapsed_s,
-                            ),
-                            baseline_metrics=_rhs1_solver_candidate_metrics(
-                                name="current_reduced",
-                                result=res_reduced,
-                                target_value=target_reduced,
-                            ),
+                            candidate_name="sparse_jax_reduced",
+                            baseline_name="current_reduced",
+                            target_value=target_reduced,
+                            solve_s=sparse_retry_elapsed_s,
+                            peak_rss_mb=_rss_mb(),
                         )
                         _apply_rhs1_handoff(handoff_state)
                 except Exception as exc:  # noqa: BLE001
@@ -14091,7 +14088,7 @@ def solve_v3_full_system_linear_gmres(
                         )
                     if res_sparse is not None:
                         sparse_retry_elapsed_s = sparse_retry_timer.elapsed_s()
-                        res_reduced, residual_vec, handoff_state, _accepted = rhs1_accept_candidate(
+                        res_reduced, residual_vec, handoff_state, _accepted = rhs1_accept_measured_candidate(
                             current_result=res_reduced,
                             candidate_result=res_sparse,
                             current_residual_vec=residual_vec,
@@ -14104,17 +14101,11 @@ def solve_v3_full_system_linear_gmres(
                             maxiter=maxiter,
                             precond_side=gmres_precond_side,
                             solver_kind=_solver_kind("incremental")[0],
-                            candidate_metrics=_rhs1_solver_candidate_metrics(
-                                name="sparse_reduced",
-                                result=res_sparse,
-                                target_value=target_reduced,
-                                solve_s=sparse_retry_elapsed_s,
-                            ),
-                            baseline_metrics=_rhs1_solver_candidate_metrics(
-                                name="current_reduced",
-                                result=res_reduced,
-                                target_value=target_reduced,
-                            ),
+                            candidate_name="sparse_reduced",
+                            baseline_name="current_reduced",
+                            target_value=target_reduced,
+                            solve_s=sparse_retry_elapsed_s,
+                            peak_rss_mb=_rss_mb(),
                         )
                         _apply_rhs1_handoff(handoff_state)
                 except Exception as exc:  # noqa: BLE001
@@ -16184,7 +16175,7 @@ def solve_v3_full_system_linear_gmres(
                         precond_side=gmres_precond_side,
                     )
                     sparse_retry_elapsed_s = sparse_retry_timer.elapsed_s()
-                    result, residual_vec, handoff_state, _accepted = rhs1_accept_candidate(
+                    result, residual_vec, handoff_state, _accepted = rhs1_accept_measured_candidate(
                         current_result=result,
                         candidate_result=res_sparse,
                         current_residual_vec=residual_vec,
@@ -16197,17 +16188,11 @@ def solve_v3_full_system_linear_gmres(
                         maxiter=maxiter,
                         precond_side=gmres_precond_side,
                         solver_kind=_solver_kind("incremental")[0],
-                        candidate_metrics=_rhs1_solver_candidate_metrics(
-                            name="sparse_jax_full",
-                            result=res_sparse,
-                            target_value=target,
-                            solve_s=sparse_retry_elapsed_s,
-                        ),
-                        baseline_metrics=_rhs1_solver_candidate_metrics(
-                            name="current_full",
-                            result=result,
-                            target_value=target,
-                        ),
+                        candidate_name="sparse_jax_full",
+                        baseline_name="current_full",
+                        target_value=target,
+                        solve_s=sparse_retry_elapsed_s,
+                        peak_rss_mb=_rss_mb(),
                     )
                     _apply_rhs1_handoff(handoff_state)
                 except Exception as exc:  # noqa: BLE001
@@ -16538,7 +16523,7 @@ def solve_v3_full_system_linear_gmres(
                         residual_vec_sparse = rhs - _mv_sparse(res_sparse.x)
                     if res_sparse is not None:
                         sparse_retry_elapsed_s = sparse_retry_timer.elapsed_s()
-                        result, residual_vec, handoff_state, _accepted = rhs1_accept_candidate(
+                        result, residual_vec, handoff_state, _accepted = rhs1_accept_measured_candidate(
                             current_result=result,
                             candidate_result=res_sparse,
                             current_residual_vec=residual_vec,
@@ -16551,17 +16536,11 @@ def solve_v3_full_system_linear_gmres(
                             maxiter=maxiter,
                             precond_side=gmres_precond_side,
                             solver_kind=_solver_kind("incremental")[0],
-                            candidate_metrics=_rhs1_solver_candidate_metrics(
-                                name="sparse_full",
-                                result=res_sparse,
-                                target_value=target,
-                                solve_s=sparse_retry_elapsed_s,
-                            ),
-                            baseline_metrics=_rhs1_solver_candidate_metrics(
-                                name="current_full",
-                                result=result,
-                                target_value=target,
-                            ),
+                            candidate_name="sparse_full",
+                            baseline_name="current_full",
+                            target_value=target,
+                            solve_s=sparse_retry_elapsed_s,
+                            peak_rss_mb=_rss_mb(),
                         )
                         _apply_rhs1_handoff(handoff_state)
                 except Exception as exc:  # noqa: BLE001
