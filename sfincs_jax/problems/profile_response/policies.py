@@ -2043,6 +2043,32 @@ def rhs1_fp_targeted_polish_allowed(
     return float(residual_norm) > float(threshold)
 
 
+@dataclass(frozen=True)
+class RHS1FPResidualPolishControls:
+    """Controls for the cheap damped FP residual-polish pass."""
+
+    min_size: int
+    steps: int
+    hybrid: bool
+    omega: float
+    backtrack: int
+
+
+def rhs1_fp_residual_polish_controls_from_env() -> RHS1FPResidualPolishControls:
+    """Parse damped FP residual-polish controls with bounded defaults."""
+
+    hybrid_env = _env_token("SFINCS_JAX_RHSMODE1_FP_POLISH_HYBRID")
+    omega = _env_float("SFINCS_JAX_RHSMODE1_FP_POLISH_OMEGA", 1.0)
+    backtrack = _env_int("SFINCS_JAX_RHSMODE1_FP_POLISH_BACKTRACK", 3)
+    return RHS1FPResidualPolishControls(
+        min_size=max(1, _env_int("SFINCS_JAX_RHSMODE1_FP_POLISH_MIN", 80000)),
+        steps=max(0, min(_env_int("SFINCS_JAX_RHSMODE1_FP_POLISH_STEPS", 2), 6)),
+        hybrid=hybrid_env not in _FALSE_VALUES,
+        omega=max(1.0e-3, min(float(omega), 1.5)),
+        backtrack=max(0, min(int(backtrack), 6)),
+    )
+
+
 def rhs1_skip_global_sparse_after_xblock_allowed(
     *,
     op: Any,
@@ -2964,6 +2990,7 @@ def rhs1_pas_tz_guarded_stage2_retry() -> bool:
 __all__ = (
     "RHS1Constraint0PETScCompatConfig",
     "RHS1FastPostXBlockPolishControls",
+    "RHS1FPResidualPolishControls",
     "RHS1QIDeviceRankBudget",
     "RHS1QIDeviceSetupSummary",
     "RHS1SparseJAXConfig",
@@ -2980,6 +3007,7 @@ __all__ = (
     "rhs1_fast_post_xblock_polish_allowed",
     "rhs1_fast_post_xblock_polish_controls_from_env",
     "rhs1_fp_force_stage2",
+    "rhs1_fp_residual_polish_controls_from_env",
     "rhs1_fp_targeted_polish_allowed",
     "rhs1_fp_xblock_global_correction_allowed",
     "rhs1_host_factor_probe_ok",

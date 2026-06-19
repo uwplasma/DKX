@@ -581,6 +581,7 @@ from .rhs1_large_cpu_policy import (
 from .problems.profile_response.policies import (
     rhs1_fast_post_xblock_polish_allowed as _rhs1_fast_post_xblock_polish_allowed_impl,
     rhs1_fast_post_xblock_polish_controls_from_env,
+    rhs1_fp_residual_polish_controls_from_env,
     rhs1_fp_xblock_global_correction_allowed as _rhs1_fp_xblock_global_correction_allowed_impl,
     rhs1_fp_targeted_polish_allowed as _rhs1_fp_targeted_polish_allowed_impl,
     rhs1_scipy_rescue_abs_floor_after_xblock as _rhs1_scipy_rescue_abs_floor_after_xblock_impl,
@@ -13629,17 +13630,7 @@ def solve_v3_full_system_linear_gmres(
             and rhs1_precond_kind == "xmg"
             and preconditioner_reduced is not None
         ):
-            polish_min_env = os.environ.get("SFINCS_JAX_RHSMODE1_FP_POLISH_MIN", "").strip()
-            try:
-                polish_min = int(polish_min_env) if polish_min_env else 80000
-            except ValueError:
-                polish_min = 80000
-            polish_steps_env = os.environ.get("SFINCS_JAX_RHSMODE1_FP_POLISH_STEPS", "").strip()
-            try:
-                polish_steps = int(polish_steps_env) if polish_steps_env else 2
-            except ValueError:
-                polish_steps = 2
-            polish_steps = max(0, min(int(polish_steps), 6))
+            fp_polish_controls = rhs1_fp_residual_polish_controls_from_env()
             fp_targeted_polish = _rhsmode1_fp_targeted_polish_allowed(
                 op=op,
                 active_size=int(active_size),
@@ -13648,14 +13639,12 @@ def solve_v3_full_system_linear_gmres(
                 rhs1_precond_kind=rhs1_precond_kind,
                 use_implicit=bool(use_implicit),
             )
-            polish_hybrid_env = os.environ.get("SFINCS_JAX_RHSMODE1_FP_POLISH_HYBRID", "").strip().lower()
-            polish_hybrid = polish_hybrid_env not in {"0", "false", "no", "off"}
             polish_precond = preconditioner_reduced
             lmax_precond_for_l1: Callable[[jnp.ndarray], jnp.ndarray] | None = None
             need_hybrid_fp_precond = fp_targeted_polish or (
-                polish_steps > 0 and int(active_size) >= max(1, int(polish_min))
+                fp_polish_controls.steps > 0 and int(active_size) >= fp_polish_controls.min_size
             )
-            if polish_hybrid and need_hybrid_fp_precond:
+            if fp_polish_controls.hybrid and need_hybrid_fp_precond:
                 precond_collision = _build_rhsmode1_collision_preconditioner(
                     op=op,
                     reduce_full=reduce_full,
@@ -13670,19 +13659,7 @@ def solve_v3_full_system_linear_gmres(
 
                 polish_precond = _hybrid_precond
 
-            if polish_steps > 0 and int(active_size) >= max(1, int(polish_min)):
-                polish_omega_env = os.environ.get("SFINCS_JAX_RHSMODE1_FP_POLISH_OMEGA", "").strip()
-                try:
-                    polish_omega = float(polish_omega_env) if polish_omega_env else 1.0
-                except ValueError:
-                    polish_omega = 1.0
-                polish_omega = max(1.0e-3, min(float(polish_omega), 1.5))
-                polish_backtrack_env = os.environ.get("SFINCS_JAX_RHSMODE1_FP_POLISH_BACKTRACK", "").strip()
-                try:
-                    polish_backtrack = int(polish_backtrack_env) if polish_backtrack_env else 3
-                except ValueError:
-                    polish_backtrack = 3
-                polish_backtrack = max(0, min(int(polish_backtrack), 6))
+            if fp_polish_controls.steps > 0 and int(active_size) >= fp_polish_controls.min_size:
                 polish_base_residual = float(res_reduced.residual_norm)
                 res_polish, polish_improved = _apply_damped_preconditioned_residual_polish(
                     current_result=res_reduced,
@@ -13690,9 +13667,9 @@ def solve_v3_full_system_linear_gmres(
                     matvec=mv_reduced,
                     preconditioner=polish_precond,
                     target=float(target_reduced),
-                    steps=int(polish_steps),
-                    omega=float(polish_omega),
-                    backtrack=int(polish_backtrack),
+                    steps=int(fp_polish_controls.steps),
+                    omega=float(fp_polish_controls.omega),
+                    backtrack=int(fp_polish_controls.backtrack),
                 )
                 if polish_improved:
                     if emit is not None:
@@ -14051,7 +14028,7 @@ def solve_v3_full_system_linear_gmres(
                             f"(maxiter={fp_bi_maxiter} tol={fp_bi_tol:.1e})",
                         )
                     precond_bi = preconditioner_reduced
-                    if precond_bi is None and polish_hybrid:
+                    if precond_bi is None and fp_polish_controls.hybrid:
                         precond_bi = polish_precond
                     res_bi = _solve_linear(
                         matvec_fn=mv_reduced,

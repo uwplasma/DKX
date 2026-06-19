@@ -4,8 +4,10 @@ from types import SimpleNamespace
 
 from sfincs_jax.rhs1_post_xblock_policy import (
     RHS1FastPostXBlockPolishControls,
+    RHS1FPResidualPolishControls,
     rhs1_fast_post_xblock_polish_allowed,
     rhs1_fast_post_xblock_polish_controls_from_env,
+    rhs1_fp_residual_polish_controls_from_env,
     rhs1_fp_xblock_global_correction_allowed,
     rhs1_fp_targeted_polish_allowed,
     rhs1_scipy_rescue_abs_floor_after_xblock,
@@ -147,6 +149,51 @@ def test_fp_targeted_polish_respects_guards(monkeypatch) -> None:
     assert not rhs1_fp_targeted_polish_allowed(**{**kwargs, "backend": "gpu"})
     monkeypatch.setenv("SFINCS_JAX_RHSMODE1_FP_TARGETED_POLISH", "0")
     assert not rhs1_fp_targeted_polish_allowed(**kwargs)
+
+
+def test_fp_residual_polish_controls_preserve_defaults(monkeypatch) -> None:
+    monkeypatch.delenv("SFINCS_JAX_RHSMODE1_FP_POLISH_MIN", raising=False)
+    monkeypatch.delenv("SFINCS_JAX_RHSMODE1_FP_POLISH_STEPS", raising=False)
+    monkeypatch.delenv("SFINCS_JAX_RHSMODE1_FP_POLISH_HYBRID", raising=False)
+    monkeypatch.delenv("SFINCS_JAX_RHSMODE1_FP_POLISH_OMEGA", raising=False)
+    monkeypatch.delenv("SFINCS_JAX_RHSMODE1_FP_POLISH_BACKTRACK", raising=False)
+
+    assert rhs1_fp_residual_polish_controls_from_env() == RHS1FPResidualPolishControls(
+        min_size=80000,
+        steps=2,
+        hybrid=True,
+        omega=1.0,
+        backtrack=3,
+    )
+
+
+def test_fp_residual_polish_controls_respect_env_and_bounds(monkeypatch) -> None:
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_FP_POLISH_MIN", "-10")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_FP_POLISH_STEPS", "99")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_FP_POLISH_HYBRID", "off")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_FP_POLISH_OMEGA", "9")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_FP_POLISH_BACKTRACK", "-4")
+
+    assert rhs1_fp_residual_polish_controls_from_env() == RHS1FPResidualPolishControls(
+        min_size=1,
+        steps=6,
+        hybrid=False,
+        omega=1.5,
+        backtrack=0,
+    )
+
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_FP_POLISH_MIN", "bad")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_FP_POLISH_STEPS", "bad")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_FP_POLISH_HYBRID", "1")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_FP_POLISH_OMEGA", "bad")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_FP_POLISH_BACKTRACK", "bad")
+    assert rhs1_fp_residual_polish_controls_from_env() == RHS1FPResidualPolishControls(
+        min_size=80000,
+        steps=2,
+        hybrid=True,
+        omega=1.0,
+        backtrack=3,
+    )
 
 
 def test_skip_global_sparse_after_xblock_requires_explicit_good_seed(monkeypatch) -> None:
