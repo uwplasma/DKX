@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from dataclasses import dataclass
 import os
 
 import jax.numpy as jnp
@@ -16,6 +17,94 @@ from .solver import (
 
 
 EmitFn = Callable[[int, str], None]
+
+_FALSE_TOKENS = {"0", "false", "no", "off"}
+_TRUE_TOKENS = {"1", "true", "yes", "on"}
+_UNLIMITED_TOKENS = {"none", "inf", "infinite", "unlimited"}
+
+
+@dataclass(frozen=True)
+class RHS1KSPHistoryLimits:
+    """Size and iteration caps for optional PETSc-like KSP replay."""
+
+    max_size: int | None
+    max_iter: int
+
+
+@dataclass(frozen=True)
+class RHS1KSPIterStatsControls:
+    """Controls for optional bounded KSP iteration-count replay."""
+
+    enabled: bool
+    max_size: int | None
+
+
+@dataclass(frozen=True)
+class RHS1KSPDiagnosticsControls:
+    """Environment-normalized controls shared by RHSMode=1 diagnostics."""
+
+    fortran_stdout: bool
+    history_max_size: int | None
+    history_max_iter: int
+    iter_stats_enabled: bool
+    iter_stats_max_size: int | None
+
+
+def rhs1_fortran_stdout_from_env(*, emit: EmitFn | None) -> bool:
+    """Resolve Fortran-style solver stdout from the environment and emit state."""
+
+    env = os.environ.get("SFINCS_JAX_FORTRAN_STDOUT", "").strip().lower()
+    if env in _FALSE_TOKENS:
+        return False
+    if env in _TRUE_TOKENS:
+        return True
+    return emit is not None
+
+
+def rhs1_ksp_history_limits_from_env() -> RHS1KSPHistoryLimits:
+    """Return bounded replay limits for optional PETSc-like KSP history."""
+
+    max_size_env = os.environ.get("SFINCS_JAX_KSP_HISTORY_MAX_SIZE", "").strip().lower()
+    if max_size_env in _UNLIMITED_TOKENS:
+        max_size = None
+    else:
+        try:
+            max_size = int(max_size_env) if max_size_env else 800
+        except ValueError:
+            max_size = 800
+
+    max_iter_env = os.environ.get("SFINCS_JAX_KSP_HISTORY_MAX_ITER", "").strip()
+    try:
+        max_iter = int(max_iter_env) if max_iter_env else 2000
+    except ValueError:
+        max_iter = 2000
+    return RHS1KSPHistoryLimits(max_size=max_size, max_iter=max_iter)
+
+
+def rhs1_ksp_iter_stats_controls_from_env() -> RHS1KSPIterStatsControls:
+    """Return opt-in iteration replay controls for solver diagnostics."""
+
+    enabled_env = os.environ.get("SFINCS_JAX_SOLVER_ITER_STATS", "").strip().lower()
+    max_size_env = os.environ.get("SFINCS_JAX_SOLVER_ITER_STATS_MAX_SIZE", "").strip()
+    try:
+        max_size = int(max_size_env) if max_size_env else None
+    except ValueError:
+        max_size = None
+    return RHS1KSPIterStatsControls(enabled=enabled_env in _TRUE_TOKENS, max_size=max_size)
+
+
+def rhs1_ksp_diagnostics_controls_from_env(*, emit: EmitFn | None) -> RHS1KSPDiagnosticsControls:
+    """Parse all shared RHSMode=1 diagnostic replay controls."""
+
+    history = rhs1_ksp_history_limits_from_env()
+    iter_stats = rhs1_ksp_iter_stats_controls_from_env()
+    return RHS1KSPDiagnosticsControls(
+        fortran_stdout=rhs1_fortran_stdout_from_env(emit=emit),
+        history_max_size=history.max_size,
+        history_max_iter=history.max_iter,
+        iter_stats_enabled=iter_stats.enabled,
+        iter_stats_max_size=iter_stats.max_size,
+    )
 
 
 def emit_rhs1_ksp_history(
@@ -205,6 +294,13 @@ def _read_iter_stats_max_iter() -> int:
 
 
 __all__ = [
+    "RHS1KSPDiagnosticsControls",
+    "RHS1KSPHistoryLimits",
+    "RHS1KSPIterStatsControls",
     "emit_rhs1_ksp_history",
     "emit_rhs1_ksp_iter_stats",
+    "rhs1_fortran_stdout_from_env",
+    "rhs1_ksp_diagnostics_controls_from_env",
+    "rhs1_ksp_history_limits_from_env",
+    "rhs1_ksp_iter_stats_controls_from_env",
 ]

@@ -16,6 +16,78 @@ def _emit_sink(messages):
     return emit
 
 
+def test_rhs1_ksp_diagnostics_controls_preserve_defaults(monkeypatch) -> None:
+    monkeypatch.delenv("SFINCS_JAX_FORTRAN_STDOUT", raising=False)
+    monkeypatch.delenv("SFINCS_JAX_KSP_HISTORY_MAX_SIZE", raising=False)
+    monkeypatch.delenv("SFINCS_JAX_KSP_HISTORY_MAX_ITER", raising=False)
+    monkeypatch.delenv("SFINCS_JAX_SOLVER_ITER_STATS", raising=False)
+    monkeypatch.delenv("SFINCS_JAX_SOLVER_ITER_STATS_MAX_SIZE", raising=False)
+
+    assert diagnostics.rhs1_fortran_stdout_from_env(emit=None) is False
+    assert diagnostics.rhs1_fortran_stdout_from_env(emit=_emit_sink([])) is True
+    assert diagnostics.rhs1_ksp_history_limits_from_env() == diagnostics.RHS1KSPHistoryLimits(
+        max_size=800,
+        max_iter=2000,
+    )
+    assert diagnostics.rhs1_ksp_iter_stats_controls_from_env() == diagnostics.RHS1KSPIterStatsControls(
+        enabled=False,
+        max_size=None,
+    )
+    assert diagnostics.rhs1_ksp_diagnostics_controls_from_env(
+        emit=None,
+    ) == diagnostics.RHS1KSPDiagnosticsControls(
+        fortran_stdout=False,
+        history_max_size=800,
+        history_max_iter=2000,
+        iter_stats_enabled=False,
+        iter_stats_max_size=None,
+    )
+
+
+def test_rhs1_ksp_diagnostics_controls_respect_overrides(monkeypatch) -> None:
+    monkeypatch.setenv("SFINCS_JAX_FORTRAN_STDOUT", "yes")
+    monkeypatch.setenv("SFINCS_JAX_KSP_HISTORY_MAX_SIZE", "none")
+    monkeypatch.setenv("SFINCS_JAX_KSP_HISTORY_MAX_ITER", "77")
+    monkeypatch.setenv("SFINCS_JAX_SOLVER_ITER_STATS", "on")
+    monkeypatch.setenv("SFINCS_JAX_SOLVER_ITER_STATS_MAX_SIZE", "123")
+
+    assert diagnostics.rhs1_ksp_history_limits_from_env() == diagnostics.RHS1KSPHistoryLimits(
+        max_size=None,
+        max_iter=77,
+    )
+    assert diagnostics.rhs1_ksp_iter_stats_controls_from_env() == diagnostics.RHS1KSPIterStatsControls(
+        enabled=True,
+        max_size=123,
+    )
+    assert diagnostics.rhs1_ksp_diagnostics_controls_from_env(
+        emit=None,
+    ) == diagnostics.RHS1KSPDiagnosticsControls(
+        fortran_stdout=True,
+        history_max_size=None,
+        history_max_iter=77,
+        iter_stats_enabled=True,
+        iter_stats_max_size=123,
+    )
+
+
+def test_rhs1_ksp_diagnostics_controls_handle_disabled_and_invalid(monkeypatch) -> None:
+    monkeypatch.setenv("SFINCS_JAX_FORTRAN_STDOUT", "off")
+    monkeypatch.setenv("SFINCS_JAX_KSP_HISTORY_MAX_SIZE", "not-an-int")
+    monkeypatch.setenv("SFINCS_JAX_KSP_HISTORY_MAX_ITER", "bad")
+    monkeypatch.setenv("SFINCS_JAX_SOLVER_ITER_STATS", "bad")
+    monkeypatch.setenv("SFINCS_JAX_SOLVER_ITER_STATS_MAX_SIZE", "bad")
+
+    assert diagnostics.rhs1_ksp_diagnostics_controls_from_env(
+        emit=_emit_sink([]),
+    ) == diagnostics.RHS1KSPDiagnosticsControls(
+        fortran_stdout=False,
+        history_max_size=800,
+        history_max_iter=2000,
+        iter_stats_enabled=False,
+        iter_stats_max_size=None,
+    )
+
+
 def test_rhs1_ksp_history_disabled_without_fortran_stdout() -> None:
     messages: list[tuple[int, str]] = []
 

@@ -42,10 +42,14 @@ Make `sfincs_jax` research-grade while preserving the public user contract:
 
 Recent checkpoints:
 
+- Shared KSP diagnostics env parsing for RHSMode=1 and Phi1 Newton-Krylov now
+  lives in `rhs1_ksp_diagnostics`, covering Fortran-style stdout, bounded KSP
+  history replay, and optional iteration statistics while diagnostic replay
+  execution remains in the existing diagnostics helpers (current checkpoint).
 - RHSMode=1 Krylov routing controls now use tested profile-response policy
   helpers for GMRES precondition-side validation and distributed Krylov solver
   normalization while sharded matvec selection and solve execution remain
-  driver-owned (current checkpoint).
+  driver-owned (`ccd4398`).
 - RHSMode=1 BiCGStab-to-GMRES fallback controls now use tested
   profile-response policy helpers for strict-mode parsing and the distributed
   PAS absolute-floor target while fallback solve execution and KSP replay
@@ -230,11 +234,12 @@ Recent checkpoints:
 - `cb295ce` Extract sparse pattern setup.
 - `4b6a5b4` Extract sparse factor policy.
 
-Current source-size snapshot after Krylov routing-control extraction:
+Current source-size snapshot after KSP diagnostics-control extraction:
 
-- `sfincs_jax/v3_driver.py`: `17732` lines.
-- `solve_v3_full_system_linear_gmres`: `12389` lines.
+- `sfincs_jax/v3_driver.py`: `17695` lines.
+- `solve_v3_full_system_linear_gmres`: `12363` lines.
 - `sfincs_jax/v3_results.py`: `119` lines.
+- `sfincs_jax/rhs1_ksp_diagnostics.py`: `306` lines.
 - `sfincs_jax/problems/profile_response/residual.py`: `981` lines.
 - `sfincs_jax/problems/profile_response/handoff.py`: `598` lines.
 - `sfincs_jax/problems/profile_response/policies.py`: `3363` lines.
@@ -247,6 +252,17 @@ Current source-size snapshot after Krylov routing-control extraction:
 
 Recent local validation:
 
+- KSP diagnostics and Newton-Krylov diagnostics shard after shared diagnostics
+  env parsing extraction:
+  `19 passed in 0.58 s`.
+- Sparse-host/minimum-norm/direct-tail driver shard:
+  `32 passed, 100 deselected in 36.49 s`.
+- Broad profile-response/RHSMode=1 policy, setup, diagnostics, solver, and
+  helper sweep after shared diagnostics env parsing extraction:
+  `1101 passed in 46.16 s`.
+- Hygiene:
+  `py_compile`, `ruff`, `compileall`, `git diff --check`, and
+  `scripts/check_repo_size.py` passed.
 - Post-xblock policy shard after Krylov routing-control extraction:
   `32 passed in 0.34 s`.
 - Sparse-host/minimum-norm/direct-tail driver shard:

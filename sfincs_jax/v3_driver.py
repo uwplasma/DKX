@@ -502,6 +502,11 @@ from .rhs1_true_operator_rescue import (
     _try_build_residual_coarse_host_sparse_preconditioner,
     _try_build_residual_window_host_sparse_preconditioner,
 )
+from .rhs1_ksp_diagnostics import (
+    rhs1_fortran_stdout_from_env,
+    rhs1_ksp_diagnostics_controls_from_env,
+    rhs1_ksp_history_limits_from_env,
+)
 from .problems.profile_response.solver_diagnostics import (
     RHS1KSPDiagnosticsContext,
     emit_profile_response_ksp_history,
@@ -10365,33 +10370,7 @@ def solve_v3_full_system_linear_gmres(
             precond_side=precond_side,
         )
 
-    fortran_stdout_env = os.environ.get("SFINCS_JAX_FORTRAN_STDOUT", "").strip().lower()
-    if fortran_stdout_env in {"0", "false", "no", "off"}:
-        fortran_stdout = False
-    elif fortran_stdout_env in {"1", "true", "yes", "on"}:
-        fortran_stdout = True
-    else:
-        fortran_stdout = emit is not None
-    ksp_history_max_env = os.environ.get("SFINCS_JAX_KSP_HISTORY_MAX_SIZE", "").strip().lower()
-    if ksp_history_max_env in {"none", "inf", "infinite", "unlimited"}:
-        ksp_history_max_size = None
-    else:
-        try:
-            ksp_history_max_size = int(ksp_history_max_env) if ksp_history_max_env else 800
-        except ValueError:
-            ksp_history_max_size = 800
-    ksp_history_max_iter_env = os.environ.get("SFINCS_JAX_KSP_HISTORY_MAX_ITER", "").strip()
-    try:
-        ksp_history_max_iter = int(ksp_history_max_iter_env) if ksp_history_max_iter_env else 2000
-    except ValueError:
-        ksp_history_max_iter = 2000
-    iter_stats_env = os.environ.get("SFINCS_JAX_SOLVER_ITER_STATS", "").strip().lower()
-    iter_stats_enabled = iter_stats_env in {"1", "true", "yes", "on"}
-    iter_stats_max_env = os.environ.get("SFINCS_JAX_SOLVER_ITER_STATS_MAX_SIZE", "").strip()
-    try:
-        iter_stats_max_size = int(iter_stats_max_env) if iter_stats_max_env else None
-    except ValueError:
-        iter_stats_max_size = None
+    ksp_diagnostics_controls = rhs1_ksp_diagnostics_controls_from_env(emit=emit)
 
     ksp_replay = RHS1KSPReplayState(
         restart=restart,
@@ -10402,11 +10381,11 @@ def solve_v3_full_system_linear_gmres(
     residual_vec: jnp.ndarray | None = None
     rhs1_ksp_diagnostics_context = RHS1KSPDiagnosticsContext(
         emit=emit,
-        fortran_stdout=bool(fortran_stdout),
-        history_max_size=ksp_history_max_size,
-        history_max_iter=ksp_history_max_iter,
-        iter_stats_enabled=bool(iter_stats_enabled),
-        iter_stats_max_size=iter_stats_max_size,
+        fortran_stdout=bool(ksp_diagnostics_controls.fortran_stdout),
+        history_max_size=ksp_diagnostics_controls.history_max_size,
+        history_max_iter=ksp_diagnostics_controls.history_max_iter,
+        iter_stats_enabled=bool(ksp_diagnostics_controls.iter_stats_enabled),
+        iter_stats_max_size=ksp_diagnostics_controls.iter_stats_max_size,
     )
 
     if use_active_dof_mode:
@@ -15599,13 +15578,7 @@ def solve_v3_full_system_newton_krylov_history(
     op = full_system_operator_from_namelist(nml=nml, identity_shift=identity_shift)
     if emit is not None:
         emit(1, f"solve_v3_full_system_newton_krylov_history: total_size={int(op.total_size)}")
-    fortran_stdout_env = os.environ.get("SFINCS_JAX_FORTRAN_STDOUT", "").strip().lower()
-    if fortran_stdout_env in {"0", "false", "no", "off"}:
-        fortran_stdout = False
-    elif fortran_stdout_env in {"1", "true", "yes", "on"}:
-        fortran_stdout = True
-    else:
-        fortran_stdout = emit is not None
+    fortran_stdout = rhs1_fortran_stdout_from_env(emit=emit)
     env_gmres_tol = os.environ.get("SFINCS_JAX_PHI1_GMRES_TOL", "").strip()
     if env_gmres_tol:
         gmres_tol = float(env_gmres_tol)
@@ -15700,19 +15673,9 @@ def solve_v3_full_system_newton_krylov_history(
     frozen_jac_policy = phi1_frozen_jacobian_policy(include_phi1=bool(op.include_phi1))
     use_frozen_jac_cache = bool(frozen_jac_policy.use_cache)
     frozen_jac_every = int(frozen_jac_policy.every)
-    ksp_history_max_env = os.environ.get("SFINCS_JAX_KSP_HISTORY_MAX_SIZE", "").strip().lower()
-    if ksp_history_max_env in {"none", "inf", "infinite", "unlimited"}:
-        ksp_history_max_size = None
-    else:
-        try:
-            ksp_history_max_size = int(ksp_history_max_env) if ksp_history_max_env else 800
-        except ValueError:
-            ksp_history_max_size = 800
-    ksp_history_max_iter_env = os.environ.get("SFINCS_JAX_KSP_HISTORY_MAX_ITER", "").strip()
-    try:
-        ksp_history_max_iter = int(ksp_history_max_iter_env) if ksp_history_max_iter_env else 2000
-    except ValueError:
-        ksp_history_max_iter = 2000
+    ksp_history_limits = rhs1_ksp_history_limits_from_env()
+    ksp_history_max_size = ksp_history_limits.max_size
+    ksp_history_max_iter = ksp_history_limits.max_iter
 
     def _emit_ksp_history_nk(
         *,
