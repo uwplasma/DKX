@@ -235,6 +235,7 @@ from .problems.profile_response.sparse_pc import (
     SparseHostOrILUFactorBuildContext,
     SparseILUPreconditionerBuildContext,
     SparseHostScipyPreconditionerBuildContext,
+    SparseHostScipyGMRESContext,
     SparsePCGMRESContext,
     SparsePCPostMinresUpdateContext,
     XBlockSubspaceCorrectionContext,
@@ -304,6 +305,7 @@ from .problems.profile_response.sparse_pc import (
     build_sparse_host_or_ilu_factor,
     build_sparse_ilu_preconditioner_from_cache,
     build_sparse_host_scipy_preconditioner,
+    run_sparse_host_scipy_gmres,
     sparse_host_direct_fallback_payload,
     sparse_host_direct_solve_from_pattern,
     sparse_minimum_norm_solve_from_pattern,
@@ -13668,20 +13670,19 @@ def solve_v3_full_system_linear_gmres(
                                 "solve_v3_full_system_linear_gmres: "
                                 f"{'sparse LU' if sparse_exact_lu else 'sparse ILU'} GMRES fallback",
                             )
-                        x_np, rn_sparse, _history = gmres_solve_with_history_scipy(
-                            matvec=_mv_sparse,
-                            b=rhs_reduced,
-                            preconditioner=_precond_sparse,
-                            x0=res_reduced.x,
-                            tol=tol,
-                            atol=atol,
-                            restart=restart,
-                            maxiter=maxiter,
-                            precondition_side=gmres_precond_side,
-                        )
-                        res_sparse = GMRESSolveResult(
-                            x=jnp.asarray(x_np, dtype=jnp.float64),
-                            residual_norm=jnp.asarray(rn_sparse, dtype=jnp.float64),
+                        res_sparse, _residual_vec_sparse_unused = run_sparse_host_scipy_gmres(
+                            SparseHostScipyGMRESContext(
+                                matvec=_mv_sparse,
+                                rhs=rhs_reduced,
+                                preconditioner=_precond_sparse,
+                                x0=res_reduced.x,
+                                tol=tol,
+                                atol=atol,
+                                restart=restart,
+                                maxiter=maxiter,
+                                precondition_side=gmres_precond_side,
+                                gmres_solver=gmres_solve_with_history_scipy,
+                            )
                         )
                     if res_sparse is not None:
                         sparse_retry_elapsed_s = sparse_retry_timer.elapsed_s()
@@ -15583,22 +15584,21 @@ def solve_v3_full_system_linear_gmres(
                                     "solve_v3_full_system_linear_gmres: sparse LU operator-preconditioned "
                                     f"GMRES fallback restart={int(sparse_pc_restart)} maxiter={int(sparse_pc_maxiter)}",
                                 )
-                            x_np, rn_sparse, _history = gmres_solve_with_history_scipy(
-                                matvec=mv,
-                                b=rhs,
-                                preconditioner=_precond_sparse,
-                                x0=result.x,
-                                tol=tol,
-                                atol=atol,
-                                restart=sparse_pc_restart,
-                                maxiter=sparse_pc_maxiter,
-                                precondition_side=gmres_precond_side,
+                            res_sparse, residual_vec_sparse = run_sparse_host_scipy_gmres(
+                                SparseHostScipyGMRESContext(
+                                    matvec=mv,
+                                    rhs=rhs,
+                                    preconditioner=_precond_sparse,
+                                    x0=result.x,
+                                    tol=tol,
+                                    atol=atol,
+                                    restart=sparse_pc_restart,
+                                    maxiter=sparse_pc_maxiter,
+                                    precondition_side=gmres_precond_side,
+                                    gmres_solver=gmres_solve_with_history_scipy,
+                                    residual_matvec=mv,
+                                )
                             )
-                            res_sparse = GMRESSolveResult(
-                                x=jnp.asarray(x_np, dtype=jnp.float64),
-                                residual_norm=jnp.asarray(rn_sparse, dtype=jnp.float64),
-                            )
-                            residual_vec_sparse = rhs - mv(res_sparse.x)
                             _mv_sparse = mv
                         else:
                             host_sparse_direct_used = True
@@ -15694,22 +15694,21 @@ def solve_v3_full_system_linear_gmres(
                                 "solve_v3_full_system_linear_gmres: "
                                 f"{'sparse LU' if sparse_exact_lu else 'sparse ILU'} GMRES fallback",
                             )
-                        x_np, rn_sparse, _history = gmres_solve_with_history_scipy(
-                            matvec=_mv_sparse,
-                            b=rhs,
-                            preconditioner=_precond_sparse,
-                            x0=result.x,
-                            tol=tol,
-                            atol=atol,
-                            restart=restart,
-                            maxiter=maxiter,
-                            precondition_side=gmres_precond_side,
+                        res_sparse, residual_vec_sparse = run_sparse_host_scipy_gmres(
+                            SparseHostScipyGMRESContext(
+                                matvec=_mv_sparse,
+                                rhs=rhs,
+                                preconditioner=_precond_sparse,
+                                x0=result.x,
+                                tol=tol,
+                                atol=atol,
+                                restart=restart,
+                                maxiter=maxiter,
+                                precondition_side=gmres_precond_side,
+                                gmres_solver=gmres_solve_with_history_scipy,
+                                residual_matvec=_mv_sparse,
+                            )
                         )
-                        res_sparse = GMRESSolveResult(
-                            x=jnp.asarray(x_np, dtype=jnp.float64),
-                            residual_norm=jnp.asarray(rn_sparse, dtype=jnp.float64),
-                        )
-                        residual_vec_sparse = rhs - _mv_sparse(res_sparse.x)
                     if res_sparse is not None:
                         sparse_retry_elapsed_s = sparse_retry_timer.elapsed_s()
                         result, residual_vec, _accepted = rhs1_accept_sparse_retry_candidate_and_update_replay(

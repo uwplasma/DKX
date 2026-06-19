@@ -52,6 +52,7 @@ from sfincs_jax.problems.profile_response.sparse_pc import (
     SparseHostOrILUFactorBuildContext,
     SparseILUPreconditionerBuildContext,
     SparseHostScipyPreconditionerBuildContext,
+    SparseHostScipyGMRESContext,
     ExplicitSparseOperatorBuildPolicy,
     ExplicitSparseOperatorBuildResult,
     SparseMinimumNormPayload,
@@ -143,6 +144,7 @@ from sfincs_jax.problems.profile_response.sparse_pc import (
     build_sparse_host_or_ilu_factor,
     build_sparse_ilu_preconditioner_from_cache,
     build_sparse_host_scipy_preconditioner,
+    run_sparse_host_scipy_gmres,
     sparse_minimum_norm_solve_payload,
     sparse_minimum_norm_solve_from_pattern,
     sparse_minimum_norm_start_message,
@@ -5526,6 +5528,60 @@ def test_build_sparse_host_scipy_preconditioner_raises_when_factor_missing() -> 
                 unavailable_message="missing",
             )
         )
+
+
+def test_run_sparse_host_scipy_gmres_wraps_result_without_residual_vector() -> None:
+    calls: list[dict[str, object]] = []
+
+    def gmres_solver(**kwargs):
+        calls.append(kwargs)
+        return np.asarray([1.0, 2.0]), 0.125, (1.0, 0.125)
+
+    result, residual_vec = run_sparse_host_scipy_gmres(
+        SparseHostScipyGMRESContext(
+            matvec=lambda v: 2.0 * v,
+            rhs=jnp.asarray([2.0, 4.0]),
+            preconditioner=lambda v: v,
+            x0=jnp.asarray([0.0, 0.0]),
+            tol=1.0e-8,
+            atol=1.0e-12,
+            restart=7,
+            maxiter=11,
+            precondition_side="left",
+            gmres_solver=gmres_solver,
+        )
+    )
+
+    np.testing.assert_allclose(np.asarray(result.x), np.asarray([1.0, 2.0]))
+    assert float(result.residual_norm) == pytest.approx(0.125)
+    assert residual_vec is None
+    assert calls[0]["restart"] == 7
+    assert calls[0]["maxiter"] == 11
+    assert calls[0]["precondition_side"] == "left"
+
+
+def test_run_sparse_host_scipy_gmres_computes_requested_true_residual_vector() -> None:
+    def gmres_solver(**_kwargs):
+        return np.asarray([1.0, 2.0]), 9.0, ()
+
+    result, residual_vec = run_sparse_host_scipy_gmres(
+        SparseHostScipyGMRESContext(
+            matvec=lambda v: v,
+            rhs=jnp.asarray([3.0, 7.0]),
+            preconditioner=lambda v: v,
+            x0=jnp.asarray([0.0, 0.0]),
+            tol=1.0e-8,
+            atol=1.0e-12,
+            restart=7,
+            maxiter=None,
+            precondition_side="none",
+            gmres_solver=gmres_solver,
+            residual_matvec=lambda v: 2.0 * v,
+        )
+    )
+
+    assert float(result.residual_norm) == pytest.approx(9.0)
+    np.testing.assert_allclose(np.asarray(residual_vec), np.asarray([1.0, 3.0]))
 
 
 def test_sparse_pc_post_minres_accepts_improved_residual_and_recomputes_pc_norm() -> (

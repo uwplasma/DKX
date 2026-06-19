@@ -44,6 +44,7 @@ from ...sparse_triangular import (
     triangular_solve_lower_padded,
     triangular_solve_upper_padded,
 )
+from ...solver import GMRESSolveResult
 
 
 ArrayFn = Callable[[jnp.ndarray], jnp.ndarray]
@@ -242,6 +243,23 @@ class SparseHostScipyPreconditionerBuildResult:
 
     preconditioner: ArrayFn
     matvec: ArrayFn
+
+
+@dataclass(frozen=True)
+class SparseHostScipyGMRESContext:
+    """Inputs for one host SciPy GMRES sparse fallback solve."""
+
+    matvec: ArrayFn
+    rhs: jnp.ndarray
+    preconditioner: ArrayFn
+    x0: jnp.ndarray
+    tol: float
+    atol: float
+    restart: int
+    maxiter: int | None
+    precondition_side: str
+    gmres_solver: Callable[..., tuple[np.ndarray, float, Sequence[float]]]
+    residual_matvec: ArrayFn | None = None
 
 
 @dataclass(frozen=True)
@@ -8040,6 +8058,35 @@ def build_sparse_host_scipy_preconditioner(
     )
 
 
+def run_sparse_host_scipy_gmres(
+    context: SparseHostScipyGMRESContext,
+) -> tuple[GMRESSolveResult, jnp.ndarray | None]:
+    """Run host SciPy GMRES and wrap the result for RHSMode=1 retry gates."""
+
+    x_np, residual_norm, _history = context.gmres_solver(
+        matvec=context.matvec,
+        b=context.rhs,
+        preconditioner=context.preconditioner,
+        x0=context.x0,
+        tol=float(context.tol),
+        atol=float(context.atol),
+        restart=int(context.restart),
+        maxiter=context.maxiter,
+        precondition_side=str(context.precondition_side),
+    )
+    result = GMRESSolveResult(
+        x=jnp.asarray(x_np, dtype=jnp.float64),
+        residual_norm=jnp.asarray(residual_norm, dtype=jnp.float64),
+    )
+    residual_vec = None
+    if context.residual_matvec is not None:
+        residual_vec = jnp.asarray(context.rhs, dtype=jnp.float64) - jnp.asarray(
+            context.residual_matvec(result.x),
+            dtype=jnp.float64,
+        )
+    return result, residual_vec
+
+
 def apply_sparse_pc_post_minres(
     *,
     context: SparsePCPostMinresContext,
@@ -8361,6 +8408,7 @@ __all__ = [
     "SparseILUPreconditionerBuildResult",
     "SparseHostScipyPreconditionerBuildContext",
     "SparseHostScipyPreconditionerBuildResult",
+    "SparseHostScipyGMRESContext",
     "ExplicitSparseOperatorBuildPolicy",
     "ExplicitSparseOperatorBuildResult",
     "SparsePCGMRESCompletionMessageContext",
@@ -8430,6 +8478,7 @@ __all__ = [
     "build_sparse_host_or_ilu_factor",
     "build_sparse_ilu_preconditioner_from_cache",
     "build_sparse_host_scipy_preconditioner",
+    "run_sparse_host_scipy_gmres",
     "build_explicit_sparse_operator_from_pattern",
     "explicit_sparse_pattern_progress_messages",
     "resolve_explicit_sparse_operator_build_policy",

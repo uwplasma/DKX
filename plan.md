@@ -42,9 +42,14 @@ Make `sfincs_jax` research-grade while preserving the public user contract:
 
 Recent checkpoints:
 
+- Host SciPy GMRES execution/result wrapping for reduced, full, and
+  sparse-operator-preconditioned sparse fallback branches now uses a tested
+  sparse-PC helper; the driver still owns solver controls and admission gates
+  (current checkpoint).
+- Compact active-plan validation log restored (`f4435ad`).
 - Sparse JAX and host sparse retry measured-acceptance/replay updates now use
   a tested handoff helper with consistent candidate/baseline naming and
-  candidate-seed replay state (current checkpoint).
+  candidate-seed replay state (`7266d37`).
 - Reduced active-DOF, full-system, and sparse-operator-preconditioned host
   SciPy fallback paths now share a tested sparse-PC callback builder for the
   host factor apply and optional explicit-matrix matvec (`19abab1`).
@@ -133,20 +138,30 @@ Recent checkpoints:
 - `cb295ce` Extract sparse pattern setup.
 - `4b6a5b4` Extract sparse factor policy.
 
-Current source-size snapshot after sparse retry handoff extraction:
+Current source-size snapshot after host SciPy sparse GMRES execution extraction:
 
-- `sfincs_jax/v3_driver.py`: `18232` lines.
-- `solve_v3_full_system_linear_gmres`: `12922` lines.
+- `sfincs_jax/v3_driver.py`: `18231` lines.
+- `solve_v3_full_system_linear_gmres`: `12919` lines.
 - `sfincs_jax/v3_results.py`: `119` lines.
 - `sfincs_jax/problems/profile_response/residual.py`: `981` lines.
 - `sfincs_jax/problems/profile_response/handoff.py`: `598` lines.
 - `sfincs_jax/problems/profile_response/dense.py`: `407` lines.
 - `sfincs_jax/problems/profile_response/linear_solve.py`: `327` lines.
 - `sfincs_jax/problems/profile_response/active_projection.py`: `116` lines.
-- `sfincs_jax/problems/profile_response/sparse_pc.py`: `8449` lines.
+- `sfincs_jax/problems/profile_response/sparse_pc.py`: `8498` lines.
 
 Recent local validation:
 
+- Sparse-PC helper shard after host SciPy sparse GMRES extraction:
+  `186 passed in 1.98 s`.
+- Sparse-host/minimum-norm/direct-tail driver shard:
+  `32 passed, 100 deselected in 35.87 s`.
+- Broad profile-response/RHSMode=1 policy, setup, diagnostics, solver, and
+  helper sweep after host SciPy sparse GMRES extraction:
+  `1028 passed in 49.73 s`.
+- Hygiene:
+  `ruff`, `compileall`, `git diff --check`, and `scripts/check_repo_size.py`
+  passed.
 - RHSMode=1 handoff helper shard after sparse retry handoff extraction:
   `34 passed in 0.37 s`.
 - Sparse-host/minimum-norm/direct-tail driver shard:
@@ -321,6 +336,10 @@ Completed recent boundaries:
 - Sparse JAX and host sparse retry candidate acceptance now uses a tested
   measured-handoff helper with driver-provided matvec/preconditioner/rhs
   routing preserved.
+- Host SciPy GMRES execution/result wrapping for reduced, full, and
+  sparse-operator-preconditioned sparse fallback branches now uses a tested
+  helper; optional true residual-vector construction remains explicit by
+  call-site through a provided residual matvec.
 
 Next steps:
 
