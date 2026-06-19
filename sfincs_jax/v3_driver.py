@@ -203,7 +203,6 @@ from .problems.profile_response.diagnostics import (
     fortran_reduced_xblock_result_metadata,
     fp_xblock_global_correction_metadata,
     fp_xblock_highx_residual_correction_metadata,
-    sparse_pc_gmres_result_metadata,
     sparse_rescue_tail_metadata,
     sparse_xblock_rescue_metadata,
     xblock_sparse_pc_result_diagnostics_from_driver_state,
@@ -242,6 +241,7 @@ from .problems.profile_response.sparse_pc import (
     build_sparse_pc_active_dof_setup,
     build_direct_tail_materialization_setup,
     emit_sparse_pc_gmres_completion_from_driver_state,
+    sparse_pc_gmres_final_payload_from_driver_state,
     evaluate_xblock_moment_schur_probe_result,
     evaluate_sparse_pc_factor_preflight,
     evaluate_sparse_pc_residual_candidate_acceptance,
@@ -9256,26 +9256,18 @@ def solve_v3_full_system_linear_gmres(
         sparse_pc_post_minres_error = sparse_pc_post_minres.error
         solve_s = float(sparse_pc_post_minres.solve_s)
         emit_sparse_pc_gmres_completion_from_driver_state(locals())
-        sparse_pc_accepted_converged = rhs1_residual_converged(
-            float(residual_norm_sparse_pc),
-            rhs1_residual_target(
-                atol=float(atol),
-                tol=float(tol),
-                rhs_norm=float(rhs_norm),
-            ),
-        )
-        sparse_pc_factor_quality_rejected = not rhs1_residual_converged(
-            float(residual_norm_sparse_pc),
-            float(target),
+        sparse_pc_final_payload = sparse_pc_gmres_final_payload_from_driver_state(
+            locals(),
+            expand_reduced=_sparse_pc_expand_reduced,
         )
         return V3LinearSolveResult(
             op=op,
             rhs=rhs,
             gmres=GMRESSolveResult(
-                x=_sparse_pc_expand_reduced(jnp.asarray(x_np, dtype=jnp.float64)),
-                residual_norm=jnp.asarray(residual_norm_sparse_pc, dtype=jnp.float64),
+                x=sparse_pc_final_payload.x,
+                residual_norm=sparse_pc_final_payload.residual_norm,
             ),
-            metadata=sparse_pc_gmres_result_metadata(locals()),
+            metadata=sparse_pc_final_payload.metadata,
         )
     if solve_method_kind_explicit in _SPARSE_HOST_MINIMUM_NORM_SOLVE_METHODS:
         if differentiable is True:

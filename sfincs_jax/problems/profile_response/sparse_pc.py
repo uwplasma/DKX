@@ -16,6 +16,7 @@ from .diagnostics import (
     XBlockSideProbeDiagnosticsContext,
     fp_xblock_global_correction_metadata,
     fp_xblock_highx_residual_correction_metadata,
+    sparse_pc_gmres_result_metadata,
     sparse_rescue_tail_metadata,
     sparse_xblock_rescue_metadata,
     xblock_assembled_operator_diagnostics,
@@ -27,6 +28,10 @@ from .diagnostics import (
     xblock_sparse_pc_core_diagnostics,
     xblock_sparse_pc_result_diagnostics_from_driver_state,
     xblock_side_probe_diagnostics,
+)
+from .residual import (
+    residual_converged as profile_residual_converged,
+    residual_target as profile_residual_target,
 )
 from .setup import (
     SPARSE_HOST_FORTRAN_REDUCED_PC_GMRES_SOLVE_METHODS,
@@ -71,6 +76,15 @@ class SparsePCGMRESResult:
     preconditioned_residual_norm: float
     history: tuple[float, ...]
     solve_s: float
+
+
+@dataclass(frozen=True)
+class SparsePCGMRESFinalPayload:
+    """Driver-independent payload for constructing the final sparse-PC result."""
+
+    x: jnp.ndarray
+    residual_norm: jnp.ndarray
+    metadata: dict[str, object]
 
 
 @dataclass(frozen=True)
@@ -6854,6 +6868,34 @@ def emit_sparse_pc_gmres_completion_from_driver_state(
     )
 
 
+def sparse_pc_gmres_final_payload_from_driver_state(
+    state: Mapping[str, object],
+    *,
+    expand_reduced: ArrayFn,
+) -> SparsePCGMRESFinalPayload:
+    """Build the final sparse-PC solve payload from historical driver names."""
+
+    residual_norm = float(state["residual_norm_sparse_pc"])
+    metadata_state = state if isinstance(state, MutableMapping) else dict(state)
+    metadata_state["sparse_pc_accepted_converged"] = profile_residual_converged(
+        residual_norm,
+        profile_residual_target(
+            atol=float(state["atol"]),
+            tol=float(state["tol"]),
+            rhs_norm=float(state["rhs_norm"]),
+        ),
+    )
+    metadata_state["sparse_pc_factor_quality_rejected"] = not profile_residual_converged(
+        residual_norm,
+        float(state["target"]),
+    )
+    return SparsePCGMRESFinalPayload(
+        x=expand_reduced(jnp.asarray(state["x_np"], dtype=jnp.float64)),
+        residual_norm=jnp.asarray(residual_norm, dtype=jnp.float64),
+        metadata=sparse_pc_gmres_result_metadata(metadata_state),
+    )
+
+
 def apply_sparse_pc_post_minres(
     *,
     context: SparsePCPostMinresContext,
@@ -7065,6 +7107,7 @@ __all__ = [
     "SparsePCPatternSetupResult",
     "SparsePCGMRESContext",
     "SparsePCGMRESResult",
+    "SparsePCGMRESFinalPayload",
     "SparsePCGMRESCompletionMessageContext",
     "SparsePCPostMinresContext",
     "SparsePCPostMinresResult",
@@ -7112,6 +7155,7 @@ __all__ = [
     "run_sparse_pc_gmres_once",
     "sparse_pc_gmres_completion_message",
     "emit_sparse_pc_gmres_completion_from_driver_state",
+    "sparse_pc_gmres_final_payload_from_driver_state",
     "sparse_rescue_tail_metadata",
     "sparse_xblock_rescue_metadata",
     "xblock_assembled_operator_diagnostics",

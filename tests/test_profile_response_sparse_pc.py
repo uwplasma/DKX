@@ -38,6 +38,7 @@ from sfincs_jax.problems.profile_response.sparse_pc import (
     MatvecCounter,
     SparsePCGMRESContext,
     SparsePCGMRESCompletionMessageContext,
+    SparsePCGMRESFinalPayload,
     SparsePCMemoryBudgetPreflightContext,
     SparsePCPatternSetupContext,
     SparsePCPostMinresContext,
@@ -111,12 +112,19 @@ from sfincs_jax.problems.profile_response.sparse_pc import (
     retry_sparse_pc_factor_dtype_from_driver_state,
     retry_sparse_pc_factor_dtype_if_needed,
     sparse_pc_gmres_completion_message,
+    sparse_pc_gmres_final_payload_from_driver_state,
     finalize_xblock_assembled_operator_metadata,
 )
 
 
 def _identity(v: jnp.ndarray) -> jnp.ndarray:
     return v
+
+
+class _DefaultSparsePCDriverState(dict):
+    def __missing__(self, key: str) -> object:
+        self[key] = 1
+        return self[key]
 
 
 def _op(
@@ -4489,6 +4497,111 @@ def test_emit_sparse_pc_gmres_completion_from_driver_state_uses_current_state() 
             "ksp_residual=2.500000e-01",
         )
     ]
+
+
+def test_sparse_pc_gmres_final_payload_from_driver_state_expands_result_and_metadata() -> None:
+    state = _DefaultSparsePCDriverState(
+        {
+            "op": SimpleNamespace(total_size=np.int64(4)),
+            "x_np": np.asarray([1.0, 2.0]),
+            "residual_norm_sparse_pc": 0.25,
+            "history": (1.0, 0.25),
+            "mv_count": np.int64(3),
+            "pc_restart": np.int64(4),
+            "pc_maxiter": np.int64(5),
+            "sparse_pc_first_attempt_maxiter": np.int64(2),
+            "sparse_pc_post_minres_steps": np.int64(0),
+            "sparse_pc_post_minres_alphas": (),
+            "sparse_pc_post_minres_alpha_clip": 4.0,
+            "sparse_pc_post_minres_min_improvement": 0.1,
+            "sparse_pc_post_minres_residual_before": None,
+            "sparse_pc_post_minres_residual_after": None,
+            "sparse_pc_post_minres_history": (),
+            "sparse_pc_post_minres_error": None,
+            "pc_shift": 0.0,
+            "sparse_pc_factor_dtype_used": np.dtype(np.float64),
+            "sparse_pc_factor_dtype_initial": np.dtype(np.float64),
+            "sparse_pc_factor_dtype_retry": None,
+            "factor_preflight_enabled": False,
+            "factor_preflight_required": False,
+            "factor_preflight_seed_enabled": False,
+            "factor_preflight_seed_used": False,
+            "factor_preflight_passed": None,
+            "factor_preflight_error": None,
+            "factor_preflight_residual_before": None,
+            "factor_preflight_residual_after": None,
+            "factor_preflight_improvement_ratio": None,
+            "factor_preflight_target_ratio": None,
+            "factor_preflight_max_target_ratio": 8.0,
+            "factor_preflight_residual_diagnostics": {},
+            "fortran_reduced_sparse_pc": False,
+            "sparse_pc_preconditioner_operator": "full",
+            "sparse_pc_factorization": "lu",
+            "sparse_pc_default_factor_kind": "ilu",
+            "sparse_pc_default_ilu_fill_factor": 6.0,
+            "sparse_pc_default_ilu_drop_tol": 1.0e-5,
+            "sparse_pc_default_pattern_color_batch": np.int64(8),
+            "preconditioner_x": np.int64(1),
+            "preconditioner_x_min_l": np.int64(0),
+            "preconditioner_xi": np.int64(1),
+            "preconditioner_species": np.int64(1),
+            "sparse_pc_permc_spec": "COLAMD",
+            "sparse_pc_default_permc_spec": "COLAMD",
+            "sparse_pc_use_active_dof": True,
+            "sparse_pc_linear_size": np.int64(2),
+            "sparse_pc_fp_dense_velocity_block": None,
+            "setup_s": 0.5,
+            "solve_s": 1.5,
+            "sparse_timer": SimpleNamespace(elapsed_s=lambda: 3.0),
+            "summary": SimpleNamespace(
+                nnz=np.int64(7),
+                avg_row_nnz=1.75,
+                max_row_nnz=np.int64(3),
+            ),
+            "sparse_pattern_scope": "active_dof",
+            "pattern_build_s": 0.125,
+            "pc_factor_s": 0.25,
+            "factor_bundle_pc": SimpleNamespace(
+                factor_s=None,
+                factor_nbytes_estimate=None,
+                factor_nnz_estimate=None,
+            ),
+            "_operator_bundle_pc": None,
+            "target": 0.5,
+            "atol": 0.5,
+            "tol": 0.0,
+            "rhs_norm": 1.0,
+            "direct_tail_operator_bundle": None,
+            "direct_tail_structured_max_nbytes": None,
+            "direct_tail_true_window_specs": (),
+            "direct_tail_true_active_block_species_count": None,
+            "direct_tail_structured_pc_metadata": {},
+            "direct_tail_support_mode_preflight_metadata": {},
+            "direct_tail_true_coupled_coarse_metadata": {},
+            "direct_tail_residual_window_coefficient_mode": "normal",
+            "direct_tail_residual_window_combine_mode": "additive",
+            "direct_tail_error": None,
+            "direct_tail_structured_pc_requested": "auto",
+            "direct_tail_structured_pc_reason": "none",
+            "direct_tail_structured_pc_error": None,
+            "direct_tail_support_mode_preflight_error": None,
+        }
+    )
+
+    payload = sparse_pc_gmres_final_payload_from_driver_state(
+        state,
+        expand_reduced=lambda x: jnp.concatenate(
+            [jnp.asarray([0.0], dtype=x.dtype), x]
+        ),
+    )
+
+    assert isinstance(payload, SparsePCGMRESFinalPayload)
+    np.testing.assert_allclose(np.asarray(payload.x), np.asarray([0.0, 1.0, 2.0]))
+    assert float(payload.residual_norm) == pytest.approx(0.25)
+    assert payload.metadata["solver_kind"] == "sparse_pc_gmres"
+    assert payload.metadata["accepted_converged"] is True
+    assert payload.metadata["sparse_pc_residual_ratio_to_target"] == pytest.approx(0.5)
+    assert payload.metadata["sparse_pc_linear_size"] == 2
 
 
 def test_sparse_pc_post_minres_accepts_improved_residual_and_recomputes_pc_norm() -> (
