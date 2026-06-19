@@ -160,6 +160,17 @@ class XBlockGMRESFallbackResult:
 
 
 @dataclass(frozen=True)
+class XBlockDeviceKrylovState:
+    """Host-side arrays and counters from a device xblock Krylov solve."""
+
+    x: np.ndarray
+    residual_norm: float
+    history: tuple[float, ...]
+    n_iterations: int
+    estimated_matvecs: int | None
+
+
+@dataclass(frozen=True)
 class XBlockSparsePCWorkEstimates:
     """User-facing solver-kind and Krylov work-memory estimates."""
 
@@ -224,6 +235,34 @@ def xblock_krylov_report(
     iterations = int(device_iterations) if device_iterations is not None else int(len(history or ()))
     matvecs = int(device_estimated_matvecs) if device_estimated_matvecs is not None else int(mv_count)
     return XBlockKrylovReport(iterations=int(iterations), matvecs=int(matvecs))
+
+
+def xblock_device_krylov_state(
+    result: object,
+    *,
+    estimated_matvecs_floor: int | None = None,
+) -> XBlockDeviceKrylovState:
+    """Transfer a device xblock Krylov result to host arrays and counters."""
+
+    x = np.asarray(jax.device_get(result.x), dtype=np.float64)
+    residual_norm = float(jax.device_get(result.residual_norm))
+    history_arr = np.asarray(jax.device_get(result.residual_history), dtype=np.float64)
+    n_iterations = int(jax.device_get(result.n_iterations))
+    history = tuple(
+        float(v)
+        for v in history_arr[: n_iterations + 1]
+        if np.isfinite(float(v))
+    )
+    estimated_matvecs = None
+    if estimated_matvecs_floor is not None:
+        estimated_matvecs = max(int(estimated_matvecs_floor), int(n_iterations) + 2)
+    return XBlockDeviceKrylovState(
+        x=x,
+        residual_norm=float(residual_norm),
+        history=history,
+        n_iterations=int(n_iterations),
+        estimated_matvecs=estimated_matvecs,
+    )
 
 
 def xblock_gmres_fallback_decision(
@@ -9222,6 +9261,7 @@ __all__ = [
     "XBlockGMRESFallbackDecision",
     "XBlockGMRESFallbackContext",
     "XBlockGMRESFallbackResult",
+    "XBlockDeviceKrylovState",
     "XBlockSparsePCWorkEstimates",
     "XBlockPhysicalResidual",
     "SparsePCGMRESFinalPayload",
@@ -9295,6 +9335,7 @@ __all__ = [
     "run_sparse_pc_gmres_once",
     "run_xblock_gmres_fallback_if_needed",
     "run_xblock_post_solve_corrections",
+    "xblock_device_krylov_state",
     "xblock_sparse_pc_completion_message",
     "xblock_gmres_fallback_decision",
     "xblock_krylov_report",

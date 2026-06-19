@@ -823,6 +823,17 @@ Recent local validation:
 - Hygiene:
   `py_compile`, `ruff`, `compileall`, `git diff --check`, and
   `scripts/check_repo_size.py` passed.
+- Sparse-PC helper shard after xblock device-Krylov result unpacking
+  extraction:
+  `210 passed in 1.96 s`.
+- Sparse-host/minimum-norm/direct-tail driver shard:
+  `32 passed, 100 deselected in 36.36 s`.
+- Broad profile-response/RHSMode=1 policy, setup, diagnostics, solver, and
+  helper sweep after xblock device-Krylov result unpacking extraction:
+  `1167 passed in 48.59 s`.
+- Hygiene:
+  `py_compile`, `ruff`, `compileall`, `git diff --check`, and
+  `scripts/check_repo_size.py` passed.
 - Older focused and broad validation checkpoints are intentionally omitted from
   this active plan; they remain available in git history.
 
@@ -1044,6 +1055,9 @@ Completed recent boundaries:
 - X-block sparse-PC non-GMRES to GMRES fallback execution now uses a tested
   profile-response helper with explicit initial-guess, GMRES, and
   physical-residual callbacks.
+- X-block device Krylov result unpacking now uses a tested profile-response
+  helper shared by `gmres_jax`, `fgmres_jax`, `bicgstab_jax`, and
+  `tfqmr_jax` branches.
 
 Next steps:
 

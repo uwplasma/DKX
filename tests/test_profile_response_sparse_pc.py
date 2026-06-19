@@ -60,6 +60,7 @@ from sfincs_jax.problems.profile_response.sparse_pc import (
     SparseMinimumNormPayload,
     SparseMinimumNormPolicy,
     SparsePCGMRESResult,
+    XBlockDeviceKrylovState,
     XBlockGMRESFallbackDecision,
     XBlockGMRESFallbackContext,
     XBlockGMRESFallbackResult,
@@ -146,6 +147,7 @@ from sfincs_jax.problems.profile_response.sparse_pc import (
     run_sparse_pc_gmres_once,
     run_xblock_gmres_fallback_if_needed,
     run_xblock_post_solve_corrections,
+    xblock_device_krylov_state,
     xblock_sparse_pc_completion_message,
     xblock_gmres_fallback_decision,
     xblock_krylov_report,
@@ -195,6 +197,38 @@ def test_xblock_krylov_report_falls_back_to_host_history_and_matvec_count() -> N
         history=(1.0, 0.5, 0.25),
         mv_count=13,
     ) == XBlockKrylovReport(iterations=3, matvecs=13)
+
+
+def test_xblock_device_krylov_state_transfers_finite_history() -> None:
+    result = SimpleNamespace(
+        x=jnp.asarray([1.0, 2.0], dtype=jnp.float64),
+        residual_norm=jnp.asarray(0.125, dtype=jnp.float64),
+        residual_history=jnp.asarray([1.0, np.nan, 0.25, 0.125], dtype=jnp.float64),
+        n_iterations=jnp.asarray(3),
+    )
+
+    state = xblock_device_krylov_state(result)
+
+    assert isinstance(state, XBlockDeviceKrylovState)
+    np.testing.assert_allclose(state.x, np.asarray([1.0, 2.0]))
+    assert state.residual_norm == pytest.approx(0.125)
+    assert state.history == (1.0, 0.25, 0.125)
+    assert state.n_iterations == 3
+    assert state.estimated_matvecs is None
+
+
+def test_xblock_device_krylov_state_estimates_cycle_matvecs() -> None:
+    result = SimpleNamespace(
+        x=jnp.asarray([0.0], dtype=jnp.float64),
+        residual_norm=jnp.asarray(0.0, dtype=jnp.float64),
+        residual_history=jnp.asarray([1.0, 0.5, 0.25], dtype=jnp.float64),
+        n_iterations=jnp.asarray(2),
+    )
+
+    state = xblock_device_krylov_state(result, estimated_matvecs_floor=9)
+
+    assert state.history == (1.0, 0.5, 0.25)
+    assert state.estimated_matvecs == 9
 
 
 @pytest.mark.parametrize("residual_norm", [1.1, np.nan])

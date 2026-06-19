@@ -320,6 +320,7 @@ from .problems.profile_response.sparse_pc import (
     run_sparse_pc_gmres_once,
     run_xblock_gmres_fallback_if_needed,
     run_xblock_post_solve_corrections,
+    xblock_device_krylov_state,
     xblock_krylov_report,
     xblock_physical_solution_and_residual,
     build_sparse_host_or_ilu_factor,
@@ -6384,14 +6385,20 @@ def solve_v3_full_system_linear_gmres(
                     fgmres_kwargs["augmentation_basis"] = augmentation_basis_for_solve
                     fgmres_kwargs["operator_on_augmentation"] = operator_on_augmentation_for_solve
                 gmres_jax_result, _gmres_jax_residual = fgmres_solver(**fgmres_kwargs)
-                x_np = np.asarray(jax.device_get(gmres_jax_result.x), dtype=np.float64)
-                residual_norm_xblock_pc = float(jax.device_get(gmres_jax_result.residual_norm))
-                history_arr = np.asarray(jax.device_get(gmres_jax_result.residual_history), dtype=np.float64)
-                n_iterations = int(jax.device_get(gmres_jax_result.n_iterations))
-                history = [float(v) for v in history_arr[: n_iterations + 1] if np.isfinite(float(v))]
-                device_krylov_iterations = int(n_iterations)
-                if bool(xblock_device_fgmres_jit) and xblock_device_fgmres_jit_mode == "cycle":
-                    device_krylov_estimated_matvecs = max(int(mv_count), int(n_iterations) + 2)
+                device_state = xblock_device_krylov_state(
+                    gmres_jax_result,
+                    estimated_matvecs_floor=(
+                        int(mv_count)
+                        if bool(xblock_device_fgmres_jit)
+                        and xblock_device_fgmres_jit_mode == "cycle"
+                        else None
+                    ),
+                )
+                x_np = device_state.x
+                residual_norm_xblock_pc = float(device_state.residual_norm)
+                history = device_state.history
+                device_krylov_iterations = int(device_state.n_iterations)
+                device_krylov_estimated_matvecs = device_state.estimated_matvecs
             elif xblock_krylov_method == "fgmres_jax":
                 fgmres_solver = (
                     (
@@ -6423,14 +6430,20 @@ def solve_v3_full_system_linear_gmres(
                     fgmres_kwargs["augmentation_basis"] = augmentation_basis_for_solve
                     fgmres_kwargs["operator_on_augmentation"] = operator_on_augmentation_for_solve
                 fgmres_result, _fgmres_residual = fgmres_solver(**fgmres_kwargs)
-                x_np = np.asarray(jax.device_get(fgmres_result.x), dtype=np.float64)
-                residual_norm_xblock_pc = float(jax.device_get(fgmres_result.residual_norm))
-                history_arr = np.asarray(jax.device_get(fgmres_result.residual_history), dtype=np.float64)
-                n_iterations = int(jax.device_get(fgmres_result.n_iterations))
-                history = [float(v) for v in history_arr[: n_iterations + 1] if np.isfinite(float(v))]
-                device_krylov_iterations = int(n_iterations)
-                if bool(xblock_device_fgmres_jit) and xblock_device_fgmres_jit_mode == "cycle":
-                    device_krylov_estimated_matvecs = max(int(mv_count), int(n_iterations) + 2)
+                device_state = xblock_device_krylov_state(
+                    fgmres_result,
+                    estimated_matvecs_floor=(
+                        int(mv_count)
+                        if bool(xblock_device_fgmres_jit)
+                        and xblock_device_fgmres_jit_mode == "cycle"
+                        else None
+                    ),
+                )
+                x_np = device_state.x
+                residual_norm_xblock_pc = float(device_state.residual_norm)
+                history = device_state.history
+                device_krylov_iterations = int(device_state.n_iterations)
+                device_krylov_estimated_matvecs = device_state.estimated_matvecs
             elif xblock_krylov_method == "bicgstab_jax":
                 bicgstab_jax_result, _bicgstab_jax_residual = bicgstab_solve_with_residual(
                     matvec=solve_matvec,
@@ -6442,15 +6455,11 @@ def solve_v3_full_system_linear_gmres(
                     maxiter=pc_maxiter,
                     precondition_side=precondition_side,
                 )
-                x_np = np.asarray(jax.device_get(bicgstab_jax_result.x), dtype=np.float64)
-                residual_norm_xblock_pc = float(jax.device_get(bicgstab_jax_result.residual_norm))
-                history_arr = np.asarray(
-                    jax.device_get(bicgstab_jax_result.residual_history),
-                    dtype=np.float64,
-                )
-                n_iterations = int(jax.device_get(bicgstab_jax_result.n_iterations))
-                history = [float(v) for v in history_arr[: n_iterations + 1] if np.isfinite(float(v))]
-                device_krylov_iterations = int(n_iterations)
+                device_state = xblock_device_krylov_state(bicgstab_jax_result)
+                x_np = device_state.x
+                residual_norm_xblock_pc = float(device_state.residual_norm)
+                history = device_state.history
+                device_krylov_iterations = int(device_state.n_iterations)
             elif xblock_krylov_method == "tfqmr_jax":
                 tfqmr_jax_result, _tfqmr_jax_residual = tfqmr_solve_with_residual(
                     matvec=solve_matvec,
@@ -6463,15 +6472,11 @@ def solve_v3_full_system_linear_gmres(
                     precondition_side=precondition_side,
                     residual_replacement_interval=int(tfqmr_replacement_interval),
                 )
-                x_np = np.asarray(jax.device_get(tfqmr_jax_result.x), dtype=np.float64)
-                residual_norm_xblock_pc = float(jax.device_get(tfqmr_jax_result.residual_norm))
-                history_arr = np.asarray(
-                    jax.device_get(tfqmr_jax_result.residual_history),
-                    dtype=np.float64,
-                )
-                n_iterations = int(jax.device_get(tfqmr_jax_result.n_iterations))
-                history = [float(v) for v in history_arr[: n_iterations + 1] if np.isfinite(float(v))]
-                device_krylov_iterations = int(n_iterations)
+                device_state = xblock_device_krylov_state(tfqmr_jax_result)
+                x_np = device_state.x
+                residual_norm_xblock_pc = float(device_state.residual_norm)
+                history = device_state.history
+                device_krylov_iterations = int(device_state.n_iterations)
             elif xblock_krylov_method == "gcrotmk":
                 x_np, residual_norm_xblock_pc, history = gcrotmk_solve_with_history_scipy(
                     matvec=solve_matvec,
