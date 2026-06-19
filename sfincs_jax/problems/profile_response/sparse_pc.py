@@ -124,6 +124,15 @@ class SparseHostDirectPayload:
 
 
 @dataclass(frozen=True)
+class SparseHostDirectFactorSolvePayload:
+    """Host direct-solve result from an explicit factor or fallback ILU factor."""
+
+    x: np.ndarray
+    residual_norm: float
+    used_explicit_factor: bool
+
+
+@dataclass(frozen=True)
 class ExplicitSparseOperatorBuildPolicy:
     """Materialization controls shared by explicit host sparse solve paths."""
 
@@ -7221,6 +7230,48 @@ def sparse_host_direct_solve_payload(
     )
 
 
+def solve_sparse_host_direct_from_available_factor(
+    *,
+    explicit_sparse_factor: object | None,
+    explicit_sparse_operator: object | None,
+    ilu: object,
+    a_csr_full: object,
+    rhs: jnp.ndarray,
+    factor_dtype: np.dtype,
+    refine_steps: int,
+    direct_solve_with_refinement: Callable[..., tuple[np.ndarray, float]],
+    ilu_solve_with_refinement: Callable[..., tuple[np.ndarray, float]],
+) -> SparseHostDirectFactorSolvePayload:
+    """Solve with an explicit host factor when present, otherwise with ILU/CSR."""
+
+    if explicit_sparse_factor is not None and explicit_sparse_operator is not None:
+        x_np, residual_norm = direct_solve_with_refinement(
+            factor_solve=explicit_sparse_factor.solve,
+            operator_matrix=explicit_sparse_operator.matrix,
+            rhs_vec=rhs,
+            factor_dtype=factor_dtype,
+            refine_steps=int(refine_steps),
+        )
+        return SparseHostDirectFactorSolvePayload(
+            x=np.asarray(x_np, dtype=np.float64),
+            residual_norm=float(residual_norm),
+            used_explicit_factor=True,
+        )
+
+    x_np, residual_norm = ilu_solve_with_refinement(
+        ilu=ilu,
+        a_csr_full=a_csr_full,
+        rhs_vec=rhs,
+        factor_dtype=factor_dtype,
+        refine_steps=int(refine_steps),
+    )
+    return SparseHostDirectFactorSolvePayload(
+        x=np.asarray(x_np, dtype=np.float64),
+        residual_norm=float(residual_norm),
+        used_explicit_factor=False,
+    )
+
+
 def apply_sparse_pc_post_minres(
     *,
     context: SparsePCPostMinresContext,
@@ -7436,6 +7487,7 @@ __all__ = [
     "SparseMinimumNormPolicy",
     "SparseMinimumNormPayload",
     "SparseHostDirectPayload",
+    "SparseHostDirectFactorSolvePayload",
     "ExplicitSparseOperatorBuildPolicy",
     "ExplicitSparseOperatorBuildResult",
     "SparsePCGMRESCompletionMessageContext",
@@ -7490,6 +7542,7 @@ __all__ = [
     "sparse_minimum_norm_solve_payload",
     "sparse_minimum_norm_start_message",
     "sparse_host_direct_solve_payload",
+    "solve_sparse_host_direct_from_available_factor",
     "build_explicit_sparse_operator_from_pattern",
     "explicit_sparse_pattern_progress_messages",
     "resolve_explicit_sparse_operator_build_policy",

@@ -56,19 +56,20 @@ Recent checkpoints:
 - `cb295ce` Extract sparse pattern setup.
 - `4b6a5b4` Extract sparse factor policy.
 
-Current source-size snapshot after explicit host request-validation extraction:
+Current source-size snapshot after host sparse direct factor-dispatch
+extraction:
 
-- `sfincs_jax/v3_driver.py`: `19103` lines.
-- `solve_v3_full_system_linear_gmres`: `13762` lines.
+- `sfincs_jax/v3_driver.py`: `19092` lines.
+- `solve_v3_full_system_linear_gmres`: `13750` lines.
 
 Recent local validation:
 
 - Focused sparse-PC shard:
-  `159 passed in 1.69 s`.
-- End-to-end explicit sparse driver checks:
-  `4 passed in 4.34 s`.
+  `161 passed in 1.69 s`.
+- End-to-end explicit sparse/direct-tail driver checks:
+  `5 passed in 14.94 s`.
 - Latest broad profile-response/x-block/sparse-pattern shard:
-  `438 passed in 113.95 s`.
+  `440 passed in 114.35 s`.
 
 Known CI issue fixed by this rewrite:
 
@@ -79,7 +80,7 @@ Known CI issue fixed by this rewrite:
 
 ### 1. `v3_driver.py` Architecture Refactor
 
-Completion estimate: 88%.
+Completion estimate: 89%.
 
 Goal:
 
@@ -124,6 +125,8 @@ Completed recent boundaries:
 - Shared explicit sparse conservative-pattern progress, CSR/drop policy
   parsing, and minimum-norm operator-materialization extraction.
 - Explicit host sparse non-autodiff request validation extraction.
+- Host sparse direct factor-dispatch extraction for explicit-factor versus
+  ILU/CSR refinement fallbacks.
 
 Next steps:
 
@@ -132,6 +135,8 @@ Next steps:
 - Extract remaining explicit sparse-host direct factor-setup policy seams only
   where this can be done without pulling driver-specific caches into domain
   modules.
+- Continue consolidating duplicated host sparse direct fallback/polish seams
+  behind tested profile-response helpers.
 - Continue shrinking `solve_v3_full_system_linear_gmres` in behavior-preserving
   tranches.
 
@@ -189,9 +194,9 @@ Next steps:
 
 ## Immediate Next Steps
 
-1. Commit and push the explicit host request-validation extraction after final
-   cleanup.
-2. Continue with explicit sparse-host direct factor-setup policy extraction
+1. Commit and push the host sparse direct factor-dispatch extraction after
+   final cleanup.
+2. Continue with duplicated host sparse direct fallback/polish seam extraction
    where cache boundaries remain clean.
 3. Run focused sparse-PC tests and the broad profile-response/x-block/sparse
    shard after each extraction.

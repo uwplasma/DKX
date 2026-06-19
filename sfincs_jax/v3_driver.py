@@ -291,6 +291,7 @@ from .problems.profile_response.sparse_pc import (
     run_sparse_pc_gmres_once,
     sparse_host_direct_solve_payload,
     explicit_sparse_pattern_progress_messages,
+    solve_sparse_host_direct_from_available_factor,
     sparse_minimum_norm_solve_payload,
     sparse_minimum_norm_start_message,
     validate_explicit_sparse_host_request,
@@ -13918,28 +13919,22 @@ def solve_v3_full_system_linear_gmres(
                                 "solve_v3_full_system_linear_gmres: host sparse LU direct fallback "
                                 f"on backend={jax.default_backend()}",
                             )
-                        if explicit_sparse_factor is not None and explicit_sparse_operator is not None:
-                            x_np, residual_norm_sparse = _host_direct_solve_with_refinement(
-                                factor_solve=explicit_sparse_factor.solve,
-                                operator_matrix=explicit_sparse_operator.matrix,
-                                rhs_vec=rhs_reduced,
-                                factor_dtype=factor_dtype,
-                                refine_steps=_host_sparse_direct_refine_steps(
-                                    "SFINCS_JAX_RHSMODE1_SPARSE_DIRECT_REFINE",
-                                    default=2,
-                                ),
-                            )
-                        else:
-                            x_np, residual_norm_sparse = _host_sparse_direct_solve_with_refinement(
-                                ilu=ilu,
-                                a_csr_full=a_csr_full,
-                                rhs_vec=rhs_reduced,
-                                factor_dtype=factor_dtype,
-                                refine_steps=_host_sparse_direct_refine_steps(
-                                    "SFINCS_JAX_RHSMODE1_SPARSE_DIRECT_REFINE",
-                                    default=2,
-                                ),
-                            )
+                        sparse_host_factor_solve = solve_sparse_host_direct_from_available_factor(
+                            explicit_sparse_factor=explicit_sparse_factor,
+                            explicit_sparse_operator=explicit_sparse_operator,
+                            ilu=ilu,
+                            a_csr_full=a_csr_full,
+                            rhs=rhs_reduced,
+                            factor_dtype=factor_dtype,
+                            refine_steps=_host_sparse_direct_refine_steps(
+                                "SFINCS_JAX_RHSMODE1_SPARSE_DIRECT_REFINE",
+                                default=2,
+                            ),
+                            direct_solve_with_refinement=_host_direct_solve_with_refinement,
+                            ilu_solve_with_refinement=_host_sparse_direct_solve_with_refinement,
+                        )
+                        x_np = sparse_host_factor_solve.x
+                        residual_norm_sparse = sparse_host_factor_solve.residual_norm
                         res_sparse = GMRESSolveResult(
                             x=jnp.asarray(x_np, dtype=jnp.float64),
                             residual_norm=jnp.asarray(residual_norm_sparse, dtype=jnp.float64),
@@ -16380,28 +16375,22 @@ def solve_v3_full_system_linear_gmres(
                                     "solve_v3_full_system_linear_gmres: host sparse LU direct fallback "
                                     f"on backend={jax.default_backend()}",
                                 )
-                            if explicit_sparse_factor is not None and explicit_sparse_operator is not None:
-                                x_np, residual_norm_sparse = _host_direct_solve_with_refinement(
-                                    factor_solve=explicit_sparse_factor.solve,
-                                    operator_matrix=explicit_sparse_operator.matrix,
-                                    rhs_vec=rhs,
-                                    factor_dtype=factor_dtype,
-                                    refine_steps=_host_sparse_direct_refine_steps(
-                                        "SFINCS_JAX_RHSMODE1_SPARSE_DIRECT_REFINE",
-                                        default=2,
-                                    ),
-                                )
-                            else:
-                                x_np, residual_norm_sparse = _host_sparse_direct_solve_with_refinement(
-                                    ilu=ilu,
-                                    a_csr_full=a_csr_full,
-                                    rhs_vec=rhs,
-                                    factor_dtype=factor_dtype,
-                                    refine_steps=_host_sparse_direct_refine_steps(
-                                        "SFINCS_JAX_RHSMODE1_SPARSE_DIRECT_REFINE",
-                                        default=2,
-                                    ),
-                                )
+                            sparse_host_factor_solve = solve_sparse_host_direct_from_available_factor(
+                                explicit_sparse_factor=explicit_sparse_factor,
+                                explicit_sparse_operator=explicit_sparse_operator,
+                                ilu=ilu,
+                                a_csr_full=a_csr_full,
+                                rhs=rhs,
+                                factor_dtype=factor_dtype,
+                                refine_steps=_host_sparse_direct_refine_steps(
+                                    "SFINCS_JAX_RHSMODE1_SPARSE_DIRECT_REFINE",
+                                    default=2,
+                                ),
+                                direct_solve_with_refinement=_host_direct_solve_with_refinement,
+                                ilu_solve_with_refinement=_host_sparse_direct_solve_with_refinement,
+                            )
+                            x_np = sparse_host_factor_solve.x
+                            residual_norm_sparse = sparse_host_factor_solve.residual_norm
                             res_sparse = GMRESSolveResult(
                                 x=jnp.asarray(x_np, dtype=jnp.float64),
                                 residual_norm=jnp.asarray(residual_norm_sparse, dtype=jnp.float64),

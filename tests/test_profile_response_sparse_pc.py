@@ -44,6 +44,7 @@ from sfincs_jax.problems.profile_response.sparse_pc import (
     SparsePCPostMinresContext,
     SparsePCPostMinresUpdateContext,
     SparseHostDirectPayload,
+    SparseHostDirectFactorSolvePayload,
     ExplicitSparseOperatorBuildPolicy,
     ExplicitSparseOperatorBuildResult,
     SparseMinimumNormPayload,
@@ -123,6 +124,7 @@ from sfincs_jax.problems.profile_response.sparse_pc import (
     sparse_pc_gmres_completion_message,
     sparse_pc_gmres_final_payload_from_driver_state,
     sparse_host_direct_solve_payload,
+    solve_sparse_host_direct_from_available_factor,
     sparse_minimum_norm_solve_payload,
     sparse_minimum_norm_start_message,
     validate_explicit_sparse_host_request,
@@ -4830,6 +4832,75 @@ def test_sparse_host_direct_solve_payload_recomputes_true_residual_and_metadata(
         "solve_v3_full_system_linear_gmres: sparse_host complete "
         "elapsed_s=0.750 residual=0.000000e+00"
     )
+
+
+def test_solve_sparse_host_direct_from_available_factor_prefers_explicit_factor() -> None:
+    calls: list[str] = []
+    explicit_factor = SimpleNamespace(solve=lambda rhs: rhs)
+    explicit_operator = SimpleNamespace(matrix=scipy_sparse.eye(2, format="csr"))
+
+    def direct_solve(**kwargs):
+        calls.append("direct")
+        assert kwargs["factor_solve"] is explicit_factor.solve
+        assert kwargs["operator_matrix"] is explicit_operator.matrix
+        assert kwargs["refine_steps"] == 3
+        return np.asarray([1.0, 2.0]), 0.125
+
+    def ilu_solve(**_kwargs):
+        calls.append("ilu")
+        return np.asarray([9.0, 9.0]), 9.0
+
+    payload = solve_sparse_host_direct_from_available_factor(
+        explicit_sparse_factor=explicit_factor,
+        explicit_sparse_operator=explicit_operator,
+        ilu=object(),
+        a_csr_full=object(),
+        rhs=jnp.asarray([1.0, 2.0], dtype=jnp.float64),
+        factor_dtype=np.dtype(np.float64),
+        refine_steps=3,
+        direct_solve_with_refinement=direct_solve,
+        ilu_solve_with_refinement=ilu_solve,
+    )
+
+    assert isinstance(payload, SparseHostDirectFactorSolvePayload)
+    assert calls == ["direct"]
+    np.testing.assert_allclose(payload.x, np.asarray([1.0, 2.0]))
+    assert payload.residual_norm == pytest.approx(0.125)
+    assert payload.used_explicit_factor is True
+
+
+def test_solve_sparse_host_direct_from_available_factor_uses_ilu_without_explicit_factor() -> None:
+    calls: list[str] = []
+    ilu = object()
+    matrix = scipy_sparse.eye(2, format="csr")
+
+    def direct_solve(**_kwargs):
+        calls.append("direct")
+        return np.asarray([9.0, 9.0]), 9.0
+
+    def ilu_solve(**kwargs):
+        calls.append("ilu")
+        assert kwargs["ilu"] is ilu
+        assert kwargs["a_csr_full"] is matrix
+        assert kwargs["refine_steps"] == 1
+        return np.asarray([-1.0, 3.0]), 0.25
+
+    payload = solve_sparse_host_direct_from_available_factor(
+        explicit_sparse_factor=None,
+        explicit_sparse_operator=None,
+        ilu=ilu,
+        a_csr_full=matrix,
+        rhs=jnp.asarray([-1.0, 3.0], dtype=jnp.float64),
+        factor_dtype=np.dtype(np.float32),
+        refine_steps=1,
+        direct_solve_with_refinement=direct_solve,
+        ilu_solve_with_refinement=ilu_solve,
+    )
+
+    assert calls == ["ilu"]
+    np.testing.assert_allclose(payload.x, np.asarray([-1.0, 3.0]))
+    assert payload.residual_norm == pytest.approx(0.25)
+    assert payload.used_explicit_factor is False
 
 
 def test_sparse_pc_post_minres_accepts_improved_residual_and_recomputes_pc_norm() -> (
