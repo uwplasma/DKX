@@ -1012,6 +1012,18 @@ Recent local validation:
 - Hygiene after generic sparse-PC sparse-pattern metadata context extraction:
   `python -m compileall -q sfincs_jax`, `git diff --check`, and
   `python scripts/check_repo_size.py` passed.
+- X-block nested metadata precompute focused tests:
+  `2 passed in 1.07 s`.
+- Profile-response diagnostics/sparse-PC shard after x-block nested metadata
+  precompute: `247 passed in 1.98 s`.
+- Xblock/sparse-host/minimum-norm/direct-tail driver shard after x-block
+  nested metadata precompute: `36 passed, 96 deselected in 38.48 s`.
+- Broad profile-response/RHSMode=1 policy, setup, diagnostics, solver, and
+  helper sweep after x-block nested metadata precompute:
+  `1190 passed in 48.36 s`.
+- Hygiene after x-block nested metadata precompute:
+  `python -m compileall -q sfincs_jax`, `git diff --check`, and
+  `python scripts/check_repo_size.py` passed.
 - Older focused and broad validation checkpoints are intentionally omitted from
   this active plan; they remain available in git history.
 
@@ -1024,7 +1036,7 @@ Known CI issue fixed by this rewrite:
 
 ### 1. `v3_driver.py` Architecture Refactor
 
-Completion estimate: 55%.
+Completion estimate: 56%.
 
 Goal:
 
@@ -1301,6 +1313,12 @@ Completed recent boundaries:
   whole frame to `XBlockSparsePCFinalPayloadContext`. After this boundary,
   `v3_driver.py` has no direct `diagnostic_state=locals()` handoffs; the
   remaining local-scope copies are filtered through named key contracts.
+- X-block sparse-PC final metadata now precomputes assembled-operator,
+  coarse-correction, QI seed/device/deflated, and side-probe metadata groups
+  before final payload construction. The copied final metadata state is down
+  from 219 raw driver keys to 75 copied scalar/source keys plus 6 compact
+  metadata dictionaries; the 219-key raw scope inventory remains available for
+  diagnostics derivation and missing-key audits.
 
 Next steps:
 

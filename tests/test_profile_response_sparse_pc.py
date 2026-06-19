@@ -169,6 +169,7 @@ from sfincs_jax.problems.profile_response.sparse_pc import (
     xblock_device_krylov_state,
     xblock_device_cycle_progress_message,
     xblock_host_krylov_progress_message,
+    xblock_sparse_pc_final_metadata_driver_scope_keys,
     xblock_sparse_pc_final_metadata_driver_state_keys,
     xblock_sparse_pc_final_metadata_state_from_driver_scope,
     xblock_krylov_state_from_first_attempt,
@@ -7412,15 +7413,30 @@ def test_xblock_sparse_pc_final_metadata_from_driver_state_merges_components(
 
 def test_xblock_sparse_pc_final_metadata_state_from_driver_scope_filters_scope() -> None:
     keys = xblock_sparse_pc_final_metadata_driver_state_keys()
+    scope_keys = xblock_sparse_pc_final_metadata_driver_scope_keys()
+    precomputed_metadata = {
+        "xblock_assembled_operator_result_metadata": {"assembled": True},
+        "xblock_coarse_correction_metadata": {"coarse": True},
+        "xblock_qi_seed_preconditioner_metadata": {"seed": True},
+        "xblock_qi_device_preconditioner_metadata": {"device": True},
+        "xblock_qi_deflated_preconditioner_metadata": {"deflated": True},
+        "xblock_side_probe_metadata": {"side": True},
+    }
     scope = {key: object() for key in keys}
+    scope.update(precomputed_metadata)
     scope["unrelated_xblock_scratch"] = object()
+    scope["qi_device_preconditioner_metadata"] = {"raw": True}
 
     state = xblock_sparse_pc_final_metadata_state_from_driver_scope(scope)
 
-    assert tuple(state) == keys
+    assert tuple(state) == (*keys, *precomputed_metadata)
     assert "unrelated_xblock_scratch" not in state
     for key in keys:
         assert state[key] is scope[key]
+    for key, value in precomputed_metadata.items():
+        assert state[key] is value
+    assert "qi_device_preconditioner_metadata" not in state
+    assert len(keys) < len(scope_keys)
 
     incomplete_scope = dict(scope)
     missing = keys[-1]

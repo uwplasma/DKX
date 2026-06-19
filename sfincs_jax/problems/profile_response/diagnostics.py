@@ -2224,6 +2224,76 @@ def xblock_sparse_pc_result_diagnostics_from_driver_state(
     can be typed incrementally.
     """
 
+    assembled_operator_metadata = state.get("xblock_assembled_operator_result_metadata")
+    if assembled_operator_metadata is None:
+        assembled_operator_metadata = xblock_assembled_operator_diagnostics(
+            XBlockAssembledOperatorDiagnosticsContext(
+                enabled=state["assembled_operator_enabled"],
+                built=state["assembled_operator_built"],
+                metadata=state["assembled_operator_metadata"],
+                row_equilibration_enabled=state[
+                    "xblock_row_equilibration_enabled"
+                ],
+                row_equilibration_built=state["xblock_row_equilibration_built"],
+                row_equilibration_metadata=state[
+                    "xblock_row_equilibration_metadata"
+                ],
+                col_equilibration_enabled=state[
+                    "xblock_col_equilibration_enabled"
+                ],
+                col_equilibration_built=state["xblock_col_equilibration_built"],
+                col_equilibration_metadata=state[
+                    "xblock_col_equilibration_metadata"
+                ],
+            )
+        )
+    coarse_correction_metadata = state.get("xblock_coarse_correction_metadata")
+    if coarse_correction_metadata is None:
+        coarse_correction_metadata = xblock_coarse_correction_diagnostics(state)
+    qi_seed_metadata = state.get("xblock_qi_seed_preconditioner_metadata")
+    if qi_seed_metadata is None:
+        qi_seed_metadata = xblock_qi_seed_preconditioner_diagnostics(state)
+    qi_device_metadata = state.get("xblock_qi_device_preconditioner_metadata")
+    if qi_device_metadata is None:
+        qi_device_metadata = xblock_qi_device_preconditioner_diagnostics(state)
+    qi_deflated_metadata = state.get("xblock_qi_deflated_preconditioner_metadata")
+    if qi_deflated_metadata is None:
+        qi_deflated_metadata = xblock_qi_deflated_preconditioner_diagnostics(state)
+    side_probe_metadata = state.get("xblock_side_probe_metadata")
+    if side_probe_metadata is None:
+        side_probe_metadata = xblock_side_probe_diagnostics(
+            XBlockSideProbeDiagnosticsContext(
+                enabled=state["xblock_side_probe_enabled"],
+                used=state["xblock_side_probe_used"],
+                switched=state["xblock_side_probe_switched"],
+                switch_suppressed_by_global_coupling=state[
+                    "xblock_side_probe_switch_suppressed_by_global_coupling"
+                ],
+                switch_suppressed_by_explicit_side=state[
+                    "xblock_side_probe_switch_suppressed_by_explicit_side"
+                ],
+                physical_seed_preserved_after_switch=state[
+                    "xblock_side_probe_physical_seed_preserved_after_switch"
+                ],
+                seed_used=state["xblock_side_probe_seed_used"],
+                seed_residual_norm=state["xblock_side_probe_seed_residual_norm"],
+                initial_side=state["xblock_side_probe_initial_side"],
+                selected_side=state["xblock_side_probe_selected_side"],
+                initial_method=state["xblock_side_probe_initial_method"],
+                selected_method=state["xblock_side_probe_selected_method"],
+                lgmres_rescue=state["xblock_side_probe_lgmres_rescue"],
+                lgmres_rescue_maxiter_capped=state[
+                    "xblock_lgmres_rescue_maxiter_capped"
+                ],
+                lgmres_rescue_outer_k=state["xblock_lgmres_rescue_outer_k"],
+                residual_norm=state["xblock_side_probe_residual_norm"],
+                residual_ratio=state["xblock_side_probe_residual_ratio"],
+                iterations=state["xblock_side_probe_iterations"],
+                matvecs=state["xblock_side_probe_matvecs"],
+                elapsed_s=state["xblock_side_probe_s"],
+            )
+        )
+
     return {
         **xblock_sparse_pc_core_diagnostics(
             XBlockSparsePCCoreDiagnosticsContext(
@@ -2269,61 +2339,10 @@ def xblock_sparse_pc_result_diagnostics_from_driver_state(
         "xblock_active_dof": bool(state["xblock_use_active_dof"]),
         "xblock_linear_size": int(state["xblock_linear_size"]),
         "xblock_full_size": int(full_size),
-        **xblock_assembled_operator_diagnostics(
-            XBlockAssembledOperatorDiagnosticsContext(
-                enabled=state["assembled_operator_enabled"],
-                built=state["assembled_operator_built"],
-                metadata=state["assembled_operator_metadata"],
-                row_equilibration_enabled=state[
-                    "xblock_row_equilibration_enabled"
-                ],
-                row_equilibration_built=state["xblock_row_equilibration_built"],
-                row_equilibration_metadata=state[
-                    "xblock_row_equilibration_metadata"
-                ],
-                col_equilibration_enabled=state[
-                    "xblock_col_equilibration_enabled"
-                ],
-                col_equilibration_built=state["xblock_col_equilibration_built"],
-                col_equilibration_metadata=state[
-                    "xblock_col_equilibration_metadata"
-                ],
-            )
-        ),
-        **xblock_coarse_correction_diagnostics(state),
-        **xblock_qi_seed_preconditioner_diagnostics(state),
-        **xblock_qi_device_preconditioner_diagnostics(state),
-        **xblock_qi_deflated_preconditioner_diagnostics(state),
-        **xblock_side_probe_diagnostics(
-            XBlockSideProbeDiagnosticsContext(
-                enabled=state["xblock_side_probe_enabled"],
-                used=state["xblock_side_probe_used"],
-                switched=state["xblock_side_probe_switched"],
-                switch_suppressed_by_global_coupling=state[
-                    "xblock_side_probe_switch_suppressed_by_global_coupling"
-                ],
-                switch_suppressed_by_explicit_side=state[
-                    "xblock_side_probe_switch_suppressed_by_explicit_side"
-                ],
-                physical_seed_preserved_after_switch=state[
-                    "xblock_side_probe_physical_seed_preserved_after_switch"
-                ],
-                seed_used=state["xblock_side_probe_seed_used"],
-                seed_residual_norm=state["xblock_side_probe_seed_residual_norm"],
-                initial_side=state["xblock_side_probe_initial_side"],
-                selected_side=state["xblock_side_probe_selected_side"],
-                initial_method=state["xblock_side_probe_initial_method"],
-                selected_method=state["xblock_side_probe_selected_method"],
-                lgmres_rescue=state["xblock_side_probe_lgmres_rescue"],
-                lgmres_rescue_maxiter_capped=state[
-                    "xblock_lgmres_rescue_maxiter_capped"
-                ],
-                lgmres_rescue_outer_k=state["xblock_lgmres_rescue_outer_k"],
-                residual_norm=state["xblock_side_probe_residual_norm"],
-                residual_ratio=state["xblock_side_probe_residual_ratio"],
-                iterations=state["xblock_side_probe_iterations"],
-                matvecs=state["xblock_side_probe_matvecs"],
-                elapsed_s=state["xblock_side_probe_s"],
-            )
-        ),
+        **assembled_operator_metadata,
+        **coarse_correction_metadata,
+        **qi_seed_metadata,
+        **qi_device_metadata,
+        **qi_deflated_metadata,
+        **side_probe_metadata,
     }

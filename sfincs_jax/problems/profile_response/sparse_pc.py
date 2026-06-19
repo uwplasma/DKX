@@ -719,7 +719,87 @@ _XBLOCK_SPARSE_PC_FINAL_METADATA_PREFLIGHT_STATE_KEYS = (
     "probe_coarse_steps_requested",
 )
 
+_XBLOCK_SPARSE_PC_FINAL_METADATA_COMPACT_CORE_STATE_KEYS = (
+    "candidate_iterations",
+    "candidate_krylov_method",
+    "candidate_matvecs",
+    "candidate_residual_norm",
+    "device_krylov_estimated_matvecs",
+    "fallback_candidate_improved_rhs",
+    "fallback_started_from_candidate",
+    "mv_count",
+    "pc_factor_s",
+    "pc_maxiter",
+    "pc_restart",
+    "precondition_side",
+    "reported_iterations",
+    "reported_matvecs",
+    "setup_s",
+    "solve_s",
+    "sparse_timer",
+    "xblock_assembled_host_fp",
+    "xblock_default_restart_capped",
+    "xblock_default_right_pc",
+    "xblock_jax_factor_apply",
+    "xblock_jax_factor_format",
+    "xblock_jax_factors",
+    "xblock_krylov_method",
+    "xblock_linear_size",
+    "xblock_lower_fill_ignored_env",
+    "xblock_lower_fill_mode",
+    "xblock_preconditioner_built",
+    "xblock_preconditioner_xi",
+    "xblock_use_active_dof",
+)
+
+_XBLOCK_SPARSE_PC_FINAL_METADATA_DEVICE_STATE_KEYS = (
+    "assembled_operator_built",
+    "assembled_operator_device_resident",
+    "fgmres_block_between_cycles",
+    "global_coupling_built",
+    "global_coupling_metadata",
+    "qi_device_augmented_krylov_mode",
+    "qi_device_augmented_krylov_rank",
+    "qi_device_augmented_krylov_reason",
+    "qi_device_augmented_krylov_requested",
+    "qi_device_augmented_krylov_used",
+    "qi_device_augmented_seed_available",
+    "qi_device_augmented_seed_labels",
+    "qi_device_augmented_seed_max_rank",
+    "qi_device_augmented_seed_projection_residual",
+    "qi_device_augmented_seed_rank",
+    "qi_device_augmented_seed_reason",
+    "qi_device_augmented_seed_requested",
+    "qi_device_augmented_seed_used",
+    "tfqmr_replacement_interval",
+    "two_level_built",
+    "xblock_device_fgmres_forced_right_pc",
+    "xblock_device_fgmres_jit",
+    "xblock_device_fgmres_jit_mode",
+    "xblock_device_fgmres_jit_outer_k",
+    "xblock_device_host_fallback_auto_disabled_by_qi_device",
+    "xblock_device_host_fallback_decision",
+    "xblock_device_krylov_forced_jax_factors",
+    "xblock_krylov_env_requested",
+    "xblock_qi_device_operator_reuse_decision",
+)
+
+_XBLOCK_SPARSE_PC_FINAL_METADATA_PRECOMPUTED_KEYS = (
+    "xblock_assembled_operator_result_metadata",
+    "xblock_coarse_correction_metadata",
+    "xblock_qi_seed_preconditioner_metadata",
+    "xblock_qi_device_preconditioner_metadata",
+    "xblock_qi_deflated_preconditioner_metadata",
+    "xblock_side_probe_metadata",
+)
+
 _XBLOCK_SPARSE_PC_FINAL_METADATA_STATE_KEYS = _unique_state_keys(
+    _XBLOCK_SPARSE_PC_FINAL_METADATA_COMPACT_CORE_STATE_KEYS,
+    _XBLOCK_SPARSE_PC_FINAL_METADATA_DEVICE_STATE_KEYS,
+    _XBLOCK_SPARSE_PC_FINAL_METADATA_PREFLIGHT_STATE_KEYS,
+)
+
+_XBLOCK_SPARSE_PC_FINAL_METADATA_SCOPE_KEYS = _unique_state_keys(
     _XBLOCK_SPARSE_PC_FINAL_METADATA_CORE_STATE_KEYS,
     _XBLOCK_SPARSE_PC_FINAL_METADATA_NESTED_STATE_KEYS,
     _XBLOCK_SPARSE_PC_FINAL_METADATA_PREFLIGHT_STATE_KEYS,
@@ -732,10 +812,26 @@ def xblock_sparse_pc_final_metadata_driver_state_keys() -> tuple[str, ...]:
     return _XBLOCK_SPARSE_PC_FINAL_METADATA_STATE_KEYS
 
 
+def xblock_sparse_pc_final_metadata_driver_scope_keys() -> tuple[str, ...]:
+    """Return raw driver-scope keys needed to derive x-block final metadata."""
+
+    return _XBLOCK_SPARSE_PC_FINAL_METADATA_SCOPE_KEYS
+
+
+def _xblock_metadata_or_compute(
+    scope: Mapping[str, object],
+    key: str,
+    builder: Callable[[Mapping[str, object]], dict[str, object]],
+) -> object:
+    if key in scope:
+        return scope[key]
+    return builder(scope)
+
+
 def xblock_sparse_pc_final_metadata_state_from_driver_scope(
     scope: Mapping[str, object],
 ) -> dict[str, object]:
-    """Copy only x-block final-metadata state needed from a driver scope."""
+    """Copy compact x-block final state and precompute nested diagnostics."""
 
     missing = tuple(
         key for key in _XBLOCK_SPARSE_PC_FINAL_METADATA_STATE_KEYS if key not in scope
@@ -744,7 +840,81 @@ def xblock_sparse_pc_final_metadata_state_from_driver_scope(
         joined = ", ".join(missing[:8])
         suffix = "" if len(missing) <= 8 else f", ... ({len(missing)} total)"
         raise KeyError(f"x-block sparse-PC final metadata missing: {joined}{suffix}")
-    return {key: scope[key] for key in _XBLOCK_SPARSE_PC_FINAL_METADATA_STATE_KEYS}
+    state = {key: scope[key] for key in _XBLOCK_SPARSE_PC_FINAL_METADATA_STATE_KEYS}
+    state["xblock_assembled_operator_result_metadata"] = _xblock_metadata_or_compute(
+        scope,
+        "xblock_assembled_operator_result_metadata",
+        lambda raw: xblock_assembled_operator_diagnostics(
+            XBlockAssembledOperatorDiagnosticsContext(
+                enabled=raw["assembled_operator_enabled"],
+                built=raw["assembled_operator_built"],
+                metadata=raw["assembled_operator_metadata"],
+                row_equilibration_enabled=raw["xblock_row_equilibration_enabled"],
+                row_equilibration_built=raw["xblock_row_equilibration_built"],
+                row_equilibration_metadata=raw["xblock_row_equilibration_metadata"],
+                col_equilibration_enabled=raw["xblock_col_equilibration_enabled"],
+                col_equilibration_built=raw["xblock_col_equilibration_built"],
+                col_equilibration_metadata=raw["xblock_col_equilibration_metadata"],
+            )
+        ),
+    )
+    state["xblock_coarse_correction_metadata"] = _xblock_metadata_or_compute(
+        scope,
+        "xblock_coarse_correction_metadata",
+        xblock_coarse_correction_diagnostics,
+    )
+    state["xblock_qi_seed_preconditioner_metadata"] = _xblock_metadata_or_compute(
+        scope,
+        "xblock_qi_seed_preconditioner_metadata",
+        xblock_qi_seed_preconditioner_diagnostics,
+    )
+    state["xblock_qi_device_preconditioner_metadata"] = _xblock_metadata_or_compute(
+        scope,
+        "xblock_qi_device_preconditioner_metadata",
+        xblock_qi_device_preconditioner_diagnostics,
+    )
+    state["xblock_qi_deflated_preconditioner_metadata"] = _xblock_metadata_or_compute(
+        scope,
+        "xblock_qi_deflated_preconditioner_metadata",
+        xblock_qi_deflated_preconditioner_diagnostics,
+    )
+    state["xblock_side_probe_metadata"] = _xblock_metadata_or_compute(
+        scope,
+        "xblock_side_probe_metadata",
+        lambda raw: xblock_side_probe_diagnostics(
+            XBlockSideProbeDiagnosticsContext(
+                enabled=raw["xblock_side_probe_enabled"],
+                used=raw["xblock_side_probe_used"],
+                switched=raw["xblock_side_probe_switched"],
+                switch_suppressed_by_global_coupling=raw[
+                    "xblock_side_probe_switch_suppressed_by_global_coupling"
+                ],
+                switch_suppressed_by_explicit_side=raw[
+                    "xblock_side_probe_switch_suppressed_by_explicit_side"
+                ],
+                physical_seed_preserved_after_switch=raw[
+                    "xblock_side_probe_physical_seed_preserved_after_switch"
+                ],
+                seed_used=raw["xblock_side_probe_seed_used"],
+                seed_residual_norm=raw["xblock_side_probe_seed_residual_norm"],
+                initial_side=raw["xblock_side_probe_initial_side"],
+                selected_side=raw["xblock_side_probe_selected_side"],
+                initial_method=raw["xblock_side_probe_initial_method"],
+                selected_method=raw["xblock_side_probe_selected_method"],
+                lgmres_rescue=raw["xblock_side_probe_lgmres_rescue"],
+                lgmres_rescue_maxiter_capped=raw[
+                    "xblock_lgmres_rescue_maxiter_capped"
+                ],
+                lgmres_rescue_outer_k=raw["xblock_lgmres_rescue_outer_k"],
+                residual_norm=raw["xblock_side_probe_residual_norm"],
+                residual_ratio=raw["xblock_side_probe_residual_ratio"],
+                iterations=raw["xblock_side_probe_iterations"],
+                matvecs=raw["xblock_side_probe_matvecs"],
+                elapsed_s=raw["xblock_side_probe_s"],
+            )
+        ),
+    )
+    return state
 
 
 @dataclass(frozen=True)
@@ -10473,6 +10643,7 @@ __all__ = [
     "xblock_device_krylov_state",
     "xblock_device_cycle_progress_message",
     "xblock_host_krylov_progress_message",
+    "xblock_sparse_pc_final_metadata_driver_scope_keys",
     "xblock_sparse_pc_final_metadata_driver_state_keys",
     "xblock_sparse_pc_final_metadata_state_from_driver_scope",
     "xblock_krylov_state_from_first_attempt",
