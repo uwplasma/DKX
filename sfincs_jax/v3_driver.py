@@ -254,6 +254,7 @@ from .problems.profile_response.sparse_pc import (
     resolve_direct_tail_structured_admission,
     resolve_direct_tail_residual_rescue_policy,
     resolve_direct_tail_true_active_rescue_policy,
+    resolve_direct_tail_coupled_coarse_rescue_policy,
     resolve_fortran_reduced_sparse_pc_backend,
     run_direct_tail_support_mode_preflight,
     resolve_fortran_reduced_xblock_factor_policy,
@@ -7896,130 +7897,61 @@ def solve_v3_full_system_linear_gmres(
         direct_tail_true_active_submatrix_min_improvement = float(
             direct_tail_true_active_rescue_policy.active_submatrix_min_improvement
         )
-        direct_tail_true_coupled_coarse_max_windows = _rhs1_int_env(
-            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_COUPLED_MAX_WINDOWS",
-            default=2,
-            minimum=1,
+        direct_tail_true_coupled_coarse_policy = resolve_direct_tail_coupled_coarse_rescue_policy(os.environ)
+        direct_tail_true_coupled_coarse_max_windows = int(direct_tail_true_coupled_coarse_policy.max_windows)
+        direct_tail_true_coupled_coarse_x_radius = int(direct_tail_true_coupled_coarse_policy.x_radius)
+        direct_tail_true_coupled_coarse_ell_radius = int(direct_tail_true_coupled_coarse_policy.ell_radius)
+        direct_tail_true_coupled_coarse_max_mb = float(direct_tail_true_coupled_coarse_policy.max_mb)
+        direct_tail_true_coupled_coarse_regularization = float(
+            direct_tail_true_coupled_coarse_policy.regularization
         )
-        direct_tail_true_coupled_coarse_x_radius = _rhs1_int_env(
-            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_COUPLED_X_RADIUS",
-            default=0,
-            minimum=0,
+        direct_tail_true_coupled_coarse_max_size = int(direct_tail_true_coupled_coarse_policy.max_size)
+        direct_tail_true_coupled_coarse_column_batch = int(direct_tail_true_coupled_coarse_policy.column_batch)
+        direct_tail_true_coupled_coarse_drop_tol = float(direct_tail_true_coupled_coarse_policy.drop_tol)
+        direct_tail_true_coupled_coarse_low_lmax = int(direct_tail_true_coupled_coarse_policy.low_lmax)
+        direct_tail_true_coupled_coarse_profile_moment_count = int(
+            direct_tail_true_coupled_coarse_policy.profile_moment_count
         )
-        direct_tail_true_coupled_coarse_ell_radius = _rhs1_int_env(
-            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_COUPLED_ELL_RADIUS",
-            default=1,
-            minimum=0,
+        direct_tail_true_coupled_coarse_angular_lmax = int(direct_tail_true_coupled_coarse_policy.angular_lmax)
+        direct_tail_true_coupled_coarse_angular_mode_max = int(
+            direct_tail_true_coupled_coarse_policy.angular_mode_max
         )
-        direct_tail_true_coupled_coarse_max_mb = _rhs1_float_env(
-            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_COUPLED_MAX_MB",
-            default=512.0,
-            minimum=0.0,
+        direct_tail_true_coupled_coarse_max_tail_units = int(
+            direct_tail_true_coupled_coarse_policy.max_tail_units
         )
-        direct_tail_true_coupled_coarse_regularization = _rhs1_float_env(
-            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_COUPLED_REGULARIZATION",
-            default=1.0e-12,
-            minimum=0.0,
+        direct_tail_true_coupled_coarse_include_tail = bool(direct_tail_true_coupled_coarse_policy.include_tail)
+        direct_tail_true_coupled_coarse_include_constraint_sources = bool(
+            direct_tail_true_coupled_coarse_policy.include_constraint_sources
         )
-        direct_tail_true_coupled_coarse_max_size = _rhs1_int_env(
-            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_COUPLED_MAX_SIZE",
-            default=64,
-            minimum=1,
+        direct_tail_true_coupled_coarse_include_fsavg = bool(direct_tail_true_coupled_coarse_policy.include_fsavg)
+        direct_tail_true_coupled_coarse_include_window_residual = bool(
+            direct_tail_true_coupled_coarse_policy.include_window_residual
         )
-        direct_tail_true_coupled_coarse_column_batch = _rhs1_int_env(
-            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_COUPLED_COLUMN_BATCH",
-            default=4,
-            minimum=1,
+        direct_tail_true_coupled_coarse_include_profile_moments = bool(
+            direct_tail_true_coupled_coarse_policy.include_profile_moments
         )
-        direct_tail_true_coupled_coarse_drop_tol = _rhs1_float_env(
-            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_COUPLED_DROP_TOL",
-            default=1.0e-14,
-            minimum=0.0,
+        direct_tail_true_coupled_coarse_include_angular_residual = bool(
+            direct_tail_true_coupled_coarse_policy.include_angular_residual
         )
-        direct_tail_true_coupled_coarse_low_lmax = _rhs1_int_env(
-            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_COUPLED_LOW_LMAX",
-            default=3,
-            minimum=0,
+        direct_tail_true_coupled_coarse_include_angular_basis = bool(
+            direct_tail_true_coupled_coarse_policy.include_angular_basis
         )
-        direct_tail_true_coupled_coarse_profile_moment_count = _rhs1_int_env(
-            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_COUPLED_PROFILE_MOMENT_COUNT",
-            default=4,
-            minimum=0,
+        direct_tail_true_coupled_coarse_include_preconditioned_loads = bool(
+            direct_tail_true_coupled_coarse_policy.include_preconditioned_loads
         )
-        direct_tail_true_coupled_coarse_angular_lmax = _rhs1_int_env(
-            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_COUPLED_ANGULAR_LMAX",
-            default=2,
-            minimum=0,
+        direct_tail_true_coupled_coarse_preconditioned_load_max_columns = int(
+            direct_tail_true_coupled_coarse_policy.preconditioned_load_max_columns
         )
-        direct_tail_true_coupled_coarse_angular_mode_max = _rhs1_int_env(
-            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_COUPLED_ANGULAR_MODE_MAX",
-            default=1,
-            minimum=0,
+        direct_tail_true_coupled_coarse_preconditioned_load_max_nnz = int(
+            direct_tail_true_coupled_coarse_policy.preconditioned_load_max_nnz
         )
-        direct_tail_true_coupled_coarse_max_tail_units = _rhs1_int_env(
-            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_COUPLED_MAX_TAIL_UNITS",
-            default=16,
-            minimum=0,
+        direct_tail_true_coupled_coarse_preconditioned_load_drop_tol = float(
+            direct_tail_true_coupled_coarse_policy.preconditioned_load_drop_tol
         )
-        direct_tail_true_coupled_coarse_include_tail = _rhs1_bool_env(
-            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_COUPLED_INCLUDE_TAIL",
-            default=True,
-        )
-        direct_tail_true_coupled_coarse_include_constraint_sources = _rhs1_bool_env(
-            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_COUPLED_INCLUDE_CONSTRAINT_SOURCES",
-            default=True,
-        )
-        direct_tail_true_coupled_coarse_include_fsavg = _rhs1_bool_env(
-            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_COUPLED_INCLUDE_FSAVG",
-            default=True,
-        )
-        direct_tail_true_coupled_coarse_include_window_residual = _rhs1_bool_env(
-            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_COUPLED_INCLUDE_WINDOW_RESIDUAL",
-            default=True,
-        )
-        direct_tail_true_coupled_coarse_include_profile_moments = _rhs1_bool_env(
-            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_COUPLED_INCLUDE_PROFILE_MOMENTS",
-            default=True,
-        )
-        direct_tail_true_coupled_coarse_include_angular_residual = _rhs1_bool_env(
-            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_COUPLED_INCLUDE_ANGULAR_RESIDUAL",
-            default=True,
-        )
-        direct_tail_true_coupled_coarse_include_angular_basis = _rhs1_bool_env(
-            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_COUPLED_INCLUDE_ANGULAR_BASIS",
-            default=False,
-        )
-        direct_tail_true_coupled_coarse_include_preconditioned_loads = _rhs1_bool_env(
-            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_COUPLED_INCLUDE_PRECONDITIONED_LOADS",
-            default=False,
-        )
-        direct_tail_true_coupled_coarse_preconditioned_load_max_columns = _rhs1_int_env(
-            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_COUPLED_PRECONDITIONED_LOAD_MAX_COLUMNS",
-            default=16,
-            minimum=0,
-        )
-        direct_tail_true_coupled_coarse_preconditioned_load_max_nnz = _rhs1_int_env(
-            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_COUPLED_PRECONDITIONED_LOAD_MAX_NNZ",
-            default=50_000,
-            minimum=0,
-        )
-        direct_tail_true_coupled_coarse_preconditioned_load_drop_tol = _rhs1_float_env(
-            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_COUPLED_PRECONDITIONED_LOAD_DROP_TOL",
-            default=1.0e-12,
-            minimum=0.0,
-        )
-        direct_tail_true_coupled_coarse_damping = _rhs1_bool_env(
-            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_COUPLED_DAMPING",
-            default=False,
-        )
-        direct_tail_true_coupled_coarse_beta_max = _rhs1_float_env(
-            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_COUPLED_BETA_MAX",
-            default=10.0,
-            minimum=0.0,
-        )
-        direct_tail_true_coupled_coarse_accept_base_improvement = _rhs1_bool_env(
-            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_COUPLED_ACCEPT_BASE_IMPROVEMENT",
-            default=False,
+        direct_tail_true_coupled_coarse_damping = bool(direct_tail_true_coupled_coarse_policy.damping)
+        direct_tail_true_coupled_coarse_beta_max = float(direct_tail_true_coupled_coarse_policy.beta_max)
+        direct_tail_true_coupled_coarse_accept_base_improvement = bool(
+            direct_tail_true_coupled_coarse_policy.accept_base_improvement
         )
         direct_tail_true_coupled_coarse_base_improvement_override_used = False
 

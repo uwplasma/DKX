@@ -22,6 +22,7 @@ from sfincs_jax.problems.profile_response.sparse_pc import (
     DirectTailSupportModePreflightContext,
     DirectTailResidualRescuePolicy,
     DirectTailTrueActiveRescuePolicy,
+    DirectTailCoupledCoarseRescuePolicy,
     SparsePCFactorPreflightPolicyContext,
     FortranReducedXBlockFactorBuildContext,
     FortranReducedXBlockGlobalCouplingStageContext,
@@ -71,6 +72,7 @@ from sfincs_jax.problems.profile_response.sparse_pc import (
     resolve_direct_tail_structured_admission,
     resolve_direct_tail_residual_rescue_policy,
     resolve_direct_tail_true_active_rescue_policy,
+    resolve_direct_tail_coupled_coarse_rescue_policy,
     run_direct_tail_support_mode_preflight,
     resolve_xblock_qi_device_admission_setup,
     resolve_xblock_qi_device_base_config_setup,
@@ -1358,6 +1360,101 @@ def test_direct_tail_true_active_rescue_policy_bad_species_count_is_none() -> No
     )
 
     assert policy.active_block_species_count is None
+
+
+def test_direct_tail_coupled_coarse_rescue_policy_defaults() -> None:
+    policy = resolve_direct_tail_coupled_coarse_rescue_policy({})
+
+    assert isinstance(policy, DirectTailCoupledCoarseRescuePolicy)
+    assert policy.max_windows == 2
+    assert policy.x_radius == 0
+    assert policy.ell_radius == 1
+    assert policy.max_mb == 512.0
+    assert policy.regularization == 1.0e-12
+    assert policy.max_size == 64
+    assert policy.column_batch == 4
+    assert policy.drop_tol == 1.0e-14
+    assert policy.low_lmax == 3
+    assert policy.profile_moment_count == 4
+    assert policy.angular_lmax == 2
+    assert policy.angular_mode_max == 1
+    assert policy.max_tail_units == 16
+    assert policy.include_tail is True
+    assert policy.include_constraint_sources is True
+    assert policy.include_fsavg is True
+    assert policy.include_window_residual is True
+    assert policy.include_profile_moments is True
+    assert policy.include_angular_residual is True
+    assert policy.include_angular_basis is False
+    assert policy.include_preconditioned_loads is False
+    assert policy.preconditioned_load_max_columns == 16
+    assert policy.preconditioned_load_max_nnz == 50000
+    assert policy.preconditioned_load_drop_tol == 1.0e-12
+    assert policy.damping is False
+    assert policy.beta_max == 10.0
+    assert policy.accept_base_improvement is False
+
+
+def test_direct_tail_coupled_coarse_rescue_policy_clamps_and_overrides() -> None:
+    policy = resolve_direct_tail_coupled_coarse_rescue_policy(
+        {
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_COUPLED_MAX_WINDOWS": "0",
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_COUPLED_X_RADIUS": "-1",
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_COUPLED_ELL_RADIUS": "-1",
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_COUPLED_MAX_MB": "-1",
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_COUPLED_REGULARIZATION": "-1",
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_COUPLED_MAX_SIZE": "0",
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_COUPLED_COLUMN_BATCH": "0",
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_COUPLED_DROP_TOL": "-1e-3",
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_COUPLED_LOW_LMAX": "-1",
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_COUPLED_PROFILE_MOMENT_COUNT": "-1",
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_COUPLED_ANGULAR_LMAX": "-1",
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_COUPLED_ANGULAR_MODE_MAX": "-1",
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_COUPLED_MAX_TAIL_UNITS": "-1",
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_COUPLED_INCLUDE_TAIL": "0",
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_COUPLED_INCLUDE_CONSTRAINT_SOURCES": "0",
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_COUPLED_INCLUDE_FSAVG": "0",
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_COUPLED_INCLUDE_WINDOW_RESIDUAL": "0",
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_COUPLED_INCLUDE_PROFILE_MOMENTS": "0",
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_COUPLED_INCLUDE_ANGULAR_RESIDUAL": "0",
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_COUPLED_INCLUDE_ANGULAR_BASIS": "1",
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_COUPLED_INCLUDE_PRECONDITIONED_LOADS": "1",
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_COUPLED_PRECONDITIONED_LOAD_MAX_COLUMNS": "-1",
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_COUPLED_PRECONDITIONED_LOAD_MAX_NNZ": "-1",
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_COUPLED_PRECONDITIONED_LOAD_DROP_TOL": "-1",
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_COUPLED_DAMPING": "1",
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_COUPLED_BETA_MAX": "-1",
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_COUPLED_ACCEPT_BASE_IMPROVEMENT": "1",
+        }
+    )
+
+    assert policy.max_windows == 1
+    assert policy.x_radius == 0
+    assert policy.ell_radius == 0
+    assert policy.max_mb == 0.0
+    assert policy.regularization == 0.0
+    assert policy.max_size == 1
+    assert policy.column_batch == 1
+    assert policy.drop_tol == 0.0
+    assert policy.low_lmax == 0
+    assert policy.profile_moment_count == 0
+    assert policy.angular_lmax == 0
+    assert policy.angular_mode_max == 0
+    assert policy.max_tail_units == 0
+    assert policy.include_tail is False
+    assert policy.include_constraint_sources is False
+    assert policy.include_fsavg is False
+    assert policy.include_window_residual is False
+    assert policy.include_profile_moments is False
+    assert policy.include_angular_residual is False
+    assert policy.include_angular_basis is True
+    assert policy.include_preconditioned_loads is True
+    assert policy.preconditioned_load_max_columns == 0
+    assert policy.preconditioned_load_max_nnz == 0
+    assert policy.preconditioned_load_drop_tol == 0.0
+    assert policy.damping is True
+    assert policy.beta_max == 0.0
+    assert policy.accept_base_improvement is True
 
 
 def test_fortran_reduced_xblock_factor_policy_uses_specific_env_before_generic() -> None:

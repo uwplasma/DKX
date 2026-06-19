@@ -672,6 +672,39 @@ class DirectTailTrueActiveRescuePolicy:
 
 
 @dataclass(frozen=True)
+class DirectTailCoupledCoarseRescuePolicy:
+    """Resolved direct-tail true-operator coupled-coarse rescue controls."""
+
+    max_windows: int
+    x_radius: int
+    ell_radius: int
+    max_mb: float
+    regularization: float
+    max_size: int
+    column_batch: int
+    drop_tol: float
+    low_lmax: int
+    profile_moment_count: int
+    angular_lmax: int
+    angular_mode_max: int
+    max_tail_units: int
+    include_tail: bool
+    include_constraint_sources: bool
+    include_fsavg: bool
+    include_window_residual: bool
+    include_profile_moments: bool
+    include_angular_residual: bool
+    include_angular_basis: bool
+    include_preconditioned_loads: bool
+    preconditioned_load_max_columns: int
+    preconditioned_load_max_nnz: int
+    preconditioned_load_drop_tol: float
+    damping: bool
+    beta_max: float
+    accept_base_improvement: bool
+
+
+@dataclass(frozen=True)
 class XBlockSparsePCSetup:
     """Setup controls for RHSMode=1 x-block sparse-PC solves."""
 
@@ -3577,6 +3610,177 @@ def resolve_direct_tail_true_active_rescue_policy(
     )
 
 
+def resolve_direct_tail_coupled_coarse_rescue_policy(
+    env: Mapping[str, str] | None,
+) -> DirectTailCoupledCoarseRescuePolicy:
+    """Resolve true-operator coupled-coarse rescue controls."""
+
+    return DirectTailCoupledCoarseRescuePolicy(
+        max_windows=_env_int(
+            env,
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_COUPLED_MAX_WINDOWS",
+            2,
+            minimum=1,
+        ),
+        x_radius=_env_int(
+            env,
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_COUPLED_X_RADIUS",
+            0,
+            minimum=0,
+        ),
+        ell_radius=_env_int(
+            env,
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_COUPLED_ELL_RADIUS",
+            1,
+            minimum=0,
+        ),
+        max_mb=max(
+            0.0,
+            _env_float(
+                env,
+                "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_COUPLED_MAX_MB",
+                512.0,
+            ),
+        ),
+        regularization=max(
+            0.0,
+            _env_float(
+                env,
+                "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_COUPLED_REGULARIZATION",
+                1.0e-12,
+            ),
+        ),
+        max_size=_env_int(
+            env,
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_COUPLED_MAX_SIZE",
+            64,
+            minimum=1,
+        ),
+        column_batch=_env_int(
+            env,
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_COUPLED_COLUMN_BATCH",
+            4,
+            minimum=1,
+        ),
+        drop_tol=max(
+            0.0,
+            _env_float(
+                env,
+                "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_COUPLED_DROP_TOL",
+                1.0e-14,
+            ),
+        ),
+        low_lmax=_env_int(
+            env,
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_COUPLED_LOW_LMAX",
+            3,
+            minimum=0,
+        ),
+        profile_moment_count=_env_int(
+            env,
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_COUPLED_PROFILE_MOMENT_COUNT",
+            4,
+            minimum=0,
+        ),
+        angular_lmax=_env_int(
+            env,
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_COUPLED_ANGULAR_LMAX",
+            2,
+            minimum=0,
+        ),
+        angular_mode_max=_env_int(
+            env,
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_COUPLED_ANGULAR_MODE_MAX",
+            1,
+            minimum=0,
+        ),
+        max_tail_units=_env_int(
+            env,
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_COUPLED_MAX_TAIL_UNITS",
+            16,
+            minimum=0,
+        ),
+        include_tail=_env_bool(
+            env,
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_COUPLED_INCLUDE_TAIL",
+            default=True,
+        ),
+        include_constraint_sources=_env_bool(
+            env,
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_COUPLED_INCLUDE_CONSTRAINT_SOURCES",
+            default=True,
+        ),
+        include_fsavg=_env_bool(
+            env,
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_COUPLED_INCLUDE_FSAVG",
+            default=True,
+        ),
+        include_window_residual=_env_bool(
+            env,
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_COUPLED_INCLUDE_WINDOW_RESIDUAL",
+            default=True,
+        ),
+        include_profile_moments=_env_bool(
+            env,
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_COUPLED_INCLUDE_PROFILE_MOMENTS",
+            default=True,
+        ),
+        include_angular_residual=_env_bool(
+            env,
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_COUPLED_INCLUDE_ANGULAR_RESIDUAL",
+            default=True,
+        ),
+        include_angular_basis=_env_bool(
+            env,
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_COUPLED_INCLUDE_ANGULAR_BASIS",
+            default=False,
+        ),
+        include_preconditioned_loads=_env_bool(
+            env,
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_COUPLED_INCLUDE_PRECONDITIONED_LOADS",
+            default=False,
+        ),
+        preconditioned_load_max_columns=_env_int(
+            env,
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_COUPLED_PRECONDITIONED_LOAD_MAX_COLUMNS",
+            16,
+            minimum=0,
+        ),
+        preconditioned_load_max_nnz=_env_int(
+            env,
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_COUPLED_PRECONDITIONED_LOAD_MAX_NNZ",
+            50_000,
+            minimum=0,
+        ),
+        preconditioned_load_drop_tol=max(
+            0.0,
+            _env_float(
+                env,
+                "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_COUPLED_PRECONDITIONED_LOAD_DROP_TOL",
+                1.0e-12,
+            ),
+        ),
+        damping=_env_bool(
+            env,
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_COUPLED_DAMPING",
+            default=False,
+        ),
+        beta_max=max(
+            0.0,
+            _env_float(
+                env,
+                "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_COUPLED_BETA_MAX",
+                10.0,
+            ),
+        ),
+        accept_base_improvement=_env_bool(
+            env,
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_COUPLED_ACCEPT_BASE_IMPROVEMENT",
+            default=False,
+        ),
+    )
+
+
 def _xblock_device_flags(method: str) -> tuple[bool, bool, bool, bool, bool]:
     method_s = str(method)
     fgmres = method_s == "fgmres_jax"
@@ -6037,6 +6241,7 @@ __all__ = [
     "SparsePCFactorPreflightPolicy",
     "DirectTailResidualRescuePolicy",
     "DirectTailTrueActiveRescuePolicy",
+    "DirectTailCoupledCoarseRescuePolicy",
     "MatvecCounter",
     "XBlockAssembledOperatorDiagnosticsContext",
     "XBlockSparsePCCoreDiagnosticsContext",
@@ -6064,6 +6269,7 @@ __all__ = [
     "resolve_sparse_pc_factor_preflight_policy",
     "resolve_direct_tail_residual_rescue_policy",
     "resolve_direct_tail_true_active_rescue_policy",
+    "resolve_direct_tail_coupled_coarse_rescue_policy",
     "run_direct_tail_support_mode_preflight",
     "resolve_direct_tail_structured_admission",
     "fp_xblock_global_correction_metadata",
