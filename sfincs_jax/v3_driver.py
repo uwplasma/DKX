@@ -341,6 +341,8 @@ from .problems.profile_response.strong_preconditioning import (
     rhs1_collision_retry_allowed,
     rhs1_fp_strong_size_guard_from_env,
     rhs1_pas_force_strong_ratio_from_env,
+    rhs1_pas_tz_guarded_minres_controls_from_env,
+    rhs1_pas_weak_minres_controls_from_env,
     rhs1_pas_weak_minres_steps,
     rhs1_pas_weak_strong_retry_skip,
     rhs1_resolved_strong_preconditioner_control,
@@ -11388,37 +11390,23 @@ def solve_v3_full_system_linear_gmres(
                             f"matrix-free correction=tzfft unavailable ({type(exc).__name__}); "
                             "using base fallback",
                         )
-            minres_steps_env = os.environ.get("SFINCS_JAX_RHSMODE1_PAS_TZ_GUARDED_MINRES_STEPS", "").strip()
-            minres_clip_env = os.environ.get("SFINCS_JAX_RHSMODE1_PAS_TZ_GUARDED_MINRES_ALPHA_CLIP", "").strip()
-            minres_improve_env = os.environ.get("SFINCS_JAX_RHSMODE1_PAS_TZ_GUARDED_MINRES_MIN_IMPROVEMENT", "").strip()
-            try:
-                minres_steps = int(minres_steps_env) if minres_steps_env else 2
-            except ValueError:
-                minres_steps = 2
-            try:
-                minres_clip = float(minres_clip_env) if minres_clip_env else 10.0
-            except ValueError:
-                minres_clip = 10.0
-            try:
-                minres_improve = float(minres_improve_env) if minres_improve_env else 0.0
-            except ValueError:
-                minres_improve = 0.0
-            if minres_steps > 0:
+            guarded_minres = rhs1_pas_tz_guarded_minres_controls_from_env()
+            if guarded_minres.steps > 0:
                 if pas_tz_guarded_correction_metadata:
                     pas_tz_guarded_correction_metadata[
                         "pas_tz_guarded_correction_full_update_materialized"
                     ] = True
                     pas_tz_guarded_correction_metadata["pas_tz_guarded_correction_minres_steps"] = int(
-                        minres_steps
+                        guarded_minres.steps
                     )
                 x_minres, residual_minres, minres_history, minres_alphas = _apply_preconditioned_minres_correction(
                     matvec=mv_reduced,
                     rhs=rhs_reduced,
                     x0=res_reduced.x,
                     preconditioner=correction_preconditioner,
-                    steps=int(minres_steps),
-                    alpha_clip=float(minres_clip),
-                    min_improvement=float(minres_improve),
+                    steps=int(guarded_minres.steps),
+                    alpha_clip=float(guarded_minres.alpha_clip),
+                    min_improvement=float(guarded_minres.min_improvement),
                 )
                 if minres_history and float(minres_history[-1]) < float(res_reduced.residual_norm):
                     old_residual = float(res_reduced.residual_norm)
@@ -11441,30 +11429,21 @@ def solve_v3_full_system_linear_gmres(
             rhs1_precond_kind=rhs1_precond_kind,
             res_ratio=float(weak_minres_ratio),
         )
+        weak_minres = rhs1_pas_weak_minres_controls_from_env(steps=int(weak_minres_steps))
         if (
             (not rhs1_pas_tz_guarded_fallback)
             and preconditioner_reduced is not None
-            and weak_minres_steps > 0
+            and weak_minres.steps > 0
             and float(res_reduced.residual_norm) > float(target_reduced)
         ):
-            weak_clip_env = os.environ.get("SFINCS_JAX_PAS_WEAK_MINRES_ALPHA_CLIP", "").strip()
-            weak_improve_env = os.environ.get("SFINCS_JAX_PAS_WEAK_MINRES_MIN_IMPROVEMENT", "").strip()
-            try:
-                weak_clip = float(weak_clip_env) if weak_clip_env else 10.0
-            except ValueError:
-                weak_clip = 10.0
-            try:
-                weak_improve = float(weak_improve_env) if weak_improve_env else 0.0
-            except ValueError:
-                weak_improve = 0.0
             x_minres, residual_minres, minres_history, minres_alphas = _apply_preconditioned_minres_correction(
                 matvec=mv_reduced,
                 rhs=rhs_reduced,
                 x0=res_reduced.x,
                 preconditioner=preconditioner_reduced,
-                steps=int(weak_minres_steps),
-                alpha_clip=float(weak_clip),
-                min_improvement=float(weak_improve),
+                steps=int(weak_minres.steps),
+                alpha_clip=float(weak_minres.alpha_clip),
+                min_improvement=float(weak_minres.min_improvement),
             )
             if minres_history and float(minres_history[-1]) < float(res_reduced.residual_norm):
                 old_residual = float(res_reduced.residual_norm)

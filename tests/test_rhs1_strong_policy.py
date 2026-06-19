@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 from sfincs_jax.rhs1_strong_policy import (
+    RHS1MinresCorrectionControls,
     requested_rhs1_strong_preconditioner_kind,
+    rhs1_pas_tz_guarded_minres_controls_from_env,
+    rhs1_pas_weak_minres_controls_from_env,
     rhs1_pas_weak_minres_steps,
     rhs1_pas_weak_strong_retry_skip,
 )
@@ -61,3 +64,58 @@ def test_rhs1_pas_weak_minres_steps_only_for_large_weak_pas(monkeypatch) -> None
 
     monkeypatch.setenv("SFINCS_JAX_PAS_WEAK_MINRES_STEPS", "bad")
     assert rhs1_pas_weak_minres_steps(has_pas=True, rhs1_precond_kind="xmg", res_ratio=1.0e7) == 2
+
+
+def test_rhs1_pas_tz_guarded_minres_controls_from_env(monkeypatch) -> None:
+    monkeypatch.delenv("SFINCS_JAX_RHSMODE1_PAS_TZ_GUARDED_MINRES_STEPS", raising=False)
+    monkeypatch.delenv("SFINCS_JAX_RHSMODE1_PAS_TZ_GUARDED_MINRES_ALPHA_CLIP", raising=False)
+    monkeypatch.delenv("SFINCS_JAX_RHSMODE1_PAS_TZ_GUARDED_MINRES_MIN_IMPROVEMENT", raising=False)
+    assert rhs1_pas_tz_guarded_minres_controls_from_env() == RHS1MinresCorrectionControls(
+        steps=2,
+        alpha_clip=10.0,
+        min_improvement=0.0,
+    )
+
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_PAS_TZ_GUARDED_MINRES_STEPS", "5")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_PAS_TZ_GUARDED_MINRES_ALPHA_CLIP", "2.5")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_PAS_TZ_GUARDED_MINRES_MIN_IMPROVEMENT", "0.1")
+    assert rhs1_pas_tz_guarded_minres_controls_from_env() == RHS1MinresCorrectionControls(
+        steps=5,
+        alpha_clip=2.5,
+        min_improvement=0.1,
+    )
+
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_PAS_TZ_GUARDED_MINRES_STEPS", "bad")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_PAS_TZ_GUARDED_MINRES_ALPHA_CLIP", "bad")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_PAS_TZ_GUARDED_MINRES_MIN_IMPROVEMENT", "bad")
+    assert rhs1_pas_tz_guarded_minres_controls_from_env() == RHS1MinresCorrectionControls(
+        steps=2,
+        alpha_clip=10.0,
+        min_improvement=0.0,
+    )
+
+
+def test_rhs1_pas_weak_minres_controls_from_env(monkeypatch) -> None:
+    monkeypatch.delenv("SFINCS_JAX_PAS_WEAK_MINRES_ALPHA_CLIP", raising=False)
+    monkeypatch.delenv("SFINCS_JAX_PAS_WEAK_MINRES_MIN_IMPROVEMENT", raising=False)
+    assert rhs1_pas_weak_minres_controls_from_env(steps=3) == RHS1MinresCorrectionControls(
+        steps=3,
+        alpha_clip=10.0,
+        min_improvement=0.0,
+    )
+
+    monkeypatch.setenv("SFINCS_JAX_PAS_WEAK_MINRES_ALPHA_CLIP", "4.0")
+    monkeypatch.setenv("SFINCS_JAX_PAS_WEAK_MINRES_MIN_IMPROVEMENT", "0.25")
+    assert rhs1_pas_weak_minres_controls_from_env(steps=7) == RHS1MinresCorrectionControls(
+        steps=7,
+        alpha_clip=4.0,
+        min_improvement=0.25,
+    )
+
+    monkeypatch.setenv("SFINCS_JAX_PAS_WEAK_MINRES_ALPHA_CLIP", "bad")
+    monkeypatch.setenv("SFINCS_JAX_PAS_WEAK_MINRES_MIN_IMPROVEMENT", "bad")
+    assert rhs1_pas_weak_minres_controls_from_env(steps=2) == RHS1MinresCorrectionControls(
+        steps=2,
+        alpha_clip=10.0,
+        min_improvement=0.0,
+    )

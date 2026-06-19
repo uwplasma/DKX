@@ -42,10 +42,14 @@ Make `sfincs_jax` research-grade while preserving the public user contract:
 
 Recent checkpoints:
 
+- RHSMode=1 guarded PAS-TZ and weak PAS MINRES correction controls now use
+  tested profile-response strong-preconditioning policy helpers while
+  correction application and residual acceptance remain driver-owned
+  (current checkpoint).
 - RHSMode=1 FP-only strong-preconditioner size guard now uses a tested
   profile-response strong-preconditioning policy helper while strong
   preconditioner construction and solve execution remain driver-owned
-  (current checkpoint).
+  (`ad43877`).
 - RHSMode=1 collision-preconditioner retry admission and guarded PAS-TZ
   strong-retry opt-in parsing now use tested policy helpers while collision
   preconditioner construction, strong builder execution, measured acceptance,
@@ -275,15 +279,15 @@ Recent checkpoints:
 - `cb295ce` Extract sparse pattern setup.
 - `4b6a5b4` Extract sparse factor policy.
 
-Current source-size snapshot after RHSMode=1 FP-only strong-size guard
+Current source-size snapshot after RHSMode=1 guarded/weak PAS MINRES-control
 extraction:
 
-- `sfincs_jax/v3_driver.py`: `17569` lines.
-- `solve_v3_full_system_linear_gmres`: `12225` lines.
+- `sfincs_jax/v3_driver.py`: `17548` lines.
+- `solve_v3_full_system_linear_gmres`: `12202` lines.
 - `sfincs_jax/v3_results.py`: `119` lines.
 - `sfincs_jax/rhs1_ksp_diagnostics.py`: `306` lines.
 - `sfincs_jax/rhs1_pas_policy.py`: `819` lines.
-- `sfincs_jax/problems/profile_response/strong_preconditioning.py`: `715` lines.
+- `sfincs_jax/problems/profile_response/strong_preconditioning.py`: `774` lines.
 - `sfincs_jax/problems/profile_response/residual.py`: `981` lines.
 - `sfincs_jax/problems/profile_response/handoff.py`: `598` lines.
 - `sfincs_jax/problems/profile_response/policies.py`: `3463` lines.
@@ -295,6 +299,15 @@ extraction:
 
 Recent local validation:
 
+- Strong policy/control shard after guarded/weak PAS MINRES-control
+  extraction: `20 passed in 0.31 s`.
+- Sparse-host/minimum-norm/direct-tail driver shard:
+  `32 passed, 100 deselected in 32.81 s`.
+- Broad profile-response/RHSMode=1 policy, setup, diagnostics, solver, and
+  helper sweep after guarded/weak PAS MINRES-control extraction:
+  `1140 passed in 42.05 s`.
+- Hygiene:
+  `py_compile` and `ruff` passed before the broad shards.
 - Strong-control policy shard after FP-only strong-size guard extraction:
   `14 passed in 0.28 s`.
 - Sparse-host/minimum-norm/direct-tail driver shard:

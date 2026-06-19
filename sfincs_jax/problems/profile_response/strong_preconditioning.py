@@ -64,6 +64,15 @@ class RHS1FPStrongSizeGuard:
     max_active_size: int
 
 
+@dataclass(frozen=True)
+class RHS1MinresCorrectionControls:
+    """Controls for bounded preconditioned-MINRES residual correction."""
+
+    steps: int
+    alpha_clip: float
+    min_improvement: float
+
+
 def requested_rhs1_strong_preconditioner_kind(
     strong_precond_env: str, *, mode: str
 ) -> str | None:
@@ -297,6 +306,53 @@ def rhs1_pas_weak_minres_steps(
     except ValueError:
         steps = 2
     return max(0, int(steps))
+
+
+def rhs1_pas_tz_guarded_minres_controls_from_env() -> RHS1MinresCorrectionControls:
+    """Return guarded PAS-TZ correction controls with historical defaults."""
+
+    steps_env = os.environ.get("SFINCS_JAX_RHSMODE1_PAS_TZ_GUARDED_MINRES_STEPS", "").strip()
+    clip_env = os.environ.get("SFINCS_JAX_RHSMODE1_PAS_TZ_GUARDED_MINRES_ALPHA_CLIP", "").strip()
+    improve_env = os.environ.get(
+        "SFINCS_JAX_RHSMODE1_PAS_TZ_GUARDED_MINRES_MIN_IMPROVEMENT", ""
+    ).strip()
+    try:
+        steps = int(steps_env) if steps_env else 2
+    except ValueError:
+        steps = 2
+    try:
+        alpha_clip = float(clip_env) if clip_env else 10.0
+    except ValueError:
+        alpha_clip = 10.0
+    try:
+        min_improvement = float(improve_env) if improve_env else 0.0
+    except ValueError:
+        min_improvement = 0.0
+    return RHS1MinresCorrectionControls(
+        steps=int(steps),
+        alpha_clip=float(alpha_clip),
+        min_improvement=float(min_improvement),
+    )
+
+
+def rhs1_pas_weak_minres_controls_from_env(*, steps: int) -> RHS1MinresCorrectionControls:
+    """Return weak PAS correction controls for an admitted weak-MINRES pass."""
+
+    clip_env = os.environ.get("SFINCS_JAX_PAS_WEAK_MINRES_ALPHA_CLIP", "").strip()
+    improve_env = os.environ.get("SFINCS_JAX_PAS_WEAK_MINRES_MIN_IMPROVEMENT", "").strip()
+    try:
+        alpha_clip = float(clip_env) if clip_env else 10.0
+    except ValueError:
+        alpha_clip = 10.0
+    try:
+        min_improvement = float(improve_env) if improve_env else 0.0
+    except ValueError:
+        min_improvement = 0.0
+    return RHS1MinresCorrectionControls(
+        steps=int(steps),
+        alpha_clip=float(alpha_clip),
+        min_improvement=float(min_improvement),
+    )
 
 
 # From sfincs_jax.rhs1_strong_control
@@ -687,6 +743,7 @@ def adjust_rhs1_theta_line_auto_kind(
 __all__ = (
     "RHS1StrongAutoSelection",
     "RHS1FPStrongSizeGuard",
+    "RHS1MinresCorrectionControls",
     "RHS1StrongPreconditionerControl",
     "RHS1StrongRetryControls",
     "RHS1StrongTriggerControls",
@@ -698,6 +755,8 @@ __all__ = (
     "rhs1_collision_retry_allowed",
     "rhs1_fp_strong_size_guard_from_env",
     "rhs1_pas_force_strong_ratio_from_env",
+    "rhs1_pas_tz_guarded_minres_controls_from_env",
+    "rhs1_pas_weak_minres_controls_from_env",
     "rhs1_pas_lite_min",
     "rhs1_pas_strong_lmax",
     "rhs1_pas_weak_minres_steps",
