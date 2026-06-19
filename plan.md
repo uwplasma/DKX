@@ -1,6 +1,6 @@
 # SFINCS_JAX Active Execution Plan
 
-Last updated: 2026-06-18 (America/Chicago)
+Last updated: 2026-06-19 (America/Chicago)
 Branch: `refactor/v3-driver-architecture`
 PR state: one draft refactor PR; do not merge until this plan is complete.
 
@@ -56,17 +56,17 @@ Recent checkpoints:
 - `cb295ce` Extract sparse pattern setup.
 - `4b6a5b4` Extract sparse factor policy.
 
-Current source-size snapshot after the factor-preflight evaluation extraction:
+Current source-size snapshot after the residual-candidate acceptance extraction:
 
-- `sfincs_jax/v3_driver.py`: `19608` lines.
-- `solve_v3_full_system_linear_gmres`: `14281` lines.
+- `sfincs_jax/v3_driver.py`: `19457` lines.
+- `solve_v3_full_system_linear_gmres`: `14128` lines.
 
 Recent local validation:
 
-- Focused sparse-PC/direct-tail/factor-preflight-evaluation shard:
-  `130 passed in 1.46 s`.
+- Focused sparse-PC/direct-tail/residual-acceptance shard:
+  `134 passed in 1.49 s`.
 - Latest broad profile-response/x-block/sparse-pattern shard:
-  `408 passed in 115.64 s`.
+  `412 passed in 117.63 s`.
 
 Known CI issue fixed by this rewrite:
 
@@ -77,7 +77,7 @@ Known CI issue fixed by this rewrite:
 
 ### 1. `v3_driver.py` Architecture Refactor
 
-Completion estimate: 76%.
+Completion estimate: 77%.
 
 Goal:
 
@@ -101,11 +101,12 @@ Completed recent boundaries:
 - Direct-tail true-active rescue policy parsing.
 - Direct-tail coupled-coarse rescue policy parsing.
 - Sparse-PC factor-preflight residual evaluation.
+- Sparse-PC residual-candidate acceptance/update bookkeeping.
 
 Next steps:
 
-- Extract repeated residual-accept/update bookkeeping for rescue candidates
-  into separately tested helpers.
+- Extract remaining sparse-PC retry candidate admission/update bookkeeping into
+  separately tested helpers.
 - Move remaining generic sparse-PC solve/result assembly into cohesive
   `profile_response` helpers.
 - Continue shrinking `solve_v3_full_system_linear_gmres` in behavior-preserving
@@ -165,9 +166,9 @@ Next steps:
 
 ## Immediate Next Steps
 
-1. Commit and push the factor-preflight evaluation extraction after a final
-   clean diff.
-2. Continue with repeated residual-accept/update bookkeeping extraction.
+1. Commit and push the residual-candidate acceptance extraction after final
+   cleanup.
+2. Continue with sparse-PC auto-preflight retry admission/update extraction.
 3. Run focused sparse-PC tests and the broad profile-response/x-block/sparse
    shard after each extraction.
 4. Snapshot CI but do not wait on queued runs unless a completed failure appears.

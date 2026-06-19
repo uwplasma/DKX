@@ -221,6 +221,7 @@ from .problems.profile_response.sparse_pc import (
     SparsePCMemoryBudgetPreflightContext,
     SparsePCFactorPreflightPolicyContext,
     SparsePCFactorPreflightEvaluationContext,
+    SparsePCResidualCandidateAcceptanceContext,
     SparsePCPatternSetupContext,
     SparsePCGMRESContext,
     SparsePCPostMinresContext,
@@ -241,6 +242,7 @@ from .problems.profile_response.sparse_pc import (
     build_direct_tail_materialization_setup,
     evaluate_xblock_moment_schur_probe_result,
     evaluate_sparse_pc_factor_preflight,
+    evaluate_sparse_pc_residual_candidate_acceptance,
     enforce_sparse_pc_memory_budget,
     failed_xblock_global_coupling_metadata,
     failed_xblock_moment_schur_metadata,
@@ -8163,65 +8165,38 @@ def solve_v3_full_system_linear_gmres(
                             direct_tail_true_coupled_coarse_metadata["base_residual_after"] = float(
                                 factor_preflight_residual_after
                             )
-                            strict_true_coupled_accept = bool(
-                                np.isfinite(float(direct_tail_true_coupled_coarse_residual_after))
-                                and float(direct_tail_true_coupled_coarse_residual_after)
-                                < float(factor_preflight_residual_after)
-                                and factor_preflight_residual_before is not None
-                                and float(direct_tail_true_coupled_coarse_residual_after)
-                                < float(factor_preflight_residual_before)
+                            true_coupled_acceptance = evaluate_sparse_pc_residual_candidate_acceptance(
+                                SparsePCResidualCandidateAcceptanceContext(
+                                    candidate_residual_after=float(
+                                        direct_tail_true_coupled_coarse_residual_after
+                                    ),
+                                    current_residual_after=float(factor_preflight_residual_after),
+                                    original_residual_before=factor_preflight_residual_before,
+                                    target=float(target),
+                                    max_target_ratio=float(factor_preflight_max_target_ratio),
+                                    seed_enabled=bool(factor_preflight_seed_enabled),
+                                    accept_base_improvement=bool(
+                                        direct_tail_true_coupled_coarse_accept_base_improvement
+                                    ),
+                                    base_improvement_requires_original_miss=False,
+                                    base_improvement_sets_passed=True,
+                                )
                             )
-                            base_improvement_accept = bool(
-                                direct_tail_true_coupled_coarse_accept_base_improvement
-                                and np.isfinite(float(direct_tail_true_coupled_coarse_residual_after))
-                                and float(direct_tail_true_coupled_coarse_residual_after)
-                                < float(factor_preflight_residual_after)
-                            )
-                            if strict_true_coupled_accept or base_improvement_accept:
+                            if bool(true_coupled_acceptance.accepted):
                                 direct_tail_true_coupled_coarse_selected = True
                                 direct_tail_true_coupled_coarse_base_improvement_override_used = bool(
-                                    base_improvement_accept
+                                    true_coupled_acceptance.base_improvement_override_used
                                 )
                                 factor_bundle_pc = true_coupled_bundle
                                 pc_factor_s += float(true_coupled_bundle.factor_s or 0.0)
                                 setup_s = sparse_timer.elapsed_s()
-                                factor_preflight_residual_after = float(
-                                    direct_tail_true_coupled_coarse_residual_after
-                                )
+                                factor_preflight_residual_after = float(true_coupled_acceptance.residual_after)
                                 residual_vec_current = residual_vec_true_coupled
                                 factor_preflight_residual_diagnostics = true_coupled_diagnostics
-                                if (
-                                    factor_preflight_residual_before is not None
-                                    and float(factor_preflight_residual_before) > 0.0
-                                ):
-                                    factor_preflight_improvement_ratio = (
-                                        float(factor_preflight_residual_before)
-                                        / max(float(factor_preflight_residual_after), 1.0e-300)
-                                    )
-                                if float(target) > 0.0:
-                                    factor_preflight_target_ratio = (
-                                        float(factor_preflight_residual_after) / float(target)
-                                        if np.isfinite(float(factor_preflight_residual_after))
-                                        else float("inf")
-                                    )
-                                factor_preflight_passed = bool(
-                                    np.isfinite(float(factor_preflight_residual_after))
-                                    and float(factor_preflight_residual_after)
-                                    < float(factor_preflight_residual_before)
-                                    and (
-                                        factor_preflight_target_ratio is None
-                                        or float(factor_preflight_target_ratio)
-                                        <= float(factor_preflight_max_target_ratio)
-                                    )
-                                )
-                                if bool(direct_tail_true_coupled_coarse_base_improvement_override_used):
-                                    factor_preflight_passed = True
-                                if (
-                                    bool(factor_preflight_seed_enabled)
-                                    and np.isfinite(float(factor_preflight_residual_after))
-                                    and float(factor_preflight_residual_after)
-                                    < float(factor_preflight_residual_before)
-                                ):
+                                factor_preflight_improvement_ratio = true_coupled_acceptance.improvement_ratio
+                                factor_preflight_target_ratio = true_coupled_acceptance.target_ratio
+                                factor_preflight_passed = bool(true_coupled_acceptance.passed)
+                                if bool(true_coupled_acceptance.seed_used):
                                     x0_sparse = x_true_coupled_sparse
                                     factor_preflight_seed_used = True
                                 if emit is not None:
@@ -8362,53 +8337,40 @@ def solve_v3_full_system_linear_gmres(
                             direct_tail_true_active_submatrix_metadata["base_residual_after"] = float(
                                 factor_preflight_residual_after
                             )
-                            if (
-                                np.isfinite(float(direct_tail_true_active_submatrix_residual_after))
-                                and float(direct_tail_true_active_submatrix_residual_after)
-                                < float(factor_preflight_residual_after)
-                                * (1.0 - float(direct_tail_true_active_submatrix_min_improvement))
-                            ):
+                            true_active_submatrix_acceptance = (
+                                evaluate_sparse_pc_residual_candidate_acceptance(
+                                    SparsePCResidualCandidateAcceptanceContext(
+                                        candidate_residual_after=float(
+                                            direct_tail_true_active_submatrix_residual_after
+                                        ),
+                                        current_residual_after=float(factor_preflight_residual_after),
+                                        original_residual_before=factor_preflight_residual_before,
+                                        target=float(target),
+                                        max_target_ratio=float(factor_preflight_max_target_ratio),
+                                        seed_enabled=bool(factor_preflight_seed_enabled),
+                                        require_original_improvement=False,
+                                        current_min_improvement=float(
+                                            direct_tail_true_active_submatrix_min_improvement
+                                        ),
+                                    )
+                                )
+                            )
+                            if bool(true_active_submatrix_acceptance.accepted):
                                 direct_tail_true_active_submatrix_selected = True
                                 factor_bundle_pc = true_active_submatrix_bundle
                                 pc_factor_s += float(true_active_submatrix_bundle.factor_s or 0.0)
                                 setup_s = sparse_timer.elapsed_s()
                                 factor_preflight_residual_after = float(
-                                    direct_tail_true_active_submatrix_residual_after
+                                    true_active_submatrix_acceptance.residual_after
                                 )
                                 residual_vec_current = residual_vec_true_active_submatrix
                                 factor_preflight_residual_diagnostics = true_active_submatrix_diagnostics
-                                if (
-                                    factor_preflight_residual_before is not None
-                                    and float(factor_preflight_residual_before) > 0.0
-                                ):
-                                    factor_preflight_improvement_ratio = (
-                                        float(factor_preflight_residual_before)
-                                        / max(float(factor_preflight_residual_after), 1.0e-300)
-                                    )
-                                if float(target) > 0.0:
-                                    factor_preflight_target_ratio = (
-                                        float(factor_preflight_residual_after) / float(target)
-                                        if np.isfinite(float(factor_preflight_residual_after))
-                                        else float("inf")
-                                    )
-                                factor_preflight_passed = bool(
-                                    np.isfinite(float(factor_preflight_residual_after))
-                                    and factor_preflight_residual_before is not None
-                                    and float(factor_preflight_residual_after)
-                                    < float(factor_preflight_residual_before)
-                                    and (
-                                        factor_preflight_target_ratio is None
-                                        or float(factor_preflight_target_ratio)
-                                        <= float(factor_preflight_max_target_ratio)
-                                    )
+                                factor_preflight_improvement_ratio = (
+                                    true_active_submatrix_acceptance.improvement_ratio
                                 )
-                                if (
-                                    bool(factor_preflight_seed_enabled)
-                                    and factor_preflight_residual_before is not None
-                                    and np.isfinite(float(factor_preflight_residual_after))
-                                    and float(factor_preflight_residual_after)
-                                    < float(factor_preflight_residual_before)
-                                ):
+                                factor_preflight_target_ratio = true_active_submatrix_acceptance.target_ratio
+                                factor_preflight_passed = bool(true_active_submatrix_acceptance.passed)
+                                if bool(true_active_submatrix_acceptance.seed_used):
                                     x0_sparse = x_true_active_submatrix_sparse
                                     factor_preflight_seed_used = True
                                 if emit is not None:
@@ -8495,50 +8457,31 @@ def solve_v3_full_system_linear_gmres(
                             direct_tail_true_active_block_metadata["base_residual_after"] = float(
                                 factor_preflight_residual_after
                             )
-                            if (
-                                np.isfinite(float(direct_tail_true_active_block_residual_after))
-                                and float(direct_tail_true_active_block_residual_after)
-                                < float(factor_preflight_residual_after)
-                            ):
+                            true_active_block_acceptance = evaluate_sparse_pc_residual_candidate_acceptance(
+                                SparsePCResidualCandidateAcceptanceContext(
+                                    candidate_residual_after=float(
+                                        direct_tail_true_active_block_residual_after
+                                    ),
+                                    current_residual_after=float(factor_preflight_residual_after),
+                                    original_residual_before=factor_preflight_residual_before,
+                                    target=float(target),
+                                    max_target_ratio=float(factor_preflight_max_target_ratio),
+                                    seed_enabled=bool(factor_preflight_seed_enabled),
+                                    require_original_improvement=False,
+                                )
+                            )
+                            if bool(true_active_block_acceptance.accepted):
                                 direct_tail_true_active_block_selected = True
                                 factor_bundle_pc = true_active_block_bundle
                                 pc_factor_s += float(true_active_block_bundle.factor_s or 0.0)
                                 setup_s = sparse_timer.elapsed_s()
-                                factor_preflight_residual_after = float(direct_tail_true_active_block_residual_after)
+                                factor_preflight_residual_after = float(true_active_block_acceptance.residual_after)
                                 residual_vec_current = residual_vec_true_active_block
                                 factor_preflight_residual_diagnostics = true_active_block_diagnostics
-                                if (
-                                    factor_preflight_residual_before is not None
-                                    and float(factor_preflight_residual_before) > 0.0
-                                ):
-                                    factor_preflight_improvement_ratio = (
-                                        float(factor_preflight_residual_before)
-                                        / max(float(factor_preflight_residual_after), 1.0e-300)
-                                    )
-                                if float(target) > 0.0:
-                                    factor_preflight_target_ratio = (
-                                        float(factor_preflight_residual_after) / float(target)
-                                        if np.isfinite(float(factor_preflight_residual_after))
-                                        else float("inf")
-                                    )
-                                factor_preflight_passed = bool(
-                                    np.isfinite(float(factor_preflight_residual_after))
-                                    and factor_preflight_residual_before is not None
-                                    and float(factor_preflight_residual_after)
-                                    < float(factor_preflight_residual_before)
-                                    and (
-                                        factor_preflight_target_ratio is None
-                                        or float(factor_preflight_target_ratio)
-                                        <= float(factor_preflight_max_target_ratio)
-                                    )
-                                )
-                                if (
-                                    bool(factor_preflight_seed_enabled)
-                                    and factor_preflight_residual_before is not None
-                                    and np.isfinite(float(factor_preflight_residual_after))
-                                    and float(factor_preflight_residual_after)
-                                    < float(factor_preflight_residual_before)
-                                ):
+                                factor_preflight_improvement_ratio = true_active_block_acceptance.improvement_ratio
+                                factor_preflight_target_ratio = true_active_block_acceptance.target_ratio
+                                factor_preflight_passed = bool(true_active_block_acceptance.passed)
+                                if bool(true_active_block_acceptance.seed_used):
                                     x0_sparse = x_true_active_block_sparse
                                     factor_preflight_seed_used = True
                                 if emit is not None:
@@ -8625,26 +8568,30 @@ def solve_v3_full_system_linear_gmres(
                             direct_tail_true_active_residual_block_metadata["base_residual_after"] = float(
                                 factor_preflight_residual_after
                             )
-                            residual_block_improves_current = (
-                                np.isfinite(float(direct_tail_true_active_residual_block_residual_after))
-                                and float(direct_tail_true_active_residual_block_residual_after)
-                                < float(factor_preflight_residual_after)
-                                * (1.0 - float(direct_tail_true_active_residual_block_min_improvement))
-                            )
-                            residual_block_improves_original = (
-                                factor_preflight_residual_before is None
-                                or (
-                                    np.isfinite(float(direct_tail_true_active_residual_block_residual_after))
-                                    and float(direct_tail_true_active_residual_block_residual_after)
-                                    < float(factor_preflight_residual_before)
+                            true_active_residual_block_acceptance = (
+                                evaluate_sparse_pc_residual_candidate_acceptance(
+                                    SparsePCResidualCandidateAcceptanceContext(
+                                        candidate_residual_after=float(
+                                            direct_tail_true_active_residual_block_residual_after
+                                        ),
+                                        current_residual_after=float(factor_preflight_residual_after),
+                                        original_residual_before=factor_preflight_residual_before,
+                                        target=float(target),
+                                        max_target_ratio=float(factor_preflight_max_target_ratio),
+                                        seed_enabled=bool(factor_preflight_seed_enabled),
+                                        current_min_improvement=float(
+                                            direct_tail_true_active_residual_block_min_improvement
+                                        ),
+                                        accept_base_improvement=bool(
+                                            direct_tail_true_active_residual_block_accept_base_improvement
+                                        ),
+                                        missing_original_improves=True,
+                                    )
                                 )
                             )
-                            if (
-                                bool(residual_block_improves_current)
-                                and not bool(residual_block_improves_original)
-                                and bool(direct_tail_true_active_residual_block_accept_base_improvement)
-                            ):
-                                direct_tail_true_active_residual_block_base_improvement_override_used = True
+                            direct_tail_true_active_residual_block_base_improvement_override_used = bool(
+                                true_active_residual_block_acceptance.base_improvement_override_used
+                            )
                             direct_tail_true_active_residual_block_metadata[
                                 "accept_base_improvement"
                             ] = bool(direct_tail_true_active_residual_block_accept_base_improvement)
@@ -8653,58 +8600,28 @@ def solve_v3_full_system_linear_gmres(
                             ] = bool(direct_tail_true_active_residual_block_base_improvement_override_used)
                             direct_tail_true_active_residual_block_metadata[
                                 "improves_current_residual"
-                            ] = bool(residual_block_improves_current)
+                            ] = bool(true_active_residual_block_acceptance.improves_current_residual)
                             direct_tail_true_active_residual_block_metadata[
                                 "improves_original_residual"
-                            ] = bool(residual_block_improves_original)
-                            if (
-                                bool(residual_block_improves_current)
-                                and (
-                                    bool(residual_block_improves_original)
-                                    or bool(direct_tail_true_active_residual_block_base_improvement_override_used)
-                                )
-                            ):
+                            ] = bool(true_active_residual_block_acceptance.improves_original_residual)
+                            if bool(true_active_residual_block_acceptance.accepted):
                                 direct_tail_true_active_residual_block_selected = True
                                 factor_bundle_pc = true_active_residual_block_bundle
                                 pc_factor_s += float(true_active_residual_block_bundle.factor_s or 0.0)
                                 setup_s = sparse_timer.elapsed_s()
                                 factor_preflight_residual_after = float(
-                                    direct_tail_true_active_residual_block_residual_after
+                                    true_active_residual_block_acceptance.residual_after
                                 )
                                 residual_vec_current = residual_vec_true_active_residual_block
                                 factor_preflight_residual_diagnostics = true_active_residual_block_diagnostics
-                                if (
-                                    factor_preflight_residual_before is not None
-                                    and float(factor_preflight_residual_before) > 0.0
-                                ):
-                                    factor_preflight_improvement_ratio = (
-                                        float(factor_preflight_residual_before)
-                                        / max(float(factor_preflight_residual_after), 1.0e-300)
-                                    )
-                                if float(target) > 0.0:
-                                    factor_preflight_target_ratio = (
-                                        float(factor_preflight_residual_after) / float(target)
-                                        if np.isfinite(float(factor_preflight_residual_after))
-                                        else float("inf")
-                                    )
-                                factor_preflight_passed = bool(
-                                    np.isfinite(float(factor_preflight_residual_after))
-                                    and factor_preflight_residual_before is not None
-                                    and float(factor_preflight_residual_after)
-                                    < float(factor_preflight_residual_before)
-                                    and (
-                                        factor_preflight_target_ratio is None
-                                        or float(factor_preflight_target_ratio)
-                                        <= float(factor_preflight_max_target_ratio)
-                                    )
+                                factor_preflight_improvement_ratio = (
+                                    true_active_residual_block_acceptance.improvement_ratio
                                 )
-                                if (
-                                    bool(factor_preflight_seed_enabled)
-                                    and factor_preflight_residual_before is not None
-                                    and np.isfinite(float(factor_preflight_residual_after))
-                                    and float(factor_preflight_residual_after)
-                                    < float(factor_preflight_residual_before)
-                                ):
+                                factor_preflight_target_ratio = (
+                                    true_active_residual_block_acceptance.target_ratio
+                                )
+                                factor_preflight_passed = bool(true_active_residual_block_acceptance.passed)
+                                if bool(true_active_residual_block_acceptance.seed_used):
                                     x0_sparse = x_true_active_residual_block_sparse
                                     factor_preflight_seed_used = True
                                 if emit is not None:
@@ -8724,7 +8641,8 @@ def solve_v3_full_system_linear_gmres(
                                     "solve_v3_full_system_linear_gmres: true active residual block rejected "
                                     f"residual={float(factor_preflight_residual_after):.6e}"
                                     f"->{float(direct_tail_true_active_residual_block_residual_after):.6e} "
-                                    f"improves_original={bool(residual_block_improves_original)}",
+                                    "improves_original="
+                                    f"{bool(true_active_residual_block_acceptance.improves_original_residual)}",
                                 )
                     except Exception as exc:  # noqa: BLE001
                         direct_tail_true_active_residual_block_error = f"{type(exc).__name__}: {exc}"
@@ -8787,51 +8705,28 @@ def solve_v3_full_system_linear_gmres(
                             direct_tail_true_window_metadata["base_residual_after"] = float(
                                 factor_preflight_residual_after
                             )
-                            if (
-                                np.isfinite(float(direct_tail_true_window_residual_after))
-                                and float(direct_tail_true_window_residual_after)
-                                < float(factor_preflight_residual_after)
-                                and factor_preflight_residual_before is not None
-                                and float(direct_tail_true_window_residual_after)
-                                < float(factor_preflight_residual_before)
-                            ):
+                            true_window_acceptance = evaluate_sparse_pc_residual_candidate_acceptance(
+                                SparsePCResidualCandidateAcceptanceContext(
+                                    candidate_residual_after=float(direct_tail_true_window_residual_after),
+                                    current_residual_after=float(factor_preflight_residual_after),
+                                    original_residual_before=factor_preflight_residual_before,
+                                    target=float(target),
+                                    max_target_ratio=float(factor_preflight_max_target_ratio),
+                                    seed_enabled=bool(factor_preflight_seed_enabled),
+                                )
+                            )
+                            if bool(true_window_acceptance.accepted):
                                 direct_tail_true_window_selected = True
                                 factor_bundle_pc = true_window_bundle
                                 pc_factor_s += float(true_window_bundle.factor_s or 0.0)
                                 setup_s = sparse_timer.elapsed_s()
-                                factor_preflight_residual_after = float(direct_tail_true_window_residual_after)
+                                factor_preflight_residual_after = float(true_window_acceptance.residual_after)
                                 residual_vec_current = residual_vec_true_window
                                 factor_preflight_residual_diagnostics = true_window_diagnostics
-                                if (
-                                    factor_preflight_residual_before is not None
-                                    and float(factor_preflight_residual_before) > 0.0
-                                ):
-                                    factor_preflight_improvement_ratio = (
-                                        float(factor_preflight_residual_before)
-                                        / max(float(factor_preflight_residual_after), 1.0e-300)
-                                    )
-                                if float(target) > 0.0:
-                                    factor_preflight_target_ratio = (
-                                        float(factor_preflight_residual_after) / float(target)
-                                        if np.isfinite(float(factor_preflight_residual_after))
-                                        else float("inf")
-                                    )
-                                factor_preflight_passed = bool(
-                                    np.isfinite(float(factor_preflight_residual_after))
-                                    and float(factor_preflight_residual_after)
-                                    < float(factor_preflight_residual_before)
-                                    and (
-                                        factor_preflight_target_ratio is None
-                                        or float(factor_preflight_target_ratio)
-                                        <= float(factor_preflight_max_target_ratio)
-                                    )
-                                )
-                                if (
-                                    bool(factor_preflight_seed_enabled)
-                                    and np.isfinite(float(factor_preflight_residual_after))
-                                    and float(factor_preflight_residual_after)
-                                    < float(factor_preflight_residual_before)
-                                ):
+                                factor_preflight_improvement_ratio = true_window_acceptance.improvement_ratio
+                                factor_preflight_target_ratio = true_window_acceptance.target_ratio
+                                factor_preflight_passed = bool(true_window_acceptance.passed)
+                                if bool(true_window_acceptance.seed_used):
                                     x0_sparse = x_true_window_sparse
                                     factor_preflight_seed_used = True
                                 if emit is not None:
@@ -8902,51 +8797,28 @@ def solve_v3_full_system_linear_gmres(
                             direct_tail_residual_coarse_metadata["base_residual_after"] = float(
                                 factor_preflight_residual_after
                             )
-                            if (
-                                np.isfinite(float(direct_tail_residual_coarse_residual_after))
-                                and float(direct_tail_residual_coarse_residual_after)
-                                < float(factor_preflight_residual_after)
-                                and factor_preflight_residual_before is not None
-                                and float(direct_tail_residual_coarse_residual_after)
-                                < float(factor_preflight_residual_before)
-                            ):
+                            residual_coarse_acceptance = evaluate_sparse_pc_residual_candidate_acceptance(
+                                SparsePCResidualCandidateAcceptanceContext(
+                                    candidate_residual_after=float(direct_tail_residual_coarse_residual_after),
+                                    current_residual_after=float(factor_preflight_residual_after),
+                                    original_residual_before=factor_preflight_residual_before,
+                                    target=float(target),
+                                    max_target_ratio=float(factor_preflight_max_target_ratio),
+                                    seed_enabled=bool(factor_preflight_seed_enabled),
+                                )
+                            )
+                            if bool(residual_coarse_acceptance.accepted):
                                 direct_tail_residual_coarse_selected = True
                                 factor_bundle_pc = residual_coarse_bundle
                                 pc_factor_s += float(residual_coarse_bundle.factor_s or 0.0)
                                 setup_s = sparse_timer.elapsed_s()
-                                factor_preflight_residual_after = float(direct_tail_residual_coarse_residual_after)
+                                factor_preflight_residual_after = float(residual_coarse_acceptance.residual_after)
                                 residual_vec_current = residual_vec_rescue
                                 factor_preflight_residual_diagnostics = rescue_diagnostics
-                                if (
-                                    factor_preflight_residual_before is not None
-                                    and float(factor_preflight_residual_before) > 0.0
-                                ):
-                                    factor_preflight_improvement_ratio = (
-                                        float(factor_preflight_residual_before)
-                                        / max(float(factor_preflight_residual_after), 1.0e-300)
-                                    )
-                                if float(target) > 0.0:
-                                    factor_preflight_target_ratio = (
-                                        float(factor_preflight_residual_after) / float(target)
-                                        if np.isfinite(float(factor_preflight_residual_after))
-                                        else float("inf")
-                                    )
-                                factor_preflight_passed = bool(
-                                    np.isfinite(float(factor_preflight_residual_after))
-                                    and float(factor_preflight_residual_after)
-                                    < float(factor_preflight_residual_before)
-                                    and (
-                                        factor_preflight_target_ratio is None
-                                        or float(factor_preflight_target_ratio)
-                                        <= float(factor_preflight_max_target_ratio)
-                                    )
-                                )
-                                if (
-                                    bool(factor_preflight_seed_enabled)
-                                    and np.isfinite(float(factor_preflight_residual_after))
-                                    and float(factor_preflight_residual_after)
-                                    < float(factor_preflight_residual_before)
-                                ):
+                                factor_preflight_improvement_ratio = residual_coarse_acceptance.improvement_ratio
+                                factor_preflight_target_ratio = residual_coarse_acceptance.target_ratio
+                                factor_preflight_passed = bool(residual_coarse_acceptance.passed)
+                                if bool(residual_coarse_acceptance.seed_used):
                                     x0_sparse = x_rescue_sparse
                                     factor_preflight_seed_used = True
                                 if emit is not None:
@@ -9025,51 +8897,28 @@ def solve_v3_full_system_linear_gmres(
                             direct_tail_residual_window_metadata["base_residual_after"] = float(
                                 factor_preflight_residual_after
                             )
-                            if (
-                                np.isfinite(float(direct_tail_residual_window_residual_after))
-                                and float(direct_tail_residual_window_residual_after)
-                                < float(factor_preflight_residual_after)
-                                and factor_preflight_residual_before is not None
-                                and float(direct_tail_residual_window_residual_after)
-                                < float(factor_preflight_residual_before)
-                            ):
+                            residual_window_acceptance = evaluate_sparse_pc_residual_candidate_acceptance(
+                                SparsePCResidualCandidateAcceptanceContext(
+                                    candidate_residual_after=float(direct_tail_residual_window_residual_after),
+                                    current_residual_after=float(factor_preflight_residual_after),
+                                    original_residual_before=factor_preflight_residual_before,
+                                    target=float(target),
+                                    max_target_ratio=float(factor_preflight_max_target_ratio),
+                                    seed_enabled=bool(factor_preflight_seed_enabled),
+                                )
+                            )
+                            if bool(residual_window_acceptance.accepted):
                                 direct_tail_residual_window_selected = True
                                 factor_bundle_pc = residual_window_bundle
                                 pc_factor_s += float(residual_window_bundle.factor_s or 0.0)
                                 setup_s = sparse_timer.elapsed_s()
-                                factor_preflight_residual_after = float(direct_tail_residual_window_residual_after)
+                                factor_preflight_residual_after = float(residual_window_acceptance.residual_after)
                                 residual_vec_current = residual_vec_window
                                 factor_preflight_residual_diagnostics = window_diagnostics
-                                if (
-                                    factor_preflight_residual_before is not None
-                                    and float(factor_preflight_residual_before) > 0.0
-                                ):
-                                    factor_preflight_improvement_ratio = (
-                                        float(factor_preflight_residual_before)
-                                        / max(float(factor_preflight_residual_after), 1.0e-300)
-                                    )
-                                if float(target) > 0.0:
-                                    factor_preflight_target_ratio = (
-                                        float(factor_preflight_residual_after) / float(target)
-                                        if np.isfinite(float(factor_preflight_residual_after))
-                                        else float("inf")
-                                    )
-                                factor_preflight_passed = bool(
-                                    np.isfinite(float(factor_preflight_residual_after))
-                                    and float(factor_preflight_residual_after)
-                                    < float(factor_preflight_residual_before)
-                                    and (
-                                        factor_preflight_target_ratio is None
-                                        or float(factor_preflight_target_ratio)
-                                        <= float(factor_preflight_max_target_ratio)
-                                    )
-                                )
-                                if (
-                                    bool(factor_preflight_seed_enabled)
-                                    and np.isfinite(float(factor_preflight_residual_after))
-                                    and float(factor_preflight_residual_after)
-                                    < float(factor_preflight_residual_before)
-                                ):
+                                factor_preflight_improvement_ratio = residual_window_acceptance.improvement_ratio
+                                factor_preflight_target_ratio = residual_window_acceptance.target_ratio
+                                factor_preflight_passed = bool(residual_window_acceptance.passed)
+                                if bool(residual_window_acceptance.seed_used):
                                     x0_sparse = x_window_sparse
                                     factor_preflight_seed_used = True
                                 if emit is not None:

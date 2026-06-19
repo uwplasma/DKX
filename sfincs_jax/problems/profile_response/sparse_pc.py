@@ -627,6 +627,42 @@ class SparsePCFactorPreflightEvaluationResult:
 
 
 @dataclass(frozen=True)
+class SparsePCResidualCandidateAcceptanceContext:
+    """Residual-admission controls for one sparse-PC rescue candidate."""
+
+    candidate_residual_after: float
+    current_residual_after: float | None
+    original_residual_before: float | None
+    target: float
+    max_target_ratio: float
+    seed_enabled: bool
+    require_original_improvement: bool = True
+    current_min_improvement: float = 0.0
+    accept_base_improvement: bool = False
+    base_improvement_requires_original_miss: bool = True
+    base_improvement_sets_passed: bool = False
+    missing_original_improves: bool = False
+
+
+@dataclass(frozen=True)
+class SparsePCResidualCandidateAcceptanceResult:
+    """Admission and post-admission residual metrics for a rescue candidate."""
+
+    finite_candidate: bool
+    improves_current_residual: bool
+    improves_original_residual: bool
+    strict_accept: bool
+    base_improvement_accept: bool
+    accepted: bool
+    base_improvement_override_used: bool
+    residual_after: float
+    improvement_ratio: float | None
+    target_ratio: float | None
+    passed: bool
+    seed_used: bool
+
+
+@dataclass(frozen=True)
 class DirectTailResidualRescuePolicy:
     """Resolved direct-tail residual rescue controls."""
 
@@ -3224,6 +3260,90 @@ def evaluate_sparse_pc_factor_preflight(
         x_seed=x_seed,
         residual_vec=residual_vec,
         x0_seed=x_seed if bool(seed_used) else None,
+    )
+
+
+def evaluate_sparse_pc_residual_candidate_acceptance(
+    context: SparsePCResidualCandidateAcceptanceContext,
+) -> SparsePCResidualCandidateAcceptanceResult:
+    """Evaluate residual admission for one sparse-PC rescue candidate.
+
+    The driver owns candidate construction and state updates; this helper owns
+    only the scalar residual bookkeeping that every rescue path repeats.
+    """
+
+    candidate = float(context.candidate_residual_after)
+    current = context.current_residual_after
+    original = context.original_residual_before
+    finite_candidate = bool(np.isfinite(candidate))
+
+    improves_current = False
+    if current is not None and np.isfinite(float(current)):
+        threshold = float(current) * (1.0 - float(context.current_min_improvement))
+        improves_current = bool(finite_candidate and candidate < threshold)
+
+    if original is None:
+        improves_original = bool(context.missing_original_improves)
+    else:
+        improves_original = bool(
+            finite_candidate
+            and np.isfinite(float(original))
+            and candidate < float(original)
+        )
+
+    strict_accept = bool(
+        improves_current
+        and (
+            not bool(context.require_original_improvement)
+            or bool(improves_original)
+        )
+    )
+    base_improvement_accept = bool(
+        context.accept_base_improvement
+        and improves_current
+        and (
+            not bool(context.base_improvement_requires_original_miss)
+            or not bool(improves_original)
+        )
+    )
+    accepted = bool(strict_accept or base_improvement_accept)
+    base_improvement_override_used = bool(base_improvement_accept)
+
+    improvement_ratio: float | None = None
+    if original is not None and float(original) > 0.0 and finite_candidate:
+        improvement_ratio = float(original) / max(candidate, 1.0e-300)
+
+    target_ratio: float | None = None
+    if float(context.target) > 0.0:
+        target_ratio = candidate / float(context.target) if finite_candidate else float("inf")
+
+    passed = bool(
+        finite_candidate
+        and original is not None
+        and candidate < float(original)
+        and (
+            target_ratio is None
+            or float(target_ratio) <= float(context.max_target_ratio)
+        )
+    )
+    if bool(base_improvement_override_used) and bool(context.base_improvement_sets_passed):
+        passed = True
+
+    seed_used = bool(context.seed_enabled and original is not None and finite_candidate and candidate < float(original))
+
+    return SparsePCResidualCandidateAcceptanceResult(
+        finite_candidate=bool(finite_candidate),
+        improves_current_residual=bool(improves_current),
+        improves_original_residual=bool(improves_original),
+        strict_accept=bool(strict_accept),
+        base_improvement_accept=bool(base_improvement_accept),
+        accepted=bool(accepted),
+        base_improvement_override_used=bool(base_improvement_override_used),
+        residual_after=float(candidate),
+        improvement_ratio=improvement_ratio,
+        target_ratio=target_ratio,
+        passed=bool(passed),
+        seed_used=bool(seed_used),
     )
 
 
@@ -6325,6 +6445,8 @@ __all__ = [
     "SparsePCFactorPreflightPolicy",
     "SparsePCFactorPreflightEvaluationContext",
     "SparsePCFactorPreflightEvaluationResult",
+    "SparsePCResidualCandidateAcceptanceContext",
+    "SparsePCResidualCandidateAcceptanceResult",
     "DirectTailResidualRescuePolicy",
     "DirectTailTrueActiveRescuePolicy",
     "DirectTailCoupledCoarseRescuePolicy",
@@ -6353,6 +6475,7 @@ __all__ = [
     "build_direct_tail_structured_preconditioner_setup",
     "enforce_sparse_pc_memory_budget",
     "evaluate_sparse_pc_factor_preflight",
+    "evaluate_sparse_pc_residual_candidate_acceptance",
     "resolve_sparse_pc_factor_preflight_policy",
     "resolve_direct_tail_residual_rescue_policy",
     "resolve_direct_tail_true_active_rescue_policy",

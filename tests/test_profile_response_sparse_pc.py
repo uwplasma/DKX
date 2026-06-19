@@ -25,6 +25,7 @@ from sfincs_jax.problems.profile_response.sparse_pc import (
     DirectTailCoupledCoarseRescuePolicy,
     SparsePCFactorPreflightPolicyContext,
     SparsePCFactorPreflightEvaluationContext,
+    SparsePCResidualCandidateAcceptanceContext,
     FortranReducedXBlockFactorBuildContext,
     FortranReducedXBlockGlobalCouplingStageContext,
     FortranReducedXBlockKrylovSetupContext,
@@ -54,6 +55,7 @@ from sfincs_jax.problems.profile_response.sparse_pc import (
     enforce_sparse_pc_memory_budget,
     evaluate_xblock_moment_schur_probe_result,
     evaluate_sparse_pc_factor_preflight,
+    evaluate_sparse_pc_residual_candidate_acceptance,
     failed_xblock_global_coupling_metadata,
     failed_xblock_two_level_metadata,
     failed_xblock_moment_schur_metadata,
@@ -1214,6 +1216,97 @@ def test_sparse_pc_factor_preflight_evaluation_rejects_large_target_ratio() -> N
     assert result.passed is False
     assert result.seed_used is False
     assert result.x0_seed is None
+
+
+def test_sparse_pc_residual_candidate_acceptance_strict_passes_and_seeds() -> None:
+    result = evaluate_sparse_pc_residual_candidate_acceptance(
+        SparsePCResidualCandidateAcceptanceContext(
+            candidate_residual_after=1.0,
+            current_residual_after=2.0,
+            original_residual_before=4.0,
+            target=0.5,
+            max_target_ratio=3.0,
+            seed_enabled=True,
+        )
+    )
+
+    assert result.finite_candidate is True
+    assert result.improves_current_residual is True
+    assert result.improves_original_residual is True
+    assert result.strict_accept is True
+    assert result.base_improvement_accept is False
+    assert result.accepted is True
+    assert result.base_improvement_override_used is False
+    assert result.improvement_ratio == 4.0
+    assert result.target_ratio == 2.0
+    assert result.passed is True
+    assert result.seed_used is True
+
+
+def test_sparse_pc_residual_candidate_acceptance_current_only_can_select_without_pass() -> None:
+    result = evaluate_sparse_pc_residual_candidate_acceptance(
+        SparsePCResidualCandidateAcceptanceContext(
+            candidate_residual_after=2.5,
+            current_residual_after=3.0,
+            original_residual_before=2.0,
+            target=1.0,
+            max_target_ratio=10.0,
+            seed_enabled=True,
+            require_original_improvement=False,
+            current_min_improvement=0.1,
+        )
+    )
+
+    assert result.improves_current_residual is True
+    assert result.improves_original_residual is False
+    assert result.strict_accept is True
+    assert result.accepted is True
+    assert result.improvement_ratio == pytest.approx(0.8)
+    assert result.passed is False
+    assert result.seed_used is False
+
+
+def test_sparse_pc_residual_candidate_acceptance_base_improvement_override_sets_passed() -> None:
+    result = evaluate_sparse_pc_residual_candidate_acceptance(
+        SparsePCResidualCandidateAcceptanceContext(
+            candidate_residual_after=2.5,
+            current_residual_after=3.0,
+            original_residual_before=2.0,
+            target=1.0,
+            max_target_ratio=1.0,
+            seed_enabled=False,
+            accept_base_improvement=True,
+            base_improvement_requires_original_miss=False,
+            base_improvement_sets_passed=True,
+        )
+    )
+
+    assert result.strict_accept is False
+    assert result.base_improvement_accept is True
+    assert result.accepted is True
+    assert result.base_improvement_override_used is True
+    assert result.target_ratio == 2.5
+    assert result.passed is True
+
+
+def test_sparse_pc_residual_candidate_acceptance_rejects_nonfinite_candidate() -> None:
+    result = evaluate_sparse_pc_residual_candidate_acceptance(
+        SparsePCResidualCandidateAcceptanceContext(
+            candidate_residual_after=float("nan"),
+            current_residual_after=1.0,
+            original_residual_before=2.0,
+            target=0.1,
+            max_target_ratio=10.0,
+            seed_enabled=True,
+        )
+    )
+
+    assert result.finite_candidate is False
+    assert result.improves_current_residual is False
+    assert result.accepted is False
+    assert result.target_ratio == float("inf")
+    assert result.passed is False
+    assert result.seed_used is False
 
 
 def test_direct_tail_residual_rescue_policy_defaults() -> None:
