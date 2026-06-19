@@ -377,6 +377,55 @@ class SparsePCFactorPolicySetup:
 
 
 @dataclass(frozen=True)
+class SparsePCFactorDtypeRetryDecision:
+    """Decision for retrying a sparse-PC factor with higher precision."""
+
+    retry: bool
+    factor_dtype_used: np.dtype
+    factor_dtype_retry: str | None
+
+
+@dataclass(frozen=True)
+class SparsePCFactorDtypeRetryContext:
+    """Callbacks and state for retrying a sparse-PC factor in higher precision."""
+
+    factor_dtype_used: np.dtype
+    factor_dtype_retry: str | None
+    residual_norm: float
+    preconditioned_residual_norm: float
+    history: Sequence[float]
+    target: float
+    x: np.ndarray
+    x0_fallback: jnp.ndarray
+    solve_s: float
+    pc_maxiter: int
+    operator_bundle: Any
+    factor_bundle: Any
+    elapsed_s: Callable[[], float]
+    emit: EmitFn | None
+    build_factor: Callable[[np.dtype], tuple[Any, Any]]
+    run_gmres_once: Callable[[jnp.ndarray, int], tuple[np.ndarray, float, float, Sequence[float], float]]
+
+
+@dataclass(frozen=True)
+class SparsePCFactorDtypeRetryResult:
+    """Sparse-PC factor dtype retry result and updated solve state."""
+
+    retried: bool
+    factor_dtype_used: np.dtype
+    factor_dtype_retry: str | None
+    operator_bundle: Any
+    factor_bundle: Any
+    factor_s_increment: float
+    setup_s: float | None
+    x: np.ndarray
+    residual_norm: float
+    preconditioned_residual_norm: float
+    history: tuple[float, ...]
+    solve_s: float
+
+
+@dataclass(frozen=True)
 class SparsePCPatternSetupContext:
     """Inputs for selecting and summarizing a generic sparse-PC pattern."""
 
@@ -2601,6 +2650,162 @@ def resolve_sparse_pc_factor_policy(
         permc_spec=str(permc_spec),
         fp32_probe_maxiter=int(fp32_probe_maxiter),
         first_attempt_maxiter=int(first_attempt_maxiter),
+    )
+
+
+def evaluate_sparse_pc_factor_dtype_retry(
+    *,
+    factor_dtype_used: np.dtype,
+    residual_norm: float,
+    target: float,
+) -> SparsePCFactorDtypeRetryDecision:
+    """Decide whether an FP32 sparse-PC factor should retry in FP64."""
+
+    dtype_used = np.dtype(factor_dtype_used)
+    should_retry = bool(
+        dtype_used == np.dtype(np.float32)
+        and (
+            not np.isfinite(float(residual_norm))
+            or float(residual_norm) > float(target)
+        )
+    )
+    if not should_retry:
+        return SparsePCFactorDtypeRetryDecision(
+            retry=False,
+            factor_dtype_used=dtype_used,
+            factor_dtype_retry=None,
+        )
+    return SparsePCFactorDtypeRetryDecision(
+        retry=True,
+        factor_dtype_used=np.dtype(np.float64),
+        factor_dtype_retry="float64",
+    )
+
+
+def sparse_pc_factor_dtype_retry_initial_guess(
+    x_candidate: np.ndarray,
+    fallback: jnp.ndarray,
+) -> jnp.ndarray:
+    """Use the first solve as the retry seed only if it is finite."""
+
+    x_np = np.asarray(x_candidate)
+    if np.all(np.isfinite(x_np)):
+        return jnp.asarray(x_np, dtype=jnp.float64)
+    return fallback
+
+
+def retry_sparse_pc_factor_dtype_if_needed(
+    context: SparsePCFactorDtypeRetryContext,
+) -> SparsePCFactorDtypeRetryResult:
+    """Retry an FP32 sparse-PC factor in FP64 when the probe residual fails."""
+
+    decision = evaluate_sparse_pc_factor_dtype_retry(
+        factor_dtype_used=context.factor_dtype_used,
+        residual_norm=float(context.residual_norm),
+        target=float(context.target),
+    )
+    if not bool(decision.retry):
+        return SparsePCFactorDtypeRetryResult(
+            retried=False,
+            factor_dtype_used=np.dtype(context.factor_dtype_used),
+            factor_dtype_retry=context.factor_dtype_retry,
+            operator_bundle=context.operator_bundle,
+            factor_bundle=context.factor_bundle,
+            factor_s_increment=0.0,
+            setup_s=None,
+            x=np.asarray(context.x, dtype=np.float64),
+            residual_norm=float(context.residual_norm),
+            preconditioned_residual_norm=float(context.preconditioned_residual_norm),
+            history=tuple(float(v) for v in (context.history or ())),
+            solve_s=float(context.solve_s),
+        )
+
+    if context.emit is not None:
+        context.emit(
+            0,
+            "solve_v3_full_system_linear_gmres: sparse_pc_gmres retrying preconditioner "
+            f"with factor_dtype={decision.factor_dtype_used.name} "
+            f"after residual={float(context.residual_norm):.6e} target={float(context.target):.6e}",
+        )
+    retry_factor_start_s = float(context.elapsed_s())
+    operator_bundle, factor_bundle = context.build_factor(decision.factor_dtype_used)
+    factor_s_increment = float(context.elapsed_s()) - retry_factor_start_s
+    setup_s = float(context.elapsed_s())
+    x0_retry = sparse_pc_factor_dtype_retry_initial_guess(context.x, context.x0_fallback)
+    x, residual_norm, rn_pc, history, solve_s_retry = context.run_gmres_once(
+        x0_retry,
+        int(context.pc_maxiter),
+    )
+    return SparsePCFactorDtypeRetryResult(
+        retried=True,
+        factor_dtype_used=np.dtype(decision.factor_dtype_used),
+        factor_dtype_retry=decision.factor_dtype_retry,
+        operator_bundle=operator_bundle,
+        factor_bundle=factor_bundle,
+        factor_s_increment=float(factor_s_increment),
+        setup_s=float(setup_s),
+        x=np.asarray(x, dtype=np.float64),
+        residual_norm=float(residual_norm),
+        preconditioned_residual_norm=float(rn_pc),
+        history=tuple(float(v) for v in (history or ())),
+        solve_s=float(context.solve_s) + float(solve_s_retry),
+    )
+
+
+def retry_sparse_pc_factor_dtype_from_driver_state(
+    state: Mapping[str, object],
+    *,
+    build_host_sparse_direct_factor_from_matvec: Callable[..., tuple[Any, Any]],
+    run_sparse_pc_gmres_once_callback: Callable[..., tuple[np.ndarray, float, float, Sequence[float], float]],
+) -> SparsePCFactorDtypeRetryResult:
+    """Retry sparse-PC factor precision using the historical driver state names."""
+
+    def build_factor(factor_dtype_arg: np.dtype) -> tuple[Any, Any]:
+        return build_host_sparse_direct_factor_from_matvec(
+            matvec=state["_sparse_pc_factor_mv"],
+            n=int(state["sparse_pc_linear_size"]),
+            dtype=state["rhs"].dtype,
+            factor_dtype=np.dtype(factor_dtype_arg),
+            pattern=state["pattern"],
+            emit=state["emit"],
+            default_diag_pivot_thresh=(
+                0.0
+                if (
+                    bool(state["constrained_pas_pc"])
+                    or bool(state["tokamak_fp_pc"])
+                    or bool(state["fortran_reduced_sparse_pc"])
+                )
+                else 1.0
+            ),
+            default_permc_spec=state["sparse_pc_default_permc_spec"],
+            default_factor_kind=state["sparse_pc_default_factor_kind"],
+            default_ilu_fill_factor=float(state["sparse_pc_default_ilu_fill_factor"]),
+            default_ilu_drop_tol=float(state["sparse_pc_default_ilu_drop_tol"]),
+            default_pattern_color_batch=int(state["sparse_pc_default_pattern_color_batch"]),
+        )
+
+    return retry_sparse_pc_factor_dtype_if_needed(
+        SparsePCFactorDtypeRetryContext(
+            factor_dtype_used=np.dtype(state["sparse_pc_factor_dtype_used"]),
+            factor_dtype_retry=state["sparse_pc_factor_dtype_retry"],
+            residual_norm=float(state["residual_norm_sparse_pc"]),
+            preconditioned_residual_norm=float(state["rn_pc"]),
+            history=state["history"],
+            target=float(state["target"]),
+            x=np.asarray(state["x_np"], dtype=np.float64),
+            x0_fallback=state["x0_sparse"],
+            solve_s=float(state["solve_s"]),
+            pc_maxiter=int(state["pc_maxiter"]),
+            operator_bundle=state["_operator_bundle_pc"],
+            factor_bundle=state["factor_bundle_pc"],
+            elapsed_s=state["sparse_timer"].elapsed_s,
+            emit=state["emit"],
+            build_factor=build_factor,
+            run_gmres_once=lambda x0, maxiter: run_sparse_pc_gmres_once_callback(
+                x0,
+                maxiter_arg=int(maxiter),
+            ),
+        )
     )
 
 
@@ -6678,6 +6883,9 @@ __all__ = [
     "XBlockSideProbeDiagnosticsContext",
     "SparsePCActiveDOFSetup",
     "SparsePCFactorPolicySetup",
+    "SparsePCFactorDtypeRetryDecision",
+    "SparsePCFactorDtypeRetryContext",
+    "SparsePCFactorDtypeRetryResult",
     "SparsePCMemoryBudgetPreflightContext",
     "SparsePCPatternSetupContext",
     "SparsePCPatternSetupResult",
@@ -6717,6 +6925,10 @@ __all__ = [
     "resolve_fortran_reduced_xblock_krylov_policy",
     "resolve_fortran_reduced_xblock_moment_schur_policy",
     "resolve_sparse_pc_factor_policy",
+    "evaluate_sparse_pc_factor_dtype_retry",
+    "sparse_pc_factor_dtype_retry_initial_guess",
+    "retry_sparse_pc_factor_dtype_if_needed",
+    "retry_sparse_pc_factor_dtype_from_driver_state",
     "run_fortran_reduced_xblock_krylov_solve",
     "run_sparse_pc_gmres_once",
     "sparse_rescue_tail_metadata",

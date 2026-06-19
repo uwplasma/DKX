@@ -264,6 +264,7 @@ from .problems.profile_response.sparse_pc import (
     resolve_direct_tail_residual_rescue_policy,
     resolve_direct_tail_true_active_rescue_policy,
     resolve_direct_tail_coupled_coarse_rescue_policy,
+    retry_sparse_pc_factor_dtype_from_driver_state,
     resolve_fortran_reduced_sparse_pc_backend,
     run_direct_tail_support_mode_preflight,
     resolve_fortran_reduced_xblock_factor_policy,
@@ -9224,42 +9225,23 @@ def solve_v3_full_system_linear_gmres(
             x0_sparse,
             maxiter_arg=sparse_pc_first_attempt_maxiter,
         )
-        if (
-            sparse_pc_factor_dtype_used == np.dtype(np.float32)
-            and (not np.isfinite(residual_norm_sparse_pc) or float(residual_norm_sparse_pc) > float(target))
-        ):
-            sparse_pc_factor_dtype_retry = "float64"
-            sparse_pc_factor_dtype_used = np.dtype(np.float64)
-            if emit is not None:
-                emit(
-                    0,
-                    "solve_v3_full_system_linear_gmres: sparse_pc_gmres retrying preconditioner "
-                    f"with factor_dtype={sparse_pc_factor_dtype_used.name} "
-                    f"after residual={float(residual_norm_sparse_pc):.6e} target={float(target):.6e}",
-                )
-            retry_factor_start_s = sparse_timer.elapsed_s()
-            _operator_bundle_pc, factor_bundle_pc = _build_host_sparse_direct_factor_from_matvec(
-                matvec=_sparse_pc_factor_mv,
-                n=int(sparse_pc_linear_size),
-                dtype=rhs.dtype,
-                factor_dtype=sparse_pc_factor_dtype_used,
-                pattern=pattern,
-                emit=emit,
-                default_diag_pivot_thresh=0.0 if (constrained_pas_pc or tokamak_fp_pc or fortran_reduced_sparse_pc) else 1.0,
-                default_permc_spec=sparse_pc_default_permc_spec,
-                default_factor_kind=sparse_pc_default_factor_kind,
-                default_ilu_fill_factor=float(sparse_pc_default_ilu_fill_factor),
-                default_ilu_drop_tol=float(sparse_pc_default_ilu_drop_tol),
-                default_pattern_color_batch=int(sparse_pc_default_pattern_color_batch),
-            )
-            pc_factor_s += sparse_timer.elapsed_s() - retry_factor_start_s
-            setup_s = sparse_timer.elapsed_s()
-            x0_retry = jnp.asarray(x_np, dtype=jnp.float64) if np.all(np.isfinite(x_np)) else x0_sparse
-            x_np, residual_norm_sparse_pc, rn_pc, history, solve_s_retry = _run_sparse_pc_gmres_once(
-                x0_retry,
-                maxiter_arg=int(pc_maxiter),
-            )
-            solve_s += solve_s_retry
+        factor_dtype_retry_result = retry_sparse_pc_factor_dtype_from_driver_state(
+            locals(),
+            build_host_sparse_direct_factor_from_matvec=_build_host_sparse_direct_factor_from_matvec,
+            run_sparse_pc_gmres_once_callback=_run_sparse_pc_gmres_once,
+        )
+        sparse_pc_factor_dtype_used = factor_dtype_retry_result.factor_dtype_used
+        sparse_pc_factor_dtype_retry = factor_dtype_retry_result.factor_dtype_retry
+        _operator_bundle_pc = factor_dtype_retry_result.operator_bundle
+        factor_bundle_pc = factor_dtype_retry_result.factor_bundle
+        pc_factor_s += float(factor_dtype_retry_result.factor_s_increment)
+        if factor_dtype_retry_result.setup_s is not None:
+            setup_s = float(factor_dtype_retry_result.setup_s)
+        x_np = factor_dtype_retry_result.x
+        residual_norm_sparse_pc = float(factor_dtype_retry_result.residual_norm)
+        rn_pc = float(factor_dtype_retry_result.preconditioned_residual_norm)
+        history = factor_dtype_retry_result.history
+        solve_s = float(factor_dtype_retry_result.solve_s)
         sparse_pc_post_minres_history: tuple[float, ...] = ()
         sparse_pc_post_minres_alphas: tuple[float, ...] = ()
         sparse_pc_post_minres_residual_before: float | None = None

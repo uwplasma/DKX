@@ -26,6 +26,7 @@ from sfincs_jax.problems.profile_response.sparse_pc import (
     SparsePCFactorPreflightPolicyContext,
     SparsePCFactorPreflightEvaluationContext,
     SparsePCResidualCandidateAcceptanceContext,
+    SparsePCFactorDtypeRetryContext,
     SparsePCAutoPreflightRetrySelectionContext,
     SparsePCAutoPreflightRetryEvaluationContext,
     SparsePCGMRESControlPolicy,
@@ -61,6 +62,7 @@ from sfincs_jax.problems.profile_response.sparse_pc import (
     evaluate_sparse_pc_residual_candidate_acceptance,
     select_sparse_pc_auto_preflight_retry_candidates,
     evaluate_sparse_pc_auto_preflight_retry,
+    evaluate_sparse_pc_factor_dtype_retry,
     resolve_sparse_pc_gmres_control_policy,
     failed_xblock_global_coupling_metadata,
     failed_xblock_two_level_metadata,
@@ -78,6 +80,7 @@ from sfincs_jax.problems.profile_response.sparse_pc import (
     resolve_fortran_reduced_xblock_moment_schur_policy,
     resolve_sparse_pc_entry_policy,
     resolve_sparse_pc_factor_policy,
+    sparse_pc_factor_dtype_retry_initial_guess,
     resolve_sparse_pc_factor_preflight_policy,
     resolve_direct_tail_structured_admission,
     resolve_direct_tail_residual_rescue_policy,
@@ -100,6 +103,8 @@ from sfincs_jax.problems.profile_response.sparse_pc import (
     resolve_xblock_two_level_policy_setup,
     run_fortran_reduced_xblock_krylov_solve,
     run_sparse_pc_gmres_once,
+    retry_sparse_pc_factor_dtype_from_driver_state,
+    retry_sparse_pc_factor_dtype_if_needed,
     finalize_xblock_assembled_operator_metadata,
 )
 
@@ -431,6 +436,225 @@ def test_sparse_pc_factor_policy_can_defer_dtype_to_host_policy() -> None:
             "use_implicit": False,
         }
     ]
+
+
+def test_sparse_pc_factor_dtype_retry_promotes_failed_fp32_probe() -> None:
+    decision = evaluate_sparse_pc_factor_dtype_retry(
+        factor_dtype_used=np.dtype(np.float32),
+        residual_norm=2.0,
+        target=1.0,
+    )
+
+    assert decision.retry is True
+    assert decision.factor_dtype_used == np.dtype(np.float64)
+    assert decision.factor_dtype_retry == "float64"
+
+
+def test_sparse_pc_factor_dtype_retry_promotes_nonfinite_fp32_probe() -> None:
+    decision = evaluate_sparse_pc_factor_dtype_retry(
+        factor_dtype_used=np.dtype(np.float32),
+        residual_norm=float("nan"),
+        target=1.0,
+    )
+
+    assert decision.retry is True
+    assert decision.factor_dtype_used == np.dtype(np.float64)
+    assert decision.factor_dtype_retry == "float64"
+
+
+def test_sparse_pc_factor_dtype_retry_keeps_successful_or_fp64_probe() -> None:
+    fp32_success = evaluate_sparse_pc_factor_dtype_retry(
+        factor_dtype_used=np.dtype(np.float32),
+        residual_norm=0.5,
+        target=1.0,
+    )
+    fp64_failure = evaluate_sparse_pc_factor_dtype_retry(
+        factor_dtype_used=np.dtype(np.float64),
+        residual_norm=2.0,
+        target=1.0,
+    )
+
+    assert fp32_success.retry is False
+    assert fp32_success.factor_dtype_used == np.dtype(np.float32)
+    assert fp32_success.factor_dtype_retry is None
+    assert fp64_failure.retry is False
+    assert fp64_failure.factor_dtype_used == np.dtype(np.float64)
+    assert fp64_failure.factor_dtype_retry is None
+
+
+def test_sparse_pc_factor_dtype_retry_initial_guess_uses_finite_candidate() -> None:
+    fallback = jnp.asarray([9.0, 9.0])
+    finite = sparse_pc_factor_dtype_retry_initial_guess(
+        np.asarray([1.0, 2.0]),
+        fallback,
+    )
+    nonfinite = sparse_pc_factor_dtype_retry_initial_guess(
+        np.asarray([1.0, np.nan]),
+        fallback,
+    )
+
+    np.testing.assert_allclose(np.asarray(finite), np.asarray([1.0, 2.0]))
+    np.testing.assert_allclose(np.asarray(nonfinite), np.asarray([9.0, 9.0]))
+
+
+def test_retry_sparse_pc_factor_dtype_if_needed_preserves_successful_probe_state() -> None:
+    build_calls: list[np.dtype] = []
+    run_calls: list[tuple[jnp.ndarray, int]] = []
+
+    result = retry_sparse_pc_factor_dtype_if_needed(
+        SparsePCFactorDtypeRetryContext(
+            factor_dtype_used=np.dtype(np.float32),
+            factor_dtype_retry=None,
+            residual_norm=0.5,
+            preconditioned_residual_norm=0.25,
+            history=(1.0, 0.5),
+            target=1.0,
+            x=np.asarray([1.0, 2.0]),
+            x0_fallback=jnp.asarray([0.0, 0.0]),
+            solve_s=3.0,
+            pc_maxiter=20,
+            operator_bundle="operator0",
+            factor_bundle="factor0",
+            elapsed_s=lambda: 0.0,
+            emit=None,
+            build_factor=lambda dtype: build_calls.append(dtype) or ("operator1", "factor1"),
+            run_gmres_once=lambda x0, maxiter: run_calls.append((x0, maxiter))
+            or (np.zeros(2), 0.0, 0.0, (), 0.0),
+        )
+    )
+
+    assert result.retried is False
+    assert result.factor_dtype_used == np.dtype(np.float32)
+    assert result.factor_dtype_retry is None
+    assert result.operator_bundle == "operator0"
+    assert result.factor_bundle == "factor0"
+    assert result.factor_s_increment == 0.0
+    assert result.setup_s is None
+    np.testing.assert_allclose(result.x, np.asarray([1.0, 2.0]))
+    assert result.residual_norm == 0.5
+    assert result.preconditioned_residual_norm == 0.25
+    assert result.history == (1.0, 0.5)
+    assert result.solve_s == 3.0
+    assert build_calls == []
+    assert run_calls == []
+
+
+def test_retry_sparse_pc_factor_dtype_if_needed_rebuilds_and_reruns_failed_fp32_probe() -> None:
+    messages: list[str] = []
+    times = iter((10.0, 10.4, 10.5))
+    build_calls: list[np.dtype] = []
+    run_calls: list[tuple[np.ndarray, int]] = []
+
+    def build_factor(dtype: np.dtype):
+        build_calls.append(np.dtype(dtype))
+        return "operator64", "factor64"
+
+    def run_gmres_once(x0: jnp.ndarray, maxiter: int):
+        run_calls.append((np.asarray(x0), int(maxiter)))
+        return np.asarray([3.0, 4.0]), 0.1, 0.05, (0.5, 0.1), 7.0
+
+    result = retry_sparse_pc_factor_dtype_if_needed(
+        SparsePCFactorDtypeRetryContext(
+            factor_dtype_used=np.dtype(np.float32),
+            factor_dtype_retry=None,
+            residual_norm=2.0,
+            preconditioned_residual_norm=1.0,
+            history=(2.0,),
+            target=1.0,
+            x=np.asarray([1.0, 2.0]),
+            x0_fallback=jnp.asarray([9.0, 9.0]),
+            solve_s=3.0,
+            pc_maxiter=20,
+            operator_bundle="operator0",
+            factor_bundle="factor0",
+            elapsed_s=lambda: next(times),
+            emit=lambda _level, msg: messages.append(msg),
+            build_factor=build_factor,
+            run_gmres_once=run_gmres_once,
+        )
+    )
+
+    assert result.retried is True
+    assert result.factor_dtype_used == np.dtype(np.float64)
+    assert result.factor_dtype_retry == "float64"
+    assert result.operator_bundle == "operator64"
+    assert result.factor_bundle == "factor64"
+    assert result.factor_s_increment == pytest.approx(0.4)
+    assert result.setup_s == pytest.approx(10.5)
+    np.testing.assert_allclose(result.x, np.asarray([3.0, 4.0]))
+    assert result.residual_norm == 0.1
+    assert result.preconditioned_residual_norm == 0.05
+    assert result.history == (0.5, 0.1)
+    assert result.solve_s == 10.0
+    assert build_calls == [np.dtype(np.float64)]
+    np.testing.assert_allclose(run_calls[0][0], np.asarray([1.0, 2.0]))
+    assert run_calls[0][1] == 20
+    assert any("factor_dtype=float64" in msg for msg in messages)
+
+
+def test_retry_sparse_pc_factor_dtype_from_driver_state_forwards_build_policy() -> None:
+    times = iter((2.0, 2.25, 2.5))
+    build_kwargs: list[dict[str, object]] = []
+    run_calls: list[tuple[np.ndarray, int]] = []
+
+    def build_factor(**kwargs):
+        build_kwargs.append(kwargs)
+        return "operator64", "factor64"
+
+    def run_gmres_once(x0: jnp.ndarray, *, maxiter_arg: int):
+        run_calls.append((np.asarray(x0), int(maxiter_arg)))
+        return np.asarray([4.0, 5.0]), 0.2, 0.1, (0.4, 0.2), 6.0
+
+    state = {
+        "_sparse_pc_factor_mv": "matvec",
+        "sparse_pc_linear_size": 12,
+        "rhs": jnp.ones(3),
+        "pattern": "pattern",
+        "emit": None,
+        "constrained_pas_pc": False,
+        "tokamak_fp_pc": True,
+        "fortran_reduced_sparse_pc": False,
+        "sparse_pc_default_permc_spec": "COLAMD",
+        "sparse_pc_default_factor_kind": "ilu",
+        "sparse_pc_default_ilu_fill_factor": 3.0,
+        "sparse_pc_default_ilu_drop_tol": 1.0e-4,
+        "sparse_pc_default_pattern_color_batch": 5,
+        "sparse_pc_factor_dtype_used": np.dtype(np.float32),
+        "sparse_pc_factor_dtype_retry": None,
+        "residual_norm_sparse_pc": 2.0,
+        "rn_pc": 1.0,
+        "history": (2.0,),
+        "target": 1.0,
+        "x_np": np.asarray([1.0, 2.0]),
+        "x0_sparse": jnp.asarray([9.0, 9.0]),
+        "solve_s": 4.0,
+        "pc_maxiter": 11,
+        "_operator_bundle_pc": "operator0",
+        "factor_bundle_pc": "factor0",
+        "sparse_timer": SimpleNamespace(elapsed_s=lambda: next(times)),
+    }
+
+    result = retry_sparse_pc_factor_dtype_from_driver_state(
+        state,
+        build_host_sparse_direct_factor_from_matvec=build_factor,
+        run_sparse_pc_gmres_once_callback=run_gmres_once,
+    )
+
+    assert result.retried is True
+    assert result.factor_dtype_used == np.dtype(np.float64)
+    assert result.factor_dtype_retry == "float64"
+    assert build_kwargs[0]["matvec"] == "matvec"
+    assert build_kwargs[0]["n"] == 12
+    assert build_kwargs[0]["factor_dtype"] == np.dtype(np.float64)
+    assert build_kwargs[0]["default_diag_pivot_thresh"] == 0.0
+    assert build_kwargs[0]["default_permc_spec"] == "COLAMD"
+    assert build_kwargs[0]["default_factor_kind"] == "ilu"
+    assert build_kwargs[0]["default_pattern_color_batch"] == 5
+    np.testing.assert_allclose(run_calls[0][0], np.asarray([1.0, 2.0]))
+    assert run_calls[0][1] == 11
+    assert result.factor_s_increment == pytest.approx(0.25)
+    assert result.setup_s == pytest.approx(2.5)
+    assert result.solve_s == pytest.approx(10.0)
 
 
 def test_sparse_pc_memory_budget_preflight_is_noop_without_positive_budget() -> None:
