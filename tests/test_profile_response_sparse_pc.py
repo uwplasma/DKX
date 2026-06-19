@@ -135,6 +135,7 @@ from sfincs_jax.problems.profile_response.sparse_pc import (
     apply_sparse_host_direct_polish_if_needed,
     sparse_host_direct_fallback_payload,
     sparse_minimum_norm_solve_payload,
+    sparse_minimum_norm_solve_from_pattern,
     sparse_minimum_norm_start_message,
     validate_explicit_sparse_host_request,
     finalize_xblock_assembled_operator_metadata,
@@ -4883,6 +4884,81 @@ def test_sparse_minimum_norm_solve_payload_solves_tiny_identity_system() -> None
     assert payload.metadata["accepted_converged"] is True
     assert payload.metadata["acceptance_criterion"] == "true_residual"
     assert "accepted=True criterion=true_residual" in payload.completion_message
+
+
+def test_sparse_minimum_norm_solve_from_pattern_materializes_and_emits_messages() -> None:
+    messages: list[tuple[int, str]] = []
+    calls: list[dict[str, object]] = []
+    bundle = SimpleNamespace(
+        metadata=SimpleNamespace(storage_kind="csr", reason="materialized"),
+        matrix=scipy_sparse.eye(2, format="csr"),
+    )
+
+    def builder(matvec_np, **kwargs):
+        calls.append({"matvec_np": matvec_np, **kwargs})
+        return bundle
+
+    payload = sparse_minimum_norm_solve_from_pattern(
+        matvec_np=lambda x: np.asarray(x, dtype=np.float64),
+        pattern={"rows": (0, 1)},
+        summary=SimpleNamespace(nnz=2, avg_row_nnz=1.0, max_row_nnz=1),
+        rhs=jnp.asarray([1.0, -2.0], dtype=jnp.float64),
+        solve_method_kind="sparse_lsmr",
+        tol=1.0e-12,
+        atol=1.0e-12,
+        maxiter=20,
+        rhs_norm=float(np.linalg.norm([1.0, -2.0])),
+        elapsed_s=lambda: 2.5,
+        backend="cpu",
+        env={"SFINCS_JAX_EXPLICIT_SPARSE_CSR_MAX_MB": "32"},
+        emit=lambda level, message: messages.append((level, message)),
+        build_operator_from_pattern=builder,
+    )
+
+    assert isinstance(payload, SparseMinimumNormPayload)
+    np.testing.assert_allclose(np.asarray(payload.x), np.asarray([1.0, -2.0]), atol=1.0e-10)
+    assert float(payload.residual_norm) < 1.0e-10
+    assert calls[0]["pattern"] == {"rows": (0, 1)}
+    assert calls[0]["backend"] == "cpu"
+    assert calls[0]["csr_max_mb"] == pytest.approx(32.0)
+    assert calls[0]["allow_operator_only"] is False
+    assert messages[0] == (
+        1,
+        "solve_v3_full_system_linear_gmres: sparse_lsmr building conservative pattern",
+    )
+    assert messages[1] == (
+        1,
+        "solve_v3_full_system_linear_gmres: sparse_lsmr pattern "
+        "nnz=2 avg_row_nnz=1 max_row_nnz=1",
+    )
+    assert messages[2] == (1, "explicit_sparse: storage=csr reason=materialized")
+    assert messages[3][1].startswith("solve_v3_full_system_linear_gmres: sparse_lsmr solve start")
+    assert messages[4][1].startswith("solve_v3_full_system_linear_gmres: sparse_lsmr complete")
+
+
+def test_sparse_minimum_norm_solve_from_pattern_requires_materialized_matrix() -> None:
+    bundle = SimpleNamespace(
+        metadata=SimpleNamespace(storage_kind="operator_only", reason="too_large"),
+        matrix=None,
+    )
+
+    with pytest.raises(RuntimeError, match="requires a materialized sparse matrix"):
+        sparse_minimum_norm_solve_from_pattern(
+            matvec_np=lambda x: np.asarray(x, dtype=np.float64),
+            pattern={"rows": (0,)},
+            summary=SimpleNamespace(nnz=1, avg_row_nnz=1.0, max_row_nnz=1),
+            rhs=jnp.asarray([1.0], dtype=jnp.float64),
+            solve_method_kind="sparse_lsmr",
+            tol=1.0e-12,
+            atol=1.0e-12,
+            maxiter=10,
+            rhs_norm=1.0,
+            elapsed_s=lambda: 0.0,
+            backend="cpu",
+            env={},
+            emit=None,
+            build_operator_from_pattern=lambda *_args, **_kwargs: bundle,
+        )
 
 
 def test_sparse_host_direct_solve_payload_recomputes_true_residual_and_metadata() -> None:

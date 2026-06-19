@@ -7362,6 +7362,70 @@ def sparse_minimum_norm_solve_payload(
     )
 
 
+def sparse_minimum_norm_solve_from_pattern(
+    *,
+    matvec_np: Callable[[np.ndarray], np.ndarray],
+    pattern: object,
+    summary: object,
+    rhs: jnp.ndarray,
+    solve_method_kind: str,
+    tol: float,
+    atol: float,
+    maxiter: int | None,
+    rhs_norm: float,
+    elapsed_s: Callable[[], float],
+    backend: str,
+    env: Mapping[str, str],
+    emit: EmitFn | None,
+    build_operator_from_pattern: Callable[..., object],
+) -> SparseMinimumNormPayload:
+    """Materialize the explicit sparse matrix and run the host minimum-norm solve."""
+
+    if emit is not None:
+        for level, message in explicit_sparse_pattern_progress_messages(
+            solver_label="sparse_lsmr",
+            summary=summary,
+        ):
+            emit(level, message)
+    sparse_operator_build = build_explicit_sparse_operator_from_pattern(
+        matvec_np=matvec_np,
+        pattern=pattern,
+        dtype=np.float64,
+        backend=backend,
+        env=env,
+        build_operator_from_pattern=build_operator_from_pattern,
+        allow_operator_only=False,
+    )
+    if emit is not None:
+        for level, message in sparse_operator_build.messages:
+            emit(level, message)
+    matrix = sparse_operator_build.operator_bundle.matrix
+    if matrix is None:
+        raise RuntimeError("sparse_lsmr requires a materialized sparse matrix.")
+
+    policy = resolve_sparse_minimum_norm_policy(
+        env,
+        solve_method_kind=solve_method_kind,
+        tol=float(tol),
+        maxiter=maxiter,
+        emit_enabled=emit is not None,
+    )
+    if emit is not None:
+        emit(0, sparse_minimum_norm_start_message(policy))
+    payload = sparse_minimum_norm_solve_payload(
+        matrix=matrix,
+        rhs=rhs,
+        policy=policy,
+        atol=float(atol),
+        tol=float(tol),
+        rhs_norm=float(rhs_norm),
+        elapsed_s=elapsed_s,
+    )
+    if emit is not None:
+        emit(0, payload.completion_message)
+    return payload
+
+
 def sparse_host_direct_solve_payload(
     *,
     factor_solve: Callable[[Any], Any],
@@ -7892,6 +7956,7 @@ __all__ = [
     "xblock_sparse_pc_final_payload_from_driver_state",
     "resolve_sparse_minimum_norm_policy",
     "sparse_minimum_norm_solve_payload",
+    "sparse_minimum_norm_solve_from_pattern",
     "sparse_minimum_norm_start_message",
     "sparse_host_direct_solve_payload",
     "solve_sparse_host_direct_from_available_factor",

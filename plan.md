@@ -42,8 +42,10 @@ Make `sfincs_jax` research-grade while preserving the public user contract:
 
 Recent checkpoints:
 
-- RHSMode=1 sparse-host direct fallback progress emission centralization
+- Explicit sparse minimum-norm materialization/solve orchestration extraction
   (current checkpoint).
+- RHSMode=1 sparse-host direct fallback progress emission centralization
+  (`8fd4866`).
 - RHSMode=1 sparse-host direct fallback solve/polish/residual orchestration
   extraction (`3fa677a`).
 - RHSMode=1 dense-shortcut true-residual scalar helper extraction
@@ -81,17 +83,24 @@ Recent checkpoints:
 - `cb295ce` Extract sparse pattern setup.
 - `4b6a5b4` Extract sparse factor policy.
 
-Current source-size snapshot after RHSMode=1 sparse-host direct fallback progress
-emission centralization:
+Current source-size snapshot after explicit sparse minimum-norm orchestration
+extraction:
 
-- `sfincs_jax/v3_driver.py`: `18821` lines.
-- `solve_v3_full_system_linear_gmres`: `13535` lines.
+- `sfincs_jax/v3_driver.py`: `18791` lines.
+- `solve_v3_full_system_linear_gmres`: `13508` lines.
 - `sfincs_jax/problems/profile_response/residual.py`: `751` lines.
 - `sfincs_jax/problems/profile_response/handoff.py`: `290` lines.
-- `sfincs_jax/problems/profile_response/sparse_pc.py`: `7916` lines.
+- `sfincs_jax/problems/profile_response/sparse_pc.py`: `7981` lines.
 
 Recent local validation:
 
+- Explicit sparse minimum-norm focused sparse-PC shard:
+  `172 passed in 1.63 s`.
+- Sparse-host/minimum-norm/direct-tail driver shard:
+  `32 passed, 100 deselected in 33.70 s`.
+- Hygiene:
+  `ruff`, `compileall`, `git diff --check`, and `scripts/check_repo_size.py`
+  passed.
 - Sparse-host fallback orchestration focused shard:
   `170 passed in 1.61 s`.
 - RHSMode=1 residual/handoff/sparse-PC/diagnostics shard:
@@ -247,6 +256,9 @@ Completed recent boundaries:
   fallback branches.
 - RHSMode=1 host sparse direct fallback progress emission consolidated into
   the same helper, removing duplicated driver-side progress-line blocks.
+- Explicit sparse minimum-norm conservative-pattern materialization, progress
+  emission, policy parsing, LSQR/LSMR execution, completion emission, and
+  matrix-required gate consolidated into a tested profile-response helper.
 
 Next steps:
 

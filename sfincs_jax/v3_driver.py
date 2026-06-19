@@ -228,7 +228,6 @@ from .problems.profile_response.sparse_pc import (
     apply_fortran_reduced_xblock_initial_seed,
     apply_fortran_reduced_xblock_moment_schur_stage,
     build_fortran_reduced_xblock_factor_stage,
-    build_explicit_sparse_operator_from_pattern,
     build_fortran_reduced_xblock_krylov_setup,
     build_sparse_pc_pattern_setup,
     build_xblock_krylov_matvec_setup,
@@ -264,7 +263,6 @@ from .problems.profile_response.sparse_pc import (
     resolve_direct_tail_residual_rescue_policy,
     resolve_direct_tail_true_active_rescue_policy,
     resolve_direct_tail_coupled_coarse_rescue_policy,
-    resolve_sparse_minimum_norm_policy,
     resolve_fortran_reduced_sparse_pc_backend,
     run_direct_tail_support_mode_preflight,
     resolve_fortran_reduced_xblock_factor_policy,
@@ -290,8 +288,7 @@ from .problems.profile_response.sparse_pc import (
     sparse_host_direct_fallback_payload,
     sparse_host_direct_solve_payload,
     explicit_sparse_pattern_progress_messages,
-    sparse_minimum_norm_solve_payload,
-    sparse_minimum_norm_start_message,
+    sparse_minimum_norm_solve_from_pattern,
     validate_explicit_sparse_host_request,
     XBlockAssembledPreflightError,
     finalize_xblock_assembled_operator_metadata,
@@ -9161,13 +9158,7 @@ def solve_v3_full_system_linear_gmres(
         )
         sparse_timer = Timer()
         pattern = v3_full_system_conservative_sparsity_pattern(op)
-        if emit is not None:
-            summary = summarize_v3_sparse_pattern(op, pattern)
-            for level, message in explicit_sparse_pattern_progress_messages(
-                solver_label="sparse_lsmr",
-                summary=summary,
-            ):
-                emit(level, message)
+        summary = summarize_v3_sparse_pattern(op, pattern)
 
         def _sparse_min_norm_mv(x_np: np.ndarray) -> jnp.ndarray:
             return apply_v3_full_system_operator_cached(op, jnp.asarray(x_np, dtype=rhs.dtype))
@@ -9175,43 +9166,22 @@ def solve_v3_full_system_linear_gmres(
         def _matvec_np(x_np: np.ndarray) -> np.ndarray:
             return np.asarray(_sparse_min_norm_mv(np.asarray(x_np, dtype=np.float64)), dtype=np.float64)
 
-        sparse_operator_build = build_explicit_sparse_operator_from_pattern(
+        sparse_minimum_norm_payload = sparse_minimum_norm_solve_from_pattern(
             matvec_np=_matvec_np,
             pattern=pattern,
-            dtype=np.float64,
-            backend=jax.default_backend(),
-            env=os.environ,
-            build_operator_from_pattern=build_operator_from_pattern,
-            allow_operator_only=False,
-        )
-        operator_bundle = sparse_operator_build.operator_bundle
-        if emit is not None:
-            for level, message in sparse_operator_build.messages:
-                emit(level, message)
-        matrix = operator_bundle.matrix
-        if matrix is None:
-            raise RuntimeError("sparse_lsmr requires a materialized sparse matrix.")
-
-        sparse_minimum_norm_policy = resolve_sparse_minimum_norm_policy(
-            os.environ,
+            summary=summary,
+            rhs=rhs,
             solve_method_kind=solve_method_kind_explicit,
             tol=float(tol),
-            maxiter=maxiter,
-            emit_enabled=emit is not None,
-        )
-        if emit is not None:
-            emit(0, sparse_minimum_norm_start_message(sparse_minimum_norm_policy))
-        sparse_minimum_norm_payload = sparse_minimum_norm_solve_payload(
-            matrix=matrix,
-            rhs=rhs,
-            policy=sparse_minimum_norm_policy,
             atol=float(atol),
-            tol=float(tol),
+            maxiter=maxiter,
             rhs_norm=float(rhs_norm),
             elapsed_s=sparse_timer.elapsed_s,
+            backend=jax.default_backend(),
+            env=os.environ,
+            emit=emit,
+            build_operator_from_pattern=build_operator_from_pattern,
         )
-        if emit is not None:
-            emit(0, sparse_minimum_norm_payload.completion_message)
         return V3LinearSolveResult(
             op=op,
             rhs=rhs,
