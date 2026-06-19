@@ -1804,6 +1804,17 @@ def rhs1_host_factor_probe_ok(*, factor: object | None, block_size: int) -> bool
 
 
 # From sfincs_jax.rhs1_constraint0_policy
+@dataclass(frozen=True)
+class RHS1Constraint0PETScCompatConfig:
+    """Host sparse-ILU controls for the constraint-scheme-0 PETSc lane."""
+
+    drop_tol: float
+    fill: float
+    diag_pivot: float
+    restart: int
+    maxiter: int
+
+
 def _has_constraint0_fp_rhs1(op: Any) -> bool:
     if int(op.rhs_mode) != 1 or bool(op.include_phi1):
         return False
@@ -1886,6 +1897,40 @@ def rhs1_constraint0_dense_fallback_allowed(op: Any) -> bool:
         return True
     env = _env_token("SFINCS_JAX_RHSMODE1_CS0_DENSE_FALLBACK")
     return env in _TRUE_VALUES
+
+
+def rhs1_constraint0_petsc_compat_config_from_env(
+    *,
+    restart: int,
+    maxiter: int | None,
+) -> RHS1Constraint0PETScCompatConfig:
+    """Parse constraint-scheme-0 PETSc-compatible sparse solve controls."""
+
+    default_restart = max(int(restart), 2000)
+    default_maxiter = max(int(maxiter or 1), 1)
+    return RHS1Constraint0PETScCompatConfig(
+        drop_tol=float(
+            _env_float("SFINCS_JAX_RHSMODE1_CS0_PETSC_COMPAT_DROP_TOL", 1.0e-4)
+        ),
+        fill=float(_env_float("SFINCS_JAX_RHSMODE1_CS0_PETSC_COMPAT_FILL", 10.0)),
+        diag_pivot=float(
+            _env_float("SFINCS_JAX_RHSMODE1_CS0_PETSC_COMPAT_DIAG_PIVOT", 0.0)
+        ),
+        restart=int(
+            _env_int("SFINCS_JAX_RHSMODE1_CS0_PETSC_COMPAT_RESTART", default_restart)
+        ),
+        maxiter=int(
+            _env_int("SFINCS_JAX_RHSMODE1_CS0_PETSC_COMPAT_MAXITER", default_maxiter)
+        ),
+    )
+
+
+def rhs1_constraint0_petsc_compat_regularization(*, max_abs: float) -> float:
+    """Parse/floor the PETSc-compatible diagonal regularization."""
+
+    default_reg = 1.0e-12 * float(max_abs)
+    regularization = _env_float("SFINCS_JAX_RHSMODE1_CS0_PETSC_COMPAT_REG", default_reg)
+    return max(0.0, float(regularization))
 
 
 # From sfincs_jax.rhs1_post_xblock_policy
@@ -2881,6 +2926,7 @@ def rhs1_pas_tz_guarded_stage2_retry() -> bool:
 
 
 __all__ = (
+    "RHS1Constraint0PETScCompatConfig",
     "RHS1QIDeviceRankBudget",
     "RHS1QIDeviceSetupSummary",
     "RHS1SparseJAXConfig",
@@ -2891,6 +2937,8 @@ __all__ = (
     "parse_rhs1_pas_tz_guarded_structured_levels",
     "rhs1_constraint0_dense_fallback_allowed",
     "rhs1_constraint0_petsc_compat",
+    "rhs1_constraint0_petsc_compat_config_from_env",
+    "rhs1_constraint0_petsc_compat_regularization",
     "rhs1_constraint0_sparse_first",
     "rhs1_fast_post_xblock_polish_allowed",
     "rhs1_fp_force_stage2",

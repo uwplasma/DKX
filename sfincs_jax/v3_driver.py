@@ -540,6 +540,8 @@ from .problems.profile_response.residual import (
 from .problems.profile_response.policies import (
     rhs1_constraint0_dense_fallback_allowed as _rhs1_constraint0_dense_fallback_allowed_impl,
     rhs1_constraint0_petsc_compat as _rhs1_constraint0_petsc_compat_impl,
+    rhs1_constraint0_petsc_compat_config_from_env,
+    rhs1_constraint0_petsc_compat_regularization,
     rhs1_constraint0_sparse_first as _rhs1_constraint0_sparse_first_impl,
 )
 from .rhs1_constraint_sources import (
@@ -11033,31 +11035,15 @@ def solve_v3_full_system_linear_gmres(
                 from scipy.sparse.csgraph import reverse_cuthill_mckee  # noqa: PLC0415
                 from scipy.sparse.linalg import spilu  # noqa: PLC0415
 
-                compat_drop_env = os.environ.get("SFINCS_JAX_RHSMODE1_CS0_PETSC_COMPAT_DROP_TOL", "").strip()
-                compat_fill_env = os.environ.get("SFINCS_JAX_RHSMODE1_CS0_PETSC_COMPAT_FILL", "").strip()
-                compat_pivot_env = os.environ.get("SFINCS_JAX_RHSMODE1_CS0_PETSC_COMPAT_DIAG_PIVOT", "").strip()
-                compat_restart_env = os.environ.get("SFINCS_JAX_RHSMODE1_CS0_PETSC_COMPAT_RESTART", "").strip()
-                compat_maxiter_env = os.environ.get("SFINCS_JAX_RHSMODE1_CS0_PETSC_COMPAT_MAXITER", "").strip()
-                try:
-                    compat_drop_tol = float(compat_drop_env) if compat_drop_env else 1.0e-4
-                except ValueError:
-                    compat_drop_tol = 1.0e-4
-                try:
-                    compat_fill = float(compat_fill_env) if compat_fill_env else 10.0
-                except ValueError:
-                    compat_fill = 10.0
-                try:
-                    compat_diag_pivot = float(compat_pivot_env) if compat_pivot_env else 0.0
-                except ValueError:
-                    compat_diag_pivot = 0.0
-                try:
-                    compat_restart = int(compat_restart_env) if compat_restart_env else max(int(restart), 2000)
-                except ValueError:
-                    compat_restart = max(int(restart), 2000)
-                try:
-                    compat_maxiter = int(compat_maxiter_env) if compat_maxiter_env else max(int(maxiter or 1), 1)
-                except ValueError:
-                    compat_maxiter = max(int(maxiter or 1), 1)
+                compat_config = rhs1_constraint0_petsc_compat_config_from_env(
+                    restart=int(restart),
+                    maxiter=maxiter,
+                )
+                compat_drop_tol = compat_config.drop_tol
+                compat_fill = compat_config.fill
+                compat_diag_pivot = compat_config.diag_pivot
+                compat_restart = compat_config.restart
+                compat_maxiter = compat_config.maxiter
 
                 if emit is not None:
                     emit(
@@ -11079,13 +11065,8 @@ def solve_v3_full_system_linear_gmres(
                     a_np_cs0[np.abs(a_np_cs0) < compat_drop_thresh] = 0.0
                 a_csr_cs0 = sp.csr_matrix(a_np_cs0)
                 a_csr_cs0.eliminate_zeros()
-                compat_reg_env = os.environ.get("SFINCS_JAX_RHSMODE1_CS0_PETSC_COMPAT_REG", "").strip()
                 max_abs_cs0 = float(np.max(np.abs(a_csr_cs0.data))) if int(a_csr_cs0.nnz) > 0 else 0.0
-                try:
-                    compat_reg = float(compat_reg_env) if compat_reg_env else (1.0e-12 * max_abs_cs0)
-                except ValueError:
-                    compat_reg = 1.0e-12 * max_abs_cs0
-                compat_reg = max(0.0, float(compat_reg))
+                compat_reg = rhs1_constraint0_petsc_compat_regularization(max_abs=max_abs_cs0)
                 perm = np.asarray(
                     reverse_cuthill_mckee(a_csr_cs0, symmetric_mode=False),
                     dtype=np.int32,
