@@ -4,10 +4,14 @@ from types import SimpleNamespace
 
 from sfincs_jax.rhs1_post_xblock_policy import (
     RHS1FastPostXBlockPolishControls,
+    RHS1FPGlobalLowLPolishControls,
+    RHS1FPL1PolishControls,
     RHS1FPLowLPolishControls,
     RHS1FPResidualPolishControls,
     rhs1_fast_post_xblock_polish_allowed,
     rhs1_fast_post_xblock_polish_controls_from_env,
+    rhs1_fp_global_low_l_polish_controls_from_env,
+    rhs1_fp_l1_polish_controls_from_env,
     rhs1_fp_low_l_polish_controls_from_env,
     rhs1_fp_residual_polish_controls_from_env,
     rhs1_fp_xblock_global_correction_allowed,
@@ -255,6 +259,143 @@ def test_fp_low_l_polish_controls_respect_env_and_invalid_values(monkeypatch) ->
         block_max=1500,
         restart=80,
         maxiter=120,
+    )
+
+
+def test_fp_l1_polish_controls_preserve_defaults(monkeypatch) -> None:
+    for name in (
+        "SFINCS_JAX_RHSMODE1_FP_L1_POLISH",
+        "SFINCS_JAX_RHSMODE1_FP_L1_POLISH_MAXITER",
+        "SFINCS_JAX_RHSMODE1_FP_L1_POLISH_RESTART",
+        "SFINCS_JAX_RHSMODE1_FP_L1_POLISH_RATIO",
+        "SFINCS_JAX_RHSMODE1_FP_L1_POLISH_ABS",
+        "SFINCS_JAX_RHSMODE1_FP_L1_POLISH_TOL",
+        "SFINCS_JAX_RHSMODE1_FP_L1_POLISH_FULL_RATIO",
+    ):
+        monkeypatch.delenv(name, raising=False)
+
+    assert rhs1_fp_l1_polish_controls_from_env() == RHS1FPL1PolishControls(
+        enabled=True,
+        restart=80,
+        maxiter=120,
+        ratio=2.0,
+        abs_threshold=1.0e-8,
+        tol=1.0e-10,
+        full_accept_ratio=1.2,
+    )
+
+
+def test_fp_l1_polish_controls_respect_env_and_invalid_values(monkeypatch) -> None:
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_FP_L1_POLISH", "off")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_FP_L1_POLISH_MAXITER", "999")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_FP_L1_POLISH_RESTART", "300")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_FP_L1_POLISH_RATIO", "3.5")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_FP_L1_POLISH_ABS", "4e-9")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_FP_L1_POLISH_TOL", "5e-11")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_FP_L1_POLISH_FULL_RATIO", "1.8")
+
+    assert rhs1_fp_l1_polish_controls_from_env() == RHS1FPL1PolishControls(
+        enabled=False,
+        restart=200,
+        maxiter=200,
+        ratio=3.5,
+        abs_threshold=4.0e-9,
+        tol=5.0e-11,
+        full_accept_ratio=1.8,
+    )
+
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_FP_L1_POLISH", "1")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_FP_L1_POLISH_MAXITER", "bad")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_FP_L1_POLISH_RESTART", "bad")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_FP_L1_POLISH_RATIO", "bad")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_FP_L1_POLISH_ABS", "bad")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_FP_L1_POLISH_TOL", "bad")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_FP_L1_POLISH_FULL_RATIO", "bad")
+    assert rhs1_fp_l1_polish_controls_from_env() == RHS1FPL1PolishControls(
+        enabled=True,
+        restart=80,
+        maxiter=120,
+        ratio=2.0,
+        abs_threshold=1.0e-8,
+        tol=1.0e-10,
+        full_accept_ratio=1.2,
+    )
+
+
+def test_fp_global_low_l_polish_controls_preserve_defaults(monkeypatch) -> None:
+    for name in (
+        "SFINCS_JAX_RHSMODE1_FP_GLOBAL_LOW_L_POLISH",
+        "SFINCS_JAX_RHSMODE1_FP_GLOBAL_LOW_LMAX",
+        "SFINCS_JAX_RHSMODE1_FP_GLOBAL_LOW_MAX_SIZE",
+        "SFINCS_JAX_RHSMODE1_FP_GLOBAL_LOW_RATIO",
+        "SFINCS_JAX_RHSMODE1_FP_GLOBAL_LOW_MAXITER",
+        "SFINCS_JAX_RHSMODE1_FP_GLOBAL_LOW_RESTART",
+        "SFINCS_JAX_RHSMODE1_FP_GLOBAL_LOW_ABS",
+        "SFINCS_JAX_RHSMODE1_FP_GLOBAL_LOW_FULL_RATIO",
+    ):
+        monkeypatch.delenv(name, raising=False)
+
+    assert rhs1_fp_global_low_l_polish_controls_from_env(
+        n_xi=9,
+    ) == RHS1FPGlobalLowLPolishControls(
+        enabled=False,
+        lmax=6,
+        max_size=8000,
+        ratio=1.0e4,
+        restart=80,
+        maxiter=120,
+        abs_threshold=1.0e-8,
+        full_accept_ratio=1.2,
+        tol=1.0e-10,
+        threshold_ratio=2.0,
+    )
+
+
+def test_fp_global_low_l_polish_controls_respect_env_and_bounds(monkeypatch) -> None:
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_FP_GLOBAL_LOW_L_POLISH", "on")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_FP_GLOBAL_LOW_LMAX", "99")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_FP_GLOBAL_LOW_MAX_SIZE", "-1")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_FP_GLOBAL_LOW_RATIO", "0.5")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_FP_GLOBAL_LOW_MAXITER", "999")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_FP_GLOBAL_LOW_RESTART", "999")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_FP_GLOBAL_LOW_ABS", "2e-9")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_FP_GLOBAL_LOW_FULL_RATIO", "0.8")
+
+    assert rhs1_fp_global_low_l_polish_controls_from_env(
+        n_xi=7,
+    ) == RHS1FPGlobalLowLPolishControls(
+        enabled=True,
+        lmax=6,
+        max_size=0,
+        ratio=1.0,
+        restart=250,
+        maxiter=250,
+        abs_threshold=2.0e-9,
+        full_accept_ratio=1.0,
+        tol=1.0e-10,
+        threshold_ratio=2.0,
+    )
+
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_FP_GLOBAL_LOW_LMAX", "bad")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_FP_GLOBAL_LOW_MAX_SIZE", "bad")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_FP_GLOBAL_LOW_RATIO", "bad")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_FP_GLOBAL_LOW_MAXITER", "bad")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_FP_GLOBAL_LOW_RESTART", "bad")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_FP_GLOBAL_LOW_ABS", "bad")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_FP_GLOBAL_LOW_FULL_RATIO", "bad")
+    assert rhs1_fp_global_low_l_polish_controls_from_env(
+        n_xi=3,
+    ) == RHS1FPGlobalLowLPolishControls(
+        enabled=True,
+        lmax=2,
+        max_size=8000,
+        ratio=1.0e4,
+        restart=80,
+        maxiter=120,
+        abs_threshold=1.0e-8,
+        full_accept_ratio=1.2,
+        tol=1.0e-10,
+        threshold_ratio=2.0,
     )
 
 

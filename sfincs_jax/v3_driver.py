@@ -581,6 +581,8 @@ from .rhs1_large_cpu_policy import (
 from .problems.profile_response.policies import (
     rhs1_fast_post_xblock_polish_allowed as _rhs1_fast_post_xblock_polish_allowed_impl,
     rhs1_fast_post_xblock_polish_controls_from_env,
+    rhs1_fp_global_low_l_polish_controls_from_env,
+    rhs1_fp_l1_polish_controls_from_env,
     rhs1_fp_low_l_polish_controls_from_env,
     rhs1_fp_residual_polish_controls_from_env,
     rhs1_fp_xblock_global_correction_allowed as _rhs1_fp_xblock_global_correction_allowed_impl,
@@ -13734,9 +13736,8 @@ def solve_v3_full_system_linear_gmres(
             # L=1 targeted polish (flow channel): solve a small projected system
             # on the L=1 active modes only. This is a cheap way to improve flow/Mach
             # parity when the full-system solve stalls above the strict target.
-            l1_polish_env = os.environ.get("SFINCS_JAX_RHSMODE1_FP_L1_POLISH", "").strip().lower()
-            l1_polish_enabled = l1_polish_env not in {"0", "false", "no", "off"}
-            if fp_targeted_polish and l1_polish_enabled:
+            l1_polish_controls = rhs1_fp_l1_polish_controls_from_env()
+            if fp_targeted_polish and l1_polish_controls.enabled:
                 nxi_for_x_np = np.asarray(op.fblock.collisionless.n_xi_for_x, dtype=np.int32)
                 l1_active_idx_np = fp_pitch_mode_active_indices(
                     n_species=int(op.n_species),
@@ -13757,38 +13758,6 @@ def solve_v3_full_system_linear_gmres(
                 if int(l1_active_idx_np.size) > 0:
                     l1_idx_jnp = jnp.asarray(np.unique(l1_active_idx_np), dtype=jnp.int32)
                     l1_n = int(l1_idx_jnp.shape[0])
-                    l1_maxiter_env = os.environ.get("SFINCS_JAX_RHSMODE1_FP_L1_POLISH_MAXITER", "").strip()
-                    l1_restart_env = os.environ.get("SFINCS_JAX_RHSMODE1_FP_L1_POLISH_RESTART", "").strip()
-                    try:
-                        l1_maxiter = int(l1_maxiter_env) if l1_maxiter_env else 120
-                    except ValueError:
-                        l1_maxiter = 120
-                    try:
-                        l1_restart = int(l1_restart_env) if l1_restart_env else 80
-                    except ValueError:
-                        l1_restart = 80
-                    l1_maxiter = max(5, min(int(l1_maxiter), 200))
-                    l1_restart = max(5, min(int(l1_restart), max(5, l1_maxiter)))
-                    l1_ratio_env = os.environ.get("SFINCS_JAX_RHSMODE1_FP_L1_POLISH_RATIO", "").strip()
-                    l1_abs_env = os.environ.get("SFINCS_JAX_RHSMODE1_FP_L1_POLISH_ABS", "").strip()
-                    try:
-                        l1_ratio = float(l1_ratio_env) if l1_ratio_env else 2.0
-                    except ValueError:
-                        l1_ratio = 2.0
-                    try:
-                        l1_abs = float(l1_abs_env) if l1_abs_env else 1.0e-8
-                    except ValueError:
-                        l1_abs = 1.0e-8
-                    tol_l1_env = os.environ.get("SFINCS_JAX_RHSMODE1_FP_L1_POLISH_TOL", "").strip()
-                    try:
-                        tol_l1 = float(tol_l1_env) if tol_l1_env else 1.0e-10
-                    except ValueError:
-                        tol_l1 = 1.0e-10
-                    l1_full_ratio_env = os.environ.get("SFINCS_JAX_RHSMODE1_FP_L1_POLISH_FULL_RATIO", "").strip()
-                    try:
-                        l1_full_ratio = float(l1_full_ratio_env) if l1_full_ratio_env else 1.2
-                    except ValueError:
-                        l1_full_ratio = 1.2
 
                     def _pre_l1_full(v: jnp.ndarray) -> jnp.ndarray:
                         if lmax_precond_for_l1 is not None:
@@ -13804,26 +13773,30 @@ def solve_v3_full_system_linear_gmres(
                             active_size=int(active_size),
                             solve_linear=_solve_linear,
                             preconditioner=_pre_l1_full,
-                            tol=tol_l1,
-                            restart=int(l1_restart),
-                            maxiter=int(l1_maxiter),
+                            tol=l1_polish_controls.tol,
+                            restart=int(l1_polish_controls.restart),
+                            maxiter=int(l1_polish_controls.maxiter),
                             precond_side=gmres_precond_side,
                             target=float(target_reduced),
-                            threshold_ratio=float(l1_ratio),
-                            abs_threshold=float(l1_abs),
-                            full_accept_ratio=float(l1_full_ratio),
+                            threshold_ratio=float(l1_polish_controls.ratio),
+                            abs_threshold=float(l1_polish_controls.abs_threshold),
+                            full_accept_ratio=float(l1_polish_controls.full_accept_ratio),
                             require_full_improvement=False,
                         )
                         if (
                             emit is not None
                             and np.isfinite(l1_outcome.projected_residual_before)
                             and l1_outcome.projected_residual_before
-                            > max(float(target_reduced) * max(1.0, float(l1_ratio)), float(l1_abs))
+                            > max(
+                                float(target_reduced) * max(1.0, float(l1_polish_controls.ratio)),
+                                float(l1_polish_controls.abs_threshold),
+                            )
                         ):
                             emit(
                                 1,
                                 "solve_v3_full_system_linear_gmres: FP L1 polish "
-                                f"(size={l1_n} restart={l1_restart} maxiter={l1_maxiter} "
+                                f"(size={l1_n} restart={l1_polish_controls.restart} "
+                                f"maxiter={l1_polish_controls.maxiter} "
                                 f"b_norm={l1_outcome.projected_residual_before:.3e})",
                             )
                         if l1_outcome.accepted:
@@ -13844,28 +13817,19 @@ def solve_v3_full_system_linear_gmres(
             # species/x/(theta,zeta). This is more expensive than the L1 polish but can be
             # significantly more effective at improving flow/current parity when the full
             # solve stalls above the strict target (especially for FP+Er).
-            global_low_l_env = os.environ.get("SFINCS_JAX_RHSMODE1_FP_GLOBAL_LOW_L_POLISH", "").strip().lower()
-            global_low_l_enabled = global_low_l_env in {"1", "true", "yes", "on"}
-            if fp_targeted_polish and global_low_l_enabled and float(res_reduced.residual_norm) > target_reduced:
-                lmax_env = os.environ.get("SFINCS_JAX_RHSMODE1_FP_GLOBAL_LOW_LMAX", "").strip()
-                max_size_env = os.environ.get("SFINCS_JAX_RHSMODE1_FP_GLOBAL_LOW_MAX_SIZE", "").strip()
-                ratio_env = os.environ.get("SFINCS_JAX_RHSMODE1_FP_GLOBAL_LOW_RATIO", "").strip()
-                try:
-                    low_lmax = int(lmax_env) if lmax_env else 6
-                except ValueError:
-                    low_lmax = 6
-                try:
-                    low_max_size = int(max_size_env) if max_size_env else 8000
-                except ValueError:
-                    low_max_size = 8000
-                try:
-                    low_ratio = float(ratio_env) if ratio_env else 1.0e4
-                except ValueError:
-                    low_ratio = 1.0e4
-                low_lmax = max(0, min(int(low_lmax), int(op.n_xi) - 1))
-                low_max_size = max(0, int(low_max_size))
-                low_ratio = max(1.0, float(low_ratio))
-                if float(res_reduced.residual_norm) > float(target_reduced) * float(low_ratio) and low_lmax > 0:
+            global_low_l_controls = rhs1_fp_global_low_l_polish_controls_from_env(
+                n_xi=int(op.n_xi),
+            )
+            if (
+                fp_targeted_polish
+                and global_low_l_controls.enabled
+                and float(res_reduced.residual_norm) > target_reduced
+            ):
+                if (
+                    float(res_reduced.residual_norm)
+                    > float(target_reduced) * float(global_low_l_controls.ratio)
+                    and global_low_l_controls.lmax > 0
+                ):
                     nxi_for_x_np = np.asarray(op.fblock.collisionless.n_xi_for_x, dtype=np.int32)
                     low_active_idx_np = fp_pitch_mode_active_indices(
                         n_species=int(op.n_species),
@@ -13875,7 +13839,7 @@ def solve_v3_full_system_linear_gmres(
                         n_zeta=int(op.n_zeta),
                         nxi_for_x=nxi_for_x_np,
                         l_min=0,
-                        l_max=int(low_lmax),
+                        l_max=int(global_low_l_controls.lmax),
                         full_to_active=(
                             full_to_active_jnp
                             if use_active_dof_mode and full_to_active_jnp is not None
@@ -13890,32 +13854,14 @@ def solve_v3_full_system_linear_gmres(
                         low_n = 0
                         low_idx_jnp = None
 
-                    if low_n > 0 and (low_max_size <= 0 or low_n <= low_max_size):
-                        low_maxiter_env = os.environ.get("SFINCS_JAX_RHSMODE1_FP_GLOBAL_LOW_MAXITER", "").strip()
-                        low_restart_env = os.environ.get("SFINCS_JAX_RHSMODE1_FP_GLOBAL_LOW_RESTART", "").strip()
-                        try:
-                            low_maxiter = int(low_maxiter_env) if low_maxiter_env else 120
-                        except ValueError:
-                            low_maxiter = 120
-                        try:
-                            low_restart = int(low_restart_env) if low_restart_env else 80
-                        except ValueError:
-                            low_restart = 80
-                        low_maxiter = max(5, min(int(low_maxiter), 250))
-                        low_restart = max(5, min(int(low_restart), max(5, low_maxiter)))
-
+                    if (
+                        low_n > 0
+                        and (
+                            global_low_l_controls.max_size <= 0
+                            or low_n <= global_low_l_controls.max_size
+                        )
+                    ):
                         assert low_idx_jnp is not None
-                        low_abs_env = os.environ.get("SFINCS_JAX_RHSMODE1_FP_GLOBAL_LOW_ABS", "").strip()
-                        try:
-                            low_abs = float(low_abs_env) if low_abs_env else 1.0e-8
-                        except ValueError:
-                            low_abs = 1.0e-8
-                        full_ratio_env = os.environ.get("SFINCS_JAX_RHSMODE1_FP_GLOBAL_LOW_FULL_RATIO", "").strip()
-                        try:
-                            full_ratio = float(full_ratio_env) if full_ratio_env else 1.2
-                        except ValueError:
-                            full_ratio = 1.2
-                        full_ratio = max(1.0, float(full_ratio))
 
                         def _pre_low_full(v: jnp.ndarray) -> jnp.ndarray:
                             if lmax_precond_for_l1 is not None:
@@ -13931,27 +13877,33 @@ def solve_v3_full_system_linear_gmres(
                                 active_size=int(active_size),
                                 solve_linear=_solve_linear,
                                 preconditioner=_pre_low_full,
-                                tol=1.0e-10,
-                                restart=int(low_restart),
-                                maxiter=int(low_maxiter),
+                                tol=float(global_low_l_controls.tol),
+                                restart=int(global_low_l_controls.restart),
+                                maxiter=int(global_low_l_controls.maxiter),
                                 precond_side=gmres_precond_side,
                                 target=float(target_reduced),
-                                threshold_ratio=2.0,
-                                abs_threshold=float(low_abs),
-                                full_accept_ratio=float(full_ratio),
+                                threshold_ratio=float(global_low_l_controls.threshold_ratio),
+                                abs_threshold=float(global_low_l_controls.abs_threshold),
+                                full_accept_ratio=float(global_low_l_controls.full_accept_ratio),
                                 require_full_improvement=True,
                             )
                             if (
                                 emit is not None
                                 and np.isfinite(low_outcome.projected_residual_before)
                                 and low_outcome.projected_residual_before
-                                > max(float(target_reduced) * 2.0, float(low_abs))
+                                > max(
+                                    float(target_reduced)
+                                    * float(global_low_l_controls.threshold_ratio),
+                                    float(global_low_l_controls.abs_threshold),
+                                )
                             ):
                                 emit(
                                     1,
                                     "solve_v3_full_system_linear_gmres: FP global low-L polish "
-                                    f"(lmax={int(low_lmax)} size={int(low_n)} restart={int(low_restart)} "
-                                    f"maxiter={int(low_maxiter)} b_norm={low_outcome.projected_residual_before:.3e})",
+                                    f"(lmax={int(global_low_l_controls.lmax)} size={int(low_n)} "
+                                    f"restart={int(global_low_l_controls.restart)} "
+                                    f"maxiter={int(global_low_l_controls.maxiter)} "
+                                    f"b_norm={low_outcome.projected_residual_before:.3e})",
                                 )
                             if low_outcome.accepted:
                                 if emit is not None:

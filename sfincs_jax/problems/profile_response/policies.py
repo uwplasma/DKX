@@ -2064,6 +2064,35 @@ class RHS1FPLowLPolishControls:
     maxiter: int
 
 
+@dataclass(frozen=True)
+class RHS1FPL1PolishControls:
+    """Controls for the FP L=1 projected residual-polish pass."""
+
+    enabled: bool
+    restart: int
+    maxiter: int
+    ratio: float
+    abs_threshold: float
+    tol: float
+    full_accept_ratio: float
+
+
+@dataclass(frozen=True)
+class RHS1FPGlobalLowLPolishControls:
+    """Controls for the FP global low-L projected residual-polish pass."""
+
+    enabled: bool
+    lmax: int
+    max_size: int
+    ratio: float
+    restart: int
+    maxiter: int
+    abs_threshold: float
+    full_accept_ratio: float
+    tol: float = 1.0e-10
+    threshold_ratio: float = 2.0
+
+
 def rhs1_fp_residual_polish_controls_from_env() -> RHS1FPResidualPolishControls:
     """Parse damped FP residual-polish controls with bounded defaults."""
 
@@ -2076,6 +2105,32 @@ def rhs1_fp_residual_polish_controls_from_env() -> RHS1FPResidualPolishControls:
         hybrid=hybrid_env not in _FALSE_VALUES,
         omega=max(1.0e-3, min(float(omega), 1.5)),
         backtrack=max(0, min(int(backtrack), 6)),
+    )
+
+
+def rhs1_fp_l1_polish_controls_from_env() -> RHS1FPL1PolishControls:
+    """Parse FP L=1 projected-polish controls with legacy bounds."""
+
+    enabled_env = _env_token("SFINCS_JAX_RHSMODE1_FP_L1_POLISH")
+    maxiter = max(
+        5,
+        min(_env_int("SFINCS_JAX_RHSMODE1_FP_L1_POLISH_MAXITER", 120), 200),
+    )
+    restart = max(
+        5,
+        min(_env_int("SFINCS_JAX_RHSMODE1_FP_L1_POLISH_RESTART", 80), max(5, maxiter)),
+    )
+    return RHS1FPL1PolishControls(
+        enabled=enabled_env not in _FALSE_VALUES,
+        restart=int(restart),
+        maxiter=int(maxiter),
+        ratio=_env_float("SFINCS_JAX_RHSMODE1_FP_L1_POLISH_RATIO", 2.0),
+        abs_threshold=_env_float("SFINCS_JAX_RHSMODE1_FP_L1_POLISH_ABS", 1.0e-8),
+        tol=_env_float("SFINCS_JAX_RHSMODE1_FP_L1_POLISH_TOL", 1.0e-10),
+        full_accept_ratio=_env_float(
+            "SFINCS_JAX_RHSMODE1_FP_L1_POLISH_FULL_RATIO",
+            1.2,
+        ),
     )
 
 
@@ -2102,6 +2157,37 @@ def rhs1_fp_low_l_polish_controls_from_env(
         block_max=_env_int("SFINCS_JAX_RHSMODE1_FP_POLISH_LMAX_BLOCK_MAX", 1500),
         restart=_env_int("SFINCS_JAX_RHSMODE1_FP_POLISH_LMAX_RESTART", 80),
         maxiter=_env_int("SFINCS_JAX_RHSMODE1_FP_POLISH_LMAX_MAXITER", 120),
+    )
+
+
+def rhs1_fp_global_low_l_polish_controls_from_env(
+    *,
+    n_xi: int,
+) -> RHS1FPGlobalLowLPolishControls:
+    """Parse FP global low-L projected-polish controls with legacy bounds."""
+
+    enabled_env = _env_token("SFINCS_JAX_RHSMODE1_FP_GLOBAL_LOW_L_POLISH")
+    low_lmax = _env_int("SFINCS_JAX_RHSMODE1_FP_GLOBAL_LOW_LMAX", 6)
+    low_max_size = _env_int("SFINCS_JAX_RHSMODE1_FP_GLOBAL_LOW_MAX_SIZE", 8000)
+    low_ratio = _env_float("SFINCS_JAX_RHSMODE1_FP_GLOBAL_LOW_RATIO", 1.0e4)
+    maxiter = max(
+        5,
+        min(_env_int("SFINCS_JAX_RHSMODE1_FP_GLOBAL_LOW_MAXITER", 120), 250),
+    )
+    restart = max(
+        5,
+        min(_env_int("SFINCS_JAX_RHSMODE1_FP_GLOBAL_LOW_RESTART", 80), max(5, maxiter)),
+    )
+    full_ratio = _env_float("SFINCS_JAX_RHSMODE1_FP_GLOBAL_LOW_FULL_RATIO", 1.2)
+    return RHS1FPGlobalLowLPolishControls(
+        enabled=enabled_env in _TRUE_VALUES,
+        lmax=max(0, min(int(low_lmax), int(n_xi) - 1)),
+        max_size=max(0, int(low_max_size)),
+        ratio=max(1.0, float(low_ratio)),
+        restart=int(restart),
+        maxiter=int(maxiter),
+        abs_threshold=_env_float("SFINCS_JAX_RHSMODE1_FP_GLOBAL_LOW_ABS", 1.0e-8),
+        full_accept_ratio=max(1.0, float(full_ratio)),
     )
 
 
@@ -3026,6 +3112,8 @@ def rhs1_pas_tz_guarded_stage2_retry() -> bool:
 __all__ = (
     "RHS1Constraint0PETScCompatConfig",
     "RHS1FastPostXBlockPolishControls",
+    "RHS1FPGlobalLowLPolishControls",
+    "RHS1FPL1PolishControls",
     "RHS1FPLowLPolishControls",
     "RHS1FPResidualPolishControls",
     "RHS1QIDeviceRankBudget",
@@ -3044,6 +3132,8 @@ __all__ = (
     "rhs1_fast_post_xblock_polish_allowed",
     "rhs1_fast_post_xblock_polish_controls_from_env",
     "rhs1_fp_force_stage2",
+    "rhs1_fp_global_low_l_polish_controls_from_env",
+    "rhs1_fp_l1_polish_controls_from_env",
     "rhs1_fp_low_l_polish_controls_from_env",
     "rhs1_fp_residual_polish_controls_from_env",
     "rhs1_fp_targeted_polish_allowed",
