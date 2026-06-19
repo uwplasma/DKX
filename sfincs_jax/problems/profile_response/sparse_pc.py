@@ -263,6 +263,23 @@ class SparseHostScipyGMRESContext:
 
 
 @dataclass(frozen=True)
+class SparseJAXRetryPreconditionerBuildContext:
+    """Inputs for building the sparse-JAX retry preconditioner."""
+
+    matvec: ArrayFn
+    n: int
+    dtype: object
+    cache_key: object
+    drop_tol: float
+    drop_rel: float
+    reg: float
+    omega: float
+    sweeps: int
+    emit: EmitFn | None
+    builder: Callable[..., ArrayFn]
+
+
+@dataclass(frozen=True)
 class ExplicitSparseOperatorBuildPolicy:
     """Materialization controls shared by explicit host sparse solve paths."""
 
@@ -8087,6 +8104,32 @@ def run_sparse_host_scipy_gmres(
     return result, residual_vec
 
 
+def build_sparse_jax_retry_preconditioner(
+    context: SparseJAXRetryPreconditionerBuildContext,
+) -> ArrayFn:
+    """Build the sparse-JAX retry preconditioner and emit its progress line."""
+
+    preconditioner = context.builder(
+        matvec=context.matvec,
+        n=int(context.n),
+        dtype=context.dtype,
+        cache_key=context.cache_key,
+        drop_tol=float(context.drop_tol),
+        drop_rel=float(context.drop_rel),
+        reg=float(context.reg),
+        omega=float(context.omega),
+        sweeps=int(context.sweeps),
+        emit=context.emit,
+    )
+    if context.emit is not None:
+        context.emit(
+            0,
+            "solve_v3_full_system_linear_gmres: sparse JAX Jacobi fallback "
+            f"(sweeps={int(context.sweeps)} omega={float(context.omega):.2f})",
+        )
+    return preconditioner
+
+
 def apply_sparse_pc_post_minres(
     *,
     context: SparsePCPostMinresContext,
@@ -8409,6 +8452,7 @@ __all__ = [
     "SparseHostScipyPreconditionerBuildContext",
     "SparseHostScipyPreconditionerBuildResult",
     "SparseHostScipyGMRESContext",
+    "SparseJAXRetryPreconditionerBuildContext",
     "ExplicitSparseOperatorBuildPolicy",
     "ExplicitSparseOperatorBuildResult",
     "SparsePCGMRESCompletionMessageContext",
@@ -8479,6 +8523,7 @@ __all__ = [
     "build_sparse_ilu_preconditioner_from_cache",
     "build_sparse_host_scipy_preconditioner",
     "run_sparse_host_scipy_gmres",
+    "build_sparse_jax_retry_preconditioner",
     "build_explicit_sparse_operator_from_pattern",
     "explicit_sparse_pattern_progress_messages",
     "resolve_explicit_sparse_operator_build_policy",

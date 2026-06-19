@@ -53,6 +53,7 @@ from sfincs_jax.problems.profile_response.sparse_pc import (
     SparseILUPreconditionerBuildContext,
     SparseHostScipyPreconditionerBuildContext,
     SparseHostScipyGMRESContext,
+    SparseJAXRetryPreconditionerBuildContext,
     ExplicitSparseOperatorBuildPolicy,
     ExplicitSparseOperatorBuildResult,
     SparseMinimumNormPayload,
@@ -145,6 +146,7 @@ from sfincs_jax.problems.profile_response.sparse_pc import (
     build_sparse_ilu_preconditioner_from_cache,
     build_sparse_host_scipy_preconditioner,
     run_sparse_host_scipy_gmres,
+    build_sparse_jax_retry_preconditioner,
     sparse_minimum_norm_solve_payload,
     sparse_minimum_norm_solve_from_pattern,
     sparse_minimum_norm_start_message,
@@ -5582,6 +5584,49 @@ def test_run_sparse_host_scipy_gmres_computes_requested_true_residual_vector() -
 
     assert float(result.residual_norm) == pytest.approx(9.0)
     np.testing.assert_allclose(np.asarray(residual_vec), np.asarray([1.0, 3.0]))
+
+
+def test_build_sparse_jax_retry_preconditioner_calls_builder_and_emits_progress() -> None:
+    calls: list[dict[str, object]] = []
+    messages: list[tuple[int, str]] = []
+
+    def builder(**kwargs):
+        calls.append(kwargs)
+        return lambda v: 0.5 * v
+
+    preconditioner = build_sparse_jax_retry_preconditioner(
+        SparseJAXRetryPreconditionerBuildContext(
+            matvec=_identity,
+            n=5,
+            dtype=jnp.float64,
+            cache_key=("cache",),
+            drop_tol=1.0e-3,
+            drop_rel=2.0e-3,
+            reg=1.0e-8,
+            omega=0.75,
+            sweeps=4,
+            emit=lambda level, message: messages.append((level, message)),
+            builder=builder,
+        )
+    )
+
+    np.testing.assert_allclose(np.asarray(preconditioner(jnp.asarray([2.0]))), [1.0])
+    assert calls[0]["matvec"] is _identity
+    assert calls[0]["n"] == 5
+    assert calls[0]["dtype"] is jnp.float64
+    assert calls[0]["cache_key"] == ("cache",)
+    assert calls[0]["drop_tol"] == pytest.approx(1.0e-3)
+    assert calls[0]["drop_rel"] == pytest.approx(2.0e-3)
+    assert calls[0]["reg"] == pytest.approx(1.0e-8)
+    assert calls[0]["omega"] == pytest.approx(0.75)
+    assert calls[0]["sweeps"] == 4
+    assert messages == [
+        (
+            0,
+            "solve_v3_full_system_linear_gmres: sparse JAX Jacobi fallback "
+            "(sweeps=4 omega=0.75)",
+        )
+    ]
 
 
 def test_sparse_pc_post_minres_accepts_improved_residual_and_recomputes_pc_norm() -> (

@@ -236,6 +236,7 @@ from .problems.profile_response.sparse_pc import (
     SparseILUPreconditionerBuildContext,
     SparseHostScipyPreconditionerBuildContext,
     SparseHostScipyGMRESContext,
+    SparseJAXRetryPreconditionerBuildContext,
     SparsePCGMRESContext,
     SparsePCPostMinresUpdateContext,
     XBlockSubspaceCorrectionContext,
@@ -306,6 +307,7 @@ from .problems.profile_response.sparse_pc import (
     build_sparse_ilu_preconditioner_from_cache,
     build_sparse_host_scipy_preconditioner,
     run_sparse_host_scipy_gmres,
+    build_sparse_jax_retry_preconditioner,
     sparse_host_direct_fallback_payload,
     sparse_host_direct_solve_from_pattern,
     sparse_minimum_norm_solve_from_pattern,
@@ -13443,25 +13445,22 @@ def solve_v3_full_system_linear_gmres(
                         fill_factor=sparse_ilu_fill,
                     )
                     precond_dtype = _precond_dtype(int(active_size))
-                    precond_sparse = _build_sparse_jax_preconditioner_from_matvec(
-                        matvec=mv_reduced,
-                        n=int(active_size),
-                        dtype=precond_dtype,
-                        cache_key=cache_key,
-                        drop_tol=sparse_drop_tol,
-                        drop_rel=sparse_drop_rel,
-                        reg=sparse_jax_reg,
-                        omega=sparse_jax_omega,
-                        sweeps=sparse_jax_sweeps,
-                        emit=emit,
+                    precond_sparse = build_sparse_jax_retry_preconditioner(
+                        SparseJAXRetryPreconditionerBuildContext(
+                            matvec=mv_reduced,
+                            n=int(active_size),
+                            dtype=precond_dtype,
+                            cache_key=cache_key,
+                            drop_tol=sparse_drop_tol,
+                            drop_rel=sparse_drop_rel,
+                            reg=sparse_jax_reg,
+                            omega=sparse_jax_omega,
+                            sweeps=sparse_jax_sweeps,
+                            emit=emit,
+                            builder=_build_sparse_jax_preconditioner_from_matvec,
+                        )
                     )
                     _mark("rhs1_sparse_precond_build_done")
-                    if emit is not None:
-                        emit(
-                            0,
-                            "solve_v3_full_system_linear_gmres: sparse JAX Jacobi fallback "
-                            f"(sweeps={int(sparse_jax_sweeps)} omega={float(sparse_jax_omega):.2f})",
-                        )
                     res_reduced, residual_vec, _accepted, _elapsed = (
                         rhs1_run_measured_linear_candidate_and_update_replay(
                             replay_state=ksp_replay,
@@ -15380,25 +15379,22 @@ def solve_v3_full_system_linear_gmres(
                         fill_factor=sparse_ilu_fill,
                     )
                     precond_dtype = _precond_dtype(int(op.total_size))
-                    precond_sparse = _build_sparse_jax_preconditioner_from_matvec(
-                        matvec=mv,
-                        n=int(op.total_size),
-                        dtype=precond_dtype,
-                        cache_key=cache_key,
-                        drop_tol=sparse_drop_tol,
-                        drop_rel=sparse_drop_rel,
-                        reg=sparse_jax_reg,
-                        omega=sparse_jax_omega,
-                        sweeps=sparse_jax_sweeps,
-                        emit=emit,
+                    precond_sparse = build_sparse_jax_retry_preconditioner(
+                        SparseJAXRetryPreconditionerBuildContext(
+                            matvec=mv,
+                            n=int(op.total_size),
+                            dtype=precond_dtype,
+                            cache_key=cache_key,
+                            drop_tol=sparse_drop_tol,
+                            drop_rel=sparse_drop_rel,
+                            reg=sparse_jax_reg,
+                            omega=sparse_jax_omega,
+                            sweeps=sparse_jax_sweeps,
+                            emit=emit,
+                            builder=_build_sparse_jax_preconditioner_from_matvec,
+                        )
                     )
                     _mark("rhs1_sparse_precond_build_done")
-                    if emit is not None:
-                        emit(
-                            0,
-                            "solve_v3_full_system_linear_gmres: sparse JAX Jacobi fallback "
-                            f"(sweeps={int(sparse_jax_sweeps)} omega={float(sparse_jax_omega):.2f})",
-                        )
                     result, residual_vec, _accepted, _elapsed = (
                         rhs1_run_measured_linear_candidate_and_update_replay(
                             replay_state=ksp_replay,

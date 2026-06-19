@@ -42,9 +42,12 @@ Make `sfincs_jax` research-grade while preserving the public user contract:
 
 Recent checkpoints:
 
+- Sparse-JAX retry preconditioner build/progress emission for reduced and full
+  branches now uses a tested sparse-PC helper while cache-key policy remains
+  driver-owned (current checkpoint).
 - Sparse-JAX Jacobi retry branches now reuse the existing measured
   linear-candidate handoff helper instead of manual timer/solve/accept blocks
-  (current checkpoint).
+  (`ac48e62`).
 - Host SciPy GMRES execution/result wrapping for reduced, full, and
   sparse-operator-preconditioned sparse fallback branches now uses a tested
   sparse-PC helper; the driver still owns solver controls and admission gates
@@ -141,20 +144,30 @@ Recent checkpoints:
 - `cb295ce` Extract sparse pattern setup.
 - `4b6a5b4` Extract sparse factor policy.
 
-Current source-size snapshot after sparse-JAX measured retry handoff reuse:
+Current source-size snapshot after sparse-JAX build/progress extraction:
 
-- `sfincs_jax/v3_driver.py`: `18209` lines.
-- `solve_v3_full_system_linear_gmres`: `12897` lines.
+- `sfincs_jax/v3_driver.py`: `18205` lines.
+- `solve_v3_full_system_linear_gmres`: `12891` lines.
 - `sfincs_jax/v3_results.py`: `119` lines.
 - `sfincs_jax/problems/profile_response/residual.py`: `981` lines.
 - `sfincs_jax/problems/profile_response/handoff.py`: `598` lines.
 - `sfincs_jax/problems/profile_response/dense.py`: `407` lines.
 - `sfincs_jax/problems/profile_response/linear_solve.py`: `327` lines.
 - `sfincs_jax/problems/profile_response/active_projection.py`: `116` lines.
-- `sfincs_jax/problems/profile_response/sparse_pc.py`: `8498` lines.
+- `sfincs_jax/problems/profile_response/sparse_pc.py`: `8543` lines.
 
 Recent local validation:
 
+- Sparse-PC helper shard after sparse-JAX build/progress extraction:
+  `187 passed in 1.96 s`.
+- Sparse-host/minimum-norm/direct-tail driver shard:
+  `32 passed, 100 deselected in 35.88 s`.
+- Broad profile-response/RHSMode=1 policy, setup, diagnostics, solver, and
+  helper sweep after sparse-JAX build/progress extraction:
+  `1029 passed in 49.84 s`.
+- Hygiene:
+  `ruff`, `compileall`, `git diff --check`, and `scripts/check_repo_size.py`
+  passed.
 - RHSMode=1 handoff helper shard after sparse-JAX measured retry reuse:
   `34 passed in 0.34 s`.
 - Sparse-host/minimum-norm/direct-tail driver shard:
@@ -355,6 +368,8 @@ Completed recent boundaries:
   call-site through a provided residual matvec.
 - Sparse-JAX Jacobi retry branches now use the shared measured linear-candidate
   handoff helper, preserving reduced/full residual-vector routing.
+- Sparse-JAX retry preconditioner build/progress emission now uses a tested
+  helper with driver-provided cache keys and builder callback.
 
 Next steps:
 
