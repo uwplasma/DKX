@@ -286,8 +286,7 @@ from .problems.profile_response.sparse_pc import (
     run_fortran_reduced_xblock_krylov_solve,
     run_sparse_pc_gmres_once,
     sparse_host_direct_fallback_payload,
-    sparse_host_direct_solve_payload,
-    explicit_sparse_pattern_progress_messages,
+    sparse_host_direct_solve_from_pattern,
     sparse_minimum_norm_solve_from_pattern,
     validate_explicit_sparse_host_request,
     XBlockAssembledPreflightError,
@@ -9201,43 +9200,31 @@ def solve_v3_full_system_linear_gmres(
         )
         sparse_timer = Timer()
         pattern = v3_full_system_conservative_sparsity_pattern(op)
-        if emit is not None:
-            summary = summarize_v3_sparse_pattern(op, pattern)
-            for level, message in explicit_sparse_pattern_progress_messages(
-                solver_label="sparse_host",
-                summary=summary,
-            ):
-                emit(level, message)
+        summary = summarize_v3_sparse_pattern(op, pattern)
 
         def _sparse_host_mv(x_np: np.ndarray) -> jnp.ndarray:
             return apply_v3_full_system_operator(op, jnp.asarray(x_np, dtype=rhs.dtype))
 
-        operator_bundle, factor_bundle = _build_host_sparse_direct_factor_from_matvec(
+        sparse_host_direct_payload = sparse_host_direct_solve_from_pattern(
             matvec=_sparse_host_mv,
+            pattern=pattern,
+            summary=summary,
             n=int(op.total_size),
             dtype=rhs.dtype,
             factor_dtype=np.dtype(np.float64),
-            pattern=pattern,
-            emit=emit,
-        )
-        sparse_host_direct_payload = sparse_host_direct_solve_payload(
-            factor_solve=factor_bundle.solve,
-            operator_matrix=operator_bundle.matrix,
             rhs=rhs,
-            factor_dtype=np.dtype(np.float64),
             refine_steps=_host_sparse_direct_refine_steps(
                 "SFINCS_JAX_RHSMODE1_SPARSE_DIRECT_REFINE",
                 default=2,
             ),
-            matvec=_sparse_host_mv,
             atol=float(atol),
             tol=float(tol),
             rhs_norm=float(rhs_norm),
             elapsed_s=sparse_timer.elapsed_s,
+            emit=emit,
+            build_host_sparse_direct_factor_from_matvec=_build_host_sparse_direct_factor_from_matvec,
             direct_solve_with_refinement=_host_direct_solve_with_refinement,
         )
-        if emit is not None:
-            emit(0, sparse_host_direct_payload.completion_message)
         return V3LinearSolveResult(
             op=op,
             rhs=rhs,

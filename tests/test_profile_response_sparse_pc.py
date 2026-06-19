@@ -131,6 +131,7 @@ from sfincs_jax.problems.profile_response.sparse_pc import (
     sparse_pc_gmres_completion_message,
     sparse_pc_gmres_final_payload_from_driver_state,
     sparse_host_direct_solve_payload,
+    sparse_host_direct_solve_from_pattern,
     solve_sparse_host_direct_from_available_factor,
     apply_sparse_host_direct_polish_if_needed,
     sparse_host_direct_fallback_payload,
@@ -4996,6 +4997,69 @@ def test_sparse_host_direct_solve_payload_recomputes_true_residual_and_metadata(
         "solve_v3_full_system_linear_gmres: sparse_host complete "
         "elapsed_s=0.750 residual=0.000000e+00"
     )
+
+
+def test_sparse_host_direct_solve_from_pattern_builds_factor_and_emits_messages() -> None:
+    messages: list[tuple[int, str]] = []
+    build_calls: list[dict[str, object]] = []
+    direct_calls: list[dict[str, object]] = []
+    operator_bundle = SimpleNamespace(matrix=scipy_sparse.diags([2.0, 4.0], format="csr"))
+    factor_bundle = SimpleNamespace(solve=lambda rhs: rhs)
+
+    def build_factor(**kwargs):
+        build_calls.append(kwargs)
+        return operator_bundle, factor_bundle
+
+    def direct_solve_with_refinement(**kwargs):
+        direct_calls.append(kwargs)
+        return np.asarray([1.0, 2.0]), 9.0
+
+    payload = sparse_host_direct_solve_from_pattern(
+        matvec=lambda x: jnp.asarray([2.0 * x[0], 4.0 * x[1]], dtype=jnp.float64),
+        pattern={"rows": (0, 1)},
+        summary=SimpleNamespace(nnz=2, avg_row_nnz=1.0, max_row_nnz=1),
+        n=2,
+        dtype=jnp.float64,
+        rhs=jnp.asarray([2.0, 8.0], dtype=jnp.float64),
+        factor_dtype=np.dtype(np.float64),
+        refine_steps=3,
+        atol=1.0e-12,
+        tol=1.0e-12,
+        rhs_norm=float(np.linalg.norm([2.0, 8.0])),
+        elapsed_s=lambda: 1.5,
+        emit=lambda level, message: messages.append((level, message)),
+        build_host_sparse_direct_factor_from_matvec=build_factor,
+        direct_solve_with_refinement=direct_solve_with_refinement,
+    )
+
+    assert isinstance(payload, SparseHostDirectPayload)
+    assert build_calls[0]["pattern"] == {"rows": (0, 1)}
+    assert build_calls[0]["n"] == 2
+    assert build_calls[0]["factor_dtype"] == np.dtype(np.float64)
+    assert build_calls[0]["emit"] is not None
+    assert direct_calls[0]["factor_solve"] is factor_bundle.solve
+    assert direct_calls[0]["operator_matrix"] is operator_bundle.matrix
+    assert direct_calls[0]["refine_steps"] == 3
+    np.testing.assert_allclose(np.asarray(payload.x), np.asarray([1.0, 2.0]))
+    assert float(payload.residual_norm) == pytest.approx(0.0)
+    assert payload.metadata["solver_kind"] == "sparse_host"
+    assert payload.metadata["accepted_converged"] is True
+    assert messages == [
+        (
+            1,
+            "solve_v3_full_system_linear_gmres: sparse_host building conservative pattern",
+        ),
+        (
+            1,
+            "solve_v3_full_system_linear_gmres: sparse_host pattern "
+            "nnz=2 avg_row_nnz=1 max_row_nnz=1",
+        ),
+        (
+            0,
+            "solve_v3_full_system_linear_gmres: sparse_host complete "
+            "elapsed_s=1.500 residual=0.000000e+00",
+        ),
+    ]
 
 
 def test_solve_sparse_host_direct_from_available_factor_prefers_explicit_factor() -> None:

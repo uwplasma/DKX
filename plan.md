@@ -42,8 +42,10 @@ Make `sfincs_jax` research-grade while preserving the public user contract:
 
 Recent checkpoints:
 
-- Explicit sparse minimum-norm materialization/solve orchestration extraction
+- Explicit sparse-host direct factor/solve orchestration extraction
   (current checkpoint).
+- Explicit sparse minimum-norm materialization/solve orchestration extraction
+  (`d802be4`).
 - RHSMode=1 sparse-host direct fallback progress emission centralization
   (`8fd4866`).
 - RHSMode=1 sparse-host direct fallback solve/polish/residual orchestration
@@ -83,17 +85,24 @@ Recent checkpoints:
 - `cb295ce` Extract sparse pattern setup.
 - `4b6a5b4` Extract sparse factor policy.
 
-Current source-size snapshot after explicit sparse minimum-norm orchestration
+Current source-size snapshot after explicit sparse-host direct orchestration
 extraction:
 
-- `sfincs_jax/v3_driver.py`: `18791` lines.
-- `solve_v3_full_system_linear_gmres`: `13508` lines.
+- `sfincs_jax/v3_driver.py`: `18778` lines.
+- `solve_v3_full_system_linear_gmres`: `13496` lines.
 - `sfincs_jax/problems/profile_response/residual.py`: `751` lines.
 - `sfincs_jax/problems/profile_response/handoff.py`: `290` lines.
-- `sfincs_jax/problems/profile_response/sparse_pc.py`: `7981` lines.
+- `sfincs_jax/problems/profile_response/sparse_pc.py`: `8034` lines.
 
 Recent local validation:
 
+- Explicit sparse-host direct focused sparse-PC shard:
+  `173 passed in 1.68 s`.
+- Sparse-host/minimum-norm/direct-tail driver shard:
+  `32 passed, 100 deselected in 33.63 s`.
+- Hygiene:
+  `ruff`, `compileall`, `git diff --check`, and `scripts/check_repo_size.py`
+  passed.
 - Explicit sparse minimum-norm focused sparse-PC shard:
   `172 passed in 1.63 s`.
 - Sparse-host/minimum-norm/direct-tail driver shard:
@@ -259,6 +268,9 @@ Completed recent boundaries:
 - Explicit sparse minimum-norm conservative-pattern materialization, progress
   emission, policy parsing, LSQR/LSMR execution, completion emission, and
   matrix-required gate consolidated into a tested profile-response helper.
+- Explicit sparse-host direct conservative-pattern progress, host factor build,
+  direct refinement solve, true-residual payload, and completion emission
+  consolidated into a tested profile-response helper.
 
 Next steps:
 

@@ -7481,6 +7481,58 @@ def sparse_host_direct_solve_payload(
     )
 
 
+def sparse_host_direct_solve_from_pattern(
+    *,
+    matvec: Callable[[np.ndarray], jnp.ndarray],
+    pattern: object,
+    summary: object,
+    n: int,
+    dtype: object,
+    rhs: jnp.ndarray,
+    factor_dtype: np.dtype,
+    refine_steps: int,
+    atol: float,
+    tol: float,
+    rhs_norm: float,
+    elapsed_s: Callable[[], float],
+    emit: EmitFn | None,
+    build_host_sparse_direct_factor_from_matvec: Callable[..., tuple[object, object]],
+    direct_solve_with_refinement: Callable[..., tuple[np.ndarray, float]],
+) -> SparseHostDirectPayload:
+    """Build an explicit host sparse factor and solve the full RHSMode=1 system."""
+
+    if emit is not None:
+        for level, message in explicit_sparse_pattern_progress_messages(
+            solver_label="sparse_host",
+            summary=summary,
+        ):
+            emit(level, message)
+    operator_bundle, factor_bundle = build_host_sparse_direct_factor_from_matvec(
+        matvec=matvec,
+        n=int(n),
+        dtype=dtype,
+        factor_dtype=factor_dtype,
+        pattern=pattern,
+        emit=emit,
+    )
+    payload = sparse_host_direct_solve_payload(
+        factor_solve=factor_bundle.solve,
+        operator_matrix=operator_bundle.matrix,
+        rhs=rhs,
+        factor_dtype=factor_dtype,
+        refine_steps=int(refine_steps),
+        matvec=matvec,
+        atol=float(atol),
+        tol=float(tol),
+        rhs_norm=float(rhs_norm),
+        elapsed_s=elapsed_s,
+        direct_solve_with_refinement=direct_solve_with_refinement,
+    )
+    if emit is not None:
+        emit(0, payload.completion_message)
+    return payload
+
+
 def solve_sparse_host_direct_from_available_factor(
     *,
     explicit_sparse_factor: object | None,
@@ -7959,6 +8011,7 @@ __all__ = [
     "sparse_minimum_norm_solve_from_pattern",
     "sparse_minimum_norm_start_message",
     "sparse_host_direct_solve_payload",
+    "sparse_host_direct_solve_from_pattern",
     "solve_sparse_host_direct_from_available_factor",
     "apply_sparse_host_direct_polish_if_needed",
     "sparse_host_direct_fallback_payload",
