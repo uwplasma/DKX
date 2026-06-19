@@ -264,6 +264,7 @@ from .problems.profile_response.sparse_pc import (
     resolve_direct_tail_residual_rescue_policy,
     resolve_direct_tail_true_active_rescue_policy,
     resolve_direct_tail_coupled_coarse_rescue_policy,
+    resolve_sparse_minimum_norm_policy,
     retry_sparse_pc_factor_dtype_from_driver_state,
     resolve_fortran_reduced_sparse_pc_backend,
     run_direct_tail_support_mode_preflight,
@@ -287,6 +288,8 @@ from .problems.profile_response.sparse_pc import (
     resolve_xblock_two_level_policy_setup,
     run_fortran_reduced_xblock_krylov_solve,
     run_sparse_pc_gmres_once,
+    sparse_minimum_norm_solve_payload,
+    sparse_minimum_norm_start_message,
     XBlockAssembledPreflightError,
     finalize_xblock_assembled_operator_metadata,
 )
@@ -326,7 +329,6 @@ from .problems.profile_response.setup import (
     SPARSE_HOST_FORTRAN_REDUCED_PC_GMRES_SOLVE_METHODS as _SPARSE_HOST_FORTRAN_REDUCED_PC_GMRES_SOLVE_METHODS,
     SPARSE_HOST_MINIMUM_NORM_SOLVE_METHODS as _SPARSE_HOST_MINIMUM_NORM_SOLVE_METHODS,
     SPARSE_HOST_PC_GMRES_SOLVE_METHODS as _SPARSE_HOST_PC_GMRES_SOLVE_METHODS,
-    SPARSE_HOST_PETSC_COMPAT_SOLVE_METHODS as _SPARSE_HOST_PETSC_COMPAT_SOLVE_METHODS,
     SPARSE_HOST_SAFE_SOLVE_METHODS as _SPARSE_HOST_SAFE_SOLVE_METHODS,
     SPARSE_HOST_XBLOCK_PC_GMRES_SOLVE_METHODS as _SPARSE_HOST_XBLOCK_PC_GMRES_SOLVE_METHODS,
     STRUCTURED_FULL_CSR_HOST_SOLVE_METHODS as _STRUCTURED_FULL_CSR_HOST_SOLVE_METHODS,
@@ -9328,123 +9330,34 @@ def solve_v3_full_system_linear_gmres(
         if matrix is None:
             raise RuntimeError("sparse_lsmr requires a materialized sparse matrix.")
 
-        import scipy.sparse.linalg as _spla  # noqa: PLC0415
-
-        lsmr_atol_env = os.environ.get("SFINCS_JAX_SPARSE_LSMR_ATOL", "").strip()
-        lsmr_btol_env = os.environ.get("SFINCS_JAX_SPARSE_LSMR_BTOL", "").strip()
-        lsmr_conlim_env = os.environ.get("SFINCS_JAX_SPARSE_LSMR_CONLIM", "").strip()
-        lsmr_damp_env = os.environ.get("SFINCS_JAX_SPARSE_LSMR_DAMP", "").strip()
-        lsmr_maxiter_env = os.environ.get("SFINCS_JAX_SPARSE_LSMR_MAXITER", "").strip()
-        try:
-            lsmr_atol = float(lsmr_atol_env) if lsmr_atol_env else float(tol)
-        except ValueError:
-            lsmr_atol = float(tol)
-        try:
-            lsmr_btol = float(lsmr_btol_env) if lsmr_btol_env else float(tol)
-        except ValueError:
-            lsmr_btol = float(tol)
-        try:
-            lsmr_conlim = float(lsmr_conlim_env) if lsmr_conlim_env else 1.0e8
-        except ValueError:
-            lsmr_conlim = 1.0e8
-        try:
-            lsmr_damp = float(lsmr_damp_env) if lsmr_damp_env else 0.0
-        except ValueError:
-            lsmr_damp = 0.0
-        try:
-            lsmr_maxiter = int(lsmr_maxiter_env) if lsmr_maxiter_env else max(1000, int(maxiter or 400))
-        except ValueError:
-            lsmr_maxiter = max(1000, int(maxiter or 400))
-        lsmr_maxiter = max(1, int(lsmr_maxiter))
-        rhs_np = np.asarray(rhs, dtype=np.float64).reshape((-1,))
-        use_lsqr = solve_method_kind_explicit in {"sparse_lsqr", "sparse_host_lsqr"}
+        sparse_minimum_norm_policy = resolve_sparse_minimum_norm_policy(
+            os.environ,
+            solve_method_kind=solve_method_kind_explicit,
+            tol=float(tol),
+            maxiter=maxiter,
+            emit_enabled=emit is not None,
+        )
         if emit is not None:
-            solver_name = "lsqr" if use_lsqr else "lsmr"
-            emit(
-                0,
-                "solve_v3_full_system_linear_gmres: sparse_lsmr solve start "
-                f"solver={solver_name} atol={lsmr_atol:.1e} btol={lsmr_btol:.1e} "
-                f"damp={lsmr_damp:.1e} conlim={lsmr_conlim:.1e} maxiter={int(lsmr_maxiter)}",
-            )
-        if use_lsqr:
-            ls_result = _spla.lsqr(
-                matrix,
-                rhs_np,
-                damp=float(lsmr_damp),
-                atol=float(lsmr_atol),
-                btol=float(lsmr_btol),
-                conlim=float(lsmr_conlim),
-                iter_lim=int(lsmr_maxiter),
-                show=bool(emit is not None and os.environ.get("SFINCS_JAX_SPARSE_LSMR_SHOW", "").strip().lower() in {"1", "true", "yes", "on"}),
-            )
-            x_np = np.asarray(ls_result[0], dtype=np.float64)
-            istop = int(ls_result[1])
-            iters = int(ls_result[2])
-            solver_reported_residual = float(ls_result[3])
-        else:
-            ls_result = _spla.lsmr(
-                matrix,
-                rhs_np,
-                damp=float(lsmr_damp),
-                atol=float(lsmr_atol),
-                btol=float(lsmr_btol),
-                conlim=float(lsmr_conlim),
-                maxiter=int(lsmr_maxiter),
-                show=bool(emit is not None and os.environ.get("SFINCS_JAX_SPARSE_LSMR_SHOW", "").strip().lower() in {"1", "true", "yes", "on"}),
-            )
-            x_np = np.asarray(ls_result[0], dtype=np.float64)
-            istop = int(ls_result[1])
-            iters = int(ls_result[2])
-            solver_reported_residual = float(ls_result[3])
-        residual_true = rhs_np - np.asarray(matrix @ x_np, dtype=np.float64)
-        residual_norm_sparse_lsmr = float(np.linalg.norm(residual_true))
-        target = rhs1_residual_target(
+            emit(0, sparse_minimum_norm_start_message(sparse_minimum_norm_policy))
+        sparse_minimum_norm_payload = sparse_minimum_norm_solve_payload(
+            matrix=matrix,
+            rhs=rhs,
+            policy=sparse_minimum_norm_policy,
             atol=float(atol),
             tol=float(tol),
             rhs_norm=float(rhs_norm),
-        )
-        true_residual_converged = rhs1_residual_converged(
-            residual_norm_sparse_lsmr,
-            target,
-        )
-        compatibility_converged = bool(int(istop) in {1, 2})
-        petsc_compat_requested = solve_method_kind_explicit in _SPARSE_HOST_PETSC_COMPAT_SOLVE_METHODS
-        accepted_converged = bool(true_residual_converged or (petsc_compat_requested and compatibility_converged))
-        acceptance_criterion = (
-            "true_residual"
-            if true_residual_converged
-            else "petsc_compatible_minimum_norm"
-            if petsc_compat_requested and compatibility_converged
-            else "not_converged"
+            elapsed_s=sparse_timer.elapsed_s,
         )
         if emit is not None:
-            emit(
-                0,
-                "solve_v3_full_system_linear_gmres: sparse_lsmr complete "
-                f"elapsed_s={sparse_timer.elapsed_s():.3f} iters={iters} istop={istop} "
-                f"reported_residual={solver_reported_residual:.6e} "
-                f"residual={residual_norm_sparse_lsmr:.6e} target={float(target):.6e} "
-                f"accepted={accepted_converged} criterion={acceptance_criterion}",
-            )
+            emit(0, sparse_minimum_norm_payload.completion_message)
         return V3LinearSolveResult(
             op=op,
             rhs=rhs,
             gmres=GMRESSolveResult(
-                x=jnp.asarray(x_np, dtype=jnp.float64),
-                residual_norm=jnp.asarray(residual_norm_sparse_lsmr, dtype=jnp.float64),
+                x=sparse_minimum_norm_payload.x,
+                residual_norm=sparse_minimum_norm_payload.residual_norm,
             ),
-            metadata={
-                "solver_kind": "sparse_lsmr",
-                "residual_kind": "least_squares_true_residual",
-                "reported_residual_norm": float(solver_reported_residual),
-                "iterations": int(iters),
-                "info_code": int(istop),
-                "least_squares_converged": bool(compatibility_converged),
-                "true_residual_converged": bool(true_residual_converged),
-                "accepted_converged": bool(accepted_converged),
-                "acceptance_criterion": str(acceptance_criterion),
-                "petsc_compat_requested": bool(petsc_compat_requested),
-            },
+            metadata=sparse_minimum_norm_payload.metadata,
         )
     if solve_method_kind_explicit in _SPARSE_HOST_DIRECT_SOLVE_METHODS:
         if differentiable is True:

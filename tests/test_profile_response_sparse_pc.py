@@ -43,6 +43,8 @@ from sfincs_jax.problems.profile_response.sparse_pc import (
     SparsePCPatternSetupContext,
     SparsePCPostMinresContext,
     SparsePCPostMinresUpdateContext,
+    SparseMinimumNormPayload,
+    SparseMinimumNormPolicy,
     XBlockAssembledPreflightError,
     apply_fortran_reduced_xblock_global_coupling_stage,
     apply_fortran_reduced_xblock_initial_seed,
@@ -86,6 +88,7 @@ from sfincs_jax.problems.profile_response.sparse_pc import (
     resolve_fortran_reduced_xblock_moment_schur_policy,
     resolve_sparse_pc_entry_policy,
     resolve_sparse_pc_factor_policy,
+    resolve_sparse_minimum_norm_policy,
     sparse_pc_factor_dtype_retry_initial_guess,
     resolve_sparse_pc_factor_preflight_policy,
     resolve_direct_tail_structured_admission,
@@ -113,6 +116,8 @@ from sfincs_jax.problems.profile_response.sparse_pc import (
     retry_sparse_pc_factor_dtype_if_needed,
     sparse_pc_gmres_completion_message,
     sparse_pc_gmres_final_payload_from_driver_state,
+    sparse_minimum_norm_solve_payload,
+    sparse_minimum_norm_start_message,
     finalize_xblock_assembled_operator_metadata,
 )
 
@@ -4602,6 +4607,83 @@ def test_sparse_pc_gmres_final_payload_from_driver_state_expands_result_and_meta
     assert payload.metadata["accepted_converged"] is True
     assert payload.metadata["sparse_pc_residual_ratio_to_target"] == pytest.approx(0.5)
     assert payload.metadata["sparse_pc_linear_size"] == 2
+
+
+def test_sparse_minimum_norm_policy_parses_env_and_preserves_defaults() -> None:
+    default_policy = resolve_sparse_minimum_norm_policy(
+        {},
+        solve_method_kind="sparse_lsmr",
+        tol=1.0e-8,
+        maxiter=None,
+        emit_enabled=False,
+    )
+
+    assert isinstance(default_policy, SparseMinimumNormPolicy)
+    assert default_policy.solver_name == "lsmr"
+    assert default_policy.atol == pytest.approx(1.0e-8)
+    assert default_policy.btol == pytest.approx(1.0e-8)
+    assert default_policy.conlim == pytest.approx(1.0e8)
+    assert default_policy.damp == pytest.approx(0.0)
+    assert default_policy.maxiter == 1000
+    assert default_policy.show is False
+    assert default_policy.petsc_compat_requested is False
+
+    parsed_policy = resolve_sparse_minimum_norm_policy(
+        {
+            "SFINCS_JAX_SPARSE_LSMR_ATOL": "2e-7",
+            "SFINCS_JAX_SPARSE_LSMR_BTOL": "bad",
+            "SFINCS_JAX_SPARSE_LSMR_CONLIM": "3e5",
+            "SFINCS_JAX_SPARSE_LSMR_DAMP": "4e-3",
+            "SFINCS_JAX_SPARSE_LSMR_MAXITER": "12",
+            "SFINCS_JAX_SPARSE_LSMR_SHOW": "yes",
+        },
+        solve_method_kind="sparse_lsqr",
+        tol=1.0e-6,
+        maxiter=7,
+        emit_enabled=True,
+    )
+
+    assert parsed_policy.solver_name == "lsqr"
+    assert parsed_policy.atol == pytest.approx(2.0e-7)
+    assert parsed_policy.btol == pytest.approx(1.0e-6)
+    assert parsed_policy.conlim == pytest.approx(3.0e5)
+    assert parsed_policy.damp == pytest.approx(4.0e-3)
+    assert parsed_policy.maxiter == 12
+    assert parsed_policy.show is True
+    assert sparse_minimum_norm_start_message(parsed_policy) == (
+        "solve_v3_full_system_linear_gmres: sparse_lsmr solve start "
+        "solver=lsqr atol=2.0e-07 btol=1.0e-06 damp=4.0e-03 "
+        "conlim=3.0e+05 maxiter=12"
+    )
+
+
+def test_sparse_minimum_norm_solve_payload_solves_tiny_identity_system() -> None:
+    policy = resolve_sparse_minimum_norm_policy(
+        {},
+        solve_method_kind="petsc_compat",
+        tol=1.0e-12,
+        maxiter=20,
+        emit_enabled=False,
+    )
+
+    payload = sparse_minimum_norm_solve_payload(
+        matrix=scipy_sparse.eye(2, format="csr"),
+        rhs=jnp.asarray([1.0, -2.0], dtype=jnp.float64),
+        policy=policy,
+        atol=1.0e-12,
+        tol=1.0e-12,
+        rhs_norm=float(np.linalg.norm([1.0, -2.0])),
+        elapsed_s=lambda: 1.25,
+    )
+
+    assert isinstance(payload, SparseMinimumNormPayload)
+    np.testing.assert_allclose(np.asarray(payload.x), np.asarray([1.0, -2.0]), atol=1.0e-10)
+    assert float(payload.residual_norm) < 1.0e-10
+    assert payload.metadata["solver_kind"] == "sparse_lsmr"
+    assert payload.metadata["petsc_compat_requested"] is True
+    assert payload.metadata["accepted_converged"] is True
+    assert payload.metadata["acceptance_criterion"] == "true_residual"
+    assert "accepted=True criterion=true_residual" in payload.completion_message
 
 
 def test_sparse_pc_post_minres_accepts_improved_residual_and_recomputes_pc_norm() -> (
