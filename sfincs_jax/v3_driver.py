@@ -169,6 +169,8 @@ from .rhs1_preconditioner_auto_policy import (
 )
 from .rhs1_schur_policy import resolve_rhs1_schur_base_kind
 from .problems.profile_response.handoff import (
+    RHS1KSPReplayState,
+    rhs1_apply_handoff_to_replay_state,
     rhs1_accept_candidate,
     rhs1_accept_measured_candidate,
 )
@@ -10714,14 +10716,12 @@ def solve_v3_full_system_linear_gmres(
     except ValueError:
         iter_stats_max_size = None
 
-    ksp_matvec = None
-    ksp_b = None
-    ksp_precond = None
-    ksp_x0 = None
-    ksp_restart = restart
-    ksp_maxiter = maxiter
-    ksp_precond_side = gmres_precond_side
-    ksp_solver_kind = "gmres"
+    ksp_replay = RHS1KSPReplayState(
+        restart=restart,
+        maxiter=maxiter,
+        precond_side=gmres_precond_side,
+        solver_kind="gmres",
+    )
     residual_vec: jnp.ndarray | None = None
     rhs1_ksp_diagnostics_context = RHS1KSPDiagnosticsContext(
         emit=emit,
@@ -10733,17 +10733,7 @@ def solve_v3_full_system_linear_gmres(
     )
 
     def _apply_rhs1_handoff(state) -> None:
-        nonlocal ksp_matvec, ksp_b, ksp_precond, ksp_x0, ksp_restart, ksp_maxiter, ksp_precond_side, ksp_solver_kind
-        if state is None:
-            return
-        ksp_matvec = state.matvec_fn
-        ksp_b = state.b_vec
-        ksp_precond = state.precond_fn
-        ksp_x0 = state.x0_vec
-        ksp_restart = state.restart
-        ksp_maxiter = state.maxiter
-        ksp_precond_side = state.precond_side
-        ksp_solver_kind = state.solver_kind
+        rhs1_apply_handoff_to_replay_state(ksp_replay, state)
     if use_active_dof_mode:
         assert active_idx_jnp is not None
         assert full_to_active_jnp is not None
@@ -11280,12 +11270,12 @@ def solve_v3_full_system_linear_gmres(
             _mark("rhs1_host_dense_shortcut_done")
             early_dense_shortcut = True
             probe_shortcut = True
-            ksp_matvec = mv_reduced
-            ksp_b = rhs_reduced
-            ksp_precond = None
-            ksp_x0 = x0_reduced
-            ksp_precond_side = "none"
-            ksp_solver_kind = _solver_kind("incremental")[0]
+            ksp_replay.matvec_fn = mv_reduced
+            ksp_replay.b_vec = rhs_reduced
+            ksp_replay.precond_fn = None
+            ksp_replay.x0_vec = x0_reduced
+            ksp_replay.precond_side = "none"
+            ksp_replay.solver_kind = _solver_kind("incremental")[0]
         sparse_operator_use = False
         if sparse_operator_mode == "on":
             sparse_operator_use = True
@@ -11468,12 +11458,12 @@ def solve_v3_full_system_linear_gmres(
                     x=jnp.asarray(x_cs0_np, dtype=jnp.float64),
                     residual_norm=jnp.asarray(rn_pc_cs0, dtype=jnp.float64),
                 )
-                ksp_matvec = _mv_cs0_pc_full
-                ksp_b = jnp.asarray(rhs_pc_np, dtype=jnp.float64)
-                ksp_precond = None
-                ksp_x0 = None if x0_reduced is None else jnp.asarray(x0_reduced, dtype=jnp.float64)
-                ksp_precond_side = "none"
-                ksp_solver_kind = _solver_kind("incremental")[0]
+                ksp_replay.matvec_fn = _mv_cs0_pc_full
+                ksp_replay.b_vec = jnp.asarray(rhs_pc_np, dtype=jnp.float64)
+                ksp_replay.precond_fn = None
+                ksp_replay.x0_vec = None if x0_reduced is None else jnp.asarray(x0_reduced, dtype=jnp.float64)
+                ksp_replay.precond_side = "none"
+                ksp_replay.solver_kind = _solver_kind("incremental")[0]
                 if emit is not None:
                     emit(
                         1,
@@ -11510,12 +11500,12 @@ def solve_v3_full_system_linear_gmres(
                         early_dense_shortcut = True
                         probe_shortcut = True
                         res_reduced = GMRESSolveResult(x=probe_x0, residual_norm=jnp.asarray(probe_norm))
-                        ksp_matvec = mv_reduced
-                        ksp_b = rhs_reduced
-                        ksp_precond = preconditioner_reduced
-                        ksp_x0 = probe_x0
-                        ksp_precond_side = gmres_precond_side
-                        ksp_solver_kind = _solver_kind(solve_method)[0]
+                        ksp_replay.matvec_fn = mv_reduced
+                        ksp_replay.b_vec = rhs_reduced
+                        ksp_replay.precond_fn = preconditioner_reduced
+                        ksp_replay.x0_vec = probe_x0
+                        ksp_replay.precond_side = gmres_precond_side
+                        ksp_replay.solver_kind = _solver_kind(solve_method)[0]
                         if emit is not None:
                             emit(
                                 0,
@@ -11624,12 +11614,12 @@ def solve_v3_full_system_linear_gmres(
             )
             res_reduced = _block_gmres_result_ready(res_reduced)
             _mark("rhs1_krylov_solve_done")
-            ksp_matvec = mv_pc
-            ksp_b = rhs_pc
-            ksp_precond = None
-            ksp_x0 = x0_reduced
-            ksp_precond_side = "none"
-            ksp_solver_kind = _solver_kind("incremental")[0]
+            ksp_replay.matvec_fn = mv_pc
+            ksp_replay.b_vec = rhs_pc
+            ksp_replay.precond_fn = None
+            ksp_replay.x0_vec = x0_reduced
+            ksp_replay.precond_side = "none"
+            ksp_replay.solver_kind = _solver_kind("incremental")[0]
         else:
             # If the probe indicates the system is far from converged but the dense
             # fallback is not allowed (e.g. medium FP DKES systems), avoid spending
@@ -11693,12 +11683,12 @@ def solve_v3_full_system_linear_gmres(
                 except Exception:
                     rn0 = jnp.asarray(np.inf, dtype=jnp.float64)
                 res_reduced = GMRESSolveResult(x=x0_reduced, residual_norm=jnp.asarray(rn0, dtype=jnp.float64))
-                ksp_matvec = mv_reduced
-                ksp_b = rhs_reduced
-                ksp_precond = preconditioner_reduced
-                ksp_x0 = x0_reduced
-                ksp_precond_side = gmres_precond_side
-                ksp_solver_kind = _solver_kind(solve_method)[0]
+                ksp_replay.matvec_fn = mv_reduced
+                ksp_replay.b_vec = rhs_reduced
+                ksp_replay.precond_fn = preconditioner_reduced
+                ksp_replay.x0_vec = x0_reduced
+                ksp_replay.precond_side = gmres_precond_side
+                ksp_replay.solver_kind = _solver_kind(solve_method)[0]
             else:
                 rhs1_progress_notes.krylov_start()
                 _mark("rhs1_krylov_solve_start")
@@ -11716,12 +11706,12 @@ def solve_v3_full_system_linear_gmres(
                 )
                 res_reduced = _block_gmres_result_ready(res_reduced)
                 _mark("rhs1_krylov_solve_done")
-                ksp_matvec = mv_reduced
-                ksp_b = rhs_reduced
-                ksp_precond = preconditioner_reduced
-                ksp_x0 = x0_reduced
-                ksp_precond_side = gmres_precond_side
-                ksp_solver_kind = _solver_kind(solve_method)[0]
+                ksp_replay.matvec_fn = mv_reduced
+                ksp_replay.b_vec = rhs_reduced
+                ksp_replay.precond_fn = preconditioner_reduced
+                ksp_replay.x0_vec = x0_reduced
+                ksp_replay.precond_side = gmres_precond_side
+                ksp_replay.solver_kind = _solver_kind(solve_method)[0]
         if (not probe_shortcut) and preconditioner_reduced is not None and (not _gmres_result_is_finite(res_reduced)):
             if emit is not None:
                 emit(0, "solve_v3_full_system_linear_gmres: preconditioned reduced GMRES returned non-finite result; retrying without preconditioner")
@@ -11738,12 +11728,12 @@ def solve_v3_full_system_linear_gmres(
                 precond_side=gmres_precond_side,
             )
             res_reduced = _block_gmres_result_ready(res_reduced)
-            ksp_matvec = mv_reduced
-            ksp_b = rhs_reduced
-            ksp_precond = None
-            ksp_x0 = x0_reduced
-            ksp_precond_side = gmres_precond_side
-            ksp_solver_kind = _solver_kind(solve_method)[0]
+            ksp_replay.matvec_fn = mv_reduced
+            ksp_replay.b_vec = rhs_reduced
+            ksp_replay.precond_fn = None
+            ksp_replay.x0_vec = x0_reduced
+            ksp_replay.precond_side = gmres_precond_side
+            ksp_replay.solver_kind = _solver_kind(solve_method)[0]
         if (
             pas_precond_force_collision
             and op.fblock.pas is not None
@@ -12085,12 +12075,12 @@ def solve_v3_full_system_linear_gmres(
                 precond_side=gmres_precond_side,
             )
             res_reduced = _block_gmres_result_ready(res_reduced)
-            ksp_matvec = mv_reduced
-            ksp_b = rhs_reduced
-            ksp_precond = preconditioner_reduced
-            ksp_x0 = x0_reduced
-            ksp_precond_side = gmres_precond_side
-            ksp_solver_kind = "gmres"
+            ksp_replay.matvec_fn = mv_reduced
+            ksp_replay.b_vec = rhs_reduced
+            ksp_replay.precond_fn = preconditioner_reduced
+            ksp_replay.x0_vec = x0_reduced
+            ksp_replay.precond_side = gmres_precond_side
+            ksp_replay.solver_kind = "gmres"
         if (
             sparse_prefer_skips_stage2
             and float(res_reduced.residual_norm) > target_reduced
@@ -13000,7 +12990,7 @@ def solve_v3_full_system_linear_gmres(
                 context=qi_device_seed_context,
             )
             if float(res_reduced.residual_norm) < qi_device_residual_before:
-                ksp_x0 = res_reduced.x
+                ksp_replay.x0_vec = res_reduced.x
 
         if sparse_order.reason_large_cpu_exact_skips_targeted:
             if emit is not None:
@@ -13173,7 +13163,7 @@ def solve_v3_full_system_linear_gmres(
                             ):
                                 sparse_xblock_rescue_reason = "seed_accepted"
                                 if polish_enabled and residual_norm_sparse_xblock > float(target_reduced):
-                                    polish_precond = precond_sparse_xblock if precond_sparse_xblock is not None else ksp_precond
+                                    polish_precond = precond_sparse_xblock if precond_sparse_xblock is not None else ksp_replay.precond_fn
                                     if emit is not None:
                                         emit(
                                             1,
@@ -13246,16 +13236,16 @@ def solve_v3_full_system_linear_gmres(
                         res_reduced = res_sparse_xblock
                         explicit_fp_xblock_seed_used = bool(assembled_host_fp and (not bool(use_implicit)))
                         if assembled_host_fp:
-                            ksp_x0 = res_reduced.x
+                            ksp_replay.x0_vec = res_reduced.x
                         else:
-                            ksp_matvec = mv_reduced
-                            ksp_b = rhs_reduced
-                            ksp_precond = precond_sparse_xblock
-                            ksp_x0 = res_reduced.x
-                            ksp_restart = restart
-                            ksp_maxiter = maxiter
-                            ksp_precond_side = gmres_precond_side
-                            ksp_solver_kind = _solver_kind("incremental")[0]
+                            ksp_replay.matvec_fn = mv_reduced
+                            ksp_replay.b_vec = rhs_reduced
+                            ksp_replay.precond_fn = precond_sparse_xblock
+                            ksp_replay.x0_vec = res_reduced.x
+                            ksp_replay.restart = restart
+                            ksp_replay.maxiter = maxiter
+                            ksp_replay.precond_side = gmres_precond_side
+                            ksp_replay.solver_kind = _solver_kind("incremental")[0]
                 except Exception as exc:  # noqa: BLE001
                     sparse_xblock_rescue_error = f"{type(exc).__name__}: {exc}"
                     sparse_xblock_rescue_reason = "exception"
@@ -13350,7 +13340,7 @@ def solve_v3_full_system_linear_gmres(
                                 x=jnp.asarray(x_corr, dtype=jnp.float64),
                                 residual_norm=jnp.asarray(after, dtype=jnp.float64),
                             )
-                            ksp_x0 = res_reduced.x
+                            ksp_replay.x0_vec = res_reduced.x
                             if emit is not None:
                                 emit(
                                     1,
@@ -13564,7 +13554,7 @@ def solve_v3_full_system_linear_gmres(
                                 x=jnp.asarray(x_highx, dtype=jnp.float64),
                                 residual_norm=jnp.asarray(highx_after, dtype=jnp.float64),
                             )
-                            ksp_x0 = res_reduced.x
+                            ksp_replay.x0_vec = res_reduced.x
                             if emit is not None:
                                 emit(
                                     1,
@@ -13670,7 +13660,7 @@ def solve_v3_full_system_linear_gmres(
                     _mark("rhs1_sparse_precond_solve_done")
                     if float(res_sparse_sxblock.residual_norm) < float(res_reduced.residual_norm):
                         res_reduced = res_sparse_sxblock
-                        ksp_x0 = res_reduced.x
+                        ksp_replay.x0_vec = res_reduced.x
                         if float(res_reduced.residual_norm) > target_reduced:
                             polish_precond = precond_sparse_xblock_current or preconditioner_reduced
                             if polish_precond is not None:
@@ -13705,14 +13695,14 @@ def solve_v3_full_system_linear_gmres(
                                 )
                                 if float(res_sxpolish.residual_norm) < float(res_reduced.residual_norm):
                                     res_reduced = res_sxpolish
-                                    ksp_matvec = mv_reduced
-                                    ksp_b = rhs_reduced
-                                    ksp_precond = polish_precond
-                                    ksp_x0 = res_reduced.x
-                                    ksp_restart = sxblock_polish_restart
-                                    ksp_maxiter = sxblock_polish_maxiter
-                                    ksp_precond_side = gmres_precond_side
-                                    ksp_solver_kind = _solver_kind("incremental")[0]
+                                    ksp_replay.matvec_fn = mv_reduced
+                                    ksp_replay.b_vec = rhs_reduced
+                                    ksp_replay.precond_fn = polish_precond
+                                    ksp_replay.x0_vec = res_reduced.x
+                                    ksp_replay.restart = sxblock_polish_restart
+                                    ksp_replay.maxiter = sxblock_polish_maxiter
+                                    ksp_replay.precond_side = gmres_precond_side
+                                    ksp_replay.solver_kind = _solver_kind("incremental")[0]
                 except Exception as exc:  # noqa: BLE001
                     if emit is not None:
                         emit(1, f"sxblock_sparse: failed ({type(exc).__name__}: {exc})")
@@ -14080,13 +14070,13 @@ def solve_v3_full_system_linear_gmres(
                         )
         residual_norm_check = float(res_reduced.residual_norm)
         residual_norm_true = residual_norm_check
-        if ksp_precond is not None and ksp_precond_side == "left":
+        if ksp_replay.precond_fn is not None and ksp_replay.precond_side == "left":
             try:
-                r_vec = ksp_b - ksp_matvec(res_reduced.x)
+                r_vec = ksp_replay.b_vec - ksp_replay.matvec_fn(res_reduced.x)
                 residual_norm_true = float(jnp.linalg.norm(r_vec))
                 if not np.isfinite(residual_norm_true):
                     residual_norm_true = float("inf")
-                r_pc = ksp_precond(r_vec)
+                r_pc = ksp_replay.precond_fn(r_vec)
                 r_pc_norm = float(jnp.linalg.norm(r_pc))
                 if np.isfinite(r_pc_norm):
                     residual_norm_check = r_pc_norm
@@ -15278,12 +15268,12 @@ def solve_v3_full_system_linear_gmres(
                 solve_method_val="incremental",
                 precond_side="none",
             )
-            ksp_matvec = mv_pc
-            ksp_b = rhs_pc
-            ksp_precond = None
-            ksp_x0 = x0
-            ksp_precond_side = "none"
-            ksp_solver_kind = _solver_kind("incremental")[0]
+            ksp_replay.matvec_fn = mv_pc
+            ksp_replay.b_vec = rhs_pc
+            ksp_replay.precond_fn = None
+            ksp_replay.x0_vec = x0
+            ksp_replay.precond_side = "none"
+            ksp_replay.solver_kind = _solver_kind("incremental")[0]
             residual_norm_full = jnp.linalg.norm(mv(res_pc.x) - rhs)
             result = GMRESSolveResult(x=res_pc.x, residual_norm=residual_norm_full)
         else:
@@ -15380,12 +15370,12 @@ def solve_v3_full_system_linear_gmres(
                     )
                 result, residual_vec = _solve_host_dense_full(x0_dense=x0)
                 _mark("rhs1_host_dense_shortcut_done")
-                ksp_matvec = mv
-                ksp_b = rhs
-                ksp_precond = None
-                ksp_x0 = x0
-                ksp_precond_side = "none"
-                ksp_solver_kind = _solver_kind("incremental")[0]
+                ksp_replay.matvec_fn = mv
+                ksp_replay.b_vec = rhs
+                ksp_replay.precond_fn = None
+                ksp_replay.x0_vec = x0
+                ksp_replay.precond_side = "none"
+                ksp_replay.solver_kind = _solver_kind("incremental")[0]
             if recycle_basis_use and (not host_dense_shortcut_full):
                 basis_full: list[jnp.ndarray] = []
                 for vec in recycle_basis_use:
@@ -15423,12 +15413,12 @@ def solve_v3_full_system_linear_gmres(
                 except Exception:
                     pass
                 _mark("rhs1_krylov_solve_done")
-                ksp_matvec = mv
-                ksp_b = rhs
-                ksp_precond = preconditioner_full
-                ksp_x0 = x0
-                ksp_precond_side = gmres_precond_side
-                ksp_solver_kind = _solver_kind(solve_method)[0]
+                ksp_replay.matvec_fn = mv
+                ksp_replay.b_vec = rhs
+                ksp_replay.precond_fn = preconditioner_full
+                ksp_replay.x0_vec = x0
+                ksp_replay.precond_side = gmres_precond_side
+                ksp_replay.solver_kind = _solver_kind(solve_method)[0]
             if (not host_dense_shortcut_full) and preconditioner_full is not None and (not _gmres_result_is_finite(result)):
                 if emit is not None:
                     emit(0, "solve_v3_full_system_linear_gmres: preconditioned GMRES returned non-finite result; retrying without preconditioner")
@@ -15451,12 +15441,12 @@ def solve_v3_full_system_linear_gmres(
                 except Exception:
                     pass
                 _mark("rhs1_krylov_solve_retry_done")
-                ksp_matvec = mv
-                ksp_b = rhs
-                ksp_precond = None
-                ksp_x0 = x0
-                ksp_precond_side = gmres_precond_side
-                ksp_solver_kind = _solver_kind(solve_method)[0]
+                ksp_replay.matvec_fn = mv
+                ksp_replay.b_vec = rhs
+                ksp_replay.precond_fn = None
+                ksp_replay.x0_vec = x0
+                ksp_replay.precond_side = gmres_precond_side
+                ksp_replay.solver_kind = _solver_kind(solve_method)[0]
             # If GMRES does not reach the requested tolerance (common without preconditioning),
             # retry with a larger iteration budget and the more robust incremental mode.
             target = max(float(atol), float(tol) * float(rhs_norm))
@@ -15501,12 +15491,12 @@ def solve_v3_full_system_linear_gmres(
                     solve_method_val="incremental",
                     precond_side=gmres_precond_side,
                 )
-                ksp_matvec = mv
-                ksp_b = rhs
-                ksp_precond = preconditioner_full
-                ksp_x0 = x0
-                ksp_precond_side = gmres_precond_side
-                ksp_solver_kind = "gmres"
+                ksp_replay.matvec_fn = mv
+                ksp_replay.b_vec = rhs
+                ksp_replay.precond_fn = preconditioner_full
+                ksp_replay.x0_vec = x0
+                ksp_replay.precond_side = gmres_precond_side
+                ksp_replay.solver_kind = "gmres"
         # The full-size RHSMode=1 branch does not have the later active-DOF sparse
         # ILU rescue. On accelerators, skipping stage2 GMRES here can therefore
         # return a high-residual solution with no real recovery path.
@@ -16497,14 +16487,14 @@ def solve_v3_full_system_linear_gmres(
                         )
         residual_norm_check = float(result.residual_norm)
         residual_norm_true = residual_norm_check
-        if ksp_precond is not None and ksp_precond_side == "left":
+        if ksp_replay.precond_fn is not None and ksp_replay.precond_side == "left":
             try:
                 if residual_vec is None:
                     residual_vec = rhs - mv(result.x)
                 residual_norm_true = float(jnp.linalg.norm(residual_vec))
                 if not np.isfinite(residual_norm_true):
                     residual_norm_true = float("inf")
-                r_pc = ksp_precond(residual_vec)
+                r_pc = ksp_replay.precond_fn(residual_vec)
                 r_pc_norm = float(jnp.linalg.norm(r_pc))
                 if np.isfinite(r_pc_norm):
                     residual_norm_check = r_pc_norm
@@ -16662,33 +16652,33 @@ def solve_v3_full_system_linear_gmres(
                 extra = jnp.where(max_abs <= zero_tol, jnp.zeros_like(extra), extra)
                 x_new = jnp.concatenate([result.x[: -int(op.extra_size)], extra], axis=0)
                 result = GMRESSolveResult(x=x_new, residual_norm=result.residual_norm)
-    if ksp_matvec is not None and ksp_b is not None:
+    if ksp_replay.matvec_fn is not None and ksp_replay.b_vec is not None:
         ksp_history = emit_profile_response_ksp_history(
             context=rhs1_ksp_diagnostics_context,
-            matvec_fn=ksp_matvec,
-            b_vec=ksp_b,
-            precond_fn=ksp_precond,
-            x0_vec=ksp_x0,
+            matvec_fn=ksp_replay.matvec_fn,
+            b_vec=ksp_replay.b_vec,
+            precond_fn=ksp_replay.precond_fn,
+            x0_vec=ksp_replay.x0_vec,
             tol_val=tol,
             atol_val=atol,
-            restart_val=int(ksp_restart),
-            maxiter_val=ksp_maxiter,
-            precond_side=ksp_precond_side,
-            solver_kind=ksp_solver_kind,
+            restart_val=int(ksp_replay.restart),
+            maxiter_val=ksp_replay.maxiter,
+            precond_side=ksp_replay.precond_side,
+            solver_kind=ksp_replay.solver_kind,
             solve_method_val=str(solve_method),
         )
         emit_profile_response_ksp_iter_stats(
             context=rhs1_ksp_diagnostics_context,
-            matvec_fn=ksp_matvec,
-            b_vec=ksp_b,
-            precond_fn=ksp_precond,
-            x0_vec=ksp_x0,
+            matvec_fn=ksp_replay.matvec_fn,
+            b_vec=ksp_replay.b_vec,
+            precond_fn=ksp_replay.precond_fn,
+            x0_vec=ksp_replay.x0_vec,
             tol_val=float(tol),
             atol_val=float(atol),
-            restart_val=int(ksp_restart),
-            maxiter_val=ksp_maxiter,
-            precond_side=ksp_precond_side,
-            solver_kind=ksp_solver_kind,
+            restart_val=int(ksp_replay.restart),
+            maxiter_val=ksp_replay.maxiter,
+            precond_side=ksp_replay.precond_side,
+            solver_kind=ksp_replay.solver_kind,
             history=ksp_history,
             solve_method_val=str(solve_method),
         )

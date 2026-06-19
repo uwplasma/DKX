@@ -5,6 +5,9 @@ from types import SimpleNamespace
 import pytest
 
 from sfincs_jax.rhs1_handoff import (
+    RHS1KSPHandoffState,
+    RHS1KSPReplayState,
+    rhs1_apply_handoff_to_replay_state,
     rhs1_accept_candidate,
     rhs1_accept_measured_candidate,
     rhs1_residual_improves,
@@ -345,3 +348,54 @@ def test_rhs1_accept_measured_candidate_rejects_clean_baseline_without_win() -> 
     assert result is current
     assert residual_vec == "r0"
     assert handoff is None
+
+
+def test_rhs1_apply_handoff_to_replay_state_is_noop_for_rejected_candidate() -> None:
+    replay = RHS1KSPReplayState(
+        matvec_fn="mv0",
+        b_vec="rhs0",
+        precond_fn="pc0",
+        x0_vec="x0",
+        restart=10,
+        maxiter=20,
+        precond_side="right",
+        solver_kind="gmres",
+    )
+
+    applied = rhs1_apply_handoff_to_replay_state(replay, None)
+
+    assert not applied
+    assert replay.matvec_fn == "mv0"
+    assert replay.b_vec == "rhs0"
+    assert replay.precond_fn == "pc0"
+    assert replay.x0_vec == "x0"
+    assert replay.restart == 10
+    assert replay.maxiter == 20
+    assert replay.precond_side == "right"
+    assert replay.solver_kind == "gmres"
+
+
+def test_rhs1_apply_handoff_to_replay_state_updates_all_replay_fields() -> None:
+    replay = RHS1KSPReplayState()
+    handoff = RHS1KSPHandoffState(
+        matvec_fn="mv1",
+        b_vec="rhs1",
+        precond_fn="pc1",
+        x0_vec="x1",
+        restart=30,
+        maxiter=90,
+        precond_side="left",
+        solver_kind="incremental",
+    )
+
+    applied = rhs1_apply_handoff_to_replay_state(replay, handoff)
+
+    assert applied
+    assert replay.matvec_fn == "mv1"
+    assert replay.b_vec == "rhs1"
+    assert replay.precond_fn == "pc1"
+    assert replay.x0_vec == "x1"
+    assert replay.restart == 30
+    assert replay.maxiter == 90
+    assert replay.precond_side == "left"
+    assert replay.solver_kind == "incremental"

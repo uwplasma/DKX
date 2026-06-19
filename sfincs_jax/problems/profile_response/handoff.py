@@ -35,6 +35,50 @@ class RHS1KSPHandoffState:
     solver_kind: str
 
 
+@dataclass
+class RHS1KSPReplayState:
+    """Mutable Krylov replay state used by final RHSMode=1 diagnostics.
+
+    The driver may accept several rescue candidates before the final solution is
+    returned. This small state object records the matvec, right-hand side,
+    preconditioner, seed, and Krylov controls associated with the currently
+    accepted candidate so Fortran-style iteration diagnostics replay the same
+    linear problem that produced the returned residual.
+    """
+
+    matvec_fn: Any = None
+    b_vec: Any = None
+    precond_fn: Any = None
+    x0_vec: Any = None
+    restart: int = 80
+    maxiter: int | None = None
+    precond_side: str = "none"
+    solver_kind: str = "gmres"
+
+
+def rhs1_apply_handoff_to_replay_state(
+    replay_state: RHS1KSPReplayState,
+    handoff_state: RHS1KSPHandoffState | None,
+) -> bool:
+    """Update ``replay_state`` from an accepted candidate handoff.
+
+    Returns ``True`` when a handoff was applied. A ``None`` handoff leaves the
+    replay state unchanged and returns ``False``; this mirrors existing driver
+    behavior where rejected candidates must not perturb the final diagnostics.
+    """
+    if handoff_state is None:
+        return False
+    replay_state.matvec_fn = handoff_state.matvec_fn
+    replay_state.b_vec = handoff_state.b_vec
+    replay_state.precond_fn = handoff_state.precond_fn
+    replay_state.x0_vec = handoff_state.x0_vec
+    replay_state.restart = int(handoff_state.restart)
+    replay_state.maxiter = handoff_state.maxiter
+    replay_state.precond_side = str(handoff_state.precond_side)
+    replay_state.solver_kind = str(handoff_state.solver_kind)
+    return True
+
+
 def rhs1_residual_improves(
     *,
     current_residual: float,
@@ -201,6 +245,8 @@ def rhs1_accept_measured_candidate(
 
 __all__ = [
     "RHS1KSPHandoffState",
+    "RHS1KSPReplayState",
+    "rhs1_apply_handoff_to_replay_state",
     "rhs1_accept_candidate",
     "rhs1_accept_measured_candidate",
     "rhs1_residual_improves",
