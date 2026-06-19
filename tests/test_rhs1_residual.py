@@ -7,6 +7,7 @@ import pytest
 
 from sfincs_jax.rhs1_residual import (
     apply_damped_preconditioned_residual_polish,
+    apply_projected_residual_polish,
     l2_norm_float,
     recompute_true_residual_result,
     replay_left_preconditioned_residual_norms,
@@ -118,6 +119,82 @@ def test_apply_damped_preconditioned_residual_polish_rejects_bad_correction() ->
 
     assert not improved
     assert polished is result
+
+
+def test_apply_projected_residual_polish_accepts_safe_projected_correction() -> None:
+    result = GMRESSolveResult(
+        x=jnp.zeros(3, dtype=jnp.float64),
+        residual_norm=jnp.asarray(math.sqrt(105.0), dtype=jnp.float64),
+    )
+    rhs = jnp.asarray([1.0, 10.0, 2.0], dtype=jnp.float64)
+
+    def solve_linear(**kwargs):
+        return GMRESSolveResult(
+            x=kwargs["b_vec"],
+            residual_norm=jnp.asarray(0.0, dtype=jnp.float64),
+        )
+
+    outcome = apply_projected_residual_polish(
+        current_result=result,
+        rhs=rhs,
+        matvec=lambda x: x,
+        projected_indices=jnp.asarray([0, 2], dtype=jnp.int32),
+        active_size=3,
+        solve_linear=solve_linear,
+        preconditioner=lambda r: r,
+        tol=1.0e-12,
+        restart=5,
+        maxiter=5,
+        precond_side="left",
+        target=1.0e-12,
+        threshold_ratio=1.0,
+        abs_threshold=0.0,
+        full_accept_ratio=1.2,
+        require_full_improvement=True,
+    )
+
+    assert outcome.accepted
+    assert outcome.result.x.tolist() == pytest.approx([1.0, 0.0, 2.0])
+    assert outcome.projected_residual_after == pytest.approx(0.0)
+    assert float(outcome.result.residual_norm) == pytest.approx(10.0)
+
+
+def test_apply_projected_residual_polish_rejects_full_residual_regression() -> None:
+    result = GMRESSolveResult(
+        x=jnp.zeros(3, dtype=jnp.float64),
+        residual_norm=jnp.asarray(math.sqrt(105.0), dtype=jnp.float64),
+    )
+    rhs = jnp.asarray([1.0, 10.0, 2.0], dtype=jnp.float64)
+
+    def solve_linear(**_kwargs):
+        return GMRESSolveResult(
+            x=jnp.asarray([20.0, 30.0], dtype=jnp.float64),
+            residual_norm=jnp.asarray(0.0, dtype=jnp.float64),
+        )
+
+    outcome = apply_projected_residual_polish(
+        current_result=result,
+        rhs=rhs,
+        matvec=lambda x: x,
+        projected_indices=jnp.asarray([0, 2], dtype=jnp.int32),
+        active_size=3,
+        solve_linear=solve_linear,
+        preconditioner=lambda r: r,
+        tol=1.0e-12,
+        restart=5,
+        maxiter=5,
+        precond_side="left",
+        target=1.0e-12,
+        threshold_ratio=1.0,
+        abs_threshold=0.0,
+        full_accept_ratio=1.2,
+        require_full_improvement=False,
+    )
+
+    assert not outcome.accepted
+    assert outcome.result is result
+    assert outcome.full_residual_after is not None
+    assert outcome.full_residual_after > outcome.full_residual_before
 
 
 def test_recompute_true_residual_result_replaces_reported_krylov_norm() -> None:

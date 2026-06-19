@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Sequence
+from dataclasses import dataclass
 import math
 from typing import Any
 
@@ -12,6 +13,18 @@ import numpy as np
 
 from ...solver import GMRESSolveResult
 from ...v3_system import _fs_average_factor, _ix_min, _source_basis_constraint_scheme_1
+
+
+@dataclass(frozen=True)
+class ProjectedResidualPolishOutcome:
+    """Result and residual diagnostics for a projected polish attempt."""
+
+    result: GMRESSolveResult
+    accepted: bool
+    full_residual_before: float
+    projected_residual_before: float
+    full_residual_after: float | None = None
+    projected_residual_after: float | None = None
 
 
 def build_rhs1_xblock_post_coarse_directions(
@@ -715,6 +728,130 @@ def apply_damped_preconditioned_residual_polish(
     return current_result, False
 
 
+def apply_projected_residual_polish(
+    *,
+    current_result: Any,
+    rhs: jnp.ndarray,
+    matvec: Callable[[jnp.ndarray], jnp.ndarray],
+    projected_indices: jnp.ndarray,
+    active_size: int,
+    solve_linear: Any,
+    preconditioner: Callable[[jnp.ndarray], jnp.ndarray],
+    tol: float,
+    restart: int,
+    maxiter: int,
+    precond_side: str,
+    target: float,
+    threshold_ratio: float,
+    abs_threshold: float,
+    full_accept_ratio: float,
+    require_full_improvement: bool,
+) -> ProjectedResidualPolishOutcome:
+    """Solve a projected residual equation and accept only safe corrections.
+
+    ``projected_indices`` selects a physically meaningful reduced subspace
+    (e.g. L=1 flow modes or low-L pitch modes). The helper solves the residual
+    equation restricted to that subspace, lifts the correction back to the full
+    reduced vector, and applies the same finite residual gates used in the
+    driver: projected residual must decrease, and the full residual must not
+    exceed the configured acceptance envelope. Some callers additionally require
+    the full residual to strictly improve.
+    """
+
+    idx = jnp.asarray(projected_indices, dtype=jnp.int32).reshape((-1,))
+    if int(idx.shape[0]) <= 0:
+        current_residual = float(current_result.residual_norm)
+        return ProjectedResidualPolishOutcome(
+            result=current_result,
+            accepted=False,
+            full_residual_before=current_residual,
+            projected_residual_before=0.0,
+        )
+
+    def _reduce(v: jnp.ndarray) -> jnp.ndarray:
+        return jnp.asarray(v, dtype=jnp.float64)[idx]
+
+    def _expand(v: jnp.ndarray) -> jnp.ndarray:
+        out = jnp.zeros((int(active_size),), dtype=jnp.float64)
+        return out.at[idx].set(jnp.asarray(v, dtype=jnp.float64), unique_indices=True)
+
+    x_base = jnp.asarray(current_result.x, dtype=jnp.float64)
+    r_full = jnp.asarray(rhs, dtype=jnp.float64) - jnp.asarray(
+        matvec(x_base), dtype=jnp.float64
+    )
+    b_projected = _reduce(r_full)
+    full_before = float(jnp.linalg.norm(r_full))
+    projected_before = float(jnp.linalg.norm(b_projected))
+    threshold = max(
+        float(target) * max(1.0, float(threshold_ratio)),
+        float(abs_threshold),
+    )
+    if (not np.isfinite(projected_before)) or projected_before <= threshold:
+        return ProjectedResidualPolishOutcome(
+            result=current_result,
+            accepted=False,
+            full_residual_before=full_before,
+            projected_residual_before=projected_before,
+        )
+
+    def _projected_matvec(v: jnp.ndarray) -> jnp.ndarray:
+        return _reduce(matvec(_expand(v)))
+
+    def _projected_preconditioner(v: jnp.ndarray) -> jnp.ndarray:
+        return _reduce(preconditioner(_expand(v)))
+
+    correction = solve_linear(
+        matvec_fn=_projected_matvec,
+        b_vec=b_projected,
+        precond_fn=_projected_preconditioner,
+        x0_vec=None,
+        tol_val=max(1.0e-14, float(tol)),
+        atol_val=0.0,
+        restart_val=int(restart),
+        maxiter_val=int(maxiter),
+        solve_method_val="incremental",
+        precond_side=str(precond_side),
+    )
+    x_try = x_base + _expand(correction.x)
+    r_try = jnp.asarray(rhs, dtype=jnp.float64) - jnp.asarray(
+        matvec(x_try), dtype=jnp.float64
+    )
+    full_after = float(jnp.linalg.norm(r_try))
+    projected_after = float(jnp.linalg.norm(_reduce(r_try)))
+    full_ratio = max(1.0, float(full_accept_ratio))
+    full_gate = np.isfinite(full_after) and full_after <= max(
+        float(full_before) * full_ratio,
+        float(full_before) + 1.0e-10,
+    )
+    if require_full_improvement:
+        full_gate = full_gate and full_after < float(current_result.residual_norm)
+    accepted = bool(
+        np.isfinite(projected_after)
+        and projected_after < projected_before
+        and full_gate
+    )
+    if not accepted:
+        return ProjectedResidualPolishOutcome(
+            result=current_result,
+            accepted=False,
+            full_residual_before=full_before,
+            projected_residual_before=projected_before,
+            full_residual_after=full_after,
+            projected_residual_after=projected_after,
+        )
+    return ProjectedResidualPolishOutcome(
+        result=GMRESSolveResult(
+            x=jnp.asarray(x_try, dtype=jnp.float64),
+            residual_norm=jnp.asarray(full_after, dtype=jnp.float64),
+        ),
+        accepted=True,
+        full_residual_before=full_before,
+        projected_residual_before=projected_before,
+        full_residual_after=full_after,
+        projected_residual_after=projected_after,
+    )
+
+
 def recompute_true_residual_result(
     *,
     result: Any,
@@ -826,12 +963,14 @@ __all__ = [
     "apply_damped_preconditioned_residual_polish",
     "apply_device_subspace_residual_equation_correction",
     "apply_preconditioned_minres_correction",
+    "apply_projected_residual_polish",
     "apply_subspace_minres_correction",
     "build_rhs1_xblock_post_coarse_directions",
     "compose_multilevel_minres_correction_preconditioner",
     "compose_multilevel_residual_correction_preconditioner",
     "compose_residual_correction_preconditioner",
     "l2_norm_float",
+    "ProjectedResidualPolishOutcome",
     "recompute_true_residual_result",
     "replay_left_preconditioned_residual_norms",
     "residual_converged",

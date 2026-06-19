@@ -498,6 +498,7 @@ from .problems.profile_response.residual import (
     apply_damped_preconditioned_residual_polish as _apply_damped_preconditioned_residual_polish,
     apply_device_subspace_residual_equation_correction as _apply_device_subspace_residual_equation_correction,
     apply_preconditioned_minres_correction as _apply_preconditioned_minres_correction,
+    apply_projected_residual_polish as _apply_projected_residual_polish,
     apply_subspace_minres_correction as _apply_subspace_minres_correction,
     build_rhs1_xblock_post_coarse_directions as _rhs1_xblock_post_coarse_directions,
     compose_multilevel_minres_correction_preconditioner as _compose_multilevel_minres_correction_preconditioner,
@@ -14256,19 +14257,6 @@ def solve_v3_full_system_linear_gmres(
                         l1_restart = 80
                     l1_maxiter = max(5, min(int(l1_maxiter), 200))
                     l1_restart = max(5, min(int(l1_restart), max(5, l1_maxiter)))
-
-                    def _l1_reduce(v: jnp.ndarray) -> jnp.ndarray:
-                        return v[l1_idx_jnp]
-
-                    def _l1_expand(v: jnp.ndarray) -> jnp.ndarray:
-                        out = jnp.zeros((int(active_size),), dtype=jnp.float64)
-                        return out.at[l1_idx_jnp].set(v, unique_indices=True)
-
-                    x_l1_base = jnp.asarray(res_reduced.x, dtype=jnp.float64)
-                    r_l1_full = rhs_reduced - mv_reduced(x_l1_base)
-                    b_l1 = _l1_reduce(r_l1_full)
-                    rn_full_base = float(jnp.linalg.norm(r_l1_full))
-                    b_l1_norm = float(jnp.linalg.norm(b_l1))
                     l1_ratio_env = os.environ.get("SFINCS_JAX_RHSMODE1_FP_L1_POLISH_RATIO", "").strip()
                     l1_abs_env = os.environ.get("SFINCS_JAX_RHSMODE1_FP_L1_POLISH_ABS", "").strip()
                     try:
@@ -14279,74 +14267,67 @@ def solve_v3_full_system_linear_gmres(
                         l1_abs = float(l1_abs_env) if l1_abs_env else 1.0e-8
                     except ValueError:
                         l1_abs = 1.0e-8
-                    l1_thresh = max(float(target_reduced) * max(1.0, float(l1_ratio)), float(l1_abs))
-                    if np.isfinite(b_l1_norm) and b_l1_norm > l1_thresh:
-                        if emit is not None:
+                    tol_l1_env = os.environ.get("SFINCS_JAX_RHSMODE1_FP_L1_POLISH_TOL", "").strip()
+                    try:
+                        tol_l1 = float(tol_l1_env) if tol_l1_env else 1.0e-10
+                    except ValueError:
+                        tol_l1 = 1.0e-10
+                    l1_full_ratio_env = os.environ.get("SFINCS_JAX_RHSMODE1_FP_L1_POLISH_FULL_RATIO", "").strip()
+                    try:
+                        l1_full_ratio = float(l1_full_ratio_env) if l1_full_ratio_env else 1.2
+                    except ValueError:
+                        l1_full_ratio = 1.2
+
+                    def _pre_l1_full(v: jnp.ndarray) -> jnp.ndarray:
+                        if lmax_precond_for_l1 is not None:
+                            return lmax_precond_for_l1(v)
+                        return polish_precond(v)
+
+                    try:
+                        l1_outcome = _apply_projected_residual_polish(
+                            current_result=res_reduced,
+                            rhs=rhs_reduced,
+                            matvec=mv_reduced,
+                            projected_indices=l1_idx_jnp,
+                            active_size=int(active_size),
+                            solve_linear=_solve_linear,
+                            preconditioner=_pre_l1_full,
+                            tol=tol_l1,
+                            restart=int(l1_restart),
+                            maxiter=int(l1_maxiter),
+                            precond_side=gmres_precond_side,
+                            target=float(target_reduced),
+                            threshold_ratio=float(l1_ratio),
+                            abs_threshold=float(l1_abs),
+                            full_accept_ratio=float(l1_full_ratio),
+                            require_full_improvement=False,
+                        )
+                        if (
+                            emit is not None
+                            and np.isfinite(l1_outcome.projected_residual_before)
+                            and l1_outcome.projected_residual_before
+                            > max(float(target_reduced) * max(1.0, float(l1_ratio)), float(l1_abs))
+                        ):
                             emit(
                                 1,
                                 "solve_v3_full_system_linear_gmres: FP L1 polish "
-                                f"(size={l1_n} restart={l1_restart} maxiter={l1_maxiter} b_norm={b_l1_norm:.3e})",
+                                f"(size={l1_n} restart={l1_restart} maxiter={l1_maxiter} "
+                                f"b_norm={l1_outcome.projected_residual_before:.3e})",
                             )
-
-                        def _mv_l1(v: jnp.ndarray) -> jnp.ndarray:
-                            return _l1_reduce(mv_reduced(_l1_expand(v)))
-
-                        def _pre_l1(v: jnp.ndarray) -> jnp.ndarray:
-                            if lmax_precond_for_l1 is not None:
-                                return _l1_reduce(lmax_precond_for_l1(_l1_expand(v)))
-                            return _l1_reduce(polish_precond(_l1_expand(v)))
-
-                        tol_l1_env = os.environ.get("SFINCS_JAX_RHSMODE1_FP_L1_POLISH_TOL", "").strip()
-                        try:
-                            tol_l1 = float(tol_l1_env) if tol_l1_env else 1.0e-10
-                        except ValueError:
-                            tol_l1 = 1.0e-10
-                        tol_l1 = max(1.0e-14, float(tol_l1))
-                        try:
-                            l1_corr = _solve_linear(
-                                matvec_fn=_mv_l1,
-                                b_vec=b_l1,
-                                precond_fn=_pre_l1,
-                                x0_vec=None,
-                                tol_val=tol_l1,
-                                atol_val=0.0,
-                                restart_val=l1_restart,
-                                maxiter_val=l1_maxiter,
-                                solve_method_val="incremental",
-                                precond_side=gmres_precond_side,
-                            )
-                            x_l1_try = x_l1_base + _l1_expand(l1_corr.x)
-                            r_try = rhs_reduced - mv_reduced(x_l1_try)
-                            rn_try = float(jnp.linalg.norm(r_try))
-                            b_l1_try = _l1_reduce(r_try)
-                            rn_l1_try = float(jnp.linalg.norm(b_l1_try))
-                            l1_full_ratio_env = os.environ.get("SFINCS_JAX_RHSMODE1_FP_L1_POLISH_FULL_RATIO", "").strip()
-                            try:
-                                l1_full_ratio = float(l1_full_ratio_env) if l1_full_ratio_env else 1.2
-                            except ValueError:
-                                l1_full_ratio = 1.2
-                            l1_full_ratio = max(1.0, float(l1_full_ratio))
-                            accept_l1 = (
-                                np.isfinite(rn_l1_try)
-                                and rn_l1_try < b_l1_norm
-                                and np.isfinite(rn_try)
-                                and rn_try <= max(float(rn_full_base) * l1_full_ratio, float(rn_full_base) + 1.0e-10)
-                            )
-                            if accept_l1:
-                                if emit is not None:
-                                    emit(
-                                        1,
-                                        "solve_v3_full_system_linear_gmres: FP L1 polish improved residual "
-                                        f"full {float(rn_full_base):.3e} -> {rn_try:.3e}; "
-                                        f"L1 {b_l1_norm:.3e} -> {rn_l1_try:.3e}",
-                                    )
-                                res_reduced = GMRESSolveResult(
-                                    x=jnp.asarray(x_l1_try, dtype=jnp.float64),
-                                    residual_norm=jnp.asarray(rn_try, dtype=jnp.float64),
-                                )
-                        except Exception as exc:  # noqa: BLE001
+                        if l1_outcome.accepted:
                             if emit is not None:
-                                emit(1, f"solve_v3_full_system_linear_gmres: FP L1 polish failed ({type(exc).__name__}: {exc})")
+                                emit(
+                                    1,
+                                    "solve_v3_full_system_linear_gmres: FP L1 polish improved residual "
+                                    f"full {l1_outcome.full_residual_before:.3e} -> "
+                                    f"{float(l1_outcome.full_residual_after):.3e}; "
+                                    f"L1 {l1_outcome.projected_residual_before:.3e} -> "
+                                    f"{float(l1_outcome.projected_residual_after):.3e}",
+                                )
+                            res_reduced = l1_outcome.result
+                    except Exception as exc:  # noqa: BLE001
+                        if emit is not None:
+                            emit(1, f"solve_v3_full_system_linear_gmres: FP L1 polish failed ({type(exc).__name__}: {exc})")
             # Low-L global polish: solve a projected system on the lowest L modes across all
             # species/x/(theta,zeta). This is more expensive than the L1 polish but can be
             # significantly more effective at improving flow/current parity when the full
@@ -14412,89 +14393,72 @@ def solve_v3_full_system_linear_gmres(
                         low_restart = max(5, min(int(low_restart), max(5, low_maxiter)))
 
                         assert low_idx_jnp is not None
-
-                        def _low_reduce(v: jnp.ndarray) -> jnp.ndarray:
-                            return v[low_idx_jnp]
-
-                        def _low_expand(v: jnp.ndarray) -> jnp.ndarray:
-                            out = jnp.zeros((int(active_size),), dtype=jnp.float64)
-                            return out.at[low_idx_jnp].set(v, unique_indices=True)
-
-                        x_low_base = jnp.asarray(res_reduced.x, dtype=jnp.float64)
-                        r_low_full = rhs_reduced - mv_reduced(x_low_base)
-                        b_low = _low_reduce(r_low_full)
-                        rn_full_base = float(jnp.linalg.norm(r_low_full))
-                        b_low_norm = float(jnp.linalg.norm(b_low))
                         low_abs_env = os.environ.get("SFINCS_JAX_RHSMODE1_FP_GLOBAL_LOW_ABS", "").strip()
                         try:
                             low_abs = float(low_abs_env) if low_abs_env else 1.0e-8
                         except ValueError:
                             low_abs = 1.0e-8
-                        low_thresh = max(float(target_reduced) * 2.0, float(low_abs))
-                        if np.isfinite(b_low_norm) and b_low_norm > low_thresh:
-                            if emit is not None:
+                        full_ratio_env = os.environ.get("SFINCS_JAX_RHSMODE1_FP_GLOBAL_LOW_FULL_RATIO", "").strip()
+                        try:
+                            full_ratio = float(full_ratio_env) if full_ratio_env else 1.2
+                        except ValueError:
+                            full_ratio = 1.2
+                        full_ratio = max(1.0, float(full_ratio))
+
+                        def _pre_low_full(v: jnp.ndarray) -> jnp.ndarray:
+                            if lmax_precond_for_l1 is not None:
+                                return lmax_precond_for_l1(v)
+                            return polish_precond(v)
+
+                        try:
+                            low_outcome = _apply_projected_residual_polish(
+                                current_result=res_reduced,
+                                rhs=rhs_reduced,
+                                matvec=mv_reduced,
+                                projected_indices=low_idx_jnp,
+                                active_size=int(active_size),
+                                solve_linear=_solve_linear,
+                                preconditioner=_pre_low_full,
+                                tol=1.0e-10,
+                                restart=int(low_restart),
+                                maxiter=int(low_maxiter),
+                                precond_side=gmres_precond_side,
+                                target=float(target_reduced),
+                                threshold_ratio=2.0,
+                                abs_threshold=float(low_abs),
+                                full_accept_ratio=float(full_ratio),
+                                require_full_improvement=True,
+                            )
+                            if (
+                                emit is not None
+                                and np.isfinite(low_outcome.projected_residual_before)
+                                and low_outcome.projected_residual_before
+                                > max(float(target_reduced) * 2.0, float(low_abs))
+                            ):
                                 emit(
                                     1,
                                     "solve_v3_full_system_linear_gmres: FP global low-L polish "
                                     f"(lmax={int(low_lmax)} size={int(low_n)} restart={int(low_restart)} "
-                                    f"maxiter={int(low_maxiter)} b_norm={b_low_norm:.3e})",
+                                    f"maxiter={int(low_maxiter)} b_norm={low_outcome.projected_residual_before:.3e})",
                                 )
-
-                            def _mv_low(v: jnp.ndarray) -> jnp.ndarray:
-                                return _low_reduce(mv_reduced(_low_expand(v)))
-
-                            def _pre_low(v: jnp.ndarray) -> jnp.ndarray:
-                                if lmax_precond_for_l1 is not None:
-                                    return _low_reduce(lmax_precond_for_l1(_low_expand(v)))
-                                return _low_reduce(polish_precond(_low_expand(v)))
-
-                            try:
-                                corr = _solve_linear(
-                                    matvec_fn=_mv_low,
-                                    b_vec=b_low,
-                                    precond_fn=_pre_low,
-                                    x0_vec=None,
-                                    tol_val=1.0e-10,
-                                    atol_val=0.0,
-                                    restart_val=low_restart,
-                                    maxiter_val=low_maxiter,
-                                    solve_method_val="incremental",
-                                    precond_side=gmres_precond_side,
-                                )
-                                x_try = x_low_base + _low_expand(corr.x)
-                                r_try = rhs_reduced - mv_reduced(x_try)
-                                rn_try = float(jnp.linalg.norm(r_try))
-                                b_low_try = _low_reduce(r_try)
-                                rn_low_try = float(jnp.linalg.norm(b_low_try))
-                                full_ratio_env = os.environ.get("SFINCS_JAX_RHSMODE1_FP_GLOBAL_LOW_FULL_RATIO", "").strip()
-                                try:
-                                    full_ratio = float(full_ratio_env) if full_ratio_env else 1.2
-                                except ValueError:
-                                    full_ratio = 1.2
-                                full_ratio = max(1.0, float(full_ratio))
-                                if (
-                                    np.isfinite(rn_try)
-                                    and rn_try < float(res_reduced.residual_norm)
-                                    and rn_try <= max(float(rn_full_base) * full_ratio, float(rn_full_base) + 1.0e-10)
-                                ):
-                                    if emit is not None:
-                                        emit(
-                                            1,
-                                            "solve_v3_full_system_linear_gmres: FP global low-L polish improved residual "
-                                            f"full {float(rn_full_base):.3e} -> {rn_try:.3e}; "
-                                            f"low-L {b_low_norm:.3e} -> {rn_low_try:.3e}",
-                                        )
-                                    res_reduced = GMRESSolveResult(
-                                        x=jnp.asarray(x_try, dtype=jnp.float64),
-                                        residual_norm=jnp.asarray(rn_try, dtype=jnp.float64),
-                                    )
-                            except Exception as exc:  # noqa: BLE001
+                            if low_outcome.accepted:
                                 if emit is not None:
                                     emit(
                                         1,
-                                        "solve_v3_full_system_linear_gmres: FP global low-L polish failed "
-                                        f"({type(exc).__name__}: {exc})",
+                                        "solve_v3_full_system_linear_gmres: FP global low-L polish improved residual "
+                                        f"full {low_outcome.full_residual_before:.3e} -> "
+                                        f"{float(low_outcome.full_residual_after):.3e}; "
+                                        f"low-L {low_outcome.projected_residual_before:.3e} -> "
+                                        f"{float(low_outcome.projected_residual_after):.3e}",
                                     )
+                                res_reduced = low_outcome.result
+                        except Exception as exc:  # noqa: BLE001
+                            if emit is not None:
+                                emit(
+                                    1,
+                                    "solve_v3_full_system_linear_gmres: FP global low-L polish failed "
+                                    f"({type(exc).__name__}: {exc})",
+                                )
                 # Optional BiCGStab polish for large FP systems: short-recurrence Krylov
                 # can reduce residuals further when restarted GMRES stagnates.
                 fp_bi_env = os.environ.get("SFINCS_JAX_RHSMODE1_FP_BICGSTAB_POLISH", "").strip().lower()
