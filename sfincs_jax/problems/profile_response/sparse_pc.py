@@ -17,6 +17,7 @@ from .diagnostics import (
     fortran_reduced_xblock_result_metadata,
     fp_xblock_global_correction_metadata,
     fp_xblock_highx_residual_correction_metadata,
+    sparse_pc_factor_preflight_result_metadata,
     sparse_pc_direct_tail_result_metadata,
     sparse_pc_gmres_result_metadata,
     sparse_rescue_tail_metadata,
@@ -405,18 +406,6 @@ _SPARSE_PC_GMRES_FINALIZATION_CORE_STATE_KEYS = (
     "constrained_pas_pc",
     "emit",
     "factor_bundle_pc",
-    "factor_preflight_enabled",
-    "factor_preflight_error",
-    "factor_preflight_improvement_ratio",
-    "factor_preflight_max_target_ratio",
-    "factor_preflight_passed",
-    "factor_preflight_required",
-    "factor_preflight_residual_after",
-    "factor_preflight_residual_before",
-    "factor_preflight_residual_diagnostics",
-    "factor_preflight_seed_enabled",
-    "factor_preflight_seed_used",
-    "factor_preflight_target_ratio",
     "fortran_reduced_sparse_pc",
     "fortran_reduced_sparse_pc_backend",
     "fortran_reduced_sparse_pc_backend_reason",
@@ -490,7 +479,12 @@ def sparse_pc_gmres_finalization_state_from_driver_scope(
         direct_tail_metadata = scope["sparse_pc_direct_tail_metadata"]
     else:
         direct_tail_metadata = sparse_pc_direct_tail_result_metadata(scope)
+    if "sparse_pc_factor_preflight_metadata" in scope:
+        factor_preflight_metadata = scope["sparse_pc_factor_preflight_metadata"]
+    else:
+        factor_preflight_metadata = sparse_pc_factor_preflight_result_metadata(scope)
     state["sparse_pc_direct_tail_metadata"] = direct_tail_metadata
+    state["sparse_pc_factor_preflight_metadata"] = factor_preflight_metadata
     return state
 
 

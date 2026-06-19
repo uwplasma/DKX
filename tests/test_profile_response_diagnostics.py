@@ -7,6 +7,7 @@ import jax.numpy as jnp
 
 from sfincs_jax.problems.profile_response.diagnostics import (
     SparsePCDirectTailMetadataContext,
+    SparsePCFactorPreflightMetadataContext,
     SparseRescueTailMetadataContext,
     XBlockAssembledOperatorDiagnosticsContext,
     XBlockSparsePCCoreDiagnosticsContext,
@@ -15,6 +16,8 @@ from sfincs_jax.problems.profile_response.diagnostics import (
     fp_xblock_highx_residual_correction_metadata,
     sparse_pc_direct_tail_result_metadata,
     sparse_pc_direct_tail_result_metadata_from_context,
+    sparse_pc_factor_preflight_result_metadata,
+    sparse_pc_factor_preflight_result_metadata_from_context,
     sparse_pc_gmres_result_metadata,
     sparse_rescue_tail_metadata,
     sparse_rescue_tail_metadata_from_context,
@@ -1143,6 +1146,48 @@ def test_sparse_pc_gmres_result_metadata_preserves_driver_schema() -> None:
         == {"kind": "precomputed"}
     )
     assert precomputed_metadata["sparse_pc_direct_tail_true_active_block_species_count"] == 2
+
+
+def test_sparse_pc_factor_preflight_result_metadata_context_matches_state() -> None:
+    state = {
+        "factor_preflight_enabled": True,
+        "factor_preflight_required": False,
+        "factor_preflight_seed_enabled": True,
+        "factor_preflight_seed_used": False,
+        "factor_preflight_passed": True,
+        "factor_preflight_error": None,
+        "factor_preflight_residual_before": 4.0,
+        "factor_preflight_residual_after": 2.0,
+        "factor_preflight_improvement_ratio": 2.0,
+        "factor_preflight_target_ratio": 5.0,
+        "factor_preflight_max_target_ratio": np.float64(10.0),
+        "factor_preflight_residual_diagnostics": {"tail": 0.2},
+    }
+
+    metadata = sparse_pc_factor_preflight_result_metadata(state)
+    context_metadata = sparse_pc_factor_preflight_result_metadata_from_context(
+        SparsePCFactorPreflightMetadataContext(
+            enabled=state["factor_preflight_enabled"],
+            required=state["factor_preflight_required"],
+            seed_enabled=state["factor_preflight_seed_enabled"],
+            seed_used=state["factor_preflight_seed_used"],
+            passed=state["factor_preflight_passed"],
+            error=state["factor_preflight_error"],
+            residual_before=state["factor_preflight_residual_before"],
+            residual_after=state["factor_preflight_residual_after"],
+            improvement_ratio=state["factor_preflight_improvement_ratio"],
+            target_ratio=state["factor_preflight_target_ratio"],
+            max_target_ratio=state["factor_preflight_max_target_ratio"],
+            residual_diagnostics=state["factor_preflight_residual_diagnostics"],
+        )
+    )
+
+    assert context_metadata == metadata
+    assert metadata["sparse_pc_factor_preflight_enabled"] is True
+    assert metadata["sparse_pc_factor_preflight_max_target_ratio"] == 10.0
+    assert metadata["sparse_pc_factor_preflight_residual_diagnostics"] == {
+        "tail": 0.2
+    }
 
 
 def test_xblock_sparse_pc_core_diagnostics_preserve_payload() -> None:

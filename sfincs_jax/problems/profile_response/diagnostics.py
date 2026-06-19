@@ -590,6 +590,72 @@ def _optional_float(value: object) -> float | None:
     return None if value is None else float(value)
 
 
+@dataclass(frozen=True)
+class SparsePCFactorPreflightMetadataContext:
+    """Explicit factor-preflight diagnostics consumed by sparse-PC metadata."""
+
+    enabled: object
+    required: object
+    seed_enabled: object
+    seed_used: object
+    passed: object
+    error: object
+    residual_before: object
+    residual_after: object
+    improvement_ratio: object
+    target_ratio: object
+    max_target_ratio: object
+    residual_diagnostics: object
+
+
+def sparse_pc_factor_preflight_result_metadata_from_context(
+    context: SparsePCFactorPreflightMetadataContext,
+) -> dict[str, object]:
+    """Return sparse-PC factor-preflight diagnostics for final metadata."""
+
+    return {
+        "sparse_pc_factor_preflight_enabled": bool(context.enabled),
+        "sparse_pc_factor_preflight_required": bool(context.required),
+        "sparse_pc_factor_preflight_seed_enabled": bool(context.seed_enabled),
+        "sparse_pc_factor_preflight_seed_used": bool(context.seed_used),
+        "sparse_pc_factor_preflight_passed": context.passed,
+        "sparse_pc_factor_preflight_error": context.error,
+        "sparse_pc_factor_preflight_residual_before": context.residual_before,
+        "sparse_pc_factor_preflight_residual_after": context.residual_after,
+        "sparse_pc_factor_preflight_improvement_ratio": context.improvement_ratio,
+        "sparse_pc_factor_preflight_target_ratio": context.target_ratio,
+        "sparse_pc_factor_preflight_max_target_ratio": float(
+            context.max_target_ratio
+        ),
+        "sparse_pc_factor_preflight_residual_diagnostics": (
+            context.residual_diagnostics
+        ),
+    }
+
+
+def sparse_pc_factor_preflight_result_metadata(
+    state: Mapping[str, object],
+) -> dict[str, object]:
+    """Return factor-preflight diagnostics from historical driver names."""
+
+    return sparse_pc_factor_preflight_result_metadata_from_context(
+        SparsePCFactorPreflightMetadataContext(
+            enabled=state["factor_preflight_enabled"],
+            required=state["factor_preflight_required"],
+            seed_enabled=state["factor_preflight_seed_enabled"],
+            seed_used=state["factor_preflight_seed_used"],
+            passed=state["factor_preflight_passed"],
+            error=state["factor_preflight_error"],
+            residual_before=state["factor_preflight_residual_before"],
+            residual_after=state["factor_preflight_residual_after"],
+            improvement_ratio=state["factor_preflight_improvement_ratio"],
+            target_ratio=state["factor_preflight_target_ratio"],
+            max_target_ratio=state["factor_preflight_max_target_ratio"],
+            residual_diagnostics=state["factor_preflight_residual_diagnostics"],
+        )
+    )
+
+
 def sparse_pc_gmres_result_metadata(
     state: Mapping[str, object],
 ) -> dict[str, object]:
@@ -617,6 +683,9 @@ def sparse_pc_gmres_result_metadata(
     direct_tail_metadata = state.get("sparse_pc_direct_tail_metadata")
     if direct_tail_metadata is None:
         direct_tail_metadata = sparse_pc_direct_tail_result_metadata(state)
+    factor_preflight_metadata = state.get("sparse_pc_factor_preflight_metadata")
+    if factor_preflight_metadata is None:
+        factor_preflight_metadata = sparse_pc_factor_preflight_result_metadata(state)
 
     metadata: dict[str, object] = {
         "solver_kind": (
@@ -643,20 +712,7 @@ def sparse_pc_gmres_result_metadata(
         "sparse_pc_factor_dtype": _dtype_name(state["sparse_pc_factor_dtype_used"]),
         "sparse_pc_initial_factor_dtype": _dtype_name(state["sparse_pc_factor_dtype_initial"]),
         "sparse_pc_factor_dtype_retry": state["sparse_pc_factor_dtype_retry"],
-        "sparse_pc_factor_preflight_enabled": bool(state["factor_preflight_enabled"]),
-        "sparse_pc_factor_preflight_required": bool(state["factor_preflight_required"]),
-        "sparse_pc_factor_preflight_seed_enabled": bool(state["factor_preflight_seed_enabled"]),
-        "sparse_pc_factor_preflight_seed_used": bool(state["factor_preflight_seed_used"]),
-        "sparse_pc_factor_preflight_passed": state["factor_preflight_passed"],
-        "sparse_pc_factor_preflight_error": state["factor_preflight_error"],
-        "sparse_pc_factor_preflight_residual_before": state["factor_preflight_residual_before"],
-        "sparse_pc_factor_preflight_residual_after": state["factor_preflight_residual_after"],
-        "sparse_pc_factor_preflight_improvement_ratio": state["factor_preflight_improvement_ratio"],
-        "sparse_pc_factor_preflight_target_ratio": state["factor_preflight_target_ratio"],
-        "sparse_pc_factor_preflight_max_target_ratio": float(state["factor_preflight_max_target_ratio"]),
-        "sparse_pc_factor_preflight_residual_diagnostics": state[
-            "factor_preflight_residual_diagnostics"
-        ],
+        **factor_preflight_metadata,
         **direct_tail_metadata,
         "sparse_pc_backend": (
             str(state["fortran_reduced_sparse_pc_backend"])
