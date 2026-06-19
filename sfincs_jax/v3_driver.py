@@ -557,7 +557,6 @@ from .problems.profile_response.policies import (
     rhs1_pas_tz_guarded_stage2_retry,
     rhs1_stage2_trigger,
 )
-from .solver_selection_policy import SolverCandidateMetrics
 from . import solver_path_policy as _solver_path_policy
 from .rhs1_host_policy import (
     host_sparse_direct_refine_steps as _host_sparse_direct_refine_steps_impl,
@@ -3125,30 +3124,6 @@ def solve_v3_full_system_linear_gmres(
     def _mark(label: str) -> None:
         if profiler is not None:
             profiler.mark(label)
-
-    def _rhs1_solver_candidate_metrics(
-        *,
-        name: str,
-        result: GMRESSolveResult,
-        target_value: float,
-        solve_s: float | None = None,
-        setup_s: float | None = None,
-    ) -> SolverCandidateMetrics:
-        """Build measured solver-policy metrics from a real RHSMode=1 retry."""
-        try:
-            residual_norm = float(result.residual_norm)
-        except Exception:
-            residual_norm = None
-        finite = residual_norm is not None and bool(np.isfinite(residual_norm))
-        return SolverCandidateMetrics(
-            name=str(name),
-            residual_norm=residual_norm,
-            target=float(target_value),
-            setup_s=setup_s,
-            solve_s=solve_s,
-            peak_rss_mb=_rss_mb(),
-            finite=finite,
-        )
     gmres_budget_setup = resolve_rhs1_gmres_budget_setup(
         restart=int(restart),
         maxiter=maxiter,
@@ -12190,7 +12165,7 @@ def solve_v3_full_system_linear_gmres(
             )
             res2 = _block_gmres_result_ready(res2)
             stage2_elapsed_s = stage2_timer.elapsed_s()
-            res_reduced, residual_vec, handoff_state, _accepted = rhs1_accept_candidate(
+            res_reduced, residual_vec, handoff_state, _accepted = rhs1_accept_measured_candidate(
                 current_result=res_reduced,
                 candidate_result=res2,
                 current_residual_vec=residual_vec,
@@ -12203,17 +12178,11 @@ def solve_v3_full_system_linear_gmres(
                 maxiter=stage2_maxiter,
                 precond_side=gmres_precond_side,
                 solver_kind=_solver_kind(stage2_method)[0],
-                candidate_metrics=_rhs1_solver_candidate_metrics(
-                    name=f"stage2_reduced:{stage2_method}",
-                    result=res2,
-                    target_value=target_reduced,
-                    solve_s=stage2_elapsed_s,
-                ),
-                baseline_metrics=_rhs1_solver_candidate_metrics(
-                    name="current_reduced",
-                    result=res_reduced,
-                    target_value=target_reduced,
-                ),
+                candidate_name=f"stage2_reduced:{stage2_method}",
+                baseline_name="current_reduced",
+                target_value=target_reduced,
+                solve_s=stage2_elapsed_s,
+                peak_rss_mb=_rss_mb(),
             )
             _apply_rhs1_handoff(handoff_state)
         pas_fast_accept = _rhsmode1_pas_fast_accept(
@@ -12812,7 +12781,7 @@ def solve_v3_full_system_linear_gmres(
             )
             res_strong = _block_gmres_result_ready(res_strong)
             strong_elapsed_s = strong_timer.elapsed_s()
-            res_reduced, residual_vec, handoff_state, _accepted = rhs1_accept_candidate(
+            res_reduced, residual_vec, handoff_state, _accepted = rhs1_accept_measured_candidate(
                 current_result=res_reduced,
                 candidate_result=res_strong,
                 current_residual_vec=residual_vec,
@@ -12825,17 +12794,11 @@ def solve_v3_full_system_linear_gmres(
                 maxiter=strong_maxiter,
                 precond_side=gmres_precond_side,
                 solver_kind=_solver_kind("incremental")[0],
-                candidate_metrics=_rhs1_solver_candidate_metrics(
-                    name="strong_reduced",
-                    result=res_strong,
-                    target_value=target_reduced,
-                    solve_s=strong_elapsed_s,
-                ),
-                baseline_metrics=_rhs1_solver_candidate_metrics(
-                    name="current_reduced",
-                    result=res_reduced,
-                    target_value=target_reduced,
-                ),
+                candidate_name="strong_reduced",
+                baseline_name="current_reduced",
+                target_value=target_reduced,
+                solve_s=strong_elapsed_s,
+                peak_rss_mb=_rss_mb(),
             )
             _apply_rhs1_handoff(handoff_state)
 
@@ -14373,7 +14336,7 @@ def solve_v3_full_system_linear_gmres(
                         row_scaled=use_row_scaled,
                     )
                 dense_retry_elapsed_s = dense_retry_timer.elapsed_s()
-                res_reduced, residual_vec, handoff_state, _accepted = rhs1_accept_candidate(
+                res_reduced, residual_vec, handoff_state, _accepted = rhs1_accept_measured_candidate(
                     current_result=res_reduced,
                     candidate_result=res_dense,
                     current_residual_vec=residual_vec,
@@ -14386,17 +14349,11 @@ def solve_v3_full_system_linear_gmres(
                     maxiter=maxiter,
                     precond_side="none",
                     solver_kind="dense",
-                    candidate_metrics=_rhs1_solver_candidate_metrics(
-                        name="dense_reduced",
-                        result=res_dense,
-                        target_value=target_reduced,
-                        solve_s=dense_retry_elapsed_s,
-                    ),
-                    baseline_metrics=_rhs1_solver_candidate_metrics(
-                        name="current_reduced",
-                        result=res_reduced,
-                        target_value=target_reduced,
-                    ),
+                    candidate_name="dense_reduced",
+                    baseline_name="current_reduced",
+                    target_value=target_reduced,
+                    solve_s=dense_retry_elapsed_s,
+                    peak_rss_mb=_rss_mb(),
                 )
                 _apply_rhs1_handoff(handoff_state)
             except Exception as exc:  # noqa: BLE001
@@ -15611,7 +15568,7 @@ def solve_v3_full_system_linear_gmres(
                 precond_side=gmres_precond_side,
             )
             stage2_elapsed_s = stage2_timer.elapsed_s()
-            result, residual_vec, handoff_state, _accepted = rhs1_accept_candidate(
+            result, residual_vec, handoff_state, _accepted = rhs1_accept_measured_candidate(
                 current_result=result,
                 candidate_result=res2,
                 current_residual_vec=residual_vec,
@@ -15624,17 +15581,11 @@ def solve_v3_full_system_linear_gmres(
                 maxiter=stage2_maxiter,
                 precond_side=gmres_precond_side,
                 solver_kind=_solver_kind(stage2_method)[0],
-                candidate_metrics=_rhs1_solver_candidate_metrics(
-                    name=f"stage2_full:{stage2_method}",
-                    result=res2,
-                    target_value=target,
-                    solve_s=stage2_elapsed_s,
-                ),
-                baseline_metrics=_rhs1_solver_candidate_metrics(
-                    name="current_full",
-                    result=result,
-                    target_value=target,
-                ),
+                candidate_name=f"stage2_full:{stage2_method}",
+                baseline_name="current_full",
+                target_value=target,
+                solve_s=stage2_elapsed_s,
+                peak_rss_mb=_rss_mb(),
             )
             _apply_rhs1_handoff(handoff_state)
         # Krylov solvers with left preconditioning report the preconditioned residual
@@ -15940,7 +15891,7 @@ def solve_v3_full_system_linear_gmres(
                 precond_side=gmres_precond_side,
             )
             strong_elapsed_s = strong_timer.elapsed_s()
-            result, residual_vec, handoff_state, _accepted = rhs1_accept_candidate(
+            result, residual_vec, handoff_state, _accepted = rhs1_accept_measured_candidate(
                 current_result=result,
                 candidate_result=res_strong,
                 current_residual_vec=residual_vec,
@@ -15953,17 +15904,11 @@ def solve_v3_full_system_linear_gmres(
                 maxiter=strong_maxiter,
                 precond_side=gmres_precond_side,
                 solver_kind=_solver_kind("incremental")[0],
-                candidate_metrics=_rhs1_solver_candidate_metrics(
-                    name="strong_full",
-                    result=res_strong,
-                    target_value=target,
-                    solve_s=strong_elapsed_s,
-                ),
-                baseline_metrics=_rhs1_solver_candidate_metrics(
-                    name="current_full",
-                    result=result,
-                    target_value=target,
-                ),
+                candidate_name="strong_full",
+                baseline_name="current_full",
+                target_value=target,
+                solve_s=strong_elapsed_s,
+                peak_rss_mb=_rss_mb(),
             )
             _apply_rhs1_handoff(handoff_state)
         if (
@@ -16659,7 +16604,7 @@ def solve_v3_full_system_linear_gmres(
                         row_scaled=use_row_scaled,
                     )
                 dense_retry_elapsed_s = dense_retry_timer.elapsed_s()
-                result, residual_vec, handoff_state, _accepted = rhs1_accept_candidate(
+                result, residual_vec, handoff_state, _accepted = rhs1_accept_measured_candidate(
                     current_result=result,
                     candidate_result=res_dense,
                     current_residual_vec=residual_vec,
@@ -16672,17 +16617,11 @@ def solve_v3_full_system_linear_gmres(
                     maxiter=maxiter,
                     precond_side="none",
                     solver_kind="dense",
-                    candidate_metrics=_rhs1_solver_candidate_metrics(
-                        name="dense_full",
-                        result=res_dense,
-                        target_value=target,
-                        solve_s=dense_retry_elapsed_s,
-                    ),
-                    baseline_metrics=_rhs1_solver_candidate_metrics(
-                        name="current_full",
-                        result=result,
-                        target_value=target,
-                    ),
+                    candidate_name="dense_full",
+                    baseline_name="current_full",
+                    target_value=target,
+                    solve_s=dense_retry_elapsed_s,
+                    peak_rss_mb=_rss_mb(),
                 )
                 _apply_rhs1_handoff(handoff_state)
             except Exception as exc:  # noqa: BLE001

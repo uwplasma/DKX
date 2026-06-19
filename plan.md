@@ -42,7 +42,8 @@ Make `sfincs_jax` research-grade while preserving the public user contract:
 
 Recent checkpoints:
 
-- Sparse fallback measured-handoff extraction (current checkpoint).
+- Measured candidate handoff consolidation (current checkpoint).
+- Sparse fallback measured-handoff extraction.
 - Sparse-PC factor-preflight evaluation extraction.
 - Direct-tail coupled-coarse rescue policy extraction.
 - Direct-tail true-active rescue policy extraction.
@@ -57,25 +58,27 @@ Recent checkpoints:
 - `cb295ce` Extract sparse pattern setup.
 - `4b6a5b4` Extract sparse factor policy.
 
-Current source-size snapshot after sparse fallback measured-handoff extraction:
+Current source-size snapshot after measured candidate handoff consolidation:
 
-- `sfincs_jax/v3_driver.py`: `19054` lines.
-- `solve_v3_full_system_linear_gmres`: `13708` lines.
+- `sfincs_jax/v3_driver.py`: `18993` lines.
+- `solve_v3_full_system_linear_gmres`: `13648` lines.
 
 Recent local validation:
 
 - Handoff helper unit shard:
-  `18 passed in 0.33 s`.
+  `18 passed in 0.35 s`.
 - End-to-end explicit sparse/direct-tail driver checks:
-  `5 passed in 14.20 s`.
+  `5 passed in 15.71 s`.
 - Latest broad profile-response/x-block/sparse-pattern shard:
-  `443 passed in 114.36 s`.
+  `443 passed in 116.32 s`.
 - Focused sparse-PC shard:
   `164 passed in 1.68 s`.
 - Hygiene:
   `ruff`, `compileall`, `git diff --check`, and `scripts/check_repo_size.py`
   passed.
 - Latest pushed CI/Docs before this tranche (`eff0ba4`) are green.
+- Latest pushed Docs for sparse fallback measured-handoff (`c3802d5`) are green;
+  CI is in progress and not yet waited on.
 
 Known CI issue fixed by this rewrite:
 
@@ -86,7 +89,7 @@ Known CI issue fixed by this rewrite:
 
 ### 1. `v3_driver.py` Architecture Refactor
 
-Completion estimate: 91%.
+Completion estimate: 92%.
 
 Goal:
 
@@ -137,6 +140,8 @@ Completed recent boundaries:
   extraction.
 - RHSMode=1 measured solver-candidate metric construction and sparse host/JAX
   fallback handoff extraction.
+- RHSMode=1 stage-2, strong-retry, dense fallback, and sparse fallback measured
+  candidate handoff consolidation; driver-local metrics builder removed.
 
 Next steps:
 
@@ -204,9 +209,9 @@ Next steps:
 
 ## Immediate Next Steps
 
-1. Commit and push the sparse fallback measured-handoff extraction.
-2. Continue with remaining measured candidate call-site consolidation where
-   behavior and cache boundaries remain clean.
+1. Commit and push the measured candidate handoff consolidation.
+2. Continue with remaining generic sparse-PC solve/result assembly extraction
+   where behavior and cache boundaries remain clean.
 3. Run focused handoff/sparse-PC tests and the broad profile-response/x-block/sparse
    shard after each extraction.
 4. Snapshot CI but do not wait on queued runs unless a completed failure appears.
