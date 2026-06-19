@@ -172,6 +172,7 @@ from .problems.profile_response.handoff import (
     RHS1KSPReplayState,
     rhs1_accept_candidate_and_update_replay,
     rhs1_accept_measured_candidate_and_update_replay,
+    rhs1_accept_smoother_candidate_and_update_replay,
     rhs1_run_fast_post_xblock_polish,
     rhs1_run_linear_candidate_and_update_replay,
     rhs1_run_measured_linear_candidate_and_update_replay,
@@ -12019,34 +12020,26 @@ def solve_v3_full_system_linear_gmres(
                 omega=float(smoother_omega),
                 max_sweeps=int(smoother_max),
             )
-            if float(smoother.residual_norm) < float(res_reduced.residual_norm):
-                if emit is not None:
-                    emit(
-                        1,
-                        "solve_v3_full_system_linear_gmres: PAS adaptive smoother "
-                        f"accepted {int(smoother.accepted_sweeps)} sweep(s), "
-                        f"reason={smoother.stop_reason}, "
-                        f"residual={float(res_reduced.residual_norm):.3e}->{float(smoother.residual_norm):.3e}",
-                    )
-                smoother_result = GMRESSolveResult(
-                    x=smoother.x,
-                    residual_norm=jnp.asarray(smoother.residual_norm, dtype=jnp.float64),
-                )
-                res_reduced, residual_vec, _accepted = rhs1_accept_candidate_and_update_replay(
+            res_reduced, residual_vec, _accepted = (
+                rhs1_accept_smoother_candidate_and_update_replay(
                     replay_state=ksp_replay,
                     current_result=res_reduced,
-                    candidate_result=smoother_result,
                     current_residual_vec=residual_vec,
+                    smoother=smoother,
+                    result_factory=lambda *, x, residual_norm: GMRESSolveResult(
+                        x=x,
+                        residual_norm=jnp.asarray(residual_norm, dtype=jnp.float64),
+                    ),
                     candidate_residual_vec=residual_vec,
                     matvec_fn=mv_reduced,
                     b_vec=rhs_reduced,
                     precond_fn=preconditioner_reduced,
-                    x0_vec=smoother_result.x,
                     restart=restart,
                     maxiter=maxiter,
                     precond_side=gmres_precond_side,
                     solver_kind=_solver_kind("incremental")[0],
                 )
+            )
         if fp_force_strong:
             strong_precond_trigger = True
         if (
@@ -15038,34 +15031,26 @@ def solve_v3_full_system_linear_gmres(
                 omega=float(smoother_omega),
                 max_sweeps=int(smoother_max),
             )
-            if float(smoother.residual_norm) < float(result.residual_norm):
-                if emit is not None:
-                    emit(
-                        1,
-                        "solve_v3_full_system_linear_gmres: PAS adaptive smoother "
-                        f"accepted {int(smoother.accepted_sweeps)} sweep(s), "
-                        f"reason={smoother.stop_reason}, "
-                        f"residual={float(result.residual_norm):.3e}->{float(smoother.residual_norm):.3e}",
-                    )
-                smoother_result = GMRESSolveResult(
-                    x=smoother.x,
-                    residual_norm=jnp.asarray(smoother.residual_norm, dtype=jnp.float64),
-                )
-                result, residual_vec, _accepted = rhs1_accept_candidate_and_update_replay(
+            result, residual_vec, _accepted = (
+                rhs1_accept_smoother_candidate_and_update_replay(
                     replay_state=ksp_replay,
                     current_result=result,
-                    candidate_result=smoother_result,
                     current_residual_vec=residual_vec,
-                    candidate_residual_vec=rhs - mv(smoother_result.x),
+                    smoother=smoother,
+                    result_factory=lambda *, x, residual_norm: GMRESSolveResult(
+                        x=x,
+                        residual_norm=jnp.asarray(residual_norm, dtype=jnp.float64),
+                    ),
+                    candidate_residual_vec=lambda candidate: rhs - mv(candidate.x),
                     matvec_fn=mv,
                     b_vec=rhs,
                     precond_fn=preconditioner_full,
-                    x0_vec=smoother_result.x,
                     restart=restart,
                     maxiter=maxiter,
                     precond_side=gmres_precond_side,
                     solver_kind=_solver_kind("incremental")[0],
                 )
+            )
         if (
             float(result.residual_norm) > target
             and int(op.rhs_mode) == 1

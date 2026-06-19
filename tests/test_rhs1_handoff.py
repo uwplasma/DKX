@@ -12,6 +12,7 @@ from sfincs_jax.rhs1_handoff import (
     rhs1_accept_candidate_and_update_replay,
     rhs1_accept_measured_candidate,
     rhs1_accept_measured_candidate_and_update_replay,
+    rhs1_accept_smoother_candidate_and_update_replay,
     rhs1_residual_improves,
     rhs1_run_fast_post_xblock_polish,
     rhs1_run_linear_candidate_and_update_replay,
@@ -232,6 +233,85 @@ def test_rhs1_accept_candidate_and_update_replay_updates_only_on_acceptance() ->
     assert rejected_residual_vec == "r1"
     assert replay.matvec_fn == "mv"
     assert replay.solver_kind == "gmres"
+
+
+def test_rhs1_accept_smoother_candidate_updates_replay_and_uses_residual_builder() -> None:
+    messages: list[tuple[int, str]] = []
+    replay = RHS1KSPReplayState()
+    current = _result(1.0, x="x0")
+    smoother = SimpleNamespace(
+        x="x1",
+        residual_norm=0.25,
+        accepted_sweeps=2,
+        stop_reason="target",
+    )
+
+    result, residual_vec, accepted = rhs1_accept_smoother_candidate_and_update_replay(
+        replay_state=replay,
+        current_result=current,
+        current_residual_vec="r0",
+        smoother=smoother,
+        result_factory=lambda *, x, residual_norm: _result(residual_norm, x=x),
+        candidate_residual_vec=lambda candidate: f"residual:{candidate.x}",
+        matvec_fn="mv",
+        b_vec="rhs",
+        precond_fn="pc",
+        restart=30,
+        maxiter=90,
+        precond_side="left",
+        solver_kind="gmres",
+        emit=lambda level, message: messages.append((level, message)),
+    )
+
+    assert accepted
+    assert result.x == "x1"
+    assert result.residual_norm == 0.25
+    assert residual_vec == "residual:x1"
+    assert replay.matvec_fn == "mv"
+    assert replay.x0_vec == "x1"
+    assert replay.solver_kind == "gmres"
+    assert messages == [
+        (
+            1,
+            "solve_v3_full_system_linear_gmres: PAS adaptive smoother "
+            "accepted 2 sweep(s), reason=target, residual=1.000e+00->2.500e-01",
+        )
+    ]
+
+
+def test_rhs1_accept_smoother_candidate_rejects_nonimproving_without_emitting() -> None:
+    messages: list[tuple[int, str]] = []
+    replay = RHS1KSPReplayState(matvec_fn="old")
+    current = _result(1.0, x="x0")
+    smoother = SimpleNamespace(
+        x="x1",
+        residual_norm=2.0,
+        accepted_sweeps=1,
+        stop_reason="worse",
+    )
+
+    result, residual_vec, accepted = rhs1_accept_smoother_candidate_and_update_replay(
+        replay_state=replay,
+        current_result=current,
+        current_residual_vec="r0",
+        smoother=smoother,
+        result_factory=lambda *, x, residual_norm: _result(residual_norm, x=x),
+        candidate_residual_vec="r1",
+        matvec_fn="mv",
+        b_vec="rhs",
+        precond_fn="pc",
+        restart=30,
+        maxiter=90,
+        precond_side="left",
+        solver_kind="gmres",
+        emit=lambda level, message: messages.append((level, message)),
+    )
+
+    assert not accepted
+    assert result is current
+    assert residual_vec == "r0"
+    assert replay.matvec_fn == "old"
+    assert messages == []
 
 
 def test_rhs1_accept_candidate_rejects_measured_runtime_memory_regression() -> None:

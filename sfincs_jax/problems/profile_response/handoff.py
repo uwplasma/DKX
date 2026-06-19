@@ -469,6 +469,72 @@ def rhs1_run_linear_candidate_and_update_replay(
     return result, residual_vec, accepted, elapsed_s
 
 
+def rhs1_accept_smoother_candidate_and_update_replay(
+    *,
+    replay_state: RHS1KSPReplayState,
+    current_result: Any,
+    current_residual_vec: Any,
+    smoother: Any,
+    result_factory: Any,
+    candidate_residual_vec: Any,
+    matvec_fn: Any,
+    b_vec: Any,
+    precond_fn: Any,
+    restart: int,
+    maxiter: int | None,
+    precond_side: str,
+    solver_kind: str,
+    emit: Any = None,
+    label: str = "PAS adaptive smoother",
+) -> tuple[Any, Any, bool]:
+    """Accept an already-run smoother candidate and update replay state.
+
+    The driver still owns the smoother execution and the residual-vector
+    routing. ``candidate_residual_vec`` may be either a precomputed vector or a
+    callable that receives the constructed candidate result.
+    """
+
+    current_residual = float(current_result.residual_norm)
+    smoother_residual = float(smoother.residual_norm)
+    if not rhs1_residual_improves(
+        current_residual=current_residual,
+        candidate_residual=smoother_residual,
+    ):
+        return current_result, current_residual_vec, False
+    candidate_result = result_factory(
+        x=smoother.x,
+        residual_norm=smoother_residual,
+    )
+    residual_vec_candidate = (
+        candidate_residual_vec(candidate_result)
+        if callable(candidate_residual_vec)
+        else candidate_residual_vec
+    )
+    if emit is not None:
+        emit(
+            1,
+            f"solve_v3_full_system_linear_gmres: {label} "
+            f"accepted {int(getattr(smoother, 'accepted_sweeps', 0))} sweep(s), "
+            f"reason={getattr(smoother, 'stop_reason', 'unknown')}, "
+            f"residual={current_residual:.3e}->{smoother_residual:.3e}",
+        )
+    return rhs1_accept_candidate_and_update_replay(
+        replay_state=replay_state,
+        current_result=current_result,
+        candidate_result=candidate_result,
+        current_residual_vec=current_residual_vec,
+        candidate_residual_vec=residual_vec_candidate,
+        matvec_fn=matvec_fn,
+        b_vec=b_vec,
+        precond_fn=precond_fn,
+        x0_vec=candidate_result.x,
+        restart=restart,
+        maxiter=maxiter,
+        precond_side=precond_side,
+        solver_kind=solver_kind,
+    )
+
+
 __all__ = [
     "RHS1KSPHandoffState",
     "RHS1KSPReplayState",
@@ -478,6 +544,7 @@ __all__ = [
     "rhs1_accept_measured_candidate",
     "rhs1_accept_measured_candidate_and_update_replay",
     "rhs1_residual_improves",
+    "rhs1_accept_smoother_candidate_and_update_replay",
     "rhs1_run_fast_post_xblock_polish",
     "rhs1_run_linear_candidate_and_update_replay",
     "rhs1_run_measured_linear_candidate_and_update_replay",
