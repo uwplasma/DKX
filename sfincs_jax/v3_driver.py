@@ -1108,83 +1108,28 @@ def _rhsmode1_explicit_sparse_host_direct_allowed(
 
 
 def _build_host_sparse_direct_factor_from_matvec(
-    *,
-    matvec: Callable[[jnp.ndarray], jnp.ndarray],
-    n: int,
-    dtype: jnp.dtype,
-    factor_dtype: np.dtype,
-    pattern=None,
-    operator_bundle_override: SparseOperatorBundle | None = None,
-    emit: Callable[[int, str], None] | None = None,
-    default_diag_pivot_thresh: float = 1.0,
-    default_permc_spec: str = "COLAMD",
-    default_factor_kind: str = "lu",
-    default_ilu_fill_factor: float = 10.0,
-    default_ilu_drop_tol: float = 1.0e-4,
-    default_pattern_color_batch: int = 1,
-    default_symbolic_ordering_kind: str = "rcm",
-    default_symbolic_block_size: int = 4096,
-    default_symbolic_block_overlap: int = 0,
-    default_symbolic_coarse_max_cols: int = 256,
-    default_symbolic_coarse_probe_cols: int = 4,
-    default_symbolic_coarse_damping: float = 1.0,
-    default_symbolic_coarse_regularization_rel: float = 1.0e-10,
-    default_symbolic_schur_max_separator_cols: int = 256,
-    default_symbolic_schur_tail_size: int = 0,
-    default_symbolic_schur_boundary_width: int = 1,
-    default_symbolic_schur_high_degree_cols: int = 64,
-    default_symbolic_schur_regularization_rel: float = 1.0e-12,
-    default_symbolic_frontal_max_separator_cols: int = 1024,
-    default_symbolic_frontal_tail_size: int = 0,
-    default_symbolic_frontal_boundary_width: int = 1,
-    default_symbolic_frontal_high_degree_cols: int = 128,
-    default_symbolic_frontal_max_superblock_size: int = 8192,
-    default_symbolic_frontal_max_superblock_blocks: int = 8,
-    default_symbolic_frontal_min_cross_nnz: int = 1,
-    default_symbolic_frontal_min_cross_separator_fraction: float = 0.0,
-    default_symbolic_frontal_regularization_rel: float = 1.0e-12,
-    default_symbolic_frontal_max_dense_rhs_entries: int = 0,
-    default_symbolic_frontal_max_dense_rhs_cols_per_block: int = 0,
-    default_symbolic_blr_frontal_tol: float = 1.0e-6,
-    default_symbolic_blr_frontal_max_rank: int = 64,
-    default_symbolic_blr_frontal_min_cols: int = 8,
-    default_symbolic_blr_frontal_gmres_rtol: float = 1.0e-6,
-    default_symbolic_blr_frontal_gmres_atol: float = 0.0,
-    default_symbolic_blr_frontal_gmres_maxiter: int = 50,
-    default_symbolic_blr_frontal_gmres_restart: int = 64,
-    default_symbolic_blr_frontal_woodbury_max_rank: int = 512,
-    default_symbolic_blr_frontal_woodbury_max_condition: float = 1.0e8,
-    default_symbolic_nd_max_leaf_size: int = 4096,
-    default_symbolic_nd_max_terminal_factor_size: int = 32768,
-    default_symbolic_nd_max_depth: int = 4,
-    default_symbolic_nd_separator_width: int = 64,
-    default_symbolic_nd_max_separator_cols: int = 4096,
-    default_symbolic_nd_high_degree_cols: int = 64,
-    default_symbolic_nd_regularization_rel: float = 1.0e-12,
-    default_symbolic_nd_max_dense_rhs_entries: int = 0,
-    default_symbolic_nd_max_dense_rhs_entries_per_child: int = 0,
-    default_symbolic_nd_max_dense_rhs_cols_per_child: int = 0,
-    default_symbolic_nd_max_setup_s: float = 0.0,
-    default_symbolic_nd_compress_updates: bool = False,
-    default_symbolic_nd_parallel_update_workers: int = 1,
-    default_symbolic_nd_residual_polish_steps: int = 0,
-    default_symbolic_nd_residual_polish_damping: float = 1.0,
-    default_symbolic_superblock_max_size: int = 32768,
-    default_symbolic_superblock_max_blocks: int = 8,
-    default_symbolic_superblock_min_cross_nnz: int = 1,
-    default_symbolic_superblock_min_retained_cross_fraction: float = 0.0,
-    default_symbolic_superblock_regularization_rel: float = 1.0e-12,
-    default_symbolic_numeric_parallel_workers: int = 1,
-    default_symbolic_max_permutation_size: int = 250_000,
-    default_monolithic_guard_enabled: bool = True,
+    **kwargs,
 ):
+    """Compatibility wrapper around the explicit-sparse factor builder.
+
+    The implementation and its full keyword schema live in
+    `explicit_sparse_factor_builder.py`. This thin wrapper exists so older
+    driver tests can still monkeypatch the builder dependencies through
+    `v3_driver`, without duplicating the entire builder signature here.
+    """
+    kwargs.setdefault("build_operator_from_matvec_callback", build_operator_from_matvec)
+    kwargs.setdefault("build_operator_from_pattern_callback", build_operator_from_pattern)
+    kwargs.setdefault(
+        "factorize_host_sparse_operator_callback",
+        factorize_host_sparse_operator,
+    )
+    kwargs.setdefault("default_backend_callback", jax.default_backend)
+    kwargs.setdefault(
+        "monolithic_max_size_callback",
+        _explicit_sparse_monolithic_max_size,
+    )
     return _build_host_sparse_direct_factor_from_matvec_impl(
-        **locals(),
-        build_operator_from_matvec_callback=build_operator_from_matvec,
-        build_operator_from_pattern_callback=build_operator_from_pattern,
-        factorize_host_sparse_operator_callback=factorize_host_sparse_operator,
-        default_backend_callback=jax.default_backend,
-        monolithic_max_size_callback=_explicit_sparse_monolithic_max_size,
+        **kwargs,
     )
 
 
