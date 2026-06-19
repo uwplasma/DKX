@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 from sfincs_jax.rhs1_strong_control import (
+    RHS1StrongRetryControls,
     RHS1StrongTriggerControls,
     rhs1_resolved_strong_preconditioner_control,
+    rhs1_strong_retry_controls_from_env,
     rhs1_strong_preconditioner_min_size,
     rhs1_strong_trigger_controls_from_env,
 )
@@ -122,6 +124,37 @@ def test_rhs1_strong_trigger_controls_fp_force(monkeypatch) -> None:
         rhs1_precond_kind="point",
         delay_pas_base_retries=False,
     ).fp_force
+
+
+def test_rhs1_strong_retry_controls_preserve_defaults(monkeypatch) -> None:
+    monkeypatch.delenv("SFINCS_JAX_RHSMODE1_STRONG_PRECOND_RESTART", raising=False)
+    monkeypatch.delenv("SFINCS_JAX_RHSMODE1_STRONG_PRECOND_MAXITER", raising=False)
+
+    assert rhs1_strong_retry_controls_from_env(
+        restart=80,
+        maxiter=300,
+    ) == RHS1StrongRetryControls(restart=120, maxiter=800)
+
+    assert rhs1_strong_retry_controls_from_env(
+        restart=160,
+        maxiter=500,
+    ) == RHS1StrongRetryControls(restart=160, maxiter=1000)
+
+
+def test_rhs1_strong_retry_controls_respect_env_and_invalid_fallback(monkeypatch) -> None:
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_STRONG_PRECOND_RESTART", "44")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_STRONG_PRECOND_MAXITER", "88")
+    assert rhs1_strong_retry_controls_from_env(
+        restart=80,
+        maxiter=300,
+    ) == RHS1StrongRetryControls(restart=44, maxiter=88)
+
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_STRONG_PRECOND_RESTART", "bad")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_STRONG_PRECOND_MAXITER", "bad")
+    assert rhs1_strong_retry_controls_from_env(
+        restart=80,
+        maxiter=None,
+    ) == RHS1StrongRetryControls(restart=120, maxiter=800)
 
 
 def test_rhs1_resolved_strong_preconditioner_control_enables_auto_on_default_problem_families() -> None:

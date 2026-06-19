@@ -35,6 +35,14 @@ class RHS1StrongTriggerControls:
     fp_abs_threshold: float
 
 
+@dataclass(frozen=True)
+class RHS1StrongRetryControls:
+    """Krylov bounds for a strong-preconditioner fallback solve."""
+
+    restart: int
+    maxiter: int
+
+
 def requested_rhs1_strong_preconditioner_kind(
     strong_precond_env: str, *, mode: str
 ) -> str | None:
@@ -138,6 +146,22 @@ def rhs1_strong_trigger_controls_from_env(
         fp_force=bool(fp_force),
         fp_abs_threshold=float(fp_abs_threshold),
     )
+
+
+def rhs1_strong_retry_controls_from_env(*, restart: int, maxiter: int | None) -> RHS1StrongRetryControls:
+    """Resolve strong-preconditioner retry Krylov bounds."""
+
+    restart_env = os.environ.get("SFINCS_JAX_RHSMODE1_STRONG_PRECOND_RESTART", "").strip()
+    maxiter_env = os.environ.get("SFINCS_JAX_RHSMODE1_STRONG_PRECOND_MAXITER", "").strip()
+    try:
+        restart_use = int(restart_env) if restart_env else max(120, int(restart))
+    except ValueError:
+        restart_use = max(120, int(restart))
+    try:
+        maxiter_use = int(maxiter_env) if maxiter_env else max(800, int(maxiter or 400) * 2)
+    except ValueError:
+        maxiter_use = max(800, int(maxiter or 400) * 2)
+    return RHS1StrongRetryControls(restart=int(restart_use), maxiter=int(maxiter_use))
 
 
 def rhs1_pas_weak_strong_retry_skip(
@@ -589,6 +613,7 @@ def adjust_rhs1_theta_line_auto_kind(
 __all__ = (
     "RHS1StrongAutoSelection",
     "RHS1StrongPreconditionerControl",
+    "RHS1StrongRetryControls",
     "RHS1StrongTriggerControls",
     "adjust_rhs1_reduced_auto_kind",
     "adjust_rhs1_theta_line_auto_kind",
@@ -603,6 +628,7 @@ __all__ = (
     "rhs1_resolved_strong_preconditioner_control",
     "rhs1_schwarz_auto_min",
     "rhs1_strong_preconditioner_min_size",
+    "rhs1_strong_retry_controls_from_env",
     "rhs1_strong_trigger_controls_from_env",
     "rhs1_theta_line_max",
     "rhs1_tz_precond_max",

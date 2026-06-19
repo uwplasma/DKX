@@ -42,11 +42,15 @@ Make `sfincs_jax` research-grade while preserving the public user contract:
 
 Recent checkpoints:
 
+- RHSMode=1 strong-preconditioner retry restart/maxiter controls now use a
+  tested profile-response strong-preconditioning helper shared by reduced and
+  full-system strong fallback solves while build, solve, measured acceptance,
+  and replay remain driver-owned (current checkpoint).
 - RHSMode=1 strong-preconditioner residual-trigger controls now use a tested
   profile-response strong-preconditioning helper for residual ratio parsing,
   reduced PAS delayed fallback defaults, tokamak PAS delay, and FP absolute
   force thresholds while auto kind selection, build, solve, and replay remain
-  driver-owned (current checkpoint).
+  driver-owned (`18603cb`).
 - RHSMode=1 small-system GMRES cutoff parsing now lives next to profile
   linear-solve routing in `profile_response.linear_solve` while profile
   context construction and solve execution remain driver-owned
@@ -251,13 +255,13 @@ Recent checkpoints:
 - `cb295ce` Extract sparse pattern setup.
 - `4b6a5b4` Extract sparse factor policy.
 
-Current source-size snapshot after strong-trigger control extraction:
+Current source-size snapshot after strong-retry control extraction:
 
-- `sfincs_jax/v3_driver.py`: `17625` lines.
-- `solve_v3_full_system_linear_gmres`: `12289` lines.
+- `sfincs_jax/v3_driver.py`: `17614` lines.
+- `solve_v3_full_system_linear_gmres`: `12277` lines.
 - `sfincs_jax/v3_results.py`: `119` lines.
 - `sfincs_jax/rhs1_ksp_diagnostics.py`: `306` lines.
-- `sfincs_jax/problems/profile_response/strong_preconditioning.py`: `610` lines.
+- `sfincs_jax/problems/profile_response/strong_preconditioning.py`: `636` lines.
 - `sfincs_jax/problems/profile_response/residual.py`: `981` lines.
 - `sfincs_jax/problems/profile_response/handoff.py`: `598` lines.
 - `sfincs_jax/problems/profile_response/policies.py`: `3463` lines.
@@ -270,6 +274,16 @@ Current source-size snapshot after strong-trigger control extraction:
 
 Recent local validation:
 
+- Strong-preconditioner policy shard after retry-control extraction:
+  `10 passed in 0.31 s`.
+- Sparse-host/minimum-norm/direct-tail driver shard:
+  `32 passed, 100 deselected in 33.99 s`.
+- Broad profile-response/RHSMode=1 policy, setup, diagnostics, solver, and
+  helper sweep after strong-retry control extraction:
+  `1116 passed in 44.49 s`.
+- Hygiene:
+  `py_compile`, `ruff`, `compileall`, `git diff --check`, and
+  `scripts/check_repo_size.py` passed.
 - Strong-preconditioner policy shard after trigger-control extraction:
   `8 passed in 0.29 s`.
 - Sparse-host/minimum-norm/direct-tail driver shard:

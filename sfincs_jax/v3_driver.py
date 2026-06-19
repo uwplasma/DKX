@@ -338,6 +338,7 @@ from .problems.profile_response.strong_preconditioning import (
     rhs1_pas_weak_minres_steps,
     rhs1_pas_weak_strong_retry_skip,
     rhs1_resolved_strong_preconditioner_control,
+    rhs1_strong_retry_controls_from_env,
     rhs1_strong_trigger_controls_from_env,
 )
 from .problems.profile_response.policies import (
@@ -12182,16 +12183,10 @@ def solve_v3_full_system_linear_gmres(
             if use_pas_projection:
                 strong_preconditioner_reduced = _wrap_pas_precond(strong_preconditioner_reduced)
 
-            strong_restart_env = os.environ.get("SFINCS_JAX_RHSMODE1_STRONG_PRECOND_RESTART", "").strip()
-            strong_maxiter_env = os.environ.get("SFINCS_JAX_RHSMODE1_STRONG_PRECOND_MAXITER", "").strip()
-            try:
-                strong_restart = int(strong_restart_env) if strong_restart_env else max(120, int(restart))
-            except ValueError:
-                strong_restart = max(120, int(restart))
-            try:
-                strong_maxiter = int(strong_maxiter_env) if strong_maxiter_env else max(800, int(maxiter or 400) * 2)
-            except ValueError:
-                strong_maxiter = max(800, int(maxiter or 400) * 2)
+            strong_retry_controls = rhs1_strong_retry_controls_from_env(
+                restart=int(restart),
+                maxiter=maxiter,
+            )
             res_reduced, residual_vec, _accepted, _strong_elapsed_s = (
                 rhs1_run_measured_linear_candidate_and_update_replay(
                     replay_state=ksp_replay,
@@ -12202,8 +12197,8 @@ def solve_v3_full_system_linear_gmres(
                     precond_fn=strong_preconditioner_reduced,
                     tol=float(tol),
                     atol=float(atol),
-                    restart=int(strong_restart),
-                    maxiter=int(strong_maxiter),
+                    restart=int(strong_retry_controls.restart),
+                    maxiter=int(strong_retry_controls.maxiter),
                     solve_method="incremental",
                     precond_side=gmres_precond_side,
                     solve_linear=_solve_linear,
@@ -14651,16 +14646,10 @@ def solve_v3_full_system_linear_gmres(
                 )
             _mark("rhs1_strong_precond_build_done")
 
-            strong_restart_env = os.environ.get("SFINCS_JAX_RHSMODE1_STRONG_PRECOND_RESTART", "").strip()
-            strong_maxiter_env = os.environ.get("SFINCS_JAX_RHSMODE1_STRONG_PRECOND_MAXITER", "").strip()
-            try:
-                strong_restart = int(strong_restart_env) if strong_restart_env else max(120, int(restart))
-            except ValueError:
-                strong_restart = max(120, int(restart))
-            try:
-                strong_maxiter = int(strong_maxiter_env) if strong_maxiter_env else max(800, int(maxiter or 400) * 2)
-            except ValueError:
-                strong_maxiter = max(800, int(maxiter or 400) * 2)
+            strong_retry_controls = rhs1_strong_retry_controls_from_env(
+                restart=int(restart),
+                maxiter=maxiter,
+            )
             result, residual_vec, _accepted, _strong_elapsed_s = (
                 rhs1_run_measured_linear_candidate_and_update_replay(
                     replay_state=ksp_replay,
@@ -14671,8 +14660,8 @@ def solve_v3_full_system_linear_gmres(
                     precond_fn=strong_preconditioner_full,
                     tol=float(tol),
                     atol=float(atol),
-                    restart=int(strong_restart),
-                    maxiter=int(strong_maxiter),
+                    restart=int(strong_retry_controls.restart),
+                    maxiter=int(strong_retry_controls.maxiter),
                     solve_method="incremental",
                     precond_side=gmres_precond_side,
                     solve_linear=_solve_linear_with_residual,
