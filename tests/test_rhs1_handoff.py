@@ -14,6 +14,7 @@ from sfincs_jax.rhs1_handoff import (
     rhs1_accept_measured_candidate_and_update_replay,
     rhs1_residual_improves,
     rhs1_run_fast_post_xblock_polish,
+    rhs1_run_measured_linear_candidate_and_update_replay,
     rhs1_solver_candidate_metrics,
 )
 from sfincs_jax.solver_selection_policy import SolverCandidateMetrics
@@ -568,3 +569,121 @@ def test_rhs1_run_fast_post_xblock_polish_rejects_nonimproving_candidate() -> No
 
     assert not accepted
     assert result is current
+
+
+def test_rhs1_run_measured_linear_candidate_accepts_result_only_solver() -> None:
+    replay = RHS1KSPReplayState()
+    current = _result(1.0, x="x0")
+    candidate = _result(1.0e-11, x="x1")
+    calls: list[dict[str, object]] = []
+
+    def solve_linear(**kwargs):
+        calls.append(kwargs)
+        return candidate
+
+    result, residual_vec, accepted, elapsed_s = (
+        rhs1_run_measured_linear_candidate_and_update_replay(
+            replay_state=replay,
+            current_result=current,
+            current_residual_vec="r0",
+            matvec_fn="mv",
+            b_vec="rhs",
+            precond_fn="pc",
+            tol=1.0e-10,
+            atol=1.0e-12,
+            restart=17,
+            maxiter=33,
+            solve_method="incremental",
+            precond_side="left",
+            solve_linear=solve_linear,
+            solver_kind="gmres",
+            candidate_name="stage2_reduced:incremental",
+            baseline_name="current_reduced",
+            target_value=1.0e-9,
+            peak_rss_mb=123.0,
+            returns_residual_vec=False,
+        )
+    )
+
+    assert accepted
+    assert result is candidate
+    assert residual_vec == "r0"
+    assert replay.matvec_fn == "mv"
+    assert replay.x0_vec == "x1"
+    assert replay.restart == 17
+    assert replay.solver_kind == "gmres"
+    assert calls[0]["x0_vec"] == "x0"
+    assert calls[0]["solve_method_val"] == "incremental"
+    assert elapsed_s >= 0.0
+
+
+def test_rhs1_run_measured_linear_candidate_accepts_returned_residual_vector() -> None:
+    replay = RHS1KSPReplayState()
+    current = _result(1.0, x="x0")
+    candidate = _result(1.0e-11, x="x1")
+
+    def solve_linear(**_kwargs):
+        return candidate, "r1"
+
+    result, residual_vec, accepted, _elapsed_s = (
+        rhs1_run_measured_linear_candidate_and_update_replay(
+            replay_state=replay,
+            current_result=current,
+            current_residual_vec="r0",
+            matvec_fn="mv",
+            b_vec="rhs",
+            precond_fn=None,
+            tol=1.0e-10,
+            atol=1.0e-12,
+            restart=17,
+            maxiter=None,
+            solve_method="incremental",
+            precond_side="none",
+            solve_linear=solve_linear,
+            solver_kind="gmres",
+            candidate_name="stage2_full:incremental",
+            baseline_name="current_full",
+            target_value=1.0e-9,
+            returns_residual_vec=True,
+        )
+    )
+
+    assert accepted
+    assert result is candidate
+    assert residual_vec == "r1"
+    assert replay.precond_fn is None
+    assert replay.precond_side == "none"
+
+
+def test_rhs1_run_measured_linear_candidate_rejects_nonimproving_candidate() -> None:
+    replay = RHS1KSPReplayState(matvec_fn="old")
+    current = _result(1.0, x="x0")
+    candidate = _result(2.0, x="x1")
+
+    result, residual_vec, accepted, _elapsed_s = (
+        rhs1_run_measured_linear_candidate_and_update_replay(
+            replay_state=replay,
+            current_result=current,
+            current_residual_vec="r0",
+            matvec_fn="mv",
+            b_vec="rhs",
+            precond_fn="pc",
+            tol=1.0e-10,
+            atol=1.0e-12,
+            restart=17,
+            maxiter=33,
+            solve_method="incremental",
+            precond_side="left",
+            solve_linear=lambda **_kwargs: candidate,
+            solver_kind="gmres",
+            candidate_name="stage2_reduced:incremental",
+            baseline_name="current_reduced",
+            target_value=1.0e-9,
+            returns_residual_vec=False,
+        )
+    )
+
+    assert not accepted
+    assert result is current
+    assert residual_vec == "r0"
+    assert replay.matvec_fn == "old"

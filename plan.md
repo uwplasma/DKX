@@ -42,8 +42,10 @@ Make `sfincs_jax` research-grade while preserving the public user contract:
 
 Recent checkpoints:
 
-- RHSMode=1 CPU SciPy rescue execution helper extraction
+- RHSMode=1 measured linear retry handoff extraction for reduced/full stage2
   (current checkpoint).
+- RHSMode=1 CPU SciPy rescue execution helper extraction
+  (`c6e31bc`).
 - Projected residual-polish helper extraction for FP L1/global low-L paths
   (`62cc9ab`).
 - FP low-L/L1 active-index helper extraction
@@ -101,14 +103,14 @@ Recent checkpoints:
 - `cb295ce` Extract sparse pattern setup.
 - `4b6a5b4` Extract sparse factor policy.
 
-Current source-size snapshot after RHSMode=1 CPU SciPy rescue execution
-helper extraction:
+Current source-size snapshot after RHSMode=1 measured linear retry handoff
+extraction:
 
-- `sfincs_jax/v3_driver.py`: `18493` lines.
-- `solve_v3_full_system_linear_gmres`: `13189` lines.
+- `sfincs_jax/v3_driver.py`: `18472` lines.
+- `solve_v3_full_system_linear_gmres`: `13167` lines.
 - `sfincs_jax/v3_results.py`: `119` lines.
 - `sfincs_jax/problems/profile_response/residual.py`: `981` lines.
-- `sfincs_jax/problems/profile_response/handoff.py`: `340` lines.
+- `sfincs_jax/problems/profile_response/handoff.py`: `417` lines.
 - `sfincs_jax/problems/profile_response/dense.py`: `407` lines.
 - `sfincs_jax/problems/profile_response/linear_solve.py`: `327` lines.
 - `sfincs_jax/problems/profile_response/active_projection.py`: `116` lines.
@@ -116,6 +118,16 @@ helper extraction:
 
 Recent local validation:
 
+- RHSMode=1 handoff helper shard:
+  `27 passed in 0.34 s`.
+- Sparse-host/minimum-norm/direct-tail driver shard:
+  `32 passed, 127 deselected in 32.34 s`.
+- Broad profile-response/RHSMode=1 policy, setup, diagnostics, solver, and
+  helper sweep:
+  `1008 passed in 49.18 s`.
+- Hygiene:
+  `ruff`, `compileall`, `git diff --check`, and `scripts/check_repo_size.py`
+  passed.
 - RHSMode=1 linear-solve helper shard:
   `5 passed in 1.05 s`.
 - Sparse-host/minimum-norm/direct-tail driver shard:
@@ -388,6 +400,8 @@ Completed recent boundaries:
 - RHSMode=1 CPU SciPy rescue GMRES/BiCGStab execution consolidated into
   `profile_response.linear_solve`; driver-side thresholds, size caps, metadata,
   and true-residual acceptance remain unchanged.
+- Reduced active-DOF and full-system stage2 retry execution/measured
+  acceptance consolidated into a replay-aware handoff helper.
 
 Next steps:
 
@@ -458,7 +472,7 @@ Next steps:
 
 1. Continue with remaining generic sparse-PC solve/result assembly extraction
    where behavior and cache boundaries remain clean.
-2. Extract remaining full-system RHSMode=1 stage2/strong-retry candidate
+2. Extract remaining full-system RHSMode=1 strong-retry candidate
    orchestration only where replay-state and metadata contracts can stay
    explicit.
 3. Run focused implicit/sparse-PC/profile-response shards after each extraction,

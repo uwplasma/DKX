@@ -12,6 +12,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import math
+import time
 from typing import Any
 
 from ...solver_selection_policy import (
@@ -326,6 +327,81 @@ def rhs1_run_fast_post_xblock_polish(
     return current_result, False
 
 
+def rhs1_run_measured_linear_candidate_and_update_replay(
+    *,
+    replay_state: RHS1KSPReplayState,
+    current_result: Any,
+    current_residual_vec: Any,
+    matvec_fn: Any,
+    b_vec: Any,
+    precond_fn: Any,
+    tol: float,
+    atol: float,
+    restart: int,
+    maxiter: int | None,
+    solve_method: str,
+    precond_side: str,
+    solve_linear: Any,
+    solver_kind: str,
+    candidate_name: str,
+    baseline_name: str,
+    target_value: float,
+    peak_rss_mb: float | None = None,
+    returns_residual_vec: bool = False,
+    result_ready: Any = None,
+) -> tuple[Any, Any, bool, float]:
+    """Run and measured-gate a linear retry candidate.
+
+    This helper covers stage2/strong-style retry branches where the driver owns
+    policy and progress messages but the candidate acceptance/replay contract is
+    identical. Solvers may return either a bare result or ``(result,
+    residual_vec)``.
+    """
+
+    started = time.perf_counter()
+    candidate_output = solve_linear(
+        matvec_fn=matvec_fn,
+        b_vec=b_vec,
+        precond_fn=precond_fn,
+        x0_vec=current_result.x,
+        tol_val=float(tol),
+        atol_val=float(atol),
+        restart_val=int(restart),
+        maxiter_val=maxiter,
+        solve_method_val=str(solve_method),
+        precond_side=str(precond_side),
+    )
+    if returns_residual_vec:
+        candidate_result, candidate_residual_vec = candidate_output
+    else:
+        candidate_result = candidate_output
+        candidate_residual_vec = current_residual_vec
+    if result_ready is not None:
+        candidate_result = result_ready(candidate_result)
+    elapsed_s = time.perf_counter() - started
+    result, residual_vec, accepted = rhs1_accept_measured_candidate_and_update_replay(
+        replay_state=replay_state,
+        current_result=current_result,
+        candidate_result=candidate_result,
+        current_residual_vec=current_residual_vec,
+        candidate_residual_vec=candidate_residual_vec,
+        matvec_fn=matvec_fn,
+        b_vec=b_vec,
+        precond_fn=precond_fn,
+        x0_vec=candidate_result.x,
+        restart=restart,
+        maxiter=maxiter,
+        precond_side=precond_side,
+        solver_kind=solver_kind,
+        candidate_name=candidate_name,
+        baseline_name=baseline_name,
+        target_value=target_value,
+        solve_s=elapsed_s,
+        peak_rss_mb=peak_rss_mb,
+    )
+    return result, residual_vec, accepted, elapsed_s
+
+
 __all__ = [
     "RHS1KSPHandoffState",
     "RHS1KSPReplayState",
@@ -336,5 +412,6 @@ __all__ = [
     "rhs1_accept_measured_candidate_and_update_replay",
     "rhs1_residual_improves",
     "rhs1_run_fast_post_xblock_polish",
+    "rhs1_run_measured_linear_candidate_and_update_replay",
     "rhs1_solver_candidate_metrics",
 ]

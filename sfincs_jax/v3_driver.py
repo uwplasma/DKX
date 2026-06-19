@@ -173,6 +173,7 @@ from .problems.profile_response.handoff import (
     rhs1_accept_candidate_and_update_replay,
     rhs1_accept_measured_candidate_and_update_replay,
     rhs1_run_fast_post_xblock_polish,
+    rhs1_run_measured_linear_candidate_and_update_replay,
 )
 from .problems.profile_response.auto_solve import (
     RHS1AutoHostSolveContext,
@@ -11979,40 +11980,29 @@ def solve_v3_full_system_linear_gmres(
                     f"(residual={float(res_reduced.residual_norm):.3e} > target={target_reduced:.3e}) "
                     f"restart={stage2_restart} maxiter={stage2_maxiter} method={stage2_method}",
                 )
-            stage2_timer = Timer()
-            res2 = _solve_linear(
-                matvec_fn=mv_reduced,
-                b_vec=rhs_reduced,
-                precond_fn=preconditioner_reduced,
-                x0_vec=res_reduced.x,
-                tol_val=tol,
-                atol_val=atol,
-                restart_val=stage2_restart,
-                maxiter_val=stage2_maxiter,
-                solve_method_val=stage2_method,
-                precond_side=gmres_precond_side,
-            )
-            res2 = _block_gmres_result_ready(res2)
-            stage2_elapsed_s = stage2_timer.elapsed_s()
-            res_reduced, residual_vec, _accepted = rhs1_accept_measured_candidate_and_update_replay(
-                replay_state=ksp_replay,
-                current_result=res_reduced,
-                candidate_result=res2,
-                current_residual_vec=residual_vec,
-                candidate_residual_vec=residual_vec,
-                matvec_fn=mv_reduced,
-                b_vec=rhs_reduced,
-                precond_fn=preconditioner_reduced,
-                x0_vec=res2.x,
-                restart=stage2_restart,
-                maxiter=stage2_maxiter,
-                precond_side=gmres_precond_side,
-                solver_kind=_solver_kind(stage2_method)[0],
-                candidate_name=f"stage2_reduced:{stage2_method}",
-                baseline_name="current_reduced",
-                target_value=target_reduced,
-                solve_s=stage2_elapsed_s,
-                peak_rss_mb=_rss_mb(),
+            res_reduced, residual_vec, _accepted, _stage2_elapsed_s = (
+                rhs1_run_measured_linear_candidate_and_update_replay(
+                    replay_state=ksp_replay,
+                    current_result=res_reduced,
+                    current_residual_vec=residual_vec,
+                    matvec_fn=mv_reduced,
+                    b_vec=rhs_reduced,
+                    precond_fn=preconditioner_reduced,
+                    tol=float(tol),
+                    atol=float(atol),
+                    restart=int(stage2_restart),
+                    maxiter=int(stage2_maxiter),
+                    solve_method=stage2_method,
+                    precond_side=gmres_precond_side,
+                    solve_linear=_solve_linear,
+                    solver_kind=_solver_kind(stage2_method)[0],
+                    candidate_name=f"stage2_reduced:{stage2_method}",
+                    baseline_name="current_reduced",
+                    target_value=float(target_reduced),
+                    peak_rss_mb=_rss_mb(),
+                    returns_residual_vec=False,
+                    result_ready=_block_gmres_result_ready,
+                )
             )
         pas_fast_accept = _rhsmode1_pas_fast_accept(
             op=op,
@@ -15077,39 +15067,28 @@ def solve_v3_full_system_linear_gmres(
                     f"(residual={float(result.residual_norm):.3e} > target={target:.3e}) "
                     f"restart={stage2_restart} maxiter={stage2_maxiter} method={stage2_method}",
                 )
-            stage2_timer = Timer()
-            res2, residual_vec2 = _solve_linear_with_residual(
-                matvec_fn=mv,
-                b_vec=rhs,
-                precond_fn=preconditioner_full,
-                x0_vec=result.x,
-                tol_val=tol,
-                atol_val=atol,
-                restart_val=stage2_restart,
-                maxiter_val=stage2_maxiter,
-                solve_method_val=stage2_method,
-                precond_side=gmres_precond_side,
-            )
-            stage2_elapsed_s = stage2_timer.elapsed_s()
-            result, residual_vec, _accepted = rhs1_accept_measured_candidate_and_update_replay(
-                replay_state=ksp_replay,
-                current_result=result,
-                candidate_result=res2,
-                current_residual_vec=residual_vec,
-                candidate_residual_vec=residual_vec2,
-                matvec_fn=mv,
-                b_vec=rhs,
-                precond_fn=preconditioner_full,
-                x0_vec=res2.x,
-                restart=stage2_restart,
-                maxiter=stage2_maxiter,
-                precond_side=gmres_precond_side,
-                solver_kind=_solver_kind(stage2_method)[0],
-                candidate_name=f"stage2_full:{stage2_method}",
-                baseline_name="current_full",
-                target_value=target,
-                solve_s=stage2_elapsed_s,
-                peak_rss_mb=_rss_mb(),
+            result, residual_vec, _accepted, _stage2_elapsed_s = (
+                rhs1_run_measured_linear_candidate_and_update_replay(
+                    replay_state=ksp_replay,
+                    current_result=result,
+                    current_residual_vec=residual_vec,
+                    matvec_fn=mv,
+                    b_vec=rhs,
+                    precond_fn=preconditioner_full,
+                    tol=float(tol),
+                    atol=float(atol),
+                    restart=int(stage2_restart),
+                    maxiter=int(stage2_maxiter),
+                    solve_method=stage2_method,
+                    precond_side=gmres_precond_side,
+                    solve_linear=_solve_linear_with_residual,
+                    solver_kind=_solver_kind(stage2_method)[0],
+                    candidate_name=f"stage2_full:{stage2_method}",
+                    baseline_name="current_full",
+                    target_value=float(target),
+                    peak_rss_mb=_rss_mb(),
+                    returns_residual_vec=True,
+                )
             )
         # Krylov solvers with left preconditioning report the preconditioned residual
         # norm. Recompute the true residual before deciding whether to escalate to a
