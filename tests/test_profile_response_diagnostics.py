@@ -11,6 +11,7 @@ from sfincs_jax.problems.profile_response.diagnostics import (
     fp_xblock_global_correction_metadata,
     fp_xblock_highx_residual_correction_metadata,
     sparse_pc_direct_tail_result_metadata,
+    sparse_pc_gmres_result_metadata,
     sparse_rescue_tail_metadata,
     sparse_xblock_rescue_metadata,
     xblock_assembled_operator_diagnostics,
@@ -756,6 +757,122 @@ def test_sparse_pc_direct_tail_result_metadata_preserves_driver_conversions() ->
     )
     assert metadata["sparse_pc_direct_tail_residual_window_coefficient_mode"] == "normal"
     assert metadata["sparse_pc_direct_tail_residual_window_combine_mode"] == "additive"
+
+
+def test_sparse_pc_gmres_result_metadata_preserves_driver_schema() -> None:
+    state = _DefaultDirectTailState(
+        {
+            "op": SimpleNamespace(total_size=np.int64(11)),
+            "history": (1.0, 0.1, 0.01),
+            "mv_count": np.int64(9),
+            "pc_restart": np.int64(7),
+            "pc_maxiter": np.int64(25),
+            "sparse_pc_first_attempt_maxiter": np.int64(5),
+            "sparse_pc_post_minres_steps": np.int64(3),
+            "sparse_pc_post_minres_alphas": (0.5, 0.25),
+            "sparse_pc_post_minres_alpha_clip": 4.0,
+            "sparse_pc_post_minres_min_improvement": 0.2,
+            "sparse_pc_post_minres_residual_before": 3.0,
+            "sparse_pc_post_minres_residual_after": 1.0,
+            "sparse_pc_post_minres_history": (3.0, 1.0),
+            "sparse_pc_post_minres_error": None,
+            "pc_shift": 1.0e-8,
+            "sparse_pc_factor_dtype_used": np.dtype(np.float32),
+            "sparse_pc_factor_dtype_initial": np.dtype(np.float64),
+            "sparse_pc_factor_dtype_retry": "float64",
+            "factor_preflight_enabled": True,
+            "factor_preflight_required": False,
+            "factor_preflight_seed_enabled": True,
+            "factor_preflight_seed_used": False,
+            "factor_preflight_passed": True,
+            "factor_preflight_error": None,
+            "factor_preflight_residual_before": 4.0,
+            "factor_preflight_residual_after": 2.0,
+            "factor_preflight_improvement_ratio": 2.0,
+            "factor_preflight_target_ratio": 5.0,
+            "factor_preflight_max_target_ratio": 10.0,
+            "factor_preflight_residual_diagnostics": {"tail": 0.2},
+            "fortran_reduced_sparse_pc": True,
+            "fortran_reduced_sparse_pc_backend": "global",
+            "fortran_reduced_sparse_pc_backend_reason": "direct_tail",
+            "fortran_reduced_xblock_min_size": np.int64(13),
+            "sparse_pc_preconditioner_operator": "full",
+            "sparse_pc_factorization": "lu",
+            "sparse_pc_default_factor_kind": "ilu",
+            "sparse_pc_default_ilu_fill_factor": 6.0,
+            "sparse_pc_default_ilu_drop_tol": 1.0e-5,
+            "sparse_pc_default_pattern_color_batch": np.int64(8),
+            "preconditioner_x": np.int64(1),
+            "preconditioner_x_min_l": np.int64(2),
+            "preconditioner_xi": np.int64(3),
+            "preconditioner_species": np.int64(4),
+            "sparse_pc_permc_spec": "MMD_AT_PLUS_A",
+            "sparse_pc_default_permc_spec": "COLAMD",
+            "sparse_pc_use_active_dof": True,
+            "sparse_pc_linear_size": np.int64(10),
+            "sparse_pc_fp_dense_velocity_block": None,
+            "setup_s": 1.25,
+            "solve_s": 2.5,
+            "sparse_timer": SimpleNamespace(elapsed_s=lambda: 9.0),
+            "summary": SimpleNamespace(nnz=np.int64(30), avg_row_nnz=3.0, max_row_nnz=np.int64(5)),
+            "sparse_pattern_scope": "fortran_reduced_active_dof",
+            "pattern_build_s": 0.125,
+            "pc_factor_s": 0.75,
+            "factor_bundle_pc": SimpleNamespace(
+                factor_s=0.5,
+                factor_nbytes_estimate=np.int64(100),
+                factor_nnz_estimate=np.int64(20),
+            ),
+            "_operator_bundle_pc": SimpleNamespace(
+                metadata=SimpleNamespace(
+                    nnz_estimate=np.int64(123),
+                    csr_nbytes_estimate=np.int64(456),
+                )
+            ),
+            "target": 0.25,
+            "residual_norm_sparse_pc": 0.5,
+            "sparse_pc_accepted_converged": False,
+            "sparse_pc_factor_quality_rejected": True,
+            "direct_tail_operator_bundle": None,
+            "direct_tail_structured_max_nbytes": None,
+            "direct_tail_true_window_specs": (),
+            "direct_tail_true_active_block_species_count": 2,
+            "direct_tail_structured_pc_metadata": {"kind": "active"},
+            "direct_tail_support_mode_preflight_metadata": {"selected": False},
+            "direct_tail_residual_window_coefficient_mode": "normal",
+            "direct_tail_residual_window_combine_mode": "additive",
+            "direct_tail_error": None,
+            "direct_tail_structured_pc_requested": "auto",
+            "direct_tail_structured_pc_reason": "selected",
+            "direct_tail_structured_pc_error": None,
+            "direct_tail_support_mode_preflight_error": None,
+        }
+    )
+
+    metadata = sparse_pc_gmres_result_metadata(state)
+
+    assert metadata["solver_kind"] == "fortran_reduced_pc_gmres"
+    assert metadata["accepted_converged"] is False
+    assert metadata["iterations"] == 3
+    assert metadata["matvecs"] == 9
+    assert metadata["sparse_pc_factor_dtype"] == "float32"
+    assert metadata["sparse_pc_initial_factor_dtype"] == "float64"
+    assert metadata["sparse_pc_factor_dtype_retry"] == "float64"
+    assert metadata["sparse_pc_post_minres_steps_accepted"] == 2
+    assert metadata["sparse_pc_post_minres_history"] == (3.0, 1.0)
+    assert metadata["sparse_pc_backend"] == "global"
+    assert metadata["sparse_pc_xblock_min_size"] == 13
+    assert metadata["sparse_pc_full_size"] == 11
+    assert metadata["sparse_pc_fp_dense_velocity_block"] is None
+    assert metadata["elapsed_s"] == 9.0
+    assert metadata["sparse_pattern_nnz"] == 30
+    assert metadata["sparse_pc_factor_elapsed_s"] == 0.5
+    assert metadata["sparse_pc_factor_nbytes_estimate"] == 100
+    assert metadata["sparse_pc_operator_csr_nbytes_estimate"] == 456
+    assert metadata["sparse_pc_residual_ratio_to_target"] == 2.0
+    assert metadata["sparse_pc_factor_quality_rejected"] is True
+    assert metadata["sparse_pc_fortran_reduced_direct_tail_structured_pc_metadata"] == {"kind": "active"}
+    assert metadata["sparse_pc_direct_tail_true_active_block_species_count"] == 2
 
 
 def test_xblock_sparse_pc_core_diagnostics_preserve_payload() -> None:

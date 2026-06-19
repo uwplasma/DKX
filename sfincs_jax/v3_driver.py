@@ -203,7 +203,7 @@ from .problems.profile_response.diagnostics import (
     fortran_reduced_xblock_result_metadata,
     fp_xblock_global_correction_metadata,
     fp_xblock_highx_residual_correction_metadata,
-    sparse_pc_direct_tail_result_metadata,
+    sparse_pc_gmres_result_metadata,
     sparse_rescue_tail_metadata,
     sparse_xblock_rescue_metadata,
     xblock_sparse_pc_result_diagnostics_from_driver_state,
@@ -9307,12 +9307,17 @@ def solve_v3_full_system_linear_gmres(
                 f"matvecs={int(mv_count)} residual={float(residual_norm_sparse_pc):.6e} "
                 f"target={float(target):.6e}{pc_suffix}",
             )
-        operator_metadata_pc = getattr(_operator_bundle_pc, "metadata", None)
-        sparse_pc_operator_nnz_estimate = getattr(operator_metadata_pc, "nnz_estimate", None)
-        sparse_pc_operator_csr_nbytes_estimate = getattr(
-            operator_metadata_pc,
-            "csr_nbytes_estimate",
-            None,
+        sparse_pc_accepted_converged = rhs1_residual_converged(
+            float(residual_norm_sparse_pc),
+            rhs1_residual_target(
+                atol=float(atol),
+                tol=float(tol),
+                rhs_norm=float(rhs_norm),
+            ),
+        )
+        sparse_pc_factor_quality_rejected = not rhs1_residual_converged(
+            float(residual_norm_sparse_pc),
+            float(target),
         )
         return V3LinearSolveResult(
             op=op,
@@ -9321,123 +9326,7 @@ def solve_v3_full_system_linear_gmres(
                 x=_sparse_pc_expand_reduced(jnp.asarray(x_np, dtype=jnp.float64)),
                 residual_norm=jnp.asarray(residual_norm_sparse_pc, dtype=jnp.float64),
             ),
-            metadata={
-                "solver_kind": (
-                    "fortran_reduced_pc_gmres" if bool(fortran_reduced_sparse_pc) else "sparse_pc_gmres"
-                ),
-                "residual_kind": "true_residual",
-                "accepted_converged": rhs1_residual_converged(
-                    float(residual_norm_sparse_pc),
-                    rhs1_residual_target(
-                        atol=float(atol),
-                        tol=float(tol),
-                        rhs_norm=float(rhs_norm),
-                    ),
-                ),
-                "acceptance_criterion": "true_residual",
-                "iterations": int(len(history or [])),
-                "matvecs": int(mv_count),
-                "gmres_restart": int(pc_restart),
-                "gmres_maxiter": int(pc_maxiter),
-                "sparse_pc_first_attempt_maxiter": int(sparse_pc_first_attempt_maxiter),
-                "sparse_pc_post_minres_steps_requested": int(sparse_pc_post_minres_steps),
-                "sparse_pc_post_minres_steps_accepted": int(len(sparse_pc_post_minres_alphas)),
-                "sparse_pc_post_minres_alpha_clip": float(sparse_pc_post_minres_alpha_clip),
-                "sparse_pc_post_minres_min_improvement": float(sparse_pc_post_minres_min_improvement),
-                "sparse_pc_post_minres_residual_before": sparse_pc_post_minres_residual_before,
-                "sparse_pc_post_minres_residual_after": sparse_pc_post_minres_residual_after,
-                "sparse_pc_post_minres_history": tuple(float(v) for v in sparse_pc_post_minres_history),
-                "sparse_pc_post_minres_alphas": tuple(float(v) for v in sparse_pc_post_minres_alphas),
-                "sparse_pc_post_minres_error": sparse_pc_post_minres_error,
-                "sparse_pc_shift": float(pc_shift),
-                "sparse_pc_factor_dtype": np.dtype(sparse_pc_factor_dtype_used).name,
-                "sparse_pc_initial_factor_dtype": np.dtype(sparse_pc_factor_dtype_initial).name,
-                "sparse_pc_factor_dtype_retry": sparse_pc_factor_dtype_retry,
-                "sparse_pc_factor_preflight_enabled": bool(factor_preflight_enabled),
-                "sparse_pc_factor_preflight_required": bool(factor_preflight_required),
-                "sparse_pc_factor_preflight_seed_enabled": bool(factor_preflight_seed_enabled),
-                "sparse_pc_factor_preflight_seed_used": bool(factor_preflight_seed_used),
-                "sparse_pc_factor_preflight_passed": factor_preflight_passed,
-                "sparse_pc_factor_preflight_error": factor_preflight_error,
-                "sparse_pc_factor_preflight_residual_before": factor_preflight_residual_before,
-                "sparse_pc_factor_preflight_residual_after": factor_preflight_residual_after,
-                "sparse_pc_factor_preflight_improvement_ratio": factor_preflight_improvement_ratio,
-                "sparse_pc_factor_preflight_target_ratio": factor_preflight_target_ratio,
-                "sparse_pc_factor_preflight_max_target_ratio": float(factor_preflight_max_target_ratio),
-                "sparse_pc_factor_preflight_residual_diagnostics": factor_preflight_residual_diagnostics,
-                **sparse_pc_direct_tail_result_metadata(locals()),
-                "sparse_pc_backend": (
-                    str(fortran_reduced_sparse_pc_backend) if bool(fortran_reduced_sparse_pc) else "global"
-                ),
-                "sparse_pc_backend_reason": (
-                    str(fortran_reduced_sparse_pc_backend_reason) if bool(fortran_reduced_sparse_pc) else "not_fortran_reduced"
-                ),
-                "sparse_pc_xblock_min_size": (
-                    int(fortran_reduced_xblock_min_size) if bool(fortran_reduced_sparse_pc) else None
-                ),
-                "sparse_pc_preconditioner_operator": sparse_pc_preconditioner_operator,
-                "sparse_pc_factorization": sparse_pc_factorization,
-                "sparse_pc_default_factorization": sparse_pc_default_factor_kind,
-                "sparse_pc_default_ilu_fill_factor": float(sparse_pc_default_ilu_fill_factor),
-                "sparse_pc_default_ilu_drop_tol": float(sparse_pc_default_ilu_drop_tol),
-                "sparse_pc_default_pattern_color_batch": int(sparse_pc_default_pattern_color_batch),
-                "sparse_pc_fortran_reduced": bool(fortran_reduced_sparse_pc),
-                "sparse_pc_fortran_reduced_keeps_theta_zeta": bool(fortran_reduced_sparse_pc),
-                "sparse_pc_fortran_reduced_preconditioner_x": int(preconditioner_x),
-                "sparse_pc_fortran_reduced_preconditioner_x_min_L": int(preconditioner_x_min_l),
-                "sparse_pc_fortran_reduced_preconditioner_xi": int(preconditioner_xi),
-                "sparse_pc_fortran_reduced_preconditioner_species": int(preconditioner_species),
-                "sparse_pc_permc_spec": sparse_pc_permc_spec,
-                "sparse_pc_default_permc_spec": sparse_pc_default_permc_spec,
-                "sparse_pc_active_dof": bool(sparse_pc_use_active_dof),
-                "sparse_pc_linear_size": int(sparse_pc_linear_size),
-                "sparse_pc_full_size": int(op.total_size),
-                "sparse_pc_fp_dense_velocity_block": (
-                    None
-                    if sparse_pc_fp_dense_velocity_block is None
-                    else bool(sparse_pc_fp_dense_velocity_block)
-                ),
-                "setup_s": float(setup_s),
-                "solve_s": float(solve_s),
-                "elapsed_s": float(sparse_timer.elapsed_s()),
-                "sparse_pattern_nnz": int(summary.nnz),
-                "sparse_pattern_avg_row_nnz": float(summary.avg_row_nnz),
-                "sparse_pattern_max_row_nnz": int(summary.max_row_nnz),
-                "sparse_pattern_scope": sparse_pattern_scope,
-                "sparse_pattern_build_s": float(pattern_build_s),
-                "sparse_pc_factor_s": float(pc_factor_s),
-                "sparse_pc_factor_elapsed_s": (
-                    None
-                    if getattr(factor_bundle_pc, "factor_s", None) is None
-                    else float(getattr(factor_bundle_pc, "factor_s"))
-                ),
-                "sparse_pc_factor_nbytes_estimate": (
-                    None
-                    if getattr(factor_bundle_pc, "factor_nbytes_estimate", None) is None
-                    else int(getattr(factor_bundle_pc, "factor_nbytes_estimate"))
-                ),
-                "sparse_pc_factor_nnz_estimate": (
-                    None
-                    if getattr(factor_bundle_pc, "factor_nnz_estimate", None) is None
-                    else int(getattr(factor_bundle_pc, "factor_nnz_estimate"))
-                ),
-                "sparse_pc_operator_nnz_estimate": sparse_pc_operator_nnz_estimate,
-                "sparse_pc_operator_csr_nbytes_estimate": (
-                    None
-                    if sparse_pc_operator_csr_nbytes_estimate is None
-                    else int(sparse_pc_operator_csr_nbytes_estimate)
-                ),
-                "sparse_pc_residual_target": float(target),
-                "sparse_pc_residual_ratio_to_target": (
-                    float(residual_norm_sparse_pc) / float(target)
-                    if float(target) > 0.0
-                    else float("inf")
-                ),
-                "sparse_pc_factor_quality_rejected": not rhs1_residual_converged(
-                    float(residual_norm_sparse_pc),
-                    float(target),
-                ),
-            },
+            metadata=sparse_pc_gmres_result_metadata(locals()),
         )
     if solve_method_kind_explicit in _SPARSE_HOST_MINIMUM_NORM_SOLVE_METHODS:
         if differentiable is True:

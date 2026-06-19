@@ -56,17 +56,17 @@ Recent checkpoints:
 - `cb295ce` Extract sparse pattern setup.
 - `4b6a5b4` Extract sparse factor policy.
 
-Current source-size snapshot after the sparse-PC GMRES control-policy extraction:
+Current source-size snapshot after the sparse-PC GMRES result-metadata extraction:
 
-- `sfincs_jax/v3_driver.py`: `19396` lines.
-- `solve_v3_full_system_linear_gmres`: `14062` lines.
+- `sfincs_jax/v3_driver.py`: `19285` lines.
+- `solve_v3_full_system_linear_gmres`: `13951` lines.
 
 Recent local validation:
 
-- Focused sparse-PC/direct-tail/GMRES-control shard:
-  `140 passed in 1.37 s`.
+- Focused diagnostics/sparse-PC shard:
+  `151 passed in 1.09 s`.
 - Latest broad profile-response/x-block/sparse-pattern shard:
-  `418 passed in 112.69 s`.
+  `419 passed in 114.96 s`.
 
 Known CI issue fixed by this rewrite:
 
@@ -77,7 +77,7 @@ Known CI issue fixed by this rewrite:
 
 ### 1. `v3_driver.py` Architecture Refactor
 
-Completion estimate: 79%.
+Completion estimate: 80%.
 
 Goal:
 
@@ -105,10 +105,11 @@ Completed recent boundaries:
 - Sparse-PC auto-preflight retry candidate selection and scalar policy
   evaluation.
 - Sparse-PC GMRES stagnation and post-minres control policy parsing.
+- Sparse-PC GMRES result metadata schema extraction.
 
 Next steps:
 
-- Extract remaining sparse-PC GMRES result metadata assembly into separately
+- Extract remaining sparse-PC factor dtype retry orchestration into separately
   tested helpers.
 - Move remaining generic sparse-PC solve/result assembly into cohesive
   `profile_response` helpers.
@@ -169,9 +170,9 @@ Next steps:
 
 ## Immediate Next Steps
 
-1. Commit and push the sparse-PC GMRES control-policy extraction after final
+1. Commit and push the sparse-PC GMRES result-metadata extraction after final
    cleanup.
-2. Continue with sparse-PC GMRES result metadata assembly extraction.
+2. Continue with sparse-PC factor dtype retry orchestration extraction.
 3. Run focused sparse-PC tests and the broad profile-response/x-block/sparse
    shard after each extraction.
 4. Snapshot CI but do not wait on queued runs unless a completed failure appears.

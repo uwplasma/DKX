@@ -438,6 +438,142 @@ def sparse_pc_direct_tail_result_metadata(
     )
     return metadata
 
+
+def _dtype_name(value: object) -> str:
+    return str(getattr(value, "name", value))
+
+
+def _optional_int(value: object) -> int | None:
+    return None if value is None else int(value)
+
+
+def _optional_float(value: object) -> float | None:
+    return None if value is None else float(value)
+
+
+def sparse_pc_gmres_result_metadata(
+    state: Mapping[str, object],
+) -> dict[str, object]:
+    """Return final metadata for generic sparse-PC GMRES solves.
+
+    This helper is deliberately state-mapping based to preserve the historical
+    driver key names while moving the metadata schema out of the solve loop.
+    """
+
+    op = state["op"]
+    sparse_pc_fp_dense_velocity_block = state["sparse_pc_fp_dense_velocity_block"]
+    target = float(state["target"])
+    residual_norm = float(state["residual_norm_sparse_pc"])
+    history = state["history"] or ()
+    factor_bundle_pc = state["factor_bundle_pc"]
+    operator_bundle = state["_operator_bundle_pc"]
+    operator_metadata = None if operator_bundle is None else getattr(operator_bundle, "metadata", None)
+    operator_nnz_estimate = None if operator_metadata is None else getattr(operator_metadata, "nnz_estimate", None)
+    operator_csr_nbytes_estimate = (
+        None if operator_metadata is None else getattr(operator_metadata, "csr_nbytes_estimate", None)
+    )
+    factor_nbytes_estimate = getattr(factor_bundle_pc, "factor_nbytes_estimate", None)
+    factor_nnz_estimate = getattr(factor_bundle_pc, "factor_nnz_estimate", None)
+    factor_elapsed_s = getattr(factor_bundle_pc, "factor_s", None)
+
+    metadata: dict[str, object] = {
+        "solver_kind": (
+            "fortran_reduced_pc_gmres" if bool(state["fortran_reduced_sparse_pc"]) else "sparse_pc_gmres"
+        ),
+        "residual_kind": "true_residual",
+        "accepted_converged": bool(state["sparse_pc_accepted_converged"]),
+        "acceptance_criterion": "true_residual",
+        "iterations": int(len(history)),
+        "matvecs": int(state["mv_count"]),
+        "gmres_restart": int(state["pc_restart"]),
+        "gmres_maxiter": int(state["pc_maxiter"]),
+        "sparse_pc_first_attempt_maxiter": int(state["sparse_pc_first_attempt_maxiter"]),
+        "sparse_pc_post_minres_steps_requested": int(state["sparse_pc_post_minres_steps"]),
+        "sparse_pc_post_minres_steps_accepted": int(len(state["sparse_pc_post_minres_alphas"])),
+        "sparse_pc_post_minres_alpha_clip": float(state["sparse_pc_post_minres_alpha_clip"]),
+        "sparse_pc_post_minres_min_improvement": float(state["sparse_pc_post_minres_min_improvement"]),
+        "sparse_pc_post_minres_residual_before": state["sparse_pc_post_minres_residual_before"],
+        "sparse_pc_post_minres_residual_after": state["sparse_pc_post_minres_residual_after"],
+        "sparse_pc_post_minres_history": tuple(float(v) for v in state["sparse_pc_post_minres_history"]),
+        "sparse_pc_post_minres_alphas": tuple(float(v) for v in state["sparse_pc_post_minres_alphas"]),
+        "sparse_pc_post_minres_error": state["sparse_pc_post_minres_error"],
+        "sparse_pc_shift": float(state["pc_shift"]),
+        "sparse_pc_factor_dtype": _dtype_name(state["sparse_pc_factor_dtype_used"]),
+        "sparse_pc_initial_factor_dtype": _dtype_name(state["sparse_pc_factor_dtype_initial"]),
+        "sparse_pc_factor_dtype_retry": state["sparse_pc_factor_dtype_retry"],
+        "sparse_pc_factor_preflight_enabled": bool(state["factor_preflight_enabled"]),
+        "sparse_pc_factor_preflight_required": bool(state["factor_preflight_required"]),
+        "sparse_pc_factor_preflight_seed_enabled": bool(state["factor_preflight_seed_enabled"]),
+        "sparse_pc_factor_preflight_seed_used": bool(state["factor_preflight_seed_used"]),
+        "sparse_pc_factor_preflight_passed": state["factor_preflight_passed"],
+        "sparse_pc_factor_preflight_error": state["factor_preflight_error"],
+        "sparse_pc_factor_preflight_residual_before": state["factor_preflight_residual_before"],
+        "sparse_pc_factor_preflight_residual_after": state["factor_preflight_residual_after"],
+        "sparse_pc_factor_preflight_improvement_ratio": state["factor_preflight_improvement_ratio"],
+        "sparse_pc_factor_preflight_target_ratio": state["factor_preflight_target_ratio"],
+        "sparse_pc_factor_preflight_max_target_ratio": float(state["factor_preflight_max_target_ratio"]),
+        "sparse_pc_factor_preflight_residual_diagnostics": state[
+            "factor_preflight_residual_diagnostics"
+        ],
+        **sparse_pc_direct_tail_result_metadata(state),
+        "sparse_pc_backend": (
+            str(state["fortran_reduced_sparse_pc_backend"])
+            if bool(state["fortran_reduced_sparse_pc"])
+            else "global"
+        ),
+        "sparse_pc_backend_reason": (
+            str(state["fortran_reduced_sparse_pc_backend_reason"])
+            if bool(state["fortran_reduced_sparse_pc"])
+            else "not_fortran_reduced"
+        ),
+        "sparse_pc_xblock_min_size": (
+            int(state["fortran_reduced_xblock_min_size"]) if bool(state["fortran_reduced_sparse_pc"]) else None
+        ),
+        "sparse_pc_preconditioner_operator": state["sparse_pc_preconditioner_operator"],
+        "sparse_pc_factorization": state["sparse_pc_factorization"],
+        "sparse_pc_default_factorization": state["sparse_pc_default_factor_kind"],
+        "sparse_pc_default_ilu_fill_factor": float(state["sparse_pc_default_ilu_fill_factor"]),
+        "sparse_pc_default_ilu_drop_tol": float(state["sparse_pc_default_ilu_drop_tol"]),
+        "sparse_pc_default_pattern_color_batch": int(state["sparse_pc_default_pattern_color_batch"]),
+        "sparse_pc_fortran_reduced": bool(state["fortran_reduced_sparse_pc"]),
+        "sparse_pc_fortran_reduced_keeps_theta_zeta": bool(state["fortran_reduced_sparse_pc"]),
+        "sparse_pc_fortran_reduced_preconditioner_x": int(state["preconditioner_x"]),
+        "sparse_pc_fortran_reduced_preconditioner_x_min_L": int(state["preconditioner_x_min_l"]),
+        "sparse_pc_fortran_reduced_preconditioner_xi": int(state["preconditioner_xi"]),
+        "sparse_pc_fortran_reduced_preconditioner_species": int(state["preconditioner_species"]),
+        "sparse_pc_permc_spec": state["sparse_pc_permc_spec"],
+        "sparse_pc_default_permc_spec": state["sparse_pc_default_permc_spec"],
+        "sparse_pc_active_dof": bool(state["sparse_pc_use_active_dof"]),
+        "sparse_pc_linear_size": int(state["sparse_pc_linear_size"]),
+        "sparse_pc_full_size": int(getattr(op, "total_size")),
+        "sparse_pc_fp_dense_velocity_block": (
+            None
+            if sparse_pc_fp_dense_velocity_block is None
+            else bool(sparse_pc_fp_dense_velocity_block)
+        ),
+        "setup_s": float(state["setup_s"]),
+        "solve_s": float(state["solve_s"]),
+        "elapsed_s": float(state["sparse_timer"].elapsed_s()),
+        "sparse_pattern_nnz": int(state["summary"].nnz),
+        "sparse_pattern_avg_row_nnz": float(state["summary"].avg_row_nnz),
+        "sparse_pattern_max_row_nnz": int(state["summary"].max_row_nnz),
+        "sparse_pattern_scope": state["sparse_pattern_scope"],
+        "sparse_pattern_build_s": float(state["pattern_build_s"]),
+        "sparse_pc_factor_s": float(state["pc_factor_s"]),
+        "sparse_pc_factor_elapsed_s": _optional_float(factor_elapsed_s),
+        "sparse_pc_factor_nbytes_estimate": _optional_int(factor_nbytes_estimate),
+        "sparse_pc_factor_nnz_estimate": _optional_int(factor_nnz_estimate),
+        "sparse_pc_operator_nnz_estimate": operator_nnz_estimate,
+        "sparse_pc_operator_csr_nbytes_estimate": _optional_int(operator_csr_nbytes_estimate),
+        "sparse_pc_residual_target": float(target),
+        "sparse_pc_residual_ratio_to_target": (
+            residual_norm / float(target) if float(target) > 0.0 else float("inf")
+        ),
+        "sparse_pc_factor_quality_rejected": bool(state["sparse_pc_factor_quality_rejected"]),
+    }
+    return metadata
+
+
 def fortran_reduced_xblock_result_metadata(
     state: Mapping[str, object],
 ) -> dict[str, object]:
