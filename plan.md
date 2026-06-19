@@ -100,6 +100,9 @@ Recent local validation:
   `173 passed in 1.68 s`.
 - Sparse-host/minimum-norm/direct-tail driver shard:
   `32 passed, 100 deselected in 33.63 s`.
+- Broad profile-response/RHSMode=1 policy, setup, diagnostics, solver, and
+  helper sweep after explicit sparse host extractions:
+  `992 passed in 42.63 s`.
 - Hygiene:
   `ruff`, `compileall`, `git diff --check`, and `scripts/check_repo_size.py`
   passed.
