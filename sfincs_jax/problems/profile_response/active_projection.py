@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import jax.numpy as jnp
+import numpy as np
 
 
 def reduce_full_with_indices(v_full: jnp.ndarray, active_idx: jnp.ndarray) -> jnp.ndarray:
@@ -44,8 +45,72 @@ def project_pas_constraint_f(
     return f.reshape((-1,))
 
 
+def fp_pitch_mode_active_indices(
+    *,
+    n_species: int,
+    n_x: int,
+    n_xi: int,
+    n_theta: int,
+    n_zeta: int,
+    nxi_for_x: np.ndarray,
+    l_min: int,
+    l_max: int,
+    full_to_active: np.ndarray | jnp.ndarray | None = None,
+) -> np.ndarray:
+    """Return active reduced indices for FP pitch modes in a Legendre band.
+
+    The FP distribution is stored in flattened
+    ``(species, x, l, theta, zeta)`` order. When ``full_to_active`` is supplied,
+    it is the historical one-based full-to-reduced map where zero means
+    inactive; the returned indices are zero-based reduced indices.
+    """
+
+    nxi_for_x_np = np.asarray(nxi_for_x, dtype=np.int32)
+    full_to_active_np = (
+        None
+        if full_to_active is None
+        else np.asarray(full_to_active, dtype=np.int32)
+    )
+    l_min_use = max(0, int(l_min))
+    l_max_use = min(max(l_min_use, int(l_max)), int(n_xi) - 1)
+    selected: list[int] = []
+    for s_idx in range(int(n_species)):
+        for ix in range(int(n_x)):
+            if ix >= int(nxi_for_x_np.size):
+                continue
+            lmax_x = min(int(nxi_for_x_np[ix]) - 1, int(l_max_use))
+            if lmax_x < l_min_use:
+                continue
+            for il in range(l_min_use, lmax_x + 1):
+                for it in range(int(n_theta)):
+                    for iz in range(int(n_zeta)):
+                        full_idx = int(
+                            (
+                                (
+                                    ((s_idx * int(n_x) + ix) * int(n_xi) + il)
+                                    * int(n_theta)
+                                    + it
+                                )
+                                * int(n_zeta)
+                                + iz
+                            )
+                        )
+                        if full_to_active_np is not None:
+                            if full_idx >= int(full_to_active_np.size):
+                                continue
+                            active_idx = int(full_to_active_np[full_idx]) - 1
+                            if active_idx >= 0:
+                                selected.append(active_idx)
+                        else:
+                            selected.append(full_idx)
+    if not selected:
+        return np.asarray([], dtype=np.int32)
+    return np.unique(np.asarray(selected, dtype=np.int32))
+
+
 __all__ = [
     "expand_reduced_with_map",
+    "fp_pitch_mode_active_indices",
     "project_pas_constraint_f",
     "reduce_full_with_indices",
 ]

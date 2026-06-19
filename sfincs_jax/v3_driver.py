@@ -479,6 +479,7 @@ from .problems.profile_response.active_dof import (
 from .rhs1_compressed_layout import build_rhs1_compressed_pitch_layout
 from .problems.profile_response.active_projection import (
     expand_reduced_with_map,
+    fp_pitch_mode_active_indices,
     project_pas_constraint_f,
     reduce_full_with_indices,
 )
@@ -14223,41 +14224,22 @@ def solve_v3_full_system_linear_gmres(
             l1_polish_env = os.environ.get("SFINCS_JAX_RHSMODE1_FP_L1_POLISH", "").strip().lower()
             l1_polish_enabled = l1_polish_env not in {"0", "false", "no", "off"}
             if fp_targeted_polish and l1_polish_enabled:
-                n_s = int(op.n_species)
-                n_x = int(op.n_x)
-                n_l = int(op.n_xi)
-                n_t = int(op.n_theta)
-                n_z = int(op.n_zeta)
                 nxi_for_x_np = np.asarray(op.fblock.collisionless.n_xi_for_x, dtype=np.int32)
-                l1_full_idx: list[int] = []
-                if use_active_dof_mode and full_to_active_jnp is not None:
-                    full_to_active_np = np.asarray(full_to_active_jnp, dtype=np.int32)
-                    for s_idx in range(n_s):
-                        for ix in range(n_x):
-                            if int(nxi_for_x_np[ix]) <= 1:
-                                continue
-                            il = 1
-                            for it in range(n_t):
-                                for iz in range(n_z):
-                                    f_idx = int(((((s_idx * n_x + ix) * n_l + il) * n_t + it) * n_z + iz))
-                                    l1_full_idx.append(f_idx)
-                    if l1_full_idx:
-                        l1_full_idx_np = np.asarray(l1_full_idx, dtype=np.int32)
-                        l1_active_idx_np = full_to_active_np[l1_full_idx_np] - 1
-                        l1_active_idx_np = l1_active_idx_np[l1_active_idx_np >= 0]
-                    else:
-                        l1_active_idx_np = np.asarray([], dtype=np.int32)
-                else:
-                    for s_idx in range(n_s):
-                        for ix in range(n_x):
-                            if int(nxi_for_x_np[ix]) <= 1:
-                                continue
-                            il = 1
-                            for it in range(n_t):
-                                for iz in range(n_z):
-                                    f_idx = int(((((s_idx * n_x + ix) * n_l + il) * n_t + it) * n_z + iz))
-                                    l1_full_idx.append(f_idx)
-                    l1_active_idx_np = np.asarray(l1_full_idx, dtype=np.int32)
+                l1_active_idx_np = fp_pitch_mode_active_indices(
+                    n_species=int(op.n_species),
+                    n_x=int(op.n_x),
+                    n_xi=int(op.n_xi),
+                    n_theta=int(op.n_theta),
+                    n_zeta=int(op.n_zeta),
+                    nxi_for_x=nxi_for_x_np,
+                    l_min=1,
+                    l_max=1,
+                    full_to_active=(
+                        full_to_active_jnp
+                        if use_active_dof_mode and full_to_active_jnp is not None
+                        else None
+                    ),
+                )
 
                 if int(l1_active_idx_np.size) > 0:
                     l1_idx_jnp = jnp.asarray(np.unique(l1_active_idx_np), dtype=jnp.int32)
@@ -14391,43 +14373,22 @@ def solve_v3_full_system_linear_gmres(
                 low_max_size = max(0, int(low_max_size))
                 low_ratio = max(1.0, float(low_ratio))
                 if float(res_reduced.residual_norm) > float(target_reduced) * float(low_ratio) and low_lmax > 0:
-                    n_s = int(op.n_species)
-                    n_x = int(op.n_x)
-                    n_l = int(op.n_xi)
-                    n_t = int(op.n_theta)
-                    n_z = int(op.n_zeta)
                     nxi_for_x_np = np.asarray(op.fblock.collisionless.n_xi_for_x, dtype=np.int32)
-                    low_full_idx: list[int] = []
-                    if use_active_dof_mode and full_to_active_jnp is not None:
-                        full_to_active_np = np.asarray(full_to_active_jnp, dtype=np.int32)
-                        for s_idx in range(n_s):
-                            for ix in range(n_x):
-                                lmax_x = min(int(nxi_for_x_np[ix]) - 1, int(low_lmax))
-                                if lmax_x < 0:
-                                    continue
-                                for il in range(lmax_x + 1):
-                                    for it in range(n_t):
-                                        for iz in range(n_z):
-                                            f_idx = int(((((s_idx * n_x + ix) * n_l + il) * n_t + it) * n_z + iz))
-                                            low_full_idx.append(f_idx)
-                        if low_full_idx:
-                            low_full_idx_np = np.asarray(low_full_idx, dtype=np.int32)
-                            low_active_idx_np = full_to_active_np[low_full_idx_np] - 1
-                            low_active_idx_np = low_active_idx_np[low_active_idx_np >= 0]
-                        else:
-                            low_active_idx_np = np.asarray([], dtype=np.int32)
-                    else:
-                        for s_idx in range(n_s):
-                            for ix in range(n_x):
-                                lmax_x = min(int(nxi_for_x_np[ix]) - 1, int(low_lmax))
-                                if lmax_x < 0:
-                                    continue
-                                for il in range(lmax_x + 1):
-                                    for it in range(n_t):
-                                        for iz in range(n_z):
-                                            f_idx = int(((((s_idx * n_x + ix) * n_l + il) * n_t + it) * n_z + iz))
-                                            low_full_idx.append(f_idx)
-                        low_active_idx_np = np.asarray(low_full_idx, dtype=np.int32)
+                    low_active_idx_np = fp_pitch_mode_active_indices(
+                        n_species=int(op.n_species),
+                        n_x=int(op.n_x),
+                        n_xi=int(op.n_xi),
+                        n_theta=int(op.n_theta),
+                        n_zeta=int(op.n_zeta),
+                        nxi_for_x=nxi_for_x_np,
+                        l_min=0,
+                        l_max=int(low_lmax),
+                        full_to_active=(
+                            full_to_active_jnp
+                            if use_active_dof_mode and full_to_active_jnp is not None
+                            else None
+                        ),
+                    )
 
                     if int(low_active_idx_np.size) > 0:
                         low_idx_jnp = jnp.asarray(np.unique(low_active_idx_np), dtype=jnp.int32)
