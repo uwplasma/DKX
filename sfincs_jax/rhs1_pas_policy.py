@@ -43,6 +43,17 @@ class RHS1PASAdaptiveSmootherControls:
     omega: float
 
 
+@dataclass(frozen=True)
+class RHS1PASSchurRescueControls:
+    """Admission and Krylov controls for the full-system PAS Schur rescue."""
+
+    run: bool
+    ratio: float
+    max_active_size: int
+    restart: int
+    maxiter: int
+
+
 def _env_float(name: str, default: float) -> float:
     raw = os.environ.get(name, "").strip()
     try:
@@ -398,6 +409,64 @@ def rhs1_pas_adaptive_smoother_controls_from_env() -> RHS1PASAdaptiveSmootherCon
     return RHS1PASAdaptiveSmootherControls(max_sweeps=int(max_sweeps), omega=float(omega))
 
 
+def rhs1_pas_schur_rescue_controls_from_env(
+    *,
+    rhs_mode: int,
+    include_phi1: bool,
+    has_pas: bool,
+    n_species: int,
+    residual_norm: float,
+    target: float,
+    active_size: int,
+    restart: int,
+    maxiter: int | None,
+) -> RHS1PASSchurRescueControls:
+    """Return full-system PAS Schur rescue admission and retry controls."""
+
+    ratio_env = os.environ.get("SFINCS_JAX_RHSMODE1_PAS_SCHUR_RESCUE_RATIO", "").strip()
+    max_env = os.environ.get("SFINCS_JAX_RHSMODE1_PAS_SCHUR_RESCUE_MAX", "").strip()
+    try:
+        ratio = float(ratio_env) if ratio_env else 1.0e4
+    except ValueError:
+        ratio = 1.0e4
+    try:
+        max_active_size = int(max_env) if max_env else 90000
+    except ValueError:
+        max_active_size = 90000
+
+    restart_env = os.environ.get("SFINCS_JAX_RHSMODE1_PAS_SCHUR_RESCUE_RESTART", "").strip()
+    maxiter_env = os.environ.get("SFINCS_JAX_RHSMODE1_PAS_SCHUR_RESCUE_MAXITER", "").strip()
+    try:
+        restart_use = int(restart_env) if restart_env else max(120, int(restart))
+    except ValueError:
+        restart_use = max(120, int(restart))
+    try:
+        maxiter_use = int(maxiter_env) if maxiter_env else max(1200, int(maxiter or 400) * 3)
+    except ValueError:
+        maxiter_use = max(1200, int(maxiter or 400) * 3)
+
+    eligible = (
+        int(rhs_mode) == 1
+        and (not bool(include_phi1))
+        and bool(has_pas)
+        and int(n_species) >= 2
+        and np.isfinite(float(residual_norm))
+    )
+    run = bool(
+        eligible
+        and float(ratio) > 0.0
+        and int(active_size) <= max(1, int(max_active_size))
+        and float(residual_norm) > float(target) * float(ratio)
+    )
+    return RHS1PASSchurRescueControls(
+        run=bool(run),
+        ratio=float(ratio),
+        max_active_size=int(max_active_size),
+        restart=int(restart_use),
+        maxiter=int(maxiter_use),
+    )
+
+
 def build_pas_tz_memory_fallback(
     *,
     op,
@@ -717,6 +786,7 @@ def resolve_pas_tz_memory_fallback_axis(
 __all__ = [
     "RHS1PASAdaptiveSmootherControls",
     "RHS1PASPreconditionerProbeConfig",
+    "RHS1PASSchurRescueControls",
     "build_pas_tz_memory_fallback",
     "estimate_rhs1_pas_tz_build_bytes",
     "estimate_rhs1_pas_tz_build_memory",
@@ -737,5 +807,6 @@ __all__ = [
     "rhs1_pas_preconditioner_probe_config_from_env",
     "rhs1_pas_preconditioner_probe_large_collision_skip",
     "rhs1_pas_preconditioner_probe_uses_collision",
+    "rhs1_pas_schur_rescue_controls_from_env",
     "rhs1_pas_tz_max_bytes",
 ]

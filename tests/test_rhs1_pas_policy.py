@@ -5,6 +5,7 @@ from types import SimpleNamespace
 from sfincs_jax.rhs1_pas_policy import (
     RHS1PASAdaptiveSmootherControls,
     RHS1PASPreconditionerProbeConfig,
+    RHS1PASSchurRescueControls,
     build_pas_tz_memory_fallback,
     estimate_rhs1_pas_tz_build_bytes,
     estimate_rhs1_pas_tz_build_memory,
@@ -23,6 +24,7 @@ from sfincs_jax.rhs1_pas_policy import (
     rhs1_pas_preconditioner_probe_config_from_env,
     rhs1_pas_preconditioner_probe_large_collision_skip,
     rhs1_pas_preconditioner_probe_uses_collision,
+    rhs1_pas_schur_rescue_controls_from_env,
 )
 
 
@@ -198,6 +200,100 @@ def test_pas_adaptive_smoother_controls_from_env(monkeypatch) -> None:
     assert rhs1_pas_adaptive_smoother_controls_from_env() == RHS1PASAdaptiveSmootherControls(
         max_sweeps=3,
         omega=1.0,
+    )
+
+
+def test_pas_schur_rescue_controls_trigger_and_defaults(monkeypatch) -> None:
+    monkeypatch.delenv("SFINCS_JAX_RHSMODE1_PAS_SCHUR_RESCUE_RATIO", raising=False)
+    monkeypatch.delenv("SFINCS_JAX_RHSMODE1_PAS_SCHUR_RESCUE_MAX", raising=False)
+    monkeypatch.delenv("SFINCS_JAX_RHSMODE1_PAS_SCHUR_RESCUE_RESTART", raising=False)
+    monkeypatch.delenv("SFINCS_JAX_RHSMODE1_PAS_SCHUR_RESCUE_MAXITER", raising=False)
+
+    assert rhs1_pas_schur_rescue_controls_from_env(
+        rhs_mode=1,
+        include_phi1=False,
+        has_pas=True,
+        n_species=2,
+        residual_norm=2.0e-2,
+        target=1.0e-8,
+        active_size=4000,
+        restart=80,
+        maxiter=300,
+    ) == RHS1PASSchurRescueControls(
+        run=True,
+        ratio=1.0e4,
+        max_active_size=90000,
+        restart=120,
+        maxiter=1200,
+    )
+
+
+def test_pas_schur_rescue_controls_respect_guards(monkeypatch) -> None:
+    kwargs = dict(
+        rhs_mode=1,
+        include_phi1=False,
+        has_pas=True,
+        n_species=2,
+        residual_norm=2.0e-2,
+        target=1.0e-8,
+        active_size=4000,
+        restart=80,
+        maxiter=300,
+    )
+    assert not rhs1_pas_schur_rescue_controls_from_env(**{**kwargs, "rhs_mode": 2}).run
+    assert not rhs1_pas_schur_rescue_controls_from_env(**{**kwargs, "include_phi1": True}).run
+    assert not rhs1_pas_schur_rescue_controls_from_env(**{**kwargs, "has_pas": False}).run
+    assert not rhs1_pas_schur_rescue_controls_from_env(**{**kwargs, "n_species": 1}).run
+    assert not rhs1_pas_schur_rescue_controls_from_env(**{**kwargs, "residual_norm": float("inf")}).run
+    assert not rhs1_pas_schur_rescue_controls_from_env(**{**kwargs, "active_size": 100000}).run
+
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_PAS_SCHUR_RESCUE_RATIO", "0")
+    assert not rhs1_pas_schur_rescue_controls_from_env(**kwargs).run
+
+
+def test_pas_schur_rescue_controls_env_overrides_and_invalid_values(monkeypatch) -> None:
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_PAS_SCHUR_RESCUE_RATIO", "25")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_PAS_SCHUR_RESCUE_MAX", "5000")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_PAS_SCHUR_RESCUE_RESTART", "44")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_PAS_SCHUR_RESCUE_MAXITER", "88")
+    assert rhs1_pas_schur_rescue_controls_from_env(
+        rhs_mode=1,
+        include_phi1=False,
+        has_pas=True,
+        n_species=2,
+        residual_norm=3.0e-7,
+        target=1.0e-8,
+        active_size=4000,
+        restart=80,
+        maxiter=300,
+    ) == RHS1PASSchurRescueControls(
+        run=True,
+        ratio=25.0,
+        max_active_size=5000,
+        restart=44,
+        maxiter=88,
+    )
+
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_PAS_SCHUR_RESCUE_RATIO", "bad")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_PAS_SCHUR_RESCUE_MAX", "bad")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_PAS_SCHUR_RESCUE_RESTART", "bad")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_PAS_SCHUR_RESCUE_MAXITER", "bad")
+    assert rhs1_pas_schur_rescue_controls_from_env(
+        rhs_mode=1,
+        include_phi1=False,
+        has_pas=True,
+        n_species=2,
+        residual_norm=2.0e-2,
+        target=1.0e-8,
+        active_size=4000,
+        restart=80,
+        maxiter=None,
+    ) == RHS1PASSchurRescueControls(
+        run=True,
+        ratio=1.0e4,
+        max_active_size=90000,
+        restart=120,
+        maxiter=1200,
     )
 
 

@@ -137,6 +137,7 @@ from .rhs1_pas_policy import (
     rhs1_pas_preconditioner_probe_config_from_env as _rhs1_pas_preconditioner_probe_config_from_env,
     rhs1_pas_preconditioner_probe_large_collision_skip as _rhs1_pas_preconditioner_probe_large_collision_skip,
     rhs1_pas_preconditioner_probe_uses_collision as _rhs1_pas_preconditioner_probe_uses_collision,
+    rhs1_pas_schur_rescue_controls_from_env,
     rhs1_pas_tz_max_bytes as _rhs1_pas_tz_max_bytes,
 )
 from .rhs1_preconditioner_dispatch import (
@@ -14654,70 +14655,49 @@ def solve_v3_full_system_linear_gmres(
                     returns_residual_vec=True,
                 )
             )
-        if (
-            int(op.rhs_mode) == 1
-            and (not bool(op.include_phi1))
-            and op.fblock.pas is not None
-            and int(op.n_species) >= 2
-            and np.isfinite(float(result.residual_norm))
-        ):
-            rescue_ratio_env = os.environ.get("SFINCS_JAX_RHSMODE1_PAS_SCHUR_RESCUE_RATIO", "").strip()
-            rescue_max_env = os.environ.get("SFINCS_JAX_RHSMODE1_PAS_SCHUR_RESCUE_MAX", "").strip()
+        pas_schur_rescue_controls = rhs1_pas_schur_rescue_controls_from_env(
+            rhs_mode=int(op.rhs_mode),
+            include_phi1=bool(op.include_phi1),
+            has_pas=op.fblock.pas is not None,
+            n_species=int(op.n_species),
+            residual_norm=float(result.residual_norm),
+            target=float(target),
+            active_size=int(active_size),
+            restart=int(restart),
+            maxiter=maxiter,
+        )
+        if pas_schur_rescue_controls.run:
+            if emit is not None:
+                emit(
+                    0,
+                    "solve_v3_full_system_linear_gmres: PAS Schur rescue "
+                    f"(residual={float(result.residual_norm):.3e} "
+                    f"> {float(target)*float(pas_schur_rescue_controls.ratio):.3e})",
+                )
             try:
-                rescue_ratio = float(rescue_ratio_env) if rescue_ratio_env else 1.0e4
-            except ValueError:
-                rescue_ratio = 1.0e4
-            try:
-                rescue_max = int(rescue_max_env) if rescue_max_env else 90000
-            except ValueError:
-                rescue_max = 90000
-            if (
-                rescue_ratio > 0.0
-                and int(active_size) <= max(1, int(rescue_max))
-                and float(result.residual_norm) > float(target) * float(rescue_ratio)
-            ):
+                schur_precond = _build_rhsmode1_schur_preconditioner(op=op)
+                result, residual_vec, _accepted, _schur_elapsed_s = (
+                    rhs1_run_linear_candidate_and_update_replay(
+                        replay_state=ksp_replay,
+                        current_result=result,
+                        current_residual_vec=residual_vec,
+                        matvec_fn=mv,
+                        b_vec=rhs,
+                        precond_fn=schur_precond,
+                        tol=float(tol),
+                        atol=float(atol),
+                        restart=int(pas_schur_rescue_controls.restart),
+                        maxiter=int(pas_schur_rescue_controls.maxiter),
+                        solve_method="incremental",
+                        precond_side=gmres_precond_side,
+                        solve_linear=_solve_linear_with_residual,
+                        solver_kind=_solver_kind("incremental")[0],
+                        returns_residual_vec=True,
+                    )
+                )
+            except Exception as exc:  # noqa: BLE001
                 if emit is not None:
-                    emit(
-                        0,
-                        "solve_v3_full_system_linear_gmres: PAS Schur rescue "
-                        f"(residual={float(result.residual_norm):.3e} > {float(target)*float(rescue_ratio):.3e})",
-                    )
-                try:
-                    schur_precond = _build_rhsmode1_schur_preconditioner(op=op)
-                    rescue_restart_env = os.environ.get("SFINCS_JAX_RHSMODE1_PAS_SCHUR_RESCUE_RESTART", "").strip()
-                    rescue_maxiter_env = os.environ.get("SFINCS_JAX_RHSMODE1_PAS_SCHUR_RESCUE_MAXITER", "").strip()
-                    try:
-                        rescue_restart = int(rescue_restart_env) if rescue_restart_env else max(120, int(restart))
-                    except ValueError:
-                        rescue_restart = max(120, int(restart))
-                    try:
-                        rescue_maxiter = (
-                            int(rescue_maxiter_env) if rescue_maxiter_env else max(1200, int(maxiter or 400) * 3)
-                        )
-                    except ValueError:
-                        rescue_maxiter = max(1200, int(maxiter or 400) * 3)
-                    result, residual_vec, _accepted, _schur_elapsed_s = (
-                        rhs1_run_linear_candidate_and_update_replay(
-                            replay_state=ksp_replay,
-                            current_result=result,
-                            current_residual_vec=residual_vec,
-                            matvec_fn=mv,
-                            b_vec=rhs,
-                            precond_fn=schur_precond,
-                            tol=float(tol),
-                            atol=float(atol),
-                            restart=int(rescue_restart),
-                            maxiter=int(rescue_maxiter),
-                            solve_method="incremental",
-                            precond_side=gmres_precond_side,
-                            solve_linear=_solve_linear_with_residual,
-                            solver_kind=_solver_kind("incremental")[0],
-                            returns_residual_vec=True,
-                        )
-                    )
-                except Exception as exc:  # noqa: BLE001
-                    if emit is not None:
-                        emit(1, f"solve_v3_full_system_linear_gmres: PAS Schur rescue failed ({type(exc).__name__}: {exc})")
+                    emit(1, f"solve_v3_full_system_linear_gmres: PAS Schur rescue failed ({type(exc).__name__}: {exc})")
         large_cpu_sparse_rescue_full = _rhsmode1_large_cpu_sparse_rescue_allowed(
             op=op,
             solve_method_kind=solve_method_kind,
