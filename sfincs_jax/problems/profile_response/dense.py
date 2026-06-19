@@ -97,6 +97,16 @@ class RHS1DenseShortcutSetup:
     messages: tuple[tuple[int, str], ...] = ()
 
 
+@dataclass(frozen=True)
+class RHS1DenseFallbackThresholds:
+    """Residual-ratio dense fallback limits resolved from environment controls."""
+
+    dense_fallback_max_huge: int
+    dense_fallback_ratio: float
+    dense_fallback_limit: int
+    dense_fallback_trigger: bool
+
+
 def _env_float(name: str, default: float) -> float:
     raw = str(os.environ.get(name, "")).strip()
     try:
@@ -167,6 +177,43 @@ def rhs1_dense_shortcut_setup_from_env(
         dense_fallback_max=int(dense_fallback_max_use),
         disable_dense_pas=bool(disable_dense_pas),
         messages=tuple(messages),
+    )
+
+
+def rhs1_dense_fallback_thresholds_from_env(
+    *,
+    dense_fallback_max: int,
+    residual_ratio: float,
+    allow_huge_limit: bool = True,
+) -> RHS1DenseFallbackThresholds:
+    """Resolve dense-fallback residual-ratio gates with legacy defaults."""
+
+    fallback_max = int(dense_fallback_max)
+    dense_fallback_ratio = 1.0e2
+    dense_fallback_max_huge = 0
+    if fallback_max > 0:
+        if bool(allow_huge_limit):
+            dense_fallback_max_huge = _env_int(
+                "SFINCS_JAX_RHSMODE1_DENSE_FALLBACK_MAX_HUGE",
+                fallback_max,
+            )
+        else:
+            dense_fallback_max_huge = fallback_max
+        dense_fallback_ratio = _env_float(
+            "SFINCS_JAX_RHSMODE1_DENSE_FALLBACK_RATIO",
+            1.0e2,
+        )
+    trigger = (
+        bool(float(residual_ratio) > float(dense_fallback_ratio))
+        if float(dense_fallback_ratio) > 0.0
+        else True
+    )
+    limit = dense_fallback_max_huge if trigger and bool(allow_huge_limit) else fallback_max
+    return RHS1DenseFallbackThresholds(
+        dense_fallback_max_huge=int(dense_fallback_max_huge),
+        dense_fallback_ratio=float(dense_fallback_ratio),
+        dense_fallback_limit=int(limit),
+        dense_fallback_trigger=bool(trigger),
     )
 
 
@@ -637,6 +684,7 @@ def _solve_rhs1_reduced_dense_fallback_host_candidate(
 __all__ = [
     "RHS1DenseProbeAdmission",
     "RHS1DenseProbeShortcutDecision",
+    "RHS1DenseFallbackThresholds",
     "RHS1DenseShortcutSetup",
     "HostDenseFullSolveContext",
     "HostDenseReducedSolveContext",
@@ -644,6 +692,7 @@ __all__ = [
     "rhs1_dense_probe_admission",
     "rhs1_dense_probe_enabled_from_env",
     "rhs1_dense_probe_shortcut_decision",
+    "rhs1_dense_fallback_thresholds_from_env",
     "rhs1_dense_shortcut_setup_from_env",
     "rhs1_fp_preconditioner_probe_kind_from_env",
     "solve_rhs1_reduced_dense_fallback_candidate",

@@ -197,6 +197,7 @@ from .problems.profile_response.dense import (
     RHS1ReducedDenseFallbackCandidateContext,
     rhs1_dense_probe_admission,
     rhs1_dense_probe_enabled_from_env,
+    rhs1_dense_fallback_thresholds_from_env,
     rhs1_dense_probe_shortcut_decision,
     rhs1_dense_shortcut_setup_from_env,
     rhs1_fp_preconditioner_probe_kind_from_env,
@@ -11600,17 +11601,11 @@ def solve_v3_full_system_linear_gmres(
             and res_ratio >= dense_shortcut_ratio
             and (not sparse_prefer_over_dense_shortcut)
         ):
-            dense_fallback_max_huge_env = os.environ.get("SFINCS_JAX_RHSMODE1_DENSE_FALLBACK_MAX_HUGE", "").strip()
-            dense_fallback_ratio_env = os.environ.get("SFINCS_JAX_RHSMODE1_DENSE_FALLBACK_RATIO", "").strip()
-            try:
-                dense_fallback_max_huge = int(dense_fallback_max_huge_env) if dense_fallback_max_huge_env else dense_fallback_max
-            except ValueError:
-                dense_fallback_max_huge = dense_fallback_max
-            try:
-                dense_fallback_ratio = float(dense_fallback_ratio_env) if dense_fallback_ratio_env else 1.0e2
-            except ValueError:
-                dense_fallback_ratio = 1.0e2
-            dense_fallback_limit = dense_fallback_max_huge if res_ratio > dense_fallback_ratio else dense_fallback_max
+            dense_thresholds = rhs1_dense_fallback_thresholds_from_env(
+                dense_fallback_max=int(dense_fallback_max),
+                residual_ratio=float(res_ratio),
+            )
+            dense_fallback_limit = int(dense_thresholds.dense_fallback_limit)
             if dense_fallback_limit > 0 and int(active_size) <= int(dense_fallback_limit):
                 early_dense_shortcut = True
                 if emit is not None:
@@ -12352,30 +12347,21 @@ def solve_v3_full_system_linear_gmres(
             quick_ratio = float(res_reduced.residual_norm) / max(float(target_reduced), 1e-300)
             if quick_ratio >= dense_shortcut_ratio:
                 dense_fallback_max = _rhsmode1_dense_fallback_max(op)
-                dense_fallback_max_huge = 0
-                dense_fallback_ratio = 1.0e2
-                if dense_fallback_max > 0:
-                    dense_fallback_max_huge_env = os.environ.get("SFINCS_JAX_RHSMODE1_DENSE_FALLBACK_MAX_HUGE", "").strip()
-                    try:
-                        dense_fallback_max_huge = int(dense_fallback_max_huge_env) if dense_fallback_max_huge_env else dense_fallback_max
-                    except ValueError:
-                        dense_fallback_max_huge = dense_fallback_max
-                    dense_fallback_ratio_env = os.environ.get("SFINCS_JAX_RHSMODE1_DENSE_FALLBACK_RATIO", "").strip()
-                    try:
-                        dense_fallback_ratio = float(dense_fallback_ratio_env) if dense_fallback_ratio_env else 1.0e2
-                    except ValueError:
-                        dense_fallback_ratio = 1.0e2
                 residual_norm_true = rhs1_true_residual_norm_or_inf(
                     rhs=rhs_reduced,
                     matvec=mv_reduced,
                     x=res_reduced.x,
                 )
                 res_ratio = float(residual_norm_true) / max(float(target_reduced), 1e-300)
-                dense_fallback_limit = dense_fallback_max_huge if res_ratio > dense_fallback_ratio else dense_fallback_max
+                dense_thresholds = rhs1_dense_fallback_thresholds_from_env(
+                    dense_fallback_max=int(dense_fallback_max),
+                    residual_ratio=float(res_ratio),
+                )
+                dense_fallback_limit = int(dense_thresholds.dense_fallback_limit)
                 force_dense_cs0 = bool(int(op.constraint_scheme) == 0 and (not cs0_sparse_first))
                 if force_dense_cs0:
                     dense_fallback_limit = max(dense_fallback_limit, dense_fallback_max)
-                dense_fallback_trigger = bool(res_ratio > dense_fallback_ratio) if dense_fallback_ratio > 0 else True
+                dense_fallback_trigger = bool(dense_thresholds.dense_fallback_trigger)
                 if (
                     dense_fallback_limit > 0
                     and int(active_size) <= dense_fallback_limit
@@ -13488,22 +13474,13 @@ def solve_v3_full_system_linear_gmres(
         dense_fallback_max = _rhsmode1_dense_fallback_max(op)
         if not dense_backend_allowed and not host_dense_fallback_allowed and not dense_krylov_allowed:
             dense_fallback_max = 0
-        dense_fallback_max_huge = 0
-        dense_fallback_ratio = 1.0e2
-        if dense_fallback_max > 0:
-            dense_fallback_max_huge_env = os.environ.get("SFINCS_JAX_RHSMODE1_DENSE_FALLBACK_MAX_HUGE", "").strip()
-            try:
-                dense_fallback_max_huge = int(dense_fallback_max_huge_env) if dense_fallback_max_huge_env else dense_fallback_max
-            except ValueError:
-                dense_fallback_max_huge = dense_fallback_max
-            dense_fallback_ratio_env = os.environ.get("SFINCS_JAX_RHSMODE1_DENSE_FALLBACK_RATIO", "").strip()
-            try:
-                dense_fallback_ratio = float(dense_fallback_ratio_env) if dense_fallback_ratio_env else 1.0e2
-            except ValueError:
-                dense_fallback_ratio = 1.0e2
         res_ratio = float(residual_norm_true) / max(float(target_reduced), 1e-300)
-        dense_fallback_limit = dense_fallback_max_huge if res_ratio > dense_fallback_ratio else dense_fallback_max
-        dense_fallback_trigger = bool(res_ratio > dense_fallback_ratio) if dense_fallback_ratio > 0 else True
+        dense_thresholds = rhs1_dense_fallback_thresholds_from_env(
+            dense_fallback_max=int(dense_fallback_max),
+            residual_ratio=float(res_ratio),
+        )
+        dense_fallback_limit = int(dense_thresholds.dense_fallback_limit)
+        dense_fallback_trigger = bool(dense_thresholds.dense_fallback_trigger)
         if host_sparse_direct_used and jax.default_backend() != "cpu":
             host_sparse_skip_ratio = _rhsmode1_host_sparse_skip_dense_ratio()
             if host_sparse_skip_ratio > 0.0 and res_ratio <= float(host_sparse_skip_ratio):
@@ -15470,13 +15447,13 @@ def solve_v3_full_system_linear_gmres(
         dense_krylov_allowed = _rhsmode1_dense_krylov_allowed()
         if (not dense_backend_allowed) and (not host_dense_fallback_allowed) and (not dense_krylov_allowed):
             dense_fallback_max = 0
-        dense_fallback_ratio_env = os.environ.get("SFINCS_JAX_RHSMODE1_DENSE_FALLBACK_RATIO", "").strip()
-        try:
-            dense_fallback_ratio = float(dense_fallback_ratio_env) if dense_fallback_ratio_env else 1.0e2
-        except ValueError:
-            dense_fallback_ratio = 1.0e2
         res_ratio = float(residual_norm_true) / max(float(target), 1e-300)
-        dense_fallback_trigger = bool(res_ratio > dense_fallback_ratio) if dense_fallback_ratio > 0 else True
+        dense_thresholds = rhs1_dense_fallback_thresholds_from_env(
+            dense_fallback_max=int(dense_fallback_max),
+            residual_ratio=float(res_ratio),
+            allow_huge_limit=False,
+        )
+        dense_fallback_trigger = bool(dense_thresholds.dense_fallback_trigger)
         if host_sparse_direct_used and jax.default_backend() != "cpu":
             host_sparse_skip_ratio = _rhsmode1_host_sparse_skip_dense_ratio()
             if host_sparse_skip_ratio > 0.0 and res_ratio <= float(host_sparse_skip_ratio):

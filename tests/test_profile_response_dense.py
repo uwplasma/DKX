@@ -7,7 +7,9 @@ import jax.numpy as jnp
 from sfincs_jax.problems.profile_response.dense import (
     HostDenseFullSolveContext,
     HostDenseReducedSolveContext,
+    RHS1DenseFallbackThresholds,
     RHS1ReducedDenseFallbackCandidateContext,
+    rhs1_dense_fallback_thresholds_from_env,
     rhs1_dense_probe_admission,
     rhs1_dense_probe_enabled_from_env,
     rhs1_dense_probe_shortcut_decision,
@@ -147,6 +149,73 @@ def test_rhs1_dense_shortcut_setup_from_env_reports_backend_disable(monkeypatch)
         "solve_v3_full_system_linear_gmres: disabling RHSMode=1 "
         "dense shortcut disabled (dense Krylov fallback kept) on backend=gpu",
     ),)
+
+
+def test_rhs1_dense_fallback_thresholds_use_default_ratio_and_huge_limit(monkeypatch) -> None:
+    monkeypatch.delenv("SFINCS_JAX_RHSMODE1_DENSE_FALLBACK_MAX_HUGE", raising=False)
+    monkeypatch.delenv("SFINCS_JAX_RHSMODE1_DENSE_FALLBACK_RATIO", raising=False)
+
+    assert rhs1_dense_fallback_thresholds_from_env(
+        dense_fallback_max=5000,
+        residual_ratio=10.0,
+    ) == RHS1DenseFallbackThresholds(
+        dense_fallback_max_huge=5000,
+        dense_fallback_ratio=100.0,
+        dense_fallback_limit=5000,
+        dense_fallback_trigger=False,
+    )
+    assert rhs1_dense_fallback_thresholds_from_env(
+        dense_fallback_max=5000,
+        residual_ratio=200.0,
+    ) == RHS1DenseFallbackThresholds(
+        dense_fallback_max_huge=5000,
+        dense_fallback_ratio=100.0,
+        dense_fallback_limit=5000,
+        dense_fallback_trigger=True,
+    )
+
+
+def test_rhs1_dense_fallback_thresholds_respect_env_and_invalid_values(monkeypatch) -> None:
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_DENSE_FALLBACK_MAX_HUGE", "12000")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_DENSE_FALLBACK_RATIO", "25")
+
+    assert rhs1_dense_fallback_thresholds_from_env(
+        dense_fallback_max=5000,
+        residual_ratio=30.0,
+    ) == RHS1DenseFallbackThresholds(
+        dense_fallback_max_huge=12000,
+        dense_fallback_ratio=25.0,
+        dense_fallback_limit=12000,
+        dense_fallback_trigger=True,
+    )
+
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_DENSE_FALLBACK_MAX_HUGE", "bad")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_DENSE_FALLBACK_RATIO", "bad")
+    assert rhs1_dense_fallback_thresholds_from_env(
+        dense_fallback_max=5000,
+        residual_ratio=200.0,
+    ) == RHS1DenseFallbackThresholds(
+        dense_fallback_max_huge=5000,
+        dense_fallback_ratio=100.0,
+        dense_fallback_limit=5000,
+        dense_fallback_trigger=True,
+    )
+
+
+def test_rhs1_dense_fallback_thresholds_can_disable_huge_limit(monkeypatch) -> None:
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_DENSE_FALLBACK_MAX_HUGE", "12000")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_DENSE_FALLBACK_RATIO", "25")
+
+    assert rhs1_dense_fallback_thresholds_from_env(
+        dense_fallback_max=5000,
+        residual_ratio=30.0,
+        allow_huge_limit=False,
+    ) == RHS1DenseFallbackThresholds(
+        dense_fallback_max_huge=5000,
+        dense_fallback_ratio=25.0,
+        dense_fallback_limit=5000,
+        dense_fallback_trigger=True,
+    )
 
 
 def test_rhs1_fp_preconditioner_probe_kind_from_env_selects_collision(monkeypatch) -> None:

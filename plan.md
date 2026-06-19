@@ -42,11 +42,15 @@ Make `sfincs_jax` research-grade while preserving the public user contract:
 
 Recent checkpoints:
 
+- RHSMode=1 dense-fallback residual-ratio threshold parsing now uses a tested
+  dense profile-response helper for default/invalid env handling, optional
+  huge-residual limits, and trigger calculation across early, reduced, and
+  full-system dense fallback gates (current checkpoint).
 - Reduced active-DOF and full-system sparse host/direct-vs-ILU factor-control
   setup now share a tested sparse-PC helper for direct intent, factor dtype,
   cache-key stamping, dense/JAX factor flags, dense cache admission, and
   explicit sparse admission while preserving driver-local matvec, pattern, and
-  operator-preconditioned rescue routing (current checkpoint).
+  operator-preconditioned rescue routing (`f9c0dd7`).
 - RHSMode=1 PAS preconditioner probe/default routing now uses tested
   PAS-policy helpers for env parsing, tokamak-like Schur defaulting, heavy-path
   admission, large-system collision skip, and residual-threshold decisions
@@ -183,15 +187,15 @@ Recent checkpoints:
 - `cb295ce` Extract sparse pattern setup.
 - `4b6a5b4` Extract sparse factor policy.
 
-Current source-size snapshot after sparse factor-control extraction:
+Current source-size snapshot after dense fallback-threshold extraction:
 
-- `sfincs_jax/v3_driver.py`: `17947` lines.
-- `solve_v3_full_system_linear_gmres`: `12617` lines.
+- `sfincs_jax/v3_driver.py`: `17924` lines.
+- `solve_v3_full_system_linear_gmres`: `12593` lines.
 - `sfincs_jax/v3_results.py`: `119` lines.
 - `sfincs_jax/problems/profile_response/residual.py`: `981` lines.
 - `sfincs_jax/problems/profile_response/handoff.py`: `598` lines.
 - `sfincs_jax/problems/profile_response/policies.py`: `2985` lines.
-- `sfincs_jax/problems/profile_response/dense.py`: `652` lines.
+- `sfincs_jax/problems/profile_response/dense.py`: `701` lines.
 - `sfincs_jax/problems/profile_response/linear_solve.py`: `327` lines.
 - `sfincs_jax/problems/profile_response/active_projection.py`: `116` lines.
 - `sfincs_jax/problems/profile_response/sparse_pc.py`: `8619` lines.
@@ -199,6 +203,16 @@ Current source-size snapshot after sparse factor-control extraction:
 
 Recent local validation:
 
+- Dense profile-response shard after dense fallback-threshold extraction:
+  `19 passed in 1.10 s`.
+- Sparse-host/minimum-norm/direct-tail driver shard:
+  `32 passed, 100 deselected in 36.83 s`.
+- Broad profile-response/RHSMode=1 policy, setup, diagnostics, solver, and
+  helper sweep after dense fallback-threshold extraction:
+  `1068 passed in 50.11 s`.
+- Hygiene:
+  `ruff`, `compileall`, `git diff --check`, and `scripts/check_repo_size.py`
+  passed.
 - Sparse-PC helper shard after sparse factor-control extraction:
   `189 passed in 2.01 s`.
 - Sparse-host/minimum-norm/direct-tail driver shard:
