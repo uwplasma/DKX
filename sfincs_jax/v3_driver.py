@@ -131,6 +131,7 @@ from .rhs1_pas_policy import (
     pas_tz_preconditioner_memory_safe as _pas_tz_preconditioner_memory_safe,
     resolve_pas_tz_guarded_correction_kind,
     rhs1_pas_adaptive_smoother_allowed as _rhs1_pas_adaptive_smoother_allowed_impl,
+    rhs1_pas_adaptive_smoother_controls_from_env,
     rhs1_pas_default_preconditioner_kind as _rhs1_pas_default_preconditioner_kind,
     rhs1_pas_preconditioner_probe_admitted as _rhs1_pas_preconditioner_probe_admitted,
     rhs1_pas_preconditioner_probe_config_from_env as _rhs1_pas_preconditioner_probe_config_from_env,
@@ -11714,24 +11715,15 @@ def solve_v3_full_system_linear_gmres(
                 use_implicit=bool(use_implicit),
             )
         ):
-            smoother_max_env = os.environ.get("SFINCS_JAX_PAS_ADAPTIVE_SMOOTHER_SWEEPS", "").strip()
-            smoother_omega_env = os.environ.get("SFINCS_JAX_PAS_ADAPTIVE_SMOOTHER_OMEGA", "").strip()
-            try:
-                smoother_max = int(smoother_max_env) if smoother_max_env else 3
-            except ValueError:
-                smoother_max = 3
-            try:
-                smoother_omega = float(smoother_omega_env) if smoother_omega_env else 1.0
-            except ValueError:
-                smoother_omega = 1.0
+            smoother_controls = rhs1_pas_adaptive_smoother_controls_from_env()
             smoother = adaptive_pas_smoother(
                 matvec=mv_reduced,
                 rhs=rhs_reduced,
                 preconditioner=preconditioner_reduced,
                 x0=res_reduced.x,
                 target=float(target_reduced),
-                omega=float(smoother_omega),
-                max_sweeps=int(smoother_max),
+                omega=float(smoother_controls.omega),
+                max_sweeps=int(smoother_controls.max_sweeps),
             )
             res_reduced, residual_vec, _accepted = (
                 rhs1_accept_smoother_candidate_and_update_replay(
@@ -14418,24 +14410,15 @@ def solve_v3_full_system_linear_gmres(
                 use_implicit=bool(use_implicit),
             )
         ):
-            smoother_max_env = os.environ.get("SFINCS_JAX_PAS_ADAPTIVE_SMOOTHER_SWEEPS", "").strip()
-            smoother_omega_env = os.environ.get("SFINCS_JAX_PAS_ADAPTIVE_SMOOTHER_OMEGA", "").strip()
-            try:
-                smoother_max = int(smoother_max_env) if smoother_max_env else 3
-            except ValueError:
-                smoother_max = 3
-            try:
-                smoother_omega = float(smoother_omega_env) if smoother_omega_env else 1.0
-            except ValueError:
-                smoother_omega = 1.0
+            smoother_controls = rhs1_pas_adaptive_smoother_controls_from_env()
             smoother = adaptive_pas_smoother(
                 matvec=mv,
                 rhs=rhs,
                 preconditioner=preconditioner_full,
                 x0=result.x,
                 target=float(target),
-                omega=float(smoother_omega),
-                max_sweeps=int(smoother_max),
+                omega=float(smoother_controls.omega),
+                max_sweeps=int(smoother_controls.max_sweeps),
             )
             result, residual_vec, _accepted = (
                 rhs1_accept_smoother_candidate_and_update_replay(

@@ -3,6 +3,7 @@ from __future__ import annotations
 from types import SimpleNamespace
 
 from sfincs_jax.rhs1_pas_policy import (
+    RHS1PASAdaptiveSmootherControls,
     RHS1PASPreconditionerProbeConfig,
     build_pas_tz_memory_fallback,
     estimate_rhs1_pas_tz_build_bytes,
@@ -16,6 +17,7 @@ from sfincs_jax.rhs1_pas_policy import (
     resolve_pas_tz_guarded_correction_kind,
     resolve_pas_tz_memory_fallback_axis,
     rhs1_pas_adaptive_smoother_allowed,
+    rhs1_pas_adaptive_smoother_controls_from_env,
     rhs1_pas_default_preconditioner_kind,
     rhs1_pas_preconditioner_probe_admitted,
     rhs1_pas_preconditioner_probe_config_from_env,
@@ -173,6 +175,29 @@ def test_pas_adaptive_smoother_env_controls_and_invalid_min(monkeypatch) -> None
         residual_norm=1.0e-2,
         target=1.0e-8,
         use_implicit=False,
+    )
+
+
+def test_pas_adaptive_smoother_controls_from_env(monkeypatch) -> None:
+    monkeypatch.delenv("SFINCS_JAX_PAS_ADAPTIVE_SMOOTHER_SWEEPS", raising=False)
+    monkeypatch.delenv("SFINCS_JAX_PAS_ADAPTIVE_SMOOTHER_OMEGA", raising=False)
+    assert rhs1_pas_adaptive_smoother_controls_from_env() == RHS1PASAdaptiveSmootherControls(
+        max_sweeps=3,
+        omega=1.0,
+    )
+
+    monkeypatch.setenv("SFINCS_JAX_PAS_ADAPTIVE_SMOOTHER_SWEEPS", "5")
+    monkeypatch.setenv("SFINCS_JAX_PAS_ADAPTIVE_SMOOTHER_OMEGA", "0.75")
+    assert rhs1_pas_adaptive_smoother_controls_from_env() == RHS1PASAdaptiveSmootherControls(
+        max_sweeps=5,
+        omega=0.75,
+    )
+
+    monkeypatch.setenv("SFINCS_JAX_PAS_ADAPTIVE_SMOOTHER_SWEEPS", "bad")
+    monkeypatch.setenv("SFINCS_JAX_PAS_ADAPTIVE_SMOOTHER_OMEGA", "bad")
+    assert rhs1_pas_adaptive_smoother_controls_from_env() == RHS1PASAdaptiveSmootherControls(
+        max_sweeps=3,
+        omega=1.0,
     )
 
 

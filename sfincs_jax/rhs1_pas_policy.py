@@ -35,6 +35,14 @@ _RHS1_PAS_PROBE_HEAVY_PRECONDITIONERS = frozenset(
 )
 
 
+@dataclass(frozen=True)
+class RHS1PASAdaptiveSmootherControls:
+    """Execution controls for the bounded PAS adaptive smoother."""
+
+    max_sweeps: int
+    omega: float
+
+
 def _env_float(name: str, default: float) -> float:
     raw = os.environ.get(name, "").strip()
     try:
@@ -374,6 +382,22 @@ def rhs1_pas_adaptive_smoother_allowed(
     )
 
 
+def rhs1_pas_adaptive_smoother_controls_from_env() -> RHS1PASAdaptiveSmootherControls:
+    """Return PAS smoother sweeps and damping controls with legacy defaults."""
+
+    sweeps_env = os.environ.get("SFINCS_JAX_PAS_ADAPTIVE_SMOOTHER_SWEEPS", "").strip()
+    omega_env = os.environ.get("SFINCS_JAX_PAS_ADAPTIVE_SMOOTHER_OMEGA", "").strip()
+    try:
+        max_sweeps = int(sweeps_env) if sweeps_env else 3
+    except ValueError:
+        max_sweeps = 3
+    try:
+        omega = float(omega_env) if omega_env else 1.0
+    except ValueError:
+        omega = 1.0
+    return RHS1PASAdaptiveSmootherControls(max_sweeps=int(max_sweeps), omega=float(omega))
+
+
 def build_pas_tz_memory_fallback(
     *,
     op,
@@ -691,6 +715,7 @@ def resolve_pas_tz_memory_fallback_axis(
 
 
 __all__ = [
+    "RHS1PASAdaptiveSmootherControls",
     "RHS1PASPreconditionerProbeConfig",
     "build_pas_tz_memory_fallback",
     "estimate_rhs1_pas_tz_build_bytes",
@@ -706,6 +731,7 @@ __all__ = [
     "resolve_pas_tz_guarded_correction_kind",
     "resolve_pas_tz_memory_fallback_axis",
     "rhs1_pas_adaptive_smoother_allowed",
+    "rhs1_pas_adaptive_smoother_controls_from_env",
     "rhs1_pas_default_preconditioner_kind",
     "rhs1_pas_preconditioner_probe_admitted",
     "rhs1_pas_preconditioner_probe_config_from_env",

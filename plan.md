@@ -42,11 +42,14 @@ Make `sfincs_jax` research-grade while preserving the public user contract:
 
 Recent checkpoints:
 
+- RHSMode=1 PAS adaptive smoother execution controls now use a tested
+  `rhs1_pas_policy` helper for sweeps and damping while smoother construction,
+  measured acceptance, and KSP replay remain driver-owned (current checkpoint).
 - RHSMode=1 strong-preconditioner request env normalization and PAS
   force-strong ratio parsing now live in the profile-response
   strong-preconditioning helper module while branch-specific messaging,
   auto-kind selection, build, solve, and replay remain driver-owned
-  (current checkpoint).
+  (`a51497f`).
 - RHSMode=1 strong-preconditioner retry restart/maxiter controls now use a
   tested profile-response strong-preconditioning helper shared by reduced and
   full-system strong fallback solves while build, solve, measured acceptance,
@@ -260,12 +263,13 @@ Recent checkpoints:
 - `cb295ce` Extract sparse pattern setup.
 - `4b6a5b4` Extract sparse factor policy.
 
-Current source-size snapshot after strong-env normalization extraction:
+Current source-size snapshot after PAS smoother-control extraction:
 
-- `sfincs_jax/v3_driver.py`: `17612` lines.
-- `solve_v3_full_system_linear_gmres`: `12273` lines.
+- `sfincs_jax/v3_driver.py`: `17595` lines.
+- `solve_v3_full_system_linear_gmres`: `12255` lines.
 - `sfincs_jax/v3_results.py`: `119` lines.
 - `sfincs_jax/rhs1_ksp_diagnostics.py`: `306` lines.
+- `sfincs_jax/rhs1_pas_policy.py`: `741` lines.
 - `sfincs_jax/problems/profile_response/strong_preconditioning.py`: `644` lines.
 - `sfincs_jax/problems/profile_response/residual.py`: `981` lines.
 - `sfincs_jax/problems/profile_response/handoff.py`: `598` lines.
@@ -279,6 +283,16 @@ Current source-size snapshot after strong-env normalization extraction:
 
 Recent local validation:
 
+- PAS policy/smoother shard after adaptive smoother-control extraction:
+  `40 passed in 0.44 s`.
+- Sparse-host/minimum-norm/direct-tail driver shard:
+  `32 passed, 100 deselected in 35.60 s`.
+- Broad profile-response/RHSMode=1 policy, setup, diagnostics, solver, and
+  helper sweep after PAS smoother-control extraction:
+  `1131 passed in 44.49 s`.
+- Hygiene:
+  `py_compile`, `ruff`, `compileall`, `git diff --check`, and
+  `scripts/check_repo_size.py` passed.
 - Strong-preconditioner policy shard after env-normalization extraction:
   `11 passed in 0.31 s`.
 - Sparse-host/minimum-norm/direct-tail driver shard:
