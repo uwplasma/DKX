@@ -172,6 +172,7 @@ from .problems.profile_response.handoff import (
     RHS1KSPReplayState,
     rhs1_accept_candidate_and_update_replay,
     rhs1_accept_measured_candidate_and_update_replay,
+    rhs1_accept_sparse_retry_candidate_and_update_replay,
     rhs1_accept_smoother_candidate_and_update_replay,
     rhs1_run_fast_post_xblock_polish,
     rhs1_run_linear_candidate_and_update_replay,
@@ -13474,7 +13475,7 @@ def solve_v3_full_system_linear_gmres(
                     )
                     sparse_retry_elapsed_s = sparse_retry_timer.elapsed_s()
                     if res_sparse is not None:
-                        res_reduced, residual_vec, _accepted = rhs1_accept_measured_candidate_and_update_replay(
+                        res_reduced, residual_vec, _accepted = rhs1_accept_sparse_retry_candidate_and_update_replay(
                             replay_state=ksp_replay,
                             current_result=res_reduced,
                             candidate_result=res_sparse,
@@ -13483,13 +13484,12 @@ def solve_v3_full_system_linear_gmres(
                             matvec_fn=mv_reduced,
                             b_vec=rhs_reduced,
                             precond_fn=precond_sparse,
-                            x0_vec=res_sparse.x,
                             restart=restart,
                             maxiter=maxiter,
                             precond_side=gmres_precond_side,
                             solver_kind=_solver_kind("incremental")[0],
-                            candidate_name="sparse_jax_reduced",
-                            baseline_name="current_reduced",
+                            candidate_family="sparse_jax",
+                            scope="reduced",
                             target_value=target_reduced,
                             solve_s=sparse_retry_elapsed_s,
                             peak_rss_mb=_rss_mb(),
@@ -13685,7 +13685,7 @@ def solve_v3_full_system_linear_gmres(
                         )
                     if res_sparse is not None:
                         sparse_retry_elapsed_s = sparse_retry_timer.elapsed_s()
-                        res_reduced, residual_vec, _accepted = rhs1_accept_measured_candidate_and_update_replay(
+                        res_reduced, residual_vec, _accepted = rhs1_accept_sparse_retry_candidate_and_update_replay(
                             replay_state=ksp_replay,
                             current_result=res_reduced,
                             candidate_result=res_sparse,
@@ -13694,13 +13694,12 @@ def solve_v3_full_system_linear_gmres(
                             matvec_fn=mv_reduced if use_implicit else _mv_sparse,
                             b_vec=rhs_reduced,
                             precond_fn=_precond_sparse,
-                            x0_vec=res_sparse.x,
                             restart=restart,
                             maxiter=maxiter,
                             precond_side=gmres_precond_side,
                             solver_kind=_solver_kind("incremental")[0],
-                            candidate_name="sparse_reduced",
-                            baseline_name="current_reduced",
+                            candidate_family="sparse",
+                            scope="reduced",
                             target_value=target_reduced,
                             solve_s=sparse_retry_elapsed_s,
                             peak_rss_mb=_rss_mb(),
@@ -15425,7 +15424,7 @@ def solve_v3_full_system_linear_gmres(
                         precond_side=gmres_precond_side,
                     )
                     sparse_retry_elapsed_s = sparse_retry_timer.elapsed_s()
-                    result, residual_vec, _accepted = rhs1_accept_measured_candidate_and_update_replay(
+                    result, residual_vec, _accepted = rhs1_accept_sparse_retry_candidate_and_update_replay(
                         replay_state=ksp_replay,
                         current_result=result,
                         candidate_result=res_sparse,
@@ -15434,13 +15433,12 @@ def solve_v3_full_system_linear_gmres(
                         matvec_fn=mv,
                         b_vec=rhs,
                         precond_fn=precond_sparse,
-                        x0_vec=res_sparse.x,
                         restart=restart,
                         maxiter=maxiter,
                         precond_side=gmres_precond_side,
                         solver_kind=_solver_kind("incremental")[0],
-                        candidate_name="sparse_jax_full",
-                        baseline_name="current_full",
+                        candidate_family="sparse_jax",
+                        scope="full",
                         target_value=target,
                         solve_s=sparse_retry_elapsed_s,
                         peak_rss_mb=_rss_mb(),
@@ -15714,7 +15712,7 @@ def solve_v3_full_system_linear_gmres(
                         residual_vec_sparse = rhs - _mv_sparse(res_sparse.x)
                     if res_sparse is not None:
                         sparse_retry_elapsed_s = sparse_retry_timer.elapsed_s()
-                        result, residual_vec, _accepted = rhs1_accept_measured_candidate_and_update_replay(
+                        result, residual_vec, _accepted = rhs1_accept_sparse_retry_candidate_and_update_replay(
                             replay_state=ksp_replay,
                             current_result=result,
                             candidate_result=res_sparse,
@@ -15723,13 +15721,12 @@ def solve_v3_full_system_linear_gmres(
                             matvec_fn=mv if use_implicit else _mv_sparse,
                             b_vec=rhs,
                             precond_fn=_precond_sparse,
-                            x0_vec=res_sparse.x,
                             restart=restart,
                             maxiter=maxiter,
                             precond_side=gmres_precond_side,
                             solver_kind=_solver_kind("incremental")[0],
-                            candidate_name="sparse_full",
-                            baseline_name="current_full",
+                            candidate_family="sparse",
+                            scope="full",
                             target_value=target,
                             solve_s=sparse_retry_elapsed_s,
                             peak_rss_mb=_rss_mb(),

@@ -278,6 +278,51 @@ def rhs1_accept_measured_candidate_and_update_replay(
     return result, residual_vec, accepted
 
 
+def rhs1_accept_sparse_retry_candidate_and_update_replay(
+    *,
+    replay_state: RHS1KSPReplayState,
+    current_result: Any,
+    candidate_result: Any,
+    current_residual_vec: Any,
+    candidate_residual_vec: Any,
+    matvec_fn: Any,
+    b_vec: Any,
+    precond_fn: Any,
+    restart: int,
+    maxiter: int | None,
+    precond_side: str,
+    solver_kind: str,
+    candidate_family: str,
+    scope: str,
+    target_value: float,
+    solve_s: float | None = None,
+    peak_rss_mb: float | None = None,
+) -> tuple[Any, Any, bool]:
+    """Accept an already-run sparse retry candidate and update replay state."""
+
+    scope_name = str(scope)
+    return rhs1_accept_measured_candidate_and_update_replay(
+        replay_state=replay_state,
+        current_result=current_result,
+        candidate_result=candidate_result,
+        current_residual_vec=current_residual_vec,
+        candidate_residual_vec=candidate_residual_vec,
+        matvec_fn=matvec_fn,
+        b_vec=b_vec,
+        precond_fn=precond_fn,
+        x0_vec=candidate_result.x,
+        restart=restart,
+        maxiter=maxiter,
+        precond_side=precond_side,
+        solver_kind=solver_kind,
+        candidate_name=f"{candidate_family}_{scope_name}",
+        baseline_name=f"current_{scope_name}",
+        target_value=target_value,
+        solve_s=solve_s,
+        peak_rss_mb=peak_rss_mb,
+    )
+
+
 def rhs1_run_fast_post_xblock_polish(
     *,
     current_result: Any,
@@ -543,6 +588,7 @@ __all__ = [
     "rhs1_accept_candidate_and_update_replay",
     "rhs1_accept_measured_candidate",
     "rhs1_accept_measured_candidate_and_update_replay",
+    "rhs1_accept_sparse_retry_candidate_and_update_replay",
     "rhs1_residual_improves",
     "rhs1_accept_smoother_candidate_and_update_replay",
     "rhs1_run_fast_post_xblock_polish",

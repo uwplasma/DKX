@@ -12,6 +12,7 @@ from sfincs_jax.rhs1_handoff import (
     rhs1_accept_candidate_and_update_replay,
     rhs1_accept_measured_candidate,
     rhs1_accept_measured_candidate_and_update_replay,
+    rhs1_accept_sparse_retry_candidate_and_update_replay,
     rhs1_accept_smoother_candidate_and_update_replay,
     rhs1_residual_improves,
     rhs1_run_fast_post_xblock_polish,
@@ -493,6 +494,76 @@ def test_rhs1_accept_measured_candidate_and_update_replay_uses_standard_metrics(
     assert replay.matvec_fn == "mv"
     assert replay.restart == 50
     assert replay.solver_kind == "gmres"
+
+
+def test_rhs1_accept_sparse_retry_candidate_updates_replay_with_candidate_seed() -> None:
+    replay = RHS1KSPReplayState()
+    current = _result(5.0e-6, x="x0")
+    candidate = _result(5.0e-11, x="x_sparse")
+
+    result, residual_vec, accepted = rhs1_accept_sparse_retry_candidate_and_update_replay(
+        replay_state=replay,
+        current_result=current,
+        candidate_result=candidate,
+        current_residual_vec="r0",
+        candidate_residual_vec="r_sparse",
+        matvec_fn="mv",
+        b_vec="rhs",
+        precond_fn="pc",
+        restart=40,
+        maxiter=80,
+        precond_side="left",
+        solver_kind="incremental",
+        candidate_family="sparse_jax",
+        scope="full",
+        target_value=1.0e-9,
+        solve_s=0.5,
+        peak_rss_mb=321.0,
+    )
+
+    assert accepted
+    assert result is candidate
+    assert residual_vec == "r_sparse"
+    assert replay.matvec_fn == "mv"
+    assert replay.b_vec == "rhs"
+    assert replay.precond_fn == "pc"
+    assert replay.x0_vec == "x_sparse"
+    assert replay.restart == 40
+    assert replay.maxiter == 80
+    assert replay.precond_side == "left"
+    assert replay.solver_kind == "incremental"
+
+
+def test_rhs1_accept_sparse_retry_candidate_rejects_without_replay_update() -> None:
+    replay = RHS1KSPReplayState(matvec_fn="old_mv", solver_kind="old")
+    current = _result(1.0e-12, x="x0")
+    candidate = _result(5.0e-13, x="x_sparse")
+
+    result, residual_vec, accepted = rhs1_accept_sparse_retry_candidate_and_update_replay(
+        replay_state=replay,
+        current_result=current,
+        candidate_result=candidate,
+        current_residual_vec="r0",
+        candidate_residual_vec="r_sparse",
+        matvec_fn="mv",
+        b_vec="rhs",
+        precond_fn="pc",
+        restart=40,
+        maxiter=80,
+        precond_side="left",
+        solver_kind="incremental",
+        candidate_family="sparse",
+        scope="reduced",
+        target_value=1.0e-9,
+        solve_s=5.0,
+        peak_rss_mb=900.0,
+    )
+
+    assert not accepted
+    assert result is current
+    assert residual_vec == "r0"
+    assert replay.matvec_fn == "old_mv"
+    assert replay.solver_kind == "old"
 
 
 def test_rhs1_accept_measured_candidate_rejects_clean_baseline_without_win() -> None:
