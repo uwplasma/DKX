@@ -170,9 +170,7 @@ from .rhs1_preconditioner_auto_policy import (
 from .rhs1_schur_policy import resolve_rhs1_schur_base_kind
 from .problems.profile_response.handoff import (
     RHS1KSPReplayState,
-    rhs1_accept_candidate,
     rhs1_accept_candidate_and_update_replay,
-    rhs1_accept_measured_candidate,
     rhs1_accept_measured_candidate_and_update_replay,
 )
 from .problems.profile_response.auto_solve import (
