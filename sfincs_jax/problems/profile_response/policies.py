@@ -1978,6 +1978,42 @@ def rhs1_fast_post_xblock_polish_allowed(
     return float(residual_norm) > float(threshold)
 
 
+@dataclass(frozen=True)
+class RHS1FastPostXBlockPolishControls:
+    """Bounded Krylov controls for the fast post-xblock polish pass."""
+
+    restart: int
+    maxiter: int
+    tol: float
+
+
+def rhs1_fast_post_xblock_polish_controls_from_env(
+    *,
+    restart: int,
+    maxiter: int | None,
+    tol: float,
+) -> RHS1FastPostXBlockPolishControls:
+    """Parse fast post-xblock polish controls with legacy bounds."""
+
+    restart_use = _env_int(
+        "SFINCS_JAX_RHSMODE1_FAST_POST_XBLOCK_POLISH_RESTART",
+        min(int(restart), 40),
+    )
+    maxiter_use = _env_int(
+        "SFINCS_JAX_RHSMODE1_FAST_POST_XBLOCK_POLISH_MAXITER",
+        min(max(40, int(maxiter or 80)), 80),
+    )
+    tol_use = _env_float(
+        "SFINCS_JAX_RHSMODE1_FAST_POST_XBLOCK_POLISH_TOL",
+        min(float(tol), 1.0e-10),
+    )
+    return RHS1FastPostXBlockPolishControls(
+        restart=max(5, int(restart_use)),
+        maxiter=max(5, int(maxiter_use)),
+        tol=float(tol_use),
+    )
+
+
 def rhs1_fp_targeted_polish_allowed(
     *,
     op: Any,
@@ -2927,6 +2963,7 @@ def rhs1_pas_tz_guarded_stage2_retry() -> bool:
 
 __all__ = (
     "RHS1Constraint0PETScCompatConfig",
+    "RHS1FastPostXBlockPolishControls",
     "RHS1QIDeviceRankBudget",
     "RHS1QIDeviceSetupSummary",
     "RHS1SparseJAXConfig",
@@ -2941,6 +2978,7 @@ __all__ = (
     "rhs1_constraint0_petsc_compat_regularization",
     "rhs1_constraint0_sparse_first",
     "rhs1_fast_post_xblock_polish_allowed",
+    "rhs1_fast_post_xblock_polish_controls_from_env",
     "rhs1_fp_force_stage2",
     "rhs1_fp_targeted_polish_allowed",
     "rhs1_fp_xblock_global_correction_allowed",

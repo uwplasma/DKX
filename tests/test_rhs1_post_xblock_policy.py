@@ -3,7 +3,9 @@ from __future__ import annotations
 from types import SimpleNamespace
 
 from sfincs_jax.rhs1_post_xblock_policy import (
+    RHS1FastPostXBlockPolishControls,
     rhs1_fast_post_xblock_polish_allowed,
+    rhs1_fast_post_xblock_polish_controls_from_env,
     rhs1_fp_xblock_global_correction_allowed,
     rhs1_fp_targeted_polish_allowed,
     rhs1_scipy_rescue_abs_floor_after_xblock,
@@ -64,6 +66,51 @@ def test_fast_post_xblock_polish_respects_guards(monkeypatch) -> None:
     assert not rhs1_fast_post_xblock_polish_allowed(**{**kwargs, "backend": "gpu"})
     monkeypatch.setenv("SFINCS_JAX_RHSMODE1_FAST_POST_XBLOCK_POLISH", "0")
     assert not rhs1_fast_post_xblock_polish_allowed(**kwargs)
+
+
+def test_fast_post_xblock_polish_controls_preserve_defaults(monkeypatch) -> None:
+    monkeypatch.delenv("SFINCS_JAX_RHSMODE1_FAST_POST_XBLOCK_POLISH_RESTART", raising=False)
+    monkeypatch.delenv("SFINCS_JAX_RHSMODE1_FAST_POST_XBLOCK_POLISH_MAXITER", raising=False)
+    monkeypatch.delenv("SFINCS_JAX_RHSMODE1_FAST_POST_XBLOCK_POLISH_TOL", raising=False)
+
+    assert rhs1_fast_post_xblock_polish_controls_from_env(
+        restart=80,
+        maxiter=160,
+        tol=1.0e-8,
+    ) == RHS1FastPostXBlockPolishControls(
+        restart=40,
+        maxiter=80,
+        tol=1.0e-10,
+    )
+
+
+def test_fast_post_xblock_polish_controls_respect_env_and_bounds(monkeypatch) -> None:
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_FAST_POST_XBLOCK_POLISH_RESTART", "3")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_FAST_POST_XBLOCK_POLISH_MAXITER", "4")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_FAST_POST_XBLOCK_POLISH_TOL", "2e-9")
+
+    assert rhs1_fast_post_xblock_polish_controls_from_env(
+        restart=80,
+        maxiter=160,
+        tol=1.0e-8,
+    ) == RHS1FastPostXBlockPolishControls(
+        restart=5,
+        maxiter=5,
+        tol=2.0e-9,
+    )
+
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_FAST_POST_XBLOCK_POLISH_RESTART", "bad")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_FAST_POST_XBLOCK_POLISH_MAXITER", "bad")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_FAST_POST_XBLOCK_POLISH_TOL", "bad")
+    assert rhs1_fast_post_xblock_polish_controls_from_env(
+        restart=12,
+        maxiter=None,
+        tol=1.0e-12,
+    ) == RHS1FastPostXBlockPolishControls(
+        restart=12,
+        maxiter=80,
+        tol=1.0e-12,
+    )
 
 
 def test_fp_targeted_polish_triggers_for_medium_large_cpu_fp(monkeypatch) -> None:

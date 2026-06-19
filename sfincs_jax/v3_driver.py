@@ -580,6 +580,7 @@ from .rhs1_large_cpu_policy import (
 )
 from .problems.profile_response.policies import (
     rhs1_fast_post_xblock_polish_allowed as _rhs1_fast_post_xblock_polish_allowed_impl,
+    rhs1_fast_post_xblock_polish_controls_from_env,
     rhs1_fp_xblock_global_correction_allowed as _rhs1_fp_xblock_global_correction_allowed_impl,
     rhs1_fp_targeted_polish_allowed as _rhs1_fp_targeted_polish_allowed_impl,
     rhs1_scipy_rescue_abs_floor_after_xblock as _rhs1_scipy_rescue_abs_floor_after_xblock_impl,
@@ -13599,32 +13600,20 @@ def solve_v3_full_system_linear_gmres(
             )
             and preconditioner_reduced is not None
         ):
-            polish_restart_env = os.environ.get("SFINCS_JAX_RHSMODE1_FAST_POST_XBLOCK_POLISH_RESTART", "").strip()
-            polish_maxiter_env = os.environ.get("SFINCS_JAX_RHSMODE1_FAST_POST_XBLOCK_POLISH_MAXITER", "").strip()
-            polish_tol_env = os.environ.get("SFINCS_JAX_RHSMODE1_FAST_POST_XBLOCK_POLISH_TOL", "").strip()
-            try:
-                polish_restart = int(polish_restart_env) if polish_restart_env else min(int(restart), 40)
-            except ValueError:
-                polish_restart = min(int(restart), 40)
-            try:
-                polish_maxiter = int(polish_maxiter_env) if polish_maxiter_env else min(max(40, int(maxiter or 80)), 80)
-            except ValueError:
-                polish_maxiter = min(max(40, int(maxiter or 80)), 80)
-            try:
-                polish_tol = float(polish_tol_env) if polish_tol_env else min(float(tol), 1.0e-10)
-            except ValueError:
-                polish_tol = min(float(tol), 1.0e-10)
-            polish_restart = max(5, int(polish_restart))
-            polish_maxiter = max(5, int(polish_maxiter))
+            polish_controls = rhs1_fast_post_xblock_polish_controls_from_env(
+                restart=int(restart),
+                maxiter=maxiter,
+                tol=float(tol),
+            )
             res_reduced, _accepted = rhs1_run_fast_post_xblock_polish(
                 current_result=res_reduced,
                 matvec_fn=mv_reduced,
                 b_vec=rhs_reduced,
                 precond_fn=preconditioner_reduced,
-                tol=polish_tol,
+                tol=polish_controls.tol,
                 atol=atol,
-                restart=polish_restart,
-                maxiter=polish_maxiter,
+                restart=polish_controls.restart,
+                maxiter=polish_controls.maxiter,
                 precond_side=gmres_precond_side,
                 solve_linear=_solve_linear,
                 emit=emit,

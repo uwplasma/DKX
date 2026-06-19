@@ -42,10 +42,13 @@ Make `sfincs_jax` research-grade while preserving the public user contract:
 
 Recent checkpoints:
 
+- RHSMode=1 fast post-xblock polish restart/maxiter/tolerance controls now use
+  a tested profile-response policy helper while the polish execution and
+  acceptance remain in the existing handoff helper (current checkpoint).
 - RHSMode=1 dense-fallback residual-ratio threshold parsing now uses a tested
   dense profile-response helper for default/invalid env handling, optional
   huge-residual limits, and trigger calculation across early, reduced, and
-  full-system dense fallback gates (current checkpoint).
+  full-system dense fallback gates (`7c39de7`).
 - Reduced active-DOF and full-system sparse host/direct-vs-ILU factor-control
   setup now share a tested sparse-PC helper for direct intent, factor dtype,
   cache-key stamping, dense/JAX factor flags, dense cache admission, and
@@ -187,14 +190,14 @@ Recent checkpoints:
 - `cb295ce` Extract sparse pattern setup.
 - `4b6a5b4` Extract sparse factor policy.
 
-Current source-size snapshot after dense fallback-threshold extraction:
+Current source-size snapshot after fast post-xblock polish-control extraction:
 
-- `sfincs_jax/v3_driver.py`: `17924` lines.
-- `solve_v3_full_system_linear_gmres`: `12593` lines.
+- `sfincs_jax/v3_driver.py`: `17913` lines.
+- `solve_v3_full_system_linear_gmres`: `12581` lines.
 - `sfincs_jax/v3_results.py`: `119` lines.
 - `sfincs_jax/problems/profile_response/residual.py`: `981` lines.
 - `sfincs_jax/problems/profile_response/handoff.py`: `598` lines.
-- `sfincs_jax/problems/profile_response/policies.py`: `2985` lines.
+- `sfincs_jax/problems/profile_response/policies.py`: `3023` lines.
 - `sfincs_jax/problems/profile_response/dense.py`: `701` lines.
 - `sfincs_jax/problems/profile_response/linear_solve.py`: `327` lines.
 - `sfincs_jax/problems/profile_response/active_projection.py`: `116` lines.
@@ -203,6 +206,16 @@ Current source-size snapshot after dense fallback-threshold extraction:
 
 Recent local validation:
 
+- Post-xblock policy shard after fast polish-control extraction:
+  `13 passed in 0.34 s`.
+- Sparse-host/minimum-norm/direct-tail driver shard:
+  `32 passed, 100 deselected in 37.12 s`.
+- Broad profile-response/RHSMode=1 policy, setup, diagnostics, solver, and
+  helper sweep after fast polish-control extraction:
+  `1070 passed in 48.62 s`.
+- Hygiene:
+  `ruff`, `compileall`, `git diff --check`, and `scripts/check_repo_size.py`
+  passed.
 - Dense profile-response shard after dense fallback-threshold extraction:
   `19 passed in 1.10 s`.
 - Sparse-host/minimum-norm/direct-tail driver shard:
