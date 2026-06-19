@@ -914,6 +914,14 @@ Recent local validation:
 - Broad profile-response/RHSMode=1 policy, setup, diagnostics, solver, and
   helper sweep after sparse-rescue explicit tail metadata context extraction:
   `1186 passed in 47.90 s`.
+- Sparse-PC helper shard after fortran-reduced xblock explicit metadata-state
+  handoff:
+  `229 passed in 1.79 s`.
+- Sparse-host/minimum-norm/direct-tail driver shard:
+  `32 passed, 100 deselected in 34.49 s`.
+- Broad profile-response/RHSMode=1 policy, setup, diagnostics, solver, and
+  helper sweep after fortran-reduced xblock explicit metadata-state handoff:
+  `1186 passed in 47.37 s`.
 - Older focused and broad validation checkpoints are intentionally omitted from
   this active plan; they remain available in git history.
 
@@ -926,7 +934,7 @@ Known CI issue fixed by this rewrite:
 
 ### 1. `v3_driver.py` Architecture Refactor
 
-Completion estimate: 48%.
+Completion estimate: 49%.
 
 Goal:
 
@@ -1173,12 +1181,20 @@ Completed recent boundaries:
 - RHSMode=1 sparse-rescue tail metadata now uses tested explicit diagnostics
   contexts instead of a driver `locals()` handoff; the legacy mapping wrapper
   remains covered for compatibility.
+- Fortran-reduced x-block final payload assembly now receives an explicit
+  final metadata-state mapping from the driver instead of the full driver
+  frame. The generic direct-tail metadata handoff is intentionally deferred
+  until direct-tail diagnostics are typed; an inline all-key dictionary would
+  make the driver less maintainable.
 
 Next steps:
 
 - Continue moving remaining generic sparse-PC result/diagnostic seams into
   cohesive `profile_response` helpers only where the replacement context can
   stay explicit and tested.
+- Split the generic sparse-PC direct-tail metadata contract before removing
+  its final broad diagnostic-state handoff; do not replace it with a giant
+  inline driver dictionary.
 - Continue extracting broad driver-state handoffs in sparse-PC branches only
   when the replacement context has focused tests and preserves diagnostic
   coverage.
