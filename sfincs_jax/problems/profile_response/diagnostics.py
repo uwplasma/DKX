@@ -656,6 +656,44 @@ def sparse_pc_factor_preflight_result_metadata(
     )
 
 
+@dataclass(frozen=True)
+class SparsePCPatternMetadataContext:
+    """Sparse pattern diagnostics consumed by generic sparse-PC metadata."""
+
+    summary: object
+    scope: object
+    build_s: object
+
+
+def sparse_pc_pattern_result_metadata_from_context(
+    context: SparsePCPatternMetadataContext,
+) -> dict[str, object]:
+    """Return sparse-PC pattern diagnostics for final metadata."""
+
+    summary = context.summary
+    return {
+        "sparse_pattern_nnz": int(summary.nnz),
+        "sparse_pattern_avg_row_nnz": float(summary.avg_row_nnz),
+        "sparse_pattern_max_row_nnz": int(summary.max_row_nnz),
+        "sparse_pattern_scope": context.scope,
+        "sparse_pattern_build_s": float(context.build_s),
+    }
+
+
+def sparse_pc_pattern_result_metadata(
+    state: Mapping[str, object],
+) -> dict[str, object]:
+    """Return sparse pattern diagnostics from historical driver names."""
+
+    return sparse_pc_pattern_result_metadata_from_context(
+        SparsePCPatternMetadataContext(
+            summary=state["summary"],
+            scope=state["sparse_pattern_scope"],
+            build_s=state["pattern_build_s"],
+        )
+    )
+
+
 def sparse_pc_gmres_result_metadata(
     state: Mapping[str, object],
 ) -> dict[str, object]:
@@ -686,6 +724,9 @@ def sparse_pc_gmres_result_metadata(
     factor_preflight_metadata = state.get("sparse_pc_factor_preflight_metadata")
     if factor_preflight_metadata is None:
         factor_preflight_metadata = sparse_pc_factor_preflight_result_metadata(state)
+    pattern_metadata = state.get("sparse_pc_pattern_metadata")
+    if pattern_metadata is None:
+        pattern_metadata = sparse_pc_pattern_result_metadata(state)
 
     metadata: dict[str, object] = {
         "solver_kind": (
@@ -752,11 +793,7 @@ def sparse_pc_gmres_result_metadata(
         "setup_s": float(state["setup_s"]),
         "solve_s": float(state["solve_s"]),
         "elapsed_s": float(state["sparse_timer"].elapsed_s()),
-        "sparse_pattern_nnz": int(state["summary"].nnz),
-        "sparse_pattern_avg_row_nnz": float(state["summary"].avg_row_nnz),
-        "sparse_pattern_max_row_nnz": int(state["summary"].max_row_nnz),
-        "sparse_pattern_scope": state["sparse_pattern_scope"],
-        "sparse_pattern_build_s": float(state["pattern_build_s"]),
+        **pattern_metadata,
         "sparse_pc_factor_s": float(state["pc_factor_s"]),
         "sparse_pc_factor_elapsed_s": _optional_float(factor_elapsed_s),
         "sparse_pc_factor_nbytes_estimate": _optional_int(factor_nbytes_estimate),

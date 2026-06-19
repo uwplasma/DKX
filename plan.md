@@ -999,6 +999,19 @@ Recent local validation:
 - Hygiene after generic sparse-PC factor-preflight metadata context extraction:
   `python -m compileall -q sfincs_jax`, `git diff --check`, and
   `python scripts/check_repo_size.py` passed.
+- Generic sparse-PC sparse-pattern metadata context focused tests:
+  `4 passed in 1.07 s`.
+- Profile-response diagnostics/sparse-PC shard after generic sparse-PC
+  sparse-pattern metadata context extraction: `247 passed in 1.97 s`.
+- Xblock/sparse-host/minimum-norm/direct-tail driver shard after generic
+  sparse-PC sparse-pattern metadata context extraction:
+  `36 passed, 96 deselected in 37.62 s`.
+- Broad profile-response/RHSMode=1 policy, setup, diagnostics, solver, and
+  helper sweep after generic sparse-PC sparse-pattern metadata context
+  extraction: `1190 passed in 48.57 s`.
+- Hygiene after generic sparse-PC sparse-pattern metadata context extraction:
+  `python -m compileall -q sfincs_jax`, `git diff --check`, and
+  `python scripts/check_repo_size.py` passed.
 - Older focused and broad validation checkpoints are intentionally omitted from
   this active plan; they remain available in git history.
 
@@ -1011,7 +1024,7 @@ Known CI issue fixed by this rewrite:
 
 ### 1. `v3_driver.py` Architecture Refactor
 
-Completion estimate: 54%.
+Completion estimate: 55%.
 
 Goal:
 
@@ -1279,6 +1292,10 @@ Completed recent boundaries:
 - Generic sparse-PC factor-preflight metadata now uses a typed diagnostics
   context and is precomputed before finalization, so raw preflight probe fields
   no longer propagate through `SparsePCGMRESFinalizationContext`.
+- Generic sparse-PC sparse-pattern metadata now uses a typed diagnostics
+  context and is precomputed before finalization, so raw pattern summary,
+  scope, and build-time fields no longer propagate through
+  `SparsePCGMRESFinalizationContext`.
 - X-block sparse-PC final metadata now receives a whitelisted driver-state copy
   from a tested `profile_response.sparse_pc` helper instead of handing the
   whole frame to `XBlockSparsePCFinalPayloadContext`. After this boundary,
@@ -1291,9 +1308,9 @@ Next steps:
   cohesive `profile_response` helpers only where the replacement context can
   stay explicit and tested.
 - Replace the remaining generic sparse-PC finalization whitelist groups with
-  typed post-MinRes, pattern-summary, Krylov-control, and sparse-factor
-  contexts; direct-tail and factor-preflight metadata are already precomputed
-  before finalization.
+  typed post-MinRes, Krylov-control, and sparse-factor contexts; direct-tail,
+  factor-preflight, and sparse-pattern metadata are already precomputed before
+  finalization.
 - Replace the remaining whitelisted local-scope copies with typed sparse-PC
   and x-block diagnostics contexts once each key group has focused tests.
 - Continue extracting sparse-PC state/metadata seams after the source split

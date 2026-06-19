@@ -8,6 +8,7 @@ import jax.numpy as jnp
 from sfincs_jax.problems.profile_response.diagnostics import (
     SparsePCDirectTailMetadataContext,
     SparsePCFactorPreflightMetadataContext,
+    SparsePCPatternMetadataContext,
     SparseRescueTailMetadataContext,
     XBlockAssembledOperatorDiagnosticsContext,
     XBlockSparsePCCoreDiagnosticsContext,
@@ -19,6 +20,8 @@ from sfincs_jax.problems.profile_response.diagnostics import (
     sparse_pc_factor_preflight_result_metadata,
     sparse_pc_factor_preflight_result_metadata_from_context,
     sparse_pc_gmres_result_metadata,
+    sparse_pc_pattern_result_metadata,
+    sparse_pc_pattern_result_metadata_from_context,
     sparse_rescue_tail_metadata,
     sparse_rescue_tail_metadata_from_context,
     sparse_xblock_rescue_metadata,
@@ -1188,6 +1191,34 @@ def test_sparse_pc_factor_preflight_result_metadata_context_matches_state() -> N
     assert metadata["sparse_pc_factor_preflight_residual_diagnostics"] == {
         "tail": 0.2
     }
+
+
+def test_sparse_pc_pattern_result_metadata_context_matches_state() -> None:
+    state = {
+        "summary": SimpleNamespace(
+            nnz=np.int64(30),
+            avg_row_nnz=np.float64(3.0),
+            max_row_nnz=np.int64(5),
+        ),
+        "sparse_pattern_scope": "fortran_reduced_active_dof",
+        "pattern_build_s": np.float64(0.125),
+    }
+
+    metadata = sparse_pc_pattern_result_metadata(state)
+    context_metadata = sparse_pc_pattern_result_metadata_from_context(
+        SparsePCPatternMetadataContext(
+            summary=state["summary"],
+            scope=state["sparse_pattern_scope"],
+            build_s=state["pattern_build_s"],
+        )
+    )
+
+    assert context_metadata == metadata
+    assert metadata["sparse_pattern_nnz"] == 30
+    assert metadata["sparse_pattern_avg_row_nnz"] == 3.0
+    assert metadata["sparse_pattern_max_row_nnz"] == 5
+    assert metadata["sparse_pattern_scope"] == "fortran_reduced_active_dof"
+    assert metadata["sparse_pattern_build_s"] == 0.125
 
 
 def test_xblock_sparse_pc_core_diagnostics_preserve_payload() -> None:

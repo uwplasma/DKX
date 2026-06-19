@@ -7181,11 +7181,14 @@ def test_sparse_pc_gmres_finalization_state_from_driver_scope_filters_scope() ->
     scope = {key: object() for key in keys}
     direct_tail_metadata = {"kind": "precomputed"}
     factor_preflight_metadata = {"preflight": "precomputed"}
+    pattern_metadata = {"pattern": "precomputed"}
     scope["sparse_pc_direct_tail_metadata"] = direct_tail_metadata
     scope["sparse_pc_factor_preflight_metadata"] = factor_preflight_metadata
+    scope["sparse_pc_pattern_metadata"] = pattern_metadata
     scope["unrelated_solver_scratch"] = object()
     scope["direct_tail_structured_pc_metadata"] = {"kind": "raw"}
     scope["factor_preflight_enabled"] = True
+    scope["summary"] = object()
 
     state = sparse_pc_gmres_finalization_state_from_driver_scope(scope)
 
@@ -7193,14 +7196,17 @@ def test_sparse_pc_gmres_finalization_state_from_driver_scope_filters_scope() ->
         *keys,
         "sparse_pc_direct_tail_metadata",
         "sparse_pc_factor_preflight_metadata",
+        "sparse_pc_pattern_metadata",
     )
     assert "unrelated_solver_scratch" not in state
     assert "direct_tail_structured_pc_metadata" not in state
     assert "factor_preflight_enabled" not in state
+    assert "summary" not in state
     for key in keys:
         assert state[key] is scope[key]
     assert state["sparse_pc_direct_tail_metadata"] is direct_tail_metadata
     assert state["sparse_pc_factor_preflight_metadata"] is factor_preflight_metadata
+    assert state["sparse_pc_pattern_metadata"] is pattern_metadata
 
     incomplete_scope = dict(scope)
     missing = keys[0]

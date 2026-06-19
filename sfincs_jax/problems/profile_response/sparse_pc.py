@@ -20,6 +20,7 @@ from .diagnostics import (
     sparse_pc_factor_preflight_result_metadata,
     sparse_pc_direct_tail_result_metadata,
     sparse_pc_gmres_result_metadata,
+    sparse_pc_pattern_result_metadata,
     sparse_rescue_tail_metadata,
     sparse_xblock_rescue_metadata,
     xblock_assembled_operator_diagnostics,
@@ -413,7 +414,6 @@ _SPARSE_PC_GMRES_FINALIZATION_CORE_STATE_KEYS = (
     "mv_count",
     "op",
     "pattern",
-    "pattern_build_s",
     "pc_form",
     "pc_maxiter",
     "pc_restart",
@@ -425,7 +425,6 @@ _SPARSE_PC_GMRES_FINALIZATION_CORE_STATE_KEYS = (
     "rhs",
     "rhs_norm",
     "setup_s",
-    "sparse_pattern_scope",
     "sparse_pc_default_factor_kind",
     "sparse_pc_default_ilu_drop_tol",
     "sparse_pc_default_ilu_fill_factor",
@@ -444,7 +443,6 @@ _SPARSE_PC_GMRES_FINALIZATION_CORE_STATE_KEYS = (
     "sparse_pc_rhs",
     "sparse_pc_use_active_dof",
     "sparse_timer",
-    "summary",
     "target",
     "tokamak_fp_pc",
     "tol",
@@ -483,8 +481,13 @@ def sparse_pc_gmres_finalization_state_from_driver_scope(
         factor_preflight_metadata = scope["sparse_pc_factor_preflight_metadata"]
     else:
         factor_preflight_metadata = sparse_pc_factor_preflight_result_metadata(scope)
+    if "sparse_pc_pattern_metadata" in scope:
+        pattern_metadata = scope["sparse_pc_pattern_metadata"]
+    else:
+        pattern_metadata = sparse_pc_pattern_result_metadata(scope)
     state["sparse_pc_direct_tail_metadata"] = direct_tail_metadata
     state["sparse_pc_factor_preflight_metadata"] = factor_preflight_metadata
+    state["sparse_pc_pattern_metadata"] = pattern_metadata
     return state
 
 
