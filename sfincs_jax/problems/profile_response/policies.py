@@ -2412,6 +2412,98 @@ def rhs1_sparse_rescue_policy_setup(
     )
 
 
+def rhs1_sparse_rescue_initial_messages(
+    *,
+    ordering: RHS1SparseRescueOrdering,
+    size: int,
+    sparse_max_size: int,
+    sparse_jax_memory_disabled_message: str | None = None,
+    large_cpu_sparse_exact_lu: bool | None = None,
+    large_cpu_label: str = "large CPU sparse",
+    targeted_rescue_kind: str | None = None,
+) -> tuple[tuple[int, str], ...]:
+    """Format initial sparse-rescue policy progress messages without side effects."""
+
+    messages: list[tuple[int, str]] = []
+    if ordering.prefer_sparse_exact_over_dense_shortcut:
+        messages.append(
+            (
+                0,
+                "solve_v3_full_system_linear_gmres: preferring sparse exact rescue over dense shortcut",
+            )
+        )
+    if ordering.reason_size_large_cpu:
+        sparse_exact_lu = bool(large_cpu_sparse_exact_lu)
+        messages.append(
+            (
+                0,
+                "solve_v3_full_system_linear_gmres: "
+                f"{large_cpu_label} {'LU' if sparse_exact_lu else 'ILU'} rescue "
+                f"(size={int(size)} > max={int(sparse_max_size)})",
+            )
+        )
+    elif ordering.reason_size_exact_direct:
+        messages.append(
+            (
+                0,
+                "solve_v3_full_system_linear_gmres: exact sparse LU rescue "
+                f"(size={int(size)} > max={int(sparse_max_size)})",
+            )
+        )
+    elif ordering.reason_size_targeted:
+        rescue_kind = str(targeted_rescue_kind or "targeted")
+        messages.append(
+            (
+                0,
+                "solve_v3_full_system_linear_gmres: targeted sparse "
+                f"{rescue_kind} rescue (size={int(size)} > max={int(sparse_max_size)})",
+            )
+        )
+    elif ordering.reason_size_disabled:
+        messages.append(
+            (1, f"sparse_ilu: disabled (size={int(size)} > max={int(sparse_max_size)})")
+        )
+    if sparse_jax_memory_disabled_message is not None:
+        messages.append((1, sparse_jax_memory_disabled_message))
+    return tuple(messages)
+
+
+def rhs1_sparse_rescue_tail_skip_messages(
+    *,
+    ordering: RHS1SparseRescueOrdering,
+    residual_norm: float,
+    rhs1_precond_kind: str,
+) -> tuple[tuple[int, str], ...]:
+    """Format sparse-rescue tail skip messages without moving driver control flow."""
+
+    messages: list[tuple[int, str]] = []
+    if ordering.reason_large_cpu_exact_skips_targeted:
+        messages.append(
+            (
+                1,
+                "solve_v3_full_system_linear_gmres: exact large-CPU sparse LU selected "
+                "-> skipping targeted sparse xblock/sxblock rescue",
+            )
+        )
+    if ordering.reason_pas_fast_accept:
+        messages.append(
+            (
+                1,
+                "solve_v3_full_system_linear_gmres: PAS fast-accept "
+                f"(residual={float(residual_norm):.3e}) -> skip sparse rescue tail",
+            )
+        )
+    if ordering.reason_gpu_sparse_skip:
+        messages.append(
+            (
+                1,
+                "solve_v3_full_system_linear_gmres: GPU sparse fallback skipped after "
+                f"{rhs1_precond_kind} accept (residual={float(residual_norm):.3e})",
+            )
+        )
+    return tuple(messages)
+
+
 # From sfincs_jax.rhs1_sparse_polish_policy
 def rhs1_polish_enabled(*, env_name: str) -> bool:
     """Return whether a polish stage is enabled by its boolean-like env var."""
@@ -2652,9 +2744,11 @@ __all__ = (
     "rhs1_skip_global_sparse_after_xblock_allowed",
     "rhs1_sparse_enabled_initial",
     "rhs1_sparse_exact_lu_requested",
+    "rhs1_sparse_rescue_initial_messages",
     "rhs1_sparse_kind_use",
     "rhs1_sparse_prefer_skips_stage2",
     "rhs1_sparse_rescue_policy_setup",
+    "rhs1_sparse_rescue_tail_skip_messages",
     "rhs1_stage2_ratio",
     "rhs1_stage2_trigger",
     "rhs1_xblock_fallback_initial_guess",

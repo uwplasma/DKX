@@ -2,7 +2,9 @@ from __future__ import annotations
 
 from sfincs_jax.rhs1_sparse_rescue_policy import (
     rhs1_resolved_sparse_rescue_ordering,
+    rhs1_sparse_rescue_initial_messages,
     rhs1_sparse_rescue_policy_setup,
+    rhs1_sparse_rescue_tail_skip_messages,
     rhs1_sparse_enabled_initial,
     rhs1_sparse_kind_use,
 )
@@ -201,3 +203,93 @@ def test_rhs1_sparse_rescue_policy_setup_keeps_ordering_flags() -> None:
     assert setup.ordering.reason_size_large_cpu
     assert setup.ordering.reason_large_cpu_exact_skips_targeted
     assert not setup.ordering.xblock_rescue_active
+
+
+def test_rhs1_sparse_rescue_initial_messages_format_policy_decisions() -> None:
+    setup = rhs1_sparse_rescue_policy_setup(
+        sparse_precond_mode="on",
+        sparse_precond_kind="jax",
+        has_fp=True,
+        has_pas=False,
+        residual_norm=1.0,
+        target=1.0e-8,
+        rhs_mode=1,
+        include_phi1=False,
+        size=1000,
+        sparse_max_size=2000,
+        precond_dtype="float32",
+        sparse_jax_max_mb=1.0,
+    )
+    assert rhs1_sparse_rescue_initial_messages(
+        ordering=setup.ordering,
+        size=1000,
+        sparse_max_size=2000,
+        sparse_jax_memory_disabled_message=setup.sparse_jax_memory_disabled_message,
+    ) == ((
+        1,
+        "sparse_jax: disabled (est_mem=4.0 MB > max_mb=1.0)",
+    ),)
+
+    decision = rhs1_resolved_sparse_rescue_ordering(
+        sparse_enabled=True,
+        sparse_kind_use="scipy",
+        size=4096,
+        sparse_max_size=1024,
+        large_cpu_sparse_rescue=True,
+    )
+    assert rhs1_sparse_rescue_initial_messages(
+        ordering=decision,
+        size=4096,
+        sparse_max_size=1024,
+        large_cpu_sparse_exact_lu=False,
+        large_cpu_label="gpu host-sparse",
+    ) == ((
+        0,
+        "solve_v3_full_system_linear_gmres: gpu host-sparse ILU rescue "
+        "(size=4096 > max=1024)",
+    ),)
+
+
+def test_rhs1_sparse_rescue_tail_skip_messages_format_policy_decisions() -> None:
+    decision = rhs1_resolved_sparse_rescue_ordering(
+        sparse_enabled=True,
+        sparse_kind_use="scipy",
+        size=4096,
+        sparse_max_size=1024,
+        large_cpu_sparse_rescue=True,
+        sparse_exact_direct=True,
+        pas_fast_accept=True,
+    )
+    assert rhs1_sparse_rescue_tail_skip_messages(
+        ordering=decision,
+        residual_norm=1.25e-4,
+        rhs1_precond_kind="xblock",
+    ) == (
+        (
+            1,
+            "solve_v3_full_system_linear_gmres: exact large-CPU sparse LU selected "
+            "-> skipping targeted sparse xblock/sxblock rescue",
+        ),
+        (
+            1,
+            "solve_v3_full_system_linear_gmres: PAS fast-accept "
+            "(residual=1.250e-04) -> skip sparse rescue tail",
+        ),
+    )
+
+    decision = rhs1_resolved_sparse_rescue_ordering(
+        sparse_enabled=True,
+        sparse_kind_use="scipy",
+        size=256,
+        sparse_max_size=1024,
+        gpu_sparse_skip=True,
+    )
+    assert rhs1_sparse_rescue_tail_skip_messages(
+        ordering=decision,
+        residual_norm=2.0e-3,
+        rhs1_precond_kind="pas_lite",
+    ) == ((
+        1,
+        "solve_v3_full_system_linear_gmres: GPU sparse fallback skipped after "
+        "pas_lite accept (residual=2.000e-03)",
+    ),)

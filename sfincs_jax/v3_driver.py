@@ -341,7 +341,9 @@ from .problems.profile_response.policies import (
     rhs1_qi_device_setup_summary as _rhs1_qi_device_setup_summary,
     rhs1_qi_device_status_fields as _rhs1_qi_device_status_fields,
     rhs1_qi_device_tail_block_required as _rhs1_qi_device_tail_block_required,
+    rhs1_sparse_rescue_initial_messages,
     rhs1_sparse_rescue_policy_setup,
+    rhs1_sparse_rescue_tail_skip_messages,
     rhs1_xblock_fallback_initial_guess as _rhs1_xblock_fallback_initial_guess,
 )
 from .problems.profile_response.setup import (
@@ -12605,38 +12607,25 @@ def solve_v3_full_system_linear_gmres(
         sparse_kind_use = str(sparse_policy.kind_use)
         sparse_xblock_rescue_active = bool(sparse_order.xblock_rescue_active)
         sparse_sxblock_rescue_active = bool(sparse_order.sxblock_rescue_active)
-        if sparse_order.prefer_sparse_exact_over_dense_shortcut and emit is not None:
-            emit(
-                0,
-                "solve_v3_full_system_linear_gmres: preferring sparse exact rescue over dense shortcut",
-            )
+        large_cpu_sparse_label = "large CPU sparse"
         if sparse_order.reason_size_large_cpu:
             sparse_exact_lu = _rhsmode1_large_cpu_sparse_exact_lu_allowed(active_size=int(active_size))
-            if emit is not None:
-                backend_name = str(jax.default_backend()).strip().lower()
-                sparse_label = "large CPU sparse" if backend_name == "cpu" else f"{backend_name} host-sparse"
-                emit(
-                    0,
-                    f"solve_v3_full_system_linear_gmres: {sparse_label} {'LU' if sparse_exact_lu else 'ILU'} rescue "
-                    f"(size={int(active_size)} > max={int(sparse_max_size)})",
-                )
-        elif sparse_order.reason_size_exact_direct and emit is not None:
-            emit(
-                0,
-                "solve_v3_full_system_linear_gmres: exact sparse LU rescue "
-                f"(size={int(active_size)} > max={int(sparse_max_size)})",
+            backend_name = str(jax.default_backend()).strip().lower()
+            large_cpu_sparse_label = (
+                "large CPU sparse" if backend_name == "cpu" else f"{backend_name} host-sparse"
             )
-        elif sparse_order.reason_size_targeted and emit is not None:
+        if emit is not None:
             rescue_kind = "xblock" if sparse_xblock_rescue_active else "sxblock"
-            emit(
-                0,
-                "solve_v3_full_system_linear_gmres: targeted sparse "
-                f"{rescue_kind} rescue (size={int(active_size)} > max={int(sparse_max_size)})",
-            )
-        elif sparse_order.reason_size_disabled and emit is not None:
-            emit(1, f"sparse_ilu: disabled (size={int(active_size)} > max={int(sparse_max_size)})")
-        if sparse_policy.sparse_jax_memory_disabled_message is not None and emit is not None:
-            emit(1, sparse_policy.sparse_jax_memory_disabled_message)
+            for _level, _message in rhs1_sparse_rescue_initial_messages(
+                ordering=sparse_order,
+                size=int(active_size),
+                sparse_max_size=int(sparse_max_size),
+                sparse_jax_memory_disabled_message=sparse_policy.sparse_jax_memory_disabled_message,
+                large_cpu_sparse_exact_lu=bool(sparse_exact_lu),
+                large_cpu_label=large_cpu_sparse_label,
+                targeted_rescue_kind=rescue_kind,
+            ):
+                emit(_level, _message)
 
         host_sparse_direct_used = False
         precond_sparse_xblock_current = None
@@ -12705,25 +12694,13 @@ def solve_v3_full_system_linear_gmres(
             if float(res_reduced.residual_norm) < qi_device_residual_before:
                 ksp_replay.x0_vec = res_reduced.x
 
-        if sparse_order.reason_large_cpu_exact_skips_targeted:
-            if emit is not None:
-                emit(
-                    1,
-                    "solve_v3_full_system_linear_gmres: exact large-CPU sparse LU selected "
-                    "-> skipping targeted sparse xblock/sxblock rescue",
-                )
-        if sparse_order.reason_pas_fast_accept and emit is not None:
-            emit(
-                1,
-                "solve_v3_full_system_linear_gmres: PAS fast-accept "
-                f"(residual={float(res_reduced.residual_norm):.3e}) -> skip sparse rescue tail",
-            )
-        if sparse_order.reason_gpu_sparse_skip and emit is not None:
-            emit(
-                1,
-                "solve_v3_full_system_linear_gmres: GPU sparse fallback skipped after "
-                f"{rhs1_precond_kind} accept (residual={float(res_reduced.residual_norm):.3e})",
-            )
+        if emit is not None:
+            for _level, _message in rhs1_sparse_rescue_tail_skip_messages(
+                ordering=sparse_order,
+                residual_norm=float(res_reduced.residual_norm),
+                rhs1_precond_kind=rhs1_precond_kind,
+            ):
+                emit(_level, _message)
         skip_global_sparse_after_xblock = False
         if sparse_enabled and float(res_reduced.residual_norm) > target_reduced:
             if sparse_xblock_rescue_active:
@@ -15306,37 +15283,26 @@ def solve_v3_full_system_linear_gmres(
         sparse_kind_use = str(sparse_policy.kind_use)
         if sparse_order.reason_size_large_cpu:
             sparse_exact_lu = _rhsmode1_large_cpu_sparse_exact_lu_allowed(active_size=int(op.total_size))
-            if emit is not None:
-                emit(
-                    0,
-                    f"solve_v3_full_system_linear_gmres: large CPU sparse {'LU' if sparse_exact_lu else 'ILU'} rescue "
-                    f"(size={int(op.total_size)} > max={int(sparse_max_size)})",
-                )
-        elif sparse_order.reason_size_exact_direct and emit is not None:
-            emit(
-                0,
-                "solve_v3_full_system_linear_gmres: exact sparse LU rescue "
-                f"(size={int(op.total_size)} > max={int(sparse_max_size)})",
-            )
-        elif sparse_order.reason_size_disabled and emit is not None:
-            emit(1, f"sparse_ilu: disabled (size={int(op.total_size)} > max={int(sparse_max_size)})")
-        if sparse_policy.sparse_jax_memory_disabled_message is not None and emit is not None:
-            emit(1, sparse_policy.sparse_jax_memory_disabled_message)
+        if emit is not None:
+            for _level, _message in rhs1_sparse_rescue_initial_messages(
+                ordering=sparse_order,
+                size=int(op.total_size),
+                sparse_max_size=int(sparse_max_size),
+                sparse_jax_memory_disabled_message=sparse_policy.sparse_jax_memory_disabled_message,
+                large_cpu_sparse_exact_lu=bool(sparse_exact_lu),
+                large_cpu_label="large CPU sparse",
+            ):
+                emit(_level, _message)
 
         dense_matrix_cache: np.ndarray | None = None
         host_sparse_direct_used = False
-        if sparse_order.reason_pas_fast_accept and emit is not None:
-            emit(
-                1,
-                "solve_v3_full_system_linear_gmres: PAS fast-accept "
-                f"(residual={float(result.residual_norm):.3e}) -> skip sparse rescue tail",
-            )
-        if sparse_order.reason_gpu_sparse_skip and emit is not None:
-            emit(
-                1,
-                "solve_v3_full_system_linear_gmres: GPU sparse fallback skipped after "
-                f"{rhs1_precond_kind} accept (residual={float(result.residual_norm):.3e})",
-            )
+        if emit is not None:
+            for _level, _message in rhs1_sparse_rescue_tail_skip_messages(
+                ordering=sparse_order,
+                residual_norm=float(result.residual_norm),
+                rhs1_precond_kind=rhs1_precond_kind,
+            ):
+                emit(_level, _message)
         if sparse_enabled and float(result.residual_norm) > target:
             if sparse_kind_use == "jax":
                 try:
