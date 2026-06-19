@@ -98,6 +98,9 @@ Recent local validation:
   `215 passed in 1.40 s`.
 - Explicit sparse-host/direct-tail driver shard:
   `32 passed, 100 deselected in 32.57 s`.
+- Broad profile-response/RHSMode=1 policy, setup, diagnostics, solver, and
+  helper sweep:
+  `989 passed in 43.41 s`.
 - Hygiene:
   `ruff`, `compileall`, `git diff --check`, and `scripts/check_repo_size.py`
   passed.
