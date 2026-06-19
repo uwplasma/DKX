@@ -237,6 +237,7 @@ from .problems.profile_response.sparse_pc import (
     DirectTailStructuredBuildContext,
     DirectTailSupportModePreflightContext,
     FortranReducedXBlockFactorBuildContext,
+    FortranReducedXBlockFinalPayloadContext,
     FortranReducedXBlockGlobalCouplingStageContext,
     FortranReducedXBlockKrylovSetupContext,
     FortranReducedXBlockKrylovSolveContext,
@@ -277,7 +278,7 @@ from .problems.profile_response.sparse_pc import (
     build_sparse_pc_active_dof_setup,
     build_direct_tail_materialization_setup,
     finalize_sparse_pc_gmres_with_dtype_retry_from_driver_state,
-    fortran_reduced_xblock_final_payload_from_driver_state,
+    fortran_reduced_xblock_final_payload,
     xblock_sparse_pc_final_payload as build_xblock_sparse_pc_final_payload,
     evaluate_xblock_moment_schur_probe_result,
     evaluate_sparse_pc_factor_preflight,
@@ -6709,9 +6710,15 @@ def solve_v3_full_system_linear_gmres(
                 x0=x0_sparse,
             )
             fortran_reduced_xblock_payload = (
-                fortran_reduced_xblock_final_payload_from_driver_state(
-                    locals(),
-                    result=xblock_krylov_result,
+                fortran_reduced_xblock_final_payload(
+                    FortranReducedXBlockFinalPayloadContext(
+                        diagnostic_state=locals(),
+                        result=xblock_krylov_result,
+                        atol=float(atol),
+                        tol=float(tol),
+                        rhs_norm=float(rhs_norm),
+                        target=float(target),
+                    ),
                     expand_reduced=_sparse_pc_expand_reduced,
                 )
             )

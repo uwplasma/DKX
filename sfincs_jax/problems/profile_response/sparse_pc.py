@@ -1741,6 +1741,18 @@ class FortranReducedXBlockGlobalCouplingStageResult:
 
 
 @dataclass(frozen=True)
+class FortranReducedXBlockFinalPayloadContext:
+    """Explicit inputs for final fortran-reduced xblock sparse-PC payloads."""
+
+    diagnostic_state: Mapping[str, object]
+    result: SparsePCGMRESResult
+    atol: float
+    tol: float
+    rhs_norm: float
+    target: float
+
+
+@dataclass(frozen=True)
 class SparsePCEntryPolicySetup:
     """Physics classification and GMRES budget for RHSMode=1 sparse-PC paths."""
 
@@ -8320,6 +8332,26 @@ def fortran_reduced_xblock_final_payload_from_driver_state(
     result: SparsePCGMRESResult,
     expand_reduced: ArrayFn,
 ) -> SparsePCGMRESFinalPayload:
+    """Build the final payload for the fortran-reduced x-block branch from state."""
+
+    return fortran_reduced_xblock_final_payload(
+        FortranReducedXBlockFinalPayloadContext(
+            diagnostic_state=state,
+            result=result,
+            atol=float(state["atol"]),
+            tol=float(state["tol"]),
+            rhs_norm=float(state["rhs_norm"]),
+            target=float(state["target"]),
+        ),
+        expand_reduced=expand_reduced,
+    )
+
+
+def fortran_reduced_xblock_final_payload(
+    context: FortranReducedXBlockFinalPayloadContext,
+    *,
+    expand_reduced: ArrayFn,
+) -> SparsePCGMRESFinalPayload:
     """Build the final payload for the fortran-reduced x-block sparse-PC branch.
 
     The x-block branch has its own metadata schema, but its final convergence
@@ -8328,8 +8360,13 @@ def fortran_reduced_xblock_final_payload_from_driver_state(
     the driver while preserving the historical metadata keys.
     """
 
+    result = context.result
     residual_norm = float(result.residual_norm)
-    metadata_state = state.__class__(state) if isinstance(state, MutableMapping) else dict(state)
+    metadata_state = (
+        context.diagnostic_state.__class__(context.diagnostic_state)
+        if isinstance(context.diagnostic_state, MutableMapping)
+        else dict(context.diagnostic_state)
+    )
     metadata_state.update(
         {
             "x_np": np.asarray(result.x, dtype=np.float64),
@@ -8339,14 +8376,14 @@ def fortran_reduced_xblock_final_payload_from_driver_state(
             "fortran_reduced_xblock_accepted_converged": profile_residual_converged(
                 residual_norm,
                 profile_residual_target(
-                    atol=float(state["atol"]),
-                    tol=float(state["tol"]),
-                    rhs_norm=float(state["rhs_norm"]),
+                    atol=float(context.atol),
+                    tol=float(context.tol),
+                    rhs_norm=float(context.rhs_norm),
                 ),
             ),
             "fortran_reduced_xblock_factor_quality_rejected": not profile_residual_converged(
                 residual_norm,
-                float(state["target"]),
+                float(context.target),
             ),
         }
     )
@@ -9852,6 +9889,7 @@ __all__ = [
     "FortranReducedXBlockFactorPolicySetup",
     "FortranReducedXBlockFactorBuildContext",
     "FortranReducedXBlockFactorBuildResult",
+    "FortranReducedXBlockFinalPayloadContext",
     "FortranReducedXBlockInitialSeedPolicySetup",
     "FortranReducedXBlockInitialSeedResult",
     "FortranReducedXBlockGlobalCouplingStageContext",
@@ -10005,6 +10043,7 @@ __all__ = [
     "sparse_pc_gmres_final_payload_from_driver_state",
     "finalize_sparse_pc_gmres_from_driver_state",
     "finalize_sparse_pc_gmres_with_dtype_retry_from_driver_state",
+    "fortran_reduced_xblock_final_payload",
     "fortran_reduced_xblock_final_payload_from_driver_state",
     "xblock_sparse_pc_final_payload",
     "xblock_sparse_pc_final_payload_from_driver_state",

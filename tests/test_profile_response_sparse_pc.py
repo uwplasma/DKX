@@ -32,6 +32,7 @@ from sfincs_jax.problems.profile_response.sparse_pc import (
     SparsePCAutoPreflightRetryEvaluationContext,
     SparsePCGMRESControlPolicy,
     FortranReducedXBlockFactorBuildContext,
+    FortranReducedXBlockFinalPayloadContext,
     FortranReducedXBlockGlobalCouplingStageContext,
     FortranReducedXBlockKrylovSetupContext,
     FortranReducedXBlockKrylovSolveContext,
@@ -153,6 +154,7 @@ from sfincs_jax.problems.profile_response.sparse_pc import (
     resolve_xblock_sparse_pc_side_policy_setup,
     resolve_xblock_two_level_policy_setup,
     fortran_reduced_xblock_final_payload_from_driver_state,
+    fortran_reduced_xblock_final_payload,
     prepare_xblock_augmented_krylov_basis,
     prepare_xblock_krylov_solve_space,
     run_fortran_reduced_xblock_krylov_solve,
@@ -3494,8 +3496,8 @@ def test_fortran_reduced_xblock_result_metadata_formats_branch_payload() -> None
     assert metadata["sparse_pc_factor_quality_rejected"] is False
 
 
-def test_fortran_reduced_xblock_final_payload_from_driver_state_sets_gates() -> None:
-    state = _DefaultSparsePCDriverState(
+def _fortran_reduced_xblock_driver_state() -> _DefaultSparsePCDriverState:
+    return _DefaultSparsePCDriverState(
         {
             "op": SimpleNamespace(total_size=4),
             "atol": 0.25,
@@ -3547,15 +3549,50 @@ def test_fortran_reduced_xblock_final_payload_from_driver_state_sets_gates() -> 
         }
     )
 
+
+def _fortran_reduced_xblock_result() -> SparsePCGMRESResult:
+    return SparsePCGMRESResult(
+        x=np.asarray([1.0, 2.0]),
+        residual_norm=0.2,
+        preconditioned_residual_norm=np.nan,
+        history=(1.0, 0.4, 0.2),
+        solve_s=1.25,
+    )
+
+
+def test_fortran_reduced_xblock_final_payload_uses_explicit_context() -> None:
+    state = _fortran_reduced_xblock_driver_state()
+
+    payload = fortran_reduced_xblock_final_payload(
+        FortranReducedXBlockFinalPayloadContext(
+            diagnostic_state=state,
+            result=_fortran_reduced_xblock_result(),
+            atol=0.25,
+            tol=0.0,
+            rhs_norm=1.0,
+            target=0.5,
+        ),
+        expand_reduced=lambda x: jnp.concatenate(
+            [jnp.asarray([0.0], dtype=x.dtype), x]
+        ),
+    )
+
+    assert isinstance(payload, SparsePCGMRESFinalPayload)
+    np.testing.assert_allclose(np.asarray(payload.x), np.asarray([0.0, 1.0, 2.0]))
+    assert float(payload.residual_norm) == pytest.approx(0.2)
+    assert payload.metadata["solver_kind"] == "fortran_reduced_pc_gmres"
+    assert payload.metadata["accepted_converged"] is True
+    assert payload.metadata["iterations"] == 3
+    assert payload.metadata["sparse_pc_factor_quality_rejected"] is False
+    assert payload.metadata["sparse_pc_residual_ratio_to_target"] == pytest.approx(0.4)
+
+
+def test_fortran_reduced_xblock_final_payload_from_driver_state_sets_gates() -> None:
+    state = _fortran_reduced_xblock_driver_state()
+
     payload = fortran_reduced_xblock_final_payload_from_driver_state(
         state,
-        result=SparsePCGMRESResult(
-            x=np.asarray([1.0, 2.0]),
-            residual_norm=0.2,
-            preconditioned_residual_norm=np.nan,
-            history=(1.0, 0.4, 0.2),
-            solve_s=1.25,
-        ),
+        result=_fortran_reduced_xblock_result(),
         expand_reduced=lambda x: jnp.concatenate(
             [jnp.asarray([0.0], dtype=x.dtype), x]
         ),

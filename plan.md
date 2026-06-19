@@ -888,6 +888,15 @@ Recent local validation:
 - Broad profile-response/RHSMode=1 policy, setup, diagnostics, solver, and
   helper sweep after xblock explicit final-payload context extraction:
   `1184 passed in 49.00 s`.
+- Sparse-PC helper shard after fortran-reduced xblock explicit final-payload
+  context extraction:
+  `228 passed in 2.22 s`.
+- Sparse-host/minimum-norm/direct-tail driver shard:
+  `32 passed, 100 deselected in 38.11 s`.
+- Broad profile-response/RHSMode=1 policy, setup, diagnostics, solver, and
+  helper sweep after fortran-reduced xblock explicit final-payload context
+  extraction:
+  `1185 passed in 49.90 s`.
 - Older focused and broad validation checkpoints are intentionally omitted from
   this active plan; they remain available in git history.
 
@@ -1137,6 +1146,9 @@ Completed recent boundaries:
 - X-block sparse-PC final payload assembly now uses a tested explicit context
   instead of a driver `locals()` handoff; the legacy state-wrapper delegates
   to the explicit path for compatibility.
+- Fortran-reduced x-block sparse-PC final payload assembly now uses a tested
+  explicit context for convergence-gate inputs, with the broad diagnostics
+  mapping named separately and the legacy state-wrapper kept for compatibility.
 
 Next steps:
 
