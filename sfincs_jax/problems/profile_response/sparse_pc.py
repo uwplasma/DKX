@@ -11,13 +11,13 @@ import jax.numpy as jnp
 import numpy as np
 
 from .diagnostics import (
-    _DIRECT_TAIL_SUFFIXES as DIRECT_TAIL_METADATA_SUFFIXES,
     XBlockAssembledOperatorDiagnosticsContext,
     XBlockSparsePCCoreDiagnosticsContext,
     XBlockSideProbeDiagnosticsContext,
     fortran_reduced_xblock_result_metadata,
     fp_xblock_global_correction_metadata,
     fp_xblock_highx_residual_correction_metadata,
+    sparse_pc_direct_tail_result_metadata,
     sparse_pc_gmres_result_metadata,
     sparse_rescue_tail_metadata,
     sparse_xblock_rescue_metadata,
@@ -462,39 +462,13 @@ _SPARSE_PC_GMRES_FINALIZATION_CORE_STATE_KEYS = (
     "x0_sparse",
 )
 
-_SPARSE_PC_GMRES_DIRECT_TAIL_BASE_STATE_KEYS = (
-    "direct_tail_built",
-    "direct_tail_direct_reduced_pmat_requested",
-    "direct_tail_enabled",
-    "direct_tail_error",
-    "direct_tail_operator_bundle",
-    "direct_tail_structured_max_nbytes",
-    "direct_tail_structured_pc_error",
-    "direct_tail_structured_pc_max_mb_auto",
-    "direct_tail_structured_pc_metadata",
-    "direct_tail_structured_pc_reason",
-    "direct_tail_structured_pc_requested",
-    "direct_tail_structured_pc_required",
-    "direct_tail_structured_pc_selected",
-    "direct_tail_support_mode_preflight_error",
-    "direct_tail_support_mode_preflight_metadata",
-    "direct_tail_support_mode_preflight_requested",
-    "direct_tail_support_mode_preflight_selected",
-    "direct_tail_true_active_block_species_count",
-    "direct_tail_true_window_specs",
-    "structured_pc_preflight_required",
-    "structured_pc_preflight_required_min_size",
-)
-
 _SPARSE_PC_GMRES_FINALIZATION_STATE_KEYS = _unique_state_keys(
     _SPARSE_PC_GMRES_FINALIZATION_CORE_STATE_KEYS,
-    _SPARSE_PC_GMRES_DIRECT_TAIL_BASE_STATE_KEYS,
-    tuple(f"direct_tail_{suffix}" for suffix in DIRECT_TAIL_METADATA_SUFFIXES),
 )
 
 
 def sparse_pc_gmres_finalization_driver_state_keys() -> tuple[str, ...]:
-    """Return driver-scope keys copied into sparse-PC GMRES finalization."""
+    """Return finalizer keys copied from driver scope before metadata injection."""
 
     return _SPARSE_PC_GMRES_FINALIZATION_STATE_KEYS
 
@@ -502,7 +476,7 @@ def sparse_pc_gmres_finalization_driver_state_keys() -> tuple[str, ...]:
 def sparse_pc_gmres_finalization_state_from_driver_scope(
     scope: Mapping[str, object],
 ) -> dict[str, object]:
-    """Copy only the sparse-PC finalizer state needed from a driver scope."""
+    """Copy only sparse-PC finalizer state and precompute direct-tail metadata."""
 
     missing = tuple(
         key for key in _SPARSE_PC_GMRES_FINALIZATION_STATE_KEYS if key not in scope
@@ -511,7 +485,13 @@ def sparse_pc_gmres_finalization_state_from_driver_scope(
         joined = ", ".join(missing[:8])
         suffix = "" if len(missing) <= 8 else f", ... ({len(missing)} total)"
         raise KeyError(f"sparse-PC GMRES finalization state missing: {joined}{suffix}")
-    return {key: scope[key] for key in _SPARSE_PC_GMRES_FINALIZATION_STATE_KEYS}
+    state = {key: scope[key] for key in _SPARSE_PC_GMRES_FINALIZATION_STATE_KEYS}
+    if "sparse_pc_direct_tail_metadata" in scope:
+        direct_tail_metadata = scope["sparse_pc_direct_tail_metadata"]
+    else:
+        direct_tail_metadata = sparse_pc_direct_tail_result_metadata(scope)
+    state["sparse_pc_direct_tail_metadata"] = direct_tail_metadata
+    return state
 
 
 _XBLOCK_SPARSE_PC_FINAL_METADATA_CORE_STATE_KEYS = (

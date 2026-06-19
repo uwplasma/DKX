@@ -976,6 +976,16 @@ Recent local validation:
 - Hygiene after x-block final metadata whitelist completeness fix:
   `python -m compileall -q sfincs_jax`, `git diff --check`, and
   `python scripts/check_repo_size.py` passed.
+- Generic sparse-PC finalization direct-tail metadata reduction focused tests:
+  `2 passed in 1.02 s`.
+- Profile-response diagnostics/sparse-PC shard after generic sparse-PC
+  finalization direct-tail metadata reduction: `245 passed in 1.93 s`.
+- Xblock/sparse-host/minimum-norm/direct-tail driver shard after generic
+  sparse-PC finalization direct-tail metadata reduction:
+  `36 passed, 96 deselected in 36.20 s`.
+- Hygiene after generic sparse-PC finalization direct-tail metadata reduction:
+  `python -m compileall -q sfincs_jax`, `git diff --check`, and
+  `python scripts/check_repo_size.py` passed.
 - Older focused and broad validation checkpoints are intentionally omitted from
   this active plan; they remain available in git history.
 
@@ -988,7 +998,7 @@ Known CI issue fixed by this rewrite:
 
 ### 1. `v3_driver.py` Architecture Refactor
 
-Completion estimate: 52%.
+Completion estimate: 53%.
 
 Goal:
 
@@ -1250,6 +1260,9 @@ Completed recent boundaries:
   compatibility boundary: the helper makes the required keys explicit while the
   next step replaces key groups with typed direct-tail, preflight, post-MinRes,
   and pattern-summary contexts.
+- Generic sparse-PC finalization now precomputes direct-tail metadata before
+  the finalizer state is built, so raw direct-tail setup/rescue keys no longer
+  propagate through `SparsePCGMRESFinalizationContext`.
 - X-block sparse-PC final metadata now receives a whitelisted driver-state copy
   from a tested `profile_response.sparse_pc` helper instead of handing the
   whole frame to `XBlockSparsePCFinalPayloadContext`. After this boundary,
@@ -1261,9 +1274,9 @@ Next steps:
 - Continue moving remaining generic sparse-PC result/diagnostic seams into
   cohesive `profile_response` helpers only where the replacement context can
   stay explicit and tested.
-- Replace the generic sparse-PC finalization whitelist groups with typed
-  direct-tail, factor-preflight, post-MinRes, and pattern-summary contexts;
-  avoid a giant inline driver dictionary.
+- Replace the remaining generic sparse-PC finalization whitelist groups with
+  typed factor-preflight, post-MinRes, pattern-summary, and Krylov-control
+  contexts; direct-tail metadata is already precomputed before finalization.
 - Replace the remaining whitelisted local-scope copies with typed sparse-PC
   and x-block diagnostics contexts once each key group has focused tests.
 - Continue extracting sparse-PC state/metadata seams after the source split

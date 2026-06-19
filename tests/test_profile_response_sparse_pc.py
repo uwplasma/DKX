@@ -7179,14 +7179,19 @@ def test_finalize_sparse_pc_gmres_from_driver_state_applies_polish_and_payload()
 def test_sparse_pc_gmres_finalization_state_from_driver_scope_filters_scope() -> None:
     keys = sparse_pc_gmres_finalization_driver_state_keys()
     scope = {key: object() for key in keys}
+    direct_tail_metadata = {"kind": "precomputed"}
+    scope["sparse_pc_direct_tail_metadata"] = direct_tail_metadata
     scope["unrelated_solver_scratch"] = object()
+    scope["direct_tail_structured_pc_metadata"] = {"kind": "raw"}
 
     state = sparse_pc_gmres_finalization_state_from_driver_scope(scope)
 
-    assert tuple(state) == keys
+    assert tuple(state) == (*keys, "sparse_pc_direct_tail_metadata")
     assert "unrelated_solver_scratch" not in state
+    assert "direct_tail_structured_pc_metadata" not in state
     for key in keys:
         assert state[key] is scope[key]
+    assert state["sparse_pc_direct_tail_metadata"] is direct_tail_metadata
 
     incomplete_scope = dict(scope)
     missing = keys[0]
