@@ -12,6 +12,7 @@ from sfincs_jax.rhs1_xblock_policy import (
     DEFAULT_FULL_FP_3D_LGMRES_RESCUE_OUTER_K,
     DEFAULT_FULL_FP_3D_RIGHT_PC_MAX_ACTIVE_SIZE,
     DEFAULT_FULL_FP_3D_SIDE_PROBE_MIN_ACTIVE_SIZE,
+    DEFAULT_FULL_FP_3D_SIDE_PROBE_SWITCH_RATIO,
     DEFAULT_RHS1_XBLOCK_LOCAL_COMPACT_ROW_NNZ_CAP,
     DEFAULT_RHS1_XBLOCK_LOCAL_DROP_REL,
     DEFAULT_RHS1_XBLOCK_LOCAL_DROP_TOL,
@@ -25,6 +26,7 @@ from sfincs_jax.rhs1_xblock_policy import (
     DEFAULT_RHS1_XBLOCK_LOWER_FILL_ROW_NNZ_CAP,
     resolve_rhs1_xblock_sparse_pc_policy,
     rhs1_xblock_device_host_fallback_decision,
+    rhs1_xblock_fallback_to_gmres_enabled,
     rhs1_xblock_qi_device_operator_reuse_decision,
     rhs1_xblock_gmres_restart,
     rhs1_xblock_krylov_method,
@@ -37,8 +39,10 @@ from sfincs_jax.rhs1_xblock_policy import (
     rhs1_xblock_lgmres_rescue_maxiter,
     rhs1_xblock_lgmres_rescue_outer_k,
     rhs1_xblock_precondition_side,
+    rhs1_xblock_side_probe_controls_from_env,
     rhs1_xblock_side_probe_enabled,
     rhs1_xblock_side_probe_should_switch,
+    rhs1_xblock_side_probe_switch_ratio,
 )
 
 
@@ -249,6 +253,142 @@ def test_lgmres_rescue_backend_guard_keeps_default_off_gpu() -> None:
     assert not rhs1_xblock_lgmres_rescue_backend_allowed(backend="gpu", env_value="")
     assert not rhs1_xblock_lgmres_rescue_backend_allowed(backend="cuda", env_value="0")
     assert rhs1_xblock_lgmres_rescue_backend_allowed(backend="gpu", env_value="1")
+
+
+def test_side_probe_controls_from_env_preserve_default_full_fp_3d_policy() -> None:
+    controls = rhs1_xblock_side_probe_controls_from_env(
+        env={},
+        explicit_side_env_value="",
+        full_fp_3d_pc=True,
+        active_size=DEFAULT_FULL_FP_3D_SIDE_PROBE_MIN_ACTIVE_SIZE,
+        krylov_method="gmres",
+        precondition_side="left",
+        pc_restart=70,
+        pc_maxiter=400,
+        backend="cpu",
+        krylov_env_value="",
+        device_host_fallback_used=False,
+    )
+
+    assert controls.enabled
+    assert controls.restart == 70
+    assert controls.maxiter == 1
+    assert controls.switch_ratio == DEFAULT_FULL_FP_3D_SIDE_PROBE_SWITCH_RATIO
+    assert controls.should_switch(DEFAULT_FULL_FP_3D_SIDE_PROBE_SWITCH_RATIO + 1.0)
+    assert not controls.should_switch(DEFAULT_FULL_FP_3D_SIDE_PROBE_SWITCH_RATIO - 1.0)
+    assert controls.lgmres_rescue_backend_allowed
+    assert controls.lgmres_rescue_enabled
+    assert controls.lgmres_rescue_maxiter == DEFAULT_FULL_FP_3D_LGMRES_RESCUE_MAXITER
+    assert controls.lgmres_rescue_maxiter_capped
+    assert controls.lgmres_rescue_outer_k == DEFAULT_FULL_FP_3D_LGMRES_RESCUE_OUTER_K
+    assert controls.global_coupling_keep_left_ratio == 1.0e6
+
+
+def test_side_probe_controls_from_env_respect_overrides_and_bounds() -> None:
+    controls = rhs1_xblock_side_probe_controls_from_env(
+        env={
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_SIDE_PROBE": "1",
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_SIDE_PROBE_MIN_ACTIVE": "999999",
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_SIDE_PROBE_RESTART": "1",
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_SIDE_PROBE_MAXITER": "-5",
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_SIDE_PROBE_SWITCH_RATIO": "10",
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_LGMRES_RESCUE": "1",
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_LGMRES_RESCUE_MAXITER": "96",
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_LGMRES_RESCUE_OUTER_K": "12",
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_GLOBAL_COUPLING_KEEP_LEFT_RATIO": "0.5",
+        },
+        explicit_side_env_value="right",
+        full_fp_3d_pc=False,
+        active_size=1,
+        krylov_method="fgmres_jax",
+        precondition_side="right",
+        pc_restart=70,
+        pc_maxiter=400,
+        backend="gpu",
+        krylov_env_value="gmres",
+        device_host_fallback_used=False,
+    )
+
+    assert controls.enabled
+    assert controls.restart == 2
+    assert controls.maxiter == 1
+    assert controls.switch_ratio == 10.0
+    assert controls.should_switch(11.0)
+    assert not controls.should_switch(10.0)
+    assert controls.lgmres_rescue_backend_allowed
+    assert controls.lgmres_rescue_enabled
+    assert controls.lgmres_rescue_maxiter == 96
+    assert controls.lgmres_rescue_maxiter_capped
+    assert controls.lgmres_rescue_outer_k == 12
+    assert controls.global_coupling_keep_left_ratio == 1.0
+
+
+def test_side_probe_controls_from_env_handle_invalid_values() -> None:
+    controls = rhs1_xblock_side_probe_controls_from_env(
+        env={
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_SIDE_PROBE": "0",
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_SIDE_PROBE_RESTART": "bad",
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_SIDE_PROBE_MAXITER": "bad",
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_SIDE_PROBE_SWITCH_RATIO": "bad",
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_LGMRES_RESCUE": "0",
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_LGMRES_RESCUE_MAXITER": "bad",
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_LGMRES_RESCUE_OUTER_K": "bad",
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_GLOBAL_COUPLING_KEEP_LEFT_RATIO": "bad",
+        },
+        explicit_side_env_value="",
+        full_fp_3d_pc=True,
+        active_size=DEFAULT_FULL_FP_3D_SIDE_PROBE_MIN_ACTIVE_SIZE,
+        krylov_method="gmres",
+        precondition_side="left",
+        pc_restart=70,
+        pc_maxiter=32,
+        backend="cpu",
+        krylov_env_value="",
+        device_host_fallback_used=False,
+    )
+
+    assert not controls.enabled
+    assert controls.restart == 70
+    assert controls.maxiter == 1
+    assert controls.switch_ratio == DEFAULT_FULL_FP_3D_SIDE_PROBE_SWITCH_RATIO
+    assert not controls.lgmres_rescue_backend_allowed
+    assert not controls.lgmres_rescue_enabled
+    assert controls.lgmres_rescue_maxiter == 32
+    assert not controls.lgmres_rescue_maxiter_capped
+    assert controls.lgmres_rescue_outer_k == DEFAULT_FULL_FP_3D_LGMRES_RESCUE_OUTER_K
+    assert controls.global_coupling_keep_left_ratio == 1.0e6
+
+
+def test_side_probe_switch_ratio_and_fallback_to_gmres_policy() -> None:
+    assert rhs1_xblock_side_probe_switch_ratio("") == DEFAULT_FULL_FP_3D_SIDE_PROBE_SWITCH_RATIO
+    assert rhs1_xblock_side_probe_switch_ratio("0.5") == 1.0
+    assert rhs1_xblock_side_probe_switch_ratio("bad") == DEFAULT_FULL_FP_3D_SIDE_PROBE_SWITCH_RATIO
+
+    assert rhs1_xblock_fallback_to_gmres_enabled(
+        env_value="",
+        xblock_side_probe_lgmres_rescue=False,
+        xblock_krylov_method="lgmres",
+    )
+    assert not rhs1_xblock_fallback_to_gmres_enabled(
+        env_value="",
+        xblock_side_probe_lgmres_rescue=True,
+        xblock_krylov_method="lgmres",
+    )
+    assert not rhs1_xblock_fallback_to_gmres_enabled(
+        env_value="",
+        xblock_side_probe_lgmres_rescue=False,
+        xblock_krylov_method="fgmres_jax",
+    )
+    assert rhs1_xblock_fallback_to_gmres_enabled(
+        env_value="1",
+        xblock_side_probe_lgmres_rescue=True,
+        xblock_krylov_method="fgmres_jax",
+    )
+    assert not rhs1_xblock_fallback_to_gmres_enabled(
+        env_value="off",
+        xblock_side_probe_lgmres_rescue=False,
+        xblock_krylov_method="lgmres",
+    )
 
 
 def test_device_host_fallback_defaults_to_large_qi_device_requests_only() -> None:

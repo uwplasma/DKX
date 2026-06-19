@@ -42,10 +42,16 @@ Make `sfincs_jax` research-grade while preserving the public user contract:
 
 Recent checkpoints:
 
+- RHSMode=1 x-block sparse-PC side-probe controls now use a tested
+  `rhs1_xblock_policy` resolver for probe enablement, probe Krylov limits,
+  switch threshold, LGMRES rescue backend/method caps, global-coupling
+  keep-left threshold, and fallback-to-GMRES defaulting while the side-probe
+  solve, seed preservation, side/method mutation, and candidate solve remain
+  driver-owned (current checkpoint).
 - RHSMode=1 PAS source-zero cleanup tolerance now uses one tested
   profile-response policy helper shared by active-DOF and full-system result
   finalization while source cleanup application remains driver-owned
-  (current checkpoint).
+  (`bf85368`).
 - RHSMode=1 CPU SciPy rescue controls now use a tested profile-response policy
   helper for enablement, residual-ratio threshold, restart/maxiter bounds,
   strong-preconditioner preference, and method selection while threshold
@@ -216,10 +222,10 @@ Recent checkpoints:
 - `cb295ce` Extract sparse pattern setup.
 - `4b6a5b4` Extract sparse factor policy.
 
-Current source-size snapshot after PAS source-zero tolerance extraction:
+Current source-size snapshot after x-block side-probe/fallback control extraction:
 
-- `sfincs_jax/v3_driver.py`: `17781` lines.
-- `solve_v3_full_system_linear_gmres`: `12442` lines.
+- `sfincs_jax/v3_driver.py`: `17751` lines.
+- `solve_v3_full_system_linear_gmres`: `12412` lines.
 - `sfincs_jax/v3_results.py`: `119` lines.
 - `sfincs_jax/problems/profile_response/residual.py`: `981` lines.
 - `sfincs_jax/problems/profile_response/handoff.py`: `598` lines.
@@ -229,9 +235,20 @@ Current source-size snapshot after PAS source-zero tolerance extraction:
 - `sfincs_jax/problems/profile_response/active_projection.py`: `116` lines.
 - `sfincs_jax/problems/profile_response/sparse_pc.py`: `8619` lines.
 - `sfincs_jax/rhs1_pas_policy.py`: `715` lines.
+- `sfincs_jax/rhs1_xblock_policy.py`: `1215` lines.
 
 Recent local validation:
 
+- X-block policy shard after x-block side-probe/fallback control extraction:
+  `64 passed in 0.41 s`.
+- Sparse-host/minimum-norm/direct-tail driver shard:
+  `32 passed, 100 deselected in 36.27 s`.
+- Broad profile-response/RHSMode=1 policy, setup, diagnostics, solver, and
+  helper sweep after x-block side-probe/fallback control extraction:
+  `1087 passed in 48.97 s`.
+- Hygiene:
+  `py_compile`, `ruff`, `compileall`, `git diff --check`, and
+  `scripts/check_repo_size.py` passed.
 - Post-xblock policy shard after PAS source-zero tolerance extraction:
   `26 passed in 0.35 s`.
 - Sparse-host/minimum-norm/direct-tail driver shard:

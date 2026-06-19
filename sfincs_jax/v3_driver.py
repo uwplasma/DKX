@@ -5671,18 +5671,20 @@ def solve_v3_full_system_linear_gmres(
                         )
                 qi_deflated_preconditioner_setup_s = float(sparse_timer.elapsed_s() - qi_deflated_start_s)
                 pc_factor_s += float(qi_deflated_preconditioner_setup_s)
-            xblock_side_probe_enabled = _rhs1_xblock_policy.rhs1_xblock_side_probe_enabled(
-                env_value=os.environ.get("SFINCS_JAX_RHSMODE1_XBLOCK_PC_SIDE_PROBE", ""),
+            xblock_side_probe_controls = _rhs1_xblock_policy.rhs1_xblock_side_probe_controls_from_env(
+                env=os.environ,
                 explicit_side_env_value=side_env,
                 full_fp_3d_pc=bool(full_fp_3d_pc),
                 active_size=int(active_size),
-                min_active_size_env_value=os.environ.get(
-                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_SIDE_PROBE_MIN_ACTIVE",
-                    "",
-                ),
                 krylov_method=str(xblock_krylov_method),
                 precondition_side=str(precondition_side),
+                pc_restart=int(pc_restart),
+                pc_maxiter=int(pc_maxiter),
+                backend=str(jax.default_backend()),
+                krylov_env_value=xblock_krylov_env,
+                device_host_fallback_used=bool(xblock_device_host_fallback_decision.used),
             )
+            xblock_side_probe_enabled = bool(xblock_side_probe_controls.enabled)
             xblock_side_probe_used = False
             xblock_side_probe_switched = False
             xblock_side_probe_initial_side: str | None = None
@@ -5706,16 +5708,8 @@ def solve_v3_full_system_linear_gmres(
                 xblock_side_probe_used = True
                 xblock_side_probe_initial_side = str(precondition_side)
                 xblock_side_probe_initial_method = str(xblock_krylov_method)
-                probe_restart = _rhs1_int_env(
-                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_SIDE_PROBE_RESTART",
-                    default=int(pc_restart),
-                    minimum=2,
-                )
-                probe_maxiter = _rhs1_int_env(
-                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_SIDE_PROBE_MAXITER",
-                    default=1,
-                    minimum=1,
-                )
+                probe_restart = int(xblock_side_probe_controls.restart)
+                probe_maxiter = int(xblock_side_probe_controls.maxiter)
                 if emit is not None:
                     emit(
                         0,
@@ -5769,38 +5763,21 @@ def solve_v3_full_system_linear_gmres(
                         x0_full = jnp.asarray(x_probe, dtype=jnp.float64)
                         xblock_side_probe_seed_used = True
                         xblock_side_probe_seed_residual_norm = float(residual_probe)
-                    should_switch_side = _rhs1_xblock_policy.rhs1_xblock_side_probe_should_switch(
-                        residual_ratio=xblock_side_probe_residual_ratio,
-                        switch_ratio_env_value=os.environ.get(
-                            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_SIDE_PROBE_SWITCH_RATIO",
-                            "",
-                        ),
+                    should_switch_side = xblock_side_probe_controls.should_switch(
+                        xblock_side_probe_residual_ratio
                     )
                     if should_switch_side and side_env in {"left", "right", "none"}:
                         should_switch_side = False
                         xblock_side_probe_switch_suppressed_by_explicit_side = True
-                    lgmres_rescue_env = os.environ.get("SFINCS_JAX_RHSMODE1_XBLOCK_PC_LGMRES_RESCUE", "")
-                    lgmres_rescue_backend_allowed = (
-                        _rhs1_xblock_policy.rhs1_xblock_lgmres_rescue_backend_allowed(
-                            backend=str(jax.default_backend()),
-                            env_value=lgmres_rescue_env,
-                        )
-                        or bool(xblock_device_host_fallback_decision.used)
-                    )
-                    lgmres_rescue_enabled = _rhs1_xblock_policy.rhs1_xblock_lgmres_rescue_enabled(
-                        env_value=lgmres_rescue_env,
-                        krylov_env_value=xblock_krylov_env,
-                    ) and bool(lgmres_rescue_backend_allowed)
+                    lgmres_rescue_enabled = bool(xblock_side_probe_controls.lgmres_rescue_enabled)
                     if (
                         should_switch_side
                         and bool(global_coupling_built)
                         and (not bool(lgmres_rescue_enabled))
                         and str(precondition_side) == "left"
                     ):
-                        keep_left_ratio = _rhs1_float_env(
-                            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_GLOBAL_COUPLING_KEEP_LEFT_RATIO",
-                            default=1.0e6,
-                            minimum=1.0,
+                        keep_left_ratio = float(
+                            xblock_side_probe_controls.global_coupling_keep_left_ratio
                         )
                         if (
                             xblock_side_probe_residual_ratio is not None
@@ -5815,14 +5792,12 @@ def solve_v3_full_system_linear_gmres(
                         # GMRES restart sensitivity, not the x-block factors.
                         xblock_krylov_method = "lgmres"
                         xblock_side_probe_lgmres_rescue = True
-                        pc_maxiter, xblock_lgmres_rescue_maxiter_capped = (
-                            _rhs1_xblock_policy.rhs1_xblock_lgmres_rescue_maxiter(
-                                os.environ.get("SFINCS_JAX_RHSMODE1_XBLOCK_PC_LGMRES_RESCUE_MAXITER", ""),
-                                int(pc_maxiter),
-                            )
+                        pc_maxiter = int(xblock_side_probe_controls.lgmres_rescue_maxiter)
+                        xblock_lgmres_rescue_maxiter_capped = bool(
+                            xblock_side_probe_controls.lgmres_rescue_maxiter_capped
                         )
-                        xblock_lgmres_rescue_outer_k = _rhs1_xblock_policy.rhs1_xblock_lgmres_rescue_outer_k(
-                            os.environ.get("SFINCS_JAX_RHSMODE1_XBLOCK_PC_LGMRES_RESCUE_OUTER_K", "")
+                        xblock_lgmres_rescue_outer_k = int(
+                            xblock_side_probe_controls.lgmres_rescue_outer_k
                         )
                     elif should_switch_side:
                         precondition_side = "right" if str(precondition_side) == "left" else "left"
@@ -6505,16 +6480,11 @@ def solve_v3_full_system_linear_gmres(
             candidate_matvecs = int(reported_matvecs)
             fallback_started_from_candidate = False
             fallback_candidate_improved_rhs = False
-            fallback_env = os.environ.get("SFINCS_JAX_RHSMODE1_XBLOCK_PC_FALLBACK_GMRES", "").strip().lower()
-            fallback_to_gmres = fallback_env not in {"0", "false", "f", "no", "off", ".false.", ".f."}
-            if xblock_side_probe_lgmres_rescue and not fallback_env:
-                fallback_to_gmres = False
-            if (
-                xblock_krylov_method
-                in {"fgmres_jax", "gmres_jax", "bicgstab_jax", "tfqmr_jax"}
-                and not fallback_env
-            ):
-                fallback_to_gmres = False
+            fallback_to_gmres = _rhs1_xblock_policy.rhs1_xblock_fallback_to_gmres_enabled(
+                env_value=os.environ.get("SFINCS_JAX_RHSMODE1_XBLOCK_PC_FALLBACK_GMRES", ""),
+                xblock_side_probe_lgmres_rescue=bool(xblock_side_probe_lgmres_rescue),
+                xblock_krylov_method=str(xblock_krylov_method),
+            )
             if (
                 xblock_krylov_method != "gmres"
                 and fallback_to_gmres

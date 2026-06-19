@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 import math
 
@@ -43,6 +44,27 @@ class RHS1XBlockSparsePCPolicy:
     ignored_krylov_env: bool
     gmres_restart: int
     restart_capped: bool
+
+
+@dataclass(frozen=True)
+class RHS1XBlockSideProbeControls:
+    """Resolved controls for the bounded x-block precondition-side probe."""
+
+    enabled: bool
+    restart: int
+    maxiter: int
+    switch_ratio: float
+    lgmres_rescue_backend_allowed: bool
+    lgmres_rescue_enabled: bool
+    lgmres_rescue_maxiter: int
+    lgmres_rescue_maxiter_capped: bool
+    lgmres_rescue_outer_k: int
+    global_coupling_keep_left_ratio: float
+
+    def should_switch(self, residual_ratio: float | None) -> bool:
+        """Return whether the measured side-probe residual is weak enough to switch."""
+        value = _finite_float_or_none(residual_ratio)
+        return bool(value is not None and value > float(self.switch_ratio))
 
 
 @dataclass(frozen=True)
@@ -199,6 +221,20 @@ class RHS1XBlockLowerFillAcceptance:
 
 def _normalize_policy_token(value: object) -> str:
     return str(value).strip().lower().replace("-", "_")
+
+
+def _env_value(env: Mapping[str, object] | None, name: str) -> str:
+    source = {} if env is None else env
+    return str(source.get(name, "")).strip()
+
+
+def _parse_int_value(env_value: object, default: int, *, minimum: int = 0) -> int:
+    raw = str(env_value).strip()
+    try:
+        value = int(raw) if raw else int(default)
+    except (TypeError, ValueError):
+        value = int(default)
+    return max(int(minimum), int(value))
 
 
 def _parse_nonnegative_int_value(env_value: object, default: int) -> int:
@@ -621,19 +657,21 @@ def rhs1_xblock_side_probe_should_switch(
     switch_ratio_env_value: str,
 ) -> bool:
     """Return whether a default-side probe is weak enough to try the other side."""
-    raw = str(switch_ratio_env_value).strip()
+    threshold = rhs1_xblock_side_probe_switch_ratio(switch_ratio_env_value)
+    value = _finite_float_or_none(residual_ratio)
+    return bool(value is not None and value > threshold)
+
+
+def rhs1_xblock_side_probe_switch_ratio(env_value: str) -> float:
+    """Return the residual-ratio threshold for side-probe switching."""
+    raw = str(env_value).strip()
     try:
         threshold = float(raw) if raw else DEFAULT_FULL_FP_3D_SIDE_PROBE_SWITCH_RATIO
     except ValueError:
         threshold = DEFAULT_FULL_FP_3D_SIDE_PROBE_SWITCH_RATIO
-    threshold = max(1.0, float(threshold))
-    if residual_ratio is None:
-        return False
-    try:
-        value = float(residual_ratio)
-    except (TypeError, ValueError):
-        return False
-    return bool(value == value and value not in {float("inf"), float("-inf")} and value > threshold)
+    if not math.isfinite(float(threshold)):
+        threshold = DEFAULT_FULL_FP_3D_SIDE_PROBE_SWITCH_RATIO
+    return max(1.0, float(threshold))
 
 
 def rhs1_xblock_lgmres_rescue_enabled(*, env_value: str, krylov_env_value: str) -> bool:
@@ -662,6 +700,106 @@ def rhs1_xblock_lgmres_rescue_backend_allowed(*, backend: str, env_value: str) -
     if raw in {"1", "true", "t", "yes", "on", ".true.", ".t."}:
         return True
     return str(backend).strip().lower() == "cpu"
+
+
+def rhs1_xblock_side_probe_controls_from_env(
+    *,
+    env: Mapping[str, object] | None,
+    explicit_side_env_value: str,
+    full_fp_3d_pc: bool,
+    active_size: int | None,
+    krylov_method: str,
+    precondition_side: str,
+    pc_restart: int,
+    pc_maxiter: int,
+    backend: str,
+    krylov_env_value: str,
+    device_host_fallback_used: bool,
+) -> RHS1XBlockSideProbeControls:
+    """Resolve side-probe and LGMRES-rescue controls from an environment mapping."""
+
+    side_probe_env = _env_value(env, "SFINCS_JAX_RHSMODE1_XBLOCK_PC_SIDE_PROBE")
+    min_active_env = _env_value(
+        env,
+        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_SIDE_PROBE_MIN_ACTIVE",
+    )
+    lgmres_env = _env_value(env, "SFINCS_JAX_RHSMODE1_XBLOCK_PC_LGMRES_RESCUE")
+    backend_allowed = (
+        rhs1_xblock_lgmres_rescue_backend_allowed(
+            backend=backend,
+            env_value=lgmres_env,
+        )
+        or bool(device_host_fallback_used)
+    )
+    maxiter, maxiter_capped = rhs1_xblock_lgmres_rescue_maxiter(
+        _env_value(env, "SFINCS_JAX_RHSMODE1_XBLOCK_PC_LGMRES_RESCUE_MAXITER"),
+        int(pc_maxiter),
+    )
+    return RHS1XBlockSideProbeControls(
+        enabled=rhs1_xblock_side_probe_enabled(
+            env_value=side_probe_env,
+            explicit_side_env_value=explicit_side_env_value,
+            full_fp_3d_pc=bool(full_fp_3d_pc),
+            active_size=active_size,
+            min_active_size_env_value=min_active_env,
+            krylov_method=krylov_method,
+            precondition_side=precondition_side,
+        ),
+        restart=_parse_int_value(
+            _env_value(env, "SFINCS_JAX_RHSMODE1_XBLOCK_PC_SIDE_PROBE_RESTART"),
+            int(pc_restart),
+            minimum=2,
+        ),
+        maxiter=_parse_int_value(
+            _env_value(env, "SFINCS_JAX_RHSMODE1_XBLOCK_PC_SIDE_PROBE_MAXITER"),
+            1,
+            minimum=1,
+        ),
+        switch_ratio=rhs1_xblock_side_probe_switch_ratio(
+            _env_value(env, "SFINCS_JAX_RHSMODE1_XBLOCK_PC_SIDE_PROBE_SWITCH_RATIO")
+        ),
+        lgmres_rescue_backend_allowed=bool(backend_allowed),
+        lgmres_rescue_enabled=bool(
+            backend_allowed
+            and rhs1_xblock_lgmres_rescue_enabled(
+                env_value=lgmres_env,
+                krylov_env_value=krylov_env_value,
+            )
+        ),
+        lgmres_rescue_maxiter=int(maxiter),
+        lgmres_rescue_maxiter_capped=bool(maxiter_capped),
+        lgmres_rescue_outer_k=rhs1_xblock_lgmres_rescue_outer_k(
+            _env_value(env, "SFINCS_JAX_RHSMODE1_XBLOCK_PC_LGMRES_RESCUE_OUTER_K")
+        ),
+        global_coupling_keep_left_ratio=_parse_finite_float_value(
+            _env_value(
+                env,
+                "SFINCS_JAX_RHSMODE1_XBLOCK_PC_GLOBAL_COUPLING_KEEP_LEFT_RATIO",
+            ),
+            1.0e6,
+            minimum=1.0,
+        ),
+    )
+
+
+def rhs1_xblock_fallback_to_gmres_enabled(
+    *,
+    env_value: str,
+    xblock_side_probe_lgmres_rescue: bool,
+    xblock_krylov_method: str,
+) -> bool:
+    """Return whether a failed non-GMRES x-block solve should retry host GMRES."""
+
+    raw = str(env_value).strip().lower()
+    fallback_to_gmres = raw not in _FALSE_VALUES
+    if bool(xblock_side_probe_lgmres_rescue) and not raw:
+        fallback_to_gmres = False
+    if (
+        str(xblock_krylov_method) in {"fgmres_jax", "gmres_jax", "bicgstab_jax", "tfqmr_jax"}
+        and not raw
+    ):
+        fallback_to_gmres = False
+    return bool(fallback_to_gmres)
 
 
 def rhs1_xblock_device_host_fallback_decision(
@@ -1050,11 +1188,13 @@ __all__ = [
     "RHS1XBlockLocalSolveCandidate",
     "RHS1XBlockLocalSolveTuning",
     "RHS1XBlockLowerFillAcceptance",
+    "RHS1XBlockSideProbeControls",
     "RHS1XBlockSparsePCPolicy",
     "resolve_rhs1_xblock_sparse_pc_policy",
     "rhs1_xblock_device_host_fallback_decision",
     "rhs1_xblock_qi_device_operator_reuse_decision",
     "rhs1_xblock_gmres_restart",
+    "rhs1_xblock_fallback_to_gmres_enabled",
     "rhs1_xblock_krylov_method",
     "rhs1_xblock_local_solve_candidate",
     "rhs1_xblock_local_solve_metadata_label",
@@ -1067,7 +1207,9 @@ __all__ = [
     "rhs1_xblock_lgmres_rescue_maxiter",
     "rhs1_xblock_lgmres_rescue_outer_k",
     "rhs1_xblock_precondition_side",
+    "rhs1_xblock_side_probe_controls_from_env",
     "rhs1_xblock_side_probe_enabled",
     "rhs1_xblock_side_probe_min_active_size",
     "rhs1_xblock_side_probe_should_switch",
+    "rhs1_xblock_side_probe_switch_ratio",
 ]
