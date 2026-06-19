@@ -942,6 +942,16 @@ Recent local validation:
 - Hygiene after that xblock metadata CI fix:
   `python -m compileall -q sfincs_jax`, `git diff --check`, and
   `python scripts/check_repo_size.py` passed.
+- Sparse-PC whitelist finalization-state helper focused tests:
+  `2 passed in 1.02 s`.
+- Profile-response diagnostics/sparse-PC shard after generic sparse-PC
+  finalization whitelist extraction: `244 passed in 1.91 s`.
+- Xblock/sparse-host/minimum-norm/direct-tail driver shard after generic
+  sparse-PC finalization whitelist extraction:
+  `36 passed, 96 deselected in 36.23 s`.
+- Hygiene after generic sparse-PC finalization whitelist extraction:
+  `python -m compileall -q sfincs_jax`, `git diff --check`, and
+  `python scripts/check_repo_size.py` passed.
 - Older focused and broad validation checkpoints are intentionally omitted from
   this active plan; they remain available in git history.
 
@@ -954,7 +964,7 @@ Known CI issue fixed by this rewrite:
 
 ### 1. `v3_driver.py` Architecture Refactor
 
-Completion estimate: 50%.
+Completion estimate: 51%.
 
 Goal:
 
@@ -1210,16 +1220,21 @@ Completed recent boundaries:
   path with named suffix groups. The legacy mapping wrapper remains compatible,
   and generic sparse-PC result metadata can now consume precomputed direct-tail
   metadata without carrying every raw direct-tail driver key.
+- Generic sparse-PC finalization now receives a whitelisted driver-state copy
+  from a tested `profile_response.sparse_pc` helper instead of handing the
+  whole frame to `SparsePCGMRESFinalizationContext`. This is a transitional
+  compatibility boundary: the helper makes the required keys explicit while the
+  next step replaces key groups with typed direct-tail, preflight, post-MinRes,
+  and pattern-summary contexts.
 
 Next steps:
 
 - Continue moving remaining generic sparse-PC result/diagnostic seams into
   cohesive `profile_response` helpers only where the replacement context can
   stay explicit and tested.
-- Build the generic sparse-PC final metadata state from typed direct-tail,
-  factor-preflight, post-minres, and pattern-summary contexts before removing
-  its final broad diagnostic-state handoff; do not replace it with a giant
-  inline driver dictionary.
+- Replace the generic sparse-PC finalization whitelist groups with typed
+  direct-tail, factor-preflight, post-MinRes, and pattern-summary contexts;
+  avoid a giant inline driver dictionary.
 - Continue extracting broad driver-state handoffs in sparse-PC branches only
   when the replacement context has focused tests and preserves diagnostic
   coverage.

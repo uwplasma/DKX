@@ -343,6 +343,7 @@ from .problems.profile_response.sparse_pc import (
     build_sparse_jax_retry_preconditioner,
     resolve_sparse_host_or_ilu_factor_controls,
     finalize_sparse_pc_gmres_with_dtype_retry,
+    sparse_pc_gmres_finalization_state_from_driver_scope,
     sparse_host_direct_fallback_payload,
     sparse_host_direct_solve_from_pattern,
     sparse_minimum_norm_solve_from_pattern,
@@ -8796,7 +8797,9 @@ def solve_v3_full_system_linear_gmres(
         )
         sparse_pc_final_payload = finalize_sparse_pc_gmres_with_dtype_retry(
             SparsePCGMRESFinalizationContext(
-                diagnostic_state=locals(),
+                diagnostic_state=sparse_pc_gmres_finalization_state_from_driver_scope(
+                    locals()
+                ),
                 result=SparsePCGMRESResult(
                     x=np.asarray(x_np, dtype=np.float64),
                     residual_norm=float(residual_norm_sparse_pc),

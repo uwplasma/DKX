@@ -121,6 +121,8 @@ from sfincs_jax.problems.profile_response.sparse_pc import (
     finalize_xblock_two_level_metadata,
     finalize_xblock_moment_schur_metadata,
     finalize_sparse_pc_gmres_with_dtype_retry,
+    sparse_pc_gmres_finalization_driver_state_keys,
+    sparse_pc_gmres_finalization_state_from_driver_scope,
     prepare_fortran_reduced_xblock_initial_guess,
     prepare_xblock_initial_guess,
     resolve_fortran_reduced_sparse_pc_backend,
@@ -7170,6 +7172,25 @@ def test_finalize_sparse_pc_gmres_from_driver_state_applies_polish_and_payload()
     assert state["x_np"].tolist() == [1.0, 2.0]
     assert any("post-minres improved" in message for _, message in messages)
     assert any("sparse_pc_gmres complete" in message for _, message in messages)
+
+
+def test_sparse_pc_gmres_finalization_state_from_driver_scope_filters_scope() -> None:
+    keys = sparse_pc_gmres_finalization_driver_state_keys()
+    scope = {key: object() for key in keys}
+    scope["unrelated_solver_scratch"] = object()
+
+    state = sparse_pc_gmres_finalization_state_from_driver_scope(scope)
+
+    assert tuple(state) == keys
+    assert "unrelated_solver_scratch" not in state
+    for key in keys:
+        assert state[key] is scope[key]
+
+    incomplete_scope = dict(scope)
+    missing = keys[0]
+    incomplete_scope.pop(missing)
+    with pytest.raises(KeyError, match=missing):
+        sparse_pc_gmres_finalization_state_from_driver_scope(incomplete_scope)
 
 
 def test_finalize_sparse_pc_gmres_with_dtype_retry_updates_copied_state(

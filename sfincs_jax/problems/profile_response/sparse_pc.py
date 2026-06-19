@@ -11,6 +11,7 @@ import jax.numpy as jnp
 import numpy as np
 
 from .diagnostics import (
+    _DIRECT_TAIL_SUFFIXES as DIRECT_TAIL_METADATA_SUFFIXES,
     XBlockAssembledOperatorDiagnosticsContext,
     XBlockSparsePCCoreDiagnosticsContext,
     XBlockSideProbeDiagnosticsContext,
@@ -379,6 +380,138 @@ class SparsePCGMRESFinalizationContext:
     factor_bundle: Any
     pc_factor_s: float
     setup_s: float | None
+
+
+def _unique_state_keys(*groups: Sequence[str]) -> tuple[str, ...]:
+    """Return state keys in first-seen order without duplicate diagnostics."""
+
+    keys: list[str] = []
+    seen: set[str] = set()
+    for group in groups:
+        for key in group:
+            if key in seen:
+                continue
+            seen.add(key)
+            keys.append(key)
+    return tuple(keys)
+
+
+_SPARSE_PC_GMRES_FINALIZATION_CORE_STATE_KEYS = (
+    "_operator_bundle_pc",
+    "_precond_sparse",
+    "_sparse_pc_factor_mv",
+    "_mv_true",
+    "atol",
+    "constrained_pas_pc",
+    "emit",
+    "factor_bundle_pc",
+    "factor_preflight_enabled",
+    "factor_preflight_error",
+    "factor_preflight_improvement_ratio",
+    "factor_preflight_max_target_ratio",
+    "factor_preflight_passed",
+    "factor_preflight_required",
+    "factor_preflight_residual_after",
+    "factor_preflight_residual_before",
+    "factor_preflight_residual_diagnostics",
+    "factor_preflight_seed_enabled",
+    "factor_preflight_seed_used",
+    "factor_preflight_target_ratio",
+    "fortran_reduced_sparse_pc",
+    "fortran_reduced_sparse_pc_backend",
+    "fortran_reduced_sparse_pc_backend_reason",
+    "fortran_reduced_xblock_min_size",
+    "mv_count",
+    "op",
+    "pattern",
+    "pattern_build_s",
+    "pc_form",
+    "pc_maxiter",
+    "pc_restart",
+    "pc_shift",
+    "preconditioner_species",
+    "preconditioner_x",
+    "preconditioner_x_min_l",
+    "preconditioner_xi",
+    "rhs",
+    "rhs_norm",
+    "setup_s",
+    "sparse_pattern_scope",
+    "sparse_pc_default_factor_kind",
+    "sparse_pc_default_ilu_drop_tol",
+    "sparse_pc_default_ilu_fill_factor",
+    "sparse_pc_default_pattern_color_batch",
+    "sparse_pc_default_permc_spec",
+    "sparse_pc_factor_dtype_initial",
+    "sparse_pc_factorization",
+    "sparse_pc_first_attempt_maxiter",
+    "sparse_pc_fp_dense_velocity_block",
+    "sparse_pc_linear_size",
+    "sparse_pc_permc_spec",
+    "sparse_pc_post_minres_alpha_clip",
+    "sparse_pc_post_minres_min_improvement",
+    "sparse_pc_post_minres_steps",
+    "sparse_pc_preconditioner_operator",
+    "sparse_pc_rhs",
+    "sparse_pc_use_active_dof",
+    "sparse_timer",
+    "summary",
+    "target",
+    "tokamak_fp_pc",
+    "tol",
+    "x0_sparse",
+)
+
+_SPARSE_PC_GMRES_DIRECT_TAIL_BASE_STATE_KEYS = (
+    "direct_tail_built",
+    "direct_tail_direct_reduced_pmat_requested",
+    "direct_tail_enabled",
+    "direct_tail_error",
+    "direct_tail_operator_bundle",
+    "direct_tail_structured_max_nbytes",
+    "direct_tail_structured_pc_error",
+    "direct_tail_structured_pc_max_mb_auto",
+    "direct_tail_structured_pc_metadata",
+    "direct_tail_structured_pc_reason",
+    "direct_tail_structured_pc_requested",
+    "direct_tail_structured_pc_required",
+    "direct_tail_structured_pc_selected",
+    "direct_tail_support_mode_preflight_error",
+    "direct_tail_support_mode_preflight_metadata",
+    "direct_tail_support_mode_preflight_requested",
+    "direct_tail_support_mode_preflight_selected",
+    "direct_tail_true_active_block_species_count",
+    "direct_tail_true_window_specs",
+    "structured_pc_preflight_required",
+    "structured_pc_preflight_required_min_size",
+)
+
+_SPARSE_PC_GMRES_FINALIZATION_STATE_KEYS = _unique_state_keys(
+    _SPARSE_PC_GMRES_FINALIZATION_CORE_STATE_KEYS,
+    _SPARSE_PC_GMRES_DIRECT_TAIL_BASE_STATE_KEYS,
+    tuple(f"direct_tail_{suffix}" for suffix in DIRECT_TAIL_METADATA_SUFFIXES),
+)
+
+
+def sparse_pc_gmres_finalization_driver_state_keys() -> tuple[str, ...]:
+    """Return driver-scope keys copied into sparse-PC GMRES finalization."""
+
+    return _SPARSE_PC_GMRES_FINALIZATION_STATE_KEYS
+
+
+def sparse_pc_gmres_finalization_state_from_driver_scope(
+    scope: Mapping[str, object],
+) -> dict[str, object]:
+    """Copy only the sparse-PC finalizer state needed from a driver scope."""
+
+    missing = tuple(
+        key for key in _SPARSE_PC_GMRES_FINALIZATION_STATE_KEYS if key not in scope
+    )
+    if missing:
+        joined = ", ".join(missing[:8])
+        suffix = "" if len(missing) <= 8 else f", ... ({len(missing)} total)"
+        raise KeyError(f"sparse-PC GMRES finalization state missing: {joined}{suffix}")
+    return {key: scope[key] for key in _SPARSE_PC_GMRES_FINALIZATION_STATE_KEYS}
 
 
 @dataclass(frozen=True)
@@ -10010,6 +10143,8 @@ __all__ = [
     "SparsePCGMRESContext",
     "SparsePCGMRESResult",
     "SparsePCGMRESFinalizationContext",
+    "sparse_pc_gmres_finalization_driver_state_keys",
+    "sparse_pc_gmres_finalization_state_from_driver_scope",
     "XBlockKrylovReport",
     "XBlockSparsePCCompletionContext",
     "XBlockSparsePCFinalPayloadContext",
