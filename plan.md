@@ -56,19 +56,17 @@ Recent checkpoints:
 - `cb295ce` Extract sparse pattern setup.
 - `4b6a5b4` Extract sparse factor policy.
 
-Current source-size snapshot after the auto-preflight retry extraction:
+Current source-size snapshot after the sparse-PC GMRES control-policy extraction:
 
-- `sfincs_jax/v3_driver.py`: `19421` lines.
-- `solve_v3_full_system_linear_gmres`: `14088` lines.
+- `sfincs_jax/v3_driver.py`: `19396` lines.
+- `solve_v3_full_system_linear_gmres`: `14062` lines.
 
 Recent local validation:
 
-- Focused sparse-PC/direct-tail/auto-preflight retry shard:
-  `138 passed in 1.44 s`.
-- Targeted v3 auto-preflight retry regression:
-  `1 passed in 3.28 s`.
+- Focused sparse-PC/direct-tail/GMRES-control shard:
+  `140 passed in 1.37 s`.
 - Latest broad profile-response/x-block/sparse-pattern shard:
-  `416 passed in 114.88 s`.
+  `418 passed in 112.69 s`.
 
 Known CI issue fixed by this rewrite:
 
@@ -79,7 +77,7 @@ Known CI issue fixed by this rewrite:
 
 ### 1. `v3_driver.py` Architecture Refactor
 
-Completion estimate: 78%.
+Completion estimate: 79%.
 
 Goal:
 
@@ -106,10 +104,11 @@ Completed recent boundaries:
 - Sparse-PC residual-candidate acceptance/update bookkeeping.
 - Sparse-PC auto-preflight retry candidate selection and scalar policy
   evaluation.
+- Sparse-PC GMRES stagnation and post-minres control policy parsing.
 
 Next steps:
 
-- Extract remaining sparse-PC GMRES setup/result assembly into separately
+- Extract remaining sparse-PC GMRES result metadata assembly into separately
   tested helpers.
 - Move remaining generic sparse-PC solve/result assembly into cohesive
   `profile_response` helpers.
@@ -170,8 +169,9 @@ Next steps:
 
 ## Immediate Next Steps
 
-1. Commit and push the auto-preflight retry extraction after final cleanup.
-2. Continue with sparse-PC GMRES setup/result assembly extraction.
+1. Commit and push the sparse-PC GMRES control-policy extraction after final
+   cleanup.
+2. Continue with sparse-PC GMRES result metadata assembly extraction.
 3. Run focused sparse-PC tests and the broad profile-response/x-block/sparse
    shard after each extraction.
 4. Snapshot CI but do not wait on queued runs unless a completed failure appears.

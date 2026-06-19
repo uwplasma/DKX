@@ -28,6 +28,7 @@ from sfincs_jax.problems.profile_response.sparse_pc import (
     SparsePCResidualCandidateAcceptanceContext,
     SparsePCAutoPreflightRetrySelectionContext,
     SparsePCAutoPreflightRetryEvaluationContext,
+    SparsePCGMRESControlPolicy,
     FortranReducedXBlockFactorBuildContext,
     FortranReducedXBlockGlobalCouplingStageContext,
     FortranReducedXBlockKrylovSetupContext,
@@ -60,6 +61,7 @@ from sfincs_jax.problems.profile_response.sparse_pc import (
     evaluate_sparse_pc_residual_candidate_acceptance,
     select_sparse_pc_auto_preflight_retry_candidates,
     evaluate_sparse_pc_auto_preflight_retry,
+    resolve_sparse_pc_gmres_control_policy,
     failed_xblock_global_coupling_metadata,
     failed_xblock_two_level_metadata,
     failed_xblock_moment_schur_metadata,
@@ -4066,6 +4068,41 @@ def test_xblock_qi_device_multilevel_config_normalizes_invalid_residual_controls
     assert setup.multilevel_residual_equation_order == "coarse_to_fine"
     assert setup.multilevel_residual_equation_solver == "action_lstsq"
     assert invalid_solver.multilevel_residual_equation_solver == "action_lstsq"
+
+
+def test_sparse_pc_gmres_control_policy_defaults() -> None:
+    policy = resolve_sparse_pc_gmres_control_policy({})
+
+    assert isinstance(policy, SparsePCGMRESControlPolicy)
+    assert policy.stagnation_abort is False
+    assert policy.stagnation_min_iter == 500
+    assert policy.stagnation_window == 500
+    assert policy.stagnation_rel_improvement == pytest.approx(1.0e-3)
+    assert policy.post_minres_steps == 0
+    assert policy.post_minres_alpha_clip == pytest.approx(10.0)
+    assert policy.post_minres_min_improvement == 0.0
+
+
+def test_sparse_pc_gmres_control_policy_overrides_and_clamps() -> None:
+    policy = resolve_sparse_pc_gmres_control_policy(
+        {
+            "SFINCS_JAX_RHSMODE1_SPARSE_PC_STAGNATION_ABORT": "1",
+            "SFINCS_JAX_RHSMODE1_SPARSE_PC_STAGNATION_MIN_ITER": "0",
+            "SFINCS_JAX_RHSMODE1_SPARSE_PC_STAGNATION_WINDOW": "-2",
+            "SFINCS_JAX_RHSMODE1_SPARSE_PC_STAGNATION_REL_IMPROVEMENT": "-0.1",
+            "SFINCS_JAX_RHSMODE1_SPARSE_PC_POST_MINRES_STEPS": "-3",
+            "SFINCS_JAX_RHSMODE1_SPARSE_PC_POST_MINRES_ALPHA_CLIP": "-1.5",
+            "SFINCS_JAX_RHSMODE1_SPARSE_PC_POST_MINRES_MIN_IMPROVEMENT": "0.25",
+        }
+    )
+
+    assert policy.stagnation_abort is True
+    assert policy.stagnation_min_iter == 1
+    assert policy.stagnation_window == 1
+    assert policy.stagnation_rel_improvement == 0.0
+    assert policy.post_minres_steps == 0
+    assert policy.post_minres_alpha_clip == 0.0
+    assert policy.post_minres_min_improvement == pytest.approx(0.25)
 
 
 def test_sparse_pc_gmres_once_explicit_left_recomputes_true_residual() -> None:

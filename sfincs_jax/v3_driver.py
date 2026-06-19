@@ -247,6 +247,7 @@ from .problems.profile_response.sparse_pc import (
     evaluate_sparse_pc_residual_candidate_acceptance,
     select_sparse_pc_auto_preflight_retry_candidates,
     evaluate_sparse_pc_auto_preflight_retry,
+    resolve_sparse_pc_gmres_control_policy,
     enforce_sparse_pc_memory_budget,
     failed_xblock_global_coupling_metadata,
     failed_xblock_moment_schur_metadata,
@@ -9177,40 +9178,14 @@ def solve_v3_full_system_linear_gmres(
                     f"error={factor_preflight_error}"
                 )
 
-        sparse_pc_stagnation_abort = _rhs1_bool_env(
-            "SFINCS_JAX_RHSMODE1_SPARSE_PC_STAGNATION_ABORT",
-            default=False,
-        )
-        sparse_pc_stagnation_min_iter = _rhs1_int_env(
-            "SFINCS_JAX_RHSMODE1_SPARSE_PC_STAGNATION_MIN_ITER",
-            default=500,
-            minimum=1,
-        )
-        sparse_pc_stagnation_window = _rhs1_int_env(
-            "SFINCS_JAX_RHSMODE1_SPARSE_PC_STAGNATION_WINDOW",
-            default=500,
-            minimum=1,
-        )
-        sparse_pc_stagnation_rel_improvement = _rhs1_float_env(
-            "SFINCS_JAX_RHSMODE1_SPARSE_PC_STAGNATION_REL_IMPROVEMENT",
-            default=1.0e-3,
-            minimum=0.0,
-        )
-        sparse_pc_post_minres_steps = _rhs1_int_env(
-            "SFINCS_JAX_RHSMODE1_SPARSE_PC_POST_MINRES_STEPS",
-            default=0,
-            minimum=0,
-        )
-        sparse_pc_post_minres_alpha_clip = _rhs1_float_env(
-            "SFINCS_JAX_RHSMODE1_SPARSE_PC_POST_MINRES_ALPHA_CLIP",
-            default=10.0,
-            minimum=0.0,
-        )
-        sparse_pc_post_minres_min_improvement = _rhs1_float_env(
-            "SFINCS_JAX_RHSMODE1_SPARSE_PC_POST_MINRES_MIN_IMPROVEMENT",
-            default=0.0,
-            minimum=0.0,
-        )
+        sparse_pc_gmres_policy = resolve_sparse_pc_gmres_control_policy(os.environ)
+        sparse_pc_stagnation_abort = bool(sparse_pc_gmres_policy.stagnation_abort)
+        sparse_pc_stagnation_min_iter = int(sparse_pc_gmres_policy.stagnation_min_iter)
+        sparse_pc_stagnation_window = int(sparse_pc_gmres_policy.stagnation_window)
+        sparse_pc_stagnation_rel_improvement = float(sparse_pc_gmres_policy.stagnation_rel_improvement)
+        sparse_pc_post_minres_steps = int(sparse_pc_gmres_policy.post_minres_steps)
+        sparse_pc_post_minres_alpha_clip = float(sparse_pc_gmres_policy.post_minres_alpha_clip)
+        sparse_pc_post_minres_min_improvement = float(sparse_pc_gmres_policy.post_minres_min_improvement)
 
         def _run_sparse_pc_gmres_once(x0_arg, *, maxiter_arg: int):
             sparse_pc_gmres = run_sparse_pc_gmres_once(

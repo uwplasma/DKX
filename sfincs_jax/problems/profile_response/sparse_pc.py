@@ -711,6 +711,19 @@ class SparsePCAutoPreflightRetryEvaluationResult:
 
 
 @dataclass(frozen=True)
+class SparsePCGMRESControlPolicy:
+    """Resolved sparse-PC GMRES progress, stagnation, and polish controls."""
+
+    stagnation_abort: bool
+    stagnation_min_iter: int
+    stagnation_window: int
+    stagnation_rel_improvement: float
+    post_minres_steps: int
+    post_minres_alpha_clip: float
+    post_minres_min_improvement: float
+
+
+@dataclass(frozen=True)
 class DirectTailResidualRescuePolicy:
     """Resolved direct-tail residual rescue controls."""
 
@@ -3492,6 +3505,62 @@ def evaluate_sparse_pc_auto_preflight_retry(
         required=bool(required),
         preflight_passed=bool(preflight_passed),
         policy_passed=bool(policy_passed),
+    )
+
+
+def resolve_sparse_pc_gmres_control_policy(
+    env: Mapping[str, str] | None,
+) -> SparsePCGMRESControlPolicy:
+    """Resolve sparse-PC GMRES stagnation and post-minres controls."""
+
+    return SparsePCGMRESControlPolicy(
+        stagnation_abort=_env_bool(
+            env,
+            "SFINCS_JAX_RHSMODE1_SPARSE_PC_STAGNATION_ABORT",
+            default=False,
+        ),
+        stagnation_min_iter=_env_int(
+            env,
+            "SFINCS_JAX_RHSMODE1_SPARSE_PC_STAGNATION_MIN_ITER",
+            default=500,
+            minimum=1,
+        ),
+        stagnation_window=_env_int(
+            env,
+            "SFINCS_JAX_RHSMODE1_SPARSE_PC_STAGNATION_WINDOW",
+            default=500,
+            minimum=1,
+        ),
+        stagnation_rel_improvement=max(
+            0.0,
+            _env_float(
+                env,
+                "SFINCS_JAX_RHSMODE1_SPARSE_PC_STAGNATION_REL_IMPROVEMENT",
+                default=1.0e-3,
+            ),
+        ),
+        post_minres_steps=_env_int(
+            env,
+            "SFINCS_JAX_RHSMODE1_SPARSE_PC_POST_MINRES_STEPS",
+            default=0,
+            minimum=0,
+        ),
+        post_minres_alpha_clip=max(
+            0.0,
+            _env_float(
+                env,
+                "SFINCS_JAX_RHSMODE1_SPARSE_PC_POST_MINRES_ALPHA_CLIP",
+                default=10.0,
+            ),
+        ),
+        post_minres_min_improvement=max(
+            0.0,
+            _env_float(
+                env,
+                "SFINCS_JAX_RHSMODE1_SPARSE_PC_POST_MINRES_MIN_IMPROVEMENT",
+                default=0.0,
+            ),
+        ),
     )
 
 
@@ -6599,6 +6668,7 @@ __all__ = [
     "SparsePCAutoPreflightRetrySelectionResult",
     "SparsePCAutoPreflightRetryEvaluationContext",
     "SparsePCAutoPreflightRetryEvaluationResult",
+    "SparsePCGMRESControlPolicy",
     "DirectTailResidualRescuePolicy",
     "DirectTailTrueActiveRescuePolicy",
     "DirectTailCoupledCoarseRescuePolicy",
@@ -6630,6 +6700,7 @@ __all__ = [
     "evaluate_sparse_pc_residual_candidate_acceptance",
     "select_sparse_pc_auto_preflight_retry_candidates",
     "evaluate_sparse_pc_auto_preflight_retry",
+    "resolve_sparse_pc_gmres_control_policy",
     "resolve_sparse_pc_factor_preflight_policy",
     "resolve_direct_tail_residual_rescue_policy",
     "resolve_direct_tail_true_active_rescue_policy",
