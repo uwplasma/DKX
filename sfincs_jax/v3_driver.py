@@ -326,7 +326,9 @@ from .problems.profile_response.sparse_pc import (
     run_xblock_first_krylov_attempt,
     run_xblock_gmres_fallback_if_needed,
     run_xblock_post_solve_corrections,
+    xblock_device_cycle_progress_message,
     xblock_krylov_report,
+    xblock_host_krylov_progress_message,
     xblock_physical_solution_and_residual,
     build_sparse_host_or_ilu_factor,
     build_sparse_ilu_preconditioner_from_cache,
@@ -6260,14 +6262,16 @@ def solve_v3_full_system_linear_gmres(
             ) -> None:
                 if emit is None:
                     return
-                ratio = float(residual_norm) / float(target) if float(target) > 0.0 else float("nan")
                 emit(
                     0,
-                    "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
-                    f"device-cycle cycle={int(cycle)} iterations={int(iterations)} "
-                    f"residual={float(residual_norm):.6e} target={float(target):.6e} "
-                        f"ratio={float(ratio):.6e} elapsed_s={sparse_timer.elapsed_s():.3f}",
-                    )
+                    xblock_device_cycle_progress_message(
+                        cycle=int(cycle),
+                        iterations=int(iterations),
+                        residual_norm=float(residual_norm),
+                        target=float(target),
+                        elapsed_s=sparse_timer.elapsed_s(),
+                    ),
+                )
 
             def _host_krylov_progress_callback(iteration: int, residual_norm: float) -> None:
                 if emit is None or progress_every <= 0:
@@ -6276,9 +6280,11 @@ def solve_v3_full_system_linear_gmres(
                     return
                 emit(
                     1,
-                    "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
-                    f"iters={int(iteration)} ksp_residual={float(residual_norm):.6e} "
-                    f"elapsed_s={sparse_timer.elapsed_s():.3f}",
+                    xblock_host_krylov_progress_message(
+                        iteration=int(iteration),
+                        residual_norm=float(residual_norm),
+                        elapsed_s=sparse_timer.elapsed_s(),
+                    ),
                 )
 
             device_krylov_iterations: int | None = None

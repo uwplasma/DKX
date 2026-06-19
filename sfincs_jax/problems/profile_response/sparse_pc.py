@@ -346,6 +346,40 @@ def xblock_krylov_report(
     return XBlockKrylovReport(iterations=int(iterations), matvecs=int(matvecs))
 
 
+def xblock_device_cycle_progress_message(
+    *,
+    cycle: int,
+    iterations: int,
+    residual_norm: float,
+    target: float,
+    elapsed_s: float,
+) -> str:
+    """Return the user-facing xblock device-cycle progress line."""
+
+    ratio = float(residual_norm) / float(target) if float(target) > 0.0 else float("nan")
+    return (
+        "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
+        f"device-cycle cycle={int(cycle)} iterations={int(iterations)} "
+        f"residual={float(residual_norm):.6e} target={float(target):.6e} "
+        f"ratio={float(ratio):.6e} elapsed_s={float(elapsed_s):.3f}"
+    )
+
+
+def xblock_host_krylov_progress_message(
+    *,
+    iteration: int,
+    residual_norm: float,
+    elapsed_s: float,
+) -> str:
+    """Return the user-facing host xblock Krylov progress line."""
+
+    return (
+        "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
+        f"iters={int(iteration)} ksp_residual={float(residual_norm):.6e} "
+        f"elapsed_s={float(elapsed_s):.3f}"
+    )
+
+
 def xblock_device_krylov_state(
     result: object,
     *,
@@ -9767,6 +9801,8 @@ __all__ = [
     "run_xblock_gmres_fallback_if_needed",
     "run_xblock_post_solve_corrections",
     "xblock_device_krylov_state",
+    "xblock_device_cycle_progress_message",
+    "xblock_host_krylov_progress_message",
     "xblock_sparse_pc_completion_message",
     "xblock_gmres_fallback_decision",
     "xblock_krylov_report",

@@ -156,6 +156,8 @@ from sfincs_jax.problems.profile_response.sparse_pc import (
     run_xblock_gmres_fallback_if_needed,
     run_xblock_post_solve_corrections,
     xblock_device_krylov_state,
+    xblock_device_cycle_progress_message,
+    xblock_host_krylov_progress_message,
     xblock_sparse_pc_completion_message,
     xblock_gmres_fallback_decision,
     xblock_krylov_report,
@@ -460,6 +462,31 @@ def test_xblock_krylov_report_falls_back_to_host_history_and_matvec_count() -> N
         history=(1.0, 0.5, 0.25),
         mv_count=13,
     ) == XBlockKrylovReport(iterations=3, matvecs=13)
+
+
+def test_xblock_device_cycle_progress_message_formats_ratio_and_elapsed_time() -> None:
+    assert xblock_device_cycle_progress_message(
+        cycle=2,
+        iterations=11,
+        residual_norm=1.5e-4,
+        target=3.0e-5,
+        elapsed_s=12.3456,
+    ) == (
+        "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
+        "device-cycle cycle=2 iterations=11 residual=1.500000e-04 "
+        "target=3.000000e-05 ratio=5.000000e+00 elapsed_s=12.346"
+    )
+
+
+def test_xblock_host_krylov_progress_message_formats_residual_and_elapsed_time() -> None:
+    assert xblock_host_krylov_progress_message(
+        iteration=20,
+        residual_norm=4.25e-7,
+        elapsed_s=8.0,
+    ) == (
+        "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
+        "iters=20 ksp_residual=4.250000e-07 elapsed_s=8.000"
+    )
 
 
 def test_xblock_device_krylov_state_transfers_finite_history() -> None:
