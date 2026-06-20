@@ -1971,60 +1971,96 @@ not be used for current planning.
 Current evidence from 2026-06-20:
 
 - Branch `refactor/v3-driver-architecture` is clean and pushed.
-- PR #8 is draft, merge-clean, and current required CI/docs checks pass.
+- PR #8 is draft and merge-clean. The previous pushed commit was green; the
+  newest commit has docs/examples/external-data/optional checks passing and
+  coverage shards still running at the time of this review.
 - Largest remaining files are
   `sfincs_jax/problems/profile_response/sparse_pc.py` (`16760` lines),
   `sfincs_jax/v3_driver.py` (`14385` lines),
   `sfincs_jax/rhs1_full_assembly.py` (`11893` lines), and
   `sfincs_jax/io.py` (`5817` lines).
 - Largest remaining function is
-  `solve_v3_full_system_linear_gmres(...)` in `v3_driver.py` (`9607` lines).
-- `profile_response.sparse_pc` now has 358 top-level items. It is no longer
-  acceptable to keep extracting driver code into that one file without a
-  source split.
+  `solve_v3_full_system_linear_gmres(...)` in `v3_driver.py` (`9599` lines).
+- `profile_response.sparse_pc` currently has 179 top-level functions and
+  182 top-level classes. It is now the largest file in the repository, so
+  adding more extracted driver logic there makes the PR harder to review.
+- `rhs1_full_assembly.py` and `io.py` are large, but they are not immediate
+  blockers for PR #8 unless this branch changes their behavior. Treat them as
+  follow-up refactor lanes after the driver/profile-response split is reviewed.
 
-Open lanes:
+Actual open lanes:
 
-1. Review-readiness and plan hygiene: keep one draft PR, keep CI green, keep
-   the worktree clean, and make the PR description match this current plan.
-2. Driver simplification: finish only the remaining high-ROI,
-   behavior-preserving driver seams before splitting modules. The next seam is
-   the generic sparse retry/result-assembly branch, but only if extraction
-   yields an explicit and smaller boundary. Avoid extracting small local scalar
-   assignments that would make call sites harder to read.
-3. Sparse-PC source split: split `profile_response.sparse_pc` into a small
-   domain package after the next one or two driver seams. Keep
-   `profile_response/sparse_pc.py` as a compatibility re-export while moving
-   implementation into a bounded set of domain files:
-   `sparse_solve/finalization.py`, `sparse_solve/direct.py`,
-   `sparse_solve/xblock.py`, `sparse_solve/direct_tail.py`,
-   `sparse_solve/fortran_reduced.py`, and `sparse_solve/qi.py`.
-4. Differentiability lane: document and test that host sparse factors remain
-   outside autodiff paths, while JAX-native Python lanes keep stable
-   transformation behavior. Add only focused tests here during this refactor,
-   not production-size optimization studies.
-5. Performance and memory lane: because these edits are behavior-preserving
-   source movement, use focused CPU validation locally and reserve `ssh office`
-   for a representative GPU smoke after the module split stabilizes. Do not
-   regenerate public benchmark plots unless solver behavior or benchmark data
-   changes.
-6. Validation/docs lane: keep focused tests at each extraction boundary,
-   broad RHSMode/profile-response shards after behavior-facing changes, and a
-   final full local/CI sweep before marking the PR ready. Add a short docs or
-   PR architecture map after the source split so reviewers can navigate the
-   new structure.
+1. PR hygiene and CI: about 85%. Keep one draft PR, keep the worktree clean,
+   keep commits small enough to review, and refresh the PR body after each
+   structural tranche. Do not wait on CI repeatedly; check only completed
+   failures or final readiness.
+2. Driver reviewability: about 75%. `v3_driver.py` is smaller than before but
+   still has a 9599-line RHSMode=1 solve function. Only extract remaining
+   driver seams when the boundary is explicit, tested, and shorter than the
+   in-line code it replaces. The next seam to inspect is the generic sparse
+   retry/result-assembly branch; if it is mostly scalar metadata plumbing,
+   leave it driver-owned and document why.
+3. Sparse profile-response package split: about 20%. This is the main blocker
+   for review. Move implementation out of
+   `profile_response/sparse_pc.py` into a bounded domain package while keeping
+   `sparse_pc.py` as a compatibility re-export for existing tests and users.
+4. Differentiability lane: about 70%. Host sparse factors and host-only direct
+   fallbacks must stay outside autodiff paths; JAX-native Python lanes must
+   keep stable transformation behavior. Add focused tests only where the
+   refactor touches solver selection or autodiff-facing APIs.
+5. Validation lane: about 80%. Focused sparse/profile-response tests and broad
+   RHSMode shards are the right gates for this PR. Do not add slow production
+   benchmark runs unless behavior changes.
+6. Docs/reviewer map: about 65%. Add a concise architecture map after the
+   split so reviewers can see the API surface, differentiable path,
+   CLI/non-autodiff path, and compatibility re-export layer.
+
+PR-blocking refactor targets:
+
+1. `sfincs_jax/problems/profile_response/sparse_pc.py`: split into
+   `profile_response/sparse/finalization.py`,
+   `profile_response/sparse/direct.py`,
+   `profile_response/sparse/xblock.py`,
+   `profile_response/sparse/tail.py`,
+   `profile_response/sparse/fortran_reduced.py`, and
+   `profile_response/sparse/qi.py`. Keep `sparse_pc.py` as a thin compatibility
+   layer until downstream imports are migrated.
+2. `sfincs_jax/v3_driver.py`: preserve it as the orchestration layer, but keep
+   moving cohesive policy/solve/result stages into domain modules only when
+   the call site becomes clearer. Do not move driver-specific cache ownership,
+   callback construction, or one-off scalar bookkeeping into generic helpers.
+3. Tests: keep existing import compatibility through `sparse_pc.py`, add
+   direct import tests for the new domain modules, and keep focused tests next
+   to each moved behavior.
+4. Documentation: update the PR body and a small developer architecture note
+   once the package split is stable. README/runtime plots do not need
+   regeneration for behavior-preserving file movement.
+
+Deferred until after PR review or a separate behavior PR:
+
+- `rhs1_full_assembly.py` preconditioner internals.
+- `io.py` output-writing split.
+- Production CPU/GPU/Fortran benchmark regeneration.
+- New solver algorithms, QI production promotion, or additional memory/runtime
+  optimization work.
+- Broad coverage-to-95% expansion that requires new physics validations.
 
 Efficient path to PR-ready:
 
-1. Extract or simplify the remaining generic sparse retry/result assembly only
-   if the new boundary is explicit and smaller than the driver code it
-   replaces.
-2. Stop adding major logic to `sparse_pc.py`; split it into the six
-   `sparse_solve/*` domain files listed above, leaving re-export compatibility.
-3. Run focused sparse/profile-response tests, then the broad RHSMode shard.
-4. Update PR description and docs with the final architecture map.
-5. Run final hygiene, full local suite if feasible, and rely on GitHub CI/docs
-   as the merge gate before converting the PR from draft to ready for review.
+1. Inspect the generic sparse retry/result-assembly branch. Extract it only if
+   the result is a small typed stage; otherwise record that the branch stays in
+   the driver because it owns local cache/callback/result routing.
+2. Create the `profile_response/sparse/` package and move x-block-related
+   sparse stages first, because they are cohesive, heavily tested, and already
+   extracted from the driver.
+3. Move finalization/direct/tail/Fortran-reduced/QI groups in separate commits,
+   keeping `sparse_pc.py` as a compatibility import layer after each commit.
+4. Run focused tests after every package split commit, then the broad
+   profile-response/RHSMode shard after behavior-facing or import-surface
+   changes.
+5. Add the reviewer architecture map, refresh the PR body, run final hygiene
+   and a full local suite if feasible, then let GitHub CI/docs be the final
+   gate before marking the draft PR ready for review.
 
 ## Historical Work Lanes
 
