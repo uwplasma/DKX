@@ -6,12 +6,15 @@ from collections.abc import Callable
 from dataclasses import dataclass
 import os
 
+import numpy as np
+import jax.scipy.linalg as jla
 import jax.numpy as jnp
 
 from sfincs_jax.implicit_solve import linear_custom_solve, linear_custom_solve_with_residual
 from sfincs_jax.krylov_dispatch import gmres_solve_dispatch, rhs_krylov_method_for_context
 from sfincs_jax.solver import (
     GMRESSolveResult,
+    assemble_dense_matrix_from_matvec,
     bicgstab_solve_with_history_scipy,
     bicgstab_solve_with_residual,
     bicgstab_solve_with_residual_jit,
@@ -64,6 +67,36 @@ class RHS1ScipyRescueOutcome:
     reported_residual: float
     history_len: int
     preconditioned_residual: float | None = None
+
+
+@dataclass(frozen=True)
+class RHS1DenseKSPFullSolveContext:
+    """Inputs for the full-system RHSMode=1 dense-KSP solve path."""
+
+    matvec: Callable[[jnp.ndarray], jnp.ndarray]
+    rhs: jnp.ndarray
+    x0: jnp.ndarray | None
+    total_size: int
+    phi1_size: int
+    n_species: int
+    n_theta: int
+    n_zeta: int
+    nxi_for_x: object
+    extra_size: int
+    tol: float
+    atol: float
+    restart: int
+    maxiter: int | None
+    solve_linear: Callable[..., GMRESSolveResult]
+
+
+@dataclass(frozen=True)
+class RHS1DenseKSPFullSolveOutcome:
+    """Physical result plus the preconditioned replay system."""
+
+    result: GMRESSolveResult
+    replay_matvec: Callable[[jnp.ndarray], jnp.ndarray]
+    replay_rhs: jnp.ndarray
 
 
 def rhs1_small_gmres_max_from_env(*, default: int = 600) -> int:
@@ -327,13 +360,128 @@ def run_rhs1_scipy_rescue(
     )
 
 
+def solve_rhs1_dense_ksp_full(
+    context: RHS1DenseKSPFullSolveContext,
+    *,
+    emit: Callable[[int, str], None] | None = None,
+) -> RHS1DenseKSPFullSolveOutcome:
+    """Run the host dense-KSP branch for full RHSMode=1 systems.
+
+    This path assembles the full operator, builds PETSc-like species blocks,
+    solves the left-preconditioned dense system, and reports the physical
+    residual. Replay-state mutation remains in the driver.
+    """
+
+    if int(context.phi1_size) != 0:
+        raise NotImplementedError(
+            "dense_ksp is only supported for includePhi1=false RHSMode=1 solves."
+        )
+    if emit is not None:
+        emit(
+            1,
+            "solve_v3_full_system_linear_gmres: assembling dense full matrix for dense_ksp",
+        )
+    a_dense = assemble_dense_matrix_from_matvec(
+        matvec=context.matvec,
+        n=int(context.total_size),
+        dtype=context.rhs.dtype,
+    )
+
+    if emit is not None:
+        emit(
+            1,
+            "solve_v3_full_system_linear_gmres: building PETSc-like species-block "
+            "preconditioner (dense_ksp)",
+        )
+
+    n_species = int(context.n_species)
+    n_theta = int(context.n_theta)
+    n_zeta = int(context.n_zeta)
+    local_per_species = int(np.sum(np.asarray(context.nxi_for_x, dtype=np.int64)))
+    dke_size = int(local_per_species * n_theta * n_zeta)
+    extra_size = int(context.extra_size)
+    extra_per_species = int(extra_size // max(1, n_species)) if extra_size else 0
+    if extra_size and (extra_per_species * n_species != extra_size):
+        extra_per_species = 0
+
+    f_size = int(n_species * dke_size)
+    expected_size = int(f_size + int(context.phi1_size) + extra_size)
+    if int(context.total_size) != expected_size:
+        raise RuntimeError(
+            f"dense_ksp expects total_size={expected_size}, got {int(context.total_size)}"
+        )
+
+    lu_factors: list[tuple[jnp.ndarray, jnp.ndarray]] = []
+    idx_blocks: list[jnp.ndarray] = []
+    for species_index in range(n_species):
+        f_idx = np.arange(
+            species_index * dke_size,
+            (species_index + 1) * dke_size,
+            dtype=np.int32,
+        )
+        extra_idx = np.arange(
+            f_size + species_index * extra_per_species,
+            f_size + (species_index + 1) * extra_per_species,
+            dtype=np.int32,
+        )
+        block_idx_np = (
+            np.concatenate([f_idx, extra_idx], axis=0)
+            if extra_per_species
+            else f_idx
+        )
+        block_idx = jnp.asarray(block_idx_np, dtype=jnp.int32)
+        a_block = a_dense[jnp.ix_(block_idx, block_idx)]
+        lu, piv = jla.lu_factor(a_block)
+        lu_factors.append((lu, piv))
+        idx_blocks.append(block_idx)
+
+    def preconditioner_dense(v: jnp.ndarray) -> jnp.ndarray:
+        out = jnp.zeros_like(v)
+        for block_idx, (lu, piv) in zip(idx_blocks, lu_factors, strict=True):
+            rhs_block = v[block_idx]
+            sol_block = jla.lu_solve((lu, piv), rhs_block)
+            out = out.at[block_idx].set(sol_block, unique_indices=True)
+        return out
+
+    def mv_dense(x: jnp.ndarray) -> jnp.ndarray:
+        return a_dense @ x
+
+    rhs_pc = preconditioner_dense(context.rhs)
+
+    def mv_pc(x: jnp.ndarray) -> jnp.ndarray:
+        return preconditioner_dense(mv_dense(x))
+
+    res_pc = context.solve_linear(
+        matvec_fn=mv_pc,
+        b_vec=rhs_pc,
+        precond_fn=None,
+        x0_vec=context.x0,
+        tol_val=float(context.tol),
+        atol_val=float(context.atol),
+        restart_val=int(context.restart),
+        maxiter_val=context.maxiter,
+        solve_method_val="incremental",
+        precond_side="none",
+    )
+    residual_norm_full = jnp.linalg.norm(context.matvec(res_pc.x) - context.rhs)
+    result = GMRESSolveResult(x=res_pc.x, residual_norm=residual_norm_full)
+    return RHS1DenseKSPFullSolveOutcome(
+        result=result,
+        replay_matvec=mv_pc,
+        replay_rhs=rhs_pc,
+    )
+
+
 __all__ = [
     "ProfileLinearSolveContext",
+    "RHS1DenseKSPFullSolveContext",
+    "RHS1DenseKSPFullSolveOutcome",
     "RHS1ScipyRescueContext",
     "RHS1ScipyRescueOutcome",
     "profile_solver_kind",
     "rhs1_small_gmres_max_from_env",
     "run_rhs1_scipy_rescue",
+    "solve_rhs1_dense_ksp_full",
     "solve_profile_linear",
     "solve_profile_linear_with_residual",
 ]

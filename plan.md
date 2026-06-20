@@ -271,6 +271,11 @@ Recent checkpoints:
   operator-preconditioned sparse-LU, implicit sparse-ILU, and SciPy sparse-GMRES
   candidate execution from already-built factors; replay acceptance, KSP replay
   updates, and branch-specific residual-vector routing remain driver-local.
+- Full-system RHSMode=1 `dense_ksp` mechanics now use a tested
+  `profile_response.linear_solve` helper. Dense operator assembly,
+  PETSc-like species-block preconditioner construction, preconditioned solve
+  execution, and physical residual measurement live outside `v3_driver.py`;
+  the driver keeps only KSP replay-state mutation.
 - RHSMode=1 PAS preconditioner probe/default routing now uses tested
   PAS-policy helpers for env parsing, tokamak-like Schur defaulting, heavy-path
   admission, large-system collision skip, and residual-threshold decisions
@@ -414,10 +419,10 @@ Recent checkpoints:
 - `cb295ce` Extract sparse pattern setup.
 - `4b6a5b4` Extract sparse factor policy.
 
-Current source-size snapshot after sparse-host retry candidate extraction:
+Current source-size snapshot after full-system dense-KSP extraction:
 
-- `sfincs_jax/v3_driver.py`: `15196` lines.
-- `solve_v3_full_system_linear_gmres`: `10451` lines.
+- `sfincs_jax/v3_driver.py`: `15147` lines.
+- `solve_v3_full_system_linear_gmres`: `10400` lines.
 - `sfincs_jax/v3_results.py`: `119` lines.
 - `sfincs_jax/rhs1_ksp_diagnostics.py`: `306` lines.
 - `sfincs_jax/rhs1_pas_policy.py`: `889` lines.
@@ -427,7 +432,7 @@ Current source-size snapshot after sparse-host retry candidate extraction:
 - `sfincs_jax/problems/profile_response/handoff.py`: `1035` lines.
 - `sfincs_jax/problems/profile_response/policies.py`: `3463` lines.
 - `sfincs_jax/problems/profile_response/dense.py`: `1092` lines.
-- `sfincs_jax/problems/profile_response/linear_solve.py`: `339` lines.
+- `sfincs_jax/problems/profile_response/linear_solve.py`: `487` lines.
 - `sfincs_jax/problems/profile_response/active_projection.py`: `203` lines.
 - `sfincs_jax/problems/profile_response/sparse_pc.py`: `15687` lines.
 - `sfincs_jax/problems/profile_response/solver_diagnostics.py`: `421` lines.
@@ -435,6 +440,17 @@ Current source-size snapshot after sparse-host retry candidate extraction:
 
 Recent local validation:
 
+- Full-system dense-KSP extraction:
+  `tests/test_profile_response_linear_solve.py` passed (`7 passed in 1.42 s`).
+- Broad profile-response/RHSMode=1 shard after full-system dense-KSP
+  extraction:
+  `tests/test_profile_response_*.py tests/test_rhs1_*.py
+  tests/test_newton_krylov_diagnostics.py tests/test_pas_smoother.py`
+  passed (`1307 passed in 85.34 s`).
+- Hygiene after full-system dense-KSP extraction:
+  `py_compile`, `ruff check`, `compileall`, `git diff --check`, and
+  `python scripts/check_repo_size.py` passed. Repo-size audit reported no
+  reviewed files above 2 MiB.
 - Sparse-host retry candidate extraction:
   `tests/test_profile_response_sparse_pc.py` passed (`294 passed in 1.69 s`).
 - Broad profile-response/RHSMode=1 shard after sparse-host retry candidate
@@ -1740,6 +1756,11 @@ Completed recent boundaries:
   implicit sparse-ILU, and SciPy sparse-GMRES candidates. The driver now keeps
   only KSP replay acceptance, branch-specific residual-vector routing, and
   candidate/baseline metadata handoff.
+- Full-system RHSMode=1 `dense_ksp` solve mechanics now use a tested
+  profile-response linear-solve helper. The helper owns dense matrix
+  assembly, species-block preconditioner factors, preconditioned dense-KSP
+  solve execution, replay matvec/RHS construction, and physical residual
+  measurement; the driver only records the replay problem.
 - Sparse-JAX Jacobi retry branches now use the shared measured linear-candidate
   handoff helper, preserving reduced/full residual-vector routing.
 - Sparse-JAX retry preconditioner build/progress emission now uses a tested
