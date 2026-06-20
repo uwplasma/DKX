@@ -1971,12 +1971,12 @@ not be used for current planning.
 Current evidence from 2026-06-20:
 
 - Branch `refactor/v3-driver-architecture` remains the single draft-PR branch.
-  The latest local tranche moves final x-block sparse-PC diagnostic metadata
+  The latest pushed tranche moves final x-block sparse-PC diagnostic metadata
   constants, typed state groups, state-key helpers, and nested-diagnostic
-  assembly into `profile_response/sparse/xblock.py`.
-- PR #8 is draft and merge-clean. Commit `fb09c09` should be treated as the
-  latest pushed structural-validation reference until this local tranche is
-  committed and pushed.
+  assembly into `profile_response/sparse/xblock.py` in commit `fe2c6fb`.
+- PR #8 is draft and merge-clean. Commit `fe2c6fb` should be treated as the
+  latest structural-validation reference until another structural tranche is
+  pushed.
 - Largest remaining files after the current sparse package splits are
   `sfincs_jax/v3_driver.py` (`14393` lines),
   `sfincs_jax/rhs1_full_assembly.py` (`11893` lines),
@@ -2051,8 +2051,8 @@ Current evidence from 2026-06-20:
 - Validation for the x-block final-metadata split: targeted `py_compile`,
   targeted `ruff`, focused sparse/profile-response tests (`358 passed`), and
   broad profile-response/RHSMode shard (`1390 passed`) passed locally.
-  `compileall`, `git diff --check`, and repository-size audit also passed
-  locally.
+  `compileall`, `git diff --check`, Sphinx HTML docs build, and
+  repository-size audit also passed locally.
 - `rhs1_full_assembly.py` and `io.py` are large, but they are not immediate
   blockers for PR #8 unless this branch changes their behavior. Treat them as
   follow-up refactor lanes after the driver/profile-response split is reviewed.
