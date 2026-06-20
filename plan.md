@@ -42,6 +42,12 @@ Make `sfincs_jax` research-grade while preserving the public user contract:
 
 Recent checkpoints:
 
+- RHSMode=1 reduced strong-preconditioner kind selection now uses a tested
+  `resolve_rhs1_reduced_strong_preconditioner_selection(...)` helper. The
+  driver still owns user progress messages, builder/cache setup, residual
+  admission, and Krylov retry execution, but auto-kind selection, xblock-L
+  truncation, PAS weak-skip, guarded PAS-TZ skip, and QI-device skip gates are
+  centralized in the strong-preconditioning policy layer.
 - RHSMode=1 PAS near-zero-Er small-system default routing now uses a tested
   `rhs1_pas_small_near_zero_er_kind(...)` policy helper. This removes three
   duplicated PAS-lite/PAS-hybrid/xmg threshold blocks from `v3_driver.py` while
@@ -332,10 +338,10 @@ Recent checkpoints:
 - `cb295ce` Extract sparse pattern setup.
 - `4b6a5b4` Extract sparse factor policy.
 
-Current source-size snapshot after PAS near-zero-Er policy extraction:
+Current source-size snapshot after reduced strong-kind selection extraction:
 
-- `sfincs_jax/v3_driver.py`: `15877` lines.
-- `solve_v3_full_system_linear_gmres`: `11116` lines.
+- `sfincs_jax/v3_driver.py`: `15837` lines.
+- `solve_v3_full_system_linear_gmres`: `11083` lines.
 - `sfincs_jax/v3_results.py`: `119` lines.
 - `sfincs_jax/rhs1_ksp_diagnostics.py`: `306` lines.
 - `sfincs_jax/rhs1_pas_policy.py`: `889` lines.

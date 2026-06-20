@@ -408,6 +408,7 @@ from .problems.profile_response.strong_preconditioning import (
     rhs1_pas_weak_minres_steps,
     rhs1_pas_weak_strong_retry_skip,
     rhs1_resolved_strong_preconditioner_control,
+    resolve_rhs1_reduced_strong_preconditioner_selection,
     rhs1_strong_preconditioner_env_from_env,
     rhs1_strong_retry_controls_from_env,
     rhs1_strong_trigger_controls_from_env,
@@ -10276,107 +10277,66 @@ def solve_v3_full_system_linear_gmres(
                     "solve_v3_full_system_linear_gmres: PAS collision probe allows strong preconditioner "
                     f"(residual={float(res_reduced.residual_norm):.3e} > {pas_force_strong_ratio:.1f}x target)",
                 )
-        strong_precond_kind: str | None = None
-        strong_xblock_tz_lmax: int | None = None
-        if strong_precond_disabled:
-            strong_precond_kind = None
-        else:
-            strong_precond_kind = requested_rhs1_strong_preconditioner_kind(
-                strong_precond_env,
-                mode="reduced",
-            )
-
-        if strong_precond_kind is None and (not strong_precond_disabled) and strong_precond_auto:
-            if int(op.constraint_scheme) == 2 and int(op.extra_size) > 0:
-                if op.fblock.pas is not None:
-                    auto_sel = auto_rhs1_reduced_strong_kind(
-                        has_pas=True,
-                        has_fp=False,
-                        geom_scheme=int(geom_scheme),
-                        use_dkes=bool(use_dkes),
-                        active_size=int(active_size),
-                        strong_precond_min=int(strong_precond_min),
-                        n_theta=int(op.n_theta),
-                        n_zeta=int(op.n_zeta),
-                        max_l=int(np.max(nxi_for_x)) if nxi_for_x.size else 0,
-                        shard_axis=_matvec_shard_axis(op),
-                        device_count=int(jax.device_count()),
-                    )
-                    strong_precond_kind = auto_sel.kind
-                else:
-                    strong_precond_kind = "schur"
-            else:
-                auto_sel = auto_rhs1_reduced_strong_kind(
-                    has_pas=op.fblock.pas is not None,
-                    has_fp=op.fblock.fp is not None,
-                    geom_scheme=int(geom_scheme),
-                    use_dkes=bool(use_dkes),
-                    active_size=int(active_size),
-                    strong_precond_min=int(strong_precond_min),
-                    n_theta=int(op.n_theta),
-                    n_zeta=int(op.n_zeta),
-                    max_l=int(np.max(nxi_for_x)) if nxi_for_x.size else 0,
-                    shard_axis=_matvec_shard_axis(op),
-                    device_count=int(jax.device_count()),
-                )
-                strong_precond_kind = auto_sel.kind
-                strong_xblock_tz_lmax = auto_sel.xblock_tz_lmax
-
-        auto_sel = adjust_rhs1_reduced_auto_kind(
-            kind=strong_precond_kind,
+        reduced_strong_selection = resolve_rhs1_reduced_strong_preconditioner_selection(
+            strong_precond_env=strong_precond_env,
+            control=strong_control,
+            has_extra_constraint_block=int(op.constraint_scheme) == 2 and int(op.extra_size) > 0,
+            has_fp=op.fblock.fp is not None,
             has_pas=op.fblock.pas is not None,
             geom_scheme=int(geom_scheme),
+            use_dkes=bool(use_dkes),
+            active_size=int(active_size),
+            n_theta=int(op.n_theta),
             n_zeta=int(op.n_zeta),
-            strong_precond_trigger=bool(strong_precond_trigger),
             max_l=int(np.max(nxi_for_x)) if nxi_for_x.size else 0,
-            n_theta=int(op.n_theta),
-        )
-        strong_precond_kind = auto_sel.kind
-        if auto_sel.xblock_tz_lmax is not None:
-            strong_xblock_tz_lmax = auto_sel.xblock_tz_lmax
-
-        auto_sel = adjust_rhs1_theta_line_auto_kind(
-            kind=strong_precond_kind,
-            n_theta=int(op.n_theta),
             nxi_for_x_sum=int(np.sum(nxi_for_x)) if nxi_for_x.size else 0,
-        )
-        strong_precond_kind = auto_sel.kind
-
-        if rhs1_pas_weak_strong_retry_skip(
-            has_pas=op.fblock.pas is not None,
+            shard_axis=_matvec_shard_axis(op),
+            device_count=int(jax.device_count()),
+            strong_precond_trigger=bool(strong_precond_trigger),
             rhs1_precond_kind=rhs1_precond_kind,
             res_ratio=float(res_ratio),
-        ):
-            if emit is not None and strong_precond_kind is not None:
+            pas_tz_guarded_fallback=bool(rhs1_pas_tz_guarded_fallback),
+            pas_tz_guarded_strong_retry=rhs1_pas_tz_guarded_strong_retry_from_env(),
+            qi_device_skip_strong=bool(qi_device_skip_strong),
+        )
+        strong_precond_kind = reduced_strong_selection.kind
+        strong_xblock_tz_lmax = reduced_strong_selection.xblock_tz_lmax
+        strong_precond_trigger = bool(reduced_strong_selection.trigger)
+
+        if reduced_strong_selection.skipped_weak_pas:
+            if (
+                emit is not None
+                and reduced_strong_selection.candidate_kind_before_skips is not None
+            ):
                 emit(
                     1,
                     "solve_v3_full_system_linear_gmres: skipping strong preconditioner "
                     "after weak PAS base residual exceeded skip threshold; set "
                     "SFINCS_JAX_PAS_STRONG_WEAK_SKIP_RATIO=0 to retry",
                 )
-            strong_precond_kind = None
-            strong_precond_trigger = False
 
-        if rhs1_pas_tz_guarded_fallback and not rhs1_pas_tz_guarded_strong_retry_from_env():
-            if emit is not None and strong_precond_kind is not None:
+        if reduced_strong_selection.skipped_guarded_pas_tz:
+            if (
+                emit is not None
+                and reduced_strong_selection.candidate_kind_before_skips is not None
+            ):
                 emit(
                     1,
                     "solve_v3_full_system_linear_gmres: skipping strong preconditioner "
                     "after guarded PAS-TZ fallback; set "
                     "SFINCS_JAX_RHSMODE1_PAS_TZ_GUARDED_STRONG_RETRY=1 to retry",
                 )
-            strong_precond_kind = None
-            strong_precond_trigger = False
 
-        if bool(qi_device_skip_strong) and strong_precond_kind is not None:
+        if (
+            reduced_strong_selection.skipped_qi_device
+            and reduced_strong_selection.candidate_kind_before_skips is not None
+        ):
             if emit is not None:
                 emit(
                     1,
                     "solve_v3_full_system_linear_gmres: skipping strong preconditioner "
                     "for QI device preconditioner experiment",
                 )
-            strong_precond_kind = None
-            strong_precond_trigger = False
 
         if (
             strong_precond_kind is not None

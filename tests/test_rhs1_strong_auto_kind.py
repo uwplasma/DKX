@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 from sfincs_jax.rhs1_strong_auto_kind import (
+    RHS1StrongPreconditionerControl,
     adjust_rhs1_reduced_auto_kind,
     adjust_rhs1_theta_line_auto_kind,
     auto_rhs1_full_strong_kind,
     auto_rhs1_reduced_strong_kind,
+    resolve_rhs1_reduced_strong_preconditioner_selection,
 )
 
 
@@ -114,3 +116,124 @@ def test_auto_rhs1_full_strong_kind_fp_prefers_sharded_schwarz_before_line(
         device_count=2,
     )
     assert selection.kind == "theta_schwarz"
+
+
+def test_resolve_rhs1_reduced_strong_selection_preserves_explicit_request() -> None:
+    selection = resolve_rhs1_reduced_strong_preconditioner_selection(
+        strong_precond_env="theta",
+        control=RHS1StrongPreconditionerControl(min_size=800, disabled=False, auto=False),
+        has_extra_constraint_block=False,
+        has_fp=True,
+        has_pas=False,
+        geom_scheme=5,
+        use_dkes=False,
+        active_size=5000,
+        n_theta=9,
+        n_zeta=5,
+        max_l=8,
+        nxi_for_x_sum=20,
+        shard_axis=None,
+        device_count=1,
+        strong_precond_trigger=True,
+        rhs1_precond_kind="point",
+        res_ratio=10.0,
+        pas_tz_guarded_fallback=False,
+        pas_tz_guarded_strong_retry=False,
+        qi_device_skip_strong=False,
+    )
+
+    assert selection.kind == "theta_line"
+    assert selection.candidate_kind_before_skips == "theta_line"
+    assert selection.trigger
+
+
+def test_resolve_rhs1_reduced_strong_selection_extra_constraint_uses_schur() -> None:
+    selection = resolve_rhs1_reduced_strong_preconditioner_selection(
+        strong_precond_env="",
+        control=RHS1StrongPreconditionerControl(min_size=800, disabled=False, auto=True),
+        has_extra_constraint_block=True,
+        has_fp=True,
+        has_pas=False,
+        geom_scheme=5,
+        use_dkes=False,
+        active_size=5000,
+        n_theta=9,
+        n_zeta=5,
+        max_l=8,
+        nxi_for_x_sum=20,
+        shard_axis=None,
+        device_count=1,
+        strong_precond_trigger=True,
+        rhs1_precond_kind="point",
+        res_ratio=10.0,
+        pas_tz_guarded_fallback=False,
+        pas_tz_guarded_strong_retry=False,
+        qi_device_skip_strong=False,
+    )
+
+    assert selection.kind == "schur"
+    assert selection.candidate_kind_before_skips == "schur"
+
+
+def test_resolve_rhs1_reduced_strong_selection_tracks_pas_and_device_skip_gates(
+    monkeypatch,
+) -> None:
+    monkeypatch.delenv("SFINCS_JAX_PAS_STRONG_WEAK_SKIP_RATIO", raising=False)
+    selection = resolve_rhs1_reduced_strong_preconditioner_selection(
+        strong_precond_env="theta",
+        control=RHS1StrongPreconditionerControl(min_size=800, disabled=False, auto=False),
+        has_extra_constraint_block=False,
+        has_fp=False,
+        has_pas=True,
+        geom_scheme=5,
+        use_dkes=False,
+        active_size=5000,
+        n_theta=9,
+        n_zeta=5,
+        max_l=8,
+        nxi_for_x_sum=20,
+        shard_axis=None,
+        device_count=1,
+        strong_precond_trigger=True,
+        rhs1_precond_kind="collision",
+        res_ratio=1.0e13,
+        pas_tz_guarded_fallback=True,
+        pas_tz_guarded_strong_retry=False,
+        qi_device_skip_strong=True,
+    )
+
+    assert selection.kind is None
+    assert selection.candidate_kind_before_skips == "theta_line"
+    assert not selection.trigger
+    assert selection.skipped_weak_pas
+    assert selection.skipped_guarded_pas_tz
+    assert selection.skipped_qi_device
+
+
+def test_resolve_rhs1_reduced_strong_selection_allows_guarded_pas_retry() -> None:
+    selection = resolve_rhs1_reduced_strong_preconditioner_selection(
+        strong_precond_env="theta",
+        control=RHS1StrongPreconditionerControl(min_size=800, disabled=False, auto=False),
+        has_extra_constraint_block=False,
+        has_fp=False,
+        has_pas=True,
+        geom_scheme=5,
+        use_dkes=False,
+        active_size=5000,
+        n_theta=9,
+        n_zeta=5,
+        max_l=8,
+        nxi_for_x_sum=20,
+        shard_axis=None,
+        device_count=1,
+        strong_precond_trigger=True,
+        rhs1_precond_kind="pas_lite",
+        res_ratio=10.0,
+        pas_tz_guarded_fallback=True,
+        pas_tz_guarded_strong_retry=True,
+        qi_device_skip_strong=False,
+    )
+
+    assert selection.kind == "theta_line"
+    assert selection.trigger
+    assert not selection.skipped_guarded_pas_tz
