@@ -181,6 +181,7 @@ from .problems.profile_response.handoff import (
     rhs1_accept_measured_candidate_and_update_replay,
     rhs1_accept_sparse_retry_candidate_and_update_replay,
     rhs1_accept_smoother_candidate_and_update_replay,
+    rhs1_run_collision_retry_if_allowed,
     rhs1_run_fast_post_xblock_polish,
     rhs1_run_linear_candidate_and_update_replay,
     rhs1_run_measured_linear_candidate_and_update_replay,
@@ -10130,7 +10131,7 @@ def solve_v3_full_system_linear_gmres(
             )
         if fp_force_strong:
             strong_precond_trigger = True
-        if rhs1_collision_retry_allowed(
+        collision_retry_allowed = rhs1_collision_retry_allowed(
             residual_norm=float(res_reduced.residual_norm),
             target=float(target_reduced),
             rhs_mode=int(op.rhs_mode),
@@ -10139,37 +10140,33 @@ def solve_v3_full_system_linear_gmres(
             has_fp=op.fblock.fp is not None,
             has_pas=op.fblock.pas is not None,
             strong_precond_trigger=bool(strong_precond_trigger),
-        ):
-            if bicgstab_preconditioner_reduced is None:
-                bicgstab_preconditioner_reduced = _build_rhsmode1_collision_preconditioner(
-                    op=op, reduce_full=reduce_full, expand_reduced=expand_reduced
-                )
-            if bicgstab_preconditioner_reduced is not None:
-                if emit is not None:
-                    emit(
-                        0,
-                        "solve_v3_full_system_linear_gmres: retry with collision preconditioner "
-                        f"(residual={float(res_reduced.residual_norm):.3e} > target={target_reduced:.3e})",
-                    )
-                res_reduced, residual_vec, _accepted, _collision_elapsed_s = (
-                    rhs1_run_linear_candidate_and_update_replay(
-                        replay_state=ksp_replay,
-                        current_result=res_reduced,
-                        current_residual_vec=residual_vec,
-                        matvec_fn=mv_reduced,
-                        b_vec=rhs_reduced,
-                        precond_fn=bicgstab_preconditioner_reduced,
-                        tol=float(tol),
-                        atol=float(atol),
-                        restart=int(restart),
-                        maxiter=maxiter,
-                        solve_method="incremental",
-                        precond_side=gmres_precond_side,
-                        solve_linear=_solve_linear,
-                        solver_kind=_solver_kind("incremental")[0],
-                        returns_residual_vec=False,
-                    )
-                )
+        )
+        res_reduced, residual_vec, bicgstab_preconditioner_reduced, _accepted, _collision_elapsed_s = (
+            rhs1_run_collision_retry_if_allowed(
+                allowed=bool(collision_retry_allowed),
+                replay_state=ksp_replay,
+                current_result=res_reduced,
+                current_residual_vec=residual_vec,
+                matvec_fn=mv_reduced,
+                b_vec=rhs_reduced,
+                precond_fn=bicgstab_preconditioner_reduced,
+                build_preconditioner=lambda: _build_rhsmode1_collision_preconditioner(
+                    op=op,
+                    reduce_full=reduce_full,
+                    expand_reduced=expand_reduced,
+                ),
+                tol=float(tol),
+                atol=float(atol),
+                restart=int(restart),
+                maxiter=maxiter,
+                precond_side=gmres_precond_side,
+                solve_linear=_solve_linear,
+                solver_kind=_solver_kind("incremental")[0],
+                target=float(target_reduced),
+                returns_residual_vec=False,
+                emit=emit,
+            )
+        )
         large_cpu_sparse_rescue_active = _rhsmode1_large_cpu_sparse_rescue_allowed(
             op=op,
             solve_method_kind=solve_method_kind,
@@ -12705,7 +12702,7 @@ def solve_v3_full_system_linear_gmres(
                     solver_kind=_solver_kind("incremental")[0],
                 )
             )
-        if rhs1_collision_retry_allowed(
+        collision_retry_allowed = rhs1_collision_retry_allowed(
             residual_norm=float(result.residual_norm),
             target=float(target),
             rhs_mode=int(op.rhs_mode),
@@ -12714,35 +12711,29 @@ def solve_v3_full_system_linear_gmres(
             has_fp=op.fblock.fp is not None,
             has_pas=op.fblock.pas is not None,
             strong_precond_trigger=bool(strong_precond_trigger),
-        ):
-            if bicgstab_preconditioner_full is None:
-                bicgstab_preconditioner_full = _build_rhsmode1_collision_preconditioner(op=op)
-            if bicgstab_preconditioner_full is not None:
-                if emit is not None:
-                    emit(
-                        0,
-                        "solve_v3_full_system_linear_gmres: retry with collision preconditioner "
-                        f"(residual={float(result.residual_norm):.3e} > target={target:.3e})",
-                )
-                result, residual_vec, _accepted, _collision_elapsed_s = (
-                    rhs1_run_linear_candidate_and_update_replay(
-                        replay_state=ksp_replay,
-                        current_result=result,
-                        current_residual_vec=residual_vec,
-                        matvec_fn=mv,
-                        b_vec=rhs,
-                        precond_fn=bicgstab_preconditioner_full,
-                        tol=float(tol),
-                        atol=float(atol),
-                        restart=int(restart),
-                        maxiter=maxiter,
-                        solve_method="incremental",
-                        precond_side=gmres_precond_side,
-                        solve_linear=_solve_linear_with_residual,
-                        solver_kind=_solver_kind("incremental")[0],
-                        returns_residual_vec=True,
-                    )
-                )
+        )
+        result, residual_vec, bicgstab_preconditioner_full, _accepted, _collision_elapsed_s = (
+            rhs1_run_collision_retry_if_allowed(
+                allowed=bool(collision_retry_allowed),
+                replay_state=ksp_replay,
+                current_result=result,
+                current_residual_vec=residual_vec,
+                matvec_fn=mv,
+                b_vec=rhs,
+                precond_fn=bicgstab_preconditioner_full,
+                build_preconditioner=lambda: _build_rhsmode1_collision_preconditioner(op=op),
+                tol=float(tol),
+                atol=float(atol),
+                restart=int(restart),
+                maxiter=maxiter,
+                precond_side=gmres_precond_side,
+                solve_linear=_solve_linear_with_residual,
+                solver_kind=_solver_kind("incremental")[0],
+                target=float(target),
+                returns_residual_vec=True,
+                emit=emit,
+            )
+        )
         strong_precond_env = rhs1_strong_preconditioner_env_from_env()
         cs0_sparse_first = _rhsmode1_constraint0_sparse_first(
             op=op,

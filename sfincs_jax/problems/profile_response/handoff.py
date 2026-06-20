@@ -573,6 +573,62 @@ def rhs1_run_pas_schur_rescue_if_requested(
         return current_result, current_residual_vec, False, 0.0
 
 
+def rhs1_run_collision_retry_if_allowed(
+    *,
+    allowed: bool,
+    replay_state: RHS1KSPReplayState,
+    current_result: Any,
+    current_residual_vec: Any,
+    matvec_fn: Any,
+    b_vec: Any,
+    precond_fn: Any,
+    build_preconditioner: Any,
+    tol: float,
+    atol: float,
+    restart: int,
+    maxiter: int | None,
+    precond_side: str,
+    solve_linear: Any,
+    solver_kind: str,
+    target: float,
+    returns_residual_vec: bool,
+    emit: Any = None,
+) -> tuple[Any, Any, Any, bool, float]:
+    """Run a collision-preconditioner retry while preserving cache handoff."""
+
+    if not bool(allowed):
+        return current_result, current_residual_vec, precond_fn, False, 0.0
+    preconditioner = precond_fn
+    if preconditioner is None:
+        preconditioner = build_preconditioner()
+    if preconditioner is None:
+        return current_result, current_residual_vec, preconditioner, False, 0.0
+    if emit is not None:
+        emit(
+            0,
+            "solve_v3_full_system_linear_gmres: retry with collision preconditioner "
+            f"(residual={float(current_result.residual_norm):.3e} > target={float(target):.3e})",
+        )
+    result, residual_vec, accepted, elapsed_s = rhs1_run_linear_candidate_and_update_replay(
+        replay_state=replay_state,
+        current_result=current_result,
+        current_residual_vec=current_residual_vec,
+        matvec_fn=matvec_fn,
+        b_vec=b_vec,
+        precond_fn=preconditioner,
+        tol=float(tol),
+        atol=float(atol),
+        restart=int(restart),
+        maxiter=maxiter,
+        solve_method="incremental",
+        precond_side=precond_side,
+        solve_linear=solve_linear,
+        solver_kind=solver_kind,
+        returns_residual_vec=bool(returns_residual_vec),
+    )
+    return result, residual_vec, preconditioner, accepted, elapsed_s
+
+
 def rhs1_accept_smoother_candidate_and_update_replay(
     *,
     replay_state: RHS1KSPReplayState,
@@ -651,6 +707,7 @@ __all__ = [
     "rhs1_residual_improves",
     "rhs1_accept_smoother_candidate_and_update_replay",
     "rhs1_run_fast_post_xblock_polish",
+    "rhs1_run_collision_retry_if_allowed",
     "rhs1_run_linear_candidate_and_update_replay",
     "rhs1_run_measured_linear_candidate_and_update_replay",
     "rhs1_run_pas_schur_rescue_if_requested",

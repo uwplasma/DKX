@@ -42,6 +42,12 @@ Make `sfincs_jax` research-grade while preserving the public user contract:
 
 Recent checkpoints:
 
+- RHSMode=1 collision-preconditioner retry execution now uses a tested
+  `rhs1_run_collision_retry_if_allowed(...)` handoff helper shared by reduced
+  active-DOF and full-system branches. The driver still owns retry admission,
+  builder callables, and cached preconditioner variables; the helper owns
+  cache reuse, progress emission, strict-improvement acceptance, and KSP replay
+  updates.
 - RHSMode=1 full-system PAS Schur rescue execution now uses a tested
   `rhs1_run_pas_schur_rescue_if_requested(...)` handoff helper. Admission
   remains controlled by `rhs1_pas_schur_rescue_controls_from_env(...)`; the
@@ -349,10 +355,10 @@ Recent checkpoints:
 - `cb295ce` Extract sparse pattern setup.
 - `4b6a5b4` Extract sparse factor policy.
 
-Current source-size snapshot after PAS Schur rescue handoff extraction:
+Current source-size snapshot after collision retry handoff extraction:
 
-- `sfincs_jax/v3_driver.py`: `15769` lines.
-- `solve_v3_full_system_linear_gmres`: `11019` lines.
+- `sfincs_jax/v3_driver.py`: `15760` lines.
+- `solve_v3_full_system_linear_gmres`: `11009` lines.
 - `sfincs_jax/v3_results.py`: `119` lines.
 - `sfincs_jax/rhs1_ksp_diagnostics.py`: `306` lines.
 - `sfincs_jax/rhs1_pas_policy.py`: `889` lines.

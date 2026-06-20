@@ -15,6 +15,7 @@ from sfincs_jax.rhs1_handoff import (
     rhs1_accept_sparse_retry_candidate_and_update_replay,
     rhs1_accept_smoother_candidate_and_update_replay,
     rhs1_residual_improves,
+    rhs1_run_collision_retry_if_allowed,
     rhs1_run_fast_post_xblock_polish,
     rhs1_run_linear_candidate_and_update_replay,
     rhs1_run_measured_linear_candidate_and_update_replay,
@@ -980,6 +981,141 @@ def test_rhs1_run_pas_schur_rescue_keeps_current_on_builder_failure() -> None:
     assert elapsed_s == 0.0
     assert replay.matvec_fn == "old"
     assert any("PAS Schur rescue failed" in message for _level, message in messages)
+
+
+def test_rhs1_run_collision_retry_skips_when_not_allowed() -> None:
+    replay = RHS1KSPReplayState(matvec_fn="old")
+    current = _result(1.0, x="x0")
+
+    result, residual_vec, precond, accepted, elapsed_s = rhs1_run_collision_retry_if_allowed(
+        allowed=False,
+        replay_state=replay,
+        current_result=current,
+        current_residual_vec="r0",
+        matvec_fn="mv",
+        b_vec="rhs",
+        precond_fn="cached",
+        build_preconditioner=lambda: "new",
+        tol=1.0e-10,
+        atol=1.0e-12,
+        restart=17,
+        maxiter=33,
+        precond_side="left",
+        solve_linear=lambda **_kwargs: (_result(0.25, x="x1"), "r1"),
+        solver_kind="gmres",
+        target=1.0e-9,
+        returns_residual_vec=True,
+    )
+
+    assert result is current
+    assert residual_vec == "r0"
+    assert precond == "cached"
+    assert not accepted
+    assert elapsed_s == 0.0
+    assert replay.matvec_fn == "old"
+
+
+def test_rhs1_run_collision_retry_reuses_cached_preconditioner() -> None:
+    replay = RHS1KSPReplayState()
+    current = _result(1.0, x="x0")
+    candidate = _result(0.25, x="x1")
+    messages: list[tuple[int, str]] = []
+
+    def build_preconditioner():
+        raise AssertionError("cached preconditioner should be reused")
+
+    result, residual_vec, precond, accepted, elapsed_s = rhs1_run_collision_retry_if_allowed(
+        allowed=True,
+        replay_state=replay,
+        current_result=current,
+        current_residual_vec="r0",
+        matvec_fn="mv",
+        b_vec="rhs",
+        precond_fn="cached",
+        build_preconditioner=build_preconditioner,
+        tol=1.0e-10,
+        atol=1.0e-12,
+        restart=17,
+        maxiter=33,
+        precond_side="left",
+        solve_linear=lambda **_kwargs: (candidate, "r1"),
+        solver_kind="gmres",
+        target=1.0e-9,
+        returns_residual_vec=True,
+        emit=lambda level, message: messages.append((level, message)),
+    )
+
+    assert accepted
+    assert result is candidate
+    assert residual_vec == "r1"
+    assert precond == "cached"
+    assert elapsed_s >= 0.0
+    assert replay.precond_fn == "cached"
+    assert any("collision preconditioner" in message for _level, message in messages)
+
+
+def test_rhs1_run_collision_retry_builds_and_returns_preconditioner() -> None:
+    replay = RHS1KSPReplayState()
+    current = _result(1.0, x="x0")
+    candidate = _result(0.25, x="x1")
+
+    result, residual_vec, precond, accepted, _elapsed_s = rhs1_run_collision_retry_if_allowed(
+        allowed=True,
+        replay_state=replay,
+        current_result=current,
+        current_residual_vec="r0",
+        matvec_fn="mv",
+        b_vec="rhs",
+        precond_fn=None,
+        build_preconditioner=lambda: "built",
+        tol=1.0e-10,
+        atol=1.0e-12,
+        restart=17,
+        maxiter=33,
+        precond_side="left",
+        solve_linear=lambda **_kwargs: candidate,
+        solver_kind="gmres",
+        target=1.0e-9,
+        returns_residual_vec=False,
+    )
+
+    assert accepted
+    assert result is candidate
+    assert residual_vec == "r0"
+    assert precond == "built"
+    assert replay.precond_fn == "built"
+
+
+def test_rhs1_run_collision_retry_skips_when_builder_returns_none() -> None:
+    replay = RHS1KSPReplayState(matvec_fn="old")
+    current = _result(1.0, x="x0")
+
+    result, residual_vec, precond, accepted, elapsed_s = rhs1_run_collision_retry_if_allowed(
+        allowed=True,
+        replay_state=replay,
+        current_result=current,
+        current_residual_vec="r0",
+        matvec_fn="mv",
+        b_vec="rhs",
+        precond_fn=None,
+        build_preconditioner=lambda: None,
+        tol=1.0e-10,
+        atol=1.0e-12,
+        restart=17,
+        maxiter=33,
+        precond_side="left",
+        solve_linear=lambda **_kwargs: (_result(0.25, x="x1"), "r1"),
+        solver_kind="gmres",
+        target=1.0e-9,
+        returns_residual_vec=True,
+    )
+
+    assert result is current
+    assert residual_vec == "r0"
+    assert precond is None
+    assert not accepted
+    assert elapsed_s == 0.0
+    assert replay.matvec_fn == "old"
 
 
 def test_rhs1_run_measured_linear_candidate_accepts_returned_residual_vector() -> None:
