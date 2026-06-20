@@ -80,6 +80,36 @@ def rhs1_apply_handoff_to_replay_state(
     return True
 
 
+def rhs1_record_ksp_replay_problem(
+    replay_state: RHS1KSPReplayState,
+    *,
+    matvec_fn: Any,
+    b_vec: Any,
+    precond_fn: Any,
+    x0_vec: Any,
+    precond_side: str,
+    solver_kind: str,
+    restart: int | None = None,
+    maxiter: int | None = None,
+) -> None:
+    """Record the current linear problem for final KSP diagnostic replay.
+
+    ``restart`` and ``maxiter`` are optional because the driver often keeps the
+    original Krylov bounds while updating only the accepted operator/RHS/seed.
+    """
+
+    replay_state.matvec_fn = matvec_fn
+    replay_state.b_vec = b_vec
+    replay_state.precond_fn = precond_fn
+    replay_state.x0_vec = x0_vec
+    replay_state.precond_side = str(precond_side)
+    replay_state.solver_kind = str(solver_kind)
+    if restart is not None:
+        replay_state.restart = int(restart)
+    if maxiter is not None:
+        replay_state.maxiter = maxiter
+
+
 def rhs1_residual_improves(
     *,
     current_residual: float,
@@ -839,15 +869,17 @@ def rhs1_run_primary_krylov_and_update_replay(
     elapsed_s = time.perf_counter() - started
     if mark is not None and mark_done is not None:
         mark(mark_done)
-    replay_state.matvec_fn = matvec_fn
-    replay_state.b_vec = b_vec
-    replay_state.precond_fn = precond_fn
-    replay_state.x0_vec = x0_vec
-    replay_state.precond_side = str(precond_side)
-    replay_state.solver_kind = str(solver_kind)
-    if update_krylov_controls:
-        replay_state.restart = int(restart)
-        replay_state.maxiter = maxiter
+    rhs1_record_ksp_replay_problem(
+        replay_state,
+        matvec_fn=matvec_fn,
+        b_vec=b_vec,
+        precond_fn=precond_fn,
+        x0_vec=x0_vec,
+        precond_side=precond_side,
+        solver_kind=solver_kind,
+        restart=int(restart) if update_krylov_controls else None,
+        maxiter=maxiter if update_krylov_controls else None,
+    )
     return result, residual_vec, elapsed_s
 
 
@@ -988,6 +1020,7 @@ __all__ = [
     "rhs1_accept_measured_candidate_and_update_replay",
     "rhs1_accept_sparse_retry_candidate_and_update_replay",
     "rhs1_residual_improves",
+    "rhs1_record_ksp_replay_problem",
     "rhs1_accept_smoother_candidate_and_update_replay",
     "rhs1_retry_without_preconditioner_if_nonfinite",
     "rhs1_run_bicgstab_gmres_fallback_if_allowed",

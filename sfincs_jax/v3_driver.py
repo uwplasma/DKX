@@ -181,6 +181,7 @@ from .problems.profile_response.handoff import (
     rhs1_accept_measured_candidate_and_update_replay,
     rhs1_accept_sparse_retry_candidate_and_update_replay,
     rhs1_accept_smoother_candidate_and_update_replay,
+    rhs1_record_ksp_replay_problem,
     rhs1_retry_without_preconditioner_if_nonfinite,
     rhs1_run_bicgstab_gmres_fallback_if_allowed,
     rhs1_run_collision_retry_if_allowed,
@@ -9265,12 +9266,15 @@ def solve_v3_full_system_linear_gmres(
             _mark("rhs1_host_dense_shortcut_done")
             early_dense_shortcut = True
             probe_shortcut = True
-            ksp_replay.matvec_fn = mv_reduced
-            ksp_replay.b_vec = rhs_reduced
-            ksp_replay.precond_fn = None
-            ksp_replay.x0_vec = x0_reduced
-            ksp_replay.precond_side = "none"
-            ksp_replay.solver_kind = _solver_kind("incremental")[0]
+            rhs1_record_ksp_replay_problem(
+                ksp_replay,
+                matvec_fn=mv_reduced,
+                b_vec=rhs_reduced,
+                precond_fn=None,
+                x0_vec=x0_reduced,
+                precond_side="none",
+                solver_kind=_solver_kind("incremental")[0],
+            )
         sparse_operator_admission = rhs1_sparse_operator_admission(
             operator_mode=sparse_operator_mode,
             use_matvec=bool(sparse_use_matvec),
@@ -9431,12 +9435,15 @@ def solve_v3_full_system_linear_gmres(
                     x=jnp.asarray(x_cs0_np, dtype=jnp.float64),
                     residual_norm=jnp.asarray(rn_pc_cs0, dtype=jnp.float64),
                 )
-                ksp_replay.matvec_fn = _mv_cs0_pc_full
-                ksp_replay.b_vec = jnp.asarray(rhs_pc_np, dtype=jnp.float64)
-                ksp_replay.precond_fn = None
-                ksp_replay.x0_vec = None if x0_reduced is None else jnp.asarray(x0_reduced, dtype=jnp.float64)
-                ksp_replay.precond_side = "none"
-                ksp_replay.solver_kind = _solver_kind("incremental")[0]
+                rhs1_record_ksp_replay_problem(
+                    ksp_replay,
+                    matvec_fn=_mv_cs0_pc_full,
+                    b_vec=jnp.asarray(rhs_pc_np, dtype=jnp.float64),
+                    precond_fn=None,
+                    x0_vec=None if x0_reduced is None else jnp.asarray(x0_reduced, dtype=jnp.float64),
+                    precond_side="none",
+                    solver_kind=_solver_kind("incremental")[0],
+                )
                 if emit is not None:
                     emit(
                         1,
@@ -9478,12 +9485,15 @@ def solve_v3_full_system_linear_gmres(
                     early_dense_shortcut = True
                     probe_shortcut = True
                     res_reduced = GMRESSolveResult(x=probe_x0, residual_norm=jnp.asarray(probe_norm))
-                    ksp_replay.matvec_fn = mv_reduced
-                    ksp_replay.b_vec = rhs_reduced
-                    ksp_replay.precond_fn = preconditioner_reduced
-                    ksp_replay.x0_vec = probe_x0
-                    ksp_replay.precond_side = gmres_precond_side
-                    ksp_replay.solver_kind = _solver_kind(solve_method)[0]
+                    rhs1_record_ksp_replay_problem(
+                        ksp_replay,
+                        matvec_fn=mv_reduced,
+                        b_vec=rhs_reduced,
+                        precond_fn=preconditioner_reduced,
+                        x0_vec=probe_x0,
+                        precond_side=gmres_precond_side,
+                        solver_kind=_solver_kind(solve_method)[0],
+                    )
                 elif dense_probe_decision.seed_x0_if_missing and x0_reduced is None:
                     x0_reduced = probe_x0
                 if emit is not None:
@@ -9573,12 +9583,15 @@ def solve_v3_full_system_linear_gmres(
             )
             res_reduced = _block_gmres_result_ready(res_reduced)
             _mark("rhs1_krylov_solve_done")
-            ksp_replay.matvec_fn = mv_pc
-            ksp_replay.b_vec = rhs_pc
-            ksp_replay.precond_fn = None
-            ksp_replay.x0_vec = x0_reduced
-            ksp_replay.precond_side = "none"
-            ksp_replay.solver_kind = _solver_kind("incremental")[0]
+            rhs1_record_ksp_replay_problem(
+                ksp_replay,
+                matvec_fn=mv_pc,
+                b_vec=rhs_pc,
+                precond_fn=None,
+                x0_vec=x0_reduced,
+                precond_side="none",
+                solver_kind=_solver_kind("incremental")[0],
+            )
         else:
             # If the probe indicates the system is far from converged but the dense
             # fallback is not allowed (e.g. medium FP DKES systems), avoid spending
@@ -9642,12 +9655,15 @@ def solve_v3_full_system_linear_gmres(
                 except Exception:
                     rn0 = jnp.asarray(np.inf, dtype=jnp.float64)
                 res_reduced = GMRESSolveResult(x=x0_reduced, residual_norm=jnp.asarray(rn0, dtype=jnp.float64))
-                ksp_replay.matvec_fn = mv_reduced
-                ksp_replay.b_vec = rhs_reduced
-                ksp_replay.precond_fn = preconditioner_reduced
-                ksp_replay.x0_vec = x0_reduced
-                ksp_replay.precond_side = gmres_precond_side
-                ksp_replay.solver_kind = _solver_kind(solve_method)[0]
+                rhs1_record_ksp_replay_problem(
+                    ksp_replay,
+                    matvec_fn=mv_reduced,
+                    b_vec=rhs_reduced,
+                    precond_fn=preconditioner_reduced,
+                    x0_vec=x0_reduced,
+                    precond_side=gmres_precond_side,
+                    solver_kind=_solver_kind(solve_method)[0],
+                )
             else:
                 res_reduced, residual_vec, _primary_elapsed_s = (
                     rhs1_run_primary_krylov_and_update_replay(
@@ -10823,14 +10839,17 @@ def solve_v3_full_system_linear_gmres(
                         if assembled_host_fp:
                             ksp_replay.x0_vec = res_reduced.x
                         else:
-                            ksp_replay.matvec_fn = mv_reduced
-                            ksp_replay.b_vec = rhs_reduced
-                            ksp_replay.precond_fn = precond_sparse_xblock
-                            ksp_replay.x0_vec = res_reduced.x
-                            ksp_replay.restart = restart
-                            ksp_replay.maxiter = maxiter
-                            ksp_replay.precond_side = gmres_precond_side
-                            ksp_replay.solver_kind = _solver_kind("incremental")[0]
+                            rhs1_record_ksp_replay_problem(
+                                ksp_replay,
+                                matvec_fn=mv_reduced,
+                                b_vec=rhs_reduced,
+                                precond_fn=precond_sparse_xblock,
+                                x0_vec=res_reduced.x,
+                                precond_side=gmres_precond_side,
+                                solver_kind=_solver_kind("incremental")[0],
+                                restart=restart,
+                                maxiter=maxiter,
+                            )
                 except Exception as exc:  # noqa: BLE001
                     sparse_xblock_rescue_error = f"{type(exc).__name__}: {exc}"
                     sparse_xblock_rescue_reason = "exception"
@@ -11273,14 +11292,17 @@ def solve_v3_full_system_linear_gmres(
                                 )
                                 if float(res_sxpolish.residual_norm) < float(res_reduced.residual_norm):
                                     res_reduced = res_sxpolish
-                                    ksp_replay.matvec_fn = mv_reduced
-                                    ksp_replay.b_vec = rhs_reduced
-                                    ksp_replay.precond_fn = polish_precond
-                                    ksp_replay.x0_vec = res_reduced.x
-                                    ksp_replay.restart = sxblock_polish_restart
-                                    ksp_replay.maxiter = sxblock_polish_maxiter
-                                    ksp_replay.precond_side = gmres_precond_side
-                                    ksp_replay.solver_kind = _solver_kind("incremental")[0]
+                                    rhs1_record_ksp_replay_problem(
+                                        ksp_replay,
+                                        matvec_fn=mv_reduced,
+                                        b_vec=rhs_reduced,
+                                        precond_fn=polish_precond,
+                                        x0_vec=res_reduced.x,
+                                        precond_side=gmres_precond_side,
+                                        solver_kind=_solver_kind("incremental")[0],
+                                        restart=sxblock_polish_restart,
+                                        maxiter=sxblock_polish_maxiter,
+                                    )
                 except Exception as exc:  # noqa: BLE001
                     if emit is not None:
                         emit(1, f"sxblock_sparse: failed ({type(exc).__name__}: {exc})")
@@ -12347,12 +12369,15 @@ def solve_v3_full_system_linear_gmres(
                 solve_method_val="incremental",
                 precond_side="none",
             )
-            ksp_replay.matvec_fn = mv_pc
-            ksp_replay.b_vec = rhs_pc
-            ksp_replay.precond_fn = None
-            ksp_replay.x0_vec = x0
-            ksp_replay.precond_side = "none"
-            ksp_replay.solver_kind = _solver_kind("incremental")[0]
+            rhs1_record_ksp_replay_problem(
+                ksp_replay,
+                matvec_fn=mv_pc,
+                b_vec=rhs_pc,
+                precond_fn=None,
+                x0_vec=x0,
+                precond_side="none",
+                solver_kind=_solver_kind("incremental")[0],
+            )
             residual_norm_full = jnp.linalg.norm(mv(res_pc.x) - rhs)
             result = GMRESSolveResult(x=res_pc.x, residual_norm=residual_norm_full)
         else:
@@ -12446,15 +12471,18 @@ def solve_v3_full_system_linear_gmres(
                         0,
                         "solve_v3_full_system_linear_gmres: accelerator FP small system -> "
                         f"using host dense shortcut (size={int(op.total_size)})",
-                    )
+                )
                 result, residual_vec = _solve_host_dense_full(x0_dense=x0)
                 _mark("rhs1_host_dense_shortcut_done")
-                ksp_replay.matvec_fn = mv
-                ksp_replay.b_vec = rhs
-                ksp_replay.precond_fn = None
-                ksp_replay.x0_vec = x0
-                ksp_replay.precond_side = "none"
-                ksp_replay.solver_kind = _solver_kind("incremental")[0]
+                rhs1_record_ksp_replay_problem(
+                    ksp_replay,
+                    matvec_fn=mv,
+                    b_vec=rhs,
+                    precond_fn=None,
+                    x0_vec=x0,
+                    precond_side="none",
+                    solver_kind=_solver_kind("incremental")[0],
+                )
             if recycle_basis_use and (not host_dense_shortcut_full):
                 basis_full: list[jnp.ndarray] = []
                 for vec in recycle_basis_use:

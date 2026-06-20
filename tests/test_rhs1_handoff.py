@@ -15,6 +15,7 @@ from sfincs_jax.rhs1_handoff import (
     rhs1_accept_sparse_retry_candidate_and_update_replay,
     rhs1_accept_smoother_candidate_and_update_replay,
     rhs1_residual_improves,
+    rhs1_record_ksp_replay_problem,
     rhs1_retry_without_preconditioner_if_nonfinite,
     rhs1_run_bicgstab_gmres_fallback_if_allowed,
     rhs1_run_collision_retry_if_allowed,
@@ -240,6 +241,50 @@ def test_rhs1_accept_candidate_and_update_replay_updates_only_on_acceptance() ->
     assert rejected_residual_vec == "r1"
     assert replay.matvec_fn == "mv"
     assert replay.solver_kind == "gmres"
+
+
+def test_rhs1_record_ksp_replay_problem_preserves_existing_krylov_controls() -> None:
+    replay = RHS1KSPReplayState(restart=99, maxiter=101, solver_kind="old")
+
+    rhs1_record_ksp_replay_problem(
+        replay,
+        matvec_fn="mv",
+        b_vec="rhs",
+        precond_fn="pc",
+        x0_vec="seed",
+        precond_side="left",
+        solver_kind="gmres",
+    )
+
+    assert replay.matvec_fn == "mv"
+    assert replay.b_vec == "rhs"
+    assert replay.precond_fn == "pc"
+    assert replay.x0_vec == "seed"
+    assert replay.precond_side == "left"
+    assert replay.solver_kind == "gmres"
+    assert replay.restart == 99
+    assert replay.maxiter == 101
+
+
+def test_rhs1_record_ksp_replay_problem_can_update_krylov_controls() -> None:
+    replay = RHS1KSPReplayState(restart=99, maxiter=101)
+
+    rhs1_record_ksp_replay_problem(
+        replay,
+        matvec_fn="mv",
+        b_vec="rhs",
+        precond_fn=None,
+        x0_vec=None,
+        precond_side="none",
+        solver_kind="gmres",
+        restart=17,
+        maxiter=33,
+    )
+
+    assert replay.restart == 17
+    assert replay.maxiter == 33
+    assert replay.precond_fn is None
+    assert replay.precond_side == "none"
 
 
 def test_rhs1_accept_smoother_candidate_updates_replay_and_uses_residual_builder() -> None:

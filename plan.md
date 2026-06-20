@@ -42,6 +42,11 @@ Make `sfincs_jax` research-grade while preserving the public user contract:
 
 Recent checkpoints:
 
+- KSP replay-state recording now uses a tested
+  `rhs1_record_ksp_replay_problem(...)` helper. Straightforward multi-field
+  replay assignment blocks in `v3_driver.py` now call the shared recorder, and
+  the primary Krylov helper uses the same path. This centralizes diagnostic
+  replay bookkeeping while preserving the legacy restart/maxiter behavior.
 - RHSMode=1 primary Krylov solve/replay and non-finite preconditioned retry
   handling now use tested handoff helpers shared by reduced active-DOF and
   full-system branches. The helpers preserve the legacy replay-control
@@ -372,10 +377,10 @@ Recent checkpoints:
 - `cb295ce` Extract sparse pattern setup.
 - `4b6a5b4` Extract sparse factor policy.
 
-Current source-size snapshot after primary Krylov handoff extraction:
+Current source-size snapshot after KSP replay recorder extraction:
 
-- `sfincs_jax/v3_driver.py`: `15747` lines.
-- `solve_v3_full_system_linear_gmres`: `10992` lines.
+- `sfincs_jax/v3_driver.py`: `15775` lines.
+- `solve_v3_full_system_linear_gmres`: `11019` lines.
 - `sfincs_jax/v3_results.py`: `119` lines.
 - `sfincs_jax/rhs1_ksp_diagnostics.py`: `306` lines.
 - `sfincs_jax/rhs1_pas_policy.py`: `889` lines.
