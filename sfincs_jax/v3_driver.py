@@ -845,6 +845,7 @@ from .sparse_triangular import (
 from .preconditioner_setup import (
     hash_array as _hash_array,
     matvec_submatrix as _matvec_submatrix_impl,
+    matvec_submatrix_v3_unsharded as _matvec_submatrix_v3_unsharded,
     precond_chunk_cols as _precond_chunk_cols,
     rhs_mode1_precond_cache_key as _rhs_mode1_precond_cache_key_impl,
     rhs_mode1_structured_fblock_cache_key as _rhs_mode1_structured_fblock_cache_key_impl,
@@ -1049,8 +1050,7 @@ def _transport_tzfft_structured_first_attempt_allowed(
     )
 
 
-def _transport_tzfft_first_attempt_budget(*, restart: int, maxiter: int | None) -> tuple[str, int, int]:
-    return _transport_tzfft_first_attempt_budget_impl(restart=restart, maxiter=maxiter)
+_transport_tzfft_first_attempt_budget = _transport_tzfft_first_attempt_budget_impl
 
 
 def _rhsmode1_host_dense_fallback_allowed() -> bool:
@@ -1074,15 +1074,10 @@ def _rhsmode1_host_dense_shortcut_allowed(
     )
 
 
-def _rhsmode1_dense_krylov_allowed() -> bool:
-    return _rhs1_dense_krylov_allowed_impl()
+_rhsmode1_dense_krylov_allowed = _rhs1_dense_krylov_allowed_impl
 
 
-def _rhsmode1_host_sparse_direct_allowed(*, sparse_exact_lu: bool, use_implicit: bool = False) -> bool:
-    return _rhs1_host_sparse_direct_allowed_impl(
-        sparse_exact_lu=sparse_exact_lu,
-        use_implicit=use_implicit,
-    )
+_rhsmode1_host_sparse_direct_allowed = _rhs1_host_sparse_direct_allowed_impl
 
 
 def _rhsmode1_sparse_operator_preconditioned_rescue_allowed(
@@ -1126,42 +1121,15 @@ def _sparse_factor_cache_key(cache_key: tuple[object, ...], factor_dtype: np.dty
     return (*cache_key, np.dtype(factor_dtype).str)
 
 
-def _host_sparse_direct_refine_steps(env_name: str, default: int = 2) -> int:
-    return _host_sparse_direct_refine_steps_impl(env_name, default=default)
+_host_sparse_direct_refine_steps = _host_sparse_direct_refine_steps_impl
 
 
-def _host_sparse_direct_solve_with_refinement(
-    *,
-    ilu,
-    a_csr_full,
-    rhs_vec: jnp.ndarray,
-    factor_dtype: np.dtype,
-    refine_steps: int,
-) -> tuple[np.ndarray, float]:
-    return _host_sparse_direct_solve_with_refinement_impl(
-        ilu=ilu,
-        a_csr_full=a_csr_full,
-        rhs_vec=rhs_vec,
-        factor_dtype=factor_dtype,
-        refine_steps=refine_steps,
-    )
+_host_sparse_direct_solve_with_refinement = (
+    _host_sparse_direct_solve_with_refinement_impl
+)
 
 
-def _host_direct_solve_with_refinement(
-    *,
-    factor_solve: Callable[[np.ndarray], np.ndarray],
-    operator_matrix,
-    rhs_vec: jnp.ndarray,
-    factor_dtype: np.dtype,
-    refine_steps: int,
-) -> tuple[np.ndarray, float]:
-    return _host_direct_solve_with_refinement_impl(
-        factor_solve=factor_solve,
-        operator_matrix=operator_matrix,
-        rhs_vec=rhs_vec,
-        factor_dtype=factor_dtype,
-        refine_steps=refine_steps,
-    )
+_host_direct_solve_with_refinement = _host_direct_solve_with_refinement_impl
 
 
 def _host_sparse_direct_polish(
@@ -1219,21 +1187,12 @@ def _host_physical_memory_mb() -> float | None:
     return None
 
 
-def _rhsmode1_host_sparse_skip_dense_ratio() -> float:
-    return _rhs1_host_sparse_skip_dense_ratio_impl()
+_rhsmode1_host_sparse_skip_dense_ratio = _rhs1_host_sparse_skip_dense_ratio_impl
 
 
-def _rhsmode1_explicit_sparse_host_direct_allowed(
-    *,
-    sparse_exact_lu: bool,
-    use_implicit: bool,
-    active_size: int,
-) -> bool:
-    return _rhs1_explicit_sparse_host_direct_allowed_impl(
-        sparse_exact_lu=sparse_exact_lu,
-        use_implicit=use_implicit,
-        active_size=active_size,
-    )
+_rhsmode1_explicit_sparse_host_direct_allowed = (
+    _rhs1_explicit_sparse_host_direct_allowed_impl
+)
 
 
 def _build_host_sparse_direct_factor_from_matvec(
@@ -1343,21 +1302,9 @@ def _rhsmode1_pas_fast_accept(
     )
 
 
-def _rhsmode1_pas_adaptive_smoother_allowed(
-    *,
-    op: V3FullSystemOperator,
-    active_size: int,
-    residual_norm: float,
-    target: float,
-    use_implicit: bool,
-) -> bool:
-    return _rhs1_pas_adaptive_smoother_allowed_impl(
-        op=op,
-        active_size=int(active_size),
-        residual_norm=float(residual_norm),
-        target=float(target),
-        use_implicit=bool(use_implicit),
-    )
+_rhsmode1_pas_adaptive_smoother_allowed = (
+    _rhs1_pas_adaptive_smoother_allowed_impl
+)
 
 
 def _rhsmode1_constraint0_sparse_first(
@@ -1378,25 +1325,12 @@ def _rhsmode1_constraint0_sparse_first(
     )
 
 
-def _rhsmode1_constraint0_petsc_compat(
-    *,
-    op: V3FullSystemOperator,
-    solve_method_kind: str,
-    sparse_precond_mode: str,
-    active_size: int,
-    sparse_max_size: int,
-) -> bool:
-    return _rhs1_constraint0_petsc_compat_impl(
-        op=op,
-        solve_method_kind=solve_method_kind,
-        sparse_precond_mode=sparse_precond_mode,
-        active_size=int(active_size),
-        sparse_max_size=int(sparse_max_size),
-    )
+_rhsmode1_constraint0_petsc_compat = _rhs1_constraint0_petsc_compat_impl
 
 
-def _rhsmode1_constraint0_dense_fallback_allowed(op: V3FullSystemOperator) -> bool:
-    return _rhs1_constraint0_dense_fallback_allowed_impl(op)
+_rhsmode1_constraint0_dense_fallback_allowed = (
+    _rhs1_constraint0_dense_fallback_allowed_impl
+)
 
 
 def _rhsmode1_sparse_exact_lu_requested(
@@ -1421,30 +1355,12 @@ def _rhsmode1_sparse_exact_lu_requested(
     )
 
 
-def _rhsmode1_prefer_sparse_over_dense_shortcut(
-    *,
-    op: V3FullSystemOperator,
-    active_size: int,
-    sparse_max_size: int,
-    use_implicit: bool,
-) -> bool:
-    return _rhs1_prefer_sparse_over_dense_shortcut_impl(
-        op=op,
-        active_size=int(active_size),
-        sparse_max_size=int(sparse_max_size),
-        use_implicit=bool(use_implicit),
-    )
+_rhsmode1_prefer_sparse_over_dense_shortcut = (
+    _rhs1_prefer_sparse_over_dense_shortcut_impl
+)
 
 
-def _rhsmode1_sparse_prefer_skips_stage2(
-    *,
-    sparse_prefer_over_dense_shortcut: bool,
-    sparse_precond_mode: str,
-) -> bool:
-    return _rhs1_sparse_prefer_skips_stage2_impl(
-        sparse_prefer_over_dense_shortcut=bool(sparse_prefer_over_dense_shortcut),
-        sparse_precond_mode=sparse_precond_mode,
-    )
+_rhsmode1_sparse_prefer_skips_stage2 = _rhs1_sparse_prefer_skips_stage2_impl
 
 
 def _rhsmode1_large_cpu_sparse_rescue_allowed(
@@ -1469,11 +1385,7 @@ def _rhsmode1_large_cpu_sparse_rescue_allowed(
     )
 
 
-def _rhsmode1_large_cpu_sparse_rescue_first(*, large_cpu_sparse_rescue: bool, strong_precond_env: str) -> bool:
-    return _rhs1_large_cpu_sparse_rescue_first_impl(
-        large_cpu_sparse_rescue=bool(large_cpu_sparse_rescue),
-        strong_precond_env=strong_precond_env,
-    )
+_rhsmode1_large_cpu_sparse_rescue_first = _rhs1_large_cpu_sparse_rescue_first_impl
 
 
 def _rhsmode1_large_cpu_sparse_skip_primary_allowed(
@@ -1494,8 +1406,9 @@ def _rhsmode1_large_cpu_sparse_skip_primary_allowed(
     )
 
 
-def _rhsmode1_large_cpu_sparse_exact_lu_allowed(*, active_size: int) -> bool:
-    return _rhs1_large_cpu_sparse_exact_lu_allowed_impl(active_size=int(active_size))
+_rhsmode1_large_cpu_sparse_exact_lu_allowed = (
+    _rhs1_large_cpu_sparse_exact_lu_allowed_impl
+)
 
 
 def _rhsmode1_large_cpu_sparse_exact_lu_xblock_allowed(
@@ -1742,8 +1655,7 @@ def _transport_sparse_direct_rescue_allowed(
     )
 
 
-def _transport_sparse_direct_rescue_first(*, sparse_direct_rescue: bool) -> bool:
-    return _transport_sparse_direct_rescue_first_impl(sparse_direct_rescue=sparse_direct_rescue)
+_transport_sparse_direct_rescue_first = _transport_sparse_direct_rescue_first_impl
 
 
 def _transport_sparse_direct_first_attempt_allowed(
@@ -1774,25 +1686,12 @@ def _transport_host_gmres_first_attempt_allowed(
     )
 
 
-def _transport_host_gmres_accepts_preconditioned_residual(
-    *,
-    op: V3FullSystemOperator,
-    true_residual_norm: float,
-    target_true: float,
-) -> bool:
-    return _transport_host_gmres_accepts_preconditioned_residual_impl(
-        op=op,
-        true_residual_norm=true_residual_norm,
-        target_true=target_true,
-    )
+_transport_host_gmres_accepts_preconditioned_residual = (
+    _transport_host_gmres_accepts_preconditioned_residual_impl
+)
 
 
-def _transport_precondition_side(
-    *,
-    op: V3FullSystemOperator,
-    use_implicit: bool,
-) -> str:
-    return _transport_precondition_side_impl(op=op, use_implicit=use_implicit)
+_transport_precondition_side = _transport_precondition_side_impl
 
 
 def _transport_disable_auto_recycle(
@@ -1807,17 +1706,9 @@ def _transport_disable_auto_recycle(
     )
 
 
-def _transport_sparse_direct_needs_float64_retry(
-    *,
-    factor_dtype: np.dtype,
-    residual_norm: float,
-    target_true: float,
-) -> bool:
-    return _transport_sparse_direct_needs_float64_retry_impl(
-        factor_dtype=factor_dtype,
-        residual_norm=residual_norm,
-        target_true=target_true,
-    )
+_transport_sparse_direct_needs_float64_retry = (
+    _transport_sparse_direct_needs_float64_retry_impl
+)
 
 
 def _transport_sparse_factor_dtype(*, size: int, use_implicit: bool) -> np.dtype:
@@ -1970,27 +1861,7 @@ def _build_sparse_jax_preconditioner_from_matvec(
     return _apply
 
 
-def _matvec_submatrix(
-    op_pc: V3FullSystemOperator,
-    *,
-    col_idx: np.ndarray,
-    row_idx: np.ndarray,
-    total_size: int,
-    chunk_cols: int,
-) -> np.ndarray:
-    # Preconditioner submatrix assembly batches basis-vector probes with
-    # `vmap`. Do not call the cached/pjit matvec here: on multi-device hosts it
-    # can enter `jax.set_mesh` inside the transform, which JAX rejects. The
-    # submatrix is a setup-time host object, so use the unsharded operator
-    # application explicitly.
-    return _matvec_submatrix_impl(
-        op_pc,
-        col_idx=col_idx,
-        row_idx=row_idx,
-        total_size=total_size,
-        chunk_cols=chunk_cols,
-        apply_operator_fn=apply_v3_full_system_operator,
-    )
+_matvec_submatrix = _matvec_submatrix_v3_unsharded
 
 
 def _rhsmode1_dense_fallback_max(op: V3FullSystemOperator) -> int:
@@ -15730,28 +15601,24 @@ def _transport_parallel_worker(payload: dict[str, object]) -> dict[str, object]:
 _TRANSPORT_PARALLEL_POOL_CACHE = TransportParallelPoolCache()
 
 
-def _transport_parallel_start_method() -> str:
-    return _transport_parallel_start_method_impl()
+_transport_parallel_start_method = _transport_parallel_start_method_impl
 
 
-def _transport_parallel_backend() -> str:
-    return _transport_parallel_backend_impl()
+_transport_parallel_backend = _transport_parallel_backend_impl
 
 
-def _transport_parallel_persistent_pool_enabled() -> bool:
-    return _transport_parallel_persistent_pool_enabled_impl()
+_transport_parallel_persistent_pool_enabled = (
+    _transport_parallel_persistent_pool_enabled_impl
+)
 
 
-def _transport_parallel_pool_key(parallel_workers: int) -> tuple[object, ...]:
-    return _transport_parallel_pool_key_impl(int(parallel_workers))
+_transport_parallel_pool_key = _transport_parallel_pool_key_impl
 
 
-def _transport_parallel_visible_gpu_ids(parallel_workers: int) -> list[str]:
-    return _transport_parallel_visible_gpu_ids_impl(int(parallel_workers))
+_transport_parallel_visible_gpu_ids = _transport_parallel_visible_gpu_ids_impl
 
 
-def _transport_parallel_gpu_worker_env(*, gpu_id: str) -> dict[str, str]:
-    return _transport_parallel_gpu_worker_env_impl(gpu_id=str(gpu_id))
+_transport_parallel_gpu_worker_env = _transport_parallel_gpu_worker_env_impl
 
 
 def _run_transport_parallel_gpu_subprocesses(

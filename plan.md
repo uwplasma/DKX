@@ -1117,6 +1117,17 @@ Recent local validation:
   wrapper alias cleanup: `36 passed, 96 deselected in 40.57 s`.
 - Transport/preconditioner dispatch shard after preconditioner wrapper alias
   cleanup: `554 passed in 29.70 s`.
+- Policy, sparse-helper, transport, and distributed-GMRES focused tests after
+  policy/refinement/parallel alias cleanup: `102 passed in 13.06 s`.
+- Transport parallel policy/runtime shard after policy/refinement/parallel
+  alias cleanup: `329 passed in 52.75 s`.
+- RHSMode=1 PAS/Schwarz monkeypatch compatibility tests after policy alias
+  cleanup: `31 passed in 10.18 s`.
+- Broad profile-response/RHSMode=1 policy, setup, diagnostics, solver, and
+  helper sweep after policy/refinement/parallel alias cleanup:
+  `1193 passed in 50.24 s`.
+- Transport/preconditioner dispatch shard after policy/refinement/parallel
+  alias cleanup: `554 passed in 29.90 s`.
 - Older focused and broad validation checkpoints are intentionally omitted from
   this active plan; they remain available in git history.
 
@@ -1129,7 +1140,7 @@ Known CI issue fixed by this rewrite:
 
 ### 1. `v3_driver.py` Architecture Refactor
 
-Completion estimate: 67%.
+Completion estimate: 68%.
 
 Goal:
 
@@ -1209,6 +1220,10 @@ Completed recent boundaries:
 - Pure forwarding preconditioner compatibility wrappers in `v3_driver.py` are
   now patchable aliases to their domain implementations, removing about 575
   net driver lines while preserving existing monkeypatch-based tests.
+- Pure forwarding policy, host-refinement, submatrix setup, and transport
+  parallel compatibility wrappers are now patchable aliases to domain helpers,
+  removing another driver boilerplate tranche without changing backend-injected
+  or callback-adapting wrappers.
 - RHSMode=1 rescue/refinement candidate acceptance and KSP replay-state updates
   consolidated into profile-response handoff helpers.
 - RHSMode=1 true-residual recomputation before fallback decisions consolidated
