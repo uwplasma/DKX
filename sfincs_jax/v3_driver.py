@@ -181,6 +181,7 @@ from .problems.profile_response.handoff import (
     rhs1_accept_measured_candidate_and_update_replay,
     rhs1_accept_sparse_retry_candidate_and_update_replay,
     rhs1_accept_smoother_candidate_and_update_replay,
+    rhs1_run_bicgstab_gmres_fallback_if_allowed,
     rhs1_run_collision_retry_if_allowed,
     rhs1_run_fast_post_xblock_polish,
     rhs1_run_linear_candidate_and_update_replay,
@@ -9951,33 +9952,30 @@ def solve_v3_full_system_linear_gmres(
             (not _gmres_result_is_finite(res_reduced))
             or (bicgstab_fallback_strict and float(res_reduced.residual_norm) > bicgstab_fallback_target)
         ):
-            if emit is not None:
-                emit(
-                    0,
-                    "solve_v3_full_system_linear_gmres: BiCGStab fallback to GMRES "
-                    f"(residual={float(res_reduced.residual_norm):.3e} > target={bicgstab_fallback_target:.3e})",
+            res_reduced, residual_vec, preconditioner_reduced, _accepted, _bicgstab_fallback_elapsed_s = (
+                rhs1_run_bicgstab_gmres_fallback_if_allowed(
+                    allowed=True,
+                    replay_state=ksp_replay,
+                    current_result=res_reduced,
+                    current_residual_vec=residual_vec,
+                    matvec_fn=mv_reduced,
+                    b_vec=rhs_reduced,
+                    precond_fn=preconditioner_reduced,
+                    preconditioner_enabled=bool(rhs1_precond_enabled),
+                    build_preconditioner=_build_rhs1_preconditioner_reduced_with_fallback,
+                    x0_vec=x0_reduced,
+                    tol=float(tol),
+                    atol=float(atol),
+                    restart=int(restart),
+                    maxiter=maxiter,
+                    precond_side=gmres_precond_side,
+                    solve_linear=_solve_linear,
+                    target=float(bicgstab_fallback_target),
+                    returns_residual_vec=False,
+                    result_ready=_block_gmres_result_ready,
+                    emit=emit,
                 )
-            if preconditioner_reduced is None and rhs1_precond_enabled:
-                preconditioner_reduced = _build_rhs1_preconditioner_reduced_with_fallback()
-            res_reduced = _solve_linear(
-                matvec_fn=mv_reduced,
-                b_vec=rhs_reduced,
-                precond_fn=preconditioner_reduced,
-                x0_vec=x0_reduced,
-                tol_val=tol,
-                atol_val=atol,
-                restart_val=restart,
-                maxiter_val=maxiter,
-                solve_method_val="incremental",
-                precond_side=gmres_precond_side,
             )
-            res_reduced = _block_gmres_result_ready(res_reduced)
-            ksp_replay.matvec_fn = mv_reduced
-            ksp_replay.b_vec = rhs_reduced
-            ksp_replay.precond_fn = preconditioner_reduced
-            ksp_replay.x0_vec = x0_reduced
-            ksp_replay.precond_side = gmres_precond_side
-            ksp_replay.solver_kind = "gmres"
         if (
             sparse_prefer_skips_stage2
             and float(res_reduced.residual_norm) > target_reduced
@@ -12540,32 +12538,29 @@ def solve_v3_full_system_linear_gmres(
                 (not _gmres_result_is_finite(result))
                 or (bicgstab_fallback_strict and float(result.residual_norm) > bicgstab_fallback_target)
             ):
-                if emit is not None:
-                    emit(
-                        0,
-                        "solve_v3_full_system_linear_gmres: BiCGStab fallback to GMRES "
-                        f"(residual={float(result.residual_norm):.3e} > target={bicgstab_fallback_target:.3e})",
+                result, residual_vec, preconditioner_full, _accepted, _bicgstab_fallback_elapsed_s = (
+                    rhs1_run_bicgstab_gmres_fallback_if_allowed(
+                        allowed=True,
+                        replay_state=ksp_replay,
+                        current_result=result,
+                        current_residual_vec=residual_vec,
+                        matvec_fn=mv,
+                        b_vec=rhs,
+                        precond_fn=preconditioner_full,
+                        preconditioner_enabled=bool(rhs1_precond_enabled),
+                        build_preconditioner=_build_rhs1_preconditioner_full,
+                        x0_vec=x0,
+                        tol=float(tol),
+                        atol=float(atol),
+                        restart=int(restart),
+                        maxiter=maxiter,
+                        precond_side=gmres_precond_side,
+                        solve_linear=_solve_linear_with_residual,
+                        target=float(bicgstab_fallback_target),
+                        returns_residual_vec=True,
+                        emit=emit,
                     )
-                if preconditioner_full is None and rhs1_precond_enabled:
-                    preconditioner_full = _build_rhs1_preconditioner_full()
-                result, residual_vec = _solve_linear_with_residual(
-                    matvec_fn=mv,
-                    b_vec=rhs,
-                    precond_fn=preconditioner_full,
-                    x0_vec=x0,
-                    tol_val=tol,
-                    atol_val=atol,
-                    restart_val=restart,
-                    maxiter_val=maxiter,
-                    solve_method_val="incremental",
-                    precond_side=gmres_precond_side,
                 )
-                ksp_replay.matvec_fn = mv
-                ksp_replay.b_vec = rhs
-                ksp_replay.precond_fn = preconditioner_full
-                ksp_replay.x0_vec = x0
-                ksp_replay.precond_side = gmres_precond_side
-                ksp_replay.solver_kind = "gmres"
         # The full-size RHSMode=1 branch does not have the later active-DOF sparse
         # ILU rescue. On accelerators, skipping stage2 GMRES here can therefore
         # return a high-residual solution with no real recovery path.

@@ -702,6 +702,79 @@ def rhs1_run_stage2_retry_if_allowed(
     return result, residual_vec, preconditioner, accepted, elapsed_s
 
 
+def rhs1_run_bicgstab_gmres_fallback_if_allowed(
+    *,
+    allowed: bool,
+    replay_state: RHS1KSPReplayState,
+    current_result: Any,
+    current_residual_vec: Any,
+    matvec_fn: Any,
+    b_vec: Any,
+    precond_fn: Any,
+    preconditioner_enabled: bool,
+    build_preconditioner: Any,
+    x0_vec: Any,
+    tol: float,
+    atol: float,
+    restart: int,
+    maxiter: int | None,
+    precond_side: str,
+    solve_linear: Any,
+    target: float,
+    returns_residual_vec: bool,
+    result_ready: Any = None,
+    emit: Any = None,
+) -> tuple[Any, Any, Any, bool, float]:
+    """Retry a BiCGStab solve with GMRES and update replay unconditionally."""
+
+    if not bool(allowed):
+        return current_result, current_residual_vec, precond_fn, False, 0.0
+    if emit is not None:
+        emit(
+            0,
+            "solve_v3_full_system_linear_gmres: BiCGStab fallback to GMRES "
+            f"(residual={float(current_result.residual_norm):.3e} > target={float(target):.3e})",
+        )
+    preconditioner = precond_fn
+    if preconditioner is None and bool(preconditioner_enabled):
+        preconditioner = build_preconditioner()
+    started = time.perf_counter()
+    candidate_output = solve_linear(
+        matvec_fn=matvec_fn,
+        b_vec=b_vec,
+        precond_fn=preconditioner,
+        x0_vec=x0_vec,
+        tol_val=float(tol),
+        atol_val=float(atol),
+        restart_val=int(restart),
+        maxiter_val=maxiter,
+        solve_method_val="incremental",
+        precond_side=str(precond_side),
+    )
+    if returns_residual_vec:
+        candidate_result, candidate_residual_vec = candidate_output
+    else:
+        candidate_result = candidate_output
+        candidate_residual_vec = current_residual_vec
+    if result_ready is not None:
+        candidate_result = result_ready(candidate_result)
+    elapsed_s = time.perf_counter() - started
+    rhs1_apply_handoff_to_replay_state(
+        replay_state,
+        RHS1KSPHandoffState(
+            matvec_fn=matvec_fn,
+            b_vec=b_vec,
+            precond_fn=preconditioner,
+            x0_vec=x0_vec,
+            restart=int(restart),
+            maxiter=maxiter,
+            precond_side=str(precond_side),
+            solver_kind="gmres",
+        ),
+    )
+    return candidate_result, candidate_residual_vec, preconditioner, True, elapsed_s
+
+
 def rhs1_accept_smoother_candidate_and_update_replay(
     *,
     replay_state: RHS1KSPReplayState,
@@ -779,6 +852,7 @@ __all__ = [
     "rhs1_accept_sparse_retry_candidate_and_update_replay",
     "rhs1_residual_improves",
     "rhs1_accept_smoother_candidate_and_update_replay",
+    "rhs1_run_bicgstab_gmres_fallback_if_allowed",
     "rhs1_run_fast_post_xblock_polish",
     "rhs1_run_collision_retry_if_allowed",
     "rhs1_run_linear_candidate_and_update_replay",

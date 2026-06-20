@@ -15,6 +15,7 @@ from sfincs_jax.rhs1_handoff import (
     rhs1_accept_sparse_retry_candidate_and_update_replay,
     rhs1_accept_smoother_candidate_and_update_replay,
     rhs1_residual_improves,
+    rhs1_run_bicgstab_gmres_fallback_if_allowed,
     rhs1_run_collision_retry_if_allowed,
     rhs1_run_fast_post_xblock_polish,
     rhs1_run_linear_candidate_and_update_replay,
@@ -1014,6 +1015,135 @@ def test_rhs1_run_collision_retry_skips_when_not_allowed() -> None:
     assert not accepted
     assert elapsed_s == 0.0
     assert replay.matvec_fn == "old"
+
+
+def test_rhs1_run_bicgstab_gmres_fallback_skips_when_not_allowed() -> None:
+    replay = RHS1KSPReplayState(matvec_fn="old")
+    current = _result(1.0, x="x0")
+
+    result, residual_vec, precond, accepted, elapsed_s = (
+        rhs1_run_bicgstab_gmres_fallback_if_allowed(
+            allowed=False,
+            replay_state=replay,
+            current_result=current,
+            current_residual_vec="r0",
+            matvec_fn="mv",
+            b_vec="rhs",
+            precond_fn="cached",
+            preconditioner_enabled=True,
+            build_preconditioner=lambda: "new",
+            x0_vec="seed",
+            tol=1.0e-10,
+            atol=1.0e-12,
+            restart=17,
+            maxiter=33,
+            precond_side="left",
+            solve_linear=lambda **_kwargs: _result(0.25, x="x1"),
+            target=1.0e-9,
+            returns_residual_vec=False,
+        )
+    )
+
+    assert result is current
+    assert residual_vec == "r0"
+    assert precond == "cached"
+    assert not accepted
+    assert elapsed_s == 0.0
+    assert replay.matvec_fn == "old"
+
+
+def test_rhs1_run_bicgstab_gmres_fallback_replaces_result_and_updates_replay() -> None:
+    replay = RHS1KSPReplayState()
+    current = _result(1.0, x="x0")
+    candidate = _result(2.0, x="x1")
+    messages: list[tuple[int, str]] = []
+    calls: list[dict[str, object]] = []
+
+    def solve_linear(**kwargs):
+        calls.append(kwargs)
+        return candidate, "r1"
+
+    result, residual_vec, precond, accepted, elapsed_s = (
+        rhs1_run_bicgstab_gmres_fallback_if_allowed(
+            allowed=True,
+            replay_state=replay,
+            current_result=current,
+            current_residual_vec="r0",
+            matvec_fn="mv",
+            b_vec="rhs",
+            precond_fn=None,
+            preconditioner_enabled=True,
+            build_preconditioner=lambda: "built",
+            x0_vec="seed",
+            tol=1.0e-10,
+            atol=1.0e-12,
+            restart=17,
+            maxiter=33,
+            precond_side="left",
+            solve_linear=solve_linear,
+            target=1.0e-9,
+            returns_residual_vec=True,
+            emit=lambda level, message: messages.append((level, message)),
+        )
+    )
+
+    assert accepted
+    assert result is candidate
+    assert residual_vec == "r1"
+    assert precond == "built"
+    assert elapsed_s >= 0.0
+    assert replay.matvec_fn == "mv"
+    assert replay.precond_fn == "built"
+    assert replay.x0_vec == "seed"
+    assert replay.solver_kind == "gmres"
+    assert calls[0]["solve_method_val"] == "incremental"
+    assert calls[0]["x0_vec"] == "seed"
+    assert any("BiCGStab fallback to GMRES" in message for _level, message in messages)
+
+
+def test_rhs1_run_bicgstab_gmres_fallback_reuses_cached_preconditioner_and_ready_hook() -> None:
+    replay = RHS1KSPReplayState()
+    current = _result(float("nan"), x="x0")
+    candidate = _result(0.5, x="x1")
+    ready_seen: list[object] = []
+
+    def build_preconditioner():
+        raise AssertionError("cached preconditioner should be reused")
+
+    def result_ready(result):
+        ready_seen.append(result)
+        return _result(result.residual_norm, x="ready")
+
+    result, residual_vec, precond, accepted, _elapsed_s = (
+        rhs1_run_bicgstab_gmres_fallback_if_allowed(
+            allowed=True,
+            replay_state=replay,
+            current_result=current,
+            current_residual_vec="r0",
+            matvec_fn="mv",
+            b_vec="rhs",
+            precond_fn="cached",
+            preconditioner_enabled=True,
+            build_preconditioner=build_preconditioner,
+            x0_vec="seed",
+            tol=1.0e-10,
+            atol=1.0e-12,
+            restart=17,
+            maxiter=33,
+            precond_side="left",
+            solve_linear=lambda **_kwargs: candidate,
+            target=1.0e-9,
+            returns_residual_vec=False,
+            result_ready=result_ready,
+        )
+    )
+
+    assert accepted
+    assert result.x == "ready"
+    assert residual_vec == "r0"
+    assert precond == "cached"
+    assert ready_seen == [candidate]
+    assert replay.precond_fn == "cached"
 
 
 def test_rhs1_run_collision_retry_reuses_cached_preconditioner() -> None:
