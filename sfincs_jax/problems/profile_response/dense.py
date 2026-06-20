@@ -231,6 +231,14 @@ class RHS1EarlyDenseShortcutDecision:
     messages: tuple[tuple[int, str], ...] = ()
 
 
+@dataclass(frozen=True)
+class RHS1PostKrylovDenseShortcutDecision:
+    """Dense-shortcut state after true-residual admission before sparse rescue."""
+
+    dense_shortcut: bool
+    messages: tuple[tuple[int, str], ...] = ()
+
+
 def _env_float(name: str, default: float) -> float:
     raw = str(os.environ.get(name, "")).strip()
     try:
@@ -396,6 +404,69 @@ def rhs1_early_dense_shortcut_decision(
     return RHS1EarlyDenseShortcutDecision(
         early_dense_shortcut=bool(shortcut),
         messages=tuple(messages),
+    )
+
+
+def rhs1_post_krylov_dense_shortcut_decision(
+    *,
+    dense_shortcut: bool,
+    dense_shortcut_ratio: float,
+    residual_norm_true: float,
+    residual_ratio: float,
+    target: float,
+    dense_fallback_max: int,
+    active_size: int,
+    constraint_scheme: int,
+    cs0_sparse_first: bool,
+    sparse_prefer_over_dense_shortcut: bool,
+    sparse_exact_direct: bool,
+) -> RHS1PostKrylovDenseShortcutDecision:
+    """Resolve late dense-shortcut admission before sparse rescue setup."""
+
+    shortcut = bool(dense_shortcut)
+    if shortcut or float(dense_shortcut_ratio) <= 0.0:
+        return RHS1PostKrylovDenseShortcutDecision(dense_shortcut=shortcut)
+
+    thresholds = rhs1_dense_fallback_thresholds_from_env(
+        dense_fallback_max=int(dense_fallback_max),
+        residual_ratio=float(residual_ratio),
+    )
+    limit = int(thresholds.dense_fallback_limit)
+    force_dense_cs0 = bool(int(constraint_scheme) == 0 and not bool(cs0_sparse_first))
+    if force_dense_cs0:
+        limit = max(limit, int(dense_fallback_max))
+
+    admitted = (
+        limit > 0
+        and int(active_size) <= int(limit)
+        and bool(thresholds.dense_fallback_trigger)
+        and (float(residual_norm_true) > float(target) or force_dense_cs0)
+        and float(residual_ratio) >= float(dense_shortcut_ratio)
+    )
+    if not admitted:
+        return RHS1PostKrylovDenseShortcutDecision(dense_shortcut=False)
+
+    if bool(sparse_prefer_over_dense_shortcut) and not bool(sparse_exact_direct):
+        return RHS1PostKrylovDenseShortcutDecision(
+            dense_shortcut=False,
+            messages=(
+                (
+                    1,
+                    "solve_v3_full_system_linear_gmres: dense shortcut skipped "
+                    "(preferring sparse rescue over dense shortcut)",
+                ),
+            ),
+        )
+
+    return RHS1PostKrylovDenseShortcutDecision(
+        dense_shortcut=True,
+        messages=(
+            (
+                0,
+                "solve_v3_full_system_linear_gmres: dense fallback shortcut "
+                f"(ratio={float(residual_ratio):.3e} >= {float(dense_shortcut_ratio):.1e})",
+            ),
+        ),
     )
 
 
@@ -1403,6 +1474,7 @@ __all__ = [
     "RHS1DenseFallbackThresholds",
     "RHS1DenseFallbackAdmission",
     "RHS1EarlyDenseShortcutDecision",
+    "RHS1PostKrylovDenseShortcutDecision",
     "RHS1DenseShortcutSetup",
     "HostDenseFullSolveContext",
     "HostDenseReducedSolveContext",
@@ -1415,6 +1487,7 @@ __all__ = [
     "rhs1_dense_probe_enabled_from_env",
     "rhs1_dense_probe_shortcut_decision",
     "rhs1_early_dense_shortcut_decision",
+    "rhs1_post_krylov_dense_shortcut_decision",
     "rhs1_dense_fallback_thresholds_from_env",
     "rhs1_dense_shortcut_setup_from_env",
     "rhs1_fp_preconditioner_probe_kind_from_env",

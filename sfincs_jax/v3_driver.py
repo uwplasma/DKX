@@ -207,10 +207,10 @@ from .problems.profile_response.dense import (
     RHS1ReducedDenseFallbackAdmissionStageContext,
     RHS1ReducedDenseFallbackCandidateContext,
     RHS1ReducedDenseFallbackStageContext,
-    rhs1_dense_fallback_thresholds_from_env,
     rhs1_dense_shortcut_setup_from_env,
     rhs1_early_dense_shortcut_decision,
     rhs1_fp_preconditioner_probe_kind_from_env,
+    rhs1_post_krylov_dense_shortcut_decision,
     run_rhs1_dense_probe_stage,
     run_rhs1_full_dense_fallback_stage,
     run_rhs1_reduced_dense_fallback_admission_stage,
@@ -10185,37 +10185,25 @@ def solve_v3_full_system_linear_gmres(
                     x=res_reduced.x,
                 )
                 res_ratio = float(residual_norm_true) / max(float(target_reduced), 1e-300)
-                dense_thresholds = rhs1_dense_fallback_thresholds_from_env(
-                    dense_fallback_max=int(dense_fallback_max),
+                post_krylov_dense_decision = rhs1_post_krylov_dense_shortcut_decision(
+                    dense_shortcut=bool(dense_shortcut),
+                    dense_shortcut_ratio=float(dense_shortcut_ratio),
+                    residual_norm_true=float(residual_norm_true),
                     residual_ratio=float(res_ratio),
+                    target=float(target_reduced),
+                    dense_fallback_max=int(dense_fallback_max),
+                    active_size=int(active_size),
+                    constraint_scheme=int(op.constraint_scheme),
+                    cs0_sparse_first=bool(cs0_sparse_first),
+                    sparse_prefer_over_dense_shortcut=bool(
+                        sparse_prefer_over_dense_shortcut
+                    ),
+                    sparse_exact_direct=bool(sparse_exact_direct),
                 )
-                dense_fallback_limit = int(dense_thresholds.dense_fallback_limit)
-                force_dense_cs0 = bool(int(op.constraint_scheme) == 0 and (not cs0_sparse_first))
-                if force_dense_cs0:
-                    dense_fallback_limit = max(dense_fallback_limit, dense_fallback_max)
-                dense_fallback_trigger = bool(dense_thresholds.dense_fallback_trigger)
-                if (
-                    dense_fallback_limit > 0
-                    and int(active_size) <= dense_fallback_limit
-                    and dense_fallback_trigger
-                    and (float(residual_norm_true) > target_reduced or force_dense_cs0)
-                    and res_ratio >= dense_shortcut_ratio
-                ):
-                    if sparse_prefer_over_dense_shortcut and (not sparse_exact_direct):
-                        if emit is not None:
-                            emit(
-                                1,
-                                "solve_v3_full_system_linear_gmres: dense shortcut skipped "
-                                "(preferring sparse rescue over dense shortcut)",
-                            )
-                    else:
-                        dense_shortcut = True
-                        if emit is not None:
-                            emit(
-                                0,
-                                "solve_v3_full_system_linear_gmres: dense fallback shortcut "
-                                f"(ratio={res_ratio:.3e} >= {dense_shortcut_ratio:.1e})",
-                            )
+                dense_shortcut = bool(post_krylov_dense_decision.dense_shortcut)
+                if emit is not None:
+                    for _level, _message in post_krylov_dense_decision.messages:
+                        emit(_level, _message)
 
         sparse_policy = rhs1_sparse_rescue_policy_setup(
             sparse_precond_mode=sparse_precond_mode,

@@ -27,6 +27,7 @@ from sfincs_jax.problems.profile_response.dense import (
     rhs1_dense_shortcut_setup_from_env,
     rhs1_early_dense_shortcut_decision,
     rhs1_fp_preconditioner_probe_kind_from_env,
+    rhs1_post_krylov_dense_shortcut_decision,
     resolve_rhs1_full_dense_fallback_admission,
     resolve_rhs1_reduced_dense_fallback_admission,
     solve_rhs1_reduced_dense_fallback_candidate,
@@ -302,6 +303,71 @@ def test_rhs1_early_dense_shortcut_decision_preserves_disabled_state() -> None:
         active_size=50,
     )
     assert not decision.early_dense_shortcut
+    assert decision.messages == ()
+
+
+def test_rhs1_post_krylov_dense_shortcut_decision_accepts() -> None:
+    decision = rhs1_post_krylov_dense_shortcut_decision(
+        dense_shortcut=False,
+        dense_shortcut_ratio=10.0,
+        residual_norm_true=1.0e-4,
+        residual_ratio=200.0,
+        target=1.0e-8,
+        dense_fallback_max=100,
+        active_size=50,
+        constraint_scheme=1,
+        cs0_sparse_first=False,
+        sparse_prefer_over_dense_shortcut=False,
+        sparse_exact_direct=False,
+    )
+
+    assert decision.dense_shortcut
+    assert decision.messages == ((
+        0,
+        "solve_v3_full_system_linear_gmres: dense fallback shortcut "
+        "(ratio=2.000e+02 >= 1.0e+01)",
+    ),)
+
+
+def test_rhs1_post_krylov_dense_shortcut_decision_prefers_sparse_when_requested() -> None:
+    decision = rhs1_post_krylov_dense_shortcut_decision(
+        dense_shortcut=False,
+        dense_shortcut_ratio=10.0,
+        residual_norm_true=1.0e-4,
+        residual_ratio=200.0,
+        target=1.0e-8,
+        dense_fallback_max=100,
+        active_size=50,
+        constraint_scheme=1,
+        cs0_sparse_first=False,
+        sparse_prefer_over_dense_shortcut=True,
+        sparse_exact_direct=False,
+    )
+
+    assert not decision.dense_shortcut
+    assert decision.messages == ((
+        1,
+        "solve_v3_full_system_linear_gmres: dense shortcut skipped "
+        "(preferring sparse rescue over dense shortcut)",
+    ),)
+
+
+def test_rhs1_post_krylov_dense_shortcut_decision_rejects_when_not_admitted() -> None:
+    decision = rhs1_post_krylov_dense_shortcut_decision(
+        dense_shortcut=False,
+        dense_shortcut_ratio=10.0,
+        residual_norm_true=1.0e-4,
+        residual_ratio=5.0,
+        target=1.0e-8,
+        dense_fallback_max=100,
+        active_size=50,
+        constraint_scheme=1,
+        cs0_sparse_first=False,
+        sparse_prefer_over_dense_shortcut=False,
+        sparse_exact_direct=False,
+    )
+
+    assert not decision.dense_shortcut
     assert decision.messages == ()
 
 
