@@ -671,6 +671,7 @@ from .rhs1_large_cpu_policy import (
 )
 from .problems.profile_response.policies import (
     rhs1_bicgstab_fallback_controls_from_env,
+    rhs1_bicgstab_fallback_decision,
     rhs1_bicgstab_fallback_target_from_env,
     rhs1_fast_post_xblock_polish_allowed as _rhs1_fast_post_xblock_polish_allowed_impl,
     rhs1_fast_post_xblock_polish_controls_from_env,
@@ -9447,21 +9448,18 @@ def solve_v3_full_system_linear_gmres(
             for _level, _message in early_dense_decision.messages:
                 emit(_level, _message)
         solver_kind = _solver_kind(solve_method)[0]
-        bicgstab_fallback_target = float(target_reduced)
-        if bicgstab_fallback_strict:
-            # In distributed PAS runs, BiCGStab often reaches parity-accurate
-            # solutions while the strict relative target is tiny due to small
-            # RHS norms. The policy helper applies that measured floor.
-            bicgstab_fallback_target = rhs1_bicgstab_fallback_target_from_env(
-                target=float(target_reduced),
-                distributed_axis=distributed_axis,
-                has_pas=op.fblock.pas is not None,
-                include_phi1=bool(op.include_phi1),
-            )
-        if (not cpu_large_sparse_shortcut) and solver_kind == "bicgstab" and (
-            (not _gmres_result_is_finite(res_reduced))
-            or (bicgstab_fallback_strict and float(res_reduced.residual_norm) > bicgstab_fallback_target)
-        ):
+        bicgstab_fallback = rhs1_bicgstab_fallback_decision(
+            solver_kind=solver_kind,
+            cpu_large_sparse_shortcut=bool(cpu_large_sparse_shortcut),
+            result_is_finite=_gmres_result_is_finite(res_reduced),
+            residual_norm=float(res_reduced.residual_norm),
+            strict=bool(bicgstab_fallback_strict),
+            target=float(target_reduced),
+            distributed_axis=distributed_axis,
+            has_pas=op.fblock.pas is not None,
+            include_phi1=bool(op.include_phi1),
+        )
+        if bicgstab_fallback.run_fallback:
             res_reduced, residual_vec, preconditioner_reduced, _accepted, _bicgstab_fallback_elapsed_s = (
                 rhs1_run_bicgstab_gmres_fallback_if_allowed(
                     allowed=True,
@@ -9480,7 +9478,7 @@ def solve_v3_full_system_linear_gmres(
                     maxiter=maxiter,
                     precond_side=gmres_precond_side,
                     solve_linear=_solve_linear,
-                    target=float(bicgstab_fallback_target),
+                    target=float(bicgstab_fallback.target),
                     returns_residual_vec=False,
                     result_ready=_block_gmres_result_ready,
                     emit=emit,

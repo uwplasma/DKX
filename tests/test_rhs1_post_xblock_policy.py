@@ -4,6 +4,7 @@ from types import SimpleNamespace
 
 from sfincs_jax.rhs1_post_xblock_policy import (
     RHS1BiCGStabFallbackControls,
+    RHS1BiCGStabFallbackDecision,
     RHS1FastPostXBlockPolishControls,
     RHS1FPBiCGStabPolishControls,
     RHS1FPGlobalLowLPolishControls,
@@ -13,6 +14,7 @@ from sfincs_jax.rhs1_post_xblock_policy import (
     RHS1KrylovRoutingControls,
     RHS1ScipyRescueControls,
     rhs1_bicgstab_fallback_controls_from_env,
+    rhs1_bicgstab_fallback_decision,
     rhs1_bicgstab_fallback_target_from_env,
     rhs1_fast_post_xblock_polish_allowed,
     rhs1_fast_post_xblock_polish_controls_from_env,
@@ -206,6 +208,54 @@ def test_bicgstab_fallback_target_uses_distributed_pas_floor(monkeypatch) -> Non
         has_pas=True,
         include_phi1=False,
     ) == 1.0e-7
+
+
+def test_bicgstab_fallback_decision_admits_nonfinite_or_strict_residual(
+    monkeypatch,
+) -> None:
+    monkeypatch.delenv("SFINCS_JAX_BICGSTAB_FALLBACK_ABS_FLOOR", raising=False)
+
+    assert rhs1_bicgstab_fallback_decision(
+        solver_kind="bicgstab",
+        cpu_large_sparse_shortcut=False,
+        result_is_finite=False,
+        residual_norm=0.0,
+        strict=False,
+        target=1.0e-9,
+        distributed_axis=None,
+        has_pas=False,
+        include_phi1=False,
+    ) == RHS1BiCGStabFallbackDecision(target=1.0e-9, run_fallback=True)
+    assert rhs1_bicgstab_fallback_decision(
+        solver_kind="bicgstab",
+        cpu_large_sparse_shortcut=False,
+        result_is_finite=True,
+        residual_norm=2.0e-7,
+        strict=True,
+        target=1.0e-9,
+        distributed_axis="theta",
+        has_pas=True,
+        include_phi1=False,
+    ) == RHS1BiCGStabFallbackDecision(target=1.0e-7, run_fallback=True)
+
+
+def test_bicgstab_fallback_decision_respects_guards() -> None:
+    common = dict(
+        solver_kind="bicgstab",
+        cpu_large_sparse_shortcut=False,
+        result_is_finite=True,
+        residual_norm=2.0,
+        strict=True,
+        target=1.0,
+        distributed_axis=None,
+        has_pas=False,
+        include_phi1=False,
+    )
+
+    assert not rhs1_bicgstab_fallback_decision(**{**common, "solver_kind": "gmres"}).run_fallback
+    assert not rhs1_bicgstab_fallback_decision(**{**common, "cpu_large_sparse_shortcut": True}).run_fallback
+    assert not rhs1_bicgstab_fallback_decision(**{**common, "strict": False}).run_fallback
+    assert not rhs1_bicgstab_fallback_decision(**{**common, "residual_norm": 0.5}).run_fallback
 
 
 def test_krylov_routing_controls_preserve_defaults(monkeypatch) -> None:

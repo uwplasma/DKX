@@ -357,6 +357,11 @@ Recent checkpoints:
   messaging, residual/FP-force admission, dense/GPU shortcut guards, and
   elapsed-time-cap gating; the driver keeps only retry-control construction and
   the accepted retry execution call.
+- RHSMode=1 reduced BiCGStab-to-GMRES fallback target and admission now use a
+  tested `profile_response.policies` resolver. The helper owns strict-target
+  floors, distributed-PAS absolute floor handling, nonfinite-result admission,
+  large-CPU sparse shortcut suppression, and solver-kind gating; the driver
+  keeps only fallback execution.
 - RHSMode=1 PAS preconditioner probe/default routing now uses tested
   PAS-policy helpers for env parsing, tokamak-like Schur defaulting, heavy-path
   admission, large-system collision skip, and residual-threshold decisions
@@ -500,10 +505,10 @@ Recent checkpoints:
 - `cb295ce` Extract sparse pattern setup.
 - `4b6a5b4` Extract sparse factor policy.
 
-Current source-size snapshot after reduced Stage-2 retry-admission extraction:
+Current source-size snapshot after reduced BiCGStab fallback-decision extraction:
 
-- `sfincs_jax/v3_driver.py`: `14753` lines.
-- `solve_v3_full_system_linear_gmres`: `9991` lines.
+- `sfincs_jax/v3_driver.py`: `14751` lines.
+- `solve_v3_full_system_linear_gmres`: `9988` lines.
 - `sfincs_jax/v3_results.py`: `119` lines.
 - `sfincs_jax/rhs1_ksp_diagnostics.py`: `306` lines.
 - `sfincs_jax/rhs1_pas_policy.py`: `889` lines.
@@ -511,7 +516,7 @@ Current source-size snapshot after reduced Stage-2 retry-admission extraction:
 - `sfincs_jax/problems/profile_response/strong_preconditioning.py`: `1238` lines.
 - `sfincs_jax/problems/profile_response/residual.py`: `981` lines.
 - `sfincs_jax/problems/profile_response/handoff.py`: `1167` lines.
-- `sfincs_jax/problems/profile_response/policies.py`: `3715` lines.
+- `sfincs_jax/problems/profile_response/policies.py`: `3761` lines.
 - `sfincs_jax/problems/profile_response/dense.py`: `1650` lines.
 - `sfincs_jax/problems/profile_response/linear_solve.py`: `798` lines.
 - `sfincs_jax/problems/profile_response/preconditioner_build.py`: `662` lines.
@@ -522,6 +527,18 @@ Current source-size snapshot after reduced Stage-2 retry-admission extraction:
 
 Recent local validation:
 
+- Reduced BiCGStab fallback-decision extraction:
+  `tests/test_rhs1_post_xblock_policy.py tests/test_rhs1_stage2_policy.py`
+  passed (`57 passed in 0.36 s`).
+- Broad profile-response/RHSMode=1 shard after reduced BiCGStab
+  fallback-decision extraction:
+  `tests/test_profile_response_*.py tests/test_rhs1_*.py
+  tests/test_newton_krylov_diagnostics.py tests/test_pas_smoother.py`
+  passed (`1354 passed in 86.61 s`).
+- Hygiene after reduced BiCGStab fallback-decision extraction:
+  `py_compile`, `ruff check`, `compileall`, `git diff --check`, and
+  `python scripts/check_repo_size.py` passed. Repo-size audit reported no
+  reviewed files above 2 MiB.
 - Reduced Stage-2 retry-admission policy extraction:
   `tests/test_rhs1_stage2_policy.py tests/test_rhs1_handoff.py` passed
   (`86 passed in 0.36 s`).

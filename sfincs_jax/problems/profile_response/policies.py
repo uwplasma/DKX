@@ -2124,6 +2124,14 @@ class RHS1BiCGStabFallbackControls:
 
 
 @dataclass(frozen=True)
+class RHS1BiCGStabFallbackDecision:
+    """Resolved target and admission flag for BiCGStab-to-GMRES fallback."""
+
+    target: float
+    run_fallback: bool
+
+
+@dataclass(frozen=True)
 class RHS1KrylovRoutingControls:
     """Shared Krylov routing controls for RHSMode=1 profile-response solves."""
 
@@ -2432,6 +2440,42 @@ def rhs1_bicgstab_fallback_target_from_env(
         default_floor = 1.0e-7
     floor = _env_float("SFINCS_JAX_BICGSTAB_FALLBACK_ABS_FLOOR", default_floor)
     return max(float(target), max(0.0, float(floor)))
+
+
+def rhs1_bicgstab_fallback_decision(
+    *,
+    solver_kind: str,
+    cpu_large_sparse_shortcut: bool,
+    result_is_finite: bool,
+    residual_norm: float,
+    strict: bool,
+    target: float,
+    distributed_axis: str | None,
+    has_pas: bool,
+    include_phi1: bool,
+) -> RHS1BiCGStabFallbackDecision:
+    """Resolve whether a BiCGStab result should fall back to GMRES."""
+
+    fallback_target = float(target)
+    if bool(strict):
+        fallback_target = rhs1_bicgstab_fallback_target_from_env(
+            target=float(target),
+            distributed_axis=distributed_axis,
+            has_pas=bool(has_pas),
+            include_phi1=bool(include_phi1),
+        )
+    run_fallback = bool(
+        (not bool(cpu_large_sparse_shortcut))
+        and str(solver_kind) == "bicgstab"
+        and (
+            (not bool(result_is_finite))
+            or (bool(strict) and float(residual_norm) > float(fallback_target))
+        )
+    )
+    return RHS1BiCGStabFallbackDecision(
+        target=float(fallback_target),
+        run_fallback=bool(run_fallback),
+    )
 
 
 def rhs1_gmres_precondition_side_from_env() -> str:
@@ -3625,6 +3669,7 @@ def rhs1_stage2_retry_admission_decision(
 __all__ = (
     "RHS1Constraint0PETScCompatConfig",
     "RHS1BiCGStabFallbackControls",
+    "RHS1BiCGStabFallbackDecision",
     "RHS1FastPostXBlockPolishControls",
     "RHS1FPBiCGStabPolishControls",
     "RHS1FPGlobalLowLPolishControls",
@@ -3648,6 +3693,7 @@ __all__ = (
     "RHS1Stage2TriggerDecision",
     "parse_rhs1_pas_tz_guarded_structured_levels",
     "rhs1_bicgstab_fallback_controls_from_env",
+    "rhs1_bicgstab_fallback_decision",
     "rhs1_bicgstab_fallback_target_from_env",
     "rhs1_constraint0_dense_fallback_allowed",
     "rhs1_constraint0_petsc_compat",
