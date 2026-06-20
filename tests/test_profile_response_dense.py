@@ -10,7 +10,9 @@ from sfincs_jax.problems.profile_response.dense import (
     RHS1DenseFallbackThresholds,
     RHS1FullDenseFallbackContext,
     RHS1ReducedDenseFallbackCandidateContext,
+    RHS1ReducedDenseFallbackStageContext,
     run_rhs1_full_dense_fallback_candidate,
+    run_rhs1_reduced_dense_fallback_stage,
     rhs1_dense_fallback_thresholds_from_env,
     rhs1_dense_probe_admission,
     rhs1_dense_probe_enabled_from_env,
@@ -555,6 +557,131 @@ def test_rhs1_reduced_dense_fallback_candidate_uses_cached_jax_dense(monkeypatch
     assert result.x.tolist() == pytest.approx([2.0, 3.0])
     assert float(result.residual_norm) == pytest.approx(0.0, abs=1.0e-12)
     assert elapsed_s >= 0.0
+
+
+def test_rhs1_reduced_dense_fallback_stage_runs_candidate_and_accepts(monkeypatch) -> None:
+    calls: dict[str, dict[str, object]] = {}
+    messages: list[tuple[int, str]] = []
+    marks: list[str] = []
+    rhs = jnp.asarray([1.0, 2.0])
+    current = GMRESSolveResult(x=jnp.zeros(2), residual_norm=jnp.asarray(9.0))
+    current_residual = jnp.ones(2)
+    candidate = GMRESSolveResult(x=jnp.asarray([1.0, 2.0]), residual_norm=jnp.asarray(0.0))
+
+    def fake_candidate(**kwargs):
+        calls["candidate"] = kwargs
+        return candidate, 0.25
+
+    monkeypatch.setattr(
+        "sfincs_jax.problems.profile_response.dense.solve_rhs1_reduced_dense_fallback_candidate",
+        fake_candidate,
+    )
+
+    def accept_candidate(**kwargs):
+        calls["accept"] = kwargs
+        return kwargs["candidate_result"], kwargs["current_residual_vec"], True
+
+    result, residual_vec, accepted = run_rhs1_reduced_dense_fallback_stage(
+        context=RHS1ReducedDenseFallbackStageContext(
+            candidate_context=RHS1ReducedDenseFallbackCandidateContext(
+                matvec=lambda x: x,
+                rhs=rhs,
+                x0=current.x,
+                active_size=2,
+                constraint_scheme=2,
+                has_fp=False,
+                has_pas=False,
+                dense_matrix_cache=None,
+                dense_backend_allowed=True,
+                use_implicit=False,
+                tol=1.0e-10,
+                atol=0.0,
+                restart=11,
+                maxiter=13,
+                gmres_precond_side="left",
+            ),
+            current_result=current,
+            current_residual_vec=current_residual,
+            target=1.0e-8,
+        ),
+        replay_state=object(),
+        accept_candidate=accept_candidate,
+        emit=lambda level, msg: messages.append((level, msg)),
+        mark=marks.append,
+        peak_rss_mb=lambda: 123.0,
+    )
+
+    assert accepted
+    assert result is candidate
+    assert residual_vec is current_residual
+    assert calls["candidate"]["emit"] is not None
+    assert calls["accept"]["candidate_name"] == "dense_reduced"
+    assert calls["accept"]["baseline_name"] == "current_reduced"
+    assert calls["accept"]["solve_s"] == 0.25
+    assert calls["accept"]["peak_rss_mb"] == 123.0
+    assert marks == ["rhs1_dense_fallback_start", "rhs1_dense_fallback_done"]
+    assert messages == [(
+        0,
+        "solve_v3_full_system_linear_gmres: dense fallback "
+        "(size=2 residual=9.000e+00 > target=1.000e-08)",
+    )]
+
+
+def test_rhs1_reduced_dense_fallback_stage_reports_failure(monkeypatch) -> None:
+    rhs = jnp.asarray([1.0, 2.0])
+    current = GMRESSolveResult(x=jnp.zeros(2), residual_norm=jnp.asarray(9.0))
+    current_residual = jnp.ones(2)
+    messages: list[tuple[int, str]] = []
+    marks: list[str] = []
+
+    def fail_candidate(**_kwargs):
+        raise RuntimeError("reduced dense failed")
+
+    monkeypatch.setattr(
+        "sfincs_jax.problems.profile_response.dense.solve_rhs1_reduced_dense_fallback_candidate",
+        fail_candidate,
+    )
+
+    result, residual_vec, accepted = run_rhs1_reduced_dense_fallback_stage(
+        context=RHS1ReducedDenseFallbackStageContext(
+            candidate_context=RHS1ReducedDenseFallbackCandidateContext(
+                matvec=lambda x: x,
+                rhs=rhs,
+                x0=current.x,
+                active_size=2,
+                constraint_scheme=2,
+                has_fp=False,
+                has_pas=False,
+                dense_matrix_cache=None,
+                dense_backend_allowed=True,
+                use_implicit=False,
+                tol=1.0e-10,
+                atol=0.0,
+                restart=11,
+                maxiter=13,
+                gmres_precond_side="left",
+            ),
+            current_result=current,
+            current_residual_vec=current_residual,
+            target=1.0e-8,
+        ),
+        replay_state=object(),
+        accept_candidate=lambda **_kwargs: (_ for _ in ()).throw(
+            AssertionError("acceptance should not run")
+        ),
+        emit=lambda level, msg: messages.append((level, msg)),
+        mark=marks.append,
+    )
+
+    assert not accepted
+    assert result is current
+    assert residual_vec is current_residual
+    assert messages[-1] == (
+        1,
+        "solve_v3_full_system_linear_gmres: dense fallback failed "
+        "(RuntimeError: reduced dense failed)",
+    )
+    assert marks == ["rhs1_dense_fallback_start", "rhs1_dense_fallback_done"]
 
 
 def test_rhs1_full_dense_fallback_candidate_uses_dense_backend() -> None:

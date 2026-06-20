@@ -204,6 +204,7 @@ from .problems.profile_response.dense import (
     HostDenseReducedSolveContext,
     RHS1FullDenseFallbackContext,
     RHS1ReducedDenseFallbackCandidateContext,
+    RHS1ReducedDenseFallbackStageContext,
     rhs1_dense_probe_admission,
     rhs1_dense_probe_enabled_from_env,
     rhs1_dense_fallback_thresholds_from_env,
@@ -211,9 +212,9 @@ from .problems.profile_response.dense import (
     rhs1_dense_shortcut_setup_from_env,
     rhs1_fp_preconditioner_probe_kind_from_env,
     run_rhs1_full_dense_fallback_candidate,
+    run_rhs1_reduced_dense_fallback_stage,
     solve_host_dense_full,
     solve_host_dense_reduced,
-    solve_rhs1_reduced_dense_fallback_candidate,
 )
 from .problems.profile_response.linear_solve import (
     ProfileLinearSolveContext,
@@ -11641,60 +11642,35 @@ def solve_v3_full_system_linear_gmres(
             and dense_fallback_trigger
             and (float(residual_norm_true) > target_reduced or force_dense_cs0)
         ):
-            _mark("rhs1_dense_fallback_start")
-            if emit is not None:
-                emit(
-                    0,
-                    "solve_v3_full_system_linear_gmres: dense fallback "
-                    f"(size={active_size} residual={float(res_reduced.residual_norm):.3e} > target={target_reduced:.3e})",
-                )
-            try:
-                res_dense, dense_retry_elapsed_s = (
-                    solve_rhs1_reduced_dense_fallback_candidate(
-                        context=RHS1ReducedDenseFallbackCandidateContext(
-                            matvec=mv_reduced,
-                            rhs=rhs_reduced,
-                            x0=res_reduced.x,
-                            active_size=int(active_size),
-                            constraint_scheme=int(op.constraint_scheme),
-                            has_fp=op.fblock.fp is not None,
-                            has_pas=op.fblock.pas is not None,
-                            dense_matrix_cache=dense_matrix_cache,
-                            dense_backend_allowed=bool(dense_backend_allowed),
-                            use_implicit=bool(use_implicit),
-                            tol=float(tol),
-                            atol=float(atol),
-                            restart=int(restart),
-                            maxiter=maxiter,
-                            gmres_precond_side=gmres_precond_side,
-                        ),
-                        emit=emit,
-                    )
-                )
-                res_reduced, residual_vec, _accepted = rhs1_accept_measured_candidate_and_update_replay(
-                    replay_state=ksp_replay,
+            res_reduced, residual_vec, _accepted = run_rhs1_reduced_dense_fallback_stage(
+                context=RHS1ReducedDenseFallbackStageContext(
+                    candidate_context=RHS1ReducedDenseFallbackCandidateContext(
+                        matvec=mv_reduced,
+                        rhs=rhs_reduced,
+                        x0=res_reduced.x,
+                        active_size=int(active_size),
+                        constraint_scheme=int(op.constraint_scheme),
+                        has_fp=op.fblock.fp is not None,
+                        has_pas=op.fblock.pas is not None,
+                        dense_matrix_cache=dense_matrix_cache,
+                        dense_backend_allowed=bool(dense_backend_allowed),
+                        use_implicit=bool(use_implicit),
+                        tol=float(tol),
+                        atol=float(atol),
+                        restart=int(restart),
+                        maxiter=maxiter,
+                        gmres_precond_side=gmres_precond_side,
+                    ),
                     current_result=res_reduced,
-                    candidate_result=res_dense,
                     current_residual_vec=residual_vec,
-                    candidate_residual_vec=None,
-                    matvec_fn=mv_reduced,
-                    b_vec=rhs_reduced,
-                    precond_fn=None,
-                    x0_vec=res_dense.x,
-                    restart=restart,
-                    maxiter=maxiter,
-                    precond_side="none",
-                    solver_kind="dense",
-                    candidate_name="dense_reduced",
-                    baseline_name="current_reduced",
-                    target_value=target_reduced,
-                    solve_s=dense_retry_elapsed_s,
-                    peak_rss_mb=_rss_mb(),
-                )
-            except Exception as exc:  # noqa: BLE001
-                if emit is not None:
-                    emit(1, f"solve_v3_full_system_linear_gmres: dense fallback failed ({type(exc).__name__}: {exc})")
-            _mark("rhs1_dense_fallback_done")
+                    target=float(target_reduced),
+                ),
+                replay_state=ksp_replay,
+                accept_candidate=rhs1_accept_measured_candidate_and_update_replay,
+                emit=emit,
+                mark=_mark,
+                peak_rss_mb=_rss_mb,
+            )
         if (
             _rhsmode1_fast_post_xblock_polish_allowed(
                 op=op,

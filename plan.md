@@ -62,6 +62,11 @@ Recent checkpoints:
   admission gates and dense-fallback policy thresholds; the helper owns dense
   backend/Krylov execution, timing, phase markers, failure reporting, and the
   measured-candidate replay handoff.
+- Reduced active-DOF RHSMode=1 dense fallback execution now uses a tested
+  `run_rhs1_reduced_dense_fallback_stage(...)` helper. The existing dense
+  candidate solver remains unchanged; the new stage helper owns progress
+  emission, phase markers, failure reporting, and measured-candidate replay
+  handoff for the reduced branch.
 - KSP replay-state recording now uses a tested
   `rhs1_record_ksp_replay_problem(...)` helper. Straightforward multi-field
   replay assignment blocks in `v3_driver.py` now call the shared recorder, and
@@ -385,6 +390,7 @@ Recent checkpoints:
 - Final RHSMode=1 projection/source cleanup extraction.
 - Final linear-solve metadata assembly extraction.
 - Final full-system dense fallback execution extraction.
+- Reduced dense fallback execution extraction.
 - Measured candidate handoff consolidation.
 - Sparse fallback measured-handoff extraction.
 - Sparse-PC factor-preflight evaluation extraction.
@@ -401,10 +407,10 @@ Recent checkpoints:
 - `cb295ce` Extract sparse pattern setup.
 - `4b6a5b4` Extract sparse factor policy.
 
-Current source-size snapshot after full-system dense fallback extraction:
+Current source-size snapshot after reduced dense fallback extraction:
 
-- `sfincs_jax/v3_driver.py`: `15669` lines.
-- `solve_v3_full_system_linear_gmres`: `10911` lines.
+- `sfincs_jax/v3_driver.py`: `15645` lines.
+- `solve_v3_full_system_linear_gmres`: `10886` lines.
 - `sfincs_jax/v3_results.py`: `119` lines.
 - `sfincs_jax/rhs1_ksp_diagnostics.py`: `306` lines.
 - `sfincs_jax/rhs1_pas_policy.py`: `889` lines.
@@ -413,7 +419,7 @@ Current source-size snapshot after full-system dense fallback extraction:
 - `sfincs_jax/problems/profile_response/residual.py`: `981` lines.
 - `sfincs_jax/problems/profile_response/handoff.py`: `1035` lines.
 - `sfincs_jax/problems/profile_response/policies.py`: `3463` lines.
-- `sfincs_jax/problems/profile_response/dense.py`: `830` lines.
+- `sfincs_jax/problems/profile_response/dense.py`: `906` lines.
 - `sfincs_jax/problems/profile_response/linear_solve.py`: `339` lines.
 - `sfincs_jax/problems/profile_response/active_projection.py`: `203` lines.
 - `sfincs_jax/problems/profile_response/sparse_pc.py`: `14949` lines.
@@ -422,6 +428,18 @@ Current source-size snapshot after full-system dense fallback extraction:
 
 Recent local validation:
 
+- Reduced dense fallback extraction:
+  `tests/test_profile_response_dense.py tests/test_rhs1_handoff.py` passed
+  (`78 passed in 1.17 s`).
+- Broad profile-response/RHSMode=1 shard after reduced dense fallback
+  extraction:
+  `tests/test_profile_response_*.py tests/test_rhs1_*.py
+  tests/test_newton_krylov_diagnostics.py tests/test_pas_smoother.py`
+  passed (`1296 passed in 87.16 s`).
+- Hygiene after reduced dense fallback extraction:
+  `ruff check`, `py_compile`, `compileall`, `git diff --check`, and
+  `python scripts/check_repo_size.py` passed. Repo-size audit reported no
+  reviewed files above 2 MiB.
 - Full-system dense fallback extraction:
   `tests/test_profile_response_dense.py tests/test_rhs1_handoff.py` passed
   (`76 passed in 1.11 s`).
