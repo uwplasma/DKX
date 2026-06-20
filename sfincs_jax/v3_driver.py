@@ -211,6 +211,8 @@ from .problems.profile_response.dense import (
     rhs1_dense_probe_shortcut_decision,
     rhs1_dense_shortcut_setup_from_env,
     rhs1_fp_preconditioner_probe_kind_from_env,
+    resolve_rhs1_full_dense_fallback_admission,
+    resolve_rhs1_reduced_dense_fallback_admission,
     run_rhs1_full_dense_fallback_candidate,
     run_rhs1_reduced_dense_fallback_stage,
     solve_host_dense_full,
@@ -11574,68 +11576,31 @@ def solve_v3_full_system_linear_gmres(
             )
         )
         dense_fallback_max = _rhsmode1_dense_fallback_max(op)
-        if not dense_backend_allowed and not host_dense_fallback_allowed and not dense_krylov_allowed:
-            dense_fallback_max = 0
-        res_ratio = float(residual_norm_true) / max(float(target_reduced), 1e-300)
-        dense_thresholds = rhs1_dense_fallback_thresholds_from_env(
+        dense_admission = resolve_rhs1_reduced_dense_fallback_admission(
             dense_fallback_max=int(dense_fallback_max),
-            residual_ratio=float(res_ratio),
+            residual_norm_true=float(residual_norm_true),
+            reported_residual_norm=float(res_reduced.residual_norm),
+            target=float(target_reduced),
+            active_size=int(active_size),
+            rhs_mode=int(op.rhs_mode),
+            include_phi1=bool(op.include_phi1),
+            constraint_scheme=int(op.constraint_scheme),
+            has_fp=op.fblock.fp is not None,
+            disable_dense_pas=bool(disable_dense_pas),
+            any_dense_path_allowed=bool(
+                dense_backend_allowed or host_dense_fallback_allowed or dense_krylov_allowed
+            ),
+            host_sparse_direct_used=bool(host_sparse_direct_used),
+            backend=jax.default_backend(),
+            host_sparse_skip_ratio=float(_rhsmode1_host_sparse_skip_dense_ratio()),
+            cs0_dense_fallback_allowed=bool(cs0_dense_fallback_allowed),
+            cs0_sparse_first=bool(cs0_sparse_first),
+            cs0_petsc_compat=bool(cs0_petsc_compat),
         )
-        dense_fallback_limit = int(dense_thresholds.dense_fallback_limit)
-        dense_fallback_trigger = bool(dense_thresholds.dense_fallback_trigger)
-        if host_sparse_direct_used and jax.default_backend() != "cpu":
-            host_sparse_skip_ratio = _rhsmode1_host_sparse_skip_dense_ratio()
-            if host_sparse_skip_ratio > 0.0 and res_ratio <= float(host_sparse_skip_ratio):
-                dense_fallback_trigger = False
-                dense_fallback_max = 0
-                dense_fallback_limit = 0
-                if emit is not None:
-                    emit(
-                        0,
-                        "solve_v3_full_system_linear_gmres: skipping dense fallback after host sparse LU "
-                        f"(ratio={res_ratio:.3e} <= {float(host_sparse_skip_ratio):.1e})",
-                    )
-        pas_force_dense = (
-            (not disable_dense_pas)
-            and op.fblock.fp is None
-            and int(op.constraint_scheme) == 2
-            and dense_fallback_limit > 0
-            and int(active_size) <= dense_fallback_limit
-            and float(res_reduced.residual_norm) > target_reduced
-        )
-        if pas_force_dense:
-            dense_fallback_trigger = True
-        fp_force_dense = (
-            op.fblock.fp is not None
-            and dense_fallback_max > 0
-            and int(active_size) <= dense_fallback_max
-            and float(residual_norm_true) > target_reduced
-        )
-        if fp_force_dense:
-            dense_fallback_trigger = True
-            dense_fallback_limit = max(dense_fallback_limit, dense_fallback_max)
-        force_dense_cs0 = bool(
-            int(op.constraint_scheme) == 0
-            and cs0_dense_fallback_allowed
-            and (not cs0_sparse_first)
-            and (not cs0_petsc_compat)
-        )
-        if force_dense_cs0:
-            # constraintScheme=0 systems are singular; keep the dense fallback
-            # available even when the residual ratio is huge.
-            dense_fallback_limit = max(dense_fallback_limit, dense_fallback_max)
-            dense_fallback_trigger = True
-        if int(op.constraint_scheme) == 0 and not cs0_dense_fallback_allowed:
-            dense_fallback_limit = 0
-            dense_fallback_trigger = False
-        if (
-            dense_fallback_limit > 0
-            and int(op.rhs_mode) == 1
-            and (not bool(op.include_phi1))
-            and int(active_size) <= dense_fallback_limit
-            and dense_fallback_trigger
-            and (float(residual_norm_true) > target_reduced or force_dense_cs0)
-        ):
+        if emit is not None:
+            for level, message in dense_admission.messages:
+                emit(level, message)
+        if dense_admission.should_run:
             res_reduced, residual_vec, _accepted = run_rhs1_reduced_dense_fallback_stage(
                 context=RHS1ReducedDenseFallbackStageContext(
                     candidate_context=RHS1ReducedDenseFallbackCandidateContext(
@@ -13292,45 +13257,28 @@ def solve_v3_full_system_linear_gmres(
         dense_backend_allowed = _rhsmode1_dense_backend_allowed()
         host_dense_fallback_allowed = _rhsmode1_host_dense_fallback_allowed()
         dense_krylov_allowed = _rhsmode1_dense_krylov_allowed()
-        if (not dense_backend_allowed) and (not host_dense_fallback_allowed) and (not dense_krylov_allowed):
-            dense_fallback_max = 0
-        res_ratio = float(residual_norm_true) / max(float(target), 1e-300)
-        dense_thresholds = rhs1_dense_fallback_thresholds_from_env(
+        dense_admission = resolve_rhs1_full_dense_fallback_admission(
             dense_fallback_max=int(dense_fallback_max),
-            residual_ratio=float(res_ratio),
-            allow_huge_limit=False,
+            residual_norm_true=float(residual_norm_true),
+            target=float(target),
+            active_size=int(active_size),
+            total_size=int(op.total_size),
+            rhs_mode=int(op.rhs_mode),
+            include_phi1=bool(op.include_phi1),
+            constraint_scheme=int(op.constraint_scheme),
+            has_fp=op.fblock.fp is not None,
+            any_dense_path_allowed=bool(
+                dense_backend_allowed or host_dense_fallback_allowed or dense_krylov_allowed
+            ),
+            host_sparse_direct_used=bool(host_sparse_direct_used),
+            backend=jax.default_backend(),
+            host_sparse_skip_ratio=float(_rhsmode1_host_sparse_skip_dense_ratio()),
+            cs0_sparse_first=bool(cs0_sparse_first),
         )
-        dense_fallback_trigger = bool(dense_thresholds.dense_fallback_trigger)
-        if host_sparse_direct_used and jax.default_backend() != "cpu":
-            host_sparse_skip_ratio = _rhsmode1_host_sparse_skip_dense_ratio()
-            if host_sparse_skip_ratio > 0.0 and res_ratio <= float(host_sparse_skip_ratio):
-                dense_fallback_trigger = False
-                dense_fallback_max = 0
-                if emit is not None:
-                    emit(
-                        0,
-                        "solve_v3_full_system_linear_gmres: skipping dense fallback after host sparse LU "
-                        f"(ratio={res_ratio:.3e} <= {float(host_sparse_skip_ratio):.1e})",
-                    )
-        fp_force_dense = (
-            op.fblock.fp is not None
-            and dense_fallback_max > 0
-            and int(active_size) <= dense_fallback_max
-            and float(residual_norm_true) > target
-        )
-        if fp_force_dense:
-            dense_fallback_trigger = True
-        force_dense_cs0 = bool(int(op.constraint_scheme) == 0 and (not cs0_sparse_first))
-        if force_dense_cs0:
-            dense_fallback_trigger = True
-        if (
-            dense_fallback_max > 0
-            and int(op.rhs_mode) == 1
-            and (not bool(op.include_phi1))
-            and int(op.total_size) <= dense_fallback_max
-            and dense_fallback_trigger
-            and float(residual_norm_true) > target
-        ):
+        if emit is not None:
+            for level, message in dense_admission.messages:
+                emit(level, message)
+        if dense_admission.should_run:
             result, residual_vec, _accepted = run_rhs1_full_dense_fallback_candidate(
                 context=RHS1FullDenseFallbackContext(
                     matvec=mv,

@@ -138,6 +138,18 @@ class RHS1DenseFallbackThresholds:
     dense_fallback_trigger: bool
 
 
+@dataclass(frozen=True)
+class RHS1DenseFallbackAdmission:
+    """Resolved dense-fallback admission decision and derived limits."""
+
+    should_run: bool
+    dense_fallback_max: int
+    dense_fallback_limit: int
+    dense_fallback_trigger: bool
+    force_dense_cs0: bool
+    messages: tuple[tuple[int, str], ...] = ()
+
+
 def _env_float(name: str, default: float) -> float:
     raw = str(os.environ.get(name, "")).strip()
     try:
@@ -245,6 +257,177 @@ def rhs1_dense_fallback_thresholds_from_env(
         dense_fallback_ratio=float(dense_fallback_ratio),
         dense_fallback_limit=int(limit),
         dense_fallback_trigger=bool(trigger),
+    )
+
+
+def resolve_rhs1_reduced_dense_fallback_admission(
+    *,
+    dense_fallback_max: int,
+    residual_norm_true: float,
+    reported_residual_norm: float,
+    target: float,
+    active_size: int,
+    rhs_mode: int,
+    include_phi1: bool,
+    constraint_scheme: int,
+    has_fp: bool,
+    disable_dense_pas: bool,
+    any_dense_path_allowed: bool,
+    host_sparse_direct_used: bool,
+    backend: str,
+    host_sparse_skip_ratio: float,
+    cs0_dense_fallback_allowed: bool,
+    cs0_sparse_first: bool,
+    cs0_petsc_compat: bool,
+) -> RHS1DenseFallbackAdmission:
+    """Resolve reduced active-DOF dense-fallback admission from policy scalars."""
+
+    max_use = int(dense_fallback_max) if bool(any_dense_path_allowed) else 0
+    residual_ratio = float(residual_norm_true) / max(float(target), 1e-300)
+    thresholds = rhs1_dense_fallback_thresholds_from_env(
+        dense_fallback_max=max_use,
+        residual_ratio=residual_ratio,
+    )
+    limit = int(thresholds.dense_fallback_limit)
+    trigger = bool(thresholds.dense_fallback_trigger)
+    messages: list[tuple[int, str]] = []
+
+    if bool(host_sparse_direct_used) and str(backend) != "cpu":
+        skip_ratio = float(host_sparse_skip_ratio)
+        if skip_ratio > 0.0 and residual_ratio <= skip_ratio:
+            trigger = False
+            max_use = 0
+            limit = 0
+            messages.append(
+                (
+                    0,
+                    "solve_v3_full_system_linear_gmres: skipping dense fallback after host sparse LU "
+                    f"(ratio={residual_ratio:.3e} <= {skip_ratio:.1e})",
+                )
+            )
+
+    pas_force_dense = (
+        (not bool(disable_dense_pas))
+        and (not bool(has_fp))
+        and int(constraint_scheme) == 2
+        and limit > 0
+        and int(active_size) <= limit
+        and float(reported_residual_norm) > float(target)
+    )
+    if pas_force_dense:
+        trigger = True
+
+    fp_force_dense = (
+        bool(has_fp)
+        and max_use > 0
+        and int(active_size) <= max_use
+        and float(residual_norm_true) > float(target)
+    )
+    if fp_force_dense:
+        trigger = True
+        limit = max(limit, max_use)
+
+    force_dense_cs0 = bool(
+        int(constraint_scheme) == 0
+        and bool(cs0_dense_fallback_allowed)
+        and (not bool(cs0_sparse_first))
+        and (not bool(cs0_petsc_compat))
+    )
+    if force_dense_cs0:
+        limit = max(limit, max_use)
+        trigger = True
+
+    if int(constraint_scheme) == 0 and not bool(cs0_dense_fallback_allowed):
+        limit = 0
+        trigger = False
+
+    should_run = (
+        limit > 0
+        and int(rhs_mode) == 1
+        and not bool(include_phi1)
+        and int(active_size) <= limit
+        and bool(trigger)
+        and (float(residual_norm_true) > float(target) or force_dense_cs0)
+    )
+    return RHS1DenseFallbackAdmission(
+        should_run=bool(should_run),
+        dense_fallback_max=int(max_use),
+        dense_fallback_limit=int(limit),
+        dense_fallback_trigger=bool(trigger),
+        force_dense_cs0=bool(force_dense_cs0),
+        messages=tuple(messages),
+    )
+
+
+def resolve_rhs1_full_dense_fallback_admission(
+    *,
+    dense_fallback_max: int,
+    residual_norm_true: float,
+    target: float,
+    active_size: int,
+    total_size: int,
+    rhs_mode: int,
+    include_phi1: bool,
+    constraint_scheme: int,
+    has_fp: bool,
+    any_dense_path_allowed: bool,
+    host_sparse_direct_used: bool,
+    backend: str,
+    host_sparse_skip_ratio: float,
+    cs0_sparse_first: bool,
+) -> RHS1DenseFallbackAdmission:
+    """Resolve full-system dense-fallback admission from policy scalars."""
+
+    max_use = int(dense_fallback_max) if bool(any_dense_path_allowed) else 0
+    residual_ratio = float(residual_norm_true) / max(float(target), 1e-300)
+    thresholds = rhs1_dense_fallback_thresholds_from_env(
+        dense_fallback_max=max_use,
+        residual_ratio=residual_ratio,
+        allow_huge_limit=False,
+    )
+    trigger = bool(thresholds.dense_fallback_trigger)
+    messages: list[tuple[int, str]] = []
+
+    if bool(host_sparse_direct_used) and str(backend) != "cpu":
+        skip_ratio = float(host_sparse_skip_ratio)
+        if skip_ratio > 0.0 and residual_ratio <= skip_ratio:
+            trigger = False
+            max_use = 0
+            messages.append(
+                (
+                    0,
+                    "solve_v3_full_system_linear_gmres: skipping dense fallback after host sparse LU "
+                    f"(ratio={residual_ratio:.3e} <= {skip_ratio:.1e})",
+                )
+            )
+
+    if (
+        bool(has_fp)
+        and max_use > 0
+        and int(active_size) <= max_use
+        and float(residual_norm_true) > float(target)
+    ):
+        trigger = True
+
+    force_dense_cs0 = bool(int(constraint_scheme) == 0 and not bool(cs0_sparse_first))
+    if force_dense_cs0:
+        trigger = True
+
+    should_run = (
+        max_use > 0
+        and int(rhs_mode) == 1
+        and not bool(include_phi1)
+        and int(total_size) <= max_use
+        and bool(trigger)
+        and float(residual_norm_true) > float(target)
+    )
+    return RHS1DenseFallbackAdmission(
+        should_run=bool(should_run),
+        dense_fallback_max=int(max_use),
+        dense_fallback_limit=int(max_use),
+        dense_fallback_trigger=bool(trigger),
+        force_dense_cs0=bool(force_dense_cs0),
+        messages=tuple(messages),
     )
 
 
@@ -886,6 +1069,7 @@ __all__ = [
     "RHS1DenseProbeAdmission",
     "RHS1DenseProbeShortcutDecision",
     "RHS1DenseFallbackThresholds",
+    "RHS1DenseFallbackAdmission",
     "RHS1DenseShortcutSetup",
     "HostDenseFullSolveContext",
     "HostDenseReducedSolveContext",
@@ -898,6 +1082,8 @@ __all__ = [
     "rhs1_dense_fallback_thresholds_from_env",
     "rhs1_dense_shortcut_setup_from_env",
     "rhs1_fp_preconditioner_probe_kind_from_env",
+    "resolve_rhs1_full_dense_fallback_admission",
+    "resolve_rhs1_reduced_dense_fallback_admission",
     "run_rhs1_full_dense_fallback_candidate",
     "run_rhs1_reduced_dense_fallback_stage",
     "solve_rhs1_reduced_dense_fallback_candidate",

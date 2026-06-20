@@ -8,6 +8,7 @@ from sfincs_jax.problems.profile_response.dense import (
     HostDenseFullSolveContext,
     HostDenseReducedSolveContext,
     RHS1DenseFallbackThresholds,
+    RHS1DenseFallbackAdmission,
     RHS1FullDenseFallbackContext,
     RHS1ReducedDenseFallbackCandidateContext,
     RHS1ReducedDenseFallbackStageContext,
@@ -19,6 +20,8 @@ from sfincs_jax.problems.profile_response.dense import (
     rhs1_dense_probe_shortcut_decision,
     rhs1_dense_shortcut_setup_from_env,
     rhs1_fp_preconditioner_probe_kind_from_env,
+    resolve_rhs1_full_dense_fallback_admission,
+    resolve_rhs1_reduced_dense_fallback_admission,
     solve_rhs1_reduced_dense_fallback_candidate,
     solve_host_dense_full,
     solve_host_dense_reduced,
@@ -221,6 +224,170 @@ def test_rhs1_dense_fallback_thresholds_can_disable_huge_limit(monkeypatch) -> N
         dense_fallback_limit=5000,
         dense_fallback_trigger=True,
     )
+
+
+def test_reduced_dense_fallback_admission_skips_after_host_sparse_lu() -> None:
+    admission = resolve_rhs1_reduced_dense_fallback_admission(
+        dense_fallback_max=100,
+        residual_norm_true=1.0e-5,
+        reported_residual_norm=1.0e-5,
+        target=1.0e-8,
+        active_size=50,
+        rhs_mode=1,
+        include_phi1=False,
+        constraint_scheme=2,
+        has_fp=False,
+        disable_dense_pas=False,
+        any_dense_path_allowed=True,
+        host_sparse_direct_used=True,
+        backend="gpu",
+        host_sparse_skip_ratio=2.0e3,
+        cs0_dense_fallback_allowed=True,
+        cs0_sparse_first=False,
+        cs0_petsc_compat=False,
+    )
+
+    assert admission == RHS1DenseFallbackAdmission(
+        should_run=False,
+        dense_fallback_max=0,
+        dense_fallback_limit=0,
+        dense_fallback_trigger=False,
+        force_dense_cs0=False,
+        messages=((
+            0,
+            "solve_v3_full_system_linear_gmres: skipping dense fallback after host sparse LU "
+            "(ratio=1.000e+03 <= 2.0e+03)",
+        ),),
+    )
+
+
+def test_reduced_dense_fallback_admission_handles_force_dense_paths() -> None:
+    fp_admission = resolve_rhs1_reduced_dense_fallback_admission(
+        dense_fallback_max=100,
+        residual_norm_true=1.0e-4,
+        reported_residual_norm=1.0e-4,
+        target=1.0e-8,
+        active_size=50,
+        rhs_mode=1,
+        include_phi1=False,
+        constraint_scheme=1,
+        has_fp=True,
+        disable_dense_pas=False,
+        any_dense_path_allowed=True,
+        host_sparse_direct_used=False,
+        backend="cpu",
+        host_sparse_skip_ratio=0.0,
+        cs0_dense_fallback_allowed=True,
+        cs0_sparse_first=False,
+        cs0_petsc_compat=False,
+    )
+    assert fp_admission.should_run
+    assert fp_admission.dense_fallback_limit >= 100
+    assert not fp_admission.force_dense_cs0
+
+    cs0_admission = resolve_rhs1_reduced_dense_fallback_admission(
+        dense_fallback_max=100,
+        residual_norm_true=0.0,
+        reported_residual_norm=0.0,
+        target=1.0e-8,
+        active_size=50,
+        rhs_mode=1,
+        include_phi1=False,
+        constraint_scheme=0,
+        has_fp=False,
+        disable_dense_pas=False,
+        any_dense_path_allowed=True,
+        host_sparse_direct_used=False,
+        backend="cpu",
+        host_sparse_skip_ratio=0.0,
+        cs0_dense_fallback_allowed=True,
+        cs0_sparse_first=False,
+        cs0_petsc_compat=False,
+    )
+    assert cs0_admission.should_run
+    assert cs0_admission.force_dense_cs0
+
+    cs0_disabled = resolve_rhs1_reduced_dense_fallback_admission(
+        dense_fallback_max=100,
+        residual_norm_true=1.0e-4,
+        reported_residual_norm=1.0e-4,
+        target=1.0e-8,
+        active_size=50,
+        rhs_mode=1,
+        include_phi1=False,
+        constraint_scheme=0,
+        has_fp=False,
+        disable_dense_pas=False,
+        any_dense_path_allowed=True,
+        host_sparse_direct_used=False,
+        backend="cpu",
+        host_sparse_skip_ratio=0.0,
+        cs0_dense_fallback_allowed=False,
+        cs0_sparse_first=False,
+        cs0_petsc_compat=False,
+    )
+    assert not cs0_disabled.should_run
+    assert cs0_disabled.dense_fallback_limit == 0
+
+
+def test_full_dense_fallback_admission_preserves_full_size_and_cs0_rules() -> None:
+    admission = resolve_rhs1_full_dense_fallback_admission(
+        dense_fallback_max=100,
+        residual_norm_true=1.0e-4,
+        target=1.0e-8,
+        active_size=50,
+        total_size=80,
+        rhs_mode=1,
+        include_phi1=False,
+        constraint_scheme=1,
+        has_fp=True,
+        any_dense_path_allowed=True,
+        host_sparse_direct_used=False,
+        backend="cpu",
+        host_sparse_skip_ratio=0.0,
+        cs0_sparse_first=False,
+    )
+    assert admission.should_run
+    assert admission.dense_fallback_max == 100
+    assert admission.dense_fallback_limit == 100
+    assert not admission.force_dense_cs0
+
+    too_large = resolve_rhs1_full_dense_fallback_admission(
+        dense_fallback_max=100,
+        residual_norm_true=1.0e-4,
+        target=1.0e-8,
+        active_size=50,
+        total_size=120,
+        rhs_mode=1,
+        include_phi1=False,
+        constraint_scheme=1,
+        has_fp=True,
+        any_dense_path_allowed=True,
+        host_sparse_direct_used=False,
+        backend="cpu",
+        host_sparse_skip_ratio=0.0,
+        cs0_sparse_first=False,
+    )
+    assert not too_large.should_run
+
+    cs0_clean = resolve_rhs1_full_dense_fallback_admission(
+        dense_fallback_max=100,
+        residual_norm_true=0.0,
+        target=1.0e-8,
+        active_size=50,
+        total_size=80,
+        rhs_mode=1,
+        include_phi1=False,
+        constraint_scheme=0,
+        has_fp=False,
+        any_dense_path_allowed=True,
+        host_sparse_direct_used=False,
+        backend="cpu",
+        host_sparse_skip_ratio=0.0,
+        cs0_sparse_first=False,
+    )
+    assert not cs0_clean.should_run
+    assert cs0_clean.force_dense_cs0
 
 
 def test_rhs1_fp_preconditioner_probe_kind_from_env_selects_collision(monkeypatch) -> None:

@@ -392,6 +392,7 @@ Recent checkpoints:
 - Final full-system dense fallback execution extraction.
 - Reduced dense fallback execution extraction.
 - Sparse-PC GMRES retry tuple-adapter extraction.
+- Reduced/full dense fallback admission policy extraction.
 - Measured candidate handoff consolidation.
 - Sparse fallback measured-handoff extraction.
 - Sparse-PC factor-preflight evaluation extraction.
@@ -408,10 +409,10 @@ Recent checkpoints:
 - `cb295ce` Extract sparse pattern setup.
 - `4b6a5b4` Extract sparse factor policy.
 
-Current source-size snapshot after sparse-PC GMRES retry adapter extraction:
+Current source-size snapshot after dense fallback admission extraction:
 
-- `sfincs_jax/v3_driver.py`: `15639` lines.
-- `solve_v3_full_system_linear_gmres`: `10879` lines.
+- `sfincs_jax/v3_driver.py`: `15587` lines.
+- `solve_v3_full_system_linear_gmres`: `10825` lines.
 - `sfincs_jax/v3_results.py`: `119` lines.
 - `sfincs_jax/rhs1_ksp_diagnostics.py`: `306` lines.
 - `sfincs_jax/rhs1_pas_policy.py`: `889` lines.
@@ -420,7 +421,7 @@ Current source-size snapshot after sparse-PC GMRES retry adapter extraction:
 - `sfincs_jax/problems/profile_response/residual.py`: `981` lines.
 - `sfincs_jax/problems/profile_response/handoff.py`: `1035` lines.
 - `sfincs_jax/problems/profile_response/policies.py`: `3463` lines.
-- `sfincs_jax/problems/profile_response/dense.py`: `906` lines.
+- `sfincs_jax/problems/profile_response/dense.py`: `1092` lines.
 - `sfincs_jax/problems/profile_response/linear_solve.py`: `339` lines.
 - `sfincs_jax/problems/profile_response/active_projection.py`: `203` lines.
 - `sfincs_jax/problems/profile_response/sparse_pc.py`: `14972` lines.
@@ -429,6 +430,17 @@ Current source-size snapshot after sparse-PC GMRES retry adapter extraction:
 
 Recent local validation:
 
+- Dense fallback admission extraction:
+  `tests/test_profile_response_dense.py` passed (`27 passed in 0.95 s`).
+- Broad profile-response/RHSMode=1 shard after dense fallback admission
+  extraction:
+  `tests/test_profile_response_*.py tests/test_rhs1_*.py
+  tests/test_newton_krylov_diagnostics.py tests/test_pas_smoother.py`
+  passed (`1300 passed in 85.19 s`).
+- Hygiene after dense fallback admission extraction:
+  `ruff check`, `py_compile`, `compileall`, `git diff --check`, and
+  `python scripts/check_repo_size.py` passed. Repo-size audit reported no
+  reviewed files above 2 MiB.
 - Sparse-PC GMRES retry adapter extraction:
   `tests/test_profile_response_sparse_pc.py` passed
   (`288 passed in 2.25 s`).
@@ -1423,7 +1435,7 @@ Known CI issue fixed by this rewrite:
 
 ### 1. `v3_driver.py` Architecture Refactor
 
-Completion estimate: 94%.
+Completion estimate: 95%.
 
 Goal:
 
@@ -1861,7 +1873,7 @@ Next steps:
 
 ### 2. Differentiability And Solver-Lane Separation
 
-Completion estimate: 74%.
+Completion estimate: 75%.
 
 Goal:
 
@@ -1896,7 +1908,7 @@ Next steps:
 
 ### 4. Validation, Coverage, And Documentation
 
-Completion estimate: 66%.
+Completion estimate: 67%.
 
 Goal:
 
