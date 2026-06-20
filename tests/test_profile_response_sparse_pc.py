@@ -85,6 +85,8 @@ from sfincs_jax.problems.profile_response.sparse_pc import (
     XBlockGMRESFallbackContext,
     XBlockGMRESFallbackResult,
     XBlockGlobalCouplingStageContext,
+    XBlockKrylovControlSetup,
+    XBlockKrylovControlSetupContext,
     XBlockKrylovSolveState,
     XBlockKrylovSolveSpaceContext,
     XBlockKrylovReport,
@@ -197,6 +199,7 @@ from sfincs_jax.problems.profile_response.sparse_pc import (
     resolve_xblock_qi_deflated_policy_setup,
     resolve_xblock_qi_device_operator_reuse_setup,
     resolve_xblock_qi_galerkin_policy_setup,
+    resolve_xblock_krylov_control_setup,
     resolve_xblock_qi_seed_policy_setup,
     resolve_xblock_qi_two_level_policy_setup,
     resolve_xblock_global_coupling_policy_setup,
@@ -650,6 +653,87 @@ def test_xblock_device_krylov_state_estimates_cycle_matvecs() -> None:
 
     assert state.history == (1.0, 0.5, 0.25)
     assert state.estimated_matvecs == 9
+
+
+def _krylov_control_context(
+    *,
+    env: dict[str, str] | None = None,
+    krylov_method: str = "gmres",
+    emitted: list[tuple[int, str]] | None = None,
+) -> XBlockKrylovControlSetupContext:
+    emit_log = emitted if emitted is not None else []
+    return XBlockKrylovControlSetupContext(
+        env={} if env is None else env,
+        krylov_method=krylov_method,
+        pc_restart=8,
+        pc_maxiter=13,
+        precondition_side="right",
+        emit=lambda level, message: emit_log.append((level, message)),
+    )
+
+
+def test_resolve_xblock_krylov_control_setup_defaults_emit_solve_start() -> None:
+    emitted: list[tuple[int, str]] = []
+    setup = resolve_xblock_krylov_control_setup(
+        _krylov_control_context(emitted=emitted)
+    )
+
+    assert isinstance(setup, XBlockKrylovControlSetup)
+    assert setup.fgmres_block_between_cycles is False
+    assert setup.tfqmr_replacement_interval == 0
+    assert setup.device_fgmres_jit is False
+    assert setup.device_fgmres_jit_mode == "cycle"
+    assert setup.device_fgmres_jit_outer_k == 0
+    assert setup.qi_device_augmented_krylov_requested is False
+    assert setup.qi_device_augmented_krylov_mode == "combined"
+    assert len(emitted) == 1
+    assert "solve start method=gmres restart=8 maxiter=13" in emitted[0][1]
+
+
+def test_resolve_xblock_krylov_control_setup_normalizes_modes_and_emits_device_lines() -> None:
+    emitted: list[tuple[int, str]] = []
+    setup = resolve_xblock_krylov_control_setup(
+        _krylov_control_context(
+            krylov_method="fgmres_jax",
+            emitted=emitted,
+            env={
+                "SFINCS_JAX_RHSMODE1_XBLOCK_PC_FGMRES_BLOCK_BETWEEN_CYCLES": "1",
+                "SFINCS_JAX_RHSMODE1_XBLOCK_PC_DEVICE_JIT": "1",
+                "SFINCS_JAX_RHSMODE1_XBLOCK_PC_DEVICE_JIT_MODE": "bad-mode",
+                "SFINCS_JAX_RHSMODE1_XBLOCK_PC_DEVICE_JIT_OUTER_K": "5",
+                "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_AUGMENTED_KRYLOV": "1",
+                "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_AUGMENTED_KRYLOV_MODE": "projected",
+            },
+        )
+    )
+
+    assert setup.fgmres_block_between_cycles is True
+    assert setup.device_fgmres_jit is True
+    assert setup.device_fgmres_jit_mode == "cycle"
+    assert setup.device_fgmres_jit_outer_k == 5
+    assert setup.qi_device_augmented_krylov_requested is True
+    assert setup.qi_device_augmented_krylov_mode == "projected"
+    messages = [message for _, message in emitted]
+    assert any("FGMRES cycle-boundary synchronization enabled" in m for m in messages)
+    assert any("JIT-compiled device FGMRES enabled mode=cycle" in m for m in messages)
+
+
+def test_resolve_xblock_krylov_control_setup_tfqmr_note_and_clamps_interval() -> None:
+    emitted: list[tuple[int, str]] = []
+    setup = resolve_xblock_krylov_control_setup(
+        _krylov_control_context(
+            krylov_method="tfqmr_jax",
+            emitted=emitted,
+            env={
+                "SFINCS_JAX_RHSMODE1_XBLOCK_PC_TFQMR_REPLACE_INTERVAL": "-4",
+                "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_AUGMENTED_KRYLOV_MODE": "invalid",
+            },
+        )
+    )
+
+    assert setup.tfqmr_replacement_interval == 0
+    assert setup.qi_device_augmented_krylov_mode == "combined"
+    assert "tfqmr_replacement_interval=0" in emitted[0][1]
 
 
 def test_run_xblock_first_krylov_attempt_dispatches_host_gmres() -> None:

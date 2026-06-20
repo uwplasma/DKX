@@ -393,6 +393,31 @@ class XBlockPreflightGateResult:
 
 
 @dataclass(frozen=True)
+class XBlockKrylovControlSetupContext:
+    """Inputs for resolving x-block Krylov runtime controls and messages."""
+
+    env: Mapping[str, str] | None
+    krylov_method: str
+    pc_restart: int
+    pc_maxiter: int | None
+    precondition_side: str
+    emit: EmitFn | None
+
+
+@dataclass(frozen=True)
+class XBlockKrylovControlSetup:
+    """Resolved x-block Krylov controls for the first solve attempt."""
+
+    fgmres_block_between_cycles: bool
+    tfqmr_replacement_interval: int
+    device_fgmres_jit: bool
+    device_fgmres_jit_mode: str
+    device_fgmres_jit_outer_k: int
+    qi_device_augmented_krylov_requested: bool
+    qi_device_augmented_krylov_mode: str
+
+
+@dataclass(frozen=True)
 class XBlockKrylovSolveState:
     """Physical-space xblock Krylov solve state used by downstream metadata."""
 
@@ -1810,6 +1835,103 @@ def evaluate_xblock_preflight_gate(
             failed=True,
             failure_reason=failure_reason,
         )
+
+
+def resolve_xblock_krylov_control_setup(
+    context: XBlockKrylovControlSetupContext,
+) -> XBlockKrylovControlSetup:
+    """Resolve x-block Krylov runtime controls and emit user-facing setup lines."""
+
+    env = context.env
+    method = str(context.krylov_method)
+    fgmres_block_between_cycles = _env_bool(
+        env,
+        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_FGMRES_BLOCK_BETWEEN_CYCLES",
+        default=False,
+    )
+    tfqmr_replacement_interval = _env_int(
+        env,
+        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_TFQMR_REPLACE_INTERVAL",
+        default=0,
+        minimum=0,
+    )
+    if context.emit is not None:
+        tfqmr_note = (
+            f" tfqmr_replacement_interval={int(tfqmr_replacement_interval)}"
+            if method == "tfqmr_jax"
+            else ""
+        )
+        context.emit(
+            0,
+            "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres solve start "
+            f"method={method} restart={int(context.pc_restart)} "
+            f"maxiter={int(context.pc_maxiter)} "
+            f"precondition_side={context.precondition_side}{tfqmr_note}",
+        )
+
+    device_fgmres_jit = _env_bool(
+        env,
+        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_DEVICE_JIT",
+        default=False,
+    )
+    device_fgmres_jit_mode = (
+        _env_value(env, "SFINCS_JAX_RHSMODE1_XBLOCK_PC_DEVICE_JIT_MODE")
+        or "cycle"
+    ).lower().replace("-", "_")
+    if device_fgmres_jit_mode not in {"cycle", "full"}:
+        device_fgmres_jit_mode = "cycle"
+    device_fgmres_jit_outer_k = _env_int(
+        env,
+        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_DEVICE_JIT_OUTER_K",
+        default=0,
+        minimum=0,
+    )
+    qi_device_augmented_krylov_requested = _env_bool(
+        env,
+        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_AUGMENTED_KRYLOV",
+        default=False,
+    )
+    qi_device_augmented_krylov_mode = (
+        _env_value(
+            env,
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_AUGMENTED_KRYLOV_MODE",
+        )
+        or "combined"
+    ).lower().replace("-", "_")
+    if qi_device_augmented_krylov_mode not in {"projected", "combined"}:
+        qi_device_augmented_krylov_mode = "combined"
+    if (
+        context.emit is not None
+        and method in {"fgmres_jax", "gmres_jax"}
+        and bool(fgmres_block_between_cycles)
+    ):
+        context.emit(
+            0,
+            "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
+            "FGMRES cycle-boundary synchronization enabled",
+        )
+    if (
+        context.emit is not None
+        and method in {"fgmres_jax", "gmres_jax"}
+        and bool(device_fgmres_jit)
+    ):
+        context.emit(
+            0,
+            "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
+            f"JIT-compiled device FGMRES enabled mode={device_fgmres_jit_mode}",
+        )
+
+    return XBlockKrylovControlSetup(
+        fgmres_block_between_cycles=bool(fgmres_block_between_cycles),
+        tfqmr_replacement_interval=int(tfqmr_replacement_interval),
+        device_fgmres_jit=bool(device_fgmres_jit),
+        device_fgmres_jit_mode=str(device_fgmres_jit_mode),
+        device_fgmres_jit_outer_k=int(device_fgmres_jit_outer_k),
+        qi_device_augmented_krylov_requested=bool(
+            qi_device_augmented_krylov_requested
+        ),
+        qi_device_augmented_krylov_mode=str(qi_device_augmented_krylov_mode),
+    )
 
 
 def xblock_krylov_state_from_first_attempt(
@@ -14327,6 +14449,8 @@ __all__ = [
     "XBlockProbeCoarseStageResult",
     "XBlockPreflightGateContext",
     "XBlockPreflightGateResult",
+    "XBlockKrylovControlSetupContext",
+    "XBlockKrylovControlSetup",
     "XBlockKrylovSolveState",
     "XBlockAugmentedKrylovBasisContext",
     "XBlockAugmentedKrylovBasisResult",
@@ -14411,6 +14535,7 @@ __all__ = [
     "build_xblock_qi_device_preconditioner_metadata",
     "build_xblock_qi_device_setup_config",
     "resolve_xblock_qi_deflated_policy_setup",
+    "resolve_xblock_krylov_control_setup",
     "build_sparse_pc_active_dof_setup",
     "build_sparse_pc_pattern_setup",
     "build_direct_tail_materialization_setup",
