@@ -2002,9 +2002,11 @@ Actual open lanes:
 2. Driver reviewability: about 75%. `v3_driver.py` is smaller than before but
    still has a 9599-line RHSMode=1 solve function. Only extract remaining
    driver seams when the boundary is explicit, tested, and shorter than the
-   in-line code it replaces. The next seam to inspect is the generic sparse
-   retry/result-assembly branch; if it is mostly scalar metadata plumbing,
-   leave it driver-owned and document why.
+   in-line code it replaces. The generic sparse retry/result-assembly shell was
+   inspected after the first sparse package split and should remain
+   driver-owned for now: it coordinates driver-local cache keys, dense fallback
+   state, KSP replay state, and residual-vector routing while delegating the
+   reusable factor/solve mechanics to tested profile-response helpers.
 3. Sparse profile-response package split: about 35%. This is the main blocker
    for review. Move implementation out of
    `profile_response/sparse_pc.py` into a bounded domain package while keeping
@@ -2052,14 +2054,14 @@ Deferred until after PR review or a separate behavior PR:
 
 Efficient path to PR-ready:
 
-1. Inspect the generic sparse retry/result-assembly branch. Extract it only if
-   the result is a small typed stage; otherwise record that the branch stays in
-   the driver because it owns local cache/callback/result routing.
+1. Treat the generic sparse retry/result-assembly shell as intentionally
+   driver-owned for now because extracting it would create a large
+   replay/cache-routing state object rather than a clearer algorithm boundary.
 2. Continue the `profile_response/sparse/` package split. The first
    x-block-rescue tranche is complete; the next tranches should move
    finalization, direct, tail, Fortran-reduced, and QI groups in separate
    commits.
-3. Move finalization/direct/tail/Fortran-reduced/QI groups in separate commits,
+3. Keep each package split tranche behavior-preserving and compatibility-backed,
    keeping `sparse_pc.py` as a compatibility import layer after each commit.
 4. Run focused tests after every package split commit, then the broad
    profile-response/RHSMode shard after behavior-facing or import-surface

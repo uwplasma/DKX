@@ -10409,6 +10409,10 @@ def solve_v3_full_system_linear_gmres(
                 and sparse_kind_use == "jax"
                 and (not skip_global_sparse_after_xblock)
             ):
+                # This routing stays in the driver because it owns the local
+                # cache key, KSP replay state, and residual-vector handoff. The
+                # reusable sparse-JAX build and measured-retry mechanics live in
+                # profile-response helpers.
                 try:
                     _mark("rhs1_sparse_precond_build_start")
                     cache_key = _rhsmode1_sparse_cache_key(
@@ -10465,6 +10469,10 @@ def solve_v3_full_system_linear_gmres(
                     if emit is not None:
                         emit(1, f"sparse_jax: failed ({type(exc).__name__}: {exc})")
             elif float(res_reduced.residual_norm) > target_reduced and (not skip_global_sparse_after_xblock):
+                # Same boundary as the sparse-JAX retry above: host sparse
+                # routing coordinates driver-owned caches, dense fallback
+                # state, and replay acceptance, while the factor/solve
+                # algorithms remain tested profile-response helpers.
                 try:
                     _mark("rhs1_sparse_precond_build_start")
                     cache_key = _rhsmode1_sparse_cache_key(
