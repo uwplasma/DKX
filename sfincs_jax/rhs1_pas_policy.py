@@ -203,6 +203,30 @@ def rhs1_pas_force_full_decision_from_env(
     )
 
 
+def rhs1_pas_small_near_zero_er_kind(
+    *,
+    pas_tz_applicable: bool,
+    tz_size: int,
+    active_size: int,
+) -> str:
+    """Return the lightweight PAS default below the x-coarsening size regime.
+
+    Near-zero-Er PAS systems below the ``xmg`` threshold should avoid expensive
+    global Schur setup. When PAS-TZ blocks are applicable and angular grids are
+    modest, use the PAS-native line/x-coarse family; otherwise fall back to xmg.
+    """
+
+    pas_lite_tz_max = _env_int("SFINCS_JAX_PAS_LITE_TZ_MAX", 256)
+    if bool(pas_tz_applicable) and int(pas_lite_tz_max) > 0 and int(tz_size) <= int(pas_lite_tz_max):
+        pas_lite_min = _env_int("SFINCS_JAX_PAS_LITE_MIN", 20000)
+        return (
+            "pas_lite"
+            if int(active_size) >= max(1, int(pas_lite_min))
+            else "pas_hybrid"
+        )
+    return "xmg"
+
+
 def pas_tokamak_theta_preconditioner_applicable(op) -> bool:
     """Return whether the PAS tokamak theta/L preconditioner is applicable.
 
@@ -859,6 +883,7 @@ __all__ = [
     "rhs1_pas_preconditioner_probe_large_collision_skip",
     "rhs1_pas_preconditioner_probe_uses_collision",
     "rhs1_pas_schur_rescue_controls_from_env",
+    "rhs1_pas_small_near_zero_er_kind",
     "rhs1_pas_tz_guarded_strong_retry_from_env",
     "rhs1_pas_tz_max_bytes",
 ]

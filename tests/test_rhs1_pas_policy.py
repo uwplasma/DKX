@@ -27,6 +27,7 @@ from sfincs_jax.rhs1_pas_policy import (
     rhs1_pas_preconditioner_probe_large_collision_skip,
     rhs1_pas_preconditioner_probe_uses_collision,
     rhs1_pas_schur_rescue_controls_from_env,
+    rhs1_pas_small_near_zero_er_kind,
     rhs1_pas_tz_guarded_strong_retry_from_env,
 )
 
@@ -509,6 +510,74 @@ def test_pas_force_full_decision_respects_guards_and_invalid_env(monkeypatch) ->
 
     monkeypatch.setenv("SFINCS_JAX_PAS_FORCE_FULL_RATIO", "100")
     assert not rhs1_pas_force_full_decision_from_env(**kwargs).run
+
+
+def test_pas_small_near_zero_er_kind_uses_lite_or_hybrid_threshold(monkeypatch) -> None:
+    monkeypatch.delenv("SFINCS_JAX_PAS_LITE_TZ_MAX", raising=False)
+    monkeypatch.delenv("SFINCS_JAX_PAS_LITE_MIN", raising=False)
+
+    kwargs = dict(pas_tz_applicable=True, tz_size=128)
+
+    assert rhs1_pas_small_near_zero_er_kind(active_size=20_000, **kwargs) == "pas_lite"
+    assert rhs1_pas_small_near_zero_er_kind(active_size=19_999, **kwargs) == "pas_hybrid"
+
+
+def test_pas_small_near_zero_er_kind_falls_back_to_xmg_for_large_or_inapplicable_tz(
+    monkeypatch,
+) -> None:
+    monkeypatch.delenv("SFINCS_JAX_PAS_LITE_TZ_MAX", raising=False)
+    monkeypatch.delenv("SFINCS_JAX_PAS_LITE_MIN", raising=False)
+
+    assert (
+        rhs1_pas_small_near_zero_er_kind(
+            pas_tz_applicable=True,
+            tz_size=257,
+            active_size=30_000,
+        )
+        == "xmg"
+    )
+    assert (
+        rhs1_pas_small_near_zero_er_kind(
+            pas_tz_applicable=False,
+            tz_size=128,
+            active_size=30_000,
+        )
+        == "xmg"
+    )
+
+
+def test_pas_small_near_zero_er_kind_respects_env_and_invalid_values(monkeypatch) -> None:
+    monkeypatch.setenv("SFINCS_JAX_PAS_LITE_TZ_MAX", "bad")
+    monkeypatch.setenv("SFINCS_JAX_PAS_LITE_MIN", "bad")
+    assert (
+        rhs1_pas_small_near_zero_er_kind(
+            pas_tz_applicable=True,
+            tz_size=256,
+            active_size=20_000,
+        )
+        == "pas_lite"
+    )
+
+    monkeypatch.setenv("SFINCS_JAX_PAS_LITE_TZ_MAX", "64")
+    assert (
+        rhs1_pas_small_near_zero_er_kind(
+            pas_tz_applicable=True,
+            tz_size=65,
+            active_size=20_000,
+        )
+        == "xmg"
+    )
+
+    monkeypatch.setenv("SFINCS_JAX_PAS_LITE_TZ_MAX", "128")
+    monkeypatch.setenv("SFINCS_JAX_PAS_LITE_MIN", "40000")
+    assert (
+        rhs1_pas_small_near_zero_er_kind(
+            pas_tz_applicable=True,
+            tz_size=128,
+            active_size=30_000,
+        )
+        == "pas_hybrid"
+    )
 
 
 def test_pas_tz_memory_fallback_axis_preserves_default_behavior() -> None:

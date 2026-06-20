@@ -136,6 +136,7 @@ from .rhs1_pas_policy import (
     rhs1_pas_preconditioner_probe_large_collision_skip as _rhs1_pas_preconditioner_probe_large_collision_skip,
     rhs1_pas_preconditioner_probe_uses_collision as _rhs1_pas_preconditioner_probe_uses_collision,
     rhs1_pas_schur_rescue_controls_from_env,
+    rhs1_pas_small_near_zero_er_kind as _rhs1_pas_small_near_zero_er_kind,
     rhs1_pas_tz_guarded_strong_retry_from_env,
     rhs1_pas_tz_max_bytes as _rhs1_pas_tz_max_bytes,
 )
@@ -7856,24 +7857,11 @@ def solve_v3_full_system_linear_gmres(
                             # prefer a lightweight PAS preconditioner when angular blocks are
                             # modest; otherwise fall back to x-coarsening to avoid expensive
                             # global Schur setup while retaining good Krylov convergence.
-                            tz_size = int(op.n_theta) * int(op.n_zeta)
-                            pas_lite_tz_env = os.environ.get("SFINCS_JAX_PAS_LITE_TZ_MAX", "").strip()
-                            try:
-                                pas_lite_tz_max = int(pas_lite_tz_env) if pas_lite_tz_env else 256
-                            except ValueError:
-                                pas_lite_tz_max = 256
-                            if _pas_tz_preconditioner_applicable(op) and pas_lite_tz_max > 0 and tz_size <= pas_lite_tz_max:
-                                pas_lite_min_env = os.environ.get("SFINCS_JAX_PAS_LITE_MIN", "").strip()
-                                try:
-                                    pas_lite_min = int(pas_lite_min_env) if pas_lite_min_env else 20000
-                                except ValueError:
-                                    pas_lite_min = 20000
-                                if int(active_size) >= max(1, int(pas_lite_min)):
-                                    rhs1_precond_kind = "pas_lite"
-                                else:
-                                    rhs1_precond_kind = "pas_hybrid"
-                            else:
-                                rhs1_precond_kind = "xmg"
+                            rhs1_precond_kind = _rhs1_pas_small_near_zero_er_kind(
+                                pas_tz_applicable=_pas_tz_preconditioner_applicable(op),
+                                tz_size=int(op.n_theta) * int(op.n_zeta),
+                                active_size=int(active_size),
+                            )
                         elif (
                             op.fblock.fp is not None
                             and er_abs <= schur_er_min
@@ -7954,24 +7942,11 @@ def solve_v3_full_system_linear_gmres(
                         and (not schur_tokamak)
                         and int(op.total_size) < pas_xmg_min
                     ):
-                        tz_size = int(op.n_theta) * int(op.n_zeta)
-                        pas_lite_tz_env = os.environ.get("SFINCS_JAX_PAS_LITE_TZ_MAX", "").strip()
-                        try:
-                            pas_lite_tz_max = int(pas_lite_tz_env) if pas_lite_tz_env else 256
-                        except ValueError:
-                            pas_lite_tz_max = 256
-                        if _pas_tz_preconditioner_applicable(op) and pas_lite_tz_max > 0 and tz_size <= pas_lite_tz_max:
-                            pas_lite_min_env = os.environ.get("SFINCS_JAX_PAS_LITE_MIN", "").strip()
-                            try:
-                                pas_lite_min = int(pas_lite_min_env) if pas_lite_min_env else 20000
-                            except ValueError:
-                                pas_lite_min = 20000
-                            if int(active_size) >= max(1, int(pas_lite_min)):
-                                rhs1_precond_kind = "pas_lite"
-                            else:
-                                rhs1_precond_kind = "pas_hybrid"
-                        else:
-                            rhs1_precond_kind = "xmg"
+                        rhs1_precond_kind = _rhs1_pas_small_near_zero_er_kind(
+                            pas_tz_applicable=_pas_tz_preconditioner_applicable(op),
+                            tz_size=int(op.n_theta) * int(op.n_zeta),
+                            active_size=int(active_size),
+                        )
                     elif (
                         op.fblock.fp is not None
                         and er_abs <= schur_er_min
@@ -8126,24 +8101,11 @@ def solve_v3_full_system_linear_gmres(
                         and er_abs <= schur_er_min
                         and int(active_size) < pas_xmg_min
                     ):
-                        tz_size = int(op.n_theta) * int(op.n_zeta)
-                        pas_lite_tz_env = os.environ.get("SFINCS_JAX_PAS_LITE_TZ_MAX", "").strip()
-                        try:
-                            pas_lite_tz_max = int(pas_lite_tz_env) if pas_lite_tz_env else 256
-                        except ValueError:
-                            pas_lite_tz_max = 256
-                        if _pas_tz_preconditioner_applicable(op) and pas_lite_tz_max > 0 and tz_size <= pas_lite_tz_max:
-                            pas_lite_min_env = os.environ.get("SFINCS_JAX_PAS_LITE_MIN", "").strip()
-                            try:
-                                pas_lite_min = int(pas_lite_min_env) if pas_lite_min_env else 20000
-                            except ValueError:
-                                pas_lite_min = 20000
-                            if int(active_size) >= max(1, int(pas_lite_min)):
-                                rhs1_precond_kind = "pas_lite"
-                            else:
-                                rhs1_precond_kind = "pas_hybrid"
-                        else:
-                            rhs1_precond_kind = "xmg"
+                        rhs1_precond_kind = _rhs1_pas_small_near_zero_er_kind(
+                            pas_tz_applicable=_pas_tz_preconditioner_applicable(op),
+                            tz_size=int(op.n_theta) * int(op.n_zeta),
+                            active_size=int(active_size),
+                        )
                     else:
                         collision_precond_min_env = os.environ.get("SFINCS_JAX_RHSMODE1_COLLISION_PRECOND_MIN", "").strip()
                         try:

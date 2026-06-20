@@ -42,6 +42,11 @@ Make `sfincs_jax` research-grade while preserving the public user contract:
 
 Recent checkpoints:
 
+- RHSMode=1 PAS near-zero-Er small-system default routing now uses a tested
+  `rhs1_pas_small_near_zero_er_kind(...)` policy helper. This removes three
+  duplicated PAS-lite/PAS-hybrid/xmg threshold blocks from `v3_driver.py` while
+  preserving the existing `SFINCS_JAX_PAS_LITE_TZ_MAX` and
+  `SFINCS_JAX_PAS_LITE_MIN` behavior.
 - RHSMode=1 x-block sparse-PC post-Krylov correction and completion emission
   now use a tested `complete_xblock_post_krylov_stage(...)` helper. The helper
   composes the existing post-solve correction runner with the completion
@@ -327,13 +332,13 @@ Recent checkpoints:
 - `cb295ce` Extract sparse pattern setup.
 - `4b6a5b4` Extract sparse factor policy.
 
-Current source-size snapshot after x-block post-Krylov completion extraction:
+Current source-size snapshot after PAS near-zero-Er policy extraction:
 
-- `sfincs_jax/v3_driver.py`: `15915` lines.
-- `solve_v3_full_system_linear_gmres`: `11155` lines.
+- `sfincs_jax/v3_driver.py`: `15877` lines.
+- `solve_v3_full_system_linear_gmres`: `11116` lines.
 - `sfincs_jax/v3_results.py`: `119` lines.
 - `sfincs_jax/rhs1_ksp_diagnostics.py`: `306` lines.
-- `sfincs_jax/rhs1_pas_policy.py`: `864` lines.
+- `sfincs_jax/rhs1_pas_policy.py`: `889` lines.
 - `sfincs_jax/rhs1_strong_fallback.py`: `147` lines.
 - `sfincs_jax/problems/profile_response/strong_preconditioning.py`: `803` lines.
 - `sfincs_jax/problems/profile_response/residual.py`: `981` lines.
@@ -347,6 +352,16 @@ Current source-size snapshot after x-block post-Krylov completion extraction:
 
 Recent local validation:
 
+- PAS policy shard after near-zero-Er PAS routing extraction:
+  `36 passed in 0.38 s`.
+- Solver-selection policy shard after near-zero-Er PAS routing extraction:
+  `162 passed in 0.90 s`.
+- RHSMode=1/profile-response shard after near-zero-Er PAS routing extraction:
+  `1254 passed in 47.25 s`.
+- Hygiene after near-zero-Er PAS routing extraction:
+  `ruff check`, `py_compile`, `compileall`, `git diff --check`, and
+  `python scripts/check_repo_size.py` passed. Repo-size audit reported no
+  reviewed files above 2 MiB.
 - Sparse-PC helper shard after x-block post-Krylov completion extraction:
   `287 passed in 2.52 s`.
 - RHSMode=1/profile-response shard after x-block post-Krylov completion
@@ -1259,7 +1274,7 @@ Known CI issue fixed by this rewrite:
 
 ### 1. `v3_driver.py` Architecture Refactor
 
-Completion estimate: 89%.
+Completion estimate: 90%.
 
 Goal:
 
@@ -1435,6 +1450,9 @@ Completed recent boundaries:
   tested sparse-PC-domain helper. Post-minres, post-coarse, and
   post-residual-equation diagnostics remain available through the same
   correction result object used by final metadata.
+- RHSMode=1 PAS near-zero-Er small-system default routing now uses a tested
+  PAS policy helper for PAS-lite/PAS-hybrid/xmg selection, eliminating three
+  duplicate env-parsing branches from the driver.
 - RHSMode=1 rescue/refinement candidate acceptance and KSP replay-state updates
   consolidated into profile-response handoff helpers.
 - RHSMode=1 true-residual recomputation before fallback decisions consolidated
