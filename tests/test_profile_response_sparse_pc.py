@@ -92,6 +92,7 @@ from sfincs_jax.problems.profile_response.sparse_pc import (
     XBlockPostSolveCorrectionContext,
     XBlockPostSolveCorrectionResult,
     XBlockPhysicalResidual,
+    XBlockPreflightGateContext,
     XBlockProbeCoarseStageContext,
     XBlockProbeCoarseStageResult,
     XBlockQICoarseSeedStageContext,
@@ -149,6 +150,7 @@ from sfincs_jax.problems.profile_response.sparse_pc import (
     evaluate_xblock_moment_schur_probe_result,
     evaluate_sparse_pc_factor_preflight,
     evaluate_sparse_pc_residual_candidate_acceptance,
+    evaluate_xblock_preflight_gate,
     select_sparse_pc_auto_preflight_retry_candidates,
     evaluate_sparse_pc_auto_preflight_retry,
     evaluate_sparse_pc_factor_dtype_retry,
@@ -1052,6 +1054,127 @@ def test_apply_xblock_probe_coarse_stage_reports_failure() -> None:
     assert result.residual_before == pytest.approx(1.0)
     assert result.residual_after is None
     assert "probe-coarse failed (RuntimeError: coarse failed)" in emitted[-1][1]
+
+
+def _preflight_context(
+    *,
+    min_improvement: float = 0.0,
+    required: bool = False,
+    rhs: jnp.ndarray | None = None,
+    rhs_norm: float = 10.0,
+    x0: jnp.ndarray | None = None,
+    matvec=None,
+    target: float = 1.0e-3,
+    emitted: list[tuple[int, str]] | None = None,
+) -> XBlockPreflightGateContext:
+    emit_log = emitted if emitted is not None else []
+    if rhs is None:
+        rhs = jnp.asarray([1.0, 0.0])
+    if matvec is None:
+        def identity_matvec(values: jnp.ndarray) -> jnp.ndarray:
+            return values
+
+        matvec = identity_matvec
+    return XBlockPreflightGateContext(
+        min_improvement=float(min_improvement),
+        required=bool(required),
+        rhs=rhs,
+        rhs_norm=float(rhs_norm),
+        x0=x0,
+        matvec=matvec,
+        target=float(target),
+        emit=lambda level, message: emit_log.append((level, message)),
+    )
+
+
+def test_evaluate_xblock_preflight_gate_inactive_skips_evaluation() -> None:
+    result = evaluate_xblock_preflight_gate(_preflight_context())
+
+    assert result.evaluated is False
+    assert result.passed is None
+    assert result.improvement is None
+    assert result.residual_norm is None
+
+
+def test_evaluate_xblock_preflight_gate_passes_on_residual_target() -> None:
+    emitted: list[tuple[int, str]] = []
+    result = evaluate_xblock_preflight_gate(
+        _preflight_context(
+            min_improvement=0.95,
+            x0=jnp.asarray([1.0, 0.0]),
+            target=1.0e-2,
+            emitted=emitted,
+        )
+    )
+
+    assert result.evaluated is True
+    assert result.failed is False
+    assert result.passed is True
+    assert result.residual_norm == pytest.approx(0.0)
+    assert result.improvement == pytest.approx(1.0)
+    assert "preflight residual=" in emitted[-1][1]
+    assert "passed=1" in emitted[-1][1]
+
+
+def test_evaluate_xblock_preflight_gate_passes_on_improvement() -> None:
+    emitted: list[tuple[int, str]] = []
+    result = evaluate_xblock_preflight_gate(
+        _preflight_context(
+            min_improvement=0.2,
+            rhs=jnp.asarray([10.0, 0.0]),
+            rhs_norm=10.0,
+            x0=jnp.asarray([8.0, 0.0]),
+            target=1.0e-6,
+            emitted=emitted,
+        )
+    )
+
+    assert result.passed is True
+    assert result.residual_norm == pytest.approx(2.0)
+    assert result.improvement == pytest.approx(0.8)
+    assert "passed=1" in emitted[-1][1]
+
+
+def test_evaluate_xblock_preflight_gate_nonrequired_failure_emits_warning() -> None:
+    emitted: list[tuple[int, str]] = []
+    result = evaluate_xblock_preflight_gate(
+        _preflight_context(
+            min_improvement=0.9,
+            x0=jnp.asarray([0.0, 0.0]),
+            matvec=lambda _values: (_ for _ in ()).throw(RuntimeError("bad matvec")),
+            emitted=emitted,
+        )
+    )
+
+    assert result.evaluated is True
+    assert result.failed is True
+    assert result.failure_reason == "RuntimeError: bad matvec"
+    assert result.passed is None
+    assert "preflight failed (RuntimeError: bad matvec)" in emitted[-1][1]
+
+
+def test_evaluate_xblock_preflight_gate_required_failure_raises() -> None:
+    emitted: list[tuple[int, str]] = []
+    with pytest.raises(RuntimeError, match="preflight gate failed"):
+        evaluate_xblock_preflight_gate(
+            _preflight_context(
+                min_improvement=0.9,
+                required=True,
+                rhs=jnp.asarray([10.0, 0.0]),
+                rhs_norm=10.0,
+                x0=jnp.asarray([0.0, 0.0]),
+                emitted=emitted,
+            )
+        )
+
+    assert "passed=0" in emitted[-1][1]
+
+
+def test_evaluate_xblock_preflight_gate_required_missing_seed_raises() -> None:
+    with pytest.raises(RuntimeError, match="required an initial seed"):
+        evaluate_xblock_preflight_gate(
+            _preflight_context(min_improvement=0.0, required=True, x0=None)
+        )
 
 
 @pytest.mark.parametrize("residual_norm", [1.1, np.nan])

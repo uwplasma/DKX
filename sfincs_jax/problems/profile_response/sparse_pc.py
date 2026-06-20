@@ -367,6 +367,32 @@ class XBlockProbeCoarseStageResult:
 
 
 @dataclass(frozen=True)
+class XBlockPreflightGateContext:
+    """Inputs for the optional x-block seed residual preflight gate."""
+
+    min_improvement: float
+    required: bool
+    rhs: jnp.ndarray
+    rhs_norm: float
+    x0: jnp.ndarray | None
+    matvec: ArrayFn
+    target: float
+    emit: EmitFn | None
+
+
+@dataclass(frozen=True)
+class XBlockPreflightGateResult:
+    """Diagnostics from the optional x-block seed residual preflight gate."""
+
+    residual_norm: float | None
+    improvement: float | None
+    passed: bool | None
+    evaluated: bool
+    failed: bool
+    failure_reason: str | None
+
+
+@dataclass(frozen=True)
 class XBlockKrylovSolveState:
     """Physical-space xblock Krylov solve state used by downstream metadata."""
 
@@ -1698,6 +1724,92 @@ def apply_xblock_probe_coarse_stage(
         failed=bool(failed),
         failure_reason=failure_reason,
     )
+
+
+def evaluate_xblock_preflight_gate(
+    context: XBlockPreflightGateContext,
+) -> XBlockPreflightGateResult:
+    """Evaluate the optional x-block seed residual preflight gate."""
+
+    min_improvement = float(context.min_improvement)
+    required = bool(context.required)
+    active = bool(min_improvement > 0.0 or required)
+    if not active:
+        return XBlockPreflightGateResult(
+            residual_norm=None,
+            improvement=None,
+            passed=None,
+            evaluated=False,
+            failed=False,
+            failure_reason=None,
+        )
+
+    if context.x0 is None:
+        if required:
+            raise RuntimeError(
+                "xblock_sparse_pc_gmres preflight gate required an initial seed"
+            )
+        return XBlockPreflightGateResult(
+            residual_norm=None,
+            improvement=0.0,
+            passed=False,
+            evaluated=False,
+            failed=False,
+            failure_reason=None,
+        )
+
+    try:
+        residual = context.rhs - jnp.asarray(
+            context.matvec(jnp.asarray(context.x0, dtype=jnp.float64)),
+            dtype=jnp.float64,
+        )
+        residual_norm = profile_l2_norm_float(residual)
+        ratio = profile_safe_ratio(residual_norm, context.rhs_norm)
+        improvement = 1.0 - float(ratio) if ratio is not None else 1.0
+        passed = bool(
+            profile_residual_converged(residual_norm, context.target)
+            or float(improvement) >= min_improvement
+        )
+        if context.emit is not None:
+            context.emit(
+                0 if passed else 1,
+                "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
+                f"preflight residual={float(residual_norm):.6e} "
+                f"improvement={float(improvement):.6e} "
+                f"required={float(min_improvement):.6e} passed={int(passed)}",
+            )
+        if required and not passed:
+            raise RuntimeError(
+                "xblock_sparse_pc_gmres preflight gate failed "
+                f"improvement={float(improvement):.6e} "
+                f"< required={float(min_improvement):.6e}"
+            )
+        return XBlockPreflightGateResult(
+            residual_norm=float(residual_norm),
+            improvement=float(improvement),
+            passed=bool(passed),
+            evaluated=True,
+            failed=False,
+            failure_reason=None,
+        )
+    except Exception as exc:  # noqa: BLE001
+        if required:
+            raise
+        failure_reason = f"{type(exc).__name__}: {exc}"
+        if context.emit is not None:
+            context.emit(
+                1,
+                "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
+                f"preflight failed ({type(exc).__name__}: {exc})",
+            )
+        return XBlockPreflightGateResult(
+            residual_norm=None,
+            improvement=None,
+            passed=None,
+            evaluated=True,
+            failed=True,
+            failure_reason=failure_reason,
+        )
 
 
 def xblock_krylov_state_from_first_attempt(
@@ -14213,6 +14325,8 @@ __all__ = [
     "XBlockSideProbeStageResult",
     "XBlockProbeCoarseStageContext",
     "XBlockProbeCoarseStageResult",
+    "XBlockPreflightGateContext",
+    "XBlockPreflightGateResult",
     "XBlockKrylovSolveState",
     "XBlockAugmentedKrylovBasisContext",
     "XBlockAugmentedKrylovBasisResult",
@@ -14306,6 +14420,7 @@ __all__ = [
     "emit_xblock_sparse_pc_completion_from_driver_state",
     "evaluate_sparse_pc_factor_preflight",
     "evaluate_sparse_pc_residual_candidate_acceptance",
+    "evaluate_xblock_preflight_gate",
     "select_sparse_pc_auto_preflight_retry_candidates",
     "evaluate_sparse_pc_auto_preflight_retry",
     "resolve_sparse_pc_gmres_control_policy",

@@ -311,10 +311,10 @@ Recent checkpoints:
 - `cb295ce` Extract sparse pattern setup.
 - `4b6a5b4` Extract sparse factor policy.
 
-Current source-size snapshot after x-block probe-coarse stage extraction:
+Current source-size snapshot after x-block preflight-gate extraction:
 
-- `sfincs_jax/v3_driver.py`: `16062` lines.
-- `solve_v3_full_system_linear_gmres`: `11302` lines.
+- `sfincs_jax/v3_driver.py`: `16035` lines.
+- `solve_v3_full_system_linear_gmres`: `11273` lines.
 - `sfincs_jax/v3_results.py`: `119` lines.
 - `sfincs_jax/rhs1_ksp_diagnostics.py`: `306` lines.
 - `sfincs_jax/rhs1_pas_policy.py`: `864` lines.
@@ -326,11 +326,19 @@ Current source-size snapshot after x-block probe-coarse stage extraction:
 - `sfincs_jax/problems/profile_response/dense.py`: `701` lines.
 - `sfincs_jax/problems/profile_response/linear_solve.py`: `339` lines.
 - `sfincs_jax/problems/profile_response/active_projection.py`: `116` lines.
-- `sfincs_jax/problems/profile_response/sparse_pc.py`: `14397` lines.
+- `sfincs_jax/problems/profile_response/sparse_pc.py`: `14512` lines.
 - `sfincs_jax/rhs1_xblock_policy.py`: `1215` lines.
 
 Recent local validation:
 
+- Sparse-PC helper shard after x-block preflight-gate extraction:
+  `275 passed in 2.48 s`.
+- RHSMode=1/profile-response shard after x-block preflight-gate extraction:
+  `1239 passed in 47.08 s`.
+- Hygiene after x-block preflight-gate extraction:
+  `ruff check`, `py_compile`, `compileall`, `git diff --check`, and
+  `python scripts/check_repo_size.py` passed. Repo-size audit reported no
+  reviewed files above 2 MiB.
 - Sparse-PC helper shard after x-block probe-coarse stage extraction:
   `269 passed in 2.48 s`.
 - RHSMode=1/profile-response shard after x-block probe-coarse stage
@@ -1195,7 +1203,7 @@ Known CI issue fixed by this rewrite:
 
 ### 1. `v3_driver.py` Architecture Refactor
 
-Completion estimate: 83%.
+Completion estimate: 84%.
 
 Goal:
 
@@ -1345,6 +1353,10 @@ Completed recent boundaries:
   coarse-direction builder closure, while seed initialization, projected
   correction, accept/reject/failure diagnostics, and scalar metadata handoff
   are owned by the helper.
+- RHSMode=1 x-block preflight residual gate now uses a tested
+  sparse-PC-domain helper. The driver still resolves the environment controls,
+  while seed residual evaluation, improvement/target acceptance, required-gate
+  errors, and warning emission are owned by the helper.
 - RHSMode=1 rescue/refinement candidate acceptance and KSP replay-state updates
   consolidated into profile-response handoff helpers.
 - RHSMode=1 true-residual recomputation before fallback decisions consolidated

@@ -285,6 +285,7 @@ from .problems.profile_response.sparse_pc import (
     XBlockKrylovSolveSpaceContext,
     XBlockMomentSchurStageContext,
     XBlockPostSolveCorrectionContext,
+    XBlockPreflightGateContext,
     XBlockProbeCoarseStageContext,
     XBlockQICoarseSeedStageContext,
     XBlockQIDeviceMetadataContext,
@@ -328,6 +329,7 @@ from .problems.profile_response.sparse_pc import (
     xblock_sparse_pc_final_payload as build_xblock_sparse_pc_final_payload,
     evaluate_sparse_pc_factor_preflight,
     evaluate_sparse_pc_residual_candidate_acceptance,
+    evaluate_xblock_preflight_gate,
     select_sparse_pc_auto_preflight_retry_candidates,
     evaluate_sparse_pc_auto_preflight_retry,
     emit_xblock_sparse_pc_completion,
@@ -4163,50 +4165,21 @@ def solve_v3_full_system_linear_gmres(
                 "SFINCS_JAX_RHSMODE1_XBLOCK_PC_PREFLIGHT_REQUIRED",
                 default=False,
             )
-            preflight_residual_norm: float | None = None
-            preflight_improvement: float | None = None
-            preflight_passed: bool | None = None
-            if (float(preflight_min_improvement) > 0.0 or bool(preflight_required)) and x0_full is not None:
-                try:
-                    preflight_residual = xblock_rhs - jnp.asarray(
-                        _mv_true_no_count(jnp.asarray(x0_full, dtype=jnp.float64)),
-                        dtype=jnp.float64,
-                    )
-                    preflight_residual_norm = rhs1_l2_norm_float(preflight_residual)
-                    preflight_ratio = rhs1_safe_ratio(preflight_residual_norm, xblock_rhs_norm)
-                    preflight_improvement = 1.0 - float(preflight_ratio) if preflight_ratio is not None else 1.0
-                    preflight_passed = bool(
-                        rhs1_residual_converged(preflight_residual_norm, target_xblock)
-                        or float(preflight_improvement) >= float(preflight_min_improvement)
-                    )
-                    if emit is not None:
-                        emit(
-                            0 if preflight_passed else 1,
-                            "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
-                            f"preflight residual={float(preflight_residual_norm):.6e} "
-                            f"improvement={float(preflight_improvement):.6e} "
-                            f"required={float(preflight_min_improvement):.6e} passed={int(preflight_passed)}",
-                        )
-                    if bool(preflight_required) and not bool(preflight_passed):
-                        raise RuntimeError(
-                            "xblock_sparse_pc_gmres preflight gate failed "
-                            f"improvement={float(preflight_improvement):.6e} "
-                            f"< required={float(preflight_min_improvement):.6e}"
-                        )
-                except Exception as exc:  # noqa: BLE001
-                    if bool(preflight_required):
-                        raise
-                    if emit is not None:
-                        emit(
-                            1,
-                            "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
-                            f"preflight failed ({type(exc).__name__}: {exc})",
-                        )
-            elif (float(preflight_min_improvement) > 0.0 or bool(preflight_required)) and x0_full is None:
-                preflight_passed = False
-                preflight_improvement = 0.0
-                if bool(preflight_required):
-                    raise RuntimeError("xblock_sparse_pc_gmres preflight gate required an initial seed")
+            preflight_gate = evaluate_xblock_preflight_gate(
+                XBlockPreflightGateContext(
+                    min_improvement=float(preflight_min_improvement),
+                    required=bool(preflight_required),
+                    rhs=xblock_rhs,
+                    rhs_norm=float(xblock_rhs_norm),
+                    x0=x0_full,
+                    matvec=_mv_true_no_count,
+                    target=float(target_xblock),
+                    emit=emit,
+                )
+            )
+            preflight_residual_norm = preflight_gate.residual_norm
+            preflight_improvement = preflight_gate.improvement
+            preflight_passed = preflight_gate.passed
 
             fgmres_block_between_cycles = _rhs1_bool_env(
                 "SFINCS_JAX_RHSMODE1_XBLOCK_PC_FGMRES_BLOCK_BETWEEN_CYCLES",
