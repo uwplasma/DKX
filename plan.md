@@ -1423,6 +1423,14 @@ Recent local validation:
 - Broad profile-response/RHSMode=1 policy, setup, diagnostics, solver, and
   helper sweep after assembled x-block operator orchestration extraction:
   `1204 passed in 49.19 s`.
+- Profile-response sparse-PC helper tests after generic sparse-PC finalization
+  bundle and driver-scope adapter extraction: `290 passed in 2.34 s`.
+- Broad profile-response/RHSMode=1 policy, setup, diagnostics, solver, and
+  helper sweep after generic sparse-PC finalization bundle extraction:
+  `1302 passed in 89.13 s`.
+- Hygiene after generic sparse-PC finalization bundle extraction:
+  `ruff`, `py_compile`, `compileall`, `git diff --check`, and repository size
+  audit passed; latest branch CI and Docs were green.
 - Older focused and broad validation checkpoints are intentionally omitted from
   this active plan; they remain available in git history.
 
@@ -1435,7 +1443,7 @@ Known CI issue fixed by this rewrite:
 
 ### 1. `v3_driver.py` Architecture Refactor
 
-Completion estimate: 95%.
+Completion estimate: 96%.
 
 Goal:
 
@@ -1848,16 +1856,25 @@ Completed recent boundaries:
   semantic policy/result contexts in `profile_response.sparse_pc`; the driver
   passes grouped policies and runtime outcomes instead of every historical
   `direct_tail_*` report key.
-- The RHSMode=1 generic sparse-PC and x-block sparse-PC finalizers no longer
-  have production driver `locals()` handoffs. X-block nested diagnostics are
-  grouped into typed assembled-operator, coarse-correction, QI seed/device/
-  deflated, and side-probe contexts before final payload construction.
+- Generic sparse-PC GMRES finalization now uses a tested bundle helper plus a
+  narrow driver-scope adapter in `profile_response.sparse_pc`. The production
+  driver no longer manually assembles direct-tail, factor-preflight,
+  sparse-pattern, static, post-MinRes, dtype-retry, and finalizer state in the
+  solve loop; after this tranche `v3_driver.py` is 15,413 lines and
+  `solve_v3_full_system_linear_gmres` is 10,660 lines.
+- The RHSMode=1 x-block sparse-PC finalizer no longer has a production driver
+  `locals()` handoff. X-block nested diagnostics are grouped into typed
+  assembled-operator, coarse-correction, QI seed/device/deflated, and
+  side-probe contexts before final payload construction.
 
 Next steps:
 
 - Continue moving remaining generic sparse-PC result/diagnostic seams into
   cohesive `profile_response` helpers only where the replacement context can
   stay explicit and tested.
+- Replace the remaining generic sparse-PC finalization `locals()` adapter with
+  a smaller explicit scope object only if that reduces driver complexity
+  without reintroducing hundreds of line-by-line field copies.
 - Continue reducing `v3_driver.py` surface area by moving cohesive solver
   policy/result seams into `profile_response` helpers, but only when the new
   boundary is explicit, typed, and smaller than the code it replaces.
@@ -1908,7 +1925,7 @@ Next steps:
 
 ### 4. Validation, Coverage, And Documentation
 
-Completion estimate: 67%.
+Completion estimate: 68%.
 
 Goal:
 

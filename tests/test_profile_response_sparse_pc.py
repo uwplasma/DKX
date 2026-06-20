@@ -14,6 +14,9 @@ from sfincs_jax.problems.profile_response.active_projection import (
     reduce_full_with_indices,
 )
 from sfincs_jax.problems.profile_response.diagnostics import (
+    SparsePCFactorPreflightMetadataContext,
+    SparsePCGMRESStaticMetadataContext,
+    SparsePCPatternMetadataContext,
     fortran_reduced_xblock_result_metadata,
 )
 from sfincs_jax.rhs1_qi_coarse import (
@@ -47,6 +50,7 @@ from sfincs_jax.problems.profile_response.sparse_pc import (
     MatvecCounter,
     SparsePCGMRESContext,
     SparsePCGMRESCompletionMessageContext,
+    SparsePCGMRESFinalizationBundleContext,
     SparsePCGMRESFinalPayload,
     SparsePCMemoryBudgetPreflightContext,
     SparsePCFactorDtypeRetryFinalizationContext,
@@ -70,6 +74,7 @@ from sfincs_jax.problems.profile_response.sparse_pc import (
     SparsePCDirectTailFinalMetadataContext,
     SparsePCGMRESFinalizationContext,
     SparsePCGMRESFinalizationStateContext,
+    SparsePCGMRESFinalResultContext,
     SparseMinimumNormPayload,
     SparseMinimumNormPolicy,
     SparsePCGMRESResult,
@@ -172,6 +177,7 @@ from sfincs_jax.problems.profile_response.sparse_pc import (
     failed_xblock_two_level_metadata,
     failed_xblock_moment_schur_metadata,
     finalize_sparse_pc_gmres_from_driver_state,
+    finalize_sparse_pc_gmres_bundle,
     finalize_sparse_pc_gmres_with_dtype_retry_from_driver_state,
     finalize_xblock_global_coupling_metadata,
     finalize_xblock_two_level_metadata,
@@ -179,6 +185,7 @@ from sfincs_jax.problems.profile_response.sparse_pc import (
     finalize_sparse_pc_gmres_with_dtype_retry,
     sparse_pc_gmres_finalization_driver_scope_keys,
     sparse_pc_gmres_finalization_driver_state_keys,
+    sparse_pc_gmres_finalization_bundle_from_driver_scope,
     sparse_pc_gmres_finalization_state_from_context,
     sparse_pc_gmres_finalization_state_from_driver_scope,
     prepare_fortran_reduced_xblock_initial_guess,
@@ -9708,6 +9715,419 @@ def test_sparse_pc_direct_tail_final_metadata_uses_grouped_policy_state() -> Non
     assert metadata["sparse_pc_fortran_reduced_direct_tail_support_mode_preflight_metadata"] == {
         "baseline": True
     }
+
+
+def test_sparse_pc_gmres_finalization_bundle_from_driver_scope_groups_locals() -> None:
+    materialization = DirectTailMaterializationResult(
+        direct_tail_default=True,
+        enabled=True,
+        built=True,
+        error=None,
+        operator_bundle="operator",
+        pc_env="auto",
+        direct_reduced_pmat_requested=True,
+    )
+    structured_admission = DirectTailStructuredAdmissionResult(
+        pc_env="active_auto",
+        requested="active_native_stack",
+        auto_default=True,
+        fail_closed_size=1000,
+        auto_large_fail_closed=False,
+        required=True,
+        setup_allowed=True,
+        max_mb_auto=False,
+        max_mb=8.0,
+        regularization=1.0e-8,
+    )
+    result = SparsePCGMRESFinalResultContext(
+        x=np.asarray([1.0, 2.0]),
+        residual_norm=0.5,
+        preconditioned_residual_norm=0.25,
+        history=(1.0, 0.5),
+        solve_s=3.0,
+        factor_dtype_used=np.dtype(np.float64),
+        factor_dtype_retry=None,
+        operator_bundle="operator",
+        factor_bundle="factor",
+        pc_factor_s=0.2,
+        setup_s=0.3,
+    )
+    post_minres = SparsePCPostMinresFinalizationContext(
+        matvec=_identity,
+        rhs=jnp.zeros(2, dtype=jnp.float64),
+        preconditioner=_identity,
+        emit=None,
+        elapsed_s=lambda: 1.0,
+        pc_form="right",
+        steps=0,
+        alpha_clip=1.0,
+        min_improvement=0.0,
+        target=1.0e-8,
+    )
+    dtype_retry = SparsePCFactorDtypeRetryFinalizationContext(
+        factor_matvec=_identity,
+        linear_size=2,
+        rhs_dtype=np.dtype(np.float64),
+        pattern=None,
+        emit=None,
+        constrained_pas_pc=False,
+        tokamak_fp_pc=False,
+        fortran_reduced_sparse_pc=True,
+        default_permc_spec="COLAMD",
+        default_factor_kind="splu",
+        default_ilu_fill_factor=4.0,
+        default_ilu_drop_tol=0.0,
+        default_pattern_color_batch=8,
+        x0_fallback=jnp.zeros(2, dtype=jnp.float64),
+        pc_maxiter=5,
+        elapsed_s=lambda: 1.0,
+    )
+    scope = {
+        "atol": 1.0e-10,
+        "mv_count": np.int64(7),
+        "rhs_norm": 2.0,
+        "target": 1.0e-8,
+        "tol": 1.0e-9,
+        "structured_pc_preflight_required": True,
+        "structured_pc_preflight_required_min_size": np.int64(64),
+        "direct_tail_materialization": materialization,
+        "direct_tail_structured_admission": structured_admission,
+        "direct_tail_residual_rescue_policy": resolve_direct_tail_residual_rescue_policy({}),
+        "direct_tail_true_active_rescue_policy": resolve_direct_tail_true_active_rescue_policy({}),
+        "direct_tail_true_coupled_coarse_policy": resolve_direct_tail_coupled_coarse_rescue_policy({}),
+        "direct_tail_true_window_specs": ((1, 2),),
+        "direct_tail_true_active_block_species_count": np.int64(2),
+        "direct_tail_structured_max_nbytes": np.int64(8 * 1024 * 1024),
+        "direct_tail_structured_pc_selected": True,
+        "direct_tail_structured_pc_reason": "selected",
+        "direct_tail_structured_pc_error": None,
+        "direct_tail_structured_pc_metadata": {"kind": "active_native_stack"},
+        "direct_tail_support_mode_preflight_requested": False,
+        "direct_tail_support_mode_preflight_selected": False,
+        "direct_tail_support_mode_preflight_error": None,
+        "direct_tail_support_mode_preflight_metadata": None,
+        "direct_tail_residual_coarse_selected": False,
+        "direct_tail_residual_coarse_residual_after": None,
+        "direct_tail_residual_coarse_error": None,
+        "direct_tail_residual_coarse_metadata": None,
+        "direct_tail_true_coupled_coarse_requested": False,
+        "direct_tail_true_coupled_coarse_auto_selected": False,
+        "direct_tail_true_coupled_coarse_selected": False,
+        "direct_tail_true_coupled_coarse_residual_after": None,
+        "direct_tail_true_coupled_coarse_error": None,
+        "direct_tail_true_coupled_coarse_metadata": None,
+        "direct_tail_true_coupled_coarse_base_improvement_override_used": False,
+        "direct_tail_true_active_submatrix_selected": False,
+        "direct_tail_true_active_submatrix_residual_after": None,
+        "direct_tail_true_active_submatrix_error": None,
+        "direct_tail_true_active_submatrix_metadata": None,
+        "direct_tail_true_active_column_cache_metadata": None,
+        "direct_tail_true_active_block_selected": False,
+        "direct_tail_true_active_block_residual_after": None,
+        "direct_tail_true_active_block_error": None,
+        "direct_tail_true_active_block_metadata": None,
+        "direct_tail_true_active_residual_block_selected": False,
+        "direct_tail_true_active_residual_block_residual_after": None,
+        "direct_tail_true_active_residual_block_error": None,
+        "direct_tail_true_active_residual_block_metadata": None,
+        "direct_tail_true_active_residual_block_base_improvement_override_used": False,
+        "direct_tail_true_window_selected": False,
+        "direct_tail_true_window_residual_after": None,
+        "direct_tail_true_window_error": None,
+        "direct_tail_true_window_metadata": None,
+        "direct_tail_residual_window_selected": False,
+        "direct_tail_residual_window_residual_after": None,
+        "direct_tail_residual_window_error": None,
+        "direct_tail_residual_window_metadata": None,
+        "factor_preflight_enabled": True,
+        "factor_preflight_required": True,
+        "factor_preflight_seed_enabled": False,
+        "factor_preflight_seed_used": False,
+        "factor_preflight_passed": True,
+        "factor_preflight_error": None,
+        "factor_preflight_residual_before": 1.0,
+        "factor_preflight_residual_after": 0.25,
+        "factor_preflight_improvement_ratio": 4.0,
+        "factor_preflight_target_ratio": 2.0,
+        "factor_preflight_max_target_ratio": 8.0,
+        "factor_preflight_residual_diagnostics": {"ok": True},
+        "summary": SimpleNamespace(nnz=np.int64(5), avg_row_nnz=2.5, max_row_nnz=np.int64(3)),
+        "sparse_pattern_scope": "active_dof",
+        "pattern_build_s": 0.125,
+        "op": SimpleNamespace(total_size=np.int64(4)),
+        "fortran_reduced_sparse_pc": True,
+        "fortran_reduced_sparse_pc_backend": "xblock",
+        "fortran_reduced_sparse_pc_backend_reason": "test",
+        "fortran_reduced_xblock_min_size": np.int64(16),
+        "pc_restart": np.int64(3),
+        "pc_maxiter": np.int64(5),
+        "sparse_pc_first_attempt_maxiter": np.int64(4),
+        "pc_shift": 0.0,
+        "sparse_pc_factor_dtype_initial": np.dtype(np.float64),
+        "sparse_pc_preconditioner_operator": "direct_pmat",
+        "sparse_pc_factorization": "splu",
+        "sparse_pc_default_factor_kind": "splu",
+        "sparse_pc_default_ilu_fill_factor": 4.0,
+        "sparse_pc_default_ilu_drop_tol": 0.0,
+        "sparse_pc_default_pattern_color_batch": np.int64(8),
+        "preconditioner_x": np.int64(1),
+        "preconditioner_x_min_l": np.int64(0),
+        "preconditioner_xi": np.int64(1),
+        "preconditioner_species": np.int64(1),
+        "sparse_pc_permc_spec": "COLAMD",
+        "sparse_pc_default_permc_spec": "COLAMD",
+        "sparse_pc_use_active_dof": True,
+        "sparse_pc_linear_size": np.int64(2),
+        "sparse_pc_fp_dense_velocity_block": False,
+    }
+
+    bundle = sparse_pc_gmres_finalization_bundle_from_driver_scope(
+        scope,
+        result=result,
+        post_minres=post_minres,
+        dtype_retry=dtype_retry,
+    )
+
+    assert bundle.atol == pytest.approx(1.0e-10)
+    assert bundle.direct_tail.materialization is materialization
+    assert bundle.direct_tail.structured_admission is structured_admission
+    assert bundle.direct_tail.true_window_specs == ((1, 2),)
+    assert bundle.factor_preflight.residual_after == pytest.approx(0.25)
+    assert bundle.pattern.scope == "active_dof"
+    assert bundle.static.sparse_pc_linear_size == 2
+    assert bundle.result is result
+    assert bundle.post_minres is post_minres
+    assert bundle.dtype_retry is dtype_retry
+
+
+def test_finalize_sparse_pc_gmres_bundle_builds_typed_state(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: dict[str, object] = {}
+    operator_bundle = SimpleNamespace(
+        metadata=SimpleNamespace(
+            reason="direct_pmat",
+            nnz_estimate=np.int64(11),
+            csr_nbytes_estimate=np.int64(256),
+        )
+    )
+    factor_bundle = SimpleNamespace(
+        factor_s=None,
+        factor_nbytes_estimate=None,
+        factor_nnz_estimate=None,
+    )
+    post_minres = SparsePCPostMinresFinalizationContext(
+        matvec=_identity,
+        rhs=jnp.asarray([1.0, 2.0], dtype=jnp.float64),
+        preconditioner=_identity,
+        emit=None,
+        elapsed_s=lambda: 1.5,
+        pc_form="right",
+        steps=0,
+        alpha_clip=1.0,
+        min_improvement=0.0,
+        target=1.0e-8,
+    )
+    dtype_retry = SparsePCFactorDtypeRetryFinalizationContext(
+        factor_matvec=_identity,
+        linear_size=2,
+        rhs_dtype=np.dtype(np.float64),
+        pattern=None,
+        emit=None,
+        constrained_pas_pc=False,
+        tokamak_fp_pc=False,
+        fortran_reduced_sparse_pc=True,
+        default_permc_spec="COLAMD",
+        default_factor_kind="splu",
+        default_ilu_fill_factor=4.0,
+        default_ilu_drop_tol=0.0,
+        default_pattern_color_batch=8,
+        x0_fallback=jnp.zeros(2, dtype=jnp.float64),
+        pc_maxiter=5,
+        elapsed_s=lambda: 1.5,
+    )
+
+    def fake_finalize(context, **kwargs):
+        calls["context"] = context
+        calls["kwargs"] = kwargs
+        return SparsePCGMRESFinalPayload(
+            x=jnp.asarray([3.0, 4.0], dtype=jnp.float64),
+            residual_norm=jnp.asarray(0.25, dtype=jnp.float64),
+            metadata={"accepted_converged": True},
+        )
+
+    monkeypatch.setattr(
+        sparse_pc_module,
+        "finalize_sparse_pc_gmres_with_dtype_retry",
+        fake_finalize,
+    )
+
+    payload = finalize_sparse_pc_gmres_bundle(
+        SparsePCGMRESFinalizationBundleContext(
+            atol=1.0e-10,
+            mv_count=np.int64(7),
+            rhs_norm=2.0,
+            target=1.0e-8,
+            tol=1.0e-9,
+            direct_tail=SparsePCDirectTailFinalMetadataContext(
+                structured_pc_preflight_required=True,
+                structured_pc_preflight_required_min_size=64,
+                materialization=DirectTailMaterializationResult(
+                    direct_tail_default=True,
+                    enabled=True,
+                    built=True,
+                    error=None,
+                    operator_bundle=operator_bundle,
+                    pc_env="auto",
+                    direct_reduced_pmat_requested=True,
+                ),
+                structured_admission=DirectTailStructuredAdmissionResult(
+                    pc_env="active_auto",
+                    requested="active_native_stack",
+                    auto_default=True,
+                    fail_closed_size=1000,
+                    auto_large_fail_closed=False,
+                    required=True,
+                    setup_allowed=True,
+                    max_mb_auto=False,
+                    max_mb=8.0,
+                    regularization=1.0e-8,
+                ),
+                residual_policy=resolve_direct_tail_residual_rescue_policy({}),
+                true_active_policy=resolve_direct_tail_true_active_rescue_policy({}),
+                coupled_coarse_policy=resolve_direct_tail_coupled_coarse_rescue_policy({}),
+                true_window_specs=((1, 2),),
+                true_active_block_species_count=2,
+                structured_max_nbytes=8 * 1024 * 1024,
+                structured_pc_selected=True,
+                structured_pc_reason="selected",
+                structured_pc_error=None,
+                structured_pc_metadata={"kind": "active_native_stack"},
+                support_mode_preflight_requested=False,
+                support_mode_preflight_selected=False,
+                support_mode_preflight_error=None,
+                support_mode_preflight_metadata=None,
+                residual_coarse_selected=False,
+                residual_coarse_residual_after=None,
+                residual_coarse_error=None,
+                residual_coarse_metadata=None,
+                true_coupled_coarse_requested=False,
+                true_coupled_coarse_auto_selected=False,
+                true_coupled_coarse_selected=False,
+                true_coupled_coarse_residual_after=None,
+                true_coupled_coarse_error=None,
+                true_coupled_coarse_metadata=None,
+                true_coupled_coarse_base_improvement_override_used=False,
+                true_active_submatrix_selected=False,
+                true_active_submatrix_residual_after=None,
+                true_active_submatrix_error=None,
+                true_active_submatrix_metadata=None,
+                true_active_column_cache_metadata=None,
+                true_active_block_selected=False,
+                true_active_block_residual_after=None,
+                true_active_block_error=None,
+                true_active_block_metadata=None,
+                true_active_residual_block_selected=False,
+                true_active_residual_block_residual_after=None,
+                true_active_residual_block_error=None,
+                true_active_residual_block_metadata=None,
+                true_active_residual_block_base_improvement_override_used=False,
+                true_window_selected=False,
+                true_window_residual_after=None,
+                true_window_error=None,
+                true_window_metadata=None,
+                residual_window_selected=False,
+                residual_window_residual_after=None,
+                residual_window_error=None,
+                residual_window_metadata=None,
+            ),
+            factor_preflight=SparsePCFactorPreflightMetadataContext(
+                enabled=True,
+                required=True,
+                seed_enabled=False,
+                seed_used=False,
+                passed=True,
+                error=None,
+                residual_before=1.0,
+                residual_after=0.25,
+                improvement_ratio=4.0,
+                target_ratio=2.0,
+                max_target_ratio=8.0,
+                residual_diagnostics={"ok": True},
+            ),
+            pattern=SparsePCPatternMetadataContext(
+                summary=SimpleNamespace(nnz=np.int64(5), avg_row_nnz=2.5, max_row_nnz=np.int64(3)),
+                scope="active_dof",
+                build_s=0.125,
+            ),
+            static=SparsePCGMRESStaticMetadataContext(
+                op=SimpleNamespace(total_size=np.int64(4)),
+                fortran_reduced_sparse_pc=True,
+                fortran_reduced_sparse_pc_backend="xblock",
+                fortran_reduced_sparse_pc_backend_reason="test",
+                fortran_reduced_xblock_min_size=np.int64(16),
+                pc_restart=np.int64(3),
+                pc_maxiter=np.int64(5),
+                sparse_pc_first_attempt_maxiter=np.int64(4),
+                pc_shift=0.0,
+                sparse_pc_factor_dtype_initial=np.dtype(np.float64),
+                sparse_pc_preconditioner_operator="direct_pmat",
+                sparse_pc_factorization="splu",
+                sparse_pc_default_factor_kind="splu",
+                sparse_pc_default_ilu_fill_factor=4.0,
+                sparse_pc_default_ilu_drop_tol=0.0,
+                sparse_pc_default_pattern_color_batch=np.int64(8),
+                preconditioner_x=np.int64(1),
+                preconditioner_x_min_l=np.int64(0),
+                preconditioner_xi=np.int64(1),
+                preconditioner_species=np.int64(1),
+                sparse_pc_permc_spec="COLAMD",
+                sparse_pc_default_permc_spec="COLAMD",
+                sparse_pc_use_active_dof=True,
+                sparse_pc_linear_size=np.int64(2),
+                sparse_pc_fp_dense_velocity_block=False,
+            ),
+            result=SparsePCGMRESFinalResultContext(
+                x=np.asarray([1.0, 2.0]),
+                residual_norm=0.5,
+                preconditioned_residual_norm=0.25,
+                history=(1.0, 0.5),
+                solve_s=3.0,
+                factor_dtype_used=np.dtype(np.float64),
+                factor_dtype_retry=None,
+                operator_bundle=operator_bundle,
+                factor_bundle=factor_bundle,
+                pc_factor_s=0.2,
+                setup_s=0.3,
+            ),
+            post_minres=post_minres,
+            dtype_retry=dtype_retry,
+        ),
+        build_host_sparse_direct_factor_from_matvec=lambda **_kwargs: None,
+        run_sparse_pc_gmres_once_callback=lambda *_args, **_kwargs: None,
+        minres_correction=lambda **_kwargs: None,
+        expand_reduced=lambda x: x,
+    )
+
+    assert isinstance(payload, SparsePCGMRESFinalPayload)
+    context = calls["context"]
+    assert isinstance(context, SparsePCGMRESFinalizationContext)
+    assert context.post_minres is post_minres
+    assert context.dtype_retry is dtype_retry
+    assert context.operator_bundle is operator_bundle
+    assert context.factor_bundle is factor_bundle
+    assert context.pc_factor_s == pytest.approx(0.2)
+    assert context.setup_s == pytest.approx(0.3)
+    np.testing.assert_allclose(context.result.x, np.asarray([1.0, 2.0]))
+    state = context.diagnostic_state
+    assert state["mv_count"] == np.int64(7)
+    assert state["sparse_pc_pattern_metadata"]["sparse_pattern_nnz"] == 5
+    assert state["sparse_pc_static_metadata"]["solver_kind"] == "fortran_reduced_pc_gmres"
+    assert state["sparse_pc_static_metadata"]["sparse_pc_full_size"] == 4
+    assert state["sparse_pc_factor_preflight_metadata"]["sparse_pc_factor_preflight_passed"] is True
+    assert state["sparse_pc_direct_tail_metadata"]["sparse_pc_fortran_reduced_direct_tail_built"] is True
+    assert state["sparse_pc_direct_tail_metadata"]["sparse_pc_fortran_reduced_direct_tail_structured_pc_selected"] is True
+    assert calls["kwargs"]["expand_reduced"](jnp.asarray([1.0])).shape == (1,)
 
 
 def test_finalize_sparse_pc_gmres_with_dtype_retry_updates_copied_state(
