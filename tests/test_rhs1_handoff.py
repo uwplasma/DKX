@@ -18,6 +18,7 @@ from sfincs_jax.rhs1_handoff import (
     rhs1_residual_improves,
     rhs1_record_ksp_replay_problem,
     rhs1_retry_without_preconditioner_if_nonfinite,
+    rhs1_run_adaptive_smoother_and_update_replay,
     rhs1_run_bicgstab_gmres_fallback_if_allowed,
     rhs1_run_collision_retry_if_allowed,
     rhs1_run_fast_post_xblock_polish,
@@ -368,6 +369,72 @@ def test_rhs1_accept_smoother_candidate_rejects_nonimproving_without_emitting() 
     assert residual_vec == "r0"
     assert replay.matvec_fn == "old"
     assert messages == []
+
+
+def test_rhs1_run_adaptive_smoother_skips_when_not_allowed() -> None:
+    replay = RHS1KSPReplayState(matvec_fn="old")
+    current = _result(1.0, x="x0")
+    factory_calls: list[str] = []
+
+    result, residual_vec, accepted = rhs1_run_adaptive_smoother_and_update_replay(
+        allowed=False,
+        replay_state=replay,
+        current_result=current,
+        current_residual_vec="r0",
+        smoother_factory=lambda _result: factory_calls.append("called"),
+        result_factory=lambda *, x, residual_norm: _result(residual_norm, x=x),
+        candidate_residual_vec="r1",
+        matvec_fn="mv",
+        b_vec="rhs",
+        precond_fn="pc",
+        restart=30,
+        maxiter=90,
+        precond_side="left",
+        solver_kind="gmres",
+    )
+
+    assert result is current
+    assert residual_vec == "r0"
+    assert not accepted
+    assert factory_calls == []
+    assert replay.matvec_fn == "old"
+
+
+def test_rhs1_run_adaptive_smoother_accepts_improving_candidate() -> None:
+    replay = RHS1KSPReplayState()
+    current = _result(1.0, x="x0")
+
+    def smoother_factory(result):
+        assert result is current
+        return SimpleNamespace(
+            x="x1",
+            residual_norm=0.25,
+            accepted_sweeps=3,
+            stop_reason="target",
+        )
+
+    result, residual_vec, accepted = rhs1_run_adaptive_smoother_and_update_replay(
+        allowed=True,
+        replay_state=replay,
+        current_result=current,
+        current_residual_vec="r0",
+        smoother_factory=smoother_factory,
+        result_factory=lambda *, x, residual_norm: _result(residual_norm, x=x),
+        candidate_residual_vec=lambda candidate: f"residual:{candidate.x}",
+        matvec_fn="mv",
+        b_vec="rhs",
+        precond_fn="pc",
+        restart=30,
+        maxiter=90,
+        precond_side="left",
+        solver_kind="gmres",
+    )
+
+    assert accepted
+    assert result.x == "x1"
+    assert residual_vec == "residual:x1"
+    assert replay.matvec_fn == "mv"
+    assert replay.x0_vec == "x1"
 
 
 def test_rhs1_accept_candidate_rejects_measured_runtime_memory_regression() -> None:

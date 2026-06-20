@@ -1138,6 +1138,49 @@ def rhs1_accept_smoother_candidate_and_update_replay(
     )
 
 
+def rhs1_run_adaptive_smoother_and_update_replay(
+    *,
+    allowed: bool,
+    replay_state: RHS1KSPReplayState,
+    current_result: Any,
+    current_residual_vec: Any,
+    smoother_factory: Any,
+    result_factory: Any,
+    candidate_residual_vec: Any,
+    matvec_fn: Any,
+    b_vec: Any,
+    precond_fn: Any,
+    restart: int,
+    maxiter: int | None,
+    precond_side: str,
+    solver_kind: str,
+    emit: Any = None,
+    label: str = "PAS adaptive smoother",
+) -> tuple[Any, Any, bool]:
+    """Run an admitted adaptive smoother and accept it only if residual improves."""
+
+    if not bool(allowed):
+        return current_result, current_residual_vec, False
+    smoother = smoother_factory(current_result)
+    return rhs1_accept_smoother_candidate_and_update_replay(
+        replay_state=replay_state,
+        current_result=current_result,
+        current_residual_vec=current_residual_vec,
+        smoother=smoother,
+        result_factory=result_factory,
+        candidate_residual_vec=candidate_residual_vec,
+        matvec_fn=matvec_fn,
+        b_vec=b_vec,
+        precond_fn=precond_fn,
+        restart=restart,
+        maxiter=maxiter,
+        precond_side=precond_side,
+        solver_kind=solver_kind,
+        emit=emit,
+        label=label,
+    )
+
+
 __all__ = [
     "RHS1KSPHandoffState",
     "RHS1KSPReplayState",
@@ -1151,6 +1194,7 @@ __all__ = [
     "rhs1_residual_improves",
     "rhs1_record_ksp_replay_problem",
     "rhs1_accept_smoother_candidate_and_update_replay",
+    "rhs1_run_adaptive_smoother_and_update_replay",
     "rhs1_retry_without_preconditioner_if_nonfinite",
     "rhs1_run_bicgstab_gmres_fallback_if_allowed",
     "rhs1_run_fast_post_xblock_polish",

@@ -182,6 +182,7 @@ from .problems.profile_response.handoff import (
     rhs1_accept_smoother_candidate_and_update_replay,
     rhs1_record_ksp_replay_problem,
     rhs1_retry_without_preconditioner_if_nonfinite,
+    rhs1_run_adaptive_smoother_and_update_replay,
     rhs1_run_bicgstab_gmres_fallback_if_allowed,
     rhs1_run_collision_retry_if_allowed,
     rhs1_run_fast_post_xblock_polish,
@@ -9580,7 +9581,7 @@ def solve_v3_full_system_linear_gmres(
                 res_reduced, hook="early_active_dof", context=qi_device_seed_context
             )
 
-        if (
+        pas_smoother_allowed = (
             rhs1_precond_kind in {"pas_lite", "pas_hybrid", "pas_tz", "pas_schur", "pas_tokamak_theta"}
             and preconditioner_reduced is not None
             and _rhsmode1_pas_adaptive_smoother_allowed(
@@ -9590,37 +9591,35 @@ def solve_v3_full_system_linear_gmres(
                 target=float(target_reduced),
                 use_implicit=bool(use_implicit),
             )
-        ):
-            smoother_controls = rhs1_pas_adaptive_smoother_controls_from_env()
-            smoother = adaptive_pas_smoother(
+        )
+        smoother_controls = rhs1_pas_adaptive_smoother_controls_from_env() if pas_smoother_allowed else None
+        res_reduced, residual_vec, _accepted = rhs1_run_adaptive_smoother_and_update_replay(
+            allowed=bool(pas_smoother_allowed),
+            replay_state=ksp_replay,
+            current_result=res_reduced,
+            current_residual_vec=residual_vec,
+            smoother_factory=lambda result: adaptive_pas_smoother(
                 matvec=mv_reduced,
                 rhs=rhs_reduced,
                 preconditioner=preconditioner_reduced,
-                x0=res_reduced.x,
+                x0=result.x,
                 target=float(target_reduced),
                 omega=float(smoother_controls.omega),
                 max_sweeps=int(smoother_controls.max_sweeps),
-            )
-            res_reduced, residual_vec, _accepted = (
-                rhs1_accept_smoother_candidate_and_update_replay(
-                    replay_state=ksp_replay,
-                    current_result=res_reduced,
-                    current_residual_vec=residual_vec,
-                    smoother=smoother,
-                    result_factory=lambda *, x, residual_norm: GMRESSolveResult(
-                        x=x,
-                        residual_norm=jnp.asarray(residual_norm, dtype=jnp.float64),
-                    ),
-                    candidate_residual_vec=residual_vec,
-                    matvec_fn=mv_reduced,
-                    b_vec=rhs_reduced,
-                    precond_fn=preconditioner_reduced,
-                    restart=restart,
-                    maxiter=maxiter,
-                    precond_side=gmres_precond_side,
-                    solver_kind=_solver_kind("incremental")[0],
-                )
-            )
+            ),
+            result_factory=lambda *, x, residual_norm: GMRESSolveResult(
+                x=x,
+                residual_norm=jnp.asarray(residual_norm, dtype=jnp.float64),
+            ),
+            candidate_residual_vec=residual_vec,
+            matvec_fn=mv_reduced,
+            b_vec=rhs_reduced,
+            precond_fn=preconditioner_reduced,
+            restart=restart,
+            maxiter=maxiter,
+            precond_side=gmres_precond_side,
+            solver_kind=_solver_kind("incremental")[0],
+        )
         if fp_force_strong:
             strong_precond_trigger = True
         collision_retry_allowed = rhs1_collision_retry_allowed(
