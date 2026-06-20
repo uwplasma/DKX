@@ -12795,6 +12795,28 @@ def run_sparse_pc_gmres_once(
     )
 
 
+def run_sparse_pc_gmres_once_for_retry(
+    *,
+    context: SparsePCGMRESContext,
+    x0: jnp.ndarray | np.ndarray | None,
+    maxiter: int,
+) -> tuple[np.ndarray, float, float, tuple[float, ...], float]:
+    """Run sparse-PC GMRES and return the tuple contract used by dtype retry."""
+
+    result = run_sparse_pc_gmres_once(
+        context=context,
+        x0=x0,
+        maxiter=int(maxiter),
+    )
+    return (
+        result.x,
+        float(result.residual_norm),
+        float(result.preconditioned_residual_norm),
+        tuple(float(value) for value in result.history),
+        float(result.solve_s),
+    )
+
+
 def sparse_pc_gmres_completion_message(
     context: SparsePCGMRESCompletionMessageContext,
 ) -> str:
@@ -14884,6 +14906,7 @@ __all__ = [
     "retry_sparse_pc_factor_dtype_from_finalization_context",
     "run_fortran_reduced_xblock_krylov_solve",
     "run_sparse_pc_gmres_once",
+    "run_sparse_pc_gmres_once_for_retry",
     "prepare_xblock_augmented_krylov_basis",
     "prepare_xblock_krylov_solve_space",
     "run_xblock_first_krylov_attempt",

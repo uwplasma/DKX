@@ -391,6 +391,7 @@ Recent checkpoints:
 - Final linear-solve metadata assembly extraction.
 - Final full-system dense fallback execution extraction.
 - Reduced dense fallback execution extraction.
+- Sparse-PC GMRES retry tuple-adapter extraction.
 - Measured candidate handoff consolidation.
 - Sparse fallback measured-handoff extraction.
 - Sparse-PC factor-preflight evaluation extraction.
@@ -407,10 +408,10 @@ Recent checkpoints:
 - `cb295ce` Extract sparse pattern setup.
 - `4b6a5b4` Extract sparse factor policy.
 
-Current source-size snapshot after reduced dense fallback extraction:
+Current source-size snapshot after sparse-PC GMRES retry adapter extraction:
 
-- `sfincs_jax/v3_driver.py`: `15645` lines.
-- `solve_v3_full_system_linear_gmres`: `10886` lines.
+- `sfincs_jax/v3_driver.py`: `15639` lines.
+- `solve_v3_full_system_linear_gmres`: `10879` lines.
 - `sfincs_jax/v3_results.py`: `119` lines.
 - `sfincs_jax/rhs1_ksp_diagnostics.py`: `306` lines.
 - `sfincs_jax/rhs1_pas_policy.py`: `889` lines.
@@ -422,12 +423,24 @@ Current source-size snapshot after reduced dense fallback extraction:
 - `sfincs_jax/problems/profile_response/dense.py`: `906` lines.
 - `sfincs_jax/problems/profile_response/linear_solve.py`: `339` lines.
 - `sfincs_jax/problems/profile_response/active_projection.py`: `203` lines.
-- `sfincs_jax/problems/profile_response/sparse_pc.py`: `14949` lines.
+- `sfincs_jax/problems/profile_response/sparse_pc.py`: `14972` lines.
 - `sfincs_jax/problems/profile_response/solver_diagnostics.py`: `421` lines.
 - `sfincs_jax/rhs1_xblock_policy.py`: `1215` lines.
 
 Recent local validation:
 
+- Sparse-PC GMRES retry adapter extraction:
+  `tests/test_profile_response_sparse_pc.py` passed
+  (`288 passed in 2.25 s`).
+- Broad profile-response/RHSMode=1 shard after sparse-PC retry adapter
+  extraction:
+  `tests/test_profile_response_*.py tests/test_rhs1_*.py
+  tests/test_newton_krylov_diagnostics.py tests/test_pas_smoother.py`
+  passed (`1297 passed in 85.66 s`).
+- Hygiene after sparse-PC retry adapter extraction:
+  `ruff check`, `py_compile`, `compileall`, `git diff --check`, and
+  `python scripts/check_repo_size.py` passed. Repo-size audit reported no
+  reviewed files above 2 MiB.
 - Reduced dense fallback extraction:
   `tests/test_profile_response_dense.py tests/test_rhs1_handoff.py` passed
   (`78 passed in 1.17 s`).

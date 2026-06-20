@@ -381,6 +381,7 @@ from .problems.profile_response.sparse_pc import (
     resolve_xblock_two_level_policy_setup,
     run_fortran_reduced_xblock_krylov_solve,
     run_sparse_pc_gmres_once,
+    run_sparse_pc_gmres_once_for_retry,
     run_xblock_krylov_solve_stage,
     xblock_sparse_pc_final_metadata_state_from_context,
     build_sparse_host_or_ilu_factor,
@@ -7301,42 +7302,31 @@ def solve_v3_full_system_linear_gmres(
         sparse_pc_post_minres_alpha_clip = float(sparse_pc_gmres_policy.post_minres_alpha_clip)
         sparse_pc_post_minres_min_improvement = float(sparse_pc_gmres_policy.post_minres_min_improvement)
 
-        def _run_sparse_pc_gmres_once(x0_arg, *, maxiter_arg: int):
-            sparse_pc_gmres = run_sparse_pc_gmres_once(
-                context=SparsePCGMRESContext(
-                    matvec=_mv_true,
-                    rhs=sparse_pc_rhs,
-                    preconditioner=_precond_sparse,
-                    emit=emit,
-                    elapsed_s=sparse_timer.elapsed_s,
-                    pc_form=pc_form,
-                    restart=int(pc_restart),
-                    tol=float(tol),
-                    atol=float(atol),
-                    precondition_side=precondition_side,
-                    factor_dtype=np.dtype(sparse_pc_factor_dtype_used),
-                    progress_every=int(progress_every),
-                    stagnation_abort=bool(sparse_pc_stagnation_abort),
-                    stagnation_min_iter=int(sparse_pc_stagnation_min_iter),
-                    stagnation_window=int(sparse_pc_stagnation_window),
-                    stagnation_rel_improvement=float(sparse_pc_stagnation_rel_improvement),
-                    explicit_left_solver=explicit_left_preconditioned_gmres_scipy,
-                    gmres_solver=gmres_solve_with_history_scipy,
-                ),
-                x0=x0_arg,
-                maxiter=int(maxiter_arg),
-            )
-            return (
-                sparse_pc_gmres.x,
-                float(sparse_pc_gmres.residual_norm),
-                float(sparse_pc_gmres.preconditioned_residual_norm),
-                sparse_pc_gmres.history,
-                float(sparse_pc_gmres.solve_s),
-            )
+        sparse_pc_gmres_context = SparsePCGMRESContext(
+            matvec=_mv_true,
+            rhs=sparse_pc_rhs,
+            preconditioner=_precond_sparse,
+            emit=emit,
+            elapsed_s=sparse_timer.elapsed_s,
+            pc_form=pc_form,
+            restart=int(pc_restart),
+            tol=float(tol),
+            atol=float(atol),
+            precondition_side=precondition_side,
+            factor_dtype=np.dtype(sparse_pc_factor_dtype_used),
+            progress_every=int(progress_every),
+            stagnation_abort=bool(sparse_pc_stagnation_abort),
+            stagnation_min_iter=int(sparse_pc_stagnation_min_iter),
+            stagnation_window=int(sparse_pc_stagnation_window),
+            stagnation_rel_improvement=float(sparse_pc_stagnation_rel_improvement),
+            explicit_left_solver=explicit_left_preconditioned_gmres_scipy,
+            gmres_solver=gmres_solve_with_history_scipy,
+        )
 
-        x_np, residual_norm_sparse_pc, rn_pc, history, solve_s = _run_sparse_pc_gmres_once(
-            x0_sparse,
-            maxiter_arg=sparse_pc_first_attempt_maxiter,
+        x_np, residual_norm_sparse_pc, rn_pc, history, solve_s = run_sparse_pc_gmres_once_for_retry(
+            context=sparse_pc_gmres_context,
+            x0=x0_sparse,
+            maxiter=int(sparse_pc_first_attempt_maxiter),
         )
         sparse_pc_direct_tail_metadata = sparse_pc_direct_tail_final_metadata(
             SparsePCDirectTailFinalMetadataContext(
@@ -7553,7 +7543,11 @@ def solve_v3_full_system_linear_gmres(
                 ),
             ),
             build_host_sparse_direct_factor_from_matvec=_build_host_sparse_direct_factor_from_matvec,
-            run_sparse_pc_gmres_once_callback=_run_sparse_pc_gmres_once,
+            run_sparse_pc_gmres_once_callback=lambda x0_arg, maxiter_arg: run_sparse_pc_gmres_once_for_retry(
+                context=sparse_pc_gmres_context,
+                x0=x0_arg,
+                maxiter=int(maxiter_arg),
+            ),
             minres_correction=_apply_preconditioned_minres_correction,
             expand_reduced=_sparse_pc_expand_reduced,
         )

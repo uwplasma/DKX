@@ -228,6 +228,7 @@ from sfincs_jax.problems.profile_response.sparse_pc import (
     run_xblock_first_krylov_attempt,
     run_xblock_krylov_solve_stage,
     run_sparse_pc_gmres_once,
+    run_sparse_pc_gmres_once_for_retry,
     run_xblock_gmres_fallback_if_needed,
     run_xblock_post_solve_corrections,
     xblock_device_krylov_state,
@@ -7911,6 +7912,48 @@ def test_sparse_pc_gmres_once_explicit_left_recomputes_true_residual() -> None:
     assert result.history == (1.0, 0.4)
     assert any("factor_dtype=float32" in msg for msg in messages)
     assert any("iters=2" in msg for msg in messages)
+
+
+def test_sparse_pc_gmres_once_for_retry_returns_dtype_retry_tuple() -> None:
+    times = iter((0.0, 0.5))
+
+    def gmres_solver(**kwargs):
+        assert kwargs["maxiter"] == 4
+        return np.asarray([0.25, 0.75]), 99.0, (1.0, 0.4)
+
+    x, residual_norm, rn_pc, history, solve_s = run_sparse_pc_gmres_once_for_retry(
+        context=SparsePCGMRESContext(
+            matvec=lambda x_arg: 2.0 * x_arg,
+            rhs=jnp.asarray([1.0, 1.0]),
+            preconditioner=_identity,
+            emit=None,
+            elapsed_s=lambda: next(times),
+            pc_form="right",
+            restart=7,
+            tol=1.0e-8,
+            atol=0.0,
+            precondition_side="right",
+            factor_dtype=np.dtype(np.float64),
+            progress_every=0,
+            stagnation_abort=False,
+            stagnation_min_iter=10,
+            stagnation_window=10,
+            stagnation_rel_improvement=1.0e-3,
+            explicit_left_solver=lambda **_kwargs: (_ for _ in ()).throw(
+                AssertionError("wrong solver")
+            ),
+            gmres_solver=gmres_solver,
+        ),
+        x0=None,
+        maxiter=4,
+    )
+
+    assert isinstance(x, np.ndarray)
+    assert x.tolist() == [0.25, 0.75]
+    assert residual_norm == pytest.approx(np.linalg.norm([0.5, -0.5]))
+    assert not np.isfinite(rn_pc)
+    assert history == (1.0, 0.4)
+    assert solve_s == pytest.approx(0.5)
 
 
 def test_sparse_pc_gmres_once_stagnation_guard_raises() -> None:
