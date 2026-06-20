@@ -1109,7 +1109,45 @@ def fortran_reduced_xblock_result_metadata(
     }
 
 
-def xblock_qi_device_preconditioner_diagnostics(
+@dataclass(frozen=True)
+class XBlockQIDevicePreconditionerDiagnosticsContext:
+    """Explicit x-block QI-device preconditioner diagnostics payload."""
+
+    qi_device_preconditioner_enabled: object
+    qi_device_preconditioner_built: object
+    qi_device_preconditioner_used: object
+    qi_device_preconditioner_used_in_krylov: object
+    qi_device_preconditioner_reason: object
+    qi_device_preconditioner_rank: object
+    qi_device_preconditioner_candidate_count: object
+    qi_device_preconditioner_coarse_shape: object
+    qi_device_preconditioner_operator_on_basis_shape: object
+    qi_device_preconditioner_coarse_norm: object
+    qi_device_preconditioner_operator_on_basis_norm: object
+    qi_device_preconditioner_residual_before: object
+    qi_device_preconditioner_residual_after: object
+    qi_device_preconditioner_improvement_ratio: object
+    qi_device_preconditioner_setup_s: object
+    qi_device_preconditioner_min_improvement: object
+    qi_device_preconditioner_use_in_krylov: object
+    qi_device_augmented_krylov_requested: object
+    qi_device_augmented_krylov_used: object
+    qi_device_augmented_krylov_rank: object
+    qi_device_augmented_krylov_reason: object
+    qi_device_augmented_krylov_mode: object
+    qi_device_augmented_seed_requested: object
+    qi_device_augmented_seed_available: object
+    qi_device_augmented_seed_used: object
+    qi_device_augmented_seed_rank: object
+    qi_device_augmented_seed_max_rank: object
+    qi_device_augmented_seed_reason: object
+    qi_device_augmented_seed_projection_residual: object
+    qi_device_augmented_seed_labels: object
+    qi_device_preconditioner_metadata: object
+    qi_device_stats: object
+
+
+def _xblock_qi_device_preconditioner_diagnostics_from_scope(
     scope: Mapping[str, object],
 ) -> dict[str, object]:
     """Return the x-block QI-device preconditioner diagnostics payload."""
@@ -1500,13 +1538,48 @@ def xblock_qi_device_preconditioner_diagnostics(
     return out
 
 
-def xblock_qi_deflated_preconditioner_diagnostics(
+def xblock_qi_device_preconditioner_diagnostics_from_context(
+    context: XBlockQIDevicePreconditionerDiagnosticsContext,
+) -> dict[str, object]:
+    """Return QI-device diagnostics from typed context inputs."""
+
+    return _xblock_qi_device_preconditioner_diagnostics_from_scope(context.__dict__)
+
+
+def xblock_qi_device_preconditioner_diagnostics(
     scope: Mapping[str, object],
+) -> dict[str, object]:
+    """Return QI-device diagnostics from historical state names."""
+
+    return _xblock_qi_device_preconditioner_diagnostics_from_scope(scope)
+
+
+@dataclass(frozen=True)
+class XBlockQIDeflatedPreconditionerDiagnosticsContext:
+    """Explicit x-block QI residual-deflation preconditioner diagnostics."""
+
+    qi_deflated_preconditioner_enabled: object
+    qi_deflated_preconditioner_built: object
+    qi_deflated_preconditioner_used: object
+    qi_deflated_preconditioner_used_in_krylov: object
+    qi_deflated_preconditioner_reason: object
+    qi_deflated_preconditioner_rank: object
+    qi_deflated_preconditioner_candidate_count: object
+    qi_deflated_preconditioner_residual_before: object
+    qi_deflated_preconditioner_residual_after: object
+    qi_deflated_preconditioner_improvement_ratio: object
+    qi_deflated_preconditioner_setup_s: object
+    qi_deflated_stats: object
+    qi_deflated_preconditioner_metadata: object
+
+
+def xblock_qi_deflated_preconditioner_diagnostics_from_context(
+    context: XBlockQIDeflatedPreconditionerDiagnosticsContext,
 ) -> dict[str, object]:
     """Return the x-block QI residual-deflation preconditioner diagnostics."""
 
-    metadata = scope["qi_deflated_preconditioner_metadata"]
-    stats = scope["qi_deflated_stats"]
+    metadata = context.qi_deflated_preconditioner_metadata
+    stats = context.qi_deflated_stats
     if not isinstance(metadata, Mapping):
         raise TypeError("qi_deflated_preconditioner_metadata must be a mapping")
     if not isinstance(stats, Mapping):
@@ -1514,35 +1587,35 @@ def xblock_qi_deflated_preconditioner_diagnostics(
 
     return {
         "xblock_qi_deflated_preconditioner_enabled": bool(
-            scope["qi_deflated_preconditioner_enabled"]
+            context.qi_deflated_preconditioner_enabled
         ),
         "xblock_qi_deflated_preconditioner_built": bool(
-            scope["qi_deflated_preconditioner_built"]
+            context.qi_deflated_preconditioner_built
         ),
         "xblock_qi_deflated_preconditioner_used": bool(
-            scope["qi_deflated_preconditioner_used"]
+            context.qi_deflated_preconditioner_used
         ),
-        "xblock_qi_deflated_preconditioner_reason": scope[
-            "qi_deflated_preconditioner_reason"
-        ],
+        "xblock_qi_deflated_preconditioner_reason": (
+            context.qi_deflated_preconditioner_reason
+        ),
         "xblock_qi_deflated_preconditioner_rank": int(
-            scope["qi_deflated_preconditioner_rank"]
+            context.qi_deflated_preconditioner_rank
         ),
         "xblock_qi_deflated_preconditioner_candidate_count": int(
-            scope["qi_deflated_preconditioner_candidate_count"]
+            context.qi_deflated_preconditioner_candidate_count
         ),
-        "xblock_qi_deflated_preconditioner_residual_before": scope[
-            "qi_deflated_preconditioner_residual_before"
-        ],
-        "xblock_qi_deflated_preconditioner_residual_after": scope[
-            "qi_deflated_preconditioner_residual_after"
-        ],
-        "xblock_qi_deflated_preconditioner_improvement_ratio": scope[
-            "qi_deflated_preconditioner_improvement_ratio"
-        ],
+        "xblock_qi_deflated_preconditioner_residual_before": (
+            context.qi_deflated_preconditioner_residual_before
+        ),
+        "xblock_qi_deflated_preconditioner_residual_after": (
+            context.qi_deflated_preconditioner_residual_after
+        ),
+        "xblock_qi_deflated_preconditioner_improvement_ratio": (
+            context.qi_deflated_preconditioner_improvement_ratio
+        ),
         "xblock_qi_deflated_preconditioner_metadata": metadata,
         "xblock_qi_deflated_preconditioner_setup_s": float(
-            scope["qi_deflated_preconditioner_setup_s"]
+            context.qi_deflated_preconditioner_setup_s
         ),
         "xblock_qi_deflated_preconditioner_applies": int(stats.get("applies", 0)),
         "xblock_qi_deflated_preconditioner_local_applies": int(
@@ -1561,9 +1634,57 @@ def xblock_qi_deflated_preconditioner_diagnostics(
             (),
         ),
         "xblock_qi_deflated_preconditioner_use_in_krylov": bool(
-            scope["qi_deflated_preconditioner_used_in_krylov"]
+            context.qi_deflated_preconditioner_used_in_krylov
         ),
     }
+
+
+def xblock_qi_deflated_preconditioner_diagnostics(
+    scope: Mapping[str, object],
+) -> dict[str, object]:
+    """Return QI deflated diagnostics from historical state names."""
+
+    return xblock_qi_deflated_preconditioner_diagnostics_from_context(
+        XBlockQIDeflatedPreconditionerDiagnosticsContext(
+            qi_deflated_preconditioner_enabled=scope[
+                "qi_deflated_preconditioner_enabled"
+            ],
+            qi_deflated_preconditioner_built=scope[
+                "qi_deflated_preconditioner_built"
+            ],
+            qi_deflated_preconditioner_used=scope[
+                "qi_deflated_preconditioner_used"
+            ],
+            qi_deflated_preconditioner_used_in_krylov=scope[
+                "qi_deflated_preconditioner_used_in_krylov"
+            ],
+            qi_deflated_preconditioner_reason=scope[
+                "qi_deflated_preconditioner_reason"
+            ],
+            qi_deflated_preconditioner_rank=scope[
+                "qi_deflated_preconditioner_rank"
+            ],
+            qi_deflated_preconditioner_candidate_count=scope[
+                "qi_deflated_preconditioner_candidate_count"
+            ],
+            qi_deflated_preconditioner_residual_before=scope[
+                "qi_deflated_preconditioner_residual_before"
+            ],
+            qi_deflated_preconditioner_residual_after=scope[
+                "qi_deflated_preconditioner_residual_after"
+            ],
+            qi_deflated_preconditioner_improvement_ratio=scope[
+                "qi_deflated_preconditioner_improvement_ratio"
+            ],
+            qi_deflated_preconditioner_setup_s=scope[
+                "qi_deflated_preconditioner_setup_s"
+            ],
+            qi_deflated_stats=scope["qi_deflated_stats"],
+            qi_deflated_preconditioner_metadata=scope[
+                "qi_deflated_preconditioner_metadata"
+            ],
+        )
+    )
 
 
 @dataclass(frozen=True, slots=True)
@@ -1763,17 +1884,41 @@ def xblock_assembled_operator_diagnostics(
     }
 
 
-def xblock_coarse_correction_diagnostics(
-    scope: Mapping[str, object],
+@dataclass(frozen=True)
+class XBlockCoarseCorrectionDiagnosticsContext:
+    """Explicit moment-Schur, two-level, and global-coupling diagnostics."""
+
+    moment_schur_enabled: object
+    moment_schur_built: object
+    moment_schur_used: object
+    moment_schur_reason: object
+    moment_schur_default_blocked_by_compact_factors: object
+    moment_schur_probe_residual_before: object
+    moment_schur_probe_residual_after: object
+    moment_schur_probe_improvement_ratio: object
+    moment_schur_metadata: object
+    moment_schur_stats: object
+    two_level_enabled: object
+    two_level_built: object
+    two_level_metadata: object
+    two_level_stats: object
+    global_coupling_enabled: object
+    global_coupling_built: object
+    global_coupling_metadata: object
+    global_coupling_stats: object
+
+
+def xblock_coarse_correction_diagnostics_from_context(
+    context: XBlockCoarseCorrectionDiagnosticsContext,
 ) -> dict[str, object]:
     """Return moment-Schur, two-level, and global-coupling diagnostics."""
 
-    moment_metadata = scope["moment_schur_metadata"]
-    moment_stats = scope["moment_schur_stats"]
-    two_level_metadata = scope["two_level_metadata"]
-    two_level_stats = scope["two_level_stats"]
-    global_metadata = scope["global_coupling_metadata"]
-    global_stats = scope["global_coupling_stats"]
+    moment_metadata = context.moment_schur_metadata
+    moment_stats = context.moment_schur_stats
+    two_level_metadata = context.two_level_metadata
+    two_level_stats = context.two_level_stats
+    global_metadata = context.global_coupling_metadata
+    global_stats = context.global_coupling_stats
     for name, value in (
         ("moment_schur_metadata", moment_metadata),
         ("moment_schur_stats", moment_stats),
@@ -1786,12 +1931,12 @@ def xblock_coarse_correction_diagnostics(
             raise TypeError(f"{name} must be a mapping")
 
     return {
-        "xblock_moment_schur_enabled": bool(scope["moment_schur_enabled"]),
-        "xblock_moment_schur_built": bool(scope["moment_schur_built"]),
-        "xblock_moment_schur_used": bool(scope["moment_schur_used"]),
-        "xblock_moment_schur_reason": scope["moment_schur_reason"],
+        "xblock_moment_schur_enabled": bool(context.moment_schur_enabled),
+        "xblock_moment_schur_built": bool(context.moment_schur_built),
+        "xblock_moment_schur_used": bool(context.moment_schur_used),
+        "xblock_moment_schur_reason": context.moment_schur_reason,
         "xblock_moment_schur_default_blocked_by_compact_factors": bool(
-            scope["moment_schur_default_blocked_by_compact_factors"]
+            context.moment_schur_default_blocked_by_compact_factors
         ),
         "xblock_moment_schur_mode": moment_metadata.get("mode"),
         "xblock_moment_schur_rank": moment_metadata.get("rank"),
@@ -1806,20 +1951,20 @@ def xblock_coarse_correction_diagnostics(
         "xblock_moment_schur_device_resident": bool(
             moment_metadata.get("device_resident", False)
         ),
-        "xblock_moment_schur_probe_residual_before": scope[
-            "moment_schur_probe_residual_before"
-        ],
-        "xblock_moment_schur_probe_residual_after": scope[
-            "moment_schur_probe_residual_after"
-        ],
-        "xblock_moment_schur_probe_improvement_ratio": scope[
-            "moment_schur_probe_improvement_ratio"
-        ],
+        "xblock_moment_schur_probe_residual_before": (
+            context.moment_schur_probe_residual_before
+        ),
+        "xblock_moment_schur_probe_residual_after": (
+            context.moment_schur_probe_residual_after
+        ),
+        "xblock_moment_schur_probe_improvement_ratio": (
+            context.moment_schur_probe_improvement_ratio
+        ),
         "xblock_moment_schur_error": moment_metadata.get("error"),
         "xblock_moment_schur_applies": int(moment_stats.get("applies", 0)),
         "xblock_moment_schur_base_applies": int(moment_stats.get("base_applies", 0)),
-        "xblock_two_level_enabled": bool(scope["two_level_enabled"]),
-        "xblock_two_level_built": bool(scope["two_level_built"]),
+        "xblock_two_level_enabled": bool(context.two_level_enabled),
+        "xblock_two_level_built": bool(context.two_level_built),
         "xblock_two_level_mode": two_level_metadata.get("mode"),
         "xblock_two_level_basis_size": two_level_metadata.get("basis_size"),
         "xblock_two_level_rank": two_level_metadata.get("rank"),
@@ -1835,8 +1980,8 @@ def xblock_coarse_correction_diagnostics(
         "xblock_two_level_coarse_applies": int(
             two_level_stats.get("coarse_applies", 0)
         ),
-        "xblock_global_coupling_enabled": bool(scope["global_coupling_enabled"]),
-        "xblock_global_coupling_built": bool(scope["global_coupling_built"]),
+        "xblock_global_coupling_enabled": bool(context.global_coupling_enabled),
+        "xblock_global_coupling_built": bool(context.global_coupling_built),
         "xblock_global_coupling_mode": global_metadata.get("mode"),
         "xblock_global_coupling_load_basis_size": global_metadata.get(
             "load_basis_size"
@@ -1870,7 +2015,119 @@ def xblock_coarse_correction_diagnostics(
     }
 
 
-def xblock_qi_seed_preconditioner_diagnostics(
+def xblock_coarse_correction_diagnostics(
+    scope: Mapping[str, object],
+) -> dict[str, object]:
+    """Return coarse-correction diagnostics from historical state names."""
+
+    return xblock_coarse_correction_diagnostics_from_context(
+        XBlockCoarseCorrectionDiagnosticsContext(
+            moment_schur_enabled=scope["moment_schur_enabled"],
+            moment_schur_built=scope["moment_schur_built"],
+            moment_schur_used=scope["moment_schur_used"],
+            moment_schur_reason=scope["moment_schur_reason"],
+            moment_schur_default_blocked_by_compact_factors=scope[
+                "moment_schur_default_blocked_by_compact_factors"
+            ],
+            moment_schur_probe_residual_before=scope[
+                "moment_schur_probe_residual_before"
+            ],
+            moment_schur_probe_residual_after=scope[
+                "moment_schur_probe_residual_after"
+            ],
+            moment_schur_probe_improvement_ratio=scope[
+                "moment_schur_probe_improvement_ratio"
+            ],
+            moment_schur_metadata=scope["moment_schur_metadata"],
+            moment_schur_stats=scope["moment_schur_stats"],
+            two_level_enabled=scope["two_level_enabled"],
+            two_level_built=scope["two_level_built"],
+            two_level_metadata=scope["two_level_metadata"],
+            two_level_stats=scope["two_level_stats"],
+            global_coupling_enabled=scope["global_coupling_enabled"],
+            global_coupling_built=scope["global_coupling_built"],
+            global_coupling_metadata=scope["global_coupling_metadata"],
+            global_coupling_stats=scope["global_coupling_stats"],
+        )
+    )
+
+
+@dataclass(frozen=True)
+class XBlockQISeedPreconditionerDiagnosticsContext:
+    """Explicit x-block QI seed/Galerkin/two-level diagnostics payload."""
+
+    qi_galerkin_stats: object
+    qi_two_level_stats: object
+    xblock_initial_seed_residual_norm: object
+    xblock_initial_seed_residual_ratio: object
+    moment_schur_seed_residual_norm: object
+    moment_schur_seed_residual_ratio: object
+    qi_coarse_seed_residual_before: object
+    qi_coarse_seed_residual_after: object
+    qi_coarse_seed_improvement_ratio: object
+    qi_coarse_seed_reason: object
+    qi_coarse_seed_labels: object
+    qi_seed_basis_kind: object
+    qi_galerkin_preconditioner_reason: object
+    qi_galerkin_preconditioner_mode: object
+    qi_galerkin_preconditioner_coarse_shape: object
+    qi_galerkin_preconditioner_residual_before: object
+    qi_galerkin_preconditioner_residual_after: object
+    qi_galerkin_preconditioner_improvement_ratio: object
+    qi_galerkin_preconditioner_probe_candidates: object
+    qi_galerkin_preconditioner_selected_index: object
+    qi_two_level_preconditioner_reason: object
+    qi_two_level_preconditioner_coarse_shape: object
+    qi_two_level_preconditioner_operator_on_basis_shape: object
+    qi_two_level_preconditioner_coarse_solver: object
+    qi_two_level_preconditioner_augmentation_labels: object
+    qi_two_level_preconditioner_smoothed_load_metadata: object
+    qi_two_level_preconditioner_residual_before: object
+    qi_two_level_preconditioner_residual_after: object
+    qi_two_level_preconditioner_improvement_ratio: object
+    qi_two_level_preconditioner_probe_candidates: object
+    qi_two_level_preconditioner_selected_index: object
+    xblock_initial_seed_used: object
+    moment_schur_seed_enabled: object
+    moment_schur_seed_used: object
+    qi_coarse_seed_enabled: object
+    qi_coarse_seed_used: object
+    qi_coarse_seed_rank: object
+    qi_coarse_seed_candidate_count: object
+    qi_coarse_seed_s: object
+    qi_seed_max_candidates: object
+    qi_seed_max_angular_mode: object
+    qi_galerkin_preconditioner_enabled: object
+    qi_galerkin_preconditioner_built: object
+    qi_galerkin_preconditioner_used: object
+    qi_galerkin_preconditioner_rank: object
+    qi_galerkin_preconditioner_candidate_count: object
+    qi_galerkin_preconditioner_coarse_norm: object
+    qi_galerkin_preconditioner_rcond: object
+    qi_galerkin_preconditioner_damping: object
+    qi_galerkin_preconditioner_basis_reused_from_seed: object
+    qi_galerkin_preconditioner_probe_reduced: object
+    qi_galerkin_preconditioner_setup_s: object
+    qi_two_level_preconditioner_enabled: object
+    qi_two_level_preconditioner_built: object
+    qi_two_level_preconditioner_used: object
+    qi_two_level_preconditioner_rank: object
+    qi_two_level_preconditioner_candidate_count: object
+    qi_two_level_preconditioner_coarse_norm: object
+    qi_two_level_preconditioner_operator_on_basis_norm: object
+    qi_two_level_preconditioner_residual_augmented: object
+    qi_two_level_preconditioner_rank_before_augmentation: object
+    qi_two_level_preconditioner_residual_augment_max_extra: object
+    qi_two_level_preconditioner_residual_augment_steps: object
+    qi_two_level_preconditioner_residual_augment_include_residuals: object
+    qi_two_level_preconditioner_smoothed_load_basis: object
+    qi_two_level_preconditioner_rcond: object
+    qi_two_level_preconditioner_damping: object
+    qi_two_level_preconditioner_basis_reused_from_seed: object
+    qi_two_level_preconditioner_setup_s: object
+
+
+def _xblock_qi_seed_preconditioner_diagnostics_from_scope(
     scope: Mapping[str, object],
 ) -> dict[str, object]:
     """Return QI seed, Galerkin, and two-level preconditioner diagnostics."""
@@ -2074,6 +2331,22 @@ def xblock_qi_seed_preconditioner_diagnostics(
             two_level_stats.get("local_applies", 0)
         ),
     }
+
+
+def xblock_qi_seed_preconditioner_diagnostics_from_context(
+    context: XBlockQISeedPreconditionerDiagnosticsContext,
+) -> dict[str, object]:
+    """Return QI seed diagnostics from typed context inputs."""
+
+    return _xblock_qi_seed_preconditioner_diagnostics_from_scope(context.__dict__)
+
+
+def xblock_qi_seed_preconditioner_diagnostics(
+    scope: Mapping[str, object],
+) -> dict[str, object]:
+    """Return QI seed diagnostics from historical state names."""
+
+    return _xblock_qi_seed_preconditioner_diagnostics_from_scope(scope)
 
 
 def xblock_device_krylov_diagnostics(scope: Mapping[str, object]) -> dict[str, object]:
@@ -2333,10 +2606,9 @@ def xblock_sparse_pc_result_diagnostics_from_driver_state(
 ) -> dict[str, object]:
     """Build final x-block sparse-PC diagnostics from the driver solve state.
 
-    This is a transitional boundary: the driver now has one explicit metadata
-    handoff instead of many scattered ``locals()`` calls, while the component
-    helpers keep the stable public keys and the remaining coarse/QI payloads
-    can be typed incrementally.
+    The driver now passes precomputed coarse, QI, device, and side-probe
+    payloads through typed contexts. This helper keeps the stable public
+    metadata keys used by downstream reports and tests.
     """
 
     assembled_operator_metadata = state.get("xblock_assembled_operator_result_metadata")

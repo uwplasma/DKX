@@ -43,11 +43,12 @@ Make `sfincs_jax` research-grade while preserving the public user contract:
 Recent checkpoints:
 
 - X-block sparse-PC final metadata now has typed grouped state contexts for
-  core solve counters, device/QI state, preflight/probe state, and precomputed
-  nested metadata. The legacy wrapper delegates through the grouped context and
-  has focused parity tests; driver wiring is deferred until nested QI/coarse
-  diagnostics are grouped so we do not replace `locals()` with a brittle raw
-  map (current checkpoint).
+  core solve counters, device/QI state, preflight/probe state, and nested
+  assembled-operator/coarse/QI/side-probe metadata. The driver builds
+  `XBlockSparsePCFinalMetadataStateContext` directly, so the production
+  x-block finalization path no longer consumes the driver frame through
+  `locals()`; the legacy wrapper remains only as a compatibility and
+  missing-key audit path.
 - Generic sparse-PC finalization now builds direct-tail, factor-preflight,
   sparse-pattern, and static solver metadata from typed contexts before
   finalization. The RHSMode=1 generic finalizer receives only five dynamic
@@ -1087,6 +1088,15 @@ Recent local validation:
 - Hygiene after generic sparse-PC static metadata precompute:
   `python -m compileall -q sfincs_jax`, `git diff --check`, and
   `python scripts/check_repo_size.py` passed.
+- X-block typed nested/final metadata focused equivalence tests:
+  `5 passed in 0.63 s`.
+- Profile-response diagnostics/sparse-PC shard after x-block typed nested/final
+  metadata: `250 passed in 2.01 s`.
+- Xblock/sparse-host/minimum-norm/direct-tail driver shard after x-block typed
+  nested/final metadata: `36 passed, 96 deselected in 39.45 s`.
+- Broad profile-response/RHSMode=1 policy, setup, diagnostics, solver, and
+  helper sweep after x-block typed nested/final metadata:
+  `1193 passed in 48.35 s`.
 - Older focused and broad validation checkpoints are intentionally omitted from
   this active plan; they remain available in git history.
 
@@ -1099,7 +1109,7 @@ Known CI issue fixed by this rewrite:
 
 ### 1. `v3_driver.py` Architecture Refactor
 
-Completion estimate: 62%.
+Completion estimate: 64%.
 
 Goal:
 
@@ -1170,6 +1180,9 @@ Completed recent boundaries:
   acceptance metadata consolidated into a profile-response helper.
 - Generic sparse-PC dtype retry, state handoff, post-minres finalization, and
   final payload construction consolidated into one profile-response helper.
+- X-block sparse-PC nested diagnostics and final metadata state now use typed
+  contexts directly from the driver; production x-block finalization no longer
+  depends on a `locals()` frame copy.
 - RHSMode=1 rescue/refinement candidate acceptance and KSP replay-state updates
   consolidated into profile-response handoff helpers.
 - RHSMode=1 true-residual recomputation before fallback decisions consolidated
@@ -1371,11 +1384,10 @@ Completed recent boundaries:
   context and is precomputed before finalization, so raw pattern summary,
   scope, and build-time fields no longer propagate through
   `SparsePCGMRESFinalizationContext`.
-- X-block sparse-PC final metadata now receives a whitelisted driver-state copy
-  from a tested `profile_response.sparse_pc` helper instead of handing the
-  whole frame to `XBlockSparsePCFinalPayloadContext`. A filtered x-block
-  `locals()` wrapper remains, and the next tranche is to replace it with
-  typed grouped diagnostics contexts instead of a brittle 75-field driver map.
+- X-block sparse-PC final metadata now receives typed grouped diagnostics
+  contexts from the driver instead of a whitelisted local-scope copy. The
+  compatibility wrapper remains covered for missing-key audits, but production
+  finalization now avoids both full-frame and filtered-frame handoffs.
 - X-block sparse-PC final metadata now precomputes assembled-operator,
   coarse-correction, QI seed/device/deflated, and side-probe metadata groups
   before final payload construction. The copied final metadata state is down
@@ -1405,23 +1417,19 @@ Completed recent boundaries:
   semantic policy/result contexts in `profile_response.sparse_pc`; the driver
   passes grouped policies and runtime outcomes instead of every historical
   `direct_tail_*` report key.
-- The RHSMode=1 generic sparse-PC finalizer no longer has a driver
-  `locals()` handoff. The remaining local-scope cleanup is the x-block final
-  metadata path, which is already filtered through a named key contract but
-  still needs a typed grouped context to avoid a brittle 75-field inline map.
-- X-block final metadata now has grouped typed state and wrapper parity tests.
-  The remaining x-block driver work is to group nested QI/coarse diagnostics
-  and then pass `XBlockSparsePCFinalMetadataStateContext` directly from the
-  driver without `locals()`.
+- The RHSMode=1 generic sparse-PC and x-block sparse-PC finalizers no longer
+  have production driver `locals()` handoffs. X-block nested diagnostics are
+  grouped into typed assembled-operator, coarse-correction, QI seed/device/
+  deflated, and side-probe contexts before final payload construction.
 
 Next steps:
 
 - Continue moving remaining generic sparse-PC result/diagnostic seams into
   cohesive `profile_response` helpers only where the replacement context can
   stay explicit and tested.
-- Type the nested x-block QI seed/device/deflated and coarse-correction
-  diagnostics so the remaining final metadata local-scope copy can be removed
-  without introducing a large raw driver dictionary.
+- Continue reducing `v3_driver.py` surface area by moving cohesive solver
+  policy/result seams into `profile_response` helpers, but only when the new
+  boundary is explicit, typed, and smaller than the code it replaces.
 - Continue replacing residual sparse-PC compatibility wrappers with explicit
   contexts only where the new boundary reduces driver complexity.
 - Continue extracting sparse-PC state/metadata seams after the source split

@@ -11,6 +11,10 @@ from sfincs_jax.problems.profile_response.diagnostics import (
     SparsePCPatternMetadataContext,
     SparseRescueTailMetadataContext,
     XBlockAssembledOperatorDiagnosticsContext,
+    XBlockCoarseCorrectionDiagnosticsContext,
+    XBlockQIDevicePreconditionerDiagnosticsContext,
+    XBlockQIDeflatedPreconditionerDiagnosticsContext,
+    XBlockQISeedPreconditionerDiagnosticsContext,
     XBlockSparsePCCoreDiagnosticsContext,
     XBlockSideProbeDiagnosticsContext,
     fp_xblock_global_correction_metadata,
@@ -27,10 +31,14 @@ from sfincs_jax.problems.profile_response.diagnostics import (
     sparse_xblock_rescue_metadata,
     xblock_assembled_operator_diagnostics,
     xblock_coarse_correction_diagnostics,
+    xblock_coarse_correction_diagnostics_from_context,
     xblock_device_krylov_diagnostics,
     xblock_qi_deflated_preconditioner_diagnostics,
+    xblock_qi_deflated_preconditioner_diagnostics_from_context,
     xblock_qi_device_preconditioner_diagnostics,
+    xblock_qi_device_preconditioner_diagnostics_from_context,
     xblock_qi_seed_preconditioner_diagnostics,
+    xblock_qi_seed_preconditioner_diagnostics_from_context,
     xblock_sparse_pc_core_diagnostics,
     xblock_side_probe_diagnostics,
 )
@@ -339,9 +347,12 @@ def _qi_device_preconditioner_scope() -> dict[str, object]:
             "residual_region_bounce_coarse_max_rank": 9,
             "residual_region_bounce_coarse_rank": 3,
             "residual_region_bounce_coarse_candidate_count": 4,
+            "residual_region_bounce_coarse_bounce_boundary": 0.75,
+            "residual_region_bounce_coarse_min_region_energy_fraction": 0.2,
             "active_pattern_coarse_enabled": True,
             "active_pattern_coarse_max_rank_requested": 12,
             "active_pattern_coarse_candidate_count": 7,
+            "active_pattern_coarse_min_chunk_energy_fraction": 0.15,
             "coupled_residual_equation_enabled": True,
             "coupled_residual_equation_max_rank_requested": 14,
             "coupled_residual_equation_rank": 6,
@@ -361,10 +372,18 @@ def _qi_device_preconditioner_scope() -> dict[str, object]:
 
 
 def test_xblock_qi_device_preconditioner_diagnostics_preserve_payload() -> None:
-    metadata = xblock_qi_device_preconditioner_diagnostics(
-        _qi_device_preconditioner_scope()
+    scope = _qi_device_preconditioner_scope()
+    metadata = xblock_qi_device_preconditioner_diagnostics(scope)
+    context_metadata = xblock_qi_device_preconditioner_diagnostics_from_context(
+        XBlockQIDevicePreconditionerDiagnosticsContext(
+            **{
+                key: scope[key]
+                for key in XBlockQIDevicePreconditionerDiagnosticsContext.__dataclass_fields__
+            }
+        )
     )
 
+    assert context_metadata == metadata
     assert metadata["xblock_qi_device_preconditioner_enabled"] is True
     assert metadata["xblock_qi_device_preconditioner_used"] is False
     assert metadata["xblock_qi_device_preconditioner_rank"] == 7
@@ -435,10 +454,51 @@ def _qi_deflated_preconditioner_scope() -> dict[str, object]:
 
 
 def test_xblock_qi_deflated_preconditioner_diagnostics_preserve_payload() -> None:
-    metadata = xblock_qi_deflated_preconditioner_diagnostics(
-        _qi_deflated_preconditioner_scope()
+    scope = _qi_deflated_preconditioner_scope()
+    metadata = xblock_qi_deflated_preconditioner_diagnostics(scope)
+    context_metadata = xblock_qi_deflated_preconditioner_diagnostics_from_context(
+        XBlockQIDeflatedPreconditionerDiagnosticsContext(
+            qi_deflated_preconditioner_enabled=scope[
+                "qi_deflated_preconditioner_enabled"
+            ],
+            qi_deflated_preconditioner_built=scope[
+                "qi_deflated_preconditioner_built"
+            ],
+            qi_deflated_preconditioner_used=scope[
+                "qi_deflated_preconditioner_used"
+            ],
+            qi_deflated_preconditioner_used_in_krylov=scope[
+                "qi_deflated_preconditioner_used_in_krylov"
+            ],
+            qi_deflated_preconditioner_reason=scope[
+                "qi_deflated_preconditioner_reason"
+            ],
+            qi_deflated_preconditioner_rank=scope[
+                "qi_deflated_preconditioner_rank"
+            ],
+            qi_deflated_preconditioner_candidate_count=scope[
+                "qi_deflated_preconditioner_candidate_count"
+            ],
+            qi_deflated_preconditioner_residual_before=scope[
+                "qi_deflated_preconditioner_residual_before"
+            ],
+            qi_deflated_preconditioner_residual_after=scope[
+                "qi_deflated_preconditioner_residual_after"
+            ],
+            qi_deflated_preconditioner_improvement_ratio=scope[
+                "qi_deflated_preconditioner_improvement_ratio"
+            ],
+            qi_deflated_preconditioner_setup_s=scope[
+                "qi_deflated_preconditioner_setup_s"
+            ],
+            qi_deflated_stats=scope["qi_deflated_stats"],
+            qi_deflated_preconditioner_metadata=scope[
+                "qi_deflated_preconditioner_metadata"
+            ],
+        )
     )
 
+    assert context_metadata == metadata
     assert metadata["xblock_qi_deflated_preconditioner_enabled"] is True
     assert metadata["xblock_qi_deflated_preconditioner_used"] is False
     assert metadata["xblock_qi_deflated_preconditioner_use_in_krylov"] is True
@@ -619,67 +679,97 @@ def test_xblock_assembled_operator_diagnostics_preserve_payload() -> None:
 
 
 def test_xblock_coarse_correction_diagnostics_preserve_payload() -> None:
-    metadata = xblock_coarse_correction_diagnostics(
-        {
-            "moment_schur_enabled": 1,
-            "moment_schur_built": True,
-            "moment_schur_used": False,
-            "moment_schur_reason": "compact_factor_guard",
-            "moment_schur_default_blocked_by_compact_factors": 1,
-            "moment_schur_probe_residual_before": 2.0,
-            "moment_schur_probe_residual_after": 0.5,
-            "moment_schur_probe_improvement_ratio": 4.0,
-            "moment_schur_metadata": {
-                "mode": "constraint",
-                "rank": 3,
-                "extra_size": 2,
-                "setup_s": 0.1,
-                "expected_size": 5,
-                "rcond": 1.0e-8,
-                "singular_value_proxy": (1.0, 0.1),
-                "device_resident": True,
-                "error": None,
-            },
-            "moment_schur_stats": {"applies": 6, "base_applies": 4},
-            "two_level_enabled": 1,
-            "two_level_built": True,
-            "two_level_metadata": {
-                "mode": "seed",
-                "basis_size": 4,
-                "rank": 4,
-                "setup_s": 0.2,
-                "rcond": 1.0e-7,
-                "basis_names": ("density", "flow"),
-                "active_projected": True,
-                "expected_size": 8,
-                "error": None,
-            },
-            "two_level_stats": {"applies": 8, "coarse_applies": 3},
-            "global_coupling_enabled": 1,
-            "global_coupling_built": True,
-            "global_coupling_metadata": {
-                "mode": "load",
-                "load_basis_size": 5,
-                "basis_size": 7,
-                "rank": 6,
-                "setup_s": 0.3,
-                "setup_budget_s": 2.0,
-                "setup_budget_reached": False,
-                "rcond": 1.0e-6,
-                "coarse_solver": "pinv",
-                "smoother": "block",
-                "ridge": 1.0e-10,
-                "singular_values": (3.0, 1.0),
-                "device_resident": True,
-                "fsavg_lmax": 2,
-                "angular_lmax": 3,
-                "basis_names": ("source", "constraint"),
-                "error": None,
-            },
-            "global_coupling_stats": {"applies": 9, "coarse_applies": 5},
-        }
+    scope = {
+        "moment_schur_enabled": 1,
+        "moment_schur_built": True,
+        "moment_schur_used": False,
+        "moment_schur_reason": "compact_factor_guard",
+        "moment_schur_default_blocked_by_compact_factors": 1,
+        "moment_schur_probe_residual_before": 2.0,
+        "moment_schur_probe_residual_after": 0.5,
+        "moment_schur_probe_improvement_ratio": 4.0,
+        "moment_schur_metadata": {
+            "mode": "constraint",
+            "rank": 3,
+            "extra_size": 2,
+            "setup_s": 0.1,
+            "expected_size": 5,
+            "rcond": 1.0e-8,
+            "singular_value_proxy": (1.0, 0.1),
+            "device_resident": True,
+            "error": None,
+        },
+        "moment_schur_stats": {"applies": 6, "base_applies": 4},
+        "two_level_enabled": 1,
+        "two_level_built": True,
+        "two_level_metadata": {
+            "mode": "seed",
+            "basis_size": 4,
+            "rank": 4,
+            "setup_s": 0.2,
+            "rcond": 1.0e-7,
+            "basis_names": ("density", "flow"),
+            "active_projected": True,
+            "expected_size": 8,
+            "error": None,
+        },
+        "two_level_stats": {"applies": 8, "coarse_applies": 3},
+        "global_coupling_enabled": 1,
+        "global_coupling_built": True,
+        "global_coupling_metadata": {
+            "mode": "load",
+            "load_basis_size": 5,
+            "basis_size": 7,
+            "rank": 6,
+            "setup_s": 0.3,
+            "setup_budget_s": 2.0,
+            "setup_budget_reached": False,
+            "rcond": 1.0e-6,
+            "coarse_solver": "pinv",
+            "smoother": "block",
+            "ridge": 1.0e-10,
+            "singular_values": (3.0, 1.0),
+            "device_resident": True,
+            "fsavg_lmax": 2,
+            "angular_lmax": 3,
+            "basis_names": ("source", "constraint"),
+            "error": None,
+        },
+        "global_coupling_stats": {"applies": 9, "coarse_applies": 5},
+    }
+    metadata = xblock_coarse_correction_diagnostics(scope)
+    context_metadata = xblock_coarse_correction_diagnostics_from_context(
+        XBlockCoarseCorrectionDiagnosticsContext(
+            moment_schur_enabled=scope["moment_schur_enabled"],
+            moment_schur_built=scope["moment_schur_built"],
+            moment_schur_used=scope["moment_schur_used"],
+            moment_schur_reason=scope["moment_schur_reason"],
+            moment_schur_default_blocked_by_compact_factors=scope[
+                "moment_schur_default_blocked_by_compact_factors"
+            ],
+            moment_schur_probe_residual_before=scope[
+                "moment_schur_probe_residual_before"
+            ],
+            moment_schur_probe_residual_after=scope[
+                "moment_schur_probe_residual_after"
+            ],
+            moment_schur_probe_improvement_ratio=scope[
+                "moment_schur_probe_improvement_ratio"
+            ],
+            moment_schur_metadata=scope["moment_schur_metadata"],
+            moment_schur_stats=scope["moment_schur_stats"],
+            two_level_enabled=scope["two_level_enabled"],
+            two_level_built=scope["two_level_built"],
+            two_level_metadata=scope["two_level_metadata"],
+            two_level_stats=scope["two_level_stats"],
+            global_coupling_enabled=scope["global_coupling_enabled"],
+            global_coupling_built=scope["global_coupling_built"],
+            global_coupling_metadata=scope["global_coupling_metadata"],
+            global_coupling_stats=scope["global_coupling_stats"],
+        )
     )
 
+    assert context_metadata == metadata
     assert metadata["xblock_moment_schur_enabled"] is True
     assert metadata["xblock_moment_schur_used"] is False
     assert metadata["xblock_moment_schur_default_blocked_by_compact_factors"] is True
@@ -699,84 +789,92 @@ def test_xblock_coarse_correction_diagnostics_preserve_payload() -> None:
 
 
 def test_xblock_qi_seed_preconditioner_diagnostics_preserve_payload() -> None:
-    metadata = xblock_qi_seed_preconditioner_diagnostics(
-        {
-            "xblock_initial_seed_used": 1,
-            "xblock_initial_seed_residual_norm": 1.0e-3,
-            "xblock_initial_seed_residual_ratio": 0.5,
-            "moment_schur_seed_enabled": 1,
-            "moment_schur_seed_used": False,
-            "moment_schur_seed_residual_norm": 2.0e-3,
-            "moment_schur_seed_residual_ratio": 0.75,
-            "qi_coarse_seed_enabled": 1,
-            "qi_coarse_seed_used": True,
-            "qi_coarse_seed_residual_before": 3.0,
-            "qi_coarse_seed_residual_after": 1.0,
-            "qi_coarse_seed_improvement_ratio": 3.0,
-            "qi_coarse_seed_rank": 4,
-            "qi_coarse_seed_candidate_count": 9,
-            "qi_coarse_seed_reason": "accepted",
-            "qi_coarse_seed_labels": ("flat", "current"),
-            "qi_coarse_seed_s": 0.25,
-            "qi_seed_basis_kind": "load",
-            "qi_seed_max_candidates": 12,
-            "qi_seed_max_angular_mode": 3,
-            "qi_galerkin_preconditioner_enabled": 1,
-            "qi_galerkin_preconditioner_built": True,
-            "qi_galerkin_preconditioner_used": False,
-            "qi_galerkin_preconditioner_reason": "probe_rejected",
-            "qi_galerkin_preconditioner_mode": "coarse",
-            "qi_galerkin_preconditioner_rank": 5,
-            "qi_galerkin_preconditioner_candidate_count": 10,
-            "qi_galerkin_preconditioner_coarse_shape": (5, 5),
-            "qi_galerkin_preconditioner_coarse_norm": 2.5,
-            "qi_galerkin_preconditioner_rcond": 1.0e-6,
-            "qi_galerkin_preconditioner_damping": 1.0e-4,
-            "qi_galerkin_preconditioner_basis_reused_from_seed": True,
-            "qi_galerkin_preconditioner_residual_before": 4.0,
-            "qi_galerkin_preconditioner_residual_after": 2.0,
-            "qi_galerkin_preconditioner_improvement_ratio": 2.0,
-            "qi_galerkin_preconditioner_probe_reduced": True,
-            "qi_galerkin_preconditioner_probe_candidates": (0, 2),
-            "qi_galerkin_preconditioner_selected_index": 1,
-            "qi_galerkin_preconditioner_setup_s": 0.5,
-            "qi_galerkin_stats": {
-                "applies": 6,
-                "coarse_applies": 4,
-                "base_applies": 2,
-            },
-            "qi_two_level_preconditioner_enabled": 1,
-            "qi_two_level_preconditioner_built": True,
-            "qi_two_level_preconditioner_used": True,
-            "qi_two_level_preconditioner_reason": "accepted",
-            "qi_two_level_preconditioner_rank": 6,
-            "qi_two_level_preconditioner_candidate_count": 11,
-            "qi_two_level_preconditioner_coarse_shape": (6, 6),
-            "qi_two_level_preconditioner_coarse_norm": 3.5,
-            "qi_two_level_preconditioner_operator_on_basis_shape": (20, 6),
-            "qi_two_level_preconditioner_operator_on_basis_norm": 4.5,
-            "qi_two_level_preconditioner_coarse_solver": "pinv",
-            "qi_two_level_preconditioner_residual_augmented": True,
-            "qi_two_level_preconditioner_rank_before_augmentation": 4,
-            "qi_two_level_preconditioner_augmentation_labels": ("r0", "r1"),
-            "qi_two_level_preconditioner_residual_augment_max_extra": 3,
-            "qi_two_level_preconditioner_residual_augment_steps": 2,
-            "qi_two_level_preconditioner_residual_augment_include_residuals": True,
-            "qi_two_level_preconditioner_smoothed_load_basis": True,
-            "qi_two_level_preconditioner_smoothed_load_metadata": {"rank": 2},
-            "qi_two_level_preconditioner_rcond": 1.0e-7,
-            "qi_two_level_preconditioner_damping": 1.0e-5,
-            "qi_two_level_preconditioner_basis_reused_from_seed": True,
-            "qi_two_level_preconditioner_residual_before": 5.0,
-            "qi_two_level_preconditioner_residual_after": 1.0,
-            "qi_two_level_preconditioner_improvement_ratio": 5.0,
-            "qi_two_level_preconditioner_probe_candidates": (1, 3),
-            "qi_two_level_preconditioner_selected_index": 0,
-            "qi_two_level_preconditioner_setup_s": 0.75,
-            "qi_two_level_stats": {"applies": 8, "local_applies": 5},
-        }
+    scope = {
+        "xblock_initial_seed_used": 1,
+        "xblock_initial_seed_residual_norm": 1.0e-3,
+        "xblock_initial_seed_residual_ratio": 0.5,
+        "moment_schur_seed_enabled": 1,
+        "moment_schur_seed_used": False,
+        "moment_schur_seed_residual_norm": 2.0e-3,
+        "moment_schur_seed_residual_ratio": 0.75,
+        "qi_coarse_seed_enabled": 1,
+        "qi_coarse_seed_used": True,
+        "qi_coarse_seed_residual_before": 3.0,
+        "qi_coarse_seed_residual_after": 1.0,
+        "qi_coarse_seed_improvement_ratio": 3.0,
+        "qi_coarse_seed_rank": 4,
+        "qi_coarse_seed_candidate_count": 9,
+        "qi_coarse_seed_reason": "accepted",
+        "qi_coarse_seed_labels": ("flat", "current"),
+        "qi_coarse_seed_s": 0.25,
+        "qi_seed_basis_kind": "load",
+        "qi_seed_max_candidates": 12,
+        "qi_seed_max_angular_mode": 3,
+        "qi_galerkin_preconditioner_enabled": 1,
+        "qi_galerkin_preconditioner_built": True,
+        "qi_galerkin_preconditioner_used": False,
+        "qi_galerkin_preconditioner_reason": "probe_rejected",
+        "qi_galerkin_preconditioner_mode": "coarse",
+        "qi_galerkin_preconditioner_rank": 5,
+        "qi_galerkin_preconditioner_candidate_count": 10,
+        "qi_galerkin_preconditioner_coarse_shape": (5, 5),
+        "qi_galerkin_preconditioner_coarse_norm": 2.5,
+        "qi_galerkin_preconditioner_rcond": 1.0e-6,
+        "qi_galerkin_preconditioner_damping": 1.0e-4,
+        "qi_galerkin_preconditioner_basis_reused_from_seed": True,
+        "qi_galerkin_preconditioner_residual_before": 4.0,
+        "qi_galerkin_preconditioner_residual_after": 2.0,
+        "qi_galerkin_preconditioner_improvement_ratio": 2.0,
+        "qi_galerkin_preconditioner_probe_reduced": True,
+        "qi_galerkin_preconditioner_probe_candidates": (0, 2),
+        "qi_galerkin_preconditioner_selected_index": 1,
+        "qi_galerkin_preconditioner_setup_s": 0.5,
+        "qi_galerkin_stats": {
+            "applies": 6,
+            "coarse_applies": 4,
+            "base_applies": 2,
+        },
+        "qi_two_level_preconditioner_enabled": 1,
+        "qi_two_level_preconditioner_built": True,
+        "qi_two_level_preconditioner_used": True,
+        "qi_two_level_preconditioner_reason": "accepted",
+        "qi_two_level_preconditioner_rank": 6,
+        "qi_two_level_preconditioner_candidate_count": 11,
+        "qi_two_level_preconditioner_coarse_shape": (6, 6),
+        "qi_two_level_preconditioner_coarse_norm": 3.5,
+        "qi_two_level_preconditioner_operator_on_basis_shape": (20, 6),
+        "qi_two_level_preconditioner_operator_on_basis_norm": 4.5,
+        "qi_two_level_preconditioner_coarse_solver": "pinv",
+        "qi_two_level_preconditioner_residual_augmented": True,
+        "qi_two_level_preconditioner_rank_before_augmentation": 4,
+        "qi_two_level_preconditioner_augmentation_labels": ("r0", "r1"),
+        "qi_two_level_preconditioner_residual_augment_max_extra": 3,
+        "qi_two_level_preconditioner_residual_augment_steps": 2,
+        "qi_two_level_preconditioner_residual_augment_include_residuals": True,
+        "qi_two_level_preconditioner_smoothed_load_basis": True,
+        "qi_two_level_preconditioner_smoothed_load_metadata": {"rank": 2},
+        "qi_two_level_preconditioner_rcond": 1.0e-7,
+        "qi_two_level_preconditioner_damping": 1.0e-5,
+        "qi_two_level_preconditioner_basis_reused_from_seed": True,
+        "qi_two_level_preconditioner_residual_before": 5.0,
+        "qi_two_level_preconditioner_residual_after": 1.0,
+        "qi_two_level_preconditioner_improvement_ratio": 5.0,
+        "qi_two_level_preconditioner_probe_candidates": (1, 3),
+        "qi_two_level_preconditioner_selected_index": 0,
+        "qi_two_level_preconditioner_setup_s": 0.75,
+        "qi_two_level_stats": {"applies": 8, "local_applies": 5},
+    }
+    metadata = xblock_qi_seed_preconditioner_diagnostics(scope)
+    context_metadata = xblock_qi_seed_preconditioner_diagnostics_from_context(
+        XBlockQISeedPreconditionerDiagnosticsContext(
+            **{
+                key: scope[key]
+                for key in XBlockQISeedPreconditionerDiagnosticsContext.__dataclass_fields__
+            }
+        )
     )
 
+    assert context_metadata == metadata
     assert metadata["xblock_initial_seed_used"] is True
     assert metadata["xblock_moment_schur_seed_used"] is False
     assert metadata["xblock_qi_coarse_seed_used"] is True
