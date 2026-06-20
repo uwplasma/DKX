@@ -57,7 +57,6 @@ from .linear_algebra import (
 )
 from .constraint_projection import (
     project_constraint_scheme1_nullspace_solution as _project_constraint_scheme1_nullspace_solution,
-    project_constraint_scheme1_nullspace_solution_with_residual as _project_constraint_scheme1_nullspace_solution_with_residual,
 )
 from .structured_velocity import factor_block_tridiagonal
 from .pas_smoother import adaptive_pas_smoother
@@ -598,6 +597,7 @@ from .problems.profile_response.active_dof import (
 from .rhs1_compressed_layout import build_rhs1_compressed_pitch_layout
 from .problems.profile_response.active_projection import (
     expand_reduced_with_map,
+    finalize_rhs1_linear_solution_cleanup,
     fp_pitch_mode_active_indices,
     project_pas_constraint_f,
     reduce_full_with_indices,
@@ -13433,36 +13433,12 @@ def solve_v3_full_system_linear_gmres(
                 if emit is not None:
                     emit(1, f"solve_v3_full_system_linear_gmres: dense fallback failed ({type(exc).__name__}: {exc})")
             _mark("rhs1_dense_fallback_done")
-    if int(op.rhs_mode) == 1:
-        project_env = os.environ.get("SFINCS_JAX_RHSMODE1_PROJECT_NULLSPACE", "").strip().lower()
-        if project_env in {"0", "false", "no", "off"}:
-            project_rhs1 = False
-        elif project_env in {"1", "true", "yes", "on"}:
-            project_rhs1 = True
-        else:
-            # Default parity-first behavior: enforce constraintScheme=1 nullspace projection
-            # for linear RHSMode=1 solves without Phi1.
-            project_rhs1 = bool(int(op.constraint_scheme) == 1 and (not bool(op.include_phi1)))
-        if project_rhs1:
-            x_projected, residual_projected = _project_constraint_scheme1_nullspace_solution_with_residual(
-                op=op,
-                x_vec=result.x,
-                rhs_vec=rhs,
-                matvec_op=op,
-                enabled_env_var="SFINCS_JAX_RHSMODE1_PROJECT_NULLSPACE",
-                residual_vec=residual_vec if residual_vec is not None and residual_vec.shape == rhs.shape else None,
-            )
-            if not bool(jnp.allclose(x_projected, result.x)):
-                residual_norm_projected = jnp.linalg.norm(residual_projected)
-                result = GMRESSolveResult(x=x_projected, residual_norm=residual_norm_projected)
-        if int(op.constraint_scheme) == 2 and int(op.extra_size) > 0:
-            zero_tol = rhs1_pas_source_zero_tolerance_from_env()
-            if zero_tol > 0.0:
-                extra = result.x[-int(op.extra_size) :]
-                max_abs = jnp.max(jnp.abs(extra))
-                extra = jnp.where(max_abs <= zero_tol, jnp.zeros_like(extra), extra)
-                x_new = jnp.concatenate([result.x[: -int(op.extra_size)], extra], axis=0)
-                result = GMRESSolveResult(x=x_new, residual_norm=result.residual_norm)
+    result = finalize_rhs1_linear_solution_cleanup(
+        op=op,
+        result=result,
+        rhs=rhs,
+        residual_vec=residual_vec,
+    )
     emit_profile_response_ksp_replay_diagnostics(
         context=rhs1_ksp_diagnostics_context,
         replay_state=ksp_replay,

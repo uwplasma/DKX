@@ -2,8 +2,25 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
+import os
+from typing import Any
+
 import jax.numpy as jnp
 import numpy as np
+
+from ...constraint_projection import project_constraint_scheme1_nullspace_solution_with_residual
+from ...solver import GMRESSolveResult
+from .policies import rhs1_pas_source_zero_tolerance_from_env
+
+
+ProjectWithResidualFn = Callable[
+    ...,
+    tuple[jnp.ndarray, jnp.ndarray],
+]
+
+_FALSE_TOKENS = {"0", "false", "no", "off"}
+_TRUE_TOKENS = {"1", "true", "yes", "on"}
 
 
 def reduce_full_with_indices(v_full: jnp.ndarray, active_idx: jnp.ndarray) -> jnp.ndarray:
@@ -108,8 +125,78 @@ def fp_pitch_mode_active_indices(
     return np.unique(np.asarray(selected, dtype=np.int32))
 
 
+def finalize_rhs1_linear_solution_cleanup(
+    *,
+    op: Any,
+    result: GMRESSolveResult,
+    rhs: jnp.ndarray,
+    residual_vec: jnp.ndarray | None,
+    project_solution_with_residual: ProjectWithResidualFn = (
+        project_constraint_scheme1_nullspace_solution_with_residual
+    ),
+    source_zero_tolerance: float | None = None,
+) -> GMRESSolveResult:
+    """Apply final RHSMode=1 projection/source cleanup to a linear solve result.
+
+    The cleanup preserves the historical driver behavior: constraintScheme=1
+    nullspace projection is enabled by default for linear no-Phi1 solves, and
+    tiny constraintScheme=2 PAS source rows are zeroed only when all source
+    entries fall below the configured tolerance.
+    """
+
+    if int(op.rhs_mode) != 1:
+        return result
+
+    result_use = result
+    if _rhs1_project_nullspace_enabled(op):
+        x_projected, residual_projected = project_solution_with_residual(
+            op=op,
+            x_vec=result_use.x,
+            rhs_vec=rhs,
+            matvec_op=op,
+            enabled_env_var="SFINCS_JAX_RHSMODE1_PROJECT_NULLSPACE",
+            residual_vec=(
+                residual_vec
+                if residual_vec is not None and residual_vec.shape == rhs.shape
+                else None
+            ),
+        )
+        if not bool(jnp.allclose(x_projected, result_use.x)):
+            result_use = GMRESSolveResult(
+                x=x_projected,
+                residual_norm=jnp.linalg.norm(residual_projected),
+            )
+
+    if int(op.constraint_scheme) == 2 and int(op.extra_size) > 0:
+        zero_tol = (
+            rhs1_pas_source_zero_tolerance_from_env()
+            if source_zero_tolerance is None
+            else float(source_zero_tolerance)
+        )
+        if zero_tol > 0.0:
+            extra = result_use.x[-int(op.extra_size) :]
+            max_abs = jnp.max(jnp.abs(extra))
+            extra = jnp.where(max_abs <= zero_tol, jnp.zeros_like(extra), extra)
+            x_new = jnp.concatenate([result_use.x[: -int(op.extra_size)], extra], axis=0)
+            result_use = GMRESSolveResult(x=x_new, residual_norm=result_use.residual_norm)
+
+    return result_use
+
+
+def _rhs1_project_nullspace_enabled(op: Any) -> bool:
+    project_env = os.environ.get("SFINCS_JAX_RHSMODE1_PROJECT_NULLSPACE", "").strip().lower()
+    if project_env in _FALSE_TOKENS:
+        return False
+    if project_env in _TRUE_TOKENS:
+        return True
+    # Default parity-first behavior: enforce constraintScheme=1 nullspace
+    # projection for linear RHSMode=1 solves without Phi1.
+    return bool(int(op.constraint_scheme) == 1 and not bool(op.include_phi1))
+
+
 __all__ = [
     "expand_reduced_with_map",
+    "finalize_rhs1_linear_solution_cleanup",
     "fp_pitch_mode_active_indices",
     "project_pas_constraint_f",
     "reduce_full_with_indices",
