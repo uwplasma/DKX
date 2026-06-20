@@ -91,6 +91,7 @@ from sfincs_jax.problems.profile_response.sparse_pc import (
     XBlockPostSolveCorrectionResult,
     XBlockPhysicalResidual,
     XBlockQICoarseSeedStageContext,
+    XBlockQIGalerkinStageContext,
     XBlockSparsePCCompletionContext,
     XBlockSparsePCFinalCoreState,
     XBlockSparsePCFinalDeviceState,
@@ -107,6 +108,7 @@ from sfincs_jax.problems.profile_response.sparse_pc import (
     apply_xblock_global_coupling_stage,
     apply_xblock_moment_schur_stage,
     apply_xblock_qi_coarse_seed_stage,
+    apply_xblock_qi_galerkin_stage,
     apply_xblock_two_level_stage,
     apply_sparse_pc_post_minres,
     apply_sparse_pc_post_minres_if_needed,
@@ -5783,6 +5785,123 @@ def test_xblock_qi_galerkin_policy_parses_build_parameters() -> None:
     assert setup.damping == pytest.approx(0.6)
     assert setup.candidate_dampings == (0.6, 0.3)
     assert not setup.probe_enabled
+
+
+def _fake_qi_galerkin_preconditioner(basis: RHS1QICoarseBasis):
+    metadata = SimpleNamespace(
+        rank=1,
+        basis_metadata=basis.metadata,
+        coarse_operator_shape=(1, 1),
+        coarse_operator_norm=2.0,
+    )
+    return SimpleNamespace(
+        metadata=metadata,
+        as_preconditioner=lambda: (lambda v: jnp.asarray(v, dtype=jnp.float64)),
+    )
+
+
+def test_xblock_qi_galerkin_stage_accepts_probe_and_installs_preconditioner() -> (
+    None
+):
+    seed_policy = resolve_xblock_qi_seed_policy_setup(
+        env={"SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_GALERKIN_PRECONDITIONER": "1"},
+    )
+    galerkin_policy = resolve_xblock_qi_galerkin_policy_setup(
+        enabled=True,
+        host_fallback_used=False,
+        precondition_side="right",
+        parse_modes=lambda _raw, **_kwargs: ("additive",),
+        parse_dampings=lambda _raw, **_kwargs: (1.0,),
+        env={"SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_GALERKIN_PRECONDITIONER_PROBE": "1"},
+    )
+    basis = _one_vector_qi_basis()
+    messages: list[str] = []
+
+    def preconditioner_builder(_operator, *, basis: RHS1QICoarseBasis, rcond):
+        assert basis is expected_basis
+        assert rcond == pytest.approx(seed_policy.rcond)
+        return _fake_qi_galerkin_preconditioner(basis)
+
+    expected_basis = basis
+    result = apply_xblock_qi_galerkin_stage(
+        context=XBlockQIGalerkinStageContext(
+            op=SimpleNamespace(),
+            base_preconditioner=lambda v: jnp.zeros_like(v),
+            matvec=lambda v: v,
+            true_matvec_no_count=lambda v: v,
+            xblock_rhs=jnp.asarray([1.0, 0.0]),
+            xblock_rhs_norm=1.0,
+            active_dof=True,
+            linear_size=2,
+            basis_for_galerkin=basis,
+            seed_policy=seed_policy,
+            galerkin_policy=galerkin_policy,
+            elapsed_s=lambda: 5.0,
+            emit=lambda _level, msg: messages.append(msg),
+            basis_builder=lambda **_kwargs: basis,
+            preconditioner_builder=preconditioner_builder,
+        )
+    )
+
+    assert result.built
+    assert result.used
+    assert result.reason == "probe_reduced"
+    assert result.mode == "additive"
+    assert result.rank == 1
+    assert result.candidate_count == 3
+    assert result.coarse_shape == (1, 1)
+    assert result.coarse_norm == pytest.approx(2.0)
+    assert result.residual_before == pytest.approx(1.0)
+    assert result.residual_after == pytest.approx(0.0)
+    assert result.probe_reduced
+    assert result.selected_index == 0
+    assert result.basis_reused_from_seed
+    assert result.preconditioner(jnp.asarray([2.0, 0.0])).tolist() == [2.0, 0.0]
+    assert result.stats["applies"] == 1
+    assert any("QI Galerkin preconditioner built" in message for message in messages)
+
+
+def test_xblock_qi_galerkin_stage_records_basis_build_failure() -> None:
+    seed_policy = resolve_xblock_qi_seed_policy_setup(
+        env={"SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_GALERKIN_PRECONDITIONER": "1"},
+    )
+    galerkin_policy = resolve_xblock_qi_galerkin_policy_setup(
+        enabled=True,
+        host_fallback_used=False,
+        precondition_side="right",
+        parse_modes=lambda _raw, **_kwargs: ("additive",),
+        parse_dampings=lambda _raw, **_kwargs: (1.0,),
+        env={},
+    )
+
+    def basis_builder(**_kwargs):
+        raise RuntimeError("missing geometry")
+
+    result = apply_xblock_qi_galerkin_stage(
+        context=XBlockQIGalerkinStageContext(
+            op=SimpleNamespace(),
+            base_preconditioner=_identity,
+            matvec=lambda v: v,
+            true_matvec_no_count=lambda v: v,
+            xblock_rhs=jnp.asarray([1.0, 0.0]),
+            xblock_rhs_norm=1.0,
+            active_dof=False,
+            linear_size=2,
+            basis_for_galerkin=None,
+            seed_policy=seed_policy,
+            galerkin_policy=galerkin_policy,
+            elapsed_s=lambda: 0.0,
+            emit=None,
+            basis_builder=basis_builder,
+            preconditioner_builder=lambda *_args, **_kwargs: None,
+        )
+    )
+
+    assert not result.built
+    assert not result.used
+    assert result.preconditioner is _identity
+    assert result.basis_for_galerkin is None
+    assert result.reason == "RuntimeError: missing geometry"
 
 
 def test_xblock_qi_two_level_policy_handles_disabled_and_side_none_cases() -> None:

@@ -313,8 +313,8 @@ Recent checkpoints:
 
 Current source-size snapshot after x-block stage orchestration extraction:
 
-- `sfincs_jax/v3_driver.py`: `16927` lines.
-- `solve_v3_full_system_linear_gmres`: `12213` lines.
+- `sfincs_jax/v3_driver.py`: `16822` lines.
+- `solve_v3_full_system_linear_gmres`: `12108` lines.
 - `sfincs_jax/v3_results.py`: `119` lines.
 - `sfincs_jax/rhs1_ksp_diagnostics.py`: `306` lines.
 - `sfincs_jax/rhs1_pas_policy.py`: `864` lines.
@@ -1171,7 +1171,7 @@ Known CI issue fixed by this rewrite:
 
 ### 1. `v3_driver.py` Architecture Refactor
 
-Completion estimate: 75%.
+Completion estimate: 76%.
 
 Goal:
 
@@ -1283,6 +1283,10 @@ Completed recent boundaries:
   now use a tested sparse-PC-domain stage helper. The driver retains only the
   shared-basis object and scalar metadata needed by later QI Galerkin/two-level
   setup.
+- RHSMode=1 x-block QI Galerkin preconditioner setup now uses a tested
+  sparse-PC-domain stage helper for shared-basis reuse/build, Galerkin
+  preconditioner construction, true-residual probe selection, preconditioner
+  installation, stats, and failure metadata.
 - RHSMode=1 rescue/refinement candidate acceptance and KSP replay-state updates
   consolidated into profile-response handoff helpers.
 - RHSMode=1 true-residual recomputation before fallback decisions consolidated

@@ -100,10 +100,8 @@ from .rhs1_qi_coarse import (
     rhs1_xblock_qi_block_geometry_metadata as _rhs1_xblock_qi_block_geometry_metadata,
 )
 from .rhs1_qi_galerkin_policy import (
-    RHS1QIGalerkinProbeCandidate,
     parse_rhs1_qi_galerkin_dampings,
     parse_rhs1_qi_galerkin_modes,
-    select_rhs1_qi_galerkin_probe_candidate,
 )
 from .rhs1_qi_deflation import (
     build_rhs1_qi_residual_deflated_preconditioner,
@@ -289,6 +287,7 @@ from .problems.profile_response.sparse_pc import (
     XBlockMomentSchurStageContext,
     XBlockPostSolveCorrectionContext,
     XBlockQICoarseSeedStageContext,
+    XBlockQIGalerkinStageContext,
     XBlockSparsePCCompletionContext,
     XBlockSparsePCFinalCoreState,
     XBlockSparsePCFinalDeviceState,
@@ -303,6 +302,7 @@ from .problems.profile_response.sparse_pc import (
     apply_xblock_global_coupling_stage,
     apply_xblock_moment_schur_stage,
     apply_xblock_qi_coarse_seed_stage,
+    apply_xblock_qi_galerkin_stage,
     apply_xblock_two_level_stage,
     build_fortran_reduced_xblock_factor_stage,
     build_fortran_reduced_xblock_krylov_setup,
@@ -3368,154 +3368,49 @@ def solve_v3_full_system_linear_gmres(
                 parse_dampings=parse_rhs1_qi_galerkin_dampings,
                 env=os.environ,
             )
-            if qi_galerkin_policy.reason is not None and not qi_galerkin_policy.should_build:
-                qi_galerkin_preconditioner_reason = qi_galerkin_policy.reason
-            for level, message in qi_galerkin_policy.messages:
-                if emit is not None:
-                    emit(level, message)
-            if qi_galerkin_policy.should_build:
-                qi_galerkin_start_s = sparse_timer.elapsed_s()
-                qi_galerkin_candidate_modes = qi_galerkin_policy.candidate_modes
-                qi_galerkin_preconditioner_mode = qi_galerkin_policy.preconditioner_mode
-                qi_galerkin_preconditioner_rcond = float(qi_galerkin_policy.rcond)
-                qi_galerkin_preconditioner_damping = float(qi_galerkin_policy.damping)
-                qi_galerkin_candidate_dampings = qi_galerkin_policy.candidate_dampings
-                qi_galerkin_probe = bool(qi_galerkin_policy.probe_enabled)
-                try:
-                    qi_galerkin_preconditioner_basis_reused_from_seed = qi_seed_basis_for_galerkin is not None
-                    if qi_seed_basis_for_galerkin is None:
-                        qi_seed_basis_for_galerkin = _rhs1_xblock_qi_coarse_basis(
-                            op=op,
-                            active_dof=bool(xblock_use_active_dof),
-                            linear_size=int(xblock_linear_size),
-                            max_rank=int(qi_seed_max_rank),
-                            rank_rtol=float(qi_seed_rank_rtol),
-                            include_angular=bool(qi_seed_include_angular),
-                            include_blocks=bool(qi_seed_include_blocks),
-                            basis_kind=qi_seed_basis_kind,
-                            max_candidates=int(qi_seed_max_candidates),
-                            max_angular_mode=int(qi_seed_max_angular_mode),
-                            include_radial=bool(qi_seed_include_radial),
-                            include_radial_angular=bool(qi_seed_include_radial_angular),
-                            include_constraint_moments=bool(qi_seed_include_constraint_moments),
-                            include_schur=bool(qi_seed_include_schur),
-                        )
-                    qi_galerkin = build_rhs1_qi_galerkin_preconditioner(
-                        _mv_xblock_krylov,
-                        basis=qi_seed_basis_for_galerkin,
-                        rcond=(
-                            float(qi_galerkin_preconditioner_rcond)
-                            if float(qi_galerkin_preconditioner_rcond) > 0.0
-                            else None
-                        ),
-                    )
-                    qi_galerkin_preconditioner_rank = int(qi_galerkin.metadata.rank)
-                    qi_galerkin_preconditioner_candidate_count = int(
-                        qi_galerkin.metadata.basis_metadata.candidate_count
-                    )
-                    qi_galerkin_preconditioner_coarse_shape = tuple(
-                        int(value) for value in qi_galerkin.metadata.coarse_operator_shape
-                    )
-                    qi_galerkin_preconditioner_coarse_norm = float(qi_galerkin.metadata.coarse_operator_norm)
-                    base_precond_xblock_krylov = precond_xblock_krylov
-                    qi_galerkin_apply = qi_galerkin.as_preconditioner()
-                    qi_galerkin_mode_use = str(qi_galerkin_candidate_modes[0])
-                    qi_galerkin_damping_use = float(qi_galerkin_candidate_dampings[0])
-
-                    def _precond_xblock_qi_galerkin(v: jnp.ndarray) -> jnp.ndarray:
-                        qi_galerkin_stats["applies"] += 1
-                        v_j = jnp.asarray(v, dtype=jnp.float64)
-                        base = jnp.asarray(base_precond_xblock_krylov(v_j), dtype=jnp.float64)
-                        qi_galerkin_stats["base_applies"] += 1
-                        if qi_galerkin_mode_use == "multiplicative":
-                            coarse_input = v_j - jnp.asarray(_mv_xblock_krylov(base), dtype=jnp.float64)
-                        else:
-                            coarse_input = v_j
-                        coarse = jnp.asarray(qi_galerkin_apply(coarse_input), dtype=jnp.float64)
-                        qi_galerkin_stats["coarse_applies"] += 1
-                        return base + qi_galerkin_damping_use * coarse
-
-                    qi_galerkin_preconditioner_built = True
-                    qi_galerkin_preconditioner_reason = "built"
-                    if bool(qi_galerkin_probe):
-                        probe_candidates: list[RHS1QIGalerkinProbeCandidate] = []
-                        v_probe = jnp.asarray(xblock_rhs, dtype=jnp.float64)
-                        base_probe = jnp.asarray(base_precond_xblock_krylov(v_probe), dtype=jnp.float64)
-                        for candidate_mode in qi_galerkin_candidate_modes:
-                            if str(candidate_mode) == "multiplicative":
-                                coarse_input = v_probe - jnp.asarray(_mv_xblock_krylov(base_probe), dtype=jnp.float64)
-                            else:
-                                coarse_input = v_probe
-                            coarse_probe = jnp.asarray(qi_galerkin_apply(coarse_input), dtype=jnp.float64)
-                            for candidate_damping in qi_galerkin_candidate_dampings:
-                                probe_solution = base_probe + float(candidate_damping) * coarse_probe
-                                probe_residual = xblock_rhs - jnp.asarray(
-                                    _mv_true_no_count(probe_solution),
-                                    dtype=jnp.float64,
-                                )
-                                residual_after = rhs1_l2_norm_float(probe_residual)
-                                ratio_after = rhs1_safe_ratio(residual_after, xblock_rhs_norm)
-                                probe_candidates.append(
-                                    RHS1QIGalerkinProbeCandidate(
-                                        mode=str(candidate_mode),
-                                        damping=float(candidate_damping),
-                                        residual_norm=float(residual_after),
-                                        improvement_ratio=ratio_after,
-                                        reduced=bool(residual_after < float(xblock_rhs_norm)),
-                                    )
-                                )
-                        probe_selection = select_rhs1_qi_galerkin_probe_candidate(
-                            float(xblock_rhs_norm),
-                            probe_candidates,
-                        )
-                        qi_galerkin_preconditioner_probe_candidates = [
-                            candidate.to_dict() for candidate in probe_selection.candidates
-                        ]
-                        qi_galerkin_preconditioner_selected_index = probe_selection.selected_index
-                        qi_galerkin_preconditioner_residual_before = float(probe_selection.residual_before_norm)
-                        qi_galerkin_preconditioner_residual_after = probe_selection.residual_after_norm
-                        qi_galerkin_preconditioner_improvement_ratio = probe_selection.improvement_ratio
-                        qi_galerkin_preconditioner_probe_reduced = bool(probe_selection.accepted)
-                        if probe_selection.accepted:
-                            qi_galerkin_mode_use = str(probe_selection.selected_mode)
-                            qi_galerkin_damping_use = float(probe_selection.selected_damping)
-                            qi_galerkin_preconditioner_mode = qi_galerkin_mode_use
-                            qi_galerkin_preconditioner_damping = qi_galerkin_damping_use
-                            precond_xblock_krylov = _precond_xblock_qi_galerkin
-                            qi_galerkin_preconditioner_used = True
-                            qi_galerkin_preconditioner_reason = "probe_reduced"
-                        else:
-                            qi_galerkin_preconditioner_used = False
-                            qi_galerkin_preconditioner_reason = str(probe_selection.reason)
-                    else:
-                        precond_xblock_krylov = _precond_xblock_qi_galerkin
-                        qi_galerkin_preconditioner_used = True
-                        qi_galerkin_preconditioner_reason = "probe_disabled"
-                    if emit is not None:
-                        ratio = (
-                            f" probe_ratio={float(qi_galerkin_preconditioner_improvement_ratio):.6e}"
-                            if qi_galerkin_preconditioner_improvement_ratio is not None
-                            else ""
-                        )
-                        emit(
-                            0,
-                            "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
-                            "QI Galerkin preconditioner built "
-                            f"mode={qi_galerkin_preconditioner_mode} "
-                            f"rank={int(qi_galerkin_preconditioner_rank)} "
-                            f"used={bool(qi_galerkin_preconditioner_used)} "
-                            f"reason={qi_galerkin_preconditioner_reason}{ratio}",
-                        )
-                except Exception as exc:  # noqa: BLE001
-                    qi_galerkin_preconditioner_reason = f"{type(exc).__name__}: {exc}"
-                    if emit is not None:
-                        emit(
-                            1,
-                            "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
-                            f"QI Galerkin preconditioner disabled after build failure ({type(exc).__name__}: {exc})",
-                        )
-                qi_galerkin_preconditioner_setup_s = float(sparse_timer.elapsed_s() - qi_galerkin_start_s)
-                pc_factor_s += float(qi_galerkin_preconditioner_setup_s)
+            qi_galerkin_stage = apply_xblock_qi_galerkin_stage(
+                context=XBlockQIGalerkinStageContext(
+                    op=op,
+                    base_preconditioner=precond_xblock_krylov,
+                    matvec=_mv_xblock_krylov,
+                    true_matvec_no_count=_mv_true_no_count,
+                    xblock_rhs=xblock_rhs,
+                    xblock_rhs_norm=float(xblock_rhs_norm),
+                    active_dof=bool(xblock_use_active_dof),
+                    linear_size=int(xblock_linear_size),
+                    basis_for_galerkin=qi_seed_basis_for_galerkin,
+                    seed_policy=qi_seed_policy,
+                    galerkin_policy=qi_galerkin_policy,
+                    elapsed_s=sparse_timer.elapsed_s,
+                    emit=emit,
+                    basis_builder=_rhs1_xblock_qi_coarse_basis,
+                    preconditioner_builder=build_rhs1_qi_galerkin_preconditioner,
+                )
+            )
+            precond_xblock_krylov = qi_galerkin_stage.preconditioner
+            qi_seed_basis_for_galerkin = qi_galerkin_stage.basis_for_galerkin
+            qi_galerkin_preconditioner_built = bool(qi_galerkin_stage.built)
+            qi_galerkin_preconditioner_used = bool(qi_galerkin_stage.used)
+            qi_galerkin_preconditioner_reason = qi_galerkin_stage.reason
+            qi_galerkin_preconditioner_mode = qi_galerkin_stage.mode
+            qi_galerkin_preconditioner_rank = int(qi_galerkin_stage.rank)
+            qi_galerkin_preconditioner_candidate_count = int(qi_galerkin_stage.candidate_count)
+            qi_galerkin_preconditioner_coarse_shape = qi_galerkin_stage.coarse_shape
+            qi_galerkin_preconditioner_coarse_norm = float(qi_galerkin_stage.coarse_norm)
+            qi_galerkin_preconditioner_setup_s = float(qi_galerkin_stage.setup_s)
+            qi_galerkin_preconditioner_rcond = float(qi_galerkin_stage.rcond)
+            qi_galerkin_preconditioner_damping = float(qi_galerkin_stage.damping)
+            qi_galerkin_preconditioner_basis_reused_from_seed = bool(
+                qi_galerkin_stage.basis_reused_from_seed
+            )
+            qi_galerkin_preconditioner_residual_before = qi_galerkin_stage.residual_before
+            qi_galerkin_preconditioner_residual_after = qi_galerkin_stage.residual_after
+            qi_galerkin_preconditioner_improvement_ratio = qi_galerkin_stage.improvement_ratio
+            qi_galerkin_preconditioner_probe_reduced = bool(qi_galerkin_stage.probe_reduced)
+            qi_galerkin_preconditioner_probe_candidates = qi_galerkin_stage.probe_candidates
+            qi_galerkin_preconditioner_selected_index = qi_galerkin_stage.selected_index
+            qi_galerkin_stats = qi_galerkin_stage.stats
+            pc_factor_s += float(qi_galerkin_preconditioner_setup_s)
             qi_two_level_policy = resolve_xblock_qi_two_level_policy_setup(
                 enabled=bool(qi_two_level_preconditioner_enabled),
                 host_fallback_used=bool(xblock_device_host_fallback_decision.used),

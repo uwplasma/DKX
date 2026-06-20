@@ -37,8 +37,10 @@ from .diagnostics import (
     xblock_side_probe_diagnostics,
 )
 from .residual import (
+    l2_norm_float as profile_l2_norm_float,
     residual_converged as profile_residual_converged,
     residual_target as profile_residual_target,
+    safe_ratio as profile_safe_ratio,
 )
 from .setup import (
     SPARSE_HOST_FORTRAN_REDUCED_PC_GMRES_SOLVE_METHODS,
@@ -60,6 +62,10 @@ from ...sparse_triangular import (
 )
 from ...solver import GMRESSolveResult
 from ...rhs1_qi_coarse import RHS1QICoarseBasis
+from ...rhs1_qi_galerkin_policy import (
+    RHS1QIGalerkinProbeCandidate,
+    select_rhs1_qi_galerkin_probe_candidate,
+)
 
 
 ArrayFn = Callable[[jnp.ndarray], jnp.ndarray]
@@ -3995,6 +4001,54 @@ class XBlockQICoarseSeedStageResult:
     reason: str | None
     labels: tuple[str, ...]
     setup_s: float
+
+
+@dataclass(frozen=True)
+class XBlockQIGalerkinStageContext:
+    """Dependencies for optional QI Galerkin preconditioner setup."""
+
+    op: object
+    base_preconditioner: ArrayFn
+    matvec: ArrayFn
+    true_matvec_no_count: ArrayFn
+    xblock_rhs: jnp.ndarray
+    xblock_rhs_norm: float
+    active_dof: bool
+    linear_size: int
+    basis_for_galerkin: RHS1QICoarseBasis | None
+    seed_policy: XBlockQISeedPolicySetup
+    galerkin_policy: XBlockQIGalerkinPolicySetup
+    elapsed_s: Callable[[], float]
+    emit: EmitFn | None
+    basis_builder: Callable[..., RHS1QICoarseBasis]
+    preconditioner_builder: Callable[..., object]
+
+
+@dataclass(frozen=True)
+class XBlockQIGalerkinStageResult:
+    """Result from optional QI Galerkin preconditioner setup."""
+
+    preconditioner: ArrayFn
+    basis_for_galerkin: RHS1QICoarseBasis | None
+    built: bool
+    used: bool
+    reason: str | None
+    mode: str | None
+    rank: int
+    candidate_count: int
+    coarse_shape: tuple[int, int]
+    coarse_norm: float
+    setup_s: float
+    rcond: float
+    damping: float
+    basis_reused_from_seed: bool
+    residual_before: float | None
+    residual_after: float | None
+    improvement_ratio: float | None
+    probe_reduced: bool
+    probe_candidates: list[dict[str, object]]
+    selected_index: int | None
+    stats: dict[str, int]
 
 
 @dataclass(frozen=True)
@@ -9559,6 +9613,229 @@ def resolve_xblock_qi_galerkin_policy_setup(
     )
 
 
+def apply_xblock_qi_galerkin_stage(
+    *,
+    context: XBlockQIGalerkinStageContext,
+) -> XBlockQIGalerkinStageResult:
+    """Build, probe, and optionally install a QI Galerkin preconditioner."""
+
+    reason = (
+        context.galerkin_policy.reason
+        if context.galerkin_policy.reason is not None and not context.galerkin_policy.should_build
+        else None
+    )
+    for level, message in context.galerkin_policy.messages:
+        if context.emit is not None:
+            context.emit(int(level), str(message))
+    if not bool(context.galerkin_policy.should_build):
+        return XBlockQIGalerkinStageResult(
+            preconditioner=context.base_preconditioner,
+            basis_for_galerkin=context.basis_for_galerkin,
+            built=False,
+            used=False,
+            reason=reason,
+            mode=None,
+            rank=0,
+            candidate_count=0,
+            coarse_shape=(0, 0),
+            coarse_norm=0.0,
+            setup_s=0.0,
+            rcond=0.0,
+            damping=1.0,
+            basis_reused_from_seed=False,
+            residual_before=None,
+            residual_after=None,
+            improvement_ratio=None,
+            probe_reduced=False,
+            probe_candidates=[],
+            selected_index=None,
+            stats={"applies": 0, "coarse_applies": 0, "base_applies": 0},
+        )
+
+    start_s = float(context.elapsed_s())
+    stats = {"applies": 0, "coarse_applies": 0, "base_applies": 0}
+    basis_for_galerkin = context.basis_for_galerkin
+    basis_reused_from_seed = basis_for_galerkin is not None
+    mode = context.galerkin_policy.preconditioner_mode
+    rcond = float(context.galerkin_policy.rcond)
+    damping = float(context.galerkin_policy.damping)
+    rank = 0
+    candidate_count = 0
+    coarse_shape = (0, 0)
+    coarse_norm = 0.0
+    residual_before: float | None = None
+    residual_after: float | None = None
+    improvement_ratio: float | None = None
+    probe_reduced = False
+    probe_candidates: list[dict[str, object]] = []
+    selected_index: int | None = None
+    built = False
+    used = False
+    try:
+        if basis_for_galerkin is None:
+            basis_for_galerkin = context.basis_builder(
+                op=context.op,
+                active_dof=bool(context.active_dof),
+                linear_size=int(context.linear_size),
+                max_rank=int(context.seed_policy.max_rank),
+                rank_rtol=float(context.seed_policy.rank_rtol),
+                include_angular=bool(context.seed_policy.include_angular),
+                include_blocks=bool(context.seed_policy.include_blocks),
+                basis_kind=context.seed_policy.basis_kind,
+                max_candidates=int(context.seed_policy.max_candidates),
+                max_angular_mode=int(context.seed_policy.max_angular_mode),
+                include_radial=bool(context.seed_policy.include_radial),
+                include_radial_angular=bool(context.seed_policy.include_radial_angular),
+                include_constraint_moments=bool(context.seed_policy.include_constraint_moments),
+                include_schur=bool(context.seed_policy.include_schur),
+            )
+        qi_galerkin = context.preconditioner_builder(
+            context.matvec,
+            basis=basis_for_galerkin,
+            rcond=float(rcond) if float(rcond) > 0.0 else None,
+        )
+        rank = int(qi_galerkin.metadata.rank)
+        candidate_count = int(qi_galerkin.metadata.basis_metadata.candidate_count)
+        coarse_shape = tuple(int(value) for value in qi_galerkin.metadata.coarse_operator_shape)
+        coarse_norm = float(qi_galerkin.metadata.coarse_operator_norm)
+        qi_galerkin_apply = qi_galerkin.as_preconditioner()
+        mode_use = str(context.galerkin_policy.candidate_modes[0])
+        damping_use = float(context.galerkin_policy.candidate_dampings[0])
+
+        def preconditioner(v: jnp.ndarray) -> jnp.ndarray:
+            stats["applies"] += 1
+            v_j = jnp.asarray(v, dtype=jnp.float64)
+            base = jnp.asarray(context.base_preconditioner(v_j), dtype=jnp.float64)
+            stats["base_applies"] += 1
+            if mode_use == "multiplicative":
+                coarse_input = v_j - jnp.asarray(context.matvec(base), dtype=jnp.float64)
+            else:
+                coarse_input = v_j
+            coarse = jnp.asarray(qi_galerkin_apply(coarse_input), dtype=jnp.float64)
+            stats["coarse_applies"] += 1
+            return base + damping_use * coarse
+
+        built = True
+        reason = "built"
+        if bool(context.galerkin_policy.probe_enabled):
+            candidates: list[RHS1QIGalerkinProbeCandidate] = []
+            v_probe = jnp.asarray(context.xblock_rhs, dtype=jnp.float64)
+            base_probe = jnp.asarray(context.base_preconditioner(v_probe), dtype=jnp.float64)
+            for candidate_mode in context.galerkin_policy.candidate_modes:
+                if str(candidate_mode) == "multiplicative":
+                    coarse_input = v_probe - jnp.asarray(context.matvec(base_probe), dtype=jnp.float64)
+                else:
+                    coarse_input = v_probe
+                coarse_probe = jnp.asarray(qi_galerkin_apply(coarse_input), dtype=jnp.float64)
+                for candidate_damping in context.galerkin_policy.candidate_dampings:
+                    probe_solution = base_probe + float(candidate_damping) * coarse_probe
+                    probe_residual = context.xblock_rhs - jnp.asarray(
+                        context.true_matvec_no_count(probe_solution),
+                        dtype=jnp.float64,
+                    )
+                    residual_norm = profile_l2_norm_float(probe_residual)
+                    ratio_after = profile_safe_ratio(residual_norm, float(context.xblock_rhs_norm))
+                    candidates.append(
+                        RHS1QIGalerkinProbeCandidate(
+                            mode=str(candidate_mode),
+                            damping=float(candidate_damping),
+                            residual_norm=float(residual_norm),
+                            improvement_ratio=ratio_after,
+                            reduced=bool(residual_norm < float(context.xblock_rhs_norm)),
+                        )
+                    )
+            probe_selection = select_rhs1_qi_galerkin_probe_candidate(
+                float(context.xblock_rhs_norm),
+                candidates,
+            )
+            probe_candidates = [candidate.to_dict() for candidate in probe_selection.candidates]
+            selected_index = probe_selection.selected_index
+            residual_before = float(probe_selection.residual_before_norm)
+            residual_after = probe_selection.residual_after_norm
+            improvement_ratio = probe_selection.improvement_ratio
+            probe_reduced = bool(probe_selection.accepted)
+            if probe_selection.accepted:
+                mode_use = str(probe_selection.selected_mode)
+                damping_use = float(probe_selection.selected_damping)
+                mode = mode_use
+                damping = damping_use
+                used = True
+                reason = "probe_reduced"
+            else:
+                used = False
+                reason = str(probe_selection.reason)
+        else:
+            used = True
+            reason = "probe_disabled"
+        if context.emit is not None:
+            ratio = (
+                f" probe_ratio={float(improvement_ratio):.6e}"
+                if improvement_ratio is not None
+                else ""
+            )
+            context.emit(
+                0,
+                "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
+                "QI Galerkin preconditioner built "
+                f"mode={mode} rank={int(rank)} used={bool(used)} "
+                f"reason={reason}{ratio}",
+            )
+        return XBlockQIGalerkinStageResult(
+            preconditioner=preconditioner if bool(used) else context.base_preconditioner,
+            basis_for_galerkin=basis_for_galerkin,
+            built=bool(built),
+            used=bool(used),
+            reason=reason,
+            mode=mode,
+            rank=int(rank),
+            candidate_count=int(candidate_count),
+            coarse_shape=coarse_shape,
+            coarse_norm=float(coarse_norm),
+            setup_s=float(context.elapsed_s()) - start_s,
+            rcond=float(rcond),
+            damping=float(damping),
+            basis_reused_from_seed=bool(basis_reused_from_seed),
+            residual_before=residual_before,
+            residual_after=residual_after,
+            improvement_ratio=improvement_ratio,
+            probe_reduced=bool(probe_reduced),
+            probe_candidates=probe_candidates,
+            selected_index=selected_index,
+            stats=stats,
+        )
+    except Exception as exc:  # noqa: BLE001
+        reason = f"{type(exc).__name__}: {exc}"
+        if context.emit is not None:
+            context.emit(
+                1,
+                "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
+                f"QI Galerkin preconditioner disabled after build failure ({type(exc).__name__}: {exc})",
+            )
+        return XBlockQIGalerkinStageResult(
+            preconditioner=context.base_preconditioner,
+            basis_for_galerkin=basis_for_galerkin,
+            built=False,
+            used=False,
+            reason=reason,
+            mode=mode,
+            rank=int(rank),
+            candidate_count=int(candidate_count),
+            coarse_shape=coarse_shape,
+            coarse_norm=float(coarse_norm),
+            setup_s=float(context.elapsed_s()) - start_s,
+            rcond=float(rcond),
+            damping=float(damping),
+            basis_reused_from_seed=bool(basis_reused_from_seed),
+            residual_before=residual_before,
+            residual_after=residual_after,
+            improvement_ratio=improvement_ratio,
+            probe_reduced=False,
+            probe_candidates=probe_candidates,
+            selected_index=selected_index,
+            stats=stats,
+        )
+
+
 def resolve_xblock_qi_two_level_policy_setup(
     *,
     enabled: bool,
@@ -12259,6 +12536,8 @@ __all__ = [
     "XBlockGlobalCouplingStageResult",
     "XBlockQICoarseSeedStageContext",
     "XBlockQICoarseSeedStageResult",
+    "XBlockQIGalerkinStageContext",
+    "XBlockQIGalerkinStageResult",
     "XBlockPhysicalResidual",
     "SparsePCGMRESFinalPayload",
     "SparseMinimumNormPolicy",
@@ -12294,6 +12573,7 @@ __all__ = [
     "apply_xblock_global_coupling_stage",
     "apply_xblock_moment_schur_stage",
     "apply_xblock_qi_coarse_seed_stage",
+    "apply_xblock_qi_galerkin_stage",
     "apply_xblock_two_level_stage",
     "apply_sparse_pc_post_minres",
     "apply_sparse_pc_post_minres_if_needed",
