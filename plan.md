@@ -280,6 +280,11 @@ Recent checkpoints:
   `profile_response.preconditioner_build` helper. The helper owns BiCGStab
   preconditioner routing, RHS1 preconditioner build admission, PAS finite-probe
   fallback to collision preconditioning, and selected-preconditioner handoff.
+- Full-system RHSMode=1 strong-preconditioner retry execution now uses a
+  tested `profile_response.preconditioner_build` stage helper. The helper owns
+  strong-route skip messages, full strong-kind selection, strong preconditioner
+  build handoff, retry-control parsing, measured retry execution, and selected
+  strong-kind metadata.
 - RHSMode=1 PAS preconditioner probe/default routing now uses tested
   PAS-policy helpers for env parsing, tokamak-like Schur defaulting, heavy-path
   admission, large-system collision skip, and residual-threshold decisions
@@ -423,10 +428,10 @@ Recent checkpoints:
 - `cb295ce` Extract sparse pattern setup.
 - `4b6a5b4` Extract sparse factor policy.
 
-Current source-size snapshot after full-system base-preconditioner extraction:
+Current source-size snapshot after full-system strong-retry stage extraction:
 
-- `sfincs_jax/v3_driver.py`: `15122` lines.
-- `solve_v3_full_system_linear_gmres`: `10373` lines.
+- `sfincs_jax/v3_driver.py`: `15084` lines.
+- `solve_v3_full_system_linear_gmres`: `10334` lines.
 - `sfincs_jax/v3_results.py`: `119` lines.
 - `sfincs_jax/rhs1_ksp_diagnostics.py`: `306` lines.
 - `sfincs_jax/rhs1_pas_policy.py`: `889` lines.
@@ -437,7 +442,7 @@ Current source-size snapshot after full-system base-preconditioner extraction:
 - `sfincs_jax/problems/profile_response/policies.py`: `3463` lines.
 - `sfincs_jax/problems/profile_response/dense.py`: `1092` lines.
 - `sfincs_jax/problems/profile_response/linear_solve.py`: `487` lines.
-- `sfincs_jax/problems/profile_response/preconditioner_build.py`: `497` lines.
+- `sfincs_jax/problems/profile_response/preconditioner_build.py`: `662` lines.
 - `sfincs_jax/problems/profile_response/active_projection.py`: `203` lines.
 - `sfincs_jax/problems/profile_response/sparse_pc.py`: `15687` lines.
 - `sfincs_jax/problems/profile_response/solver_diagnostics.py`: `421` lines.
@@ -445,6 +450,19 @@ Current source-size snapshot after full-system base-preconditioner extraction:
 
 Recent local validation:
 
+- Full-system strong-preconditioner retry stage extraction:
+  `tests/test_profile_response_preconditioner_build.py
+  tests/test_rhs1_strong_auto_kind.py tests/test_rhs1_strong_control.py`
+  passed (`38 passed in 0.42 s`).
+- Broad profile-response/RHSMode=1 shard after full-system strong-retry
+  extraction:
+  `tests/test_profile_response_*.py tests/test_rhs1_*.py
+  tests/test_newton_krylov_diagnostics.py tests/test_pas_smoother.py`
+  passed (`1314 passed in 85.92 s`).
+- Hygiene after full-system strong-preconditioner retry stage extraction:
+  `py_compile`, `ruff check`, `compileall`, `git diff --check`, and
+  `python scripts/check_repo_size.py` passed. Repo-size audit reported no
+  reviewed files above 2 MiB.
 - Full-system base-preconditioner setup extraction:
   `tests/test_profile_response_preconditioner_build.py` passed
   (`8 passed in 0.36 s`).
@@ -1782,6 +1800,11 @@ Completed recent boundaries:
   profile-response preconditioner-build helper. The helper owns BiCGStab
   preconditioner routing, RHS1 preconditioner build admission, PAS finite
   probing, collision fallback, and selected-preconditioner result handoff.
+- Full-system RHSMode=1 strong-preconditioner retry now uses a tested
+  profile-response preconditioner-build stage helper. The helper owns
+  skip-message emission, full strong-kind selection, strong-preconditioner
+  build handoff, retry-control parsing, measured retry execution, and selected
+  strong-kind result handoff.
 - Sparse-JAX Jacobi retry branches now use the shared measured linear-candidate
   handoff helper, preserving reduced/full residual-vector routing.
 - Sparse-JAX retry preconditioner build/progress emission now uses a tested
@@ -2008,7 +2031,7 @@ Next steps:
 
 ### 4. Validation, Coverage, And Documentation
 
-Completion estimate: 71%.
+Completion estimate: 72%.
 
 Goal:
 

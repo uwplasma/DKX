@@ -232,9 +232,11 @@ from .problems.profile_response.linear_solve import (
 from .problems.profile_response.preconditioner_build import (
     RHS1FullBasePreconditionerSetupContext,
     RHS1FullPreconditionerBuildContext,
+    RHS1FullStrongRetryStageContext,
     RHS1ReducedPreconditionerBuildContext,
     build_rhs1_full_preconditioner,
     build_rhs1_reduced_preconditioner_with_fallback,
+    run_rhs1_full_strong_retry_stage,
     setup_rhs1_full_base_preconditioner,
 )
 from .problems.profile_response.qi_device_seed import (
@@ -401,7 +403,6 @@ from .problems.profile_response.strong_preconditioning import (
     rhs1_pas_weak_minres_controls_from_env,
     rhs1_pas_weak_minres_steps,
     rhs1_resolved_strong_preconditioner_control,
-    resolve_rhs1_full_strong_preconditioner_selection,
     resolve_rhs1_reduced_strong_preconditioner_selection,
     rhs1_strong_preconditioner_env_from_env,
     rhs1_strong_retry_controls_from_env,
@@ -12332,54 +12333,14 @@ def solve_v3_full_system_linear_gmres(
             ),
             pas_fast_accept=bool(pas_fast_accept),
         )
-        if strong_control.reason_cs0_sparse_first and emit is not None:
-            emit(
-                1,
-                "solve_v3_full_system_linear_gmres: constraintScheme=0 sparse-first "
-                "auto mode -> defer strong preconditioner until after sparse ILU",
-            )
-        if strong_control.reason_pas_auto_skip and emit is not None:
-            emit(
-                1,
-                "solve_v3_full_system_linear_gmres: PAS auto strong preconditioner skipped "
-                f"after base={rhs1_precond_kind} "
-                f"(residual={float(result.residual_norm):.3e} <= {float(pas_auto_strong_ratio):.1f}x target)",
-            )
-        if strong_control.reason_pas_fast_accept and emit is not None:
-            emit(
-                1,
-                "solve_v3_full_system_linear_gmres: PAS fast-accept "
-                f"(residual={float(result.residual_norm):.3e}) -> skip strong preconditioner tail",
-            )
-        full_strong_selection = resolve_rhs1_full_strong_preconditioner_selection(
-            strong_precond_env=strong_precond_env,
-            control=strong_control,
-            has_extra_constraint_block=int(op.constraint_scheme) == 2 and int(op.extra_size) > 0,
-            has_fp=op.fblock.fp is not None,
-            has_pas=op.fblock.pas is not None,
-            rhs1_precond_kind=rhs1_precond_kind,
-            geom_scheme=int(geom_scheme),
-            total_size=int(op.total_size),
-            n_theta=int(op.n_theta),
-            n_zeta=int(op.n_zeta),
-            max_l=int(np.max(nxi_for_x)) if nxi_for_x.size else 0,
-            nxi_for_x_sum=int(np.sum(nxi_for_x)) if nxi_for_x.size else 0,
-            shard_axis=_matvec_shard_axis(op),
-            device_count=int(jax.device_count()),
-        )
-        strong_precond_kind = full_strong_selection.kind
-
-        if strong_precond_kind is not None and _rhs1_residual_needs_rescue(
-            float(result.residual_norm),
-            float(target),
-        ):
+        def _build_rhs1_full_strong_preconditioner_for_retry(strong_kind: str):
             dd_block_theta = rhs1_dd_setup.block("theta")
             dd_overlap_theta = rhs1_dd_setup.overlap("theta", default=1)
             dd_block_zeta = rhs1_dd_setup.block("zeta")
             dd_overlap_zeta = rhs1_dd_setup.overlap("zeta", default=1)
-            strong_precond_kind, strong_preconditioner_full = _build_rhs1_strong_preconditioner_full_from_kind(
+            return _build_rhs1_strong_preconditioner_full_from_kind(
                 op=op,
-                strong_precond_kind=strong_precond_kind,
+                strong_precond_kind=strong_kind,
                 rhs1_precond_kind=rhs1_precond_kind,
                 residual_norm=float(result.residual_norm),
                 dd_block_theta=dd_block_theta,
@@ -12387,46 +12348,47 @@ def solve_v3_full_system_linear_gmres(
                 dd_block_zeta=dd_block_zeta,
                 dd_overlap_zeta=dd_overlap_zeta,
             )
-        if strong_precond_kind is not None and _rhs1_residual_needs_rescue(
-            float(result.residual_norm),
-            float(target),
-        ):
-            _mark("rhs1_strong_precond_build_start")
-            if emit is not None:
-                emit(
-                    0,
-                    "solve_v3_full_system_linear_gmres: strong preconditioner fallback "
-                    f"kind={strong_precond_kind} (residual={float(result.residual_norm):.3e} > target={target:.3e})",
-                )
-            _mark("rhs1_strong_precond_build_done")
 
-            strong_retry_controls = rhs1_strong_retry_controls_from_env(
+        full_strong_retry = run_rhs1_full_strong_retry_stage(
+            RHS1FullStrongRetryStageContext(
+                strong_precond_env=strong_precond_env,
+                strong_control=strong_control,
+                has_extra_constraint_block=int(op.constraint_scheme) == 2 and int(op.extra_size) > 0,
+                has_fp=op.fblock.fp is not None,
+                has_pas=op.fblock.pas is not None,
+                rhs1_precond_kind=rhs1_precond_kind,
+                geom_scheme=int(geom_scheme),
+                total_size=int(op.total_size),
+                n_theta=int(op.n_theta),
+                n_zeta=int(op.n_zeta),
+                max_l=int(np.max(nxi_for_x)) if nxi_for_x.size else 0,
+                nxi_for_x_sum=int(np.sum(nxi_for_x)) if nxi_for_x.size else 0,
+                shard_axis=_matvec_shard_axis(op),
+                device_count=int(jax.device_count()),
+                pas_auto_strong_ratio=float(pas_auto_strong_ratio),
+                current_result=result,
+                current_residual_vec=residual_vec,
+                matvec=mv,
+                rhs=rhs,
+                tol=float(tol),
+                atol=float(atol),
                 restart=int(restart),
                 maxiter=maxiter,
+                precondition_side=gmres_precond_side,
+                solver_kind=_solver_kind("incremental")[0],
+                target=float(target),
+                peak_rss_mb=_rss_mb(),
+                emit=emit,
+                mark=_mark,
+                replay_state=ksp_replay,
+                build_strong_preconditioner=_build_rhs1_full_strong_preconditioner_for_retry,
+                run_measured_candidate=rhs1_run_measured_linear_candidate_and_update_replay,
+                solve_linear=_solve_linear_with_residual,
             )
-            result, residual_vec, _accepted, _strong_elapsed_s = (
-                rhs1_run_measured_linear_candidate_and_update_replay(
-                    replay_state=ksp_replay,
-                    current_result=result,
-                    current_residual_vec=residual_vec,
-                    matvec_fn=mv,
-                    b_vec=rhs,
-                    precond_fn=strong_preconditioner_full,
-                    tol=float(tol),
-                    atol=float(atol),
-                    restart=int(strong_retry_controls.restart),
-                    maxiter=int(strong_retry_controls.maxiter),
-                    solve_method="incremental",
-                    precond_side=gmres_precond_side,
-                    solve_linear=_solve_linear_with_residual,
-                    solver_kind=_solver_kind("incremental")[0],
-                    candidate_name="strong_full",
-                    baseline_name="current_full",
-                    target_value=float(target),
-                    peak_rss_mb=_rss_mb(),
-                    returns_residual_vec=True,
-                )
-            )
+        )
+        result = full_strong_retry.result
+        residual_vec = full_strong_retry.residual_vec
+        strong_precond_kind = full_strong_retry.selected_kind
         pas_schur_rescue_controls = rhs1_pas_schur_rescue_controls_from_env(
             rhs_mode=int(op.rhs_mode),
             include_phi1=bool(op.include_phi1),

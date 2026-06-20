@@ -10,6 +10,12 @@ import os
 import jax
 import jax.numpy as jnp
 
+from .strong_preconditioning import (
+    RHS1StrongPreconditionerControl,
+    resolve_rhs1_full_strong_preconditioner_selection,
+    rhs1_strong_retry_controls_from_env,
+)
+
 
 Preconditioner = Callable[[jnp.ndarray], jnp.ndarray]
 
@@ -93,6 +99,57 @@ class RHS1FullBasePreconditionerSetupResult:
 
     preconditioner: Preconditioner | None
     bicgstab_preconditioner: Preconditioner | None
+
+
+@dataclass(frozen=True)
+class RHS1FullStrongRetryStageContext:
+    """Inputs for the full-system strong-preconditioner retry stage."""
+
+    strong_precond_env: str
+    strong_control: RHS1StrongPreconditionerControl
+    has_extra_constraint_block: bool
+    has_fp: bool
+    has_pas: bool
+    rhs1_precond_kind: str | None
+    geom_scheme: int
+    total_size: int
+    n_theta: int
+    n_zeta: int
+    max_l: int
+    nxi_for_x_sum: int
+    shard_axis: str | None
+    device_count: int
+    pas_auto_strong_ratio: float
+    current_result: Any
+    current_residual_vec: jnp.ndarray | None
+    matvec: Callable[[jnp.ndarray], jnp.ndarray]
+    rhs: jnp.ndarray
+    tol: float
+    atol: float
+    restart: int
+    maxiter: int | None
+    precondition_side: str
+    solver_kind: str
+    target: float
+    peak_rss_mb: float
+    emit: Callable[[int, str], None] | None
+    mark: Callable[[str], None]
+    replay_state: Any
+    build_strong_preconditioner: Callable[[str], tuple[str | None, Preconditioner | None]]
+    run_measured_candidate: Callable[..., tuple[Any, jnp.ndarray | None, bool, float]]
+    solve_linear: Callable[..., tuple[Any, jnp.ndarray | None]]
+
+
+@dataclass(frozen=True)
+class RHS1FullStrongRetryStageResult:
+    """Result of the full-system strong-preconditioner retry stage."""
+
+    result: Any
+    residual_vec: jnp.ndarray | None
+    accepted: bool
+    elapsed_s: float | None
+    selected_kind: str | None
+    preconditioner: Preconditioner | None
 
 
 def _parse_adi_sweeps() -> int:
@@ -368,6 +425,111 @@ def setup_rhs1_full_base_preconditioner(
     )
 
 
+def run_rhs1_full_strong_retry_stage(
+    context: RHS1FullStrongRetryStageContext,
+) -> RHS1FullStrongRetryStageResult:
+    """Select, build, and run the full-system strong-preconditioner retry."""
+
+    residual_norm = float(context.current_result.residual_norm)
+    if context.strong_control.reason_cs0_sparse_first and context.emit is not None:
+        context.emit(
+            1,
+            "solve_v3_full_system_linear_gmres: constraintScheme=0 sparse-first "
+            "auto mode -> defer strong preconditioner until after sparse ILU",
+        )
+    if context.strong_control.reason_pas_auto_skip and context.emit is not None:
+        context.emit(
+            1,
+            "solve_v3_full_system_linear_gmres: PAS auto strong preconditioner skipped "
+            f"after base={context.rhs1_precond_kind} "
+            f"(residual={residual_norm:.3e} <= {float(context.pas_auto_strong_ratio):.1f}x target)",
+        )
+    if context.strong_control.reason_pas_fast_accept and context.emit is not None:
+        context.emit(
+            1,
+            "solve_v3_full_system_linear_gmres: PAS fast-accept "
+            f"(residual={residual_norm:.3e}) -> skip strong preconditioner tail",
+        )
+
+    selection = resolve_rhs1_full_strong_preconditioner_selection(
+        strong_precond_env=context.strong_precond_env,
+        control=context.strong_control,
+        has_extra_constraint_block=bool(context.has_extra_constraint_block),
+        has_fp=bool(context.has_fp),
+        has_pas=bool(context.has_pas),
+        rhs1_precond_kind=context.rhs1_precond_kind,
+        geom_scheme=int(context.geom_scheme),
+        total_size=int(context.total_size),
+        n_theta=int(context.n_theta),
+        n_zeta=int(context.n_zeta),
+        max_l=int(context.max_l),
+        nxi_for_x_sum=int(context.nxi_for_x_sum),
+        shard_axis=context.shard_axis,
+        device_count=int(context.device_count),
+    )
+    strong_precond_kind = selection.kind
+    strong_preconditioner: Preconditioner | None = None
+
+    if strong_precond_kind is not None and residual_norm > float(context.target):
+        strong_precond_kind, strong_preconditioner = context.build_strong_preconditioner(
+            strong_precond_kind
+        )
+
+    if strong_precond_kind is None or residual_norm <= float(context.target):
+        return RHS1FullStrongRetryStageResult(
+            result=context.current_result,
+            residual_vec=context.current_residual_vec,
+            accepted=False,
+            elapsed_s=None,
+            selected_kind=strong_precond_kind,
+            preconditioner=strong_preconditioner,
+        )
+
+    context.mark("rhs1_strong_precond_build_start")
+    if context.emit is not None:
+        context.emit(
+            0,
+            "solve_v3_full_system_linear_gmres: strong preconditioner fallback "
+            f"kind={strong_precond_kind} "
+            f"(residual={residual_norm:.3e} > target={float(context.target):.3e})",
+        )
+    context.mark("rhs1_strong_precond_build_done")
+
+    strong_retry_controls = rhs1_strong_retry_controls_from_env(
+        restart=int(context.restart),
+        maxiter=context.maxiter,
+    )
+    result, residual_vec, accepted, elapsed_s = context.run_measured_candidate(
+        replay_state=context.replay_state,
+        current_result=context.current_result,
+        current_residual_vec=context.current_residual_vec,
+        matvec_fn=context.matvec,
+        b_vec=context.rhs,
+        precond_fn=strong_preconditioner,
+        tol=float(context.tol),
+        atol=float(context.atol),
+        restart=int(strong_retry_controls.restart),
+        maxiter=int(strong_retry_controls.maxiter),
+        solve_method="incremental",
+        precond_side=context.precondition_side,
+        solve_linear=context.solve_linear,
+        solver_kind=context.solver_kind,
+        candidate_name="strong_full",
+        baseline_name="current_full",
+        target_value=float(context.target),
+        peak_rss_mb=float(context.peak_rss_mb),
+        returns_residual_vec=True,
+    )
+    return RHS1FullStrongRetryStageResult(
+        result=result,
+        residual_vec=residual_vec,
+        accepted=bool(accepted),
+        elapsed_s=float(elapsed_s),
+        selected_kind=strong_precond_kind,
+        preconditioner=strong_preconditioner,
+    )
+
+
 def _apply_pas_tz_guarded_overlays(
     *,
     context: RHS1ReducedPreconditionerBuildContext,
@@ -488,10 +650,13 @@ __all__ = [
     "RHS1FullBasePreconditionerSetupContext",
     "RHS1FullBasePreconditionerSetupResult",
     "RHS1FullPreconditionerBuildContext",
+    "RHS1FullStrongRetryStageContext",
+    "RHS1FullStrongRetryStageResult",
     "RHS1ReducedPreconditionerBuildContext",
     "RHS1ReducedPreconditionerBuildResult",
     "build_rhs1_full_preconditioner",
     "build_rhs1_reduced_preconditioner",
     "build_rhs1_reduced_preconditioner_with_fallback",
+    "run_rhs1_full_strong_retry_stage",
     "setup_rhs1_full_base_preconditioner",
 ]
