@@ -91,6 +91,7 @@ from sfincs_jax.problems.profile_response.sparse_pc import (
     XBlockPostSolveCorrectionResult,
     XBlockPhysicalResidual,
     XBlockQICoarseSeedStageContext,
+    XBlockQIDeviceMetadataContext,
     XBlockQIGalerkinStageContext,
     XBlockQITwoLevelStageContext,
     XBlockSparsePCCompletionContext,
@@ -123,6 +124,7 @@ from sfincs_jax.problems.profile_response.sparse_pc import (
     build_sparse_pc_pattern_setup,
     build_direct_tail_materialization_setup,
     build_direct_tail_structured_preconditioner_setup,
+    build_xblock_qi_device_preconditioner_metadata,
     build_xblock_assembled_equilibration_setup,
     build_xblock_assembled_device_setup,
     build_xblock_assembled_matvec_setup,
@@ -6461,6 +6463,154 @@ def test_xblock_qi_device_multilevel_config_normalizes_invalid_residual_controls
     assert setup.multilevel_residual_equation_order == "coarse_to_fine"
     assert setup.multilevel_residual_equation_solver == "action_lstsq"
     assert invalid_solver.multilevel_residual_equation_solver == "action_lstsq"
+
+
+def test_build_xblock_qi_device_preconditioner_metadata_records_probe_state() -> None:
+    probe = SimpleNamespace(
+        metadata=SimpleNamespace(
+            to_dict=lambda: {"rank": 3, "coupled_residual_equation_rank": 2}
+        ),
+        accepted=False,
+        residual_before_norm=10.0,
+        residual_after_norm=7.5,
+        improvement_ratio=0.75,
+        cycles=4,
+        residual_history=(10.0, 8.0, 7.5),
+        step_history=(0.5, 0.25),
+    )
+    state = SimpleNamespace(
+        local_smoother=SimpleNamespace(
+            metadata=SimpleNamespace(to_dict=lambda: {"kind": "jacobi"})
+        )
+    )
+    enrichment = SimpleNamespace(
+        residual_enrichment=True,
+        residual_enrichment_depth=2,
+        residual_enrichment_include_residual=True,
+        recycle_enrichment=True,
+        recycle_cycles=3,
+        operator_krylov_enrichment=True,
+        operator_krylov_depth=4,
+        adjoint_krylov_enrichment=False,
+        adjoint_krylov_depth=0,
+        adjoint_krylov_transpose_source="autodiff",
+        operator_action_enrichment=True,
+        operator_action_depth=1,
+    )
+    multilevel = SimpleNamespace(
+        multilevel_coarse=True,
+        multilevel_max_levels=3,
+        multilevel_aggregate_factor=2,
+        multilevel_max_angular_mode=1,
+        multilevel_max_radial_degree=2,
+        multilevel_max_pitch_degree=1,
+        multilevel_current_moments=True,
+        multilevel_species_current_moments=False,
+        multilevel_radial_current_moments=True,
+        multilevel_tail_constraint_moments=True,
+        multilevel_current_max_pitch_degree=2,
+        multilevel_residual_equation=True,
+        multilevel_residual_equation_max_level_rank=5,
+        multilevel_residual_equation_order="coarse_to_fine",
+        multilevel_residual_equation_solver="action_lstsq",
+        multilevel_residual_equation_include_global=True,
+    )
+
+    metadata = build_xblock_qi_device_preconditioner_metadata(
+        XBlockQIDeviceMetadataContext(
+            probe=probe,
+            state=state,
+            basis_reused_from_seed=True,
+            min_improvement=0.05,
+            cycles_requested=6,
+            minres_step=True,
+            alpha_clip=10.0,
+            augmented_seed_requested=True,
+            augmented_seed_available=True,
+            augmented_seed_used=False,
+            augmented_seed_rank=2,
+            augmented_seed_max_rank=4,
+            augmented_seed_reason="accepted",
+            augmented_seed_projection_residual=1.25,
+            augmented_seed_labels=("rhs", "residual"),
+            use_in_krylov=True,
+            use_in_krylov_requested=True,
+            precondition_side="none",
+            compose_with_base=True,
+            compose_mode="multiplicative",
+            matrix_free_enabled=True,
+            local_smoother_kind="matrix_free_block",
+            enrichment_config=enrichment,
+            multilevel_config=multilevel,
+            multilevel_max_rank=9,
+            extra_coarse_metadata={"global_moment_residual_equation": True},
+            residual_correction_metadata={"coupled_residual_equation": True},
+            max_rank_requested=11,
+        )
+    )
+
+    assert metadata["rank"] == 3
+    assert metadata["basis_reused_from_seed"] is True
+    assert metadata["cycles"] == 4
+    assert metadata["residual_history"] == (10.0, 8.0, 7.5)
+    assert metadata["step_policy"] == "residual_minimizing"
+    assert metadata["augmented_seed_projection_residual_norm"] == pytest.approx(1.25)
+    assert metadata["use_in_krylov_blocked_by_precondition_side_none"] is True
+    assert metadata["local_smoother_metadata"] == {"kind": "jacobi"}
+    assert metadata["operator_krylov_depth_requested"] == 4
+    assert metadata["multilevel_max_rank_requested"] == 9
+    assert metadata["multilevel_residual_equation_solver_requested"] == "action_lstsq"
+    assert metadata["global_moment_residual_equation"] is True
+    assert metadata["coupled_residual_equation"] is True
+    assert metadata["max_rank_requested"] == 11
+
+
+def test_build_xblock_qi_device_preconditioner_metadata_uses_safe_defaults() -> None:
+    probe = SimpleNamespace(
+        metadata={"rank": 1},
+        accepted=True,
+        residual_before_norm=2.0,
+        residual_after_norm=1.0,
+    )
+    metadata = build_xblock_qi_device_preconditioner_metadata(
+        XBlockQIDeviceMetadataContext(
+            probe=probe,
+            state=SimpleNamespace(local_smoother=None),
+            basis_reused_from_seed=False,
+            min_improvement=0.0,
+            cycles_requested=1,
+            minres_step=False,
+            alpha_clip=0.0,
+            augmented_seed_requested=False,
+            augmented_seed_available=False,
+            augmented_seed_used=False,
+            augmented_seed_rank=0,
+            augmented_seed_max_rank=0,
+            augmented_seed_reason=None,
+            augmented_seed_projection_residual=None,
+            augmented_seed_labels=(),
+            use_in_krylov=False,
+            use_in_krylov_requested=False,
+            precondition_side="right",
+            compose_with_base=False,
+            compose_mode="additive",
+            matrix_free_enabled=False,
+            local_smoother_kind="none",
+            enrichment_config=SimpleNamespace(),
+            multilevel_config=SimpleNamespace(),
+            multilevel_max_rank=None,
+            extra_coarse_metadata={},
+            residual_correction_metadata={},
+            max_rank_requested=None,
+        )
+    )
+
+    assert metadata["cycles"] == 1
+    assert metadata["residual_history"] == (2.0, 1.0)
+    assert metadata["step_policy"] == "fixed"
+    assert metadata["local_smoother_metadata"] is None
+    assert metadata["multilevel_max_rank_requested"] is None
+    assert metadata["max_rank_requested"] is None
 
 
 def test_sparse_pc_gmres_control_policy_defaults() -> None:

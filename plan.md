@@ -311,10 +311,10 @@ Recent checkpoints:
 - `cb295ce` Extract sparse pattern setup.
 - `4b6a5b4` Extract sparse factor policy.
 
-Current source-size snapshot after x-block stage orchestration extraction:
+Current source-size snapshot after x-block QI-device metadata extraction:
 
-- `sfincs_jax/v3_driver.py`: `16617` lines.
-- `solve_v3_full_system_linear_gmres`: `11901` lines.
+- `sfincs_jax/v3_driver.py`: `16575` lines.
+- `solve_v3_full_system_linear_gmres`: `11835` lines.
 - `sfincs_jax/v3_results.py`: `119` lines.
 - `sfincs_jax/rhs1_ksp_diagnostics.py`: `306` lines.
 - `sfincs_jax/rhs1_pas_policy.py`: `864` lines.
@@ -326,7 +326,7 @@ Current source-size snapshot after x-block stage orchestration extraction:
 - `sfincs_jax/problems/profile_response/dense.py`: `701` lines.
 - `sfincs_jax/problems/profile_response/linear_solve.py`: `339` lines.
 - `sfincs_jax/problems/profile_response/active_projection.py`: `116` lines.
-- `sfincs_jax/problems/profile_response/sparse_pc.py`: `8682` lines.
+- `sfincs_jax/problems/profile_response/sparse_pc.py`: `13349` lines.
 - `sfincs_jax/rhs1_xblock_policy.py`: `1215` lines.
 
 Recent local validation:
@@ -1171,7 +1171,7 @@ Known CI issue fixed by this rewrite:
 
 ### 1. `v3_driver.py` Architecture Refactor
 
-Completion estimate: 77%.
+Completion estimate: 78%.
 
 Goal:
 
@@ -1291,6 +1291,12 @@ Completed recent boundaries:
   sparse-PC-domain stage helper for shared-basis reuse/build, smoothed-load
   basis construction, residual augmentation, true-residual damping selection,
   seed/preconditioner installation, stats, and failure metadata.
+- RHSMode=1 x-block QI device preconditioner probe metadata now uses a typed
+  sparse-PC-domain helper for probe histories, augmented-seed fields,
+  enrichment/multilevel controls, local-smoother metadata, Krylov installation
+  flags, and residual-correction metadata. This also restored the late-bound
+  driver `_matvec_submatrix` compatibility shim required by CI monkeypatch
+  tests after the submatrix helper extraction.
 - RHSMode=1 rescue/refinement candidate acceptance and KSP replay-state updates
   consolidated into profile-response handoff helpers.
 - RHSMode=1 true-residual recomputation before fallback decisions consolidated

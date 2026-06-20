@@ -287,6 +287,7 @@ from .problems.profile_response.sparse_pc import (
     XBlockMomentSchurStageContext,
     XBlockPostSolveCorrectionContext,
     XBlockQICoarseSeedStageContext,
+    XBlockQIDeviceMetadataContext,
     XBlockQIGalerkinStageContext,
     XBlockQITwoLevelStageContext,
     XBlockSparsePCCompletionContext,
@@ -315,6 +316,7 @@ from .problems.profile_response.sparse_pc import (
     build_xblock_assembled_operator_if_requested,
     build_sparse_pc_active_dof_setup,
     build_direct_tail_materialization_setup,
+    build_xblock_qi_device_preconditioner_metadata,
     fortran_reduced_xblock_final_payload,
     xblock_sparse_pc_final_payload as build_xblock_sparse_pc_final_payload,
     evaluate_sparse_pc_factor_preflight,
@@ -842,7 +844,6 @@ from .sparse_triangular import (
 from .preconditioner_setup import (
     hash_array as _hash_array,
     matvec_submatrix as _matvec_submatrix_impl,
-    matvec_submatrix_v3_unsharded as _matvec_submatrix_v3_unsharded,
     precond_chunk_cols as _precond_chunk_cols,
     rhs_mode1_precond_cache_key as _rhs_mode1_precond_cache_key_impl,
     rhs_mode1_structured_fblock_cache_key as _rhs_mode1_structured_fblock_cache_key_impl,
@@ -1859,7 +1860,30 @@ def _build_sparse_jax_preconditioner_from_matvec(
     return _apply
 
 
-_matvec_submatrix = _matvec_submatrix_v3_unsharded
+def _matvec_submatrix(
+    op_pc: object,
+    *,
+    col_idx: np.ndarray,
+    row_idx: np.ndarray,
+    total_size: int,
+    chunk_cols: int,
+) -> np.ndarray:
+    """Driver compatibility wrapper for unsharded operator-column probes.
+
+    The production implementation lives in :mod:`sfincs_jax.preconditioner_setup`.
+    Keeping this late-bound wrapper lets driver-level tests monkeypatch the
+    unsharded operator apply without accidentally entering the cached/sharded
+    path inside ``jax.vmap``.
+    """
+
+    return _matvec_submatrix_impl(
+        op_pc,
+        col_idx=col_idx,
+        row_idx=row_idx,
+        total_size=total_size,
+        chunk_cols=chunk_cols,
+        apply_operator_fn=apply_v3_full_system_operator,
+    )
 
 
 def _rhsmode1_dense_fallback_max(op: V3FullSystemOperator) -> int:
@@ -3892,118 +3916,52 @@ def solve_v3_full_system_linear_gmres(
                         else float(qi_device_probe.improvement_ratio)
                     )
                     qi_device_preconditioner_reason = str(qi_device_probe.reason)
-                    qi_device_preconditioner_probe_cycles = int(
-                        getattr(qi_device_probe, "cycles", 1 if bool(qi_device_probe.accepted) else 0)
-                    )
-                    qi_device_preconditioner_residual_history = tuple(
-                        float(value)
-                        for value in getattr(
-                            qi_device_probe,
-                            "residual_history",
-                            (
-                                float(qi_device_probe.residual_before_norm),
-                                float(qi_device_probe.residual_after_norm),
-                            ),
+                    qi_device_preconditioner_metadata = (
+                        build_xblock_qi_device_preconditioner_metadata(
+                            XBlockQIDeviceMetadataContext(
+                                probe=qi_device_probe,
+                                state=qi_device_state,
+                                basis_reused_from_seed=(
+                                    qi_device_preconditioner_basis_reused_from_seed
+                                ),
+                                min_improvement=qi_device_preconditioner_min_improvement,
+                                cycles_requested=qi_device_preconditioner_cycles,
+                                minres_step=qi_device_preconditioner_minres_step,
+                                alpha_clip=qi_device_preconditioner_alpha_clip,
+                                augmented_seed_requested=qi_device_augmented_seed_requested,
+                                augmented_seed_available=qi_device_augmented_seed_available,
+                                augmented_seed_used=qi_device_augmented_seed_used,
+                                augmented_seed_rank=qi_device_augmented_seed_rank,
+                                augmented_seed_max_rank=qi_device_augmented_seed_max_rank,
+                                augmented_seed_reason=qi_device_augmented_seed_reason,
+                                augmented_seed_projection_residual=(
+                                    qi_device_augmented_seed_projection_residual
+                                ),
+                                augmented_seed_labels=qi_device_augmented_seed_labels,
+                                use_in_krylov=qi_device_preconditioner_use_in_krylov,
+                                use_in_krylov_requested=qi_device_use_in_krylov_requested,
+                                precondition_side=precondition_side,
+                                compose_with_base=qi_device_compose_with_base,
+                                compose_mode=qi_device_compose_mode,
+                                matrix_free_enabled=qi_device_matrix_free_enabled,
+                                local_smoother_kind=qi_device_local_smoother_kind,
+                                enrichment_config=qi_device_enrichment_config,
+                                multilevel_config=qi_device_multilevel_config,
+                                multilevel_max_rank=qi_device_multilevel_max_rank,
+                                extra_coarse_metadata=qi_device_extra_coarse_metadata,
+                                residual_correction_metadata=(
+                                    qi_device_residual_correction_metadata
+                                ),
+                                max_rank_requested=qi_device_max_rank,
+                            )
                         )
                     )
-                    qi_device_preconditioner_step_history = tuple(
-                        float(value) for value in getattr(qi_device_probe, "step_history", ())
+                    qi_device_preconditioner_probe_cycles = int(
+                        qi_device_preconditioner_metadata.get(
+                            "cycles",
+                            1 if bool(qi_device_probe.accepted) else 0,
+                        )
                     )
-                    qi_device_preconditioner_metadata = {
-                        **qi_device_probe.metadata.to_dict(),
-                        "basis_reused_from_seed": bool(qi_device_preconditioner_basis_reused_from_seed),
-                        "min_improvement": float(qi_device_preconditioner_min_improvement),
-                        "cycles_requested": int(qi_device_preconditioner_cycles),
-                        "cycles": int(qi_device_preconditioner_probe_cycles),
-                        "residual_history": qi_device_preconditioner_residual_history,
-                        "step_policy": "residual_minimizing"
-                        if bool(qi_device_preconditioner_minres_step)
-                        else "fixed",
-                        "alpha_clip": float(qi_device_preconditioner_alpha_clip),
-                        "step_history": qi_device_preconditioner_step_history,
-                        "augmented_seed_requested": bool(qi_device_augmented_seed_requested),
-                        "augmented_seed_available": bool(qi_device_augmented_seed_available),
-                        "augmented_seed_used": bool(qi_device_augmented_seed_used),
-                        "augmented_seed_rank": int(qi_device_augmented_seed_rank),
-                        "augmented_seed_max_rank": int(qi_device_augmented_seed_max_rank),
-                        "augmented_seed_reason": qi_device_augmented_seed_reason,
-                        "augmented_seed_projection_residual_norm": (
-                            qi_device_augmented_seed_projection_residual
-                        ),
-                        "augmented_seed_labels": qi_device_augmented_seed_labels,
-                        "use_in_krylov": bool(qi_device_preconditioner_use_in_krylov),
-                        "use_in_krylov_requested": bool(qi_device_use_in_krylov_requested),
-                        "precondition_side": precondition_side,
-                        "compose_with_base": bool(qi_device_compose_with_base),
-                        "compose_mode": qi_device_compose_mode,
-                        "use_in_krylov_blocked_by_precondition_side_none": bool(
-                            qi_device_use_in_krylov_requested and precondition_side == "none"
-                        ),
-                        "matrix_free_enabled": bool(qi_device_matrix_free_enabled),
-                        "local_smoother_kind_requested": qi_device_local_smoother_kind,
-                        "local_smoother_metadata": (
-                            qi_device_state.local_smoother.metadata.to_dict()
-                            if qi_device_state.local_smoother is not None
-                            and hasattr(qi_device_state.local_smoother.metadata, "to_dict")
-                            else None
-                        ),
-                        "residual_enrichment_requested": bool(qi_device_residual_enrichment),
-                        "residual_enrichment_depth_requested": int(qi_device_residual_enrichment_depth),
-                        "residual_enrichment_include_residual": bool(
-                            qi_device_residual_enrichment_include_residual
-                        ),
-                        "recycle_enrichment_requested": bool(qi_device_recycle_enrichment),
-                        "recycle_enrichment_cycles_requested": int(qi_device_recycle_cycles),
-                        "operator_krylov_enrichment_requested": bool(qi_device_operator_krylov_enrichment),
-                        "operator_krylov_depth_requested": int(qi_device_operator_krylov_depth),
-                        "adjoint_krylov_enrichment_requested": bool(qi_device_adjoint_krylov_enrichment),
-                        "adjoint_krylov_depth_requested": int(qi_device_adjoint_krylov_depth),
-                        "adjoint_krylov_transpose_requested": qi_device_adjoint_krylov_transpose_source,
-                        "operator_action_enrichment_requested": bool(qi_device_operator_action_enrichment),
-                        "operator_action_depth_requested": int(qi_device_operator_action_depth),
-                        "multilevel_coarse_requested": bool(qi_device_multilevel_coarse),
-                        "multilevel_max_levels_requested": int(qi_device_multilevel_max_levels),
-                        "multilevel_aggregate_factor_requested": int(qi_device_multilevel_aggregate_factor),
-                        "multilevel_max_rank_requested": (
-                            None
-                            if qi_device_multilevel_max_rank is None
-                            else int(qi_device_multilevel_max_rank)
-                        ),
-                        "multilevel_max_angular_mode_requested": int(qi_device_multilevel_max_angular_mode),
-                        "multilevel_max_radial_degree_requested": int(qi_device_multilevel_max_radial_degree),
-                        "multilevel_max_pitch_degree_requested": int(qi_device_multilevel_max_pitch_degree),
-                        "multilevel_current_moments_requested": bool(qi_device_multilevel_current_moments),
-                        "multilevel_species_current_moments_requested": bool(
-                            qi_device_multilevel_species_current_moments
-                        ),
-                        "multilevel_radial_current_moments_requested": bool(
-                            qi_device_multilevel_radial_current_moments
-                        ),
-                        "multilevel_tail_constraint_moments_requested": bool(
-                            qi_device_multilevel_tail_constraint_moments
-                        ),
-                        "multilevel_current_max_pitch_degree_requested": int(
-                            qi_device_multilevel_current_max_pitch_degree
-                        ),
-                        "multilevel_residual_equation_requested": bool(
-                            qi_device_multilevel_residual_equation
-                        ),
-                        "multilevel_residual_equation_max_level_rank_requested": int(
-                            qi_device_multilevel_residual_equation_max_level_rank
-                        ),
-                        "multilevel_residual_equation_order_requested": (
-                            qi_device_multilevel_residual_equation_order
-                        ),
-                        "multilevel_residual_equation_solver_requested": (
-                            qi_device_multilevel_residual_equation_solver
-                        ),
-                        "multilevel_residual_equation_include_global_requested": bool(
-                            qi_device_multilevel_residual_equation_include_global
-                        ),
-                        **qi_device_extra_coarse_metadata,
-                        **qi_device_residual_correction_metadata,
-                        "max_rank_requested": None if qi_device_max_rank is None else int(qi_device_max_rank),
-                    }
                     base_precond_before_qi_device = precond_xblock_krylov
 
                     def _precond_xblock_qi_device(v: jnp.ndarray) -> jnp.ndarray:

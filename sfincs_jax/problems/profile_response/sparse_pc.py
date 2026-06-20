@@ -4114,6 +4114,40 @@ class XBlockQITwoLevelStageResult:
 
 
 @dataclass(frozen=True)
+class XBlockQIDeviceMetadataContext:
+    """Explicit inputs for QI device preconditioner diagnostic metadata."""
+
+    probe: object
+    state: object
+    basis_reused_from_seed: bool
+    min_improvement: float
+    cycles_requested: int
+    minres_step: bool
+    alpha_clip: float
+    augmented_seed_requested: bool
+    augmented_seed_available: bool
+    augmented_seed_used: bool
+    augmented_seed_rank: int
+    augmented_seed_max_rank: int
+    augmented_seed_reason: str | None
+    augmented_seed_projection_residual: float | None
+    augmented_seed_labels: Sequence[str]
+    use_in_krylov: bool
+    use_in_krylov_requested: bool
+    precondition_side: str
+    compose_with_base: bool
+    compose_mode: str
+    matrix_free_enabled: bool
+    local_smoother_kind: str
+    enrichment_config: object
+    multilevel_config: object
+    multilevel_max_rank: int | None
+    extra_coarse_metadata: Mapping[str, object]
+    residual_correction_metadata: Mapping[str, object]
+    max_rank_requested: int | None
+
+
+@dataclass(frozen=True)
 class XBlockInitialGuessSetup:
     """Accepted initial guess for an x-block Krylov solve."""
 
@@ -9459,6 +9493,192 @@ def resolve_xblock_qi_seed_policy_setup(env: Mapping[str, str] | None = None) ->
     )
 
 
+def _object_metadata_dict(metadata: object) -> dict[str, object]:
+    """Return a plain metadata dictionary from dataclass-like solver metadata."""
+
+    if hasattr(metadata, "to_dict"):
+        return dict(metadata.to_dict())
+    if isinstance(metadata, Mapping):
+        return dict(metadata)
+    return {}
+
+
+def build_xblock_qi_device_preconditioner_metadata(
+    context: XBlockQIDeviceMetadataContext,
+) -> dict[str, object]:
+    """Build stable diagnostics for the QI device preconditioner probe."""
+
+    probe = context.probe
+    state = context.state
+    probe_metadata = _object_metadata_dict(getattr(probe, "metadata", {}))
+    probe_cycles = int(
+        getattr(
+            probe,
+            "cycles",
+            1 if bool(getattr(probe, "accepted", False)) else 0,
+        )
+    )
+    residual_history = tuple(
+        float(value)
+        for value in getattr(
+            probe,
+            "residual_history",
+            (
+                float(getattr(probe, "residual_before_norm", float("nan"))),
+                float(getattr(probe, "residual_after_norm", float("nan"))),
+            ),
+        )
+    )
+    step_history = tuple(float(value) for value in getattr(probe, "step_history", ()))
+    local_smoother = getattr(state, "local_smoother", None)
+    local_smoother_metadata = None
+    if local_smoother is not None:
+        local_metadata = getattr(local_smoother, "metadata", None)
+        if hasattr(local_metadata, "to_dict"):
+            local_smoother_metadata = dict(local_metadata.to_dict())
+
+    enrichment = context.enrichment_config
+    multilevel = context.multilevel_config
+    return {
+        **probe_metadata,
+        "basis_reused_from_seed": bool(context.basis_reused_from_seed),
+        "min_improvement": float(context.min_improvement),
+        "cycles_requested": int(context.cycles_requested),
+        "cycles": int(probe_cycles),
+        "residual_history": residual_history,
+        "step_policy": "residual_minimizing" if bool(context.minres_step) else "fixed",
+        "alpha_clip": float(context.alpha_clip),
+        "step_history": step_history,
+        "augmented_seed_requested": bool(context.augmented_seed_requested),
+        "augmented_seed_available": bool(context.augmented_seed_available),
+        "augmented_seed_used": bool(context.augmented_seed_used),
+        "augmented_seed_rank": int(context.augmented_seed_rank),
+        "augmented_seed_max_rank": int(context.augmented_seed_max_rank),
+        "augmented_seed_reason": context.augmented_seed_reason,
+        "augmented_seed_projection_residual_norm": (
+            None
+            if context.augmented_seed_projection_residual is None
+            else float(context.augmented_seed_projection_residual)
+        ),
+        "augmented_seed_labels": tuple(
+            str(label) for label in context.augmented_seed_labels
+        ),
+        "use_in_krylov": bool(context.use_in_krylov),
+        "use_in_krylov_requested": bool(context.use_in_krylov_requested),
+        "precondition_side": str(context.precondition_side),
+        "compose_with_base": bool(context.compose_with_base),
+        "compose_mode": str(context.compose_mode),
+        "use_in_krylov_blocked_by_precondition_side_none": bool(
+            context.use_in_krylov_requested and str(context.precondition_side) == "none"
+        ),
+        "matrix_free_enabled": bool(context.matrix_free_enabled),
+        "local_smoother_kind_requested": str(context.local_smoother_kind),
+        "local_smoother_metadata": local_smoother_metadata,
+        "residual_enrichment_requested": bool(
+            getattr(enrichment, "residual_enrichment", False)
+        ),
+        "residual_enrichment_depth_requested": int(
+            getattr(enrichment, "residual_enrichment_depth", 0)
+        ),
+        "residual_enrichment_include_residual": bool(
+            getattr(enrichment, "residual_enrichment_include_residual", False)
+        ),
+        "recycle_enrichment_requested": bool(
+            getattr(enrichment, "recycle_enrichment", False)
+        ),
+        "recycle_enrichment_cycles_requested": int(
+            getattr(enrichment, "recycle_cycles", 0)
+        ),
+        "operator_krylov_enrichment_requested": bool(
+            getattr(enrichment, "operator_krylov_enrichment", False)
+        ),
+        "operator_krylov_depth_requested": int(
+            getattr(enrichment, "operator_krylov_depth", 0)
+        ),
+        "adjoint_krylov_enrichment_requested": bool(
+            getattr(enrichment, "adjoint_krylov_enrichment", False)
+        ),
+        "adjoint_krylov_depth_requested": int(
+            getattr(enrichment, "adjoint_krylov_depth", 0)
+        ),
+        "adjoint_krylov_transpose_requested": getattr(
+            enrichment,
+            "adjoint_krylov_transpose_source",
+            None,
+        ),
+        "operator_action_enrichment_requested": bool(
+            getattr(enrichment, "operator_action_enrichment", False)
+        ),
+        "operator_action_depth_requested": int(
+            getattr(enrichment, "operator_action_depth", 0)
+        ),
+        "multilevel_coarse_requested": bool(
+            getattr(multilevel, "multilevel_coarse", False)
+        ),
+        "multilevel_max_levels_requested": int(
+            getattr(multilevel, "multilevel_max_levels", 1)
+        ),
+        "multilevel_aggregate_factor_requested": int(
+            getattr(multilevel, "multilevel_aggregate_factor", 2)
+        ),
+        "multilevel_max_rank_requested": (
+            None
+            if context.multilevel_max_rank is None
+            else int(context.multilevel_max_rank)
+        ),
+        "multilevel_max_angular_mode_requested": int(
+            getattr(multilevel, "multilevel_max_angular_mode", 0)
+        ),
+        "multilevel_max_radial_degree_requested": int(
+            getattr(multilevel, "multilevel_max_radial_degree", 0)
+        ),
+        "multilevel_max_pitch_degree_requested": int(
+            getattr(multilevel, "multilevel_max_pitch_degree", 0)
+        ),
+        "multilevel_current_moments_requested": bool(
+            getattr(multilevel, "multilevel_current_moments", False)
+        ),
+        "multilevel_species_current_moments_requested": bool(
+            getattr(multilevel, "multilevel_species_current_moments", False)
+        ),
+        "multilevel_radial_current_moments_requested": bool(
+            getattr(multilevel, "multilevel_radial_current_moments", False)
+        ),
+        "multilevel_tail_constraint_moments_requested": bool(
+            getattr(multilevel, "multilevel_tail_constraint_moments", False)
+        ),
+        "multilevel_current_max_pitch_degree_requested": int(
+            getattr(multilevel, "multilevel_current_max_pitch_degree", 0)
+        ),
+        "multilevel_residual_equation_requested": bool(
+            getattr(multilevel, "multilevel_residual_equation", False)
+        ),
+        "multilevel_residual_equation_max_level_rank_requested": int(
+            getattr(multilevel, "multilevel_residual_equation_max_level_rank", 0)
+        ),
+        "multilevel_residual_equation_order_requested": getattr(
+            multilevel,
+            "multilevel_residual_equation_order",
+            None,
+        ),
+        "multilevel_residual_equation_solver_requested": getattr(
+            multilevel,
+            "multilevel_residual_equation_solver",
+            None,
+        ),
+        "multilevel_residual_equation_include_global_requested": bool(
+            getattr(multilevel, "multilevel_residual_equation_include_global", False)
+        ),
+        **dict(context.extra_coarse_metadata),
+        **dict(context.residual_correction_metadata),
+        "max_rank_requested": (
+            None
+            if context.max_rank_requested is None
+            else int(context.max_rank_requested)
+        ),
+    }
+
+
 def apply_xblock_qi_coarse_seed_stage(
     *,
     context: XBlockQICoarseSeedStageContext,
@@ -12977,6 +13197,7 @@ __all__ = [
     "XBlockGlobalCouplingStageResult",
     "XBlockQICoarseSeedStageContext",
     "XBlockQICoarseSeedStageResult",
+    "XBlockQIDeviceMetadataContext",
     "XBlockQIGalerkinStageContext",
     "XBlockQIGalerkinStageResult",
     "XBlockQITwoLevelStageContext",
@@ -13027,6 +13248,7 @@ __all__ = [
     "build_fortran_reduced_xblock_krylov_setup",
     "build_xblock_local_preconditioner",
     "build_xblock_assembled_operator_if_requested",
+    "build_xblock_qi_device_preconditioner_metadata",
     "build_sparse_pc_active_dof_setup",
     "build_sparse_pc_pattern_setup",
     "build_direct_tail_materialization_setup",
