@@ -75,6 +75,7 @@ from sfincs_jax.problems.profile_response.sparse_pc import (
     SparseHostRetryCandidateResult,
     SparseJAXRetryPreconditionerBuildContext,
     SparseXBlockExplicitSeedContext,
+    SparseXBlockRescueAcceptanceContext,
     SparseXBlockRescueBuildContext,
     SparseXBlockRescueSolveContext,
     ExplicitSparseOperatorBuildPolicy,
@@ -151,6 +152,7 @@ from sfincs_jax.problems.profile_response.sparse_pc import (
     apply_sparse_pc_post_minres_if_needed,
     apply_sparse_pc_post_minres_from_driver_state,
     apply_sparse_xblock_explicit_seed,
+    accept_sparse_xblock_rescue_candidate,
     apply_xblock_subspace_correction_if_needed,
     build_fortran_reduced_xblock_factor_stage,
     build_sparse_xblock_rescue_preconditioner,
@@ -4356,6 +4358,142 @@ def test_sparse_xblock_rescue_solve_stage_routes_assembled_seed(monkeypatch) -> 
     assert result.seed_residual == pytest.approx(0.5)
     assert result.seed_refines_performed == 2
     assert marks == ["rhs1_sparse_precond_solve_start", "rhs1_sparse_precond_solve_done"]
+
+
+def test_sparse_xblock_rescue_acceptance_rejects_non_improving_candidate() -> None:
+    replay = SimpleNamespace(x0_vec="old")
+    record_calls: list[tuple[tuple[object, ...], dict[str, object]]] = []
+    current = GMRESSolveResult(
+        x=jnp.asarray([0.0], dtype=jnp.float64),
+        residual_norm=jnp.asarray(1.0, dtype=jnp.float64),
+    )
+    candidate = GMRESSolveResult(
+        x=jnp.asarray([1.0], dtype=jnp.float64),
+        residual_norm=jnp.asarray(2.0, dtype=jnp.float64),
+    )
+
+    result = accept_sparse_xblock_rescue_candidate(
+        context=SparseXBlockRescueAcceptanceContext(
+            current_result=current,
+            candidate_result=candidate,
+            reason="gmres_candidate",
+            assembled_host_fp=False,
+            use_implicit=False,
+            replay_state=replay,
+            matvec=_identity,
+            rhs=jnp.asarray([1.0], dtype=jnp.float64),
+            preconditioner=_identity,
+            precondition_side="left",
+            solver_kind="gmres",
+            restart=20,
+            maxiter=40,
+            record_replay_problem=lambda *args, **kwargs: record_calls.append(
+                (args, kwargs)
+            ),
+        )
+    )
+
+    assert result.result is current
+    assert not result.accepted
+    assert result.reason == "gmres_candidate"
+    assert result.candidate_residual is None
+    assert not result.explicit_seed_used
+    assert replay.x0_vec == "old"
+    assert record_calls == []
+
+
+def test_sparse_xblock_rescue_acceptance_records_replay_for_host_gmres() -> None:
+    replay = SimpleNamespace()
+    record_calls: list[tuple[tuple[object, ...], dict[str, object]]] = []
+    current = GMRESSolveResult(
+        x=jnp.asarray([0.0], dtype=jnp.float64),
+        residual_norm=jnp.asarray(2.0, dtype=jnp.float64),
+    )
+    candidate = GMRESSolveResult(
+        x=jnp.asarray([0.75], dtype=jnp.float64),
+        residual_norm=jnp.asarray(0.25, dtype=jnp.float64),
+    )
+    rhs = jnp.asarray([1.0], dtype=jnp.float64)
+
+    result = accept_sparse_xblock_rescue_candidate(
+        context=SparseXBlockRescueAcceptanceContext(
+            current_result=current,
+            candidate_result=candidate,
+            reason="gmres_candidate",
+            assembled_host_fp=False,
+            use_implicit=False,
+            replay_state=replay,
+            matvec=_identity,
+            rhs=rhs,
+            preconditioner=_identity,
+            precondition_side="left",
+            solver_kind="gmres",
+            restart=20,
+            maxiter=40,
+            record_replay_problem=lambda *args, **kwargs: record_calls.append(
+                (args, kwargs)
+            ),
+        )
+    )
+
+    assert result.result is candidate
+    assert result.accepted
+    assert result.reason == "gmres_candidate_improved"
+    assert result.candidate_residual == pytest.approx(0.25)
+    assert not result.explicit_seed_used
+    assert len(record_calls) == 1
+    args, kwargs = record_calls[0]
+    assert args == (replay,)
+    assert kwargs["matvec_fn"] is _identity
+    assert kwargs["b_vec"] is rhs
+    assert kwargs["precond_fn"] is _identity
+    assert kwargs["x0_vec"] is candidate.x
+    assert kwargs["precond_side"] == "left"
+    assert kwargs["solver_kind"] == "gmres"
+    assert kwargs["restart"] == 20
+    assert kwargs["maxiter"] == 40
+
+
+def test_sparse_xblock_rescue_acceptance_updates_assembled_seed_replay() -> None:
+    replay = SimpleNamespace(x0_vec=None)
+    record_calls: list[tuple[tuple[object, ...], dict[str, object]]] = []
+    current = GMRESSolveResult(
+        x=jnp.asarray([0.0], dtype=jnp.float64),
+        residual_norm=jnp.asarray(2.0, dtype=jnp.float64),
+    )
+    candidate = GMRESSolveResult(
+        x=jnp.asarray([0.75], dtype=jnp.float64),
+        residual_norm=jnp.asarray(0.25, dtype=jnp.float64),
+    )
+
+    result = accept_sparse_xblock_rescue_candidate(
+        context=SparseXBlockRescueAcceptanceContext(
+            current_result=current,
+            candidate_result=candidate,
+            reason="seed_accepted",
+            assembled_host_fp=True,
+            use_implicit=False,
+            replay_state=replay,
+            matvec=_identity,
+            rhs=jnp.asarray([1.0], dtype=jnp.float64),
+            preconditioner=_identity,
+            precondition_side="left",
+            solver_kind="gmres",
+            restart=20,
+            maxiter=40,
+            record_replay_problem=lambda *args, **kwargs: record_calls.append(
+                (args, kwargs)
+            ),
+        )
+    )
+
+    assert result.result is candidate
+    assert result.accepted
+    assert result.reason == "seed_accepted"
+    assert result.candidate_residual == pytest.approx(0.25)
+    assert result.explicit_seed_used
+    assert replay.x0_vec is candidate.x
+    assert record_calls == []
 
 
 def test_fortran_reduced_xblock_krylov_policy_defaults_and_counter() -> None:

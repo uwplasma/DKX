@@ -390,8 +390,10 @@ from .problems.profile_response.sparse_pc import (
     run_fortran_reduced_xblock_krylov_solve,
     run_sparse_pc_gmres_once,
     run_sparse_pc_gmres_once_for_retry,
+    SparseXBlockRescueAcceptanceContext,
     SparseXBlockRescueBuildContext,
     SparseXBlockRescueSolveContext,
+    accept_sparse_xblock_rescue_candidate,
     build_sparse_xblock_rescue_preconditioner,
     run_sparse_xblock_rescue_solve_stage,
     run_xblock_krylov_solve_stage,
@@ -10064,27 +10066,36 @@ def solve_v3_full_system_linear_gmres(
                         sparse_xblock_rescue_seed_refines_performed = int(
                             sparse_xblock_solve.seed_refines_performed
                         )
-                    if res_sparse_xblock is not None and float(res_sparse_xblock.residual_norm) < float(res_reduced.residual_norm):
-                        sparse_xblock_rescue_candidate_accepted = True
-                        sparse_xblock_rescue_candidate_residual = float(res_sparse_xblock.residual_norm)
-                        if sparse_xblock_rescue_reason == "gmres_candidate":
-                            sparse_xblock_rescue_reason = "gmres_candidate_improved"
-                        res_reduced = res_sparse_xblock
-                        explicit_fp_xblock_seed_used = bool(assembled_host_fp and (not bool(use_implicit)))
-                        if assembled_host_fp:
-                            ksp_replay.x0_vec = res_reduced.x
-                        else:
-                            rhs1_record_ksp_replay_problem(
-                                ksp_replay,
-                                matvec_fn=mv_reduced,
-                                b_vec=rhs_reduced,
-                                precond_fn=precond_sparse_xblock,
-                                x0_vec=res_reduced.x,
-                                precond_side=gmres_precond_side,
-                                solver_kind=_solver_kind("incremental")[0],
-                                restart=restart,
-                                maxiter=maxiter,
-                            )
+                    sparse_xblock_acceptance = accept_sparse_xblock_rescue_candidate(
+                        context=SparseXBlockRescueAcceptanceContext(
+                            current_result=res_reduced,
+                            candidate_result=res_sparse_xblock,
+                            reason=sparse_xblock_rescue_reason,
+                            assembled_host_fp=bool(assembled_host_fp),
+                            use_implicit=bool(use_implicit),
+                            replay_state=ksp_replay,
+                            matvec=mv_reduced,
+                            rhs=rhs_reduced,
+                            preconditioner=precond_sparse_xblock,
+                            precondition_side=gmres_precond_side,
+                            solver_kind=_solver_kind("incremental")[0],
+                            restart=int(restart),
+                            maxiter=maxiter,
+                            record_replay_problem=rhs1_record_ksp_replay_problem,
+                        )
+                    )
+                    res_reduced = sparse_xblock_acceptance.result
+                    sparse_xblock_rescue_candidate_accepted = bool(
+                        sparse_xblock_acceptance.accepted
+                    )
+                    sparse_xblock_rescue_reason = str(sparse_xblock_acceptance.reason)
+                    explicit_fp_xblock_seed_used = bool(
+                        sparse_xblock_acceptance.explicit_seed_used
+                    )
+                    if sparse_xblock_acceptance.candidate_residual is not None:
+                        sparse_xblock_rescue_candidate_residual = float(
+                            sparse_xblock_acceptance.candidate_residual
+                        )
                 except Exception as exc:  # noqa: BLE001
                     sparse_xblock_rescue_error = f"{type(exc).__name__}: {exc}"
                     sparse_xblock_rescue_reason = "exception"

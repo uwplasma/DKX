@@ -3980,6 +3980,37 @@ class SparseXBlockRescueSolveResult:
 
 
 @dataclass(frozen=True)
+class SparseXBlockRescueAcceptanceContext:
+    """Inputs for accepting a sparse x-block rescue candidate."""
+
+    current_result: GMRESSolveResult
+    candidate_result: GMRESSolveResult | None
+    reason: str
+    assembled_host_fp: bool
+    use_implicit: bool
+    replay_state: Any
+    matvec: ArrayFn
+    rhs: jnp.ndarray
+    preconditioner: ArrayFn
+    precondition_side: str
+    solver_kind: str
+    restart: int
+    maxiter: int | None
+    record_replay_problem: Callable[..., None]
+
+
+@dataclass(frozen=True)
+class SparseXBlockRescueAcceptanceResult:
+    """Accepted sparse x-block rescue state and replay diagnostics."""
+
+    result: GMRESSolveResult
+    accepted: bool
+    reason: str
+    candidate_residual: float | None = None
+    explicit_seed_used: bool = False
+
+
+@dataclass(frozen=True)
 class FortranReducedXBlockMomentSchurStageContext:
     """Dependencies for the optional fortran-reduced moment-Schur stage."""
 
@@ -6820,6 +6851,49 @@ def run_sparse_xblock_rescue_solve_stage(
         )
     finally:
         context.mark("rhs1_sparse_precond_solve_done")
+
+
+def accept_sparse_xblock_rescue_candidate(
+    *,
+    context: SparseXBlockRescueAcceptanceContext,
+) -> SparseXBlockRescueAcceptanceResult:
+    """Accept an improving sparse x-block candidate and update replay state."""
+
+    candidate = context.candidate_result
+    if candidate is None or not (
+        float(candidate.residual_norm) < float(context.current_result.residual_norm)
+    ):
+        return SparseXBlockRescueAcceptanceResult(
+            result=context.current_result,
+            accepted=False,
+            reason=str(context.reason),
+        )
+
+    reason = str(context.reason)
+    if reason == "gmres_candidate":
+        reason = "gmres_candidate_improved"
+    explicit_seed_used = bool(context.assembled_host_fp and (not bool(context.use_implicit)))
+    if bool(context.assembled_host_fp):
+        context.replay_state.x0_vec = candidate.x
+    else:
+        context.record_replay_problem(
+            context.replay_state,
+            matvec_fn=context.matvec,
+            b_vec=context.rhs,
+            precond_fn=context.preconditioner,
+            x0_vec=candidate.x,
+            precond_side=context.precondition_side,
+            solver_kind=context.solver_kind,
+            restart=int(context.restart),
+            maxiter=context.maxiter,
+        )
+    return SparseXBlockRescueAcceptanceResult(
+        result=candidate,
+        accepted=True,
+        reason=reason,
+        candidate_residual=float(candidate.residual_norm),
+        explicit_seed_used=bool(explicit_seed_used),
+    )
 
 
 def apply_fortran_reduced_xblock_moment_schur_stage(
@@ -15927,6 +16001,8 @@ __all__ = [
     "SparseJAXRetryPreconditionerBuildContext",
     "SparseXBlockExplicitSeedContext",
     "SparseXBlockExplicitSeedResult",
+    "SparseXBlockRescueAcceptanceContext",
+    "SparseXBlockRescueAcceptanceResult",
     "SparseXBlockRescueBuildContext",
     "SparseXBlockRescueBuildResult",
     "SparseXBlockRescueSolveContext",
@@ -15945,6 +16021,7 @@ __all__ = [
     "XBlockPostSolveCorrectionResult",
     "XBlockPostKrylovCompletionContext",
     "XBlockPostKrylovCompletionResult",
+    "accept_sparse_xblock_rescue_candidate",
     "apply_fortran_reduced_xblock_global_coupling_stage",
     "apply_fortran_reduced_xblock_initial_seed",
     "apply_fortran_reduced_xblock_moment_schur_stage",

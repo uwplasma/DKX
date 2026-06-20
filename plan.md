@@ -42,6 +42,12 @@ Make `sfincs_jax` research-grade while preserving the public user contract:
 
 Recent checkpoints:
 
+- RHSMode=1 generic sparse x-block rescue candidate acceptance/replay update
+  now uses a tested `profile_response.sparse_pc` helper. The helper owns
+  strict residual-improvement admission, GMRES-candidate reason promotion,
+  explicit-seed replay updates, and KSP replay problem recording for non-seed
+  candidates; the driver keeps only scalar metadata assignment around the
+  returned acceptance result.
 - Final RHSMode=1 KSP replay history/stat emission now uses a tested
   `emit_profile_response_ksp_replay_diagnostics(...)` helper in the
   profile-response solver diagnostics module. The driver owns only the replay
@@ -520,6 +526,7 @@ Recent checkpoints:
 - Final linear-solve metadata assembly extraction.
 - Final full-system dense fallback execution extraction.
 - Reduced dense fallback execution extraction.
+- Generic sparse x-block candidate acceptance extraction.
 - Sparse-PC GMRES retry tuple-adapter extraction.
 - Reduced/full dense fallback admission policy extraction.
 - Measured candidate handoff consolidation.
@@ -538,10 +545,10 @@ Recent checkpoints:
 - `cb295ce` Extract sparse pattern setup.
 - `4b6a5b4` Extract sparse factor policy.
 
-Current source-size snapshot after generic sparse x-block solve-stage extraction:
+Current source-size snapshot after generic sparse x-block acceptance extraction:
 
-- `sfincs_jax/v3_driver.py`: `14522` lines.
-- `solve_v3_full_system_linear_gmres`: `9752` lines.
+- `sfincs_jax/v3_driver.py`: `14533` lines.
+- `solve_v3_full_system_linear_gmres`: `9761` lines.
 - `sfincs_jax/v3_results.py`: `119` lines.
 - `sfincs_jax/rhs1_ksp_diagnostics.py`: `306` lines.
 - `sfincs_jax/rhs1_pas_policy.py`: `889` lines.
@@ -554,22 +561,22 @@ Current source-size snapshot after generic sparse x-block solve-stage extraction
 - `sfincs_jax/problems/profile_response/linear_solve.py`: `798` lines.
 - `sfincs_jax/problems/profile_response/preconditioner_build.py`: `811` lines.
 - `sfincs_jax/problems/profile_response/active_projection.py`: `203` lines.
-- `sfincs_jax/problems/profile_response/sparse_pc.py`: `16082` lines.
+- `sfincs_jax/problems/profile_response/sparse_pc.py`: `16159` lines.
 - `sfincs_jax/problems/profile_response/solver_diagnostics.py`: `421` lines.
 - `sfincs_jax/rhs1_xblock_policy.py`: `1215` lines.
 
 Recent local validation:
 
-- Generic sparse x-block solve-stage extraction:
+- Generic sparse x-block candidate acceptance extraction:
   `tests/test_profile_response_sparse_pc.py
   tests/test_v3_driver_rhs1_dispatch_coverage.py` passed
-  (`338 passed in 23.36 s`).
+  (`341 passed in 22.71 s`).
 - Broad profile-response/RHSMode=1 shard after generic sparse x-block
-  solve-stage extraction:
+  candidate acceptance extraction:
   `tests/test_profile_response_*.py tests/test_rhs1_*.py
   tests/test_newton_krylov_diagnostics.py tests/test_pas_smoother.py`
-  passed (`1370 passed in 86.05 s`).
-- Hygiene after generic sparse x-block solve-stage extraction:
+  passed (`1373 passed in 85.60 s`).
+- Hygiene after generic sparse x-block candidate acceptance extraction:
   `py_compile`, `ruff check`, `compileall`, `git diff --check`, and
   `python scripts/check_repo_size.py` passed. Repo-size audit reported no
   reviewed files above 2 MiB.
