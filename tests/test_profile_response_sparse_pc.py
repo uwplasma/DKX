@@ -64,6 +64,7 @@ from sfincs_jax.problems.profile_response.sparse_pc import (
     ExplicitSparseOperatorBuildResult,
     SparsePCDirectTailFinalMetadataContext,
     SparsePCGMRESFinalizationContext,
+    SparsePCGMRESFinalizationStateContext,
     SparseMinimumNormPayload,
     SparseMinimumNormPolicy,
     SparsePCGMRESResult,
@@ -133,6 +134,7 @@ from sfincs_jax.problems.profile_response.sparse_pc import (
     finalize_sparse_pc_gmres_with_dtype_retry,
     sparse_pc_gmres_finalization_driver_scope_keys,
     sparse_pc_gmres_finalization_driver_state_keys,
+    sparse_pc_gmres_finalization_state_from_context,
     sparse_pc_gmres_finalization_state_from_driver_scope,
     prepare_fortran_reduced_xblock_initial_guess,
     prepare_xblock_initial_guess,
@@ -7209,7 +7211,21 @@ def test_sparse_pc_gmres_finalization_state_from_driver_scope_filters_scope() ->
     scope["sparse_pc_preconditioner_operator"] = "raw_operator"
 
     state = sparse_pc_gmres_finalization_state_from_driver_scope(scope)
+    context_state = sparse_pc_gmres_finalization_state_from_context(
+        SparsePCGMRESFinalizationStateContext(
+            atol=scope["atol"],
+            mv_count=scope["mv_count"],
+            rhs_norm=scope["rhs_norm"],
+            target=scope["target"],
+            tol=scope["tol"],
+            sparse_pc_direct_tail_metadata=direct_tail_metadata,
+            sparse_pc_factor_preflight_metadata=factor_preflight_metadata,
+            sparse_pc_pattern_metadata=pattern_metadata,
+            sparse_pc_static_metadata=static_metadata,
+        )
+    )
 
+    assert context_state == state
     assert tuple(state) == (
         *keys,
         "sparse_pc_direct_tail_metadata",

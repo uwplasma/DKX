@@ -499,6 +499,41 @@ def sparse_pc_gmres_finalization_driver_scope_keys() -> tuple[str, ...]:
     return _SPARSE_PC_GMRES_FINALIZATION_SCOPE_KEYS
 
 
+@dataclass(frozen=True)
+class SparsePCGMRESFinalizationStateContext:
+    """Explicit sparse-PC final metadata state inputs."""
+
+    atol: object
+    mv_count: object
+    rhs_norm: object
+    target: object
+    tol: object
+    sparse_pc_direct_tail_metadata: object
+    sparse_pc_factor_preflight_metadata: object
+    sparse_pc_pattern_metadata: object
+    sparse_pc_static_metadata: object
+
+
+def sparse_pc_gmres_finalization_state_from_context(
+    context: SparsePCGMRESFinalizationStateContext,
+) -> dict[str, object]:
+    """Build sparse-PC finalization metadata state from typed inputs."""
+
+    return {
+        "atol": context.atol,
+        "mv_count": context.mv_count,
+        "rhs_norm": context.rhs_norm,
+        "target": context.target,
+        "tol": context.tol,
+        "sparse_pc_direct_tail_metadata": context.sparse_pc_direct_tail_metadata,
+        "sparse_pc_factor_preflight_metadata": (
+            context.sparse_pc_factor_preflight_metadata
+        ),
+        "sparse_pc_pattern_metadata": context.sparse_pc_pattern_metadata,
+        "sparse_pc_static_metadata": context.sparse_pc_static_metadata,
+    }
+
+
 def sparse_pc_gmres_finalization_state_from_driver_scope(
     scope: Mapping[str, object],
 ) -> dict[str, object]:
@@ -532,11 +567,19 @@ def sparse_pc_gmres_finalization_state_from_driver_scope(
         static_metadata = scope["sparse_pc_static_metadata"]
     else:
         static_metadata = sparse_pc_gmres_static_metadata(scope)
-    state["sparse_pc_direct_tail_metadata"] = direct_tail_metadata
-    state["sparse_pc_factor_preflight_metadata"] = factor_preflight_metadata
-    state["sparse_pc_pattern_metadata"] = pattern_metadata
-    state["sparse_pc_static_metadata"] = static_metadata
-    return state
+    return sparse_pc_gmres_finalization_state_from_context(
+        SparsePCGMRESFinalizationStateContext(
+            atol=state["atol"],
+            mv_count=state["mv_count"],
+            rhs_norm=state["rhs_norm"],
+            target=state["target"],
+            tol=state["tol"],
+            sparse_pc_direct_tail_metadata=direct_tail_metadata,
+            sparse_pc_factor_preflight_metadata=factor_preflight_metadata,
+            sparse_pc_pattern_metadata=pattern_metadata,
+            sparse_pc_static_metadata=static_metadata,
+        )
+    )
 
 
 _XBLOCK_SPARSE_PC_FINAL_METADATA_CORE_STATE_KEYS = (
@@ -11239,10 +11282,12 @@ __all__ = [
     "SparsePCGMRESContext",
     "SparsePCGMRESResult",
     "SparsePCGMRESFinalizationContext",
+    "SparsePCGMRESFinalizationStateContext",
     "SparsePCFactorDtypeRetryFinalizationContext",
     "SparsePCPostMinresFinalizationContext",
     "sparse_pc_gmres_finalization_driver_scope_keys",
     "sparse_pc_gmres_finalization_driver_state_keys",
+    "sparse_pc_gmres_finalization_state_from_context",
     "sparse_pc_gmres_finalization_state_from_driver_scope",
     "XBlockKrylovReport",
     "XBlockSparsePCCompletionContext",

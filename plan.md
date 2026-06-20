@@ -51,9 +51,10 @@ Recent checkpoints:
   missing-key audit path.
 - Generic sparse-PC finalization now builds direct-tail, factor-preflight,
   sparse-pattern, and static solver metadata from typed contexts before
-  finalization. The RHSMode=1 generic finalizer receives only five dynamic
-  convergence/reporting scalars plus compact metadata dictionaries; it no
-  longer consumes the driver frame through `locals()`.
+  finalization. The RHSMode=1 generic finalizer receives those five dynamic
+  convergence/reporting scalars plus compact metadata dictionaries through
+  `SparsePCGMRESFinalizationStateContext`; it no longer consumes a driver
+  frame or ad hoc mapping at the production call site.
 - X-block sparse-PC physical residual recomputation and reported Krylov
   iteration/matvec counters now use tested `profile_response.sparse_pc`
   helpers, removing duplicated reporting code from the driver while preserving
@@ -1097,6 +1098,16 @@ Recent local validation:
 - Broad profile-response/RHSMode=1 policy, setup, diagnostics, solver, and
   helper sweep after x-block typed nested/final metadata:
   `1193 passed in 48.35 s`.
+- Generic sparse-PC typed finalization-state focused test:
+  `1 passed in 1.01 s`.
+- Profile-response diagnostics/sparse-PC shard after generic sparse-PC typed
+  finalization-state handoff: `250 passed in 1.97 s`.
+- Xblock/sparse-host/minimum-norm/direct-tail driver shard after generic
+  sparse-PC typed finalization-state handoff:
+  `36 passed, 96 deselected in 37.04 s`.
+- Broad profile-response/RHSMode=1 policy, setup, diagnostics, solver, and
+  helper sweep after generic sparse-PC typed finalization-state handoff:
+  `1193 passed in 47.58 s`.
 - Older focused and broad validation checkpoints are intentionally omitted from
   this active plan; they remain available in git history.
 
@@ -1109,7 +1120,7 @@ Known CI issue fixed by this rewrite:
 
 ### 1. `v3_driver.py` Architecture Refactor
 
-Completion estimate: 64%.
+Completion estimate: 65%.
 
 Goal:
 
@@ -1180,6 +1191,9 @@ Completed recent boundaries:
   acceptance metadata consolidated into a profile-response helper.
 - Generic sparse-PC dtype retry, state handoff, post-minres finalization, and
   final payload construction consolidated into one profile-response helper.
+- Generic sparse-PC finalization-state handoff now uses
+  `SparsePCGMRESFinalizationStateContext` directly from the driver instead of
+  a raw mapping wrapper.
 - X-block sparse-PC nested diagnostics and final metadata state now use typed
   contexts directly from the driver; production x-block finalization no longer
   depends on a `locals()` frame copy.
