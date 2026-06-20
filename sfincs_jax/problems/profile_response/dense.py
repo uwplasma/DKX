@@ -82,6 +82,28 @@ class RHS1ReducedDenseFallbackStageContext:
 
 
 @dataclass(frozen=True)
+class RHS1ReducedDenseFallbackAdmissionStageContext:
+    """Inputs for reduced dense fallback admission plus execution handoff."""
+
+    stage_context: RHS1ReducedDenseFallbackStageContext
+    dense_fallback_max: int
+    residual_norm_true: float
+    reported_residual_norm: float
+    active_size: int
+    rhs_mode: int
+    include_phi1: bool
+    has_fp: bool
+    disable_dense_pas: bool
+    any_dense_path_allowed: bool
+    host_sparse_direct_used: bool
+    backend: str
+    host_sparse_skip_ratio: float
+    cs0_dense_fallback_allowed: bool
+    cs0_sparse_first: bool
+    cs0_petsc_compat: bool
+
+
+@dataclass(frozen=True)
 class RHS1FullDenseFallbackContext:
     """Inputs for the final full-system RHSMode=1 dense fallback candidate."""
 
@@ -829,6 +851,57 @@ def run_rhs1_reduced_dense_fallback_stage(
     return result, residual_vec, bool(accepted)
 
 
+def run_rhs1_reduced_dense_fallback_admission_stage(
+    *,
+    context: RHS1ReducedDenseFallbackAdmissionStageContext,
+    replay_state,
+    accept_candidate: Callable[..., tuple[GMRESSolveResult, jnp.ndarray | None, bool]],
+    emit: Callable[[int, str], None] | None = None,
+    mark: Callable[[str], None] | None = None,
+    peak_rss_mb: Callable[[], float] | None = None,
+) -> tuple[GMRESSolveResult, jnp.ndarray | None, bool]:
+    """Resolve admission and run reduced dense fallback if policy allows it."""
+
+    stage_context = context.stage_context
+    admission = resolve_rhs1_reduced_dense_fallback_admission(
+        dense_fallback_max=int(context.dense_fallback_max),
+        residual_norm_true=float(context.residual_norm_true),
+        reported_residual_norm=float(context.reported_residual_norm),
+        target=float(stage_context.target),
+        active_size=int(context.active_size),
+        rhs_mode=int(context.rhs_mode),
+        include_phi1=bool(context.include_phi1),
+        constraint_scheme=int(stage_context.candidate_context.constraint_scheme),
+        has_fp=bool(context.has_fp),
+        disable_dense_pas=bool(context.disable_dense_pas),
+        any_dense_path_allowed=bool(context.any_dense_path_allowed),
+        host_sparse_direct_used=bool(context.host_sparse_direct_used),
+        backend=str(context.backend),
+        host_sparse_skip_ratio=float(context.host_sparse_skip_ratio),
+        cs0_dense_fallback_allowed=bool(context.cs0_dense_fallback_allowed),
+        cs0_sparse_first=bool(context.cs0_sparse_first),
+        cs0_petsc_compat=bool(context.cs0_petsc_compat),
+    )
+    if emit is not None:
+        for level, message in admission.messages:
+            emit(level, message)
+    if not bool(admission.should_run):
+        return (
+            stage_context.current_result,
+            stage_context.current_residual_vec,
+            False,
+        )
+
+    return run_rhs1_reduced_dense_fallback_stage(
+        context=stage_context,
+        replay_state=replay_state,
+        accept_candidate=accept_candidate,
+        emit=emit,
+        mark=mark,
+        peak_rss_mb=peak_rss_mb,
+    )
+
+
 def run_rhs1_full_dense_fallback_candidate(
     *,
     context: RHS1FullDenseFallbackContext,
@@ -1142,6 +1215,7 @@ __all__ = [
     "HostDenseReducedSolveContext",
     "RHS1FullDenseFallbackContext",
     "RHS1FullDenseFallbackStageContext",
+    "RHS1ReducedDenseFallbackAdmissionStageContext",
     "RHS1ReducedDenseFallbackCandidateContext",
     "RHS1ReducedDenseFallbackStageContext",
     "rhs1_dense_probe_admission",
@@ -1154,6 +1228,7 @@ __all__ = [
     "resolve_rhs1_reduced_dense_fallback_admission",
     "run_rhs1_full_dense_fallback_candidate",
     "run_rhs1_full_dense_fallback_stage",
+    "run_rhs1_reduced_dense_fallback_admission_stage",
     "run_rhs1_reduced_dense_fallback_stage",
     "solve_rhs1_reduced_dense_fallback_candidate",
     "solve_host_dense_full",

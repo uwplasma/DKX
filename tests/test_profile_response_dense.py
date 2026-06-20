@@ -11,10 +11,12 @@ from sfincs_jax.problems.profile_response.dense import (
     RHS1DenseFallbackAdmission,
     RHS1FullDenseFallbackContext,
     RHS1FullDenseFallbackStageContext,
+    RHS1ReducedDenseFallbackAdmissionStageContext,
     RHS1ReducedDenseFallbackCandidateContext,
     RHS1ReducedDenseFallbackStageContext,
     run_rhs1_full_dense_fallback_candidate,
     run_rhs1_full_dense_fallback_stage,
+    run_rhs1_reduced_dense_fallback_admission_stage,
     run_rhs1_reduced_dense_fallback_stage,
     rhs1_dense_fallback_thresholds_from_env,
     rhs1_dense_probe_admission,
@@ -851,6 +853,153 @@ def test_rhs1_reduced_dense_fallback_stage_reports_failure(monkeypatch) -> None:
         "(RuntimeError: reduced dense failed)",
     )
     assert marks == ["rhs1_dense_fallback_start", "rhs1_dense_fallback_done"]
+
+
+def test_rhs1_reduced_dense_fallback_admission_stage_skips_when_rejected(
+    monkeypatch,
+) -> None:
+    rhs = jnp.asarray([1.0, 2.0])
+    current = GMRESSolveResult(x=jnp.zeros(2), residual_norm=jnp.asarray(9.0))
+    current_residual = jnp.ones(2)
+
+    def fail_stage(**_kwargs):
+        raise AssertionError("reduced dense stage should not run")
+
+    monkeypatch.setattr(
+        "sfincs_jax.problems.profile_response.dense.run_rhs1_reduced_dense_fallback_stage",
+        fail_stage,
+    )
+
+    result, residual_vec, accepted = run_rhs1_reduced_dense_fallback_admission_stage(
+        context=RHS1ReducedDenseFallbackAdmissionStageContext(
+            stage_context=RHS1ReducedDenseFallbackStageContext(
+                candidate_context=RHS1ReducedDenseFallbackCandidateContext(
+                    matvec=lambda x: x,
+                    rhs=rhs,
+                    x0=current.x,
+                    active_size=20,
+                    constraint_scheme=1,
+                    has_fp=True,
+                    has_pas=False,
+                    dense_matrix_cache=None,
+                    dense_backend_allowed=True,
+                    use_implicit=False,
+                    tol=1.0e-10,
+                    atol=0.0,
+                    restart=11,
+                    maxiter=13,
+                    gmres_precond_side="left",
+                ),
+                current_result=current,
+                current_residual_vec=current_residual,
+                target=1.0e-8,
+            ),
+            dense_fallback_max=10,
+            residual_norm_true=1.0e-4,
+            reported_residual_norm=9.0,
+            active_size=20,
+            rhs_mode=1,
+            include_phi1=False,
+            has_fp=True,
+            disable_dense_pas=False,
+            any_dense_path_allowed=True,
+            host_sparse_direct_used=False,
+            backend="cpu",
+            host_sparse_skip_ratio=0.0,
+            cs0_dense_fallback_allowed=True,
+            cs0_sparse_first=False,
+            cs0_petsc_compat=False,
+        ),
+        replay_state=object(),
+        accept_candidate=lambda **_kwargs: (_ for _ in ()).throw(
+            AssertionError("acceptance should not run")
+        ),
+    )
+
+    assert not accepted
+    assert result is current
+    assert residual_vec is current_residual
+
+
+def test_rhs1_reduced_dense_fallback_admission_stage_runs_when_admitted(
+    monkeypatch,
+) -> None:
+    calls: dict[str, dict[str, object]] = {}
+    messages: list[tuple[int, str]] = []
+    marks: list[str] = []
+    replay_state = object()
+    rhs = jnp.asarray([1.0, 2.0])
+    current = GMRESSolveResult(x=jnp.zeros(2), residual_norm=jnp.asarray(9.0))
+    current_residual = jnp.ones(2)
+    candidate = GMRESSolveResult(x=jnp.asarray([1.0, 2.0]), residual_norm=jnp.asarray(0.0))
+
+    def fake_stage(**kwargs):
+        calls["stage"] = kwargs
+        return candidate, current_residual, True
+
+    monkeypatch.setattr(
+        "sfincs_jax.problems.profile_response.dense.run_rhs1_reduced_dense_fallback_stage",
+        fake_stage,
+    )
+
+    result, residual_vec, accepted = run_rhs1_reduced_dense_fallback_admission_stage(
+        context=RHS1ReducedDenseFallbackAdmissionStageContext(
+            stage_context=RHS1ReducedDenseFallbackStageContext(
+                candidate_context=RHS1ReducedDenseFallbackCandidateContext(
+                    matvec=lambda x: x,
+                    rhs=rhs,
+                    x0=current.x,
+                    active_size=2,
+                    constraint_scheme=1,
+                    has_fp=True,
+                    has_pas=False,
+                    dense_matrix_cache=None,
+                    dense_backend_allowed=True,
+                    use_implicit=False,
+                    tol=1.0e-10,
+                    atol=0.0,
+                    restart=11,
+                    maxiter=13,
+                    gmres_precond_side="left",
+                ),
+                current_result=current,
+                current_residual_vec=current_residual,
+                target=1.0e-8,
+            ),
+            dense_fallback_max=10,
+            residual_norm_true=1.0e-4,
+            reported_residual_norm=9.0,
+            active_size=2,
+            rhs_mode=1,
+            include_phi1=False,
+            has_fp=True,
+            disable_dense_pas=False,
+            any_dense_path_allowed=True,
+            host_sparse_direct_used=False,
+            backend="cpu",
+            host_sparse_skip_ratio=0.0,
+            cs0_dense_fallback_allowed=True,
+            cs0_sparse_first=False,
+            cs0_petsc_compat=False,
+        ),
+        replay_state=replay_state,
+        accept_candidate=lambda **_kwargs: (_ for _ in ()).throw(
+            AssertionError("acceptance is delegated to stage helper")
+        ),
+        emit=lambda level, msg: messages.append((level, msg)),
+        mark=marks.append,
+        peak_rss_mb=lambda: 123.0,
+    )
+
+    assert accepted
+    assert result is candidate
+    assert residual_vec is current_residual
+    assert calls["stage"]["replay_state"] is replay_state
+    assert calls["stage"]["emit"] is not None
+    assert callable(calls["stage"]["mark"])
+    assert calls["stage"]["peak_rss_mb"] is not None
+    assert messages == []
+    assert marks == []
 
 
 def test_rhs1_full_dense_fallback_candidate_uses_dense_backend() -> None:
