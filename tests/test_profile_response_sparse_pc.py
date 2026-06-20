@@ -4847,6 +4847,60 @@ def test_fp_xblock_highx_residual_correction_stage_reports_no_skipped_blocks() -
     ]
 
 
+def test_fp_xblock_highx_residual_correction_stage_preserves_exception_residual() -> None:
+    total_size = 30
+    current = GMRESSolveResult(
+        x=jnp.zeros((total_size,), dtype=jnp.float64),
+        residual_norm=jnp.asarray(2.0, dtype=jnp.float64),
+    )
+    marks: list[str] = []
+    elapsed_values = iter((3.0, 3.4))
+
+    result = run_fp_xblock_highx_residual_correction_stage(
+        context=FPXBlockHighXCorrectionContext(
+            current_result=current,
+            matvec=_identity,
+            rhs=jnp.ones((total_size,), dtype=jnp.float64),
+            reduce_full=_identity,
+            expand_reduced=_identity,
+            total_size=total_size,
+            n_species=1,
+            n_x=1,
+            n_xi=5,
+            n_theta=2,
+            n_zeta=3,
+            n_xi_for_x=(1,),
+            host_block_max_env_value="",
+            include_factored_blocks=False,
+            max_blocks=1,
+            steps=2,
+            max_directions=4,
+            alpha_clip=1.0,
+            rcond=1.0e-8,
+            min_improvement=0.0,
+            include_all=True,
+            include_raw=True,
+            replay_state=SimpleNamespace(x0_vec=None),
+            emit=None,
+            elapsed_s=lambda: next(elapsed_values),
+            mark=marks.append,
+            block_factor_allowed=lambda **_kwargs: False,
+            correction=lambda **_kwargs: (_ for _ in ()).throw(RuntimeError("boom")),
+        )
+    )
+
+    assert result.result is current
+    assert not result.accepted
+    assert result.reason == "exception"
+    assert result.error == "RuntimeError: boom"
+    assert result.residual_before == pytest.approx(2.0)
+    assert result.elapsed_s == pytest.approx(0.4)
+    assert marks == [
+        "rhs1_fp_xblock_highx_residual_correction_start",
+        "rhs1_fp_xblock_highx_residual_correction_failed",
+    ]
+
+
 def test_fortran_reduced_xblock_krylov_policy_defaults_and_counter() -> None:
     setup = resolve_fortran_reduced_xblock_krylov_policy(env={})
 

@@ -7122,6 +7122,7 @@ def run_fp_xblock_highx_residual_correction_stage(
     """Run the optional FP high-x residual-equation correction stage."""
 
     start_s = float(context.elapsed_s())
+    residual_before: float | None = None
     context.mark("rhs1_fp_xblock_highx_residual_correction_start")
     try:
         highx_slices: list[tuple[str, int, int]] = []
@@ -7291,7 +7292,7 @@ def run_fp_xblock_highx_residual_correction_stage(
             accepted=False,
             reason="exception",
             error=error,
-            residual_before=None,
+            residual_before=residual_before,
             residual_after=None,
             improvement_ratio=None,
             elapsed_s=elapsed_s,

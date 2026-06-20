@@ -46,8 +46,9 @@ Recent checkpoints:
   `run_fp_xblock_highx_residual_correction_stage(...)` helper. The helper owns
   skipped-block slice selection, residual-direction construction, subspace
   correction execution, strict improvement acceptance, replay x0 updates, and
-  failure-safe diagnostics; the driver keeps only admission policy and
-  env-control resolution.
+  failure-safe diagnostics, including legacy-compatible `residual_before`
+  retention when correction execution raises; the driver keeps only admission
+  policy and env-control resolution.
 - RHSMode=1 FP x-block global correction execution now uses a tested
   `run_fp_xblock_global_correction_stage(...)` helper. The helper owns
   correction execution, phase markers, strict residual-improvement acceptance,
@@ -575,7 +576,7 @@ Current source-size snapshot after FP high-x residual correction extraction:
 - `sfincs_jax/problems/profile_response/linear_solve.py`: `798` lines.
 - `sfincs_jax/problems/profile_response/preconditioner_build.py`: `811` lines.
 - `sfincs_jax/problems/profile_response/active_projection.py`: `203` lines.
-- `sfincs_jax/problems/profile_response/sparse_pc.py`: `16569` lines.
+- `sfincs_jax/problems/profile_response/sparse_pc.py`: `16570` lines.
 - `sfincs_jax/problems/profile_response/solver_diagnostics.py`: `421` lines.
 - `sfincs_jax/rhs1_xblock_policy.py`: `1215` lines.
 
@@ -584,7 +585,7 @@ Recent local validation:
 - FP high-x residual-equation correction extraction:
   `tests/test_profile_response_sparse_pc.py
   tests/test_v3_driver_rhs1_dispatch_coverage.py` passed
-  (`347 passed in 22.63 s`).
+  (`348 passed in 23.08 s`).
 - Broad profile-response/RHSMode=1 shard after FP high-x residual correction
   extraction:
   `tests/test_profile_response_*.py tests/test_rhs1_*.py
