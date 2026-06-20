@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Callable, Mapping, MutableMapping, Sequence
 from dataclasses import dataclass, fields
+from time import perf_counter
 from typing import Any
 
 import jax
@@ -3197,6 +3198,48 @@ class SparseHostDirectFallbackPayload:
     polish_accepted: bool
     polish_restart: int | None
     polish_maxiter: int | None
+
+
+@dataclass(frozen=True)
+class ExplicitSparseMinimumNormBranchContext:
+    """Driver callbacks and controls for the explicit sparse LSQR/LSMR branch."""
+
+    op: Any
+    rhs: jnp.ndarray
+    solve_method_kind: str
+    differentiable: bool | None
+    use_active_dof: bool
+    tol: float
+    atol: float
+    maxiter: int | None
+    rhs_norm: float
+    backend: str
+    env: Mapping[str, str]
+    emit: EmitFn | None
+    build_pattern: Callable[[Any], object]
+    summarize_pattern: Callable[[Any, object], object]
+    apply_cached_operator: Callable[[Any, jnp.ndarray], jnp.ndarray]
+    build_operator_from_pattern: Callable[..., object]
+
+
+@dataclass(frozen=True)
+class ExplicitSparseHostDirectBranchContext:
+    """Driver callbacks and controls for the explicit sparse host-LU branch."""
+
+    op: Any
+    rhs: jnp.ndarray
+    differentiable: bool | None
+    use_active_dof: bool
+    tol: float
+    atol: float
+    rhs_norm: float
+    refine_steps: int
+    emit: EmitFn | None
+    build_pattern: Callable[[Any], object]
+    summarize_pattern: Callable[[Any, object], object]
+    apply_operator: Callable[[Any, jnp.ndarray], jnp.ndarray]
+    build_host_sparse_direct_factor_from_matvec: Callable[..., tuple[object, object]]
+    direct_solve_with_refinement: Callable[..., tuple[np.ndarray, float]]
 
 
 @dataclass(frozen=True)
@@ -14035,6 +14078,95 @@ def sparse_host_direct_solve_from_pattern(
     return payload
 
 
+def _elapsed_since_now() -> Callable[[], float]:
+    """Return a cheap elapsed-time callback for explicit host sparse branches."""
+
+    start_s = perf_counter()
+    return lambda: perf_counter() - start_s
+
+
+def solve_explicit_sparse_minimum_norm_branch(
+    context: ExplicitSparseMinimumNormBranchContext,
+) -> SparseMinimumNormPayload:
+    """Run the explicit sparse LSQR/LSMR branch from driver-provided callbacks."""
+
+    validate_explicit_sparse_host_request(
+        solve_method_label="sparse_lsmr",
+        differentiable=context.differentiable,
+        rhs_mode=int(context.op.rhs_mode),
+        use_active_dof=bool(context.use_active_dof),
+        path_description="host sparse minimum-norm path",
+    )
+    pattern = context.build_pattern(context.op)
+    summary = context.summarize_pattern(context.op, pattern)
+    rhs_dtype = context.rhs.dtype
+
+    def matvec_np(x_np: np.ndarray) -> np.ndarray:
+        x_device = jnp.asarray(np.asarray(x_np, dtype=np.float64), dtype=rhs_dtype)
+        return np.asarray(
+            context.apply_cached_operator(context.op, x_device),
+            dtype=np.float64,
+        )
+
+    return sparse_minimum_norm_solve_from_pattern(
+        matvec_np=matvec_np,
+        pattern=pattern,
+        summary=summary,
+        rhs=context.rhs,
+        solve_method_kind=context.solve_method_kind,
+        tol=float(context.tol),
+        atol=float(context.atol),
+        maxiter=context.maxiter,
+        rhs_norm=float(context.rhs_norm),
+        elapsed_s=_elapsed_since_now(),
+        backend=str(context.backend),
+        env=context.env,
+        emit=context.emit,
+        build_operator_from_pattern=context.build_operator_from_pattern,
+    )
+
+
+def solve_explicit_sparse_host_direct_branch(
+    context: ExplicitSparseHostDirectBranchContext,
+) -> SparseHostDirectPayload:
+    """Run the explicit sparse host-LU branch from driver-provided callbacks."""
+
+    validate_explicit_sparse_host_request(
+        solve_method_label="sparse_host",
+        differentiable=context.differentiable,
+        rhs_mode=int(context.op.rhs_mode),
+        use_active_dof=bool(context.use_active_dof),
+        path_description="host sparse LU path",
+    )
+    pattern = context.build_pattern(context.op)
+    summary = context.summarize_pattern(context.op, pattern)
+    rhs_dtype = context.rhs.dtype
+
+    def matvec(x_np: np.ndarray) -> jnp.ndarray:
+        x_device = jnp.asarray(x_np, dtype=rhs_dtype)
+        return context.apply_operator(context.op, x_device)
+
+    return sparse_host_direct_solve_from_pattern(
+        matvec=matvec,
+        pattern=pattern,
+        summary=summary,
+        n=int(context.op.total_size),
+        dtype=rhs_dtype,
+        factor_dtype=np.dtype(np.float64),
+        rhs=context.rhs,
+        refine_steps=int(context.refine_steps),
+        atol=float(context.atol),
+        tol=float(context.tol),
+        rhs_norm=float(context.rhs_norm),
+        elapsed_s=_elapsed_since_now(),
+        emit=context.emit,
+        build_host_sparse_direct_factor_from_matvec=(
+            context.build_host_sparse_direct_factor_from_matvec
+        ),
+        direct_solve_with_refinement=context.direct_solve_with_refinement,
+    )
+
+
 def solve_sparse_host_direct_from_available_factor(
     *,
     explicit_sparse_factor: object | None,
@@ -15186,6 +15318,8 @@ __all__ = [
     "SparseHostDirectFactorSolvePayload",
     "SparseHostDirectPolishPayload",
     "SparseHostDirectFallbackPayload",
+    "ExplicitSparseMinimumNormBranchContext",
+    "ExplicitSparseHostDirectBranchContext",
     "SparseHostOrILUFactorBuildContext",
     "SparseHostOrILUFactorBuildResult",
     "SparseHostOrILUFactorControls",
@@ -15310,8 +15444,10 @@ __all__ = [
     "sparse_minimum_norm_solve_payload",
     "sparse_minimum_norm_solve_from_pattern",
     "sparse_minimum_norm_start_message",
+    "solve_explicit_sparse_minimum_norm_branch",
     "sparse_host_direct_solve_payload",
     "sparse_host_direct_solve_from_pattern",
+    "solve_explicit_sparse_host_direct_branch",
     "solve_sparse_host_direct_from_available_factor",
     "apply_sparse_host_direct_polish_if_needed",
     "sparse_host_direct_fallback_payload",

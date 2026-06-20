@@ -1433,6 +1433,11 @@ Recent local validation:
 - Broad profile-response/RHSMode=1 policy, setup, diagnostics, solver, and
   helper sweep after sparse-PC driver-result bundle extraction:
   `1302 passed in 85.29 s`.
+- Profile-response sparse-PC helper tests after explicit sparse host/minimum-
+  norm branch extraction: `292 passed in 2.22 s`.
+- Broad profile-response/RHSMode=1 policy, setup, diagnostics, solver, and
+  helper sweep after explicit sparse host/minimum-norm branch extraction:
+  `1304 passed in 87.56 s`.
 - Hygiene after generic sparse-PC finalization bundle extraction:
   `ruff`, `py_compile`, `compileall`, `git diff --check`, and repository size
   audit passed; latest branch CI and Docs were green.
@@ -1448,7 +1453,7 @@ Known CI issue fixed by this rewrite:
 
 ### 1. `v3_driver.py` Architecture Refactor
 
-Completion estimate: 96%.
+Completion estimate: 97%.
 
 Goal:
 
@@ -1644,6 +1649,13 @@ Completed recent boundaries:
 - Explicit sparse minimum-norm conservative-pattern materialization, progress
   emission, policy parsing, LSQR/LSMR execution, completion emission, and
   matrix-required gate consolidated into a tested profile-response helper.
+- Explicit sparse minimum-norm and sparse-host direct branch orchestration now
+  uses tested callback-based profile-response helpers. The production driver
+  still supplies the full-system operator callbacks, but validation,
+  conservative-pattern setup, summary handling, elapsed timing, matvec closure
+  creation, and LSQR/LSMR or host-LU payload construction are no longer inline;
+  after this tranche `v3_driver.py` is 15,347 lines and
+  `solve_v3_full_system_linear_gmres` is 10,596 lines.
 - Explicit sparse-host direct conservative-pattern progress, host factor build,
   direct refinement solve, true-residual payload, and completion emission
   consolidated into a tested profile-response helper.
@@ -1932,7 +1944,7 @@ Next steps:
 
 ### 4. Validation, Coverage, And Documentation
 
-Completion estimate: 68%.
+Completion estimate: 69%.
 
 Goal:
 

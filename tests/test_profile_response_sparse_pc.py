@@ -63,6 +63,8 @@ from sfincs_jax.problems.profile_response.sparse_pc import (
     SparseHostDirectFactorSolvePayload,
     SparseHostDirectPolishPayload,
     SparseHostDirectFallbackPayload,
+    ExplicitSparseMinimumNormBranchContext,
+    ExplicitSparseHostDirectBranchContext,
     SparseHostOrILUFactorBuildContext,
     SparseHostOrILUFactorControls,
     SparseILUPreconditionerBuildContext,
@@ -260,6 +262,7 @@ from sfincs_jax.problems.profile_response.sparse_pc import (
     sparse_pc_gmres_final_payload_from_driver_state,
     sparse_host_direct_solve_payload,
     sparse_host_direct_solve_from_pattern,
+    solve_explicit_sparse_host_direct_branch,
     solve_sparse_host_direct_from_available_factor,
     apply_sparse_host_direct_polish_if_needed,
     sparse_host_direct_fallback_payload,
@@ -271,6 +274,7 @@ from sfincs_jax.problems.profile_response.sparse_pc import (
     sparse_minimum_norm_solve_payload,
     sparse_minimum_norm_solve_from_pattern,
     sparse_minimum_norm_start_message,
+    solve_explicit_sparse_minimum_norm_branch,
     validate_explicit_sparse_host_request,
     finalize_xblock_assembled_operator_metadata,
     xblock_sparse_pc_final_metadata_from_driver_state,
@@ -8435,6 +8439,66 @@ def test_sparse_minimum_norm_solve_from_pattern_requires_materialized_matrix() -
         )
 
 
+def test_solve_explicit_sparse_minimum_norm_branch_uses_driver_callbacks() -> None:
+    messages: list[tuple[int, str]] = []
+    calls: dict[str, object] = {}
+    op = SimpleNamespace(rhs_mode=1, total_size=2, matrix=scipy_sparse.eye(2, format="csr"))
+    bundle = SimpleNamespace(
+        metadata=SimpleNamespace(storage_kind="csr", reason="materialized"),
+        matrix=op.matrix,
+    )
+
+    def build_pattern(arg_op):
+        calls["pattern_op"] = arg_op
+        return {"rows": (0, 1)}
+
+    def summarize_pattern(arg_op, pattern):
+        calls["summary_op"] = arg_op
+        calls["summary_pattern"] = pattern
+        return SimpleNamespace(nnz=2, avg_row_nnz=1.0, max_row_nnz=1)
+
+    def apply_cached_operator(arg_op, x):
+        calls["matvec_op"] = arg_op
+        return jnp.asarray(arg_op.matrix @ np.asarray(x, dtype=np.float64), dtype=x.dtype)
+
+    def build_operator_from_pattern(matvec_np, **kwargs):
+        calls["operator_kwargs"] = kwargs
+        calls["operator_action"] = matvec_np(np.asarray([2.0, -3.0]))
+        return bundle
+
+    payload = solve_explicit_sparse_minimum_norm_branch(
+        ExplicitSparseMinimumNormBranchContext(
+            op=op,
+            rhs=jnp.asarray([1.0, -2.0], dtype=jnp.float64),
+            solve_method_kind="sparse_lsmr",
+            differentiable=False,
+            use_active_dof=False,
+            tol=1.0e-12,
+            atol=1.0e-12,
+            maxiter=20,
+            rhs_norm=float(np.linalg.norm([1.0, -2.0])),
+            backend="cpu",
+            env={},
+            emit=lambda level, message: messages.append((level, message)),
+            build_pattern=build_pattern,
+            summarize_pattern=summarize_pattern,
+            apply_cached_operator=apply_cached_operator,
+            build_operator_from_pattern=build_operator_from_pattern,
+        )
+    )
+
+    assert isinstance(payload, SparseMinimumNormPayload)
+    np.testing.assert_allclose(np.asarray(payload.x), np.asarray([1.0, -2.0]), atol=1.0e-10)
+    assert float(payload.residual_norm) < 1.0e-10
+    assert calls["pattern_op"] is op
+    assert calls["summary_pattern"] == {"rows": (0, 1)}
+    np.testing.assert_allclose(calls["operator_action"], np.asarray([2.0, -3.0]))
+    assert calls["operator_kwargs"]["pattern"] == {"rows": (0, 1)}
+    assert calls["operator_kwargs"]["backend"] == "cpu"
+    assert messages[0][1].startswith("solve_v3_full_system_linear_gmres: sparse_lsmr building")
+    assert messages[-1][1].startswith("solve_v3_full_system_linear_gmres: sparse_lsmr complete")
+
+
 def test_sparse_host_direct_solve_payload_recomputes_true_residual_and_metadata() -> None:
     calls: list[dict[str, object]] = []
 
@@ -8533,6 +8597,66 @@ def test_sparse_host_direct_solve_from_pattern_builds_factor_and_emits_messages(
             "elapsed_s=1.500 residual=0.000000e+00",
         ),
     ]
+
+
+def test_solve_explicit_sparse_host_direct_branch_uses_driver_callbacks() -> None:
+    messages: list[tuple[int, str]] = []
+    calls: dict[str, object] = {}
+    matrix = scipy_sparse.diags([2.0, 4.0], format="csr")
+    op = SimpleNamespace(rhs_mode=1, total_size=2, matrix=matrix)
+    operator_bundle = SimpleNamespace(matrix=matrix)
+    factor_bundle = SimpleNamespace(solve=lambda rhs: rhs)
+
+    def build_pattern(arg_op):
+        calls["pattern_op"] = arg_op
+        return {"rows": (0, 1)}
+
+    def summarize_pattern(arg_op, pattern):
+        calls["summary_op"] = arg_op
+        calls["summary_pattern"] = pattern
+        return SimpleNamespace(nnz=2, avg_row_nnz=1.0, max_row_nnz=1)
+
+    def apply_operator(arg_op, x):
+        calls["matvec_op"] = arg_op
+        return jnp.asarray(arg_op.matrix @ np.asarray(x, dtype=np.float64), dtype=x.dtype)
+
+    def build_factor(**kwargs):
+        calls["factor_kwargs"] = kwargs
+        return operator_bundle, factor_bundle
+
+    def direct_solve_with_refinement(**kwargs):
+        calls["direct_kwargs"] = kwargs
+        return np.asarray([1.0, 2.0]), 9.0
+
+    payload = solve_explicit_sparse_host_direct_branch(
+        ExplicitSparseHostDirectBranchContext(
+            op=op,
+            rhs=jnp.asarray([2.0, 8.0], dtype=jnp.float64),
+            differentiable=False,
+            use_active_dof=False,
+            tol=1.0e-12,
+            atol=1.0e-12,
+            rhs_norm=float(np.linalg.norm([2.0, 8.0])),
+            refine_steps=3,
+            emit=lambda level, message: messages.append((level, message)),
+            build_pattern=build_pattern,
+            summarize_pattern=summarize_pattern,
+            apply_operator=apply_operator,
+            build_host_sparse_direct_factor_from_matvec=build_factor,
+            direct_solve_with_refinement=direct_solve_with_refinement,
+        )
+    )
+
+    assert isinstance(payload, SparseHostDirectPayload)
+    np.testing.assert_allclose(np.asarray(payload.x), np.asarray([1.0, 2.0]))
+    assert float(payload.residual_norm) == pytest.approx(0.0)
+    assert calls["pattern_op"] is op
+    assert calls["summary_pattern"] == {"rows": (0, 1)}
+    assert calls["factor_kwargs"]["pattern"] == {"rows": (0, 1)}
+    assert calls["factor_kwargs"]["n"] == 2
+    assert calls["direct_kwargs"]["refine_steps"] == 3
+    assert messages[0][1].startswith("solve_v3_full_system_linear_gmres: sparse_host building")
+    assert messages[-1] == (0, payload.completion_message)
 
 
 def test_solve_sparse_host_direct_from_available_factor_prefers_explicit_factor() -> None:

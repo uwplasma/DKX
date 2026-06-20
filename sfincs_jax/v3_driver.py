@@ -271,6 +271,8 @@ from .problems.profile_response.sparse_pc import (
     SparsePCAutoPreflightRetrySelectionContext,
     SparsePCAutoPreflightRetryEvaluationContext,
     SparsePCPatternSetupContext,
+    ExplicitSparseMinimumNormBranchContext,
+    ExplicitSparseHostDirectBranchContext,
     SparseHostOrILUFactorBuildContext,
     SparseILUPreconditionerBuildContext,
     SparseHostScipyPreconditionerBuildContext,
@@ -383,9 +385,8 @@ from .problems.profile_response.sparse_pc import (
     finalize_sparse_pc_gmres_bundle,
     sparse_pc_gmres_finalization_bundle_from_driver_result,
     sparse_host_direct_fallback_payload,
-    sparse_host_direct_solve_from_pattern,
-    sparse_minimum_norm_solve_from_pattern,
-    validate_explicit_sparse_host_request,
+    solve_explicit_sparse_minimum_norm_branch,
+    solve_explicit_sparse_host_direct_branch,
     finalize_xblock_assembled_operator_metadata,
 )
 from .rhs1_strong_fallback import (
@@ -7341,38 +7342,25 @@ def solve_v3_full_system_linear_gmres(
             payload=sparse_pc_final_payload,
         )
     if solve_method_kind_explicit in _SPARSE_HOST_MINIMUM_NORM_SOLVE_METHODS:
-        validate_explicit_sparse_host_request(
-            solve_method_label="sparse_lsmr",
-            differentiable=differentiable,
-            rhs_mode=int(op.rhs_mode),
-            use_active_dof=bool(use_active_dof_mode),
-            path_description="host sparse minimum-norm path",
-        )
-        sparse_timer = Timer()
-        pattern = v3_full_system_conservative_sparsity_pattern(op)
-        summary = summarize_v3_sparse_pattern(op, pattern)
-
-        def _sparse_min_norm_mv(x_np: np.ndarray) -> jnp.ndarray:
-            return apply_v3_full_system_operator_cached(op, jnp.asarray(x_np, dtype=rhs.dtype))
-
-        def _matvec_np(x_np: np.ndarray) -> np.ndarray:
-            return np.asarray(_sparse_min_norm_mv(np.asarray(x_np, dtype=np.float64)), dtype=np.float64)
-
-        sparse_minimum_norm_payload = sparse_minimum_norm_solve_from_pattern(
-            matvec_np=_matvec_np,
-            pattern=pattern,
-            summary=summary,
-            rhs=rhs,
-            solve_method_kind=solve_method_kind_explicit,
-            tol=float(tol),
-            atol=float(atol),
-            maxiter=maxiter,
-            rhs_norm=float(rhs_norm),
-            elapsed_s=sparse_timer.elapsed_s,
-            backend=jax.default_backend(),
-            env=os.environ,
-            emit=emit,
-            build_operator_from_pattern=build_operator_from_pattern,
+        sparse_minimum_norm_payload = solve_explicit_sparse_minimum_norm_branch(
+            ExplicitSparseMinimumNormBranchContext(
+                op=op,
+                rhs=rhs,
+                solve_method_kind=solve_method_kind_explicit,
+                differentiable=differentiable,
+                use_active_dof=bool(use_active_dof_mode),
+                tol=float(tol),
+                atol=float(atol),
+                maxiter=maxiter,
+                rhs_norm=float(rhs_norm),
+                backend=jax.default_backend(),
+                env=os.environ,
+                emit=emit,
+                build_pattern=v3_full_system_conservative_sparsity_pattern,
+                summarize_pattern=summarize_v3_sparse_pattern,
+                apply_cached_operator=apply_v3_full_system_operator_cached,
+                build_operator_from_pattern=build_operator_from_pattern,
+            )
         )
         return v3_linear_solve_result_from_payload(
             op=op,
@@ -7380,39 +7368,28 @@ def solve_v3_full_system_linear_gmres(
             payload=sparse_minimum_norm_payload,
         )
     if solve_method_kind_explicit in _SPARSE_HOST_DIRECT_SOLVE_METHODS:
-        validate_explicit_sparse_host_request(
-            solve_method_label="sparse_host",
-            differentiable=differentiable,
-            rhs_mode=int(op.rhs_mode),
-            use_active_dof=bool(use_active_dof_mode),
-            path_description="host sparse LU path",
-        )
-        sparse_timer = Timer()
-        pattern = v3_full_system_conservative_sparsity_pattern(op)
-        summary = summarize_v3_sparse_pattern(op, pattern)
-
-        def _sparse_host_mv(x_np: np.ndarray) -> jnp.ndarray:
-            return apply_v3_full_system_operator(op, jnp.asarray(x_np, dtype=rhs.dtype))
-
-        sparse_host_direct_payload = sparse_host_direct_solve_from_pattern(
-            matvec=_sparse_host_mv,
-            pattern=pattern,
-            summary=summary,
-            n=int(op.total_size),
-            dtype=rhs.dtype,
-            factor_dtype=np.dtype(np.float64),
-            rhs=rhs,
-            refine_steps=_host_sparse_direct_refine_steps(
-                "SFINCS_JAX_RHSMODE1_SPARSE_DIRECT_REFINE",
-                default=2,
-            ),
-            atol=float(atol),
-            tol=float(tol),
-            rhs_norm=float(rhs_norm),
-            elapsed_s=sparse_timer.elapsed_s,
-            emit=emit,
-            build_host_sparse_direct_factor_from_matvec=_build_host_sparse_direct_factor_from_matvec,
-            direct_solve_with_refinement=_host_direct_solve_with_refinement,
+        sparse_host_direct_payload = solve_explicit_sparse_host_direct_branch(
+            ExplicitSparseHostDirectBranchContext(
+                op=op,
+                rhs=rhs,
+                differentiable=differentiable,
+                use_active_dof=bool(use_active_dof_mode),
+                tol=float(tol),
+                atol=float(atol),
+                rhs_norm=float(rhs_norm),
+                refine_steps=_host_sparse_direct_refine_steps(
+                    "SFINCS_JAX_RHSMODE1_SPARSE_DIRECT_REFINE",
+                    default=2,
+                ),
+                emit=emit,
+                build_pattern=v3_full_system_conservative_sparsity_pattern,
+                summarize_pattern=summarize_v3_sparse_pattern,
+                apply_operator=apply_v3_full_system_operator,
+                build_host_sparse_direct_factor_from_matvec=(
+                    _build_host_sparse_direct_factor_from_matvec
+                ),
+                direct_solve_with_refinement=_host_direct_solve_with_refinement,
+            )
         )
         return v3_linear_solve_result_from_payload(
             op=op,
