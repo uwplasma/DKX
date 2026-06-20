@@ -385,6 +385,11 @@ Recent checkpoints:
   diagnostics, explicit FP `preconditioner_xi` promotion, assembled-host-FP
   admission, build phase markers, and builder invocation; the driver keeps the
   later Krylov/seed acceptance and metadata state.
+- RHSMode=1 explicit FP x-block seed/refinement/polish logic now uses a tested
+  `profile_response.sparse_pc` helper. The helper owns seed application,
+  residual refinement, accept-ratio parsing, optional bounded GMRES polish, and
+  progress messages; the driver keeps metadata assignment and final acceptance
+  against the current solve.
 - RHSMode=1 PAS preconditioner probe/default routing now uses tested
   PAS-policy helpers for env parsing, tokamak-like Schur defaulting, heavy-path
   admission, large-system collision skip, and residual-threshold decisions
@@ -528,10 +533,10 @@ Recent checkpoints:
 - `cb295ce` Extract sparse pattern setup.
 - `4b6a5b4` Extract sparse factor policy.
 
-Current source-size snapshot after generic sparse x-block rescue setup extraction:
+Current source-size snapshot after explicit FP x-block seed extraction:
 
-- `sfincs_jax/v3_driver.py`: `14635` lines.
-- `solve_v3_full_system_linear_gmres`: `9867` lines.
+- `sfincs_jax/v3_driver.py`: `14545` lines.
+- `solve_v3_full_system_linear_gmres`: `9775` lines.
 - `sfincs_jax/v3_results.py`: `119` lines.
 - `sfincs_jax/rhs1_ksp_diagnostics.py`: `306` lines.
 - `sfincs_jax/rhs1_pas_policy.py`: `889` lines.
@@ -544,12 +549,25 @@ Current source-size snapshot after generic sparse x-block rescue setup extractio
 - `sfincs_jax/problems/profile_response/linear_solve.py`: `798` lines.
 - `sfincs_jax/problems/profile_response/preconditioner_build.py`: `811` lines.
 - `sfincs_jax/problems/profile_response/active_projection.py`: `203` lines.
-- `sfincs_jax/problems/profile_response/sparse_pc.py`: `15782` lines.
+- `sfincs_jax/problems/profile_response/sparse_pc.py`: `15962` lines.
 - `sfincs_jax/problems/profile_response/solver_diagnostics.py`: `421` lines.
 - `sfincs_jax/rhs1_xblock_policy.py`: `1215` lines.
 
 Recent local validation:
 
+- Explicit FP x-block seed extraction:
+  `tests/test_profile_response_sparse_pc.py
+  tests/test_v3_driver_rhs1_dispatch_coverage.py` passed
+  (`335 passed in 24.21 s`).
+- Broad profile-response/RHSMode=1 shard after explicit FP x-block seed
+  extraction:
+  `tests/test_profile_response_*.py tests/test_rhs1_*.py
+  tests/test_newton_krylov_diagnostics.py tests/test_pas_smoother.py`
+  passed (`1367 passed in 86.85 s`).
+- Hygiene after explicit FP x-block seed extraction:
+  `py_compile`, `ruff check`, `compileall`, `git diff --check`, and
+  `python scripts/check_repo_size.py` passed. Repo-size audit reported no
+  reviewed files above 2 MiB.
 - Generic sparse x-block rescue setup extraction:
   `tests/test_profile_response_sparse_pc.py
   tests/test_v3_driver_rhs1_dispatch_coverage.py` passed

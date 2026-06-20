@@ -24,6 +24,7 @@ from sfincs_jax.rhs1_qi_coarse import (
     RHS1QICoarseBasisMetadata,
     RHS1QICoarseCorrection,
 )
+from sfincs_jax.solver import GMRESSolveResult
 from sfincs_jax.problems.profile_response.sparse_pc import (
     DirectTailMaterializationContext,
     DirectTailMaterializationResult,
@@ -73,6 +74,7 @@ from sfincs_jax.problems.profile_response.sparse_pc import (
     SparseHostRetryCandidateContext,
     SparseHostRetryCandidateResult,
     SparseJAXRetryPreconditionerBuildContext,
+    SparseXBlockExplicitSeedContext,
     SparseXBlockRescueBuildContext,
     ExplicitSparseOperatorBuildPolicy,
     ExplicitSparseOperatorBuildResult,
@@ -147,6 +149,7 @@ from sfincs_jax.problems.profile_response.sparse_pc import (
     apply_sparse_pc_post_minres,
     apply_sparse_pc_post_minres_if_needed,
     apply_sparse_pc_post_minres_from_driver_state,
+    apply_sparse_xblock_explicit_seed,
     apply_xblock_subspace_correction_if_needed,
     build_fortran_reduced_xblock_factor_stage,
     build_sparse_xblock_rescue_preconditioner,
@@ -4162,6 +4165,78 @@ def test_sparse_xblock_rescue_build_keeps_xi_for_implicit_or_pas_cases() -> None
     assert calls["assembled"]["preconditioner_xi"] == 0
     assert calls["builder"]["build_jax_factors"] is True
     assert calls["builder"]["preconditioner_xi"] == 0
+
+
+def test_sparse_xblock_explicit_seed_accepts_and_refines(monkeypatch) -> None:
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_FP_XBLOCK_POLISH", "0")
+    messages: list[str] = []
+
+    result = apply_sparse_xblock_explicit_seed(
+        context=SparseXBlockExplicitSeedContext(
+            preconditioner=lambda v: 0.5 * v,
+            rhs=jnp.asarray([1.0], dtype=jnp.float64),
+            matvec=_identity,
+            current_result=GMRESSolveResult(
+                x=jnp.asarray([0.0], dtype=jnp.float64),
+                residual_norm=jnp.asarray(10.0, dtype=jnp.float64),
+            ),
+            target=1.0e-9,
+            tol=1.0e-9,
+            atol=1.0e-12,
+            restart=20,
+            maxiter=40,
+            precondition_side="left",
+            active_size=10,
+            emit=lambda _level, msg: messages.append(msg),
+            polish_solver=lambda **_kwargs: (_ for _ in ()).throw(AssertionError("polish disabled")),
+        )
+    )
+
+    assert result.result is not None
+    assert float(result.result.residual_norm) == pytest.approx(0.125)
+    assert result.seed_residual == pytest.approx(0.5)
+    assert result.seed_improvement_ratio == pytest.approx(20.0)
+    assert result.seed_accept_ratio == pytest.approx(10.0)
+    assert result.refine_steps == 2
+    assert result.refines_performed == 2
+    assert result.reason == "seed_accepted"
+    assert any("explicit FP x-block seed" in message for message in messages)
+    assert any("explicit FP x-block refinement steps=2/2" in message for message in messages)
+
+
+def test_sparse_xblock_explicit_seed_rejects_bad_seed(monkeypatch) -> None:
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_FP_XBLOCK_POLISH", "0")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_FP_XBLOCK_REFINES", "0")
+    messages: list[str] = []
+
+    result = apply_sparse_xblock_explicit_seed(
+        context=SparseXBlockExplicitSeedContext(
+            preconditioner=lambda v: jnp.zeros_like(v),
+            rhs=jnp.asarray([10.0], dtype=jnp.float64),
+            matvec=_identity,
+            current_result=GMRESSolveResult(
+                x=jnp.asarray([0.0], dtype=jnp.float64),
+                residual_norm=jnp.asarray(0.1, dtype=jnp.float64),
+            ),
+            target=1.0e-9,
+            tol=1.0e-9,
+            atol=1.0e-12,
+            restart=20,
+            maxiter=40,
+            precondition_side="left",
+            active_size=10,
+            emit=lambda _level, msg: messages.append(msg),
+            polish_solver=lambda **_kwargs: (_ for _ in ()).throw(AssertionError("polish disabled")),
+        )
+    )
+
+    assert result.result is None
+    assert result.seed_residual == pytest.approx(10.0)
+    assert result.seed_improvement_ratio == pytest.approx(0.01)
+    assert result.refine_steps == 0
+    assert result.refines_performed == 0
+    assert result.reason == "seed_rejected_accept_gate"
+    assert any("explicit FP x-block seed rejected" in message for message in messages)
 
 
 def test_fortran_reduced_xblock_krylov_policy_defaults_and_counter() -> None:

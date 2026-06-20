@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Callable, Mapping, MutableMapping, Sequence
 from dataclasses import dataclass, fields
+import os
 from time import perf_counter
 from typing import Any
 
@@ -77,7 +78,12 @@ from ...rhs1_qi_galerkin_policy import (
     RHS1QIGalerkinProbeCandidate,
     select_rhs1_qi_galerkin_probe_candidate,
 )
-from .policies import rhs1_qi_device_tail_block_required
+from .policies import (
+    rhs1_parse_accept_ratio,
+    rhs1_parse_polish_gmres_config,
+    rhs1_polish_enabled,
+    rhs1_qi_device_tail_block_required,
+)
 
 
 ArrayFn = Callable[[jnp.ndarray], jnp.ndarray]
@@ -3905,6 +3911,38 @@ class SparseXBlockRescueBuildResult:
 
 
 @dataclass(frozen=True)
+class SparseXBlockExplicitSeedContext:
+    """Inputs for the explicit FP x-block seed/refine/polish path."""
+
+    preconditioner: ArrayFn
+    rhs: jnp.ndarray
+    matvec: ArrayFn
+    current_result: GMRESSolveResult
+    target: float
+    tol: float
+    atol: float
+    restart: int
+    maxiter: int | None
+    precondition_side: str
+    active_size: int
+    emit: EmitFn | None
+    polish_solver: Callable[..., tuple[np.ndarray, float, Sequence[float]]]
+
+
+@dataclass(frozen=True)
+class SparseXBlockExplicitSeedResult:
+    """Explicit FP x-block seed outcome and diagnostics."""
+
+    result: GMRESSolveResult | None
+    seed_residual: float
+    seed_improvement_ratio: float
+    seed_accept_ratio: float
+    refine_steps: int
+    refines_performed: int
+    reason: str
+
+
+@dataclass(frozen=True)
 class FortranReducedXBlockMomentSchurStageContext:
     """Dependencies for the optional fortran-reduced moment-Schur stage."""
 
@@ -6525,6 +6563,145 @@ def build_sparse_xblock_rescue_preconditioner(
         preconditioner=preconditioner,
         preconditioner_xi=int(preconditioner_xi),
         force_assembled_host_fp=bool(force_assembled_host_fp),
+    )
+
+
+def apply_sparse_xblock_explicit_seed(
+    *,
+    context: SparseXBlockExplicitSeedContext,
+) -> SparseXBlockExplicitSeedResult:
+    """Apply, refine, and optionally polish the explicit FP x-block seed."""
+
+    refine_env = os.environ.get("SFINCS_JAX_RHSMODE1_FP_XBLOCK_REFINES", "").strip()
+    try:
+        refine_steps = int(refine_env) if refine_env else 2
+    except ValueError:
+        refine_steps = 2
+    refine_steps = max(0, int(refine_steps))
+    accept_ratio = rhs1_parse_accept_ratio(
+        env_name="SFINCS_JAX_RHSMODE1_FP_XBLOCK_ACCEPT_RATIO",
+        default=10.0,
+    )
+    polish_enabled = rhs1_polish_enabled(
+        env_name="SFINCS_JAX_RHSMODE1_FP_XBLOCK_POLISH",
+    )
+    polish_restart, polish_maxiter = rhs1_parse_polish_gmres_config(
+        restart_env_name="SFINCS_JAX_RHSMODE1_FP_XBLOCK_POLISH_RESTART",
+        maxiter_env_name="SFINCS_JAX_RHSMODE1_FP_XBLOCK_POLISH_MAXITER",
+        default_restart=min(int(context.restart), 40),
+        default_maxiter=min(int(context.maxiter or 80), 80),
+        active_size=int(context.active_size),
+        large_active_min_env_name="SFINCS_JAX_RHSMODE1_FP_XBLOCK_POLISH_LARGE_MIN",
+        large_default_restart_env_name=(
+            "SFINCS_JAX_RHSMODE1_FP_XBLOCK_POLISH_LARGE_RESTART_DEFAULT"
+        ),
+        large_default_maxiter_env_name=(
+            "SFINCS_JAX_RHSMODE1_FP_XBLOCK_POLISH_LARGE_MAXITER_DEFAULT"
+        ),
+        default_large_restart=10,
+        default_large_maxiter=1,
+        min_maxiter=1,
+    )
+    base_residual_norm = float(context.current_result.residual_norm)
+    x_trial = jnp.asarray(context.preconditioner(context.rhs), dtype=jnp.float64)
+    residual_vec = context.rhs - context.matvec(x_trial)
+    residual_norm = float(jnp.linalg.norm(residual_vec))
+    seed_residual_initial = float(residual_norm)
+    improvement_ratio = 1.0
+    if np.isfinite(residual_norm) and residual_norm > 0.0:
+        improvement_ratio = float(base_residual_norm) / float(residual_norm)
+    elif np.isfinite(residual_norm):
+        improvement_ratio = float("inf")
+
+    if context.emit is not None:
+        context.emit(
+            0,
+            "solve_v3_full_system_linear_gmres: explicit FP x-block seed "
+            f"(residual={residual_norm:.6e} current={base_residual_norm:.6e})",
+        )
+
+    performed_refines = 0
+    for refine_index in range(int(refine_steps)):
+        if not np.isfinite(residual_norm) or residual_norm == 0.0:
+            break
+        dx_trial = jnp.asarray(context.preconditioner(residual_vec), dtype=jnp.float64)
+        x_next = x_trial + dx_trial
+        residual_vec_next = context.rhs - context.matvec(x_next)
+        residual_norm_next = float(jnp.linalg.norm(residual_vec_next))
+        if not np.isfinite(residual_norm_next) or residual_norm_next >= residual_norm:
+            break
+        x_trial = x_next
+        residual_vec = residual_vec_next
+        residual_norm = residual_norm_next
+        performed_refines = int(refine_index) + 1
+
+    if context.emit is not None and int(refine_steps) > 0:
+        context.emit(
+            1,
+            "solve_v3_full_system_linear_gmres: explicit FP x-block refinement "
+            f"steps={int(performed_refines)}/{int(refine_steps)} "
+            f"residual={float(residual_norm):.6e}",
+        )
+
+    reason = "seed_rejected_accept_gate"
+    result: GMRESSolveResult | None = None
+    if (
+        np.isfinite(residual_norm)
+        and residual_norm <= max(float(context.target), base_residual_norm * accept_ratio)
+    ):
+        reason = "seed_accepted"
+        if bool(polish_enabled) and residual_norm > float(context.target):
+            if context.emit is not None:
+                context.emit(
+                    1,
+                    "solve_v3_full_system_linear_gmres: explicit FP x-block polish "
+                    f"start residual={float(residual_norm):.6e} "
+                    f"target={float(context.target):.3e} restart={int(polish_restart)} "
+                    f"maxiter={int(polish_maxiter)}",
+                )
+            x_np, _rn, _history = context.polish_solver(
+                matvec=context.matvec,
+                b=context.rhs,
+                preconditioner=context.preconditioner,
+                x0=x_trial,
+                tol=float(context.tol),
+                atol=float(context.atol),
+                restart=int(polish_restart),
+                maxiter=int(polish_maxiter),
+                precondition_side=context.precondition_side,
+            )
+            x_polish = jnp.asarray(x_np, dtype=jnp.float64)
+            residual_vec_polish = context.rhs - context.matvec(x_polish)
+            residual_norm_polish = float(jnp.linalg.norm(residual_vec_polish))
+            if context.emit is not None:
+                context.emit(
+                    1,
+                    "solve_v3_full_system_linear_gmres: explicit FP x-block polish "
+                    f"done residual={float(residual_norm_polish):.6e}",
+                )
+            if np.isfinite(residual_norm_polish) and residual_norm_polish < residual_norm:
+                x_trial = x_polish
+                residual_norm = residual_norm_polish
+        result = GMRESSolveResult(
+            x=x_trial,
+            residual_norm=jnp.asarray(residual_norm, dtype=jnp.float64),
+        )
+    elif context.emit is not None:
+        context.emit(
+            0,
+            "solve_v3_full_system_linear_gmres: explicit FP x-block seed rejected "
+            f"(residual={residual_norm:.6e}, base={base_residual_norm:.6e}, "
+            f"accept_ratio={accept_ratio:.1e})",
+        )
+
+    return SparseXBlockExplicitSeedResult(
+        result=result,
+        seed_residual=float(seed_residual_initial),
+        seed_improvement_ratio=float(improvement_ratio),
+        seed_accept_ratio=float(accept_ratio),
+        refine_steps=int(refine_steps),
+        refines_performed=int(performed_refines),
+        reason=reason,
     )
 
 
@@ -15631,6 +15808,8 @@ __all__ = [
     "SparseHostRetryCandidateContext",
     "SparseHostRetryCandidateResult",
     "SparseJAXRetryPreconditionerBuildContext",
+    "SparseXBlockExplicitSeedContext",
+    "SparseXBlockExplicitSeedResult",
     "SparseXBlockRescueBuildContext",
     "SparseXBlockRescueBuildResult",
     "SparsePCDirectTailFinalMetadataContext",
@@ -15663,6 +15842,7 @@ __all__ = [
     "apply_sparse_pc_post_minres",
     "apply_sparse_pc_post_minres_if_needed",
     "apply_sparse_pc_post_minres_from_driver_state",
+    "apply_sparse_xblock_explicit_seed",
     "apply_xblock_subspace_correction_if_needed",
     "build_fortran_reduced_xblock_factor_stage",
     "build_sparse_xblock_rescue_preconditioner",

@@ -390,7 +390,9 @@ from .problems.profile_response.sparse_pc import (
     run_fortran_reduced_xblock_krylov_solve,
     run_sparse_pc_gmres_once,
     run_sparse_pc_gmres_once_for_retry,
+    SparseXBlockExplicitSeedContext,
     SparseXBlockRescueBuildContext,
+    apply_sparse_xblock_explicit_seed,
     build_sparse_xblock_rescue_preconditioner,
     run_xblock_krylov_solve_stage,
     xblock_sparse_pc_final_metadata_state_from_context,
@@ -10030,132 +10032,40 @@ def solve_v3_full_system_linear_gmres(
                     else:
                         res_sparse_xblock = None
                         if assembled_host_fp:
-                            refine_env = os.environ.get("SFINCS_JAX_RHSMODE1_FP_XBLOCK_REFINES", "").strip()
-                            try:
-                                refine_steps = int(refine_env) if refine_env else 2
-                            except ValueError:
-                                refine_steps = 2
-                            refine_steps = max(0, int(refine_steps))
-                            accept_ratio = rhs1_parse_accept_ratio(
-                                env_name="SFINCS_JAX_RHSMODE1_FP_XBLOCK_ACCEPT_RATIO",
-                                default=10.0,
+                            explicit_seed = apply_sparse_xblock_explicit_seed(
+                                context=SparseXBlockExplicitSeedContext(
+                                    preconditioner=precond_sparse_xblock,
+                                    rhs=rhs_reduced,
+                                    matvec=mv_reduced,
+                                    current_result=res_reduced,
+                                    target=float(target_reduced),
+                                    tol=float(tol),
+                                    atol=float(atol),
+                                    restart=int(restart),
+                                    maxiter=maxiter,
+                                    precondition_side=gmres_precond_side,
+                                    active_size=int(active_size),
+                                    emit=emit,
+                                    polish_solver=gmres_solve_with_history_scipy,
+                                )
                             )
-                            sparse_xblock_rescue_seed_accept_ratio = float(accept_ratio)
-                            polish_enabled = rhs1_polish_enabled(
-                                env_name="SFINCS_JAX_RHSMODE1_FP_XBLOCK_POLISH",
+                            res_sparse_xblock = explicit_seed.result
+                            explicit_fp_xblock_seed_residual = float(explicit_seed.seed_residual)
+                            sparse_xblock_rescue_seed_residual = float(explicit_seed.seed_residual)
+                            explicit_fp_xblock_seed_improvement_ratio = float(
+                                explicit_seed.seed_improvement_ratio
                             )
-                            polish_restart, polish_maxiter = rhs1_parse_polish_gmres_config(
-                                restart_env_name="SFINCS_JAX_RHSMODE1_FP_XBLOCK_POLISH_RESTART",
-                                maxiter_env_name="SFINCS_JAX_RHSMODE1_FP_XBLOCK_POLISH_MAXITER",
-                                default_restart=min(int(restart), 40),
-                                default_maxiter=min(int(maxiter or 80), 80),
-                                active_size=int(active_size),
-                                large_active_min_env_name="SFINCS_JAX_RHSMODE1_FP_XBLOCK_POLISH_LARGE_MIN",
-                                large_default_restart_env_name=(
-                                    "SFINCS_JAX_RHSMODE1_FP_XBLOCK_POLISH_LARGE_RESTART_DEFAULT"
-                                ),
-                                large_default_maxiter_env_name=(
-                                    "SFINCS_JAX_RHSMODE1_FP_XBLOCK_POLISH_LARGE_MAXITER_DEFAULT"
-                                ),
-                                default_large_restart=10,
-                                default_large_maxiter=1,
-                                min_maxiter=1,
+                            sparse_xblock_rescue_seed_improvement_ratio = float(
+                                explicit_seed.seed_improvement_ratio
                             )
-                            base_residual_norm = float(res_reduced.residual_norm)
-                            x_trial = jnp.asarray(precond_sparse_xblock(rhs_reduced), dtype=jnp.float64)
-                            residual_vec_sparse_xblock = rhs_reduced - mv_reduced(x_trial)
-                            residual_norm_sparse_xblock = float(jnp.linalg.norm(residual_vec_sparse_xblock))
-                            explicit_fp_xblock_seed_residual = float(residual_norm_sparse_xblock)
-                            sparse_xblock_rescue_seed_residual = float(residual_norm_sparse_xblock)
-                            if np.isfinite(residual_norm_sparse_xblock) and residual_norm_sparse_xblock > 0.0:
-                                explicit_fp_xblock_seed_improvement_ratio = float(base_residual_norm) / float(
-                                    residual_norm_sparse_xblock
-                                )
-                                sparse_xblock_rescue_seed_improvement_ratio = float(
-                                    explicit_fp_xblock_seed_improvement_ratio
-                                )
-                            elif np.isfinite(residual_norm_sparse_xblock):
-                                explicit_fp_xblock_seed_improvement_ratio = float("inf")
-                                sparse_xblock_rescue_seed_improvement_ratio = float("inf")
-                            if emit is not None:
-                                emit(
-                                    0,
-                                    "solve_v3_full_system_linear_gmres: explicit FP x-block seed "
-                                    f"(residual={residual_norm_sparse_xblock:.6e} current={base_residual_norm:.6e})",
-                                )
-                            performed_refines = 0
-                            for refine_index in range(refine_steps):
-                                if not np.isfinite(residual_norm_sparse_xblock) or residual_norm_sparse_xblock == 0.0:
-                                    break
-                                dx_trial = jnp.asarray(precond_sparse_xblock(residual_vec_sparse_xblock), dtype=jnp.float64)
-                                x_next = x_trial + dx_trial
-                                residual_vec_next = rhs_reduced - mv_reduced(x_next)
-                                residual_norm_next = float(jnp.linalg.norm(residual_vec_next))
-                                if not np.isfinite(residual_norm_next) or residual_norm_next >= residual_norm_sparse_xblock:
-                                    break
-                                x_trial = x_next
-                                residual_vec_sparse_xblock = residual_vec_next
-                                residual_norm_sparse_xblock = residual_norm_next
-                                performed_refines = int(refine_index) + 1
-                            sparse_xblock_rescue_seed_refine_steps = int(refine_steps)
-                            sparse_xblock_rescue_seed_refines_performed = int(performed_refines)
-                            if emit is not None and int(refine_steps) > 0:
-                                emit(
-                                    1,
-                                    "solve_v3_full_system_linear_gmres: explicit FP x-block refinement "
-                                    f"steps={int(performed_refines)}/{int(refine_steps)} "
-                                    f"residual={float(residual_norm_sparse_xblock):.6e}",
-                                )
-                            if (
-                                np.isfinite(residual_norm_sparse_xblock)
-                                and residual_norm_sparse_xblock <= max(float(target_reduced), base_residual_norm * accept_ratio)
-                            ):
-                                sparse_xblock_rescue_reason = "seed_accepted"
-                                if polish_enabled and residual_norm_sparse_xblock > float(target_reduced):
-                                    polish_precond = precond_sparse_xblock if precond_sparse_xblock is not None else ksp_replay.precond_fn
-                                    if emit is not None:
-                                        emit(
-                                            1,
-                                            "solve_v3_full_system_linear_gmres: explicit FP x-block polish "
-                                            f"start residual={float(residual_norm_sparse_xblock):.6e} "
-                                            f"target={float(target_reduced):.3e} restart={int(polish_restart)} "
-                                            f"maxiter={int(polish_maxiter)}",
-                                        )
-                                    x_np, _rn_sparse_xblock, _history = gmres_solve_with_history_scipy(
-                                        matvec=mv_reduced,
-                                        b=rhs_reduced,
-                                        preconditioner=polish_precond,
-                                        x0=x_trial,
-                                        tol=tol,
-                                        atol=atol,
-                                        restart=polish_restart,
-                                        maxiter=polish_maxiter,
-                                        precondition_side=gmres_precond_side,
-                                    )
-                                    x_polish = jnp.asarray(x_np, dtype=jnp.float64)
-                                    residual_vec_polish = rhs_reduced - mv_reduced(x_polish)
-                                    residual_norm_polish = float(jnp.linalg.norm(residual_vec_polish))
-                                    if emit is not None:
-                                        emit(
-                                            1,
-                                            "solve_v3_full_system_linear_gmres: explicit FP x-block polish "
-                                            f"done residual={float(residual_norm_polish):.6e}",
-                                        )
-                                    if np.isfinite(residual_norm_polish) and residual_norm_polish < residual_norm_sparse_xblock:
-                                        x_trial = x_polish
-                                        residual_norm_sparse_xblock = residual_norm_polish
-                                res_sparse_xblock = GMRESSolveResult(
-                                    x=x_trial,
-                                    residual_norm=jnp.asarray(residual_norm_sparse_xblock, dtype=jnp.float64),
-                                )
-                            elif emit is not None:
-                                sparse_xblock_rescue_reason = "seed_rejected_accept_gate"
-                                emit(
-                                    0,
-                                    "solve_v3_full_system_linear_gmres: explicit FP x-block seed rejected "
-                                    f"(residual={residual_norm_sparse_xblock:.6e}, base={base_residual_norm:.6e}, "
-                                    f"accept_ratio={accept_ratio:.1e})",
-                                )
+                            sparse_xblock_rescue_seed_accept_ratio = float(
+                                explicit_seed.seed_accept_ratio
+                            )
+                            sparse_xblock_rescue_seed_refine_steps = int(explicit_seed.refine_steps)
+                            sparse_xblock_rescue_seed_refines_performed = int(
+                                explicit_seed.refines_performed
+                            )
+                            sparse_xblock_rescue_reason = str(explicit_seed.reason)
                         else:
                             x_np, _rn_sparse_xblock, _history = gmres_solve_with_history_scipy(
                                 matvec=mv_reduced,
