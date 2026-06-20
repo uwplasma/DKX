@@ -268,11 +268,11 @@ def test_build_host_sparse_direct_factor_from_matvec_falls_back_on_invalid_env(m
         1,
         "explicit_sparse: factorization start factor_kind=lu permc=COLAMD shape=(2, 2)",
     )
-    assert messages[2] == (
-        1,
-        "explicit_sparse: factorization complete factor_kind=lu elapsed_s=0.000 "
-        "factor_nnz=None factor_mb=unknown",
+    assert messages[2][0] == 1
+    assert messages[2][1].startswith(
+        "explicit_sparse: factorization complete factor_kind=lu elapsed_s="
     )
+    assert messages[2][1].endswith(" factor_nnz=None factor_mb=unknown")
 
 
 def test_build_host_sparse_direct_factor_from_matvec_respects_env_overrides(monkeypatch) -> None:
