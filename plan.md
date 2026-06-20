@@ -1410,7 +1410,7 @@ Known CI issue fixed by this rewrite:
 
 ### 1. `v3_driver.py` Architecture Refactor
 
-Completion estimate: 92%.
+Completion estimate: 94%.
 
 Goal:
 
@@ -1848,7 +1848,7 @@ Next steps:
 
 ### 2. Differentiability And Solver-Lane Separation
 
-Completion estimate: 73%.
+Completion estimate: 74%.
 
 Goal:
 
@@ -1883,7 +1883,7 @@ Next steps:
 
 ### 4. Validation, Coverage, And Documentation
 
-Completion estimate: 64%.
+Completion estimate: 66%.
 
 Goal:
 
