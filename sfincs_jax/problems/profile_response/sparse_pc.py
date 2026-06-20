@@ -61,11 +61,16 @@ from ...sparse_triangular import (
     triangular_solve_upper_padded,
 )
 from ...solver import GMRESSolveResult
-from ...rhs1_qi_coarse import RHS1QICoarseBasis
+from ...rhs1_qi_coarse import (
+    RHS1QICoarseBasis,
+    rhs1_xblock_qi_block_geometry_metadata,
+)
+from ...rhs1_qi_device_preconditioner import RHS1QIDevicePreconditionerConfig
 from ...rhs1_qi_galerkin_policy import (
     RHS1QIGalerkinProbeCandidate,
     select_rhs1_qi_galerkin_probe_candidate,
 )
+from .policies import rhs1_qi_device_tail_block_required
 
 
 ArrayFn = Callable[[jnp.ndarray], jnp.ndarray]
@@ -4145,6 +4150,31 @@ class XBlockQIDeviceMetadataContext:
     extra_coarse_metadata: Mapping[str, object]
     residual_correction_metadata: Mapping[str, object]
     max_rank_requested: int | None
+
+
+@dataclass(frozen=True)
+class XBlockQIDeviceSetupConfigContext:
+    """Inputs for building the QI device preconditioner setup contract."""
+
+    op: object
+    active_dof: bool
+    linear_size: int
+    base_config: object
+    enrichment_config: object
+    multilevel_config: object
+    multilevel_max_rank: int | None
+    max_rank: int | None
+    extra_coarse_controls: Mapping[str, object]
+    extra_coarse_setup_kwargs: Mapping[str, object]
+    residual_correction_setup_kwargs: Mapping[str, object]
+
+
+@dataclass(frozen=True)
+class XBlockQIDeviceSetupConfig:
+    """Geometry metadata and config object for device preconditioner setup."""
+
+    geometry_metadata: dict[str, object]
+    config: RHS1QIDevicePreconditionerConfig
 
 
 @dataclass(frozen=True)
@@ -9679,6 +9709,157 @@ def build_xblock_qi_device_preconditioner_metadata(
     }
 
 
+def build_xblock_qi_device_setup_config(
+    context: XBlockQIDeviceSetupConfigContext,
+) -> XBlockQIDeviceSetupConfig:
+    """Build geometry metadata and config for the QI device preconditioner."""
+
+    base = context.base_config
+    enrichment = context.enrichment_config
+    multilevel = context.multilevel_config
+    active_dof = bool(context.active_dof)
+    linear_size = int(context.linear_size)
+    extra_coarse_controls = dict(context.extra_coarse_controls)
+    include_tail_block = rhs1_qi_device_tail_block_required(
+        multilevel_coarse=bool(getattr(multilevel, "multilevel_coarse", False)),
+        extra_coarse_controls=extra_coarse_controls,
+    )
+    geometry_metadata: dict[str, object] = {
+        "rhs_mode": int(getattr(context.op, "rhs_mode")),
+        "n_theta": int(getattr(context.op, "n_theta", 1)),
+        "n_zeta": int(getattr(context.op, "n_zeta", 1)),
+        "n_x": int(getattr(context.op, "n_x", 1)),
+        "n_species": int(getattr(context.op, "n_species", 1)),
+        "active_dof": active_dof,
+        **rhs1_xblock_qi_block_geometry_metadata(
+            op=context.op,
+            active_dof=active_dof,
+            linear_size=linear_size,
+            include_tail_block=bool(include_tail_block),
+        ),
+    }
+    config = RHS1QIDevicePreconditionerConfig(
+        regularization_rcond=float(getattr(base, "rcond")),
+        damping=float(getattr(base, "damping")),
+        coarse_solver=getattr(base, "coarse_solver"),
+        jacobi_damping=float(getattr(base, "jacobi_damping")),
+        jacobi_sweeps=int(getattr(base, "jacobi_sweeps")),
+        jacobi_step_policy=getattr(base, "jacobi_step_policy"),
+        jacobi_diagonal_floor=float(getattr(base, "jacobi_floor")),
+        jacobi_require_all_diagonal=bool(
+            getattr(base, "jacobi_require_all_diagonal")
+        ),
+        local_smoother_kind=getattr(base, "local_smoother_kind"),
+        matrix_free_smoother_sweeps=int(
+            getattr(base, "matrix_free_smoother_sweeps")
+        ),
+        matrix_free_smoother_damping=float(
+            getattr(base, "matrix_free_smoother_damping")
+        ),
+        matrix_free_smoother_step_policy=getattr(
+            base,
+            "matrix_free_smoother_step_policy",
+        ),
+        matrix_free_smoother_alpha_clip=float(
+            getattr(base, "matrix_free_smoother_alpha_clip")
+        ),
+        matrix_free_block_smoother_max_groups=int(
+            getattr(base, "matrix_free_block_smoother_max_groups")
+        ),
+        matrix_free_block_smoother_include_tail=bool(
+            getattr(base, "matrix_free_block_smoother_include_tail")
+        ),
+        matrix_free_block_smoother_rcond=float(
+            getattr(base, "matrix_free_block_smoother_rcond")
+        ),
+        matrix_free_block_smoother_grouping=getattr(
+            base,
+            "matrix_free_block_smoother_grouping",
+        ),
+        max_rank=context.max_rank,
+        residual_enrichment=bool(getattr(enrichment, "residual_enrichment")),
+        residual_enrichment_depth=int(
+            getattr(enrichment, "residual_enrichment_depth")
+        ),
+        residual_enrichment_include_residual=bool(
+            getattr(enrichment, "residual_enrichment_include_residual")
+        ),
+        recycle_enrichment=bool(getattr(enrichment, "recycle_enrichment")),
+        recycle_enrichment_cycles=int(getattr(enrichment, "recycle_cycles")),
+        operator_krylov_enrichment=bool(
+            getattr(enrichment, "operator_krylov_enrichment")
+        ),
+        operator_krylov_depth=int(getattr(enrichment, "operator_krylov_depth")),
+        adjoint_krylov_enrichment=bool(
+            getattr(enrichment, "adjoint_krylov_enrichment")
+        ),
+        adjoint_krylov_depth=int(getattr(enrichment, "adjoint_krylov_depth")),
+        adjoint_krylov_transpose_source=getattr(
+            enrichment,
+            "adjoint_krylov_transpose_source",
+        ),
+        operator_action_enrichment=bool(
+            getattr(enrichment, "operator_action_enrichment")
+        ),
+        operator_action_enrichment_depth=int(
+            getattr(enrichment, "operator_action_depth")
+        ),
+        multilevel_coarse=bool(getattr(multilevel, "multilevel_coarse")),
+        multilevel_max_levels=int(getattr(multilevel, "multilevel_max_levels")),
+        multilevel_aggregate_factor=int(
+            getattr(multilevel, "multilevel_aggregate_factor")
+        ),
+        multilevel_max_rank=context.multilevel_max_rank,
+        multilevel_max_angular_mode=int(
+            getattr(multilevel, "multilevel_max_angular_mode")
+        ),
+        multilevel_max_radial_degree=int(
+            getattr(multilevel, "multilevel_max_radial_degree")
+        ),
+        multilevel_max_pitch_degree=int(
+            getattr(multilevel, "multilevel_max_pitch_degree")
+        ),
+        multilevel_current_moments=bool(
+            getattr(multilevel, "multilevel_current_moments")
+        ),
+        multilevel_species_current_moments=bool(
+            getattr(multilevel, "multilevel_species_current_moments")
+        ),
+        multilevel_radial_current_moments=bool(
+            getattr(multilevel, "multilevel_radial_current_moments")
+        ),
+        multilevel_tail_constraint_moments=bool(
+            getattr(multilevel, "multilevel_tail_constraint_moments")
+        ),
+        multilevel_current_max_pitch_degree=int(
+            getattr(multilevel, "multilevel_current_max_pitch_degree")
+        ),
+        multilevel_residual_equation=bool(
+            getattr(multilevel, "multilevel_residual_equation")
+        ),
+        multilevel_residual_equation_max_level_rank=int(
+            getattr(multilevel, "multilevel_residual_equation_max_level_rank")
+        ),
+        multilevel_residual_equation_order=getattr(
+            multilevel,
+            "multilevel_residual_equation_order",
+        ),
+        multilevel_residual_equation_solver=getattr(
+            multilevel,
+            "multilevel_residual_equation_solver",
+        ),
+        multilevel_residual_equation_include_global=bool(
+            getattr(multilevel, "multilevel_residual_equation_include_global")
+        ),
+        **dict(context.extra_coarse_setup_kwargs),
+        **dict(context.residual_correction_setup_kwargs),
+    )
+    return XBlockQIDeviceSetupConfig(
+        geometry_metadata=geometry_metadata,
+        config=config,
+    )
+
+
 def apply_xblock_qi_coarse_seed_stage(
     *,
     context: XBlockQICoarseSeedStageContext,
@@ -13198,6 +13379,8 @@ __all__ = [
     "XBlockQICoarseSeedStageContext",
     "XBlockQICoarseSeedStageResult",
     "XBlockQIDeviceMetadataContext",
+    "XBlockQIDeviceSetupConfig",
+    "XBlockQIDeviceSetupConfigContext",
     "XBlockQIGalerkinStageContext",
     "XBlockQIGalerkinStageResult",
     "XBlockQITwoLevelStageContext",
@@ -13249,6 +13432,7 @@ __all__ = [
     "build_xblock_local_preconditioner",
     "build_xblock_assembled_operator_if_requested",
     "build_xblock_qi_device_preconditioner_metadata",
+    "build_xblock_qi_device_setup_config",
     "build_sparse_pc_active_dof_setup",
     "build_sparse_pc_pattern_setup",
     "build_direct_tail_materialization_setup",

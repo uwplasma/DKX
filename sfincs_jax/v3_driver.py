@@ -97,7 +97,7 @@ from .rhs1_qi_coarse import (
     build_rhs1_xblock_smoothed_load_qi_basis as _rhs1_xblock_smoothed_load_qi_basis,
     build_rhs1_qi_galerkin_preconditioner,
     orthonormalize_rhs1_qi_coarse_basis,
-    rhs1_xblock_qi_block_geometry_metadata as _rhs1_xblock_qi_block_geometry_metadata,
+    rhs1_xblock_qi_block_geometry_metadata,
 )
 from .rhs1_qi_galerkin_policy import (
     parse_rhs1_qi_galerkin_dampings,
@@ -109,7 +109,6 @@ from .rhs1_qi_deflation import (
     probe_rhs1_qi_deflated_minres_seed,
 )
 from .rhs1_qi_device_preconditioner import (
-    RHS1QIDevicePreconditionerConfig,
     probe_rhs1_qi_device_augmented_seed,
     probe_rhs1_qi_device_preconditioner,
     setup_rhs1_qi_device_preconditioner,
@@ -288,6 +287,7 @@ from .problems.profile_response.sparse_pc import (
     XBlockPostSolveCorrectionContext,
     XBlockQICoarseSeedStageContext,
     XBlockQIDeviceMetadataContext,
+    XBlockQIDeviceSetupConfigContext,
     XBlockQIGalerkinStageContext,
     XBlockQITwoLevelStageContext,
     XBlockSparsePCCompletionContext,
@@ -317,6 +317,7 @@ from .problems.profile_response.sparse_pc import (
     build_sparse_pc_active_dof_setup,
     build_direct_tail_materialization_setup,
     build_xblock_qi_device_preconditioner_metadata,
+    build_xblock_qi_device_setup_config,
     fortran_reduced_xblock_final_payload,
     xblock_sparse_pc_final_payload as build_xblock_sparse_pc_final_payload,
     evaluate_sparse_pc_factor_preflight,
@@ -417,7 +418,7 @@ from .problems.profile_response.policies import (
     rhs1_qi_device_residual_correction_setup_kwargs as _rhs1_qi_device_residual_correction_setup_kwargs,
     rhs1_qi_device_setup_summary as _rhs1_qi_device_setup_summary,
     rhs1_qi_device_status_fields as _rhs1_qi_device_status_fields,
-    rhs1_qi_device_tail_block_required as _rhs1_qi_device_tail_block_required,
+    rhs1_qi_device_tail_block_required,
     rhs1_sparse_jax_config_from_env,
     rhs1_sparse_operator_admission,
     rhs1_sparse_preconditioner_config_from_env,
@@ -426,6 +427,10 @@ from .problems.profile_response.policies import (
     rhs1_sparse_rescue_tail_skip_messages,
     rhs1_xblock_fallback_initial_guess as _rhs1_xblock_fallback_initial_guess,
 )
+
+_rhs1_xblock_qi_block_geometry_metadata = rhs1_xblock_qi_block_geometry_metadata
+_rhs1_qi_device_tail_block_required = rhs1_qi_device_tail_block_required
+
 from .problems.profile_response.setup import (
     SPARSE_HOST_DIRECT_SOLVE_METHODS as _SPARSE_HOST_DIRECT_SOLVE_METHODS,
     SPARSE_HOST_FORTRAN_REDUCED_PC_GMRES_SOLVE_METHODS as _SPARSE_HOST_FORTRAN_REDUCED_PC_GMRES_SOLVE_METHODS,
@@ -3546,35 +3551,7 @@ def solve_v3_full_system_linear_gmres(
                     probe_uses_minres_step=_rhs1_qi_device_probe_uses_minres_step,
                     env=os.environ,
                 )
-                qi_device_rcond = float(qi_device_base_config.rcond)
-                qi_device_damping = float(qi_device_base_config.damping)
-                qi_device_jacobi_damping = float(qi_device_base_config.jacobi_damping)
-                qi_device_jacobi_sweeps = int(qi_device_base_config.jacobi_sweeps)
-                qi_device_jacobi_floor = float(qi_device_base_config.jacobi_floor)
-                qi_device_jacobi_require_all_diagonal = bool(qi_device_base_config.jacobi_require_all_diagonal)
                 qi_device_local_smoother_kind = qi_device_base_config.local_smoother_kind
-                qi_device_matrix_free_smoother_sweeps = int(qi_device_base_config.matrix_free_smoother_sweeps)
-                qi_device_matrix_free_smoother_damping = float(qi_device_base_config.matrix_free_smoother_damping)
-                qi_device_matrix_free_smoother_step_policy = (
-                    qi_device_base_config.matrix_free_smoother_step_policy
-                )
-                qi_device_matrix_free_smoother_alpha_clip = float(
-                    qi_device_base_config.matrix_free_smoother_alpha_clip
-                )
-                qi_device_matrix_free_block_smoother_max_groups = int(
-                    qi_device_base_config.matrix_free_block_smoother_max_groups
-                )
-                qi_device_matrix_free_block_smoother_include_tail = bool(
-                    qi_device_base_config.matrix_free_block_smoother_include_tail
-                )
-                qi_device_matrix_free_block_smoother_rcond = float(
-                    qi_device_base_config.matrix_free_block_smoother_rcond
-                )
-                qi_device_matrix_free_block_smoother_grouping = (
-                    qi_device_base_config.matrix_free_block_smoother_grouping
-                )
-                qi_device_jacobi_step_policy = qi_device_base_config.jacobi_step_policy
-                qi_device_coarse_solver = qi_device_base_config.coarse_solver
                 qi_device_preconditioner_min_improvement = float(qi_device_base_config.min_improvement)
                 qi_device_preconditioner_cycles = int(qi_device_base_config.cycles)
                 qi_device_augmented_seed_requested = bool(qi_device_base_config.augmented_seed_requested)
@@ -3589,80 +3566,14 @@ def solve_v3_full_system_linear_gmres(
                     matrix_free_enabled=bool(qi_device_matrix_free_enabled),
                     env=os.environ,
                 )
-                qi_device_residual_enrichment = bool(qi_device_enrichment_config.residual_enrichment)
-                qi_device_residual_enrichment_depth = int(
-                    qi_device_enrichment_config.residual_enrichment_depth
-                )
-                qi_device_residual_enrichment_include_residual = bool(
-                    qi_device_enrichment_config.residual_enrichment_include_residual
-                )
-                qi_device_recycle_enrichment = bool(qi_device_enrichment_config.recycle_enrichment)
-                qi_device_recycle_cycles = int(qi_device_enrichment_config.recycle_cycles)
                 qi_device_operator_krylov_enrichment = bool(
                     qi_device_enrichment_config.operator_krylov_enrichment
                 )
-                qi_device_operator_krylov_depth = int(qi_device_enrichment_config.operator_krylov_depth)
-                qi_device_adjoint_krylov_enrichment = bool(
-                    qi_device_enrichment_config.adjoint_krylov_enrichment
-                )
-                qi_device_adjoint_krylov_depth = int(qi_device_enrichment_config.adjoint_krylov_depth)
-                qi_device_adjoint_krylov_transpose_source = (
-                    qi_device_enrichment_config.adjoint_krylov_transpose_source
-                )
-                qi_device_operator_action_enrichment = bool(
-                    qi_device_enrichment_config.operator_action_enrichment
-                )
-                qi_device_operator_action_depth = int(qi_device_enrichment_config.operator_action_depth)
                 qi_device_multilevel_config = resolve_xblock_qi_device_multilevel_config_setup(
                     env=os.environ
                 )
                 qi_device_multilevel_coarse = bool(
                     qi_device_multilevel_config.multilevel_coarse
-                )
-                qi_device_multilevel_max_levels = int(
-                    qi_device_multilevel_config.multilevel_max_levels
-                )
-                qi_device_multilevel_aggregate_factor = int(
-                    qi_device_multilevel_config.multilevel_aggregate_factor
-                )
-                qi_device_multilevel_max_angular_mode = int(
-                    qi_device_multilevel_config.multilevel_max_angular_mode
-                )
-                qi_device_multilevel_max_radial_degree = int(
-                    qi_device_multilevel_config.multilevel_max_radial_degree
-                )
-                qi_device_multilevel_max_pitch_degree = int(
-                    qi_device_multilevel_config.multilevel_max_pitch_degree
-                )
-                qi_device_multilevel_current_moments = bool(
-                    qi_device_multilevel_config.multilevel_current_moments
-                )
-                qi_device_multilevel_species_current_moments = bool(
-                    qi_device_multilevel_config.multilevel_species_current_moments
-                )
-                qi_device_multilevel_radial_current_moments = bool(
-                    qi_device_multilevel_config.multilevel_radial_current_moments
-                )
-                qi_device_multilevel_tail_constraint_moments = bool(
-                    qi_device_multilevel_config.multilevel_tail_constraint_moments
-                )
-                qi_device_multilevel_current_max_pitch_degree = int(
-                    qi_device_multilevel_config.multilevel_current_max_pitch_degree
-                )
-                qi_device_multilevel_residual_equation = bool(
-                    qi_device_multilevel_config.multilevel_residual_equation
-                )
-                qi_device_multilevel_residual_equation_max_level_rank = int(
-                    qi_device_multilevel_config.multilevel_residual_equation_max_level_rank
-                )
-                qi_device_multilevel_residual_equation_order = str(
-                    qi_device_multilevel_config.multilevel_residual_equation_order
-                )
-                qi_device_multilevel_residual_equation_solver = str(
-                    qi_device_multilevel_config.multilevel_residual_equation_solver
-                )
-                qi_device_multilevel_residual_equation_include_global = bool(
-                    qi_device_multilevel_config.multilevel_residual_equation_include_global
                 )
                 qi_device_residual_correction_controls = (
                     _rhs1_qi_device_residual_correction_controls()
@@ -3747,6 +3658,25 @@ def solve_v3_full_system_linear_gmres(
                     if emit is not None:
                         for qi_device_message in qi_device_setup_summary.progress_messages:
                             emit(1, qi_device_message)
+                    qi_device_setup_config = build_xblock_qi_device_setup_config(
+                        XBlockQIDeviceSetupConfigContext(
+                            op=op,
+                            active_dof=bool(xblock_use_active_dof),
+                            linear_size=int(xblock_linear_size),
+                            base_config=qi_device_base_config,
+                            enrichment_config=qi_device_enrichment_config,
+                            multilevel_config=qi_device_multilevel_config,
+                            multilevel_max_rank=qi_device_multilevel_max_rank,
+                            max_rank=qi_device_max_rank,
+                            extra_coarse_controls=qi_device_extra_coarse_controls,
+                            extra_coarse_setup_kwargs=(
+                                qi_device_extra_coarse_setup_kwargs
+                            ),
+                            residual_correction_setup_kwargs=(
+                                qi_device_residual_correction_setup_kwargs
+                            ),
+                        )
+                    )
                     qi_device_state = setup_rhs1_qi_device_preconditioner(
                         operator=qi_operator_for_setup,
                         coarse_basis=qi_seed_basis_for_galerkin,
@@ -3754,98 +3684,8 @@ def solve_v3_full_system_linear_gmres(
                         total_size=int(xblock_linear_size),
                         dtype=jnp.float64,
                         operator_metadata=assembled_operator_metadata,
-                        geometry_metadata={
-                            "rhs_mode": int(op.rhs_mode),
-                            "n_theta": int(getattr(op, "n_theta", 1)),
-                            "n_zeta": int(getattr(op, "n_zeta", 1)),
-                            "n_x": int(getattr(op, "n_x", 1)),
-                            "n_species": int(getattr(op, "n_species", 1)),
-                            "active_dof": bool(xblock_use_active_dof),
-                            **_rhs1_xblock_qi_block_geometry_metadata(
-                                op=op,
-                                active_dof=bool(xblock_use_active_dof),
-                                linear_size=int(xblock_linear_size),
-                                include_tail_block=bool(
-                                    _rhs1_qi_device_tail_block_required(
-                                        multilevel_coarse=bool(qi_device_multilevel_coarse),
-                                        extra_coarse_controls=qi_device_extra_coarse_controls,
-                                    )
-                                ),
-                            ),
-                        },
-                        config=RHS1QIDevicePreconditionerConfig(
-                            regularization_rcond=float(qi_device_rcond),
-                            damping=float(qi_device_damping),
-                            coarse_solver=qi_device_coarse_solver,
-                            jacobi_damping=float(qi_device_jacobi_damping),
-                            jacobi_sweeps=int(qi_device_jacobi_sweeps),
-                            jacobi_step_policy=qi_device_jacobi_step_policy,
-                            jacobi_diagonal_floor=float(qi_device_jacobi_floor),
-                            jacobi_require_all_diagonal=bool(qi_device_jacobi_require_all_diagonal),
-                            local_smoother_kind=qi_device_local_smoother_kind,
-                            matrix_free_smoother_sweeps=int(qi_device_matrix_free_smoother_sweeps),
-                            matrix_free_smoother_damping=float(qi_device_matrix_free_smoother_damping),
-                            matrix_free_smoother_step_policy=qi_device_matrix_free_smoother_step_policy,
-                            matrix_free_smoother_alpha_clip=float(qi_device_matrix_free_smoother_alpha_clip),
-                            matrix_free_block_smoother_max_groups=int(
-                                qi_device_matrix_free_block_smoother_max_groups
-                            ),
-                            matrix_free_block_smoother_include_tail=bool(
-                                qi_device_matrix_free_block_smoother_include_tail
-                            ),
-                            matrix_free_block_smoother_rcond=float(qi_device_matrix_free_block_smoother_rcond),
-                            matrix_free_block_smoother_grouping=qi_device_matrix_free_block_smoother_grouping,
-                            max_rank=qi_device_max_rank,
-                            residual_enrichment=bool(qi_device_residual_enrichment),
-                            residual_enrichment_depth=int(qi_device_residual_enrichment_depth),
-                            residual_enrichment_include_residual=bool(
-                                qi_device_residual_enrichment_include_residual
-                            ),
-                            recycle_enrichment=bool(qi_device_recycle_enrichment),
-                            recycle_enrichment_cycles=int(qi_device_recycle_cycles),
-                            operator_krylov_enrichment=bool(qi_device_operator_krylov_enrichment),
-                            operator_krylov_depth=int(qi_device_operator_krylov_depth),
-                            adjoint_krylov_enrichment=bool(qi_device_adjoint_krylov_enrichment),
-                            adjoint_krylov_depth=int(qi_device_adjoint_krylov_depth),
-                            adjoint_krylov_transpose_source=qi_device_adjoint_krylov_transpose_source,
-                            operator_action_enrichment=bool(qi_device_operator_action_enrichment),
-                            operator_action_enrichment_depth=int(qi_device_operator_action_depth),
-                            multilevel_coarse=bool(qi_device_multilevel_coarse),
-                            multilevel_max_levels=int(qi_device_multilevel_max_levels),
-                            multilevel_aggregate_factor=int(qi_device_multilevel_aggregate_factor),
-                            multilevel_max_rank=qi_device_multilevel_max_rank,
-                            multilevel_max_angular_mode=int(qi_device_multilevel_max_angular_mode),
-                            multilevel_max_radial_degree=int(qi_device_multilevel_max_radial_degree),
-                            multilevel_max_pitch_degree=int(qi_device_multilevel_max_pitch_degree),
-                            multilevel_current_moments=bool(qi_device_multilevel_current_moments),
-                            multilevel_species_current_moments=bool(
-                                qi_device_multilevel_species_current_moments
-                            ),
-                            multilevel_radial_current_moments=bool(
-                                qi_device_multilevel_radial_current_moments
-                            ),
-                            multilevel_tail_constraint_moments=bool(
-                                qi_device_multilevel_tail_constraint_moments
-                            ),
-                            multilevel_current_max_pitch_degree=int(
-                                qi_device_multilevel_current_max_pitch_degree
-                            ),
-                            multilevel_residual_equation=bool(qi_device_multilevel_residual_equation),
-                            multilevel_residual_equation_max_level_rank=int(
-                                qi_device_multilevel_residual_equation_max_level_rank
-                            ),
-                            multilevel_residual_equation_order=(
-                                qi_device_multilevel_residual_equation_order
-                            ),
-                            multilevel_residual_equation_solver=(
-                                qi_device_multilevel_residual_equation_solver
-                            ),
-                            multilevel_residual_equation_include_global=bool(
-                                qi_device_multilevel_residual_equation_include_global
-                            ),
-                            **qi_device_extra_coarse_setup_kwargs,
-                            **qi_device_residual_correction_setup_kwargs,
-                        ),
+                        geometry_metadata=qi_device_setup_config.geometry_metadata,
+                        config=qi_device_setup_config.config,
                     )
                     qi_device_preconditioner_built = True
                     qi_device_state_for_augmented_krylov = qi_device_state

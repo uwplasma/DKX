@@ -92,6 +92,7 @@ from sfincs_jax.problems.profile_response.sparse_pc import (
     XBlockPhysicalResidual,
     XBlockQICoarseSeedStageContext,
     XBlockQIDeviceMetadataContext,
+    XBlockQIDeviceSetupConfigContext,
     XBlockQIGalerkinStageContext,
     XBlockQITwoLevelStageContext,
     XBlockSparsePCCompletionContext,
@@ -125,6 +126,7 @@ from sfincs_jax.problems.profile_response.sparse_pc import (
     build_direct_tail_materialization_setup,
     build_direct_tail_structured_preconditioner_setup,
     build_xblock_qi_device_preconditioner_metadata,
+    build_xblock_qi_device_setup_config,
     build_xblock_assembled_equilibration_setup,
     build_xblock_assembled_device_setup,
     build_xblock_assembled_matvec_setup,
@@ -6611,6 +6613,74 @@ def test_build_xblock_qi_device_preconditioner_metadata_uses_safe_defaults() -> 
     assert metadata["local_smoother_metadata"] is None
     assert metadata["multilevel_max_rank_requested"] is None
     assert metadata["max_rank_requested"] is None
+
+
+def test_build_xblock_qi_device_setup_config_matches_driver_contract() -> None:
+    op = SimpleNamespace(
+        rhs_mode=1,
+        n_species=1,
+        n_x=2,
+        n_xi=3,
+        n_theta=2,
+        n_zeta=2,
+        fblock=SimpleNamespace(
+            collisionless=SimpleNamespace(n_xi_for_x=np.asarray([3, 2], dtype=np.int32))
+        ),
+    )
+    base = resolve_xblock_qi_device_base_config_setup(
+        matrix_free_enabled=True,
+        assembled_device_operator_available=False,
+        precondition_side="right",
+        probe_uses_minres_step=lambda: True,
+        env={
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_RCOND": "1e-9",
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_LOCAL_SMOOTHER": "matrix-free-block",
+        },
+    )
+    enrichment = resolve_xblock_qi_device_enrichment_config_setup(
+        matrix_free_enabled=True,
+        env={
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_OPERATOR_KRYLOV_ENRICHMENT": "1",
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_OPERATOR_KRYLOV_DEPTH": "3",
+        },
+    )
+    multilevel = resolve_xblock_qi_device_multilevel_config_setup(
+        env={
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_COARSE": "1",
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_MAX_LEVELS": "4",
+        }
+    )
+
+    setup = build_xblock_qi_device_setup_config(
+        XBlockQIDeviceSetupConfigContext(
+            op=op,
+            active_dof=True,
+            linear_size=23,
+            base_config=base,
+            enrichment_config=enrichment,
+            multilevel_config=multilevel,
+            multilevel_max_rank=7,
+            max_rank=11,
+            extra_coarse_controls={},
+            extra_coarse_setup_kwargs={"global_moment_residual_equation": True},
+            residual_correction_setup_kwargs={"coupled_residual_equation": True},
+        )
+    )
+
+    assert setup.geometry_metadata["rhs_mode"] == 1
+    assert setup.geometry_metadata["qi_block_sizes"] == (12, 8, 3)
+    assert setup.geometry_metadata["qi_block_tail_size"] == 3
+    assert setup.geometry_metadata["qi_block_tail_included"] is True
+    assert setup.config.regularization_rcond == pytest.approx(1.0e-9)
+    assert setup.config.local_smoother_kind == "matrix_free_block"
+    assert setup.config.operator_krylov_enrichment is True
+    assert setup.config.operator_krylov_depth == 3
+    assert setup.config.multilevel_coarse is True
+    assert setup.config.multilevel_max_levels == 4
+    assert setup.config.multilevel_max_rank == 7
+    assert setup.config.max_rank == 11
+    assert setup.config.global_moment_residual_equation is True
+    assert setup.config.coupled_residual_equation is True
 
 
 def test_sparse_pc_gmres_control_policy_defaults() -> None:
