@@ -1971,12 +1971,12 @@ not be used for current planning.
 Current evidence from 2026-06-20:
 
 - Branch `refactor/v3-driver-architecture` remains the single draft-PR branch.
-  The latest local tranche moves generic x-block Krylov/probe/control helpers,
+  The latest pushed tranche moves generic x-block Krylov/probe/control helpers,
   precondition-side/probe-coarse gates, augmented Krylov setup, GMRES fallback
   routing, progress messages, work estimates, and physical-residual
-  measurement into `profile_response/sparse/xblock.py`.
-- PR #8 is draft and merge-clean. Commit `9c1734f` should be treated as the
-  latest pushed CI reference until this local tranche is committed and pushed.
+  measurement into `profile_response/sparse/xblock.py` in commit `6a871b4`.
+- PR #8 is draft and merge-clean. Commit `6a871b4` should be treated as the
+  latest CI reference until another structural tranche is pushed.
 - Largest remaining files after the current sparse package splits are
   `sfincs_jax/v3_driver.py` (`14393` lines),
   `sfincs_jax/rhs1_full_assembly.py` (`11893` lines),
@@ -2040,7 +2040,8 @@ Current evidence from 2026-06-20:
 - Validation for the generic x-block Krylov/probe/control split: targeted
   `py_compile`, targeted `ruff`, focused sparse/profile-response tests
   (`358 passed`), and broad profile-response/RHSMode shard (`1390 passed`)
-  passed locally.
+  passed locally. `compileall`, `git diff --check`, Sphinx HTML docs build, and
+  repository-size audit also passed locally.
 - `rhs1_full_assembly.py` and `io.py` are large, but they are not immediate
   blockers for PR #8 unless this branch changes their behavior. Treat them as
   follow-up refactor lanes after the driver/profile-response split is reviewed.
