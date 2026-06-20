@@ -13,6 +13,7 @@ from sfincs_jax.problems.profile_response.sparse import direct as sparse_direct_
 from sfincs_jax.problems.profile_response.sparse import (
     finalization as sparse_finalization_module,
 )
+from sfincs_jax.problems.profile_response.sparse import krylov as sparse_krylov_module
 from sfincs_jax.problems.profile_response.sparse import xblock as sparse_xblock_module
 from sfincs_jax.problems.profile_response.active_projection import (
     expand_reduced_with_map,
@@ -418,6 +419,18 @@ def test_sparse_finalization_module_reexports_match_compat_layer() -> None:
             sparse_finalization_module,
             name,
         )
+
+
+def test_sparse_krylov_module_reexports_match_compat_layer() -> None:
+    """The split sparse Krylov module keeps legacy sparse_pc imports stable."""
+
+    moved_names = (
+        "SparsePCGMRESContext",
+        "run_sparse_pc_gmres_once",
+        "run_sparse_pc_gmres_once_for_retry",
+    )
+    for name in moved_names:
+        assert getattr(sparse_pc_module, name) is getattr(sparse_krylov_module, name)
 
 
 def _identity(v: jnp.ndarray) -> jnp.ndarray:
