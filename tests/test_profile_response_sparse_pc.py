@@ -73,6 +73,7 @@ from sfincs_jax.problems.profile_response.sparse_pc import (
     SparseHostRetryCandidateContext,
     SparseHostRetryCandidateResult,
     SparseJAXRetryPreconditionerBuildContext,
+    SparseXBlockRescueBuildContext,
     ExplicitSparseOperatorBuildPolicy,
     ExplicitSparseOperatorBuildResult,
     SparsePCDirectTailFinalMetadataContext,
@@ -148,6 +149,7 @@ from sfincs_jax.problems.profile_response.sparse_pc import (
     apply_sparse_pc_post_minres_from_driver_state,
     apply_xblock_subspace_correction_if_needed,
     build_fortran_reduced_xblock_factor_stage,
+    build_sparse_xblock_rescue_preconditioner,
     build_explicit_sparse_operator_from_pattern,
     build_fortran_reduced_xblock_krylov_setup,
     build_sparse_pc_active_dof_setup,
@@ -4073,6 +4075,93 @@ def test_fortran_reduced_xblock_factor_stage_builds_with_policy_and_timing() -> 
     assert calls["builder"]["force_assembled_host_fp"] is True
     assert any("promoting x-block backend preconditioner_xi 0 -> 1" in message for message in messages)
     assert any("using x-block backend instead of monolithic CSR factor" in message for message in messages)
+
+
+def test_sparse_xblock_rescue_build_promotes_xi_and_builds_with_markers() -> None:
+    messages: list[str] = []
+    calls: dict[str, object] = {}
+    marks: list[str] = []
+    op = SimpleNamespace(fblock=SimpleNamespace(fp=object(), pas=None))
+
+    def assembled_allowed(**kwargs) -> bool:
+        calls["assembled"] = kwargs
+        return True
+
+    def builder(**kwargs):
+        calls["builder"] = kwargs
+        return lambda v: 2.0 * v
+
+    result = build_sparse_xblock_rescue_preconditioner(
+        context=SparseXBlockRescueBuildContext(
+            op=op,
+            reduce_full=_identity,
+            expand_reduced=_identity,
+            active_size=42,
+            preconditioner_species=1,
+            preconditioner_x=3,
+            preconditioner_xi=0,
+            use_implicit=False,
+            drop_tol=0.1,
+            drop_rel=0.2,
+            ilu_drop_tol=0.3,
+            fill_factor=4.0,
+            emit=lambda _level, msg: messages.append(msg),
+            mark=marks.append,
+            assembled_host_allowed=assembled_allowed,
+            builder=builder,
+        )
+    )
+
+    assert result.preconditioner_xi == 1
+    assert result.force_assembled_host_fp is True
+    assert result.preconditioner(jnp.asarray([3.0])).tolist() == [6.0]
+    assert marks == ["rhs1_sparse_precond_build_start", "rhs1_sparse_precond_build_done"]
+    assert calls["assembled"]["preconditioner_xi"] == 1
+    assert calls["builder"]["build_jax_factors"] is False
+    assert calls["builder"]["preconditioner_xi"] == 1
+    assert calls["builder"]["force_assembled_host_fp"] is True
+    assert any("v3-like sparse x-block rescue" in message for message in messages)
+    assert any("promoting sparse x-block rescue preconditioner_xi 0 -> 1" in message for message in messages)
+
+
+def test_sparse_xblock_rescue_build_keeps_xi_for_implicit_or_pas_cases() -> None:
+    calls: dict[str, object] = {}
+    op = SimpleNamespace(fblock=SimpleNamespace(fp=object(), pas=object()))
+
+    def assembled_allowed(**kwargs) -> bool:
+        calls["assembled"] = kwargs
+        return False
+
+    def builder(**kwargs):
+        calls["builder"] = kwargs
+        return _identity
+
+    result = build_sparse_xblock_rescue_preconditioner(
+        context=SparseXBlockRescueBuildContext(
+            op=op,
+            reduce_full=_identity,
+            expand_reduced=_identity,
+            active_size=42,
+            preconditioner_species=1,
+            preconditioner_x=3,
+            preconditioner_xi=0,
+            use_implicit=True,
+            drop_tol=0.1,
+            drop_rel=0.2,
+            ilu_drop_tol=0.3,
+            fill_factor=4.0,
+            emit=None,
+            mark=lambda _name: None,
+            assembled_host_allowed=assembled_allowed,
+            builder=builder,
+        )
+    )
+
+    assert result.preconditioner_xi == 0
+    assert result.force_assembled_host_fp is False
+    assert calls["assembled"]["preconditioner_xi"] == 0
+    assert calls["builder"]["build_jax_factors"] is True
+    assert calls["builder"]["preconditioner_xi"] == 0
 
 
 def test_fortran_reduced_xblock_krylov_policy_defaults_and_counter() -> None:

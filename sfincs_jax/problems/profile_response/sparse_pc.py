@@ -3874,6 +3874,37 @@ class FortranReducedXBlockFactorBuildResult:
 
 
 @dataclass(frozen=True)
+class SparseXBlockRescueBuildContext:
+    """Dependencies for the generic sparse x-block rescue preconditioner build."""
+
+    op: object
+    reduce_full: ArrayFn
+    expand_reduced: ArrayFn
+    active_size: int
+    preconditioner_species: int
+    preconditioner_x: int
+    preconditioner_xi: int
+    use_implicit: bool
+    drop_tol: float
+    drop_rel: float
+    ilu_drop_tol: float
+    fill_factor: float
+    emit: EmitFn | None
+    mark: Callable[[str], None]
+    assembled_host_allowed: Callable[..., bool]
+    builder: Callable[..., ArrayFn]
+
+
+@dataclass(frozen=True)
+class SparseXBlockRescueBuildResult:
+    """Result from building the generic sparse x-block rescue preconditioner."""
+
+    preconditioner: ArrayFn
+    preconditioner_xi: int
+    force_assembled_host_fp: bool
+
+
+@dataclass(frozen=True)
 class FortranReducedXBlockMomentSchurStageContext:
     """Dependencies for the optional fortran-reduced moment-Schur stage."""
 
@@ -6433,6 +6464,67 @@ def build_fortran_reduced_xblock_factor_stage(
         preconditioner_xi=int(policy.preconditioner_xi),
         force_assembled_host_fp=bool(force_assembled_host_fp),
         factor_s=float(context.elapsed_s()) - factor_start_s,
+    )
+
+
+def build_sparse_xblock_rescue_preconditioner(
+    *,
+    context: SparseXBlockRescueBuildContext,
+) -> SparseXBlockRescueBuildResult:
+    """Build the generic sparse x-block rescue preconditioner."""
+
+    if context.emit is not None:
+        context.emit(
+            0,
+            "solve_v3_full_system_linear_gmres: v3-like sparse x-block rescue "
+            f"(size={int(context.active_size)} preconditioner_x={int(context.preconditioner_x)})",
+        )
+
+    preconditioner_xi = int(context.preconditioner_xi)
+    fblock = getattr(context.op, "fblock", None)
+    if (
+        preconditioner_xi == 0
+        and not bool(context.use_implicit)
+        and getattr(fblock, "fp", None) is not None
+        and getattr(fblock, "pas", None) is None
+    ):
+        preconditioner_xi = 1
+        if context.emit is not None:
+            context.emit(
+                1,
+                "solve_v3_full_system_linear_gmres: promoting sparse x-block rescue "
+                "preconditioner_xi 0 -> 1 for stronger host FP factorization",
+            )
+
+    force_assembled_host_fp = bool(
+        context.assembled_host_allowed(
+            op=context.op,
+            preconditioner_species=int(context.preconditioner_species),
+            preconditioner_xi=int(preconditioner_xi),
+            use_implicit=bool(context.use_implicit),
+            active_size=int(context.active_size),
+        )
+    )
+    context.mark("rhs1_sparse_precond_build_start")
+    preconditioner = context.builder(
+        op=context.op,
+        reduce_full=context.reduce_full,
+        expand_reduced=context.expand_reduced,
+        build_jax_factors=bool(context.use_implicit),
+        preconditioner_species=int(context.preconditioner_species),
+        preconditioner_xi=int(preconditioner_xi),
+        drop_tol=float(context.drop_tol),
+        drop_rel=float(context.drop_rel),
+        ilu_drop_tol=float(context.ilu_drop_tol),
+        fill_factor=float(context.fill_factor),
+        force_assembled_host_fp=bool(force_assembled_host_fp),
+        emit=context.emit,
+    )
+    context.mark("rhs1_sparse_precond_build_done")
+    return SparseXBlockRescueBuildResult(
+        preconditioner=preconditioner,
+        preconditioner_xi=int(preconditioner_xi),
+        force_assembled_host_fp=bool(force_assembled_host_fp),
     )
 
 
@@ -15539,6 +15631,8 @@ __all__ = [
     "SparseHostRetryCandidateContext",
     "SparseHostRetryCandidateResult",
     "SparseJAXRetryPreconditionerBuildContext",
+    "SparseXBlockRescueBuildContext",
+    "SparseXBlockRescueBuildResult",
     "SparsePCDirectTailFinalMetadataContext",
     "ExplicitSparseOperatorBuildPolicy",
     "ExplicitSparseOperatorBuildResult",
@@ -15571,6 +15665,7 @@ __all__ = [
     "apply_sparse_pc_post_minres_from_driver_state",
     "apply_xblock_subspace_correction_if_needed",
     "build_fortran_reduced_xblock_factor_stage",
+    "build_sparse_xblock_rescue_preconditioner",
     "build_fortran_reduced_xblock_krylov_setup",
     "build_xblock_local_preconditioner",
     "build_xblock_assembled_operator_if_requested",

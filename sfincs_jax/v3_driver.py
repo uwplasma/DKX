@@ -390,6 +390,8 @@ from .problems.profile_response.sparse_pc import (
     run_fortran_reduced_xblock_krylov_solve,
     run_sparse_pc_gmres_once,
     run_sparse_pc_gmres_once_for_retry,
+    SparseXBlockRescueBuildContext,
+    build_sparse_xblock_rescue_preconditioner,
     run_xblock_krylov_solve_stage,
     xblock_sparse_pc_final_metadata_state_from_context,
     build_sparse_host_or_ilu_factor,
@@ -9984,53 +9986,33 @@ def solve_v3_full_system_linear_gmres(
                 sparse_xblock_rescue_attempted = True
                 sparse_xblock_rescue_reason = "started"
                 try:
-                    if emit is not None:
-                        emit(
-                            0,
-                            "solve_v3_full_system_linear_gmres: v3-like sparse x-block rescue "
-                            f"(size={int(active_size)} preconditioner_x={int(preconditioner_x)})",
+                    sparse_xblock_build = build_sparse_xblock_rescue_preconditioner(
+                        context=SparseXBlockRescueBuildContext(
+                            op=op,
+                            reduce_full=reduce_full,
+                            expand_reduced=expand_reduced,
+                            active_size=int(active_size),
+                            preconditioner_species=int(preconditioner_species),
+                            preconditioner_x=int(preconditioner_x),
+                            preconditioner_xi=int(preconditioner_xi),
+                            use_implicit=bool(use_implicit),
+                            drop_tol=float(sparse_drop_tol),
+                            drop_rel=float(sparse_drop_rel),
+                            ilu_drop_tol=float(sparse_ilu_drop_tol),
+                            fill_factor=float(sparse_ilu_fill),
+                            emit=emit,
+                            mark=_mark,
+                            assembled_host_allowed=_rhsmode1_fp_xblock_assembled_host_allowed,
+                            builder=_build_rhsmode1_xblock_tz_sparse_preconditioner,
                         )
-                    sparse_xblock_preconditioner_xi = int(preconditioner_xi)
-                    if (
-                        sparse_xblock_preconditioner_xi == 0
-                        and (not bool(use_implicit))
-                        and op.fblock.fp is not None
-                        and op.fblock.pas is None
-                    ):
-                        sparse_xblock_preconditioner_xi = 1
-                        if emit is not None:
-                            emit(
-                                1,
-                                "solve_v3_full_system_linear_gmres: promoting sparse x-block rescue "
-                                "preconditioner_xi 0 -> 1 for stronger host FP factorization",
-                            )
-                    assembled_host_fp = _rhsmode1_fp_xblock_assembled_host_allowed(
-                        op=op,
-                        preconditioner_species=preconditioner_species,
-                        preconditioner_xi=sparse_xblock_preconditioner_xi,
-                        use_implicit=bool(use_implicit),
-                        active_size=int(active_size),
                     )
-                    sparse_xblock_rescue_assembled_host_fp = bool(assembled_host_fp)
-                    sparse_xblock_rescue_preconditioner_xi = int(sparse_xblock_preconditioner_xi)
-                    _mark("rhs1_sparse_precond_build_start")
-                    precond_sparse_xblock = _build_rhsmode1_xblock_tz_sparse_preconditioner(
-                        op=op,
-                        reduce_full=reduce_full,
-                        expand_reduced=expand_reduced,
-                        build_jax_factors=bool(use_implicit),
-                        preconditioner_species=preconditioner_species,
-                        preconditioner_xi=sparse_xblock_preconditioner_xi,
-                        drop_tol=sparse_drop_tol,
-                        drop_rel=sparse_drop_rel,
-                        ilu_drop_tol=sparse_ilu_drop_tol,
-                        fill_factor=sparse_ilu_fill,
-                        force_assembled_host_fp=bool(assembled_host_fp),
-                        emit=emit,
-                    )
+                    precond_sparse_xblock = sparse_xblock_build.preconditioner
+                    sparse_xblock_preconditioner_xi = int(sparse_xblock_build.preconditioner_xi)
+                    assembled_host_fp = bool(sparse_xblock_build.force_assembled_host_fp)
                     precond_sparse_xblock_current = precond_sparse_xblock
                     sparse_xblock_rescue_built = True
-                    _mark("rhs1_sparse_precond_build_done")
+                    sparse_xblock_rescue_assembled_host_fp = bool(assembled_host_fp)
+                    sparse_xblock_rescue_preconditioner_xi = int(sparse_xblock_preconditioner_xi)
                     _mark("rhs1_sparse_precond_solve_start")
                     if use_implicit:
                         res_sparse_xblock = _solve_linear(

@@ -380,6 +380,11 @@ Recent checkpoints:
   `profile_response.dense` helper. The helper owns the quick reported-residual
   gate, true-residual recomputation, dense-shortcut policy call, and diagnostic
   messages; the driver keeps only the resulting boolean and `emit` calls.
+- RHSMode=1 generic sparse x-block rescue preconditioner setup now uses a
+  tested `profile_response.sparse_pc` stage. The helper owns rescue start
+  diagnostics, explicit FP `preconditioner_xi` promotion, assembled-host-FP
+  admission, build phase markers, and builder invocation; the driver keeps the
+  later Krylov/seed acceptance and metadata state.
 - RHSMode=1 PAS preconditioner probe/default routing now uses tested
   PAS-policy helpers for env parsing, tokamak-like Schur defaulting, heavy-path
   admission, large-system collision skip, and residual-threshold decisions
@@ -523,10 +528,10 @@ Recent checkpoints:
 - `cb295ce` Extract sparse pattern setup.
 - `4b6a5b4` Extract sparse factor policy.
 
-Current source-size snapshot after late dense-shortcut evaluation extraction:
+Current source-size snapshot after generic sparse x-block rescue setup extraction:
 
-- `sfincs_jax/v3_driver.py`: `14653` lines.
-- `solve_v3_full_system_linear_gmres`: `9887` lines.
+- `sfincs_jax/v3_driver.py`: `14635` lines.
+- `solve_v3_full_system_linear_gmres`: `9867` lines.
 - `sfincs_jax/v3_results.py`: `119` lines.
 - `sfincs_jax/rhs1_ksp_diagnostics.py`: `306` lines.
 - `sfincs_jax/rhs1_pas_policy.py`: `889` lines.
@@ -539,12 +544,25 @@ Current source-size snapshot after late dense-shortcut evaluation extraction:
 - `sfincs_jax/problems/profile_response/linear_solve.py`: `798` lines.
 - `sfincs_jax/problems/profile_response/preconditioner_build.py`: `811` lines.
 - `sfincs_jax/problems/profile_response/active_projection.py`: `203` lines.
-- `sfincs_jax/problems/profile_response/sparse_pc.py`: `15687` lines.
+- `sfincs_jax/problems/profile_response/sparse_pc.py`: `15782` lines.
 - `sfincs_jax/problems/profile_response/solver_diagnostics.py`: `421` lines.
 - `sfincs_jax/rhs1_xblock_policy.py`: `1215` lines.
 
 Recent local validation:
 
+- Generic sparse x-block rescue setup extraction:
+  `tests/test_profile_response_sparse_pc.py
+  tests/test_v3_driver_rhs1_dispatch_coverage.py` passed
+  (`333 passed in 22.71 s`).
+- Broad profile-response/RHSMode=1 shard after generic sparse x-block rescue
+  setup extraction:
+  `tests/test_profile_response_*.py tests/test_rhs1_*.py
+  tests/test_newton_krylov_diagnostics.py tests/test_pas_smoother.py`
+  passed (`1365 passed in 86.44 s`).
+- Hygiene after generic sparse x-block rescue setup extraction:
+  `py_compile`, `ruff check`, `compileall`, `git diff --check`, and
+  `python scripts/check_repo_size.py` passed. Repo-size audit reported no
+  reviewed files above 2 MiB.
 - Late dense-shortcut evaluation extraction:
   `tests/test_profile_response_dense.py
   tests/test_v3_driver_rhs1_dispatch_coverage.py` passed
