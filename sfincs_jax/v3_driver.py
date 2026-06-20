@@ -439,11 +439,11 @@ from .problems.profile_response.setup import (
     resolve_rhs1_domain_decomposition_setup,
     resolve_rhs1_dkes_adjustment_setup,
     resolve_rhs1_gmres_budget_setup,
+    resolve_rhs1_initial_route_setup,
     resolve_rhs1_physics_flag_setup,
     resolve_rhs1_post_active_solve_policy_setup,
     resolve_rhs1_preconditioner_option_setup,
     resolve_rhs1_tolerance_setup,
-    resolve_solve_method_request_flags,
 )
 from . import rhs1_xblock_policy as _rhs1_xblock_policy
 from . import rhs1_xblock_sparse_host_policy as _rhs1_xblock_sparse_host_policy
@@ -2590,46 +2590,26 @@ def solve_v3_full_system_linear_gmres(
         emit=emit,
         enabled=rhs1_large_progress_enabled(rhs_mode=int(op.rhs_mode), total_size=int(op.total_size)),
     )
-    method_flags = resolve_solve_method_request_flags(
+    route_setup = resolve_rhs1_initial_route_setup(
+        nml=nml,
+        op=op,
         solve_method=str(solve_method),
         xblock_active_dof_env=os.environ.get("SFINCS_JAX_RHSMODE1_XBLOCK_ACTIVE_DOF", ""),
+        use_implicit=bool(_resolve_use_implicit(differentiable=differentiable)),
+        force_krylov=bool(_rhs1_bool_env("SFINCS_JAX_RHSMODE1_FORCE_KRYLOV", default=False)),
+        sharded_axis=_matvec_shard_axis(op),
+        backend=str(jax.default_backend()),
+        device_count=int(jax.device_count()),
+        structured_auto_allowed=_rhs1_structured_full_csr_auto_allowed_impl,
     )
+    method_flags = route_setup.method_flags
     solve_method_kind_requested = method_flags.kind
-    sparse_host_requested = bool(method_flags.sparse_host_requested)
-    sparse_host_safe_requested = bool(method_flags.sparse_host_safe_requested)
-    sparse_pc_gmres_requested = bool(method_flags.sparse_pc_gmres_requested)
-    sparse_minimum_norm_requested = bool(method_flags.sparse_minimum_norm_requested)
     sparse_host_like_requested = bool(method_flags.sparse_host_like_requested)
     xblock_active_dof_requested = bool(method_flags.xblock_active_dof_requested)
     structured_full_csr_explicit_requested = bool(method_flags.structured_full_csr_explicit_requested)
-    use_implicit_requested = bool(_resolve_use_implicit(differentiable=differentiable))
-    structured_auto_allowed = False
-    structured_sharded_multidevice = False
-    if not structured_full_csr_explicit_requested:
-        phys_params_for_structured = nml.group("physicsParameters")
-        structured_eparallel_values: list[float] = []
-        for key in ("EParallelHat", "eParallelHat", "EPARALLELHAT"):
-            value = phys_params_for_structured.get(key, phys_params_for_structured.get(key.upper(), None))
-            try:
-                structured_eparallel_values.append(abs(float(value)) if value is not None else 0.0)
-            except (TypeError, ValueError):
-                structured_eparallel_values.append(0.0)
-        structured_eparallel_abs = max(structured_eparallel_values, default=0.0)
-        structured_sharded_axis = _matvec_shard_axis(op)
-        structured_sharded_multidevice = (
-            structured_sharded_axis in {"theta", "zeta"} and jax.device_count() > 1
-        )
-        structured_auto_allowed = bool(
-            (not _rhs1_bool_env("SFINCS_JAX_RHSMODE1_FORCE_KRYLOV", default=False))
-            and _rhs1_structured_full_csr_auto_allowed_impl(
-                op=op,
-                active_size=int(op.total_size),
-                use_implicit=bool(use_implicit_requested),
-                solve_method_kind=solve_method_kind_requested,
-                backend=str(jax.default_backend()),
-                eparallel_abs=float(structured_eparallel_abs),
-            )
-        )
+    use_implicit_requested = bool(route_setup.use_implicit_requested)
+    structured_auto_allowed = bool(route_setup.structured_auto_allowed)
+    structured_sharded_multidevice = bool(route_setup.structured_sharded_multidevice)
     auto_host_result = try_rhs1_auto_host_solve(
         RHS1AutoHostSolveContext(
             nml=nml,

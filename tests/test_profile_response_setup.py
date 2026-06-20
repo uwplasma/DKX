@@ -9,6 +9,7 @@ from sfincs_jax.problems.profile_response.setup import (
     resolve_rhs1_domain_decomposition_setup,
     resolve_rhs1_dkes_adjustment_setup,
     resolve_rhs1_gmres_budget_setup,
+    resolve_rhs1_initial_route_setup,
     resolve_rhs1_physics_flag_setup,
     resolve_rhs1_post_active_solve_policy_setup,
     resolve_rhs1_preconditioner_option_setup,
@@ -205,6 +206,108 @@ def test_solve_method_request_flags_preserve_driver_aliases() -> None:
         xblock_active_dof_env="maybe",
     )
     assert not invalid_env.xblock_active_dof_requested
+
+
+def test_rhs1_initial_route_setup_controls_structured_auto_admission() -> None:
+    nml = FakeNamelist(
+        {
+            "physicsParameters": {
+                "EParallelHat": "bad",
+                "eParallelHat": "-0.25",
+            }
+        }
+    )
+    op = FakeOperator(
+        rhs_mode=1,
+        include_phi1=False,
+        constraint_scheme=1,
+        total_size=4096,
+        phi1_size=0,
+        fblock=FakeFBlock(fp=object(), pas=None),
+    )
+    calls: list[dict[str, object]] = []
+
+    def policy(**kwargs: object) -> bool:
+        calls.append(kwargs)
+        return True
+
+    setup = resolve_rhs1_initial_route_setup(
+        nml=nml,
+        op=op,
+        solve_method="auto",
+        xblock_active_dof_env="",
+        use_implicit=False,
+        force_krylov=False,
+        sharded_axis="theta",
+        backend="cpu",
+        device_count=2,
+        structured_auto_allowed=policy,
+    )
+
+    assert setup.method_flags.kind == "auto"
+    assert setup.structured_eparallel_abs == 0.25
+    assert setup.structured_sharded_multidevice
+    assert setup.structured_auto_allowed
+    assert calls == [
+        {
+            "op": op,
+            "active_size": 4096,
+            "use_implicit": False,
+            "solve_method_kind": "auto",
+            "backend": "cpu",
+            "eparallel_abs": 0.25,
+        }
+    ]
+
+    forced = resolve_rhs1_initial_route_setup(
+        nml=nml,
+        op=op,
+        solve_method="auto",
+        xblock_active_dof_env="",
+        use_implicit=False,
+        force_krylov=True,
+        sharded_axis=None,
+        backend="gpu",
+        device_count=1,
+        structured_auto_allowed=policy,
+    )
+
+    assert not forced.structured_auto_allowed
+    assert len(calls) == 1
+
+
+def test_rhs1_initial_route_setup_skips_auto_policy_for_explicit_structured() -> None:
+    nml = FakeNamelist({"physicsParameters": {"EParallelHat": "1.0"}})
+    op = FakeOperator(
+        rhs_mode=1,
+        include_phi1=False,
+        constraint_scheme=1,
+        total_size=16,
+        phi1_size=0,
+        fblock=FakeFBlock(fp=object(), pas=None),
+    )
+
+    def policy(**_kwargs: object) -> bool:
+        raise AssertionError("explicit structured CSR should not query auto admission")
+
+    setup = resolve_rhs1_initial_route_setup(
+        nml=nml,
+        op=op,
+        solve_method="structured-full-csr",
+        xblock_active_dof_env="",
+        use_implicit=True,
+        force_krylov=False,
+        sharded_axis="zeta",
+        backend="cpu",
+        device_count=4,
+        structured_auto_allowed=policy,
+    )
+
+    assert setup.method_flags.structured_full_csr_explicit_requested
+    assert setup.use_implicit_requested
+    assert setup.structured_eparallel_abs == 0.0
+    assert not setup.structured_auto_allowed
+    assert not setup.structured_sharded_multidevice
 
 
 def test_preconditioner_option_setup_controls_pas_projection() -> None:

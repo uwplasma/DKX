@@ -7,7 +7,7 @@ geometry hints, tolerance tightening, and solve-method classification.
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from numbers import Integral, Real
 from typing import Any
@@ -153,6 +153,17 @@ class SolveMethodRequestFlags:
     sparse_host_like_requested: bool
     xblock_active_dof_requested: bool
     structured_full_csr_explicit_requested: bool
+
+
+@dataclass(frozen=True)
+class RHS1InitialRouteSetup:
+    """Early RHSMode=1 solver routing state used before active-DOF setup."""
+
+    method_flags: SolveMethodRequestFlags
+    use_implicit_requested: bool
+    structured_eparallel_abs: float
+    structured_auto_allowed: bool
+    structured_sharded_multidevice: bool
 
 
 @dataclass(frozen=True)
@@ -685,6 +696,66 @@ def resolve_solve_method_request_flags(
     )
 
 
+def resolve_rhs1_initial_route_setup(
+    *,
+    nml: Any,
+    op: Any,
+    solve_method: str,
+    xblock_active_dof_env: str,
+    use_implicit: bool,
+    force_krylov: bool,
+    sharded_axis: str | None,
+    backend: str,
+    device_count: int,
+    structured_auto_allowed: Callable[..., bool],
+) -> RHS1InitialRouteSetup:
+    """Resolve early RHSMode=1 routing shared by auto and explicit host paths.
+
+    The solve driver still builds the operator and owns the selected solve
+    branches. This helper only classifies the user request and evaluates the
+    structured full-CSR auto-admission policy from already available inputs.
+    """
+
+    method_flags = resolve_solve_method_request_flags(
+        solve_method=solve_method,
+        xblock_active_dof_env=xblock_active_dof_env,
+    )
+    structured_eparallel_abs = 0.0
+    structured_sharded_multidevice = False
+    structured_auto_allowed_value = False
+    if not method_flags.structured_full_csr_explicit_requested:
+        phys_params = nml.group("physicsParameters")
+        values: list[float] = []
+        for key in ("EParallelHat", "eParallelHat", "EPARALLELHAT"):
+            value = phys_params.get(key, phys_params.get(key.upper(), None))
+            try:
+                values.append(abs(float(value)) if value is not None else 0.0)
+            except (TypeError, ValueError):
+                values.append(0.0)
+        structured_eparallel_abs = max(values, default=0.0)
+        structured_sharded_multidevice = (
+            sharded_axis in {"theta", "zeta"} and int(device_count) > 1
+        )
+        structured_auto_allowed_value = bool(
+            (not bool(force_krylov))
+            and structured_auto_allowed(
+                op=op,
+                active_size=int(op.total_size),
+                use_implicit=bool(use_implicit),
+                solve_method_kind=method_flags.kind,
+                backend=str(backend),
+                eparallel_abs=float(structured_eparallel_abs),
+            )
+        )
+    return RHS1InitialRouteSetup(
+        method_flags=method_flags,
+        use_implicit_requested=bool(use_implicit),
+        structured_eparallel_abs=float(structured_eparallel_abs),
+        structured_auto_allowed=bool(structured_auto_allowed_value),
+        structured_sharded_multidevice=bool(structured_sharded_multidevice),
+    )
+
+
 def _read_int_value(raw: object, default: int) -> int:
     try:
         text = str(raw).strip()
@@ -838,6 +909,7 @@ def resolve_rhs1_preconditioner_option_setup(
 __all__ = (
     "RHS1DomainDecompositionSetup",
     "RHS1GmresBudgetSetup",
+    "RHS1InitialRouteSetup",
     "RHS1PhysicsFlagSetup",
     "RHS1PreconditionerOptionSetup",
     "RHS1ToleranceSetup",
@@ -855,6 +927,7 @@ __all__ = (
     "normalize_profile_solve_method_kind",
     "resolve_rhs1_domain_decomposition_setup",
     "resolve_rhs1_gmres_budget_setup",
+    "resolve_rhs1_initial_route_setup",
     "resolve_rhs1_physics_flag_setup",
     "resolve_rhs1_preconditioner_option_setup",
     "resolve_rhs1_tolerance_setup",

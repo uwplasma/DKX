@@ -1128,6 +1128,12 @@ Recent local validation:
   `1193 passed in 50.24 s`.
 - Transport/preconditioner dispatch shard after policy/refinement/parallel
   alias cleanup: `554 passed in 29.90 s`.
+- Profile-response setup unit tests after initial-route extraction:
+  `13 passed in 0.32 s`.
+- Structured CSR and auto-host routing shard after initial-route extraction:
+  `109 passed in 23.10 s`.
+- Broad profile-response/RHSMode=1 policy, setup, diagnostics, solver, and
+  helper sweep after initial-route extraction: `1195 passed in 48.86 s`.
 - Older focused and broad validation checkpoints are intentionally omitted from
   this active plan; they remain available in git history.
 
@@ -1140,7 +1146,7 @@ Known CI issue fixed by this rewrite:
 
 ### 1. `v3_driver.py` Architecture Refactor
 
-Completion estimate: 68%.
+Completion estimate: 69%.
 
 Goal:
 
@@ -1224,6 +1230,9 @@ Completed recent boundaries:
   parallel compatibility wrappers are now patchable aliases to domain helpers,
   removing another driver boilerplate tranche without changing backend-injected
   or callback-adapting wrappers.
+- RHSMode=1 initial solve-route setup now lives in the profile-response setup
+  module with unit coverage for solve-method classification, structured-CSR
+  auto admission, force-Krylov rejection, and multi-device sharding metadata.
 - RHSMode=1 rescue/refinement candidate acceptance and KSP replay-state updates
   consolidated into profile-response handoff helpers.
 - RHSMode=1 true-residual recomputation before fallback decisions consolidated
