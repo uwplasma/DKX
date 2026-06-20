@@ -1940,7 +1940,73 @@ Known CI issue fixed by this rewrite:
 - `tests/test_repo_size_policy.py::test_tracked_large_files_are_reviewed`
   failed because `plan.md` reached `2.01 MiB`.
 
-## Active Work Lanes
+## Current Open Lanes For Review Readiness
+
+This section is the current authoritative path for making PR #8 ready for
+review. The older checkpoint detail below remains historical evidence of how
+the refactor got here, but the percentages in that historical section should
+not be used for current planning.
+
+Current evidence from 2026-06-20:
+
+- Branch `refactor/v3-driver-architecture` is clean and pushed.
+- PR #8 is draft, merge-clean, and current required CI/docs checks pass.
+- Largest remaining files are
+  `sfincs_jax/problems/profile_response/sparse_pc.py` (`16570` lines),
+  `sfincs_jax/v3_driver.py` (`14435` lines),
+  `sfincs_jax/rhs1_full_assembly.py` (`11893` lines), and
+  `sfincs_jax/io.py` (`5817` lines).
+- Largest remaining function is
+  `solve_v3_full_system_linear_gmres(...)` in `v3_driver.py` (`9659` lines).
+- `profile_response.sparse_pc` now has 358 top-level items. It is no longer
+  acceptable to keep extracting driver code into that one file without a
+  source split.
+
+Open lanes:
+
+1. Review-readiness and plan hygiene: keep one draft PR, keep CI green, keep
+   the worktree clean, and make the PR description match this current plan.
+2. Driver simplification: finish only the remaining high-ROI,
+   behavior-preserving driver seams before splitting modules. The next seams
+   are the `sxblock_tz` sparse seed/polish branch and the generic sparse
+   retry/result-assembly branch. Avoid extracting small local scalar
+   assignments that would make call sites harder to read.
+3. Sparse-PC source split: split `profile_response.sparse_pc` into a small
+   domain package after the next one or two driver seams. Keep
+   `profile_response/sparse_pc.py` as a compatibility re-export while moving
+   implementation into a bounded set of domain files:
+   `sparse_solve/finalization.py`, `sparse_solve/direct.py`,
+   `sparse_solve/xblock.py`, `sparse_solve/direct_tail.py`,
+   `sparse_solve/fortran_reduced.py`, and `sparse_solve/qi.py`.
+4. Differentiability lane: document and test that host sparse factors remain
+   outside autodiff paths, while JAX-native Python lanes keep stable
+   transformation behavior. Add only focused tests here during this refactor,
+   not production-size optimization studies.
+5. Performance and memory lane: because these edits are behavior-preserving
+   source movement, use focused CPU validation locally and reserve `ssh office`
+   for a representative GPU smoke after the module split stabilizes. Do not
+   regenerate public benchmark plots unless solver behavior or benchmark data
+   changes.
+6. Validation/docs lane: keep focused tests at each extraction boundary,
+   broad RHSMode/profile-response shards after behavior-facing changes, and a
+   final full local/CI sweep before marking the PR ready. Add a short docs or
+   PR architecture map after the source split so reviewers can navigate the
+   new structure.
+
+Efficient path to PR-ready:
+
+1. Extract `sxblock_tz` sparse seed/polish execution into a tested helper.
+2. Extract or simplify the remaining generic sparse retry/result assembly only
+   if the new boundary is explicit and smaller than the driver code it
+   replaces.
+3. Stop adding major logic to `sparse_pc.py`; split it into the six
+   `sparse_solve/*` domain files listed above, leaving re-export compatibility.
+4. Run focused sparse/profile-response tests, then the broad RHSMode shard.
+5. Update PR description and docs with the final architecture map.
+6. Run final hygiene, full local suite if feasible, and rely on GitHub CI/docs
+   as the merge gate before converting the PR from draft to ready for review.
+
+## Historical Work Lanes
 
 ### 1. `v3_driver.py` Architecture Refactor
 
@@ -2480,14 +2546,20 @@ Next steps:
 
 ## Immediate Next Steps
 
-1. Continue with remaining generic sparse-PC solve/result assembly extraction
-   where behavior and cache boundaries remain clean.
-2. Extract remaining full-system RHSMode=1 collision/PAS-Schur rescue
-   orchestration only where replay-state and metadata contracts can stay
-   explicit.
-3. Run focused implicit/sparse-PC/profile-response shards after each extraction,
-   and broad shards only after behavior-facing seams move.
-4. Snapshot CI but do not wait on queued runs unless a completed failure appears.
+1. Extract the remaining `sxblock_tz` sparse seed/polish branch if the helper
+   boundary stays explicit, replay-safe, and smaller than the inline driver
+   code.
+2. Make one pass over the generic sparse retry/result assembly branch and
+   either extract the cohesive stage or leave it driver-owned with an explicit
+   comment if extraction would only move scalar bookkeeping.
+3. Split `profile_response.sparse_pc` into the planned `sparse_solve/*`
+   domain files before adding more large helpers there.
+4. Run focused sparse/profile-response tests after each tranche; run the broad
+   RHSMode/profile-response shard after behavior-facing changes; do not wait on
+   queued CI unless a completed failure appears.
+5. Update the PR description and reviewer architecture map after the source
+   split, then run final hygiene/full-suite/CI before marking the draft PR
+   ready for review.
 
 ## Completion Criteria
 
