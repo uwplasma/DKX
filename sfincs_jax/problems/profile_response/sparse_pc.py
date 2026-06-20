@@ -4202,6 +4202,51 @@ class XBlockQIDeflatedPolicySetup:
 
 
 @dataclass(frozen=True)
+class XBlockQIDeflatedStageContext:
+    """Dependencies for optional QI residual-deflated preconditioner setup."""
+
+    op: object
+    rhs: jnp.ndarray
+    x0_full: jnp.ndarray | None
+    xblock_rhs: jnp.ndarray
+    base_preconditioner: ArrayFn
+    matvec: ArrayFn
+    true_matvec_no_count: ArrayFn
+    active_dof: bool
+    reduce_full: ArrayFn | None
+    policy: XBlockQIDeflatedPolicySetup
+    elapsed_s: Callable[[], float]
+    emit: EmitFn | None
+    global_load_basis_builder: Callable[..., Sequence[tuple[str, jnp.ndarray]]]
+    preconditioner_builder: Callable[..., object]
+    minres_seed_probe: Callable[..., tuple[jnp.ndarray, object]]
+    linear_probe: Callable[..., tuple[jnp.ndarray, object]]
+
+
+@dataclass(frozen=True)
+class XBlockQIDeflatedStageResult:
+    """Result from optional QI residual-deflated setup and seed probe."""
+
+    preconditioner: ArrayFn
+    x0_full: jnp.ndarray | None
+    built: bool
+    used: bool
+    used_in_krylov: bool
+    reason: str | None
+    rank: int
+    candidate_count: int
+    residual_before: float | None
+    residual_after: float | None
+    improvement_ratio: float | None
+    metadata: dict[str, object]
+    setup_s: float
+    stats: dict[str, int]
+    correction_cycles: int
+    use_in_krylov: bool
+    seed_solver: str
+
+
+@dataclass(frozen=True)
 class XBlockInitialGuessSetup:
     """Accepted initial guess for an x-block Krylov solve."""
 
@@ -10012,6 +10057,195 @@ def resolve_xblock_qi_deflated_policy_setup(
     )
 
 
+def apply_xblock_qi_deflated_stage(
+    *,
+    context: XBlockQIDeflatedStageContext,
+) -> XBlockQIDeflatedStageResult:
+    """Build, probe, and optionally install a QI residual-deflated preconditioner."""
+
+    start_s = float(context.elapsed_s())
+    policy = context.policy
+    stats = {"applies": 0, "local_applies": 0}
+    x0_full = context.x0_full
+    built = False
+    used = False
+    used_in_krylov = False
+    reason: str | None = None
+    rank = 0
+    candidate_count = 0
+    residual_before: float | None = None
+    residual_after: float | None = None
+    improvement_ratio: float | None = None
+    metadata: dict[str, object] = {}
+    preconditioner = context.base_preconditioner
+
+    try:
+        def local_smoother(v: jnp.ndarray) -> jnp.ndarray:
+            stats["local_applies"] += 1
+            return jnp.asarray(
+                context.base_preconditioner(jnp.asarray(v, dtype=jnp.float64)),
+                dtype=jnp.float64,
+            )
+
+        current = (
+            jnp.zeros_like(context.xblock_rhs)
+            if x0_full is None
+            else jnp.asarray(x0_full, dtype=jnp.float64)
+        )
+        residual_seed = context.xblock_rhs - jnp.asarray(
+            context.true_matvec_no_count(current),
+            dtype=jnp.float64,
+        )
+        extra_directions: list[tuple[str, jnp.ndarray]] = []
+        if bool(policy.extra_global_loads) and int(policy.extra_max_directions) > 0:
+            raw_loads = context.global_load_basis_builder(
+                op=context.op,
+                rhs=context.rhs,
+                include_rhs=bool(policy.extra_include_rhs),
+                fsavg_lmax=int(policy.extra_fsavg_lmax),
+                angular_lmax=int(policy.extra_angular_lmax),
+                max_extra_units=int(policy.extra_max_extra_units),
+                max_directions=int(policy.extra_max_directions),
+            )
+            for load_name, load_values in raw_loads[: int(policy.extra_max_directions)]:
+                load_vec = jnp.asarray(load_values, dtype=jnp.float64).reshape((-1,))
+                if bool(context.active_dof):
+                    if context.reduce_full is None:
+                        raise RuntimeError("QI deflated active-DOF stage requires reduce_full")
+                    load_vec = context.reduce_full(load_vec)
+                load_norm = float(jnp.linalg.norm(load_vec))
+                if not np.isfinite(load_norm) or load_norm <= 0.0:
+                    continue
+                load_vec = load_vec / jnp.asarray(load_norm, dtype=load_vec.dtype)
+                if bool(policy.extra_smooth_loads):
+                    load_vec = local_smoother(load_vec)
+                extra_directions.append((f"global_load:{load_name}", load_vec))
+
+        qi_deflated = context.preconditioner_builder(
+            operator=context.matvec,
+            local_smoother=local_smoother,
+            residual_seed=residual_seed,
+            extra_directions=tuple(extra_directions),
+            krylov_depth=int(policy.krylov_depth),
+            max_rank=int(policy.max_rank),
+            regularization_rcond=float(policy.rcond),
+            basis_rtol=float(policy.basis_rtol),
+            damping=float(policy.damping),
+            correction_cycles=int(policy.correction_cycles),
+            composition=policy.composition,
+            include_raw_residual=bool(policy.include_raw_residual),
+        )
+        built = True
+        if policy.seed_solver == "cycle_minres":
+            x_candidate, probe = context.minres_seed_probe(
+                operator=context.true_matvec_no_count,
+                rhs=context.xblock_rhs,
+                x0=current,
+                preconditioner=qi_deflated,
+                cycles=int(policy.correction_cycles),
+                min_relative_improvement=float(policy.min_improvement),
+                regularization_rcond=float(policy.rcond),
+            )
+        else:
+            x_candidate, probe = context.linear_probe(
+                operator=context.true_matvec_no_count,
+                rhs=context.xblock_rhs,
+                x0=current,
+                preconditioner=qi_deflated,
+                min_relative_improvement=float(policy.min_improvement),
+            )
+
+        metadata = {
+            **_object_metadata_dict(getattr(probe, "metadata", {})),
+            "seed_solver": getattr(probe, "seed_solver", policy.seed_solver),
+            "cycle_residual_history": getattr(probe, "cycle_residual_history", ()),
+            "cycle_coefficients": getattr(probe, "cycle_coefficients", ()),
+        }
+        probe_metadata = getattr(probe, "metadata", None)
+        rank = int(getattr(probe_metadata, "rank", metadata.get("rank", 0)) or 0)
+        candidate_count = int(
+            getattr(
+                probe_metadata,
+                "candidate_count",
+                metadata.get("candidate_count", 0),
+            )
+            or 0
+        )
+        residual_before = float(getattr(probe, "residual_before_norm"))
+        residual_after = float(getattr(probe, "residual_after_norm"))
+        improvement_ratio = getattr(probe, "improvement_ratio", None)
+        reason = str(getattr(probe, "reason"))
+
+        def deflated_preconditioner(v: jnp.ndarray) -> jnp.ndarray:
+            stats["applies"] += 1
+            return jnp.asarray(
+                qi_deflated.apply(jnp.asarray(v, dtype=jnp.float64)),
+                dtype=jnp.float64,
+            )
+
+        if bool(getattr(probe, "accepted", False)):
+            x0_full = jnp.asarray(x_candidate, dtype=jnp.float64)
+            used = True
+            if bool(policy.use_in_krylov):
+                preconditioner = deflated_preconditioner
+                used_in_krylov = True
+            ratio_for_message = (
+                float(improvement_ratio)
+                if improvement_ratio is not None
+                else float("nan")
+            )
+            if context.emit is not None:
+                context.emit(
+                    0,
+                    "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
+                    "QI residual-deflated preconditioner accepted "
+                    f"residual {float(residual_before):.6e} "
+                    f"-> {float(residual_after):.6e} "
+                    f"(rank={int(rank)} "
+                    f"seed_solver={metadata['seed_solver']} "
+                    f"cycles={int(policy.correction_cycles)} "
+                    f"use_in_krylov={int(policy.use_in_krylov)} "
+                    f"ratio={ratio_for_message:.6e})",
+                )
+        elif context.emit is not None:
+            context.emit(
+                1,
+                "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
+                "QI residual-deflated preconditioner rejected "
+                f"reason={reason} residual={float(residual_before):.6e}",
+            )
+    except Exception as exc:  # noqa: BLE001
+        reason = f"{type(exc).__name__}: {exc}"
+        metadata = {"error": reason}
+        if context.emit is not None:
+            context.emit(
+                1,
+                "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
+                "QI residual-deflated preconditioner disabled after build failure "
+                f"({type(exc).__name__}: {exc})",
+            )
+
+    return XBlockQIDeflatedStageResult(
+        preconditioner=preconditioner,
+        x0_full=x0_full,
+        built=bool(built),
+        used=bool(used),
+        used_in_krylov=bool(used_in_krylov),
+        reason=reason,
+        rank=int(rank),
+        candidate_count=int(candidate_count),
+        residual_before=residual_before,
+        residual_after=residual_after,
+        improvement_ratio=improvement_ratio,
+        metadata=metadata,
+        setup_s=float(context.elapsed_s()) - start_s,
+        stats=stats,
+        correction_cycles=int(policy.correction_cycles),
+        use_in_krylov=bool(policy.use_in_krylov),
+        seed_solver=str(policy.seed_solver),
+    )
+
+
 def apply_xblock_qi_coarse_seed_stage(
     *,
     context: XBlockQICoarseSeedStageContext,
@@ -13534,6 +13768,8 @@ __all__ = [
     "XBlockQIDeviceSetupConfig",
     "XBlockQIDeviceSetupConfigContext",
     "XBlockQIDeflatedPolicySetup",
+    "XBlockQIDeflatedStageContext",
+    "XBlockQIDeflatedStageResult",
     "XBlockQIGalerkinStageContext",
     "XBlockQIGalerkinStageResult",
     "XBlockQITwoLevelStageContext",
@@ -13573,6 +13809,7 @@ __all__ = [
     "apply_xblock_global_coupling_stage",
     "apply_xblock_moment_schur_stage",
     "apply_xblock_qi_coarse_seed_stage",
+    "apply_xblock_qi_deflated_stage",
     "apply_xblock_qi_galerkin_stage",
     "apply_xblock_qi_two_level_stage",
     "apply_xblock_two_level_stage",

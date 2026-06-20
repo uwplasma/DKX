@@ -288,6 +288,7 @@ from .problems.profile_response.sparse_pc import (
     XBlockQICoarseSeedStageContext,
     XBlockQIDeviceMetadataContext,
     XBlockQIDeviceSetupConfigContext,
+    XBlockQIDeflatedStageContext,
     XBlockQIGalerkinStageContext,
     XBlockQITwoLevelStageContext,
     XBlockSparsePCCompletionContext,
@@ -304,6 +305,7 @@ from .problems.profile_response.sparse_pc import (
     apply_xblock_global_coupling_stage,
     apply_xblock_moment_schur_stage,
     apply_xblock_qi_coarse_seed_stage,
+    apply_xblock_qi_deflated_stage,
     apply_xblock_qi_galerkin_stage,
     apply_xblock_qi_two_level_stage,
     apply_xblock_two_level_stage,
@@ -3953,178 +3955,51 @@ def solve_v3_full_system_linear_gmres(
             elif qi_deflated_preconditioner_enabled and precondition_side == "none":
                 qi_deflated_preconditioner_reason = "disabled_by_precondition_side_none"
             elif qi_deflated_preconditioner_enabled:
-                qi_deflated_start_s = sparse_timer.elapsed_s()
                 qi_deflated_policy = resolve_xblock_qi_deflated_policy_setup(os.environ)
-                qi_deflated_krylov_depth = int(qi_deflated_policy.krylov_depth)
-                qi_deflated_max_rank = int(qi_deflated_policy.max_rank)
-                qi_deflated_rcond = float(qi_deflated_policy.rcond)
-                qi_deflated_basis_rtol = float(qi_deflated_policy.basis_rtol)
-                qi_deflated_min_improvement = float(qi_deflated_policy.min_improvement)
-                qi_deflated_damping = float(qi_deflated_policy.damping)
-                qi_deflated_correction_cycles = int(qi_deflated_policy.correction_cycles)
-                qi_deflated_use_in_krylov = bool(qi_deflated_policy.use_in_krylov)
-                qi_deflated_seed_solver = qi_deflated_policy.seed_solver
-                qi_deflated_composition = qi_deflated_policy.composition
-                qi_deflated_include_raw_residual = bool(
-                    qi_deflated_policy.include_raw_residual
+                qi_deflated_stage = apply_xblock_qi_deflated_stage(
+                    context=XBlockQIDeflatedStageContext(
+                        op=op,
+                        rhs=rhs,
+                        x0_full=x0_full,
+                        xblock_rhs=xblock_rhs,
+                        base_preconditioner=precond_xblock_krylov,
+                        matvec=_mv_xblock_krylov,
+                        true_matvec_no_count=_mv_true_no_count,
+                        active_dof=bool(xblock_use_active_dof),
+                        reduce_full=_xblock_reduce_full if bool(xblock_use_active_dof) else None,
+                        policy=qi_deflated_policy,
+                        elapsed_s=sparse_timer.elapsed_s,
+                        emit=emit,
+                        global_load_basis_builder=_rhs1_xblock_global_coupling_load_basis,
+                        preconditioner_builder=build_rhs1_qi_residual_deflated_preconditioner,
+                        minres_seed_probe=probe_rhs1_qi_deflated_minres_seed,
+                        linear_probe=probe_rhs1_qi_deflated_correction,
+                    )
                 )
-                qi_deflated_extra_global_loads = bool(
-                    qi_deflated_policy.extra_global_loads
+                precond_xblock_krylov = qi_deflated_stage.preconditioner
+                x0_full = qi_deflated_stage.x0_full
+                qi_deflated_preconditioner_built = bool(qi_deflated_stage.built)
+                qi_deflated_preconditioner_used = bool(qi_deflated_stage.used)
+                qi_deflated_preconditioner_used_in_krylov = bool(
+                    qi_deflated_stage.used_in_krylov
                 )
-                qi_deflated_extra_smooth_loads = bool(
-                    qi_deflated_policy.extra_smooth_loads
+                qi_deflated_preconditioner_reason = qi_deflated_stage.reason
+                qi_deflated_preconditioner_rank = int(qi_deflated_stage.rank)
+                qi_deflated_preconditioner_candidate_count = int(
+                    qi_deflated_stage.candidate_count
                 )
-                qi_deflated_extra_max_directions = int(
-                    qi_deflated_policy.extra_max_directions
+                qi_deflated_preconditioner_residual_before = (
+                    qi_deflated_stage.residual_before
                 )
-                qi_deflated_extra_fsavg_lmax = int(qi_deflated_policy.extra_fsavg_lmax)
-                qi_deflated_extra_angular_lmax = int(
-                    qi_deflated_policy.extra_angular_lmax
+                qi_deflated_preconditioner_residual_after = (
+                    qi_deflated_stage.residual_after
                 )
-                qi_deflated_extra_max_extra_units = int(
-                    qi_deflated_policy.extra_max_extra_units
+                qi_deflated_preconditioner_improvement_ratio = (
+                    qi_deflated_stage.improvement_ratio
                 )
-                qi_deflated_extra_include_rhs = bool(qi_deflated_policy.extra_include_rhs)
-                try:
-                    base_precond_xblock_krylov = precond_xblock_krylov
-
-                    def _qi_deflated_local_smoother(v: jnp.ndarray) -> jnp.ndarray:
-                        qi_deflated_stats["local_applies"] += 1
-                        return jnp.asarray(
-                            base_precond_xblock_krylov(jnp.asarray(v, dtype=jnp.float64)),
-                            dtype=jnp.float64,
-                        )
-
-                    qi_current = (
-                        jnp.zeros_like(xblock_rhs)
-                        if x0_full is None
-                        else jnp.asarray(x0_full, dtype=jnp.float64)
-                    )
-                    residual_deflated_before = xblock_rhs - jnp.asarray(
-                        _mv_true_no_count(qi_current),
-                        dtype=jnp.float64,
-                    )
-                    extra_directions: list[tuple[str, jnp.ndarray]] = []
-                    if bool(qi_deflated_extra_global_loads) and int(qi_deflated_extra_max_directions) > 0:
-                        raw_loads = _rhs1_xblock_global_coupling_load_basis(
-                            op=op,
-                            rhs=rhs,
-                            include_rhs=bool(qi_deflated_extra_include_rhs),
-                            fsavg_lmax=int(qi_deflated_extra_fsavg_lmax),
-                            angular_lmax=int(qi_deflated_extra_angular_lmax),
-                            max_extra_units=int(qi_deflated_extra_max_extra_units),
-                            max_directions=int(qi_deflated_extra_max_directions),
-                        )
-                        for load_name, load_values in raw_loads[: int(qi_deflated_extra_max_directions)]:
-                            load_vec = jnp.asarray(load_values, dtype=jnp.float64).reshape((-1,))
-                            if xblock_use_active_dof:
-                                load_vec = _xblock_reduce_full(load_vec)
-                            load_norm = float(jnp.linalg.norm(load_vec))
-                            if not np.isfinite(load_norm) or load_norm <= 0.0:
-                                continue
-                            load_vec = load_vec / jnp.asarray(load_norm, dtype=load_vec.dtype)
-                            if bool(qi_deflated_extra_smooth_loads):
-                                load_vec = _qi_deflated_local_smoother(load_vec)
-                            extra_directions.append((f"global_load:{load_name}", load_vec))
-                    qi_deflated = build_rhs1_qi_residual_deflated_preconditioner(
-                        operator=_mv_xblock_krylov,
-                        local_smoother=_qi_deflated_local_smoother,
-                        residual_seed=residual_deflated_before,
-                        extra_directions=tuple(extra_directions),
-                        krylov_depth=int(qi_deflated_krylov_depth),
-                        max_rank=int(qi_deflated_max_rank),
-                        regularization_rcond=float(qi_deflated_rcond),
-                        basis_rtol=float(qi_deflated_basis_rtol),
-                        damping=float(qi_deflated_damping),
-                        correction_cycles=int(qi_deflated_correction_cycles),
-                        composition=qi_deflated_composition,
-                        include_raw_residual=bool(qi_deflated_include_raw_residual),
-                    )
-                    qi_deflated_preconditioner_built = True
-                    if qi_deflated_seed_solver == "cycle_minres":
-                        x_deflated_candidate, qi_deflated_probe = probe_rhs1_qi_deflated_minres_seed(
-                            operator=_mv_true_no_count,
-                            rhs=xblock_rhs,
-                            x0=qi_current,
-                            preconditioner=qi_deflated,
-                            cycles=int(qi_deflated_correction_cycles),
-                            min_relative_improvement=float(qi_deflated_min_improvement),
-                            regularization_rcond=float(qi_deflated_rcond),
-                        )
-                    else:
-                        x_deflated_candidate, qi_deflated_probe = probe_rhs1_qi_deflated_correction(
-                            operator=_mv_true_no_count,
-                            rhs=xblock_rhs,
-                            x0=qi_current,
-                            preconditioner=qi_deflated,
-                            min_relative_improvement=float(qi_deflated_min_improvement),
-                        )
-                    qi_deflated_preconditioner_metadata = {
-                        **qi_deflated_probe.metadata.to_dict(),
-                        "seed_solver": qi_deflated_probe.seed_solver,
-                        "cycle_residual_history": qi_deflated_probe.cycle_residual_history,
-                        "cycle_coefficients": qi_deflated_probe.cycle_coefficients,
-                    }
-                    qi_deflated_preconditioner_rank = int(qi_deflated_probe.metadata.rank)
-                    qi_deflated_preconditioner_candidate_count = int(
-                        qi_deflated_probe.metadata.candidate_count
-                    )
-                    qi_deflated_preconditioner_residual_before = float(
-                        qi_deflated_probe.residual_before_norm
-                    )
-                    qi_deflated_preconditioner_residual_after = float(
-                        qi_deflated_probe.residual_after_norm
-                    )
-                    qi_deflated_preconditioner_improvement_ratio = (
-                        qi_deflated_probe.improvement_ratio
-                    )
-                    qi_deflated_preconditioner_reason = str(qi_deflated_probe.reason)
-
-                    def _precond_xblock_qi_deflated(v: jnp.ndarray) -> jnp.ndarray:
-                        qi_deflated_stats["applies"] += 1
-                        return jnp.asarray(
-                            qi_deflated.apply(jnp.asarray(v, dtype=jnp.float64)),
-                            dtype=jnp.float64,
-                        )
-
-                    if bool(qi_deflated_probe.accepted):
-                        x0_full = jnp.asarray(x_deflated_candidate, dtype=jnp.float64)
-                        if bool(qi_deflated_use_in_krylov):
-                            precond_xblock_krylov = _precond_xblock_qi_deflated
-                            qi_deflated_preconditioner_used_in_krylov = True
-                        qi_deflated_preconditioner_used = True
-                        if emit is not None:
-                            emit(
-                                0,
-                                "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
-                                "QI residual-deflated preconditioner accepted "
-                                f"residual {qi_deflated_preconditioner_residual_before:.6e} "
-                                f"-> {qi_deflated_preconditioner_residual_after:.6e} "
-                                f"(rank={int(qi_deflated_preconditioner_rank)} "
-                                f"seed_solver={qi_deflated_probe.seed_solver} "
-                                f"cycles={int(qi_deflated_correction_cycles)} "
-                                f"use_in_krylov={int(qi_deflated_use_in_krylov)} "
-                                f"ratio={float(qi_deflated_preconditioner_improvement_ratio):.6e})",
-                            )
-                    elif emit is not None:
-                        emit(
-                            1,
-                            "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
-                            "QI residual-deflated preconditioner rejected "
-                            f"reason={qi_deflated_preconditioner_reason} "
-                            f"residual={float(qi_deflated_preconditioner_residual_before):.6e}",
-                        )
-                except Exception as exc:  # noqa: BLE001
-                    qi_deflated_preconditioner_reason = f"{type(exc).__name__}: {exc}"
-                    qi_deflated_preconditioner_metadata = {"error": qi_deflated_preconditioner_reason}
-                    if emit is not None:
-                        emit(
-                            1,
-                            "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
-                            "QI residual-deflated preconditioner disabled after build failure "
-                            f"({type(exc).__name__}: {exc})",
-                        )
-                qi_deflated_preconditioner_setup_s = float(sparse_timer.elapsed_s() - qi_deflated_start_s)
+                qi_deflated_preconditioner_metadata = qi_deflated_stage.metadata
+                qi_deflated_preconditioner_setup_s = float(qi_deflated_stage.setup_s)
+                qi_deflated_stats = qi_deflated_stage.stats
                 pc_factor_s += float(qi_deflated_preconditioner_setup_s)
             xblock_side_probe_controls = _rhs1_xblock_policy.rhs1_xblock_side_probe_controls_from_env(
                 env=os.environ,

@@ -311,10 +311,10 @@ Recent checkpoints:
 - `cb295ce` Extract sparse pattern setup.
 - `4b6a5b4` Extract sparse factor policy.
 
-Current source-size snapshot after x-block QI residual-deflated policy extraction:
+Current source-size snapshot after x-block QI residual-deflated stage extraction:
 
-- `sfincs_jax/v3_driver.py`: `16350` lines.
-- `solve_v3_full_system_linear_gmres`: `11604` lines.
+- `sfincs_jax/v3_driver.py`: `16225` lines.
+- `solve_v3_full_system_linear_gmres`: `11469` lines.
 - `sfincs_jax/v3_results.py`: `119` lines.
 - `sfincs_jax/rhs1_ksp_diagnostics.py`: `306` lines.
 - `sfincs_jax/rhs1_pas_policy.py`: `864` lines.
@@ -326,11 +326,19 @@ Current source-size snapshot after x-block QI residual-deflated policy extractio
 - `sfincs_jax/problems/profile_response/dense.py`: `701` lines.
 - `sfincs_jax/problems/profile_response/linear_solve.py`: `339` lines.
 - `sfincs_jax/problems/profile_response/active_projection.py`: `116` lines.
-- `sfincs_jax/problems/profile_response/sparse_pc.py`: `13687` lines.
+- `sfincs_jax/problems/profile_response/sparse_pc.py`: `13924` lines.
 - `sfincs_jax/rhs1_xblock_policy.py`: `1215` lines.
 
 Recent local validation:
 
+- Sparse-PC helper shard after x-block QI residual-deflated stage extraction:
+  `261 passed in 2.47 s`.
+- RHSMode=1/profile-response shard after x-block QI residual-deflated stage
+  extraction: `1225 passed in 46.78 s`.
+- Hygiene after x-block QI residual-deflated stage extraction:
+  `ruff check`, `py_compile`, `compileall`, `git diff --check`, and
+  `python scripts/check_repo_size.py` passed. Repo-size audit reported no
+  reviewed files above 2 MiB.
 - Sparse-PC helper shard after xblock reporting helper extraction:
   `193 passed in 1.90 s`.
 - Sparse-host/minimum-norm/direct-tail driver shard:
@@ -1171,7 +1179,7 @@ Known CI issue fixed by this rewrite:
 
 ### 1. `v3_driver.py` Architecture Refactor
 
-Completion estimate: 80%.
+Completion estimate: 81%.
 
 Goal:
 
@@ -1305,8 +1313,12 @@ Completed recent boundaries:
 - RHSMode=1 x-block QI residual-deflated preconditioner controls now use a
   tested sparse-PC-domain policy resolver for Krylov/rank/damping/cycle
   controls, seed-solver normalization, composition, raw-residual admission,
-  and extra global-load directions. Build/probe/application remain
-  driver-owned until the next stage extraction.
+  and extra global-load directions.
+- RHSMode=1 x-block QI residual-deflated preconditioner build/probe/install
+  now uses a tested sparse-PC-domain stage helper. The driver keeps only the
+  policy resolution, explicit callback wiring, scalar diagnostics handoff, and
+  timing aggregation; acceptance/rejection/failure behavior is covered by
+  focused sparse-PC tests.
 - RHSMode=1 rescue/refinement candidate acceptance and KSP replay-state updates
   consolidated into profile-response handoff helpers.
 - RHSMode=1 true-residual recomputation before fallback decisions consolidated

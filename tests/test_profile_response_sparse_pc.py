@@ -93,6 +93,7 @@ from sfincs_jax.problems.profile_response.sparse_pc import (
     XBlockQICoarseSeedStageContext,
     XBlockQIDeviceMetadataContext,
     XBlockQIDeviceSetupConfigContext,
+    XBlockQIDeflatedStageContext,
     XBlockQIGalerkinStageContext,
     XBlockQITwoLevelStageContext,
     XBlockSparsePCCompletionContext,
@@ -111,6 +112,7 @@ from sfincs_jax.problems.profile_response.sparse_pc import (
     apply_xblock_global_coupling_stage,
     apply_xblock_moment_schur_stage,
     apply_xblock_qi_coarse_seed_stage,
+    apply_xblock_qi_deflated_stage,
     apply_xblock_qi_galerkin_stage,
     apply_xblock_qi_two_level_stage,
     apply_xblock_two_level_stage,
@@ -6755,6 +6757,218 @@ def test_xblock_qi_deflated_policy_overrides_and_clamps() -> None:
     assert setup.extra_max_extra_units == 9
     assert setup.extra_include_rhs is False
     assert linear.seed_solver == "linear_apply"
+
+
+def test_apply_xblock_qi_deflated_stage_accepts_and_installs_preconditioner() -> None:
+    emitted: list[tuple[int, str]] = []
+    builder_calls: list[dict[str, object]] = []
+
+    class FakeDeflatedPreconditioner:
+        def apply(self, values: jnp.ndarray) -> jnp.ndarray:
+            return 0.25 * values
+
+    def preconditioner_builder(**kwargs: object) -> FakeDeflatedPreconditioner:
+        builder_calls.append(kwargs)
+        assert kwargs["krylov_depth"] == 4
+        assert kwargs["max_rank"] == 16
+        assert kwargs["composition"] == "multiplicative"
+        assert len(kwargs["extra_directions"]) == 1
+        return FakeDeflatedPreconditioner()
+
+    def linear_probe(**kwargs: object) -> tuple[jnp.ndarray, SimpleNamespace]:
+        assert kwargs["preconditioner"].apply(jnp.asarray([4.0, 8.0])).tolist() == [
+            1.0,
+            2.0,
+        ]
+        probe_metadata = SimpleNamespace(
+            rank=2,
+            candidate_count=3,
+            to_dict=lambda: {"rank": 2, "candidate_count": 3},
+        )
+        return jnp.asarray([1.0, 2.0]), SimpleNamespace(
+            metadata=probe_metadata,
+            accepted=True,
+            seed_solver="linear_apply",
+            cycle_residual_history=(2.0, 0.5),
+            cycle_coefficients=(0.25,),
+            residual_before_norm=2.0,
+            residual_after_norm=0.5,
+            improvement_ratio=0.25,
+            reason="residual_reduced",
+        )
+
+    def minres_probe(**_kwargs: object) -> tuple[jnp.ndarray, SimpleNamespace]:
+        raise AssertionError("linear seed policy should not call the MINRES probe")
+
+    policy = resolve_xblock_qi_deflated_policy_setup(
+        {
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEFLATED_PRECONDITIONER_SEED_SOLVER": "linear_apply",
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEFLATED_PRECONDITIONER_USE_IN_KRYLOV": "1",
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEFLATED_PRECONDITIONER_EXTRA_MAX_DIRECTIONS": "1",
+        }
+    )
+
+    result = apply_xblock_qi_deflated_stage(
+        context=XBlockQIDeflatedStageContext(
+            op=SimpleNamespace(),
+            rhs=jnp.asarray([1.0, 0.0]),
+            x0_full=None,
+            xblock_rhs=jnp.asarray([1.0, 2.0]),
+            base_preconditioner=lambda values: 0.5 * values,
+            matvec=lambda values: values,
+            true_matvec_no_count=lambda values: values,
+            active_dof=False,
+            reduce_full=None,
+            policy=policy,
+            elapsed_s=lambda: 1.25,
+            emit=lambda level, message: emitted.append((level, message)),
+            global_load_basis_builder=lambda **_kwargs: [
+                ("rhs", jnp.asarray([3.0, 4.0]))
+            ],
+            preconditioner_builder=preconditioner_builder,
+            minres_seed_probe=minres_probe,
+            linear_probe=linear_probe,
+        )
+    )
+
+    assert result.built is True
+    assert result.used is True
+    assert result.used_in_krylov is True
+    assert result.rank == 2
+    assert result.candidate_count == 3
+    assert result.residual_before == pytest.approx(2.0)
+    assert result.residual_after == pytest.approx(0.5)
+    assert result.improvement_ratio == pytest.approx(0.25)
+    assert result.metadata["seed_solver"] == "linear_apply"
+    assert result.stats["local_applies"] == 1
+    assert jnp.allclose(result.x0_full, jnp.asarray([1.0, 2.0]))
+    assert jnp.allclose(
+        result.preconditioner(jnp.asarray([8.0, 12.0])),
+        jnp.asarray([2.0, 3.0]),
+    )
+    assert result.stats["applies"] == 1
+    assert builder_calls
+    assert "QI residual-deflated preconditioner accepted" in emitted[-1][1]
+
+
+def test_apply_xblock_qi_deflated_stage_rejects_without_replacing_base() -> None:
+    emitted: list[tuple[int, str]] = []
+
+    class FakeDeflatedPreconditioner:
+        def apply(self, values: jnp.ndarray) -> jnp.ndarray:
+            return 0.0 * values
+
+    def minres_probe(**_kwargs: object) -> tuple[jnp.ndarray, SimpleNamespace]:
+        probe_metadata = SimpleNamespace(
+            rank=1,
+            candidate_count=1,
+            to_dict=lambda: {"rank": 1, "candidate_count": 1},
+        )
+        return jnp.asarray([9.0, 9.0]), SimpleNamespace(
+            metadata=probe_metadata,
+            accepted=False,
+            seed_solver="cycle_minres",
+            cycle_residual_history=(1.0, 0.95),
+            cycle_coefficients=(),
+            residual_before_norm=1.0,
+            residual_after_norm=0.95,
+            improvement_ratio=0.95,
+            reason="residual_not_reduced",
+        )
+
+    def linear_probe(**_kwargs: object) -> tuple[jnp.ndarray, SimpleNamespace]:
+        raise AssertionError("cycle-minres policy should not call the linear probe")
+
+    policy = resolve_xblock_qi_deflated_policy_setup(
+        {
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEFLATED_PRECONDITIONER_USE_IN_KRYLOV": "1",
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEFLATED_PRECONDITIONER_EXTRA_GLOBAL_LOADS": "0",
+        }
+    )
+
+    result = apply_xblock_qi_deflated_stage(
+        context=XBlockQIDeflatedStageContext(
+            op=SimpleNamespace(),
+            rhs=jnp.asarray([1.0, 0.0]),
+            x0_full=jnp.asarray([0.25, -0.25]),
+            xblock_rhs=jnp.asarray([1.0, 2.0]),
+            base_preconditioner=lambda values: 2.0 * values,
+            matvec=lambda values: values,
+            true_matvec_no_count=lambda values: values,
+            active_dof=False,
+            reduce_full=None,
+            policy=policy,
+            elapsed_s=lambda: 2.0,
+            emit=lambda level, message: emitted.append((level, message)),
+            global_load_basis_builder=lambda **_kwargs: [],
+            preconditioner_builder=lambda **_kwargs: FakeDeflatedPreconditioner(),
+            minres_seed_probe=minres_probe,
+            linear_probe=linear_probe,
+        )
+    )
+
+    assert result.built is True
+    assert result.used is False
+    assert result.used_in_krylov is False
+    assert result.reason == "residual_not_reduced"
+    assert result.rank == 1
+    assert result.candidate_count == 1
+    assert jnp.allclose(result.x0_full, jnp.asarray([0.25, -0.25]))
+    assert jnp.allclose(
+        result.preconditioner(jnp.asarray([3.0, 4.0])),
+        jnp.asarray([6.0, 8.0]),
+    )
+    assert result.stats == {"applies": 0, "local_applies": 0}
+    assert "QI residual-deflated preconditioner rejected" in emitted[-1][1]
+
+
+def test_apply_xblock_qi_deflated_stage_reports_build_failure() -> None:
+    emitted: list[tuple[int, str]] = []
+
+    def preconditioner_builder(**_kwargs: object) -> object:
+        raise RuntimeError("boom")
+
+    policy = resolve_xblock_qi_deflated_policy_setup(
+        {
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEFLATED_PRECONDITIONER_EXTRA_GLOBAL_LOADS": "0",
+        }
+    )
+
+    result = apply_xblock_qi_deflated_stage(
+        context=XBlockQIDeflatedStageContext(
+            op=SimpleNamespace(),
+            rhs=jnp.asarray([1.0, 0.0]),
+            x0_full=None,
+            xblock_rhs=jnp.asarray([1.0, 2.0]),
+            base_preconditioner=lambda values: values + 1.0,
+            matvec=lambda values: values,
+            true_matvec_no_count=lambda values: values,
+            active_dof=False,
+            reduce_full=None,
+            policy=policy,
+            elapsed_s=lambda: 3.0,
+            emit=lambda level, message: emitted.append((level, message)),
+            global_load_basis_builder=lambda **_kwargs: [],
+            preconditioner_builder=preconditioner_builder,
+            minres_seed_probe=lambda **_kwargs: (_ for _ in ()).throw(
+                AssertionError("probe should not run after builder failure")
+            ),
+            linear_probe=lambda **_kwargs: (_ for _ in ()).throw(
+                AssertionError("probe should not run after builder failure")
+            ),
+        )
+    )
+
+    assert result.built is False
+    assert result.used is False
+    assert result.used_in_krylov is False
+    assert result.reason == "RuntimeError: boom"
+    assert result.metadata == {"error": "RuntimeError: boom"}
+    assert jnp.allclose(
+        result.preconditioner(jnp.asarray([2.0, 3.0])),
+        jnp.asarray([3.0, 4.0]),
+    )
+    assert "disabled after build failure" in emitted[-1][1]
 
 
 def test_sparse_pc_gmres_control_policy_defaults() -> None:
