@@ -492,8 +492,12 @@ the historical private driver name and test the focused module directly. This ke
   ILU/direct-tail policy parsing, structured direct-tail materialization, and
   final direct-tail metadata assembly.
 - ``sfincs_jax/problems/profile_response/sparse/xblock.py``:
-  x-block and sxblock rescue/correction helpers plus shared x-block Krylov
-  matvec and initial-guess policy dataclasses.
+  x-block and sxblock rescue/correction helpers, shared x-block Krylov matvec
+  and initial-guess policy dataclasses, precondition-side/probe-coarse gates,
+  device/host Krylov control, optional augmented Krylov setup, GMRES fallback
+  routing, work estimates, progress messages, and physical-residual
+  measurement. This module owns generic x-block stage mechanics; QI-specific
+  coarse-basis choices remain in ``sparse/qi.py``.
 - ``sfincs_jax/problems/profile_response/sparse/fortran_reduced.py``:
   Fortran-reduced x-block backend policy, factor-build, Krylov setup/solve,
   optional moment/global coarse stages, and final payload construction.

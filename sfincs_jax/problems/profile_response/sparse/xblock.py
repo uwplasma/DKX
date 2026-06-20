@@ -16,6 +16,16 @@ from ..policies import (
     rhs1_parse_polish_gmres_config,
     rhs1_polish_enabled,
 )
+from ..residual import (
+    l2_norm_float as profile_l2_norm_float,
+    residual_converged as profile_residual_converged,
+    safe_ratio as profile_safe_ratio,
+)
+from ....memory_model import (
+    bicgstab_work_nbytes,
+    gmres_basis_nbytes,
+    tfqmr_work_nbytes,
+)
 from ....solver import GMRESSolveResult
 
 
@@ -30,6 +40,31 @@ def _env_value(env: object, key: str) -> str:
         except AttributeError:
             return ""
     return str(env.get(key, "")).strip()
+
+
+def _env_int(
+    env: Mapping[str, str] | None,
+    key: str,
+    default: int,
+    minimum: int | None = None,
+) -> int:
+    raw = _env_value(env, key)
+    try:
+        value = int(raw) if raw else int(default)
+    except ValueError:
+        value = int(default)
+    if minimum is not None:
+        value = max(int(minimum), int(value))
+    return int(value)
+
+
+def _env_bool(env: Mapping[str, str] | None, key: str, default: bool = False) -> bool:
+    raw = _env_value(env, key).lower()
+    if raw in {"1", "true", "t", "yes", "on", ".true.", ".t."}:
+        return True
+    if raw in {"0", "false", "f", "no", "off", ".false.", ".f."}:
+        return False
+    return bool(default)
 
 
 @dataclass(frozen=True)
@@ -1274,7 +1309,1962 @@ class XBlockGlobalCouplingPolicySetup:
     setup_max_s: float
 
 
+@dataclass(frozen=True)
+class XBlockKrylovReport:
+    """Reported xblock Krylov work counters after optional device execution."""
+
+    iterations: int
+    matvecs: int
+
+
+@dataclass(frozen=True)
+class XBlockSparsePCCompletionContext:
+    """Explicit inputs for the final xblock sparse-PC progress line."""
+
+    emit: EmitFn | None
+    krylov_method: str
+    elapsed_s: float
+    iterations: int
+    matvecs: int
+    residual_norm: float
+    target: float
+    history: Sequence[float] | None
+
+
+@dataclass(frozen=True)
+class XBlockSparsePCFinalPayloadContext:
+    """Explicit inputs for finalizing the xblock sparse-PC payload."""
+
+    op: object
+    x: np.ndarray
+    residual_norm: float
+    target: float
+    krylov_method: str
+    linear_size: int | None
+    restart: int | None
+    diagnostic_state: Mapping[str, object]
+    post_corrections: object | None = None
+
+
+@dataclass(frozen=True)
+class XBlockGMRESFallbackDecision:
+    """Admission result for a non-GMRES xblock solve retrying with GMRES."""
+
+    run: bool
+
+
+@dataclass(frozen=True)
+class XBlockGMRESFallbackContext:
+    """Inputs for retrying a failed non-GMRES xblock solve with GMRES."""
+
+    krylov_method: str
+    fallback_enabled: bool
+    x_solution: np.ndarray
+    x_physical: np.ndarray
+    residual_norm: float
+    history: Sequence[float] | None
+    solve_s: float
+    target: float
+    rhs_norm: float
+    original_x0: jnp.ndarray | None
+    solve_rhs: jnp.ndarray
+    solve_matvec: ArrayFn
+    solve_preconditioner: ArrayFn | None
+    precondition_side: str
+    tol: float
+    atol: float
+    restart: int
+    maxiter: int | None
+    progress_callback: Callable[[int, float], None] | None
+    emit: EmitFn | None
+    elapsed_s: Callable[[], float]
+    gmres_solver: Callable[..., tuple[np.ndarray, float, Sequence[float]]]
+    initial_guess_builder: Callable[..., tuple[jnp.ndarray | None, bool, bool]]
+    solution_to_physical: Callable[[jnp.ndarray], jnp.ndarray]
+    physical_rhs: jnp.ndarray
+    physical_matvec: ArrayFn
+    device_iterations: int | None = None
+    device_estimated_matvecs: int | None = None
+
+
+@dataclass(frozen=True)
+class XBlockGMRESFallbackResult:
+    """Updated xblock solve state after optional GMRES fallback."""
+
+    krylov_method: str
+    x_solution: np.ndarray
+    x_physical: np.ndarray
+    residual_norm: float
+    history: tuple[float, ...]
+    solve_s: float
+    device_iterations: int | None
+    device_estimated_matvecs: int | None
+    fallback_started_from_candidate: bool
+    fallback_candidate_improved_rhs: bool
+
+
+@dataclass(frozen=True)
+class XBlockDeviceKrylovState:
+    """Host-side arrays and counters from a device xblock Krylov solve."""
+
+    x: np.ndarray
+    residual_norm: float
+    history: tuple[float, ...]
+    n_iterations: int
+    estimated_matvecs: int | None
+
+
+@dataclass(frozen=True)
+class XBlockFirstKrylovAttemptContext:
+    """Inputs for the first xblock sparse-PC Krylov attempt."""
+
+    krylov_method: str
+    matvec: ArrayFn
+    rhs: jnp.ndarray
+    preconditioner: ArrayFn | None
+    x0: jnp.ndarray | None
+    tol: float
+    atol: float
+    restart: int
+    maxiter: int | None
+    precondition_side: str
+    lgmres_outer_k: int | None
+    fgmres_block_between_cycles: bool
+    skip_inactive_work: bool
+    device_fgmres_jit: bool
+    device_fgmres_jit_mode: str
+    device_fgmres_jit_outer_k: int
+    augmented_krylov_used: bool
+    augmentation_basis: jnp.ndarray | None
+    operator_on_augmentation: jnp.ndarray | None
+    augmentation_mode: str
+    tfqmr_replacement_interval: int
+    mv_count: int
+    host_progress_callback: Callable[[int, float], None] | None
+    device_cycle_progress_callback: Callable[..., None] | None
+    gmres_solver: Callable[..., tuple[np.ndarray, float, Sequence[float]]]
+    lgmres_solver: Callable[..., tuple[np.ndarray, float, Sequence[float]]]
+    gcrotmk_solver: Callable[..., tuple[np.ndarray, float, Sequence[float]]]
+    bicgstab_solver: Callable[..., tuple[np.ndarray, float, Sequence[float]]]
+    fgmres_solver: Callable[..., tuple[object, object]]
+    fgmres_jit_solver: Callable[..., tuple[object, object]]
+    fgmres_cycle_jit_solver: Callable[..., tuple[object, object]]
+    bicgstab_jax_solver: Callable[..., tuple[object, object]]
+    tfqmr_jax_solver: Callable[..., tuple[object, object]]
+
+
+@dataclass(frozen=True)
+class XBlockFirstKrylovAttemptResult:
+    """Result from the first xblock sparse-PC Krylov attempt."""
+
+    x: np.ndarray
+    residual_norm: float
+    history: tuple[float, ...]
+    device_iterations: int | None
+    device_estimated_matvecs: int | None
+
+
+@dataclass(frozen=True)
+class XBlockSideProbeStageContext:
+    """Inputs for the bounded precondition-side probe before the main x-block solve."""
+
+    controls: object
+    precondition_side: str
+    krylov_method: str
+    pc_maxiter: int | None
+    side_env: str
+    global_coupling_built: bool
+    matvec: ArrayFn
+    true_matvec_no_count: ArrayFn
+    rhs: jnp.ndarray
+    rhs_norm: float
+    target: float
+    preconditioner: ArrayFn
+    x0: jnp.ndarray | None
+    tol: float
+    atol: float
+    elapsed_s: Callable[[], float]
+    matvec_count: Callable[[], int]
+    emit: EmitFn | None
+    gmres_solver: Callable[..., tuple[np.ndarray, float, Sequence[float]]]
+
+
+@dataclass(frozen=True)
+class XBlockSideProbeStageResult:
+    """Updated solve state and diagnostics from the bounded side probe."""
+
+    x0: jnp.ndarray | None
+    precondition_side: str
+    krylov_method: str
+    pc_maxiter: int | None
+    enabled: bool
+    used: bool
+    switched: bool
+    initial_side: str | None
+    selected_side: str | None
+    initial_method: str | None
+    selected_method: str | None
+    lgmres_rescue: bool
+    lgmres_rescue_maxiter_capped: bool
+    lgmres_rescue_outer_k: int | None
+    residual_norm: float | None
+    residual_ratio: float | None
+    iterations: int
+    matvecs: int
+    elapsed_s: float
+    switch_suppressed_by_global_coupling: bool
+    switch_suppressed_by_explicit_side: bool
+    physical_seed_preserved_after_switch: bool
+    seed_used: bool
+    seed_residual_norm: float | None
+    failed: bool
+    failure_reason: str | None
+
+
+@dataclass(frozen=True)
+class XBlockProbeCoarseStageContext:
+    """Inputs for the optional pre-Krylov projected coarse seed correction."""
+
+    policy: object
+    rhs: jnp.ndarray
+    x0: jnp.ndarray | None
+    matvec: ArrayFn
+    target: float
+    direction_builder: Callable[..., tuple[tuple[str, jnp.ndarray], ...]]
+    correction: Callable[..., tuple[jnp.ndarray, jnp.ndarray, Sequence[float], Sequence[int], Sequence[str]]]
+    elapsed_s: Callable[[], float]
+    emit: EmitFn | None
+
+
+@dataclass(frozen=True)
+class XBlockProbeCoarseStageResult:
+    """Updated seed and diagnostics from the optional probe-coarse stage."""
+
+    x0: jnp.ndarray | None
+    steps_requested: int
+    max_directions: int
+    max_extra_units: int
+    fsavg_lmax: int
+    angular_lmax: int
+    include_angular_residual: bool
+    include_raw: bool
+    alpha_clip: float
+    rcond: float
+    min_improvement: float
+    elapsed_s: float
+    history: tuple[float, ...]
+    direction_counts: tuple[int, ...]
+    direction_names: tuple[str, ...]
+    residual_before: float | None
+    residual_after: float | None
+    seed_initialized: bool
+    improved: bool
+    failed: bool
+    failure_reason: str | None
+
+
+@dataclass(frozen=True)
+class XBlockPreflightGateContext:
+    """Inputs for the optional x-block seed residual preflight gate."""
+
+    min_improvement: float
+    required: bool
+    rhs: jnp.ndarray
+    rhs_norm: float
+    x0: jnp.ndarray | None
+    matvec: ArrayFn
+    target: float
+    emit: EmitFn | None
+
+
+@dataclass(frozen=True)
+class XBlockPreflightGateResult:
+    """Diagnostics from the optional x-block seed residual preflight gate."""
+
+    residual_norm: float | None
+    improvement: float | None
+    passed: bool | None
+    evaluated: bool
+    failed: bool
+    failure_reason: str | None
+
+
+@dataclass(frozen=True)
+class XBlockKrylovControlSetupContext:
+    """Inputs for resolving x-block Krylov runtime controls and messages."""
+
+    env: Mapping[str, str] | None
+    krylov_method: str
+    pc_restart: int
+    pc_maxiter: int | None
+    precondition_side: str
+    emit: EmitFn | None
+
+
+@dataclass(frozen=True)
+class XBlockKrylovControlSetup:
+    """Resolved x-block Krylov controls for the first solve attempt."""
+
+    fgmres_block_between_cycles: bool
+    tfqmr_replacement_interval: int
+    device_fgmres_jit: bool
+    device_fgmres_jit_mode: str
+    device_fgmres_jit_outer_k: int
+    qi_device_augmented_krylov_requested: bool
+    qi_device_augmented_krylov_mode: str
+
+
+@dataclass(frozen=True)
+class XBlockKrylovProgressCallbacksContext:
+    """Inputs for x-block Krylov host/device progress callbacks."""
+
+    emit: EmitFn | None
+    elapsed_s: Callable[[], float]
+    progress_every: int
+
+
+@dataclass(frozen=True)
+class XBlockKrylovProgressCallbacks:
+    """Host and device progress callbacks passed to the first Krylov attempt."""
+
+    host_progress_callback: Callable[[int, float], None]
+    device_cycle_progress_callback: Callable[..., None]
+
+
+@dataclass(frozen=True)
+class XBlockKrylovSolveState:
+    """Physical-space xblock Krylov solve state used by downstream metadata."""
+
+    krylov_method: str
+    x_solution: np.ndarray
+    x_physical: np.ndarray
+    residual_norm: float
+    history: tuple[float, ...]
+    solve_s: float
+    device_iterations: int | None
+    device_estimated_matvecs: int | None
+    reported_iterations: int
+    reported_matvecs: int
+    fallback_started_from_candidate: bool = False
+    fallback_candidate_improved_rhs: bool = False
+
+
+@dataclass(frozen=True)
+class XBlockFirstKrylovSolveStateContext:
+    """Inputs for converting a first xblock Krylov attempt to physical state."""
+
+    krylov_method: str
+    first_attempt: XBlockFirstKrylovAttemptResult
+    solve_s: float
+    solution_to_physical: ArrayFn
+    physical_rhs: jnp.ndarray
+    physical_matvec: ArrayFn
+    mv_count: int
+
+
+@dataclass(frozen=True)
+class XBlockKrylovSolveStageContext:
+    """Inputs for first x-block Krylov attempt plus optional GMRES fallback."""
+
+    first_attempt: XBlockFirstKrylovAttemptContext
+    solve_start_s: float
+    side_probe_s: float
+    probe_coarse_s: float
+    elapsed_s: Callable[[], float]
+    solution_to_physical: ArrayFn
+    physical_rhs: jnp.ndarray
+    physical_matvec: ArrayFn
+    target: float
+    rhs_norm: float
+    fallback_enabled: bool
+    progress_callback: Callable[[int, float], None] | None
+    emit: EmitFn | None
+    initial_guess_builder: Callable[..., tuple[jnp.ndarray | None, bool, bool]]
+
+
+@dataclass(frozen=True)
+class XBlockKrylovSolveStageResult:
+    """Candidate and final x-block Krylov state after optional GMRES fallback."""
+
+    first_attempt: XBlockFirstKrylovAttemptResult
+    fallback: XBlockGMRESFallbackResult
+    candidate_state: XBlockKrylovSolveState
+    final_state: XBlockKrylovSolveState
+
+
+@dataclass(frozen=True)
+class XBlockKrylovSolveSpaceContext:
+    """Prepared physical/equilibrated xblock Krylov solve-space inputs."""
+
+    matvec: ArrayFn
+    rhs: jnp.ndarray
+    preconditioner: ArrayFn | None
+    x0: jnp.ndarray | None
+    precondition_side: str
+    row_equilibration_built: bool
+    col_equilibration_built: bool
+    row_scale: jnp.ndarray | None
+    inv_row_scale: jnp.ndarray | None
+    col_scale: jnp.ndarray | None
+    inv_col_scale: jnp.ndarray | None
+
+
+@dataclass(frozen=True)
+class XBlockKrylovSolveSpace:
+    """Krylov solve-space callbacks after optional row/column equilibration."""
+
+    matvec: ArrayFn
+    rhs: jnp.ndarray
+    preconditioner: ArrayFn | None
+    x0: jnp.ndarray | None
+    solution_to_physical: ArrayFn
+    transform_label: str | None
+
+
+@dataclass(frozen=True)
+class XBlockAugmentedKrylovBasisContext:
+    """Inputs for preparing a QI augmented Krylov basis in solve coordinates."""
+
+    krylov_method: str
+    qi_device_state: object | None
+    seed_available: bool
+    seed_rank: int
+    seed_basis: jnp.ndarray | None
+    seed_operator_on_basis: jnp.ndarray | None
+    row_equilibration_built: bool
+    col_equilibration_built: bool
+    row_scale: jnp.ndarray | None
+    inv_col_scale: jnp.ndarray | None
+    precondition_side: str
+    solve_preconditioner: ArrayFn | None
+
+
+@dataclass(frozen=True)
+class XBlockAugmentedKrylovBasisResult:
+    """Prepared QI augmented Krylov basis and diagnostic state."""
+
+    basis: jnp.ndarray | None
+    operator_on_basis: jnp.ndarray | None
+    used: bool
+    rank: int
+    reason: str
+    seed_used: bool
+
+
+@dataclass(frozen=True)
+class XBlockAugmentedKrylovStageContext:
+    """Inputs for optional QI augmented-Krylov solve setup and diagnostics."""
+
+    requested: bool
+    krylov_method: str
+    qi_device_state: object | None
+    seed_available: bool
+    seed_rank: int
+    seed_basis: jnp.ndarray | None
+    seed_operator_on_basis: jnp.ndarray | None
+    seed_used: bool
+    row_equilibration_built: bool
+    col_equilibration_built: bool
+    row_scale: jnp.ndarray | None
+    inv_col_scale: jnp.ndarray | None
+    precondition_side: str
+    solve_preconditioner: ArrayFn | None
+    mode: str
+    metadata: Mapping[str, object]
+    emit: EmitFn | None
+    basis_builder: Callable[[XBlockAugmentedKrylovBasisContext], XBlockAugmentedKrylovBasisResult]
+
+
+@dataclass(frozen=True)
+class XBlockAugmentedKrylovStageResult:
+    """Optional QI augmented-Krylov basis and updated diagnostic metadata."""
+
+    basis: jnp.ndarray | None
+    operator_on_basis: jnp.ndarray | None
+    used: bool
+    rank: int
+    reason: str | None
+    seed_used: bool
+    metadata: dict[str, object]
+
+
+@dataclass(frozen=True)
+class XBlockSparsePCWorkEstimates:
+    """User-facing solver-kind and Krylov work-memory estimates."""
+
+    solver_kind: str
+    device_krylov_methods: frozenset[str]
+    gmres_basis_nbytes: int
+    bicgstab_work_nbytes: int
+    tfqmr_work_nbytes: int
+
+
+@dataclass(frozen=True)
+class XBlockPhysicalResidual:
+    """Physical-space xblock solution and true residual norm."""
+
+    x_physical: np.ndarray
+    residual_norm: float
+
+
+def xblock_krylov_report(
+    *,
+    device_iterations: int | None,
+    device_estimated_matvecs: int | None,
+    history: Sequence[float] | None,
+    mv_count: int,
+) -> XBlockKrylovReport:
+    """Return the xblock Krylov iteration/matvec counters reported to users."""
+
+    iterations = int(device_iterations) if device_iterations is not None else int(len(history or ()))
+    matvecs = int(device_estimated_matvecs) if device_estimated_matvecs is not None else int(mv_count)
+    return XBlockKrylovReport(iterations=int(iterations), matvecs=int(matvecs))
+
+
+def apply_xblock_side_probe_stage(
+    context: XBlockSideProbeStageContext,
+) -> XBlockSideProbeStageResult:
+    """Run the bounded x-block precondition-side probe and return updated state."""
+
+    controls = context.controls
+    enabled = bool(getattr(controls, "enabled", False))
+    x0 = context.x0
+    precondition_side = str(context.precondition_side)
+    krylov_method = str(context.krylov_method)
+    pc_maxiter = context.pc_maxiter
+    used = False
+    switched = False
+    initial_side: str | None = None
+    selected_side: str | None = None
+    initial_method: str | None = None
+    selected_method: str | None = None
+    lgmres_rescue = False
+    lgmres_rescue_maxiter_capped = False
+    lgmres_rescue_outer_k: int | None = None
+    residual_norm: float | None = None
+    residual_ratio: float | None = None
+    iterations = 0
+    matvecs = 0
+    elapsed_s = 0.0
+    switch_suppressed_by_global_coupling = False
+    switch_suppressed_by_explicit_side = False
+    physical_seed_preserved_after_switch = False
+    seed_used = False
+    seed_residual_norm: float | None = None
+    failed = False
+    failure_reason: str | None = None
+
+    if not enabled:
+        return XBlockSideProbeStageResult(
+            x0=x0,
+            precondition_side=precondition_side,
+            krylov_method=krylov_method,
+            pc_maxiter=pc_maxiter,
+            enabled=False,
+            used=False,
+            switched=False,
+            initial_side=None,
+            selected_side=None,
+            initial_method=None,
+            selected_method=None,
+            lgmres_rescue=False,
+            lgmres_rescue_maxiter_capped=False,
+            lgmres_rescue_outer_k=None,
+            residual_norm=None,
+            residual_ratio=None,
+            iterations=0,
+            matvecs=0,
+            elapsed_s=0.0,
+            switch_suppressed_by_global_coupling=False,
+            switch_suppressed_by_explicit_side=False,
+            physical_seed_preserved_after_switch=False,
+            seed_used=False,
+            seed_residual_norm=None,
+            failed=False,
+            failure_reason=None,
+        )
+
+    used = True
+    initial_side = precondition_side
+    initial_method = krylov_method
+    probe_restart = int(getattr(controls, "restart"))
+    probe_maxiter = int(getattr(controls, "maxiter"))
+    if context.emit is not None:
+        context.emit(
+            0,
+            "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres side probe start "
+            f"side={precondition_side} restart={int(probe_restart)} maxiter={int(probe_maxiter)}",
+        )
+    probe_start_s = float(context.elapsed_s())
+    probe_start_mv = int(context.matvec_count())
+    try:
+        x_probe, residual_probe, history_probe = context.gmres_solver(
+            matvec=context.matvec,
+            b=context.rhs,
+            preconditioner=context.preconditioner if precondition_side != "none" else None,
+            x0=x0,
+            tol=float(context.tol),
+            atol=float(context.atol),
+            restart=probe_restart,
+            maxiter=probe_maxiter,
+            precondition_side=precondition_side,
+        )
+        elapsed_s = float(context.elapsed_s()) - probe_start_s
+        matvecs = int(context.matvec_count()) - int(probe_start_mv)
+        iterations = int(len(history_probe or []))
+        residual_norm = float(residual_probe)
+        residual_ratio = profile_safe_ratio(residual_norm, context.target)
+        incumbent_seed_norm = float(context.rhs_norm)
+        if x0 is not None:
+            try:
+                incumbent_residual = context.rhs - jnp.asarray(
+                    context.true_matvec_no_count(jnp.asarray(x0, dtype=jnp.float64)),
+                    dtype=jnp.float64,
+                )
+                incumbent_seed_norm = profile_l2_norm_float(incumbent_residual)
+            except Exception:
+                incumbent_seed_norm = float(context.rhs_norm)
+        if str(precondition_side) == "left" and np.isfinite(float(residual_probe)):
+            # The left-preconditioned side probe returns a physical-space state,
+            # so it can seed a later side switch.
+            x0 = jnp.asarray(x_probe, dtype=jnp.float64)
+            seed_used = True
+            seed_residual_norm = float(residual_probe)
+        elif (
+            np.isfinite(float(residual_probe))
+            and float(residual_probe) < float(incumbent_seed_norm)
+        ):
+            x0 = jnp.asarray(x_probe, dtype=jnp.float64)
+            seed_used = True
+            seed_residual_norm = float(residual_probe)
+
+        should_switch_side = bool(controls.should_switch(residual_ratio))
+        if should_switch_side and context.side_env in {"left", "right", "none"}:
+            should_switch_side = False
+            switch_suppressed_by_explicit_side = True
+        lgmres_rescue_enabled = bool(getattr(controls, "lgmres_rescue_enabled"))
+        if (
+            should_switch_side
+            and bool(context.global_coupling_built)
+            and (not bool(lgmres_rescue_enabled))
+            and str(precondition_side) == "left"
+        ):
+            keep_left_ratio = float(getattr(controls, "global_coupling_keep_left_ratio"))
+            if (
+                residual_ratio is not None
+                and np.isfinite(float(residual_ratio))
+                and float(residual_ratio) <= float(keep_left_ratio)
+            ):
+                should_switch_side = False
+                switch_suppressed_by_global_coupling = True
+        if should_switch_side and lgmres_rescue_enabled and str(precondition_side) == "left":
+            krylov_method = "lgmres"
+            lgmres_rescue = True
+            pc_maxiter = int(getattr(controls, "lgmres_rescue_maxiter"))
+            lgmres_rescue_maxiter_capped = bool(
+                getattr(controls, "lgmres_rescue_maxiter_capped")
+            )
+            lgmres_rescue_outer_k = int(getattr(controls, "lgmres_rescue_outer_k"))
+        elif should_switch_side:
+            precondition_side = "right" if str(precondition_side) == "left" else "left"
+            switched = True
+            if str(precondition_side) == "right" and x0 is not None:
+                physical_seed_preserved_after_switch = True
+        selected_side = str(precondition_side)
+        selected_method = str(krylov_method)
+        if context.emit is not None:
+            if lgmres_rescue:
+                action = "method_rescue"
+            elif switch_suppressed_by_explicit_side:
+                action = "keep_explicit_side"
+            elif switch_suppressed_by_global_coupling:
+                action = "keep_global_coupling"
+            else:
+                action = "switch" if switched else "keep"
+            ratio_for_message = (
+                float(residual_ratio) if residual_ratio is not None else float("nan")
+            )
+            residual_for_message = (
+                float(residual_norm) if residual_norm is not None else float("nan")
+            )
+            context.emit(
+                0,
+                "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres side probe "
+                f"{action} side={initial_side}->{selected_side} "
+                f"method={initial_method}->{selected_method} "
+                f"iters={iterations} matvecs={matvecs} "
+                f"residual={residual_for_message:.6e} "
+                f"ratio={ratio_for_message:.6e}"
+                + (" seed_used=1" if seed_used else "")
+                + (
+                    " preserved_physical_seed=1"
+                    if physical_seed_preserved_after_switch
+                    else ""
+                ),
+            )
+    except Exception as exc:  # noqa: BLE001
+        elapsed_s = float(context.elapsed_s()) - probe_start_s
+        selected_side = str(precondition_side)
+        selected_method = str(krylov_method)
+        failed = True
+        failure_reason = f"{type(exc).__name__}: {exc}"
+        if context.emit is not None:
+            context.emit(
+                1,
+                "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
+                f"side probe failed ({type(exc).__name__}: {exc}); keeping side={precondition_side}",
+            )
+
+    return XBlockSideProbeStageResult(
+        x0=x0,
+        precondition_side=precondition_side,
+        krylov_method=krylov_method,
+        pc_maxiter=pc_maxiter,
+        enabled=True,
+        used=used,
+        switched=switched,
+        initial_side=initial_side,
+        selected_side=selected_side,
+        initial_method=initial_method,
+        selected_method=selected_method,
+        lgmres_rescue=lgmres_rescue,
+        lgmres_rescue_maxiter_capped=lgmres_rescue_maxiter_capped,
+        lgmres_rescue_outer_k=lgmres_rescue_outer_k,
+        residual_norm=residual_norm,
+        residual_ratio=residual_ratio,
+        iterations=iterations,
+        matvecs=matvecs,
+        elapsed_s=float(elapsed_s),
+        switch_suppressed_by_global_coupling=switch_suppressed_by_global_coupling,
+        switch_suppressed_by_explicit_side=switch_suppressed_by_explicit_side,
+        physical_seed_preserved_after_switch=physical_seed_preserved_after_switch,
+        seed_used=seed_used,
+        seed_residual_norm=seed_residual_norm,
+        failed=failed,
+        failure_reason=failure_reason,
+    )
+
+
+def apply_xblock_probe_coarse_stage(
+    context: XBlockProbeCoarseStageContext,
+) -> XBlockProbeCoarseStageResult:
+    """Apply the optional projected coarse correction before x-block Krylov."""
+
+    policy = context.policy
+    steps_requested = int(getattr(policy, "steps_requested"))
+    max_directions = int(getattr(policy, "max_directions"))
+    max_extra_units = int(getattr(policy, "max_extra_units"))
+    fsavg_lmax = int(getattr(policy, "fsavg_lmax"))
+    angular_lmax = int(getattr(policy, "angular_lmax"))
+    include_angular_residual = bool(getattr(policy, "include_angular_residual"))
+    include_raw = bool(getattr(policy, "include_raw"))
+    alpha_clip = float(getattr(policy, "alpha_clip"))
+    rcond = float(getattr(policy, "rcond"))
+    min_improvement = float(getattr(policy, "min_improvement"))
+    x0 = context.x0
+    elapsed_s = 0.0
+    history: tuple[float, ...] = ()
+    direction_counts: tuple[int, ...] = ()
+    direction_names: tuple[str, ...] = ()
+    residual_before: float | None = None
+    residual_after: float | None = None
+    seed_initialized = False
+    improved = False
+    failed = False
+    failure_reason: str | None = None
+
+    if steps_requested > 0 and x0 is None:
+        # Let this opt-in stage act as a true pre-Krylov projected solve even
+        # without an unrelated seed from an earlier stage.
+        x0 = jnp.zeros_like(context.rhs)
+        seed_initialized = True
+
+    if steps_requested > 0 and x0 is not None:
+        start_s = float(context.elapsed_s())
+
+        def coarse_direction_builder(
+            residual_vec: jnp.ndarray,
+        ) -> tuple[tuple[str, jnp.ndarray], ...]:
+            return context.direction_builder(
+                residual_vec,
+                include_raw=bool(include_raw),
+                fsavg_lmax=int(fsavg_lmax),
+                angular_lmax=int(angular_lmax),
+                max_extra_units=int(max_extra_units),
+                max_directions=int(max_directions),
+                include_angular_residual=bool(include_angular_residual),
+            )
+
+        try:
+            seed_residual = context.rhs - jnp.asarray(
+                context.matvec(jnp.asarray(x0, dtype=jnp.float64)),
+                dtype=jnp.float64,
+            )
+            residual_before = profile_l2_norm_float(seed_residual)
+            if (
+                np.isfinite(float(residual_before))
+                and float(residual_before) > float(context.target)
+            ):
+                (
+                    x_probe,
+                    residual_probe,
+                    history_raw,
+                    direction_counts_raw,
+                    direction_names_raw,
+                ) = context.correction(
+                    matvec=context.matvec,
+                    rhs=context.rhs,
+                    x0=jnp.asarray(x0, dtype=jnp.float64),
+                    direction_builder=coarse_direction_builder,
+                    steps=int(steps_requested),
+                    max_directions=int(max_directions),
+                    alpha_clip=float(alpha_clip),
+                    rcond=float(rcond),
+                    min_improvement=float(min_improvement),
+                )
+                history = tuple(float(v) for v in history_raw)
+                direction_counts = tuple(int(v) for v in direction_counts_raw)
+                direction_names = tuple(str(v) for v in direction_names_raw)
+                residual_after = profile_l2_norm_float(residual_probe)
+                if (
+                    np.isfinite(float(residual_after))
+                    and float(residual_after) < float(residual_before)
+                ):
+                    x0 = jnp.asarray(x_probe, dtype=jnp.float64)
+                    improved = True
+                    if context.emit is not None:
+                        context.emit(
+                            0,
+                            "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
+                            f"probe-coarse improved seed residual {residual_before:.6e} "
+                            f"-> {residual_after:.6e} "
+                            f"(steps={len(direction_counts)} "
+                            f"directions={sum(direction_counts)})",
+                        )
+                elif context.emit is not None:
+                    after = (
+                        float(residual_after)
+                        if residual_after is not None
+                        else float("nan")
+                    )
+                    context.emit(
+                        1,
+                        "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
+                        f"probe-coarse rejected seed residual {residual_before:.6e} "
+                        f"-> {after:.6e}",
+                    )
+        except Exception as exc:  # noqa: BLE001
+            failed = True
+            failure_reason = f"{type(exc).__name__}: {exc}"
+            if context.emit is not None:
+                context.emit(
+                    1,
+                    "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
+                    f"probe-coarse failed ({type(exc).__name__}: {exc})",
+                )
+        elapsed_s = float(context.elapsed_s()) - start_s
+
+    return XBlockProbeCoarseStageResult(
+        x0=x0,
+        steps_requested=int(steps_requested),
+        max_directions=int(max_directions),
+        max_extra_units=int(max_extra_units),
+        fsavg_lmax=int(fsavg_lmax),
+        angular_lmax=int(angular_lmax),
+        include_angular_residual=bool(include_angular_residual),
+        include_raw=bool(include_raw),
+        alpha_clip=float(alpha_clip),
+        rcond=float(rcond),
+        min_improvement=float(min_improvement),
+        elapsed_s=float(elapsed_s),
+        history=history,
+        direction_counts=direction_counts,
+        direction_names=direction_names,
+        residual_before=residual_before,
+        residual_after=residual_after,
+        seed_initialized=bool(seed_initialized),
+        improved=bool(improved),
+        failed=bool(failed),
+        failure_reason=failure_reason,
+    )
+
+
+def evaluate_xblock_preflight_gate(
+    context: XBlockPreflightGateContext,
+) -> XBlockPreflightGateResult:
+    """Evaluate the optional x-block seed residual preflight gate."""
+
+    min_improvement = float(context.min_improvement)
+    required = bool(context.required)
+    active = bool(min_improvement > 0.0 or required)
+    if not active:
+        return XBlockPreflightGateResult(
+            residual_norm=None,
+            improvement=None,
+            passed=None,
+            evaluated=False,
+            failed=False,
+            failure_reason=None,
+        )
+
+    if context.x0 is None:
+        if required:
+            raise RuntimeError(
+                "xblock_sparse_pc_gmres preflight gate required an initial seed"
+            )
+        return XBlockPreflightGateResult(
+            residual_norm=None,
+            improvement=0.0,
+            passed=False,
+            evaluated=False,
+            failed=False,
+            failure_reason=None,
+        )
+
+    try:
+        residual = context.rhs - jnp.asarray(
+            context.matvec(jnp.asarray(context.x0, dtype=jnp.float64)),
+            dtype=jnp.float64,
+        )
+        residual_norm = profile_l2_norm_float(residual)
+        ratio = profile_safe_ratio(residual_norm, context.rhs_norm)
+        improvement = 1.0 - float(ratio) if ratio is not None else 1.0
+        passed = bool(
+            profile_residual_converged(residual_norm, context.target)
+            or float(improvement) >= min_improvement
+        )
+        if context.emit is not None:
+            context.emit(
+                0 if passed else 1,
+                "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
+                f"preflight residual={float(residual_norm):.6e} "
+                f"improvement={float(improvement):.6e} "
+                f"required={float(min_improvement):.6e} passed={int(passed)}",
+            )
+        if required and not passed:
+            raise RuntimeError(
+                "xblock_sparse_pc_gmres preflight gate failed "
+                f"improvement={float(improvement):.6e} "
+                f"< required={float(min_improvement):.6e}"
+            )
+        return XBlockPreflightGateResult(
+            residual_norm=float(residual_norm),
+            improvement=float(improvement),
+            passed=bool(passed),
+            evaluated=True,
+            failed=False,
+            failure_reason=None,
+        )
+    except Exception as exc:  # noqa: BLE001
+        if required:
+            raise
+        failure_reason = f"{type(exc).__name__}: {exc}"
+        if context.emit is not None:
+            context.emit(
+                1,
+                "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
+                f"preflight failed ({type(exc).__name__}: {exc})",
+            )
+        return XBlockPreflightGateResult(
+            residual_norm=None,
+            improvement=None,
+            passed=None,
+            evaluated=True,
+            failed=True,
+            failure_reason=failure_reason,
+        )
+
+
+def resolve_xblock_krylov_control_setup(
+    context: XBlockKrylovControlSetupContext,
+) -> XBlockKrylovControlSetup:
+    """Resolve x-block Krylov runtime controls and emit user-facing setup lines."""
+
+    env = context.env
+    method = str(context.krylov_method)
+    fgmres_block_between_cycles = _env_bool(
+        env,
+        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_FGMRES_BLOCK_BETWEEN_CYCLES",
+        default=False,
+    )
+    tfqmr_replacement_interval = _env_int(
+        env,
+        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_TFQMR_REPLACE_INTERVAL",
+        default=0,
+        minimum=0,
+    )
+    if context.emit is not None:
+        tfqmr_note = (
+            f" tfqmr_replacement_interval={int(tfqmr_replacement_interval)}"
+            if method == "tfqmr_jax"
+            else ""
+        )
+        context.emit(
+            0,
+            "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres solve start "
+            f"method={method} restart={int(context.pc_restart)} "
+            f"maxiter={int(context.pc_maxiter)} "
+            f"precondition_side={context.precondition_side}{tfqmr_note}",
+        )
+
+    device_fgmres_jit = _env_bool(
+        env,
+        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_DEVICE_JIT",
+        default=False,
+    )
+    device_fgmres_jit_mode = (
+        _env_value(env, "SFINCS_JAX_RHSMODE1_XBLOCK_PC_DEVICE_JIT_MODE")
+        or "cycle"
+    ).lower().replace("-", "_")
+    if device_fgmres_jit_mode not in {"cycle", "full"}:
+        device_fgmres_jit_mode = "cycle"
+    device_fgmres_jit_outer_k = _env_int(
+        env,
+        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_DEVICE_JIT_OUTER_K",
+        default=0,
+        minimum=0,
+    )
+    qi_device_augmented_krylov_requested = _env_bool(
+        env,
+        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_AUGMENTED_KRYLOV",
+        default=False,
+    )
+    qi_device_augmented_krylov_mode = (
+        _env_value(
+            env,
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_AUGMENTED_KRYLOV_MODE",
+        )
+        or "combined"
+    ).lower().replace("-", "_")
+    if qi_device_augmented_krylov_mode not in {"projected", "combined"}:
+        qi_device_augmented_krylov_mode = "combined"
+    if (
+        context.emit is not None
+        and method in {"fgmres_jax", "gmres_jax"}
+        and bool(fgmres_block_between_cycles)
+    ):
+        context.emit(
+            0,
+            "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
+            "FGMRES cycle-boundary synchronization enabled",
+        )
+    if (
+        context.emit is not None
+        and method in {"fgmres_jax", "gmres_jax"}
+        and bool(device_fgmres_jit)
+    ):
+        context.emit(
+            0,
+            "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
+            f"JIT-compiled device FGMRES enabled mode={device_fgmres_jit_mode}",
+        )
+
+    return XBlockKrylovControlSetup(
+        fgmres_block_between_cycles=bool(fgmres_block_between_cycles),
+        tfqmr_replacement_interval=int(tfqmr_replacement_interval),
+        device_fgmres_jit=bool(device_fgmres_jit),
+        device_fgmres_jit_mode=str(device_fgmres_jit_mode),
+        device_fgmres_jit_outer_k=int(device_fgmres_jit_outer_k),
+        qi_device_augmented_krylov_requested=bool(
+            qi_device_augmented_krylov_requested
+        ),
+        qi_device_augmented_krylov_mode=str(qi_device_augmented_krylov_mode),
+    )
+
+
+def xblock_krylov_state_from_first_attempt(
+    context: XBlockFirstKrylovSolveStateContext,
+) -> XBlockKrylovSolveState:
+    """Convert a first xblock Krylov attempt to physical-space solve state."""
+
+    x_solution = np.asarray(context.first_attempt.x, dtype=np.float64)
+    physical_residual = xblock_physical_solution_and_residual(
+        x=x_solution,
+        solution_to_physical=context.solution_to_physical,
+        rhs=context.physical_rhs,
+        matvec=context.physical_matvec,
+        fallback_residual_norm=float(context.first_attempt.residual_norm),
+    )
+    report = xblock_krylov_report(
+        device_iterations=context.first_attempt.device_iterations,
+        device_estimated_matvecs=context.first_attempt.device_estimated_matvecs,
+        history=context.first_attempt.history,
+        mv_count=int(context.mv_count),
+    )
+    return XBlockKrylovSolveState(
+        krylov_method=str(context.krylov_method),
+        x_solution=x_solution,
+        x_physical=physical_residual.x_physical,
+        residual_norm=float(physical_residual.residual_norm),
+        history=tuple(float(v) for v in context.first_attempt.history),
+        solve_s=float(context.solve_s),
+        device_iterations=context.first_attempt.device_iterations,
+        device_estimated_matvecs=context.first_attempt.device_estimated_matvecs,
+        reported_iterations=int(report.iterations),
+        reported_matvecs=int(report.matvecs),
+    )
+
+
+def xblock_krylov_state_from_gmres_fallback(
+    *,
+    fallback: XBlockGMRESFallbackResult,
+    mv_count: int,
+) -> XBlockKrylovSolveState:
+    """Convert an optional GMRES fallback result to physical-space solve state."""
+
+    report = xblock_krylov_report(
+        device_iterations=fallback.device_iterations,
+        device_estimated_matvecs=fallback.device_estimated_matvecs,
+        history=fallback.history,
+        mv_count=int(mv_count),
+    )
+    return XBlockKrylovSolveState(
+        krylov_method=str(fallback.krylov_method),
+        x_solution=np.asarray(fallback.x_solution, dtype=np.float64),
+        x_physical=np.asarray(fallback.x_physical, dtype=np.float64),
+        residual_norm=float(fallback.residual_norm),
+        history=tuple(float(v) for v in fallback.history),
+        solve_s=float(fallback.solve_s),
+        device_iterations=fallback.device_iterations,
+        device_estimated_matvecs=fallback.device_estimated_matvecs,
+        reported_iterations=int(report.iterations),
+        reported_matvecs=int(report.matvecs),
+        fallback_started_from_candidate=bool(fallback.fallback_started_from_candidate),
+        fallback_candidate_improved_rhs=bool(fallback.fallback_candidate_improved_rhs),
+    )
+
+
+def run_xblock_krylov_solve_stage(
+    context: XBlockKrylovSolveStageContext,
+) -> XBlockKrylovSolveStageResult:
+    """Run the x-block Krylov attempt and optional GMRES fallback as one stage."""
+
+    first_attempt = run_xblock_first_krylov_attempt(context.first_attempt)
+    solve_s = (
+        float(context.elapsed_s())
+        - float(context.solve_start_s)
+        + float(context.side_probe_s)
+        + float(context.probe_coarse_s)
+    )
+    candidate_state = xblock_krylov_state_from_first_attempt(
+        XBlockFirstKrylovSolveStateContext(
+            krylov_method=str(context.first_attempt.krylov_method),
+            first_attempt=first_attempt,
+            solve_s=float(solve_s),
+            solution_to_physical=context.solution_to_physical,
+            physical_rhs=context.physical_rhs,
+            physical_matvec=context.physical_matvec,
+            mv_count=int(context.first_attempt.mv_count),
+        )
+    )
+    fallback = run_xblock_gmres_fallback_if_needed(
+        XBlockGMRESFallbackContext(
+            krylov_method=str(context.first_attempt.krylov_method),
+            fallback_enabled=bool(context.fallback_enabled),
+            x_solution=candidate_state.x_solution,
+            x_physical=candidate_state.x_physical,
+            residual_norm=float(candidate_state.residual_norm),
+            history=candidate_state.history,
+            solve_s=float(candidate_state.solve_s),
+            target=float(context.target),
+            rhs_norm=float(context.rhs_norm),
+            original_x0=context.first_attempt.x0,
+            solve_rhs=context.first_attempt.rhs,
+            solve_matvec=context.first_attempt.matvec,
+            solve_preconditioner=context.first_attempt.preconditioner,
+            precondition_side=str(context.first_attempt.precondition_side),
+            tol=float(context.first_attempt.tol),
+            atol=float(context.first_attempt.atol),
+            restart=int(context.first_attempt.restart),
+            maxiter=context.first_attempt.maxiter,
+            progress_callback=context.progress_callback,
+            emit=context.emit,
+            elapsed_s=context.elapsed_s,
+            gmres_solver=context.first_attempt.gmres_solver,
+            initial_guess_builder=context.initial_guess_builder,
+            solution_to_physical=context.solution_to_physical,
+            physical_rhs=context.physical_rhs,
+            physical_matvec=context.physical_matvec,
+            device_iterations=candidate_state.device_iterations,
+            device_estimated_matvecs=candidate_state.device_estimated_matvecs,
+        )
+    )
+    final_state = xblock_krylov_state_from_gmres_fallback(
+        fallback=fallback,
+        mv_count=int(context.first_attempt.mv_count),
+    )
+    return XBlockKrylovSolveStageResult(
+        first_attempt=first_attempt,
+        fallback=fallback,
+        candidate_state=candidate_state,
+        final_state=final_state,
+    )
+
+
+def xblock_device_cycle_progress_message(
+    *,
+    cycle: int,
+    iterations: int,
+    residual_norm: float,
+    target: float,
+    elapsed_s: float,
+) -> str:
+    """Return the user-facing xblock device-cycle progress line."""
+
+    ratio = float(residual_norm) / float(target) if float(target) > 0.0 else float("nan")
+    return (
+        "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
+        f"device-cycle cycle={int(cycle)} iterations={int(iterations)} "
+        f"residual={float(residual_norm):.6e} target={float(target):.6e} "
+        f"ratio={float(ratio):.6e} elapsed_s={float(elapsed_s):.3f}"
+    )
+
+
+def xblock_host_krylov_progress_message(
+    *,
+    iteration: int,
+    residual_norm: float,
+    elapsed_s: float,
+) -> str:
+    """Return the user-facing host xblock Krylov progress line."""
+
+    return (
+        "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
+        f"iters={int(iteration)} ksp_residual={float(residual_norm):.6e} "
+        f"elapsed_s={float(elapsed_s):.3f}"
+    )
+
+
+def build_xblock_krylov_progress_callbacks(
+    context: XBlockKrylovProgressCallbacksContext,
+) -> XBlockKrylovProgressCallbacks:
+    """Return host/device progress callbacks for the x-block Krylov solve."""
+
+    def device_cycle_progress_callback(
+        *,
+        cycle: int,
+        iterations: int,
+        residual_norm: float,
+        target: float,
+    ) -> None:
+        if context.emit is None:
+            return
+        context.emit(
+            0,
+            xblock_device_cycle_progress_message(
+                cycle=int(cycle),
+                iterations=int(iterations),
+                residual_norm=float(residual_norm),
+                target=float(target),
+                elapsed_s=float(context.elapsed_s()),
+            ),
+        )
+
+    def host_progress_callback(iteration: int, residual_norm: float) -> None:
+        if context.emit is None or int(context.progress_every) <= 0:
+            return
+        if int(iteration) % int(context.progress_every) != 0:
+            return
+        context.emit(
+            1,
+            xblock_host_krylov_progress_message(
+                iteration=int(iteration),
+                residual_norm=float(residual_norm),
+                elapsed_s=float(context.elapsed_s()),
+            ),
+        )
+
+    return XBlockKrylovProgressCallbacks(
+        host_progress_callback=host_progress_callback,
+        device_cycle_progress_callback=device_cycle_progress_callback,
+    )
+
+
+def xblock_device_krylov_state(
+    result: object,
+    *,
+    estimated_matvecs_floor: int | None = None,
+) -> XBlockDeviceKrylovState:
+    """Transfer a device xblock Krylov result to host arrays and counters."""
+
+    x = np.asarray(jax.device_get(result.x), dtype=np.float64)
+    residual_norm = float(jax.device_get(result.residual_norm))
+    history_arr = np.asarray(jax.device_get(result.residual_history), dtype=np.float64)
+    n_iterations = int(jax.device_get(result.n_iterations))
+    history = tuple(
+        float(v)
+        for v in history_arr[: n_iterations + 1]
+        if np.isfinite(float(v))
+    )
+    estimated_matvecs = None
+    if estimated_matvecs_floor is not None:
+        estimated_matvecs = max(int(estimated_matvecs_floor), int(n_iterations) + 2)
+    return XBlockDeviceKrylovState(
+        x=x,
+        residual_norm=float(residual_norm),
+        history=history,
+        n_iterations=int(n_iterations),
+        estimated_matvecs=estimated_matvecs,
+    )
+
+
+def prepare_xblock_krylov_solve_space(
+    context: XBlockKrylovSolveSpaceContext,
+) -> XBlockKrylovSolveSpace:
+    """Apply xblock row/column equilibration to the Krylov solve callbacks."""
+
+    def _identity_solution(v: jnp.ndarray) -> jnp.ndarray:
+        return jnp.asarray(v, dtype=jnp.float64)
+
+    if not bool(context.row_equilibration_built):
+        return XBlockKrylovSolveSpace(
+            matvec=context.matvec,
+            rhs=context.rhs,
+            preconditioner=context.preconditioner if str(context.precondition_side) != "none" else None,
+            x0=context.x0,
+            solution_to_physical=_identity_solution,
+            transform_label=None,
+        )
+
+    if context.row_scale is None or context.inv_row_scale is None:
+        raise ValueError("row equilibration requires row_scale and inv_row_scale")
+    if bool(context.col_equilibration_built) and (
+        context.col_scale is None or context.inv_col_scale is None
+    ):
+        raise ValueError("column equilibration requires col_scale and inv_col_scale")
+
+    row_scale = jnp.asarray(context.row_scale, dtype=jnp.float64)
+    inv_row_scale = jnp.asarray(context.inv_row_scale, dtype=jnp.float64)
+    col_scale = (
+        jnp.asarray(context.col_scale, dtype=jnp.float64)
+        if bool(context.col_equilibration_built)
+        else None
+    )
+    inv_col_scale = (
+        jnp.asarray(context.inv_col_scale, dtype=jnp.float64)
+        if bool(context.col_equilibration_built)
+        else None
+    )
+    base_matvec = context.matvec
+    base_preconditioner = context.preconditioner
+
+    def _mv_equilibrated(v: jnp.ndarray) -> jnp.ndarray:
+        v_j = jnp.asarray(v, dtype=jnp.float64)
+        physical_v = col_scale * v_j if col_scale is not None else v_j
+        return row_scale * jnp.asarray(base_matvec(physical_v), dtype=jnp.float64)
+
+    def _precond_equilibrated(v: jnp.ndarray) -> jnp.ndarray:
+        physical_residual = inv_row_scale * jnp.asarray(v, dtype=jnp.float64)
+        if base_preconditioner is None:
+            physical_update = physical_residual
+        else:
+            physical_update = jnp.asarray(base_preconditioner(physical_residual), dtype=jnp.float64)
+        if inv_col_scale is not None:
+            return inv_col_scale * physical_update
+        return physical_update
+
+    rhs = row_scale * jnp.asarray(context.rhs, dtype=jnp.float64)
+    x0 = context.x0
+    if col_scale is not None and inv_col_scale is not None:
+        x0 = None if x0 is None else inv_col_scale * jnp.asarray(x0, dtype=jnp.float64)
+
+        def _solution_to_physical(v: jnp.ndarray) -> jnp.ndarray:
+            return col_scale * jnp.asarray(v, dtype=jnp.float64)
+
+        solution_to_physical = _solution_to_physical
+        transform_label = "row/column"
+    else:
+        solution_to_physical = _identity_solution
+        transform_label = "row"
+
+    return XBlockKrylovSolveSpace(
+        matvec=_mv_equilibrated,
+        rhs=rhs,
+        preconditioner=_precond_equilibrated if str(context.precondition_side) != "none" else None,
+        x0=x0,
+        solution_to_physical=solution_to_physical,
+        transform_label=transform_label,
+    )
+
+
+def prepare_xblock_augmented_krylov_basis(
+    context: XBlockAugmentedKrylovBasisContext,
+) -> XBlockAugmentedKrylovBasisResult:
+    """Prepare the optional QI augmented Krylov basis for the solve-space operator."""
+
+    seed_available = bool(
+        context.seed_available
+        and context.seed_basis is not None
+        and context.seed_operator_on_basis is not None
+        and int(context.seed_rank) > 0
+    )
+    if context.qi_device_state is None:
+        return XBlockAugmentedKrylovBasisResult(
+            basis=None,
+            operator_on_basis=None,
+            used=False,
+            rank=0,
+            reason="disabled_missing_qi_device_state",
+            seed_used=False,
+        )
+    if str(context.krylov_method) not in {"fgmres_jax", "gmres_jax"}:
+        return XBlockAugmentedKrylovBasisResult(
+            basis=None,
+            operator_on_basis=None,
+            used=False,
+            rank=0,
+            reason="disabled_non_jax_fgmres_method",
+            seed_used=False,
+        )
+    if int(context.qi_device_state.metadata.rank) <= 0 and not seed_available:
+        return XBlockAugmentedKrylovBasisResult(
+            basis=None,
+            operator_on_basis=None,
+            used=False,
+            rank=0,
+            reason="disabled_empty_qi_device_basis",
+            seed_used=False,
+        )
+
+    try:
+        if seed_available:
+            basis = jnp.asarray(context.seed_basis, dtype=jnp.float64)
+            operator_on_basis = jnp.asarray(context.seed_operator_on_basis, dtype=jnp.float64)
+            reason = "enabled_from_augmented_seed"
+            seed_used = True
+        else:
+            basis = jnp.asarray(context.qi_device_state.basis.vectors, dtype=jnp.float64)
+            operator_on_basis = jnp.asarray(context.qi_device_state.operator_on_basis, dtype=jnp.float64)
+            reason = "enabled"
+            seed_used = False
+
+        if bool(context.col_equilibration_built) and context.inv_col_scale is not None:
+            basis = jnp.asarray(context.inv_col_scale, dtype=jnp.float64).reshape((-1, 1)) * basis
+        if bool(context.row_equilibration_built) and context.row_scale is not None:
+            operator_on_basis = (
+                jnp.asarray(context.row_scale, dtype=jnp.float64).reshape((-1, 1))
+                * operator_on_basis
+            )
+        if str(context.precondition_side) == "left" and context.solve_preconditioner is not None:
+            operator_on_basis = jnp.stack(
+                [
+                    jnp.asarray(
+                        context.solve_preconditioner(operator_on_basis[:, idx]),
+                        dtype=jnp.float64,
+                    )
+                    for idx in range(int(operator_on_basis.shape[1]))
+                ],
+                axis=1,
+            )
+        return XBlockAugmentedKrylovBasisResult(
+            basis=basis,
+            operator_on_basis=operator_on_basis,
+            used=True,
+            rank=int(basis.shape[1]),
+            reason=reason,
+            seed_used=seed_used,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return XBlockAugmentedKrylovBasisResult(
+            basis=None,
+            operator_on_basis=None,
+            used=False,
+            rank=0,
+            reason=f"{type(exc).__name__}: {exc}",
+            seed_used=False,
+        )
+
+
+def apply_xblock_augmented_krylov_stage(
+    context: XBlockAugmentedKrylovStageContext,
+) -> XBlockAugmentedKrylovStageResult:
+    """Prepare optional QI augmented-Krylov inputs and update metadata."""
+
+    metadata = dict(context.metadata)
+    if not bool(context.requested):
+        return XBlockAugmentedKrylovStageResult(
+            basis=None,
+            operator_on_basis=None,
+            used=False,
+            rank=0,
+            reason=None,
+            seed_used=bool(context.seed_used),
+            metadata=metadata,
+        )
+
+    augmented_krylov = context.basis_builder(
+        XBlockAugmentedKrylovBasisContext(
+            krylov_method=str(context.krylov_method),
+            qi_device_state=context.qi_device_state,
+            seed_available=bool(context.seed_available),
+            seed_rank=int(context.seed_rank),
+            seed_basis=context.seed_basis,
+            seed_operator_on_basis=context.seed_operator_on_basis,
+            row_equilibration_built=bool(context.row_equilibration_built),
+            col_equilibration_built=bool(context.col_equilibration_built),
+            row_scale=context.row_scale,
+            inv_col_scale=context.inv_col_scale,
+            precondition_side=str(context.precondition_side),
+            solve_preconditioner=context.solve_preconditioner,
+        )
+    )
+    seed_used = bool(context.seed_used or augmented_krylov.seed_used)
+    metadata["augmented_seed_used"] = bool(seed_used)
+    metadata["augmented_seed_available"] = bool(context.seed_available)
+    if context.emit is not None:
+        context.emit(
+            0 if bool(augmented_krylov.used) else 1,
+            "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
+            f"QI augmented Krylov {augmented_krylov.reason} "
+            f"rank={int(augmented_krylov.rank)} "
+            f"mode={context.mode}",
+        )
+    return XBlockAugmentedKrylovStageResult(
+        basis=augmented_krylov.basis,
+        operator_on_basis=augmented_krylov.operator_on_basis,
+        used=bool(augmented_krylov.used),
+        rank=int(augmented_krylov.rank),
+        reason=str(augmented_krylov.reason),
+        seed_used=bool(seed_used),
+        metadata=metadata,
+    )
+
+
+def run_xblock_first_krylov_attempt(
+    context: XBlockFirstKrylovAttemptContext,
+) -> XBlockFirstKrylovAttemptResult:
+    """Run the selected first xblock sparse-PC Krylov method."""
+
+    method = str(context.krylov_method)
+    device_iterations: int | None = None
+    device_estimated_matvecs: int | None = None
+
+    if method == "lgmres":
+        x_np, residual_norm, history = context.lgmres_solver(
+            matvec=context.matvec,
+            b=context.rhs,
+            preconditioner=context.preconditioner,
+            x0=context.x0,
+            tol=float(context.tol),
+            atol=float(context.atol),
+            restart=int(context.restart),
+            maxiter=context.maxiter,
+            outer_k=context.lgmres_outer_k,
+            precondition_side=str(context.precondition_side),
+        )
+    elif method in {"gmres_jax", "fgmres_jax"}:
+        fgmres_solver = (
+            (
+                context.fgmres_cycle_jit_solver
+                if str(context.device_fgmres_jit_mode) == "cycle"
+                else context.fgmres_jit_solver
+            )
+            if bool(context.device_fgmres_jit)
+            else context.fgmres_solver
+        )
+        fgmres_kwargs: dict[str, Any] = {
+            "matvec": context.matvec,
+            "b": context.rhs,
+            "preconditioner": context.preconditioner,
+            "x0": context.x0,
+            "tol": float(context.tol),
+            "atol": float(context.atol),
+            "restart": int(context.restart),
+            "maxiter": context.maxiter,
+            "precondition_side": str(context.precondition_side),
+            "skip_inactive_work": bool(context.skip_inactive_work),
+            "block_between_cycles": bool(context.fgmres_block_between_cycles),
+        }
+        if bool(context.device_fgmres_jit) and str(context.device_fgmres_jit_mode) == "cycle":
+            fgmres_kwargs["outer_k"] = int(context.device_fgmres_jit_outer_k)
+            fgmres_kwargs["augmentation_mode"] = str(context.augmentation_mode)
+            fgmres_kwargs["progress_callback"] = context.device_cycle_progress_callback
+        if bool(context.augmented_krylov_used):
+            fgmres_kwargs["augmentation_basis"] = context.augmentation_basis
+            fgmres_kwargs["operator_on_augmentation"] = context.operator_on_augmentation
+        fgmres_result, _fgmres_residual = fgmres_solver(**fgmres_kwargs)
+        device_state = xblock_device_krylov_state(
+            fgmres_result,
+            estimated_matvecs_floor=(
+                int(context.mv_count)
+                if bool(context.device_fgmres_jit)
+                and str(context.device_fgmres_jit_mode) == "cycle"
+                else None
+            ),
+        )
+        x_np = device_state.x
+        residual_norm = float(device_state.residual_norm)
+        history = device_state.history
+        device_iterations = int(device_state.n_iterations)
+        device_estimated_matvecs = device_state.estimated_matvecs
+    elif method == "bicgstab_jax":
+        bicgstab_result, _bicgstab_residual = context.bicgstab_jax_solver(
+            matvec=context.matvec,
+            b=context.rhs,
+            preconditioner=context.preconditioner,
+            x0=context.x0,
+            tol=float(context.tol),
+            atol=float(context.atol),
+            maxiter=context.maxiter,
+            precondition_side=str(context.precondition_side),
+        )
+        device_state = xblock_device_krylov_state(bicgstab_result)
+        x_np = device_state.x
+        residual_norm = float(device_state.residual_norm)
+        history = device_state.history
+        device_iterations = int(device_state.n_iterations)
+    elif method == "tfqmr_jax":
+        tfqmr_result, _tfqmr_residual = context.tfqmr_jax_solver(
+            matvec=context.matvec,
+            b=context.rhs,
+            preconditioner=context.preconditioner,
+            x0=context.x0,
+            tol=float(context.tol),
+            atol=float(context.atol),
+            maxiter=context.maxiter,
+            precondition_side=str(context.precondition_side),
+            residual_replacement_interval=int(context.tfqmr_replacement_interval),
+        )
+        device_state = xblock_device_krylov_state(tfqmr_result)
+        x_np = device_state.x
+        residual_norm = float(device_state.residual_norm)
+        history = device_state.history
+        device_iterations = int(device_state.n_iterations)
+    elif method == "gcrotmk":
+        x_np, residual_norm, history = context.gcrotmk_solver(
+            matvec=context.matvec,
+            b=context.rhs,
+            preconditioner=context.preconditioner,
+            x0=context.x0,
+            tol=float(context.tol),
+            atol=float(context.atol),
+            restart=int(context.restart),
+            maxiter=context.maxiter,
+            precondition_side=str(context.precondition_side),
+        )
+    elif method == "bicgstab":
+        x_np, residual_norm, history = context.bicgstab_solver(
+            matvec=context.matvec,
+            b=context.rhs,
+            preconditioner=context.preconditioner,
+            x0=context.x0,
+            tol=float(context.tol),
+            atol=float(context.atol),
+            maxiter=context.maxiter,
+            precondition_side=str(context.precondition_side),
+        )
+    else:
+        x_np, residual_norm, history = context.gmres_solver(
+            matvec=context.matvec,
+            b=context.rhs,
+            preconditioner=context.preconditioner,
+            x0=context.x0,
+            tol=float(context.tol),
+            atol=float(context.atol),
+            restart=int(context.restart),
+            maxiter=context.maxiter,
+            precondition_side=str(context.precondition_side),
+            progress_callback=context.host_progress_callback,
+        )
+
+    return XBlockFirstKrylovAttemptResult(
+        x=np.asarray(x_np, dtype=np.float64),
+        residual_norm=float(residual_norm),
+        history=tuple(float(v) for v in (history or ())),
+        device_iterations=device_iterations,
+        device_estimated_matvecs=device_estimated_matvecs,
+    )
+
+
+def xblock_gmres_fallback_decision(
+    *,
+    krylov_method: str,
+    fallback_enabled: bool,
+    residual_norm: float,
+    target: float,
+) -> XBlockGMRESFallbackDecision:
+    """Decide whether a non-GMRES xblock solve needs a GMRES fallback."""
+
+    residual = float(residual_norm)
+    should_retry = (
+        str(krylov_method) != "gmres"
+        and bool(fallback_enabled)
+        and ((not np.isfinite(residual)) or residual > float(target))
+    )
+    return XBlockGMRESFallbackDecision(run=bool(should_retry))
+
+
+def run_xblock_gmres_fallback_if_needed(
+    context: XBlockGMRESFallbackContext,
+) -> XBlockGMRESFallbackResult:
+    """Retry a failed non-GMRES xblock solve with GMRES when policy permits."""
+
+    x_solution = np.asarray(context.x_solution, dtype=np.float64)
+    x_physical = np.asarray(context.x_physical, dtype=np.float64)
+    residual_norm = float(context.residual_norm)
+    history = tuple(float(v) for v in (context.history or ()))
+    krylov_method = str(context.krylov_method)
+    device_iterations = context.device_iterations
+    device_estimated_matvecs = context.device_estimated_matvecs
+    fallback_started_from_candidate = False
+    fallback_candidate_improved_rhs = False
+
+    fallback_decision = xblock_gmres_fallback_decision(
+        krylov_method=krylov_method,
+        fallback_enabled=bool(context.fallback_enabled),
+        residual_norm=float(residual_norm),
+        target=float(context.target),
+    )
+    if not fallback_decision.run:
+        return XBlockGMRESFallbackResult(
+            krylov_method=krylov_method,
+            x_solution=x_solution,
+            x_physical=x_physical,
+            residual_norm=float(residual_norm),
+            history=history,
+            solve_s=float(context.solve_s),
+            device_iterations=device_iterations,
+            device_estimated_matvecs=device_estimated_matvecs,
+            fallback_started_from_candidate=False,
+            fallback_candidate_improved_rhs=False,
+        )
+
+    if context.emit is not None:
+        context.emit(
+            0,
+            "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
+            f"{krylov_method} residual={float(residual_norm):.6e} "
+            f"> target={float(context.target):.6e}; falling back to gmres",
+        )
+
+    (
+        fallback_x0,
+        fallback_started_from_candidate,
+        fallback_candidate_improved_rhs,
+    ) = context.initial_guess_builder(
+        candidate=x_solution,
+        original_x0=context.original_x0,
+        rhs_shape=tuple(context.solve_rhs.shape),
+        candidate_residual_norm=float(residual_norm),
+        rhs_norm=float(context.rhs_norm),
+        precondition_side=str(context.precondition_side),
+    )
+    fallback_start_s = float(context.elapsed_s())
+    x_np, residual_fallback, history_fallback = context.gmres_solver(
+        matvec=context.solve_matvec,
+        b=context.solve_rhs,
+        preconditioner=context.solve_preconditioner,
+        x0=fallback_x0,
+        tol=float(context.tol),
+        atol=float(context.atol),
+        restart=int(context.restart),
+        maxiter=context.maxiter,
+        precondition_side=str(context.precondition_side),
+        progress_callback=context.progress_callback,
+    )
+    solve_s = float(context.solve_s) + (float(context.elapsed_s()) - fallback_start_s)
+    x_solution = np.asarray(x_np, dtype=np.float64)
+    physical_residual = xblock_physical_solution_and_residual(
+        x=x_solution,
+        solution_to_physical=context.solution_to_physical,
+        rhs=context.physical_rhs,
+        matvec=context.physical_matvec,
+        fallback_residual_norm=float(residual_fallback),
+    )
+    return XBlockGMRESFallbackResult(
+        krylov_method="gmres",
+        x_solution=x_solution,
+        x_physical=physical_residual.x_physical,
+        residual_norm=float(physical_residual.residual_norm),
+        history=tuple(float(v) for v in (history_fallback or ())),
+        solve_s=float(solve_s),
+        device_iterations=None,
+        device_estimated_matvecs=None,
+        fallback_started_from_candidate=bool(fallback_started_from_candidate),
+        fallback_candidate_improved_rhs=bool(fallback_candidate_improved_rhs),
+    )
+
+
+def xblock_sparse_pc_work_estimates(
+    *,
+    krylov_method: str,
+    linear_size: int,
+    restart: int,
+    dtype: Any = np.float64,
+) -> XBlockSparsePCWorkEstimates:
+    """Return xblock sparse-PC method labels and Krylov work estimates."""
+
+    method = str(krylov_method)
+    return XBlockSparsePCWorkEstimates(
+        solver_kind=(
+            "xblock_sparse_pc_gmres"
+            if method == "gmres"
+            else f"xblock_sparse_pc_{method}"
+        ),
+        device_krylov_methods=frozenset(
+            {"fgmres_jax", "gmres_jax", "bicgstab_jax", "tfqmr_jax"}
+        ),
+        gmres_basis_nbytes=gmres_basis_nbytes(
+            int(linear_size),
+            int(restart),
+            dtype=dtype,
+        ),
+        bicgstab_work_nbytes=bicgstab_work_nbytes(int(linear_size), dtype=dtype),
+        tfqmr_work_nbytes=tfqmr_work_nbytes(int(linear_size), dtype=dtype),
+    )
+
+
+def xblock_sparse_pc_completion_message(
+    *,
+    krylov_method: str,
+    elapsed_s: float,
+    iterations: int,
+    matvecs: int,
+    residual_norm: float,
+    target: float,
+    history: Sequence[float] | None,
+) -> str:
+    """Format the final xblock sparse-PC progress line shown to users."""
+
+    ksp_suffix = (
+        f" ksp_residual={float(history[-1]):.6e}" if history else ""
+    )
+    return (
+        "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres complete "
+        f"method={krylov_method} elapsed_s={float(elapsed_s):.3f} "
+        f"iters={int(iterations)} "
+        f"matvecs={int(matvecs)} residual={float(residual_norm):.6e} "
+        f"target={float(target):.6e}{ksp_suffix}"
+    )
+
+
+def emit_xblock_sparse_pc_completion(
+    context: XBlockSparsePCCompletionContext,
+) -> None:
+    """Emit the final xblock sparse-PC progress line from explicit inputs."""
+
+    if context.emit is None:
+        return
+    context.emit(
+        0,
+        xblock_sparse_pc_completion_message(
+            krylov_method=str(context.krylov_method),
+            elapsed_s=float(context.elapsed_s),
+            iterations=int(context.iterations),
+            matvecs=int(context.matvecs),
+            residual_norm=float(context.residual_norm),
+            target=float(context.target),
+            history=context.history,
+        ),
+    )
+
+
+def emit_xblock_sparse_pc_completion_from_driver_state(
+    state: Mapping[str, object],
+) -> None:
+    """Emit the final xblock sparse-PC progress line from driver state."""
+
+    if state["emit"] is None:
+        return
+    emit_xblock_sparse_pc_completion(
+        XBlockSparsePCCompletionContext(
+            emit=state["emit"],
+            krylov_method=str(state["xblock_krylov_method"]),
+            elapsed_s=state["sparse_timer"].elapsed_s(),
+            iterations=int(state["reported_iterations"]),
+            matvecs=int(state["reported_matvecs"]),
+            residual_norm=float(state["residual_norm_xblock_pc"]),
+            target=float(state["target_xblock"]),
+            history=state["history"],
+        ),
+    )
+
+
+def xblock_physical_solution_and_residual(
+    *,
+    x: np.ndarray,
+    solution_to_physical: Callable[[jnp.ndarray], jnp.ndarray],
+    rhs: jnp.ndarray,
+    matvec: Callable[[jnp.ndarray], jnp.ndarray],
+    fallback_residual_norm: float,
+) -> XBlockPhysicalResidual:
+    """Map a Krylov solution to physical coordinates and measure true residual."""
+
+    x_solution = np.asarray(x, dtype=np.float64)
+    x_physical = np.asarray(
+        jax.device_get(solution_to_physical(jnp.asarray(x_solution, dtype=jnp.float64))),
+        dtype=np.float64,
+    )
+    try:
+        residual_true = np.asarray(rhs, dtype=np.float64) - np.asarray(
+            jax.device_get(matvec(jnp.asarray(x_physical, dtype=jnp.float64))),
+            dtype=np.float64,
+        )
+        residual_norm = float(np.linalg.norm(residual_true))
+    except Exception:
+        residual_norm = float(fallback_residual_norm)
+    return XBlockPhysicalResidual(
+        x_physical=np.asarray(x_physical, dtype=np.float64),
+        residual_norm=float(residual_norm),
+    )
+
+
+
 __all__ = (
+    "XBlockKrylovReport",
+    "XBlockSparsePCCompletionContext",
+    "XBlockSparsePCFinalPayloadContext",
+    "XBlockGMRESFallbackDecision",
+    "XBlockGMRESFallbackContext",
+    "XBlockGMRESFallbackResult",
+    "XBlockDeviceKrylovState",
+    "XBlockFirstKrylovAttemptContext",
+    "XBlockFirstKrylovAttemptResult",
+    "XBlockSideProbeStageContext",
+    "XBlockSideProbeStageResult",
+    "XBlockProbeCoarseStageContext",
+    "XBlockProbeCoarseStageResult",
+    "XBlockPreflightGateContext",
+    "XBlockPreflightGateResult",
+    "XBlockKrylovControlSetupContext",
+    "XBlockKrylovControlSetup",
+    "XBlockKrylovProgressCallbacksContext",
+    "XBlockKrylovProgressCallbacks",
+    "XBlockKrylovSolveState",
+    "XBlockFirstKrylovSolveStateContext",
+    "XBlockKrylovSolveStageContext",
+    "XBlockKrylovSolveStageResult",
+    "XBlockKrylovSolveSpaceContext",
+    "XBlockKrylovSolveSpace",
+    "XBlockAugmentedKrylovBasisContext",
+    "XBlockAugmentedKrylovBasisResult",
+    "XBlockAugmentedKrylovStageContext",
+    "XBlockAugmentedKrylovStageResult",
+    "XBlockSparsePCWorkEstimates",
+    "XBlockPhysicalResidual",
+    "xblock_krylov_report",
+    "apply_xblock_side_probe_stage",
+    "apply_xblock_probe_coarse_stage",
+    "evaluate_xblock_preflight_gate",
+    "resolve_xblock_krylov_control_setup",
+    "xblock_krylov_state_from_first_attempt",
+    "xblock_krylov_state_from_gmres_fallback",
+    "run_xblock_krylov_solve_stage",
+    "xblock_device_cycle_progress_message",
+    "xblock_host_krylov_progress_message",
+    "build_xblock_krylov_progress_callbacks",
+    "xblock_device_krylov_state",
+    "prepare_xblock_krylov_solve_space",
+    "prepare_xblock_augmented_krylov_basis",
+    "apply_xblock_augmented_krylov_stage",
+    "run_xblock_first_krylov_attempt",
+    "xblock_gmres_fallback_decision",
+    "run_xblock_gmres_fallback_if_needed",
+    "xblock_sparse_pc_work_estimates",
+    "xblock_sparse_pc_completion_message",
+    "emit_xblock_sparse_pc_completion",
+    "emit_xblock_sparse_pc_completion_from_driver_state",
+    "xblock_physical_solution_and_residual",
     "XBlockMomentSchurPolicySetup",
     "XBlockGlobalCouplingPolicySetup",
     "MatvecCounter",
