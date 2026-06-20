@@ -123,6 +123,7 @@ from sfincs_jax.problems.profile_response.sparse_pc import (
     finalize_xblock_two_level_metadata,
     finalize_xblock_moment_schur_metadata,
     finalize_sparse_pc_gmres_with_dtype_retry,
+    sparse_pc_gmres_finalization_driver_scope_keys,
     sparse_pc_gmres_finalization_driver_state_keys,
     sparse_pc_gmres_finalization_state_from_driver_scope,
     prepare_fortran_reduced_xblock_initial_guess,
@@ -7181,17 +7182,21 @@ def test_finalize_sparse_pc_gmres_from_driver_state_applies_polish_and_payload()
 
 def test_sparse_pc_gmres_finalization_state_from_driver_scope_filters_scope() -> None:
     keys = sparse_pc_gmres_finalization_driver_state_keys()
+    scope_keys = sparse_pc_gmres_finalization_driver_scope_keys()
     scope = {key: object() for key in keys}
     direct_tail_metadata = {"kind": "precomputed"}
     factor_preflight_metadata = {"preflight": "precomputed"}
     pattern_metadata = {"pattern": "precomputed"}
+    static_metadata = {"solver_kind": "precomputed"}
     scope["sparse_pc_direct_tail_metadata"] = direct_tail_metadata
     scope["sparse_pc_factor_preflight_metadata"] = factor_preflight_metadata
     scope["sparse_pc_pattern_metadata"] = pattern_metadata
+    scope["sparse_pc_static_metadata"] = static_metadata
     scope["unrelated_solver_scratch"] = object()
     scope["direct_tail_structured_pc_metadata"] = {"kind": "raw"}
     scope["factor_preflight_enabled"] = True
     scope["summary"] = object()
+    scope["sparse_pc_preconditioner_operator"] = "raw_operator"
 
     state = sparse_pc_gmres_finalization_state_from_driver_scope(scope)
 
@@ -7200,16 +7205,20 @@ def test_sparse_pc_gmres_finalization_state_from_driver_scope_filters_scope() ->
         "sparse_pc_direct_tail_metadata",
         "sparse_pc_factor_preflight_metadata",
         "sparse_pc_pattern_metadata",
+        "sparse_pc_static_metadata",
     )
     assert "unrelated_solver_scratch" not in state
     assert "direct_tail_structured_pc_metadata" not in state
     assert "factor_preflight_enabled" not in state
     assert "summary" not in state
+    assert "sparse_pc_preconditioner_operator" not in state
     for key in keys:
         assert state[key] is scope[key]
     assert state["sparse_pc_direct_tail_metadata"] is direct_tail_metadata
     assert state["sparse_pc_factor_preflight_metadata"] is factor_preflight_metadata
     assert state["sparse_pc_pattern_metadata"] is pattern_metadata
+    assert state["sparse_pc_static_metadata"] is static_metadata
+    assert len(keys) < len(scope_keys)
 
     incomplete_scope = dict(scope)
     missing = keys[0]

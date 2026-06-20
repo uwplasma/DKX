@@ -1063,6 +1063,19 @@ Recent local validation:
 - Hygiene after generic sparse-PC explicit elapsed/completion cleanup:
   `python -m compileall -q sfincs_jax`, `git diff --check`, and
   `python scripts/check_repo_size.py` passed.
+- Generic sparse-PC static metadata precompute focused tests:
+  `3 passed in 1.09 s` plus two final-payload tests `2 passed in 0.68 s`.
+- Profile-response diagnostics/sparse-PC shard after generic sparse-PC static
+  metadata precompute: `248 passed in 2.02 s`.
+- Xblock/sparse-host/minimum-norm/direct-tail driver shard after generic
+  sparse-PC static metadata precompute:
+  `36 passed, 96 deselected in 41.34 s`.
+- Broad profile-response/RHSMode=1 policy, setup, diagnostics, solver, and
+  helper sweep after generic sparse-PC static metadata precompute:
+  `1191 passed in 49.01 s`.
+- Hygiene after generic sparse-PC static metadata precompute:
+  `python -m compileall -q sfincs_jax`, `git diff --check`, and
+  `python scripts/check_repo_size.py` passed.
 - Older focused and broad validation checkpoints are intentionally omitted from
   this active plan; they remain available in git history.
 
@@ -1075,7 +1088,7 @@ Known CI issue fixed by this rewrite:
 
 ### 1. `v3_driver.py` Architecture Refactor
 
-Completion estimate: 59%.
+Completion estimate: 60%.
 
 Goal:
 
@@ -1370,6 +1383,13 @@ Completed recent boundaries:
   explicit finalization contexts in the typed path, so `emit` and
   `sparse_timer` no longer propagate through the generic metadata map. The
   generic copied finalization state is down to 30 keys.
+- Generic sparse-PC finalization now precomputes static result metadata
+  before finalization. Backend labels, preconditioner/factorization labels,
+  factor defaults, active-size metadata, Fortran-reduced settings, and full
+  size no longer propagate as raw finalizer state. The generic copied
+  finalization state is down to 5 dynamic convergence/reporting keys, with a
+  30-key raw scope inventory kept only for static metadata derivation and
+  missing-key audits.
 
 Next steps:
 

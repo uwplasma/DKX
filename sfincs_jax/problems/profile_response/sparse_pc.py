@@ -18,6 +18,7 @@ from .diagnostics import (
     fp_xblock_global_correction_metadata,
     fp_xblock_highx_residual_correction_metadata,
     sparse_pc_factor_preflight_result_metadata,
+    sparse_pc_gmres_static_metadata,
     sparse_pc_direct_tail_result_metadata,
     sparse_pc_gmres_result_metadata,
     sparse_pc_pattern_result_metadata,
@@ -440,11 +441,17 @@ def _unique_state_keys(*groups: Sequence[str]) -> tuple[str, ...]:
 
 _SPARSE_PC_GMRES_FINALIZATION_CORE_STATE_KEYS = (
     "atol",
+    "mv_count",
+    "rhs_norm",
+    "target",
+    "tol",
+)
+
+_SPARSE_PC_GMRES_FINALIZATION_STATIC_METADATA_SCOPE_KEYS = (
     "fortran_reduced_sparse_pc",
     "fortran_reduced_sparse_pc_backend",
     "fortran_reduced_sparse_pc_backend_reason",
     "fortran_reduced_xblock_min_size",
-    "mv_count",
     "op",
     "pc_maxiter",
     "pc_restart",
@@ -453,7 +460,6 @@ _SPARSE_PC_GMRES_FINALIZATION_CORE_STATE_KEYS = (
     "preconditioner_x",
     "preconditioner_x_min_l",
     "preconditioner_xi",
-    "rhs_norm",
     "sparse_pc_default_factor_kind",
     "sparse_pc_default_ilu_drop_tol",
     "sparse_pc_default_ilu_fill_factor",
@@ -467,12 +473,15 @@ _SPARSE_PC_GMRES_FINALIZATION_CORE_STATE_KEYS = (
     "sparse_pc_permc_spec",
     "sparse_pc_preconditioner_operator",
     "sparse_pc_use_active_dof",
-    "target",
-    "tol",
 )
 
 _SPARSE_PC_GMRES_FINALIZATION_STATE_KEYS = _unique_state_keys(
     _SPARSE_PC_GMRES_FINALIZATION_CORE_STATE_KEYS,
+)
+
+_SPARSE_PC_GMRES_FINALIZATION_SCOPE_KEYS = _unique_state_keys(
+    _SPARSE_PC_GMRES_FINALIZATION_CORE_STATE_KEYS,
+    _SPARSE_PC_GMRES_FINALIZATION_STATIC_METADATA_SCOPE_KEYS,
 )
 
 
@@ -482,14 +491,24 @@ def sparse_pc_gmres_finalization_driver_state_keys() -> tuple[str, ...]:
     return _SPARSE_PC_GMRES_FINALIZATION_STATE_KEYS
 
 
+def sparse_pc_gmres_finalization_driver_scope_keys() -> tuple[str, ...]:
+    """Return raw driver-scope keys needed to build sparse-PC finalization state."""
+
+    return _SPARSE_PC_GMRES_FINALIZATION_SCOPE_KEYS
+
+
 def sparse_pc_gmres_finalization_state_from_driver_scope(
     scope: Mapping[str, object],
 ) -> dict[str, object]:
     """Copy only sparse-PC finalizer state and precompute direct-tail metadata."""
 
-    missing = tuple(
-        key for key in _SPARSE_PC_GMRES_FINALIZATION_STATE_KEYS if key not in scope
-    )
+    required_keys = _SPARSE_PC_GMRES_FINALIZATION_STATE_KEYS
+    if "sparse_pc_static_metadata" not in scope:
+        required_keys = _unique_state_keys(
+            required_keys,
+            _SPARSE_PC_GMRES_FINALIZATION_STATIC_METADATA_SCOPE_KEYS,
+        )
+    missing = tuple(key for key in required_keys if key not in scope)
     if missing:
         joined = ", ".join(missing[:8])
         suffix = "" if len(missing) <= 8 else f", ... ({len(missing)} total)"
@@ -507,9 +526,14 @@ def sparse_pc_gmres_finalization_state_from_driver_scope(
         pattern_metadata = scope["sparse_pc_pattern_metadata"]
     else:
         pattern_metadata = sparse_pc_pattern_result_metadata(scope)
+    if "sparse_pc_static_metadata" in scope:
+        static_metadata = scope["sparse_pc_static_metadata"]
+    else:
+        static_metadata = sparse_pc_gmres_static_metadata(scope)
     state["sparse_pc_direct_tail_metadata"] = direct_tail_metadata
     state["sparse_pc_factor_preflight_metadata"] = factor_preflight_metadata
     state["sparse_pc_pattern_metadata"] = pattern_metadata
+    state["sparse_pc_static_metadata"] = static_metadata
     return state
 
 
@@ -10721,6 +10745,7 @@ __all__ = [
     "SparsePCGMRESFinalizationContext",
     "SparsePCFactorDtypeRetryFinalizationContext",
     "SparsePCPostMinresFinalizationContext",
+    "sparse_pc_gmres_finalization_driver_scope_keys",
     "sparse_pc_gmres_finalization_driver_state_keys",
     "sparse_pc_gmres_finalization_state_from_driver_scope",
     "XBlockKrylovReport",

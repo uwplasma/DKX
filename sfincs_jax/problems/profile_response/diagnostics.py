@@ -665,6 +665,159 @@ class SparsePCPatternMetadataContext:
     build_s: object
 
 
+@dataclass(frozen=True)
+class SparsePCGMRESStaticMetadataContext:
+    """Static generic sparse-PC metadata known before final solve polishing."""
+
+    op: object
+    fortran_reduced_sparse_pc: object
+    fortran_reduced_sparse_pc_backend: object
+    fortran_reduced_sparse_pc_backend_reason: object
+    fortran_reduced_xblock_min_size: object
+    pc_restart: object
+    pc_maxiter: object
+    sparse_pc_first_attempt_maxiter: object
+    pc_shift: object
+    sparse_pc_factor_dtype_initial: object
+    sparse_pc_preconditioner_operator: object
+    sparse_pc_factorization: object
+    sparse_pc_default_factor_kind: object
+    sparse_pc_default_ilu_fill_factor: object
+    sparse_pc_default_ilu_drop_tol: object
+    sparse_pc_default_pattern_color_batch: object
+    preconditioner_x: object
+    preconditioner_x_min_l: object
+    preconditioner_xi: object
+    preconditioner_species: object
+    sparse_pc_permc_spec: object
+    sparse_pc_default_permc_spec: object
+    sparse_pc_use_active_dof: object
+    sparse_pc_linear_size: object
+    sparse_pc_fp_dense_velocity_block: object
+
+
+def sparse_pc_gmres_static_metadata_from_context(
+    context: SparsePCGMRESStaticMetadataContext,
+) -> dict[str, object]:
+    """Return static generic sparse-PC diagnostics for final metadata."""
+
+    fortran_reduced = bool(context.fortran_reduced_sparse_pc)
+    fp_dense_velocity_block = context.sparse_pc_fp_dense_velocity_block
+    return {
+        "solver_kind": (
+            "fortran_reduced_pc_gmres" if fortran_reduced else "sparse_pc_gmres"
+        ),
+        "gmres_restart": int(context.pc_restart),
+        "gmres_maxiter": int(context.pc_maxiter),
+        "sparse_pc_first_attempt_maxiter": int(
+            context.sparse_pc_first_attempt_maxiter
+        ),
+        "sparse_pc_shift": float(context.pc_shift),
+        "sparse_pc_initial_factor_dtype": _dtype_name(
+            context.sparse_pc_factor_dtype_initial
+        ),
+        "sparse_pc_backend": (
+            str(context.fortran_reduced_sparse_pc_backend)
+            if fortran_reduced
+            else "global"
+        ),
+        "sparse_pc_backend_reason": (
+            str(context.fortran_reduced_sparse_pc_backend_reason)
+            if fortran_reduced
+            else "not_fortran_reduced"
+        ),
+        "sparse_pc_xblock_min_size": (
+            int(context.fortran_reduced_xblock_min_size)
+            if fortran_reduced
+            else None
+        ),
+        "sparse_pc_preconditioner_operator": (
+            context.sparse_pc_preconditioner_operator
+        ),
+        "sparse_pc_factorization": context.sparse_pc_factorization,
+        "sparse_pc_default_factorization": context.sparse_pc_default_factor_kind,
+        "sparse_pc_default_ilu_fill_factor": float(
+            context.sparse_pc_default_ilu_fill_factor
+        ),
+        "sparse_pc_default_ilu_drop_tol": float(
+            context.sparse_pc_default_ilu_drop_tol
+        ),
+        "sparse_pc_default_pattern_color_batch": int(
+            context.sparse_pc_default_pattern_color_batch
+        ),
+        "sparse_pc_fortran_reduced": fortran_reduced,
+        "sparse_pc_fortran_reduced_keeps_theta_zeta": fortran_reduced,
+        "sparse_pc_fortran_reduced_preconditioner_x": int(
+            context.preconditioner_x
+        ),
+        "sparse_pc_fortran_reduced_preconditioner_x_min_L": int(
+            context.preconditioner_x_min_l
+        ),
+        "sparse_pc_fortran_reduced_preconditioner_xi": int(
+            context.preconditioner_xi
+        ),
+        "sparse_pc_fortran_reduced_preconditioner_species": int(
+            context.preconditioner_species
+        ),
+        "sparse_pc_permc_spec": context.sparse_pc_permc_spec,
+        "sparse_pc_default_permc_spec": context.sparse_pc_default_permc_spec,
+        "sparse_pc_active_dof": bool(context.sparse_pc_use_active_dof),
+        "sparse_pc_linear_size": int(context.sparse_pc_linear_size),
+        "sparse_pc_full_size": int(getattr(context.op, "total_size")),
+        "sparse_pc_fp_dense_velocity_block": (
+            None if fp_dense_velocity_block is None else bool(fp_dense_velocity_block)
+        ),
+    }
+
+
+def sparse_pc_gmres_static_metadata(
+    state: Mapping[str, object],
+) -> dict[str, object]:
+    """Return static generic sparse-PC diagnostics from driver-style names."""
+
+    return sparse_pc_gmres_static_metadata_from_context(
+        SparsePCGMRESStaticMetadataContext(
+            op=state["op"],
+            fortran_reduced_sparse_pc=state["fortran_reduced_sparse_pc"],
+            fortran_reduced_sparse_pc_backend=state[
+                "fortran_reduced_sparse_pc_backend"
+            ],
+            fortran_reduced_sparse_pc_backend_reason=state[
+                "fortran_reduced_sparse_pc_backend_reason"
+            ],
+            fortran_reduced_xblock_min_size=state["fortran_reduced_xblock_min_size"],
+            pc_restart=state["pc_restart"],
+            pc_maxiter=state["pc_maxiter"],
+            sparse_pc_first_attempt_maxiter=state["sparse_pc_first_attempt_maxiter"],
+            pc_shift=state["pc_shift"],
+            sparse_pc_factor_dtype_initial=state["sparse_pc_factor_dtype_initial"],
+            sparse_pc_preconditioner_operator=state[
+                "sparse_pc_preconditioner_operator"
+            ],
+            sparse_pc_factorization=state["sparse_pc_factorization"],
+            sparse_pc_default_factor_kind=state["sparse_pc_default_factor_kind"],
+            sparse_pc_default_ilu_fill_factor=state[
+                "sparse_pc_default_ilu_fill_factor"
+            ],
+            sparse_pc_default_ilu_drop_tol=state["sparse_pc_default_ilu_drop_tol"],
+            sparse_pc_default_pattern_color_batch=state[
+                "sparse_pc_default_pattern_color_batch"
+            ],
+            preconditioner_x=state["preconditioner_x"],
+            preconditioner_x_min_l=state["preconditioner_x_min_l"],
+            preconditioner_xi=state["preconditioner_xi"],
+            preconditioner_species=state["preconditioner_species"],
+            sparse_pc_permc_spec=state["sparse_pc_permc_spec"],
+            sparse_pc_default_permc_spec=state["sparse_pc_default_permc_spec"],
+            sparse_pc_use_active_dof=state["sparse_pc_use_active_dof"],
+            sparse_pc_linear_size=state["sparse_pc_linear_size"],
+            sparse_pc_fp_dense_velocity_block=state[
+                "sparse_pc_fp_dense_velocity_block"
+            ],
+        )
+    )
+
+
 def sparse_pc_pattern_result_metadata_from_context(
     context: SparsePCPatternMetadataContext,
 ) -> dict[str, object]:
@@ -703,8 +856,6 @@ def sparse_pc_gmres_result_metadata(
     driver key names while moving the metadata schema out of the solve loop.
     """
 
-    op = state["op"]
-    sparse_pc_fp_dense_velocity_block = state["sparse_pc_fp_dense_velocity_block"]
     target = float(state["target"])
     residual_norm = float(state["residual_norm_sparse_pc"])
     history = state["history"] or ()
@@ -730,19 +881,17 @@ def sparse_pc_gmres_result_metadata(
     pattern_metadata = state.get("sparse_pc_pattern_metadata")
     if pattern_metadata is None:
         pattern_metadata = sparse_pc_pattern_result_metadata(state)
+    static_metadata = state.get("sparse_pc_static_metadata")
+    if static_metadata is None:
+        static_metadata = sparse_pc_gmres_static_metadata(state)
 
     metadata: dict[str, object] = {
-        "solver_kind": (
-            "fortran_reduced_pc_gmres" if bool(state["fortran_reduced_sparse_pc"]) else "sparse_pc_gmres"
-        ),
+        **static_metadata,
         "residual_kind": "true_residual",
         "accepted_converged": bool(state["sparse_pc_accepted_converged"]),
         "acceptance_criterion": "true_residual",
         "iterations": int(len(history)),
         "matvecs": int(state["mv_count"]),
-        "gmres_restart": int(state["pc_restart"]),
-        "gmres_maxiter": int(state["pc_maxiter"]),
-        "sparse_pc_first_attempt_maxiter": int(state["sparse_pc_first_attempt_maxiter"]),
         "sparse_pc_post_minres_steps_requested": int(state["sparse_pc_post_minres_steps"]),
         "sparse_pc_post_minres_steps_accepted": int(len(state["sparse_pc_post_minres_alphas"])),
         "sparse_pc_post_minres_alpha_clip": float(state["sparse_pc_post_minres_alpha_clip"]),
@@ -752,47 +901,10 @@ def sparse_pc_gmres_result_metadata(
         "sparse_pc_post_minres_history": tuple(float(v) for v in state["sparse_pc_post_minres_history"]),
         "sparse_pc_post_minres_alphas": tuple(float(v) for v in state["sparse_pc_post_minres_alphas"]),
         "sparse_pc_post_minres_error": state["sparse_pc_post_minres_error"],
-        "sparse_pc_shift": float(state["pc_shift"]),
         "sparse_pc_factor_dtype": _dtype_name(state["sparse_pc_factor_dtype_used"]),
-        "sparse_pc_initial_factor_dtype": _dtype_name(state["sparse_pc_factor_dtype_initial"]),
         "sparse_pc_factor_dtype_retry": state["sparse_pc_factor_dtype_retry"],
         **factor_preflight_metadata,
         **direct_tail_metadata,
-        "sparse_pc_backend": (
-            str(state["fortran_reduced_sparse_pc_backend"])
-            if bool(state["fortran_reduced_sparse_pc"])
-            else "global"
-        ),
-        "sparse_pc_backend_reason": (
-            str(state["fortran_reduced_sparse_pc_backend_reason"])
-            if bool(state["fortran_reduced_sparse_pc"])
-            else "not_fortran_reduced"
-        ),
-        "sparse_pc_xblock_min_size": (
-            int(state["fortran_reduced_xblock_min_size"]) if bool(state["fortran_reduced_sparse_pc"]) else None
-        ),
-        "sparse_pc_preconditioner_operator": state["sparse_pc_preconditioner_operator"],
-        "sparse_pc_factorization": state["sparse_pc_factorization"],
-        "sparse_pc_default_factorization": state["sparse_pc_default_factor_kind"],
-        "sparse_pc_default_ilu_fill_factor": float(state["sparse_pc_default_ilu_fill_factor"]),
-        "sparse_pc_default_ilu_drop_tol": float(state["sparse_pc_default_ilu_drop_tol"]),
-        "sparse_pc_default_pattern_color_batch": int(state["sparse_pc_default_pattern_color_batch"]),
-        "sparse_pc_fortran_reduced": bool(state["fortran_reduced_sparse_pc"]),
-        "sparse_pc_fortran_reduced_keeps_theta_zeta": bool(state["fortran_reduced_sparse_pc"]),
-        "sparse_pc_fortran_reduced_preconditioner_x": int(state["preconditioner_x"]),
-        "sparse_pc_fortran_reduced_preconditioner_x_min_L": int(state["preconditioner_x_min_l"]),
-        "sparse_pc_fortran_reduced_preconditioner_xi": int(state["preconditioner_xi"]),
-        "sparse_pc_fortran_reduced_preconditioner_species": int(state["preconditioner_species"]),
-        "sparse_pc_permc_spec": state["sparse_pc_permc_spec"],
-        "sparse_pc_default_permc_spec": state["sparse_pc_default_permc_spec"],
-        "sparse_pc_active_dof": bool(state["sparse_pc_use_active_dof"]),
-        "sparse_pc_linear_size": int(state["sparse_pc_linear_size"]),
-        "sparse_pc_full_size": int(getattr(op, "total_size")),
-        "sparse_pc_fp_dense_velocity_block": (
-            None
-            if sparse_pc_fp_dense_velocity_block is None
-            else bool(sparse_pc_fp_dense_velocity_block)
-        ),
         "setup_s": float(state["setup_s"]),
         "solve_s": float(state["solve_s"]),
         "elapsed_s": float(elapsed_s),
