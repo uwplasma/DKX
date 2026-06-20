@@ -358,6 +358,134 @@ def _full_strong_stage_context(**overrides) -> pb.RHS1FullStrongRetryStageContex
     )
 
 
+def _reduced_strong_stage_context(**overrides) -> pb.RHS1ReducedStrongRetryStageContext:
+    calls = overrides.pop("calls", {})
+    rhs = overrides.get("rhs", jnp.asarray([1.0, -2.0], dtype=jnp.float64))
+    current_result = overrides.get("current_result", FakeSolveResult(residual_norm=10.0))
+    precond = overrides.get("precond", _identity)
+
+    def build_strong(kind: str, lmax: int | None):
+        calls["build_strong"] = (kind, lmax)
+        return precond
+
+    def run_measured_candidate(**kwargs):
+        calls["run_measured"] = kwargs
+        return (
+            overrides.get("candidate_result", FakeSolveResult(residual_norm=0.1)),
+            overrides.get("candidate_residual_vec", None),
+            True,
+            0.5,
+        )
+
+    def wrap(preconditioner):
+        calls["wrapped"] = preconditioner
+        return overrides.get("wrapped_precond", preconditioner)
+
+    return pb.RHS1ReducedStrongRetryStageContext(
+        strong_precond_kind=overrides.get("strong_precond_kind", "theta_line"),
+        strong_xblock_tz_lmax=overrides.get("strong_xblock_tz_lmax", 3),
+        rescue_needed=bool(overrides.get("rescue_needed", True)),
+        strong_precond_trigger=bool(overrides.get("strong_precond_trigger", True)),
+        early_dense_shortcut=bool(overrides.get("early_dense_shortcut", False)),
+        active_size=int(overrides.get("active_size", 5000)),
+        has_fp=bool(overrides.get("has_fp", True)),
+        has_pas=bool(overrides.get("has_pas", False)),
+        rhs1_precond_kind=overrides.get("rhs1_precond_kind", "point"),
+        current_result=current_result,
+        current_residual_vec=overrides.get("current_residual_vec"),
+        matvec=overrides.get("matvec", _identity),
+        rhs=rhs,
+        tol=float(overrides.get("tol", 1.0e-9)),
+        atol=float(overrides.get("atol", 1.0e-12)),
+        restart=int(overrides.get("restart", 10)),
+        maxiter=overrides.get("maxiter", 20),
+        precondition_side=overrides.get("precondition_side", "left"),
+        solver_kind=overrides.get("solver_kind", "gmres"),
+        target=float(overrides.get("target", 1.0)),
+        peak_rss_mb=float(overrides.get("peak_rss_mb", 321.0)),
+        emit=overrides.get("emit"),
+        mark=overrides.get("mark", lambda name: calls.setdefault("marks", []).append(name)),
+        replay_state=overrides.get("replay_state", object()),
+        build_strong_preconditioner=overrides.get("build_strong", build_strong),
+        wrap_pas_preconditioner=overrides.get("wrap", wrap),
+        use_pas_projection=bool(overrides.get("use_pas_projection", False)),
+        run_measured_candidate=overrides.get("run_measured", run_measured_candidate),
+        solve_linear=overrides.get("solve_linear", lambda **_kwargs: None),
+        result_ready=overrides.get("result_ready", lambda _result: True),
+    )
+
+
+def test_reduced_strong_retry_stage_builds_and_runs_explicit_request(monkeypatch) -> None:
+    monkeypatch.delenv("SFINCS_JAX_RHSMODE1_STRONG_PRECOND_RESTART", raising=False)
+    monkeypatch.delenv("SFINCS_JAX_RHSMODE1_STRONG_PRECOND_MAXITER", raising=False)
+    calls: dict[str, object] = {}
+    messages: list[str] = []
+
+    outcome = pb.run_rhs1_reduced_strong_retry_stage(
+        _reduced_strong_stage_context(
+            calls=calls,
+            emit=lambda _level, msg: messages.append(msg),
+            use_pas_projection=True,
+        )
+    )
+
+    assert calls["build_strong"] == ("theta_line", 3)
+    assert calls["marks"] == ["rhs1_strong_precond_build_start", "rhs1_strong_precond_build_done"]
+    assert calls["wrapped"] is _identity
+    measured = calls["run_measured"]
+    assert measured["precond_fn"] is _identity
+    assert measured["restart"] == 120
+    assert measured["maxiter"] == 800
+    assert measured["candidate_name"] == "strong_reduced"
+    assert measured["returns_residual_vec"] is False
+    assert outcome.accepted
+    assert outcome.selected_kind == "theta_line"
+    assert any("strong preconditioner fallback kind=theta_line" in message for message in messages)
+
+
+def test_reduced_strong_retry_stage_respects_rescue_gate() -> None:
+    calls: dict[str, object] = {}
+    current = FakeSolveResult(residual_norm=0.5)
+
+    outcome = pb.run_rhs1_reduced_strong_retry_stage(
+        _reduced_strong_stage_context(
+            calls=calls,
+            current_result=current,
+            rescue_needed=False,
+        )
+    )
+
+    assert outcome.result is current
+    assert outcome.residual_vec is None
+    assert not outcome.accepted
+    assert outcome.selected_kind == "theta_line"
+    assert outcome.preconditioner is None
+    assert calls == {}
+
+
+def test_reduced_strong_retry_stage_applies_fp_size_guard(monkeypatch) -> None:
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_FP_STRONG_PRECOND_MAX", "4")
+    calls: dict[str, object] = {}
+    messages: list[str] = []
+
+    outcome = pb.run_rhs1_reduced_strong_retry_stage(
+        _reduced_strong_stage_context(
+            calls=calls,
+            active_size=5,
+            has_fp=True,
+            has_pas=False,
+            strong_precond_kind="xblock_tz",
+            emit=lambda _level, msg: messages.append(msg),
+        )
+    )
+
+    assert not outcome.accepted
+    assert outcome.selected_kind is None
+    assert outcome.preconditioner is None
+    assert calls == {}
+    assert any("fp_max=4" in message for message in messages)
+
+
 def test_full_strong_retry_stage_builds_and_runs_explicit_request(monkeypatch) -> None:
     monkeypatch.delenv("SFINCS_JAX_RHSMODE1_STRONG_PRECOND_RESTART", raising=False)
     monkeypatch.delenv("SFINCS_JAX_RHSMODE1_STRONG_PRECOND_MAXITER", raising=False)

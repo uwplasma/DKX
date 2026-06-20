@@ -12,7 +12,9 @@ import jax.numpy as jnp
 
 from .strong_preconditioning import (
     RHS1StrongPreconditionerControl,
+    adjust_rhs1_pas_schur_strong_kind_from_env,
     resolve_rhs1_full_strong_preconditioner_selection,
+    rhs1_fp_strong_size_guard_from_env,
     rhs1_strong_preconditioner_control_messages,
     rhs1_strong_retry_controls_from_env,
 )
@@ -142,6 +144,42 @@ class RHS1FullStrongRetryStageContext:
 
 
 @dataclass(frozen=True)
+class RHS1ReducedStrongRetryStageContext:
+    """Inputs for the reduced-system strong-preconditioner retry stage."""
+
+    strong_precond_kind: str | None
+    strong_xblock_tz_lmax: int | None
+    rescue_needed: bool
+    strong_precond_trigger: bool
+    early_dense_shortcut: bool
+    active_size: int
+    has_fp: bool
+    has_pas: bool
+    rhs1_precond_kind: str | None
+    current_result: Any
+    current_residual_vec: jnp.ndarray | None
+    matvec: Callable[[jnp.ndarray], jnp.ndarray]
+    rhs: jnp.ndarray
+    tol: float
+    atol: float
+    restart: int
+    maxiter: int | None
+    precondition_side: str
+    solver_kind: str
+    target: float
+    peak_rss_mb: float
+    emit: Callable[[int, str], None] | None
+    mark: Callable[[str], None]
+    replay_state: Any
+    build_strong_preconditioner: Callable[[str, int | None], Preconditioner]
+    wrap_pas_preconditioner: Callable[[Preconditioner], Preconditioner]
+    use_pas_projection: bool
+    run_measured_candidate: Callable[..., tuple[Any, jnp.ndarray | None, bool, float]]
+    solve_linear: Callable[..., tuple[Any, jnp.ndarray | None]]
+    result_ready: Callable[[Any], bool]
+
+
+@dataclass(frozen=True)
 class RHS1FullStrongRetryStageResult:
     """Result of the full-system strong-preconditioner retry stage."""
 
@@ -151,6 +189,123 @@ class RHS1FullStrongRetryStageResult:
     elapsed_s: float | None
     selected_kind: str | None
     preconditioner: Preconditioner | None
+
+
+@dataclass(frozen=True)
+class RHS1ReducedStrongRetryStageResult:
+    """Result of the reduced-system strong-preconditioner retry stage."""
+
+    result: Any
+    residual_vec: jnp.ndarray | None
+    accepted: bool
+    elapsed_s: float | None
+    selected_kind: str | None
+    preconditioner: Preconditioner | None
+
+
+def run_rhs1_reduced_strong_retry_stage(
+    context: RHS1ReducedStrongRetryStageContext,
+) -> RHS1ReducedStrongRetryStageResult:
+    """Build and run an admitted reduced strong-preconditioner retry."""
+
+    strong_precond_kind = context.strong_precond_kind
+    residual_norm = float(context.current_result.residual_norm)
+    if not (
+        strong_precond_kind is not None
+        and bool(context.rescue_needed)
+        and bool(context.strong_precond_trigger)
+        and not bool(context.early_dense_shortcut)
+    ):
+        return RHS1ReducedStrongRetryStageResult(
+            result=context.current_result,
+            residual_vec=context.current_residual_vec,
+            accepted=False,
+            elapsed_s=None,
+            selected_kind=strong_precond_kind,
+            preconditioner=None,
+        )
+
+    fp_size_guard = rhs1_fp_strong_size_guard_from_env(
+        active_size=int(context.active_size),
+        strong_precond_kind=strong_precond_kind,
+        has_fp=bool(context.has_fp),
+        has_pas=bool(context.has_pas),
+    )
+    if fp_size_guard.skip:
+        if context.emit is not None:
+            context.emit(
+                1,
+                "solve_v3_full_system_linear_gmres: skipping strong preconditioner "
+                f"(kind={strong_precond_kind}, size={int(context.active_size)} "
+                f"> fp_max={int(fp_size_guard.max_active_size)})",
+            )
+        return RHS1ReducedStrongRetryStageResult(
+            result=context.current_result,
+            residual_vec=context.current_residual_vec,
+            accepted=False,
+            elapsed_s=None,
+            selected_kind=None,
+            preconditioner=None,
+        )
+
+    strong_precond_kind = adjust_rhs1_pas_schur_strong_kind_from_env(
+        kind=strong_precond_kind,
+        has_pas=bool(context.has_pas),
+        base_kind=context.rhs1_precond_kind,
+        residual_norm=residual_norm,
+        active_size=int(context.active_size),
+    )
+    context.mark("rhs1_strong_precond_build_start")
+    if context.emit is not None:
+        context.emit(
+            0,
+            "solve_v3_full_system_linear_gmres: strong preconditioner fallback "
+            f"kind={strong_precond_kind} "
+            f"(residual={residual_norm:.3e} > target={float(context.target):.3e})",
+        )
+
+    preconditioner = context.build_strong_preconditioner(
+        strong_precond_kind,
+        context.strong_xblock_tz_lmax,
+    )
+    context.mark("rhs1_strong_precond_build_done")
+    if context.use_pas_projection:
+        preconditioner = context.wrap_pas_preconditioner(preconditioner)
+
+    strong_retry_controls = rhs1_strong_retry_controls_from_env(
+        restart=int(context.restart),
+        maxiter=context.maxiter,
+    )
+    result, residual_vec, accepted, elapsed_s = context.run_measured_candidate(
+        replay_state=context.replay_state,
+        current_result=context.current_result,
+        current_residual_vec=context.current_residual_vec,
+        matvec_fn=context.matvec,
+        b_vec=context.rhs,
+        precond_fn=preconditioner,
+        tol=float(context.tol),
+        atol=float(context.atol),
+        restart=int(strong_retry_controls.restart),
+        maxiter=int(strong_retry_controls.maxiter),
+        solve_method="incremental",
+        precond_side=context.precondition_side,
+        solve_linear=context.solve_linear,
+        solver_kind=context.solver_kind,
+        candidate_name="strong_reduced",
+        baseline_name="current_reduced",
+        target_value=float(context.target),
+        peak_rss_mb=float(context.peak_rss_mb),
+        returns_residual_vec=False,
+        result_ready=context.result_ready,
+    )
+    return RHS1ReducedStrongRetryStageResult(
+        result=result,
+        residual_vec=residual_vec,
+        accepted=bool(accepted),
+        elapsed_s=float(elapsed_s),
+        selected_kind=strong_precond_kind,
+        preconditioner=preconditioner,
+    )
 
 
 def _parse_adi_sweeps() -> int:
@@ -645,9 +800,12 @@ __all__ = [
     "RHS1FullStrongRetryStageResult",
     "RHS1ReducedPreconditionerBuildContext",
     "RHS1ReducedPreconditionerBuildResult",
+    "RHS1ReducedStrongRetryStageContext",
+    "RHS1ReducedStrongRetryStageResult",
     "build_rhs1_full_preconditioner",
     "build_rhs1_reduced_preconditioner",
     "build_rhs1_reduced_preconditioner_with_fallback",
     "run_rhs1_full_strong_retry_stage",
+    "run_rhs1_reduced_strong_retry_stage",
     "setup_rhs1_full_base_preconditioner",
 ]

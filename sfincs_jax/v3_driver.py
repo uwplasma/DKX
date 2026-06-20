@@ -243,9 +243,11 @@ from .problems.profile_response.preconditioner_build import (
     RHS1FullPreconditionerBuildContext,
     RHS1FullStrongRetryStageContext,
     RHS1ReducedPreconditionerBuildContext,
+    RHS1ReducedStrongRetryStageContext,
     build_rhs1_full_preconditioner,
     build_rhs1_reduced_preconditioner_with_fallback,
     run_rhs1_full_strong_retry_stage,
+    run_rhs1_reduced_strong_retry_stage,
     setup_rhs1_full_base_preconditioner,
 )
 from .problems.profile_response.qi_device_seed import (
@@ -405,9 +407,7 @@ from .rhs1_strong_fallback import (
 )
 from .problems.profile_response.strong_preconditioning import (
     RHS1PostPrimaryMinresCorrectionContext,
-    adjust_rhs1_pas_schur_strong_kind_from_env,
     rhs1_collision_retry_allowed,
-    rhs1_fp_strong_size_guard_from_env,
     rhs1_pas_force_strong_ratio_from_env,
     rhs1_pas_tz_guarded_minres_controls_from_env,
     rhs1_pas_weak_minres_controls_from_env,
@@ -417,7 +417,6 @@ from .problems.profile_response.strong_preconditioning import (
     resolve_rhs1_reduced_strong_preconditioner_selection,
     rhs1_strong_preconditioner_env_from_env,
     rhs1_strong_preconditioner_control_messages,
-    rhs1_strong_retry_controls_from_env,
     rhs1_strong_trigger_controls_from_env,
     run_rhs1_post_primary_minres_corrections,
 )
@@ -9769,99 +9768,59 @@ def solve_v3_full_system_linear_gmres(
             ):
                 emit(1, message)
 
-        if (
-            strong_precond_kind is not None
-            and _rhs1_residual_needs_rescue(
-                float(res_reduced.residual_norm),
-                float(target_reduced),
-                force=bool(fp_force_strong),
-            )
-            and strong_precond_trigger
-            and not early_dense_shortcut
-        ):
-            fp_size_guard = rhs1_fp_strong_size_guard_from_env(
-                active_size=int(active_size),
-                strong_precond_kind=strong_precond_kind,
-                has_fp=op.fblock.fp is not None,
-                has_pas=op.fblock.pas is not None,
-            )
-            if fp_size_guard.skip:
-                if emit is not None:
-                    emit(
-                        1,
-                        "solve_v3_full_system_linear_gmres: skipping strong preconditioner "
-                        f"(kind={strong_precond_kind}, size={int(active_size)} "
-                        f"> fp_max={int(fp_size_guard.max_active_size)})",
-                    )
-                strong_precond_kind = None
-        if (
-            strong_precond_kind is not None
-            and _rhs1_residual_needs_rescue(
-                float(res_reduced.residual_norm),
-                float(target_reduced),
-                force=bool(fp_force_strong),
-            )
-            and strong_precond_trigger
-            and not early_dense_shortcut
-        ):
-            strong_precond_kind = adjust_rhs1_pas_schur_strong_kind_from_env(
-                kind=strong_precond_kind,
-                has_pas=op.fblock.pas is not None,
-                base_kind=rhs1_precond_kind,
-                residual_norm=float(res_reduced.residual_norm),
-                active_size=int(active_size),
-            )
-            _mark("rhs1_strong_precond_build_start")
-            if emit is not None:
-                emit(
-                    0,
-                    "solve_v3_full_system_linear_gmres: strong preconditioner fallback "
-                    f"kind={strong_precond_kind} (residual={float(res_reduced.residual_norm):.3e} > target={target_reduced:.3e})",
-                )
-
-            strong_preconditioner_reduced = _build_rhs1_strong_preconditioner_reduced_from_kind(
+        def _build_reduced_strong_candidate(kind: str, lmax: int | None):
+            return _build_rhs1_strong_preconditioner_reduced_from_kind(
                 op=op,
-                strong_precond_kind=strong_precond_kind,
+                strong_precond_kind=kind,
                 reduce_full=reduce_full,
                 expand_reduced=expand_reduced,
-                rhs1_xblock_tz_lmax=strong_xblock_tz_lmax,
+                rhs1_xblock_tz_lmax=lmax,
                 dd_block_theta=rhs1_dd_setup.block("theta"),
                 dd_overlap_theta=rhs1_dd_setup.overlap("theta", default=1),
                 dd_block_zeta=rhs1_dd_setup.block("zeta"),
                 dd_overlap_zeta=rhs1_dd_setup.overlap("zeta", default=1),
             )
-            _mark("rhs1_strong_precond_build_done")
-            if use_pas_projection:
-                strong_preconditioner_reduced = _wrap_pas_precond(strong_preconditioner_reduced)
 
-            strong_retry_controls = rhs1_strong_retry_controls_from_env(
+        reduced_strong_retry = run_rhs1_reduced_strong_retry_stage(
+            RHS1ReducedStrongRetryStageContext(
+                strong_precond_kind=strong_precond_kind,
+                strong_xblock_tz_lmax=strong_xblock_tz_lmax,
+                rescue_needed=_rhs1_residual_needs_rescue(
+                    float(res_reduced.residual_norm),
+                    float(target_reduced),
+                    force=bool(fp_force_strong),
+                ),
+                strong_precond_trigger=bool(strong_precond_trigger),
+                early_dense_shortcut=bool(early_dense_shortcut),
+                active_size=int(active_size),
+                has_fp=op.fblock.fp is not None,
+                has_pas=op.fblock.pas is not None,
+                rhs1_precond_kind=rhs1_precond_kind,
+                current_result=res_reduced,
+                current_residual_vec=residual_vec,
+                matvec=mv_reduced,
+                rhs=rhs_reduced,
+                tol=float(tol),
+                atol=float(atol),
                 restart=int(restart),
                 maxiter=maxiter,
+                precondition_side=gmres_precond_side,
+                solver_kind=_solver_kind("incremental")[0],
+                target=float(target_reduced),
+                peak_rss_mb=_rss_mb(),
+                emit=emit,
+                mark=_mark,
+                replay_state=ksp_replay,
+                build_strong_preconditioner=_build_reduced_strong_candidate,
+                wrap_pas_preconditioner=_wrap_pas_precond,
+                use_pas_projection=bool(use_pas_projection),
+                run_measured_candidate=rhs1_run_measured_linear_candidate_and_update_replay,
+                solve_linear=_solve_linear,
+                result_ready=_block_gmres_result_ready,
             )
-            res_reduced, residual_vec, _accepted, _strong_elapsed_s = (
-                rhs1_run_measured_linear_candidate_and_update_replay(
-                    replay_state=ksp_replay,
-                    current_result=res_reduced,
-                    current_residual_vec=residual_vec,
-                    matvec_fn=mv_reduced,
-                    b_vec=rhs_reduced,
-                    precond_fn=strong_preconditioner_reduced,
-                    tol=float(tol),
-                    atol=float(atol),
-                    restart=int(strong_retry_controls.restart),
-                    maxiter=int(strong_retry_controls.maxiter),
-                    solve_method="incremental",
-                    precond_side=gmres_precond_side,
-                    solve_linear=_solve_linear,
-                    solver_kind=_solver_kind("incremental")[0],
-                    candidate_name="strong_reduced",
-                    baseline_name="current_reduced",
-                    target_value=float(target_reduced),
-                    peak_rss_mb=_rss_mb(),
-                    returns_residual_vec=False,
-                    result_ready=_block_gmres_result_ready,
-                )
-            )
+        )
+        res_reduced = reduced_strong_retry.result
+        residual_vec = reduced_strong_retry.residual_vec
 
         # Only treat the probe as a "dense shortcut" when the dense branch is
         # actually allowed (probe_shortcut). Otherwise we still want to try
