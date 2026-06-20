@@ -3325,6 +3325,14 @@ class RHS1Stage2TriggerDecision:
     messages: tuple[tuple[int, str], ...] = ()
 
 
+@dataclass(frozen=True)
+class RHS1Stage2RetryAdmissionDecision:
+    """Resolved Stage-2 retry execution gate and progress messages."""
+
+    run_retry: bool
+    messages: tuple[tuple[int, str], ...] = ()
+
+
 def rhs1_stage2_ratio(*, use_dkes: bool) -> float:
     """Return the stage-2 residual-ratio trigger with DKES tightening."""
     stage2_ratio_env = os.environ.get("SFINCS_JAX_LINEAR_STAGE2_RATIO", "").strip()
@@ -3570,6 +3578,50 @@ def rhs1_stage2_trigger_decision(
     )
 
 
+def rhs1_stage2_retry_admission_decision(
+    *,
+    residual_norm: float,
+    target: float,
+    fp_force_stage2: bool,
+    stage2_enabled: bool,
+    stage2_trigger: bool,
+    early_dense_shortcut: bool,
+    gpu_dkes_sparse_shortcut: bool,
+    sparse_prefer_skips_stage2: bool,
+    elapsed_s: float,
+    time_cap_s: float,
+) -> RHS1Stage2RetryAdmissionDecision:
+    """Resolve whether the Stage-2 retry should run after trigger policy."""
+
+    residual_above_target = float(residual_norm) > float(target)
+    common_admitted = bool(stage2_enabled) and bool(stage2_trigger) and (
+        not bool(early_dense_shortcut)
+    ) and (not bool(gpu_dkes_sparse_shortcut))
+    messages: list[tuple[int, str]] = []
+    if (
+        bool(sparse_prefer_skips_stage2)
+        and residual_above_target
+        and common_admitted
+    ):
+        messages.append(
+            (
+                1,
+                "solve_v3_full_system_linear_gmres: stage2 reduced GMRES skipped "
+                "(preferring sparse rescue first)",
+            )
+        )
+    run_retry = bool(
+        (residual_above_target or bool(fp_force_stage2))
+        and common_admitted
+        and (not bool(sparse_prefer_skips_stage2))
+        and float(elapsed_s) < float(time_cap_s)
+    )
+    return RHS1Stage2RetryAdmissionDecision(
+        run_retry=bool(run_retry),
+        messages=tuple(messages),
+    )
+
+
 __all__ = (
     "RHS1Constraint0PETScCompatConfig",
     "RHS1BiCGStabFallbackControls",
@@ -3591,6 +3643,7 @@ __all__ = (
     "RHS1SparseRescueOrdering",
     "RHS1SparseRescuePolicySetup",
     "RHS1Stage2AdmissionControls",
+    "RHS1Stage2RetryAdmissionDecision",
     "RHS1Stage2RetryControls",
     "RHS1Stage2TriggerDecision",
     "parse_rhs1_pas_tz_guarded_structured_levels",
@@ -3654,6 +3707,7 @@ __all__ = (
     "rhs1_sparse_rescue_tail_skip_messages",
     "rhs1_stage2_ratio",
     "rhs1_stage2_admission_controls_from_env",
+    "rhs1_stage2_retry_admission_decision",
     "rhs1_stage2_retry_controls_from_env",
     "rhs1_stage2_trigger",
     "rhs1_stage2_trigger_decision",

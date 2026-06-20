@@ -693,6 +693,7 @@ from .problems.profile_response.policies import rhs1_pas_fast_accept as _rhs1_pa
 from .problems.profile_response.policies import (
     rhs1_pas_tz_guarded_stage2_retry,
     rhs1_stage2_admission_controls_from_env,
+    rhs1_stage2_retry_admission_decision,
     rhs1_stage2_retry_controls_from_env,
     rhs1_stage2_trigger,
     rhs1_stage2_trigger_decision,
@@ -9485,29 +9486,22 @@ def solve_v3_full_system_linear_gmres(
                     emit=emit,
                 )
             )
-        if (
-            sparse_prefer_skips_stage2
-            and float(res_reduced.residual_norm) > target_reduced
-            and stage2_enabled
-            and stage2_trigger
-            and not early_dense_shortcut
-            and not gpu_dkes_sparse_shortcut
-            and emit is not None
-        ):
-            emit(
-                1,
-                "solve_v3_full_system_linear_gmres: stage2 reduced GMRES skipped "
-                "(preferring sparse rescue first)",
-            )
-        if (
-            (float(res_reduced.residual_norm) > target_reduced or fp_force_stage2)
-            and stage2_enabled
-            and stage2_trigger
-            and not early_dense_shortcut
-            and not gpu_dkes_sparse_shortcut
-            and not sparse_prefer_skips_stage2
-            and t.elapsed_s() < stage2_time_cap_s
-        ):
+        stage2_retry_admission = rhs1_stage2_retry_admission_decision(
+            residual_norm=float(res_reduced.residual_norm),
+            target=float(target_reduced),
+            fp_force_stage2=bool(fp_force_stage2),
+            stage2_enabled=bool(stage2_enabled),
+            stage2_trigger=bool(stage2_trigger),
+            early_dense_shortcut=bool(early_dense_shortcut),
+            gpu_dkes_sparse_shortcut=bool(gpu_dkes_sparse_shortcut),
+            sparse_prefer_skips_stage2=bool(sparse_prefer_skips_stage2),
+            elapsed_s=t.elapsed_s(),
+            time_cap_s=float(stage2_time_cap_s),
+        )
+        if emit is not None:
+            for _level, _message in stage2_retry_admission.messages:
+                emit(_level, _message)
+        if stage2_retry_admission.run_retry:
             stage2_controls = rhs1_stage2_retry_controls_from_env(
                 restart=int(restart),
                 maxiter=maxiter,

@@ -8,6 +8,7 @@ from sfincs_jax.rhs1_stage2_policy import (
     rhs1_pas_tz_guarded_stage2_retry,
     rhs1_stage2_admission_controls_from_env,
     rhs1_stage2_ratio,
+    rhs1_stage2_retry_admission_decision,
     rhs1_stage2_retry_controls_from_env,
     rhs1_stage2_trigger,
     rhs1_stage2_trigger_decision,
@@ -142,6 +143,87 @@ def test_rhs1_stage2_trigger_decision_reports_guarded_pas_tz_retry_gate(
     )
     assert retry_decision.stage2_trigger
     assert retry_decision.messages == ()
+
+
+def test_rhs1_stage2_retry_admission_decision_runs_before_time_cap() -> None:
+    decision = rhs1_stage2_retry_admission_decision(
+        residual_norm=2.0,
+        target=1.0,
+        fp_force_stage2=False,
+        stage2_enabled=True,
+        stage2_trigger=True,
+        early_dense_shortcut=False,
+        gpu_dkes_sparse_shortcut=False,
+        sparse_prefer_skips_stage2=False,
+        elapsed_s=9.0,
+        time_cap_s=10.0,
+    )
+
+    assert decision.run_retry
+    assert decision.messages == ()
+
+
+def test_rhs1_stage2_retry_admission_decision_allows_fp_force_at_target() -> None:
+    decision = rhs1_stage2_retry_admission_decision(
+        residual_norm=0.5,
+        target=1.0,
+        fp_force_stage2=True,
+        stage2_enabled=True,
+        stage2_trigger=True,
+        early_dense_shortcut=False,
+        gpu_dkes_sparse_shortcut=False,
+        sparse_prefer_skips_stage2=False,
+        elapsed_s=0.0,
+        time_cap_s=10.0,
+    )
+
+    assert decision.run_retry
+    assert decision.messages == ()
+
+
+def test_rhs1_stage2_retry_admission_decision_reports_sparse_prefer_skip() -> None:
+    decision = rhs1_stage2_retry_admission_decision(
+        residual_norm=2.0,
+        target=1.0,
+        fp_force_stage2=False,
+        stage2_enabled=True,
+        stage2_trigger=True,
+        early_dense_shortcut=False,
+        gpu_dkes_sparse_shortcut=False,
+        sparse_prefer_skips_stage2=True,
+        elapsed_s=0.0,
+        time_cap_s=10.0,
+    )
+
+    assert not decision.run_retry
+    assert decision.messages == (
+        (
+            1,
+            "solve_v3_full_system_linear_gmres: stage2 reduced GMRES skipped "
+            "(preferring sparse rescue first)",
+        ),
+    )
+
+
+def test_rhs1_stage2_retry_admission_decision_respects_guards() -> None:
+    common = dict(
+        residual_norm=2.0,
+        target=1.0,
+        fp_force_stage2=False,
+        stage2_enabled=True,
+        stage2_trigger=True,
+        early_dense_shortcut=False,
+        gpu_dkes_sparse_shortcut=False,
+        sparse_prefer_skips_stage2=False,
+        elapsed_s=0.0,
+        time_cap_s=10.0,
+    )
+
+    assert not rhs1_stage2_retry_admission_decision(**{**common, "stage2_enabled": False}).run_retry
+    assert not rhs1_stage2_retry_admission_decision(**{**common, "stage2_trigger": False}).run_retry
+    assert not rhs1_stage2_retry_admission_decision(**{**common, "early_dense_shortcut": True}).run_retry
+    assert not rhs1_stage2_retry_admission_decision(**{**common, "gpu_dkes_sparse_shortcut": True}).run_retry
+    assert not rhs1_stage2_retry_admission_decision(**{**common, "elapsed_s": 10.0}).run_retry
 
 
 def test_rhs1_stage2_admission_controls_preserve_default_gate(monkeypatch) -> None:
