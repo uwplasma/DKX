@@ -3316,6 +3316,15 @@ class RHS1Stage2AdmissionControls:
     time_cap_s: float
 
 
+@dataclass(frozen=True)
+class RHS1Stage2TriggerDecision:
+    """Resolved Stage-2 trigger state and progress messages."""
+
+    stage2_trigger: bool
+    fp_force_stage2: bool
+    messages: tuple[tuple[int, str], ...] = ()
+
+
 def rhs1_stage2_ratio(*, use_dkes: bool) -> float:
     """Return the stage-2 residual-ratio trigger with DKES tightening."""
     stage2_ratio_env = os.environ.get("SFINCS_JAX_LINEAR_STAGE2_RATIO", "").strip()
@@ -3488,6 +3497,79 @@ def rhs1_pas_tz_guarded_stage2_retry() -> bool:
     return env in {"1", "true", "yes", "on"}
 
 
+def rhs1_stage2_trigger_decision(
+    *,
+    res_ratio: float,
+    use_dkes: bool,
+    has_fp: bool,
+    include_phi1: bool,
+    residual_norm: float,
+    cpu_large_xblock_shortcut: bool,
+    cpu_large_sparse_shortcut: bool,
+    has_pas: bool,
+    rhs1_precond_kind: str | None,
+    pas_tz_guarded_fallback: bool,
+    pas_tz_guarded_retry: bool,
+) -> RHS1Stage2TriggerDecision:
+    """Resolve Stage-2 trigger/skip state after the primary residual is known."""
+
+    stage2_trigger = rhs1_stage2_trigger(res_ratio=float(res_ratio), use_dkes=bool(use_dkes))
+    fp_force_stage2 = rhs1_fp_force_stage2(
+        has_fp=bool(has_fp),
+        include_phi1=bool(include_phi1),
+        residual_norm=float(residual_norm),
+    )
+    if fp_force_stage2:
+        stage2_trigger = True
+    messages: list[tuple[int, str]] = []
+    if cpu_large_xblock_shortcut:
+        stage2_trigger = False
+        messages.append(
+            (
+                1,
+                "solve_v3_full_system_linear_gmres: CPU large FP x-block shortcut "
+                "skipping stage2 GMRES and proceeding directly to x-block rescue",
+            )
+        )
+    if cpu_large_sparse_shortcut:
+        stage2_trigger = False
+        messages.append(
+            (
+                1,
+                "solve_v3_full_system_linear_gmres: CPU large FP sparse-LU shortcut "
+                "skipping stage2 GMRES and proceeding directly to sparse rescue",
+            )
+        )
+    if rhs1_pas_stage2_skip(
+        has_pas=bool(has_pas),
+        rhs1_precond_kind=rhs1_precond_kind,
+        res_ratio=float(res_ratio),
+    ):
+        stage2_trigger = False
+        messages.append(
+            (
+                1,
+                "solve_v3_full_system_linear_gmres: PAS stage2 skipped "
+                f"(residual ratio={float(res_ratio):.3e}; set the relevant PAS stage2 skip ratio to 0 to retry)",
+            )
+        )
+    if bool(pas_tz_guarded_fallback) and bool(stage2_trigger) and not bool(pas_tz_guarded_retry):
+        stage2_trigger = False
+        messages.append(
+            (
+                1,
+                "solve_v3_full_system_linear_gmres: stage2 reduced GMRES skipped "
+                "after guarded PAS-TZ fallback; set "
+                "SFINCS_JAX_RHSMODE1_PAS_TZ_GUARDED_STAGE2_RETRY=1 to retry",
+            )
+        )
+    return RHS1Stage2TriggerDecision(
+        stage2_trigger=bool(stage2_trigger),
+        fp_force_stage2=bool(fp_force_stage2),
+        messages=tuple(messages),
+    )
+
+
 __all__ = (
     "RHS1Constraint0PETScCompatConfig",
     "RHS1BiCGStabFallbackControls",
@@ -3510,6 +3592,7 @@ __all__ = (
     "RHS1SparseRescuePolicySetup",
     "RHS1Stage2AdmissionControls",
     "RHS1Stage2RetryControls",
+    "RHS1Stage2TriggerDecision",
     "parse_rhs1_pas_tz_guarded_structured_levels",
     "rhs1_bicgstab_fallback_controls_from_env",
     "rhs1_bicgstab_fallback_target_from_env",
@@ -3573,5 +3656,6 @@ __all__ = (
     "rhs1_stage2_admission_controls_from_env",
     "rhs1_stage2_retry_controls_from_env",
     "rhs1_stage2_trigger",
+    "rhs1_stage2_trigger_decision",
     "rhs1_xblock_fallback_initial_guess",
 )

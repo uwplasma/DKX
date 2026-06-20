@@ -10,6 +10,7 @@ from sfincs_jax.rhs1_stage2_policy import (
     rhs1_stage2_ratio,
     rhs1_stage2_retry_controls_from_env,
     rhs1_stage2_trigger,
+    rhs1_stage2_trigger_decision,
 )
 
 
@@ -27,6 +28,120 @@ def test_rhs1_stage2_trigger_uses_ratio_policy(monkeypatch) -> None:
     assert not rhs1_stage2_trigger(res_ratio=9.0, use_dkes=False)
     assert rhs1_stage2_trigger(res_ratio=1.1, use_dkes=True)
     assert not rhs1_stage2_trigger(res_ratio=0.9, use_dkes=True)
+
+
+def test_rhs1_stage2_trigger_decision_forces_fp_stage2(monkeypatch) -> None:
+    monkeypatch.setenv("SFINCS_JAX_LINEAR_STAGE2_RATIO", "100")
+    monkeypatch.delenv("SFINCS_JAX_FP_STAGE2_ABS", raising=False)
+
+    decision = rhs1_stage2_trigger_decision(
+        res_ratio=1.0,
+        use_dkes=False,
+        has_fp=True,
+        include_phi1=False,
+        residual_norm=2.0e-6,
+        cpu_large_xblock_shortcut=False,
+        cpu_large_sparse_shortcut=False,
+        has_pas=False,
+        rhs1_precond_kind=None,
+        pas_tz_guarded_fallback=False,
+        pas_tz_guarded_retry=False,
+    )
+
+    assert decision.stage2_trigger
+    assert decision.fp_force_stage2
+    assert decision.messages == ()
+
+
+def test_rhs1_stage2_trigger_decision_reports_shortcut_skips() -> None:
+    decision = rhs1_stage2_trigger_decision(
+        res_ratio=1.0e6,
+        use_dkes=False,
+        has_fp=True,
+        include_phi1=False,
+        residual_norm=1.0e-2,
+        cpu_large_xblock_shortcut=True,
+        cpu_large_sparse_shortcut=True,
+        has_pas=False,
+        rhs1_precond_kind=None,
+        pas_tz_guarded_fallback=False,
+        pas_tz_guarded_retry=False,
+    )
+
+    assert not decision.stage2_trigger
+    assert decision.fp_force_stage2
+    assert len(decision.messages) == 2
+    assert "x-block shortcut" in decision.messages[0][1]
+    assert "sparse-LU shortcut" in decision.messages[1][1]
+
+
+def test_rhs1_stage2_trigger_decision_reports_pas_skip(monkeypatch) -> None:
+    monkeypatch.setenv("SFINCS_JAX_PAS_STAGE2_SKIP_RATIO", "10")
+
+    decision = rhs1_stage2_trigger_decision(
+        res_ratio=11.0,
+        use_dkes=False,
+        has_fp=False,
+        include_phi1=False,
+        residual_norm=0.0,
+        cpu_large_xblock_shortcut=False,
+        cpu_large_sparse_shortcut=False,
+        has_pas=True,
+        rhs1_precond_kind="pas_hybrid",
+        pas_tz_guarded_fallback=False,
+        pas_tz_guarded_retry=False,
+    )
+
+    assert not decision.stage2_trigger
+    assert not decision.fp_force_stage2
+    assert len(decision.messages) == 1
+    assert "PAS stage2 skipped" in decision.messages[0][1]
+
+
+def test_rhs1_stage2_trigger_decision_reports_guarded_pas_tz_retry_gate(
+    monkeypatch,
+) -> None:
+    monkeypatch.setenv("SFINCS_JAX_LINEAR_STAGE2_RATIO", "10")
+
+    decision = rhs1_stage2_trigger_decision(
+        res_ratio=11.0,
+        use_dkes=False,
+        has_fp=False,
+        include_phi1=False,
+        residual_norm=0.0,
+        cpu_large_xblock_shortcut=False,
+        cpu_large_sparse_shortcut=False,
+        has_pas=False,
+        rhs1_precond_kind=None,
+        pas_tz_guarded_fallback=True,
+        pas_tz_guarded_retry=False,
+    )
+
+    assert not decision.stage2_trigger
+    assert decision.messages == (
+        (
+            1,
+            "solve_v3_full_system_linear_gmres: stage2 reduced GMRES skipped "
+            "after guarded PAS-TZ fallback; set "
+            "SFINCS_JAX_RHSMODE1_PAS_TZ_GUARDED_STAGE2_RETRY=1 to retry",
+        ),
+    )
+
+    retry_decision = rhs1_stage2_trigger_decision(
+        res_ratio=11.0,
+        use_dkes=False,
+        has_fp=False,
+        include_phi1=False,
+        residual_norm=0.0,
+        cpu_large_xblock_shortcut=False,
+        cpu_large_sparse_shortcut=False,
+        has_pas=False,
+        rhs1_precond_kind=None,
+        pas_tz_guarded_fallback=True,
+        pas_tz_guarded_retry=True,
+    )
+    assert retry_decision.stage2_trigger
+    assert retry_decision.messages == ()
 
 
 def test_rhs1_stage2_admission_controls_preserve_default_gate(monkeypatch) -> None:

@@ -347,6 +347,11 @@ Recent checkpoints:
   driver keeps shortcut admission policy and backend lookup, while handoff owns
   zero-seed construction, initial residual probing/fallback, replay-state
   mutation, and stable progress-message reason strings.
+- RHSMode=1 reduced Stage-2 trigger/skip decision and progress-message
+  formatting now use a tested `profile_response.policies` resolver. The helper
+  owns residual-ratio triggering, FP absolute-residual forcing, large-CPU
+  shortcut suppression, PAS weak-skip suppression, and guarded PAS-TZ retry
+  gating; the driver keeps only the retry execution branch.
 - RHSMode=1 PAS preconditioner probe/default routing now uses tested
   PAS-policy helpers for env parsing, tokamak-like Schur defaulting, heavy-path
   admission, large-system collision skip, and residual-threshold decisions
@@ -490,10 +495,10 @@ Recent checkpoints:
 - `cb295ce` Extract sparse pattern setup.
 - `4b6a5b4` Extract sparse factor policy.
 
-Current source-size snapshot after skip-primary handoff extraction:
+Current source-size snapshot after reduced Stage-2 trigger extraction:
 
-- `sfincs_jax/v3_driver.py`: `14790` lines.
-- `solve_v3_full_system_linear_gmres`: `10028` lines.
+- `sfincs_jax/v3_driver.py`: `14759` lines.
+- `solve_v3_full_system_linear_gmres`: `9998` lines.
 - `sfincs_jax/v3_results.py`: `119` lines.
 - `sfincs_jax/rhs1_ksp_diagnostics.py`: `306` lines.
 - `sfincs_jax/rhs1_pas_policy.py`: `889` lines.
@@ -501,7 +506,7 @@ Current source-size snapshot after skip-primary handoff extraction:
 - `sfincs_jax/problems/profile_response/strong_preconditioning.py`: `1238` lines.
 - `sfincs_jax/problems/profile_response/residual.py`: `981` lines.
 - `sfincs_jax/problems/profile_response/handoff.py`: `1167` lines.
-- `sfincs_jax/problems/profile_response/policies.py`: `3577` lines.
+- `sfincs_jax/problems/profile_response/policies.py`: `3661` lines.
 - `sfincs_jax/problems/profile_response/dense.py`: `1650` lines.
 - `sfincs_jax/problems/profile_response/linear_solve.py`: `798` lines.
 - `sfincs_jax/problems/profile_response/preconditioner_build.py`: `662` lines.
@@ -512,6 +517,18 @@ Current source-size snapshot after skip-primary handoff extraction:
 
 Recent local validation:
 
+- Reduced Stage-2 trigger/skip policy extraction:
+  `tests/test_rhs1_stage2_policy.py tests/test_rhs1_handoff.py` passed
+  (`82 passed in 0.34 s`).
+- Broad profile-response/RHSMode=1 shard after reduced Stage-2 trigger
+  extraction:
+  `tests/test_profile_response_*.py tests/test_rhs1_*.py
+  tests/test_newton_krylov_diagnostics.py tests/test_pas_smoother.py`
+  passed (`1348 passed in 84.83 s`).
+- Hygiene after reduced Stage-2 trigger extraction:
+  `py_compile`, `ruff check`, `compileall`, `git diff --check`, and
+  `python scripts/check_repo_size.py` passed. Repo-size audit reported no
+  reviewed files above 2 MiB.
 - Skip-primary Krylov seed/replay handoff extraction:
   `tests/test_rhs1_handoff.py tests/test_rhs1_large_cpu_policy.py
   tests/test_v3_driver_solve_policy_coverage.py

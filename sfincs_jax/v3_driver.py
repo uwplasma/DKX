@@ -691,12 +691,11 @@ from .problems.profile_response.policies import (
 )
 from .problems.profile_response.policies import rhs1_pas_fast_accept as _rhs1_pas_fast_accept_impl
 from .problems.profile_response.policies import (
-    rhs1_fp_force_stage2,
-    rhs1_pas_stage2_skip,
     rhs1_pas_tz_guarded_stage2_retry,
     rhs1_stage2_admission_controls_from_env,
     rhs1_stage2_retry_controls_from_env,
     rhs1_stage2_trigger,
+    rhs1_stage2_trigger_decision,
 )
 from . import solver_path_policy as _solver_path_policy
 from .rhs1_host_policy import (
@@ -9416,51 +9415,21 @@ def solve_v3_full_system_linear_gmres(
         residual_vec = minres_corrections.residual_vec
         residual_norm_true = float(minres_corrections.residual_norm_true)
         res_ratio = float(residual_norm_true) / max(float(target_reduced), 1e-300)
-        stage2_trigger = rhs1_stage2_trigger(res_ratio=res_ratio, use_dkes=bool(use_dkes))
-        fp_force_stage2 = rhs1_fp_force_stage2(
-            has_fp=op.fblock.fp is not None,
-            include_phi1=bool(op.include_phi1),
+        stage2_decision = rhs1_stage2_trigger_decision(
+            res_ratio=float(res_ratio),
+            use_dkes=bool(use_dkes),
+            has_fp=op.fblock.fp is not None, include_phi1=bool(op.include_phi1),
             residual_norm=float(res_reduced.residual_norm),
-        )
-        if fp_force_stage2:
-            stage2_trigger = True
-        if cpu_large_xblock_shortcut:
-            stage2_trigger = False
-            if emit is not None:
-                emit(
-                    1,
-                    "solve_v3_full_system_linear_gmres: CPU large FP x-block shortcut "
-                    "skipping stage2 GMRES and proceeding directly to x-block rescue",
-                )
-        if cpu_large_sparse_shortcut:
-            stage2_trigger = False
-            if emit is not None:
-                emit(
-                    1,
-                    "solve_v3_full_system_linear_gmres: CPU large FP sparse-LU shortcut "
-                    "skipping stage2 GMRES and proceeding directly to sparse rescue",
-                )
-        if rhs1_pas_stage2_skip(
             has_pas=op.fblock.pas is not None,
             rhs1_precond_kind=rhs1_precond_kind,
-            res_ratio=float(res_ratio),
-        ):
-            stage2_trigger = False
-            if emit is not None:
-                emit(
-                    1,
-                    "solve_v3_full_system_linear_gmres: PAS stage2 skipped "
-                    f"(residual ratio={res_ratio:.3e}; set the relevant PAS stage2 skip ratio to 0 to retry)",
-                )
-        if rhs1_pas_tz_guarded_fallback and stage2_trigger and not rhs1_pas_tz_guarded_stage2_retry():
-            stage2_trigger = False
-            if emit is not None:
-                emit(
-                    1,
-                    "solve_v3_full_system_linear_gmres: stage2 reduced GMRES skipped "
-                    "after guarded PAS-TZ fallback; set "
-                    "SFINCS_JAX_RHSMODE1_PAS_TZ_GUARDED_STAGE2_RETRY=1 to retry",
-                )
+            pas_tz_guarded_fallback=bool(rhs1_pas_tz_guarded_fallback),
+            pas_tz_guarded_retry=rhs1_pas_tz_guarded_stage2_retry(),
+            cpu_large_xblock_shortcut=bool(cpu_large_xblock_shortcut), cpu_large_sparse_shortcut=bool(cpu_large_sparse_shortcut),
+        )
+        stage2_trigger, fp_force_stage2 = stage2_decision.stage2_trigger, stage2_decision.fp_force_stage2
+        if emit is not None:
+            for _level, _message in stage2_decision.messages:
+                emit(_level, _message)
         early_dense_decision = rhs1_early_dense_shortcut_decision(
             early_dense_shortcut=bool(early_dense_shortcut),
             cs0_sparse_first=bool(cs0_sparse_first),
