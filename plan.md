@@ -1037,6 +1037,19 @@ Recent local validation:
 - Hygiene after generic sparse-PC post-MinRes explicit finalization:
   `python -m compileall -q sfincs_jax`, `git diff --check`, and
   `python scripts/check_repo_size.py` passed.
+- Generic sparse-PC dtype-retry explicit-finalization focused tests:
+  `3 passed in 1.09 s`.
+- Profile-response diagnostics/sparse-PC shard after generic sparse-PC
+  dtype-retry explicit finalization: `248 passed in 1.98 s`.
+- Xblock/sparse-host/minimum-norm/direct-tail driver shard after generic
+  sparse-PC dtype-retry explicit finalization:
+  `36 passed, 96 deselected in 38.26 s`.
+- Broad profile-response/RHSMode=1 policy, setup, diagnostics, solver, and
+  helper sweep after generic sparse-PC dtype-retry explicit finalization:
+  `1191 passed in 48.84 s`.
+- Hygiene after generic sparse-PC dtype-retry explicit finalization:
+  `python -m compileall -q sfincs_jax`, `git diff --check`, and
+  `python scripts/check_repo_size.py` passed.
 - Older focused and broad validation checkpoints are intentionally omitted from
   this active plan; they remain available in git history.
 
@@ -1049,7 +1062,7 @@ Known CI issue fixed by this rewrite:
 
 ### 1. `v3_driver.py` Architecture Refactor
 
-Completion estimate: 57%.
+Completion estimate: 58%.
 
 Goal:
 
@@ -1336,6 +1349,10 @@ Completed recent boundaries:
   typed `SparsePCPostMinresFinalizationContext` instead of the metadata map.
   The generic copied finalization state is down from 48 keys to 38 keys while
   dtype retry remains mapping-backed for the next explicit-context tranche.
+- Generic sparse-PC finalization now passes factor-dtype retry dependencies
+  through `SparsePCFactorDtypeRetryFinalizationContext`, removing factor
+  matvec, pattern, RHS dtype, retry seed, and PAS/tokamak retry flags from the
+  metadata map. The generic copied finalization state is down to 32 keys.
 
 Next steps:
 
@@ -1343,9 +1360,9 @@ Next steps:
   cohesive `profile_response` helpers only where the replacement context can
   stay explicit and tested.
 - Replace the remaining generic sparse-PC finalization whitelist groups with
-  typed dtype-retry, Krylov-control, and sparse-factor contexts; post-MinRes,
-  direct-tail, factor-preflight, and sparse-pattern metadata are already
-  explicit or precomputed before finalization.
+  typed Krylov-control and sparse-factor metadata contexts; dtype retry,
+  post-MinRes, direct-tail, factor-preflight, and sparse-pattern metadata are
+  already explicit or precomputed before finalization.
 - Replace the remaining whitelisted local-scope copies with typed sparse-PC
   and x-block diagnostics contexts once each key group has focused tests.
 - Continue extracting sparse-PC state/metadata seams after the source split

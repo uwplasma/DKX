@@ -42,6 +42,7 @@ from sfincs_jax.problems.profile_response.sparse_pc import (
     SparsePCGMRESCompletionMessageContext,
     SparsePCGMRESFinalPayload,
     SparsePCMemoryBudgetPreflightContext,
+    SparsePCFactorDtypeRetryFinalizationContext,
     SparsePCPostMinresFinalizationContext,
     SparsePCPatternSetupContext,
     SparsePCPostMinresContext,
@@ -7315,27 +7316,13 @@ def test_finalize_sparse_pc_gmres_with_dtype_retry_updates_copied_state(
     assert state["x_np"].tolist() == [1.0, 2.0]
 
 
-def test_finalize_sparse_pc_gmres_with_dtype_retry_uses_explicit_post_minres_context(
+def test_finalize_sparse_pc_gmres_with_dtype_retry_uses_explicit_finalization_contexts(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     calls: dict[str, object] = {}
 
-    def fake_retry(arg_state, **_kwargs):
-        calls["retry_state"] = arg_state
-        return sparse_pc_module.SparsePCFactorDtypeRetryResult(
-            retried=False,
-            factor_dtype_used=np.dtype(np.float64),
-            factor_dtype_retry=None,
-            operator_bundle="operator",
-            factor_bundle="factor",
-            factor_s_increment=0.0,
-            setup_s=None,
-            x=np.asarray([3.0, 4.0]),
-            residual_norm=0.25,
-            preconditioned_residual_norm=0.2,
-            history=(1.0, 0.25),
-            solve_s=5.0,
-        )
+    def fail_legacy_retry(*_args, **_kwargs):
+        raise AssertionError("explicit dtype context should bypass legacy retry")
 
     def fail_legacy_finalize(*_args, **_kwargs):
         raise AssertionError("explicit post-minres context should bypass legacy finalizer")
@@ -7352,7 +7339,7 @@ def test_finalize_sparse_pc_gmres_with_dtype_retry_uses_explicit_post_minres_con
     monkeypatch.setattr(
         sparse_pc_module,
         "retry_sparse_pc_factor_dtype_from_driver_state",
-        fake_retry,
+        fail_legacy_retry,
     )
     monkeypatch.setattr(
         sparse_pc_module,
@@ -7380,7 +7367,7 @@ def test_finalize_sparse_pc_gmres_with_dtype_retry_uses_explicit_post_minres_con
 
     payload = finalize_sparse_pc_gmres_with_dtype_retry(
         SparsePCGMRESFinalizationContext(
-            diagnostic_state={"emit": None},
+            diagnostic_state={"emit": None, "target": 1e-3},
             result=SparsePCGMRESResult(
                 x=np.asarray([1.0, 2.0]),
                 residual_norm=1.5,
@@ -7406,6 +7393,24 @@ def test_finalize_sparse_pc_gmres_with_dtype_retry_uses_explicit_post_minres_con
                 min_improvement=0.0,
                 target=1e-3,
             ),
+            dtype_retry=SparsePCFactorDtypeRetryFinalizationContext(
+                factor_matvec=_identity,
+                linear_size=2,
+                rhs_dtype=np.dtype(np.float64),
+                pattern=None,
+                emit=None,
+                constrained_pas_pc=False,
+                tokamak_fp_pc=False,
+                fortran_reduced_sparse_pc=False,
+                default_permc_spec="COLAMD",
+                default_factor_kind="splu",
+                default_ilu_fill_factor=4.0,
+                default_ilu_drop_tol=0.0,
+                default_pattern_color_batch=8,
+                x0_fallback=jnp.asarray([0.0, 0.0], dtype=jnp.float64),
+                pc_maxiter=5,
+                elapsed_s=elapsed_s,
+            ),
         ),
         build_host_sparse_direct_factor_from_matvec=lambda **_kwargs: None,
         run_sparse_pc_gmres_once_callback=lambda *_args, **_kwargs: None,
@@ -7418,19 +7423,20 @@ def test_finalize_sparse_pc_gmres_with_dtype_retry_uses_explicit_post_minres_con
     final_state = calls["final_state"]
     np.testing.assert_allclose(final_state["x_np"], np.asarray([2.0, 3.0]))
     assert final_state["residual_norm_sparse_pc"] == pytest.approx(0.1)
-    assert final_state["rn_pc"] == pytest.approx(0.2)
+    assert final_state["rn_pc"] == pytest.approx(1.25)
     assert final_state["sparse_pc_post_minres_steps"] == 1
     assert final_state["sparse_pc_post_minres_alpha_clip"] == pytest.approx(2.0)
     assert final_state["sparse_pc_post_minres_min_improvement"] == pytest.approx(0.0)
     assert final_state["sparse_pc_post_minres_history"] == (0.25, 0.1)
     assert final_state["sparse_pc_post_minres_alphas"] == (0.75,)
-    assert final_state["sparse_pc_post_minres_residual_before"] == pytest.approx(0.25)
+    assert final_state["sparse_pc_post_minres_residual_before"] == pytest.approx(1.5)
     assert final_state["sparse_pc_post_minres_residual_after"] == pytest.approx(0.1)
     assert final_state["sparse_pc_post_minres_error"] is None
-    assert final_state["solve_s"] == pytest.approx(5.5)
-    assert "_mv_true" not in calls["retry_state"]
-    assert "_precond_sparse" not in calls["retry_state"]
-    assert "sparse_pc_rhs" not in calls["retry_state"]
+    assert final_state["solve_s"] == pytest.approx(3.5)
+    assert "_sparse_pc_factor_mv" not in final_state
+    assert "pattern" not in final_state
+    assert "rhs" not in final_state
+    assert "x0_sparse" not in final_state
 
 
 def test_finalize_sparse_pc_gmres_with_dtype_retry_from_driver_state_delegates(
