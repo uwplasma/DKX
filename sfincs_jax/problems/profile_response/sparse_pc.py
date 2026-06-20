@@ -3943,6 +3943,43 @@ class SparseXBlockExplicitSeedResult:
 
 
 @dataclass(frozen=True)
+class SparseXBlockRescueSolveContext:
+    """Inputs for one generic sparse x-block rescue solve candidate."""
+
+    preconditioner: ArrayFn
+    rhs: jnp.ndarray
+    matvec: ArrayFn
+    current_result: GMRESSolveResult
+    target: float
+    tol: float
+    atol: float
+    restart: int
+    maxiter: int | None
+    precondition_side: str
+    active_size: int
+    use_implicit: bool
+    assembled_host_fp: bool
+    emit: EmitFn | None
+    mark: Callable[[str], None]
+    solve_linear: Callable[..., GMRESSolveResult]
+    host_gmres_solver: Callable[..., tuple[np.ndarray, float, Sequence[float]]]
+
+
+@dataclass(frozen=True)
+class SparseXBlockRescueSolveResult:
+    """Solve candidate and diagnostics for generic sparse x-block rescue."""
+
+    result: GMRESSolveResult | None
+    reason: str
+    candidate_residual: float | None = None
+    seed_residual: float | None = None
+    seed_improvement_ratio: float | None = None
+    seed_accept_ratio: float | None = None
+    seed_refine_steps: int | None = None
+    seed_refines_performed: int | None = None
+
+
+@dataclass(frozen=True)
 class FortranReducedXBlockMomentSchurStageContext:
     """Dependencies for the optional fortran-reduced moment-Schur stage."""
 
@@ -6703,6 +6740,86 @@ def apply_sparse_xblock_explicit_seed(
         refines_performed=int(performed_refines),
         reason=reason,
     )
+
+
+def run_sparse_xblock_rescue_solve_stage(
+    *,
+    context: SparseXBlockRescueSolveContext,
+) -> SparseXBlockRescueSolveResult:
+    """Run one sparse x-block rescue solve candidate without accepting it."""
+
+    context.mark("rhs1_sparse_precond_solve_start")
+    try:
+        if bool(context.use_implicit):
+            result = context.solve_linear(
+                matvec_fn=context.matvec,
+                b_vec=context.rhs,
+                precond_fn=context.preconditioner,
+                x0_vec=context.current_result.x,
+                tol_val=float(context.tol),
+                atol_val=float(context.atol),
+                restart_val=int(context.restart),
+                maxiter_val=context.maxiter,
+                solve_method_val="incremental",
+                precond_side=context.precondition_side,
+            )
+            return SparseXBlockRescueSolveResult(
+                result=result,
+                reason="started",
+            )
+
+        if bool(context.assembled_host_fp):
+            seed = apply_sparse_xblock_explicit_seed(
+                context=SparseXBlockExplicitSeedContext(
+                    preconditioner=context.preconditioner,
+                    rhs=context.rhs,
+                    matvec=context.matvec,
+                    current_result=context.current_result,
+                    target=float(context.target),
+                    tol=float(context.tol),
+                    atol=float(context.atol),
+                    restart=int(context.restart),
+                    maxiter=context.maxiter,
+                    precondition_side=context.precondition_side,
+                    active_size=int(context.active_size),
+                    emit=context.emit,
+                    polish_solver=context.host_gmres_solver,
+                )
+            )
+            return SparseXBlockRescueSolveResult(
+                result=seed.result,
+                reason=seed.reason,
+                seed_residual=float(seed.seed_residual),
+                seed_improvement_ratio=float(seed.seed_improvement_ratio),
+                seed_accept_ratio=float(seed.seed_accept_ratio),
+                seed_refine_steps=int(seed.refine_steps),
+                seed_refines_performed=int(seed.refines_performed),
+            )
+
+        x_np, _rn, _history = context.host_gmres_solver(
+            matvec=context.matvec,
+            b=context.rhs,
+            preconditioner=context.preconditioner,
+            x0=context.current_result.x,
+            tol=float(context.tol),
+            atol=float(context.atol),
+            restart=int(context.restart),
+            maxiter=context.maxiter,
+            precondition_side=context.precondition_side,
+        )
+        x_sparse_xblock = jnp.asarray(x_np, dtype=jnp.float64)
+        residual_vec = context.rhs - context.matvec(x_sparse_xblock)
+        result = GMRESSolveResult(
+            x=x_sparse_xblock,
+            residual_norm=jnp.asarray(jnp.linalg.norm(residual_vec), dtype=jnp.float64),
+        )
+        return SparseXBlockRescueSolveResult(
+            result=result,
+            reason="gmres_candidate",
+            candidate_residual=float(result.residual_norm),
+        )
+    finally:
+        context.mark("rhs1_sparse_precond_solve_done")
 
 
 def apply_fortran_reduced_xblock_moment_schur_stage(
@@ -15812,6 +15929,8 @@ __all__ = [
     "SparseXBlockExplicitSeedResult",
     "SparseXBlockRescueBuildContext",
     "SparseXBlockRescueBuildResult",
+    "SparseXBlockRescueSolveContext",
+    "SparseXBlockRescueSolveResult",
     "SparsePCDirectTailFinalMetadataContext",
     "ExplicitSparseOperatorBuildPolicy",
     "ExplicitSparseOperatorBuildResult",
@@ -15891,6 +16010,7 @@ __all__ = [
     "retry_sparse_pc_factor_dtype_from_driver_state",
     "retry_sparse_pc_factor_dtype_from_finalization_context",
     "run_fortran_reduced_xblock_krylov_solve",
+    "run_sparse_xblock_rescue_solve_stage",
     "run_sparse_pc_gmres_once",
     "run_sparse_pc_gmres_once_for_retry",
     "finalize_sparse_pc_gmres_bundle",

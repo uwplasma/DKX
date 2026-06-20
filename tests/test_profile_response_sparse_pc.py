@@ -76,6 +76,7 @@ from sfincs_jax.problems.profile_response.sparse_pc import (
     SparseJAXRetryPreconditionerBuildContext,
     SparseXBlockExplicitSeedContext,
     SparseXBlockRescueBuildContext,
+    SparseXBlockRescueSolveContext,
     ExplicitSparseOperatorBuildPolicy,
     ExplicitSparseOperatorBuildResult,
     SparsePCDirectTailFinalMetadataContext,
@@ -244,6 +245,7 @@ from sfincs_jax.problems.profile_response.sparse_pc import (
     run_fortran_reduced_xblock_krylov_solve,
     run_xblock_first_krylov_attempt,
     run_xblock_krylov_solve_stage,
+    run_sparse_xblock_rescue_solve_stage,
     run_sparse_pc_gmres_once,
     run_sparse_pc_gmres_once_for_retry,
     run_xblock_gmres_fallback_if_needed,
@@ -4237,6 +4239,123 @@ def test_sparse_xblock_explicit_seed_rejects_bad_seed(monkeypatch) -> None:
     assert result.refines_performed == 0
     assert result.reason == "seed_rejected_accept_gate"
     assert any("explicit FP x-block seed rejected" in message for message in messages)
+
+
+def test_sparse_xblock_rescue_solve_stage_dispatches_implicit_solver() -> None:
+    calls: dict[str, object] = {}
+    marks: list[str] = []
+    expected = GMRESSolveResult(
+        x=jnp.asarray([2.0], dtype=jnp.float64),
+        residual_norm=jnp.asarray(0.25, dtype=jnp.float64),
+    )
+
+    def solve_linear(**kwargs):
+        calls["solve_linear"] = kwargs
+        return expected
+
+    result = run_sparse_xblock_rescue_solve_stage(
+        context=SparseXBlockRescueSolveContext(
+            preconditioner=_identity,
+            rhs=jnp.asarray([1.0], dtype=jnp.float64),
+            matvec=_identity,
+            current_result=GMRESSolveResult(
+                x=jnp.asarray([0.0], dtype=jnp.float64),
+                residual_norm=jnp.asarray(2.0, dtype=jnp.float64),
+            ),
+            target=1.0e-9,
+            tol=1.0e-9,
+            atol=1.0e-12,
+            restart=20,
+            maxiter=40,
+            precondition_side="left",
+            active_size=10,
+            use_implicit=True,
+            assembled_host_fp=False,
+            emit=None,
+            mark=marks.append,
+            solve_linear=solve_linear,
+            host_gmres_solver=lambda **_kwargs: (_ for _ in ()).throw(AssertionError("host not used")),
+        )
+    )
+
+    assert result.result is expected
+    assert result.reason == "started"
+    assert result.candidate_residual is None
+    assert marks == ["rhs1_sparse_precond_solve_start", "rhs1_sparse_precond_solve_done"]
+    assert calls["solve_linear"]["solve_method_val"] == "incremental"
+    assert calls["solve_linear"]["precond_fn"] is _identity
+
+
+def test_sparse_xblock_rescue_solve_stage_builds_host_gmres_candidate() -> None:
+    marks: list[str] = []
+
+    result = run_sparse_xblock_rescue_solve_stage(
+        context=SparseXBlockRescueSolveContext(
+            preconditioner=_identity,
+            rhs=jnp.asarray([1.0], dtype=jnp.float64),
+            matvec=_identity,
+            current_result=GMRESSolveResult(
+                x=jnp.asarray([0.0], dtype=jnp.float64),
+                residual_norm=jnp.asarray(2.0, dtype=jnp.float64),
+            ),
+            target=1.0e-9,
+            tol=1.0e-9,
+            atol=1.0e-12,
+            restart=20,
+            maxiter=40,
+            precondition_side="left",
+            active_size=10,
+            use_implicit=False,
+            assembled_host_fp=False,
+            emit=None,
+            mark=marks.append,
+            solve_linear=lambda **_kwargs: (_ for _ in ()).throw(AssertionError("implicit not used")),
+            host_gmres_solver=lambda **_kwargs: (np.asarray([0.75]), 0.0, ()),
+        )
+    )
+
+    assert result.result is not None
+    assert float(result.result.residual_norm) == pytest.approx(0.25)
+    assert result.candidate_residual == pytest.approx(0.25)
+    assert result.reason == "gmres_candidate"
+    assert marks == ["rhs1_sparse_precond_solve_start", "rhs1_sparse_precond_solve_done"]
+
+
+def test_sparse_xblock_rescue_solve_stage_routes_assembled_seed(monkeypatch) -> None:
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_FP_XBLOCK_POLISH", "0")
+    marks: list[str] = []
+
+    result = run_sparse_xblock_rescue_solve_stage(
+        context=SparseXBlockRescueSolveContext(
+            preconditioner=lambda v: 0.5 * v,
+            rhs=jnp.asarray([1.0], dtype=jnp.float64),
+            matvec=_identity,
+            current_result=GMRESSolveResult(
+                x=jnp.asarray([0.0], dtype=jnp.float64),
+                residual_norm=jnp.asarray(10.0, dtype=jnp.float64),
+            ),
+            target=1.0e-9,
+            tol=1.0e-9,
+            atol=1.0e-12,
+            restart=20,
+            maxiter=40,
+            precondition_side="left",
+            active_size=10,
+            use_implicit=False,
+            assembled_host_fp=True,
+            emit=None,
+            mark=marks.append,
+            solve_linear=lambda **_kwargs: (_ for _ in ()).throw(AssertionError("implicit not used")),
+            host_gmres_solver=lambda **_kwargs: (_ for _ in ()).throw(AssertionError("polish disabled")),
+        )
+    )
+
+    assert result.result is not None
+    assert float(result.result.residual_norm) == pytest.approx(0.125)
+    assert result.reason == "seed_accepted"
+    assert result.seed_residual == pytest.approx(0.5)
+    assert result.seed_refines_performed == 2
+    assert marks == ["rhs1_sparse_precond_solve_start", "rhs1_sparse_precond_solve_done"]
 
 
 def test_fortran_reduced_xblock_krylov_policy_defaults_and_counter() -> None:

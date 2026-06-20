@@ -390,6 +390,11 @@ Recent checkpoints:
   residual refinement, accept-ratio parsing, optional bounded GMRES polish, and
   progress messages; the driver keeps metadata assignment and final acceptance
   against the current solve.
+- RHSMode=1 generic sparse x-block solve-candidate execution now uses a tested
+  `profile_response.sparse_pc` stage. The stage owns implicit-Krylov dispatch,
+  explicit assembled-host seed routing, host-GMRES candidate construction, and
+  solve phase markers; the driver keeps result acceptance, replay-state
+  handoff, and metadata assignment.
 - RHSMode=1 PAS preconditioner probe/default routing now uses tested
   PAS-policy helpers for env parsing, tokamak-like Schur defaulting, heavy-path
   admission, large-system collision skip, and residual-threshold decisions
@@ -533,10 +538,10 @@ Recent checkpoints:
 - `cb295ce` Extract sparse pattern setup.
 - `4b6a5b4` Extract sparse factor policy.
 
-Current source-size snapshot after explicit FP x-block seed extraction:
+Current source-size snapshot after generic sparse x-block solve-stage extraction:
 
-- `sfincs_jax/v3_driver.py`: `14545` lines.
-- `solve_v3_full_system_linear_gmres`: `9775` lines.
+- `sfincs_jax/v3_driver.py`: `14522` lines.
+- `solve_v3_full_system_linear_gmres`: `9752` lines.
 - `sfincs_jax/v3_results.py`: `119` lines.
 - `sfincs_jax/rhs1_ksp_diagnostics.py`: `306` lines.
 - `sfincs_jax/rhs1_pas_policy.py`: `889` lines.
@@ -549,12 +554,25 @@ Current source-size snapshot after explicit FP x-block seed extraction:
 - `sfincs_jax/problems/profile_response/linear_solve.py`: `798` lines.
 - `sfincs_jax/problems/profile_response/preconditioner_build.py`: `811` lines.
 - `sfincs_jax/problems/profile_response/active_projection.py`: `203` lines.
-- `sfincs_jax/problems/profile_response/sparse_pc.py`: `15962` lines.
+- `sfincs_jax/problems/profile_response/sparse_pc.py`: `16082` lines.
 - `sfincs_jax/problems/profile_response/solver_diagnostics.py`: `421` lines.
 - `sfincs_jax/rhs1_xblock_policy.py`: `1215` lines.
 
 Recent local validation:
 
+- Generic sparse x-block solve-stage extraction:
+  `tests/test_profile_response_sparse_pc.py
+  tests/test_v3_driver_rhs1_dispatch_coverage.py` passed
+  (`338 passed in 23.36 s`).
+- Broad profile-response/RHSMode=1 shard after generic sparse x-block
+  solve-stage extraction:
+  `tests/test_profile_response_*.py tests/test_rhs1_*.py
+  tests/test_newton_krylov_diagnostics.py tests/test_pas_smoother.py`
+  passed (`1370 passed in 86.05 s`).
+- Hygiene after generic sparse x-block solve-stage extraction:
+  `py_compile`, `ruff check`, `compileall`, `git diff --check`, and
+  `python scripts/check_repo_size.py` passed. Repo-size audit reported no
+  reviewed files above 2 MiB.
 - Explicit FP x-block seed extraction:
   `tests/test_profile_response_sparse_pc.py
   tests/test_v3_driver_rhs1_dispatch_coverage.py` passed

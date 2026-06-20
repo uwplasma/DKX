@@ -390,10 +390,10 @@ from .problems.profile_response.sparse_pc import (
     run_fortran_reduced_xblock_krylov_solve,
     run_sparse_pc_gmres_once,
     run_sparse_pc_gmres_once_for_retry,
-    SparseXBlockExplicitSeedContext,
     SparseXBlockRescueBuildContext,
-    apply_sparse_xblock_explicit_seed,
+    SparseXBlockRescueSolveContext,
     build_sparse_xblock_rescue_preconditioner,
+    run_sparse_xblock_rescue_solve_stage,
     run_xblock_krylov_solve_stage,
     xblock_sparse_pc_final_metadata_state_from_context,
     build_sparse_host_or_ilu_factor,
@@ -10015,78 +10015,55 @@ def solve_v3_full_system_linear_gmres(
                     sparse_xblock_rescue_built = True
                     sparse_xblock_rescue_assembled_host_fp = bool(assembled_host_fp)
                     sparse_xblock_rescue_preconditioner_xi = int(sparse_xblock_preconditioner_xi)
-                    _mark("rhs1_sparse_precond_solve_start")
-                    if use_implicit:
-                        res_sparse_xblock = _solve_linear(
-                            matvec_fn=mv_reduced,
-                            b_vec=rhs_reduced,
-                            precond_fn=precond_sparse_xblock,
-                            x0_vec=res_reduced.x,
-                            tol_val=tol,
-                            atol_val=atol,
-                            restart_val=restart,
-                            maxiter_val=maxiter,
-                            solve_method_val="incremental",
-                            precond_side=gmres_precond_side,
+                    sparse_xblock_solve = run_sparse_xblock_rescue_solve_stage(
+                        context=SparseXBlockRescueSolveContext(
+                            preconditioner=precond_sparse_xblock,
+                            rhs=rhs_reduced,
+                            matvec=mv_reduced,
+                            current_result=res_reduced,
+                            target=float(target_reduced),
+                            tol=float(tol),
+                            atol=float(atol),
+                            restart=int(restart),
+                            maxiter=maxiter,
+                            precondition_side=gmres_precond_side,
+                            active_size=int(active_size),
+                            use_implicit=bool(use_implicit),
+                            assembled_host_fp=bool(assembled_host_fp),
+                            emit=emit,
+                            mark=_mark,
+                            solve_linear=_solve_linear,
+                            host_gmres_solver=gmres_solve_with_history_scipy,
                         )
-                    else:
-                        res_sparse_xblock = None
-                        if assembled_host_fp:
-                            explicit_seed = apply_sparse_xblock_explicit_seed(
-                                context=SparseXBlockExplicitSeedContext(
-                                    preconditioner=precond_sparse_xblock,
-                                    rhs=rhs_reduced,
-                                    matvec=mv_reduced,
-                                    current_result=res_reduced,
-                                    target=float(target_reduced),
-                                    tol=float(tol),
-                                    atol=float(atol),
-                                    restart=int(restart),
-                                    maxiter=maxiter,
-                                    precondition_side=gmres_precond_side,
-                                    active_size=int(active_size),
-                                    emit=emit,
-                                    polish_solver=gmres_solve_with_history_scipy,
-                                )
-                            )
-                            res_sparse_xblock = explicit_seed.result
-                            explicit_fp_xblock_seed_residual = float(explicit_seed.seed_residual)
-                            sparse_xblock_rescue_seed_residual = float(explicit_seed.seed_residual)
-                            explicit_fp_xblock_seed_improvement_ratio = float(
-                                explicit_seed.seed_improvement_ratio
-                            )
-                            sparse_xblock_rescue_seed_improvement_ratio = float(
-                                explicit_seed.seed_improvement_ratio
-                            )
-                            sparse_xblock_rescue_seed_accept_ratio = float(
-                                explicit_seed.seed_accept_ratio
-                            )
-                            sparse_xblock_rescue_seed_refine_steps = int(explicit_seed.refine_steps)
-                            sparse_xblock_rescue_seed_refines_performed = int(
-                                explicit_seed.refines_performed
-                            )
-                            sparse_xblock_rescue_reason = str(explicit_seed.reason)
-                        else:
-                            x_np, _rn_sparse_xblock, _history = gmres_solve_with_history_scipy(
-                                matvec=mv_reduced,
-                                b=rhs_reduced,
-                                preconditioner=precond_sparse_xblock,
-                                x0=res_reduced.x,
-                                tol=tol,
-                                atol=atol,
-                                restart=restart,
-                                maxiter=maxiter,
-                                precondition_side=gmres_precond_side,
-                            )
-                            x_sparse_xblock = jnp.asarray(x_np, dtype=jnp.float64)
-                            residual_vec_sparse_xblock = rhs_reduced - mv_reduced(x_sparse_xblock)
-                            res_sparse_xblock = GMRESSolveResult(
-                                x=x_sparse_xblock,
-                                residual_norm=jnp.asarray(jnp.linalg.norm(residual_vec_sparse_xblock), dtype=jnp.float64),
-                            )
-                            sparse_xblock_rescue_candidate_residual = float(res_sparse_xblock.residual_norm)
-                            sparse_xblock_rescue_reason = "gmres_candidate"
-                    _mark("rhs1_sparse_precond_solve_done")
+                    )
+                    res_sparse_xblock = sparse_xblock_solve.result
+                    sparse_xblock_rescue_reason = str(sparse_xblock_solve.reason)
+                    if sparse_xblock_solve.candidate_residual is not None:
+                        sparse_xblock_rescue_candidate_residual = float(
+                            sparse_xblock_solve.candidate_residual
+                        )
+                    if sparse_xblock_solve.seed_residual is not None:
+                        explicit_fp_xblock_seed_residual = float(sparse_xblock_solve.seed_residual)
+                        sparse_xblock_rescue_seed_residual = float(sparse_xblock_solve.seed_residual)
+                    if sparse_xblock_solve.seed_improvement_ratio is not None:
+                        explicit_fp_xblock_seed_improvement_ratio = float(
+                            sparse_xblock_solve.seed_improvement_ratio
+                        )
+                        sparse_xblock_rescue_seed_improvement_ratio = float(
+                            sparse_xblock_solve.seed_improvement_ratio
+                        )
+                    if sparse_xblock_solve.seed_accept_ratio is not None:
+                        sparse_xblock_rescue_seed_accept_ratio = float(
+                            sparse_xblock_solve.seed_accept_ratio
+                        )
+                    if sparse_xblock_solve.seed_refine_steps is not None:
+                        sparse_xblock_rescue_seed_refine_steps = int(
+                            sparse_xblock_solve.seed_refine_steps
+                        )
+                    if sparse_xblock_solve.seed_refines_performed is not None:
+                        sparse_xblock_rescue_seed_refines_performed = int(
+                            sparse_xblock_solve.seed_refines_performed
+                        )
                     if res_sparse_xblock is not None and float(res_sparse_xblock.residual_norm) < float(res_reduced.residual_norm):
                         sparse_xblock_rescue_candidate_accepted = True
                         sparse_xblock_rescue_candidate_residual = float(res_sparse_xblock.residual_norm)
