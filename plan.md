@@ -1108,6 +1108,15 @@ Recent local validation:
 - Broad profile-response/RHSMode=1 policy, setup, diagnostics, solver, and
   helper sweep after generic sparse-PC typed finalization-state handoff:
   `1193 passed in 47.58 s`.
+- RHSMode=1 PAS/Schwarz monkeypatch compatibility tests after preconditioner
+  wrapper alias cleanup: `31 passed in 9.30 s`.
+- Broad profile-response/RHSMode=1 policy, setup, diagnostics, solver, and
+  helper sweep after preconditioner wrapper alias cleanup:
+  `1193 passed in 49.22 s`.
+- Xblock/sparse-host/minimum-norm/direct-tail driver shard after preconditioner
+  wrapper alias cleanup: `36 passed, 96 deselected in 40.57 s`.
+- Transport/preconditioner dispatch shard after preconditioner wrapper alias
+  cleanup: `554 passed in 29.70 s`.
 - Older focused and broad validation checkpoints are intentionally omitted from
   this active plan; they remain available in git history.
 
@@ -1120,7 +1129,7 @@ Known CI issue fixed by this rewrite:
 
 ### 1. `v3_driver.py` Architecture Refactor
 
-Completion estimate: 65%.
+Completion estimate: 67%.
 
 Goal:
 
@@ -1197,6 +1206,9 @@ Completed recent boundaries:
 - X-block sparse-PC nested diagnostics and final metadata state now use typed
   contexts directly from the driver; production x-block finalization no longer
   depends on a `locals()` frame copy.
+- Pure forwarding preconditioner compatibility wrappers in `v3_driver.py` are
+  now patchable aliases to their domain implementations, removing about 575
+  net driver lines while preserving existing monkeypatch-based tests.
 - RHSMode=1 rescue/refinement candidate acceptance and KSP replay-state updates
   consolidated into profile-response handoff helpers.
 - RHSMode=1 true-residual recomputation before fallback decisions consolidated

@@ -2013,94 +2013,12 @@ def _transport_precond_cache_key(op: V3FullSystemOperator, kind: str) -> tuple[o
     return _transport_precond_cache_key_impl(op, kind, precond_dtype=_precond_dtype())
 
 
-def _build_rhsmode23_collision_preconditioner(
-    *,
-    op: V3FullSystemOperator,
-    reduce_full: Callable[[jnp.ndarray], jnp.ndarray] | None = None,
-    expand_reduced: Callable[[jnp.ndarray], jnp.ndarray] | None = None,
-) -> Callable[[jnp.ndarray], jnp.ndarray]:
-    """Compatibility wrapper for the RHSMode=2/3 collision preconditioner."""
-    return build_rhsmode23_collision_preconditioner(
-        op=op,
-        reduce_full=reduce_full,
-        expand_reduced=expand_reduced,
-    )
-
-
-
-def _build_rhsmode23_sxblock_preconditioner(
-    *,
-    op: V3FullSystemOperator,
-    reduce_full: Callable[[jnp.ndarray], jnp.ndarray] | None = None,
-    expand_reduced: Callable[[jnp.ndarray], jnp.ndarray] | None = None,
-) -> Callable[[jnp.ndarray], jnp.ndarray]:
-    """Compatibility wrapper for the RHSMode=2/3 species/x-block preconditioner."""
-    return build_rhsmode23_sxblock_preconditioner(
-        op=op,
-        reduce_full=reduce_full,
-        expand_reduced=expand_reduced,
-    )
-
-
-
-def _build_rhsmode23_xmg_preconditioner(
-    *,
-    op: V3FullSystemOperator,
-    reduce_full: Callable[[jnp.ndarray], jnp.ndarray] | None = None,
-    expand_reduced: Callable[[jnp.ndarray], jnp.ndarray] | None = None,
-) -> Callable[[jnp.ndarray], jnp.ndarray]:
-    """Compatibility wrapper for the RHSMode=2/3 x-grid multilevel preconditioner."""
-    return build_rhsmode23_xmg_preconditioner(
-        op=op,
-        reduce_full=reduce_full,
-        expand_reduced=expand_reduced,
-    )
-
-
-
-def _build_rhsmode1_xmg_preconditioner(
-    *,
-    op: V3FullSystemOperator,
-    reduce_full: Callable[[jnp.ndarray], jnp.ndarray] | None = None,
-    expand_reduced: Callable[[jnp.ndarray], jnp.ndarray] | None = None,
-    stride_override: int | None = None,
-) -> Callable[[jnp.ndarray], jnp.ndarray]:
-    """Compatibility wrapper for the RHSMode=1 radial x-multigrid preconditioner."""
-    return build_rhs1_xmg_preconditioner(
-        op=op,
-        reduce_full=reduce_full,
-        expand_reduced=expand_reduced,
-        stride_override=stride_override,
-    )
-
-
-def _build_rhsmode1_xupwind_preconditioner(
-    *,
-    op: V3FullSystemOperator,
-    reduce_full: Callable[[jnp.ndarray], jnp.ndarray] | None = None,
-    expand_reduced: Callable[[jnp.ndarray], jnp.ndarray] | None = None,
-) -> Callable[[jnp.ndarray], jnp.ndarray]:
-    """Compatibility wrapper for the RHSMode=1 radial x-upwind preconditioner."""
-    return build_rhs1_xupwind_preconditioner(
-        op=op,
-        reduce_full=reduce_full,
-        expand_reduced=expand_reduced,
-    )
-
-
-def _build_rhsmode23_tzfft_preconditioner(
-    *,
-    op: V3FullSystemOperator,
-    reduce_full: Callable[[jnp.ndarray], jnp.ndarray] | None = None,
-    expand_reduced: Callable[[jnp.ndarray], jnp.ndarray] | None = None,
-) -> Callable[[jnp.ndarray], jnp.ndarray]:
-    """Compatibility wrapper for the RHSMode=2/3 angular FFT preconditioner."""
-    return build_rhsmode23_tzfft_preconditioner(
-        op=op,
-        reduce_full=reduce_full,
-        expand_reduced=expand_reduced,
-    )
-
+_build_rhsmode23_collision_preconditioner = build_rhsmode23_collision_preconditioner
+_build_rhsmode23_sxblock_preconditioner = build_rhsmode23_sxblock_preconditioner
+_build_rhsmode23_xmg_preconditioner = build_rhsmode23_xmg_preconditioner
+_build_rhsmode1_xmg_preconditioner = build_rhs1_xmg_preconditioner
+_build_rhsmode1_xupwind_preconditioner = build_rhs1_xupwind_preconditioner
+_build_rhsmode23_tzfft_preconditioner = build_rhsmode23_tzfft_preconditioner
 
 
 def _build_rhsmode1_pas_tokamak_theta_preconditioner(
@@ -2142,57 +2060,9 @@ def _build_rhsmode1_pas_tz_preconditioner(
     )
 
 
-def _build_rhsmode1_collision_preconditioner(
-    *,
-    op: V3FullSystemOperator,
-    reduce_full: Callable[[jnp.ndarray], jnp.ndarray] | None = None,
-    expand_reduced: Callable[[jnp.ndarray], jnp.ndarray] | None = None,
-) -> Callable[[jnp.ndarray], jnp.ndarray]:
-    """Compatibility wrapper for the canonical collision preconditioner."""
-
-    return build_rhs1_collision_preconditioner(
-        op=op,
-        reduce_full=reduce_full,
-        expand_reduced=expand_reduced,
-    )
-
-
-def _build_rhsmode1_block_preconditioner_xdiag(
-    *,
-    op: V3FullSystemOperator,
-    reduce_full: Callable[[jnp.ndarray], jnp.ndarray] | None = None,
-    expand_reduced: Callable[[jnp.ndarray], jnp.ndarray] | None = None,
-    preconditioner_xi: int = 1,
-) -> Callable[[jnp.ndarray], jnp.ndarray]:
-    """Compatibility wrapper for the canonical point-xdiag preconditioner."""
-
-    return build_rhs1_block_preconditioner_xdiag(
-        op=op,
-        reduce_full=reduce_full,
-        expand_reduced=expand_reduced,
-        preconditioner_xi=preconditioner_xi,
-    )
-
-
-def _build_rhsmode1_block_preconditioner(
-    *,
-    op: V3FullSystemOperator,
-    reduce_full: Callable[[jnp.ndarray], jnp.ndarray] | None = None,
-    expand_reduced: Callable[[jnp.ndarray], jnp.ndarray] | None = None,
-    preconditioner_species: int = 1,
-    preconditioner_x: int = 1,
-    preconditioner_xi: int = 1,
-) -> Callable[[jnp.ndarray], jnp.ndarray]:
-    """Compatibility wrapper for the canonical point-block preconditioner."""
-
-    return build_rhs1_block_preconditioner(
-        op=op,
-        reduce_full=reduce_full,
-        expand_reduced=expand_reduced,
-        preconditioner_species=preconditioner_species,
-        preconditioner_x=preconditioner_x,
-        preconditioner_xi=preconditioner_xi,
-    )
+_build_rhsmode1_collision_preconditioner = build_rhs1_collision_preconditioner
+_build_rhsmode1_block_preconditioner_xdiag = build_rhs1_block_preconditioner_xdiag
+_build_rhsmode1_block_preconditioner = build_rhs1_block_preconditioner
 
 
 def _build_rhsmode23_theta_dd_preconditioner(
@@ -2263,110 +2133,25 @@ def _build_rhsmode23_zeta_schwarz_preconditioner(
     )
 
 
-def _build_rhsmode23_block_preconditioner(
-    *,
-    op: V3FullSystemOperator,
-    reduce_full: Callable[[jnp.ndarray], jnp.ndarray] | None = None,
-    expand_reduced: Callable[[jnp.ndarray], jnp.ndarray] | None = None,
-) -> Callable[[jnp.ndarray], jnp.ndarray]:
-    """Compatibility wrapper for the RHSMode=2/3 point-block preconditioner."""
-    return build_rhsmode23_block_preconditioner(
-        op=op,
-        reduce_full=reduce_full,
-        expand_reduced=expand_reduced,
-    )
+_build_rhsmode23_block_preconditioner = build_rhsmode23_block_preconditioner
 
 
-
-def _build_rhsmode23_fp_tzfft_preconditioner(
-    *,
-    op: V3FullSystemOperator,
-    reduce_full: Callable[[jnp.ndarray], jnp.ndarray] | None = None,
-    expand_reduced: Callable[[jnp.ndarray], jnp.ndarray] | None = None,
-) -> Callable[[jnp.ndarray], jnp.ndarray]:
-    """Compatibility wrapper for ``build_rhsmode23_fp_tzfft_preconditioner``."""
-    return build_rhsmode23_fp_tzfft_preconditioner(
-        op=op,
-        reduce_full=reduce_full,
-        expand_reduced=expand_reduced,
-    )
-
-
-
-def _build_rhsmode23_fp_tzfft_line_preconditioner(
-    *,
-    op: V3FullSystemOperator,
-    reduce_full: Callable[[jnp.ndarray], jnp.ndarray] | None = None,
-    expand_reduced: Callable[[jnp.ndarray], jnp.ndarray] | None = None,
-) -> Callable[[jnp.ndarray], jnp.ndarray]:
-    """Compatibility wrapper for ``build_rhsmode23_fp_tzfft_line_preconditioner``."""
-    return build_rhsmode23_fp_tzfft_line_preconditioner(
-        op=op,
-        reduce_full=reduce_full,
-        expand_reduced=expand_reduced,
-    )
-
-
-
-def _build_rhsmode23_fp_tzfft_line_schur_preconditioner(
-    *,
-    op: V3FullSystemOperator,
-    reduce_full: Callable[[jnp.ndarray], jnp.ndarray] | None = None,
-    expand_reduced: Callable[[jnp.ndarray], jnp.ndarray] | None = None,
-) -> Callable[[jnp.ndarray], jnp.ndarray]:
-    """Compatibility wrapper for ``build_rhsmode23_fp_tzfft_line_schur_preconditioner``."""
-    return build_rhsmode23_fp_tzfft_line_schur_preconditioner(
-        op=op,
-        reduce_full=reduce_full,
-        expand_reduced=expand_reduced,
-    )
-
-
-
-def _build_rhsmode23_fp_local_geom_line_preconditioner(
-    *,
-    op: V3FullSystemOperator,
-    reduce_full: Callable[[jnp.ndarray], jnp.ndarray] | None = None,
-    expand_reduced: Callable[[jnp.ndarray], jnp.ndarray] | None = None,
-) -> Callable[[jnp.ndarray], jnp.ndarray]:
-    """Compatibility wrapper for ``build_rhsmode23_fp_local_geom_line_preconditioner``."""
-    return build_rhsmode23_fp_local_geom_line_preconditioner(
-        op=op,
-        reduce_full=reduce_full,
-        expand_reduced=expand_reduced,
-    )
-
-
-
-def _build_rhsmode23_fp_xblock_tz_lu_preconditioner(
-    *,
-    op: V3FullSystemOperator,
-    reduce_full: Callable[[jnp.ndarray], jnp.ndarray] | None = None,
-    expand_reduced: Callable[[jnp.ndarray], jnp.ndarray] | None = None,
-) -> Callable[[jnp.ndarray], jnp.ndarray]:
-    """Compatibility wrapper for ``build_rhsmode23_fp_xblock_tz_lu_preconditioner``."""
-    return build_rhsmode23_fp_xblock_tz_lu_preconditioner(
-        op=op,
-        reduce_full=reduce_full,
-        expand_reduced=expand_reduced,
-    )
-
-
-
-def _build_rhsmode23_fp_xblock_tz_lu_schur_preconditioner(
-    *,
-    op: V3FullSystemOperator,
-    reduce_full: Callable[[jnp.ndarray], jnp.ndarray] | None = None,
-    expand_reduced: Callable[[jnp.ndarray], jnp.ndarray] | None = None,
-) -> Callable[[jnp.ndarray], jnp.ndarray]:
-    """Compatibility wrapper for ``build_rhsmode23_fp_xblock_tz_lu_schur_preconditioner``."""
-    return build_rhsmode23_fp_xblock_tz_lu_schur_preconditioner(
-        op=op,
-        reduce_full=reduce_full,
-        expand_reduced=expand_reduced,
-    )
-
-
+_build_rhsmode23_fp_tzfft_preconditioner = build_rhsmode23_fp_tzfft_preconditioner
+_build_rhsmode23_fp_tzfft_line_preconditioner = (
+    build_rhsmode23_fp_tzfft_line_preconditioner
+)
+_build_rhsmode23_fp_tzfft_line_schur_preconditioner = (
+    build_rhsmode23_fp_tzfft_line_schur_preconditioner
+)
+_build_rhsmode23_fp_local_geom_line_preconditioner = (
+    build_rhsmode23_fp_local_geom_line_preconditioner
+)
+_build_rhsmode23_fp_xblock_tz_lu_preconditioner = (
+    build_rhsmode23_fp_xblock_tz_lu_preconditioner
+)
+_build_rhsmode23_fp_xblock_tz_lu_schur_preconditioner = (
+    build_rhsmode23_fp_xblock_tz_lu_schur_preconditioner
+)
 
 
 def _build_rhsmode23_fp_direct_active_block_schur_preconditioner(
@@ -2409,19 +2194,9 @@ def _build_rhsmode23_fp_fortran_reduced_lu_preconditioner(
     )
 
 
-def _build_rhsmode23_fp_structured_fblock_lu_preconditioner(
-    *,
-    op: V3FullSystemOperator,
-    reduce_full: Callable[[jnp.ndarray], jnp.ndarray] | None = None,
-    expand_reduced: Callable[[jnp.ndarray], jnp.ndarray] | None = None,
-) -> Callable[[jnp.ndarray], jnp.ndarray]:
-    """Compatibility wrapper for ``build_rhsmode23_fp_structured_fblock_lu_preconditioner``."""
-    return build_rhsmode23_fp_structured_fblock_lu_preconditioner(
-        op=op,
-        reduce_full=reduce_full,
-        expand_reduced=expand_reduced,
-    )
-
+_build_rhsmode23_fp_structured_fblock_lu_preconditioner = (
+    build_rhsmode23_fp_structured_fblock_lu_preconditioner
+)
 
 
 def _build_rhsmode1_schur_preconditioner(
@@ -2461,121 +2236,19 @@ def _build_rhsmode1_schur_preconditioner(
     )
 
 
-def _build_rhsmode1_theta_line_preconditioner(
-    *,
-    op: V3FullSystemOperator,
-    reduce_full: Callable[[jnp.ndarray], jnp.ndarray] | None = None,
-    expand_reduced: Callable[[jnp.ndarray], jnp.ndarray] | None = None,
-) -> Callable[[jnp.ndarray], jnp.ndarray]:
-    """Compatibility wrapper for the canonical theta-line builder."""
-
-    return build_rhs1_theta_line_preconditioner(
-        op=op,
-        reduce_full=reduce_full,
-        expand_reduced=expand_reduced,
-    )
-
-
-def _build_rhsmode1_theta_dd_preconditioner(
-    *,
-    op: V3FullSystemOperator,
-    block: int,
-    reduce_full: Callable[[jnp.ndarray], jnp.ndarray] | None = None,
-    expand_reduced: Callable[[jnp.ndarray], jnp.ndarray] | None = None,
-) -> Callable[[jnp.ndarray], jnp.ndarray]:
-    """Compatibility wrapper for the canonical theta-DD builder."""
-
-    return build_rhs1_theta_dd_preconditioner(
-        op=op,
-        block=block,
-        reduce_full=reduce_full,
-        expand_reduced=expand_reduced,
-    )
-
-
-def _build_rhsmode1_zeta_dd_preconditioner(
-    *,
-    op: V3FullSystemOperator,
-    block: int,
-    reduce_full: Callable[[jnp.ndarray], jnp.ndarray] | None = None,
-    expand_reduced: Callable[[jnp.ndarray], jnp.ndarray] | None = None,
-) -> Callable[[jnp.ndarray], jnp.ndarray]:
-    """Compatibility wrapper for the canonical zeta-DD builder."""
-
-    return build_rhs1_zeta_dd_preconditioner(
-        op=op,
-        block=block,
-        reduce_full=reduce_full,
-        expand_reduced=expand_reduced,
-    )
-
-
-def _build_rhsmode1_theta_schwarz_preconditioner(
-    *,
-    op: V3FullSystemOperator,
-    block: int,
-    overlap: int,
-    reduce_full: Callable[[jnp.ndarray], jnp.ndarray] | None = None,
-    expand_reduced: Callable[[jnp.ndarray], jnp.ndarray] | None = None,
-) -> Callable[[jnp.ndarray], jnp.ndarray]:
-    """Compatibility wrapper for the canonical theta-Schwarz builder."""
-
-    return build_rhs1_theta_schwarz_preconditioner(
-        op=op,
-        block=block,
-        overlap=overlap,
-        reduce_full=reduce_full,
-        expand_reduced=expand_reduced,
-    )
-
-
-def _build_rhsmode1_zeta_schwarz_preconditioner(
-    *,
-    op: V3FullSystemOperator,
-    block: int,
-    overlap: int,
-    reduce_full: Callable[[jnp.ndarray], jnp.ndarray] | None = None,
-    expand_reduced: Callable[[jnp.ndarray], jnp.ndarray] | None = None,
-) -> Callable[[jnp.ndarray], jnp.ndarray]:
-    """Compatibility wrapper for the canonical zeta-Schwarz builder."""
-
-    return build_rhs1_zeta_schwarz_preconditioner(
-        op=op,
-        block=block,
-        overlap=overlap,
-        reduce_full=reduce_full,
-        expand_reduced=expand_reduced,
-    )
-
-
-def _build_rhsmode1_theta_line_xdiag_preconditioner(
-    *,
-    op: V3FullSystemOperator,
-    reduce_full: Callable[[jnp.ndarray], jnp.ndarray] | None = None,
-    expand_reduced: Callable[[jnp.ndarray], jnp.ndarray] | None = None,
-) -> Callable[[jnp.ndarray], jnp.ndarray]:
-    """Compatibility wrapper for the canonical theta-line x-diagonal builder."""
-
-    return build_rhs1_theta_line_xdiag_preconditioner(
-        op=op,
-        reduce_full=reduce_full,
-        expand_reduced=expand_reduced,
-    )
-
-
-def _build_rhsmode1_theta_zeta_preconditioner(
-    *,
-    op: V3FullSystemOperator,
-    reduce_full: Callable[[jnp.ndarray], jnp.ndarray] | None = None,
-    expand_reduced: Callable[[jnp.ndarray], jnp.ndarray] | None = None,
-) -> Callable[[jnp.ndarray], jnp.ndarray]:
-    """Compatibility wrapper for the canonical theta-zeta angular-block builder."""
-
-    return build_rhs1_theta_zeta_preconditioner(
-        op=op,
-        reduce_full=reduce_full,
-        expand_reduced=expand_reduced,
-    )
+_build_rhsmode1_theta_line_preconditioner = build_rhs1_theta_line_preconditioner
+_build_rhsmode1_theta_dd_preconditioner = build_rhs1_theta_dd_preconditioner
+_build_rhsmode1_zeta_dd_preconditioner = build_rhs1_zeta_dd_preconditioner
+_build_rhsmode1_theta_schwarz_preconditioner = (
+    build_rhs1_theta_schwarz_preconditioner
+)
+_build_rhsmode1_zeta_schwarz_preconditioner = (
+    build_rhs1_zeta_schwarz_preconditioner
+)
+_build_rhsmode1_theta_line_xdiag_preconditioner = (
+    build_rhs1_theta_line_xdiag_preconditioner
+)
+_build_rhsmode1_theta_zeta_preconditioner = build_rhs1_theta_zeta_preconditioner
 
 
 def _rhs1_pas_composite_builders() -> RHS1PasCompositeBuilders:
@@ -2649,164 +2322,24 @@ def _build_rhsmode1_pas_schur_preconditioner(
     )
 
 
-def _build_rhsmode1_species_block_preconditioner(
-    *,
-    op: V3FullSystemOperator,
-    reduce_full: Callable[[jnp.ndarray], jnp.ndarray] | None = None,
-    expand_reduced: Callable[[jnp.ndarray], jnp.ndarray] | None = None,
-) -> Callable[[jnp.ndarray], jnp.ndarray]:
-    """Compatibility wrapper for the canonical species-block builder."""
-
-    return build_rhs1_species_block_preconditioner(
-        op=op,
-        reduce_full=reduce_full,
-        expand_reduced=expand_reduced,
-    )
-
-
-def _build_rhsmode1_species_xblock_preconditioner(
-    *,
-    op: V3FullSystemOperator,
-    reduce_full: Callable[[jnp.ndarray], jnp.ndarray] | None = None,
-    expand_reduced: Callable[[jnp.ndarray], jnp.ndarray] | None = None,
-) -> Callable[[jnp.ndarray], jnp.ndarray]:
-    """Compatibility wrapper for the canonical species/x-block builder."""
-
-    return build_rhs1_species_xblock_preconditioner(
-        op=op,
-        reduce_full=reduce_full,
-        expand_reduced=expand_reduced,
-    )
-
-
-def _build_rhsmode1_xblock_tz_preconditioner(
-    *,
-    op: V3FullSystemOperator,
-    reduce_full: Callable[[jnp.ndarray], jnp.ndarray] | None = None,
-    expand_reduced: Callable[[jnp.ndarray], jnp.ndarray] | None = None,
-) -> Callable[[jnp.ndarray], jnp.ndarray]:
-    """Compatibility wrapper for the canonical dense x-block builder."""
-
-    return build_rhs1_xblock_tz_preconditioner(
-        op=op,
-        reduce_full=reduce_full,
-        expand_reduced=expand_reduced,
-    )
-
-
-def _build_rhsmode1_xblock_tz_lmax_preconditioner(
-    *,
-    op: V3FullSystemOperator,
-    lmax: int,
-    reduce_full: Callable[[jnp.ndarray], jnp.ndarray] | None = None,
-    expand_reduced: Callable[[jnp.ndarray], jnp.ndarray] | None = None,
-) -> Callable[[jnp.ndarray], jnp.ndarray]:
-    """Compatibility wrapper for the canonical truncated-L x-block builder."""
-
-    return build_rhs1_xblock_tz_lmax_preconditioner(
-        op=op,
-        lmax=lmax,
-        reduce_full=reduce_full,
-        expand_reduced=expand_reduced,
-    )
-
-
-def _build_rhsmode1_xblock_tz_sparse_preconditioner(
-    *,
-    op: V3FullSystemOperator,
-    reduce_full: Callable[[jnp.ndarray], jnp.ndarray] | None = None,
-    expand_reduced: Callable[[jnp.ndarray], jnp.ndarray] | None = None,
-    build_jax_factors: bool,
-    preconditioner_species: int,
-    preconditioner_xi: int,
-    drop_tol: float,
-    drop_rel: float,
-    ilu_drop_tol: float,
-    fill_factor: float,
-    force_assembled_host_fp: bool = False,
-    emit: Callable[[int, str], None] | None = None,
-) -> Callable[[jnp.ndarray], jnp.ndarray]:
-    return build_rhs1_xblock_tz_sparse_preconditioner(
-        op=op,
-        reduce_full=reduce_full,
-        expand_reduced=expand_reduced,
-        build_jax_factors=build_jax_factors,
-        preconditioner_species=preconditioner_species,
-        preconditioner_xi=preconditioner_xi,
-        drop_tol=drop_tol,
-        drop_rel=drop_rel,
-        ilu_drop_tol=ilu_drop_tol,
-        fill_factor=fill_factor,
-        force_assembled_host_fp=force_assembled_host_fp,
-        emit=emit,
-    )
-
-
-def _build_rhsmode1_sxblock_tz_sparse_host_preconditioner(
-    *,
-    op: V3FullSystemOperator,
-    reduce_full: Callable[[jnp.ndarray], jnp.ndarray] | None = None,
-    expand_reduced: Callable[[jnp.ndarray], jnp.ndarray] | None = None,
-    drop_tol: float,
-    drop_rel: float,
-    ilu_drop_tol: float,
-    fill_factor: float,
-    emit: Callable[[int, str], None] | None = None,
-) -> Callable[[jnp.ndarray], jnp.ndarray]:
-    """Compatibility wrapper for the canonical sparse species/x-per-L builder."""
-
-    return build_rhs1_sxblock_tz_sparse_host_preconditioner(
-        op=op,
-        reduce_full=reduce_full,
-        expand_reduced=expand_reduced,
-        drop_tol=drop_tol,
-        drop_rel=drop_rel,
-        ilu_drop_tol=ilu_drop_tol,
-        fill_factor=fill_factor,
-        emit=emit,
-    )
-
-
-def _compute_rhsmode1_sxblock_tz_sparse_host_seed(
-    *,
-    op: V3FullSystemOperator,
-    rhs_reduced: jnp.ndarray,
-    reduce_full: Callable[[jnp.ndarray], jnp.ndarray] | None = None,
-    expand_reduced: Callable[[jnp.ndarray], jnp.ndarray] | None = None,
-    drop_tol: float,
-    drop_rel: float,
-    ilu_drop_tol: float,
-    fill_factor: float,
-    emit: Callable[[int, str], None] | None = None,
-) -> jnp.ndarray:
-    """Compatibility wrapper for the canonical sparse species/x-per-L seed."""
-
-    return compute_rhs1_sxblock_tz_sparse_host_seed(
-        op=op,
-        rhs_reduced=rhs_reduced,
-        reduce_full=reduce_full,
-        expand_reduced=expand_reduced,
-        drop_tol=drop_tol,
-        drop_rel=drop_rel,
-        ilu_drop_tol=ilu_drop_tol,
-        fill_factor=fill_factor,
-        emit=emit,
-    )
-
-
-def _build_rhsmode1_sxblock_tz_preconditioner(
-    *,
-    op: V3FullSystemOperator,
-    reduce_full: Callable[[jnp.ndarray], jnp.ndarray] | None = None,
-    expand_reduced: Callable[[jnp.ndarray], jnp.ndarray] | None = None,
-) -> Callable[[jnp.ndarray], jnp.ndarray]:
-    """Compatibility wrapper for the canonical dense species/x-per-L builder."""
-
-    return build_rhs1_sxblock_tz_preconditioner(
-        op=op,
-        reduce_full=reduce_full,
-        expand_reduced=expand_reduced,
-    )
+_build_rhsmode1_species_block_preconditioner = build_rhs1_species_block_preconditioner
+_build_rhsmode1_species_xblock_preconditioner = (
+    build_rhs1_species_xblock_preconditioner
+)
+_build_rhsmode1_xblock_tz_preconditioner = build_rhs1_xblock_tz_preconditioner
+_build_rhsmode1_xblock_tz_lmax_preconditioner = (
+    build_rhs1_xblock_tz_lmax_preconditioner
+)
+_build_rhsmode1_xblock_tz_sparse_preconditioner = (
+    build_rhs1_xblock_tz_sparse_preconditioner
+)
+_build_rhsmode1_sxblock_tz_sparse_host_preconditioner = (
+    build_rhs1_sxblock_tz_sparse_host_preconditioner
+)
+_compute_rhsmode1_sxblock_tz_sparse_host_seed = (
+    compute_rhs1_sxblock_tz_sparse_host_seed
+)
+_build_rhsmode1_sxblock_tz_preconditioner = build_rhs1_sxblock_tz_preconditioner
 
 
 def _build_rhsmode1_pas_xblock_ilu_preconditioner(
@@ -2823,139 +2356,31 @@ def _build_rhsmode1_pas_xblock_ilu_preconditioner(
     )
 
 
-def _build_rhsmode1_zeta_line_preconditioner(
-    *,
-    op: V3FullSystemOperator,
-    reduce_full: Callable[[jnp.ndarray], jnp.ndarray] | None = None,
-    expand_reduced: Callable[[jnp.ndarray], jnp.ndarray] | None = None,
-) -> Callable[[jnp.ndarray], jnp.ndarray]:
-    """Compatibility wrapper for the canonical zeta-line builder."""
-
-    return build_rhs1_zeta_line_preconditioner(
-        op=op,
-        reduce_full=reduce_full,
-        expand_reduced=expand_reduced,
-    )
-
-
-def _build_rhsmode1_structured_fblock_jacobi_preconditioner(
-    *,
-    op: V3FullSystemOperator,
-    reduce_full: Callable[[jnp.ndarray], jnp.ndarray] | None = None,
-    expand_reduced: Callable[[jnp.ndarray], jnp.ndarray] | None = None,
-) -> Callable[[jnp.ndarray], jnp.ndarray]:
-    """Compatibility wrapper for the canonical structured f-block builder."""
-
-    return build_rhs1_structured_fblock_jacobi_preconditioner(
-        op=op,
-        reduce_full=reduce_full,
-        expand_reduced=expand_reduced,
-    )
-
-
-def _build_rhsmode1_structured_fblock_angular_jacobi_preconditioner(
-    *,
-    op: V3FullSystemOperator,
-    reduce_full: Callable[[jnp.ndarray], jnp.ndarray] | None = None,
-    expand_reduced: Callable[[jnp.ndarray], jnp.ndarray] | None = None,
-) -> Callable[[jnp.ndarray], jnp.ndarray]:
-    """Compatibility wrapper for the canonical structured f-block builder."""
-
-    return build_rhs1_structured_fblock_angular_jacobi_preconditioner(
-        op=op,
-        reduce_full=reduce_full,
-        expand_reduced=expand_reduced,
-    )
-
-
-def _build_rhsmode1_structured_fblock_xi_angular_jacobi_preconditioner(
-    *,
-    op: V3FullSystemOperator,
-    reduce_full: Callable[[jnp.ndarray], jnp.ndarray] | None = None,
-    expand_reduced: Callable[[jnp.ndarray], jnp.ndarray] | None = None,
-) -> Callable[[jnp.ndarray], jnp.ndarray]:
-    """Compatibility wrapper for the canonical structured f-block builder."""
-
-    return build_rhs1_structured_fblock_xi_angular_jacobi_preconditioner(
-        op=op,
-        reduce_full=reduce_full,
-        expand_reduced=expand_reduced,
-    )
-
-
-def _build_rhsmode1_structured_fblock_fp_radial_jacobi_preconditioner(
-    *,
-    op: V3FullSystemOperator,
-    reduce_full: Callable[[jnp.ndarray], jnp.ndarray] | None = None,
-    expand_reduced: Callable[[jnp.ndarray], jnp.ndarray] | None = None,
-) -> Callable[[jnp.ndarray], jnp.ndarray]:
-    """Compatibility wrapper for the canonical structured f-block builder."""
-
-    return build_rhs1_structured_fblock_fp_radial_jacobi_preconditioner(
-        op=op,
-        reduce_full=reduce_full,
-        expand_reduced=expand_reduced,
-    )
-
-
-def _build_rhsmode1_structured_fblock_fp_lowmode_schur_preconditioner(
-    *,
-    op: V3FullSystemOperator,
-    reduce_full: Callable[[jnp.ndarray], jnp.ndarray] | None = None,
-    expand_reduced: Callable[[jnp.ndarray], jnp.ndarray] | None = None,
-) -> Callable[[jnp.ndarray], jnp.ndarray]:
-    """Compatibility wrapper for the canonical structured f-block builder."""
-
-    return build_rhs1_structured_fblock_fp_lowmode_schur_preconditioner(
-        op=op,
-        reduce_full=reduce_full,
-        expand_reduced=expand_reduced,
-    )
-
-
-def _build_rhsmode1_structured_fblock_fp_moment_schur_preconditioner(
-    *,
-    op: V3FullSystemOperator,
-    reduce_full: Callable[[jnp.ndarray], jnp.ndarray] | None = None,
-    expand_reduced: Callable[[jnp.ndarray], jnp.ndarray] | None = None,
-) -> Callable[[jnp.ndarray], jnp.ndarray]:
-    """Compatibility wrapper for the canonical structured f-block builder."""
-
-    return build_rhs1_structured_fblock_fp_moment_schur_preconditioner(
-        op=op,
-        reduce_full=reduce_full,
-        expand_reduced=expand_reduced,
-    )
-
-
-def _build_rhsmode1_structured_fblock_fp_coupled_moment_schur_preconditioner(
-    *,
-    op: V3FullSystemOperator,
-    reduce_full: Callable[[jnp.ndarray], jnp.ndarray] | None = None,
-    expand_reduced: Callable[[jnp.ndarray], jnp.ndarray] | None = None,
-) -> Callable[[jnp.ndarray], jnp.ndarray]:
-    """Compatibility wrapper for the canonical structured f-block builder."""
-
-    return build_rhs1_structured_fblock_fp_coupled_moment_schur_preconditioner(
-        op=op,
-        reduce_full=reduce_full,
-        expand_reduced=expand_reduced,
-    )
-
-
-def _build_rhsmode1_structured_fblock_fp_tail_coupled_schur_preconditioner(
-    *,
-    op: V3FullSystemOperator,
-    reduce_full: Callable[[jnp.ndarray], jnp.ndarray] | None = None,
-    expand_reduced: Callable[[jnp.ndarray], jnp.ndarray] | None = None,
-) -> Callable[[jnp.ndarray], jnp.ndarray]:
-    """Compatibility wrapper for the canonical structured f-block builder."""
-
-    return build_rhs1_structured_fblock_fp_tail_coupled_schur_preconditioner(
-        op=op,
-        reduce_full=reduce_full,
-        expand_reduced=expand_reduced,
-    )
+_build_rhsmode1_zeta_line_preconditioner = build_rhs1_zeta_line_preconditioner
+_build_rhsmode1_structured_fblock_jacobi_preconditioner = (
+    build_rhs1_structured_fblock_jacobi_preconditioner
+)
+_build_rhsmode1_structured_fblock_angular_jacobi_preconditioner = (
+    build_rhs1_structured_fblock_angular_jacobi_preconditioner
+)
+_build_rhsmode1_structured_fblock_xi_angular_jacobi_preconditioner = (
+    build_rhs1_structured_fblock_xi_angular_jacobi_preconditioner
+)
+_build_rhsmode1_structured_fblock_fp_radial_jacobi_preconditioner = (
+    build_rhs1_structured_fblock_fp_radial_jacobi_preconditioner
+)
+_build_rhsmode1_structured_fblock_fp_lowmode_schur_preconditioner = (
+    build_rhs1_structured_fblock_fp_lowmode_schur_preconditioner
+)
+_build_rhsmode1_structured_fblock_fp_moment_schur_preconditioner = (
+    build_rhs1_structured_fblock_fp_moment_schur_preconditioner
+)
+_build_rhsmode1_structured_fblock_fp_coupled_moment_schur_preconditioner = (
+    build_rhs1_structured_fblock_fp_coupled_moment_schur_preconditioner
+)
+_build_rhsmode1_structured_fblock_fp_tail_coupled_schur_preconditioner = (
+    build_rhs1_structured_fblock_fp_tail_coupled_schur_preconditioner
+)
 
 
 def _build_rhs1_preconditioner_from_kind(
