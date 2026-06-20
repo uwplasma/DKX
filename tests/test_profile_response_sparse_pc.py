@@ -35,6 +35,7 @@ from sfincs_jax.problems.profile_response.sparse_pc import (
     DirectTailResidualRescuePolicy,
     DirectTailTrueActiveRescuePolicy,
     DirectTailCoupledCoarseRescuePolicy,
+    FPXBlockGlobalCorrectionContext,
     SparsePCFactorPreflightPolicyContext,
     SparsePCFactorPreflightEvaluationContext,
     SparsePCResidualCandidateAcceptanceContext,
@@ -247,6 +248,7 @@ from sfincs_jax.problems.profile_response.sparse_pc import (
     run_fortran_reduced_xblock_krylov_solve,
     run_xblock_first_krylov_attempt,
     run_xblock_krylov_solve_stage,
+    run_fp_xblock_global_correction_stage,
     run_sparse_xblock_rescue_solve_stage,
     run_sparse_pc_gmres_once,
     run_sparse_pc_gmres_once_for_retry,
@@ -4494,6 +4496,206 @@ def test_sparse_xblock_rescue_acceptance_updates_assembled_seed_replay() -> None
     assert result.explicit_seed_used
     assert replay.x0_vec is candidate.x
     assert record_calls == []
+
+
+def test_fp_xblock_global_correction_stage_accepts_improvement() -> None:
+    replay = SimpleNamespace(x0_vec=None)
+    marks: list[str] = []
+    messages: list[str] = []
+    elapsed_values = iter((10.0, 12.5))
+    current = GMRESSolveResult(
+        x=jnp.asarray([0.0], dtype=jnp.float64),
+        residual_norm=jnp.asarray(2.0, dtype=jnp.float64),
+    )
+
+    def safe_preconditioner(preconditioner, *, clip):
+        assert preconditioner is _identity
+        assert clip == pytest.approx(4.0)
+        return preconditioner
+
+    def correction(**kwargs):
+        assert kwargs["matvec"] is _identity
+        assert kwargs["rhs"] is rhs
+        assert kwargs["x0"] is current.x
+        assert kwargs["preconditioner"] is _identity
+        assert kwargs["steps"] == 3
+        assert kwargs["alpha_clip"] == pytest.approx(10.0)
+        assert kwargs["min_improvement"] == pytest.approx(0.0)
+        return (
+            jnp.asarray([1.0], dtype=jnp.float64),
+            jnp.asarray([0.25], dtype=jnp.float64),
+            (0.5,),
+            (1.0, 0.5),
+        )
+
+    rhs = jnp.asarray([1.0], dtype=jnp.float64)
+    result = run_fp_xblock_global_correction_stage(
+        context=FPXBlockGlobalCorrectionContext(
+            current_result=current,
+            matvec=_identity,
+            rhs=rhs,
+            preconditioner=_identity,
+            preconditioner_label="base",
+            steps=3,
+            alpha_clip=10.0,
+            min_improvement=0.0,
+            preconditioner_clip=4.0,
+            replay_state=replay,
+            emit=lambda _level, msg: messages.append(msg),
+            elapsed_s=lambda: next(elapsed_values),
+            mark=marks.append,
+            safe_preconditioner=safe_preconditioner,
+            correction=correction,
+        )
+    )
+
+    assert result.accepted
+    assert result.reason == "accepted"
+    assert result.result.residual_norm == pytest.approx(0.5)
+    np.testing.assert_allclose(np.asarray(result.residual_vec), np.asarray([0.25]))
+    assert result.preconditioner_label == "base"
+    assert result.steps == 3
+    assert result.accepted_steps == 2
+    assert result.residual_before == pytest.approx(2.0)
+    assert result.residual_after == pytest.approx(0.5)
+    assert result.improvement_ratio == pytest.approx(4.0)
+    assert result.elapsed_s == pytest.approx(2.5)
+    np.testing.assert_allclose(np.asarray(replay.x0_vec), np.asarray([1.0]))
+    assert marks == [
+        "rhs1_fp_xblock_global_correction_start",
+        "rhs1_fp_xblock_global_correction_done",
+    ]
+    assert any("FP x-block global correction" in message for message in messages)
+    assert any("accepted" in message for message in messages)
+
+
+def test_fp_xblock_global_correction_stage_rejects_non_improvement() -> None:
+    replay = SimpleNamespace(x0_vec="old")
+    marks: list[str] = []
+    elapsed_values = iter((1.0, 1.25))
+    current = GMRESSolveResult(
+        x=jnp.asarray([0.0], dtype=jnp.float64),
+        residual_norm=jnp.asarray(2.0, dtype=jnp.float64),
+    )
+
+    result = run_fp_xblock_global_correction_stage(
+        context=FPXBlockGlobalCorrectionContext(
+            current_result=current,
+            matvec=_identity,
+            rhs=jnp.asarray([1.0], dtype=jnp.float64),
+            preconditioner=_identity,
+            preconditioner_label="sparse_xblock",
+            steps=2,
+            alpha_clip=0.0,
+            min_improvement=0.0,
+            preconditioner_clip=1.0e6,
+            replay_state=replay,
+            emit=None,
+            elapsed_s=lambda: next(elapsed_values),
+            mark=marks.append,
+            safe_preconditioner=lambda preconditioner, **_kwargs: preconditioner,
+            correction=lambda **_kwargs: (
+                jnp.asarray([1.0], dtype=jnp.float64),
+                jnp.asarray([3.0], dtype=jnp.float64),
+                (3.0,),
+                (1.0,),
+            ),
+        )
+    )
+
+    assert result.result is current
+    assert not result.accepted
+    assert result.reason == "no_improvement"
+    assert result.residual_vec is None
+    assert result.residual_before == pytest.approx(2.0)
+    assert result.residual_after == pytest.approx(3.0)
+    assert result.accepted_steps == 1
+    assert result.elapsed_s == pytest.approx(0.25)
+    assert replay.x0_vec == "old"
+    assert marks == [
+        "rhs1_fp_xblock_global_correction_start",
+        "rhs1_fp_xblock_global_correction_done",
+    ]
+
+
+def test_fp_xblock_global_correction_stage_reports_missing_preconditioner() -> None:
+    current = GMRESSolveResult(
+        x=jnp.asarray([0.0], dtype=jnp.float64),
+        residual_norm=jnp.asarray(2.0, dtype=jnp.float64),
+    )
+    marks: list[str] = []
+
+    result = run_fp_xblock_global_correction_stage(
+        context=FPXBlockGlobalCorrectionContext(
+            current_result=current,
+            matvec=_identity,
+            rhs=jnp.asarray([1.0], dtype=jnp.float64),
+            preconditioner=None,
+            preconditioner_label=None,
+            steps=2,
+            alpha_clip=0.0,
+            min_improvement=0.0,
+            preconditioner_clip=1.0,
+            replay_state=SimpleNamespace(x0_vec=None),
+            emit=None,
+            elapsed_s=lambda: 0.0,
+            mark=marks.append,
+            safe_preconditioner=lambda *_args, **_kwargs: _identity,
+            correction=lambda **_kwargs: (_ for _ in ()).throw(
+                AssertionError("correction should not run")
+            ),
+        )
+    )
+
+    assert result.result is current
+    assert not result.accepted
+    assert result.reason == "missing_preconditioner"
+    assert result.steps is None
+    assert result.elapsed_s is None
+    assert marks == []
+
+
+def test_fp_xblock_global_correction_stage_reports_exception() -> None:
+    replay = SimpleNamespace(x0_vec="old")
+    marks: list[str] = []
+    messages: list[str] = []
+    elapsed_values = iter((2.0, 2.5))
+    current = GMRESSolveResult(
+        x=jnp.asarray([0.0], dtype=jnp.float64),
+        residual_norm=jnp.asarray(2.0, dtype=jnp.float64),
+    )
+
+    result = run_fp_xblock_global_correction_stage(
+        context=FPXBlockGlobalCorrectionContext(
+            current_result=current,
+            matvec=_identity,
+            rhs=jnp.asarray([1.0], dtype=jnp.float64),
+            preconditioner=_identity,
+            preconditioner_label="base",
+            steps=2,
+            alpha_clip=0.0,
+            min_improvement=0.0,
+            preconditioner_clip=1.0,
+            replay_state=replay,
+            emit=lambda _level, msg: messages.append(msg),
+            elapsed_s=lambda: next(elapsed_values),
+            mark=marks.append,
+            safe_preconditioner=lambda preconditioner, **_kwargs: preconditioner,
+            correction=lambda **_kwargs: (_ for _ in ()).throw(RuntimeError("boom")),
+        )
+    )
+
+    assert result.result is current
+    assert not result.accepted
+    assert result.reason == "exception"
+    assert result.error == "RuntimeError: boom"
+    assert result.elapsed_s == pytest.approx(0.5)
+    assert replay.x0_vec == "old"
+    assert marks == [
+        "rhs1_fp_xblock_global_correction_start",
+        "rhs1_fp_xblock_global_correction_failed",
+    ]
+    assert any("failed" in message for message in messages)
 
 
 def test_fortran_reduced_xblock_krylov_policy_defaults_and_counter() -> None:

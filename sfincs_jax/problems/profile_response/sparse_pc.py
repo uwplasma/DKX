@@ -4011,6 +4011,45 @@ class SparseXBlockRescueAcceptanceResult:
 
 
 @dataclass(frozen=True)
+class FPXBlockGlobalCorrectionContext:
+    """Dependencies for the optional FP x-block global correction stage."""
+
+    current_result: GMRESSolveResult
+    matvec: ArrayFn
+    rhs: jnp.ndarray
+    preconditioner: ArrayFn | None
+    preconditioner_label: str | None
+    steps: int
+    alpha_clip: float
+    min_improvement: float
+    preconditioner_clip: float
+    replay_state: Any
+    emit: EmitFn | None
+    elapsed_s: Callable[[], float]
+    mark: Callable[[str], None]
+    safe_preconditioner: Callable[..., ArrayFn]
+    correction: Callable[..., tuple[jnp.ndarray, jnp.ndarray, Sequence[float], Sequence[float]]]
+
+
+@dataclass(frozen=True)
+class FPXBlockGlobalCorrectionResult:
+    """Updated state and diagnostics from the FP x-block global correction."""
+
+    result: GMRESSolveResult
+    residual_vec: jnp.ndarray | None
+    accepted: bool
+    reason: str
+    error: str | None
+    preconditioner_label: str | None
+    steps: int | None
+    accepted_steps: int | None
+    residual_before: float | None
+    residual_after: float | None
+    improvement_ratio: float | None
+    elapsed_s: float | None
+
+
+@dataclass(frozen=True)
 class FortranReducedXBlockMomentSchurStageContext:
     """Dependencies for the optional fortran-reduced moment-Schur stage."""
 
@@ -6894,6 +6933,135 @@ def accept_sparse_xblock_rescue_candidate(
         candidate_residual=float(candidate.residual_norm),
         explicit_seed_used=bool(explicit_seed_used),
     )
+
+
+def run_fp_xblock_global_correction_stage(
+    *,
+    context: FPXBlockGlobalCorrectionContext,
+) -> FPXBlockGlobalCorrectionResult:
+    """Run the optional FP x-block global correction and accept improvement."""
+
+    if context.preconditioner is None:
+        return FPXBlockGlobalCorrectionResult(
+            result=context.current_result,
+            residual_vec=None,
+            accepted=False,
+            reason="missing_preconditioner",
+            error=None,
+            preconditioner_label=context.preconditioner_label,
+            steps=None,
+            accepted_steps=None,
+            residual_before=None,
+            residual_after=None,
+            improvement_ratio=None,
+            elapsed_s=None,
+        )
+
+    steps = int(context.steps)
+    residual_before = float(context.current_result.residual_norm)
+    start_s = float(context.elapsed_s())
+    context.mark("rhs1_fp_xblock_global_correction_start")
+    if context.emit is not None:
+        context.emit(
+            1,
+            "solve_v3_full_system_linear_gmres: FP x-block global correction "
+            f"(steps={steps} preconditioner={context.preconditioner_label} "
+            f"residual={residual_before:.6e})",
+        )
+
+    try:
+        x_corr, residual_corr, correction_history, correction_alphas = (
+            context.correction(
+                matvec=context.matvec,
+                rhs=context.rhs,
+                x0=context.current_result.x,
+                preconditioner=context.safe_preconditioner(
+                    context.preconditioner,
+                    clip=float(context.preconditioner_clip),
+                ),
+                steps=steps,
+                alpha_clip=float(context.alpha_clip),
+                min_improvement=float(context.min_improvement),
+            )
+        )
+        elapsed_s = float(context.elapsed_s() - start_s)
+        accepted_steps = int(len(correction_alphas))
+        residual_after = (
+            float(correction_history[-1]) if correction_history else None
+        )
+        if (
+            residual_after is not None
+            and np.isfinite(float(residual_after))
+            and float(residual_after) < residual_before
+        ):
+            improvement_ratio = residual_before / max(float(residual_after), 1.0e-300)
+            accepted_result = GMRESSolveResult(
+                x=jnp.asarray(x_corr, dtype=jnp.float64),
+                residual_norm=jnp.asarray(float(residual_after), dtype=jnp.float64),
+            )
+            context.replay_state.x0_vec = accepted_result.x
+            if context.emit is not None:
+                context.emit(
+                    1,
+                    "solve_v3_full_system_linear_gmres: FP x-block global "
+                    f"correction accepted {residual_before:.3e}->{float(residual_after):.3e} "
+                    f"steps={accepted_steps}",
+                )
+            context.mark("rhs1_fp_xblock_global_correction_done")
+            return FPXBlockGlobalCorrectionResult(
+                result=accepted_result,
+                residual_vec=jnp.asarray(residual_corr, dtype=jnp.float64),
+                accepted=True,
+                reason="accepted",
+                error=None,
+                preconditioner_label=context.preconditioner_label,
+                steps=steps,
+                accepted_steps=accepted_steps,
+                residual_before=residual_before,
+                residual_after=float(residual_after),
+                improvement_ratio=float(improvement_ratio),
+                elapsed_s=elapsed_s,
+            )
+
+        context.mark("rhs1_fp_xblock_global_correction_done")
+        return FPXBlockGlobalCorrectionResult(
+            result=context.current_result,
+            residual_vec=None,
+            accepted=False,
+            reason="no_improvement",
+            error=None,
+            preconditioner_label=context.preconditioner_label,
+            steps=steps,
+            accepted_steps=accepted_steps,
+            residual_before=residual_before,
+            residual_after=residual_after,
+            improvement_ratio=None,
+            elapsed_s=elapsed_s,
+        )
+    except Exception as exc:  # noqa: BLE001
+        error = f"{type(exc).__name__}: {exc}"
+        elapsed_s = float(context.elapsed_s() - start_s)
+        context.mark("rhs1_fp_xblock_global_correction_failed")
+        if context.emit is not None:
+            context.emit(
+                1,
+                "solve_v3_full_system_linear_gmres: FP x-block global correction "
+                f"failed ({error})",
+            )
+        return FPXBlockGlobalCorrectionResult(
+            result=context.current_result,
+            residual_vec=None,
+            accepted=False,
+            reason="exception",
+            error=error,
+            preconditioner_label=context.preconditioner_label,
+            steps=steps,
+            accepted_steps=None,
+            residual_before=residual_before,
+            residual_after=None,
+            improvement_ratio=None,
+            elapsed_s=elapsed_s,
+        )
 
 
 def apply_fortran_reduced_xblock_moment_schur_stage(
@@ -15882,6 +16050,8 @@ __all__ = [
     "DirectTailStructuredBuildResult",
     "DirectTailSupportModePreflightContext",
     "DirectTailSupportModePreflightResult",
+    "FPXBlockGlobalCorrectionContext",
+    "FPXBlockGlobalCorrectionResult",
     "SparsePCFactorPreflightPolicyContext",
     "SparsePCFactorPreflightPolicy",
     "SparsePCFactorPreflightEvaluationContext",
@@ -16087,6 +16257,7 @@ __all__ = [
     "retry_sparse_pc_factor_dtype_from_driver_state",
     "retry_sparse_pc_factor_dtype_from_finalization_context",
     "run_fortran_reduced_xblock_krylov_solve",
+    "run_fp_xblock_global_correction_stage",
     "run_sparse_xblock_rescue_solve_stage",
     "run_sparse_pc_gmres_once",
     "run_sparse_pc_gmres_once_for_retry",

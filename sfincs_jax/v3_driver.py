@@ -390,11 +390,13 @@ from .problems.profile_response.sparse_pc import (
     run_fortran_reduced_xblock_krylov_solve,
     run_sparse_pc_gmres_once,
     run_sparse_pc_gmres_once_for_retry,
+    FPXBlockGlobalCorrectionContext,
     SparseXBlockRescueAcceptanceContext,
     SparseXBlockRescueBuildContext,
     SparseXBlockRescueSolveContext,
     accept_sparse_xblock_rescue_candidate,
     build_sparse_xblock_rescue_preconditioner,
+    run_fp_xblock_global_correction_stage,
     run_sparse_xblock_rescue_solve_stage,
     run_xblock_krylov_solve_stage,
     xblock_sparse_pc_final_metadata_state_from_context,
@@ -10120,97 +10122,71 @@ def solve_v3_full_system_linear_gmres(
                 fp_xblock_global_correction_preconditioner = (
                     "sparse_xblock" if precond_sparse_xblock_current is not None else "base"
                 )
-                if correction_precond is None:
-                    fp_xblock_global_correction_reason = "missing_preconditioner"
-                else:
-                    correction_steps = _rhs1_int_env(
-                        "SFINCS_JAX_RHSMODE1_FP_XBLOCK_GLOBAL_CORRECTION_STEPS",
-                        default=3,
-                        minimum=1,
+                correction_steps = _rhs1_int_env(
+                    "SFINCS_JAX_RHSMODE1_FP_XBLOCK_GLOBAL_CORRECTION_STEPS",
+                    default=3,
+                    minimum=1,
+                )
+                correction_alpha_clip = _rhs1_float_env(
+                    "SFINCS_JAX_RHSMODE1_FP_XBLOCK_GLOBAL_CORRECTION_ALPHA_CLIP",
+                    default=10.0,
+                    minimum=0.0,
+                )
+                correction_min_improvement = _rhs1_float_env(
+                    "SFINCS_JAX_RHSMODE1_FP_XBLOCK_GLOBAL_CORRECTION_MIN_IMPROVEMENT",
+                    default=0.0,
+                    minimum=0.0,
+                )
+                correction_precond_clip = _rhs1_float_env(
+                    "SFINCS_JAX_RHSMODE1_FP_XBLOCK_GLOBAL_CORRECTION_PRECONDITIONER_CLIP",
+                    default=1.0e100,
+                    minimum=0.0,
+                )
+                fp_xblock_global_correction = run_fp_xblock_global_correction_stage(
+                    context=FPXBlockGlobalCorrectionContext(
+                        current_result=res_reduced,
+                        matvec=mv_reduced,
+                        rhs=rhs_reduced,
+                        preconditioner=correction_precond,
+                        preconditioner_label=fp_xblock_global_correction_preconditioner,
+                        steps=int(correction_steps),
+                        alpha_clip=float(correction_alpha_clip),
+                        min_improvement=float(correction_min_improvement),
+                        preconditioner_clip=float(correction_precond_clip),
+                        replay_state=ksp_replay,
+                        emit=emit,
+                        elapsed_s=t.elapsed_s,
+                        mark=_mark,
+                        safe_preconditioner=_safe_preconditioner,
+                        correction=_apply_preconditioned_minres_correction,
                     )
-                    correction_alpha_clip = _rhs1_float_env(
-                        "SFINCS_JAX_RHSMODE1_FP_XBLOCK_GLOBAL_CORRECTION_ALPHA_CLIP",
-                        default=10.0,
-                        minimum=0.0,
-                    )
-                    correction_min_improvement = _rhs1_float_env(
-                        "SFINCS_JAX_RHSMODE1_FP_XBLOCK_GLOBAL_CORRECTION_MIN_IMPROVEMENT",
-                        default=0.0,
-                        minimum=0.0,
-                    )
-                    correction_precond_clip = _rhs1_float_env(
-                        "SFINCS_JAX_RHSMODE1_FP_XBLOCK_GLOBAL_CORRECTION_PRECONDITIONER_CLIP",
-                        default=1.0e100,
-                        minimum=0.0,
-                    )
-                    fp_xblock_global_correction_steps = int(correction_steps)
-                    fp_xblock_global_correction_residual_before = float(res_reduced.residual_norm)
-                    correction_start_s = float(t.elapsed_s())
-                    _mark("rhs1_fp_xblock_global_correction_start")
-                    if emit is not None:
-                        emit(
-                            1,
-                            "solve_v3_full_system_linear_gmres: FP x-block global correction "
-                            f"(steps={int(correction_steps)} "
-                            f"preconditioner={fp_xblock_global_correction_preconditioner} "
-                            f"residual={float(res_reduced.residual_norm):.6e})",
-                        )
-                    try:
-                        x_corr, residual_corr, correction_history, correction_alphas = (
-                            _apply_preconditioned_minres_correction(
-                                matvec=mv_reduced,
-                                rhs=rhs_reduced,
-                                x0=res_reduced.x,
-                                preconditioner=_safe_preconditioner(
-                                    correction_precond,
-                                    clip=float(correction_precond_clip),
-                                ),
-                                steps=int(correction_steps),
-                                alpha_clip=float(correction_alpha_clip),
-                                min_improvement=float(correction_min_improvement),
-                            )
-                        )
-                        fp_xblock_global_correction_elapsed_s = float(t.elapsed_s() - correction_start_s)
-                        fp_xblock_global_correction_accepted_steps = int(len(correction_alphas))
-                        if correction_history:
-                            fp_xblock_global_correction_residual_after = float(correction_history[-1])
-                        if (
-                            correction_history
-                            and np.isfinite(float(correction_history[-1]))
-                            and float(correction_history[-1]) < float(res_reduced.residual_norm)
-                        ):
-                            before = float(res_reduced.residual_norm)
-                            after = float(correction_history[-1])
-                            fp_xblock_global_correction_accepted = True
-                            fp_xblock_global_correction_reason = "accepted"
-                            fp_xblock_global_correction_improvement_ratio = float(before) / max(after, 1.0e-300)
-                            residual_vec = residual_corr
-                            res_reduced = GMRESSolveResult(
-                                x=jnp.asarray(x_corr, dtype=jnp.float64),
-                                residual_norm=jnp.asarray(after, dtype=jnp.float64),
-                            )
-                            ksp_replay.x0_vec = res_reduced.x
-                            if emit is not None:
-                                emit(
-                                    1,
-                                    "solve_v3_full_system_linear_gmres: FP x-block global correction accepted "
-                                    f"{before:.3e}->{after:.3e} "
-                                    f"steps={int(len(correction_alphas))}",
-                                )
-                        else:
-                            fp_xblock_global_correction_reason = "no_improvement"
-                        _mark("rhs1_fp_xblock_global_correction_done")
-                    except Exception as exc:  # noqa: BLE001
-                        fp_xblock_global_correction_error = f"{type(exc).__name__}: {exc}"
-                        fp_xblock_global_correction_reason = "exception"
-                        fp_xblock_global_correction_elapsed_s = float(t.elapsed_s() - correction_start_s)
-                        _mark("rhs1_fp_xblock_global_correction_failed")
-                        if emit is not None:
-                            emit(
-                                1,
-                                "solve_v3_full_system_linear_gmres: FP x-block global correction failed "
-                                f"({type(exc).__name__}: {exc})",
-                            )
+                )
+                res_reduced = fp_xblock_global_correction.result
+                if fp_xblock_global_correction.residual_vec is not None:
+                    residual_vec = fp_xblock_global_correction.residual_vec
+                fp_xblock_global_correction_accepted = bool(
+                    fp_xblock_global_correction.accepted
+                )
+                fp_xblock_global_correction_reason = str(
+                    fp_xblock_global_correction.reason
+                )
+                fp_xblock_global_correction_error = fp_xblock_global_correction.error
+                fp_xblock_global_correction_steps = fp_xblock_global_correction.steps
+                fp_xblock_global_correction_accepted_steps = (
+                    fp_xblock_global_correction.accepted_steps
+                )
+                fp_xblock_global_correction_residual_before = (
+                    fp_xblock_global_correction.residual_before
+                )
+                fp_xblock_global_correction_residual_after = (
+                    fp_xblock_global_correction.residual_after
+                )
+                fp_xblock_global_correction_improvement_ratio = (
+                    fp_xblock_global_correction.improvement_ratio
+                )
+                fp_xblock_global_correction_elapsed_s = (
+                    fp_xblock_global_correction.elapsed_s
+                )
             else:
                 correction_env = os.environ.get("SFINCS_JAX_RHSMODE1_FP_XBLOCK_GLOBAL_CORRECTION", "").strip().lower()
                 fp_xblock_global_correction_reason = (
