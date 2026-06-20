@@ -12,6 +12,8 @@ from dataclasses import dataclass
 from numbers import Integral, Real
 from typing import Any
 
+import numpy as np
+
 
 SPARSE_HOST_DIRECT_SOLVE_METHODS = frozenset({"sparse_host", "host_sparse", "sparse_host_lu"})
 SPARSE_HOST_SAFE_SOLVE_METHODS = frozenset(
@@ -164,6 +166,48 @@ class RHS1InitialRouteSetup:
     structured_eparallel_abs: float
     structured_auto_allowed: bool
     structured_sharded_multidevice: bool
+
+
+@dataclass(frozen=True)
+class RHS1RecycleBasisSetup:
+    """Filtered recycled Krylov basis compatible with the current operator."""
+
+    recycle_k: int
+    basis: tuple[Any, ...]
+
+
+@dataclass(frozen=True)
+class RHS1ReducedModeShapeSetup:
+    """Pitch-mode shape summary used by active-DOF admission policy."""
+
+    nxi_for_x: np.ndarray
+    max_l: int
+    has_reduced_modes: bool
+
+
+@dataclass(frozen=True)
+class RHS1ActiveProblemSetup:
+    """Resolved active-system setup after RHSMode=1 physics policy gates."""
+
+    tol: float
+    restart: int
+    maxiter: int | None
+    messages: tuple[tuple[int, str], ...]
+    use_dkes: bool
+    include_xdot_sparse_pc: bool
+    include_electric_field_xi_sparse_pc: bool
+    er_abs_sparse_pc: float
+    preconditioner_species: int
+    preconditioner_x: int
+    preconditioner_x_min_l: int
+    preconditioner_xi: int
+    full_preconditioner_requested: bool
+    geom_scheme: int
+    use_pas_projection: bool
+    use_active_dof_mode: bool
+    active_idx_jnp: Any
+    full_to_active_jnp: Any
+    active_size: int
 
 
 @dataclass(frozen=True)
@@ -756,6 +800,139 @@ def resolve_rhs1_initial_route_setup(
     )
 
 
+def resolve_rhs1_recycle_basis_setup(
+    *,
+    recycle_basis: Any,
+    total_size: int,
+    recycle_k_env: str,
+    asarray: Callable[[Any], Any],
+) -> RHS1RecycleBasisSetup:
+    """Clamp and filter recycled Krylov vectors for a fixed linear-system size."""
+
+    raw = str(recycle_k_env or "").strip()
+    try:
+        recycle_k = int(raw) if raw else 4
+    except ValueError:
+        recycle_k = 4
+    recycle_k = max(0, int(recycle_k))
+    if recycle_k <= 0 or not recycle_basis:
+        return RHS1RecycleBasisSetup(recycle_k=int(recycle_k), basis=())
+
+    selected: list[Any] = []
+    expected_shape = (int(total_size),)
+    for vec in recycle_basis:
+        candidate = asarray(vec)
+        if getattr(candidate, "shape", None) == expected_shape:
+            selected.append(candidate)
+    if len(selected) > recycle_k:
+        selected = selected[-recycle_k:]
+    return RHS1RecycleBasisSetup(recycle_k=int(recycle_k), basis=tuple(selected))
+
+
+def resolve_rhs1_reduced_mode_shape_setup(
+    *,
+    nxi_for_x: Any,
+    n_xi: int,
+) -> RHS1ReducedModeShapeSetup:
+    """Summarize velocity-grid pitch truncation for active-DOF decisions."""
+
+    nxi_array = np.asarray(nxi_for_x, dtype=np.int32)
+    max_l = int(np.max(nxi_array)) if nxi_array.size else 0
+    has_reduced_modes = bool(np.any(nxi_array < int(n_xi)))
+    return RHS1ReducedModeShapeSetup(
+        nxi_for_x=nxi_array,
+        max_l=int(max_l),
+        has_reduced_modes=bool(has_reduced_modes),
+    )
+
+
+def resolve_rhs1_active_problem_setup(
+    *,
+    nml: Any,
+    op: Any,
+    tol: float,
+    fp_tol: float,
+    restart: int,
+    maxiter: int | None,
+    restart_env_forced: bool,
+    maxiter_env_forced: bool,
+    has_reduced_modes: bool,
+    sparse_host_like_requested: bool,
+    xblock_active_dof_requested: bool,
+    dkes_gmres_budget: Callable[..., tuple[int, int | None, bool, bool]],
+    active_dof_indices: Callable[[Any], np.ndarray],
+    env: Mapping[str, str] | None = None,
+) -> RHS1ActiveProblemSetup:
+    """Resolve RHSMode=1 active-system policy and index maps.
+
+    This combines the setup decisions that must happen after the operator and
+    RHS are available but before any solver branch is selected.
+    """
+
+    from .active_dof import build_rhs1_active_dof_state, resolve_rhs1_active_dof_mode
+
+    physics = resolve_rhs1_physics_flag_setup(nml)
+    dkes = resolve_rhs1_dkes_adjustment_setup(
+        op=op,
+        tol=float(tol),
+        fp_tol=float(fp_tol),
+        restart=int(restart),
+        maxiter=maxiter,
+        restart_env_forced=bool(restart_env_forced),
+        maxiter_env_forced=bool(maxiter_env_forced),
+        use_dkes=bool(physics.use_dkes),
+        dkes_gmres_budget=dkes_gmres_budget,
+        env=env,
+    )
+    active_env = _env_value(env, "SFINCS_JAX_ACTIVE_DOF").lower()
+    dkes_active_env = _env_value(env, "SFINCS_JAX_ACTIVE_DOF_DKES").lower()
+    active_decision = resolve_rhs1_active_dof_mode(
+        active_dof_env=active_env,
+        dkes_active_env=dkes_active_env,
+        rhs_mode=int(op.rhs_mode),
+        include_phi1=bool(op.include_phi1),
+        has_reduced_modes=bool(has_reduced_modes),
+        sparse_host_like_requested=bool(sparse_host_like_requested),
+        xblock_active_dof_requested=bool(xblock_active_dof_requested),
+        has_pas=op.fblock.pas is not None,
+        use_dkes=bool(physics.use_dkes),
+    )
+    precond = resolve_rhs1_preconditioner_option_setup(
+        nml=nml,
+        op=op,
+        sparse_host_like_requested=bool(sparse_host_like_requested),
+        use_active_dof_mode=bool(active_decision.use_active_dof_mode),
+        env=env,
+    )
+    active_state = build_rhs1_active_dof_state(
+        op=op,
+        use_active_dof_mode=bool(precond.use_active_dof_mode),
+        use_pas_projection=bool(precond.use_pas_projection),
+        active_dof_indices=active_dof_indices,
+    )
+    return RHS1ActiveProblemSetup(
+        tol=float(dkes.tol),
+        restart=int(dkes.restart),
+        maxiter=dkes.maxiter,
+        messages=tuple(dkes.messages),
+        use_dkes=bool(physics.use_dkes),
+        include_xdot_sparse_pc=bool(physics.include_xdot_sparse_pc),
+        include_electric_field_xi_sparse_pc=bool(physics.include_electric_field_xi_sparse_pc),
+        er_abs_sparse_pc=float(physics.er_abs_sparse_pc),
+        preconditioner_species=int(precond.preconditioner_species),
+        preconditioner_x=int(precond.preconditioner_x),
+        preconditioner_x_min_l=int(precond.preconditioner_x_min_l),
+        preconditioner_xi=int(precond.preconditioner_xi),
+        full_preconditioner_requested=bool(precond.full_preconditioner_requested),
+        geom_scheme=int(precond.geom_scheme),
+        use_pas_projection=bool(precond.use_pas_projection),
+        use_active_dof_mode=bool(precond.use_active_dof_mode),
+        active_idx_jnp=active_state.active_idx_jnp,
+        full_to_active_jnp=active_state.full_to_active_jnp,
+        active_size=int(active_state.active_size),
+    )
+
+
 def _read_int_value(raw: object, default: int) -> int:
     try:
         text = str(raw).strip()
@@ -908,10 +1085,13 @@ def resolve_rhs1_preconditioner_option_setup(
 
 __all__ = (
     "RHS1DomainDecompositionSetup",
+    "RHS1ActiveProblemSetup",
     "RHS1GmresBudgetSetup",
     "RHS1InitialRouteSetup",
     "RHS1PhysicsFlagSetup",
     "RHS1PreconditionerOptionSetup",
+    "RHS1RecycleBasisSetup",
+    "RHS1ReducedModeShapeSetup",
     "RHS1ToleranceSetup",
     "SPARSE_HOST_DIRECT_SOLVE_METHODS",
     "SPARSE_HOST_FORTRAN_REDUCED_PC_GMRES_SOLVE_METHODS",
@@ -925,11 +1105,14 @@ __all__ = (
     "equilibrium_name_hint_from_namelist",
     "geometry_scheme_hint_from_namelist",
     "normalize_profile_solve_method_kind",
+    "resolve_rhs1_active_problem_setup",
     "resolve_rhs1_domain_decomposition_setup",
     "resolve_rhs1_gmres_budget_setup",
     "resolve_rhs1_initial_route_setup",
     "resolve_rhs1_physics_flag_setup",
     "resolve_rhs1_preconditioner_option_setup",
+    "resolve_rhs1_recycle_basis_setup",
+    "resolve_rhs1_reduced_mode_shape_setup",
     "resolve_rhs1_tolerance_setup",
     "resolve_solve_method_request_flags",
 )

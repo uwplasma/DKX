@@ -436,13 +436,13 @@ from .problems.profile_response.setup import (
     STRUCTURED_FULL_CSR_HOST_SOLVE_METHODS as _STRUCTURED_FULL_CSR_HOST_SOLVE_METHODS,
     equilibrium_name_hint_from_namelist,
     geometry_scheme_hint_from_namelist,
+    resolve_rhs1_active_problem_setup,
     resolve_rhs1_domain_decomposition_setup,
-    resolve_rhs1_dkes_adjustment_setup,
     resolve_rhs1_gmres_budget_setup,
     resolve_rhs1_initial_route_setup,
-    resolve_rhs1_physics_flag_setup,
     resolve_rhs1_post_active_solve_policy_setup,
-    resolve_rhs1_preconditioner_option_setup,
+    resolve_rhs1_recycle_basis_setup,
+    resolve_rhs1_reduced_mode_shape_setup,
     resolve_rhs1_tolerance_setup,
 )
 from . import rhs1_xblock_policy as _rhs1_xblock_policy
@@ -576,10 +576,6 @@ from .problems.profile_response.solver_diagnostics import (
     RHS1KSPDiagnosticsContext,
     emit_profile_response_ksp_history,
     emit_profile_response_ksp_iter_stats,
-)
-from .problems.profile_response.active_dof import (
-    build_rhs1_active_dof_state,
-    resolve_rhs1_active_dof_mode,
 )
 from .rhs1_compressed_layout import build_rhs1_compressed_pitch_layout
 from .problems.profile_response.active_projection import (
@@ -2657,31 +2653,24 @@ def solve_v3_full_system_linear_gmres(
             )
         )
 
-    recycle_k_env = os.environ.get("SFINCS_JAX_RHSMODE1_RECYCLE_K", "").strip()
-    try:
-        recycle_k = int(recycle_k_env) if recycle_k_env else 4
-    except ValueError:
-        recycle_k = 4
-    recycle_k = max(0, recycle_k)
-    recycle_basis_use: list[jnp.ndarray] = []
-    if recycle_k > 0 and recycle_basis:
-        for vec in recycle_basis:
-            v = jnp.asarray(vec)
-            if v.shape == (op.total_size,):
-                recycle_basis_use.append(v)
-        if len(recycle_basis_use) > recycle_k:
-            recycle_basis_use = recycle_basis_use[-recycle_k:]
+    recycle_basis_setup = resolve_rhs1_recycle_basis_setup(
+        recycle_basis=recycle_basis,
+        total_size=int(op.total_size),
+        recycle_k_env=os.environ.get("SFINCS_JAX_RHSMODE1_RECYCLE_K", ""),
+        asarray=jnp.asarray,
+    )
+    recycle_basis_use = list(recycle_basis_setup.basis)
 
-    active_env = os.environ.get("SFINCS_JAX_ACTIVE_DOF", "").strip().lower()
-    nxi_for_x = np.asarray(op.fblock.collisionless.n_xi_for_x, dtype=np.int32)
-    max_l = int(np.max(nxi_for_x)) if nxi_for_x.size else 0
-    has_reduced_modes = bool(np.any(nxi_for_x < int(op.n_xi)))
-    physics_flag_setup = resolve_rhs1_physics_flag_setup(nml)
-    use_dkes = bool(physics_flag_setup.use_dkes)
-    include_xdot_sparse_pc = bool(physics_flag_setup.include_xdot_sparse_pc)
-    include_electric_field_xi_sparse_pc = bool(physics_flag_setup.include_electric_field_xi_sparse_pc)
-    er_abs_sparse_pc = float(physics_flag_setup.er_abs_sparse_pc)
-    dkes_adjustment_setup = resolve_rhs1_dkes_adjustment_setup(
+    reduced_mode_shape_setup = resolve_rhs1_reduced_mode_shape_setup(
+        nxi_for_x=op.fblock.collisionless.n_xi_for_x,
+        n_xi=int(op.n_xi),
+    )
+    nxi_for_x = reduced_mode_shape_setup.nxi_for_x
+    max_l = int(reduced_mode_shape_setup.max_l)
+    has_reduced_modes = bool(reduced_mode_shape_setup.has_reduced_modes)
+    precond_opts = nml.group("preconditionerOptions")
+    active_problem_setup = resolve_rhs1_active_problem_setup(
+        nml=nml,
         op=op,
         tol=float(tol),
         fp_tol=float(fp_tol),
@@ -2689,50 +2678,34 @@ def solve_v3_full_system_linear_gmres(
         maxiter=maxiter,
         restart_env_forced=bool(restart_env_forced),
         maxiter_env_forced=bool(maxiter_env_forced),
-        use_dkes=bool(use_dkes),
-        dkes_gmres_budget=_rhs1_dkes_gmres_budget,
-        env=os.environ,
-    )
-    tol = float(dkes_adjustment_setup.tol)
-    restart = int(dkes_adjustment_setup.restart)
-    maxiter = dkes_adjustment_setup.maxiter
-    if emit is not None:
-        for level, message in dkes_adjustment_setup.messages:
-            emit(int(level), str(message))
-    dkes_active_env = os.environ.get("SFINCS_JAX_ACTIVE_DOF_DKES", "").strip().lower()
-    active_dof_decision = resolve_rhs1_active_dof_mode(
-        active_dof_env=active_env,
-        dkes_active_env=dkes_active_env,
-        rhs_mode=int(op.rhs_mode),
-        include_phi1=bool(op.include_phi1),
         has_reduced_modes=bool(has_reduced_modes),
         sparse_host_like_requested=bool(sparse_host_like_requested),
         xblock_active_dof_requested=bool(xblock_active_dof_requested),
-        has_pas=op.fblock.pas is not None,
-        use_dkes=bool(use_dkes),
-    )
-    use_active_dof_mode = bool(active_dof_decision.use_active_dof_mode)
-
-    precond_opts = nml.group("preconditionerOptions")
-    precond_option_setup = resolve_rhs1_preconditioner_option_setup(
-        nml=nml,
-        op=op,
-        sparse_host_like_requested=bool(sparse_host_like_requested),
-        use_active_dof_mode=bool(use_active_dof_mode),
+        dkes_gmres_budget=_rhs1_dkes_gmres_budget,
+        active_dof_indices=_transport_active_dof_indices,
         env=os.environ,
     )
-    preconditioner_species = int(precond_option_setup.preconditioner_species)
-    preconditioner_x = int(precond_option_setup.preconditioner_x)
-    preconditioner_x_min_l = int(precond_option_setup.preconditioner_x_min_l)
-    preconditioner_xi = int(precond_option_setup.preconditioner_xi)
-    full_precond_requested = bool(precond_option_setup.full_preconditioner_requested)
-    geom_scheme = int(precond_option_setup.geom_scheme)
-    use_pas_projection = bool(precond_option_setup.use_pas_projection)
-    use_active_dof_mode = bool(precond_option_setup.use_active_dof_mode)
-
-    active_idx_jnp: jnp.ndarray | None = None
-    full_to_active_jnp: jnp.ndarray | None = None
-    active_size = int(op.total_size)
+    tol = float(active_problem_setup.tol)
+    restart = int(active_problem_setup.restart)
+    maxiter = active_problem_setup.maxiter
+    use_dkes = bool(active_problem_setup.use_dkes)
+    include_xdot_sparse_pc = bool(active_problem_setup.include_xdot_sparse_pc)
+    include_electric_field_xi_sparse_pc = bool(active_problem_setup.include_electric_field_xi_sparse_pc)
+    er_abs_sparse_pc = float(active_problem_setup.er_abs_sparse_pc)
+    preconditioner_species = int(active_problem_setup.preconditioner_species)
+    preconditioner_x = int(active_problem_setup.preconditioner_x)
+    preconditioner_x_min_l = int(active_problem_setup.preconditioner_x_min_l)
+    preconditioner_xi = int(active_problem_setup.preconditioner_xi)
+    full_precond_requested = bool(active_problem_setup.full_preconditioner_requested)
+    geom_scheme = int(active_problem_setup.geom_scheme)
+    use_pas_projection = bool(active_problem_setup.use_pas_projection)
+    use_active_dof_mode = bool(active_problem_setup.use_active_dof_mode)
+    active_idx_jnp = active_problem_setup.active_idx_jnp
+    full_to_active_jnp = active_problem_setup.full_to_active_jnp
+    active_size = int(active_problem_setup.active_size)
+    if emit is not None:
+        for level, message in active_problem_setup.messages:
+            emit(int(level), str(message))
     pas_tz_guarded_correction_metadata: dict[str, object] = {}
     rhsmode1_general_metadata: dict[str, object] = {}
 
@@ -2756,15 +2729,6 @@ def solve_v3_full_system_linear_gmres(
 
     cpu_large_xblock_shortcut = False
     explicit_fp_xblock_seed_used = False
-    active_dof_state = build_rhs1_active_dof_state(
-        op=op,
-        use_active_dof_mode=bool(use_active_dof_mode),
-        use_pas_projection=bool(use_pas_projection),
-        active_dof_indices=_transport_active_dof_indices,
-    )
-    active_idx_jnp = active_dof_state.active_idx_jnp
-    full_to_active_jnp = active_dof_state.full_to_active_jnp
-    active_size = int(active_dof_state.active_size)
     if use_active_dof_mode and emit is not None:
         if use_pas_projection:
             emit(

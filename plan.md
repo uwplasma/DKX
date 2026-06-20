@@ -1134,6 +1134,12 @@ Recent local validation:
   `109 passed in 23.10 s`.
 - Broad profile-response/RHSMode=1 policy, setup, diagnostics, solver, and
   helper sweep after initial-route extraction: `1195 passed in 48.86 s`.
+- Profile-response setup and active-DOF unit tests after active-problem setup
+  extraction: `19 passed in 0.35 s`.
+- Structured CSR and auto-host routing shard after active-problem setup
+  extraction: `109 passed in 23.22 s`.
+- Broad profile-response/RHSMode=1 policy, setup, diagnostics, solver, and
+  helper sweep after active-problem setup extraction: `1198 passed in 48.29 s`.
 - Older focused and broad validation checkpoints are intentionally omitted from
   this active plan; they remain available in git history.
 
@@ -1146,7 +1152,7 @@ Known CI issue fixed by this rewrite:
 
 ### 1. `v3_driver.py` Architecture Refactor
 
-Completion estimate: 69%.
+Completion estimate: 70%.
 
 Goal:
 
@@ -1233,6 +1239,10 @@ Completed recent boundaries:
 - RHSMode=1 initial solve-route setup now lives in the profile-response setup
   module with unit coverage for solve-method classification, structured-CSR
   auto admission, force-Krylov rejection, and multi-device sharding metadata.
+- RHSMode=1 recycled-Krylov basis filtering, reduced-pitch-mode shape
+  detection, DKES adjustment, active-DOF admission, preconditioner-option
+  parsing, and active-map construction are consolidated in a typed
+  active-problem setup helper with focused tests.
 - RHSMode=1 rescue/refinement candidate acceptance and KSP replay-state updates
   consolidated into profile-response handoff helpers.
 - RHSMode=1 true-residual recomputation before fallback decisions consolidated

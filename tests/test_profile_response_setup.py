@@ -2,10 +2,13 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+import numpy as np
+
 from sfincs_jax.problems.profile_response.setup import (
     SPARSE_HOST_SAFE_SOLVE_METHODS,
     equilibrium_name_hint_from_namelist,
     geometry_scheme_hint_from_namelist,
+    resolve_rhs1_active_problem_setup,
     resolve_rhs1_domain_decomposition_setup,
     resolve_rhs1_dkes_adjustment_setup,
     resolve_rhs1_gmres_budget_setup,
@@ -13,6 +16,8 @@ from sfincs_jax.problems.profile_response.setup import (
     resolve_rhs1_physics_flag_setup,
     resolve_rhs1_post_active_solve_policy_setup,
     resolve_rhs1_preconditioner_option_setup,
+    resolve_rhs1_recycle_basis_setup,
+    resolve_rhs1_reduced_mode_shape_setup,
     resolve_rhs1_tolerance_setup,
     resolve_solve_method_request_flags,
 )
@@ -42,6 +47,7 @@ class FakeOperator:
     fblock: FakeFBlock
     n_zeta: int = 1
     n_species: int = 1
+    f_size: int = 0
 
 
 def test_rhs1_gmres_budget_setup_applies_only_valid_env_overrides() -> None:
@@ -308,6 +314,126 @@ def test_rhs1_initial_route_setup_skips_auto_policy_for_explicit_structured() ->
     assert setup.structured_eparallel_abs == 0.0
     assert not setup.structured_auto_allowed
     assert not setup.structured_sharded_multidevice
+
+
+def test_rhs1_recycle_basis_setup_filters_shape_and_keeps_latest_vectors() -> None:
+    basis = [
+        np.asarray([1.0, 0.0]),
+        np.asarray([2.0, 0.0, 0.0]),
+        np.asarray([3.0, 0.0, 0.0]),
+        np.asarray([4.0, 0.0, 0.0]),
+    ]
+
+    setup = resolve_rhs1_recycle_basis_setup(
+        recycle_basis=basis,
+        total_size=3,
+        recycle_k_env="2",
+        asarray=np.asarray,
+    )
+
+    assert setup.recycle_k == 2
+    assert len(setup.basis) == 2
+    np.testing.assert_allclose(setup.basis[0], np.asarray([3.0, 0.0, 0.0]))
+    np.testing.assert_allclose(setup.basis[1], np.asarray([4.0, 0.0, 0.0]))
+
+    invalid = resolve_rhs1_recycle_basis_setup(
+        recycle_basis=basis,
+        total_size=3,
+        recycle_k_env="bad",
+        asarray=np.asarray,
+    )
+    assert invalid.recycle_k == 4
+    assert len(invalid.basis) == 3
+
+    disabled = resolve_rhs1_recycle_basis_setup(
+        recycle_basis=basis,
+        total_size=3,
+        recycle_k_env="0",
+        asarray=np.asarray,
+    )
+    assert disabled.basis == ()
+
+
+def test_rhs1_reduced_mode_shape_setup_detects_truncated_pitch_grid() -> None:
+    reduced = resolve_rhs1_reduced_mode_shape_setup(
+        nxi_for_x=[5, 7, 9],
+        n_xi=9,
+    )
+
+    assert reduced.nxi_for_x.dtype == np.int32
+    assert reduced.max_l == 9
+    assert reduced.has_reduced_modes
+
+    full = resolve_rhs1_reduced_mode_shape_setup(
+        nxi_for_x=[9, 9],
+        n_xi=9,
+    )
+    assert not full.has_reduced_modes
+
+
+def test_rhs1_active_problem_setup_combines_dkes_active_dof_and_preconditioner_options() -> None:
+    nml = FakeNamelist(
+        {
+            "physicsParameters": {
+                "useDKESExBDrift": ".true.",
+                "includeXDotTerm": ".true.",
+                "includeElectricFieldTermInXiDot": ".true.",
+                "dPhiHatdrN": "-3.0",
+            },
+            "preconditionerOptions": {
+                "PRECONDITIONER_SPECIES": "2",
+                "PRECONDITIONER_X": "3",
+                "PRECONDITIONER_XI": "4",
+                "PRECONDITIONER_X_MIN_L": "1",
+            },
+            "geometryParameters": {"geometryScheme": "5"},
+        }
+    )
+    op = FakeOperator(
+        rhs_mode=1,
+        include_phi1=False,
+        constraint_scheme=2,
+        total_size=6,
+        phi1_size=0,
+        fblock=FakeFBlock(fp=None, pas=object()),
+        f_size=6,
+    )
+
+    def budget(**_kwargs: object) -> tuple[int, int, bool, bool]:
+        return 24, 48, True, True
+
+    setup = resolve_rhs1_active_problem_setup(
+        nml=nml,
+        op=op,
+        tol=1.0e-6,
+        fp_tol=1.0e-9,
+        restart=12,
+        maxiter=24,
+        restart_env_forced=False,
+        maxiter_env_forced=False,
+        has_reduced_modes=True,
+        sparse_host_like_requested=False,
+        xblock_active_dof_requested=False,
+        dkes_gmres_budget=budget,
+        active_dof_indices=lambda _op: np.asarray([0, 2, 4], dtype=np.int32),
+        env={"SFINCS_JAX_ACTIVE_DOF": "true"},
+    )
+
+    assert setup.restart == 24
+    assert setup.maxiter == 48
+    assert setup.use_dkes
+    assert setup.include_xdot_sparse_pc
+    assert setup.include_electric_field_xi_sparse_pc
+    assert setup.er_abs_sparse_pc == 3.0
+    assert setup.preconditioner_species == 2
+    assert setup.preconditioner_x == 3
+    assert setup.preconditioner_x_min_l == 1
+    assert setup.preconditioner_xi == 4
+    assert setup.geom_scheme == 5
+    assert setup.use_active_dof_mode
+    assert setup.active_size == 3
+    np.testing.assert_allclose(np.asarray(setup.active_idx_jnp), np.asarray([0, 2, 4]))
+    assert any("PAS DKES default GMRES budget" in message for _, message in setup.messages)
 
 
 def test_preconditioner_option_setup_controls_pas_projection() -> None:
