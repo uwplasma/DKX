@@ -75,6 +75,8 @@ from sfincs_jax.problems.profile_response.sparse_pc import (
     SparsePCGMRESResult,
     XBlockAugmentedKrylovBasisContext,
     XBlockAugmentedKrylovBasisResult,
+    XBlockAugmentedKrylovStageContext,
+    XBlockAugmentedKrylovStageResult,
     XBlockDeviceKrylovState,
     XBlockFirstKrylovAttemptContext,
     XBlockFirstKrylovAttemptResult,
@@ -117,6 +119,7 @@ from sfincs_jax.problems.profile_response.sparse_pc import (
     apply_fortran_reduced_xblock_initial_seed,
     apply_fortran_reduced_xblock_moment_schur_stage,
     apply_xblock_global_coupling_stage,
+    apply_xblock_augmented_krylov_stage,
     apply_xblock_moment_schur_stage,
     apply_xblock_probe_coarse_stage,
     apply_xblock_qi_coarse_seed_stage,
@@ -434,6 +437,97 @@ def test_prepare_xblock_augmented_krylov_basis_prefers_seed_and_scales_left_prec
         np.asarray(result.operator_on_basis),
         np.asarray(2.0 * row_scale.reshape((-1, 1)) * seed_action),
     )
+
+
+def _augmented_krylov_stage_context(
+    **overrides: object,
+) -> XBlockAugmentedKrylovStageContext:
+    values: dict[str, object] = {
+        "requested": True,
+        "krylov_method": "fgmres_jax",
+        "qi_device_state": _qi_device_state(),
+        "seed_available": False,
+        "seed_rank": 0,
+        "seed_basis": None,
+        "seed_operator_on_basis": None,
+        "seed_used": False,
+        "row_equilibration_built": False,
+        "col_equilibration_built": False,
+        "row_scale": None,
+        "inv_col_scale": None,
+        "precondition_side": "right",
+        "solve_preconditioner": None,
+        "mode": "combined",
+        "metadata": {"existing": True},
+        "emit": None,
+        "basis_builder": prepare_xblock_augmented_krylov_basis,
+    }
+    values.update(overrides)
+    return XBlockAugmentedKrylovStageContext(**values)  # type: ignore[arg-type]
+
+
+def test_apply_xblock_augmented_krylov_stage_skips_when_not_requested() -> None:
+    result = apply_xblock_augmented_krylov_stage(
+        _augmented_krylov_stage_context(requested=False, seed_used=True)
+    )
+
+    assert isinstance(result, XBlockAugmentedKrylovStageResult)
+    assert result.used is False
+    assert result.rank == 0
+    assert result.reason is None
+    assert result.seed_used is True
+    assert result.basis is None
+    assert result.operator_on_basis is None
+    assert result.metadata == {"existing": True}
+
+
+def test_apply_xblock_augmented_krylov_stage_updates_metadata_and_emits_success() -> None:
+    emitted: list[tuple[int, str]] = []
+    seed_basis = jnp.asarray([[1.0], [0.0]], dtype=jnp.float64)
+    seed_action = jnp.asarray([[2.0], [0.0]], dtype=jnp.float64)
+
+    result = apply_xblock_augmented_krylov_stage(
+        _augmented_krylov_stage_context(
+            seed_available=True,
+            seed_rank=1,
+            seed_basis=seed_basis,
+            seed_operator_on_basis=seed_action,
+            mode="projected",
+            emit=lambda level, message: emitted.append((level, message)),
+        )
+    )
+
+    assert result.used is True
+    assert result.rank == 1
+    assert result.reason == "enabled_from_augmented_seed"
+    assert result.seed_used is True
+    assert result.metadata["augmented_seed_used"] is True
+    assert result.metadata["augmented_seed_available"] is True
+    np.testing.assert_allclose(np.asarray(result.basis), np.asarray(seed_basis))
+    assert emitted[-1][0] == 0
+    assert "QI augmented Krylov enabled_from_augmented_seed" in emitted[-1][1]
+    assert "mode=projected" in emitted[-1][1]
+
+
+def test_apply_xblock_augmented_krylov_stage_emits_rejection() -> None:
+    emitted: list[tuple[int, str]] = []
+
+    result = apply_xblock_augmented_krylov_stage(
+        _augmented_krylov_stage_context(
+            krylov_method="lgmres",
+            seed_available=False,
+            emit=lambda level, message: emitted.append((level, message)),
+        )
+    )
+
+    assert result.used is False
+    assert result.rank == 0
+    assert result.reason == "disabled_non_jax_fgmres_method"
+    assert result.seed_used is False
+    assert result.metadata["augmented_seed_used"] is False
+    assert result.metadata["augmented_seed_available"] is False
+    assert emitted[-1][0] == 1
+    assert "QI augmented Krylov disabled_non_jax_fgmres_method" in emitted[-1][1]
 
 
 def test_prepare_xblock_krylov_solve_space_unscaled_preserves_callbacks() -> None:

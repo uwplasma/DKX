@@ -508,6 +508,43 @@ class XBlockAugmentedKrylovBasisResult:
 
 
 @dataclass(frozen=True)
+class XBlockAugmentedKrylovStageContext:
+    """Inputs for optional QI augmented-Krylov solve setup and diagnostics."""
+
+    requested: bool
+    krylov_method: str
+    qi_device_state: object | None
+    seed_available: bool
+    seed_rank: int
+    seed_basis: jnp.ndarray | None
+    seed_operator_on_basis: jnp.ndarray | None
+    seed_used: bool
+    row_equilibration_built: bool
+    col_equilibration_built: bool
+    row_scale: jnp.ndarray | None
+    inv_col_scale: jnp.ndarray | None
+    precondition_side: str
+    solve_preconditioner: ArrayFn | None
+    mode: str
+    metadata: Mapping[str, object]
+    emit: EmitFn | None
+    basis_builder: Callable[[XBlockAugmentedKrylovBasisContext], XBlockAugmentedKrylovBasisResult]
+
+
+@dataclass(frozen=True)
+class XBlockAugmentedKrylovStageResult:
+    """Optional QI augmented-Krylov basis and updated diagnostic metadata."""
+
+    basis: jnp.ndarray | None
+    operator_on_basis: jnp.ndarray | None
+    used: bool
+    rank: int
+    reason: str | None
+    seed_used: bool
+    metadata: dict[str, object]
+
+
+@dataclass(frozen=True)
 class XBlockSparsePCWorkEstimates:
     """User-facing solver-kind and Krylov work-memory estimates."""
 
@@ -2223,6 +2260,61 @@ def prepare_xblock_augmented_krylov_basis(
             reason=f"{type(exc).__name__}: {exc}",
             seed_used=False,
         )
+
+
+def apply_xblock_augmented_krylov_stage(
+    context: XBlockAugmentedKrylovStageContext,
+) -> XBlockAugmentedKrylovStageResult:
+    """Prepare optional QI augmented-Krylov inputs and update metadata."""
+
+    metadata = dict(context.metadata)
+    if not bool(context.requested):
+        return XBlockAugmentedKrylovStageResult(
+            basis=None,
+            operator_on_basis=None,
+            used=False,
+            rank=0,
+            reason=None,
+            seed_used=bool(context.seed_used),
+            metadata=metadata,
+        )
+
+    augmented_krylov = context.basis_builder(
+        XBlockAugmentedKrylovBasisContext(
+            krylov_method=str(context.krylov_method),
+            qi_device_state=context.qi_device_state,
+            seed_available=bool(context.seed_available),
+            seed_rank=int(context.seed_rank),
+            seed_basis=context.seed_basis,
+            seed_operator_on_basis=context.seed_operator_on_basis,
+            row_equilibration_built=bool(context.row_equilibration_built),
+            col_equilibration_built=bool(context.col_equilibration_built),
+            row_scale=context.row_scale,
+            inv_col_scale=context.inv_col_scale,
+            precondition_side=str(context.precondition_side),
+            solve_preconditioner=context.solve_preconditioner,
+        )
+    )
+    seed_used = bool(context.seed_used or augmented_krylov.seed_used)
+    metadata["augmented_seed_used"] = bool(seed_used)
+    metadata["augmented_seed_available"] = bool(context.seed_available)
+    if context.emit is not None:
+        context.emit(
+            0 if bool(augmented_krylov.used) else 1,
+            "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
+            f"QI augmented Krylov {augmented_krylov.reason} "
+            f"rank={int(augmented_krylov.rank)} "
+            f"mode={context.mode}",
+        )
+    return XBlockAugmentedKrylovStageResult(
+        basis=augmented_krylov.basis,
+        operator_on_basis=augmented_krylov.operator_on_basis,
+        used=bool(augmented_krylov.used),
+        rank=int(augmented_krylov.rank),
+        reason=str(augmented_krylov.reason),
+        seed_used=bool(seed_used),
+        metadata=metadata,
+    )
 
 
 def run_xblock_first_krylov_attempt(
@@ -14454,6 +14546,8 @@ __all__ = [
     "XBlockKrylovSolveState",
     "XBlockAugmentedKrylovBasisContext",
     "XBlockAugmentedKrylovBasisResult",
+    "XBlockAugmentedKrylovStageContext",
+    "XBlockAugmentedKrylovStageResult",
     "XBlockKrylovSolveSpace",
     "XBlockKrylovSolveSpaceContext",
     "XBlockSparsePCFinalCoreState",
@@ -14523,6 +14617,7 @@ __all__ = [
     "apply_xblock_qi_two_level_stage",
     "apply_xblock_side_probe_stage",
     "apply_xblock_probe_coarse_stage",
+    "apply_xblock_augmented_krylov_stage",
     "apply_xblock_two_level_stage",
     "apply_sparse_pc_post_minres",
     "apply_sparse_pc_post_minres_if_needed",

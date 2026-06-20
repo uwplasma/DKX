@@ -277,7 +277,7 @@ from .problems.profile_response.sparse_pc import (
     SparsePCGMRESFinalizationStateContext,
     SparsePCPostMinresFinalizationContext,
     SparsePCGMRESResult,
-    XBlockAugmentedKrylovBasisContext,
+    XBlockAugmentedKrylovStageContext,
     XBlockFirstKrylovAttemptContext,
     XBlockFirstKrylovSolveStateContext,
     XBlockGMRESFallbackContext,
@@ -307,6 +307,7 @@ from .problems.profile_response.sparse_pc import (
     apply_fortran_reduced_xblock_initial_seed,
     apply_fortran_reduced_xblock_moment_schur_stage,
     apply_xblock_global_coupling_stage,
+    apply_xblock_augmented_krylov_stage,
     apply_xblock_moment_schur_stage,
     apply_xblock_probe_coarse_stage,
     apply_xblock_qi_coarse_seed_stage,
@@ -4247,44 +4248,37 @@ def solve_v3_full_system_linear_gmres(
                 )
             augmentation_basis_for_solve = None
             operator_on_augmentation_for_solve = None
-            if bool(qi_device_augmented_krylov_requested):
-                augmented_krylov = prepare_xblock_augmented_krylov_basis(
-                    XBlockAugmentedKrylovBasisContext(
-                        krylov_method=str(xblock_krylov_method),
-                        qi_device_state=qi_device_state_for_augmented_krylov,
-                        seed_available=bool(qi_device_augmented_seed_available),
-                        seed_rank=int(qi_device_augmented_seed_rank),
-                        seed_basis=qi_device_augmented_seed_basis_for_krylov,
-                        seed_operator_on_basis=qi_device_augmented_seed_action_for_krylov,
-                        row_equilibration_built=bool(xblock_row_equilibration_built),
-                        col_equilibration_built=bool(xblock_col_equilibration_built),
-                        row_scale=xblock_row_scale_jnp,
-                        inv_col_scale=xblock_inv_col_scale_jnp,
-                        precondition_side=str(precondition_side),
-                        solve_preconditioner=solve_preconditioner,
-                    )
+            augmented_krylov_stage = apply_xblock_augmented_krylov_stage(
+                XBlockAugmentedKrylovStageContext(
+                    requested=bool(qi_device_augmented_krylov_requested),
+                    krylov_method=str(xblock_krylov_method),
+                    qi_device_state=qi_device_state_for_augmented_krylov,
+                    seed_available=bool(qi_device_augmented_seed_available),
+                    seed_rank=int(qi_device_augmented_seed_rank),
+                    seed_basis=qi_device_augmented_seed_basis_for_krylov,
+                    seed_operator_on_basis=qi_device_augmented_seed_action_for_krylov,
+                    seed_used=bool(qi_device_augmented_seed_used),
+                    row_equilibration_built=bool(xblock_row_equilibration_built),
+                    col_equilibration_built=bool(xblock_col_equilibration_built),
+                    row_scale=xblock_row_scale_jnp,
+                    inv_col_scale=xblock_inv_col_scale_jnp,
+                    precondition_side=str(precondition_side),
+                    solve_preconditioner=solve_preconditioner,
+                    mode=str(qi_device_augmented_krylov_mode),
+                    metadata=qi_device_preconditioner_metadata,
+                    emit=emit,
+                    basis_builder=prepare_xblock_augmented_krylov_basis,
                 )
-                augmentation_basis_for_solve = augmented_krylov.basis
-                operator_on_augmentation_for_solve = augmented_krylov.operator_on_basis
-                qi_device_augmented_krylov_used = bool(augmented_krylov.used)
-                qi_device_augmented_krylov_rank = int(augmented_krylov.rank)
-                qi_device_augmented_krylov_reason = str(augmented_krylov.reason)
-                if bool(augmented_krylov.seed_used):
-                    qi_device_augmented_seed_used = True
-                qi_device_preconditioner_metadata["augmented_seed_used"] = bool(
-                    qi_device_augmented_seed_used
-                )
-                qi_device_preconditioner_metadata["augmented_seed_available"] = bool(
-                    qi_device_augmented_seed_available
-                )
-                if emit is not None:
-                    emit(
-                        0 if bool(qi_device_augmented_krylov_used) else 1,
-                        "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
-                        f"QI augmented Krylov {qi_device_augmented_krylov_reason} "
-                        f"rank={int(qi_device_augmented_krylov_rank)} "
-                        f"mode={qi_device_augmented_krylov_mode}",
-                    )
+            )
+            augmentation_basis_for_solve = augmented_krylov_stage.basis
+            operator_on_augmentation_for_solve = (
+                augmented_krylov_stage.operator_on_basis
+            )
+            qi_device_augmented_krylov_used = bool(augmented_krylov_stage.used)
+            qi_device_augmented_krylov_rank = int(augmented_krylov_stage.rank)
+            qi_device_augmented_krylov_reason = augmented_krylov_stage.reason
+            qi_device_augmented_seed_used = bool(augmented_krylov_stage.seed_used)
+            qi_device_preconditioner_metadata = augmented_krylov_stage.metadata
             solve_start_s = sparse_timer.elapsed_s()
 
             def _device_cycle_progress_callback(
