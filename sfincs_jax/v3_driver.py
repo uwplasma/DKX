@@ -274,9 +274,7 @@ from .problems.profile_response.sparse_pc import (
     ExplicitSparseMinimumNormBranchContext,
     ExplicitSparseHostDirectBranchContext,
     SparseHostOrILUFactorBuildContext,
-    SparseILUPreconditionerBuildContext,
-    SparseHostScipyPreconditionerBuildContext,
-    SparseHostScipyGMRESContext,
+    SparseHostRetryCandidateContext,
     SparseJAXRetryPreconditionerBuildContext,
     SparsePCGMRESContext,
     XBlockAugmentedKrylovStageContext,
@@ -377,14 +375,11 @@ from .problems.profile_response.sparse_pc import (
     run_xblock_krylov_solve_stage,
     xblock_sparse_pc_final_metadata_state_from_context,
     build_sparse_host_or_ilu_factor,
-    build_sparse_ilu_preconditioner_from_cache,
-    build_sparse_host_scipy_preconditioner,
-    run_sparse_host_scipy_gmres,
+    run_sparse_host_retry_candidate,
     build_sparse_jax_retry_preconditioner,
     resolve_sparse_host_or_ilu_factor_controls,
     finalize_sparse_pc_gmres_bundle,
     sparse_pc_gmres_finalization_bundle_from_driver_result,
-    sparse_host_direct_fallback_payload,
     solve_explicit_sparse_minimum_norm_branch,
     solve_explicit_sparse_host_direct_branch,
     finalize_xblock_assembled_operator_metadata,
@@ -11175,83 +11170,12 @@ def solve_v3_full_system_linear_gmres(
                             build_sparse_ilu_from_matvec=_build_sparse_ilu_from_matvec,
                         )
                     )
-                    explicit_sparse_operator = sparse_factor_build.explicit_sparse_operator
-                    explicit_sparse_factor = sparse_factor_build.explicit_sparse_factor
-                    a_csr_full = sparse_factor_build.a_csr_full
-                    _a_csr_drop = sparse_factor_build.a_csr_drop
-                    ilu = sparse_factor_build.ilu
-                    a_dense_cache = sparse_factor_build.a_dense_cache
-                    l_dense = sparse_factor_build.l_dense
-                    u_dense = sparse_factor_build.u_dense
-                    l_unit_diag = sparse_factor_build.l_unit_diag
-                    dense_matrix_cache = a_dense_cache
+                    dense_matrix_cache = sparse_factor_build.a_dense_cache
                     _mark("rhs1_sparse_precond_build_done")
-                    host_sparse_direct = host_sparse_direct_wanted
-                    sparse_retry_timer = Timer()
 
-                    if host_sparse_direct and ilu is not None:
-                        host_sparse_direct_used = True
-                        sparse_host_fallback = sparse_host_direct_fallback_payload(
-                            explicit_sparse_factor=explicit_sparse_factor,
-                            explicit_sparse_operator=explicit_sparse_operator,
-                            ilu=ilu,
-                            a_csr_full=a_csr_full,
-                            rhs=rhs_reduced,
-                            factor_dtype=factor_dtype,
-                            refine_steps=_host_sparse_direct_refine_steps(
-                                "SFINCS_JAX_RHSMODE1_SPARSE_DIRECT_REFINE",
-                                default=2,
-                            ),
-                            matvec=mv_reduced,
-                            target=float(target_reduced),
-                            tol=tol,
-                            atol=atol,
-                            restart=restart,
-                            maxiter=maxiter,
-                            precondition_side=gmres_precond_side,
-                            emit=emit,
-                            backend_name=jax.default_backend(),
-                            polish_enabled=rhs1_polish_enabled,
-                            parse_polish_gmres_config=rhs1_parse_polish_gmres_config,
-                            direct_solve_with_refinement=_host_direct_solve_with_refinement,
-                            ilu_solve_with_refinement=_host_sparse_direct_solve_with_refinement,
-                            host_sparse_direct_polish=_host_sparse_direct_polish,
-                        )
-                        res_sparse = GMRESSolveResult(
-                            x=sparse_host_fallback.x,
-                            residual_norm=sparse_host_fallback.residual_norm,
-                        )
-                        residual_vec_sparse = sparse_host_fallback.residual_vec
-                        _mv_sparse = mv_reduced
-                        _precond_sparse = None
-                    elif use_implicit:
-                        ilu_cache = _RHSMODE1_SPARSE_ILU_CACHE.get(cache_key)
-                        precond_build = build_sparse_ilu_preconditioner_from_cache(
-                            SparseILUPreconditionerBuildContext(
-                                cache_entry=ilu_cache,
-                                l_dense=l_dense,
-                                u_dense=u_dense,
-                                l_unit_diag=l_unit_diag,
-                            )
-                        )
-                        precond_sparse = precond_build.preconditioner
-
-                        if precond_sparse is None:
-                            if emit is not None:
-                                emit(
-                                    1,
-                                    f"{'sparse_lu' if sparse_exact_lu else 'sparse_ilu'}: "
-                                    "implicit preconditioner factors unavailable; skipping",
-                                )
-                            res_sparse = None
-                        else:
-                            if emit is not None:
-                                emit(
-                                    0,
-                                    "solve_v3_full_system_linear_gmres: "
-                                    f"{'sparse LU' if sparse_exact_lu else 'sparse ILU'} (implicit) fallback",
-                                )
-                            res_sparse = _solve_linear(
+                    def _run_reduced_implicit_sparse(precond_sparse):
+                        return (
+                            _solve_linear(
                                 matvec_fn=mv_reduced,
                                 b_vec=rhs_reduced,
                                 precond_fn=precond_sparse,
@@ -11262,50 +11186,60 @@ def solve_v3_full_system_linear_gmres(
                                 maxiter_val=maxiter,
                                 solve_method_val="incremental",
                                 precond_side=gmres_precond_side,
-                            )
-                    else:
-                        scipy_sparse_build = build_sparse_host_scipy_preconditioner(
-                            SparseHostScipyPreconditionerBuildContext(
-                                ilu=ilu,
-                                a_csr_full=a_csr_full,
-                                base_matvec=mv_reduced,
-                                sparse_use_matvec=sparse_use_matvec,
-                            )
+                            ),
+                            None,
                         )
-                        _precond_sparse = scipy_sparse_build.preconditioner
-                        _mv_sparse = scipy_sparse_build.matvec
 
-                        if emit is not None:
-                            emit(
-                                0,
-                                "solve_v3_full_system_linear_gmres: "
-                                f"{'sparse LU' if sparse_exact_lu else 'sparse ILU'} GMRES fallback",
-                            )
-                        res_sparse, _residual_vec_sparse_unused = run_sparse_host_scipy_gmres(
-                            SparseHostScipyGMRESContext(
-                                matvec=_mv_sparse,
-                                rhs=rhs_reduced,
-                                preconditioner=_precond_sparse,
-                                x0=res_reduced.x,
-                                tol=tol,
-                                atol=atol,
-                                restart=restart,
-                                maxiter=maxiter,
-                                precondition_side=gmres_precond_side,
-                                gmres_solver=gmres_solve_with_history_scipy,
-                            )
+                    sparse_retry_candidate = run_sparse_host_retry_candidate(
+                        SparseHostRetryCandidateContext(
+                            factor_build=sparse_factor_build,
+                            host_sparse_direct=bool(host_sparse_direct_wanted),
+                            host_direct_operator_pc=False,
+                            use_implicit=bool(use_implicit),
+                            matvec=mv_reduced,
+                            rhs=rhs_reduced,
+                            x0=res_reduced.x,
+                            factor_dtype=factor_dtype,
+                            refine_steps=_host_sparse_direct_refine_steps(
+                                "SFINCS_JAX_RHSMODE1_SPARSE_DIRECT_REFINE",
+                                default=2,
+                            ),
+                            target=float(target_reduced),
+                            tol=tol,
+                            atol=atol,
+                            restart=restart,
+                            maxiter=maxiter,
+                            precondition_side=gmres_precond_side,
+                            emit=emit,
+                            backend_name=jax.default_backend(),
+                            sparse_use_matvec=bool(sparse_use_matvec),
+                            sparse_exact_lu=bool(sparse_exact_lu),
+                            cache_entry=_RHSMODE1_SPARSE_ILU_CACHE.get(cache_key),
+                            require_lower_diag=False,
+                            polish_enabled=rhs1_polish_enabled,
+                            parse_polish_gmres_config=rhs1_parse_polish_gmres_config,
+                            direct_solve_with_refinement=_host_direct_solve_with_refinement,
+                            ilu_solve_with_refinement=_host_sparse_direct_solve_with_refinement,
+                            host_sparse_direct_polish=_host_sparse_direct_polish,
+                            gmres_solver=gmres_solve_with_history_scipy,
+                            implicit_solver=_run_reduced_implicit_sparse,
+                            compute_scipy_residual_vec=False,
                         )
-                    if res_sparse is not None:
-                        sparse_retry_elapsed_s = sparse_retry_timer.elapsed_s()
+                    )
+                    if sparse_retry_candidate.result is not None:
+                        host_sparse_direct_used = (
+                            host_sparse_direct_used
+                            or sparse_retry_candidate.host_sparse_direct_used
+                        )
                         res_reduced, residual_vec, _accepted = rhs1_accept_sparse_retry_candidate_and_update_replay(
                             replay_state=ksp_replay,
                             current_result=res_reduced,
-                            candidate_result=res_sparse,
+                            candidate_result=sparse_retry_candidate.result,
                             current_residual_vec=residual_vec,
                             candidate_residual_vec=None,
-                            matvec_fn=mv_reduced if use_implicit else _mv_sparse,
+                            matvec_fn=sparse_retry_candidate.matvec,
                             b_vec=rhs_reduced,
-                            precond_fn=_precond_sparse,
+                            precond_fn=sparse_retry_candidate.preconditioner,
                             restart=restart,
                             maxiter=maxiter,
                             precond_side=gmres_precond_side,
@@ -11313,7 +11247,7 @@ def solve_v3_full_system_linear_gmres(
                             candidate_family="sparse",
                             scope="reduced",
                             target_value=target_reduced,
-                            solve_s=sparse_retry_elapsed_s,
+                            solve_s=sparse_retry_candidate.solve_s,
                             peak_rss_mb=_rss_mb(),
                         )
                 except Exception as exc:  # noqa: BLE001
@@ -12810,180 +12744,96 @@ def solve_v3_full_system_linear_gmres(
                             build_sparse_ilu_from_matvec=_build_sparse_ilu_from_matvec,
                         )
                     )
-                    explicit_sparse_operator = sparse_factor_build.explicit_sparse_operator
-                    explicit_sparse_factor = sparse_factor_build.explicit_sparse_factor
-                    a_csr_full = sparse_factor_build.a_csr_full
-                    _a_csr_drop = sparse_factor_build.a_csr_drop
-                    ilu = sparse_factor_build.ilu
-                    a_dense_cache = sparse_factor_build.a_dense_cache
-                    l_dense = sparse_factor_build.l_dense
-                    u_dense = sparse_factor_build.u_dense
-                    l_unit_diag = sparse_factor_build.l_unit_diag
-                    dense_matrix_cache = a_dense_cache
+                    dense_matrix_cache = sparse_factor_build.a_dense_cache
                     _mark("rhs1_sparse_precond_build_done")
-                    host_sparse_direct = host_sparse_direct_wanted
-                    sparse_retry_timer = Timer()
 
-                    if host_sparse_direct and ilu is not None:
-                        if sparse_operator_preconditioned_rescue:
-                            scipy_sparse_build = build_sparse_host_scipy_preconditioner(
-                                SparseHostScipyPreconditionerBuildContext(
-                                    ilu=ilu,
-                                    a_csr_full=a_csr_full,
-                                    base_matvec=mv,
-                                    sparse_use_matvec=False,
-                                )
-                            )
-                            _precond_sparse = scipy_sparse_build.preconditioner
-
-                            sparse_pc_restart, sparse_pc_maxiter = rhs1_parse_polish_gmres_config(
-                                restart_env_name="SFINCS_JAX_RHSMODE1_SPARSE_PC_GMRES_RESTART",
-                                maxiter_env_name="SFINCS_JAX_RHSMODE1_SPARSE_PC_GMRES_MAXITER",
-                                default_restart=max(120, int(restart)),
-                                default_maxiter=max(800, int(maxiter or 400) * 2),
-                            )
-                            if emit is not None:
-                                emit(
-                                    0,
-                                    "solve_v3_full_system_linear_gmres: sparse LU operator-preconditioned "
-                                    f"GMRES fallback restart={int(sparse_pc_restart)} maxiter={int(sparse_pc_maxiter)}",
-                                )
-                            res_sparse, residual_vec_sparse = run_sparse_host_scipy_gmres(
-                                SparseHostScipyGMRESContext(
-                                    matvec=mv,
-                                    rhs=rhs,
-                                    preconditioner=_precond_sparse,
-                                    x0=result.x,
-                                    tol=tol,
-                                    atol=atol,
-                                    restart=sparse_pc_restart,
-                                    maxiter=sparse_pc_maxiter,
-                                    precondition_side=gmres_precond_side,
-                                    gmres_solver=gmres_solve_with_history_scipy,
-                                    residual_matvec=mv,
-                                )
-                            )
-                            _mv_sparse = mv
-                        else:
-                            host_sparse_direct_used = True
-                            sparse_host_fallback = sparse_host_direct_fallback_payload(
-                                explicit_sparse_factor=explicit_sparse_factor,
-                                explicit_sparse_operator=explicit_sparse_operator,
-                                ilu=ilu,
-                                a_csr_full=a_csr_full,
-                                rhs=rhs,
-                                factor_dtype=factor_dtype,
-                                refine_steps=_host_sparse_direct_refine_steps(
-                                    "SFINCS_JAX_RHSMODE1_SPARSE_DIRECT_REFINE",
-                                    default=2,
+                    sparse_pc_restart = None
+                    sparse_pc_maxiter = None
+                    if bool(sparse_operator_preconditioned_rescue):
+                        sparse_pc_restart, sparse_pc_maxiter = (
+                            rhs1_parse_polish_gmres_config(
+                                restart_env_name=(
+                                    "SFINCS_JAX_RHSMODE1_SPARSE_PC_GMRES_RESTART"
                                 ),
-                                matvec=mv,
-                                target=float(target),
-                                tol=tol,
-                                atol=atol,
-                                restart=restart,
-                                maxiter=maxiter,
-                                precondition_side=gmres_precond_side,
-                                emit=emit,
-                                backend_name=jax.default_backend(),
-                                polish_enabled=rhs1_polish_enabled,
-                                parse_polish_gmres_config=rhs1_parse_polish_gmres_config,
-                                direct_solve_with_refinement=_host_direct_solve_with_refinement,
-                                ilu_solve_with_refinement=_host_sparse_direct_solve_with_refinement,
-                                host_sparse_direct_polish=_host_sparse_direct_polish,
-                            )
-                            res_sparse = GMRESSolveResult(
-                                x=sparse_host_fallback.x,
-                                residual_norm=sparse_host_fallback.residual_norm,
-                            )
-                            residual_vec_sparse = sparse_host_fallback.residual_vec
-                            _mv_sparse = mv
-                            _precond_sparse = None
-                    elif use_implicit:
-                        ilu_cache = _RHSMODE1_SPARSE_ILU_CACHE.get(cache_key)
-                        precond_build = build_sparse_ilu_preconditioner_from_cache(
-                            SparseILUPreconditionerBuildContext(
-                                cache_entry=ilu_cache,
-                                l_dense=l_dense,
-                                u_dense=u_dense,
-                                l_unit_diag=l_unit_diag,
-                                require_lower_diag=True,
+                                maxiter_env_name=(
+                                    "SFINCS_JAX_RHSMODE1_SPARSE_PC_GMRES_MAXITER"
+                                ),
+                                default_restart=max(120, int(restart)),
+                                default_maxiter=max(
+                                    800,
+                                    int(maxiter or 400) * 2,
+                                ),
                             )
                         )
-                        precond_sparse = precond_build.preconditioner
 
-                        if precond_sparse is None:
-                            if emit is not None:
-                                emit(
-                                    1,
-                                    f"{'sparse_lu' if sparse_exact_lu else 'sparse_ilu'}: "
-                                    "implicit preconditioner factors unavailable; skipping",
-                                )
-                            res_sparse = None
-                            residual_vec_sparse = None
-                        else:
-                            if emit is not None:
-                                emit(
-                                    0,
-                                    "solve_v3_full_system_linear_gmres: "
-                                    f"{'sparse LU' if sparse_exact_lu else 'sparse ILU'} (implicit) fallback",
-                                )
-                            res_sparse, residual_vec_sparse = _solve_linear_with_residual(
-                                matvec_fn=mv,
-                                b_vec=rhs,
-                                precond_fn=precond_sparse,
-                                x0_vec=result.x,
-                                tol_val=tol,
-                                atol_val=atol,
-                                restart_val=restart,
-                                maxiter_val=maxiter,
-                                solve_method_val="incremental",
-                                precond_side=gmres_precond_side,
-                            )
-                    else:
-                        scipy_sparse_build = build_sparse_host_scipy_preconditioner(
-                            SparseHostScipyPreconditionerBuildContext(
-                                ilu=ilu,
-                                a_csr_full=a_csr_full,
-                                base_matvec=mv,
-                                sparse_use_matvec=sparse_use_matvec,
-                            )
+                    def _run_full_implicit_sparse(precond_sparse):
+                        return _solve_linear_with_residual(
+                            matvec_fn=mv,
+                            b_vec=rhs,
+                            precond_fn=precond_sparse,
+                            x0_vec=result.x,
+                            tol_val=tol,
+                            atol_val=atol,
+                            restart_val=restart,
+                            maxiter_val=maxiter,
+                            solve_method_val="incremental",
+                            precond_side=gmres_precond_side,
                         )
-                        _precond_sparse = scipy_sparse_build.preconditioner
-                        _mv_sparse = scipy_sparse_build.matvec
 
-                        if emit is not None:
-                            emit(
-                                0,
-                                "solve_v3_full_system_linear_gmres: "
-                                f"{'sparse LU' if sparse_exact_lu else 'sparse ILU'} GMRES fallback",
-                            )
-                        res_sparse, residual_vec_sparse = run_sparse_host_scipy_gmres(
-                            SparseHostScipyGMRESContext(
-                                matvec=_mv_sparse,
-                                rhs=rhs,
-                                preconditioner=_precond_sparse,
-                                x0=result.x,
-                                tol=tol,
-                                atol=atol,
-                                restart=restart,
-                                maxiter=maxiter,
-                                precondition_side=gmres_precond_side,
-                                gmres_solver=gmres_solve_with_history_scipy,
-                                residual_matvec=_mv_sparse,
-                            )
+                    sparse_retry_candidate = run_sparse_host_retry_candidate(
+                        SparseHostRetryCandidateContext(
+                            factor_build=sparse_factor_build,
+                            host_sparse_direct=bool(host_sparse_direct_wanted),
+                            host_direct_operator_pc=bool(
+                                sparse_operator_preconditioned_rescue
+                            ),
+                            use_implicit=bool(use_implicit),
+                            matvec=mv,
+                            rhs=rhs,
+                            x0=result.x,
+                            factor_dtype=factor_dtype,
+                            refine_steps=_host_sparse_direct_refine_steps(
+                                "SFINCS_JAX_RHSMODE1_SPARSE_DIRECT_REFINE",
+                                default=2,
+                            ),
+                            target=float(target),
+                            tol=tol,
+                            atol=atol,
+                            restart=restart,
+                            maxiter=maxiter,
+                            precondition_side=gmres_precond_side,
+                            emit=emit,
+                            backend_name=jax.default_backend(),
+                            sparse_use_matvec=bool(sparse_use_matvec),
+                            sparse_exact_lu=bool(sparse_exact_lu),
+                            cache_entry=_RHSMODE1_SPARSE_ILU_CACHE.get(cache_key),
+                            require_lower_diag=True,
+                            polish_enabled=rhs1_polish_enabled,
+                            parse_polish_gmres_config=rhs1_parse_polish_gmres_config,
+                            direct_solve_with_refinement=_host_direct_solve_with_refinement,
+                            ilu_solve_with_refinement=_host_sparse_direct_solve_with_refinement,
+                            host_sparse_direct_polish=_host_sparse_direct_polish,
+                            gmres_solver=gmres_solve_with_history_scipy,
+                            implicit_solver=_run_full_implicit_sparse,
+                            operator_pc_restart=sparse_pc_restart,
+                            operator_pc_maxiter=sparse_pc_maxiter,
+                            compute_scipy_residual_vec=True,
                         )
-                    if res_sparse is not None:
-                        sparse_retry_elapsed_s = sparse_retry_timer.elapsed_s()
+                    )
+                    if sparse_retry_candidate.result is not None:
+                        host_sparse_direct_used = (
+                            host_sparse_direct_used
+                            or sparse_retry_candidate.host_sparse_direct_used
+                        )
                         result, residual_vec, _accepted = rhs1_accept_sparse_retry_candidate_and_update_replay(
                             replay_state=ksp_replay,
                             current_result=result,
-                            candidate_result=res_sparse,
+                            candidate_result=sparse_retry_candidate.result,
                             current_residual_vec=residual_vec,
-                            candidate_residual_vec=residual_vec_sparse,
-                            matvec_fn=mv if use_implicit else _mv_sparse,
+                            candidate_residual_vec=sparse_retry_candidate.residual_vec,
+                            matvec_fn=sparse_retry_candidate.matvec,
                             b_vec=rhs,
-                            precond_fn=_precond_sparse,
+                            precond_fn=sparse_retry_candidate.preconditioner,
                             restart=restart,
                             maxiter=maxiter,
                             precond_side=gmres_precond_side,
@@ -12991,7 +12841,7 @@ def solve_v3_full_system_linear_gmres(
                             candidate_family="sparse",
                             scope="full",
                             target_value=target,
-                            solve_s=sparse_retry_elapsed_s,
+                            solve_s=sparse_retry_candidate.solve_s,
                             peak_rss_mb=_rss_mb(),
                         )
                 except Exception as exc:  # noqa: BLE001

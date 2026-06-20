@@ -70,6 +70,8 @@ from sfincs_jax.problems.profile_response.sparse_pc import (
     SparseILUPreconditionerBuildContext,
     SparseHostScipyPreconditionerBuildContext,
     SparseHostScipyGMRESContext,
+    SparseHostRetryCandidateContext,
+    SparseHostRetryCandidateResult,
     SparseJAXRetryPreconditionerBuildContext,
     ExplicitSparseOperatorBuildPolicy,
     ExplicitSparseOperatorBuildResult,
@@ -270,6 +272,7 @@ from sfincs_jax.problems.profile_response.sparse_pc import (
     build_sparse_ilu_preconditioner_from_cache,
     build_sparse_host_scipy_preconditioner,
     run_sparse_host_scipy_gmres,
+    run_sparse_host_retry_candidate,
     build_sparse_jax_retry_preconditioner,
     sparse_minimum_norm_solve_payload,
     sparse_minimum_norm_solve_from_pattern,
@@ -9221,6 +9224,159 @@ def test_run_sparse_host_scipy_gmres_computes_requested_true_residual_vector() -
 
     assert float(result.residual_norm) == pytest.approx(9.0)
     np.testing.assert_allclose(np.asarray(residual_vec), np.asarray([1.0, 3.0]))
+
+
+def test_run_sparse_host_retry_candidate_uses_host_direct_path() -> None:
+    messages: list[tuple[int, str]] = []
+    explicit_factor = SimpleNamespace(solve=lambda rhs: rhs, factor=object())
+    explicit_operator = SimpleNamespace(matrix=scipy_sparse.eye(2, format="csr"))
+    factor_build = sparse_pc_module.SparseHostOrILUFactorBuildResult(
+        explicit_sparse_operator=explicit_operator,
+        explicit_sparse_factor=explicit_factor,
+        a_csr_full=explicit_operator.matrix,
+        a_csr_drop=explicit_operator.matrix,
+        ilu=explicit_factor.factor,
+        a_dense_cache=None,
+        l_dense=None,
+        u_dense=None,
+        l_unit_diag=False,
+        used_explicit_sparse=True,
+    )
+
+    def direct_solve(**_kwargs):
+        return np.asarray([1.0, 2.0]), 5.0
+
+    result = run_sparse_host_retry_candidate(
+        SparseHostRetryCandidateContext(
+            factor_build=factor_build,
+            host_sparse_direct=True,
+            host_direct_operator_pc=False,
+            use_implicit=False,
+            matvec=lambda x: jnp.asarray(x, dtype=jnp.float64),
+            rhs=jnp.asarray([1.0, 2.0], dtype=jnp.float64),
+            x0=jnp.zeros(2, dtype=jnp.float64),
+            factor_dtype=np.dtype(np.float64),
+            refine_steps=3,
+            target=1.0,
+            tol=1.0e-8,
+            atol=1.0e-8,
+            restart=20,
+            maxiter=30,
+            precondition_side="right",
+            emit=lambda level, message: messages.append((level, message)),
+            backend_name="cpu",
+            sparse_use_matvec=False,
+            sparse_exact_lu=True,
+            cache_entry=None,
+            require_lower_diag=False,
+            polish_enabled=lambda **_kwargs: False,
+            parse_polish_gmres_config=lambda **_kwargs: (5, 6),
+            direct_solve_with_refinement=direct_solve,
+            ilu_solve_with_refinement=lambda **_kwargs: (_ for _ in ()).throw(
+                AssertionError("direct factor should be preferred")
+            ),
+            host_sparse_direct_polish=lambda **_kwargs: (_ for _ in ()).throw(
+                AssertionError("polish disabled")
+            ),
+            gmres_solver=lambda **_kwargs: (_ for _ in ()).throw(
+                AssertionError("GMRES should not run")
+            ),
+            implicit_solver=lambda _precond: (_ for _ in ()).throw(
+                AssertionError("implicit solve should not run")
+            ),
+        )
+    )
+
+    assert isinstance(result, SparseHostRetryCandidateResult)
+    assert result.result is not None
+    assert result.host_sparse_direct_used is True
+    assert result.preconditioner is None
+    np.testing.assert_allclose(np.asarray(result.result.x), np.asarray([1.0, 2.0]))
+    assert float(result.result.residual_norm) == pytest.approx(5.0)
+    assert messages[0] == (
+        0,
+        "solve_v3_full_system_linear_gmres: host sparse LU direct fallback "
+        "on backend=cpu",
+    )
+
+
+def test_run_sparse_host_retry_candidate_uses_scipy_gmres_path() -> None:
+    messages: list[tuple[int, str]] = []
+    ilu = SimpleNamespace(solve=lambda rhs: 0.5 * rhs)
+    matrix = scipy_sparse.eye(2, format="csr")
+    factor_build = sparse_pc_module.SparseHostOrILUFactorBuildResult(
+        explicit_sparse_operator=None,
+        explicit_sparse_factor=None,
+        a_csr_full=matrix,
+        a_csr_drop=matrix,
+        ilu=ilu,
+        a_dense_cache=None,
+        l_dense=None,
+        u_dense=None,
+        l_unit_diag=False,
+        used_explicit_sparse=False,
+    )
+
+    def gmres_solver(**kwargs):
+        assert kwargs["restart"] == 9
+        assert kwargs["precondition_side"] == "left"
+        return np.asarray([1.0, 2.0]), 0.25, (1.0, 0.25)
+
+    result = run_sparse_host_retry_candidate(
+        SparseHostRetryCandidateContext(
+            factor_build=factor_build,
+            host_sparse_direct=False,
+            host_direct_operator_pc=False,
+            use_implicit=False,
+            matvec=lambda x: jnp.asarray(x, dtype=jnp.float64),
+            rhs=jnp.asarray([1.0, 2.0], dtype=jnp.float64),
+            x0=jnp.zeros(2, dtype=jnp.float64),
+            factor_dtype=np.dtype(np.float64),
+            refine_steps=2,
+            target=1.0,
+            tol=1.0e-8,
+            atol=1.0e-8,
+            restart=9,
+            maxiter=None,
+            precondition_side="left",
+            emit=lambda level, message: messages.append((level, message)),
+            backend_name="cpu",
+            sparse_use_matvec=False,
+            sparse_exact_lu=False,
+            cache_entry=None,
+            require_lower_diag=False,
+            polish_enabled=lambda **_kwargs: False,
+            parse_polish_gmres_config=lambda **_kwargs: (5, 6),
+            direct_solve_with_refinement=lambda **_kwargs: (_ for _ in ()).throw(
+                AssertionError("direct solve should not run")
+            ),
+            ilu_solve_with_refinement=lambda **_kwargs: (_ for _ in ()).throw(
+                AssertionError("direct ILU solve should not run")
+            ),
+            host_sparse_direct_polish=lambda **_kwargs: (_ for _ in ()).throw(
+                AssertionError("polish should not run")
+            ),
+            gmres_solver=gmres_solver,
+            implicit_solver=lambda _precond: (_ for _ in ()).throw(
+                AssertionError("implicit solve should not run")
+            ),
+            compute_scipy_residual_vec=False,
+        )
+    )
+
+    assert isinstance(result, SparseHostRetryCandidateResult)
+    assert result.result is not None
+    assert result.host_sparse_direct_used is False
+    assert result.preconditioner is not None
+    assert result.residual_vec is None
+    np.testing.assert_allclose(np.asarray(result.result.x), np.asarray([1.0, 2.0]))
+    assert float(result.result.residual_norm) == pytest.approx(0.25)
+    assert messages == [
+        (
+            0,
+            "solve_v3_full_system_linear_gmres: sparse ILU GMRES fallback",
+        )
+    ]
 
 
 def test_build_sparse_jax_retry_preconditioner_calls_builder_and_emits_progress() -> None:

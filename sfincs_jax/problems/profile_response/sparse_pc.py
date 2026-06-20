@@ -3353,6 +3353,55 @@ class SparseHostScipyGMRESContext:
 
 
 @dataclass(frozen=True)
+class SparseHostRetryCandidateContext:
+    """Inputs for choosing one sparse-host retry candidate after factor setup."""
+
+    factor_build: SparseHostOrILUFactorBuildResult
+    host_sparse_direct: bool
+    host_direct_operator_pc: bool
+    use_implicit: bool
+    matvec: ArrayFn
+    rhs: jnp.ndarray
+    x0: jnp.ndarray
+    factor_dtype: np.dtype
+    refine_steps: int
+    target: float
+    tol: float
+    atol: float
+    restart: int
+    maxiter: int | None
+    precondition_side: str
+    emit: EmitFn | None
+    backend_name: str
+    sparse_use_matvec: bool
+    sparse_exact_lu: bool
+    cache_entry: object | None
+    require_lower_diag: bool
+    polish_enabled: Callable[..., bool]
+    parse_polish_gmres_config: Callable[..., tuple[int, int]]
+    direct_solve_with_refinement: Callable[..., tuple[np.ndarray, float]]
+    ilu_solve_with_refinement: Callable[..., tuple[np.ndarray, float]]
+    host_sparse_direct_polish: Callable[..., tuple[np.ndarray, float]]
+    gmres_solver: Callable[..., tuple[np.ndarray, float, Sequence[float]]]
+    implicit_solver: Callable[[ArrayFn], tuple[GMRESSolveResult | None, jnp.ndarray | None]]
+    operator_pc_restart: int | None = None
+    operator_pc_maxiter: int | None = None
+    compute_scipy_residual_vec: bool = True
+
+
+@dataclass(frozen=True)
+class SparseHostRetryCandidateResult:
+    """Sparse retry candidate plus callbacks needed by the replay accept gate."""
+
+    result: GMRESSolveResult | None
+    residual_vec: jnp.ndarray | None
+    matvec: ArrayFn
+    preconditioner: ArrayFn | None
+    solve_s: float
+    host_sparse_direct_used: bool
+
+
+@dataclass(frozen=True)
 class SparseJAXRetryPreconditionerBuildContext:
     """Inputs for building the sparse-JAX retry preconditioner."""
 
@@ -14639,6 +14688,165 @@ def run_sparse_host_scipy_gmres(
     return result, residual_vec
 
 
+def run_sparse_host_retry_candidate(
+    context: SparseHostRetryCandidateContext,
+) -> SparseHostRetryCandidateResult:
+    """Run one sparse-host retry candidate from already-built factors."""
+
+    start_s = perf_counter()
+    factor_build = context.factor_build
+    matvec_for_accept = context.matvec
+    preconditioner_for_accept: ArrayFn | None = None
+    result: GMRESSolveResult | None = None
+    residual_vec: jnp.ndarray | None = None
+    host_sparse_direct_used = False
+    label = "sparse LU" if bool(context.sparse_exact_lu) else "sparse ILU"
+
+    if bool(context.host_sparse_direct) and factor_build.ilu is not None:
+        if bool(context.host_direct_operator_pc):
+            scipy_sparse_build = build_sparse_host_scipy_preconditioner(
+                SparseHostScipyPreconditionerBuildContext(
+                    ilu=factor_build.ilu,
+                    a_csr_full=factor_build.a_csr_full,
+                    base_matvec=context.matvec,
+                    sparse_use_matvec=False,
+                )
+            )
+            preconditioner_for_accept = scipy_sparse_build.preconditioner
+            restart = (
+                int(context.operator_pc_restart)
+                if context.operator_pc_restart is not None
+                else int(context.restart)
+            )
+            maxiter = (
+                int(context.operator_pc_maxiter)
+                if context.operator_pc_maxiter is not None
+                else context.maxiter
+            )
+            if context.emit is not None:
+                context.emit(
+                    0,
+                    "solve_v3_full_system_linear_gmres: sparse LU operator-preconditioned "
+                    f"GMRES fallback restart={int(restart)} maxiter={int(maxiter or 0)}",
+                )
+            result, residual_vec = run_sparse_host_scipy_gmres(
+                SparseHostScipyGMRESContext(
+                    matvec=context.matvec,
+                    rhs=context.rhs,
+                    preconditioner=preconditioner_for_accept,
+                    x0=context.x0,
+                    tol=float(context.tol),
+                    atol=float(context.atol),
+                    restart=int(restart),
+                    maxiter=maxiter,
+                    precondition_side=context.precondition_side,
+                    gmres_solver=context.gmres_solver,
+                    residual_matvec=context.matvec,
+                )
+            )
+        else:
+            host_sparse_direct_used = True
+            direct_payload = sparse_host_direct_fallback_payload(
+                explicit_sparse_factor=factor_build.explicit_sparse_factor,
+                explicit_sparse_operator=factor_build.explicit_sparse_operator,
+                ilu=factor_build.ilu,
+                a_csr_full=factor_build.a_csr_full,
+                rhs=context.rhs,
+                factor_dtype=context.factor_dtype,
+                refine_steps=int(context.refine_steps),
+                matvec=context.matvec,
+                target=float(context.target),
+                tol=float(context.tol),
+                atol=float(context.atol),
+                restart=int(context.restart),
+                maxiter=context.maxiter,
+                precondition_side=context.precondition_side,
+                emit=context.emit,
+                backend_name=context.backend_name,
+                polish_enabled=context.polish_enabled,
+                parse_polish_gmres_config=context.parse_polish_gmres_config,
+                direct_solve_with_refinement=context.direct_solve_with_refinement,
+                ilu_solve_with_refinement=context.ilu_solve_with_refinement,
+                host_sparse_direct_polish=context.host_sparse_direct_polish,
+            )
+            result = GMRESSolveResult(
+                x=direct_payload.x,
+                residual_norm=direct_payload.residual_norm,
+            )
+            residual_vec = direct_payload.residual_vec
+    elif bool(context.use_implicit):
+        precond_build = build_sparse_ilu_preconditioner_from_cache(
+            SparseILUPreconditionerBuildContext(
+                cache_entry=context.cache_entry,
+                l_dense=factor_build.l_dense,
+                u_dense=factor_build.u_dense,
+                l_unit_diag=factor_build.l_unit_diag,
+                require_lower_diag=bool(context.require_lower_diag),
+            )
+        )
+        preconditioner_for_accept = precond_build.preconditioner
+        if preconditioner_for_accept is None:
+            if context.emit is not None:
+                context.emit(
+                    1,
+                    f"{'sparse_lu' if context.sparse_exact_lu else 'sparse_ilu'}: "
+                    "implicit preconditioner factors unavailable; skipping",
+                )
+        else:
+            if context.emit is not None:
+                context.emit(
+                    0,
+                    "solve_v3_full_system_linear_gmres: "
+                    f"{label} (implicit) fallback",
+                )
+            result, residual_vec = context.implicit_solver(preconditioner_for_accept)
+    else:
+        scipy_sparse_build = build_sparse_host_scipy_preconditioner(
+            SparseHostScipyPreconditionerBuildContext(
+                ilu=factor_build.ilu,
+                a_csr_full=factor_build.a_csr_full,
+                base_matvec=context.matvec,
+                sparse_use_matvec=bool(context.sparse_use_matvec),
+            )
+        )
+        preconditioner_for_accept = scipy_sparse_build.preconditioner
+        matvec_for_accept = scipy_sparse_build.matvec
+        if context.emit is not None:
+            context.emit(
+                0,
+                "solve_v3_full_system_linear_gmres: "
+                f"{label} GMRES fallback",
+            )
+        result, residual_vec = run_sparse_host_scipy_gmres(
+            SparseHostScipyGMRESContext(
+                matvec=matvec_for_accept,
+                rhs=context.rhs,
+                preconditioner=preconditioner_for_accept,
+                x0=context.x0,
+                tol=float(context.tol),
+                atol=float(context.atol),
+                restart=int(context.restart),
+                maxiter=context.maxiter,
+                precondition_side=context.precondition_side,
+                gmres_solver=context.gmres_solver,
+                residual_matvec=(
+                    matvec_for_accept
+                    if bool(context.compute_scipy_residual_vec)
+                    else None
+                ),
+            )
+        )
+
+    return SparseHostRetryCandidateResult(
+        result=result,
+        residual_vec=residual_vec,
+        matvec=matvec_for_accept,
+        preconditioner=preconditioner_for_accept,
+        solve_s=perf_counter() - start_s,
+        host_sparse_direct_used=bool(host_sparse_direct_used),
+    )
+
+
 def build_sparse_jax_retry_preconditioner(
     context: SparseJAXRetryPreconditionerBuildContext,
 ) -> ArrayFn:
@@ -15328,6 +15536,8 @@ __all__ = [
     "SparseHostScipyPreconditionerBuildContext",
     "SparseHostScipyPreconditionerBuildResult",
     "SparseHostScipyGMRESContext",
+    "SparseHostRetryCandidateContext",
+    "SparseHostRetryCandidateResult",
     "SparseJAXRetryPreconditionerBuildContext",
     "SparsePCDirectTailFinalMetadataContext",
     "ExplicitSparseOperatorBuildPolicy",
@@ -15456,6 +15666,7 @@ __all__ = [
     "build_sparse_ilu_preconditioner_from_cache",
     "build_sparse_host_scipy_preconditioner",
     "run_sparse_host_scipy_gmres",
+    "run_sparse_host_retry_candidate",
     "build_sparse_jax_retry_preconditioner",
     "build_explicit_sparse_operator_from_pattern",
     "explicit_sparse_pattern_progress_messages",

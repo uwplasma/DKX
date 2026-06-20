@@ -266,6 +266,11 @@ Recent checkpoints:
   cache-key stamping, dense/JAX factor flags, dense cache admission, and
   explicit sparse admission while preserving driver-local matvec, pattern, and
   operator-preconditioned rescue routing (`f9c0dd7`).
+- Reduced active-DOF and full-system sparse-host retry candidate selection now
+  uses a tested sparse-PC helper. The helper owns host-direct,
+  operator-preconditioned sparse-LU, implicit sparse-ILU, and SciPy sparse-GMRES
+  candidate execution from already-built factors; replay acceptance, KSP replay
+  updates, and branch-specific residual-vector routing remain driver-local.
 - RHSMode=1 PAS preconditioner probe/default routing now uses tested
   PAS-policy helpers for env parsing, tokamak-like Schur defaulting, heavy-path
   admission, large-system collision skip, and residual-threshold decisions
@@ -409,10 +414,10 @@ Recent checkpoints:
 - `cb295ce` Extract sparse pattern setup.
 - `4b6a5b4` Extract sparse factor policy.
 
-Current source-size snapshot after dense fallback admission extraction:
+Current source-size snapshot after sparse-host retry candidate extraction:
 
-- `sfincs_jax/v3_driver.py`: `15587` lines.
-- `solve_v3_full_system_linear_gmres`: `10825` lines.
+- `sfincs_jax/v3_driver.py`: `15196` lines.
+- `solve_v3_full_system_linear_gmres`: `10451` lines.
 - `sfincs_jax/v3_results.py`: `119` lines.
 - `sfincs_jax/rhs1_ksp_diagnostics.py`: `306` lines.
 - `sfincs_jax/rhs1_pas_policy.py`: `889` lines.
@@ -424,12 +429,24 @@ Current source-size snapshot after dense fallback admission extraction:
 - `sfincs_jax/problems/profile_response/dense.py`: `1092` lines.
 - `sfincs_jax/problems/profile_response/linear_solve.py`: `339` lines.
 - `sfincs_jax/problems/profile_response/active_projection.py`: `203` lines.
-- `sfincs_jax/problems/profile_response/sparse_pc.py`: `14972` lines.
+- `sfincs_jax/problems/profile_response/sparse_pc.py`: `15687` lines.
 - `sfincs_jax/problems/profile_response/solver_diagnostics.py`: `421` lines.
 - `sfincs_jax/rhs1_xblock_policy.py`: `1215` lines.
 
 Recent local validation:
 
+- Sparse-host retry candidate extraction:
+  `tests/test_profile_response_sparse_pc.py` passed (`294 passed in 1.69 s`).
+- Broad profile-response/RHSMode=1 shard after sparse-host retry candidate
+  extraction:
+  `tests/test_profile_response_*.py tests/test_rhs1_*.py
+  tests/test_newton_krylov_diagnostics.py tests/test_pas_smoother.py`
+  passed (`1306 passed in 84.86 s`).
+- Hygiene after sparse-host retry candidate extraction:
+  `py_compile`, `ruff check`, `compileall`, `git diff --check`, and
+  `python scripts/check_repo_size.py` passed. Repo-size audit reported no
+  reviewed files above 2 MiB. CI/Docs snapshot for the prior pushed commit was
+  green before this local commit.
 - Dense fallback admission extraction:
   `tests/test_profile_response_dense.py` passed (`27 passed in 0.95 s`).
 - Broad profile-response/RHSMode=1 shard after dense fallback admission
@@ -1453,7 +1470,7 @@ Known CI issue fixed by this rewrite:
 
 ### 1. `v3_driver.py` Architecture Refactor
 
-Completion estimate: 97%.
+Completion estimate: 98%.
 
 Goal:
 
@@ -1718,6 +1735,11 @@ Completed recent boundaries:
   sparse-operator-preconditioned sparse fallback branches now uses a tested
   helper; optional true residual-vector construction remains explicit by
   call-site through a provided residual matvec.
+- Reduced active-DOF and full-system sparse-host retry candidate execution now
+  uses one tested helper for host-direct, operator-preconditioned sparse-LU,
+  implicit sparse-ILU, and SciPy sparse-GMRES candidates. The driver now keeps
+  only KSP replay acceptance, branch-specific residual-vector routing, and
+  candidate/baseline metadata handoff.
 - Sparse-JAX Jacobi retry branches now use the shared measured linear-candidate
   handoff helper, preserving reduced/full residual-vector routing.
 - Sparse-JAX retry preconditioner build/progress emission now uses a tested
@@ -1944,7 +1966,7 @@ Next steps:
 
 ### 4. Validation, Coverage, And Documentation
 
-Completion estimate: 69%.
+Completion estimate: 70%.
 
 Goal:
 
