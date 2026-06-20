@@ -9,6 +9,7 @@ import jax.numpy as jnp
 from scipy import sparse as scipy_sparse
 
 import sfincs_jax.problems.profile_response.sparse_pc as sparse_pc_module
+from sfincs_jax.problems.profile_response.sparse import direct as sparse_direct_module
 from sfincs_jax.problems.profile_response.sparse import xblock as sparse_xblock_module
 from sfincs_jax.problems.profile_response.active_projection import (
     expand_reduced_with_map,
@@ -322,6 +323,29 @@ def test_sparse_xblock_module_reexports_match_compat_layer() -> None:
     )
     for name in moved_names:
         assert getattr(sparse_pc_module, name) is getattr(sparse_xblock_module, name)
+
+
+def test_sparse_direct_module_reexports_match_compat_layer() -> None:
+    """The split sparse direct module keeps legacy sparse_pc imports stable."""
+
+    moved_names = (
+        "ExplicitSparseMinimumNormBranchContext",
+        "ExplicitSparseOperatorBuildPolicy",
+        "ExplicitSparseOperatorBuildResult",
+        "SparseMinimumNormPayload",
+        "SparseMinimumNormPolicy",
+        "build_explicit_sparse_operator_from_pattern",
+        "explicit_sparse_pattern_progress_messages",
+        "resolve_explicit_sparse_operator_build_policy",
+        "resolve_sparse_minimum_norm_policy",
+        "solve_explicit_sparse_minimum_norm_branch",
+        "sparse_minimum_norm_solve_from_pattern",
+        "sparse_minimum_norm_solve_payload",
+        "sparse_minimum_norm_start_message",
+        "validate_explicit_sparse_host_request",
+    )
+    for name in moved_names:
+        assert getattr(sparse_pc_module, name) is getattr(sparse_direct_module, name)
 
 
 def _identity(v: jnp.ndarray) -> jnp.ndarray:
