@@ -1,6 +1,6 @@
 # SFINCS_JAX Active Execution Plan
 
-Last updated: 2026-06-19 (America/Chicago)
+Last updated: 2026-06-20 (America/Chicago)
 Branch: `refactor/v3-driver-architecture`
 PR state: one draft refactor PR; do not merge until this plan is complete.
 
@@ -42,10 +42,15 @@ Make `sfincs_jax` research-grade while preserving the public user contract:
 
 Recent checkpoints:
 
+- Generic sparse-PC finalization now builds direct-tail, factor-preflight,
+  sparse-pattern, and static solver metadata from typed contexts before
+  finalization. The RHSMode=1 generic finalizer receives only five dynamic
+  convergence/reporting scalars plus compact metadata dictionaries; it no
+  longer consumes the driver frame through `locals()` (current checkpoint).
 - X-block sparse-PC physical residual recomputation and reported Krylov
   iteration/matvec counters now use tested `profile_response.sparse_pc`
   helpers, removing duplicated reporting code from the driver while preserving
-  fallback semantics (current checkpoint).
+  fallback semantics.
 - RHSMode=1 full-system strong fallback ADI sweep parsing now lives in
   `rhs1_strong_fallback`, matching the reduced strong fallback helper and
   removing the final full-branch inline ADI env parse (`c20e4b1`).
@@ -1088,7 +1093,7 @@ Known CI issue fixed by this rewrite:
 
 ### 1. `v3_driver.py` Architecture Refactor
 
-Completion estimate: 60%.
+Completion estimate: 61%.
 
 Goal:
 
@@ -1362,9 +1367,9 @@ Completed recent boundaries:
   `SparsePCGMRESFinalizationContext`.
 - X-block sparse-PC final metadata now receives a whitelisted driver-state copy
   from a tested `profile_response.sparse_pc` helper instead of handing the
-  whole frame to `XBlockSparsePCFinalPayloadContext`. After this boundary,
-  `v3_driver.py` has no direct `diagnostic_state=locals()` handoffs; the
-  remaining local-scope copies are filtered through named key contracts.
+  whole frame to `XBlockSparsePCFinalPayloadContext`. A filtered x-block
+  `locals()` wrapper remains, and the next tranche is to replace it with
+  typed grouped diagnostics contexts instead of a brittle 75-field driver map.
 - X-block sparse-PC final metadata now precomputes assembled-operator,
   coarse-correction, QI seed/device/deflated, and side-probe metadata groups
   before final payload construction. The copied final metadata state is down
@@ -1390,18 +1395,24 @@ Completed recent boundaries:
   finalization state is down to 5 dynamic convergence/reporting keys, with a
   30-key raw scope inventory kept only for static metadata derivation and
   missing-key audits.
+- Generic sparse-PC finalization now builds direct-tail metadata from
+  semantic policy/result contexts in `profile_response.sparse_pc`; the driver
+  passes grouped policies and runtime outcomes instead of every historical
+  `direct_tail_*` report key.
+- The RHSMode=1 generic sparse-PC finalizer no longer has a driver
+  `locals()` handoff. The remaining local-scope cleanup is the x-block final
+  metadata path, which is already filtered through a named key contract but
+  still needs a typed grouped context to avoid a brittle 75-field inline map.
 
 Next steps:
 
 - Continue moving remaining generic sparse-PC result/diagnostic seams into
   cohesive `profile_response` helpers only where the replacement context can
   stay explicit and tested.
-- Replace the remaining generic sparse-PC finalization whitelist groups with
-  typed Krylov-control and sparse-factor metadata contexts; dtype retry,
-  post-MinRes, direct-tail, factor-preflight, and sparse-pattern metadata are
-  already explicit or precomputed before finalization.
-- Replace the remaining whitelisted local-scope copies with typed sparse-PC
-  and x-block diagnostics contexts once each key group has focused tests.
+- Replace the remaining x-block final metadata local-scope copy with typed
+  grouped diagnostics contexts once each key group has focused tests.
+- Continue replacing residual sparse-PC compatibility wrappers with explicit
+  contexts only where the new boundary reduces driver complexity.
 - Continue extracting sparse-PC state/metadata seams after the source split
   stabilizes; avoid moving driver-specific direction builders or caches into
   generic helpers.

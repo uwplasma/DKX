@@ -11,6 +11,7 @@ import jax.numpy as jnp
 import numpy as np
 
 from .diagnostics import (
+    SparsePCDirectTailMetadataContext,
     XBlockAssembledOperatorDiagnosticsContext,
     XBlockSparsePCCoreDiagnosticsContext,
     XBlockSideProbeDiagnosticsContext,
@@ -20,6 +21,7 @@ from .diagnostics import (
     sparse_pc_factor_preflight_result_metadata,
     sparse_pc_gmres_static_metadata,
     sparse_pc_direct_tail_result_metadata,
+    sparse_pc_direct_tail_result_metadata_from_context,
     sparse_pc_gmres_result_metadata,
     sparse_pc_pattern_result_metadata,
     sparse_rescue_tail_metadata,
@@ -2629,6 +2631,67 @@ class DirectTailSupportModePreflightResult:
 
 
 @dataclass(frozen=True)
+class SparsePCDirectTailFinalMetadataContext:
+    """Semantic direct-tail state used by final sparse-PC diagnostics.
+
+    Most direct-tail metadata is policy state, not solver scratch. Keeping that
+    mapping here avoids exposing dozens of historical report keys to the driver.
+    """
+
+    structured_pc_preflight_required: bool
+    structured_pc_preflight_required_min_size: int
+    materialization: DirectTailMaterializationResult
+    structured_admission: DirectTailStructuredAdmissionResult
+    residual_policy: "DirectTailResidualRescuePolicy"
+    true_active_policy: "DirectTailTrueActiveRescuePolicy"
+    coupled_coarse_policy: "DirectTailCoupledCoarseRescuePolicy"
+    true_window_specs: tuple[tuple[int, ...], ...]
+    true_active_block_species_count: int | None
+    structured_max_nbytes: int | None
+    structured_pc_selected: bool
+    structured_pc_reason: str | None
+    structured_pc_error: str | None
+    structured_pc_metadata: dict[str, object] | None
+    support_mode_preflight_requested: bool
+    support_mode_preflight_selected: bool
+    support_mode_preflight_error: str | None
+    support_mode_preflight_metadata: dict[str, object] | None
+    residual_coarse_selected: bool
+    residual_coarse_residual_after: float | None
+    residual_coarse_error: str | None
+    residual_coarse_metadata: dict[str, object] | None
+    true_coupled_coarse_requested: bool
+    true_coupled_coarse_auto_selected: bool
+    true_coupled_coarse_selected: bool
+    true_coupled_coarse_residual_after: float | None
+    true_coupled_coarse_error: str | None
+    true_coupled_coarse_metadata: dict[str, object] | None
+    true_coupled_coarse_base_improvement_override_used: bool
+    true_active_submatrix_selected: bool
+    true_active_submatrix_residual_after: float | None
+    true_active_submatrix_error: str | None
+    true_active_submatrix_metadata: dict[str, object] | None
+    true_active_column_cache_metadata: dict[str, object] | None
+    true_active_block_selected: bool
+    true_active_block_residual_after: float | None
+    true_active_block_error: str | None
+    true_active_block_metadata: dict[str, object] | None
+    true_active_residual_block_selected: bool
+    true_active_residual_block_residual_after: float | None
+    true_active_residual_block_error: str | None
+    true_active_residual_block_metadata: dict[str, object] | None
+    true_active_residual_block_base_improvement_override_used: bool
+    true_window_selected: bool
+    true_window_residual_after: float | None
+    true_window_error: str | None
+    true_window_metadata: dict[str, object] | None
+    residual_window_selected: bool
+    residual_window_residual_after: float | None
+    residual_window_error: str | None
+    residual_window_metadata: dict[str, object] | None
+
+
+@dataclass(frozen=True)
 class SparsePCFactorPreflightPolicyContext:
     """Inputs for sparse-PC factor residual-preflight policy parsing."""
 
@@ -2891,6 +2954,265 @@ class DirectTailCoupledCoarseRescuePolicy:
     damping: bool
     beta_max: float
     accept_base_improvement: bool
+
+
+def _direct_tail_final_suffix_values(
+    context: SparsePCDirectTailFinalMetadataContext,
+) -> dict[str, object]:
+    residual = context.residual_policy
+    active = context.true_active_policy
+    coupled = context.coupled_coarse_policy
+    return {
+        "residual_coarse_requested": residual.residual_coarse_requested,
+        "residual_coarse_selected": context.residual_coarse_selected,
+        "residual_coarse_rank": residual.residual_coarse_rank,
+        "residual_coarse_max_mb": residual.residual_coarse_max_mb,
+        "residual_coarse_regularization": residual.residual_coarse_regularization,
+        "residual_coarse_residual_after": context.residual_coarse_residual_after,
+        "residual_coarse_error": context.residual_coarse_error,
+        "residual_coarse_metadata": context.residual_coarse_metadata,
+        "true_coupled_coarse_requested": context.true_coupled_coarse_requested,
+        "true_coupled_coarse_explicit_requested": (
+            residual.true_coupled_coarse_explicit_requested
+        ),
+        "true_coupled_coarse_auto_enabled": residual.true_coupled_coarse_auto_enabled,
+        "true_coupled_coarse_auto_native_enabled": (
+            residual.true_coupled_coarse_auto_native_enabled
+        ),
+        "true_coupled_coarse_auto_target_ratio": (
+            residual.true_coupled_coarse_auto_target_ratio
+        ),
+        "true_coupled_coarse_auto_min_size": (
+            residual.true_coupled_coarse_auto_min_size
+        ),
+        "true_coupled_coarse_auto_selected": (
+            context.true_coupled_coarse_auto_selected
+        ),
+        "true_coupled_coarse_selected": context.true_coupled_coarse_selected,
+        "true_coupled_coarse_max_windows": coupled.max_windows,
+        "true_coupled_coarse_x_radius": coupled.x_radius,
+        "true_coupled_coarse_ell_radius": coupled.ell_radius,
+        "true_coupled_coarse_max_mb": coupled.max_mb,
+        "true_coupled_coarse_regularization": coupled.regularization,
+        "true_coupled_coarse_max_size": coupled.max_size,
+        "true_coupled_coarse_column_batch": coupled.column_batch,
+        "true_coupled_coarse_drop_tol": coupled.drop_tol,
+        "true_coupled_coarse_low_lmax": coupled.low_lmax,
+        "true_coupled_coarse_profile_moment_count": (
+            coupled.profile_moment_count
+        ),
+        "true_coupled_coarse_angular_lmax": coupled.angular_lmax,
+        "true_coupled_coarse_angular_mode_max": coupled.angular_mode_max,
+        "true_coupled_coarse_max_tail_units": coupled.max_tail_units,
+        "true_coupled_coarse_include_tail": coupled.include_tail,
+        "true_coupled_coarse_include_constraint_sources": (
+            coupled.include_constraint_sources
+        ),
+        "true_coupled_coarse_include_fsavg": coupled.include_fsavg,
+        "true_coupled_coarse_include_window_residual": (
+            coupled.include_window_residual
+        ),
+        "true_coupled_coarse_include_profile_moments": (
+            coupled.include_profile_moments
+        ),
+        "true_coupled_coarse_include_angular_residual": (
+            coupled.include_angular_residual
+        ),
+        "true_coupled_coarse_include_angular_basis": (
+            coupled.include_angular_basis
+        ),
+        "true_coupled_coarse_include_preconditioned_loads": (
+            coupled.include_preconditioned_loads
+        ),
+        "true_coupled_coarse_preconditioned_load_max_columns": (
+            coupled.preconditioned_load_max_columns
+        ),
+        "true_coupled_coarse_preconditioned_load_max_nnz": (
+            coupled.preconditioned_load_max_nnz
+        ),
+        "true_coupled_coarse_preconditioned_load_drop_tol": (
+            coupled.preconditioned_load_drop_tol
+        ),
+        "true_coupled_coarse_damping": coupled.damping,
+        "true_coupled_coarse_beta_max": coupled.beta_max,
+        "true_coupled_coarse_accept_base_improvement": (
+            coupled.accept_base_improvement
+        ),
+        "true_coupled_coarse_base_improvement_override_used": (
+            context.true_coupled_coarse_base_improvement_override_used
+        ),
+        "true_coupled_coarse_residual_after": (
+            context.true_coupled_coarse_residual_after
+        ),
+        "true_coupled_coarse_error": context.true_coupled_coarse_error,
+        "true_coupled_coarse_metadata": context.true_coupled_coarse_metadata,
+        "true_active_submatrix_requested": active.active_submatrix_requested,
+        "true_active_submatrix_selected": context.true_active_submatrix_selected,
+        "true_active_submatrix_damping": active.active_submatrix_damping,
+        "true_active_submatrix_alpha_clip": active.active_submatrix_alpha_clip,
+        "true_active_submatrix_min_improvement": (
+            active.active_submatrix_min_improvement
+        ),
+        "true_active_submatrix_residual_after": (
+            context.true_active_submatrix_residual_after
+        ),
+        "true_active_submatrix_error": context.true_active_submatrix_error,
+        "true_active_submatrix_metadata": context.true_active_submatrix_metadata,
+        "true_active_column_cache_requested": active.active_column_cache_requested,
+        "true_active_column_cache_max_mb": active.active_column_cache_max_mb,
+        "true_active_column_cache_metadata": (
+            context.true_active_column_cache_metadata
+        ),
+        "true_active_block_requested": active.active_block_requested,
+        "true_active_block_selected": context.true_active_block_selected,
+        "true_active_block_x_count": active.active_block_x_count,
+        "true_active_block_ell_count": active.active_block_ell_count,
+        "true_active_block_theta_stride": active.active_block_theta_stride,
+        "true_active_block_zeta_stride": active.active_block_zeta_stride,
+        "true_active_block_max_mb": active.active_block_max_mb,
+        "true_active_block_regularization": active.active_block_regularization,
+        "true_active_block_max_size": active.active_block_max_size,
+        "true_active_block_column_batch": active.active_block_column_batch,
+        "true_active_block_drop_tol": active.active_block_drop_tol,
+        "true_active_block_include_tail": active.active_block_include_tail,
+        "true_active_block_max_tail": active.active_block_max_tail,
+        "true_active_block_damping": active.active_block_damping,
+        "true_active_block_beta_max": active.active_block_beta_max,
+        "true_active_block_residual_after": context.true_active_block_residual_after,
+        "true_active_block_error": context.true_active_block_error,
+        "true_active_block_metadata": context.true_active_block_metadata,
+        "true_active_residual_block_requested": (
+            active.active_residual_block_requested
+        ),
+        "true_active_residual_block_selected": (
+            context.true_active_residual_block_selected
+        ),
+        "true_active_residual_block_max_mb": active.active_residual_block_max_mb,
+        "true_active_residual_block_regularization": (
+            active.active_residual_block_regularization
+        ),
+        "true_active_residual_block_max_size": (
+            active.active_residual_block_max_size
+        ),
+        "true_active_residual_block_column_batch": (
+            active.active_residual_block_column_batch
+        ),
+        "true_active_residual_block_drop_tol": (
+            active.active_residual_block_drop_tol
+        ),
+        "true_active_residual_block_include_tail": (
+            active.active_residual_block_include_tail
+        ),
+        "true_active_residual_block_max_tail": (
+            active.active_residual_block_max_tail
+        ),
+        "true_active_residual_block_kinetic_only": (
+            active.active_residual_block_kinetic_only
+        ),
+        "true_active_residual_block_damping": (
+            active.active_residual_block_damping
+        ),
+        "true_active_residual_block_beta_max": (
+            active.active_residual_block_beta_max
+        ),
+        "true_active_residual_block_min_improvement": (
+            active.active_residual_block_min_improvement
+        ),
+        "true_active_residual_block_accept_base_improvement": (
+            active.active_residual_block_accept_base_improvement
+        ),
+        "true_active_residual_block_base_improvement_override_used": (
+            context.true_active_residual_block_base_improvement_override_used
+        ),
+        "true_active_residual_block_residual_after": (
+            context.true_active_residual_block_residual_after
+        ),
+        "true_active_residual_block_error": (
+            context.true_active_residual_block_error
+        ),
+        "true_active_residual_block_metadata": (
+            context.true_active_residual_block_metadata
+        ),
+        "true_window_requested": residual.true_window_requested,
+        "true_window_selected": context.true_window_selected,
+        "true_window_max_windows": residual.true_window_max_windows,
+        "true_window_x_radius": residual.true_window_x_radius,
+        "true_window_ell_radius": residual.true_window_ell_radius,
+        "true_window_max_mb": residual.true_window_max_mb,
+        "true_window_regularization": residual.true_window_regularization,
+        "true_window_max_size": residual.true_window_max_size,
+        "true_window_column_batch": residual.true_window_column_batch,
+        "true_window_drop_tol": residual.true_window_drop_tol,
+        "true_window_include_tail": residual.true_window_include_tail,
+        "true_window_damping": residual.true_window_damping,
+        "true_window_beta_max": residual.true_window_beta_max,
+        "true_window_residual_after": context.true_window_residual_after,
+        "true_window_error": context.true_window_error,
+        "true_window_metadata": context.true_window_metadata,
+        "residual_window_requested": residual.residual_window_requested,
+        "residual_window_selected": context.residual_window_selected,
+        "residual_window_max_windows": residual.residual_window_max_windows,
+        "residual_window_x_radius": residual.residual_window_x_radius,
+        "residual_window_ell_radius": residual.residual_window_ell_radius,
+        "residual_window_max_mb": residual.residual_window_max_mb,
+        "residual_window_regularization": residual.residual_window_regularization,
+        "residual_window_coefficient_mode": (
+            residual.residual_window_coefficient_mode
+        ),
+        "residual_window_combine_mode": residual.residual_window_combine_mode,
+        "residual_window_interface_depth": residual.residual_window_interface_depth,
+        "residual_window_max_size": residual.residual_window_max_size,
+        "residual_window_residual_after": context.residual_window_residual_after,
+        "residual_window_error": context.residual_window_error,
+        "residual_window_metadata": context.residual_window_metadata,
+    }
+
+
+def sparse_pc_direct_tail_final_metadata(
+    context: SparsePCDirectTailFinalMetadataContext,
+) -> dict[str, object]:
+    """Build final sparse-PC direct-tail metadata from grouped solver state."""
+
+    return sparse_pc_direct_tail_result_metadata_from_context(
+        SparsePCDirectTailMetadataContext(
+            structured_pc_preflight_required=(
+                context.structured_pc_preflight_required
+            ),
+            structured_pc_preflight_required_min_size=(
+                context.structured_pc_preflight_required_min_size
+            ),
+            suffix_values=_direct_tail_final_suffix_values(context),
+            true_active_block_species_count=(
+                context.true_active_block_species_count
+            ),
+            true_window_specs=context.true_window_specs,
+            operator_bundle=context.materialization.operator_bundle,
+            structured_max_nbytes=context.structured_max_nbytes,
+            enabled=context.materialization.enabled,
+            direct_reduced_pmat_requested=(
+                context.materialization.direct_reduced_pmat_requested
+            ),
+            built=context.materialization.built,
+            error=context.materialization.error,
+            structured_pc_requested=context.structured_admission.requested,
+            structured_pc_required=context.structured_admission.required,
+            structured_pc_selected=context.structured_pc_selected,
+            structured_pc_reason=context.structured_pc_reason,
+            structured_pc_error=context.structured_pc_error,
+            structured_pc_max_mb_auto=context.structured_admission.max_mb_auto,
+            structured_pc_metadata=context.structured_pc_metadata,
+            support_mode_preflight_requested=(
+                context.support_mode_preflight_requested
+            ),
+            support_mode_preflight_selected=(
+                context.support_mode_preflight_selected
+            ),
+            support_mode_preflight_error=context.support_mode_preflight_error,
+            support_mode_preflight_metadata=(
+                context.support_mode_preflight_metadata
+            ),
+        )
+    )
 
 
 @dataclass(frozen=True)
@@ -10781,6 +11103,7 @@ __all__ = [
     "SparseHostScipyPreconditionerBuildResult",
     "SparseHostScipyGMRESContext",
     "SparseJAXRetryPreconditionerBuildContext",
+    "SparsePCDirectTailFinalMetadataContext",
     "ExplicitSparseOperatorBuildPolicy",
     "ExplicitSparseOperatorBuildResult",
     "SparsePCGMRESCompletionMessageContext",
@@ -10818,6 +11141,7 @@ __all__ = [
     "resolve_direct_tail_true_active_rescue_policy",
     "resolve_direct_tail_coupled_coarse_rescue_policy",
     "run_direct_tail_support_mode_preflight",
+    "sparse_pc_direct_tail_final_metadata",
     "resolve_direct_tail_structured_admission",
     "fp_xblock_global_correction_metadata",
     "fp_xblock_highx_residual_correction_metadata",

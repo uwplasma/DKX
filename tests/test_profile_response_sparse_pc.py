@@ -18,7 +18,9 @@ from sfincs_jax.problems.profile_response.diagnostics import (
 )
 from sfincs_jax.problems.profile_response.sparse_pc import (
     DirectTailMaterializationContext,
+    DirectTailMaterializationResult,
     DirectTailStructuredAdmissionContext,
+    DirectTailStructuredAdmissionResult,
     DirectTailStructuredBuildContext,
     DirectTailSupportModePreflightContext,
     DirectTailResidualRescuePolicy,
@@ -60,6 +62,7 @@ from sfincs_jax.problems.profile_response.sparse_pc import (
     SparseJAXRetryPreconditionerBuildContext,
     ExplicitSparseOperatorBuildPolicy,
     ExplicitSparseOperatorBuildResult,
+    SparsePCDirectTailFinalMetadataContext,
     SparsePCGMRESFinalizationContext,
     SparseMinimumNormPayload,
     SparseMinimumNormPolicy,
@@ -146,6 +149,7 @@ from sfincs_jax.problems.profile_response.sparse_pc import (
     resolve_direct_tail_true_active_rescue_policy,
     resolve_direct_tail_coupled_coarse_rescue_policy,
     run_direct_tail_support_mode_preflight,
+    sparse_pc_direct_tail_final_metadata,
     resolve_xblock_qi_device_admission_setup,
     resolve_xblock_qi_device_base_config_setup,
     resolve_xblock_qi_device_enrichment_config_setup,
@@ -7225,6 +7229,128 @@ def test_sparse_pc_gmres_finalization_state_from_driver_scope_filters_scope() ->
     incomplete_scope.pop(missing)
     with pytest.raises(KeyError, match=missing):
         sparse_pc_gmres_finalization_state_from_driver_scope(incomplete_scope)
+
+
+def test_sparse_pc_direct_tail_final_metadata_uses_grouped_policy_state() -> None:
+    env = {
+        "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_RESIDUAL_COARSE": "1",
+        "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_RESIDUAL_COARSE_RANK": "7",
+        "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_RESIDUAL_WINDOW": "1",
+        "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_RESIDUAL_WINDOW_COEFFICIENTS": "normal",
+        "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_RESIDUAL_WINDOW_COMBINE": "union",
+        "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_WINDOW": "1",
+        "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_COUPLED_COARSE": "1",
+        "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_COUPLED_AUTO_TARGET_RATIO": "12",
+        "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_ACTIVE_BLOCK": "1",
+        "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_ACTIVE_BLOCK_SPECIES_COUNT": "3",
+        "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_COUPLED_MAX_WINDOWS": "4",
+        "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_TRUE_COUPLED_INCLUDE_ANGULAR_BASIS": "1",
+    }
+    operator_bundle = SimpleNamespace(
+        metadata=SimpleNamespace(
+            reason="direct_pmat",
+            nnz_estimate=np.int64(123),
+            csr_nbytes_estimate=np.int64(456),
+        )
+    )
+
+    metadata = sparse_pc_direct_tail_final_metadata(
+        SparsePCDirectTailFinalMetadataContext(
+            structured_pc_preflight_required=True,
+            structured_pc_preflight_required_min_size=1000,
+            materialization=DirectTailMaterializationResult(
+                direct_tail_default=True,
+                enabled=True,
+                built=True,
+                error=None,
+                operator_bundle=operator_bundle,
+                pc_env="auto",
+                direct_reduced_pmat_requested=True,
+            ),
+            structured_admission=DirectTailStructuredAdmissionResult(
+                pc_env="active_auto",
+                requested="active_native_stack",
+                auto_default=False,
+                fail_closed_size=500_000,
+                auto_large_fail_closed=False,
+                required=True,
+                setup_allowed=True,
+                max_mb_auto=False,
+                max_mb=64.0,
+                regularization=1.0e-9,
+            ),
+            residual_policy=resolve_direct_tail_residual_rescue_policy(env),
+            true_active_policy=resolve_direct_tail_true_active_rescue_policy(env),
+            coupled_coarse_policy=resolve_direct_tail_coupled_coarse_rescue_policy(env),
+            true_window_specs=((1, 2, 3),),
+            true_active_block_species_count=3,
+            structured_max_nbytes=4 * 1024 * 1024,
+            structured_pc_selected=True,
+            structured_pc_reason="selected",
+            structured_pc_error=None,
+            structured_pc_metadata={"kind": "active_native_stack"},
+            support_mode_preflight_requested=True,
+            support_mode_preflight_selected=False,
+            support_mode_preflight_error="not_requested",
+            support_mode_preflight_metadata={"baseline": True},
+            residual_coarse_selected=True,
+            residual_coarse_residual_after=0.25,
+            residual_coarse_error=None,
+            residual_coarse_metadata={"rank": 7},
+            true_coupled_coarse_requested=True,
+            true_coupled_coarse_auto_selected=True,
+            true_coupled_coarse_selected=True,
+            true_coupled_coarse_residual_after=0.125,
+            true_coupled_coarse_error=None,
+            true_coupled_coarse_metadata={"windows": 4},
+            true_coupled_coarse_base_improvement_override_used=True,
+            true_active_submatrix_selected=True,
+            true_active_submatrix_residual_after=0.5,
+            true_active_submatrix_error=None,
+            true_active_submatrix_metadata={"active": "submatrix"},
+            true_active_column_cache_metadata={"hits": 2},
+            true_active_block_selected=True,
+            true_active_block_residual_after=0.375,
+            true_active_block_error=None,
+            true_active_block_metadata={"active": "block"},
+            true_active_residual_block_selected=True,
+            true_active_residual_block_residual_after=0.3125,
+            true_active_residual_block_error=None,
+            true_active_residual_block_metadata={"active": "residual_block"},
+            true_active_residual_block_base_improvement_override_used=True,
+            true_window_selected=True,
+            true_window_residual_after=0.2,
+            true_window_error=None,
+            true_window_metadata={"window": "true"},
+            residual_window_selected=True,
+            residual_window_residual_after=0.3,
+            residual_window_error=None,
+            residual_window_metadata={"window": "residual"},
+        )
+    )
+
+    assert metadata["sparse_pc_direct_tail_residual_coarse_requested"] is True
+    assert metadata["sparse_pc_direct_tail_residual_coarse_selected"] is True
+    assert metadata["sparse_pc_direct_tail_residual_coarse_rank"] == 7
+    assert metadata["sparse_pc_direct_tail_residual_window_combine_mode"] == "union"
+    assert metadata["sparse_pc_direct_tail_true_window_specs"] == ((1, 2, 3),)
+    assert metadata["sparse_pc_direct_tail_true_active_block_species_count"] == 3
+    assert metadata["sparse_pc_direct_tail_true_coupled_coarse_max_windows"] == 4
+    assert metadata["sparse_pc_direct_tail_true_coupled_coarse_auto_target_ratio"] == pytest.approx(12.0)
+    assert metadata["sparse_pc_direct_tail_true_coupled_coarse_include_angular_basis"] is True
+    assert metadata["sparse_pc_direct_tail_true_active_column_cache_metadata"] == {"hits": 2}
+    assert metadata["sparse_pc_direct_tail_true_active_residual_block_base_improvement_override_used"] is True
+    assert metadata["sparse_pc_fortran_reduced_direct_tail_operator_reason"] == "direct_pmat"
+    assert metadata["sparse_pc_fortran_reduced_direct_tail_nnz"] == 123
+    assert metadata["sparse_pc_fortran_reduced_direct_tail_structured_pc_selected"] is True
+    assert metadata["sparse_pc_fortran_reduced_direct_tail_structured_pc_required"] is True
+    assert metadata["sparse_pc_fortran_reduced_direct_tail_structured_pc_max_mb"] == pytest.approx(4.0)
+    assert metadata["sparse_pc_fortran_reduced_direct_tail_structured_pc_metadata"] == {
+        "kind": "active_native_stack"
+    }
+    assert metadata["sparse_pc_fortran_reduced_direct_tail_support_mode_preflight_metadata"] == {
+        "baseline": True
+    }
 
 
 def test_finalize_sparse_pc_gmres_with_dtype_retry_updates_copied_state(
