@@ -325,6 +325,48 @@ class XBlockSideProbeStageResult:
 
 
 @dataclass(frozen=True)
+class XBlockProbeCoarseStageContext:
+    """Inputs for the optional pre-Krylov projected coarse seed correction."""
+
+    policy: object
+    rhs: jnp.ndarray
+    x0: jnp.ndarray | None
+    matvec: ArrayFn
+    target: float
+    direction_builder: Callable[..., tuple[tuple[str, jnp.ndarray], ...]]
+    correction: Callable[..., tuple[jnp.ndarray, jnp.ndarray, Sequence[float], Sequence[int], Sequence[str]]]
+    elapsed_s: Callable[[], float]
+    emit: EmitFn | None
+
+
+@dataclass(frozen=True)
+class XBlockProbeCoarseStageResult:
+    """Updated seed and diagnostics from the optional probe-coarse stage."""
+
+    x0: jnp.ndarray | None
+    steps_requested: int
+    max_directions: int
+    max_extra_units: int
+    fsavg_lmax: int
+    angular_lmax: int
+    include_angular_residual: bool
+    include_raw: bool
+    alpha_clip: float
+    rcond: float
+    min_improvement: float
+    elapsed_s: float
+    history: tuple[float, ...]
+    direction_counts: tuple[int, ...]
+    direction_names: tuple[str, ...]
+    residual_before: float | None
+    residual_after: float | None
+    seed_initialized: bool
+    improved: bool
+    failed: bool
+    failure_reason: str | None
+
+
+@dataclass(frozen=True)
 class XBlockKrylovSolveState:
     """Physical-space xblock Krylov solve state used by downstream metadata."""
 
@@ -1510,6 +1552,150 @@ def apply_xblock_side_probe_stage(
         seed_used=seed_used,
         seed_residual_norm=seed_residual_norm,
         failed=failed,
+        failure_reason=failure_reason,
+    )
+
+
+def apply_xblock_probe_coarse_stage(
+    context: XBlockProbeCoarseStageContext,
+) -> XBlockProbeCoarseStageResult:
+    """Apply the optional projected coarse correction before x-block Krylov."""
+
+    policy = context.policy
+    steps_requested = int(getattr(policy, "steps_requested"))
+    max_directions = int(getattr(policy, "max_directions"))
+    max_extra_units = int(getattr(policy, "max_extra_units"))
+    fsavg_lmax = int(getattr(policy, "fsavg_lmax"))
+    angular_lmax = int(getattr(policy, "angular_lmax"))
+    include_angular_residual = bool(getattr(policy, "include_angular_residual"))
+    include_raw = bool(getattr(policy, "include_raw"))
+    alpha_clip = float(getattr(policy, "alpha_clip"))
+    rcond = float(getattr(policy, "rcond"))
+    min_improvement = float(getattr(policy, "min_improvement"))
+    x0 = context.x0
+    elapsed_s = 0.0
+    history: tuple[float, ...] = ()
+    direction_counts: tuple[int, ...] = ()
+    direction_names: tuple[str, ...] = ()
+    residual_before: float | None = None
+    residual_after: float | None = None
+    seed_initialized = False
+    improved = False
+    failed = False
+    failure_reason: str | None = None
+
+    if steps_requested > 0 and x0 is None:
+        # Let this opt-in stage act as a true pre-Krylov projected solve even
+        # without an unrelated seed from an earlier stage.
+        x0 = jnp.zeros_like(context.rhs)
+        seed_initialized = True
+
+    if steps_requested > 0 and x0 is not None:
+        start_s = float(context.elapsed_s())
+
+        def coarse_direction_builder(
+            residual_vec: jnp.ndarray,
+        ) -> tuple[tuple[str, jnp.ndarray], ...]:
+            return context.direction_builder(
+                residual_vec,
+                include_raw=bool(include_raw),
+                fsavg_lmax=int(fsavg_lmax),
+                angular_lmax=int(angular_lmax),
+                max_extra_units=int(max_extra_units),
+                max_directions=int(max_directions),
+                include_angular_residual=bool(include_angular_residual),
+            )
+
+        try:
+            seed_residual = context.rhs - jnp.asarray(
+                context.matvec(jnp.asarray(x0, dtype=jnp.float64)),
+                dtype=jnp.float64,
+            )
+            residual_before = profile_l2_norm_float(seed_residual)
+            if (
+                np.isfinite(float(residual_before))
+                and float(residual_before) > float(context.target)
+            ):
+                (
+                    x_probe,
+                    residual_probe,
+                    history_raw,
+                    direction_counts_raw,
+                    direction_names_raw,
+                ) = context.correction(
+                    matvec=context.matvec,
+                    rhs=context.rhs,
+                    x0=jnp.asarray(x0, dtype=jnp.float64),
+                    direction_builder=coarse_direction_builder,
+                    steps=int(steps_requested),
+                    max_directions=int(max_directions),
+                    alpha_clip=float(alpha_clip),
+                    rcond=float(rcond),
+                    min_improvement=float(min_improvement),
+                )
+                history = tuple(float(v) for v in history_raw)
+                direction_counts = tuple(int(v) for v in direction_counts_raw)
+                direction_names = tuple(str(v) for v in direction_names_raw)
+                residual_after = profile_l2_norm_float(residual_probe)
+                if (
+                    np.isfinite(float(residual_after))
+                    and float(residual_after) < float(residual_before)
+                ):
+                    x0 = jnp.asarray(x_probe, dtype=jnp.float64)
+                    improved = True
+                    if context.emit is not None:
+                        context.emit(
+                            0,
+                            "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
+                            f"probe-coarse improved seed residual {residual_before:.6e} "
+                            f"-> {residual_after:.6e} "
+                            f"(steps={len(direction_counts)} "
+                            f"directions={sum(direction_counts)})",
+                        )
+                elif context.emit is not None:
+                    after = (
+                        float(residual_after)
+                        if residual_after is not None
+                        else float("nan")
+                    )
+                    context.emit(
+                        1,
+                        "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
+                        f"probe-coarse rejected seed residual {residual_before:.6e} "
+                        f"-> {after:.6e}",
+                    )
+        except Exception as exc:  # noqa: BLE001
+            failed = True
+            failure_reason = f"{type(exc).__name__}: {exc}"
+            if context.emit is not None:
+                context.emit(
+                    1,
+                    "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
+                    f"probe-coarse failed ({type(exc).__name__}: {exc})",
+                )
+        elapsed_s = float(context.elapsed_s()) - start_s
+
+    return XBlockProbeCoarseStageResult(
+        x0=x0,
+        steps_requested=int(steps_requested),
+        max_directions=int(max_directions),
+        max_extra_units=int(max_extra_units),
+        fsavg_lmax=int(fsavg_lmax),
+        angular_lmax=int(angular_lmax),
+        include_angular_residual=bool(include_angular_residual),
+        include_raw=bool(include_raw),
+        alpha_clip=float(alpha_clip),
+        rcond=float(rcond),
+        min_improvement=float(min_improvement),
+        elapsed_s=float(elapsed_s),
+        history=history,
+        direction_counts=direction_counts,
+        direction_names=direction_names,
+        residual_before=residual_before,
+        residual_after=residual_after,
+        seed_initialized=bool(seed_initialized),
+        improved=bool(improved),
+        failed=bool(failed),
         failure_reason=failure_reason,
     )
 
@@ -14025,6 +14211,8 @@ __all__ = [
     "XBlockFirstKrylovSolveStateContext",
     "XBlockSideProbeStageContext",
     "XBlockSideProbeStageResult",
+    "XBlockProbeCoarseStageContext",
+    "XBlockProbeCoarseStageResult",
     "XBlockKrylovSolveState",
     "XBlockAugmentedKrylovBasisContext",
     "XBlockAugmentedKrylovBasisResult",
@@ -14096,6 +14284,7 @@ __all__ = [
     "apply_xblock_qi_galerkin_stage",
     "apply_xblock_qi_two_level_stage",
     "apply_xblock_side_probe_stage",
+    "apply_xblock_probe_coarse_stage",
     "apply_xblock_two_level_stage",
     "apply_sparse_pc_post_minres",
     "apply_sparse_pc_post_minres_if_needed",

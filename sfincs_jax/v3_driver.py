@@ -285,6 +285,7 @@ from .problems.profile_response.sparse_pc import (
     XBlockKrylovSolveSpaceContext,
     XBlockMomentSchurStageContext,
     XBlockPostSolveCorrectionContext,
+    XBlockProbeCoarseStageContext,
     XBlockQICoarseSeedStageContext,
     XBlockQIDeviceMetadataContext,
     XBlockQIDeviceSetupConfigContext,
@@ -305,6 +306,7 @@ from .problems.profile_response.sparse_pc import (
     apply_fortran_reduced_xblock_moment_schur_stage,
     apply_xblock_global_coupling_stage,
     apply_xblock_moment_schur_stage,
+    apply_xblock_probe_coarse_stage,
     apply_xblock_qi_coarse_seed_stage,
     apply_xblock_qi_deflated_stage,
     apply_xblock_qi_galerkin_stage,
@@ -4118,107 +4120,39 @@ def solve_v3_full_system_linear_gmres(
                 )
 
             probe_coarse_policy = _read_rhs1_probe_coarse_policy()
-            probe_coarse_steps_requested = int(probe_coarse_policy.steps_requested)
-            probe_coarse_max_directions = int(probe_coarse_policy.max_directions)
-            probe_coarse_max_extra_units = int(probe_coarse_policy.max_extra_units)
-            probe_coarse_fsavg_lmax = int(probe_coarse_policy.fsavg_lmax)
-            probe_coarse_angular_lmax = int(probe_coarse_policy.angular_lmax)
-            probe_coarse_include_angular_residual = bool(
-                probe_coarse_policy.include_angular_residual
+            probe_coarse_stage = apply_xblock_probe_coarse_stage(
+                XBlockProbeCoarseStageContext(
+                    policy=probe_coarse_policy,
+                    rhs=xblock_rhs,
+                    x0=x0_full,
+                    matvec=_mv_true,
+                    target=float(target_xblock),
+                    direction_builder=_xblock_coarse_direction_builder,
+                    correction=_apply_subspace_minres_correction,
+                    elapsed_s=sparse_timer.elapsed_s,
+                    emit=emit,
+                )
             )
-            probe_coarse_include_raw = bool(probe_coarse_policy.include_raw)
-            probe_coarse_alpha_clip = float(probe_coarse_policy.alpha_clip)
-            probe_coarse_rcond = float(probe_coarse_policy.rcond)
-            probe_coarse_min_improvement = float(probe_coarse_policy.min_improvement)
-            probe_coarse_s = 0.0
-            probe_coarse_history: tuple[float, ...] = ()
-            probe_coarse_direction_counts: tuple[int, ...] = ()
-            probe_coarse_direction_names: tuple[str, ...] = ()
-            probe_coarse_residual_before: float | None = None
-            probe_coarse_residual_after: float | None = None
-            probe_coarse_seed_initialized = False
-            if probe_coarse_steps_requested > 0 and x0_full is None:
-                # Allow the opt-in probe-coarse path to act as a genuine
-                # pre-Krylov projected coarse solve. Previously it was inert
-                # unless an unrelated side probe or explicit initial seed had
-                # already provided an initial state.
-                x0_full = jnp.zeros_like(xblock_rhs)
-                probe_coarse_seed_initialized = True
-            if probe_coarse_steps_requested > 0 and x0_full is not None:
-                probe_coarse_start_s = sparse_timer.elapsed_s()
-
-                def _probe_coarse_direction_builder(
-                    residual_vec: jnp.ndarray,
-                ) -> tuple[tuple[str, jnp.ndarray], ...]:
-                    return _xblock_coarse_direction_builder(
-                        residual_vec,
-                        include_raw=bool(probe_coarse_include_raw),
-                        fsavg_lmax=int(probe_coarse_fsavg_lmax),
-                        angular_lmax=int(probe_coarse_angular_lmax),
-                        max_extra_units=int(probe_coarse_max_extra_units),
-                        max_directions=int(probe_coarse_max_directions),
-                        include_angular_residual=bool(probe_coarse_include_angular_residual),
-                    )
-
-                try:
-                    seed_residual = xblock_rhs - jnp.asarray(_mv_true(jnp.asarray(x0_full, dtype=jnp.float64)))
-                    probe_coarse_residual_before = float(jnp.linalg.norm(seed_residual))
-                    if (
-                        np.isfinite(float(probe_coarse_residual_before))
-                        and float(probe_coarse_residual_before) > float(target_xblock)
-                    ):
-                        (
-                            x_probe_coarse,
-                            residual_probe_coarse,
-                            probe_coarse_history,
-                            probe_coarse_direction_counts,
-                            probe_coarse_direction_names,
-                        ) = _apply_subspace_minres_correction(
-                            matvec=_mv_true,
-                            rhs=xblock_rhs,
-                            x0=jnp.asarray(x0_full, dtype=jnp.float64),
-                            direction_builder=_probe_coarse_direction_builder,
-                            steps=probe_coarse_steps_requested,
-                            max_directions=probe_coarse_max_directions,
-                            alpha_clip=probe_coarse_alpha_clip,
-                            rcond=probe_coarse_rcond,
-                            min_improvement=probe_coarse_min_improvement,
-                        )
-                        probe_coarse_residual_after = float(jnp.linalg.norm(residual_probe_coarse))
-                        if (
-                            np.isfinite(float(probe_coarse_residual_after))
-                            and float(probe_coarse_residual_after) < float(probe_coarse_residual_before)
-                        ):
-                            x0_full = jnp.asarray(x_probe_coarse, dtype=jnp.float64)
-                            if emit is not None:
-                                emit(
-                                    0,
-                                    "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
-                                    f"probe-coarse improved seed residual {probe_coarse_residual_before:.6e} "
-                                    f"-> {probe_coarse_residual_after:.6e} "
-                                    f"(steps={len(probe_coarse_direction_counts)} "
-                                    f"directions={sum(probe_coarse_direction_counts)})",
-                                )
-                        elif emit is not None:
-                            after = (
-                                float(probe_coarse_residual_after)
-                                if probe_coarse_residual_after is not None
-                                else float("nan")
-                            )
-                            emit(
-                                1,
-                                "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
-                                f"probe-coarse rejected seed residual {probe_coarse_residual_before:.6e} "
-                                f"-> {after:.6e}",
-                            )
-                except Exception as exc:  # noqa: BLE001
-                    if emit is not None:
-                        emit(
-                            1,
-                            "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
-                            f"probe-coarse failed ({type(exc).__name__}: {exc})",
-                        )
-                probe_coarse_s = float(sparse_timer.elapsed_s() - probe_coarse_start_s)
+            x0_full = probe_coarse_stage.x0
+            probe_coarse_steps_requested = int(probe_coarse_stage.steps_requested)
+            probe_coarse_max_directions = int(probe_coarse_stage.max_directions)
+            probe_coarse_max_extra_units = int(probe_coarse_stage.max_extra_units)
+            probe_coarse_fsavg_lmax = int(probe_coarse_stage.fsavg_lmax)
+            probe_coarse_angular_lmax = int(probe_coarse_stage.angular_lmax)
+            probe_coarse_include_angular_residual = bool(
+                probe_coarse_stage.include_angular_residual
+            )
+            probe_coarse_include_raw = bool(probe_coarse_stage.include_raw)
+            probe_coarse_alpha_clip = float(probe_coarse_stage.alpha_clip)
+            probe_coarse_rcond = float(probe_coarse_stage.rcond)
+            probe_coarse_min_improvement = float(probe_coarse_stage.min_improvement)
+            probe_coarse_s = float(probe_coarse_stage.elapsed_s)
+            probe_coarse_history = probe_coarse_stage.history
+            probe_coarse_direction_counts = probe_coarse_stage.direction_counts
+            probe_coarse_direction_names = probe_coarse_stage.direction_names
+            probe_coarse_residual_before = probe_coarse_stage.residual_before
+            probe_coarse_residual_after = probe_coarse_stage.residual_after
+            probe_coarse_seed_initialized = bool(probe_coarse_stage.seed_initialized)
 
             preflight_min_improvement = _rhs1_float_env(
                 "SFINCS_JAX_RHSMODE1_XBLOCK_PC_PREFLIGHT_MIN_IMPROVEMENT",
