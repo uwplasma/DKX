@@ -553,6 +553,59 @@ class RHS1StrongPreconditionerControl:
     reason_collision_probe_skip: bool = False
 
 
+def rhs1_strong_preconditioner_control_messages(
+    control: RHS1StrongPreconditionerControl,
+    *,
+    residual_norm: float,
+    target: float,
+    rhs1_precond_kind: str | None,
+    pas_auto_strong_ratio: float,
+    pas_collision_probe_allows_strong: bool = False,
+    pas_force_strong_ratio: float | None = None,
+    sparse_rescue_label: str = "large CPU",
+) -> tuple[str, ...]:
+    """Return user-facing progress messages for strong-preconditioner gates."""
+
+    messages: list[str] = []
+    if control.reason_cs0_sparse_first:
+        messages.append(
+            "solve_v3_full_system_linear_gmres: constraintScheme=0 sparse-first "
+            "auto mode -> defer strong preconditioner until after sparse ILU"
+        )
+    if control.reason_large_cpu_sparse_first:
+        messages.append(
+            f"solve_v3_full_system_linear_gmres: {sparse_rescue_label} rescue-first "
+            "auto mode -> defer strong preconditioner until after sparse LU"
+        )
+    if control.reason_pas_auto_skip:
+        messages.append(
+            "solve_v3_full_system_linear_gmres: PAS auto strong preconditioner skipped "
+            f"after base={rhs1_precond_kind} "
+            f"(residual={float(residual_norm):.3e} <= {float(pas_auto_strong_ratio):.1f}x target)"
+        )
+    if control.reason_pas_fast_accept:
+        messages.append(
+            "solve_v3_full_system_linear_gmres: PAS fast-accept "
+            f"(residual={float(residual_norm):.3e}) -> skip strong preconditioner tail"
+        )
+    if control.reason_collision_probe_skip:
+        messages.append(
+            "solve_v3_full_system_linear_gmres: PAS collision probe disabled strong preconditioner auto"
+        )
+    elif pas_collision_probe_allows_strong:
+        ratio = (
+            rhs1_pas_force_strong_ratio_from_env()
+            if pas_force_strong_ratio is None
+            else float(pas_force_strong_ratio)
+        )
+        if float(residual_norm) > float(target) * float(ratio):
+            messages.append(
+                "solve_v3_full_system_linear_gmres: PAS collision probe allows strong preconditioner "
+                f"(residual={float(residual_norm):.3e} > {float(ratio):.1f}x target)"
+            )
+    return tuple(messages)
+
+
 def rhs1_strong_preconditioner_min_size() -> int:
     """Parse the minimum size threshold for auto strong-preconditioning."""
     strong_precond_min_env = os.environ.get(
@@ -681,6 +734,34 @@ class RHS1FullStrongPreconditionerSelection:
 
     kind: str | None
     xblock_tz_lmax: int | None
+
+
+def rhs1_reduced_strong_selection_skip_messages(
+    selection: RHS1ReducedStrongPreconditionerSelection,
+) -> tuple[str, ...]:
+    """Return progress messages for reduced strong-preconditioner skip gates."""
+
+    if selection.candidate_kind_before_skips is None:
+        return ()
+    messages: list[str] = []
+    if selection.skipped_weak_pas:
+        messages.append(
+            "solve_v3_full_system_linear_gmres: skipping strong preconditioner "
+            "after weak PAS base residual exceeded skip threshold; set "
+            "SFINCS_JAX_PAS_STRONG_WEAK_SKIP_RATIO=0 to retry"
+        )
+    if selection.skipped_guarded_pas_tz:
+        messages.append(
+            "solve_v3_full_system_linear_gmres: skipping strong preconditioner "
+            "after guarded PAS-TZ fallback; set "
+            "SFINCS_JAX_RHSMODE1_PAS_TZ_GUARDED_STRONG_RETRY=1 to retry"
+        )
+    if selection.skipped_qi_device:
+        messages.append(
+            "solve_v3_full_system_linear_gmres: skipping strong preconditioner "
+            "for QI device preconditioner experiment"
+        )
+    return tuple(messages)
 
 
 def _int_env(name: str, default: int) -> int:
@@ -1217,6 +1298,7 @@ __all__ = (
     "rhs1_fp_strong_size_guard_from_env",
     "rhs1_pas_force_strong_ratio_from_env",
     "rhs1_pas_tz_guarded_minres_controls_from_env",
+    "rhs1_reduced_strong_selection_skip_messages",
     "rhs1_pas_weak_minres_controls_from_env",
     "rhs1_pas_lite_min",
     "rhs1_pas_strong_lmax",
@@ -1227,6 +1309,7 @@ __all__ = (
     "resolve_rhs1_full_strong_preconditioner_selection",
     "resolve_rhs1_reduced_strong_preconditioner_selection",
     "run_rhs1_post_primary_minres_corrections",
+    "rhs1_strong_preconditioner_control_messages",
     "rhs1_schwarz_auto_min",
     "rhs1_strong_preconditioner_env_from_env",
     "rhs1_strong_preconditioner_min_size",

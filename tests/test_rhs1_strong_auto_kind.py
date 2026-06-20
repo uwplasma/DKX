@@ -8,6 +8,7 @@ from sfincs_jax.rhs1_strong_auto_kind import (
     auto_rhs1_reduced_strong_kind,
     resolve_rhs1_full_strong_preconditioner_selection,
     resolve_rhs1_reduced_strong_preconditioner_selection,
+    rhs1_reduced_strong_selection_skip_messages,
 )
 
 
@@ -209,6 +210,17 @@ def test_resolve_rhs1_reduced_strong_selection_tracks_pas_and_device_skip_gates(
     assert selection.skipped_weak_pas
     assert selection.skipped_guarded_pas_tz
     assert selection.skipped_qi_device
+    messages = rhs1_reduced_strong_selection_skip_messages(selection)
+    assert messages == (
+        "solve_v3_full_system_linear_gmres: skipping strong preconditioner "
+        "after weak PAS base residual exceeded skip threshold; set "
+        "SFINCS_JAX_PAS_STRONG_WEAK_SKIP_RATIO=0 to retry",
+        "solve_v3_full_system_linear_gmres: skipping strong preconditioner "
+        "after guarded PAS-TZ fallback; set "
+        "SFINCS_JAX_RHSMODE1_PAS_TZ_GUARDED_STRONG_RETRY=1 to retry",
+        "solve_v3_full_system_linear_gmres: skipping strong preconditioner "
+        "for QI device preconditioner experiment",
+    )
 
 
 def test_resolve_rhs1_reduced_strong_selection_allows_guarded_pas_retry() -> None:

@@ -9,6 +9,7 @@ from sfincs_jax.rhs1_strong_control import (
     rhs1_pas_force_strong_ratio_from_env,
     rhs1_resolved_strong_preconditioner_control,
     rhs1_strong_preconditioner_env_from_env,
+    rhs1_strong_preconditioner_control_messages,
     rhs1_strong_retry_controls_from_env,
     rhs1_strong_preconditioner_min_size,
     rhs1_strong_trigger_controls_from_env,
@@ -297,3 +298,65 @@ def test_rhs1_resolved_strong_preconditioner_control_does_not_skip_collision_pro
     )
     assert not control.reason_collision_probe_skip
     assert control.auto
+
+
+def test_rhs1_strong_preconditioner_control_messages_report_all_gates() -> None:
+    control = rhs1_resolved_strong_preconditioner_control(
+        strong_precond_env="",
+        has_extra_constraint_block=False,
+        has_fp=False,
+        has_pas=True,
+        size=5000,
+        n_theta=9,
+        n_zeta=5,
+        cs0_sparse_first=True,
+        large_cpu_sparse_rescue_first=True,
+        pas_auto_skip=True,
+        pas_fast_accept=True,
+        pas_precond_force_collision=True,
+        residual_norm=1.0,
+        target=1.0,
+    )
+
+    messages = rhs1_strong_preconditioner_control_messages(
+        control,
+        residual_norm=1.0,
+        target=1.0,
+        rhs1_precond_kind="pas_lite",
+        pas_auto_strong_ratio=4.0,
+        sparse_rescue_label="gpu host-sparse",
+    )
+
+    joined = "\n".join(messages)
+    assert "constraintScheme=0 sparse-first" in joined
+    assert "gpu host-sparse rescue-first" in joined
+    assert "PAS auto strong preconditioner skipped after base=pas_lite" in joined
+    assert "PAS fast-accept" in joined
+    assert "PAS collision probe disabled strong preconditioner auto" in joined
+
+
+def test_rhs1_strong_preconditioner_control_messages_reports_collision_probe_allow() -> None:
+    messages = rhs1_strong_preconditioner_control_messages(
+        rhs1_resolved_strong_preconditioner_control(
+            strong_precond_env="",
+            has_extra_constraint_block=False,
+            has_fp=False,
+            has_pas=True,
+            size=5000,
+            n_theta=9,
+            n_zeta=5,
+            residual_norm=20.0,
+            target=1.0,
+        ),
+        residual_norm=20.0,
+        target=1.0,
+        rhs1_precond_kind="pas_lite",
+        pas_auto_strong_ratio=4.0,
+        pas_collision_probe_allows_strong=True,
+        pas_force_strong_ratio=10.0,
+    )
+
+    assert messages == (
+        "solve_v3_full_system_linear_gmres: PAS collision probe allows strong "
+        "preconditioner (residual=2.000e+01 > 10.0x target)",
+    )

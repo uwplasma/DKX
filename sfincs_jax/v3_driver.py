@@ -412,9 +412,11 @@ from .problems.profile_response.strong_preconditioning import (
     rhs1_pas_tz_guarded_minres_controls_from_env,
     rhs1_pas_weak_minres_controls_from_env,
     rhs1_pas_weak_minres_steps,
+    rhs1_reduced_strong_selection_skip_messages,
     rhs1_resolved_strong_preconditioner_control,
     resolve_rhs1_reduced_strong_preconditioner_selection,
     rhs1_strong_preconditioner_env_from_env,
+    rhs1_strong_preconditioner_control_messages,
     rhs1_strong_retry_controls_from_env,
     rhs1_strong_trigger_controls_from_env,
     run_rhs1_post_primary_minres_corrections,
@@ -9718,46 +9720,23 @@ def solve_v3_full_system_linear_gmres(
             residual_norm=float(res_reduced.residual_norm),
             target=float(target_reduced),
         )
-        if strong_control.reason_cs0_sparse_first and emit is not None:
-            emit(
-                1,
-                "solve_v3_full_system_linear_gmres: constraintScheme=0 sparse-first "
-                "auto mode -> defer strong preconditioner until after sparse ILU",
-            )
-        if strong_control.reason_large_cpu_sparse_first and emit is not None:
-            if emit is not None:
-                backend_name = str(jax.default_backend()).strip().lower()
-                sparse_label = "large CPU" if backend_name == "cpu" else f"{backend_name} host-sparse"
-                emit(
-                    1,
-                    f"solve_v3_full_system_linear_gmres: {sparse_label} rescue-first "
-                    "auto mode -> defer strong preconditioner until after sparse LU",
-                )
-        if strong_control.reason_pas_auto_skip and emit is not None:
-            if emit is not None:
-                emit(
-                    1,
-                    "solve_v3_full_system_linear_gmres: PAS auto strong preconditioner skipped "
-                    f"after base={rhs1_precond_kind} "
-                    f"(residual={float(res_reduced.residual_norm):.3e} <= {float(pas_auto_strong_ratio):.1f}x target)",
-                )
-        if strong_control.reason_pas_fast_accept and emit is not None:
-            if emit is not None:
-                emit(
-                    1,
-                    "solve_v3_full_system_linear_gmres: PAS fast-accept "
-                    f"(residual={float(res_reduced.residual_norm):.3e}) -> skip strong preconditioner tail",
-                )
-        if strong_control.reason_collision_probe_skip and emit is not None:
-            emit(1, "solve_v3_full_system_linear_gmres: PAS collision probe disabled strong preconditioner auto")
-        elif pas_precond_force_collision and strong_precond_env in {"", "auto"} and emit is not None:
-            pas_force_strong_ratio = rhs1_pas_force_strong_ratio_from_env()
-            if float(res_reduced.residual_norm) > target_reduced * pas_force_strong_ratio:
-                emit(
-                    1,
-                    "solve_v3_full_system_linear_gmres: PAS collision probe allows strong preconditioner "
-                    f"(residual={float(res_reduced.residual_norm):.3e} > {pas_force_strong_ratio:.1f}x target)",
-                )
+        if emit is not None:
+            backend_name = str(jax.default_backend()).strip().lower()
+            sparse_label = "large CPU" if backend_name == "cpu" else f"{backend_name} host-sparse"
+            for message in rhs1_strong_preconditioner_control_messages(
+                strong_control,
+                residual_norm=float(res_reduced.residual_norm),
+                target=float(target_reduced),
+                rhs1_precond_kind=rhs1_precond_kind,
+                pas_auto_strong_ratio=float(pas_auto_strong_ratio),
+                pas_collision_probe_allows_strong=(
+                    bool(pas_precond_force_collision)
+                    and strong_precond_env in {"", "auto"}
+                ),
+                pas_force_strong_ratio=rhs1_pas_force_strong_ratio_from_env(),
+                sparse_rescue_label=sparse_label,
+            ):
+                emit(1, message)
         reduced_strong_selection = resolve_rhs1_reduced_strong_preconditioner_selection(
             strong_precond_env=strong_precond_env,
             control=strong_control,
@@ -9784,40 +9763,11 @@ def solve_v3_full_system_linear_gmres(
         strong_xblock_tz_lmax = reduced_strong_selection.xblock_tz_lmax
         strong_precond_trigger = bool(reduced_strong_selection.trigger)
 
-        if reduced_strong_selection.skipped_weak_pas:
-            if (
-                emit is not None
-                and reduced_strong_selection.candidate_kind_before_skips is not None
+        if emit is not None:
+            for message in rhs1_reduced_strong_selection_skip_messages(
+                reduced_strong_selection
             ):
-                emit(
-                    1,
-                    "solve_v3_full_system_linear_gmres: skipping strong preconditioner "
-                    "after weak PAS base residual exceeded skip threshold; set "
-                    "SFINCS_JAX_PAS_STRONG_WEAK_SKIP_RATIO=0 to retry",
-                )
-
-        if reduced_strong_selection.skipped_guarded_pas_tz:
-            if (
-                emit is not None
-                and reduced_strong_selection.candidate_kind_before_skips is not None
-            ):
-                emit(
-                    1,
-                    "solve_v3_full_system_linear_gmres: skipping strong preconditioner "
-                    "after guarded PAS-TZ fallback; set "
-                    "SFINCS_JAX_RHSMODE1_PAS_TZ_GUARDED_STRONG_RETRY=1 to retry",
-                )
-
-        if (
-            reduced_strong_selection.skipped_qi_device
-            and reduced_strong_selection.candidate_kind_before_skips is not None
-        ):
-            if emit is not None:
-                emit(
-                    1,
-                    "solve_v3_full_system_linear_gmres: skipping strong preconditioner "
-                    "for QI device preconditioner experiment",
-                )
+                emit(1, message)
 
         if (
             strong_precond_kind is not None

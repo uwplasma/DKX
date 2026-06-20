@@ -13,6 +13,7 @@ import jax.numpy as jnp
 from .strong_preconditioning import (
     RHS1StrongPreconditionerControl,
     resolve_rhs1_full_strong_preconditioner_selection,
+    rhs1_strong_preconditioner_control_messages,
     rhs1_strong_retry_controls_from_env,
 )
 
@@ -431,25 +432,15 @@ def run_rhs1_full_strong_retry_stage(
     """Select, build, and run the full-system strong-preconditioner retry."""
 
     residual_norm = float(context.current_result.residual_norm)
-    if context.strong_control.reason_cs0_sparse_first and context.emit is not None:
-        context.emit(
-            1,
-            "solve_v3_full_system_linear_gmres: constraintScheme=0 sparse-first "
-            "auto mode -> defer strong preconditioner until after sparse ILU",
-        )
-    if context.strong_control.reason_pas_auto_skip and context.emit is not None:
-        context.emit(
-            1,
-            "solve_v3_full_system_linear_gmres: PAS auto strong preconditioner skipped "
-            f"after base={context.rhs1_precond_kind} "
-            f"(residual={residual_norm:.3e} <= {float(context.pas_auto_strong_ratio):.1f}x target)",
-        )
-    if context.strong_control.reason_pas_fast_accept and context.emit is not None:
-        context.emit(
-            1,
-            "solve_v3_full_system_linear_gmres: PAS fast-accept "
-            f"(residual={residual_norm:.3e}) -> skip strong preconditioner tail",
-        )
+    if context.emit is not None:
+        for message in rhs1_strong_preconditioner_control_messages(
+            context.strong_control,
+            residual_norm=residual_norm,
+            target=float(context.target),
+            rhs1_precond_kind=context.rhs1_precond_kind,
+            pas_auto_strong_ratio=float(context.pas_auto_strong_ratio),
+        ):
+            context.emit(1, message)
 
     selection = resolve_rhs1_full_strong_preconditioner_selection(
         strong_precond_env=context.strong_precond_env,

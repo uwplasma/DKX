@@ -367,6 +367,10 @@ Recent checkpoints:
   invocation, residual-improvement acceptance, replay-state mutation, and
   progress emission; the driver keeps only admission policy and smoother
   parameter callbacks.
+- RHSMode=1 strong-preconditioner control/selection skip diagnostics now use
+  tested `profile_response.strong_preconditioning` message helpers shared by
+  reduced and full-system paths. The driver keeps only live backend labels and
+  `emit` calls; the policy module owns message text and gate precedence.
 - RHSMode=1 PAS preconditioner probe/default routing now uses tested
   PAS-policy helpers for env parsing, tokamak-like Schur defaulting, heavy-path
   admission, large-system collision skip, and residual-threshold decisions
@@ -510,21 +514,21 @@ Recent checkpoints:
 - `cb295ce` Extract sparse pattern setup.
 - `4b6a5b4` Extract sparse factor policy.
 
-Current source-size snapshot after reduced PAS adaptive smoother extraction:
+Current source-size snapshot after strong-preconditioner diagnostic extraction:
 
-- `sfincs_jax/v3_driver.py`: `14750` lines.
-- `solve_v3_full_system_linear_gmres`: `9986` lines.
+- `sfincs_jax/v3_driver.py`: `14700` lines.
+- `solve_v3_full_system_linear_gmres`: `9934` lines.
 - `sfincs_jax/v3_results.py`: `119` lines.
 - `sfincs_jax/rhs1_ksp_diagnostics.py`: `306` lines.
 - `sfincs_jax/rhs1_pas_policy.py`: `889` lines.
 - `sfincs_jax/rhs1_strong_fallback.py`: `147` lines.
-- `sfincs_jax/problems/profile_response/strong_preconditioning.py`: `1238` lines.
+- `sfincs_jax/problems/profile_response/strong_preconditioning.py`: `1321` lines.
 - `sfincs_jax/problems/profile_response/residual.py`: `981` lines.
 - `sfincs_jax/problems/profile_response/handoff.py`: `1211` lines.
 - `sfincs_jax/problems/profile_response/policies.py`: `3761` lines.
 - `sfincs_jax/problems/profile_response/dense.py`: `1650` lines.
 - `sfincs_jax/problems/profile_response/linear_solve.py`: `798` lines.
-- `sfincs_jax/problems/profile_response/preconditioner_build.py`: `662` lines.
+- `sfincs_jax/problems/profile_response/preconditioner_build.py`: `653` lines.
 - `sfincs_jax/problems/profile_response/active_projection.py`: `203` lines.
 - `sfincs_jax/problems/profile_response/sparse_pc.py`: `15687` lines.
 - `sfincs_jax/problems/profile_response/solver_diagnostics.py`: `421` lines.
@@ -532,6 +536,19 @@ Current source-size snapshot after reduced PAS adaptive smoother extraction:
 
 Recent local validation:
 
+- Strong-preconditioner diagnostic extraction:
+  `tests/test_rhs1_strong_control.py tests/test_rhs1_strong_auto_kind.py
+  tests/test_profile_response_preconditioner_build.py` passed
+  (`40 passed in 0.38 s`).
+- Broad profile-response/RHSMode=1 shard after strong-preconditioner
+  diagnostic extraction:
+  `tests/test_profile_response_*.py tests/test_rhs1_*.py
+  tests/test_newton_krylov_diagnostics.py tests/test_pas_smoother.py`
+  passed (`1358 passed in 86.11 s`).
+- Hygiene after strong-preconditioner diagnostic extraction:
+  `py_compile`, `ruff check`, `compileall`, `git diff --check`, and
+  `python scripts/check_repo_size.py` passed. Repo-size audit reported no
+  reviewed files above 2 MiB.
 - Reduced PAS adaptive smoother extraction:
   `tests/test_rhs1_handoff.py tests/test_rhs1_pas_policy.py
   tests/test_pas_smoother.py` passed (`114 passed in 0.49 s`).
