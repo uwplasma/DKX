@@ -1971,22 +1971,22 @@ not be used for current planning.
 Current evidence from 2026-06-20:
 
 - Branch `refactor/v3-driver-architecture` remains the single draft-PR branch.
-  The latest pushed tranche moves generic x-block Krylov/probe/control helpers,
-  precondition-side/probe-coarse gates, augmented Krylov setup, GMRES fallback
-  routing, progress messages, work estimates, and physical-residual
-  measurement into `profile_response/sparse/xblock.py` in commit `6a871b4`.
-- PR #8 is draft and merge-clean. Commit `6a871b4` should be treated as the
-  latest CI reference until another structural tranche is pushed.
+  The latest local tranche moves x-block post-solve subspace corrections,
+  post-MinRes/coarse/residual-equation orchestration, and post-Krylov completion
+  emission into `profile_response/sparse/xblock.py`.
+- PR #8 is draft and merge-clean. Commit `39d7140` should be treated as the
+  latest pushed CI reference until this local tranche is committed and pushed.
 - Largest remaining files after the current sparse package splits are
   `sfincs_jax/v3_driver.py` (`14393` lines),
   `sfincs_jax/rhs1_full_assembly.py` (`11893` lines),
-  `sfincs_jax/problems/profile_response/sparse_pc.py` (`5920` lines), and
+  `sfincs_jax/problems/profile_response/sparse_pc.py` (`5399` lines), and
   `sfincs_jax/io.py` (`5817` lines).
 - Largest remaining function is
   `solve_v3_full_system_linear_gmres(...)` in `v3_driver.py` (`9599` lines).
-- `profile_response.sparse_pc` currently has 67 top-level functions and
-  49 top-level classes. The sparse package split has moved 35 x-block rescue,
-  setup, Krylov/probe/control, fallback, and progress functions and 50
+- `profile_response.sparse_pc` currently has 64 top-level functions and
+  43 top-level classes. The sparse package split has moved 38 x-block rescue,
+  setup, Krylov/probe/control, fallback, progress, post-solve correction, and
+  completion functions and 56
   dataclasses/classes into
   `profile_response/sparse/xblock.py`, plus
   36 explicit sparse/minimum-norm/host-direct/ILU/direct-tail helpers and 33
@@ -2042,17 +2042,21 @@ Current evidence from 2026-06-20:
   (`358 passed`), and broad profile-response/RHSMode shard (`1390 passed`)
   passed locally. `compileall`, `git diff --check`, Sphinx HTML docs build, and
   repository-size audit also passed locally.
+- Validation for the x-block post-solve correction split: targeted
+  `py_compile`, targeted `ruff`, focused sparse/profile-response tests
+  (`358 passed`), and broad profile-response/RHSMode shard (`1390 passed`)
+  passed locally.
 - `rhs1_full_assembly.py` and `io.py` are large, but they are not immediate
   blockers for PR #8 unless this branch changes their behavior. Treat them as
   follow-up refactor lanes after the driver/profile-response split is reviewed.
 
 Actual open lanes:
 
-1. PR hygiene and CI: about 90%. Keep one draft PR, keep the worktree clean,
+1. PR hygiene and CI: about 91%. Keep one draft PR, keep the worktree clean,
    keep commits small enough to review, and refresh the PR body after each
    structural tranche. Do not wait on CI repeatedly; check only completed
    failures or final readiness.
-2. Driver reviewability: about 82%. `v3_driver.py` is smaller than before but
+2. Driver reviewability: about 83%. `v3_driver.py` is smaller than before but
    still has a 9599-line RHSMode=1 solve function. Only extract remaining
    driver seams when the boundary is explicit, tested, and shorter than the
    in-line code it replaces. The generic sparse retry/result-assembly shell was
@@ -2060,7 +2064,7 @@ Actual open lanes:
    driver-owned for now: it coordinates driver-local cache keys, dense fallback
    state, KSP replay state, and residual-vector routing while delegating the
    reusable factor/solve mechanics to tested profile-response helpers.
-3. Sparse profile-response package split: about 97%. This is the main blocker
+3. Sparse profile-response package split: about 98%. This is the main blocker
    for review. Move implementation out of
    `profile_response/sparse_pc.py` into a bounded domain package while keeping
    `sparse_pc.py` as a compatibility re-export for existing tests and users.
@@ -2071,10 +2075,11 @@ Actual open lanes:
 5. Validation lane: about 96%. Focused sparse/profile-response tests and broad
    RHSMode shards are the right gates for this PR. Do not add slow production
    benchmark runs unless behavior changes.
-6. Docs/reviewer map: about 78%. The source map and API docs now show the
+6. Docs/reviewer map: about 80%. The source map and API docs now show the
    sparse compatibility layer and extracted sparse helper modules, including
-   the generic x-block Krylov/probe/control boundary. The remaining work is a
-   short review checklist if needed before marking the draft PR ready.
+   the generic x-block Krylov/probe/control and post-solve boundaries. The
+   remaining work is a short review checklist if needed before marking the
+   draft PR ready.
 
 PR-blocking refactor targets:
 
@@ -2112,9 +2117,9 @@ Efficient path to PR-ready:
    replay/cache-routing state object rather than a clearer algorithm boundary.
 2. The QI-specific x-block split is committed and pushed.
 3. Continue the `profile_response/sparse/` package split only if the remaining
-   post-solve correction/final-metadata or entry-policy bundles can be moved
-   with a small compatibility surface and clearer boundaries than the current
-   compatibility layer.
+   final-metadata or entry-policy bundles can be moved with a small
+   compatibility surface and clearer boundaries than the current compatibility
+   layer.
 4. Keep each package split tranche behavior-preserving and compatibility-backed,
    keeping `sparse_pc.py` as a compatibility import layer after each commit.
 5. Run focused tests after every package split commit, then the broad

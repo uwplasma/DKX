@@ -495,9 +495,10 @@ the historical private driver name and test the focused module directly. This ke
   x-block and sxblock rescue/correction helpers, shared x-block Krylov matvec
   and initial-guess policy dataclasses, precondition-side/probe-coarse gates,
   device/host Krylov control, optional augmented Krylov setup, GMRES fallback
-  routing, work estimates, progress messages, and physical-residual
-  measurement. This module owns generic x-block stage mechanics; QI-specific
-  coarse-basis choices remain in ``sparse/qi.py``.
+  routing, work estimates, progress messages, physical-residual measurement,
+  and post-Krylov post-solve correction/completion orchestration. This module
+  owns generic x-block stage mechanics; QI-specific coarse-basis choices remain
+  in ``sparse/qi.py``.
 - ``sfincs_jax/problems/profile_response/sparse/fortran_reduced.py``:
   Fortran-reduced x-block backend policy, factor-build, Krylov setup/solve,
   optional moment/global coarse stages, and final payload construction.

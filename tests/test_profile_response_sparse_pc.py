@@ -389,6 +389,15 @@ def test_sparse_xblock_module_reexports_match_compat_layer() -> None:
         "emit_xblock_sparse_pc_completion",
         "emit_xblock_sparse_pc_completion_from_driver_state",
         "xblock_physical_solution_and_residual",
+        "XBlockSubspaceCorrectionContext",
+        "XBlockSubspaceCorrectionResult",
+        "XBlockPostSolveCorrectionContext",
+        "XBlockPostSolveCorrectionResult",
+        "XBlockPostKrylovCompletionContext",
+        "XBlockPostKrylovCompletionResult",
+        "apply_xblock_subspace_correction_if_needed",
+        "run_xblock_post_solve_corrections",
+        "complete_xblock_post_krylov_stage",
     )
     for name in moved_names:
         assert getattr(sparse_pc_module, name) is getattr(sparse_xblock_module, name)
