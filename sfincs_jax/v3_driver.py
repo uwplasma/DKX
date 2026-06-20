@@ -590,8 +590,7 @@ from .rhs1_ksp_diagnostics import (
 )
 from .problems.profile_response.solver_diagnostics import (
     RHS1KSPDiagnosticsContext,
-    emit_profile_response_ksp_history,
-    emit_profile_response_ksp_iter_stats,
+    emit_profile_response_ksp_replay_diagnostics,
 )
 from .problems.profile_response.active_dof import (
     build_rhs1_active_dof_state as _build_rhs1_active_dof_state_compat,
@@ -13464,36 +13463,13 @@ def solve_v3_full_system_linear_gmres(
                 extra = jnp.where(max_abs <= zero_tol, jnp.zeros_like(extra), extra)
                 x_new = jnp.concatenate([result.x[: -int(op.extra_size)], extra], axis=0)
                 result = GMRESSolveResult(x=x_new, residual_norm=result.residual_norm)
-    if ksp_replay.matvec_fn is not None and ksp_replay.b_vec is not None:
-        ksp_history = emit_profile_response_ksp_history(
-            context=rhs1_ksp_diagnostics_context,
-            matvec_fn=ksp_replay.matvec_fn,
-            b_vec=ksp_replay.b_vec,
-            precond_fn=ksp_replay.precond_fn,
-            x0_vec=ksp_replay.x0_vec,
-            tol_val=tol,
-            atol_val=atol,
-            restart_val=int(ksp_replay.restart),
-            maxiter_val=ksp_replay.maxiter,
-            precond_side=ksp_replay.precond_side,
-            solver_kind=ksp_replay.solver_kind,
-            solve_method_val=str(solve_method),
-        )
-        emit_profile_response_ksp_iter_stats(
-            context=rhs1_ksp_diagnostics_context,
-            matvec_fn=ksp_replay.matvec_fn,
-            b_vec=ksp_replay.b_vec,
-            precond_fn=ksp_replay.precond_fn,
-            x0_vec=ksp_replay.x0_vec,
-            tol_val=float(tol),
-            atol_val=float(atol),
-            restart_val=int(ksp_replay.restart),
-            maxiter_val=ksp_replay.maxiter,
-            precond_side=ksp_replay.precond_side,
-            solver_kind=ksp_replay.solver_kind,
-            history=ksp_history,
-            solve_method_val=str(solve_method),
-        )
+    emit_profile_response_ksp_replay_diagnostics(
+        context=rhs1_ksp_diagnostics_context,
+        replay_state=ksp_replay,
+        tol_val=float(tol),
+        atol_val=float(atol),
+        solve_method_val=str(solve_method),
+    )
     if emit is not None:
         emit(0, f"solve_v3_full_system_linear_gmres: residual_norm={float(result.residual_norm):.6e}")
         emit(1, f"solve_v3_full_system_linear_gmres: elapsed_s={t.elapsed_s():.3f}")

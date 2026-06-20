@@ -42,6 +42,11 @@ Make `sfincs_jax` research-grade while preserving the public user contract:
 
 Recent checkpoints:
 
+- Final RHSMode=1 KSP replay history/stat emission now uses a tested
+  `emit_profile_response_ksp_replay_diagnostics(...)` helper in the
+  profile-response solver diagnostics module. The driver owns only the replay
+  state and calls one explicit diagnostic seam, preserving bounded replay
+  controls and iteration-stat reuse.
 - KSP replay-state recording now uses a tested
   `rhs1_record_ksp_replay_problem(...)` helper. Straightforward multi-field
   replay assignment blocks in `v3_driver.py` now call the shared recorder, and
@@ -361,6 +366,7 @@ Recent checkpoints:
 - X-block sparse-PC metadata helper extraction.
 - Sparse-PC finalization helper extraction.
 - KSP replay-state contract extraction.
+- Final KSP replay diagnostic emission extraction.
 - Measured candidate handoff consolidation.
 - Sparse fallback measured-handoff extraction.
 - Sparse-PC factor-preflight evaluation extraction.
@@ -377,26 +383,39 @@ Recent checkpoints:
 - `cb295ce` Extract sparse pattern setup.
 - `4b6a5b4` Extract sparse factor policy.
 
-Current source-size snapshot after KSP replay recorder extraction:
+Current source-size snapshot after final KSP replay diagnostic extraction:
 
-- `sfincs_jax/v3_driver.py`: `15775` lines.
-- `solve_v3_full_system_linear_gmres`: `11019` lines.
+- `sfincs_jax/v3_driver.py`: `15751` lines.
+- `solve_v3_full_system_linear_gmres`: `10996` lines.
 - `sfincs_jax/v3_results.py`: `119` lines.
 - `sfincs_jax/rhs1_ksp_diagnostics.py`: `306` lines.
 - `sfincs_jax/rhs1_pas_policy.py`: `889` lines.
 - `sfincs_jax/rhs1_strong_fallback.py`: `147` lines.
-- `sfincs_jax/problems/profile_response/strong_preconditioning.py`: `803` lines.
+- `sfincs_jax/problems/profile_response/strong_preconditioning.py`: `1053` lines.
 - `sfincs_jax/problems/profile_response/residual.py`: `981` lines.
-- `sfincs_jax/problems/profile_response/handoff.py`: `598` lines.
+- `sfincs_jax/problems/profile_response/handoff.py`: `1035` lines.
 - `sfincs_jax/problems/profile_response/policies.py`: `3463` lines.
 - `sfincs_jax/problems/profile_response/dense.py`: `701` lines.
 - `sfincs_jax/problems/profile_response/linear_solve.py`: `339` lines.
 - `sfincs_jax/problems/profile_response/active_projection.py`: `116` lines.
 - `sfincs_jax/problems/profile_response/sparse_pc.py`: `14949` lines.
+- `sfincs_jax/problems/profile_response/solver_diagnostics.py`: `384` lines.
 - `sfincs_jax/rhs1_xblock_policy.py`: `1215` lines.
 
 Recent local validation:
 
+- KSP replay diagnostic extraction:
+  `tests/test_rhs1_solver_diagnostics.py tests/test_rhs1_ksp_diagnostics.py`
+  passed (`16 passed in 0.60 s`).
+- Broad profile-response/RHSMode=1 shard after KSP replay diagnostic
+  extraction:
+  `tests/test_profile_response_*.py tests/test_rhs1_*.py
+  tests/test_newton_krylov_diagnostics.py tests/test_pas_smoother.py`
+  passed (`1283 passed in 41.60 s`).
+- Hygiene after KSP replay diagnostic extraction:
+  `ruff check`, `py_compile`, `compileall`, `git diff --check`, and
+  `python scripts/check_repo_size.py` passed. Repo-size audit reported no
+  reviewed files above 2 MiB.
 - PAS policy shard after near-zero-Er PAS routing extraction:
   `36 passed in 0.38 s`.
 - Solver-selection policy shard after near-zero-Er PAS routing extraction:

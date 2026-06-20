@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 from collections.abc import Callable, Mapping, Sequence
+from dataclasses import dataclass
+from typing import Any
 
 import jax.numpy as jnp
 
@@ -149,6 +150,57 @@ def emit_profile_response_ksp_iter_stats(
         enabled=bool(context.iter_stats_enabled),
         max_size=context.iter_stats_max_size,
     )
+
+
+def emit_profile_response_ksp_replay_diagnostics(
+    *,
+    context: RHS1KSPDiagnosticsContext,
+    replay_state: Any,
+    tol_val: float,
+    atol_val: float,
+    solve_method_val: str,
+) -> list[float] | None:
+    """Emit RHSMode=1 KSP replay history and iteration statistics.
+
+    ``replay_state`` is duck-typed so the driver-owned solve state can stay in
+    the handoff module without creating an import cycle.
+    """
+
+    matvec_fn = getattr(replay_state, "matvec_fn", None)
+    b_vec = getattr(replay_state, "b_vec", None)
+    if matvec_fn is None or b_vec is None:
+        return None
+
+    history = emit_profile_response_ksp_history(
+        context=context,
+        matvec_fn=matvec_fn,
+        b_vec=b_vec,
+        precond_fn=getattr(replay_state, "precond_fn", None),
+        x0_vec=getattr(replay_state, "x0_vec", None),
+        tol_val=tol_val,
+        atol_val=atol_val,
+        restart_val=int(getattr(replay_state, "restart")),
+        maxiter_val=getattr(replay_state, "maxiter", None),
+        precond_side=getattr(replay_state, "precond_side"),
+        solver_kind=getattr(replay_state, "solver_kind"),
+        solve_method_val=solve_method_val,
+    )
+    emit_profile_response_ksp_iter_stats(
+        context=context,
+        matvec_fn=matvec_fn,
+        b_vec=b_vec,
+        precond_fn=getattr(replay_state, "precond_fn", None),
+        x0_vec=getattr(replay_state, "x0_vec", None),
+        tol_val=float(tol_val),
+        atol_val=float(atol_val),
+        restart_val=int(getattr(replay_state, "restart")),
+        maxiter_val=getattr(replay_state, "maxiter", None),
+        precond_side=getattr(replay_state, "precond_side"),
+        solver_kind=getattr(replay_state, "solver_kind"),
+        history=history,
+        solve_method_val=solve_method_val,
+    )
+    return history
 
 
 def prepare_cached_qi_correction_basis(

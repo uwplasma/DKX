@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from types import SimpleNamespace
+
 import jax.numpy as jnp
 import sfincs_jax.rhs1_solver_diagnostics as diagnostics
 from sfincs_jax.rhs1_solver_diagnostics import (
@@ -11,6 +13,7 @@ from sfincs_jax.rhs1_solver_diagnostics import (
     build_rhs1_xblock_correction_metadata_from_driver_state,
     emit_profile_response_ksp_history,
     emit_profile_response_ksp_iter_stats,
+    emit_profile_response_ksp_replay_diagnostics,
 )
 
 
@@ -308,3 +311,93 @@ def test_profile_response_ksp_diagnostics_forward_context(monkeypatch) -> None:
     assert calls["iter_stats"]["enabled"] is True
     assert calls["iter_stats"]["max_size"] == 17
     assert calls["iter_stats"]["history"] == [1.0, 0.25]
+
+
+def test_profile_response_ksp_replay_diagnostics_skip_empty_replay(monkeypatch) -> None:
+    def fail_history(**_kwargs):
+        raise AssertionError("empty replay should not emit history")
+
+    def fail_iter_stats(**_kwargs):
+        raise AssertionError("empty replay should not emit iteration stats")
+
+    monkeypatch.setattr(diagnostics, "emit_profile_response_ksp_history", fail_history)
+    monkeypatch.setattr(diagnostics, "emit_profile_response_ksp_iter_stats", fail_iter_stats)
+    context = RHS1KSPDiagnosticsContext(
+        emit=None,
+        fortran_stdout=False,
+        history_max_size=11,
+        history_max_iter=13,
+        iter_stats_enabled=False,
+        iter_stats_max_size=17,
+    )
+
+    assert (
+        emit_profile_response_ksp_replay_diagnostics(
+            context=context,
+            replay_state=SimpleNamespace(matvec_fn=None, b_vec=jnp.ones(2)),
+            tol_val=1.0e-8,
+            atol_val=0.0,
+            solve_method_val="incremental",
+        )
+        is None
+    )
+
+
+def test_profile_response_ksp_replay_diagnostics_forward_replay_state(monkeypatch) -> None:
+    calls: dict[str, dict[str, object]] = {}
+
+    def fake_history(**kwargs):
+        calls["history"] = kwargs
+        return [1.0, 0.25]
+
+    def fake_iter_stats(**kwargs):
+        calls["iter_stats"] = kwargs
+
+    monkeypatch.setattr(diagnostics, "emit_profile_response_ksp_history", fake_history)
+    monkeypatch.setattr(diagnostics, "emit_profile_response_ksp_iter_stats", fake_iter_stats)
+    context = RHS1KSPDiagnosticsContext(
+        emit=None,
+        fortran_stdout=True,
+        history_max_size=11,
+        history_max_iter=13,
+        iter_stats_enabled=True,
+        iter_stats_max_size=17,
+    )
+    b_vec = jnp.ones(2)
+    x0_vec = jnp.zeros(2)
+
+    def precond(x):
+        return x
+
+    replay = SimpleNamespace(
+        matvec_fn=lambda x: x,
+        b_vec=b_vec,
+        precond_fn=precond,
+        x0_vec=x0_vec,
+        restart="5",
+        maxiter=7,
+        precond_side="right",
+        solver_kind="lgmres",
+    )
+
+    history = emit_profile_response_ksp_replay_diagnostics(
+        context=context,
+        replay_state=replay,
+        tol_val=1.0e-8,
+        atol_val=1.0e-12,
+        solve_method_val="incremental",
+    )
+
+    assert history == [1.0, 0.25]
+    assert calls["history"]["context"] is context
+    assert calls["history"]["matvec_fn"] is replay.matvec_fn
+    assert calls["history"]["b_vec"] is b_vec
+    assert calls["history"]["precond_fn"] is precond
+    assert calls["history"]["x0_vec"] is x0_vec
+    assert calls["history"]["restart_val"] == 5
+    assert calls["history"]["maxiter_val"] == 7
+    assert calls["history"]["precond_side"] == "right"
+    assert calls["history"]["solver_kind"] == "lgmres"
+    assert calls["iter_stats"]["history"] == [1.0, 0.25]
+    assert calls["iter_stats"]["tol_val"] == 1.0e-8
+    assert calls["iter_stats"]["atol_val"] == 1.0e-12
