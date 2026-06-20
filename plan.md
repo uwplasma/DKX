@@ -1974,7 +1974,7 @@ Current evidence from 2026-06-20:
   The latest pushed tranche moves QI-specific x-block policy/configuration,
   coarse-seed, Galerkin, two-level, device, and residual-deflated stage helpers
   into `profile_response/sparse/qi.py` in commit `d3e63a7`.
-- PR #8 is draft and merge-clean. Commit `d3e63a7` should be treated as the
+- PR #8 is draft and merge-clean. Commit `54a0264` should be treated as the
   latest CI reference until another structural tranche is pushed.
 - Largest remaining files after the current sparse package splits are
   `sfincs_jax/v3_driver.py` (`14393` lines),
@@ -2033,17 +2033,19 @@ Current evidence from 2026-06-20:
   targeted `ruff`, focused sparse/profile-response tests (`358 passed`),
   broad profile-response/RHSMode shard (`1390 passed`), `compileall`,
   `git diff --check`, and repository-size audit passed locally.
+- Validation for the reviewer architecture-map update: Sphinx HTML docs build,
+  `git diff --check`, and repository-size audit passed locally.
 - `rhs1_full_assembly.py` and `io.py` are large, but they are not immediate
   blockers for PR #8 unless this branch changes their behavior. Treat them as
   follow-up refactor lanes after the driver/profile-response split is reviewed.
 
 Actual open lanes:
 
-1. PR hygiene and CI: about 88%. Keep one draft PR, keep the worktree clean,
+1. PR hygiene and CI: about 89%. Keep one draft PR, keep the worktree clean,
    keep commits small enough to review, and refresh the PR body after each
    structural tranche. Do not wait on CI repeatedly; check only completed
    failures or final readiness.
-2. Driver reviewability: about 79%. `v3_driver.py` is smaller than before but
+2. Driver reviewability: about 80%. `v3_driver.py` is smaller than before but
    still has a 9599-line RHSMode=1 solve function. Only extract remaining
    driver seams when the boundary is explicit, tested, and shorter than the
    in-line code it replaces. The generic sparse retry/result-assembly shell was
@@ -2051,7 +2053,7 @@ Actual open lanes:
    driver-owned for now: it coordinates driver-local cache keys, dense fallback
    state, KSP replay state, and residual-vector routing while delegating the
    reusable factor/solve mechanics to tested profile-response helpers.
-3. Sparse profile-response package split: about 93%. This is the main blocker
+3. Sparse profile-response package split: about 94%. This is the main blocker
    for review. Move implementation out of
    `profile_response/sparse_pc.py` into a bounded domain package while keeping
    `sparse_pc.py` as a compatibility re-export for existing tests and users.
@@ -2062,9 +2064,10 @@ Actual open lanes:
 5. Validation lane: about 95%. Focused sparse/profile-response tests and broad
    RHSMode shards are the right gates for this PR. Do not add slow production
    benchmark runs unless behavior changes.
-6. Docs/reviewer map: about 68%. Add a concise architecture map after the
-   split so reviewers can see the API surface, differentiable path,
-   CLI/non-autodiff path, and compatibility re-export layer.
+6. Docs/reviewer map: about 76%. The source map and API docs now show the
+   sparse compatibility layer and extracted sparse helper modules. The
+   remaining work is a short review checklist if needed before marking the
+   draft PR ready.
 
 PR-blocking refactor targets:
 
