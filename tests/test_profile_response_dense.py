@@ -25,6 +25,7 @@ from sfincs_jax.problems.profile_response.dense import (
     rhs1_dense_probe_enabled_from_env,
     rhs1_dense_probe_shortcut_decision,
     rhs1_dense_shortcut_setup_from_env,
+    rhs1_early_dense_shortcut_decision,
     rhs1_fp_preconditioner_probe_kind_from_env,
     resolve_rhs1_full_dense_fallback_admission,
     resolve_rhs1_reduced_dense_fallback_admission,
@@ -230,6 +231,78 @@ def test_rhs1_dense_fallback_thresholds_can_disable_huge_limit(monkeypatch) -> N
         dense_fallback_limit=5000,
         dense_fallback_trigger=True,
     )
+
+
+def test_rhs1_early_dense_shortcut_decision_accepts_small_active_system() -> None:
+    decision = rhs1_early_dense_shortcut_decision(
+        early_dense_shortcut=False,
+        cs0_sparse_first=False,
+        cs0_dense_fallback_allowed=True,
+        constraint_scheme=0,
+        dense_shortcut_ratio=10.0,
+        residual_ratio=20.0,
+        sparse_prefer_over_dense_shortcut=False,
+        dense_fallback_max=100,
+        active_size=50,
+    )
+
+    assert decision.early_dense_shortcut
+    assert decision.messages == ((
+        0,
+        "solve_v3_full_system_linear_gmres: dense fallback shortcut (early) "
+        "(ratio=2.000e+01 >= 1.0e+01)",
+    ),)
+
+
+def test_rhs1_early_dense_shortcut_decision_reports_size_skip() -> None:
+    decision = rhs1_early_dense_shortcut_decision(
+        early_dense_shortcut=False,
+        cs0_sparse_first=False,
+        cs0_dense_fallback_allowed=True,
+        constraint_scheme=0,
+        dense_shortcut_ratio=10.0,
+        residual_ratio=20.0,
+        sparse_prefer_over_dense_shortcut=False,
+        dense_fallback_max=10,
+        active_size=50,
+    )
+
+    assert not decision.early_dense_shortcut
+    assert decision.messages == ((
+        1,
+        "solve_v3_full_system_linear_gmres: dense fallback shortcut skipped "
+        "(size=50 > dense_max=10)",
+    ),)
+
+
+def test_rhs1_early_dense_shortcut_decision_preserves_disabled_state() -> None:
+    decision = rhs1_early_dense_shortcut_decision(
+        early_dense_shortcut=True,
+        cs0_sparse_first=False,
+        cs0_dense_fallback_allowed=True,
+        constraint_scheme=0,
+        dense_shortcut_ratio=10.0,
+        residual_ratio=20.0,
+        sparse_prefer_over_dense_shortcut=False,
+        dense_fallback_max=100,
+        active_size=50,
+    )
+    assert decision.early_dense_shortcut
+    assert decision.messages == ()
+
+    decision = rhs1_early_dense_shortcut_decision(
+        early_dense_shortcut=False,
+        cs0_sparse_first=True,
+        cs0_dense_fallback_allowed=True,
+        constraint_scheme=0,
+        dense_shortcut_ratio=10.0,
+        residual_ratio=20.0,
+        sparse_prefer_over_dense_shortcut=False,
+        dense_fallback_max=100,
+        active_size=50,
+    )
+    assert not decision.early_dense_shortcut
+    assert decision.messages == ()
 
 
 def test_reduced_dense_fallback_admission_skips_after_host_sparse_lu() -> None:

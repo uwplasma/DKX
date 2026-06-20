@@ -308,6 +308,11 @@ Recent checkpoints:
   admission, probe residual evaluation, shortcut acceptance, x0 seeding,
   progress/failure messages, and replay-record handoff through explicit
   callbacks.
+- RHSMode=1 early dense-shortcut admission now uses a tested
+  `profile_response.dense` policy helper. The driver keeps the upstream
+  residual-ratio calculation and downstream solver routing, while dense
+  threshold parsing, size gating, shortcut state, and progress messages live
+  with the dense fallback policies.
 - RHSMode=1 PAS preconditioner probe/default routing now uses tested
   PAS-policy helpers for env parsing, tokamak-like Schur defaulting, heavy-path
   admission, large-system collision skip, and residual-threshold decisions
@@ -451,10 +456,10 @@ Recent checkpoints:
 - `cb295ce` Extract sparse pattern setup.
 - `4b6a5b4` Extract sparse factor policy.
 
-Current source-size snapshot after reduced dense-probe stage extraction:
+Current source-size snapshot after early dense-shortcut policy extraction:
 
-- `sfincs_jax/v3_driver.py`: `15038` lines.
-- `solve_v3_full_system_linear_gmres`: `10288` lines.
+- `sfincs_jax/v3_driver.py`: `15027` lines.
+- `solve_v3_full_system_linear_gmres`: `10276` lines.
 - `sfincs_jax/v3_results.py`: `119` lines.
 - `sfincs_jax/rhs1_ksp_diagnostics.py`: `306` lines.
 - `sfincs_jax/rhs1_pas_policy.py`: `889` lines.
@@ -463,7 +468,7 @@ Current source-size snapshot after reduced dense-probe stage extraction:
 - `sfincs_jax/problems/profile_response/residual.py`: `981` lines.
 - `sfincs_jax/problems/profile_response/handoff.py`: `1093` lines.
 - `sfincs_jax/problems/profile_response/policies.py`: `3577` lines.
-- `sfincs_jax/problems/profile_response/dense.py`: `1363` lines.
+- `sfincs_jax/problems/profile_response/dense.py`: `1431` lines.
 - `sfincs_jax/problems/profile_response/linear_solve.py`: `487` lines.
 - `sfincs_jax/problems/profile_response/preconditioner_build.py`: `662` lines.
 - `sfincs_jax/problems/profile_response/active_projection.py`: `203` lines.
@@ -473,6 +478,17 @@ Current source-size snapshot after reduced dense-probe stage extraction:
 
 Recent local validation:
 
+- Early dense-shortcut policy extraction:
+  `tests/test_profile_response_dense.py` passed (`36 passed in 0.98 s`).
+- Broad profile-response/RHSMode=1 shard after early dense-shortcut policy
+  extraction:
+  `tests/test_profile_response_*.py tests/test_rhs1_*.py
+  tests/test_newton_krylov_diagnostics.py tests/test_pas_smoother.py`
+  passed (`1326 passed in 85.42 s`).
+- Hygiene after early dense-shortcut policy extraction:
+  `py_compile`, `ruff check`, `compileall`, `git diff --check`, and
+  `python scripts/check_repo_size.py` passed. Repo-size audit reported no
+  reviewed files above 2 MiB.
 - Reduced dense-probe stage extraction:
   `tests/test_profile_response_dense.py` passed (`33 passed in 1.04 s`).
 - Broad profile-response/RHSMode=1 shard after reduced dense-probe stage

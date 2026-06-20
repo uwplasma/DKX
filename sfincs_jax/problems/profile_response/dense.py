@@ -223,6 +223,14 @@ class RHS1DenseFallbackAdmission:
     messages: tuple[tuple[int, str], ...] = ()
 
 
+@dataclass(frozen=True)
+class RHS1EarlyDenseShortcutDecision:
+    """Early dense-shortcut state after residual-ratio admission checks."""
+
+    early_dense_shortcut: bool
+    messages: tuple[tuple[int, str], ...] = ()
+
+
 def _env_float(name: str, default: float) -> float:
     raw = str(os.environ.get(name, "")).strip()
     try:
@@ -330,6 +338,64 @@ def rhs1_dense_fallback_thresholds_from_env(
         dense_fallback_ratio=float(dense_fallback_ratio),
         dense_fallback_limit=int(limit),
         dense_fallback_trigger=bool(trigger),
+    )
+
+
+def rhs1_early_dense_shortcut_decision(
+    *,
+    early_dense_shortcut: bool,
+    cs0_sparse_first: bool,
+    cs0_dense_fallback_allowed: bool,
+    constraint_scheme: int,
+    dense_shortcut_ratio: float,
+    residual_ratio: float,
+    sparse_prefer_over_dense_shortcut: bool,
+    dense_fallback_max: int,
+    active_size: int,
+) -> RHS1EarlyDenseShortcutDecision:
+    """Resolve the cheap early dense-shortcut gate from residual-ratio scalars."""
+
+    messages: list[tuple[int, str]] = []
+    shortcut = bool(early_dense_shortcut)
+    if not (
+        (not shortcut)
+        and (not bool(cs0_sparse_first))
+        and (bool(cs0_dense_fallback_allowed) or int(constraint_scheme) != 0)
+        and float(dense_shortcut_ratio) > 0.0
+        and float(residual_ratio) >= float(dense_shortcut_ratio)
+        and (not bool(sparse_prefer_over_dense_shortcut))
+    ):
+        return RHS1EarlyDenseShortcutDecision(
+            early_dense_shortcut=shortcut,
+            messages=(),
+        )
+
+    thresholds = rhs1_dense_fallback_thresholds_from_env(
+        dense_fallback_max=int(dense_fallback_max),
+        residual_ratio=float(residual_ratio),
+    )
+    limit = int(thresholds.dense_fallback_limit)
+    if limit > 0 and int(active_size) <= int(limit):
+        shortcut = True
+        messages.append(
+            (
+                0,
+                "solve_v3_full_system_linear_gmres: dense fallback shortcut (early) "
+                f"(ratio={float(residual_ratio):.3e} >= {float(dense_shortcut_ratio):.1e})",
+            )
+        )
+    else:
+        messages.append(
+            (
+                1,
+                "solve_v3_full_system_linear_gmres: dense fallback shortcut skipped "
+                f"(size={int(active_size)} > dense_max={int(limit)})",
+            )
+        )
+
+    return RHS1EarlyDenseShortcutDecision(
+        early_dense_shortcut=bool(shortcut),
+        messages=tuple(messages),
     )
 
 
@@ -1336,6 +1402,7 @@ __all__ = [
     "RHS1DenseProbeShortcutDecision",
     "RHS1DenseFallbackThresholds",
     "RHS1DenseFallbackAdmission",
+    "RHS1EarlyDenseShortcutDecision",
     "RHS1DenseShortcutSetup",
     "HostDenseFullSolveContext",
     "HostDenseReducedSolveContext",
@@ -1347,6 +1414,7 @@ __all__ = [
     "rhs1_dense_probe_admission",
     "rhs1_dense_probe_enabled_from_env",
     "rhs1_dense_probe_shortcut_decision",
+    "rhs1_early_dense_shortcut_decision",
     "rhs1_dense_fallback_thresholds_from_env",
     "rhs1_dense_shortcut_setup_from_env",
     "rhs1_fp_preconditioner_probe_kind_from_env",

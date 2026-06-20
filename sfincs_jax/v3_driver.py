@@ -209,6 +209,7 @@ from .problems.profile_response.dense import (
     RHS1ReducedDenseFallbackStageContext,
     rhs1_dense_fallback_thresholds_from_env,
     rhs1_dense_shortcut_setup_from_env,
+    rhs1_early_dense_shortcut_decision,
     rhs1_fp_preconditioner_probe_kind_from_env,
     run_rhs1_dense_probe_stage,
     run_rhs1_full_dense_fallback_stage,
@@ -9678,33 +9679,21 @@ def solve_v3_full_system_linear_gmres(
                     "after guarded PAS-TZ fallback; set "
                     "SFINCS_JAX_RHSMODE1_PAS_TZ_GUARDED_STAGE2_RETRY=1 to retry",
                 )
-        if (
-            (not early_dense_shortcut)
-            and (not cs0_sparse_first)
-            and (cs0_dense_fallback_allowed or int(op.constraint_scheme) != 0)
-            and dense_shortcut_ratio > 0
-            and res_ratio >= dense_shortcut_ratio
-            and (not sparse_prefer_over_dense_shortcut)
-        ):
-            dense_thresholds = rhs1_dense_fallback_thresholds_from_env(
-                dense_fallback_max=int(dense_fallback_max),
-                residual_ratio=float(res_ratio),
-            )
-            dense_fallback_limit = int(dense_thresholds.dense_fallback_limit)
-            if dense_fallback_limit > 0 and int(active_size) <= int(dense_fallback_limit):
-                early_dense_shortcut = True
-                if emit is not None:
-                    emit(
-                        0,
-                        "solve_v3_full_system_linear_gmres: dense fallback shortcut (early) "
-                        f"(ratio={res_ratio:.3e} >= {dense_shortcut_ratio:.1e})",
-                    )
-            elif emit is not None:
-                emit(
-                    1,
-                    "solve_v3_full_system_linear_gmres: dense fallback shortcut skipped "
-                    f"(size={int(active_size)} > dense_max={int(dense_fallback_limit)})",
-                )
+        early_dense_decision = rhs1_early_dense_shortcut_decision(
+            early_dense_shortcut=bool(early_dense_shortcut),
+            cs0_sparse_first=bool(cs0_sparse_first),
+            cs0_dense_fallback_allowed=bool(cs0_dense_fallback_allowed),
+            constraint_scheme=int(op.constraint_scheme),
+            dense_shortcut_ratio=float(dense_shortcut_ratio),
+            residual_ratio=float(res_ratio),
+            sparse_prefer_over_dense_shortcut=bool(sparse_prefer_over_dense_shortcut),
+            dense_fallback_max=int(dense_fallback_max),
+            active_size=int(active_size),
+        )
+        early_dense_shortcut = bool(early_dense_decision.early_dense_shortcut)
+        if emit is not None:
+            for _level, _message in early_dense_decision.messages:
+                emit(_level, _message)
         solver_kind = _solver_kind(solve_method)[0]
         bicgstab_fallback_target = float(target_reduced)
         if bicgstab_fallback_strict:
