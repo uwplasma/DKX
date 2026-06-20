@@ -18,6 +18,7 @@ from sfincs_jax.rhs1_handoff import (
     rhs1_run_fast_post_xblock_polish,
     rhs1_run_linear_candidate_and_update_replay,
     rhs1_run_measured_linear_candidate_and_update_replay,
+    rhs1_run_pas_schur_rescue_if_requested,
     rhs1_solver_candidate_metrics,
 )
 from sfincs_jax.solver_selection_policy import SolverCandidateMetrics
@@ -875,6 +876,110 @@ def test_rhs1_run_linear_candidate_rejects_nonimproving_candidate() -> None:
     assert result is current
     assert residual_vec == "r0"
     assert replay.matvec_fn == "old"
+
+
+def test_rhs1_run_pas_schur_rescue_skips_when_controls_disabled() -> None:
+    replay = RHS1KSPReplayState(matvec_fn="old")
+    current = _result(1.0, x="x0")
+
+    result, residual_vec, accepted, elapsed_s = rhs1_run_pas_schur_rescue_if_requested(
+        replay_state=replay,
+        controls=SimpleNamespace(run=False, ratio=10.0, restart=17, maxiter=33),
+        current_result=current,
+        current_residual_vec="r0",
+        matvec_fn="mv",
+        b_vec="rhs",
+        build_preconditioner=lambda: "pc",
+        tol=1.0e-10,
+        atol=1.0e-12,
+        restart=17,
+        maxiter=33,
+        precond_side="left",
+        solve_linear=lambda **_kwargs: (_result(0.25, x="x1"), "r1"),
+        solver_kind="gmres",
+        target=1.0e-9,
+    )
+
+    assert result is current
+    assert residual_vec == "r0"
+    assert not accepted
+    assert elapsed_s == 0.0
+    assert replay.matvec_fn == "old"
+
+
+def test_rhs1_run_pas_schur_rescue_accepts_improving_candidate() -> None:
+    replay = RHS1KSPReplayState()
+    current = _result(1.0, x="x0")
+    candidate = _result(0.25, x="x1")
+    messages: list[tuple[int, str]] = []
+    calls: list[dict[str, object]] = []
+
+    def solve_linear(**kwargs):
+        calls.append(kwargs)
+        return candidate, "r1"
+
+    result, residual_vec, accepted, elapsed_s = rhs1_run_pas_schur_rescue_if_requested(
+        replay_state=replay,
+        controls=SimpleNamespace(run=True, ratio=10.0, restart=17, maxiter=33),
+        current_result=current,
+        current_residual_vec="r0",
+        matvec_fn="mv",
+        b_vec="rhs",
+        build_preconditioner=lambda: "pc",
+        tol=1.0e-10,
+        atol=1.0e-12,
+        restart=17,
+        maxiter=33,
+        precond_side="left",
+        solve_linear=solve_linear,
+        solver_kind="gmres",
+        target=1.0e-9,
+        emit=lambda level, message: messages.append((level, message)),
+    )
+
+    assert accepted
+    assert result is candidate
+    assert residual_vec == "r1"
+    assert elapsed_s >= 0.0
+    assert replay.precond_fn == "pc"
+    assert replay.x0_vec == "x1"
+    assert calls[0]["precond_fn"] == "pc"
+    assert any("PAS Schur rescue" in message for _level, message in messages)
+
+
+def test_rhs1_run_pas_schur_rescue_keeps_current_on_builder_failure() -> None:
+    replay = RHS1KSPReplayState(matvec_fn="old")
+    current = _result(1.0, x="x0")
+    messages: list[tuple[int, str]] = []
+
+    def build_preconditioner():
+        raise RuntimeError("boom")
+
+    result, residual_vec, accepted, elapsed_s = rhs1_run_pas_schur_rescue_if_requested(
+        replay_state=replay,
+        controls=SimpleNamespace(run=True, ratio=10.0, restart=17, maxiter=33),
+        current_result=current,
+        current_residual_vec="r0",
+        matvec_fn="mv",
+        b_vec="rhs",
+        build_preconditioner=build_preconditioner,
+        tol=1.0e-10,
+        atol=1.0e-12,
+        restart=17,
+        maxiter=33,
+        precond_side="left",
+        solve_linear=lambda **_kwargs: (_result(0.25, x="x1"), "r1"),
+        solver_kind="gmres",
+        target=1.0e-9,
+        emit=lambda level, message: messages.append((level, message)),
+    )
+
+    assert result is current
+    assert residual_vec == "r0"
+    assert not accepted
+    assert elapsed_s == 0.0
+    assert replay.matvec_fn == "old"
+    assert any("PAS Schur rescue failed" in message for _level, message in messages)
 
 
 def test_rhs1_run_measured_linear_candidate_accepts_returned_residual_vector() -> None:

@@ -514,6 +514,65 @@ def rhs1_run_linear_candidate_and_update_replay(
     return result, residual_vec, accepted, elapsed_s
 
 
+def rhs1_run_pas_schur_rescue_if_requested(
+    *,
+    replay_state: RHS1KSPReplayState,
+    controls: Any,
+    current_result: Any,
+    current_residual_vec: Any,
+    matvec_fn: Any,
+    b_vec: Any,
+    build_preconditioner: Any,
+    tol: float,
+    atol: float,
+    restart: int,
+    maxiter: int | None,
+    precond_side: str,
+    solve_linear: Any,
+    solver_kind: str,
+    target: float,
+    emit: Any = None,
+) -> tuple[Any, Any, bool, float]:
+    """Run the full-system PAS Schur rescue when policy admission requests it."""
+
+    if not bool(getattr(controls, "run", False)):
+        return current_result, current_residual_vec, False, 0.0
+    if emit is not None:
+        emit(
+            0,
+            "solve_v3_full_system_linear_gmres: PAS Schur rescue "
+            f"(residual={float(current_result.residual_norm):.3e} "
+            f"> {float(target) * float(getattr(controls, 'ratio')):.3e})",
+        )
+    try:
+        schur_precond = build_preconditioner()
+        return rhs1_run_linear_candidate_and_update_replay(
+            replay_state=replay_state,
+            current_result=current_result,
+            current_residual_vec=current_residual_vec,
+            matvec_fn=matvec_fn,
+            b_vec=b_vec,
+            precond_fn=schur_precond,
+            tol=float(tol),
+            atol=float(atol),
+            restart=int(restart),
+            maxiter=maxiter,
+            solve_method="incremental",
+            precond_side=precond_side,
+            solve_linear=solve_linear,
+            solver_kind=solver_kind,
+            returns_residual_vec=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        if emit is not None:
+            emit(
+                1,
+                "solve_v3_full_system_linear_gmres: PAS Schur rescue failed "
+                f"({type(exc).__name__}: {exc})",
+            )
+        return current_result, current_residual_vec, False, 0.0
+
+
 def rhs1_accept_smoother_candidate_and_update_replay(
     *,
     replay_state: RHS1KSPReplayState,
@@ -594,5 +653,6 @@ __all__ = [
     "rhs1_run_fast_post_xblock_polish",
     "rhs1_run_linear_candidate_and_update_replay",
     "rhs1_run_measured_linear_candidate_and_update_replay",
+    "rhs1_run_pas_schur_rescue_if_requested",
     "rhs1_solver_candidate_metrics",
 ]

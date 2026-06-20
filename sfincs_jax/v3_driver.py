@@ -184,6 +184,7 @@ from .problems.profile_response.handoff import (
     rhs1_run_fast_post_xblock_polish,
     rhs1_run_linear_candidate_and_update_replay,
     rhs1_run_measured_linear_candidate_and_update_replay,
+    rhs1_run_pas_schur_rescue_if_requested,
 )
 from .problems.profile_response.auto_solve import (
     RHS1AutoHostSolveContext,
@@ -12875,38 +12876,26 @@ def solve_v3_full_system_linear_gmres(
             restart=int(restart),
             maxiter=maxiter,
         )
-        if pas_schur_rescue_controls.run:
-            if emit is not None:
-                emit(
-                    0,
-                    "solve_v3_full_system_linear_gmres: PAS Schur rescue "
-                    f"(residual={float(result.residual_norm):.3e} "
-                    f"> {float(target)*float(pas_schur_rescue_controls.ratio):.3e})",
-                )
-            try:
-                schur_precond = _build_rhsmode1_schur_preconditioner(op=op)
-                result, residual_vec, _accepted, _schur_elapsed_s = (
-                    rhs1_run_linear_candidate_and_update_replay(
-                        replay_state=ksp_replay,
-                        current_result=result,
-                        current_residual_vec=residual_vec,
-                        matvec_fn=mv,
-                        b_vec=rhs,
-                        precond_fn=schur_precond,
-                        tol=float(tol),
-                        atol=float(atol),
-                        restart=int(pas_schur_rescue_controls.restart),
-                        maxiter=int(pas_schur_rescue_controls.maxiter),
-                        solve_method="incremental",
-                        precond_side=gmres_precond_side,
-                        solve_linear=_solve_linear_with_residual,
-                        solver_kind=_solver_kind("incremental")[0],
-                        returns_residual_vec=True,
-                    )
-                )
-            except Exception as exc:  # noqa: BLE001
-                if emit is not None:
-                    emit(1, f"solve_v3_full_system_linear_gmres: PAS Schur rescue failed ({type(exc).__name__}: {exc})")
+        result, residual_vec, _accepted, _schur_elapsed_s = (
+            rhs1_run_pas_schur_rescue_if_requested(
+                replay_state=ksp_replay,
+                controls=pas_schur_rescue_controls,
+                current_result=result,
+                current_residual_vec=residual_vec,
+                matvec_fn=mv,
+                b_vec=rhs,
+                build_preconditioner=lambda: _build_rhsmode1_schur_preconditioner(op=op),
+                tol=float(tol),
+                atol=float(atol),
+                restart=int(pas_schur_rescue_controls.restart),
+                maxiter=int(pas_schur_rescue_controls.maxiter),
+                precond_side=gmres_precond_side,
+                solve_linear=_solve_linear_with_residual,
+                solver_kind=_solver_kind("incremental")[0],
+                target=float(target),
+                emit=emit,
+            )
+        )
         large_cpu_sparse_rescue_full = _rhsmode1_large_cpu_sparse_rescue_allowed(
             op=op,
             solve_method_kind=solve_method_kind,
