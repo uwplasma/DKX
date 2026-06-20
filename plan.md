@@ -311,11 +311,10 @@ Recent checkpoints:
 - `cb295ce` Extract sparse pattern setup.
 - `4b6a5b4` Extract sparse factor policy.
 
-Current source-size snapshot after xblock sparse-PC reporting helper
-extraction:
+Current source-size snapshot after x-block stage orchestration extraction:
 
-- `sfincs_jax/v3_driver.py`: `17443` lines.
-- `solve_v3_full_system_linear_gmres`: `12063` lines.
+- `sfincs_jax/v3_driver.py`: `16967` lines.
+- `solve_v3_full_system_linear_gmres`: `12255` lines.
 - `sfincs_jax/v3_results.py`: `119` lines.
 - `sfincs_jax/rhs1_ksp_diagnostics.py`: `306` lines.
 - `sfincs_jax/rhs1_pas_policy.py`: `864` lines.
@@ -1172,7 +1171,7 @@ Known CI issue fixed by this rewrite:
 
 ### 1. `v3_driver.py` Architecture Refactor
 
-Completion estimate: 73%.
+Completion estimate: 74%.
 
 Goal:
 
@@ -1274,6 +1273,11 @@ Completed recent boundaries:
   equilibration, optional device CSR setup, matvec replacement, and fail-closed
   metadata now live in a sparse-PC-domain helper with focused success,
   disabled, and rejection tests.
+- RHSMode=1 x-block constraint moment-Schur, two-level, and global-coupling
+  stage orchestration now lives in tested sparse-PC-domain helpers. The driver
+  still resolves high-level policies and passes explicit operator callbacks,
+  but build/probe/failure metadata and preconditioner replacement are no
+  longer maintained inline.
 - RHSMode=1 rescue/refinement candidate acceptance and KSP replay-state updates
   consolidated into profile-response handoff helpers.
 - RHSMode=1 true-residual recomputation before fallback decisions consolidated

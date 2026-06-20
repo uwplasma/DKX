@@ -77,9 +77,11 @@ from sfincs_jax.problems.profile_response.sparse_pc import (
     XBlockGMRESFallbackDecision,
     XBlockGMRESFallbackContext,
     XBlockGMRESFallbackResult,
+    XBlockGlobalCouplingStageContext,
     XBlockKrylovSolveState,
     XBlockKrylovSolveSpaceContext,
     XBlockKrylovReport,
+    XBlockMomentSchurStageContext,
     XBlockPostSolveCorrectionContext,
     XBlockPostSolveCorrectionResult,
     XBlockPhysicalResidual,
@@ -91,10 +93,14 @@ from sfincs_jax.problems.profile_response.sparse_pc import (
     XBlockSparsePCFinalPayloadContext,
     XBlockSparsePCFinalPreflightState,
     XBlockSparsePCWorkEstimates,
+    XBlockTwoLevelStageContext,
     XBlockAssembledPreflightError,
     apply_fortran_reduced_xblock_global_coupling_stage,
     apply_fortran_reduced_xblock_initial_seed,
     apply_fortran_reduced_xblock_moment_schur_stage,
+    apply_xblock_global_coupling_stage,
+    apply_xblock_moment_schur_stage,
+    apply_xblock_two_level_stage,
     apply_sparse_pc_post_minres,
     apply_sparse_pc_post_minres_if_needed,
     apply_sparse_pc_post_minres_from_driver_state,
@@ -5039,6 +5045,131 @@ def test_xblock_moment_schur_metadata_helpers_normalize_success_and_failure() ->
     assert failure["error"] == "ValueError: bad factor"
 
 
+def test_xblock_moment_schur_stage_accepts_probe_and_records_metadata() -> None:
+    policy = resolve_xblock_moment_schur_policy_setup(
+        op=SimpleNamespace(rhs_mode=1, constraint_scheme=1, extra_size=1, phi1_size=0),
+        xblock_krylov_method="gmres_jax",
+        xblock_jax_factors=False,
+        xblock_jax_factor_format="padded",
+        precondition_side="right",
+        env={
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_MOMENT_SCHUR": "1",
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_MOMENT_SCHUR_PROBE": "1",
+        },
+    )
+    messages: list[str] = []
+    stats = {"applies": 2, "base_applies": 3}
+
+    def builder(**kwargs):
+        assert kwargs["rcond"] == pytest.approx(policy.rcond)
+        return (lambda v: v), {"rank": 1}, stats
+
+    result = apply_xblock_moment_schur_stage(
+        context=XBlockMomentSchurStageContext(
+            op=SimpleNamespace(),
+            base_preconditioner=lambda v: jnp.zeros_like(v),
+            reduce_full=None,
+            expand_reduced=None,
+            policy=policy,
+            precondition_side="right",
+            rhs=jnp.asarray([1.0]),
+            matvec_no_count=lambda v: v,
+            elapsed_s=lambda: 2.0,
+            emit=lambda _level, msg: messages.append(msg),
+            builder=builder,
+        )
+    )
+
+    assert result.built
+    assert result.used
+    assert result.reason == "probe_reduced"
+    assert result.metadata["rank"] == 1
+    assert result.metadata["setup_s"] == pytest.approx(0.0)
+    assert result.probe_residual_before == pytest.approx(1.0)
+    assert result.probe_residual_after == pytest.approx(0.0)
+    assert result.stats is stats
+    assert result.preconditioner(jnp.asarray([4.0])).tolist() == [4.0]
+    assert any("moment-Schur build start" in message for message in messages)
+    assert any("constraint1 moment-Schur accepted" in message for message in messages)
+
+
+def test_xblock_moment_schur_stage_rejects_probe_and_restores_base() -> None:
+    policy = resolve_xblock_moment_schur_policy_setup(
+        op=SimpleNamespace(rhs_mode=1, constraint_scheme=1, extra_size=1, phi1_size=0),
+        xblock_krylov_method="gmres_jax",
+        xblock_jax_factors=False,
+        xblock_jax_factor_format="padded",
+        precondition_side="right",
+        env={
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_MOMENT_SCHUR": "1",
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_MOMENT_SCHUR_PROBE": "1",
+        },
+    )
+
+    def base(v: jnp.ndarray) -> jnp.ndarray:
+        return 0.5 * v
+
+    def builder(**_kwargs):
+        return (lambda v: jnp.zeros_like(v)), {}, {}
+
+    result = apply_xblock_moment_schur_stage(
+        context=XBlockMomentSchurStageContext(
+            op=SimpleNamespace(),
+            base_preconditioner=base,
+            reduce_full=None,
+            expand_reduced=None,
+            policy=policy,
+            precondition_side="right",
+            rhs=jnp.asarray([1.0]),
+            matvec_no_count=lambda v: v,
+            elapsed_s=lambda: 0.0,
+            emit=None,
+            builder=builder,
+        )
+    )
+
+    assert result.built
+    assert not result.used
+    assert result.reason == "probe_not_reduced"
+    assert result.preconditioner is base
+    assert result.probe_improvement_ratio == pytest.approx(1.0)
+
+
+def test_xblock_moment_schur_stage_records_failure() -> None:
+    policy = resolve_xblock_moment_schur_policy_setup(
+        op=SimpleNamespace(rhs_mode=1, constraint_scheme=1, extra_size=1, phi1_size=0),
+        xblock_krylov_method="gmres_jax",
+        xblock_jax_factors=False,
+        xblock_jax_factor_format="padded",
+        precondition_side="right",
+        env={"SFINCS_JAX_RHSMODE1_XBLOCK_PC_MOMENT_SCHUR": "1"},
+    )
+
+    def builder(**_kwargs):
+        raise RuntimeError("bad moment")
+
+    result = apply_xblock_moment_schur_stage(
+        context=XBlockMomentSchurStageContext(
+            op=SimpleNamespace(),
+            base_preconditioner=_identity,
+            reduce_full=None,
+            expand_reduced=None,
+            policy=policy,
+            precondition_side="right",
+            rhs=jnp.asarray([1.0]),
+            matvec_no_count=lambda v: v,
+            elapsed_s=lambda: 0.0,
+            emit=None,
+            builder=builder,
+        )
+    )
+
+    assert not result.built
+    assert not result.used
+    assert result.preconditioner is _identity
+    assert result.metadata["error"] == "RuntimeError: bad moment"
+
+
 def test_xblock_two_level_policy_defaults_off_and_honors_disabled_side() -> None:
     off = resolve_xblock_two_level_policy_setup(precondition_side="right", env={})
     no_side = resolve_xblock_two_level_policy_setup(
@@ -5087,6 +5218,68 @@ def test_xblock_two_level_metadata_helpers_normalize_success_and_failure() -> No
 
     assert success == {"mode": "additive", "setup_s": 0.25}
     assert failure == {"error": "RuntimeError: bad coarse", "setup_s": 0.5}
+
+
+def test_xblock_two_level_stage_builds_and_records_stats() -> None:
+    policy = resolve_xblock_two_level_policy_setup(
+        precondition_side="right",
+        env={"SFINCS_JAX_RHSMODE1_XBLOCK_PC_TWO_LEVEL": "1"},
+    )
+    stats = {"applies": 3, "coarse_applies": 4}
+
+    def builder(**kwargs):
+        assert kwargs["expected_size"] == 2
+        assert kwargs["mode"] == "additive"
+        return (lambda v: 2.0 * v), {"rank": 2}, stats
+
+    result = apply_xblock_two_level_stage(
+        context=XBlockTwoLevelStageContext(
+            op=SimpleNamespace(),
+            rhs=jnp.asarray([1.0, 2.0]),
+            matvec=lambda v: v,
+            base_preconditioner=_identity,
+            direction_projector=None,
+            expected_size=2,
+            policy=policy,
+            elapsed_s=lambda: 1.0,
+            emit=None,
+            builder=builder,
+        )
+    )
+
+    assert result.built
+    assert result.metadata == {"rank": 2, "setup_s": 0.0}
+    assert result.stats is stats
+    assert result.preconditioner(jnp.asarray([3.0])).tolist() == [6.0]
+
+
+def test_xblock_two_level_stage_records_failure() -> None:
+    policy = resolve_xblock_two_level_policy_setup(
+        precondition_side="right",
+        env={"SFINCS_JAX_RHSMODE1_XBLOCK_PC_TWO_LEVEL": "1"},
+    )
+
+    def builder(**_kwargs):
+        raise ValueError("bad two")
+
+    result = apply_xblock_two_level_stage(
+        context=XBlockTwoLevelStageContext(
+            op=SimpleNamespace(),
+            rhs=jnp.asarray([1.0]),
+            matvec=lambda v: v,
+            base_preconditioner=_identity,
+            direction_projector=None,
+            expected_size=1,
+            policy=policy,
+            elapsed_s=lambda: 0.0,
+            emit=None,
+            builder=builder,
+        )
+    )
+
+    assert not result.built
+    assert result.preconditioner is _identity
+    assert result.metadata["error"] == "ValueError: bad two"
 
 
 def test_xblock_global_coupling_policy_defaults_off_and_selects_builder_defaults() -> (
@@ -5162,6 +5355,75 @@ def test_xblock_global_coupling_metadata_helpers_normalize_success_and_failure()
 
     assert success == {"mode": "additive", "setup_s": 0.75}
     assert failure == {"error": "RuntimeError: timeout", "setup_s": 1.5}
+
+
+def test_xblock_global_coupling_stage_selects_device_builder() -> None:
+    policy = resolve_xblock_global_coupling_policy_setup(
+        precondition_side="right",
+        xblock_krylov_method="gmres_jax",
+        env={"SFINCS_JAX_RHSMODE1_XBLOCK_PC_GLOBAL_COUPLING": "1"},
+    )
+    stats = {"applies": 5, "coarse_applies": 6}
+
+    def host_builder(**_kwargs):
+        raise AssertionError("host builder should not be selected")
+
+    def device_builder(**kwargs):
+        assert kwargs["max_setup_s"] == pytest.approx(180.0)
+        assert kwargs["expected_size"] == 2
+        return (lambda v: 3.0 * v), {"rank": 4}, stats
+
+    result = apply_xblock_global_coupling_stage(
+        context=XBlockGlobalCouplingStageContext(
+            op=SimpleNamespace(),
+            rhs=jnp.asarray([1.0, 2.0]),
+            matvec=lambda v: v,
+            base_preconditioner=_identity,
+            direction_projector=None,
+            expected_size=2,
+            policy=policy,
+            elapsed_s=lambda: 1.0,
+            emit=None,
+            host_builder=host_builder,
+            device_builder=device_builder,
+        )
+    )
+
+    assert result.built
+    assert result.metadata == {"rank": 4, "setup_s": 0.0}
+    assert result.stats is stats
+    assert result.preconditioner(jnp.asarray([2.0])).tolist() == [6.0]
+
+
+def test_xblock_global_coupling_stage_records_failure() -> None:
+    policy = resolve_xblock_global_coupling_policy_setup(
+        precondition_side="right",
+        xblock_krylov_method="gmres",
+        env={"SFINCS_JAX_RHSMODE1_XBLOCK_PC_GLOBAL_COUPLING": "1"},
+    )
+
+    def host_builder(**_kwargs):
+        raise RuntimeError("bad global")
+
+    result = apply_xblock_global_coupling_stage(
+        context=XBlockGlobalCouplingStageContext(
+            op=SimpleNamespace(),
+            rhs=jnp.asarray([1.0]),
+            matvec=lambda v: v,
+            base_preconditioner=_identity,
+            direction_projector=None,
+            expected_size=1,
+            policy=policy,
+            elapsed_s=lambda: 0.0,
+            emit=None,
+            host_builder=host_builder,
+            device_builder=host_builder,
+        )
+    )
+
+    assert not result.built
+    assert result.preconditioner is _identity
+    assert result.metadata["error"] == "RuntimeError: bad global"
 
 
 def test_prepare_xblock_initial_guess_accepts_reduced_and_full_active_shapes() -> None:

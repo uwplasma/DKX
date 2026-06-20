@@ -284,7 +284,9 @@ from .problems.profile_response.sparse_pc import (
     XBlockFirstKrylovAttemptContext,
     XBlockFirstKrylovSolveStateContext,
     XBlockGMRESFallbackContext,
+    XBlockGlobalCouplingStageContext,
     XBlockKrylovSolveSpaceContext,
+    XBlockMomentSchurStageContext,
     XBlockPostSolveCorrectionContext,
     XBlockSparsePCCompletionContext,
     XBlockSparsePCFinalCoreState,
@@ -293,9 +295,13 @@ from .problems.profile_response.sparse_pc import (
     XBlockSparsePCFinalNestedMetadata,
     XBlockSparsePCFinalPayloadContext,
     XBlockSparsePCFinalPreflightState,
+    XBlockTwoLevelStageContext,
     apply_fortran_reduced_xblock_global_coupling_stage,
     apply_fortran_reduced_xblock_initial_seed,
     apply_fortran_reduced_xblock_moment_schur_stage,
+    apply_xblock_global_coupling_stage,
+    apply_xblock_moment_schur_stage,
+    apply_xblock_two_level_stage,
     build_fortran_reduced_xblock_factor_stage,
     build_fortran_reduced_xblock_krylov_setup,
     build_xblock_local_preconditioner,
@@ -307,7 +313,6 @@ from .problems.profile_response.sparse_pc import (
     build_direct_tail_materialization_setup,
     fortran_reduced_xblock_final_payload,
     xblock_sparse_pc_final_payload as build_xblock_sparse_pc_final_payload,
-    evaluate_xblock_moment_schur_probe_result,
     evaluate_sparse_pc_factor_preflight,
     evaluate_sparse_pc_residual_candidate_acceptance,
     select_sparse_pc_auto_preflight_retry_candidates,
@@ -315,12 +320,6 @@ from .problems.profile_response.sparse_pc import (
     emit_xblock_sparse_pc_completion,
     resolve_sparse_pc_gmres_control_policy,
     enforce_sparse_pc_memory_budget,
-    failed_xblock_global_coupling_metadata,
-    failed_xblock_moment_schur_metadata,
-    failed_xblock_two_level_metadata,
-    finalize_xblock_global_coupling_metadata,
-    finalize_xblock_moment_schur_metadata,
-    finalize_xblock_two_level_metadata,
     prepare_fortran_reduced_xblock_initial_guess,
     prepare_xblock_initial_guess,
     resolve_sparse_pc_entry_policy,
@@ -3024,122 +3023,56 @@ def solve_v3_full_system_linear_gmres(
                 moment_schur_policy.default_blocked_by_compact_factors
             )
             moment_schur_enabled = bool(moment_schur_policy.enabled)
-            moment_schur_rcond = float(moment_schur_policy.rcond)
-            moment_schur_probe_enabled = bool(moment_schur_policy.probe_enabled)
-            moment_schur_probe_min_improvement = float(moment_schur_policy.probe_min_improvement)
-            moment_schur_built = False
-            moment_schur_used = False
-            moment_schur_reason: str | None = None
-            moment_schur_probe_residual_before: float | None = None
-            moment_schur_probe_residual_after: float | None = None
-            moment_schur_probe_improvement_ratio: float | None = None
-            moment_schur_metadata: dict[str, object] = {}
-            moment_schur_stats = {"applies": 0, "base_applies": 0}
-            if emit is not None:
-                for level, message in moment_schur_policy.messages:
-                    emit(int(level), str(message))
-            if moment_schur_enabled and precondition_side != "none":
-                moment_schur_start_s = sparse_timer.elapsed_s()
-                try:
-                    base_precond_before_moment_schur = precond_xblock_krylov
-                    moment_schur_candidate, moment_schur_metadata, moment_schur_stats = (
-                        _build_rhs1_xblock_constraint1_moment_schur_preconditioner(
-                            op=op,
-                            base_preconditioner=base_precond_before_moment_schur,
-                            reduce_full=_xblock_reduce_full if xblock_use_active_dof else None,
-                            expand_reduced=_xblock_expand_reduced if xblock_use_active_dof else None,
-                            rcond=moment_schur_rcond,
-                            emit=emit,
-                        )
-                    )
-                    moment_schur_built = True
-                    moment_schur_used = True
-                    moment_schur_reason = "built"
-                    if bool(moment_schur_probe_enabled):
-                        seed_candidate = jnp.asarray(moment_schur_candidate(xblock_rhs), dtype=jnp.float64)
-                        seed_residual = xblock_rhs - jnp.asarray(
-                            _mv_true_no_count(seed_candidate),
-                            dtype=jnp.float64,
-                        )
-                        moment_schur_probe_residual_after = float(jnp.linalg.norm(seed_residual))
-                        moment_schur_probe_residual_before = float(jnp.linalg.norm(xblock_rhs))
-                        probe_result = evaluate_xblock_moment_schur_probe_result(
-                            residual_before=float(moment_schur_probe_residual_before),
-                            residual_after=float(moment_schur_probe_residual_after),
-                            min_improvement=float(moment_schur_probe_min_improvement),
-                        )
-                        moment_schur_used = bool(probe_result.used)
-                        moment_schur_reason = str(probe_result.reason)
-                        moment_schur_probe_improvement_ratio = float(probe_result.improvement_ratio)
-                        if emit is not None:
-                            for level, message in probe_result.messages:
-                                emit(int(level), str(message))
-                    precond_xblock_krylov = (
-                        moment_schur_candidate if bool(moment_schur_used) else base_precond_before_moment_schur
-                    )
-                    moment_schur_metadata = finalize_xblock_moment_schur_metadata(
-                        metadata=moment_schur_metadata,
-                        setup_s=float(sparse_timer.elapsed_s() - moment_schur_start_s),
-                    )
-                    pc_factor_s += float(moment_schur_metadata["setup_s"])
-                except Exception as exc:  # noqa: BLE001
-                    moment_schur_used = False
-                    moment_schur_reason = f"{type(exc).__name__}: {exc}"
-                    moment_schur_metadata = failed_xblock_moment_schur_metadata(
-                        exc=exc,
-                        setup_s=float(sparse_timer.elapsed_s() - moment_schur_start_s),
-                    )
-                    if emit is not None:
-                        emit(
-                            1,
-                            "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
-                            f"constraint1 moment-Schur disabled after build failure ({type(exc).__name__}: {exc})",
-                        )
+            moment_schur_stage = apply_xblock_moment_schur_stage(
+                context=XBlockMomentSchurStageContext(
+                    op=op,
+                    base_preconditioner=precond_xblock_krylov,
+                    reduce_full=_xblock_reduce_full if xblock_use_active_dof else None,
+                    expand_reduced=_xblock_expand_reduced if xblock_use_active_dof else None,
+                    policy=moment_schur_policy,
+                    precondition_side=str(precondition_side),
+                    rhs=xblock_rhs,
+                    matvec_no_count=_mv_true_no_count,
+                    elapsed_s=sparse_timer.elapsed_s,
+                    emit=emit,
+                    builder=_build_rhs1_xblock_constraint1_moment_schur_preconditioner,
+                )
+            )
+            precond_xblock_krylov = moment_schur_stage.preconditioner
+            moment_schur_built = bool(moment_schur_stage.built)
+            moment_schur_used = bool(moment_schur_stage.used)
+            moment_schur_reason = moment_schur_stage.reason
+            moment_schur_probe_residual_before = moment_schur_stage.probe_residual_before
+            moment_schur_probe_residual_after = moment_schur_stage.probe_residual_after
+            moment_schur_probe_improvement_ratio = moment_schur_stage.probe_improvement_ratio
+            moment_schur_metadata = moment_schur_stage.metadata
+            moment_schur_stats = moment_schur_stage.stats
+            pc_factor_s += float(moment_schur_stage.setup_s)
+
             two_level_policy = resolve_xblock_two_level_policy_setup(
                 precondition_side=str(precondition_side),
                 env=os.environ,
             )
             two_level_enabled = bool(two_level_policy.enabled)
-            two_level_built = False
-            two_level_metadata: dict[str, object] = {}
-            two_level_stats = {"applies": 0, "coarse_applies": 0}
-            if bool(two_level_policy.should_build):
-                two_level_start_s = sparse_timer.elapsed_s()
-                try:
-                    precond_xblock_krylov, two_level_metadata, two_level_stats = (
-                        _build_rhs1_xblock_two_level_preconditioner(
-                            op=op,
-                            rhs=rhs,
-                            matvec=_mv_xblock_krylov,
-                            base_preconditioner=precond_xblock_krylov,
-                            direction_projector=_xblock_reduce_full if xblock_use_active_dof else None,
-                            expected_size=int(xblock_linear_size),
-                            mode=two_level_policy.mode,
-                            fsavg_lmax=int(two_level_policy.fsavg_lmax),
-                            max_extra_units=int(two_level_policy.max_extra_units),
-                            max_directions=int(two_level_policy.max_directions),
-                            rcond=float(two_level_policy.rcond),
-                            include_rhs=bool(two_level_policy.include_rhs),
-                            emit=emit,
-                        )
-                    )
-                    two_level_built = True
-                    two_level_metadata = finalize_xblock_two_level_metadata(
-                        metadata=two_level_metadata,
-                        setup_s=float(sparse_timer.elapsed_s() - two_level_start_s),
-                    )
-                    pc_factor_s += float(two_level_metadata["setup_s"])
-                except Exception as exc:  # noqa: BLE001
-                    two_level_metadata = failed_xblock_two_level_metadata(
-                        exc=exc,
-                        setup_s=float(sparse_timer.elapsed_s() - two_level_start_s),
-                    )
-                    if emit is not None:
-                        emit(
-                            1,
-                            "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
-                            f"two-level coarse disabled after build failure ({type(exc).__name__}: {exc})",
-                        )
+            two_level_stage = apply_xblock_two_level_stage(
+                context=XBlockTwoLevelStageContext(
+                    op=op,
+                    rhs=rhs,
+                    matvec=_mv_xblock_krylov,
+                    base_preconditioner=precond_xblock_krylov,
+                    direction_projector=_xblock_reduce_full if xblock_use_active_dof else None,
+                    expected_size=int(xblock_linear_size),
+                    policy=two_level_policy,
+                    elapsed_s=sparse_timer.elapsed_s,
+                    emit=emit,
+                    builder=_build_rhs1_xblock_two_level_preconditioner,
+                )
+            )
+            precond_xblock_krylov = two_level_stage.preconditioner
+            two_level_built = bool(two_level_stage.built)
+            two_level_metadata = two_level_stage.metadata
+            two_level_stats = two_level_stage.stats
+            pc_factor_s += float(two_level_stage.setup_s)
 
             global_coupling_policy = resolve_xblock_global_coupling_policy_setup(
                 precondition_side=str(precondition_side),
@@ -3147,53 +3080,26 @@ def solve_v3_full_system_linear_gmres(
                 env=os.environ,
             )
             global_coupling_enabled = bool(global_coupling_policy.enabled)
-            global_coupling_built = False
-            global_coupling_metadata: dict[str, object] = {}
-            global_coupling_stats = {"applies": 0, "coarse_applies": 0}
-            if bool(global_coupling_policy.should_build):
-                global_coupling_start_s = sparse_timer.elapsed_s()
-                try:
-                    global_builder = (
-                        _build_rhs1_xblock_device_global_coupling_preconditioner
-                        if bool(global_coupling_policy.use_device_builder)
-                        else _build_rhs1_xblock_smoothed_global_coupling_preconditioner
-                    )
-                    precond_xblock_krylov, global_coupling_metadata, global_coupling_stats = (
-                        global_builder(
-                            op=op,
-                            rhs=rhs,
-                            matvec=_mv_xblock_krylov,
-                            base_preconditioner=precond_xblock_krylov,
-                            direction_projector=_xblock_reduce_full if xblock_use_active_dof else None,
-                            expected_size=int(xblock_linear_size),
-                            mode=global_coupling_policy.mode,
-                            fsavg_lmax=int(global_coupling_policy.fsavg_lmax),
-                            angular_lmax=int(global_coupling_policy.angular_lmax),
-                            max_extra_units=int(global_coupling_policy.max_extra_units),
-                            max_directions=int(global_coupling_policy.max_directions),
-                            rcond=float(global_coupling_policy.rcond),
-                            include_rhs=bool(global_coupling_policy.include_rhs),
-                            max_setup_s=float(global_coupling_policy.setup_max_s),
-                            emit=emit,
-                        )
-                    )
-                    global_coupling_built = True
-                    global_coupling_metadata = finalize_xblock_global_coupling_metadata(
-                        metadata=global_coupling_metadata,
-                        setup_s=float(sparse_timer.elapsed_s() - global_coupling_start_s),
-                    )
-                    pc_factor_s += float(global_coupling_metadata["setup_s"])
-                except Exception as exc:  # noqa: BLE001
-                    global_coupling_metadata = failed_xblock_global_coupling_metadata(
-                        exc=exc,
-                        setup_s=float(sparse_timer.elapsed_s() - global_coupling_start_s),
-                    )
-                    if emit is not None:
-                        emit(
-                            1,
-                            "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
-                            f"global-coupling disabled after build failure ({type(exc).__name__}: {exc})",
-                        )
+            global_coupling_stage = apply_xblock_global_coupling_stage(
+                context=XBlockGlobalCouplingStageContext(
+                    op=op,
+                    rhs=rhs,
+                    matvec=_mv_xblock_krylov,
+                    base_preconditioner=precond_xblock_krylov,
+                    direction_projector=_xblock_reduce_full if xblock_use_active_dof else None,
+                    expected_size=int(xblock_linear_size),
+                    policy=global_coupling_policy,
+                    elapsed_s=sparse_timer.elapsed_s,
+                    emit=emit,
+                    host_builder=_build_rhs1_xblock_smoothed_global_coupling_preconditioner,
+                    device_builder=_build_rhs1_xblock_device_global_coupling_preconditioner,
+                )
+            )
+            precond_xblock_krylov = global_coupling_stage.preconditioner
+            global_coupling_built = bool(global_coupling_stage.built)
+            global_coupling_metadata = global_coupling_stage.metadata
+            global_coupling_stats = global_coupling_stage.stats
+            pc_factor_s += float(global_coupling_stage.setup_s)
 
             setup_s = sparse_timer.elapsed_s()
             x0_setup = prepare_xblock_initial_guess(

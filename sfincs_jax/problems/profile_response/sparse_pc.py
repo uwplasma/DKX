@@ -3850,6 +3850,94 @@ class XBlockGlobalCouplingPolicySetup:
 
 
 @dataclass(frozen=True)
+class XBlockMomentSchurStageContext:
+    """Dependencies for optional primary x-block moment-Schur setup."""
+
+    op: object
+    base_preconditioner: ArrayFn
+    reduce_full: ArrayFn | None
+    expand_reduced: ArrayFn | None
+    policy: XBlockMomentSchurPolicySetup
+    precondition_side: str
+    rhs: jnp.ndarray
+    matvec_no_count: ArrayFn
+    elapsed_s: Callable[[], float]
+    emit: EmitFn | None
+    builder: Callable[..., tuple[ArrayFn, dict[str, object], dict[str, int]]]
+
+
+@dataclass(frozen=True)
+class XBlockMomentSchurStageResult:
+    """Result from optional primary x-block moment-Schur setup."""
+
+    preconditioner: ArrayFn
+    built: bool
+    used: bool
+    reason: str | None
+    metadata: dict[str, object]
+    stats: dict[str, int]
+    probe_residual_before: float | None
+    probe_residual_after: float | None
+    probe_improvement_ratio: float | None
+    setup_s: float
+
+
+@dataclass(frozen=True)
+class XBlockTwoLevelStageContext:
+    """Dependencies for optional primary x-block two-level setup."""
+
+    op: object
+    rhs: jnp.ndarray
+    matvec: ArrayFn
+    base_preconditioner: ArrayFn
+    direction_projector: ArrayFn | None
+    expected_size: int
+    policy: XBlockTwoLevelPolicySetup
+    elapsed_s: Callable[[], float]
+    emit: EmitFn | None
+    builder: Callable[..., tuple[ArrayFn, dict[str, object], dict[str, int]]]
+
+
+@dataclass(frozen=True)
+class XBlockTwoLevelStageResult:
+    """Result from optional primary x-block two-level setup."""
+
+    preconditioner: ArrayFn
+    built: bool
+    metadata: dict[str, object]
+    stats: dict[str, int]
+    setup_s: float
+
+
+@dataclass(frozen=True)
+class XBlockGlobalCouplingStageContext:
+    """Dependencies for optional primary x-block global-coupling setup."""
+
+    op: object
+    rhs: jnp.ndarray
+    matvec: ArrayFn
+    base_preconditioner: ArrayFn
+    direction_projector: ArrayFn | None
+    expected_size: int
+    policy: XBlockGlobalCouplingPolicySetup
+    elapsed_s: Callable[[], float]
+    emit: EmitFn | None
+    host_builder: Callable[..., tuple[ArrayFn, dict[str, object], dict[str, int]]]
+    device_builder: Callable[..., tuple[ArrayFn, dict[str, object], dict[str, int]]]
+
+
+@dataclass(frozen=True)
+class XBlockGlobalCouplingStageResult:
+    """Result from optional primary x-block global-coupling setup."""
+
+    preconditioner: ArrayFn
+    built: bool
+    metadata: dict[str, object]
+    stats: dict[str, int]
+    setup_s: float
+
+
+@dataclass(frozen=True)
 class XBlockQISeedPolicySetup:
     """Shared QI coarse-basis admission and seed/preconditioner settings."""
 
@@ -8757,6 +8845,238 @@ def failed_xblock_global_coupling_metadata(
     }
 
 
+def apply_xblock_moment_schur_stage(
+    *,
+    context: XBlockMomentSchurStageContext,
+) -> XBlockMomentSchurStageResult:
+    """Build and optionally probe the primary x-block moment-Schur stage."""
+
+    if context.emit is not None:
+        for level, message in context.policy.messages:
+            context.emit(int(level), str(message))
+    if (not bool(context.policy.enabled)) or str(context.precondition_side) == "none":
+        return XBlockMomentSchurStageResult(
+            preconditioner=context.base_preconditioner,
+            built=False,
+            used=False,
+            reason=None,
+            metadata={},
+            stats={"applies": 0, "base_applies": 0},
+            probe_residual_before=None,
+            probe_residual_after=None,
+            probe_improvement_ratio=None,
+            setup_s=0.0,
+        )
+
+    start_s = float(context.elapsed_s())
+    try:
+        candidate, metadata, stats = context.builder(
+            op=context.op,
+            base_preconditioner=context.base_preconditioner,
+            reduce_full=context.reduce_full,
+            expand_reduced=context.expand_reduced,
+            rcond=float(context.policy.rcond),
+            emit=context.emit,
+        )
+        used = True
+        reason: str | None = "built"
+        probe_residual_before: float | None = None
+        probe_residual_after: float | None = None
+        probe_improvement_ratio: float | None = None
+        if bool(context.policy.probe_enabled):
+            seed_candidate = jnp.asarray(candidate(context.rhs), dtype=jnp.float64)
+            seed_residual = context.rhs - jnp.asarray(
+                context.matvec_no_count(seed_candidate),
+                dtype=jnp.float64,
+            )
+            probe_result = evaluate_xblock_moment_schur_probe_result(
+                residual_before=float(jnp.linalg.norm(context.rhs)),
+                residual_after=float(jnp.linalg.norm(seed_residual)),
+                min_improvement=float(context.policy.probe_min_improvement),
+            )
+            used = bool(probe_result.used)
+            reason = str(probe_result.reason)
+            probe_residual_before = float(probe_result.residual_before)
+            probe_residual_after = float(probe_result.residual_after)
+            probe_improvement_ratio = float(probe_result.improvement_ratio)
+            if context.emit is not None:
+                for level, message in probe_result.messages:
+                    context.emit(int(level), str(message))
+        setup_s = float(context.elapsed_s()) - start_s
+        return XBlockMomentSchurStageResult(
+            preconditioner=candidate if bool(used) else context.base_preconditioner,
+            built=True,
+            used=bool(used),
+            reason=reason,
+            metadata=finalize_xblock_moment_schur_metadata(
+                metadata=metadata,
+                setup_s=float(setup_s),
+            ),
+            stats=stats,
+            probe_residual_before=probe_residual_before,
+            probe_residual_after=probe_residual_after,
+            probe_improvement_ratio=probe_improvement_ratio,
+            setup_s=float(setup_s),
+        )
+    except Exception as exc:  # noqa: BLE001
+        setup_s = float(context.elapsed_s()) - start_s
+        reason = f"{type(exc).__name__}: {exc}"
+        if context.emit is not None:
+            context.emit(
+                1,
+                "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
+                f"constraint1 moment-Schur disabled after build failure ({type(exc).__name__}: {exc})",
+            )
+        return XBlockMomentSchurStageResult(
+            preconditioner=context.base_preconditioner,
+            built=False,
+            used=False,
+            reason=reason,
+            metadata=failed_xblock_moment_schur_metadata(
+                exc=exc,
+                setup_s=float(setup_s),
+            ),
+            stats={"applies": 0, "base_applies": 0},
+            probe_residual_before=None,
+            probe_residual_after=None,
+            probe_improvement_ratio=None,
+            setup_s=float(setup_s),
+        )
+
+
+def apply_xblock_two_level_stage(
+    *,
+    context: XBlockTwoLevelStageContext,
+) -> XBlockTwoLevelStageResult:
+    """Build the optional primary x-block two-level stage."""
+
+    if not bool(context.policy.should_build):
+        return XBlockTwoLevelStageResult(
+            preconditioner=context.base_preconditioner,
+            built=False,
+            metadata={},
+            stats={"applies": 0, "coarse_applies": 0},
+            setup_s=0.0,
+        )
+
+    start_s = float(context.elapsed_s())
+    try:
+        preconditioner, metadata, stats = context.builder(
+            op=context.op,
+            rhs=context.rhs,
+            matvec=context.matvec,
+            base_preconditioner=context.base_preconditioner,
+            direction_projector=context.direction_projector,
+            expected_size=int(context.expected_size),
+            mode=context.policy.mode,
+            fsavg_lmax=int(context.policy.fsavg_lmax),
+            max_extra_units=int(context.policy.max_extra_units),
+            max_directions=int(context.policy.max_directions),
+            rcond=float(context.policy.rcond),
+            include_rhs=bool(context.policy.include_rhs),
+            emit=context.emit,
+        )
+        setup_s = float(context.elapsed_s()) - start_s
+        return XBlockTwoLevelStageResult(
+            preconditioner=preconditioner,
+            built=True,
+            metadata=finalize_xblock_two_level_metadata(
+                metadata=metadata,
+                setup_s=float(setup_s),
+            ),
+            stats=stats,
+            setup_s=float(setup_s),
+        )
+    except Exception as exc:  # noqa: BLE001
+        setup_s = float(context.elapsed_s()) - start_s
+        if context.emit is not None:
+            context.emit(
+                1,
+                "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
+                f"two-level coarse disabled after build failure ({type(exc).__name__}: {exc})",
+            )
+        return XBlockTwoLevelStageResult(
+            preconditioner=context.base_preconditioner,
+            built=False,
+            metadata=failed_xblock_two_level_metadata(
+                exc=exc,
+                setup_s=float(setup_s),
+            ),
+            stats={"applies": 0, "coarse_applies": 0},
+            setup_s=float(setup_s),
+        )
+
+
+def apply_xblock_global_coupling_stage(
+    *,
+    context: XBlockGlobalCouplingStageContext,
+) -> XBlockGlobalCouplingStageResult:
+    """Build the optional primary x-block global-coupling stage."""
+
+    if not bool(context.policy.should_build):
+        return XBlockGlobalCouplingStageResult(
+            preconditioner=context.base_preconditioner,
+            built=False,
+            metadata={},
+            stats={"applies": 0, "coarse_applies": 0},
+            setup_s=0.0,
+        )
+
+    start_s = float(context.elapsed_s())
+    try:
+        builder = (
+            context.device_builder
+            if bool(context.policy.use_device_builder)
+            else context.host_builder
+        )
+        preconditioner, metadata, stats = builder(
+            op=context.op,
+            rhs=context.rhs,
+            matvec=context.matvec,
+            base_preconditioner=context.base_preconditioner,
+            direction_projector=context.direction_projector,
+            expected_size=int(context.expected_size),
+            mode=context.policy.mode,
+            fsavg_lmax=int(context.policy.fsavg_lmax),
+            angular_lmax=int(context.policy.angular_lmax),
+            max_extra_units=int(context.policy.max_extra_units),
+            max_directions=int(context.policy.max_directions),
+            rcond=float(context.policy.rcond),
+            include_rhs=bool(context.policy.include_rhs),
+            max_setup_s=float(context.policy.setup_max_s),
+            emit=context.emit,
+        )
+        setup_s = float(context.elapsed_s()) - start_s
+        return XBlockGlobalCouplingStageResult(
+            preconditioner=preconditioner,
+            built=True,
+            metadata=finalize_xblock_global_coupling_metadata(
+                metadata=metadata,
+                setup_s=float(setup_s),
+            ),
+            stats=stats,
+            setup_s=float(setup_s),
+        )
+    except Exception as exc:  # noqa: BLE001
+        setup_s = float(context.elapsed_s()) - start_s
+        if context.emit is not None:
+            context.emit(
+                1,
+                "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
+                f"global-coupling disabled after build failure ({type(exc).__name__}: {exc})",
+            )
+        return XBlockGlobalCouplingStageResult(
+            preconditioner=context.base_preconditioner,
+            built=False,
+            metadata=failed_xblock_global_coupling_metadata(
+                exc=exc,
+                setup_s=float(setup_s),
+            ),
+            stats={"applies": 0, "coarse_applies": 0},
+            setup_s=float(setup_s),
+        )
+
+
 def prepare_xblock_initial_guess(
     *,
     x0: object | None,
@@ -11786,6 +12106,12 @@ __all__ = [
     "XBlockSparsePCBranchSetup",
     "XBlockLocalPreconditionerBuildResult",
     "XBlockAssembledOperatorBuildResult",
+    "XBlockMomentSchurStageContext",
+    "XBlockMomentSchurStageResult",
+    "XBlockTwoLevelStageContext",
+    "XBlockTwoLevelStageResult",
+    "XBlockGlobalCouplingStageContext",
+    "XBlockGlobalCouplingStageResult",
     "XBlockPhysicalResidual",
     "SparsePCGMRESFinalPayload",
     "SparseMinimumNormPolicy",
@@ -11818,6 +12144,9 @@ __all__ = [
     "apply_fortran_reduced_xblock_global_coupling_stage",
     "apply_fortran_reduced_xblock_initial_seed",
     "apply_fortran_reduced_xblock_moment_schur_stage",
+    "apply_xblock_global_coupling_stage",
+    "apply_xblock_moment_schur_stage",
+    "apply_xblock_two_level_stage",
     "apply_sparse_pc_post_minres",
     "apply_sparse_pc_post_minres_if_needed",
     "apply_sparse_pc_post_minres_from_driver_state",
