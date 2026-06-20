@@ -1153,6 +1153,13 @@ Recent local validation:
 - Broad profile-response/RHSMode=1 policy, setup, diagnostics, solver, and
   helper sweep after local x-block preconditioner build extraction:
   `1201 passed in 48.02 s`.
+- Profile-response sparse-PC helper tests after assembled x-block operator
+  orchestration extraction: `240 passed in 2.38 s`.
+- Driver sparse-helper/solve-policy compatibility shard after assembled
+  x-block operator orchestration extraction: `34 passed in 0.95 s`.
+- Broad profile-response/RHSMode=1 policy, setup, diagnostics, solver, and
+  helper sweep after assembled x-block operator orchestration extraction:
+  `1204 passed in 49.19 s`.
 - Older focused and broad validation checkpoints are intentionally omitted from
   this active plan; they remain available in git history.
 
@@ -1165,7 +1172,7 @@ Known CI issue fixed by this rewrite:
 
 ### 1. `v3_driver.py` Architecture Refactor
 
-Completion estimate: 72%.
+Completion estimate: 73%.
 
 Goal:
 
@@ -1263,6 +1270,10 @@ Completed recent boundaries:
 - RHSMode=1 local x-block preconditioner construction and timing are now a
   sparse-PC-domain helper with tested identity-skip and delegated factor-build
   paths.
+- RHSMode=1 assembled x-block operator materialization, validation,
+  equilibration, optional device CSR setup, matvec replacement, and fail-closed
+  metadata now live in a sparse-PC-domain helper with focused success,
+  disabled, and rejection tests.
 - RHSMode=1 rescue/refinement candidate acceptance and KSP replay-state updates
   consolidated into profile-response handoff helpers.
 - RHSMode=1 true-residual recomputation before fallback decisions consolidated

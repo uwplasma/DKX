@@ -3772,6 +3772,28 @@ class XBlockAssembledMatvecSetup:
 
 
 @dataclass(frozen=True)
+class XBlockAssembledOperatorBuildResult:
+    """Optional assembled x-block operator build state."""
+
+    matvec: ArrayFn
+    built: bool
+    device_resident: bool
+    metadata: dict[str, object]
+    device_operator: object | None
+    pc_factor_increment_s: float
+    row_enabled: bool
+    row_built: bool
+    row_metadata: dict[str, object]
+    row_scale: jnp.ndarray | None
+    inv_row_scale: jnp.ndarray | None
+    col_enabled: bool
+    col_built: bool
+    col_metadata: dict[str, object]
+    col_scale: jnp.ndarray | None
+    inv_col_scale: jnp.ndarray | None
+
+
+@dataclass(frozen=True)
 class XBlockMomentSchurPolicySetup:
     """Admission and probe policy for x-block constraint moment-Schur correction."""
 
@@ -8139,6 +8161,241 @@ def build_xblock_assembled_matvec_setup(
     return XBlockAssembledMatvecSetup(matvec=matvec, location="host")
 
 
+def build_xblock_assembled_operator_if_requested(
+    *,
+    enabled: bool,
+    op: object,
+    rhs_dtype: object,
+    xblock_active_idx_np: np.ndarray | None,
+    sparse_pc_fp_dense_velocity_block: bool | None,
+    xblock_krylov_method: str,
+    xblock_linear_size: int,
+    true_matvec_no_count: ArrayFn,
+    default_matvec: ArrayFn,
+    mv_count: MatvecCounter,
+    progress_every: int,
+    elapsed_s: Callable[[], float],
+    emit: EmitFn | None,
+    estimate_summary: Callable[..., object],
+    full_pattern: Callable[..., object],
+    active_pattern: Callable[..., object],
+    summarize_pattern: Callable[..., object],
+    build_operator_from_pattern: Callable[..., object],
+    device_csr_from_matrix: Callable[..., object],
+    validate_device_csr_matvec: Callable[..., object],
+    finalize_metadata: Callable[..., dict[str, object]],
+    backend: str,
+    env: Mapping[str, str] | None = None,
+) -> XBlockAssembledOperatorBuildResult:
+    """Optionally assemble an x-block Krylov operator and return replacement matvec state."""
+
+    if not bool(enabled):
+        return XBlockAssembledOperatorBuildResult(
+            matvec=default_matvec,
+            built=False,
+            device_resident=False,
+            metadata={},
+            device_operator=None,
+            pc_factor_increment_s=0.0,
+            row_enabled=False,
+            row_built=False,
+            row_metadata={},
+            row_scale=None,
+            inv_row_scale=None,
+            col_enabled=False,
+            col_built=False,
+            col_metadata={},
+            col_scale=None,
+            inv_col_scale=None,
+        )
+
+    start_s = float(elapsed_s())
+    metadata: dict[str, object] = {}
+    if emit is not None:
+        emit(
+            1,
+            "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
+            "building assembled operator for Krylov matvec reuse",
+        )
+    try:
+        try:
+            preflight = build_xblock_assembled_operator_preflight_setup(
+                op=op,
+                xblock_active_idx_np=xblock_active_idx_np,
+                sparse_pc_fp_dense_velocity_block=sparse_pc_fp_dense_velocity_block,
+                xblock_krylov_method=str(xblock_krylov_method),
+                estimate_summary=estimate_summary,
+                full_pattern=full_pattern,
+                active_pattern=active_pattern,
+                summarize_pattern=summarize_pattern,
+                env=env,
+            )
+        except XBlockAssembledPreflightError as preflight_exc:
+            metadata.update(preflight_exc.metadata)
+            raise
+        metadata.update(preflight.metadata)
+
+        def matvec_np_no_count(x_np: np.ndarray) -> np.ndarray:
+            return np.asarray(
+                jax.device_get(
+                    true_matvec_no_count(
+                        jnp.asarray(np.asarray(x_np, dtype=np.float64), dtype=rhs_dtype)
+                    )
+                ),
+                dtype=np.float64,
+            ).reshape((-1,))
+
+        bundle = build_operator_from_pattern(
+            matvec_np_no_count,
+            pattern=preflight.pattern,
+            dtype=np.float64,
+            backend=str(backend),
+            csr_max_mb=float(preflight.csr_max_mb),
+            drop_tol=float(preflight.drop_tol),
+            allow_operator_only=False,
+            max_colors=int(preflight.max_colors),
+        )
+        matrix = bundle.matrix
+        if matrix is None:
+            raise RuntimeError("assembled x-block operator materialization returned no matrix")
+
+        validation_samples = _env_int(
+            env,
+            "SFINCS_JAX_RHSMODE1_XBLOCK_ASSEMBLED_OPERATOR_VALIDATE",
+            default=1,
+            minimum=0,
+        )
+        validation_tol = max(
+            0.0,
+            _env_float(
+                env,
+                "SFINCS_JAX_RHSMODE1_XBLOCK_ASSEMBLED_OPERATOR_VALIDATE_RTOL",
+                default=1.0e-8,
+            ),
+        )
+        validation_errors: list[float] = []
+        rng = np.random.default_rng(1729)
+        for _ in range(int(validation_samples)):
+            probe = rng.standard_normal(int(xblock_linear_size)).astype(np.float64)
+            probe_norm = float(np.linalg.norm(probe))
+            if np.isfinite(probe_norm) and probe_norm > 0.0:
+                probe /= probe_norm
+            ref = matvec_np_no_count(probe)
+            got = np.asarray(bundle.matvec(probe), dtype=np.float64).reshape((-1,))
+            denom = max(float(np.linalg.norm(ref)), 1.0e-300)
+            validation_errors.append(float(np.linalg.norm(got - ref) / denom))
+        max_validation_error = max(validation_errors, default=0.0)
+        if max_validation_error > float(validation_tol):
+            raise RuntimeError(
+                "assembled x-block operator validation failed "
+                f"max_rel_error={max_validation_error:.3e} > {float(validation_tol):.3e}"
+            )
+
+        equilibration = build_xblock_assembled_equilibration_setup(
+            assembled_matrix=matrix,
+            xblock_linear_size=int(xblock_linear_size),
+            elapsed_s=elapsed_s,
+            env=env,
+        )
+        if emit is not None:
+            for level, message in equilibration.messages:
+                emit(int(level), str(message))
+
+        device = build_xblock_assembled_device_setup(
+            assembled_matrix=matrix,
+            assembled_matvec=bundle.matvec,
+            csr_cap_nbytes=int(preflight.csr_cap_nbytes),
+            device_enabled=bool(preflight.device_enabled),
+            device_required=bool(preflight.device_required),
+            validation_samples=int(validation_samples),
+            validation_tol=float(validation_tol),
+            device_csr_from_matrix=device_csr_from_matrix,
+            validate_device_csr_matvec=validate_device_csr_matvec,
+        )
+        if emit is not None:
+            for level, message in device.messages:
+                emit(int(level), str(message))
+
+        matvec_setup = build_xblock_assembled_matvec_setup(
+            assembled_matvec=bundle.matvec,
+            device_operator=device.device_operator,
+            mv_count=mv_count,
+            progress_every=int(progress_every),
+            elapsed_s=elapsed_s,
+            emit=emit,
+        )
+        metadata = finalize_metadata(
+            metadata=metadata,
+            setup_s=float(elapsed_s()) - start_s,
+            assembled_matrix=matrix,
+            assembled_summary=preflight.summary,
+            assembled_bundle_metadata=bundle.metadata,
+            max_colors=int(preflight.max_colors),
+            validation_errors=validation_errors,
+            device_enabled=bool(preflight.device_enabled),
+            device_required=bool(preflight.device_required),
+            device_resident=bool(device.device_resident),
+            device_operator=device.device_operator,
+            device_validation_errors=tuple(device.validation_errors),
+            device_error=device.error,
+        )
+        if emit is not None:
+            emit(
+                0,
+                "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres assembled operator "
+                f"built location={matvec_setup.location} nnz={metadata['matrix_nnz']} "
+                f"setup_s={metadata['setup_s']:.3f}",
+            )
+        return XBlockAssembledOperatorBuildResult(
+            matvec=matvec_setup.matvec,
+            built=True,
+            device_resident=bool(device.device_resident),
+            metadata=metadata,
+            device_operator=device.device_operator,
+            pc_factor_increment_s=float(metadata["setup_s"]),
+            row_enabled=bool(equilibration.row_enabled),
+            row_built=bool(equilibration.row_built),
+            row_metadata=dict(equilibration.row_metadata),
+            row_scale=equilibration.row_scale,
+            inv_row_scale=equilibration.inv_row_scale,
+            col_enabled=bool(equilibration.col_enabled),
+            col_built=bool(equilibration.col_built),
+            col_metadata=dict(equilibration.col_metadata),
+            col_scale=equilibration.col_scale,
+            inv_col_scale=equilibration.inv_col_scale,
+        )
+    except Exception as exc:  # noqa: BLE001
+        metadata = {
+            **metadata,
+            "error": f"{type(exc).__name__}: {exc}",
+            "setup_s": float(elapsed_s()) - start_s,
+        }
+        if emit is not None:
+            emit(
+                1,
+                "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
+                f"assembled operator disabled after build failure ({type(exc).__name__}: {exc})",
+            )
+        return XBlockAssembledOperatorBuildResult(
+            matvec=default_matvec,
+            built=False,
+            device_resident=False,
+            metadata=metadata,
+            device_operator=None,
+            pc_factor_increment_s=0.0,
+            row_enabled=False,
+            row_built=False,
+            row_metadata={},
+            row_scale=None,
+            inv_row_scale=None,
+            col_enabled=False,
+            col_built=False,
+            col_metadata={},
+            col_scale=None,
+            inv_col_scale=None,
+        )
+
+
 def finalize_xblock_assembled_operator_metadata(
     *,
     metadata: Mapping[str, object],
@@ -11528,6 +11785,7 @@ __all__ = [
     "XBlockSparsePCWorkEstimates",
     "XBlockSparsePCBranchSetup",
     "XBlockLocalPreconditionerBuildResult",
+    "XBlockAssembledOperatorBuildResult",
     "XBlockPhysicalResidual",
     "SparsePCGMRESFinalPayload",
     "SparseMinimumNormPolicy",
@@ -11567,6 +11825,7 @@ __all__ = [
     "build_fortran_reduced_xblock_factor_stage",
     "build_fortran_reduced_xblock_krylov_setup",
     "build_xblock_local_preconditioner",
+    "build_xblock_assembled_operator_if_requested",
     "build_sparse_pc_active_dof_setup",
     "build_sparse_pc_pattern_setup",
     "build_direct_tail_materialization_setup",

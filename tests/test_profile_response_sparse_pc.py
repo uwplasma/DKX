@@ -109,6 +109,7 @@ from sfincs_jax.problems.profile_response.sparse_pc import (
     build_xblock_assembled_equilibration_setup,
     build_xblock_assembled_device_setup,
     build_xblock_assembled_matvec_setup,
+    build_xblock_assembled_operator_if_requested,
     build_xblock_assembled_operator_preflight_setup,
     build_xblock_krylov_matvec_setup,
     build_xblock_local_preconditioner,
@@ -4602,6 +4603,155 @@ def test_xblock_assembled_operator_preflight_rejection_carries_metadata() -> Non
     assert excinfo.value.metadata["preflight_rejected"] is True
     assert excinfo.value.metadata["preflight_pattern_nnz_estimate"] == 10
     assert "non-positive CSR memory budget" in str(excinfo.value)
+
+
+def test_xblock_assembled_operator_if_requested_disabled_returns_defaults() -> None:
+    def default_matvec(v):
+        return 2.0 * v
+
+    counter = MatvecCounter(0)
+
+    result = build_xblock_assembled_operator_if_requested(
+        enabled=False,
+        op=SimpleNamespace(),
+        rhs_dtype=jnp.float64,
+        xblock_active_idx_np=None,
+        sparse_pc_fp_dense_velocity_block=False,
+        xblock_krylov_method="gmres",
+        xblock_linear_size=2,
+        true_matvec_no_count=lambda v: v,
+        default_matvec=default_matvec,
+        mv_count=counter,
+        progress_every=1,
+        elapsed_s=lambda: 0.0,
+        emit=None,
+        estimate_summary=lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            AssertionError("unused")
+        ),
+        full_pattern=lambda *_args, **_kwargs: object(),
+        active_pattern=lambda *_args, **_kwargs: object(),
+        summarize_pattern=lambda *_args, **_kwargs: object(),
+        build_operator_from_pattern=lambda *_args, **_kwargs: object(),
+        device_csr_from_matrix=lambda *_args, **_kwargs: object(),
+        validate_device_csr_matvec=lambda *_args, **_kwargs: (),
+        finalize_metadata=lambda **_kwargs: {},
+        backend="cpu",
+        env={},
+    )
+
+    assert result.matvec is default_matvec
+    assert not result.built
+    assert result.metadata == {}
+    assert result.pc_factor_increment_s == 0.0
+    assert not result.row_enabled
+    assert not result.col_enabled
+
+
+def test_xblock_assembled_operator_if_requested_builds_host_operator() -> None:
+    messages: list[str] = []
+    pattern = object()
+    summary = SimpleNamespace(nnz=2, shape=(2, 2), max_row_nnz=1, avg_row_nnz=1.0)
+    matrix = scipy_sparse.csr_matrix([[1.0, 0.0], [0.0, 1.0]])
+    elapsed_values = iter([1.0, 1.2, 1.5, 2.0])
+
+    def elapsed_s() -> float:
+        try:
+            return next(elapsed_values)
+        except StopIteration:
+            return 2.0
+
+    bundle = SimpleNamespace(
+        matrix=matrix,
+        matvec=lambda x: np.asarray(x, dtype=np.float64),
+        metadata=SimpleNamespace(
+            storage_kind="csr",
+            reason="test",
+            csr_nbytes_estimate=64,
+        ),
+    )
+
+    result = build_xblock_assembled_operator_if_requested(
+        enabled=True,
+        op=SimpleNamespace(),
+        rhs_dtype=jnp.float64,
+        xblock_active_idx_np=None,
+        sparse_pc_fp_dense_velocity_block=False,
+        xblock_krylov_method="gmres",
+        xblock_linear_size=2,
+        true_matvec_no_count=lambda v: v,
+        default_matvec=lambda v: -v,
+        mv_count=MatvecCounter(0),
+        progress_every=0,
+        elapsed_s=elapsed_s,
+        emit=lambda _level, msg: messages.append(msg),
+        estimate_summary=lambda *_args, **_kwargs: summary,
+        full_pattern=lambda *_args, **_kwargs: pattern,
+        active_pattern=lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            AssertionError("unused")
+        ),
+        summarize_pattern=lambda _op, used_pattern: summary
+        if used_pattern is pattern
+        else (_ for _ in ()).throw(AssertionError("bad pattern")),
+        build_operator_from_pattern=lambda *_args, **_kwargs: bundle,
+        device_csr_from_matrix=lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            AssertionError("device disabled")
+        ),
+        validate_device_csr_matvec=lambda *_args, **_kwargs: (),
+        finalize_metadata=finalize_xblock_assembled_operator_metadata,
+        backend="cpu",
+        env={
+            "SFINCS_JAX_RHSMODE1_XBLOCK_ASSEMBLED_OPERATOR_DEVICE": "0",
+            "SFINCS_JAX_RHSMODE1_XBLOCK_ASSEMBLED_OPERATOR_VALIDATE": "1",
+            "SFINCS_JAX_RHSMODE1_XBLOCK_ASSEMBLED_OPERATOR_ROW_EQUILIBRATE": "1",
+        },
+    )
+
+    assert result.built
+    assert not result.device_resident
+    assert result.metadata["matrix_nnz"] == 2
+    assert result.metadata["validation_rel_errors"] == pytest.approx((0.0,))
+    assert result.pc_factor_increment_s == pytest.approx(result.metadata["setup_s"])
+    assert result.row_enabled
+    assert result.row_built
+    assert result.matvec(jnp.asarray([3.0, 4.0])).tolist() == [3.0, 4.0]
+    assert any("assembled operator built" in message for message in messages)
+
+
+def test_xblock_assembled_operator_if_requested_failure_returns_metadata() -> None:
+    summary = SimpleNamespace(nnz=10, shape=(3, 3), max_row_nnz=4, avg_row_nnz=3.0)
+
+    result = build_xblock_assembled_operator_if_requested(
+        enabled=True,
+        op=SimpleNamespace(),
+        rhs_dtype=jnp.float64,
+        xblock_active_idx_np=None,
+        sparse_pc_fp_dense_velocity_block=False,
+        xblock_krylov_method="gmres",
+        xblock_linear_size=3,
+        true_matvec_no_count=lambda v: v,
+        default_matvec=lambda v: -v,
+        mv_count=MatvecCounter(0),
+        progress_every=0,
+        elapsed_s=lambda: 5.0,
+        emit=None,
+        estimate_summary=lambda *_args, **_kwargs: summary,
+        full_pattern=lambda *_args, **_kwargs: object(),
+        active_pattern=lambda *_args, **_kwargs: object(),
+        summarize_pattern=lambda *_args, **_kwargs: summary,
+        build_operator_from_pattern=lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            AssertionError("preflight should reject before materialization")
+        ),
+        device_csr_from_matrix=lambda *_args, **_kwargs: object(),
+        validate_device_csr_matvec=lambda *_args, **_kwargs: (),
+        finalize_metadata=lambda **_kwargs: {},
+        backend="cpu",
+        env={"SFINCS_JAX_RHSMODE1_XBLOCK_ASSEMBLED_OPERATOR_CSR_MAX_MB": "0"},
+    )
+
+    assert not result.built
+    assert "XBlockAssembledPreflightMemoryError" in result.metadata["error"]
+    assert result.metadata["preflight_rejected"] is True
+    assert result.pc_factor_increment_s == 0.0
 
 
 def test_xblock_assembled_device_setup_builds_and_validates_operator() -> None:
