@@ -392,6 +392,7 @@ from .problems.profile_response.sparse_pc import (
     run_sparse_pc_gmres_once_for_retry,
     FPXBlockGlobalCorrectionContext,
     FPXBlockHighXCorrectionContext,
+    SparseSXBlockRescueContext,
     SparseXBlockRescueAcceptanceContext,
     SparseXBlockRescueBuildContext,
     SparseXBlockRescueSolveContext,
@@ -399,6 +400,7 @@ from .problems.profile_response.sparse_pc import (
     build_sparse_xblock_rescue_preconditioner,
     run_fp_xblock_global_correction_stage,
     run_fp_xblock_highx_residual_correction_stage,
+    run_sparse_sxblock_rescue_stage,
     run_sparse_xblock_rescue_solve_stage,
     run_xblock_krylov_solve_stage,
     xblock_sparse_pc_final_metadata_state_from_context,
@@ -10370,90 +10372,38 @@ def solve_v3_full_system_linear_gmres(
                 and sparse_sxblock_rescue_active
                 and (not skip_global_sparse_after_xblock)
             ):
-                try:
-                    if emit is not None:
-                        emit(
-                            0,
-                            "solve_v3_full_system_linear_gmres: sparse sxblock_tz rescue "
-                            f"(size={int(active_size)} n_species={int(op.n_species)})",
-                        )
-                    _mark("rhs1_sparse_precond_build_start")
-                    x_sparse_sxblock = _compute_rhsmode1_sxblock_tz_sparse_host_seed(
+                sxblock_rescue = run_sparse_sxblock_rescue_stage(
+                    context=SparseSXBlockRescueContext(
                         op=op,
-                        rhs_reduced=rhs_reduced,
+                        current_result=res_reduced,
+                        matvec=mv_reduced,
+                        rhs=rhs_reduced,
                         reduce_full=reduce_full,
                         expand_reduced=expand_reduced,
-                        drop_tol=sparse_drop_tol,
-                        drop_rel=sparse_drop_rel,
-                        ilu_drop_tol=sparse_ilu_drop_tol,
-                        fill_factor=sparse_ilu_fill,
+                        drop_tol=float(sparse_drop_tol),
+                        drop_rel=float(sparse_drop_rel),
+                        ilu_drop_tol=float(sparse_ilu_drop_tol),
+                        fill_factor=float(sparse_ilu_fill),
+                        preconditioner=(
+                            precond_sparse_xblock_current or preconditioner_reduced
+                        ),
+                        replay_state=ksp_replay,
+                        tol=float(tol),
+                        atol=float(atol),
+                        restart=int(restart),
+                        maxiter=maxiter,
+                        target=float(target_reduced),
+                        precondition_side=gmres_precond_side,
+                        solver_kind=_solver_kind("incremental")[0],
                         emit=emit,
+                        mark=_mark,
+                        seed_builder=_compute_rhsmode1_sxblock_tz_sparse_host_seed,
+                        gmres_solver=gmres_solve_with_history_scipy,
+                        parse_polish_gmres_config=rhs1_parse_polish_gmres_config,
+                        record_replay_problem=rhs1_record_ksp_replay_problem,
                     )
-                    _mark("rhs1_sparse_precond_build_done")
-                    _mark("rhs1_sparse_precond_solve_start")
-                    residual_vec_sparse_sxblock = rhs_reduced - mv_reduced(x_sparse_sxblock)
-                    res_sparse_sxblock = GMRESSolveResult(
-                        x=x_sparse_sxblock,
-                        residual_norm=jnp.asarray(jnp.linalg.norm(residual_vec_sparse_sxblock), dtype=jnp.float64),
-                    )
-                    if emit is not None:
-                        emit(
-                            0,
-                            "solve_v3_full_system_linear_gmres: explicit sxblock seed "
-                            f"(residual={float(res_sparse_sxblock.residual_norm):.6e})",
-                        )
-                    _mark("rhs1_sparse_precond_solve_done")
-                    if float(res_sparse_sxblock.residual_norm) < float(res_reduced.residual_norm):
-                        res_reduced = res_sparse_sxblock
-                        ksp_replay.x0_vec = res_reduced.x
-                        if float(res_reduced.residual_norm) > target_reduced:
-                            polish_precond = precond_sparse_xblock_current or preconditioner_reduced
-                            if polish_precond is not None:
-                                sxblock_polish_restart, sxblock_polish_maxiter = rhs1_parse_polish_gmres_config(
-                                    restart_env_name="SFINCS_JAX_RHSMODE1_SXBLOCK_POLISH_RESTART",
-                                    maxiter_env_name="SFINCS_JAX_RHSMODE1_SXBLOCK_POLISH_MAXITER",
-                                    default_restart=min(int(restart), 40),
-                                    default_maxiter=min(max(40, int(maxiter or 120)), 120),
-                                )
-                                if emit is not None:
-                                    emit(
-                                        0,
-                                        "solve_v3_full_system_linear_gmres: sxblock seed polish "
-                                        f"restart={sxblock_polish_restart} maxiter={sxblock_polish_maxiter}",
-                                    )
-                                x_np, _rn_sxpolish, _history = gmres_solve_with_history_scipy(
-                                    matvec=mv_reduced,
-                                    b=rhs_reduced,
-                                    preconditioner=polish_precond,
-                                    x0=res_reduced.x,
-                                    tol=tol,
-                                    atol=atol,
-                                    restart=sxblock_polish_restart,
-                                    maxiter=sxblock_polish_maxiter,
-                                    precondition_side=gmres_precond_side,
-                                )
-                                x_sxpolish = jnp.asarray(x_np, dtype=jnp.float64)
-                                residual_vec_sxpolish = rhs_reduced - mv_reduced(x_sxpolish)
-                                res_sxpolish = GMRESSolveResult(
-                                    x=x_sxpolish,
-                                    residual_norm=jnp.asarray(jnp.linalg.norm(residual_vec_sxpolish), dtype=jnp.float64),
-                                )
-                                if float(res_sxpolish.residual_norm) < float(res_reduced.residual_norm):
-                                    res_reduced = res_sxpolish
-                                    rhs1_record_ksp_replay_problem(
-                                        ksp_replay,
-                                        matvec_fn=mv_reduced,
-                                        b_vec=rhs_reduced,
-                                        precond_fn=polish_precond,
-                                        x0_vec=res_reduced.x,
-                                        precond_side=gmres_precond_side,
-                                        solver_kind=_solver_kind("incremental")[0],
-                                        restart=sxblock_polish_restart,
-                                        maxiter=sxblock_polish_maxiter,
-                                    )
-                except Exception as exc:  # noqa: BLE001
-                    if emit is not None:
-                        emit(1, f"sxblock_sparse: failed ({type(exc).__name__}: {exc})")
+                )
+                res_reduced = sxblock_rescue.result
             if (
                 float(res_reduced.residual_norm) > target_reduced
                 and sparse_kind_use == "jax"

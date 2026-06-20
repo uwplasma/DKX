@@ -76,6 +76,7 @@ from sfincs_jax.problems.profile_response.sparse_pc import (
     SparseHostRetryCandidateContext,
     SparseHostRetryCandidateResult,
     SparseJAXRetryPreconditionerBuildContext,
+    SparseSXBlockRescueContext,
     SparseXBlockExplicitSeedContext,
     SparseXBlockRescueAcceptanceContext,
     SparseXBlockRescueBuildContext,
@@ -251,6 +252,7 @@ from sfincs_jax.problems.profile_response.sparse_pc import (
     run_xblock_krylov_solve_stage,
     run_fp_xblock_global_correction_stage,
     run_fp_xblock_highx_residual_correction_stage,
+    run_sparse_sxblock_rescue_stage,
     run_sparse_xblock_rescue_solve_stage,
     run_sparse_pc_gmres_once,
     run_sparse_pc_gmres_once_for_retry,
@@ -4899,6 +4901,184 @@ def test_fp_xblock_highx_residual_correction_stage_preserves_exception_residual(
         "rhs1_fp_xblock_highx_residual_correction_start",
         "rhs1_fp_xblock_highx_residual_correction_failed",
     ]
+
+
+def _sxblock_context(**overrides: object) -> SparseSXBlockRescueContext:
+    values: dict[str, object] = {
+        "op": SimpleNamespace(n_species=2),
+        "current_result": GMRESSolveResult(
+            x=jnp.asarray([0.0, 0.0], dtype=jnp.float64),
+            residual_norm=jnp.asarray(2.0, dtype=jnp.float64),
+        ),
+        "matvec": _identity,
+        "rhs": jnp.asarray([1.0, 1.0], dtype=jnp.float64),
+        "reduce_full": _identity,
+        "expand_reduced": _identity,
+        "drop_tol": 0.0,
+        "drop_rel": 0.0,
+        "ilu_drop_tol": 0.0,
+        "fill_factor": 1.0,
+        "preconditioner": _identity,
+        "replay_state": SimpleNamespace(x0_vec=None),
+        "tol": 1.0e-9,
+        "atol": 1.0e-12,
+        "restart": 20,
+        "maxiter": 80,
+        "target": 1.0e-9,
+        "precondition_side": "left",
+        "solver_kind": "gmres",
+        "emit": None,
+        "mark": lambda _name: None,
+        "seed_builder": lambda **_kwargs: jnp.asarray([1.0, 1.0], dtype=jnp.float64),
+        "gmres_solver": lambda **_kwargs: (_ for _ in ()).throw(
+            AssertionError("unexpected gmres polish")
+        ),
+        "parse_polish_gmres_config": lambda **_kwargs: (5, 6),
+        "record_replay_problem": lambda *_args, **_kwargs: None,
+    }
+    values.update(overrides)
+    return SparseSXBlockRescueContext(**values)
+
+
+def test_sparse_sxblock_rescue_stage_rejects_non_improving_seed() -> None:
+    replay = SimpleNamespace(x0_vec="old")
+    marks: list[str] = []
+    messages: list[str] = []
+
+    result = run_sparse_sxblock_rescue_stage(
+        context=_sxblock_context(
+            rhs=jnp.asarray([1.0, 1.0], dtype=jnp.float64),
+            seed_builder=lambda **_kwargs: jnp.asarray([-1.0, -1.0], dtype=jnp.float64),
+            replay_state=replay,
+            emit=lambda _level, msg: messages.append(msg),
+            mark=marks.append,
+        )
+    )
+
+    assert not result.accepted
+    assert not result.polished
+    assert result.error is None
+    assert result.seed_residual == pytest.approx(np.sqrt(8.0))
+    assert result.polish_residual is None
+    assert replay.x0_vec == "old"
+    assert marks == [
+        "rhs1_sparse_precond_build_start",
+        "rhs1_sparse_precond_build_done",
+        "rhs1_sparse_precond_solve_start",
+        "rhs1_sparse_precond_solve_done",
+    ]
+    assert any("sparse sxblock_tz rescue" in message for message in messages)
+    assert any("explicit sxblock seed" in message for message in messages)
+
+
+def test_sparse_sxblock_rescue_stage_accepts_seed_without_polish() -> None:
+    replay = SimpleNamespace(x0_vec=None)
+
+    result = run_sparse_sxblock_rescue_stage(
+        context=_sxblock_context(
+            rhs=jnp.asarray([1.0, 1.0], dtype=jnp.float64),
+            target=0.75,
+            seed_builder=lambda **_kwargs: jnp.asarray([0.75, 0.75], dtype=jnp.float64),
+            replay_state=replay,
+            preconditioner=lambda _v: pytest.fail("polish should not run"),
+        )
+    )
+
+    assert result.accepted
+    assert not result.polished
+    assert result.seed_residual == pytest.approx(np.sqrt(0.125))
+    assert result.polish_residual is None
+    np.testing.assert_allclose(np.asarray(result.result.x), np.asarray([0.75, 0.75]))
+    np.testing.assert_allclose(np.asarray(replay.x0_vec), np.asarray([0.75, 0.75]))
+
+
+def test_sparse_sxblock_rescue_stage_accepts_polish_and_records_replay() -> None:
+    replay = SimpleNamespace(x0_vec=None)
+    record_calls: list[tuple[tuple[object, ...], dict[str, object]]] = []
+    parse_calls: list[dict[str, object]] = []
+    gmres_calls: list[dict[str, object]] = []
+    rhs = jnp.asarray([1.0, 1.0], dtype=jnp.float64)
+
+    def parse_config(**kwargs):
+        parse_calls.append(kwargs)
+        return 7, 8
+
+    def gmres_solver(**kwargs):
+        gmres_calls.append(kwargs)
+        return np.asarray([0.9, 0.9], dtype=np.float64), 0.0, (0.2,)
+
+    result = run_sparse_sxblock_rescue_stage(
+        context=_sxblock_context(
+            rhs=rhs,
+            target=1.0e-9,
+            restart=30,
+            maxiter=200,
+            seed_builder=lambda **_kwargs: jnp.asarray([0.75, 0.75], dtype=jnp.float64),
+            replay_state=replay,
+            preconditioner=_identity,
+            parse_polish_gmres_config=parse_config,
+            gmres_solver=gmres_solver,
+            record_replay_problem=lambda *args, **kwargs: record_calls.append(
+                (args, kwargs)
+            ),
+        )
+    )
+
+    assert result.accepted
+    assert result.polished
+    assert result.seed_residual == pytest.approx(np.sqrt(0.125))
+    assert result.polish_residual == pytest.approx(np.sqrt(0.02))
+    assert result.polish_restart == 7
+    assert result.polish_maxiter == 8
+    np.testing.assert_allclose(np.asarray(result.result.x), np.asarray([0.9, 0.9]))
+    assert parse_calls == [
+        {
+            "restart_env_name": "SFINCS_JAX_RHSMODE1_SXBLOCK_POLISH_RESTART",
+            "maxiter_env_name": "SFINCS_JAX_RHSMODE1_SXBLOCK_POLISH_MAXITER",
+            "default_restart": 30,
+            "default_maxiter": 120,
+        }
+    ]
+    assert len(gmres_calls) == 1
+    assert gmres_calls[0]["matvec"] is _identity
+    assert gmres_calls[0]["b"] is rhs
+    assert gmres_calls[0]["preconditioner"] is _identity
+    assert gmres_calls[0]["restart"] == 7
+    assert gmres_calls[0]["maxiter"] == 8
+    assert len(record_calls) == 1
+    args, kwargs = record_calls[0]
+    assert args == (replay,)
+    assert kwargs["matvec_fn"] is _identity
+    assert kwargs["b_vec"] is rhs
+    assert kwargs["precond_fn"] is _identity
+    assert kwargs["precond_side"] == "left"
+    assert kwargs["solver_kind"] == "gmres"
+    assert kwargs["restart"] == 7
+    assert kwargs["maxiter"] == 8
+    np.testing.assert_allclose(np.asarray(kwargs["x0_vec"]), np.asarray([0.9, 0.9]))
+
+
+def test_sparse_sxblock_rescue_stage_reports_seed_exception() -> None:
+    messages: list[str] = []
+    current = GMRESSolveResult(
+        x=jnp.asarray([0.0, 0.0], dtype=jnp.float64),
+        residual_norm=jnp.asarray(2.0, dtype=jnp.float64),
+    )
+
+    result = run_sparse_sxblock_rescue_stage(
+        context=_sxblock_context(
+            current_result=current,
+            seed_builder=lambda **_kwargs: (_ for _ in ()).throw(RuntimeError("boom")),
+            emit=lambda _level, msg: messages.append(msg),
+        )
+    )
+
+    assert result.result is current
+    assert not result.accepted
+    assert not result.polished
+    assert result.error == "RuntimeError: boom"
+    assert result.seed_residual is None
+    assert any("sxblock_sparse: failed" in message for message in messages)
 
 
 def test_fortran_reduced_xblock_krylov_policy_defaults_and_counter() -> None:

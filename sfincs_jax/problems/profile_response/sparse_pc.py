@@ -4011,6 +4011,51 @@ class SparseXBlockRescueAcceptanceResult:
 
 
 @dataclass(frozen=True)
+class SparseSXBlockRescueContext:
+    """Dependencies for the sparse sxblock_tz seed and optional polish stage."""
+
+    op: Any
+    current_result: GMRESSolveResult
+    matvec: ArrayFn
+    rhs: jnp.ndarray
+    reduce_full: ArrayFn
+    expand_reduced: ArrayFn
+    drop_tol: float
+    drop_rel: float
+    ilu_drop_tol: float
+    fill_factor: float
+    preconditioner: ArrayFn | None
+    replay_state: Any
+    tol: float
+    atol: float
+    restart: int
+    maxiter: int | None
+    target: float
+    precondition_side: str
+    solver_kind: str
+    emit: EmitFn | None
+    mark: Callable[[str], None]
+    seed_builder: Callable[..., jnp.ndarray]
+    gmres_solver: Callable[..., tuple[np.ndarray, float, Sequence[float]]]
+    parse_polish_gmres_config: Callable[..., tuple[int, int]]
+    record_replay_problem: Callable[..., None]
+
+
+@dataclass(frozen=True)
+class SparseSXBlockRescueResult:
+    """Updated state and diagnostics from the sparse sxblock_tz rescue stage."""
+
+    result: GMRESSolveResult
+    accepted: bool
+    polished: bool
+    error: str | None
+    seed_residual: float | None
+    polish_residual: float | None
+    polish_restart: int | None
+    polish_maxiter: int | None
+
+
+@dataclass(frozen=True)
 class FPXBlockGlobalCorrectionContext:
     """Dependencies for the optional FP x-block global correction stage."""
 
@@ -6984,6 +7029,148 @@ def accept_sparse_xblock_rescue_candidate(
         candidate_residual=float(candidate.residual_norm),
         explicit_seed_used=bool(explicit_seed_used),
     )
+
+
+def run_sparse_sxblock_rescue_stage(
+    *,
+    context: SparseSXBlockRescueContext,
+) -> SparseSXBlockRescueResult:
+    """Run sparse sxblock_tz seed rescue and optional GMRES polish."""
+
+    try:
+        if context.emit is not None:
+            context.emit(
+                0,
+                "solve_v3_full_system_linear_gmres: sparse sxblock_tz rescue "
+                f"(size={int(context.current_result.x.size)} "
+                f"n_species={int(context.op.n_species)})",
+            )
+        context.mark("rhs1_sparse_precond_build_start")
+        x_sparse = context.seed_builder(
+            op=context.op,
+            rhs_reduced=context.rhs,
+            reduce_full=context.reduce_full,
+            expand_reduced=context.expand_reduced,
+            drop_tol=float(context.drop_tol),
+            drop_rel=float(context.drop_rel),
+            ilu_drop_tol=float(context.ilu_drop_tol),
+            fill_factor=float(context.fill_factor),
+            emit=context.emit,
+        )
+        context.mark("rhs1_sparse_precond_build_done")
+        context.mark("rhs1_sparse_precond_solve_start")
+        residual_vec_sparse = context.rhs - context.matvec(x_sparse)
+        seed_result = GMRESSolveResult(
+            x=x_sparse,
+            residual_norm=jnp.asarray(
+                jnp.linalg.norm(residual_vec_sparse),
+                dtype=jnp.float64,
+            ),
+        )
+        seed_residual = float(seed_result.residual_norm)
+        if context.emit is not None:
+            context.emit(
+                0,
+                "solve_v3_full_system_linear_gmres: explicit sxblock seed "
+                f"(residual={seed_residual:.6e})",
+            )
+        context.mark("rhs1_sparse_precond_solve_done")
+        if seed_residual >= float(context.current_result.residual_norm):
+            return SparseSXBlockRescueResult(
+                result=context.current_result,
+                accepted=False,
+                polished=False,
+                error=None,
+                seed_residual=seed_residual,
+                polish_residual=None,
+                polish_restart=None,
+                polish_maxiter=None,
+            )
+
+        result = seed_result
+        context.replay_state.x0_vec = result.x
+        polish_residual: float | None = None
+        polish_restart: int | None = None
+        polish_maxiter: int | None = None
+        polished = False
+        if float(result.residual_norm) > float(context.target):
+            polish_precond = context.preconditioner
+            if polish_precond is not None:
+                polish_restart, polish_maxiter = context.parse_polish_gmres_config(
+                    restart_env_name="SFINCS_JAX_RHSMODE1_SXBLOCK_POLISH_RESTART",
+                    maxiter_env_name="SFINCS_JAX_RHSMODE1_SXBLOCK_POLISH_MAXITER",
+                    default_restart=min(int(context.restart), 40),
+                    default_maxiter=min(
+                        max(40, int(context.maxiter or 120)),
+                        120,
+                    ),
+                )
+                if context.emit is not None:
+                    context.emit(
+                        0,
+                        "solve_v3_full_system_linear_gmres: sxblock seed polish "
+                        f"restart={polish_restart} maxiter={polish_maxiter}",
+                    )
+                x_np, _rn_polish, _history = context.gmres_solver(
+                    matvec=context.matvec,
+                    b=context.rhs,
+                    preconditioner=polish_precond,
+                    x0=result.x,
+                    tol=float(context.tol),
+                    atol=float(context.atol),
+                    restart=int(polish_restart),
+                    maxiter=int(polish_maxiter),
+                    precondition_side=context.precondition_side,
+                )
+                x_polish = jnp.asarray(x_np, dtype=jnp.float64)
+                residual_vec_polish = context.rhs - context.matvec(x_polish)
+                polish_candidate = GMRESSolveResult(
+                    x=x_polish,
+                    residual_norm=jnp.asarray(
+                        jnp.linalg.norm(residual_vec_polish),
+                        dtype=jnp.float64,
+                    ),
+                )
+                polish_residual = float(polish_candidate.residual_norm)
+                if polish_residual < float(result.residual_norm):
+                    result = polish_candidate
+                    polished = True
+                    context.record_replay_problem(
+                        context.replay_state,
+                        matvec_fn=context.matvec,
+                        b_vec=context.rhs,
+                        precond_fn=polish_precond,
+                        x0_vec=result.x,
+                        precond_side=context.precondition_side,
+                        solver_kind=context.solver_kind,
+                        restart=int(polish_restart),
+                        maxiter=int(polish_maxiter),
+                    )
+
+        return SparseSXBlockRescueResult(
+            result=result,
+            accepted=True,
+            polished=bool(polished),
+            error=None,
+            seed_residual=seed_residual,
+            polish_residual=polish_residual,
+            polish_restart=polish_restart,
+            polish_maxiter=polish_maxiter,
+        )
+    except Exception as exc:  # noqa: BLE001
+        error = f"{type(exc).__name__}: {exc}"
+        if context.emit is not None:
+            context.emit(1, f"sxblock_sparse: failed ({error})")
+        return SparseSXBlockRescueResult(
+            result=context.current_result,
+            accepted=False,
+            polished=False,
+            error=error,
+            seed_residual=None,
+            polish_residual=None,
+            polish_restart=None,
+            polish_maxiter=None,
+        )
 
 
 def run_fp_xblock_global_correction_stage(
@@ -16408,6 +16595,8 @@ __all__ = [
     "SparseHostRetryCandidateContext",
     "SparseHostRetryCandidateResult",
     "SparseJAXRetryPreconditionerBuildContext",
+    "SparseSXBlockRescueContext",
+    "SparseSXBlockRescueResult",
     "SparseXBlockExplicitSeedContext",
     "SparseXBlockExplicitSeedResult",
     "SparseXBlockRescueAcceptanceContext",
@@ -16498,6 +16687,7 @@ __all__ = [
     "run_fortran_reduced_xblock_krylov_solve",
     "run_fp_xblock_global_correction_stage",
     "run_fp_xblock_highx_residual_correction_stage",
+    "run_sparse_sxblock_rescue_stage",
     "run_sparse_xblock_rescue_solve_stage",
     "run_sparse_pc_gmres_once",
     "run_sparse_pc_gmres_once_for_retry",

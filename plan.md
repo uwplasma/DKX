@@ -42,6 +42,12 @@ Make `sfincs_jax` research-grade while preserving the public user contract:
 
 Recent checkpoints:
 
+- RHSMode=1 sparse `sxblock_tz` rescue seed/polish execution now uses a
+  tested `run_sparse_sxblock_rescue_stage(...)` helper. The helper owns seed
+  construction, residual measurement, strict residual-improvement acceptance,
+  optional GMRES polish, replay x0 updates, KSP replay problem recording for
+  polished candidates, phase markers, and failure-safe messages; the driver
+  keeps only admission policy and preconditioner selection.
 - RHSMode=1 FP high-x residual-equation correction now uses a tested
   `run_fp_xblock_highx_residual_correction_stage(...)` helper. The helper owns
   skipped-block slice selection, residual-direction construction, subspace
@@ -539,6 +545,7 @@ Recent checkpoints:
 - Final linear-solve metadata assembly extraction.
 - Final full-system dense fallback execution extraction.
 - Reduced dense fallback execution extraction.
+- Sparse `sxblock_tz` rescue seed/polish extraction.
 - FP high-x residual-equation correction extraction.
 - FP x-block global correction execution extraction.
 - Generic sparse x-block candidate acceptance extraction.
@@ -560,10 +567,10 @@ Recent checkpoints:
 - `cb295ce` Extract sparse pattern setup.
 - `4b6a5b4` Extract sparse factor policy.
 
-Current source-size snapshot after FP high-x residual correction extraction:
+Current source-size snapshot after sparse `sxblock_tz` rescue extraction:
 
-- `sfincs_jax/v3_driver.py`: `14435` lines.
-- `solve_v3_full_system_linear_gmres`: `9659` lines.
+- `sfincs_jax/v3_driver.py`: `14385` lines.
+- `solve_v3_full_system_linear_gmres`: `9607` lines.
 - `sfincs_jax/v3_results.py`: `119` lines.
 - `sfincs_jax/rhs1_ksp_diagnostics.py`: `306` lines.
 - `sfincs_jax/rhs1_pas_policy.py`: `889` lines.
@@ -576,12 +583,26 @@ Current source-size snapshot after FP high-x residual correction extraction:
 - `sfincs_jax/problems/profile_response/linear_solve.py`: `798` lines.
 - `sfincs_jax/problems/profile_response/preconditioner_build.py`: `811` lines.
 - `sfincs_jax/problems/profile_response/active_projection.py`: `203` lines.
-- `sfincs_jax/problems/profile_response/sparse_pc.py`: `16570` lines.
+- `sfincs_jax/problems/profile_response/sparse_pc.py`: `16760` lines.
 - `sfincs_jax/problems/profile_response/solver_diagnostics.py`: `421` lines.
 - `sfincs_jax/rhs1_xblock_policy.py`: `1215` lines.
 
 Recent local validation:
 
+- Sparse `sxblock_tz` rescue extraction:
+  `tests/test_profile_response_sparse_pc.py
+  tests/test_v3_driver_rhs1_dispatch_coverage.py
+  tests/test_rhs1_sxblock_tz_sparse_host.py` passed
+  (`354 passed in 26.99 s`).
+- Broad profile-response/RHSMode=1 shard after sparse `sxblock_tz` rescue
+  extraction:
+  `tests/test_profile_response_*.py tests/test_rhs1_*.py
+  tests/test_newton_krylov_diagnostics.py tests/test_pas_smoother.py`
+  passed (`1384 passed in 102.09 s`).
+- Hygiene after sparse `sxblock_tz` rescue extraction:
+  `py_compile`, `ruff check`, `compileall`, `git diff --check`, and
+  `python scripts/check_repo_size.py` passed. Repo-size audit reported no
+  reviewed files above 2 MiB.
 - FP high-x residual-equation correction extraction:
   `tests/test_profile_response_sparse_pc.py
   tests/test_v3_driver_rhs1_dispatch_coverage.py` passed
@@ -1952,12 +1973,12 @@ Current evidence from 2026-06-20:
 - Branch `refactor/v3-driver-architecture` is clean and pushed.
 - PR #8 is draft, merge-clean, and current required CI/docs checks pass.
 - Largest remaining files are
-  `sfincs_jax/problems/profile_response/sparse_pc.py` (`16570` lines),
-  `sfincs_jax/v3_driver.py` (`14435` lines),
+  `sfincs_jax/problems/profile_response/sparse_pc.py` (`16760` lines),
+  `sfincs_jax/v3_driver.py` (`14385` lines),
   `sfincs_jax/rhs1_full_assembly.py` (`11893` lines), and
   `sfincs_jax/io.py` (`5817` lines).
 - Largest remaining function is
-  `solve_v3_full_system_linear_gmres(...)` in `v3_driver.py` (`9659` lines).
+  `solve_v3_full_system_linear_gmres(...)` in `v3_driver.py` (`9607` lines).
 - `profile_response.sparse_pc` now has 358 top-level items. It is no longer
   acceptable to keep extracting driver code into that one file without a
   source split.
@@ -1967,9 +1988,9 @@ Open lanes:
 1. Review-readiness and plan hygiene: keep one draft PR, keep CI green, keep
    the worktree clean, and make the PR description match this current plan.
 2. Driver simplification: finish only the remaining high-ROI,
-   behavior-preserving driver seams before splitting modules. The next seams
-   are the `sxblock_tz` sparse seed/polish branch and the generic sparse
-   retry/result-assembly branch. Avoid extracting small local scalar
+   behavior-preserving driver seams before splitting modules. The next seam is
+   the generic sparse retry/result-assembly branch, but only if extraction
+   yields an explicit and smaller boundary. Avoid extracting small local scalar
    assignments that would make call sites harder to read.
 3. Sparse-PC source split: split `profile_response.sparse_pc` into a small
    domain package after the next one or two driver seams. Keep
@@ -1995,15 +2016,14 @@ Open lanes:
 
 Efficient path to PR-ready:
 
-1. Extract `sxblock_tz` sparse seed/polish execution into a tested helper.
-2. Extract or simplify the remaining generic sparse retry/result assembly only
+1. Extract or simplify the remaining generic sparse retry/result assembly only
    if the new boundary is explicit and smaller than the driver code it
    replaces.
-3. Stop adding major logic to `sparse_pc.py`; split it into the six
+2. Stop adding major logic to `sparse_pc.py`; split it into the six
    `sparse_solve/*` domain files listed above, leaving re-export compatibility.
-4. Run focused sparse/profile-response tests, then the broad RHSMode shard.
-5. Update PR description and docs with the final architecture map.
-6. Run final hygiene, full local suite if feasible, and rely on GitHub CI/docs
+3. Run focused sparse/profile-response tests, then the broad RHSMode shard.
+4. Update PR description and docs with the final architecture map.
+5. Run final hygiene, full local suite if feasible, and rely on GitHub CI/docs
    as the merge gate before converting the PR from draft to ready for review.
 
 ## Historical Work Lanes
@@ -2546,18 +2566,15 @@ Next steps:
 
 ## Immediate Next Steps
 
-1. Extract the remaining `sxblock_tz` sparse seed/polish branch if the helper
-   boundary stays explicit, replay-safe, and smaller than the inline driver
-   code.
-2. Make one pass over the generic sparse retry/result assembly branch and
+1. Make one pass over the generic sparse retry/result assembly branch and
    either extract the cohesive stage or leave it driver-owned with an explicit
    comment if extraction would only move scalar bookkeeping.
-3. Split `profile_response.sparse_pc` into the planned `sparse_solve/*`
+2. Split `profile_response.sparse_pc` into the planned `sparse_solve/*`
    domain files before adding more large helpers there.
-4. Run focused sparse/profile-response tests after each tranche; run the broad
+3. Run focused sparse/profile-response tests after each tranche; run the broad
    RHSMode/profile-response shard after behavior-facing changes; do not wait on
    queued CI unless a completed failure appears.
-5. Update the PR description and reviewer architecture map after the source
+4. Update the PR description and reviewer architecture map after the source
    split, then run final hygiene/full-suite/CI before marking the draft PR
    ready for review.
 
