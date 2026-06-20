@@ -42,6 +42,12 @@ Make `sfincs_jax` research-grade while preserving the public user contract:
 
 Recent checkpoints:
 
+- RHSMode=1 FP high-x residual-equation correction now uses a tested
+  `run_fp_xblock_highx_residual_correction_stage(...)` helper. The helper owns
+  skipped-block slice selection, residual-direction construction, subspace
+  correction execution, strict improvement acceptance, replay x0 updates, and
+  failure-safe diagnostics; the driver keeps only admission policy and
+  env-control resolution.
 - RHSMode=1 FP x-block global correction execution now uses a tested
   `run_fp_xblock_global_correction_stage(...)` helper. The helper owns
   correction execution, phase markers, strict residual-improvement acceptance,
@@ -532,6 +538,7 @@ Recent checkpoints:
 - Final linear-solve metadata assembly extraction.
 - Final full-system dense fallback execution extraction.
 - Reduced dense fallback execution extraction.
+- FP high-x residual-equation correction extraction.
 - FP x-block global correction execution extraction.
 - Generic sparse x-block candidate acceptance extraction.
 - Sparse-PC GMRES retry tuple-adapter extraction.
@@ -552,10 +559,10 @@ Recent checkpoints:
 - `cb295ce` Extract sparse pattern setup.
 - `4b6a5b4` Extract sparse factor policy.
 
-Current source-size snapshot after FP x-block global correction extraction:
+Current source-size snapshot after FP high-x residual correction extraction:
 
-- `sfincs_jax/v3_driver.py`: `14509` lines.
-- `solve_v3_full_system_linear_gmres`: `9735` lines.
+- `sfincs_jax/v3_driver.py`: `14435` lines.
+- `solve_v3_full_system_linear_gmres`: `9659` lines.
 - `sfincs_jax/v3_results.py`: `119` lines.
 - `sfincs_jax/rhs1_ksp_diagnostics.py`: `306` lines.
 - `sfincs_jax/rhs1_pas_policy.py`: `889` lines.
@@ -568,12 +575,25 @@ Current source-size snapshot after FP x-block global correction extraction:
 - `sfincs_jax/problems/profile_response/linear_solve.py`: `798` lines.
 - `sfincs_jax/problems/profile_response/preconditioner_build.py`: `811` lines.
 - `sfincs_jax/problems/profile_response/active_projection.py`: `203` lines.
-- `sfincs_jax/problems/profile_response/sparse_pc.py`: `16330` lines.
+- `sfincs_jax/problems/profile_response/sparse_pc.py`: `16569` lines.
 - `sfincs_jax/problems/profile_response/solver_diagnostics.py`: `421` lines.
 - `sfincs_jax/rhs1_xblock_policy.py`: `1215` lines.
 
 Recent local validation:
 
+- FP high-x residual-equation correction extraction:
+  `tests/test_profile_response_sparse_pc.py
+  tests/test_v3_driver_rhs1_dispatch_coverage.py` passed
+  (`347 passed in 22.63 s`).
+- Broad profile-response/RHSMode=1 shard after FP high-x residual correction
+  extraction:
+  `tests/test_profile_response_*.py tests/test_rhs1_*.py
+  tests/test_newton_krylov_diagnostics.py tests/test_pas_smoother.py`
+  passed (`1379 passed in 86.11 s`).
+- Hygiene after FP high-x residual correction extraction:
+  `py_compile`, `ruff check`, `compileall`, `git diff --check`, and
+  `python scripts/check_repo_size.py` passed. Repo-size audit reported no
+  reviewed files above 2 MiB.
 - FP x-block global correction execution extraction:
   `tests/test_profile_response_sparse_pc.py
   tests/test_v3_driver_rhs1_dispatch_coverage.py` passed

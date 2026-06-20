@@ -4050,6 +4050,57 @@ class FPXBlockGlobalCorrectionResult:
 
 
 @dataclass(frozen=True)
+class FPXBlockHighXCorrectionContext:
+    """Dependencies for FP high-x residual-equation correction."""
+
+    current_result: GMRESSolveResult
+    matvec: ArrayFn
+    rhs: jnp.ndarray
+    reduce_full: ArrayFn
+    expand_reduced: ArrayFn
+    total_size: int
+    n_species: int
+    n_x: int
+    n_xi: int
+    n_theta: int
+    n_zeta: int
+    n_xi_for_x: Sequence[int]
+    host_block_max_env_value: str
+    include_factored_blocks: bool
+    max_blocks: int
+    steps: int
+    max_directions: int
+    alpha_clip: float
+    rcond: float
+    min_improvement: float
+    include_all: bool
+    include_raw: bool
+    replay_state: Any
+    emit: EmitFn | None
+    elapsed_s: Callable[[], float]
+    mark: Callable[[str], None]
+    block_factor_allowed: Callable[..., bool]
+    correction: Callable[..., tuple[jnp.ndarray, jnp.ndarray, Sequence[float], Sequence[int], Sequence[str]]]
+
+
+@dataclass(frozen=True)
+class FPXBlockHighXCorrectionResult:
+    """Updated state and diagnostics from the FP high-x correction."""
+
+    result: GMRESSolveResult
+    residual_vec: jnp.ndarray | None
+    accepted: bool
+    reason: str
+    error: str | None
+    residual_before: float | None
+    residual_after: float | None
+    improvement_ratio: float | None
+    elapsed_s: float | None
+    direction_count: int | None
+    direction_names: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class FortranReducedXBlockMomentSchurStageContext:
     """Dependencies for the optional fortran-reduced moment-Schur stage."""
 
@@ -7061,6 +7112,191 @@ def run_fp_xblock_global_correction_stage(
             residual_after=None,
             improvement_ratio=None,
             elapsed_s=elapsed_s,
+        )
+
+
+def run_fp_xblock_highx_residual_correction_stage(
+    *,
+    context: FPXBlockHighXCorrectionContext,
+) -> FPXBlockHighXCorrectionResult:
+    """Run the optional FP high-x residual-equation correction stage."""
+
+    start_s = float(context.elapsed_s())
+    context.mark("rhs1_fp_xblock_highx_residual_correction_start")
+    try:
+        highx_slices: list[tuple[str, int, int]] = []
+        nxi_for_x = tuple(int(v) for v in context.n_xi_for_x)
+        for species in range(int(context.n_species)):
+            for ix in range(int(context.n_x)):
+                n_lx = int(nxi_for_x[int(ix)])
+                block_size = int(n_lx * int(context.n_theta) * int(context.n_zeta))
+                if block_size <= 0:
+                    continue
+                block_factor_allowed = bool(
+                    context.block_factor_allowed(
+                        block_size=block_size,
+                        max_block_size_env_value=context.host_block_max_env_value,
+                    )
+                )
+                if block_factor_allowed and not bool(context.include_factored_blocks):
+                    continue
+                start = int(
+                    (int(species) * int(context.n_x) + int(ix))
+                    * int(context.n_xi)
+                    * int(context.n_theta)
+                    * int(context.n_zeta)
+                )
+                highx_slices.append((f"s{int(species)}_x{int(ix)}", start, block_size))
+
+        highx_slices = highx_slices[: int(context.max_blocks)]
+        if not highx_slices:
+            context.mark("rhs1_fp_xblock_highx_residual_correction_done")
+            return FPXBlockHighXCorrectionResult(
+                result=context.current_result,
+                residual_vec=None,
+                accepted=False,
+                reason="no_skipped_blocks",
+                error=None,
+                residual_before=None,
+                residual_after=None,
+                improvement_ratio=None,
+                elapsed_s=None,
+                direction_count=None,
+                direction_names=(),
+            )
+
+        residual_before = float(context.current_result.residual_norm)
+        if context.emit is not None:
+            context.emit(
+                1,
+                "solve_v3_full_system_linear_gmres: FP high-x "
+                "residual-equation correction "
+                f"(blocks={len(highx_slices)} directions<={int(context.max_directions)} "
+                f"residual={residual_before:.6e})",
+            )
+
+        def _direction_builder(
+            residual_reduced: jnp.ndarray,
+        ) -> tuple[tuple[str, jnp.ndarray], ...]:
+            residual_full_np = np.asarray(
+                jax.device_get(
+                    context.expand_reduced(
+                        jnp.asarray(residual_reduced, dtype=jnp.float64)
+                    )
+                ),
+                dtype=np.float64,
+            ).reshape((-1,))
+            directions: list[tuple[str, jnp.ndarray]] = []
+            if bool(context.include_raw):
+                directions.append(
+                    ("raw_residual", jnp.asarray(residual_reduced, dtype=jnp.float64))
+                )
+
+            def _direction_for(
+                blocks: Sequence[tuple[str, int, int]],
+            ) -> jnp.ndarray | None:
+                full_np = np.zeros((int(context.total_size),), dtype=np.float64)
+                for _label, block_start, block_size in blocks:
+                    sl = slice(int(block_start), int(block_start + block_size))
+                    full_np[sl] = residual_full_np[sl]
+                if not np.any(np.isfinite(full_np) & (full_np != 0.0)):
+                    return None
+                return context.reduce_full(jnp.asarray(full_np, dtype=jnp.float64))
+
+            if bool(context.include_all):
+                all_direction = _direction_for(highx_slices)
+                if all_direction is not None:
+                    directions.append(("highx_all", all_direction))
+            for label, block_start, block_size in highx_slices:
+                direction = _direction_for(((label, block_start, block_size),))
+                if direction is not None:
+                    directions.append((f"highx_{label}", direction))
+            return tuple(directions)
+
+        x_highx, residual_highx, history, counts, names = context.correction(
+            matvec=context.matvec,
+            rhs=context.rhs,
+            x0=context.current_result.x,
+            direction_builder=_direction_builder,
+            steps=int(context.steps),
+            max_directions=int(context.max_directions),
+            alpha_clip=float(context.alpha_clip),
+            rcond=float(context.rcond),
+            min_improvement=float(context.min_improvement),
+        )
+        elapsed_s = float(context.elapsed_s() - start_s)
+        direction_count = int(sum(int(v) for v in counts))
+        direction_names = tuple(str(v) for v in names)
+        residual_after = float(history[-1]) if history else None
+        if (
+            residual_after is not None
+            and np.isfinite(float(residual_after))
+            and float(residual_after) < residual_before
+        ):
+            improvement_ratio = residual_before / max(float(residual_after), 1.0e-300)
+            accepted_result = GMRESSolveResult(
+                x=jnp.asarray(x_highx, dtype=jnp.float64),
+                residual_norm=jnp.asarray(float(residual_after), dtype=jnp.float64),
+            )
+            context.replay_state.x0_vec = accepted_result.x
+            if context.emit is not None:
+                context.emit(
+                    1,
+                    "solve_v3_full_system_linear_gmres: FP high-x "
+                    f"residual-equation correction accepted {residual_before:.3e}"
+                    f"->{float(residual_after):.3e} directions={direction_count}",
+                )
+            context.mark("rhs1_fp_xblock_highx_residual_correction_done")
+            return FPXBlockHighXCorrectionResult(
+                result=accepted_result,
+                residual_vec=jnp.asarray(residual_highx, dtype=jnp.float64),
+                accepted=True,
+                reason="accepted",
+                error=None,
+                residual_before=residual_before,
+                residual_after=float(residual_after),
+                improvement_ratio=float(improvement_ratio),
+                elapsed_s=elapsed_s,
+                direction_count=direction_count,
+                direction_names=direction_names,
+            )
+
+        context.mark("rhs1_fp_xblock_highx_residual_correction_done")
+        return FPXBlockHighXCorrectionResult(
+            result=context.current_result,
+            residual_vec=None,
+            accepted=False,
+            reason="no_improvement",
+            error=None,
+            residual_before=residual_before,
+            residual_after=residual_after,
+            improvement_ratio=None,
+            elapsed_s=elapsed_s,
+            direction_count=direction_count,
+            direction_names=direction_names,
+        )
+    except Exception as exc:  # noqa: BLE001
+        error = f"{type(exc).__name__}: {exc}"
+        elapsed_s = float(context.elapsed_s() - start_s)
+        context.mark("rhs1_fp_xblock_highx_residual_correction_failed")
+        if context.emit is not None:
+            context.emit(
+                1,
+                "solve_v3_full_system_linear_gmres: FP high-x "
+                f"residual-equation correction failed ({error})",
+            )
+        return FPXBlockHighXCorrectionResult(
+            result=context.current_result,
+            residual_vec=None,
+            accepted=False,
+            reason="exception",
+            error=error,
+            residual_before=None,
+            residual_after=None,
+            improvement_ratio=None,
+            elapsed_s=elapsed_s,
+            direction_count=None,
+            direction_names=(),
         )
 
 
@@ -16052,6 +16288,8 @@ __all__ = [
     "DirectTailSupportModePreflightResult",
     "FPXBlockGlobalCorrectionContext",
     "FPXBlockGlobalCorrectionResult",
+    "FPXBlockHighXCorrectionContext",
+    "FPXBlockHighXCorrectionResult",
     "SparsePCFactorPreflightPolicyContext",
     "SparsePCFactorPreflightPolicy",
     "SparsePCFactorPreflightEvaluationContext",
@@ -16258,6 +16496,7 @@ __all__ = [
     "retry_sparse_pc_factor_dtype_from_finalization_context",
     "run_fortran_reduced_xblock_krylov_solve",
     "run_fp_xblock_global_correction_stage",
+    "run_fp_xblock_highx_residual_correction_stage",
     "run_sparse_xblock_rescue_solve_stage",
     "run_sparse_pc_gmres_once",
     "run_sparse_pc_gmres_once_for_retry",

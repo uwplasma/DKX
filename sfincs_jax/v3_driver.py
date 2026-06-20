@@ -391,12 +391,14 @@ from .problems.profile_response.sparse_pc import (
     run_sparse_pc_gmres_once,
     run_sparse_pc_gmres_once_for_retry,
     FPXBlockGlobalCorrectionContext,
+    FPXBlockHighXCorrectionContext,
     SparseXBlockRescueAcceptanceContext,
     SparseXBlockRescueBuildContext,
     SparseXBlockRescueSolveContext,
     accept_sparse_xblock_rescue_candidate,
     build_sparse_xblock_rescue_preconditioner,
     run_fp_xblock_global_correction_stage,
+    run_fp_xblock_highx_residual_correction_stage,
     run_sparse_xblock_rescue_solve_stage,
     run_xblock_krylov_solve_stage,
     xblock_sparse_pc_final_metadata_state_from_context,
@@ -10218,186 +10220,110 @@ def solve_v3_full_system_linear_gmres(
             if fp_xblock_highx_residual_correction_allowed:
                 fp_xblock_highx_residual_correction_attempted = True
                 fp_xblock_highx_residual_correction_reason = "started"
-                highx_start_s = float(t.elapsed_s())
-                _mark("rhs1_fp_xblock_highx_residual_correction_start")
-                try:
-                    highx_host_block_max_env = os.environ.get(
-                        "SFINCS_JAX_RHSMODE1_XBLOCK_SPARSE_HOST_BLOCK_MAX",
-                        "",
-                    ).strip()
-                    highx_include_factored = _rhs1_bool_env(
-                        "SFINCS_JAX_RHSMODE1_FP_XBLOCK_HIGHX_RESIDUAL_CORRECTION_INCLUDE_FACTORED",
-                        default=False,
-                    )
-                    highx_slices: list[tuple[str, int, int]] = []
-                    nxi_for_x_highx = np.asarray(op.fblock.collisionless.n_xi_for_x, dtype=np.int32)
-                    for s_highx in range(int(op.n_species)):
-                        for ix_highx in range(int(op.n_x)):
-                            n_lx_highx = int(nxi_for_x_highx[int(ix_highx)])
-                            block_size_highx = int(n_lx_highx * int(op.n_theta) * int(op.n_zeta))
-                            if block_size_highx <= 0:
-                                continue
-                            block_factor_allowed = _rhs1_xblock_sparse_host_policy.rhs1_xblock_sparse_host_block_factor_allowed(
-                                block_size=int(block_size_highx),
-                                max_block_size_env_value=highx_host_block_max_env,
+                highx_correction = run_fp_xblock_highx_residual_correction_stage(
+                    context=FPXBlockHighXCorrectionContext(
+                        current_result=res_reduced,
+                        matvec=mv_reduced,
+                        rhs=rhs_reduced,
+                        reduce_full=reduce_full,
+                        expand_reduced=expand_reduced,
+                        total_size=int(op.total_size),
+                        n_species=int(op.n_species),
+                        n_x=int(op.n_x),
+                        n_xi=int(op.n_xi),
+                        n_theta=int(op.n_theta),
+                        n_zeta=int(op.n_zeta),
+                        n_xi_for_x=tuple(
+                            int(v)
+                            for v in np.asarray(
+                                op.fblock.collisionless.n_xi_for_x,
+                                dtype=np.int32,
                             )
-                            if block_factor_allowed and not bool(highx_include_factored):
-                                continue
-                            start_highx = int(
-                                (int(s_highx) * int(op.n_x) + int(ix_highx))
-                                * int(op.n_xi)
-                                * int(op.n_theta)
-                                * int(op.n_zeta)
-                            )
-                            highx_slices.append(
-                                (
-                                    f"s{int(s_highx)}_x{int(ix_highx)}",
-                                    int(start_highx),
-                                    int(block_size_highx),
-                                )
-                            )
-                    max_blocks = _rhs1_int_env(
-                        "SFINCS_JAX_RHSMODE1_FP_XBLOCK_HIGHX_RESIDUAL_CORRECTION_MAX_BLOCKS",
-                        default=16,
-                        minimum=1,
-                    )
-                    highx_slices = highx_slices[: int(max_blocks)]
-                    if not highx_slices:
-                        fp_xblock_highx_residual_correction_reason = "no_skipped_blocks"
-                    else:
-                        highx_steps = _rhs1_int_env(
+                        ),
+                        host_block_max_env_value=os.environ.get(
+                            "SFINCS_JAX_RHSMODE1_XBLOCK_SPARSE_HOST_BLOCK_MAX",
+                            "",
+                        ).strip(),
+                        include_factored_blocks=_rhs1_bool_env(
+                            "SFINCS_JAX_RHSMODE1_FP_XBLOCK_HIGHX_RESIDUAL_CORRECTION_INCLUDE_FACTORED",
+                            default=False,
+                        ),
+                        max_blocks=_rhs1_int_env(
+                            "SFINCS_JAX_RHSMODE1_FP_XBLOCK_HIGHX_RESIDUAL_CORRECTION_MAX_BLOCKS",
+                            default=16,
+                            minimum=1,
+                        ),
+                        steps=_rhs1_int_env(
                             "SFINCS_JAX_RHSMODE1_FP_XBLOCK_HIGHX_RESIDUAL_CORRECTION_STEPS",
                             default=1,
                             minimum=1,
-                        )
-                        highx_max_directions = _rhs1_int_env(
+                        ),
+                        max_directions=_rhs1_int_env(
                             "SFINCS_JAX_RHSMODE1_FP_XBLOCK_HIGHX_RESIDUAL_CORRECTION_MAX_DIRECTIONS",
                             default=12,
                             minimum=1,
-                        )
-                        highx_alpha_clip = _rhs1_float_env(
+                        ),
+                        alpha_clip=_rhs1_float_env(
                             "SFINCS_JAX_RHSMODE1_FP_XBLOCK_HIGHX_RESIDUAL_CORRECTION_ALPHA_CLIP",
                             default=0.0,
                             minimum=0.0,
-                        )
-                        highx_rcond = _rhs1_float_env(
+                        ),
+                        rcond=_rhs1_float_env(
                             "SFINCS_JAX_RHSMODE1_FP_XBLOCK_HIGHX_RESIDUAL_CORRECTION_RCOND",
                             default=1.0e-12,
                             minimum=0.0,
-                        )
-                        highx_min_improvement = _rhs1_float_env(
+                        ),
+                        min_improvement=_rhs1_float_env(
                             "SFINCS_JAX_RHSMODE1_FP_XBLOCK_HIGHX_RESIDUAL_CORRECTION_MIN_IMPROVEMENT",
                             default=0.0,
                             minimum=0.0,
-                        )
-                        highx_include_all = _rhs1_bool_env(
+                        ),
+                        include_all=_rhs1_bool_env(
                             "SFINCS_JAX_RHSMODE1_FP_XBLOCK_HIGHX_RESIDUAL_CORRECTION_INCLUDE_ALL",
                             default=True,
-                        )
-                        highx_include_raw = _rhs1_bool_env(
+                        ),
+                        include_raw=_rhs1_bool_env(
                             "SFINCS_JAX_RHSMODE1_FP_XBLOCK_HIGHX_RESIDUAL_CORRECTION_INCLUDE_RAW",
                             default=False,
-                        )
-                        fp_xblock_highx_residual_correction_residual_before = float(res_reduced.residual_norm)
-
-                        def _highx_direction_builder(residual_reduced: jnp.ndarray) -> Sequence[tuple[str, jnp.ndarray]]:
-                            residual_full_np = np.asarray(
-                                jax.device_get(expand_reduced(jnp.asarray(residual_reduced, dtype=jnp.float64))),
-                                dtype=np.float64,
-                            ).reshape((-1,))
-                            directions: list[tuple[str, jnp.ndarray]] = []
-                            if bool(highx_include_raw):
-                                directions.append(
-                                    (
-                                        "raw_residual",
-                                        jnp.asarray(residual_reduced, dtype=jnp.float64),
-                                    )
-                                )
-
-                            def _direction_for(blocks: Sequence[tuple[str, int, int]], name: str) -> jnp.ndarray | None:
-                                full_np = np.zeros((int(op.total_size),), dtype=np.float64)
-                                for _label, start, block_size in blocks:
-                                    sl = slice(int(start), int(start + block_size))
-                                    full_np[sl] = residual_full_np[sl]
-                                if not np.any(np.isfinite(full_np) & (full_np != 0.0)):
-                                    return None
-                                return reduce_full(jnp.asarray(full_np, dtype=jnp.float64))
-
-                            if bool(highx_include_all):
-                                all_direction = _direction_for(highx_slices, "highx_all")
-                                if all_direction is not None:
-                                    directions.append(("highx_all", all_direction))
-                            for label, start, block_size in highx_slices:
-                                direction = _direction_for(((label, start, block_size),), f"highx_{label}")
-                                if direction is not None:
-                                    directions.append((f"highx_{label}", direction))
-                            return tuple(directions)
-
-                        if emit is not None:
-                            emit(
-                                1,
-                                "solve_v3_full_system_linear_gmres: FP high-x residual-equation correction "
-                                f"(blocks={len(highx_slices)} directions<={int(highx_max_directions)} "
-                                f"residual={float(res_reduced.residual_norm):.6e})",
-                            )
-                        x_highx, residual_highx, highx_history, highx_counts, highx_names = (
-                            _apply_subspace_minres_correction(
-                                matvec=mv_reduced,
-                                rhs=rhs_reduced,
-                                x0=res_reduced.x,
-                                direction_builder=_highx_direction_builder,
-                                steps=int(highx_steps),
-                                max_directions=int(highx_max_directions),
-                                alpha_clip=float(highx_alpha_clip),
-                                rcond=float(highx_rcond),
-                                min_improvement=float(highx_min_improvement),
-                            )
-                        )
-                        fp_xblock_highx_residual_correction_elapsed_s = float(t.elapsed_s() - highx_start_s)
-                        fp_xblock_highx_residual_correction_direction_count = int(sum(highx_counts))
-                        fp_xblock_highx_residual_correction_direction_names = tuple(highx_names)
-                        if highx_history:
-                            fp_xblock_highx_residual_correction_residual_after = float(highx_history[-1])
-                        if (
-                            highx_history
-                            and np.isfinite(float(highx_history[-1]))
-                            and float(highx_history[-1]) < float(res_reduced.residual_norm)
-                        ):
-                            highx_before = float(res_reduced.residual_norm)
-                            highx_after = float(highx_history[-1])
-                            fp_xblock_highx_residual_correction_accepted = True
-                            fp_xblock_highx_residual_correction_reason = "accepted"
-                            fp_xblock_highx_residual_correction_improvement_ratio = highx_before / max(
-                                highx_after,
-                                1.0e-300,
-                            )
-                            residual_vec = residual_highx
-                            res_reduced = GMRESSolveResult(
-                                x=jnp.asarray(x_highx, dtype=jnp.float64),
-                                residual_norm=jnp.asarray(highx_after, dtype=jnp.float64),
-                            )
-                            ksp_replay.x0_vec = res_reduced.x
-                            if emit is not None:
-                                emit(
-                                    1,
-                                    "solve_v3_full_system_linear_gmres: FP high-x residual-equation correction "
-                                    f"accepted {highx_before:.3e}->{highx_after:.3e} "
-                                    f"directions={int(sum(highx_counts))}",
-                                )
-                        elif fp_xblock_highx_residual_correction_reason == "started":
-                            fp_xblock_highx_residual_correction_reason = "no_improvement"
-                    _mark("rhs1_fp_xblock_highx_residual_correction_done")
-                except Exception as exc:  # noqa: BLE001
-                    fp_xblock_highx_residual_correction_error = f"{type(exc).__name__}: {exc}"
-                    fp_xblock_highx_residual_correction_reason = "exception"
-                    fp_xblock_highx_residual_correction_elapsed_s = float(t.elapsed_s() - highx_start_s)
-                    _mark("rhs1_fp_xblock_highx_residual_correction_failed")
-                    if emit is not None:
-                        emit(
-                            1,
-                            "solve_v3_full_system_linear_gmres: FP high-x residual-equation correction failed "
-                            f"({type(exc).__name__}: {exc})",
-                        )
+                        ),
+                        replay_state=ksp_replay,
+                        emit=emit,
+                        elapsed_s=t.elapsed_s,
+                        mark=_mark,
+                        block_factor_allowed=(
+                            _rhs1_xblock_sparse_host_policy.rhs1_xblock_sparse_host_block_factor_allowed
+                        ),
+                        correction=_apply_subspace_minres_correction,
+                    )
+                )
+                res_reduced = highx_correction.result
+                if highx_correction.residual_vec is not None:
+                    residual_vec = highx_correction.residual_vec
+                fp_xblock_highx_residual_correction_accepted = bool(
+                    highx_correction.accepted
+                )
+                fp_xblock_highx_residual_correction_reason = str(
+                    highx_correction.reason
+                )
+                fp_xblock_highx_residual_correction_error = highx_correction.error
+                fp_xblock_highx_residual_correction_residual_before = (
+                    highx_correction.residual_before
+                )
+                fp_xblock_highx_residual_correction_residual_after = (
+                    highx_correction.residual_after
+                )
+                fp_xblock_highx_residual_correction_improvement_ratio = (
+                    highx_correction.improvement_ratio
+                )
+                fp_xblock_highx_residual_correction_elapsed_s = (
+                    highx_correction.elapsed_s
+                )
+                fp_xblock_highx_residual_correction_direction_count = (
+                    highx_correction.direction_count
+                )
+                fp_xblock_highx_residual_correction_direction_names = (
+                    highx_correction.direction_names
+                )
             else:
                 fp_xblock_highx_residual_correction_reason = (
                     "disabled" if not highx_enabled else "policy_guard"

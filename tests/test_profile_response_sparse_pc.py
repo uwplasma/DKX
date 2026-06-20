@@ -36,6 +36,7 @@ from sfincs_jax.problems.profile_response.sparse_pc import (
     DirectTailTrueActiveRescuePolicy,
     DirectTailCoupledCoarseRescuePolicy,
     FPXBlockGlobalCorrectionContext,
+    FPXBlockHighXCorrectionContext,
     SparsePCFactorPreflightPolicyContext,
     SparsePCFactorPreflightEvaluationContext,
     SparsePCResidualCandidateAcceptanceContext,
@@ -249,6 +250,7 @@ from sfincs_jax.problems.profile_response.sparse_pc import (
     run_xblock_first_krylov_attempt,
     run_xblock_krylov_solve_stage,
     run_fp_xblock_global_correction_stage,
+    run_fp_xblock_highx_residual_correction_stage,
     run_sparse_xblock_rescue_solve_stage,
     run_sparse_pc_gmres_once,
     run_sparse_pc_gmres_once_for_retry,
@@ -4696,6 +4698,153 @@ def test_fp_xblock_global_correction_stage_reports_exception() -> None:
         "rhs1_fp_xblock_global_correction_failed",
     ]
     assert any("failed" in message for message in messages)
+
+
+def test_fp_xblock_highx_residual_correction_stage_accepts_improvement() -> None:
+    total_size = 30
+    replay = SimpleNamespace(x0_vec=None)
+    marks: list[str] = []
+    messages: list[str] = []
+    elapsed_values = iter((5.0, 6.25))
+    current = GMRESSolveResult(
+        x=jnp.zeros((total_size,), dtype=jnp.float64),
+        residual_norm=jnp.asarray(2.0, dtype=jnp.float64),
+    )
+    rhs = jnp.ones((total_size,), dtype=jnp.float64)
+
+    def correction(**kwargs):
+        assert kwargs["matvec"] is _identity
+        assert kwargs["rhs"] is rhs
+        assert kwargs["x0"] is current.x
+        assert kwargs["steps"] == 2
+        assert kwargs["max_directions"] == 4
+        assert kwargs["alpha_clip"] == pytest.approx(1.0)
+        assert kwargs["rcond"] == pytest.approx(1.0e-8)
+        assert kwargs["min_improvement"] == pytest.approx(0.0)
+        directions = kwargs["direction_builder"](
+            jnp.arange(1, total_size + 1, dtype=jnp.float64)
+        )
+        direction_names = tuple(name for name, _direction in directions)
+        assert direction_names == ("raw_residual", "highx_all", "highx_s0_x0")
+        np.testing.assert_allclose(
+            np.asarray(directions[1][1])[:6],
+            np.arange(1, 7, dtype=np.float64),
+        )
+        np.testing.assert_allclose(np.asarray(directions[1][1])[6:], 0.0)
+        return (
+            jnp.ones((total_size,), dtype=jnp.float64),
+            jnp.full((total_size,), 0.25, dtype=jnp.float64),
+            (0.5,),
+            (len(directions),),
+            direction_names,
+        )
+
+    result = run_fp_xblock_highx_residual_correction_stage(
+        context=FPXBlockHighXCorrectionContext(
+            current_result=current,
+            matvec=_identity,
+            rhs=rhs,
+            reduce_full=_identity,
+            expand_reduced=_identity,
+            total_size=total_size,
+            n_species=1,
+            n_x=1,
+            n_xi=5,
+            n_theta=2,
+            n_zeta=3,
+            n_xi_for_x=(1,),
+            host_block_max_env_value="",
+            include_factored_blocks=False,
+            max_blocks=1,
+            steps=2,
+            max_directions=4,
+            alpha_clip=1.0,
+            rcond=1.0e-8,
+            min_improvement=0.0,
+            include_all=True,
+            include_raw=True,
+            replay_state=replay,
+            emit=lambda _level, msg: messages.append(msg),
+            elapsed_s=lambda: next(elapsed_values),
+            mark=marks.append,
+            block_factor_allowed=lambda **_kwargs: False,
+            correction=correction,
+        )
+    )
+
+    assert result.accepted
+    assert result.reason == "accepted"
+    assert result.result.residual_norm == pytest.approx(0.5)
+    np.testing.assert_allclose(np.asarray(result.residual_vec), 0.25)
+    assert result.residual_before == pytest.approx(2.0)
+    assert result.residual_after == pytest.approx(0.5)
+    assert result.improvement_ratio == pytest.approx(4.0)
+    assert result.elapsed_s == pytest.approx(1.25)
+    assert result.direction_count == 3
+    assert result.direction_names == ("raw_residual", "highx_all", "highx_s0_x0")
+    np.testing.assert_allclose(np.asarray(replay.x0_vec), 1.0)
+    assert marks == [
+        "rhs1_fp_xblock_highx_residual_correction_start",
+        "rhs1_fp_xblock_highx_residual_correction_done",
+    ]
+    assert any("FP high-x residual-equation correction" in msg for msg in messages)
+    assert any("accepted" in msg for msg in messages)
+
+
+def test_fp_xblock_highx_residual_correction_stage_reports_no_skipped_blocks() -> None:
+    total_size = 30
+    current = GMRESSolveResult(
+        x=jnp.zeros((total_size,), dtype=jnp.float64),
+        residual_norm=jnp.asarray(2.0, dtype=jnp.float64),
+    )
+    marks: list[str] = []
+
+    result = run_fp_xblock_highx_residual_correction_stage(
+        context=FPXBlockHighXCorrectionContext(
+            current_result=current,
+            matvec=_identity,
+            rhs=jnp.ones((total_size,), dtype=jnp.float64),
+            reduce_full=_identity,
+            expand_reduced=_identity,
+            total_size=total_size,
+            n_species=1,
+            n_x=1,
+            n_xi=5,
+            n_theta=2,
+            n_zeta=3,
+            n_xi_for_x=(1,),
+            host_block_max_env_value="",
+            include_factored_blocks=False,
+            max_blocks=1,
+            steps=2,
+            max_directions=4,
+            alpha_clip=1.0,
+            rcond=1.0e-8,
+            min_improvement=0.0,
+            include_all=True,
+            include_raw=True,
+            replay_state=SimpleNamespace(x0_vec=None),
+            emit=None,
+            elapsed_s=lambda: 0.0,
+            mark=marks.append,
+            block_factor_allowed=lambda **_kwargs: True,
+            correction=lambda **_kwargs: (_ for _ in ()).throw(
+                AssertionError("correction should not run")
+            ),
+        )
+    )
+
+    assert result.result is current
+    assert not result.accepted
+    assert result.reason == "no_skipped_blocks"
+    assert result.residual_before is None
+    assert result.elapsed_s is None
+    assert result.direction_count is None
+    assert result.direction_names == ()
+    assert marks == [
+        "rhs1_fp_xblock_highx_residual_correction_start",
+        "rhs1_fp_xblock_highx_residual_correction_done",
+    ]
 
 
 def test_fortran_reduced_xblock_krylov_policy_defaults_and_counter() -> None:
