@@ -303,6 +303,11 @@ Recent checkpoints:
   explicit policy scalars and replay callbacks; the dense module owns reduced
   dense admission messages, skip behavior, and delegation to the existing
   measured-candidate fallback stage.
+- Reduced active-DOF RHSMode=1 dense-probe shortcut and seed handling now use
+  a tested `profile_response.dense` stage helper. The helper owns dense-probe
+  admission, probe residual evaluation, shortcut acceptance, x0 seeding,
+  progress/failure messages, and replay-record handoff through explicit
+  callbacks.
 - RHSMode=1 PAS preconditioner probe/default routing now uses tested
   PAS-policy helpers for env parsing, tokamak-like Schur defaulting, heavy-path
   admission, large-system collision skip, and residual-threshold decisions
@@ -446,10 +451,10 @@ Recent checkpoints:
 - `cb295ce` Extract sparse pattern setup.
 - `4b6a5b4` Extract sparse factor policy.
 
-Current source-size snapshot after reduced dense fallback admission-stage extraction:
+Current source-size snapshot after reduced dense-probe stage extraction:
 
-- `sfincs_jax/v3_driver.py`: `15053` lines.
-- `solve_v3_full_system_linear_gmres`: `10302` lines.
+- `sfincs_jax/v3_driver.py`: `15038` lines.
+- `solve_v3_full_system_linear_gmres`: `10288` lines.
 - `sfincs_jax/v3_results.py`: `119` lines.
 - `sfincs_jax/rhs1_ksp_diagnostics.py`: `306` lines.
 - `sfincs_jax/rhs1_pas_policy.py`: `889` lines.
@@ -458,7 +463,7 @@ Current source-size snapshot after reduced dense fallback admission-stage extrac
 - `sfincs_jax/problems/profile_response/residual.py`: `981` lines.
 - `sfincs_jax/problems/profile_response/handoff.py`: `1093` lines.
 - `sfincs_jax/problems/profile_response/policies.py`: `3577` lines.
-- `sfincs_jax/problems/profile_response/dense.py`: `1236` lines.
+- `sfincs_jax/problems/profile_response/dense.py`: `1363` lines.
 - `sfincs_jax/problems/profile_response/linear_solve.py`: `487` lines.
 - `sfincs_jax/problems/profile_response/preconditioner_build.py`: `662` lines.
 - `sfincs_jax/problems/profile_response/active_projection.py`: `203` lines.
@@ -468,6 +473,17 @@ Current source-size snapshot after reduced dense fallback admission-stage extrac
 
 Recent local validation:
 
+- Reduced dense-probe stage extraction:
+  `tests/test_profile_response_dense.py` passed (`33 passed in 1.04 s`).
+- Broad profile-response/RHSMode=1 shard after reduced dense-probe stage
+  extraction:
+  `tests/test_profile_response_*.py tests/test_rhs1_*.py
+  tests/test_newton_krylov_diagnostics.py tests/test_pas_smoother.py`
+  passed (`1323 passed in 88.17 s`).
+- Hygiene after reduced dense-probe stage extraction:
+  `py_compile`, `ruff check`, `compileall`, `git diff --check`, and
+  `python scripts/check_repo_size.py` passed. Repo-size audit reported no
+  reviewed files above 2 MiB.
 - Reduced dense fallback admission-stage extraction:
   `tests/test_profile_response_dense.py` passed (`31 passed in 0.97 s`).
 - Broad profile-response/RHSMode=1 shard after reduced dense fallback

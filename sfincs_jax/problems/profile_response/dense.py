@@ -158,6 +158,40 @@ class RHS1DenseProbeShortcutDecision:
 
 
 @dataclass(frozen=True)
+class RHS1DenseProbeStageContext:
+    """Inputs for the reduced dense-probe shortcut/seed stage."""
+
+    matvec: Callable[[jnp.ndarray], jnp.ndarray]
+    rhs: jnp.ndarray
+    preconditioner: Callable[[jnp.ndarray], jnp.ndarray] | None
+    current_result: GMRESSolveResult
+    x0_reduced: jnp.ndarray | None
+    target: float
+    active_size: int
+    constraint_scheme: int
+    probe_shortcut: bool
+    cs0_petsc_compat: bool
+    cs0_sparse_first: bool
+    cs0_dense_fallback_allowed: bool
+    solve_method_kind: str
+    solve_method: str
+    dense_shortcut_ratio: float
+    dense_fallback_max: int
+    sparse_prefer_over_dense_shortcut: bool
+    gmres_precond_side: str
+
+
+@dataclass(frozen=True)
+class RHS1DenseProbeStageResult:
+    """Outputs from the reduced dense-probe shortcut/seed stage."""
+
+    result: GMRESSolveResult
+    x0_reduced: jnp.ndarray | None
+    early_dense_shortcut: bool
+    probe_shortcut: bool
+
+
+@dataclass(frozen=True)
 class RHS1DenseShortcutSetup:
     """Dense shortcut/fallback controls after env and backend gates."""
 
@@ -605,6 +639,96 @@ def rhs1_dense_probe_shortcut_decision(
         accept_shortcut=False,
         seed_x0_if_missing=True,
         messages=((1, message),),
+    )
+
+
+def run_rhs1_dense_probe_stage(
+    *,
+    context: RHS1DenseProbeStageContext,
+    replay_state,
+    record_replay_problem: Callable[..., None],
+    solver_kind: Callable[[str], tuple[str, str]],
+    emit: Callable[[int, str], None] | None = None,
+) -> RHS1DenseProbeStageResult:
+    """Run the reduced dense-probe shortcut/seed stage with replay handoff."""
+
+    result = context.current_result
+    x0_reduced = context.x0_reduced
+    probe_shortcut = bool(context.probe_shortcut)
+    early_dense_shortcut = False
+    admission = rhs1_dense_probe_admission(
+        probe_enabled=rhs1_dense_probe_enabled_from_env(),
+        probe_shortcut=probe_shortcut,
+        cs0_petsc_compat=bool(context.cs0_petsc_compat),
+        cs0_sparse_first=bool(context.cs0_sparse_first),
+        cs0_dense_fallback_allowed=bool(context.cs0_dense_fallback_allowed),
+        constraint_scheme=int(context.constraint_scheme),
+        has_preconditioner=context.preconditioner is not None,
+        solve_method_kind=str(context.solve_method_kind),
+    )
+    if not bool(admission.enabled):
+        return RHS1DenseProbeStageResult(
+            result=result,
+            x0_reduced=x0_reduced,
+            early_dense_shortcut=False,
+            probe_shortcut=probe_shortcut,
+        )
+
+    try:
+        if context.preconditioner is None:
+            return RHS1DenseProbeStageResult(
+                result=result,
+                x0_reduced=x0_reduced,
+                early_dense_shortcut=False,
+                probe_shortcut=probe_shortcut,
+            )
+        probe_x0 = context.preconditioner(context.rhs)
+        probe_r = context.rhs - context.matvec(probe_x0)
+        probe_norm = float(jnp.linalg.norm(probe_r))
+        probe_ratio = probe_norm / max(float(context.target), 1e-300)
+        decision = rhs1_dense_probe_shortcut_decision(
+            dense_shortcut_ratio=float(context.dense_shortcut_ratio),
+            probe_ratio=float(probe_ratio),
+            dense_fallback_max=int(context.dense_fallback_max),
+            active_size=int(context.active_size),
+            sparse_prefer_over_dense_shortcut=bool(
+                context.sparse_prefer_over_dense_shortcut
+            ),
+        )
+        if bool(decision.accept_shortcut):
+            early_dense_shortcut = True
+            probe_shortcut = True
+            result = GMRESSolveResult(
+                x=probe_x0,
+                residual_norm=jnp.asarray(probe_norm),
+            )
+            record_replay_problem(
+                replay_state,
+                matvec_fn=context.matvec,
+                b_vec=context.rhs,
+                precond_fn=context.preconditioner,
+                x0_vec=probe_x0,
+                precond_side=str(context.gmres_precond_side),
+                solver_kind=solver_kind(str(context.solve_method))[0],
+            )
+        elif bool(decision.seed_x0_if_missing) and x0_reduced is None:
+            x0_reduced = probe_x0
+        if emit is not None:
+            for level, message in decision.messages:
+                emit(level, message)
+    except Exception as exc:  # noqa: BLE001
+        if emit is not None:
+            emit(
+                1,
+                "solve_v3_full_system_linear_gmres: probe failed "
+                f"({type(exc).__name__}: {exc})",
+            )
+
+    return RHS1DenseProbeStageResult(
+        result=result,
+        x0_reduced=x0_reduced,
+        early_dense_shortcut=bool(early_dense_shortcut),
+        probe_shortcut=bool(probe_shortcut),
     )
 
 
@@ -1207,6 +1331,8 @@ def _solve_rhs1_reduced_dense_fallback_host_candidate(
 
 __all__ = [
     "RHS1DenseProbeAdmission",
+    "RHS1DenseProbeStageContext",
+    "RHS1DenseProbeStageResult",
     "RHS1DenseProbeShortcutDecision",
     "RHS1DenseFallbackThresholds",
     "RHS1DenseFallbackAdmission",
@@ -1228,6 +1354,7 @@ __all__ = [
     "resolve_rhs1_reduced_dense_fallback_admission",
     "run_rhs1_full_dense_fallback_candidate",
     "run_rhs1_full_dense_fallback_stage",
+    "run_rhs1_dense_probe_stage",
     "run_rhs1_reduced_dense_fallback_admission_stage",
     "run_rhs1_reduced_dense_fallback_stage",
     "solve_rhs1_reduced_dense_fallback_candidate",

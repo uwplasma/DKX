@@ -9,6 +9,7 @@ from sfincs_jax.problems.profile_response.dense import (
     HostDenseReducedSolveContext,
     RHS1DenseFallbackThresholds,
     RHS1DenseFallbackAdmission,
+    RHS1DenseProbeStageContext,
     RHS1FullDenseFallbackContext,
     RHS1FullDenseFallbackStageContext,
     RHS1ReducedDenseFallbackAdmissionStageContext,
@@ -16,6 +17,7 @@ from sfincs_jax.problems.profile_response.dense import (
     RHS1ReducedDenseFallbackStageContext,
     run_rhs1_full_dense_fallback_candidate,
     run_rhs1_full_dense_fallback_stage,
+    run_rhs1_dense_probe_stage,
     run_rhs1_reduced_dense_fallback_admission_stage,
     run_rhs1_reduced_dense_fallback_stage,
     rhs1_dense_fallback_thresholds_from_env,
@@ -665,6 +667,97 @@ def test_rhs1_dense_probe_shortcut_decision_reports_skip_reasons() -> None:
         "solve_v3_full_system_linear_gmres: probe shortcut skipped "
         "(size=100 > dense_max=50)",
     ),)
+
+
+def test_rhs1_dense_probe_stage_accepts_shortcut_and_records_replay() -> None:
+    calls: dict[str, dict[str, object]] = {}
+    messages: list[tuple[int, str]] = []
+    replay_state = object()
+    rhs = jnp.asarray([1.0, 2.0])
+    current = GMRESSolveResult(x=jnp.ones(2), residual_norm=jnp.asarray(10.0))
+    probe_x0 = jnp.asarray([0.0, 0.0])
+
+    def record_replay_problem(state, **kwargs):
+        calls["record"] = {"state": state, **kwargs}
+
+    result = run_rhs1_dense_probe_stage(
+        context=RHS1DenseProbeStageContext(
+            matvec=lambda x: jnp.zeros_like(x),
+            rhs=rhs,
+            preconditioner=lambda _rhs: probe_x0,
+            current_result=current,
+            x0_reduced=None,
+            target=1.0e-8,
+            active_size=2,
+            constraint_scheme=1,
+            probe_shortcut=False,
+            cs0_petsc_compat=False,
+            cs0_sparse_first=False,
+            cs0_dense_fallback_allowed=True,
+            solve_method_kind="incremental",
+            solve_method="incremental",
+            dense_shortcut_ratio=10.0,
+            dense_fallback_max=10,
+            sparse_prefer_over_dense_shortcut=False,
+            gmres_precond_side="left",
+        ),
+        replay_state=replay_state,
+        record_replay_problem=record_replay_problem,
+        solver_kind=lambda method: (f"kind:{method}", "unused"),
+        emit=lambda level, msg: messages.append((level, msg)),
+    )
+
+    assert result.early_dense_shortcut
+    assert result.probe_shortcut
+    assert result.x0_reduced is None
+    assert result.result.x.tolist() == pytest.approx(probe_x0.tolist())
+    assert calls["record"]["state"] is replay_state
+    assert calls["record"]["precond_side"] == "left"
+    assert calls["record"]["solver_kind"] == "kind:incremental"
+    assert messages == [(
+        0,
+        "solve_v3_full_system_linear_gmres: dense fallback shortcut (probe) "
+        "(ratio=2.236e+08 >= 1.0e+01)",
+    )]
+
+
+def test_rhs1_dense_probe_stage_seeds_x0_when_shortcut_not_accepted() -> None:
+    rhs = jnp.asarray([1.0, 2.0])
+    current = GMRESSolveResult(x=jnp.ones(2), residual_norm=jnp.asarray(10.0))
+    probe_x0 = jnp.asarray([3.0, 4.0])
+
+    result = run_rhs1_dense_probe_stage(
+        context=RHS1DenseProbeStageContext(
+            matvec=lambda x: x,
+            rhs=rhs,
+            preconditioner=lambda _rhs: probe_x0,
+            current_result=current,
+            x0_reduced=None,
+            target=1.0,
+            active_size=2,
+            constraint_scheme=1,
+            probe_shortcut=False,
+            cs0_petsc_compat=False,
+            cs0_sparse_first=False,
+            cs0_dense_fallback_allowed=True,
+            solve_method_kind="incremental",
+            solve_method="incremental",
+            dense_shortcut_ratio=1.0e9,
+            dense_fallback_max=10,
+            sparse_prefer_over_dense_shortcut=False,
+            gmres_precond_side="left",
+        ),
+        replay_state=object(),
+        record_replay_problem=lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            AssertionError("shortcut replay should not run")
+        ),
+        solver_kind=lambda method: (method, method),
+    )
+
+    assert not result.early_dense_shortcut
+    assert not result.probe_shortcut
+    assert result.result is current
+    assert result.x0_reduced is probe_x0
 
 
 def test_rhs1_reduced_dense_fallback_candidate_host_lu(monkeypatch) -> None:
