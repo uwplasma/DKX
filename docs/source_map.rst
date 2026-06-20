@@ -476,9 +476,32 @@ the historical private driver name and test the focused module directly. This ke
   PAS-TZ guard metadata, collision fallback admission, and optional BiCGStab
   preconditioner reuse.
 - ``sfincs_jax/problems/profile_response/sparse_pc.py``:
-  RHSMode=1/profile-response host sparse-PC Krylov attempt helpers. This module
-  owns sparse-PC GMRES progress/stagnation handling and optional post-minres
-  residual polish while the driver keeps only solve-local context assembly.
+  RHSMode=1/profile-response host sparse-PC compatibility layer. During the
+  architecture refactor this file keeps the historical import surface stable
+  for tests, debug scripts, and downstream users while implementation moves
+  into ``sfincs_jax/problems/profile_response/sparse``. It still owns the small
+  amount of driver-facing sparse-PC attempt orchestration that depends on
+  solve-local cache/replay/residual routing.
+- ``sfincs_jax/problems/profile_response/sparse/finalization.py``:
+  sparse-PC GMRES result contracts, post-MinRes polish metadata, dtype-retry
+  result assembly, completion messages, and final payload construction.
+- ``sfincs_jax/problems/profile_response/sparse/krylov.py``:
+  generic sparse-PC Krylov execution helpers shared by the compatibility layer.
+- ``sfincs_jax/problems/profile_response/sparse/direct.py``:
+  explicit sparse operator admission, minimum-norm/direct host shortcuts,
+  ILU/direct-tail policy parsing, structured direct-tail materialization, and
+  final direct-tail metadata assembly.
+- ``sfincs_jax/problems/profile_response/sparse/xblock.py``:
+  x-block and sxblock rescue/correction helpers plus shared x-block Krylov
+  matvec and initial-guess policy dataclasses.
+- ``sfincs_jax/problems/profile_response/sparse/fortran_reduced.py``:
+  Fortran-reduced x-block backend policy, factor-build, Krylov setup/solve,
+  optional moment/global coarse stages, and final payload construction.
+- ``sfincs_jax/problems/profile_response/sparse/qi.py``:
+  QI-specific x-block device/operator-reuse policy, coarse-seed, Galerkin,
+  two-level, device, and residual-deflated stages. These helpers are separated
+  from generic sparse-PC logic because they encode QI-specific coarse-basis and
+  residual-space choices.
 - ``sfincs_jax/problems/profile_response/dense.py``:
   RHSMode=1/profile-response host dense solve helpers. This module owns the
   reduced row-scaled LU path and the full/reduced least-squares dense fallback

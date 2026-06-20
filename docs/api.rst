@@ -252,6 +252,24 @@ research workflows.
 .. automodule:: sfincs_jax.problems.profile_response.residual
    :members:
 
+.. automodule:: sfincs_jax.problems.profile_response.sparse.direct
+   :members:
+
+.. automodule:: sfincs_jax.problems.profile_response.sparse.finalization
+   :members:
+
+.. automodule:: sfincs_jax.problems.profile_response.sparse.fortran_reduced
+   :members:
+
+.. automodule:: sfincs_jax.problems.profile_response.sparse.krylov
+   :members:
+
+.. automodule:: sfincs_jax.problems.profile_response.sparse.qi
+   :members:
+
+.. automodule:: sfincs_jax.problems.profile_response.sparse.xblock
+   :members:
+
 .. automodule:: sfincs_jax.rhs1_schur_policy
    :members:
 
