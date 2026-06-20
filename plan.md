@@ -42,6 +42,12 @@ Make `sfincs_jax` research-grade while preserving the public user contract:
 
 Recent checkpoints:
 
+- RHSMode=1 Stage-2 retry execution now uses a tested
+  `rhs1_run_stage2_retry_if_allowed(...)` handoff helper shared by reduced
+  active-DOF and full-system branches. The driver still owns admission,
+  time-cap checks, and retry-control resolution; the helper owns optional
+  base-preconditioner setup, progress emission, measured acceptance, KSP
+  replay updates, and RSS sampling after setup.
 - RHSMode=1 collision-preconditioner retry execution now uses a tested
   `rhs1_run_collision_retry_if_allowed(...)` handoff helper shared by reduced
   active-DOF and full-system branches. The driver still owns retry admission,
@@ -355,10 +361,10 @@ Recent checkpoints:
 - `cb295ce` Extract sparse pattern setup.
 - `4b6a5b4` Extract sparse factor policy.
 
-Current source-size snapshot after collision retry handoff extraction:
+Current source-size snapshot after Stage-2 retry handoff extraction:
 
-- `sfincs_jax/v3_driver.py`: `15760` lines.
-- `solve_v3_full_system_linear_gmres`: `11009` lines.
+- `sfincs_jax/v3_driver.py`: `15745` lines.
+- `solve_v3_full_system_linear_gmres`: `10993` lines.
 - `sfincs_jax/v3_results.py`: `119` lines.
 - `sfincs_jax/rhs1_ksp_diagnostics.py`: `306` lines.
 - `sfincs_jax/rhs1_pas_policy.py`: `889` lines.

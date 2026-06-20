@@ -629,6 +629,79 @@ def rhs1_run_collision_retry_if_allowed(
     return result, residual_vec, preconditioner, accepted, elapsed_s
 
 
+def rhs1_run_stage2_retry_if_allowed(
+    *,
+    allowed: bool,
+    replay_state: RHS1KSPReplayState,
+    current_result: Any,
+    current_residual_vec: Any,
+    matvec_fn: Any,
+    b_vec: Any,
+    precond_fn: Any,
+    preconditioner_enabled: bool,
+    build_preconditioner: Any,
+    controls: Any,
+    tol: float,
+    atol: float,
+    precond_side: str,
+    solve_linear: Any,
+    solver_kind: str,
+    candidate_name: str,
+    baseline_name: str,
+    target: float,
+    peak_rss_mb: Any,
+    returns_residual_vec: bool,
+    result_ready: Any = None,
+    emit: Any = None,
+    label: str = "stage2 GMRES",
+) -> tuple[Any, Any, Any, bool, float]:
+    """Run a Stage-2 Krylov retry while preserving preconditioner cache state."""
+
+    if not bool(allowed):
+        return current_result, current_residual_vec, precond_fn, False, 0.0
+    preconditioner = precond_fn
+    if preconditioner is None and bool(preconditioner_enabled):
+        preconditioner = build_preconditioner()
+
+    restart = int(getattr(controls, "restart"))
+    maxiter = int(getattr(controls, "maxiter"))
+    method = str(getattr(controls, "method"))
+    if emit is not None:
+        emit(
+            0,
+            "solve_v3_full_system_linear_gmres: "
+            f"{label} (residual={float(current_result.residual_norm):.3e} "
+            f"> target={float(target):.3e}) restart={restart} "
+            f"maxiter={maxiter} method={method}",
+        )
+    peak_rss_value = peak_rss_mb() if callable(peak_rss_mb) else peak_rss_mb
+    result, residual_vec, accepted, elapsed_s = (
+        rhs1_run_measured_linear_candidate_and_update_replay(
+            replay_state=replay_state,
+            current_result=current_result,
+            current_residual_vec=current_residual_vec,
+            matvec_fn=matvec_fn,
+            b_vec=b_vec,
+            precond_fn=preconditioner,
+            tol=float(tol),
+            atol=float(atol),
+            restart=restart,
+            maxiter=maxiter,
+            solve_method=method,
+            precond_side=precond_side,
+            solve_linear=solve_linear,
+            solver_kind=solver_kind,
+            candidate_name=candidate_name,
+            baseline_name=baseline_name,
+            target_value=float(target),
+            peak_rss_mb=peak_rss_value,
+            returns_residual_vec=bool(returns_residual_vec),
+            result_ready=result_ready,
+        )
+    )
+    return result, residual_vec, preconditioner, accepted, elapsed_s
+
+
 def rhs1_accept_smoother_candidate_and_update_replay(
     *,
     replay_state: RHS1KSPReplayState,
@@ -711,5 +784,6 @@ __all__ = [
     "rhs1_run_linear_candidate_and_update_replay",
     "rhs1_run_measured_linear_candidate_and_update_replay",
     "rhs1_run_pas_schur_rescue_if_requested",
+    "rhs1_run_stage2_retry_if_allowed",
     "rhs1_solver_candidate_metrics",
 ]

@@ -20,6 +20,7 @@ from sfincs_jax.rhs1_handoff import (
     rhs1_run_linear_candidate_and_update_replay,
     rhs1_run_measured_linear_candidate_and_update_replay,
     rhs1_run_pas_schur_rescue_if_requested,
+    rhs1_run_stage2_retry_if_allowed,
     rhs1_solver_candidate_metrics,
 )
 from sfincs_jax.solver_selection_policy import SolverCandidateMetrics
@@ -1116,6 +1117,179 @@ def test_rhs1_run_collision_retry_skips_when_builder_returns_none() -> None:
     assert not accepted
     assert elapsed_s == 0.0
     assert replay.matvec_fn == "old"
+
+
+def test_rhs1_run_stage2_retry_skips_when_not_allowed() -> None:
+    replay = RHS1KSPReplayState(matvec_fn="old")
+    current = _result(1.0, x="x0")
+
+    result, residual_vec, precond, accepted, elapsed_s = rhs1_run_stage2_retry_if_allowed(
+        allowed=False,
+        replay_state=replay,
+        current_result=current,
+        current_residual_vec="r0",
+        matvec_fn="mv",
+        b_vec="rhs",
+        precond_fn="cached",
+        preconditioner_enabled=True,
+        build_preconditioner=lambda: "new",
+        controls=SimpleNamespace(restart=17, maxiter=33, method="incremental"),
+        tol=1.0e-10,
+        atol=1.0e-12,
+        precond_side="left",
+        solve_linear=lambda **_kwargs: (_result(0.25, x="x1"), "r1"),
+        solver_kind="gmres",
+        candidate_name="stage2_full:incremental",
+        baseline_name="current_full",
+        target=1.0e-9,
+        peak_rss_mb=lambda: 12.0,
+        returns_residual_vec=True,
+    )
+
+    assert result is current
+    assert residual_vec == "r0"
+    assert precond == "cached"
+    assert not accepted
+    assert elapsed_s == 0.0
+    assert replay.matvec_fn == "old"
+
+
+def test_rhs1_run_stage2_retry_builds_preconditioner_and_samples_rss_before_solve() -> None:
+    replay = RHS1KSPReplayState()
+    current = _result(1.0, x="x0")
+    candidate = _result(1.0e-11, x="x1")
+    order: list[str] = []
+    messages: list[tuple[int, str]] = []
+
+    def build_preconditioner():
+        order.append("build")
+        return "built"
+
+    def peak_rss_mb():
+        order.append("rss")
+        return 42.0
+
+    def solve_linear(**kwargs):
+        order.append("solve")
+        assert kwargs["precond_fn"] == "built"
+        assert kwargs["restart_val"] == 17
+        assert kwargs["maxiter_val"] == 33
+        return candidate, "r1"
+
+    result, residual_vec, precond, accepted, elapsed_s = rhs1_run_stage2_retry_if_allowed(
+        allowed=True,
+        replay_state=replay,
+        current_result=current,
+        current_residual_vec="r0",
+        matvec_fn="mv",
+        b_vec="rhs",
+        precond_fn=None,
+        preconditioner_enabled=True,
+        build_preconditioner=build_preconditioner,
+        controls=SimpleNamespace(restart=17, maxiter=33, method="incremental"),
+        tol=1.0e-10,
+        atol=1.0e-12,
+        precond_side="left",
+        solve_linear=solve_linear,
+        solver_kind="gmres",
+        candidate_name="stage2_full:incremental",
+        baseline_name="current_full",
+        target=1.0e-9,
+        peak_rss_mb=peak_rss_mb,
+        returns_residual_vec=True,
+        emit=lambda level, message: messages.append((level, message)),
+    )
+
+    assert accepted
+    assert result is candidate
+    assert residual_vec == "r1"
+    assert precond == "built"
+    assert elapsed_s >= 0.0
+    assert order == ["build", "rss", "solve"]
+    assert replay.precond_fn == "built"
+    assert replay.restart == 17
+    assert any("stage2 GMRES" in message for _level, message in messages)
+
+
+def test_rhs1_run_stage2_retry_reuses_cached_preconditioner() -> None:
+    replay = RHS1KSPReplayState()
+    current = _result(1.0, x="x0")
+    candidate = _result(1.0e-11, x="x1")
+
+    def build_preconditioner():
+        raise AssertionError("cached preconditioner should be reused")
+
+    result, residual_vec, precond, accepted, _elapsed_s = rhs1_run_stage2_retry_if_allowed(
+        allowed=True,
+        replay_state=replay,
+        current_result=current,
+        current_residual_vec="r0",
+        matvec_fn="mv",
+        b_vec="rhs",
+        precond_fn="cached",
+        preconditioner_enabled=True,
+        build_preconditioner=build_preconditioner,
+        controls=SimpleNamespace(restart=17, maxiter=33, method="incremental"),
+        tol=1.0e-10,
+        atol=1.0e-12,
+        precond_side="left",
+        solve_linear=lambda **_kwargs: candidate,
+        solver_kind="gmres",
+        candidate_name="stage2_reduced:incremental",
+        baseline_name="current_reduced",
+        target=1.0e-9,
+        peak_rss_mb=12.0,
+        returns_residual_vec=False,
+    )
+
+    assert accepted
+    assert result is candidate
+    assert residual_vec == "r0"
+    assert precond == "cached"
+    assert replay.precond_fn == "cached"
+
+
+def test_rhs1_run_stage2_retry_allows_unpreconditioned_retry_when_disabled() -> None:
+    replay = RHS1KSPReplayState()
+    current = _result(1.0, x="x0")
+    candidate = _result(1.0e-11, x="x1")
+
+    def build_preconditioner():
+        raise AssertionError("preconditioner disabled")
+
+    def solve_linear(**kwargs):
+        assert kwargs["precond_fn"] is None
+        return candidate
+
+    result, residual_vec, precond, accepted, _elapsed_s = rhs1_run_stage2_retry_if_allowed(
+        allowed=True,
+        replay_state=replay,
+        current_result=current,
+        current_residual_vec="r0",
+        matvec_fn="mv",
+        b_vec="rhs",
+        precond_fn=None,
+        preconditioner_enabled=False,
+        build_preconditioner=build_preconditioner,
+        controls=SimpleNamespace(restart=17, maxiter=33, method="incremental"),
+        tol=1.0e-10,
+        atol=1.0e-12,
+        precond_side="none",
+        solve_linear=solve_linear,
+        solver_kind="gmres",
+        candidate_name="stage2_reduced:incremental",
+        baseline_name="current_reduced",
+        target=1.0e-9,
+        peak_rss_mb=12.0,
+        returns_residual_vec=False,
+    )
+
+    assert accepted
+    assert result is candidate
+    assert residual_vec == "r0"
+    assert precond is None
+    assert replay.precond_fn is None
+    assert replay.precond_side == "none"
 
 
 def test_rhs1_run_measured_linear_candidate_accepts_returned_residual_vector() -> None:

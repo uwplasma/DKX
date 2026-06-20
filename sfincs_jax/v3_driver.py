@@ -186,6 +186,7 @@ from .problems.profile_response.handoff import (
     rhs1_run_linear_candidate_and_update_replay,
     rhs1_run_measured_linear_candidate_and_update_replay,
     rhs1_run_pas_schur_rescue_if_requested,
+    rhs1_run_stage2_retry_if_allowed,
 )
 from .problems.profile_response.auto_solve import (
     RHS1AutoHostSolveContext,
@@ -10000,8 +10001,6 @@ def solve_v3_full_system_linear_gmres(
             and not sparse_prefer_skips_stage2
             and t.elapsed_s() < stage2_time_cap_s
         ):
-            if preconditioner_reduced is None and rhs1_precond_enabled:
-                preconditioner_reduced = _build_rhs1_preconditioner_reduced_with_fallback()
             stage2_controls = rhs1_stage2_retry_controls_from_env(
                 restart=int(restart),
                 maxiter=maxiter,
@@ -10010,38 +10009,32 @@ def solve_v3_full_system_linear_gmres(
                 has_pas=op.fblock.pas is not None,
                 tokamak_pas=bool(tokamak_pas),
             )
-            stage2_restart = int(stage2_controls.restart)
-            stage2_maxiter = int(stage2_controls.maxiter)
             stage2_method = str(stage2_controls.method)
-            if emit is not None:
-                emit(
-                    0,
-                    "solve_v3_full_system_linear_gmres: stage2 reduced GMRES "
-                    f"(residual={float(res_reduced.residual_norm):.3e} > target={target_reduced:.3e}) "
-                    f"restart={stage2_restart} maxiter={stage2_maxiter} method={stage2_method}",
-                )
-            res_reduced, residual_vec, _accepted, _stage2_elapsed_s = (
-                rhs1_run_measured_linear_candidate_and_update_replay(
+            res_reduced, residual_vec, preconditioner_reduced, _accepted, _stage2_elapsed_s = (
+                rhs1_run_stage2_retry_if_allowed(
+                    allowed=True,
                     replay_state=ksp_replay,
                     current_result=res_reduced,
                     current_residual_vec=residual_vec,
                     matvec_fn=mv_reduced,
                     b_vec=rhs_reduced,
                     precond_fn=preconditioner_reduced,
+                    preconditioner_enabled=bool(rhs1_precond_enabled),
+                    build_preconditioner=_build_rhs1_preconditioner_reduced_with_fallback,
+                    controls=stage2_controls,
                     tol=float(tol),
                     atol=float(atol),
-                    restart=int(stage2_restart),
-                    maxiter=int(stage2_maxiter),
-                    solve_method=stage2_method,
                     precond_side=gmres_precond_side,
                     solve_linear=_solve_linear,
                     solver_kind=_solver_kind(stage2_method)[0],
                     candidate_name=f"stage2_reduced:{stage2_method}",
                     baseline_name="current_reduced",
-                    target_value=float(target_reduced),
-                    peak_rss_mb=_rss_mb(),
+                    target=float(target_reduced),
+                    peak_rss_mb=_rss_mb,
                     returns_residual_vec=False,
                     result_ready=_block_gmres_result_ready,
+                    emit=emit,
+                    label="stage2 reduced GMRES",
                 )
             )
         pas_fast_accept = _rhsmode1_pas_fast_accept(
@@ -12590,8 +12583,6 @@ def solve_v3_full_system_linear_gmres(
             and (not prefer_sparse_accel)
             and t.elapsed_s() < stage2_time_cap_s
         ):
-            if preconditioner_full is None and rhs1_precond_enabled:
-                preconditioner_full = _build_rhs1_preconditioner_full()
             stage2_controls = rhs1_stage2_retry_controls_from_env(
                 restart=int(restart),
                 maxiter=maxiter,
@@ -12599,37 +12590,31 @@ def solve_v3_full_system_linear_gmres(
                 has_fp=op.fblock.fp is not None,
                 has_pas=op.fblock.pas is not None,
             )
-            stage2_restart = int(stage2_controls.restart)
-            stage2_maxiter = int(stage2_controls.maxiter)
             stage2_method = str(stage2_controls.method)
-            if emit is not None:
-                emit(
-                    0,
-                    "solve_v3_full_system_linear_gmres: stage2 GMRES "
-                    f"(residual={float(result.residual_norm):.3e} > target={target:.3e}) "
-                    f"restart={stage2_restart} maxiter={stage2_maxiter} method={stage2_method}",
-                )
-            result, residual_vec, _accepted, _stage2_elapsed_s = (
-                rhs1_run_measured_linear_candidate_and_update_replay(
+            result, residual_vec, preconditioner_full, _accepted, _stage2_elapsed_s = (
+                rhs1_run_stage2_retry_if_allowed(
+                    allowed=True,
                     replay_state=ksp_replay,
                     current_result=result,
                     current_residual_vec=residual_vec,
                     matvec_fn=mv,
                     b_vec=rhs,
                     precond_fn=preconditioner_full,
+                    preconditioner_enabled=bool(rhs1_precond_enabled),
+                    build_preconditioner=_build_rhs1_preconditioner_full,
+                    controls=stage2_controls,
                     tol=float(tol),
                     atol=float(atol),
-                    restart=int(stage2_restart),
-                    maxiter=int(stage2_maxiter),
-                    solve_method=stage2_method,
                     precond_side=gmres_precond_side,
                     solve_linear=_solve_linear_with_residual,
                     solver_kind=_solver_kind(stage2_method)[0],
                     candidate_name=f"stage2_full:{stage2_method}",
                     baseline_name="current_full",
-                    target_value=float(target),
-                    peak_rss_mb=_rss_mb(),
+                    target=float(target),
+                    peak_rss_mb=_rss_mb,
                     returns_residual_vec=True,
+                    emit=emit,
+                    label="stage2 GMRES",
                 )
             )
         # Krylov solvers with left preconditioning report the preconditioned residual
