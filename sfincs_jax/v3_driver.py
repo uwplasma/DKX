@@ -222,11 +222,13 @@ from .problems.profile_response.dense import (
 from .problems.profile_response.linear_solve import (
     ProfileLinearSolveContext,
     RHS1DenseKSPFullSolveContext,
+    RHS1DenseKSPReducedSolveContext,
     RHS1ScipyRescueContext,
     profile_solver_kind,
     rhs1_small_gmres_max_from_env,
     run_rhs1_scipy_rescue,
     solve_rhs1_dense_ksp_full,
+    solve_rhs1_dense_ksp_reduced,
     solve_profile_linear,
     solve_profile_linear_with_residual,
 )
@@ -9251,85 +9253,40 @@ def solve_v3_full_system_linear_gmres(
         elif probe_shortcut:
             pass
         elif solve_method_kind == "dense_ksp":
-            if int(op.phi1_size) != 0:
-                raise NotImplementedError("dense_ksp is only supported for includePhi1=false RHSMode=1 solves.")
-            if emit is not None:
-                emit(1, "solve_v3_full_system_linear_gmres: assembling dense reduced matrix for dense_ksp")
-            a_dense = assemble_dense_matrix_from_matvec(matvec=mv_reduced, n=active_size, dtype=rhs_reduced.dtype)
-
-            if emit is not None:
-                emit(1, "solve_v3_full_system_linear_gmres: building PETSc-like species-block preconditioner (dense_ksp)")
-
-            import jax.scipy.linalg as jla  # noqa: PLC0415
-
-            n_species = int(op.n_species)
-            n_theta = int(op.n_theta)
-            n_zeta = int(op.n_zeta)
-            local_per_species = int(np.sum(nxi_for_x))
-            dke_size = int(local_per_species * n_theta * n_zeta)
-            extra_size = int(op.extra_size)
-            extra_per_species = int(extra_size // max(1, n_species)) if extra_size else 0
-            if extra_size and (extra_per_species * n_species != extra_size):
-                extra_per_species = 0
-
-            f_size = int(n_species * dke_size)
-            expected_active = int(f_size + int(op.phi1_size) + extra_size)
-            if int(active_size) != expected_active:
-                raise RuntimeError(f"dense_ksp expects active_size={expected_active}, got {active_size}")
-
-            lu_factors: list[tuple[jnp.ndarray, jnp.ndarray]] = []
-            idx_blocks: list[jnp.ndarray] = []
-            for s in range(n_species):
-                f_idx = np.arange(s * dke_size, (s + 1) * dke_size, dtype=np.int32)
-                extra_idx = np.arange(f_size + s * extra_per_species, f_size + (s + 1) * extra_per_species, dtype=np.int32)
-                block_idx_np = np.concatenate([f_idx, extra_idx], axis=0) if extra_per_species else f_idx
-                block_idx = jnp.asarray(block_idx_np, dtype=jnp.int32)
-                a_block = a_dense[jnp.ix_(block_idx, block_idx)]
-                lu, piv = jla.lu_factor(a_block)
-                lu_factors.append((lu, piv))
-                idx_blocks.append(block_idx)
-
-            def preconditioner_dense(v: jnp.ndarray) -> jnp.ndarray:
-                out = jnp.zeros_like(v)
-                for block_idx, (lu, piv) in zip(idx_blocks, lu_factors, strict=True):
-                    rhs_block = v[block_idx]
-                    sol_block = jla.lu_solve((lu, piv), rhs_block)
-                    out = out.at[block_idx].set(sol_block, unique_indices=True)
-                return out
-
-            def mv_dense(x: jnp.ndarray) -> jnp.ndarray:
-                return a_dense @ x
-
             # PETSc v3 uses *left* preconditioning and checks convergence in the
             # preconditioned residual norm ||M^{-1} r||. To match this behavior with
             # JAX's GMRES (which uses a SciPy-style convergence check), solve the
             # explicitly left-preconditioned system:
             #   (M^{-1} A) x = (M^{-1} b).
-            rhs_pc = preconditioner_dense(rhs_reduced)
-
-            def mv_pc(x: jnp.ndarray) -> jnp.ndarray:
-                return preconditioner_dense(mv_dense(x))
-
             rhs1_progress_notes.krylov_start()
             _mark("rhs1_krylov_solve_start")
-            res_reduced = _solve_linear(
-                matvec_fn=mv_pc,
-                b_vec=rhs_pc,
-                precond_fn=None,
-                x0_vec=x0_reduced,
-                tol_val=tol,
-                atol_val=atol,
-                restart_val=restart,
-                maxiter_val=maxiter,
-                solve_method_val="incremental",
-                precond_side="none",
+            dense_ksp_reduced_outcome = solve_rhs1_dense_ksp_reduced(
+                RHS1DenseKSPReducedSolveContext(
+                    matvec=mv_reduced,
+                    rhs=rhs_reduced,
+                    x0=x0_reduced,
+                    active_size=int(active_size),
+                    phi1_size=int(op.phi1_size),
+                    n_species=int(op.n_species),
+                    n_theta=int(op.n_theta),
+                    n_zeta=int(op.n_zeta),
+                    nxi_for_x=nxi_for_x,
+                    extra_size=int(op.extra_size),
+                    tol=float(tol),
+                    atol=float(atol),
+                    restart=int(restart),
+                    maxiter=maxiter,
+                    solve_linear=_solve_linear,
+                    result_ready=_block_gmres_result_ready,
+                ),
+                emit=emit,
             )
-            res_reduced = _block_gmres_result_ready(res_reduced)
             _mark("rhs1_krylov_solve_done")
+            res_reduced = dense_ksp_reduced_outcome.result
             rhs1_record_ksp_replay_problem(
                 ksp_replay,
-                matvec_fn=mv_pc,
-                b_vec=rhs_pc,
+                matvec_fn=dense_ksp_reduced_outcome.replay_matvec,
+                b_vec=dense_ksp_reduced_outcome.replay_rhs,
                 precond_fn=None,
                 x0_vec=x0_reduced,
                 precond_side="none",

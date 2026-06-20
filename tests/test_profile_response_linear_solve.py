@@ -5,11 +5,13 @@ import jax.numpy as jnp
 from sfincs_jax.problems.profile_response.linear_solve import (
     ProfileLinearSolveContext,
     RHS1DenseKSPFullSolveContext,
+    RHS1DenseKSPReducedSolveContext,
     RHS1ScipyRescueContext,
     profile_solver_kind,
     rhs1_small_gmres_max_from_env,
     run_rhs1_scipy_rescue,
     solve_rhs1_dense_ksp_full,
+    solve_rhs1_dense_ksp_reduced,
     solve_profile_linear_with_residual,
 )
 from sfincs_jax.solver import GMRESSolveResult, assemble_dense_matrix_from_matvec
@@ -183,6 +185,72 @@ def test_solve_rhs1_dense_ksp_full_solves_species_block_system() -> None:
 
     assert jnp.linalg.norm(a @ outcome.result.x - rhs) < 1.0e-10
     assert outcome.result.residual_norm < 1.0e-10
+    assert jnp.linalg.norm(outcome.replay_matvec(outcome.result.x) - outcome.replay_rhs) < 1.0e-10
+    assert captured["precond_fn"] is None
+    assert captured["solve_method_val"] == "incremental"
+    assert captured["precond_side"] == "none"
+
+
+def test_solve_rhs1_dense_ksp_reduced_preserves_preconditioned_result_ready() -> None:
+    a = jnp.asarray(
+        [
+            [4.0, 0.2, 0.0, 0.0, 0.1, 0.0],
+            [0.1, 3.0, 0.0, 0.0, 0.0, 0.2],
+            [0.0, 0.0, 5.0, 0.3, 0.1, 0.0],
+            [0.0, 0.0, 0.2, 2.5, 0.0, 0.1],
+            [0.1, 0.0, 0.2, 0.0, 1.7, 0.0],
+            [0.0, 0.2, 0.0, 0.1, 0.0, 1.9],
+        ],
+        dtype=jnp.float64,
+    )
+    rhs = jnp.asarray([1.0, -0.5, 0.25, 2.0, -1.0, 0.75], dtype=jnp.float64)
+    captured: dict[str, object] = {}
+    ready_calls: list[GMRESSolveResult] = []
+
+    def solve_linear(**kwargs) -> GMRESSolveResult:
+        captured.update(kwargs)
+        b_vec = kwargs["b_vec"]
+        mat = assemble_dense_matrix_from_matvec(
+            matvec=kwargs["matvec_fn"],
+            n=int(b_vec.shape[0]),
+            dtype=b_vec.dtype,
+        )
+        x = jnp.linalg.solve(mat, b_vec)
+        return GMRESSolveResult(
+            x=x,
+            residual_norm=jnp.linalg.norm(mat @ x - b_vec),
+        )
+
+    def result_ready(result: GMRESSolveResult) -> GMRESSolveResult:
+        ready_calls.append(result)
+        return GMRESSolveResult(
+            x=result.x,
+            residual_norm=result.residual_norm + jnp.asarray(0.0, dtype=jnp.float64),
+        )
+
+    outcome = solve_rhs1_dense_ksp_reduced(
+        RHS1DenseKSPReducedSolveContext(
+            matvec=lambda x: a @ x,
+            rhs=rhs,
+            x0=None,
+            active_size=6,
+            phi1_size=0,
+            n_species=2,
+            n_theta=1,
+            n_zeta=1,
+            nxi_for_x=jnp.asarray([2]),
+            extra_size=2,
+            tol=1.0e-12,
+            atol=1.0e-12,
+            restart=6,
+            maxiter=20,
+            solve_linear=solve_linear,
+            result_ready=result_ready,
+        )
+    )
+
+    assert len(ready_calls) == 1
+    assert jnp.linalg.norm(a @ outcome.result.x - rhs) < 1.0e-10
     assert jnp.linalg.norm(outcome.replay_matvec(outcome.result.x) - outcome.replay_rhs) < 1.0e-10
     assert captured["precond_fn"] is None
     assert captured["solve_method_val"] == "incremental"
