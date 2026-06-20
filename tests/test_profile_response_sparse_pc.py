@@ -97,6 +97,8 @@ from sfincs_jax.problems.profile_response.sparse_pc import (
     XBlockKrylovSolveSpaceContext,
     XBlockKrylovReport,
     XBlockMomentSchurStageContext,
+    XBlockPostKrylovCompletionContext,
+    XBlockPostKrylovCompletionResult,
     XBlockPostSolveCorrectionContext,
     XBlockPostSolveCorrectionResult,
     XBlockPhysicalResidual,
@@ -219,6 +221,7 @@ from sfincs_jax.problems.profile_response.sparse_pc import (
     resolve_xblock_two_level_policy_setup,
     fortran_reduced_xblock_final_payload_from_driver_state,
     fortran_reduced_xblock_final_payload,
+    complete_xblock_post_krylov_stage,
     prepare_xblock_augmented_krylov_basis,
     prepare_xblock_krylov_solve_space,
     run_fortran_reduced_xblock_krylov_solve,
@@ -2041,6 +2044,65 @@ def test_run_xblock_post_solve_corrections_preserves_state_when_inactive() -> No
     assert result.post_residual_equation_direction_counts == ()
     assert result.post_residual_equation_include_post_coarse is False
     assert result.post_residual_equation_include_qi_basis is False
+
+
+def test_complete_xblock_post_krylov_stage_emits_completion_and_returns_state() -> None:
+    emitted: list[tuple[int, str]] = []
+
+    def fail_correction(**_kwargs):
+        raise AssertionError("correction should not run")
+
+    result = complete_xblock_post_krylov_stage(
+        XBlockPostKrylovCompletionContext(
+            corrections=XBlockPostSolveCorrectionContext(
+                matvec=_identity,
+                rhs=jnp.zeros(2),
+                x=np.asarray([1.0, 2.0]),
+                residual_norm=0.25,
+                target=1.0,
+                solve_s=3.0,
+                preconditioner=_identity,
+                precondition_side="none",
+                post_solve_policy=_xblock_post_policy(
+                    post_minres_steps=0,
+                    post_coarse_steps=0,
+                    post_residual_steps=0,
+                    include_post_coarse=False,
+                    include_qi_basis=False,
+                ),
+                qi_device_state=None,
+                coarse_direction_builder=lambda residual_vec, **_kwargs: (
+                    ("raw", residual_vec),
+                ),
+                emit=lambda level, message: emitted.append((level, message)),
+                elapsed_s=lambda: 2.25,
+                minres_correction=fail_correction,
+                residual_equation_correction=fail_correction,
+                coarse_correction=fail_correction,
+            ),
+            krylov_method="gmres",
+            elapsed_s=lambda: 9.0,
+            iterations=7,
+            matvecs=11,
+            target=1.0,
+            history=(0.5, 0.25),
+        )
+    )
+
+    assert isinstance(result, XBlockPostKrylovCompletionResult)
+    np.testing.assert_allclose(result.x, np.asarray([1.0, 2.0]))
+    assert result.residual_norm == pytest.approx(0.25)
+    assert result.solve_s == pytest.approx(3.0)
+    assert result.corrections.post_minres_history == ()
+    assert emitted == [
+        (
+            0,
+            "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres complete "
+            "method=gmres elapsed_s=9.000 iters=7 matvecs=11 "
+            "residual=2.500000e-01 target=1.000000e+00 "
+            "ksp_residual=2.500000e-01",
+        )
+    ]
 
 
 def test_xblock_physical_solution_and_residual_measures_true_residual() -> None:

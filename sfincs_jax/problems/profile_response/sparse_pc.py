@@ -3287,6 +3287,29 @@ class XBlockPostSolveCorrectionResult:
 
 
 @dataclass(frozen=True)
+class XBlockPostKrylovCompletionContext:
+    """Inputs for post-Krylov correction followed by completion emission."""
+
+    corrections: XBlockPostSolveCorrectionContext
+    krylov_method: str
+    elapsed_s: Callable[[], float]
+    iterations: int
+    matvecs: int
+    target: float
+    history: Sequence[float] | None
+
+
+@dataclass(frozen=True)
+class XBlockPostKrylovCompletionResult:
+    """Final x-block state after post-solve corrections and completion emission."""
+
+    corrections: XBlockPostSolveCorrectionResult
+    x: np.ndarray
+    residual_norm: float
+    solve_s: float
+
+
+@dataclass(frozen=True)
 class SparsePCActiveDOFSetup:
     """Active-DOF maps and vector routing for the generic sparse-PC path."""
 
@@ -14624,6 +14647,32 @@ def run_xblock_post_solve_corrections(
     )
 
 
+def complete_xblock_post_krylov_stage(
+    context: XBlockPostKrylovCompletionContext,
+) -> XBlockPostKrylovCompletionResult:
+    """Apply x-block post-solve corrections and emit the completion line."""
+
+    corrections = run_xblock_post_solve_corrections(context.corrections)
+    emit_xblock_sparse_pc_completion(
+        XBlockSparsePCCompletionContext(
+            emit=context.corrections.emit,
+            krylov_method=str(context.krylov_method),
+            elapsed_s=float(context.elapsed_s()),
+            iterations=int(context.iterations),
+            matvecs=int(context.matvecs),
+            residual_norm=float(corrections.residual_norm),
+            target=float(context.target),
+            history=context.history,
+        )
+    )
+    return XBlockPostKrylovCompletionResult(
+        corrections=corrections,
+        x=np.asarray(corrections.x, dtype=np.float64),
+        residual_norm=float(corrections.residual_norm),
+        solve_s=float(corrections.solve_s),
+    )
+
+
 __all__ = [
     "FortranReducedSparsePCBackendSetup",
     "FortranReducedXBlockFactorPolicySetup",
@@ -14769,6 +14818,8 @@ __all__ = [
     "XBlockSubspaceCorrectionResult",
     "XBlockPostSolveCorrectionContext",
     "XBlockPostSolveCorrectionResult",
+    "XBlockPostKrylovCompletionContext",
+    "XBlockPostKrylovCompletionResult",
     "apply_fortran_reduced_xblock_global_coupling_stage",
     "apply_fortran_reduced_xblock_initial_seed",
     "apply_fortran_reduced_xblock_moment_schur_stage",
@@ -14839,6 +14890,7 @@ __all__ = [
     "run_xblock_krylov_solve_stage",
     "run_xblock_gmres_fallback_if_needed",
     "run_xblock_post_solve_corrections",
+    "complete_xblock_post_krylov_stage",
     "xblock_device_krylov_state",
     "xblock_device_cycle_progress_message",
     "xblock_host_krylov_progress_message",

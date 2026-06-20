@@ -285,6 +285,7 @@ from .problems.profile_response.sparse_pc import (
     XBlockKrylovSolveStageContext,
     XBlockKrylovSolveSpaceContext,
     XBlockMomentSchurStageContext,
+    XBlockPostKrylovCompletionContext,
     XBlockPostSolveCorrectionContext,
     XBlockPreflightGateContext,
     XBlockProbeCoarseStageContext,
@@ -295,7 +296,6 @@ from .problems.profile_response.sparse_pc import (
     XBlockQIGalerkinStageContext,
     XBlockQITwoLevelStageContext,
     XBlockSideProbeStageContext,
-    XBlockSparsePCCompletionContext,
     XBlockSparsePCFinalCoreState,
     XBlockSparsePCFinalDeviceState,
     XBlockSparsePCFinalMetadataStateContext,
@@ -335,7 +335,7 @@ from .problems.profile_response.sparse_pc import (
     evaluate_xblock_preflight_gate,
     select_sparse_pc_auto_preflight_retry_candidates,
     evaluate_sparse_pc_auto_preflight_retry,
-    emit_xblock_sparse_pc_completion,
+    complete_xblock_post_krylov_stage,
     resolve_sparse_pc_gmres_control_policy,
     enforce_sparse_pc_memory_budget,
     prepare_fortran_reduced_xblock_initial_guess,
@@ -372,7 +372,6 @@ from .problems.profile_response.sparse_pc import (
     run_fortran_reduced_xblock_krylov_solve,
     run_sparse_pc_gmres_once,
     run_xblock_krylov_solve_stage,
-    run_xblock_post_solve_corrections,
     xblock_sparse_pc_final_metadata_state_from_context,
     build_sparse_host_or_ilu_factor,
     build_sparse_ilu_preconditioner_from_cache,
@@ -4362,43 +4361,40 @@ def solve_v3_full_system_linear_gmres(
             reported_iterations = int(solve_state.reported_iterations)
             reported_matvecs = int(solve_state.reported_matvecs)
             x_np = solve_state.x_physical
-            post_corrections = run_xblock_post_solve_corrections(
-                XBlockPostSolveCorrectionContext(
-                    matvec=_mv_true,
-                    rhs=xblock_rhs,
-                    x=np.asarray(x_np, dtype=np.float64),
-                    residual_norm=float(residual_norm_xblock_pc),
-                    target=float(target_xblock),
-                    solve_s=float(solve_s),
-                    preconditioner=precond_xblock_krylov,
-                    precondition_side=str(precondition_side),
-                    post_solve_policy=_read_rhs1_post_solve_correction_policy(),
-                    qi_device_state=qi_device_state_for_augmented_krylov,
-                    coarse_direction_builder=_xblock_coarse_direction_builder,
-                    emit=emit,
-                    elapsed_s=sparse_timer.elapsed_s,
-                    minres_correction=_apply_preconditioned_minres_correction,
-                    residual_equation_correction=(
-                        _apply_device_subspace_residual_equation_correction
+            post_completion = complete_xblock_post_krylov_stage(
+                XBlockPostKrylovCompletionContext(
+                    corrections=XBlockPostSolveCorrectionContext(
+                        matvec=_mv_true,
+                        rhs=xblock_rhs,
+                        x=np.asarray(x_np, dtype=np.float64),
+                        residual_norm=float(residual_norm_xblock_pc),
+                        target=float(target_xblock),
+                        solve_s=float(solve_s),
+                        preconditioner=precond_xblock_krylov,
+                        precondition_side=str(precondition_side),
+                        post_solve_policy=_read_rhs1_post_solve_correction_policy(),
+                        qi_device_state=qi_device_state_for_augmented_krylov,
+                        coarse_direction_builder=_xblock_coarse_direction_builder,
+                        emit=emit,
+                        elapsed_s=sparse_timer.elapsed_s,
+                        minres_correction=_apply_preconditioned_minres_correction,
+                        residual_equation_correction=(
+                            _apply_device_subspace_residual_equation_correction
+                        ),
+                        coarse_correction=_apply_subspace_minres_correction,
                     ),
-                    coarse_correction=_apply_subspace_minres_correction,
-                )
-            )
-            x_np = np.asarray(post_corrections.x, dtype=np.float64)
-            residual_norm_xblock_pc = float(post_corrections.residual_norm)
-            solve_s = float(post_corrections.solve_s)
-            emit_xblock_sparse_pc_completion(
-                XBlockSparsePCCompletionContext(
-                    emit=emit,
                     krylov_method=str(xblock_krylov_method),
-                    elapsed_s=sparse_timer.elapsed_s(),
+                    elapsed_s=sparse_timer.elapsed_s,
                     iterations=int(reported_iterations),
                     matvecs=int(reported_matvecs),
-                    residual_norm=float(residual_norm_xblock_pc),
                     target=float(target_xblock),
                     history=history,
                 )
             )
+            post_corrections = post_completion.corrections
+            x_np = np.asarray(post_completion.x, dtype=np.float64)
+            residual_norm_xblock_pc = float(post_completion.residual_norm)
+            solve_s = float(post_completion.solve_s)
             xblock_final_metadata_state = (
                 xblock_sparse_pc_final_metadata_state_from_context(
                     XBlockSparsePCFinalMetadataStateContext(
