@@ -209,14 +209,15 @@ from .problems.profile_response.dense import (
     RHS1FullDenseFallbackStageContext,
     RHS1FullHostDenseShortcutContext,
     RHS1DenseProbeStageContext,
+    RHS1PostKrylovDenseShortcutEvaluationContext,
     RHS1ReducedDenseFallbackAdmissionStageContext,
     RHS1ReducedDenseFallbackCandidateContext,
     RHS1ReducedDenseFallbackStageContext,
     RHS1ReducedHostDenseShortcutContext,
     rhs1_dense_shortcut_setup_from_env,
     rhs1_early_dense_shortcut_decision,
+    rhs1_evaluate_post_krylov_dense_shortcut,
     rhs1_fp_preconditioner_probe_kind_from_env,
-    rhs1_post_krylov_dense_shortcut_decision,
     run_rhs1_dense_probe_stage,
     run_rhs1_full_dense_fallback_stage,
     run_rhs1_full_host_dense_shortcut_stage,
@@ -9826,35 +9827,28 @@ def solve_v3_full_system_linear_gmres(
         # actually allowed (probe_shortcut). Otherwise we still want to try
         # stronger preconditioners (e.g. sparse ILU) before giving up.
         dense_shortcut = probe_shortcut
-        if not dense_shortcut and dense_shortcut_ratio > 0:
-            quick_ratio = float(res_reduced.residual_norm) / max(float(target_reduced), 1e-300)
-            if quick_ratio >= dense_shortcut_ratio:
-                dense_fallback_max = _rhsmode1_dense_fallback_max(op)
-                residual_norm_true = rhs1_true_residual_norm_or_inf(
-                    rhs=rhs_reduced,
-                    matvec=mv_reduced,
-                    x=res_reduced.x,
-                )
-                res_ratio = float(residual_norm_true) / max(float(target_reduced), 1e-300)
-                post_krylov_dense_decision = rhs1_post_krylov_dense_shortcut_decision(
-                    dense_shortcut=bool(dense_shortcut),
-                    dense_shortcut_ratio=float(dense_shortcut_ratio),
-                    residual_norm_true=float(residual_norm_true),
-                    residual_ratio=float(res_ratio),
-                    target=float(target_reduced),
-                    dense_fallback_max=int(dense_fallback_max),
-                    active_size=int(active_size),
-                    constraint_scheme=int(op.constraint_scheme),
-                    cs0_sparse_first=bool(cs0_sparse_first),
-                    sparse_prefer_over_dense_shortcut=bool(
-                        sparse_prefer_over_dense_shortcut
-                    ),
-                    sparse_exact_direct=bool(sparse_exact_direct),
-                )
-                dense_shortcut = bool(post_krylov_dense_decision.dense_shortcut)
-                if emit is not None:
-                    for _level, _message in post_krylov_dense_decision.messages:
-                        emit(_level, _message)
+        post_krylov_dense_evaluation = rhs1_evaluate_post_krylov_dense_shortcut(
+            RHS1PostKrylovDenseShortcutEvaluationContext(
+                dense_shortcut=bool(dense_shortcut),
+                dense_shortcut_ratio=float(dense_shortcut_ratio),
+                current_result=res_reduced,
+                rhs=rhs_reduced,
+                matvec=mv_reduced,
+                target=float(target_reduced),
+                dense_fallback_max=int(_rhsmode1_dense_fallback_max(op)),
+                active_size=int(active_size),
+                constraint_scheme=int(op.constraint_scheme),
+                cs0_sparse_first=bool(cs0_sparse_first),
+                sparse_prefer_over_dense_shortcut=bool(
+                    sparse_prefer_over_dense_shortcut
+                ),
+                sparse_exact_direct=bool(sparse_exact_direct),
+            )
+        )
+        dense_shortcut = bool(post_krylov_dense_evaluation.dense_shortcut)
+        if emit is not None:
+            for _level, _message in post_krylov_dense_evaluation.messages:
+                emit(_level, _message)
 
         sparse_policy = rhs1_sparse_rescue_policy_setup(
             sparse_precond_mode=sparse_precond_mode,

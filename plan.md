@@ -376,6 +376,10 @@ Recent checkpoints:
   admission, FP size guards, PAS Schur downgrade, build timing/progress,
   optional PAS wrapping, retry-control parsing, and measured candidate
   handoff; the driver keeps only live builder callbacks and solve state.
+- RHSMode=1 late post-Krylov dense-shortcut evaluation now uses a tested
+  `profile_response.dense` helper. The helper owns the quick reported-residual
+  gate, true-residual recomputation, dense-shortcut policy call, and diagnostic
+  messages; the driver keeps only the resulting boolean and `emit` calls.
 - RHSMode=1 PAS preconditioner probe/default routing now uses tested
   PAS-policy helpers for env parsing, tokamak-like Schur defaulting, heavy-path
   admission, large-system collision skip, and residual-threshold decisions
@@ -519,10 +523,10 @@ Recent checkpoints:
 - `cb295ce` Extract sparse pattern setup.
 - `4b6a5b4` Extract sparse factor policy.
 
-Current source-size snapshot after reduced strong-preconditioner retry extraction:
+Current source-size snapshot after late dense-shortcut evaluation extraction:
 
-- `sfincs_jax/v3_driver.py`: `14659` lines.
-- `solve_v3_full_system_linear_gmres`: `9894` lines.
+- `sfincs_jax/v3_driver.py`: `14653` lines.
+- `solve_v3_full_system_linear_gmres`: `9887` lines.
 - `sfincs_jax/v3_results.py`: `119` lines.
 - `sfincs_jax/rhs1_ksp_diagnostics.py`: `306` lines.
 - `sfincs_jax/rhs1_pas_policy.py`: `889` lines.
@@ -531,7 +535,7 @@ Current source-size snapshot after reduced strong-preconditioner retry extractio
 - `sfincs_jax/problems/profile_response/residual.py`: `981` lines.
 - `sfincs_jax/problems/profile_response/handoff.py`: `1211` lines.
 - `sfincs_jax/problems/profile_response/policies.py`: `3761` lines.
-- `sfincs_jax/problems/profile_response/dense.py`: `1650` lines.
+- `sfincs_jax/problems/profile_response/dense.py`: `1728` lines.
 - `sfincs_jax/problems/profile_response/linear_solve.py`: `798` lines.
 - `sfincs_jax/problems/profile_response/preconditioner_build.py`: `811` lines.
 - `sfincs_jax/problems/profile_response/active_projection.py`: `203` lines.
@@ -541,6 +545,19 @@ Current source-size snapshot after reduced strong-preconditioner retry extractio
 
 Recent local validation:
 
+- Late dense-shortcut evaluation extraction:
+  `tests/test_profile_response_dense.py
+  tests/test_v3_driver_rhs1_dispatch_coverage.py` passed
+  (`81 passed in 21.48 s`).
+- Broad profile-response/RHSMode=1 shard after late dense-shortcut evaluation
+  extraction:
+  `tests/test_profile_response_*.py tests/test_rhs1_*.py
+  tests/test_newton_krylov_diagnostics.py tests/test_pas_smoother.py`
+  passed (`1363 passed in 85.83 s`).
+- Hygiene after late dense-shortcut evaluation extraction:
+  `py_compile`, `ruff check`, `compileall`, `git diff --check`, and
+  `python scripts/check_repo_size.py` passed. Repo-size audit reported no
+  reviewed files above 2 MiB.
 - Reduced strong-preconditioner retry extraction:
   `tests/test_profile_response_preconditioner_build.py
   tests/test_rhs1_strong_control.py tests/test_rhs1_strong_auto_kind.py`

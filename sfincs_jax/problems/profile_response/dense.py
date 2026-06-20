@@ -18,7 +18,7 @@ from ...solver import (
     dense_solve_from_matrix,
     dense_solve_from_matrix_row_scaled,
 )
-from .residual import result_with_true_residual
+from .residual import result_with_true_residual, true_residual_norm_or_inf
 
 
 @dataclass(frozen=True)
@@ -281,6 +281,34 @@ class RHS1PostKrylovDenseShortcutDecision:
     messages: tuple[tuple[int, str], ...] = ()
 
 
+@dataclass(frozen=True)
+class RHS1PostKrylovDenseShortcutEvaluationContext:
+    """Inputs for late dense-shortcut evaluation after primary Krylov retries."""
+
+    dense_shortcut: bool
+    dense_shortcut_ratio: float
+    current_result: GMRESSolveResult
+    rhs: jnp.ndarray
+    matvec: Callable[[jnp.ndarray], jnp.ndarray]
+    target: float
+    dense_fallback_max: int
+    active_size: int
+    constraint_scheme: int
+    cs0_sparse_first: bool
+    sparse_prefer_over_dense_shortcut: bool
+    sparse_exact_direct: bool
+
+
+@dataclass(frozen=True)
+class RHS1PostKrylovDenseShortcutEvaluation:
+    """Late dense-shortcut result with optional true-residual diagnostics."""
+
+    dense_shortcut: bool
+    residual_norm_true: float | None = None
+    residual_ratio: float | None = None
+    messages: tuple[tuple[int, str], ...] = ()
+
+
 def _env_float(name: str, default: float) -> float:
     raw = str(os.environ.get(name, "")).strip()
     try:
@@ -509,6 +537,53 @@ def rhs1_post_krylov_dense_shortcut_decision(
                 f"(ratio={float(residual_ratio):.3e} >= {float(dense_shortcut_ratio):.1e})",
             ),
         ),
+    )
+
+
+def rhs1_evaluate_post_krylov_dense_shortcut(
+    context: RHS1PostKrylovDenseShortcutEvaluationContext,
+) -> RHS1PostKrylovDenseShortcutEvaluation:
+    """Evaluate the late dense shortcut and compute true residual only if needed."""
+
+    dense_shortcut = bool(context.dense_shortcut)
+    if dense_shortcut or float(context.dense_shortcut_ratio) <= 0.0:
+        return RHS1PostKrylovDenseShortcutEvaluation(
+            dense_shortcut=dense_shortcut
+        )
+
+    quick_ratio = float(context.current_result.residual_norm) / max(
+        float(context.target),
+        1.0e-300,
+    )
+    if quick_ratio < float(context.dense_shortcut_ratio):
+        return RHS1PostKrylovDenseShortcutEvaluation(dense_shortcut=False)
+
+    residual_norm_true = true_residual_norm_or_inf(
+        rhs=context.rhs,
+        matvec=context.matvec,
+        x=context.current_result.x,
+    )
+    residual_ratio = float(residual_norm_true) / max(float(context.target), 1.0e-300)
+    decision = rhs1_post_krylov_dense_shortcut_decision(
+        dense_shortcut=False,
+        dense_shortcut_ratio=float(context.dense_shortcut_ratio),
+        residual_norm_true=float(residual_norm_true),
+        residual_ratio=float(residual_ratio),
+        target=float(context.target),
+        dense_fallback_max=int(context.dense_fallback_max),
+        active_size=int(context.active_size),
+        constraint_scheme=int(context.constraint_scheme),
+        cs0_sparse_first=bool(context.cs0_sparse_first),
+        sparse_prefer_over_dense_shortcut=bool(
+            context.sparse_prefer_over_dense_shortcut
+        ),
+        sparse_exact_direct=bool(context.sparse_exact_direct),
+    )
+    return RHS1PostKrylovDenseShortcutEvaluation(
+        dense_shortcut=bool(decision.dense_shortcut),
+        residual_norm_true=float(residual_norm_true),
+        residual_ratio=float(residual_ratio),
+        messages=decision.messages,
     )
 
 
@@ -1615,6 +1690,8 @@ __all__ = [
     "RHS1DenseFallbackAdmission",
     "RHS1EarlyDenseShortcutDecision",
     "RHS1PostKrylovDenseShortcutDecision",
+    "RHS1PostKrylovDenseShortcutEvaluation",
+    "RHS1PostKrylovDenseShortcutEvaluationContext",
     "RHS1DenseShortcutSetup",
     "HostDenseFullSolveContext",
     "HostDenseReducedSolveContext",
@@ -1631,6 +1708,7 @@ __all__ = [
     "rhs1_dense_probe_enabled_from_env",
     "rhs1_dense_probe_shortcut_decision",
     "rhs1_early_dense_shortcut_decision",
+    "rhs1_evaluate_post_krylov_dense_shortcut",
     "rhs1_post_krylov_dense_shortcut_decision",
     "rhs1_dense_fallback_thresholds_from_env",
     "rhs1_dense_shortcut_setup_from_env",

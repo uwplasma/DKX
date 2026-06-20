@@ -13,6 +13,7 @@ from sfincs_jax.problems.profile_response.dense import (
     RHS1FullDenseFallbackContext,
     RHS1FullDenseFallbackStageContext,
     RHS1FullHostDenseShortcutContext,
+    RHS1PostKrylovDenseShortcutEvaluationContext,
     RHS1ReducedDenseFallbackAdmissionStageContext,
     RHS1ReducedDenseFallbackCandidateContext,
     RHS1ReducedDenseFallbackStageContext,
@@ -30,6 +31,7 @@ from sfincs_jax.problems.profile_response.dense import (
     rhs1_dense_probe_shortcut_decision,
     rhs1_dense_shortcut_setup_from_env,
     rhs1_early_dense_shortcut_decision,
+    rhs1_evaluate_post_krylov_dense_shortcut,
     rhs1_fp_preconditioner_probe_kind_from_env,
     rhs1_post_krylov_dense_shortcut_decision,
     resolve_rhs1_full_dense_fallback_admission,
@@ -373,6 +375,70 @@ def test_rhs1_post_krylov_dense_shortcut_decision_rejects_when_not_admitted() ->
 
     assert not decision.dense_shortcut
     assert decision.messages == ()
+
+
+def test_rhs1_evaluate_post_krylov_dense_shortcut_skips_true_residual_when_quick_ratio_low() -> None:
+    def raising_matvec(_x):
+        raise AssertionError("true residual should not be evaluated")
+
+    evaluation = rhs1_evaluate_post_krylov_dense_shortcut(
+        RHS1PostKrylovDenseShortcutEvaluationContext(
+            dense_shortcut=False,
+            dense_shortcut_ratio=10.0,
+            current_result=GMRESSolveResult(
+                x=jnp.asarray([0.0], dtype=jnp.float64),
+                residual_norm=jnp.asarray(1.0, dtype=jnp.float64),
+            ),
+            rhs=jnp.asarray([1.0], dtype=jnp.float64),
+            matvec=raising_matvec,
+            target=1.0,
+            dense_fallback_max=100,
+            active_size=50,
+            constraint_scheme=1,
+            cs0_sparse_first=False,
+            sparse_prefer_over_dense_shortcut=False,
+            sparse_exact_direct=False,
+        )
+    )
+
+    assert not evaluation.dense_shortcut
+    assert evaluation.residual_norm_true is None
+    assert evaluation.residual_ratio is None
+    assert evaluation.messages == ()
+
+
+def test_rhs1_evaluate_post_krylov_dense_shortcut_accepts_from_true_residual(monkeypatch) -> None:
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_DENSE_FALLBACK_RATIO", "1")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_DENSE_FALLBACK_MAX_HUGE", "100")
+
+    evaluation = rhs1_evaluate_post_krylov_dense_shortcut(
+        RHS1PostKrylovDenseShortcutEvaluationContext(
+            dense_shortcut=False,
+            dense_shortcut_ratio=1.0,
+            current_result=GMRESSolveResult(
+                x=jnp.asarray([0.0, 0.0], dtype=jnp.float64),
+                residual_norm=jnp.asarray(10.0, dtype=jnp.float64),
+            ),
+            rhs=jnp.asarray([1.0, 0.0], dtype=jnp.float64),
+            matvec=lambda x: jnp.zeros_like(x),
+            target=1.0e-3,
+            dense_fallback_max=100,
+            active_size=50,
+            constraint_scheme=1,
+            cs0_sparse_first=False,
+            sparse_prefer_over_dense_shortcut=False,
+            sparse_exact_direct=False,
+        )
+    )
+
+    assert evaluation.dense_shortcut
+    assert evaluation.residual_norm_true == pytest.approx(1.0)
+    assert evaluation.residual_ratio == pytest.approx(1000.0)
+    assert evaluation.messages == ((
+        0,
+        "solve_v3_full_system_linear_gmres: dense fallback shortcut "
+        "(ratio=1.000e+03 >= 1.0e+00)",
+    ),)
 
 
 def test_reduced_dense_fallback_admission_skips_after_host_sparse_lu() -> None:
