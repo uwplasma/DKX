@@ -288,6 +288,7 @@ from .problems.profile_response.sparse_pc import (
     XBlockPostSolveCorrectionContext,
     XBlockQICoarseSeedStageContext,
     XBlockQIGalerkinStageContext,
+    XBlockQITwoLevelStageContext,
     XBlockSparsePCCompletionContext,
     XBlockSparsePCFinalCoreState,
     XBlockSparsePCFinalDeviceState,
@@ -303,6 +304,7 @@ from .problems.profile_response.sparse_pc import (
     apply_xblock_moment_schur_stage,
     apply_xblock_qi_coarse_seed_stage,
     apply_xblock_qi_galerkin_stage,
+    apply_xblock_qi_two_level_stage,
     apply_xblock_two_level_stage,
     build_fortran_reduced_xblock_factor_stage,
     build_fortran_reduced_xblock_krylov_setup,
@@ -3419,288 +3421,81 @@ def solve_v3_full_system_linear_gmres(
                 parse_dampings=parse_rhs1_qi_galerkin_dampings,
                 env=os.environ,
             )
-            if qi_two_level_policy.reason is not None and not qi_two_level_policy.should_build:
-                qi_two_level_preconditioner_reason = qi_two_level_policy.reason
-            for level, message in qi_two_level_policy.messages:
-                if emit is not None:
-                    emit(level, message)
-            if qi_two_level_policy.should_build:
-                qi_two_level_start_s = sparse_timer.elapsed_s()
-                qi_two_level_preconditioner_rcond = float(qi_two_level_policy.rcond)
-                qi_two_level_preconditioner_damping = float(qi_two_level_policy.damping)
-                qi_two_level_candidate_dampings = qi_two_level_policy.candidate_dampings
-                qi_two_level_min_improvement = float(qi_two_level_policy.min_improvement)
-                qi_two_level_preconditioner_coarse_solver = qi_two_level_policy.coarse_solver
-                qi_two_level_residual_augment = bool(qi_two_level_policy.residual_augment)
-                qi_two_level_residual_augment_max_extra = int(qi_two_level_policy.residual_augment_max_extra)
-                qi_two_level_preconditioner_residual_augment_max_extra = int(
-                    qi_two_level_residual_augment_max_extra
+            qi_two_level_stage = apply_xblock_qi_two_level_stage(
+                context=XBlockQITwoLevelStageContext(
+                    op=op,
+                    rhs=rhs,
+                    x0_full=x0_full,
+                    xblock_rhs=xblock_rhs,
+                    base_preconditioner=precond_xblock_krylov,
+                    matvec=_mv_xblock_krylov,
+                    true_matvec_no_count=_mv_true_no_count,
+                    direction_projector=_xblock_reduce_full if xblock_use_active_dof else None,
+                    active_dof=bool(xblock_use_active_dof),
+                    linear_size=int(xblock_linear_size),
+                    basis_for_galerkin=qi_seed_basis_for_galerkin,
+                    seed_policy=qi_seed_policy,
+                    two_level_policy=qi_two_level_policy,
+                    elapsed_s=sparse_timer.elapsed_s,
+                    emit=emit,
+                    basis_builder=_rhs1_xblock_qi_coarse_basis,
+                    smoothed_load_basis_builder=_rhs1_xblock_smoothed_load_qi_basis,
+                    orthonormalizer=orthonormalize_rhs1_qi_coarse_basis,
+                    preconditioner_builder=build_rhs1_qi_two_level_preconditioner,
                 )
-                qi_two_level_residual_augment_steps = int(qi_two_level_policy.residual_augment_steps)
-                qi_two_level_preconditioner_residual_augment_steps = int(qi_two_level_residual_augment_steps)
-                qi_two_level_residual_augment_include_residuals = bool(
-                    qi_two_level_policy.residual_augment_include_residuals
-                )
-                qi_two_level_preconditioner_residual_augment_include_residuals = bool(
-                    qi_two_level_residual_augment_include_residuals
-                )
-                qi_two_level_smoothed_load_basis = bool(qi_two_level_policy.smoothed_load_basis)
-                qi_two_level_smoothed_load_basis_combine = bool(qi_two_level_policy.smoothed_load_basis_combine)
-                qi_two_level_smoothed_load_max_directions = int(qi_two_level_policy.smoothed_load_max_directions)
-                qi_two_level_smoothed_load_max_rank = int(qi_two_level_policy.smoothed_load_max_rank)
-                qi_two_level_smoothed_load_fsavg_lmax = int(qi_two_level_policy.smoothed_load_fsavg_lmax)
-                qi_two_level_smoothed_load_angular_lmax = int(qi_two_level_policy.smoothed_load_angular_lmax)
-                qi_two_level_smoothed_load_max_extra_units = int(qi_two_level_policy.smoothed_load_max_extra_units)
-                qi_two_level_smoothed_load_include_rhs = bool(qi_two_level_policy.smoothed_load_include_rhs)
-                try:
-                    qi_two_level_preconditioner_basis_reused_from_seed = qi_seed_basis_for_galerkin is not None
-                    if qi_seed_basis_for_galerkin is None:
-                        qi_seed_basis_for_galerkin = _rhs1_xblock_qi_coarse_basis(
-                            op=op,
-                            active_dof=bool(xblock_use_active_dof),
-                            linear_size=int(xblock_linear_size),
-                            max_rank=int(qi_seed_max_rank),
-                            rank_rtol=float(qi_seed_rank_rtol),
-                            include_angular=bool(qi_seed_include_angular),
-                            include_blocks=bool(qi_seed_include_blocks),
-                            basis_kind=qi_seed_basis_kind,
-                            max_candidates=int(qi_seed_max_candidates),
-                            max_angular_mode=int(qi_seed_max_angular_mode),
-                            include_radial=bool(qi_seed_include_radial),
-                            include_radial_angular=bool(qi_seed_include_radial_angular),
-                            include_constraint_moments=bool(qi_seed_include_constraint_moments),
-                            include_schur=bool(qi_seed_include_schur),
-                        )
-                    base_precond_xblock_krylov = precond_xblock_krylov
-
-                    def _qi_two_level_local_smoother(v: jnp.ndarray) -> jnp.ndarray:
-                        qi_two_level_stats["local_applies"] += 1
-                        return jnp.asarray(base_precond_xblock_krylov(jnp.asarray(v, dtype=jnp.float64)), dtype=jnp.float64)
-
-                    qi_current = (
-                        jnp.zeros_like(xblock_rhs)
-                        if x0_full is None
-                        else jnp.asarray(x0_full, dtype=jnp.float64)
-                    )
-                    residual_two_level_before = xblock_rhs - jnp.asarray(
-                        _mv_true_no_count(qi_current),
-                        dtype=jnp.float64,
-                    )
-                    qi_two_level_preconditioner_residual_before = float(jnp.linalg.norm(residual_two_level_before))
-                    qi_two_level_basis = qi_seed_basis_for_galerkin
-                    if bool(qi_two_level_smoothed_load_basis):
-                        smoothed_load_basis, smoothed_load_metadata = _rhs1_xblock_smoothed_load_qi_basis(
-                            op=op,
-                            rhs=rhs,
-                            base_preconditioner=_qi_two_level_local_smoother,
-                            direction_projector=_xblock_reduce_full if xblock_use_active_dof else None,
-                            expected_size=int(xblock_linear_size),
-                            include_rhs=bool(qi_two_level_smoothed_load_include_rhs),
-                            fsavg_lmax=int(qi_two_level_smoothed_load_fsavg_lmax),
-                            angular_lmax=int(qi_two_level_smoothed_load_angular_lmax),
-                            max_extra_units=int(qi_two_level_smoothed_load_max_extra_units),
-                            max_directions=int(qi_two_level_smoothed_load_max_directions),
-                            rank_rtol=float(qi_seed_rank_rtol),
-                            max_rank=int(qi_two_level_smoothed_load_max_rank),
-                        )
-                        qi_two_level_preconditioner_smoothed_load_basis = True
-                        qi_two_level_preconditioner_smoothed_load_metadata = smoothed_load_metadata
-                        if bool(qi_two_level_smoothed_load_basis_combine):
-                            combined_candidates = jnp.concatenate(
-                                [
-                                    jnp.asarray(smoothed_load_basis.vectors, dtype=jnp.float64),
-                                    jnp.asarray(qi_two_level_basis.vectors, dtype=jnp.float64),
-                                ],
-                                axis=1,
-                            )
-                            combined_labels = tuple(smoothed_load_basis.metadata.accepted_labels) + tuple(
-                                qi_two_level_basis.metadata.accepted_labels
-                            )
-                            qi_two_level_basis = orthonormalize_rhs1_qi_coarse_basis(
-                                combined_candidates,
-                                labels=combined_labels,
-                                rtol=float(qi_seed_rank_rtol),
-                                max_rank=int(qi_two_level_smoothed_load_max_rank) + int(qi_seed_max_rank),
-                            )
-                        else:
-                            qi_two_level_basis = smoothed_load_basis
-                    if bool(qi_two_level_residual_augment) and int(qi_two_level_residual_augment_max_extra) > 0:
-                        qi_two_level_preconditioner_rank_before_augmentation = int(qi_two_level_basis.metadata.rank)
-                        extra_vectors: list[jnp.ndarray] = []
-                        extra_labels: list[str] = []
-
-                        def _add_adaptive_vector(label: str, values: jnp.ndarray) -> None:
-                            if len(extra_vectors) >= int(qi_two_level_residual_augment_max_extra):
-                                return
-                            vec = jnp.asarray(values, dtype=jnp.float64).reshape((-1,))
-                            if int(vec.shape[0]) != int(qi_two_level_basis.vectors.shape[0]):
-                                return
-                            norm = float(jnp.linalg.norm(vec))
-                            if not np.isfinite(norm) or norm <= 0.0:
-                                return
-                            extra_vectors.append(vec / jnp.asarray(norm, dtype=vec.dtype))
-                            extra_labels.append(label)
-
-                        adaptive_residual = residual_two_level_before
-                        for adaptive_step in range(int(qi_two_level_residual_augment_steps)):
-                            if len(extra_vectors) >= int(qi_two_level_residual_augment_max_extra):
-                                break
-                            adaptive_correction = _qi_two_level_local_smoother(adaptive_residual)
-                            _add_adaptive_vector(
-                                f"adaptive:krylov_local_step_{adaptive_step}",
-                                adaptive_correction,
-                            )
-                            adaptive_residual = adaptive_residual - jnp.asarray(
-                                _mv_xblock_krylov(adaptive_correction),
-                                dtype=jnp.float64,
-                            )
-                            if bool(qi_two_level_residual_augment_include_residuals):
-                                _add_adaptive_vector(
-                                    f"adaptive:krylov_remaining_step_{adaptive_step}",
-                                    adaptive_residual,
-                                )
-                        if len(extra_vectors) < int(qi_two_level_residual_augment_max_extra):
-                            final_local = _qi_two_level_local_smoother(adaptive_residual)
-                            _add_adaptive_vector(
-                                f"adaptive:krylov_local_step_{int(qi_two_level_residual_augment_steps)}",
-                                final_local,
-                            )
-                        if extra_vectors:
-                            qi_two_level_preconditioner_residual_augmented = True
-                            qi_two_level_preconditioner_augmentation_labels = tuple(extra_labels)
-                            augmented_candidates = jnp.concatenate(
-                                [jnp.stack(tuple(extra_vectors), axis=1), jnp.asarray(qi_two_level_basis.vectors)],
-                                axis=1,
-                            )
-                            augmented_labels = tuple(extra_labels) + tuple(qi_two_level_basis.metadata.accepted_labels)
-                            qi_two_level_basis = orthonormalize_rhs1_qi_coarse_basis(
-                                augmented_candidates,
-                                labels=augmented_labels,
-                                rtol=float(qi_seed_rank_rtol),
-                                max_rank=int(qi_seed_max_rank) + int(qi_two_level_residual_augment_max_extra),
-                            )
-
-                    qi_two_level = build_rhs1_qi_two_level_preconditioner(
-                        operator=_mv_xblock_krylov,
-                        local_smoother=_qi_two_level_local_smoother,
-                        basis=qi_two_level_basis,
-                        regularization_rcond=(
-                            float(qi_two_level_preconditioner_rcond)
-                            if float(qi_two_level_preconditioner_rcond) > 0.0
-                            else 0.0
-                        ),
-                        damping=1.0,
-                        coarse_solver=qi_two_level_preconditioner_coarse_solver,
-                    )
-                    qi_two_level_preconditioner_built = True
-                    qi_two_level_preconditioner_rank = int(qi_two_level.metadata.rank)
-                    qi_two_level_preconditioner_candidate_count = int(
-                        qi_two_level_basis.metadata.candidate_count
-                    )
-                    qi_two_level_preconditioner_coarse_shape = tuple(
-                        int(value) for value in qi_two_level.metadata.coarse_operator_shape
-                    )
-                    qi_two_level_preconditioner_coarse_norm = float(qi_two_level.metadata.coarse_operator_norm)
-                    qi_two_level_preconditioner_coarse_solver = str(qi_two_level.metadata.coarse_solver)
-                    qi_two_level_preconditioner_operator_on_basis_shape = tuple(
-                        int(value) for value in qi_two_level.metadata.operator_on_basis_shape
-                    )
-                    qi_two_level_preconditioner_operator_on_basis_norm = float(
-                        qi_two_level.metadata.operator_on_basis_norm
-                    )
-                    correction_two_level = jnp.asarray(
-                        qi_two_level.apply(residual_two_level_before),
-                        dtype=jnp.float64,
-                    )
-                    required_two_level = float(qi_two_level_preconditioner_residual_before) * max(
-                        0.0,
-                        1.0 - float(qi_two_level_min_improvement),
-                    )
-                    best_two_level_index: int | None = None
-                    best_two_level_damping: float | None = None
-                    best_two_level_residual = float("inf")
-                    best_two_level_solution = qi_current
-                    for candidate_index, candidate_damping in enumerate(qi_two_level_candidate_dampings):
-                        probe_solution = qi_current + float(candidate_damping) * correction_two_level
-                        probe_residual = xblock_rhs - jnp.asarray(_mv_true_no_count(probe_solution), dtype=jnp.float64)
-                        residual_after = float(jnp.linalg.norm(probe_residual))
-                        ratio_after = (
-                            residual_after / float(qi_two_level_preconditioner_residual_before)
-                            if float(qi_two_level_preconditioner_residual_before) > 0.0
-                            else None
-                        )
-                        reduced = bool(
-                            np.isfinite(residual_after)
-                            and residual_after < float(qi_two_level_preconditioner_residual_before)
-                        )
-                        qi_two_level_preconditioner_probe_candidates.append(
-                            {
-                                "damping": float(candidate_damping),
-                                "residual_norm": float(residual_after),
-                                "improvement_ratio": ratio_after,
-                                "reduced": reduced,
-                            }
-                        )
-                        if np.isfinite(residual_after) and residual_after < best_two_level_residual:
-                            best_two_level_index = int(candidate_index)
-                            best_two_level_damping = float(candidate_damping)
-                            best_two_level_residual = float(residual_after)
-                            best_two_level_solution = probe_solution
-                    qi_two_level_preconditioner_selected_index = best_two_level_index
-                    qi_two_level_preconditioner_residual_after = float(best_two_level_residual)
-                    qi_two_level_preconditioner_improvement_ratio = (
-                        float(best_two_level_residual) / float(qi_two_level_preconditioner_residual_before)
-                        if float(qi_two_level_preconditioner_residual_before) > 0.0
-                        else None
-                    )
-                    qi_two_level_preconditioner_reason = (
-                        "residual_reduced"
-                        if np.isfinite(float(best_two_level_residual))
-                        and float(best_two_level_residual) < float(required_two_level)
-                        else "residual_not_reduced"
-                    )
-
-                    def _precond_xblock_qi_two_level(v: jnp.ndarray) -> jnp.ndarray:
-                        qi_two_level_stats["applies"] += 1
-                        return float(qi_two_level_preconditioner_damping) * jnp.asarray(
-                            qi_two_level.apply(jnp.asarray(v, dtype=jnp.float64)),
-                            dtype=jnp.float64,
-                        )
-
-                    if qi_two_level_preconditioner_reason == "residual_reduced":
-                        qi_two_level_preconditioner_damping = float(best_two_level_damping)
-                        x0_full = jnp.asarray(best_two_level_solution, dtype=jnp.float64)
-                        precond_xblock_krylov = _precond_xblock_qi_two_level
-                        qi_two_level_preconditioner_used = True
-                        if emit is not None:
-                            emit(
-                                0,
-                                "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
-                                "QI two-level preconditioner accepted "
-                                f"residual {qi_two_level_preconditioner_residual_before:.6e} "
-                                f"-> {qi_two_level_preconditioner_residual_after:.6e} "
-                                f"(rank={int(qi_two_level_preconditioner_rank)} "
-                                f"damping={float(qi_two_level_preconditioner_damping):.3e} "
-                                f"ratio={float(qi_two_level_preconditioner_improvement_ratio):.6e})",
-                            )
-                    elif emit is not None:
-                        emit(
-                            1,
-                            "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
-                            "QI two-level preconditioner rejected "
-                            f"reason={qi_two_level_preconditioner_reason} "
-                            f"residual={float(qi_two_level_preconditioner_residual_before):.6e}",
-                        )
-                except Exception as exc:  # noqa: BLE001
-                    qi_two_level_preconditioner_reason = f"{type(exc).__name__}: {exc}"
-                    if emit is not None:
-                        emit(
-                            1,
-                            "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
-                            f"QI two-level preconditioner disabled after build failure ({type(exc).__name__}: {exc})",
-                        )
-                qi_two_level_preconditioner_setup_s = float(sparse_timer.elapsed_s() - qi_two_level_start_s)
-                pc_factor_s += float(qi_two_level_preconditioner_setup_s)
+            )
+            precond_xblock_krylov = qi_two_level_stage.preconditioner
+            x0_full = qi_two_level_stage.x0_full
+            qi_seed_basis_for_galerkin = qi_two_level_stage.basis_for_galerkin
+            qi_two_level_preconditioner_built = bool(qi_two_level_stage.built)
+            qi_two_level_preconditioner_used = bool(qi_two_level_stage.used)
+            qi_two_level_preconditioner_reason = qi_two_level_stage.reason
+            qi_two_level_preconditioner_rank = int(qi_two_level_stage.rank)
+            qi_two_level_preconditioner_candidate_count = int(qi_two_level_stage.candidate_count)
+            qi_two_level_preconditioner_coarse_shape = qi_two_level_stage.coarse_shape
+            qi_two_level_preconditioner_coarse_norm = float(qi_two_level_stage.coarse_norm)
+            qi_two_level_preconditioner_operator_on_basis_shape = (
+                qi_two_level_stage.operator_on_basis_shape
+            )
+            qi_two_level_preconditioner_operator_on_basis_norm = float(
+                qi_two_level_stage.operator_on_basis_norm
+            )
+            qi_two_level_preconditioner_coarse_solver = qi_two_level_stage.coarse_solver
+            qi_two_level_preconditioner_residual_augmented = bool(
+                qi_two_level_stage.residual_augmented
+            )
+            qi_two_level_preconditioner_rank_before_augmentation = int(
+                qi_two_level_stage.rank_before_augmentation
+            )
+            qi_two_level_preconditioner_augmentation_labels = qi_two_level_stage.augmentation_labels
+            qi_two_level_preconditioner_residual_augment_max_extra = int(
+                qi_two_level_stage.residual_augment_max_extra
+            )
+            qi_two_level_preconditioner_residual_augment_steps = int(
+                qi_two_level_stage.residual_augment_steps
+            )
+            qi_two_level_preconditioner_residual_augment_include_residuals = bool(
+                qi_two_level_stage.residual_augment_include_residuals
+            )
+            qi_two_level_preconditioner_smoothed_load_basis = bool(
+                qi_two_level_stage.smoothed_load_basis
+            )
+            qi_two_level_preconditioner_smoothed_load_metadata = (
+                qi_two_level_stage.smoothed_load_metadata
+            )
+            qi_two_level_preconditioner_setup_s = float(qi_two_level_stage.setup_s)
+            qi_two_level_preconditioner_rcond = float(qi_two_level_stage.rcond)
+            qi_two_level_preconditioner_damping = float(qi_two_level_stage.damping)
+            qi_two_level_preconditioner_basis_reused_from_seed = bool(
+                qi_two_level_stage.basis_reused_from_seed
+            )
+            qi_two_level_preconditioner_residual_before = qi_two_level_stage.residual_before
+            qi_two_level_preconditioner_residual_after = qi_two_level_stage.residual_after
+            qi_two_level_preconditioner_improvement_ratio = qi_two_level_stage.improvement_ratio
+            qi_two_level_preconditioner_probe_candidates = qi_two_level_stage.probe_candidates
+            qi_two_level_preconditioner_selected_index = qi_two_level_stage.selected_index
+            qi_two_level_stats = qi_two_level_stage.stats
+            pc_factor_s += float(qi_two_level_preconditioner_setup_s)
             qi_device_admission = resolve_xblock_qi_device_admission_setup(
                 enabled=bool(qi_device_preconditioner_enabled),
                 host_fallback_used=bool(xblock_device_host_fallback_decision.used),

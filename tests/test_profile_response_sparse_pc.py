@@ -92,6 +92,7 @@ from sfincs_jax.problems.profile_response.sparse_pc import (
     XBlockPhysicalResidual,
     XBlockQICoarseSeedStageContext,
     XBlockQIGalerkinStageContext,
+    XBlockQITwoLevelStageContext,
     XBlockSparsePCCompletionContext,
     XBlockSparsePCFinalCoreState,
     XBlockSparsePCFinalDeviceState,
@@ -109,6 +110,7 @@ from sfincs_jax.problems.profile_response.sparse_pc import (
     apply_xblock_moment_schur_stage,
     apply_xblock_qi_coarse_seed_stage,
     apply_xblock_qi_galerkin_stage,
+    apply_xblock_qi_two_level_stage,
     apply_xblock_two_level_stage,
     apply_sparse_pc_post_minres,
     apply_sparse_pc_post_minres_if_needed,
@@ -5988,6 +5990,138 @@ def test_xblock_qi_two_level_policy_parses_build_parameters() -> None:
     assert setup.smoothed_load_angular_lmax == 3
     assert setup.smoothed_load_max_extra_units == 4
     assert not setup.smoothed_load_include_rhs
+
+
+def _fake_qi_two_level_preconditioner():
+    metadata = SimpleNamespace(
+        rank=1,
+        coarse_operator_shape=(1, 1),
+        coarse_operator_norm=3.0,
+        operator_on_basis_shape=(2, 1),
+        operator_on_basis_norm=4.0,
+        coarse_solver="action_lstsq",
+    )
+    return SimpleNamespace(
+        metadata=metadata,
+        apply=lambda v: jnp.asarray(v, dtype=jnp.float64),
+    )
+
+
+def test_xblock_qi_two_level_stage_accepts_residual_reducing_probe() -> None:
+    seed_policy = resolve_xblock_qi_seed_policy_setup(
+        env={"SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_TWO_LEVEL_PRECONDITIONER": "1"},
+    )
+    two_level_policy = resolve_xblock_qi_two_level_policy_setup(
+        enabled=True,
+        host_fallback_used=False,
+        precondition_side="right",
+        seed_max_rank=seed_policy.max_rank,
+        parse_dampings=lambda _raw, **_kwargs: (1.0,),
+        env={
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_TWO_LEVEL_PRECONDITIONER_MIN_IMPROVEMENT": "0.01"
+        },
+    )
+    basis = _one_vector_qi_basis()
+    messages: list[str] = []
+
+    def preconditioner_builder(**kwargs):
+        assert kwargs["basis"] is basis
+        assert kwargs["coarse_solver"] == "action_lstsq"
+        return _fake_qi_two_level_preconditioner()
+
+    result = apply_xblock_qi_two_level_stage(
+        context=XBlockQITwoLevelStageContext(
+            op=SimpleNamespace(),
+            rhs=jnp.asarray([1.0, 0.0]),
+            x0_full=None,
+            xblock_rhs=jnp.asarray([1.0, 0.0]),
+            base_preconditioner=_identity,
+            matvec=lambda v: v,
+            true_matvec_no_count=lambda v: v,
+            direction_projector=None,
+            active_dof=True,
+            linear_size=2,
+            basis_for_galerkin=basis,
+            seed_policy=seed_policy,
+            two_level_policy=two_level_policy,
+            elapsed_s=lambda: 6.0,
+            emit=lambda _level, msg: messages.append(msg),
+            basis_builder=lambda **_kwargs: basis,
+            smoothed_load_basis_builder=lambda **_kwargs: (basis, {}),
+            orthonormalizer=lambda vectors, **_kwargs: RHS1QICoarseBasis(
+                vectors=vectors,
+                metadata=basis.metadata,
+            ),
+            preconditioner_builder=preconditioner_builder,
+        )
+    )
+
+    assert result.built
+    assert result.used
+    assert result.reason == "residual_reduced"
+    assert result.rank == 1
+    assert result.candidate_count == 3
+    assert result.coarse_shape == (1, 1)
+    assert result.operator_on_basis_shape == (2, 1)
+    assert result.coarse_solver == "action_lstsq"
+    assert result.residual_before == pytest.approx(1.0)
+    assert result.residual_after == pytest.approx(0.0)
+    assert result.improvement_ratio == pytest.approx(0.0)
+    assert result.selected_index == 0
+    assert result.x0_full.tolist() == [1.0, 0.0]
+    assert result.preconditioner(jnp.asarray([2.0, 0.0])).tolist() == [2.0, 0.0]
+    assert result.stats["applies"] == 1
+    assert any("QI two-level preconditioner accepted" in message for message in messages)
+
+
+def test_xblock_qi_two_level_stage_records_basis_failure() -> None:
+    seed_policy = resolve_xblock_qi_seed_policy_setup(
+        env={"SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_TWO_LEVEL_PRECONDITIONER": "1"},
+    )
+    two_level_policy = resolve_xblock_qi_two_level_policy_setup(
+        enabled=True,
+        host_fallback_used=False,
+        precondition_side="right",
+        seed_max_rank=seed_policy.max_rank,
+        parse_dampings=lambda _raw, **_kwargs: (1.0,),
+        env={},
+    )
+
+    def basis_builder(**_kwargs):
+        raise RuntimeError("no basis")
+
+    result = apply_xblock_qi_two_level_stage(
+        context=XBlockQITwoLevelStageContext(
+            op=SimpleNamespace(),
+            rhs=jnp.asarray([1.0, 0.0]),
+            x0_full=None,
+            xblock_rhs=jnp.asarray([1.0, 0.0]),
+            base_preconditioner=_identity,
+            matvec=lambda v: v,
+            true_matvec_no_count=lambda v: v,
+            direction_projector=None,
+            active_dof=False,
+            linear_size=2,
+            basis_for_galerkin=None,
+            seed_policy=seed_policy,
+            two_level_policy=two_level_policy,
+            elapsed_s=lambda: 0.0,
+            emit=None,
+            basis_builder=basis_builder,
+            smoothed_load_basis_builder=lambda **_kwargs: (_one_vector_qi_basis(), {}),
+            orthonormalizer=lambda vectors, **_kwargs: RHS1QICoarseBasis(
+                vectors=vectors,
+                metadata=_one_vector_qi_basis().metadata,
+            ),
+            preconditioner_builder=lambda **_kwargs: _fake_qi_two_level_preconditioner(),
+        )
+    )
+
+    assert not result.built
+    assert not result.used
+    assert result.preconditioner is _identity
+    assert result.reason == "RuntimeError: no basis"
+    assert result.coarse_solver == "action_lstsq"
 
 
 def test_xblock_qi_device_admission_defaults_off_and_handles_host_fallback() -> None:

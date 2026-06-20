@@ -4052,6 +4052,68 @@ class XBlockQIGalerkinStageResult:
 
 
 @dataclass(frozen=True)
+class XBlockQITwoLevelStageContext:
+    """Dependencies for optional QI two-level preconditioner setup."""
+
+    op: object
+    rhs: jnp.ndarray
+    x0_full: jnp.ndarray | None
+    xblock_rhs: jnp.ndarray
+    base_preconditioner: ArrayFn
+    matvec: ArrayFn
+    true_matvec_no_count: ArrayFn
+    direction_projector: ArrayFn | None
+    active_dof: bool
+    linear_size: int
+    basis_for_galerkin: RHS1QICoarseBasis | None
+    seed_policy: XBlockQISeedPolicySetup
+    two_level_policy: XBlockQITwoLevelPolicySetup
+    elapsed_s: Callable[[], float]
+    emit: EmitFn | None
+    basis_builder: Callable[..., RHS1QICoarseBasis]
+    smoothed_load_basis_builder: Callable[..., tuple[RHS1QICoarseBasis, dict[str, object]]]
+    orthonormalizer: Callable[..., RHS1QICoarseBasis]
+    preconditioner_builder: Callable[..., object]
+
+
+@dataclass(frozen=True)
+class XBlockQITwoLevelStageResult:
+    """Result from optional QI two-level preconditioner setup."""
+
+    preconditioner: ArrayFn
+    x0_full: jnp.ndarray | None
+    basis_for_galerkin: RHS1QICoarseBasis | None
+    built: bool
+    used: bool
+    reason: str | None
+    rank: int
+    candidate_count: int
+    coarse_shape: tuple[int, int]
+    coarse_norm: float
+    operator_on_basis_shape: tuple[int, int]
+    operator_on_basis_norm: float
+    coarse_solver: str | None
+    residual_augmented: bool
+    rank_before_augmentation: int
+    augmentation_labels: tuple[str, ...]
+    residual_augment_max_extra: int
+    residual_augment_steps: int
+    residual_augment_include_residuals: bool
+    smoothed_load_basis: bool
+    smoothed_load_metadata: dict[str, object]
+    setup_s: float
+    rcond: float
+    damping: float
+    basis_reused_from_seed: bool
+    residual_before: float | None
+    residual_after: float | None
+    improvement_ratio: float | None
+    probe_candidates: list[dict[str, object]]
+    selected_index: int | None
+    stats: dict[str, int]
+
+
+@dataclass(frozen=True)
 class XBlockInitialGuessSetup:
     """Accepted initial guess for an x-block Krylov solve."""
 
@@ -10042,6 +10104,385 @@ def resolve_xblock_qi_two_level_policy_setup(
     )
 
 
+def apply_xblock_qi_two_level_stage(
+    *,
+    context: XBlockQITwoLevelStageContext,
+) -> XBlockQITwoLevelStageResult:
+    """Build, probe, and optionally install a QI two-level preconditioner."""
+
+    reason = (
+        context.two_level_policy.reason
+        if context.two_level_policy.reason is not None and not context.two_level_policy.should_build
+        else None
+    )
+    for level, message in context.two_level_policy.messages:
+        if context.emit is not None:
+            context.emit(int(level), str(message))
+    if not bool(context.two_level_policy.should_build):
+        return XBlockQITwoLevelStageResult(
+            preconditioner=context.base_preconditioner,
+            x0_full=context.x0_full,
+            basis_for_galerkin=context.basis_for_galerkin,
+            built=False,
+            used=False,
+            reason=reason,
+            rank=0,
+            candidate_count=0,
+            coarse_shape=(0, 0),
+            coarse_norm=0.0,
+            operator_on_basis_shape=(0, 0),
+            operator_on_basis_norm=0.0,
+            coarse_solver=None,
+            residual_augmented=False,
+            rank_before_augmentation=0,
+            augmentation_labels=(),
+            residual_augment_max_extra=0,
+            residual_augment_steps=0,
+            residual_augment_include_residuals=False,
+            smoothed_load_basis=False,
+            smoothed_load_metadata={},
+            setup_s=0.0,
+            rcond=0.0,
+            damping=1.0,
+            basis_reused_from_seed=False,
+            residual_before=None,
+            residual_after=None,
+            improvement_ratio=None,
+            probe_candidates=[],
+            selected_index=None,
+            stats={"applies": 0, "local_applies": 0},
+        )
+
+    start_s = float(context.elapsed_s())
+    policy = context.two_level_policy
+    rcond = float(policy.rcond)
+    damping = float(policy.damping)
+    coarse_solver = policy.coarse_solver
+    residual_augment_max_extra = int(policy.residual_augment_max_extra)
+    residual_augment_steps = int(policy.residual_augment_steps)
+    residual_augment_include_residuals = bool(policy.residual_augment_include_residuals)
+    stats = {"applies": 0, "local_applies": 0}
+    basis_for_galerkin = context.basis_for_galerkin
+    basis_reused_from_seed = basis_for_galerkin is not None
+    x0_full = context.x0_full
+    built = False
+    used = False
+    rank = 0
+    candidate_count = 0
+    coarse_shape = (0, 0)
+    coarse_norm = 0.0
+    operator_on_basis_shape = (0, 0)
+    operator_on_basis_norm = 0.0
+    residual_augmented = False
+    rank_before_augmentation = 0
+    augmentation_labels: tuple[str, ...] = ()
+    smoothed_load_basis_used = False
+    smoothed_load_metadata: dict[str, object] = {}
+    residual_before: float | None = None
+    residual_after: float | None = None
+    improvement_ratio: float | None = None
+    probe_candidates: list[dict[str, object]] = []
+    selected_index: int | None = None
+    try:
+        if basis_for_galerkin is None:
+            basis_for_galerkin = context.basis_builder(
+                op=context.op,
+                active_dof=bool(context.active_dof),
+                linear_size=int(context.linear_size),
+                max_rank=int(context.seed_policy.max_rank),
+                rank_rtol=float(context.seed_policy.rank_rtol),
+                include_angular=bool(context.seed_policy.include_angular),
+                include_blocks=bool(context.seed_policy.include_blocks),
+                basis_kind=context.seed_policy.basis_kind,
+                max_candidates=int(context.seed_policy.max_candidates),
+                max_angular_mode=int(context.seed_policy.max_angular_mode),
+                include_radial=bool(context.seed_policy.include_radial),
+                include_radial_angular=bool(context.seed_policy.include_radial_angular),
+                include_constraint_moments=bool(context.seed_policy.include_constraint_moments),
+                include_schur=bool(context.seed_policy.include_schur),
+            )
+
+        def local_smoother(v: jnp.ndarray) -> jnp.ndarray:
+            stats["local_applies"] += 1
+            return jnp.asarray(
+                context.base_preconditioner(jnp.asarray(v, dtype=jnp.float64)),
+                dtype=jnp.float64,
+            )
+
+        current = (
+            jnp.zeros_like(context.xblock_rhs)
+            if x0_full is None
+            else jnp.asarray(x0_full, dtype=jnp.float64)
+        )
+        residual_before_vec = context.xblock_rhs - jnp.asarray(
+            context.true_matvec_no_count(current),
+            dtype=jnp.float64,
+        )
+        residual_before = float(jnp.linalg.norm(residual_before_vec))
+        two_level_basis = basis_for_galerkin
+        if bool(policy.smoothed_load_basis):
+            smoothed_basis, smoothed_metadata = context.smoothed_load_basis_builder(
+                op=context.op,
+                rhs=context.rhs,
+                base_preconditioner=local_smoother,
+                direction_projector=context.direction_projector,
+                expected_size=int(context.linear_size),
+                include_rhs=bool(policy.smoothed_load_include_rhs),
+                fsavg_lmax=int(policy.smoothed_load_fsavg_lmax),
+                angular_lmax=int(policy.smoothed_load_angular_lmax),
+                max_extra_units=int(policy.smoothed_load_max_extra_units),
+                max_directions=int(policy.smoothed_load_max_directions),
+                rank_rtol=float(context.seed_policy.rank_rtol),
+                max_rank=int(policy.smoothed_load_max_rank),
+            )
+            smoothed_load_basis_used = True
+            smoothed_load_metadata = dict(smoothed_metadata)
+            if bool(policy.smoothed_load_basis_combine):
+                combined_candidates = jnp.concatenate(
+                    [
+                        jnp.asarray(smoothed_basis.vectors, dtype=jnp.float64),
+                        jnp.asarray(two_level_basis.vectors, dtype=jnp.float64),
+                    ],
+                    axis=1,
+                )
+                combined_labels = tuple(smoothed_basis.metadata.accepted_labels) + tuple(
+                    two_level_basis.metadata.accepted_labels
+                )
+                two_level_basis = context.orthonormalizer(
+                    combined_candidates,
+                    labels=combined_labels,
+                    rtol=float(context.seed_policy.rank_rtol),
+                    max_rank=int(policy.smoothed_load_max_rank) + int(context.seed_policy.max_rank),
+                )
+            else:
+                two_level_basis = smoothed_basis
+
+        if bool(policy.residual_augment) and int(residual_augment_max_extra) > 0:
+            rank_before_augmentation = int(two_level_basis.metadata.rank)
+            extra_vectors: list[jnp.ndarray] = []
+            extra_labels: list[str] = []
+
+            def add_adaptive_vector(label: str, values: jnp.ndarray) -> None:
+                if len(extra_vectors) >= int(residual_augment_max_extra):
+                    return
+                vec = jnp.asarray(values, dtype=jnp.float64).reshape((-1,))
+                if int(vec.shape[0]) != int(two_level_basis.vectors.shape[0]):
+                    return
+                norm = float(jnp.linalg.norm(vec))
+                if not np.isfinite(norm) or norm <= 0.0:
+                    return
+                extra_vectors.append(vec / jnp.asarray(norm, dtype=vec.dtype))
+                extra_labels.append(label)
+
+            adaptive_residual = residual_before_vec
+            for adaptive_step in range(int(residual_augment_steps)):
+                if len(extra_vectors) >= int(residual_augment_max_extra):
+                    break
+                adaptive_correction = local_smoother(adaptive_residual)
+                add_adaptive_vector(
+                    f"adaptive:krylov_local_step_{adaptive_step}",
+                    adaptive_correction,
+                )
+                adaptive_residual = adaptive_residual - jnp.asarray(
+                    context.matvec(adaptive_correction),
+                    dtype=jnp.float64,
+                )
+                if bool(residual_augment_include_residuals):
+                    add_adaptive_vector(
+                        f"adaptive:krylov_remaining_step_{adaptive_step}",
+                        adaptive_residual,
+                    )
+            if len(extra_vectors) < int(residual_augment_max_extra):
+                final_local = local_smoother(adaptive_residual)
+                add_adaptive_vector(
+                    f"adaptive:krylov_local_step_{int(residual_augment_steps)}",
+                    final_local,
+                )
+            if extra_vectors:
+                residual_augmented = True
+                augmentation_labels = tuple(extra_labels)
+                augmented_candidates = jnp.concatenate(
+                    [jnp.stack(tuple(extra_vectors), axis=1), jnp.asarray(two_level_basis.vectors)],
+                    axis=1,
+                )
+                augmented_labels = tuple(extra_labels) + tuple(two_level_basis.metadata.accepted_labels)
+                two_level_basis = context.orthonormalizer(
+                    augmented_candidates,
+                    labels=augmented_labels,
+                    rtol=float(context.seed_policy.rank_rtol),
+                    max_rank=int(context.seed_policy.max_rank) + int(residual_augment_max_extra),
+                )
+
+        qi_two_level = context.preconditioner_builder(
+            operator=context.matvec,
+            local_smoother=local_smoother,
+            basis=two_level_basis,
+            regularization_rcond=float(rcond) if float(rcond) > 0.0 else 0.0,
+            damping=1.0,
+            coarse_solver=coarse_solver,
+        )
+        built = True
+        rank = int(qi_two_level.metadata.rank)
+        candidate_count = int(two_level_basis.metadata.candidate_count)
+        coarse_shape = tuple(int(value) for value in qi_two_level.metadata.coarse_operator_shape)
+        coarse_norm = float(qi_two_level.metadata.coarse_operator_norm)
+        coarse_solver = str(qi_two_level.metadata.coarse_solver)
+        operator_on_basis_shape = tuple(
+            int(value) for value in qi_two_level.metadata.operator_on_basis_shape
+        )
+        operator_on_basis_norm = float(qi_two_level.metadata.operator_on_basis_norm)
+        correction = jnp.asarray(qi_two_level.apply(residual_before_vec), dtype=jnp.float64)
+        required = float(residual_before) * max(0.0, 1.0 - float(policy.min_improvement))
+        best_index: int | None = None
+        best_damping: float | None = None
+        best_residual = float("inf")
+        best_solution = current
+        for candidate_index, candidate_damping in enumerate(policy.candidate_dampings):
+            probe_solution = current + float(candidate_damping) * correction
+            probe_residual = context.xblock_rhs - jnp.asarray(
+                context.true_matvec_no_count(probe_solution),
+                dtype=jnp.float64,
+            )
+            candidate_residual = float(jnp.linalg.norm(probe_residual))
+            ratio_after = (
+                candidate_residual / float(residual_before)
+                if float(residual_before) > 0.0
+                else None
+            )
+            reduced = bool(np.isfinite(candidate_residual) and candidate_residual < float(residual_before))
+            probe_candidates.append(
+                {
+                    "damping": float(candidate_damping),
+                    "residual_norm": float(candidate_residual),
+                    "improvement_ratio": ratio_after,
+                    "reduced": reduced,
+                }
+            )
+            if np.isfinite(candidate_residual) and candidate_residual < best_residual:
+                best_index = int(candidate_index)
+                best_damping = float(candidate_damping)
+                best_residual = float(candidate_residual)
+                best_solution = probe_solution
+        selected_index = best_index
+        residual_after = float(best_residual)
+        improvement_ratio = (
+            float(best_residual) / float(residual_before)
+            if float(residual_before) > 0.0
+            else None
+        )
+        reason = (
+            "residual_reduced"
+            if np.isfinite(float(best_residual)) and float(best_residual) < float(required)
+            else "residual_not_reduced"
+        )
+
+        if reason == "residual_reduced":
+            damping = float(best_damping)
+            x0_full = jnp.asarray(best_solution, dtype=jnp.float64)
+
+            def preconditioner(v: jnp.ndarray) -> jnp.ndarray:
+                stats["applies"] += 1
+                return float(damping) * jnp.asarray(
+                    qi_two_level.apply(jnp.asarray(v, dtype=jnp.float64)),
+                    dtype=jnp.float64,
+                )
+
+            used = True
+            if context.emit is not None:
+                context.emit(
+                    0,
+                    "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
+                    "QI two-level preconditioner accepted "
+                    f"residual {float(residual_before):.6e} -> {float(residual_after):.6e} "
+                    f"(rank={int(rank)} damping={float(damping):.3e} "
+                    f"ratio={float(improvement_ratio):.6e})",
+                )
+            selected_preconditioner = preconditioner
+        else:
+            if context.emit is not None:
+                context.emit(
+                    1,
+                    "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
+                    f"QI two-level preconditioner rejected reason={reason} "
+                    f"residual={float(residual_before):.6e}",
+                )
+            selected_preconditioner = context.base_preconditioner
+        return XBlockQITwoLevelStageResult(
+            preconditioner=selected_preconditioner,
+            x0_full=x0_full,
+            basis_for_galerkin=basis_for_galerkin,
+            built=bool(built),
+            used=bool(used),
+            reason=reason,
+            rank=int(rank),
+            candidate_count=int(candidate_count),
+            coarse_shape=coarse_shape,
+            coarse_norm=float(coarse_norm),
+            operator_on_basis_shape=operator_on_basis_shape,
+            operator_on_basis_norm=float(operator_on_basis_norm),
+            coarse_solver=coarse_solver,
+            residual_augmented=bool(residual_augmented),
+            rank_before_augmentation=int(rank_before_augmentation),
+            augmentation_labels=augmentation_labels,
+            residual_augment_max_extra=int(residual_augment_max_extra),
+            residual_augment_steps=int(residual_augment_steps),
+            residual_augment_include_residuals=bool(residual_augment_include_residuals),
+            smoothed_load_basis=bool(smoothed_load_basis_used),
+            smoothed_load_metadata=smoothed_load_metadata,
+            setup_s=float(context.elapsed_s()) - start_s,
+            rcond=float(rcond),
+            damping=float(damping),
+            basis_reused_from_seed=bool(basis_reused_from_seed),
+            residual_before=residual_before,
+            residual_after=residual_after,
+            improvement_ratio=improvement_ratio,
+            probe_candidates=probe_candidates,
+            selected_index=selected_index,
+            stats=stats,
+        )
+    except Exception as exc:  # noqa: BLE001
+        reason = f"{type(exc).__name__}: {exc}"
+        if context.emit is not None:
+            context.emit(
+                1,
+                "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
+                f"QI two-level preconditioner disabled after build failure ({type(exc).__name__}: {exc})",
+            )
+        return XBlockQITwoLevelStageResult(
+            preconditioner=context.base_preconditioner,
+            x0_full=x0_full,
+            basis_for_galerkin=basis_for_galerkin,
+            built=False,
+            used=False,
+            reason=reason,
+            rank=int(rank),
+            candidate_count=int(candidate_count),
+            coarse_shape=coarse_shape,
+            coarse_norm=float(coarse_norm),
+            operator_on_basis_shape=operator_on_basis_shape,
+            operator_on_basis_norm=float(operator_on_basis_norm),
+            coarse_solver=coarse_solver,
+            residual_augmented=bool(residual_augmented),
+            rank_before_augmentation=int(rank_before_augmentation),
+            augmentation_labels=augmentation_labels,
+            residual_augment_max_extra=int(residual_augment_max_extra),
+            residual_augment_steps=int(residual_augment_steps),
+            residual_augment_include_residuals=bool(residual_augment_include_residuals),
+            smoothed_load_basis=bool(smoothed_load_basis_used),
+            smoothed_load_metadata=smoothed_load_metadata,
+            setup_s=float(context.elapsed_s()) - start_s,
+            rcond=float(rcond),
+            damping=float(damping),
+            basis_reused_from_seed=bool(basis_reused_from_seed),
+            residual_before=residual_before,
+            residual_after=residual_after,
+            improvement_ratio=improvement_ratio,
+            probe_candidates=probe_candidates,
+            selected_index=selected_index,
+            stats=stats,
+        )
+
+
 def resolve_xblock_qi_device_admission_setup(
     *,
     enabled: bool,
@@ -12538,6 +12979,8 @@ __all__ = [
     "XBlockQICoarseSeedStageResult",
     "XBlockQIGalerkinStageContext",
     "XBlockQIGalerkinStageResult",
+    "XBlockQITwoLevelStageContext",
+    "XBlockQITwoLevelStageResult",
     "XBlockPhysicalResidual",
     "SparsePCGMRESFinalPayload",
     "SparseMinimumNormPolicy",
@@ -12574,6 +13017,7 @@ __all__ = [
     "apply_xblock_moment_schur_stage",
     "apply_xblock_qi_coarse_seed_stage",
     "apply_xblock_qi_galerkin_stage",
+    "apply_xblock_qi_two_level_stage",
     "apply_xblock_two_level_stage",
     "apply_sparse_pc_post_minres",
     "apply_sparse_pc_post_minres_if_needed",
