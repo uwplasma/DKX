@@ -42,6 +42,12 @@ Make `sfincs_jax` research-grade while preserving the public user contract:
 
 Recent checkpoints:
 
+- RHSMode=1 x-block sparse-PC first-attempt plus optional GMRES fallback solve
+  execution now uses a tested `run_xblock_krylov_solve_stage(...)` helper.
+  The helper owns first-attempt dispatch, physical true-residual measurement,
+  fallback admission/execution, and candidate/final state separation; the
+  driver keeps only explicit metadata scalar handoff and post-solve correction
+  orchestration.
 - RHSMode=1 x-block sparse-PC host/device Krylov progress callbacks now use a
   tested `profile_response.sparse_pc` callback builder. The driver passes an
   explicit timing/emitter context instead of owning local progress closures,
@@ -316,10 +322,10 @@ Recent checkpoints:
 - `cb295ce` Extract sparse pattern setup.
 - `4b6a5b4` Extract sparse factor policy.
 
-Current source-size snapshot after x-block Krylov-progress callback extraction:
+Current source-size snapshot after x-block Krylov solve-stage extraction:
 
-- `sfincs_jax/v3_driver.py`: `15962` lines.
-- `solve_v3_full_system_linear_gmres`: `11197` lines.
+- `sfincs_jax/v3_driver.py`: `15919` lines.
+- `solve_v3_full_system_linear_gmres`: `11158` lines.
 - `sfincs_jax/v3_results.py`: `119` lines.
 - `sfincs_jax/rhs1_ksp_diagnostics.py`: `306` lines.
 - `sfincs_jax/rhs1_pas_policy.py`: `864` lines.
@@ -331,11 +337,19 @@ Current source-size snapshot after x-block Krylov-progress callback extraction:
 - `sfincs_jax/problems/profile_response/dense.py`: `701` lines.
 - `sfincs_jax/problems/profile_response/linear_solve.py`: `339` lines.
 - `sfincs_jax/problems/profile_response/active_projection.py`: `116` lines.
-- `sfincs_jax/problems/profile_response/sparse_pc.py`: `14797` lines.
+- `sfincs_jax/problems/profile_response/sparse_pc.py`: `14897` lines.
 - `sfincs_jax/rhs1_xblock_policy.py`: `1215` lines.
 
 Recent local validation:
 
+- Sparse-PC helper shard after x-block Krylov solve-stage extraction:
+  `286 passed in 2.56 s`.
+- RHSMode=1/profile-response shard after x-block Krylov solve-stage
+  extraction: `1250 passed in 47.34 s`.
+- Hygiene after x-block Krylov solve-stage extraction:
+  `ruff check`, `py_compile`, `compileall`, `git diff --check`, and
+  `python scripts/check_repo_size.py` passed. Repo-size audit reported no
+  reviewed files above 2 MiB.
 - Sparse-PC helper shard after x-block Krylov-progress callback extraction:
   `284 passed in 2.46 s`.
 - RHSMode=1/profile-response shard after x-block Krylov-progress callback
@@ -1232,7 +1246,7 @@ Known CI issue fixed by this rewrite:
 
 ### 1. `v3_driver.py` Architecture Refactor
 
-Completion estimate: 87%.
+Completion estimate: 88%.
 
 Goal:
 
@@ -1399,6 +1413,11 @@ Completed recent boundaries:
   sparse-PC-domain callback builder. The driver owns only the emitter, elapsed
   timer, and progress stride, while device-cycle and host-iteration progress
   formatting and no-op behavior are covered by focused tests.
+- RHSMode=1 x-block Krylov first-attempt plus optional GMRES fallback solve
+  execution now uses a tested sparse-PC-domain stage helper. Candidate
+  true-residual state, optional fallback state, fallback progress/emission, and
+  final reported Krylov counters are built outside the driver while preserving
+  existing metadata scalar names.
 - RHSMode=1 rescue/refinement candidate acceptance and KSP replay-state updates
   consolidated into profile-response handoff helpers.
 - RHSMode=1 true-residual recomputation before fallback decisions consolidated

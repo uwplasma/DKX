@@ -279,11 +279,10 @@ from .problems.profile_response.sparse_pc import (
     SparsePCGMRESResult,
     XBlockAugmentedKrylovStageContext,
     XBlockFirstKrylovAttemptContext,
-    XBlockFirstKrylovSolveStateContext,
-    XBlockGMRESFallbackContext,
     XBlockGlobalCouplingStageContext,
     XBlockKrylovControlSetupContext,
     XBlockKrylovProgressCallbacksContext,
+    XBlockKrylovSolveStageContext,
     XBlockKrylovSolveSpaceContext,
     XBlockMomentSchurStageContext,
     XBlockPostSolveCorrectionContext,
@@ -372,11 +371,8 @@ from .problems.profile_response.sparse_pc import (
     resolve_xblock_two_level_policy_setup,
     run_fortran_reduced_xblock_krylov_solve,
     run_sparse_pc_gmres_once,
-    run_xblock_first_krylov_attempt,
-    run_xblock_gmres_fallback_if_needed,
+    run_xblock_krylov_solve_stage,
     run_xblock_post_solve_corrections,
-    xblock_krylov_state_from_first_attempt,
-    xblock_krylov_state_from_gmres_fallback,
     xblock_sparse_pc_final_metadata_state_from_context,
     build_sparse_host_or_ilu_factor,
     build_sparse_ilu_preconditioner_from_cache,
@@ -4288,110 +4284,71 @@ def solve_v3_full_system_linear_gmres(
                 )
             )
 
-            device_krylov_iterations: int | None = None
-            device_krylov_estimated_matvecs: int | None = None
-            first_krylov = run_xblock_first_krylov_attempt(
-                XBlockFirstKrylovAttemptContext(
-                    krylov_method=str(xblock_krylov_method),
-                    matvec=solve_matvec,
-                    rhs=solve_rhs,
-                    preconditioner=solve_preconditioner,
-                    x0=solve_x0,
-                    tol=float(tol),
-                    atol=float(atol),
-                    restart=int(pc_restart),
-                    maxiter=pc_maxiter,
-                    precondition_side=str(precondition_side),
-                    lgmres_outer_k=xblock_lgmres_rescue_outer_k,
-                    fgmres_block_between_cycles=bool(fgmres_block_between_cycles),
-                    skip_inactive_work=not bool(two_level_built),
-                    device_fgmres_jit=bool(xblock_device_fgmres_jit),
-                    device_fgmres_jit_mode=str(xblock_device_fgmres_jit_mode),
-                    device_fgmres_jit_outer_k=int(xblock_device_fgmres_jit_outer_k),
-                    augmented_krylov_used=bool(qi_device_augmented_krylov_used),
-                    augmentation_basis=augmentation_basis_for_solve,
-                    operator_on_augmentation=operator_on_augmentation_for_solve,
-                    augmentation_mode=str(qi_device_augmented_krylov_mode),
-                    tfqmr_replacement_interval=int(tfqmr_replacement_interval),
-                    mv_count=int(mv_count),
-                    host_progress_callback=progress_callbacks.host_progress_callback,
-                    device_cycle_progress_callback=progress_callbacks.device_cycle_progress_callback,
-                    gmres_solver=gmres_solve_with_history_scipy,
-                    lgmres_solver=lgmres_solve_with_history_scipy,
-                    gcrotmk_solver=gcrotmk_solve_with_history_scipy,
-                    bicgstab_solver=bicgstab_solve_with_history_scipy,
-                    fgmres_solver=fgmres_solve_with_residual,
-                    fgmres_jit_solver=fgmres_solve_with_residual_jit,
-                    fgmres_cycle_jit_solver=fgmres_cycle_jit_solve_with_residual,
-                    bicgstab_jax_solver=bicgstab_solve_with_residual,
-                    tfqmr_jax_solver=tfqmr_solve_with_residual,
-                )
-            )
-            solve_s = (sparse_timer.elapsed_s() - solve_start_s) + float(xblock_side_probe_s) + float(probe_coarse_s)
-            solve_state = xblock_krylov_state_from_first_attempt(
-                XBlockFirstKrylovSolveStateContext(
-                    krylov_method=str(xblock_krylov_method),
-                    first_attempt=first_krylov,
-                    solve_s=float(solve_s),
-                    solution_to_physical=solve_solution_to_physical,
-                    physical_rhs=xblock_rhs,
-                    physical_matvec=_mv_true,
-                    mv_count=int(mv_count),
-                )
-            )
-            x_solution_np = solve_state.x_solution
-            x_physical_np = solve_state.x_physical
-            residual_norm_xblock_pc = float(solve_state.residual_norm)
-            history = solve_state.history
-            candidate_krylov_method = str(solve_state.krylov_method)
-            candidate_residual_norm = float(residual_norm_xblock_pc)
-            device_krylov_iterations = solve_state.device_iterations
-            device_krylov_estimated_matvecs = solve_state.device_estimated_matvecs
-            candidate_iterations = int(solve_state.reported_iterations)
-            candidate_matvecs = int(solve_state.reported_matvecs)
-            fallback_started_from_candidate = False
-            fallback_candidate_improved_rhs = False
             fallback_to_gmres = _rhs1_xblock_policy.rhs1_xblock_fallback_to_gmres_enabled(
                 env_value=os.environ.get("SFINCS_JAX_RHSMODE1_XBLOCK_PC_FALLBACK_GMRES", ""),
                 xblock_side_probe_lgmres_rescue=bool(xblock_side_probe_lgmres_rescue),
                 xblock_krylov_method=str(xblock_krylov_method),
             )
-            fallback_result = run_xblock_gmres_fallback_if_needed(
-                XBlockGMRESFallbackContext(
-                    krylov_method=str(xblock_krylov_method),
-                    fallback_enabled=bool(fallback_to_gmres),
-                    x_solution=x_solution_np,
-                    x_physical=x_physical_np,
-                    residual_norm=float(residual_norm_xblock_pc),
-                    history=history,
-                    solve_s=float(solve_s),
-                    target=float(target_xblock),
-                    rhs_norm=float(xblock_rhs_norm),
-                    original_x0=solve_x0,
-                    solve_rhs=solve_rhs,
-                    solve_matvec=solve_matvec,
-                    solve_preconditioner=solve_preconditioner,
-                    precondition_side=str(precondition_side),
-                    tol=float(tol),
-                    atol=float(atol),
-                    restart=int(pc_restart),
-                    maxiter=pc_maxiter,
-                    progress_callback=progress_callbacks.host_progress_callback,
-                    emit=emit,
+            krylov_stage = run_xblock_krylov_solve_stage(
+                XBlockKrylovSolveStageContext(
+                    first_attempt=XBlockFirstKrylovAttemptContext(
+                        krylov_method=str(xblock_krylov_method),
+                        matvec=solve_matvec,
+                        rhs=solve_rhs,
+                        preconditioner=solve_preconditioner,
+                        x0=solve_x0,
+                        tol=float(tol),
+                        atol=float(atol),
+                        restart=int(pc_restart),
+                        maxiter=pc_maxiter,
+                        precondition_side=str(precondition_side),
+                        lgmres_outer_k=xblock_lgmres_rescue_outer_k,
+                        fgmres_block_between_cycles=bool(fgmres_block_between_cycles),
+                        skip_inactive_work=not bool(two_level_built),
+                        device_fgmres_jit=bool(xblock_device_fgmres_jit),
+                        device_fgmres_jit_mode=str(xblock_device_fgmres_jit_mode),
+                        device_fgmres_jit_outer_k=int(xblock_device_fgmres_jit_outer_k),
+                        augmented_krylov_used=bool(qi_device_augmented_krylov_used),
+                        augmentation_basis=augmentation_basis_for_solve,
+                        operator_on_augmentation=operator_on_augmentation_for_solve,
+                        augmentation_mode=str(qi_device_augmented_krylov_mode),
+                        tfqmr_replacement_interval=int(tfqmr_replacement_interval),
+                        mv_count=int(mv_count),
+                        host_progress_callback=progress_callbacks.host_progress_callback,
+                        device_cycle_progress_callback=(
+                            progress_callbacks.device_cycle_progress_callback
+                        ),
+                        gmres_solver=gmres_solve_with_history_scipy,
+                        lgmres_solver=lgmres_solve_with_history_scipy,
+                        gcrotmk_solver=gcrotmk_solve_with_history_scipy,
+                        bicgstab_solver=bicgstab_solve_with_history_scipy,
+                        fgmres_solver=fgmres_solve_with_residual,
+                        fgmres_jit_solver=fgmres_solve_with_residual_jit,
+                        fgmres_cycle_jit_solver=fgmres_cycle_jit_solve_with_residual,
+                        bicgstab_jax_solver=bicgstab_solve_with_residual,
+                        tfqmr_jax_solver=tfqmr_solve_with_residual,
+                    ),
+                    solve_start_s=float(solve_start_s),
+                    side_probe_s=float(xblock_side_probe_s),
+                    probe_coarse_s=float(probe_coarse_s),
                     elapsed_s=sparse_timer.elapsed_s,
-                    gmres_solver=gmres_solve_with_history_scipy,
-                    initial_guess_builder=_rhs1_xblock_fallback_initial_guess,
                     solution_to_physical=solve_solution_to_physical,
                     physical_rhs=xblock_rhs,
                     physical_matvec=_mv_true,
-                    device_iterations=device_krylov_iterations,
-                    device_estimated_matvecs=device_krylov_estimated_matvecs,
+                    target=float(target_xblock),
+                    rhs_norm=float(xblock_rhs_norm),
+                    fallback_enabled=bool(fallback_to_gmres),
+                    progress_callback=progress_callbacks.host_progress_callback,
+                    emit=emit,
+                    initial_guess_builder=_rhs1_xblock_fallback_initial_guess,
                 )
             )
-            solve_state = xblock_krylov_state_from_gmres_fallback(
-                fallback=fallback_result,
-                mv_count=int(mv_count),
-            )
+            candidate_state = krylov_stage.candidate_state
+            candidate_krylov_method = str(candidate_state.krylov_method)
+            candidate_residual_norm = float(candidate_state.residual_norm)
+            candidate_iterations = int(candidate_state.reported_iterations)
+            candidate_matvecs = int(candidate_state.reported_matvecs)
+            solve_state = krylov_stage.final_state
             xblock_krylov_method = str(solve_state.krylov_method)
             x_solution_np = solve_state.x_solution
             x_physical_np = solve_state.x_physical

@@ -91,6 +91,8 @@ from sfincs_jax.problems.profile_response.sparse_pc import (
     XBlockKrylovProgressCallbacksContext,
     XBlockKrylovControlSetup,
     XBlockKrylovControlSetupContext,
+    XBlockKrylovSolveStageContext,
+    XBlockKrylovSolveStageResult,
     XBlockKrylovSolveState,
     XBlockKrylovSolveSpaceContext,
     XBlockKrylovReport,
@@ -221,6 +223,7 @@ from sfincs_jax.problems.profile_response.sparse_pc import (
     prepare_xblock_krylov_solve_space,
     run_fortran_reduced_xblock_krylov_solve,
     run_xblock_first_krylov_attempt,
+    run_xblock_krylov_solve_stage,
     run_sparse_pc_gmres_once,
     run_xblock_gmres_fallback_if_needed,
     run_xblock_post_solve_corrections,
@@ -799,6 +802,104 @@ def test_xblock_krylov_state_from_gmres_fallback_preserves_fallback_flags_and_ho
     assert state.reported_matvecs == 17
     assert state.fallback_started_from_candidate
     assert state.fallback_candidate_improved_rhs
+
+
+def test_run_xblock_krylov_solve_stage_preserves_candidate_when_fallback_disabled() -> None:
+    def gmres_solver(**_kwargs: object) -> tuple[np.ndarray, float, list[float]]:
+        return np.asarray([1.0, 2.0], dtype=np.float64), 0.99, [1.0, 0.99]
+
+    stage = run_xblock_krylov_solve_stage(
+        XBlockKrylovSolveStageContext(
+            first_attempt=_first_krylov_context(
+                gmres_solver=gmres_solver,
+                mv_count=12,
+            ),
+            solve_start_s=4.0,
+            side_probe_s=1.0,
+            probe_coarse_s=0.5,
+            elapsed_s=lambda: 10.0,
+            solution_to_physical=lambda v: jnp.asarray(v, dtype=jnp.float64),
+            physical_rhs=jnp.asarray([1.0, 2.0], dtype=jnp.float64),
+            physical_matvec=lambda v: jnp.asarray(v, dtype=jnp.float64),
+            target=1e-8,
+            rhs_norm=2.0,
+            fallback_enabled=False,
+            progress_callback=None,
+            emit=None,
+            initial_guess_builder=lambda **_kwargs: (None, False, False),
+        )
+    )
+
+    assert isinstance(stage, XBlockKrylovSolveStageResult)
+    assert stage.final_state is not stage.candidate_state
+    assert stage.candidate_state.krylov_method == "gmres"
+    assert stage.final_state.krylov_method == "gmres"
+    np.testing.assert_allclose(stage.final_state.x_physical, np.asarray([1.0, 2.0]))
+    assert stage.final_state.residual_norm == pytest.approx(0.0)
+    assert stage.final_state.solve_s == pytest.approx(7.5)
+    assert stage.final_state.reported_iterations == 2
+    assert stage.final_state.reported_matvecs == 12
+    assert not stage.final_state.fallback_started_from_candidate
+    assert not stage.final_state.fallback_candidate_improved_rhs
+
+
+def test_run_xblock_krylov_solve_stage_runs_fallback_and_keeps_candidate_report() -> None:
+    emitted: list[tuple[int, str]] = []
+    progress: list[tuple[int, float]] = []
+
+    def bicgstab_solver(**_kwargs: object) -> tuple[np.ndarray, float, list[float]]:
+        return np.asarray([0.0, 0.0], dtype=np.float64), 2.0, [2.0]
+
+    def gmres_solver(**kwargs: object) -> tuple[np.ndarray, float, list[float]]:
+        callback = kwargs["progress_callback"]
+        assert callback is not None
+        callback(3, 0.25)
+        return np.asarray([1.0, 1.0], dtype=np.float64), 0.25, [2.0, 0.25]
+
+    stage = run_xblock_krylov_solve_stage(
+        XBlockKrylovSolveStageContext(
+            first_attempt=_first_krylov_context(
+                krylov_method="bicgstab",
+                rhs=jnp.asarray([1.0, 1.0], dtype=jnp.float64),
+                bicgstab_solver=bicgstab_solver,
+                gmres_solver=gmres_solver,
+                mv_count=5,
+            ),
+            solve_start_s=0.0,
+            side_probe_s=0.0,
+            probe_coarse_s=0.0,
+            elapsed_s=lambda: 3.0,
+            solution_to_physical=lambda v: jnp.asarray(v, dtype=jnp.float64),
+            physical_rhs=jnp.asarray([1.0, 1.0], dtype=jnp.float64),
+            physical_matvec=lambda v: jnp.asarray(v, dtype=jnp.float64),
+            target=0.5,
+            rhs_norm=2.0,
+            fallback_enabled=True,
+            progress_callback=lambda iteration, residual: progress.append(
+                (iteration, residual)
+            ),
+            emit=lambda level, message: emitted.append((level, message)),
+            initial_guess_builder=lambda **_kwargs: (
+                jnp.asarray([0.0, 0.0], dtype=jnp.float64),
+                True,
+                False,
+            ),
+        )
+    )
+
+    assert stage.candidate_state.krylov_method == "bicgstab"
+    assert stage.candidate_state.residual_norm == pytest.approx(np.sqrt(2.0))
+    assert stage.candidate_state.reported_iterations == 1
+    assert stage.final_state.krylov_method == "gmres"
+    np.testing.assert_allclose(stage.final_state.x_physical, np.asarray([1.0, 1.0]))
+    assert stage.final_state.residual_norm == pytest.approx(0.0)
+    assert stage.final_state.reported_iterations == 2
+    assert stage.final_state.reported_matvecs == 5
+    assert stage.final_state.fallback_started_from_candidate
+    assert not stage.final_state.fallback_candidate_improved_rhs
+    assert progress == [(3, 0.25)]
+    assert emitted
+    assert "falling back to gmres" in emitted[0][1]
 
 
 def test_xblock_device_krylov_state_transfers_finite_history() -> None:

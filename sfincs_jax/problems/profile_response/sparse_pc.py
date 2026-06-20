@@ -172,7 +172,7 @@ class XBlockGMRESFallbackContext:
     original_x0: jnp.ndarray | None
     solve_rhs: jnp.ndarray
     solve_matvec: ArrayFn
-    solve_preconditioner: ArrayFn
+    solve_preconditioner: ArrayFn | None
     precondition_side: str
     tol: float
     atol: float
@@ -463,6 +463,36 @@ class XBlockFirstKrylovSolveStateContext:
     physical_rhs: jnp.ndarray
     physical_matvec: ArrayFn
     mv_count: int
+
+
+@dataclass(frozen=True)
+class XBlockKrylovSolveStageContext:
+    """Inputs for first x-block Krylov attempt plus optional GMRES fallback."""
+
+    first_attempt: XBlockFirstKrylovAttemptContext
+    solve_start_s: float
+    side_probe_s: float
+    probe_coarse_s: float
+    elapsed_s: Callable[[], float]
+    solution_to_physical: ArrayFn
+    physical_rhs: jnp.ndarray
+    physical_matvec: ArrayFn
+    target: float
+    rhs_norm: float
+    fallback_enabled: bool
+    progress_callback: Callable[[int, float], None] | None
+    emit: EmitFn | None
+    initial_guess_builder: Callable[..., tuple[jnp.ndarray | None, bool, bool]]
+
+
+@dataclass(frozen=True)
+class XBlockKrylovSolveStageResult:
+    """Candidate and final x-block Krylov state after optional GMRES fallback."""
+
+    first_attempt: XBlockFirstKrylovAttemptResult
+    fallback: XBlockGMRESFallbackResult
+    candidate_state: XBlockKrylovSolveState
+    final_state: XBlockKrylovSolveState
 
 
 @dataclass(frozen=True)
@@ -2047,6 +2077,73 @@ def xblock_krylov_state_from_gmres_fallback(
         reported_matvecs=int(report.matvecs),
         fallback_started_from_candidate=bool(fallback.fallback_started_from_candidate),
         fallback_candidate_improved_rhs=bool(fallback.fallback_candidate_improved_rhs),
+    )
+
+
+def run_xblock_krylov_solve_stage(
+    context: XBlockKrylovSolveStageContext,
+) -> XBlockKrylovSolveStageResult:
+    """Run the x-block Krylov attempt and optional GMRES fallback as one stage."""
+
+    first_attempt = run_xblock_first_krylov_attempt(context.first_attempt)
+    solve_s = (
+        float(context.elapsed_s())
+        - float(context.solve_start_s)
+        + float(context.side_probe_s)
+        + float(context.probe_coarse_s)
+    )
+    candidate_state = xblock_krylov_state_from_first_attempt(
+        XBlockFirstKrylovSolveStateContext(
+            krylov_method=str(context.first_attempt.krylov_method),
+            first_attempt=first_attempt,
+            solve_s=float(solve_s),
+            solution_to_physical=context.solution_to_physical,
+            physical_rhs=context.physical_rhs,
+            physical_matvec=context.physical_matvec,
+            mv_count=int(context.first_attempt.mv_count),
+        )
+    )
+    fallback = run_xblock_gmres_fallback_if_needed(
+        XBlockGMRESFallbackContext(
+            krylov_method=str(context.first_attempt.krylov_method),
+            fallback_enabled=bool(context.fallback_enabled),
+            x_solution=candidate_state.x_solution,
+            x_physical=candidate_state.x_physical,
+            residual_norm=float(candidate_state.residual_norm),
+            history=candidate_state.history,
+            solve_s=float(candidate_state.solve_s),
+            target=float(context.target),
+            rhs_norm=float(context.rhs_norm),
+            original_x0=context.first_attempt.x0,
+            solve_rhs=context.first_attempt.rhs,
+            solve_matvec=context.first_attempt.matvec,
+            solve_preconditioner=context.first_attempt.preconditioner,
+            precondition_side=str(context.first_attempt.precondition_side),
+            tol=float(context.first_attempt.tol),
+            atol=float(context.first_attempt.atol),
+            restart=int(context.first_attempt.restart),
+            maxiter=context.first_attempt.maxiter,
+            progress_callback=context.progress_callback,
+            emit=context.emit,
+            elapsed_s=context.elapsed_s,
+            gmres_solver=context.first_attempt.gmres_solver,
+            initial_guess_builder=context.initial_guess_builder,
+            solution_to_physical=context.solution_to_physical,
+            physical_rhs=context.physical_rhs,
+            physical_matvec=context.physical_matvec,
+            device_iterations=candidate_state.device_iterations,
+            device_estimated_matvecs=candidate_state.device_estimated_matvecs,
+        )
+    )
+    final_state = xblock_krylov_state_from_gmres_fallback(
+        fallback=fallback,
+        mv_count=int(context.first_attempt.mv_count),
+    )
+    return XBlockKrylovSolveStageResult(
+        first_attempt=first_attempt,
+        fallback=fallback,
+        candidate_state=candidate_state,
+        final_state=final_state,
     )
 
 
@@ -14597,6 +14694,8 @@ __all__ = [
     "XBlockFirstKrylovAttemptContext",
     "XBlockFirstKrylovAttemptResult",
     "XBlockFirstKrylovSolveStateContext",
+    "XBlockKrylovSolveStageContext",
+    "XBlockKrylovSolveStageResult",
     "XBlockSideProbeStageContext",
     "XBlockSideProbeStageResult",
     "XBlockProbeCoarseStageContext",
@@ -14737,6 +14836,7 @@ __all__ = [
     "prepare_xblock_augmented_krylov_basis",
     "prepare_xblock_krylov_solve_space",
     "run_xblock_first_krylov_attempt",
+    "run_xblock_krylov_solve_stage",
     "run_xblock_gmres_fallback_if_needed",
     "run_xblock_post_solve_corrections",
     "xblock_device_krylov_state",
