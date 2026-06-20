@@ -79,6 +79,8 @@ from sfincs_jax.problems.profile_response.sparse_pc import (
     XBlockFirstKrylovAttemptContext,
     XBlockFirstKrylovAttemptResult,
     XBlockFirstKrylovSolveStateContext,
+    XBlockSideProbeStageContext,
+    XBlockSideProbeStageResult,
     XBlockGMRESFallbackDecision,
     XBlockGMRESFallbackContext,
     XBlockGMRESFallbackResult,
@@ -115,6 +117,7 @@ from sfincs_jax.problems.profile_response.sparse_pc import (
     apply_xblock_qi_deflated_stage,
     apply_xblock_qi_galerkin_stage,
     apply_xblock_qi_two_level_stage,
+    apply_xblock_side_probe_stage,
     apply_xblock_two_level_stage,
     apply_sparse_pc_post_minres,
     apply_sparse_pc_post_minres_if_needed,
@@ -736,6 +739,167 @@ def test_run_xblock_first_krylov_attempt_dispatches_tfqmr_replacement_interval()
     assert result.history == (1.0, 0.25, 0.0625)
     assert result.device_iterations == 2
     assert calls[0]["residual_replacement_interval"] == 5
+
+
+def _side_probe_controls(
+    *,
+    enabled: bool = True,
+    switch: bool = False,
+    lgmres_rescue_enabled: bool = False,
+) -> SimpleNamespace:
+    return SimpleNamespace(
+        enabled=enabled,
+        restart=3,
+        maxiter=4,
+        should_switch=lambda _ratio: bool(switch),
+        lgmres_rescue_enabled=bool(lgmres_rescue_enabled),
+        global_coupling_keep_left_ratio=100.0,
+        lgmres_rescue_maxiter=11,
+        lgmres_rescue_maxiter_capped=True,
+        lgmres_rescue_outer_k=7,
+    )
+
+
+def _side_probe_context(
+    *,
+    controls: object,
+    precondition_side: str = "right",
+    krylov_method: str = "gmres",
+    pc_maxiter: int | None = 9,
+    side_env: str = "",
+    global_coupling_built: bool = False,
+    x0: jnp.ndarray | None = None,
+    gmres_solver=None,
+    emitted: list[tuple[int, str]] | None = None,
+) -> XBlockSideProbeStageContext:
+    time_values = iter((0.0, 0.5))
+    matvec_values = iter((2, 7))
+    emit_log = emitted if emitted is not None else []
+
+    if gmres_solver is None:
+        def default_gmres_solver(
+            **_kwargs: object,
+        ) -> tuple[np.ndarray, float, list[float]]:
+            return np.asarray([2.0, -1.0]), 0.25, [1.0, 0.25]
+
+        gmres_solver = default_gmres_solver
+
+    return XBlockSideProbeStageContext(
+        controls=controls,
+        precondition_side=precondition_side,
+        krylov_method=krylov_method,
+        pc_maxiter=pc_maxiter,
+        side_env=side_env,
+        global_coupling_built=global_coupling_built,
+        matvec=lambda values: values,
+        true_matvec_no_count=lambda values: values,
+        rhs=jnp.asarray([1.0, 1.0]),
+        rhs_norm=10.0,
+        target=1.0,
+        preconditioner=lambda values: values,
+        x0=x0,
+        tol=1.0e-8,
+        atol=1.0e-10,
+        elapsed_s=lambda: next(time_values),
+        matvec_count=lambda: next(matvec_values),
+        emit=lambda level, message: emit_log.append((level, message)),
+        gmres_solver=gmres_solver,
+    )
+
+
+def test_apply_xblock_side_probe_stage_keeps_side_and_uses_better_seed() -> None:
+    emitted: list[tuple[int, str]] = []
+    result = apply_xblock_side_probe_stage(
+        _side_probe_context(
+            controls=_side_probe_controls(switch=False),
+            precondition_side="right",
+            x0=jnp.asarray([5.0, 5.0]),
+            emitted=emitted,
+        )
+    )
+
+    assert isinstance(result, XBlockSideProbeStageResult)
+    assert result.enabled is True
+    assert result.used is True
+    assert result.switched is False
+    assert result.precondition_side == "right"
+    assert result.krylov_method == "gmres"
+    assert result.iterations == 2
+    assert result.matvecs == 5
+    assert result.elapsed_s == pytest.approx(0.5)
+    assert result.residual_norm == pytest.approx(0.25)
+    assert result.residual_ratio == pytest.approx(0.25)
+    assert result.seed_used is True
+    assert jnp.allclose(result.x0, jnp.asarray([2.0, -1.0]))
+    assert "side probe keep side=right->right" in emitted[-1][1]
+
+
+def test_apply_xblock_side_probe_stage_switches_left_to_right_with_seed() -> None:
+    emitted: list[tuple[int, str]] = []
+    result = apply_xblock_side_probe_stage(
+        _side_probe_context(
+            controls=_side_probe_controls(switch=True),
+            precondition_side="left",
+            x0=None,
+            emitted=emitted,
+        )
+    )
+
+    assert result.precondition_side == "right"
+    assert result.switched is True
+    assert result.seed_used is True
+    assert result.physical_seed_preserved_after_switch is True
+    assert jnp.allclose(result.x0, jnp.asarray([2.0, -1.0]))
+    assert "side probe switch side=left->right" in emitted[-1][1]
+    assert "preserved_physical_seed=1" in emitted[-1][1]
+
+
+def test_apply_xblock_side_probe_stage_lgmres_rescue_updates_method() -> None:
+    emitted: list[tuple[int, str]] = []
+    result = apply_xblock_side_probe_stage(
+        _side_probe_context(
+            controls=_side_probe_controls(
+                switch=True,
+                lgmres_rescue_enabled=True,
+            ),
+            precondition_side="left",
+            pc_maxiter=5,
+            emitted=emitted,
+        )
+    )
+
+    assert result.precondition_side == "left"
+    assert result.krylov_method == "lgmres"
+    assert result.pc_maxiter == 11
+    assert result.lgmres_rescue is True
+    assert result.lgmres_rescue_maxiter_capped is True
+    assert result.lgmres_rescue_outer_k == 7
+    assert "side probe method_rescue side=left->left" in emitted[-1][1]
+
+
+def test_apply_xblock_side_probe_stage_reports_solver_failure() -> None:
+    emitted: list[tuple[int, str]] = []
+
+    def failing_solver(**_kwargs: object) -> tuple[np.ndarray, float, list[float]]:
+        raise RuntimeError("probe failed")
+
+    result = apply_xblock_side_probe_stage(
+        _side_probe_context(
+            controls=_side_probe_controls(switch=True),
+            precondition_side="left",
+            gmres_solver=failing_solver,
+            emitted=emitted,
+        )
+    )
+
+    assert result.failed is True
+    assert result.failure_reason == "RuntimeError: probe failed"
+    assert result.precondition_side == "left"
+    assert result.krylov_method == "gmres"
+    assert result.selected_side == "left"
+    assert result.selected_method == "gmres"
+    assert result.elapsed_s == pytest.approx(0.5)
+    assert "side probe failed (RuntimeError: probe failed)" in emitted[-1][1]
 
 
 @pytest.mark.parametrize("residual_norm", [1.1, np.nan])

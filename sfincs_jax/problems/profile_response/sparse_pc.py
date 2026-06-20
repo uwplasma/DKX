@@ -268,6 +268,63 @@ class XBlockFirstKrylovAttemptResult:
 
 
 @dataclass(frozen=True)
+class XBlockSideProbeStageContext:
+    """Inputs for the bounded precondition-side probe before the main x-block solve."""
+
+    controls: object
+    precondition_side: str
+    krylov_method: str
+    pc_maxiter: int | None
+    side_env: str
+    global_coupling_built: bool
+    matvec: ArrayFn
+    true_matvec_no_count: ArrayFn
+    rhs: jnp.ndarray
+    rhs_norm: float
+    target: float
+    preconditioner: ArrayFn
+    x0: jnp.ndarray | None
+    tol: float
+    atol: float
+    elapsed_s: Callable[[], float]
+    matvec_count: Callable[[], int]
+    emit: EmitFn | None
+    gmres_solver: Callable[..., tuple[np.ndarray, float, Sequence[float]]]
+
+
+@dataclass(frozen=True)
+class XBlockSideProbeStageResult:
+    """Updated solve state and diagnostics from the bounded side probe."""
+
+    x0: jnp.ndarray | None
+    precondition_side: str
+    krylov_method: str
+    pc_maxiter: int | None
+    enabled: bool
+    used: bool
+    switched: bool
+    initial_side: str | None
+    selected_side: str | None
+    initial_method: str | None
+    selected_method: str | None
+    lgmres_rescue: bool
+    lgmres_rescue_maxiter_capped: bool
+    lgmres_rescue_outer_k: int | None
+    residual_norm: float | None
+    residual_ratio: float | None
+    iterations: int
+    matvecs: int
+    elapsed_s: float
+    switch_suppressed_by_global_coupling: bool
+    switch_suppressed_by_explicit_side: bool
+    physical_seed_preserved_after_switch: bool
+    seed_used: bool
+    seed_residual_norm: float | None
+    failed: bool
+    failure_reason: str | None
+
+
+@dataclass(frozen=True)
 class XBlockKrylovSolveState:
     """Physical-space xblock Krylov solve state used by downstream metadata."""
 
@@ -1231,6 +1288,230 @@ def xblock_krylov_report(
     iterations = int(device_iterations) if device_iterations is not None else int(len(history or ()))
     matvecs = int(device_estimated_matvecs) if device_estimated_matvecs is not None else int(mv_count)
     return XBlockKrylovReport(iterations=int(iterations), matvecs=int(matvecs))
+
+
+def apply_xblock_side_probe_stage(
+    context: XBlockSideProbeStageContext,
+) -> XBlockSideProbeStageResult:
+    """Run the bounded x-block precondition-side probe and return updated state."""
+
+    controls = context.controls
+    enabled = bool(getattr(controls, "enabled", False))
+    x0 = context.x0
+    precondition_side = str(context.precondition_side)
+    krylov_method = str(context.krylov_method)
+    pc_maxiter = context.pc_maxiter
+    used = False
+    switched = False
+    initial_side: str | None = None
+    selected_side: str | None = None
+    initial_method: str | None = None
+    selected_method: str | None = None
+    lgmres_rescue = False
+    lgmres_rescue_maxiter_capped = False
+    lgmres_rescue_outer_k: int | None = None
+    residual_norm: float | None = None
+    residual_ratio: float | None = None
+    iterations = 0
+    matvecs = 0
+    elapsed_s = 0.0
+    switch_suppressed_by_global_coupling = False
+    switch_suppressed_by_explicit_side = False
+    physical_seed_preserved_after_switch = False
+    seed_used = False
+    seed_residual_norm: float | None = None
+    failed = False
+    failure_reason: str | None = None
+
+    if not enabled:
+        return XBlockSideProbeStageResult(
+            x0=x0,
+            precondition_side=precondition_side,
+            krylov_method=krylov_method,
+            pc_maxiter=pc_maxiter,
+            enabled=False,
+            used=False,
+            switched=False,
+            initial_side=None,
+            selected_side=None,
+            initial_method=None,
+            selected_method=None,
+            lgmres_rescue=False,
+            lgmres_rescue_maxiter_capped=False,
+            lgmres_rescue_outer_k=None,
+            residual_norm=None,
+            residual_ratio=None,
+            iterations=0,
+            matvecs=0,
+            elapsed_s=0.0,
+            switch_suppressed_by_global_coupling=False,
+            switch_suppressed_by_explicit_side=False,
+            physical_seed_preserved_after_switch=False,
+            seed_used=False,
+            seed_residual_norm=None,
+            failed=False,
+            failure_reason=None,
+        )
+
+    used = True
+    initial_side = precondition_side
+    initial_method = krylov_method
+    probe_restart = int(getattr(controls, "restart"))
+    probe_maxiter = int(getattr(controls, "maxiter"))
+    if context.emit is not None:
+        context.emit(
+            0,
+            "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres side probe start "
+            f"side={precondition_side} restart={int(probe_restart)} maxiter={int(probe_maxiter)}",
+        )
+    probe_start_s = float(context.elapsed_s())
+    probe_start_mv = int(context.matvec_count())
+    try:
+        x_probe, residual_probe, history_probe = context.gmres_solver(
+            matvec=context.matvec,
+            b=context.rhs,
+            preconditioner=context.preconditioner if precondition_side != "none" else None,
+            x0=x0,
+            tol=float(context.tol),
+            atol=float(context.atol),
+            restart=probe_restart,
+            maxiter=probe_maxiter,
+            precondition_side=precondition_side,
+        )
+        elapsed_s = float(context.elapsed_s()) - probe_start_s
+        matvecs = int(context.matvec_count()) - int(probe_start_mv)
+        iterations = int(len(history_probe or []))
+        residual_norm = float(residual_probe)
+        residual_ratio = profile_safe_ratio(residual_norm, context.target)
+        incumbent_seed_norm = float(context.rhs_norm)
+        if x0 is not None:
+            try:
+                incumbent_residual = context.rhs - jnp.asarray(
+                    context.true_matvec_no_count(jnp.asarray(x0, dtype=jnp.float64)),
+                    dtype=jnp.float64,
+                )
+                incumbent_seed_norm = profile_l2_norm_float(incumbent_residual)
+            except Exception:
+                incumbent_seed_norm = float(context.rhs_norm)
+        if str(precondition_side) == "left" and np.isfinite(float(residual_probe)):
+            # The left-preconditioned side probe returns a physical-space state,
+            # so it can seed a later side switch.
+            x0 = jnp.asarray(x_probe, dtype=jnp.float64)
+            seed_used = True
+            seed_residual_norm = float(residual_probe)
+        elif (
+            np.isfinite(float(residual_probe))
+            and float(residual_probe) < float(incumbent_seed_norm)
+        ):
+            x0 = jnp.asarray(x_probe, dtype=jnp.float64)
+            seed_used = True
+            seed_residual_norm = float(residual_probe)
+
+        should_switch_side = bool(controls.should_switch(residual_ratio))
+        if should_switch_side and context.side_env in {"left", "right", "none"}:
+            should_switch_side = False
+            switch_suppressed_by_explicit_side = True
+        lgmres_rescue_enabled = bool(getattr(controls, "lgmres_rescue_enabled"))
+        if (
+            should_switch_side
+            and bool(context.global_coupling_built)
+            and (not bool(lgmres_rescue_enabled))
+            and str(precondition_side) == "left"
+        ):
+            keep_left_ratio = float(getattr(controls, "global_coupling_keep_left_ratio"))
+            if (
+                residual_ratio is not None
+                and np.isfinite(float(residual_ratio))
+                and float(residual_ratio) <= float(keep_left_ratio)
+            ):
+                should_switch_side = False
+                switch_suppressed_by_global_coupling = True
+        if should_switch_side and lgmres_rescue_enabled and str(precondition_side) == "left":
+            krylov_method = "lgmres"
+            lgmres_rescue = True
+            pc_maxiter = int(getattr(controls, "lgmres_rescue_maxiter"))
+            lgmres_rescue_maxiter_capped = bool(
+                getattr(controls, "lgmres_rescue_maxiter_capped")
+            )
+            lgmres_rescue_outer_k = int(getattr(controls, "lgmres_rescue_outer_k"))
+        elif should_switch_side:
+            precondition_side = "right" if str(precondition_side) == "left" else "left"
+            switched = True
+            if str(precondition_side) == "right" and x0 is not None:
+                physical_seed_preserved_after_switch = True
+        selected_side = str(precondition_side)
+        selected_method = str(krylov_method)
+        if context.emit is not None:
+            if lgmres_rescue:
+                action = "method_rescue"
+            elif switch_suppressed_by_explicit_side:
+                action = "keep_explicit_side"
+            elif switch_suppressed_by_global_coupling:
+                action = "keep_global_coupling"
+            else:
+                action = "switch" if switched else "keep"
+            ratio_for_message = (
+                float(residual_ratio) if residual_ratio is not None else float("nan")
+            )
+            residual_for_message = (
+                float(residual_norm) if residual_norm is not None else float("nan")
+            )
+            context.emit(
+                0,
+                "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres side probe "
+                f"{action} side={initial_side}->{selected_side} "
+                f"method={initial_method}->{selected_method} "
+                f"iters={iterations} matvecs={matvecs} "
+                f"residual={residual_for_message:.6e} "
+                f"ratio={ratio_for_message:.6e}"
+                + (" seed_used=1" if seed_used else "")
+                + (
+                    " preserved_physical_seed=1"
+                    if physical_seed_preserved_after_switch
+                    else ""
+                ),
+            )
+    except Exception as exc:  # noqa: BLE001
+        elapsed_s = float(context.elapsed_s()) - probe_start_s
+        selected_side = str(precondition_side)
+        selected_method = str(krylov_method)
+        failed = True
+        failure_reason = f"{type(exc).__name__}: {exc}"
+        if context.emit is not None:
+            context.emit(
+                1,
+                "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
+                f"side probe failed ({type(exc).__name__}: {exc}); keeping side={precondition_side}",
+            )
+
+    return XBlockSideProbeStageResult(
+        x0=x0,
+        precondition_side=precondition_side,
+        krylov_method=krylov_method,
+        pc_maxiter=pc_maxiter,
+        enabled=True,
+        used=used,
+        switched=switched,
+        initial_side=initial_side,
+        selected_side=selected_side,
+        initial_method=initial_method,
+        selected_method=selected_method,
+        lgmres_rescue=lgmres_rescue,
+        lgmres_rescue_maxiter_capped=lgmres_rescue_maxiter_capped,
+        lgmres_rescue_outer_k=lgmres_rescue_outer_k,
+        residual_norm=residual_norm,
+        residual_ratio=residual_ratio,
+        iterations=iterations,
+        matvecs=matvecs,
+        elapsed_s=float(elapsed_s),
+        switch_suppressed_by_global_coupling=switch_suppressed_by_global_coupling,
+        switch_suppressed_by_explicit_side=switch_suppressed_by_explicit_side,
+        physical_seed_preserved_after_switch=physical_seed_preserved_after_switch,
+        seed_used=seed_used,
+        seed_residual_norm=seed_residual_norm,
+        failed=failed,
+        failure_reason=failure_reason,
+    )
 
 
 def xblock_krylov_state_from_first_attempt(
@@ -13742,6 +14023,8 @@ __all__ = [
     "XBlockFirstKrylovAttemptContext",
     "XBlockFirstKrylovAttemptResult",
     "XBlockFirstKrylovSolveStateContext",
+    "XBlockSideProbeStageContext",
+    "XBlockSideProbeStageResult",
     "XBlockKrylovSolveState",
     "XBlockAugmentedKrylovBasisContext",
     "XBlockAugmentedKrylovBasisResult",
@@ -13812,6 +14095,7 @@ __all__ = [
     "apply_xblock_qi_deflated_stage",
     "apply_xblock_qi_galerkin_stage",
     "apply_xblock_qi_two_level_stage",
+    "apply_xblock_side_probe_stage",
     "apply_xblock_two_level_stage",
     "apply_sparse_pc_post_minres",
     "apply_sparse_pc_post_minres_if_needed",

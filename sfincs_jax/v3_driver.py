@@ -291,6 +291,7 @@ from .problems.profile_response.sparse_pc import (
     XBlockQIDeflatedStageContext,
     XBlockQIGalerkinStageContext,
     XBlockQITwoLevelStageContext,
+    XBlockSideProbeStageContext,
     XBlockSparsePCCompletionContext,
     XBlockSparsePCFinalCoreState,
     XBlockSparsePCFinalDeviceState,
@@ -308,6 +309,7 @@ from .problems.profile_response.sparse_pc import (
     apply_xblock_qi_deflated_stage,
     apply_xblock_qi_galerkin_stage,
     apply_xblock_qi_two_level_stage,
+    apply_xblock_side_probe_stage,
     apply_xblock_two_level_stage,
     build_fortran_reduced_xblock_factor_stage,
     build_fortran_reduced_xblock_krylov_setup,
@@ -4014,162 +4016,63 @@ def solve_v3_full_system_linear_gmres(
                 krylov_env_value=xblock_krylov_env,
                 device_host_fallback_used=bool(xblock_device_host_fallback_decision.used),
             )
-            xblock_side_probe_enabled = bool(xblock_side_probe_controls.enabled)
-            xblock_side_probe_used = False
-            xblock_side_probe_switched = False
-            xblock_side_probe_initial_side: str | None = None
-            xblock_side_probe_selected_side: str | None = None
-            xblock_side_probe_initial_method: str | None = None
-            xblock_side_probe_selected_method: str | None = None
-            xblock_side_probe_lgmres_rescue = False
-            xblock_lgmres_rescue_maxiter_capped = False
-            xblock_lgmres_rescue_outer_k: int | None = None
-            xblock_side_probe_residual_norm: float | None = None
-            xblock_side_probe_residual_ratio: float | None = None
-            xblock_side_probe_iterations = 0
-            xblock_side_probe_matvecs = 0
-            xblock_side_probe_s = 0.0
-            xblock_side_probe_switch_suppressed_by_global_coupling = False
-            xblock_side_probe_switch_suppressed_by_explicit_side = False
-            xblock_side_probe_physical_seed_preserved_after_switch = False
-            xblock_side_probe_seed_used = False
-            xblock_side_probe_seed_residual_norm: float | None = None
-            if xblock_side_probe_enabled:
-                xblock_side_probe_used = True
-                xblock_side_probe_initial_side = str(precondition_side)
-                xblock_side_probe_initial_method = str(xblock_krylov_method)
-                probe_restart = int(xblock_side_probe_controls.restart)
-                probe_maxiter = int(xblock_side_probe_controls.maxiter)
-                if emit is not None:
-                    emit(
-                        0,
-                        "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres side probe start "
-                        f"side={precondition_side} restart={int(probe_restart)} maxiter={int(probe_maxiter)}",
-                    )
-                probe_start_s = sparse_timer.elapsed_s()
-                probe_start_mv = int(mv_count)
-                try:
-                    x_probe, residual_probe, history_probe = gmres_solve_with_history_scipy(
-                        matvec=_mv_xblock_krylov,
-                        b=xblock_rhs,
-                        preconditioner=precond_xblock_krylov if precondition_side != "none" else None,
-                        x0=x0_full,
-                        tol=tol,
-                        atol=atol,
-                        restart=probe_restart,
-                        maxiter=probe_maxiter,
-                        precondition_side=precondition_side,
-                    )
-                    xblock_side_probe_s = float(sparse_timer.elapsed_s() - probe_start_s)
-                    xblock_side_probe_matvecs = int(mv_count) - int(probe_start_mv)
-                    xblock_side_probe_iterations = int(len(history_probe or []))
-                    xblock_side_probe_residual_norm = float(residual_probe)
-                    xblock_side_probe_residual_ratio = rhs1_safe_ratio(
-                        residual_probe,
-                        target_xblock,
-                    )
-                    incumbent_seed_norm = float(xblock_rhs_norm)
-                    if x0_full is not None:
-                        try:
-                            incumbent_residual = xblock_rhs - jnp.asarray(
-                                _mv_true_no_count(jnp.asarray(x0_full, dtype=jnp.float64)),
-                                dtype=jnp.float64,
-                            )
-                            incumbent_seed_norm = rhs1_l2_norm_float(incumbent_residual)
-                        except Exception:
-                            incumbent_seed_norm = float(xblock_rhs_norm)
-                    if str(precondition_side) == "left" and np.isfinite(float(residual_probe)):
-                        # Preserve historical behavior: a left-preconditioned
-                        # side probe is already a physical-space state, so it
-                        # can seed a later side switch even if it was only used
-                        # as a switching diagnostic.
-                        x0_full = jnp.asarray(x_probe, dtype=jnp.float64)
-                        xblock_side_probe_seed_used = True
-                        xblock_side_probe_seed_residual_norm = float(residual_probe)
-                    elif (
-                        np.isfinite(float(residual_probe))
-                        and float(residual_probe) < float(incumbent_seed_norm)
-                    ):
-                        x0_full = jnp.asarray(x_probe, dtype=jnp.float64)
-                        xblock_side_probe_seed_used = True
-                        xblock_side_probe_seed_residual_norm = float(residual_probe)
-                    should_switch_side = xblock_side_probe_controls.should_switch(
-                        xblock_side_probe_residual_ratio
-                    )
-                    if should_switch_side and side_env in {"left", "right", "none"}:
-                        should_switch_side = False
-                        xblock_side_probe_switch_suppressed_by_explicit_side = True
-                    lgmres_rescue_enabled = bool(xblock_side_probe_controls.lgmres_rescue_enabled)
-                    if (
-                        should_switch_side
-                        and bool(global_coupling_built)
-                        and (not bool(lgmres_rescue_enabled))
-                        and str(precondition_side) == "left"
-                    ):
-                        keep_left_ratio = float(
-                            xblock_side_probe_controls.global_coupling_keep_left_ratio
-                        )
-                        if (
-                            xblock_side_probe_residual_ratio is not None
-                            and np.isfinite(float(xblock_side_probe_residual_ratio))
-                            and float(xblock_side_probe_residual_ratio) <= float(keep_left_ratio)
-                        ):
-                            should_switch_side = False
-                            xblock_side_probe_switch_suppressed_by_global_coupling = True
-                    if should_switch_side and lgmres_rescue_enabled and str(precondition_side) == "left":
-                        # Reuse the physical-space left-probe state: for these
-                        # large 3D full-FP systems the measured slow mode is
-                        # GMRES restart sensitivity, not the x-block factors.
-                        xblock_krylov_method = "lgmres"
-                        xblock_side_probe_lgmres_rescue = True
-                        pc_maxiter = int(xblock_side_probe_controls.lgmres_rescue_maxiter)
-                        xblock_lgmres_rescue_maxiter_capped = bool(
-                            xblock_side_probe_controls.lgmres_rescue_maxiter_capped
-                        )
-                        xblock_lgmres_rescue_outer_k = int(
-                            xblock_side_probe_controls.lgmres_rescue_outer_k
-                        )
-                    elif should_switch_side:
-                        precondition_side = "right" if str(precondition_side) == "left" else "left"
-                        xblock_side_probe_switched = True
-                        if str(precondition_side) == "right" and x0_full is not None:
-                            xblock_side_probe_physical_seed_preserved_after_switch = True
-                    xblock_side_probe_selected_side = str(precondition_side)
-                    xblock_side_probe_selected_method = str(xblock_krylov_method)
-                    if emit is not None:
-                        if xblock_side_probe_lgmres_rescue:
-                            action = "method_rescue"
-                        elif xblock_side_probe_switch_suppressed_by_explicit_side:
-                            action = "keep_explicit_side"
-                        elif xblock_side_probe_switch_suppressed_by_global_coupling:
-                            action = "keep_global_coupling"
-                        else:
-                            action = "switch" if xblock_side_probe_switched else "keep"
-                        emit(
-                            0,
-                            "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres side probe "
-                            f"{action} side={xblock_side_probe_initial_side}->{xblock_side_probe_selected_side} "
-                            f"method={xblock_side_probe_initial_method}->{xblock_side_probe_selected_method} "
-                            f"iters={xblock_side_probe_iterations} matvecs={xblock_side_probe_matvecs} "
-                            f"residual={float(xblock_side_probe_residual_norm):.6e} "
-                            f"ratio={float(xblock_side_probe_residual_ratio):.6e}"
-                            + (" seed_used=1" if xblock_side_probe_seed_used else "")
-                            + (
-                                " preserved_physical_seed=1"
-                                if xblock_side_probe_physical_seed_preserved_after_switch
-                                else ""
-                            ),
-                        )
-                except Exception as exc:  # noqa: BLE001
-                    xblock_side_probe_s = float(sparse_timer.elapsed_s() - probe_start_s)
-                    xblock_side_probe_selected_side = str(precondition_side)
-                    xblock_side_probe_selected_method = str(xblock_krylov_method)
-                    if emit is not None:
-                        emit(
-                            1,
-                            "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
-                            f"side probe failed ({type(exc).__name__}: {exc}); keeping side={precondition_side}",
-                        )
+            xblock_side_probe_stage = apply_xblock_side_probe_stage(
+                XBlockSideProbeStageContext(
+                    controls=xblock_side_probe_controls,
+                    precondition_side=str(precondition_side),
+                    krylov_method=str(xblock_krylov_method),
+                    pc_maxiter=pc_maxiter,
+                    side_env=str(side_env),
+                    global_coupling_built=bool(global_coupling_built),
+                    matvec=_mv_xblock_krylov,
+                    true_matvec_no_count=_mv_true_no_count,
+                    rhs=xblock_rhs,
+                    rhs_norm=float(xblock_rhs_norm),
+                    target=float(target_xblock),
+                    preconditioner=precond_xblock_krylov,
+                    x0=x0_full,
+                    tol=float(tol),
+                    atol=float(atol),
+                    elapsed_s=sparse_timer.elapsed_s,
+                    matvec_count=lambda: int(mv_count),
+                    emit=emit,
+                    gmres_solver=gmres_solve_with_history_scipy,
+                )
+            )
+            x0_full = xblock_side_probe_stage.x0
+            precondition_side = xblock_side_probe_stage.precondition_side
+            xblock_krylov_method = xblock_side_probe_stage.krylov_method
+            pc_maxiter = xblock_side_probe_stage.pc_maxiter
+            xblock_side_probe_enabled = bool(xblock_side_probe_stage.enabled)
+            xblock_side_probe_used = bool(xblock_side_probe_stage.used)
+            xblock_side_probe_switched = bool(xblock_side_probe_stage.switched)
+            xblock_side_probe_initial_side = xblock_side_probe_stage.initial_side
+            xblock_side_probe_selected_side = xblock_side_probe_stage.selected_side
+            xblock_side_probe_initial_method = xblock_side_probe_stage.initial_method
+            xblock_side_probe_selected_method = xblock_side_probe_stage.selected_method
+            xblock_side_probe_lgmres_rescue = bool(xblock_side_probe_stage.lgmres_rescue)
+            xblock_lgmres_rescue_maxiter_capped = bool(
+                xblock_side_probe_stage.lgmres_rescue_maxiter_capped
+            )
+            xblock_lgmres_rescue_outer_k = xblock_side_probe_stage.lgmres_rescue_outer_k
+            xblock_side_probe_residual_norm = xblock_side_probe_stage.residual_norm
+            xblock_side_probe_residual_ratio = xblock_side_probe_stage.residual_ratio
+            xblock_side_probe_iterations = int(xblock_side_probe_stage.iterations)
+            xblock_side_probe_matvecs = int(xblock_side_probe_stage.matvecs)
+            xblock_side_probe_s = float(xblock_side_probe_stage.elapsed_s)
+            xblock_side_probe_switch_suppressed_by_global_coupling = bool(
+                xblock_side_probe_stage.switch_suppressed_by_global_coupling
+            )
+            xblock_side_probe_switch_suppressed_by_explicit_side = bool(
+                xblock_side_probe_stage.switch_suppressed_by_explicit_side
+            )
+            xblock_side_probe_physical_seed_preserved_after_switch = bool(
+                xblock_side_probe_stage.physical_seed_preserved_after_switch
+            )
+            xblock_side_probe_seed_used = bool(xblock_side_probe_stage.seed_used)
+            xblock_side_probe_seed_residual_norm = (
+                xblock_side_probe_stage.seed_residual_norm
+            )
 
             if precondition_side != "none":
                 if xblock_use_active_dof:

@@ -311,10 +311,10 @@ Recent checkpoints:
 - `cb295ce` Extract sparse pattern setup.
 - `4b6a5b4` Extract sparse factor policy.
 
-Current source-size snapshot after x-block QI residual-deflated stage extraction:
+Current source-size snapshot after x-block side-probe stage extraction:
 
-- `sfincs_jax/v3_driver.py`: `16225` lines.
-- `solve_v3_full_system_linear_gmres`: `11469` lines.
+- `sfincs_jax/v3_driver.py`: `16128` lines.
+- `solve_v3_full_system_linear_gmres`: `11370` lines.
 - `sfincs_jax/v3_results.py`: `119` lines.
 - `sfincs_jax/rhs1_ksp_diagnostics.py`: `306` lines.
 - `sfincs_jax/rhs1_pas_policy.py`: `864` lines.
@@ -326,11 +326,19 @@ Current source-size snapshot after x-block QI residual-deflated stage extraction
 - `sfincs_jax/problems/profile_response/dense.py`: `701` lines.
 - `sfincs_jax/problems/profile_response/linear_solve.py`: `339` lines.
 - `sfincs_jax/problems/profile_response/active_projection.py`: `116` lines.
-- `sfincs_jax/problems/profile_response/sparse_pc.py`: `13924` lines.
+- `sfincs_jax/problems/profile_response/sparse_pc.py`: `14208` lines.
 - `sfincs_jax/rhs1_xblock_policy.py`: `1215` lines.
 
 Recent local validation:
 
+- Sparse-PC helper shard after x-block side-probe stage extraction:
+  `265 passed in 2.53 s`.
+- RHSMode=1/profile-response shard after x-block side-probe stage extraction:
+  `1229 passed in 47.34 s`.
+- Hygiene after x-block side-probe stage extraction:
+  `ruff check`, `py_compile`, `compileall`, `git diff --check`, and
+  `python scripts/check_repo_size.py` passed. Repo-size audit reported no
+  reviewed files above 2 MiB.
 - Sparse-PC helper shard after x-block QI residual-deflated stage extraction:
   `261 passed in 2.47 s`.
 - RHSMode=1/profile-response shard after x-block QI residual-deflated stage
@@ -1179,7 +1187,7 @@ Known CI issue fixed by this rewrite:
 
 ### 1. `v3_driver.py` Architecture Refactor
 
-Completion estimate: 81%.
+Completion estimate: 82%.
 
 Goal:
 
@@ -1319,6 +1327,11 @@ Completed recent boundaries:
   policy resolution, explicit callback wiring, scalar diagnostics handoff, and
   timing aggregation; acceptance/rejection/failure behavior is covered by
   focused sparse-PC tests.
+- RHSMode=1 x-block precondition-side probe now uses a tested
+  sparse-PC-domain stage helper. The driver resolves the side-probe policy and
+  keeps downstream diagnostic variable names, while probe execution, seed
+  preservation, side switching, LGMRES rescue, failure handling, and emitted
+  action messages are owned by the helper.
 - RHSMode=1 rescue/refinement candidate acceptance and KSP replay-state updates
   consolidated into profile-response handoff helpers.
 - RHSMode=1 true-residual recomputation before fallback decisions consolidated
