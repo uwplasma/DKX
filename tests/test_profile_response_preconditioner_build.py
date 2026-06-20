@@ -200,3 +200,95 @@ def test_reduced_preconditioner_fallback_switches_to_collision_on_accelerator_oo
     assert result.pas_precond_force_collision
     assert result.bicgstab_preconditioner is result.preconditioner
     assert len(calls["collision"]) == 1
+
+
+def _full_base_setup_context(**overrides) -> pb.RHS1FullBasePreconditionerSetupContext:
+    calls = overrides.pop("calls", {})
+    rhs = overrides.get("rhs", jnp.asarray([1.0, 2.0], dtype=jnp.float64))
+    rhs1_precond = overrides.get("rhs1_precond", _identity)
+    collision_precond = overrides.get("collision_precond", lambda v: 0.5 * v)
+
+    def build_rhs1():
+        calls.setdefault("build_rhs1", 0)
+        calls["build_rhs1"] += 1
+        return rhs1_precond
+
+    def build_collision():
+        calls.setdefault("build_collision", 0)
+        calls["build_collision"] += 1
+        return collision_precond
+
+    return pb.RHS1FullBasePreconditionerSetupContext(
+        rhs=rhs,
+        rhs1_precond_enabled=bool(overrides.get("rhs1_precond_enabled", True)),
+        host_dense_shortcut=bool(overrides.get("host_dense_shortcut", False)),
+        rhs1_bicgstab_kind=overrides.get("rhs1_bicgstab_kind"),
+        rhs1_precond_kind=overrides.get("rhs1_precond_kind", "point"),
+        solve_method=overrides.get("solve_method", "gmres"),
+        solve_method_kind=overrides.get("solve_method_kind", "gmres"),
+        emit=overrides.get("emit"),
+        solver_kind=overrides.get("solver_kind", lambda _method: ("gmres", "incremental")),
+        build_rhs1_preconditioner=build_rhs1,
+        build_collision_preconditioner=build_collision,
+    )
+
+
+def test_full_base_preconditioner_setup_builds_rhs1_for_gmres() -> None:
+    calls: dict[str, int] = {}
+
+    result = pb.setup_rhs1_full_base_preconditioner(
+        _full_base_setup_context(calls=calls, rhs1_precond_kind="point")
+    )
+
+    assert result.preconditioner is _identity
+    assert result.bicgstab_preconditioner is None
+    assert calls == {"build_rhs1": 1}
+
+
+def test_full_base_preconditioner_setup_skips_when_host_dense_shortcut() -> None:
+    calls: dict[str, int] = {}
+
+    result = pb.setup_rhs1_full_base_preconditioner(
+        _full_base_setup_context(calls=calls, host_dense_shortcut=True)
+    )
+
+    assert result.preconditioner is None
+    assert result.bicgstab_preconditioner is None
+    assert calls == {}
+
+
+def test_full_base_preconditioner_setup_uses_collision_for_bicgstab_kind() -> None:
+    calls: dict[str, int] = {}
+
+    result = pb.setup_rhs1_full_base_preconditioner(
+        _full_base_setup_context(
+            calls=calls,
+            rhs1_precond_enabled=False,
+            rhs1_bicgstab_kind="collision",
+        )
+    )
+
+    assert result.preconditioner is result.bicgstab_preconditioner
+    assert calls == {"build_collision": 1}
+
+
+def test_full_base_preconditioner_setup_falls_back_for_nonfinite_pas_probe() -> None:
+    calls: dict[str, int] = {}
+    messages: list[str] = []
+
+    def nonfinite_precond(v: jnp.ndarray) -> jnp.ndarray:
+        return jnp.full_like(v, jnp.inf)
+
+    result = pb.setup_rhs1_full_base_preconditioner(
+        _full_base_setup_context(
+            calls=calls,
+            rhs1_precond=nonfinite_precond,
+            rhs1_bicgstab_kind="rhs1",
+            rhs1_precond_kind="pas_tz",
+            emit=lambda _level, msg: messages.append(msg),
+        )
+    )
+
+    assert result.preconditioner is result.bicgstab_preconditioner
+    assert calls == {"build_rhs1": 1, "build_collision": 1}
+    assert any("PAS precond non-finite" in message for message in messages)

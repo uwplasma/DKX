@@ -230,10 +230,12 @@ from .problems.profile_response.linear_solve import (
     solve_profile_linear_with_residual,
 )
 from .problems.profile_response.preconditioner_build import (
+    RHS1FullBasePreconditionerSetupContext,
     RHS1FullPreconditionerBuildContext,
     RHS1ReducedPreconditionerBuildContext,
     build_rhs1_full_preconditioner,
     build_rhs1_reduced_preconditioner_with_fallback,
+    setup_rhs1_full_base_preconditioner,
 )
 from .problems.profile_response.qi_device_seed import (
     MatrixFreeQIDeviceSeedContext,
@@ -11981,12 +11983,6 @@ def solve_v3_full_system_linear_gmres(
                     x0=x0_dense,
                 )
 
-            if rhs1_bicgstab_kind is not None:
-                if emit is not None:
-                    emit(1, f"solve_v3_full_system_linear_gmres: RHSMode=1 BiCGStab preconditioner={rhs1_bicgstab_kind}")
-                if rhs1_bicgstab_kind == "collision":
-                    bicgstab_preconditioner_full = _build_rhsmode1_collision_preconditioner(op=op)
-
             def _build_rhs1_preconditioner_full():
                 return build_rhs1_full_preconditioner(
                     context=RHS1FullPreconditionerBuildContext(
@@ -12005,46 +12001,25 @@ def solve_v3_full_system_linear_gmres(
                     rhs1_xblock_tz_lmax=rhs1_xblock_tz_lmax,
                 )
 
-            if rhs1_precond_enabled and (not host_dense_shortcut_full):
-                solver_kind = _solver_kind(solve_method)[0]
-                build_rhs1 = (
-                    (solver_kind != "bicgstab" and solve_method_kind != "dense")
-                    or (rhs1_bicgstab_kind == "rhs1" and solve_method_kind != "dense")
+            base_precond_setup = setup_rhs1_full_base_preconditioner(
+                RHS1FullBasePreconditionerSetupContext(
+                    rhs=rhs,
+                    rhs1_precond_enabled=bool(rhs1_precond_enabled),
+                    host_dense_shortcut=bool(host_dense_shortcut_full),
+                    rhs1_bicgstab_kind=rhs1_bicgstab_kind,
+                    rhs1_precond_kind=rhs1_precond_kind,
+                    solve_method=solve_method,
+                    solve_method_kind=solve_method_kind,
+                    emit=emit,
+                    solver_kind=_solver_kind,
+                    build_rhs1_preconditioner=_build_rhs1_preconditioner_full,
+                    build_collision_preconditioner=lambda: _build_rhsmode1_collision_preconditioner(
+                        op=op
+                    ),
                 )
-                if build_rhs1:
-                    preconditioner_full = _build_rhs1_preconditioner_full()
-                    if rhs1_bicgstab_kind == "rhs1":
-                        bicgstab_preconditioner_full = preconditioner_full
-            if (not host_dense_shortcut_full) and preconditioner_full is None and bicgstab_preconditioner_full is not None:
-                preconditioner_full = bicgstab_preconditioner_full
-            if (not host_dense_shortcut_full) and preconditioner_full is not None and rhs1_precond_kind in {
-                "pas_hybrid",
-                "pas_lite",
-                "pas_tz",
-                "pas_schur",
-                "pas_tokamak_theta",
-                "pas_ilu",
-            }:
-                try:
-                    probe = preconditioner_full(rhs)
-                    probe_ok = bool(jnp.all(jnp.isfinite(probe)))
-                except Exception as exc:  # noqa: BLE001
-                    probe_ok = False
-                    if emit is not None:
-                        emit(
-                            1,
-                            "solve_v3_full_system_linear_gmres: PAS precond probe failed "
-                            f"({type(exc).__name__}: {exc}), using collision preconditioner",
-                        )
-                if not probe_ok:
-                    preconditioner_full = _build_rhsmode1_collision_preconditioner(op=op)
-                    if rhs1_bicgstab_kind == "rhs1":
-                        bicgstab_preconditioner_full = preconditioner_full
-                    if emit is not None:
-                        emit(
-                            1,
-                            "solve_v3_full_system_linear_gmres: PAS precond non-finite -> collision",
-                        )
+            )
+            preconditioner_full = base_precond_setup.preconditioner
+            bicgstab_preconditioner_full = base_precond_setup.bicgstab_preconditioner
             if host_dense_shortcut_full:
                 _mark("rhs1_host_dense_shortcut_start")
                 if emit is not None:

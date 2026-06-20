@@ -70,6 +70,31 @@ class RHS1ReducedPreconditionerBuildResult:
     pas_tz_guarded_axis: str | None
 
 
+@dataclass(frozen=True)
+class RHS1FullBasePreconditionerSetupContext:
+    """Inputs for selecting the full-system base preconditioner."""
+
+    rhs: jnp.ndarray
+    rhs1_precond_enabled: bool
+    host_dense_shortcut: bool
+    rhs1_bicgstab_kind: str | None
+    rhs1_precond_kind: str | None
+    solve_method: str
+    solve_method_kind: str
+    emit: Callable[[int, str], None] | None
+    solver_kind: Callable[[str], tuple[str, str]]
+    build_rhs1_preconditioner: Callable[[], Preconditioner]
+    build_collision_preconditioner: Callable[[], Preconditioner]
+
+
+@dataclass(frozen=True)
+class RHS1FullBasePreconditionerSetupResult:
+    """Selected full-system preconditioner state for primary Krylov solves."""
+
+    preconditioner: Preconditioner | None
+    bicgstab_preconditioner: Preconditioner | None
+
+
 def _parse_adi_sweeps() -> int:
     sweeps_env = os.environ.get("SFINCS_JAX_RHSMODE1_ADI_SWEEPS", "").strip()
     try:
@@ -260,8 +285,87 @@ def build_rhs1_reduced_preconditioner_with_fallback(
                 bicgstab_preconditioner=precond if rhs1_bicgstab_kind == "rhs1" else None,
                 pas_tz_guarded_fallback=False,
                 pas_tz_guarded_axis=None,
-            )
+        )
         raise
+
+
+def setup_rhs1_full_base_preconditioner(
+    context: RHS1FullBasePreconditionerSetupContext,
+) -> RHS1FullBasePreconditionerSetupResult:
+    """Select the full-system base preconditioner and PAS finite-probe fallback."""
+
+    preconditioner: Preconditioner | None = None
+    bicgstab_preconditioner: Preconditioner | None = None
+
+    if context.rhs1_bicgstab_kind is not None:
+        if context.emit is not None:
+            context.emit(
+                1,
+                "solve_v3_full_system_linear_gmres: RHSMode=1 BiCGStab "
+                f"preconditioner={context.rhs1_bicgstab_kind}",
+            )
+        if context.rhs1_bicgstab_kind == "collision":
+            bicgstab_preconditioner = context.build_collision_preconditioner()
+
+    if bool(context.rhs1_precond_enabled) and (not bool(context.host_dense_shortcut)):
+        solver_kind = context.solver_kind(context.solve_method)[0]
+        build_rhs1 = (
+            (solver_kind != "bicgstab" and context.solve_method_kind != "dense")
+            or (
+                context.rhs1_bicgstab_kind == "rhs1"
+                and context.solve_method_kind != "dense"
+            )
+        )
+        if build_rhs1:
+            preconditioner = context.build_rhs1_preconditioner()
+            if context.rhs1_bicgstab_kind == "rhs1":
+                bicgstab_preconditioner = preconditioner
+
+    if (
+        (not bool(context.host_dense_shortcut))
+        and preconditioner is None
+        and bicgstab_preconditioner is not None
+    ):
+        preconditioner = bicgstab_preconditioner
+
+    if (
+        (not bool(context.host_dense_shortcut))
+        and preconditioner is not None
+        and context.rhs1_precond_kind
+        in {
+            "pas_hybrid",
+            "pas_lite",
+            "pas_tz",
+            "pas_schur",
+            "pas_tokamak_theta",
+            "pas_ilu",
+        }
+    ):
+        try:
+            probe = preconditioner(context.rhs)
+            probe_ok = bool(jnp.all(jnp.isfinite(probe)))
+        except Exception as exc:  # noqa: BLE001
+            probe_ok = False
+            if context.emit is not None:
+                context.emit(
+                    1,
+                    "solve_v3_full_system_linear_gmres: PAS precond probe failed "
+                    f"({type(exc).__name__}: {exc}), using collision preconditioner",
+                )
+        if not probe_ok:
+            preconditioner = context.build_collision_preconditioner()
+            if context.rhs1_bicgstab_kind == "rhs1":
+                bicgstab_preconditioner = preconditioner
+            if context.emit is not None:
+                context.emit(
+                    1,
+                    "solve_v3_full_system_linear_gmres: PAS precond non-finite -> collision",
+                )
+
+    return RHS1FullBasePreconditionerSetupResult(
+        preconditioner=preconditioner,
+        bicgstab_preconditioner=bicgstab_preconditioner,
+    )
 
 
 def _apply_pas_tz_guarded_overlays(
@@ -381,10 +485,13 @@ def _apply_pas_tz_guarded_overlays(
 
 
 __all__ = [
+    "RHS1FullBasePreconditionerSetupContext",
+    "RHS1FullBasePreconditionerSetupResult",
     "RHS1FullPreconditionerBuildContext",
     "RHS1ReducedPreconditionerBuildContext",
     "RHS1ReducedPreconditionerBuildResult",
     "build_rhs1_full_preconditioner",
     "build_rhs1_reduced_preconditioner",
     "build_rhs1_reduced_preconditioner_with_fallback",
+    "setup_rhs1_full_base_preconditioner",
 ]

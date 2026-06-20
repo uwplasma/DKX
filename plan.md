@@ -276,6 +276,10 @@ Recent checkpoints:
   PETSc-like species-block preconditioner construction, preconditioned solve
   execution, and physical residual measurement live outside `v3_driver.py`;
   the driver keeps only KSP replay-state mutation.
+- Full-system RHSMode=1 base-preconditioner setup now uses a tested
+  `profile_response.preconditioner_build` helper. The helper owns BiCGStab
+  preconditioner routing, RHS1 preconditioner build admission, PAS finite-probe
+  fallback to collision preconditioning, and selected-preconditioner handoff.
 - RHSMode=1 PAS preconditioner probe/default routing now uses tested
   PAS-policy helpers for env parsing, tokamak-like Schur defaulting, heavy-path
   admission, large-system collision skip, and residual-threshold decisions
@@ -419,10 +423,10 @@ Recent checkpoints:
 - `cb295ce` Extract sparse pattern setup.
 - `4b6a5b4` Extract sparse factor policy.
 
-Current source-size snapshot after full-system dense-KSP extraction:
+Current source-size snapshot after full-system base-preconditioner extraction:
 
-- `sfincs_jax/v3_driver.py`: `15147` lines.
-- `solve_v3_full_system_linear_gmres`: `10400` lines.
+- `sfincs_jax/v3_driver.py`: `15122` lines.
+- `solve_v3_full_system_linear_gmres`: `10373` lines.
 - `sfincs_jax/v3_results.py`: `119` lines.
 - `sfincs_jax/rhs1_ksp_diagnostics.py`: `306` lines.
 - `sfincs_jax/rhs1_pas_policy.py`: `889` lines.
@@ -433,6 +437,7 @@ Current source-size snapshot after full-system dense-KSP extraction:
 - `sfincs_jax/problems/profile_response/policies.py`: `3463` lines.
 - `sfincs_jax/problems/profile_response/dense.py`: `1092` lines.
 - `sfincs_jax/problems/profile_response/linear_solve.py`: `487` lines.
+- `sfincs_jax/problems/profile_response/preconditioner_build.py`: `497` lines.
 - `sfincs_jax/problems/profile_response/active_projection.py`: `203` lines.
 - `sfincs_jax/problems/profile_response/sparse_pc.py`: `15687` lines.
 - `sfincs_jax/problems/profile_response/solver_diagnostics.py`: `421` lines.
@@ -440,6 +445,18 @@ Current source-size snapshot after full-system dense-KSP extraction:
 
 Recent local validation:
 
+- Full-system base-preconditioner setup extraction:
+  `tests/test_profile_response_preconditioner_build.py` passed
+  (`8 passed in 0.36 s`).
+- Broad profile-response/RHSMode=1 shard after full-system base-preconditioner
+  extraction:
+  `tests/test_profile_response_*.py tests/test_rhs1_*.py
+  tests/test_newton_krylov_diagnostics.py tests/test_pas_smoother.py`
+  passed (`1311 passed in 85.66 s`).
+- Hygiene after full-system base-preconditioner setup extraction:
+  `py_compile`, `ruff check`, `compileall`, `git diff --check`, and
+  `python scripts/check_repo_size.py` passed. Repo-size audit reported no
+  reviewed files above 2 MiB.
 - Full-system dense-KSP extraction:
   `tests/test_profile_response_linear_solve.py` passed (`7 passed in 1.42 s`).
 - Broad profile-response/RHSMode=1 shard after full-system dense-KSP
@@ -1761,6 +1778,10 @@ Completed recent boundaries:
   assembly, species-block preconditioner factors, preconditioned dense-KSP
   solve execution, replay matvec/RHS construction, and physical residual
   measurement; the driver only records the replay problem.
+- Full-system RHSMode=1 base-preconditioner setup now uses a tested
+  profile-response preconditioner-build helper. The helper owns BiCGStab
+  preconditioner routing, RHS1 preconditioner build admission, PAS finite
+  probing, collision fallback, and selected-preconditioner result handoff.
 - Sparse-JAX Jacobi retry branches now use the shared measured linear-candidate
   handoff helper, preserving reduced/full residual-vector routing.
 - Sparse-JAX retry preconditioner build/progress emission now uses a tested
@@ -1987,7 +2008,7 @@ Next steps:
 
 ### 4. Validation, Coverage, And Documentation
 
-Completion estimate: 70%.
+Completion estimate: 71%.
 
 Goal:
 
