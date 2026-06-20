@@ -1975,7 +1975,8 @@ Current evidence from 2026-06-20:
   post-MinRes/coarse/residual-equation orchestration, and post-Krylov completion
   emission into `profile_response/sparse/xblock.py` in commit `fb09c09`.
 - PR #8 is draft and merge-clean. Commit `fb09c09` should be treated as the
-  latest CI reference until another structural tranche is pushed.
+  latest structural-validation reference; branch-head commits after it are
+  plan/PR synchronization unless another structural tranche is pushed.
 - Largest remaining files after the current sparse package splits are
   `sfincs_jax/v3_driver.py` (`14393` lines),
   `sfincs_jax/rhs1_full_assembly.py` (`11893` lines),
