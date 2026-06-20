@@ -1974,7 +1974,7 @@ Current evidence from 2026-06-20:
   The latest pushed tranche moves QI-specific x-block policy/configuration,
   coarse-seed, Galerkin, two-level, device, and residual-deflated stage helpers
   into `profile_response/sparse/qi.py` in commit `d3e63a7`.
-- PR #8 is draft and merge-clean. Commit `54a0264` should be treated as the
+- PR #8 is draft and merge-clean. Commit `05d9dd7` should be treated as the
   latest CI reference until another structural tranche is pushed.
 - Largest remaining files after the current sparse package splits are
   `sfincs_jax/v3_driver.py` (`14393` lines),
