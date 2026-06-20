@@ -4,11 +4,13 @@ from __future__ import annotations
 
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
+import math
 from typing import Any
 
 import jax.numpy as jnp
 
 from ...rhs1_ksp_diagnostics import emit_rhs1_ksp_history, emit_rhs1_ksp_iter_stats
+from .residual import l2_norm_float, residual_converged, residual_target
 
 
 EmitFn = Callable[[int, str], None]
@@ -201,6 +203,41 @@ def emit_profile_response_ksp_replay_diagnostics(
         solve_method_val=solve_method_val,
     )
     return history
+
+
+def build_profile_response_linear_metadata(
+    *,
+    rhs_mode: int,
+    result_residual_norm: float,
+    rhs: jnp.ndarray,
+    tol: float,
+    atol: float,
+    metadata_parts: Sequence[Mapping[str, object]],
+    post_xblock_accept_floor: float = 0.0,
+) -> dict[str, object]:
+    """Merge final linear-solve metadata and apply post-xblock acceptance gates."""
+
+    metadata: dict[str, object] = {}
+    for part in metadata_parts:
+        metadata.update(dict(part))
+
+    floor = float(post_xblock_accept_floor)
+    residual_norm = float(result_residual_norm)
+    if int(rhs_mode) == 1 and floor > 0.0 and math.isfinite(residual_norm) and residual_norm <= floor:
+        target = residual_target(
+            atol=float(atol),
+            tol=float(tol),
+            rhs_norm=l2_norm_float(rhs),
+        )
+        metadata.update(
+            {
+                "accepted_converged": True,
+                "acceptance_criterion": "post_xblock_abs_floor",
+                "true_residual_converged": residual_converged(residual_norm, target),
+                "accepted_residual_floor": floor,
+            }
+        )
+    return metadata
 
 
 def prepare_cached_qi_correction_basis(

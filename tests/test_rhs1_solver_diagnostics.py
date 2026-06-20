@@ -9,6 +9,7 @@ from sfincs_jax.rhs1_solver_diagnostics import (
     RHS1PostMinresDiagnostics,
     RHS1PreflightDiagnostics,
     RHS1SubspaceCorrectionDiagnostics,
+    build_profile_response_linear_metadata,
     build_rhs1_xblock_correction_metadata,
     build_rhs1_xblock_correction_metadata_from_driver_state,
     emit_profile_response_ksp_history,
@@ -148,6 +149,43 @@ def test_rhs1_xblock_correction_metadata_defaults_are_output_safe() -> None:
     assert metadata["xblock_post_coarse_direction_names"] == ()
     assert metadata["xblock_post_residual_equation_direction_count"] == 0
     assert metadata["xblock_post_residual_equation_include_qi_basis"] is False
+
+
+def test_profile_response_linear_metadata_merges_parts_without_acceptance() -> None:
+    first = {"a": 1, "shared": "first"}
+    second = {"b": 2, "shared": "second"}
+
+    metadata = build_profile_response_linear_metadata(
+        rhs_mode=2,
+        result_residual_norm=1.0e-3,
+        rhs=jnp.ones(2),
+        tol=1.0e-8,
+        atol=0.0,
+        metadata_parts=(first, second),
+        post_xblock_accept_floor=1.0,
+    )
+
+    assert metadata == {"a": 1, "b": 2, "shared": "second"}
+    assert first == {"a": 1, "shared": "first"}
+    assert second == {"b": 2, "shared": "second"}
+
+
+def test_profile_response_linear_metadata_marks_post_xblock_acceptance() -> None:
+    metadata = build_profile_response_linear_metadata(
+        rhs_mode=1,
+        result_residual_norm=2.0e-10,
+        rhs=jnp.ones(2),
+        tol=1.0e-8,
+        atol=0.0,
+        metadata_parts=({"path": "xblock"},),
+        post_xblock_accept_floor=1.0e-9,
+    )
+
+    assert metadata["path"] == "xblock"
+    assert metadata["accepted_converged"] is True
+    assert metadata["acceptance_criterion"] == "post_xblock_abs_floor"
+    assert metadata["true_residual_converged"] is True
+    assert metadata["accepted_residual_floor"] == 1.0e-9
 
 
 def test_rhs1_xblock_correction_metadata_from_driver_state_matches_typed_builder() -> None:

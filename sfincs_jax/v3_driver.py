@@ -589,6 +589,7 @@ from .rhs1_ksp_diagnostics import (
 )
 from .problems.profile_response.solver_diagnostics import (
     RHS1KSPDiagnosticsContext,
+    build_profile_response_linear_metadata,
     emit_profile_response_ksp_replay_diagnostics,
 )
 from .problems.profile_response.active_dof import (
@@ -13449,9 +13450,7 @@ def solve_v3_full_system_linear_gmres(
     if emit is not None:
         emit(0, f"solve_v3_full_system_linear_gmres: residual_norm={float(result.residual_norm):.6e}")
         emit(1, f"solve_v3_full_system_linear_gmres: elapsed_s={t.elapsed_s():.3f}")
-    metadata_out = {}
-    metadata_out.update(pas_tz_guarded_correction_metadata)
-    metadata_out.update(rhsmode1_general_metadata)
+    post_xblock_accept_floor = 0.0
     if int(op.rhs_mode) == 1:
         post_xblock_accept_floor = _rhsmode1_scipy_rescue_abs_floor_after_xblock(
             op=op,
@@ -13460,27 +13459,18 @@ def solve_v3_full_system_linear_gmres(
             used_explicit_fp_xblock_seed=bool(explicit_fp_xblock_seed_used),
             use_implicit=bool(use_implicit),
         )
-        if (
-            float(post_xblock_accept_floor) > 0.0
-            and np.isfinite(float(result.residual_norm))
-            and float(result.residual_norm) <= float(post_xblock_accept_floor)
-        ):
-            true_residual_target = rhs1_residual_target(
-                atol=float(atol),
-                tol=float(tol),
-                rhs_norm=rhs1_l2_norm_float(rhs),
-            )
-            metadata_out.update(
-                {
-                    "accepted_converged": True,
-                    "acceptance_criterion": "post_xblock_abs_floor",
-                    "true_residual_converged": rhs1_residual_converged(
-                        float(result.residual_norm),
-                        true_residual_target,
-                    ),
-                    "accepted_residual_floor": float(post_xblock_accept_floor),
-                }
-            )
+    metadata_out = build_profile_response_linear_metadata(
+        rhs_mode=int(op.rhs_mode),
+        result_residual_norm=float(result.residual_norm),
+        rhs=rhs,
+        tol=float(tol),
+        atol=float(atol),
+        metadata_parts=(
+            pas_tz_guarded_correction_metadata,
+            rhsmode1_general_metadata,
+        ),
+        post_xblock_accept_floor=float(post_xblock_accept_floor),
+    )
     return V3LinearSolveResult(
         op=op,
         rhs=rhs,
