@@ -134,7 +134,6 @@ from .rhs1_pas_policy import (
     rhs1_pas_preconditioner_probe_config_from_env as _rhs1_pas_preconditioner_probe_config_from_env,
     rhs1_pas_preconditioner_probe_large_collision_skip as _rhs1_pas_preconditioner_probe_large_collision_skip,
     rhs1_pas_preconditioner_probe_uses_collision as _rhs1_pas_preconditioner_probe_uses_collision,
-    rhs1_pas_schur_rescue_controls_from_env,
     rhs1_pas_small_near_zero_er_kind as _rhs1_pas_small_near_zero_er_kind,
     rhs1_pas_tz_guarded_strong_retry_from_env,
     rhs1_pas_tz_max_bytes as _rhs1_pas_tz_max_bytes,
@@ -185,9 +184,9 @@ from .problems.profile_response.handoff import (
     rhs1_run_bicgstab_gmres_fallback_if_allowed,
     rhs1_run_collision_retry_if_allowed,
     rhs1_run_fast_post_xblock_polish,
+    rhs1_run_full_pas_schur_rescue_from_env,
     rhs1_run_linear_candidate_and_update_replay,
     rhs1_run_measured_linear_candidate_and_update_replay,
-    rhs1_run_pas_schur_rescue_if_requested,
     rhs1_run_primary_krylov_and_update_replay,
     rhs1_run_stage2_retry_if_allowed,
 )
@@ -12389,21 +12388,9 @@ def solve_v3_full_system_linear_gmres(
         result = full_strong_retry.result
         residual_vec = full_strong_retry.residual_vec
         strong_precond_kind = full_strong_retry.selected_kind
-        pas_schur_rescue_controls = rhs1_pas_schur_rescue_controls_from_env(
-            rhs_mode=int(op.rhs_mode),
-            include_phi1=bool(op.include_phi1),
-            has_pas=op.fblock.pas is not None,
-            n_species=int(op.n_species),
-            residual_norm=float(result.residual_norm),
-            target=float(target),
-            active_size=int(active_size),
-            restart=int(restart),
-            maxiter=maxiter,
-        )
         result, residual_vec, _accepted, _schur_elapsed_s = (
-            rhs1_run_pas_schur_rescue_if_requested(
+            rhs1_run_full_pas_schur_rescue_from_env(
                 replay_state=ksp_replay,
-                controls=pas_schur_rescue_controls,
                 current_result=result,
                 current_residual_vec=residual_vec,
                 matvec_fn=mv,
@@ -12411,12 +12398,17 @@ def solve_v3_full_system_linear_gmres(
                 build_preconditioner=lambda: _build_rhsmode1_schur_preconditioner(op=op),
                 tol=float(tol),
                 atol=float(atol),
-                restart=int(pas_schur_rescue_controls.restart),
-                maxiter=int(pas_schur_rescue_controls.maxiter),
+                restart=int(restart),
+                maxiter=maxiter,
                 precond_side=gmres_precond_side,
                 solve_linear=_solve_linear_with_residual,
                 solver_kind=_solver_kind("incremental")[0],
                 target=float(target),
+                rhs_mode=int(op.rhs_mode),
+                include_phi1=bool(op.include_phi1),
+                has_pas=op.fblock.pas is not None,
+                n_species=int(op.n_species),
+                active_size=int(active_size),
                 emit=emit,
             )
         )

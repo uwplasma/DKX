@@ -285,6 +285,10 @@ Recent checkpoints:
   strong-route skip messages, full strong-kind selection, strong preconditioner
   build handoff, retry-control parsing, measured retry execution, and selected
   strong-kind metadata.
+- Full-system RHSMode=1 PAS-Schur rescue now uses a tested
+  `profile_response.handoff` stage helper. The helper owns rescue-control
+  resolution from environment policy, restart/maxiter propagation, and
+  replay-aware rescue execution.
 - RHSMode=1 PAS preconditioner probe/default routing now uses tested
   PAS-policy helpers for env parsing, tokamak-like Schur defaulting, heavy-path
   admission, large-system collision skip, and residual-threshold decisions
@@ -428,17 +432,17 @@ Recent checkpoints:
 - `cb295ce` Extract sparse pattern setup.
 - `4b6a5b4` Extract sparse factor policy.
 
-Current source-size snapshot after full-system strong-retry stage extraction:
+Current source-size snapshot after full-system PAS-Schur rescue stage extraction:
 
-- `sfincs_jax/v3_driver.py`: `15084` lines.
-- `solve_v3_full_system_linear_gmres`: `10334` lines.
+- `sfincs_jax/v3_driver.py`: `15076` lines.
+- `solve_v3_full_system_linear_gmres`: `10327` lines.
 - `sfincs_jax/v3_results.py`: `119` lines.
 - `sfincs_jax/rhs1_ksp_diagnostics.py`: `306` lines.
 - `sfincs_jax/rhs1_pas_policy.py`: `889` lines.
 - `sfincs_jax/rhs1_strong_fallback.py`: `147` lines.
 - `sfincs_jax/problems/profile_response/strong_preconditioning.py`: `1053` lines.
 - `sfincs_jax/problems/profile_response/residual.py`: `981` lines.
-- `sfincs_jax/problems/profile_response/handoff.py`: `1035` lines.
+- `sfincs_jax/problems/profile_response/handoff.py`: `1093` lines.
 - `sfincs_jax/problems/profile_response/policies.py`: `3463` lines.
 - `sfincs_jax/problems/profile_response/dense.py`: `1092` lines.
 - `sfincs_jax/problems/profile_response/linear_solve.py`: `487` lines.
@@ -450,6 +454,18 @@ Current source-size snapshot after full-system strong-retry stage extraction:
 
 Recent local validation:
 
+- Full-system PAS-Schur rescue stage extraction:
+  `tests/test_rhs1_handoff.py tests/test_rhs1_pas_policy.py` passed
+  (`91 passed in 0.39 s`).
+- Broad profile-response/RHSMode=1 shard after full-system PAS-Schur rescue
+  extraction:
+  `tests/test_profile_response_*.py tests/test_rhs1_*.py
+  tests/test_newton_krylov_diagnostics.py tests/test_pas_smoother.py`
+  passed (`1315 passed in 85.65 s`).
+- Hygiene after full-system PAS-Schur rescue stage extraction:
+  `py_compile`, `ruff check`, `compileall`, `git diff --check`, and
+  `python scripts/check_repo_size.py` passed. Repo-size audit reported no
+  reviewed files above 2 MiB.
 - Full-system strong-preconditioner retry stage extraction:
   `tests/test_profile_response_preconditioner_build.py
   tests/test_rhs1_strong_auto_kind.py tests/test_rhs1_strong_control.py`
@@ -1805,6 +1821,10 @@ Completed recent boundaries:
   skip-message emission, full strong-kind selection, strong-preconditioner
   build handoff, retry-control parsing, measured retry execution, and selected
   strong-kind result handoff.
+- Full-system RHSMode=1 PAS-Schur rescue now uses a tested profile-response
+  handoff helper. The helper resolves PAS-Schur rescue policy controls and
+  delegates to the existing replay-aware rescue runner with the resolved
+  Krylov bounds.
 - Sparse-JAX Jacobi retry branches now use the shared measured linear-candidate
   handoff helper, preserving reduced/full residual-vector routing.
 - Sparse-JAX retry preconditioner build/progress emission now uses a tested
@@ -2031,7 +2051,7 @@ Next steps:
 
 ### 4. Validation, Coverage, And Documentation
 
-Completion estimate: 72%.
+Completion estimate: 73%.
 
 Goal:
 

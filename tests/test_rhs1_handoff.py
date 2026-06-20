@@ -20,6 +20,7 @@ from sfincs_jax.rhs1_handoff import (
     rhs1_run_bicgstab_gmres_fallback_if_allowed,
     rhs1_run_collision_retry_if_allowed,
     rhs1_run_fast_post_xblock_polish,
+    rhs1_run_full_pas_schur_rescue_from_env,
     rhs1_run_linear_candidate_and_update_replay,
     rhs1_run_measured_linear_candidate_and_update_replay,
     rhs1_run_pas_schur_rescue_if_requested,
@@ -1030,6 +1031,50 @@ def test_rhs1_run_pas_schur_rescue_keeps_current_on_builder_failure() -> None:
     assert elapsed_s == 0.0
     assert replay.matvec_fn == "old"
     assert any("PAS Schur rescue failed" in message for _level, message in messages)
+
+
+def test_rhs1_run_full_pas_schur_rescue_from_env_resolves_controls(monkeypatch) -> None:
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_PAS_SCHUR_RESCUE_RATIO", "10")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_PAS_SCHUR_RESCUE_RESTART", "23")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_PAS_SCHUR_RESCUE_MAXITER", "47")
+    replay = RHS1KSPReplayState()
+    current = _result(1.0e-6, x="x0")
+    candidate = _result(1.0e-10, x="x1")
+    calls: list[dict[str, object]] = []
+
+    def solve_linear(**kwargs):
+        calls.append(kwargs)
+        return candidate, "r1"
+
+    result, residual_vec, accepted, elapsed_s = rhs1_run_full_pas_schur_rescue_from_env(
+        replay_state=replay,
+        current_result=current,
+        current_residual_vec="r0",
+        matvec_fn="mv",
+        b_vec="rhs",
+        build_preconditioner=lambda: "pc",
+        tol=1.0e-10,
+        atol=1.0e-12,
+        restart=17,
+        maxiter=33,
+        precond_side="left",
+        solve_linear=solve_linear,
+        solver_kind="gmres",
+        target=1.0e-9,
+        rhs_mode=1,
+        include_phi1=False,
+        has_pas=True,
+        n_species=2,
+        active_size=100,
+    )
+
+    assert accepted
+    assert result is candidate
+    assert residual_vec == "r1"
+    assert elapsed_s >= 0.0
+    assert calls[0]["restart_val"] == 23
+    assert calls[0]["maxiter_val"] == 47
+    assert replay.precond_fn == "pc"
 
 
 def test_rhs1_run_collision_retry_skips_when_not_allowed() -> None:

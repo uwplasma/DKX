@@ -20,6 +20,7 @@ from ...solver_selection_policy import (
     SolverCandidateMetrics,
     solver_candidate_gate,
 )
+from ...rhs1_pas_policy import rhs1_pas_schur_rescue_controls_from_env
 
 
 @dataclass(frozen=True)
@@ -603,6 +604,62 @@ def rhs1_run_pas_schur_rescue_if_requested(
         return current_result, current_residual_vec, False, 0.0
 
 
+def rhs1_run_full_pas_schur_rescue_from_env(
+    *,
+    replay_state: RHS1KSPReplayState,
+    current_result: Any,
+    current_residual_vec: Any,
+    matvec_fn: Any,
+    b_vec: Any,
+    build_preconditioner: Any,
+    tol: float,
+    atol: float,
+    restart: int,
+    maxiter: int | None,
+    precond_side: str,
+    solve_linear: Any,
+    solver_kind: str,
+    target: float,
+    rhs_mode: int,
+    include_phi1: bool,
+    has_pas: bool,
+    n_species: int,
+    active_size: int,
+    emit: Any = None,
+) -> tuple[Any, Any, bool, float]:
+    """Resolve PAS-Schur rescue controls and run the full-system rescue."""
+
+    controls = rhs1_pas_schur_rescue_controls_from_env(
+        rhs_mode=int(rhs_mode),
+        include_phi1=bool(include_phi1),
+        has_pas=bool(has_pas),
+        n_species=int(n_species),
+        residual_norm=float(current_result.residual_norm),
+        target=float(target),
+        active_size=int(active_size),
+        restart=int(restart),
+        maxiter=maxiter,
+    )
+    return rhs1_run_pas_schur_rescue_if_requested(
+        replay_state=replay_state,
+        controls=controls,
+        current_result=current_result,
+        current_residual_vec=current_residual_vec,
+        matvec_fn=matvec_fn,
+        b_vec=b_vec,
+        build_preconditioner=build_preconditioner,
+        tol=float(tol),
+        atol=float(atol),
+        restart=int(controls.restart),
+        maxiter=int(controls.maxiter),
+        precond_side=precond_side,
+        solve_linear=solve_linear,
+        solver_kind=solver_kind,
+        target=float(target),
+        emit=emit,
+    )
+
+
 def rhs1_run_collision_retry_if_allowed(
     *,
     allowed: bool,
@@ -1028,6 +1085,7 @@ __all__ = [
     "rhs1_run_collision_retry_if_allowed",
     "rhs1_run_linear_candidate_and_update_replay",
     "rhs1_run_measured_linear_candidate_and_update_replay",
+    "rhs1_run_full_pas_schur_rescue_from_env",
     "rhs1_run_pas_schur_rescue_if_requested",
     "rhs1_run_primary_krylov_and_update_replay",
     "rhs1_run_stage2_retry_if_allowed",
