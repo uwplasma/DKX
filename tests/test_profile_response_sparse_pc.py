@@ -13,6 +13,9 @@ from sfincs_jax.problems.profile_response.sparse import direct as sparse_direct_
 from sfincs_jax.problems.profile_response.sparse import (
     finalization as sparse_finalization_module,
 )
+from sfincs_jax.problems.profile_response.sparse import (
+    fortran_reduced as sparse_fortran_reduced_module,
+)
 from sfincs_jax.problems.profile_response.sparse import krylov as sparse_krylov_module
 from sfincs_jax.problems.profile_response.sparse import xblock as sparse_xblock_module
 from sfincs_jax.problems.profile_response.active_projection import (
@@ -318,8 +321,10 @@ def test_sparse_xblock_module_reexports_match_compat_layer() -> None:
         "SparseSXBlockRescueContext",
         "FPXBlockGlobalCorrectionContext",
         "FPXBlockHighXCorrectionContext",
+        "XBlockGlobalCouplingPolicySetup",
         "XBlockInitialGuessSetup",
         "XBlockKrylovMatvecSetup",
+        "XBlockMomentSchurPolicySetup",
         "build_sparse_xblock_rescue_preconditioner",
         "build_xblock_krylov_matvec_setup",
         "apply_sparse_xblock_explicit_seed",
@@ -436,6 +441,48 @@ def test_sparse_krylov_module_reexports_match_compat_layer() -> None:
     )
     for name in moved_names:
         assert getattr(sparse_pc_module, name) is getattr(sparse_krylov_module, name)
+
+
+def test_sparse_fortran_reduced_module_reexports_match_compat_layer() -> None:
+    """The split fortran-reduced module keeps legacy sparse_pc imports stable."""
+
+    moved_names = (
+        "FortranReducedSparsePCBackendSetup",
+        "FortranReducedXBlockFactorBuildContext",
+        "FortranReducedXBlockFactorBuildResult",
+        "FortranReducedXBlockFactorPolicySetup",
+        "FortranReducedXBlockFinalPayloadContext",
+        "FortranReducedXBlockGlobalCouplingStageContext",
+        "FortranReducedXBlockGlobalCouplingStageResult",
+        "FortranReducedXBlockInitialSeedPolicySetup",
+        "FortranReducedXBlockInitialSeedResult",
+        "FortranReducedXBlockKrylovPolicySetup",
+        "FortranReducedXBlockKrylovSetupContext",
+        "FortranReducedXBlockKrylovSetupResult",
+        "FortranReducedXBlockKrylovSolveContext",
+        "FortranReducedXBlockMomentSchurStageContext",
+        "FortranReducedXBlockMomentSchurStageResult",
+        "apply_fortran_reduced_xblock_global_coupling_stage",
+        "apply_fortran_reduced_xblock_initial_seed",
+        "apply_fortran_reduced_xblock_moment_schur_stage",
+        "build_fortran_reduced_xblock_factor_stage",
+        "build_fortran_reduced_xblock_krylov_setup",
+        "fortran_reduced_xblock_final_payload",
+        "fortran_reduced_xblock_final_payload_from_driver_state",
+        "prepare_fortran_reduced_xblock_initial_guess",
+        "resolve_fortran_reduced_sparse_pc_backend",
+        "resolve_fortran_reduced_xblock_factor_policy",
+        "resolve_fortran_reduced_xblock_global_coupling_policy",
+        "resolve_fortran_reduced_xblock_initial_seed_policy",
+        "resolve_fortran_reduced_xblock_krylov_policy",
+        "resolve_fortran_reduced_xblock_moment_schur_policy",
+        "run_fortran_reduced_xblock_krylov_solve",
+    )
+    for name in moved_names:
+        assert getattr(sparse_pc_module, name) is getattr(
+            sparse_fortran_reduced_module,
+            name,
+        )
 
 
 def _identity(v: jnp.ndarray) -> jnp.ndarray:

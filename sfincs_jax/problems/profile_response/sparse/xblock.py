@@ -1244,7 +1244,39 @@ def prepare_xblock_initial_guess(
     )
 
 
+
+@dataclass(frozen=True)
+class XBlockMomentSchurPolicySetup:
+    """Admission and probe policy for x-block constraint moment-Schur correction."""
+
+    default_candidate: bool
+    default_blocked_by_compact_factors: bool
+    enabled: bool
+    rcond: float
+    probe_enabled: bool
+    probe_min_improvement: float
+    messages: tuple[tuple[int, str], ...]
+
+@dataclass(frozen=True)
+class XBlockGlobalCouplingPolicySetup:
+    """Admission and build parameters for x-block global-coupling correction."""
+
+    enabled: bool
+    should_build: bool
+    use_device_builder: bool
+    mode: str
+    max_directions: int
+    fsavg_lmax: int
+    angular_lmax: int
+    max_extra_units: int
+    rcond: float
+    include_rhs: bool
+    setup_max_s: float
+
+
 __all__ = (
+    "XBlockMomentSchurPolicySetup",
+    "XBlockGlobalCouplingPolicySetup",
     "MatvecCounter",
     "XBlockKrylovMatvecSetup",
     "XBlockInitialGuessSetup",
