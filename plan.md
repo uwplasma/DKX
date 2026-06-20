@@ -2059,54 +2059,54 @@ Current evidence from 2026-06-20:
 
 Actual open lanes:
 
-1. PR hygiene and CI: about 92%. Keep one draft PR, keep the worktree clean,
+1. PR hygiene and CI: about 95%. Keep one draft PR, keep the worktree clean,
    keep commits small enough to review, and refresh the PR body after each
-   structural tranche. Do not wait on CI repeatedly; check only completed
-   failures or final readiness.
-2. Driver reviewability: about 84%. `v3_driver.py` is smaller than before but
-   still has a 9599-line RHSMode=1 solve function. Only extract remaining
-   driver seams when the boundary is explicit, tested, and shorter than the
-   in-line code it replaces. The generic sparse retry/result-assembly shell was
-   inspected after the first sparse package split and should remain
-   driver-owned for now: it coordinates driver-local cache keys, dense fallback
-   state, KSP replay state, and residual-vector routing while delegating the
-   reusable factor/solve mechanics to tested profile-response helpers.
-3. Sparse profile-response package split: about 99%. This is the main blocker
-   for review. Move implementation out of
-   `profile_response/sparse_pc.py` into a bounded domain package while keeping
-   `sparse_pc.py` as a compatibility re-export for existing tests and users.
-4. Differentiability lane: about 76%. Host sparse factors and host-only direct
-   fallbacks must stay outside autodiff paths; JAX-native Python lanes must
-   keep stable transformation behavior. Add focused tests only where the
-   refactor touches solver selection or autodiff-facing APIs.
+   structural tranche. Do not wait on queued CI repeatedly; inspect completed
+   failures and do one final readiness check.
+2. Driver reviewability: about 86%. `v3_driver.py` is smaller than before but
+   still has a 9600-line RHSMode=1 solve function. For this PR, reviewability
+   means the driver is an orchestration layer with documented handoff points,
+   not that the file is fully eliminated. Further extractions must reduce the
+   call site and keep driver-owned cache keys, callback construction, replay
+   state, and residual-vector routing explicit.
+3. Sparse profile-response package split: about 99%. The package split is
+   nearly review-ready. The only remaining candidate structural split is a
+   cohesive sparse policy/admission module for active-DOF setup,
+   entry/factor/preflight policy, residual-candidate admission, retry
+   selection, and GMRES control. If that move becomes a large state-object
+   shuffle rather than a clearer boundary, freeze `sparse_pc.py` as the
+   compatibility layer and mark the remaining split deferred.
+4. Differentiability lane: about 78%. Host sparse factors and host-only direct
+   fallbacks remain outside autodiff paths; JAX-native Python lanes keep stable
+   transformation behavior. This PR should add differentiability tests only
+   where the refactor touches solver selection or autodiff-facing APIs.
 5. Validation lane: about 96%. Focused sparse/profile-response tests and broad
-   RHSMode shards are the right gates for this PR. Do not add slow production
-   benchmark runs unless behavior changes.
-6. Docs/reviewer map: about 82%. The source map and API docs now show the
-   sparse compatibility layer and extracted sparse helper modules, including
-   the generic x-block Krylov/probe/control, post-solve, and final-metadata
-   boundaries. The remaining work is a short review checklist if needed before
-   marking the draft PR ready.
+   RHSMode shards are the correct gates for this behavior-preserving PR. Do not
+   add slow production benchmark runs unless behavior changes.
+6. Docs/reviewer map: about 88%. The source map and API docs now show the
+   sparse compatibility layer and extracted sparse helper modules. The
+   remaining reviewer work is a concise architecture checklist explaining what
+   stays driver-owned and why.
+7. Repository hygiene: 100% at the current checkpoint. No dirty files, no
+   tracked oversized artifacts reported by the size audit, and no README or
+   benchmark figure regeneration is required for behavior-preserving movement.
 
 PR-blocking refactor targets:
 
-1. `sfincs_jax/problems/profile_response/sparse_pc.py`: split into
-   `profile_response/sparse/finalization.py`,
-   `profile_response/sparse/direct.py`,
-   `profile_response/sparse/xblock.py`,
-   `profile_response/sparse/fortran_reduced.py`, and
-   `profile_response/sparse/qi.py`. Keep `sparse_pc.py` as a thin compatibility
-   layer until downstream imports are migrated.
-2. `sfincs_jax/v3_driver.py`: preserve it as the orchestration layer, but keep
-   moving cohesive policy/solve/result stages into domain modules only when
-   the call site becomes clearer. Do not move driver-specific cache ownership,
-   callback construction, or one-off scalar bookkeeping into generic helpers.
-3. Tests: keep existing import compatibility through `sparse_pc.py`, add
-   direct import tests for the new domain modules, and keep focused tests next
-   to each moved behavior.
-4. Documentation: update the PR body and a small developer architecture note
-   once the package split is stable. README/runtime plots do not need
-   regeneration for behavior-preserving file movement.
+1. Decide and execute exactly one final source-structure action:
+   move the remaining sparse policy/admission bundle into
+   `profile_response/sparse/policy.py` if it stays cohesive and testable, or
+   explicitly freeze it in `sparse_pc.py` with a reviewer note explaining why.
+2. Keep `sfincs_jax/v3_driver.py` as the orchestration layer for this PR.
+   Do not extract driver-specific cache ownership, callback construction,
+   residual-vector routing, KSP replay mutation, or one-off scalar bookkeeping
+   into generic helpers.
+3. Keep existing import compatibility through `sparse_pc.py`, add direct import
+   tests only for any new domain module, and keep focused tests next to moved
+   behavior.
+4. Update `docs/source_map.rst`, this plan, and the PR body after the final
+   source-structure action. README/runtime plots do not need regeneration for
+   behavior-preserving file movement.
 
 Deferred until after PR review or a separate behavior PR:
 
@@ -2119,21 +2119,19 @@ Deferred until after PR review or a separate behavior PR:
 
 Efficient path to PR-ready:
 
-1. Treat the generic sparse retry/result-assembly shell as intentionally
-   driver-owned for now because extracting it would create a large
-   replay/cache-routing state object rather than a clearer algorithm boundary.
-2. The QI-specific x-block split is committed and pushed.
-3. Continue the `profile_response/sparse/` package split only if the remaining
-   entry-policy/factor-policy bundle can be moved with a small compatibility
-   surface and clearer boundaries than the current compatibility layer.
-4. Keep each package split tranche behavior-preserving and compatibility-backed,
-   keeping `sparse_pc.py` as a compatibility import layer after each commit.
-5. Run focused tests after every package split commit, then the broad
-   profile-response/RHSMode shard after behavior-facing or import-surface
-   changes.
-6. Add the reviewer architecture map, refresh the PR body, run final hygiene
-   and a full local suite if feasible, then let GitHub CI/docs be the final
-   gate before marking the draft PR ready for review.
+1. Make the final policy/admission split decision before doing more refactor
+   work. Do not start another broad driver extraction in this PR.
+2. If the policy/admission split is clean, move it, add compatibility re-export
+   tests, run focused sparse/profile-response tests, and commit it. If it is
+   not clean, document the freeze and move directly to validation.
+3. Run the bounded review suite: targeted `py_compile`, targeted `ruff`,
+   focused sparse/profile-response tests, broad profile-response/RHSMode shard,
+   `compileall`, `git diff --check`, `scripts/check_repo_size.py`, and Sphinx
+   docs if documentation changed.
+4. Refresh the PR body with final file/function counts, validation commands,
+   and the explicit deferred-lane list.
+5. Check GitHub CI once after the final push. If required checks pass, mark PR
+   #8 ready for review.
 
 ## Historical Work Lanes
 
@@ -2675,18 +2673,21 @@ Next steps:
 
 ## Immediate Next Steps
 
-1. Commit and push the x-block setup split after final local hygiene.
-2. Continue with the fortran-reduced x-block extraction next; the generic
-   x-block matvec dependency is now out of `sparse_pc.py`, so the remaining
-   boundary is cleaner.
-3. Keep the generic sparse retry/result assembly driver-owned unless a smaller
-   explicit context can replace the current cache/replay/residual coordination.
-4. Run focused sparse/profile-response tests after each tranche; run the broad
-   RHSMode/profile-response shard after behavior-facing changes; do not wait on
-   queued CI unless a completed failure appears.
-5. Update the PR description and reviewer architecture map after the source
-   split, then run final hygiene/full-suite/CI before marking the draft PR
-   ready for review.
+1. Inspect the remaining sparse policy/admission bundle in
+   `profile_response/sparse_pc.py` and decide whether it can move cleanly to
+   `profile_response/sparse/policy.py`.
+2. If the split is clean, implement only that final package split, preserve
+   `sparse_pc.py` compatibility imports, and add direct re-export tests. If it
+   is not clean, document the freeze and do not continue line-count-driven
+   extraction in this PR.
+3. Run the bounded review suite: targeted `py_compile`, targeted `ruff`,
+   focused sparse/profile-response tests, broad profile-response/RHSMode shard,
+   `compileall`, `git diff --check`, repository-size audit, and Sphinx docs if
+   documentation changed.
+4. Refresh the PR description and reviewer architecture map with final source
+   counts, validation commands, and deferred lanes.
+5. Check completed GitHub CI once after the final push. If required checks pass,
+   mark PR #8 ready for review.
 
 ## Completion Criteria
 
@@ -2694,8 +2695,9 @@ This plan is complete only when current evidence shows:
 
 - The refactor branch has no dirty or untracked generated artifacts.
 - CI required jobs pass.
-- `v3_driver.py` no longer owns large independent solver subsystems that belong
-  in domain modules.
+- `v3_driver.py` owns orchestration, live callback/cache/replay state, and
+  one-off scalar bookkeeping only; any remaining large solver subsystem is
+  either extracted or explicitly documented as deferred.
 - Public CLI and Python APIs still work.
 - Differentiable and non-differentiable lanes are explicit and tested.
 - Benchmarks/parity/docs are regenerated from checked reports where behavior or
