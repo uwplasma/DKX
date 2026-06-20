@@ -87,6 +87,8 @@ from sfincs_jax.problems.profile_response.sparse_pc import (
     XBlockGMRESFallbackContext,
     XBlockGMRESFallbackResult,
     XBlockGlobalCouplingStageContext,
+    XBlockKrylovProgressCallbacks,
+    XBlockKrylovProgressCallbacksContext,
     XBlockKrylovControlSetup,
     XBlockKrylovControlSetupContext,
     XBlockKrylovSolveState,
@@ -146,6 +148,7 @@ from sfincs_jax.problems.profile_response.sparse_pc import (
     build_xblock_assembled_matvec_setup,
     build_xblock_assembled_operator_if_requested,
     build_xblock_assembled_operator_preflight_setup,
+    build_xblock_krylov_progress_callbacks,
     build_xblock_krylov_matvec_setup,
     build_xblock_local_preconditioner,
     emit_xblock_sparse_pc_completion_from_driver_state,
@@ -651,6 +654,87 @@ def test_xblock_host_krylov_progress_message_formats_residual_and_elapsed_time()
         "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
         "iters=20 ksp_residual=4.250000e-07 elapsed_s=8.000"
     )
+
+
+def test_build_xblock_krylov_progress_callbacks_emits_device_cycle_progress() -> None:
+    emitted: list[tuple[int, str]] = []
+
+    callbacks = build_xblock_krylov_progress_callbacks(
+        XBlockKrylovProgressCallbacksContext(
+            emit=lambda level, message: emitted.append((level, message)),
+            elapsed_s=lambda: 12.3456,
+            progress_every=10,
+        )
+    )
+
+    callbacks.device_cycle_progress_callback(
+        cycle=2,
+        iterations=11,
+        residual_norm=1.5e-4,
+        target=3.0e-5,
+    )
+
+    assert isinstance(callbacks, XBlockKrylovProgressCallbacks)
+    assert emitted == [
+        (
+            0,
+            "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
+            "device-cycle cycle=2 iterations=11 residual=1.500000e-04 "
+            "target=3.000000e-05 ratio=5.000000e+00 elapsed_s=12.346",
+        )
+    ]
+
+
+def test_build_xblock_krylov_progress_callbacks_emits_host_only_on_stride() -> None:
+    emitted: list[tuple[int, str]] = []
+
+    callbacks = build_xblock_krylov_progress_callbacks(
+        XBlockKrylovProgressCallbacksContext(
+            emit=lambda level, message: emitted.append((level, message)),
+            elapsed_s=lambda: 8.0,
+            progress_every=5,
+        )
+    )
+
+    callbacks.host_progress_callback(4, 4.25e-7)
+    callbacks.host_progress_callback(10, 4.25e-7)
+
+    assert emitted == [
+        (
+            1,
+            "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
+            "iters=10 ksp_residual=4.250000e-07 elapsed_s=8.000",
+        )
+    ]
+
+
+def test_build_xblock_krylov_progress_callbacks_noops_when_progress_disabled() -> None:
+    callbacks_without_emit = build_xblock_krylov_progress_callbacks(
+        XBlockKrylovProgressCallbacksContext(
+            emit=None,
+            elapsed_s=lambda: 0.0,
+            progress_every=5,
+        )
+    )
+    callbacks_without_emit.device_cycle_progress_callback(
+        cycle=1,
+        iterations=2,
+        residual_norm=1.0,
+        target=0.5,
+    )
+    callbacks_without_emit.host_progress_callback(5, 1.0)
+
+    emitted: list[tuple[int, str]] = []
+    callbacks_without_stride = build_xblock_krylov_progress_callbacks(
+        XBlockKrylovProgressCallbacksContext(
+            emit=lambda level, message: emitted.append((level, message)),
+            elapsed_s=lambda: 0.0,
+            progress_every=0,
+        )
+    )
+    callbacks_without_stride.host_progress_callback(5, 1.0)
+
+    assert emitted == []
 
 
 def test_xblock_krylov_state_from_first_attempt_measures_physical_residual() -> None:

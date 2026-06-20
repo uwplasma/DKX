@@ -418,6 +418,23 @@ class XBlockKrylovControlSetup:
 
 
 @dataclass(frozen=True)
+class XBlockKrylovProgressCallbacksContext:
+    """Inputs for x-block Krylov host/device progress callbacks."""
+
+    emit: EmitFn | None
+    elapsed_s: Callable[[], float]
+    progress_every: int
+
+
+@dataclass(frozen=True)
+class XBlockKrylovProgressCallbacks:
+    """Host and device progress callbacks passed to the first Krylov attempt."""
+
+    host_progress_callback: Callable[[int, float], None]
+    device_cycle_progress_callback: Callable[..., None]
+
+
+@dataclass(frozen=True)
 class XBlockKrylovSolveState:
     """Physical-space xblock Krylov solve state used by downstream metadata."""
 
@@ -2064,6 +2081,51 @@ def xblock_host_krylov_progress_message(
         "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
         f"iters={int(iteration)} ksp_residual={float(residual_norm):.6e} "
         f"elapsed_s={float(elapsed_s):.3f}"
+    )
+
+
+def build_xblock_krylov_progress_callbacks(
+    context: XBlockKrylovProgressCallbacksContext,
+) -> XBlockKrylovProgressCallbacks:
+    """Return host/device progress callbacks for the x-block Krylov solve."""
+
+    def device_cycle_progress_callback(
+        *,
+        cycle: int,
+        iterations: int,
+        residual_norm: float,
+        target: float,
+    ) -> None:
+        if context.emit is None:
+            return
+        context.emit(
+            0,
+            xblock_device_cycle_progress_message(
+                cycle=int(cycle),
+                iterations=int(iterations),
+                residual_norm=float(residual_norm),
+                target=float(target),
+                elapsed_s=float(context.elapsed_s()),
+            ),
+        )
+
+    def host_progress_callback(iteration: int, residual_norm: float) -> None:
+        if context.emit is None or int(context.progress_every) <= 0:
+            return
+        if int(iteration) % int(context.progress_every) != 0:
+            return
+        context.emit(
+            1,
+            xblock_host_krylov_progress_message(
+                iteration=int(iteration),
+                residual_norm=float(residual_norm),
+                elapsed_s=float(context.elapsed_s()),
+            ),
+        )
+
+    return XBlockKrylovProgressCallbacks(
+        host_progress_callback=host_progress_callback,
+        device_cycle_progress_callback=device_cycle_progress_callback,
     )
 
 
@@ -14543,6 +14605,8 @@ __all__ = [
     "XBlockPreflightGateResult",
     "XBlockKrylovControlSetupContext",
     "XBlockKrylovControlSetup",
+    "XBlockKrylovProgressCallbacksContext",
+    "XBlockKrylovProgressCallbacks",
     "XBlockKrylovSolveState",
     "XBlockAugmentedKrylovBasisContext",
     "XBlockAugmentedKrylovBasisResult",
@@ -14629,6 +14693,7 @@ __all__ = [
     "build_xblock_assembled_operator_if_requested",
     "build_xblock_qi_device_preconditioner_metadata",
     "build_xblock_qi_device_setup_config",
+    "build_xblock_krylov_progress_callbacks",
     "resolve_xblock_qi_deflated_policy_setup",
     "resolve_xblock_krylov_control_setup",
     "build_sparse_pc_active_dof_setup",

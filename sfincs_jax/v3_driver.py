@@ -283,6 +283,7 @@ from .problems.profile_response.sparse_pc import (
     XBlockGMRESFallbackContext,
     XBlockGlobalCouplingStageContext,
     XBlockKrylovControlSetupContext,
+    XBlockKrylovProgressCallbacksContext,
     XBlockKrylovSolveSpaceContext,
     XBlockMomentSchurStageContext,
     XBlockPostSolveCorrectionContext,
@@ -325,6 +326,7 @@ from .problems.profile_response.sparse_pc import (
     build_xblock_assembled_operator_if_requested,
     build_sparse_pc_active_dof_setup,
     build_direct_tail_materialization_setup,
+    build_xblock_krylov_progress_callbacks,
     build_xblock_qi_device_preconditioner_metadata,
     build_xblock_qi_device_setup_config,
     fortran_reduced_xblock_final_payload,
@@ -373,10 +375,8 @@ from .problems.profile_response.sparse_pc import (
     run_xblock_first_krylov_attempt,
     run_xblock_gmres_fallback_if_needed,
     run_xblock_post_solve_corrections,
-    xblock_device_cycle_progress_message,
     xblock_krylov_state_from_first_attempt,
     xblock_krylov_state_from_gmres_fallback,
-    xblock_host_krylov_progress_message,
     xblock_sparse_pc_final_metadata_state_from_context,
     build_sparse_host_or_ilu_factor,
     build_sparse_ilu_preconditioner_from_cache,
@@ -4280,40 +4280,13 @@ def solve_v3_full_system_linear_gmres(
             qi_device_augmented_seed_used = bool(augmented_krylov_stage.seed_used)
             qi_device_preconditioner_metadata = augmented_krylov_stage.metadata
             solve_start_s = sparse_timer.elapsed_s()
-
-            def _device_cycle_progress_callback(
-                *,
-                cycle: int,
-                iterations: int,
-                residual_norm: float,
-                target: float,
-            ) -> None:
-                if emit is None:
-                    return
-                emit(
-                    0,
-                    xblock_device_cycle_progress_message(
-                        cycle=int(cycle),
-                        iterations=int(iterations),
-                        residual_norm=float(residual_norm),
-                        target=float(target),
-                        elapsed_s=sparse_timer.elapsed_s(),
-                    ),
+            progress_callbacks = build_xblock_krylov_progress_callbacks(
+                XBlockKrylovProgressCallbacksContext(
+                    emit=emit,
+                    elapsed_s=sparse_timer.elapsed_s,
+                    progress_every=int(progress_every),
                 )
-
-            def _host_krylov_progress_callback(iteration: int, residual_norm: float) -> None:
-                if emit is None or progress_every <= 0:
-                    return
-                if int(iteration) % int(progress_every) != 0:
-                    return
-                emit(
-                    1,
-                    xblock_host_krylov_progress_message(
-                        iteration=int(iteration),
-                        residual_norm=float(residual_norm),
-                        elapsed_s=sparse_timer.elapsed_s(),
-                    ),
-                )
+            )
 
             device_krylov_iterations: int | None = None
             device_krylov_estimated_matvecs: int | None = None
@@ -4341,8 +4314,8 @@ def solve_v3_full_system_linear_gmres(
                     augmentation_mode=str(qi_device_augmented_krylov_mode),
                     tfqmr_replacement_interval=int(tfqmr_replacement_interval),
                     mv_count=int(mv_count),
-                    host_progress_callback=_host_krylov_progress_callback,
-                    device_cycle_progress_callback=_device_cycle_progress_callback,
+                    host_progress_callback=progress_callbacks.host_progress_callback,
+                    device_cycle_progress_callback=progress_callbacks.device_cycle_progress_callback,
                     gmres_solver=gmres_solve_with_history_scipy,
                     lgmres_solver=lgmres_solve_with_history_scipy,
                     gcrotmk_solver=gcrotmk_solve_with_history_scipy,
@@ -4403,7 +4376,7 @@ def solve_v3_full_system_linear_gmres(
                     atol=float(atol),
                     restart=int(pc_restart),
                     maxiter=pc_maxiter,
-                    progress_callback=_host_krylov_progress_callback,
+                    progress_callback=progress_callbacks.host_progress_callback,
                     emit=emit,
                     elapsed_s=sparse_timer.elapsed_s,
                     gmres_solver=gmres_solve_with_history_scipy,
