@@ -1140,6 +1140,12 @@ Recent local validation:
   extraction: `109 passed in 23.22 s`.
 - Broad profile-response/RHSMode=1 policy, setup, diagnostics, solver, and
   helper sweep after active-problem setup extraction: `1198 passed in 48.29 s`.
+- Profile-response sparse-PC policy tests after x-block branch setup
+  extraction: `235 passed in 1.87 s`.
+- Driver sparse-helper/solve-policy compatibility shard after x-block branch
+  setup extraction: `34 passed in 0.94 s`.
+- Broad profile-response/RHSMode=1 policy, setup, diagnostics, solver, and
+  helper sweep after x-block branch setup extraction: `1199 passed in 49.26 s`.
 - Older focused and broad validation checkpoints are intentionally omitted from
   this active plan; they remain available in git history.
 
@@ -1152,7 +1158,7 @@ Known CI issue fixed by this rewrite:
 
 ### 1. `v3_driver.py` Architecture Refactor
 
-Completion estimate: 70%.
+Completion estimate: 71%.
 
 Goal:
 
@@ -1243,6 +1249,10 @@ Completed recent boundaries:
   detection, DKES adjustment, active-DOF admission, preconditioner-option
   parsing, and active-map construction are consolidated in a typed
   active-problem setup helper with focused tests.
+- RHSMode=1 x-block sparse-PC branch setup now composes local factor, side
+  policy, and QI-device operator-reuse decisions in a single typed
+  sparse-PC-domain helper while keeping driver monkeypatch compatibility
+  aliases during migration.
 - RHSMode=1 rescue/refinement candidate acceptance and KSP replay-state updates
   consolidated into profile-response handoff helpers.
 - RHSMode=1 true-residual recomputation before fallback decisions consolidated

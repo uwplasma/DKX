@@ -169,6 +169,7 @@ from sfincs_jax.problems.profile_response.sparse_pc import (
     resolve_xblock_moment_schur_policy_setup,
     resolve_xblock_seed_policy_setup,
     resolve_xblock_sparse_pc_setup,
+    resolve_xblock_sparse_pc_branch_setup,
     resolve_xblock_sparse_pc_side_policy_setup,
     resolve_xblock_two_level_policy_setup,
     fortran_reduced_xblock_final_payload_from_driver_state,
@@ -4230,6 +4231,77 @@ def test_xblock_qi_device_operator_reuse_setup_reports_factor_build_route() -> N
         "building jax x-block preconditioner" in message
         for _, message in setup.messages
     )
+
+
+def test_xblock_sparse_pc_branch_setup_composes_fallback_side_and_reuse() -> None:
+    def fallback_decision(**kwargs):
+        return SimpleNamespace(
+            used=False,
+            ignored_env=False,
+            mode="auto",
+            reason="ok",
+            requested_method=kwargs["requested_krylov_method"],
+            effective_krylov_env_value=kwargs["env_value"],
+            min_active_size=1,
+            qi_like_full_fp_3d=False,
+            non_autodiff=False,
+        )
+
+    def side_policy(**kwargs):
+        assert kwargs["krylov_env_value"] == "fgmres_jax"
+        return SimpleNamespace(
+            precondition_side="left",
+            default_right_preconditioned=False,
+            krylov_method="fgmres_jax",
+            gmres_restart=41,
+            restart_capped=True,
+            ignored_krylov_env=True,
+        )
+
+    def reuse_decision(**kwargs):
+        assert kwargs["requested_krylov_method"] == "fgmres_jax"
+        assert kwargs["precondition_side"] == "right"
+        return SimpleNamespace(skip_xblock_factors=True)
+
+    setup = resolve_xblock_sparse_pc_branch_setup(
+        op=_op(fp=True, constraint_scheme=1, n_zeta=7, n_species=1),
+        preconditioner_species=1,
+        preconditioner_xi=0,
+        active_size=4000,
+        pc_restart=20,
+        pc_restart_env="",
+        tokamak_fp_er_pc=False,
+        use_dkes=False,
+        include_xdot_sparse_pc=False,
+        include_electric_field_xi_sparse_pc=False,
+        lower_fill_mode=lambda value: ("force", value == "bad"),
+        species_decoupled_for_host_assembly=lambda **_kwargs: False,
+        assembled_host_allowed=lambda **_kwargs: False,
+        krylov_method=lambda value: (
+            "fgmres_jax" if value == "fgmres_jax" else "gmres",
+            False,
+        ),
+        device_host_fallback_decision=fallback_decision,
+        resolve_xblock_policy=side_policy,
+        reuse_decision=reuse_decision,
+        env={
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_KRYLOV": "fgmres_jax",
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER": "1",
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MATRIX_FREE": "1",
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_USE_IN_KRYLOV": "1",
+        },
+    )
+
+    assert setup.xblock_preconditioner_xi == 1
+    assert setup.xblock_device_krylov_requested
+    assert setup.precondition_side == "right"
+    assert setup.xblock_device_fgmres_forced_right_pc
+    assert setup.pc_restart == 41
+    assert setup.xblock_default_restart_capped
+    assert setup.xblock_qi_device_operator_reuse_skip_factors
+    assert not setup.xblock_jax_factors
+    assert any("ignoring unknown" in message for _, message in setup.messages)
+    assert any("skipping local x-block factors" in message for _, message in setup.messages)
 
 
 def test_xblock_krylov_matvec_setup_reduces_active_dofs_and_counts_progress() -> None:

@@ -344,15 +344,13 @@ from .problems.profile_response.sparse_pc import (
     resolve_xblock_qi_device_base_config_setup,
     resolve_xblock_qi_device_enrichment_config_setup,
     resolve_xblock_qi_device_multilevel_config_setup,
-    resolve_xblock_qi_device_operator_reuse_setup,
     resolve_xblock_qi_galerkin_policy_setup,
     resolve_xblock_qi_seed_policy_setup,
     resolve_xblock_qi_two_level_policy_setup,
     resolve_xblock_global_coupling_policy_setup,
     resolve_xblock_moment_schur_policy_setup,
     resolve_xblock_seed_policy_setup,
-    resolve_xblock_sparse_pc_setup,
-    resolve_xblock_sparse_pc_side_policy_setup,
+    resolve_xblock_sparse_pc_branch_setup,
     resolve_xblock_two_level_policy_setup,
     run_fortran_reduced_xblock_krylov_solve,
     run_sparse_pc_gmres_once,
@@ -576,6 +574,9 @@ from .problems.profile_response.solver_diagnostics import (
     RHS1KSPDiagnosticsContext,
     emit_profile_response_ksp_history,
     emit_profile_response_ksp_iter_stats,
+)
+from .problems.profile_response.active_dof import (
+    build_rhs1_active_dof_state as _build_rhs1_active_dof_state_compat,
 )
 from .rhs1_compressed_layout import build_rhs1_compressed_pitch_layout
 from .problems.profile_response.active_projection import (
@@ -976,6 +977,7 @@ from .profiling import _rss_mb, maybe_profiler
 
 _rhs1_xblock_precondition_side = _rhs1_xblock_policy.rhs1_xblock_precondition_side
 _rhs1_xblock_gmres_restart = _rhs1_xblock_policy.rhs1_xblock_gmres_restart
+build_rhs1_active_dof_state = _build_rhs1_active_dof_state_compat
 _rhs1_dkes_gmres_budget = _solver_path_policy.rhs1_dkes_gmres_budget
 _rhs1_residual_needs_rescue = _solver_path_policy.rhs1_residual_needs_rescue
 
@@ -2839,107 +2841,78 @@ def solve_v3_full_system_linear_gmres(
         pc_maxiter = int(sparse_pc_entry_policy.pc_maxiter)
 
         if xblock_sparse_pc:
-            xblock_setup = resolve_xblock_sparse_pc_setup(
+            xblock_branch_setup = resolve_xblock_sparse_pc_branch_setup(
                 op=op,
                 preconditioner_species=int(preconditioner_species),
                 preconditioner_xi=int(preconditioner_xi),
                 active_size=int(active_size),
+                pc_restart=int(pc_restart),
+                pc_restart_env=str(pc_restart_env),
+                tokamak_fp_er_pc=bool(tokamak_fp_er_pc),
+                use_dkes=bool(use_dkes),
+                include_xdot_sparse_pc=bool(include_xdot_sparse_pc),
+                include_electric_field_xi_sparse_pc=bool(include_electric_field_xi_sparse_pc),
                 lower_fill_mode=_rhs1_xblock_policy.rhs1_xblock_lower_fill_mode,
                 species_decoupled_for_host_assembly=_rhsmode1_fp_xblock_species_decoupled_for_host_assembly,
                 assembled_host_allowed=_rhsmode1_fp_xblock_assembled_host_allowed,
                 krylov_method=_rhs1_xblock_policy.rhs1_xblock_krylov_method,
                 device_host_fallback_decision=_rhs1_xblock_policy.rhs1_xblock_device_host_fallback_decision,
-                env=os.environ,
-            )
-            xblock_drop_tol = float(xblock_setup.xblock_drop_tol)
-            xblock_drop_rel = float(xblock_setup.xblock_drop_rel)
-            xblock_ilu_drop_tol = float(xblock_setup.xblock_ilu_drop_tol)
-            xblock_fill_factor = float(xblock_setup.xblock_fill_factor)
-            xblock_lower_fill_mode = str(xblock_setup.xblock_lower_fill_mode)
-            xblock_lower_fill_ignored_env = bool(xblock_setup.xblock_lower_fill_ignored_env)
-            xblock_preconditioner_xi = int(xblock_setup.xblock_preconditioner_xi)
-            force_assembled_host_fp = bool(xblock_setup.force_assembled_host_fp)
-            xblock_assembled_host_fp = bool(xblock_setup.xblock_assembled_host_fp)
-            xblock_krylov_env_requested = str(xblock_setup.xblock_krylov_env_requested)
-            xblock_krylov_env = str(xblock_setup.xblock_krylov_env)
-            xblock_krylov_requested = str(xblock_setup.xblock_krylov_requested)
-            xblock_device_fgmres_requested = bool(xblock_setup.xblock_device_fgmres_requested)
-            xblock_device_gmres_requested = bool(xblock_setup.xblock_device_gmres_requested)
-            xblock_device_bicgstab_requested = bool(xblock_setup.xblock_device_bicgstab_requested)
-            xblock_device_tfqmr_requested = bool(xblock_setup.xblock_device_tfqmr_requested)
-            xblock_device_krylov_requested = bool(xblock_setup.xblock_device_krylov_requested)
-            xblock_device_host_fallback_decision = xblock_setup.xblock_device_host_fallback_decision
-            xblock_device_host_fallback_auto_disabled_by_qi_device = bool(
-                xblock_setup.xblock_device_host_fallback_auto_disabled_by_qi_device
-            )
-            qi_device_preconditioner_requested_for_fallback = bool(
-                xblock_setup.qi_device_preconditioner_requested_for_fallback
-            )
-            qi_device_matrix_free_requested_for_fallback = bool(
-                xblock_setup.qi_device_matrix_free_requested_for_fallback
-            )
-            qi_device_use_in_krylov_requested_for_fallback = bool(
-                xblock_setup.qi_device_use_in_krylov_requested_for_fallback
-            )
-            if emit is not None:
-                for level, message in xblock_setup.messages:
-                    emit(int(level), str(message))
-            xblock_side_policy = resolve_xblock_sparse_pc_side_policy_setup(
-                op=op,
-                xblock_device_krylov_requested=bool(xblock_device_krylov_requested),
-                xblock_device_host_fallback_decision=xblock_device_host_fallback_decision,
-                xblock_krylov_env=str(xblock_krylov_env),
-                pc_restart=int(pc_restart),
-                pc_restart_env=str(pc_restart_env),
-                tokamak_fp_er_pc=bool(tokamak_fp_er_pc),
-                active_size=int(active_size),
-                use_dkes=bool(use_dkes),
-                include_xdot_sparse_pc=bool(include_xdot_sparse_pc),
-                include_electric_field_xi_sparse_pc=bool(include_electric_field_xi_sparse_pc),
                 resolve_xblock_policy=resolve_rhs1_xblock_sparse_pc_policy,
-                env=os.environ,
-            )
-            xblock_jax_factors = bool(xblock_side_policy.xblock_jax_factors)
-            xblock_jax_factor_format = str(xblock_side_policy.xblock_jax_factor_format)
-            xblock_jax_factor_apply = str(xblock_side_policy.xblock_jax_factor_apply)
-            xblock_device_krylov_forced_jax_factors = bool(
-                xblock_side_policy.xblock_device_krylov_forced_jax_factors
-            )
-            full_fp_3d_pc = bool(xblock_side_policy.full_fp_3d_pc)
-            side_env = str(xblock_side_policy.side_env)
-            precondition_side = str(xblock_side_policy.precondition_side)
-            xblock_default_right_pc = bool(xblock_side_policy.xblock_default_right_pc)
-            xblock_krylov_method = str(xblock_side_policy.xblock_krylov_method)
-            xblock_device_fgmres_forced_right_pc = bool(
-                xblock_side_policy.xblock_device_fgmres_forced_right_pc
-            )
-            pc_restart = int(xblock_side_policy.pc_restart)
-            xblock_default_restart_capped = bool(xblock_side_policy.xblock_default_restart_capped)
-            if emit is not None:
-                for level, message in xblock_side_policy.messages:
-                    emit(int(level), str(message))
-            xblock_qi_reuse_setup = resolve_xblock_qi_device_operator_reuse_setup(
-                op=op,
-                xblock_krylov_method=str(xblock_krylov_method),
-                xblock_device_host_fallback_decision=xblock_device_host_fallback_decision,
-                qi_device_preconditioner_requested=bool(qi_device_preconditioner_requested_for_fallback),
-                qi_device_matrix_free_requested=bool(qi_device_matrix_free_requested_for_fallback),
-                qi_device_use_in_krylov_requested=bool(qi_device_use_in_krylov_requested_for_fallback),
-                precondition_side=str(precondition_side),
-                xblock_jax_factors=bool(xblock_jax_factors),
-                xblock_device_krylov_forced_jax_factors=bool(xblock_device_krylov_forced_jax_factors),
-                xblock_preconditioner_xi=int(xblock_preconditioner_xi),
                 reuse_decision=_rhs1_xblock_policy.rhs1_xblock_qi_device_operator_reuse_decision,
                 env=os.environ,
             )
-            xblock_qi_device_operator_reuse_decision = xblock_qi_reuse_setup.decision
-            xblock_qi_device_operator_reuse_skip_factors = bool(xblock_qi_reuse_setup.skip_xblock_factors)
-            xblock_jax_factors = bool(xblock_qi_reuse_setup.xblock_jax_factors)
+            xblock_drop_tol = float(xblock_branch_setup.xblock_drop_tol)
+            xblock_drop_rel = float(xblock_branch_setup.xblock_drop_rel)
+            xblock_ilu_drop_tol = float(xblock_branch_setup.xblock_ilu_drop_tol)
+            xblock_fill_factor = float(xblock_branch_setup.xblock_fill_factor)
+            xblock_lower_fill_mode = str(xblock_branch_setup.xblock_lower_fill_mode)
+            xblock_lower_fill_ignored_env = bool(xblock_branch_setup.xblock_lower_fill_ignored_env)
+            xblock_preconditioner_xi = int(xblock_branch_setup.xblock_preconditioner_xi)
+            force_assembled_host_fp = bool(xblock_branch_setup.force_assembled_host_fp)
+            xblock_assembled_host_fp = bool(xblock_branch_setup.xblock_assembled_host_fp)
+            xblock_krylov_env_requested = str(xblock_branch_setup.xblock_krylov_env_requested)
+            xblock_krylov_env = str(xblock_branch_setup.xblock_krylov_env)
+            xblock_krylov_requested = str(xblock_branch_setup.xblock_krylov_requested)
+            xblock_device_fgmres_requested = bool(xblock_branch_setup.xblock_device_fgmres_requested)
+            xblock_device_gmres_requested = bool(xblock_branch_setup.xblock_device_gmres_requested)
+            xblock_device_bicgstab_requested = bool(xblock_branch_setup.xblock_device_bicgstab_requested)
+            xblock_device_tfqmr_requested = bool(xblock_branch_setup.xblock_device_tfqmr_requested)
+            xblock_device_krylov_requested = bool(xblock_branch_setup.xblock_device_krylov_requested)
+            xblock_device_host_fallback_decision = xblock_branch_setup.xblock_device_host_fallback_decision
+            xblock_device_host_fallback_auto_disabled_by_qi_device = bool(
+                xblock_branch_setup.xblock_device_host_fallback_auto_disabled_by_qi_device
+            )
+            qi_device_preconditioner_requested_for_fallback = bool(
+                xblock_branch_setup.qi_device_preconditioner_requested_for_fallback
+            )
+            qi_device_matrix_free_requested_for_fallback = bool(
+                xblock_branch_setup.qi_device_matrix_free_requested_for_fallback
+            )
+            qi_device_use_in_krylov_requested_for_fallback = bool(
+                xblock_branch_setup.qi_device_use_in_krylov_requested_for_fallback
+            )
+            xblock_jax_factors = bool(xblock_branch_setup.xblock_jax_factors)
+            xblock_jax_factor_format = str(xblock_branch_setup.xblock_jax_factor_format)
+            xblock_jax_factor_apply = str(xblock_branch_setup.xblock_jax_factor_apply)
             xblock_device_krylov_forced_jax_factors = bool(
-                xblock_qi_reuse_setup.xblock_device_krylov_forced_jax_factors
+                xblock_branch_setup.xblock_device_krylov_forced_jax_factors
+            )
+            full_fp_3d_pc = bool(xblock_branch_setup.full_fp_3d_pc)
+            side_env = str(xblock_branch_setup.side_env)
+            precondition_side = str(xblock_branch_setup.precondition_side)
+            xblock_default_right_pc = bool(xblock_branch_setup.xblock_default_right_pc)
+            xblock_krylov_method = str(xblock_branch_setup.xblock_krylov_method)
+            xblock_device_fgmres_forced_right_pc = bool(
+                xblock_branch_setup.xblock_device_fgmres_forced_right_pc
+            )
+            pc_restart = int(xblock_branch_setup.pc_restart)
+            xblock_default_restart_capped = bool(xblock_branch_setup.xblock_default_restart_capped)
+            xblock_qi_device_operator_reuse_decision = xblock_branch_setup.xblock_qi_device_operator_reuse_decision
+            xblock_qi_device_operator_reuse_skip_factors = bool(
+                xblock_branch_setup.xblock_qi_device_operator_reuse_skip_factors
             )
             if emit is not None:
-                for level, message in xblock_qi_reuse_setup.messages:
+                for level, message in xblock_branch_setup.messages:
                     emit(int(level), str(message))
             factor_start_s = sparse_timer.elapsed_s()
             xblock_preconditioner_built = False
