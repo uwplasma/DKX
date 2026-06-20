@@ -9,6 +9,7 @@ import jax.numpy as jnp
 from scipy import sparse as scipy_sparse
 
 import sfincs_jax.problems.profile_response.sparse_pc as sparse_pc_module
+from sfincs_jax.problems.profile_response.sparse import xblock as sparse_xblock_module
 from sfincs_jax.problems.profile_response.active_projection import (
     expand_reduced_with_map,
     reduce_full_with_indices,
@@ -298,6 +299,29 @@ from sfincs_jax.problems.profile_response.sparse_pc import (
     xblock_sparse_pc_final_metadata_from_driver_state,
     xblock_sparse_pc_final_payload_from_driver_state,
 )
+
+
+def test_sparse_xblock_module_reexports_match_compat_layer() -> None:
+    """The split sparse x-block module keeps legacy sparse_pc imports stable."""
+
+    moved_names = (
+        "SparseXBlockRescueBuildContext",
+        "SparseXBlockExplicitSeedContext",
+        "SparseXBlockRescueSolveContext",
+        "SparseXBlockRescueAcceptanceContext",
+        "SparseSXBlockRescueContext",
+        "FPXBlockGlobalCorrectionContext",
+        "FPXBlockHighXCorrectionContext",
+        "build_sparse_xblock_rescue_preconditioner",
+        "apply_sparse_xblock_explicit_seed",
+        "run_sparse_xblock_rescue_solve_stage",
+        "accept_sparse_xblock_rescue_candidate",
+        "run_sparse_sxblock_rescue_stage",
+        "run_fp_xblock_global_correction_stage",
+        "run_fp_xblock_highx_residual_correction_stage",
+    )
+    for name in moved_names:
+        assert getattr(sparse_pc_module, name) is getattr(sparse_xblock_module, name)
 
 
 def _identity(v: jnp.ndarray) -> jnp.ndarray:

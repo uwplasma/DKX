@@ -1974,16 +1974,21 @@ Current evidence from 2026-06-20:
 - PR #8 is draft and merge-clean. The previous pushed commit was green; the
   newest commit has docs/examples/external-data/optional checks passing and
   coverage shards still running at the time of this review.
-- Largest remaining files are
-  `sfincs_jax/problems/profile_response/sparse_pc.py` (`16760` lines),
+- Largest remaining files after the first sparse package split are
+  `sfincs_jax/problems/profile_response/sparse_pc.py` (`15735` lines),
   `sfincs_jax/v3_driver.py` (`14385` lines),
   `sfincs_jax/rhs1_full_assembly.py` (`11893` lines), and
   `sfincs_jax/io.py` (`5817` lines).
 - Largest remaining function is
   `solve_v3_full_system_linear_gmres(...)` in `v3_driver.py` (`9599` lines).
-- `profile_response.sparse_pc` currently has 179 top-level functions and
-  182 top-level classes. It is now the largest file in the repository, so
-  adding more extracted driver logic there makes the PR harder to review.
+- `profile_response.sparse_pc` currently has 172 top-level functions and
+  168 top-level classes. The first split moved 7 x-block rescue functions and
+  14 dataclasses into `profile_response/sparse/xblock.py` while preserving the
+  existing `sparse_pc` import surface.
+- Validation for the first sparse x-block split: targeted `py_compile`, targeted
+  `ruff`, focused sparse/profile-response tests (`355 passed`), broad
+  profile-response/RHSMode shard (`1385 passed`), `git diff --check`, and
+  `scripts/check_repo_size.py` all passed locally.
 - `rhs1_full_assembly.py` and `io.py` are large, but they are not immediate
   blockers for PR #8 unless this branch changes their behavior. Treat them as
   follow-up refactor lanes after the driver/profile-response split is reviewed.
@@ -2000,7 +2005,7 @@ Actual open lanes:
    in-line code it replaces. The next seam to inspect is the generic sparse
    retry/result-assembly branch; if it is mostly scalar metadata plumbing,
    leave it driver-owned and document why.
-3. Sparse profile-response package split: about 20%. This is the main blocker
+3. Sparse profile-response package split: about 35%. This is the main blocker
    for review. Move implementation out of
    `profile_response/sparse_pc.py` into a bounded domain package while keeping
    `sparse_pc.py` as a compatibility re-export for existing tests and users.
@@ -2008,7 +2013,7 @@ Actual open lanes:
    fallbacks must stay outside autodiff paths; JAX-native Python lanes must
    keep stable transformation behavior. Add focused tests only where the
    refactor touches solver selection or autodiff-facing APIs.
-5. Validation lane: about 80%. Focused sparse/profile-response tests and broad
+5. Validation lane: about 82%. Focused sparse/profile-response tests and broad
    RHSMode shards are the right gates for this PR. Do not add slow production
    benchmark runs unless behavior changes.
 6. Docs/reviewer map: about 65%. Add a concise architecture map after the
@@ -2050,9 +2055,10 @@ Efficient path to PR-ready:
 1. Inspect the generic sparse retry/result-assembly branch. Extract it only if
    the result is a small typed stage; otherwise record that the branch stays in
    the driver because it owns local cache/callback/result routing.
-2. Create the `profile_response/sparse/` package and move x-block-related
-   sparse stages first, because they are cohesive, heavily tested, and already
-   extracted from the driver.
+2. Continue the `profile_response/sparse/` package split. The first
+   x-block-rescue tranche is complete; the next tranches should move
+   finalization, direct, tail, Fortran-reduced, and QI groups in separate
+   commits.
 3. Move finalization/direct/tail/Fortran-reduced/QI groups in separate commits,
    keeping `sparse_pc.py` as a compatibility import layer after each commit.
 4. Run focused tests after every package split commit, then the broad
