@@ -311,10 +311,10 @@ Recent checkpoints:
 - `cb295ce` Extract sparse pattern setup.
 - `4b6a5b4` Extract sparse factor policy.
 
-Current source-size snapshot after x-block QI-device setup-config extraction:
+Current source-size snapshot after x-block QI residual-deflated policy extraction:
 
-- `sfincs_jax/v3_driver.py`: `16415` lines.
-- `solve_v3_full_system_linear_gmres`: `11670` lines.
+- `sfincs_jax/v3_driver.py`: `16350` lines.
+- `solve_v3_full_system_linear_gmres`: `11604` lines.
 - `sfincs_jax/v3_results.py`: `119` lines.
 - `sfincs_jax/rhs1_ksp_diagnostics.py`: `306` lines.
 - `sfincs_jax/rhs1_pas_policy.py`: `864` lines.
@@ -326,7 +326,7 @@ Current source-size snapshot after x-block QI-device setup-config extraction:
 - `sfincs_jax/problems/profile_response/dense.py`: `701` lines.
 - `sfincs_jax/problems/profile_response/linear_solve.py`: `339` lines.
 - `sfincs_jax/problems/profile_response/active_projection.py`: `116` lines.
-- `sfincs_jax/problems/profile_response/sparse_pc.py`: `13533` lines.
+- `sfincs_jax/problems/profile_response/sparse_pc.py`: `13687` lines.
 - `sfincs_jax/rhs1_xblock_policy.py`: `1215` lines.
 
 Recent local validation:
@@ -1171,7 +1171,7 @@ Known CI issue fixed by this rewrite:
 
 ### 1. `v3_driver.py` Architecture Refactor
 
-Completion estimate: 79%.
+Completion estimate: 80%.
 
 Goal:
 
@@ -1302,6 +1302,11 @@ Completed recent boundaries:
   sparse-PC-domain setup helper. The driver keeps compatibility aliases for
   legacy tests/debug scripts, but no longer owns the device config literal or
   QI tail-block geometry assembly at the production call site.
+- RHSMode=1 x-block QI residual-deflated preconditioner controls now use a
+  tested sparse-PC-domain policy resolver for Krylov/rank/damping/cycle
+  controls, seed-solver normalization, composition, raw-residual admission,
+  and extra global-load directions. Build/probe/application remain
+  driver-owned until the next stage extraction.
 - RHSMode=1 rescue/refinement candidate acceptance and KSP replay-state updates
   consolidated into profile-response handoff helpers.
 - RHSMode=1 true-residual recomputation before fallback decisions consolidated

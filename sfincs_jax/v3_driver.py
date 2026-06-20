@@ -348,6 +348,7 @@ from .problems.profile_response.sparse_pc import (
     resolve_xblock_qi_device_base_config_setup,
     resolve_xblock_qi_device_enrichment_config_setup,
     resolve_xblock_qi_device_multilevel_config_setup,
+    resolve_xblock_qi_deflated_policy_setup,
     resolve_xblock_qi_galerkin_policy_setup,
     resolve_xblock_qi_seed_policy_setup,
     resolve_xblock_qi_two_level_policy_setup,
@@ -3953,103 +3954,37 @@ def solve_v3_full_system_linear_gmres(
                 qi_deflated_preconditioner_reason = "disabled_by_precondition_side_none"
             elif qi_deflated_preconditioner_enabled:
                 qi_deflated_start_s = sparse_timer.elapsed_s()
-                qi_deflated_krylov_depth = _rhs1_int_env(
-                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEFLATED_PRECONDITIONER_KRYLOV_DEPTH",
-                    default=4,
-                    minimum=0,
+                qi_deflated_policy = resolve_xblock_qi_deflated_policy_setup(os.environ)
+                qi_deflated_krylov_depth = int(qi_deflated_policy.krylov_depth)
+                qi_deflated_max_rank = int(qi_deflated_policy.max_rank)
+                qi_deflated_rcond = float(qi_deflated_policy.rcond)
+                qi_deflated_basis_rtol = float(qi_deflated_policy.basis_rtol)
+                qi_deflated_min_improvement = float(qi_deflated_policy.min_improvement)
+                qi_deflated_damping = float(qi_deflated_policy.damping)
+                qi_deflated_correction_cycles = int(qi_deflated_policy.correction_cycles)
+                qi_deflated_use_in_krylov = bool(qi_deflated_policy.use_in_krylov)
+                qi_deflated_seed_solver = qi_deflated_policy.seed_solver
+                qi_deflated_composition = qi_deflated_policy.composition
+                qi_deflated_include_raw_residual = bool(
+                    qi_deflated_policy.include_raw_residual
                 )
-                qi_deflated_max_rank = _rhs1_int_env(
-                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEFLATED_PRECONDITIONER_MAX_RANK",
-                    default=16,
-                    minimum=1,
+                qi_deflated_extra_global_loads = bool(
+                    qi_deflated_policy.extra_global_loads
                 )
-                qi_deflated_rcond = _rhs1_float_env(
-                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEFLATED_PRECONDITIONER_RCOND",
-                    default=1.0e-12,
-                    minimum=0.0,
+                qi_deflated_extra_smooth_loads = bool(
+                    qi_deflated_policy.extra_smooth_loads
                 )
-                qi_deflated_basis_rtol = _rhs1_float_env(
-                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEFLATED_PRECONDITIONER_BASIS_RTOL",
-                    default=1.0e-10,
-                    minimum=0.0,
+                qi_deflated_extra_max_directions = int(
+                    qi_deflated_policy.extra_max_directions
                 )
-                qi_deflated_min_improvement = _rhs1_float_env(
-                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEFLATED_PRECONDITIONER_MIN_IMPROVEMENT",
-                    default=0.05,
-                    minimum=0.0,
+                qi_deflated_extra_fsavg_lmax = int(qi_deflated_policy.extra_fsavg_lmax)
+                qi_deflated_extra_angular_lmax = int(
+                    qi_deflated_policy.extra_angular_lmax
                 )
-                qi_deflated_damping = _rhs1_float_env(
-                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEFLATED_PRECONDITIONER_DAMPING",
-                    default=1.0,
-                    minimum=0.0,
+                qi_deflated_extra_max_extra_units = int(
+                    qi_deflated_policy.extra_max_extra_units
                 )
-                qi_deflated_correction_cycles = _rhs1_int_env(
-                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEFLATED_PRECONDITIONER_CYCLES",
-                    default=8,
-                    minimum=1,
-                )
-                qi_deflated_use_in_krylov = _rhs1_bool_env(
-                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEFLATED_PRECONDITIONER_USE_IN_KRYLOV",
-                    default=False,
-                )
-                qi_deflated_seed_solver = (
-                    os.environ.get(
-                        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEFLATED_PRECONDITIONER_SEED_SOLVER",
-                        "cycle_minres",
-                    )
-                    .strip()
-                    .lower()
-                    .replace("-", "_")
-                )
-                if qi_deflated_seed_solver in {"minres", "cycle_minres", "cycle_lstsq", "gcro_seed"}:
-                    qi_deflated_seed_solver = "cycle_minres"
-                else:
-                    qi_deflated_seed_solver = "linear_apply"
-                qi_deflated_composition = (
-                    os.environ.get(
-                        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEFLATED_PRECONDITIONER_COMPOSITION",
-                        "multiplicative",
-                    )
-                    .strip()
-                    .lower()
-                    .replace("-", "_")
-                )
-                qi_deflated_include_raw_residual = _rhs1_bool_env(
-                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEFLATED_PRECONDITIONER_INCLUDE_RAW_RESIDUAL",
-                    default=False,
-                )
-                qi_deflated_extra_global_loads = _rhs1_bool_env(
-                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEFLATED_PRECONDITIONER_EXTRA_GLOBAL_LOADS",
-                    default=True,
-                )
-                qi_deflated_extra_smooth_loads = _rhs1_bool_env(
-                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEFLATED_PRECONDITIONER_EXTRA_SMOOTH_LOADS",
-                    default=True,
-                )
-                qi_deflated_extra_max_directions = _rhs1_int_env(
-                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEFLATED_PRECONDITIONER_EXTRA_MAX_DIRECTIONS",
-                    default=16,
-                    minimum=0,
-                )
-                qi_deflated_extra_fsavg_lmax = _rhs1_int_env(
-                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEFLATED_PRECONDITIONER_EXTRA_FSAVG_LMAX",
-                    default=4,
-                    minimum=0,
-                )
-                qi_deflated_extra_angular_lmax = _rhs1_int_env(
-                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEFLATED_PRECONDITIONER_EXTRA_ANGULAR_LMAX",
-                    default=1,
-                    minimum=0,
-                )
-                qi_deflated_extra_max_extra_units = _rhs1_int_env(
-                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEFLATED_PRECONDITIONER_EXTRA_MAX_EXTRA_UNITS",
-                    default=8,
-                    minimum=0,
-                )
-                qi_deflated_extra_include_rhs = _rhs1_bool_env(
-                    "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEFLATED_PRECONDITIONER_EXTRA_INCLUDE_RHS",
-                    default=True,
-                )
+                qi_deflated_extra_include_rhs = bool(qi_deflated_policy.extra_include_rhs)
                 try:
                     base_precond_xblock_krylov = precond_xblock_krylov
 

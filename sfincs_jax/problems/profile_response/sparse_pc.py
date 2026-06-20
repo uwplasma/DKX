@@ -4178,6 +4178,30 @@ class XBlockQIDeviceSetupConfig:
 
 
 @dataclass(frozen=True)
+class XBlockQIDeflatedPolicySetup:
+    """Environment controls for the QI residual-deflated preconditioner."""
+
+    krylov_depth: int
+    max_rank: int
+    rcond: float
+    basis_rtol: float
+    min_improvement: float
+    damping: float
+    correction_cycles: int
+    use_in_krylov: bool
+    seed_solver: str
+    composition: str
+    include_raw_residual: bool
+    extra_global_loads: bool
+    extra_smooth_loads: bool
+    extra_max_directions: int
+    extra_fsavg_lmax: int
+    extra_angular_lmax: int
+    extra_max_extra_units: int
+    extra_include_rhs: bool
+
+
+@dataclass(frozen=True)
 class XBlockInitialGuessSetup:
     """Accepted initial guess for an x-block Krylov solve."""
 
@@ -9860,6 +9884,134 @@ def build_xblock_qi_device_setup_config(
     )
 
 
+def resolve_xblock_qi_deflated_policy_setup(
+    env: Mapping[str, str] | None = None,
+) -> XBlockQIDeflatedPolicySetup:
+    """Resolve QI residual-deflated preconditioner controls."""
+
+    seed_solver = (
+        _env_value(
+            env,
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEFLATED_PRECONDITIONER_SEED_SOLVER",
+        )
+        or "cycle_minres"
+    ).lower().replace("-", "_")
+    if seed_solver in {"minres", "cycle_minres", "cycle_lstsq", "gcro_seed"}:
+        seed_solver = "cycle_minres"
+    else:
+        seed_solver = "linear_apply"
+    composition = (
+        _env_value(
+            env,
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEFLATED_PRECONDITIONER_COMPOSITION",
+        )
+        or "multiplicative"
+    ).lower().replace("-", "_")
+    return XBlockQIDeflatedPolicySetup(
+        krylov_depth=_env_int(
+            env,
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEFLATED_PRECONDITIONER_KRYLOV_DEPTH",
+            default=4,
+            minimum=0,
+        ),
+        max_rank=_env_int(
+            env,
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEFLATED_PRECONDITIONER_MAX_RANK",
+            default=16,
+            minimum=1,
+        ),
+        rcond=max(
+            0.0,
+            _env_float(
+                env,
+                "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEFLATED_PRECONDITIONER_RCOND",
+                default=1.0e-12,
+            ),
+        ),
+        basis_rtol=max(
+            0.0,
+            _env_float(
+                env,
+                "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEFLATED_PRECONDITIONER_BASIS_RTOL",
+                default=1.0e-10,
+            ),
+        ),
+        min_improvement=max(
+            0.0,
+            _env_float(
+                env,
+                "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEFLATED_PRECONDITIONER_MIN_IMPROVEMENT",
+                default=0.05,
+            ),
+        ),
+        damping=max(
+            0.0,
+            _env_float(
+                env,
+                "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEFLATED_PRECONDITIONER_DAMPING",
+                default=1.0,
+            ),
+        ),
+        correction_cycles=_env_int(
+            env,
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEFLATED_PRECONDITIONER_CYCLES",
+            default=8,
+            minimum=1,
+        ),
+        use_in_krylov=_env_bool(
+            env,
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEFLATED_PRECONDITIONER_USE_IN_KRYLOV",
+            default=False,
+        ),
+        seed_solver=seed_solver,
+        composition=composition,
+        include_raw_residual=_env_bool(
+            env,
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEFLATED_PRECONDITIONER_INCLUDE_RAW_RESIDUAL",
+            default=False,
+        ),
+        extra_global_loads=_env_bool(
+            env,
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEFLATED_PRECONDITIONER_EXTRA_GLOBAL_LOADS",
+            default=True,
+        ),
+        extra_smooth_loads=_env_bool(
+            env,
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEFLATED_PRECONDITIONER_EXTRA_SMOOTH_LOADS",
+            default=True,
+        ),
+        extra_max_directions=_env_int(
+            env,
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEFLATED_PRECONDITIONER_EXTRA_MAX_DIRECTIONS",
+            default=16,
+            minimum=0,
+        ),
+        extra_fsavg_lmax=_env_int(
+            env,
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEFLATED_PRECONDITIONER_EXTRA_FSAVG_LMAX",
+            default=4,
+            minimum=0,
+        ),
+        extra_angular_lmax=_env_int(
+            env,
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEFLATED_PRECONDITIONER_EXTRA_ANGULAR_LMAX",
+            default=1,
+            minimum=0,
+        ),
+        extra_max_extra_units=_env_int(
+            env,
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEFLATED_PRECONDITIONER_EXTRA_MAX_EXTRA_UNITS",
+            default=8,
+            minimum=0,
+        ),
+        extra_include_rhs=_env_bool(
+            env,
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEFLATED_PRECONDITIONER_EXTRA_INCLUDE_RHS",
+            default=True,
+        ),
+    )
+
+
 def apply_xblock_qi_coarse_seed_stage(
     *,
     context: XBlockQICoarseSeedStageContext,
@@ -13381,6 +13533,7 @@ __all__ = [
     "XBlockQIDeviceMetadataContext",
     "XBlockQIDeviceSetupConfig",
     "XBlockQIDeviceSetupConfigContext",
+    "XBlockQIDeflatedPolicySetup",
     "XBlockQIGalerkinStageContext",
     "XBlockQIGalerkinStageResult",
     "XBlockQITwoLevelStageContext",
@@ -13433,6 +13586,7 @@ __all__ = [
     "build_xblock_assembled_operator_if_requested",
     "build_xblock_qi_device_preconditioner_metadata",
     "build_xblock_qi_device_setup_config",
+    "resolve_xblock_qi_deflated_policy_setup",
     "build_sparse_pc_active_dof_setup",
     "build_sparse_pc_pattern_setup",
     "build_direct_tail_materialization_setup",

@@ -184,6 +184,7 @@ from sfincs_jax.problems.profile_response.sparse_pc import (
     resolve_xblock_qi_device_base_config_setup,
     resolve_xblock_qi_device_enrichment_config_setup,
     resolve_xblock_qi_device_multilevel_config_setup,
+    resolve_xblock_qi_deflated_policy_setup,
     resolve_xblock_qi_device_operator_reuse_setup,
     resolve_xblock_qi_galerkin_policy_setup,
     resolve_xblock_qi_seed_policy_setup,
@@ -6681,6 +6682,79 @@ def test_build_xblock_qi_device_setup_config_matches_driver_contract() -> None:
     assert setup.config.max_rank == 11
     assert setup.config.global_moment_residual_equation is True
     assert setup.config.coupled_residual_equation is True
+
+
+def test_xblock_qi_deflated_policy_defaults() -> None:
+    setup = resolve_xblock_qi_deflated_policy_setup({})
+
+    assert setup.krylov_depth == 4
+    assert setup.max_rank == 16
+    assert setup.rcond == pytest.approx(1.0e-12)
+    assert setup.basis_rtol == pytest.approx(1.0e-10)
+    assert setup.min_improvement == pytest.approx(0.05)
+    assert setup.damping == pytest.approx(1.0)
+    assert setup.correction_cycles == 8
+    assert setup.use_in_krylov is False
+    assert setup.seed_solver == "cycle_minres"
+    assert setup.composition == "multiplicative"
+    assert setup.include_raw_residual is False
+    assert setup.extra_global_loads is True
+    assert setup.extra_smooth_loads is True
+    assert setup.extra_max_directions == 16
+    assert setup.extra_fsavg_lmax == 4
+    assert setup.extra_angular_lmax == 1
+    assert setup.extra_max_extra_units == 8
+    assert setup.extra_include_rhs is True
+
+
+def test_xblock_qi_deflated_policy_overrides_and_clamps() -> None:
+    setup = resolve_xblock_qi_deflated_policy_setup(
+        {
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEFLATED_PRECONDITIONER_KRYLOV_DEPTH": "-2",
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEFLATED_PRECONDITIONER_MAX_RANK": "0",
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEFLATED_PRECONDITIONER_RCOND": "-1",
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEFLATED_PRECONDITIONER_BASIS_RTOL": "2e-8",
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEFLATED_PRECONDITIONER_MIN_IMPROVEMENT": "0.2",
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEFLATED_PRECONDITIONER_DAMPING": "0.75",
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEFLATED_PRECONDITIONER_CYCLES": "0",
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEFLATED_PRECONDITIONER_USE_IN_KRYLOV": "1",
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEFLATED_PRECONDITIONER_SEED_SOLVER": "gcro-seed",
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEFLATED_PRECONDITIONER_COMPOSITION": "additive",
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEFLATED_PRECONDITIONER_INCLUDE_RAW_RESIDUAL": "1",
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEFLATED_PRECONDITIONER_EXTRA_GLOBAL_LOADS": "0",
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEFLATED_PRECONDITIONER_EXTRA_SMOOTH_LOADS": "0",
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEFLATED_PRECONDITIONER_EXTRA_MAX_DIRECTIONS": "-3",
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEFLATED_PRECONDITIONER_EXTRA_FSAVG_LMAX": "7",
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEFLATED_PRECONDITIONER_EXTRA_ANGULAR_LMAX": "5",
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEFLATED_PRECONDITIONER_EXTRA_MAX_EXTRA_UNITS": "9",
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEFLATED_PRECONDITIONER_EXTRA_INCLUDE_RHS": "0",
+        }
+    )
+    linear = resolve_xblock_qi_deflated_policy_setup(
+        {
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEFLATED_PRECONDITIONER_SEED_SOLVER": "bad",
+        }
+    )
+
+    assert setup.krylov_depth == 0
+    assert setup.max_rank == 1
+    assert setup.rcond == 0.0
+    assert setup.basis_rtol == pytest.approx(2.0e-8)
+    assert setup.min_improvement == pytest.approx(0.2)
+    assert setup.damping == pytest.approx(0.75)
+    assert setup.correction_cycles == 1
+    assert setup.use_in_krylov is True
+    assert setup.seed_solver == "cycle_minres"
+    assert setup.composition == "additive"
+    assert setup.include_raw_residual is True
+    assert setup.extra_global_loads is False
+    assert setup.extra_smooth_loads is False
+    assert setup.extra_max_directions == 0
+    assert setup.extra_fsavg_lmax == 7
+    assert setup.extra_angular_lmax == 5
+    assert setup.extra_max_extra_units == 9
+    assert setup.extra_include_rhs is False
+    assert linear.seed_solver == "linear_apply"
 
 
 def test_sparse_pc_gmres_control_policy_defaults() -> None:
