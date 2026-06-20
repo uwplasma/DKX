@@ -1428,6 +1428,11 @@ Recent local validation:
 - Broad profile-response/RHSMode=1 policy, setup, diagnostics, solver, and
   helper sweep after generic sparse-PC finalization bundle extraction:
   `1302 passed in 89.13 s`.
+- Profile-response sparse-PC helper tests after sparse-PC driver-result bundle
+  extraction: `290 passed in 2.18 s`.
+- Broad profile-response/RHSMode=1 policy, setup, diagnostics, solver, and
+  helper sweep after sparse-PC driver-result bundle extraction:
+  `1302 passed in 85.29 s`.
 - Hygiene after generic sparse-PC finalization bundle extraction:
   `ruff`, `py_compile`, `compileall`, `git diff --check`, and repository size
   audit passed; latest branch CI and Docs were green.
@@ -1860,8 +1865,10 @@ Completed recent boundaries:
   narrow driver-scope adapter in `profile_response.sparse_pc`. The production
   driver no longer manually assembles direct-tail, factor-preflight,
   sparse-pattern, static, post-MinRes, dtype-retry, and finalizer state in the
-  solve loop; after this tranche `v3_driver.py` is 15,413 lines and
-  `solve_v3_full_system_linear_gmres` is 10,660 lines.
+  solve loop. The remaining final-result/post-MinRes/dtype-retry packing is
+  now built by a tested driver-result bundle helper; after this tranche
+  `v3_driver.py` is 15,370 lines and `solve_v3_full_system_linear_gmres` is
+  10,620 lines.
 - The RHSMode=1 x-block sparse-PC finalizer no longer has a production driver
   `locals()` handoff. X-block nested diagnostics are grouped into typed
   assembled-operator, coarse-correction, QI seed/device/deflated, and

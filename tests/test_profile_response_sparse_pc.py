@@ -185,6 +185,7 @@ from sfincs_jax.problems.profile_response.sparse_pc import (
     finalize_sparse_pc_gmres_with_dtype_retry,
     sparse_pc_gmres_finalization_driver_scope_keys,
     sparse_pc_gmres_finalization_driver_state_keys,
+    sparse_pc_gmres_finalization_bundle_from_driver_result,
     sparse_pc_gmres_finalization_bundle_from_driver_scope,
     sparse_pc_gmres_finalization_state_from_context,
     sparse_pc_gmres_finalization_state_from_driver_scope,
@@ -9879,6 +9880,27 @@ def test_sparse_pc_gmres_finalization_bundle_from_driver_scope_groups_locals() -
         "sparse_pc_use_active_dof": True,
         "sparse_pc_linear_size": np.int64(2),
         "sparse_pc_fp_dense_velocity_block": False,
+        "sparse_pc_factor_dtype_used": np.dtype(np.float64),
+        "sparse_pc_factor_dtype_retry": None,
+        "_operator_bundle_pc": "operator",
+        "factor_bundle_pc": "factor",
+        "pc_factor_s": 0.2,
+        "setup_s": 0.3,
+        "_mv_true": _identity,
+        "sparse_pc_rhs": jnp.zeros(2, dtype=jnp.float64),
+        "_precond_sparse": _identity,
+        "emit": None,
+        "sparse_timer": SimpleNamespace(elapsed_s=lambda: 1.0),
+        "pc_form": "right",
+        "sparse_pc_post_minres_steps": np.int64(0),
+        "sparse_pc_post_minres_alpha_clip": 1.0,
+        "sparse_pc_post_minres_min_improvement": 0.0,
+        "_sparse_pc_factor_mv": _identity,
+        "rhs": jnp.zeros(2, dtype=jnp.float64),
+        "pattern": None,
+        "constrained_pas_pc": False,
+        "tokamak_fp_pc": False,
+        "x0_sparse": jnp.zeros(2, dtype=jnp.float64),
     }
 
     bundle = sparse_pc_gmres_finalization_bundle_from_driver_scope(
@@ -9898,6 +9920,22 @@ def test_sparse_pc_gmres_finalization_bundle_from_driver_scope_groups_locals() -
     assert bundle.result is result
     assert bundle.post_minres is post_minres
     assert bundle.dtype_retry is dtype_retry
+
+    driver_bundle = sparse_pc_gmres_finalization_bundle_from_driver_result(
+        scope,
+        x=np.asarray([1.0, 2.0]),
+        residual_norm=0.5,
+        preconditioned_residual_norm=0.25,
+        history=(1.0, 0.5),
+        solve_s=3.0,
+    )
+
+    np.testing.assert_allclose(driver_bundle.result.x, np.asarray([1.0, 2.0]))
+    assert driver_bundle.result.factor_dtype_used == np.dtype(np.float64)
+    assert driver_bundle.result.operator_bundle == "operator"
+    assert driver_bundle.post_minres.rhs.shape == (2,)
+    assert driver_bundle.dtype_retry.linear_size == 2
+    assert driver_bundle.dtype_retry.pc_maxiter == 5
 
 
 def test_finalize_sparse_pc_gmres_bundle_builds_typed_state(

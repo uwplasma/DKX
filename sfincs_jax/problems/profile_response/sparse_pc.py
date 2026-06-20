@@ -1066,6 +1066,67 @@ def sparse_pc_gmres_finalization_bundle_from_driver_scope(
     )
 
 
+def sparse_pc_gmres_finalization_bundle_from_driver_result(
+    scope: Mapping[str, object],
+    *,
+    x: np.ndarray,
+    residual_norm: float,
+    preconditioned_residual_norm: float,
+    history: Sequence[float] | None,
+    solve_s: float,
+) -> SparsePCGMRESFinalizationBundleContext:
+    """Build the full sparse-PC finalization bundle from the first GMRES result."""
+
+    return sparse_pc_gmres_finalization_bundle_from_driver_scope(
+        scope,
+        result=SparsePCGMRESFinalResultContext(
+            x=np.asarray(x, dtype=np.float64),
+            residual_norm=float(residual_norm),
+            preconditioned_residual_norm=float(preconditioned_residual_norm),
+            history=tuple(float(v) for v in (history or ())),
+            solve_s=float(solve_s),
+            factor_dtype_used=np.dtype(scope["sparse_pc_factor_dtype_used"]),
+            factor_dtype_retry=scope["sparse_pc_factor_dtype_retry"],
+            operator_bundle=scope["_operator_bundle_pc"],
+            factor_bundle=scope["factor_bundle_pc"],
+            pc_factor_s=float(scope["pc_factor_s"]),
+            setup_s=float(scope["setup_s"]),
+        ),
+        post_minres=SparsePCPostMinresFinalizationContext(
+            matvec=scope["_mv_true"],
+            rhs=scope["sparse_pc_rhs"],
+            preconditioner=scope["_precond_sparse"],
+            emit=scope["emit"],
+            elapsed_s=scope["sparse_timer"].elapsed_s,
+            pc_form=scope["pc_form"],
+            steps=int(scope["sparse_pc_post_minres_steps"]),
+            alpha_clip=float(scope["sparse_pc_post_minres_alpha_clip"]),
+            min_improvement=float(scope["sparse_pc_post_minres_min_improvement"]),
+            target=float(scope["target"]),
+        ),
+        dtype_retry=SparsePCFactorDtypeRetryFinalizationContext(
+            factor_matvec=scope["_sparse_pc_factor_mv"],
+            linear_size=int(scope["sparse_pc_linear_size"]),
+            rhs_dtype=np.dtype(scope["rhs"].dtype),
+            pattern=scope["pattern"],
+            emit=scope["emit"],
+            constrained_pas_pc=bool(scope["constrained_pas_pc"]),
+            tokamak_fp_pc=bool(scope["tokamak_fp_pc"]),
+            fortran_reduced_sparse_pc=bool(scope["fortran_reduced_sparse_pc"]),
+            default_permc_spec=scope["sparse_pc_default_permc_spec"],
+            default_factor_kind=scope["sparse_pc_default_factor_kind"],
+            default_ilu_fill_factor=float(scope["sparse_pc_default_ilu_fill_factor"]),
+            default_ilu_drop_tol=float(scope["sparse_pc_default_ilu_drop_tol"]),
+            default_pattern_color_batch=int(
+                scope["sparse_pc_default_pattern_color_batch"]
+            ),
+            x0_fallback=scope["x0_sparse"],
+            pc_maxiter=int(scope["pc_maxiter"]),
+            elapsed_s=scope["sparse_timer"].elapsed_s,
+        ),
+    )
+
+
 _XBLOCK_SPARSE_PC_FINAL_METADATA_CORE_STATE_KEYS = (
     "assembled_operator_built",
     "assembled_operator_enabled",
@@ -15058,6 +15119,7 @@ __all__ = [
     "sparse_pc_gmres_finalization_driver_scope_keys",
     "sparse_pc_gmres_finalization_driver_state_keys",
     "sparse_pc_gmres_finalization_bundle_from_driver_scope",
+    "sparse_pc_gmres_finalization_bundle_from_driver_result",
     "sparse_pc_gmres_finalization_state_from_context",
     "sparse_pc_gmres_finalization_state_from_driver_scope",
     "XBlockKrylovReport",
