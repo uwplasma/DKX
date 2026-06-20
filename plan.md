@@ -42,6 +42,12 @@ Make `sfincs_jax` research-grade while preserving the public user contract:
 
 Recent checkpoints:
 
+- RHSMode=1 full-system strong-preconditioner kind selection now uses a tested
+  `resolve_rhs1_full_strong_preconditioner_selection(...)` helper. The driver
+  still owns full preconditioner construction, residual admission, and Krylov
+  retry execution, while explicit-env/full-mode alias handling, full-space
+  auto-kind selection, xblock-L truncation, and line-size adjustment are
+  centralized with the reduced strong-preconditioning policy helpers.
 - RHSMode=1 reduced strong-preconditioner kind selection now uses a tested
   `resolve_rhs1_reduced_strong_preconditioner_selection(...)` helper. The
   driver still owns user progress messages, builder/cache setup, residual
@@ -338,10 +344,10 @@ Recent checkpoints:
 - `cb295ce` Extract sparse pattern setup.
 - `4b6a5b4` Extract sparse factor policy.
 
-Current source-size snapshot after reduced strong-kind selection extraction:
+Current source-size snapshot after full strong-kind selection extraction:
 
-- `sfincs_jax/v3_driver.py`: `15837` lines.
-- `solve_v3_full_system_linear_gmres`: `11083` lines.
+- `sfincs_jax/v3_driver.py`: `15780` lines.
+- `solve_v3_full_system_linear_gmres`: `11031` lines.
 - `sfincs_jax/v3_results.py`: `119` lines.
 - `sfincs_jax/rhs1_ksp_diagnostics.py`: `306` lines.
 - `sfincs_jax/rhs1_pas_policy.py`: `889` lines.

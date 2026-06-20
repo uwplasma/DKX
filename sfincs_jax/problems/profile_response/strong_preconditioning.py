@@ -493,6 +493,14 @@ class RHS1ReducedStrongPreconditionerSelection:
     skipped_qi_device: bool = False
 
 
+@dataclass(frozen=True)
+class RHS1FullStrongPreconditionerSelection:
+    """Resolved full-space strong-preconditioner route."""
+
+    kind: str | None
+    xblock_tz_lmax: int | None
+
+
 def _int_env(name: str, default: int) -> int:
     env = os.environ.get(name, "").strip()
     try:
@@ -919,7 +927,95 @@ def resolve_rhs1_reduced_strong_preconditioner_selection(
     )
 
 
+def resolve_rhs1_full_strong_preconditioner_selection(
+    *,
+    strong_precond_env: str,
+    control: RHS1StrongPreconditionerControl,
+    has_extra_constraint_block: bool,
+    has_fp: bool,
+    has_pas: bool,
+    rhs1_precond_kind: str | None,
+    geom_scheme: int,
+    total_size: int,
+    n_theta: int,
+    n_zeta: int,
+    max_l: int,
+    nxi_for_x_sum: int,
+    shard_axis: str | None,
+    device_count: int,
+) -> RHS1FullStrongPreconditionerSelection:
+    """Resolve the full-space strong-preconditioner kind without side effects."""
+
+    kind: str | None = None
+    xblock_tz_lmax: int | None = None
+
+    if not bool(control.disabled):
+        kind = requested_rhs1_strong_preconditioner_kind(
+            strong_precond_env,
+            mode="full",
+        )
+
+    if kind is None and (not bool(control.disabled)) and bool(control.auto):
+        if bool(has_extra_constraint_block):
+            if has_pas:
+                auto_sel = auto_rhs1_full_strong_kind(
+                    has_pas=True,
+                    has_fp=False,
+                    rhs1_precond_kind=rhs1_precond_kind,
+                    total_size=int(total_size),
+                    strong_precond_min=int(control.min_size),
+                    n_theta=int(n_theta),
+                    n_zeta=int(n_zeta),
+                    max_l=int(max_l),
+                    shard_axis=shard_axis,
+                    device_count=int(device_count),
+                )
+                kind = auto_sel.kind
+                xblock_tz_lmax = auto_sel.xblock_tz_lmax
+            else:
+                kind = "schur"
+        else:
+            auto_sel = auto_rhs1_full_strong_kind(
+                has_pas=bool(has_pas),
+                has_fp=bool(has_fp),
+                rhs1_precond_kind=rhs1_precond_kind,
+                total_size=int(total_size),
+                strong_precond_min=int(control.min_size),
+                n_theta=int(n_theta),
+                n_zeta=int(n_zeta),
+                max_l=int(max_l),
+                shard_axis=shard_axis,
+                device_count=int(device_count),
+            )
+            kind = auto_sel.kind
+            xblock_tz_lmax = auto_sel.xblock_tz_lmax
+
+    auto_sel = adjust_rhs1_reduced_auto_kind(
+        kind=kind,
+        has_pas=bool(has_pas),
+        geom_scheme=int(geom_scheme),
+        n_zeta=int(n_zeta),
+        strong_precond_trigger=True,
+        max_l=int(max_l),
+        n_theta=int(n_theta),
+    )
+    kind = auto_sel.kind
+    if auto_sel.xblock_tz_lmax is not None:
+        xblock_tz_lmax = auto_sel.xblock_tz_lmax
+
+    auto_sel = adjust_rhs1_theta_line_auto_kind(
+        kind=kind,
+        n_theta=int(n_theta),
+        nxi_for_x_sum=int(nxi_for_x_sum),
+    )
+    return RHS1FullStrongPreconditionerSelection(
+        kind=auto_sel.kind,
+        xblock_tz_lmax=xblock_tz_lmax,
+    )
+
+
 __all__ = (
+    "RHS1FullStrongPreconditionerSelection",
     "RHS1StrongAutoSelection",
     "RHS1FPStrongSizeGuard",
     "RHS1MinresCorrectionControls",
@@ -944,6 +1040,7 @@ __all__ = (
     "rhs1_pas_weak_strong_retry_skip",
     "rhs1_pas_xmg_min",
     "rhs1_resolved_strong_preconditioner_control",
+    "resolve_rhs1_full_strong_preconditioner_selection",
     "resolve_rhs1_reduced_strong_preconditioner_selection",
     "rhs1_schwarz_auto_min",
     "rhs1_strong_preconditioner_env_from_env",

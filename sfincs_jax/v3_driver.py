@@ -394,20 +394,15 @@ from .rhs1_strong_fallback import (
     build_rhs1_strong_preconditioner_reduced_from_kind,
 )
 from .problems.profile_response.strong_preconditioning import (
-    adjust_rhs1_reduced_auto_kind,
     adjust_rhs1_pas_schur_strong_kind_from_env,
-    adjust_rhs1_theta_line_auto_kind,
-    auto_rhs1_full_strong_kind,
-    auto_rhs1_reduced_strong_kind,
-    requested_rhs1_strong_preconditioner_kind,
     rhs1_collision_retry_allowed,
     rhs1_fp_strong_size_guard_from_env,
     rhs1_pas_force_strong_ratio_from_env,
     rhs1_pas_tz_guarded_minres_controls_from_env,
     rhs1_pas_weak_minres_controls_from_env,
     rhs1_pas_weak_minres_steps,
-    rhs1_pas_weak_strong_retry_skip,
     rhs1_resolved_strong_preconditioner_control,
+    resolve_rhs1_full_strong_preconditioner_selection,
     resolve_rhs1_reduced_strong_preconditioner_selection,
     rhs1_strong_preconditioner_env_from_env,
     rhs1_strong_retry_controls_from_env,
@@ -10234,9 +10229,6 @@ def solve_v3_full_system_linear_gmres(
             residual_norm=float(res_reduced.residual_norm),
             target=float(target_reduced),
         )
-        strong_precond_min = int(strong_control.min_size)
-        strong_precond_disabled = bool(strong_control.disabled)
-        strong_precond_auto = bool(strong_control.auto)
         if strong_control.reason_cs0_sparse_first and emit is not None:
             emit(
                 1,
@@ -12777,9 +12769,6 @@ def solve_v3_full_system_linear_gmres(
             ),
             pas_fast_accept=bool(pas_fast_accept),
         )
-        strong_precond_min = int(strong_control.min_size)
-        strong_precond_disabled = bool(strong_control.disabled)
-        strong_precond_auto = bool(strong_control.auto)
         if strong_control.reason_cs0_sparse_first and emit is not None:
             emit(
                 1,
@@ -12799,69 +12788,23 @@ def solve_v3_full_system_linear_gmres(
                 "solve_v3_full_system_linear_gmres: PAS fast-accept "
                 f"(residual={float(result.residual_norm):.3e}) -> skip strong preconditioner tail",
             )
-        strong_precond_kind: str | None = None
-        strong_xblock_tz_lmax: int | None = None
-        if strong_precond_disabled:
-            strong_precond_kind = None
-        else:
-            strong_precond_kind = requested_rhs1_strong_preconditioner_kind(
-                strong_precond_env,
-                mode="full",
-            )
-
-        if strong_precond_kind is None and (not strong_precond_disabled) and strong_precond_auto:
-            if int(op.constraint_scheme) == 2 and int(op.extra_size) > 0:
-                if op.fblock.pas is not None:
-                    auto_sel = auto_rhs1_full_strong_kind(
-                        has_pas=True,
-                        has_fp=False,
-                        rhs1_precond_kind=rhs1_precond_kind,
-                        total_size=int(op.total_size),
-                        strong_precond_min=int(strong_precond_min),
-                        n_theta=int(op.n_theta),
-                        n_zeta=int(op.n_zeta),
-                        max_l=int(np.max(nxi_for_x)) if nxi_for_x.size else 0,
-                        shard_axis=_matvec_shard_axis(op),
-                        device_count=int(jax.device_count()),
-                    )
-                    strong_precond_kind = auto_sel.kind
-                else:
-                    strong_precond_kind = "schur"
-            else:
-                auto_sel = auto_rhs1_full_strong_kind(
-                    has_pas=op.fblock.pas is not None,
-                    has_fp=op.fblock.fp is not None,
-                    rhs1_precond_kind=rhs1_precond_kind,
-                    total_size=int(op.total_size),
-                    strong_precond_min=int(strong_precond_min),
-                    n_theta=int(op.n_theta),
-                    n_zeta=int(op.n_zeta),
-                    max_l=int(np.max(nxi_for_x)) if nxi_for_x.size else 0,
-                    shard_axis=_matvec_shard_axis(op),
-                    device_count=int(jax.device_count()),
-                )
-                strong_precond_kind = auto_sel.kind
-                strong_xblock_tz_lmax = auto_sel.xblock_tz_lmax
-
-        auto_sel = adjust_rhs1_reduced_auto_kind(
-            kind=strong_precond_kind,
+        full_strong_selection = resolve_rhs1_full_strong_preconditioner_selection(
+            strong_precond_env=strong_precond_env,
+            control=strong_control,
+            has_extra_constraint_block=int(op.constraint_scheme) == 2 and int(op.extra_size) > 0,
+            has_fp=op.fblock.fp is not None,
             has_pas=op.fblock.pas is not None,
+            rhs1_precond_kind=rhs1_precond_kind,
             geom_scheme=int(geom_scheme),
+            total_size=int(op.total_size),
+            n_theta=int(op.n_theta),
             n_zeta=int(op.n_zeta),
-            strong_precond_trigger=True,
             max_l=int(np.max(nxi_for_x)) if nxi_for_x.size else 0,
-            n_theta=int(op.n_theta),
-        )
-        strong_precond_kind = auto_sel.kind
-        if auto_sel.xblock_tz_lmax is not None:
-            strong_xblock_tz_lmax = auto_sel.xblock_tz_lmax
-
-        auto_sel = adjust_rhs1_theta_line_auto_kind(
-            kind=strong_precond_kind,
-            n_theta=int(op.n_theta),
             nxi_for_x_sum=int(np.sum(nxi_for_x)) if nxi_for_x.size else 0,
+            shard_axis=_matvec_shard_axis(op),
+            device_count=int(jax.device_count()),
         )
-        strong_precond_kind = auto_sel.kind
+        strong_precond_kind = full_strong_selection.kind
 
         if strong_precond_kind is not None and _rhs1_residual_needs_rescue(
             float(result.residual_norm),

@@ -6,6 +6,7 @@ from sfincs_jax.rhs1_strong_auto_kind import (
     adjust_rhs1_theta_line_auto_kind,
     auto_rhs1_full_strong_kind,
     auto_rhs1_reduced_strong_kind,
+    resolve_rhs1_full_strong_preconditioner_selection,
     resolve_rhs1_reduced_strong_preconditioner_selection,
 )
 
@@ -237,3 +238,66 @@ def test_resolve_rhs1_reduced_strong_selection_allows_guarded_pas_retry() -> Non
     assert selection.kind == "theta_line"
     assert selection.trigger
     assert not selection.skipped_guarded_pas_tz
+
+
+def test_resolve_rhs1_full_strong_selection_preserves_full_mode_alias() -> None:
+    selection = resolve_rhs1_full_strong_preconditioner_selection(
+        strong_precond_env="theta_zeta",
+        control=RHS1StrongPreconditionerControl(min_size=800, disabled=False, auto=False),
+        has_extra_constraint_block=False,
+        has_fp=True,
+        has_pas=False,
+        rhs1_precond_kind="point",
+        geom_scheme=5,
+        total_size=5000,
+        n_theta=9,
+        n_zeta=5,
+        max_l=8,
+        nxi_for_x_sum=20,
+        shard_axis=None,
+        device_count=1,
+    )
+
+    assert selection.kind == "adi"
+
+
+def test_resolve_rhs1_full_strong_selection_extra_constraint_uses_schur() -> None:
+    selection = resolve_rhs1_full_strong_preconditioner_selection(
+        strong_precond_env="",
+        control=RHS1StrongPreconditionerControl(min_size=800, disabled=False, auto=True),
+        has_extra_constraint_block=True,
+        has_fp=True,
+        has_pas=False,
+        rhs1_precond_kind="point",
+        geom_scheme=5,
+        total_size=5000,
+        n_theta=9,
+        n_zeta=5,
+        max_l=8,
+        nxi_for_x_sum=20,
+        shard_axis=None,
+        device_count=1,
+    )
+
+    assert selection.kind == "schur"
+
+
+def test_resolve_rhs1_full_strong_selection_auto_uses_full_size() -> None:
+    selection = resolve_rhs1_full_strong_preconditioner_selection(
+        strong_precond_env="",
+        control=RHS1StrongPreconditionerControl(min_size=800, disabled=False, auto=True),
+        has_extra_constraint_block=False,
+        has_fp=True,
+        has_pas=False,
+        rhs1_precond_kind="block",
+        geom_scheme=5,
+        total_size=5000,
+        n_theta=9,
+        n_zeta=5,
+        max_l=8,
+        nxi_for_x_sum=20,
+        shard_axis=None,
+        device_count=1,
+    )
+
+    assert selection.kind == "xblock_tz"
