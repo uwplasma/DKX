@@ -1971,11 +1971,11 @@ not be used for current planning.
 Current evidence from 2026-06-20:
 
 - Branch `refactor/v3-driver-architecture` remains the single draft-PR branch.
-  The latest local tranche moves QI-specific x-block policy/configuration,
+  The latest pushed tranche moves QI-specific x-block policy/configuration,
   coarse-seed, Galerkin, two-level, device, and residual-deflated stage helpers
-  into `profile_response/sparse/qi.py`.
-- PR #8 is draft and merge-clean. The last pushed commit should be treated as
-  the latest CI reference until this local tranche is committed and pushed.
+  into `profile_response/sparse/qi.py` in commit `d3e63a7`.
+- PR #8 is draft and merge-clean. Commit `d3e63a7` should be treated as the
+  latest CI reference until another structural tranche is pushed.
 - Largest remaining files after the current sparse package splits are
   `sfincs_jax/v3_driver.py` (`14393` lines),
   `sfincs_jax/rhs1_full_assembly.py` (`11893` lines),
@@ -2100,7 +2100,7 @@ Efficient path to PR-ready:
 1. Treat the generic sparse retry/result-assembly shell as intentionally
    driver-owned for now because extracting it would create a large
    replay/cache-routing state object rather than a clearer algorithm boundary.
-2. Commit the QI-specific x-block split after final hygiene.
+2. The QI-specific x-block split is committed and pushed.
 3. Continue the `profile_response/sparse/` package split. The remaining
    high-value tranche is generic x-block policy/result bundles that are still
    mixed with driver-specific setup. Move it only if the compatibility surface
