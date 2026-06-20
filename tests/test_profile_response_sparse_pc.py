@@ -17,6 +17,7 @@ from sfincs_jax.problems.profile_response.sparse import (
     fortran_reduced as sparse_fortran_reduced_module,
 )
 from sfincs_jax.problems.profile_response.sparse import krylov as sparse_krylov_module
+from sfincs_jax.problems.profile_response.sparse import qi as sparse_qi_module
 from sfincs_jax.problems.profile_response.sparse import xblock as sparse_xblock_module
 from sfincs_jax.problems.profile_response.active_projection import (
     expand_reduced_with_map,
@@ -337,6 +338,50 @@ def test_sparse_xblock_module_reexports_match_compat_layer() -> None:
     )
     for name in moved_names:
         assert getattr(sparse_pc_module, name) is getattr(sparse_xblock_module, name)
+
+
+def test_sparse_qi_module_reexports_match_compat_layer() -> None:
+    """The split sparse QI module keeps legacy sparse_pc imports stable."""
+
+    moved_names = (
+        "XBlockQICoarseSeedStageContext",
+        "XBlockQICoarseSeedStageResult",
+        "XBlockQIDeflatedPolicySetup",
+        "XBlockQIDeflatedStageContext",
+        "XBlockQIDeflatedStageResult",
+        "XBlockQIDeviceAdmissionSetup",
+        "XBlockQIDeviceBaseConfigSetup",
+        "XBlockQIDeviceEnrichmentConfigSetup",
+        "XBlockQIDeviceMetadataContext",
+        "XBlockQIDeviceMultilevelConfigSetup",
+        "XBlockQIDeviceOperatorReuseSetup",
+        "XBlockQIDeviceSetupConfig",
+        "XBlockQIDeviceSetupConfigContext",
+        "XBlockQIGalerkinPolicySetup",
+        "XBlockQIGalerkinStageContext",
+        "XBlockQIGalerkinStageResult",
+        "XBlockQISeedPolicySetup",
+        "XBlockQITwoLevelPolicySetup",
+        "XBlockQITwoLevelStageContext",
+        "XBlockQITwoLevelStageResult",
+        "apply_xblock_qi_coarse_seed_stage",
+        "apply_xblock_qi_deflated_stage",
+        "apply_xblock_qi_galerkin_stage",
+        "apply_xblock_qi_two_level_stage",
+        "build_xblock_qi_device_preconditioner_metadata",
+        "build_xblock_qi_device_setup_config",
+        "resolve_xblock_qi_deflated_policy_setup",
+        "resolve_xblock_qi_device_admission_setup",
+        "resolve_xblock_qi_device_base_config_setup",
+        "resolve_xblock_qi_device_enrichment_config_setup",
+        "resolve_xblock_qi_device_multilevel_config_setup",
+        "resolve_xblock_qi_device_operator_reuse_setup",
+        "resolve_xblock_qi_galerkin_policy_setup",
+        "resolve_xblock_qi_seed_policy_setup",
+        "resolve_xblock_qi_two_level_policy_setup",
+    )
+    for name in moved_names:
+        assert getattr(sparse_pc_module, name) is getattr(sparse_qi_module, name)
 
 
 def test_sparse_direct_module_reexports_match_compat_layer() -> None:
