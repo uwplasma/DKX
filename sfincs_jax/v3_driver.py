@@ -175,6 +175,7 @@ from .rhs1_preconditioner_auto_policy import (
 from .rhs1_schur_policy import resolve_rhs1_schur_base_kind
 from .problems.profile_response.handoff import (
     RHS1KSPReplayState,
+    RHS1SkipPrimaryKrylovSeedContext,
     rhs1_accept_candidate_and_update_replay,
     rhs1_accept_measured_candidate_and_update_replay,
     rhs1_accept_sparse_retry_candidate_and_update_replay,
@@ -189,6 +190,8 @@ from .problems.profile_response.handoff import (
     rhs1_run_measured_linear_candidate_and_update_replay,
     rhs1_run_primary_krylov_and_update_replay,
     rhs1_run_stage2_retry_if_allowed,
+    rhs1_seed_skip_primary_krylov_and_update_replay,
+    rhs1_skip_primary_krylov_reason,
 )
 from .problems.profile_response.auto_solve import (
     RHS1AutoHostSolveContext,
@@ -9242,44 +9245,34 @@ def solve_v3_full_system_linear_gmres(
             )
             if skip_primary_krylov:
                 if emit is not None:
-                    reason = "probe ratio huge, dense disabled"
-                    if gpu_dkes_sparse_shortcut:
-                        reason = "GPU DKES auto sparse shortcut"
-                    elif cpu_large_xblock_shortcut:
-                        backend_name = str(jax.default_backend()).strip().lower()
-                        reason = (
-                            "CPU large FP x-block shortcut"
-                            if backend_name == "cpu"
-                            else f"{backend_name} host-sparse FP x-block shortcut"
-                        )
-                    elif cpu_large_sparse_shortcut:
-                        backend_name = str(jax.default_backend()).strip().lower()
-                        reason = (
-                            "CPU large FP sparse-LU shortcut"
-                            if backend_name == "cpu"
-                            else f"{backend_name} host-sparse FP sparse-LU shortcut"
-                        )
+                    reason = rhs1_skip_primary_krylov_reason(
+                        gpu_dkes_sparse_shortcut=bool(gpu_dkes_sparse_shortcut),
+                        cpu_large_xblock_shortcut=bool(cpu_large_xblock_shortcut),
+                        cpu_large_sparse_shortcut=bool(cpu_large_sparse_shortcut),
+                        backend_name=str(jax.default_backend()).strip().lower(),
+                    )
                     emit(
                         0,
                         "solve_v3_full_system_linear_gmres: skipping initial Krylov "
                         f"({reason}) -> sparse ILU",
                     )
-                if x0_reduced is None:
-                    x0_reduced = jnp.zeros_like(rhs_reduced)
-                try:
-                    r0 = rhs_reduced - mv_reduced(x0_reduced)
-                    rn0 = jnp.linalg.norm(r0)
-                except Exception:
-                    rn0 = jnp.asarray(np.inf, dtype=jnp.float64)
-                res_reduced = GMRESSolveResult(x=x0_reduced, residual_norm=jnp.asarray(rn0, dtype=jnp.float64))
-                rhs1_record_ksp_replay_problem(
-                    ksp_replay,
-                    matvec_fn=mv_reduced,
-                    b_vec=rhs_reduced,
-                    precond_fn=preconditioner_reduced,
-                    x0_vec=x0_reduced,
-                    precond_side=gmres_precond_side,
-                    solver_kind=_solver_kind(solve_method)[0],
+                res_reduced, x0_reduced = rhs1_seed_skip_primary_krylov_and_update_replay(
+                    replay_state=ksp_replay,
+                    context=RHS1SkipPrimaryKrylovSeedContext(
+                        matvec_fn=mv_reduced,
+                        b_vec=rhs_reduced,
+                        precond_fn=preconditioner_reduced,
+                        x0_vec=x0_reduced,
+                        precond_side=gmres_precond_side,
+                        solver_kind=_solver_kind(solve_method)[0],
+                        zero_like=jnp.zeros_like,
+                        norm=jnp.linalg.norm,
+                        inf_residual=lambda: jnp.asarray(np.inf, dtype=jnp.float64),
+                        result_factory=lambda x, residual_norm: GMRESSolveResult(
+                            x=x,
+                            residual_norm=jnp.asarray(residual_norm, dtype=jnp.float64),
+                        ),
+                    ),
                 )
             else:
                 res_reduced, residual_vec, _primary_elapsed_s = (

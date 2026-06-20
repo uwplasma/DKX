@@ -7,6 +7,7 @@ import pytest
 from sfincs_jax.rhs1_handoff import (
     RHS1KSPHandoffState,
     RHS1KSPReplayState,
+    RHS1SkipPrimaryKrylovSeedContext,
     rhs1_apply_handoff_to_replay_state,
     rhs1_accept_candidate,
     rhs1_accept_candidate_and_update_replay,
@@ -26,6 +27,8 @@ from sfincs_jax.rhs1_handoff import (
     rhs1_run_pas_schur_rescue_if_requested,
     rhs1_run_primary_krylov_and_update_replay,
     rhs1_run_stage2_retry_if_allowed,
+    rhs1_seed_skip_primary_krylov_and_update_replay,
+    rhs1_skip_primary_krylov_reason,
     rhs1_solver_candidate_metrics,
 )
 from sfincs_jax.solver_selection_policy import SolverCandidateMetrics
@@ -1319,6 +1322,103 @@ def test_rhs1_run_primary_krylov_blocks_returned_residual_when_requested() -> No
     assert residual_vec is residual
     assert block_calls == ["ready"]
     assert replay.precond_fn is None
+
+
+def test_rhs1_seed_skip_primary_krylov_records_seed_replay() -> None:
+    replay = RHS1KSPReplayState(restart=99, maxiter=101, solver_kind="old")
+
+    result, x0 = rhs1_seed_skip_primary_krylov_and_update_replay(
+        replay_state=replay,
+        context=RHS1SkipPrimaryKrylovSeedContext(
+            matvec_fn=lambda seed: 2.0 * seed,
+            b_vec=3.0,
+            precond_fn="pc",
+            x0_vec=None,
+            precond_side="left",
+            solver_kind="gmres",
+            zero_like=lambda _b: 0.0,
+            norm=abs,
+            inf_residual=lambda: float("inf"),
+            result_factory=lambda x, residual_norm: _result(residual_norm, x=x),
+        ),
+    )
+
+    assert x0 == 0.0
+    assert result.x == 0.0
+    assert result.residual_norm == 3.0
+    assert replay.matvec_fn(2.0) == 4.0
+    assert replay.b_vec == 3.0
+    assert replay.precond_fn == "pc"
+    assert replay.x0_vec == 0.0
+    assert replay.precond_side == "left"
+    assert replay.solver_kind == "gmres"
+    assert replay.restart == 99
+    assert replay.maxiter == 101
+
+
+def test_rhs1_seed_skip_primary_krylov_uses_inf_residual_on_probe_failure() -> None:
+    replay = RHS1KSPReplayState()
+
+    def failing_matvec(_seed):
+        raise RuntimeError("probe failed")
+
+    result, x0 = rhs1_seed_skip_primary_krylov_and_update_replay(
+        replay_state=replay,
+        context=RHS1SkipPrimaryKrylovSeedContext(
+            matvec_fn=failing_matvec,
+            b_vec=3.0,
+            precond_fn=None,
+            x0_vec="seed",
+            precond_side="none",
+            solver_kind="bicgstab",
+            zero_like=lambda _b: "unused",
+            norm=abs,
+            inf_residual=lambda: 123.0,
+            result_factory=lambda x, residual_norm: _result(residual_norm, x=x),
+        ),
+    )
+
+    assert x0 == "seed"
+    assert result.x == "seed"
+    assert result.residual_norm == 123.0
+    assert replay.x0_vec == "seed"
+    assert replay.precond_fn is None
+    assert replay.solver_kind == "bicgstab"
+
+
+@pytest.mark.parametrize(
+    (
+        "gpu_dkes_sparse_shortcut",
+        "cpu_large_xblock_shortcut",
+        "cpu_large_sparse_shortcut",
+        "backend_name",
+        "expected",
+    ),
+    [
+        (True, False, False, "gpu", "GPU DKES auto sparse shortcut"),
+        (False, True, False, "cpu", "CPU large FP x-block shortcut"),
+        (False, True, False, "gpu", "gpu host-sparse FP x-block shortcut"),
+        (False, False, True, "cpu", "CPU large FP sparse-LU shortcut"),
+        (False, False, True, "gpu", "gpu host-sparse FP sparse-LU shortcut"),
+        (False, False, False, "cpu", "probe ratio huge, dense disabled"),
+    ],
+)
+def test_rhs1_skip_primary_krylov_reason_formats_user_message(
+    gpu_dkes_sparse_shortcut: bool,
+    cpu_large_xblock_shortcut: bool,
+    cpu_large_sparse_shortcut: bool,
+    backend_name: str,
+    expected: str,
+) -> None:
+    assert (
+        rhs1_skip_primary_krylov_reason(
+            gpu_dkes_sparse_shortcut=gpu_dkes_sparse_shortcut,
+            cpu_large_xblock_shortcut=cpu_large_xblock_shortcut,
+            cpu_large_sparse_shortcut=cpu_large_sparse_shortcut,
+            backend_name=backend_name,
+        )
+        == expected
+    )
 
 
 def test_rhs1_retry_without_preconditioner_skips_finite_or_disabled() -> None:

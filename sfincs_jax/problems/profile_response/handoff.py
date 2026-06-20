@@ -58,6 +58,22 @@ class RHS1KSPReplayState:
     solver_kind: str = "gmres"
 
 
+@dataclass(frozen=True)
+class RHS1SkipPrimaryKrylovSeedContext:
+    """Inputs for a skip-primary seed result and replay update."""
+
+    matvec_fn: Any
+    b_vec: Any
+    precond_fn: Any
+    x0_vec: Any
+    precond_side: str
+    solver_kind: str
+    zero_like: Any
+    norm: Any
+    inf_residual: Any
+    result_factory: Any
+
+
 def rhs1_apply_handoff_to_replay_state(
     replay_state: RHS1KSPReplayState,
     handoff_state: RHS1KSPHandoffState | None,
@@ -940,6 +956,61 @@ def rhs1_run_primary_krylov_and_update_replay(
     return result, residual_vec, elapsed_s
 
 
+def rhs1_seed_skip_primary_krylov_and_update_replay(
+    *,
+    replay_state: RHS1KSPReplayState,
+    context: RHS1SkipPrimaryKrylovSeedContext,
+) -> tuple[Any, Any]:
+    """Create a seed result and replay problem when primary Krylov is skipped."""
+
+    x0_vec = context.x0_vec
+    if x0_vec is None:
+        x0_vec = context.zero_like(context.b_vec)
+    try:
+        residual = context.b_vec - context.matvec_fn(x0_vec)
+        residual_norm = context.norm(residual)
+    except Exception:
+        residual_norm = context.inf_residual()
+    result = context.result_factory(x0_vec, residual_norm)
+    rhs1_record_ksp_replay_problem(
+        replay_state,
+        matvec_fn=context.matvec_fn,
+        b_vec=context.b_vec,
+        precond_fn=context.precond_fn,
+        x0_vec=x0_vec,
+        precond_side=context.precond_side,
+        solver_kind=context.solver_kind,
+    )
+    return result, x0_vec
+
+
+def rhs1_skip_primary_krylov_reason(
+    *,
+    gpu_dkes_sparse_shortcut: bool,
+    cpu_large_xblock_shortcut: bool,
+    cpu_large_sparse_shortcut: bool,
+    backend_name: str,
+) -> str:
+    """Return the user-facing reason for bypassing the initial Krylov solve."""
+
+    backend = str(backend_name).strip().lower()
+    if gpu_dkes_sparse_shortcut:
+        return "GPU DKES auto sparse shortcut"
+    if cpu_large_xblock_shortcut:
+        return (
+            "CPU large FP x-block shortcut"
+            if backend == "cpu"
+            else f"{backend} host-sparse FP x-block shortcut"
+        )
+    if cpu_large_sparse_shortcut:
+        return (
+            "CPU large FP sparse-LU shortcut"
+            if backend == "cpu"
+            else f"{backend} host-sparse FP sparse-LU shortcut"
+        )
+    return "probe ratio huge, dense disabled"
+
+
 def rhs1_retry_without_preconditioner_if_nonfinite(
     *,
     allowed: bool,
@@ -1070,6 +1141,7 @@ def rhs1_accept_smoother_candidate_and_update_replay(
 __all__ = [
     "RHS1KSPHandoffState",
     "RHS1KSPReplayState",
+    "RHS1SkipPrimaryKrylovSeedContext",
     "rhs1_apply_handoff_to_replay_state",
     "rhs1_accept_candidate",
     "rhs1_accept_candidate_and_update_replay",
@@ -1088,6 +1160,8 @@ __all__ = [
     "rhs1_run_full_pas_schur_rescue_from_env",
     "rhs1_run_pas_schur_rescue_if_requested",
     "rhs1_run_primary_krylov_and_update_replay",
+    "rhs1_seed_skip_primary_krylov_and_update_replay",
+    "rhs1_skip_primary_krylov_reason",
     "rhs1_run_stage2_retry_if_allowed",
     "rhs1_solver_candidate_metrics",
 ]

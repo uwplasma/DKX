@@ -342,6 +342,11 @@ Recent checkpoints:
   correction execution, residual-improvement acceptance, and progress messages;
   the driver keeps only preconditioner-construction callbacks and result-state
   assignment.
+- RHSMode=1 skip-primary Krylov seed/replay setup and user-facing shortcut
+  reason formatting now use tested `profile_response.handoff` helpers. The
+  driver keeps shortcut admission policy and backend lookup, while handoff owns
+  zero-seed construction, initial residual probing/fallback, replay-state
+  mutation, and stable progress-message reason strings.
 - RHSMode=1 PAS preconditioner probe/default routing now uses tested
   PAS-policy helpers for env parsing, tokamak-like Schur defaulting, heavy-path
   admission, large-system collision skip, and residual-threshold decisions
@@ -485,17 +490,17 @@ Recent checkpoints:
 - `cb295ce` Extract sparse pattern setup.
 - `4b6a5b4` Extract sparse factor policy.
 
-Current source-size snapshot after post-primary MinRes correction extraction:
+Current source-size snapshot after skip-primary handoff extraction:
 
-- `sfincs_jax/v3_driver.py`: `14797` lines.
-- `solve_v3_full_system_linear_gmres`: `10038` lines.
+- `sfincs_jax/v3_driver.py`: `14790` lines.
+- `solve_v3_full_system_linear_gmres`: `10028` lines.
 - `sfincs_jax/v3_results.py`: `119` lines.
 - `sfincs_jax/rhs1_ksp_diagnostics.py`: `306` lines.
 - `sfincs_jax/rhs1_pas_policy.py`: `889` lines.
 - `sfincs_jax/rhs1_strong_fallback.py`: `147` lines.
 - `sfincs_jax/problems/profile_response/strong_preconditioning.py`: `1238` lines.
 - `sfincs_jax/problems/profile_response/residual.py`: `981` lines.
-- `sfincs_jax/problems/profile_response/handoff.py`: `1093` lines.
+- `sfincs_jax/problems/profile_response/handoff.py`: `1167` lines.
 - `sfincs_jax/problems/profile_response/policies.py`: `3577` lines.
 - `sfincs_jax/problems/profile_response/dense.py`: `1650` lines.
 - `sfincs_jax/problems/profile_response/linear_solve.py`: `798` lines.
@@ -507,6 +512,19 @@ Current source-size snapshot after post-primary MinRes correction extraction:
 
 Recent local validation:
 
+- Skip-primary Krylov seed/replay handoff extraction:
+  `tests/test_rhs1_handoff.py tests/test_rhs1_large_cpu_policy.py
+  tests/test_v3_driver_solve_policy_coverage.py
+  tests/test_rhs1_sparse_first_heuristic.py` passed (`163 passed in 0.88 s`).
+- Broad profile-response/RHSMode=1 shard after skip-primary handoff
+  extraction:
+  `tests/test_profile_response_*.py tests/test_rhs1_*.py
+  tests/test_newton_krylov_diagnostics.py tests/test_pas_smoother.py`
+  passed (`1344 passed in 87.59 s`).
+- Hygiene after skip-primary handoff extraction:
+  `py_compile`, `ruff check`, `compileall`, `git diff --check`, and
+  `python scripts/check_repo_size.py` passed. Repo-size audit reported no
+  reviewed files above 2 MiB.
 - Post-primary guarded/weak MinRes correction extraction:
   `tests/test_rhs1_strong_policy.py tests/test_rhs1_strong_auto_kind.py
   tests/test_profile_response_preconditioner_build.py` passed
