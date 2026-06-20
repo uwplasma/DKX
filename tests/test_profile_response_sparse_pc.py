@@ -10,6 +10,9 @@ from scipy import sparse as scipy_sparse
 
 import sfincs_jax.problems.profile_response.sparse_pc as sparse_pc_module
 from sfincs_jax.problems.profile_response.sparse import direct as sparse_direct_module
+from sfincs_jax.problems.profile_response.sparse import (
+    finalization as sparse_finalization_module,
+)
 from sfincs_jax.problems.profile_response.sparse import xblock as sparse_xblock_module
 from sfincs_jax.problems.profile_response.active_projection import (
     expand_reduced_with_map,
@@ -375,6 +378,46 @@ def test_sparse_direct_module_reexports_match_compat_layer() -> None:
     )
     for name in moved_names:
         assert getattr(sparse_pc_module, name) is getattr(sparse_direct_module, name)
+
+
+def test_sparse_finalization_module_reexports_match_compat_layer() -> None:
+    """The split sparse finalization module keeps legacy sparse_pc imports stable."""
+
+    moved_names = (
+        "SparsePCFactorDtypeRetryContext",
+        "SparsePCFactorDtypeRetryDecision",
+        "SparsePCFactorDtypeRetryFinalizationContext",
+        "SparsePCFactorDtypeRetryResult",
+        "SparsePCGMRESCompletionMessageContext",
+        "SparsePCGMRESFinalPayload",
+        "SparsePCGMRESFinalResultContext",
+        "SparsePCGMRESFinalizationContext",
+        "SparsePCGMRESResult",
+        "SparsePCPostMinresContext",
+        "SparsePCPostMinresFinalizationContext",
+        "SparsePCPostMinresResult",
+        "SparsePCPostMinresUpdateContext",
+        "SparsePCPostMinresUpdateResult",
+        "apply_sparse_pc_post_minres",
+        "apply_sparse_pc_post_minres_from_driver_state",
+        "apply_sparse_pc_post_minres_if_needed",
+        "emit_sparse_pc_gmres_completion_from_driver_state",
+        "evaluate_sparse_pc_factor_dtype_retry",
+        "finalize_sparse_pc_gmres_from_driver_state",
+        "finalize_sparse_pc_gmres_with_dtype_retry",
+        "finalize_sparse_pc_gmres_with_dtype_retry_from_driver_state",
+        "retry_sparse_pc_factor_dtype_from_driver_state",
+        "retry_sparse_pc_factor_dtype_from_finalization_context",
+        "retry_sparse_pc_factor_dtype_if_needed",
+        "sparse_pc_factor_dtype_retry_initial_guess",
+        "sparse_pc_gmres_completion_message",
+        "sparse_pc_gmres_final_payload_from_driver_state",
+    )
+    for name in moved_names:
+        assert getattr(sparse_pc_module, name) is getattr(
+            sparse_finalization_module,
+            name,
+        )
 
 
 def _identity(v: jnp.ndarray) -> jnp.ndarray:
@@ -11568,12 +11611,12 @@ def test_finalize_sparse_pc_gmres_with_dtype_retry_updates_copied_state(
         )
 
     monkeypatch.setattr(
-        sparse_pc_module,
+        sparse_finalization_module,
         "retry_sparse_pc_factor_dtype_from_driver_state",
         fake_retry,
     )
     monkeypatch.setattr(
-        sparse_pc_module,
+        sparse_finalization_module,
         "finalize_sparse_pc_gmres_from_driver_state",
         fake_finalize,
     )
@@ -11650,17 +11693,17 @@ def test_finalize_sparse_pc_gmres_with_dtype_retry_uses_explicit_finalization_co
         )
 
     monkeypatch.setattr(
-        sparse_pc_module,
+        sparse_finalization_module,
         "retry_sparse_pc_factor_dtype_from_driver_state",
         fail_legacy_retry,
     )
     monkeypatch.setattr(
-        sparse_pc_module,
+        sparse_finalization_module,
         "finalize_sparse_pc_gmres_from_driver_state",
         fail_legacy_finalize,
     )
     monkeypatch.setattr(
-        sparse_pc_module,
+        sparse_finalization_module,
         "sparse_pc_gmres_final_payload_from_driver_state",
         fake_payload,
     )
@@ -11768,7 +11811,7 @@ def test_finalize_sparse_pc_gmres_with_dtype_retry_from_driver_state_delegates(
         )
 
     monkeypatch.setattr(
-        sparse_pc_module,
+        sparse_finalization_module,
         "finalize_sparse_pc_gmres_with_dtype_retry",
         fake_finalize,
     )

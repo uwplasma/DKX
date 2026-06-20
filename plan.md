@@ -1971,23 +1971,25 @@ not be used for current planning.
 Current evidence from 2026-06-20:
 
 - Branch `refactor/v3-driver-architecture` remains the single draft-PR branch.
-  The latest tranche moves sparse host-direct/ILU helpers into
-  `profile_response/sparse/direct.py`.
+  The latest tranche moves generic sparse-PC GMRES finalization, post-MinRes
+  polishing, and dtype-retry helpers into
+  `profile_response/sparse/finalization.py`.
 - PR #8 is draft and merge-clean. The previous pushed commit was green; the
-  newest commit has docs/examples/external-data/optional checks passing and
-  coverage shards still running at the time of this review.
+  previous pushed commit is green on CI and docs.
 - Largest remaining files after the first sparse package splits are
-  `sfincs_jax/problems/profile_response/sparse_pc.py` (`14367` lines),
+  `sfincs_jax/problems/profile_response/sparse_pc.py` (`13552` lines),
   `sfincs_jax/v3_driver.py` (`14394` lines),
   `sfincs_jax/rhs1_full_assembly.py` (`11893` lines), and
   `sfincs_jax/io.py` (`5817` lines).
 - Largest remaining function is
   `solve_v3_full_system_linear_gmres(...)` in `v3_driver.py` (`9599` lines).
-- `profile_response.sparse_pc` currently has 150 top-level functions and
-  147 top-level classes. The sparse package split has moved 7 x-block rescue
+- `profile_response.sparse_pc` currently has 136 top-level functions and
+  133 top-level classes. The sparse package split has moved 7 x-block rescue
   functions and 14 dataclasses into `profile_response/sparse/xblock.py`, plus
   26 explicit sparse/minimum-norm/host-direct/ILU helpers and 21 dataclasses
-  into `profile_response/sparse/direct.py`, while preserving the existing
+  into `profile_response/sparse/direct.py`, plus 14 generic GMRES
+  finalization/post-MinRes/dtype-retry helpers and 14 dataclasses into
+  `profile_response/sparse/finalization.py`, while preserving the existing
   `sparse_pc` import surface.
 - Validation for the first sparse x-block split: targeted `py_compile`, targeted
   `ruff`, focused sparse/profile-response tests (`355 passed`), broad
@@ -2000,6 +2002,10 @@ Current evidence from 2026-06-20:
 - Validation for the sparse host-direct/ILU split: targeted `py_compile`,
   targeted `ruff`, focused sparse/profile-response tests (`354 passed`), broad
   profile-response/RHSMode shard (`1386 passed`), `compileall`,
+  `git diff --check`, and `scripts/check_repo_size.py` all passed locally.
+- Validation for the sparse finalization split: targeted `py_compile`,
+  targeted `ruff`, focused sparse/profile-response tests (`355 passed`), broad
+  profile-response/RHSMode shard (`1387 passed`), `compileall`,
   `git diff --check`, and `scripts/check_repo_size.py` all passed locally.
 - `rhs1_full_assembly.py` and `io.py` are large, but they are not immediate
   blockers for PR #8 unless this branch changes their behavior. Treat them as
@@ -2019,7 +2025,7 @@ Actual open lanes:
    driver-owned for now: it coordinates driver-local cache keys, dense fallback
    state, KSP replay state, and residual-vector routing while delegating the
    reusable factor/solve mechanics to tested profile-response helpers.
-3. Sparse profile-response package split: about 55%. This is the main blocker
+3. Sparse profile-response package split: about 68%. This is the main blocker
    for review. Move implementation out of
    `profile_response/sparse_pc.py` into a bounded domain package while keeping
    `sparse_pc.py` as a compatibility re-export for existing tests and users.
@@ -2027,7 +2033,7 @@ Actual open lanes:
    fallbacks must stay outside autodiff paths; JAX-native Python lanes must
    keep stable transformation behavior. Add focused tests only where the
    refactor touches solver selection or autodiff-facing APIs.
-5. Validation lane: about 86%. Focused sparse/profile-response tests and broad
+5. Validation lane: about 88%. Focused sparse/profile-response tests and broad
    RHSMode shards are the right gates for this PR. Do not add slow production
    benchmark runs unless behavior changes.
 6. Docs/reviewer map: about 65%. Add a concise architecture map after the
@@ -2622,10 +2628,10 @@ Next steps:
 
 ## Immediate Next Steps
 
-1. Commit and push the sparse host-direct/ILU split after final local hygiene.
-2. Continue the sparse package split with the finalization/result-metadata
-   helpers next; this has the highest reviewability payoff and should keep
-   `sparse_pc.py` as a compatibility re-export layer.
+1. Commit and push the sparse finalization split after final local hygiene.
+2. Continue the sparse package split with direct-tail/finalization-bundle
+   metadata or fortran-reduced/xblock-QI helpers next, choosing whichever
+   boundary avoids circular imports and reduces `sparse_pc.py` most cleanly.
 3. Keep the generic sparse retry/result assembly driver-owned unless a smaller
    explicit context can replace the current cache/replay/residual coordination.
 4. Run focused sparse/profile-response tests after each tranche; run the broad
