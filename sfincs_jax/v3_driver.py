@@ -298,6 +298,7 @@ from .problems.profile_response.sparse_pc import (
     apply_fortran_reduced_xblock_moment_schur_stage,
     build_fortran_reduced_xblock_factor_stage,
     build_fortran_reduced_xblock_krylov_setup,
+    build_xblock_local_preconditioner,
     build_sparse_pc_pattern_setup,
     build_xblock_krylov_matvec_setup,
     build_direct_tail_structured_preconditioner_setup,
@@ -2914,29 +2915,24 @@ def solve_v3_full_system_linear_gmres(
             if emit is not None:
                 for level, message in xblock_branch_setup.messages:
                     emit(int(level), str(message))
-            factor_start_s = sparse_timer.elapsed_s()
-            xblock_preconditioner_built = False
-            if xblock_qi_device_operator_reuse_skip_factors:
-
-                def precond_xblock(v: jnp.ndarray) -> jnp.ndarray:
-                    return jnp.asarray(v, dtype=jnp.float64)
-
-                pc_factor_s = sparse_timer.elapsed_s() - factor_start_s
-            else:
-                precond_xblock = _build_rhsmode1_xblock_tz_sparse_preconditioner(
-                    op=op,
-                    build_jax_factors=bool(xblock_jax_factors),
-                    preconditioner_species=preconditioner_species,
-                    preconditioner_xi=xblock_preconditioner_xi,
-                    drop_tol=xblock_drop_tol,
-                    drop_rel=xblock_drop_rel,
-                    ilu_drop_tol=xblock_ilu_drop_tol,
-                    fill_factor=xblock_fill_factor,
-                    force_assembled_host_fp=bool(force_assembled_host_fp),
-                    emit=emit,
-                )
-                pc_factor_s = sparse_timer.elapsed_s() - factor_start_s
-                xblock_preconditioner_built = True
+            xblock_local_preconditioner = build_xblock_local_preconditioner(
+                skip_factors=bool(xblock_qi_device_operator_reuse_skip_factors),
+                elapsed_s=sparse_timer.elapsed_s,
+                build_preconditioner=_build_rhsmode1_xblock_tz_sparse_preconditioner,
+                op=op,
+                build_jax_factors=bool(xblock_jax_factors),
+                preconditioner_species=preconditioner_species,
+                preconditioner_xi=xblock_preconditioner_xi,
+                drop_tol=xblock_drop_tol,
+                drop_rel=xblock_drop_rel,
+                ilu_drop_tol=xblock_ilu_drop_tol,
+                fill_factor=xblock_fill_factor,
+                force_assembled_host_fp=bool(force_assembled_host_fp),
+                emit=emit,
+            )
+            precond_xblock = xblock_local_preconditioner.preconditioner
+            pc_factor_s = float(xblock_local_preconditioner.factor_s)
+            xblock_preconditioner_built = bool(xblock_local_preconditioner.built)
             setup_s = sparse_timer.elapsed_s()
             xblock_matvec_setup = build_xblock_krylov_matvec_setup(
                 op=op,

@@ -3664,6 +3664,15 @@ class XBlockSparsePCBranchSetup:
     messages: tuple[tuple[int, str], ...]
 
 
+@dataclass(frozen=True)
+class XBlockLocalPreconditionerBuildResult:
+    """Local x-block preconditioner and timing metadata."""
+
+    preconditioner: ArrayFn
+    factor_s: float
+    built: bool
+
+
 class MatvecCounter:
     """Mutable matvec counter that preserves ``int(counter)`` call sites."""
 
@@ -7553,6 +7562,55 @@ def resolve_xblock_sparse_pc_branch_setup(
         xblock_qi_device_operator_reuse_decision=reuse.decision,
         xblock_qi_device_operator_reuse_skip_factors=bool(reuse.skip_xblock_factors),
         messages=tuple((*setup.messages, *side.messages, *reuse.messages)),
+    )
+
+
+def build_xblock_local_preconditioner(
+    *,
+    skip_factors: bool,
+    elapsed_s: Callable[[], float],
+    build_preconditioner: Callable[..., ArrayFn],
+    op: object,
+    build_jax_factors: bool,
+    preconditioner_species: int,
+    preconditioner_xi: int,
+    drop_tol: float,
+    drop_rel: float,
+    ilu_drop_tol: float,
+    fill_factor: float,
+    force_assembled_host_fp: bool,
+    emit: EmitFn | None = None,
+) -> XBlockLocalPreconditionerBuildResult:
+    """Build or skip the local x-block factor preconditioner with timing."""
+
+    factor_start_s = float(elapsed_s())
+    if bool(skip_factors):
+
+        def identity_preconditioner(v: jnp.ndarray) -> jnp.ndarray:
+            return jnp.asarray(v, dtype=jnp.float64)
+
+        return XBlockLocalPreconditionerBuildResult(
+            preconditioner=identity_preconditioner,
+            factor_s=float(elapsed_s()) - factor_start_s,
+            built=False,
+        )
+
+    preconditioner = build_preconditioner(
+        op=op,
+        build_jax_factors=bool(build_jax_factors),
+        preconditioner_species=int(preconditioner_species),
+        preconditioner_xi=int(preconditioner_xi),
+        drop_tol=float(drop_tol),
+        drop_rel=float(drop_rel),
+        ilu_drop_tol=float(ilu_drop_tol),
+        fill_factor=float(fill_factor),
+        force_assembled_host_fp=bool(force_assembled_host_fp),
+        emit=emit,
+    )
+    return XBlockLocalPreconditionerBuildResult(
+        preconditioner=preconditioner,
+        factor_s=float(elapsed_s()) - factor_start_s,
+        built=True,
     )
 
 
@@ -11469,6 +11527,7 @@ __all__ = [
     "XBlockSparsePCFinalMetadataStateContext",
     "XBlockSparsePCWorkEstimates",
     "XBlockSparsePCBranchSetup",
+    "XBlockLocalPreconditionerBuildResult",
     "XBlockPhysicalResidual",
     "SparsePCGMRESFinalPayload",
     "SparseMinimumNormPolicy",
@@ -11507,6 +11566,7 @@ __all__ = [
     "apply_xblock_subspace_correction_if_needed",
     "build_fortran_reduced_xblock_factor_stage",
     "build_fortran_reduced_xblock_krylov_setup",
+    "build_xblock_local_preconditioner",
     "build_sparse_pc_active_dof_setup",
     "build_sparse_pc_pattern_setup",
     "build_direct_tail_materialization_setup",

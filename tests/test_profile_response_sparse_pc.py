@@ -111,6 +111,7 @@ from sfincs_jax.problems.profile_response.sparse_pc import (
     build_xblock_assembled_matvec_setup,
     build_xblock_assembled_operator_preflight_setup,
     build_xblock_krylov_matvec_setup,
+    build_xblock_local_preconditioner,
     emit_xblock_sparse_pc_completion_from_driver_state,
     emit_xblock_sparse_pc_completion,
     emit_sparse_pc_gmres_completion_from_driver_state,
@@ -4302,6 +4303,79 @@ def test_xblock_sparse_pc_branch_setup_composes_fallback_side_and_reuse() -> Non
     assert not setup.xblock_jax_factors
     assert any("ignoring unknown" in message for _, message in setup.messages)
     assert any("skipping local x-block factors" in message for _, message in setup.messages)
+
+
+def test_xblock_local_preconditioner_skips_to_identity_for_qi_reuse() -> None:
+    times = iter([10.0, 10.25])
+
+    def build_preconditioner(**_kwargs):
+        raise AssertionError("skip_factors should avoid local factor construction")
+
+    result = build_xblock_local_preconditioner(
+        skip_factors=True,
+        elapsed_s=lambda: next(times),
+        build_preconditioner=build_preconditioner,
+        op=object(),
+        build_jax_factors=False,
+        preconditioner_species=1,
+        preconditioner_xi=1,
+        drop_tol=0.0,
+        drop_rel=0.0,
+        ilu_drop_tol=0.0,
+        fill_factor=1.0,
+        force_assembled_host_fp=False,
+    )
+
+    assert not result.built
+    assert result.factor_s == pytest.approx(0.25)
+    assert result.preconditioner(jnp.asarray([1.0], dtype=jnp.float32)).dtype == jnp.float64
+
+
+def test_xblock_local_preconditioner_delegates_factor_build_with_controls() -> None:
+    calls: list[dict[str, object]] = []
+    times = iter([2.0, 3.5])
+
+    def preconditioner(v):
+        return 2.0 * v
+
+    def build_preconditioner(**kwargs):
+        calls.append(kwargs)
+        return preconditioner
+
+    op = object()
+    result = build_xblock_local_preconditioner(
+        skip_factors=False,
+        elapsed_s=lambda: next(times),
+        build_preconditioner=build_preconditioner,
+        op=op,
+        build_jax_factors=True,
+        preconditioner_species=2,
+        preconditioner_xi=3,
+        drop_tol=1.0e-5,
+        drop_rel=1.0e-6,
+        ilu_drop_tol=1.0e-4,
+        fill_factor=8.0,
+        force_assembled_host_fp=True,
+        emit=None,
+    )
+
+    assert result.built
+    assert result.factor_s == pytest.approx(1.5)
+    np.testing.assert_allclose(np.asarray(result.preconditioner(jnp.asarray([2.0]))), np.asarray([4.0]))
+    assert calls == [
+        {
+            "op": op,
+            "build_jax_factors": True,
+            "preconditioner_species": 2,
+            "preconditioner_xi": 3,
+            "drop_tol": 1.0e-5,
+            "drop_rel": 1.0e-6,
+            "ilu_drop_tol": 1.0e-4,
+            "fill_factor": 8.0,
+            "force_assembled_host_fp": True,
+            "emit": None,
+        }
+    ]
 
 
 def test_xblock_krylov_matvec_setup_reduces_active_dofs_and_counts_progress() -> None:
