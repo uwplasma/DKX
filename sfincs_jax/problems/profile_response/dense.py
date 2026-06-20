@@ -72,6 +72,27 @@ class RHS1ReducedDenseFallbackCandidateContext:
 
 
 @dataclass(frozen=True)
+class RHS1FullDenseFallbackContext:
+    """Inputs for the final full-system RHSMode=1 dense fallback candidate."""
+
+    matvec: Callable[[jnp.ndarray], jnp.ndarray]
+    rhs: jnp.ndarray
+    current_result: GMRESSolveResult
+    current_residual_vec: jnp.ndarray | None
+    total_size: int
+    constraint_scheme: int
+    dense_matrix_cache: np.ndarray | jnp.ndarray | None
+    dense_backend_allowed: bool
+    residual_norm_check: float
+    target: float
+    tol: float
+    atol: float
+    restart: int
+    maxiter: int | None
+    backend: str | None = None
+
+
+@dataclass(frozen=True)
 class RHS1DenseProbeAdmission:
     """Whether the reduced-system dense probe should run."""
 
@@ -534,6 +555,112 @@ def solve_rhs1_reduced_dense_fallback_candidate(
     return result, time.perf_counter() - started
 
 
+def run_rhs1_full_dense_fallback_candidate(
+    *,
+    context: RHS1FullDenseFallbackContext,
+    replay_state,
+    accept_candidate: Callable[..., tuple[GMRESSolveResult, jnp.ndarray | None, bool]],
+    solve_linear_with_residual: Callable[..., tuple[GMRESSolveResult, jnp.ndarray]],
+    emit: Callable[[int, str], None] | None = None,
+    mark: Callable[[str], None] | None = None,
+    peak_rss_mb: Callable[[], float] | None = None,
+) -> tuple[GMRESSolveResult, jnp.ndarray | None, bool]:
+    """Run the final full-system dense fallback and measured acceptance handoff."""
+
+    if mark is not None:
+        mark("rhs1_dense_fallback_start")
+    if emit is not None:
+        emit(
+            0,
+            "solve_v3_full_system_linear_gmres: dense fallback "
+            f"(size={int(context.total_size)} "
+            f"residual={float(context.residual_norm_check):.3e} "
+            f"> target={float(context.target):.3e})",
+        )
+
+    accepted = False
+    result = context.current_result
+    residual_vec = context.current_residual_vec
+    try:
+        started = time.perf_counter()
+        use_row_scaled = int(context.constraint_scheme) == 0
+        if context.dense_backend_allowed:
+            dense_method = "dense_row_scaled" if use_row_scaled else "dense"
+            res_dense, residual_vec_dense = solve_linear_with_residual(
+                matvec_fn=context.matvec,
+                b_vec=context.rhs,
+                precond_fn=None,
+                x0_vec=None,
+                tol_val=float(context.tol),
+                atol_val=float(context.atol),
+                restart_val=int(context.restart),
+                maxiter_val=context.maxiter,
+                solve_method_val=dense_method,
+                precond_side="none",
+            )
+        else:
+            backend = context.backend or jax.default_backend()
+            if emit is not None and backend != "cpu":
+                emit(
+                    0,
+                    "solve_v3_full_system_linear_gmres: dense fallback using explicit dense Krylov "
+                    f"on backend={backend}",
+                )
+            if context.dense_matrix_cache is not None:
+                a_dense = jnp.asarray(context.dense_matrix_cache, dtype=context.rhs.dtype)
+            else:
+                a_dense = assemble_dense_matrix_from_matvec(
+                    matvec=context.matvec,
+                    n=int(context.total_size),
+                    dtype=context.rhs.dtype,
+                )
+            res_dense, residual_vec_dense = dense_krylov_solve_from_matrix_with_residual(
+                a=a_dense,
+                b=context.rhs,
+                x0=context.current_result.x,
+                preconditioner=None,
+                tol=float(context.tol),
+                atol=float(context.atol),
+                restart=int(context.restart),
+                maxiter=context.maxiter,
+                solve_method="incremental",
+                precondition_side="none",
+                row_scaled=use_row_scaled,
+            )
+        elapsed_s = time.perf_counter() - started
+        result, residual_vec, accepted = accept_candidate(
+            replay_state=replay_state,
+            current_result=context.current_result,
+            candidate_result=res_dense,
+            current_residual_vec=context.current_residual_vec,
+            candidate_residual_vec=residual_vec_dense,
+            matvec_fn=context.matvec,
+            b_vec=context.rhs,
+            precond_fn=None,
+            x0_vec=res_dense.x,
+            restart=int(context.restart),
+            maxiter=context.maxiter,
+            precond_side="none",
+            solver_kind="dense",
+            candidate_name="dense_full",
+            baseline_name="current_full",
+            target_value=float(context.target),
+            solve_s=elapsed_s,
+            peak_rss_mb=peak_rss_mb() if peak_rss_mb is not None else None,
+        )
+    except Exception as exc:  # noqa: BLE001
+        if emit is not None:
+            emit(
+                1,
+                "solve_v3_full_system_linear_gmres: dense fallback failed "
+                f"({type(exc).__name__}: {exc})",
+            )
+    finally:
+        if mark is not None:
+            mark("rhs1_dense_fallback_done")
+    return result, residual_vec, bool(accepted)
+
+
 def _solve_rhs1_reduced_dense_fallback_host_candidate(
     *,
     context: RHS1ReducedDenseFallbackCandidateContext,
@@ -688,6 +815,7 @@ __all__ = [
     "RHS1DenseShortcutSetup",
     "HostDenseFullSolveContext",
     "HostDenseReducedSolveContext",
+    "RHS1FullDenseFallbackContext",
     "RHS1ReducedDenseFallbackCandidateContext",
     "rhs1_dense_probe_admission",
     "rhs1_dense_probe_enabled_from_env",
@@ -695,6 +823,7 @@ __all__ = [
     "rhs1_dense_fallback_thresholds_from_env",
     "rhs1_dense_shortcut_setup_from_env",
     "rhs1_fp_preconditioner_probe_kind_from_env",
+    "run_rhs1_full_dense_fallback_candidate",
     "solve_rhs1_reduced_dense_fallback_candidate",
     "solve_host_dense_full",
     "solve_host_dense_reduced",

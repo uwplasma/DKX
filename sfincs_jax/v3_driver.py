@@ -202,6 +202,7 @@ from .problems.profile_response.auto_solve import (
 from .problems.profile_response.dense import (
     HostDenseFullSolveContext,
     HostDenseReducedSolveContext,
+    RHS1FullDenseFallbackContext,
     RHS1ReducedDenseFallbackCandidateContext,
     rhs1_dense_probe_admission,
     rhs1_dense_probe_enabled_from_env,
@@ -209,6 +210,7 @@ from .problems.profile_response.dense import (
     rhs1_dense_probe_shortcut_decision,
     rhs1_dense_shortcut_setup_from_env,
     rhs1_fp_preconditioner_probe_kind_from_env,
+    run_rhs1_full_dense_fallback_candidate,
     solve_host_dense_full,
     solve_host_dense_reduced,
     solve_rhs1_reduced_dense_fallback_candidate,
@@ -13359,81 +13361,31 @@ def solve_v3_full_system_linear_gmres(
             and dense_fallback_trigger
             and float(residual_norm_true) > target
         ):
-            _mark("rhs1_dense_fallback_start")
-            if emit is not None:
-                emit(
-                    0,
-                    "solve_v3_full_system_linear_gmres: dense fallback "
-                    f"(size={int(op.total_size)} residual={float(residual_norm_check):.3e} > target={target:.3e})",
-                )
-            try:
-                dense_retry_timer = Timer()
-                use_row_scaled = int(op.constraint_scheme) == 0
-                if dense_backend_allowed:
-                    dense_method = "dense_row_scaled" if use_row_scaled else "dense"
-                    res_dense, residual_vec_dense = _solve_linear_with_residual(
-                        matvec_fn=mv,
-                        b_vec=rhs,
-                        precond_fn=None,
-                        x0_vec=None,
-                        tol_val=tol,
-                        atol_val=atol,
-                        restart_val=restart,
-                        maxiter_val=maxiter,
-                        solve_method_val=dense_method,
-                        precond_side="none",
-                    )
-                else:
-                    if emit is not None and jax.default_backend() != "cpu":
-                        emit(
-                            0,
-                            "solve_v3_full_system_linear_gmres: dense fallback using explicit dense Krylov "
-                            f"on backend={jax.default_backend()}",
-                        )
-                    if dense_matrix_cache is not None:
-                        a_dense = jnp.asarray(dense_matrix_cache, dtype=rhs.dtype)
-                    else:
-                        a_dense = assemble_dense_matrix_from_matvec(
-                            matvec=mv, n=int(op.total_size), dtype=rhs.dtype
-                        )
-                    res_dense, residual_vec_dense = dense_krylov_solve_from_matrix_with_residual(
-                        a=a_dense,
-                        b=rhs,
-                        x0=result.x,
-                        preconditioner=None,
-                        tol=tol,
-                        atol=atol,
-                        restart=restart,
-                        maxiter=maxiter,
-                        solve_method="incremental",
-                        precondition_side="none",
-                        row_scaled=use_row_scaled,
-                    )
-                dense_retry_elapsed_s = dense_retry_timer.elapsed_s()
-                result, residual_vec, _accepted = rhs1_accept_measured_candidate_and_update_replay(
-                    replay_state=ksp_replay,
+            result, residual_vec, _accepted = run_rhs1_full_dense_fallback_candidate(
+                context=RHS1FullDenseFallbackContext(
+                    matvec=mv,
+                    rhs=rhs,
                     current_result=result,
-                    candidate_result=res_dense,
                     current_residual_vec=residual_vec,
-                    candidate_residual_vec=residual_vec_dense,
-                    matvec_fn=mv,
-                    b_vec=rhs,
-                    precond_fn=None,
-                    x0_vec=res_dense.x,
-                    restart=restart,
+                    total_size=int(op.total_size),
+                    constraint_scheme=int(op.constraint_scheme),
+                    dense_matrix_cache=dense_matrix_cache,
+                    dense_backend_allowed=bool(dense_backend_allowed),
+                    residual_norm_check=float(residual_norm_check),
+                    target=float(target),
+                    tol=float(tol),
+                    atol=float(atol),
+                    restart=int(restart),
                     maxiter=maxiter,
-                    precond_side="none",
-                    solver_kind="dense",
-                    candidate_name="dense_full",
-                    baseline_name="current_full",
-                    target_value=target,
-                    solve_s=dense_retry_elapsed_s,
-                    peak_rss_mb=_rss_mb(),
-                )
-            except Exception as exc:  # noqa: BLE001
-                if emit is not None:
-                    emit(1, f"solve_v3_full_system_linear_gmres: dense fallback failed ({type(exc).__name__}: {exc})")
-            _mark("rhs1_dense_fallback_done")
+                    backend=jax.default_backend(),
+                ),
+                replay_state=ksp_replay,
+                accept_candidate=rhs1_accept_measured_candidate_and_update_replay,
+                solve_linear_with_residual=_solve_linear_with_residual,
+                emit=emit,
+                mark=_mark,
+                peak_rss_mb=_rss_mb,
+            )
     result = finalize_rhs1_linear_solution_cleanup(
         op=op,
         result=result,
