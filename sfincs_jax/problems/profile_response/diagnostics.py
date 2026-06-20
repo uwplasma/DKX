@@ -708,6 +708,9 @@ def sparse_pc_gmres_result_metadata(
     target = float(state["target"])
     residual_norm = float(state["residual_norm_sparse_pc"])
     history = state["history"] or ()
+    elapsed_s = state.get("sparse_pc_elapsed_s")
+    if elapsed_s is None:
+        elapsed_s = state["sparse_timer"].elapsed_s()
     factor_bundle_pc = state["factor_bundle_pc"]
     operator_bundle = state["_operator_bundle_pc"]
     operator_metadata = None if operator_bundle is None else getattr(operator_bundle, "metadata", None)
@@ -792,7 +795,7 @@ def sparse_pc_gmres_result_metadata(
         ),
         "setup_s": float(state["setup_s"]),
         "solve_s": float(state["solve_s"]),
-        "elapsed_s": float(state["sparse_timer"].elapsed_s()),
+        "elapsed_s": float(elapsed_s),
         **pattern_metadata,
         "sparse_pc_factor_s": float(state["pc_factor_s"]),
         "sparse_pc_factor_elapsed_s": _optional_float(factor_elapsed_s),

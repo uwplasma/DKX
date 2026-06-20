@@ -7352,7 +7352,7 @@ def test_finalize_sparse_pc_gmres_with_dtype_retry_uses_explicit_finalization_co
         fake_payload,
     )
 
-    elapsed_values = iter((10.0, 10.5))
+    elapsed_values = iter((10.0, 10.5, 11.0))
 
     def elapsed_s() -> float:
         return next(elapsed_values)
@@ -7433,6 +7433,7 @@ def test_finalize_sparse_pc_gmres_with_dtype_retry_uses_explicit_finalization_co
     assert final_state["sparse_pc_post_minres_residual_after"] == pytest.approx(0.1)
     assert final_state["sparse_pc_post_minres_error"] is None
     assert final_state["solve_s"] == pytest.approx(3.5)
+    assert final_state["sparse_pc_elapsed_s"] == pytest.approx(11.0)
     assert "_sparse_pc_factor_mv" not in final_state
     assert "pattern" not in final_state
     assert "rhs" not in final_state

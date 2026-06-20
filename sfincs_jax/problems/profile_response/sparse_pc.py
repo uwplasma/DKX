@@ -440,7 +440,6 @@ def _unique_state_keys(*groups: Sequence[str]) -> tuple[str, ...]:
 
 _SPARSE_PC_GMRES_FINALIZATION_CORE_STATE_KEYS = (
     "atol",
-    "emit",
     "fortran_reduced_sparse_pc",
     "fortran_reduced_sparse_pc_backend",
     "fortran_reduced_sparse_pc_backend_reason",
@@ -468,7 +467,6 @@ _SPARSE_PC_GMRES_FINALIZATION_CORE_STATE_KEYS = (
     "sparse_pc_permc_spec",
     "sparse_pc_preconditioner_operator",
     "sparse_pc_use_active_dof",
-    "sparse_timer",
     "target",
     "tol",
 )
@@ -9081,9 +9079,24 @@ def finalize_sparse_pc_gmres_with_dtype_retry(
                 "sparse_pc_post_minres_residual_after": post_minres.residual_after,
                 "sparse_pc_post_minres_error": post_minres.error,
                 "solve_s": float(post_minres.solve_s),
+                "sparse_pc_elapsed_s": float(post_context.elapsed_s()),
             }
         )
-        emit_sparse_pc_gmres_completion_from_driver_state(final_state)
+        if post_context.emit is not None:
+            post_context.emit(
+                0,
+                sparse_pc_gmres_completion_message(
+                    SparsePCGMRESCompletionMessageContext(
+                        elapsed_s=float(final_state["sparse_pc_elapsed_s"]),
+                        iterations=int(len(final_state["history"] or ())),
+                        matvecs=int(final_state["mv_count"]),
+                        residual_norm=float(final_state["residual_norm_sparse_pc"]),
+                        target=float(final_state["target"]),
+                        preconditioned_residual_norm=float(final_state["rn_pc"]),
+                        history=final_state["history"],
+                    )
+                ),
+            )
         return sparse_pc_gmres_final_payload_from_driver_state(
             final_state,
             expand_reduced=expand_reduced,

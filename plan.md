@@ -1050,6 +1050,19 @@ Recent local validation:
 - Hygiene after generic sparse-PC dtype-retry explicit finalization:
   `python -m compileall -q sfincs_jax`, `git diff --check`, and
   `python scripts/check_repo_size.py` passed.
+- Generic sparse-PC explicit elapsed/completion focused tests:
+  `3 passed in 1.07 s`.
+- Profile-response diagnostics/sparse-PC shard after generic sparse-PC explicit
+  elapsed/completion cleanup: `248 passed in 1.97 s`.
+- Xblock/sparse-host/minimum-norm/direct-tail driver shard after generic
+  sparse-PC explicit elapsed/completion cleanup:
+  `36 passed, 96 deselected in 36.88 s`.
+- Broad profile-response/RHSMode=1 policy, setup, diagnostics, solver, and
+  helper sweep after generic sparse-PC explicit elapsed/completion cleanup:
+  `1191 passed in 48.44 s`.
+- Hygiene after generic sparse-PC explicit elapsed/completion cleanup:
+  `python -m compileall -q sfincs_jax`, `git diff --check`, and
+  `python scripts/check_repo_size.py` passed.
 - Older focused and broad validation checkpoints are intentionally omitted from
   this active plan; they remain available in git history.
 
@@ -1062,7 +1075,7 @@ Known CI issue fixed by this rewrite:
 
 ### 1. `v3_driver.py` Architecture Refactor
 
-Completion estimate: 58%.
+Completion estimate: 59%.
 
 Goal:
 
@@ -1353,6 +1366,10 @@ Completed recent boundaries:
   through `SparsePCFactorDtypeRetryFinalizationContext`, removing factor
   matvec, pattern, RHS dtype, retry seed, and PAS/tokamak retry flags from the
   metadata map. The generic copied finalization state is down to 32 keys.
+- Generic sparse-PC finalization now reports elapsed time and completion from
+  explicit finalization contexts in the typed path, so `emit` and
+  `sparse_timer` no longer propagate through the generic metadata map. The
+  generic copied finalization state is down to 30 keys.
 
 Next steps:
 
