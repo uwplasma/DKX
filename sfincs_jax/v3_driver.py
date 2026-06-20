@@ -221,12 +221,14 @@ from .problems.profile_response.dense import (
 )
 from .problems.profile_response.linear_solve import (
     ProfileLinearSolveContext,
+    RHS1Constraint0PETScCompatSolveContext,
     RHS1DenseKSPFullSolveContext,
     RHS1DenseKSPReducedSolveContext,
     RHS1ScipyRescueContext,
     profile_solver_kind,
     rhs1_small_gmres_max_from_env,
     run_rhs1_scipy_rescue,
+    solve_rhs1_constraint0_petsc_compat,
     solve_rhs1_dense_ksp_full,
     solve_rhs1_dense_ksp_reduced,
     solve_profile_linear,
@@ -9090,124 +9092,37 @@ def solve_v3_full_system_linear_gmres(
                     emit(1, f"sparse_operator: failed ({type(exc).__name__}: {exc})")
         if cs0_petsc_compat and solve_method_kind not in {"dense", "dense_ksp"}:
             try:
-                import scipy.sparse as sp  # noqa: PLC0415
-                from scipy.sparse.csgraph import reverse_cuthill_mckee  # noqa: PLC0415
-                from scipy.sparse.linalg import spilu  # noqa: PLC0415
-
                 compat_config = rhs1_constraint0_petsc_compat_config_from_env(
                     restart=int(restart),
                     maxiter=maxiter,
                 )
-                compat_drop_tol = compat_config.drop_tol
-                compat_fill = compat_config.fill
-                compat_diag_pivot = compat_config.diag_pivot
-                compat_restart = compat_config.restart
-                compat_maxiter = compat_config.maxiter
-
-                if emit is not None:
-                    emit(
-                        0,
-                        "solve_v3_full_system_linear_gmres: constraintScheme=0 PETSc-compat sparse ILU solve "
-                        f"(size={int(active_size)} drop_tol={compat_drop_tol:.1e} fill={compat_fill:.1f})",
-                    )
-
-                a_dense_cs0 = assemble_dense_matrix_from_matvec(
-                    matvec=mv_reduced,
-                    n=int(active_size),
-                    dtype=rhs_reduced.dtype,
+                cs0_outcome = solve_rhs1_constraint0_petsc_compat(
+                    RHS1Constraint0PETScCompatSolveContext(
+                        matvec=mv_reduced,
+                        rhs=rhs_reduced,
+                        x0=x0_reduced,
+                        active_size=int(active_size),
+                        tol=float(tol),
+                        atol=float(atol),
+                        sparse_drop_tol=float(sparse_drop_tol),
+                        sparse_drop_rel=float(sparse_drop_rel),
+                        config=compat_config,
+                        regularization=lambda max_abs: rhs1_constraint0_petsc_compat_regularization(
+                            max_abs=max_abs
+                        ),
+                    ),
+                    emit=emit,
                 )
-                a_np_cs0 = np.asarray(a_dense_cs0, dtype=np.float64)
-                max_abs_cs0 = float(np.max(np.abs(a_np_cs0))) if a_np_cs0.size else 0.0
-                compat_drop_thresh = max(float(sparse_drop_tol), float(sparse_drop_rel) * max_abs_cs0)
-                if compat_drop_thresh > 0.0:
-                    a_np_cs0 = a_np_cs0.copy()
-                    a_np_cs0[np.abs(a_np_cs0) < compat_drop_thresh] = 0.0
-                a_csr_cs0 = sp.csr_matrix(a_np_cs0)
-                a_csr_cs0.eliminate_zeros()
-                max_abs_cs0 = float(np.max(np.abs(a_csr_cs0.data))) if int(a_csr_cs0.nnz) > 0 else 0.0
-                compat_reg = rhs1_constraint0_petsc_compat_regularization(max_abs=max_abs_cs0)
-                perm = np.asarray(
-                    reverse_cuthill_mckee(a_csr_cs0, symmetric_mode=False),
-                    dtype=np.int32,
-                )
-                inv_perm = np.argsort(perm).astype(np.int32, copy=False)
-                a_perm = a_csr_cs0[perm][:, perm].tocsc()
-                if compat_reg != 0.0:
-                    diag_idx = np.arange(int(active_size), dtype=np.int32)
-                    a_perm = a_perm.copy()
-                    a_perm[diag_idx, diag_idx] = a_perm[diag_idx, diag_idx] + compat_reg
-                ilu_cs0 = spilu(
-                    a_perm,
-                    drop_tol=float(compat_drop_tol),
-                    fill_factor=float(compat_fill),
-                    permc_spec="NATURAL",
-                    diag_pivot_thresh=float(compat_diag_pivot),
-                )
-                rhs_perm = jnp.asarray(np.asarray(rhs_reduced, dtype=np.float64)[perm], dtype=jnp.float64)
-                x0_perm = None
-
-                def _mv_perm(v: jnp.ndarray) -> jnp.ndarray:
-                    x_np = np.asarray(v, dtype=np.float64).reshape((-1,))
-                    return jnp.asarray(a_perm @ x_np, dtype=jnp.float64)
-
-                def _precond_perm(v: jnp.ndarray) -> jnp.ndarray:
-                    x_np = np.asarray(v, dtype=np.float64).reshape((-1,))
-                    return jnp.asarray(ilu_cs0.solve(x_np), dtype=jnp.float64)
-
-                rhs_pc_perm_np = np.asarray(_precond_perm(rhs_perm), dtype=np.float64)
-                rhs_pc_norm = float(np.linalg.norm(rhs_pc_perm_np))
-                if emit is not None:
-                    emit(
-                        1,
-                        "solve_v3_full_system_linear_gmres: constraintScheme=0 PETSc-compat rhs_pc "
-                        f"norm={rhs_pc_norm:.3e} finite={bool(np.all(np.isfinite(rhs_pc_perm_np)))} "
-                        f"drop={compat_drop_thresh:.3e} reg={compat_reg:.3e} nnz={int(a_csr_cs0.nnz)}",
-                    )
-                rhs_perm_norm = float(np.linalg.norm(np.asarray(rhs_perm, dtype=np.float64)))
-                rhs_pc_zero_tol = max(float(atol), max(1.0, rhs_perm_norm) * float(tol))
-                if np.isfinite(rhs_pc_norm) and rhs_pc_norm <= rhs_pc_zero_tol:
-                    x_perm_np = np.zeros((int(active_size),), dtype=np.float64)
-                    rn_true_cs0 = rhs_perm_norm
-                    rn_pc_cs0 = rhs_pc_norm
-                else:
-                    x_perm_np, rn_true_cs0, rn_pc_cs0, _history = explicit_left_preconditioned_gmres_scipy(
-                        matvec=_mv_perm,
-                        b=rhs_perm,
-                        preconditioner=_precond_perm,
-                        x0=x0_perm,
-                        tol=tol,
-                        atol=atol,
-                        restart=min(int(active_size), max(1, int(compat_restart))),
-                        maxiter=max(1, int(compat_maxiter)),
-                    )
-                x_cs0_np = np.asarray(x_perm_np, dtype=np.float64)[inv_perm]
-                rhs_pc_np = rhs_pc_perm_np[inv_perm]
-
-                def _mv_cs0_pc_full(v: jnp.ndarray) -> jnp.ndarray:
-                    x_np = np.asarray(v, dtype=np.float64).reshape((-1,))
-                    y_perm = np.asarray(a_perm @ x_np[perm], dtype=np.float64)
-                    z_perm = ilu_cs0.solve(y_perm)
-                    return jnp.asarray(z_perm[inv_perm], dtype=jnp.float64)
-
-                res_reduced = GMRESSolveResult(
-                    x=jnp.asarray(x_cs0_np, dtype=jnp.float64),
-                    residual_norm=jnp.asarray(rn_pc_cs0, dtype=jnp.float64),
-                )
+                res_reduced = cs0_outcome.result
                 rhs1_record_ksp_replay_problem(
                     ksp_replay,
-                    matvec_fn=_mv_cs0_pc_full,
-                    b_vec=jnp.asarray(rhs_pc_np, dtype=jnp.float64),
+                    matvec_fn=cs0_outcome.replay_matvec,
+                    b_vec=cs0_outcome.replay_rhs,
                     precond_fn=None,
                     x0_vec=None if x0_reduced is None else jnp.asarray(x0_reduced, dtype=jnp.float64),
                     precond_side="none",
                     solver_kind=_solver_kind("incremental")[0],
                 )
-                if emit is not None:
-                    emit(
-                        1,
-                        "solve_v3_full_system_linear_gmres: constraintScheme=0 PETSc-compat residuals "
-                        f"preconditioned={rn_pc_cs0:.3e} true={rn_true_cs0:.3e}",
-                    )
             except Exception as exc:  # noqa: BLE001
                 cs0_petsc_compat = False
                 if emit is not None:

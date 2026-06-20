@@ -1,15 +1,19 @@
 from __future__ import annotations
 
+from types import SimpleNamespace
+
 import jax.numpy as jnp
 
 from sfincs_jax.problems.profile_response.linear_solve import (
     ProfileLinearSolveContext,
+    RHS1Constraint0PETScCompatSolveContext,
     RHS1DenseKSPFullSolveContext,
     RHS1DenseKSPReducedSolveContext,
     RHS1ScipyRescueContext,
     profile_solver_kind,
     rhs1_small_gmres_max_from_env,
     run_rhs1_scipy_rescue,
+    solve_rhs1_constraint0_petsc_compat,
     solve_rhs1_dense_ksp_full,
     solve_rhs1_dense_ksp_reduced,
     solve_profile_linear_with_residual,
@@ -132,6 +136,52 @@ def test_run_rhs1_scipy_rescue_bicgstab_recomputes_true_residual() -> None:
     assert jnp.linalg.norm(outcome.residual_vec) < 1.0e-10
     assert outcome.reported_residual < 1.0e-10
     assert outcome.history_len >= 1
+
+
+def test_solve_rhs1_constraint0_petsc_compat_records_preconditioned_replay() -> None:
+    a = jnp.asarray(
+        [
+            [4.0, 0.2, 0.0],
+            [0.1, 3.0, 0.4],
+            [0.0, 0.3, 2.0],
+        ],
+        dtype=jnp.float64,
+    )
+    rhs = jnp.asarray([1.0, -2.0, 0.5], dtype=jnp.float64)
+    messages: list[str] = []
+
+    outcome = solve_rhs1_constraint0_petsc_compat(
+        RHS1Constraint0PETScCompatSolveContext(
+            matvec=lambda x: a @ x,
+            rhs=rhs,
+            x0=None,
+            active_size=3,
+            tol=1.0e-12,
+            atol=1.0e-12,
+            sparse_drop_tol=0.0,
+            sparse_drop_rel=0.0,
+            config=SimpleNamespace(
+                drop_tol=0.0,
+                fill=10.0,
+                diag_pivot=0.0,
+                restart=4,
+                maxiter=12,
+            ),
+            regularization=lambda _max_abs: 0.0,
+        ),
+        emit=lambda _level, message: messages.append(message),
+    )
+
+    assert jnp.linalg.norm(a @ outcome.result.x - rhs) < 1.0e-10
+    assert jnp.linalg.norm(outcome.replay_matvec(outcome.result.x) - outcome.replay_rhs) < 1.0e-10
+    assert outcome.true_residual < 1.0e-10
+    assert outcome.preconditioned_residual < 1.0e-10
+    assert outcome.rhs_pc_norm > 0.0
+    assert outcome.drop_threshold == 0.0
+    assert outcome.regularization == 0.0
+    assert outcome.nnz == 7
+    assert any("constraintScheme=0 PETSc-compat sparse ILU solve" in message for message in messages)
+    assert any("constraintScheme=0 PETSc-compat residuals" in message for message in messages)
 
 
 def test_solve_rhs1_dense_ksp_full_solves_species_block_system() -> None:

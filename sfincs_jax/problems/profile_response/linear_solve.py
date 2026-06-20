@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass
 import os
+from typing import Any
 
 import numpy as np
 import jax.scipy.linalg as jla
@@ -67,6 +68,37 @@ class RHS1ScipyRescueOutcome:
     reported_residual: float
     history_len: int
     preconditioned_residual: float | None = None
+
+
+@dataclass(frozen=True)
+class RHS1Constraint0PETScCompatSolveContext:
+    """Inputs for the constraintScheme=0 PETSc-compatible sparse-ILU solve."""
+
+    matvec: Callable[[jnp.ndarray], jnp.ndarray]
+    rhs: jnp.ndarray
+    x0: jnp.ndarray | None
+    active_size: int
+    tol: float
+    atol: float
+    sparse_drop_tol: float
+    sparse_drop_rel: float
+    config: Any
+    regularization: Callable[[float], float]
+
+
+@dataclass(frozen=True)
+class RHS1Constraint0PETScCompatSolveOutcome:
+    """Result and replay system for the constraintScheme=0 PETSc-compatible solve."""
+
+    result: GMRESSolveResult
+    replay_matvec: Callable[[jnp.ndarray], jnp.ndarray]
+    replay_rhs: jnp.ndarray
+    true_residual: float
+    preconditioned_residual: float
+    rhs_pc_norm: float
+    drop_threshold: float
+    regularization: float
+    nnz: int
 
 
 @dataclass(frozen=True)
@@ -391,6 +423,137 @@ def run_rhs1_scipy_rescue(
     )
 
 
+def solve_rhs1_constraint0_petsc_compat(
+    context: RHS1Constraint0PETScCompatSolveContext,
+    *,
+    emit: Callable[[int, str], None] | None = None,
+) -> RHS1Constraint0PETScCompatSolveOutcome:
+    """Run the host sparse-ILU PETSc-compatibility lane for constraintScheme=0."""
+
+    import scipy.sparse as sp  # noqa: PLC0415
+    from scipy.sparse.csgraph import reverse_cuthill_mckee  # noqa: PLC0415
+    from scipy.sparse.linalg import spilu  # noqa: PLC0415
+
+    config = context.config
+    drop_tol = float(config.drop_tol)
+    fill = float(config.fill)
+    diag_pivot = float(config.diag_pivot)
+    restart = int(config.restart)
+    maxiter = int(config.maxiter)
+    active_size = int(context.active_size)
+
+    if emit is not None:
+        emit(
+            0,
+            "solve_v3_full_system_linear_gmres: constraintScheme=0 PETSc-compat sparse ILU solve "
+            f"(size={active_size} drop_tol={drop_tol:.1e} fill={fill:.1f})",
+        )
+
+    a_dense = assemble_dense_matrix_from_matvec(
+        matvec=context.matvec,
+        n=active_size,
+        dtype=context.rhs.dtype,
+    )
+    a_np = np.asarray(a_dense, dtype=np.float64)
+    max_abs = float(np.max(np.abs(a_np))) if a_np.size else 0.0
+    drop_threshold = max(float(context.sparse_drop_tol), float(context.sparse_drop_rel) * max_abs)
+    if drop_threshold > 0.0:
+        a_np = a_np.copy()
+        a_np[np.abs(a_np) < drop_threshold] = 0.0
+    a_csr = sp.csr_matrix(a_np)
+    a_csr.eliminate_zeros()
+    max_abs = float(np.max(np.abs(a_csr.data))) if int(a_csr.nnz) > 0 else 0.0
+    regularization = float(context.regularization(max_abs))
+    perm = np.asarray(
+        reverse_cuthill_mckee(a_csr, symmetric_mode=False),
+        dtype=np.int32,
+    )
+    inv_perm = np.argsort(perm).astype(np.int32, copy=False)
+    a_perm = a_csr[perm][:, perm].tocsc()
+    if regularization != 0.0:
+        diag_idx = np.arange(active_size, dtype=np.int32)
+        a_perm = a_perm.copy()
+        a_perm[diag_idx, diag_idx] = a_perm[diag_idx, diag_idx] + regularization
+    ilu = spilu(
+        a_perm,
+        drop_tol=drop_tol,
+        fill_factor=fill,
+        permc_spec="NATURAL",
+        diag_pivot_thresh=diag_pivot,
+    )
+    rhs_perm = jnp.asarray(
+        np.asarray(context.rhs, dtype=np.float64)[perm],
+        dtype=jnp.float64,
+    )
+
+    def mv_perm(v: jnp.ndarray) -> jnp.ndarray:
+        x_np = np.asarray(v, dtype=np.float64).reshape((-1,))
+        return jnp.asarray(a_perm @ x_np, dtype=jnp.float64)
+
+    def precond_perm(v: jnp.ndarray) -> jnp.ndarray:
+        x_np = np.asarray(v, dtype=np.float64).reshape((-1,))
+        return jnp.asarray(ilu.solve(x_np), dtype=jnp.float64)
+
+    rhs_pc_perm_np = np.asarray(precond_perm(rhs_perm), dtype=np.float64)
+    rhs_pc_norm = float(np.linalg.norm(rhs_pc_perm_np))
+    if emit is not None:
+        emit(
+            1,
+            "solve_v3_full_system_linear_gmres: constraintScheme=0 PETSc-compat rhs_pc "
+            f"norm={rhs_pc_norm:.3e} finite={bool(np.all(np.isfinite(rhs_pc_perm_np)))} "
+            f"drop={drop_threshold:.3e} reg={regularization:.3e} nnz={int(a_csr.nnz)}",
+        )
+    rhs_perm_norm = float(np.linalg.norm(np.asarray(rhs_perm, dtype=np.float64)))
+    rhs_pc_zero_tol = max(float(context.atol), max(1.0, rhs_perm_norm) * float(context.tol))
+    if np.isfinite(rhs_pc_norm) and rhs_pc_norm <= rhs_pc_zero_tol:
+        x_perm_np = np.zeros((active_size,), dtype=np.float64)
+        true_residual = rhs_perm_norm
+        preconditioned_residual = rhs_pc_norm
+    else:
+        x_perm_np, true_residual, preconditioned_residual, _history = (
+            explicit_left_preconditioned_gmres_scipy(
+                matvec=mv_perm,
+                b=rhs_perm,
+                preconditioner=precond_perm,
+                x0=None,
+                tol=float(context.tol),
+                atol=float(context.atol),
+                restart=min(active_size, max(1, restart)),
+                maxiter=max(1, maxiter),
+            )
+        )
+    x_np = np.asarray(x_perm_np, dtype=np.float64)[inv_perm]
+    rhs_pc_np = rhs_pc_perm_np[inv_perm]
+
+    def mv_pc_full(v: jnp.ndarray) -> jnp.ndarray:
+        x_np_local = np.asarray(v, dtype=np.float64).reshape((-1,))
+        y_perm = np.asarray(a_perm @ x_np_local[perm], dtype=np.float64)
+        z_perm = ilu.solve(y_perm)
+        return jnp.asarray(z_perm[inv_perm], dtype=jnp.float64)
+
+    result = GMRESSolveResult(
+        x=jnp.asarray(x_np, dtype=jnp.float64),
+        residual_norm=jnp.asarray(preconditioned_residual, dtype=jnp.float64),
+    )
+    if emit is not None:
+        emit(
+            1,
+            "solve_v3_full_system_linear_gmres: constraintScheme=0 PETSc-compat residuals "
+            f"preconditioned={preconditioned_residual:.3e} true={true_residual:.3e}",
+        )
+    return RHS1Constraint0PETScCompatSolveOutcome(
+        result=result,
+        replay_matvec=mv_pc_full,
+        replay_rhs=jnp.asarray(rhs_pc_np, dtype=jnp.float64),
+        true_residual=float(true_residual),
+        preconditioned_residual=float(preconditioned_residual),
+        rhs_pc_norm=float(rhs_pc_norm),
+        drop_threshold=float(drop_threshold),
+        regularization=float(regularization),
+        nnz=int(a_csr.nnz),
+    )
+
+
 def solve_rhs1_dense_ksp_full(
     context: RHS1DenseKSPFullSolveContext,
     *,
@@ -616,6 +779,8 @@ def solve_rhs1_dense_ksp_reduced(
 
 __all__ = [
     "ProfileLinearSolveContext",
+    "RHS1Constraint0PETScCompatSolveContext",
+    "RHS1Constraint0PETScCompatSolveOutcome",
     "RHS1DenseKSPFullSolveContext",
     "RHS1DenseKSPFullSolveOutcome",
     "RHS1DenseKSPReducedSolveContext",
@@ -625,6 +790,7 @@ __all__ = [
     "profile_solver_kind",
     "rhs1_small_gmres_max_from_env",
     "run_rhs1_scipy_rescue",
+    "solve_rhs1_constraint0_petsc_compat",
     "solve_rhs1_dense_ksp_full",
     "solve_rhs1_dense_ksp_reduced",
     "solve_profile_linear",
