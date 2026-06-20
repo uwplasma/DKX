@@ -202,6 +202,7 @@ from .problems.profile_response.dense import (
     HostDenseFullSolveContext,
     HostDenseReducedSolveContext,
     RHS1FullDenseFallbackContext,
+    RHS1FullDenseFallbackStageContext,
     RHS1ReducedDenseFallbackCandidateContext,
     RHS1ReducedDenseFallbackStageContext,
     rhs1_dense_probe_admission,
@@ -210,9 +211,8 @@ from .problems.profile_response.dense import (
     rhs1_dense_probe_shortcut_decision,
     rhs1_dense_shortcut_setup_from_env,
     rhs1_fp_preconditioner_probe_kind_from_env,
-    resolve_rhs1_full_dense_fallback_admission,
     resolve_rhs1_reduced_dense_fallback_admission,
-    run_rhs1_full_dense_fallback_candidate,
+    run_rhs1_full_dense_fallback_stage,
     run_rhs1_reduced_dense_fallback_stage,
     solve_host_dense_full,
     solve_host_dense_reduced,
@@ -12733,30 +12733,9 @@ def solve_v3_full_system_linear_gmres(
         dense_backend_allowed = _rhsmode1_dense_backend_allowed()
         host_dense_fallback_allowed = _rhsmode1_host_dense_fallback_allowed()
         dense_krylov_allowed = _rhsmode1_dense_krylov_allowed()
-        dense_admission = resolve_rhs1_full_dense_fallback_admission(
-            dense_fallback_max=int(dense_fallback_max),
-            residual_norm_true=float(residual_norm_true),
-            target=float(target),
-            active_size=int(active_size),
-            total_size=int(op.total_size),
-            rhs_mode=int(op.rhs_mode),
-            include_phi1=bool(op.include_phi1),
-            constraint_scheme=int(op.constraint_scheme),
-            has_fp=op.fblock.fp is not None,
-            any_dense_path_allowed=bool(
-                dense_backend_allowed or host_dense_fallback_allowed or dense_krylov_allowed
-            ),
-            host_sparse_direct_used=bool(host_sparse_direct_used),
-            backend=jax.default_backend(),
-            host_sparse_skip_ratio=float(_rhsmode1_host_sparse_skip_dense_ratio()),
-            cs0_sparse_first=bool(cs0_sparse_first),
-        )
-        if emit is not None:
-            for level, message in dense_admission.messages:
-                emit(level, message)
-        if dense_admission.should_run:
-            result, residual_vec, _accepted = run_rhs1_full_dense_fallback_candidate(
-                context=RHS1FullDenseFallbackContext(
+        result, residual_vec, _accepted = run_rhs1_full_dense_fallback_stage(
+            context=RHS1FullDenseFallbackStageContext(
+                candidate_context=RHS1FullDenseFallbackContext(
                     matvec=mv,
                     rhs=rhs,
                     current_result=result,
@@ -12773,13 +12752,28 @@ def solve_v3_full_system_linear_gmres(
                     maxiter=maxiter,
                     backend=jax.default_backend(),
                 ),
-                replay_state=ksp_replay,
-                accept_candidate=rhs1_accept_measured_candidate_and_update_replay,
-                solve_linear_with_residual=_solve_linear_with_residual,
-                emit=emit,
-                mark=_mark,
-                peak_rss_mb=_rss_mb,
-            )
+                dense_fallback_max=int(dense_fallback_max),
+                residual_norm_true=float(residual_norm_true),
+                active_size=int(active_size),
+                rhs_mode=int(op.rhs_mode),
+                include_phi1=bool(op.include_phi1),
+                has_fp=op.fblock.fp is not None,
+                any_dense_path_allowed=bool(
+                    dense_backend_allowed
+                    or host_dense_fallback_allowed
+                    or dense_krylov_allowed
+                ),
+                host_sparse_direct_used=bool(host_sparse_direct_used),
+                host_sparse_skip_ratio=float(_rhsmode1_host_sparse_skip_dense_ratio()),
+                cs0_sparse_first=bool(cs0_sparse_first),
+            ),
+            replay_state=ksp_replay,
+            accept_candidate=rhs1_accept_measured_candidate_and_update_replay,
+            solve_linear_with_residual=_solve_linear_with_residual,
+            emit=emit,
+            mark=_mark,
+            peak_rss_mb=_rss_mb,
+        )
     result = finalize_rhs1_linear_solution_cleanup(
         op=op,
         result=result,

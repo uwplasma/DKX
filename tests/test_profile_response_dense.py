@@ -10,9 +10,11 @@ from sfincs_jax.problems.profile_response.dense import (
     RHS1DenseFallbackThresholds,
     RHS1DenseFallbackAdmission,
     RHS1FullDenseFallbackContext,
+    RHS1FullDenseFallbackStageContext,
     RHS1ReducedDenseFallbackCandidateContext,
     RHS1ReducedDenseFallbackStageContext,
     run_rhs1_full_dense_fallback_candidate,
+    run_rhs1_full_dense_fallback_stage,
     run_rhs1_reduced_dense_fallback_stage,
     rhs1_dense_fallback_thresholds_from_env,
     rhs1_dense_probe_admission,
@@ -1017,3 +1019,136 @@ def test_rhs1_full_dense_fallback_candidate_reports_failure() -> None:
         "(RuntimeError: dense failed)",
     )
     assert marks == ["rhs1_dense_fallback_start", "rhs1_dense_fallback_done"]
+
+
+def test_rhs1_full_dense_fallback_stage_skips_when_admission_rejects(
+    monkeypatch,
+) -> None:
+    rhs = jnp.asarray([1.0, 2.0])
+    current_residual = jnp.asarray([3.0, 4.0])
+    current = GMRESSolveResult(x=jnp.zeros(2), residual_norm=jnp.asarray(9.0))
+
+    def fail_candidate(**_kwargs):
+        raise AssertionError("candidate should not run")
+
+    monkeypatch.setattr(
+        "sfincs_jax.problems.profile_response.dense.run_rhs1_full_dense_fallback_candidate",
+        fail_candidate,
+    )
+
+    result, residual_vec, accepted = run_rhs1_full_dense_fallback_stage(
+        context=RHS1FullDenseFallbackStageContext(
+            candidate_context=RHS1FullDenseFallbackContext(
+                matvec=lambda x: x,
+                rhs=rhs,
+                current_result=current,
+                current_residual_vec=current_residual,
+                total_size=20,
+                constraint_scheme=1,
+                dense_matrix_cache=None,
+                dense_backend_allowed=True,
+                residual_norm_check=9.0,
+                target=1.0e-8,
+                tol=1.0e-10,
+                atol=0.0,
+                restart=11,
+                maxiter=13,
+                backend="cpu",
+            ),
+            dense_fallback_max=10,
+            residual_norm_true=1.0e-4,
+            active_size=2,
+            rhs_mode=1,
+            include_phi1=False,
+            has_fp=True,
+            any_dense_path_allowed=True,
+            host_sparse_direct_used=False,
+            host_sparse_skip_ratio=0.0,
+            cs0_sparse_first=False,
+        ),
+        replay_state=object(),
+        accept_candidate=lambda **_kwargs: (_ for _ in ()).throw(
+            AssertionError("acceptance should not run")
+        ),
+        solve_linear_with_residual=lambda **_kwargs: (_ for _ in ()).throw(
+            AssertionError("solve should not run")
+        ),
+    )
+
+    assert not accepted
+    assert result is current
+    assert residual_vec is current_residual
+
+
+def test_rhs1_full_dense_fallback_stage_runs_candidate_when_admitted(
+    monkeypatch,
+) -> None:
+    calls: dict[str, dict[str, object]] = {}
+    messages: list[tuple[int, str]] = []
+    marks: list[str] = []
+    replay_state = object()
+    rhs = jnp.asarray([1.0, 2.0])
+    current_residual = jnp.asarray([3.0, 4.0])
+    current = GMRESSolveResult(x=jnp.zeros(2), residual_norm=jnp.asarray(9.0))
+    candidate = GMRESSolveResult(x=jnp.asarray([1.0, 2.0]), residual_norm=jnp.asarray(0.0))
+
+    def fake_candidate(**kwargs):
+        calls["candidate"] = kwargs
+        return candidate, current_residual, True
+
+    monkeypatch.setattr(
+        "sfincs_jax.problems.profile_response.dense.run_rhs1_full_dense_fallback_candidate",
+        fake_candidate,
+    )
+
+    result, residual_vec, accepted = run_rhs1_full_dense_fallback_stage(
+        context=RHS1FullDenseFallbackStageContext(
+            candidate_context=RHS1FullDenseFallbackContext(
+                matvec=lambda x: x,
+                rhs=rhs,
+                current_result=current,
+                current_residual_vec=current_residual,
+                total_size=2,
+                constraint_scheme=1,
+                dense_matrix_cache=None,
+                dense_backend_allowed=True,
+                residual_norm_check=9.0,
+                target=1.0e-8,
+                tol=1.0e-10,
+                atol=0.0,
+                restart=11,
+                maxiter=13,
+                backend="cpu",
+            ),
+            dense_fallback_max=10,
+            residual_norm_true=1.0e-4,
+            active_size=2,
+            rhs_mode=1,
+            include_phi1=False,
+            has_fp=True,
+            any_dense_path_allowed=True,
+            host_sparse_direct_used=False,
+            host_sparse_skip_ratio=0.0,
+            cs0_sparse_first=False,
+        ),
+        replay_state=replay_state,
+        accept_candidate=lambda **_kwargs: (_ for _ in ()).throw(
+            AssertionError("acceptance is delegated to candidate helper")
+        ),
+        solve_linear_with_residual=lambda **_kwargs: (_ for _ in ()).throw(
+            AssertionError("solve is delegated to candidate helper")
+        ),
+        emit=lambda level, msg: messages.append((level, msg)),
+        mark=marks.append,
+        peak_rss_mb=lambda: 123.0,
+    )
+
+    assert accepted
+    assert result is candidate
+    assert residual_vec is current_residual
+    assert calls["candidate"]["replay_state"] is replay_state
+    assert calls["candidate"]["emit"] is not None
+    assert callable(calls["candidate"]["mark"])
+    assert calls["candidate"]["peak_rss_mb"] is not None
+    assert messages == []
+    assert marks == []
