@@ -16,6 +16,11 @@ from sfincs_jax.problems.profile_response.active_projection import (
 from sfincs_jax.problems.profile_response.diagnostics import (
     fortran_reduced_xblock_result_metadata,
 )
+from sfincs_jax.rhs1_qi_coarse import (
+    RHS1QICoarseBasis,
+    RHS1QICoarseBasisMetadata,
+    RHS1QICoarseCorrection,
+)
 from sfincs_jax.problems.profile_response.sparse_pc import (
     DirectTailMaterializationContext,
     DirectTailMaterializationResult,
@@ -85,6 +90,7 @@ from sfincs_jax.problems.profile_response.sparse_pc import (
     XBlockPostSolveCorrectionContext,
     XBlockPostSolveCorrectionResult,
     XBlockPhysicalResidual,
+    XBlockQICoarseSeedStageContext,
     XBlockSparsePCCompletionContext,
     XBlockSparsePCFinalCoreState,
     XBlockSparsePCFinalDeviceState,
@@ -100,6 +106,7 @@ from sfincs_jax.problems.profile_response.sparse_pc import (
     apply_fortran_reduced_xblock_moment_schur_stage,
     apply_xblock_global_coupling_stage,
     apply_xblock_moment_schur_stage,
+    apply_xblock_qi_coarse_seed_stage,
     apply_xblock_two_level_stage,
     apply_sparse_pc_post_minres,
     apply_sparse_pc_post_minres_if_needed,
@@ -5601,6 +5608,108 @@ def test_xblock_qi_seed_policy_parses_shared_basis_parameters() -> None:
     assert not setup.include_constraint_moments
     assert not setup.include_schur
     assert setup.basis_kind == "residual_enriched"
+
+
+def _one_vector_qi_basis() -> RHS1QICoarseBasis:
+    metadata = RHS1QICoarseBasisMetadata(
+        total_size=2,
+        candidate_count=3,
+        rank=1,
+        discarded_count=2,
+        candidate_labels=("rhs", "block", "radial"),
+        accepted_labels=("rhs",),
+        candidate_norms=(1.0, 2.0, 3.0),
+        accepted_norms=(1.0,),
+        rank_rtol=1.0e-10,
+        rank_atol=0.0,
+    )
+    return RHS1QICoarseBasis(vectors=jnp.asarray([[1.0], [0.0]]), metadata=metadata)
+
+
+def test_xblock_qi_coarse_seed_stage_accepts_improving_seed() -> None:
+    policy = resolve_xblock_qi_seed_policy_setup(
+        env={"SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_COARSE_SEED": "1"},
+    )
+    basis = _one_vector_qi_basis()
+    messages: list[str] = []
+
+    def basis_builder(**kwargs):
+        assert kwargs["linear_size"] == 2
+        assert kwargs["max_rank"] == policy.max_rank
+        return basis
+
+    def correction_builder(*_args, **kwargs):
+        assert kwargs["basis"] is basis
+        return RHS1QICoarseCorrection(
+            solution=jnp.asarray([0.5, 0.0]),
+            correction=jnp.asarray([0.5, 0.0]),
+            coefficients=jnp.asarray([0.5]),
+            residual_before_norm=2.0,
+            residual_after_norm=0.25,
+            improvement_ratio=0.125,
+            applied=True,
+            reason="accepted",
+            basis_metadata=basis.metadata,
+        )
+
+    result = apply_xblock_qi_coarse_seed_stage(
+        context=XBlockQICoarseSeedStageContext(
+            op=SimpleNamespace(),
+            x0_full=None,
+            xblock_rhs=jnp.asarray([1.0, 0.0]),
+            matvec_no_count=lambda v: v,
+            active_dof=True,
+            linear_size=2,
+            policy=policy,
+            elapsed_s=lambda: 4.0,
+            emit=lambda _level, msg: messages.append(msg),
+            basis_builder=basis_builder,
+            correction_builder=correction_builder,
+        )
+    )
+
+    assert result.used
+    assert result.x0_full.tolist() == [0.5, 0.0]
+    assert result.basis_for_galerkin is basis
+    assert result.residual_before == pytest.approx(2.0)
+    assert result.residual_after == pytest.approx(0.25)
+    assert result.rank == 1
+    assert result.candidate_count == 3
+    assert result.labels == ("rhs",)
+    assert result.reason == "accepted"
+    assert any("QI coarse seed improved residual" in message for message in messages)
+
+
+def test_xblock_qi_coarse_seed_stage_records_failure_and_keeps_seed() -> None:
+    policy = resolve_xblock_qi_seed_policy_setup(
+        env={"SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_COARSE_SEED": "1"},
+    )
+    incumbent = jnp.asarray([0.25, 0.75])
+
+    def basis_builder(**_kwargs):
+        raise RuntimeError("bad basis")
+
+    result = apply_xblock_qi_coarse_seed_stage(
+        context=XBlockQICoarseSeedStageContext(
+            op=SimpleNamespace(),
+            x0_full=incumbent,
+            xblock_rhs=jnp.asarray([1.0, 0.0]),
+            matvec_no_count=lambda v: v,
+            active_dof=False,
+            linear_size=2,
+            policy=policy,
+            elapsed_s=lambda: 0.0,
+            emit=None,
+            basis_builder=basis_builder,
+            correction_builder=lambda *_args, **_kwargs: None,
+        )
+    )
+
+    assert not result.used
+    assert result.x0_full is incumbent
+    assert result.basis_for_galerkin is None
+    assert result.reason == "RuntimeError: bad basis"
+    assert result.rank == 0
 
 
 def test_xblock_qi_galerkin_policy_handles_disabled_and_fallback_cases() -> None:

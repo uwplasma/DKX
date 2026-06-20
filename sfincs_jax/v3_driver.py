@@ -288,6 +288,7 @@ from .problems.profile_response.sparse_pc import (
     XBlockKrylovSolveSpaceContext,
     XBlockMomentSchurStageContext,
     XBlockPostSolveCorrectionContext,
+    XBlockQICoarseSeedStageContext,
     XBlockSparsePCCompletionContext,
     XBlockSparsePCFinalCoreState,
     XBlockSparsePCFinalDeviceState,
@@ -301,6 +302,7 @@ from .problems.profile_response.sparse_pc import (
     apply_fortran_reduced_xblock_moment_schur_stage,
     apply_xblock_global_coupling_stage,
     apply_xblock_moment_schur_stage,
+    apply_xblock_qi_coarse_seed_stage,
     apply_xblock_two_level_stage,
     build_fortran_reduced_xblock_factor_stage,
     build_fortran_reduced_xblock_krylov_setup,
@@ -3332,74 +3334,32 @@ def solve_v3_full_system_linear_gmres(
             qi_deflated_preconditioner_metadata: dict[str, object] = {}
             qi_deflated_preconditioner_setup_s = 0.0
             qi_deflated_stats = {"applies": 0, "local_applies": 0}
-            if qi_coarse_seed_enabled:
-                qi_seed_start_s = sparse_timer.elapsed_s()
-                try:
-                    qi_basis = _rhs1_xblock_qi_coarse_basis(
-                        op=op,
-                        active_dof=bool(xblock_use_active_dof),
-                        linear_size=int(xblock_linear_size),
-                        max_rank=int(qi_seed_max_rank),
-                        rank_rtol=float(qi_seed_rank_rtol),
-                        include_angular=bool(qi_seed_include_angular),
-                        include_blocks=bool(qi_seed_include_blocks),
-                        basis_kind=qi_seed_basis_kind,
-                        max_candidates=int(qi_seed_max_candidates),
-                        max_angular_mode=int(qi_seed_max_angular_mode),
-                        include_radial=bool(qi_seed_include_radial),
-                        include_radial_angular=bool(qi_seed_include_radial_angular),
-                        include_constraint_moments=bool(qi_seed_include_constraint_moments),
-                        include_schur=bool(qi_seed_include_schur),
-                    )
-                    qi_seed_basis_for_galerkin = qi_basis
-                    qi_current = (
-                        jnp.zeros_like(xblock_rhs)
-                        if x0_full is None
-                        else jnp.asarray(x0_full, dtype=jnp.float64)
-                    )
-                    qi_result = apply_rhs1_qi_coarse_correction(
-                        _mv_true_no_count,
-                        xblock_rhs,
-                        current=qi_current,
-                        basis=qi_basis,
-                        min_relative_improvement=float(qi_seed_min_improvement),
-                        rcond=float(qi_seed_rcond) if float(qi_seed_rcond) > 0.0 else None,
-                    )
-                    qi_coarse_seed_residual_before = float(qi_result.residual_before_norm)
-                    qi_coarse_seed_residual_after = float(qi_result.residual_after_norm)
-                    qi_coarse_seed_improvement_ratio = float(qi_result.improvement_ratio)
-                    qi_coarse_seed_rank = int(qi_result.basis_metadata.rank)
-                    qi_coarse_seed_candidate_count = int(qi_result.basis_metadata.candidate_count)
-                    qi_coarse_seed_reason = str(qi_result.reason)
-                    qi_coarse_seed_labels = tuple(qi_result.basis_metadata.accepted_labels)
-                    if bool(qi_result.applied):
-                        x0_full = jnp.asarray(qi_result.solution, dtype=jnp.float64)
-                        qi_coarse_seed_used = True
-                        if emit is not None:
-                            emit(
-                                0,
-                                "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
-                                f"QI coarse seed improved residual {qi_coarse_seed_residual_before:.6e} "
-                                f"-> {qi_coarse_seed_residual_after:.6e} "
-                                f"(rank={int(qi_coarse_seed_rank)} "
-                                f"ratio={float(qi_coarse_seed_improvement_ratio):.6e})",
-                            )
-                    elif emit is not None:
-                        emit(
-                            1,
-                            "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
-                            f"QI coarse seed rejected reason={qi_coarse_seed_reason} "
-                            f"residual={float(qi_coarse_seed_residual_before):.6e}",
-                        )
-                except Exception as exc:  # noqa: BLE001
-                    qi_coarse_seed_reason = f"{type(exc).__name__}: {exc}"
-                    if emit is not None:
-                        emit(
-                            1,
-                            "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
-                            f"QI coarse seed failed ({type(exc).__name__}: {exc})",
-                        )
-                qi_coarse_seed_s = float(sparse_timer.elapsed_s() - qi_seed_start_s)
+            qi_coarse_seed_stage = apply_xblock_qi_coarse_seed_stage(
+                context=XBlockQICoarseSeedStageContext(
+                    op=op,
+                    x0_full=x0_full,
+                    xblock_rhs=xblock_rhs,
+                    matvec_no_count=_mv_true_no_count,
+                    active_dof=bool(xblock_use_active_dof),
+                    linear_size=int(xblock_linear_size),
+                    policy=qi_seed_policy,
+                    elapsed_s=sparse_timer.elapsed_s,
+                    emit=emit,
+                    basis_builder=_rhs1_xblock_qi_coarse_basis,
+                    correction_builder=apply_rhs1_qi_coarse_correction,
+                )
+            )
+            x0_full = qi_coarse_seed_stage.x0_full
+            qi_seed_basis_for_galerkin = qi_coarse_seed_stage.basis_for_galerkin
+            qi_coarse_seed_used = bool(qi_coarse_seed_stage.used)
+            qi_coarse_seed_residual_before = qi_coarse_seed_stage.residual_before
+            qi_coarse_seed_residual_after = qi_coarse_seed_stage.residual_after
+            qi_coarse_seed_improvement_ratio = qi_coarse_seed_stage.improvement_ratio
+            qi_coarse_seed_rank = int(qi_coarse_seed_stage.rank)
+            qi_coarse_seed_candidate_count = int(qi_coarse_seed_stage.candidate_count)
+            qi_coarse_seed_reason = qi_coarse_seed_stage.reason
+            qi_coarse_seed_labels = qi_coarse_seed_stage.labels
+            qi_coarse_seed_s = float(qi_coarse_seed_stage.setup_s)
             qi_galerkin_policy = resolve_xblock_qi_galerkin_policy_setup(
                 enabled=bool(qi_galerkin_preconditioner_enabled),
                 host_fallback_used=bool(xblock_device_host_fallback_decision.used),

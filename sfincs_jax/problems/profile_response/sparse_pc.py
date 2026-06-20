@@ -59,6 +59,7 @@ from ...sparse_triangular import (
     triangular_solve_upper_padded,
 )
 from ...solver import GMRESSolveResult
+from ...rhs1_qi_coarse import RHS1QICoarseBasis
 
 
 ArrayFn = Callable[[jnp.ndarray], jnp.ndarray]
@@ -3960,6 +3961,40 @@ class XBlockQISeedPolicySetup:
     include_constraint_moments: bool
     include_schur: bool
     basis_kind: str | None
+
+
+@dataclass(frozen=True)
+class XBlockQICoarseSeedStageContext:
+    """Dependencies for optional QI coarse residual-seed setup."""
+
+    op: object
+    x0_full: jnp.ndarray | None
+    xblock_rhs: jnp.ndarray
+    matvec_no_count: ArrayFn
+    active_dof: bool
+    linear_size: int
+    policy: XBlockQISeedPolicySetup
+    elapsed_s: Callable[[], float]
+    emit: EmitFn | None
+    basis_builder: Callable[..., RHS1QICoarseBasis]
+    correction_builder: Callable[..., object]
+
+
+@dataclass(frozen=True)
+class XBlockQICoarseSeedStageResult:
+    """Result from optional QI coarse residual-seed setup."""
+
+    x0_full: jnp.ndarray | None
+    basis_for_galerkin: RHS1QICoarseBasis | None
+    used: bool
+    residual_before: float | None
+    residual_after: float | None
+    improvement_ratio: float | None
+    rank: int
+    candidate_count: int
+    reason: str | None
+    labels: tuple[str, ...]
+    setup_s: float
 
 
 @dataclass(frozen=True)
@@ -9308,6 +9343,116 @@ def resolve_xblock_qi_seed_policy_setup(env: Mapping[str, str] | None = None) ->
     )
 
 
+def apply_xblock_qi_coarse_seed_stage(
+    *,
+    context: XBlockQICoarseSeedStageContext,
+) -> XBlockQICoarseSeedStageResult:
+    """Build a QI coarse basis and optionally use it as the initial x-block seed."""
+
+    if not bool(context.policy.coarse_seed_enabled):
+        return XBlockQICoarseSeedStageResult(
+            x0_full=context.x0_full,
+            basis_for_galerkin=None,
+            used=False,
+            residual_before=None,
+            residual_after=None,
+            improvement_ratio=None,
+            rank=0,
+            candidate_count=0,
+            reason=None,
+            labels=(),
+            setup_s=0.0,
+        )
+
+    start_s = float(context.elapsed_s())
+    basis_for_galerkin: RHS1QICoarseBasis | None = None
+    used = False
+    residual_before: float | None = None
+    residual_after: float | None = None
+    improvement_ratio: float | None = None
+    rank = 0
+    candidate_count = 0
+    reason: str | None = None
+    labels: tuple[str, ...] = ()
+    x0_full = context.x0_full
+    try:
+        basis_for_galerkin = context.basis_builder(
+            op=context.op,
+            active_dof=bool(context.active_dof),
+            linear_size=int(context.linear_size),
+            max_rank=int(context.policy.max_rank),
+            rank_rtol=float(context.policy.rank_rtol),
+            include_angular=bool(context.policy.include_angular),
+            include_blocks=bool(context.policy.include_blocks),
+            basis_kind=context.policy.basis_kind,
+            max_candidates=int(context.policy.max_candidates),
+            max_angular_mode=int(context.policy.max_angular_mode),
+            include_radial=bool(context.policy.include_radial),
+            include_radial_angular=bool(context.policy.include_radial_angular),
+            include_constraint_moments=bool(context.policy.include_constraint_moments),
+            include_schur=bool(context.policy.include_schur),
+        )
+        current = (
+            jnp.zeros_like(context.xblock_rhs)
+            if x0_full is None
+            else jnp.asarray(x0_full, dtype=jnp.float64)
+        )
+        qi_result = context.correction_builder(
+            context.matvec_no_count,
+            context.xblock_rhs,
+            current=current,
+            basis=basis_for_galerkin,
+            min_relative_improvement=float(context.policy.min_improvement),
+            rcond=float(context.policy.rcond) if float(context.policy.rcond) > 0.0 else None,
+        )
+        residual_before = float(qi_result.residual_before_norm)
+        residual_after = float(qi_result.residual_after_norm)
+        improvement_ratio = float(qi_result.improvement_ratio)
+        rank = int(qi_result.basis_metadata.rank)
+        candidate_count = int(qi_result.basis_metadata.candidate_count)
+        reason = str(qi_result.reason)
+        labels = tuple(qi_result.basis_metadata.accepted_labels)
+        if bool(qi_result.applied):
+            x0_full = jnp.asarray(qi_result.solution, dtype=jnp.float64)
+            used = True
+            if context.emit is not None:
+                context.emit(
+                    0,
+                    "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
+                    f"QI coarse seed improved residual {float(residual_before):.6e} "
+                    f"-> {float(residual_after):.6e} "
+                    f"(rank={int(rank)} ratio={float(improvement_ratio):.6e})",
+                )
+        elif context.emit is not None:
+            context.emit(
+                1,
+                "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
+                f"QI coarse seed rejected reason={reason} "
+                f"residual={float(residual_before):.6e}",
+            )
+    except Exception as exc:  # noqa: BLE001
+        reason = f"{type(exc).__name__}: {exc}"
+        if context.emit is not None:
+            context.emit(
+                1,
+                "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
+                f"QI coarse seed failed ({type(exc).__name__}: {exc})",
+            )
+    return XBlockQICoarseSeedStageResult(
+        x0_full=x0_full,
+        basis_for_galerkin=basis_for_galerkin,
+        used=bool(used),
+        residual_before=residual_before,
+        residual_after=residual_after,
+        improvement_ratio=improvement_ratio,
+        rank=int(rank),
+        candidate_count=int(candidate_count),
+        reason=reason,
+        labels=labels,
+        setup_s=float(context.elapsed_s()) - start_s,
+    )
+
+
 def resolve_xblock_qi_galerkin_policy_setup(
     *,
     enabled: bool,
@@ -12112,6 +12257,8 @@ __all__ = [
     "XBlockTwoLevelStageResult",
     "XBlockGlobalCouplingStageContext",
     "XBlockGlobalCouplingStageResult",
+    "XBlockQICoarseSeedStageContext",
+    "XBlockQICoarseSeedStageResult",
     "XBlockPhysicalResidual",
     "SparsePCGMRESFinalPayload",
     "SparseMinimumNormPolicy",
@@ -12146,6 +12293,7 @@ __all__ = [
     "apply_fortran_reduced_xblock_moment_schur_stage",
     "apply_xblock_global_coupling_stage",
     "apply_xblock_moment_schur_stage",
+    "apply_xblock_qi_coarse_seed_stage",
     "apply_xblock_two_level_stage",
     "apply_sparse_pc_post_minres",
     "apply_sparse_pc_post_minres_if_needed",
