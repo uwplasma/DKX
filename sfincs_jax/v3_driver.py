@@ -400,6 +400,7 @@ from .rhs1_strong_fallback import (
     build_rhs1_strong_preconditioner_reduced_from_kind,
 )
 from .problems.profile_response.strong_preconditioning import (
+    RHS1PostPrimaryMinresCorrectionContext,
     adjust_rhs1_pas_schur_strong_kind_from_env,
     rhs1_collision_retry_allowed,
     rhs1_fp_strong_size_guard_from_env,
@@ -412,6 +413,7 @@ from .problems.profile_response.strong_preconditioning import (
     rhs1_strong_preconditioner_env_from_env,
     rhs1_strong_retry_controls_from_env,
     rhs1_strong_trigger_controls_from_env,
+    run_rhs1_post_primary_minres_corrections,
 )
 from .problems.profile_response.policies import (
     RHS1FullSparseRescueSetupContext,
@@ -9380,129 +9382,46 @@ def solve_v3_full_system_linear_gmres(
                 update_residual_vec=False,
             )
         )
-        if (
-            rhs1_pas_tz_guarded_fallback
-            and preconditioner_reduced is not None
-            and float(res_reduced.residual_norm) > float(target_reduced)
-        ):
-            correction_preconditioner = preconditioner_reduced
-            correction_kind = resolve_pas_tz_guarded_correction_kind(
-                requested=os.environ.get("SFINCS_JAX_RHSMODE1_PAS_TZ_GUARDED_CORRECTION", "")
-            )
-            if correction_kind is not None or pas_tz_guarded_stream_requested:
-                pas_tz_guarded_correction_metadata.update(
-                    {
-                        "pas_tz_guarded_correction_kind": correction_kind,
-                        "pas_tz_guarded_correction_stream_requested": bool(pas_tz_guarded_stream_requested),
-                        "pas_tz_guarded_correction_streamed": False,
-                        "pas_tz_guarded_correction_full_update_materialized": False,
-                    }
-                )
-            if pas_tz_guarded_stream_requested:
-                blocker = (
-                    "production-pas-tz-minres-correction-requires-full-residual-direction"
-                )
-                pas_tz_guarded_correction_metadata["pas_tz_guarded_correction_stream_blocker"] = blocker
-                if emit is not None:
-                    emit(
-                        1,
-                        "solve_v3_full_system_linear_gmres: PAS-TZ guarded streamed "
-                        "correction requested but unavailable; using dense minres "
-                        "correction because the production preconditioner requires "
-                        "a full residual and full preconditioned direction",
-                    )
-            if correction_kind == "tzfft" and rhs1_pas_tz_guarded_axis != "tzfft":
-                try:
-                    correction_preconditioner = _build_rhsmode23_tzfft_preconditioner(
-                        op=op, reduce_full=reduce_full, expand_reduced=expand_reduced
-                    )
-                    if use_pas_projection:
-                        correction_preconditioner = _wrap_pas_precond(correction_preconditioner)
-                    if emit is not None:
-                        emit(
-                            1,
-                            "solve_v3_full_system_linear_gmres: PAS-TZ guarded "
-                            "matrix-free correction=tzfft",
-                        )
-                except Exception as exc:  # noqa: BLE001
-                    correction_preconditioner = preconditioner_reduced
-                    if emit is not None:
-                        emit(
-                            1,
-                            "solve_v3_full_system_linear_gmres: PAS-TZ guarded "
-                            f"matrix-free correction=tzfft unavailable ({type(exc).__name__}); "
-                            "using base fallback",
-                        )
-            guarded_minres = rhs1_pas_tz_guarded_minres_controls_from_env()
-            if guarded_minres.steps > 0:
-                if pas_tz_guarded_correction_metadata:
-                    pas_tz_guarded_correction_metadata[
-                        "pas_tz_guarded_correction_full_update_materialized"
-                    ] = True
-                    pas_tz_guarded_correction_metadata["pas_tz_guarded_correction_minres_steps"] = int(
-                        guarded_minres.steps
-                    )
-                x_minres, residual_minres, minres_history, minres_alphas = _apply_preconditioned_minres_correction(
-                    matvec=mv_reduced,
-                    rhs=rhs_reduced,
-                    x0=res_reduced.x,
-                    preconditioner=correction_preconditioner,
-                    steps=int(guarded_minres.steps),
-                    alpha_clip=float(guarded_minres.alpha_clip),
-                    min_improvement=float(guarded_minres.min_improvement),
-                )
-                if minres_history and float(minres_history[-1]) < float(res_reduced.residual_norm):
-                    old_residual = float(res_reduced.residual_norm)
-                    residual_norm_true = float(minres_history[-1])
-                    residual_vec = residual_minres
-                    res_reduced = GMRESSolveResult(
-                        x=jnp.asarray(x_minres, dtype=jnp.float64),
-                        residual_norm=jnp.asarray(residual_norm_true, dtype=jnp.float64),
-                    )
-                    if emit is not None:
-                        emit(
-                            1,
-                            "solve_v3_full_system_linear_gmres: PAS-TZ guarded minres correction "
-                            f"accepted {len(minres_alphas)} step(s), residual="
-                            f"{old_residual:.3e}->{residual_norm_true:.3e}",
-                        )
-        weak_minres_ratio = float(residual_norm_true) / max(float(target_reduced), 1e-300)
-        weak_minres_steps = rhs1_pas_weak_minres_steps(
-            has_pas=op.fblock.pas is not None,
-            rhs1_precond_kind=rhs1_precond_kind,
-            res_ratio=float(weak_minres_ratio),
-        )
-        weak_minres = rhs1_pas_weak_minres_controls_from_env(steps=int(weak_minres_steps))
-        if (
-            (not rhs1_pas_tz_guarded_fallback)
-            and preconditioner_reduced is not None
-            and weak_minres.steps > 0
-            and float(res_reduced.residual_norm) > float(target_reduced)
-        ):
-            x_minres, residual_minres, minres_history, minres_alphas = _apply_preconditioned_minres_correction(
+        minres_corrections = run_rhs1_post_primary_minres_corrections(
+            RHS1PostPrimaryMinresCorrectionContext(
+                result=res_reduced,
+                residual_vec=residual_vec,
+                residual_norm_true=float(residual_norm_true),
+                target=float(target_reduced),
                 matvec=mv_reduced,
                 rhs=rhs_reduced,
-                x0=res_reduced.x,
                 preconditioner=preconditioner_reduced,
-                steps=int(weak_minres.steps),
-                alpha_clip=float(weak_minres.alpha_clip),
-                min_improvement=float(weak_minres.min_improvement),
-            )
-            if minres_history and float(minres_history[-1]) < float(res_reduced.residual_norm):
-                old_residual = float(res_reduced.residual_norm)
-                residual_norm_true = float(minres_history[-1])
-                residual_vec = residual_minres
-                res_reduced = GMRESSolveResult(
-                    x=jnp.asarray(x_minres, dtype=jnp.float64),
-                    residual_norm=jnp.asarray(residual_norm_true, dtype=jnp.float64),
-                )
-                if emit is not None:
-                    emit(
-                        1,
-                        "solve_v3_full_system_linear_gmres: weak PAS minres correction "
-                        f"accepted {len(minres_alphas)} step(s), residual="
-                        f"{old_residual:.3e}->{residual_norm_true:.3e}",
-                    )
+                has_pas=op.fblock.pas is not None,
+                rhs1_precond_kind=rhs1_precond_kind,
+                pas_tz_guarded_fallback=bool(rhs1_pas_tz_guarded_fallback),
+                pas_tz_guarded_axis=rhs1_pas_tz_guarded_axis,
+                pas_tz_guarded_stream_requested=bool(pas_tz_guarded_stream_requested),
+                use_pas_projection=bool(use_pas_projection),
+                metadata=pas_tz_guarded_correction_metadata,
+                requested_guarded_correction=os.environ.get(
+                    "SFINCS_JAX_RHSMODE1_PAS_TZ_GUARDED_CORRECTION", ""
+                ),
+                build_tzfft_preconditioner=lambda: _build_rhsmode23_tzfft_preconditioner(
+                    op=op,
+                    reduce_full=reduce_full,
+                    expand_reduced=expand_reduced,
+                ),
+                wrap_pas_preconditioner=_wrap_pas_precond,
+                minres_correction=_apply_preconditioned_minres_correction,
+                result_factory=lambda x, residual_norm: GMRESSolveResult(
+                    x=jnp.asarray(x, dtype=jnp.float64),
+                    residual_norm=jnp.asarray(residual_norm, dtype=jnp.float64),
+                ),
+                resolve_guarded_correction_kind=resolve_pas_tz_guarded_correction_kind,
+                guarded_controls_factory=rhs1_pas_tz_guarded_minres_controls_from_env,
+                weak_steps_policy=rhs1_pas_weak_minres_steps,
+                weak_controls_factory=rhs1_pas_weak_minres_controls_from_env,
+            ),
+            emit=emit,
+        )
+        res_reduced = minres_corrections.result
+        residual_vec = minres_corrections.residual_vec
+        residual_norm_true = float(minres_corrections.residual_norm_true)
         res_ratio = float(residual_norm_true) / max(float(target_reduced), 1e-300)
         stage2_trigger = rhs1_stage2_trigger(res_ratio=res_ratio, use_dkes=bool(use_dkes))
         fp_force_stage2 = rhs1_fp_force_stage2(

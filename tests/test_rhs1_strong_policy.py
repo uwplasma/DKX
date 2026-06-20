@@ -1,14 +1,24 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
+
 from sfincs_jax.rhs1_strong_policy import (
     RHS1MinresCorrectionControls,
+    RHS1PostPrimaryMinresCorrectionContext,
     adjust_rhs1_pas_schur_strong_kind_from_env,
     requested_rhs1_strong_preconditioner_kind,
     rhs1_pas_tz_guarded_minres_controls_from_env,
     rhs1_pas_weak_minres_controls_from_env,
     rhs1_pas_weak_minres_steps,
     rhs1_pas_weak_strong_retry_skip,
+    run_rhs1_post_primary_minres_corrections,
 )
+
+
+@dataclass(frozen=True)
+class _DummyResult:
+    x: object
+    residual_norm: float
 
 
 def test_requested_rhs1_strong_preconditioner_kind_reduced_mode_extended_aliases() -> None:
@@ -120,6 +130,145 @@ def test_rhs1_pas_weak_minres_controls_from_env(monkeypatch) -> None:
         alpha_clip=10.0,
         min_improvement=0.0,
     )
+
+
+def test_post_primary_minres_corrections_accepts_guarded_tzfft_path() -> None:
+    messages: list[str] = []
+    built: list[str] = []
+    wrapped: list[object] = []
+
+    def base_preconditioner(vector):
+        return ("base", vector)
+
+    def tzfft_preconditioner(vector):
+        return ("tzfft", vector)
+
+    def build_tzfft_preconditioner():
+        built.append("tzfft")
+        return tzfft_preconditioner
+
+    def wrap_pas_preconditioner(preconditioner):
+        wrapped.append(preconditioner)
+
+        def wrapped_preconditioner(vector):
+            return ("wrapped", preconditioner(vector))
+
+        return wrapped_preconditioner
+
+    def minres_correction(**kwargs):
+        assert kwargs["preconditioner"](("probe",))[0] == "wrapped"
+        return "x1", "residual_vec1", (10.0, 2.0), (0.25,)
+
+    metadata: dict[str, object] = {}
+    outcome = run_rhs1_post_primary_minres_corrections(
+        RHS1PostPrimaryMinresCorrectionContext(
+            result=_DummyResult(x="x0", residual_norm=10.0),
+            residual_vec="residual_vec0",
+            residual_norm_true=10.0,
+            target=1.0,
+            matvec=lambda vector: vector,
+            rhs="rhs",
+            preconditioner=base_preconditioner,
+            has_pas=True,
+            rhs1_precond_kind="pas_lite",
+            pas_tz_guarded_fallback=True,
+            pas_tz_guarded_axis="theta",
+            pas_tz_guarded_stream_requested=True,
+            use_pas_projection=True,
+            metadata=metadata,
+            requested_guarded_correction="tzfft",
+            build_tzfft_preconditioner=build_tzfft_preconditioner,
+            wrap_pas_preconditioner=wrap_pas_preconditioner,
+            minres_correction=minres_correction,
+            result_factory=lambda x, residual_norm: _DummyResult(
+                x=x,
+                residual_norm=residual_norm,
+            ),
+            resolve_guarded_correction_kind=lambda *, requested: requested,
+            guarded_controls_factory=lambda: RHS1MinresCorrectionControls(
+                steps=2,
+                alpha_clip=10.0,
+                min_improvement=0.0,
+            ),
+            weak_steps_policy=lambda **_kwargs: 2,
+            weak_controls_factory=lambda *, steps: RHS1MinresCorrectionControls(
+                steps=steps,
+                alpha_clip=10.0,
+                min_improvement=0.0,
+            ),
+        ),
+        emit=lambda _level, message: messages.append(message),
+    )
+
+    assert outcome.accepted_guarded
+    assert not outcome.accepted_weak
+    assert outcome.result == _DummyResult(x="x1", residual_norm=2.0)
+    assert outcome.residual_vec == "residual_vec1"
+    assert outcome.residual_norm_true == 2.0
+    assert built == ["tzfft"]
+    assert wrapped == [tzfft_preconditioner]
+    assert metadata["pas_tz_guarded_correction_kind"] == "tzfft"
+    assert metadata["pas_tz_guarded_correction_full_update_materialized"] is True
+    assert metadata["pas_tz_guarded_correction_minres_steps"] == 2
+    assert metadata["pas_tz_guarded_correction_stream_blocker"] == (
+        "production-pas-tz-minres-correction-requires-full-residual-direction"
+    )
+    assert any("PAS-TZ guarded streamed correction requested" in message for message in messages)
+    assert any("PAS-TZ guarded minres correction accepted" in message for message in messages)
+
+
+def test_post_primary_minres_corrections_accepts_weak_pas_path() -> None:
+    messages: list[str] = []
+
+    def minres_correction(**_kwargs):
+        return "x1", "residual_vec1", (20.0, 5.0), (0.5,)
+
+    outcome = run_rhs1_post_primary_minres_corrections(
+        RHS1PostPrimaryMinresCorrectionContext(
+            result=_DummyResult(x="x0", residual_norm=20.0),
+            residual_vec="residual_vec0",
+            residual_norm_true=20.0,
+            target=1.0,
+            matvec=lambda vector: vector,
+            rhs="rhs",
+            preconditioner=lambda vector: vector,
+            has_pas=True,
+            rhs1_precond_kind="collision",
+            pas_tz_guarded_fallback=False,
+            pas_tz_guarded_axis=None,
+            pas_tz_guarded_stream_requested=False,
+            use_pas_projection=False,
+            metadata={},
+            requested_guarded_correction="",
+            build_tzfft_preconditioner=lambda: (lambda vector: vector),
+            wrap_pas_preconditioner=lambda preconditioner: preconditioner,
+            minres_correction=minres_correction,
+            result_factory=lambda x, residual_norm: _DummyResult(
+                x=x,
+                residual_norm=residual_norm,
+            ),
+            resolve_guarded_correction_kind=lambda *, requested: None,
+            guarded_controls_factory=lambda: RHS1MinresCorrectionControls(
+                steps=0,
+                alpha_clip=10.0,
+                min_improvement=0.0,
+            ),
+            weak_steps_policy=lambda **_kwargs: 3,
+            weak_controls_factory=lambda *, steps: RHS1MinresCorrectionControls(
+                steps=steps,
+                alpha_clip=4.0,
+                min_improvement=0.0,
+            ),
+        ),
+        emit=lambda _level, message: messages.append(message),
+    )
+
+    assert not outcome.accepted_guarded
+    assert outcome.accepted_weak
+    assert outcome.result == _DummyResult(x="x1", residual_norm=5.0)
+    assert outcome.residual_vec == "residual_vec1"
+    assert outcome.residual_norm_true == 5.0
+    assert any("weak PAS minres correction accepted" in message for message in messages)
 
 
 def test_adjust_rhs1_pas_schur_strong_kind_from_env(monkeypatch) -> None:
