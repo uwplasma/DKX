@@ -15,12 +15,14 @@ from sfincs_jax.rhs1_handoff import (
     rhs1_accept_sparse_retry_candidate_and_update_replay,
     rhs1_accept_smoother_candidate_and_update_replay,
     rhs1_residual_improves,
+    rhs1_retry_without_preconditioner_if_nonfinite,
     rhs1_run_bicgstab_gmres_fallback_if_allowed,
     rhs1_run_collision_retry_if_allowed,
     rhs1_run_fast_post_xblock_polish,
     rhs1_run_linear_candidate_and_update_replay,
     rhs1_run_measured_linear_candidate_and_update_replay,
     rhs1_run_pas_schur_rescue_if_requested,
+    rhs1_run_primary_krylov_and_update_replay,
     rhs1_run_stage2_retry_if_allowed,
     rhs1_solver_candidate_metrics,
 )
@@ -1144,6 +1146,172 @@ def test_rhs1_run_bicgstab_gmres_fallback_reuses_cached_preconditioner_and_ready
     assert precond == "cached"
     assert ready_seen == [candidate]
     assert replay.precond_fn == "cached"
+
+
+def test_rhs1_run_primary_krylov_updates_replay_without_resetting_controls() -> None:
+    replay = RHS1KSPReplayState(restart=99, maxiter=101, solver_kind="old")
+    candidate = _result(0.25, x="x1")
+    events: list[str] = []
+
+    def solve_linear(**kwargs):
+        events.append("solve")
+        assert kwargs["precond_fn"] == "pc"
+        assert kwargs["x0_vec"] == "seed"
+        assert kwargs["solve_method_val"] == "incremental"
+        return candidate
+
+    def result_ready(result):
+        events.append("ready")
+        return _result(result.residual_norm, x="ready")
+
+    result, residual_vec, elapsed_s = rhs1_run_primary_krylov_and_update_replay(
+        replay_state=replay,
+        matvec_fn="mv",
+        b_vec="rhs",
+        precond_fn="pc",
+        x0_vec="seed",
+        tol=1.0e-10,
+        atol=1.0e-12,
+        restart=17,
+        maxiter=33,
+        solve_method="incremental",
+        precond_side="left",
+        solve_linear=solve_linear,
+        solver_kind="gmres",
+        returns_residual_vec=False,
+        current_residual_vec="r0",
+        result_ready=result_ready,
+        progress_start=lambda: events.append("progress"),
+        mark=lambda name: events.append(name),
+        mark_start="start",
+        mark_done="done",
+    )
+
+    assert result.x == "ready"
+    assert residual_vec == "r0"
+    assert elapsed_s >= 0.0
+    assert events == ["progress", "start", "solve", "ready", "done"]
+    assert replay.matvec_fn == "mv"
+    assert replay.b_vec == "rhs"
+    assert replay.precond_fn == "pc"
+    assert replay.x0_vec == "seed"
+    assert replay.precond_side == "left"
+    assert replay.solver_kind == "gmres"
+    assert replay.restart == 99
+    assert replay.maxiter == 101
+
+
+def test_rhs1_run_primary_krylov_blocks_returned_residual_when_requested() -> None:
+    replay = RHS1KSPReplayState()
+    candidate = _result(0.25, x="x1")
+    block_calls: list[str] = []
+    residual = SimpleNamespace(block_until_ready=lambda: block_calls.append("ready"))
+
+    result, residual_vec, _elapsed_s = rhs1_run_primary_krylov_and_update_replay(
+        replay_state=replay,
+        matvec_fn="mv",
+        b_vec="rhs",
+        precond_fn=None,
+        x0_vec=None,
+        tol=1.0e-10,
+        atol=1.0e-12,
+        restart=17,
+        maxiter=None,
+        solve_method="incremental",
+        precond_side="none",
+        solve_linear=lambda **_kwargs: (candidate, residual),
+        solver_kind="gmres",
+        returns_residual_vec=True,
+        block_residual_until_ready=True,
+    )
+
+    assert result is candidate
+    assert residual_vec is residual
+    assert block_calls == ["ready"]
+    assert replay.precond_fn is None
+
+
+def test_rhs1_retry_without_preconditioner_skips_finite_or_disabled() -> None:
+    replay = RHS1KSPReplayState(matvec_fn="old")
+    current = _result(0.25, x="x0")
+
+    def finite(result):
+        return result.residual_norm == 0.25
+
+    result, residual_vec, accepted, elapsed_s = rhs1_retry_without_preconditioner_if_nonfinite(
+        allowed=True,
+        replay_state=replay,
+        current_result=current,
+        current_residual_vec="r0",
+        matvec_fn="mv",
+        b_vec="rhs",
+        x0_vec="seed",
+        tol=1.0e-10,
+        atol=1.0e-12,
+        restart=17,
+        maxiter=33,
+        solve_method="incremental",
+        precond_side="left",
+        solve_linear=lambda **_kwargs: _result(0.1, x="x1"),
+        solver_kind="gmres",
+        result_is_finite=finite,
+        returns_residual_vec=False,
+    )
+
+    assert result is current
+    assert residual_vec == "r0"
+    assert not accepted
+    assert elapsed_s == 0.0
+    assert replay.matvec_fn == "old"
+
+
+def test_rhs1_retry_without_preconditioner_runs_nonfinite_retry() -> None:
+    replay = RHS1KSPReplayState(restart=99, maxiter=101)
+    current = _result(float("nan"), x="x0")
+    candidate = _result(0.1, x="x1")
+    messages: list[tuple[int, str]] = []
+    marks: list[str] = []
+
+    def solve_linear(**kwargs):
+        assert kwargs["precond_fn"] is None
+        assert kwargs["x0_vec"] == "seed"
+        return candidate, "r1"
+
+    result, residual_vec, accepted, elapsed_s = rhs1_retry_without_preconditioner_if_nonfinite(
+        allowed=True,
+        replay_state=replay,
+        current_result=current,
+        current_residual_vec="r0",
+        matvec_fn="mv",
+        b_vec="rhs",
+        x0_vec="seed",
+        tol=1.0e-10,
+        atol=1.0e-12,
+        restart=17,
+        maxiter=33,
+        solve_method="incremental",
+        precond_side="left",
+        solve_linear=solve_linear,
+        solver_kind="gmres",
+        result_is_finite=lambda result: result.residual_norm == result.residual_norm,
+        returns_residual_vec=True,
+        mark=lambda name: marks.append(name),
+        mark_start="retry_start",
+        mark_done="retry_done",
+        emit=lambda level, message: messages.append((level, message)),
+        message="retry message",
+    )
+
+    assert accepted
+    assert result is candidate
+    assert residual_vec == "r1"
+    assert elapsed_s >= 0.0
+    assert replay.precond_fn is None
+    assert replay.x0_vec == "seed"
+    assert replay.restart == 99
+    assert replay.maxiter == 101
+    assert marks == ["retry_start", "retry_done"]
+    assert messages == [(0, "retry message")]
 
 
 def test_rhs1_run_collision_retry_reuses_cached_preconditioner() -> None:

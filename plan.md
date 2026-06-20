@@ -42,6 +42,11 @@ Make `sfincs_jax` research-grade while preserving the public user contract:
 
 Recent checkpoints:
 
+- RHSMode=1 primary Krylov solve/replay and non-finite preconditioned retry
+  handling now use tested handoff helpers shared by reduced active-DOF and
+  full-system branches. The helpers preserve the legacy replay-control
+  contract: primary-solve replay updates replace the linear problem and solver
+  kind without resetting the initially configured restart/maxiter controls.
 - RHSMode=1 BiCGStab-to-GMRES fallback execution now uses a tested
   `rhs1_run_bicgstab_gmres_fallback_if_allowed(...)` handoff helper shared by
   reduced active-DOF and full-system branches. The helper preserves the
@@ -367,10 +372,10 @@ Recent checkpoints:
 - `cb295ce` Extract sparse pattern setup.
 - `4b6a5b4` Extract sparse factor policy.
 
-Current source-size snapshot after BiCGStab fallback handoff extraction:
+Current source-size snapshot after primary Krylov handoff extraction:
 
-- `sfincs_jax/v3_driver.py`: `15740` lines.
-- `solve_v3_full_system_linear_gmres`: `10987` lines.
+- `sfincs_jax/v3_driver.py`: `15747` lines.
+- `solve_v3_full_system_linear_gmres`: `10992` lines.
 - `sfincs_jax/v3_results.py`: `119` lines.
 - `sfincs_jax/rhs1_ksp_diagnostics.py`: `306` lines.
 - `sfincs_jax/rhs1_pas_policy.py`: `889` lines.

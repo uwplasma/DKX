@@ -181,12 +181,14 @@ from .problems.profile_response.handoff import (
     rhs1_accept_measured_candidate_and_update_replay,
     rhs1_accept_sparse_retry_candidate_and_update_replay,
     rhs1_accept_smoother_candidate_and_update_replay,
+    rhs1_retry_without_preconditioner_if_nonfinite,
     rhs1_run_bicgstab_gmres_fallback_if_allowed,
     rhs1_run_collision_retry_if_allowed,
     rhs1_run_fast_post_xblock_polish,
     rhs1_run_linear_candidate_and_update_replay,
     rhs1_run_measured_linear_candidate_and_update_replay,
     rhs1_run_pas_schur_rescue_if_requested,
+    rhs1_run_primary_krylov_and_update_replay,
     rhs1_run_stage2_retry_if_allowed,
 )
 from .problems.profile_response.auto_solve import (
@@ -9647,50 +9649,57 @@ def solve_v3_full_system_linear_gmres(
                 ksp_replay.precond_side = gmres_precond_side
                 ksp_replay.solver_kind = _solver_kind(solve_method)[0]
             else:
-                rhs1_progress_notes.krylov_start()
-                _mark("rhs1_krylov_solve_start")
-                res_reduced = _solve_linear(
-                    matvec_fn=mv_reduced,
-                    b_vec=rhs_reduced,
-                    precond_fn=preconditioner_reduced,
-                    x0_vec=x0_reduced,
-                    tol_val=tol,
-                    atol_val=atol,
-                    restart_val=restart,
-                    maxiter_val=maxiter,
-                    solve_method_val=solve_method,
-                    precond_side=gmres_precond_side,
+                res_reduced, residual_vec, _primary_elapsed_s = (
+                    rhs1_run_primary_krylov_and_update_replay(
+                        replay_state=ksp_replay,
+                        matvec_fn=mv_reduced,
+                        b_vec=rhs_reduced,
+                        precond_fn=preconditioner_reduced,
+                        x0_vec=x0_reduced,
+                        tol=float(tol),
+                        atol=float(atol),
+                        restart=int(restart),
+                        maxiter=maxiter,
+                        solve_method=solve_method,
+                        precond_side=gmres_precond_side,
+                        solve_linear=_solve_linear,
+                        solver_kind=_solver_kind(solve_method)[0],
+                        returns_residual_vec=False,
+                        current_residual_vec=residual_vec,
+                        result_ready=_block_gmres_result_ready,
+                        progress_start=rhs1_progress_notes.krylov_start,
+                        mark=_mark,
+                        mark_start="rhs1_krylov_solve_start",
+                        mark_done="rhs1_krylov_solve_done",
+                    )
                 )
-                res_reduced = _block_gmres_result_ready(res_reduced)
-                _mark("rhs1_krylov_solve_done")
-                ksp_replay.matvec_fn = mv_reduced
-                ksp_replay.b_vec = rhs_reduced
-                ksp_replay.precond_fn = preconditioner_reduced
-                ksp_replay.x0_vec = x0_reduced
-                ksp_replay.precond_side = gmres_precond_side
-                ksp_replay.solver_kind = _solver_kind(solve_method)[0]
-        if (not probe_shortcut) and preconditioner_reduced is not None and (not _gmres_result_is_finite(res_reduced)):
-            if emit is not None:
-                emit(0, "solve_v3_full_system_linear_gmres: preconditioned reduced GMRES returned non-finite result; retrying without preconditioner")
-            res_reduced = _solve_linear(
+        res_reduced, residual_vec, _accepted, _retry_elapsed_s = (
+            rhs1_retry_without_preconditioner_if_nonfinite(
+                allowed=(not probe_shortcut) and preconditioner_reduced is not None,
+                replay_state=ksp_replay,
+                current_result=res_reduced,
+                current_residual_vec=residual_vec,
                 matvec_fn=mv_reduced,
                 b_vec=rhs_reduced,
-                precond_fn=None,
                 x0_vec=x0_reduced,
-                tol_val=tol,
-                atol_val=atol,
-                restart_val=restart,
-                maxiter_val=maxiter,
-                solve_method_val=solve_method,
+                tol=float(tol),
+                atol=float(atol),
+                restart=int(restart),
+                maxiter=maxiter,
+                solve_method=solve_method,
                 precond_side=gmres_precond_side,
+                solve_linear=_solve_linear,
+                solver_kind=_solver_kind(solve_method)[0],
+                result_is_finite=_gmres_result_is_finite,
+                returns_residual_vec=False,
+                result_ready=_block_gmres_result_ready,
+                emit=emit,
+                message=(
+                    "solve_v3_full_system_linear_gmres: preconditioned reduced "
+                    "GMRES returned non-finite result; retrying without preconditioner"
+                ),
             )
-            res_reduced = _block_gmres_result_ready(res_reduced)
-            ksp_replay.matvec_fn = mv_reduced
-            ksp_replay.b_vec = rhs_reduced
-            ksp_replay.precond_fn = None
-            ksp_replay.x0_vec = x0_reduced
-            ksp_replay.precond_side = gmres_precond_side
-            ksp_replay.solver_kind = _solver_kind(solve_method)[0]
+        )
         force_full_decision = rhs1_pas_force_full_decision_from_env(
             enabled=bool(pas_precond_force_collision),
             has_pas=op.fblock.pas is not None,
@@ -12463,60 +12472,58 @@ def solve_v3_full_system_linear_gmres(
                             if jnp.isfinite(r1) and (not jnp.isfinite(r0) or float(r1) < float(r0)):
                                 x0 = x0_recycled
             if not host_dense_shortcut_full:
-                rhs1_progress_notes.krylov_start()
-                _mark("rhs1_krylov_solve_start")
-                result, residual_vec = _solve_linear_with_residual(
+                result, residual_vec, _primary_elapsed_s = (
+                    rhs1_run_primary_krylov_and_update_replay(
+                        replay_state=ksp_replay,
+                        matvec_fn=mv,
+                        b_vec=rhs,
+                        precond_fn=preconditioner_full,
+                        x0_vec=x0,
+                        tol=float(tol),
+                        atol=float(atol),
+                        restart=int(restart),
+                        maxiter=maxiter,
+                        solve_method=solve_method,
+                        precond_side=gmres_precond_side,
+                        solve_linear=_solve_linear_with_residual,
+                        solver_kind=_solver_kind(solve_method)[0],
+                        returns_residual_vec=True,
+                        current_residual_vec=residual_vec,
+                        result_ready=_block_gmres_result_ready,
+                        progress_start=rhs1_progress_notes.krylov_start,
+                        mark=_mark,
+                        mark_start="rhs1_krylov_solve_start",
+                        mark_done="rhs1_krylov_solve_done",
+                        block_residual_until_ready=True,
+                    )
+                )
+            result, residual_vec, _accepted, _retry_elapsed_s = (
+                rhs1_retry_without_preconditioner_if_nonfinite(
+                    allowed=(not host_dense_shortcut_full) and preconditioner_full is not None,
+                    replay_state=ksp_replay,
+                    current_result=result,
+                    current_residual_vec=residual_vec,
                     matvec_fn=mv,
                     b_vec=rhs,
-                    precond_fn=preconditioner_full,
                     x0_vec=x0,
-                    tol_val=tol,
-                    atol_val=atol,
-                    restart_val=restart,
-                    maxiter_val=maxiter,
-                    solve_method_val=solve_method,
+                    tol=float(tol),
+                    atol=float(atol),
+                    restart=int(restart),
+                    maxiter=maxiter,
+                    solve_method=solve_method,
                     precond_side=gmres_precond_side,
+                    solve_linear=_solve_linear_with_residual,
+                    solver_kind=_solver_kind(solve_method)[0],
+                    result_is_finite=_gmres_result_is_finite,
+                    returns_residual_vec=True,
+                    result_ready=_block_gmres_result_ready,
+                    mark=_mark,
+                    mark_start="rhs1_krylov_solve_retry_start",
+                    mark_done="rhs1_krylov_solve_retry_done",
+                    block_residual_until_ready=True,
+                    emit=emit,
                 )
-                result = _block_gmres_result_ready(result)
-                try:
-                    jax.block_until_ready(residual_vec)
-                except Exception:
-                    pass
-                _mark("rhs1_krylov_solve_done")
-                ksp_replay.matvec_fn = mv
-                ksp_replay.b_vec = rhs
-                ksp_replay.precond_fn = preconditioner_full
-                ksp_replay.x0_vec = x0
-                ksp_replay.precond_side = gmres_precond_side
-                ksp_replay.solver_kind = _solver_kind(solve_method)[0]
-            if (not host_dense_shortcut_full) and preconditioner_full is not None and (not _gmres_result_is_finite(result)):
-                if emit is not None:
-                    emit(0, "solve_v3_full_system_linear_gmres: preconditioned GMRES returned non-finite result; retrying without preconditioner")
-                _mark("rhs1_krylov_solve_retry_start")
-                result, residual_vec = _solve_linear_with_residual(
-                    matvec_fn=mv,
-                    b_vec=rhs,
-                    precond_fn=None,
-                    x0_vec=x0,
-                    tol_val=tol,
-                    atol_val=atol,
-                    restart_val=restart,
-                    maxiter_val=maxiter,
-                    solve_method_val=solve_method,
-                    precond_side=gmres_precond_side,
-                )
-                result = _block_gmres_result_ready(result)
-                try:
-                    jax.block_until_ready(residual_vec)
-                except Exception:
-                    pass
-                _mark("rhs1_krylov_solve_retry_done")
-                ksp_replay.matvec_fn = mv
-                ksp_replay.b_vec = rhs
-                ksp_replay.precond_fn = None
-                ksp_replay.x0_vec = x0
-                ksp_replay.precond_side = gmres_precond_side
-                ksp_replay.solver_kind = _solver_kind(solve_method)[0]
+            )
             # If GMRES does not reach the requested tolerance (common without preconditioning),
             # retry with a larger iteration budget and the more robust incremental mode.
             target = max(float(atol), float(tol) * float(rhs_norm))

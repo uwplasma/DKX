@@ -775,6 +775,143 @@ def rhs1_run_bicgstab_gmres_fallback_if_allowed(
     return candidate_result, candidate_residual_vec, preconditioner, True, elapsed_s
 
 
+def rhs1_run_primary_krylov_and_update_replay(
+    *,
+    replay_state: RHS1KSPReplayState,
+    matvec_fn: Any,
+    b_vec: Any,
+    precond_fn: Any,
+    x0_vec: Any,
+    tol: float,
+    atol: float,
+    restart: int,
+    maxiter: int | None,
+    solve_method: str,
+    precond_side: str,
+    solve_linear: Any,
+    solver_kind: str,
+    returns_residual_vec: bool,
+    current_residual_vec: Any = None,
+    result_ready: Any = None,
+    progress_start: Any = None,
+    mark: Any = None,
+    mark_start: str | None = None,
+    mark_done: str | None = None,
+    block_residual_until_ready: bool = False,
+    update_krylov_controls: bool = False,
+) -> tuple[Any, Any, float]:
+    """Run a primary Krylov solve and record the replay problem.
+
+    The legacy driver initialized replay restart/maxiter once near the top of
+    the solve. Most primary-solve replay updates only replaced the linear
+    problem and solver kind, so ``update_krylov_controls`` stays opt-in.
+    """
+
+    if progress_start is not None:
+        progress_start()
+    if mark is not None and mark_start is not None:
+        mark(mark_start)
+    started = time.perf_counter()
+    candidate_output = solve_linear(
+        matvec_fn=matvec_fn,
+        b_vec=b_vec,
+        precond_fn=precond_fn,
+        x0_vec=x0_vec,
+        tol_val=float(tol),
+        atol_val=float(atol),
+        restart_val=int(restart),
+        maxiter_val=maxiter,
+        solve_method_val=str(solve_method),
+        precond_side=str(precond_side),
+    )
+    if returns_residual_vec:
+        result, residual_vec = candidate_output
+    else:
+        result = candidate_output
+        residual_vec = current_residual_vec
+    if result_ready is not None:
+        result = result_ready(result)
+    if block_residual_until_ready and residual_vec is not None:
+        try:
+            residual_vec.block_until_ready()
+        except Exception:
+            pass
+    elapsed_s = time.perf_counter() - started
+    if mark is not None and mark_done is not None:
+        mark(mark_done)
+    replay_state.matvec_fn = matvec_fn
+    replay_state.b_vec = b_vec
+    replay_state.precond_fn = precond_fn
+    replay_state.x0_vec = x0_vec
+    replay_state.precond_side = str(precond_side)
+    replay_state.solver_kind = str(solver_kind)
+    if update_krylov_controls:
+        replay_state.restart = int(restart)
+        replay_state.maxiter = maxiter
+    return result, residual_vec, elapsed_s
+
+
+def rhs1_retry_without_preconditioner_if_nonfinite(
+    *,
+    allowed: bool,
+    replay_state: RHS1KSPReplayState,
+    current_result: Any,
+    current_residual_vec: Any,
+    matvec_fn: Any,
+    b_vec: Any,
+    x0_vec: Any,
+    tol: float,
+    atol: float,
+    restart: int,
+    maxiter: int | None,
+    solve_method: str,
+    precond_side: str,
+    solve_linear: Any,
+    solver_kind: str,
+    result_is_finite: Any,
+    returns_residual_vec: bool,
+    result_ready: Any = None,
+    mark: Any = None,
+    mark_start: str | None = None,
+    mark_done: str | None = None,
+    block_residual_until_ready: bool = False,
+    emit: Any = None,
+    message: str = (
+        "solve_v3_full_system_linear_gmres: preconditioned GMRES returned "
+        "non-finite result; retrying without preconditioner"
+    ),
+) -> tuple[Any, Any, bool, float]:
+    """Retry without a preconditioner after a nonfinite preconditioned solve."""
+
+    if not bool(allowed) or bool(result_is_finite(current_result)):
+        return current_result, current_residual_vec, False, 0.0
+    if emit is not None:
+        emit(0, message)
+    result, residual_vec, elapsed_s = rhs1_run_primary_krylov_and_update_replay(
+        replay_state=replay_state,
+        matvec_fn=matvec_fn,
+        b_vec=b_vec,
+        precond_fn=None,
+        x0_vec=x0_vec,
+        tol=float(tol),
+        atol=float(atol),
+        restart=int(restart),
+        maxiter=maxiter,
+        solve_method=solve_method,
+        precond_side=precond_side,
+        solve_linear=solve_linear,
+        solver_kind=solver_kind,
+        returns_residual_vec=bool(returns_residual_vec),
+        current_residual_vec=current_residual_vec,
+        result_ready=result_ready,
+        mark=mark,
+        mark_start=mark_start,
+        mark_done=mark_done,
+        block_residual_until_ready=bool(block_residual_until_ready),
+    )
+    return result, residual_vec, True, elapsed_s
+
+
 def rhs1_accept_smoother_candidate_and_update_replay(
     *,
     replay_state: RHS1KSPReplayState,
@@ -852,12 +989,14 @@ __all__ = [
     "rhs1_accept_sparse_retry_candidate_and_update_replay",
     "rhs1_residual_improves",
     "rhs1_accept_smoother_candidate_and_update_replay",
+    "rhs1_retry_without_preconditioner_if_nonfinite",
     "rhs1_run_bicgstab_gmres_fallback_if_allowed",
     "rhs1_run_fast_post_xblock_polish",
     "rhs1_run_collision_retry_if_allowed",
     "rhs1_run_linear_candidate_and_update_replay",
     "rhs1_run_measured_linear_candidate_and_update_replay",
     "rhs1_run_pas_schur_rescue_if_requested",
+    "rhs1_run_primary_krylov_and_update_replay",
     "rhs1_run_stage2_retry_if_allowed",
     "rhs1_solver_candidate_metrics",
 ]
