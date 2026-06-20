@@ -156,6 +156,7 @@ from .sparse.xblock import (
     FPXBlockGlobalCorrectionResult,
     FPXBlockHighXCorrectionContext,
     FPXBlockHighXCorrectionResult,
+    MatvecCounter,
     SparseSXBlockRescueContext,
     SparseSXBlockRescueResult,
     SparseXBlockExplicitSeedContext,
@@ -166,9 +167,13 @@ from .sparse.xblock import (
     SparseXBlockRescueBuildResult,
     SparseXBlockRescueSolveContext,
     SparseXBlockRescueSolveResult,
+    XBlockInitialGuessSetup,
+    XBlockKrylovMatvecSetup,
     accept_sparse_xblock_rescue_candidate,
     apply_sparse_xblock_explicit_seed,
     build_sparse_xblock_rescue_preconditioner,
+    build_xblock_krylov_matvec_setup,
+    prepare_xblock_initial_guess,
     run_fp_xblock_global_correction_stage,
     run_fp_xblock_highx_residual_correction_stage,
     run_sparse_sxblock_rescue_stage,
@@ -4627,40 +4632,8 @@ class XBlockLocalPreconditionerBuildResult:
     built: bool
 
 
-class MatvecCounter:
-    """Mutable matvec counter that preserves ``int(counter)`` call sites."""
-
-    def __init__(self, value: int = 0) -> None:
-        self.value = int(value)
-
-    def increment(self) -> None:
-        self.value += 1
-
-    def __iadd__(self, increment: int) -> "MatvecCounter":
-        self.value += int(increment)
-        return self
-
-    def __int__(self) -> int:
-        return int(self.value)
-
-    def __mod__(self, divisor: int) -> int:
-        return int(self.value) % int(divisor)
 
 
-@dataclass(frozen=True)
-class XBlockKrylovMatvecSetup:
-    """Active-DOF reduction and true-matvec context for x-block Krylov solves."""
-
-    progress_every: int
-    mv_count: MatvecCounter
-    xblock_linear_size: int
-    xblock_active_idx_np: np.ndarray | None
-    xblock_rhs: jnp.ndarray
-    reduce_full: ArrayFn
-    expand_reduced: ArrayFn
-    matvec_no_count: ArrayFn
-    matvec: ArrayFn
-    messages: tuple[tuple[int, str], ...]
 
 
 @dataclass(frozen=True)
@@ -5188,12 +5161,6 @@ class XBlockQIDeflatedStageResult:
     seed_solver: str
 
 
-@dataclass(frozen=True)
-class XBlockInitialGuessSetup:
-    """Accepted initial guess for an x-block Krylov solve."""
-
-    x0_full: jnp.ndarray | None
-    messages: tuple[tuple[int, str], ...]
 
 
 @dataclass(frozen=True)
@@ -8739,94 +8706,6 @@ def build_xblock_local_preconditioner(
     )
 
 
-def build_xblock_krylov_matvec_setup(
-    *,
-    op: object,
-    rhs: jnp.ndarray,
-    xblock_use_active_dof: bool,
-    active_idx: jnp.ndarray | None,
-    full_to_active: jnp.ndarray | None,
-    reduce_full_with_indices: Callable[[jnp.ndarray, jnp.ndarray], jnp.ndarray],
-    expand_reduced_with_map: Callable[[jnp.ndarray, jnp.ndarray], jnp.ndarray],
-    operator_matvec: ArrayFn,
-    elapsed_s: Callable[[], float],
-    emit: EmitFn | None,
-    env: Mapping[str, str] | None = None,
-    progress_every: int | None = None,
-    mv_count: MatvecCounter | None = None,
-    progress_label: str = "xblock_sparse_pc_gmres",
-    emit_active_message: bool = True,
-) -> XBlockKrylovMatvecSetup:
-    """Build reduced/full matvec closures and progress accounting."""
-
-    if progress_every is None:
-        progress_every_env = _env_value(env, "SFINCS_JAX_SPARSE_PC_PROGRESS_EVERY")
-        try:
-            progress_every = int(progress_every_env) if progress_every_env else 25
-        except ValueError:
-            progress_every = 25
-    progress_every = max(0, int(progress_every))
-    counter = mv_count if mv_count is not None else MatvecCounter(0)
-
-    linear_size = int(op.total_size)
-    active_idx_np: np.ndarray | None = None
-    xblock_rhs = rhs
-    messages: list[tuple[int, str]] = []
-    if bool(xblock_use_active_dof):
-        if active_idx is None or full_to_active is None:
-            raise ValueError("x-block active-DOF matvec setup requires active_idx and full_to_active maps.")
-        active_idx_np = np.asarray(jax.device_get(active_idx), dtype=np.int32)
-        linear_size = int(active_idx_np.shape[0])
-        xblock_rhs = rhs[active_idx]
-        if bool(emit_active_message):
-            messages.append(
-                (
-                    1,
-                    "solve_v3_full_system_linear_gmres: "
-                    f"{progress_label} active-DOF reduction enabled "
-                    f"(size={int(linear_size)}/{int(op.total_size)})",
-                )
-            )
-
-    def reduce_full(v_full: jnp.ndarray) -> jnp.ndarray:
-        if not bool(xblock_use_active_dof):
-            return v_full
-        assert active_idx is not None
-        return reduce_full_with_indices(v_full, active_idx)
-
-    def expand_reduced(v_vec: jnp.ndarray) -> jnp.ndarray:
-        if not bool(xblock_use_active_dof):
-            return v_vec
-        assert full_to_active is not None
-        return expand_reduced_with_map(v_vec, full_to_active)
-
-    def matvec_no_count(v: jnp.ndarray) -> jnp.ndarray:
-        x_full = expand_reduced(jnp.asarray(v, dtype=rhs.dtype))
-        y_full = operator_matvec(x_full)
-        return reduce_full(y_full)
-
-    def matvec(v: jnp.ndarray) -> jnp.ndarray:
-        counter.increment()
-        if emit is not None and progress_every > 0 and int(counter) % progress_every == 0:
-            emit(
-                1,
-                "solve_v3_full_system_linear_gmres: "
-                f"{progress_label} matvecs={int(counter)} elapsed_s={float(elapsed_s()):.3f}",
-            )
-        return matvec_no_count(v)
-
-    return XBlockKrylovMatvecSetup(
-        progress_every=int(progress_every),
-        mv_count=counter,
-        xblock_linear_size=int(linear_size),
-        xblock_active_idx_np=active_idx_np,
-        xblock_rhs=jnp.asarray(xblock_rhs, dtype=rhs.dtype),
-        reduce_full=reduce_full,
-        expand_reduced=expand_reduced,
-        matvec_no_count=matvec_no_count,
-        matvec=matvec,
-        messages=tuple(messages),
-    )
 
 
 def _normalized_equilibration_norm(value: str) -> str:
@@ -10092,39 +9971,6 @@ def apply_xblock_global_coupling_stage(
         )
 
 
-def prepare_xblock_initial_guess(
-    *,
-    x0: object | None,
-    xblock_rhs: jnp.ndarray,
-    full_rhs: jnp.ndarray,
-    xblock_use_active_dof: bool,
-    reduce_full: ArrayFn,
-) -> XBlockInitialGuessSetup:
-    """Accept a user-provided initial guess if its shape matches the active x-block solve."""
-
-    if x0 is None:
-        return XBlockInitialGuessSetup(x0_full=None, messages=())
-    x0_arr = jnp.asarray(x0, dtype=jnp.float64)
-    xblock_shape = tuple(xblock_rhs.shape)
-    full_shape = tuple(full_rhs.shape)
-    if x0_arr.shape == xblock_rhs.shape:
-        return XBlockInitialGuessSetup(x0_full=x0_arr, messages=())
-    if bool(xblock_use_active_dof) and x0_arr.shape == full_rhs.shape:
-        return XBlockInitialGuessSetup(
-            x0_full=jnp.asarray(reduce_full(x0_arr), dtype=jnp.float64),
-            messages=(),
-        )
-    expected = f"expected={xblock_shape}" + (f" or {full_shape}" if bool(xblock_use_active_dof) else "")
-    return XBlockInitialGuessSetup(
-        x0_full=None,
-        messages=(
-            (
-                1,
-                "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
-                f"ignoring incompatible x0 shape={tuple(x0_arr.shape)} {expected}",
-            ),
-        ),
-    )
 
 
 def prepare_fortran_reduced_xblock_initial_guess(
@@ -13149,6 +12995,8 @@ __all__ = [
     "DirectTailTrueActiveRescuePolicy",
     "DirectTailCoupledCoarseRescuePolicy",
     "MatvecCounter",
+    "XBlockInitialGuessSetup",
+    "XBlockKrylovMatvecSetup",
     "XBlockAssembledOperatorDiagnosticsContext",
     "XBlockSparsePCCoreDiagnosticsContext",
     "XBlockSideProbeDiagnosticsContext",
@@ -13302,6 +13150,7 @@ __all__ = [
     "build_xblock_qi_device_preconditioner_metadata",
     "build_xblock_qi_device_setup_config",
     "build_xblock_krylov_progress_callbacks",
+    "build_xblock_krylov_matvec_setup",
     "resolve_xblock_qi_deflated_policy_setup",
     "resolve_xblock_krylov_control_setup",
     "build_sparse_pc_active_dof_setup",
@@ -13327,6 +13176,7 @@ __all__ = [
     "fp_xblock_global_correction_metadata",
     "fp_xblock_highx_residual_correction_metadata",
     "prepare_fortran_reduced_xblock_initial_guess",
+    "prepare_xblock_initial_guess",
     "resolve_fortran_reduced_sparse_pc_backend",
     "resolve_fortran_reduced_xblock_factor_policy",
     "resolve_fortran_reduced_xblock_global_coupling_policy",

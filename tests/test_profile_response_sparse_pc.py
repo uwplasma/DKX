@@ -310,6 +310,7 @@ def test_sparse_xblock_module_reexports_match_compat_layer() -> None:
     """The split sparse x-block module keeps legacy sparse_pc imports stable."""
 
     moved_names = (
+        "MatvecCounter",
         "SparseXBlockRescueBuildContext",
         "SparseXBlockExplicitSeedContext",
         "SparseXBlockRescueSolveContext",
@@ -317,8 +318,12 @@ def test_sparse_xblock_module_reexports_match_compat_layer() -> None:
         "SparseSXBlockRescueContext",
         "FPXBlockGlobalCorrectionContext",
         "FPXBlockHighXCorrectionContext",
+        "XBlockInitialGuessSetup",
+        "XBlockKrylovMatvecSetup",
         "build_sparse_xblock_rescue_preconditioner",
+        "build_xblock_krylov_matvec_setup",
         "apply_sparse_xblock_explicit_seed",
+        "prepare_xblock_initial_guess",
         "run_sparse_xblock_rescue_solve_stage",
         "accept_sparse_xblock_rescue_candidate",
         "run_sparse_sxblock_rescue_stage",
