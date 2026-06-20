@@ -203,19 +203,21 @@ from .problems.profile_response.dense import (
     HostDenseReducedSolveContext,
     RHS1FullDenseFallbackContext,
     RHS1FullDenseFallbackStageContext,
+    RHS1FullHostDenseShortcutContext,
     RHS1DenseProbeStageContext,
     RHS1ReducedDenseFallbackAdmissionStageContext,
     RHS1ReducedDenseFallbackCandidateContext,
     RHS1ReducedDenseFallbackStageContext,
+    RHS1ReducedHostDenseShortcutContext,
     rhs1_dense_shortcut_setup_from_env,
     rhs1_early_dense_shortcut_decision,
     rhs1_fp_preconditioner_probe_kind_from_env,
     rhs1_post_krylov_dense_shortcut_decision,
     run_rhs1_dense_probe_stage,
     run_rhs1_full_dense_fallback_stage,
+    run_rhs1_full_host_dense_shortcut_stage,
     run_rhs1_reduced_dense_fallback_admission_stage,
-    solve_host_dense_full,
-    solve_host_dense_reduced,
+    run_rhs1_reduced_host_dense_shortcut_stage,
 )
 from .problems.profile_response.linear_solve import (
     ProfileLinearSolveContext,
@@ -8686,6 +8688,7 @@ def solve_v3_full_system_linear_gmres(
                                 x0_reduced = x0_recycled
         target_reduced = max(float(atol), float(tol) * float(jnp.linalg.norm(rhs_reduced)))
         target_stage2 = float(target_reduced)
+        res_reduced: GMRESSolveResult | None = None
         if op.fblock.fp is not None and op.fblock.pas is None and (not bool(op.include_phi1)):
             # FP RHS can have large norms; enforce a stricter absolute target for
             # stage2/strong-preconditioner decisions to avoid premature convergence
@@ -8767,18 +8770,6 @@ def solve_v3_full_system_linear_gmres(
                     f"{sparse_label} sparse-LU shortcut -> skip primary preconditioner build",
                 )
 
-        def _solve_host_dense_reduced(*, x0_dense: jnp.ndarray | None = None) -> GMRESSolveResult:
-            return solve_host_dense_reduced(
-                context=HostDenseReducedSolveContext(
-                    matvec=mv_reduced,
-                    rhs=rhs_reduced,
-                    active_size=int(active_size),
-                    constraint_scheme=int(op.constraint_scheme),
-                    has_fp=op.fblock.fp is not None,
-                    dense_matrix_cache=dense_matrix_cache,
-                ),
-                x0=x0_dense,
-            )
         if rhs1_bicgstab_kind is not None:
             if emit is not None:
                 emit(1, f"solve_v3_full_system_linear_gmres: RHSMode=1 BiCGStab preconditioner={rhs1_bicgstab_kind}")
@@ -9014,26 +9005,32 @@ def solve_v3_full_system_linear_gmres(
                                 f"({type(exc).__name__}: {exc})",
                             )
         if host_dense_shortcut:
-            _mark("rhs1_host_dense_shortcut_start")
-            if emit is not None:
-                emit(
-                    0,
-                    "solve_v3_full_system_linear_gmres: accelerator FP small system -> "
-                    f"using host dense shortcut (size={int(active_size)})",
-                )
-            res_reduced = _solve_host_dense_reduced(x0_dense=x0_reduced)
-            _mark("rhs1_host_dense_shortcut_done")
-            early_dense_shortcut = True
-            probe_shortcut = True
-            rhs1_record_ksp_replay_problem(
-                ksp_replay,
-                matvec_fn=mv_reduced,
-                b_vec=rhs_reduced,
-                precond_fn=None,
-                x0_vec=x0_reduced,
-                precond_side="none",
-                solver_kind=_solver_kind("incremental")[0],
+            host_dense_shortcut_outcome = run_rhs1_reduced_host_dense_shortcut_stage(
+                context=RHS1ReducedHostDenseShortcutContext(
+                    enabled=True,
+                    solve_context=HostDenseReducedSolveContext(
+                        matvec=mv_reduced,
+                        rhs=rhs_reduced,
+                        active_size=int(active_size),
+                        constraint_scheme=int(op.constraint_scheme),
+                        has_fp=op.fblock.fp is not None,
+                        dense_matrix_cache=dense_matrix_cache,
+                    ),
+                    current_result=None,
+                    x0=x0_reduced,
+                    active_size=int(active_size),
+                    early_dense_shortcut=bool(early_dense_shortcut),
+                    probe_shortcut=bool(probe_shortcut),
+                ),
+                replay_state=ksp_replay,
+                record_replay_problem=rhs1_record_ksp_replay_problem,
+                solver_kind=_solver_kind,
+                emit=emit,
+                mark=_mark,
             )
+            res_reduced = host_dense_shortcut_outcome.result
+            early_dense_shortcut = bool(host_dense_shortcut_outcome.early_dense_shortcut)
+            probe_shortcut = bool(host_dense_shortcut_outcome.probe_shortcut)
         sparse_operator_admission = rhs1_sparse_operator_admission(
             operator_mode=sparse_operator_mode,
             use_matvec=bool(sparse_use_matvec),
@@ -9243,7 +9240,8 @@ def solve_v3_full_system_linear_gmres(
             solver_kind=_solver_kind,
             emit=emit,
         )
-        res_reduced = dense_probe_result.result
+        if dense_probe_result.result is not None:
+            res_reduced = dense_probe_result.result
         x0_reduced = dense_probe_result.x0_reduced
         early_dense_shortcut = bool(dense_probe_result.early_dense_shortcut)
         probe_shortcut = bool(dense_probe_result.probe_shortcut)
@@ -11933,16 +11931,6 @@ def solve_v3_full_system_linear_gmres(
                 solve_method_kind=str(solve_method_kind),
             )
 
-            def _solve_host_dense_full(*, x0_dense: jnp.ndarray | None = None) -> tuple[GMRESSolveResult, jnp.ndarray]:
-                return solve_host_dense_full(
-                    context=HostDenseFullSolveContext(
-                        matvec=mv,
-                        rhs=rhs,
-                        total_size=int(op.total_size),
-                    ),
-                    x0=x0_dense,
-                )
-
             def _build_rhs1_preconditioner_full():
                 return build_rhs1_full_preconditioner(
                     context=RHS1FullPreconditionerBuildContext(
@@ -11981,24 +11969,27 @@ def solve_v3_full_system_linear_gmres(
             preconditioner_full = base_precond_setup.preconditioner
             bicgstab_preconditioner_full = base_precond_setup.bicgstab_preconditioner
             if host_dense_shortcut_full:
-                _mark("rhs1_host_dense_shortcut_start")
-                if emit is not None:
-                    emit(
-                        0,
-                        "solve_v3_full_system_linear_gmres: accelerator FP small system -> "
-                        f"using host dense shortcut (size={int(op.total_size)})",
+                host_dense_shortcut_full_outcome = run_rhs1_full_host_dense_shortcut_stage(
+                    context=RHS1FullHostDenseShortcutContext(
+                        enabled=True,
+                        solve_context=HostDenseFullSolveContext(
+                            matvec=mv,
+                            rhs=rhs,
+                            total_size=int(op.total_size),
+                        ),
+                        current_result=None,
+                        current_residual_vec=residual_vec,
+                        x0=x0,
+                        total_size=int(op.total_size),
+                    ),
+                    replay_state=ksp_replay,
+                    record_replay_problem=rhs1_record_ksp_replay_problem,
+                    solver_kind=_solver_kind,
+                    emit=emit,
+                    mark=_mark,
                 )
-                result, residual_vec = _solve_host_dense_full(x0_dense=x0)
-                _mark("rhs1_host_dense_shortcut_done")
-                rhs1_record_ksp_replay_problem(
-                    ksp_replay,
-                    matvec_fn=mv,
-                    b_vec=rhs,
-                    precond_fn=None,
-                    x0_vec=x0,
-                    precond_side="none",
-                    solver_kind=_solver_kind("incremental")[0],
-                )
+                result = host_dense_shortcut_full_outcome.result
+                residual_vec = host_dense_shortcut_full_outcome.residual_vec
             if recycle_basis_use and (not host_dense_shortcut_full):
                 basis_full: list[jnp.ndarray] = []
                 for vec in recycle_basis_use:

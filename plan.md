@@ -319,6 +319,10 @@ Recent checkpoints:
   fallback thresholds, constraintScheme=0 force-dense semantics,
   sparse-preferred skip messaging, and shortcut state live in the dense policy
   module.
+- RHSMode=1 reduced and full host dense shortcut execution now use tested
+  `profile_response.dense` stage helpers. The helpers own host dense
+  solve execution, progress markers/messages, and KSP replay-record handoff;
+  the driver keeps only shortcut admission and branch routing.
 - RHSMode=1 PAS preconditioner probe/default routing now uses tested
   PAS-policy helpers for env parsing, tokamak-like Schur defaulting, heavy-path
   admission, large-system collision skip, and residual-threshold decisions
@@ -462,10 +466,10 @@ Recent checkpoints:
 - `cb295ce` Extract sparse pattern setup.
 - `4b6a5b4` Extract sparse factor policy.
 
-Current source-size snapshot after post-Krylov dense-shortcut policy extraction:
+Current source-size snapshot after host dense shortcut stage extraction:
 
-- `sfincs_jax/v3_driver.py`: `15015` lines.
-- `solve_v3_full_system_linear_gmres`: `10264` lines.
+- `sfincs_jax/v3_driver.py`: `15006` lines.
+- `solve_v3_full_system_linear_gmres`: `10253` lines.
 - `sfincs_jax/v3_results.py`: `119` lines.
 - `sfincs_jax/rhs1_ksp_diagnostics.py`: `306` lines.
 - `sfincs_jax/rhs1_pas_policy.py`: `889` lines.
@@ -474,7 +478,7 @@ Current source-size snapshot after post-Krylov dense-shortcut policy extraction:
 - `sfincs_jax/problems/profile_response/residual.py`: `981` lines.
 - `sfincs_jax/problems/profile_response/handoff.py`: `1093` lines.
 - `sfincs_jax/problems/profile_response/policies.py`: `3577` lines.
-- `sfincs_jax/problems/profile_response/dense.py`: `1504` lines.
+- `sfincs_jax/problems/profile_response/dense.py`: `1650` lines.
 - `sfincs_jax/problems/profile_response/linear_solve.py`: `487` lines.
 - `sfincs_jax/problems/profile_response/preconditioner_build.py`: `662` lines.
 - `sfincs_jax/problems/profile_response/active_projection.py`: `203` lines.
@@ -484,6 +488,19 @@ Current source-size snapshot after post-Krylov dense-shortcut policy extraction:
 
 Recent local validation:
 
+- Host dense shortcut stage extraction:
+  `tests/test_profile_response_dense.py` plus previously failing full-assembly,
+  Schwarz heuristic, Schur heuristic, and benchmark-variant CI tests passed
+  (`48 passed in 26.87 s`).
+- Broad profile-response/RHSMode=1 shard after host dense shortcut stage
+  extraction:
+  `tests/test_profile_response_*.py tests/test_rhs1_*.py
+  tests/test_newton_krylov_diagnostics.py tests/test_pas_smoother.py`
+  passed (`1332 passed in 86.06 s`).
+- Hygiene after host dense shortcut stage extraction:
+  `py_compile`, `ruff check`, `compileall`, `git diff --check`, and
+  `python scripts/check_repo_size.py` passed. Repo-size audit reported no
+  reviewed files above 2 MiB.
 - Post-Krylov dense-shortcut policy extraction:
   `tests/test_profile_response_dense.py` passed (`39 passed in 1.01 s`).
 - Broad profile-response/RHSMode=1 shard after post-Krylov dense-shortcut

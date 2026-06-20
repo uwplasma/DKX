@@ -12,14 +12,18 @@ from sfincs_jax.problems.profile_response.dense import (
     RHS1DenseProbeStageContext,
     RHS1FullDenseFallbackContext,
     RHS1FullDenseFallbackStageContext,
+    RHS1FullHostDenseShortcutContext,
     RHS1ReducedDenseFallbackAdmissionStageContext,
     RHS1ReducedDenseFallbackCandidateContext,
     RHS1ReducedDenseFallbackStageContext,
+    RHS1ReducedHostDenseShortcutContext,
     run_rhs1_full_dense_fallback_candidate,
     run_rhs1_full_dense_fallback_stage,
+    run_rhs1_full_host_dense_shortcut_stage,
     run_rhs1_dense_probe_stage,
     run_rhs1_reduced_dense_fallback_admission_stage,
     run_rhs1_reduced_dense_fallback_stage,
+    run_rhs1_reduced_host_dense_shortcut_stage,
     rhs1_dense_fallback_thresholds_from_env,
     rhs1_dense_probe_admission,
     rhs1_dense_probe_enabled_from_env,
@@ -710,6 +714,129 @@ def test_host_dense_full_lstsq_handles_rectangular_operator(monkeypatch) -> None
     assert result.x.tolist() == pytest.approx(expected.tolist())
     assert residual.tolist() == pytest.approx((np.asarray(rhs) - a_np @ expected).tolist())
     assert float(result.residual_norm) == pytest.approx(float(np.linalg.norm(np.asarray(residual))))
+
+
+def test_reduced_host_dense_shortcut_stage_preserves_disabled_state() -> None:
+    current = GMRESSolveResult(x=jnp.ones(2), residual_norm=jnp.asarray(3.0))
+    result = run_rhs1_reduced_host_dense_shortcut_stage(
+        context=RHS1ReducedHostDenseShortcutContext(
+            enabled=False,
+            solve_context=HostDenseReducedSolveContext(
+                matvec=lambda x: x,
+                rhs=jnp.asarray([1.0, 2.0]),
+                active_size=2,
+                constraint_scheme=1,
+                has_fp=True,
+            ),
+            current_result=current,
+            x0=None,
+            active_size=2,
+            early_dense_shortcut=True,
+            probe_shortcut=True,
+        ),
+        replay_state=object(),
+        record_replay_problem=lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            AssertionError("replay should not be recorded")
+        ),
+        solver_kind=lambda method: (method, method),
+    )
+
+    assert result.result is current
+    assert result.early_dense_shortcut
+    assert result.probe_shortcut
+
+
+def test_reduced_host_dense_shortcut_stage_solves_and_records_replay() -> None:
+    calls: dict[str, dict[str, object]] = {}
+    messages: list[tuple[int, str]] = []
+    marks: list[str] = []
+    replay_state = object()
+    a_np = np.asarray([[2.0, 0.0], [0.0, 4.0]])
+    rhs = jnp.asarray([4.0, 12.0])
+
+    def record_replay_problem(state, **kwargs):
+        calls["record"] = {"state": state, **kwargs}
+
+    result = run_rhs1_reduced_host_dense_shortcut_stage(
+        context=RHS1ReducedHostDenseShortcutContext(
+            enabled=True,
+            solve_context=HostDenseReducedSolveContext(
+                matvec=lambda x: jnp.asarray(a_np) @ x,
+                rhs=rhs,
+                active_size=2,
+                constraint_scheme=1,
+                has_fp=True,
+                dense_matrix_cache=a_np,
+            ),
+            current_result=GMRESSolveResult(x=jnp.zeros(2), residual_norm=jnp.asarray(9.0)),
+            x0=jnp.zeros(2),
+            active_size=2,
+            early_dense_shortcut=False,
+            probe_shortcut=False,
+        ),
+        replay_state=replay_state,
+        record_replay_problem=record_replay_problem,
+        solver_kind=lambda method: (f"kind:{method}", "unused"),
+        emit=lambda level, msg: messages.append((level, msg)),
+        mark=marks.append,
+    )
+
+    assert result.result.x.tolist() == pytest.approx([2.0, 3.0])
+    assert result.early_dense_shortcut
+    assert result.probe_shortcut
+    assert calls["record"]["state"] is replay_state
+    assert calls["record"]["precond_side"] == "none"
+    assert calls["record"]["solver_kind"] == "kind:incremental"
+    assert marks == ["rhs1_host_dense_shortcut_start", "rhs1_host_dense_shortcut_done"]
+    assert messages == [(
+        0,
+        "solve_v3_full_system_linear_gmres: accelerator FP small system -> "
+        "using host dense shortcut (size=2)",
+    )]
+
+
+def test_full_host_dense_shortcut_stage_solves_and_records_replay() -> None:
+    calls: dict[str, dict[str, object]] = {}
+    messages: list[tuple[int, str]] = []
+    marks: list[str] = []
+    replay_state = object()
+    a_np = np.asarray([[3.0, 0.0], [0.0, 5.0]])
+    rhs = jnp.asarray([6.0, 15.0])
+
+    def record_replay_problem(state, **kwargs):
+        calls["record"] = {"state": state, **kwargs}
+
+    result = run_rhs1_full_host_dense_shortcut_stage(
+        context=RHS1FullHostDenseShortcutContext(
+            enabled=True,
+            solve_context=HostDenseFullSolveContext(
+                matvec=lambda x: jnp.asarray(a_np) @ x,
+                rhs=rhs,
+                total_size=2,
+            ),
+            current_result=GMRESSolveResult(x=jnp.zeros(2), residual_norm=jnp.asarray(9.0)),
+            current_residual_vec=jnp.ones(2),
+            x0=jnp.zeros(2),
+            total_size=2,
+        ),
+        replay_state=replay_state,
+        record_replay_problem=record_replay_problem,
+        solver_kind=lambda method: (f"kind:{method}", "unused"),
+        emit=lambda level, msg: messages.append((level, msg)),
+        mark=marks.append,
+    )
+
+    assert result.result.x.tolist() == pytest.approx([2.0, 3.0])
+    assert result.residual_vec.tolist() == pytest.approx([0.0, 0.0])
+    assert calls["record"]["state"] is replay_state
+    assert calls["record"]["precond_side"] == "none"
+    assert calls["record"]["solver_kind"] == "kind:incremental"
+    assert marks == ["rhs1_host_dense_shortcut_start", "rhs1_host_dense_shortcut_done"]
+    assert messages == [(
+        0,
+        "solve_v3_full_system_linear_gmres: accelerator FP small system -> "
+        "using host dense shortcut (size=2)",
+    )]
 
 
 def test_rhs1_dense_probe_enabled_from_env_defaults_on_and_respects_false(

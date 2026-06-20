@@ -43,6 +43,48 @@ class HostDenseFullSolveContext:
 
 
 @dataclass(frozen=True)
+class RHS1ReducedHostDenseShortcutContext:
+    """Inputs for reduced-system host dense shortcut execution."""
+
+    enabled: bool
+    solve_context: HostDenseReducedSolveContext
+    current_result: GMRESSolveResult | None
+    x0: jnp.ndarray | None
+    active_size: int
+    early_dense_shortcut: bool
+    probe_shortcut: bool
+
+
+@dataclass(frozen=True)
+class RHS1ReducedHostDenseShortcutResult:
+    """Outputs from reduced-system host dense shortcut execution."""
+
+    result: GMRESSolveResult
+    early_dense_shortcut: bool
+    probe_shortcut: bool
+
+
+@dataclass(frozen=True)
+class RHS1FullHostDenseShortcutContext:
+    """Inputs for full-system host dense shortcut execution."""
+
+    enabled: bool
+    solve_context: HostDenseFullSolveContext
+    current_result: GMRESSolveResult | None
+    current_residual_vec: jnp.ndarray | None
+    x0: jnp.ndarray | None
+    total_size: int
+
+
+@dataclass(frozen=True)
+class RHS1FullHostDenseShortcutResult:
+    """Outputs from full-system host dense shortcut execution."""
+
+    result: GMRESSolveResult
+    residual_vec: jnp.ndarray | None
+
+
+@dataclass(frozen=True)
 class RHS1ReducedDenseFallbackCandidateContext:
     """Inputs for the reduced RHSMode=1 dense fallback candidate.
 
@@ -164,7 +206,7 @@ class RHS1DenseProbeStageContext:
     matvec: Callable[[jnp.ndarray], jnp.ndarray]
     rhs: jnp.ndarray
     preconditioner: Callable[[jnp.ndarray], jnp.ndarray] | None
-    current_result: GMRESSolveResult
+    current_result: GMRESSolveResult | None
     x0_reduced: jnp.ndarray | None
     target: float
     active_size: int
@@ -185,7 +227,7 @@ class RHS1DenseProbeStageContext:
 class RHS1DenseProbeStageResult:
     """Outputs from the reduced dense-probe shortcut/seed stage."""
 
-    result: GMRESSolveResult
+    result: GMRESSolveResult | None
     x0_reduced: jnp.ndarray | None
     early_dense_shortcut: bool
     probe_shortcut: bool
@@ -958,6 +1000,104 @@ def solve_host_dense_full(
     return GMRESSolveResult(x=x_dense, residual_norm=jnp.linalg.norm(residual_vec)), residual_vec
 
 
+def run_rhs1_reduced_host_dense_shortcut_stage(
+    *,
+    context: RHS1ReducedHostDenseShortcutContext,
+    replay_state,
+    record_replay_problem: Callable[..., None],
+    solver_kind: Callable[[str], tuple[str, str]],
+    emit: Callable[[int, str], None] | None = None,
+    mark: Callable[[str], None] | None = None,
+) -> RHS1ReducedHostDenseShortcutResult:
+    """Run the reduced host dense shortcut and record replay metadata."""
+
+    if not bool(context.enabled):
+        if context.current_result is None:
+            raise ValueError("disabled reduced host dense shortcut needs current_result")
+        return RHS1ReducedHostDenseShortcutResult(
+            result=context.current_result,
+            early_dense_shortcut=bool(context.early_dense_shortcut),
+            probe_shortcut=bool(context.probe_shortcut),
+        )
+
+    if mark is not None:
+        mark("rhs1_host_dense_shortcut_start")
+    if emit is not None:
+        emit(
+            0,
+            "solve_v3_full_system_linear_gmres: accelerator FP small system -> "
+            f"using host dense shortcut (size={int(context.active_size)})",
+        )
+    result = solve_host_dense_reduced(
+        context=context.solve_context,
+        x0=context.x0,
+    )
+    if mark is not None:
+        mark("rhs1_host_dense_shortcut_done")
+    record_replay_problem(
+        replay_state,
+        matvec_fn=context.solve_context.matvec,
+        b_vec=context.solve_context.rhs,
+        precond_fn=None,
+        x0_vec=context.x0,
+        precond_side="none",
+        solver_kind=solver_kind("incremental")[0],
+    )
+    return RHS1ReducedHostDenseShortcutResult(
+        result=result,
+        early_dense_shortcut=True,
+        probe_shortcut=True,
+    )
+
+
+def run_rhs1_full_host_dense_shortcut_stage(
+    *,
+    context: RHS1FullHostDenseShortcutContext,
+    replay_state,
+    record_replay_problem: Callable[..., None],
+    solver_kind: Callable[[str], tuple[str, str]],
+    emit: Callable[[int, str], None] | None = None,
+    mark: Callable[[str], None] | None = None,
+) -> RHS1FullHostDenseShortcutResult:
+    """Run the full-system host dense shortcut and record replay metadata."""
+
+    if not bool(context.enabled):
+        if context.current_result is None:
+            raise ValueError("disabled full host dense shortcut needs current_result")
+        return RHS1FullHostDenseShortcutResult(
+            result=context.current_result,
+            residual_vec=context.current_residual_vec,
+        )
+
+    if mark is not None:
+        mark("rhs1_host_dense_shortcut_start")
+    if emit is not None:
+        emit(
+            0,
+            "solve_v3_full_system_linear_gmres: accelerator FP small system -> "
+            f"using host dense shortcut (size={int(context.total_size)})",
+        )
+    result, residual_vec = solve_host_dense_full(
+        context=context.solve_context,
+        x0=context.x0,
+    )
+    if mark is not None:
+        mark("rhs1_host_dense_shortcut_done")
+    record_replay_problem(
+        replay_state,
+        matvec_fn=context.solve_context.matvec,
+        b_vec=context.solve_context.rhs,
+        precond_fn=None,
+        x0_vec=context.x0,
+        precond_side="none",
+        solver_kind=solver_kind("incremental")[0],
+    )
+    return RHS1FullHostDenseShortcutResult(
+        result=result,
+        residual_vec=residual_vec,
+    )
+
+
 def solve_rhs1_reduced_dense_fallback_candidate(
     *,
     context: RHS1ReducedDenseFallbackCandidateContext,
@@ -1478,8 +1618,12 @@ __all__ = [
     "RHS1DenseShortcutSetup",
     "HostDenseFullSolveContext",
     "HostDenseReducedSolveContext",
+    "RHS1FullHostDenseShortcutContext",
+    "RHS1FullHostDenseShortcutResult",
     "RHS1FullDenseFallbackContext",
     "RHS1FullDenseFallbackStageContext",
+    "RHS1ReducedHostDenseShortcutContext",
+    "RHS1ReducedHostDenseShortcutResult",
     "RHS1ReducedDenseFallbackAdmissionStageContext",
     "RHS1ReducedDenseFallbackCandidateContext",
     "RHS1ReducedDenseFallbackStageContext",
@@ -1495,9 +1639,11 @@ __all__ = [
     "resolve_rhs1_reduced_dense_fallback_admission",
     "run_rhs1_full_dense_fallback_candidate",
     "run_rhs1_full_dense_fallback_stage",
+    "run_rhs1_full_host_dense_shortcut_stage",
     "run_rhs1_dense_probe_stage",
     "run_rhs1_reduced_dense_fallback_admission_stage",
     "run_rhs1_reduced_dense_fallback_stage",
+    "run_rhs1_reduced_host_dense_shortcut_stage",
     "solve_rhs1_reduced_dense_fallback_candidate",
     "solve_host_dense_full",
     "solve_host_dense_reduced",
