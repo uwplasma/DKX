@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from sfincs_jax.rhs1_sparse_rescue_policy import (
+    RHS1FullSparseRescueSetupContext,
+    rhs1_full_sparse_rescue_setup,
     rhs1_resolved_sparse_rescue_ordering,
     rhs1_sparse_jax_config_from_env,
     rhs1_sparse_operator_admission,
@@ -567,3 +569,98 @@ def test_rhs1_sparse_rescue_tail_skip_messages_format_policy_decisions() -> None
         "solve_v3_full_system_linear_gmres: GPU sparse fallback skipped after "
         "pas_lite accept (residual=2.000e-03)",
     ),)
+
+
+def test_rhs1_full_sparse_rescue_setup_emits_large_cpu_lu_messages() -> None:
+    messages: list[tuple[int, str]] = []
+
+    setup = rhs1_full_sparse_rescue_setup(
+        RHS1FullSparseRescueSetupContext(
+            sparse_precond_mode="on",
+            sparse_precond_kind="auto",
+            has_fp=True,
+            has_pas=False,
+            residual_norm=1.0,
+            target=1.0e-8,
+            rhs_mode=1,
+            include_phi1=False,
+            size=4096,
+            sparse_max_size=1024,
+            precond_dtype="float64",
+            sparse_exact_lu=False,
+            use_implicit=False,
+            large_cpu_sparse_rescue=True,
+            sparse_jax_max_mb=128.0,
+            pas_fast_accept=False,
+            gpu_sparse_skip=False,
+            rhs1_precond_kind="point",
+            emit=lambda level, message: messages.append((level, message)),
+            host_sparse_direct_allowed=lambda **_kwargs: True,
+            large_cpu_sparse_exact_lu_allowed=lambda *, active_size: active_size > 1024,
+        )
+    )
+
+    assert setup.enabled
+    assert setup.kind_use == "scipy"
+    assert setup.sparse_exact_direct
+    assert setup.sparse_exact_lu
+    assert setup.large_cpu_sparse_rescue
+    assert setup.ordering.reason_size_large_cpu
+    assert setup.ordering.reason_large_cpu_exact_skips_targeted
+    assert messages == [
+        (
+            0,
+            "solve_v3_full_system_linear_gmres: large CPU sparse LU rescue "
+            "(size=4096 > max=1024)",
+        ),
+        (
+            1,
+            "solve_v3_full_system_linear_gmres: exact large-CPU sparse LU selected "
+            "-> skipping targeted sparse xblock/sxblock rescue",
+        ),
+    ]
+
+
+def test_rhs1_full_sparse_rescue_setup_preserves_disable_reasons() -> None:
+    messages: list[tuple[int, str]] = []
+
+    setup = rhs1_full_sparse_rescue_setup(
+        RHS1FullSparseRescueSetupContext(
+            sparse_precond_mode="on",
+            sparse_precond_kind="jax",
+            has_fp=True,
+            has_pas=False,
+            residual_norm=2.0e-3,
+            target=1.0e-8,
+            rhs_mode=1,
+            include_phi1=False,
+            size=1000,
+            sparse_max_size=2000,
+            precond_dtype="float32",
+            sparse_exact_lu=False,
+            use_implicit=False,
+            large_cpu_sparse_rescue=False,
+            sparse_jax_max_mb=1.0,
+            pas_fast_accept=False,
+            gpu_sparse_skip=True,
+            rhs1_precond_kind="pas_lite",
+            emit=lambda level, message: messages.append((level, message)),
+        )
+    )
+
+    assert not setup.enabled
+    assert setup.kind_use == "jax"
+    assert not setup.sparse_exact_direct
+    assert not setup.sparse_exact_lu
+    assert setup.policy.sparse_jax_memory_disabled_message == (
+        "sparse_jax: disabled (est_mem=4.0 MB > max_mb=1.0)"
+    )
+    assert setup.ordering.reason_gpu_sparse_skip
+    assert messages == [
+        (1, "sparse_jax: disabled (est_mem=4.0 MB > max_mb=1.0)"),
+        (
+            1,
+            "solve_v3_full_system_linear_gmres: GPU sparse fallback skipped after "
+            "pas_lite accept (residual=2.000e-03)",
+        ),
+    ]

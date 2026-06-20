@@ -408,7 +408,9 @@ from .problems.profile_response.strong_preconditioning import (
     rhs1_strong_trigger_controls_from_env,
 )
 from .problems.profile_response.policies import (
+    RHS1FullSparseRescueSetupContext,
     parse_rhs1_pas_tz_guarded_structured_levels as _rhs1_pas_tz_guarded_structured_levels,
+    rhs1_full_sparse_rescue_setup,
     rhs1_qi_device_coupled_install_on_reject_requested as _rhs1_qi_device_coupled_install_on_reject_requested,
     rhs1_qi_device_extra_coarse_controls as _rhs1_qi_device_extra_coarse_controls,
     rhs1_qi_device_extra_coarse_metadata as _rhs1_qi_device_extra_coarse_metadata,
@@ -12422,61 +12424,46 @@ def solve_v3_full_system_linear_gmres(
             target=float(target),
         )
 
-        sparse_exact_direct = _rhsmode1_host_sparse_direct_allowed(
-            sparse_exact_lu=sparse_exact_lu,
-            use_implicit=bool(use_implicit),
-        )
-        sparse_policy = rhs1_sparse_rescue_policy_setup(
-            sparse_precond_mode=sparse_precond_mode,
-            sparse_precond_kind=sparse_precond_kind,
-            has_fp=op.fblock.fp is not None,
-            has_pas=op.fblock.pas is not None,
-            residual_norm=float(result.residual_norm),
-            target=float(target),
-            rhs_mode=int(op.rhs_mode),
-            include_phi1=bool(op.include_phi1),
-            size=int(op.total_size),
-            sparse_max_size=int(sparse_max_size),
-            precond_dtype=_precond_dtype(int(op.total_size)),
-            sparse_exact_direct=bool(sparse_exact_direct),
-            large_cpu_sparse_rescue=bool(large_cpu_sparse_rescue_full),
-            sparse_jax_max_mb=float(sparse_jax_config.max_mb),
-            pas_fast_accept=bool(pas_fast_accept),
-            gpu_sparse_skip=bool(
-                _rhs1_gpu_sparse_fallback_skip_allowed(
-                    op=op,
-                    rhs1_precond_kind=rhs1_precond_kind,
-                    use_active_dof_mode=False,
-                    residual_norm=float(result.residual_norm),
-                    target=float(target),
-                )
-            ),
-        )
-        sparse_order = sparse_policy.ordering
-        sparse_enabled = bool(sparse_policy.enabled)
-        sparse_kind_use = str(sparse_policy.kind_use)
-        if sparse_order.reason_size_large_cpu:
-            sparse_exact_lu = _rhsmode1_large_cpu_sparse_exact_lu_allowed(active_size=int(op.total_size))
-        if emit is not None:
-            for _level, _message in rhs1_sparse_rescue_initial_messages(
-                ordering=sparse_order,
+        full_sparse_setup = rhs1_full_sparse_rescue_setup(
+            RHS1FullSparseRescueSetupContext(
+                sparse_precond_mode=sparse_precond_mode,
+                sparse_precond_kind=sparse_precond_kind,
+                has_fp=op.fblock.fp is not None,
+                has_pas=op.fblock.pas is not None,
+                residual_norm=float(result.residual_norm),
+                target=float(target),
+                rhs_mode=int(op.rhs_mode),
+                include_phi1=bool(op.include_phi1),
                 size=int(op.total_size),
                 sparse_max_size=int(sparse_max_size),
-                sparse_jax_memory_disabled_message=sparse_policy.sparse_jax_memory_disabled_message,
-                large_cpu_sparse_exact_lu=bool(sparse_exact_lu),
-                large_cpu_label="large CPU sparse",
-            ):
-                emit(_level, _message)
+                precond_dtype=_precond_dtype(int(op.total_size)),
+                sparse_exact_lu=bool(sparse_exact_lu),
+                use_implicit=bool(use_implicit),
+                large_cpu_sparse_rescue=bool(large_cpu_sparse_rescue_full),
+                sparse_jax_max_mb=float(sparse_jax_config.max_mb),
+                pas_fast_accept=bool(pas_fast_accept),
+                gpu_sparse_skip=bool(
+                    _rhs1_gpu_sparse_fallback_skip_allowed(
+                        op=op,
+                        rhs1_precond_kind=rhs1_precond_kind,
+                        use_active_dof_mode=False,
+                        residual_norm=float(result.residual_norm),
+                        target=float(target),
+                    )
+                ),
+                rhs1_precond_kind=rhs1_precond_kind,
+                emit=emit,
+                host_sparse_direct_allowed=_rhsmode1_host_sparse_direct_allowed,
+                large_cpu_sparse_exact_lu_allowed=_rhsmode1_large_cpu_sparse_exact_lu_allowed,
+            )
+        )
+        sparse_order = full_sparse_setup.ordering
+        sparse_enabled = bool(full_sparse_setup.enabled)
+        sparse_kind_use = str(full_sparse_setup.kind_use)
+        sparse_exact_lu = bool(full_sparse_setup.sparse_exact_lu)
 
         dense_matrix_cache: np.ndarray | None = None
         host_sparse_direct_used = False
-        if emit is not None:
-            for _level, _message in rhs1_sparse_rescue_tail_skip_messages(
-                ordering=sparse_order,
-                residual_norm=float(result.residual_norm),
-                rhs1_precond_kind=rhs1_precond_kind,
-            ):
-                emit(_level, _message)
         if sparse_enabled and float(result.residual_norm) > target:
             if sparse_kind_use == "jax":
                 try:

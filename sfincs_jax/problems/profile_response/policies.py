@@ -2632,6 +2632,47 @@ class RHS1SparseRescuePolicySetup:
 
 
 @dataclass(frozen=True)
+class RHS1FullSparseRescueSetupContext:
+    """Inputs for full-system sparse-rescue setup and message emission."""
+
+    sparse_precond_mode: str
+    sparse_precond_kind: str
+    has_fp: bool
+    has_pas: bool
+    residual_norm: float
+    target: float
+    rhs_mode: int
+    include_phi1: bool
+    size: int
+    sparse_max_size: int
+    precond_dtype: Any
+    sparse_exact_lu: bool
+    use_implicit: bool
+    large_cpu_sparse_rescue: bool
+    sparse_jax_max_mb: float
+    pas_fast_accept: bool
+    gpu_sparse_skip: bool
+    rhs1_precond_kind: str
+    emit: Any = None
+    large_cpu_label: str = "large CPU sparse"
+    host_sparse_direct_allowed: Any = None
+    large_cpu_sparse_exact_lu_allowed: Any = None
+
+
+@dataclass(frozen=True)
+class RHS1FullSparseRescueSetupResult:
+    """Full-system sparse-rescue setup state handed back to the driver."""
+
+    policy: RHS1SparseRescuePolicySetup
+    ordering: RHS1SparseRescueOrdering
+    enabled: bool
+    kind_use: str
+    sparse_exact_direct: bool
+    sparse_exact_lu: bool
+    large_cpu_sparse_rescue: bool
+
+
+@dataclass(frozen=True)
 class RHS1SparseJAXConfig:
     """Environment-controlled sparse-JAX retry controls for RHSMode=1."""
 
@@ -3081,6 +3122,76 @@ def rhs1_sparse_rescue_tail_skip_messages(
     return tuple(messages)
 
 
+def rhs1_full_sparse_rescue_setup(
+    context: RHS1FullSparseRescueSetupContext,
+) -> RHS1FullSparseRescueSetupResult:
+    """Resolve full-system sparse-rescue policy and emit progress messages."""
+
+    if context.host_sparse_direct_allowed is None:
+        sparse_exact_direct = bool(context.sparse_exact_lu) and not bool(
+            context.use_implicit
+        )
+    else:
+        sparse_exact_direct = bool(
+            context.host_sparse_direct_allowed(
+                sparse_exact_lu=bool(context.sparse_exact_lu),
+                use_implicit=bool(context.use_implicit),
+            )
+        )
+    policy = rhs1_sparse_rescue_policy_setup(
+        sparse_precond_mode=context.sparse_precond_mode,
+        sparse_precond_kind=context.sparse_precond_kind,
+        has_fp=bool(context.has_fp),
+        has_pas=bool(context.has_pas),
+        residual_norm=float(context.residual_norm),
+        target=float(context.target),
+        rhs_mode=int(context.rhs_mode),
+        include_phi1=bool(context.include_phi1),
+        size=int(context.size),
+        sparse_max_size=int(context.sparse_max_size),
+        precond_dtype=context.precond_dtype,
+        sparse_exact_direct=bool(sparse_exact_direct),
+        large_cpu_sparse_rescue=bool(context.large_cpu_sparse_rescue),
+        sparse_jax_max_mb=float(context.sparse_jax_max_mb),
+        pas_fast_accept=bool(context.pas_fast_accept),
+        gpu_sparse_skip=bool(context.gpu_sparse_skip),
+    )
+    ordering = policy.ordering
+    sparse_exact_lu = bool(context.sparse_exact_lu)
+    if ordering.reason_size_large_cpu:
+        if context.large_cpu_sparse_exact_lu_allowed is None:
+            sparse_exact_lu = bool(context.sparse_exact_lu)
+        else:
+            sparse_exact_lu = bool(
+                context.large_cpu_sparse_exact_lu_allowed(active_size=int(context.size))
+            )
+    if context.emit is not None:
+        for level, message in rhs1_sparse_rescue_initial_messages(
+            ordering=ordering,
+            size=int(context.size),
+            sparse_max_size=int(context.sparse_max_size),
+            sparse_jax_memory_disabled_message=policy.sparse_jax_memory_disabled_message,
+            large_cpu_sparse_exact_lu=bool(sparse_exact_lu),
+            large_cpu_label=str(context.large_cpu_label),
+        ):
+            context.emit(level, message)
+        for level, message in rhs1_sparse_rescue_tail_skip_messages(
+            ordering=ordering,
+            residual_norm=float(context.residual_norm),
+            rhs1_precond_kind=str(context.rhs1_precond_kind),
+        ):
+            context.emit(level, message)
+    return RHS1FullSparseRescueSetupResult(
+        policy=policy,
+        ordering=ordering,
+        enabled=bool(policy.enabled),
+        kind_use=str(policy.kind_use),
+        sparse_exact_direct=bool(sparse_exact_direct),
+        sparse_exact_lu=bool(sparse_exact_lu),
+        large_cpu_sparse_rescue=bool(context.large_cpu_sparse_rescue),
+    )
+
+
 # From sfincs_jax.rhs1_sparse_polish_policy
 def rhs1_polish_enabled(*, env_name: str) -> bool:
     """Return whether a polish stage is enabled by its boolean-like env var."""
@@ -3390,6 +3501,8 @@ __all__ = (
     "RHS1QIDeviceRankBudget",
     "RHS1QIDeviceSetupSummary",
     "RHS1ScipyRescueControls",
+    "RHS1FullSparseRescueSetupContext",
+    "RHS1FullSparseRescueSetupResult",
     "RHS1SparseJAXConfig",
     "RHS1SparseOperatorAdmission",
     "RHS1SparsePreconditionerConfig",
@@ -3441,6 +3554,7 @@ __all__ = (
     "rhs1_qi_device_status_fields",
     "rhs1_qi_device_tail_block_required",
     "rhs1_resolved_sparse_rescue_ordering",
+    "rhs1_full_sparse_rescue_setup",
     "rhs1_scipy_rescue_abs_floor_after_xblock",
     "rhs1_scipy_rescue_active_size_allowed",
     "rhs1_scipy_rescue_controls_from_env",
