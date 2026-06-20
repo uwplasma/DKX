@@ -83,7 +83,12 @@ from sfincs_jax.problems.profile_response.sparse_pc import (
     XBlockPostSolveCorrectionResult,
     XBlockPhysicalResidual,
     XBlockSparsePCCompletionContext,
+    XBlockSparsePCFinalCoreState,
+    XBlockSparsePCFinalDeviceState,
+    XBlockSparsePCFinalMetadataStateContext,
+    XBlockSparsePCFinalNestedMetadata,
     XBlockSparsePCFinalPayloadContext,
+    XBlockSparsePCFinalPreflightState,
     XBlockSparsePCWorkEstimates,
     XBlockAssembledPreflightError,
     apply_fortran_reduced_xblock_global_coupling_stage,
@@ -178,6 +183,7 @@ from sfincs_jax.problems.profile_response.sparse_pc import (
     xblock_host_krylov_progress_message,
     xblock_sparse_pc_final_metadata_driver_scope_keys,
     xblock_sparse_pc_final_metadata_driver_state_keys,
+    xblock_sparse_pc_final_metadata_state_from_context,
     xblock_sparse_pc_final_metadata_state_from_driver_scope,
     xblock_krylov_state_from_first_attempt,
     xblock_krylov_state_from_gmres_fallback,
@@ -7704,6 +7710,42 @@ def test_xblock_sparse_pc_final_metadata_state_from_driver_scope_filters_scope()
     incomplete_scope.pop(missing)
     with pytest.raises(KeyError, match=missing):
         xblock_sparse_pc_final_metadata_state_from_driver_scope(incomplete_scope)
+
+
+def test_xblock_sparse_pc_final_metadata_state_context_matches_driver_scope() -> None:
+    keys = xblock_sparse_pc_final_metadata_driver_state_keys()
+    precomputed_metadata = {
+        "xblock_assembled_operator_result_metadata": {"assembled": True},
+        "xblock_coarse_correction_metadata": {"coarse": True},
+        "xblock_qi_seed_preconditioner_metadata": {"seed": True},
+        "xblock_qi_device_preconditioner_metadata": {"device": True},
+        "xblock_qi_deflated_preconditioner_metadata": {"deflated": True},
+        "xblock_side_probe_metadata": {"side": True},
+    }
+    scope = {key: object() for key in keys}
+    scope.update(precomputed_metadata)
+
+    def _kwargs(cls):
+        return {key: scope[key] for key in cls.__dataclass_fields__}
+
+    context_state = xblock_sparse_pc_final_metadata_state_from_context(
+        XBlockSparsePCFinalMetadataStateContext(
+            core=XBlockSparsePCFinalCoreState(**_kwargs(XBlockSparsePCFinalCoreState)),
+            device=XBlockSparsePCFinalDeviceState(
+                **_kwargs(XBlockSparsePCFinalDeviceState)
+            ),
+            preflight=XBlockSparsePCFinalPreflightState(
+                **_kwargs(XBlockSparsePCFinalPreflightState)
+            ),
+            nested=XBlockSparsePCFinalNestedMetadata(
+                **_kwargs(XBlockSparsePCFinalNestedMetadata)
+            ),
+        )
+    )
+    wrapper_state = xblock_sparse_pc_final_metadata_state_from_driver_scope(scope)
+
+    assert context_state == wrapper_state
+    assert tuple(context_state) == (*keys, *precomputed_metadata)
 
 
 def test_xblock_sparse_pc_final_payload_uses_explicit_context(

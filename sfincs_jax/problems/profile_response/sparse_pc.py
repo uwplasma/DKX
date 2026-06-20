@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping, MutableMapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, fields
 from typing import Any
 
 import jax
@@ -854,6 +854,125 @@ _XBLOCK_SPARSE_PC_FINAL_METADATA_SCOPE_KEYS = _unique_state_keys(
 )
 
 
+@dataclass(frozen=True)
+class XBlockSparsePCFinalCoreState:
+    """Core x-block solve counters and user-facing solver controls."""
+
+    candidate_iterations: object
+    candidate_krylov_method: object
+    candidate_matvecs: object
+    candidate_residual_norm: object
+    device_krylov_estimated_matvecs: object
+    fallback_candidate_improved_rhs: object
+    fallback_started_from_candidate: object
+    mv_count: object
+    pc_factor_s: object
+    pc_maxiter: object
+    pc_restart: object
+    precondition_side: object
+    reported_iterations: object
+    reported_matvecs: object
+    setup_s: object
+    solve_s: object
+    sparse_timer: object
+    xblock_assembled_host_fp: object
+    xblock_default_restart_capped: object
+    xblock_default_right_pc: object
+    xblock_jax_factor_apply: object
+    xblock_jax_factor_format: object
+    xblock_jax_factors: object
+    xblock_krylov_method: object
+    xblock_linear_size: object
+    xblock_lower_fill_ignored_env: object
+    xblock_lower_fill_mode: object
+    xblock_preconditioner_built: object
+    xblock_preconditioner_xi: object
+    xblock_use_active_dof: object
+
+
+@dataclass(frozen=True)
+class XBlockSparsePCFinalDeviceState:
+    """Device, QI, and global-coupling state for x-block diagnostics."""
+
+    assembled_operator_built: object
+    assembled_operator_device_resident: object
+    fgmres_block_between_cycles: object
+    global_coupling_built: object
+    global_coupling_metadata: object
+    qi_device_augmented_krylov_mode: object
+    qi_device_augmented_krylov_rank: object
+    qi_device_augmented_krylov_reason: object
+    qi_device_augmented_krylov_requested: object
+    qi_device_augmented_krylov_used: object
+    qi_device_augmented_seed_available: object
+    qi_device_augmented_seed_labels: object
+    qi_device_augmented_seed_max_rank: object
+    qi_device_augmented_seed_projection_residual: object
+    qi_device_augmented_seed_rank: object
+    qi_device_augmented_seed_reason: object
+    qi_device_augmented_seed_requested: object
+    qi_device_augmented_seed_used: object
+    tfqmr_replacement_interval: object
+    two_level_built: object
+    xblock_device_fgmres_forced_right_pc: object
+    xblock_device_fgmres_jit: object
+    xblock_device_fgmres_jit_mode: object
+    xblock_device_fgmres_jit_outer_k: object
+    xblock_device_host_fallback_auto_disabled_by_qi_device: object
+    xblock_device_host_fallback_decision: object
+    xblock_device_krylov_forced_jax_factors: object
+    xblock_krylov_env_requested: object
+    xblock_qi_device_operator_reuse_decision: object
+
+
+@dataclass(frozen=True)
+class XBlockSparsePCFinalPreflightState:
+    """Pre-Krylov probe and residual-gate state for x-block diagnostics."""
+
+    preflight_improvement: object
+    preflight_min_improvement: object
+    preflight_passed: object
+    preflight_required: object
+    preflight_residual_norm: object
+    probe_coarse_angular_lmax: object
+    probe_coarse_direction_counts: object
+    probe_coarse_direction_names: object
+    probe_coarse_fsavg_lmax: object
+    probe_coarse_history: object
+    probe_coarse_include_angular_residual: object
+    probe_coarse_residual_after: object
+    probe_coarse_residual_before: object
+    probe_coarse_s: object
+    probe_coarse_seed_initialized: object
+    probe_coarse_steps_requested: object
+
+
+@dataclass(frozen=True)
+class XBlockSparsePCFinalNestedMetadata:
+    """Precomputed nested x-block diagnostic groups."""
+
+    xblock_assembled_operator_result_metadata: object
+    xblock_coarse_correction_metadata: object
+    xblock_qi_seed_preconditioner_metadata: object
+    xblock_qi_device_preconditioner_metadata: object
+    xblock_qi_deflated_preconditioner_metadata: object
+    xblock_side_probe_metadata: object
+
+
+@dataclass(frozen=True)
+class XBlockSparsePCFinalMetadataStateContext:
+    """Grouped state used to build final x-block sparse-PC metadata."""
+
+    core: XBlockSparsePCFinalCoreState
+    device: XBlockSparsePCFinalDeviceState
+    preflight: XBlockSparsePCFinalPreflightState
+    nested: XBlockSparsePCFinalNestedMetadata
+
+
+def _dataclass_field_mapping(value: object) -> dict[str, object]:
+    return {field.name: getattr(value, field.name) for field in fields(value)}
+
+
 def xblock_sparse_pc_final_metadata_driver_state_keys() -> tuple[str, ...]:
     """Return driver-scope keys copied into x-block final metadata."""
 
@@ -876,6 +995,38 @@ def _xblock_metadata_or_compute(
     return builder(scope)
 
 
+def xblock_sparse_pc_final_metadata_state_from_context(
+    context: XBlockSparsePCFinalMetadataStateContext,
+) -> dict[str, object]:
+    """Return the compact final x-block diagnostic state from typed groups."""
+
+    raw = {
+        **_dataclass_field_mapping(context.core),
+        **_dataclass_field_mapping(context.device),
+        **_dataclass_field_mapping(context.preflight),
+        **_dataclass_field_mapping(context.nested),
+    }
+    missing = tuple(
+        key
+        for key in (
+            *_XBLOCK_SPARSE_PC_FINAL_METADATA_STATE_KEYS,
+            *_XBLOCK_SPARSE_PC_FINAL_METADATA_PRECOMPUTED_KEYS,
+        )
+        if key not in raw
+    )
+    if missing:
+        joined = ", ".join(missing[:8])
+        suffix = "" if len(missing) <= 8 else f", ... ({len(missing)} total)"
+        raise KeyError(f"x-block sparse-PC final metadata missing: {joined}{suffix}")
+    return {
+        **{key: raw[key] for key in _XBLOCK_SPARSE_PC_FINAL_METADATA_STATE_KEYS},
+        **{
+            key: raw[key]
+            for key in _XBLOCK_SPARSE_PC_FINAL_METADATA_PRECOMPUTED_KEYS
+        },
+    }
+
+
 def xblock_sparse_pc_final_metadata_state_from_driver_scope(
     scope: Mapping[str, object],
 ) -> dict[str, object]:
@@ -888,8 +1039,8 @@ def xblock_sparse_pc_final_metadata_state_from_driver_scope(
         joined = ", ".join(missing[:8])
         suffix = "" if len(missing) <= 8 else f", ... ({len(missing)} total)"
         raise KeyError(f"x-block sparse-PC final metadata missing: {joined}{suffix}")
-    state = {key: scope[key] for key in _XBLOCK_SPARSE_PC_FINAL_METADATA_STATE_KEYS}
-    state["xblock_assembled_operator_result_metadata"] = _xblock_metadata_or_compute(
+    nested = XBlockSparsePCFinalNestedMetadata(
+        xblock_assembled_operator_result_metadata=_xblock_metadata_or_compute(
         scope,
         "xblock_assembled_operator_result_metadata",
         lambda raw: xblock_assembled_operator_diagnostics(
@@ -905,64 +1056,87 @@ def xblock_sparse_pc_final_metadata_state_from_driver_scope(
                 col_equilibration_metadata=raw["xblock_col_equilibration_metadata"],
             )
         ),
-    )
-    state["xblock_coarse_correction_metadata"] = _xblock_metadata_or_compute(
-        scope,
-        "xblock_coarse_correction_metadata",
-        xblock_coarse_correction_diagnostics,
-    )
-    state["xblock_qi_seed_preconditioner_metadata"] = _xblock_metadata_or_compute(
-        scope,
-        "xblock_qi_seed_preconditioner_metadata",
-        xblock_qi_seed_preconditioner_diagnostics,
-    )
-    state["xblock_qi_device_preconditioner_metadata"] = _xblock_metadata_or_compute(
-        scope,
-        "xblock_qi_device_preconditioner_metadata",
-        xblock_qi_device_preconditioner_diagnostics,
-    )
-    state["xblock_qi_deflated_preconditioner_metadata"] = _xblock_metadata_or_compute(
-        scope,
-        "xblock_qi_deflated_preconditioner_metadata",
-        xblock_qi_deflated_preconditioner_diagnostics,
-    )
-    state["xblock_side_probe_metadata"] = _xblock_metadata_or_compute(
-        scope,
-        "xblock_side_probe_metadata",
-        lambda raw: xblock_side_probe_diagnostics(
-            XBlockSideProbeDiagnosticsContext(
-                enabled=raw["xblock_side_probe_enabled"],
-                used=raw["xblock_side_probe_used"],
-                switched=raw["xblock_side_probe_switched"],
-                switch_suppressed_by_global_coupling=raw[
-                    "xblock_side_probe_switch_suppressed_by_global_coupling"
-                ],
-                switch_suppressed_by_explicit_side=raw[
-                    "xblock_side_probe_switch_suppressed_by_explicit_side"
-                ],
-                physical_seed_preserved_after_switch=raw[
-                    "xblock_side_probe_physical_seed_preserved_after_switch"
-                ],
-                seed_used=raw["xblock_side_probe_seed_used"],
-                seed_residual_norm=raw["xblock_side_probe_seed_residual_norm"],
-                initial_side=raw["xblock_side_probe_initial_side"],
-                selected_side=raw["xblock_side_probe_selected_side"],
-                initial_method=raw["xblock_side_probe_initial_method"],
-                selected_method=raw["xblock_side_probe_selected_method"],
-                lgmres_rescue=raw["xblock_side_probe_lgmres_rescue"],
-                lgmres_rescue_maxiter_capped=raw[
-                    "xblock_lgmres_rescue_maxiter_capped"
-                ],
-                lgmres_rescue_outer_k=raw["xblock_lgmres_rescue_outer_k"],
-                residual_norm=raw["xblock_side_probe_residual_norm"],
-                residual_ratio=raw["xblock_side_probe_residual_ratio"],
-                iterations=raw["xblock_side_probe_iterations"],
-                matvecs=raw["xblock_side_probe_matvecs"],
-                elapsed_s=raw["xblock_side_probe_s"],
-            )
+        ),
+        xblock_coarse_correction_metadata=_xblock_metadata_or_compute(
+            scope,
+            "xblock_coarse_correction_metadata",
+            xblock_coarse_correction_diagnostics,
+        ),
+        xblock_qi_seed_preconditioner_metadata=_xblock_metadata_or_compute(
+            scope,
+            "xblock_qi_seed_preconditioner_metadata",
+            xblock_qi_seed_preconditioner_diagnostics,
+        ),
+        xblock_qi_device_preconditioner_metadata=_xblock_metadata_or_compute(
+            scope,
+            "xblock_qi_device_preconditioner_metadata",
+            xblock_qi_device_preconditioner_diagnostics,
+        ),
+        xblock_qi_deflated_preconditioner_metadata=_xblock_metadata_or_compute(
+            scope,
+            "xblock_qi_deflated_preconditioner_metadata",
+            xblock_qi_deflated_preconditioner_diagnostics,
+        ),
+        xblock_side_probe_metadata=_xblock_metadata_or_compute(
+            scope,
+            "xblock_side_probe_metadata",
+            lambda raw: xblock_side_probe_diagnostics(
+                XBlockSideProbeDiagnosticsContext(
+                    enabled=raw["xblock_side_probe_enabled"],
+                    used=raw["xblock_side_probe_used"],
+                    switched=raw["xblock_side_probe_switched"],
+                    switch_suppressed_by_global_coupling=raw[
+                        "xblock_side_probe_switch_suppressed_by_global_coupling"
+                    ],
+                    switch_suppressed_by_explicit_side=raw[
+                        "xblock_side_probe_switch_suppressed_by_explicit_side"
+                    ],
+                    physical_seed_preserved_after_switch=raw[
+                        "xblock_side_probe_physical_seed_preserved_after_switch"
+                    ],
+                    seed_used=raw["xblock_side_probe_seed_used"],
+                    seed_residual_norm=raw["xblock_side_probe_seed_residual_norm"],
+                    initial_side=raw["xblock_side_probe_initial_side"],
+                    selected_side=raw["xblock_side_probe_selected_side"],
+                    initial_method=raw["xblock_side_probe_initial_method"],
+                    selected_method=raw["xblock_side_probe_selected_method"],
+                    lgmres_rescue=raw["xblock_side_probe_lgmres_rescue"],
+                    lgmres_rescue_maxiter_capped=raw[
+                        "xblock_lgmres_rescue_maxiter_capped"
+                    ],
+                    lgmres_rescue_outer_k=raw["xblock_lgmres_rescue_outer_k"],
+                    residual_norm=raw["xblock_side_probe_residual_norm"],
+                    residual_ratio=raw["xblock_side_probe_residual_ratio"],
+                    iterations=raw["xblock_side_probe_iterations"],
+                    matvecs=raw["xblock_side_probe_matvecs"],
+                    elapsed_s=raw["xblock_side_probe_s"],
+                )
+            ),
         ),
     )
-    return state
+    return xblock_sparse_pc_final_metadata_state_from_context(
+        XBlockSparsePCFinalMetadataStateContext(
+            core=XBlockSparsePCFinalCoreState(
+                **{
+                    key: scope[key]
+                    for key in _XBLOCK_SPARSE_PC_FINAL_METADATA_COMPACT_CORE_STATE_KEYS
+                }
+            ),
+            device=XBlockSparsePCFinalDeviceState(
+                **{
+                    key: scope[key]
+                    for key in _XBLOCK_SPARSE_PC_FINAL_METADATA_DEVICE_STATE_KEYS
+                }
+            ),
+            preflight=XBlockSparsePCFinalPreflightState(
+                **{
+                    key: scope[key]
+                    for key in _XBLOCK_SPARSE_PC_FINAL_METADATA_PREFLIGHT_STATE_KEYS
+                }
+            ),
+            nested=nested,
+        )
+    )
 
 
 @dataclass(frozen=True)
@@ -11085,6 +11259,11 @@ __all__ = [
     "XBlockAugmentedKrylovBasisResult",
     "XBlockKrylovSolveSpace",
     "XBlockKrylovSolveSpaceContext",
+    "XBlockSparsePCFinalCoreState",
+    "XBlockSparsePCFinalDeviceState",
+    "XBlockSparsePCFinalPreflightState",
+    "XBlockSparsePCFinalNestedMetadata",
+    "XBlockSparsePCFinalMetadataStateContext",
     "XBlockSparsePCWorkEstimates",
     "XBlockPhysicalResidual",
     "SparsePCGMRESFinalPayload",
@@ -11170,6 +11349,7 @@ __all__ = [
     "xblock_host_krylov_progress_message",
     "xblock_sparse_pc_final_metadata_driver_scope_keys",
     "xblock_sparse_pc_final_metadata_driver_state_keys",
+    "xblock_sparse_pc_final_metadata_state_from_context",
     "xblock_sparse_pc_final_metadata_state_from_driver_scope",
     "xblock_krylov_state_from_first_attempt",
     "xblock_krylov_state_from_gmres_fallback",

@@ -42,11 +42,17 @@ Make `sfincs_jax` research-grade while preserving the public user contract:
 
 Recent checkpoints:
 
+- X-block sparse-PC final metadata now has typed grouped state contexts for
+  core solve counters, device/QI state, preflight/probe state, and precomputed
+  nested metadata. The legacy wrapper delegates through the grouped context and
+  has focused parity tests; driver wiring is deferred until nested QI/coarse
+  diagnostics are grouped so we do not replace `locals()` with a brittle raw
+  map (current checkpoint).
 - Generic sparse-PC finalization now builds direct-tail, factor-preflight,
   sparse-pattern, and static solver metadata from typed contexts before
   finalization. The RHSMode=1 generic finalizer receives only five dynamic
   convergence/reporting scalars plus compact metadata dictionaries; it no
-  longer consumes the driver frame through `locals()` (current checkpoint).
+  longer consumes the driver frame through `locals()`.
 - X-block sparse-PC physical residual recomputation and reported Krylov
   iteration/matvec counters now use tested `profile_response.sparse_pc`
   helpers, removing duplicated reporting code from the driver while preserving
@@ -1093,7 +1099,7 @@ Known CI issue fixed by this rewrite:
 
 ### 1. `v3_driver.py` Architecture Refactor
 
-Completion estimate: 61%.
+Completion estimate: 62%.
 
 Goal:
 
@@ -1403,14 +1409,19 @@ Completed recent boundaries:
   `locals()` handoff. The remaining local-scope cleanup is the x-block final
   metadata path, which is already filtered through a named key contract but
   still needs a typed grouped context to avoid a brittle 75-field inline map.
+- X-block final metadata now has grouped typed state and wrapper parity tests.
+  The remaining x-block driver work is to group nested QI/coarse diagnostics
+  and then pass `XBlockSparsePCFinalMetadataStateContext` directly from the
+  driver without `locals()`.
 
 Next steps:
 
 - Continue moving remaining generic sparse-PC result/diagnostic seams into
   cohesive `profile_response` helpers only where the replacement context can
   stay explicit and tested.
-- Replace the remaining x-block final metadata local-scope copy with typed
-  grouped diagnostics contexts once each key group has focused tests.
+- Type the nested x-block QI seed/device/deflated and coarse-correction
+  diagnostics so the remaining final metadata local-scope copy can be removed
+  without introducing a large raw driver dictionary.
 - Continue replacing residual sparse-PC compatibility wrappers with explicit
   contexts only where the new boundary reduces driver complexity.
 - Continue extracting sparse-PC state/metadata seams after the source split
