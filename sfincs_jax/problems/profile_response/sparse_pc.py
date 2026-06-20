@@ -371,6 +371,22 @@ class SparsePCGMRESFinalPayload:
 
 
 @dataclass(frozen=True)
+class SparsePCPostMinresFinalizationContext:
+    """Dependencies for final optional sparse-PC post-MinRes polishing."""
+
+    matvec: ArrayFn
+    rhs: jnp.ndarray
+    preconditioner: ArrayFn
+    emit: EmitFn | None
+    elapsed_s: Callable[[], float]
+    pc_form: str
+    steps: int
+    alpha_clip: float
+    min_improvement: float
+    target: float
+
+
+@dataclass(frozen=True)
 class SparsePCGMRESFinalizationContext:
     """Explicit inputs for final sparse-PC GMRES retry, polish, and payload."""
 
@@ -382,6 +398,7 @@ class SparsePCGMRESFinalizationContext:
     factor_bundle: Any
     pc_factor_s: float
     setup_s: float | None
+    post_minres: SparsePCPostMinresFinalizationContext | None = None
 
 
 def _unique_state_keys(*groups: Sequence[str]) -> tuple[str, ...]:
@@ -399,14 +416,10 @@ def _unique_state_keys(*groups: Sequence[str]) -> tuple[str, ...]:
 
 
 _SPARSE_PC_GMRES_FINALIZATION_CORE_STATE_KEYS = (
-    "_operator_bundle_pc",
-    "_precond_sparse",
     "_sparse_pc_factor_mv",
-    "_mv_true",
     "atol",
     "constrained_pas_pc",
     "emit",
-    "factor_bundle_pc",
     "fortran_reduced_sparse_pc",
     "fortran_reduced_sparse_pc_backend",
     "fortran_reduced_sparse_pc_backend_reason",
@@ -414,7 +427,6 @@ _SPARSE_PC_GMRES_FINALIZATION_CORE_STATE_KEYS = (
     "mv_count",
     "op",
     "pattern",
-    "pc_form",
     "pc_maxiter",
     "pc_restart",
     "pc_shift",
@@ -424,7 +436,6 @@ _SPARSE_PC_GMRES_FINALIZATION_CORE_STATE_KEYS = (
     "preconditioner_xi",
     "rhs",
     "rhs_norm",
-    "setup_s",
     "sparse_pc_default_factor_kind",
     "sparse_pc_default_ilu_drop_tol",
     "sparse_pc_default_ilu_fill_factor",
@@ -436,11 +447,7 @@ _SPARSE_PC_GMRES_FINALIZATION_CORE_STATE_KEYS = (
     "sparse_pc_fp_dense_velocity_block",
     "sparse_pc_linear_size",
     "sparse_pc_permc_spec",
-    "sparse_pc_post_minres_alpha_clip",
-    "sparse_pc_post_minres_min_improvement",
-    "sparse_pc_post_minres_steps",
     "sparse_pc_preconditioner_operator",
-    "sparse_pc_rhs",
     "sparse_pc_use_active_dof",
     "sparse_timer",
     "target",
@@ -8928,6 +8935,54 @@ def finalize_sparse_pc_gmres_with_dtype_retry(
     )
     if retry_result.setup_s is not None:
         final_state["setup_s"] = float(retry_result.setup_s)
+    if context.post_minres is not None:
+        post_context = context.post_minres
+        post_minres = apply_sparse_pc_post_minres_if_needed(
+            SparsePCPostMinresUpdateContext(
+                matvec=post_context.matvec,
+                rhs=post_context.rhs,
+                preconditioner=post_context.preconditioner,
+                emit=post_context.emit,
+                elapsed_s=post_context.elapsed_s,
+                pc_form=str(post_context.pc_form),
+                steps=int(post_context.steps),
+                alpha_clip=float(post_context.alpha_clip),
+                min_improvement=float(post_context.min_improvement),
+                minres_correction=minres_correction,
+                x=np.asarray(retry_result.x, dtype=np.float64),
+                residual_norm=float(retry_result.residual_norm),
+                preconditioned_residual_norm=float(
+                    retry_result.preconditioned_residual_norm
+                ),
+                solve_s=float(retry_result.solve_s),
+                target=float(post_context.target),
+            )
+        )
+        final_state.update(
+            {
+                "x_np": post_minres.x,
+                "residual_norm_sparse_pc": float(post_minres.residual_norm),
+                "rn_pc": float(post_minres.preconditioned_residual_norm),
+                "sparse_pc_post_minres_steps": int(post_context.steps),
+                "sparse_pc_post_minres_alpha_clip": float(post_context.alpha_clip),
+                "sparse_pc_post_minres_min_improvement": float(
+                    post_context.min_improvement
+                ),
+                "sparse_pc_post_minres_history": post_minres.history,
+                "sparse_pc_post_minres_alphas": post_minres.alphas,
+                "sparse_pc_post_minres_residual_before": (
+                    post_minres.residual_before
+                ),
+                "sparse_pc_post_minres_residual_after": post_minres.residual_after,
+                "sparse_pc_post_minres_error": post_minres.error,
+                "solve_s": float(post_minres.solve_s),
+            }
+        )
+        emit_sparse_pc_gmres_completion_from_driver_state(final_state)
+        return sparse_pc_gmres_final_payload_from_driver_state(
+            final_state,
+            expand_reduced=expand_reduced,
+        )
     return finalize_sparse_pc_gmres_from_driver_state(
         final_state,
         minres_correction=minres_correction,
@@ -10546,6 +10601,7 @@ __all__ = [
     "SparsePCGMRESContext",
     "SparsePCGMRESResult",
     "SparsePCGMRESFinalizationContext",
+    "SparsePCPostMinresFinalizationContext",
     "sparse_pc_gmres_finalization_driver_state_keys",
     "sparse_pc_gmres_finalization_state_from_driver_scope",
     "XBlockKrylovReport",

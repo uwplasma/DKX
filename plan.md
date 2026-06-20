@@ -1024,6 +1024,19 @@ Recent local validation:
 - Hygiene after x-block nested metadata precompute:
   `python -m compileall -q sfincs_jax`, `git diff --check`, and
   `python scripts/check_repo_size.py` passed.
+- Generic sparse-PC post-MinRes explicit-finalization focused tests:
+  `3 passed in 1.12 s`.
+- Profile-response diagnostics/sparse-PC shard after generic sparse-PC
+  post-MinRes explicit finalization: `248 passed in 1.97 s`.
+- Xblock/sparse-host/minimum-norm/direct-tail driver shard after generic
+  sparse-PC post-MinRes explicit finalization:
+  `36 passed, 96 deselected in 38.32 s`.
+- Broad profile-response/RHSMode=1 policy, setup, diagnostics, solver, and
+  helper sweep after generic sparse-PC post-MinRes explicit finalization:
+  `1191 passed in 48.64 s`.
+- Hygiene after generic sparse-PC post-MinRes explicit finalization:
+  `python -m compileall -q sfincs_jax`, `git diff --check`, and
+  `python scripts/check_repo_size.py` passed.
 - Older focused and broad validation checkpoints are intentionally omitted from
   this active plan; they remain available in git history.
 
@@ -1036,7 +1049,7 @@ Known CI issue fixed by this rewrite:
 
 ### 1. `v3_driver.py` Architecture Refactor
 
-Completion estimate: 56%.
+Completion estimate: 57%.
 
 Goal:
 
@@ -1319,6 +1332,10 @@ Completed recent boundaries:
   from 219 raw driver keys to 75 copied scalar/source keys plus 6 compact
   metadata dictionaries; the 219-key raw scope inventory remains available for
   diagnostics derivation and missing-key audits.
+- Generic sparse-PC finalization now passes post-MinRes dependencies through a
+  typed `SparsePCPostMinresFinalizationContext` instead of the metadata map.
+  The generic copied finalization state is down from 48 keys to 38 keys while
+  dtype retry remains mapping-backed for the next explicit-context tranche.
 
 Next steps:
 
@@ -1326,9 +1343,9 @@ Next steps:
   cohesive `profile_response` helpers only where the replacement context can
   stay explicit and tested.
 - Replace the remaining generic sparse-PC finalization whitelist groups with
-  typed post-MinRes, Krylov-control, and sparse-factor contexts; direct-tail,
-  factor-preflight, and sparse-pattern metadata are already precomputed before
-  finalization.
+  typed dtype-retry, Krylov-control, and sparse-factor contexts; post-MinRes,
+  direct-tail, factor-preflight, and sparse-pattern metadata are already
+  explicit or precomputed before finalization.
 - Replace the remaining whitelisted local-scope copies with typed sparse-PC
   and x-block diagnostics contexts once each key group has focused tests.
 - Continue extracting sparse-PC state/metadata seams after the source split
