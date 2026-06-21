@@ -416,6 +416,13 @@ the historical private driver name and test the focused module directly. This ke
   Schur update budgets, admission probe thresholds, and ND residual-polish
   controls; ``rhs1_full_assembly.py`` keeps sparse symbolic analysis,
   factorization, and true residual admission.
+- ``sfincs_jax/rhs1_symbolic_sparse_policy.py``:
+  symbolic superblock and separator-Schur RHSMode=1 active-preconditioner
+  policy. The module owns grouped-block and block-Schur size gates, ordering
+  defaults, separator/coarse limits, retained-cross-fraction gates, prefill
+  safety factors, and admission probe thresholds; ``rhs1_full_assembly.py``
+  keeps symbolic sparse analysis, host factorization, and true residual
+  admission.
 - ``sfincs_jax/rhs1_structured_full_csr.py``:
   runtime/non-autodiff wrapper that adapts analytic RHSMode=1 full-CSR assembly
   from ``rhs1_full_assembly.py`` into the ``SparseOperatorBundle`` contract used
