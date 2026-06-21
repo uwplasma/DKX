@@ -556,6 +556,14 @@ the historical private driver name and test the focused module directly. This ke
   GMRES, and BiCGStab solve attempts. This mirrors the transport linear-solve
   module so solver-family selection is directly testable and no longer embedded
   as a large nested body in ``v3_driver.py``.
+- ``sfincs_jax/problems/profile_response/phi1_newton.py``:
+  nonlinear Phi1 Newton-Krylov solve orchestration for RHSMode=1 profile
+  response. This module owns the accepted-state history solve used by output
+  writing, the small Newton-Krylov parity fixture path, active-DOF compaction,
+  frozen-Jacobian mode selection, sparse-direct host rescue for non-autodiff
+  runs, KSP-history replay wiring, and line-search advancement. ``v3_driver.py``
+  now imports the historical public names from this module as compatibility
+  facades.
 - ``sfincs_jax/problems/profile_response/preconditioner_build.py``:
   RHSMode=1/profile-response full and reduced preconditioner build
   orchestration. The driver passes solve-local builders and projection
