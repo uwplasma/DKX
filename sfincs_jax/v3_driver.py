@@ -461,13 +461,7 @@ from .rhs1_xblock_policy import (
     resolve_rhs1_xblock_sparse_pc_policy,
 )
 from .solvers.preconditioners.pas import (
-    RHS1PasCompositeBuilders,
-    build_rhs1_pas_hybrid_preconditioner,
-    build_rhs1_pas_lite_preconditioner,
-    build_rhs1_pas_schur_preconditioner,
-    build_rhs1_pas_tokamak_theta_preconditioner,
-    build_rhs1_pas_tz_preconditioner,
-    build_rhs1_pas_xblock_ilu_preconditioner,
+    RHS1PasFamilyBuilders,
     compose_preconditioners as _compose_preconditioners,
 )
 from .solvers.preconditioners.full_fp import (
@@ -1932,45 +1926,6 @@ _build_rhsmode1_xupwind_preconditioner = build_rhs1_xupwind_preconditioner
 _build_rhsmode23_tzfft_preconditioner = build_rhsmode23_tzfft_preconditioner
 
 
-def _build_rhsmode1_pas_tokamak_theta_preconditioner(
-    *,
-    op: V3FullSystemOperator,
-    reduce_full: Callable[[jnp.ndarray], jnp.ndarray] | None = None,
-    expand_reduced: Callable[[jnp.ndarray], jnp.ndarray] | None = None,
-) -> Callable[[jnp.ndarray], jnp.ndarray]:
-    """Compatibility wrapper for the PAS tokamak theta/L builder."""
-    return build_rhs1_pas_tokamak_theta_preconditioner(
-        op=op,
-        reduce_full=reduce_full,
-        expand_reduced=expand_reduced,
-        block_preconditioner_builder=_build_rhsmode1_block_preconditioner,
-        pas_tokamak_theta_applicable=_pas_tokamak_theta_preconditioner_applicable,
-    )
-
-
-def _build_rhsmode1_pas_tz_preconditioner(
-    *,
-    op: V3FullSystemOperator,
-    reduce_full: Callable[[jnp.ndarray], jnp.ndarray] | None = None,
-    expand_reduced: Callable[[jnp.ndarray], jnp.ndarray] | None = None,
-) -> Callable[[jnp.ndarray], jnp.ndarray]:
-    """Compatibility wrapper for the PAS theta-zeta/L builder."""
-    return build_rhs1_pas_tz_preconditioner(
-        op=op,
-        reduce_full=reduce_full,
-        expand_reduced=expand_reduced,
-        pas_tz_applicable=_pas_tz_preconditioner_applicable,
-        pas_tz_memory_safe=_pas_tz_preconditioner_memory_safe,
-        matvec_shard_axis=_matvec_shard_axis,
-        device_count=jax.device_count,
-        theta_schwarz_builder=_build_rhsmode1_theta_schwarz_preconditioner,
-        zeta_schwarz_builder=_build_rhsmode1_zeta_schwarz_preconditioner,
-        pas_hybrid_builder=_build_rhsmode1_pas_hybrid_preconditioner,
-        collision_builder=_build_rhsmode1_collision_preconditioner,
-        tzfft_builder=_build_rhsmode23_tzfft_preconditioner,
-    )
-
-
 _build_rhsmode1_collision_preconditioner = build_rhs1_collision_preconditioner
 _build_rhsmode1_block_preconditioner_xdiag = build_rhs1_block_preconditioner_xdiag
 _build_rhsmode1_block_preconditioner = build_rhs1_block_preconditioner
@@ -2162,20 +2117,56 @@ _build_rhsmode1_theta_line_xdiag_preconditioner = (
 _build_rhsmode1_theta_zeta_preconditioner = build_rhs1_theta_zeta_preconditioner
 
 
-def _rhs1_pas_composite_builders() -> RHS1PasCompositeBuilders:
-    """Bind current PAS component builders for compatibility wrappers."""
+def _rhs1_pas_family_builders() -> RHS1PasFamilyBuilders:
+    """Bind current PAS-family builders for compatibility wrappers."""
 
-    return RHS1PasCompositeBuilders(
+    return RHS1PasFamilyBuilders(
         pas_tokamak_theta_applicable=_pas_tokamak_theta_preconditioner_applicable,
         pas_tz_applicable=_pas_tz_preconditioner_applicable,
-        pas_tokamak_theta_builder=_build_rhsmode1_pas_tokamak_theta_preconditioner,
-        pas_tz_builder=_build_rhsmode1_pas_tz_preconditioner,
+        pas_tz_memory_safe=_pas_tz_preconditioner_memory_safe,
+        matvec_shard_axis=_matvec_shard_axis,
+        device_count=jax.device_count,
+        block_preconditioner_builder=_build_rhsmode1_block_preconditioner,
+        theta_schwarz_builder=_build_rhsmode1_theta_schwarz_preconditioner,
+        zeta_schwarz_builder=_build_rhsmode1_zeta_schwarz_preconditioner,
         theta_line_builder=_build_rhsmode1_theta_line_preconditioner,
         zeta_line_builder=_build_rhsmode1_zeta_line_preconditioner,
         xblock_tz_lmax_builder=_build_rhsmode1_xblock_tz_lmax_preconditioner,
         xmg_builder=_build_rhsmode1_xmg_preconditioner,
         xupwind_builder=_build_rhsmode1_xupwind_preconditioner,
         collision_builder=_build_rhsmode1_collision_preconditioner,
+        tzfft_builder=_build_rhsmode23_tzfft_preconditioner,
+        pas_hybrid_builder=_build_rhsmode1_pas_hybrid_preconditioner,
+    )
+
+
+def _build_rhsmode1_pas_tokamak_theta_preconditioner(
+    *,
+    op: V3FullSystemOperator,
+    reduce_full: Callable[[jnp.ndarray], jnp.ndarray] | None = None,
+    expand_reduced: Callable[[jnp.ndarray], jnp.ndarray] | None = None,
+) -> Callable[[jnp.ndarray], jnp.ndarray]:
+    """Compatibility wrapper for the PAS tokamak theta/L builder."""
+
+    return _rhs1_pas_family_builders().build_tokamak_theta(
+        op=op,
+        reduce_full=reduce_full,
+        expand_reduced=expand_reduced,
+    )
+
+
+def _build_rhsmode1_pas_tz_preconditioner(
+    *,
+    op: V3FullSystemOperator,
+    reduce_full: Callable[[jnp.ndarray], jnp.ndarray] | None = None,
+    expand_reduced: Callable[[jnp.ndarray], jnp.ndarray] | None = None,
+) -> Callable[[jnp.ndarray], jnp.ndarray]:
+    """Compatibility wrapper for the PAS theta-zeta/L builder."""
+
+    return _rhs1_pas_family_builders().build_tz(
+        op=op,
+        reduce_full=reduce_full,
+        expand_reduced=expand_reduced,
     )
 
 
@@ -2188,9 +2179,8 @@ def _build_rhsmode1_pas_lite_preconditioner(
 ) -> Callable[[jnp.ndarray], jnp.ndarray]:
     """Compatibility wrapper for the canonical PAS-lite composite builder."""
 
-    return build_rhs1_pas_lite_preconditioner(
+    return _rhs1_pas_family_builders().build_lite(
         op=op,
-        builders=_rhs1_pas_composite_builders(),
         reduce_full=reduce_full,
         expand_reduced=expand_reduced,
         safe=safe,
@@ -2206,9 +2196,8 @@ def _build_rhsmode1_pas_hybrid_preconditioner(
 ) -> Callable[[jnp.ndarray], jnp.ndarray]:
     """Compatibility wrapper for the canonical PAS-hybrid composite builder."""
 
-    return build_rhs1_pas_hybrid_preconditioner(
+    return _rhs1_pas_family_builders().build_hybrid(
         op=op,
-        builders=_rhs1_pas_composite_builders(),
         reduce_full=reduce_full,
         expand_reduced=expand_reduced,
         safe=safe,
@@ -2224,9 +2213,8 @@ def _build_rhsmode1_pas_schur_preconditioner(
 ) -> Callable[[jnp.ndarray], jnp.ndarray]:
     """Compatibility wrapper for the canonical PAS-Schur composite builder."""
 
-    return build_rhs1_pas_schur_preconditioner(
+    return _rhs1_pas_family_builders().build_schur(
         op=op,
-        builders=_rhs1_pas_composite_builders(),
         reduce_full=reduce_full,
         expand_reduced=expand_reduced,
         safe=safe,
@@ -2259,11 +2247,10 @@ def _build_rhsmode1_pas_xblock_ilu_preconditioner(
     reduce_full: Callable[[jnp.ndarray], jnp.ndarray] | None = None,
     expand_reduced: Callable[[jnp.ndarray], jnp.ndarray] | None = None,
 ) -> Callable[[jnp.ndarray], jnp.ndarray]:
-    return build_rhs1_pas_xblock_ilu_preconditioner(
+    return _rhs1_pas_family_builders().build_xblock_ilu(
         op=op,
         reduce_full=reduce_full,
         expand_reduced=expand_reduced,
-        pas_hybrid_preconditioner=_build_rhsmode1_pas_hybrid_preconditioner,
     )
 
 

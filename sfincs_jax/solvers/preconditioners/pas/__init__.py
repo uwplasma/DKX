@@ -8,6 +8,7 @@ from .angular import (
 )
 from .composite import (
     RHS1PasCompositeBuilders,
+    RHS1PasFamilyBuilders,
     build_rhs1_pas_hybrid_preconditioner,
     build_rhs1_pas_lite_preconditioner,
     build_rhs1_pas_schur_preconditioner,
@@ -20,6 +21,7 @@ from .xblock_ilu import (
 
 __all__ = (
     "RHS1PasCompositeBuilders",
+    "RHS1PasFamilyBuilders",
     "build_rhs1_pas_hybrid_preconditioner",
     "build_rhs1_pas_lite_preconditioner",
     "build_rhs1_pas_schur_preconditioner",

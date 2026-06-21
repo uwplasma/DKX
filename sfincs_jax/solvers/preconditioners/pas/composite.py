@@ -18,6 +18,7 @@ ApplicabilityPredicate = Callable[[V3FullSystemOperator], bool]
 
 __all__ = (
     "RHS1PasCompositeBuilders",
+    "RHS1PasFamilyBuilders",
     "build_rhs1_pas_hybrid_preconditioner",
     "build_rhs1_pas_lite_preconditioner",
     "build_rhs1_pas_schur_preconditioner",
@@ -44,6 +45,168 @@ class RHS1PasCompositeBuilders:
     xmg_builder: PreconditionerBuilder
     xupwind_builder: PreconditionerBuilder
     collision_builder: PreconditionerBuilder
+
+
+@dataclass(frozen=True)
+class RHS1PasFamilyBuilders:
+    """RHSMode=1 PAS-family dependency bundle.
+
+    This object keeps the PAS preconditioner-family wiring near the PAS
+    implementations. The production driver supplies the current low-level
+    builders so legacy monkeypatch-based tests can still override those names,
+    but the PAS package owns how the family composes tokamak-theta, theta-zeta,
+    lite, hybrid, Schur, and x-block ILU variants.
+    """
+
+    pas_tokamak_theta_applicable: ApplicabilityPredicate
+    pas_tz_applicable: ApplicabilityPredicate
+    pas_tz_memory_safe: ApplicabilityPredicate
+    matvec_shard_axis: Callable[[object], str | None]
+    device_count: Callable[[], int]
+    block_preconditioner_builder: PreconditionerBuilder
+    theta_schwarz_builder: PreconditionerBuilder
+    zeta_schwarz_builder: PreconditionerBuilder
+    theta_line_builder: PreconditionerBuilder
+    zeta_line_builder: PreconditionerBuilder
+    xblock_tz_lmax_builder: PreconditionerBuilder
+    xmg_builder: PreconditionerBuilder
+    xupwind_builder: PreconditionerBuilder
+    collision_builder: PreconditionerBuilder
+    tzfft_builder: PreconditionerBuilder
+    pas_hybrid_builder: PreconditionerBuilder | None = None
+
+    def composite_builders(self) -> RHS1PasCompositeBuilders:
+        """Return the builder subset needed by PAS composite variants."""
+
+        return RHS1PasCompositeBuilders(
+            pas_tokamak_theta_applicable=self.pas_tokamak_theta_applicable,
+            pas_tz_applicable=self.pas_tz_applicable,
+            pas_tokamak_theta_builder=self.build_tokamak_theta,
+            pas_tz_builder=self.build_tz,
+            theta_line_builder=self.theta_line_builder,
+            zeta_line_builder=self.zeta_line_builder,
+            xblock_tz_lmax_builder=self.xblock_tz_lmax_builder,
+            xmg_builder=self.xmg_builder,
+            xupwind_builder=self.xupwind_builder,
+            collision_builder=self.collision_builder,
+        )
+
+    def build_tokamak_theta(
+        self,
+        *,
+        op: V3FullSystemOperator,
+        reduce_full: Callable[[jnp.ndarray], jnp.ndarray] | None = None,
+        expand_reduced: Callable[[jnp.ndarray], jnp.ndarray] | None = None,
+    ) -> Preconditioner:
+        """Build the tokamak-like PAS theta/L preconditioner."""
+
+        from .angular import build_rhs1_pas_tokamak_theta_preconditioner
+
+        return build_rhs1_pas_tokamak_theta_preconditioner(
+            op=op,
+            reduce_full=reduce_full,
+            expand_reduced=expand_reduced,
+            block_preconditioner_builder=self.block_preconditioner_builder,
+            pas_tokamak_theta_applicable=self.pas_tokamak_theta_applicable,
+        )
+
+    def build_tz(
+        self,
+        *,
+        op: V3FullSystemOperator,
+        reduce_full: Callable[[jnp.ndarray], jnp.ndarray] | None = None,
+        expand_reduced: Callable[[jnp.ndarray], jnp.ndarray] | None = None,
+    ) -> Preconditioner:
+        """Build the PAS theta-zeta/L preconditioner with memory fallback."""
+
+        from .angular import build_rhs1_pas_tz_preconditioner
+
+        return build_rhs1_pas_tz_preconditioner(
+            op=op,
+            reduce_full=reduce_full,
+            expand_reduced=expand_reduced,
+            pas_tz_applicable=self.pas_tz_applicable,
+            pas_tz_memory_safe=self.pas_tz_memory_safe,
+            matvec_shard_axis=self.matvec_shard_axis,
+            device_count=self.device_count,
+            theta_schwarz_builder=self.theta_schwarz_builder,
+            zeta_schwarz_builder=self.zeta_schwarz_builder,
+            pas_hybrid_builder=self.pas_hybrid_builder or self.build_hybrid,
+            collision_builder=self.collision_builder,
+            tzfft_builder=self.tzfft_builder,
+        )
+
+    def build_lite(
+        self,
+        *,
+        op: V3FullSystemOperator,
+        reduce_full: Callable[[jnp.ndarray], jnp.ndarray] | None = None,
+        expand_reduced: Callable[[jnp.ndarray], jnp.ndarray] | None = None,
+        safe: bool = True,
+    ) -> Preconditioner:
+        """Build the lightweight PAS composite preconditioner."""
+
+        return build_rhs1_pas_lite_preconditioner(
+            op=op,
+            builders=self.composite_builders(),
+            reduce_full=reduce_full,
+            expand_reduced=expand_reduced,
+            safe=safe,
+        )
+
+    def build_hybrid(
+        self,
+        *,
+        op: V3FullSystemOperator,
+        reduce_full: Callable[[jnp.ndarray], jnp.ndarray] | None = None,
+        expand_reduced: Callable[[jnp.ndarray], jnp.ndarray] | None = None,
+        safe: bool = True,
+    ) -> Preconditioner:
+        """Build the PAS line/x-coarse hybrid preconditioner."""
+
+        return build_rhs1_pas_hybrid_preconditioner(
+            op=op,
+            builders=self.composite_builders(),
+            reduce_full=reduce_full,
+            expand_reduced=expand_reduced,
+            safe=safe,
+        )
+
+    def build_schur(
+        self,
+        *,
+        op: V3FullSystemOperator,
+        reduce_full: Callable[[jnp.ndarray], jnp.ndarray] | None = None,
+        expand_reduced: Callable[[jnp.ndarray], jnp.ndarray] | None = None,
+        safe: bool = True,
+    ) -> Preconditioner:
+        """Build the strongest PAS composite Schur-style preconditioner."""
+
+        return build_rhs1_pas_schur_preconditioner(
+            op=op,
+            builders=self.composite_builders(),
+            reduce_full=reduce_full,
+            expand_reduced=expand_reduced,
+            safe=safe,
+        )
+
+    def build_xblock_ilu(
+        self,
+        *,
+        op: V3FullSystemOperator,
+        reduce_full: Callable[[jnp.ndarray], jnp.ndarray] | None = None,
+        expand_reduced: Callable[[jnp.ndarray], jnp.ndarray] | None = None,
+    ) -> Preconditioner:
+        """Build the PAS x-block sparse ILU/LU preconditioner."""
+
+        from .xblock_ilu import build_rhs1_pas_xblock_ilu_preconditioner
+
+        return build_rhs1_pas_xblock_ilu_preconditioner(
+            op=op,
+            reduce_full=reduce_full,
+            expand_reduced=expand_reduced,
+            pas_hybrid_preconditioner=self.pas_hybrid_builder or self.build_hybrid,
+        )
 
 
 def compose_preconditioners(
