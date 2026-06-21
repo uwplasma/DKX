@@ -770,7 +770,17 @@ explicitly made full. This keeps the non-differentiable host sparse-factor lane
 under fast synthetic sparse tests instead of relying on a slow full RHSMode=1
 solve for coverage.
 
-The next real RHSMode=1 preconditioner-family extraction is covered by
+The active sparse-factor family extracted next is covered by
+``tests/test_rhs1_active_sparse_factors.py``. These tests exercise
+``sfincs_jax.solvers.preconditioners.symbolic_sparse.active_factors`` directly:
+legacy ``rhs1_full_assembly`` aliases, exact global sparse-factor application on
+a bounded active system, row/column equilibration metadata for the scaled
+factor, and physics-filtered sparse-factor retention of selected kinetic
+off-diagonal couplings. The existing ``tests/test_rhs1_full_assembly.py``
+dispatch tests still cover the same builders through ``auto`` and named
+preconditioner routes.
+
+The RHSMode=1 x-block low-``ell`` Schur extraction is covered by
 ``tests/test_rhs1_xblock_low_l_schur.py``. These tests exercise
 ``sfincs_jax.solvers.preconditioners.xblock.low_l_schur`` directly: legacy
 ``rhs1_full_assembly`` aliases, SFINCS-v3 flat low-``ell`` x-block index
