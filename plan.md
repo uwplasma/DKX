@@ -13,7 +13,8 @@ not merge this PR until the review boundary below is complete.
 Make `sfincs_jax` a smaller, domain-organized, research-grade neoclassical
 transport code that preserves SFINCS Fortran v3 parity where the models overlap,
 keeps CPU/GPU defaults fast and memory-aware, exposes explicit differentiable
-Python solve lanes, and backs every public claim with focused tests,
+Python solve lanes, keeps the active implementation in a small, easy-to-manage
+set of domain files, and backs every public claim with focused tests,
 documentation, README figures, and complete benchmark reports.
 
 ## Current State
@@ -44,6 +45,11 @@ documentation, README figures, and complete benchmark reports.
   including native `x_ell` kinetic factors, native `x_ell` plus tail Schur,
   sparse low-`ell` x-block Schur, physics coarse residual correction, and the
   shared low-`ell` x-block index helper.
+- `sfincs_jax.solvers.preconditioners.xblock.active_projected` now owns the
+  active-projected RHSMode=1 full-CSR x-block and overlap-Schwarz
+  preconditioner family, including active full-index mapping, x-block sparse
+  LU/ILU residual correction, factor-memory admission, block scaling, singular
+  block fallback metadata, and restricted additive-Schwarz patch setup.
 - `sfincs_jax.outputs.formats` now owns flat HDF5/NetCDF/NPZ output
   readers/writers, output suffix dispatch, SFINCS Fortran-compatible HDF5
   layout conversion, NetCDF-safe names, and solver-trace attachment.  `io.py`
@@ -52,19 +58,24 @@ documentation, README figures, and complete benchmark reports.
 ### What The Latest Review Found
 
 - The branch has committed the symbolic-sparse RHSMode=1 Fortran-reduced
-  extraction (`b7a0bf2`) and the flat output-format split (`11abd75`). The
-  current local tranche extracts the RHSMode=1 x-block low-`ell` Schur family
-  and has passed focused full-assembly, sparse-pattern, import, and direct
-  x-block tests locally.
+  extraction (`b7a0bf2`), the flat output-format split (`11abd75`), and the
+  RHSMode=1 x-block low-`ell` Schur extraction (`86db37f`). The current local
+  tranche extracts the active-projected x-block and overlap-Schwarz family and
+  has passed focused direct tests, full-assembly regression tests, import
+  contract checks, `ruff`, and `py_compile` locally.
 - Current largest source files:
   - `sfincs_jax/v3_driver.py`: about 14.4k lines, 79 functions.
-  - `sfincs_jax/rhs1_full_assembly.py`: about 9.2k lines after this tranche.
+  - `sfincs_jax/rhs1_full_assembly.py`: about 8.6k lines after the current
+    local active-projected extraction.
   - `sfincs_jax/io.py`: about 5.5k lines after the output-format split.
   - `sfincs_jax/problems/profile_response/sparse/xblock.py`: about 4.5k lines.
   - `sfincs_jax/rhs1_qi_device_preconditioner.py`: about 4.4k lines.
-- The repository has about 286 Python source files and about 159k source lines.
+- The repository has about 287 Python source files and about 160k source lines.
   The file count is high enough that new modules must now consolidate domain
   ownership, not add more flat historical `rhs1_*` or `transport_*` helpers.
+- GitHub PR metadata must be reconciled before review: the working rule remains
+  one draft PR for this refactor campaign, but `gh pr list --head
+  refactor/rhs1-full-assembly-preconditioners` currently returns no matching PR.
 - Docs are extensive and mostly accurate, but `docs/source_map.rst`,
   `docs/testing.rst`, `docs/development_roadmap.rst`, and README must be updated
   whenever ownership or public claims change.
@@ -141,9 +152,10 @@ Acceptance:
 
 ### P1. Finish RHSMode=1 Full-Assembly Ownership Split
 
-Status: about 88% after the full-CSR Schur, symbolic-sparse Fortran-reduced,
-and x-block low-`ell` Schur extractions.  Continue only for cohesive
-implementation families, not wrapper churn.
+Status: about 92% after the full-CSR Schur, symbolic-sparse Fortran-reduced,
+x-block low-`ell` Schur, and active-projected x-block/overlap-Schwarz
+extractions. Continue only for cohesive implementation families, not wrapper
+churn.
 
 Actions:
 
@@ -171,8 +183,8 @@ Acceptance:
 
 ### P2. Reduce `v3_driver.py` To Orchestration
 
-Status: about 88%; still too large, but less urgent than completing the current
-RHSMode=1 tranche cleanly.
+Status: about 88%; still the largest source file and the main review-readiness
+blocker once the current RHSMode=1 tranche is committed.
 
 Actions:
 
@@ -213,8 +225,9 @@ Acceptance:
 
 ### P4. Consolidate The Package Layout
 
-Status: about 70%; skeleton exists, but too many flat compatibility modules
-remain.
+Status: about 72%; skeleton exists, but too many flat compatibility modules
+remain and the source file count is now high enough that consolidation must
+take priority over additional small wrapper files.
 
 Actions:
 
@@ -237,7 +250,7 @@ Acceptance:
 
 ### P5. Preserve Differentiability And Fast Non-Autodiff Lanes
 
-Status: about 80%.
+Status: about 82%.
 
 Actions:
 
@@ -359,24 +372,37 @@ CPU/GPU/Fortran gates, not more smoother/restart tuning.
 
 ## Immediate Ordered Next Steps
 
-1. Land the current `outputs.formats` tranche, which is the only active local
-   split at this checkpoint.
-2. Extract one more high-value `io.py` schema/diagnostics contract only if it
-   reduces responsibility without adding file sprawl; otherwise stop P3 after
-   the format split and document the remaining boundary.
-3. Reassess whether P1 should stop after the x-block low-`ell` Schur extraction
-   or extract one final cohesive family. Do not continue if the remaining work
-   would only create wrapper churn or vague files.
-4. Reduce `v3_driver.py` only at stage boundaries that already have stable
-   extracted types: solver dispatch, progress reporting, output handoff, or
-   result contracts.  Do not split driver-local mutable state into vague helper
-   files.
-5. Run the focused local validation matrix for touched domains, Sphinx with
-   warnings as errors, repo-size checks, and then inspect CI once enough work has
-   landed to make the wait useful.
-6. Mark PR #8 ready for review only after the branch is clean, docs are current,
-   public behavior is unchanged, and deferred technical research lanes are
-   explicitly fail-closed rather than mixed into the refactor PR.
+1. Finish and commit the current active-projected x-block tranche: source-map,
+   API docs, testing docs, direct tests, full-assembly regression tests, Sphinx,
+   repo-size, and import contracts.
+2. Stop P1 unless review finds one remaining large, cohesive RHSMode=1
+   preconditioner family that can move without creating a new vague file. The
+   default assumption is that `rhs1_full_assembly.py` now stays as orchestration,
+   dispatch/admission, and compatibility until the v3-driver stage boundary is
+   cleaner.
+3. Reconcile PR metadata and keep exactly one draft PR for this refactor
+   campaign. If PR #8 is stale or points at a different branch, update the plan
+   and GitHub state before asking for review.
+4. Move to P2: extract one stable `v3_driver.py` stage boundary at a time,
+   prioritizing result/output handoff, progress reporting, solver dispatch, or
+   result contracts. Avoid extracting driver-local mutable state into vague
+   helpers.
+5. Move to P3 only after the next driver seam is stable: split the remaining
+   `io.py` schema/diagnostics contract into `outputs/` if it removes real
+   responsibility without adding file sprawl.
+6. Consolidate package layout while refactoring: convert flat `rhs1_*` and
+   `transport_*` implementation files into domain package owners or mark them
+   as compatibility shims. Prefer deleting redundant wrappers over adding files.
+7. Raise coverage through extracted module tests and physics/numerical gates,
+   with no new long smoke solves in normal CI. Keep production CPU/GPU/Fortran
+   sweeps in release/manual tiers.
+8. Regenerate README/docs runtime, memory, parity, and benchmark figures only
+   after behavior-changing solver work and only from complete CPU/GPU/Fortran
+   JSON reports. Do not update public plots for pure refactors.
+9. Mark the draft PR ready for review only after the branch is clean, docs are
+   current, public behavior is unchanged, focused validation passes, CI is
+   checked once after a meaningful push, and deferred technical research lanes
+   are explicitly fail-closed rather than mixed into the refactor PR.
 
 ## Done Definition
 

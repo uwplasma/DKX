@@ -100,6 +100,9 @@ scripts and notebooks.
 .. automodule:: sfincs_jax.solvers.preconditioners.xblock.low_l_schur
    :members:
 
+.. automodule:: sfincs_jax.solvers.preconditioners.xblock.active_projected
+   :members:
+
 .. automodule:: sfincs_jax.solvers.preconditioners.xblock.tz_sparse
    :members:
 
