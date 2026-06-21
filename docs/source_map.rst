@@ -119,14 +119,16 @@ RHSMode=1 output-safety and trace-schema helpers:
 - production-size nonconverged-output refusal gates,
 - residual/target extraction from solver results,
 - solver metadata normalization for output and traces,
+- main-file RHSMode=1 solver diagnostics, timing, memory-estimate, direct-tail,
+  sparse-PC, and residual-target-ratio output fields,
 - conservative solver-trace memory estimates,
 - sidecar JSON trace writing when a large RHSMode=1 diagnostic output is
   intentionally refused.
 
-The solved-field schema construction still lives in ``sfincs_jax/io.py`` during
-the current refactor tranche. The next I/O split should move solved-field,
-diagnostic, timing, memory, and provenance schema construction behind a smaller
-output contract while preserving these writer functions.
+The solved-field physics schema construction still lives in ``sfincs_jax/io.py``
+during the current refactor tranche. The next I/O split should move physical
+solved-field and provenance schema construction behind a smaller output
+contract while preserving these writer functions.
 
 ``sfincs_jax/input_compat.py``
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
