@@ -1,0 +1,594 @@
+"""Nonlinear Phi1 Newton-Krylov solves for RHSMode=1 profile response.
+
+This module owns the nonlinear Phi1 solve loop that used to live in
+``v3_driver.py``.  It keeps the production/non-autodiff sparse-direct rescue
+explicit while preserving the JAX-native Newton and linearization path used by
+differentiable Python workflows.
+"""
+
+from __future__ import annotations
+
+from collections.abc import Callable
+from dataclasses import replace
+import os
+
+import jax
+import jax.numpy as jnp
+import numpy as np
+
+from ...host_refinement import (
+    host_sparse_direct_polish,
+    host_sparse_direct_solve_with_refinement,
+)
+from ...krylov_dispatch import gmres_solve_dispatch
+from ...namelist import Namelist
+from ...newton_krylov_diagnostics import emit_newton_krylov_ksp_history
+from ...phi1_line_search import advance_phi1_newton_iterate
+from ...phi1_newton_linear import (
+    build_phi1_newton_preconditioner,
+    solve_phi1_newton_linear_step,
+)
+from ...phi1_newton_policy import (
+    phi1_frozen_jacobian_policy,
+    phi1_gmres_restart,
+    phi1_line_search_policy,
+    phi1_use_active_dof_mode,
+)
+from ...preconditioner_context import (
+    set_precond_policy_hints,
+    set_precond_size_hint,
+    use_solver_jit,
+)
+from ...rhs1_compressed_layout import build_rhs1_compressed_pitch_layout
+from ...rhs1_host_policy import (
+    host_sparse_direct_refine_steps,
+    host_sparse_factor_dtype,
+)
+from ...rhs1_ksp_diagnostics import (
+    rhs1_fortran_stdout_from_env,
+    rhs1_ksp_history_limits_from_env,
+)
+from ...solver import (
+    GMRESSolveResult,
+    distributed_gmres_enabled,
+    gmres_solve,
+    gmres_solve_distributed,
+    gmres_solve_jit,
+)
+from ...solver_runtime import gmres_result_is_finite
+from ...solvers.preconditioners.full_fp.kinetic_blocks import (
+    build_rhs1_block_preconditioner,
+    build_rhs1_collision_preconditioner,
+)
+from ...solvers.preconditioners.symbolic_sparse import build_sparse_ilu_from_matvec
+from ...v3_results import V3NewtonKrylovResult
+from ...v3_system import (
+    V3FullSystemOperator,
+    apply_v3_full_system_jacobian_jit,
+    apply_v3_full_system_operator_cached,
+    full_system_operator_from_namelist,
+    residual_v3_full_system,
+    rhs_v3_full_system_jit,
+)
+
+
+def _transport_active_dof_indices(op: V3FullSystemOperator) -> np.ndarray:
+    return build_rhs1_compressed_pitch_layout(op).active_full_indices.astype(np.int32, copy=False)
+
+
+def _dispatch_gmres(**kwargs):
+    return gmres_solve_dispatch(
+        gmres_solve_fn=gmres_solve,
+        gmres_solve_jit_fn=gmres_solve_jit,
+        gmres_solve_distributed_fn=gmres_solve_distributed,
+        distributed_gmres_enabled_fn=distributed_gmres_enabled,
+        use_solver_jit_fn=use_solver_jit,
+        **kwargs,
+    )
+
+
+def _phi1_host_sparse_factor_dtype(*, size: int) -> np.dtype:
+    return host_sparse_factor_dtype(
+        size=int(size),
+        factorization="lu",
+        use_implicit=False,
+        backend=jax.default_backend(),
+    )
+
+
+def solve_v3_full_system_newton_krylov(
+    *,
+    nml: Namelist,
+    x0: jnp.ndarray | None = None,
+    tol: float = 1e-10,
+    max_newton: int = 12,
+    gmres_tol: float = 1e-10,
+    gmres_restart: int = 80,
+    gmres_maxiter: int | None = 400,
+    solve_method: str = "batched",
+    identity_shift: float = 0.0,
+) -> V3NewtonKrylovResult:
+    """Solve ``residual_v3_full_system(op, x) = 0`` with Newton-Krylov.
+
+    This small path is intended for parity fixtures and developer experiments.
+    Production output writing uses :func:`solve_v3_full_system_newton_krylov_history`
+    so accepted Newton iterates can be serialized.
+    """
+
+    op = full_system_operator_from_namelist(nml=nml, identity_shift=identity_shift)
+    set_precond_size_hint(int(op.total_size))
+    set_precond_policy_hints(
+        has_pas=getattr(op.fblock, "pas", None) is not None,
+        has_fp=getattr(op.fblock, "fp", None) is not None,
+        include_phi1=bool(op.include_phi1),
+        rhs_mode=int(op.rhs_mode),
+    )
+    if x0 is None:
+        x = jnp.zeros((op.total_size,), dtype=jnp.float64)
+    else:
+        x = jnp.asarray(x0, dtype=jnp.float64)
+        if x.shape != (op.total_size,):
+            raise ValueError(f"x0 must have shape {(op.total_size,)}, got {x.shape}")
+
+    last_linear_resid = jnp.asarray(jnp.inf, dtype=jnp.float64)
+
+    for k in range(int(max_newton)):
+        r, jvp = jax.linearize(lambda xx: residual_v3_full_system(op, xx), x)
+        rnorm = jnp.linalg.norm(r)
+        if float(rnorm) < float(tol):
+            return V3NewtonKrylovResult(
+                op=op,
+                x=x,
+                residual_norm=rnorm,
+                n_newton=k,
+                last_linear_residual_norm=last_linear_resid,
+            )
+
+        lin = _dispatch_gmres(
+            matvec=jvp,
+            b=-r,
+            tol=float(gmres_tol),
+            restart=int(gmres_restart),
+            maxiter=gmres_maxiter,
+            solve_method=str(solve_method),
+        )
+        s = lin.x
+        last_linear_resid = lin.residual_norm
+
+        step = 1.0
+        step_scale_env = os.environ.get("SFINCS_JAX_PHI1_STEP_SCALE", "").strip()
+        try:
+            step_scale = float(step_scale_env) if step_scale_env else 1.0
+        except ValueError:
+            step_scale = 1.0
+        rnorm0 = float(rnorm)
+        for _ in range(12):
+            x_try = x + (step * step_scale) * s
+            r_try = residual_v3_full_system(op, x_try)
+            rnorm_try = float(jnp.linalg.norm(r_try))
+            if rnorm_try <= 0.9 * rnorm0:
+                x = x_try
+                break
+            step *= 0.5
+        else:
+            x = x + (1.0 / 64.0) * s
+
+    r = residual_v3_full_system(op, x)
+    return V3NewtonKrylovResult(
+        op=op,
+        x=x,
+        residual_norm=jnp.linalg.norm(r),
+        n_newton=int(max_newton),
+        last_linear_residual_norm=last_linear_resid,
+    )
+
+
+def solve_v3_full_system_newton_krylov_history(
+    *,
+    nml: Namelist,
+    x0: jnp.ndarray | None = None,
+    tol: float = 1e-10,
+    max_newton: int = 12,
+    gmres_tol: float = 1e-10,
+    gmres_restart: int = 80,
+    gmres_maxiter: int | None = 400,
+    solve_method: str = "batched",
+    identity_shift: float = 0.0,
+    nonlinear_rtol: float = 0.0,
+    use_frozen_linearization: bool = False,
+    emit: Callable[[int, str], None] | None = None,
+) -> tuple[V3NewtonKrylovResult, list[jnp.ndarray]]:
+    """Newton-Krylov solve that returns the accepted Newton-state history."""
+
+    op = full_system_operator_from_namelist(nml=nml, identity_shift=identity_shift)
+    if emit is not None:
+        emit(1, f"solve_v3_full_system_newton_krylov_history: total_size={int(op.total_size)}")
+    fortran_stdout = rhs1_fortran_stdout_from_env(emit=emit)
+    env_gmres_tol = os.environ.get("SFINCS_JAX_PHI1_GMRES_TOL", "").strip()
+    if env_gmres_tol:
+        gmres_tol = float(env_gmres_tol)
+
+    if x0 is None:
+        x = jnp.zeros((op.total_size,), dtype=jnp.float64)
+    else:
+        x = jnp.asarray(x0, dtype=jnp.float64)
+        if x.shape != (op.total_size,):
+            raise ValueError(f"x0 must have shape {(op.total_size,)}, got {x.shape}")
+
+    active_env = os.environ.get("SFINCS_JAX_PHI1_ACTIVE_DOF", "").strip().lower()
+    nxi_for_x = np.asarray(op.fblock.collisionless.n_xi_for_x, dtype=np.int32)
+    has_reduced_modes = bool(np.any(nxi_for_x < int(op.n_xi)))
+    use_active_dof_mode = phi1_use_active_dof_mode(
+        rhs_mode=int(op.rhs_mode),
+        include_phi1=bool(op.include_phi1),
+        has_reduced_modes=has_reduced_modes,
+        env_value=active_env,
+    )
+
+    active_idx_jnp: jnp.ndarray | None = None
+    full_to_active_jnp: jnp.ndarray | None = None
+    active_size = int(op.total_size)
+    if use_active_dof_mode:
+        active_idx_np = _transport_active_dof_indices(op)
+        active_idx_jnp = jnp.asarray(active_idx_np, dtype=jnp.int32)
+        full_to_active_np = np.zeros((int(op.total_size),), dtype=np.int32)
+        full_to_active_np[np.asarray(active_idx_np, dtype=np.int32)] = np.arange(
+            1,
+            int(active_idx_np.shape[0]) + 1,
+            dtype=np.int32,
+        )
+        full_to_active_jnp = jnp.asarray(full_to_active_np, dtype=jnp.int32)
+        active_size = int(active_idx_np.shape[0])
+        if emit is not None:
+            emit(
+                1,
+                "solve_v3_full_system_newton_krylov_history: active-DOF mode enabled "
+                f"(size={active_size}/{int(op.total_size)})",
+            )
+    gmres_restart_use = phi1_gmres_restart(active_size=active_size, gmres_restart=int(gmres_restart))
+
+    def _reduce_full(v_full: jnp.ndarray) -> jnp.ndarray:
+        assert active_idx_jnp is not None
+        return v_full[active_idx_jnp]
+
+    def _expand_reduced(v_reduced: jnp.ndarray) -> jnp.ndarray:
+        assert full_to_active_jnp is not None
+        z0 = jnp.zeros((1,), dtype=v_reduced.dtype)
+        padded = jnp.concatenate([z0, v_reduced], axis=0)
+        return padded[full_to_active_jnp]
+
+    pc_env = os.environ.get("SFINCS_JAX_PHI1_USE_PRECONDITIONER", "").strip().lower()
+    use_preconditioner = pc_env not in {"0", "false", "no", "off"}
+    dense_cutoff_env = os.environ.get("SFINCS_JAX_PHI1_NK_DENSE_CUTOFF", "").strip()
+    try:
+        dense_cutoff = int(dense_cutoff_env) if dense_cutoff_env else 5000
+    except ValueError:
+        dense_cutoff = 5000
+    linear_size = active_size if use_active_dof_mode else int(op.total_size)
+    solve_method_in = str(solve_method).strip().lower()
+    use_sparse_direct_linear = solve_method_in == "sparse_direct"
+    use_dense_linear = solve_method_in in {"dense", "dense_row_scaled"} or (
+        use_frozen_linearization and int(linear_size) <= int(dense_cutoff)
+    )
+    if use_dense_linear or use_sparse_direct_linear:
+        use_preconditioner = False
+    preconditioner = build_phi1_newton_preconditioner(
+        use_preconditioner=bool(use_preconditioner),
+        use_frozen_linearization=bool(use_frozen_linearization),
+        rhs_mode=int(op.rhs_mode),
+        include_phi1=bool(op.include_phi1),
+        use_active_dof_mode=bool(use_active_dof_mode),
+        op=op,
+        reduce_full=_reduce_full if use_active_dof_mode else None,
+        expand_reduced=_expand_reduced if use_active_dof_mode else None,
+        preconditioner_options=nml.group("preconditionerOptions"),
+        collision_builder=build_rhs1_collision_preconditioner,
+        block_builder=build_rhs1_block_preconditioner,
+        emit=emit,
+    )
+
+    last_linear_resid = jnp.asarray(jnp.inf, dtype=jnp.float64)
+    accepted: list[jnp.ndarray] = []
+    rnorm_initial: float | None = None
+    cached_jvp = None
+    cached_jvp_iter = -1
+    frozen_jac_policy = phi1_frozen_jacobian_policy(include_phi1=bool(op.include_phi1))
+    use_frozen_jac_cache = bool(frozen_jac_policy.use_cache)
+    frozen_jac_every = int(frozen_jac_policy.every)
+    ksp_history_limits = rhs1_ksp_history_limits_from_env()
+    ksp_history_max_size = ksp_history_limits.max_size
+    ksp_history_max_iter = ksp_history_limits.max_iter
+
+    def _emit_ksp_history_nk(
+        *,
+        matvec_fn,
+        b_vec: jnp.ndarray,
+        precond_fn,
+        x0_vec: jnp.ndarray | None,
+        tol_val: float,
+        atol_val: float,
+        restart_val: int,
+        maxiter_val: int | None,
+        precond_side: str,
+    ) -> None:
+        emit_newton_krylov_ksp_history(
+            matvec_fn=matvec_fn,
+            b_vec=b_vec,
+            precond_fn=precond_fn,
+            x0_vec=x0_vec,
+            tol_val=tol_val,
+            atol_val=atol_val,
+            restart_val=restart_val,
+            maxiter_val=maxiter_val,
+            precond_side=precond_side,
+            emit=emit,
+            fortran_stdout=bool(fortran_stdout),
+            max_size=ksp_history_max_size,
+            max_history_iter=ksp_history_max_iter,
+        )
+
+    def _phi1_sparse_direct_solve(
+        *,
+        matvec_fn,
+        b_vec: jnp.ndarray,
+        n: int,
+        cache_tag: tuple[object, ...],
+        tol_val: float,
+        atol_val: float,
+        restart_val: int,
+        maxiter_val: int | None,
+    ) -> GMRESSolveResult:
+        factor_dtype = _phi1_host_sparse_factor_dtype(size=int(n))
+        cache_key_use = ("phi1_nk_sparse_direct", *cache_tag, str(factor_dtype))
+        a_csr_full, _a_csr_drop, ilu, _a_dense, _l_dense, _u_dense, _l_unit = build_sparse_ilu_from_matvec(
+            matvec=matvec_fn,
+            n=int(n),
+            dtype=jnp.float64,
+            cache_key=cache_key_use,
+            factor_dtype=factor_dtype,
+            drop_tol=0.0,
+            drop_rel=0.0,
+            ilu_drop_tol=0.0,
+            fill_factor=1.0,
+            build_dense_factors=False,
+            build_jax_factors=False,
+            build_ilu=True,
+            store_dense=False,
+            factorization="lu",
+            emit=emit,
+        )
+        if ilu is None:
+            raise RuntimeError("phi1 sparse_direct: factors unavailable")
+        x_np, residual_norm = host_sparse_direct_solve_with_refinement(
+            ilu=ilu,
+            a_csr_full=a_csr_full,
+            rhs_vec=b_vec,
+            factor_dtype=factor_dtype,
+            refine_steps=host_sparse_direct_refine_steps("SFINCS_JAX_PHI1_SPARSE_DIRECT_REFINE", default=2),
+        )
+        target_true = max(float(atol_val), float(tol_val) * float(jnp.linalg.norm(b_vec)))
+        if factor_dtype == np.dtype(np.float32) and residual_norm > target_true:
+            polish_env = os.environ.get("SFINCS_JAX_PHI1_SPARSE_DIRECT_POLISH", "").strip().lower()
+            if polish_env not in {"0", "false", "no", "off"}:
+                polish_restart_env = os.environ.get("SFINCS_JAX_PHI1_SPARSE_DIRECT_POLISH_RESTART", "").strip()
+                polish_maxiter_env = os.environ.get("SFINCS_JAX_PHI1_SPARSE_DIRECT_POLISH_MAXITER", "").strip()
+                try:
+                    polish_restart = int(polish_restart_env) if polish_restart_env else min(int(restart_val), 40)
+                except ValueError:
+                    polish_restart = min(int(restart_val), 40)
+                try:
+                    polish_maxiter = (
+                        int(polish_maxiter_env)
+                        if polish_maxiter_env
+                        else min(max(40, int(maxiter_val or 120)), 120)
+                    )
+                except ValueError:
+                    polish_maxiter = min(max(40, int(maxiter_val or 120)), 120)
+                x_polish, residual_norm_polish = host_sparse_direct_polish(
+                    matvec_fn=matvec_fn,
+                    rhs_vec=b_vec,
+                    x0_np=x_np,
+                    ilu=ilu,
+                    factor_dtype=factor_dtype,
+                    tol=tol_val,
+                    atol=atol_val,
+                    restart=max(5, int(polish_restart)),
+                    maxiter=max(5, int(polish_maxiter)),
+                    precondition_side="left",
+                )
+                if np.isfinite(residual_norm_polish) and residual_norm_polish < residual_norm:
+                    x_np = x_polish
+                    residual_norm = residual_norm_polish
+        return GMRESSolveResult(
+            x=jnp.asarray(x_np, dtype=jnp.float64),
+            residual_norm=jnp.asarray(residual_norm, dtype=jnp.float64),
+        )
+
+    for k in range(int(max_newton)):
+        if emit is not None:
+            emit(1, f"newton_iter={k}: evaluateResidual called")
+        op_use = op
+        if bool(op.include_phi1):
+            phi1_flat = x[op.f_size : op.f_size + op.n_theta * op.n_zeta]
+            phi1 = phi1_flat.reshape((op.n_theta, op.n_zeta))
+            op_use = replace(op, phi1_hat_base=phi1)
+
+        r = apply_v3_full_system_operator_cached(op_use, x, include_jacobian_terms=False) - rhs_v3_full_system_jit(op_use)
+        rnorm = jnp.linalg.norm(r)
+        rnorm_f = float(rnorm)
+        if rnorm_initial is None:
+            rnorm_initial = max(rnorm_f, 1e-300)
+        if emit is not None:
+            emit(0, f"newton_iter={k}: residual_norm={rnorm_f:.6e}")
+        if emit is not None and fortran_stdout:
+            emit(0, f"{k:4d} SNES Function norm {rnorm_f: .12e} ")
+        if not np.isfinite(rnorm_f):
+            x_return = accepted[-1] if accepted else x
+            r_return = residual_v3_full_system(op, x_return)
+            return (
+                V3NewtonKrylovResult(
+                    op=op,
+                    x=x_return,
+                    residual_norm=jnp.linalg.norm(r_return),
+                    n_newton=k,
+                    last_linear_residual_norm=last_linear_resid,
+                ),
+                accepted,
+            )
+
+        converged_abs = rnorm_f < float(tol)
+        converged_rel = rnorm_f <= float(nonlinear_rtol) * float(rnorm_initial)
+        if converged_abs or converged_rel:
+            if not accepted:
+                accepted.append(x)
+            return (
+                V3NewtonKrylovResult(
+                    op=op,
+                    x=x,
+                    residual_norm=rnorm,
+                    n_newton=k,
+                    last_linear_residual_norm=last_linear_resid,
+                ),
+                accepted,
+            )
+
+        if use_frozen_linearization:
+            jac_mode = frozen_jac_policy.mode
+            if jac_mode == "frozen_rhs":
+
+                def residual_for_jac(xx: jnp.ndarray) -> jnp.ndarray:
+                    if bool(op.include_phi1):
+                        phi1_flat_x = xx[op.f_size : op.f_size + op.n_theta * op.n_zeta]
+                        phi1_x = phi1_flat_x.reshape((op.n_theta, op.n_zeta))
+                        op_rhs_x = replace(op, phi1_hat_base=phi1_x)
+                    else:
+                        op_rhs_x = op
+                    return (
+                        apply_v3_full_system_operator_cached(op_use, xx, include_jacobian_terms=True)
+                        - rhs_v3_full_system_jit(op_rhs_x)
+                    )
+
+                reuse_cached = (
+                    use_frozen_jac_cache
+                    and cached_jvp is not None
+                    and (k - cached_jvp_iter) < frozen_jac_every
+                )
+                if reuse_cached:
+                    matvec = cached_jvp
+                    if emit is not None:
+                        emit(1, f"newton_iter={k}: evaluateJacobian reused (frozen_rhs cache)")
+                else:
+                    _r_lin, jvp = jax.linearize(residual_for_jac, x)
+                    matvec = jvp
+                    if use_frozen_jac_cache:
+                        cached_jvp = jvp
+                        cached_jvp_iter = k
+                    if emit is not None:
+                        emit(1, f"newton_iter={k}: evaluateJacobian called (frozen operator + dynamic RHS)")
+            elif jac_mode == "frozen_op":
+
+                def residual_for_jac(xx: jnp.ndarray) -> jnp.ndarray:
+                    if bool(op.include_phi1):
+                        phi1_flat_x = xx[op.f_size : op.f_size + op.n_theta * op.n_zeta]
+                        phi1_x = phi1_flat_x.reshape((op.n_theta, op.n_zeta))
+                        op_mat_x = replace(op, phi1_hat_base=phi1_x)
+                    else:
+                        op_mat_x = op
+                    return (
+                        apply_v3_full_system_operator_cached(op_mat_x, xx, include_jacobian_terms=True)
+                        - rhs_v3_full_system_jit(op_use)
+                    )
+
+                _r_lin, jvp = jax.linearize(residual_for_jac, x)
+                matvec = jvp
+                if emit is not None:
+                    emit(1, f"newton_iter={k}: evaluateJacobian called (dynamic operator + frozen RHS)")
+            else:
+                def matvec(dx: jnp.ndarray) -> jnp.ndarray:
+                    return apply_v3_full_system_jacobian_jit(op_use, x, dx)
+
+                if emit is not None:
+                    emit(1, f"newton_iter={k}: evaluateJacobian called (fully frozen linearization)")
+        else:
+            _r_lin, jvp = jax.linearize(lambda xx: residual_v3_full_system(op, xx), x)
+            matvec = jvp
+            if emit is not None:
+                emit(1, f"newton_iter={k}: evaluateJacobian called (autodiff linearization)")
+
+        solve_method_linear = str(solve_method)
+        if use_frozen_linearization and int(linear_size) <= int(dense_cutoff):
+            solve_method_linear = "dense"
+
+        lin, s, linear_resid_norm = solve_phi1_newton_linear_step(
+            use_active_dof_mode=bool(use_active_dof_mode),
+            solve_method_linear=solve_method_linear,
+            matvec=matvec,
+            residual_vec=r,
+            preconditioner=preconditioner,
+            gmres_tol=float(gmres_tol),
+            gmres_restart=int(gmres_restart_use),
+            gmres_maxiter=gmres_maxiter,
+            sparse_direct_solve=_phi1_sparse_direct_solve,
+            gmres_dispatch=_dispatch_gmres,
+            gmres_result_is_finite=gmres_result_is_finite,
+            emit_ksp_history=_emit_ksp_history_nk,
+            emit=emit,
+            newton_iter=int(k),
+            reduce_full=_reduce_full if use_active_dof_mode else None,
+            expand_reduced=_expand_reduced if use_active_dof_mode else None,
+            active_size=int(active_size),
+            total_size=int(op.total_size),
+        )
+
+        if emit is not None:
+            emit(1, f"newton_iter={k}: gmres_residual={float(linear_resid_norm):.6e}")
+        if not gmres_result_is_finite(lin):
+            x_return = accepted[-1] if accepted else x
+            r_return = residual_v3_full_system(op, x_return)
+            return (
+                V3NewtonKrylovResult(
+                    op=op,
+                    x=x_return,
+                    residual_norm=jnp.linalg.norm(r_return),
+                    n_newton=k,
+                    last_linear_residual_norm=last_linear_resid,
+                ),
+                accepted,
+            )
+        last_linear_resid = linear_resid_norm
+
+        ls_policy = phi1_line_search_policy(
+            use_frozen_linearization=bool(use_frozen_linearization),
+            include_phi1=bool(op.include_phi1),
+        )
+        x = advance_phi1_newton_iterate(
+            x=x,
+            step_direction=s,
+            residual_norm0=float(rnorm),
+            residual_fn=lambda x_try: residual_v3_full_system(op, x_try),
+            accepted=accepted,
+            mode=str(ls_policy.mode),
+            step_scale=float(ls_policy.step_scale),
+            factor=ls_policy.factor,
+            c1=float(ls_policy.c1),
+            maxiter=int(ls_policy.maxiter),
+        )
+        accepted.append(x)
+
+    r = residual_v3_full_system(op, x)
+    return (
+        V3NewtonKrylovResult(
+            op=op,
+            x=x,
+            residual_norm=jnp.linalg.norm(r),
+            n_newton=int(max_newton),
+            last_linear_residual_norm=last_linear_resid,
+        ),
+        accepted,
+    )
+
+
+__all__ = [
+    "solve_v3_full_system_newton_krylov",
+    "solve_v3_full_system_newton_krylov_history",
+]

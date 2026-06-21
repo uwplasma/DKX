@@ -734,6 +734,13 @@ otherwise lower residual when the incumbent is already clean. The docstring
 audit in ``tests/test_policy_module_docstrings.py`` now also covers this
 source-mapped non-policy control module so the handoff contract remains
 discoverable while ``v3_driver.py`` is split further.
+The nonlinear Phi1 Newton-Krylov stage now lives in
+``sfincs_jax.problems.profile_response.phi1_newton``. It is covered by
+``tests/test_full_system_newton_krylov.py`` and the adjacent Phi1 policy,
+linear-step, and line-search tests. The fixture test imports the new owner
+directly, verifies the historical ``v3_driver`` name is a facade, and checks
+converged residual/solution parity against the tiny PETSc state-vector
+reference for ``includePhi1InKineticEquation=true``.
 Transport worker residual abort formatting is covered in
 ``tests/test_transport_residual_quality.py`` for
 ``sfincs_jax.problems.transport_matrix.residual_quality``, including custom

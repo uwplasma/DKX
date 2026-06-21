@@ -50,6 +50,11 @@ documentation, README figures, and complete benchmark reports.
   preconditioner family, including active full-index mapping, x-block sparse
   LU/ILU residual correction, factor-memory admission, block scaling, singular
   block fallback metadata, and restricted additive-Schwarz patch setup.
+- `sfincs_jax.problems.profile_response.phi1_newton` now owns the nonlinear
+  Phi1 Newton-Krylov solve stage, including accepted-state history solves,
+  active-DOF compaction, frozen-Jacobian mode selection, sparse-direct
+  non-autodiff rescue, KSP-history replay wiring, and line-search advancement.
+  `v3_driver.py` keeps the historical public names as compatibility facades.
 - `sfincs_jax.outputs.formats` now owns flat HDF5/NetCDF/NPZ output
   readers/writers, output suffix dispatch, SFINCS Fortran-compatible HDF5
   layout conversion, NetCDF-safe names, and solver-trace attachment.  `io.py`
@@ -59,18 +64,19 @@ documentation, README figures, and complete benchmark reports.
 
 - The branch has committed the symbolic-sparse RHSMode=1 Fortran-reduced
   extraction (`b7a0bf2`), the flat output-format split (`11abd75`), and the
-  RHSMode=1 x-block low-`ell` Schur extraction (`86db37f`). The current local
-  tranche extracts the active-projected x-block and overlap-Schwarz family and
-  has passed focused direct tests, full-assembly regression tests, import
-  contract checks, `ruff`, and `py_compile` locally.
+  RHSMode=1 x-block low-`ell` Schur extraction (`86db37f`), plus the
+  active-projected x-block/overlap-Schwarz extraction (`ae8fa52`). The current
+  local tranche extracts the nonlinear Phi1 Newton-Krylov stage from
+  `v3_driver.py` into the profile-response package and has passed focused Phi1
+  tests, `ruff`, and `py_compile` locally.
 - Current largest source files:
-  - `sfincs_jax/v3_driver.py`: about 14.4k lines, 79 functions.
+  - `sfincs_jax/v3_driver.py`: about 13.9k lines, 77 top-level definitions.
   - `sfincs_jax/rhs1_full_assembly.py`: about 8.6k lines after the current
     local active-projected extraction.
   - `sfincs_jax/io.py`: about 5.5k lines after the output-format split.
   - `sfincs_jax/problems/profile_response/sparse/xblock.py`: about 4.5k lines.
   - `sfincs_jax/rhs1_qi_device_preconditioner.py`: about 4.4k lines.
-- The repository has about 287 Python source files and about 160k source lines.
+- The repository has about 288 Python source files and about 160k source lines.
   The file count is high enough that new modules must now consolidate domain
   ownership, not add more flat historical `rhs1_*` or `transport_*` helpers.
 - GitHub PR metadata must be reconciled before review: the working rule remains
@@ -183,8 +189,10 @@ Acceptance:
 
 ### P2. Reduce `v3_driver.py` To Orchestration
 
-Status: about 88%; still the largest source file and the main review-readiness
-blocker once the current RHSMode=1 tranche is committed.
+Status: about 90%; still the largest source file, but the nonlinear Phi1
+Newton-Krylov solve stage has moved to the profile-response package. The next
+P2 work should target another stable stage boundary, not driver-local mutable
+state.
 
 Actions:
 
@@ -372,21 +380,20 @@ CPU/GPU/Fortran gates, not more smoother/restart tuning.
 
 ## Immediate Ordered Next Steps
 
-1. Finish and commit the current active-projected x-block tranche: source-map,
-   API docs, testing docs, direct tests, full-assembly regression tests, Sphinx,
+1. Finish and commit the current nonlinear Phi1 Newton-Krylov tranche:
+   source-map, API docs, testing docs, direct tests, focused Phi1 tests, Sphinx,
    repo-size, and import contracts.
 2. Stop P1 unless review finds one remaining large, cohesive RHSMode=1
    preconditioner family that can move without creating a new vague file. The
    default assumption is that `rhs1_full_assembly.py` now stays as orchestration,
    dispatch/admission, and compatibility until the v3-driver stage boundary is
    cleaner.
-3. Reconcile PR metadata and keep exactly one draft PR for this refactor
+3. Continue P2 with one more stable `v3_driver.py` stage boundary only after
+   this Phi1 tranche is clean. Candidate priorities are result/output handoff,
+   progress reporting, or transport parallel facade cleanup.
+4. Reconcile PR metadata and keep exactly one draft PR for this refactor
    campaign. If PR #8 is stale or points at a different branch, update the plan
    and GitHub state before asking for review.
-4. Move to P2: extract one stable `v3_driver.py` stage boundary at a time,
-   prioritizing result/output handoff, progress reporting, solver dispatch, or
-   result contracts. Avoid extracting driver-local mutable state into vague
-   helpers.
 5. Move to P3 only after the next driver seam is stable: split the remaining
    `io.py` schema/diagnostics contract into `outputs/` if it removes real
    responsibility without adding file sprawl.
