@@ -620,12 +620,14 @@ the historical private driver name and test the focused module directly. This ke
 - ``sfincs_jax/problems/profile_response/sparse/qi.py``:
   QI-specific x-block device/operator-reuse policy, coarse-seed, Galerkin,
   two-level, QI-device admission/build/probe/install, and residual-deflated
-  stages plus the QI seed/device/deflated diagnostic payload builders used by
-  the sparse-PC final metadata. These helpers are separated from generic
-  sparse-PC logic because they encode QI-specific coarse-basis and
-  residual-space choices; ``v3_driver.py`` now injects solve-local operators
-  and compatibility probe aliases rather than owning the QI-device setup logic
-  or constructing QI metadata inline.
+  stages. It also owns ``run_xblock_qi_preconditioner_pipeline()``, the
+  aggregate runner that keeps QI stage ordering, setup-time accounting,
+  fail-closed reasons, and seed/device/deflated diagnostic scope out of
+  ``v3_driver.py``. These helpers are separated from generic sparse-PC logic
+  because they encode QI-specific coarse-basis and residual-space choices;
+  ``v3_driver.py`` now injects solve-local operators and compatibility probe
+  aliases rather than owning QI setup orchestration or constructing QI metadata
+  inline.
 - ``sfincs_jax/problems/profile_response/dense.py``:
   RHSMode=1/profile-response host dense solve helpers. This module owns the
   reduced row-scaled LU path and the full/reduced least-squares dense fallback
