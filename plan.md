@@ -32,12 +32,15 @@ benchmark artifacts.
   - RHSMode=1 Fortran-reduced symbolic sparse factors.
   - RHSMode=1 low-`ell` x-block Schur preconditioners.
   - RHSMode=1 active-projected x-block / overlap-Schwarz preconditioners.
+  - RHSMode=1 active sparse-factor preconditioners
+    (`active_global_sparse_factor`, `active_scaled_ilu/lu`, and
+    `active_filtered_sparse_factor`).
   - Flat HDF5/NetCDF/NPZ output-format helpers.
   - Nonlinear Phi1 Newton-Krylov profile-response solve stage.
 - GitHub Docs CI is green for the latest pushed commits on the active branch.
 - Current largest package files from the fresh source audit:
   - `sfincs_jax/v3_driver.py`: about 13.9k lines.
-  - `sfincs_jax/rhs1_full_assembly.py`: about 8.6k lines.
+  - `sfincs_jax/rhs1_full_assembly.py`: about 7.9k lines.
   - `sfincs_jax/io.py`: about 5.5k lines.
   - `sfincs_jax/problems/profile_response/sparse/xblock.py`: about 4.5k lines.
   - `sfincs_jax/rhs1_qi_device_preconditioner.py`: about 4.4k lines.
@@ -145,8 +148,10 @@ and fail-closed.
    redundant wrappers over adding a new file.
 
 3. `rhs1_full_assembly.py` ownership split
-   Status: most major preconditioner families have owners. Stop unless a large
-   cohesive family remains. This file should now trend toward assembly
+   Status: most major preconditioner families have owners, including the active
+   sparse-factor family now owned by
+   `solvers.preconditioners.symbolic_sparse.active_factors`. Stop unless a
+   large cohesive family remains. This file should now trend toward assembly
    orchestration, dispatch/admission, and compatibility.
 
 4. `io.py` schema split
