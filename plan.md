@@ -39,8 +39,11 @@ deferred research lanes.
   in commit `eeb2a85`.
 - Final RHSMode=1/profile-response linear-solve handoff moved into
   `sfincs_jax.problems.profile_response.finalization` in commit `e1c6fa4`.
-- Current uncommitted tranche moves initial operator/RHS problem
-  materialization into `sfincs_jax.problems.profile_response.setup`.
+- Initial operator/RHS problem materialization moved into
+  `sfincs_jax.problems.profile_response.setup` in commit `611e283`.
+- Current next tranche is one more cohesive `v3_driver.py` stage extraction or,
+  if the next driver seam would be wrapper-only, the first `io.py` output-schema
+  split.
 - The README and docs currently state the public claim boundary: the documented
   release suite is CPU/GPU parity-clean, while production-resolution QI, true
   device-QI, lower-memory native factor replacement, full-grid QA/QH RHSMode=1,
@@ -157,39 +160,36 @@ claim. They must stay documented, fail-closed, and gated.
 
 ## Refactor Open Lanes
 
-1. **Finish current profile-response setup/materialization tranche**
-   Update source map/API/testing docs, rerun focused validation, commit, and
-   push active branch and PR branch. This is the current local dirty state.
+1. **Make `v3_driver.py` orchestration-only**
+   Extract one more cohesive driver boundary if it removes real responsibility,
+   not just wrapper lines. The next likely candidates are progress/timing
+   reporting, a larger result/output handoff, or solve-result metadata assembly
+   not already covered by finalization.
 
-2. **Make `v3_driver.py` orchestration-only**
-   After the transport tranche, extract one more cohesive driver boundary:
-   result/output handoff or progress/timing reporting. Do not extract another
-   tiny wrapper-only seam.
+2. **Split output schema from `io.py`**
+   Move solved-field schema, diagnostics, solver metadata, timing, memory, and
+   provenance contracts behind a small output contract. Keep file-format
+   writers in `outputs.formats`.
 
 3. **Stabilize RHSMode=1 ownership**
    Stop broad RHSMode=1 churn unless a complete remaining family has a clear
    domain home. Keep `rhs1_full_assembly.py` as assembly/dispatch/admission
    owner until a full family can move cleanly.
 
-4. **Split output schema from `io.py`**
-   Move solved-field schema, diagnostics, solver metadata, timing, memory, and
-   provenance contracts behind a small output contract. Keep file-format
-   writers in `outputs.formats`.
-
-5. **Consolidate package layout**
+4. **Consolidate package layout**
    Identify compatibility-only top-level modules, remove redundant aliases, and
    prefer fewer clearer domain modules over many small historical wrappers.
 
-6. **Preserve differentiable/non-differentiable API separation**
+5. **Preserve differentiable/non-differentiable API separation**
    Make branch certificates and implicit-differentiation contracts explicit in
    solver result metadata and docs.
 
-7. **Raise coverage through real tests**
+6. **Raise coverage through real tests**
    Every extraction gets direct tests. Add numerical and physics gates where
    they are cheap and meaningful; keep CPU/GPU/Fortran sweeps in release/manual
    tiers.
 
-8. **Keep documentation synchronized**
+7. **Keep documentation synchronized**
    Update `README.md`, `docs/source_map.rst`, `docs/testing.rst`,
    `docs/development_roadmap.rst`, and `docs/research_lanes.rst` only when
    claims or ownership change.
@@ -212,30 +212,7 @@ Acceptance:
 - PR #8 remains the single draft PR.
 - Local worktree is clean after each pushed tranche.
 
-### P1. Close The Current Setup/Materialization Tranche
-
-Goal: land the already-tested initial operator/RHS materialization extraction.
-
-Actions:
-
-1. Keep `sfincs_jax.problems.profile_response.setup` as owner of GMRES budget
-   parsing, operator-build progress, VMEC timing, preconditioner hint
-   installation, tolerance tightening, transport `whichRHS` defaulting, RHS
-   assembly, and RHS norm progress.
-2. Keep `v3_driver.py` responsible only for passing builders/callbacks into the
-   materialization context and consuming the typed result.
-3. Rerun focused setup/finalization tests, `ruff`, `py_compile`,
-   `git diff --check`, repo-size audit, and Sphinx.
-4. Commit and push to both branches.
-
-Acceptance:
-
-- The driver no longer owns initial operator/RHS setup progress and side-effect
-  hint installation inline.
-- The extracted module has direct tests.
-- Public CLI/Python behavior is unchanged.
-
-### P2. Extract One More Real Driver Stage
+### P1. Extract One More Real Driver Stage
 
 Goal: reduce `v3_driver.py` by moving a cohesive stage, not wrapper clutter.
 
@@ -247,11 +224,11 @@ Preferred choices:
 
 Acceptance:
 
-- Extracted module has direct tests.
+- The extracted module has direct tests.
 - Driver keeps only orchestration and dependency injection.
 - Public CLI/Python behavior is unchanged.
 
-### P3. Split `io.py` Output Schema
+### P2. Split `io.py` Output Schema
 
 Goal: make output behavior testable without solver internals.
 
@@ -267,7 +244,7 @@ Acceptance:
 - `io.py` becomes smaller orchestration/compatibility code.
 - Output schema tests catch missing metadata and format drift.
 
-### P4. Consolidate And Delete Compatibility Surfaces
+### P3. Consolidate And Delete Compatibility Surfaces
 
 Goal: reduce file count and cognitive load.
 
@@ -285,7 +262,7 @@ Acceptance:
 - File count does not grow without a domain reason.
 - Developers can infer code location from the equation, solver, or workflow.
 
-### P5. Make Solver Contracts Explicit
+### P4. Make Solver Contracts Explicit
 
 Goal: keep adaptive performance and differentiability honest.
 
@@ -302,7 +279,7 @@ Acceptance:
 - Differentiable examples remain JAX-transformable on documented fixtures.
 - CLI remains fast, robust, and residual-clean.
 
-### P6. Raise Coverage With Meaningful Tests
+### P5. Raise Coverage With Meaningful Tests
 
 Goal: move toward 95% meaningful coverage while keeping CI practical.
 
@@ -322,7 +299,7 @@ Acceptance:
 - Coverage increases because responsibilities are smaller and testable.
 - Normal CI remains in the practical budget.
 
-### P7. Documentation And README Pass
+### P6. Documentation And README Pass
 
 Goal: keep public claims clear and reviewer-proof.
 
@@ -339,7 +316,7 @@ Acceptance:
 - No README claim depends on incomplete production-resolution evidence.
 - Docs show where equations, algorithms, tests, and claims live.
 
-### P8. Benchmarks, Parity, And Figures
+### P7. Benchmarks, Parity, And Figures
 
 Goal: regenerate public artifacts only from complete evidence.
 
@@ -356,7 +333,7 @@ Acceptance:
 - Public plots trace to checked complete reports.
 - Fortran v3 comparisons use matched physics, resolution, and normalization.
 
-### P9. Make PR #8 Review-Ready
+### P8. Make PR #8 Review-Ready
 
 Goal: one coherent refactor PR with no hidden release-claim drift.
 
