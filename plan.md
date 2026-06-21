@@ -55,7 +55,7 @@ Make `sfincs_jax` research-grade while preserving the public user contract:
 Current largest source files:
 
 - `sfincs_jax/v3_driver.py`: about 14.4k lines.
-- `sfincs_jax/rhs1_full_assembly.py`: about 11.4k lines.
+- `sfincs_jax/rhs1_full_assembly.py`: about 11.1k lines.
 - `sfincs_jax/io.py`: about 5.8k lines.
 - `sfincs_jax/problems/profile_response/sparse_pc.py`: about 3.6k lines.
 
@@ -78,6 +78,11 @@ Latest local validation for this branch:
 - Final hygiene for the native-stack/sparse-coarse policy extraction passed:
   targeted `py_compile`, targeted `ruff`, `git diff --check`, repository-size
   audit, and Sphinx HTML docs build.
+- Coarse-basis implementation extraction: `tests/test_rhs1_coarse_basis.py`,
+  `tests/test_rhs1_coarse_policy.py`, domain package import contracts, and
+  policy/source-map docstring tests passed (`18 passed`);
+  `tests/test_rhs1_full_assembly.py` passed (`121 passed`);
+  `tests/test_v3_sparse_pattern.py` passed (`132 passed`).
 
 ## Open Lanes
 
@@ -100,7 +105,7 @@ Acceptance:
 
 ### 2. Follow-Up RHSMode=1 Full-Assembly Refactor
 
-Status: about 48%.
+Status: about 55%.
 
 Completed on this branch:
 
@@ -110,6 +115,8 @@ Completed on this branch:
 - Symbolic sparse policy split.
 - Native-stack and sparse-coarse residual policy split into
   `sfincs_jax.solvers.preconditioners.schur.rhs1_coarse_policy`.
+- RHSMode=1 active coarse residual basis/config/window implementation split
+  into `sfincs_jax.solvers.preconditioners.schur.rhs1_coarse_basis`.
 
 Open work:
 
