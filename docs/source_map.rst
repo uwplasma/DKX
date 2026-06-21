@@ -276,10 +276,11 @@ the historical private driver name and test the focused module directly. This ke
   PAS-family RHSMode=1 composite preconditioner policy. It owns the
   ``pas_lite``, ``pas_hybrid``, and ``pas_schur`` composition rules, including
   angular/TZ applicability, line/truncated-:math:`L` selection, ``Er`` x-upwind
-  routing, x-coarse correction, collision smoothing, and the safety wrapper.
-  ``v3_driver.py`` keeps compatibility wrappers that bind the current low-level
-  builders so monkeypatch-based debug workflows continue to use the historical
-  private names.
+  routing, x-coarse correction, collision smoothing, the safety wrapper, and
+  the ``RHS1PasFamilyBuilders`` dependency bundle used to build all public
+  PAS-family variants. ``v3_driver.py`` now keeps compatibility wrappers only:
+  it supplies the current low-level builders for monkeypatch-based debug
+  workflows and delegates family composition back to this package.
 - ``sfincs_jax/solvers/preconditioners/pas/angular.py``:
   PAS-only RHSMode=1 angular block-tridiagonal factors, including the
   tokamak-like theta/:math:`L` builder and the geometry-rich theta-zeta/:math:`L`
