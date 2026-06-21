@@ -24,6 +24,7 @@ DOMAIN_PACKAGES = (
     "sfincs_jax.solvers.preconditioners.xblock",
     "sfincs_jax.solvers.preconditioners.symbolic_sparse",
     "sfincs_jax.parallel",
+    "sfincs_jax.outputs",
     "sfincs_jax.workflows",
     "sfincs_jax.validation",
     "sfincs_jax.benchmarks",
@@ -127,6 +128,18 @@ ACTIVE_PACKAGE_EXPORTS = {
         "select_active_fortran_v3_reduced_support_mode_preconditioner",
         "sparse_equilibration_scale",
         "sparse_lu_factor_nbytes",
+    ),
+    "sfincs_jax.outputs": (
+        "decode_if_bytes",
+        "fortran_h5_layout",
+        "output_file_format",
+        "read_sfincs_h5",
+        "read_sfincs_output_file",
+        "to_numpy_for_h5",
+        "write_sfincs_h5",
+        "write_sfincs_netcdf",
+        "write_sfincs_npz",
+        "write_sfincs_output_file",
     ),
 }
 

@@ -46,7 +46,8 @@ from .rhs1_host_policy import (
     rhs1_tokamak_pas_er_sparse_pc_auto_allowed,
     rhs1_tokamak_pas_noer_sparse_pc_auto_allowed,
 )
-from .solver_trace import SolverTrace, write_solver_trace_h5, write_solver_trace_json
+from .outputs import formats as _output_formats
+from .solver_trace import SolverTrace, write_solver_trace_json
 from .solver_progress import format_duration, runtime_scale_hint
 from .vmec_wout import _set_scale_factor, psi_a_hat_from_wout, read_vmec_wout, vmec_interpolation
 from .v3 import V3Grids, geometry_from_namelist, grids_from_namelist
@@ -92,6 +93,17 @@ _OUTPUT_CACHE_FIELDS = (
     "classicalHeatFluxNoPhi1_rHat",
     "classicalHeatFluxNoPhi1_rN",
 )
+_decode_if_bytes = _output_formats.decode_if_bytes
+_fortran_h5_layout = _output_formats.fortran_h5_layout
+_netcdf_safe_name = _output_formats.netcdf_safe_name
+_output_file_format = _output_formats.output_file_format
+_to_numpy_for_h5 = _output_formats.to_numpy_for_h5
+read_sfincs_h5 = _output_formats.read_sfincs_h5
+read_sfincs_output_file = _output_formats.read_sfincs_output_file
+write_sfincs_h5 = _output_formats.write_sfincs_h5
+write_sfincs_netcdf = _output_formats.write_sfincs_netcdf
+write_sfincs_npz = _output_formats.write_sfincs_npz
+write_sfincs_output_file = _output_formats.write_sfincs_output_file
 
 
 def _rhs1_active_size_for_trace(op: Any) -> int | None:
@@ -1084,67 +1096,6 @@ def _save_output_cache(cache_key: tuple[object, ...], payload: dict[str, np.ndar
     except Exception:
         return
 
-def _decode_if_bytes(x: Any) -> Any:
-    if isinstance(x, (bytes, np.bytes_)):
-        return x.decode("utf-8", errors="replace")
-    if isinstance(x, np.ndarray) and x.dtype.kind in {"S", "U", "O"}:
-        # Common case in SFINCS: 1-element byte-string array.
-        if x.size == 1:
-            item = x.reshape(-1)[0]
-            return _decode_if_bytes(item)
-    return x
-
-
-def read_sfincs_h5(path: Path) -> Dict[str, Any]:
-    """Read a SFINCS `sfincsOutput.h5` file into memory.
-
-    This is intended for small-to-moderate outputs used in tests and examples.
-    """
-    path = path.resolve()
-    if not path.exists():
-        raise FileNotFoundError(str(path))
-
-    out: Dict[str, Any] = {}
-    with h5py.File(path, "r") as f:
-        def visit(name: str, obj: Any) -> None:
-            if isinstance(obj, h5py.Dataset):
-                v = obj[...]
-                v = _decode_if_bytes(v)
-                out[name] = v
-
-        f.visititems(visit)
-    return out
-
-
-def _to_numpy_for_h5(x: Any) -> Any:
-    if isinstance(x, np.ndarray):
-        return x
-    # Handle JAX arrays without importing jax as a hard dependency at import time.
-    if hasattr(x, "__array__"):
-        return np.asarray(x)
-    return x
-
-
-def _fortran_h5_layout(x: Any) -> Any:
-    """Mimic the layout of arrays written by v3's Fortran HDF5 output.
-
-    SFINCS v3 writes arrays from Fortran (column-major). When the resulting HDF5 datasets
-    are read back in Python (row-major), multi-dimensional arrays appear with axes
-    effectively reversed compared to the (itheta, izeta, ...) indexing used in the Fortran
-    source.
-
-    To make `sfincs_jax` outputs comparable to Fortran `sfincsOutput.h5` *as read by Python*,
-    we transpose arrays by reversing axes before writing.
-    """
-    arr = _to_numpy_for_h5(x)
-    if not isinstance(arr, np.ndarray):
-        return arr
-    if arr.ndim <= 1:
-        return arr
-    axes = tuple(reversed(range(arr.ndim)))
-    return np.ascontiguousarray(np.transpose(arr, axes=axes))
-
-
 def _transport_solver_diagnostic_arrays(result: Any, n_rhs: int) -> dict[str, np.ndarray]:
     """Return absolute and relative transport residual diagnostics for H5 output."""
     residuals_by_rhs = getattr(result, "residual_norms_by_rhs", None) or {}
@@ -1181,245 +1132,6 @@ def _transport_solver_diagnostic_arrays(result: Any, n_rhs: int) -> dict[str, np
             dtype=np.float64,
         ),
     }
-
-
-def write_sfincs_h5(
-    *,
-    path: Path,
-    data: Dict[str, Any],
-    fortran_layout: bool = True,
-    overwrite: bool = True,
-    solver_trace: SolverTrace | None = None,
-) -> None:
-    """Write a minimal SFINCS-style HDF5 file (flat datasets at root)."""
-    path = path.resolve()
-    if path.exists() and not overwrite:
-        raise FileExistsError(str(path))
-    path.parent.mkdir(parents=True, exist_ok=True)
-
-    with h5py.File(path, "w") as f:
-        for k, v in data.items():
-            if v is None:
-                continue
-            vv = _to_numpy_for_h5(v)
-            if fortran_layout:
-                vv = _fortran_h5_layout(vv)
-            if isinstance(vv, np.ndarray) and vv.ndim > 0 and vv.dtype.kind != "O":
-                vv = np.ascontiguousarray(vv)
-            f.create_dataset(k, data=vv)
-        if solver_trace is not None:
-            write_solver_trace_h5(f, solver_trace)
-
-
-def _output_file_format(path: Path) -> str:
-    """Infer the on-disk output format from a filename suffix."""
-    suffix = Path(path).suffix.lower()
-    if suffix in {".h5", ".hdf5", ""}:
-        return "h5"
-    if suffix in {".nc", ".netcdf", ".cdf"}:
-        return "netcdf"
-    if suffix == ".npz":
-        return "npz"
-    raise ValueError(
-        f"Unsupported sfincs_jax output suffix {suffix!r}. "
-        "Use .h5/.hdf5, .nc/.netcdf, or .npz."
-    )
-
-
-def _netcdf_safe_name(name: str, used: set[str]) -> str:
-    """Return a NetCDF variable name while preserving the original name in attrs."""
-    candidate = re.sub(r"[^0-9A-Za-z_]", "_", str(name)).strip("_")
-    if not candidate:
-        candidate = "dataset"
-    if candidate[0].isdigit():
-        candidate = f"v_{candidate}"
-    base = candidate
-    i = 2
-    while candidate in used:
-        candidate = f"{base}_{i}"
-        i += 1
-    used.add(candidate)
-    return candidate
-
-
-def write_sfincs_netcdf(
-    *,
-    path: Path,
-    data: Dict[str, Any],
-    fortran_layout: bool = True,
-    overwrite: bool = True,
-    solver_trace: SolverTrace | None = None,
-) -> None:
-    """Write SFINCS datasets to an uncompressed NetCDF4 file.
-
-    NetCDF variable names are sanitized for broad tool compatibility. The original
-    SFINCS dataset names are stored in the global JSON attribute
-    ``sfincs_jax_original_names_json`` and restored by :func:`read_sfincs_output_file`.
-    """
-    try:
-        from netCDF4 import Dataset  # noqa: PLC0415
-    except Exception as exc:  # pragma: no cover - dependency is required by pyproject.
-        raise RuntimeError("NetCDF output requires the netCDF4 package.") from exc
-
-    path = path.resolve()
-    if path.exists() and not overwrite:
-        raise FileExistsError(str(path))
-    path.parent.mkdir(parents=True, exist_ok=True)
-
-    used: set[str] = set()
-    original_names: dict[str, str] = {}
-    with Dataset(path, "w", format="NETCDF4") as ds:
-        ds.setncattr("sfincs_jax_format", "netcdf")
-        if solver_trace is not None:
-            ds.setncattr("sfincs_jax_solver_trace_json", solver_trace.to_json())
-        for key, value in data.items():
-            if value is None:
-                continue
-            name = _netcdf_safe_name(str(key), used)
-            original_names[name] = str(key)
-            vv = _to_numpy_for_h5(value)
-            if fortran_layout:
-                vv = _fortran_h5_layout(vv)
-            arr = np.asarray(vv)
-            dims: tuple[str, ...] = ()
-            if arr.ndim:
-                dims = tuple(f"{name}_dim_{i}" for i in range(arr.ndim))
-                for dim_name, size in zip(dims, arr.shape, strict=False):
-                    ds.createDimension(dim_name, int(size))
-            if arr.dtype.kind in {"S", "U", "O"}:
-                var = ds.createVariable(name, str, dims)
-                if arr.ndim == 0:
-                    var[...] = _decode_if_bytes(arr.reshape(()).item())
-                else:
-                    var[...] = np.vectorize(_decode_if_bytes, otypes=[str])(arr)
-                continue
-            if arr.dtype.kind == "b":
-                arr = arr.astype(np.int8)
-                original_dtype = "bool"
-            else:
-                original_dtype = str(arr.dtype)
-            if arr.dtype.byteorder not in {"=", "|"}:
-                arr = arr.astype(arr.dtype.type, copy=True)
-            if arr.ndim > 0:
-                arr = np.ascontiguousarray(arr)
-            var = ds.createVariable(name, arr.dtype, dims, zlib=False)
-            var.setncattr("sfincs_jax_original_dtype", original_dtype)
-            if arr.ndim == 0:
-                var[...] = arr.reshape(()).item()
-            else:
-                var[...] = arr
-        ds.setncattr("sfincs_jax_original_names_json", json.dumps(original_names, sort_keys=True))
-
-
-def write_sfincs_npz(
-    *,
-    path: Path,
-    data: Dict[str, Any],
-    fortran_layout: bool = True,
-    overwrite: bool = True,
-    solver_trace: SolverTrace | None = None,
-) -> None:
-    """Write SFINCS datasets to a fast, uncompressed ``.npz`` archive."""
-    path = path.resolve()
-    if path.exists() and not overwrite:
-        raise FileExistsError(str(path))
-    path.parent.mkdir(parents=True, exist_ok=True)
-    payload: dict[str, np.ndarray] = {}
-    for key, value in data.items():
-        if value is None:
-            continue
-        vv = _to_numpy_for_h5(value)
-        if fortran_layout:
-            vv = _fortran_h5_layout(vv)
-        arr = np.asarray(vv)
-        if arr.ndim > 0 and arr.dtype.kind != "O":
-            arr = np.ascontiguousarray(arr)
-        payload[str(key)] = arr
-    if solver_trace is not None:
-        payload["sfincs_jax_solver_trace_json"] = np.asarray(solver_trace.to_json())
-    np.savez(path, **payload)
-
-
-def write_sfincs_output_file(
-    *,
-    path: Path,
-    data: Dict[str, Any],
-    fortran_layout: bool = True,
-    overwrite: bool = True,
-    solver_trace: SolverTrace | None = None,
-) -> None:
-    """Write SFINCS output using the format selected by ``path``.
-
-    ``.h5``/``.hdf5`` remains the parity-oriented default. ``.nc``/``.netcdf``
-    writes NetCDF4 for ecosystem interoperability, and ``.npz`` writes a fast
-    NumPy archive for lightweight Python workflows.
-    """
-    fmt = _output_file_format(path)
-    if fmt == "h5":
-        write_sfincs_h5(
-            path=path,
-            data=data,
-            fortran_layout=fortran_layout,
-            overwrite=overwrite,
-            solver_trace=solver_trace,
-        )
-    elif fmt == "netcdf":
-        write_sfincs_netcdf(
-            path=path,
-            data=data,
-            fortran_layout=fortran_layout,
-            overwrite=overwrite,
-            solver_trace=solver_trace,
-        )
-    elif fmt == "npz":
-        write_sfincs_npz(
-            path=path,
-            data=data,
-            fortran_layout=fortran_layout,
-            overwrite=overwrite,
-            solver_trace=solver_trace,
-        )
-    else:  # pragma: no cover - guarded by _output_file_format.
-        raise ValueError(fmt)
-
-
-def read_sfincs_output_file(path: Path) -> Dict[str, Any]:
-    """Read ``.h5``, ``.nc``/``.netcdf``, or ``.npz`` SFINCS output into memory."""
-    path = Path(path).resolve()
-    fmt = _output_file_format(path)
-    if fmt == "h5":
-        return read_sfincs_h5(path)
-    if fmt == "npz":
-        if not path.exists():
-            raise FileNotFoundError(str(path))
-        out: dict[str, Any] = {}
-        with np.load(path, allow_pickle=False) as npz:
-            for key in npz.files:
-                out[key] = _decode_if_bytes(npz[key])
-        return out
-    if fmt == "netcdf":
-        try:
-            from netCDF4 import Dataset  # noqa: PLC0415
-        except Exception as exc:  # pragma: no cover - dependency is required by pyproject.
-            raise RuntimeError("NetCDF output requires the netCDF4 package.") from exc
-        if not path.exists():
-            raise FileNotFoundError(str(path))
-        out: dict[str, Any] = {}
-        with Dataset(path, "r") as ds:
-            mapping_raw = getattr(ds, "sfincs_jax_original_names_json", "{}")
-            mapping = json.loads(mapping_raw)
-            for name, var in ds.variables.items():
-                key = mapping.get(name, name)
-                value = var[...]
-                if hasattr(value, "filled"):
-                    value = value.filled(np.nan)
-                value = _decode_if_bytes(value)
-                original_dtype = getattr(var, "sfincs_jax_original_dtype", "")
-                if original_dtype == "bool":
-                    value = np.asarray(value, dtype=np.int8).astype(bool)
-                out[key] = value
-        return out
-    raise ValueError(fmt)
 
 
 def _write_transport_h5_streaming(

@@ -22,6 +22,9 @@ API reference
 .. automodule:: sfincs_jax.diagnostics
    :members:
 
+.. automodule:: sfincs_jax.outputs.formats
+   :members:
+
 .. automodule:: sfincs_jax.grids
    :members:
 

@@ -39,19 +39,24 @@ documentation, README figures, and complete benchmark reports.
   now owns the Fortran-v3-style RHSMode=1 reduced active sparse-factor family,
   including reduced-support construction, support-mode preflight, symbolic-plan
   permutation, equilibration, LU/ILU setup, and memory admission.
+- `sfincs_jax.outputs.formats` now owns flat HDF5/NetCDF/NPZ output
+  readers/writers, output suffix dispatch, SFINCS Fortran-compatible HDF5
+  layout conversion, NetCDF-safe names, and solver-trace attachment.  `io.py`
+  keeps compatibility aliases for existing imports.
 
 ### What The Latest Review Found
 
-- The branch has completed the symbolic-sparse RHSMode=1 Fortran-reduced
-  extraction locally; it still needs the final validation/commit/push gate for
-  this tranche.
+- The branch has committed the symbolic-sparse RHSMode=1 Fortran-reduced
+  extraction (`b7a0bf2`). The latest output-format split has passed focused
+  format/import tests locally and is the current tranche to land before further
+  refactoring.
 - Current largest source files:
   - `sfincs_jax/v3_driver.py`: about 14.4k lines, 79 functions.
   - `sfincs_jax/rhs1_full_assembly.py`: about 9.7k lines after this tranche.
-  - `sfincs_jax/io.py`: about 5.8k lines, 60 functions.
+  - `sfincs_jax/io.py`: about 5.5k lines after the output-format split.
   - `sfincs_jax/problems/profile_response/sparse/xblock.py`: about 4.5k lines.
   - `sfincs_jax/rhs1_qi_device_preconditioner.py`: about 4.4k lines.
-- The repository has about 283 Python source files and about 160k source lines.
+- The repository has about 285 Python source files and about 159k source lines.
   The file count is high enough that new modules must now consolidate domain
   ownership, not add more flat historical `rhs1_*` or `transport_*` helpers.
 - Docs are extensive and mostly accurate, but `docs/source_map.rst`,
@@ -108,29 +113,31 @@ documentation, README figures, and complete benchmark reports.
 
 ## Priority Plan
 
-### P0. Branch Hygiene And Current Extraction Tranche
+### P0. Branch Hygiene And Tranche Gate
 
-Status: in final validation.
+Status: active guardrail for every refactor tranche.
 
 Actions:
 
-1. Finish targeted validation for the symbolic-sparse RHSMode=1
-   Fortran-reduced extraction.
-2. Commit and push the tranche once the full-assembly, sparse-pattern,
-   import-contract, docs, hygiene, and repo-size gates pass.
+1. Keep each tranche small enough to validate and review, but large enough to
+   move a complete domain responsibility.
+2. Run focused tests for the touched domain plus `ruff`, `py_compile`, Sphinx,
+   repo-size, and `git diff --check`.
+3. Commit and push only clean tranches; do not accumulate generated artifacts or
+   temporary simulation outputs.
 
 Acceptance:
 
-- `git status` has no accidental untracked implementation files after commit.
-- New module tests pass.
-- `tests/test_rhs1_full_assembly.py` and `tests/test_v3_sparse_pattern.py` pass.
-- `ruff`, `py_compile`, `git diff --check`, repo-size audit, and Sphinx pass for
-  touched files.
+- `git status` has no accidental untracked implementation files after each
+  commit.
+- New module tests and legacy compatibility tests pass for the touched domain.
+- `ruff`, `py_compile`, `git diff --check`, repo-size audit, and Sphinx pass.
 
 ### P1. Finish RHSMode=1 Full-Assembly Ownership Split
 
-Status: about 78% after the full-CSR Schur and symbolic-sparse Fortran-reduced
-extractions.
+Status: about 82% after the full-CSR Schur and symbolic-sparse Fortran-reduced
+extractions.  Continue only for cohesive implementation families, not wrapper
+churn.
 
 Actions:
 
@@ -179,13 +186,16 @@ Acceptance:
 
 ### P3. Split I/O By Schema And Format
 
-Status: not started on this follow-up branch.
+Status: started.  Flat format readers/writers are extracted to
+`sfincs_jax.outputs.formats`; schema construction and high-level output
+orchestration still live in `sfincs_jax/io.py`.
 
 Actions:
 
 1. Introduce one output schema contract for solved fields, diagnostics, solver
    metadata, timing, memory, and provenance.
-2. Move HDF5, NetCDF, and NPZ writing behind format-specific writers.
+2. Keep HDF5, NetCDF, and NPZ writing behind the format-specific owner already
+   extracted in `sfincs_jax.outputs.formats`.
 3. Keep CLI output behavior, `--plot`, and current dataset names unchanged.
 4. Keep plotting and diagnostics outside solver internals.
 
@@ -343,13 +353,24 @@ CPU/GPU/Fortran gates, not more smoother/restart tuning.
 
 ## Immediate Ordered Next Steps
 
-1. Finish targeted validation and commit/push the symbolic-sparse extraction.
-2. Finish any remaining high-value RHSMode=1 family extraction, then stop P1
-   before it turns into wrapper churn.
-3. Split `io.py` into schema and format writers.
-4. Run broader local validation and docs build.
-5. Mark PR #8 ready for review only after the branch is clean, docs are current,
-   and tests prove behavior preservation.
+1. Land the current `outputs.formats` tranche, which is the only active local
+   split at this checkpoint.
+2. Extract one more high-value `io.py` schema/diagnostics contract only if it
+   reduces responsibility without adding file sprawl; otherwise stop P3 after
+   the format split and document the remaining boundary.
+3. Extract at most one more cohesive RHSMode=1 implementation family from
+   `rhs1_full_assembly.py`, prioritizing a family with direct tests and low
+   coupling.  Stop P1 after that unless a clear owner boundary remains.
+4. Reduce `v3_driver.py` only at stage boundaries that already have stable
+   extracted types: solver dispatch, progress reporting, output handoff, or
+   result contracts.  Do not split driver-local mutable state into vague helper
+   files.
+5. Run the focused local validation matrix for touched domains, Sphinx with
+   warnings as errors, repo-size checks, and then inspect CI once enough work has
+   landed to make the wait useful.
+6. Mark PR #8 ready for review only after the branch is clean, docs are current,
+   public behavior is unchanged, and deferred technical research lanes are
+   explicitly fail-closed rather than mixed into the refactor PR.
 
 ## Done Definition
 
