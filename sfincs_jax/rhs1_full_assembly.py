@@ -33,6 +33,10 @@ from .rhs1_fortran_reduced_factor_policy import (
 )
 from .rhs1_reduced_pmat_plan import build_rhs1_reduced_pmat_elimination_plan
 from .rhs1_symbolic_frontal_policy import resolve_active_symbolic_frontal_policy
+from .rhs1_symbolic_sparse_policy import (
+    resolve_active_symbolic_block_schur_policy,
+    resolve_active_symbolic_superblock_policy,
+)
 from .v3_sparse_pattern import estimate_v3_full_system_conservative_sparsity_summary
 
 _STRUCTURED_FULL_CSR_OBJECT_CACHE: dict[tuple[object, ...], tuple[Any, dict[str, object]]] = {}
@@ -6304,12 +6308,11 @@ def _build_active_projected_symbolic_superblock_lu_preconditioner(
 
     matrix_csr = matrix.tocsr()
     active_size = int(matrix_csr.shape[0])
-    max_active_size = int(
-        _env_int(
-            "SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_SYMBOLIC_SUPERBLOCK_MAX_ACTIVE_SIZE",
-            300_000,
-        )
+    policy = resolve_active_symbolic_superblock_policy(
+        active_size=int(active_size),
+        regularization=float(regularization),
     )
+    max_active_size = int(policy.max_active_size)
     if int(max_active_size) > 0 and int(active_size) > int(max_active_size):
         return RHS1StructuredFullCSRPreconditioner(
             operator=None,
@@ -6346,66 +6349,14 @@ def _build_active_projected_symbolic_superblock_lu_preconditioner(
         active_indices=active_np,
     )
 
-    ordering_kind = (
-        os.environ.get(
-            "SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_SYMBOLIC_SUPERBLOCK_ORDERING",
-            "rcm",
-        )
-        .strip()
-        .lower()
-    )
-    block_size = max(
-        1,
-        int(_env_int("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_SYMBOLIC_SUPERBLOCK_BLOCK_SIZE", 1024)),
-    )
-    max_permutation_size = max(
-        1,
-        int(
-            _env_int(
-                "SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_SYMBOLIC_SUPERBLOCK_MAX_PERMUTATION_SIZE",
-                300_000,
-            )
-        ),
-    )
-    max_superblock_size = max(
-        1,
-        int(
-            _env_int(
-                "SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_SYMBOLIC_SUPERBLOCK_MAX_SIZE",
-                32768,
-            )
-        ),
-    )
-    max_superblock_blocks = max(
-        1,
-        int(_env_int("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_SYMBOLIC_SUPERBLOCK_MAX_BLOCKS", 8)),
-    )
-    min_cross_nnz = max(
-        1,
-        int(_env_int("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_SYMBOLIC_SUPERBLOCK_MIN_CROSS_NNZ", 1)),
-    )
-    large_retained_default = 0.25 if int(active_size) > 300_000 else 0.0
-    min_retained_cross_fraction = max(
-        0.0,
-        min(
-            1.0,
-            float(
-                _env_float(
-                    "SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_SYMBOLIC_SUPERBLOCK_MIN_RETAINED_CROSS_FRACTION",
-                    large_retained_default,
-                )
-            ),
-        ),
-    )
-    regularization_rel = max(
-        0.0,
-        float(
-            _env_float(
-                "SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_SYMBOLIC_SUPERBLOCK_REGULARIZATION_REL",
-                max(float(abs(regularization)), 1.0e-12),
-            )
-        ),
-    )
+    ordering_kind = str(policy.ordering_kind)
+    block_size = int(policy.block_size)
+    max_permutation_size = int(policy.max_permutation_size)
+    max_superblock_size = int(policy.max_superblock_size)
+    max_superblock_blocks = int(policy.max_superblock_blocks)
+    min_cross_nnz = int(policy.min_cross_nnz)
+    min_retained_cross_fraction = float(policy.min_retained_cross_fraction)
+    regularization_rel = float(policy.regularization_rel)
     analysis = analyze_sparse_symbolic_structure(
         matrix_csr,
         ordering_kind=ordering_kind,
@@ -6414,15 +6365,7 @@ def _build_active_projected_symbolic_superblock_lu_preconditioner(
     )
     csr_nbytes = int(_scipy_csr_nbytes(matrix_csr))
     group_factor = max(1.0, float(max_superblock_size) / float(max(1, block_size)))
-    prefill_safety = max(
-        1.0,
-        float(
-            _env_float(
-                "SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_SYMBOLIC_SUPERBLOCK_PREFILL_SAFETY_FACTOR",
-                8.0,
-            )
-        ),
-    )
+    prefill_safety = float(policy.prefill_safety_factor)
     raw_estimate = int(np.ceil(float(csr_nbytes) * (1.0 + np.sqrt(group_factor))))
     prefill_estimate = int(np.ceil(float(raw_estimate) * float(prefill_safety)))
     if prefill_estimate > int(max_factor_nbytes):
@@ -6504,28 +6447,9 @@ def _build_active_projected_symbolic_superblock_lu_preconditioner(
     admission = admit_sparse_factor_against_operator(
         factor.operator,
         factor,
-        probe_count=max(
-            1,
-            int(_env_int("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_SYMBOLIC_SUPERBLOCK_ADMISSION_PROBES", 4)),
-        ),
-        max_relative_residual=max(
-            0.0,
-            float(
-                _env_float(
-                    "SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_SYMBOLIC_SUPERBLOCK_ADMISSION_MAX_RELATIVE_RESIDUAL",
-                    1.0e-2,
-                )
-            ),
-        ),
-        min_improvement_vs_identity=max(
-            0.0,
-            float(
-                _env_float(
-                    "SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_SYMBOLIC_SUPERBLOCK_ADMISSION_MIN_IMPROVEMENT",
-                    1.0,
-                )
-            ),
-        ),
+        probe_count=int(policy.admission_probes),
+        max_relative_residual=float(policy.admission_max_relative_residual),
+        min_improvement_vs_identity=float(policy.admission_min_improvement),
     )
     if not bool(admission.accepted):
         admission_reason = (
@@ -6637,12 +6561,8 @@ def _build_active_projected_symbolic_block_schur_lu_preconditioner(
 
     matrix_csr = matrix.tocsr()
     active_size = int(matrix_csr.shape[0])
-    max_active_size = int(
-        _env_int(
-            "SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_SYMBOLIC_BLOCK_SCHUR_MAX_ACTIVE_SIZE",
-            300_000,
-        )
-    )
+    policy = resolve_active_symbolic_block_schur_policy(regularization=float(regularization))
+    max_active_size = int(policy.max_active_size)
     if int(max_active_size) > 0 and int(active_size) > int(max_active_size):
         return RHS1StructuredFullCSRPreconditioner(
             operator=None,
@@ -6683,53 +6603,13 @@ def _build_active_projected_symbolic_block_schur_lu_preconditioner(
         active_indices=active_np,
     )
 
-    ordering_kind = (
-        os.environ.get(
-            "SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_SYMBOLIC_BLOCK_SCHUR_ORDERING",
-            "rcm",
-        )
-        .strip()
-        .lower()
-    )
-    block_size = max(
-        1,
-        int(_env_int("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_SYMBOLIC_BLOCK_SCHUR_BLOCK_SIZE", 2048)),
-    )
-    max_permutation_size = max(
-        1,
-        int(
-            _env_int(
-                "SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_SYMBOLIC_BLOCK_SCHUR_MAX_PERMUTATION_SIZE",
-                300_000,
-            )
-        ),
-    )
-    separator_cols = max(
-        0,
-        int(
-            _env_int(
-                "SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_SYMBOLIC_BLOCK_SCHUR_MAX_SEPARATOR_COLS",
-                512,
-            )
-        ),
-    )
-    boundary_width = max(
-        0,
-        int(_env_int("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_SYMBOLIC_BLOCK_SCHUR_BOUNDARY_WIDTH", 1)),
-    )
-    high_degree_cols = max(
-        0,
-        int(_env_int("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_SYMBOLIC_BLOCK_SCHUR_HIGH_DEGREE_COLS", 128)),
-    )
-    regularization_rel = max(
-        0.0,
-        float(
-            _env_float(
-                "SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_SYMBOLIC_BLOCK_SCHUR_REGULARIZATION_REL",
-                max(float(abs(regularization)), 1.0e-12),
-            )
-        ),
-    )
+    ordering_kind = str(policy.ordering_kind)
+    block_size = int(policy.block_size)
+    max_permutation_size = int(policy.max_permutation_size)
+    separator_cols = int(policy.separator_cols)
+    boundary_width = int(policy.boundary_width)
+    high_degree_cols = int(policy.high_degree_cols)
+    regularization_rel = float(policy.regularization_rel)
     analysis = analyze_sparse_symbolic_structure(
         matrix_csr,
         ordering_kind=ordering_kind,
@@ -6746,15 +6626,7 @@ def _build_active_projected_symbolic_block_schur_lu_preconditioner(
     separator_dense_estimate = int(separator_use * separator_use * np.dtype(np.float64).itemsize)
     csr_nbytes = int(_scipy_csr_nbytes(matrix_csr))
     raw_estimate = int(csr_nbytes + 2 * local_dense_estimate + 3 * separator_dense_estimate)
-    prefill_safety = max(
-        1.0,
-        float(
-            _env_float(
-                "SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_SYMBOLIC_BLOCK_SCHUR_PREFILL_SAFETY_FACTOR",
-                4.0,
-            )
-        ),
-    )
+    prefill_safety = float(policy.prefill_safety_factor)
     prefill_estimate = int(np.ceil(float(raw_estimate) * float(prefill_safety)))
     if prefill_estimate > int(max_factor_nbytes):
         return RHS1StructuredFullCSRPreconditioner(
@@ -6830,28 +6702,9 @@ def _build_active_projected_symbolic_block_schur_lu_preconditioner(
     admission = admit_sparse_factor_against_operator(
         factor.operator,
         factor,
-        probe_count=max(
-            1,
-            int(_env_int("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_SYMBOLIC_BLOCK_SCHUR_ADMISSION_PROBES", 4)),
-        ),
-        max_relative_residual=max(
-            0.0,
-            float(
-                _env_float(
-                    "SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_SYMBOLIC_BLOCK_SCHUR_ADMISSION_MAX_RELATIVE_RESIDUAL",
-                    1.0e-2,
-                )
-            ),
-        ),
-        min_improvement_vs_identity=max(
-            0.0,
-            float(
-                _env_float(
-                    "SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_SYMBOLIC_BLOCK_SCHUR_ADMISSION_MIN_IMPROVEMENT",
-                    1.0,
-                )
-            ),
-        ),
+        probe_count=int(policy.admission_probes),
+        max_relative_residual=float(policy.admission_max_relative_residual),
+        min_improvement_vs_identity=float(policy.admission_min_improvement),
     )
     if not bool(admission.accepted):
         admission_reason = (

@@ -18,6 +18,10 @@ from sfincs_jax.rhs1_fortran_reduced_factor_policy import (
     resolve_active_fortran_v3_reduced_factor_policy,
 )
 from sfincs_jax.rhs1_symbolic_frontal_policy import resolve_active_symbolic_frontal_policy
+from sfincs_jax.rhs1_symbolic_sparse_policy import (
+    resolve_active_symbolic_block_schur_policy,
+    resolve_active_symbolic_superblock_policy,
+)
 from sfincs_jax.rhs1_full_assembly import (
     build_direct_active_fortran_v3_reduced_pmat_preconditioner,
     build_active_projected_rhs1_full_csr_preconditioner,
@@ -293,6 +297,110 @@ def test_symbolic_frontal_policy_nd_overrides_follow_frontal_defaults() -> None:
     assert policy.nd_high_degree_cols == 7
     assert policy.nd_max_dense_rhs_entries == 456
     assert policy.regularization_rel == 1.0e-6
+
+
+def test_symbolic_superblock_policy_keeps_default_controls() -> None:
+    policy = resolve_active_symbolic_superblock_policy(
+        active_size=128,
+        regularization=0.0,
+        env={},
+    )
+
+    assert policy.max_active_size == 300000
+    assert policy.ordering_kind == "rcm"
+    assert policy.block_size == 1024
+    assert policy.max_superblock_size == 32768
+    assert policy.max_superblock_blocks == 8
+    assert policy.min_cross_nnz == 1
+    assert policy.min_retained_cross_fraction == 0.0
+    assert policy.regularization_rel == 1.0e-12
+    assert policy.prefill_safety_factor == 8.0
+    assert policy.admission_probes == 4
+    assert policy.admission_max_relative_residual == 1.0e-2
+    assert policy.admission_min_improvement == 1.0
+
+
+def test_symbolic_superblock_policy_uses_large_retained_fraction_and_clamps() -> None:
+    policy = resolve_active_symbolic_superblock_policy(
+        active_size=400001,
+        regularization=-1.0e-8,
+        env={
+            "SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_SYMBOLIC_SUPERBLOCK_BLOCK_SIZE": "0",
+            "SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_SYMBOLIC_SUPERBLOCK_MAX_SIZE": "0",
+            "SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_SYMBOLIC_SUPERBLOCK_MAX_BLOCKS": "0",
+            "SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_SYMBOLIC_SUPERBLOCK_MIN_CROSS_NNZ": "0",
+            "SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_SYMBOLIC_SUPERBLOCK_MIN_RETAINED_CROSS_FRACTION": "2",
+            "SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_SYMBOLIC_SUPERBLOCK_REGULARIZATION_REL": "-1",
+            "SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_SYMBOLIC_SUPERBLOCK_PREFILL_SAFETY_FACTOR": "0.2",
+            "SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_SYMBOLIC_SUPERBLOCK_ADMISSION_PROBES": "0",
+            "SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_SYMBOLIC_SUPERBLOCK_ADMISSION_MAX_RELATIVE_RESIDUAL": "-1",
+            "SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_SYMBOLIC_SUPERBLOCK_ADMISSION_MIN_IMPROVEMENT": "-1",
+        },
+    )
+
+    assert policy.block_size == 1
+    assert policy.max_superblock_size == 1
+    assert policy.max_superblock_blocks == 1
+    assert policy.min_cross_nnz == 1
+    assert policy.min_retained_cross_fraction == 1.0
+    assert policy.regularization_rel == 0.0
+    assert policy.prefill_safety_factor == 1.0
+    assert policy.admission_probes == 1
+    assert policy.admission_max_relative_residual == 0.0
+    assert policy.admission_min_improvement == 0.0
+
+
+def test_symbolic_superblock_policy_large_default_fraction_without_override() -> None:
+    policy = resolve_active_symbolic_superblock_policy(
+        active_size=400001,
+        regularization=0.0,
+        env={},
+    )
+
+    assert policy.min_retained_cross_fraction == 0.25
+
+
+def test_symbolic_block_schur_policy_keeps_default_controls() -> None:
+    policy = resolve_active_symbolic_block_schur_policy(regularization=0.0, env={})
+
+    assert policy.max_active_size == 300000
+    assert policy.ordering_kind == "rcm"
+    assert policy.block_size == 2048
+    assert policy.separator_cols == 512
+    assert policy.boundary_width == 1
+    assert policy.high_degree_cols == 128
+    assert policy.regularization_rel == 1.0e-12
+    assert policy.prefill_safety_factor == 4.0
+    assert policy.admission_probes == 4
+    assert policy.admission_max_relative_residual == 1.0e-2
+    assert policy.admission_min_improvement == 1.0
+
+
+def test_symbolic_block_schur_policy_clamps_controls() -> None:
+    policy = resolve_active_symbolic_block_schur_policy(
+        regularization=-1.0e-6,
+        env={
+            "SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_SYMBOLIC_BLOCK_SCHUR_BLOCK_SIZE": "0",
+            "SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_SYMBOLIC_BLOCK_SCHUR_MAX_SEPARATOR_COLS": "-1",
+            "SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_SYMBOLIC_BLOCK_SCHUR_BOUNDARY_WIDTH": "-1",
+            "SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_SYMBOLIC_BLOCK_SCHUR_HIGH_DEGREE_COLS": "-1",
+            "SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_SYMBOLIC_BLOCK_SCHUR_REGULARIZATION_REL": "-1",
+            "SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_SYMBOLIC_BLOCK_SCHUR_PREFILL_SAFETY_FACTOR": "0.1",
+            "SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_SYMBOLIC_BLOCK_SCHUR_ADMISSION_PROBES": "0",
+            "SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_SYMBOLIC_BLOCK_SCHUR_ADMISSION_MAX_RELATIVE_RESIDUAL": "-1",
+            "SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_SYMBOLIC_BLOCK_SCHUR_ADMISSION_MIN_IMPROVEMENT": "-1",
+        },
+    )
+
+    assert policy.block_size == 1
+    assert policy.separator_cols == 0
+    assert policy.boundary_width == 0
+    assert policy.high_degree_cols == 0
+    assert policy.regularization_rel == 0.0
+    assert policy.prefill_safety_factor == 1.0
+    assert policy.admission_probes == 1
+    assert policy.admission_max_relative_residual == 0.0
+    assert policy.admission_min_improvement == 0.0
 
 
 def test_structured_full_csr_matches_constraint_scheme1_full_operator() -> None:
