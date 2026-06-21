@@ -32,6 +32,7 @@ from .rhs1_fortran_reduced_factor_policy import (
     resolve_active_fortran_v3_reduced_factor_policy,
 )
 from .rhs1_reduced_pmat_plan import build_rhs1_reduced_pmat_elimination_plan
+from .rhs1_symbolic_frontal_policy import resolve_active_symbolic_frontal_policy
 from .v3_sparse_pattern import estimate_v3_full_system_conservative_sparsity_summary
 
 _STRUCTURED_FULL_CSR_OBJECT_CACHE: dict[tuple[object, ...], tuple[Any, dict[str, object]]] = {}
@@ -5976,24 +5977,15 @@ def _build_active_projected_symbolic_frontal_schur_lu_preconditioner(
 
     matrix_csr = matrix.tocsr()
     active_size = int(matrix_csr.shape[0])
-    requested_kind_l = str(requested_kind).strip().lower()
-    use_nd_frontal = "nd_frontal" in requested_kind_l or "nested_dissection" in requested_kind_l or "multilevel" in requested_kind_l
-    active_symbolic_kind = (
-        "active_symbolic_nd_frontal_schur_lu"
-        if bool(use_nd_frontal)
-        else "active_symbolic_frontal_schur_lu"
+    policy = resolve_active_symbolic_frontal_policy(
+        requested_kind=requested_kind,
+        active_size=int(active_size),
+        regularization=float(regularization),
     )
-    active_architecture = (
-        "active_true_operator_symbolic_nd_frontal_schur_lu"
-        if bool(use_nd_frontal)
-        else "active_true_operator_symbolic_frontal_schur_lu"
-    )
-    max_active_size = int(
-        _env_int(
-            "SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_SYMBOLIC_FRONTAL_MAX_ACTIVE_SIZE",
-            300_000,
-        )
-    )
+    use_nd_frontal = bool(policy.use_nd_frontal)
+    active_symbolic_kind = str(policy.active_symbolic_kind)
+    active_architecture = str(policy.active_architecture)
+    max_active_size = int(policy.max_active_size)
     if int(max_active_size) > 0 and int(active_size) > int(max_active_size):
         return RHS1StructuredFullCSRPreconditioner(
             operator=None,
@@ -6030,127 +6022,31 @@ def _build_active_projected_symbolic_frontal_schur_lu_preconditioner(
         active_indices=active_np,
     )
 
-    ordering_kind = (
-        os.environ.get("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_SYMBOLIC_FRONTAL_ORDERING", "rcm")
-        .strip()
-        .lower()
-    )
-    block_size = max(1, int(_env_int("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_SYMBOLIC_FRONTAL_BLOCK_SIZE", 1024)))
-    max_permutation_size = max(
-        1,
-        int(_env_int("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_SYMBOLIC_FRONTAL_MAX_PERMUTATION_SIZE", 300_000)),
-    )
-    separator_cols = max(
-        0,
-        int(_env_int("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_SYMBOLIC_FRONTAL_MAX_SEPARATOR_COLS", 1024)),
-    )
-    max_superblock_size = max(
-        1,
-        int(_env_int("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_SYMBOLIC_FRONTAL_MAX_SUPERBLOCK_SIZE", 8192)),
-    )
-    max_superblock_blocks = max(
-        1,
-        int(_env_int("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_SYMBOLIC_FRONTAL_MAX_SUPERBLOCK_BLOCKS", 8)),
-    )
-    boundary_width = max(0, int(_env_int("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_SYMBOLIC_FRONTAL_BOUNDARY_WIDTH", 1)))
-    high_degree_cols = max(
-        0,
-        int(_env_int("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_SYMBOLIC_FRONTAL_HIGH_DEGREE_COLS", 128)),
-    )
-    min_cross_nnz = max(1, int(_env_int("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_SYMBOLIC_FRONTAL_MIN_CROSS_NNZ", 1)))
-    max_dense_rhs_entries = max(
-        0,
-        int(
-            _env_int(
-                "SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_SYMBOLIC_FRONTAL_MAX_DENSE_RHS_ENTRIES",
-                160_000_000,
-            )
-        ),
-    )
-    max_dense_rhs_cols_per_block = max(
-        0,
-        int(
-            _env_int(
-                "SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_SYMBOLIC_FRONTAL_MAX_DENSE_RHS_COLS_PER_BLOCK",
-                256,
-            )
-        ),
-    )
-    large_separator_default = 0.20 if int(active_size) > 300_000 else 0.0
-    min_cross_separator_fraction = max(
-        0.0,
-        min(
-            1.0,
-            float(
-                _env_float(
-                    "SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_SYMBOLIC_FRONTAL_MIN_CROSS_SEPARATOR_FRACTION",
-                    large_separator_default,
-                )
-            ),
-        ),
-    )
-    regularization_rel = max(
-        0.0,
-        float(
-            _env_float(
-                "SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_SYMBOLIC_FRONTAL_REGULARIZATION_REL",
-                max(float(abs(regularization)), 1.0e-12),
-            )
-        ),
-    )
-    nd_max_leaf_size = max(
-        1,
-        int(_env_int("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_SYMBOLIC_ND_MAX_LEAF_SIZE", 4096)),
-    )
-    nd_max_terminal_factor_size = max(
-        1,
-        int(_env_int("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_SYMBOLIC_ND_MAX_TERMINAL_FACTOR_SIZE", 32768)),
-    )
-    nd_max_depth = max(
-        0,
-        int(_env_int("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_SYMBOLIC_ND_MAX_DEPTH", 1)),
-    )
-    nd_separator_width = max(
-        1,
-        int(_env_int("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_SYMBOLIC_ND_SEPARATOR_WIDTH", 128)),
-    )
-    nd_max_separator_cols = max(
-        1,
-        int(_env_int("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_SYMBOLIC_ND_MAX_SEPARATOR_COLS", max(1, separator_cols))),
-    )
-    nd_high_degree_cols = max(
-        0,
-        int(_env_int("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_SYMBOLIC_ND_HIGH_DEGREE_COLS", high_degree_cols)),
-    )
-    nd_max_dense_rhs_entries = max(
-        0,
-        int(
-            _env_int(
-                "SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_SYMBOLIC_ND_MAX_DENSE_RHS_ENTRIES",
-                max_dense_rhs_entries,
-            )
-        ),
-    )
-    nd_max_dense_rhs_entries_per_child = max(
-        0,
-        int(_env_int("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_SYMBOLIC_ND_MAX_DENSE_RHS_ENTRIES_PER_CHILD", 0)),
-    )
-    nd_max_dense_rhs_cols_per_child = max(
-        0,
-        int(_env_int("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_SYMBOLIC_ND_MAX_DENSE_RHS_COLS_PER_CHILD", 0)),
-    )
-    nd_max_setup_s = max(
-        0.0,
-        float(_env_float("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_SYMBOLIC_ND_MAX_SETUP_S", 0.0)),
-    )
-    nd_residual_polish_steps = max(
-        0,
-        int(_env_int("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_SYMBOLIC_ND_RESIDUAL_POLISH_STEPS", 2)),
-    )
-    nd_residual_polish_damping = max(
-        0.0,
-        float(_env_float("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_SYMBOLIC_ND_RESIDUAL_POLISH_DAMPING", 1.0)),
-    )
+    ordering_kind = str(policy.ordering_kind)
+    block_size = int(policy.block_size)
+    max_permutation_size = int(policy.max_permutation_size)
+    separator_cols = int(policy.separator_cols)
+    max_superblock_size = int(policy.max_superblock_size)
+    max_superblock_blocks = int(policy.max_superblock_blocks)
+    boundary_width = int(policy.boundary_width)
+    high_degree_cols = int(policy.high_degree_cols)
+    min_cross_nnz = int(policy.min_cross_nnz)
+    max_dense_rhs_entries = int(policy.max_dense_rhs_entries)
+    max_dense_rhs_cols_per_block = int(policy.max_dense_rhs_cols_per_block)
+    min_cross_separator_fraction = float(policy.min_cross_separator_fraction)
+    regularization_rel = float(policy.regularization_rel)
+    nd_max_leaf_size = int(policy.nd_max_leaf_size)
+    nd_max_terminal_factor_size = int(policy.nd_max_terminal_factor_size)
+    nd_max_depth = int(policy.nd_max_depth)
+    nd_separator_width = int(policy.nd_separator_width)
+    nd_max_separator_cols = int(policy.nd_max_separator_cols)
+    nd_high_degree_cols = int(policy.nd_high_degree_cols)
+    nd_max_dense_rhs_entries = int(policy.nd_max_dense_rhs_entries)
+    nd_max_dense_rhs_entries_per_child = int(policy.nd_max_dense_rhs_entries_per_child)
+    nd_max_dense_rhs_cols_per_child = int(policy.nd_max_dense_rhs_cols_per_child)
+    nd_max_setup_s = float(policy.nd_max_setup_s)
+    nd_residual_polish_steps = int(policy.nd_residual_polish_steps)
+    nd_residual_polish_damping = float(policy.nd_residual_polish_damping)
     analysis = analyze_sparse_symbolic_structure(
         matrix_csr,
         ordering_kind=ordering_kind,
@@ -6161,10 +6057,7 @@ def _build_active_projected_symbolic_frontal_schur_lu_preconditioner(
     group_factor = max(1.0, float(max_superblock_size) / float(max(1, block_size)))
     separator_dense_estimate = int(separator_cols) * int(separator_cols) * np.dtype(np.float64).itemsize
     raw_estimate = int(np.ceil(float(csr_nbytes) * (1.0 + np.sqrt(group_factor)) + 4.0 * separator_dense_estimate))
-    prefill_safety = max(
-        1.0,
-        float(_env_float("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_SYMBOLIC_FRONTAL_PREFILL_SAFETY_FACTOR", 4.0)),
-    )
+    prefill_safety = float(policy.prefill_safety_factor)
     prefill_estimate = int(np.ceil(float(raw_estimate) * float(prefill_safety)))
     dense_rhs_entries_estimate = int(max(0, active_size - separator_cols)) * int(separator_cols)
     if prefill_estimate > int(max_factor_nbytes):
@@ -6268,20 +6161,9 @@ def _build_active_projected_symbolic_frontal_schur_lu_preconditioner(
     admission = admit_sparse_factor_against_operator(
         factor.operator,
         factor,
-        probe_count=max(1, int(_env_int("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_SYMBOLIC_FRONTAL_ADMISSION_PROBES", 4))),
-        max_relative_residual=max(
-            0.0,
-            float(
-                _env_float(
-                    "SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_SYMBOLIC_FRONTAL_ADMISSION_MAX_RELATIVE_RESIDUAL",
-                    1.0e-2,
-                )
-            ),
-        ),
-        min_improvement_vs_identity=max(
-            0.0,
-            float(_env_float("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_SYMBOLIC_FRONTAL_ADMISSION_MIN_IMPROVEMENT", 1.0)),
-        ),
+        probe_count=int(policy.admission_probes),
+        max_relative_residual=float(policy.admission_max_relative_residual),
+        min_improvement_vs_identity=float(policy.admission_min_improvement),
     )
     if not bool(admission.accepted):
         admission_reason = (

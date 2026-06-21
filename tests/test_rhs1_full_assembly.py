@@ -17,6 +17,7 @@ from sfincs_jax.rhs1_fortran_reduced_factor_policy import (
     active_fortran_v3_reduced_permc_candidates,
     resolve_active_fortran_v3_reduced_factor_policy,
 )
+from sfincs_jax.rhs1_symbolic_frontal_policy import resolve_active_symbolic_frontal_policy
 from sfincs_jax.rhs1_full_assembly import (
     build_direct_active_fortran_v3_reduced_pmat_preconditioner,
     build_active_projected_rhs1_full_csr_preconditioner,
@@ -196,6 +197,102 @@ def test_fortran_reduced_permc_candidates_match_superlu_and_rcm_contract() -> No
         "COLAMD",
     )
     assert active_fortran_v3_reduced_permc_candidates(requested="", factor_kind="ilu") == ("COLAMD",)
+
+
+def test_symbolic_frontal_policy_keeps_default_frontal_controls() -> None:
+    policy = resolve_active_symbolic_frontal_policy(
+        requested_kind="active_symbolic_frontal_schur_lu",
+        active_size=128,
+        regularization=0.0,
+        env={},
+    )
+
+    assert policy.use_nd_frontal is False
+    assert policy.active_symbolic_kind == "active_symbolic_frontal_schur_lu"
+    assert policy.active_architecture == "active_true_operator_symbolic_frontal_schur_lu"
+    assert policy.max_active_size == 300000
+    assert policy.ordering_kind == "rcm"
+    assert policy.block_size == 1024
+    assert policy.separator_cols == 1024
+    assert policy.min_cross_separator_fraction == 0.0
+    assert policy.regularization_rel == 1.0e-12
+    assert policy.prefill_safety_factor == 4.0
+    assert policy.admission_probes == 4
+    assert policy.admission_max_relative_residual == 1.0e-2
+    assert policy.admission_min_improvement == 1.0
+
+
+def test_symbolic_frontal_policy_routes_nested_dissection_aliases() -> None:
+    policy = resolve_active_symbolic_frontal_policy(
+        requested_kind="active_symbolic_nested_dissection_frontal_schur_lu",
+        active_size=400001,
+        regularization=0.0,
+        env={},
+    )
+
+    assert policy.use_nd_frontal is True
+    assert policy.active_symbolic_kind == "active_symbolic_nd_frontal_schur_lu"
+    assert policy.active_architecture == "active_true_operator_symbolic_nd_frontal_schur_lu"
+    assert policy.min_cross_separator_fraction == 0.20
+    assert policy.nd_max_separator_cols == policy.separator_cols
+    assert policy.nd_high_degree_cols == policy.high_degree_cols
+    assert policy.nd_max_dense_rhs_entries == policy.max_dense_rhs_entries
+
+
+def test_symbolic_frontal_policy_clamps_invalid_or_out_of_range_values() -> None:
+    policy = resolve_active_symbolic_frontal_policy(
+        requested_kind="active_symbolic_frontal_schur_lu",
+        active_size=20,
+        regularization=-1.0e-8,
+        env={
+            "SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_SYMBOLIC_FRONTAL_BLOCK_SIZE": "0",
+            "SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_SYMBOLIC_FRONTAL_MAX_SEPARATOR_COLS": "-3",
+            "SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_SYMBOLIC_FRONTAL_MIN_CROSS_SEPARATOR_FRACTION": "2.0",
+            "SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_SYMBOLIC_FRONTAL_REGULARIZATION_REL": "-1",
+            "SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_SYMBOLIC_FRONTAL_PREFILL_SAFETY_FACTOR": "0.1",
+            "SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_SYMBOLIC_FRONTAL_ADMISSION_PROBES": "0",
+            "SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_SYMBOLIC_FRONTAL_ADMISSION_MAX_RELATIVE_RESIDUAL": "-1",
+            "SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_SYMBOLIC_FRONTAL_ADMISSION_MIN_IMPROVEMENT": "-2",
+            "SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_SYMBOLIC_ND_MAX_DEPTH": "-1",
+            "SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_SYMBOLIC_ND_RESIDUAL_POLISH_DAMPING": "-0.5",
+        },
+    )
+
+    assert policy.block_size == 1
+    assert policy.separator_cols == 0
+    assert policy.min_cross_separator_fraction == 1.0
+    assert policy.regularization_rel == 0.0
+    assert policy.prefill_safety_factor == 1.0
+    assert policy.admission_probes == 1
+    assert policy.admission_max_relative_residual == 0.0
+    assert policy.admission_min_improvement == 0.0
+    assert policy.nd_max_depth == 0
+    assert policy.nd_residual_polish_damping == 0.0
+
+
+def test_symbolic_frontal_policy_nd_overrides_follow_frontal_defaults() -> None:
+    policy = resolve_active_symbolic_frontal_policy(
+        requested_kind="active_symbolic_multilevel_frontal_schur_lu",
+        active_size=20,
+        regularization=1.0e-6,
+        env={
+            "SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_SYMBOLIC_FRONTAL_MAX_SEPARATOR_COLS": "17",
+            "SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_SYMBOLIC_FRONTAL_HIGH_DEGREE_COLS": "5",
+            "SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_SYMBOLIC_FRONTAL_MAX_DENSE_RHS_ENTRIES": "123",
+            "SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_SYMBOLIC_ND_MAX_SEPARATOR_COLS": "23",
+            "SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_SYMBOLIC_ND_HIGH_DEGREE_COLS": "7",
+            "SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_SYMBOLIC_ND_MAX_DENSE_RHS_ENTRIES": "456",
+        },
+    )
+
+    assert policy.use_nd_frontal is True
+    assert policy.separator_cols == 17
+    assert policy.high_degree_cols == 5
+    assert policy.max_dense_rhs_entries == 123
+    assert policy.nd_max_separator_cols == 23
+    assert policy.nd_high_degree_cols == 7
+    assert policy.nd_max_dense_rhs_entries == 456
+    assert policy.regularization_rel == 1.0e-6
 
 
 def test_structured_full_csr_matches_constraint_scheme1_full_operator() -> None:

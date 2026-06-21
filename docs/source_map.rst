@@ -410,6 +410,12 @@ the historical private driver name and test the focused module directly. This ke
   defaults, SuperLU/RCM ordering candidates, equilibration norm selection, and
   progress logging defaults; ``rhs1_full_assembly.py`` keeps the numerical
   sparse factor setup and true residual admission.
+- ``sfincs_jax/rhs1_symbolic_frontal_policy.py``:
+  symbolic frontal/Schur RHSMode=1 active-preconditioner policy. The module
+  owns frontal versus nested-dissection routing, separator/block limits, dense
+  Schur update budgets, admission probe thresholds, and ND residual-polish
+  controls; ``rhs1_full_assembly.py`` keeps sparse symbolic analysis,
+  factorization, and true residual admission.
 - ``sfincs_jax/rhs1_structured_full_csr.py``:
   runtime/non-autodiff wrapper that adapts analytic RHSMode=1 full-CSR assembly
   from ``rhs1_full_assembly.py`` into the ``SparseOperatorBundle`` contract used
