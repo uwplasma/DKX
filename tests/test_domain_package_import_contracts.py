@@ -128,6 +128,9 @@ ACTIVE_PACKAGE_EXPORTS = {
     "sfincs_jax.solvers.preconditioners.symbolic_sparse": (
         "RHS1FullSystemMatrixFreeOperatorAdapter",
         "active_fortran_v3_reduced_preconditioner_matrix",
+        "build_active_filtered_sparse_factor_preconditioner",
+        "build_active_global_sparse_factor_preconditioner",
+        "build_active_scaled_sparse_factor_preconditioner",
         "build_sparse_ilu_from_matvec",
         "build_active_fortran_v3_reduced_sparse_factor_preconditioner",
         "estimate_spilu_factor_nbytes",

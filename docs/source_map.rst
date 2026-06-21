@@ -450,6 +450,13 @@ the historical private driver name and test the focused module directly. This ke
   ``rhs1_full_assembly.py`` now imports the historical private names as
   compatibility aliases and keeps only direct-Pmat emission plus surrounding
   active-preconditioner dispatch.
+- ``sfincs_jax/solvers/preconditioners/symbolic_sparse/active_factors.py``:
+  active-projected RHSMode=1 sparse-factor preconditioners. The module owns the
+  global active sparse factor, row/column-equilibrated active factor, and
+  physics-filtered active sparse factor that retains selected off-diagonal
+  kinetic couplings. These are host-side, non-differentiable preconditioner
+  setup routines for explicit CSR solves; ``rhs1_full_assembly.py`` imports the
+  historical private builder names as aliases and keeps candidate dispatch.
 - ``sfincs_jax/rhs1_direct_tail_policy.py``:
   RHSMode=1 direct-tail structured-preconditioner adapter, direct reduced-Pmat
   aliases, stable cache-key hashing, cache-hit metadata tagging, and adaptive
