@@ -632,6 +632,13 @@ the historical private driver name and test the focused module directly. This ke
   metadata key assembly, and KSP replay diagnostic context forwarding. This
   keeps output-visible trace fields independently testable while
   ``v3_driver.py`` continues to own the solve orchestration.
+- ``sfincs_jax/problems/profile_response/finalization.py``:
+  final RHSMode=1/profile-response linear-solve handoff. It applies cleanup
+  projection, emits optional KSP replay diagnostics, writes final residual and
+  elapsed-time progress lines, applies post-xblock acceptance-floor metadata,
+  and wraps the result in ``V3LinearSolveResult``. The driver now passes a typed
+  context into this module instead of assembling final metadata and result
+  objects inline.
 - ``sfincs_jax/rhs1_ksp_diagnostics.py``:
   bounded RHSMode=1 PETSc-style KSP residual-history replay and iteration-count
   diagnostics. The driver passes the active matvec, preconditioner, and emit
