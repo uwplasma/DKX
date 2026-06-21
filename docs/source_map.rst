@@ -618,9 +618,11 @@ the historical private driver name and test the focused module directly. This ke
   optional moment/global coarse stages, and final payload construction.
 - ``sfincs_jax/problems/profile_response/sparse/qi.py``:
   QI-specific x-block device/operator-reuse policy, coarse-seed, Galerkin,
-  two-level, device, and residual-deflated stages. These helpers are separated
-  from generic sparse-PC logic because they encode QI-specific coarse-basis and
-  residual-space choices.
+  two-level, QI-device admission/build/probe/install, and residual-deflated
+  stages. These helpers are separated from generic sparse-PC logic because they
+  encode QI-specific coarse-basis and residual-space choices; ``v3_driver.py``
+  now injects solve-local operators and compatibility probe aliases rather than
+  owning the QI-device setup logic.
 - ``sfincs_jax/problems/profile_response/dense.py``:
   RHSMode=1/profile-response host dense solve helpers. This module owns the
   reduced row-scaled LU path and the full/reduced least-squares dense fallback
@@ -1010,7 +1012,8 @@ the historical private driver name and test the focused module directly. This ke
   is wired into ``RHS1QIDevicePreconditionerConfig`` as
   ``coupled_residual_equation`` and is fail-closed unless setup residual
   decreases.
-- ``sfincs_jax/v3_driver.py`` and ``scripts/run_qi_seed_robustness.py``:
+- ``sfincs_jax/problems/profile_response/sparse/qi.py``,
+  ``sfincs_jax/v3_driver.py``, and ``scripts/run_qi_seed_robustness.py``:
   expose the coupled residual equation through
   ``SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_COUPLED_RESIDUAL_EQUATION*``
   controls, progress logs, solver-trace keys, and the
