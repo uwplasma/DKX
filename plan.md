@@ -49,16 +49,19 @@ deferred research lanes.
   canonical owner is now `sfincs_jax.problems.profile_response.policies`; tests
   now enforce that ownership boundary instead of preserving aliases only for
   historical convenience.
-- QI seed/device/deflated metadata construction no longer lives inline in
-  `v3_driver.py`; the driver now calls the validated profile-response QI
-  diagnostics builders and stays focused on solve orchestration.
+- QI seed/Galerkin/two-level/device/deflated stage orchestration no longer
+  lives inline in `v3_driver.py`; the driver now calls
+  `run_xblock_qi_preconditioner_pipeline()` from
+  `sfincs_jax.problems.profile_response.sparse.qi`, injects solve-local
+  operators/probe aliases, and keeps QI metadata construction in the
+  profile-response sparse package.
 - RHSMode=1 PAS-family binding moved into
   `sfincs_jax.solvers.preconditioners.pas.RHS1PasFamilyBuilders`; `v3_driver.py`
   now keeps only thin private wrappers that inject current low-level builders
   for compatibility-sensitive tests and debug workflows.
-- Current next tranche is one more cohesive `v3_driver.py` stage extraction or,
-  if the next driver seam would be wrapper-only, the first `io.py` output-schema
-  split.
+- Current next tranche is the first `io.py` output-schema split unless a larger
+  `v3_driver.py` progress/timing/result handoff emerges that removes real
+  responsibility rather than wrapper lines.
 - The README and docs currently state the public claim boundary: the documented
   release suite is CPU/GPU parity-clean, while production-resolution QI, true
   device-QI, lower-memory native factor replacement, full-grid QA/QH RHSMode=1,
@@ -90,6 +93,11 @@ deferred research lanes.
   `43 passed in 6.73s`.
 - QI metadata simplification preserves sparse/QI driver behavior:
   `504 passed in 125.76s`.
+- QI pipeline extraction preserves profile-response sparse-PC, QI driver
+  sparse-pattern metadata, QI unit, QI artifact/helper, and import-contract
+  behavior:
+  `323 passed in 2.14s`, `57 passed in 26.34s`, `178 passed in 28.85s`,
+  and `7 passed in 0.53s`.
 - RHSMode=1 PAS-family extraction preserves PAS composite, driver policy,
   Schur heuristic, import-contract, preconditioner context, and profile-response
   preconditioner build behavior:
@@ -101,7 +109,7 @@ deferred research lanes.
 
 ### Current Code Shape
 
-- `sfincs_jax/v3_driver.py`: about 13.0k lines, still the largest orchestration
+- `sfincs_jax/v3_driver.py`: about 12.7k lines, still the largest orchestration
   and compatibility surface.
 - `sfincs_jax/rhs1_full_assembly.py`: about 7.9k lines, now mostly RHSMode=1
   exact/active CSR assembly, admission, dispatch, and compatibility.

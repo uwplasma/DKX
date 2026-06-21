@@ -230,6 +230,8 @@ from .sparse.qi import (
     XBlockQIGalerkinPolicySetup,
     XBlockQIGalerkinStageContext,
     XBlockQIGalerkinStageResult,
+    XBlockQIStagePipelineContext,
+    XBlockQIStagePipelineResult,
     XBlockQISeedPolicySetup,
     XBlockQITwoLevelPolicySetup,
     XBlockQITwoLevelStageContext,
@@ -250,6 +252,7 @@ from .sparse.qi import (
     resolve_xblock_qi_galerkin_policy_setup,
     resolve_xblock_qi_seed_policy_setup,
     resolve_xblock_qi_two_level_policy_setup,
+    run_xblock_qi_preconditioner_pipeline,
 )
 from .sparse.xblock import (
     XBlockSparsePCFinalCoreState,
@@ -3460,6 +3463,8 @@ __all__ = [
     "build_xblock_assembled_operator_if_requested",
     "build_xblock_qi_device_preconditioner_metadata",
     "build_xblock_qi_device_setup_config",
+    "XBlockQIStagePipelineContext",
+    "XBlockQIStagePipelineResult",
     "build_xblock_krylov_progress_callbacks",
     "build_xblock_krylov_matvec_setup",
     "resolve_xblock_qi_deflated_policy_setup",
@@ -3471,6 +3476,7 @@ __all__ = [
     "resolve_xblock_qi_galerkin_policy_setup",
     "resolve_xblock_qi_seed_policy_setup",
     "resolve_xblock_qi_two_level_policy_setup",
+    "run_xblock_qi_preconditioner_pipeline",
     "resolve_xblock_krylov_control_setup",
     "build_sparse_pc_active_dof_setup",
     "build_sparse_pc_pattern_setup",

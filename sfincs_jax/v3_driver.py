@@ -84,7 +84,6 @@ from .rhs1_domain_decomposition import (  # compatibility exports for legacy tes
     _rhs1_dd_coarse_level_count,
 )
 from .rhs1_qi_coarse import (
-    RHS1QICoarseBasis,
     apply_rhs1_qi_coarse_correction,
     build_rhs1_xblock_global_coupling_load_basis as _rhs1_xblock_global_coupling_load_basis,
     build_rhs1_xblock_qi_coarse_basis as _rhs1_xblock_qi_coarse_basis,
@@ -303,11 +302,7 @@ from .problems.profile_response.sparse_pc import (
     XBlockPostSolveCorrectionContext,
     XBlockPreflightGateContext,
     XBlockProbeCoarseStageContext,
-    XBlockQICoarseSeedStageContext,
-    XBlockQIDeflatedStageContext,
-    XBlockQIDeviceStageContext,
-    XBlockQIGalerkinStageContext,
-    XBlockQITwoLevelStageContext,
+    XBlockQIStagePipelineContext,
     XBlockSideProbeStageContext,
     XBlockSparsePCFinalCoreState,
     XBlockSparsePCFinalDeviceState,
@@ -323,11 +318,7 @@ from .problems.profile_response.sparse_pc import (
     apply_xblock_augmented_krylov_stage,
     apply_xblock_moment_schur_stage,
     apply_xblock_probe_coarse_stage,
-    apply_xblock_qi_coarse_seed_stage,
-    apply_xblock_qi_deflated_stage,
-    apply_xblock_qi_device_stage,
-    apply_xblock_qi_galerkin_stage,
-    apply_xblock_qi_two_level_stage,
+    run_xblock_qi_preconditioner_pipeline,
     apply_xblock_side_probe_stage,
     apply_xblock_two_level_stage,
     build_fortran_reduced_xblock_factor_stage,
@@ -367,11 +358,7 @@ from .problems.profile_response.sparse_pc import (
     resolve_fortran_reduced_xblock_moment_schur_policy,
     prepare_xblock_augmented_krylov_basis,
     prepare_xblock_krylov_solve_space,
-    resolve_xblock_qi_deflated_policy_setup,
     resolve_xblock_krylov_control_setup,
-    resolve_xblock_qi_galerkin_policy_setup,
-    resolve_xblock_qi_seed_policy_setup,
-    resolve_xblock_qi_two_level_policy_setup,
     resolve_xblock_global_coupling_policy_setup,
     resolve_xblock_moment_schur_policy_setup,
     resolve_xblock_seed_policy_setup,
@@ -3208,300 +3195,23 @@ def solve_v3_full_system_linear_gmres(
                             "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
                             f"constraint1 moment-Schur seed failed ({type(exc).__name__}: {exc})",
                         )
-            qi_seed_policy = resolve_xblock_qi_seed_policy_setup(env=os.environ)
-            qi_coarse_seed_enabled = bool(qi_seed_policy.coarse_seed_enabled)
-            qi_coarse_seed_used = False
-            qi_coarse_seed_residual_before: float | None = None
-            qi_coarse_seed_residual_after: float | None = None
-            qi_coarse_seed_improvement_ratio: float | None = None
-            qi_coarse_seed_rank = 0
-            qi_coarse_seed_candidate_count = 0
-            qi_coarse_seed_reason: str | None = None
-            qi_coarse_seed_labels: tuple[str, ...] = ()
-            qi_coarse_seed_s = 0.0
-            qi_seed_max_rank = int(qi_seed_policy.max_rank)
-            qi_seed_max_candidates = int(qi_seed_policy.max_candidates)
-            qi_seed_max_angular_mode = int(qi_seed_policy.max_angular_mode)
-            qi_seed_rank_rtol = float(qi_seed_policy.rank_rtol)
-            qi_seed_min_improvement = float(qi_seed_policy.min_improvement)
-            qi_seed_rcond = float(qi_seed_policy.rcond)
-            qi_seed_include_angular = bool(qi_seed_policy.include_angular)
-            qi_seed_include_blocks = bool(qi_seed_policy.include_blocks)
-            qi_seed_include_radial = bool(qi_seed_policy.include_radial)
-            qi_seed_include_radial_angular = bool(qi_seed_policy.include_radial_angular)
-            qi_seed_include_constraint_moments = bool(qi_seed_policy.include_constraint_moments)
-            qi_seed_include_schur = bool(qi_seed_policy.include_schur)
-            qi_seed_basis_kind: str | None = qi_seed_policy.basis_kind
-            qi_seed_basis_for_galerkin: RHS1QICoarseBasis | None = None
-            qi_galerkin_preconditioner_enabled = bool(qi_seed_policy.galerkin_preconditioner_enabled)
-            qi_galerkin_preconditioner_built = False
-            qi_galerkin_preconditioner_used = False
-            qi_galerkin_preconditioner_reason: str | None = None
-            qi_galerkin_preconditioner_mode: str | None = None
-            qi_galerkin_preconditioner_rank = 0
-            qi_galerkin_preconditioner_candidate_count = 0
-            qi_galerkin_preconditioner_coarse_shape: tuple[int, int] = (0, 0)
-            qi_galerkin_preconditioner_coarse_norm = 0.0
-            qi_galerkin_preconditioner_setup_s = 0.0
-            qi_galerkin_preconditioner_rcond = 0.0
-            qi_galerkin_preconditioner_damping = 1.0
-            qi_galerkin_preconditioner_basis_reused_from_seed = False
-            qi_galerkin_preconditioner_residual_before: float | None = None
-            qi_galerkin_preconditioner_residual_after: float | None = None
-            qi_galerkin_preconditioner_improvement_ratio: float | None = None
-            qi_galerkin_preconditioner_probe_reduced = False
-            qi_galerkin_preconditioner_probe_candidates: list[dict[str, object]] = []
-            qi_galerkin_preconditioner_selected_index: int | None = None
-            qi_galerkin_stats = {"applies": 0, "coarse_applies": 0, "base_applies": 0}
-            qi_two_level_preconditioner_enabled = bool(qi_seed_policy.two_level_preconditioner_enabled)
-            qi_two_level_preconditioner_built = False
-            qi_two_level_preconditioner_used = False
-            qi_two_level_preconditioner_reason: str | None = None
-            qi_two_level_preconditioner_rank = 0
-            qi_two_level_preconditioner_candidate_count = 0
-            qi_two_level_preconditioner_coarse_shape: tuple[int, int] = (0, 0)
-            qi_two_level_preconditioner_coarse_norm = 0.0
-            qi_two_level_preconditioner_operator_on_basis_shape: tuple[int, int] = (0, 0)
-            qi_two_level_preconditioner_operator_on_basis_norm = 0.0
-            qi_two_level_preconditioner_coarse_solver: str | None = None
-            qi_two_level_preconditioner_residual_augmented = False
-            qi_two_level_preconditioner_rank_before_augmentation = 0
-            qi_two_level_preconditioner_augmentation_labels: tuple[str, ...] = ()
-            qi_two_level_preconditioner_residual_augment_max_extra = 0
-            qi_two_level_preconditioner_residual_augment_steps = 0
-            qi_two_level_preconditioner_residual_augment_include_residuals = False
-            qi_two_level_preconditioner_smoothed_load_basis = False
-            qi_two_level_preconditioner_smoothed_load_metadata: dict[str, object] = {}
-            qi_two_level_preconditioner_setup_s = 0.0
-            qi_two_level_preconditioner_rcond = 0.0
-            qi_two_level_preconditioner_damping = 1.0
-            qi_two_level_preconditioner_basis_reused_from_seed = False
-            qi_two_level_preconditioner_residual_before: float | None = None
-            qi_two_level_preconditioner_residual_after: float | None = None
-            qi_two_level_preconditioner_improvement_ratio: float | None = None
-            qi_two_level_preconditioner_probe_candidates: list[dict[str, object]] = []
-            qi_two_level_preconditioner_selected_index: int | None = None
-            qi_two_level_stats = {"applies": 0, "local_applies": 0}
-            qi_device_preconditioner_enabled = bool(qi_seed_policy.device_preconditioner_enabled)
-            qi_device_preconditioner_built = False
-            qi_device_preconditioner_used = False
-            qi_device_preconditioner_used_in_krylov = False
-            qi_device_preconditioner_reason: str | None = None
-            qi_device_preconditioner_rank = 0
-            qi_device_preconditioner_candidate_count = 0
-            qi_device_preconditioner_coarse_shape: tuple[int, int] = (0, 0)
-            qi_device_preconditioner_operator_on_basis_shape: tuple[int, int] = (0, 0)
-            qi_device_preconditioner_coarse_norm = 0.0
-            qi_device_preconditioner_operator_on_basis_norm = 0.0
-            qi_device_preconditioner_residual_before: float | None = None
-            qi_device_preconditioner_residual_after: float | None = None
-            qi_device_preconditioner_improvement_ratio: float | None = None
-            qi_device_preconditioner_metadata: dict[str, object] = {}
-            qi_device_preconditioner_setup_s = 0.0
-            qi_device_preconditioner_min_improvement = 0.0
-            qi_device_preconditioner_use_in_krylov = False
-            qi_device_stats = {"applies": 0}
-            qi_device_state_for_augmented_krylov = None
-            qi_device_augmented_krylov_requested = False
-            qi_device_augmented_krylov_used = False
-            qi_device_augmented_krylov_rank = 0
-            qi_device_augmented_krylov_reason: str | None = None
-            qi_device_augmented_krylov_mode = "projected"
-            qi_device_augmented_seed_requested = False
-            qi_device_augmented_seed_available = False
-            qi_device_augmented_seed_used = False
-            qi_device_augmented_seed_rank = 0
-            qi_device_augmented_seed_max_rank = 0
-            qi_device_augmented_seed_reason: str | None = None
-            qi_device_augmented_seed_projection_residual: float | None = None
-            qi_device_augmented_seed_labels: tuple[str, ...] = ()
-            qi_device_augmented_seed_basis_for_krylov = None
-            qi_device_augmented_seed_action_for_krylov = None
-            qi_deflated_preconditioner_enabled = bool(qi_seed_policy.deflated_preconditioner_enabled)
-            qi_deflated_preconditioner_built = False
-            qi_deflated_preconditioner_used = False
-            qi_deflated_preconditioner_used_in_krylov = False
-            qi_deflated_preconditioner_reason: str | None = None
-            qi_deflated_preconditioner_rank = 0
-            qi_deflated_preconditioner_candidate_count = 0
-            qi_deflated_preconditioner_residual_before: float | None = None
-            qi_deflated_preconditioner_residual_after: float | None = None
-            qi_deflated_preconditioner_improvement_ratio: float | None = None
-            qi_deflated_preconditioner_metadata: dict[str, object] = {}
-            qi_deflated_preconditioner_setup_s = 0.0
-            qi_deflated_stats = {"applies": 0, "local_applies": 0}
-            qi_coarse_seed_stage = apply_xblock_qi_coarse_seed_stage(
-                context=XBlockQICoarseSeedStageContext(
-                    op=op,
-                    x0_full=x0_full,
-                    xblock_rhs=xblock_rhs,
-                    matvec_no_count=_mv_true_no_count,
-                    active_dof=bool(xblock_use_active_dof),
-                    linear_size=int(xblock_linear_size),
-                    policy=qi_seed_policy,
-                    elapsed_s=sparse_timer.elapsed_s,
-                    emit=emit,
-                    basis_builder=_rhs1_xblock_qi_coarse_basis,
-                    correction_builder=apply_rhs1_qi_coarse_correction,
-                )
-            )
-            x0_full = qi_coarse_seed_stage.x0_full
-            qi_seed_basis_for_galerkin = qi_coarse_seed_stage.basis_for_galerkin
-            qi_coarse_seed_used = bool(qi_coarse_seed_stage.used)
-            qi_coarse_seed_residual_before = qi_coarse_seed_stage.residual_before
-            qi_coarse_seed_residual_after = qi_coarse_seed_stage.residual_after
-            qi_coarse_seed_improvement_ratio = qi_coarse_seed_stage.improvement_ratio
-            qi_coarse_seed_rank = int(qi_coarse_seed_stage.rank)
-            qi_coarse_seed_candidate_count = int(qi_coarse_seed_stage.candidate_count)
-            qi_coarse_seed_reason = qi_coarse_seed_stage.reason
-            qi_coarse_seed_labels = qi_coarse_seed_stage.labels
-            qi_coarse_seed_s = float(qi_coarse_seed_stage.setup_s)
-            qi_galerkin_policy = resolve_xblock_qi_galerkin_policy_setup(
-                enabled=bool(qi_galerkin_preconditioner_enabled),
-                host_fallback_used=bool(xblock_device_host_fallback_decision.used),
-                precondition_side=str(precondition_side),
-                parse_modes=parse_rhs1_qi_galerkin_modes,
-                parse_dampings=parse_rhs1_qi_galerkin_dampings,
-                env=os.environ,
-            )
-            qi_galerkin_stage = apply_xblock_qi_galerkin_stage(
-                context=XBlockQIGalerkinStageContext(
-                    op=op,
-                    base_preconditioner=precond_xblock_krylov,
-                    matvec=_mv_xblock_krylov,
-                    true_matvec_no_count=_mv_true_no_count,
-                    xblock_rhs=xblock_rhs,
-                    xblock_rhs_norm=float(xblock_rhs_norm),
-                    active_dof=bool(xblock_use_active_dof),
-                    linear_size=int(xblock_linear_size),
-                    basis_for_galerkin=qi_seed_basis_for_galerkin,
-                    seed_policy=qi_seed_policy,
-                    galerkin_policy=qi_galerkin_policy,
-                    elapsed_s=sparse_timer.elapsed_s,
-                    emit=emit,
-                    basis_builder=_rhs1_xblock_qi_coarse_basis,
-                    preconditioner_builder=build_rhs1_qi_galerkin_preconditioner,
-                )
-            )
-            precond_xblock_krylov = qi_galerkin_stage.preconditioner
-            qi_seed_basis_for_galerkin = qi_galerkin_stage.basis_for_galerkin
-            qi_galerkin_preconditioner_built = bool(qi_galerkin_stage.built)
-            qi_galerkin_preconditioner_used = bool(qi_galerkin_stage.used)
-            qi_galerkin_preconditioner_reason = qi_galerkin_stage.reason
-            qi_galerkin_preconditioner_mode = qi_galerkin_stage.mode
-            qi_galerkin_preconditioner_rank = int(qi_galerkin_stage.rank)
-            qi_galerkin_preconditioner_candidate_count = int(qi_galerkin_stage.candidate_count)
-            qi_galerkin_preconditioner_coarse_shape = qi_galerkin_stage.coarse_shape
-            qi_galerkin_preconditioner_coarse_norm = float(qi_galerkin_stage.coarse_norm)
-            qi_galerkin_preconditioner_setup_s = float(qi_galerkin_stage.setup_s)
-            qi_galerkin_preconditioner_rcond = float(qi_galerkin_stage.rcond)
-            qi_galerkin_preconditioner_damping = float(qi_galerkin_stage.damping)
-            qi_galerkin_preconditioner_basis_reused_from_seed = bool(
-                qi_galerkin_stage.basis_reused_from_seed
-            )
-            qi_galerkin_preconditioner_residual_before = qi_galerkin_stage.residual_before
-            qi_galerkin_preconditioner_residual_after = qi_galerkin_stage.residual_after
-            qi_galerkin_preconditioner_improvement_ratio = qi_galerkin_stage.improvement_ratio
-            qi_galerkin_preconditioner_probe_reduced = bool(qi_galerkin_stage.probe_reduced)
-            qi_galerkin_preconditioner_probe_candidates = qi_galerkin_stage.probe_candidates
-            qi_galerkin_preconditioner_selected_index = qi_galerkin_stage.selected_index
-            qi_galerkin_stats = qi_galerkin_stage.stats
-            pc_factor_s += float(qi_galerkin_preconditioner_setup_s)
-            qi_two_level_policy = resolve_xblock_qi_two_level_policy_setup(
-                enabled=bool(qi_two_level_preconditioner_enabled),
-                host_fallback_used=bool(xblock_device_host_fallback_decision.used),
-                precondition_side=str(precondition_side),
-                seed_max_rank=int(qi_seed_max_rank),
-                parse_dampings=parse_rhs1_qi_galerkin_dampings,
-                env=os.environ,
-            )
-            qi_two_level_stage = apply_xblock_qi_two_level_stage(
-                context=XBlockQITwoLevelStageContext(
+            qi_pipeline = run_xblock_qi_preconditioner_pipeline(
+                XBlockQIStagePipelineContext(
                     op=op,
                     rhs=rhs,
                     x0_full=x0_full,
                     xblock_rhs=xblock_rhs,
+                    xblock_rhs_norm=float(xblock_rhs_norm),
                     base_preconditioner=precond_xblock_krylov,
                     matvec=_mv_xblock_krylov,
                     true_matvec_no_count=_mv_true_no_count,
-                    direction_projector=_xblock_reduce_full if xblock_use_active_dof else None,
+                    direction_projector=(
+                        _xblock_reduce_full if xblock_use_active_dof else None
+                    ),
                     active_dof=bool(xblock_use_active_dof),
                     linear_size=int(xblock_linear_size),
-                    basis_for_galerkin=qi_seed_basis_for_galerkin,
-                    seed_policy=qi_seed_policy,
-                    two_level_policy=qi_two_level_policy,
-                    elapsed_s=sparse_timer.elapsed_s,
-                    emit=emit,
-                    basis_builder=_rhs1_xblock_qi_coarse_basis,
-                    smoothed_load_basis_builder=_rhs1_xblock_smoothed_load_qi_basis,
-                    orthonormalizer=orthonormalize_rhs1_qi_coarse_basis,
-                    preconditioner_builder=build_rhs1_qi_two_level_preconditioner,
-                )
-            )
-            precond_xblock_krylov = qi_two_level_stage.preconditioner
-            x0_full = qi_two_level_stage.x0_full
-            qi_seed_basis_for_galerkin = qi_two_level_stage.basis_for_galerkin
-            qi_two_level_preconditioner_built = bool(qi_two_level_stage.built)
-            qi_two_level_preconditioner_used = bool(qi_two_level_stage.used)
-            qi_two_level_preconditioner_reason = qi_two_level_stage.reason
-            qi_two_level_preconditioner_rank = int(qi_two_level_stage.rank)
-            qi_two_level_preconditioner_candidate_count = int(qi_two_level_stage.candidate_count)
-            qi_two_level_preconditioner_coarse_shape = qi_two_level_stage.coarse_shape
-            qi_two_level_preconditioner_coarse_norm = float(qi_two_level_stage.coarse_norm)
-            qi_two_level_preconditioner_operator_on_basis_shape = (
-                qi_two_level_stage.operator_on_basis_shape
-            )
-            qi_two_level_preconditioner_operator_on_basis_norm = float(
-                qi_two_level_stage.operator_on_basis_norm
-            )
-            qi_two_level_preconditioner_coarse_solver = qi_two_level_stage.coarse_solver
-            qi_two_level_preconditioner_residual_augmented = bool(
-                qi_two_level_stage.residual_augmented
-            )
-            qi_two_level_preconditioner_rank_before_augmentation = int(
-                qi_two_level_stage.rank_before_augmentation
-            )
-            qi_two_level_preconditioner_augmentation_labels = qi_two_level_stage.augmentation_labels
-            qi_two_level_preconditioner_residual_augment_max_extra = int(
-                qi_two_level_stage.residual_augment_max_extra
-            )
-            qi_two_level_preconditioner_residual_augment_steps = int(
-                qi_two_level_stage.residual_augment_steps
-            )
-            qi_two_level_preconditioner_residual_augment_include_residuals = bool(
-                qi_two_level_stage.residual_augment_include_residuals
-            )
-            qi_two_level_preconditioner_smoothed_load_basis = bool(
-                qi_two_level_stage.smoothed_load_basis
-            )
-            qi_two_level_preconditioner_smoothed_load_metadata = (
-                qi_two_level_stage.smoothed_load_metadata
-            )
-            qi_two_level_preconditioner_setup_s = float(qi_two_level_stage.setup_s)
-            qi_two_level_preconditioner_rcond = float(qi_two_level_stage.rcond)
-            qi_two_level_preconditioner_damping = float(qi_two_level_stage.damping)
-            qi_two_level_preconditioner_basis_reused_from_seed = bool(
-                qi_two_level_stage.basis_reused_from_seed
-            )
-            qi_two_level_preconditioner_residual_before = qi_two_level_stage.residual_before
-            qi_two_level_preconditioner_residual_after = qi_two_level_stage.residual_after
-            qi_two_level_preconditioner_improvement_ratio = qi_two_level_stage.improvement_ratio
-            qi_two_level_preconditioner_probe_candidates = qi_two_level_stage.probe_candidates
-            qi_two_level_preconditioner_selected_index = qi_two_level_stage.selected_index
-            qi_two_level_stats = qi_two_level_stage.stats
-            pc_factor_s += float(qi_two_level_preconditioner_setup_s)
-            qi_device_stage = apply_xblock_qi_device_stage(
-                XBlockQIDeviceStageContext(
-                    op=op,
-                    x0_full=x0_full,
-                    xblock_rhs=xblock_rhs,
-                    base_preconditioner=precond_xblock_krylov,
-                    basis_for_galerkin=qi_seed_basis_for_galerkin,
-                    seed_policy=qi_seed_policy,
-                    active_dof=bool(xblock_use_active_dof),
-                    linear_size=int(xblock_linear_size),
+                    host_fallback_used=bool(xblock_device_host_fallback_decision.used),
                     precondition_side=str(precondition_side),
-                    true_matvec_no_count=_mv_true_no_count,
                     assembled_device_operator=assembled_device_operator,
                     assembled_operator_metadata=assembled_operator_metadata,
                     assembled_operator_enabled=bool(assembled_operator_enabled),
@@ -3512,135 +3222,74 @@ def solve_v3_full_system_linear_gmres(
                     assembled_operator_device_error=assembled_operator_metadata.get(
                         "device_error"
                     ),
-                    host_fallback_used=bool(xblock_device_host_fallback_decision.used),
                     elapsed_s=sparse_timer.elapsed_s,
                     emit=emit,
                     env=os.environ,
                     basis_builder=_rhs1_xblock_qi_coarse_basis,
-                    setup_preconditioner=setup_rhs1_qi_device_preconditioner,
-                    probe_preconditioner=probe_rhs1_qi_device_preconditioner,
-                    probe_augmented_seed=probe_rhs1_qi_device_augmented_seed,
+                    smoothed_load_basis_builder=(
+                        _rhs1_xblock_smoothed_load_qi_basis
+                    ),
+                    global_load_basis_builder=(
+                        _rhs1_xblock_global_coupling_load_basis
+                    ),
+                    correction_builder=apply_rhs1_qi_coarse_correction,
+                    galerkin_preconditioner_builder=(
+                        build_rhs1_qi_galerkin_preconditioner
+                    ),
+                    two_level_preconditioner_builder=(
+                        build_rhs1_qi_two_level_preconditioner
+                    ),
+                    orthonormalizer=orthonormalize_rhs1_qi_coarse_basis,
+                    device_setup_preconditioner=setup_rhs1_qi_device_preconditioner,
+                    device_probe_preconditioner=probe_rhs1_qi_device_preconditioner,
+                    device_probe_augmented_seed=(
+                        probe_rhs1_qi_device_augmented_seed
+                    ),
+                    deflated_preconditioner_builder=(
+                        build_rhs1_qi_residual_deflated_preconditioner
+                    ),
+                    deflated_minres_seed_probe=probe_rhs1_qi_deflated_minres_seed,
+                    deflated_linear_probe=probe_rhs1_qi_deflated_correction,
+                    parse_galerkin_modes=parse_rhs1_qi_galerkin_modes,
+                    parse_galerkin_dampings=parse_rhs1_qi_galerkin_dampings,
+                    reduce_full=_xblock_reduce_full,
                 )
             )
-            precond_xblock_krylov = qi_device_stage.preconditioner
-            x0_full = qi_device_stage.x0_full
-            qi_seed_basis_for_galerkin = qi_device_stage.basis_for_galerkin
+            precond_xblock_krylov = qi_pipeline.preconditioner
+            x0_full = qi_pipeline.x0_full
             qi_device_state_for_augmented_krylov = (
-                qi_device_stage.state_for_augmented_krylov
+                qi_pipeline.qi_device_state_for_augmented_krylov
             )
             qi_device_augmented_seed_basis_for_krylov = (
-                qi_device_stage.augmented_seed_basis_for_krylov
+                qi_pipeline.qi_device_augmented_seed_basis_for_krylov
             )
             qi_device_augmented_seed_action_for_krylov = (
-                qi_device_stage.augmented_seed_action_for_krylov
+                qi_pipeline.qi_device_augmented_seed_action_for_krylov
             )
-            qi_device_preconditioner_enabled = bool(qi_device_stage.enabled)
-            qi_device_preconditioner_built = bool(qi_device_stage.built)
-            qi_device_preconditioner_used = bool(qi_device_stage.used)
-            qi_device_preconditioner_used_in_krylov = bool(
-                qi_device_stage.used_in_krylov
+            qi_device_augmented_seed_requested = (
+                qi_pipeline.qi_device_augmented_seed_requested
             )
-            qi_device_preconditioner_reason = qi_device_stage.reason
-            qi_device_preconditioner_rank = int(qi_device_stage.rank)
-            qi_device_preconditioner_candidate_count = int(
-                qi_device_stage.candidate_count
+            qi_device_augmented_seed_available = (
+                qi_pipeline.qi_device_augmented_seed_available
             )
-            qi_device_preconditioner_coarse_shape = qi_device_stage.coarse_shape
-            qi_device_preconditioner_operator_on_basis_shape = (
-                qi_device_stage.operator_on_basis_shape
+            qi_device_augmented_seed_used = qi_pipeline.qi_device_augmented_seed_used
+            qi_device_augmented_seed_rank = qi_pipeline.qi_device_augmented_seed_rank
+            qi_device_augmented_seed_max_rank = (
+                qi_pipeline.qi_device_augmented_seed_max_rank
             )
-            qi_device_preconditioner_coarse_norm = float(qi_device_stage.coarse_norm)
-            qi_device_preconditioner_operator_on_basis_norm = float(
-                qi_device_stage.operator_on_basis_norm
+            qi_device_augmented_seed_reason = (
+                qi_pipeline.qi_device_augmented_seed_reason
             )
-            qi_device_preconditioner_residual_before = qi_device_stage.residual_before
-            qi_device_preconditioner_residual_after = qi_device_stage.residual_after
-            qi_device_preconditioner_improvement_ratio = (
-                qi_device_stage.improvement_ratio
-            )
-            qi_device_preconditioner_metadata = qi_device_stage.metadata
-            qi_device_preconditioner_setup_s = float(qi_device_stage.setup_s)
-            qi_device_preconditioner_min_improvement = float(
-                qi_device_stage.min_improvement
-            )
-            qi_device_preconditioner_use_in_krylov = bool(
-                qi_device_stage.use_in_krylov
-            )
-            qi_device_stats = qi_device_stage.stats
-            qi_device_augmented_seed_requested = bool(
-                qi_device_stage.augmented_seed_requested
-            )
-            qi_device_augmented_seed_available = bool(
-                qi_device_stage.augmented_seed_available
-            )
-            qi_device_augmented_seed_used = bool(qi_device_stage.augmented_seed_used)
-            qi_device_augmented_seed_rank = int(qi_device_stage.augmented_seed_rank)
-            qi_device_augmented_seed_max_rank = int(
-                qi_device_stage.augmented_seed_max_rank
-            )
-            qi_device_augmented_seed_reason = qi_device_stage.augmented_seed_reason
             qi_device_augmented_seed_projection_residual = (
-                qi_device_stage.augmented_seed_projection_residual
+                qi_pipeline.qi_device_augmented_seed_projection_residual
             )
-            qi_device_augmented_seed_labels = qi_device_stage.augmented_seed_labels
-            pc_factor_s += float(qi_device_preconditioner_setup_s)
-            if qi_deflated_preconditioner_enabled and bool(xblock_device_host_fallback_decision.used):
-                qi_deflated_preconditioner_reason = "disabled_by_device_host_fallback"
-                if emit is not None:
-                    emit(
-                        1,
-                        "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
-                        "QI residual-deflated preconditioner disabled because device-host fallback is active",
-                    )
-            elif qi_deflated_preconditioner_enabled and precondition_side == "none":
-                qi_deflated_preconditioner_reason = "disabled_by_precondition_side_none"
-            elif qi_deflated_preconditioner_enabled:
-                qi_deflated_policy = resolve_xblock_qi_deflated_policy_setup(os.environ)
-                qi_deflated_stage = apply_xblock_qi_deflated_stage(
-                    context=XBlockQIDeflatedStageContext(
-                        op=op,
-                        rhs=rhs,
-                        x0_full=x0_full,
-                        xblock_rhs=xblock_rhs,
-                        base_preconditioner=precond_xblock_krylov,
-                        matvec=_mv_xblock_krylov,
-                        true_matvec_no_count=_mv_true_no_count,
-                        active_dof=bool(xblock_use_active_dof),
-                        reduce_full=_xblock_reduce_full if bool(xblock_use_active_dof) else None,
-                        policy=qi_deflated_policy,
-                        elapsed_s=sparse_timer.elapsed_s,
-                        emit=emit,
-                        global_load_basis_builder=_rhs1_xblock_global_coupling_load_basis,
-                        preconditioner_builder=build_rhs1_qi_residual_deflated_preconditioner,
-                        minres_seed_probe=probe_rhs1_qi_deflated_minres_seed,
-                        linear_probe=probe_rhs1_qi_deflated_correction,
-                    )
-                )
-                precond_xblock_krylov = qi_deflated_stage.preconditioner
-                x0_full = qi_deflated_stage.x0_full
-                qi_deflated_preconditioner_built = bool(qi_deflated_stage.built)
-                qi_deflated_preconditioner_used = bool(qi_deflated_stage.used)
-                qi_deflated_preconditioner_used_in_krylov = bool(
-                    qi_deflated_stage.used_in_krylov
-                )
-                qi_deflated_preconditioner_reason = qi_deflated_stage.reason
-                qi_deflated_preconditioner_rank = int(qi_deflated_stage.rank)
-                qi_deflated_preconditioner_candidate_count = int(
-                    qi_deflated_stage.candidate_count
-                )
-                qi_deflated_preconditioner_residual_before = (
-                    qi_deflated_stage.residual_before
-                )
-                qi_deflated_preconditioner_residual_after = (
-                    qi_deflated_stage.residual_after
-                )
-                qi_deflated_preconditioner_improvement_ratio = (
-                    qi_deflated_stage.improvement_ratio
-                )
-                qi_deflated_preconditioner_metadata = qi_deflated_stage.metadata
-                qi_deflated_preconditioner_setup_s = float(qi_deflated_stage.setup_s)
-                qi_deflated_stats = qi_deflated_stage.stats
-                pc_factor_s += float(qi_deflated_preconditioner_setup_s)
+            qi_device_augmented_seed_labels = (
+                qi_pipeline.qi_device_augmented_seed_labels
+            )
+            qi_device_preconditioner_metadata = (
+                qi_pipeline.qi_device_preconditioner_metadata
+            )
+            pc_factor_s += float(qi_pipeline.pc_factor_s)
             xblock_side_probe_controls = _rhs1_xblock_policy.rhs1_xblock_side_probe_controls_from_env(
                 env=os.environ,
                 explicit_side_env_value=side_env,
@@ -4031,6 +3680,7 @@ def solve_v3_full_system_linear_gmres(
             x_np = np.asarray(post_completion.x, dtype=np.float64)
             residual_norm_xblock_pc = float(post_completion.residual_norm)
             solve_s = float(post_completion.solve_s)
+            qi_diagnostic_scope = {**qi_pipeline.diagnostic_scope(), **locals()}
             xblock_final_metadata_state = (
                 xblock_sparse_pc_final_metadata_state_from_context(
                     XBlockSparsePCFinalMetadataStateContext(
@@ -4244,13 +3894,19 @@ def solve_v3_full_system_linear_gmres(
                                 )
                             ),
                             xblock_qi_seed_preconditioner_metadata=(
-                                xblock_qi_seed_preconditioner_diagnostics(locals())
+                                xblock_qi_seed_preconditioner_diagnostics(
+                                    qi_diagnostic_scope
+                                )
                             ),
                             xblock_qi_device_preconditioner_metadata=(
-                                xblock_qi_device_preconditioner_diagnostics(locals())
+                                xblock_qi_device_preconditioner_diagnostics(
+                                    qi_diagnostic_scope
+                                )
                             ),
                             xblock_qi_deflated_preconditioner_metadata=(
-                                xblock_qi_deflated_preconditioner_diagnostics(locals())
+                                xblock_qi_deflated_preconditioner_diagnostics(
+                                    qi_diagnostic_scope
+                                )
                             ),
                             xblock_side_probe_metadata=xblock_side_probe_diagnostics(
                                 XBlockSideProbeDiagnosticsContext(
