@@ -35,11 +35,16 @@ What is already done:
   basis layers out of the monolith:
   `rhs1_coarse_policy.py` and `rhs1_coarse_basis.py` now live under
   `sfincs_jax.solvers.preconditioners.schur`.
+- The first complete RHSMode=1 preconditioner implementation family has moved:
+  `sfincs_jax.solvers.preconditioners.schur.rhs1_full_csr` now owns the
+  structured full-CSR preconditioner result type plus Jacobi, diagonal
+  tail-Schur, zeta-line Schur, pitch-line Schur, and radial-pitch Schur
+  builders.
 
 Current source-size pressure points:
 
 - `sfincs_jax/v3_driver.py`: about 14.4k lines.
-- `sfincs_jax/rhs1_full_assembly.py`: about 11.1k lines.
+- `sfincs_jax/rhs1_full_assembly.py`: about 10.6k lines.
 - `sfincs_jax/io.py`: about 5.8k lines.
 - `sfincs_jax/problems/profile_response/sparse/xblock.py`: about 4.5k lines.
 - `sfincs_jax/rhs1_qi_device_preconditioner.py`: about 4.4k lines.
@@ -57,6 +62,8 @@ Latest validation evidence for this follow-up branch:
 - Docs workflow passed on the latest pushed commits.
 - Focused RHSMode=1 full-assembly tests passed after the recent extractions.
 - `tests/test_v3_sparse_pattern.py` passed after the recent extractions.
+- `tests/test_rhs1_full_csr_schur_preconditioners.py` directly validates the
+  extracted full-CSR Schur family on exact small sparse systems.
 - Targeted `ruff`, `git diff --check`, repository-size audit, and Sphinx build
   passed after the recent extractions.
 
@@ -128,7 +135,7 @@ Acceptance:
 
 ### P1. Finish The RHSMode=1 Full-Assembly Split
 
-Status: about 55%.
+Status: about 65%.
 
 This is the next highest-value refactor because it attacks the largest active
 solver monolith after `v3_driver.py` and unlocks better tests for the production
@@ -136,10 +143,10 @@ RHSMode=1 solver lanes.
 
 Actions, in order:
 
-1. Identify one cohesive RHSMode=1 preconditioner family that can move as a
-   complete implementation, not only policy constants. Candidate families are:
-   active native-stack/sparse-coarse apply builders, direct-tail factor helpers,
-   or active sparse-coarse residual admission.
+1. Complete the next cohesive RHSMode=1 preconditioner family move. The first
+   completed family is the full-CSR Schur/Jacobi block family; the next best
+   candidates are active native-stack/sparse-coarse apply builders, direct-tail
+   factor helpers, or active sparse-coarse residual admission.
 2. If the move is blocked by circular imports or result contracts, first extract
    the shared typed contracts into a neutral solver/preconditioner module.
 3. Move the family into `sfincs_jax/solvers/preconditioners/schur/` or a more

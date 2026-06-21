@@ -732,6 +732,16 @@ diagnostics, and array-to-message collection. These are intentionally fast
 policy checks; they protect solver-path diagnostics without launching transport
 solves.
 
+The RHSMode=1 full-CSR Schur extraction is covered by
+``tests/test_rhs1_full_csr_schur_preconditioners.py``. These tests exercise the
+new ``sfincs_jax.solvers.preconditioners.schur.rhs1_full_csr`` implementation
+directly: regularized Jacobi pivots, diagonal kinetic plus tail Schur exactness,
+zeta-line Schur exactness, pitch-line Schur exactness, radial-pitch Schur
+exactness, block-memory estimates, and legacy ``rhs1_full_assembly`` alias
+compatibility. The exactness checks use a small sparse RHSMode=1 operator with a
+diagonal kinetic block and coupled tail variables, so they validate real
+preconditioner setup/apply behavior without launching a full transport solve.
+
 The output/helper layer is kept under small, direct tests rather than only
 end-to-end HDF5 comparisons. ``tests/test_io_export_and_h5_coverage.py`` covers
 Fortran-layout HDF5 round trips, export-``f`` identity, nearest-neighbor, periodic
