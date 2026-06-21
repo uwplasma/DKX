@@ -17,6 +17,7 @@ from sfincs_jax.problems.profile_response.sparse import (
     fortran_reduced as sparse_fortran_reduced_module,
 )
 from sfincs_jax.problems.profile_response.sparse import krylov as sparse_krylov_module
+from sfincs_jax.problems.profile_response.sparse import policy as sparse_policy_module
 from sfincs_jax.problems.profile_response.sparse import qi as sparse_qi_module
 from sfincs_jax.problems.profile_response.sparse import xblock as sparse_xblock_module
 from sfincs_jax.problems.profile_response.active_projection import (
@@ -578,6 +579,43 @@ def test_sparse_krylov_module_reexports_match_compat_layer() -> None:
     )
     for name in moved_names:
         assert getattr(sparse_pc_module, name) is getattr(sparse_krylov_module, name)
+
+
+def test_sparse_policy_module_reexports_match_compat_layer() -> None:
+    """The split sparse policy module keeps legacy sparse_pc imports stable."""
+
+    moved_names = (
+        "SparsePCActiveDOFSetup",
+        "SparsePCEntryPolicySetup",
+        "SparsePCFactorPolicySetup",
+        "SparsePCPatternSetupContext",
+        "SparsePCPatternSetupResult",
+        "SparsePCMemoryBudgetPreflightContext",
+        "SparsePCFactorPreflightPolicyContext",
+        "SparsePCFactorPreflightPolicy",
+        "SparsePCFactorPreflightEvaluationContext",
+        "SparsePCFactorPreflightEvaluationResult",
+        "SparsePCResidualCandidateAcceptanceContext",
+        "SparsePCResidualCandidateAcceptanceResult",
+        "SparsePCAutoPreflightRetrySelectionContext",
+        "SparsePCAutoPreflightRetrySelectionResult",
+        "SparsePCAutoPreflightRetryEvaluationContext",
+        "SparsePCAutoPreflightRetryEvaluationResult",
+        "SparsePCGMRESControlPolicy",
+        "build_sparse_pc_active_dof_setup",
+        "build_sparse_pc_pattern_setup",
+        "resolve_sparse_pc_entry_policy",
+        "resolve_sparse_pc_factor_policy",
+        "enforce_sparse_pc_memory_budget",
+        "resolve_sparse_pc_factor_preflight_policy",
+        "evaluate_sparse_pc_factor_preflight",
+        "evaluate_sparse_pc_residual_candidate_acceptance",
+        "select_sparse_pc_auto_preflight_retry_candidates",
+        "evaluate_sparse_pc_auto_preflight_retry",
+        "resolve_sparse_pc_gmres_control_policy",
+    )
+    for name in moved_names:
+        assert getattr(sparse_pc_module, name) is getattr(sparse_policy_module, name)
 
 
 def test_sparse_fortran_reduced_module_reexports_match_compat_layer() -> None:

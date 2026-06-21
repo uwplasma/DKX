@@ -482,6 +482,13 @@ the historical private driver name and test the focused module directly. This ke
   into ``sfincs_jax/problems/profile_response/sparse``. It still owns the small
   amount of driver-facing sparse-PC attempt orchestration that depends on
   solve-local cache/replay/residual routing.
+- ``sfincs_jax/problems/profile_response/sparse/policy.py``:
+  generic sparse-PC policy and admission helpers: active-DOF map construction,
+  entry classification, sparse factor policy, conservative-pattern setup,
+  memory-budget preflight, factor residual-preflight gates, rescue-candidate
+  acceptance, auto-retry selection, and GMRES stagnation/post-MinRes controls.
+  This module is intentionally independent of x-block assembled-operator and
+  QI-device setup so it can stay reusable and easy to test.
 - ``sfincs_jax/problems/profile_response/sparse/finalization.py``:
   sparse-PC GMRES result contracts, post-MinRes polish metadata, dtype-retry
   result assembly, completion messages, and final payload construction.
