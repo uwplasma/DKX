@@ -45,6 +45,10 @@ deferred research lanes.
   into `sfincs_jax.problems.profile_response.sparse.qi`; `v3_driver.py` now
   injects solve-local operators and compatibility probe aliases for the tested
   fail-closed QI research lane.
+- Stale private `v3_driver.py` QI policy aliases are being deleted when their
+  canonical owner is now `sfincs_jax.problems.profile_response.policies`; tests
+  now enforce that ownership boundary instead of preserving aliases only for
+  historical convenience.
 - Current next tranche is one more cohesive `v3_driver.py` stage extraction or,
   if the next driver seam would be wrapper-only, the first `io.py` output-schema
   split.
@@ -68,10 +72,19 @@ deferred research lanes.
   `455 passed in 125.61s`.
 - Full bounded QI campaign passes after extraction:
   `550 passed in 34.31s`.
+- Stale QI driver-alias tests pass after canonical policy ownership cleanup:
+  `4 passed in 1.94s`.
+- The previously failing CI coverage shard 1 reproduces locally as passing
+  after the QI alias cleanup and deterministic x64 setup for precision gates:
+  `814 passed, 39 skipped in 55.97s`.
+- Optional Equinox/JAXopt, optional Lineax implicit-solve, collision-stencil,
+  collision-physics, and sparse-helper precision gates now set x64 before JAX
+  array APIs are imported; the affected focused group passes:
+  `43 passed in 6.73s`.
 - `ruff` and `py_compile` pass on touched transport-parallel, finalization, and
   setup/QI files.
-- PR #8 is draft and CI checks on the latest pushed clean commit are green or
-  still running; do not wait on CI after every local tranche.
+- PR #8 remains draft. Check CI after the next meaningful push rather than
+  polling continuously during local refactor tranches.
 
 ### Current Code Shape
 

@@ -233,7 +233,7 @@ def test_global_coarse_and_load_bases_cover_tail_source_and_moments() -> None:
     assert "constraint1_source_s0_0" in coarse_labels
     assert "fsavg_s0_x0_l0" in coarse_labels
     assert all(vector.shape == (op.total_size,) for _, vector in coarse)
-    assert vd._rhs1_xblock_global_coarse_basis is build_rhs1_xblock_global_coarse_basis
+    assert not hasattr(vd, "_rhs1_xblock_global_coarse_basis")
 
     loads = build_rhs1_xblock_global_coupling_load_basis(
         op=op,

@@ -86,7 +86,6 @@ from .rhs1_domain_decomposition import (  # compatibility exports for legacy tes
 from .rhs1_qi_coarse import (
     RHS1QICoarseBasis,
     apply_rhs1_qi_coarse_correction,
-    build_rhs1_xblock_global_coarse_basis as _rhs1_xblock_global_coarse_basis,
     build_rhs1_xblock_global_coupling_load_basis as _rhs1_xblock_global_coupling_load_basis,
     build_rhs1_xblock_qi_coarse_basis as _rhs1_xblock_qi_coarse_basis,
     build_rhs1_xblock_smoothed_load_qi_basis as _rhs1_xblock_smoothed_load_qi_basis,
@@ -431,7 +430,6 @@ from .problems.profile_response.policies import (
     RHS1FullSparseRescueSetupContext,
     parse_rhs1_pas_tz_guarded_structured_levels as _rhs1_pas_tz_guarded_structured_levels,
     rhs1_full_sparse_rescue_setup,
-    rhs1_qi_device_tail_block_required,
     rhs1_sparse_jax_config_from_env,
     rhs1_sparse_operator_admission,
     rhs1_sparse_preconditioner_config_from_env,
@@ -442,7 +440,6 @@ from .problems.profile_response.policies import (
 )
 
 _rhs1_xblock_qi_block_geometry_metadata = rhs1_xblock_qi_block_geometry_metadata
-_rhs1_qi_device_tail_block_required = rhs1_qi_device_tail_block_required
 
 from .problems.profile_response.setup import (
     SPARSE_HOST_DIRECT_SOLVE_METHODS as _SPARSE_HOST_DIRECT_SOLVE_METHODS,

@@ -35,8 +35,11 @@ import sys
 import time
 from typing import Any
 
-import jax
-import jax.numpy as jnp
+from jax import config as _jax_config
+
+_jax_config.update("jax_enable_x64", True)
+import jax  # noqa: E402
+import jax.numpy as jnp  # noqa: E402
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(_REPO_ROOT) not in sys.path:

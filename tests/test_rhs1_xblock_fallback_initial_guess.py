@@ -24,48 +24,45 @@ from sfincs_jax.problems.profile_response.policies import (
 )
 
 
-def test_driver_private_policy_helpers_alias_canonical_profile_response_helpers():
+def test_driver_private_policy_helpers_only_keep_active_compatibility_aliases():
     assert (
         vd._rhs1_pas_tz_guarded_structured_levels
         is parse_rhs1_pas_tz_guarded_structured_levels
     )
-    assert (
-        vd._rhs1_qi_device_extra_coarse_controls is rhs1_qi_device_extra_coarse_controls
-    )
-    assert (
-        vd._rhs1_qi_device_extra_coarse_setup_kwargs
-        is rhs1_qi_device_extra_coarse_setup_kwargs
-    )
-    assert (
-        vd._rhs1_qi_device_extra_coarse_metadata
-        is rhs1_qi_device_extra_coarse_metadata
-    )
-    assert (
-        vd._rhs1_qi_device_coupled_install_on_reject_requested
-        is rhs1_qi_device_coupled_install_on_reject_requested
-    )
-    assert (
-        vd._rhs1_qi_device_probe_uses_minres_step
-        is rhs1_qi_device_probe_uses_minres_step
-    )
-    assert vd._rhs1_qi_device_progress_messages is rhs1_qi_device_progress_messages
-    assert (
-        vd._rhs1_qi_device_residual_correction_controls
-        is rhs1_qi_device_residual_correction_controls
-    )
-    assert (
-        vd._rhs1_qi_device_residual_correction_setup_kwargs
-        is rhs1_qi_device_residual_correction_setup_kwargs
-    )
-    assert (
-        vd._rhs1_qi_device_residual_correction_metadata
-        is rhs1_qi_device_residual_correction_metadata
-    )
-    assert vd._rhs1_qi_device_setup_summary is rhs1_qi_device_setup_summary
-    assert vd._rhs1_qi_device_status_fields is rhs1_qi_device_status_fields
-    assert vd._rhs1_qi_device_tail_block_required is rhs1_qi_device_tail_block_required
-    assert vd._rhs1_qi_device_rank_budget is rhs1_qi_device_rank_budget
     assert vd._rhs1_xblock_fallback_initial_guess is rhs1_xblock_fallback_initial_guess
+
+    removed_qi_policy_aliases = (
+        "_rhs1_qi_device_extra_coarse_controls",
+        "_rhs1_qi_device_extra_coarse_setup_kwargs",
+        "_rhs1_qi_device_extra_coarse_metadata",
+        "_rhs1_qi_device_coupled_install_on_reject_requested",
+        "_rhs1_qi_device_probe_uses_minres_step",
+        "_rhs1_qi_device_progress_messages",
+        "_rhs1_qi_device_residual_correction_controls",
+        "_rhs1_qi_device_residual_correction_setup_kwargs",
+        "_rhs1_qi_device_residual_correction_metadata",
+        "_rhs1_qi_device_setup_summary",
+        "_rhs1_qi_device_status_fields",
+        "_rhs1_qi_device_tail_block_required",
+        "_rhs1_qi_device_rank_budget",
+    )
+    assert all(not hasattr(vd, name) for name in removed_qi_policy_aliases)
+
+
+def test_qi_device_policy_helpers_live_in_profile_response_policy_module():
+    assert callable(rhs1_qi_device_extra_coarse_controls)
+    assert callable(rhs1_qi_device_extra_coarse_setup_kwargs)
+    assert callable(rhs1_qi_device_extra_coarse_metadata)
+    assert callable(rhs1_qi_device_coupled_install_on_reject_requested)
+    assert callable(rhs1_qi_device_probe_uses_minres_step)
+    assert callable(rhs1_qi_device_progress_messages)
+    assert callable(rhs1_qi_device_residual_correction_controls)
+    assert callable(rhs1_qi_device_residual_correction_setup_kwargs)
+    assert callable(rhs1_qi_device_residual_correction_metadata)
+    assert callable(rhs1_qi_device_setup_summary)
+    assert callable(rhs1_qi_device_status_fields)
+    assert callable(rhs1_qi_device_tail_block_required)
+    assert callable(rhs1_qi_device_rank_budget)
 
 
 def test_fallback_initial_guess_reuses_left_candidate_that_improves_rhs():
