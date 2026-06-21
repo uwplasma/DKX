@@ -349,6 +349,14 @@ the historical private driver name and test the focused module directly. This ke
   window columns, and storage estimates; ``rhs1_full_assembly.py`` keeps only
   aliases at the existing internal call sites plus the matrix/operator-dependent
   adaptive residual-basis stages.
+- ``sfincs_jax/solvers/preconditioners/schur/rhs1_full_csr.py``:
+  complete full-CSR RHSMode=1 Schur preconditioner family for the explicit
+  host solve lane. It owns the shared structured full-CSR preconditioner result
+  type, Jacobi fallback, diagonal tail-Schur, zeta-line Schur, pitch-line Schur,
+  radial-pitch Schur builders, block memory estimates, and regularized diagonal
+  inversion. ``rhs1_full_assembly.py`` now imports the historical private names
+  from this module so existing call sites and debug scripts keep working while
+  the implementation has direct tests.
 - ``sfincs_jax/problems/transport_matrix/direct_pmat.py``
   (legacy alias: ``sfincs_jax/transport_direct_pmat.py``):
   direct term-level RHSMode=2/3 reduced ``Pmat`` and exact active-operator
