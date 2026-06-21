@@ -33,20 +33,26 @@ deferred research lanes.
 - Flat output file-format helpers moved to `sfincs_jax.outputs.formats`.
 - Nonlinear Phi1 Newton-Krylov profile-response solve logic moved to
   `sfincs_jax.problems.profile_response.phi1_newton`.
+- Transport-parallel runtime glue moved out of `v3_driver.py` into
+  `sfincs_jax.problems.transport_matrix.parallel`, and the active transport
+  DOF index helper moved into `sfincs_jax.problems.transport_matrix.active_dense`
+  in commit `eeb2a85`.
+- Current uncommitted tranche moves the final RHSMode=1/profile-response
+  linear-solve handoff into
+  `sfincs_jax.problems.profile_response.finalization`.
 - The README and docs currently state the public claim boundary: the documented
   release suite is CPU/GPU parity-clean, while production-resolution QI, true
   device-QI, lower-memory native factor replacement, full-grid QA/QH RHSMode=1,
   and single-case multi-GPU scaling remain fail-closed research lanes.
-- Current uncommitted tranche moves transport-parallel runtime glue out of
-  `v3_driver.py` into `sfincs_jax.problems.transport_matrix.parallel` and moves
-  the active transport DOF index helper into
-  `sfincs_jax.problems.transport_matrix.active_dense`.
 
 ### Local Validation From This Audit
 
 - Focused transport/refactor tests pass:
   `78 passed in 15.10s`.
-- `ruff` and `py_compile` pass on touched transport-parallel files.
+- Focused profile-response finalization tests pass:
+  `21 passed in 1.05s`.
+- `ruff` and `py_compile` pass on touched transport-parallel and finalization
+  files.
 - PR #8 is draft and CI checks on the latest pushed clean commit are green or
   still running; do not wait on CI after every local tranche.
 
@@ -148,9 +154,9 @@ claim. They must stay documented, fail-closed, and gated.
 
 ## Refactor Open Lanes
 
-1. **Finish current transport-parallel tranche**
-   Update source map/testing docs, rerun focused validation, commit, and push
-   active branch and PR branch. This is the current local dirty state.
+1. **Finish current profile-response finalization tranche**
+   Update source map/API/testing docs, rerun focused validation, commit, and
+   push active branch and PR branch. This is the current local dirty state.
 
 2. **Make `v3_driver.py` orchestration-only**
    After the transport tranche, extract one more cohesive driver boundary:
@@ -187,35 +193,54 @@ claim. They must stay documented, fail-closed, and gated.
 
 ## Prioritized Execution Plan
 
-### P0. Close The Current Dirty Tranche
+### P0. Keep Branch/PR Hygiene Green
 
-Goal: land the already-tested transport-parallel runtime extraction cleanly.
+Goal: keep one draft PR and no hidden branch divergence.
 
 Actions:
 
-1. Update `docs/source_map.rst` for the new transport-parallel pool/runtime and
-   active-DOF ownership.
-2. Update `docs/testing.rst` to point transport-parallel monkeypatch and policy
-   tests at the new modules.
-3. Rerun focused transport tests, `ruff`, `py_compile`, `git diff --check`, and
-   the repo-size audit.
-4. Commit and push to both the active implementation branch and PR #8 branch.
+1. Push coherent tranches to both the active implementation branch and PR #8
+   branch.
+2. Keep PR #8 in draft until the review-ready boundary is met.
+3. Check CI after meaningful pushes, not after every local edit.
 
 Acceptance:
 
-- `v3_driver.py` has less real transport-parallel process-pool responsibility.
-- `sfincs_jax.problems.transport_matrix.parallel` owns pool/runtime policy.
 - PR #8 remains the single draft PR.
+- Local worktree is clean after each pushed tranche.
 
-### P1. Extract One Real Driver Stage
+### P1. Close The Current Finalization Tranche
+
+Goal: land the already-tested RHSMode=1 final linear-solve handoff extraction.
+
+Actions:
+
+1. Keep `sfincs_jax.problems.profile_response.finalization` as owner of final
+   cleanup, KSP replay diagnostics, residual/elapsed progress messages,
+   post-xblock acceptance-floor metadata, and `V3LinearSolveResult`
+   construction.
+2. Keep `v3_driver.py` responsible only for passing solve state and backend
+   metadata into the finalization context.
+3. Rerun focused finalization/diagnostic/projection tests, `ruff`,
+   `py_compile`, `git diff --check`, repo-size audit, and Sphinx.
+4. Commit and push to both branches.
+
+Acceptance:
+
+- The driver no longer assembles final RHSMode=1 metadata and result objects
+  inline.
+- The extracted module has direct tests.
+- Public CLI/Python behavior is unchanged.
+
+### P2. Extract One More Real Driver Stage
 
 Goal: reduce `v3_driver.py` by moving a cohesive stage, not wrapper clutter.
 
 Preferred choices:
 
-1. result/output handoff,
-2. progress/timing reporting,
-3. solve-result metadata assembly.
+1. progress/timing reporting,
+2. solve-result metadata assembly that is not already covered by finalization,
+3. a larger output/result handoff boundary.
 
 Acceptance:
 
@@ -223,7 +248,7 @@ Acceptance:
 - Driver keeps only orchestration and dependency injection.
 - Public CLI/Python behavior is unchanged.
 
-### P2. Split `io.py` Output Schema
+### P3. Split `io.py` Output Schema
 
 Goal: make output behavior testable without solver internals.
 
@@ -239,7 +264,7 @@ Acceptance:
 - `io.py` becomes smaller orchestration/compatibility code.
 - Output schema tests catch missing metadata and format drift.
 
-### P3. Consolidate And Delete Compatibility Surfaces
+### P4. Consolidate And Delete Compatibility Surfaces
 
 Goal: reduce file count and cognitive load.
 
@@ -257,7 +282,7 @@ Acceptance:
 - File count does not grow without a domain reason.
 - Developers can infer code location from the equation, solver, or workflow.
 
-### P4. Make Solver Contracts Explicit
+### P5. Make Solver Contracts Explicit
 
 Goal: keep adaptive performance and differentiability honest.
 
@@ -274,7 +299,7 @@ Acceptance:
 - Differentiable examples remain JAX-transformable on documented fixtures.
 - CLI remains fast, robust, and residual-clean.
 
-### P5. Raise Coverage With Meaningful Tests
+### P6. Raise Coverage With Meaningful Tests
 
 Goal: move toward 95% meaningful coverage while keeping CI practical.
 
@@ -294,7 +319,7 @@ Acceptance:
 - Coverage increases because responsibilities are smaller and testable.
 - Normal CI remains in the practical budget.
 
-### P6. Documentation And README Pass
+### P7. Documentation And README Pass
 
 Goal: keep public claims clear and reviewer-proof.
 
@@ -311,7 +336,7 @@ Acceptance:
 - No README claim depends on incomplete production-resolution evidence.
 - Docs show where equations, algorithms, tests, and claims live.
 
-### P7. Benchmarks, Parity, And Figures
+### P8. Benchmarks, Parity, And Figures
 
 Goal: regenerate public artifacts only from complete evidence.
 
@@ -328,7 +353,7 @@ Acceptance:
 - Public plots trace to checked complete reports.
 - Fortran v3 comparisons use matched physics, resolution, and normalization.
 
-### P8. Make PR #8 Review-Ready
+### P9. Make PR #8 Review-Ready
 
 Goal: one coherent refactor PR with no hidden release-claim drift.
 

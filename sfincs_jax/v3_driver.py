@@ -610,15 +610,16 @@ from .rhs1_ksp_diagnostics import (
 )
 from .problems.profile_response.solver_diagnostics import (
     RHS1KSPDiagnosticsContext,
-    build_profile_response_linear_metadata,
-    emit_profile_response_ksp_replay_diagnostics,
+)
+from .problems.profile_response.finalization import (
+    ProfileResponseLinearFinalizationContext,
+    finalize_profile_response_linear_solve,
 )
 from .problems.profile_response.active_dof import (
     build_rhs1_active_dof_state as _build_rhs1_active_dof_state_compat,
 )
 from .problems.profile_response.active_projection import (
     expand_reduced_with_map,
-    finalize_rhs1_linear_solution_cleanup,
     fp_pitch_mode_active_indices,
     project_pas_constraint_f,
     reduce_full_with_indices,
@@ -12115,48 +12116,29 @@ def solve_v3_full_system_linear_gmres(
             mark=_mark,
             peak_rss_mb=_rss_mb,
         )
-    result = finalize_rhs1_linear_solution_cleanup(
-        op=op,
-        result=result,
-        rhs=rhs,
-        residual_vec=residual_vec,
-    )
-    emit_profile_response_ksp_replay_diagnostics(
-        context=rhs1_ksp_diagnostics_context,
-        replay_state=ksp_replay,
-        tol_val=float(tol),
-        atol_val=float(atol),
-        solve_method_val=str(solve_method),
-    )
-    if emit is not None:
-        emit(0, f"solve_v3_full_system_linear_gmres: residual_norm={float(result.residual_norm):.6e}")
-        emit(1, f"solve_v3_full_system_linear_gmres: elapsed_s={t.elapsed_s():.3f}")
-    post_xblock_accept_floor = 0.0
-    if int(op.rhs_mode) == 1:
-        post_xblock_accept_floor = _rhsmode1_scipy_rescue_abs_floor_after_xblock(
+    return finalize_profile_response_linear_solve(
+        ProfileResponseLinearFinalizationContext(
             op=op,
+            rhs=rhs,
+            result=result,
+            residual_vec=residual_vec,
+            ksp_replay=ksp_replay,
+            ksp_diagnostics_context=rhs1_ksp_diagnostics_context,
+            tol=float(tol),
+            atol=float(atol),
+            solve_method=str(solve_method),
             active_size=int(active_size),
             used_large_cpu_xblock_shortcut=bool(cpu_large_xblock_shortcut),
             used_explicit_fp_xblock_seed=bool(explicit_fp_xblock_seed_used),
             use_implicit=bool(use_implicit),
+            backend=jax.default_backend(),
+            metadata_parts=(
+                pas_tz_guarded_correction_metadata,
+                rhsmode1_general_metadata,
+            ),
+            emit=emit,
+            elapsed_s=t.elapsed_s,
         )
-    metadata_out = build_profile_response_linear_metadata(
-        rhs_mode=int(op.rhs_mode),
-        result_residual_norm=float(result.residual_norm),
-        rhs=rhs,
-        tol=float(tol),
-        atol=float(atol),
-        metadata_parts=(
-            pas_tz_guarded_correction_metadata,
-            rhsmode1_general_metadata,
-        ),
-        post_xblock_accept_floor=float(post_xblock_accept_floor),
-    )
-    return V3LinearSolveResult(
-        op=op,
-        rhs=rhs,
-        gmres=result,
-        metadata=metadata_out or None,
     )
 
 
