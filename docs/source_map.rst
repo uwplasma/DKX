@@ -1123,7 +1123,9 @@ the historical private driver name and test the focused module directly. This ke
   combined RHSMode=2/3 active-DOF and dense-path setup. It resolves the initial
   output/restart policy, active-index compaction state, dense fallback and dense
   preconditioner admission, and ordered user-facing notes before the transport
-  loop builds matvecs or preconditioners.
+  loop builds matvecs or preconditioners. It also owns the active full-vector
+  DOF index helper used when the driver needs to mirror Fortran's reduced
+  active transport unknown layout.
 - ``sfincs_jax/problems/transport_matrix/sparse_direct_solve.py``
   (legacy alias: ``sfincs_jax/transport_sparse_direct_solve.py``):
   RHSMode=2/3 sparse-direct rescue implementation. It owns sparse-pattern
@@ -1218,11 +1220,16 @@ the historical private driver name and test the focused module directly. This ke
 - ``sfincs_jax/problems/transport_matrix/parallel/runtime.py``
   (legacy alias: ``sfincs_jax/transport_parallel_runtime.py``):
   transport parallel RHS partitioning, GPU worker subprocess launch, and parent-side
-  merge of per-worker state/residual/elapsed-time results.
+  merge of per-worker state/residual/elapsed-time results. The policy-backed
+  GPU subprocess wrapper lives here so ``v3_driver.py`` no longer owns GPU
+  worker environment selection.
 - ``sfincs_jax/problems/transport_matrix/parallel/pool.py``
   (legacy alias: ``sfincs_jax/transport_parallel_pool.py``):
-  persistent transport process-pool caching, rebuild, and shutdown behavior used by the
-  CPU process-parallel transport lane.
+  persistent transport process-pool caching, worker-environment setup, executor
+  keyword construction, rebuild, and shutdown behavior used by the CPU
+  process-parallel transport lane. ``v3_driver.py`` keeps only the worker
+  function that injects the current namelist reader and transport solve
+  implementation.
 - ``sfincs_jax/problems/transport_matrix/parallel/execution.py``
   (legacy alias: ``sfincs_jax/transport_parallel_execution.py``):
   top-level transport process-parallel execution control, including run/no-run gating,
