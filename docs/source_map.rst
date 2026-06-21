@@ -593,7 +593,10 @@ the historical private driver name and test the focused module directly. This ke
   orchestration. The driver passes solve-local builders and projection
   functions through typed contexts, and the helper returns explicit state for
   PAS-TZ guard metadata, collision fallback admission, and optional BiCGStab
-  preconditioner reuse.
+  preconditioner reuse. It also owns RHSMode=1 strong-preconditioner family
+  mapping, full/reduced strong fallback builders, PAS-Schur to PAS-hybrid build
+  adjustment, ADI sweep parsing, and x-block TZ low-``l`` controls; the driver
+  injects only the current solve-local dispatch seam.
 - ``sfincs_jax/problems/profile_response/sparse_pc.py``:
   RHSMode=1/profile-response host sparse-PC compatibility layer. During the
   architecture refactor this file keeps the historical import surface stable
@@ -1081,9 +1084,9 @@ the historical private driver name and test the focused module directly. This ke
   strong-preconditioner request mapping, enable/disable control, automatic
   strong-kind selection, and post-selection adjustment policy.
 - ``sfincs_jax/rhs1_strong_fallback.py``:
-  bounded strong-preconditioner retry/fallback metadata and stage decision
-  helpers used to keep residual rescue paths observable without embedding the
-  branch logic directly in ``v3_driver.py``.
+  compatibility facade for historical RHSMode=1 strong-preconditioner fallback
+  imports. The implementation owner is now
+  ``sfincs_jax/problems/profile_response/preconditioner_build.py``.
 - ``sfincs_jax/problems/profile_response/handoff.py``
   (legacy alias: ``sfincs_jax/rhs1_handoff.py``):
   accepted-candidate handoff and Krylov replay-state updates. This is the
