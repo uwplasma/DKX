@@ -2,379 +2,382 @@
 
 Last updated: 2026-06-21 (America/Chicago)
 
-Active branch: `refactor/rhs1-full-assembly-preconditioners`
+Active implementation branch: `refactor/rhs1-full-assembly-preconditioners`
 
 Intended review PR: #8, `refactor/v3-driver-architecture`
 
-Important hygiene note: PR #8 currently points at
-`refactor/v3-driver-architecture`, while the active work in this checkout is on
-`refactor/rhs1-full-assembly-preconditioners`. Do not open another PR. Before
-review, reconcile this mismatch by moving the active branch work onto the PR
-branch or otherwise updating PR #8 to the active refactor head. Keep the PR in
-draft/review-prep state until this plan's review boundary is complete.
+PR state: draft. The active implementation branch has been pushed to the PR
+branch at the latest clean commit. Do not open additional refactor PRs; keep PR
+#8 as the single review surface until this plan reaches the review-ready
+boundary.
 
 ## One-Sentence Plan
 
 Make `sfincs_jax` a small, domain-organized, research-grade neoclassical
-transport code that preserves SFINCS Fortran v3 parity where the models
-overlap, gives users a simple input-file CLI with fast CPU/GPU defaults and low
-memory use, exposes explicit differentiable Python solve lanes for optimization
-and sensitivity work, keeps the implementation in a manageable number of
-well-named files, and backs README/docs claims with focused tests and complete
-benchmark artifacts.
+transport code with parity against SFINCS Fortran v3 where models overlap,
+simple input-file CLI defaults, explicit differentiable Python lanes, fast and
+memory-bounded CPU/GPU execution, a manageable number of well-named files, and
+README/docs/tests/benchmarks that clearly separate production claims from
+deferred research lanes.
 
-## Current Results
+## Current Audit Snapshot
 
-- Latest local branch state is clean and pushed to
-  `origin/refactor/rhs1-full-assembly-preconditioners`.
-- Latest commits on this branch extracted:
-  - RHSMode=1 full-CSR Schur preconditioners.
-  - RHSMode=1 Fortran-reduced symbolic sparse factors.
-  - RHSMode=1 low-`ell` x-block Schur preconditioners.
-  - RHSMode=1 active-projected x-block / overlap-Schwarz preconditioners.
-  - RHSMode=1 active sparse-factor preconditioners
-    (`active_global_sparse_factor`, `active_scaled_ilu/lu`, and
-    `active_filtered_sparse_factor`).
-  - Flat HDF5/NetCDF/NPZ output-format helpers.
-  - Nonlinear Phi1 Newton-Krylov profile-response solve stage.
-- GitHub Docs CI is green for the latest pushed commits on the active branch.
-- Current largest package files from the fresh source audit:
-  - `sfincs_jax/v3_driver.py`: about 13.9k lines.
-  - `sfincs_jax/rhs1_full_assembly.py`: about 7.9k lines.
-  - `sfincs_jax/io.py`: about 5.5k lines.
-  - `sfincs_jax/problems/profile_response/sparse/xblock.py`: about 4.5k lines.
-  - `sfincs_jax/rhs1_qi_device_preconditioner.py`: about 4.4k lines.
-- Package size is still high: about 288 Python files and 160k package lines.
-  The next work must consolidate ownership and delete duplicate compatibility
-  surfaces where possible, not create another layer of flat wrapper modules.
-- README/docs are broadly accurate about current public claims: the audited
-  release suite is CPU/GPU parity-clean, production-resolution QI and true
-  device-QI remain deferred, and lower-memory native factor/preconditioner
-  work remains opt-in research infrastructure.
+### Done
+
+- Major RHSMode=1 preconditioner families now have domain owners:
+  - full-CSR Schur preconditioners,
+  - Fortran-reduced symbolic sparse factors,
+  - low-`ell` x-block Schur preconditioners,
+  - active-projected x-block / overlap-Schwarz preconditioners,
+  - active sparse-factor preconditioners.
+- Flat output file-format helpers moved to `sfincs_jax.outputs.formats`.
+- Nonlinear Phi1 Newton-Krylov profile-response solve logic moved to
+  `sfincs_jax.problems.profile_response.phi1_newton`.
+- The README and docs currently state the public claim boundary: the documented
+  release suite is CPU/GPU parity-clean, while production-resolution QI, true
+  device-QI, lower-memory native factor replacement, full-grid QA/QH RHSMode=1,
+  and single-case multi-GPU scaling remain fail-closed research lanes.
+- Current uncommitted tranche moves transport-parallel runtime glue out of
+  `v3_driver.py` into `sfincs_jax.problems.transport_matrix.parallel` and moves
+  the active transport DOF index helper into
+  `sfincs_jax.problems.transport_matrix.active_dense`.
+
+### Local Validation From This Audit
+
+- Focused transport/refactor tests pass:
+  `78 passed in 15.10s`.
+- `ruff` and `py_compile` pass on touched transport-parallel files.
+- PR #8 is draft and CI checks on the latest pushed clean commit are green or
+  still running; do not wait on CI after every local tranche.
+
+### Current Code Shape
+
+- `sfincs_jax/v3_driver.py`: about 13.8k lines, still the largest orchestration
+  and compatibility surface.
+- `sfincs_jax/rhs1_full_assembly.py`: about 7.9k lines, now mostly RHSMode=1
+  exact/active CSR assembly, admission, dispatch, and compatibility.
+- `sfincs_jax/io.py`: about 5.5k lines, still owns too much output schema and
+  diagnostics materialization.
+- Package size: about 289 Python files and 160k package lines.
+- Largest remaining package clusters:
+  `problems/transport_matrix`, `problems/profile_response`,
+  `solvers/preconditioners`, plus many historical top-level compatibility
+  modules.
+
+### Current Documentation Shape
+
+- `README.md` is user-facing and should stay focused on install, one-command
+  usage, output/plotting, current benchmark figures, and short claim-scope
+  notes.
+- `docs/source_map.rst` is the equation-to-source map and must be updated after
+  every ownership move.
+- `docs/testing.rst` is the validation-tier map and must distinguish normal CI,
+  release, manual GPU, and research tiers.
+- `docs/research_lanes.rst` is the correct home for fail-closed algorithmic
+  research evidence.
+- `docs/development_roadmap.rst` is a public stable roadmap; this `plan.md` is
+  the active branch checklist.
 
 ## Goals
 
-1. User simplicity
-   A normal user should run `sfincs_jax input.namelist --wout-path wout.nc --out
-   sfincsOutput.h5`, get progress and phase timing, and not need solver
-   environment variables.
+1. **Small, understandable code**
+   Keep a limited set of domain packages with names tied to physics and
+   numerical responsibility. Reduce monoliths, delete redundant wrappers, and
+   avoid adding more flat `rhs1_*`, `transport_*`, or `v3_*` implementation
+   files.
 
-2. Fortran v3 parity
-   Where the same physics model is solved, SFINCS Fortran v3 remains the
-   trust anchor. Comparisons must include shared output quantities, residual
-   metadata, runtime, memory, and solver path.
+2. **Simple user workflow**
+   A typical user should run
+   `sfincs_jax input.namelist --wout-path wout.nc --out sfincsOutput.h5` and
+   get a robust solve, clear progress, phase timing, output metadata, and
+   plots without knowing solver internals.
 
-3. Differentiable research API
-   Python users must be able to choose JAX-native differentiable solve lanes for
-   sensitivity analysis, inverse design, uncertainty quantification, and
-   stellarator optimization. Host-only shortcuts must be explicit and disabled
-   when gradients are requested.
+3. **Fortran v3 parity**
+   Where the same equations and normalizations are solved, SFINCS Fortran v3
+   remains the comparison anchor. Shared outputs, residual metadata, runtime,
+   memory, and solver path must be compared from matched inputs and resolutions.
 
-4. Fast CPU/GPU defaults
-   CLI and `differentiable=False` Python calls may use faster host sparse
-   factors, caches, and backend-specific policies. Accepted results must pass
-   true-residual gates and write method/timing/memory metadata.
+4. **Explicit differentiability**
+   Python users must be able to select JAX-native differentiable solve lanes
+   for sensitivity analysis, inverse design, UQ, and optimization. Host-only
+   shortcuts are allowed only in CLI / `differentiable=False` lanes and must be
+   recorded in metadata.
 
-5. Small and manageable code structure
-   The active implementation should move toward a small set of domain packages:
-   `input`, `physics`, `discretization`, `operators`,
-   `problems/profile_response`, `problems/transport_matrix`, `solvers`,
-   `parallel`, `outputs`, `workflows`, `validation`, `benchmarks`, and `compat`.
-   Avoid new historical `rhs1_*`, `transport_*`, or `v3_*` implementation files.
+5. **Fast CPU/GPU execution**
+   Defaults should minimize runtime and memory on CPU and GPU while failing
+   closed through true-residual gates. Adaptive `auto` choices must record a
+   branch certificate: selected method, rejected candidates, residual margins,
+   backend, memory estimate, and warnings near branch boundaries.
 
-6. Research-grade tests and docs
-   Coverage should rise through extracted-module tests, numerical identities,
-   physics gates, and regression artifacts, not by adding slow smoke-only full
-   solves to normal CI. Docs must say what is production quality, reduced-grid
-   evidence, or deferred research.
+6. **Research-grade tests and docs**
+   Coverage must rise through extracted-module tests, numerical identities,
+   physics gates, and regression artifacts, not slow full-solve smoke tests.
+   Docs must clearly label production quality, reduced-grid evidence, and
+   deferred research.
 
 ## Technical Open Lanes
 
-These are not all blockers for the refactor PR, but they must remain documented
-and fail-closed.
+These are not refactor PR blockers unless a code change touches their public
+claim. They must stay documented, fail-closed, and gated.
 
-1. Production-resolution QI and true device-QI
-   Current status: bounded evidence exists and the hard seed gets below
-   `3e-5`, but production tolerance and full write gates remain open.
-   Refactor implication: preserve explicit differentiable/non-differentiable
-   lane separation and branch certificates; do not bury host fallbacks inside
-   gradient paths.
+1. **True device-QI and production-resolution QI**
+   Current status: bounded CPU/GPU evidence exists, but the hard seed remains
+   above production write tolerance. Keep non-autodiff host fallback explicit
+   and do not hide it in differentiable paths.
 
-2. Full-grid QA/QH RHSMode=1 production convergence
-   Current status: reduced-grid QA/QH bootstrap-current comparisons are useful
-   and documented; full `25 x 39 x 60 x 7` production convergence remains a
-   separate validation lane.
-   Refactor implication: keep RHSMode=1 profile-response modules testable and
-   solver metadata complete.
+2. **Full-grid QA/QH RHSMode=1 production convergence**
+   Current status: reduced-grid bootstrap-current comparisons are useful and
+   documented; full production convergence remains a validation lane.
 
-3. Lower-memory native sparse-factor replacement
+3. **Lower-memory native sparse-factor replacement**
    Current status: direct `Pmat`, symbolic ordering, nested-dissection,
-   BLR/HSS-style, and residual-admission infrastructure exists, but it is not a
-   promoted default for the hardest geometry-rich cases.
-   Refactor implication: keep this as opt-in research infrastructure under
-   `solvers/preconditioners`, not as driver-local policy sprawl.
+   BLR/HSS-style, and residual-admission infrastructure exists, but it is not
+   promoted for hardest geometry-rich production cases.
 
-4. Geometry-rich RHSMode=2/3 production preconditioner
-   Current status: reduced geom2/geom11 gates pass, full production setup is
-   still too slow for promotion.
-   Refactor implication: extract reusable transport-matrix stage boundaries
-   only if they simplify the problem package and preserve tests.
+4. **Geometry-rich RHSMode=2/3 production preconditioner**
+   Current status: reduced geom2/geom11 gates pass; full production setup is
+   still too slow for default promotion.
 
-5. Single-case multi-GPU strong scaling
-   Current status: available as experimental benchmarking, but the public
-   production recommendation remains one GPU per independent case/scan point.
-   Refactor implication: keep parallel runtime code separate from solver
-   correctness and avoid making sharded single-case paths the default.
+5. **Single-case multi-GPU strong scaling**
+   Current status: independent-case/RHS parallelism is the practical public
+   scaling story; single-case strong scaling remains experimental.
 
-6. 95% meaningful coverage
-   Current status: docs describe roughly mid-50% package coverage; the target
-   requires splitting monoliths into testable modules and adding real numerical
-   and physics gates.
-   Refactor implication: every extraction needs direct tests; normal CI should
-   remain practical.
+6. **95% meaningful coverage**
+   Current status: target requires more ownership extraction and focused tests,
+   not slow production solves in normal CI.
 
 ## Refactor Open Lanes
 
-1. Branch/PR reconciliation
-   PR #8 is open on `refactor/v3-driver-architecture`, but active commits are on
-   `refactor/rhs1-full-assembly-preconditioners`. This is the first review
-   blocker.
+1. **Finish current transport-parallel tranche**
+   Update source map/testing docs, rerun focused validation, commit, and push
+   active branch and PR branch. This is the current local dirty state.
 
-2. `v3_driver.py` orchestration boundary
-   Status: improved, but still the largest file. Phi1 Newton-Krylov is now in
-   `problems/profile_response/phi1_newton.py`.
-   Next extract only one cohesive stage boundary: result/output handoff,
-   progress reporting, or transport parallel execution. Prefer deletion of
-   redundant wrappers over adding a new file.
+2. **Make `v3_driver.py` orchestration-only**
+   After the transport tranche, extract one more cohesive driver boundary:
+   result/output handoff or progress/timing reporting. Do not extract another
+   tiny wrapper-only seam.
 
-3. `rhs1_full_assembly.py` ownership split
-   Status: most major preconditioner families have owners, including the active
-   sparse-factor family now owned by
-   `solvers.preconditioners.symbolic_sparse.active_factors`. Stop unless a
-   large cohesive family remains. This file should now trend toward assembly
-   orchestration, dispatch/admission, and compatibility.
+3. **Stabilize RHSMode=1 ownership**
+   Stop broad RHSMode=1 churn unless a complete remaining family has a clear
+   domain home. Keep `rhs1_full_assembly.py` as assembly/dispatch/admission
+   owner until a full family can move cleanly.
 
-4. `io.py` schema split
-   Status: flat file formats are extracted to `outputs.formats`; output schema,
-   solved-field assembly, diagnostics, timing, memory, and provenance contracts
-   still live in `io.py`.
-   Next split only after the next driver seam is stable.
+4. **Split output schema from `io.py`**
+   Move solved-field schema, diagnostics, solver metadata, timing, memory, and
+   provenance contracts behind a small output contract. Keep file-format
+   writers in `outputs.formats`.
 
-5. Package consolidation
-   Status: domain package skeleton exists, but top-level compatibility and
-   historical modules remain numerous.
-   Next move should reduce cognitive load: consolidate related files, mark
-   compatibility shims, and delete redundant aliases when tests prove they are
-   unused.
+5. **Consolidate package layout**
+   Identify compatibility-only top-level modules, remove redundant aliases, and
+   prefer fewer clearer domain modules over many small historical wrappers.
 
-6. Documentation consistency
-   Status: `docs/source_map.rst`, `docs/testing.rst`, `docs/research_lanes.rst`,
-   and README already describe most current claims, but they must be updated
-   after each ownership move.
+6. **Preserve differentiable/non-differentiable API separation**
+   Make branch certificates and implicit-differentiation contracts explicit in
+   solver result metadata and docs.
 
-## Prioritized Next Steps
+7. **Raise coverage through real tests**
+   Every extraction gets direct tests. Add numerical and physics gates where
+   they are cheap and meaningful; keep CPU/GPU/Fortran sweeps in release/manual
+   tiers.
 
-### P0. Reconcile Branch And PR Metadata
+8. **Keep documentation synchronized**
+   Update `README.md`, `docs/source_map.rst`, `docs/testing.rst`,
+   `docs/development_roadmap.rst`, and `docs/research_lanes.rst` only when
+   claims or ownership change.
 
-Goal: one PR, one active refactor head, no hidden branch divergence.
+## Prioritized Execution Plan
 
-Actions:
+### P0. Close The Current Dirty Tranche
 
-1. Decide whether to fast-forward/update `refactor/v3-driver-architecture` with
-   the active branch commits or retarget PR #8 to
-   `refactor/rhs1-full-assembly-preconditioners`.
-2. Keep PR #8 as the single review PR.
-3. Make the PR draft/review-prep until the review boundary below is complete.
-
-Acceptance:
-
-- `gh pr list` shows one open PR for the active refactor head.
-- The plan and PR metadata agree on branch name and readiness state.
-
-### P1. Finish One More `v3_driver.py` Boundary
-
-Goal: reduce the driver to orchestration without creating wrapper clutter.
+Goal: land the already-tested transport-parallel runtime extraction cleanly.
 
 Actions:
 
-1. Inspect the remaining driver-local stage seams.
-2. Choose exactly one cohesive boundary, preferably one of:
-   result/output handoff, progress/timing reporting, or transport parallel
-   execution.
-3. Move implementation into an existing domain package where possible.
-4. Keep driver compatibility aliases only for public imports, monkeypatch seams,
-   or active tests.
+1. Update `docs/source_map.rst` for the new transport-parallel pool/runtime and
+   active-DOF ownership.
+2. Update `docs/testing.rst` to point transport-parallel monkeypatch and policy
+   tests at the new modules.
+3. Rerun focused transport tests, `ruff`, `py_compile`, `git diff --check`, and
+   the repo-size audit.
+4. Commit and push to both the active implementation branch and PR #8 branch.
 
 Acceptance:
 
-- `v3_driver.py` loses real responsibility, not just a few wrapper lines.
+- `v3_driver.py` has less real transport-parallel process-pool responsibility.
+- `sfincs_jax.problems.transport_matrix.parallel` owns pool/runtime policy.
+- PR #8 remains the single draft PR.
+
+### P1. Extract One Real Driver Stage
+
+Goal: reduce `v3_driver.py` by moving a cohesive stage, not wrapper clutter.
+
+Preferred choices:
+
+1. result/output handoff,
+2. progress/timing reporting,
+3. solve-result metadata assembly.
+
+Acceptance:
+
 - Extracted module has direct tests.
-- Existing CLI/output/transport/profile-response tests still pass.
+- Driver keeps only orchestration and dependency injection.
+- Public CLI/Python behavior is unchanged.
 
-### P2. Stabilize RHSMode=1 Assembly Ownership
+### P2. Split `io.py` Output Schema
 
-Goal: stop broad RHSMode=1 extraction churn unless a complete family remains.
+Goal: make output behavior testable without solver internals.
 
 Actions:
 
-1. Audit remaining large sections in `rhs1_full_assembly.py`.
-2. Move only a complete remaining preconditioner/solver family if it has a
-   clear home under `solvers/preconditioners` or `problems/profile_response`.
-3. Otherwise mark the file as current orchestration/compatibility owner and move
-   to I/O/refactor consolidation.
+1. Define one file-format-independent output schema for solved fields,
+   diagnostics, solver metadata, timing, memory, and provenance.
+2. Keep HDF5/NetCDF/NPZ serialization in `outputs.formats`.
+3. Add direct tests proving `.h5`, `.nc`, and `.npz` share the same core fields.
 
 Acceptance:
 
-- No vague new `rhs1_*` module is added.
-- Source map explains the owner of every major RHSMode=1 family.
+- `io.py` becomes smaller orchestration/compatibility code.
+- Output schema tests catch missing metadata and format drift.
 
-### P3. Split Output Schema From `io.py`
+### P3. Consolidate And Delete Compatibility Surfaces
 
-Goal: make output behavior easy to test without touching solver internals.
+Goal: reduce file count and cognitive load.
 
 Actions:
 
-1. Define one output schema contract for solved fields, diagnostics, solver
-   metadata, timing, memory, and provenance.
-2. Keep HDF5/NetCDF/NPZ writer functions in `outputs.formats`.
-3. Preserve CLI output suffix behavior and `--plot`.
-4. Add direct tests proving `.h5`, `.nc`, and `.npz` share the same core fields.
+1. Audit top-level historical modules for implementation, compatibility-only,
+   or dead status.
+2. Move implementation into existing domain packages only when it improves
+   ownership.
+3. Delete redundant aliases after import-contract tests prove they are unused.
+4. Add short module docstrings to explain physics/numerical responsibility.
 
 Acceptance:
 
-- `io.py` becomes a smaller orchestration/compatibility surface.
-- Output tests cover schema and format equivalence directly.
+- File count does not grow without a domain reason.
+- Developers can infer code location from the equation, solver, or workflow.
 
-### P4. Consolidate Layout And Delete Redundancy
+### P4. Make Solver Contracts Explicit
 
-Goal: simplify the codebase, not just move lines.
+Goal: keep adaptive performance and differentiability honest.
 
 Actions:
 
-1. Identify top-level historical files that are now compatibility-only.
-2. Move implementation into domain packages or delete redundant wrappers.
-3. Keep module names descriptive and pedagogical; avoid generic
-   `transport_*`, `rhs1_*`, and `v3_*` names for new implementation.
-4. Add short module docstrings explaining the equation, algorithm, or workflow
-   responsibility.
+1. Record branch certificates for `auto` decisions.
+2. Keep host-only fallbacks out of differentiable lanes.
+3. Use implicit linear-solve differentiation contracts for JAX-native solves.
+4. Treat `lineax`, `jaxopt`, `equinox`, and `optax` as optional measured
+   clarity/performance lanes, not required dependencies unless they prove value.
 
 Acceptance:
 
-- File count does not grow without a real domain reason.
-- Developers can infer where code lives from physics/numerical responsibility.
+- Differentiable examples remain JAX-transformable on documented fixtures.
+- CLI remains fast, robust, and residual-clean.
 
-### P5. Preserve Differentiable And Fast Non-Differentiable Contracts
+### P5. Raise Coverage With Meaningful Tests
 
-Goal: make adaptive solver choices auditable without pretending they are smooth.
+Goal: move toward 95% meaningful coverage while keeping CI practical.
 
 Actions:
 
-1. Keep public solve entries explicit about `differentiable=True` versus
-   `differentiable=False`.
-2. Record branch certificates for `auto`: selected method, rejected candidates,
-   residual margins, backend, memory estimates, and warnings near branch
-   boundaries.
-3. Use implicit differentiation/custom-linear-solve contracts for
-   differentiable linear solves rather than differentiating through every Krylov
-   or setup iteration.
-4. Keep optional `lineax`, `jaxopt`, `equinox`, and `optax` as measured optional
-   lanes unless they clearly improve runtime, memory, accuracy, or clarity.
+1. Target extracted modules first: policies, metadata, output schema,
+   active-DOF layouts, sparse/preconditioner primitives, and result contracts.
+2. Add synthetic-operator solver tests for residual gates and fail-closed
+   behavior.
+3. Add physics gates for conservation/null modes, radial normalization,
+   collisionality trends, ambipolar sign/root behavior, and bootstrap-current
+   normalization.
+4. Keep expensive full CPU/GPU/Fortran runs outside normal CI.
 
 Acceptance:
 
-- Differentiable workflows remain JAX-transformable on documented reduced
-   fixtures.
-- CLI defaults remain fast and residual-clean.
-- No host-only fallback is silently used in a gradient path.
+- Coverage increases because responsibilities are smaller and testable.
+- Normal CI remains in the practical budget.
 
-### P6. Raise Coverage With Real Tests
+### P6. Documentation And README Pass
 
-Goal: move toward 95% meaningful coverage without slowing CI.
+Goal: keep public claims clear and reviewer-proof.
 
 Actions:
 
-1. Every extracted module gets direct unit/regression tests.
-2. Add physics/numerical gates for conservation/null modes, finite-difference
-   order, symmetry limits, residual gates, output normalizations, and known
-   bootstrap/transport trends.
-3. Test solver primitives with synthetic sparse/operator systems instead of
-   expensive production solves.
-4. Keep CPU/GPU/Fortran sweeps in manual or release tiers.
+1. README stays short: install, one-command solve, plot command, public figures,
+   and short scope notes.
+2. Deep algorithms, equations, validation tiers, and deferred lanes stay in
+   docs.
+3. Source map and API docs match the refactored module ownership.
 
 Acceptance:
 
-- Coverage increases because monolith responsibilities become testable.
-- `docs/testing.rst` classifies tests as CI, release, manual GPU, or research
-   tier.
-- Normal CI remains practical.
+- No README claim depends on incomplete production-resolution evidence.
+- Docs show where equations, algorithms, tests, and claims live.
 
-### P7. Documentation And README Final Pass
+### P7. Benchmarks, Parity, And Figures
 
-Goal: keep public claims honest and usable.
+Goal: regenerate public artifacts only from complete evidence.
 
 Actions:
 
-1. Update `docs/source_map.rst` after every ownership move.
-2. Update `docs/testing.rst` when tests or validation tiers change.
-3. Keep README focused on install, quick CLI usage, plotting, current
-   runtime/memory figures, and short scope notes.
-4. Keep deep research-lane details in docs, not the README.
-
-Acceptance:
-
-- README remains user-friendly.
-- Docs are detailed enough for reviewers to trace equations, algorithms,
-   source files, tests, and claims.
-- Deferred research lanes stay explicitly labeled.
-
-### P8. Benchmarks, Parity, And Figures
-
-Goal: update public plots only from complete evidence.
-
-Actions:
-
-1. Do not regenerate runtime/memory/parity figures for pure refactors.
-2. After behavior-changing solver work, rerun complete CPU reports locally and
-   GPU reports on `ssh office` when needed.
+1. Do not regenerate runtime/memory/parity plots for behavior-preserving
+   refactors.
+2. After solver behavior changes, run complete CPU reports locally and GPU
+   reports on `ssh office` when needed.
 3. Regenerate README/docs plots only from canonical complete JSON reports.
-4. Keep reduced-grid QA/QH/QI figures labeled as reduced-grid until production
-   gates pass.
 
 Acceptance:
 
-- Public plots trace to complete checked reports.
-- Fortran v3 comparisons use matching model and resolution contracts.
+- Public plots trace to checked complete reports.
+- Fortran v3 comparisons use matched physics, resolution, and normalization.
+
+### P8. Make PR #8 Review-Ready
+
+Goal: one coherent refactor PR with no hidden release-claim drift.
+
+Actions:
+
+1. Ensure PR #8 points at the active refactor head and remains draft until all
+   review gates pass.
+2. Run focused tests for touched domains, Sphinx `-W`, `ruff`, `py_compile`,
+   `git diff --check`, and repo-size checks.
+3. Check CI after a meaningful push, not after every local edit.
+4. Summarize what changed, what stayed behavior-preserving, and which research
+   lanes remain deferred.
+
+Acceptance:
+
+- PR story is understandable.
+- `v3_driver.py`, `rhs1_full_assembly.py`, and `io.py` have documented
+  remaining responsibilities.
+- README/docs/tests match the code.
 
 ## Review-Ready Boundary
 
 The refactor PR is ready for review when:
 
-- PR #8 points at the active branch and has one coherent story.
-- `v3_driver.py`, `rhs1_full_assembly.py`, and `io.py` no longer hide major
-  solver/preconditioner/output contracts in untested monolithic bodies, or any
-  remaining responsibility is explicitly documented as deferred.
-- Public CLI and Python APIs keep the same output schemas.
-- Differentiable and non-differentiable solve lanes are explicit and tested.
-- Focused local validation, `ruff`, `py_compile`, `git diff --check`, repo-size
-  audit, and Sphinx pass.
-- CI is checked after a meaningful push, not after every small local edit.
-- README/docs accurately distinguish production claims, reduced-grid evidence,
-  and deferred research lanes.
+- P0 through P3 are complete or explicitly deferred with rationale.
+- `v3_driver.py` is primarily orchestration and dependency injection.
+- `rhs1_full_assembly.py` no longer hides a major unowned preconditioner family.
+- `io.py` has a documented output-schema split plan or an implemented schema
+  extraction.
+- Public CLI and Python APIs preserve existing output schemas.
+- Differentiable and non-differentiable lanes are explicit and tested.
+- Focused local validation, `ruff`, `py_compile`, `git diff --check`,
+  repo-size audit, and Sphinx pass.
+- README/docs distinguish production claims, reduced-grid evidence, and
+  deferred research lanes.
 
-## Work That Is Explicitly Deferred
+## Explicitly Deferred Research Work
 
-These lanes are important but should not block the refactor PR unless a code
+These lanes remain important but should not block the refactor PR unless a
 change touches their public claims:
 
-- True differentiable device-QI at production tolerance.
-- Production-resolution QI ladders.
-- Full-grid QA/QH RHSMode=1 production convergence beyond reduced-grid
-  documentation evidence.
-- Single-case multi-GPU strong scaling as a public performance claim.
-- Lower-memory native sparse-factor replacement for the largest geometry-rich
+- true differentiable device-QI at production tolerance,
+- production-resolution QI ladders,
+- full-grid QA/QH RHSMode=1 production convergence beyond reduced-grid
+  documentation evidence,
+- single-case multi-GPU strong scaling as a public performance claim,
+- lower-memory native sparse-factor replacement for the largest geometry-rich
   RHSMode=2/3 and full-grid QA/QH RHSMode=1 cases.
 
 Deferred means fail-closed, documented, and test-gated where possible. Future
-algorithm work should target genuinely stronger operator/coarse/factor
-architectures and complete CPU/GPU/Fortran gates, not more smoother/restart
-tuning.
+algorithm work should target stronger operator/coarse/factor architectures and
+complete CPU/GPU/Fortran gates, not more smoother/restart tuning.

@@ -441,6 +441,12 @@ guards, merge-ready result packing, and GPU-worker NPZ conversion for non-contig
 seam directly: inactive-policy no-op behavior, payload partitioning, worker result
 merge, output-field propagation, transport-matrix assembly, and progress emission
 are tested with monkeypatched kernels and worker runtimes.
+``tests/test_transport_parallel.py`` now targets the transport parallel modules
+directly for the process-pool and XLA-policy seams: persistent pool reuse and
+rebuild monkeypatch ``sfincs_jax.problems.transport_matrix.parallel.pool``, while
+worker-local XLA flag rewriting is checked through
+``sfincs_jax.problems.transport_matrix.parallel.policy``. Driver aliases are
+kept only where they preserve the public debugging seam.
 ``tests/test_transport_postsolve_diagnostics.py`` covers
 ``sfincs_jax.problems.transport_matrix.postsolve_diagnostics`` through both the
 new package path and the legacy compatibility alias. The extracted post-solve

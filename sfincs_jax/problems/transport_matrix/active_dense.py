@@ -10,6 +10,7 @@ from typing import Any
 import jax.numpy as jnp
 import numpy as np
 
+from sfincs_jax.rhs1_compressed_layout import build_rhs1_compressed_pitch_layout
 from sfincs_jax.problems.transport_matrix.solve_policy import (
     TransportActiveDOFDecision,
     TransportActiveDOFState,
@@ -20,6 +21,11 @@ from sfincs_jax.problems.transport_matrix.solve_policy import (
     resolve_transport_dense_policy,
     resolve_transport_initial_solve_policy,
 )
+
+
+def transport_active_dof_indices(op: Any) -> np.ndarray:
+    """Return full-vector indices for active RHSMode=2/3 transport unknowns."""
+    return build_rhs1_compressed_pitch_layout(op).active_full_indices.astype(np.int32, copy=False)
 
 
 @dataclass(frozen=True)

@@ -1,7 +1,17 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+import atexit
+import concurrent.futures
+import multiprocessing as mp
 import threading
+
+from sfincs_jax.problems.transport_matrix.parallel.policy import (
+    rewrite_xla_flags,
+    transport_parallel_pool_executor_kwargs as _transport_parallel_pool_executor_kwargs,
+    transport_parallel_pool_key,
+    transport_parallel_worker_env as _transport_parallel_worker_env,
+)
 
 
 class TransportParallelPoolCache:
@@ -46,3 +56,67 @@ class TransportParallelPoolCache:
             self._pool = pool
             self._key = key
         return pool
+
+
+_TRANSPORT_PARALLEL_POOL_CACHE = TransportParallelPoolCache()
+
+
+def transport_parallel_worker_env(parallel_workers: int):
+    """Return the process-pool worker environment context for transport solves."""
+    return _transport_parallel_worker_env(
+        parallel_workers=int(parallel_workers),
+        rewrite_xla_flags=rewrite_xla_flags,
+    )
+
+
+def transport_parallel_pool_executor_kwargs(
+    *,
+    parallel_workers: int,
+    emit: Callable[[int, str], None] | None = None,
+) -> dict[str, object]:
+    """Build ``ProcessPoolExecutor`` kwargs for transport worker pools."""
+    return _transport_parallel_pool_executor_kwargs(
+        parallel_workers=int(parallel_workers),
+        get_context=mp.get_context,
+        emit=emit,
+    )
+
+
+def shutdown_transport_parallel_pool() -> None:
+    """Shut down the persistent transport process pool, if one exists."""
+    _TRANSPORT_PARALLEL_POOL_CACHE.shutdown()
+
+
+def get_transport_parallel_pool(
+    *,
+    parallel_workers: int,
+    emit: Callable[[int, str], None] | None = None,
+) -> concurrent.futures.ProcessPoolExecutor:
+    """Return the persistent process pool for CPU transport-worker solves."""
+    return _TRANSPORT_PARALLEL_POOL_CACHE.get(
+        parallel_workers=int(parallel_workers),
+        key_fn=transport_parallel_pool_key,
+        worker_env=transport_parallel_worker_env,
+        executor_kwargs=transport_parallel_pool_executor_kwargs,
+        executor_class=concurrent.futures.ProcessPoolExecutor,
+        emit=emit,
+    )
+
+
+def transport_parallel_process_pool_executor(**kwargs: object) -> concurrent.futures.ProcessPoolExecutor:
+    """Construct the process-pool executor used by one-shot transport workers."""
+    return concurrent.futures.ProcessPoolExecutor(**kwargs)
+
+
+atexit.register(shutdown_transport_parallel_pool)
+
+
+__all__ = (
+    "TransportParallelPoolCache",
+    "get_transport_parallel_pool",
+    "shutdown_transport_parallel_pool",
+    "transport_parallel_pool_executor_kwargs",
+    "transport_parallel_pool_key",
+    "transport_parallel_process_pool_executor",
+    "transport_parallel_worker_env",
+)

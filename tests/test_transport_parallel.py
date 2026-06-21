@@ -11,6 +11,8 @@ from sfincs_jax.io import read_sfincs_h5, write_sfincs_jax_output_h5
 from sfincs_jax.namelist import read_sfincs_input
 from sfincs_jax import cli
 from sfincs_jax import v3_driver
+from sfincs_jax.problems.transport_matrix.parallel import pool as transport_parallel_pool
+from sfincs_jax.problems.transport_matrix.parallel import policy as transport_parallel_policy
 from sfincs_jax.v3_driver import solve_v3_transport_matrix_linear_gmres
 
 
@@ -424,8 +426,8 @@ def test_transport_parallel_pool_reuses_workers(monkeypatch: pytest.MonkeyPatch)
 
     monkeypatch.setenv("SFINCS_JAX_TRANSPORT_POOL_PERSIST", "1")
     monkeypatch.setenv("SFINCS_JAX_TRANSPORT_MP_START_METHOD", "spawn")
-    monkeypatch.setattr(v3_driver.concurrent.futures, "ProcessPoolExecutor", _DummyPool)
-    monkeypatch.setattr(v3_driver.mp, "get_context", lambda _name: object())
+    monkeypatch.setattr(transport_parallel_pool.concurrent.futures, "ProcessPoolExecutor", _DummyPool)
+    monkeypatch.setattr(transport_parallel_pool.mp, "get_context", lambda _name: object())
 
     v3_driver._shutdown_transport_parallel_pool()
     try:
@@ -457,8 +459,8 @@ def test_transport_parallel_pool_rebuilds_on_worker_change(monkeypatch: pytest.M
 
     monkeypatch.setenv("SFINCS_JAX_TRANSPORT_POOL_PERSIST", "1")
     monkeypatch.setenv("SFINCS_JAX_TRANSPORT_MP_START_METHOD", "spawn")
-    monkeypatch.setattr(v3_driver.concurrent.futures, "ProcessPoolExecutor", _DummyPool)
-    monkeypatch.setattr(v3_driver.mp, "get_context", lambda _name: object())
+    monkeypatch.setattr(transport_parallel_pool.concurrent.futures, "ProcessPoolExecutor", _DummyPool)
+    monkeypatch.setattr(transport_parallel_pool.mp, "get_context", lambda _name: object())
 
     v3_driver._shutdown_transport_parallel_pool()
     try:
@@ -488,8 +490,8 @@ def test_transport_parallel_pool_key_tracks_backend(monkeypatch: pytest.MonkeyPa
     assert key_cpu != key_gpu
 
 
-def test_driver_xla_rewrite_wrapper_accepts_worker_env_positional_callback() -> None:
-    rewritten = v3_driver._rewrite_xla_flags(
+def test_parallel_policy_xla_rewrite_accepts_worker_env_positional_callback() -> None:
+    rewritten = transport_parallel_policy.rewrite_xla_flags(
         "--xla_cpu_multi_thread_eigen=false --keep=1",
         3,
         1,

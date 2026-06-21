@@ -11,7 +11,11 @@ import time
 
 import numpy as np
 
-from sfincs_jax.problems.transport_matrix.parallel.policy import validate_transport_parallel_worker_count
+from sfincs_jax.problems.transport_matrix.parallel.policy import (
+    transport_parallel_gpu_worker_env,
+    transport_parallel_visible_gpu_ids,
+    validate_transport_parallel_worker_count,
+)
 from sfincs_jax.problems.transport_matrix.parallel.validation import (
     validate_complete_transport_worker_rhs_coverage,
     validate_distinct_transport_worker_rhs,
@@ -418,6 +422,22 @@ def run_transport_parallel_gpu_subprocesses(
                 }
             )
     return results
+
+
+def run_transport_parallel_gpu_subprocesses_with_policy(
+    *,
+    payloads: list[dict[str, object]],
+    parallel_workers: int,
+    emit: Callable[[int, str], None] | None = None,
+) -> list[dict[str, object]]:
+    """Run GPU transport workers using the standard environment policy."""
+    return run_transport_parallel_gpu_subprocesses(
+        payloads=payloads,
+        parallel_workers=int(parallel_workers),
+        visible_gpu_ids=transport_parallel_visible_gpu_ids,
+        gpu_worker_env=transport_parallel_gpu_worker_env,
+        emit=emit,
+    )
 
 
 def merge_transport_parallel_results(

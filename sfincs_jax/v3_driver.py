@@ -1,11 +1,8 @@
 from __future__ import annotations
 
 from dataclasses import replace
-import atexit
-import contextlib
 import hashlib
 import json
-import multiprocessing as mp
 import subprocess
 import sys
 import tempfile
@@ -18,7 +15,6 @@ _jax_config.update("jax_enable_x64", True)
 from collections.abc import Callable, Sequence
 from typing import Any
 import os
-import concurrent.futures
 from pathlib import Path
 import numpy as np
 
@@ -620,7 +616,6 @@ from .problems.profile_response.solver_diagnostics import (
 from .problems.profile_response.active_dof import (
     build_rhs1_active_dof_state as _build_rhs1_active_dof_state_compat,
 )
-from .rhs1_compressed_layout import build_rhs1_compressed_pitch_layout
 from .problems.profile_response.active_projection import (
     expand_reduced_with_map,
     finalize_rhs1_linear_solution_cleanup,
@@ -778,7 +773,10 @@ from .transport_solve_setup import (
     resolve_transport_state_setup,
     resolve_transport_which_rhs_setup,
 )
-from .transport_active_dense_setup import resolve_transport_active_dense_setup
+from .transport_active_dense_setup import (
+    resolve_transport_active_dense_setup,
+    transport_active_dof_indices as _transport_active_dof_indices,
+)
 from .transport_handoff_policy import (
     transport_candidate_is_better,
     transport_polish_config_from_env,
@@ -819,23 +817,26 @@ from .transport_sparse_direct_solve import (
     transport_sparse_direct_solve as _transport_sparse_direct_solve_with_context,
 )
 from .problems.transport_matrix.parallel.policy import (
-    rewrite_xla_flags as _rewrite_xla_flags,
-    transport_parallel_backend as _transport_parallel_backend_impl,
-    transport_parallel_gpu_worker_env as _transport_parallel_gpu_worker_env_impl,
-    transport_parallel_persistent_pool_enabled as _transport_parallel_persistent_pool_enabled_impl,
-    transport_parallel_pool_executor_kwargs as _transport_parallel_pool_executor_kwargs_impl,
-    transport_parallel_pool_key as _transport_parallel_pool_key_impl,
-    transport_parallel_start_method as _transport_parallel_start_method_impl,
-    transport_parallel_visible_gpu_ids as _transport_parallel_visible_gpu_ids_impl,
-    transport_parallel_worker_env as _transport_parallel_worker_env_impl,
+    transport_parallel_backend as _transport_parallel_backend,
+    transport_parallel_gpu_worker_env as _transport_parallel_gpu_worker_env,
+    transport_parallel_persistent_pool_enabled as _transport_parallel_persistent_pool_enabled,
+    transport_parallel_start_method as _transport_parallel_start_method,
+    transport_parallel_visible_gpu_ids as _transport_parallel_visible_gpu_ids,
 )
 from .problems.transport_matrix.parallel.payload import solve_transport_parallel_payload as _solve_transport_parallel_payload
 from .problems.transport_matrix.parallel.runtime import (
-    run_transport_parallel_gpu_subprocesses as _run_transport_parallel_gpu_subprocesses_impl,
+    run_transport_parallel_gpu_subprocesses_with_policy as _run_transport_parallel_gpu_subprocesses,
 )
 from .problems.transport_matrix.parallel.solve import TransportParallelSolveRuntime, maybe_run_transport_parallel_solve
 from .transport_residual_quality import transport_residual_gate_thresholds_from_env
-from .problems.transport_matrix.parallel.pool import TransportParallelPoolCache
+from .problems.transport_matrix.parallel.pool import (
+    get_transport_parallel_pool as _get_transport_parallel_pool,
+    shutdown_transport_parallel_pool as _shutdown_transport_parallel_pool,
+    transport_parallel_pool_executor_kwargs as _transport_parallel_pool_executor_kwargs,
+    transport_parallel_pool_key as _transport_parallel_pool_key,
+    transport_parallel_process_pool_executor as _transport_parallel_process_pool_executor,
+    transport_parallel_worker_env as _transport_parallel_worker_env,
+)
 from .solve_mode_policy import resolve_use_implicit as _resolve_use_implicit_impl
 from .phi1_newton_policy import (
     phi1_frozen_jacobian_policy,
@@ -12166,15 +12167,6 @@ solve_v3_full_system_linear_gmres_jit = jax.jit(
 
 
 
-@contextlib.contextmanager
-def _transport_parallel_worker_env(parallel_workers: int):
-    with _transport_parallel_worker_env_impl(
-        parallel_workers=int(parallel_workers),
-        rewrite_xla_flags=_rewrite_xla_flags,
-    ):
-        yield
-
-
 def _transport_parallel_worker(payload: dict[str, object]) -> dict[str, object]:
     """Worker entry point for parallel whichRHS transport solves."""
     return _solve_transport_parallel_payload(
@@ -12182,89 +12174,6 @@ def _transport_parallel_worker(payload: dict[str, object]) -> dict[str, object]:
         read_input=read_sfincs_input,
         solve_transport=solve_v3_transport_matrix_linear_gmres,
     )
-
-
-_TRANSPORT_PARALLEL_POOL_CACHE = TransportParallelPoolCache()
-
-
-_transport_parallel_start_method = _transport_parallel_start_method_impl
-
-
-_transport_parallel_backend = _transport_parallel_backend_impl
-
-
-_transport_parallel_persistent_pool_enabled = (
-    _transport_parallel_persistent_pool_enabled_impl
-)
-
-
-_transport_parallel_pool_key = _transport_parallel_pool_key_impl
-
-
-_transport_parallel_visible_gpu_ids = _transport_parallel_visible_gpu_ids_impl
-
-
-_transport_parallel_gpu_worker_env = _transport_parallel_gpu_worker_env_impl
-
-
-def _run_transport_parallel_gpu_subprocesses(
-    *,
-    payloads: list[dict[str, object]],
-    parallel_workers: int,
-    emit: Callable[[int, str], None] | None = None,
-) -> list[dict[str, object]]:
-    return _run_transport_parallel_gpu_subprocesses_impl(
-        payloads=payloads,
-        parallel_workers=int(parallel_workers),
-        visible_gpu_ids=_transport_parallel_visible_gpu_ids,
-        gpu_worker_env=_transport_parallel_gpu_worker_env,
-        emit=emit,
-    )
-
-
-def _transport_parallel_pool_executor_kwargs(
-    *,
-    parallel_workers: int,
-    emit: Callable[[int, str], None] | None = None,
-) -> dict[str, object]:
-    return _transport_parallel_pool_executor_kwargs_impl(
-        parallel_workers=int(parallel_workers),
-        get_context=mp.get_context,
-        emit=emit,
-    )
-
-
-def _shutdown_transport_parallel_pool() -> None:
-    _TRANSPORT_PARALLEL_POOL_CACHE.shutdown()
-
-
-atexit.register(_shutdown_transport_parallel_pool)
-
-
-def _get_transport_parallel_pool(
-    *,
-    parallel_workers: int,
-    emit: Callable[[int, str], None] | None = None,
-) -> concurrent.futures.ProcessPoolExecutor:
-    return _TRANSPORT_PARALLEL_POOL_CACHE.get(
-        parallel_workers=int(parallel_workers),
-        key_fn=_transport_parallel_pool_key,
-        worker_env=_transport_parallel_worker_env,
-        executor_kwargs=_transport_parallel_pool_executor_kwargs,
-        executor_class=concurrent.futures.ProcessPoolExecutor,
-        emit=emit,
-    )
-
-
-def _transport_active_dof_indices(op: V3FullSystemOperator) -> np.ndarray:
-    """Return full-vector indices for active transport solve DOFs.
-
-    For v3 RHSMode=2/3 transport solves, Fortran only includes active Legendre
-    modes for each x (as set by `Nxi_for_x`) in the linear system unknown vector.
-    This helper builds that reduced active set so matrix-free solves can mirror
-    Fortran's non-singular system size.
-    """
-    return build_rhs1_compressed_pitch_layout(op).active_full_indices.astype(np.int32, copy=False)
 
 
 def solve_v3_transport_matrix_linear_gmres(
@@ -12365,7 +12274,7 @@ def solve_v3_transport_matrix_linear_gmres(
             shutdown_pool=_shutdown_transport_parallel_pool,
             worker=_transport_parallel_worker,
             worker_env=_transport_parallel_worker_env,
-            executor_class=concurrent.futures.ProcessPoolExecutor,
+            executor_class=_transport_parallel_process_pool_executor,
             executor_kwargs=_transport_parallel_pool_executor_kwargs,
             elapsed_s=t_all.elapsed_s,
         ),

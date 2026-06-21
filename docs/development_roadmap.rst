@@ -7,6 +7,10 @@ solver paths, benchmark generation, and research-only QI/parallelism probes.
 The next phase should improve maintainability without changing the validated
 physics behavior. This page is the working plan for that phase.
 
+The active branch checklist for the current refactor PR lives in the repository
+root as ``plan.md``. This page records the stable public roadmap and must not
+introduce a competing sequence of work.
+
 Goals
 -----
 
