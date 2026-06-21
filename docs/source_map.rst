@@ -335,6 +335,13 @@ the historical private driver name and test the focused module directly. This ke
   setup, PAS-ILU Schur shortcuts, constraint-source injection/projection, cache
   population, and reduced/full apply wrappers. ``v3_driver.py`` injects the
   current base builders and keeps a compatibility wrapper only.
+- ``sfincs_jax/solvers/preconditioners/schur/rhs1_coarse_policy.py``:
+  environment-normalized policy for RHSMode=1 active native-stack and
+  sparse-coarse residual preconditioners. It owns side-effect-free parsing for
+  memory budgets, Schwarz admission, coarse-equation solver choice,
+  field-split output/base-kind routing, and coupled-kinetic admission probes;
+  ``rhs1_full_assembly.py`` keeps sparse basis assembly, factorization, cache
+  ownership, and true residual admission.
 - ``sfincs_jax/problems/transport_matrix/direct_pmat.py``
   (legacy alias: ``sfincs_jax/transport_direct_pmat.py``):
   direct term-level RHSMode=2/3 reduced ``Pmat`` and exact active-operator

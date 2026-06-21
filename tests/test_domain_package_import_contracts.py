@@ -58,8 +58,14 @@ ACTIVE_PACKAGE_EXPORTS = {
         "build_rhs1_structured_fblock_xi_angular_jacobi_preconditioner",
     ),
     "sfincs_jax.solvers.preconditioners.schur": (
+        "ActiveNativeFieldSplitSparseCoarsePolicy",
+        "ActiveNativeStackPolicy",
+        "ActiveSparseCoarseResidualPolicy",
         "RHS1SchurPreconditionerBuilders",
         "build_rhs1_schur_preconditioner",
+        "resolve_active_native_field_split_sparse_coarse_policy",
+        "resolve_active_native_stack_policy",
+        "resolve_active_sparse_coarse_residual_policy",
     ),
     "sfincs_jax.solvers.preconditioners.domain_decomposition": (
         "build_rhs1_theta_dd_preconditioner",

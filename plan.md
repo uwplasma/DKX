@@ -45,8 +45,8 @@ Make `sfincs_jax` research-grade while preserving the public user contract:
 ## Current Evidence
 
 - Worktree is clean on `refactor/rhs1-full-assembly-preconditioners`.
-- Latest follow-up commit: `1553d9b Split RHS1 symbolic sparse policy`.
-- Latest follow-up branch Docs workflow passed.
+- Latest checked completed follow-up branch Docs workflow passed. Avoid repeated
+  CI polling; inspect only completed failures or final review gates.
 - PR #8 CI/docs/examples/external-data/optional gates/coverage checks passed.
 - Repository size audit has passed after the plan compaction work.
 - No README benchmark or parity figure regeneration is required for current
@@ -55,7 +55,7 @@ Make `sfincs_jax` research-grade while preserving the public user contract:
 Current largest source files:
 
 - `sfincs_jax/v3_driver.py`: about 14.4k lines.
-- `sfincs_jax/rhs1_full_assembly.py`: about 11.5k lines.
+- `sfincs_jax/rhs1_full_assembly.py`: about 11.4k lines.
 - `sfincs_jax/io.py`: about 5.8k lines.
 - `sfincs_jax/problems/profile_response/sparse_pc.py`: about 3.6k lines.
 
@@ -65,6 +65,19 @@ Current structural issue:
   compatibility shims and top-level `rhs1_*` / `transport_*` modules. Keep the
   shims for user/test compatibility, but do not add more generic top-level
   modules. Move new implementation into clear domain packages.
+
+Latest local validation for this branch:
+
+- Native-stack/sparse-coarse policy extraction: targeted `py_compile` passed.
+- Targeted `ruff` passed for the new Schur policy module, package facade,
+  `rhs1_full_assembly.py`, and touched tests.
+- `tests/test_rhs1_coarse_policy.py`, domain package import contracts, and
+  policy docstring/source-map tests passed (`15 passed`).
+- `tests/test_rhs1_full_assembly.py` passed (`121 passed`).
+- `tests/test_v3_sparse_pattern.py` passed (`132 passed`).
+- Final hygiene for the native-stack/sparse-coarse policy extraction passed:
+  targeted `py_compile`, targeted `ruff`, `git diff --check`, repository-size
+  audit, and Sphinx HTML docs build.
 
 ## Open Lanes
 
@@ -87,7 +100,7 @@ Acceptance:
 
 ### 2. Follow-Up RHSMode=1 Full-Assembly Refactor
 
-Status: about 40%.
+Status: about 48%.
 
 Completed on this branch:
 
@@ -95,11 +108,11 @@ Completed on this branch:
 - Fortran-v3-reduced factor-policy split.
 - Symbolic frontal policy split.
 - Symbolic sparse policy split.
+- Native-stack and sparse-coarse residual policy split into
+  `sfincs_jax.solvers.preconditioners.schur.rhs1_coarse_policy`.
 
 Open work:
 
-- Extract native-stack/coarse-residual policy from
-  `rhs1_full_assembly.py`.
 - Move one complete RHSMode=1 preconditioner family implementation into the
   `solvers/preconditioners/` domain tree once policy boundaries are stable.
 - Keep compatibility aliases only where tests/debug scripts depend on private
@@ -218,8 +231,8 @@ Acceptance:
 ## Finite Execution Sequence
 
 1. Keep PR #8 stable and review-ready.
-2. On this branch, extract native-stack/coarse-residual policy from
-   `rhs1_full_assembly.py`.
+2. On this branch, move one complete RHSMode=1 preconditioner family
+   implementation into the `solvers/preconditioners/` domain tree.
 3. Validate with targeted `py_compile`, `ruff`, `tests/test_rhs1_full_assembly.py`,
    `tests/test_v3_sparse_pattern.py`, `git diff --check`, and repository-size
    audit.

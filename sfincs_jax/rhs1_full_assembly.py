@@ -37,6 +37,11 @@ from .rhs1_symbolic_sparse_policy import (
     resolve_active_symbolic_block_schur_policy,
     resolve_active_symbolic_superblock_policy,
 )
+from .solvers.preconditioners.schur.rhs1_coarse_policy import (
+    resolve_active_native_field_split_sparse_coarse_policy,
+    resolve_active_native_stack_policy,
+    resolve_active_sparse_coarse_residual_policy,
+)
 from .v3_sparse_pattern import estimate_v3_full_system_conservative_sparsity_summary
 
 _STRUCTURED_FULL_CSR_OBJECT_CACHE: dict[tuple[object, ...], tuple[Any, dict[str, object]]] = {}
@@ -4588,11 +4593,8 @@ def _build_active_projected_bounded_native_stack_preconditioner(
             },
         )
 
-    base_budget_fraction = float(
-        _env_float("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_NATIVE_STACK_BASE_BUDGET_FRACTION", 0.75)
-    )
-    base_budget_fraction = min(max(float(base_budget_fraction), 0.05), 1.0)
-    base_budget = max(1, int(float(max_factor_nbytes) * base_budget_fraction))
+    policy = resolve_active_native_stack_policy(max_factor_nbytes=int(max_factor_nbytes))
+    base_budget = int(policy.base_budget_nbytes)
     base = _build_active_projected_multiline_field_split_base_preconditioner(
         matrix=matrix_csr,
         layout=layout,
@@ -4612,8 +4614,8 @@ def _build_active_projected_bounded_native_stack_preconditioner(
         )
 
     base_nbytes = int(base.metadata.get("factor_nbytes_actual", base.metadata.get("factor_nbytes_estimate", 0)) or 0)
-    schwarz_requested = _env_bool("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_NATIVE_STACK_SCHWARZ", False)
-    schwarz_max_size = _env_int("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_NATIVE_STACK_SCHWARZ_MAX_SIZE", 100_000)
+    schwarz_requested = bool(policy.schwarz_requested)
+    schwarz_max_size = int(policy.schwarz_max_size)
     schwarz: RHS1StructuredFullCSRPreconditioner | None = None
     schwarz_nbytes = 0
     schwarz_reason = "disabled"
@@ -4642,11 +4644,7 @@ def _build_active_projected_bounded_native_stack_preconditioner(
                 schwarz = None
 
     config = _coarse_residual_config(layout)
-    max_coarse_size = _env_int(
-        "SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_NATIVE_STACK_COARSE_MAX_SIZE",
-        _env_int("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_NATIVE_XELL_COARSE_MAX_SIZE", 640),
-    )
-    max_coarse_size = max(1, int(max_coarse_size))
+    max_coarse_size = int(policy.max_coarse_size)
     window_basis, window_metadata = _build_active_native_xell_coarse_window_basis_csc(layout=layout)
     physics_basis = _build_coarse_residual_basis_csc(layout=layout, config=config)
     full_basis = (
@@ -4733,17 +4731,10 @@ def _build_active_projected_bounded_native_stack_preconditioner(
     )
 
     az_basis = (matrix_csr @ basis).tocsc()
-    coarse_solver_mode = (
-        os.environ.get("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_NATIVE_STACK_COARSE_SOLVER", "least_squares")
-        .strip()
-        .lower()
-        .replace("-", "_")
-    )
-    if coarse_solver_mode in {"galerkin", "petrov_galerkin", "ztaz"}:
-        coarse_solver_mode = "galerkin"
+    coarse_solver_mode = str(policy.coarse_solver_mode)
+    if coarse_solver_mode == "galerkin":
         coarse = np.asarray((basis.T @ az_basis).toarray(), dtype=np.float64)
     else:
-        coarse_solver_mode = "least_squares"
         coarse = np.asarray((az_basis.T @ az_basis).toarray(), dtype=np.float64)
     coarse_size = int(coarse.shape[0])
     coarse_scale = max(float(np.linalg.norm(coarse, ord=np.inf)) if coarse.size else 0.0, 1.0)
@@ -7140,17 +7131,10 @@ def _build_active_projected_native_xell_field_split_sparse_coarse_preconditioner
     from scipy.sparse.linalg import LinearOperator  # noqa: PLC0415
 
     matrix_csr = matrix.tocsr()
-    requested_kind_l = str(requested_kind).strip().lower().replace("-", "_")
-    is_multiline = "multiline" in requested_kind_l or "xell_angular" in requested_kind_l
-    is_angular_only = "angular" in requested_kind_l and not is_multiline
-    is_coupled_kinetic = "coupled_kinetic" in requested_kind_l or "dominant_kinetic" in requested_kind_l
-    output_kind = "active_native_xell_field_split_sparse_coarse"
-    if is_coupled_kinetic:
-        output_kind = "active_coupled_kinetic_field_split_sparse_coarse"
-    if is_angular_only:
-        output_kind = "active_angular_line_field_split_sparse_coarse"
-    if is_multiline:
-        output_kind = "active_multiline_field_split_sparse_coarse"
+    policy = resolve_active_native_field_split_sparse_coarse_policy(requested_kind=str(requested_kind))
+    is_multiline = bool(policy.is_multiline)
+    is_coupled_kinetic = bool(policy.is_coupled_kinetic)
+    output_kind = str(policy.output_kind)
     active_np = (
         np.arange(int(layout.total_size), dtype=np.int64)
         if active_indices is None
@@ -7169,19 +7153,7 @@ def _build_active_projected_native_xell_field_split_sparse_coarse_preconditioner
             },
         )
 
-    requested_base_kind = "active_multiline_xell_angular"
-    if bool(is_coupled_kinetic):
-        requested_base_kind = "active_coupled_kinetic_block"
-    elif not is_multiline:
-        requested_base_kind = (
-            "active_angular_line"
-            if is_angular_only
-            else os.environ.get(
-                "SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_LINE_FIELD_SPLIT_BASE",
-                "active_native_xell",
-            )
-        )
-        requested_base_kind = str(requested_base_kind).strip().lower().replace("-", "_") or "active_native_xell"
+    requested_base_kind = str(policy.requested_base_kind)
     if bool(is_coupled_kinetic):
         base = _build_active_projected_coupled_kinetic_block_preconditioner(
             matrix=matrix_csr,
@@ -7223,15 +7195,7 @@ def _build_active_projected_native_xell_field_split_sparse_coarse_preconditioner
         )
 
     config = _coarse_residual_config(layout)
-    max_coarse_size = _env_int(
-        (
-            "SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_COUPLED_KINETIC_COARSE_MAX_SIZE"
-            if bool(is_coupled_kinetic)
-            else "SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_NATIVE_XELL_COARSE_MAX_SIZE"
-        ),
-        _env_int("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_SPARSE_COARSE_MAX_SIZE", 640),
-    )
-    max_coarse_size = max(1, int(max_coarse_size))
+    max_coarse_size = int(policy.max_coarse_size)
     window_basis, window_metadata = _build_active_native_xell_coarse_window_basis_csc(layout=layout)
     physics_basis = _build_coarse_residual_basis_csc(layout=layout, config=config)
     full_basis = (
@@ -7293,17 +7257,10 @@ def _build_active_projected_native_xell_field_split_sparse_coarse_preconditioner
     )
 
     az_basis = (matrix_csr @ basis).tocsc()
-    coarse_solver_mode = (
-        os.environ.get("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_NATIVE_XELL_COARSE_SOLVER", "least_squares")
-        .strip()
-        .lower()
-        .replace("-", "_")
-    )
-    if coarse_solver_mode in {"galerkin", "petrov_galerkin", "ztaz"}:
-        coarse_solver_mode = "galerkin"
+    coarse_solver_mode = str(policy.coarse_solver_mode)
+    if coarse_solver_mode == "galerkin":
         coarse = np.asarray((basis.T @ az_basis).toarray(), dtype=np.float64)
     else:
-        coarse_solver_mode = "least_squares"
         coarse = np.asarray((az_basis.T @ az_basis).toarray(), dtype=np.float64)
     coarse_size = int(coarse.shape[0])
     coarse_scale = max(float(np.linalg.norm(coarse, ord=np.inf)) if coarse.size else 0.0, 1.0)
@@ -7371,33 +7328,9 @@ def _build_active_projected_native_xell_field_split_sparse_coarse_preconditioner
         accepted, admission_metadata = _admit_linear_operator_against_matrix(
             matrix=matrix_csr,
             operator=operator,
-            probe_count=max(
-                1,
-                int(
-                    _env_int(
-                        "SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_COUPLED_KINETIC_COARSE_ADMISSION_PROBES",
-                        4,
-                    )
-                ),
-            ),
-            max_relative_residual=max(
-                0.0,
-                float(
-                    _env_float(
-                        "SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_COUPLED_KINETIC_COARSE_ADMISSION_MAX_RELATIVE_RESIDUAL",
-                        1.0e-2,
-                    )
-                ),
-            ),
-            min_improvement_vs_identity=max(
-                0.0,
-                float(
-                    _env_float(
-                        "SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_COUPLED_KINETIC_COARSE_ADMISSION_MIN_IMPROVEMENT",
-                        1.0,
-                    )
-                ),
-            ),
+            probe_count=int(policy.admission_probes),
+            max_relative_residual=float(policy.admission_max_relative_residual),
+            min_improvement_vs_identity=float(policy.admission_min_improvement),
         )
         admission_metadata["admission_enabled"] = True
         if not bool(accepted):
@@ -7525,22 +7458,9 @@ def _build_active_projected_sparse_coarse_residual_preconditioner(
             },
         )
 
-    requested_norm = str(requested_kind).strip().lower().replace("-", "_")
-    if "scaled_ilu" in requested_norm or "equilibrated_ilu" in requested_norm or "rowcol_ilu" in requested_norm:
-        base_kind = "active_scaled_ilu"
-    elif "schwarz" in requested_norm or "ras" in requested_norm:
-        base_kind = "active_overlap_schwarz"
-    elif "filtered" in requested_norm:
-        base_kind = "active_filtered_sparse_factor"
-    elif "xblock" in requested_norm:
-        base_kind = "active_xblock"
-    else:
-        base_kind = "active_diagonal_schur"
-    output_kind = (
-        "active_filtered_sparse_coarse"
-        if str(base_kind) == "active_filtered_sparse_factor"
-        else "active_tail_sparse_coarse"
-    )
+    policy = resolve_active_sparse_coarse_residual_policy(requested_kind=str(requested_kind))
+    base_kind = str(policy.base_kind)
+    output_kind = str(policy.output_kind)
     base = build_active_projected_rhs1_full_csr_preconditioner(
         matrix=matrix_csr,
         layout=layout,
@@ -7560,8 +7480,7 @@ def _build_active_projected_sparse_coarse_residual_preconditioner(
         )
 
     config = _coarse_residual_config(layout)
-    max_coarse_size = _env_int("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_SPARSE_COARSE_MAX_SIZE", 640)
-    max_coarse_size = max(1, int(max_coarse_size))
+    max_coarse_size = int(policy.max_coarse_size)
     full_basis = _build_coarse_residual_basis_csc(layout=layout, config=config)
     basis = full_basis[active_np, :].tocsc()
     if basis.shape[1] == 0:
@@ -7604,18 +7523,10 @@ def _build_active_projected_sparse_coarse_residual_preconditioner(
     basis.eliminate_zeros()
 
     az_basis = (matrix_csr @ basis).tocsc()
-    default_coarse_solver = "least_squares" if str(base_kind) == "active_filtered_sparse_factor" else "galerkin"
-    coarse_solver_mode = (
-        os.environ.get("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_SPARSE_COARSE_SOLVER", default_coarse_solver)
-        .strip()
-        .lower()
-        .replace("-", "_")
-    )
-    if coarse_solver_mode in {"least_squares", "normal", "normal_equations"}:
-        coarse_solver_mode = "least_squares"
+    coarse_solver_mode = str(policy.coarse_solver_mode)
+    if coarse_solver_mode == "least_squares":
         coarse = np.asarray((az_basis.T @ az_basis).toarray(), dtype=np.float64)
     else:
-        coarse_solver_mode = "galerkin"
         coarse = np.asarray((basis.T @ az_basis).toarray(), dtype=np.float64)
     coarse_size = int(coarse.shape[0])
     coarse_scale = max(float(np.linalg.norm(coarse, ord=np.inf)) if coarse.size else 0.0, 1.0)

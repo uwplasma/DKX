@@ -88,6 +88,9 @@ scripts and notebooks.
 .. automodule:: sfincs_jax.solvers.preconditioners.pas.xblock_ilu
    :members:
 
+.. automodule:: sfincs_jax.solvers.preconditioners.schur.rhs1_coarse_policy
+   :members:
+
 .. automodule:: sfincs_jax.solvers.preconditioners.xblock.tz_sparse
    :members:
 
