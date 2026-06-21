@@ -264,6 +264,48 @@ class RHS1DomainDecompositionSetup:
         return max(0, min(max(0, n - 1), int(overlap)))
 
 
+@dataclass(frozen=True)
+class ProfileResponseLinearProblemSetupContext:
+    """Injected dependencies for initial v3 full-system problem materialization."""
+
+    nml: Any
+    op: Any | None
+    which_rhs: int | None
+    restart: int
+    maxiter: int | None
+    tol: float
+    identity_shift: float
+    phi1_hat_base: Any
+    emit: Callable[[int, str], None] | None
+    mark: Callable[[str], None]
+    env: Mapping[str, str]
+    timer_factory: Callable[[], Any]
+    build_operator: Callable[..., Any]
+    rhs_builder: Callable[[Any], Any]
+    norm: Callable[[Any], Any]
+    with_transport_rhs_settings: Callable[..., Any]
+    set_precond_size_hint: Callable[[int], None]
+    set_precond_policy_hints: Callable[..., None]
+
+
+@dataclass(frozen=True)
+class ProfileResponseLinearProblemSetup:
+    """Initial v3 full-system operator/RHS setup result."""
+
+    op: Any
+    which_rhs: int | None
+    rhs: Any
+    rhs_norm: Any
+    tol: float
+    fp_tol: float
+    restart: int
+    maxiter: int | None
+    restart_env_forced: bool
+    maxiter_env_forced: bool
+    geom_scheme_hint: int
+    tolerance_setup: RHS1ToleranceSetup
+
+
 def _env_value(env: Mapping[str, str] | None, key: str) -> str:
     source = env if env is not None else {}
     return str(source.get(key, "")).strip()
@@ -327,6 +369,116 @@ def _preconditioner_option_int(options: Mapping[str, object], key: str, default:
         return int(value)
     except (TypeError, ValueError):
         return int(default)
+
+
+def materialize_profile_response_linear_problem(
+    context: ProfileResponseLinearProblemSetupContext,
+) -> ProfileResponseLinearProblemSetup:
+    """Build the initial operator/RHS pair and setup metadata for a linear solve."""
+
+    gmres_budget_setup = resolve_rhs1_gmres_budget_setup(
+        restart=int(context.restart),
+        maxiter=context.maxiter,
+        env=context.env,
+    )
+    restart = int(gmres_budget_setup.restart)
+    maxiter = gmres_budget_setup.maxiter
+
+    geom_scheme_hint = geometry_scheme_hint_from_namelist(context.nml)
+    vmec_operator_timer = None
+    if context.emit is not None:
+        context.emit(1, "solve_v3_full_system_linear_gmres: building operator")
+        if geom_scheme_hint == 5:
+            eq_name = equilibrium_name_hint_from_namelist(context.nml)
+            context.emit(
+                1,
+                f"solve_v3_full_system_linear_gmres: VMEC operator build start ({eq_name})",
+            )
+            vmec_operator_timer = context.timer_factory()
+
+    op = (
+        context.build_operator(
+            nml=context.nml,
+            identity_shift=context.identity_shift,
+            phi1_hat_base=context.phi1_hat_base,
+        )
+        if context.op is None
+        else context.op
+    )
+    if context.emit is not None and vmec_operator_timer is not None:
+        context.emit(
+            1,
+            "solve_v3_full_system_linear_gmres: VMEC operator build done "
+            f"elapsed_s={float(vmec_operator_timer.elapsed_s()):.3f}",
+        )
+
+    context.mark("operator_built")
+    context.set_precond_size_hint(int(op.total_size))
+    context.set_precond_policy_hints(
+        geom_scheme=geom_scheme_hint,
+        has_pas=getattr(op.fblock, "pas", None) is not None,
+        has_fp=getattr(op.fblock, "fp", None) is not None,
+        include_phi1=bool(op.include_phi1),
+        rhs_mode=int(op.rhs_mode),
+    )
+
+    tolerance_setup = resolve_rhs1_tolerance_setup(
+        op=op,
+        tol=float(context.tol),
+        env=context.env,
+    )
+    tol = float(tolerance_setup.tol)
+    if context.emit is not None and tolerance_setup.fp_tightened:
+        context.emit(
+            1,
+            "solve_v3_full_system_linear_gmres: FP tol tightened "
+            f"{float(tolerance_setup.fp_previous_tol):.1e} -> {float(tol):.1e}",
+        )
+    if context.emit is not None and tolerance_setup.pas_tightened:
+        context.emit(
+            1,
+            "solve_v3_full_system_linear_gmres: PAS tol tightened "
+            f"{float(tolerance_setup.pas_previous_tol):.1e} -> {float(tol):.1e}",
+        )
+
+    which_rhs = context.which_rhs
+    if int(op.rhs_mode) in {2, 3}:
+        if which_rhs is None:
+            which_rhs = 1
+        op = context.with_transport_rhs_settings(op, which_rhs=int(which_rhs))
+        if context.emit is not None:
+            context.emit(
+                1,
+                "solve_v3_full_system_linear_gmres: applied transport RHS settings "
+                f"whichRHS={int(which_rhs)}",
+            )
+
+    if context.emit is not None:
+        context.emit(1, f"solve_v3_full_system_linear_gmres: total_size={int(op.total_size)}")
+        context.emit(1, "solve_v3_full_system_linear_gmres: assembling RHS")
+    rhs = context.rhs_builder(op)
+    context.mark("rhs_assembled")
+    rhs_norm = context.norm(rhs)
+    if context.emit is not None:
+        context.emit(
+            2,
+            f"solve_v3_full_system_linear_gmres: rhs_norm={float(rhs_norm):.6e}",
+        )
+
+    return ProfileResponseLinearProblemSetup(
+        op=op,
+        which_rhs=which_rhs,
+        rhs=rhs,
+        rhs_norm=rhs_norm,
+        tol=float(tol),
+        fp_tol=float(tolerance_setup.fp_tol),
+        restart=int(restart),
+        maxiter=maxiter,
+        restart_env_forced=bool(gmres_budget_setup.restart_env_forced),
+        maxiter_env_forced=bool(gmres_budget_setup.maxiter_env_forced),
+        geom_scheme_hint=int(geom_scheme_hint),
+        tolerance_setup=tolerance_setup,
+    )
 
 
 def resolve_rhs1_gmres_budget_setup(
@@ -1093,6 +1245,8 @@ __all__ = (
     "RHS1RecycleBasisSetup",
     "RHS1ReducedModeShapeSetup",
     "RHS1ToleranceSetup",
+    "ProfileResponseLinearProblemSetup",
+    "ProfileResponseLinearProblemSetupContext",
     "SPARSE_HOST_DIRECT_SOLVE_METHODS",
     "SPARSE_HOST_FORTRAN_REDUCED_PC_GMRES_SOLVE_METHODS",
     "SPARSE_HOST_MINIMUM_NORM_SOLVE_METHODS",
@@ -1104,6 +1258,7 @@ __all__ = (
     "SolveMethodRequestFlags",
     "equilibrium_name_hint_from_namelist",
     "geometry_scheme_hint_from_namelist",
+    "materialize_profile_response_linear_problem",
     "normalize_profile_solve_method_kind",
     "resolve_rhs1_active_problem_setup",
     "resolve_rhs1_domain_decomposition_setup",

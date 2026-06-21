@@ -5,9 +5,11 @@ from dataclasses import dataclass
 import numpy as np
 
 from sfincs_jax.problems.profile_response.setup import (
+    ProfileResponseLinearProblemSetupContext,
     SPARSE_HOST_SAFE_SOLVE_METHODS,
     equilibrium_name_hint_from_namelist,
     geometry_scheme_hint_from_namelist,
+    materialize_profile_response_linear_problem,
     resolve_rhs1_active_problem_setup,
     resolve_rhs1_domain_decomposition_setup,
     resolve_rhs1_dkes_adjustment_setup,
@@ -48,6 +50,11 @@ class FakeOperator:
     n_zeta: int = 1
     n_species: int = 1
     f_size: int = 0
+
+
+class FakeTimer:
+    def elapsed_s(self) -> float:
+        return 1.25
 
 
 def test_rhs1_gmres_budget_setup_applies_only_valid_env_overrides() -> None:
@@ -130,6 +137,128 @@ def test_rhs1_tolerance_setup_tightens_only_matching_physics_lanes() -> None:
     assert pas_setup.tol == 5e-9
     assert pas_setup.pas_tightened
     assert not pas_setup.fp_tightened
+
+
+def test_materialize_profile_response_linear_problem_builds_rhs_and_progress() -> None:
+    nml = FakeNamelist(
+        {
+            "geometryParameters": {
+                "geometryScheme": 5,
+                "equilibriumFile": "/tmp/wout_unit.nc",
+            }
+        }
+    )
+    op = FakeOperator(
+        rhs_mode=1,
+        include_phi1=False,
+        constraint_scheme=1,
+        total_size=90000,
+        phi1_size=0,
+        fblock=FakeFBlock(fp=object(), pas=None),
+    )
+    messages: list[tuple[int, str]] = []
+    marks: list[str] = []
+    size_hints: list[int] = []
+    policy_hints: list[dict[str, object]] = []
+
+    setup = materialize_profile_response_linear_problem(
+        ProfileResponseLinearProblemSetupContext(
+            nml=nml,
+            op=None,
+            which_rhs=None,
+            restart=80,
+            maxiter=400,
+            tol=1.0e-6,
+            identity_shift=0.25,
+            phi1_hat_base="phi1",
+            emit=lambda level, message: messages.append((int(level), str(message))),
+            mark=marks.append,
+            env={"SFINCS_JAX_GMRES_RESTART": "96"},
+            timer_factory=FakeTimer,
+            build_operator=lambda **_kwargs: op,
+            rhs_builder=lambda _op: np.asarray([3.0, 4.0]),
+            norm=lambda rhs: np.linalg.norm(rhs),
+            with_transport_rhs_settings=lambda op_use, **_kwargs: op_use,
+            set_precond_size_hint=size_hints.append,
+            set_precond_policy_hints=lambda **kwargs: policy_hints.append(dict(kwargs)),
+        )
+    )
+
+    assert setup.op is op
+    assert setup.which_rhs is None
+    assert setup.restart == 96
+    assert setup.maxiter == 400
+    assert setup.restart_env_forced
+    assert not setup.maxiter_env_forced
+    assert setup.tol == 1.0e-8
+    assert setup.fp_tol == 1.0e-8
+    assert setup.rhs_norm == 5.0
+    assert marks == ["operator_built", "rhs_assembled"]
+    assert size_hints == [90000]
+    assert policy_hints == [
+        {
+            "geom_scheme": 5,
+            "has_pas": False,
+            "has_fp": True,
+            "include_phi1": False,
+            "rhs_mode": 1,
+        }
+    ]
+    assert (
+        1,
+        "solve_v3_full_system_linear_gmres: VMEC operator build start (wout_unit.nc)",
+    ) in messages
+    assert (
+        1,
+        "solve_v3_full_system_linear_gmres: VMEC operator build done elapsed_s=1.250",
+    ) in messages
+    assert any("FP tol tightened" in message for _, message in messages)
+    assert messages[-1] == (
+        2,
+        "solve_v3_full_system_linear_gmres: rhs_norm=5.000000e+00",
+    )
+
+
+def test_materialize_profile_response_linear_problem_applies_transport_rhs_default() -> None:
+    nml = FakeNamelist({"geometryParameters": {"geometryScheme": 2}})
+    op = FakeOperator(
+        rhs_mode=3,
+        include_phi1=False,
+        constraint_scheme=1,
+        total_size=10,
+        phi1_size=0,
+        fblock=FakeFBlock(fp=None, pas=None),
+    )
+    transport_calls: list[int] = []
+
+    setup = materialize_profile_response_linear_problem(
+        ProfileResponseLinearProblemSetupContext(
+            nml=nml,
+            op=op,
+            which_rhs=None,
+            restart=80,
+            maxiter=None,
+            tol=1.0e-6,
+            identity_shift=0.0,
+            phi1_hat_base=None,
+            emit=None,
+            mark=lambda _label: None,
+            env={},
+            timer_factory=FakeTimer,
+            build_operator=lambda **_kwargs: None,
+            rhs_builder=lambda _op: np.asarray([2.0]),
+            norm=lambda rhs: np.linalg.norm(rhs),
+            with_transport_rhs_settings=lambda op_use, *, which_rhs: (
+                transport_calls.append(int(which_rhs)) or op_use
+            ),
+            set_precond_size_hint=lambda _size: None,
+            set_precond_policy_hints=lambda **_kwargs: None,
+        )
+    )
+
+    assert setup.which_rhs == 1
+    assert transport_calls == [1]
+    assert setup.rhs_norm == 2.0
 
 
 def test_rhs1_dkes_adjustment_setup_tightens_fp_tol_and_pas_budget() -> None:

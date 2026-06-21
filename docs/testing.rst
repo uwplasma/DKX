@@ -418,6 +418,12 @@ constraintScheme=1 source basis. It also exercises the constraintScheme=1
 moment-Schur x-block wrapper directly, including emitted metadata and apply
 counters. These are algebraic tests, not smoke tests, so they protect the
 source/moment closure used by both RHSMode=1 and transport solves.
+``tests/test_profile_response_setup.py`` covers the profile-response setup
+module directly: GMRES budget overrides, geometry/equilibrium hints,
+FP/PAS tolerance tightening, physics flags, active-DOF admission, and now the
+injected initial problem materialization stage that builds or accepts the
+operator, emits VMEC/RHS progress lines, installs preconditioner hints, applies
+transport ``whichRHS`` defaults, assembles the RHS, and reports the RHS norm.
 The subspace residual-correction tests now import
 ``sfincs_jax.problems.profile_response.residual`` directly for the host and
 device residual-equation correction kernels, with driver-alias checks retained

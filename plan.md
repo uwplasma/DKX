@@ -37,9 +37,10 @@ deferred research lanes.
   `sfincs_jax.problems.transport_matrix.parallel`, and the active transport
   DOF index helper moved into `sfincs_jax.problems.transport_matrix.active_dense`
   in commit `eeb2a85`.
-- Current uncommitted tranche moves the final RHSMode=1/profile-response
-  linear-solve handoff into
-  `sfincs_jax.problems.profile_response.finalization`.
+- Final RHSMode=1/profile-response linear-solve handoff moved into
+  `sfincs_jax.problems.profile_response.finalization` in commit `e1c6fa4`.
+- Current uncommitted tranche moves initial operator/RHS problem
+  materialization into `sfincs_jax.problems.profile_response.setup`.
 - The README and docs currently state the public claim boundary: the documented
   release suite is CPU/GPU parity-clean, while production-resolution QI, true
   device-QI, lower-memory native factor replacement, full-grid QA/QH RHSMode=1,
@@ -51,8 +52,10 @@ deferred research lanes.
   `78 passed in 15.10s`.
 - Focused profile-response finalization tests pass:
   `21 passed in 1.05s`.
-- `ruff` and `py_compile` pass on touched transport-parallel and finalization
-  files.
+- Focused profile-response setup/finalization tests pass:
+  `42 passed in 1.15s`.
+- `ruff` and `py_compile` pass on touched transport-parallel, finalization, and
+  setup files.
 - PR #8 is draft and CI checks on the latest pushed clean commit are green or
   still running; do not wait on CI after every local tranche.
 
@@ -154,7 +157,7 @@ claim. They must stay documented, fail-closed, and gated.
 
 ## Refactor Open Lanes
 
-1. **Finish current profile-response finalization tranche**
+1. **Finish current profile-response setup/materialization tranche**
    Update source map/API/testing docs, rerun focused validation, commit, and
    push active branch and PR branch. This is the current local dirty state.
 
@@ -209,26 +212,26 @@ Acceptance:
 - PR #8 remains the single draft PR.
 - Local worktree is clean after each pushed tranche.
 
-### P1. Close The Current Finalization Tranche
+### P1. Close The Current Setup/Materialization Tranche
 
-Goal: land the already-tested RHSMode=1 final linear-solve handoff extraction.
+Goal: land the already-tested initial operator/RHS materialization extraction.
 
 Actions:
 
-1. Keep `sfincs_jax.problems.profile_response.finalization` as owner of final
-   cleanup, KSP replay diagnostics, residual/elapsed progress messages,
-   post-xblock acceptance-floor metadata, and `V3LinearSolveResult`
-   construction.
-2. Keep `v3_driver.py` responsible only for passing solve state and backend
-   metadata into the finalization context.
-3. Rerun focused finalization/diagnostic/projection tests, `ruff`,
-   `py_compile`, `git diff --check`, repo-size audit, and Sphinx.
+1. Keep `sfincs_jax.problems.profile_response.setup` as owner of GMRES budget
+   parsing, operator-build progress, VMEC timing, preconditioner hint
+   installation, tolerance tightening, transport `whichRHS` defaulting, RHS
+   assembly, and RHS norm progress.
+2. Keep `v3_driver.py` responsible only for passing builders/callbacks into the
+   materialization context and consuming the typed result.
+3. Rerun focused setup/finalization tests, `ruff`, `py_compile`,
+   `git diff --check`, repo-size audit, and Sphinx.
 4. Commit and push to both branches.
 
 Acceptance:
 
-- The driver no longer assembles final RHSMode=1 metadata and result objects
-  inline.
+- The driver no longer owns initial operator/RHS setup progress and side-effect
+  hint installation inline.
 - The extracted module has direct tests.
 - Public CLI/Python behavior is unchanged.
 

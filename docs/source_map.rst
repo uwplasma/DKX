@@ -556,8 +556,12 @@ the historical private driver name and test the focused module directly. This ke
   max-iteration environment overrides, geometry/equilibrium progress hints,
   FP/PAS tolerance tightening, physics-flag normalization, solve-method lane
   classification, preconditioner-option admission, and domain-decomposition
-  block/overlap parsing. The driver consumes these typed setup results before
-  entering the numerical solve loop.
+  block/overlap parsing. It also owns the injected initial problem
+  materialization step that builds or accepts the v3 operator, emits operator
+  and RHS progress lines, installs preconditioner policy hints, applies
+  transport ``whichRHS`` defaults, assembles the RHS, and returns the RHS norm.
+  The driver consumes these typed setup results before entering the numerical
+  solve loop.
 - ``sfincs_jax/problems/profile_response/linear_solve.py``:
   RHSMode=1/profile-response Krylov routing for implicit, JIT, distributed,
   GMRES, and BiCGStab solve attempts. This mirrors the transport linear-solve

@@ -470,16 +470,14 @@ from .problems.profile_response.setup import (
     SPARSE_HOST_SAFE_SOLVE_METHODS as _SPARSE_HOST_SAFE_SOLVE_METHODS,
     SPARSE_HOST_XBLOCK_PC_GMRES_SOLVE_METHODS as _SPARSE_HOST_XBLOCK_PC_GMRES_SOLVE_METHODS,
     STRUCTURED_FULL_CSR_HOST_SOLVE_METHODS as _STRUCTURED_FULL_CSR_HOST_SOLVE_METHODS,
-    equilibrium_name_hint_from_namelist,
-    geometry_scheme_hint_from_namelist,
+    ProfileResponseLinearProblemSetupContext,
+    materialize_profile_response_linear_problem,
     resolve_rhs1_active_problem_setup,
     resolve_rhs1_domain_decomposition_setup,
-    resolve_rhs1_gmres_budget_setup,
     resolve_rhs1_initial_route_setup,
     resolve_rhs1_post_active_solve_policy_setup,
     resolve_rhs1_recycle_basis_setup,
     resolve_rhs1_reduced_mode_shape_setup,
-    resolve_rhs1_tolerance_setup,
 )
 from . import rhs1_xblock_policy as _rhs1_xblock_policy
 from . import rhs1_xblock_sparse_host_policy as _rhs1_xblock_sparse_host_policy
@@ -2583,75 +2581,40 @@ def solve_v3_full_system_linear_gmres(
     def _mark(label: str) -> None:
         if profiler is not None:
             profiler.mark(label)
-    gmres_budget_setup = resolve_rhs1_gmres_budget_setup(
-        restart=int(restart),
-        maxiter=maxiter,
-        env=os.environ,
-    )
-    maxiter_env = os.environ.get("SFINCS_JAX_GMRES_MAXITER", "").strip()
-    restart = int(gmres_budget_setup.restart)
-    maxiter = gmres_budget_setup.maxiter
-    restart_env_forced = bool(gmres_budget_setup.restart_env_forced)
-    maxiter_env_forced = bool(gmres_budget_setup.maxiter_env_forced)
-    geom_scheme_hint = geometry_scheme_hint_from_namelist(nml)
-    vmec_operator_timer: Timer | None = None
-    if emit is not None:
-        emit(1, "solve_v3_full_system_linear_gmres: building operator")
-        if geom_scheme_hint == 5:
-            eq_name = equilibrium_name_hint_from_namelist(nml)
-            emit(1, f"solve_v3_full_system_linear_gmres: VMEC operator build start ({eq_name})")
-            vmec_operator_timer = Timer()
-    op = (
-        full_system_operator_from_namelist(
+    linear_problem_setup = materialize_profile_response_linear_problem(
+        ProfileResponseLinearProblemSetupContext(
             nml=nml,
-            identity_shift=identity_shift,
+            op=op,
+            which_rhs=which_rhs,
+            restart=int(restart),
+            maxiter=maxiter,
+            tol=float(tol),
+            identity_shift=float(identity_shift),
             phi1_hat_base=phi1_hat_base,
+            emit=emit,
+            mark=_mark,
+            env=os.environ,
+            timer_factory=Timer,
+            build_operator=full_system_operator_from_namelist,
+            rhs_builder=rhs_v3_full_system,
+            norm=jnp.linalg.norm,
+            with_transport_rhs_settings=with_transport_rhs_settings,
+            set_precond_size_hint=_set_precond_size_hint,
+            set_precond_policy_hints=_set_precond_policy_hints,
         )
-        if op is None
-        else op
     )
-    if emit is not None and vmec_operator_timer is not None:
-        emit(1, f"solve_v3_full_system_linear_gmres: VMEC operator build done elapsed_s={vmec_operator_timer.elapsed_s():.3f}")
-    _mark("operator_built")
-    _set_precond_size_hint(int(op.total_size))
-    _set_precond_policy_hints(
-        geom_scheme=geom_scheme_hint,
-        has_pas=getattr(op.fblock, "pas", None) is not None,
-        has_fp=getattr(op.fblock, "fp", None) is not None,
-        include_phi1=bool(op.include_phi1),
-        rhs_mode=int(op.rhs_mode),
-    )
-    tolerance_setup = resolve_rhs1_tolerance_setup(op=op, tol=float(tol), env=os.environ)
-    tol = float(tolerance_setup.tol)
-    fp_tol = float(tolerance_setup.fp_tol)
-    if emit is not None and tolerance_setup.fp_tightened:
-        emit(
-            1,
-            "solve_v3_full_system_linear_gmres: FP tol tightened "
-            f"{float(tolerance_setup.fp_previous_tol):.1e} -> {float(tol):.1e}",
-        )
-    if emit is not None and tolerance_setup.pas_tightened:
-        emit(
-            1,
-            "solve_v3_full_system_linear_gmres: PAS tol tightened "
-            f"{float(tolerance_setup.pas_previous_tol):.1e} -> {float(tol):.1e}",
-        )
-    if int(op.rhs_mode) in {2, 3}:
-        # v3 sets (dnHatdpsiHats, dTHatdpsiHats, EParallelHat) internally based on whichRHS.
-        # If the input file omits gradients (common for monoenergetic runs), callers must select whichRHS.
-        if which_rhs is None:
-            which_rhs = 1
-        op = with_transport_rhs_settings(op, which_rhs=int(which_rhs))
-        if emit is not None:
-            emit(1, f"solve_v3_full_system_linear_gmres: applied transport RHS settings whichRHS={int(which_rhs)}")
-    if emit is not None:
-        emit(1, f"solve_v3_full_system_linear_gmres: total_size={int(op.total_size)}")
-        emit(1, "solve_v3_full_system_linear_gmres: assembling RHS")
-    rhs = rhs_v3_full_system(op)
-    _mark("rhs_assembled")
-    rhs_norm = jnp.linalg.norm(rhs)
-    if emit is not None:
-        emit(2, f"solve_v3_full_system_linear_gmres: rhs_norm={float(rhs_norm):.6e}")
+    op = linear_problem_setup.op
+    which_rhs = linear_problem_setup.which_rhs
+    rhs = linear_problem_setup.rhs
+    rhs_norm = linear_problem_setup.rhs_norm
+    tol = float(linear_problem_setup.tol)
+    fp_tol = float(linear_problem_setup.fp_tol)
+    restart = int(linear_problem_setup.restart)
+    maxiter = linear_problem_setup.maxiter
+    restart_env_forced = bool(linear_problem_setup.restart_env_forced)
+    maxiter_env_forced = bool(linear_problem_setup.maxiter_env_forced)
+    maxiter_env = os.environ.get("SFINCS_JAX_GMRES_MAXITER", "").strip()
+    geom_scheme_hint = int(linear_problem_setup.geom_scheme_hint)
     rhs1_progress_notes = RHS1ProgressNotes(
         emit=emit,
         enabled=rhs1_large_progress_enabled(rhs_mode=int(op.rhs_mode), total_size=int(op.total_size)),
