@@ -107,6 +107,10 @@ ACTIVE_PACKAGE_EXPORTS = {
         "build_rhs1_xblock_tz_lmax_preconditioner",
         "build_rhs1_xblock_tz_preconditioner",
         "build_rhs1_xblock_tz_sparse_preconditioner",
+        "build_native_xell_kinetic_preconditioner",
+        "build_native_xell_tail_schur_preconditioner",
+        "build_xblock_tz_low_l_coarse_residual_preconditioner",
+        "build_xblock_tz_low_l_schur_preconditioner",
         "compute_rhs1_sxblock_tz_sparse_host_seed",
         "get_rhsmode1_fp_xblock_assembled_host_cache",
         "rhsmode1_fp_xblock_assembled_host_allowed",
@@ -116,6 +120,7 @@ ACTIVE_PACKAGE_EXPORTS = {
         "rhsmode1_precond_cache_key",
         "rhsmode1_xblock_sparse_lu_default_max",
         "safe_inverse_diagonal_np",
+        "xblock_tz_low_l_indices",
     ),
     "sfincs_jax.solvers.preconditioners.symbolic_sparse": (
         "RHS1FullSystemMatrixFreeOperatorAdapter",
