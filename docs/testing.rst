@@ -318,6 +318,16 @@ tree moved to ``596 tests collected`` and ``596 passed``, package coverage staye
 at about ``55%``, and ``v3_driver.py`` itself moved from about ``37%`` to about
 ``38%``.
 
+The active architecture branch has also started the I/O ownership split. The
+flat HDF5/NetCDF/NPZ format helpers live in ``sfincs_jax.outputs.formats`` while
+``sfincs_jax.io`` keeps legacy aliases for existing scripts.
+``tests/test_output_formats.py`` protects that boundary with round-trip checks
+for HDF5, NetCDF, and NPZ, Fortran-layout serialization, suffix dispatch,
+NetCDF-safe names, byte-string decoding, and alias identity between the legacy
+and new import paths. This is a format-contract test, not a smoke solve; it
+keeps output behavior stable while the remaining schema construction is split
+later.
+
 The current release-preparation pass supersedes those historical counts. On
 2026-06-13, the final local tree passed ``2510`` tests in ``562.68 s`` without
 coverage instrumentation and ``2510`` tests in ``746.33 s`` with coverage

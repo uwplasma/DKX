@@ -44,6 +44,8 @@ skeleton packages are:
   preconditioning machinery.
 - ``sfincs_jax/parallel`` for CPU/GPU process, sharding, worker payload, and
   scaling utilities.
+- ``sfincs_jax/outputs`` for output-schema-adjacent helpers and flat
+  HDF5/NetCDF/NPZ file-format readers and writers.
 - ``sfincs_jax/workflows`` for optimization, VMEC-JAX/Boozer/SFINCS-JAX
   pipelines, scans, and publication figures.
 - ``sfincs_jax/validation`` and ``sfincs_jax/benchmarks`` for physics gates,
@@ -93,9 +95,26 @@ Input/output orchestration:
 
 - reads namelists,
 - resolves equilibrium overrides (including ``wout_path``),
-- writes ``sfincsOutput.h5``,
 - materializes output diagnostics,
-- exposes the in-memory results API.
+- exposes the in-memory results API,
+- keeps legacy compatibility aliases for flat output-format helpers now owned by
+  ``sfincs_jax.outputs.formats``.
+
+``sfincs_jax/outputs/formats.py``
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Flat output file-format helpers:
+
+- HDF5, NetCDF, and NPZ readers/writers,
+- SFINCS Fortran-compatible HDF5 layout conversion,
+- output suffix dispatch,
+- NetCDF-safe dataset naming,
+- solver-trace attachment for HDF5 outputs.
+
+The output field/schema construction still lives in ``sfincs_jax/io.py`` during
+the current refactor tranche.  The next I/O split should move solved-field,
+diagnostic, solver-metadata, timing, memory, and provenance schema construction
+behind a smaller output contract while preserving these writer functions.
 
 ``sfincs_jax/input_compat.py``
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
