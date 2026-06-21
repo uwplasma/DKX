@@ -41,6 +41,10 @@ deferred research lanes.
   `sfincs_jax.problems.profile_response.finalization` in commit `e1c6fa4`.
 - Initial operator/RHS problem materialization moved into
   `sfincs_jax.problems.profile_response.setup` in commit `611e283`.
+- QI-device admission/build/probe/install logic moved out of `v3_driver.py`
+  into `sfincs_jax.problems.profile_response.sparse.qi`; `v3_driver.py` now
+  injects solve-local operators and compatibility probe aliases for the tested
+  fail-closed QI research lane.
 - Current next tranche is one more cohesive `v3_driver.py` stage extraction or,
   if the next driver seam would be wrapper-only, the first `io.py` output-schema
   split.
@@ -57,14 +61,21 @@ deferred research lanes.
   `21 passed in 1.05s`.
 - Focused profile-response setup/finalization tests pass:
   `42 passed in 1.15s`.
+- Focused QI baseline tests pass before extraction:
+  `549 passed in 35.17s`.
+- Extracted QI-device stage, QI sparse re-export, and compatibility-sensitive
+  v3 sparse-pattern tests pass:
+  `455 passed in 125.61s`.
+- Full bounded QI campaign passes after extraction:
+  `550 passed in 34.31s`.
 - `ruff` and `py_compile` pass on touched transport-parallel, finalization, and
-  setup files.
+  setup/QI files.
 - PR #8 is draft and CI checks on the latest pushed clean commit are green or
   still running; do not wait on CI after every local tranche.
 
 ### Current Code Shape
 
-- `sfincs_jax/v3_driver.py`: about 13.8k lines, still the largest orchestration
+- `sfincs_jax/v3_driver.py`: about 13.4k lines, still the largest orchestration
   and compatibility surface.
 - `sfincs_jax/rhs1_full_assembly.py`: about 7.9k lines, now mostly RHSMode=1
   exact/active CSR assembly, admission, dispatch, and compatibility.

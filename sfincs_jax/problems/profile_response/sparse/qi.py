@@ -12,7 +12,19 @@ from ..residual import (
     l2_norm_float as profile_l2_norm_float,
     safe_ratio as profile_safe_ratio,
 )
-from ..policies import rhs1_qi_device_tail_block_required
+from ..policies import (
+    rhs1_qi_device_coupled_install_on_reject_requested,
+    rhs1_qi_device_extra_coarse_controls,
+    rhs1_qi_device_extra_coarse_metadata,
+    rhs1_qi_device_extra_coarse_setup_kwargs,
+    rhs1_qi_device_probe_uses_minres_step,
+    rhs1_qi_device_residual_correction_controls,
+    rhs1_qi_device_residual_correction_metadata,
+    rhs1_qi_device_residual_correction_setup_kwargs,
+    rhs1_qi_device_setup_summary,
+    rhs1_qi_device_status_fields,
+    rhs1_qi_device_tail_block_required,
+)
 from ....rhs1_qi_coarse import (
     RHS1QICoarseBasis,
     rhs1_xblock_qi_block_geometry_metadata,
@@ -306,6 +318,75 @@ class XBlockQIDeviceSetupConfig:
 
     geometry_metadata: dict[str, object]
     config: RHS1QIDevicePreconditionerConfig
+
+
+@dataclass(frozen=True)
+class XBlockQIDeviceStageContext:
+    """Dependencies for optional QI-device preconditioner setup and admission."""
+
+    op: object
+    x0_full: jnp.ndarray | None
+    xblock_rhs: jnp.ndarray
+    base_preconditioner: ArrayFn
+    basis_for_galerkin: RHS1QICoarseBasis | None
+    seed_policy: XBlockQISeedPolicySetup
+    active_dof: bool
+    linear_size: int
+    precondition_side: str
+    true_matvec_no_count: ArrayFn
+    assembled_device_operator: object | None
+    assembled_operator_metadata: Mapping[str, object]
+    assembled_operator_enabled: bool
+    assembled_operator_built: bool
+    assembled_operator_device_resident: bool
+    assembled_operator_device_error: object | None
+    host_fallback_used: bool
+    elapsed_s: Callable[[], float]
+    emit: EmitFn | None
+    env: Mapping[str, str] | None
+    basis_builder: Callable[..., RHS1QICoarseBasis]
+    setup_preconditioner: Callable[..., object]
+    probe_preconditioner: Callable[..., tuple[jnp.ndarray, object]]
+    probe_augmented_seed: Callable[..., object]
+
+
+@dataclass(frozen=True)
+class XBlockQIDeviceStageResult:
+    """Result from optional QI-device preconditioner setup and seed probing."""
+
+    preconditioner: ArrayFn
+    x0_full: jnp.ndarray | None
+    basis_for_galerkin: RHS1QICoarseBasis | None
+    state_for_augmented_krylov: object | None
+    augmented_seed_basis_for_krylov: jnp.ndarray | None
+    augmented_seed_action_for_krylov: jnp.ndarray | None
+    enabled: bool
+    built: bool
+    used: bool
+    used_in_krylov: bool
+    reason: str | None
+    rank: int
+    candidate_count: int
+    coarse_shape: tuple[int, int]
+    operator_on_basis_shape: tuple[int, int]
+    coarse_norm: float
+    operator_on_basis_norm: float
+    residual_before: float | None
+    residual_after: float | None
+    improvement_ratio: float | None
+    metadata: dict[str, object]
+    setup_s: float
+    min_improvement: float
+    use_in_krylov: bool
+    stats: dict[str, int]
+    augmented_seed_requested: bool
+    augmented_seed_available: bool
+    augmented_seed_used: bool
+    augmented_seed_rank: int
+    augmented_seed_max_rank: int
+    augmented_seed_reason: str | None
+    augmented_seed_projection_residual: float | None
+    augmented_seed_labels: tuple[str, ...]
 
 
 @dataclass(frozen=True)
@@ -1072,6 +1153,490 @@ def build_xblock_qi_device_setup_config(
     return XBlockQIDeviceSetupConfig(
         geometry_metadata=geometry_metadata,
         config=config,
+    )
+
+
+def apply_xblock_qi_device_stage(
+    context: XBlockQIDeviceStageContext,
+) -> XBlockQIDeviceStageResult:
+    """Build, probe, and optionally install the QI-device x-block preconditioner."""
+
+    env = context.env
+    stats = {"applies": 0}
+    enabled = bool(context.seed_policy.device_preconditioner_enabled)
+    reason: str | None = None
+    metadata: dict[str, object] = {}
+    setup_s = 0.0
+    min_improvement = 0.0
+    use_in_krylov = False
+    state_for_augmented_krylov = None
+    augmented_seed_basis_for_krylov = None
+    augmented_seed_action_for_krylov = None
+    augmented_seed_requested = False
+    augmented_seed_available = False
+    augmented_seed_used = False
+    augmented_seed_rank = 0
+    augmented_seed_max_rank = 0
+    augmented_seed_reason: str | None = None
+    augmented_seed_projection_residual: float | None = None
+    augmented_seed_labels: tuple[str, ...] = ()
+    rank = 0
+    candidate_count = 0
+    coarse_shape = (0, 0)
+    operator_on_basis_shape = (0, 0)
+    coarse_norm = 0.0
+    operator_on_basis_norm = 0.0
+    residual_before: float | None = None
+    residual_after: float | None = None
+    improvement_ratio: float | None = None
+
+    admission = resolve_xblock_qi_device_admission_setup(
+        enabled=enabled,
+        host_fallback_used=bool(context.host_fallback_used),
+        assembled_device_operator_available=context.assembled_device_operator is not None,
+        assembled_operator_enabled=bool(context.assembled_operator_enabled),
+        assembled_operator_built=bool(context.assembled_operator_built),
+        assembled_operator_device_resident=bool(context.assembled_operator_device_resident),
+        assembled_operator_device_error=context.assembled_operator_device_error,
+        env=env,
+    )
+    if admission.reason is not None and not admission.should_build:
+        reason = admission.reason
+        metadata = dict(admission.metadata)
+    for level, message in admission.messages:
+        if context.emit is not None:
+            context.emit(level, message)
+    if not bool(admission.should_build):
+        return XBlockQIDeviceStageResult(
+            preconditioner=context.base_preconditioner,
+            x0_full=context.x0_full,
+            basis_for_galerkin=context.basis_for_galerkin,
+            state_for_augmented_krylov=None,
+            augmented_seed_basis_for_krylov=None,
+            augmented_seed_action_for_krylov=None,
+            enabled=enabled,
+            built=False,
+            used=False,
+            used_in_krylov=False,
+            reason=reason,
+            rank=rank,
+            candidate_count=candidate_count,
+            coarse_shape=coarse_shape,
+            operator_on_basis_shape=operator_on_basis_shape,
+            coarse_norm=coarse_norm,
+            operator_on_basis_norm=operator_on_basis_norm,
+            residual_before=residual_before,
+            residual_after=residual_after,
+            improvement_ratio=improvement_ratio,
+            metadata=metadata,
+            setup_s=setup_s,
+            min_improvement=min_improvement,
+            use_in_krylov=use_in_krylov,
+            stats=stats,
+            augmented_seed_requested=augmented_seed_requested,
+            augmented_seed_available=augmented_seed_available,
+            augmented_seed_used=augmented_seed_used,
+            augmented_seed_rank=augmented_seed_rank,
+            augmented_seed_max_rank=augmented_seed_max_rank,
+            augmented_seed_reason=augmented_seed_reason,
+            augmented_seed_projection_residual=augmented_seed_projection_residual,
+            augmented_seed_labels=augmented_seed_labels,
+        )
+
+    start_s = context.elapsed_s()
+    preconditioner = context.base_preconditioner
+    x0_full = context.x0_full
+    basis_for_galerkin = context.basis_for_galerkin
+    used = False
+    used_in_krylov = False
+    try:
+        matrix_free_enabled = bool(admission.matrix_free_enabled)
+        base_config = resolve_xblock_qi_device_base_config_setup(
+            matrix_free_enabled=matrix_free_enabled,
+            assembled_device_operator_available=context.assembled_device_operator is not None,
+            precondition_side=str(context.precondition_side),
+            probe_uses_minres_step=rhs1_qi_device_probe_uses_minres_step,
+            env=env,
+        )
+        local_smoother_kind = base_config.local_smoother_kind
+        min_improvement = float(base_config.min_improvement)
+        cycles = int(base_config.cycles)
+        augmented_seed_requested = bool(base_config.augmented_seed_requested)
+        augmented_seed_max_rank = int(base_config.augmented_seed_max_rank)
+        minres_step = bool(base_config.minres_step)
+        alpha_clip = float(base_config.alpha_clip)
+        use_in_krylov_requested = bool(base_config.use_in_krylov_requested)
+        use_in_krylov = bool(base_config.use_in_krylov)
+        compose_with_base = bool(base_config.compose_with_base)
+        compose_mode = base_config.compose_mode
+        enrichment_config = resolve_xblock_qi_device_enrichment_config_setup(
+            matrix_free_enabled=matrix_free_enabled,
+            env=env,
+        )
+        operator_krylov_enrichment = bool(
+            enrichment_config.operator_krylov_enrichment
+        )
+        multilevel_config = resolve_xblock_qi_device_multilevel_config_setup(env=env)
+        multilevel_coarse = bool(multilevel_config.multilevel_coarse)
+        residual_correction_controls = rhs1_qi_device_residual_correction_controls()
+        residual_correction_setup_kwargs = (
+            rhs1_qi_device_residual_correction_setup_kwargs(
+                residual_correction_controls
+            )
+        )
+        residual_correction_metadata = rhs1_qi_device_residual_correction_metadata(
+            residual_correction_controls
+        )
+        multilevel_max_rank_env = _env_value(
+            env,
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MULTILEVEL_MAX_RANK",
+        )
+        multilevel_max_rank: int | None = None
+        if multilevel_max_rank_env:
+            try:
+                multilevel_max_rank = max(1, int(multilevel_max_rank_env))
+            except ValueError:
+                multilevel_max_rank = None
+        extra_coarse_controls = rhs1_qi_device_extra_coarse_controls()
+        extra_coarse_setup_kwargs = rhs1_qi_device_extra_coarse_setup_kwargs(
+            extra_coarse_controls
+        )
+        extra_coarse_metadata = rhs1_qi_device_extra_coarse_metadata(
+            extra_coarse_controls
+        )
+        setup_summary = rhs1_qi_device_setup_summary(
+            seed_max_rank=int(context.seed_policy.max_rank),
+            n_species=int(getattr(context.op, "n_species", 1)),
+            assembled_device_operator_available=(
+                context.assembled_device_operator is not None
+            ),
+            enrichment_config=enrichment_config,
+            multilevel_config=multilevel_config,
+            multilevel_max_rank=multilevel_max_rank,
+            extra_coarse_controls=extra_coarse_controls,
+            residual_correction_controls=residual_correction_controls,
+        )
+        max_rank = setup_summary.max_rank
+        if (
+            context.assembled_device_operator is None
+            and not bool(matrix_free_enabled)
+        ):
+            raise RuntimeError(
+                "missing assembled device CSR operator and matrix-free fallback disabled"
+            )
+        basis_reused_from_seed = basis_for_galerkin is not None
+        if basis_for_galerkin is None:
+            basis_for_galerkin = context.basis_builder(
+                op=context.op,
+                active_dof=bool(context.active_dof),
+                linear_size=int(context.linear_size),
+                max_rank=int(context.seed_policy.max_rank),
+                rank_rtol=float(context.seed_policy.rank_rtol),
+                include_angular=bool(context.seed_policy.include_angular),
+                include_blocks=bool(context.seed_policy.include_blocks),
+                basis_kind=context.seed_policy.basis_kind,
+                max_candidates=int(context.seed_policy.max_candidates),
+                max_angular_mode=int(context.seed_policy.max_angular_mode),
+                include_radial=bool(context.seed_policy.include_radial),
+                include_radial_angular=bool(
+                    context.seed_policy.include_radial_angular
+                ),
+                include_constraint_moments=bool(
+                    context.seed_policy.include_constraint_moments
+                ),
+                include_schur=bool(context.seed_policy.include_schur),
+            )
+        current = (
+            jnp.zeros_like(context.xblock_rhs)
+            if x0_full is None
+            else jnp.asarray(x0_full, dtype=jnp.float64)
+        )
+        residual_seed = None
+        if bool(setup_summary.residual_seed_required):
+            residual_seed = context.xblock_rhs - context.true_matvec_no_count(current)
+        operator_for_setup = (
+            context.assembled_device_operator
+            if context.assembled_device_operator is not None
+            else context.true_matvec_no_count
+        )
+        if context.emit is not None:
+            for message in setup_summary.progress_messages:
+                context.emit(1, message)
+        setup_config = build_xblock_qi_device_setup_config(
+            XBlockQIDeviceSetupConfigContext(
+                op=context.op,
+                active_dof=bool(context.active_dof),
+                linear_size=int(context.linear_size),
+                base_config=base_config,
+                enrichment_config=enrichment_config,
+                multilevel_config=multilevel_config,
+                multilevel_max_rank=multilevel_max_rank,
+                max_rank=max_rank,
+                extra_coarse_controls=extra_coarse_controls,
+                extra_coarse_setup_kwargs=extra_coarse_setup_kwargs,
+                residual_correction_setup_kwargs=residual_correction_setup_kwargs,
+            )
+        )
+        state = context.setup_preconditioner(
+            operator=operator_for_setup,
+            coarse_basis=basis_for_galerkin,
+            residual_seed=residual_seed,
+            total_size=int(context.linear_size),
+            dtype=jnp.float64,
+            operator_metadata=context.assembled_operator_metadata,
+            geometry_metadata=setup_config.geometry_metadata,
+            config=setup_config.config,
+        )
+        state_for_augmented_krylov = state
+        rank = int(state.metadata.rank)
+        candidate_count = int(state.basis.metadata.candidate_count)
+        coarse_shape = tuple(
+            int(value) for value in state.metadata.coarse_operator_shape
+        )
+        operator_on_basis_shape = tuple(
+            int(value) for value in state.metadata.operator_on_basis_shape
+        )
+        coarse_norm = float(state.metadata.coarse_operator_norm)
+        operator_on_basis_norm = float(state.metadata.operator_on_basis_norm)
+        if bool(augmented_seed_requested):
+            augmented_seed = context.probe_augmented_seed(
+                rhs=context.xblock_rhs,
+                x0=current,
+                state=state,
+                operator=context.true_matvec_no_count,
+                min_relative_improvement=float(min_improvement),
+                max_cycles=int(cycles),
+                residual_minimizing_step=bool(minres_step),
+                alpha_clip=float(alpha_clip),
+                max_rank=int(augmented_seed_max_rank),
+            )
+            candidate = augmented_seed.solution
+            probe = augmented_seed.probe
+            augmented_seed_rank = int(augmented_seed.rank)
+            augmented_seed_available = bool(
+                probe.accepted and augmented_seed_rank > 0
+            )
+            augmented_seed_reason = str(augmented_seed.reason)
+            augmented_seed_projection_residual = (
+                None
+                if augmented_seed.projection_residual_norm is None
+                else float(augmented_seed.projection_residual_norm)
+            )
+            augmented_seed_labels = tuple(
+                str(label) for label in augmented_seed.accepted_labels
+            )
+            if bool(augmented_seed_available):
+                augmented_seed_basis_for_krylov = jnp.asarray(
+                    augmented_seed.augmentation_basis,
+                    dtype=jnp.float64,
+                )
+                augmented_seed_action_for_krylov = jnp.asarray(
+                    augmented_seed.operator_on_augmentation,
+                    dtype=jnp.float64,
+                )
+        else:
+            candidate, probe = context.probe_preconditioner(
+                rhs=context.xblock_rhs,
+                x0=current,
+                state=state,
+                operator=context.true_matvec_no_count,
+                min_relative_improvement=float(min_improvement),
+                max_cycles=int(cycles),
+                residual_minimizing_step=bool(minres_step),
+                alpha_clip=float(alpha_clip),
+            )
+        residual_before = float(probe.residual_before_norm)
+        residual_after = float(probe.residual_after_norm)
+        improvement_ratio = (
+            None if probe.improvement_ratio is None else float(probe.improvement_ratio)
+        )
+        reason = str(probe.reason)
+        metadata = build_xblock_qi_device_preconditioner_metadata(
+            XBlockQIDeviceMetadataContext(
+                probe=probe,
+                state=state,
+                basis_reused_from_seed=basis_reused_from_seed,
+                min_improvement=min_improvement,
+                cycles_requested=cycles,
+                minres_step=minres_step,
+                alpha_clip=alpha_clip,
+                augmented_seed_requested=augmented_seed_requested,
+                augmented_seed_available=augmented_seed_available,
+                augmented_seed_used=augmented_seed_used,
+                augmented_seed_rank=augmented_seed_rank,
+                augmented_seed_max_rank=augmented_seed_max_rank,
+                augmented_seed_reason=augmented_seed_reason,
+                augmented_seed_projection_residual=augmented_seed_projection_residual,
+                augmented_seed_labels=augmented_seed_labels,
+                use_in_krylov=use_in_krylov,
+                use_in_krylov_requested=use_in_krylov_requested,
+                precondition_side=context.precondition_side,
+                compose_with_base=compose_with_base,
+                compose_mode=compose_mode,
+                matrix_free_enabled=matrix_free_enabled,
+                local_smoother_kind=local_smoother_kind,
+                enrichment_config=enrichment_config,
+                multilevel_config=multilevel_config,
+                multilevel_max_rank=multilevel_max_rank,
+                extra_coarse_metadata=extra_coarse_metadata,
+                residual_correction_metadata=residual_correction_metadata,
+                max_rank_requested=max_rank,
+            )
+        )
+        probe_cycles = int(metadata.get("cycles", 1 if bool(probe.accepted) else 0))
+        base_preconditioner = context.base_preconditioner
+
+        def _precond_qi_device(v: jnp.ndarray) -> jnp.ndarray:
+            stats["applies"] += 1
+            v_j = jnp.asarray(v, dtype=jnp.float64)
+            if bool(compose_with_base):
+                base = jnp.asarray(base_preconditioner(v_j), dtype=jnp.float64)
+                if compose_mode == "multiplicative":
+                    coarse_input = v_j - jnp.asarray(
+                        context.true_matvec_no_count(base),
+                        dtype=jnp.float64,
+                    )
+                else:
+                    coarse_input = v_j
+                coarse = jnp.asarray(
+                    state.apply(jnp.asarray(coarse_input, dtype=jnp.float64)),
+                    dtype=jnp.float64,
+                )
+                return base + coarse
+            return jnp.asarray(state.apply(v_j), dtype=jnp.float64)
+
+        coupled_stage_accepted_for_krylov = (
+            bool(metadata.get("coupled_residual_equation_accepted", False))
+            and int(metadata.get("coupled_residual_equation_rank", 0) or 0) > 0
+        )
+        install_after_seed_reject = bool(
+            rhs1_qi_device_coupled_install_on_reject_requested(
+                residual_correction_controls
+            )
+            and use_in_krylov
+            and coupled_stage_accepted_for_krylov
+            and not bool(probe.accepted)
+        )
+        metadata["seed_probe_accepted"] = bool(probe.accepted)
+        metadata["installed_in_krylov_after_seed_reject"] = bool(
+            install_after_seed_reject
+        )
+        status_fields = rhs1_qi_device_status_fields(
+            extra_coarse_controls=extra_coarse_controls,
+            residual_correction_controls=residual_correction_controls,
+            metadata=metadata,
+        )
+        if bool(probe.accepted):
+            x0_full = jnp.asarray(candidate, dtype=jnp.float64)
+            used = True
+            if bool(use_in_krylov):
+                preconditioner = _precond_qi_device
+                used_in_krylov = True
+            if context.emit is not None:
+                context.emit(
+                    0,
+                    "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
+                    "QI device preconditioner accepted "
+                    f"residual {residual_before:.6e} -> {residual_after:.6e} "
+                    f"(rank={int(rank)} cycles={int(probe_cycles)} "
+                    f"ratio={float(improvement_ratio):.6e} "
+                    f"use_in_krylov={int(bool(use_in_krylov))} "
+                    f"augmented_seed_requested={int(bool(augmented_seed_requested))} "
+                    f"augmented_seed_available={int(bool(augmented_seed_available))} "
+                    f"augmented_seed_used={int(bool(augmented_seed_used))} "
+                    f"augmented_seed_rank={int(augmented_seed_rank)} "
+                    f"augmented_seed_max_rank={int(augmented_seed_max_rank)} "
+                    f"augmented_seed_reason={augmented_seed_reason or 'none'} "
+                    "augmented_seed_projection_residual="
+                    f"{float(augmented_seed_projection_residual) if augmented_seed_projection_residual is not None else float('nan'):.6e} "
+                    f"operator_krylov={int(bool(operator_krylov_enrichment))} "
+                    f"coarse_reuse={int(bool(multilevel_coarse))} "
+                    f"{status_fields} "
+                    f"compose_base={int(bool(compose_with_base))})",
+                )
+        elif bool(install_after_seed_reject):
+            preconditioner = _precond_qi_device
+            used = True
+            used_in_krylov = True
+            reason = "krylov_installed_after_seed_probe_reject"
+            if context.emit is not None:
+                context.emit(
+                    1,
+                    "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
+                    "QI device preconditioner installed in Krylov after seed "
+                    f"probe reject (rank={int(rank)} "
+                    f"coupled_rank={int(metadata.get('coupled_residual_equation_rank', 0))} "
+                    f"coupled_candidates={int(metadata.get('coupled_residual_equation_candidate_count', 0))} "
+                    f"residual {float(residual_before):.6e} -> {float(residual_after):.6e})",
+                )
+        elif context.emit is not None:
+            context.emit(
+                1,
+                "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
+                "QI device preconditioner rejected "
+                f"reason={reason} "
+                f"residual {float(residual_before):.6e} -> {float(residual_after):.6e} "
+                f"(rank={int(rank)} cycles={int(probe_cycles)} "
+                f"ratio={float(improvement_ratio) if improvement_ratio is not None else float('nan'):.6e} "
+                f"step_policy={metadata.get('step_policy', 'fixed')} "
+                f"use_in_krylov={int(bool(use_in_krylov))} "
+                f"augmented_seed_requested={int(bool(augmented_seed_requested))} "
+                f"augmented_seed_available={int(bool(augmented_seed_available))} "
+                f"augmented_seed_used={int(bool(augmented_seed_used))} "
+                f"augmented_seed_rank={int(augmented_seed_rank)} "
+                f"augmented_seed_max_rank={int(augmented_seed_max_rank)} "
+                f"augmented_seed_reason={augmented_seed_reason or 'none'} "
+                "augmented_seed_projection_residual="
+                f"{float(augmented_seed_projection_residual) if augmented_seed_projection_residual is not None else float('nan'):.6e} "
+                f"operator_krylov={int(bool(operator_krylov_enrichment))} "
+                f"coarse_reuse={int(bool(multilevel_coarse))} "
+                f"{status_fields} "
+                f"compose_base={int(bool(compose_with_base))})",
+            )
+    except Exception as exc:  # noqa: BLE001
+        reason = f"{type(exc).__name__}: {exc}"
+        metadata = {"error": reason}
+        if context.emit is not None:
+            context.emit(
+                1,
+                "solve_v3_full_system_linear_gmres: xblock_sparse_pc_gmres "
+                f"QI device preconditioner disabled after build failure ({type(exc).__name__}: {exc})",
+            )
+    setup_s = float(context.elapsed_s() - start_s)
+    return XBlockQIDeviceStageResult(
+        preconditioner=preconditioner,
+        x0_full=x0_full,
+        basis_for_galerkin=basis_for_galerkin,
+        state_for_augmented_krylov=state_for_augmented_krylov,
+        augmented_seed_basis_for_krylov=augmented_seed_basis_for_krylov,
+        augmented_seed_action_for_krylov=augmented_seed_action_for_krylov,
+        enabled=enabled,
+        built=state_for_augmented_krylov is not None,
+        used=used,
+        used_in_krylov=used_in_krylov,
+        reason=reason,
+        rank=rank,
+        candidate_count=candidate_count,
+        coarse_shape=coarse_shape,
+        operator_on_basis_shape=operator_on_basis_shape,
+        coarse_norm=coarse_norm,
+        operator_on_basis_norm=operator_on_basis_norm,
+        residual_before=residual_before,
+        residual_after=residual_after,
+        improvement_ratio=improvement_ratio,
+        metadata=metadata,
+        setup_s=setup_s,
+        min_improvement=min_improvement,
+        use_in_krylov=use_in_krylov,
+        stats=stats,
+        augmented_seed_requested=augmented_seed_requested,
+        augmented_seed_available=augmented_seed_available,
+        augmented_seed_used=augmented_seed_used,
+        augmented_seed_rank=augmented_seed_rank,
+        augmented_seed_max_rank=augmented_seed_max_rank,
+        augmented_seed_reason=augmented_seed_reason,
+        augmented_seed_projection_residual=augmented_seed_projection_residual,
+        augmented_seed_labels=augmented_seed_labels,
     )
 
 
@@ -2877,6 +3442,8 @@ __all__ = (
     "XBlockQIDeviceMetadataContext",
     "XBlockQIDeviceMultilevelConfigSetup",
     "XBlockQIDeviceOperatorReuseSetup",
+    "XBlockQIDeviceStageContext",
+    "XBlockQIDeviceStageResult",
     "XBlockQIDeviceSetupConfig",
     "XBlockQIDeviceSetupConfigContext",
     "XBlockQIGalerkinPolicySetup",
@@ -2888,6 +3455,7 @@ __all__ = (
     "XBlockQITwoLevelStageResult",
     "apply_xblock_qi_coarse_seed_stage",
     "apply_xblock_qi_deflated_stage",
+    "apply_xblock_qi_device_stage",
     "apply_xblock_qi_galerkin_stage",
     "apply_xblock_qi_two_level_stage",
     "build_xblock_qi_device_preconditioner_metadata",

@@ -35,6 +35,10 @@ from sfincs_jax.rhs1_qi_coarse import (
     RHS1QICoarseBasisMetadata,
     RHS1QICoarseCorrection,
 )
+from sfincs_jax.rhs1_qi_device_preconditioner import (
+    probe_rhs1_qi_device_preconditioner,
+    setup_rhs1_qi_device_preconditioner,
+)
 from sfincs_jax.solver import GMRESSolveResult
 from sfincs_jax.problems.profile_response.sparse_pc import (
     DirectTailMaterializationContext,
@@ -137,6 +141,7 @@ from sfincs_jax.problems.profile_response.sparse_pc import (
     XBlockQIDeviceMetadataContext,
     XBlockQIDeviceSetupConfigContext,
     XBlockQIDeflatedStageContext,
+    XBlockQIDeviceStageContext,
     XBlockQIGalerkinStageContext,
     XBlockQITwoLevelStageContext,
     XBlockSparsePCCompletionContext,
@@ -158,6 +163,7 @@ from sfincs_jax.problems.profile_response.sparse_pc import (
     apply_xblock_probe_coarse_stage,
     apply_xblock_qi_coarse_seed_stage,
     apply_xblock_qi_deflated_stage,
+    apply_xblock_qi_device_stage,
     apply_xblock_qi_galerkin_stage,
     apply_xblock_qi_two_level_stage,
     apply_xblock_side_probe_stage,
@@ -428,6 +434,8 @@ def test_sparse_qi_module_reexports_match_compat_layer() -> None:
         "XBlockQIDeviceMetadataContext",
         "XBlockQIDeviceMultilevelConfigSetup",
         "XBlockQIDeviceOperatorReuseSetup",
+        "XBlockQIDeviceStageContext",
+        "XBlockQIDeviceStageResult",
         "XBlockQIDeviceSetupConfig",
         "XBlockQIDeviceSetupConfigContext",
         "XBlockQIGalerkinPolicySetup",
@@ -439,6 +447,7 @@ def test_sparse_qi_module_reexports_match_compat_layer() -> None:
         "XBlockQITwoLevelStageResult",
         "apply_xblock_qi_coarse_seed_stage",
         "apply_xblock_qi_deflated_stage",
+        "apply_xblock_qi_device_stage",
         "apply_xblock_qi_galerkin_stage",
         "apply_xblock_qi_two_level_stage",
         "build_xblock_qi_device_preconditioner_metadata",
@@ -8930,6 +8939,81 @@ def test_build_xblock_qi_device_setup_config_matches_driver_contract() -> None:
     assert setup.config.max_rank == 11
     assert setup.config.global_moment_residual_equation is True
     assert setup.config.coupled_residual_equation is True
+
+
+def test_xblock_qi_device_stage_accepts_matrix_free_true_residual_drop() -> None:
+    op = SimpleNamespace(
+        rhs_mode=1,
+        n_species=1,
+        n_x=1,
+        n_xi=2,
+        n_theta=1,
+        n_zeta=1,
+        fblock=SimpleNamespace(
+            collisionless=SimpleNamespace(n_xi_for_x=np.asarray([2], dtype=np.int32))
+        ),
+    )
+    dense = jnp.asarray([[2.0, 0.0], [0.0, 3.0]], dtype=jnp.float64)
+    rhs = jnp.asarray([2.0, 0.0], dtype=jnp.float64)
+    basis = _one_vector_qi_basis()
+    emitted: list[tuple[int, str]] = []
+    seed_policy = resolve_xblock_qi_seed_policy_setup(
+        {
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER": "1",
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MATRIX_FREE": "1",
+        }
+    )
+
+    def matvec(vector):
+        return dense @ jnp.asarray(vector, dtype=jnp.float64)
+
+    def unused_augmented_seed(**_kwargs):
+        raise AssertionError("augmented seed probe should be disabled by default")
+
+    result = apply_xblock_qi_device_stage(
+        XBlockQIDeviceStageContext(
+            op=op,
+            x0_full=None,
+            xblock_rhs=rhs,
+            base_preconditioner=lambda vector: jnp.zeros_like(vector),
+            basis_for_galerkin=None,
+            seed_policy=seed_policy,
+            active_dof=False,
+            linear_size=2,
+            precondition_side="right",
+            true_matvec_no_count=matvec,
+            assembled_device_operator=None,
+            assembled_operator_metadata={},
+            assembled_operator_enabled=False,
+            assembled_operator_built=False,
+            assembled_operator_device_resident=False,
+            assembled_operator_device_error=None,
+            host_fallback_used=False,
+            elapsed_s=lambda: 0.25,
+            emit=lambda level, message: emitted.append((level, message)),
+            env={
+                "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER": "1",
+                "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MATRIX_FREE": "1",
+            },
+            basis_builder=lambda **_kwargs: basis,
+            setup_preconditioner=setup_rhs1_qi_device_preconditioner,
+            probe_preconditioner=probe_rhs1_qi_device_preconditioner,
+            probe_augmented_seed=unused_augmented_seed,
+        )
+    )
+
+    assert result.enabled is True
+    assert result.built is True
+    assert result.used is True
+    assert result.used_in_krylov is False
+    assert result.reason == "residual_reduced"
+    assert result.residual_before == pytest.approx(float(jnp.linalg.norm(rhs)))
+    assert result.residual_after is not None
+    assert result.residual_after < 1.0e-10
+    assert result.metadata["operator_source"] == "matrix_free"
+    assert result.metadata["seed_probe_accepted"] is True
+    np.testing.assert_allclose(result.x0_full, np.asarray([1.0, 0.0]))
+    assert any("QI device preconditioner accepted" in message for _, message in emitted)
 
 
 def test_xblock_qi_deflated_policy_defaults() -> None:
