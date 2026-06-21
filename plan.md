@@ -1,8 +1,9 @@
 # SFINCS_JAX Active Execution Plan
 
-Last updated: 2026-06-20 (America/Chicago)
-Branch: `refactor/v3-driver-architecture`
-PR state: one draft refactor PR; do not merge until this plan is complete.
+Last updated: 2026-06-21 (America/Chicago)
+Active branch: `refactor/rhs1-full-assembly-preconditioners`
+Review PR: #8, `refactor/v3-driver-architecture`, is ready for review with
+green CI/docs checks at commit `43edc4f`.
 
 This file is intentionally compact. The previous 35k-line checkpoint log made
 `plan.md` exceed the repository size policy. Historical detail remains
@@ -1968,15 +1969,18 @@ review. The older checkpoint detail below remains historical evidence of how
 the refactor got here, but the percentages in that historical section should
 not be used for current planning.
 
-Current evidence from 2026-06-20:
+Current evidence from 2026-06-21:
 
-- Branch `refactor/v3-driver-architecture` remains the single draft-PR branch.
-  The latest local structural tranche moves generic sparse-PC policy and
-  admission helpers into `profile_response/sparse/policy.py`, while keeping
+- PR #8 (`refactor/v3-driver-architecture`) is non-draft, merge-clean, and
+  ready for review. CI, docs, examples-smoke, external-data-smoke, optional
+  ecosystem gates, coverage aggregation, and Codecov patch checks passed on
+  commit `43edc4f`.
+- The current branch is `refactor/rhs1-full-assembly-preconditioners`, split
+  from PR #8 for follow-up RHSMode=1 preconditioner/refactor work. Keep PR #8
+  untouched unless review or CI exposes a real defect.
+- The latest structural tranche moves generic sparse-PC policy and admission
+  helpers into `profile_response/sparse/policy.py`, while keeping
   `profile_response/sparse_pc.py` as the compatibility import layer.
-- PR #8 is draft and merge-clean. Commit `8e11545` is the latest pushed
-  plan-only checkpoint; the policy split is the next structural tranche to
-  commit and push.
 - Largest remaining files after the current sparse package splits are
   `sfincs_jax/v3_driver.py` (`14393` lines),
   `sfincs_jax/rhs1_full_assembly.py` (`11893` lines),
@@ -1984,7 +1988,7 @@ Current evidence from 2026-06-20:
   `sfincs_jax/io.py` (`5817` lines).
 - Largest remaining function is
   `solve_v3_full_system_linear_gmres(...)` in `v3_driver.py` (`9599` lines).
-- `profile_response.sparse_pc` currently has 42 top-level functions and
+- `profile_response.sparse_pc` currently has 47 top-level functions and
   21 top-level classes. The sparse package split has moved 45 x-block rescue,
   setup, Krylov/probe/control, fallback, progress, post-solve correction, and
   final-metadata functions and 61
@@ -2065,11 +2069,10 @@ Current evidence from 2026-06-20:
 
 Actual open lanes:
 
-1. PR hygiene and CI: about 96%. Keep one draft PR, keep the worktree clean,
-   keep commits small enough to review, and refresh the PR body after each
-   structural tranche. Do not wait on queued CI repeatedly; inspect completed
-   failures and do one final readiness check.
-2. Driver reviewability: about 86%. `v3_driver.py` is smaller than before but
+1. PR hygiene and CI: 100% for PR #8. The PR is ready for review and should not
+   absorb new follow-up refactors. Do not wait on queued CI repeatedly; inspect
+   completed failures only if they appear.
+2. Driver reviewability: about 88%. `v3_driver.py` is smaller than before but
    still has a 9600-line RHSMode=1 solve function. For this PR, reviewability
    means the driver is an orchestration layer with documented handoff points,
    not that the file is fully eliminated. Further extractions must reduce the
@@ -2082,35 +2085,39 @@ Actual open lanes:
    it preserves a smaller, typed boundary.
 4. Differentiability lane: about 78%. Host sparse factors and host-only direct
    fallbacks remain outside autodiff paths; JAX-native Python lanes keep stable
-   transformation behavior. This PR should add differentiability tests only
-   where the refactor touches solver selection or autodiff-facing APIs.
+   transformation behavior. Follow-up refactors should add differentiability
+   tests only where they touch solver selection, residual equations, or
+   autodiff-facing APIs.
 5. Validation lane: about 96%. Focused sparse/profile-response tests and broad
-   RHSMode shards are the correct gates for this behavior-preserving PR. Do not
-   add slow production benchmark runs unless behavior changes.
-6. Docs/reviewer map: about 92%. The source map and API docs now show the
+   RHSMode shards are the correct gates for behavior-preserving refactors. Do
+   not add slow production benchmark runs unless behavior changes.
+6. Docs/reviewer map: 100% for PR #8. The source map and API docs now show the
    sparse compatibility layer and extracted sparse helper modules. The
-   remaining reviewer work is a concise architecture checklist explaining what
-   stays driver-owned and why.
+   architecture checklist explains what stays driver-owned and why.
 7. Repository hygiene: 100% at the current checkpoint. No dirty files, no
    tracked oversized artifacts reported by the size audit, and no README or
    benchmark figure regeneration is required for behavior-preserving movement.
 
-PR-blocking refactor targets:
+Follow-up refactor targets, in review-ROI order:
 
-1. Commit and push the final sparse policy/admission split, then refresh the PR
-   body with final counts and validation evidence.
-2. Keep `sfincs_jax/v3_driver.py` as the orchestration layer for this PR.
-   Do not extract driver-specific cache ownership, callback construction,
-   residual-vector routing, KSP replay mutation, or one-off scalar bookkeeping
-   into generic helpers.
-3. Keep existing import compatibility through `sparse_pc.py`, add direct import
-   tests only for any new domain module, and keep focused tests next to moved
-   behavior.
-4. Update `docs/source_map.rst`, this plan, and the PR body after the final
-   source-structure action. README/runtime plots do not need regeneration for
-   behavior-preserving file movement.
+1. `rhs1_full_assembly.py`: split preconditioner policy/dispatch first, then
+   move cohesive preconditioner families into domain modules. First bounded
+   tranche: extract active projected preconditioner auto-candidate selection
+   from the 936-line dispatcher into a small tested policy module.
+2. `io.py`: split output schema construction, HDF5/NetCDF writers,
+   diagnostics, and Fortran-alignment compatibility into cohesive modules
+   after RHSMode=1 preconditioner boundaries are stable.
+3. `v3_driver.py`: continue extracting solver-stage helpers only when the call
+   site becomes smaller and more explicit. Keep cache ownership, callback
+   construction, replay mutation, and residual-vector routing driver-owned.
+4. `explicit_sparse.py` and solver utilities: split only after direct call
+   sites show a stable domain boundary; avoid creating many thin files with
+   generic names.
+5. Differentiability and coverage: add targeted tests around touched APIs and
+   residual equations. Coverage expansion to 95% should come from real physics,
+   numerical, API, I/O, and regression gates, not smoke scaffolds.
 
-Deferred until after PR review or a separate behavior PR:
+Deferred until after PR #8 review or a separate behavior PR:
 
 - `rhs1_full_assembly.py` preconditioner internals.
 - `io.py` output-writing split.
@@ -2119,13 +2126,15 @@ Deferred until after PR review or a separate behavior PR:
   optimization work.
 - Broad coverage-to-95% expansion that requires new physics validations.
 
-Efficient path to PR-ready:
+Efficient path from here:
 
-1. Commit and push the generic sparse policy/admission split.
-2. Refresh the PR body with final file/function counts, validation commands,
-   and the explicit deferred-lane list.
-3. Check GitHub CI once after the final push. If required checks pass, mark PR
-   #8 ready for review.
+1. Keep PR #8 stable through review.
+2. On `refactor/rhs1-full-assembly-preconditioners`, extract and test the
+   active projected preconditioner auto-policy as the first bounded split.
+3. Validate with targeted compile, ruff, focused RHSMode=1 tests,
+   `git diff --check`, and the repository-size audit.
+4. Commit and push this follow-up branch separately. Open a follow-up PR only
+   after the first tranche proves it reduces complexity without broad churn.
 
 ## Historical Work Lanes
 
