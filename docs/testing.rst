@@ -763,6 +763,15 @@ explicitly made full. This keeps the non-differentiable host sparse-factor lane
 under fast synthetic sparse tests instead of relying on a slow full RHSMode=1
 solve for coverage.
 
+The next real RHSMode=1 preconditioner-family extraction is covered by
+``tests/test_rhs1_xblock_low_l_schur.py``. These tests exercise
+``sfincs_jax.solvers.preconditioners.xblock.low_l_schur`` directly: legacy
+``rhs1_full_assembly`` aliases, SFINCS-v3 flat low-``ell`` x-block index
+ordering, sparse x-block/tail Schur exactness on a bounded constructed system,
+memory-budget rejection, and the physics low-mode coarse residual wrapper. The
+test matrix is built so the low-``ell`` x-block support exactly spans the
+kinetic block, giving a real residual-zero Schur check without a full solve.
+
 The output/helper layer is kept under small, direct tests rather than only
 end-to-end HDF5 comparisons. ``tests/test_io_export_and_h5_coverage.py`` covers
 Fortran-layout HDF5 round trips, export-``f`` identity, nearest-neighbor, periodic

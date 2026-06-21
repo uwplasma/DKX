@@ -7,6 +7,13 @@ from .block_jacobi import (
     build_rhs1_xblock_tz_lmax_preconditioner,
     build_rhs1_xblock_tz_preconditioner,
 )
+from .low_l_schur import (
+    build_native_xell_kinetic_preconditioner,
+    build_native_xell_tail_schur_preconditioner,
+    build_xblock_tz_low_l_coarse_residual_preconditioner,
+    build_xblock_tz_low_l_schur_preconditioner,
+    xblock_tz_low_l_indices,
+)
 from .radial import (
     build_rhs1_xmg_preconditioner,
     build_rhs1_xupwind_preconditioner,
@@ -39,6 +46,10 @@ __all__ = (
     "build_rhs1_xblock_tz_lmax_preconditioner",
     "build_rhs1_xblock_tz_preconditioner",
     "build_rhs1_xblock_tz_sparse_preconditioner",
+    "build_native_xell_kinetic_preconditioner",
+    "build_native_xell_tail_schur_preconditioner",
+    "build_xblock_tz_low_l_coarse_residual_preconditioner",
+    "build_xblock_tz_low_l_schur_preconditioner",
     "compute_rhs1_sxblock_tz_sparse_host_seed",
     "get_rhsmode1_fp_xblock_assembled_host_cache",
     "rhsmode1_fp_xblock_assembled_host_allowed",
@@ -48,4 +59,5 @@ __all__ = (
     "rhsmode1_precond_cache_key",
     "rhsmode1_xblock_sparse_lu_default_max",
     "safe_inverse_diagonal_np",
+    "xblock_tz_low_l_indices",
 )

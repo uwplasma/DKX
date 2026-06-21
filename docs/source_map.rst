@@ -338,6 +338,13 @@ the historical private driver name and test the focused module directly. This ke
   host-factor probe/cache-key policy, shared chunked unsharded matrix probing,
   and extra-variable Schur solve. ``v3_driver.py`` keeps compatibility wrappers
   only.
+- ``sfincs_jax/solvers/preconditioners/xblock/low_l_schur.py``:
+  low-pitch x-block Schur preconditioners for exact RHSMode=1 full-CSR systems.
+  This module owns the opt-in native ``x_ell`` kinetic factor, native
+  ``x_ell`` plus dense-tail Schur factor, sparse low-``ell`` ``(theta,zeta)``
+  x-block factor, physics low-mode coarse residual correction, and the shared
+  low-``ell`` x-block index helper. ``rhs1_full_assembly.py`` keeps only
+  compatibility aliases plus dispatch/admission logic around these builders.
 - ``sfincs_jax/solvers/preconditioners/domain_decomposition/line_blocks.py``:
   angular line-block and restricted-additive-Schwarz preconditioners for
   RHSMode=1 domain-decomposition and strong fallback paths. It owns the

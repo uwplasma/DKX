@@ -39,6 +39,11 @@ documentation, README figures, and complete benchmark reports.
   now owns the Fortran-v3-style RHSMode=1 reduced active sparse-factor family,
   including reduced-support construction, support-mode preflight, symbolic-plan
   permutation, equilibration, LU/ILU setup, and memory admission.
+- `sfincs_jax.solvers.preconditioners.xblock.low_l_schur` now owns the
+  low-pitch x-block Schur family for exact RHSMode=1 full-CSR systems,
+  including native `x_ell` kinetic factors, native `x_ell` plus tail Schur,
+  sparse low-`ell` x-block Schur, physics coarse residual correction, and the
+  shared low-`ell` x-block index helper.
 - `sfincs_jax.outputs.formats` now owns flat HDF5/NetCDF/NPZ output
   readers/writers, output suffix dispatch, SFINCS Fortran-compatible HDF5
   layout conversion, NetCDF-safe names, and solver-trace attachment.  `io.py`
@@ -47,16 +52,17 @@ documentation, README figures, and complete benchmark reports.
 ### What The Latest Review Found
 
 - The branch has committed the symbolic-sparse RHSMode=1 Fortran-reduced
-  extraction (`b7a0bf2`). The latest output-format split has passed focused
-  format/import tests locally and is the current tranche to land before further
-  refactoring.
+  extraction (`b7a0bf2`) and the flat output-format split (`11abd75`). The
+  current local tranche extracts the RHSMode=1 x-block low-`ell` Schur family
+  and has passed focused full-assembly, sparse-pattern, import, and direct
+  x-block tests locally.
 - Current largest source files:
   - `sfincs_jax/v3_driver.py`: about 14.4k lines, 79 functions.
-  - `sfincs_jax/rhs1_full_assembly.py`: about 9.7k lines after this tranche.
+  - `sfincs_jax/rhs1_full_assembly.py`: about 9.2k lines after this tranche.
   - `sfincs_jax/io.py`: about 5.5k lines after the output-format split.
   - `sfincs_jax/problems/profile_response/sparse/xblock.py`: about 4.5k lines.
   - `sfincs_jax/rhs1_qi_device_preconditioner.py`: about 4.4k lines.
-- The repository has about 285 Python source files and about 159k source lines.
+- The repository has about 286 Python source files and about 159k source lines.
   The file count is high enough that new modules must now consolidate domain
   ownership, not add more flat historical `rhs1_*` or `transport_*` helpers.
 - Docs are extensive and mostly accurate, but `docs/source_map.rst`,
@@ -135,9 +141,9 @@ Acceptance:
 
 ### P1. Finish RHSMode=1 Full-Assembly Ownership Split
 
-Status: about 82% after the full-CSR Schur and symbolic-sparse Fortran-reduced
-extractions.  Continue only for cohesive implementation families, not wrapper
-churn.
+Status: about 88% after the full-CSR Schur, symbolic-sparse Fortran-reduced,
+and x-block low-`ell` Schur extractions.  Continue only for cohesive
+implementation families, not wrapper churn.
 
 Actions:
 
@@ -358,9 +364,9 @@ CPU/GPU/Fortran gates, not more smoother/restart tuning.
 2. Extract one more high-value `io.py` schema/diagnostics contract only if it
    reduces responsibility without adding file sprawl; otherwise stop P3 after
    the format split and document the remaining boundary.
-3. Extract at most one more cohesive RHSMode=1 implementation family from
-   `rhs1_full_assembly.py`, prioritizing a family with direct tests and low
-   coupling.  Stop P1 after that unless a clear owner boundary remains.
+3. Reassess whether P1 should stop after the x-block low-`ell` Schur extraction
+   or extract one final cohesive family. Do not continue if the remaining work
+   would only create wrapper churn or vague files.
 4. Reduce `v3_driver.py` only at stage boundaries that already have stable
    extracted types: solver dispatch, progress reporting, output handoff, or
    result contracts.  Do not split driver-local mutable state into vague helper
