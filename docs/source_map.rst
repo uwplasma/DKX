@@ -404,6 +404,12 @@ the historical private driver name and test the focused module directly. This ke
   owns environment parsing for the candidate ladder, large-system fallback
   guard, skipped-fallback metadata, and progress logging default, leaving
   ``rhs1_full_assembly.py`` to dispatch candidates and measure setup results.
+- ``sfincs_jax/rhs1_fortran_reduced_factor_policy.py``:
+  Fortran-v3-reduced RHSMode=1 active-Pmat factorization policy. The module
+  owns factor-kind normalization, large-matrix ILU guards, LU prefill safety
+  defaults, SuperLU/RCM ordering candidates, equilibration norm selection, and
+  progress logging defaults; ``rhs1_full_assembly.py`` keeps the numerical
+  sparse factor setup and true residual admission.
 - ``sfincs_jax/rhs1_structured_full_csr.py``:
   runtime/non-autodiff wrapper that adapts analytic RHSMode=1 full-CSR assembly
   from ``rhs1_full_assembly.py`` into the ``SparseOperatorBundle`` contract used

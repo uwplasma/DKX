@@ -27,10 +27,15 @@ from .rhs1_fblock_assembly import (
     select_structured_rhs1_fblock_csr_operator,
 )
 from .rhs1_active_preconditioner_policy import resolve_active_projected_preconditioner_auto_policy
+from .rhs1_fortran_reduced_factor_policy import (
+    active_fortran_v3_reduced_permc_candidates,
+    resolve_active_fortran_v3_reduced_factor_policy,
+)
 from .rhs1_reduced_pmat_plan import build_rhs1_reduced_pmat_elimination_plan
 from .v3_sparse_pattern import estimate_v3_full_system_conservative_sparsity_summary
 
 _STRUCTURED_FULL_CSR_OBJECT_CACHE: dict[tuple[object, ...], tuple[Any, dict[str, object]]] = {}
+_active_fortran_v3_reduced_permc_candidates = active_fortran_v3_reduced_permc_candidates
 
 
 def _estimate_csr_nbytes_from_nnz(*, shape: tuple[int, int], nnz: int, dtype: Any = np.float64) -> int:
@@ -1875,62 +1880,42 @@ def _build_active_fortran_v3_reduced_sparse_factor_preconditioner(
             },
         )
 
-    factor_kind = os.environ.get("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_FORTRAN_V3_PC_FACTOR_KIND", "").strip().lower()
-    if not factor_kind:
-        factor_kind = "ilu" if "ilu" in requested or requested.endswith("pc_matrix") else "lu"
-    if factor_kind not in {"ilu", "spilu", "lu", "splu"}:
-        factor_kind = "ilu"
-    factor_kind = "lu" if factor_kind in {"lu", "splu"} else "ilu"
-    large_matrix = n >= int(_env_int("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_FORTRAN_V3_PC_LARGE_SIZE", 300_000))
-    if factor_kind == "ilu":
-        ilu_max_size = int(_env_int("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_FORTRAN_V3_PC_ILU_MAX_SIZE", 350_000))
-        if int(ilu_max_size) > 0 and n > int(ilu_max_size):
-            return RHS1StructuredFullCSRPreconditioner(
-                operator=None,
-                selected=False,
-                kind="active_fortran_v3_pc_matrix",
-                reason=f"active_fortran_v3_pc_matrix_ilu_size_exceeded:{n}>{int(ilu_max_size)}",
-                setup_s=max(0.0, time.perf_counter() - t0),
-                metadata={
-                    **reduction_metadata,
-                    "factor_kind": str(factor_kind),
-                    "matrix_size": int(n),
-                    "ilu_max_size": int(ilu_max_size),
-                    "note": (
-                        "large ILU setup is intentionally fail-closed; raise "
-                        "SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_FORTRAN_V3_PC_ILU_MAX_SIZE "
-                        "only for explicit diagnostics"
-                    ),
-                },
-            )
-    fill_factor_default = 3.0 if factor_kind == "ilu" else 12.0
-    drop_tol_default = 3.0e-3 if factor_kind == "ilu" else 0.0
-    if bool(large_matrix) and factor_kind == "ilu":
-        fill_factor_default = float(
-            _env_float("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_FORTRAN_V3_PC_LARGE_FILL_FACTOR", 1.2)
-        )
-        drop_tol_default = float(
-            _env_float("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_FORTRAN_V3_PC_LARGE_DROP_TOL", 5.0e-2)
-        )
-    fill_factor = max(
-        1.0,
-        float(_env_float("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_FORTRAN_V3_PC_FILL_FACTOR", fill_factor_default)),
+    factor_policy = resolve_active_fortran_v3_reduced_factor_policy(
+        requested_kind=requested,
+        matrix_size=int(n),
     )
-    drop_tol = float(_env_float("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_FORTRAN_V3_PC_DROP_TOL", drop_tol_default))
-    diag_pivot = float(_env_float("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_FORTRAN_V3_PC_DIAG_PIVOT_THRESH", 0.0))
-    permc_env = os.environ.get("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_FORTRAN_V3_PC_PERMC_SPEC", "").strip().upper()
-    permc_candidates = _active_fortran_v3_reduced_permc_candidates(
-        requested=permc_env,
-        factor_kind=factor_kind,
-    )
+    factor_kind = str(factor_policy.factor_kind)
+    large_matrix = bool(factor_policy.large_matrix)
+    if bool(factor_policy.ilu_size_exceeded):
+        return RHS1StructuredFullCSRPreconditioner(
+            operator=None,
+            selected=False,
+            kind="active_fortran_v3_pc_matrix",
+            reason=f"active_fortran_v3_pc_matrix_ilu_size_exceeded:{n}>{int(factor_policy.ilu_max_size)}",
+            setup_s=max(0.0, time.perf_counter() - t0),
+            metadata={
+                **reduction_metadata,
+                "factor_kind": str(factor_kind),
+                "matrix_size": int(n),
+                "ilu_max_size": int(factor_policy.ilu_max_size),
+                "note": (
+                    "large ILU setup is intentionally fail-closed; raise "
+                    "SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_FORTRAN_V3_PC_ILU_MAX_SIZE "
+                    "only for explicit diagnostics"
+                ),
+            },
+        )
+    fill_factor = float(factor_policy.fill_factor)
+    drop_tol = float(factor_policy.drop_tol)
+    diag_pivot = float(factor_policy.diag_pivot)
+    permc_env = str(factor_policy.permc_requested)
+    permc_candidates = tuple(str(candidate) for candidate in factor_policy.permc_candidates)
     permc_spec = str(permc_candidates[0])
-    scale_norm = os.environ.get("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_FORTRAN_V3_PC_SCALE_NORM", "l1").strip().lower()
-    if scale_norm not in {"l1", "l2", "max"}:
-        scale_norm = "l1"
-    max_scale = max(1.0, float(_env_float("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_FORTRAN_V3_PC_MAX_SCALE", 1.0e6)))
+    scale_norm = str(factor_policy.scale_norm)
+    max_scale = float(factor_policy.max_scale)
 
     estimate = _estimate_spilu_factor_nbytes(matrix=reduced, fill_factor=fill_factor) + 2 * n * np.dtype(np.float64).itemsize
-    if _env_bool("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_FORTRAN_V3_PC_PROGRESS", bool(large_matrix)):
+    if bool(factor_policy.progress):
         print(
             "active_fortran_v3_pc_matrix: factor setup "
             f"n={n} nnz={int(reduced.nnz)} factor_kind={factor_kind} "
@@ -1959,21 +1944,8 @@ def _build_active_fortran_v3_reduced_sparse_factor_preconditioner(
                 "permc_spec_candidates": tuple(str(candidate) for candidate in permc_candidates),
             },
         )
-    lu_large_prefill_size = _env_int("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_FORTRAN_V3_PC_LU_LARGE_SIZE", 300_000)
-    lu_prefill_default = 4.5
-    if factor_kind == "lu" and n >= int(lu_large_prefill_size):
-        lu_prefill_default = float(
-            _env_float("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_FORTRAN_V3_PC_LU_LARGE_PREFILL_SAFETY_FACTOR", 32.0)
-        )
-    lu_prefill_safety_factor = max(
-        1.0,
-        float(
-            _env_float(
-                "SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_FORTRAN_V3_PC_LU_PREFILL_SAFETY_FACTOR",
-                lu_prefill_default,
-            )
-        ),
-    )
+    lu_large_prefill_size = int(factor_policy.lu_large_prefill_size)
+    lu_prefill_safety_factor = float(factor_policy.lu_prefill_safety_factor)
     lu_prefill_estimate = int(np.ceil(float(estimate) * float(lu_prefill_safety_factor)))
     if factor_kind == "lu" and lu_prefill_estimate > int(max_factor_nbytes):
         return RHS1StructuredFullCSRPreconditioner(
@@ -2343,28 +2315,6 @@ def build_direct_active_fortran_v3_reduced_pmat_preconditioner(
             **emission_metadata,
         },
     )
-
-
-def _active_fortran_v3_reduced_permc_candidates(*, requested: str, factor_kind: str) -> tuple[str, ...]:
-    """Return SuperLU ordering candidates for the active Fortran-v3 factor.
-
-    ``RCM`` is implemented by an explicit symmetric permutation before calling
-    SuperLU with ``NATURAL`` ordering. This mirrors SFINCS Fortran v3's PETSc
-    serial sparse-direct fallback, where ``MATORDERINGRCM`` is requested for
-    the preconditioner factor. The unset default keeps the previously measured
-    NATURAL-first behavior for compatibility until the RCM path is promoted by
-    full-grid evidence.
-    """
-
-    valid = ("RCM", "NATURAL", "MMD_ATA", "MMD_AT_PLUS_A", "COLAMD")
-    requested_use = str(requested or "").strip().upper()
-    if requested_use in valid:
-        return (requested_use,)
-    if requested_use and requested_use not in {"AUTO", "DEFAULT"}:
-        return ("COLAMD",)
-    if str(factor_kind).strip().lower() == "lu":
-        return ("NATURAL", "COLAMD")
-    return ("COLAMD",)
 
 
 def _active_fortran_v3_reduced_preconditioner_matrix(

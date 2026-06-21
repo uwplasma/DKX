@@ -1983,7 +1983,7 @@ Current evidence from 2026-06-21:
   `profile_response/sparse_pc.py` as the compatibility import layer.
 - Largest remaining files after the current sparse package splits are
   `sfincs_jax/v3_driver.py` (`14393` lines),
-  `sfincs_jax/rhs1_full_assembly.py` (`11834` lines),
+  `sfincs_jax/rhs1_full_assembly.py` (`11784` lines),
   `sfincs_jax/problems/profile_response/sparse_pc.py` (`3580` lines), and
   `sfincs_jax/io.py` (`5817` lines).
 - Largest remaining function is
@@ -2071,6 +2071,16 @@ Current evidence from 2026-06-21:
   `sfincs_jax/rhs1_active_preconditioner_policy.py` and reduced
   `build_active_projected_rhs1_full_csr_preconditioner(...)` from 936 to 876
   lines without changing candidate execution.
+- Validation for the Fortran-v3-reduced factor-policy split: targeted
+  `py_compile`, targeted `ruff`, and full RHSMode=1 full-assembly tests
+  (`112 passed`), adjacent sparse-pattern tests (`132 passed`), `git diff
+  --check`, repository-size audit, and Sphinx HTML docs build passed locally.
+  This moved factor-kind normalization, large-matrix ILU guards, LU prefill
+  defaults, SuperLU/RCM ordering candidates, scale-norm selection, and progress
+  defaults into `sfincs_jax/rhs1_fortran_reduced_factor_policy.py`; the sparse
+  factor setup and residual admission remain in `rhs1_full_assembly.py`. The
+  Fortran-v3 reduced factor builder is now 430 lines, down from 463 before this
+  split.
 - `rhs1_full_assembly.py` and `io.py` are large, but they are not immediate
   blockers for PR #8 unless this branch changes their behavior. Treat them as
   follow-up refactor lanes after the driver/profile-response split is reviewed.

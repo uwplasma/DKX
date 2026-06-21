@@ -13,6 +13,10 @@ from sfincs_jax.namelist import read_sfincs_input
 from sfincs_jax.rhs1_active_preconditioner_policy import (
     resolve_active_projected_preconditioner_auto_policy,
 )
+from sfincs_jax.rhs1_fortran_reduced_factor_policy import (
+    active_fortran_v3_reduced_permc_candidates,
+    resolve_active_fortran_v3_reduced_factor_policy,
+)
 from sfincs_jax.rhs1_full_assembly import (
     build_direct_active_fortran_v3_reduced_pmat_preconditioner,
     build_active_projected_rhs1_full_csr_preconditioner,
@@ -111,6 +115,87 @@ def test_active_preconditioner_auto_policy_empty_override_falls_back_to_safe_pai
 
     assert policy.candidates == ("active_diagonal_schur", "jacobi")
     assert policy.candidates_requested == ("active_diagonal_schur", "jacobi")
+
+
+def test_fortran_reduced_factor_policy_keeps_default_lu_ordering() -> None:
+    policy = resolve_active_fortran_v3_reduced_factor_policy(
+        requested_kind="active_fortran_v3_reduced_lu",
+        matrix_size=128,
+        env={},
+    )
+
+    assert policy.factor_kind == "lu"
+    assert policy.permc_requested == ""
+    assert policy.permc_candidates == ("NATURAL", "COLAMD")
+    assert policy.permc_spec == "NATURAL"
+    assert policy.fill_factor == 12.0
+    assert policy.drop_tol == 0.0
+    assert policy.lu_prefill_safety_factor == 4.5
+    assert policy.progress is False
+
+
+def test_fortran_reduced_factor_policy_normalizes_invalid_env_values() -> None:
+    policy = resolve_active_fortran_v3_reduced_factor_policy(
+        requested_kind="active_fortran_v3_reduced_lu",
+        matrix_size=128,
+        env={
+            "SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_FORTRAN_V3_PC_FACTOR_KIND": "bad",
+            "SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_FORTRAN_V3_PC_FILL_FACTOR": "0.25",
+            "SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_FORTRAN_V3_PC_PERMC_SPEC": "bad",
+            "SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_FORTRAN_V3_PC_SCALE_NORM": "bad",
+            "SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_FORTRAN_V3_PC_MAX_SCALE": "0.5",
+        },
+    )
+
+    assert policy.factor_kind == "ilu"
+    assert policy.fill_factor == 1.0
+    assert policy.permc_candidates == ("COLAMD",)
+    assert policy.scale_norm == "l1"
+    assert policy.max_scale == 1.0
+
+
+def test_fortran_reduced_factor_policy_large_ilu_defaults_and_size_guard() -> None:
+    policy = resolve_active_fortran_v3_reduced_factor_policy(
+        requested_kind="active_fortran_v3_reduced_direct_pmat_ilu",
+        matrix_size=20,
+        env={
+            "SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_FORTRAN_V3_PC_LARGE_SIZE": "1",
+            "SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_FORTRAN_V3_PC_ILU_MAX_SIZE": "10",
+        },
+    )
+
+    assert policy.factor_kind == "ilu"
+    assert policy.large_matrix is True
+    assert policy.ilu_size_exceeded is True
+    assert policy.ilu_max_size == 10
+    assert policy.fill_factor == 1.2
+    assert policy.drop_tol == 5.0e-2
+    assert policy.progress is True
+
+
+def test_fortran_reduced_factor_policy_lu_large_prefill_defaults() -> None:
+    policy = resolve_active_fortran_v3_reduced_factor_policy(
+        requested_kind="active_fortran_v3_reduced_lu",
+        matrix_size=20,
+        env={
+            "SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_FORTRAN_V3_PC_FACTOR_KIND": "lu",
+            "SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_FORTRAN_V3_PC_LU_LARGE_SIZE": "10",
+            "SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_FORTRAN_V3_PC_LU_LARGE_PREFILL_SAFETY_FACTOR": "8",
+        },
+    )
+
+    assert policy.factor_kind == "lu"
+    assert policy.lu_large_prefill_size == 10
+    assert policy.lu_prefill_safety_factor == 8.0
+
+
+def test_fortran_reduced_permc_candidates_match_superlu_and_rcm_contract() -> None:
+    assert active_fortran_v3_reduced_permc_candidates(requested="RCM", factor_kind="lu") == ("RCM",)
+    assert active_fortran_v3_reduced_permc_candidates(requested="DEFAULT", factor_kind="lu") == (
+        "NATURAL",
+        "COLAMD",
+    )
+    assert active_fortran_v3_reduced_permc_candidates(requested="", factor_kind="ilu") == ("COLAMD",)
 
 
 def test_structured_full_csr_matches_constraint_scheme1_full_operator() -> None:
