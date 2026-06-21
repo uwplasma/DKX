@@ -409,6 +409,14 @@ the historical private driver name and test the focused module directly. This ke
   adapter used by coarse/Galerkin corrections. ``v3_driver.py`` imports the
   historical private helper names as aliases so existing debugging and
   monkeypatch tests keep using the same seam.
+- ``sfincs_jax/solvers/preconditioners/symbolic_sparse/rhs1_fortran_reduced.py``:
+  Fortran-v3-style reduced active sparse factors for RHSMode=1. The module owns
+  reduced active matrix construction, support-mode parsing and preflight,
+  symbolic-plan permutation, sparse equilibration, LU/ILU memory admission, and
+  SuperLU/RCM factor setup for the non-differentiable host CSR lane.
+  ``rhs1_full_assembly.py`` now imports the historical private names as
+  compatibility aliases and keeps only direct-Pmat emission plus surrounding
+  active-preconditioner dispatch.
 - ``sfincs_jax/rhs1_direct_tail_policy.py``:
   RHSMode=1 direct-tail structured-preconditioner adapter, direct reduced-Pmat
   aliases, stable cache-key hashing, cache-hit metadata tagging, and adaptive
@@ -430,8 +438,8 @@ the historical private driver name and test the focused module directly. This ke
   Fortran-v3-reduced RHSMode=1 active-Pmat factorization policy. The module
   owns factor-kind normalization, large-matrix ILU guards, LU prefill safety
   defaults, SuperLU/RCM ordering candidates, equilibration norm selection, and
-  progress logging defaults; ``rhs1_full_assembly.py`` keeps the numerical
-  sparse factor setup and true residual admission.
+  progress logging defaults; the symbolic-sparse RHSMode=1 Fortran-reduced
+  module consumes this policy and performs the numerical sparse factor setup.
 - ``sfincs_jax/rhs1_symbolic_frontal_policy.py``:
   symbolic frontal/Schur RHSMode=1 active-preconditioner policy. The module
   owns frontal versus nested-dissection routing, separator/block limits, dense
