@@ -342,6 +342,13 @@ the historical private driver name and test the focused module directly. This ke
   field-split output/base-kind routing, and coupled-kinetic admission probes;
   ``rhs1_full_assembly.py`` keeps sparse basis assembly, factorization, cache
   ownership, and true residual admission.
+- ``sfincs_jax/solvers/preconditioners/schur/rhs1_coarse_basis.py``:
+  reusable RHSMode=1 active coarse residual basis construction for the Schur
+  preconditioner family. It owns low-``L``/low-angular-mode config, normalized
+  surface modes, sparse basis materialization, targeted ``(species,x,L)``
+  window columns, and storage estimates; ``rhs1_full_assembly.py`` keeps only
+  aliases at the existing internal call sites plus the matrix/operator-dependent
+  adaptive residual-basis stages.
 - ``sfincs_jax/problems/transport_matrix/direct_pmat.py``
   (legacy alias: ``sfincs_jax/transport_direct_pmat.py``):
   direct term-level RHSMode=2/3 reduced ``Pmat`` and exact active-operator
