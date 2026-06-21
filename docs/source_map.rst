@@ -399,6 +399,11 @@ the historical private driver name and test the focused module directly. This ke
   same formulas used by the matrix-free v3 operator, while ``v3_driver.py``
   injects the structured full-CSR builder callback to preserve the existing
   monkeypatch/debug seam and avoid circular imports.
+- ``sfincs_jax/rhs1_active_preconditioner_policy.py``:
+  active-projected RHSMode=1 full-CSR preconditioner auto-policy. The module
+  owns environment parsing for the candidate ladder, large-system fallback
+  guard, skipped-fallback metadata, and progress logging default, leaving
+  ``rhs1_full_assembly.py`` to dispatch candidates and measure setup results.
 - ``sfincs_jax/rhs1_structured_full_csr.py``:
   runtime/non-autodiff wrapper that adapts analytic RHSMode=1 full-CSR assembly
   from ``rhs1_full_assembly.py`` into the ``SparseOperatorBundle`` contract used

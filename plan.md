@@ -1983,7 +1983,7 @@ Current evidence from 2026-06-21:
   `profile_response/sparse_pc.py` as the compatibility import layer.
 - Largest remaining files after the current sparse package splits are
   `sfincs_jax/v3_driver.py` (`14393` lines),
-  `sfincs_jax/rhs1_full_assembly.py` (`11893` lines),
+  `sfincs_jax/rhs1_full_assembly.py` (`11834` lines),
   `sfincs_jax/problems/profile_response/sparse_pc.py` (`3580` lines), and
   `sfincs_jax/io.py` (`5817` lines).
 - Largest remaining function is
@@ -2063,6 +2063,14 @@ Current evidence from 2026-06-21:
   (`359 passed`), and broad profile-response/RHSMode shard (`1391 passed`)
   passed locally. `compileall`, `git diff --check`, Sphinx HTML docs build,
   and repository-size audit also passed locally.
+- Validation for the active projected preconditioner auto-policy split:
+  targeted `py_compile`, targeted `ruff`, full RHSMode=1 full-assembly tests
+  (`107 passed`), adjacent sparse-pattern tests (`132 passed`), `git diff
+  --check`, and repository-size audit passed locally. This moved the
+  environment-driven active auto ladder into
+  `sfincs_jax/rhs1_active_preconditioner_policy.py` and reduced
+  `build_active_projected_rhs1_full_csr_preconditioner(...)` from 936 to 876
+  lines without changing candidate execution.
 - `rhs1_full_assembly.py` and `io.py` are large, but they are not immediate
   blockers for PR #8 unless this branch changes their behavior. Treat them as
   follow-up refactor lanes after the driver/profile-response split is reviewed.

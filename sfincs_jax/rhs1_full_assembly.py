@@ -26,6 +26,7 @@ from .rhs1_fblock_assembly import (
     clear_structured_rhs1_fblock_csr_cache,
     select_structured_rhs1_fblock_csr_operator,
 )
+from .rhs1_active_preconditioner_policy import resolve_active_projected_preconditioner_auto_policy
 from .rhs1_reduced_pmat_plan import build_rhs1_reduced_pmat_elimination_plan
 from .v3_sparse_pattern import estimate_v3_full_system_conservative_sparsity_summary
 
@@ -883,76 +884,16 @@ def build_active_projected_rhs1_full_csr_preconditioner(
             metadata={},
         )
     if kind_l in {"auto", "active_auto", "structured_auto"}:
-        large_fallback_size = max(
-            1,
-            int(_env_int("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_AUTO_LARGE_FALLBACK_SIZE", 300000)),
+        auto_policy = resolve_active_projected_preconditioner_auto_policy(
+            matrix_size=int(matrix.shape[0])
         )
-        candidate_env_override = os.environ.get("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_AUTO_CANDIDATES")
-        candidate_env = (
-            candidate_env_override
-            if candidate_env_override is not None
-            else (
-                "active_fortran_v3_reduced_lu,"
-                "active_fortran_v3_reduced_native_stack,"
-                "active_symbolic_frontal_schur_lu,"
-                "active_symbolic_superblock_lu,"
-                "active_symbolic_block_schur_lu,"
-                "active_schwarz_sparse_coarse,"
-                "active_global_field_split_schur,"
-                "active_xblock_ell_band_schur,"
-                "active_ell_band_schur,"
-                "active_bounded_native_stack,"
-                "active_xblock,"
-                "active_diagonal_schur,"
-                "active_spilu,"
-                "jacobi"
-            )
-        )
-        large_default_used = False
-        if candidate_env_override is None and int(matrix.shape[0]) >= int(large_fallback_size):
-            candidate_env = os.environ.get(
-                "SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_AUTO_LARGE_CANDIDATES",
-                (
-                    "active_fortran_v3_reduced_native_stack,"
-                    "active_symbolic_frontal_schur_lu,"
-                    "active_symbolic_superblock_lu,"
-                    "active_coupled_kinetic_field_split_sparse_coarse,"
-                    "active_symbolic_block_schur_lu,"
-                    "active_fortran_v3_reduced_lu"
-                ),
-            )
-            large_default_used = True
-        candidates = [
-            item.strip().lower().replace("-", "_")
-            for item in candidate_env.split(",")
-            if item.strip()
-        ]
-        if not candidates:
-            candidates = ["active_diagonal_schur", "jacobi"]
-        auto_candidates_requested = list(candidates)
-        large_fallbacks = {
-            "active_diagonal_schur",
-            "active_diag_schur",
-            "active_tail_schur",
-            "active_constraint_tail_schur",
-            "active_field_split",
-            "active_field_split_tail",
-            "jacobi",
-            "diagonal",
-        }
-        allow_large_fallback = _env_bool(
-            "SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_AUTO_ALLOW_LARGE_DIAGONAL_FALLBACK",
-            False,
-        )
-        skipped_large_fallbacks: list[str] = []
-        if int(matrix.shape[0]) >= int(large_fallback_size) and not bool(allow_large_fallback):
-            skipped_large_fallbacks = [candidate for candidate in candidates if candidate in large_fallbacks]
-            candidates = [candidate for candidate in candidates if candidate not in large_fallbacks]
+        large_fallback_size = int(auto_policy.large_fallback_size)
+        candidates = list(auto_policy.candidates)
+        auto_candidates_requested = list(auto_policy.candidates_requested)
+        skipped_large_fallbacks = list(auto_policy.skipped_large_fallbacks)
+        large_default_used = bool(auto_policy.large_default_used)
         rejected: list[dict[str, object]] = []
-        log_large_auto = _env_bool(
-            "SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_AUTO_PROGRESS",
-            bool(large_default_used) or int(matrix.shape[0]) >= int(large_fallback_size),
-        )
+        log_large_auto = bool(auto_policy.log_progress)
         for candidate in candidates:
             if candidate in {"auto", "active_auto", "structured_auto"}:
                 continue

@@ -10,6 +10,9 @@ import scipy.sparse as sp
 import sfincs_jax.rhs1_full_assembly as rfa
 import sfincs_jax.v3_driver as vd
 from sfincs_jax.namelist import read_sfincs_input
+from sfincs_jax.rhs1_active_preconditioner_policy import (
+    resolve_active_projected_preconditioner_auto_policy,
+)
 from sfincs_jax.rhs1_full_assembly import (
     build_direct_active_fortran_v3_reduced_pmat_preconditioner,
     build_active_projected_rhs1_full_csr_preconditioner,
@@ -30,6 +33,84 @@ REF = Path(__file__).parent / "ref"
 def _deterministic_vector(size: int) -> np.ndarray:
     idx = np.arange(int(size), dtype=np.float64)
     return np.sin(0.17 * idx) + 0.25 * np.cos(0.31 * idx)
+
+
+def test_active_preconditioner_auto_policy_keeps_small_default_ladder() -> None:
+    policy = resolve_active_projected_preconditioner_auto_policy(matrix_size=128, env={})
+
+    assert policy.candidates[0] == "active_fortran_v3_reduced_lu"
+    assert "active_global_field_split_schur" in policy.candidates
+    assert policy.candidates[-1] == "jacobi"
+    assert policy.candidates_requested == policy.candidates
+    assert policy.skipped_large_fallbacks == ()
+    assert policy.large_fallback_size == 300000
+    assert policy.large_default_used is False
+    assert policy.log_progress is False
+
+
+def test_active_preconditioner_auto_policy_uses_large_safe_ladder() -> None:
+    policy = resolve_active_projected_preconditioner_auto_policy(
+        matrix_size=12,
+        env={"SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_AUTO_LARGE_FALLBACK_SIZE": "10"},
+    )
+
+    assert policy.large_default_used is True
+    assert policy.log_progress is True
+    assert policy.candidates == (
+        "active_fortran_v3_reduced_native_stack",
+        "active_symbolic_frontal_schur_lu",
+        "active_symbolic_superblock_lu",
+        "active_coupled_kinetic_field_split_sparse_coarse",
+        "active_symbolic_block_schur_lu",
+        "active_fortran_v3_reduced_lu",
+    )
+    assert "jacobi" not in policy.candidates
+    assert policy.skipped_large_fallbacks == ()
+
+
+def test_active_preconditioner_auto_policy_normalizes_and_skips_large_fallbacks() -> None:
+    policy = resolve_active_projected_preconditioner_auto_policy(
+        matrix_size=12,
+        env={
+            "SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_AUTO_CANDIDATES": (
+                " active-diagonal-schur, Active-SpILU, jacobi "
+            ),
+            "SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_AUTO_LARGE_FALLBACK_SIZE": "10",
+        },
+    )
+
+    assert policy.candidates_requested == (
+        "active_diagonal_schur",
+        "active_spilu",
+        "jacobi",
+    )
+    assert policy.candidates == ("active_spilu",)
+    assert policy.skipped_large_fallbacks == ("active_diagonal_schur", "jacobi")
+    assert policy.log_progress is True
+
+
+def test_active_preconditioner_auto_policy_can_allow_large_fallbacks() -> None:
+    policy = resolve_active_projected_preconditioner_auto_policy(
+        matrix_size=12,
+        env={
+            "SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_AUTO_CANDIDATES": "active-diagonal-schur,jacobi",
+            "SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_AUTO_LARGE_FALLBACK_SIZE": "10",
+            "SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_AUTO_ALLOW_LARGE_DIAGONAL_FALLBACK": "true",
+        },
+    )
+
+    assert policy.candidates == ("active_diagonal_schur", "jacobi")
+    assert policy.skipped_large_fallbacks == ()
+
+
+def test_active_preconditioner_auto_policy_empty_override_falls_back_to_safe_pair() -> None:
+    policy = resolve_active_projected_preconditioner_auto_policy(
+        matrix_size=4,
+        env={"SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_AUTO_CANDIDATES": " , "},
+    )
+
+    assert policy.candidates == ("active_diagonal_schur", "jacobi")
+    assert policy.candidates_requested == ("active_diagonal_schur", "jacobi")
 
 
 def test_structured_full_csr_matches_constraint_scheme1_full_operator() -> None:
