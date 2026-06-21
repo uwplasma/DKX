@@ -12,16 +12,18 @@ from sfincs_jax.io import (
     _as_1d_float,
     _export_f_config,
     _legendre_matrix,
-    _raise_for_nonconverged_rhsmode1_output,
-    _rhsmode1_result_residual_and_target,
-    _should_fail_nonconverged_rhsmode1_output,
-    _write_nonconverged_rhsmode1_solver_trace_json,
     read_sfincs_h5,
     read_sfincs_output_file,
     write_sfincs_h5,
     write_sfincs_output_file,
 )
 from sfincs_jax.namelist import Namelist
+from sfincs_jax.outputs.rhsmode1 import (
+    _raise_for_nonconverged_rhsmode1_output,
+    _rhsmode1_result_residual_and_target,
+    _should_fail_nonconverged_rhsmode1_output,
+    _write_nonconverged_rhsmode1_solver_trace_json,
+)
 from sfincs_jax.solver_trace import read_solver_trace_json
 
 

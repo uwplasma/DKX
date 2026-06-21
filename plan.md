@@ -59,9 +59,12 @@ deferred research lanes.
   `sfincs_jax.solvers.preconditioners.pas.RHS1PasFamilyBuilders`; `v3_driver.py`
   now keeps only thin private wrappers that inject current low-level builders
   for compatibility-sensitive tests and debug workflows.
-- Current next tranche is the first `io.py` output-schema split unless a larger
-  `v3_driver.py` progress/timing/result handoff emerges that removes real
-  responsibility rather than wrapper lines.
+- RHSMode=1 production-output refusal gates, residual/target extraction,
+  solver-trace memory estimates, and nonconverged sidecar trace writing moved
+  from `io.py` into `sfincs_jax.outputs.rhsmode1`.
+- Current next tranche is solved-field/output-schema consolidation inside
+  `io.py` unless a larger `v3_driver.py` progress/timing/result handoff emerges
+  that removes real responsibility rather than wrapper lines.
 - The README and docs currently state the public claim boundary: the documented
   release suite is CPU/GPU parity-clean, while production-resolution QI, true
   device-QI, lower-memory native factor replacement, full-grid QA/QH RHSMode=1,
@@ -98,6 +101,12 @@ deferred research lanes.
   behavior:
   `323 passed in 2.14s`, `57 passed in 26.34s`, `178 passed in 28.85s`,
   and `7 passed in 0.53s`.
+- RHSMode=1 output-gate extraction preserves IO helper coverage and solver-trace
+  output-format behavior:
+  `18 passed in 0.33s`; after switching moved-helper tests to the new owner
+  module and combining with import contracts, `25 passed in 0.62s`.
+- Broader write-output and CLI forwarding paths remain intact:
+  `58 passed in 20.29s`.
 - RHSMode=1 PAS-family extraction preserves PAS composite, driver policy,
   Schur heuristic, import-contract, preconditioner context, and profile-response
   preconditioner build behavior:
@@ -113,8 +122,9 @@ deferred research lanes.
   and compatibility surface.
 - `sfincs_jax/rhs1_full_assembly.py`: about 7.9k lines, now mostly RHSMode=1
   exact/active CSR assembly, admission, dispatch, and compatibility.
-- `sfincs_jax/io.py`: about 5.5k lines, still owns too much output schema and
-  diagnostics materialization.
+- `sfincs_jax/io.py`: about 5.2k lines, still owns too much solved-field schema
+  and diagnostics materialization; RHSMode=1 output safety now lives in
+  `sfincs_jax.outputs.rhsmode1`.
 - Package size: about 289 Python files and 160k package lines.
 - Largest remaining package clusters:
   `problems/transport_matrix`, `problems/profile_response`,
@@ -212,9 +222,9 @@ claim. They must stay documented, fail-closed, and gated.
    not already covered by finalization.
 
 2. **Split output schema from `io.py`**
-   Move solved-field schema, diagnostics, solver metadata, timing, memory, and
-   provenance contracts behind a small output contract. Keep file-format
-   writers in `outputs.formats`.
+   Move solved-field schema, diagnostics, timing, memory, and provenance
+   contracts behind a small output contract. Keep file-format writers in
+   `outputs.formats` and RHSMode=1 output-safety gates in `outputs.rhsmode1`.
 
 3. **Stabilize RHSMode=1 ownership**
    Stop broad RHSMode=1 churn unless a complete remaining family has a clear
@@ -280,8 +290,9 @@ Goal: make output behavior testable without solver internals.
 Actions:
 
 1. Define one file-format-independent output schema for solved fields,
-   diagnostics, solver metadata, timing, memory, and provenance.
-2. Keep HDF5/NetCDF/NPZ serialization in `outputs.formats`.
+   diagnostics, timing, memory, and provenance.
+2. Keep HDF5/NetCDF/NPZ serialization in `outputs.formats` and convergence
+   refusal/trace policy in `outputs.rhsmode1`.
 3. Add direct tests proving `.h5`, `.nc`, and `.npz` share the same core fields.
 
 Acceptance:

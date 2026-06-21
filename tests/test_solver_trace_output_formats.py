@@ -7,7 +7,11 @@ import h5py
 import numpy as np
 import pytest
 
-from sfincs_jax.io import _profile_memory_summary, _solver_trace_memory_estimate, write_sfincs_output_file
+from sfincs_jax.io import write_sfincs_output_file
+from sfincs_jax.outputs.rhsmode1 import (
+    _profile_memory_summary,
+    _solver_trace_memory_estimate,
+)
 from sfincs_jax.solver_trace import (
     SolverTrace,
     SolverTraceCandidate,

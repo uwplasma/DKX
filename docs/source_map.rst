@@ -111,10 +111,22 @@ Flat output file-format helpers:
 - NetCDF-safe dataset naming,
 - solver-trace attachment for HDF5 outputs.
 
-The output field/schema construction still lives in ``sfincs_jax/io.py`` during
-the current refactor tranche.  The next I/O split should move solved-field,
-diagnostic, solver-metadata, timing, memory, and provenance schema construction
-behind a smaller output contract while preserving these writer functions.
+``sfincs_jax/outputs/rhsmode1.py``
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+RHSMode=1 output-safety and trace-schema helpers:
+
+- production-size nonconverged-output refusal gates,
+- residual/target extraction from solver results,
+- solver metadata normalization for output and traces,
+- conservative solver-trace memory estimates,
+- sidecar JSON trace writing when a large RHSMode=1 diagnostic output is
+  intentionally refused.
+
+The solved-field schema construction still lives in ``sfincs_jax/io.py`` during
+the current refactor tranche. The next I/O split should move solved-field,
+diagnostic, timing, memory, and provenance schema construction behind a smaller
+output contract while preserving these writer functions.
 
 ``sfincs_jax/input_compat.py``
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
