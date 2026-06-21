@@ -772,6 +772,16 @@ memory-budget rejection, and the physics low-mode coarse residual wrapper. The
 test matrix is built so the low-``ell`` x-block support exactly spans the
 kinetic block, giving a real residual-zero Schur check without a full solve.
 
+The adjacent active-projected x-block extraction is covered by
+``tests/test_rhs1_active_projected_xblock.py``. These tests exercise
+``sfincs_jax.solvers.preconditioners.xblock.active_projected`` directly:
+legacy ``rhs1_full_assembly`` aliases, active-position mapping for unsorted
+active indices, exact active x-block solves on a block-diagonal active system,
+factor-memory budget rejection, exact radius-zero restricted additive-Schwarz
+correction, and overlap-Schwarz budget rejection. This keeps the
+non-differentiable active-CSR preconditioner branch under focused numerical
+tests instead of relying on a slow finite-beta RHSMode=1 production solve.
+
 The output/helper layer is kept under small, direct tests rather than only
 end-to-end HDF5 comparisons. ``tests/test_io_export_and_h5_coverage.py`` covers
 Fortran-layout HDF5 round trips, export-``f`` identity, nearest-neighbor, periodic

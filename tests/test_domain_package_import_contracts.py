@@ -97,9 +97,12 @@ ACTIVE_PACKAGE_EXPORTS = {
         "build_rhs1_zeta_schwarz_preconditioner",
     ),
     "sfincs_jax.solvers.preconditioners.xblock": (
+        "active_positions_for_full_indices",
         "assemble_rhsmode1_fp_xblock_tz_sparse_matrix",
         "assemble_selected_theta_tz_operator",
         "assemble_selected_zeta_tz_operator",
+        "build_active_projected_overlap_schwarz_preconditioner",
+        "build_active_projected_xblock_preconditioner",
         "build_rhs1_sxblock_tz_preconditioner",
         "build_rhs1_sxblock_tz_sparse_host_preconditioner",
         "build_rhs1_xmg_preconditioner",
