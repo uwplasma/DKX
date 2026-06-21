@@ -165,6 +165,9 @@ research workflows.
 .. automodule:: sfincs_jax.problems.profile_response.policies
    :members:
 
+.. automodule:: sfincs_jax.problems.profile_response.setup
+   :members:
+
 .. automodule:: sfincs_jax.problems.profile_response.phi1_newton
    :members:
 
