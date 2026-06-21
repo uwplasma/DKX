@@ -331,6 +331,199 @@ def _parse_xblock_tz_lmax(
     return int(lmax_use)
 
 
+_REDUCED_STRONG_KINDS = frozenset(
+    {
+        "theta_line",
+        "theta_schwarz",
+        "theta_line_xdiag",
+        "species_block",
+        "sxblock",
+        "sxblock_tz",
+        "theta_zeta",
+        "xmg",
+        "pas_lite",
+        "pas_hybrid",
+        "xblock_tz",
+        "xblock_tz_lmax",
+        "zeta_line",
+        "zeta_schwarz",
+        "schur",
+        "adi",
+    }
+)
+
+
+@dataclass(frozen=True)
+class RHS1StrongPreconditionerFamilyBuilders:
+    """Build the RHSMode=1 strong-preconditioner family through dispatch.
+
+    The solve loop injects the current dispatch function so legacy debug tests
+    can still monkeypatch the driver seam, while the actual strong-family
+    mapping and environment controls live with the profile-response
+    preconditioner orchestration.
+    """
+
+    dispatch_builder: Callable[..., Preconditioner]
+
+    def build_reduced_from_kind(
+        self,
+        *,
+        op: Any,
+        strong_precond_kind: str | None,
+        reduce_full: Callable[[jnp.ndarray], jnp.ndarray],
+        expand_reduced: Callable[[jnp.ndarray], jnp.ndarray],
+        rhs1_xblock_tz_lmax: int | None = None,
+        dd_block_theta: int = 8,
+        dd_overlap_theta: int = 1,
+        dd_block_zeta: int = 8,
+        dd_overlap_zeta: int = 1,
+    ) -> Preconditioner | None:
+        """Build a reduced active-DOF strong fallback preconditioner."""
+
+        return build_rhs1_strong_preconditioner_reduced_from_kind(
+            op=op,
+            strong_precond_kind=strong_precond_kind,
+            reduce_full=reduce_full,
+            expand_reduced=expand_reduced,
+            rhs1_xblock_tz_lmax=rhs1_xblock_tz_lmax,
+            dd_block_theta=int(dd_block_theta),
+            dd_overlap_theta=int(dd_overlap_theta),
+            dd_block_zeta=int(dd_block_zeta),
+            dd_overlap_zeta=int(dd_overlap_zeta),
+            dispatch_builder=self.dispatch_builder,
+        )
+
+    def build_full_from_kind(
+        self,
+        *,
+        op: Any,
+        strong_precond_kind: str | None,
+        base_preconditioner_kind: str | None,
+        residual_norm: float,
+        rhs1_xblock_tz_lmax: int | None = None,
+        dd_block_theta: int = 8,
+        dd_overlap_theta: int = 1,
+        dd_block_zeta: int = 8,
+        dd_overlap_zeta: int = 1,
+        adi_sweeps: int | None = None,
+    ) -> tuple[str | None, Preconditioner | None]:
+        """Build a full-system strong fallback preconditioner."""
+
+        return build_rhs1_strong_preconditioner_full_from_kind(
+            op=op,
+            strong_precond_kind=strong_precond_kind,
+            base_preconditioner_kind=base_preconditioner_kind,
+            residual_norm=float(residual_norm),
+            rhs1_xblock_tz_lmax=rhs1_xblock_tz_lmax,
+            dd_block_theta=int(dd_block_theta),
+            dd_overlap_theta=int(dd_overlap_theta),
+            dd_block_zeta=int(dd_block_zeta),
+            dd_overlap_zeta=int(dd_overlap_zeta),
+            dispatch_builder=self.dispatch_builder,
+            adi_sweeps=adi_sweeps,
+        )
+
+
+def _reduced_strong_build_kind(kind: str | None) -> str | None:
+    """Return the concrete reduced strong-builder kind."""
+
+    if kind is None:
+        return None
+    return str(kind) if kind in _REDUCED_STRONG_KINDS else "adi"
+
+
+def resolve_rhs1_strong_preconditioner_kind_for_build(
+    strong_precond_kind: str | None,
+    *,
+    has_pas: bool,
+    base_preconditioner_kind: str | None,
+    residual_norm: float,
+) -> str | None:
+    """Adjust the requested strong-preconditioner kind before building it."""
+
+    if (
+        strong_precond_kind == "schur"
+        and has_pas
+        and base_preconditioner_kind in {"pas_lite", "pas_hybrid"}
+        and residual_norm == residual_norm
+    ):
+        return "pas_hybrid"
+    return strong_precond_kind
+
+
+def build_rhs1_strong_preconditioner_reduced_from_kind(
+    *,
+    op: Any,
+    strong_precond_kind: str | None,
+    reduce_full: Callable[[jnp.ndarray], jnp.ndarray],
+    expand_reduced: Callable[[jnp.ndarray], jnp.ndarray],
+    rhs1_xblock_tz_lmax: int | None,
+    dd_block_theta: int,
+    dd_overlap_theta: int,
+    dd_block_zeta: int,
+    dd_overlap_zeta: int,
+    dispatch_builder: Callable[..., Preconditioner],
+) -> Preconditioner | None:
+    """Build the reduced active-DOF strong fallback through shared dispatch."""
+
+    effective_kind = _reduced_strong_build_kind(strong_precond_kind)
+    if effective_kind is None:
+        return None
+    lmax_use = _parse_xblock_tz_lmax(
+        rhs1_precond_kind=effective_kind,
+        rhs1_xblock_tz_lmax=rhs1_xblock_tz_lmax,
+    )
+    return dispatch_builder(
+        op=op,
+        rhs1_precond_kind=effective_kind,
+        reduce_full=reduce_full,
+        expand_reduced=expand_reduced,
+        rhs1_xblock_tz_lmax=int(lmax_use),
+        dd_block_theta=int(dd_block_theta),
+        dd_overlap_theta=int(dd_overlap_theta),
+        dd_block_zeta=int(dd_block_zeta),
+        dd_overlap_zeta=int(dd_overlap_zeta),
+        adi_sweeps=max(1, _parse_adi_sweeps()),
+    )
+
+
+def build_rhs1_strong_preconditioner_full_from_kind(
+    *,
+    op: Any,
+    strong_precond_kind: str | None,
+    base_preconditioner_kind: str | None,
+    residual_norm: float,
+    rhs1_xblock_tz_lmax: int | None,
+    dd_block_theta: int,
+    dd_overlap_theta: int,
+    dd_block_zeta: int,
+    dd_overlap_zeta: int,
+    dispatch_builder: Callable[..., Preconditioner],
+    adi_sweeps: int | None = None,
+) -> tuple[str | None, Preconditioner | None]:
+    """Build the full-system strong fallback preconditioner via shared dispatch."""
+
+    effective_kind = resolve_rhs1_strong_preconditioner_kind_for_build(
+        strong_precond_kind,
+        has_pas=getattr(getattr(op, "fblock", None), "pas", None) is not None,
+        base_preconditioner_kind=base_preconditioner_kind,
+        residual_norm=float(residual_norm),
+    )
+    if effective_kind is None:
+        return None, None
+    preconditioner = dispatch_builder(
+        op=op,
+        rhs1_precond_kind=effective_kind,
+        rhs1_xblock_tz_lmax=rhs1_xblock_tz_lmax,
+        dd_block_theta=int(dd_block_theta),
+        dd_overlap_theta=int(dd_overlap_theta),
+        dd_block_zeta=int(dd_block_zeta),
+        dd_overlap_zeta=int(dd_overlap_zeta),
+        adi_sweeps=max(1, _parse_adi_sweeps() if adi_sweeps is None else int(adi_sweeps)),
+    )
+    return effective_kind, preconditioner
+
+
 def _wrap_if_needed(context: RHS1ReducedPreconditionerBuildContext, precond: Preconditioner) -> Preconditioner:
     return context.wrap_pas_preconditioner(precond) if context.use_pas_projection else precond
 
@@ -802,9 +995,13 @@ __all__ = [
     "RHS1ReducedPreconditionerBuildResult",
     "RHS1ReducedStrongRetryStageContext",
     "RHS1ReducedStrongRetryStageResult",
+    "RHS1StrongPreconditionerFamilyBuilders",
     "build_rhs1_full_preconditioner",
     "build_rhs1_reduced_preconditioner",
     "build_rhs1_reduced_preconditioner_with_fallback",
+    "build_rhs1_strong_preconditioner_full_from_kind",
+    "build_rhs1_strong_preconditioner_reduced_from_kind",
+    "resolve_rhs1_strong_preconditioner_kind_for_build",
     "run_rhs1_full_strong_retry_stage",
     "run_rhs1_reduced_strong_retry_stage",
     "setup_rhs1_full_base_preconditioner",

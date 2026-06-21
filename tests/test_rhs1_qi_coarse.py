@@ -189,7 +189,7 @@ def test_xblock_qi_coarse_basis_pads_active_operator_layout() -> None:
     assert basis.metadata.accepted_labels[0] == "global"
 
 
-def test_xblock_qi_block_geometry_metadata_tracks_tail_block_and_driver_alias() -> None:
+def test_xblock_qi_block_geometry_metadata_tracks_tail_block_and_canonical_owner() -> None:
     op = _fake_xblock_qi_operator()
 
     metadata = rhs1_xblock_qi_block_geometry_metadata(
@@ -205,11 +205,8 @@ def test_xblock_qi_block_geometry_metadata_tracks_tail_block_and_driver_alias() 
     assert metadata["qi_block_f_size"] == 32
     assert metadata["qi_block_tail_size"] == 5
     assert metadata["qi_block_tail_included"] is True
-    assert vd._rhs1_xblock_qi_coarse_basis is build_rhs1_xblock_qi_coarse_basis
-    assert (
-        vd._rhs1_xblock_qi_block_geometry_metadata
-        is rhs1_xblock_qi_block_geometry_metadata
-    )
+    assert not hasattr(vd, "_rhs1_xblock_qi_coarse_basis")
+    assert not hasattr(vd, "_rhs1_xblock_qi_block_geometry_metadata")
 
 
 def test_global_coarse_and_load_bases_cover_tail_source_and_moments() -> None:

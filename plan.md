@@ -55,16 +55,27 @@ deferred research lanes.
   `sfincs_jax.problems.profile_response.sparse.qi`, injects solve-local
   operators/probe aliases, and keeps QI metadata construction in the
   profile-response sparse package.
+- Final stale `v3_driver.py` QI coarse-basis/block-metadata aliases were
+  removed. The driver now passes the canonical
+  `build_rhs1_xblock_qi_coarse_basis` owner directly to the extracted QI
+  pipeline, and tests assert that the old private aliases are gone rather than
+  preserving them for historical convenience.
 - RHSMode=1 PAS-family binding moved into
   `sfincs_jax.solvers.preconditioners.pas.RHS1PasFamilyBuilders`; `v3_driver.py`
   now keeps only thin private wrappers that inject current low-level builders
   for compatibility-sensitive tests and debug workflows.
+- RHSMode=1 strong-preconditioner family build mapping moved from flat
+  `rhs1_strong_fallback.py`/driver imports into
+  `sfincs_jax.problems.profile_response.preconditioner_build.RHS1StrongPreconditionerFamilyBuilders`.
+  `rhs1_strong_fallback.py` is now only a compatibility facade for historical
+  imports.
 - RHSMode=1 production-output refusal gates, residual/target extraction,
   solver-trace memory estimates, and nonconverged sidecar trace writing moved
   from `io.py` into `sfincs_jax.outputs.rhsmode1`.
 - Current next tranche is solved-field/output-schema consolidation inside
-  `io.py` unless a larger `v3_driver.py` progress/timing/result handoff emerges
-  that removes real responsibility rather than wrapper lines.
+  `io.py` or one larger progress/timing/result handoff from `v3_driver.py`.
+  The remaining QI code in `v3_driver.py` is active solve-local injection and
+  metadata relay for tested fail-closed paths, not removable dead code.
 - The README and docs currently state the public claim boundary: the documented
   release suite is CPU/GPU parity-clean, while production-resolution QI, true
   device-QI, lower-memory native factor replacement, full-grid QA/QH RHSMode=1,
@@ -101,6 +112,9 @@ deferred research lanes.
   behavior:
   `323 passed in 2.14s`, `57 passed in 26.34s`, `178 passed in 28.85s`,
   and `7 passed in 0.53s`.
+- QI alias cleanup preserves live QI coarse/device/two-level/deflated behavior
+  and sparse-driver handoff behavior:
+  `81 passed in 18.53s` and `552 passed in 112.36s`.
 - RHSMode=1 output-gate extraction preserves IO helper coverage and solver-trace
   output-format behavior:
   `18 passed in 0.33s`; after switching moved-helper tests to the new owner
@@ -111,6 +125,10 @@ deferred research lanes.
   Schur heuristic, import-contract, preconditioner context, and profile-response
   preconditioner build behavior:
   `48 passed in 26.32s` and `18 passed in 0.38s`.
+- RHSMode=1 strong-family extraction preserves direct profile-response builder
+  behavior, legacy driver compatibility, and strong-control/policy/auto-kind
+  gates:
+  `63 passed in 0.69s`.
 - `ruff` and `py_compile` pass on touched transport-parallel, finalization, and
   setup/QI files.
 - PR #8 remains draft. Check CI after the next meaningful push rather than

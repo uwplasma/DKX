@@ -86,11 +86,10 @@ from .rhs1_domain_decomposition import (  # compatibility exports for legacy tes
 from .rhs1_qi_coarse import (
     apply_rhs1_qi_coarse_correction,
     build_rhs1_xblock_global_coupling_load_basis as _rhs1_xblock_global_coupling_load_basis,
-    build_rhs1_xblock_qi_coarse_basis as _rhs1_xblock_qi_coarse_basis,
+    build_rhs1_xblock_qi_coarse_basis,
     build_rhs1_xblock_smoothed_load_qi_basis as _rhs1_xblock_smoothed_load_qi_basis,
     build_rhs1_qi_galerkin_preconditioner,
     orthonormalize_rhs1_qi_coarse_basis,
-    rhs1_xblock_qi_block_geometry_metadata,
 )
 from .rhs1_qi_galerkin_policy import (
     parse_rhs1_qi_galerkin_dampings,
@@ -243,6 +242,7 @@ from .problems.profile_response.preconditioner_build import (
     RHS1FullStrongRetryStageContext,
     RHS1ReducedPreconditionerBuildContext,
     RHS1ReducedStrongRetryStageContext,
+    RHS1StrongPreconditionerFamilyBuilders,
     build_rhs1_full_preconditioner,
     build_rhs1_reduced_preconditioner_with_fallback,
     run_rhs1_full_strong_retry_stage,
@@ -391,10 +391,6 @@ from .problems.profile_response.sparse_pc import (
     solve_explicit_sparse_host_direct_branch,
     finalize_xblock_assembled_operator_metadata,
 )
-from .rhs1_strong_fallback import (
-    build_rhs1_strong_preconditioner_full_from_kind,
-    build_rhs1_strong_preconditioner_reduced_from_kind,
-)
 from .problems.profile_response.strong_preconditioning import (
     RHS1PostPrimaryMinresCorrectionContext,
     rhs1_collision_retry_allowed,
@@ -422,8 +418,6 @@ from .problems.profile_response.policies import (
     rhs1_sparse_rescue_tail_skip_messages,
     rhs1_xblock_fallback_initial_guess as _rhs1_xblock_fallback_initial_guess,
 )
-
-_rhs1_xblock_qi_block_geometry_metadata = rhs1_xblock_qi_block_geometry_metadata
 
 from .problems.profile_response.setup import (
     SPARSE_HOST_DIRECT_SOLVE_METHODS as _SPARSE_HOST_DIRECT_SOLVE_METHODS,
@@ -2346,6 +2340,14 @@ def _build_rhs1_preconditioner_from_kind(
     )
 
 
+def _rhs1_strong_preconditioner_family_builders() -> RHS1StrongPreconditionerFamilyBuilders:
+    """Bind the current RHSMode=1 dispatch seam for strong fallback builders."""
+
+    return RHS1StrongPreconditionerFamilyBuilders(
+        dispatch_builder=_build_rhs1_preconditioner_from_kind,
+    )
+
+
 def _build_rhs1_strong_preconditioner_full_from_kind(
     *,
     op: V3FullSystemOperator,
@@ -2360,7 +2362,7 @@ def _build_rhs1_strong_preconditioner_full_from_kind(
     adi_sweeps: int | None = None,
 ) -> tuple[str | None, Callable[[jnp.ndarray], jnp.ndarray] | None]:
     """Build the full-system strong fallback preconditioner via shared dispatch."""
-    return build_rhs1_strong_preconditioner_full_from_kind(
+    return _rhs1_strong_preconditioner_family_builders().build_full_from_kind(
         op=op,
         strong_precond_kind=strong_precond_kind,
         base_preconditioner_kind=rhs1_precond_kind,
@@ -2370,7 +2372,6 @@ def _build_rhs1_strong_preconditioner_full_from_kind(
         dd_overlap_theta=dd_overlap_theta,
         dd_block_zeta=dd_block_zeta,
         dd_overlap_zeta=dd_overlap_zeta,
-        dispatch_builder=_build_rhs1_preconditioner_from_kind,
         adi_sweeps=adi_sweeps,
     )
 
@@ -2388,7 +2389,7 @@ def _build_rhs1_strong_preconditioner_reduced_from_kind(
     dd_overlap_zeta: int = 1,
 ) -> Callable[[jnp.ndarray], jnp.ndarray] | None:
     """Build the reduced active-DOF strong fallback preconditioner via dispatch."""
-    return build_rhs1_strong_preconditioner_reduced_from_kind(
+    return _rhs1_strong_preconditioner_family_builders().build_reduced_from_kind(
         op=op,
         strong_precond_kind=strong_precond_kind,
         reduce_full=reduce_full,
@@ -2398,7 +2399,6 @@ def _build_rhs1_strong_preconditioner_reduced_from_kind(
         dd_overlap_theta=int(dd_overlap_theta),
         dd_block_zeta=int(dd_block_zeta),
         dd_overlap_zeta=int(dd_overlap_zeta),
-        dispatch_builder=_build_rhs1_preconditioner_from_kind,
     )
 
 
@@ -3225,7 +3225,7 @@ def solve_v3_full_system_linear_gmres(
                     elapsed_s=sparse_timer.elapsed_s,
                     emit=emit,
                     env=os.environ,
-                    basis_builder=_rhs1_xblock_qi_coarse_basis,
+                    basis_builder=build_rhs1_xblock_qi_coarse_basis,
                     smoothed_load_basis_builder=(
                         _rhs1_xblock_smoothed_load_qi_basis
                     ),

@@ -154,6 +154,104 @@ def test_full_preconditioner_build_passes_policy_inputs(monkeypatch) -> None:
     assert result is _identity
 
 
+def test_strong_preconditioner_family_builds_full_through_dispatch(monkeypatch) -> None:
+    sentinel = object()
+    seen: dict[str, object] = {}
+
+    def dispatch(**kwargs):
+        seen.update(kwargs)
+        return sentinel
+
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_ADI_SWEEPS", "6")
+    family = pb.RHS1StrongPreconditionerFamilyBuilders(dispatch_builder=dispatch)
+
+    kind, preconditioner = family.build_full_from_kind(
+        op=FakeOperator(fblock=FakeFBlock()),
+        strong_precond_kind="theta_schwarz",
+        base_preconditioner_kind="point",
+        residual_norm=1.0,
+        dd_block_theta=17,
+        dd_overlap_theta=3,
+        dd_block_zeta=19,
+        dd_overlap_zeta=4,
+    )
+
+    assert kind == "theta_schwarz"
+    assert preconditioner is sentinel
+    assert seen["rhs1_precond_kind"] == "theta_schwarz"
+    assert seen["dd_block_theta"] == 17
+    assert seen["dd_overlap_theta"] == 3
+    assert seen["dd_block_zeta"] == 19
+    assert seen["dd_overlap_zeta"] == 4
+    assert seen["adi_sweeps"] == 6
+
+
+def test_strong_preconditioner_family_downgrades_pas_schur_full_build() -> None:
+    seen: dict[str, object] = {}
+
+    def dispatch(**kwargs):
+        seen.update(kwargs)
+        return object()
+
+    family = pb.RHS1StrongPreconditionerFamilyBuilders(dispatch_builder=dispatch)
+    kind, preconditioner = family.build_full_from_kind(
+        op=FakeOperator(fblock=FakeFBlock(pas=object())),
+        strong_precond_kind="schur",
+        base_preconditioner_kind="pas_lite",
+        residual_norm=1.0,
+    )
+
+    assert kind == "pas_hybrid"
+    assert preconditioner is not None
+    assert seen["rhs1_precond_kind"] == "pas_hybrid"
+
+
+def test_strong_preconditioner_family_builds_reduced_with_lmax_and_adi_env(monkeypatch) -> None:
+    sentinel = object()
+    seen: dict[str, object] = {}
+
+    def dispatch(**kwargs):
+        seen.update(kwargs)
+        return sentinel
+
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_XBLOCK_TZ_LMAX", "6")
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_ADI_SWEEPS", "4")
+    family = pb.RHS1StrongPreconditionerFamilyBuilders(dispatch_builder=dispatch)
+
+    preconditioner = family.build_reduced_from_kind(
+        op=FakeOperator(fblock=FakeFBlock()),
+        strong_precond_kind="xblock_tz_lmax",
+        reduce_full=lambda x: x,
+        expand_reduced=lambda x: x,
+    )
+
+    assert preconditioner is sentinel
+    assert seen["rhs1_precond_kind"] == "xblock_tz_lmax"
+    assert seen["rhs1_xblock_tz_lmax"] == 6
+    assert seen["adi_sweeps"] == 4
+
+
+def test_strong_preconditioner_family_reduced_unknown_kind_uses_adi(monkeypatch) -> None:
+    seen: dict[str, object] = {}
+
+    def dispatch(**kwargs):
+        seen.update(kwargs)
+        return object()
+
+    monkeypatch.setenv("SFINCS_JAX_RHSMODE1_ADI_SWEEPS", "bad")
+    family = pb.RHS1StrongPreconditionerFamilyBuilders(dispatch_builder=dispatch)
+
+    family.build_reduced_from_kind(
+        op=FakeOperator(fblock=FakeFBlock()),
+        strong_precond_kind="not-a-kind",
+        reduce_full=lambda x: x,
+        expand_reduced=lambda x: x,
+    )
+
+    assert seen["rhs1_precond_kind"] == "adi"
+    assert seen["adi_sweeps"] == 2
+
+
 def test_pas_tz_guarded_overlay_uses_structured_correction(monkeypatch) -> None:
     calls: dict[str, object] = {}
     monkeypatch.setenv("SFINCS_JAX_RHSMODE1_PAS_TZ_GUARDED_STRUCTURED_LEVELS", "collision")
