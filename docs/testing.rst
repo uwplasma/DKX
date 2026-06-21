@@ -742,6 +742,17 @@ compatibility. The exactness checks use a small sparse RHSMode=1 operator with a
 diagonal kinetic block and coupled tail variables, so they validate real
 preconditioner setup/apply behavior without launching a full transport solve.
 
+The adjacent Fortran-v3-style reduced active sparse-factor extraction is covered
+by ``tests/test_rhs1_fortran_reduced_symbolic_sparse.py``. These tests exercise
+the new
+``sfincs_jax.solvers.preconditioners.symbolic_sparse.rhs1_fortran_reduced``
+owner directly: package-facade exports, legacy ``rhs1_full_assembly`` alias
+compatibility, support-mode parsing and rejection of invalid tokens, default
+Fortran-reduced support dropping, and exact LU application when the support is
+explicitly made full. This keeps the non-differentiable host sparse-factor lane
+under fast synthetic sparse tests instead of relying on a slow full RHSMode=1
+solve for coverage.
+
 The output/helper layer is kept under small, direct tests rather than only
 end-to-end HDF5 comparisons. ``tests/test_io_export_and_h5_coverage.py`` covers
 Fortran-layout HDF5 round trips, export-``f`` identity, nearest-neighbor, periodic

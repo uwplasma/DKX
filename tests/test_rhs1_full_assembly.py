@@ -9,6 +9,7 @@ import scipy.sparse as sp
 
 import sfincs_jax.rhs1_full_assembly as rfa
 import sfincs_jax.v3_driver as vd
+from sfincs_jax.solvers.preconditioners.symbolic_sparse import rhs1_fortran_reduced as rfr
 from sfincs_jax.namelist import read_sfincs_input
 from sfincs_jax.rhs1_active_preconditioner_policy import (
     resolve_active_projected_preconditioner_auto_policy,
@@ -1387,8 +1388,8 @@ def test_active_fortran_v3_reduced_lu_large_default_prefill_rejects_observed_pro
         raising=False,
     )
     monkeypatch.setattr(
-        rfa,
-        "_estimate_spilu_factor_nbytes",
+        rfr,
+        "estimate_spilu_factor_nbytes",
         lambda *, matrix, fill_factor: observed_symbolic_estimate,
     )
 

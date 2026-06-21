@@ -1,0 +1,948 @@
+"""Fortran-v3-style reduced active sparse factors for RHSMode=1.
+
+SFINCS Fortran v3 builds a simplified ``whichMatrix=0`` preconditioning
+operator rather than factoring the exact Jacobian used for the residual.  This
+module owns the Python-native analogue used by the explicit host CSR lane:
+reduced active matrix construction, support-mode selection, equilibration, LU
+or ILU setup, memory admission, and JSON-friendly factor metadata.
+"""
+
+from __future__ import annotations
+
+from collections.abc import Callable, Sequence
+from typing import Any
+import os
+import time
+
+import numpy as np
+import scipy.sparse as sp
+
+from ....rhs1_block_operator import RHS1ActiveBlockLayout, RHS1BlockLayout
+from ....rhs1_compressed_layout import infer_rhs1_compressed_pitch_layout_from_active_indices
+from ....rhs1_fortran_reduced_factor_policy import resolve_active_fortran_v3_reduced_factor_policy
+from ....rhs1_reduced_pmat_plan import build_rhs1_reduced_pmat_elimination_plan
+from ..schur.rhs1_full_csr import RHS1StructuredFullCSRPreconditioner
+
+__all__ = (
+    "active_fortran_v3_reduced_preconditioner_matrix",
+    "build_active_fortran_v3_reduced_sparse_factor_preconditioner",
+    "estimate_spilu_factor_nbytes",
+    "parse_active_fortran_v3_support_mode_candidates",
+    "select_active_fortran_v3_reduced_support_mode_preconditioner",
+    "sparse_equilibration_scale",
+    "sparse_lu_factor_nbytes",
+)
+
+
+def build_active_fortran_v3_reduced_sparse_factor_preconditioner(
+    *,
+    matrix: Any,
+    layout: RHS1BlockLayout,
+    active_indices: Any | None,
+    requested_kind: str,
+    regularization: float,
+    max_factor_nbytes: int,
+    t0: float,
+    preconditioner_x: int | None = None,
+    preconditioner_xi: int | None = None,
+    preconditioner_species: int | None = None,
+    preconditioner_x_min_l: int | None = None,
+) -> RHS1StructuredFullCSRPreconditioner:
+    """Factor a Fortran-v3-inspired reduced active preconditioner matrix."""
+
+    from scipy.sparse.csgraph import reverse_cuthill_mckee  # noqa: PLC0415
+    from scipy.sparse.linalg import LinearOperator, spilu, splu  # noqa: PLC0415
+
+    try:
+        reduced, reduction_metadata = active_fortran_v3_reduced_preconditioner_matrix(
+            matrix=matrix,
+            layout=layout,
+            active_indices=active_indices,
+            regularization=regularization,
+            preconditioner_x=preconditioner_x,
+            preconditioner_xi=preconditioner_xi,
+            preconditioner_species=preconditioner_species,
+            preconditioner_x_min_l=preconditioner_x_min_l,
+        )
+    except ValueError as exc:
+        return RHS1StructuredFullCSRPreconditioner(
+            operator=None,
+            selected=False,
+            kind="active_fortran_v3_pc_matrix",
+            reason="active_fortran_v3_pc_matrix_invalid_layout",
+            setup_s=max(0.0, time.perf_counter() - t0),
+            metadata={"error": str(exc)},
+        )
+
+    requested = str(requested_kind).strip().lower().replace("-", "_")
+    use_symbolic_plan = bool(
+        _env_bool(
+            "SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_FORTRAN_V3_PC_SYMBOLIC_PLAN",
+            "planned" in requested,
+        )
+    )
+    plan_permutation: np.ndarray | None = None
+    if use_symbolic_plan:
+        separator_ells_raw = os.environ.get(
+            "SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_FORTRAN_V3_PC_SYMBOLIC_PLAN_SEPARATOR_ELLS",
+            "0",
+        )
+        separator_ells: list[int] = []
+        for token in separator_ells_raw.replace(";", ",").split(","):
+            token = token.strip()
+            if not token:
+                continue
+            try:
+                separator_ells.append(int(token))
+            except ValueError:
+                continue
+        if not separator_ells:
+            separator_ells = [0]
+        try:
+            compressed_layout = infer_rhs1_compressed_pitch_layout_from_active_indices(
+                layout,
+                active_indices,
+            )
+            plan = build_rhs1_reduced_pmat_elimination_plan(
+                compressed_layout,
+                separator_ells=tuple(separator_ells),
+                max_interior_group_size=max(
+                    1,
+                    int(
+                        _env_int(
+                            "SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_FORTRAN_V3_PC_SYMBOLIC_PLAN_MAX_INTERIOR_GROUP_SIZE",
+                            32768,
+                        )
+                    ),
+                ),
+                max_separator_size=max(
+                    1,
+                    int(
+                        _env_int(
+                            "SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_FORTRAN_V3_PC_SYMBOLIC_PLAN_MAX_SEPARATOR_SIZE",
+                            8192,
+                        )
+                    ),
+                ),
+            )
+        except ValueError as exc:
+            return RHS1StructuredFullCSRPreconditioner(
+                operator=None,
+                selected=False,
+                kind="active_fortran_v3_reduced_planned_matrix",
+                reason="active_fortran_v3_reduced_symbolic_plan_invalid",
+                setup_s=max(0.0, time.perf_counter() - t0),
+                metadata={
+                    **reduction_metadata,
+                    "symbolic_plan_requested": True,
+                    "error": str(exc),
+                },
+            )
+        plan_permutation = np.asarray(plan.permutation, dtype=np.int64)
+        if plan_permutation.size != int(reduced.shape[0]) or np.unique(plan_permutation).size != int(
+            reduced.shape[0]
+        ):
+            return RHS1StructuredFullCSRPreconditioner(
+                operator=None,
+                selected=False,
+                kind="active_fortran_v3_reduced_planned_matrix",
+                reason="active_fortran_v3_reduced_symbolic_plan_incomplete_permutation",
+                setup_s=max(0.0, time.perf_counter() - t0),
+                metadata={
+                    **reduction_metadata,
+                    "symbolic_plan_requested": True,
+                    "symbolic_plan_size": int(plan_permutation.size),
+                    "matrix_size": int(reduced.shape[0]),
+                },
+            )
+        reduced = reduced[plan_permutation, :][:, plan_permutation].tocsr()
+        reduction_metadata = {
+            **reduction_metadata,
+            "symbolic_plan_requested": True,
+            "symbolic_plan_applied": True,
+            "symbolic_plan_permutation_nbytes": int(plan_permutation.nbytes),
+            "reduced_pmat_symbolic_plan": plan.metadata(),
+        }
+    else:
+        reduction_metadata = {
+            **reduction_metadata,
+            "symbolic_plan_requested": False,
+            "symbolic_plan_applied": False,
+        }
+
+    max_size = _env_int("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_FORTRAN_V3_PC_MAX_SIZE", 1_000_000)
+    n = int(reduced.shape[0])
+    if int(max_size) > 0 and n > int(max_size):
+        return RHS1StructuredFullCSRPreconditioner(
+            operator=None,
+            selected=False,
+            kind="active_fortran_v3_pc_matrix",
+            reason=f"active_fortran_v3_pc_matrix_size_exceeded:{n}>{int(max_size)}",
+            setup_s=max(0.0, time.perf_counter() - t0),
+            metadata={**reduction_metadata, "max_size": int(max_size)},
+        )
+
+    factor_policy = resolve_active_fortran_v3_reduced_factor_policy(
+        requested_kind=requested,
+        matrix_size=int(n),
+    )
+    factor_kind = str(factor_policy.factor_kind)
+    large_matrix = bool(factor_policy.large_matrix)
+    if bool(factor_policy.ilu_size_exceeded):
+        return RHS1StructuredFullCSRPreconditioner(
+            operator=None,
+            selected=False,
+            kind="active_fortran_v3_pc_matrix",
+            reason=f"active_fortran_v3_pc_matrix_ilu_size_exceeded:{n}>{int(factor_policy.ilu_max_size)}",
+            setup_s=max(0.0, time.perf_counter() - t0),
+            metadata={
+                **reduction_metadata,
+                "factor_kind": str(factor_kind),
+                "matrix_size": int(n),
+                "ilu_max_size": int(factor_policy.ilu_max_size),
+                "note": (
+                    "large ILU setup is intentionally fail-closed; raise "
+                    "SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_FORTRAN_V3_PC_ILU_MAX_SIZE "
+                    "only for explicit diagnostics"
+                ),
+            },
+        )
+    fill_factor = float(factor_policy.fill_factor)
+    drop_tol = float(factor_policy.drop_tol)
+    diag_pivot = float(factor_policy.diag_pivot)
+    permc_env = str(factor_policy.permc_requested)
+    permc_candidates = tuple(str(candidate) for candidate in factor_policy.permc_candidates)
+    permc_spec = str(permc_candidates[0])
+    scale_norm = str(factor_policy.scale_norm)
+    max_scale = float(factor_policy.max_scale)
+
+    estimate = estimate_spilu_factor_nbytes(matrix=reduced, fill_factor=fill_factor) + 2 * n * np.dtype(
+        np.float64
+    ).itemsize
+    if bool(factor_policy.progress):
+        print(
+            "active_fortran_v3_pc_matrix: factor setup "
+            f"n={n} nnz={int(reduced.nnz)} factor_kind={factor_kind} "
+            f"fill_factor={float(fill_factor):.3g} drop_tol={float(drop_tol):.3g} "
+            f"estimate_mb={float(estimate) / (1024.0 * 1024.0):.1f} "
+            f"budget_mb={float(max_factor_nbytes) / (1024.0 * 1024.0):.1f}",
+            flush=True,
+        )
+    if estimate > int(max_factor_nbytes):
+        return RHS1StructuredFullCSRPreconditioner(
+            operator=None,
+            selected=False,
+            kind="active_fortran_v3_pc_matrix",
+            reason=f"active_fortran_v3_pc_matrix_budget_exceeded:{estimate}>{int(max_factor_nbytes)}",
+            setup_s=max(0.0, time.perf_counter() - t0),
+            metadata={
+                **reduction_metadata,
+                "factor_kind": str(factor_kind),
+                "factor_nbytes_estimate": int(estimate),
+                "max_factor_nbytes": int(max_factor_nbytes),
+                "fill_factor": float(fill_factor),
+                "drop_tol": float(drop_tol),
+                "large_matrix_defaults": bool(large_matrix),
+                "permc_spec": str(permc_spec),
+                "permc_spec_requested": str(permc_env or "AUTO"),
+                "permc_spec_candidates": tuple(str(candidate) for candidate in permc_candidates),
+            },
+        )
+    lu_large_prefill_size = int(factor_policy.lu_large_prefill_size)
+    lu_prefill_safety_factor = float(factor_policy.lu_prefill_safety_factor)
+    lu_prefill_estimate = int(np.ceil(float(estimate) * float(lu_prefill_safety_factor)))
+    if factor_kind == "lu" and lu_prefill_estimate > int(max_factor_nbytes):
+        return RHS1StructuredFullCSRPreconditioner(
+            operator=None,
+            selected=False,
+            kind="active_fortran_v3_pc_matrix",
+            reason=(
+                "active_fortran_v3_pc_matrix_lu_prefill_budget_exceeded:"
+                f"{lu_prefill_estimate}>{int(max_factor_nbytes)}"
+            ),
+            setup_s=max(0.0, time.perf_counter() - t0),
+            metadata={
+                **reduction_metadata,
+                "factor_kind": str(factor_kind),
+                "factor_nbytes_estimate": int(estimate),
+                "factor_nbytes_prefill_estimate": int(lu_prefill_estimate),
+                "lu_prefill_safety_factor": float(lu_prefill_safety_factor),
+                "lu_large_prefill_size": int(lu_large_prefill_size),
+                "max_factor_nbytes": int(max_factor_nbytes),
+                "fill_factor": float(fill_factor),
+                "drop_tol": float(drop_tol),
+                "large_matrix_defaults": bool(large_matrix),
+                "permc_spec": str(permc_spec),
+                "permc_spec_requested": str(permc_env or "AUTO"),
+                "permc_spec_candidates": tuple(str(candidate) for candidate in permc_candidates),
+            },
+        )
+
+    row_scale, row_meta = sparse_equilibration_scale(
+        reduced,
+        axis=1,
+        norm=scale_norm,
+        max_scale=max_scale,
+    )
+    scaled = reduced.multiply(row_scale[:, None]).tocsc()
+    col_scale, col_meta = sparse_equilibration_scale(
+        scaled,
+        axis=0,
+        norm=scale_norm,
+        max_scale=max_scale,
+    )
+    scaled = scaled.multiply(col_scale[None, :]).tocsc()
+    factor = None
+    if use_symbolic_plan:
+        selected_kind = (
+            "active_fortran_v3_reduced_planned_lu"
+            if factor_kind == "lu"
+            else "active_fortran_v3_reduced_planned_ilu"
+        )
+    else:
+        selected_kind = "active_fortran_v3_reduced_lu" if factor_kind == "lu" else "active_fortran_v3_reduced_ilu"
+    permc_failures: list[dict[str, object]] = []
+    selected_permutation: np.ndarray | None = None
+    selected_superlu_permc = str(permc_spec)
+    for candidate_permc in permc_candidates:
+        candidate_permc_use = str(candidate_permc).upper()
+        factor_matrix = scaled
+        factor_permutation: np.ndarray | None = None
+        superlu_permc = candidate_permc_use
+        if candidate_permc_use == "RCM":
+            factor_permutation = np.asarray(
+                reverse_cuthill_mckee(scaled.tocsr(), symmetric_mode=False),
+                dtype=np.int64,
+            )
+            factor_matrix = scaled[factor_permutation, :][:, factor_permutation].tocsc()
+            superlu_permc = "NATURAL"
+        try:
+            if factor_kind == "lu":
+                factor = splu(factor_matrix, permc_spec=str(superlu_permc), diag_pivot_thresh=float(diag_pivot))
+            else:
+                factor = spilu(
+                    factor_matrix,
+                    drop_tol=float(drop_tol),
+                    fill_factor=float(fill_factor),
+                    permc_spec=str(superlu_permc),
+                    diag_pivot_thresh=float(diag_pivot),
+                )
+            permc_spec = str(candidate_permc_use)
+            selected_permutation = factor_permutation
+            selected_superlu_permc = str(superlu_permc)
+            break
+        except Exception as exc:  # noqa: BLE001
+            permc_failures.append(
+                {
+                    "permc_spec": str(candidate_permc_use),
+                    "superlu_permc_spec": str(superlu_permc),
+                    "error_type": type(exc).__name__,
+                    "error": str(exc),
+                }
+            )
+    if factor is None:
+        return RHS1StructuredFullCSRPreconditioner(
+            operator=None,
+            selected=False,
+            kind="active_fortran_v3_pc_matrix",
+            reason="active_fortran_v3_pc_matrix_failed:all_permc_specs",
+            setup_s=max(0.0, time.perf_counter() - t0),
+            metadata={
+                **reduction_metadata,
+                "error": str(permc_failures[-1]["error"]) if permc_failures else "",
+                "permc_failures": tuple(dict(entry) for entry in permc_failures),
+                "factor_kind": str(factor_kind),
+                "factor_nbytes_estimate": int(estimate),
+                "fill_factor": float(fill_factor),
+                "drop_tol": float(drop_tol),
+                "large_matrix_defaults": bool(large_matrix),
+                "permc_spec": str(permc_spec),
+                "permc_spec_requested": str(permc_env or "AUTO"),
+                "permc_spec_candidates": tuple(str(candidate) for candidate in permc_candidates),
+                "row_scaling": row_meta,
+                "column_scaling": col_meta,
+            },
+        )
+
+    factor_nbytes = int(
+        sparse_lu_factor_nbytes(factor)
+        + row_scale.nbytes
+        + col_scale.nbytes
+        + (0 if plan_permutation is None else plan_permutation.nbytes)
+    )
+    if factor_nbytes > int(max_factor_nbytes):
+        return RHS1StructuredFullCSRPreconditioner(
+            operator=None,
+            selected=False,
+            kind="active_fortran_v3_pc_matrix",
+            reason=f"active_fortran_v3_pc_matrix_factor_budget_exceeded:{factor_nbytes}>{int(max_factor_nbytes)}",
+            setup_s=max(0.0, time.perf_counter() - t0),
+            metadata={
+                **reduction_metadata,
+                "factor_kind": str(factor_kind),
+                "factor_nbytes_estimate": int(estimate),
+                "factor_nbytes_actual": int(factor_nbytes),
+                "max_factor_nbytes": int(max_factor_nbytes),
+                "permc_spec": str(permc_spec),
+                "permc_spec_requested": str(permc_env or "AUTO"),
+                "permc_spec_candidates": tuple(str(candidate) for candidate in permc_candidates),
+                "permc_failures": tuple(dict(entry) for entry in permc_failures),
+            },
+        )
+
+    def apply(x: Any) -> np.ndarray:
+        arr = np.asarray(x, dtype=np.float64).reshape((-1,))
+        arr_factor_order = arr if plan_permutation is None else arr[plan_permutation]
+        scaled_rhs = row_scale * arr_factor_order
+        if selected_permutation is None:
+            scaled_solution = np.asarray(factor.solve(scaled_rhs), dtype=np.float64).reshape((-1,))
+        else:
+            permuted_solution = np.asarray(
+                factor.solve(scaled_rhs[selected_permutation]),
+                dtype=np.float64,
+            ).reshape((-1,))
+            scaled_solution = np.empty_like(permuted_solution)
+            scaled_solution[selected_permutation] = permuted_solution
+        solution_factor_order = col_scale * scaled_solution
+        if plan_permutation is None:
+            return solution_factor_order
+        solution = np.empty_like(solution_factor_order)
+        solution[plan_permutation] = solution_factor_order
+        return solution
+
+    operator = LinearOperator(reduced.shape, matvec=apply, dtype=np.float64)
+    return RHS1StructuredFullCSRPreconditioner(
+        operator=operator,
+        selected=True,
+        kind=selected_kind,
+        reason="complete",
+        setup_s=max(0.0, time.perf_counter() - t0),
+        metadata={
+            **reduction_metadata,
+            "requested_kind": str(requested_kind),
+            "architecture": "fortran_v3_reduced_active_pc_matrix",
+            "factor_kind": str(factor_kind),
+            "factor_nnz": int(factor.L.nnz + factor.U.nnz),
+            "factor_nbytes_estimate": int(estimate),
+            "factor_nbytes_prefill_estimate": int(lu_prefill_estimate) if factor_kind == "lu" else int(estimate),
+            "factor_nbytes_actual": int(factor_nbytes),
+            "lu_prefill_safety_factor": float(lu_prefill_safety_factor) if factor_kind == "lu" else None,
+            "lu_large_prefill_size": int(lu_large_prefill_size),
+            "max_factor_nbytes": int(max_factor_nbytes),
+            "fill_factor": float(fill_factor),
+            "drop_tol": float(drop_tol),
+            "large_matrix_defaults": bool(large_matrix),
+            "diag_pivot_thresh": float(diag_pivot),
+            "permc_spec": str(permc_spec),
+            "superlu_permc_spec": str(selected_superlu_permc),
+            "explicit_symmetric_ordering": bool(selected_permutation is not None),
+            "symbolic_plan_permutation": bool(plan_permutation is not None),
+            "permc_spec_requested": str(permc_env or "AUTO"),
+            "permc_spec_candidates": tuple(str(candidate) for candidate in permc_candidates),
+            "permc_failures": tuple(dict(entry) for entry in permc_failures),
+            "scale_norm": str(scale_norm),
+            "max_scale": float(max_scale),
+            "row_scaling": row_meta,
+            "column_scaling": col_meta,
+            "requires_preflight": bool(factor_kind == "ilu" or use_symbolic_plan),
+            "admission_policy": (
+                "external_true_residual_required"
+                if bool(factor_kind == "ilu" or use_symbolic_plan)
+                else "exact_reduced_matrix_factor"
+            ),
+        },
+    )
+
+
+def active_fortran_v3_reduced_preconditioner_matrix(
+    *,
+    matrix: Any,
+    layout: RHS1BlockLayout,
+    active_indices: Any | None,
+    regularization: float,
+    preconditioner_x: int | None = None,
+    preconditioner_xi: int | None = None,
+    preconditioner_species: int | None = None,
+    preconditioner_x_min_l: int | None = None,
+) -> tuple[Any, dict[str, object]]:
+    """Return an active CSR matrix with Fortran-v3-style support reduction."""
+
+    matrix_csr = matrix.tocsr().astype(np.float64)
+    active = (
+        np.arange(int(matrix_csr.shape[0]), dtype=np.int64)
+        if active_indices is None
+        else np.asarray(active_indices, dtype=np.int64).reshape((-1,))
+    )
+    active_layout = RHS1ActiveBlockLayout.from_layout(layout, active)
+    if active.size != int(matrix_csr.shape[0]):
+        raise ValueError("active_indices size must match active matrix shape")
+    if matrix_csr.shape[0] != matrix_csr.shape[1]:
+        raise ValueError("active matrix must be square")
+
+    matrix_coo = matrix_csr.tocoo(copy=False)
+    row_full = active[np.asarray(matrix_coo.row, dtype=np.int64)]
+    col_full = active[np.asarray(matrix_coo.col, dtype=np.int64)]
+    kinetic_entry = (row_full < int(layout.f_size)) & (col_full < int(layout.f_size))
+    keep = np.ones(matrix_coo.nnz, dtype=bool)
+    preconditioner_x_use = (
+        int(preconditioner_x)
+        if preconditioner_x is not None
+        else int(_env_int("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_FORTRAN_V3_PC_PRECONDITIONER_X", 1))
+    )
+    preconditioner_xi_use = (
+        int(preconditioner_xi)
+        if preconditioner_xi is not None
+        else int(_env_int("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_FORTRAN_V3_PC_PRECONDITIONER_XI", 1))
+    )
+    preconditioner_species_use = (
+        int(preconditioner_species)
+        if preconditioner_species is not None
+        else int(_env_int("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_FORTRAN_V3_PC_PRECONDITIONER_SPECIES", 1))
+    )
+    preconditioner_x_min_l_use = max(
+        0,
+        int(preconditioner_x_min_l)
+        if preconditioner_x_min_l is not None
+        else int(_env_int("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_FORTRAN_V3_PC_PRECONDITIONER_X_MIN_L", 0)),
+    )
+    dropped: dict[str, int] = {
+        "x_nonlocal": 0,
+        "x_unsupported": 0,
+        "ell_two": 0,
+        "ell_outside_support": 0,
+        "species_cross": 0,
+    }
+
+    if np.any(kinetic_entry):
+        kinetic_positions = np.flatnonzero(kinetic_entry)
+        row_decoded = layout.decode_kinetic_indices(row_full[kinetic_positions])
+        col_decoded = layout.decode_kinetic_indices(col_full[kinetic_positions])
+
+        if int(preconditioner_species_use) > 0:
+            mask = row_decoded.species != col_decoded.species
+            keep[kinetic_positions[mask]] = False
+            dropped["species_cross"] = int(np.count_nonzero(mask))
+
+        if int(preconditioner_x_use) > 0:
+            row_x = row_decoded.x.astype(np.int64, copy=False)
+            col_x = col_decoded.x.astype(np.int64, copy=False)
+            if int(preconditioner_x_use) == 1:
+                x_allowed = row_x == col_x
+            elif int(preconditioner_x_use) == 2:
+                x_allowed = col_x >= row_x
+            elif int(preconditioner_x_use) in {3, 5}:
+                x_allowed = np.abs(row_x - col_x) <= 1
+            elif int(preconditioner_x_use) == 4:
+                x_allowed = (col_x == row_x) | (col_x == row_x + 1)
+            else:
+                x_allowed = row_x == col_x
+            if int(preconditioner_x_min_l_use) > 0:
+                x_gate = row_decoded.ell >= int(preconditioner_x_min_l_use)
+                x_allowed = np.where(x_gate, x_allowed, True)
+            mask = ~x_allowed
+            keep[kinetic_positions[mask]] = False
+            dropped["x_unsupported"] = int(np.count_nonzero(mask))
+            dropped["x_nonlocal"] = int(np.count_nonzero(mask & (row_decoded.x != col_decoded.x)))
+
+        ell_distance = np.abs(row_decoded.ell - col_decoded.ell)
+        ell_radius = 1 if int(preconditioner_xi_use) > 0 else 2
+        mask = ell_distance > int(ell_radius)
+        if int(preconditioner_xi_use) > 0:
+            dropped["ell_two"] = int(np.count_nonzero(ell_distance == 2))
+        if np.any(mask):
+            keep[kinetic_positions[mask]] = False
+            dropped["ell_outside_support"] = int(np.count_nonzero(mask))
+
+    reduced = sp.coo_matrix(
+        (matrix_coo.data[keep], (matrix_coo.row[keep], matrix_coo.col[keep])),
+        shape=matrix_csr.shape,
+        dtype=np.float64,
+    ).tocsr()
+    reduced.sum_duplicates()
+    reduced.eliminate_zeros()
+    diagonal_shift = float(
+        _env_float(
+            "SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_FORTRAN_V3_PC_DIAGONAL_SHIFT",
+            max(float(abs(regularization)), 1.0e-14),
+        )
+    )
+    if diagonal_shift > 0.0:
+        scale = max(float(np.max(np.abs(reduced.data))) if reduced.nnz else 0.0, 1.0)
+        reduced = reduced + float(diagonal_shift * scale) * sp.eye(reduced.shape[0], dtype=np.float64, format="csr")
+    metadata = {
+        "matrix_shape": tuple(int(v) for v in matrix_csr.shape),
+        "matrix_nnz": int(matrix_csr.nnz),
+        "reduced_matrix_nnz": int(reduced.nnz),
+        "reduced_nnz_ratio": float(reduced.nnz / max(int(matrix_csr.nnz), 1)),
+        "dropped_entries": {str(k): int(v) for k, v in dropped.items()},
+        "diagonal_shift": float(diagonal_shift),
+        "preconditioner_x": int(preconditioner_x_use),
+        "preconditioner_xi": int(preconditioner_xi_use),
+        "preconditioner_species": int(preconditioner_species_use),
+        "preconditioner_x_min_l": int(preconditioner_x_min_l_use),
+        "fortran_reduced_filter": "layout_decoded_supports",
+        "active_layout": active_layout.to_dict(),
+        "fortran_v3_source": (
+            "solver.F90 uses GMRES+PCLU on whichMatrix=0; populateMatrix.F90 "
+            "drops off-by-2 ell terms when preconditioner_xi=1 and createGrids.F90 "
+            "defaults preconditioner_x=1 to diagonal x derivative stencils."
+        ),
+        "implementation_note": (
+            "This is an active-CSR reduction of the exact operator. The next "
+            "production step is direct term-level assembly of the v3 whichMatrix=0 "
+            "operator to avoid first materializing the full true CSR."
+        ),
+    }
+    return reduced, metadata
+
+
+def select_active_fortran_v3_reduced_support_mode_preconditioner(
+    *,
+    matrix: Any,
+    layout: RHS1BlockLayout,
+    active_indices: Any | None,
+    requested_kind: str,
+    regularization: float,
+    max_factor_nbytes: int,
+    rhs: Any,
+    true_matvec: Callable[[np.ndarray], Any],
+    candidates: str | Sequence[str] = "current,x0,xmin_l2,species0",
+    max_candidates: int = 4,
+    min_improvement_ratio: float = 1.05,
+    preconditioner_x: int = 1,
+    preconditioner_xi: int = 1,
+    preconditioner_species: int = 1,
+    preconditioner_x_min_l: int = 0,
+) -> tuple[RHS1StructuredFullCSRPreconditioner, dict[str, object]]:
+    """Select a Fortran-v3 reduced support mode using true residual probes."""
+
+    t0 = time.perf_counter()
+    rhs_np = np.asarray(rhs, dtype=np.float64).reshape((-1,))
+    rhs_norm = float(np.linalg.norm(rhs_np))
+    candidate_specs = parse_active_fortran_v3_support_mode_candidates(
+        candidates=candidates,
+        max_candidates=max_candidates,
+        preconditioner_x=int(preconditioner_x),
+        preconditioner_xi=int(preconditioner_xi),
+        preconditioner_species=int(preconditioner_species),
+        preconditioner_x_min_l=int(preconditioner_x_min_l),
+    )
+    candidate_entries: list[dict[str, object]] = []
+    first_selected_pc: RHS1StructuredFullCSRPreconditioner | None = None
+    baseline_pc: RHS1StructuredFullCSRPreconditioner | None = None
+    baseline_residual: float | None = None
+    best_pc: RHS1StructuredFullCSRPreconditioner | None = None
+    best_residual = float("inf")
+    best_label: str | None = None
+    early_stop_reason: str | None = None
+
+    for spec_index, spec in enumerate(candidate_specs):
+        candidate_start = time.perf_counter()
+        try:
+            pc = build_active_fortran_v3_reduced_sparse_factor_preconditioner(
+                matrix=matrix,
+                layout=layout,
+                active_indices=active_indices,
+                requested_kind=requested_kind,
+                regularization=float(regularization),
+                max_factor_nbytes=int(max_factor_nbytes),
+                t0=candidate_start,
+                preconditioner_x=int(spec["preconditioner_x"]),
+                preconditioner_xi=int(spec["preconditioner_xi"]),
+                preconditioner_species=int(spec["preconditioner_species"]),
+                preconditioner_x_min_l=int(spec["preconditioner_x_min_l"]),
+            )
+            residual_after: float | None = None
+            improvement_ratio: float | None = None
+            if bool(pc.selected) and pc.operator is not None:
+                if first_selected_pc is None:
+                    first_selected_pc = pc
+                y_np = np.asarray(pc.operator.matvec(rhs_np), dtype=np.float64).reshape((-1,))
+                true_y = np.asarray(true_matvec(y_np), dtype=np.float64).reshape((-1,))
+                residual_after = float(np.linalg.norm(rhs_np - true_y))
+                if rhs_norm > 0.0 and np.isfinite(float(residual_after)):
+                    improvement_ratio = float(rhs_norm / max(float(residual_after), 1.0e-300))
+                if bool(spec["is_current"]):
+                    baseline_pc = pc
+                    baseline_residual = float(residual_after)
+                if np.isfinite(float(residual_after)) and float(residual_after) < float(best_residual):
+                    best_pc = pc
+                    best_residual = float(residual_after)
+                    best_label = str(spec["label"])
+            entry = {
+                "label": str(spec["label"]),
+                "is_current": bool(spec["is_current"]),
+                "selected": bool(pc.selected),
+                "kind": str(pc.kind),
+                "reason": str(pc.reason),
+                "setup_s": float(pc.setup_s),
+                "residual_after": None if residual_after is None else float(residual_after),
+                "improvement_ratio": None if improvement_ratio is None else float(improvement_ratio),
+                "preconditioner_x": int(spec["preconditioner_x"]),
+                "preconditioner_xi": int(spec["preconditioner_xi"]),
+                "preconditioner_species": int(spec["preconditioner_species"]),
+                "preconditioner_x_min_l": int(spec["preconditioner_x_min_l"]),
+                "factor_nbytes_actual": pc.metadata.get("factor_nbytes_actual"),
+                "factor_nbytes_estimate": pc.metadata.get("factor_nbytes_estimate"),
+                "reduced_matrix_nnz": pc.metadata.get("reduced_matrix_nnz"),
+            }
+            if (
+                bool(spec["is_current"])
+                and bool(pc.selected)
+                and active_fortran_v3_support_mode_dropped_no_entries(pc.metadata)
+                and spec_index + 1 < len(candidate_specs)
+            ):
+                early_stop_reason = "current_support_dropped_no_entries"
+                entry["early_stop_reason"] = early_stop_reason
+                candidate_entries.append(entry)
+                break
+        except Exception as exc:  # noqa: BLE001
+            entry = {
+                "label": str(spec["label"]),
+                "is_current": bool(spec["is_current"]),
+                "selected": False,
+                "reason": f"support_mode_candidate_failed:{type(exc).__name__}",
+                "error": str(exc),
+                "setup_s": max(0.0, time.perf_counter() - candidate_start),
+                "residual_after": None,
+                "improvement_ratio": None,
+                "preconditioner_x": int(spec["preconditioner_x"]),
+                "preconditioner_xi": int(spec["preconditioner_xi"]),
+                "preconditioner_species": int(spec["preconditioner_species"]),
+                "preconditioner_x_min_l": int(spec["preconditioner_x_min_l"]),
+            }
+        candidate_entries.append(entry)
+
+    min_ratio = max(1.0, float(min_improvement_ratio))
+    accepted_nonbaseline = False
+    selected_pc = baseline_pc if baseline_pc is not None else first_selected_pc
+    selected_label = "current" if baseline_pc is not None else None
+    if best_pc is not None and np.isfinite(float(best_residual)):
+        if baseline_residual is None:
+            selected_pc = best_pc
+            selected_label = best_label
+            accepted_nonbaseline = bool(best_label != "current")
+        elif float(best_residual) <= float(baseline_residual) / float(min_ratio):
+            selected_pc = best_pc
+            selected_label = best_label
+            accepted_nonbaseline = bool(best_label != "current")
+    if selected_pc is None:
+        selected_pc = RHS1StructuredFullCSRPreconditioner(
+            operator=None,
+            selected=False,
+            kind=str(requested_kind),
+            reason="support_mode_preflight_no_candidate_selected",
+            setup_s=max(0.0, time.perf_counter() - t0),
+            metadata={},
+        )
+    metadata = {
+        "selected": bool(selected_pc.selected),
+        "selection_kind": "active_fortran_v3_support_mode_preflight",
+        "requested_kind": str(requested_kind),
+        "rhs_norm": float(rhs_norm),
+        "max_candidates": int(max_candidates),
+        "min_improvement_ratio": float(min_ratio),
+        "candidate_specs": tuple(str(spec["label"]) for spec in candidate_specs),
+        "candidates": tuple(candidate_entries),
+        "baseline_residual_after": baseline_residual,
+        "best_residual_after": None if best_pc is None else float(best_residual),
+        "selected_candidate": selected_label,
+        "accepted_nonbaseline": bool(accepted_nonbaseline),
+        "early_stop_reason": early_stop_reason,
+        "setup_s": max(0.0, time.perf_counter() - t0),
+    }
+    selected_metadata = dict(selected_pc.metadata)
+    selected_metadata["support_mode_preflight"] = metadata
+    return (
+        RHS1StructuredFullCSRPreconditioner(
+            operator=selected_pc.operator,
+            selected=bool(selected_pc.selected),
+            kind=str(selected_pc.kind),
+            reason=str(selected_pc.reason),
+            setup_s=float(selected_pc.setup_s),
+            metadata=selected_metadata,
+        ),
+        metadata,
+    )
+
+
+def parse_active_fortran_v3_support_mode_candidates(
+    *,
+    candidates: str | Sequence[str],
+    max_candidates: int,
+    preconditioner_x: int,
+    preconditioner_xi: int,
+    preconditioner_species: int,
+    preconditioner_x_min_l: int,
+) -> tuple[dict[str, object], ...]:
+    """Parse bounded active-support candidates used by the residual selector."""
+
+    if isinstance(candidates, str):
+        raw_specs = [item.strip() for item in candidates.split(",") if item.strip()]
+    else:
+        raw_specs = [str(item).strip() for item in candidates if str(item).strip()]
+    if not raw_specs:
+        raw_specs = ["current"]
+    if raw_specs[0].strip().lower().replace("-", "_") not in {"current", "base", "default"}:
+        raw_specs.insert(0, "current")
+
+    current_modes = {
+        "preconditioner_x": int(preconditioner_x),
+        "preconditioner_xi": int(preconditioner_xi),
+        "preconditioner_species": int(preconditioner_species),
+        "preconditioner_x_min_l": int(preconditioner_x_min_l),
+    }
+    parsed: list[dict[str, object]] = []
+    seen: set[tuple[int, int, int, int]] = set()
+    for raw_spec in raw_specs:
+        spec_l = str(raw_spec).strip().lower().replace("-", "_")
+        modes = dict(current_modes)
+        is_current = spec_l in {"current", "base", "default"}
+        if not is_current:
+            for token in spec_l.replace("+", ":").replace(";", ":").split(":"):
+                token = token.strip()
+                if not token:
+                    continue
+                apply_active_fortran_v3_support_mode_token(modes, token)
+        key = (
+            int(modes["preconditioner_x"]),
+            int(modes["preconditioner_xi"]),
+            int(modes["preconditioner_species"]),
+            int(modes["preconditioner_x_min_l"]),
+        )
+        if key in seen:
+            continue
+        seen.add(key)
+        parsed.append(
+            {
+                "label": "current" if is_current else spec_l,
+                "is_current": bool(is_current),
+                **modes,
+            }
+        )
+        if len(parsed) >= max(1, int(max_candidates)):
+            break
+    return tuple(parsed)
+
+
+def active_fortran_v3_support_mode_dropped_no_entries(metadata: dict[str, object]) -> bool:
+    """Return true when the current reduced support removed no active entries."""
+
+    dropped = metadata.get("dropped_entries")
+    if not isinstance(dropped, dict):
+        return False
+    try:
+        return sum(int(value) for value in dropped.values()) == 0
+    except (TypeError, ValueError):
+        return False
+
+
+def apply_active_fortran_v3_support_mode_token(modes: dict[str, int], token: str) -> None:
+    """Apply one parsed support-mode token to a mutable mode dictionary."""
+
+    token_l = token.strip().lower().replace("-", "_")
+    if token_l.startswith("x_min_l="):
+        modes["preconditioner_x_min_l"] = max(0, int(token_l.split("=", 1)[1]))
+    elif token_l.startswith("xmin_l="):
+        modes["preconditioner_x_min_l"] = max(0, int(token_l.split("=", 1)[1]))
+    elif token_l.startswith("xmin_l") and token_l[6:].isdigit():
+        modes["preconditioner_x_min_l"] = max(0, int(token_l[6:]))
+    elif token_l.startswith("x_min_l") and token_l[7:].isdigit():
+        modes["preconditioner_x_min_l"] = max(0, int(token_l[7:]))
+    elif token_l.startswith("xi="):
+        modes["preconditioner_xi"] = int(token_l.split("=", 1)[1])
+    elif token_l.startswith("xi") and token_l[2:].isdigit():
+        modes["preconditioner_xi"] = int(token_l[2:])
+    elif token_l.startswith("species="):
+        modes["preconditioner_species"] = int(token_l.split("=", 1)[1])
+    elif token_l.startswith("species") and token_l[7:].isdigit():
+        modes["preconditioner_species"] = int(token_l[7:])
+    elif token_l.startswith("x="):
+        modes["preconditioner_x"] = int(token_l.split("=", 1)[1])
+    elif token_l.startswith("x") and token_l[1:].isdigit():
+        modes["preconditioner_x"] = int(token_l[1:])
+    else:
+        raise ValueError(f"unsupported Fortran-v3 support-mode candidate token: {token!r}")
+
+
+def estimate_spilu_factor_nbytes(*, matrix: Any, fill_factor: float) -> int:
+    """Conservative storage estimate for a SuperLU ILU factorization."""
+
+    matrix = matrix.tocsr()
+    nnz_estimate = int(np.ceil(max(1.0, float(fill_factor)) * max(1, int(matrix.nnz))))
+    data_nbytes = nnz_estimate * np.dtype(np.float64).itemsize
+    index_nbytes = nnz_estimate * np.dtype(np.int32).itemsize
+    indptr_nbytes = 2 * (int(matrix.shape[0]) + 1) * np.dtype(np.int32).itemsize
+    return int(data_nbytes + index_nbytes + indptr_nbytes)
+
+
+def sparse_equilibration_scale(
+    matrix: Any,
+    *,
+    axis: int,
+    norm: str,
+    max_scale: float,
+) -> tuple[np.ndarray, dict[str, object]]:
+    """Return clipped inverse sparse row/column norms for equilibration."""
+
+    matrix_csr = matrix.tocsr() if int(axis) == 1 else matrix.tocsc()
+    abs_matrix = matrix_csr.copy()
+    abs_matrix.data = np.abs(np.asarray(abs_matrix.data, dtype=np.float64))
+    norm_l = str(norm).strip().lower()
+    if norm_l == "l2":
+        squared = matrix_csr.copy()
+        squared.data = np.square(np.asarray(squared.data, dtype=np.float64))
+        values = np.sqrt(np.asarray(squared.sum(axis=1 if int(axis) == 1 else 0), dtype=np.float64).reshape((-1,)))
+    elif norm_l == "max":
+        values = np.asarray(abs_matrix.max(axis=1 if int(axis) == 1 else 0).toarray(), dtype=np.float64).reshape((-1,))
+    else:
+        norm_l = "l1"
+        values = np.asarray(abs_matrix.sum(axis=1 if int(axis) == 1 else 0), dtype=np.float64).reshape((-1,))
+    scale = np.ones_like(values, dtype=np.float64)
+    good = np.isfinite(values) & (values > 0.0)
+    scale[good] = 1.0 / values[good]
+    max_scale_use = max(1.0, float(max_scale))
+    scale = np.clip(scale, 1.0 / max_scale_use, max_scale_use)
+    metadata = {
+        "axis": "row" if int(axis) == 1 else "column",
+        "norm": str(norm_l),
+        "size": int(scale.size),
+        "norm_min": float(np.min(values)) if values.size else 0.0,
+        "norm_max": float(np.max(values)) if values.size else 0.0,
+        "scale_min": float(np.min(scale)) if scale.size else 0.0,
+        "scale_max": float(np.max(scale)) if scale.size else 0.0,
+        "zero_or_invalid_norm_count": int(np.count_nonzero(~good)),
+    }
+    return scale, metadata
+
+
+def sparse_lu_factor_nbytes(factor: Any) -> int:
+    """Return actual SuperLU factor storage as CSR data/index bytes."""
+
+    return int(_scipy_csr_nbytes(factor.L.tocsr()) + _scipy_csr_nbytes(factor.U.tocsr()))
+
+
+def _scipy_csr_nbytes(matrix: Any) -> int:
+    matrix_csr = matrix.tocsr()
+    return int(matrix_csr.data.nbytes + matrix_csr.indices.nbytes + matrix_csr.indptr.nbytes)
+
+
+def _env_int(name: str, default: int) -> int:
+    try:
+        return int(os.environ.get(name, "").strip() or int(default))
+    except ValueError:
+        return int(default)
+
+
+def _env_float(name: str, default: float) -> float:
+    try:
+        return float(os.environ.get(name, "").strip() or float(default))
+    except ValueError:
+        return float(default)
+
+
+def _env_bool(name: str, default: bool) -> bool:
+    value = os.environ.get(name, "").strip().lower()
+    if not value:
+        return bool(default)
+    return value in {"1", "true", "yes", "on"}
