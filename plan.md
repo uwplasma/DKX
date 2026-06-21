@@ -49,6 +49,9 @@ deferred research lanes.
   canonical owner is now `sfincs_jax.problems.profile_response.policies`; tests
   now enforce that ownership boundary instead of preserving aliases only for
   historical convenience.
+- QI seed/device/deflated metadata construction no longer lives inline in
+  `v3_driver.py`; the driver now calls the validated profile-response QI
+  diagnostics builders and stays focused on solve orchestration.
 - Current next tranche is one more cohesive `v3_driver.py` stage extraction or,
   if the next driver seam would be wrapper-only, the first `io.py` output-schema
   split.
@@ -81,6 +84,8 @@ deferred research lanes.
   collision-physics, and sparse-helper precision gates now set x64 before JAX
   array APIs are imported; the affected focused group passes:
   `43 passed in 6.73s`.
+- QI metadata simplification preserves sparse/QI driver behavior:
+  `504 passed in 125.76s`.
 - `ruff` and `py_compile` pass on touched transport-parallel, finalization, and
   setup/QI files.
 - PR #8 remains draft. Check CI after the next meaningful push rather than
@@ -88,7 +93,7 @@ deferred research lanes.
 
 ### Current Code Shape
 
-- `sfincs_jax/v3_driver.py`: about 13.4k lines, still the largest orchestration
+- `sfincs_jax/v3_driver.py`: about 13.1k lines, still the largest orchestration
   and compatibility surface.
 - `sfincs_jax/rhs1_full_assembly.py`: about 7.9k lines, now mostly RHSMode=1
   exact/active CSR assembly, admission, dispatch, and compatibility.
