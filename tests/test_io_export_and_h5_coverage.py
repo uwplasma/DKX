@@ -7,7 +7,6 @@ import numpy as np
 import pytest
 
 from sfincs_jax.io import (
-    _add_rhsmode1_solver_diagnostics,
     _apply_export_f_maps,
     _as_1d_float,
     _export_f_config,
@@ -19,6 +18,7 @@ from sfincs_jax.io import (
 )
 from sfincs_jax.namelist import Namelist
 from sfincs_jax.outputs.rhsmode1 import (
+    _add_rhsmode1_solver_diagnostics,
     _raise_for_nonconverged_rhsmode1_output,
     _rhsmode1_result_residual_and_target,
     _should_fail_nonconverged_rhsmode1_output,
