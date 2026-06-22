@@ -15,10 +15,11 @@ import time
 import numpy as np
 import scipy.sparse as sp
 
-from ....rhs1_block_operator import RHS1BlockLayout
+from ....rhs1_block_operator import RHS1ActiveBlockLayout, RHS1BlockLayout
 from ..schur.rhs1_full_csr import (
     RHS1StructuredFullCSRPreconditioner,
     build_jacobi_preconditioner,
+    safe_inverse_diagonal,
 )
 from ..symbolic_sparse.rhs1_fortran_reduced import (
     estimate_spilu_factor_nbytes,
@@ -29,7 +30,10 @@ from .low_l_schur import xblock_tz_low_l_indices
 
 __all__ = (
     "active_positions_for_full_indices",
+    "build_active_projected_angular_line_preconditioner",
+    "build_active_projected_diagonal_schur_preconditioner",
     "build_active_projected_overlap_schwarz_preconditioner",
+    "build_active_projected_xell_kinetic_line_preconditioner",
     "build_active_projected_xblock_preconditioner",
 )
 
@@ -657,6 +661,621 @@ def build_active_projected_overlap_schwarz_preconditioner(
             "damping": float(damping),
             "fill_estimate": float(fill_estimate),
             "permc_spec": str(permc_spec),
+        },
+    )
+
+
+def build_active_projected_diagonal_schur_preconditioner(
+    *,
+    matrix: Any,
+    layout: RHS1BlockLayout,
+    active_indices: Any | None,
+    requested_kind: str,
+    regularization: float,
+    max_factor_nbytes: int,
+    t0: float,
+) -> RHS1StructuredFullCSRPreconditioner:
+    """Build a cheap active kinetic-diagonal plus global-tail Schur split."""
+
+    from scipy.linalg import lu_factor, lu_solve  # noqa: PLC0415
+    from scipy.sparse.linalg import LinearOperator  # noqa: PLC0415
+
+    matrix_csr = matrix.tocsr()
+    try:
+        active_layout = RHS1ActiveBlockLayout.from_layout(layout, active_indices)
+    except ValueError as exc:
+        return RHS1StructuredFullCSRPreconditioner(
+            operator=None,
+            selected=False,
+            kind="active_diagonal_schur",
+            reason="invalid_active_layout",
+            setup_s=max(0.0, time.perf_counter() - t0),
+            metadata={"error": str(exc)},
+        )
+
+    if int(active_layout.active_size) != int(matrix_csr.shape[0]):
+        return RHS1StructuredFullCSRPreconditioner(
+            operator=None,
+            selected=False,
+            kind="active_diagonal_schur",
+            reason="active_index_size_mismatch",
+            setup_s=max(0.0, time.perf_counter() - t0),
+            metadata={
+                "active_layout": active_layout.to_dict(),
+                "matrix_shape": tuple(int(v) for v in matrix_csr.shape),
+            },
+        )
+    if int(active_layout.phi1_count) != 0:
+        return RHS1StructuredFullCSRPreconditioner(
+            operator=None,
+            selected=False,
+            kind="active_diagonal_schur",
+            reason="active_phi1_tail_split_unsupported",
+            setup_s=max(0.0, time.perf_counter() - t0),
+            metadata={"active_layout": active_layout.to_dict()},
+        )
+    if int(active_layout.extra_count) <= 0:
+        return build_jacobi_preconditioner(
+            matrix=matrix_csr,
+            requested_kind=requested_kind,
+            regularization=regularization,
+            t0=t0,
+            reason="active_no_global_tail",
+        )
+    if not bool(active_layout.has_contiguous_extra_tail):
+        return RHS1StructuredFullCSRPreconditioner(
+            operator=None,
+            selected=False,
+            kind="active_diagonal_schur",
+            reason="active_tail_not_contiguous",
+            setup_s=max(0.0, time.perf_counter() - t0),
+            metadata={"active_layout": active_layout.to_dict()},
+        )
+
+    n_f = int(active_layout.kinetic_count)
+    tail_size = int(active_layout.extra_count)
+    if n_f + tail_size != int(matrix_csr.shape[0]):
+        return RHS1StructuredFullCSRPreconditioner(
+            operator=None,
+            selected=False,
+            kind="active_diagonal_schur",
+            reason="active_kinetic_tail_size_mismatch",
+            setup_s=max(0.0, time.perf_counter() - t0),
+            metadata={
+                "kinetic_size": int(n_f),
+                "tail_size": int(tail_size),
+                "matrix_shape": tuple(int(v) for v in matrix_csr.shape),
+                "active_layout": active_layout.to_dict(),
+            },
+        )
+
+    schur_nbytes_estimate = int(tail_size) * int(tail_size) * np.dtype(np.float64).itemsize
+    if schur_nbytes_estimate > int(max_factor_nbytes):
+        return RHS1StructuredFullCSRPreconditioner(
+            operator=None,
+            selected=False,
+            kind="active_diagonal_schur",
+            reason=f"active_diagonal_schur_budget_exceeded:{schur_nbytes_estimate}>{int(max_factor_nbytes)}",
+            setup_s=max(0.0, time.perf_counter() - t0),
+            metadata={
+                "kinetic_size": int(n_f),
+                "tail_size": int(tail_size),
+                "schur_nbytes_estimate": int(schur_nbytes_estimate),
+                "max_factor_nbytes": int(max_factor_nbytes),
+                "active_layout": active_layout.to_dict(),
+            },
+        )
+
+    diag = matrix_csr.diagonal()
+    inv_f, diag_meta = safe_inverse_diagonal(diag[:n_f], regularization=regularization)
+    u = matrix_csr[:n_f, n_f:].tocsr()
+    v = matrix_csr[n_f:, :n_f].tocsr()
+    w = matrix_csr[n_f:, n_f:].tocsr()
+    scaled_u = u.multiply(inv_f[:, None])
+    schur = np.asarray((w - v @ scaled_u).toarray(), dtype=np.float64)
+    schur_scale = max(float(np.linalg.norm(schur, ord=np.inf)) if schur.size else 0.0, 1.0)
+    schur_regularization = float(abs(regularization)) * schur_scale
+    if schur_regularization > 0.0:
+        schur = schur + schur_regularization * np.eye(tail_size, dtype=np.float64)
+    try:
+        lu, piv = lu_factor(schur)
+        schur_solver_kind = "lu"
+
+        def solve_tail(rhs_tail: np.ndarray) -> np.ndarray:
+            return np.asarray(lu_solve((lu, piv), rhs_tail), dtype=np.float64).reshape((-1,))
+
+    except Exception:  # noqa: BLE001
+        pinv = np.linalg.pinv(schur, rcond=max(float(abs(regularization)), 1.0e-14))
+        schur_solver_kind = "pinv"
+
+        def solve_tail(rhs_tail: np.ndarray) -> np.ndarray:
+            return np.asarray(pinv @ rhs_tail, dtype=np.float64).reshape((-1,))
+
+    def apply(x: Any) -> np.ndarray:
+        arr = np.asarray(x, dtype=np.float64).reshape((-1,))
+        y_f = inv_f * arr[:n_f]
+        rhs_tail = arr[n_f:] - np.asarray(v @ y_f, dtype=np.float64).reshape((-1,))
+        y_tail = solve_tail(rhs_tail)
+        y_f = y_f - inv_f * np.asarray(u @ y_tail, dtype=np.float64).reshape((-1,))
+        return np.concatenate((y_f, y_tail))
+
+    operator = LinearOperator(matrix_csr.shape, matvec=apply, dtype=np.float64)
+    cond_estimate = None
+    if tail_size <= 128:
+        cond_estimate = float(np.linalg.cond(schur))
+    return RHS1StructuredFullCSRPreconditioner(
+        operator=operator,
+        selected=True,
+        kind="active_diagonal_schur",
+        reason="complete",
+        setup_s=max(0.0, time.perf_counter() - t0),
+        metadata={
+            "requested_kind": str(requested_kind),
+            "matrix_shape": tuple(int(v) for v in matrix_csr.shape),
+            "matrix_nnz": int(matrix_csr.nnz),
+            "kinetic_size": int(n_f),
+            "tail_size": int(tail_size),
+            "u_nnz": int(u.nnz),
+            "v_nnz": int(v.nnz),
+            "w_nnz": int(w.nnz),
+            "factor_nbytes_actual": int(schur.nbytes),
+            "factor_nbytes_estimate": int(schur_nbytes_estimate),
+            "schur_nbytes": int(schur.nbytes),
+            "schur_regularization": float(schur_regularization),
+            "schur_condition_estimate": cond_estimate,
+            "schur_solver_kind": str(schur_solver_kind),
+            "active_layout": active_layout.to_dict(),
+            **diag_meta,
+        },
+    )
+
+
+def build_active_projected_xell_kinetic_line_preconditioner(
+    *,
+    matrix: Any,
+    layout: RHS1BlockLayout,
+    active_kinetic_indices: Any,
+    requested_kind: str,
+    regularization: float,
+    max_factor_nbytes: int,
+    t0: float,
+) -> RHS1StructuredFullCSRPreconditioner:
+    """Build dense active ``(x, ell)`` line inverses for a projected kinetic block."""
+
+    from scipy.sparse.linalg import LinearOperator  # noqa: PLC0415
+
+    matrix_csr = matrix.tocsr()
+    active_full = np.asarray(active_kinetic_indices, dtype=np.int64).reshape((-1,))
+    if matrix_csr.shape[0] != matrix_csr.shape[1]:
+        return RHS1StructuredFullCSRPreconditioner(
+            operator=None,
+            selected=False,
+            kind="active_native_xell",
+            reason="matrix_not_square",
+            setup_s=max(0.0, time.perf_counter() - t0),
+            metadata={"shape": tuple(int(v) for v in matrix_csr.shape)},
+        )
+    if active_full.shape != (int(matrix_csr.shape[0]),):
+        return RHS1StructuredFullCSRPreconditioner(
+            operator=None,
+            selected=False,
+            kind="active_native_xell",
+            reason="active_kinetic_index_size_mismatch",
+            setup_s=max(0.0, time.perf_counter() - t0),
+            metadata={
+                "active_kinetic_index_size": int(active_full.size),
+                "matrix_shape": tuple(int(v) for v in matrix_csr.shape),
+            },
+        )
+    if active_full.size == 0:
+        return RHS1StructuredFullCSRPreconditioner(
+            operator=None,
+            selected=False,
+            kind="active_native_xell",
+            reason="empty_active_kinetic_space",
+            setup_s=max(0.0, time.perf_counter() - t0),
+            metadata={},
+        )
+    if np.any(active_full < 0) or np.any(active_full >= int(layout.f_size)):
+        return RHS1StructuredFullCSRPreconditioner(
+            operator=None,
+            selected=False,
+            kind="active_native_xell",
+            reason="active_kinetic_indices_outside_f_block",
+            setup_s=max(0.0, time.perf_counter() - t0),
+            metadata={
+                "layout_f_size": int(layout.f_size),
+                "active_min": int(np.min(active_full)),
+                "active_max": int(np.max(active_full)),
+            },
+        )
+
+    decoded = layout.decode_kinetic_indices(active_full)
+    line_ids = (
+        (decoded.species.astype(np.int64, copy=False) * int(layout.n_theta) + decoded.theta)
+        * int(layout.n_zeta)
+        + decoded.zeta
+    )
+    unique_lines = np.unique(line_ids)
+    positions_by_line = [np.flatnonzero(line_ids == line_id).astype(np.int64, copy=False) for line_id in unique_lines]
+    block_sizes = np.asarray([int(pos.size) for pos in positions_by_line], dtype=np.int64)
+    max_block_size = int(_env_int("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_NATIVE_XELL_MAX_BLOCK_SIZE", 512))
+    max_block_size = max(1, int(max_block_size))
+    block_size_max = int(np.max(block_sizes)) if block_sizes.size else 0
+    if block_size_max > int(max_block_size):
+        return RHS1StructuredFullCSRPreconditioner(
+            operator=None,
+            selected=False,
+            kind="active_native_xell",
+            reason=f"active_native_xell_block_size_exceeded:{block_size_max}>{int(max_block_size)}",
+            setup_s=max(0.0, time.perf_counter() - t0),
+            metadata={
+                "block_size_max": int(block_size_max),
+                "max_block_size": int(max_block_size),
+                "n_blocks": int(len(positions_by_line)),
+            },
+        )
+
+    inverse_nbytes_estimate = int(sum(int(size) * int(size) * np.dtype(np.float64).itemsize for size in block_sizes))
+    index_nbytes_estimate = int(sum(int(size) * np.dtype(np.int64).itemsize for size in block_sizes))
+    factor_estimate = int(inverse_nbytes_estimate + index_nbytes_estimate)
+    if factor_estimate > int(max_factor_nbytes):
+        return RHS1StructuredFullCSRPreconditioner(
+            operator=None,
+            selected=False,
+            kind="active_native_xell",
+            reason=f"active_native_xell_budget_exceeded:{factor_estimate}>{int(max_factor_nbytes)}",
+            setup_s=max(0.0, time.perf_counter() - t0),
+            metadata={
+                "factor_nbytes_estimate": int(factor_estimate),
+                "inverse_nbytes_estimate": int(inverse_nbytes_estimate),
+                "index_nbytes_estimate": int(index_nbytes_estimate),
+                "max_factor_nbytes": int(max_factor_nbytes),
+                "n_blocks": int(len(positions_by_line)),
+                "block_size_min": int(np.min(block_sizes)) if block_sizes.size else 0,
+                "block_size_max": int(block_size_max),
+            },
+        )
+
+    inverse_blocks: list[np.ndarray] = []
+    regularized_count = 0
+    singular_count = 0
+    nonfinite_count = 0
+    condition_nonfinite_count = 0
+    max_condition_estimate: float | None = 0.0 if block_size_max <= 64 else None
+    max_block_scale = 0.0
+    for positions in positions_by_line:
+        block = np.asarray(matrix_csr[positions[:, None], positions].toarray(), dtype=np.float64)
+        block_scale = max(float(np.linalg.norm(block, ord=np.inf)) if block.size else 0.0, 1.0)
+        max_block_scale = max(float(max_block_scale), float(block_scale))
+        regularization_abs = float(abs(regularization)) * float(block_scale)
+        if regularization_abs > 0.0:
+            block = block + regularization_abs * np.eye(int(block.shape[0]), dtype=np.float64)
+            regularized_count += 1
+        if max_condition_estimate is not None:
+            condition_estimate = float(np.linalg.cond(block))
+            if np.isfinite(condition_estimate):
+                max_condition_estimate = max(float(max_condition_estimate), condition_estimate)
+            else:
+                condition_nonfinite_count += 1
+        try:
+            inverse = np.linalg.inv(block)
+        except np.linalg.LinAlgError:
+            singular_count += 1
+            inverse = np.linalg.pinv(block, rcond=max(float(abs(regularization)), 1.0e-14))
+        if not np.all(np.isfinite(inverse)):
+            nonfinite_count += 1
+        inverse_blocks.append(np.asarray(inverse, dtype=np.float64))
+    if int(nonfinite_count) > 0:
+        return RHS1StructuredFullCSRPreconditioner(
+            operator=None,
+            selected=False,
+            kind="active_native_xell",
+            reason="active_native_xell_inverse_nonfinite",
+            setup_s=max(0.0, time.perf_counter() - t0),
+            metadata={
+                "block_inverse_nonfinite_count": int(nonfinite_count),
+                "n_blocks": int(len(positions_by_line)),
+            },
+        )
+
+    actual_inverse_nbytes = int(sum(int(inv.nbytes) for inv in inverse_blocks))
+    actual_index_nbytes = int(sum(int(pos.nbytes) for pos in positions_by_line))
+    actual_nbytes = int(actual_inverse_nbytes + actual_index_nbytes)
+    if actual_nbytes > int(max_factor_nbytes):
+        return RHS1StructuredFullCSRPreconditioner(
+            operator=None,
+            selected=False,
+            kind="active_native_xell",
+            reason=f"active_native_xell_budget_exceeded_actual:{actual_nbytes}>{int(max_factor_nbytes)}",
+            setup_s=max(0.0, time.perf_counter() - t0),
+            metadata={
+                "factor_nbytes_estimate": int(factor_estimate),
+                "factor_nbytes_actual": int(actual_nbytes),
+                "max_factor_nbytes": int(max_factor_nbytes),
+                "n_blocks": int(len(positions_by_line)),
+            },
+        )
+
+    def apply(rhs: Any) -> np.ndarray:
+        rhs_vec = np.asarray(rhs, dtype=np.float64).reshape((-1,))
+        if rhs_vec.shape != (int(matrix_csr.shape[0]),):
+            raise ValueError(f"rhs must have shape {(int(matrix_csr.shape[0]),)}, got {rhs_vec.shape}")
+        out = np.empty_like(rhs_vec)
+        for positions, inverse in zip(positions_by_line, inverse_blocks, strict=True):
+            out[positions] = np.asarray(inverse @ rhs_vec[positions], dtype=np.float64)
+        return out
+
+    operator = LinearOperator(matrix_csr.shape, matvec=apply, dtype=np.float64)
+    return RHS1StructuredFullCSRPreconditioner(
+        operator=operator,
+        selected=True,
+        kind="active_native_xell",
+        reason="complete",
+        setup_s=max(0.0, time.perf_counter() - t0),
+        metadata={
+            "requested_kind": str(requested_kind),
+            "backend": "python_native_active_x_ell_line_inverse",
+            "active_size": int(matrix_csr.shape[0]),
+            "n_blocks": int(len(positions_by_line)),
+            "block_size_min": int(np.min(block_sizes)) if block_sizes.size else 0,
+            "block_size_max": int(block_size_max),
+            "block_size_unique": tuple(int(v) for v in np.unique(block_sizes)),
+            "fixed_axes": ("species", "theta", "zeta"),
+            "line_axes": ("active_x", "active_ell"),
+            "factor_nbytes_estimate": int(factor_estimate),
+            "factor_nbytes_actual": int(actual_nbytes),
+            "inverse_nbytes_actual": int(actual_inverse_nbytes),
+            "index_nbytes_actual": int(actual_index_nbytes),
+            "max_factor_nbytes": int(max_factor_nbytes),
+            "max_block_size": int(max_block_size),
+            "regularization": float(regularization),
+            "block_inverse_regularized_count": int(regularized_count),
+            "block_inverse_singular_count": int(singular_count),
+            "block_inverse_nonfinite_count": int(nonfinite_count),
+            "block_inverse_condition_estimate_max": max_condition_estimate,
+            "block_inverse_condition_nonfinite_count": int(condition_nonfinite_count),
+            "block_inverse_scale_max": float(max_block_scale),
+            "layout": layout.to_dict(),
+        },
+    )
+
+
+def build_active_projected_angular_line_preconditioner(
+    *,
+    matrix: Any,
+    layout: RHS1BlockLayout,
+    active_kinetic_indices: Any,
+    requested_kind: str,
+    regularization: float,
+    max_factor_nbytes: int,
+    t0: float,
+) -> RHS1StructuredFullCSRPreconditioner:
+    """Build active angular-line inverses grouped by ``(species, x, ell)``."""
+
+    from scipy.sparse.linalg import LinearOperator  # noqa: PLC0415
+
+    matrix_csr = matrix.tocsr()
+    active_full = np.asarray(active_kinetic_indices, dtype=np.int64).reshape((-1,))
+    if matrix_csr.shape[0] != matrix_csr.shape[1]:
+        return RHS1StructuredFullCSRPreconditioner(
+            operator=None,
+            selected=False,
+            kind="active_angular_line",
+            reason="matrix_not_square",
+            setup_s=max(0.0, time.perf_counter() - t0),
+            metadata={"shape": tuple(int(v) for v in matrix_csr.shape)},
+        )
+    if active_full.shape != (int(matrix_csr.shape[0]),):
+        return RHS1StructuredFullCSRPreconditioner(
+            operator=None,
+            selected=False,
+            kind="active_angular_line",
+            reason="active_index_size_mismatch",
+            setup_s=max(0.0, time.perf_counter() - t0),
+            metadata={
+                "active_index_size": int(active_full.size),
+                "matrix_shape": tuple(int(v) for v in matrix_csr.shape),
+            },
+        )
+    if active_full.size == 0:
+        return RHS1StructuredFullCSRPreconditioner(
+            operator=None,
+            selected=False,
+            kind="active_angular_line",
+            reason="empty_active_space",
+            setup_s=max(0.0, time.perf_counter() - t0),
+            metadata={},
+        )
+
+    kinetic_mask = active_full < int(layout.f_size)
+    kinetic_positions = np.flatnonzero(kinetic_mask).astype(np.int64, copy=False)
+    if kinetic_positions.size == 0:
+        return build_jacobi_preconditioner(
+            matrix=matrix_csr,
+            requested_kind=requested_kind,
+            regularization=regularization,
+            t0=t0,
+            reason="active_angular_line_no_kinetic_rows",
+        )
+    active_kinetic_full = active_full[kinetic_positions]
+    if np.any(active_kinetic_full < 0) or np.any(active_kinetic_full >= int(layout.f_size)):
+        return RHS1StructuredFullCSRPreconditioner(
+            operator=None,
+            selected=False,
+            kind="active_angular_line",
+            reason="active_kinetic_indices_outside_f_block",
+            setup_s=max(0.0, time.perf_counter() - t0),
+            metadata={
+                "layout_f_size": int(layout.f_size),
+                "active_min": int(np.min(active_kinetic_full)),
+                "active_max": int(np.max(active_kinetic_full)),
+            },
+        )
+
+    decoded = layout.decode_kinetic_indices(active_kinetic_full)
+    line_ids = (
+        (decoded.species.astype(np.int64, copy=False) * int(layout.n_x) + decoded.x)
+        * int(layout.n_xi)
+        + decoded.ell
+    )
+    unique_lines = np.unique(line_ids)
+    positions_by_line = [
+        kinetic_positions[np.flatnonzero(line_ids == line_id)].astype(np.int64, copy=False)
+        for line_id in unique_lines
+    ]
+    block_sizes = np.asarray([int(pos.size) for pos in positions_by_line], dtype=np.int64)
+    max_block_size = int(_env_int("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_ANGULAR_LINE_MAX_BLOCK_SIZE", 4096))
+    max_block_size = max(1, int(max_block_size))
+    block_size_max = int(np.max(block_sizes)) if block_sizes.size else 0
+    if block_size_max > int(max_block_size):
+        return RHS1StructuredFullCSRPreconditioner(
+            operator=None,
+            selected=False,
+            kind="active_angular_line",
+            reason=f"active_angular_line_block_size_exceeded:{block_size_max}>{int(max_block_size)}",
+            setup_s=max(0.0, time.perf_counter() - t0),
+            metadata={
+                "block_size_max": int(block_size_max),
+                "max_block_size": int(max_block_size),
+                "n_blocks": int(len(positions_by_line)),
+            },
+        )
+
+    inverse_nbytes_estimate = int(sum(int(size) * int(size) * np.dtype(np.float64).itemsize for size in block_sizes))
+    index_nbytes_estimate = int(sum(int(size) * np.dtype(np.int64).itemsize for size in block_sizes))
+    tail_positions = np.flatnonzero(~kinetic_mask).astype(np.int64, copy=False)
+    tail_nbytes_estimate = int(tail_positions.size * np.dtype(np.float64).itemsize)
+    factor_estimate = int(inverse_nbytes_estimate + index_nbytes_estimate + tail_nbytes_estimate)
+    if factor_estimate > int(max_factor_nbytes):
+        return RHS1StructuredFullCSRPreconditioner(
+            operator=None,
+            selected=False,
+            kind="active_angular_line",
+            reason=f"active_angular_line_budget_exceeded:{factor_estimate}>{int(max_factor_nbytes)}",
+            setup_s=max(0.0, time.perf_counter() - t0),
+            metadata={
+                "factor_nbytes_estimate": int(factor_estimate),
+                "inverse_nbytes_estimate": int(inverse_nbytes_estimate),
+                "index_nbytes_estimate": int(index_nbytes_estimate),
+                "tail_nbytes_estimate": int(tail_nbytes_estimate),
+                "max_factor_nbytes": int(max_factor_nbytes),
+                "n_blocks": int(len(positions_by_line)),
+                "block_size_min": int(np.min(block_sizes)) if block_sizes.size else 0,
+                "block_size_max": int(block_size_max),
+            },
+        )
+
+    inverse_blocks: list[np.ndarray] = []
+    regularized_count = 0
+    singular_count = 0
+    nonfinite_count = 0
+    condition_nonfinite_count = 0
+    max_condition_estimate: float | None = 0.0 if block_size_max <= 64 else None
+    max_block_scale = 0.0
+    for positions in positions_by_line:
+        block = np.asarray(matrix_csr[positions[:, None], positions].toarray(), dtype=np.float64)
+        block_scale = max(float(np.linalg.norm(block, ord=np.inf)) if block.size else 0.0, 1.0)
+        max_block_scale = max(float(max_block_scale), float(block_scale))
+        regularization_abs = float(abs(regularization)) * float(block_scale)
+        if regularization_abs > 0.0:
+            block = block + regularization_abs * np.eye(int(block.shape[0]), dtype=np.float64)
+            regularized_count += 1
+        if max_condition_estimate is not None:
+            condition_estimate = float(np.linalg.cond(block))
+            if np.isfinite(condition_estimate):
+                max_condition_estimate = max(float(max_condition_estimate), condition_estimate)
+            else:
+                condition_nonfinite_count += 1
+        try:
+            inverse = np.linalg.inv(block)
+        except np.linalg.LinAlgError:
+            singular_count += 1
+            inverse = np.linalg.pinv(block, rcond=max(float(abs(regularization)), 1.0e-14))
+        if not np.all(np.isfinite(inverse)):
+            nonfinite_count += 1
+        inverse_blocks.append(np.asarray(inverse, dtype=np.float64))
+    if int(nonfinite_count) > 0:
+        return RHS1StructuredFullCSRPreconditioner(
+            operator=None,
+            selected=False,
+            kind="active_angular_line",
+            reason="active_angular_line_inverse_nonfinite",
+            setup_s=max(0.0, time.perf_counter() - t0),
+            metadata={"block_inverse_nonfinite_count": int(nonfinite_count), "n_blocks": int(len(positions_by_line))},
+        )
+
+    inv_tail = np.empty((0,), dtype=np.float64)
+    tail_metadata: dict[str, object] = {"tail_size": int(tail_positions.size)}
+    if tail_positions.size:
+        inv_tail, tail_metadata = safe_inverse_diagonal(
+            matrix_csr.diagonal()[tail_positions],
+            regularization=regularization,
+        )
+    actual_inverse_nbytes = int(sum(int(inv.nbytes) for inv in inverse_blocks))
+    actual_index_nbytes = int(sum(int(pos.nbytes) for pos in positions_by_line))
+    actual_nbytes = int(actual_inverse_nbytes + actual_index_nbytes + inv_tail.nbytes)
+    if actual_nbytes > int(max_factor_nbytes):
+        return RHS1StructuredFullCSRPreconditioner(
+            operator=None,
+            selected=False,
+            kind="active_angular_line",
+            reason=f"active_angular_line_budget_exceeded_actual:{actual_nbytes}>{int(max_factor_nbytes)}",
+            setup_s=max(0.0, time.perf_counter() - t0),
+            metadata={
+                "factor_nbytes_estimate": int(factor_estimate),
+                "factor_nbytes_actual": int(actual_nbytes),
+                "max_factor_nbytes": int(max_factor_nbytes),
+                "n_blocks": int(len(positions_by_line)),
+            },
+        )
+
+    def apply(rhs: Any) -> np.ndarray:
+        rhs_vec = np.asarray(rhs, dtype=np.float64).reshape((-1,))
+        if rhs_vec.shape != (int(matrix_csr.shape[0]),):
+            raise ValueError(f"rhs must have shape {(int(matrix_csr.shape[0]),)}, got {rhs_vec.shape}")
+        out = np.zeros_like(rhs_vec)
+        for positions, inverse in zip(positions_by_line, inverse_blocks, strict=True):
+            out[positions] = np.asarray(inverse @ rhs_vec[positions], dtype=np.float64)
+        if tail_positions.size:
+            out[tail_positions] = inv_tail * rhs_vec[tail_positions]
+        return out
+
+    operator = LinearOperator(matrix_csr.shape, matvec=apply, dtype=np.float64)
+    return RHS1StructuredFullCSRPreconditioner(
+        operator=operator,
+        selected=True,
+        kind="active_angular_line",
+        reason="complete",
+        setup_s=max(0.0, time.perf_counter() - t0),
+        metadata={
+            "requested_kind": str(requested_kind),
+            "backend": "python_native_active_angular_line_inverse",
+            "active_size": int(matrix_csr.shape[0]),
+            "kinetic_size": int(kinetic_positions.size),
+            "tail_size": int(tail_positions.size),
+            "n_blocks": int(len(positions_by_line)),
+            "block_size_min": int(np.min(block_sizes)) if block_sizes.size else 0,
+            "block_size_max": int(block_size_max),
+            "block_size_unique": tuple(int(v) for v in np.unique(block_sizes)),
+            "fixed_axes": ("species", "x", "ell"),
+            "line_axes": ("active_theta", "active_zeta"),
+            "factor_nbytes_estimate": int(factor_estimate),
+            "factor_nbytes_actual": int(actual_nbytes),
+            "inverse_nbytes_actual": int(actual_inverse_nbytes),
+            "index_nbytes_actual": int(actual_index_nbytes),
+            "tail_inverse_nbytes_actual": int(inv_tail.nbytes),
+            "max_factor_nbytes": int(max_factor_nbytes),
+            "max_block_size": int(max_block_size),
+            "regularization": float(regularization),
+            "block_inverse_regularized_count": int(regularized_count),
+            "block_inverse_singular_count": int(singular_count),
+            "block_inverse_nonfinite_count": int(nonfinite_count),
+            "block_inverse_condition_estimate_max": max_condition_estimate,
+            "block_inverse_condition_nonfinite_count": int(condition_nonfinite_count),
+            "block_inverse_scale_max": float(max_block_scale),
+            "layout": layout.to_dict(),
+            **{f"tail_{key}": value for key, value in tail_metadata.items()},
         },
     )
 

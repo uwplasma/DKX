@@ -28,7 +28,8 @@ deferred research lanes.
   - full-CSR Schur preconditioners,
   - Fortran-reduced symbolic sparse factors,
   - low-`ell` x-block Schur preconditioners,
-  - active-projected x-block / overlap-Schwarz preconditioners,
+  - active-projected x-block / overlap-Schwarz / diagonal-Schur / line
+    preconditioners,
   - active sparse-factor preconditioners.
 - Flat output file-format helpers moved to `sfincs_jax.outputs.formats`.
 - Nonlinear Phi1 Newton-Krylov profile-response solve logic moved to
@@ -93,9 +94,15 @@ deferred research lanes.
   QI pipeline instead of importing every coarse/Galerkin/two-level/device/
   deflated helper directly. Tests patch the canonical QI device-preconditioner
   module rather than stale driver aliases.
-- Current next tranche is one real active-projected RHSMode=1 preconditioner
-  family extraction from `rhs1_full_assembly.py` into the solver domain package,
-  followed by focused coverage and then the planned `io.py` output-schema split.
+- Active-projected diagonal-Schur, x-ell kinetic-line, and angular-line
+  preconditioners moved from `rhs1_full_assembly.py` into
+  `sfincs_jax.solvers.preconditioners.xblock.active_projected`. The assembly
+  module now keeps compatibility aliases plus dispatch/admission logic for
+  these builders.
+- Current next tranche is the planned `io.py` output-schema split or the next
+  matrix/operator-dependent active-preconditioner extraction from
+  `rhs1_full_assembly.py`, whichever gives the larger tested ownership
+  reduction without creating extra wrapper files.
 - The README and docs currently state the public claim boundary: the documented
   release suite is CPU/GPU parity-clean, while production-resolution QI, true
   device-QI, lower-memory native factor replacement, full-grid QA/QH RHSMode=1,
@@ -138,6 +145,9 @@ deferred research lanes.
 - QI default-builder ownership cleanup preserves sparse-PC behavior while
   removing direct QI helper imports from `v3_driver.py`:
   `324 passed in 2.14s`.
+- Active-projected diagonal-Schur/line extraction preserves full-assembly,
+  sparse-pattern, package-import, active-projected, and Schur focused behavior:
+  `121 passed in 36.71s`, `132 passed in 116.36s`, and `18 passed in 0.64s`.
 - RHSMode=1 output-gate extraction preserves IO helper coverage and solver-trace
   output-format behavior:
   `18 passed in 0.33s`; after switching moved-helper tests to the new owner

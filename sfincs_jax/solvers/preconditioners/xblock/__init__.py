@@ -4,7 +4,10 @@ from __future__ import annotations
 
 from .active_projected import (
     active_positions_for_full_indices,
+    build_active_projected_angular_line_preconditioner,
+    build_active_projected_diagonal_schur_preconditioner,
     build_active_projected_overlap_schwarz_preconditioner,
+    build_active_projected_xell_kinetic_line_preconditioner,
     build_active_projected_xblock_preconditioner,
 )
 from .block_jacobi import (
@@ -45,7 +48,10 @@ __all__ = (
     "assemble_rhsmode1_fp_xblock_tz_sparse_matrix",
     "assemble_selected_theta_tz_operator",
     "assemble_selected_zeta_tz_operator",
+    "build_active_projected_angular_line_preconditioner",
+    "build_active_projected_diagonal_schur_preconditioner",
     "build_active_projected_overlap_schwarz_preconditioner",
+    "build_active_projected_xell_kinetic_line_preconditioner",
     "build_active_projected_xblock_preconditioner",
     "build_rhs1_sxblock_tz_preconditioner",
     "build_rhs1_sxblock_tz_sparse_host_preconditioner",
