@@ -20,6 +20,7 @@ from sfincs_jax.transport_parallel_policy import (
     transport_parallel_worker_env,
 )
 from sfincs_jax.transport_policy import (
+    TransportRuntimePolicy,
     transport_dense_accelerator_auto_allowed,
     transport_dense_backend_allowed,
     transport_disable_auto_recycle,
@@ -471,6 +472,38 @@ def test_transport_residual_dtype_recycle_and_helper_policy(
     assert transport_sparse_direct_use_explicit_helper(size=1, backend="gpu")
     assert not transport_sparse_direct_use_explicit_helper(size=11_999, backend="cpu")
     assert transport_sparse_direct_use_explicit_helper(size=12_000, backend="cpu")
+
+
+def test_transport_runtime_policy_binds_backend_and_dtype_provider(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    backend = "cpu"
+
+    def current_backend() -> str:
+        return backend
+
+    policy = TransportRuntimePolicy(
+        backend=current_backend,
+        host_sparse_factor_dtype=lambda **_kwargs: np.dtype(np.float32),
+    )
+
+    monkeypatch.delenv("SFINCS_JAX_TRANSPORT_DENSE_ALLOW_ACCELERATOR", raising=False)
+    assert policy.dense_backend_allowed()
+    backend = "gpu"
+    assert not policy.dense_backend_allowed()
+    assert policy.sparse_direct_use_explicit_helper(size=1)
+
+    backend = "cpu"
+    monkeypatch.delenv("SFINCS_JAX_TRANSPORT_SPARSE_FACTOR_DTYPE", raising=False)
+    monkeypatch.delenv("SFINCS_JAX_TRANSPORT_SPARSE_FLOAT64_MIN", raising=False)
+    assert policy.sparse_factor_dtype(size=30_000, use_implicit=False) == np.dtype(
+        np.float64
+    )
+
+    monkeypatch.setenv("SFINCS_JAX_TRANSPORT_HOST_GMRES_PROGRESS_EVERY", "bad")
+    assert policy.host_gmres_progress_every() == 10
+    monkeypatch.setenv("SFINCS_JAX_TRANSPORT_HOST_GMRES_PROGRESS_EVERY", "0")
+    assert policy.host_gmres_progress_every() == 0
 
 
 def test_transport_parallel_scaling_audit_accepts_warm_deterministic_summary() -> None:

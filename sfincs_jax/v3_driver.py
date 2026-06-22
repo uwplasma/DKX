@@ -643,22 +643,12 @@ from .host_refinement import (
     host_sparse_direct_solve_with_refinement as _host_sparse_direct_solve_with_refinement_impl,
 )
 from .transport_policy import (
-    transport_dense_accelerator_auto_allowed as _transport_dense_accelerator_auto_allowed_impl,
-    transport_dense_backend_allowed as _transport_dense_backend_allowed_impl,
-    transport_disable_auto_recycle as _transport_disable_auto_recycle_impl,
     transport_host_gmres_accepts_preconditioned_residual as _transport_host_gmres_accepts_preconditioned_residual_impl,
-    transport_host_gmres_first_attempt_allowed as _transport_host_gmres_first_attempt_allowed_impl,
     transport_precondition_side as _transport_precondition_side_impl,
-    transport_sparse_direct_first_attempt_allowed as _transport_sparse_direct_first_attempt_allowed_impl,
     transport_sparse_direct_needs_float64_retry as _transport_sparse_direct_needs_float64_retry_impl,
-    transport_sparse_direct_rescue_allowed as _transport_sparse_direct_rescue_allowed_impl,
     transport_sparse_direct_rescue_first as _transport_sparse_direct_rescue_first_impl,
-    transport_sparse_direct_use_explicit_helper as _transport_sparse_direct_use_explicit_helper_impl,
-    transport_sparse_factor_dtype as _transport_sparse_factor_dtype_impl,
-    transport_tzfft_accelerator_auto_allowed as _transport_tzfft_accelerator_auto_allowed_impl,
-    transport_tzfft_backend_allowed as _transport_tzfft_backend_allowed_impl,
     transport_tzfft_first_attempt_budget as _transport_tzfft_first_attempt_budget_impl,
-    transport_tzfft_structured_first_attempt_allowed as _transport_tzfft_structured_first_attempt_allowed_impl,
+    TransportRuntimePolicy,
 )
 from .problems.transport_matrix.preconditioner_dispatch import (
     TransportPreconditionerContext,
@@ -961,44 +951,6 @@ def _rhsmode1_dense_backend_allowed() -> bool:
     return _rhs1_dense_backend_allowed_impl(backend=jax.default_backend())
 
 
-def _transport_dense_backend_allowed() -> bool:
-    return _transport_dense_backend_allowed_impl(backend=jax.default_backend())
-
-
-def _transport_dense_accelerator_auto_allowed(
-    op: V3FullSystemOperator,
-    *,
-    geometry_scheme: int,
-) -> bool:
-    return _transport_dense_accelerator_auto_allowed_impl(
-        op,
-        backend=jax.default_backend(),
-        geometry_scheme=int(geometry_scheme),
-    )
-
-
-def _transport_tzfft_backend_allowed() -> bool:
-    return _transport_tzfft_backend_allowed_impl(backend=jax.default_backend())
-
-
-def _transport_tzfft_accelerator_auto_allowed(op: V3FullSystemOperator) -> bool:
-    return _transport_tzfft_accelerator_auto_allowed_impl(op, backend=jax.default_backend())
-
-
-def _transport_tzfft_structured_first_attempt_allowed(
-    op: V3FullSystemOperator,
-    *,
-    size: int,
-    use_implicit: bool,
-) -> bool:
-    return _transport_tzfft_structured_first_attempt_allowed_impl(
-        op,
-        size=size,
-        use_implicit=use_implicit,
-        backend=jax.default_backend(),
-    )
-
-
 _transport_tzfft_first_attempt_budget = _transport_tzfft_first_attempt_budget_impl
 
 
@@ -1064,6 +1016,40 @@ def _host_sparse_factor_dtype(
         use_implicit=use_implicit,
         backend=jax.default_backend(),
     )
+
+
+_transport_runtime_policy = TransportRuntimePolicy(
+    backend=lambda: jax.default_backend(),
+    host_sparse_factor_dtype=_host_sparse_factor_dtype,
+)
+_transport_dense_backend_allowed = _transport_runtime_policy.dense_backend_allowed
+_transport_dense_accelerator_auto_allowed = (
+    _transport_runtime_policy.dense_accelerator_auto_allowed
+)
+_transport_tzfft_backend_allowed = _transport_runtime_policy.tzfft_backend_allowed
+_transport_tzfft_accelerator_auto_allowed = (
+    _transport_runtime_policy.tzfft_accelerator_auto_allowed
+)
+_transport_tzfft_structured_first_attempt_allowed = (
+    _transport_runtime_policy.tzfft_structured_first_attempt_allowed
+)
+_transport_sparse_direct_rescue_allowed = (
+    _transport_runtime_policy.sparse_direct_rescue_allowed
+)
+_transport_sparse_direct_first_attempt_allowed = (
+    _transport_runtime_policy.sparse_direct_first_attempt_allowed
+)
+_transport_host_gmres_first_attempt_allowed = (
+    _transport_runtime_policy.host_gmres_first_attempt_allowed
+)
+_transport_disable_auto_recycle = _transport_runtime_policy.disable_auto_recycle
+_transport_sparse_factor_dtype = _transport_runtime_policy.sparse_factor_dtype
+_transport_sparse_direct_use_explicit_helper = (
+    _transport_runtime_policy.sparse_direct_use_explicit_helper
+)
+_transport_host_gmres_progress_every = (
+    _transport_runtime_policy.host_gmres_progress_every
+)
 
 
 def _sparse_factor_cache_key(cache_key: tuple[object, ...], factor_dtype: np.dtype) -> tuple[object, ...]:
@@ -1586,53 +1572,7 @@ def _rhsmode1_sparse_sxblock_rescue_allowed(
     )
 
 
-def _transport_sparse_direct_rescue_allowed(
-    *,
-    op: V3FullSystemOperator,
-    size: int,
-    residual_norm: float,
-    target: float,
-    use_implicit: bool,
-) -> bool:
-    return _transport_sparse_direct_rescue_allowed_impl(
-        op=op,
-        size=size,
-        residual_norm=residual_norm,
-        target=target,
-        use_implicit=use_implicit,
-        backend=jax.default_backend(),
-    )
-
-
 _transport_sparse_direct_rescue_first = _transport_sparse_direct_rescue_first_impl
-
-
-def _transport_sparse_direct_first_attempt_allowed(
-    *,
-    op: V3FullSystemOperator,
-    size: int,
-    use_implicit: bool,
-) -> bool:
-    return _transport_sparse_direct_first_attempt_allowed_impl(
-        op=op,
-        size=size,
-        use_implicit=use_implicit,
-        backend=jax.default_backend(),
-    )
-
-
-def _transport_host_gmres_first_attempt_allowed(
-    *,
-    op: V3FullSystemOperator,
-    size: int,
-    use_implicit: bool,
-) -> bool:
-    return _transport_host_gmres_first_attempt_allowed_impl(
-        op=op,
-        size=size,
-        use_implicit=use_implicit,
-        backend=jax.default_backend(),
-    )
 
 
 _transport_host_gmres_accepts_preconditioned_residual = (
@@ -1643,45 +1583,9 @@ _transport_host_gmres_accepts_preconditioned_residual = (
 _transport_precondition_side = _transport_precondition_side_impl
 
 
-def _transport_disable_auto_recycle(
-    *,
-    op: V3FullSystemOperator,
-    use_implicit: bool,
-) -> bool:
-    return _transport_disable_auto_recycle_impl(
-        op=op,
-        use_implicit=use_implicit,
-        backend=jax.default_backend(),
-    )
-
-
 _transport_sparse_direct_needs_float64_retry = (
     _transport_sparse_direct_needs_float64_retry_impl
 )
-
-
-def _transport_sparse_factor_dtype(*, size: int, use_implicit: bool) -> np.dtype:
-    return _transport_sparse_factor_dtype_impl(
-        size=size,
-        use_implicit=use_implicit,
-        backend=jax.default_backend(),
-        host_sparse_factor_dtype=_host_sparse_factor_dtype,
-    )
-
-
-def _transport_sparse_direct_use_explicit_helper(*, size: int) -> bool:
-    return _transport_sparse_direct_use_explicit_helper_impl(
-        size=size,
-        backend=jax.default_backend(),
-    )
-
-
-def _transport_host_gmres_progress_every() -> int:
-    env = os.environ.get("SFINCS_JAX_TRANSPORT_HOST_GMRES_PROGRESS_EVERY", "").strip()
-    try:
-        return max(0, int(env)) if env else 10
-    except ValueError:
-        return 10
 
 
 def _gmres_solve_dispatch(*, distributed_axis: str | None = None, size_hint: int | None = None, **kwargs):

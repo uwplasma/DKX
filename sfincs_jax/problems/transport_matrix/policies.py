@@ -8,6 +8,7 @@ paths are eligible for a bounded transport solve.
 from __future__ import annotations
 
 from collections.abc import Callable
+from dataclasses import dataclass
 import os
 from typing import Any
 
@@ -503,3 +504,154 @@ def transport_sparse_direct_use_explicit_helper(*, size: int, backend: str) -> b
     if str(backend).strip().lower() != "cpu":
         return True
     return int(size) >= max(1, int(cpu_min))
+
+
+@dataclass(frozen=True)
+class TransportRuntimePolicy:
+    """Runtime-bound transport policy facade.
+
+    The pure helpers above take explicit backend and dtype-provider inputs so
+    tests and downstream tools can reason about decisions deterministically.
+    The CLI/driver needs the same decisions bound to the current JAX backend.
+    Keeping that binding here avoids private wrapper functions in
+    ``v3_driver.py`` while preserving the same testable policy behavior.
+    """
+
+    backend: Callable[[], str]
+    host_sparse_factor_dtype: Callable[..., np.dtype]
+
+    def current_backend(self) -> str:
+        """Return the active backend key used by runtime policy decisions."""
+
+        return str(self.backend()).strip().lower()
+
+    def dense_backend_allowed(self) -> bool:
+        """Return whether dense transport may run on the active backend."""
+
+        return transport_dense_backend_allowed(backend=self.current_backend())
+
+    def dense_accelerator_auto_allowed(self, op: Any, *, geometry_scheme: int) -> bool:
+        """Return whether dense transport can auto-promote to accelerator."""
+
+        return transport_dense_accelerator_auto_allowed(
+            op,
+            backend=self.current_backend(),
+            geometry_scheme=int(geometry_scheme),
+        )
+
+    def tzfft_backend_allowed(self) -> bool:
+        """Return whether structured tzfft transport may run on this backend."""
+
+        return transport_tzfft_backend_allowed(backend=self.current_backend())
+
+    def tzfft_accelerator_auto_allowed(self, op: Any) -> bool:
+        """Return whether structured tzfft may auto-run on accelerator."""
+
+        return transport_tzfft_accelerator_auto_allowed(
+            op,
+            backend=self.current_backend(),
+        )
+
+    def tzfft_structured_first_attempt_allowed(
+        self,
+        op: Any,
+        *,
+        size: int,
+        use_implicit: bool,
+    ) -> bool:
+        """Return whether the bounded tzfft first attempt is admissible."""
+
+        return transport_tzfft_structured_first_attempt_allowed(
+            op,
+            size=int(size),
+            use_implicit=bool(use_implicit),
+            backend=self.current_backend(),
+        )
+
+    def sparse_direct_rescue_allowed(
+        self,
+        *,
+        op: Any,
+        size: int,
+        residual_norm: float,
+        target: float,
+        use_implicit: bool,
+    ) -> bool:
+        """Return whether sparse-direct transport rescue is admissible."""
+
+        return transport_sparse_direct_rescue_allowed(
+            op=op,
+            size=int(size),
+            residual_norm=float(residual_norm),
+            target=float(target),
+            use_implicit=bool(use_implicit),
+            backend=self.current_backend(),
+        )
+
+    def sparse_direct_first_attempt_allowed(
+        self,
+        *,
+        op: Any,
+        size: int,
+        use_implicit: bool,
+    ) -> bool:
+        """Return whether sparse-direct should be attempted before Krylov."""
+
+        return transport_sparse_direct_first_attempt_allowed(
+            op=op,
+            size=int(size),
+            use_implicit=bool(use_implicit),
+            backend=self.current_backend(),
+        )
+
+    def host_gmres_first_attempt_allowed(
+        self,
+        *,
+        op: Any,
+        size: int,
+        use_implicit: bool,
+    ) -> bool:
+        """Return whether host GMRES should be attempted before other rescues."""
+
+        return transport_host_gmres_first_attempt_allowed(
+            op=op,
+            size=int(size),
+            use_implicit=bool(use_implicit),
+            backend=self.current_backend(),
+        )
+
+    def disable_auto_recycle(self, *, op: Any, use_implicit: bool) -> bool:
+        """Return whether transport Krylov recycling should be disabled."""
+
+        return transport_disable_auto_recycle(
+            op=op,
+            use_implicit=bool(use_implicit),
+            backend=self.current_backend(),
+        )
+
+    def sparse_factor_dtype(self, *, size: int, use_implicit: bool) -> np.dtype:
+        """Resolve sparse transport factor dtype for the active backend."""
+
+        return transport_sparse_factor_dtype(
+            size=int(size),
+            use_implicit=bool(use_implicit),
+            backend=self.current_backend(),
+            host_sparse_factor_dtype=self.host_sparse_factor_dtype,
+        )
+
+    def sparse_direct_use_explicit_helper(self, *, size: int) -> bool:
+        """Return whether to materialize the explicit sparse helper."""
+
+        return transport_sparse_direct_use_explicit_helper(
+            size=int(size),
+            backend=self.current_backend(),
+        )
+
+    def host_gmres_progress_every(self) -> int:
+        """Resolve terminal progress cadence for transport host GMRES."""
+
+        env = os.environ.get("SFINCS_JAX_TRANSPORT_HOST_GMRES_PROGRESS_EVERY", "").strip()
+        try:
+            return max(0, int(env)) if env else 10
+        except ValueError:
+            return 10

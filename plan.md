@@ -112,6 +112,10 @@ deferred research lanes.
   `v3_driver.py`. The sparse-PC stage helpers now resolve canonical QI default
   builders internally when the driver does not inject a test builder, and tests
   assert that the old private driver aliases stay absent.
+- Transport runtime backend/dtype policy binding moved into
+  `sfincs_jax.problems.transport_matrix.policies.TransportRuntimePolicy`.
+  `v3_driver.py` now keeps bound method aliases for compatibility and no longer
+  owns private transport backend-injection wrapper functions.
 - Active-projected diagonal-Schur, x-ell kinetic-line, angular-line, and native
   indexed Schwarz
   preconditioners moved from `rhs1_full_assembly.py` into
@@ -193,6 +197,10 @@ deferred research lanes.
   `3 passed in 1.98s`, `334 passed in 5.15s`, and `229 passed in 30.40s`.
 - The combined focused QI/sparse validation after this cleanup passes:
   `556 passed in 32.10s`.
+- Transport runtime-policy binding preserves driver compatibility and canonical
+  transport policy behavior:
+  `83 passed in 11.20s`; broader transport tests pass with
+  `287 passed in 54.12s`.
 - Active global-field-split/native-stack extraction preserves all
   RHSMode=1 full-assembly behavior:
   `121 passed in 39.49s`.
@@ -234,7 +242,7 @@ deferred research lanes.
 
 ### Current Code Shape
 
-- `sfincs_jax/v3_driver.py`: about 12.3k lines, still the largest orchestration
+- `sfincs_jax/v3_driver.py`: about 12.2k lines, still the largest orchestration
   and compatibility surface.
 - `sfincs_jax/rhs1_full_assembly.py`: about 6.0k lines, now mostly RHSMode=1
   exact/active CSR assembly, admission, dispatch, and compatibility.
