@@ -227,8 +227,8 @@ from .problems.profile_response.preconditioner_build import (
     setup_rhs1_full_base_preconditioner,
 )
 from .problems.profile_response.qi_device_seed import (
-    MatrixFreeQIDeviceSeedContext,
-    attempt_matrixfree_qi_device_seed,
+    attempt_matrixfree_qi_device_seed_if_requested,
+    build_matrixfree_qi_device_seed_setup,
 )
 from .problems.profile_response.diagnostics import (
     SparseRescueTailMetadataContext,
@@ -8168,7 +8168,7 @@ def solve_v3_full_system_linear_gmres(
         strong_precond_trigger = bool(strong_trigger_controls.trigger)
         fp_force_strong = bool(strong_trigger_controls.fp_force)
 
-        qi_device_seed_context = MatrixFreeQIDeviceSeedContext(
+        qi_device_seed_setup = build_matrixfree_qi_device_seed_setup(
             op=op,
             active_size=int(active_size),
             target_reduced=float(target_reduced),
@@ -8179,18 +8179,14 @@ def solve_v3_full_system_linear_gmres(
             rhsmode1_general_metadata=rhsmode1_general_metadata,
         )
 
-        qi_device_early_enabled = _rhs1_bool_env(
-            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_EARLY",
-            default=False,
+        qi_device_skip_strong = bool(qi_device_seed_setup.skip_strong)
+        early_qi_attempt = attempt_matrixfree_qi_device_seed_if_requested(
+            res_reduced,
+            hook="early_active_dof",
+            setup=qi_device_seed_setup,
+            enabled=bool(qi_device_seed_setup.early_enabled or qi_device_seed_setup.skip_strong),
         )
-        qi_device_skip_strong = _rhs1_bool_env(
-            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_SKIP_STRONG",
-            default=False,
-        )
-        if bool(qi_device_early_enabled or qi_device_skip_strong):
-            res_reduced = attempt_matrixfree_qi_device_seed(
-                res_reduced, hook="early_active_dof", context=qi_device_seed_context
-            )
+        res_reduced = early_qi_attempt.result
 
         pas_smoother_allowed = (
             rhs1_precond_kind in {"pas_lite", "pas_hybrid", "pas_tz", "pas_schur", "pas_tokamak_theta"}
@@ -8554,31 +8550,20 @@ def solve_v3_full_system_linear_gmres(
         fp_xblock_highx_residual_correction_elapsed_s: float | None = None
         fp_xblock_highx_residual_correction_direction_count: int | None = None
         fp_xblock_highx_residual_correction_direction_names: tuple[str, ...] = ()
-        pre_sparse_qi_device_enabled = bool(
-            int(op.rhs_mode) == 1
-            and _rhs1_bool_env(
-                "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER",
-                default=False,
-            )
-            and _rhs1_bool_env(
-                "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MATRIX_FREE",
-                default=False,
-            )
+        pre_sparse_qi_attempt = attempt_matrixfree_qi_device_seed_if_requested(
+            res_reduced,
+            hook="pre_sparse_active_dof",
+            setup=qi_device_seed_setup,
+            enabled=bool(
+                qi_device_seed_setup.pre_sparse_enabled
+                and sparse_enabled
+                and float(res_reduced.residual_norm) > target_reduced
+                and not bool(rhsmode1_general_metadata.get("xblock_qi_device_preconditioner_built", False))
+            ),
         )
-        if (
-            pre_sparse_qi_device_enabled
-            and sparse_enabled
-            and float(res_reduced.residual_norm) > target_reduced
-            and not bool(rhsmode1_general_metadata.get("xblock_qi_device_preconditioner_built", False))
-        ):
-            qi_device_residual_before = float(res_reduced.residual_norm)
-            res_reduced = attempt_matrixfree_qi_device_seed(
-                res_reduced,
-                hook="pre_sparse_active_dof",
-                context=qi_device_seed_context,
-            )
-            if float(res_reduced.residual_norm) < qi_device_residual_before:
-                ksp_replay.x0_vec = res_reduced.x
+        res_reduced = pre_sparse_qi_attempt.result
+        if bool(pre_sparse_qi_attempt.improved):
+            ksp_replay.x0_vec = res_reduced.x
 
         if emit is not None:
             for _level, _message in rhs1_sparse_rescue_tail_skip_messages(

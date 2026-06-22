@@ -99,16 +99,28 @@ deferred research lanes.
   QI pipeline instead of importing every coarse/Galerkin/two-level/device/
   deflated helper directly. Tests patch the canonical QI device-preconditioner
   module rather than stale driver aliases.
+- Matrix-free QI seed context construction, env-gate resolution, and optional
+  early/pre-sparse attempt bookkeeping moved into
+  `sfincs_jax.problems.profile_response.qi_device_seed`. `v3_driver.py` now
+  keeps only the reduced-solve hook placement, the strong-solver skip flag, and
+  replay-state update when the domain helper reports an improved seed.
 - Active-projected diagonal-Schur, x-ell kinetic-line, angular-line, and native
   indexed Schwarz
   preconditioners moved from `rhs1_full_assembly.py` into
   `sfincs_jax.solvers.preconditioners.xblock.active_projected`. The assembly
   module now keeps compatibility aliases plus dispatch/admission logic for
   these builders.
-- Current next tranche is the planned `io.py` output-schema split or extracting
-  the global field-split/multiline active-preconditioner family from
-  `rhs1_full_assembly.py`, whichever gives the larger tested ownership
-  reduction without creating extra wrapper files.
+- Active-projected global field-split, multiline field-split, bounded native
+  stack, and Fortran-v3-reduced native-stack preconditioners moved from
+  `rhs1_full_assembly.py` into
+  `sfincs_jax.solvers.preconditioners.xblock.active_projected`. The extracted
+  module owns local base dispatch for x-block/angular/native-indexed bases, and
+  `rhs1_full_assembly.py` injects its dispatcher only where a still-local base
+  family is needed.
+- Current next tranche is a larger result/output handoff or `io.py`
+  solved-field schema split. Avoid further QI churn unless it removes a tested
+  solve-local integration block; no standalone `qi_*` functions remain in
+  `v3_driver.py`.
 - The README and docs currently state the public claim boundary: the documented
   release suite is CPU/GPU parity-clean, while production-resolution QI, true
   device-QI, lower-memory native factor replacement, full-grid QA/QH RHSMode=1,
@@ -161,6 +173,17 @@ deferred research lanes.
 - Transport-streaming output extraction preserves output-format, streaming,
   coordinate-conversion, import-contract, and write-output smoke/parity paths:
   `40 passed in 9.46s`, `8 passed in 0.76s`, and `8 passed in 185.68s`.
+- QI code is still live and tested: after the latest audit, the QI unit suite
+  and artifact/research-lane checks pass while old private driver aliases stay
+  absent:
+  `127 passed in 32.65s`, `102 passed in 1.05s`, and the focused QI seed/coarse
+  tests pass with the new domain-owned seed setup (`17 passed in 5.56s`).
+- Active global-field-split/native-stack extraction preserves all
+  RHSMode=1 full-assembly behavior:
+  `121 passed in 39.49s`.
+- Package facade updates for the x-block preconditioner domain preserve import
+  contracts:
+  `7 passed in 0.70s`.
 - RHSMode=1 output-gate extraction preserves IO helper coverage and solver-trace
   output-format behavior:
   `18 passed in 0.33s`; after switching moved-helper tests to the new owner
@@ -192,11 +215,11 @@ deferred research lanes.
 
 ### Current Code Shape
 
-- `sfincs_jax/v3_driver.py`: about 12.4k lines, still the largest orchestration
+- `sfincs_jax/v3_driver.py`: about 12.3k lines, still the largest orchestration
   and compatibility surface.
-- `sfincs_jax/rhs1_full_assembly.py`: about 7.9k lines, now mostly RHSMode=1
+- `sfincs_jax/rhs1_full_assembly.py`: about 6.0k lines, now mostly RHSMode=1
   exact/active CSR assembly, admission, dispatch, and compatibility.
-- `sfincs_jax/io.py`: about 4.9k lines, still owns too much solved-field physics
+- `sfincs_jax/io.py`: about 4.4k lines, still owns too much solved-field physics
   schema and provenance materialization; RHSMode=1 output safety and solver
   diagnostics now live in
   `sfincs_jax.outputs.rhsmode1`.

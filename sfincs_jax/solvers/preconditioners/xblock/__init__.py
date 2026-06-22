@@ -4,6 +4,10 @@ from __future__ import annotations
 
 from .active_projected import (
     active_positions_for_full_indices,
+    build_active_fortran_v3_reduced_native_stack_preconditioner,
+    build_active_projected_bounded_native_stack_preconditioner,
+    build_active_projected_global_field_split_schur_preconditioner,
+    build_active_projected_multiline_field_split_base_preconditioner,
     build_active_projected_angular_line_preconditioner,
     build_active_projected_diagonal_schur_preconditioner,
     build_active_projected_native_indexed_schwarz_preconditioner,
@@ -49,6 +53,10 @@ __all__ = (
     "assemble_rhsmode1_fp_xblock_tz_sparse_matrix",
     "assemble_selected_theta_tz_operator",
     "assemble_selected_zeta_tz_operator",
+    "build_active_fortran_v3_reduced_native_stack_preconditioner",
+    "build_active_projected_bounded_native_stack_preconditioner",
+    "build_active_projected_global_field_split_schur_preconditioner",
+    "build_active_projected_multiline_field_split_base_preconditioner",
     "build_active_projected_angular_line_preconditioner",
     "build_active_projected_diagonal_schur_preconditioner",
     "build_active_projected_native_indexed_schwarz_preconditioner",

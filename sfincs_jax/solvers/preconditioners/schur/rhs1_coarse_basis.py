@@ -16,6 +16,7 @@ import numpy as np
 import scipy.sparse as sp
 
 __all__ = (
+    "append_adaptive_residual_basis_csc",
     "build_active_native_xell_coarse_window_basis_csc",
     "build_coarse_residual_basis_csc",
     "coarse_residual_config",
@@ -272,6 +273,138 @@ def build_active_native_xell_coarse_window_basis_csc(
     return basis, metadata
 
 
+def append_adaptive_residual_basis_csc(
+    *,
+    matrix: Any,
+    base_operator: Any,
+    basis: Any,
+    max_total_columns: int,
+) -> tuple[Any, dict[str, object]]:
+    """Append bounded residual-derived coarse columns ``z - A M z``.
+
+    The generated vectors are construction-time snapshots of the mismatch
+    between the true active operator ``A`` and the selected base preconditioner
+    ``M``. They are independent of the Krylov right-hand side, so the resulting
+    preconditioner remains linear. Columns are sparsified by relative magnitude
+    and capped by both column count and per-column nonzeros.
+    """
+
+    enabled = _env_bool("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_ADAPTIVE_RESIDUAL_BASIS", False)
+    max_columns = max(0, int(_env_int("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_ADAPTIVE_RESIDUAL_MAX_COLUMNS", 32)))
+    max_seed_columns = max(
+        0,
+        int(_env_int("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_ADAPTIVE_RESIDUAL_MAX_SEED_COLUMNS", 64)),
+    )
+    max_nnz_per_column = max(
+        1,
+        int(_env_int("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_ADAPTIVE_RESIDUAL_MAX_NNZ_PER_COLUMN", 4096)),
+    )
+    drop_rel = max(
+        0.0,
+        float(_env_float("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_ADAPTIVE_RESIDUAL_DROP_REL", 1.0e-3)),
+    )
+    min_rel_norm = max(
+        0.0,
+        float(_env_float("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_ADAPTIVE_RESIDUAL_MIN_REL_NORM", 1.0e-8)),
+    )
+    metadata = {
+        "adaptive_residual_basis_enabled": bool(enabled),
+        "adaptive_residual_basis_columns": 0,
+        "adaptive_residual_basis_seed_columns": 0,
+        "adaptive_residual_basis_max_columns": int(max_columns),
+        "adaptive_residual_basis_max_seed_columns": int(max_seed_columns),
+        "adaptive_residual_basis_max_nnz_per_column": int(max_nnz_per_column),
+        "adaptive_residual_basis_drop_rel": float(drop_rel),
+        "adaptive_residual_basis_min_rel_norm": float(min_rel_norm),
+    }
+    if not bool(enabled) or int(max_columns) <= 0 or int(max_seed_columns) <= 0 or int(basis.shape[1]) <= 0:
+        return basis, metadata
+
+    matrix_csr = matrix.tocsr()
+    basis_csc = basis.tocsc()
+    remaining = max(0, int(max_total_columns) - int(basis_csc.shape[1]))
+    max_columns_use = min(int(max_columns), int(remaining))
+    if max_columns_use <= 0:
+        metadata["adaptive_residual_basis_truncated_by_total_cap"] = True
+        return basis_csc, metadata
+
+    seed_count = min(int(basis_csc.shape[1]), int(max_seed_columns))
+    rows: list[np.ndarray] = []
+    cols: list[np.ndarray] = []
+    data: list[np.ndarray] = []
+    residual_norms: list[float] = []
+    skipped_small = 0
+    skipped_zero = 0
+    for seed_col in range(seed_count):
+        if len(rows) >= max_columns_use:
+            break
+        z = np.asarray(basis_csc[:, seed_col].toarray(), dtype=np.float64).reshape((-1,))
+        z_norm = max(float(np.linalg.norm(z)), np.finfo(np.float64).tiny)
+        mz = np.asarray(base_operator.matvec(z), dtype=np.float64).reshape((-1,))
+        residual = z - np.asarray(matrix_csr @ mz, dtype=np.float64).reshape((-1,))
+        residual_norm = float(np.linalg.norm(residual))
+        if not np.isfinite(residual_norm) or residual_norm <= 0.0:
+            skipped_zero += 1
+            continue
+        if residual_norm / z_norm < float(min_rel_norm):
+            skipped_small += 1
+            continue
+        abs_residual = np.abs(residual)
+        threshold = float(drop_rel) * max(float(np.max(abs_residual)), np.finfo(np.float64).tiny)
+        keep = np.flatnonzero(abs_residual >= threshold)
+        if keep.size > int(max_nnz_per_column):
+            order = np.argpartition(abs_residual[keep], -int(max_nnz_per_column))[-int(max_nnz_per_column) :]
+            keep = keep[order]
+            keep.sort()
+        if keep.size == 0:
+            skipped_zero += 1
+            continue
+        values = residual[keep]
+        values_norm = float(np.linalg.norm(values))
+        if not np.isfinite(values_norm) or values_norm <= 0.0:
+            skipped_zero += 1
+            continue
+        rows.append(keep.astype(np.int64, copy=False))
+        cols.append(np.full((int(keep.size),), len(rows) - 1, dtype=np.int64))
+        data.append((values / values_norm).astype(np.float64, copy=False))
+        residual_norms.append(float(residual_norm))
+
+    if not rows:
+        metadata.update(
+            {
+                "adaptive_residual_basis_seed_columns": int(seed_count),
+                "adaptive_residual_basis_skipped_small": int(skipped_small),
+                "adaptive_residual_basis_skipped_zero": int(skipped_zero),
+                "adaptive_residual_basis_truncated_by_total_cap": False,
+            }
+        )
+        return basis_csc, metadata
+
+    adaptive = sp.coo_matrix(
+        (
+            np.concatenate(data),
+            (np.concatenate(rows), np.concatenate(cols)),
+        ),
+        shape=(int(matrix_csr.shape[0]), int(len(rows))),
+    ).tocsc()
+    adaptive.sum_duplicates()
+    adaptive.eliminate_zeros()
+    combined = sp.hstack([basis_csc, adaptive], format="csc")
+    metadata.update(
+        {
+            "adaptive_residual_basis_columns": int(adaptive.shape[1]),
+            "adaptive_residual_basis_seed_columns": int(seed_count),
+            "adaptive_residual_basis_nnz": int(adaptive.nnz),
+            "adaptive_residual_basis_skipped_small": int(skipped_small),
+            "adaptive_residual_basis_skipped_zero": int(skipped_zero),
+            "adaptive_residual_basis_residual_norm_max": float(max(residual_norms)),
+            "adaptive_residual_basis_residual_norm_min": float(min(residual_norms)),
+            "adaptive_residual_basis_truncated_by_total_cap": bool(len(rows) >= max_columns_use),
+        }
+    )
+    return combined, metadata
+
+
 def coarse_surface_mode_count(*, layout: Any, config: dict[str, object]) -> int:
     """Return the number of retained normalized angular/helical surface modes."""
 
@@ -333,3 +466,10 @@ def _env_float(name: str, default: float) -> float:
         return float(os.environ.get(name, "").strip() or float(default))
     except ValueError:
         return float(default)
+
+
+def _env_bool(name: str, default: bool) -> bool:
+    value = os.environ.get(name, "").strip().lower()
+    if not value:
+        return bool(default)
+    return value in {"1", "true", "yes", "on"}

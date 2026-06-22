@@ -8,6 +8,7 @@ CSR solve lane; differentiable paths should stay on JAX-native operators.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import Any
 import os
 import time
@@ -21,15 +22,26 @@ from ..schur.rhs1_full_csr import (
     build_jacobi_preconditioner,
     safe_inverse_diagonal,
 )
+from ..schur.rhs1_coarse_basis import (
+    append_adaptive_residual_basis_csc,
+    build_active_native_xell_coarse_window_basis_csc,
+    build_coarse_residual_basis_csc,
+    coarse_residual_config,
+)
+from ..schur.rhs1_coarse_policy import resolve_active_native_stack_policy
 from ..symbolic_sparse.rhs1_fortran_reduced import (
     estimate_spilu_factor_nbytes,
     sparse_equilibration_scale,
     sparse_lu_factor_nbytes,
 )
-from .low_l_schur import xblock_tz_low_l_indices
+from .low_l_schur import build_native_xell_kinetic_preconditioner, xblock_tz_low_l_indices
 
 __all__ = (
     "active_positions_for_full_indices",
+    "build_active_fortran_v3_reduced_native_stack_preconditioner",
+    "build_active_projected_bounded_native_stack_preconditioner",
+    "build_active_projected_global_field_split_schur_preconditioner",
+    "build_active_projected_multiline_field_split_base_preconditioner",
     "build_active_projected_angular_line_preconditioner",
     "build_active_projected_diagonal_schur_preconditioner",
     "build_active_projected_native_indexed_schwarz_preconditioner",
@@ -762,6 +774,931 @@ def build_active_projected_native_indexed_schwarz_preconditioner(
             "layout": layout.to_dict(),
             **{f"tail_{key}": value for key, value in tail_metadata.items()},
         },
+    )
+
+
+def build_active_projected_global_field_split_schur_preconditioner(
+    *,
+    matrix: Any,
+    layout: RHS1BlockLayout,
+    active_indices: Any | None,
+    requested_kind: str,
+    regularization: float,
+    max_factor_nbytes: int,
+    t0: float,
+    base_preconditioner_factory: Callable[..., RHS1StructuredFullCSRPreconditioner] | None = None,
+    base_kind_override: str | None = None,
+) -> RHS1StructuredFullCSRPreconditioner:
+    """Build a coupled active kinetic/global Schur preconditioner.
+
+    This opt-in path is the active-system counterpart of a PETSc-style
+    field-split block factorization.  It uses an existing local active kinetic
+    preconditioner as an approximate ``K^{-1}``, explicitly forms the compact
+    global Schur residual equation ``S = W - V K^{-1} U``, and applies the
+    corresponding block inverse.  It is intentionally fail-closed and is not an
+    automatic default until QA/QH production gates demonstrate net benefit.
+    """
+
+    from scipy.linalg import lu_factor, lu_solve  # noqa: PLC0415
+    from scipy.sparse.linalg import LinearOperator  # noqa: PLC0415
+
+    matrix_csr = matrix.tocsr()
+    active_np = (
+        np.arange(int(layout.total_size), dtype=np.int64)
+        if active_indices is None
+        else np.asarray(active_indices, dtype=np.int64).reshape((-1,))
+    )
+    try:
+        active_layout = RHS1ActiveBlockLayout.from_layout(
+            layout,
+            None if active_indices is None else active_np,
+        )
+    except ValueError as exc:
+        return RHS1StructuredFullCSRPreconditioner(
+            operator=None,
+            selected=False,
+            kind="active_global_field_split_schur",
+            reason="invalid_active_layout",
+            setup_s=max(0.0, time.perf_counter() - t0),
+            metadata={"error": str(exc)},
+        )
+
+    if int(active_layout.active_size) != int(matrix_csr.shape[0]):
+        return RHS1StructuredFullCSRPreconditioner(
+            operator=None,
+            selected=False,
+            kind="active_global_field_split_schur",
+            reason="active_index_size_mismatch",
+            setup_s=max(0.0, time.perf_counter() - t0),
+            metadata={
+                "active_layout": active_layout.to_dict(),
+                "matrix_shape": tuple(int(v) for v in matrix_csr.shape),
+            },
+        )
+    if int(active_layout.phi1_count) != 0:
+        return RHS1StructuredFullCSRPreconditioner(
+            operator=None,
+            selected=False,
+            kind="active_global_field_split_schur",
+            reason="active_phi1_tail_split_unsupported",
+            setup_s=max(0.0, time.perf_counter() - t0),
+            metadata={"active_layout": active_layout.to_dict()},
+        )
+    if int(active_layout.extra_count) <= 0:
+        return RHS1StructuredFullCSRPreconditioner(
+            operator=None,
+            selected=False,
+            kind="active_global_field_split_schur",
+            reason="active_no_global_tail",
+            setup_s=max(0.0, time.perf_counter() - t0),
+            metadata={"active_layout": active_layout.to_dict()},
+        )
+    if not bool(active_layout.has_contiguous_extra_tail):
+        return RHS1StructuredFullCSRPreconditioner(
+            operator=None,
+            selected=False,
+            kind="active_global_field_split_schur",
+            reason="active_tail_not_contiguous",
+            setup_s=max(0.0, time.perf_counter() - t0),
+            metadata={"active_layout": active_layout.to_dict()},
+        )
+
+    n_k = int(active_layout.kinetic_count)
+    tail_size = int(active_layout.extra_count)
+    if n_k + tail_size != int(matrix_csr.shape[0]):
+        return RHS1StructuredFullCSRPreconditioner(
+            operator=None,
+            selected=False,
+            kind="active_global_field_split_schur",
+            reason="active_kinetic_tail_size_mismatch",
+            setup_s=max(0.0, time.perf_counter() - t0),
+            metadata={
+                "kinetic_size": int(n_k),
+                "tail_size": int(tail_size),
+                "matrix_shape": tuple(int(v) for v in matrix_csr.shape),
+                "active_layout": active_layout.to_dict(),
+            },
+        )
+
+    max_schur_size = int(_env_int("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_GLOBAL_FIELD_SPLIT_MAX_TAIL", 256))
+    max_schur_size = max(1, int(max_schur_size))
+    if tail_size > max_schur_size:
+        return RHS1StructuredFullCSRPreconditioner(
+            operator=None,
+            selected=False,
+            kind="active_global_field_split_schur",
+            reason=f"active_global_field_split_tail_size_exceeded:{tail_size}>{max_schur_size}",
+            setup_s=max(0.0, time.perf_counter() - t0),
+            metadata={
+                "kinetic_size": int(n_k),
+                "tail_size": int(tail_size),
+                "max_tail_size": int(max_schur_size),
+                "active_layout": active_layout.to_dict(),
+            },
+        )
+
+    base_kind = (
+        str(base_kind_override)
+        if base_kind_override is not None
+        else os.environ.get("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_GLOBAL_FIELD_SPLIT_BASE", "active_xblock")
+    )
+    base_kind = base_kind.strip().lower().replace("-", "_")
+    if base_kind in {
+        "",
+        "auto",
+        "active_auto",
+        "active_global_field_split_schur",
+        "active_field_split_schur",
+        "active_xblock_global_schur",
+    }:
+        base_kind = "active_xblock"
+
+    kinetic_matrix = matrix_csr[:n_k, :n_k].tocsc()
+    kinetic_active = active_np[:n_k].astype(np.int64, copy=False)
+    base_budget = max(1, int(max_factor_nbytes))
+    if base_kind in {
+        "active_native_xell",
+        "active_native_x_ell",
+        "native_xell",
+        "native_x_ell",
+        "jax_native_xell",
+        "jax_xell",
+    }:
+        full_kinetic_active = (
+            int(n_k) == int(layout.f_size)
+            and np.array_equal(kinetic_active, np.arange(int(layout.f_size), dtype=np.int64))
+        )
+        if bool(full_kinetic_active):
+            kinetic_layout = RHS1BlockLayout(
+                n_species=int(layout.n_species),
+                n_x=int(layout.n_x),
+                n_xi=int(layout.n_xi),
+                n_theta=int(layout.n_theta),
+                n_zeta=int(layout.n_zeta),
+                f_size=int(layout.f_size),
+                phi1_size=0,
+                extra_size=0,
+                total_size=int(layout.f_size),
+                constraint_scheme=int(layout.constraint_scheme),
+                include_phi1=False,
+                include_phi1_in_kinetic=False,
+                rhs_mode=int(layout.rhs_mode),
+            )
+            base = build_native_xell_kinetic_preconditioner(
+                matrix=kinetic_matrix,
+                layout=kinetic_layout,
+                requested_kind=base_kind,
+                regularization=regularization,
+                max_factor_nbytes=base_budget,
+                t0=t0,
+            )
+        else:
+            base = build_active_projected_xell_kinetic_line_preconditioner(
+                matrix=kinetic_matrix,
+                layout=layout,
+                active_kinetic_indices=kinetic_active,
+                requested_kind=base_kind,
+                regularization=regularization,
+                max_factor_nbytes=base_budget,
+                t0=t0,
+            )
+    else:
+        base = _build_active_projected_local_base_preconditioner(
+            matrix=kinetic_matrix,
+            layout=layout,
+            active_indices=kinetic_active,
+            kind=base_kind,
+            max_factor_nbytes=base_budget,
+            regularization=regularization,
+            t0=t0,
+        )
+        if (not bool(base.selected) or base.operator is None) and base.reason == "unsupported_local_base_kind":
+            base = (
+                None
+                if base_preconditioner_factory is None
+                else base_preconditioner_factory(
+                    matrix=kinetic_matrix,
+                    layout=layout,
+                    active_indices=kinetic_active,
+                    kind=base_kind,
+                    max_factor_nbytes=base_budget,
+                    regularization=regularization,
+                )
+            )
+        if base is None:
+            return RHS1StructuredFullCSRPreconditioner(
+                operator=None,
+                selected=False,
+                kind="active_global_field_split_schur",
+                reason="active_global_field_split_missing_base_factory",
+                setup_s=max(0.0, time.perf_counter() - t0),
+                metadata={
+                    "requested_kind": str(requested_kind),
+                    "requested_base_kind": str(base_kind),
+                    "kinetic_size": int(n_k),
+                    "tail_size": int(tail_size),
+                    "active_layout": active_layout.to_dict(),
+                },
+            )
+    if not bool(base.selected) or base.operator is None:
+        return RHS1StructuredFullCSRPreconditioner(
+            operator=None,
+            selected=False,
+            kind="active_global_field_split_schur",
+            reason=f"active_global_field_split_base_failed:{base.reason}",
+            setup_s=max(0.0, time.perf_counter() - t0),
+            metadata={
+                "requested_kind": str(requested_kind),
+                "requested_base_kind": str(base_kind),
+                "base_preconditioner": base.to_dict(),
+                "kinetic_size": int(n_k),
+                "tail_size": int(tail_size),
+                "active_layout": active_layout.to_dict(),
+            },
+        )
+
+    u = matrix_csr[:n_k, n_k:].tocsc()
+    v = matrix_csr[n_k:, :n_k].tocsr()
+    w = matrix_csr[n_k:, n_k:].tocsr()
+    base_factor_nbytes = int(
+        base.metadata.get("factor_nbytes_actual", base.metadata.get("factor_nbytes_estimate", 0)) or 0
+    )
+    kinetic_response_nbytes = int(n_k * tail_size * np.dtype(np.float64).itemsize)
+    schur_nbytes = int(tail_size * tail_size * np.dtype(np.float64).itemsize)
+    partition_nbytes = int(_scipy_csr_nbytes(u.tocsr()) + _scipy_csr_nbytes(v) + _scipy_csr_nbytes(w))
+    factor_estimate = int(base_factor_nbytes + kinetic_response_nbytes + schur_nbytes + partition_nbytes)
+    if factor_estimate > int(max_factor_nbytes):
+        return RHS1StructuredFullCSRPreconditioner(
+            operator=None,
+            selected=False,
+            kind="active_global_field_split_schur",
+            reason=f"active_global_field_split_budget_exceeded:{factor_estimate}>{int(max_factor_nbytes)}",
+            setup_s=max(0.0, time.perf_counter() - t0),
+            metadata={
+                "requested_kind": str(requested_kind),
+                "base_kind": str(base.kind),
+                "requested_base_kind": str(base_kind),
+                "kinetic_size": int(n_k),
+                "tail_size": int(tail_size),
+                "kinetic_response_nbytes": int(kinetic_response_nbytes),
+                "schur_nbytes": int(schur_nbytes),
+                "partition_nbytes": int(partition_nbytes),
+                "base_factor_nbytes_actual": int(base_factor_nbytes),
+                "factor_nbytes_estimate": int(factor_estimate),
+                "max_factor_nbytes": int(max_factor_nbytes),
+                "active_layout": active_layout.to_dict(),
+                "base_preconditioner": base.to_dict(),
+            },
+        )
+
+    def solve_kinetic(rhs_kinetic: Any) -> np.ndarray:
+        return np.asarray(base.operator.matvec(rhs_kinetic), dtype=np.float64).reshape((-1,))
+
+    kinetic_response = np.zeros((n_k, tail_size), dtype=np.float64)
+    active_u_columns = 0
+    for col_index in range(tail_size):
+        start = int(u.indptr[col_index])
+        stop = int(u.indptr[col_index + 1])
+        if start == stop:
+            continue
+        active_u_columns += 1
+        column = np.zeros((n_k,), dtype=np.float64)
+        column[u.indices[start:stop]] = u.data[start:stop]
+        kinetic_response[:, col_index] = solve_kinetic(column)
+
+    schur = np.asarray(w.toarray(), dtype=np.float64) - np.asarray(v @ kinetic_response, dtype=np.float64)
+    schur_scale = max(float(np.linalg.norm(schur, ord=np.inf)) if schur.size else 0.0, 1.0)
+    schur_regularization = float(abs(regularization)) * schur_scale
+    if schur_regularization > 0.0:
+        schur = schur + schur_regularization * np.eye(tail_size, dtype=np.float64)
+    schur_solver_kind = "lu"
+    try:
+        lu, piv = lu_factor(schur, check_finite=False)
+
+        def solve_tail(rhs_tail: np.ndarray) -> np.ndarray:
+            return np.asarray(lu_solve((lu, piv), rhs_tail, check_finite=False), dtype=np.float64).reshape((-1,))
+
+    except Exception:  # noqa: BLE001
+        pinv = np.linalg.pinv(schur, rcond=max(float(abs(regularization)), 1.0e-14))
+        schur_solver_kind = "pinv"
+
+        def solve_tail(rhs_tail: np.ndarray) -> np.ndarray:
+            return np.asarray(pinv @ rhs_tail, dtype=np.float64).reshape((-1,))
+
+    def apply(x: Any) -> np.ndarray:
+        arr = np.asarray(x, dtype=np.float64).reshape((-1,))
+        y_k = solve_kinetic(arr[:n_k])
+        rhs_tail = arr[n_k:] - np.asarray(v @ y_k, dtype=np.float64).reshape((-1,))
+        y_tail = solve_tail(rhs_tail)
+        y_k = y_k - np.asarray(kinetic_response @ y_tail, dtype=np.float64).reshape((-1,))
+        return np.concatenate((y_k, y_tail))
+
+    cond_estimate = None
+    if tail_size <= 128:
+        cond_estimate = float(np.linalg.cond(schur))
+    operator = LinearOperator(matrix_csr.shape, matvec=apply, dtype=np.float64)
+    return RHS1StructuredFullCSRPreconditioner(
+        operator=operator,
+        selected=True,
+        kind="active_global_field_split_schur",
+        reason="complete",
+        setup_s=max(0.0, time.perf_counter() - t0),
+        metadata={
+            "requested_kind": str(requested_kind),
+            "architecture": "active_kinetic_global_field_split_schur",
+            "base_kind": str(base.kind),
+            "requested_base_kind": str(base_kind),
+            "base_preconditioner": base.to_dict(),
+            "active_size": int(matrix_csr.shape[0]),
+            "kinetic_size": int(n_k),
+            "tail_size": int(tail_size),
+            "u_nnz": int(u.nnz),
+            "v_nnz": int(v.nnz),
+            "w_nnz": int(w.nnz),
+            "active_u_columns": int(active_u_columns),
+            "kinetic_response_nbytes": int(kinetic_response.nbytes),
+            "schur_nbytes": int(schur.nbytes),
+            "partition_nbytes": int(partition_nbytes),
+            "base_factor_nbytes_actual": int(base_factor_nbytes),
+            "factor_nbytes_estimate": int(factor_estimate),
+            "factor_nbytes_actual": int(factor_estimate),
+            "max_factor_nbytes": int(max_factor_nbytes),
+            "schur_regularization": float(schur_regularization),
+            "schur_condition_estimate": cond_estimate,
+            "schur_solver_kind": str(schur_solver_kind),
+            "active_layout": active_layout.to_dict(),
+            "note": "opt_in_probe_not_auto_default",
+        },
+    )
+
+
+def _build_active_projected_local_base_preconditioner(
+    *,
+    matrix: Any,
+    layout: RHS1BlockLayout,
+    active_indices: Any,
+    kind: str,
+    max_factor_nbytes: int,
+    regularization: float,
+    t0: float,
+) -> RHS1StructuredFullCSRPreconditioner:
+    """Resolve active x-block base preconditioners owned by this module."""
+
+    kind_l = str(kind).strip().lower().replace("-", "_")
+    if kind_l in {"active_xblock", "active_x_block", "active_block_x", "active_xblock_spilu", "active_xblock_lu"}:
+        return build_active_projected_xblock_preconditioner(
+            matrix=matrix,
+            layout=layout,
+            active_indices=active_indices,
+            requested_kind=kind_l,
+            regularization=regularization,
+            max_factor_nbytes=max_factor_nbytes,
+            t0=t0,
+        )
+    if kind_l in {"active_angular_line", "active_tz_line", "active_theta_zeta_line"}:
+        return build_active_projected_angular_line_preconditioner(
+            matrix=matrix,
+            layout=layout,
+            active_kinetic_indices=active_indices,
+            requested_kind=kind_l,
+            regularization=regularization,
+            max_factor_nbytes=max_factor_nbytes,
+            t0=t0,
+        )
+    if kind_l in {"active_diagonal_schur", "active_diag_schur"}:
+        return build_active_projected_diagonal_schur_preconditioner(
+            matrix=matrix,
+            layout=layout,
+            active_indices=active_indices,
+            requested_kind=kind_l,
+            regularization=regularization,
+            max_factor_nbytes=max_factor_nbytes,
+            t0=t0,
+        )
+    if kind_l in {"active_overlap_schwarz", "active_additive_schwarz", "active_restricted_schwarz", "active_ras"}:
+        return build_active_projected_overlap_schwarz_preconditioner(
+            matrix=matrix,
+            layout=layout,
+            active_indices=active_indices,
+            requested_kind=kind_l,
+            regularization=regularization,
+            max_factor_nbytes=max_factor_nbytes,
+            t0=t0,
+        )
+    if kind_l in {"active_native_indexed_schwarz", "active_native_indexed_asm", "active_native_indexed_lines"}:
+        return build_active_projected_native_indexed_schwarz_preconditioner(
+            matrix=matrix,
+            layout=layout,
+            active_indices=active_indices,
+            requested_kind=kind_l,
+            regularization=regularization,
+            max_factor_nbytes=max_factor_nbytes,
+            t0=t0,
+        )
+    return RHS1StructuredFullCSRPreconditioner(
+        operator=None,
+        selected=False,
+        kind=str(kind_l or "active_unknown"),
+        reason="unsupported_local_base_kind",
+        setup_s=max(0.0, time.perf_counter() - t0),
+        metadata={"requested_kind": str(kind)},
+    )
+
+
+def build_active_projected_multiline_field_split_base_preconditioner(
+    *,
+    matrix: Any,
+    layout: RHS1BlockLayout,
+    active_indices: Any | None,
+    regularization: float,
+    max_factor_nbytes: int,
+    t0: float,
+    base_preconditioner_factory: Callable[..., RHS1StructuredFullCSRPreconditioner] | None = None,
+) -> RHS1StructuredFullCSRPreconditioner:
+    """Compose x-ell and angular-line field splits through a true residual equation.
+
+    The default multiplicative form applies the native ``(x, ell)`` field-split
+    inverse, computes the actual active-system residual, then applies the
+    angular-line field-split inverse to that residual.  This gives the sparse
+    coarse layer a stronger base than either line factor alone while preserving
+    the same fail-closed memory accounting.
+    """
+
+    from scipy.sparse.linalg import LinearOperator  # noqa: PLC0415
+
+    matrix_csr = matrix.tocsr()
+    xell = build_active_projected_global_field_split_schur_preconditioner(
+        matrix=matrix_csr,
+        layout=layout,
+        active_indices=active_indices,
+        requested_kind="active_global_field_split_schur",
+        regularization=regularization,
+        max_factor_nbytes=max_factor_nbytes,
+        t0=t0,
+        base_preconditioner_factory=base_preconditioner_factory,
+        base_kind_override="active_native_xell",
+    )
+    angular = build_active_projected_global_field_split_schur_preconditioner(
+        matrix=matrix_csr,
+        layout=layout,
+        active_indices=active_indices,
+        requested_kind="active_global_field_split_schur",
+        regularization=regularization,
+        max_factor_nbytes=max_factor_nbytes,
+        t0=t0,
+        base_preconditioner_factory=base_preconditioner_factory,
+        base_kind_override="active_angular_line",
+    )
+    if not bool(xell.selected) or xell.operator is None or not bool(angular.selected) or angular.operator is None:
+        return RHS1StructuredFullCSRPreconditioner(
+            operator=None,
+            selected=False,
+            kind="active_multiline_field_split_base",
+            reason=f"active_multiline_base_failed:xell={xell.reason};angular={angular.reason}",
+            setup_s=max(0.0, time.perf_counter() - t0),
+            metadata={
+                "xell_preconditioner": xell.to_dict(),
+                "angular_preconditioner": angular.to_dict(),
+            },
+        )
+
+    xell_nbytes = int(xell.metadata.get("factor_nbytes_actual", xell.metadata.get("factor_nbytes_estimate", 0)) or 0)
+    angular_nbytes = int(
+        angular.metadata.get("factor_nbytes_actual", angular.metadata.get("factor_nbytes_estimate", 0)) or 0
+    )
+    factor_nbytes = int(xell_nbytes + angular_nbytes)
+    if factor_nbytes > int(max_factor_nbytes):
+        return RHS1StructuredFullCSRPreconditioner(
+            operator=None,
+            selected=False,
+            kind="active_multiline_field_split_base",
+            reason=f"active_multiline_budget_exceeded:{factor_nbytes}>{int(max_factor_nbytes)}",
+            setup_s=max(0.0, time.perf_counter() - t0),
+            metadata={
+                "xell_preconditioner": xell.to_dict(),
+                "angular_preconditioner": angular.to_dict(),
+                "xell_factor_nbytes_actual": int(xell_nbytes),
+                "angular_factor_nbytes_actual": int(angular_nbytes),
+                "factor_nbytes_actual": int(factor_nbytes),
+                "max_factor_nbytes": int(max_factor_nbytes),
+            },
+        )
+
+    mode = (
+        os.environ.get("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_MULTILINE_MODE", "multiplicative")
+        .strip()
+        .lower()
+        .replace("-", "_")
+    )
+    if mode not in {"multiplicative", "xell_then_angular", "angular_then_xell", "additive"}:
+        mode = "multiplicative"
+    xell_weight = float(_env_float("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_MULTILINE_XELL_WEIGHT", 1.0))
+    angular_weight = float(_env_float("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_MULTILINE_ANGULAR_WEIGHT", 1.0))
+
+    def _matvec_xell(arr: np.ndarray) -> np.ndarray:
+        return np.asarray(xell.operator.matvec(arr), dtype=np.float64).reshape((-1,))
+
+    def _matvec_angular(arr: np.ndarray) -> np.ndarray:
+        return np.asarray(angular.operator.matvec(arr), dtype=np.float64).reshape((-1,))
+
+    def apply(x: Any) -> np.ndarray:
+        arr = np.asarray(x, dtype=np.float64).reshape((-1,))
+        if mode == "additive":
+            denom = max(abs(xell_weight) + abs(angular_weight), 1.0e-300)
+            return (xell_weight * _matvec_xell(arr) + angular_weight * _matvec_angular(arr)) / denom
+        if mode == "angular_then_xell":
+            first = _matvec_angular(arr)
+            residual = arr - np.asarray(matrix_csr @ first, dtype=np.float64).reshape((-1,))
+            return first + xell_weight * _matvec_xell(residual)
+        first = _matvec_xell(arr)
+        residual = arr - np.asarray(matrix_csr @ first, dtype=np.float64).reshape((-1,))
+        return first + angular_weight * _matvec_angular(residual)
+
+    operator = LinearOperator(matrix_csr.shape, matvec=apply, dtype=np.float64)
+    return RHS1StructuredFullCSRPreconditioner(
+        operator=operator,
+        selected=True,
+        kind="active_multiline_field_split_base",
+        reason="complete",
+        setup_s=max(0.0, time.perf_counter() - t0),
+        metadata={
+            "requested_kind": "active_multiline_field_split_base",
+            "architecture": "active_multiline_xell_angular_field_split_residual",
+            "base_kind": "active_multiline_xell_angular",
+            "requested_base_kind": "active_multiline_xell_angular",
+            "mode": str(mode),
+            "xell_weight": float(xell_weight),
+            "angular_weight": float(angular_weight),
+            "xell_preconditioner": xell.to_dict(),
+            "angular_preconditioner": angular.to_dict(),
+            "xell_factor_nbytes_actual": int(xell_nbytes),
+            "angular_factor_nbytes_actual": int(angular_nbytes),
+            "factor_nbytes_actual": int(factor_nbytes),
+            "max_factor_nbytes": int(max_factor_nbytes),
+            "note": "opt_in_probe_not_auto_default",
+        },
+    )
+
+
+def build_active_projected_bounded_native_stack_preconditioner(
+    *,
+    matrix: Any,
+    layout: RHS1BlockLayout,
+    active_indices: Any | None,
+    requested_kind: str,
+    regularization: float,
+    max_factor_nbytes: int,
+    t0: float,
+    base_preconditioner_factory: Callable[..., RHS1StructuredFullCSRPreconditioner] | None = None,
+) -> RHS1StructuredFullCSRPreconditioner:
+    """Build a bounded native line/patch/coarse stack for RHSMode=1.
+
+    This is the production-facing replacement for monolithic serial sparse
+    factor setup.  The stack uses only bounded components:
+
+    - native ``(x, ell)`` line solves at fixed angular grid point,
+    - native angular-line solves at fixed ``(species, x, ell)``,
+    - an optional local additive-Schwarz patch layer under a setup-size gate,
+    - and a compact coupled coarse residual equation over physics/profile
+      moments plus optional targeted windows.
+
+    The final true residual is still owned by Krylov.  This object is a fixed
+    linear preconditioner and is therefore safe to use in GMRES/FGMRES policy
+    probes without any right-hand-side-dependent tuning.
+    """
+
+    from scipy.linalg import lu_factor, lu_solve  # noqa: PLC0415
+    from scipy.sparse.linalg import LinearOperator  # noqa: PLC0415
+
+    matrix_csr = matrix.tocsr()
+    active_np = (
+        np.arange(int(layout.total_size), dtype=np.int64)
+        if active_indices is None
+        else np.asarray(active_indices, dtype=np.int64).reshape((-1,))
+    )
+    if active_np.shape != (int(matrix_csr.shape[0]),):
+        return RHS1StructuredFullCSRPreconditioner(
+            operator=None,
+            selected=False,
+            kind="active_bounded_native_stack",
+            reason="active_index_size_mismatch",
+            setup_s=max(0.0, time.perf_counter() - t0),
+            metadata={
+                "active_index_size": int(active_np.size),
+                "matrix_shape": tuple(int(v) for v in matrix_csr.shape),
+            },
+        )
+
+    policy = resolve_active_native_stack_policy(max_factor_nbytes=int(max_factor_nbytes))
+    base_budget = int(policy.base_budget_nbytes)
+    base = build_active_projected_multiline_field_split_base_preconditioner(
+        matrix=matrix_csr,
+        layout=layout,
+        active_indices=active_indices,
+        regularization=regularization,
+        max_factor_nbytes=base_budget,
+        t0=t0,
+        base_preconditioner_factory=base_preconditioner_factory,
+    )
+    if not bool(base.selected) or base.operator is None:
+        return RHS1StructuredFullCSRPreconditioner(
+            operator=None,
+            selected=False,
+            kind="active_bounded_native_stack",
+            reason=f"line_factor_base_not_selected:{base.reason}",
+            setup_s=max(0.0, time.perf_counter() - t0),
+            metadata={"line_base_preconditioner": base.to_dict(), "base_budget_nbytes": int(base_budget)},
+        )
+
+    base_nbytes = int(base.metadata.get("factor_nbytes_actual", base.metadata.get("factor_nbytes_estimate", 0)) or 0)
+    schwarz_requested = bool(policy.schwarz_requested)
+    schwarz_max_size = int(policy.schwarz_max_size)
+    schwarz: RHS1StructuredFullCSRPreconditioner | None = None
+    schwarz_nbytes = 0
+    schwarz_reason = "disabled"
+    if bool(schwarz_requested):
+        if int(schwarz_max_size) > 0 and int(matrix_csr.shape[0]) > int(schwarz_max_size):
+            schwarz_reason = f"size_exceeded:{int(matrix_csr.shape[0])}>{int(schwarz_max_size)}"
+        else:
+            remaining_budget = max(1, int(max_factor_nbytes) - int(base_nbytes))
+            schwarz = build_active_projected_overlap_schwarz_preconditioner(
+                matrix=matrix_csr,
+                layout=layout,
+                active_indices=active_np,
+                requested_kind="active_overlap_schwarz",
+                regularization=regularization,
+                max_factor_nbytes=remaining_budget,
+                t0=t0,
+            )
+            if bool(schwarz.selected) and schwarz.operator is not None:
+                schwarz_reason = "selected"
+                schwarz_nbytes = int(
+                    schwarz.metadata.get("factor_nbytes_actual", schwarz.metadata.get("factor_nbytes_estimate", 0))
+                    or 0
+                )
+            else:
+                schwarz_reason = f"not_selected:{getattr(schwarz, 'reason', 'unknown')}"
+                schwarz = None
+
+    config = coarse_residual_config(layout)
+    max_coarse_size = int(policy.max_coarse_size)
+    window_basis, window_metadata = build_active_native_xell_coarse_window_basis_csc(layout=layout)
+    physics_basis = build_coarse_residual_basis_csc(layout=layout, config=config)
+    full_basis = (
+        sp.hstack([window_basis, physics_basis], format="csc")
+        if int(window_basis.shape[1]) > 0
+        else physics_basis
+    )
+    basis = full_basis[active_np, :].tocsc()
+    if basis.shape[1] == 0:
+        return RHS1StructuredFullCSRPreconditioner(
+            operator=None,
+            selected=False,
+            kind="active_bounded_native_stack",
+            reason="empty_projected_native_stack_coarse_basis",
+            setup_s=max(0.0, time.perf_counter() - t0),
+            metadata={
+                "line_base_preconditioner": base.to_dict(),
+                "schwarz_reason": str(schwarz_reason),
+                **window_metadata,
+                **config,
+            },
+        )
+
+    col_norm = np.sqrt(np.asarray(basis.power(2).sum(axis=0), dtype=np.float64).reshape((-1,)))
+    keep = np.flatnonzero(np.isfinite(col_norm) & (col_norm > 0.0))
+    if keep.size == 0:
+        return RHS1StructuredFullCSRPreconditioner(
+            operator=None,
+            selected=False,
+            kind="active_bounded_native_stack",
+            reason="zero_projected_native_stack_coarse_basis",
+            setup_s=max(0.0, time.perf_counter() - t0),
+            metadata={
+                "line_base_preconditioner": base.to_dict(),
+                "schwarz_reason": str(schwarz_reason),
+                **window_metadata,
+                **config,
+            },
+        )
+    if keep.size > int(max_coarse_size):
+        keep = keep[: int(max_coarse_size)]
+    basis = basis[:, keep].tocsc()
+    col_norm = np.sqrt(np.asarray(basis.power(2).sum(axis=0), dtype=np.float64).reshape((-1,)))
+    valid = np.flatnonzero(np.isfinite(col_norm) & (col_norm > 0.0))
+    if valid.size == 0:
+        return RHS1StructuredFullCSRPreconditioner(
+            operator=None,
+            selected=False,
+            kind="active_bounded_native_stack",
+            reason="invalid_projected_native_stack_coarse_basis",
+            setup_s=max(0.0, time.perf_counter() - t0),
+            metadata={
+                "line_base_preconditioner": base.to_dict(),
+                "schwarz_reason": str(schwarz_reason),
+                **window_metadata,
+                **config,
+            },
+        )
+    basis = basis[:, valid].tocsc()
+    col_norm = col_norm[valid]
+    basis = (basis @ sp.diags(1.0 / col_norm, format="csc")).tocsc()
+    basis.eliminate_zeros()
+    adaptive_base_operator = base.operator
+    adaptive_residual_operator = "line_base"
+    if schwarz is not None and schwarz.operator is not None:
+        adaptive_residual_operator = "line_base_plus_schwarz"
+
+        def _apply_base_plus_schwarz_for_adaptive_basis(x: Any) -> np.ndarray:
+            arr = np.asarray(x, dtype=np.float64).reshape((-1,))
+            y_base = np.asarray(base.operator.matvec(arr), dtype=np.float64).reshape((-1,))
+            residual = arr - np.asarray(matrix_csr @ y_base, dtype=np.float64).reshape((-1,))
+            return y_base + np.asarray(schwarz.operator.matvec(residual), dtype=np.float64).reshape((-1,))
+
+        adaptive_base_operator = LinearOperator(
+            matrix_csr.shape,
+            matvec=_apply_base_plus_schwarz_for_adaptive_basis,
+            dtype=np.float64,
+        )
+    basis, adaptive_metadata = append_adaptive_residual_basis_csc(
+        matrix=matrix_csr,
+        base_operator=adaptive_base_operator,
+        basis=basis,
+        max_total_columns=int(max_coarse_size),
+    )
+
+    az_basis = (matrix_csr @ basis).tocsc()
+    coarse_solver_mode = str(policy.coarse_solver_mode)
+    if coarse_solver_mode == "galerkin":
+        coarse = np.asarray((basis.T @ az_basis).toarray(), dtype=np.float64)
+    else:
+        coarse = np.asarray((az_basis.T @ az_basis).toarray(), dtype=np.float64)
+    coarse_size = int(coarse.shape[0])
+    coarse_scale = max(float(np.linalg.norm(coarse, ord=np.inf)) if coarse.size else 0.0, 1.0)
+    coarse_regularization = max(float(abs(regularization)), 1.0e-14) * coarse_scale
+    coarse_reg = coarse + coarse_regularization * np.eye(coarse_size, dtype=np.float64)
+    basis_nbytes = int(_scipy_csr_nbytes(basis.tocsr()))
+    az_basis_nbytes = int(_scipy_csr_nbytes(az_basis.tocsr()))
+    coarse_nbytes = int(coarse_reg.nbytes)
+    total_nbytes = int(base_nbytes + schwarz_nbytes + basis_nbytes + az_basis_nbytes + coarse_nbytes)
+    if total_nbytes > int(max_factor_nbytes):
+        return RHS1StructuredFullCSRPreconditioner(
+            operator=None,
+            selected=False,
+            kind="active_bounded_native_stack",
+            reason=f"active_bounded_native_stack_budget_exceeded:{total_nbytes}>{int(max_factor_nbytes)}",
+            setup_s=max(0.0, time.perf_counter() - t0),
+            metadata={
+                "line_base_preconditioner": base.to_dict(),
+                "schwarz_preconditioner": None if schwarz is None else schwarz.to_dict(),
+                "schwarz_reason": str(schwarz_reason),
+                "coarse_size": int(coarse_size),
+                "basis_nbytes_actual": int(basis_nbytes),
+                "az_basis_nbytes_actual": int(az_basis_nbytes),
+                "coarse_nbytes_actual": int(coarse_nbytes),
+                "base_factor_nbytes_actual": int(base_nbytes),
+                "schwarz_factor_nbytes_actual": int(schwarz_nbytes),
+                "factor_nbytes_actual": int(total_nbytes),
+                "max_factor_nbytes": int(max_factor_nbytes),
+                **adaptive_metadata,
+                **window_metadata,
+                **config,
+            },
+        )
+
+    solver_kind = "lu"
+    try:
+        lu, piv = lu_factor(coarse_reg, check_finite=False)
+
+        def solve_coarse(rhs: np.ndarray) -> np.ndarray:
+            return np.asarray(lu_solve((lu, piv), rhs, check_finite=False), dtype=np.float64).reshape((-1,))
+
+        coarse_condition = float(np.linalg.cond(coarse_reg)) if coarse_size <= 512 else None
+    except Exception:  # noqa: BLE001
+        solver_kind = "pinv"
+        pinv = np.linalg.pinv(coarse_reg, rcond=max(float(abs(regularization)), 1.0e-14))
+
+        def solve_coarse(rhs: np.ndarray) -> np.ndarray:
+            return np.asarray(pinv @ rhs, dtype=np.float64).reshape((-1,))
+
+        coarse_condition = None
+
+    def _apply_line_base(arr: np.ndarray) -> np.ndarray:
+        return np.asarray(base.operator.matvec(arr), dtype=np.float64).reshape((-1,))
+
+    def _apply_schwarz(residual: np.ndarray) -> np.ndarray:
+        if schwarz is None or schwarz.operator is None:
+            return np.zeros_like(residual)
+        return np.asarray(schwarz.operator.matvec(residual), dtype=np.float64).reshape((-1,))
+
+    def apply(x: Any) -> np.ndarray:
+        arr = np.asarray(x, dtype=np.float64).reshape((-1,))
+        y = _apply_line_base(arr)
+        if schwarz is not None:
+            residual = arr - np.asarray(matrix_csr @ y, dtype=np.float64).reshape((-1,))
+            y = y + _apply_schwarz(residual)
+        residual = arr - np.asarray(matrix_csr @ y, dtype=np.float64).reshape((-1,))
+        coarse_rhs = (
+            np.asarray(basis.T @ residual, dtype=np.float64).reshape((-1,))
+            if coarse_solver_mode == "galerkin"
+            else np.asarray(az_basis.T @ residual, dtype=np.float64).reshape((-1,))
+        )
+        coeff = solve_coarse(coarse_rhs)
+        return y + np.asarray(basis @ coeff, dtype=np.float64).reshape((-1,))
+
+    operator = LinearOperator(matrix_csr.shape, matvec=apply, dtype=np.float64)
+    return RHS1StructuredFullCSRPreconditioner(
+        operator=operator,
+        selected=True,
+        kind="active_bounded_native_stack",
+        reason="complete",
+        setup_s=max(0.0, time.perf_counter() - t0),
+        metadata={
+            "requested_kind": str(requested_kind),
+            "architecture": "active_bounded_native_line_schwarz_coupled_coarse",
+            "base_kind": str(base.kind),
+            "line_base_preconditioner": base.to_dict(),
+            "schwarz_requested": bool(schwarz_requested),
+            "schwarz_selected": bool(schwarz is not None),
+            "schwarz_reason": str(schwarz_reason),
+            "schwarz_preconditioner": None if schwarz is None else schwarz.to_dict(),
+            "active_size": int(matrix_csr.shape[0]),
+            "coarse_size": int(coarse_size),
+            "max_coarse_size": int(max_coarse_size),
+            "projected_basis_nnz": int(basis.nnz),
+            "az_basis_nnz": int(az_basis.nnz),
+            "coarse_solver": str(solver_kind),
+            "coarse_equation": str(coarse_solver_mode),
+            "coarse_regularization": float(coarse_regularization),
+            "coarse_condition_estimate": coarse_condition,
+            "adaptive_residual_operator": str(adaptive_residual_operator),
+            "basis_nbytes_actual": int(basis_nbytes),
+            "az_basis_nbytes_actual": int(az_basis_nbytes),
+            "coarse_nbytes_actual": int(coarse_nbytes),
+            "base_factor_nbytes_actual": int(base_nbytes),
+            "schwarz_factor_nbytes_actual": int(schwarz_nbytes),
+            "factor_nbytes_actual": int(total_nbytes),
+            "max_factor_nbytes": int(max_factor_nbytes),
+            "note": "no_global_serial_sparse_factor",
+            "requires_preflight": True,
+            **adaptive_metadata,
+            **window_metadata,
+            **config,
+        },
+    )
+
+
+def build_active_fortran_v3_reduced_native_stack_preconditioner(
+    *,
+    matrix: Any,
+    layout: RHS1BlockLayout,
+    active_indices: Any | None,
+    requested_kind: str,
+    regularization: float,
+    max_factor_nbytes: int,
+    t0: float,
+    base_preconditioner_factory: Callable[..., RHS1StructuredFullCSRPreconditioner] | None = None,
+) -> RHS1StructuredFullCSRPreconditioner:
+    """Build the production-named bounded native stack for direct-tail solves.
+
+    ``active_fortran_v3_reduced_lu`` is the robust full-grid incumbent, but it
+    stores a large monolithic sparse factor.  This production candidate keeps
+    the same active direct-tail operator and residual gate while replacing the
+    global serial factor by bounded native line factors, optional local
+    Schwarz, and a compact coupled coarse residual equation.
+    """
+
+    base = build_active_projected_bounded_native_stack_preconditioner(
+        matrix=matrix,
+        layout=layout,
+        active_indices=active_indices,
+        requested_kind=str(requested_kind),
+        regularization=regularization,
+        max_factor_nbytes=max_factor_nbytes,
+        t0=t0,
+        base_preconditioner_factory=base_preconditioner_factory,
+    )
+    metadata = dict(base.metadata)
+    metadata.update(
+        {
+            "requested_kind": str(requested_kind),
+            "architecture": "fortran_v3_reduced_active_native_line_schwarz_coupled_coarse",
+            "base_preconditioner_kind": str(base.kind),
+            "base_architecture": str(base.metadata.get("architecture", "")),
+            "no_global_serial_sparse_factor": True,
+            "exact_serial_lu_factor": False,
+            "production_candidate": True,
+            "requires_preflight": True,
+            "note": "bounded_direct_tail_native_stack",
+        }
+    )
+    return RHS1StructuredFullCSRPreconditioner(
+        operator=base.operator,
+        selected=bool(base.selected),
+        kind="active_fortran_v3_reduced_native_stack",
+        reason=str(base.reason),
+        setup_s=float(base.setup_s),
+        metadata=metadata,
     )
 
 

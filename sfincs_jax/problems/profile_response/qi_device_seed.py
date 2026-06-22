@@ -54,6 +54,101 @@ class MatrixFreeQIDeviceSeedContext:
         return float(self.timer_elapsed_s())
 
 
+@dataclass(frozen=True)
+class MatrixFreeQIDeviceSeedSetup:
+    """Resolved matrix-free QI seed gates for one RHSMode=1 reduced solve."""
+
+    context: MatrixFreeQIDeviceSeedContext
+    early_enabled: bool
+    skip_strong: bool
+    pre_sparse_enabled: bool
+
+
+@dataclass(frozen=True)
+class MatrixFreeQIDeviceSeedAttempt:
+    """Result from an optional matrix-free QI seed attempt."""
+
+    result: GMRESSolveResult
+    attempted: bool
+    improved: bool
+
+
+def build_matrixfree_qi_device_seed_setup(
+    *,
+    op: Any,
+    active_size: int,
+    target_reduced: float,
+    mv_reduced: Callable[[jnp.ndarray], jnp.ndarray],
+    rhs_reduced: jnp.ndarray,
+    emit: Callable[[int, str], None] | None,
+    timer_elapsed_s: Callable[[], float],
+    rhsmode1_general_metadata: dict[str, object],
+) -> MatrixFreeQIDeviceSeedSetup:
+    """Resolve QI seed env gates and package the solve-local context."""
+
+    context = MatrixFreeQIDeviceSeedContext(
+        op=op,
+        active_size=int(active_size),
+        target_reduced=float(target_reduced),
+        mv_reduced=mv_reduced,
+        rhs_reduced=rhs_reduced,
+        emit=emit,
+        timer_elapsed_s=timer_elapsed_s,
+        rhsmode1_general_metadata=rhsmode1_general_metadata,
+    )
+    pre_sparse_enabled = bool(
+        int(getattr(op, "rhs_mode", 0)) == 1
+        and _rhs1_bool_env(
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER",
+            default=False,
+        )
+        and _rhs1_bool_env(
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_MATRIX_FREE",
+            default=False,
+        )
+    )
+    return MatrixFreeQIDeviceSeedSetup(
+        context=context,
+        early_enabled=_rhs1_bool_env(
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_EARLY",
+            default=False,
+        ),
+        skip_strong=_rhs1_bool_env(
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_QI_DEVICE_PRECONDITIONER_SKIP_STRONG",
+            default=False,
+        ),
+        pre_sparse_enabled=pre_sparse_enabled,
+    )
+
+
+def attempt_matrixfree_qi_device_seed_if_requested(
+    current_result: GMRESSolveResult,
+    *,
+    hook: str,
+    setup: MatrixFreeQIDeviceSeedSetup,
+    enabled: bool,
+) -> MatrixFreeQIDeviceSeedAttempt:
+    """Run a matrix-free QI seed attempt only when the resolved gate is open."""
+
+    if not bool(enabled):
+        return MatrixFreeQIDeviceSeedAttempt(
+            result=current_result,
+            attempted=False,
+            improved=False,
+        )
+    residual_before = float(current_result.residual_norm)
+    result = attempt_matrixfree_qi_device_seed(
+        current_result,
+        hook=hook,
+        context=setup.context,
+    )
+    return MatrixFreeQIDeviceSeedAttempt(
+        result=result,
+        attempted=True,
+        improved=float(result.residual_norm) < residual_before,
+    )
+
+
 def attempt_matrixfree_qi_device_seed(
     current_result: GMRESSolveResult,
     *,
@@ -756,5 +851,9 @@ def attempt_matrixfree_qi_device_seed(
 
 __all__ = [
     "MatrixFreeQIDeviceSeedContext",
+    "MatrixFreeQIDeviceSeedSetup",
+    "MatrixFreeQIDeviceSeedAttempt",
     "attempt_matrixfree_qi_device_seed",
+    "attempt_matrixfree_qi_device_seed_if_requested",
+    "build_matrixfree_qi_device_seed_setup",
 ]

@@ -378,12 +378,15 @@ the historical private driver name and test the focused module directly. This ke
   compatibility aliases plus dispatch/admission logic around these builders.
 - ``sfincs_jax/solvers/preconditioners/xblock/active_projected.py``:
   active-projected x-block, diagonal-Schur, x-ell kinetic-line, angular-line,
-  native indexed Schwarz, and restricted-additive-Schwarz preconditioners for
-  exact RHSMode=1 active CSR systems. This module owns active full-index to
-  projected-position mapping, active x-block sparse LU/ILU residual correction,
-  optional block scaling, singular block fallback metadata, compact active
-  kinetic/angular line inverses, native padded-indexed block factors, active
-  global-tail Schur setup, and overlap-Schwarz patch setup.
+  native indexed Schwarz, restricted-additive-Schwarz, global field-split,
+  multiline field-split, bounded native-stack, and Fortran-v3-reduced
+  native-stack preconditioners for exact RHSMode=1 active CSR systems. This
+  module owns active full-index to projected-position mapping, active x-block
+  sparse LU/ILU residual correction, optional block scaling, singular block
+  fallback metadata, compact active kinetic/angular line inverses, native
+  padded-indexed block factors, active global-tail Schur setup,
+  overlap-Schwarz patch setup, local base dispatch for extracted x-block
+  families, and the bounded line/patch/coarse native-stack architecture.
   ``rhs1_full_assembly.py`` keeps only compatibility aliases plus
   dispatch/admission logic around these builders.
 - ``sfincs_jax/solvers/preconditioners/domain_decomposition/line_blocks.py``:
@@ -672,9 +675,12 @@ the historical private driver name and test the focused module directly. This ke
   used by non-differentiable host shortcut paths.
 - ``sfincs_jax/problems/profile_response/qi_device_seed.py``:
   matrix-free QI device seed correction for RHSMode=1 active-DOF solves. The
-  driver passes solve-local state through a typed context while the module owns
-  QI coarse-basis setup, residual-improvement admission, metadata updates, and
-  fail-closed diagnostics.
+  driver passes solve-local state through a typed setup/context while the
+  module owns env-gate resolution for early and pre-sparse seed hooks, QI
+  coarse-basis setup, residual-improvement admission, metadata updates, and
+  fail-closed diagnostics. The returned attempt object reports whether a hook
+  was attempted and whether it improved the residual so the driver only updates
+  replay state when the domain helper accepts a better seed.
 - ``sfincs_jax/problems/profile_response/solver_diagnostics.py``
   (legacy alias: ``sfincs_jax/rhs1_solver_diagnostics.py``):
   typed RHSMode=1 x-block correction diagnostic records, historical solver
