@@ -371,11 +371,13 @@ the historical private driver name and test the focused module directly. This ke
   low-``ell`` x-block index helper. ``rhs1_full_assembly.py`` keeps only
   compatibility aliases plus dispatch/admission logic around these builders.
 - ``sfincs_jax/solvers/preconditioners/xblock/active_projected.py``:
-  active-projected x-block and restricted-additive-Schwarz preconditioners for
-  exact RHSMode=1 active CSR systems. This module owns active full-index to
-  projected-position mapping, active x-block sparse LU/ILU residual correction,
-  optional block scaling, singular block fallback metadata, and overlap-Schwarz
-  patch setup. ``rhs1_full_assembly.py`` keeps only compatibility aliases plus
+  active-projected x-block, diagonal-Schur, x-ell kinetic-line, angular-line,
+  and restricted-additive-Schwarz preconditioners for exact RHSMode=1 active
+  CSR systems. This module owns active full-index to projected-position
+  mapping, active x-block sparse LU/ILU residual correction, optional block
+  scaling, singular block fallback metadata, compact active kinetic/angular
+  line inverses, active global-tail Schur setup, and overlap-Schwarz patch
+  setup. ``rhs1_full_assembly.py`` keeps only compatibility aliases plus
   dispatch/admission logic around these builders.
 - ``sfincs_jax/solvers/preconditioners/domain_decomposition/line_blocks.py``:
   angular line-block and restricted-additive-Schwarz preconditioners for
