@@ -111,6 +111,24 @@ Flat output file-format helpers:
 - NetCDF-safe dataset naming,
 - solver-trace attachment for HDF5 outputs.
 
+``sfincs_jax/outputs/cache.py``
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Geometry-output cache helpers:
+
+- output-cache environment gates,
+- stable cache-directory and cache-path construction,
+- hashable namelist fragments for geometry/species/physics cache keys,
+- content-based equilibrium identity for VMEC/Boozer files,
+- geometry-output cache-key construction with an injected equilibrium resolver,
+- filtered disk load/save for geometry-derived fields such as
+  ``gpsiHatpsiHat``, ``uHat``, ``VPrimeHat``, ``FSABHat2``, ``BDotCurlB``,
+  ``diotadpsiHat``, and classical no-``Phi1`` fluxes.
+
+``sfincs_jax/io.py`` keeps a small compatibility wrapper for
+``_output_geom_cache_key`` because equilibrium path localization is still part
+of input/output orchestration.
+
 ``sfincs_jax/outputs/rhsmode1.py``
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
@@ -128,7 +146,8 @@ RHSMode=1 output-safety and trace-schema helpers:
 The solved-field physics schema construction still lives in ``sfincs_jax/io.py``
 during the current refactor tranche. The next I/O split should move physical
 solved-field and provenance schema construction behind a smaller output
-contract while preserving these writer functions.
+contract while preserving these writer functions and the output-cache boundary
+in the ``outputs`` package.
 
 ``sfincs_jax/outputs/transport.py``
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
