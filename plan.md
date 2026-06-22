@@ -1,6 +1,6 @@
 # SFINCS_JAX Refactor And Release-Readiness Plan
 
-Last updated: 2026-06-21 (America/Chicago)
+Last updated: 2026-06-22 (America/Chicago)
 
 Active implementation branch: `refactor/rhs1-full-assembly-preconditioners`
 
@@ -129,8 +129,11 @@ deferred research lanes.
   module owns local base dispatch for x-block/angular/native-indexed bases, and
   `rhs1_full_assembly.py` injects its dispatcher only where a still-local base
   family is needed.
-- Current next tranche is a larger result/output handoff or `io.py`
-  solved-field schema split. The QI audit is complete for this refactor stage:
+- The previous next tranche was a larger result/output handoff or `io.py`
+  solved-field schema split. The revised next tranche is now either the
+  ambipolar/sensitivity owner or a full profile-response orchestration split,
+  because both reduce churn more than wrapper-level moves. The QI audit is
+  complete for this refactor stage:
   no standalone `qi_*` functions/classes remain in `v3_driver.py`, no direct QI
   builder aliases remain there, and the remaining QI references are live
   solve-local hook placements into tested domain modules.
@@ -138,6 +141,23 @@ deferred research lanes.
   release suite is CPU/GPU parity-clean, while production-resolution QI, true
   device-QI, lower-memory native factor replacement, full-grid QA/QH RHSMode=1,
   and single-case multi-GPU scaling remain fail-closed research lanes.
+- The latest SFINCS Fortran v3 source audit found functionality that should be
+  tracked separately from solver-performance refactors:
+  - `ambipolarSolve=.true.` with `ambipolarSolveOption=1` uses safeguarded
+    Newton/bisection, option 2 uses Brent, and option 3 uses pure Newton.
+  - Options 1 and 3 compute `dRadialCurrentdEr` through an adjoint solve:
+    `populateAdjointRHS(..., particle flux, species-summed)` followed by
+    `computedRadialCurrentdEr()`, which forms
+    `dL/dEr * f - dS/dEr` via `populatedMatrixdLambda(..., whichLambda=0)`
+    and `populatedRHSdLambda(..., whichLambda=0)`.
+  - `RHSMode=4/5` expose adjoint sensitivity outputs for particle flux, heat
+    flux, parallel flow, total heat flux, radial current, bootstrap current,
+    and, for `RHSMode=5`, `dPhi/dPsi`. Debug mode also writes finite-difference
+    sensitivity checks and percent errors.
+  - `sfincs_jax` currently has Er-scan postprocessing compatible with upstream
+    scan scripts and several autodiff validation examples, but not yet a
+    first-class in-solver ambipolar Newton / adjoint-sensitivity API matching
+    these Fortran v3 modes.
 
 ### Local Validation From This Audit
 
@@ -339,13 +359,43 @@ claim. They must stay documented, fail-closed, and gated.
    Current status: target requires more ownership extraction and focused tests,
    not slow production solves in normal CI.
 
+7. **Fortran v3 ambipolar and adjoint-sensitivity functionality**
+   Current status: scan-based ambipolar postprocessing exists, but Fortran-v3
+   in-solver ambipolar Newton options and `RHSMode=4/5` adjoint sensitivity
+   outputs are not yet full feature-parity claims. The missing public
+   capabilities include:
+   - direct solves for `ambipolarSolve=1` with options 1, 2, and 3,
+   - `d(radial current)/dEr` from a residual/Jacobian derivative path,
+   - derivatives of particle flux, heat flux, parallel flow, total heat flux,
+     bootstrap current, and `dPhi/dPsi` with respect to `Er` and Boozer/geometry
+     harmonic parameters where the model is shared,
+   - output-schema fields equivalent to Fortran v3
+     `dParticleFluxdLambda`, `dHeatFluxdLambda`, `dParallelFlowdLambda`,
+     `dTotalHeatFluxdLambda`, `dRadialCurrentdLambda`,
+     `dBootstrapdLambda`, and `dPhidPsidLambda`,
+   - finite-difference or complex-step debug gates for small cases.
+
+   Preferred implementation: use JAX implicit differentiation of the linear
+   residual as the primary differentiable lane, and use the same derivative
+   kernels in a fast non-differentiable CLI lane for Newton/Brent ambipolar root
+   solves. Host-only finite differences are allowed only as debug/reference
+   checks and must be recorded in metadata.
+
 ## Refactor Open Lanes
 
 1. **Make `v3_driver.py` orchestration-only**
-   Extract one more cohesive driver boundary if it removes real responsibility,
-   not just wrapper lines. The next likely candidates are progress/timing
-   reporting, a larger result/output handoff, or solve-result metadata assembly
-   not already covered by finalization.
+   Extract complete owner boundaries, not aliases. The next acceptable driver
+   tranches are:
+   - an ambipolar/root-solve owner that handles direct Er root solves and
+     derivative certificates,
+   - a profile-response solve orchestration owner that removes the remaining
+     large solve-local decision tree,
+   - a result/output handoff owner that owns solved-field metadata assembly,
+   - progress/timing/profiling reporting as one cohesive runtime-observability
+     module.
+
+   Do not spend more tranches moving one-off wrappers unless the same commit
+   deletes the compatibility path or removes a full branch of the driver.
 
 2. **Split output schema from `io.py`**
    Move solved-field schema, diagnostics, timing, memory, and provenance
@@ -378,6 +428,47 @@ claim. They must stay documented, fail-closed, and gated.
    `docs/development_roadmap.rst`, and `docs/research_lanes.rst` only when
    claims or ownership change.
 
+8. **Close Fortran-v3 feature gaps deliberately**
+   Treat missing Fortran-v3 functionality as product scope, not incidental
+   cleanup. Ambipolar Newton and adjoint sensitivities get their own design,
+   tests, docs, and output schema rather than being hidden in scan examples.
+
+## Tranche Efficiency Rules
+
+The previous pattern created many small files while only slowly reducing the
+monolith. Starting from this point, a refactor tranche is considered worthwhile
+only if it satisfies at least one of these gates:
+
+1. It removes a complete owner boundary of at least one real algorithm family
+   from `v3_driver.py`, `io.py`, or `rhs1_full_assembly.py`.
+2. It deletes stale compatibility code or reduces a monolith by at least about
+   300 lines without adding an equivalent amount of wrapper code elsewhere.
+3. It turns a missing functionality lane into a tested, documented feature with
+   clear public API and output schema.
+4. It consolidates multiple historical top-level files into an existing domain
+   package and reduces file-count or import-path ambiguity.
+
+Every tranche must start with a short design note in the commit message or PR
+summary covering owner module, code to delete, public compatibility, tests, and
+docs touched. Every tranche must end with:
+
+- direct tests for the new owner,
+- one integration or import-contract test for compatibility,
+- `ruff`/`py_compile` on touched files,
+- `git diff --check`,
+- `docs/source_map.rst` update when equation ownership changes.
+
+The default next tranche is therefore not another alias move. It is either:
+
+1. **Ambipolar/sensitivity owner extraction and feature design** if we prioritize
+   Fortran-v3 functionality parity, or
+2. **Profile-response solve orchestration extraction** if we prioritize
+   monolith reduction.
+
+Both are large enough to reduce churn. The recommended order is ambipolar /
+sensitivity first because it adds missing product functionality and gives the
+refactor a clear differentiable/non-differentiable API boundary.
+
 ## Prioritized Execution Plan
 
 ### P0. Keep Branch/PR Hygiene Green
@@ -402,15 +493,63 @@ Goal: reduce `v3_driver.py` by moving a cohesive stage, not wrapper clutter.
 
 Preferred choices:
 
-1. progress/timing reporting,
-2. solve-result metadata assembly that is not already covered by finalization,
-3. a larger output/result handoff boundary.
+1. ambipolar root-solve and derivative-certificate orchestration,
+2. profile-response solve orchestration after RHSMode=1 setup/finalization,
+3. progress/timing/profiling reporting,
+4. solve-result metadata assembly that is not already covered by finalization,
+5. a larger output/result handoff boundary.
 
 Acceptance:
 
 - The extracted module has direct tests.
 - Driver keeps only orchestration and dependency injection.
 - Public CLI/Python behavior is unchanged.
+- The tranche deletes a full owner boundary or records a concrete reason why a
+  compatibility shim remains.
+
+### P1A. Add Fortran-V3 Ambipolar And Sensitivity Parity Design
+
+Goal: make missing ambipolar Newton and adjoint sensitivity capabilities an
+explicit implementation lane.
+
+Actions:
+
+1. Add a domain owner, tentatively `sfincs_jax.problems.ambipolar` or
+   `sfincs_jax.problems.profile_response.sensitivity`, with:
+   - Brent root solve matching `ambipolarSolveOption=2`,
+   - safeguarded Newton/bisection matching `ambipolarSolveOption=1`,
+   - pure Newton matching `ambipolarSolveOption=3`,
+   - derivative certificates for `d(radial current)/dEr`.
+2. Implement derivative kernels using the linear residual contract:
+   `dF/dEr = dDiagnostic/dEr - dDiagnostic/df * A^{-1} * dResidual/dEr`
+   or an equivalent JAX `custom_linear_solve` / implicit-differentiation form.
+3. Extend the Python API with explicit differentiable and non-differentiable
+   paths:
+   - differentiable: JAX implicit differentiation and transformable result
+     functions,
+   - CLI/non-differentiable: robust root solve using derivative-backed Newton
+     when available and Brent fallback otherwise.
+4. Add output metadata and optional output datasets for:
+   `ambipolarEr`, root history, radial-current history,
+   `dRadialCurrentdEr`, selected option, residual/root tolerances, and branch
+   certificate.
+5. Add tests:
+   - analytic scalar root fixture for all three root options,
+   - finite-difference vs JAX derivative of radial current on a tiny linear
+     fixture,
+   - Fortran-v3 small-input parity for Brent root and Newton derivative sign,
+   - bootstrap/current derivative API shape and metadata tests,
+   - docs example that differentiates current or ambipolar residual with
+     respect to `Er`.
+
+Acceptance:
+
+- `sfincs_jax` can answer "what is d current / d Er?" from a public API.
+- Fortran-v3 ambipolar option semantics are documented and tested where shared.
+- Host-only finite differences are labeled debug/reference, not the primary
+  differentiable claim.
+- Full production-resolution Er-root campaigns remain release/manual-tier tests
+  unless they fit the CI budget.
 
 ### P2. Split `io.py` Output Schema
 
@@ -446,6 +585,8 @@ Acceptance:
 
 - File count does not grow without a domain reason.
 - Developers can infer code location from the equation, solver, or workflow.
+- Historical top-level modules that only re-export one domain owner are deleted
+  once import-contract tests and downstream examples no longer need them.
 
 ### P4. Make Solver Contracts Explicit
 
@@ -544,12 +685,16 @@ Acceptance:
 The refactor PR is ready for review when:
 
 - P0 through P3 are complete or explicitly deferred with rationale.
+- P1A has either an implemented first tranche or a checked design issue with
+  explicit API/tests/docs acceptance criteria.
 - `v3_driver.py` is primarily orchestration and dependency injection.
 - `rhs1_full_assembly.py` no longer hides a major unowned preconditioner family.
 - `io.py` has a documented output-schema split plan or an implemented schema
   extraction.
 - Public CLI and Python APIs preserve existing output schemas.
 - Differentiable and non-differentiable lanes are explicit and tested.
+- Fortran-v3 ambipolar/adjoint-sensitivity functionality is no longer confused
+  with scan-only postprocessing in docs or README claims.
 - Focused local validation, `ruff`, `py_compile`, `git diff --check`,
   repo-size audit, and Sphinx pass.
 - README/docs distinguish production claims, reduced-grid evidence, and
@@ -567,6 +712,11 @@ change touches their public claims:
 - single-case multi-GPU strong scaling as a public performance claim,
 - lower-memory native sparse-factor replacement for the largest geometry-rich
   RHSMode=2/3 and full-grid QA/QH RHSMode=1 cases.
+
+The Fortran-v3 ambipolar Newton and `RHSMode=4/5` adjoint-sensitivity feature
+gap is not a performance research lane. It is a functionality parity lane and
+should be designed and implemented in bounded phases, with production-resolution
+campaigns remaining release/manual-tier validation.
 
 Deferred means fail-closed, documented, and test-gated where possible. Future
 algorithm work should target stronger operator/coarse/factor architectures and
