@@ -14,14 +14,22 @@ from .formats import (
     write_sfincs_npz,
     write_sfincs_output_file,
 )
+from .transport import (
+    conversion_factors_to_from_dpsi_hat,
+    transport_solver_diagnostic_arrays,
+    write_transport_h5_streaming,
+)
 
 __all__ = (
+    "conversion_factors_to_from_dpsi_hat",
     "decode_if_bytes",
     "fortran_h5_layout",
     "output_file_format",
     "read_sfincs_h5",
     "read_sfincs_output_file",
     "to_numpy_for_h5",
+    "transport_solver_diagnostic_arrays",
+    "write_transport_h5_streaming",
     "write_sfincs_h5",
     "write_sfincs_netcdf",
     "write_sfincs_npz",

@@ -79,6 +79,11 @@ deferred research lanes.
 - RHSMode=2/3 transport solver residual-output arrays moved from `io.py` into
   `sfincs_jax.outputs.transport`, with a direct output-schema test covering
   missing RHS diagnostics and max residual summaries.
+- RHSMode=2/3 streaming HDF5 transport writer and radial derivative conversion
+  factors moved from `io.py` into `sfincs_jax.outputs.transport`. `io.py` now
+  orchestrates when streaming is selected, while the output-domain module owns
+  slice-wise HDF5 layout, flux variants, classical flux arrays, transport
+  matrix, elapsed time, and solver-diagnostic datasets.
 - RHSMode=1 x-block sparse-PC final metadata and payload assembly moved out of
   `v3_driver.py` into the profile-response sparse x-block handoff helpers. The
   driver now supplies solve-local scope plus the accepted physical solution,
@@ -153,6 +158,9 @@ deferred research lanes.
   focused QI and active-CSR gates:
   `400 passed in 18.96s`, `344 passed in 7.07s`, `121 passed in 38.05s`,
   `132 passed in 129.62s`, and `9 passed in 1.07s`.
+- Transport-streaming output extraction preserves output-format, streaming,
+  coordinate-conversion, import-contract, and write-output smoke/parity paths:
+  `40 passed in 9.46s`, `8 passed in 0.76s`, and `8 passed in 185.68s`.
 - RHSMode=1 output-gate extraction preserves IO helper coverage and solver-trace
   output-format behavior:
   `18 passed in 0.33s`; after switching moved-helper tests to the new owner
