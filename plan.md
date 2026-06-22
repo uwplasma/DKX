@@ -108,6 +108,10 @@ deferred research lanes.
   `sfincs_jax.problems.profile_response.qi_device_seed`. `v3_driver.py` now
   keeps only the reduced-solve hook placement, the strong-solver skip flag, and
   replay-state update when the domain helper reports an improved seed.
+- Final direct QI two-level/global-coupling builder aliases were removed from
+  `v3_driver.py`. The sparse-PC stage helpers now resolve canonical QI default
+  builders internally when the driver does not inject a test builder, and tests
+  assert that the old private driver aliases stay absent.
 - Active-projected diagonal-Schur, x-ell kinetic-line, angular-line, and native
   indexed Schwarz
   preconditioners moved from `rhs1_full_assembly.py` into
@@ -122,9 +126,10 @@ deferred research lanes.
   `rhs1_full_assembly.py` injects its dispatcher only where a still-local base
   family is needed.
 - Current next tranche is a larger result/output handoff or `io.py`
-  solved-field schema split. Avoid further QI churn unless it removes a tested
-  solve-local integration block; no standalone `qi_*` functions remain in
-  `v3_driver.py`.
+  solved-field schema split. The QI audit is complete for this refactor stage:
+  no standalone `qi_*` functions/classes remain in `v3_driver.py`, no direct QI
+  builder aliases remain there, and the remaining QI references are live
+  solve-local hook placements into tested domain modules.
 - The README and docs currently state the public claim boundary: the documented
   release suite is CPU/GPU parity-clean, while production-resolution QI, true
   device-QI, lower-memory native factor replacement, full-grid QA/QH RHSMode=1,
@@ -182,6 +187,12 @@ deferred research lanes.
   absent:
   `127 passed in 32.65s`, `102 passed in 1.05s`, and the focused QI seed/coarse
   tests pass with the new domain-owned seed setup (`17 passed in 5.56s`).
+- Final QI driver-surface cleanup preserves canonical default-builder behavior
+  and confirms that the remaining QI code works in the documented fail-closed
+  scope:
+  `3 passed in 1.98s`, `334 passed in 5.15s`, and `229 passed in 30.40s`.
+- The combined focused QI/sparse validation after this cleanup passes:
+  `556 passed in 32.10s`.
 - Active global-field-split/native-stack extraction preserves all
   RHSMode=1 full-assembly behavior:
   `121 passed in 39.49s`.

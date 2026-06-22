@@ -1148,7 +1148,7 @@ class XBlockTwoLevelStageContext:
     policy: XBlockTwoLevelPolicySetup
     elapsed_s: Callable[[], float]
     emit: EmitFn | None
-    builder: Callable[..., tuple[ArrayFn, dict[str, object], dict[str, int]]]
+    builder: Callable[..., tuple[ArrayFn, dict[str, object], dict[str, int]]] | None = None
 
 
 @dataclass(frozen=True)
@@ -1175,8 +1175,8 @@ class XBlockGlobalCouplingStageContext:
     policy: XBlockGlobalCouplingPolicySetup
     elapsed_s: Callable[[], float]
     emit: EmitFn | None
-    host_builder: Callable[..., tuple[ArrayFn, dict[str, object], dict[str, int]]]
-    device_builder: Callable[..., tuple[ArrayFn, dict[str, object], dict[str, int]]]
+    host_builder: Callable[..., tuple[ArrayFn, dict[str, object], dict[str, int]]] | None = None
+    device_builder: Callable[..., tuple[ArrayFn, dict[str, object], dict[str, int]]] | None = None
 
 
 @dataclass(frozen=True)
@@ -2850,7 +2850,15 @@ def apply_xblock_two_level_stage(
 
     start_s = float(context.elapsed_s())
     try:
-        preconditioner, metadata, stats = context.builder(
+        if context.builder is None:
+            from ...rhs1_qi_two_level import (
+                build_rhs1_xblock_two_level_preconditioner,
+            )
+
+            builder = build_rhs1_xblock_two_level_preconditioner
+        else:
+            builder = context.builder
+        preconditioner, metadata, stats = builder(
             op=context.op,
             rhs=context.rhs,
             matvec=context.matvec,
@@ -2913,11 +2921,26 @@ def apply_xblock_global_coupling_stage(
 
     start_s = float(context.elapsed_s())
     try:
-        builder = (
-            context.device_builder
-            if bool(context.policy.use_device_builder)
-            else context.host_builder
-        )
+        if context.host_builder is None or context.device_builder is None:
+            from ...rhs1_qi_two_level import (
+                build_rhs1_xblock_device_global_coupling_preconditioner,
+                build_rhs1_xblock_smoothed_global_coupling_preconditioner,
+            )
+
+            host_builder = (
+                build_rhs1_xblock_smoothed_global_coupling_preconditioner
+                if context.host_builder is None
+                else context.host_builder
+            )
+            device_builder = (
+                build_rhs1_xblock_device_global_coupling_preconditioner
+                if context.device_builder is None
+                else context.device_builder
+            )
+        else:
+            host_builder = context.host_builder
+            device_builder = context.device_builder
+        builder = device_builder if bool(context.policy.use_device_builder) else host_builder
         preconditioner, metadata, stats = builder(
             op=context.op,
             rhs=context.rhs,

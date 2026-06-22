@@ -83,11 +83,6 @@ from .rhs1_domain_decomposition import (  # compatibility exports for legacy tes
     _rhs1_dd_coarse_block_sizes,
     _rhs1_dd_coarse_level_count,
 )
-from .rhs1_qi_two_level import (
-    build_rhs1_xblock_device_global_coupling_preconditioner as _build_rhs1_xblock_device_global_coupling_preconditioner,
-    build_rhs1_xblock_smoothed_global_coupling_preconditioner as _build_rhs1_xblock_smoothed_global_coupling_preconditioner,
-    build_rhs1_xblock_two_level_preconditioner as _build_rhs1_xblock_two_level_preconditioner,
-)
 from .memory_model import estimate_sparse_pc_memory
 from .rhs1_pas_policy import (
     build_pas_tz_memory_fallback,
@@ -3012,7 +3007,6 @@ def solve_v3_full_system_linear_gmres(
                     policy=two_level_policy,
                     elapsed_s=sparse_timer.elapsed_s,
                     emit=emit,
-                    builder=_build_rhs1_xblock_two_level_preconditioner,
                 )
             )
             precond_xblock_krylov = two_level_stage.preconditioner
@@ -3038,8 +3032,6 @@ def solve_v3_full_system_linear_gmres(
                     policy=global_coupling_policy,
                     elapsed_s=sparse_timer.elapsed_s,
                     emit=emit,
-                    host_builder=_build_rhs1_xblock_smoothed_global_coupling_preconditioner,
-                    device_builder=_build_rhs1_xblock_device_global_coupling_preconditioner,
                 )
             )
             precond_xblock_krylov = global_coupling_stage.preconditioner
@@ -3794,7 +3786,6 @@ def solve_v3_full_system_linear_gmres(
                     policy=global_coupling_policy,
                     elapsed_s=sparse_timer.elapsed_s,
                     emit=emit,
-                    builder=_build_rhs1_xblock_smoothed_global_coupling_preconditioner,
                 )
             )
             precond_xblock_krylov = global_coupling_result.preconditioner

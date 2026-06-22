@@ -263,7 +263,7 @@ class FortranReducedXBlockGlobalCouplingStageContext:
     policy: XBlockGlobalCouplingPolicySetup
     elapsed_s: Callable[[], float]
     emit: EmitFn | None
-    builder: Callable[..., tuple[ArrayFn, dict[str, object], dict[str, int]]]
+    builder: Callable[..., tuple[ArrayFn, dict[str, object], dict[str, int]]] | None = None
 
 @dataclass(frozen=True)
 class FortranReducedXBlockGlobalCouplingStageResult:
@@ -1060,7 +1060,15 @@ def apply_fortran_reduced_xblock_global_coupling_stage(
             "global-coupling build start",
         )
     try:
-        preconditioner, metadata, stats = context.builder(
+        if context.builder is None:
+            from ....rhs1_qi_two_level import (
+                build_rhs1_xblock_smoothed_global_coupling_preconditioner,
+            )
+
+            builder = build_rhs1_xblock_smoothed_global_coupling_preconditioner
+        else:
+            builder = context.builder
+        preconditioner, metadata, stats = builder(
             op=context.op,
             rhs=context.rhs,
             matvec=context.matvec,

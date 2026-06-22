@@ -6,7 +6,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
-from sfincs_jax import v3_driver as vd
+import sfincs_jax.v3_driver as v3_driver
 from sfincs_jax.rhs1_qi_coarse import RHS1QICoarseBasis, RHS1QICoarseBasisMetadata
 from sfincs_jax.rhs1_qi_two_level import (
     build_rhs1_xblock_device_global_coupling_preconditioner,
@@ -217,7 +217,7 @@ def test_two_level_qi_probe_fails_closed_without_required_improvement() -> None:
     assert jnp.allclose(x, x0)
 
 
-def test_xblock_two_level_wrapper_records_metadata_and_driver_alias() -> None:
+def test_xblock_two_level_wrapper_records_metadata_without_driver_alias() -> None:
     op = _fake_xblock_operator()
     matrix = _xblock_matrix(op.total_size)
     rhs = jnp.arange(1, op.total_size + 1, dtype=jnp.float64)
@@ -249,10 +249,7 @@ def test_xblock_two_level_wrapper_records_metadata_and_driver_alias() -> None:
     assert stats["applies"] == 1
     assert stats["coarse_applies"] == 1
     assert np.all(np.isfinite(np.asarray(out)))
-    assert (
-        vd._build_rhs1_xblock_two_level_preconditioner
-        is build_rhs1_xblock_two_level_preconditioner
-    )
+    assert not hasattr(v3_driver, "_build_rhs1_xblock_two_level_preconditioner")
 
 
 def test_host_global_coupling_wrapper_records_metadata_and_stats(monkeypatch) -> None:
@@ -296,9 +293,9 @@ def test_host_global_coupling_wrapper_records_metadata_and_stats(monkeypatch) ->
     assert stats["applies"] == 1
     assert stats["coarse_applies"] == 1
     assert np.all(np.isfinite(np.asarray(out)))
-    assert (
-        vd._build_rhs1_xblock_smoothed_global_coupling_preconditioner
-        is build_rhs1_xblock_smoothed_global_coupling_preconditioner
+    assert not hasattr(
+        v3_driver,
+        "_build_rhs1_xblock_smoothed_global_coupling_preconditioner",
     )
 
 
@@ -356,7 +353,7 @@ def test_device_global_coupling_wrapper_supports_qr_and_normal_equations(
         assert stats["coarse_applies"] == 1
         assert np.all(np.isfinite(np.asarray(out)))
 
-    assert (
-        vd._build_rhs1_xblock_device_global_coupling_preconditioner
-        is build_rhs1_xblock_device_global_coupling_preconditioner
+    assert not hasattr(
+        v3_driver,
+        "_build_rhs1_xblock_device_global_coupling_preconditioner",
     )
