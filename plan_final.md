@@ -34,6 +34,11 @@ Manual and paper references:
 - `/Users/rogeriojorge/local/sfincs/doc/sfincsPaper/sfincsPaper.tex`
 - Public repository: <https://github.com/landreman/sfincs>
 
+New reference decks and probe summary for the ambipolar functionality live in
+`benchmarks/fortran_v3_ambipolar_reference/`. These decks pin the source-code
+behavior of `ambipolarSolveOption=1`, `2`, and `3` before the sfincs_jax
+implementation begins.
+
 Important Fortran v3 implementation modules:
 
 | Module | Functionality to mirror or compare |
@@ -68,6 +73,14 @@ Key Fortran v3 algorithm facts to preserve:
   `evaluateAdjointInnerProductFactor`, which forms
   `dL/dEr * f - dS/dEr`, followed by the free-energy inner product with the
   adjoint radial-current solution.
+- Fortran v3 has a source/manual discrepancy for derivative-assisted
+  ambipolar solves: the manual says options 1 and 3 require
+  `magneticDriftScheme > 0`, but `validateInput.F90` rejects tangential
+  magnetic drifts for `RHSMode>3` and for `ambipolarSolve=.true.` with
+  `ambipolarSolveOption != 2`. The implementation plan follows the source:
+  options 1 and 3 are validated first with `magneticDriftScheme == 0`, then
+  any later tangential-drift extension must be an explicit new sfincs_jax
+  capability with its own tests.
 - The linear/nonlinear solver stack is PETSc SNES/KSP. Linear cases use one
   SNES step. `includePhi1=true` with self-consistent `Phi1` uses Newton line
   search and nested KSP solves.
@@ -85,6 +98,50 @@ Key Fortran v3 algorithm facts to preserve:
   drive terms.
 - For adjoints, Fortran v3 reuses the transpose operator path through either a
   separately built adjoint matrix or `KSPSolveTranspose`.
+
+### Ambipolar Probe Results From Fortran v3
+
+Completed local probes on 2026-06-22 used
+`/Users/rogeriojorge/local/sfincs/fortran/version3/sfincs` and the small decks
+now checked into `benchmarks/fortran_v3_ambipolar_reference/namelists`.
+
+Observed facts to feed directly into implementation:
+
+- `geometry4_w7x_like_small_option1`: safeguarded Newton/bisection completed
+  with Er evaluations `[-20, 20, 0]`, radial currents about
+  `[-1.09e-6, 1.43e-6, 2.51e-8]`, internal Fortran ambipolar time
+  `0.143 s`, wall time `75.31 s`, and peak RSS about `135 MB`.
+- `geometry4_w7x_like_small_option2`: Brent completed with the same bracket and
+  initial point, internal Fortran ambipolar time `0.147 s`, wall time
+  `75.66 s`, and peak RSS about `135 MB`.
+- `geometry4_w7x_like_small_option3`: pure Newton completed from the initial
+  guess, internal Fortran ambipolar time `0.063 s`, wall time `75.19 s`, and
+  peak RSS about `120 MB`.
+- `geometry1_helical_small_option2`: Brent completed on a distinct analytic
+  helical geometry with Er values `[-20, 20, 0, -1.7273, -2.0106]` and final
+  radial current about `1.7e-9`; internal Fortran ambipolar time was `0.373 s`,
+  wall time was `75.54 s`, peak RSS was about `156 MB`, and the run reported an
+  MPI finalization error after writing useful diagnostics.
+- All small probes used MUMPS through PETSc. The logs show repeated full
+  `whichMatrix=0` and `whichMatrix=1` setup per Er evaluation, followed by
+  residual matrix assembly and diagnostics.
+- For these tiny systems, Jacobian sizes alternated between about `19,566` and
+  `26,750` nonzeros depending on the Er branch/active terms, while the
+  preconditioner had about `15,436`, `19,356`, or `26,750` nonzeros depending
+  on deck and preconditioner settings.
+- `geometry4_w7x_like_production_option2` completed the larger Brent reference
+  deck with `Ntheta=13`, `Nzeta=19`, `Nxi=48`, and `Nx=5`. The useful physical
+  result was a root near `Er=-3.577332`, radial current
+  `2.2e-12`, six forward solves, internal ambipolar time `32.97 s`, and main
+  solve times between about `3.0 s` and `8.8 s`.
+- The production Brent deck used MUMPS and assembled matrices with about
+  `1.57e6` to `2.28e6` Jacobian nonzeros and about `1.27e6` to `1.54e6`
+  preconditioner nonzeros, depending on branch terms.
+- The large gap between Fortran's internal ambipolar time and process wall time
+  comes from process/logging/finalization overhead and verbose MUMPS/PETSc
+  diagnostics. sfincs_jax should not emulate this shell-style scan cost; it
+  should keep fixed-shape geometry/operator/factor metadata alive across Er
+  evaluations.
 
 ### Current sfincs_jax State
 
@@ -333,21 +390,35 @@ Implementation steps:
 1. Create `sfincs_jax.problems.ambipolar` as the canonical owner.
 2. Define `AmbipolarProblem`, `AmbipolarResult`, and `AmbipolarIteration`
    pytrees with solver path, residual, root type, derivative, and output fields.
-3. Reuse the existing scan postprocessor as the Brent-compatible backend, but
-   move it under the canonical ambipolar problem package.
-4. Implement Fortran-compatible radial-current conventions:
+3. Implement an in-process fixed-shape ambipolar driver. It must reuse parsed
+   input, geometry, grids, operator metadata, factor/preconditioner setup, and
+   diagnostic allocation across Er evaluations whenever the shape is unchanged.
+4. Reuse the existing scan postprocessor only as a compatibility backend for
+   reading completed scan directories; do not use scan-style repeated process
+   launches as the primary sfincs_jax algorithm.
+5. Implement Fortran-compatible radial-current conventions:
    `J_r = sum_s Z_s Gamma_s`, with the correct flux variant for `Phi1`.
-5. Implement Brent with bracket provenance, monotonic interpolation diagnostics,
+6. Implement Brent with bracket provenance, monotonic interpolation diagnostics,
    and no derivative requirement.
-6. Implement safeguarded Newton/bisection using `dJr/dEr`.
-7. Implement pure Newton with strict derivative and trust-region guards.
-8. Add automatic policy:
+7. Implement safeguarded Newton/bisection using `dJr/dEr`.
+8. Implement pure Newton with strict derivative and trust-region guards.
+9. Mirror the Fortran v3 source-code validator first:
+   derivative-assisted options 1 and 3 require no `Phi1`, no inductive
+   electric field, FP collisions, constraint scheme `-1` or `1`, full or DKES
+   trajectory compatibility, and no tangential magnetic drifts.
+10. Add a separately gated future extension for tangential-drift
+    derivative-assisted ambipolar solves if the physics/operator derivatives
+    are implemented.
+11. Add automatic policy:
    - use derivative-assisted safeguarded Newton when an adjoint/implicit
      derivative is available and bracket is valid;
    - use Brent for robust CLI default when derivative setup is expensive;
    - fail with partial scan artifact if no bracket is found.
-9. Add radial-batch ambipolar solve for profile workflows.
-10. Add CLI:
+12. Add radial-batch ambipolar solve for profile workflows.
+13. Add solve-complete/finalization separation: if diagnostics are written but
+    profiling or backend finalization fails, record a warning status rather
+    than marking the physical solve as failed.
+14. Add CLI:
     `sfincs_jax ambipolar input.namelist --er-min ... --er-max ...`.
 
 Derivative formula:
@@ -370,10 +441,19 @@ Acceptance gates:
 
 - Reproduce Fortran v3 `ambipolarSolveOption=1/2/3` on at least one tokamak,
   one W7-X-like analytic case, one VMEC QA case, and one QH case.
+- First reference reproduction target is the checked-in small probe set:
+  `geometry4_w7x_like_small_option{1,2,3}` and
+  `geometry1_helical_small_option2`.
+- Production reference target is the checked-in production decks under
+  `benchmarks/fortran_v3_ambipolar_reference/namelists`, which must be run
+  before public benchmark claims are regenerated.
 - `dJr/dEr` matches finite differences on a stable step window.
 - Brent and Newton return the same root within tolerance when both are valid.
 - CPU/GPU roots and root types match within tolerance for bounded cases.
 - Failed brackets write a useful partial artifact and do not claim success.
+- The sfincs_jax in-process ambipolar driver avoids repeated full operator and
+  factor setup when Er updates do not change the problem shape; the benchmark
+  summary must report setup reuse explicitly.
 
 ## Lane 4 - Adjoint Sensitivities And Differentiable Solves
 
@@ -770,18 +850,22 @@ Deliverables:
 
 1. Generate the Fortran-v3 feature matrix from source/docs into docs.
 2. Add a matching sfincs_jax feature matrix and mark implemented/deferred items.
-3. Extract the public `api` contracts before moving more internals.
-4. Refactor ambipolar functionality into a canonical problem owner.
-5. Implement Brent in-solver ambipolar solve first, because it does not depend
+3. Use the checked-in small and production Fortran v3 ambipolar summaries as
+   the first implementation gates for the sfincs_jax ambipolar driver.
+4. Re-run the checked-in Fortran v3 production decks before regenerating public
+   performance claims, because the compact production probe did not capture RSS.
+5. Extract the public `api` contracts before moving more internals.
+6. Refactor ambipolar functionality into a canonical problem owner.
+7. Implement Brent in-solver ambipolar solve first, because it does not depend
    on adjoint derivatives and provides a validation baseline.
-6. Implement `dJr/dEr` through implicit differentiation on a small RHSMode 1
+8. Implement `dJr/dEr` through implicit differentiation on a small RHSMode 1
    case and compare against centered finite differences.
-7. Implement safeguarded Newton/bisection using that derivative.
-8. Define residual/operator/transpose operator protocol and migrate one
+9. Implement safeguarded Newton/bisection using that derivative.
+10. Define residual/operator/transpose operator protocol and migrate one
    RHSMode 2/3 path to it.
-9. Add one T3D/NEOPAX-style closure example with fixed geometry and radial
+11. Add one T3D/NEOPAX-style closure example with fixed geometry and radial
    profile inputs.
-10. Run focused tests, docs build, commit, and push after each coherent owner
+12. Run focused tests, docs build, commit, and push after each coherent owner
     boundary or feature milestone.
 
 ## Known Risks And Explicit Deferred Items
@@ -802,4 +886,3 @@ Deliverables:
 - Lineax, JAXopt, Equinox, and other ecosystem libraries should be adopted only
   after a measured benefit. Avoid adding dependencies for conceptual elegance
   without runtime, memory, compile-time, or derivative-maintenance wins.
-
