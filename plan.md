@@ -94,13 +94,14 @@ deferred research lanes.
   QI pipeline instead of importing every coarse/Galerkin/two-level/device/
   deflated helper directly. Tests patch the canonical QI device-preconditioner
   module rather than stale driver aliases.
-- Active-projected diagonal-Schur, x-ell kinetic-line, and angular-line
+- Active-projected diagonal-Schur, x-ell kinetic-line, angular-line, and native
+  indexed Schwarz
   preconditioners moved from `rhs1_full_assembly.py` into
   `sfincs_jax.solvers.preconditioners.xblock.active_projected`. The assembly
   module now keeps compatibility aliases plus dispatch/admission logic for
   these builders.
-- Current next tranche is the planned `io.py` output-schema split or the next
-  matrix/operator-dependent active-preconditioner extraction from
+- Current next tranche is the planned `io.py` output-schema split or extracting
+  the global field-split/multiline active-preconditioner family from
   `rhs1_full_assembly.py`, whichever gives the larger tested ownership
   reduction without creating extra wrapper files.
 - The README and docs currently state the public claim boundary: the documented
@@ -148,6 +149,10 @@ deferred research lanes.
 - Active-projected diagonal-Schur/line extraction preserves full-assembly,
   sparse-pattern, package-import, active-projected, and Schur focused behavior:
   `121 passed in 36.71s`, `132 passed in 116.36s`, and `18 passed in 0.64s`.
+- QI domain-ownership audit plus native indexed Schwarz extraction preserve the
+  focused QI and active-CSR gates:
+  `400 passed in 18.96s`, `344 passed in 7.07s`, `121 passed in 38.05s`,
+  `132 passed in 129.62s`, and `9 passed in 1.07s`.
 - RHSMode=1 output-gate extraction preserves IO helper coverage and solver-trace
   output-format behavior:
   `18 passed in 0.33s`; after switching moved-helper tests to the new owner

@@ -249,10 +249,7 @@ def test_global_coarse_and_load_bases_cover_tail_source_and_moments() -> None:
     assert "fsavg_s0_x1_l1" in load_labels
     assert any(label.startswith("angular_s0_allx_l0_m1_n0_") for label in load_labels)
     assert all(vector.shape == (op.total_size,) for _, vector in loads)
-    assert (
-        vd._rhs1_xblock_global_coupling_load_basis
-        is build_rhs1_xblock_global_coupling_load_basis
-    )
+    assert not hasattr(vd, "_rhs1_xblock_global_coupling_load_basis")
 
 
 def test_smoothed_load_qi_basis_rank_gates_and_records_metadata() -> None:
@@ -281,10 +278,7 @@ def test_smoothed_load_qi_basis_rank_gates_and_records_metadata() -> None:
     assert all(
         label.startswith("smoothed_load:") for label in basis.metadata.accepted_labels
     )
-    assert (
-        vd._rhs1_xblock_smoothed_load_qi_basis
-        is build_rhs1_xblock_smoothed_load_qi_basis
-    )
+    assert not hasattr(vd, "_rhs1_xblock_smoothed_load_qi_basis")
 
 
 def test_qi_coarse_correction_reduces_residual_for_block_slow_mode() -> None:

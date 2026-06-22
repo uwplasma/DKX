@@ -104,6 +104,7 @@ ACTIVE_PACKAGE_EXPORTS = {
         "assemble_selected_zeta_tz_operator",
         "build_active_projected_angular_line_preconditioner",
         "build_active_projected_diagonal_schur_preconditioner",
+        "build_active_projected_native_indexed_schwarz_preconditioner",
         "build_active_projected_overlap_schwarz_preconditioner",
         "build_active_projected_xell_kinetic_line_preconditioner",
         "build_active_projected_xblock_preconditioner",
