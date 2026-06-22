@@ -646,7 +646,10 @@ the historical private driver name and test the focused module directly. This ke
   for tests, debug scripts, and downstream users while implementation moves
   into ``sfincs_jax/problems/profile_response/sparse``. It still owns the small
   amount of driver-facing sparse-PC attempt orchestration that depends on
-  solve-local cache/replay/residual routing.
+  solve-local cache/replay/residual routing. Optional two-level and
+  global-coupling stage contexts accept injected builders for tests, but resolve
+  the canonical QI builders themselves in production so ``v3_driver.py`` no
+  longer re-exports private QI builder aliases.
 - ``sfincs_jax/problems/profile_response/sparse/policy.py``:
   generic sparse-PC policy and admission helpers: active-DOF map construction,
   entry classification, sparse factor policy, conservative-pattern setup,
@@ -676,7 +679,9 @@ the historical private driver name and test the focused module directly. This ke
   remain in ``sparse/qi.py``.
 - ``sfincs_jax/problems/profile_response/sparse/fortran_reduced.py``:
   Fortran-reduced x-block backend policy, factor-build, Krylov setup/solve,
-  optional moment/global coarse stages, and final payload construction.
+  optional moment/global coarse stages, and final payload construction. The
+  optional global-coupling stage uses the canonical QI host builder by default
+  when no test builder is injected.
 - ``sfincs_jax/problems/profile_response/sparse/qi.py``:
   QI-specific x-block device/operator-reuse policy, coarse-seed, Galerkin,
   two-level, QI-device admission/build/probe/install, and residual-deflated
@@ -776,7 +781,8 @@ the historical private driver name and test the focused module directly. This ke
   directly tested architecture prototype before any hard-seed promotion. It
   also owns the x-block fixed two-level, host smoothed global-coupling, and
   device global-coupling preconditioner wrappers that build the actual
-  coarse-action callables used by the driver.
+  coarse-action callables used by the sparse/profile-response stage helpers.
+  ``v3_driver.py`` no longer imports or re-exports these private builders.
 - ``sfincs_jax/rhs1_qi_device_smoother.py``:
   device-local QI smoother primitives, including CSR-backed Jacobi,
   matrix-free residual-minimizing steps, and fail-closed seed probes for the
