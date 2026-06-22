@@ -139,6 +139,12 @@ RHSMode=2/3 transport output-schema helpers:
 - max residual and max relative residual summary fields,
 - explicit ``NaN`` placeholders for missing RHS diagnostics in partial debug
   artifacts.
+- streaming HDF5 transport diagnostics writer for large RHSMode=2/3 output
+  payloads, including per-``whichRHS`` solved-field slices, flux variants,
+  classical fluxes, transport matrix, elapsed time, and solver diagnostics
+  without keeping every diagnostic array resident in ``io.py``.
+- radial derivative conversion factors used when writing ``psiHat``,
+  ``psiN``, ``rHat``, and ``rN`` transport-flux variants.
 
 ``sfincs_jax/input_compat.py``
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
