@@ -1,0 +1,805 @@
+# SFINCS_JAX Final Research-Grade Implementation Plan
+
+Last updated: 2026-06-22 (America/Chicago)
+
+Active branch: `refactor/rhs1-full-assembly-preconditioners`
+
+Review surface: draft PR #8, `refactor/v3-driver-architecture`
+
+Status: this file is the controlling completion plan. `plan.md` remains the
+execution log and historical record; future work should update this file only
+when the target plan itself changes.
+
+## One-Sentence Goal
+
+Finish `sfincs_jax` as a compact, domain-organized, production-grade
+neoclassical transport code: users provide a geometry and input file and get
+accurate CPU/GPU results with automatic robust solver selection, while Python
+users can opt into end-to-end differentiable residual, flux, ambipolar, and
+optimization workflows with parity against SFINCS Fortran v3 wherever the
+physics models overlap.
+
+## Evidence Reviewed
+
+### SFINCS Fortran v3 Source And Documentation
+
+Local reference: `/Users/rogeriojorge/local/sfincs/fortran/version3`
+
+Manual and paper references:
+
+- `/Users/rogeriojorge/local/sfincs/doc/manual/version3/equations.tex`
+- `/Users/rogeriojorge/local/sfincs/doc/manual/version3/runs.tex`
+- `/Users/rogeriojorge/local/sfincs/doc/manual/version3/inputParameters.tex`
+- `/Users/rogeriojorge/local/sfincs/doc/manual/version3/outputParameters.tex`
+- `/Users/rogeriojorge/local/sfincs/doc/sfincsPaper/sfincsPaper.tex`
+- Public repository: <https://github.com/landreman/sfincs>
+
+Important Fortran v3 implementation modules:
+
+| Module | Functionality to mirror or compare |
+| --- | --- |
+| `sfincs_main.F90`, `sfincs.F90` | Program initialization, MPI/PETSc lifecycle, execution mode selection. |
+| `readInput.F90`, `validateInput.F90` | Namelist schema, defaults, compatibility guards, automatic coercions. |
+| `createGrids.F90`, `xGrid.F90`, `uniformDiffMatrices.F90`, `polynomialDiffMatrices.F90` | Velocity and angle grids, interpolation, differentiation matrices, monoenergetic overrides. |
+| `geometry.F90`, `updateBoozerGeometry.F90`, `radialCoordinates.F90` | Geometry schemes 1, 2, 3, 4, 5, 11, 12, 13 and radial-coordinate conversions. |
+| `populateMatrix.F90`, `evaluateResidual.F90`, `evaluateJacobian.F90`, `preallocateMatrix.F90`, `sparsify.F90` | Exact residual/Jacobian/Pmat construction, sparse preallocation, simplified preconditioner matrix. |
+| `solver.F90` | SNES/KSP orchestration, direct/iterative choices, MUMPS/SuperLU_DIST/PETSc factor controls, adjoint solves. |
+| `ambipolarSolver.F90` | In-solver ambipolar root solve using Brent, safeguarded Newton/bisection, or pure Newton. |
+| `populateAdjointRHS.F90`, `populatedMatrixdLambda.F90`, `populatedRHSdLambda.F90`, `adjointDiagnostics.F90` | RHSMode 4/5 adjoint sensitivity system, `dL/dlambda f - dS/dlambda`, `dRadialCurrentdEr`. |
+| `diagnostics.F90`, `writeHDF5Output.F90`, `export_f.F90` | Fluxes, flows, bootstrap current, Phi1 diagnostics, KSP/SNES status, HDF5 outputs, exported distribution functions. |
+| `classicalTransport.F90` | Classical transport diagnostics. |
+| `testingAdjointDiagnostics.F90` | Finite-difference checks for adjoint sensitivity implementation. |
+
+Key Fortran v3 algorithm facts to preserve:
+
+- The most general system solves for
+  `{f_s1(theta,zeta,x,xi), Phi1(theta,zeta), S_s1, S_s2, lambda}`. Without
+  self-consistent `Phi1`, the unknowns reduce to `{f_s1, S_s1, S_s2}`.
+- RHSMode 1 solves one physical right-hand side. RHSMode 2 solves three
+  right-hand sides for the energy-integrated transport matrix. RHSMode 3 solves
+  two monoenergetic right-hand sides with its special `Nx=1` grid convention.
+- RHSMode 4 computes adjoint sensitivities at fixed `E_r`. RHSMode 5 computes
+  adjoint sensitivities at ambipolar `E_r`.
+- `ambipolarSolveOption=1` uses safeguarded Newton/bisection,
+  `ambipolarSolveOption=2` uses Brent, and `ambipolarSolveOption=3` uses pure
+  Newton.
+- Newton-based ambipolar solve options compute `dRadialCurrentdEr` with an
+  adjoint solve. The derivative is based on
+  `evaluateAdjointInnerProductFactor`, which forms
+  `dL/dEr * f - dS/dEr`, followed by the free-energy inner product with the
+  adjoint radial-current solution.
+- The linear/nonlinear solver stack is PETSc SNES/KSP. Linear cases use one
+  SNES step. `includePhi1=true` with self-consistent `Phi1` uses Newton line
+  search and nested KSP solves.
+- Iterative solves use GMRES with a factorized `PCLU` preconditioner. Direct
+  solves use `KSPPREONLY + PCLU`.
+- When parallel direct solvers are available, the factorization backend is
+  MUMPS or SuperLU_DIST. Serial PETSc direct solves use a sparse ordering,
+  typically RCM in v3, with diagonal-pivot safeguards.
+- MUMPS robustness is improved by pivot threshold controls and by retrying with
+  larger `ICNTL(14)` workspace when factorization fails. This is a solver
+  policy and residual-admission pattern that `sfincs_jax` should mimic
+  natively, not by depending on PETSc.
+- For RHSMode 2/3, Fortran v3 builds the operator once, reuses the factorized
+  operator/preconditioner across the right-hand sides, and only changes the
+  drive terms.
+- For adjoints, Fortran v3 reuses the transpose operator path through either a
+  separately built adjoint matrix or `KSPSolveTranspose`.
+
+### Current sfincs_jax State
+
+Current source size snapshot:
+
+- `sfincs_jax/v3_driver.py`: about 12.2k lines.
+- `sfincs_jax/rhs1_full_assembly.py`: about 6.0k lines.
+- Several RHSMode 1 QI, x-block, sparse policy, output, and transport modules
+  still exceed 2k to 4k lines.
+- Package total is about 160k Python lines across about 293 Python files.
+
+Useful existing assets:
+
+- JAX-native residual/operator code already exists for large portions of the
+  v3 model.
+- `sfincs_jax/implicit_solve.py` already wraps `jax.lax.custom_linear_solve`
+  for implicit differentiation through linear solves.
+- `sfincs_jax/problems/profile_response/phi1_newton.py` already uses
+  `jax.linearize` to build Newton-Krylov JVPs.
+- `sfincs_jax/ambipolar.py` postprocesses completed Er scans, but does not yet
+  provide the Fortran v3 in-solver ambipolar algorithms.
+- Several profile-response and transport-matrix preconditioners exist, but the
+  implementation surface is still too fragmented and too environment-variable
+  driven.
+- Docs and examples now include autodiff and optimization demonstrations, but
+  they should be recast around a small public API and explicit validation
+  contracts.
+
+Important current gaps:
+
+- No first-class RHSMode 4/5 API matching Fortran v3 adjoint diagnostics.
+- No in-solver ambipolar root solve matching Fortran v3 options 1, 2, and 3.
+- No complete derivative API for `dGamma/dEr`, `dQ/dEr`, `d<J.B>/dEr`,
+  `dJr/dEr`, profile sensitivities, and geometry harmonic sensitivities across
+  all supported solve lanes.
+- Too many solver choices are exposed as low-level environment variables rather
+  than automatic, tested policy decisions.
+- Code ownership is better than before but still not final: the target is fewer
+  domain packages with larger, coherent ownership boundaries, not a growing set
+  of one-off files.
+
+### External References For Differentiation And Workflows
+
+Sources reviewed:
+
+- Fast automated adjoints for spectral PDE solvers:
+  <https://arxiv.org/abs/2506.14792>
+- JAX `custom_linear_solve` documentation:
+  <https://docs.jax.dev/en/latest/_autosummary/jax.lax.custom_linear_solve.html>
+- JAX custom JVP/VJP documentation:
+  <https://docs.jax.dev/en/latest/notebooks/Custom_derivative_rules_for_Python_code.html>
+- Lineax documentation:
+  <https://docs.kidger.site/lineax/>
+- JAXopt implicit differentiation:
+  <https://jaxopt.github.io/stable/implicit_diff.html>
+- T3D documentation:
+  <https://t3d.readthedocs.io/>
+- NEOPAX repository and local checkout:
+  <https://github.com/uwplasma/NEOPAX>
+
+Derivative design implications:
+
+- The right default is not to backpropagate through every Krylov iteration or
+  every adaptive solver branch. The robust design is an explicit residual graph
+  plus implicit differentiation at the converged solution.
+- The primal equation is
+  `R(u, p) = 0`, with solution `u(p)`.
+- Forward sensitivity should use
+  `R_u du/dp = -R_p`.
+- Reverse sensitivity for scalar objective `J(u, p)` should solve
+  `R_u^T lambda = J_u^T`, then use
+  `dJ/dp = J_p - lambda^T R_p`.
+- This matches the Fortran v3 adjoint structure and the spectral-PDE adjoint
+  paper's message: build adjoints from the symbolic residual/operator graph and
+  reuse efficient sparse/direct/iterative solves.
+- `jax.lax.custom_linear_solve` is the base primitive for differentiating
+  linear solve calls without tracing all iterations.
+- `custom_jvp` and `custom_vjp` should wrap only stable public solve APIs and
+  only when the default JAX transform would trace control flow or host-only
+  operations.
+- Lineax can be evaluated as an optional operator abstraction or least-squares
+  backend, but it should be adopted only if benchmarks show lower compile time,
+  lower runtime, lower memory, or cleaner derivative code for a concrete lane.
+- T3D and NEOPAX need a profile/flux closure interface, not a file-only
+  executable. `sfincs_jax` should expose shape-stable JAX-friendly functions for
+  radial batches, Er scans, transport coefficients, ambipolar roots, and
+  Jacobian/vector-Jacobian products.
+
+## Product Requirements
+
+### Default User Experience
+
+- CLI users provide `input.namelist` and a geometry path. The default solver
+  policy selects a robust and efficient method automatically.
+- The terminal output reports phase timings, selected solver path, residual
+  target, residual history summary, memory estimate, output file paths, and
+  enough progress to judge whether a run will take seconds, minutes, or longer.
+- Advanced users can override solver family, preconditioner, differentiability
+  mode, output format, and profiling options, but routine runs should not
+  require environment variables.
+
+### Python And Optimization Experience
+
+- Python users can call a compact public API:
+  `solve_flux_surface`, `solve_transport_matrix`, `solve_ambipolar`,
+  `make_flux_closure`, and `make_objective`.
+- Differentiable mode is explicit and documented. It returns pytrees with
+  solution, diagnostics, residual certificates, and derivative capabilities.
+- Non-differentiable mode can use faster host/direct paths when called from the
+  CLI or from Python with `differentiable=False`.
+- The API should support optimization workflows such as:
+  bootstrap-current minimization, ambipolar electron-root targeting, particle
+  and heat flux minimization, impurity flux targeting, sensitivity analysis,
+  inverse design, uncertainty quantification, and profile evolution coupling.
+
+### Research-Grade Claim Boundary
+
+Public claims require all of the following:
+
+- Numerical residual passes the true operator residual gate.
+- Shared outputs match SFINCS Fortran v3 within documented tolerances.
+- CPU and GPU either match within tolerance or the difference is documented and
+  gated.
+- Runtime and peak memory are measured from fresh cold and warm runs.
+- The exact resolution, device, commit, Python/JAX versions, and solver path
+  are recorded.
+- For derivative claims, JVP/VJP/adjoint results pass finite-difference checks
+  on stable windows and transpose/adjoint residual checks.
+- For optimization examples, the plotted improvement must come from a
+  reproducible script, not a hand-edited artifact.
+
+## Final Architecture Target
+
+The final codebase should have a small number of domain packages. New files are
+allowed only when they create a clear owner boundary. One-function wrappers and
+historical compatibility facades should be deleted as their callers migrate.
+
+Target package boundaries:
+
+| Package | Ownership |
+| --- | --- |
+| `sfincs_jax.api` | Public Python API, stable return objects, high-level solve entry points. |
+| `sfincs_jax.cli` | CLI parsing, user-facing progress, plotting, profiling switches. |
+| `sfincs_jax.config` | Namelist/TOML parsing, defaults, validation, Fortran-compatible coercions. |
+| `sfincs_jax.geometry` | Analytic, VMEC, Boozer, Miller, `vmec_jax`, and `booz_xform_jax` adapters. |
+| `sfincs_jax.discretization` | Grids, quadrature, interpolation, finite differences, radial-coordinate conversion. |
+| `sfincs_jax.operators` | Drift-kinetic residuals, Jacobians, RHS builders, collision/source/Phi1 blocks. |
+| `sfincs_jax.solvers` | Linear/nonlinear solve policies, native factors, Krylov, preconditioners, implicit solves. |
+| `sfincs_jax.problems` | Problem orchestration for profile response, transport matrices, monoenergetic, ambipolar, adjoint sensitivity. |
+| `sfincs_jax.outputs` | HDF5/netCDF/NPZ writing, restart/recycle state, diagnostics schema, plotting payloads. |
+| `sfincs_jax.sensitivity` | JVP/VJP, implicit differentiation, adjoint diagnostics, finite-difference checks. |
+| `sfincs_jax.workflows` | Radial scans, optimization objectives, T3D/NEOPAX closures, publication figures. |
+| `sfincs_jax.validation` | Parity reports, benchmark harnesses, physics gates, artifact policies. |
+
+Structural rules:
+
+- Keep domain files under about 1500 lines when practical. Exceptions require a
+  short owner comment at the top explaining why the file is intentionally large.
+- Prefer fewer coherent owner files over many small wrappers.
+- Do not keep duplicate names like `v3_*`, `rhs1_*`, and `transport_*` when a
+  domain name is clearer.
+- Compatibility shims get a deletion issue/date in this plan and must have a
+  focused import-contract test while they exist.
+- Every moved owner boundary gets at least one test that imports the canonical
+  owner and one test that exercises behavior through the public API.
+
+## Lane 1 - Refactor To Stable Domain Ownership
+
+Goal: remove `v3_driver.py` as a monolith without scattering equivalent
+complexity across many small files.
+
+Milestones:
+
+1. Freeze the current public behavior with focused API, CLI, and parity tests.
+2. Move namelist validation and Fortran compatibility rules into
+   `sfincs_jax.config`.
+3. Move all remaining grid, index, and radial-coordinate conversion logic into
+   `sfincs_jax.discretization`.
+4. Move matrix/residual/RHS builders into `sfincs_jax.operators`, grouped by
+   physical block rather than by historical RHSMode filename.
+5. Move problem orchestration into `sfincs_jax.problems`, with each problem
+   exposing a small `setup -> solve -> diagnose -> output` pipeline.
+6. Collapse redundant QI, x-block, sparse-PC, and policy files into coherent
+   solver families under `sfincs_jax.solvers`.
+7. Delete compatibility facades once all tests and docs import canonical names.
+8. Reduce `v3_driver.py` to either zero lines or a deprecated shim under 300
+   lines that only calls public APIs.
+
+Acceptance gates:
+
+- `v3_driver.py` no longer owns physics equations, solver policy, output
+  schema, or QI/preconditioner internals.
+- No new package has more than three files with overlapping solver-policy
+  responsibility.
+- Source file count decreases or stays roughly flat after compatibility shims
+  are deleted.
+- Public API examples and CLI examples run unchanged.
+- Focused refactor tests run in under 2 minutes locally.
+
+## Lane 2 - Full Fortran v3 Functionality Matrix
+
+Goal: make the Fortran v3 feature surface explicit and either implemented,
+tested, or documented as intentionally unsupported.
+
+Feature matrix:
+
+| Feature | Current target |
+| --- | --- |
+| RHSMode 1 profile response | Keep parity, improve automatic solver selection, finish production-grid gates. |
+| RHSMode 2 energy-integrated transport matrix | Keep parity, reuse operator/factors across RHS, production-floor CPU/GPU reports. |
+| RHSMode 3 monoenergetic transport matrix | Keep parity, preserve special grid normalization, compare with DKES-style literature gates. |
+| RHSMode 4 adjoint sensitivities at fixed Er | Implement first-class API and HDF5/netCDF outputs. |
+| RHSMode 5 adjoint sensitivities at ambipolar Er | Implement after Lane 3 ambipolar and Lane 6 adjoint transpose solve are stable. |
+| `ambipolarSolveOption=1` | Implement safeguarded Newton/bisection with `dJr/dEr` from implicit/adjoint solve. |
+| `ambipolarSolveOption=2` | Implement Brent root solve using completed physical solves and scan reuse. |
+| `ambipolarSolveOption=3` | Implement pure Newton with robust failure certificate and fallback suggestion. |
+| `includePhi1` self-consistent | Keep nonlinear Newton-Krylov parity and output all SNES-like diagnostics. |
+| `readExternalPhi1` | Add or audit file input parity and cheaper fixed-Phi1 solves. |
+| `includePhi1InCollisionOperator` | Keep explicit caveat until parity and memory gates pass. |
+| `geometryScheme=1/2/3/4` | Keep analytic geometry parity and physics gates. |
+| `geometryScheme=5` | VMEC wout parity, `vmec_jax` differentiable adapter lane, finite-beta QA/QH gates. |
+| `geometryScheme=11/12` | Boozer `.bc` parity and memory/runtime reports. |
+| `geometryScheme=13` | Decide implementation scope for direct Boozer-spectrum optimization input. |
+| `export_f` | Implement distribution-function export on requested grids with bounded output sizes. |
+| Matrix/vector debug dumps | Provide NPZ/netCDF debug dumps for operators/RHS/solution/preconditioner metadata. |
+| HDF5 output parity | Continue adding all Fortran v3 outputs plus sfincs_jax diagnostics. |
+| Classical transport | Audit term-by-term with Fortran v3 and add physics tests. |
+| Input validation | Mirror Fortran v3 compatibility errors and warnings, but phrase them for Python/CLI users. |
+
+Acceptance gates:
+
+- A generated feature matrix in docs marks each item as implemented, tested,
+  intentionally unsupported, or deferred.
+- Every implemented item has at least one unit test, one behavior/regression
+  test, and one docs example or reference page.
+- Every unsupported/deferred item has a precise physics or engineering reason,
+  not a vague "not yet".
+
+## Lane 3 - Ambipolar Solver And Er Derivatives
+
+Goal: make ambipolar calculations first-class, fast, and differentiable when
+requested.
+
+Implementation steps:
+
+1. Create `sfincs_jax.problems.ambipolar` as the canonical owner.
+2. Define `AmbipolarProblem`, `AmbipolarResult`, and `AmbipolarIteration`
+   pytrees with solver path, residual, root type, derivative, and output fields.
+3. Reuse the existing scan postprocessor as the Brent-compatible backend, but
+   move it under the canonical ambipolar problem package.
+4. Implement Fortran-compatible radial-current conventions:
+   `J_r = sum_s Z_s Gamma_s`, with the correct flux variant for `Phi1`.
+5. Implement Brent with bracket provenance, monotonic interpolation diagnostics,
+   and no derivative requirement.
+6. Implement safeguarded Newton/bisection using `dJr/dEr`.
+7. Implement pure Newton with strict derivative and trust-region guards.
+8. Add automatic policy:
+   - use derivative-assisted safeguarded Newton when an adjoint/implicit
+     derivative is available and bracket is valid;
+   - use Brent for robust CLI default when derivative setup is expensive;
+   - fail with partial scan artifact if no bracket is found.
+9. Add radial-batch ambipolar solve for profile workflows.
+10. Add CLI:
+    `sfincs_jax ambipolar input.namelist --er-min ... --er-max ...`.
+
+Derivative formula:
+
+Given `R(u, Er, p) = 0` and `Jr(u, Er, p)`, compute
+
+```text
+du/dEr = -R_u^{-1} R_Er
+dJr/dEr = partial_Er Jr + Jr_u du/dEr
+```
+
+For reverse mode, solve
+
+```text
+R_u^T lambda = Jr_u^T
+dJr/dEr = partial_Er Jr - lambda^T R_Er
+```
+
+Acceptance gates:
+
+- Reproduce Fortran v3 `ambipolarSolveOption=1/2/3` on at least one tokamak,
+  one W7-X-like analytic case, one VMEC QA case, and one QH case.
+- `dJr/dEr` matches finite differences on a stable step window.
+- Brent and Newton return the same root within tolerance when both are valid.
+- CPU/GPU roots and root types match within tolerance for bounded cases.
+- Failed brackets write a useful partial artifact and do not claim success.
+
+## Lane 4 - Adjoint Sensitivities And Differentiable Solves
+
+Goal: replace ad hoc gradient examples with a tested derivative system aligned
+with Fortran RHSMode 4/5 and modern JAX implicit differentiation.
+
+Public APIs:
+
+- `linearize_solve(problem, params)`
+- `jvp_flux(problem, tangent_params)`
+- `vjp_flux(problem, cotangent_outputs)`
+- `adjoint_sensitivity(problem, objective)`
+- `differentiate_ambipolar_root(problem, objective)`
+- `finite_difference_check(problem, parameter, step_window)`
+
+Implementation steps:
+
+1. Define residual graph objects for each problem: residual, matvec, transpose
+   matvec, RHS, diagnostics, and parameter leaves.
+2. Ensure each residual graph has shape-stable pytrees and no hidden global
+   state.
+3. Use `jax.lax.custom_linear_solve` for linear solve differentiation.
+4. Use `jax.linearize` for Newton/Phi1 JVPs where the nonlinear residual is
+   solved in JAX.
+5. Use `custom_vjp` only around public solve functions that contain adaptive
+   solver choices or host-only fast paths.
+6. For CLI/non-differentiable paths, return derivative-unavailable metadata
+   rather than silently tracing host operations.
+7. Implement Fortran-v3-style adjoint RHS builders for particle flux, heat flux,
+   parallel flow, total heat flux, radial current, and bootstrap current.
+8. Implement `dL/dlambda f - dS/dlambda` for:
+   - `Er`,
+   - Boozer `B`,
+   - contravariant/covariant Boozer components,
+   - `iota`,
+   - radial derivative/metric terms after the exact Fortran mapping is audited.
+9. Audit the exact Fortran `whichLambda` mapping before public docs, because
+   comments and case labels must be reconciled term-by-term.
+10. Add RHSMode 4 fixed-Er output fields.
+11. Add RHSMode 5 ambipolar-Er output fields and `dPhi/dPsi` sensitivity.
+
+Acceptance gates:
+
+- `A^T lambda - J_u^T` adjoint residual passes for every derivative gate.
+- JVP and VJP agree through dot-product tests:
+  `<JVP(dp), y> = <dp, VJP(y)>`.
+- Finite-difference checks pass on documented stable windows.
+- Fortran v3 RHSMode 4/5 outputs match on small and intermediate grids.
+- Derivative examples run under CI without full production solves.
+
+## Lane 5 - Native Solver And Preconditioner Architecture
+
+Goal: provide PETSc-like robustness natively in Python/JAX without depending on
+PETSc, MUMPS, or SuperLU_DIST at runtime.
+
+Fortran behavior to emulate:
+
+- Exact operator and simplified Pmat are separate.
+- Factorization is reused across RHS and adjoint solves when possible.
+- Ordering and pivot safeguards are part of solver policy.
+- Direct solve failure is diagnosed and retried with safer factor controls.
+- Adjoints reuse transpose solves.
+
+Implementation steps:
+
+1. Standardize operator objects with:
+   `matvec`, `transpose_matvec`, optional explicit sparse emission,
+   block metadata, true residual, and parameter leaves.
+2. Standardize preconditioner objects with:
+   `apply`, optional `apply_transpose`, setup diagnostics, residual admission,
+   memory estimate, and reuse key.
+3. Keep two solver stacks:
+   - differentiable stack: pure JAX matvecs, Krylov, custom linear solve,
+     optional Lineax only if it improves a measured lane;
+   - production stack: native Python/JAX sparse/direct/block factors and host
+     rescue paths when `differentiable=False`.
+4. Implement reusable symbolic ordering metadata for active-only operators.
+5. Implement native sparse/block factor families:
+   - line factors in `x`, `ell`, `theta`, and `zeta`;
+   - block triangular/angular streaming factors;
+   - active-only coupled kinetic block factors;
+   - moment/source/constraint Schur complement;
+   - additive Schwarz patches;
+   - nested-dissection/multifrontal-inspired separator updates where beneficial.
+6. Add setup-time true-residual admission for every approximate factor:
+   no auto promotion without measuring residual reduction on the actual
+   operator.
+7. Add factor reuse across:
+   - RHSMode 2/3 multiple RHS;
+   - Er scans at fixed shape;
+   - radial batches where geometry shape is fixed;
+   - adjoint transpose solves.
+8. Add fail-fast memory guards before expensive factor setup.
+9. Add structured progress logging for setup and solve phases.
+10. Keep lower-memory replacement as research/deferred if it cannot beat the
+    existing robust path within the documented budget.
+
+Acceptance gates:
+
+- Auto policy selects the best passing method without environment variables.
+- Strict true-residual gate passes before outputs are promoted as converged.
+- Production-floor QA/QH RHSMode 1, geometry-rich RHSMode 2/3, and Phi1 cases
+  either pass or are documented as deferred with exact residual/runtime/RSS.
+- Runtime is no worse than 20x SFINCS Fortran v3 for public production
+  comparison claims, unless a case is explicitly marked as research/deferred.
+- Peak memory fits documented CPU/GPU budgets and records device memory where
+  applicable.
+
+## Lane 6 - T3D, NEOPAX, And Optimization Integration
+
+Goal: make `sfincs_jax` useful as a transport closure in profile solvers and
+stellarator optimization, not only as a standalone file-based code.
+
+Public closures:
+
+- `make_flux_surface_closure(geometry, species, resolution, mode)`
+- `make_transport_matrix_closure(geometry, species, resolution)`
+- `make_ambipolar_closure(geometry, species, resolution, er_policy)`
+- `make_radial_profile_closure(geometry_provider, profile_provider, radii)`
+
+Closure inputs:
+
+- radius or radial grid,
+- density and temperature profiles,
+- density and temperature gradients,
+- electric field or ambipolar policy,
+- species charges/masses,
+- geometry object or geometry file,
+- solver/differentiability mode.
+
+Closure outputs:
+
+- particle fluxes,
+- heat fluxes,
+- parallel flows,
+- bootstrap current,
+- radial current,
+- ambipolar roots and root type,
+- transport matrices,
+- derivatives/JVP/VJP when requested,
+- solver certificates.
+
+Optimization examples:
+
+- QA nfp=2 bootstrap-current minimization.
+- QA or QI electron-root targeting from ambipolarity.
+- Heat and particle flux minimization with impurity-flux target.
+- VMEC-JAX to Booz-Xform-JAX to SFINCS-JAX differentiable pipeline.
+- T3D/NEOPAX-style radial closure using a fixed geometry and evolving profiles.
+
+Acceptance gates:
+
+- Examples run from a clean install without private local paths.
+- Differentiable examples have finite-difference or adjoint validation.
+- Non-differentiable production examples report solver path and residual.
+- Docs explain when gradients are exact implicit derivatives, proxy gradients,
+  or unavailable.
+
+## Lane 7 - Validation, Physics Gates, And Coverage
+
+Goal: reach high meaningful coverage through real physics, numerical, and
+regression tests without making CI expensive.
+
+Test tiers:
+
+| Tier | Runtime budget | Purpose |
+| --- | --- | --- |
+| Unit | seconds | Grids, coordinates, geometry, operators, collision terms, output schema. |
+| Numerical | seconds to 2 min | Residual identities, transpose tests, conservation, quadrature convergence. |
+| Physics gates | 2 to 8 min | Literature and Fortran v3 anchored transport/ambipolar/bootstrap checks. |
+| CI regression | 5 to 10 min total | Public API, CLI, small parity, derivative gates, docs build. |
+| Nightly/optional | 30 to 120 min | Production-floor CPU, GPU, Fortran v3 parity, memory/runtime. |
+| Release | manual or scheduled | Full public benchmark regeneration, figures, parity matrix, artifacts. |
+
+Physics gates to keep or add:
+
+- Axisymmetric tokamak banana/plateau/Pfirsch-Schlueter trend checks.
+- Monoenergetic DKES-style transport coefficients for W7-X/LHD/HSX analytic
+  cases.
+- Simakov-Helander high-collisionality limit with a pinned high-nu scan.
+- QA/QH bootstrap current comparison against SFINCS Fortran v3 and Redl formula
+  at identical resolution, with convergence error bars.
+- W7-X ambipolarity with checked equilibrium/profile provenance.
+- Finite-beta QA profile-current lane once residual convergence is clean.
+- Phi1 sanity checks: flux-surface averaged lowest-order radial particle flux
+  cancellation and nonlinear residual convergence.
+- Adjoint sensitivity checks against finite differences and Fortran RHSMode 4/5.
+- CPU/GPU reproducibility checks for representative PAS, FP, Phi1, QA, QH, and
+  QI cases.
+
+Coverage strategy:
+
+- Aim for 95 percent meaningful package coverage after refactor, not by adding
+  slow full-solve tests.
+- Prefer tests on extracted pure functions and operator blocks.
+- Add synthetic manufactured operators for solver/preconditioner unit tests,
+  but keep every manufactured test tied to an actual operator identity.
+- Keep large equilibria out of git history; fetch release fixtures only in
+  optional/nightly jobs.
+- Coverage gaps in host-only profiling paths can be exempted only with explicit
+  comments and separate integration tests.
+
+## Lane 8 - Benchmarks, Figures, Docs, And Release Artifacts
+
+Goal: regenerate public claims from reproducible scripts after implementation
+lanes pass.
+
+Benchmark matrix:
+
+- Devices/geometries: tokamak, HSX, W7-X, LHD, QA, QH, QI nfp=1/2/3/4 when
+  available.
+- Geometry modes: analytic, VMEC, Boozer `.bc`, direct Boozer spectrum if
+  implemented.
+- Physics modes: PAS, full FP, magnetic drifts on/off, Er on/off, Phi1 on/off,
+  RHSMode 1/2/3/4/5 where supported.
+- Resolution tiers:
+  - CI tier: small but physically meaningful;
+  - public benchmark tier: production-floor resolution;
+  - stress tier: collaborator/NTX-like large cases.
+- Devices: CPU cold/warm, GPU cold/warm, Fortran v3 reference.
+
+Metrics:
+
+- wall time,
+- compile/setup/solve/diagnostics/output phase times,
+- peak RSS,
+- device memory,
+- residual norm and target,
+- Krylov iterations and factor setup status,
+- selected solver path,
+- all shared physical outputs,
+- derivative residuals and finite-difference errors when applicable.
+
+Required public figures:
+
+- Runtime and memory comparison plot: Fortran v3, sfincs_jax CPU cold/warm,
+  sfincs_jax GPU cold/warm.
+- QA/QH bootstrap current: sfincs_jax, Fortran v3, Redl formula, same
+  resolution, convergence error bars.
+- Ambipolar Er educational/validation plot.
+- Autodiff sensitivity validation plot.
+- Solver phase timing plot for at least one production-floor case.
+- Optional transport profile closure plot for T3D/NEOPAX-style use.
+
+Docs requirements:
+
+- Landing page explains the drift-kinetic equation before the discretized
+  system.
+- Usage page shows one CLI command, one Python solve, one plot command, and one
+  differentiable objective.
+- Method pages explain grids, collisions, geometry, Phi1, solvers,
+  preconditioners, ambipolar solve, and adjoints.
+- API pages expose stable entry points only, not internal helper churn.
+- Validation pages explain every physics gate and benchmark provenance.
+- Research-lane page lists only honest deferred items with exact status.
+
+## Lane 9 - Release And Branch Hygiene
+
+Goal: ship from a clean, lightweight repository with one review PR.
+
+Steps:
+
+1. Keep the active refactor work in PR #8 until this plan is complete.
+2. Do not open additional PRs for sub-lanes.
+3. Commit and push coherent tranches frequently.
+4. Keep large outputs and generated benchmark data out of git unless they are
+   compressed public figures under the artifact-size policy.
+5. Before review-ready:
+   - full local focused tests pass;
+   - docs build passes;
+   - CI passes;
+   - release benchmark scripts complete or deferred statuses are documented;
+   - README figures and docs figures are regenerated from current reports;
+   - `git diff --check` passes;
+   - no temporary outputs or local paths remain.
+6. After review-ready and merge:
+   - tag a new version;
+   - publish release notes;
+   - confirm PyPI workflow;
+   - archive release benchmark artifacts.
+
+## Milestones
+
+### M0 - Final Plan And Feature Matrix
+
+Deliverables:
+
+- `plan_final.md` committed.
+- Generated Fortran-v3 feature matrix in docs.
+- Current sfincs_jax gap table linked from docs.
+
+Exit gate:
+
+- Team agrees that `plan_final.md` is the single controlling plan.
+
+### M1 - Refactor Skeleton
+
+Deliverables:
+
+- Public API and domain package boundaries finalized.
+- `v3_driver.py` reduced to orchestration shim or eliminated.
+- Compatibility shims marked and scheduled for deletion.
+
+Exit gate:
+
+- Focused refactor tests and docs build pass.
+
+### M2 - Operator And Solver Ownership
+
+Deliverables:
+
+- Residual/operator objects standardized.
+- Solver/preconditioner objects standardized.
+- Auto policy no longer requires routine environment variables.
+
+Exit gate:
+
+- Representative RHSMode 1/2/3 cases pass CPU parity with automatic defaults.
+
+### M3 - Ambipolar First-Class Solver
+
+Deliverables:
+
+- Brent, safeguarded Newton/bisection, and pure Newton implemented.
+- `dJr/dEr` available via implicit/adjoint derivative.
+- CLI and Python API documented.
+
+Exit gate:
+
+- Fortran-compatible roots and derivative checks pass on bounded cases.
+
+### M4 - RHSMode 4/5 And General Sensitivities
+
+Deliverables:
+
+- Fixed-Er adjoint sensitivities implemented.
+- Ambipolar-Er adjoint sensitivities implemented.
+- Derivative outputs written to HDF5/netCDF.
+
+Exit gate:
+
+- Dot-product, finite-difference, and Fortran v3 adjoint parity gates pass.
+
+### M5 - Optimization And Profile Closure
+
+Deliverables:
+
+- Stable closures for T3D/NEOPAX-style integration.
+- QA bootstrap-current and electron-root optimization examples.
+- VMEC-JAX/Booz-Xform-JAX/SFINCS-JAX workflow example.
+
+Exit gate:
+
+- Examples run and derivative/provenance gates pass.
+
+### M6 - Production Benchmark Regeneration
+
+Deliverables:
+
+- Fresh CPU/GPU/Fortran benchmark reports.
+- Runtime/memory plots regenerated.
+- QA/QH bootstrap current plot regenerated.
+- Parity matrix regenerated.
+
+Exit gate:
+
+- README and docs contain only current data.
+
+### M7 - Review-Ready PR
+
+Deliverables:
+
+- CI green.
+- Docs green.
+- Coverage target met or remaining uncovered lines are justified.
+- No temporary files or local-path artifacts.
+- PR #8 ready for review.
+
+Exit gate:
+
+- The branch is merge-ready.
+
+### M8 - Release
+
+Deliverables:
+
+- Merge to main.
+- Tag and release.
+- PyPI workflow verified.
+- Release notes include implemented features, limitations, and benchmark
+  provenance.
+
+## Immediate Next Steps
+
+1. Generate the Fortran-v3 feature matrix from source/docs into docs.
+2. Add a matching sfincs_jax feature matrix and mark implemented/deferred items.
+3. Extract the public `api` contracts before moving more internals.
+4. Refactor ambipolar functionality into a canonical problem owner.
+5. Implement Brent in-solver ambipolar solve first, because it does not depend
+   on adjoint derivatives and provides a validation baseline.
+6. Implement `dJr/dEr` through implicit differentiation on a small RHSMode 1
+   case and compare against centered finite differences.
+7. Implement safeguarded Newton/bisection using that derivative.
+8. Define residual/operator/transpose operator protocol and migrate one
+   RHSMode 2/3 path to it.
+9. Add one T3D/NEOPAX-style closure example with fixed geometry and radial
+   profile inputs.
+10. Run focused tests, docs build, commit, and push after each coherent owner
+    boundary or feature milestone.
+
+## Known Risks And Explicit Deferred Items
+
+- A fully native MUMPS/SuperLU_DIST-equivalent factorization stack is a large
+  numerical project. The near-term target is robust native block/Schur/factor
+  infrastructure with honest gates, not an overclaim that it matches mature
+  sparse direct solvers on every production case.
+- Full production-grid QA/QH RHSMode 1 can remain slower or higher-memory than
+  Fortran v3 if residuals and outputs are correct and the limitation is
+  documented. It cannot be used for favorable public performance claims unless
+  the benchmark gate passes.
+- True device-QI and single-case multi-GPU strong scaling remain research lanes
+  until strict residual, runtime, and reproducibility gates pass.
+- GeometryScheme 13 and full external-Phi1 parity require a scoped audit before
+  implementation. They should not block core RHSMode 1/2/3/ambipolar/adjoint
+  release milestones unless users require them.
+- Lineax, JAXopt, Equinox, and other ecosystem libraries should be adopted only
+  after a measured benefit. Avoid adding dependencies for conceptual elegance
+  without runtime, memory, compile-time, or derivative-maintenance wins.
+
