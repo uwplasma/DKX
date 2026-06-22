@@ -130,6 +130,16 @@ during the current refactor tranche. The next I/O split should move physical
 solved-field and provenance schema construction behind a smaller output
 contract while preserving these writer functions.
 
+``sfincs_jax/outputs/transport.py``
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+RHSMode=2/3 transport output-schema helpers:
+
+- per-``whichRHS`` linear residual, RHS norm, and relative residual arrays,
+- max residual and max relative residual summary fields,
+- explicit ``NaN`` placeholders for missing RHS diagnostics in partial debug
+  artifacts.
+
 ``sfincs_jax/input_compat.py``
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 

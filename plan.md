@@ -76,6 +76,9 @@ deferred research lanes.
   sparse-PC timing/memory fields, direct-tail support-mode metadata, true
   coupled-coarse fields, and residual-target ratios, moved from `io.py` into
   `sfincs_jax.outputs.rhsmode1` without adding a new file.
+- RHSMode=2/3 transport solver residual-output arrays moved from `io.py` into
+  `sfincs_jax.outputs.transport`, with a direct output-schema test covering
+  missing RHS diagnostics and max residual summaries.
 - RHSMode=1 x-block sparse-PC final metadata and payload assembly moved out of
   `v3_driver.py` into the profile-response sparse x-block handoff helpers. The
   driver now supplies solve-local scope plus the accepted physical solution,
@@ -149,6 +152,9 @@ deferred research lanes.
   result-contract tests and driver import boundaries:
   `323 passed in 2.30s`; `ruff` passes on the touched driver and sparse-PC
   tests.
+- Transport output-schema split adds a direct test for residual diagnostics
+  and preserves output/import contracts:
+  `15 passed in 1.30s`.
 - `ruff` and `py_compile` pass on touched transport-parallel, finalization, and
   setup/QI files.
 - PR #8 remains draft. Check CI after the next meaningful push rather than
