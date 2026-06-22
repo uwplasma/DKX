@@ -1185,6 +1185,9 @@ the historical private driver name and test the focused module directly. This ke
 - ``sfincs_jax/problems/transport_matrix/policies.py``
   (legacy alias: ``sfincs_jax/transport_policy.py``):
   pure transport backend, sparse-direct, host-GMRES, dtype, and recycle policy.
+  ``TransportRuntimePolicy`` binds those pure decisions to the active JAX
+  backend and host sparse-factor dtype provider, so ``v3_driver.py`` no longer
+  carries private transport backend-injection wrapper functions.
 - ``sfincs_jax/problems/transport_matrix/preconditioner_dispatch.py``
   (legacy alias: ``sfincs_jax/transport_preconditioner_dispatch.py``):
   shared transport preconditioner-kind normalization, auto-selection, DD/sparse-JAX
