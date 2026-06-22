@@ -83,30 +83,7 @@ from .rhs1_domain_decomposition import (  # compatibility exports for legacy tes
     _rhs1_dd_coarse_block_sizes,
     _rhs1_dd_coarse_level_count,
 )
-from .rhs1_qi_coarse import (
-    apply_rhs1_qi_coarse_correction,
-    build_rhs1_xblock_global_coupling_load_basis as _rhs1_xblock_global_coupling_load_basis,
-    build_rhs1_xblock_qi_coarse_basis,
-    build_rhs1_xblock_smoothed_load_qi_basis as _rhs1_xblock_smoothed_load_qi_basis,
-    build_rhs1_qi_galerkin_preconditioner,
-    orthonormalize_rhs1_qi_coarse_basis,
-)
-from .rhs1_qi_galerkin_policy import (
-    parse_rhs1_qi_galerkin_dampings,
-    parse_rhs1_qi_galerkin_modes,
-)
-from .rhs1_qi_deflation import (
-    build_rhs1_qi_residual_deflated_preconditioner,
-    probe_rhs1_qi_deflated_correction,
-    probe_rhs1_qi_deflated_minres_seed,
-)
-from .rhs1_qi_device_preconditioner import (
-    probe_rhs1_qi_device_augmented_seed,
-    probe_rhs1_qi_device_preconditioner,
-    setup_rhs1_qi_device_preconditioner,
-)
 from .rhs1_qi_two_level import (
-    build_rhs1_qi_two_level_preconditioner,
     build_rhs1_xblock_device_global_coupling_preconditioner as _build_rhs1_xblock_device_global_coupling_preconditioner,
     build_rhs1_xblock_smoothed_global_coupling_preconditioner as _build_rhs1_xblock_smoothed_global_coupling_preconditioner,
     build_rhs1_xblock_two_level_preconditioner as _build_rhs1_xblock_two_level_preconditioner,
@@ -293,7 +270,6 @@ from .problems.profile_response.sparse_pc import (
     XBlockPostSolveCorrectionContext,
     XBlockPreflightGateContext,
     XBlockProbeCoarseStageContext,
-    XBlockQIStagePipelineContext,
     XBlockSideProbeStageContext,
     XBlockTwoLevelStageContext,
     apply_fortran_reduced_xblock_global_coupling_stage,
@@ -316,6 +292,7 @@ from .problems.profile_response.sparse_pc import (
     build_sparse_pc_active_dof_setup,
     build_direct_tail_materialization_setup,
     build_xblock_krylov_progress_callbacks,
+    build_xblock_qi_stage_pipeline_context,
     fortran_reduced_xblock_final_payload,
     xblock_sparse_pc_final_metadata_state_from_driver_scope,
     xblock_sparse_pc_final_payload_from_driver_state,
@@ -3181,7 +3158,7 @@ def solve_v3_full_system_linear_gmres(
                             f"constraint1 moment-Schur seed failed ({type(exc).__name__}: {exc})",
                         )
             qi_pipeline = run_xblock_qi_preconditioner_pipeline(
-                XBlockQIStagePipelineContext(
+                build_xblock_qi_stage_pipeline_context(
                     op=op,
                     rhs=rhs,
                     x0_full=x0_full,
@@ -3210,33 +3187,6 @@ def solve_v3_full_system_linear_gmres(
                     elapsed_s=sparse_timer.elapsed_s,
                     emit=emit,
                     env=os.environ,
-                    basis_builder=build_rhs1_xblock_qi_coarse_basis,
-                    smoothed_load_basis_builder=(
-                        _rhs1_xblock_smoothed_load_qi_basis
-                    ),
-                    global_load_basis_builder=(
-                        _rhs1_xblock_global_coupling_load_basis
-                    ),
-                    correction_builder=apply_rhs1_qi_coarse_correction,
-                    galerkin_preconditioner_builder=(
-                        build_rhs1_qi_galerkin_preconditioner
-                    ),
-                    two_level_preconditioner_builder=(
-                        build_rhs1_qi_two_level_preconditioner
-                    ),
-                    orthonormalizer=orthonormalize_rhs1_qi_coarse_basis,
-                    device_setup_preconditioner=setup_rhs1_qi_device_preconditioner,
-                    device_probe_preconditioner=probe_rhs1_qi_device_preconditioner,
-                    device_probe_augmented_seed=(
-                        probe_rhs1_qi_device_augmented_seed
-                    ),
-                    deflated_preconditioner_builder=(
-                        build_rhs1_qi_residual_deflated_preconditioner
-                    ),
-                    deflated_minres_seed_probe=probe_rhs1_qi_deflated_minres_seed,
-                    deflated_linear_probe=probe_rhs1_qi_deflated_correction,
-                    parse_galerkin_modes=parse_rhs1_qi_galerkin_modes,
-                    parse_galerkin_dampings=parse_rhs1_qi_galerkin_dampings,
                     reduce_full=_xblock_reduce_full,
                 )
             )

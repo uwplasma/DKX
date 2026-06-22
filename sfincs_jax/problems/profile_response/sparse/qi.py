@@ -3607,6 +3607,63 @@ def resolve_xblock_qi_device_multilevel_config_setup(
     )
 
 
+def build_xblock_qi_stage_pipeline_context(
+    **context_kwargs: object,
+) -> XBlockQIStagePipelineContext:
+    """Return the production QI pipeline context with domain-owned builders.
+
+    The driver owns solve-local arrays, matvecs, and timing. The QI module owns
+    the concrete coarse, Galerkin, two-level, device, and deflated
+    implementations. This keeps production wiring explicit without forcing the
+    orchestration layer to import every QI helper individually.
+    """
+
+    from ....rhs1_qi_coarse import (
+        apply_rhs1_qi_coarse_correction,
+        build_rhs1_xblock_global_coupling_load_basis,
+        build_rhs1_xblock_qi_coarse_basis,
+        build_rhs1_xblock_smoothed_load_qi_basis,
+        build_rhs1_qi_galerkin_preconditioner,
+        orthonormalize_rhs1_qi_coarse_basis,
+    )
+    from ....rhs1_qi_deflation import (
+        build_rhs1_qi_residual_deflated_preconditioner,
+        probe_rhs1_qi_deflated_correction,
+        probe_rhs1_qi_deflated_minres_seed,
+    )
+    from ....rhs1_qi_device_preconditioner import (
+        probe_rhs1_qi_device_augmented_seed,
+        probe_rhs1_qi_device_preconditioner,
+        setup_rhs1_qi_device_preconditioner,
+    )
+    from ....rhs1_qi_galerkin_policy import (
+        parse_rhs1_qi_galerkin_dampings,
+        parse_rhs1_qi_galerkin_modes,
+    )
+    from ....rhs1_qi_two_level import build_rhs1_qi_two_level_preconditioner
+
+    return XBlockQIStagePipelineContext(
+        **context_kwargs,
+        basis_builder=build_rhs1_xblock_qi_coarse_basis,
+        smoothed_load_basis_builder=build_rhs1_xblock_smoothed_load_qi_basis,
+        global_load_basis_builder=build_rhs1_xblock_global_coupling_load_basis,
+        correction_builder=apply_rhs1_qi_coarse_correction,
+        galerkin_preconditioner_builder=build_rhs1_qi_galerkin_preconditioner,
+        two_level_preconditioner_builder=build_rhs1_qi_two_level_preconditioner,
+        orthonormalizer=orthonormalize_rhs1_qi_coarse_basis,
+        device_setup_preconditioner=setup_rhs1_qi_device_preconditioner,
+        device_probe_preconditioner=probe_rhs1_qi_device_preconditioner,
+        device_probe_augmented_seed=probe_rhs1_qi_device_augmented_seed,
+        deflated_preconditioner_builder=(
+            build_rhs1_qi_residual_deflated_preconditioner
+        ),
+        deflated_minres_seed_probe=probe_rhs1_qi_deflated_minres_seed,
+        deflated_linear_probe=probe_rhs1_qi_deflated_correction,
+        parse_galerkin_modes=parse_rhs1_qi_galerkin_modes,
+        parse_galerkin_dampings=parse_rhs1_qi_galerkin_dampings,
+    )
+
+
 def run_xblock_qi_preconditioner_pipeline(
     context: XBlockQIStagePipelineContext,
 ) -> XBlockQIStagePipelineResult:
@@ -4010,6 +4067,7 @@ __all__ = (
     "apply_xblock_qi_device_stage",
     "apply_xblock_qi_galerkin_stage",
     "apply_xblock_qi_two_level_stage",
+    "build_xblock_qi_stage_pipeline_context",
     "build_xblock_qi_device_preconditioner_metadata",
     "build_xblock_qi_device_setup_config",
     "resolve_xblock_qi_deflated_policy_setup",

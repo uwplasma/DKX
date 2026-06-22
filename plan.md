@@ -43,8 +43,8 @@ deferred research lanes.
   `sfincs_jax.problems.profile_response.setup` in commit `611e283`.
 - QI-device admission/build/probe/install logic moved out of `v3_driver.py`
   into `sfincs_jax.problems.profile_response.sparse.qi`; `v3_driver.py` now
-  injects solve-local operators and compatibility probe aliases for the tested
-  fail-closed QI research lane.
+  passes solve-local arrays/operators/timing into the domain-owned QI pipeline
+  context for the tested fail-closed research lane.
 - Stale private `v3_driver.py` QI policy aliases are being deleted when their
   canonical owner is now `sfincs_jax.problems.profile_response.policies`; tests
   now enforce that ownership boundary instead of preserving aliases only for
@@ -52,14 +52,13 @@ deferred research lanes.
 - QI seed/Galerkin/two-level/device/deflated stage orchestration no longer
   lives inline in `v3_driver.py`; the driver now calls
   `run_xblock_qi_preconditioner_pipeline()` from
-  `sfincs_jax.problems.profile_response.sparse.qi`, injects solve-local
-  operators/probe aliases, and keeps QI metadata construction in the
-  profile-response sparse package.
+  `sfincs_jax.problems.profile_response.sparse.qi`, while QI builder wiring
+  and metadata construction stay in the profile-response sparse package.
 - Final stale `v3_driver.py` QI coarse-basis/block-metadata aliases were
-  removed. The driver now passes the canonical
-  `build_rhs1_xblock_qi_coarse_basis` owner directly to the extracted QI
-  pipeline, and tests assert that the old private aliases are gone rather than
-  preserving them for historical convenience.
+  removed. The extracted QI pipeline now obtains canonical coarse-basis and
+  block-metadata builders from its own default context factory, and tests assert
+  that old private driver aliases stay gone rather than preserving them for
+  historical convenience.
 - RHSMode=1 PAS-family binding moved into
   `sfincs_jax.solvers.preconditioners.pas.RHS1PasFamilyBuilders`; `v3_driver.py`
   now keeps only thin private wrappers that inject current low-level builders
@@ -85,13 +84,18 @@ deferred research lanes.
   while `sfincs_jax.problems.profile_response.sparse_pc` owns the final
   diagnostic payload contract used by `V3LinearSolveResult`.
 - QI-specific code left in `v3_driver.py` was audited after the extraction.
-  The remaining references are live dependency-injection seams for the tested
-  QI pipeline and augmented-Krylov path; metadata-only relay locals made
-  obsolete by the sparse-PC finalization handoff were deleted.
-- Current next tranche is solved-field/output-schema consolidation inside
-  `io.py` or one larger progress/timing/result handoff from `v3_driver.py`.
-  The remaining QI code in `v3_driver.py` is active solve-local injection and
-  metadata relay for tested fail-closed paths, not removable dead code.
+  The remaining references are live solve-local handoff for the tested QI
+  pipeline and augmented-Krylov path; metadata-only relay locals made obsolete
+  by the sparse-PC finalization handoff were deleted.
+- QI default-builder wiring moved into
+  `sfincs_jax.problems.profile_response.sparse.qi.build_xblock_qi_stage_pipeline_context()`.
+  `v3_driver.py` now passes only solve-local arrays/operators/timing into the
+  QI pipeline instead of importing every coarse/Galerkin/two-level/device/
+  deflated helper directly. Tests patch the canonical QI device-preconditioner
+  module rather than stale driver aliases.
+- Current next tranche is one real active-projected RHSMode=1 preconditioner
+  family extraction from `rhs1_full_assembly.py` into the solver domain package,
+  followed by focused coverage and then the planned `io.py` output-schema split.
 - The README and docs currently state the public claim boundary: the documented
   release suite is CPU/GPU parity-clean, while production-resolution QI, true
   device-QI, lower-memory native factor replacement, full-grid QA/QH RHSMode=1,
@@ -131,6 +135,9 @@ deferred research lanes.
 - QI alias cleanup preserves live QI coarse/device/two-level/deflated behavior
   and sparse-driver handoff behavior:
   `81 passed in 18.53s` and `552 passed in 112.36s`.
+- QI default-builder ownership cleanup preserves sparse-PC behavior while
+  removing direct QI helper imports from `v3_driver.py`:
+  `324 passed in 2.14s`.
 - RHSMode=1 output-gate extraction preserves IO helper coverage and solver-trace
   output-format behavior:
   `18 passed in 0.33s`; after switching moved-helper tests to the new owner

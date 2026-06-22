@@ -11,6 +11,7 @@ import scipy.sparse as sp
 from scipy.sparse.linalg import aslinearoperator
 
 import sfincs_jax.io as io_module
+import sfincs_jax.rhs1_qi_device_preconditioner as rhs1_qi_device_preconditioner_module
 import sfincs_jax.v3_driver as v3_driver_module
 from sfincs_jax.explicit_sparse import SparseDecision, SparseOperatorBundle, build_operator_from_pattern
 from sfincs_jax.io import write_sfincs_jax_output_h5
@@ -4042,7 +4043,11 @@ def test_xblock_sparse_pc_qi_device_krylov_request_disables_auto_host_fallback(m
             step_history=(1.0,),
         )
 
-    monkeypatch.setattr(v3_driver_module, "probe_rhs1_qi_device_preconditioner", _accepted_probe)
+    monkeypatch.setattr(
+        rhs1_qi_device_preconditioner_module,
+        "probe_rhs1_qi_device_preconditioner",
+        _accepted_probe,
+    )
 
     result = solve_v3_full_system_linear_gmres(
         nml=nml,
@@ -4250,7 +4255,11 @@ def test_xblock_sparse_pc_qi_device_preconditioner_opt_in_records_acceptance(mon
             metadata=state.metadata,
         )
 
-    monkeypatch.setattr(v3_driver_module, "probe_rhs1_qi_device_preconditioner", _accepted_probe)
+    monkeypatch.setattr(
+        rhs1_qi_device_preconditioner_module,
+        "probe_rhs1_qi_device_preconditioner",
+        _accepted_probe,
+    )
 
     result = solve_v3_full_system_linear_gmres(
         nml=nml,
@@ -4342,7 +4351,11 @@ def test_xblock_sparse_pc_qi_device_preconditioner_matrix_free_fallback(monkeypa
             metadata=state.metadata,
         )
 
-    monkeypatch.setattr(v3_driver_module, "probe_rhs1_qi_device_preconditioner", _accepted_probe)
+    monkeypatch.setattr(
+        rhs1_qi_device_preconditioner_module,
+        "probe_rhs1_qi_device_preconditioner",
+        _accepted_probe,
+    )
 
     result = solve_v3_full_system_linear_gmres(
         nml=nml,
@@ -4417,7 +4430,11 @@ def test_xblock_sparse_pc_qi_device_multilevel_coarse_env_records_metadata(monke
             metadata=state.metadata,
         )
 
-    monkeypatch.setattr(v3_driver_module, "probe_rhs1_qi_device_preconditioner", _accepted_probe)
+    monkeypatch.setattr(
+        rhs1_qi_device_preconditioner_module,
+        "probe_rhs1_qi_device_preconditioner",
+        _accepted_probe,
+    )
 
     result = solve_v3_full_system_linear_gmres(
         nml=nml,
@@ -4474,7 +4491,11 @@ def test_xblock_sparse_pc_qi_device_augmented_krylov_reuses_operator_basis(monke
             metadata=state.metadata,
         )
 
-    monkeypatch.setattr(v3_driver_module, "probe_rhs1_qi_device_preconditioner", _accepted_probe)
+    monkeypatch.setattr(
+        rhs1_qi_device_preconditioner_module,
+        "probe_rhs1_qi_device_preconditioner",
+        _accepted_probe,
+    )
 
     result = solve_v3_full_system_linear_gmres(
         nml=nml,
@@ -4545,7 +4566,11 @@ def test_xblock_sparse_pc_qi_device_augmented_krylov_can_reuse_probe_seed_space(
 
     monkeypatch.setattr(v3_driver_module, "fgmres_solve_with_residual", _capturing_device_krylov_result)
     monkeypatch.setattr(v3_driver_module, "fgmres_solve_with_residual_jit", _capturing_device_krylov_result)
-    monkeypatch.setattr(v3_driver_module, "probe_rhs1_qi_device_augmented_seed", _accepted_augmented_seed)
+    monkeypatch.setattr(
+        rhs1_qi_device_preconditioner_module,
+        "probe_rhs1_qi_device_augmented_seed",
+        _accepted_augmented_seed,
+    )
 
     result = solve_v3_full_system_linear_gmres(
         nml=nml,
@@ -4623,7 +4648,11 @@ def test_xblock_sparse_pc_qi_device_multilevel_residual_equation_env_records_met
             metadata=state.metadata,
         )
 
-    monkeypatch.setattr(v3_driver_module, "probe_rhs1_qi_device_preconditioner", _accepted_probe)
+    monkeypatch.setattr(
+        rhs1_qi_device_preconditioner_module,
+        "probe_rhs1_qi_device_preconditioner",
+        _accepted_probe,
+    )
 
     result = solve_v3_full_system_linear_gmres(
         nml=nml,
@@ -4691,7 +4720,11 @@ def test_xblock_sparse_pc_qi_device_residual_snapshot_env_records_metadata(monke
             metadata=state.metadata,
         )
 
-    monkeypatch.setattr(v3_driver_module, "probe_rhs1_qi_device_preconditioner", _accepted_probe)
+    monkeypatch.setattr(
+        rhs1_qi_device_preconditioner_module,
+        "probe_rhs1_qi_device_preconditioner",
+        _accepted_probe,
+    )
 
     result = solve_v3_full_system_linear_gmres(
         nml=nml,
@@ -4765,7 +4798,11 @@ def test_xblock_sparse_pc_qi_device_block_schur_residual_equation_env_records_me
             metadata=state.metadata,
         )
 
-    monkeypatch.setattr(v3_driver_module, "probe_rhs1_qi_device_preconditioner", _accepted_probe)
+    monkeypatch.setattr(
+        rhs1_qi_device_preconditioner_module,
+        "probe_rhs1_qi_device_preconditioner",
+        _accepted_probe,
+    )
 
     result = solve_v3_full_system_linear_gmres(
         nml=nml,
@@ -4840,7 +4877,11 @@ def test_xblock_sparse_pc_qi_device_residual_snapshot_equation_env_records_metad
             metadata=state.metadata,
         )
 
-    monkeypatch.setattr(v3_driver_module, "probe_rhs1_qi_device_preconditioner", _accepted_probe)
+    monkeypatch.setattr(
+        rhs1_qi_device_preconditioner_module,
+        "probe_rhs1_qi_device_preconditioner",
+        _accepted_probe,
+    )
 
     result = solve_v3_full_system_linear_gmres(
         nml=nml,
@@ -4909,7 +4950,11 @@ def test_xblock_sparse_pc_qi_device_matrix_free_local_smoother_routing(monkeypat
             metadata=state.metadata,
         )
 
-    monkeypatch.setattr(v3_driver_module, "probe_rhs1_qi_device_preconditioner", _accepted_probe)
+    monkeypatch.setattr(
+        rhs1_qi_device_preconditioner_module,
+        "probe_rhs1_qi_device_preconditioner",
+        _accepted_probe,
+    )
 
     result = solve_v3_full_system_linear_gmres(
         nml=nml,
@@ -4969,7 +5014,11 @@ def test_xblock_sparse_pc_qi_device_matrix_free_block_smoother_routing(monkeypat
             metadata=state.metadata,
         )
 
-    monkeypatch.setattr(v3_driver_module, "probe_rhs1_qi_device_preconditioner", _accepted_probe)
+    monkeypatch.setattr(
+        rhs1_qi_device_preconditioner_module,
+        "probe_rhs1_qi_device_preconditioner",
+        _accepted_probe,
+    )
 
     result = solve_v3_full_system_linear_gmres(
         nml=nml,
@@ -5016,7 +5065,11 @@ def test_xblock_sparse_pc_qi_device_matrix_free_seed_runs_with_precondition_side
             metadata=state.metadata,
         )
 
-    monkeypatch.setattr(v3_driver_module, "probe_rhs1_qi_device_preconditioner", _accepted_probe)
+    monkeypatch.setattr(
+        rhs1_qi_device_preconditioner_module,
+        "probe_rhs1_qi_device_preconditioner",
+        _accepted_probe,
+    )
 
     result = solve_v3_full_system_linear_gmres(
         nml=nml,

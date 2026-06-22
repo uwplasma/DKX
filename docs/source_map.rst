@@ -654,9 +654,9 @@ the historical private driver name and test the focused module directly. This ke
   fail-closed reasons, and seed/device/deflated diagnostic scope out of
   ``v3_driver.py``. These helpers are separated from generic sparse-PC logic
   because they encode QI-specific coarse-basis and residual-space choices;
-  ``v3_driver.py`` now injects solve-local operators and compatibility probe
-  aliases rather than owning QI setup orchestration or constructing QI metadata
-  inline.
+  ``build_xblock_qi_stage_pipeline_context()`` owns production default-builder
+  wiring, so ``v3_driver.py`` now injects only solve-local arrays, operators,
+  timing, and active-DOF maps rather than importing each QI builder directly.
 - ``sfincs_jax/problems/profile_response/dense.py``:
   RHSMode=1/profile-response host dense solve helpers. This module owns the
   reduced row-scaled LU path and the full/reduced least-squares dense fallback
@@ -731,8 +731,7 @@ the historical private driver name and test the focused module directly. This ke
   by the true device-QI research lane. It also owns the operator-derived
   x-block QI coarse-basis padding, block-geometry metadata, global coarse-load
   direction builders, and smoothed-load QI basis construction that the
-  production driver used to build inline; ``v3_driver.py`` keeps those old
-  private names as compatibility aliases only.
+  production driver used to pass directly into the QI pipeline.
 - ``sfincs_jax/rhs1_qi_galerkin_policy.py``:
   fail-closed Galerkin candidate parsing and true-residual selection. The
   production driver only keeps an experimental QI coarse candidate when this

@@ -192,6 +192,7 @@ from sfincs_jax.problems.profile_response.sparse_pc import (
     build_xblock_krylov_progress_callbacks,
     build_xblock_krylov_matvec_setup,
     build_xblock_local_preconditioner,
+    build_xblock_qi_stage_pipeline_context,
     emit_xblock_sparse_pc_completion_from_driver_state,
     emit_xblock_sparse_pc_completion,
     emit_sparse_pc_gmres_completion_from_driver_state,
@@ -450,6 +451,7 @@ def test_sparse_qi_module_reexports_match_compat_layer() -> None:
         "apply_xblock_qi_device_stage",
         "apply_xblock_qi_galerkin_stage",
         "apply_xblock_qi_two_level_stage",
+        "build_xblock_qi_stage_pipeline_context",
         "build_xblock_qi_device_preconditioner_metadata",
         "build_xblock_qi_device_setup_config",
         "resolve_xblock_qi_deflated_policy_setup",
@@ -464,6 +466,50 @@ def test_sparse_qi_module_reexports_match_compat_layer() -> None:
     )
     for name in moved_names:
         assert getattr(sparse_pc_module, name) is getattr(sparse_qi_module, name)
+
+
+def test_xblock_qi_pipeline_context_factory_owns_default_builders() -> None:
+    """Production QI builder wiring belongs to the QI sparse domain module."""
+
+    def identity(x: jnp.ndarray) -> jnp.ndarray:
+        return x
+
+    context = build_xblock_qi_stage_pipeline_context(
+        op=object(),
+        rhs=jnp.zeros(1),
+        x0_full=None,
+        xblock_rhs=jnp.zeros(1),
+        xblock_rhs_norm=0.0,
+        base_preconditioner=identity,
+        matvec=identity,
+        true_matvec_no_count=identity,
+        direction_projector=None,
+        active_dof=False,
+        linear_size=1,
+        host_fallback_used=False,
+        precondition_side="left",
+        assembled_device_operator=None,
+        assembled_operator_metadata={},
+        assembled_operator_enabled=False,
+        assembled_operator_built=False,
+        assembled_operator_device_resident=False,
+        assembled_operator_device_error=None,
+        elapsed_s=lambda: 0.0,
+        emit=None,
+        env={},
+        reduce_full=None,
+    )
+
+    assert context.basis_builder.__module__ == "sfincs_jax.rhs1_qi_coarse"
+    assert context.device_setup_preconditioner.__module__ == (
+        "sfincs_jax.rhs1_qi_device_preconditioner"
+    )
+    assert context.deflated_preconditioner_builder.__module__ == (
+        "sfincs_jax.rhs1_qi_deflation"
+    )
+    assert context.parse_galerkin_modes.__module__ == (
+        "sfincs_jax.rhs1_qi_galerkin_policy"
+    )
 
 
 def test_sparse_direct_module_reexports_match_compat_layer() -> None:
