@@ -84,6 +84,10 @@ deferred research lanes.
   orchestrates when streaming is selected, while the output-domain module owns
   slice-wise HDF5 layout, flux variants, classical flux arrays, transport
   matrix, elapsed time, and solver-diagnostic datasets.
+- Output geometry-cache gates, stable cache paths, content-based equilibrium
+  identity, cache-key construction, and disk load/save moved from `io.py` into
+  `sfincs_jax.outputs.cache`. `io.py` now only injects its equilibrium resolver
+  into a thin compatibility wrapper for the cache-key helper.
 - RHSMode=1 x-block sparse-PC final metadata and payload assembly moved out of
   `v3_driver.py` into the profile-response sparse x-block handoff helpers. The
   driver now supplies solve-local scope plus the accepted physical solution,
@@ -208,6 +212,10 @@ deferred research lanes.
 - Transport output-schema split adds a direct test for residual diagnostics
   and preserves output/import contracts:
   `15 passed in 1.30s`.
+- Output geometry-cache extraction preserves cache gating, content identity,
+  cache roundtrip, VMEC/equilibrium cache-key behavior, legacy writer cache
+  aliases, and output-policy helpers:
+  `22 passed in 0.98s`.
 - `ruff` and `py_compile` pass on touched transport-parallel, finalization, and
   setup/QI files.
 - PR #8 remains draft. Check CI after the next meaningful push rather than
@@ -219,10 +227,11 @@ deferred research lanes.
   and compatibility surface.
 - `sfincs_jax/rhs1_full_assembly.py`: about 6.0k lines, now mostly RHSMode=1
   exact/active CSR assembly, admission, dispatch, and compatibility.
-- `sfincs_jax/io.py`: about 4.4k lines, still owns too much solved-field physics
+- `sfincs_jax/io.py`: about 4.3k lines, still owns too much solved-field physics
   schema and provenance materialization; RHSMode=1 output safety and solver
-  diagnostics now live in
-  `sfincs_jax.outputs.rhsmode1`.
+  diagnostics now live in `sfincs_jax.outputs.rhsmode1`, transport-output
+  helpers live in `sfincs_jax.outputs.transport`, and geometry-cache helpers
+  live in `sfincs_jax.outputs.cache`.
 - Package size: about 289 Python files and 160k package lines.
 - Largest remaining package clusters:
   `problems/transport_matrix`, `problems/profile_response`,
@@ -323,6 +332,9 @@ claim. They must stay documented, fail-closed, and gated.
    Move solved-field schema, diagnostics, timing, memory, and provenance
    contracts behind a small output contract. Keep file-format writers in
    `outputs.formats` and RHSMode=1 output-safety gates in `outputs.rhsmode1`.
+   The geometry-output cache family is now complete in `outputs.cache`; the
+   next output split should target solved-field/provenance schema assembly or
+   export-f mapping, not another cache helper.
 
 3. **Stabilize RHSMode=1 ownership**
    Stop broad RHSMode=1 churn unless a complete remaining family has a clear

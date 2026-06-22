@@ -13,30 +13,29 @@ from sfincs_jax.io import (
     _get_float,
     _get_int,
     _legendre_matrix,
-    _output_cache_dir,
-    _output_cache_path,
     _phi1_fast_explicit_gmres_restart_default,
     _select_phi1_newton_linear_solve_method,
     read_sfincs_h5,
     write_sfincs_h5,
 )
 from sfincs_jax.namelist import read_sfincs_input
+from sfincs_jax.outputs.cache import output_cache_dir, output_cache_path
 from sfincs_jax.v3 import geometry_from_namelist, grids_from_namelist
 
 
 def test_output_cache_dir_prefers_xdg_cache_home(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("SFINCS_JAX_OUTPUT_CACHE_DIR", raising=False)
     monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path / "xdg"))
-    cache_dir = _output_cache_dir()
+    cache_dir = output_cache_dir()
     assert cache_dir == tmp_path / "xdg" / "sfincs_jax" / "output_cache"
     assert cache_dir.is_dir()
 
 
 def test_output_cache_path_is_stable_and_key_sensitive(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("SFINCS_JAX_OUTPUT_CACHE_DIR", str(tmp_path / "cache"))
-    path1 = _output_cache_path(("a", 1))
-    path2 = _output_cache_path(("a", 1))
-    path3 = _output_cache_path(("a", 2))
+    path1 = output_cache_path(("a", 1))
+    path2 = output_cache_path(("a", 1))
+    path3 = output_cache_path(("a", 2))
     assert path1 == path2
     assert path1 != path3
     assert path1 is not None and path1.name.startswith("output_geom_")
