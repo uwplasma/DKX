@@ -628,9 +628,11 @@ the historical private driver name and test the focused module directly. This ke
   device/host Krylov control, optional augmented Krylov setup, GMRES fallback
   routing, work estimates, progress messages, physical-residual measurement,
   post-Krylov post-solve correction/completion orchestration, and final
-  x-block sparse-PC diagnostic metadata assembly. This module owns generic
-  x-block stage mechanics; QI-specific coarse-basis choices remain in
-  ``sparse/qi.py``.
+  x-block sparse-PC diagnostic metadata assembly. The driver-facing handoff
+  accepts the solve-local scope, filters it into typed finalization state, and
+  returns the final sparse-PC payload used by ``V3LinearSolveResult``. This
+  module owns generic x-block stage mechanics; QI-specific coarse-basis choices
+  remain in ``sparse/qi.py``.
 - ``sfincs_jax/problems/profile_response/sparse/fortran_reduced.py``:
   Fortran-reduced x-block backend policy, factor-build, Krylov setup/solve,
   optional moment/global coarse stages, and final payload construction.
