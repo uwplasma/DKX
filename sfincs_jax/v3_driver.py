@@ -3251,26 +3251,11 @@ def solve_v3_full_system_linear_gmres(
             qi_device_augmented_seed_action_for_krylov = (
                 qi_pipeline.qi_device_augmented_seed_action_for_krylov
             )
-            qi_device_augmented_seed_requested = (
-                qi_pipeline.qi_device_augmented_seed_requested
-            )
             qi_device_augmented_seed_available = (
                 qi_pipeline.qi_device_augmented_seed_available
             )
             qi_device_augmented_seed_used = qi_pipeline.qi_device_augmented_seed_used
             qi_device_augmented_seed_rank = qi_pipeline.qi_device_augmented_seed_rank
-            qi_device_augmented_seed_max_rank = (
-                qi_pipeline.qi_device_augmented_seed_max_rank
-            )
-            qi_device_augmented_seed_reason = (
-                qi_pipeline.qi_device_augmented_seed_reason
-            )
-            qi_device_augmented_seed_projection_residual = (
-                qi_pipeline.qi_device_augmented_seed_projection_residual
-            )
-            qi_device_augmented_seed_labels = (
-                qi_pipeline.qi_device_augmented_seed_labels
-            )
             qi_device_preconditioner_metadata = (
                 qi_pipeline.qi_device_preconditioner_metadata
             )

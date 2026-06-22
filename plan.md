@@ -81,6 +81,10 @@ deferred research lanes.
   driver now supplies solve-local scope plus the accepted physical solution,
   while `sfincs_jax.problems.profile_response.sparse_pc` owns the final
   diagnostic payload contract used by `V3LinearSolveResult`.
+- QI-specific code left in `v3_driver.py` was audited after the extraction.
+  The remaining references are live dependency-injection seams for the tested
+  QI pipeline and augmented-Krylov path; metadata-only relay locals made
+  obsolete by the sparse-PC finalization handoff were deleted.
 - Current next tranche is solved-field/output-schema consolidation inside
   `io.py` or one larger progress/timing/result handoff from `v3_driver.py`.
   The remaining QI code in `v3_driver.py` is active solve-local injection and
