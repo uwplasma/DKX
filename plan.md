@@ -76,6 +76,11 @@ deferred research lanes.
   sparse-PC timing/memory fields, direct-tail support-mode metadata, true
   coupled-coarse fields, and residual-target ratios, moved from `io.py` into
   `sfincs_jax.outputs.rhsmode1` without adding a new file.
+- RHSMode=1 x-block sparse-PC final metadata and payload assembly moved out of
+  `v3_driver.py` into the profile-response sparse x-block handoff helpers. The
+  driver now supplies solve-local scope plus the accepted physical solution,
+  while `sfincs_jax.problems.profile_response.sparse_pc` owns the final
+  diagnostic payload contract used by `V3LinearSolveResult`.
 - Current next tranche is solved-field/output-schema consolidation inside
   `io.py` or one larger progress/timing/result handoff from `v3_driver.py`.
   The remaining QI code in `v3_driver.py` is active solve-local injection and
@@ -136,6 +141,10 @@ deferred research lanes.
 - RHSMode=1 solver-diagnostics output-schema extraction preserves HDF5/export,
   RHSMode=1 write-output, Phi1 write-output, and state-recycle parity fields:
   `23 passed in 20.43s`.
+- RHSMode=1 x-block sparse-PC finalization handoff preserves the sparse-PC
+  result-contract tests and driver import boundaries:
+  `323 passed in 2.30s`; `ruff` passes on the touched driver and sparse-PC
+  tests.
 - `ruff` and `py_compile` pass on touched transport-parallel, finalization, and
   setup/QI files.
 - PR #8 remains draft. Check CI after the next meaningful push rather than
@@ -143,7 +152,7 @@ deferred research lanes.
 
 ### Current Code Shape
 
-- `sfincs_jax/v3_driver.py`: about 12.7k lines, still the largest orchestration
+- `sfincs_jax/v3_driver.py`: about 12.4k lines, still the largest orchestration
   and compatibility surface.
 - `sfincs_jax/rhs1_full_assembly.py`: about 7.9k lines, now mostly RHSMode=1
   exact/active CSR assembly, admission, dispatch, and compatibility.
