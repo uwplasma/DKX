@@ -552,7 +552,8 @@ accuracy, flux sign conventions, CPU/GPU agreement, or Fortran parity.
 
    This direct path writes per-evaluation ``sfincsOutput.h5`` files and solver
    traces, then summarizes the selected solver lane, residual, timing, active
-   size, and cache provenance in ``ambipolar_result.json``.
+   size, cache provenance, and shape-checked Krylov state reuse in
+   ``ambipolar_result.json``.
 
    Passing this audit means the specific completed scan has internally
    consistent promotion evidence.  It does not imply convergence with respect
