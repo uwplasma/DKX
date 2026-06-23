@@ -36,8 +36,11 @@ ACTIVE_PACKAGE_EXPORTS = {
         "AmbipolarIteration",
         "AmbipolarProblem",
         "AmbipolarResult",
+        "SfincsJaxEvaluationRecord",
+        "SfincsJaxRadialCurrentEvaluator",
         "brent_ambipolar_root",
         "solve_ambipolar_brent",
+        "solve_sfincs_jax_ambipolar_brent",
         "validate_fortran_v3_ambipolar_constraints",
     ),
     "sfincs_jax.solvers.preconditioners.pas": (
