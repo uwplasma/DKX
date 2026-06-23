@@ -39,6 +39,18 @@ New reference decks and probe summary for the ambipolar functionality live in
 behavior of `ambipolarSolveOption=1`, `2`, and `3` before the sfincs_jax
 implementation begins.
 
+Implementation progress on 2026-06-23:
+
+- `sfincs_jax.problems.ambipolar` now owns the first-class ambipolar problem,
+  iteration, and result contracts.
+- The Fortran-compatible Brent root path is implemented and tested against the
+  checked-in small and production Fortran v3 ambipolar summaries.
+- The source-code validator for Fortran-compatible ambipolar restrictions is
+  implemented for the reference decks and derivative-assisted option guards.
+- Remaining Lane 3 work is to connect the Brent evaluator to real in-process
+  sfincs_jax solves with setup reuse, then add `dJr/dEr` and the option 1/3
+  Newton paths.
+
 Important Fortran v3 implementation modules:
 
 | Module | Functionality to mirror or compare |
@@ -443,10 +455,12 @@ Acceptance gates:
   one W7-X-like analytic case, one VMEC QA case, and one QH case.
 - First reference reproduction target is the checked-in small probe set:
   `geometry4_w7x_like_small_option{1,2,3}` and
-  `geometry1_helical_small_option2`.
+  `geometry1_helical_small_option2`. The Brent option-2 sequence is now covered
+  by `tests/test_ambipolar_problem.py`.
 - Production reference target is the checked-in production decks under
   `benchmarks/fortran_v3_ambipolar_reference/namelists`, which must be run
-  before public benchmark claims are regenerated.
+  before public benchmark claims are regenerated. The checked-in production
+  Brent summary is now covered by `tests/test_ambipolar_problem.py`.
 - `dJr/dEr` matches finite differences on a stable step window.
 - Brent and Newton return the same root within tolerance when both are valid.
 - CPU/GPU roots and root types match within tolerance for bounded cases.
@@ -855,17 +869,16 @@ Deliverables:
 4. Re-run the checked-in Fortran v3 production decks before regenerating public
    performance claims, because the compact production probe did not capture RSS.
 5. Extract the public `api` contracts before moving more internals.
-6. Refactor ambipolar functionality into a canonical problem owner.
-7. Implement Brent in-solver ambipolar solve first, because it does not depend
-   on adjoint derivatives and provides a validation baseline.
-8. Implement `dJr/dEr` through implicit differentiation on a small RHSMode 1
+6. Connect the canonical ambipolar Brent owner to a real in-process sfincs_jax
+   RHSMode 1 evaluator that reuses setup across Er evaluations.
+7. Implement `dJr/dEr` through implicit differentiation on a small RHSMode 1
    case and compare against centered finite differences.
-9. Implement safeguarded Newton/bisection using that derivative.
-10. Define residual/operator/transpose operator protocol and migrate one
+8. Implement safeguarded Newton/bisection and pure Newton using that derivative.
+9. Define residual/operator/transpose operator protocol and migrate one
    RHSMode 2/3 path to it.
-11. Add one T3D/NEOPAX-style closure example with fixed geometry and radial
+10. Add one T3D/NEOPAX-style closure example with fixed geometry and radial
    profile inputs.
-12. Run focused tests, docs build, commit, and push after each coherent owner
+11. Run focused tests, docs build, commit, and push after each coherent owner
     boundary or feature milestone.
 
 ## Known Risks And Explicit Deferred Items
