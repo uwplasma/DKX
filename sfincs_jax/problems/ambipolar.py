@@ -9,8 +9,10 @@ solves.
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 import math
+import os
 from pathlib import Path
 from types import MappingProxyType
 from typing import Any
@@ -119,6 +121,20 @@ class SfincsJaxEvaluationRecord:
     input_path: Path
     output_path: Path
     solver_trace_path: Path | None = None
+    selected_path: str | None = None
+    solve_method: str | None = None
+    preconditioner: str | None = None
+    residual_norm: float | None = None
+    residual_target: float | None = None
+    converged: bool | None = None
+    setup_s: float | None = None
+    solve_s: float | None = None
+    elapsed_s: float | None = None
+    total_size: int | None = None
+    active_size: int | None = None
+    cache_enabled: bool = False
+    cache_dir: Path | None = None
+    metadata: Mapping[str, Any] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "er", float(self.er))
@@ -127,6 +143,44 @@ class SfincsJaxEvaluationRecord:
         object.__setattr__(self, "output_path", Path(self.output_path))
         if self.solver_trace_path is not None:
             object.__setattr__(self, "solver_trace_path", Path(self.solver_trace_path))
+        if self.cache_dir is not None:
+            object.__setattr__(self, "cache_dir", Path(self.cache_dir))
+        object.__setattr__(self, "metadata", _immutable_mapping(self.metadata))
+
+
+@dataclass(frozen=True, slots=True)
+class RadialCurrentDerivativeResult:
+    """Finite-difference derivative certificate for ``dJr/dEr``."""
+
+    er: float
+    derivative: float
+    step: float
+    scheme: str
+    evaluations: tuple[AmbipolarIteration, ...]
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "er", float(self.er))
+        object.__setattr__(self, "derivative", float(self.derivative))
+        object.__setattr__(self, "step", float(self.step))
+        object.__setattr__(self, "evaluations", tuple(self.evaluations))
+
+
+@contextmanager
+def _temporary_env(overrides: Mapping[str, str | None]):
+    previous = {key: os.environ.get(key) for key in overrides}
+    try:
+        for key, value in overrides.items():
+            if value is None:
+                os.environ.pop(key, None)
+            else:
+                os.environ[key] = str(value)
+        yield
+    finally:
+        for key, value in previous.items():
+            if value is None:
+                os.environ.pop(key, None)
+            else:
+                os.environ[key] = value
 
 
 class SfincsJaxRadialCurrentEvaluator:
@@ -148,6 +202,8 @@ class SfincsJaxRadialCurrentEvaluator:
         differentiable: bool = False,
         compute_solution: bool = True,
         overwrite: bool = True,
+        reuse_output_geometry_cache: bool = True,
+        cache_dir: str | Path | None = None,
         emit: Callable[[int, str], None] | None = None,
     ) -> None:
         self.input_namelist = Path(input_namelist).resolve()
@@ -157,6 +213,12 @@ class SfincsJaxRadialCurrentEvaluator:
         self.differentiable = bool(differentiable)
         self.compute_solution = bool(compute_solution)
         self.overwrite = bool(overwrite)
+        self.reuse_output_geometry_cache = bool(reuse_output_geometry_cache)
+        self.cache_dir = (
+            Path(cache_dir).resolve()
+            if cache_dir is not None
+            else self.work_dir / ".sfincs_jax_output_cache"
+        )
         self.emit = emit
         self.template_text = self.input_namelist.read_text()
         if variable is None:
@@ -171,6 +233,7 @@ class SfincsJaxRadialCurrentEvaluator:
         from ..ambipolar import radial_current_from_output  # noqa: PLC0415
         from ..io import localize_equilibrium_file_in_place, read_sfincs_h5, write_sfincs_jax_output_h5  # noqa: PLC0415
         from ..scans import _patch_scalar_in_group  # noqa: PLC0415
+        from ..solver_trace import read_solver_trace_json  # noqa: PLC0415
 
         index = len(self.records) + 1
         run_dir = self.work_dir / f"eval_{index:03d}_{self.variable}_{float(er):+.8e}".replace("+", "p").replace("-", "m")
@@ -187,18 +250,28 @@ class SfincsJaxRadialCurrentEvaluator:
         eval_input.write_text(patched)
         localize_equilibrium_file_in_place(input_namelist=eval_input, overwrite=False)
 
-        write_sfincs_jax_output_h5(
-            input_namelist=eval_input,
-            output_path=eval_output,
-            overwrite=self.overwrite,
-            compute_transport_matrix=False,
-            compute_solution=self.compute_solution,
-            solver_trace_path=solver_trace,
-            solve_method=self.solve_method,
-            differentiable=self.differentiable,
-            emit=self.emit,
-        )
+        cache_overrides: dict[str, str | None] = {}
+        if self.reuse_output_geometry_cache:
+            self.cache_dir.mkdir(parents=True, exist_ok=True)
+            cache_overrides = {
+                "SFINCS_JAX_OUTPUT_CACHE": "1",
+                "SFINCS_JAX_OUTPUT_CACHE_PERSIST": "1",
+                "SFINCS_JAX_OUTPUT_CACHE_DIR": str(self.cache_dir),
+            }
+        with _temporary_env(cache_overrides):
+            write_sfincs_jax_output_h5(
+                input_namelist=eval_input,
+                output_path=eval_output,
+                overwrite=self.overwrite,
+                compute_transport_matrix=False,
+                compute_solution=self.compute_solution,
+                solver_trace_path=solver_trace,
+                solve_method=self.solve_method,
+                differentiable=self.differentiable,
+                emit=self.emit,
+            )
         radial_current = radial_current_from_output(read_sfincs_h5(eval_output))
+        trace = read_solver_trace_json(solver_trace) if solver_trace.exists() else None
         self.records.append(
             SfincsJaxEvaluationRecord(
                 er=float(er),
@@ -206,6 +279,23 @@ class SfincsJaxRadialCurrentEvaluator:
                 input_path=eval_input,
                 output_path=eval_output,
                 solver_trace_path=solver_trace if solver_trace.exists() else None,
+                selected_path=None if trace is None else trace.selected_path,
+                solve_method=None if trace is None else trace.solve_method,
+                preconditioner=None if trace is None else trace.preconditioner,
+                residual_norm=None if trace is None else trace.residual_norm,
+                residual_target=None if trace is None else trace.residual_target,
+                converged=None if trace is None else trace.converged,
+                setup_s=None if trace is None else trace.setup_s,
+                solve_s=None if trace is None else trace.solve_s,
+                elapsed_s=None if trace is None else trace.elapsed_s,
+                total_size=None if trace is None else trace.total_size,
+                active_size=None if trace is None else trace.active_size,
+                cache_enabled=bool(self.reuse_output_geometry_cache),
+                cache_dir=self.cache_dir if self.reuse_output_geometry_cache else None,
+                metadata={
+                    "requested_solve_method": self.solve_method,
+                    **({} if trace is None else {"solver_trace_metadata": dict(trace.metadata)}),
+                },
             )
         )
         return float(radial_current)
@@ -380,6 +470,60 @@ def brent_ambipolar_root(
     )
 
 
+def finite_difference_radial_current_derivative(
+    evaluate_radial_current: RadialCurrentEvaluator,
+    *,
+    er: float,
+    step: float,
+    scheme: str = "centered",
+) -> RadialCurrentDerivativeResult:
+    """Estimate ``dJr/dEr`` with a controlled finite-difference stencil."""
+
+    h = float(step)
+    if h <= 0.0:
+        raise ValueError("step must be positive.")
+    scheme_norm = str(scheme).strip().lower()
+    evaluations: list[AmbipolarIteration] = []
+
+    def eval_one(value: float, stage: str) -> float:
+        current = float(evaluate_radial_current(float(value)))
+        evaluations.append(
+            AmbipolarIteration(
+                index=len(evaluations) + 1,
+                er=float(value),
+                radial_current=current,
+                stage=stage,
+            )
+        )
+        return current
+
+    if scheme_norm in {"centered", "central"}:
+        fp = eval_one(float(er) + h, "finite_difference_plus")
+        fm = eval_one(float(er) - h, "finite_difference_minus")
+        derivative = (fp - fm) / (2.0 * h)
+        scheme_out = "centered"
+    elif scheme_norm == "forward":
+        f0 = eval_one(float(er), "finite_difference_base")
+        fp = eval_one(float(er) + h, "finite_difference_plus")
+        derivative = (fp - f0) / h
+        scheme_out = "forward"
+    elif scheme_norm == "backward":
+        f0 = eval_one(float(er), "finite_difference_base")
+        fm = eval_one(float(er) - h, "finite_difference_minus")
+        derivative = (f0 - fm) / h
+        scheme_out = "backward"
+    else:
+        raise ValueError("scheme must be 'centered', 'forward', or 'backward'.")
+
+    return RadialCurrentDerivativeResult(
+        er=float(er),
+        derivative=float(derivative),
+        step=h,
+        scheme=scheme_out,
+        evaluations=tuple(evaluations),
+    )
+
+
 def solve_sfincs_jax_ambipolar_brent(
     *,
     input_namelist: str | Path,
@@ -392,6 +536,7 @@ def solve_sfincs_jax_ambipolar_brent(
     step_tolerance: float = 1.0e-8,
     solve_method: str = "auto",
     differentiable: bool = False,
+    reuse_output_geometry_cache: bool = True,
     emit: Callable[[int, str], None] | None = None,
 ) -> tuple[AmbipolarResult, SfincsJaxRadialCurrentEvaluator]:
     """Run a real sfincs_jax-backed Brent ambipolar solve in-process.
@@ -406,6 +551,7 @@ def solve_sfincs_jax_ambipolar_brent(
         work_dir=work_dir,
         solve_method=solve_method,
         differentiable=differentiable,
+        reuse_output_geometry_cache=reuse_output_geometry_cache,
         emit=emit,
     )
     result = brent_ambipolar_root(
@@ -493,9 +639,11 @@ __all__ = [
     "AmbipolarProblem",
     "AmbipolarResult",
     "RadialCurrentEvaluator",
+    "RadialCurrentDerivativeResult",
     "SfincsJaxEvaluationRecord",
     "SfincsJaxRadialCurrentEvaluator",
     "brent_ambipolar_root",
+    "finite_difference_radial_current_derivative",
     "solve_ambipolar_brent",
     "solve_sfincs_jax_ambipolar_brent",
     "validate_fortran_v3_ambipolar_constraints",

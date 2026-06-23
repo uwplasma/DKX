@@ -1416,6 +1416,27 @@ For job arrays, slice the scan values with ``--index`` and ``--stride``:
      --index ${SLURM_ARRAY_TASK_ID} \
      --stride 64
 
+Solving the ambipolar root directly
+-----------------------------------
+
+For ``RHSMode=1`` inputs, the ``ambipolar`` command evaluates radial-current
+outputs in process and applies a bracketed Brent solve:
+
+.. code-block:: bash
+
+   sfincs_jax ambipolar \
+     --input /path/to/input.namelist \
+     --out-dir /path/to/ambipolar_run \
+     --er-min -0.1 --er-max 0.1 --er-initial 0.0
+
+The output directory contains one subdirectory per :math:`E_r` evaluation,
+the corresponding ``sfincsOutput.h5`` files, solver-trace JSON sidecars, and
+``ambipolar_result.json``.  The summary records the selected solver path,
+preconditioner, residual norm, residual target, setup/solve/elapsed time,
+active size, and whether the scoped geometry/output cache was used.  The cache
+is enabled by default across evaluations with the same input shape; pass
+``--no-output-cache`` when debugging raw setup cost.
+
 Running upstream postprocessing scripts (utils/)
 ------------------------------------------------
 

@@ -13,6 +13,7 @@ from sfincs_jax.problems.ambipolar import (
     AmbipolarProblem,
     SfincsJaxRadialCurrentEvaluator,
     brent_ambipolar_root,
+    finite_difference_radial_current_derivative,
     solve_ambipolar_brent,
     validate_fortran_v3_ambipolar_constraints,
 )
@@ -191,6 +192,38 @@ def test_sfincs_jax_radial_current_evaluator_runs_real_tiny_rhs1_output(tmp_path
     assert record.output_path.exists()
     assert record.solver_trace_path is not None
     assert record.solver_trace_path.exists()
+    assert record.selected_path == "rhsmode1_solution"
+    assert record.solve_method is not None
+    assert record.metadata["requested_solve_method"] == "auto"
+    assert record.residual_norm is not None
+    assert record.residual_target is not None
+    assert record.elapsed_s is not None
+    assert record.total_size is not None
+    assert record.active_size is not None
+    assert record.cache_enabled is True
+    assert record.cache_dir is not None
+    assert record.cache_dir.exists()
     data = read_sfincs_h5(record.output_path)
     np.testing.assert_allclose(float(np.asarray(data["Er"]).reshape(())), 0.0, rtol=0.0, atol=0.0)
     np.testing.assert_allclose(radial_current, radial_current_from_output(data), rtol=0.0, atol=5.0e-12)
+
+
+def test_finite_difference_radial_current_derivative_matches_smooth_reference() -> None:
+    """Finite differences provide the baseline gate for the future implicit dJr/dEr path."""
+
+    def current(er: float) -> float:
+        return 2.5 * er**2 - 3.0 * er + 1.25
+
+    result = finite_difference_radial_current_derivative(
+        current,
+        er=0.75,
+        step=1.0e-5,
+        scheme="centered",
+    )
+
+    expected = 5.0 * 0.75 - 3.0
+    np.testing.assert_allclose(result.derivative, expected, rtol=1.0e-10, atol=1.0e-10)
+    assert result.scheme == "centered"
+    assert len(result.evaluations) == 2
+    assert result.evaluations[0].stage == "finite_difference_plus"
+    assert result.evaluations[1].stage == "finite_difference_minus"

@@ -546,6 +546,7 @@ def _cmd_ambipolar(args: argparse.Namespace) -> int:
         step_tolerance=float(args.step_tolerance),
         solve_method=str(args.solve_method),
         differentiable=False,
+        reuse_output_geometry_cache=not bool(getattr(args, "no_output_cache", False)),
         emit=lambda level, msg: _emit(msg, level=level, args=args),
     )
 
@@ -575,6 +576,19 @@ def _cmd_ambipolar(args: argparse.Namespace) -> int:
                 "input_path": str(item.input_path),
                 "output_path": str(item.output_path),
                 "solver_trace_path": None if item.solver_trace_path is None else str(item.solver_trace_path),
+                "selected_path": item.selected_path,
+                "solve_method": item.solve_method,
+                "preconditioner": item.preconditioner,
+                "residual_norm": item.residual_norm,
+                "residual_target": item.residual_target,
+                "converged": item.converged,
+                "setup_s": item.setup_s,
+                "solve_s": item.solve_s,
+                "elapsed_s": item.elapsed_s,
+                "total_size": item.total_size,
+                "active_size": item.active_size,
+                "cache_enabled": item.cache_enabled,
+                "cache_dir": None if item.cache_dir is None else str(item.cache_dir),
             }
             for item in evaluator.records
         ],
@@ -991,6 +1005,11 @@ def main(argv: list[str] | None = None) -> int:
         "--summary-json",
         default=None,
         help="Optional summary JSON path. Default: <out-dir>/ambipolar_result.json.",
+    )
+    p_ambi_direct.add_argument(
+        "--no-output-cache",
+        action="store_true",
+        help="Disable the per-run geometry/output cache used across Er evaluations.",
     )
     p_ambi_direct.set_defaults(func=_cmd_ambipolar)
 
