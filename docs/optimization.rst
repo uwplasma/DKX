@@ -540,6 +540,20 @@ accuracy, flux sign conventions, CPU/GPU agreement, or Fortran parity.
         --scan-dir runs/qa_candidate01/scan_cpu/r0p50 \
         --n-fine 1000
 
+   For ``RHSMode=1`` inputs where the root should be solved directly instead
+   of inferred from a precomputed scan, use the in-process Brent driver:
+
+   .. code-block:: bash
+
+      sfincs_jax ambipolar \
+        --input runs/qa_candidate01/input_r0p50.namelist \
+        --out-dir runs/qa_candidate01/ambipolar_cpu/r0p50 \
+        --er-min -3 --er-max 3 --er-initial 0
+
+   This direct path writes per-evaluation ``sfincsOutput.h5`` files and solver
+   traces, then summarizes the selected solver lane, residual, timing, active
+   size, and cache provenance in ``ambipolar_result.json``.
+
    Passing this audit means the specific completed scan has internally
    consistent promotion evidence.  It does not imply convergence with respect
    to kinetic resolution, radial grid choice, profile uncertainty, or optimizer
