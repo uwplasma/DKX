@@ -138,6 +138,7 @@ class SfincsJaxEvaluationRecord:
     solver_state_path: Path | None = None
     solver_state_input_exists: bool = False
     solver_state_output_exists: bool = False
+    fixed_shape_signature: tuple[int, ...] | None = None
     metadata: Mapping[str, Any] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
@@ -151,6 +152,12 @@ class SfincsJaxEvaluationRecord:
             object.__setattr__(self, "cache_dir", Path(self.cache_dir))
         if self.solver_state_path is not None:
             object.__setattr__(self, "solver_state_path", Path(self.solver_state_path))
+        if self.fixed_shape_signature is not None:
+            object.__setattr__(
+                self,
+                "fixed_shape_signature",
+                tuple(int(v) for v in self.fixed_shape_signature),
+            )
         object.__setattr__(self, "metadata", _immutable_mapping(self.metadata))
 
 
@@ -247,6 +254,7 @@ class SfincsJaxRadialCurrentEvaluator:
         from ..ambipolar import radial_current_from_output  # noqa: PLC0415
         from ..io import localize_equilibrium_file_in_place, read_sfincs_h5, write_sfincs_jax_output_h5  # noqa: PLC0415
         from ..scans import _patch_scalar_in_group  # noqa: PLC0415
+        from ..solver_state import read_krylov_state_signature  # noqa: PLC0415
         from ..solver_trace import read_solver_trace_json  # noqa: PLC0415
 
         index = len(self.records) + 1
@@ -295,6 +303,11 @@ class SfincsJaxRadialCurrentEvaluator:
         radial_current = radial_current_from_output(read_sfincs_h5(eval_output))
         trace = read_solver_trace_json(solver_trace) if solver_trace.exists() else None
         solver_state_output_exists = bool(self.reuse_solver_state and self.solver_state_path.exists())
+        fixed_shape_signature = (
+            read_krylov_state_signature(self.solver_state_path)
+            if self.reuse_solver_state and solver_state_output_exists
+            else None
+        )
         self.records.append(
             SfincsJaxEvaluationRecord(
                 er=float(er),
@@ -319,11 +332,13 @@ class SfincsJaxRadialCurrentEvaluator:
                 solver_state_path=self.solver_state_path if self.reuse_solver_state else None,
                 solver_state_input_exists=solver_state_input_exists,
                 solver_state_output_exists=solver_state_output_exists,
+                fixed_shape_signature=fixed_shape_signature,
                 metadata={
                     "requested_solve_method": self.solve_method,
                     "solver_state_reuse_enabled": bool(self.reuse_solver_state),
                     "solver_state_input_exists": solver_state_input_exists,
                     "solver_state_output_exists": solver_state_output_exists,
+                    "fixed_shape_signature": fixed_shape_signature,
                     **({} if trace is None else {"solver_trace_metadata": dict(trace.metadata)}),
                 },
             )

@@ -11,11 +11,22 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
+import hashlib
 from typing import Any
 
 import jax
 import jax.numpy as jnp
 import numpy as np
+
+
+_ACTIVE_FIELD_SPLIT_ORDERING_CACHE_MAX_SIZE = 64
+_ACTIVE_FIELD_SPLIT_ORDERING_CACHE: dict[tuple[object, ...], "RHS1ActiveFieldSplitOrdering"] = {}
+
+
+def clear_rhs1_active_field_split_ordering_cache() -> None:
+    """Clear cached RHSMode=1 symbolic active field-split orderings."""
+
+    _ACTIVE_FIELD_SPLIT_ORDERING_CACHE.clear()
 
 
 @dataclass(frozen=True)
@@ -287,6 +298,61 @@ class RHS1ActiveFieldSplitOrdering:
     kinetic_positions: np.ndarray
     phi1_positions: np.ndarray
     extra_positions: np.ndarray
+
+    @staticmethod
+    def cache_key(
+        layout: RHS1BlockLayout,
+        active_indices: Any | None = None,
+    ) -> tuple[object, ...]:
+        """Return a semantic fixed-shape key for active field-split ordering.
+
+        The key intentionally contains only layout and active-set information.
+        It must not depend on matrix values, electric field, profiles, or
+        geometry amplitudes because this cache stores symbolic index maps only.
+        """
+
+        if active_indices is None:
+            active_size = int(layout.total_size)
+            active_digest = "all"
+        else:
+            active = np.asarray(active_indices, dtype=np.int64).reshape((-1,))
+            active_size = int(active.size)
+            active_digest = hashlib.sha256(active.tobytes()).hexdigest()
+        return (
+            "rhs1_active_field_split_ordering_v1",
+            int(layout.n_species),
+            int(layout.n_x),
+            int(layout.n_xi),
+            int(layout.n_theta),
+            int(layout.n_zeta),
+            int(layout.phi1_size),
+            int(layout.extra_size),
+            int(layout.total_size),
+            int(layout.constraint_scheme),
+            int(bool(layout.include_phi1)),
+            int(bool(layout.include_phi1_in_kinetic)),
+            int(layout.rhs_mode),
+            active_size,
+            active_digest,
+        )
+
+    @classmethod
+    def cached_from_layout(
+        cls,
+        layout: RHS1BlockLayout,
+        active_indices: Any | None = None,
+    ) -> "RHS1ActiveFieldSplitOrdering":
+        """Build or reuse symbolic active-position maps for the same shape."""
+
+        key = cls.cache_key(layout, active_indices)
+        cached = _ACTIVE_FIELD_SPLIT_ORDERING_CACHE.get(key)
+        if cached is not None:
+            return cached
+        ordering = cls.from_layout(layout, active_indices)
+        if len(_ACTIVE_FIELD_SPLIT_ORDERING_CACHE) >= _ACTIVE_FIELD_SPLIT_ORDERING_CACHE_MAX_SIZE:
+            _ACTIVE_FIELD_SPLIT_ORDERING_CACHE.clear()
+        _ACTIVE_FIELD_SPLIT_ORDERING_CACHE[key] = ordering
+        return ordering
 
     @classmethod
     def from_layout(
@@ -1906,6 +1972,7 @@ __all__ = [
     "RHS1GroupedBlockDiagonalFactor",
     "RHS1KineticIndices",
     "RHS1UniformBlockDiagonalFactor",
+    "clear_rhs1_active_field_split_ordering_cache",
     "preflight_rhs1_block_jacobi_candidate",
     "preflight_rhs1_line_jacobi_candidate",
     "probe_rhs1_block_jacobi_preconditioner",

@@ -143,6 +143,7 @@ def test_cmd_ambipolar_summary_records_solver_state_reuse(monkeypatch: pytest.Mo
             solver_state_path=state_path,
             solver_state_input_exists=True,
             solver_state_output_exists=True,
+            fixed_shape_signature=(1, 12, 1, 2, 3, 4, 5, 1, 0, 0, 1),
         )
         return result, type("FakeEvaluator", (), {"records": [record]})()
 
@@ -179,6 +180,7 @@ def test_cmd_ambipolar_summary_records_solver_state_reuse(monkeypatch: pytest.Mo
     assert payload["evaluations"][0]["solver_state_input_exists"] is True
     assert payload["evaluations"][0]["solver_state_output_exists"] is True
     assert payload["evaluations"][0]["solver_state_path"] == str(state_path)
+    assert payload["evaluations"][0]["fixed_shape_signature"] == [1, 12, 1, 2, 3, 4, 5, 1, 0, 0, 1]
 
 
 def test_cmd_compare_h5_honors_tolerance_json(tmp_path: Path) -> None:

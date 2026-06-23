@@ -1981,7 +1981,7 @@ def _build_active_projected_coupled_kinetic_block_preconditioner(
             },
         )
     try:
-        ordering = RHS1ActiveFieldSplitOrdering.from_layout(layout, active_np)
+        ordering = RHS1ActiveFieldSplitOrdering.cached_from_layout(layout, active_np)
     except ValueError as exc:
         return RHS1StructuredFullCSRPreconditioner(
             operator=None,
@@ -3514,7 +3514,7 @@ def _build_active_projected_symbolic_coupled_schur_preconditioner(
             },
         )
     try:
-        ordering = RHS1ActiveFieldSplitOrdering.from_layout(layout, active_np)
+        ordering = RHS1ActiveFieldSplitOrdering.cached_from_layout(layout, active_np)
     except ValueError as exc:
         return RHS1StructuredFullCSRPreconditioner(
             operator=None,

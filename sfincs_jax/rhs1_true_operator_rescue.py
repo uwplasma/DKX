@@ -783,7 +783,7 @@ def _try_build_true_operator_active_block_lsq_preconditioner(
             )
         return None
     try:
-        ordering = RHS1ActiveFieldSplitOrdering.from_layout(layout, active_np)
+        ordering = RHS1ActiveFieldSplitOrdering.cached_from_layout(layout, active_np)
     except ValueError as exc:
         if emit is not None:
             emit(
@@ -1266,7 +1266,7 @@ def _try_build_true_operator_active_submatrix_preconditioner(
             )
         return None
     try:
-        ordering = RHS1ActiveFieldSplitOrdering.from_layout(layout, active_np)
+        ordering = RHS1ActiveFieldSplitOrdering.cached_from_layout(layout, active_np)
     except ValueError as exc:
         if emit is not None:
             emit(

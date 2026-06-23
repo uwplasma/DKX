@@ -55,9 +55,13 @@ Implementation progress on 2026-06-23:
   uses an ambipolar-local geometry/output cache across `E_r` evaluations, and
   carries a shape-checked Krylov state file for warm starts/recycled basis
   reuse between nearby electric-field solves.
+- RHSMode 1 active field-split symbolic orderings now use a package-level
+  semantic fixed-shape key, so structured CSR and true-operator rescue paths
+  can reuse active/full index maps across same-shape solves without reusing
+  stale `E_r`-dependent numerical matrices or factors.
 - A finite-difference `dJr/dEr` helper now provides the numerical derivative
   gate that implicit/adjoint derivatives must match.
-- Remaining Lane 3 work is deeper fixed-shape symbolic operator/factor and
+- Remaining Lane 3 work is deeper fixed-shape numerical operator/factor and
   preconditioner setup reuse behind that evaluator, then implicit/adjoint
   `dJr/dEr` and the option 1/3 Newton paths.
 
@@ -477,8 +481,9 @@ Acceptance gates:
 - Failed brackets write a useful partial artifact and do not claim success.
 - The sfincs_jax in-process ambipolar driver reports per-evaluation solver
   trace provenance and currently reuses geometry/output setup through a scoped
-  cache and shape-checked Krylov state through a private state file. The
-  remaining implementation gate is to avoid repeated symbolic operator and
+  cache, shape-checked Krylov state through a private state file, and symbolic
+  active field-split orderings through a fixed-shape key. The remaining
+  implementation gate is to avoid repeated numerical operator and
   factor/preconditioner setup when Er updates do not change the problem shape.
 
 ## Lane 4 - Adjoint Sensitivities And Differentiable Solves
@@ -881,9 +886,10 @@ Deliverables:
 4. Re-run the checked-in Fortran v3 production decks before regenerating public
    performance claims, because the compact production probe did not capture RSS.
 5. Extract the public `api` contracts before moving more internals.
-6. Add fixed-shape symbolic operator/preconditioner setup reuse behind the real
+6. Add fixed-shape numerical operator/preconditioner setup reuse behind the real
    in-process RHSMode 1 ambipolar evaluator. Geometry/output caching, Krylov
-   state reuse, and trace provenance are already in place.
+   state reuse, symbolic field-split ordering reuse, and trace provenance are
+   already in place.
 7. Implement `dJr/dEr` through implicit differentiation on a small RHSMode 1
    case and compare against centered finite differences.
 8. Implement safeguarded Newton/bisection and pure Newton using that derivative.

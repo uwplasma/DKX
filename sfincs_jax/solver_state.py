@@ -7,23 +7,74 @@ import numpy as np
 import jax.numpy as jnp
 
 
+OPERATOR_SHAPE_SIGNATURE_FIELDS = (
+    "rhs_mode",
+    "total_size",
+    "n_species",
+    "n_x",
+    "n_xi",
+    "n_theta",
+    "n_zeta",
+    "constraint_scheme",
+    "include_phi1",
+    "include_phi1_in_kinetic",
+    "quasineutrality_option",
+)
+
+
+def operator_shape_signature(op) -> tuple[int, ...]:
+    """Return the semantic fixed-shape signature for reusable solve state.
+
+    This signature deliberately excludes electric-field values, profile
+    amplitudes, geometry values, and matrix entries.  It is a compatibility key
+    for warm starts and symbolic setup reuse, not a key for reusing numerical
+    matrices or factors.
+    """
+
+    return (
+        int(op.rhs_mode),
+        int(op.total_size),
+        int(op.n_species),
+        int(op.n_x),
+        int(op.n_xi),
+        int(op.n_theta),
+        int(op.n_zeta),
+        int(op.constraint_scheme),
+        int(bool(op.include_phi1)),
+        int(bool(op.include_phi1_in_kinetic)),
+        int(op.quasineutrality_option),
+    )
+
+
+def operator_shape_signature_dict(op) -> dict[str, int]:
+    """Return the shape signature as a JSON-friendly dictionary."""
+
+    return dict(zip(OPERATOR_SHAPE_SIGNATURE_FIELDS, operator_shape_signature(op), strict=True))
+
+
 def _op_signature(op) -> np.ndarray:
+    """Backward-compatible ndarray view of :func:`operator_shape_signature`."""
+
     return np.asarray(
-        [
-            int(op.rhs_mode),
-            int(op.total_size),
-            int(op.n_species),
-            int(op.n_x),
-            int(op.n_xi),
-            int(op.n_theta),
-            int(op.n_zeta),
-            int(op.constraint_scheme),
-            int(bool(op.include_phi1)),
-            int(bool(op.include_phi1_in_kinetic)),
-            int(op.quasineutrality_option),
-        ],
+        operator_shape_signature(op),
         dtype=np.int64,
     )
+
+
+def read_krylov_state_signature(path: str | Path) -> tuple[int, ...] | None:
+    """Read only the fixed-shape signature from a saved Krylov state file."""
+
+    path = Path(path)
+    if not path.exists():
+        return None
+    try:
+        data = np.load(path, allow_pickle=False)
+        sig = np.asarray(data["signature"], dtype=np.int64).reshape((-1,))
+    except Exception:
+        return None
+    if sig.size != len(OPERATOR_SHAPE_SIGNATURE_FIELDS):
+        return None
+    return tuple(int(v) for v in sig)
 
 
 def save_krylov_state(
@@ -38,6 +89,7 @@ def save_krylov_state(
     path.parent.mkdir(parents=True, exist_ok=True)
     payload: dict[str, Any] = {
         "signature": _op_signature(op),
+        "signature_fields": np.asarray(OPERATOR_SHAPE_SIGNATURE_FIELDS, dtype="U32"),
     }
     if x_full is not None:
         payload["x_full"] = np.asarray(x_full, dtype=np.float64)

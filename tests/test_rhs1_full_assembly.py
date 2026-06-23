@@ -32,7 +32,11 @@ from sfincs_jax.rhs1_full_assembly import (
     select_structured_rhs1_full_csr_operator,
     solve_structured_rhs1_full_csr,
 )
-from sfincs_jax.rhs1_block_operator import RHS1BlockLayout
+from sfincs_jax.rhs1_block_operator import (
+    RHS1ActiveFieldSplitOrdering,
+    RHS1BlockLayout,
+    clear_rhs1_active_field_split_ordering_cache,
+)
 from sfincs_jax.rhs1_full_csr_kinetic_pc import rhs1_full_csr_x_ell_block_indices
 from sfincs_jax.v3_system import apply_v3_full_system_operator, full_system_operator_from_namelist, rhs_v3_full_system
 
@@ -43,6 +47,37 @@ REF = Path(__file__).parent / "ref"
 def _deterministic_vector(size: int) -> np.ndarray:
     idx = np.arange(int(size), dtype=np.float64)
     return np.sin(0.17 * idx) + 0.25 * np.cos(0.31 * idx)
+
+
+def test_active_field_split_ordering_cache_reuses_symbolic_shape_only() -> None:
+    clear_rhs1_active_field_split_ordering_cache()
+    layout = RHS1BlockLayout(
+        n_species=1,
+        n_x=2,
+        n_xi=3,
+        n_theta=4,
+        n_zeta=5,
+        f_size=120,
+        phi1_size=20,
+        extra_size=3,
+        total_size=143,
+        constraint_scheme=1,
+        include_phi1=True,
+        include_phi1_in_kinetic=False,
+        rhs_mode=1,
+    )
+    active = np.asarray([0, 1, 4, 7, layout.f_size, layout.f_size + 1, layout.total_size - 1], dtype=np.int64)
+
+    first = RHS1ActiveFieldSplitOrdering.cached_from_layout(layout, active)
+    second = RHS1ActiveFieldSplitOrdering.cached_from_layout(layout, active.copy())
+    changed = RHS1ActiveFieldSplitOrdering.cached_from_layout(layout, active[:-1])
+
+    assert second is first
+    assert changed is not first
+    assert first.cache_key(layout, active) == second.cache_key(layout, active.copy())
+    assert first.to_dict()["kinetic_size"] == 4
+    assert first.to_dict()["phi1_size"] == 2
+    assert first.to_dict()["extra_size"] == 1
 
 
 def test_active_preconditioner_auto_policy_keeps_small_default_ladder() -> None:

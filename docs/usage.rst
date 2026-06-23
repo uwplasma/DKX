@@ -1438,7 +1438,10 @@ is enabled by default across evaluations with the same input shape; pass
 ``--no-output-cache`` when debugging raw setup cost.  The direct driver also
 keeps a private, shape-checked Krylov state file across evaluations so nearby
 electric-field solves can warm start and recycle a small basis.  Pass
-``--no-solver-state`` when comparing against completely cold solves.
+``--no-solver-state`` when comparing against completely cold solves.  The same
+fixed-shape signature is used internally for symbolic RHSMode=1 field-split
+ordering caches; numerical matrices and factors are still rebuilt unless a
+solver path explicitly proves they are safe to reuse.
 
 Running upstream postprocessing scripts (utils/)
 ------------------------------------------------
