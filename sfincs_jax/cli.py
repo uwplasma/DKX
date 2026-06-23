@@ -547,6 +547,7 @@ def _cmd_ambipolar(args: argparse.Namespace) -> int:
         solve_method=str(args.solve_method),
         differentiable=False,
         reuse_output_geometry_cache=not bool(getattr(args, "no_output_cache", False)),
+        reuse_solver_state=not bool(getattr(args, "no_solver_state", False)),
         emit=lambda level, msg: _emit(msg, level=level, args=args),
     )
 
@@ -589,6 +590,10 @@ def _cmd_ambipolar(args: argparse.Namespace) -> int:
                 "active_size": item.active_size,
                 "cache_enabled": item.cache_enabled,
                 "cache_dir": None if item.cache_dir is None else str(item.cache_dir),
+                "solver_state_reuse_enabled": item.solver_state_reuse_enabled,
+                "solver_state_path": None if item.solver_state_path is None else str(item.solver_state_path),
+                "solver_state_input_exists": item.solver_state_input_exists,
+                "solver_state_output_exists": item.solver_state_output_exists,
             }
             for item in evaluator.records
         ],
@@ -1010,6 +1015,11 @@ def main(argv: list[str] | None = None) -> int:
         "--no-output-cache",
         action="store_true",
         help="Disable the per-run geometry/output cache used across Er evaluations.",
+    )
+    p_ambi_direct.add_argument(
+        "--no-solver-state",
+        action="store_true",
+        help="Disable shape-checked Krylov state reuse across Er evaluations.",
     )
     p_ambi_direct.set_defaults(func=_cmd_ambipolar)
 

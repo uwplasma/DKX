@@ -203,9 +203,23 @@ def test_sfincs_jax_radial_current_evaluator_runs_real_tiny_rhs1_output(tmp_path
     assert record.cache_enabled is True
     assert record.cache_dir is not None
     assert record.cache_dir.exists()
+    assert record.solver_state_reuse_enabled is True
+    assert record.solver_state_path is not None
+    assert record.solver_state_input_exists is False
+    assert record.solver_state_output_exists is True
+    assert record.solver_state_path.exists()
     data = read_sfincs_h5(record.output_path)
     np.testing.assert_allclose(float(np.asarray(data["Er"]).reshape(())), 0.0, rtol=0.0, atol=0.0)
     np.testing.assert_allclose(radial_current, radial_current_from_output(data), rtol=0.0, atol=5.0e-12)
+
+    repeated_radial_current = evaluator(0.0)
+    assert len(evaluator.records) == 2
+    repeated = evaluator.records[1]
+    assert repeated.solver_state_reuse_enabled is True
+    assert repeated.solver_state_input_exists is True
+    assert repeated.solver_state_output_exists is True
+    assert repeated.solver_state_path == record.solver_state_path
+    np.testing.assert_allclose(repeated_radial_current, radial_current, rtol=0.0, atol=5.0e-12)
 
 
 def test_finite_difference_radial_current_derivative_matches_smooth_reference() -> None:

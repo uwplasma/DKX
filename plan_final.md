@@ -51,13 +51,15 @@ Implementation progress on 2026-06-23:
   in-process `write_sfincs_jax_output_h5` calls, records per-evaluation
   artifacts, and is exposed through `sfincs_jax ambipolar`.
 - Each real ambipolar evaluation now records solver-trace provenance
-  (selected path, residual, target, setup/solve/elapsed time, active size) and
-  uses an ambipolar-local geometry/output cache across `E_r` evaluations.
+  (selected path, residual, target, setup/solve/elapsed time, active size),
+  uses an ambipolar-local geometry/output cache across `E_r` evaluations, and
+  carries a shape-checked Krylov state file for warm starts/recycled basis
+  reuse between nearby electric-field solves.
 - A finite-difference `dJr/dEr` helper now provides the numerical derivative
   gate that implicit/adjoint derivatives must match.
-- Remaining Lane 3 work is deeper fixed-shape operator/preconditioner reuse
-  behind that evaluator, then implicit/adjoint `dJr/dEr` and the option 1/3
-  Newton paths.
+- Remaining Lane 3 work is deeper fixed-shape symbolic operator/factor and
+  preconditioner setup reuse behind that evaluator, then implicit/adjoint
+  `dJr/dEr` and the option 1/3 Newton paths.
 
 Important Fortran v3 implementation modules:
 
@@ -475,7 +477,8 @@ Acceptance gates:
 - Failed brackets write a useful partial artifact and do not claim success.
 - The sfincs_jax in-process ambipolar driver reports per-evaluation solver
   trace provenance and currently reuses geometry/output setup through a scoped
-  cache. The remaining implementation gate is to avoid repeated operator and
+  cache and shape-checked Krylov state through a private state file. The
+  remaining implementation gate is to avoid repeated symbolic operator and
   factor/preconditioner setup when Er updates do not change the problem shape.
 
 ## Lane 4 - Adjoint Sensitivities And Differentiable Solves
@@ -878,9 +881,9 @@ Deliverables:
 4. Re-run the checked-in Fortran v3 production decks before regenerating public
    performance claims, because the compact production probe did not capture RSS.
 5. Extract the public `api` contracts before moving more internals.
-6. Add fixed-shape operator/preconditioner setup reuse behind the real
-   in-process RHSMode 1 ambipolar evaluator. Geometry/output caching and trace
-   provenance are already in place.
+6. Add fixed-shape symbolic operator/preconditioner setup reuse behind the real
+   in-process RHSMode 1 ambipolar evaluator. Geometry/output caching, Krylov
+   state reuse, and trace provenance are already in place.
 7. Implement `dJr/dEr` through implicit differentiation on a small RHSMode 1
    case and compare against centered finite differences.
 8. Implement safeguarded Newton/bisection and pure Newton using that derivative.

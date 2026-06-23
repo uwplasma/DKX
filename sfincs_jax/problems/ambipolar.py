@@ -134,6 +134,10 @@ class SfincsJaxEvaluationRecord:
     active_size: int | None = None
     cache_enabled: bool = False
     cache_dir: Path | None = None
+    solver_state_reuse_enabled: bool = False
+    solver_state_path: Path | None = None
+    solver_state_input_exists: bool = False
+    solver_state_output_exists: bool = False
     metadata: Mapping[str, Any] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
@@ -145,6 +149,8 @@ class SfincsJaxEvaluationRecord:
             object.__setattr__(self, "solver_trace_path", Path(self.solver_trace_path))
         if self.cache_dir is not None:
             object.__setattr__(self, "cache_dir", Path(self.cache_dir))
+        if self.solver_state_path is not None:
+            object.__setattr__(self, "solver_state_path", Path(self.solver_state_path))
         object.__setattr__(self, "metadata", _immutable_mapping(self.metadata))
 
 
@@ -204,6 +210,8 @@ class SfincsJaxRadialCurrentEvaluator:
         overwrite: bool = True,
         reuse_output_geometry_cache: bool = True,
         cache_dir: str | Path | None = None,
+        reuse_solver_state: bool = True,
+        solver_state_path: str | Path | None = None,
         emit: Callable[[int, str], None] | None = None,
     ) -> None:
         self.input_namelist = Path(input_namelist).resolve()
@@ -218,6 +226,12 @@ class SfincsJaxRadialCurrentEvaluator:
             Path(cache_dir).resolve()
             if cache_dir is not None
             else self.work_dir / ".sfincs_jax_output_cache"
+        )
+        self.reuse_solver_state = bool(reuse_solver_state)
+        self.solver_state_path = (
+            Path(solver_state_path).resolve()
+            if solver_state_path is not None
+            else self.work_dir / ".sfincs_jax_solver_state" / "rhsmode1_state.npz"
         )
         self.emit = emit
         self.template_text = self.input_namelist.read_text()
@@ -250,15 +264,23 @@ class SfincsJaxRadialCurrentEvaluator:
         eval_input.write_text(patched)
         localize_equilibrium_file_in_place(input_namelist=eval_input, overwrite=False)
 
-        cache_overrides: dict[str, str | None] = {}
+        env_overrides: dict[str, str | None] = {}
         if self.reuse_output_geometry_cache:
             self.cache_dir.mkdir(parents=True, exist_ok=True)
-            cache_overrides = {
-                "SFINCS_JAX_OUTPUT_CACHE": "1",
-                "SFINCS_JAX_OUTPUT_CACHE_PERSIST": "1",
-                "SFINCS_JAX_OUTPUT_CACHE_DIR": str(self.cache_dir),
-            }
-        with _temporary_env(cache_overrides):
+            env_overrides.update(
+                {
+                    "SFINCS_JAX_OUTPUT_CACHE": "1",
+                    "SFINCS_JAX_OUTPUT_CACHE_PERSIST": "1",
+                    "SFINCS_JAX_OUTPUT_CACHE_DIR": str(self.cache_dir),
+                }
+            )
+        solver_state_input_exists = bool(self.reuse_solver_state and self.solver_state_path.exists())
+        if self.reuse_solver_state:
+            self.solver_state_path.parent.mkdir(parents=True, exist_ok=True)
+            env_overrides["SFINCS_JAX_STATE_OUT"] = str(self.solver_state_path)
+            if solver_state_input_exists:
+                env_overrides["SFINCS_JAX_STATE_IN"] = str(self.solver_state_path)
+        with _temporary_env(env_overrides):
             write_sfincs_jax_output_h5(
                 input_namelist=eval_input,
                 output_path=eval_output,
@@ -272,6 +294,7 @@ class SfincsJaxRadialCurrentEvaluator:
             )
         radial_current = radial_current_from_output(read_sfincs_h5(eval_output))
         trace = read_solver_trace_json(solver_trace) if solver_trace.exists() else None
+        solver_state_output_exists = bool(self.reuse_solver_state and self.solver_state_path.exists())
         self.records.append(
             SfincsJaxEvaluationRecord(
                 er=float(er),
@@ -292,8 +315,15 @@ class SfincsJaxRadialCurrentEvaluator:
                 active_size=None if trace is None else trace.active_size,
                 cache_enabled=bool(self.reuse_output_geometry_cache),
                 cache_dir=self.cache_dir if self.reuse_output_geometry_cache else None,
+                solver_state_reuse_enabled=bool(self.reuse_solver_state),
+                solver_state_path=self.solver_state_path if self.reuse_solver_state else None,
+                solver_state_input_exists=solver_state_input_exists,
+                solver_state_output_exists=solver_state_output_exists,
                 metadata={
                     "requested_solve_method": self.solve_method,
+                    "solver_state_reuse_enabled": bool(self.reuse_solver_state),
+                    "solver_state_input_exists": solver_state_input_exists,
+                    "solver_state_output_exists": solver_state_output_exists,
                     **({} if trace is None else {"solver_trace_metadata": dict(trace.metadata)}),
                 },
             )
@@ -537,6 +567,7 @@ def solve_sfincs_jax_ambipolar_brent(
     solve_method: str = "auto",
     differentiable: bool = False,
     reuse_output_geometry_cache: bool = True,
+    reuse_solver_state: bool = True,
     emit: Callable[[int, str], None] | None = None,
 ) -> tuple[AmbipolarResult, SfincsJaxRadialCurrentEvaluator]:
     """Run a real sfincs_jax-backed Brent ambipolar solve in-process.
@@ -552,6 +583,7 @@ def solve_sfincs_jax_ambipolar_brent(
         solve_method=solve_method,
         differentiable=differentiable,
         reuse_output_geometry_cache=reuse_output_geometry_cache,
+        reuse_solver_state=reuse_solver_state,
         emit=emit,
     )
     result = brent_ambipolar_root(

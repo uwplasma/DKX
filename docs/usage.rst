@@ -1435,7 +1435,10 @@ the corresponding ``sfincsOutput.h5`` files, solver-trace JSON sidecars, and
 preconditioner, residual norm, residual target, setup/solve/elapsed time,
 active size, and whether the scoped geometry/output cache was used.  The cache
 is enabled by default across evaluations with the same input shape; pass
-``--no-output-cache`` when debugging raw setup cost.
+``--no-output-cache`` when debugging raw setup cost.  The direct driver also
+keeps a private, shape-checked Krylov state file across evaluations so nearby
+electric-field solves can warm start and recycle a small basis.  Pass
+``--no-solver-state`` when comparing against completely cold solves.
 
 Running upstream postprocessing scripts (utils/)
 ------------------------------------------------
