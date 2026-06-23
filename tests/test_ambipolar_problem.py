@@ -11,6 +11,7 @@ from sfincs_jax.io import read_sfincs_h5
 from sfincs_jax.namelist import read_sfincs_input
 from sfincs_jax.problems.ambipolar import (
     AmbipolarProblem,
+    RadialCurrentDerivativeResult,
     SfincsJaxRadialCurrentEvaluator,
     brent_ambipolar_root,
     finite_difference_radial_current_derivative,
@@ -35,6 +36,11 @@ def _summary_case(summary_name: str, case_name: str) -> dict:
     raise AssertionError(f"Missing reference case {case_name}")
 
 
+def _profile_case(summary_name: str, case_name: str) -> dict:
+    case = _summary_case(summary_name, case_name)
+    return case["parsed"]
+
+
 def _table_evaluator(case: dict, *, atol: float = 1.0e-9):
     er_values = [float(v) for v in case["er_values"]]
     currents = [float(v) for v in case["radial_currents"]]
@@ -48,6 +54,37 @@ def _table_evaluator(case: dict, *, atol: float = 1.0e-9):
         raise AssertionError(f"Unexpected Er evaluation {er}; known values are {er_values}")
 
     return evaluate, calls
+
+
+def _nonzero_reference_pairs(case: dict) -> tuple[list[float], list[float]]:
+    pairs = [
+        (float(er), float(current))
+        for er, current in zip(case["er_values"], case["radial_currents"], strict=True)
+        if float(er) != 0.0 or float(current) != 0.0
+    ]
+    return [er for er, _ in pairs], [current for _, current in pairs]
+
+
+def _newton_derivative_replay_provider(er_values: list[float], currents: list[float]):
+    derivatives = {
+        er: current / (er - er_next)
+        for er, er_next, current in zip(er_values[:-1], er_values[1:], currents[:-1], strict=True)
+    }
+
+    def derivative(er: float) -> RadialCurrentDerivativeResult:
+        for er_known, value in derivatives.items():
+            if math.isclose(float(er), er_known, rel_tol=0.0, abs_tol=1.0e-10):
+                return RadialCurrentDerivativeResult(
+                    er=float(er),
+                    derivative=float(value),
+                    step=0.0,
+                    scheme="fortran_sequence_replay",
+                    evaluations=(),
+                    metadata={"reference_er": float(er_known)},
+                )
+        raise AssertionError(f"Unexpected derivative evaluation {er}; known values are {sorted(derivatives)}")
+
+    return derivative
 
 
 def test_brent_matches_fortran_v3_small_w7x_early_stop() -> None:
@@ -129,6 +166,57 @@ def test_brent_replays_fortran_v3_production_w7x_sequence() -> None:
     np.testing.assert_allclose(result.root_er, -3.5773320425472463, rtol=0.0, atol=2.0e-10)
     np.testing.assert_allclose(result.root_radial_current, 2.206662531726209e-12, rtol=0.0, atol=1.0e-18)
     np.testing.assert_allclose(calls, case["er_values"], rtol=0.0, atol=2.0e-10)
+
+
+def test_new_profile_summary_replays_geometry1_pure_newton_sequence() -> None:
+    """The new helical option-3 profile pins the derivative-assisted Newton owner."""
+
+    case = _profile_case("small_profile_summary_2026-06-23.json", "geometry1_helical_small_option3")
+    er_values, currents = _nonzero_reference_pairs(case)
+    evaluate, calls = _table_evaluator({"er_values": er_values, "radial_currents": currents}, atol=1.0e-10)
+
+    result = newton_ambipolar_root(
+        evaluate,
+        _newton_derivative_replay_provider(er_values, currents),
+        er_min=-20.0,
+        er_max=20.0,
+        er_initial=0.0,
+        max_evaluations=8,
+        current_tolerance=1.0e-7,
+        step_tolerance=1.0e-6,
+    )
+
+    assert result.converged
+    assert result.method == "newton"
+    np.testing.assert_allclose(result.er_values, er_values, rtol=0.0, atol=1.0e-10)
+    np.testing.assert_allclose(result.radial_currents, currents, rtol=0.0, atol=1.0e-18)
+    np.testing.assert_allclose(calls, er_values, rtol=0.0, atol=1.0e-10)
+
+
+def test_new_profile_summaries_preserve_solver_counts_and_marker_residual_split() -> None:
+    """Reference summaries distinguish physical residuals from Fortran success markers."""
+
+    small = json.loads((REFERENCE_ROOT / "small_profile_summary_2026-06-23.json").read_text())
+    production = json.loads((REFERENCE_ROOT / "production_profile_summary_2026-06-23.json").read_text())
+
+    assert len(small["cases"]) == 6
+    assert len(production["cases"]) == 6
+    for payload in (small, production):
+        for case in payload["cases"]:
+            parsed = case["parsed"]
+            assert parsed["solver_packages"] == ["mumps"]
+            assert parsed["petsc_profile_markers"]["ksp_view"] is True
+            assert parsed["max_rss_bytes"] is not None
+            assert max(parsed["jacobian_nnz"] or [0]) > 0
+
+    helical_brent = _profile_case(
+        "production_profile_summary_2026-06-23.json",
+        "geometry1_helical_production_option2",
+    )
+    nonzero_currents = [abs(float(v)) for v in helical_brent["radial_currents"] if float(v) != 0.0]
+    assert min(nonzero_currents) < 1.0e-10
+    assert helical_brent["success_markers"]["brent_successful"] is False
+    assert helical_brent["success_markers"]["goodbye"] is False
 
 
 def test_brent_failure_returns_nonconverged_unbracketed_certificate() -> None:

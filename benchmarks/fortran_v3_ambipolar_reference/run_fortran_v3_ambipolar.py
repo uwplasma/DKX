@@ -53,6 +53,8 @@ def parse_fortran_log(path: Path) -> dict[str, object]:
     wall_match = re.search(r"^real\s+([-+0-9.Ee]+)", text, flags=re.MULTILINE)
     rss_match = re.search(r"^\s*(\d+)\s+maximum resident set size", text, flags=re.MULTILINE)
     ambi_match = re.search(r"Time for ambipolar solve:\s*([-+0-9.EeDd]+)", text)
+    matrix_sizes = [int(v) for v in re.findall(r"matrixSize:\s*(\d+)", text)]
+    ksp_reasons = re.findall(r"Linear solve converged due to\s+([A-Z_]+)", text)
     return {
         "success_markers": {
             "brent_successful": "Brent algorithm successful." in text,
@@ -66,16 +68,23 @@ def parse_fortran_log(path: Path) -> dict[str, object]:
         "internal_ambipolar_time_s": None if ambi_match is None else float(ambi_match.group(1).replace("D", "E")),
         "wall_time_s": None if wall_match is None else float(wall_match.group(1)),
         "max_rss_bytes": None if rss_match is None else int(rss_match.group(1)),
+        "matrix_sizes": matrix_sizes,
         "main_solve_times_s": solve_times,
         "adjoint_solve_times_s": adjoint_times,
         "jacobian_nnz": jac_nnz,
         "preconditioner_nnz": pmat_nnz,
+        "ksp_convergence_reasons": sorted(set(ksp_reasons)),
         "max_ksp_iteration_index": max(residual_iters) if residual_iters else None,
         "mumps_jobs": {
             "analysis": text.count("JOB, N, NNZ =   1"),
             "factor": text.count("JOB, N, NNZ =   2"),
             "solve": text.count("JOB, N, NNZ =   3"),
             "destroy": text.count("JOB =  -2"),
+        },
+        "petsc_profile_markers": {
+            "log_view": "Event                Count" in text or "Summary of Stages" in text,
+            "ksp_view": "KSP Object:" in text,
+            "pc_view": "PC Object:" in text,
         },
     }
 
@@ -122,6 +131,7 @@ def run_case(*, namelist: Path, executable: Path, scratch: Path, timeout_s: floa
         "case": namelist.stem,
         "namelist": str(namelist.relative_to(REPO_ROOT)),
         "scratch_dir": str(case_dir),
+        "log_path": str(log_path),
         "return_code": return_code,
         "timed_out": timed_out,
         "elapsed_wall_s": elapsed,
@@ -142,6 +152,17 @@ def main() -> None:
         action="store_true",
         help="Pass the PETSc/MUMPS option used in the probe campaign to reduce verbosity when honored.",
     )
+    parser.add_argument(
+        "--profile-petsc",
+        action="store_true",
+        help="Append PETSc -log_view, -ksp_view, and -pc_view to the Fortran run for profiling.",
+    )
+    parser.add_argument(
+        "--petsc-option",
+        action="append",
+        default=[],
+        help="Additional raw PETSc option token. Repeat for options and values, e.g. --petsc-option -ksp_monitor_true_residual.",
+    )
     args = parser.parse_args()
 
     namelists = selected_namelists(args.tier, args.cases)
@@ -150,7 +171,12 @@ def main() -> None:
     if not args.fortran_exe.exists():
         raise SystemExit(f"Missing Fortran v3 executable: {args.fortran_exe}")
 
-    extra_args = ["-mat_mumps_icntl_4", "0"] if args.quiet_mumps else []
+    extra_args = []
+    if args.quiet_mumps:
+        extra_args.extend(["-mat_mumps_icntl_4", "0"])
+    if args.profile_petsc:
+        extra_args.extend(["-log_view", "-ksp_view", "-pc_view"])
+    extra_args.extend(args.petsc_option)
     args.scratch.mkdir(parents=True, exist_ok=True)
     results = [
         run_case(

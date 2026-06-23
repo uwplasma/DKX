@@ -1,6 +1,6 @@
 # SFINCS_JAX Final Research-Grade Implementation Plan
 
-Last updated: 2026-06-22 (America/Chicago)
+Last updated: 2026-06-23 (America/Chicago)
 
 Active branch: `refactor/rhs1-full-assembly-preconditioners`
 
@@ -34,7 +34,7 @@ Manual and paper references:
 - `/Users/rogeriojorge/local/sfincs/doc/sfincsPaper/sfincsPaper.tex`
 - Public repository: <https://github.com/landreman/sfincs>
 
-New reference decks and probe summary for the ambipolar functionality live in
+Reference decks and probe summaries for the ambipolar functionality live in
 `benchmarks/fortran_v3_ambipolar_reference/`. These decks pin the source-code
 behavior of `ambipolarSolveOption=1`, `2`, and `3` before the sfincs_jax
 implementation begins.
@@ -45,6 +45,10 @@ Implementation progress on 2026-06-23:
   iteration, and result contracts.
 - The Fortran-compatible Brent root path is implemented and tested against the
   checked-in small and production Fortran v3 ambipolar summaries.
+- The Fortran v3 ambipolar reference matrix now covers geometry-1 helical and
+  geometry-4 W7-X-like decks at small and production tiers for options 1, 2,
+  and 3, with PETSc/KSP/MUMPS profiling markers and `/usr/bin/time -lp` RSS
+  summaries.
 - The source-code validator for Fortran-compatible ambipolar restrictions is
   implemented for the reference decks and derivative-assisted option guards.
 - The Brent owner can now evaluate real RHSMode 1 radial currents through
@@ -132,9 +136,13 @@ Key Fortran v3 algorithm facts to preserve:
 
 ### Ambipolar Probe Results From Fortran v3
 
-Completed local probes on 2026-06-22 used
+Completed local probes on 2026-06-22 and 2026-06-23 used
 `/Users/rogeriojorge/local/sfincs/fortran/version3/sfincs` and the small decks
-now checked into `benchmarks/fortran_v3_ambipolar_reference/namelists`.
+now checked into `benchmarks/fortran_v3_ambipolar_reference/namelists`. The
+new reproducible summaries are
+`small_profile_summary_2026-06-23.json` and
+`production_profile_summary_2026-06-23.json`; raw PETSc/MUMPS logs stay in the
+scratch paths recorded in those JSON files.
 
 Observed facts to feed directly into implementation:
 
@@ -153,6 +161,10 @@ Observed facts to feed directly into implementation:
   radial current about `1.7e-9`; internal Fortran ambipolar time was `0.373 s`,
   wall time was `75.54 s`, peak RSS was about `156 MB`, and the run reported an
   MPI finalization error after writing useful diagnostics.
+- `geometry1_helical_small_option1` and `geometry1_helical_small_option3` now
+  pin the same analytic helical problem for derivative-assisted Newton paths.
+  Option 1 used four forward solves and four adjoint solves; option 3 used two
+  forward solves and two adjoint solves. Both reached `|J_r| ~ 1.1e-9`.
 - All small probes used MUMPS through PETSc. The logs show repeated full
   `whichMatrix=0` and `whichMatrix=1` setup per Er evaluation, followed by
   residual matrix assembly and diagnostics.
@@ -160,14 +172,29 @@ Observed facts to feed directly into implementation:
   `26,750` nonzeros depending on the Er branch/active terms, while the
   preconditioner had about `15,436`, `19,356`, or `26,750` nonzeros depending
   on deck and preconditioner settings.
-- `geometry4_w7x_like_production_option2` completed the larger Brent reference
-  deck with `Ntheta=13`, `Nzeta=19`, `Nxi=48`, and `Nx=5`. The useful physical
-  result was a root near `Er=-3.577332`, radial current
-  `2.2e-12`, six forward solves, internal ambipolar time `32.97 s`, and main
-  solve times between about `3.0 s` and `8.8 s`.
-- The production Brent deck used MUMPS and assembled matrices with about
+- `geometry4_w7x_like_production_option{1,2,3}` completed the larger reference
+  deck with `Ntheta=13`, `Nzeta=19`, `Nxi=48`, and `Nx=5`. All three options
+  converged to the same root near `Er=-3.57735`. Option 1 used six forward and
+  six adjoint solves, option 2 used six forward solves, and option 3 used four
+  forward and four adjoint solves. The profiled runs reported internal
+  ambipolar times of about `18.7 s`, `13.8 s`, and `12.1 s`, respectively,
+  and peak RSS around `1.35-1.39 GB`.
+- `geometry1_helical_production_option1` and
+  `geometry1_helical_production_option3` converged to `Er=-3.26189` with final
+  `|J_r| ~ 6.5e-11`. The same production grid is substantially harder than the
+  W7-X-like deck: peak RSS was `5.7-5.8 GB`, option 1 used ten forward plus ten
+  adjoint solves, and option 3 used eight forward plus eight adjoint solves.
+- `geometry1_helical_production_option2` reached `|J_r| ~ 8.1e-12` but did not
+  print Fortran's Brent success marker before exhausting its 12 evaluation
+  budget. This is an important policy gate: sfincs_jax should report both the
+  best residual found and whether the declared convergence criterion was met,
+  rather than treating a small final residual and a success marker as the same
+  concept.
+- The production decks used MUMPS and assembled matrices with about
   `1.57e6` to `2.28e6` Jacobian nonzeros and about `1.27e6` to `1.54e6`
-  preconditioner nonzeros, depending on branch terms.
+  preconditioner nonzeros for W7-X-like geometry. The helical production decks
+  used the same maximum Jacobian size but an exact preconditioner with up to
+  `2.28e6` nonzeros, explaining their higher RSS.
 - The large gap between Fortran's internal ambipolar time and process wall time
   comes from process/logging/finalization overhead and verbose MUMPS/PETSc
   diagnostics. sfincs_jax should not emulate this shell-style scan cost; it
@@ -886,10 +913,13 @@ Deliverables:
 
 1. Generate the Fortran-v3 feature matrix from source/docs into docs.
 2. Add a matching sfincs_jax feature matrix and mark implemented/deferred items.
-3. Use the checked-in small and production Fortran v3 ambipolar summaries as
-   the first implementation gates for the sfincs_jax ambipolar driver.
-4. Re-run the checked-in Fortran v3 production decks before regenerating public
-   performance claims, because the compact production probe did not capture RSS.
+3. Use `small_profile_summary_2026-06-23.json` and
+   `production_profile_summary_2026-06-23.json` as the first implementation
+   gates for the sfincs_jax ambipolar driver. The older 2026-06-22 summaries
+   remain historical hand-normalized probes.
+4. Add sfincs_jax replay tests for the new small helical option-1 and option-3
+   sequences, and add a production metadata test that checks solver counts,
+   RSS bounds, and marker/residual separation without running Fortran in CI.
 5. Extract the public `api` contracts before moving more internals.
 6. Add fixed-shape numerical operator/preconditioner setup reuse behind the real
    in-process RHSMode 1 ambipolar evaluator. Geometry/output caching, Krylov

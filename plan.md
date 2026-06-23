@@ -721,3 +721,45 @@ campaigns remaining release/manual-tier validation.
 Deferred means fail-closed, documented, and test-gated where possible. Future
 algorithm work should target stronger operator/coarse/factor architectures and
 complete CPU/GPU/Fortran gates, not more smoother/restart tuning.
+
+## 2026-06-23 Ambipolar Fortran v3 Reference Refresh
+
+Steps taken:
+
+1. Added missing geometry-1 helical ambipolar option-1 and option-3 namelists
+   at small and production tiers.
+2. Extended `benchmarks/fortran_v3_ambipolar_reference/run_fortran_v3_ambipolar.py`
+   with PETSc profiling flags, log-path provenance, RSS parsing, KSP/PC profile
+   markers, and convergence-marker separation.
+3. Ran the full small-tier Fortran v3 ambipolar matrix:
+   geometry-1 helical and geometry-4 W7-X-like, options 1/2/3.
+4. Ran the full production-tier matrix at `13 x 19 x 48 x 5` for the same
+   geometries and options.
+5. Updated `plan_final.md` so the new 2026-06-23 summaries are the controlling
+   ambipolar implementation gates.
+6. Added CI-light tests that replay a derivative-assisted Newton sequence and
+   check that production summaries preserve solver counts, RSS, and the
+   distinction between small residual and declared Fortran success marker.
+
+Results:
+
+- Small tier: all six decks completed useful physical roots through PETSc/MUMPS.
+- Production W7-X-like: options 1/2/3 converged to `Er ~ -3.57735`, with peak
+  RSS around `1.35-1.39 GB`.
+- Production helical: options 1 and 3 converged to `Er ~ -3.26189`, with peak
+  RSS around `5.7-5.8 GB`.
+- Production helical option 2 reached `|J_r| ~ 8.1e-12` but did not print
+  Fortran's Brent success marker before exhausting its evaluation budget. This
+  must remain a marker/residual split in sfincs_jax, not an implicit success.
+- Focused validation passed: `python -m pytest tests/test_ambipolar_problem.py
+  -q --tb=short`, JSON validation, runner `py_compile`, namelist sanity check,
+  and `git diff --check`.
+
+Next best steps:
+
+1. Implement the exact implicit/adjoint `dJr/dEr` helper against a small RHSMode
+   1 residual graph and finite-difference gate.
+2. Wire that derivative into the existing safeguarded Newton and pure Newton
+   ambipolar solvers.
+3. Add sfincs_jax-vs-Fortran replay gates for the new production profiles
+   without running Fortran in CI.
