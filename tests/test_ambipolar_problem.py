@@ -6,9 +6,12 @@ from pathlib import Path
 
 import numpy as np
 
+from sfincs_jax.ambipolar import radial_current_from_output
+from sfincs_jax.io import read_sfincs_h5
 from sfincs_jax.namelist import read_sfincs_input
 from sfincs_jax.problems.ambipolar import (
     AmbipolarProblem,
+    SfincsJaxRadialCurrentEvaluator,
     brent_ambipolar_root,
     solve_ambipolar_brent,
     validate_fortran_v3_ambipolar_constraints,
@@ -167,3 +170,27 @@ def test_fortran_v3_ambipolar_validator_accepts_reference_decks_and_rejects_adjo
     assert any("tangential magnetic drifts" in item for item in errors)
     assert any("constraintScheme" in item for item in errors)
     assert any("collisionOperator" in item for item in errors)
+
+
+def test_sfincs_jax_radial_current_evaluator_runs_real_tiny_rhs1_output(tmp_path: Path) -> None:
+    """The canonical ambipolar owner can evaluate radial current through sfincs_jax itself."""
+
+    input_path = REPO_ROOT / "tests" / "ref" / "pas_1species_PAS_noEr_tiny_scheme11.input.namelist"
+    evaluator = SfincsJaxRadialCurrentEvaluator(
+        input_namelist=input_path,
+        work_dir=tmp_path / "ambipolar_eval",
+        solve_method="auto",
+        compute_solution=True,
+    )
+
+    radial_current = evaluator(0.0)
+
+    assert len(evaluator.records) == 1
+    record = evaluator.records[0]
+    assert record.input_path.exists()
+    assert record.output_path.exists()
+    assert record.solver_trace_path is not None
+    assert record.solver_trace_path.exists()
+    data = read_sfincs_h5(record.output_path)
+    np.testing.assert_allclose(float(np.asarray(data["Er"]).reshape(())), 0.0, rtol=0.0, atol=0.0)
+    np.testing.assert_allclose(radial_current, radial_current_from_output(data), rtol=0.0, atol=5.0e-12)

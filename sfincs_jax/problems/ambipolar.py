@@ -11,6 +11,7 @@ from __future__ import annotations
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 import math
+from pathlib import Path
 from types import MappingProxyType
 from typing import Any
 
@@ -107,6 +108,107 @@ class AmbipolarResult:
         """Radial-current values evaluated in order."""
 
         return tuple(item.radial_current for item in self.iterations)
+
+
+@dataclass(frozen=True, slots=True)
+class SfincsJaxEvaluationRecord:
+    """One concrete sfincs_jax output evaluation used by an ambipolar solve."""
+
+    er: float
+    radial_current: float
+    input_path: Path
+    output_path: Path
+    solver_trace_path: Path | None = None
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "er", float(self.er))
+        object.__setattr__(self, "radial_current", float(self.radial_current))
+        object.__setattr__(self, "input_path", Path(self.input_path))
+        object.__setattr__(self, "output_path", Path(self.output_path))
+        if self.solver_trace_path is not None:
+            object.__setattr__(self, "solver_trace_path", Path(self.solver_trace_path))
+
+
+class SfincsJaxRadialCurrentEvaluator:
+    """In-process radial-current evaluator backed by ``write_sfincs_jax_output_h5``.
+
+    This is the first real-solve bridge for the canonical ambipolar owner.  It
+    keeps template parsing, directory ownership, and call records in one object.
+    Later setup reuse should be added behind this class without changing the
+    public Brent/Newton root-solving contracts.
+    """
+
+    def __init__(
+        self,
+        *,
+        input_namelist: str | Path,
+        work_dir: str | Path,
+        variable: str | None = None,
+        solve_method: str = "auto",
+        differentiable: bool = False,
+        compute_solution: bool = True,
+        overwrite: bool = True,
+        emit: Callable[[int, str], None] | None = None,
+    ) -> None:
+        self.input_namelist = Path(input_namelist).resolve()
+        self.work_dir = Path(work_dir).resolve()
+        self.work_dir.mkdir(parents=True, exist_ok=True)
+        self.solve_method = str(solve_method)
+        self.differentiable = bool(differentiable)
+        self.compute_solution = bool(compute_solution)
+        self.overwrite = bool(overwrite)
+        self.emit = emit
+        self.template_text = self.input_namelist.read_text()
+        if variable is None:
+            from ..namelist import read_sfincs_input  # noqa: PLC0415
+            from ..scans import _er_scan_var_name  # noqa: PLC0415
+
+            variable = _er_scan_var_name(nml=read_sfincs_input(self.input_namelist))
+        self.variable = str(variable)
+        self.records: list[SfincsJaxEvaluationRecord] = []
+
+    def __call__(self, er: float) -> float:
+        from ..ambipolar import radial_current_from_output  # noqa: PLC0415
+        from ..io import localize_equilibrium_file_in_place, read_sfincs_h5, write_sfincs_jax_output_h5  # noqa: PLC0415
+        from ..scans import _patch_scalar_in_group  # noqa: PLC0415
+
+        index = len(self.records) + 1
+        run_dir = self.work_dir / f"eval_{index:03d}_{self.variable}_{float(er):+.8e}".replace("+", "p").replace("-", "m")
+        run_dir.mkdir(parents=True, exist_ok=True)
+        eval_input = run_dir / "input.namelist"
+        eval_output = run_dir / "sfincsOutput.h5"
+        solver_trace = run_dir / "sfincsOutput.solver_trace.json"
+        patched = _patch_scalar_in_group(
+            txt=self.template_text,
+            group="physicsParameters",
+            key=self.variable,
+            value=float(er),
+        )
+        eval_input.write_text(patched)
+        localize_equilibrium_file_in_place(input_namelist=eval_input, overwrite=False)
+
+        write_sfincs_jax_output_h5(
+            input_namelist=eval_input,
+            output_path=eval_output,
+            overwrite=self.overwrite,
+            compute_transport_matrix=False,
+            compute_solution=self.compute_solution,
+            solver_trace_path=solver_trace,
+            solve_method=self.solve_method,
+            differentiable=self.differentiable,
+            emit=self.emit,
+        )
+        radial_current = radial_current_from_output(read_sfincs_h5(eval_output))
+        self.records.append(
+            SfincsJaxEvaluationRecord(
+                er=float(er),
+                radial_current=float(radial_current),
+                input_path=eval_input,
+                output_path=eval_output,
+                solver_trace_path=solver_trace if solver_trace.exists() else None,
+            )
+        )
+        return float(radial_current)
 
 
 def _same_fortran_sign(a: float, b: float) -> bool:
@@ -278,6 +380,47 @@ def brent_ambipolar_root(
     )
 
 
+def solve_sfincs_jax_ambipolar_brent(
+    *,
+    input_namelist: str | Path,
+    work_dir: str | Path,
+    er_min: float,
+    er_max: float,
+    er_initial: float = 0.0,
+    max_evaluations: int = 20,
+    current_tolerance: float = 1.0e-10,
+    step_tolerance: float = 1.0e-8,
+    solve_method: str = "auto",
+    differentiable: bool = False,
+    emit: Callable[[int, str], None] | None = None,
+) -> tuple[AmbipolarResult, SfincsJaxRadialCurrentEvaluator]:
+    """Run a real sfincs_jax-backed Brent ambipolar solve in-process.
+
+    The returned evaluator exposes the concrete per-evaluation input/output
+    artifacts.  Keeping it separate from ``AmbipolarResult`` preserves a small
+    mathematical result contract while still giving CLI workflows provenance.
+    """
+
+    evaluator = SfincsJaxRadialCurrentEvaluator(
+        input_namelist=input_namelist,
+        work_dir=work_dir,
+        solve_method=solve_method,
+        differentiable=differentiable,
+        emit=emit,
+    )
+    result = brent_ambipolar_root(
+        evaluator,
+        er_min=er_min,
+        er_max=er_max,
+        er_initial=er_initial,
+        max_evaluations=max_evaluations,
+        current_tolerance=current_tolerance,
+        step_tolerance=step_tolerance,
+        metadata={"input_namelist": str(Path(input_namelist)), "work_dir": str(Path(work_dir))},
+    )
+    return result, evaluator
+
+
 def _lookup_config_value(config: Any, groups: tuple[str, ...], key: str, default: Any = None) -> Any:
     key_upper = key.upper()
     for group in groups:
@@ -350,7 +493,10 @@ __all__ = [
     "AmbipolarProblem",
     "AmbipolarResult",
     "RadialCurrentEvaluator",
+    "SfincsJaxEvaluationRecord",
+    "SfincsJaxRadialCurrentEvaluator",
     "brent_ambipolar_root",
     "solve_ambipolar_brent",
+    "solve_sfincs_jax_ambipolar_brent",
     "validate_fortran_v3_ambipolar_constraints",
 ]

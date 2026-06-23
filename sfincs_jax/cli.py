@@ -513,6 +513,89 @@ def _cmd_ambipolar_solve(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_ambipolar(args: argparse.Namespace) -> int:
+    t0 = _now()
+    from .problems.ambipolar import solve_sfincs_jax_ambipolar_brent  # noqa: PLC0415
+
+    _emit("################################################################", level=0, args=args)
+    _emit(" sfincs_jax ambipolar", level=0, args=args)
+    _emit(f" input={Path(args.input).resolve()}", level=0, args=args)
+    _emit(f" out-dir={Path(args.out_dir).resolve()}", level=0, args=args)
+    _emit_runtime_info(args=args)
+    _emit_parallel_runtime_info(args=args)
+    _emit(
+        " ambipolar:"
+        f" method=brent er_min={float(args.er_min):.16g}"
+        f" er_max={float(args.er_max):.16g}"
+        f" er_initial={float(args.er_initial):.16g}"
+        f" max_evaluations={int(args.max_evaluations)}"
+        f" current_tolerance={float(args.current_tolerance):.3e}"
+        f" step_tolerance={float(args.step_tolerance):.3e}",
+        level=0,
+        args=args,
+    )
+
+    result, evaluator = solve_sfincs_jax_ambipolar_brent(
+        input_namelist=Path(args.input),
+        work_dir=Path(args.out_dir),
+        er_min=float(args.er_min),
+        er_max=float(args.er_max),
+        er_initial=float(args.er_initial),
+        max_evaluations=int(args.max_evaluations),
+        current_tolerance=float(args.current_tolerance),
+        step_tolerance=float(args.step_tolerance),
+        solve_method=str(args.solve_method),
+        differentiable=False,
+        emit=lambda level, msg: _emit(msg, level=level, args=args),
+    )
+
+    summary_path = Path(args.summary_json) if args.summary_json else Path(args.out_dir) / "ambipolar_result.json"
+    summary_path.parent.mkdir(parents=True, exist_ok=True)
+    summary = {
+        "converged": bool(result.converged),
+        "method": result.method,
+        "status": result.status,
+        "message": result.message,
+        "root_er": result.root_er,
+        "root_radial_current": result.root_radial_current,
+        "root_type": result.root_type,
+        "iterations": [
+            {
+                "index": item.index,
+                "er": item.er,
+                "radial_current": item.radial_current,
+                "stage": item.stage,
+            }
+            for item in result.iterations
+        ],
+        "evaluations": [
+            {
+                "er": item.er,
+                "radial_current": item.radial_current,
+                "input_path": str(item.input_path),
+                "output_path": str(item.output_path),
+                "solver_trace_path": None if item.solver_trace_path is None else str(item.solver_trace_path),
+            }
+            for item in evaluator.records
+        ],
+        "elapsed_s": float(_now() - t0),
+    }
+    summary_path.write_text(json.dumps(summary, indent=2, sort_keys=True))
+
+    if result.converged:
+        _emit(
+            f" ambipolar root: Er={float(result.root_er):.16g} "
+            f"radial_current={float(result.root_radial_current):.6e} type={result.root_type}",
+            level=0,
+            args=args,
+        )
+    else:
+        _emit(f" ambipolar status={result.status}: {result.message}", level=0, args=args)
+    _emit(f" wrote summary -> {summary_path.resolve()}", level=0, args=args)
+    _emit(f" elapsed_s={_now()-t0:.3f}", level=1, args=args)
+    return 0 if result.converged else 2
+
+
 def _apply_cores_setting(cores: int | None) -> None:
     if cores is None:
         return
@@ -629,6 +712,7 @@ def _normalize_default_argv(argv: list[str]) -> list[str]:
         return argv
     known_cmds = {
         "solve-v3",
+        "ambipolar",
         "scan-er",
         "ambipolar-solve",
         "run-fortran",
@@ -879,6 +963,36 @@ def main(argv: list[str] | None = None) -> int:
     p_ambi.add_argument("--scan-dir", required=True, help="Scan directory produced by `sfincs_jax scan-er`.")
     p_ambi.add_argument("--n-fine", default="500", help="Number of fine-grid points for bracketing (default: 500).")
     p_ambi.set_defaults(func=_cmd_ambipolar_solve)
+
+    p_ambi_direct = sub.add_parser(
+        "ambipolar",
+        help="Run an in-process Brent ambipolar Er solve from input.namelist.",
+    )
+    _add_common_cli_args(p_ambi_direct)
+    _add_parallel_cli_args(p_ambi_direct)
+    p_ambi_direct.add_argument("--input", required=True, help="Path to input.namelist.")
+    p_ambi_direct.add_argument(
+        "--out-dir",
+        default="ambipolar_run",
+        help="Directory for per-evaluation inputs, outputs, traces, and the summary JSON.",
+    )
+    p_ambi_direct.add_argument("--er-min", default="-100.0", help="Lower Er bracket.")
+    p_ambi_direct.add_argument("--er-max", default="100.0", help="Upper Er bracket.")
+    p_ambi_direct.add_argument("--er-initial", default="0.0", help="Initial Er evaluation.")
+    p_ambi_direct.add_argument("--max-evaluations", default="20", help="Maximum Brent radial-current evaluations.")
+    p_ambi_direct.add_argument("--current-tolerance", default="1e-10", help="Radial-current convergence tolerance.")
+    p_ambi_direct.add_argument("--step-tolerance", default="1e-8", help="Reserved Er-step tolerance for Newton-compatible APIs.")
+    p_ambi_direct.add_argument(
+        "--solve-method",
+        default="auto",
+        help="Advanced RHSMode=1 solver override for each radial-current evaluation.",
+    )
+    p_ambi_direct.add_argument(
+        "--summary-json",
+        default=None,
+        help="Optional summary JSON path. Default: <out-dir>/ambipolar_result.json.",
+    )
+    p_ambi_direct.set_defaults(func=_cmd_ambipolar)
 
     p_run = sub.add_parser("run-fortran", help="Run the compiled Fortran SFINCS v3 executable.")
     _add_common_cli_args(p_run)
