@@ -8,7 +8,14 @@ import pytest
 
 import sfincs_jax
 from sfincs_jax.compare import _as_numpy, _center_fsa, _merge_tolerance_floor
-from sfincs_jax.solver_state import _op_signature, load_krylov_state, save_krylov_state
+from sfincs_jax.solver_state import (
+    _op_signature,
+    operator_shape_signature,
+    operator_shape_signature_dict,
+    read_krylov_state_signature,
+    load_krylov_state,
+    save_krylov_state,
+)
 
 
 def test_initialize_distributed_runtime_from_env(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -67,8 +74,23 @@ def test_solver_state_round_trip_and_signature_guard(tmp_path: Path) -> None:
 
     sig = _op_signature(op)
     assert sig.tolist() == [1, 5, 2, 3, 4, 5, 6, 1, 1, 0, 2]
+    assert operator_shape_signature(op) == tuple(sig.tolist())
+    assert operator_shape_signature_dict(op) == {
+        "rhs_mode": 1,
+        "total_size": 5,
+        "n_species": 2,
+        "n_x": 3,
+        "n_xi": 4,
+        "n_theta": 5,
+        "n_zeta": 6,
+        "constraint_scheme": 1,
+        "include_phi1": 1,
+        "include_phi1_in_kinetic": 0,
+        "quasineutrality_option": 2,
+    }
 
     save_krylov_state(path=path, op=op, x_full=x_full, x_by_rhs=x_by_rhs, x_history=x_history)
+    assert read_krylov_state_signature(path) == tuple(sig.tolist())
     loaded = load_krylov_state(path=path, op=op)
     assert loaded is not None
     np.testing.assert_allclose(loaded["x_full"], x_full)
