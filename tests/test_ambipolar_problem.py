@@ -14,7 +14,11 @@ from sfincs_jax.problems.ambipolar import (
     SfincsJaxRadialCurrentEvaluator,
     brent_ambipolar_root,
     finite_difference_radial_current_derivative,
+    newton_ambipolar_root,
+    safeguarded_newton_ambipolar_root,
     solve_ambipolar_brent,
+    solve_ambipolar_newton,
+    solve_ambipolar_safeguarded_newton,
     validate_fortran_v3_ambipolar_constraints,
 )
 
@@ -243,3 +247,98 @@ def test_finite_difference_radial_current_derivative_matches_smooth_reference() 
     assert len(result.evaluations) == 2
     assert result.evaluations[0].stage == "finite_difference_plus"
     assert result.evaluations[1].stage == "finite_difference_minus"
+
+
+def test_safeguarded_newton_matches_brent_on_smooth_bracketed_root() -> None:
+    def current(er: float) -> float:
+        return (er - 0.25) * (1.0 + 0.1 * er * er)
+
+    def derivative(er: float) -> float:
+        return (1.0 + 0.1 * er * er) + (er - 0.25) * 0.2 * er
+
+    problem = AmbipolarProblem(
+        evaluate_radial_current=current,
+        er_min=-1.0,
+        er_max=1.0,
+        er_initial=0.0,
+        max_evaluations=12,
+        current_tolerance=1.0e-12,
+        step_tolerance=1.0e-12,
+    )
+
+    newton = solve_ambipolar_safeguarded_newton(problem, derivative, derivative_source="analytic")
+    brent = solve_ambipolar_brent(problem)
+
+    assert newton.converged
+    assert newton.method == "safeguarded_newton"
+    np.testing.assert_allclose(newton.root_er, 0.25, rtol=0.0, atol=1.0e-12)
+    np.testing.assert_allclose(newton.root_er, brent.root_er, rtol=0.0, atol=1.0e-10)
+    assert newton.metadata["derivative_count"] >= 1
+
+
+def test_safeguarded_newton_accepts_finite_difference_derivative_provider() -> None:
+    def current(er: float) -> float:
+        return er - 0.125
+
+    result = safeguarded_newton_ambipolar_root(
+        current,
+        lambda er: finite_difference_radial_current_derivative(current, er=er, step=1.0e-5),
+        er_min=-1.0,
+        er_max=1.0,
+        er_initial=0.0,
+        max_evaluations=8,
+        current_tolerance=1.0e-12,
+        step_tolerance=1.0e-12,
+    )
+
+    assert result.converged
+    np.testing.assert_allclose(result.root_er, 0.125, rtol=0.0, atol=1.0e-12)
+    assert result.metadata["derivative_count"] == 1
+
+
+def test_safeguarded_newton_falls_back_to_bisection_for_unsafe_derivative() -> None:
+    result = safeguarded_newton_ambipolar_root(
+        lambda er: er,
+        lambda er: 0.0,
+        er_min=-1.0,
+        er_max=1.0,
+        er_initial=0.25,
+        max_evaluations=60,
+        current_tolerance=1.0e-12,
+        step_tolerance=1.0e-12,
+    )
+
+    assert result.converged
+    assert result.metadata["fallback_count"] >= 1
+    np.testing.assert_allclose(result.root_er, 0.0, rtol=0.0, atol=1.0e-12)
+
+
+def test_pure_newton_converges_and_fails_closed_for_zero_derivative() -> None:
+    result = newton_ambipolar_root(
+        lambda er: er - 0.4,
+        lambda er: 1.0,
+        er_min=-2.0,
+        er_max=2.0,
+        er_initial=0.0,
+        max_evaluations=5,
+        current_tolerance=1.0e-12,
+        step_tolerance=1.0e-12,
+    )
+
+    assert result.converged
+    np.testing.assert_allclose(result.root_er, 0.4, rtol=0.0, atol=1.0e-12)
+    assert result.metadata["derivative_count"] == 1
+
+    failed = solve_ambipolar_newton(
+        AmbipolarProblem(
+            evaluate_radial_current=lambda er: er - 0.4,
+            er_min=-2.0,
+            er_max=2.0,
+            er_initial=0.0,
+            max_evaluations=5,
+        ),
+        lambda er: 0.0,
+    )
+
+    assert not failed.converged
+    assert failed.status == "zero_derivative"

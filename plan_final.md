@@ -61,9 +61,14 @@ Implementation progress on 2026-06-23:
   stale `E_r`-dependent numerical matrices or factors.
 - A finite-difference `dJr/dEr` helper now provides the numerical derivative
   gate that implicit/adjoint derivatives must match.
+- Derivative-assisted safeguarded Newton/bisection and strict pure-Newton root
+  solvers are implemented behind the same ambipolar owner. They accept a
+  derivative provider, so finite-difference gates work now and exact
+  implicit/adjoint `dJr/dEr` can be wired in without changing the root-solve
+  contract.
 - Remaining Lane 3 work is deeper fixed-shape numerical operator/factor and
-  preconditioner setup reuse behind that evaluator, then implicit/adjoint
-  `dJr/dEr` and the option 1/3 Newton paths.
+  preconditioner setup reuse behind that evaluator, then exact implicit/adjoint
+  `dJr/dEr` and Fortran option 1/3 physical parity gates.
 
 Important Fortran v3 implementation modules:
 
@@ -890,9 +895,12 @@ Deliverables:
    in-process RHSMode 1 ambipolar evaluator. Geometry/output caching, Krylov
    state reuse, symbolic field-split ordering reuse, and trace provenance are
    already in place.
-7. Implement `dJr/dEr` through implicit differentiation on a small RHSMode 1
-   case and compare against centered finite differences.
-8. Implement safeguarded Newton/bisection and pure Newton using that derivative.
+7. Implement exact `dJr/dEr` through implicit differentiation on a small
+   RHSMode 1 case and compare against centered finite differences. The
+   finite-difference derivative contract and Newton root solvers are already in
+   place.
+8. Wire the exact derivative into safeguarded Newton/bisection and pure Newton
+   for Fortran option 1/3 physical parity gates.
 9. Define residual/operator/transpose operator protocol and migrate one
    RHSMode 2/3 path to it.
 10. Add one T3D/NEOPAX-style closure example with fixed geometry and radial

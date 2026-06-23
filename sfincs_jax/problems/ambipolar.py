@@ -19,6 +19,7 @@ from typing import Any
 
 
 RadialCurrentEvaluator = Callable[[float], float]
+RadialCurrentDerivativeEvaluator = Callable[[float], Any]
 
 
 def _immutable_mapping(value: Mapping[str, Any] | None) -> Mapping[str, Any]:
@@ -170,12 +171,14 @@ class RadialCurrentDerivativeResult:
     step: float
     scheme: str
     evaluations: tuple[AmbipolarIteration, ...]
+    metadata: Mapping[str, Any] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "er", float(self.er))
         object.__setattr__(self, "derivative", float(self.derivative))
         object.__setattr__(self, "step", float(self.step))
         object.__setattr__(self, "evaluations", tuple(self.evaluations))
+        object.__setattr__(self, "metadata", _immutable_mapping(self.metadata))
 
 
 @contextmanager
@@ -371,6 +374,65 @@ def _evaluate(problem: AmbipolarProblem, iterations: list[AmbipolarIteration], e
     return current
 
 
+def _coerce_derivative_result(
+    value: float | RadialCurrentDerivativeResult,
+    *,
+    er: float,
+    source: str,
+) -> RadialCurrentDerivativeResult:
+    if isinstance(value, RadialCurrentDerivativeResult):
+        return value
+    return RadialCurrentDerivativeResult(
+        er=float(er),
+        derivative=float(value),
+        step=0.0,
+        scheme=str(source),
+        evaluations=(),
+        metadata={"source": str(source)},
+    )
+
+
+def _evaluate_derivative(
+    evaluate_derivative: RadialCurrentDerivativeEvaluator,
+    *,
+    er: float,
+    source: str,
+) -> RadialCurrentDerivativeResult:
+    result = _coerce_derivative_result(evaluate_derivative(float(er)), er=float(er), source=source)
+    if not math.isfinite(float(result.derivative)):
+        raise FloatingPointError("dJr/dEr must be finite.")
+    return result
+
+
+def _bracket_from_values(
+    *,
+    a: float,
+    fa: float,
+    c: float,
+    fc: float,
+    b: float,
+    fb: float,
+) -> tuple[float, float, float, float] | None:
+    """Return a sign-changing bracket using the initial point when useful."""
+
+    if _same_fortran_sign(fa, fc):
+        return None
+    lo = float(a)
+    flo = float(fa)
+    hi = float(c)
+    fhi = float(fc)
+    if not _same_fortran_sign(fa, fb):
+        hi = float(b)
+        fhi = float(fb)
+    elif not _same_fortran_sign(fc, fb):
+        lo = float(b)
+        flo = float(fb)
+    if lo > hi:
+        lo, hi = hi, lo
+        flo, fhi = fhi, flo
+    return lo, flo, hi, fhi
+
+
 def solve_ambipolar_brent(problem: AmbipolarProblem) -> AmbipolarResult:
     """Solve ambipolarity with the SFINCS Fortran v3 Brent algorithm.
 
@@ -512,6 +574,336 @@ def brent_ambipolar_root(
             step_tolerance=step_tolerance,
             metadata=metadata,
         )
+    )
+
+
+def solve_ambipolar_safeguarded_newton(
+    problem: AmbipolarProblem,
+    evaluate_derivative: RadialCurrentDerivativeEvaluator,
+    *,
+    derivative_source: str = "external",
+) -> AmbipolarResult:
+    """Solve ambipolarity with derivative-assisted Newton plus bisection guards.
+
+    This is the sfincs_jax owner for the Fortran-v3 option-1 style policy.  The
+    derivative provider can be a finite-difference gate today or an exact
+    implicit/adjoint derivative later.  The method preserves a sign-changing
+    bracket and falls back to bisection whenever the Newton step is unsafe.
+    """
+
+    iterations: list[AmbipolarIteration] = []
+    a = float(problem.er_min)
+    fa = _evaluate(problem, iterations, a, "bracket_min")
+    c = float(problem.er_max)
+    fc = _evaluate(problem, iterations, c, "bracket_max")
+    b = float(problem.er_initial)
+    fb = _evaluate(problem, iterations, b, "initial")
+
+    bracket = _bracket_from_values(a=a, fa=fa, c=c, fc=fc, b=b, fb=fb)
+    if bracket is None:
+        return AmbipolarResult(
+            converged=False,
+            method="safeguarded_newton",
+            root_er=None,
+            root_radial_current=None,
+            iterations=tuple(iterations),
+            status="unbracketed",
+            message="Root must be bracketed in safeguarded Newton solve.",
+        )
+    lo, flo, hi, _ = bracket
+    if abs(fb) < float(problem.current_tolerance):
+        return AmbipolarResult(
+            converged=True,
+            method="safeguarded_newton",
+            root_er=b,
+            root_radial_current=fb,
+            iterations=tuple(iterations),
+            status="converged",
+            root_type=_root_type(b),
+            metadata={"convergence": "radial_current"},
+        )
+
+    derivative_records: list[RadialCurrentDerivativeResult] = []
+    fallback_count = 0
+    step = math.inf
+    for _ in range(4, int(problem.max_evaluations) + 1):
+        try:
+            derivative = _evaluate_derivative(evaluate_derivative, er=b, source=derivative_source)
+        except FloatingPointError as exc:
+            return AmbipolarResult(
+                converged=False,
+                method="safeguarded_newton",
+                root_er=b,
+                root_radial_current=fb,
+                iterations=tuple(iterations),
+                status="invalid_derivative",
+                message=str(exc),
+                root_type=_root_type(b),
+                metadata={"derivative_count": len(derivative_records), "fallback_count": fallback_count},
+            )
+        derivative_records.append(derivative)
+        d_jr_d_er = float(derivative.derivative)
+        candidate = math.nan
+        if d_jr_d_er != 0.0:
+            candidate = b - fb / d_jr_d_er
+        use_bisection = (
+            (not math.isfinite(candidate))
+            or candidate <= lo
+            or candidate >= hi
+        )
+        if use_bisection:
+            candidate = 0.5 * (lo + hi)
+            fallback_count += 1
+        step = abs(candidate - b)
+        b = float(candidate)
+        fb = _evaluate(problem, iterations, b, "newton_bisection" if use_bisection else "newton")
+
+        if abs(fb) < float(problem.current_tolerance):
+            return AmbipolarResult(
+                converged=True,
+                method="safeguarded_newton",
+                root_er=b,
+                root_radial_current=fb,
+                iterations=tuple(iterations),
+                status="converged",
+                root_type=_root_type(b),
+                metadata={
+                    "convergence": "radial_current",
+                    "derivative_count": len(derivative_records),
+                    "fallback_count": fallback_count,
+                    "last_derivative": d_jr_d_er,
+                },
+            )
+        if step <= float(problem.step_tolerance) or abs(hi - lo) <= float(problem.step_tolerance):
+            return AmbipolarResult(
+                converged=True,
+                method="safeguarded_newton",
+                root_er=b,
+                root_radial_current=fb,
+                iterations=tuple(iterations),
+                status="converged",
+                root_type=_root_type(b),
+                metadata={
+                    "convergence": "step",
+                    "derivative_count": len(derivative_records),
+                    "fallback_count": fallback_count,
+                    "last_derivative": d_jr_d_er,
+                },
+            )
+
+        if _same_fortran_sign(flo, fb):
+            lo = b
+            flo = fb
+        else:
+            hi = b
+
+    return AmbipolarResult(
+        converged=False,
+        method="safeguarded_newton",
+        root_er=b,
+        root_radial_current=fb,
+        iterations=tuple(iterations),
+        status="max_evaluations",
+        message="The derivative-assisted Er search did not converge within max_evaluations.",
+        root_type=_root_type(b),
+        metadata={
+            "derivative_count": len(derivative_records),
+            "fallback_count": fallback_count,
+            "last_step": float(step) if math.isfinite(step) else None,
+        },
+    )
+
+
+def solve_ambipolar_newton(
+    problem: AmbipolarProblem,
+    evaluate_derivative: RadialCurrentDerivativeEvaluator,
+    *,
+    derivative_source: str = "external",
+) -> AmbipolarResult:
+    """Solve ambipolarity with strict Newton steps and trust-region failure certificates."""
+
+    iterations: list[AmbipolarIteration] = []
+    b = float(problem.er_initial)
+    fb = _evaluate(problem, iterations, b, "initial")
+    if abs(fb) < float(problem.current_tolerance):
+        return AmbipolarResult(
+            converged=True,
+            method="newton",
+            root_er=b,
+            root_radial_current=fb,
+            iterations=tuple(iterations),
+            status="converged",
+            root_type=_root_type(b),
+            metadata={"convergence": "radial_current"},
+        )
+
+    derivative_records: list[RadialCurrentDerivativeResult] = []
+    last_step = math.inf
+    for _ in range(2, int(problem.max_evaluations) + 1):
+        try:
+            derivative = _evaluate_derivative(evaluate_derivative, er=b, source=derivative_source)
+        except FloatingPointError as exc:
+            return AmbipolarResult(
+                converged=False,
+                method="newton",
+                root_er=b,
+                root_radial_current=fb,
+                iterations=tuple(iterations),
+                status="invalid_derivative",
+                message=str(exc),
+                root_type=_root_type(b),
+                metadata={"derivative_count": len(derivative_records)},
+            )
+        derivative_records.append(derivative)
+        d_jr_d_er = float(derivative.derivative)
+        if d_jr_d_er == 0.0:
+            return AmbipolarResult(
+                converged=False,
+                method="newton",
+                root_er=b,
+                root_radial_current=fb,
+                iterations=tuple(iterations),
+                status="zero_derivative",
+                message="Pure Newton cannot proceed with dJr/dEr=0.",
+                root_type=_root_type(b),
+                metadata={"derivative_count": len(derivative_records)},
+            )
+        step = -fb / d_jr_d_er
+        if not math.isfinite(step):
+            return AmbipolarResult(
+                converged=False,
+                method="newton",
+                root_er=b,
+                root_radial_current=fb,
+                iterations=tuple(iterations),
+                status="invalid_step",
+                message="Pure Newton produced a non-finite step.",
+                root_type=_root_type(b),
+                metadata={"derivative_count": len(derivative_records)},
+            )
+        last_step = abs(float(step))
+        b = float(b + step)
+        if b < float(problem.er_min) or b > float(problem.er_max):
+            return AmbipolarResult(
+                converged=False,
+                method="newton",
+                root_er=b,
+                root_radial_current=None,
+                iterations=tuple(iterations),
+                status="out_of_bounds",
+                message="Pure Newton left the configured Er trust region.",
+                root_type=_root_type(b),
+                metadata={
+                    "derivative_count": len(derivative_records),
+                    "last_derivative": d_jr_d_er,
+                    "last_step": float(last_step),
+                },
+            )
+        fb = _evaluate(problem, iterations, b, "newton")
+        if abs(fb) < float(problem.current_tolerance):
+            return AmbipolarResult(
+                converged=True,
+                method="newton",
+                root_er=b,
+                root_radial_current=fb,
+                iterations=tuple(iterations),
+                status="converged",
+                root_type=_root_type(b),
+                metadata={
+                    "convergence": "radial_current",
+                    "derivative_count": len(derivative_records),
+                    "last_derivative": d_jr_d_er,
+                    "last_step": float(last_step),
+                },
+            )
+        if last_step <= float(problem.step_tolerance):
+            return AmbipolarResult(
+                converged=True,
+                method="newton",
+                root_er=b,
+                root_radial_current=fb,
+                iterations=tuple(iterations),
+                status="converged",
+                root_type=_root_type(b),
+                metadata={
+                    "convergence": "step",
+                    "derivative_count": len(derivative_records),
+                    "last_derivative": d_jr_d_er,
+                    "last_step": float(last_step),
+                },
+            )
+
+    return AmbipolarResult(
+        converged=False,
+        method="newton",
+        root_er=b,
+        root_radial_current=fb,
+        iterations=tuple(iterations),
+        status="max_evaluations",
+        message="The pure Newton Er search did not converge within max_evaluations.",
+        root_type=_root_type(b),
+        metadata={
+            "derivative_count": len(derivative_records),
+            "last_step": float(last_step) if math.isfinite(last_step) else None,
+        },
+    )
+
+
+def safeguarded_newton_ambipolar_root(
+    evaluate_radial_current: RadialCurrentEvaluator,
+    evaluate_derivative: RadialCurrentDerivativeEvaluator,
+    *,
+    er_min: float,
+    er_max: float,
+    er_initial: float = 0.0,
+    max_evaluations: int = 20,
+    current_tolerance: float = 1.0e-10,
+    step_tolerance: float = 1.0e-8,
+    metadata: Mapping[str, Any] | None = None,
+) -> AmbipolarResult:
+    """Convenience wrapper for derivative-assisted safeguarded Newton."""
+
+    return solve_ambipolar_safeguarded_newton(
+        AmbipolarProblem(
+            evaluate_radial_current=evaluate_radial_current,
+            er_min=er_min,
+            er_max=er_max,
+            er_initial=er_initial,
+            max_evaluations=max_evaluations,
+            current_tolerance=current_tolerance,
+            step_tolerance=step_tolerance,
+            metadata=metadata,
+        ),
+        evaluate_derivative,
+    )
+
+
+def newton_ambipolar_root(
+    evaluate_radial_current: RadialCurrentEvaluator,
+    evaluate_derivative: RadialCurrentDerivativeEvaluator,
+    *,
+    er_min: float,
+    er_max: float,
+    er_initial: float = 0.0,
+    max_evaluations: int = 20,
+    current_tolerance: float = 1.0e-10,
+    step_tolerance: float = 1.0e-8,
+    metadata: Mapping[str, Any] | None = None,
+) -> AmbipolarResult:
+    """Convenience wrapper for strict derivative-only Newton."""
+
+    return solve_ambipolar_newton(
+        AmbipolarProblem(
+            evaluate_radial_current=evaluate_radial_current,
+            er_min=er_min,
+            er_max=er_max,
+            er_initial=er_initial,
+            max_evaluations=max_evaluations,
+            current_tolerance=current_tolerance,
+            step_tolerance=step_tolerance,
+            metadata=metadata,
+        ),
+        evaluate_derivative,
     )
 
 
@@ -685,13 +1077,18 @@ __all__ = [
     "AmbipolarIteration",
     "AmbipolarProblem",
     "AmbipolarResult",
+    "RadialCurrentDerivativeEvaluator",
     "RadialCurrentEvaluator",
     "RadialCurrentDerivativeResult",
     "SfincsJaxEvaluationRecord",
     "SfincsJaxRadialCurrentEvaluator",
     "brent_ambipolar_root",
     "finite_difference_radial_current_derivative",
+    "newton_ambipolar_root",
+    "safeguarded_newton_ambipolar_root",
     "solve_ambipolar_brent",
+    "solve_ambipolar_newton",
+    "solve_ambipolar_safeguarded_newton",
     "solve_sfincs_jax_ambipolar_brent",
     "validate_fortran_v3_ambipolar_constraints",
 ]

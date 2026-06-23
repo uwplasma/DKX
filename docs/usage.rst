@@ -1443,6 +1443,29 @@ fixed-shape signature is used internally for symbolic RHSMode=1 field-split
 ordering caches; numerical matrices and factors are still rebuilt unless a
 solver path explicitly proves they are safe to reuse.
 
+Python workflows can also call the derivative-assisted root solvers directly.
+The derivative provider can be a finite-difference gate today or an exact
+implicit/adjoint derivative when that Lane-4 path is enabled:
+
+.. code-block:: python
+
+   from sfincs_jax.problems.ambipolar import (
+       finite_difference_radial_current_derivative,
+       safeguarded_newton_ambipolar_root,
+   )
+
+   result = safeguarded_newton_ambipolar_root(
+       evaluate_radial_current,
+       lambda er: finite_difference_radial_current_derivative(
+           evaluate_radial_current,
+           er=er,
+           step=1.0e-4,
+       ),
+       er_min=-0.1,
+       er_max=0.1,
+       er_initial=0.0,
+   )
+
 Running upstream postprocessing scripts (utils/)
 ------------------------------------------------
 
