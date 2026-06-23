@@ -32,6 +32,14 @@ DOMAIN_PACKAGES = (
 )
 
 ACTIVE_PACKAGE_EXPORTS = {
+    "sfincs_jax.problems": (
+        "AmbipolarIteration",
+        "AmbipolarProblem",
+        "AmbipolarResult",
+        "brent_ambipolar_root",
+        "solve_ambipolar_brent",
+        "validate_fortran_v3_ambipolar_constraints",
+    ),
     "sfincs_jax.solvers.preconditioners.pas": (
         "RHS1PasCompositeBuilders",
         "RHS1PasFamilyBuilders",
