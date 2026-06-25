@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from sfincs_jax.optimization_ladder import estimate_rhs1_active_size
+from sfincs_jax.workflows.optimization_ladder import estimate_rhs1_active_size
 
 
 _REPO = Path(__file__).resolve().parents[1]

@@ -15,7 +15,7 @@ _REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
-from sfincs_jax.optimization_ladder import evaluate_promotion_ladder, load_ladder_config  # noqa: E402
+from sfincs_jax.workflows.optimization_ladder import evaluate_promotion_ladder, load_ladder_config  # noqa: E402
 
 
 def _build_parser() -> argparse.ArgumentParser:

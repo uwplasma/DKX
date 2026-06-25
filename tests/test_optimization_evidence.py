@@ -6,7 +6,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from sfincs_jax.optimization_evidence import (
+from sfincs_jax.workflows.optimization_evidence import (
     build_promotion_evidence_plan,
     prepare_fortran_er_scan_inputs,
 )
