@@ -681,8 +681,10 @@ the historical private driver name and test the focused module directly. This ke
   result assembly, completion messages, and final payload construction.
 - ``sfincs_jax/problems/profile_response/sparse/direct.py``:
   explicit sparse operator admission, minimum-norm/direct host shortcuts,
-  ILU/direct-tail policy parsing, structured direct-tail materialization, and
-  final direct-tail metadata assembly.
+  sparse-factor cache keys, host-memory probing, sparse-JAX preconditioner
+  materialization, conservative full-pattern probing, ILU/direct-tail policy
+  parsing, structured direct-tail materialization, and final direct-tail
+  metadata assembly.
 - ``sfincs_jax/problems/profile_response/sparse/xblock.py``:
   x-block and sxblock rescue/correction helpers, shared x-block Krylov matvec
   and initial-guess policy dataclasses, precondition-side/probe-coarse gates,
