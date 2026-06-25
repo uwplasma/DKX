@@ -51,9 +51,6 @@ from .linear_algebra import (
     recycled_initial_guess as _recycled_initial_guess,
     small_regularized_lstsq as _small_regularized_lstsq,
 )
-from .constraint_projection import (
-    project_constraint_scheme1_nullspace_solution as _project_constraint_scheme1_nullspace_solution,
-)
 from .structured_velocity import factor_block_tridiagonal
 from .pas_smoother import adaptive_pas_smoother
 from .explicit_sparse import (
@@ -697,6 +694,7 @@ from .transport_linear_solve import (
     transport_solver_kind as _transport_solver_kind,
 )
 from .transport_solve_finalization import (
+    TransportConstraintNullspaceProjector,
     TransportRHSFinalizationContext,
     finalize_full_transport_rhs,
     finalize_reduced_transport_rhs,
@@ -11012,22 +11010,8 @@ def solve_v3_transport_matrix_linear_gmres(
 
     per_rhs_loop_policy = resolve_transport_per_rhs_loop_policy(op=op0, rhs_mode=int(rhs_mode))
 
-    def _maybe_project_constraint_nullspace(
-        x_vec: jnp.ndarray,
-        *,
-        which_rhs: int,
-        op_matvec: V3FullSystemOperator,
-        rhs_vec: jnp.ndarray,
-    ) -> jnp.ndarray:
-        if not per_rhs_loop_policy.projection_candidate(int(which_rhs)):
-            return x_vec
-        return _project_constraint_scheme1_nullspace_solution(
-            op=op0,
-            x_vec=x_vec,
-            rhs_vec=rhs_vec,
-            matvec_op=op_matvec,
-            enabled_env_var="SFINCS_JAX_TRANSPORT_PROJECT_NULLSPACE",
-        )
+    constraint_projector = TransportConstraintNullspaceProjector(op=op0, policy=per_rhs_loop_policy)
+    _maybe_project_constraint_nullspace = constraint_projector.project
 
     dense_batch_done = False
     dense_batch_fallback_enabled = bool(per_rhs_loop_policy.dense_batch_fallback_enabled)

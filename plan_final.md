@@ -1083,6 +1083,9 @@ Completed on 2026-06-25:
 - Closed the bounded/reference RHSMode 4/5 sensitivity lane with an aggregate
   fixture coverage gate for every release-facing adjoint output family, while
   keeping full production-grid parity as an external release-refresh benchmark.
+- Moved RHSMode 2/3 constraint-nullspace projection ownership into the
+  transport finalization module through a tested projector object, removing
+  another local solve-loop policy closure from `v3_driver.py`.
 
 Next ordered implementation steps:
 

@@ -2038,3 +2038,56 @@ Next best steps:
    `v3_driver.py` through high-value owner-boundary extractions only.
 3. Run a broader fast test slice after the next refactor tranche and then
    prepare the draft PR for final review-readiness checks.
+
+## 2026-06-25 Transport Constraint-Projection Owner Refactor
+
+Steps taken:
+
+1. Re-inventoried the remaining nested helpers in `v3_driver.py` after the
+   ambipolar and RHSMode 4/5 closure work.
+2. Moved the RHSMode=2/3 constraint-nullspace projection adapter into
+   `sfincs_jax/problems/transport_matrix/finalize.py` as
+   `TransportConstraintNullspaceProjector`.
+3. Rewired `v3_driver.py` so dense-batch and RHS finalization paths receive
+   `constraint_projector.project` instead of a local projection closure.
+4. Updated projection tests to target the transport finalization owner instead
+   of a private `v3_driver` alias.
+
+Results:
+
+- `v3_driver.py` dropped from `12,046` to `12,030` lines in this tranche.
+- `python -m pytest tests/test_constraint_projection.py
+  tests/test_transport_solve_finalization.py -q --tb=short` passed with
+  `9 passed in 1.18 s`.
+- `python -m pytest tests/test_transport_dense_batch.py
+  tests/test_transport_linear_solve.py tests/test_transport_sparse_direct_solve.py
+  tests/test_transport_preconditioner_dispatch.py
+  tests/test_v3_driver_rhs1_dispatch_coverage.py
+  tests/test_v3_driver_pas_precond_policy_coverage.py -q --tb=short` passed
+  with `93 passed in 24.97 s`.
+- `JAX_ENABLE_X64=True python -m pytest
+  tests/test_transport_parallel.py::test_transport_theta_dd_preconditioner_matches_default
+  tests/test_transport_parallel.py::test_transport_theta_schwarz_preconditioner_matches_default
+  -q --tb=short` passed with `2 passed in 12.16 s`.
+- `python -m ruff check
+  sfincs_jax/problems/transport_matrix/finalize.py sfincs_jax/v3_driver.py
+  tests/test_constraint_projection.py`, `python -m py_compile
+  sfincs_jax/v3_driver.py`, and `git diff --check` passed.
+
+Current lane status:
+
+- Ambipolar solver lane: 100% closed for the bounded/reference PR scope.
+- RHSMode 4/5 sensitivity lane: 100% closed for the bounded/reference PR scope.
+- Refactor/review-ready PR lane: 93%; transport preconditioner caching,
+  sparse-direct setup, linear-solve callbacks, and constraint projection now
+  have tested domain owners.
+- Overall completion: about 97%.
+
+Next best steps:
+
+1. Commit and push this projection refactor tranche.
+2. Run one broader fast validation slice across ambipolar, sensitivity,
+   transport, CLI import contracts, and docs.
+3. Prepare a review-readiness checklist for the draft PR: clean worktree,
+   no large generated artifacts, current branch pushed, plan statuses aligned,
+   and remaining production refresh benchmarks explicitly documented.

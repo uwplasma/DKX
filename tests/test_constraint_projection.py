@@ -6,11 +6,11 @@ from jax import config as jax_config
 import jax.numpy as jnp
 import numpy as np
 
-import sfincs_jax.v3_driver as v3_driver
 from sfincs_jax.constraint_projection import (
     project_constraint_scheme1_nullspace_solution,
     project_constraint_scheme1_nullspace_solution_with_residual,
 )
+from sfincs_jax.transport_solve_finalization import TransportConstraintNullspaceProjector
 
 jax_config.update("jax_enable_x64", True)
 
@@ -115,19 +115,32 @@ def test_transport_projection_skips_roundoff_constraint_residual() -> None:
     np.testing.assert_allclose(np.asarray(residual_projected), np.asarray(x - rhs))
 
 
-def test_projection_state_wrapper_and_driver_alias() -> None:
+def test_transport_projection_projector_applies_policy_selected_rhs() -> None:
     op = _op()
     x = jnp.zeros((4,), dtype=jnp.float64)
     rhs = jnp.asarray([0.0, 0.0, -2.0, 3.0], dtype=jnp.float64)
-
-    x_projected = project_constraint_scheme1_nullspace_solution(
+    policy = SimpleNamespace(projection_candidate=lambda which_rhs: int(which_rhs) == 3)
+    projector = TransportConstraintNullspaceProjector(
         op=op,
+        policy=policy,
+        project_solution=lambda **kwargs: project_constraint_scheme1_nullspace_solution(
+            **kwargs,
+            apply_operator=_identity_operator,
+        ),
+    )
+
+    x_projected = projector.project(
         x_vec=x,
+        which_rhs=3,
+        op_matvec=op,
         rhs_vec=rhs,
-        matvec_op=op,
-        enabled_env_var="SFINCS_JAX_TRANSPORT_PROJECT_NULLSPACE",
-        apply_operator=_identity_operator,
+    )
+    x_unprojected = projector.project(
+        x_vec=x,
+        which_rhs=2,
+        op_matvec=op,
+        rhs_vec=rhs,
     )
 
     assert bool(jnp.any(x_projected != x))
-    assert v3_driver._project_constraint_scheme1_nullspace_solution is project_constraint_scheme1_nullspace_solution
+    np.testing.assert_allclose(np.asarray(x_unprojected), np.asarray(x))

@@ -15,6 +15,8 @@ from typing import Any
 
 import jax.numpy as jnp
 
+from sfincs_jax.constraint_projection import project_constraint_scheme1_nullspace_solution
+
 
 EmitFn = Callable[[int, str], None]
 
@@ -79,6 +81,34 @@ class TransportRHSFinalizationContext:
             maxiter_val=self.maxiter,
             precond_side=str(self.precond_side),
             solver_kind=str(solver_kind),
+        )
+
+
+@dataclass(frozen=True)
+class TransportConstraintNullspaceProjector:
+    """Apply constraintScheme=1 nullspace projection only for policy-selected RHSs."""
+
+    op: Any
+    policy: Any
+    enabled_env_var: str = "SFINCS_JAX_TRANSPORT_PROJECT_NULLSPACE"
+    project_solution: Callable[..., jnp.ndarray] = project_constraint_scheme1_nullspace_solution
+
+    def project(
+        self,
+        x_vec: jnp.ndarray,
+        *,
+        which_rhs: int,
+        op_matvec: Any,
+        rhs_vec: jnp.ndarray,
+    ) -> jnp.ndarray:
+        if not self.policy.projection_candidate(int(which_rhs)):
+            return x_vec
+        return self.project_solution(
+            op=self.op,
+            x_vec=x_vec,
+            rhs_vec=rhs_vec,
+            matvec_op=op_matvec,
+            enabled_env_var=self.enabled_env_var,
         )
 
 
@@ -235,6 +265,7 @@ def _maybe_emit_ksp_iteration_stats(
 
 
 __all__ = [
+    "TransportConstraintNullspaceProjector",
     "TransportKSPIterationRequest",
     "TransportRHSFinalizationContext",
     "TransportRHSFinalizationResult",
