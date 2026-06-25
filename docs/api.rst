@@ -191,31 +191,31 @@ research workflows.
 .. automodule:: sfincs_jax.problems.profile_response.active_projection
    :members:
 
-.. automodule:: sfincs_jax.rhs1_constraint_sources
+.. automodule:: sfincs_jax.operators.profile_response.sources
    :members:
 
-.. automodule:: sfincs_jax.rhs1_device_operator
+.. automodule:: sfincs_jax.operators.profile_response.device_sparse
    :members:
 
-.. automodule:: sfincs_jax.rhs1_host_policy
+.. automodule:: sfincs_jax.problems.profile_response.host_policy
    :members:
 
-.. automodule:: sfincs_jax.rhs1_direct_tail_policy
+.. automodule:: sfincs_jax.problems.profile_response.direct_tail_policy
    :members:
 
-.. automodule:: sfincs_jax.rhs1_fortran_reduced_direct_tail
+.. automodule:: sfincs_jax.operators.profile_response.reduced_tail
    :members:
 
-.. automodule:: sfincs_jax.rhs1_structured_full_csr
+.. automodule:: sfincs_jax.operators.profile_response.structured_csr
    :members:
 
-.. automodule:: sfincs_jax.rhs1_true_operator_rescue
+.. automodule:: sfincs_jax.operators.profile_response.true_operator_rescue
    :members:
 
 .. automodule:: sfincs_jax.host_refinement
    :members:
 
-.. automodule:: sfincs_jax.rhs1_large_cpu_policy
+.. automodule:: sfincs_jax.problems.profile_response.large_cpu_policy
    :members:
 
 .. automodule:: sfincs_jax.rhs1_pas_matrixfree
@@ -224,7 +224,7 @@ research workflows.
 .. automodule:: sfincs_jax.rhs1_pas_policy
    :members:
 
-.. automodule:: sfincs_jax.rhs1_preconditioner_auto_policy
+.. automodule:: sfincs_jax.problems.profile_response.preconditioner_auto_policy
    :members:
 
 .. automodule:: sfincs_jax.rhs1_preconditioner_dispatch
@@ -302,16 +302,16 @@ research workflows.
 .. automodule:: sfincs_jax.problems.profile_response.solver_diagnostics
    :members:
 
-.. automodule:: sfincs_jax.rhs1_ksp_diagnostics
+.. automodule:: sfincs_jax.problems.profile_response.ksp_diagnostics
    :members:
 
 .. automodule:: sfincs_jax.newton_krylov_diagnostics
    :members:
 
-.. automodule:: sfincs_jax.rhs1_solver_policy
+.. automodule:: sfincs_jax.problems.profile_response.solver_policy
    :members:
 
-.. automodule:: sfincs_jax.rhs1_strong_fallback
+.. automodule:: sfincs_jax.problems.profile_response.preconditioner_build
    :members:
 
 .. automodule:: sfincs_jax.rhs1_xblock_policy
