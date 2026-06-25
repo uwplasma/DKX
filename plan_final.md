@@ -82,6 +82,11 @@ Implementation progress on 2026-06-23:
   for the magnetic-drift radial-current contribution, plus explicit
   `psiHat`/`rHat`/`rN` coordinate wrappers. A tiny RHSMode-1 deck checks the
   recovered vector against the existing diagnostic.
+- `sfincs_jax.problems.ambipolar` now includes a size-limited dense RHSMode-1
+  linear-observable builder that assembles the true small-deck operator/RHS,
+  finite-differences their scalar-parameter derivatives, and feeds the result
+  to the tangent/adjoint certificate. This pins the wiring contract before a
+  production sparse/matrix-free implementation.
 - Derivative-assisted safeguarded Newton/bisection and strict pure-Newton root
   solvers are implemented behind the same ambipolar owner. They accept a
   derivative provider, so finite-difference gates, direct implicit
@@ -943,12 +948,12 @@ Deliverables:
    in-process RHSMode 1 ambipolar evaluator. Geometry/output caching, Krylov
    state reuse, symbolic field-split ordering reuse, and trace provenance are
    already in place.
-7. Fill a `LinearObservableSystem` from the concrete RHSMode 1 radial-current
-   residual graph and compare its builder-backed implicit derivative against
-   centered finite differences. The generic certificate, builder bridge,
-   magnetic-drift radial-current observable probe, finite-difference derivative
-   contract, and Newton root solvers are already in place. Remaining work is
-   the `Er` derivative of the operator/RHS plus Phi1 drift-current branches.
+7. Promote the small-deck dense RHSMode-1 derivative gate to a sparse/matrix-free
+   production builder with analytic or JVP-backed `Er` operator/RHS derivatives.
+   The generic certificate, builder bridge, magnetic-drift radial-current
+   observable, coordinate conversion, finite-difference derivative contract, and
+   Newton root solvers are already in place. Remaining work is production
+   operator derivatives plus Phi1 drift-current branches.
 8. Wire the exact derivative into safeguarded Newton/bisection and pure Newton
    for Fortran option 1/3 physical parity gates.
 9. Define residual/operator/transpose operator protocol and migrate one

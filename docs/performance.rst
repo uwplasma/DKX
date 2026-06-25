@@ -521,7 +521,10 @@ JAX-native performance patterns used in `sfincs_jax`
   implicit derivative. For small validation decks,
   ``probe_linear_observable_vector`` can recover the observable vector from an
   existing linear diagnostic in bounded chunks; production paths should use the
-  pinned analytic weights once validated.
+  pinned analytic weights once validated. The ambipolar owner also includes a
+  size-limited dense RHSMode-1 builder for validation gates that assembles
+  ``A``, ``b``, finite-differences ``A_p`` and ``b_p``, and then reuses the same
+  certificate machinery.
 - **Default to short-recurrence Krylov for transport**: BiCGStab avoids storing a full GMRES basis and
   is therefore far more memory efficient for large RHSMode=2/3 systems. GMRES remains available and is
   used as a fallback when BiCGStab stagnates; transport-matrix solves default to BiCGStab with the

@@ -1033,6 +1033,111 @@ def implicit_linear_radial_current_derivative_from_builder(
     return _radial_current_derivative_from_linear_certificate(er=er, result=result)
 
 
+def dense_rhs1_vm_radial_current_linear_observable_system(
+    *,
+    op: Any,
+    op_plus: Any,
+    op_minus: Any,
+    parameter: float,
+    derivative_step: float,
+    radial_coordinate: str = "psiHat",
+    psi_a_hat: float | None = None,
+    a_hat: float | None = None,
+    r_n: float | None = None,
+    max_size: int = 512,
+    observable_chunk_size: int = 128,
+    include_jacobian_terms: bool = True,
+    metadata: Mapping[str, Any] | None = None,
+) -> Any:
+    """Build a dense RHSMode-1 radial-current derivative system for small gates.
+
+    This validation bridge uses real SFINCS_JAX operators and diagnostics but is
+    intentionally size-limited. Production ambipolar derivatives should replace
+    the dense assembly with sparse/matrix-free operator derivatives after this
+    small-deck gate pins the signs, normalization, and coordinate conversion.
+    """
+
+    h = float(derivative_step)
+    if h <= 0.0:
+        raise ValueError("derivative_step must be positive.")
+    total_size = int(getattr(op, "total_size"))
+    if total_size <= 0:
+        raise ValueError("op.total_size must be positive.")
+    if total_size > int(max_size):
+        raise ValueError(f"dense RHSMode-1 derivative builder refused size {total_size} > max_size {int(max_size)}.")
+    for name, candidate in (("op_plus", op_plus), ("op_minus", op_minus)):
+        if int(getattr(candidate, "total_size")) != total_size:
+            raise ValueError(f"{name}.total_size must match op.total_size.")
+
+    import jax.numpy as jnp  # noqa: PLC0415
+
+    from ..sensitivity import LinearObservableSystem  # noqa: PLC0415
+    from ..solver import assemble_dense_matrix_from_matvec  # noqa: PLC0415
+    from ..v3_system import apply_v3_full_system_operator_cached, rhs_v3_full_system_jit  # noqa: PLC0415
+    from .transport_matrix.diagnostics import radial_current_vm_observable_vector  # noqa: PLC0415
+
+    def assemble_matrix(operator: Any) -> Any:
+        return assemble_dense_matrix_from_matvec(
+            matvec=lambda state: apply_v3_full_system_operator_cached(
+                operator,
+                state,
+                include_jacobian_terms=bool(include_jacobian_terms),
+            ),
+            n=total_size,
+            dtype=jnp.float64,
+        )
+
+    matrix = assemble_matrix(op)
+    matrix_plus = assemble_matrix(op_plus)
+    matrix_minus = assemble_matrix(op_minus)
+    rhs = rhs_v3_full_system_jit(op)
+    rhs_plus = rhs_v3_full_system_jit(op_plus)
+    rhs_minus = rhs_v3_full_system_jit(op_minus)
+    observable_vector, observable_offset = radial_current_vm_observable_vector(
+        op,
+        radial_coordinate=radial_coordinate,
+        psi_a_hat=psi_a_hat,
+        a_hat=a_hat,
+        r_n=r_n,
+        chunk_size=int(observable_chunk_size),
+    )
+    observable_vector_plus, observable_offset_plus = radial_current_vm_observable_vector(
+        op_plus,
+        radial_coordinate=radial_coordinate,
+        psi_a_hat=psi_a_hat,
+        a_hat=a_hat,
+        r_n=r_n,
+        chunk_size=int(observable_chunk_size),
+    )
+    observable_vector_minus, observable_offset_minus = radial_current_vm_observable_vector(
+        op_minus,
+        radial_coordinate=radial_coordinate,
+        psi_a_hat=psi_a_hat,
+        a_hat=a_hat,
+        r_n=r_n,
+        chunk_size=int(observable_chunk_size),
+    )
+    merged_metadata = {
+        "builder": "dense_rhs1_vm_radial_current",
+        "total_size": total_size,
+        "radial_coordinate": str(radial_coordinate),
+        "derivative_step": h,
+        **dict(metadata or {}),
+    }
+    return LinearObservableSystem(
+        parameter=float(parameter),
+        matrix=matrix,
+        rhs=rhs,
+        matrix_derivative=(matrix_plus - matrix_minus) / (2.0 * h),
+        rhs_derivative=(rhs_plus - rhs_minus) / (2.0 * h),
+        observable_vector=observable_vector,
+        observable_vector_derivative=(observable_vector_plus - observable_vector_minus) / (2.0 * h),
+        observable_offset=float(observable_offset),
+        observable_offset_derivative=(float(observable_offset_plus) - float(observable_offset_minus)) / (2.0 * h),
+        metadata=merged_metadata,
+    )
+
+
 def _radial_current_derivative_from_linear_certificate(
     *,
     er: float,
@@ -1183,6 +1288,7 @@ __all__ = [
     "SfincsJaxEvaluationRecord",
     "SfincsJaxRadialCurrentEvaluator",
     "brent_ambipolar_root",
+    "dense_rhs1_vm_radial_current_linear_observable_system",
     "finite_difference_radial_current_derivative",
     "implicit_linear_radial_current_derivative",
     "implicit_linear_radial_current_derivative_from_builder",

@@ -892,3 +892,32 @@ Next best steps:
 1. Build the corresponding RHSMode 1 `LinearObservableSystem` by pairing this
    observable with the active operator/RHS and their `Er` derivatives.
 2. Add Phi1 drift-current support after the no-Phi1 magnetic-drift gate passes.
+
+## 2026-06-25 Dense RHSMode 1 Linear-Observable Derivative Gate
+
+Steps taken:
+
+1. Added `dense_rhs1_vm_radial_current_linear_observable_system` to
+   `sfincs_jax.problems.ambipolar`.
+2. The helper assembles the true small-deck RHSMode 1 operator, RHS, radial
+   current observable, and centered finite-difference derivatives from an
+   operator triplet.
+3. Added a tiny real RHSMode 1 gate that perturbs the density-gradient source,
+   solves tangent/adjoint systems, and compares the resulting derivative against
+   a centered finite-difference solve.
+
+Results:
+
+- Dense real RHSMode 1 derivative gate passed:
+  `python -m pytest
+  tests/test_sensitivity.py::test_dense_rhs1_radial_current_linear_observable_system_matches_finite_difference
+  -q --tb=short` with `1 passed` in about 9 seconds.
+
+Next best steps:
+
+1. Replace dense validation assembly with a sparse/matrix-free builder for
+   production RHSMode 1 surfaces.
+2. Provide true `Er` derivatives of the operator/RHS, either analytically from
+   the collisionless electric-field blocks or by a checked JVP path.
+3. Wire the resulting derivative provider into safeguarded Newton and pure
+   Newton ambipolar solves for Fortran option-1/3 parity gates.
