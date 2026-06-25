@@ -182,7 +182,7 @@ research workflows.
 .. automodule:: sfincs_jax.solvers.preconditioners.xblock.coarse
    :members:
 
-.. automodule:: sfincs_jax.solvers.preconditioners.domain_decomposition.policy
+.. automodule:: sfincs_jax.solvers.preconditioners.domain_decomposition
    :members:
 
 .. automodule:: sfincs_jax.problems.profile_response.active_dof
@@ -251,7 +251,7 @@ research workflows.
 .. automodule:: sfincs_jax.solvers.preconditioners.qi.device_smoother
    :members:
 
-.. automodule:: sfincs_jax.solvers.preconditioners.qi.galerkin_policy
+.. automodule:: sfincs_jax.solvers.preconditioners.qi.residual_galerkin
    :members:
 
 .. automodule:: sfincs_jax.solvers.preconditioners.qi.global_moments
@@ -264,9 +264,6 @@ research workflows.
    :members:
 
 .. automodule:: sfincs_jax.solvers.preconditioners.qi.promotion
-   :members:
-
-.. automodule:: sfincs_jax.solvers.preconditioners.qi.residual_galerkin
    :members:
 
 .. automodule:: sfincs_jax.solvers.preconditioners.qi.residual_regions
@@ -296,7 +293,7 @@ research workflows.
 .. automodule:: sfincs_jax.problems.profile_response.sparse.xblock
    :members:
 
-.. automodule:: sfincs_jax.solvers.preconditioners.schur.policy
+.. automodule:: sfincs_jax.solvers.preconditioners.schur.rhs1
    :members:
 
 .. automodule:: sfincs_jax.problems.profile_response.solver_diagnostics
@@ -315,9 +312,6 @@ research workflows.
    :members:
 
 .. automodule:: sfincs_jax.solvers.preconditioners.xblock.policy
-   :members:
-
-.. automodule:: sfincs_jax.solvers.preconditioners.xblock.sparse_host_policy
    :members:
 
 .. automodule:: sfincs_jax.solve_mode_policy
