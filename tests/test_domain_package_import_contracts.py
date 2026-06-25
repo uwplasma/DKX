@@ -47,6 +47,7 @@ ACTIVE_PACKAGE_EXPORTS = {
         "implicit_linear_radial_current_derivative_from_builder",
         "implicit_matrix_free_radial_current_derivative",
         "implicit_matrix_free_radial_current_derivative_from_builder",
+        "matrix_free_radial_current_derivative_provider",
         "matrix_free_rhs1_vm_radial_current_linear_observable_system",
         "newton_ambipolar_root",
         "operator_tangent_from_centered_difference",
