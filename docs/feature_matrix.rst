@@ -108,10 +108,10 @@ Fortran v3 feature ownership
      - ``ambipolarSolver.F90``, ``solver.F90``, ``adjointDiagnostics.F90``
      - Fortran first finds ambipolar ``E_r``, then evaluates derivatives at
        constant radial current with the extra ``dPhi/dPsi`` term.
-     - Partial/deferred. The implicit sensitivity spine is present, but full
-       RHSMode-5 parity requires option-1/3 production derivatives and
-       constant-current diagnostic output gates. Source-compatible validation
-       and HDF5 field-name gates are present.
+     - Partial/deferred. The implicit sensitivity spine is present, and a
+       compact Fortran RHSMode=5 heat-flux/``dPhidPsidLambda`` constant-current
+       fixture now pins the output surface. Full RHSMode-5 parity still
+       requires production option-1/3 derivatives and larger diagnostic gates.
    * - Collision models
      - ``populateMatrix.F90`` and collision-specific helpers
      - Manual and validation checks distinguish PAS and full Fokker-Planck
