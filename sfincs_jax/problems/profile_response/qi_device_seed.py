@@ -27,7 +27,7 @@ from sfincs_jax.solvers.preconditioners.qi.device import (
     probe_rhs1_qi_device_preconditioner,
     setup_rhs1_qi_device_preconditioner,
 )
-from sfincs_jax.problems.profile_response.solver_policy import (
+from sfincs_jax.problems.profile_response.policies import (
     read_bool_env as _rhs1_bool_env,
     read_float_env as _rhs1_float_env,
     read_int_env as _rhs1_int_env,

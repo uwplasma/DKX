@@ -2545,3 +2545,75 @@ Next best steps:
 4. Execute Tranche D in one solver/preconditioner review pass: collapse QI by
    role, remove or rename remaining `rhs1`-named solver internals, refresh docs
    and source maps, and bring package file count below `220`.
+
+## 2026-06-25 Lane 1 Tranche B Policy/Sparse Checkpoint
+
+Steps taken:
+
+1. Consolidated six profile-response policy shards into
+   `sfincs_jax.problems.profile_response.policies`:
+   `active_preconditioner_policy.py`, `direct_tail_policy.py`,
+   `host_policy.py`, `large_cpu_policy.py`,
+   `preconditioner_auto_policy.py`, and `solver_policy.py` were deleted.
+2. Consolidated top-level profile-response finalization and KSP replay
+   diagnostics into `sfincs_jax.problems.profile_response.solver_diagnostics`;
+   `finalization.py` and `ksp_diagnostics.py` were deleted.
+3. Moved sparse-PC Krylov execution helpers from
+   `sfincs_jax.problems.profile_response.sparse.krylov` into
+   `sfincs_jax.problems.profile_response.sparse_pc`; `sparse/krylov.py` was
+   deleted. Shared sparse-PC finalization remains in
+   `profile_response/sparse/finalization.py` because direct/x-block/
+   Fortran-reduced sparse paths share the same payload contracts.
+4. Rewrote internal imports and tests to use canonical owners, and removed
+   deleted modules from `docs/api.rst` and `docs/testing.rst`.
+5. Repaired a transient duplicate sparse-PC finalization merge by restoring
+   the shared sparse finalization owner and keeping only Krylov execution in
+   `sparse_pc.py`.
+6. Updated `plan_final.md` as the single authoritative plan for the remaining
+   consolidation pass. The plan now names the remaining large tranches and the
+   concrete delete/merge targets instead of allowing helper-by-helper churn.
+
+Current inventory:
+
+- Package Python files: `230`.
+- `problems/profile_response`: `24` Python files and about `50k` lines.
+- `sfincs_jax/problems/profile_response/solve.py`: `11,279` lines.
+- `sfincs_jax/problems/profile_response/policies.py`: `6,380` lines.
+- `sfincs_jax/problems/profile_response/sparse_pc.py`: `3,761` lines.
+- `sfincs_jax/problems/profile_response/solver_diagnostics.py`: `812` lines.
+- `sfincs_jax/problems/transport_matrix`: `33` Python files.
+- `sfincs_jax/solvers/preconditioners`: `50` Python files.
+
+Validation:
+
+- Focused policy/finalization/sparse-PC tests passed:
+  `526 passed in 39.20s`.
+- Scoped ruff passed for the consolidated profile-response modules and sparse
+  tests.
+- `python -m py_compile sfincs_jax/problems/profile_response/*.py
+  sfincs_jax/problems/profile_response/sparse/*.py` passed.
+- `python -m sphinx -W -b html docs docs/_build/html` passed.
+
+Current lane status:
+
+- Lane 1 Tranche A: `100%` implementation/validation complete pending final
+  checkpoint commit.
+- Lane 1 Tranche B: about `35%`; policy/diagnostics/krylov shards are
+  consolidated and the old 24-file intermediate count is reached, but the
+  final 22-file target remains open, `profile_response/solve.py` still must be
+  reduced below `3.5k` lines, and `sparse_pc.py` must be deleted or moved under
+  the sparse package.
+- Lane 1 Tranche C: `0%`.
+- Lane 1 Tranche D: `0%`.
+- Lane 1 overall: about `55%` of the authoritative consolidation plan.
+- Overall refactor/review-ready PR goal: not complete.
+
+Next best steps:
+
+1. Commit and push this Tranche B checkpoint after `git diff --check` passes.
+2. Finish Tranche B in one large solve-phase move: move setup/materialization,
+   residual/admission, sparse branch orchestration, final handoff, and
+   diagnostics from `profile_response/solve.py` into existing profile-response
+   owners, then delete or fold `sparse_pc.py`.
+3. Run the focused RHSMode-1, sparse-PC, QI admission, ambipolar, sensitivity,
+   docs, and import-contract gates before starting Tranche C.

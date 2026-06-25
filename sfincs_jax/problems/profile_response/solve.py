@@ -907,7 +907,7 @@ from sfincs_jax.operators.profile_response.full_system import (
     solve_structured_rhs1_full_csr,
 )
 from sfincs_jax.operators.profile_response.structured_csr import _try_build_structured_rhs1_full_csr_operator_bundle
-from sfincs_jax.problems.profile_response.preconditioner_auto_policy import (
+from sfincs_jax.problems.profile_response.policies import (
     canonical_rhs1_preconditioner_kind as _canonical_rhs1_preconditioner_kind,
     pas_auto_skip_strong_retry as _pas_auto_skip_strong_retry,
     rhs1_fp_dkes_default_kind as _rhs1_fp_dkes_default_kind,
@@ -926,7 +926,7 @@ from sfincs_jax.problems.profile_response.preconditioner_auto_policy import (
     rhs1_pas_weak_auto_override_kind as _rhs1_pas_weak_auto_override_kind,
     rhs1_sharded_line_override_allowed as _rhs1_sharded_line_override_allowed,
 )
-from sfincs_jax.problems.profile_response.preconditioner_auto_policy import (
+from sfincs_jax.problems.profile_response.policies import (
     rhs1_gpu_sparse_fallback_skip_allowed as _rhs1_gpu_sparse_fallback_skip_allowed_impl,
 )
 from sfincs_jax.solvers.preconditioners.schur.rhs1 import resolve_rhs1_schur_base_kind
@@ -1248,14 +1248,14 @@ from sfincs_jax.problems.profile_response.policies import (
     rhs1_parse_polish_gmres_config,
     rhs1_polish_enabled,
 )
-from sfincs_jax.problems.profile_response.solver_policy import (
+from sfincs_jax.problems.profile_response.policies import (
     read_bool_env as _rhs1_bool_env,
     read_float_env as _rhs1_float_env,
     read_int_env as _rhs1_int_env,
     read_post_solve_correction_policy as _read_rhs1_post_solve_correction_policy,
     read_probe_coarse_policy as _read_rhs1_probe_coarse_policy,
 )
-from sfincs_jax.problems.profile_response.direct_tail_policy import (
+from sfincs_jax.problems.profile_response.policies import (
     _DIRECT_TAIL_STRUCTURED_PC_CACHE,
     _StructuredHostSparsePreconditionerBundle,
     _direct_tail_structured_pc_cache_key,
@@ -1286,7 +1286,7 @@ from sfincs_jax.operators.profile_response.true_operator_rescue import (
     _try_build_residual_coarse_host_sparse_preconditioner,
     _try_build_residual_window_host_sparse_preconditioner,
 )
-from sfincs_jax.problems.profile_response.ksp_diagnostics import (
+from sfincs_jax.problems.profile_response.solver_diagnostics import (
     rhs1_fortran_stdout_from_env,
     rhs1_ksp_diagnostics_controls_from_env,
     rhs1_ksp_history_limits_from_env,
@@ -1294,7 +1294,7 @@ from sfincs_jax.problems.profile_response.ksp_diagnostics import (
 from sfincs_jax.problems.profile_response.solver_diagnostics import (
     RHS1KSPDiagnosticsContext,
 )
-from sfincs_jax.problems.profile_response.finalization import (
+from sfincs_jax.problems.profile_response.solver_diagnostics import (
     ProfileResponseLinearFinalizationContext,
     finalize_profile_response_linear_solve,
 )
@@ -1357,7 +1357,7 @@ from sfincs_jax.problems.profile_response.policies import (
     rhs1_sparse_exact_lu_requested as _rhs1_sparse_exact_lu_requested_impl,
     rhs1_sparse_prefer_skips_stage2 as _rhs1_sparse_prefer_skips_stage2_impl,
 )
-from sfincs_jax.problems.profile_response.large_cpu_policy import (
+from sfincs_jax.problems.profile_response.policies import (
     rhs1_large_cpu_sparse_exact_lu_allowed as _rhs1_large_cpu_sparse_exact_lu_allowed_impl,
     rhs1_large_cpu_sparse_exact_lu_xblock_allowed as _rhs1_large_cpu_sparse_exact_lu_xblock_allowed_impl,
     rhs1_large_cpu_sparse_rescue_allowed as _rhs1_large_cpu_sparse_rescue_allowed_impl,
@@ -1398,7 +1398,7 @@ from sfincs_jax.problems.profile_response.policies import (
     rhs1_stage2_trigger_decision,
 )
 from sfincs_jax import solver_path_policy as _solver_path_policy
-from sfincs_jax.problems.profile_response.host_policy import (
+from sfincs_jax.problems.profile_response.policies import (
     host_sparse_direct_refine_steps as _host_sparse_direct_refine_steps_impl,
     host_sparse_factor_dtype as _host_sparse_factor_dtype_impl,
     rhs1_dense_auto_fp_allowed as _rhs1_dense_auto_fp_allowed_impl,

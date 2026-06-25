@@ -2,22 +2,28 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from collections.abc import Mapping
+from dataclasses import dataclass, replace
+import hashlib
 import os
-from typing import Any, Mapping
+from typing import Any
 
 import jax.numpy as jnp
 import numpy as np
 
 from ...pas_smoother import pas_fast_accept as _pas_fast_accept_metric
-from sfincs_jax.problems.profile_response.solver_policy import (
-    read_bool_env as _read_bool_env,
-    read_float_env as _read_float_env,
-    read_int_env as _read_int_env,
+from sfincs_jax.explicit_sparse import SparseOperatorBundle
+from sfincs_jax.solver_selection_policy import (
+    SolverAcceptanceCriteria,
+    SolverCandidateGate,
+    SolverCandidateMetrics,
+    solver_candidate_gate,
 )
 
 _TRUE_VALUES = {"1", "true", "yes", "on"}
 _FALSE_VALUES = {"0", "false", "no", "off"}
+TRUE_ENV_VALUES = {"1", "true", "t", "yes", "on", ".true.", ".t."}
+FALSE_ENV_VALUES = {"0", "false", "f", "no", "off", ".false.", ".f."}
 
 
 def _env_token(name: str) -> str:
@@ -38,6 +44,566 @@ def _env_float(name: str, default: float) -> float:
         return float(raw) if raw else float(default)
     except ValueError:
         return float(default)
+
+
+def _env_get(env: Mapping[str, str] | None, name: str) -> str:
+    source = os.environ if env is None else env
+    return str(source.get(name, "")).strip()
+
+
+def read_bool_env(name: str, *, default: bool = False, env: Mapping[str, str] | None = None) -> bool:
+    """Parse a Fortran/Python-style boolean environment value."""
+
+    raw = _env_get(env, name).lower()
+    if not raw:
+        return bool(default)
+    if raw in TRUE_ENV_VALUES:
+        return True
+    if raw in FALSE_ENV_VALUES:
+        return False
+    return bool(default)
+
+
+def read_int_env(
+    name: str,
+    *,
+    default: int,
+    minimum: int = 0,
+    env: Mapping[str, str] | None = None,
+) -> int:
+    """Parse an integer environment value with a lower bound."""
+
+    raw = _env_get(env, name)
+    try:
+        value = int(raw) if raw else int(default)
+    except ValueError:
+        value = int(default)
+    return max(int(minimum), int(value))
+
+
+def read_float_env(
+    name: str,
+    *,
+    default: float,
+    minimum: float = 0.0,
+    env: Mapping[str, str] | None = None,
+) -> float:
+    """Parse a floating-point environment value with a lower bound."""
+
+    raw = _env_get(env, name)
+    try:
+        value = float(raw) if raw else float(default)
+    except ValueError:
+        value = float(default)
+    return max(float(minimum), float(value))
+
+
+_read_bool_env = read_bool_env
+_read_int_env = read_int_env
+_read_float_env = read_float_env
+
+
+@dataclass(frozen=True)
+class RHS1PostMinresPolicy:
+    """Opt-in post-Krylov minres cleanup policy."""
+
+    steps_requested: int
+    alpha_clip: float
+    min_improvement: float
+
+
+@dataclass(frozen=True)
+class RHS1SubspaceCorrectionPolicy:
+    """Policy for small residual-equation or coarse correction spaces."""
+
+    steps_requested: int
+    max_directions: int
+    max_extra_units: int
+    fsavg_lmax: int
+    angular_lmax: int
+    include_angular_residual: bool
+    include_raw: bool
+    alpha_clip: float
+    rcond: float
+    min_improvement: float
+    include_post_coarse: bool = True
+    include_qi_basis: bool = True
+
+
+@dataclass(frozen=True)
+class RHS1PostSolveCorrectionPolicy:
+    """All post-Krylov x-block correction policies used by profile-response solves."""
+
+    post_minres: RHS1PostMinresPolicy
+    post_coarse: RHS1SubspaceCorrectionPolicy
+    post_residual_equation: RHS1SubspaceCorrectionPolicy
+
+
+def read_post_minres_policy(*, env: Mapping[str, str] | None = None) -> RHS1PostMinresPolicy:
+    """Read the post-minres cleanup policy."""
+
+    return RHS1PostMinresPolicy(
+        steps_requested=read_int_env(
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_POST_MINRES_STEPS",
+            default=0,
+            minimum=0,
+            env=env,
+        ),
+        alpha_clip=read_float_env(
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_POST_MINRES_ALPHA_CLIP",
+            default=10.0,
+            minimum=0.0,
+            env=env,
+        ),
+        min_improvement=read_float_env(
+            "SFINCS_JAX_RHSMODE1_XBLOCK_PC_POST_MINRES_MIN_IMPROVEMENT",
+            default=0.0,
+            minimum=0.0,
+            env=env,
+        ),
+    )
+
+
+def read_subspace_correction_policy(
+    prefix: str,
+    *,
+    enabled_default: bool = False,
+    steps_default: int = 1,
+    max_directions_default: int = 16,
+    max_extra_units_default: int = 8,
+    fsavg_lmax_default: int = 2,
+    angular_lmax_default: int = -1,
+    include_angular_residual_default: bool = False,
+    include_raw_default: bool = True,
+    alpha_clip_default: float = 0.0,
+    rcond_default: float = 1.0e-12,
+    min_improvement_default: float = 0.0,
+    include_post_coarse_default: bool = True,
+    include_qi_basis_default: bool = True,
+    env: Mapping[str, str] | None = None,
+) -> RHS1SubspaceCorrectionPolicy:
+    """Read a named small-subspace correction policy."""
+
+    enabled = read_bool_env(prefix, default=enabled_default, env=env)
+    steps_requested = (
+        read_int_env(f"{prefix}_STEPS", default=steps_default, minimum=1, env=env)
+        if enabled
+        else 0
+    )
+    return RHS1SubspaceCorrectionPolicy(
+        steps_requested=steps_requested,
+        max_directions=read_int_env(
+            f"{prefix}_MAX_DIRECTIONS",
+            default=max_directions_default,
+            minimum=1,
+            env=env,
+        ),
+        max_extra_units=read_int_env(
+            f"{prefix}_MAX_EXTRA_UNITS",
+            default=max_extra_units_default,
+            minimum=0,
+            env=env,
+        ),
+        fsavg_lmax=read_int_env(
+            f"{prefix}_FSAVG_LMAX",
+            default=fsavg_lmax_default,
+            minimum=0,
+            env=env,
+        ),
+        angular_lmax=read_int_env(
+            f"{prefix}_ANGULAR_LMAX",
+            default=angular_lmax_default,
+            minimum=-1,
+            env=env,
+        ),
+        include_angular_residual=read_bool_env(
+            f"{prefix}_ANGULAR_RESIDUAL",
+            default=include_angular_residual_default,
+            env=env,
+        ),
+        include_raw=read_bool_env(
+            f"{prefix}_INCLUDE_RAW",
+            default=include_raw_default,
+            env=env,
+        ),
+        alpha_clip=read_float_env(
+            f"{prefix}_ALPHA_CLIP",
+            default=alpha_clip_default,
+            minimum=0.0,
+            env=env,
+        ),
+        rcond=read_float_env(
+            f"{prefix}_RCOND",
+            default=rcond_default,
+            minimum=0.0,
+            env=env,
+        ),
+        min_improvement=read_float_env(
+            f"{prefix}_MIN_IMPROVEMENT",
+            default=min_improvement_default,
+            minimum=0.0,
+            env=env,
+        ),
+        include_post_coarse=read_bool_env(
+            f"{prefix}_INCLUDE_POST_COARSE",
+            default=include_post_coarse_default,
+            env=env,
+        ),
+        include_qi_basis=read_bool_env(
+            f"{prefix}_INCLUDE_QI_BASIS",
+            default=include_qi_basis_default,
+            env=env,
+        ),
+    )
+
+
+def read_probe_coarse_policy(*, env: Mapping[str, str] | None = None) -> RHS1SubspaceCorrectionPolicy:
+    """Read the pre-Krylov probe-coarse policy."""
+
+    return read_subspace_correction_policy(
+        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_PROBE_COARSE",
+        max_directions_default=16,
+        max_extra_units_default=8,
+        fsavg_lmax_default=2,
+        angular_lmax_default=-1,
+        include_angular_residual_default=False,
+        env=env,
+    )
+
+
+def read_post_coarse_policy(*, env: Mapping[str, str] | None = None) -> RHS1SubspaceCorrectionPolicy:
+    """Read the post-Krylov coarse correction policy."""
+
+    return read_subspace_correction_policy(
+        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_POST_COARSE",
+        max_directions_default=16,
+        max_extra_units_default=8,
+        fsavg_lmax_default=2,
+        angular_lmax_default=-1,
+        include_angular_residual_default=False,
+        env=env,
+    )
+
+
+def read_post_residual_equation_policy(
+    *,
+    env: Mapping[str, str] | None = None,
+) -> RHS1SubspaceCorrectionPolicy:
+    """Read the post-Krylov final-residual equation policy."""
+
+    return read_subspace_correction_policy(
+        "SFINCS_JAX_RHSMODE1_XBLOCK_PC_POST_RESIDUAL_EQUATION",
+        max_directions_default=64,
+        max_extra_units_default=8,
+        fsavg_lmax_default=4,
+        angular_lmax_default=1,
+        include_angular_residual_default=True,
+        include_raw_default=True,
+        include_post_coarse_default=True,
+        include_qi_basis_default=True,
+        env=env,
+    )
+
+
+def read_post_solve_correction_policy(
+    *,
+    env: Mapping[str, str] | None = None,
+) -> RHS1PostSolveCorrectionPolicy:
+    """Read all post-Krylov correction policies for the x-block solve."""
+
+    return RHS1PostSolveCorrectionPolicy(
+        post_minres=read_post_minres_policy(env=env),
+        post_coarse=read_post_coarse_policy(env=env),
+        post_residual_equation=read_post_residual_equation_policy(env=env),
+    )
+
+
+_DEFAULT_ACTIVE_AUTO_CANDIDATES = (
+    "active_fortran_v3_reduced_lu",
+    "active_fortran_v3_reduced_native_stack",
+    "active_symbolic_frontal_schur_lu",
+    "active_symbolic_superblock_lu",
+    "active_symbolic_block_schur_lu",
+    "active_schwarz_sparse_coarse",
+    "active_global_field_split_schur",
+    "active_xblock_ell_band_schur",
+    "active_ell_band_schur",
+    "active_bounded_native_stack",
+    "active_xblock",
+    "active_diagonal_schur",
+    "active_spilu",
+    "jacobi",
+)
+
+_DEFAULT_ACTIVE_LARGE_AUTO_CANDIDATES = (
+    "active_fortran_v3_reduced_native_stack",
+    "active_symbolic_frontal_schur_lu",
+    "active_symbolic_superblock_lu",
+    "active_coupled_kinetic_field_split_sparse_coarse",
+    "active_symbolic_block_schur_lu",
+    "active_fortran_v3_reduced_lu",
+)
+
+_ACTIVE_LARGE_FALLBACK_CANDIDATES = frozenset(
+    {
+        "active_diagonal_schur",
+        "active_diag_schur",
+        "active_tail_schur",
+        "active_constraint_tail_schur",
+        "active_field_split",
+        "active_field_split_tail",
+        "jacobi",
+        "diagonal",
+    }
+)
+
+
+@dataclass(frozen=True)
+class ActiveProjectedPreconditionerAutoPolicy:
+    """Resolved auto-policy for active projected RHSMode=1 preconditioners."""
+
+    candidates: tuple[str, ...]
+    candidates_requested: tuple[str, ...]
+    skipped_large_fallbacks: tuple[str, ...]
+    large_fallback_size: int
+    large_default_used: bool
+    log_progress: bool
+
+
+def _parse_active_candidates(candidate_env: str) -> tuple[str, ...]:
+    return tuple(
+        item.strip().lower().replace("-", "_")
+        for item in str(candidate_env).split(",")
+        if item.strip()
+    )
+
+
+def resolve_active_projected_preconditioner_auto_policy(
+    *,
+    matrix_size: int,
+    env: Mapping[str, str] | None = None,
+) -> ActiveProjectedPreconditionerAutoPolicy:
+    """Resolve the active-system preconditioner auto ladder."""
+
+    env_map = os.environ if env is None else env
+    size = int(matrix_size)
+    large_fallback_size = max(
+        1,
+        read_int_env(
+            "SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_AUTO_LARGE_FALLBACK_SIZE",
+            default=300000,
+            env=env_map,
+        ),
+    )
+    candidate_env_override = env_map.get("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_AUTO_CANDIDATES")
+    candidate_env = (
+        candidate_env_override
+        if candidate_env_override is not None
+        else ",".join(_DEFAULT_ACTIVE_AUTO_CANDIDATES)
+    )
+    large_default_used = False
+    if candidate_env_override is None and size >= int(large_fallback_size):
+        candidate_env = env_map.get(
+            "SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_AUTO_LARGE_CANDIDATES",
+            ",".join(_DEFAULT_ACTIVE_LARGE_AUTO_CANDIDATES),
+        )
+        large_default_used = True
+
+    candidates = _parse_active_candidates(candidate_env)
+    if not candidates:
+        candidates = ("active_diagonal_schur", "jacobi")
+    candidates_requested = tuple(candidates)
+
+    allow_large_fallback = read_bool_env(
+        "SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_AUTO_ALLOW_LARGE_DIAGONAL_FALLBACK",
+        default=False,
+        env=env_map,
+    )
+    skipped_large_fallbacks: tuple[str, ...] = ()
+    if size >= int(large_fallback_size) and not bool(allow_large_fallback):
+        skipped_large_fallbacks = tuple(
+            candidate for candidate in candidates if candidate in _ACTIVE_LARGE_FALLBACK_CANDIDATES
+        )
+        candidates = tuple(
+            candidate for candidate in candidates if candidate not in _ACTIVE_LARGE_FALLBACK_CANDIDATES
+        )
+
+    log_progress = read_bool_env(
+        "SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_AUTO_PROGRESS",
+        default=bool(large_default_used) or size >= int(large_fallback_size),
+        env=env_map,
+    )
+    return ActiveProjectedPreconditionerAutoPolicy(
+        candidates=tuple(candidates),
+        candidates_requested=tuple(candidates_requested),
+        skipped_large_fallbacks=tuple(skipped_large_fallbacks),
+        large_fallback_size=int(large_fallback_size),
+        large_default_used=bool(large_default_used),
+        log_progress=bool(log_progress),
+    )
+
+
+@dataclass(frozen=True)
+class _StructuredHostSparsePreconditionerBundle:
+    """Adapter exposing structured CSR preconditioners through the factor API."""
+
+    preconditioner: object
+    operator: SparseOperatorBundle
+    kind: str
+    factor_nbytes_estimate: int | None = None
+    factor_nnz_estimate: int | None = None
+    factor_s: float | None = None
+
+    def solve(self, rhs) -> np.ndarray:
+        preconditioner_operator = getattr(self.preconditioner, "operator", None)
+        if preconditioner_operator is None:
+            raise RuntimeError(f"structured host preconditioner {self.kind!r} was not selected")
+        return np.asarray(preconditioner_operator.matvec(np.asarray(rhs, dtype=np.float64).reshape((-1,))))
+
+
+_DIRECT_TAIL_STRUCTURED_PC_CACHE: dict[tuple[object, ...], object] = {}
+_DIRECT_REDUCED_PMAT_PC_KINDS = frozenset(
+    {
+        "active_fortran_v3_reduced_direct_pmat_lu",
+        "active_fortran_v3_reduced_direct_pmat_ilu",
+        "active_fortran_v3_direct_pmat_lu",
+        "active_fortran_v3_direct_pmat_ilu",
+        "direct_reduced_pmat_lu",
+        "direct_reduced_pmat_ilu",
+    }
+)
+
+
+def _is_direct_reduced_pmat_pc_kind(kind: str | None) -> bool:
+    """Return true for explicit preconditioner aliases that avoid active CSR assembly."""
+
+    normalized = str(kind or "").strip().lower().replace("-", "_")
+    return normalized in _DIRECT_REDUCED_PMAT_PC_KINDS
+
+
+def _hash_numpy_array_for_cache(array: Any) -> str:
+    """Return a stable content hash for NumPy-like cache-key arrays."""
+
+    arr = np.ascontiguousarray(np.asarray(array))
+    digest = hashlib.blake2b(digest_size=16)
+    digest.update(str(arr.dtype).encode("ascii", errors="ignore"))
+    digest.update(np.asarray(arr.shape, dtype=np.int64).tobytes())
+    digest.update(arr.view(np.uint8))
+    return digest.hexdigest()
+
+
+def _direct_tail_structured_pc_cache_key(
+    *,
+    matrix: Any,
+    layout: Any,
+    active_indices: np.ndarray | None,
+    kind: str,
+    max_factor_nbytes: int,
+    regularization: float,
+    support_modes: tuple[int, int, int, int] | None = None,
+) -> tuple[object, ...]:
+    """Return a robust cache key for an active direct-tail preconditioner."""
+
+    matrix_csr = matrix.tocsr()
+    env_signature = tuple(
+        sorted(
+            (str(key), str(value))
+            for key, value in os.environ.items()
+            if str(key).startswith("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_")
+        )
+    )
+    active_digest = "all" if active_indices is None else _hash_numpy_array_for_cache(np.asarray(active_indices))
+    return (
+        "direct_tail_structured_pc_v1",
+        tuple(int(v) for v in matrix_csr.shape),
+        int(matrix_csr.nnz),
+        _hash_numpy_array_for_cache(matrix_csr.indptr),
+        _hash_numpy_array_for_cache(matrix_csr.indices),
+        _hash_numpy_array_for_cache(matrix_csr.data),
+        active_digest,
+        tuple(sorted(layout.to_dict().items())),
+        str(kind).strip().lower().replace("-", "_"),
+        None if support_modes is None else tuple(int(v) for v in support_modes),
+        int(max_factor_nbytes),
+        float(regularization),
+        env_signature,
+    )
+
+
+def _direct_tail_structured_pc_with_cache_metadata(
+    preconditioner: object,
+    *,
+    cache_hit: bool,
+    cache_key: tuple[object, ...],
+):
+    """Attach direct-tail cache diagnostics to an immutable preconditioner object."""
+
+    metadata = dict(getattr(preconditioner, "metadata", None) or {})
+    metadata["direct_tail_structured_pc_cache_hit"] = bool(cache_hit)
+    metadata["direct_tail_structured_pc_cache_key_digest"] = hashlib.blake2b(
+        repr(cache_key).encode("utf-8"),
+        digest_size=12,
+    ).hexdigest()
+    if bool(cache_hit):
+        metadata["direct_tail_structured_pc_cached_setup_s"] = float(getattr(preconditioner, "setup_s", 0.0) or 0.0)
+        return replace(preconditioner, setup_s=0.0, metadata=metadata)
+    return replace(preconditioner, metadata=metadata)
+
+
+def _rhsmode1_fortran_reduced_direct_tail_pc_default_max_mb(
+    *,
+    requested_kind: str | None,
+    active_size: int,
+) -> float:
+    """Return the default direct-tail structured-PC memory cap in MiB."""
+
+    base_mb = read_float_env(
+        "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_PC_AUTO_BASE_MB",
+        default=512.0,
+        minimum=0.0,
+    )
+    auto_max_mb = read_float_env(
+        "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_PC_AUTO_MAX_MB",
+        default=4096.0,
+        minimum=0.0,
+    )
+    slope_mb_per_unknown = read_float_env(
+        "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_PC_AUTO_MB_PER_UNKNOWN",
+        default=1.6e-2,
+        minimum=0.0,
+    )
+    requested = str(requested_kind or "").strip().lower().replace("-", "_")
+    if requested in {"auto", "active_auto", "structured", "structured_auto"}:
+        requested = "active_fortran_v3_reduced_lu"
+    if requested != "active_fortran_v3_reduced_lu":
+        return float(base_mb)
+    active_n = max(0, int(active_size))
+    adaptive_mb = max(float(base_mb), float(base_mb) + float(slope_mb_per_unknown) * float(active_n))
+    production_min_active = read_int_env(
+        "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_PC_AUTO_PRODUCTION_MIN_ACTIVE",
+        default=400_000,
+        minimum=1,
+    )
+    if active_n >= int(production_min_active):
+        production_max_mb = read_float_env(
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_PC_AUTO_PRODUCTION_MAX_MB",
+            default=16_384.0,
+            minimum=0.0,
+        )
+        production_slope_mb_per_unknown = read_float_env(
+            "SFINCS_JAX_RHSMODE1_FORTRAN_REDUCED_DIRECT_TAIL_PC_AUTO_PRODUCTION_MB_PER_UNKNOWN",
+            default=2.8e-2,
+            minimum=0.0,
+        )
+        adaptive_mb = max(
+            float(adaptive_mb),
+            float(base_mb) + float(production_slope_mb_per_unknown) * float(active_n),
+        )
+        if float(production_max_mb) > 0.0:
+            auto_max_mb = max(float(auto_max_mb), float(production_max_mb))
+    if float(auto_max_mb) > 0.0:
+        adaptive_mb = min(float(adaptive_mb), max(float(base_mb), float(auto_max_mb)))
+    return float(adaptive_mb)
 
 
 def parse_rhs1_pas_tz_guarded_structured_levels(raw: str) -> tuple[str, ...]:
@@ -3666,7 +4232,2039 @@ def rhs1_stage2_retry_admission_decision(
     )
 
 
+# Consolidated host/dense/sparse policy section
+
+_TRUE_VALUES = {"1", "true", "yes", "on"}
+_FALSE_VALUES = {"0", "false", "no", "off"}
+
+
+def _env_bool(name: str) -> bool | None:
+    env = str(os.environ.get(name, "")).strip().lower()
+    if env in _TRUE_VALUES:
+        return True
+    if env in _FALSE_VALUES:
+        return False
+    return None
+
+
+def _env_int(name: str, default: int) -> int:
+    env = str(os.environ.get(name, "")).strip()
+    try:
+        return int(env) if env else int(default)
+    except ValueError:
+        return int(default)
+
+
+def _env_float(name: str, default: float) -> float:
+    env = str(os.environ.get(name, "")).strip()
+    try:
+        return float(env) if env else float(default)
+    except ValueError:
+        return float(default)
+
+
+def rhs1_dense_backend_allowed(*, backend: str) -> bool:
+    """Return whether RHSMode=1 dense linear algebra may run on the active backend."""
+    env = _env_bool("SFINCS_JAX_RHSMODE1_DENSE_ALLOW_ACCELERATOR")
+    if env is not None:
+        return bool(env)
+    return str(backend).strip().lower() == "cpu"
+
+
+def rhs1_host_dense_fallback_allowed(*, backend: str) -> bool:
+    """Return whether host dense LU fallback is allowed for RHSMode=1."""
+    if str(backend).strip().lower() == "cpu":
+        return True
+    env = _env_bool("SFINCS_JAX_RHSMODE1_DENSE_HOST_LU")
+    return bool(env)
+
+
+def rhs1_host_dense_shortcut_allowed(
+    *,
+    op: Any,
+    active_size: int,
+    use_implicit: bool,
+    solve_method_kind: str,
+    backend: str,
+    dense_fallback_max: int,
+) -> bool:
+    """Allow the small accelerator FP branch to use host dense LU directly."""
+    env = _env_bool("SFINCS_JAX_RHSMODE1_HOST_DENSE_SHORTCUT")
+    if env is False:
+        return False
+    if bool(use_implicit):
+        return False
+    if str(backend).strip().lower() == "cpu":
+        return False
+    if str(solve_method_kind).strip().lower() in {"dense", "dense_ksp"}:
+        return False
+    if int(op.rhs_mode) != 1 or bool(op.include_phi1):
+        return False
+    if op.fblock.fp is None:
+        return False
+    host_dense_env = _env_bool("SFINCS_JAX_RHSMODE1_DENSE_HOST_LU")
+    if host_dense_env is False:
+        return False
+    shortcut_max = _env_int("SFINCS_JAX_RHSMODE1_HOST_DENSE_SHORTCUT_MAX", 900)
+    dense_cap = min(max(0, int(shortcut_max)), max(0, int(dense_fallback_max)))
+    if dense_cap <= 0:
+        return False
+    return int(active_size) <= dense_cap
+
+
+def rhs1_dense_fallback_max(op: Any) -> int:
+    """Resolve the RHSMode=1 dense fallback active-size ceiling.
+
+    Full Fokker-Planck systems use a larger conservative default because dense
+    fallback is often the cheapest robust path for small/medium FP systems. PAS
+    systems are stricter: dense fallback can drift away from PETSc-style
+    approximate branches, so PAS is disabled by default except for
+    ``constraintScheme=0`` or explicit user opt-in.
+    """
+    base_max = _env_int("SFINCS_JAX_RHSMODE1_DENSE_FALLBACK_MAX", 400)
+    if op.fblock.fp is None:
+        dense_pas_raw = str(os.environ.get("SFINCS_JAX_RHSMODE1_DENSE_PAS_MAX", "")).strip()
+        if dense_pas_raw:
+            dense_pas_max = _env_int("SFINCS_JAX_RHSMODE1_DENSE_PAS_MAX", base_max)
+            if dense_pas_max <= 0:
+                return 0
+            return max(base_max, dense_pas_max)
+        if int(op.constraint_scheme) != 0:
+            return 0
+        dense_pas_max = 5000
+        if dense_pas_max <= 0:
+            return base_max
+        return max(base_max, dense_pas_max)
+
+    dense_fp_raw = str(os.environ.get("SFINCS_JAX_RHSMODE1_DENSE_FP_MAX", "")).strip()
+    dense_fp_cutoff_raw = str(os.environ.get("SFINCS_JAX_RHSMODE1_DENSE_FP_CUTOFF", "")).strip()
+    if dense_fp_raw:
+        dense_fp_max = _env_int("SFINCS_JAX_RHSMODE1_DENSE_FP_MAX", base_max)
+    elif dense_fp_cutoff_raw:
+        dense_fp_max = _env_int("SFINCS_JAX_RHSMODE1_DENSE_FP_CUTOFF", base_max)
+    else:
+        dense_fp_max = 8000
+    if dense_fp_max <= 0:
+        return base_max
+    return max(base_max, dense_fp_max)
+
+
+def rhs1_dense_auto_fp_cutoff(*, dense_active_cutoff: int) -> int:
+    """Resolve the initial dense-solve cutoff for full-FP RHSMode=1 systems.
+
+    This is the pre-Krylov auto-selection threshold used by the CLI/output
+    writer. It intentionally matches the default full-FP dense fallback budget
+    (8000 active unknowns) so moderate FP systems do not first run through the
+    expensive Krylov/strong/sparse rescue ladder. Users may still disable the
+    initial dense path with ``SFINCS_JAX_RHSMODE1_DENSE_FP_CUTOFF=0`` or lower it
+    for memory-constrained hosts.
+    """
+    raw = str(os.environ.get("SFINCS_JAX_RHSMODE1_DENSE_FP_CUTOFF", "")).strip()
+    if raw:
+        try:
+            return max(0, int(raw))
+        except ValueError:
+            pass
+    return min(max(0, int(dense_active_cutoff)), 8000)
+
+
+def rhs1_dense_auto_fp_accelerator_min() -> int:
+    """Minimum active size for default accelerator dense auto-selection.
+
+    Tiny GPU full-FP systems are usually faster on the existing matrix-free path
+    because dense assembly/solver setup dominates. Moderate systems can avoid the
+    expensive Krylov/preconditioner ladder, so enable accelerator dense auto only
+    above this floor unless the user explicitly overrides the solve method.
+    """
+    return max(0, _env_int("SFINCS_JAX_RHSMODE1_DENSE_FP_ACCELERATOR_MIN", 1000))
+
+
+def rhs1_dense_auto_fp_allowed(
+    *,
+    backend: str,
+    active_size: int,
+    dense_active_cutoff: int,
+) -> bool:
+    """Return whether full-FP RHSMode=1 auto mode should start with dense LU.
+
+    CPU defaults use the dense path for all systems below the FP cutoff. On
+    accelerators, keep tiny fixtures on the lower-overhead matrix-free path but
+    use dense LU for moderate systems that otherwise pay a long Krylov/probe
+    ladder before falling back.
+    """
+    cutoff = rhs1_dense_auto_fp_cutoff(dense_active_cutoff=dense_active_cutoff)
+    if cutoff <= 0 or int(active_size) > int(cutoff):
+        return False
+    if str(backend).strip().lower() == "cpu":
+        return True
+    return int(active_size) >= int(rhs1_dense_auto_fp_accelerator_min())
+
+
+def rhs1_dense_krylov_allowed() -> bool:
+    """Return whether dense Krylov fallback is enabled."""
+    env = _env_bool("SFINCS_JAX_RHSMODE1_DENSE_KRYLOV")
+    if env is not None:
+        return bool(env)
+    return True
+
+
+def rhs1_host_sparse_direct_allowed(*, sparse_exact_lu: bool, use_implicit: bool = False) -> bool:
+    """Return whether exact sparse LU may be built and solved on the host."""
+    if not bool(sparse_exact_lu):
+        return False
+    if bool(use_implicit):
+        return False
+    env = _env_bool("SFINCS_JAX_RHSMODE1_SPARSE_DIRECT_HOST")
+    if env is not None:
+        return bool(env)
+    return True
+
+
+def rhs1_sparse_operator_preconditioned_rescue_allowed(
+    *,
+    op: Any,
+    sparse_exact_lu: bool,
+    host_sparse_direct_wanted: bool,
+    backend: str,
+) -> bool:
+    """Allow sparse-preconditioned GMRES before exact sparse LU.
+
+    This branch is kept narrow because it is a parity-preserving rescue for CPU
+    full-FP constraint-scheme-1 systems, not a general sparse solve replacement.
+    """
+    if not bool(sparse_exact_lu) or not bool(host_sparse_direct_wanted):
+        return False
+    if str(backend).strip().lower() != "cpu":
+        return False
+    if int(op.rhs_mode) != 1 or bool(op.include_phi1):
+        return False
+    if int(op.constraint_scheme) != 1:
+        return False
+    if op.fblock.fp is None or op.fblock.pas is not None:
+        return False
+    env = _env_bool("SFINCS_JAX_RHSMODE1_SPARSE_PC_GMRES")
+    if env is False:
+        return False
+    return True
+
+
+def rhs1_constrained_pas_sparse_pc_auto_allowed(
+    *,
+    op: Any,
+    active_size: int,
+    use_implicit: bool,
+    solve_method_kind: str,
+) -> bool:
+    """Return whether large constrained-PAS RHSMode=1 should start sparse-PC GMRES.
+
+    The matrix-free PAS path is robust for small examples, but production-sized
+    finite-beta profile-current decks can spend many minutes in Krylov fallback
+    and still stall at a large true residual.  The host sparse-PC branch builds
+    the same explicit operator sparsity used for diagnostics, factors the
+    RHSMode=1 preconditioner, and then polishes the true residual with GMRES.
+
+    Keep this as a narrow non-differentiable policy: it is a CLI/production
+    solve path, not the JAX-native autodiff route.
+    """
+    env = _env_bool("SFINCS_JAX_RHSMODE1_CONSTRAINED_PAS_SPARSE_PC")
+    if env is False:
+        return False
+    if bool(use_implicit):
+        return False
+    if str(solve_method_kind).strip().lower().replace("-", "_") not in {"auto", "default", "incremental"}:
+        return False
+    if int(op.rhs_mode) != 1 or bool(op.include_phi1):
+        return False
+    if int(op.constraint_scheme) != 2:
+        return False
+    if op.fblock.fp is not None or op.fblock.pas is None:
+        return False
+
+    min_size = _env_int("SFINCS_JAX_RHSMODE1_CONSTRAINED_PAS_SPARSE_PC_MIN", 30_000)
+    max_size = _env_int("SFINCS_JAX_RHSMODE1_CONSTRAINED_PAS_SPARSE_PC_MAX", 300_000)
+    if env is True:
+        min_size = 0
+    if int(max_size) > 0 and int(active_size) > int(max_size):
+        return False
+    return int(active_size) >= max(0, int(min_size))
+
+
+def rhs1_tokamak_pas_er_sparse_pc_auto_allowed(
+    *,
+    op: Any,
+    active_size: int,
+    use_implicit: bool,
+    solve_method_kind: str,
+    backend: str,
+    er_abs: float,
+    use_dkes: bool,
+    include_xdot: bool,
+    include_electric_field_xi: bool,
+) -> bool:
+    """Return whether tokamak PAS+Er should start the host sparse-PC lane.
+
+    Production-floor tokamak PAS+Er full-trajectory cases at
+    ``25 x 1 x 8 x 100`` stall in the matrix-free PAS-ILU/Schur fallback ladder
+    but are parity-clean with the non-differentiable sparse-PC GMRES route using
+    a tiny diagonal shift and relaxed SuperLU pivoting. Keep this policy narrow:
+    CPU/GPU only, no Phi1, pure PAS, axisymmetric, electric-field trajectory
+    terms enabled, and active size in the measured window. The sparse
+    factorization is still hosted, but the matrix-vector probes follow the
+    active JAX backend; keep accelerators outside CPU/GPU opt-in until tested.
+    """
+    env = _env_bool("SFINCS_JAX_RHSMODE1_TOKAMAK_PAS_ER_SPARSE_PC")
+    if env is False:
+        return False
+    backend_norm = str(backend).strip().lower()
+    if backend_norm not in {"cpu", "gpu", "cuda"}:
+        return False
+    if bool(use_implicit):
+        return False
+    if str(solve_method_kind).strip().lower().replace("-", "_") not in {"auto", "default", "incremental"}:
+        return False
+    if int(op.rhs_mode) != 1 or bool(op.include_phi1):
+        return False
+    if int(op.constraint_scheme) != 2:
+        return False
+    if op.fblock.fp is not None or op.fblock.pas is None:
+        return False
+    if int(getattr(op, "n_zeta", 1)) != 1:
+        return False
+    has_er_drive = abs(float(er_abs)) > 0.0 and (
+        bool(use_dkes) or bool(include_xdot) or bool(include_electric_field_xi)
+    )
+    if not has_er_drive:
+        return False
+
+    min_size = _env_int("SFINCS_JAX_RHSMODE1_TOKAMAK_PAS_ER_SPARSE_PC_MIN", 10_000)
+    max_size = _env_int("SFINCS_JAX_RHSMODE1_TOKAMAK_PAS_ER_SPARSE_PC_MAX", 60_000)
+    if env is True:
+        min_size = 0
+    if int(max_size) > 0 and int(active_size) > int(max_size):
+        return False
+    return int(active_size) >= max(0, int(min_size))
+
+
+def rhs1_tokamak_pas_noer_sparse_pc_auto_allowed(
+    *,
+    op: Any,
+    active_size: int,
+    use_implicit: bool,
+    solve_method_kind: str,
+    backend: str,
+    er_abs: float,
+) -> bool:
+    """Return whether tokamak PAS no-Er should start the host sparse-PC lane.
+
+    The measured production-floor ``tokamak_*species_PASCollisions_noEr`` cases
+    at ``25 x 1 x (4|8) x 100`` spend most of their default matrix-free memory
+    or GPU wall time inside the Krylov solve even though a host sparse-PC solve
+    reaches the same Fortran output. Keep this policy scoped to the validated
+    non-differentiable axisymmetric no-Er PAS window so geometry-rich and Phi1
+    systems continue to use their own policies.
+    """
+
+    env = _env_bool("SFINCS_JAX_RHSMODE1_TOKAMAK_PAS_NOER_SPARSE_PC")
+    if env is False:
+        return False
+    backend_norm = str(backend).strip().lower()
+    if backend_norm not in {"cpu", "gpu", "cuda"}:
+        return False
+    if bool(use_implicit):
+        return False
+    if str(solve_method_kind).strip().lower().replace("-", "_") not in {"auto", "default", "incremental"}:
+        return False
+    if int(op.rhs_mode) != 1 or bool(op.include_phi1):
+        return False
+    if int(op.constraint_scheme) != 2:
+        return False
+    if op.fblock.fp is not None or op.fblock.pas is None:
+        return False
+    if int(getattr(op, "n_zeta", 1)) != 1:
+        return False
+    if abs(float(er_abs)) > 0.0:
+        return False
+
+    min_size = _env_int("SFINCS_JAX_RHSMODE1_TOKAMAK_PAS_NOER_SPARSE_PC_MIN", 5_000)
+    max_size = _env_int("SFINCS_JAX_RHSMODE1_TOKAMAK_PAS_NOER_SPARSE_PC_MAX", 750_000)
+    if env is True:
+        min_size = 0
+    if int(max_size) > 0 and int(active_size) > int(max_size):
+        return False
+    return int(active_size) >= max(0, int(min_size))
+
+
+def rhs1_tokamak_fp_er_sparse_pc_auto_allowed(
+    *,
+    op: Any,
+    active_size: int,
+    use_implicit: bool,
+    solve_method_kind: str,
+    backend: str,
+    er_abs: float,
+    use_dkes: bool,
+    include_xdot: bool,
+    include_electric_field_xi: bool,
+) -> bool:
+    """Return whether tokamak full-FP + Er should start sparse-PC GMRES.
+
+    Production-floor CPU/GPU probes at ``25 x 1 x 8 x 100`` show the
+    matrix-free FP+Er routes can either stall before the strong fallback or pay
+    for large generic XLA solves. The x-block sparse-PC route is parity-clean
+    and materially faster in this measured axisymmetric window, so it is the
+    default for both CPU and GPU non-differentiable output/CLI lanes.
+    """
+
+    env = _env_bool("SFINCS_JAX_RHSMODE1_TOKAMAK_FP_ER_SPARSE_PC")
+    if env is False:
+        return False
+    backend_norm = str(backend).strip().lower()
+    allowed_backends = {"cpu", "gpu", "cuda"}
+    if backend_norm not in allowed_backends:
+        return False
+    if bool(use_implicit):
+        return False
+    if str(solve_method_kind).strip().lower().replace("-", "_") not in {"auto", "default", "incremental"}:
+        return False
+    if int(op.rhs_mode) != 1 or bool(op.include_phi1):
+        return False
+    if int(op.constraint_scheme) != 1:
+        return False
+    if op.fblock.fp is None or op.fblock.pas is not None:
+        return False
+    if int(getattr(op, "n_zeta", 1)) != 1:
+        return False
+    has_er_drive = abs(float(er_abs)) > 0.0 and (
+        bool(use_dkes) or bool(include_xdot) or bool(include_electric_field_xi)
+    )
+    if not has_er_drive:
+        return False
+
+    min_size = _env_int("SFINCS_JAX_RHSMODE1_TOKAMAK_FP_ER_SPARSE_PC_MIN", 10_000)
+    max_size = _env_int("SFINCS_JAX_RHSMODE1_TOKAMAK_FP_ER_SPARSE_PC_MAX", 60_000)
+    if env is True:
+        min_size = 0
+    if int(max_size) > 0 and int(active_size) > int(max_size):
+        return False
+    return int(active_size) >= max(0, int(min_size))
+
+
+def rhs1_tokamak_fp_noer_sparse_pc_auto_allowed(
+    *,
+    op: Any,
+    active_size: int,
+    use_implicit: bool,
+    solve_method_kind: str,
+    backend: str,
+    er_abs: float,
+    use_dkes: bool,
+    include_xdot: bool,
+    include_electric_field_xi: bool,
+) -> bool:
+    """Return whether tokamak full-FP no-Er should start sparse-PC GMRES.
+
+    The production-floor ``tokamak_1species_FPCollisions_noEr`` GPU row at
+    ``25 x 1 x 8 x 100`` can exit the matrix-free XMG/strong-preconditioner
+    ladder with a small-but-physics-visible residual.  Sparse-PC GMRES is slower
+    than the memory-heavy theta-line route, but it is parity-clean against the
+    Fortran direct solve and has substantially lower peak memory.  Keep this
+    default GPU-only and constrained to the measured axisymmetric no-Er window.
+    """
+
+    env = _env_bool("SFINCS_JAX_RHSMODE1_TOKAMAK_FP_NOER_SPARSE_PC")
+    if env is False:
+        return False
+    backend_norm = str(backend).strip().lower()
+    allowed_backends = {"gpu", "cuda"} if env is not True else {"cpu", "gpu", "cuda"}
+    if backend_norm not in allowed_backends:
+        return False
+    if bool(use_implicit):
+        return False
+    if str(solve_method_kind).strip().lower().replace("-", "_") not in {"auto", "default", "incremental"}:
+        return False
+    if int(op.rhs_mode) != 1 or bool(op.include_phi1):
+        return False
+    if int(op.constraint_scheme) != 0:
+        return False
+    if op.fblock.fp is None or op.fblock.pas is not None:
+        return False
+    if int(getattr(op, "n_zeta", 1)) != 1:
+        return False
+    has_er_drive = abs(float(er_abs)) > 0.0 and (
+        bool(use_dkes) or bool(include_xdot) or bool(include_electric_field_xi)
+    )
+    if has_er_drive:
+        return False
+
+    min_size = _env_int("SFINCS_JAX_RHSMODE1_TOKAMAK_FP_NOER_SPARSE_PC_MIN", 10_000)
+    max_size = _env_int("SFINCS_JAX_RHSMODE1_TOKAMAK_FP_NOER_SPARSE_PC_MAX", 60_000)
+    if env is True:
+        min_size = 0
+    if int(max_size) > 0 and int(active_size) > int(max_size):
+        return False
+    return int(active_size) >= max(0, int(min_size))
+
+
+def rhs1_fp_3d_sparse_pc_auto_allowed(
+    *,
+    op: Any,
+    active_size: int,
+    use_implicit: bool,
+    solve_method_kind: str,
+    backend: str,
+    eparallel_abs: float = 0.0,
+) -> bool:
+    """Return whether 3D full-FP RHSMode=1 should start sparse-PC GMRES.
+
+    Bounded HSX and geometryScheme11 FP probes show that the host sparse-PC
+    branch can beat the dense FP shortcut on runtime and memory for some
+    geometry-rich systems while preserving Fortran parity. Keep the promotion
+    narrow and CPU-only, and do not take it for small or low-pitch-resolution
+    systems by default: dense LU is more robust for QI-like smoke decks and
+    avoids sparse-factorization failures before a solver trace is written.
+    """
+    env = _env_bool("SFINCS_JAX_RHSMODE1_FP3D_SPARSE_PC")
+    if env is False:
+        return False
+    if str(backend).strip().lower() != "cpu":
+        return False
+    if bool(use_implicit):
+        return False
+    if str(solve_method_kind).strip().lower().replace("-", "_") not in {"auto", "default", "incremental"}:
+        return False
+    if int(op.rhs_mode) != 1 or bool(op.include_phi1):
+        return False
+    if int(op.constraint_scheme) != 1:
+        return False
+    if op.fblock.fp is None or op.fblock.pas is not None:
+        return False
+    if int(getattr(op, "n_zeta", 1)) <= 1:
+        return False
+    if abs(float(eparallel_abs)) > 0.0:
+        return False
+
+    min_nxi = _env_int("SFINCS_JAX_RHSMODE1_FP3D_SPARSE_PC_MIN_NXI", 50)
+    if int(getattr(op, "n_xi", max(0, int(min_nxi)))) < max(0, int(min_nxi)):
+        return False
+
+    min_size = _env_int("SFINCS_JAX_RHSMODE1_FP3D_SPARSE_PC_MIN", 5001)
+    max_size = _env_int("SFINCS_JAX_RHSMODE1_FP3D_SPARSE_PC_MAX", 20000)
+    if env is True:
+        min_size = 0
+    if int(max_size) > 0 and int(active_size) > int(max_size):
+        return False
+    return int(active_size) >= max(0, int(min_size))
+
+
+def rhs1_fp_3d_xblock_sparse_pc_auto_allowed(
+    *,
+    op: Any,
+    active_size: int,
+    use_implicit: bool,
+    solve_method_kind: str,
+    backend: str,
+    eparallel_abs: float = 0.0,
+) -> bool:
+    """Return whether 3D full-FP RHSMode=1 should use x-block sparse-PC GMRES.
+
+    The scale-0.50 QI CPU/GPU ladder and measured finite-beta two-species QA
+    electron-root decks are too large for dense fallback but converge with
+    host-assembled x-block sparse LU as a right preconditioner. Keep this as a
+    bounded non-differentiable output/CLI route: small systems still use dense
+    LU, GPU users get a checked non-dense route in the medium window, and
+    production-floor systems remain deferred until larger non-dense ladders are
+    measured.
+    """
+
+    env = _env_bool("SFINCS_JAX_RHSMODE1_FP3D_XBLOCK_SPARSE_PC")
+    if env is False:
+        return False
+    if str(backend).strip().lower() not in {"cpu", "gpu", "cuda"}:
+        return False
+    if bool(use_implicit):
+        return False
+    if str(solve_method_kind).strip().lower().replace("-", "_") not in {"auto", "default", "incremental"}:
+        return False
+    if int(op.rhs_mode) != 1 or bool(op.include_phi1):
+        return False
+    if int(op.constraint_scheme) != 1:
+        return False
+    if op.fblock.fp is None or op.fblock.pas is not None:
+        return False
+    n_species = int(getattr(op, "n_species", 1))
+    if n_species not in {1, 2}:
+        return False
+    if int(getattr(op, "n_zeta", 1)) <= 1:
+        return False
+    if bool(getattr(op, "point_at_x0", False)):
+        return False
+    if abs(float(eparallel_abs)) > 0.0:
+        return False
+
+    if n_species == 1:
+        min_nxi = _env_int("SFINCS_JAX_RHSMODE1_FP3D_XBLOCK_SPARSE_PC_MIN_NXI", 50)
+        max_nxi = _env_int("SFINCS_JAX_RHSMODE1_FP3D_XBLOCK_SPARSE_PC_MAX_NXI", 10_000_000)
+        min_size = _env_int("SFINCS_JAX_RHSMODE1_FP3D_XBLOCK_SPARSE_PC_MIN", 30_000)
+        max_size = _env_int("SFINCS_JAX_RHSMODE1_FP3D_XBLOCK_SPARSE_PC_MAX", 45_000)
+        if env is True:
+            min_size = 0
+    else:
+        multispecies_env = _env_bool("SFINCS_JAX_RHSMODE1_FP3D_XBLOCK_SPARSE_PC_MULTISPECIES")
+        if multispecies_env is False:
+            return False
+        min_nxi = _env_int("SFINCS_JAX_RHSMODE1_FP3D_XBLOCK_SPARSE_PC_MULTISPECIES_MIN_NXI", 12)
+        max_nxi = _env_int("SFINCS_JAX_RHSMODE1_FP3D_XBLOCK_SPARSE_PC_MULTISPECIES_MAX_NXI", 16)
+        min_size = _env_int("SFINCS_JAX_RHSMODE1_FP3D_XBLOCK_SPARSE_PC_MULTISPECIES_MIN", 30_000)
+        max_size = _env_int("SFINCS_JAX_RHSMODE1_FP3D_XBLOCK_SPARSE_PC_MULTISPECIES_MAX", 100_000)
+        if env is True or multispecies_env is True:
+            min_size = 0
+
+    n_xi = int(getattr(op, "n_xi", max(0, int(min_nxi))))
+    if n_xi < max(0, int(min_nxi)):
+        return False
+    if int(max_nxi) > 0 and n_xi > int(max_nxi):
+        return False
+    if int(max_size) > 0 and int(active_size) > int(max_size):
+        return False
+    return int(active_size) >= max(0, int(min_size))
+
+
+def rhs1_structured_full_csr_auto_allowed(
+    *,
+    op: Any,
+    active_size: int,
+    use_implicit: bool,
+    solve_method_kind: str,
+    backend: str,
+    eparallel_abs: float = 0.0,
+) -> bool:
+    """Return whether ``auto`` should try the no-probe full-CSR host lane.
+
+    This is intentionally a non-differentiable CLI/output opt-in policy. The
+    assembled full-CSR path preserves the production matrix-vector product, but
+    Zenodo QA/QH finite-beta probes showed that it can spend minutes before
+    falling back when the current x-block Schur preconditioner is insufficient.
+    Therefore the public ``auto`` default does not try this route unless
+    ``SFINCS_JAX_RHS1_STRUCTURED_CSR_AUTO=1`` is set by an expert benchmark.
+    The actual CSR/factor memory gates still live in the structured solve
+    itself; this helper only decides whether an opted-in ``auto`` run is allowed
+    to try that route before falling back. Keep a finite default size ceiling
+    because production QH finite-beta audits showed that full-CSR assembly can
+    exceed 50 GB before the memory gate is reached; experts can set
+    ``SFINCS_JAX_RHS1_STRUCTURED_CSR_AUTO_MAX_SIZE=0`` for deliberate large
+    benchmarks.
+    """
+
+    env = _env_bool("SFINCS_JAX_RHS1_STRUCTURED_CSR_AUTO")
+    if env is not True:
+        return False
+    if bool(use_implicit):
+        return False
+    if str(backend).strip().lower() not in {"cpu", "gpu", "cuda"}:
+        return False
+    if str(solve_method_kind).strip().lower().replace("-", "_") not in {"auto", "default"}:
+        return False
+    if int(op.rhs_mode) != 1 or bool(op.include_phi1):
+        return False
+    if int(op.constraint_scheme) not in {1, 2}:
+        return False
+    if op.fblock.fp is None or op.fblock.pas is not None:
+        return False
+    n_species = int(getattr(op, "n_species", 1))
+    if n_species > 2:
+        return False
+    if int(getattr(op, "n_zeta", 1)) <= 1:
+        return False
+    if bool(getattr(op, "point_at_x0", False)):
+        return False
+    if abs(float(eparallel_abs)) > 0.0:
+        return False
+
+    min_nxi = _env_int("SFINCS_JAX_RHS1_STRUCTURED_CSR_AUTO_MIN_NXI", 12)
+    if int(getattr(op, "n_xi", max(0, int(min_nxi)))) < max(0, int(min_nxi)):
+        return False
+
+    min_size = _env_int("SFINCS_JAX_RHS1_STRUCTURED_CSR_AUTO_MIN_SIZE", 10_000)
+    max_size = _env_int("SFINCS_JAX_RHS1_STRUCTURED_CSR_AUTO_MAX_SIZE", 100_000)
+    if int(max_size) > 0 and int(active_size) > int(max_size):
+        return False
+    return int(active_size) >= max(0, int(min_size))
+
+
+def rhs1_tokamak_er_dense_auto_allowed(
+    *,
+    op: Any,
+    active_size: int,
+    use_implicit: bool,
+    solve_method_kind: str,
+    backend: str,
+    use_dkes: bool,
+    er_abs: float,
+    include_xdot: bool,
+    include_electric_field_xi: bool,
+) -> bool:
+    """Return whether bounded tokamak electric-field RHSMode=1 may use dense LU.
+
+    Production-resolution tokamak Er probes show that the matrix-free
+    Krylov/strong/sparse-rescue ladder can spend O(100 s) on systems just above
+    the generic dense cutoff, while dense LU solves the same algebraic problem in
+    a few seconds with Fortran-clean diagnostics. Keep this CPU-only and
+    size-bounded because dense LU has a larger transient RSS footprint.
+    """
+    env = _env_bool("SFINCS_JAX_RHSMODE1_TOKAMAK_ER_DENSE")
+    if env is False:
+        return False
+    if str(backend).strip().lower() != "cpu":
+        return False
+    if bool(use_implicit):
+        return False
+    if str(solve_method_kind).strip().lower().replace("-", "_") not in {"auto", "default", "incremental"}:
+        return False
+    if int(op.rhs_mode) != 1 or bool(op.include_phi1):
+        return False
+    if int(getattr(op, "n_zeta", 1)) != 1:
+        return False
+    if op.fblock.fp is None and op.fblock.pas is None:
+        return False
+    has_er_drive = abs(float(er_abs)) > 0.0 and (
+        bool(use_dkes) or bool(include_xdot) or bool(include_electric_field_xi)
+    )
+    if not has_er_drive:
+        return False
+
+    min_size = _env_int("SFINCS_JAX_RHSMODE1_TOKAMAK_ER_DENSE_MIN", 5000)
+    max_size = _env_int("SFINCS_JAX_RHSMODE1_TOKAMAK_ER_DENSE_MAX", 6500)
+    max_dense_bytes = _env_int("SFINCS_JAX_RHSMODE1_TOKAMAK_ER_DENSE_MAX_BYTES", 350_000_000)
+    if env is True:
+        min_size = 0
+    if int(max_size) > 0 and int(active_size) > int(max_size):
+        return False
+    dense_bytes = int(active_size) * int(active_size) * 8
+    if int(max_dense_bytes) > 0 and dense_bytes > int(max_dense_bytes):
+        return False
+    return int(active_size) >= max(0, int(min_size))
+
+
+def host_sparse_factor_dtype(
+    *,
+    size: int,
+    factorization: str,
+    use_implicit: bool,
+    backend: str,
+) -> np.dtype:
+    """Resolve the dtype used for host sparse factorization."""
+    env = str(os.environ.get("SFINCS_JAX_HOST_SPARSE_FACTOR_DTYPE", "")).strip().lower()
+    if env in {"float64", "fp64", "64"}:
+        return np.dtype(np.float64)
+    if env in {"float32", "fp32", "32"}:
+        return np.dtype(np.float32)
+    if bool(use_implicit):
+        return np.dtype(np.float64)
+    if str(backend).strip().lower() != "cpu":
+        return np.dtype(np.float64)
+    if str(factorization).strip().lower() != "lu":
+        return np.dtype(np.float64)
+    min_size = _env_int("SFINCS_JAX_HOST_SPARSE_FACTOR_FLOAT32_MIN", 12000)
+    if int(size) >= max(1, int(min_size)):
+        return np.dtype(np.float32)
+    return np.dtype(np.float64)
+
+
+def host_sparse_direct_refine_steps(env_name: str, default: int = 2) -> int:
+    """Parse nonnegative iterative-refinement step count for host direct solves."""
+    return max(0, _env_int(env_name, int(default)))
+
+
+def rhs1_host_sparse_skip_dense_ratio() -> float:
+    """Residual ratio above which sparse direct paths may skip dense fallback."""
+    return _env_float("SFINCS_JAX_RHSMODE1_SPARSE_DIRECT_SKIP_DENSE_RATIO", 1.0e4)
+
+
+def rhs1_explicit_sparse_host_direct_allowed(
+    *,
+    sparse_exact_lu: bool,
+    use_implicit: bool,
+    active_size: int,
+) -> bool:
+    """Return whether the explicit sparse helper may build a host sparse operator."""
+    env = _env_bool("SFINCS_JAX_RHSMODE1_EXPLICIT_SPARSE_HELPER")
+    if env is False:
+        return False
+    if bool(use_implicit) or (not bool(sparse_exact_lu)):
+        return False
+    max_size = _env_int("SFINCS_JAX_RHSMODE1_EXPLICIT_SPARSE_HELPER_MAX", 20000)
+    return int(active_size) <= max(1, int(max_size))
+
+# Consolidated large explicit-FP host-rescue policy section
+
+_TRUE_VALUES = {"1", "true", "yes", "on"}
+_FALSE_VALUES = {"0", "false", "no", "off"}
+
+
+def _env_token(name: str) -> str:
+    return str(os.environ.get(name, "")).strip().lower()
+
+
+def _env_int(name: str, default: int) -> int:
+    raw = str(os.environ.get(name, "")).strip()
+    try:
+        return int(raw) if raw else int(default)
+    except ValueError:
+        return int(default)
+
+
+def _env_float(name: str, default: float) -> float:
+    raw = str(os.environ.get(name, "")).strip()
+    try:
+        return float(raw) if raw else float(default)
+    except ValueError:
+        return float(default)
+
+
+def _is_explicit_rhs1_fp(op: Any) -> bool:
+    return int(op.rhs_mode) == 1 and (not bool(op.include_phi1)) and op.fblock.fp is not None
+
+
+def _is_explicit_rhs1_fp_only(op: Any) -> bool:
+    return _is_explicit_rhs1_fp(op) and getattr(op.fblock, "pas", None) is None
+
+
+def _host_sparse_rescue_backend_allowed(*, backend: str, active_size: int | None = None) -> bool:
+    """Return whether this backend may use non-differentiable host sparse rescue."""
+
+    backend_name = str(backend).strip().lower()
+    if backend_name == "cpu":
+        return True
+
+    env = _env_token("SFINCS_JAX_RHSMODE1_ACCELERATOR_HOST_SPARSE_RESCUE")
+    if env in _FALSE_VALUES:
+        return False
+
+    # If the caller cannot provide a size, require an explicit opt-in on
+    # accelerators. Size-aware solver-policy calls get a conservative default
+    # cap so moderate GPU CLI/output cases can avoid fragile device Krylov tails.
+    if active_size is None:
+        return env in _TRUE_VALUES
+
+    rescue_max = _env_int("SFINCS_JAX_RHSMODE1_ACCELERATOR_HOST_SPARSE_RESCUE_MAX", 30000)
+    return int(active_size) <= max(1, int(rescue_max))
+
+
+def rhs1_large_cpu_sparse_exact_lu_allowed(*, active_size: int) -> bool:
+    """Return whether the large-CPU sparse rescue may use exact sparse LU."""
+    env = _env_token("SFINCS_JAX_RHSMODE1_SPARSE_LARGE_CPU_RESCUE_EXACT_LU")
+    if env in _FALSE_VALUES:
+        return False
+    exact_max = _env_int("SFINCS_JAX_RHSMODE1_SPARSE_LARGE_CPU_RESCUE_EXACT_LU_MAX", 30000)
+    return int(active_size) <= max(0, int(exact_max))
+
+
+def rhs1_large_cpu_sparse_rescue_allowed(
+    *,
+    op: Any,
+    solve_method_kind: str,
+    active_size: int,
+    sparse_max_size: int,
+    preconditioner_x: int,
+    residual_norm: float,
+    target: float,
+    backend: str,
+) -> bool:
+    """Return whether a large CPU FP solve should try global sparse rescue."""
+    env = _env_token("SFINCS_JAX_RHSMODE1_SPARSE_LARGE_CPU_RESCUE")
+    if env in _FALSE_VALUES:
+        return False
+    if not _host_sparse_rescue_backend_allowed(backend=backend, active_size=int(active_size)):
+        return False
+    if not _is_explicit_rhs1_fp(op):
+        return False
+    if str(solve_method_kind).strip().lower() in {"dense", "dense_ksp"}:
+        return False
+
+    fullx_min = _env_int("SFINCS_JAX_RHSMODE1_SPARSE_LARGE_CPU_RESCUE_FULLX_MIN", 50000)
+    if int(preconditioner_x) != 0 and int(active_size) < max(0, int(fullx_min)):
+        if not rhs1_large_cpu_sparse_exact_lu_allowed(active_size=int(active_size)):
+            return False
+    if int(active_size) <= int(sparse_max_size):
+        return False
+
+    rescue_max = _env_int("SFINCS_JAX_RHSMODE1_SPARSE_LARGE_CPU_RESCUE_MAX", 80000)
+    if int(active_size) > max(1, int(rescue_max)):
+        return False
+    if float(target) <= 0.0:
+        return True
+    rescue_ratio = _env_float("SFINCS_JAX_RHSMODE1_SPARSE_LARGE_CPU_RESCUE_RATIO", 1.0e3)
+    return float(residual_norm) > float(target) * float(rescue_ratio)
+
+
+def rhs1_large_cpu_sparse_rescue_first(
+    *,
+    large_cpu_sparse_rescue: bool,
+    strong_precond_env: str,
+) -> bool:
+    """Return whether large-CPU sparse rescue should run before strong preconditioning."""
+    env = _env_token("SFINCS_JAX_RHSMODE1_SPARSE_LARGE_CPU_RESCUE_FIRST")
+    if env in _FALSE_VALUES:
+        return False
+    return bool(large_cpu_sparse_rescue) and str(strong_precond_env).strip().lower() in {"", "auto"}
+
+
+def rhs1_large_cpu_sparse_skip_primary_allowed(
+    *,
+    op: Any,
+    solve_method_kind: str,
+    active_size: int,
+    sparse_max_size: int,
+    use_implicit: bool,
+    backend: str,
+) -> bool:
+    """Return whether mid-size full-FP solves may jump directly to sparse LU.
+
+    This is the early-entry form of the existing non-differentiable host sparse
+    rescue for systems just above the dense cutoff where the measured default
+    Krylov path only serves as a slow gateway to exact active sparse LU. It is
+    deliberately bounded by the same exact-LU cap used by the rescue itself.
+    """
+
+    env = _env_token("SFINCS_JAX_RHSMODE1_SPARSE_LARGE_CPU_SKIP_PRIMARY")
+    if env in _FALSE_VALUES:
+        return False
+    if not _host_sparse_rescue_backend_allowed(backend=backend, active_size=int(active_size)):
+        return False
+    if not _is_explicit_rhs1_fp(op):
+        return False
+    if str(solve_method_kind).strip().lower() in {"dense", "dense_ksp"}:
+        return False
+    if int(active_size) <= int(sparse_max_size):
+        return False
+    skip_min_default = max(int(sparse_max_size) + 1, 8000)
+    skip_min = _env_int("SFINCS_JAX_RHSMODE1_SPARSE_LARGE_CPU_SKIP_PRIMARY_MIN", skip_min_default)
+    if int(active_size) < max(1, int(skip_min)):
+        return False
+    skip_max = _env_int("SFINCS_JAX_RHSMODE1_SPARSE_LARGE_CPU_SKIP_PRIMARY_MAX", 30000)
+    if int(active_size) > max(1, int(skip_max)):
+        return False
+    return rhs1_large_cpu_sparse_exact_lu_allowed(active_size=int(active_size))
+
+
+def rhs1_large_cpu_sparse_exact_lu_xblock_allowed(
+    *,
+    op: Any,
+    active_size: int,
+    preconditioner_x: int,
+    used_large_cpu_xblock_shortcut: bool,
+    used_explicit_fp_xblock_seed: bool,
+    xblock_seed_residual: float,
+    xblock_seed_improvement_ratio: float,
+    use_implicit: bool,
+    backend: str,
+) -> bool:
+    """Return whether a good x-block seed should promote exact sparse LU."""
+    env = _env_token("SFINCS_JAX_RHSMODE1_SPARSE_LARGE_CPU_RESCUE_EXACT_LU_XBLOCK")
+    if env in _FALSE_VALUES:
+        return False
+    if not _host_sparse_rescue_backend_allowed(backend=backend, active_size=int(active_size)):
+        return False
+    if bool(use_implicit):
+        return False
+    if not bool(used_large_cpu_xblock_shortcut) or not bool(used_explicit_fp_xblock_seed):
+        return False
+    if not _is_explicit_rhs1_fp_only(op):
+        return False
+    if int(preconditioner_x) == 0:
+        return False
+
+    exact_max = _env_int("SFINCS_JAX_RHSMODE1_SPARSE_LARGE_CPU_RESCUE_EXACT_LU_XBLOCK_MAX", 70000)
+    if int(active_size) > max(0, int(exact_max)):
+        return False
+    residual_abs = _env_float("SFINCS_JAX_RHSMODE1_SPARSE_LARGE_CPU_RESCUE_EXACT_LU_XBLOCK_ABS", 5.0e-4)
+    if not np.isfinite(float(xblock_seed_residual)) or float(xblock_seed_residual) > float(residual_abs):
+        return False
+    improvement_ratio = _env_float("SFINCS_JAX_RHSMODE1_SPARSE_LARGE_CPU_RESCUE_EXACT_LU_XBLOCK_RATIO", 100.0)
+    return float(xblock_seed_improvement_ratio) >= max(1.0, float(improvement_ratio))
+
+
+def rhs1_sparse_xblock_rescue_allowed(
+    *,
+    op: Any,
+    solve_method_kind: str,
+    active_size: int,
+    sparse_max_size: int,
+    preconditioner_x: int,
+    pre_theta: int,
+    pre_zeta: int,
+    residual_norm: float,
+    target: float,
+    backend: str,
+) -> bool:
+    """Return whether the CPU FP x-block sparse rescue path is eligible."""
+    env = _env_token("SFINCS_JAX_RHSMODE1_SPARSE_XBLOCK_RESCUE")
+    if env in _FALSE_VALUES:
+        return False
+    if not _host_sparse_rescue_backend_allowed(backend=backend, active_size=int(active_size)):
+        return False
+    if not _is_explicit_rhs1_fp(op):
+        return False
+    if str(solve_method_kind).strip().lower() in {"dense", "dense_ksp"}:
+        return False
+    if int(preconditioner_x) == 0:
+        return False
+    if int(pre_theta) != 0 or int(pre_zeta) != 0:
+        return False
+
+    skip_primary_max = _env_int("SFINCS_JAX_RHSMODE1_SPARSE_LARGE_CPU_SKIP_PRIMARY_MAX", 30000)
+    rescue_min_default = max(int(sparse_max_size) + 1, 12000, int(skip_primary_max) + 1)
+    rescue_min = _env_int("SFINCS_JAX_RHSMODE1_SPARSE_XBLOCK_RESCUE_MIN", rescue_min_default)
+    rescue_max = _env_int("SFINCS_JAX_RHSMODE1_SPARSE_XBLOCK_RESCUE_MAX", 120000)
+    if int(active_size) < max(1, int(rescue_min)):
+        return False
+    if int(active_size) > max(1, int(rescue_max)):
+        return False
+    if float(target) <= 0.0:
+        return True
+    rescue_ratio = _env_float("SFINCS_JAX_RHSMODE1_SPARSE_XBLOCK_RESCUE_RATIO", 1.0e2)
+    return float(residual_norm) > float(target) * float(rescue_ratio)
+
+
+def rhs1_fp_xblock_assembled_host_allowed(
+    *,
+    op: Any,
+    preconditioner_species: int,
+    preconditioner_xi: int,
+    use_implicit: bool,
+    backend: str,
+    active_size: int | None = None,
+) -> bool:
+    """Return whether an explicit CPU FP x-block seed may use host assembly."""
+    env = _env_token("SFINCS_JAX_RHSMODE1_FP_XBLOCK_ASSEMBLED_HOST")
+    if env in _FALSE_VALUES:
+        return False
+    if bool(use_implicit):
+        return False
+    if not _host_sparse_rescue_backend_allowed(backend=backend, active_size=active_size):
+        return False
+    if not _is_explicit_rhs1_fp_only(op):
+        return False
+    # In Fortran decks, preconditioner_species=0 means "keep species coupling".
+    # For a one-species full-FP system this is algebraically identical to the
+    # per-species x-block used by the host-assembled sparse path, and it avoids
+    # expensive dense matvec probing.  Multi-species systems must keep the old
+    # guard because dropping inter-species coupling changes the preconditioner.
+    n_species = int(getattr(op, "n_species", 0) or 0)
+    if int(preconditioner_species) == 0 and n_species != 1:
+        return False
+    if int(preconditioner_xi) != 1:
+        return False
+    if bool(op.point_at_x0):
+        return False
+    return True
+
+
+def rhs1_large_cpu_xblock_skip_primary_allowed(
+    *,
+    op: Any,
+    solve_method_kind: str,
+    active_size: int,
+    sparse_max_size: int,
+    preconditioner_species: int,
+    preconditioner_x: int,
+    preconditioner_xi: int,
+    pre_theta: int,
+    pre_zeta: int,
+    use_implicit: bool,
+    rhs1_precond_env: str,
+    backend: str,
+) -> bool:
+    """Return whether a large CPU FP solve should seed with x-block first."""
+    env = _env_token("SFINCS_JAX_RHSMODE1_LARGE_CPU_XBLOCK_SKIP_PRIMARY")
+    if env in _FALSE_VALUES:
+        return False
+    if not _host_sparse_rescue_backend_allowed(backend=backend, active_size=int(active_size)):
+        return False
+    if bool(use_implicit):
+        return False
+    if str(solve_method_kind).strip().lower() in {"dense", "dense_ksp"}:
+        return False
+    if int(active_size) <= int(sparse_max_size):
+        return False
+    if int(preconditioner_x) == 0 or int(pre_theta) != 0 or int(pre_zeta) != 0:
+        return False
+    if rhs1_precond_env not in {"", "auto", "default"}:
+        return False
+    return rhs1_fp_xblock_assembled_host_allowed(
+        op=op,
+        preconditioner_species=preconditioner_species,
+        preconditioner_xi=preconditioner_xi,
+        use_implicit=bool(use_implicit),
+        backend=backend,
+        active_size=int(active_size),
+    )
+
+
+def rhs1_sparse_sxblock_rescue_allowed(
+    *,
+    op: Any,
+    solve_method_kind: str,
+    active_size: int,
+    sparse_max_size: int,
+    preconditioner_x: int,
+    pre_theta: int,
+    pre_zeta: int,
+    use_implicit: bool,
+    backend: str,
+) -> bool:
+    """Return whether species-x-block sparse rescue is eligible."""
+    env = _env_token("SFINCS_JAX_RHSMODE1_SPARSE_SXBLOCK_RESCUE")
+    if env not in _TRUE_VALUES:
+        return False
+    if str(backend).strip().lower() != "cpu":
+        return False
+    if bool(use_implicit):
+        return False
+    if str(solve_method_kind).strip().lower() in {"dense", "dense_ksp"}:
+        return False
+    if int(active_size) <= int(sparse_max_size):
+        return False
+    if int(preconditioner_x) == 0 or int(pre_theta) != 0 or int(pre_zeta) != 0:
+        return False
+    if int(getattr(op, "n_species", 1)) <= 1:
+        return False
+    if not _is_explicit_rhs1_fp_only(op):
+        return False
+
+    rescue_min_default = max(int(sparse_max_size) + 1, 12000)
+    rescue_min = _env_int("SFINCS_JAX_RHSMODE1_SPARSE_SXBLOCK_RESCUE_MIN", rescue_min_default)
+    rescue_max = _env_int("SFINCS_JAX_RHSMODE1_SPARSE_SXBLOCK_RESCUE_MAX", 120000)
+    return max(1, int(rescue_min)) <= int(active_size) <= max(1, int(rescue_max))
+
+# Consolidated automatic preconditioner-routing policy section
+
+PAS_AUTO_STRONG_BASE_KINDS = frozenset(
+    {
+        "schur",
+        "xblock_tz",
+        "xblock_tz_lmax",
+        "sxblock_tz",
+        "species_block",
+        "theta_zeta",
+        "pas_lite",
+        "pas_hybrid",
+        "pas_schur",
+        "pas_tz",
+        "pas_tzfft",
+        "pas_tokamak_theta",
+    }
+)
+
+PAS_WEAK_AUTO_OVERRIDE_KINDS = frozenset(
+    {
+        None,
+        "collision",
+        "point",
+        "xmg",
+        "theta_line",
+        "zeta_line",
+        "theta_zeta",
+        "xblock_tz",
+        "xblock_tz_lmax",
+        "theta_line_xdiag",
+    }
+)
+
+FP_FORCE_XMG_WEAK_KINDS = frozenset(
+    {
+        None,
+        "collision",
+        "point",
+        "theta_line",
+        "zeta_line",
+        "theta_schwarz",
+        "zeta_schwarz",
+    }
+)
+
+_RHS1_PRECONDITIONER_KIND_ALIASES = {
+    "0": None,
+    "false": None,
+    "no": None,
+    "off": None,
+    "theta": "theta_line",
+    "theta_line": "theta_line",
+    "line_theta": "theta_line",
+    "theta_dd": "theta_dd",
+    "theta_block": "theta_dd",
+    "dd_theta": "theta_dd",
+    "dd_t": "theta_dd",
+    "theta_schwarz": "theta_schwarz",
+    "schwarz_theta": "theta_schwarz",
+    "ras_theta": "theta_schwarz",
+    "theta_ras": "theta_schwarz",
+    "theta_line_xdiag": "theta_line_xdiag",
+    "theta_xdiag": "theta_line_xdiag",
+    "theta_line_diagx": "theta_line_xdiag",
+    "xdiag": "point_xdiag",
+    "point_xdiag": "point_xdiag",
+    "block_xdiag": "point_xdiag",
+    "species": "species_block",
+    "species_block": "species_block",
+    "speciesblock": "species_block",
+    "sxblock": "sxblock",
+    "species_xblock": "sxblock",
+    "species_x": "sxblock",
+    "sxblock_tz": "sxblock_tz",
+    "sxblock_theta_zeta": "sxblock_tz",
+    "species_xblock_tz": "sxblock_tz",
+    "sx_tz": "sxblock_tz",
+    "xblock_tz_lmax": "xblock_tz_lmax",
+    "xblock_tz_trunc": "xblock_tz_lmax",
+    "xblock_tz_cut": "xblock_tz_lmax",
+    "xblock_tz": "xblock_tz",
+    "xblock": "xblock_tz",
+    "x_tz": "xblock_tz",
+    "xtz": "xblock_tz",
+    "xblock_theta_zeta": "xblock_tz",
+    "xmg": "xmg",
+    "multigrid": "xmg",
+    "x_coarse": "xmg",
+    "coarse_x": "xmg",
+    "pas_lite": "pas_lite",
+    "pas_light": "pas_lite",
+    "pas_xmg": "pas_lite",
+    "pas_xmg_lite": "pas_lite",
+    "pas_hybrid": "pas_hybrid",
+    "pas_xline_xcoarse": "pas_hybrid",
+    "pas_line_xcoarse": "pas_hybrid",
+    "pas_xcoarse_line": "pas_hybrid",
+    "pas_schur": "pas_schur",
+    "pas_block_schur": "pas_schur",
+    "pas_xmg_l": "pas_schur",
+    "pas_tz": "pas_tz",
+    "pas_3d": "pas_tz",
+    "pas_tz_l": "pas_tz",
+    "pas_tzfft": "pas_tzfft",
+    "pas_fft": "pas_tzfft",
+    "pas_stream_fft": "pas_tzfft",
+    "pas_streaming_fft": "pas_tzfft",
+    "pas_ilu": "pas_ilu",
+    "pas_block_ilu": "pas_ilu",
+    "pas_xblock_ilu": "pas_ilu",
+    "block_ilu": "pas_ilu",
+    "theta_zeta": "theta_zeta",
+    "theta_zeta_line": "theta_zeta",
+    "tz": "theta_zeta",
+    "tz_line": "theta_zeta",
+    "zeta": "zeta_line",
+    "zeta_line": "zeta_line",
+    "line_zeta": "zeta_line",
+    "zeta_dd": "zeta_dd",
+    "zeta_block": "zeta_dd",
+    "dd_zeta": "zeta_dd",
+    "dd_z": "zeta_dd",
+    "zeta_schwarz": "zeta_schwarz",
+    "schwarz_zeta": "zeta_schwarz",
+    "ras_zeta": "zeta_schwarz",
+    "zeta_ras": "zeta_schwarz",
+    "adi": "adi",
+    "adi_line": "adi",
+    "line_adi": "adi",
+    "zeta_theta": "adi",
+    "1": "point",
+    "true": "point",
+    "yes": "point",
+    "on": "point",
+    "point": "point",
+    "point_block": "point",
+    "schur": "schur",
+    "schur_complement": "schur",
+    "constraint_schur": "schur",
+    "collision": "collision",
+    "diag": "collision",
+    "collision_diag": "collision",
+    "structured_fblock": "structured_fblock_jacobi",
+    "structured_fblock_jacobi": "structured_fblock_jacobi",
+    "fblock_jacobi": "structured_fblock_jacobi",
+    "block_coo_jacobi": "structured_fblock_jacobi",
+    "structured_fblock_angular": "structured_fblock_angular_jacobi",
+    "structured_fblock_angular_jacobi": "structured_fblock_angular_jacobi",
+    "fblock_angular_jacobi": "structured_fblock_angular_jacobi",
+    "block_coo_angular_jacobi": "structured_fblock_angular_jacobi",
+    "structured_fblock_xi_angular": "structured_fblock_xi_angular_jacobi",
+    "structured_fblock_xi_angular_jacobi": "structured_fblock_xi_angular_jacobi",
+    "fblock_xi_angular_jacobi": "structured_fblock_xi_angular_jacobi",
+    "block_coo_xi_angular_jacobi": "structured_fblock_xi_angular_jacobi",
+    "structured_fblock_fp_radial": "structured_fblock_fp_radial_jacobi",
+    "structured_fblock_fp_radial_jacobi": "structured_fblock_fp_radial_jacobi",
+    "fblock_fp_radial_jacobi": "structured_fblock_fp_radial_jacobi",
+    "fblock_species_x_jacobi": "structured_fblock_fp_radial_jacobi",
+    "block_coo_fp_radial_jacobi": "structured_fblock_fp_radial_jacobi",
+    "structured_fblock_fp_lowmode_schur": "structured_fblock_fp_lowmode_schur",
+    "fblock_fp_lowmode_schur": "structured_fblock_fp_lowmode_schur",
+    "fblock_fp_galerkin": "structured_fblock_fp_lowmode_schur",
+    "block_coo_fp_lowmode_schur": "structured_fblock_fp_lowmode_schur",
+    "structured_fblock_fp_moment_schur": "structured_fblock_fp_moment_schur",
+    "fblock_fp_moment_schur": "structured_fblock_fp_moment_schur",
+    "fblock_fp_moment_galerkin": "structured_fblock_fp_moment_schur",
+    "block_coo_fp_moment_schur": "structured_fblock_fp_moment_schur",
+    "structured_fblock_fp_coupled_moment_schur": "structured_fblock_fp_coupled_moment_schur",
+    "fblock_fp_coupled_moment_schur": "structured_fblock_fp_coupled_moment_schur",
+    "fblock_fp_coupled_galerkin": "structured_fblock_fp_coupled_moment_schur",
+    "block_coo_fp_coupled_moment_schur": "structured_fblock_fp_coupled_moment_schur",
+    "structured_fblock_fp_tail_coupled_schur": "structured_fblock_fp_tail_coupled_schur",
+    "fblock_fp_tail_coupled_schur": "structured_fblock_fp_tail_coupled_schur",
+    "fblock_fp_tail_coupled_minres": "structured_fblock_fp_tail_coupled_schur",
+    "fblock_fp_tail_minres": "structured_fblock_fp_tail_coupled_schur",
+    "block_coo_fp_tail_coupled_schur": "structured_fblock_fp_tail_coupled_schur",
+    "block_coo_fp_tail_coupled_minres": "structured_fblock_fp_tail_coupled_schur",
+}
+
+
+def _env_int(name: str, default: int) -> int:
+    env = os.environ.get(name, "").strip()
+    try:
+        return int(env) if env else int(default)
+    except ValueError:
+        return int(default)
+
+
+def _env_float(name: str, default: float) -> float:
+    env = os.environ.get(name, "").strip()
+    try:
+        return float(env) if env else float(default)
+    except ValueError:
+        return float(default)
+
+
+def _env_token(name: str) -> str:
+    return os.environ.get(name, "").strip().lower()
+
+
+_FALSE_VALUES = {"0", "false", "no", "off"}
+
+
+def canonical_rhs1_preconditioner_kind(raw: str | None) -> str | None:
+    """Canonicalize ``SFINCS_JAX_RHSMODE1_PRECONDITIONER`` aliases.
+
+    Unknown non-empty aliases intentionally return ``None`` to preserve the
+    historical driver behavior for unrecognized values.
+    """
+    key = str(raw or "").strip().lower()
+    if not key:
+        return None
+    return _RHS1_PRECONDITIONER_KIND_ALIASES.get(key)
+
+
+def rhs1_measured_auto_promotion_gate(
+    *,
+    current_kind: str | None,
+    candidate_kind: str | None,
+    candidate_metrics: SolverCandidateMetrics | None = None,
+    baseline_metrics: SolverCandidateMetrics | None = None,
+    criteria: SolverAcceptanceCriteria | None = None,
+) -> SolverCandidateGate:
+    """Gate an automatic RHSMode=1 preconditioner promotion with measured data.
+
+    Existing heuristic policy calls pass no metrics, so they remain unchanged.
+    Once a dispatch point has residual/runtime/memory data for a candidate, this
+    helper enforces the common rule: do not promote a new automatic path over a
+    clean incumbent unless the candidate is residual-clean and provides a real
+    measured runtime or memory win.
+    """
+    if candidate_kind == current_kind:
+        return SolverCandidateGate(accepted=True, reasons=("same_kind",))
+    if candidate_metrics is None:
+        return SolverCandidateGate(accepted=True, reasons=("unmeasured_historical_policy",))
+    return solver_candidate_gate(candidate_metrics, baseline=baseline_metrics, criteria=criteria)
+
+
+def rhs1_pas_auto_large_base_kind(*, active_size: int) -> str:
+    """Keep large auto-selected PAS solves in the PAS-native preconditioner family."""
+    pas_lite_min = _env_int("SFINCS_JAX_PAS_LITE_MIN", 20000)
+    if int(active_size) >= max(1, int(pas_lite_min)):
+        return "pas_lite"
+    return "pas_hybrid"
+
+
+def rhs1_pas_weak_auto_override_kind(
+    *,
+    rhs1_precond_env: str,
+    rhs_mode: int,
+    include_phi1: bool,
+    has_pas: bool,
+    current_kind: str | None,
+    active_size: int,
+    n_theta: int,
+    n_zeta: int,
+    max_l: int,
+    candidate_metrics: SolverCandidateMetrics | None = None,
+    baseline_metrics: SolverCandidateMetrics | None = None,
+    criteria: SolverAcceptanceCriteria | None = None,
+) -> str | None:
+    """Promote weak default PAS preconditioners to PAS-aware defaults.
+
+    This mirrors the driver auto-policy used before expensive PAS fallback
+    attempts: small angular blocks may use ``xblock_tz``; larger systems stay in
+    the PAS-native lite/hybrid family.
+    """
+    if str(rhs1_precond_env or "").strip().lower():
+        return current_kind
+    if int(rhs_mode) != 1 or bool(include_phi1) or not has_pas:
+        return current_kind
+    if current_kind not in PAS_WEAK_AUTO_OVERRIDE_KINDS:
+        return current_kind
+
+    xblock_tz_max = _env_int("SFINCS_JAX_RHSMODE1_XBLOCK_TZ_MAX", 1200)
+    xblock_small_max = _env_int("SFINCS_JAX_RHSMODE1_XBLOCK_TZ_SMALL_MAX", 4000)
+    if (
+        int(active_size) <= max(1, int(xblock_small_max))
+        and int(xblock_tz_max) > 0
+        and int(max_l) * int(n_theta) * int(n_zeta) <= int(xblock_tz_max)
+    ):
+        candidate_kind = "xblock_tz"
+    else:
+        candidate_kind = rhs1_pas_auto_large_base_kind(active_size=int(active_size))
+    gate = rhs1_measured_auto_promotion_gate(
+        current_kind=current_kind,
+        candidate_kind=candidate_kind,
+        candidate_metrics=candidate_metrics,
+        baseline_metrics=baseline_metrics,
+        criteria=criteria,
+    )
+    return candidate_kind if gate.accepted else current_kind
+
+
+def rhs1_measured_auto_promotion_allowed(
+    *,
+    current_kind: str | None,
+    candidate_kind: str | None,
+    candidate_metrics: SolverCandidateMetrics | None = None,
+    baseline_metrics: SolverCandidateMetrics | None = None,
+    criteria: SolverAcceptanceCriteria | None = None,
+) -> bool:
+    """Return whether measured data allow an RHSMode=1 automatic promotion."""
+    return rhs1_measured_auto_promotion_gate(
+        current_kind=current_kind,
+        candidate_kind=candidate_kind,
+        candidate_metrics=candidate_metrics,
+        baseline_metrics=baseline_metrics,
+        criteria=criteria,
+    ).accepted
+
+
+def rhs1_pas_family_refinement_kind(
+    *,
+    rhs1_precond_env: str,
+    has_pas: bool,
+    has_fp: bool,
+    current_kind: str | None,
+    active_size: int,
+    n_zeta: int,
+    geom_scheme: int,
+    pas_tz_applicable: bool,
+    pas_tokamak_theta_applicable: bool,
+) -> str | None:
+    """Refine automatic PAS lite/hybrid selections to specialized PAS builders."""
+    result = current_kind
+    env = str(rhs1_precond_env or "").strip().lower()
+    tokamak_geometry = int(n_zeta) == 1 or int(geom_scheme) == 1
+    tokamak_like = int(geom_scheme) == 1 or int(n_zeta) <= 5
+
+    if result == "pas_lite" and has_pas and tokamak_geometry:
+        # GeometryScheme=1 tokamak PAS runs need stronger angular/L coupling
+        # than pas_lite provides, but can still avoid the most expensive global
+        # blocks by staying in the hybrid family.
+        result = "pas_hybrid"
+    if env in {"", "auto", "default"} and result in {"pas_lite", "pas_hybrid"} and pas_tokamak_theta_applicable:
+        return "pas_tokamak_theta"
+    if (
+        env in {"", "auto", "default"}
+        and result in {"pas_lite", "pas_hybrid"}
+        and pas_tz_applicable
+        and (not pas_tokamak_theta_applicable)
+    ):
+        return "pas_tz"
+    if tokamak_like and result in {"pas_lite", "pas_hybrid"} and pas_tz_applicable:
+        return "pas_tz"
+    if env == "" and has_pas and tokamak_like and result in {"pas_lite", "pas_hybrid"}:
+        pas_ilu_min = _env_int("SFINCS_JAX_RHSMODE1_PAS_ILU_MIN", 12000)
+        if int(active_size) >= max(1, int(pas_ilu_min)):
+            return "pas_ilu"
+    return result
+
+
+def rhs1_fp_dkes_env_preconditioner_kind(
+    *,
+    rhs1_precond_env: str,
+    rhs_mode: int,
+    include_phi1: bool,
+    has_fp: bool,
+    use_dkes: bool,
+    total_size: int,
+    n_theta: int,
+    n_zeta: int,
+    max_l: int,
+) -> str:
+    """Return an early env override for bounded FP DKES xblock_tz solves."""
+    env = str(rhs1_precond_env or "").strip().lower()
+    if env:
+        return env
+    if int(rhs_mode) != 1 or bool(include_phi1) or (not has_fp) or (not use_dkes):
+        return env
+
+    fp_dkes_max = _env_int("SFINCS_JAX_RHSMODE1_FP_DKES_STRONG_MAX", 20000)
+    if int(total_size) > max(1, int(fp_dkes_max)):
+        return env
+
+    xblock_tz_max = _env_int("SFINCS_JAX_RHSMODE1_XBLOCK_TZ_MAX", 1200)
+    if (
+        int(n_theta) > 1
+        and int(xblock_tz_max) > 0
+        and int(max_l) * int(n_theta) * int(n_zeta) <= int(xblock_tz_max)
+    ):
+        return "xblock_tz"
+    return env
+
+
+def rhs1_fp_dkes_default_kind(
+    *,
+    active_size: int,
+    n_theta: int,
+    n_zeta: int,
+    max_l: int,
+    xblock_tz_limit: int,
+) -> str:
+    """Select the default RHSMode=1 preconditioner for FP DKES trajectory cases."""
+    fp_dkes_strong_max = _env_int("SFINCS_JAX_RHSMODE1_FP_DKES_STRONG_MAX", 20000)
+    if int(active_size) > max(1, int(fp_dkes_strong_max)):
+        return "collision"
+    if (
+        int(n_theta) > 1
+        and int(xblock_tz_limit) > 0
+        and int(max_l) * int(n_theta) * int(n_zeta) <= int(xblock_tz_limit)
+    ):
+        return "xblock_tz"
+    return "xmg"
+
+
+def rhs1_large_fp_near_zero_er_override_kind(
+    *,
+    rhs1_precond_env: str,
+    rhs_mode: int,
+    include_phi1: bool,
+    has_fp: bool,
+    has_pas: bool,
+    current_kind: str | None,
+    total_size: int,
+    er_abs: float,
+    schur_er_min: float,
+) -> str | None:
+    """Force large near-zero-Er FP-only systems from weak line/point blocks to xmg."""
+    if str(rhs1_precond_env or "").strip().lower():
+        return current_kind
+    if int(rhs_mode) != 1 or bool(include_phi1) or (not has_fp) or has_pas:
+        return current_kind
+    if float(er_abs) > float(schur_er_min):
+        return current_kind
+    if current_kind not in FP_FORCE_XMG_WEAK_KINDS:
+        return current_kind
+
+    fp_force_xmg_min = _env_int("SFINCS_JAX_RHSMODE1_FP_FORCE_XMG_MIN", 120000)
+    if int(total_size) >= max(1, int(fp_force_xmg_min)):
+        return "xmg"
+    return current_kind
+
+
+def pas_auto_skip_strong_retry(
+    *,
+    has_pas: bool,
+    strong_precond_env: str,
+    rhs1_precond_kind: str | None,
+    residual_norm: float,
+    target: float,
+    ratio: float,
+) -> bool:
+    """Skip PAS strong retry when the current strong base already met the relaxed target."""
+    if not has_pas or ratio <= 0.0:
+        return False
+    if strong_precond_env not in {"", "auto"}:
+        return False
+    if rhs1_precond_kind not in PAS_AUTO_STRONG_BASE_KINDS:
+        return False
+    return float(residual_norm) <= float(target) * float(ratio)
+
+
+def rhs1_pas_dkes_xblock_allowed(
+    *,
+    has_pas: bool,
+    use_dkes: bool,
+    backend: str,
+    n_theta: int,
+    n_zeta: int,
+    max_l: int,
+    xblock_tz_limit: int,
+) -> bool:
+    """Return whether bounded PAS DKES runs may use dense xblock_tz preconditioning."""
+    if not has_pas or not use_dkes:
+        return False
+    backend_norm = str(backend).strip().lower()
+    if backend_norm not in {"cpu", "gpu", "tpu"}:
+        return False
+    if int(n_theta) <= 1:
+        return False
+    if int(xblock_tz_limit) <= 0:
+        return False
+    return int(max_l) * int(n_theta) * int(n_zeta) <= int(xblock_tz_limit)
+
+
+def rhs1_pas_dkes_pas_tz_preferred(
+    *,
+    has_pas: bool,
+    use_dkes: bool,
+    backend: str,
+    n_theta: int,
+    n_zeta: int,
+    max_l: int,
+    active_size: int,
+) -> bool:
+    """Return whether PAS DKES auto-selection should prefer ``pas_tz``.
+
+    Dense x-blocks are robust for small DKES angular blocks, but on the HSX DKES
+    benchmark the structured PAS angular block is faster and lower-memory on
+    both CPU and GPU once the angular block reaches O(10^3) DOFs.
+    """
+    if not has_pas or not use_dkes:
+        return False
+    backend_norm = str(backend).strip().lower()
+    if backend_norm not in {"cpu", "gpu"}:
+        return False
+    if int(n_theta) <= 1 or int(n_zeta) <= 1:
+        return False
+    backend_key = backend_norm.upper()
+    min_block = _env_int(f"SFINCS_JAX_RHSMODE1_PAS_DKES_{backend_key}_PAS_TZ_MIN", 950)
+    max_active = _env_int(f"SFINCS_JAX_RHSMODE1_PAS_DKES_{backend_key}_PAS_TZ_ACTIVE_MAX", 15000)
+    block_size = int(max_l) * int(n_theta) * int(n_zeta)
+    return block_size >= max(1, int(min_block)) and int(active_size) <= max(1, int(max_active))
+
+
+def rhs1_pas_dkes_cpu_pas_tz_preferred(
+    *,
+    has_pas: bool,
+    use_dkes: bool,
+    backend: str,
+    n_theta: int,
+    n_zeta: int,
+    max_l: int,
+    active_size: int,
+) -> bool:
+    """Backward-compatible CPU PAS-DKES alias for older policy tests/callers."""
+    return rhs1_pas_dkes_pas_tz_preferred(
+        has_pas=has_pas,
+        use_dkes=use_dkes,
+        backend=backend,
+        n_theta=n_theta,
+        n_zeta=n_zeta,
+        max_l=max_l,
+        active_size=active_size,
+    )
+
+
+def rhs1_pas_full_cpu_pas_tz_preferred(
+    *,
+    has_pas: bool,
+    has_fp: bool,
+    use_dkes: bool,
+    backend: str,
+    geom_scheme: int,
+    n_theta: int,
+    n_zeta: int,
+    max_l: int,
+    active_size: int,
+    pas_tz_applicable: bool,
+) -> bool:
+    """Return whether bounded CPU full-trajectory PAS should prefer ``pas_tz``.
+
+    This targets bounded geometryScheme=11 full-trajectory PAS cases where
+    ``pas_tz`` is faster and much lower-memory than the default Schur block on
+    CPU.  The backend-general wrapper below adds the corresponding bounded GPU
+    gate using separate environment controls.
+    """
+    if not has_pas or has_fp or use_dkes:
+        return False
+    if not pas_tz_applicable:
+        return False
+    if str(backend).strip().lower() != "cpu":
+        return False
+    if int(geom_scheme) != 11:
+        return False
+    if int(n_theta) <= 1 or int(n_zeta) <= 1:
+        return False
+    max_zeta = _env_int("SFINCS_JAX_RHSMODE1_PAS_FULL_CPU_PAS_TZ_NZETA_MAX", 19)
+    min_block = _env_int("SFINCS_JAX_RHSMODE1_PAS_FULL_CPU_PAS_TZ_MIN", 950)
+    max_active = _env_int("SFINCS_JAX_RHSMODE1_PAS_FULL_CPU_PAS_TZ_ACTIVE_MAX", 15000)
+    block_size = int(max_l) * int(n_theta) * int(n_zeta)
+    return (
+        int(n_zeta) <= max(1, int(max_zeta))
+        and block_size >= max(1, int(min_block))
+        and int(active_size) <= max(1, int(max_active))
+    )
+
+
+def rhs1_pas_full_pas_tz_preferred(
+    *,
+    has_pas: bool,
+    has_fp: bool,
+    use_dkes: bool,
+    backend: str,
+    geom_scheme: int,
+    n_theta: int,
+    n_zeta: int,
+    max_l: int,
+    active_size: int,
+    pas_tz_applicable: bool,
+) -> bool:
+    """Return whether bounded full-trajectory PAS should prefer ``pas_tz``.
+
+    CPU behavior is delegated to the existing CPU policy. GPU behavior is
+    admitted only for the measured geometryScheme=11 full-trajectory PAS lane
+    where ``pas_tz`` lowers RSS and wall time relative to Schur while preserving
+    parity. The bounds deliberately mirror the CPU lane and can be tightened or
+    disabled with backend-specific environment variables.
+    """
+    backend_key = str(backend).strip().lower()
+    if backend_key == "cpu":
+        return rhs1_pas_full_cpu_pas_tz_preferred(
+            has_pas=has_pas,
+            has_fp=has_fp,
+            use_dkes=use_dkes,
+            backend=backend,
+            geom_scheme=geom_scheme,
+            n_theta=n_theta,
+            n_zeta=n_zeta,
+            max_l=max_l,
+            active_size=active_size,
+            pas_tz_applicable=pas_tz_applicable,
+        )
+    if backend_key not in {"gpu", "cuda"}:
+        return False
+    mode = _env_token("SFINCS_JAX_RHSMODE1_PAS_FULL_GPU_PAS_TZ")
+    if mode in _FALSE_VALUES:
+        return False
+    if not has_pas or has_fp or use_dkes:
+        return False
+    if not pas_tz_applicable:
+        return False
+    if int(geom_scheme) != 11:
+        return False
+    if int(n_theta) <= 1 or int(n_zeta) <= 1:
+        return False
+    max_zeta = _env_int("SFINCS_JAX_RHSMODE1_PAS_FULL_GPU_PAS_TZ_NZETA_MAX", 19)
+    min_block = _env_int("SFINCS_JAX_RHSMODE1_PAS_FULL_GPU_PAS_TZ_MIN", 950)
+    max_active = _env_int("SFINCS_JAX_RHSMODE1_PAS_FULL_GPU_PAS_TZ_ACTIVE_MAX", 15000)
+    block_size = int(max_l) * int(n_theta) * int(n_zeta)
+    return (
+        int(n_zeta) <= max(1, int(max_zeta))
+        and block_size >= max(1, int(min_block))
+        and int(active_size) <= max(1, int(max_active))
+    )
+
+
+def rhs1_geometry4_pas_memory_pas_tz_preferred(
+    *,
+    rhs1_precond_env: str | None,
+    current_kind: str | None,
+    has_pas: bool,
+    has_fp: bool,
+    use_dkes: bool,
+    geom_scheme: int,
+    n_theta: int,
+    n_zeta: int,
+    max_l: int,
+    active_size: int,
+    er_abs: float,
+    schur_er_min: float,
+    pas_tz_applicable: bool,
+) -> bool:
+    """Return whether geometryScheme=4 PAS should use memory-oriented ``pas_tz``.
+
+    This targets the bounded no-Er geometry4 PAS offender where direct top-level
+    ``pas_tz`` is parity-clean and materially lower-memory than wrapping the same
+    angular block inside the constraint-Schur preconditioner.
+    """
+    mode = _env_token("SFINCS_JAX_RHSMODE1_GEOM4_PAS_MEMORY_PAS_TZ")
+    if mode in _FALSE_VALUES:
+        return False
+    if (rhs1_precond_env or "").strip().lower() not in {"", "auto", "default"}:
+        return False
+    if current_kind != "schur":
+        return False
+    if not has_pas or has_fp or use_dkes:
+        return False
+    if not pas_tz_applicable:
+        return False
+    if int(geom_scheme) != 4:
+        return False
+    if int(n_theta) <= 1 or int(n_zeta) <= 1:
+        return False
+    if float(er_abs) > float(schur_er_min):
+        return False
+    block_size = int(max_l) * int(n_theta) * int(n_zeta)
+    min_block = _env_int("SFINCS_JAX_RHSMODE1_GEOM4_PAS_MEMORY_PAS_TZ_MIN", 1500)
+    min_active = _env_int("SFINCS_JAX_RHSMODE1_GEOM4_PAS_MEMORY_PAS_TZ_ACTIVE_MIN", 8000)
+    max_active = _env_int("SFINCS_JAX_RHSMODE1_GEOM4_PAS_MEMORY_PAS_TZ_ACTIVE_MAX", 25000)
+    return (
+        block_size >= max(1, int(min_block))
+        and int(active_size) >= max(1, int(min_active))
+        and int(active_size) <= max(1, int(max_active))
+    )
+
+
+def rhs1_pas_tokamak_gpu_theta_allowed(
+    *,
+    has_pas: bool,
+    has_fp: bool,
+    backend: str,
+    tokamak_like: bool,
+    active_size: int,
+    er_abs: float,
+    schur_er_min: float,
+    has_magdrift: bool,
+    has_collisionless: bool,
+) -> bool:
+    """Return whether the bounded GPU tokamak PAS theta/L path is eligible."""
+    if not has_pas or has_fp:
+        return False
+    if str(backend).strip().lower() == "cpu":
+        return False
+    if not tokamak_like or not has_collisionless:
+        return False
+    if float(er_abs) <= float(schur_er_min):
+        return False
+    if has_magdrift:
+        return False
+    theta_max = _env_int("SFINCS_JAX_RHSMODE1_PAS_TOKAMAK_GPU_THETA_MAX", 8000)
+    return int(active_size) <= max(1, int(theta_max))
+
+
+def rhs1_pas_tokamak_gpu_xblock_preferred(
+    *,
+    has_pas: bool,
+    has_fp: bool,
+    backend: str,
+    tokamak_like: bool,
+    active_size: int,
+    er_abs: float,
+    schur_er_min: float,
+    has_magdrift: bool,
+    has_collisionless: bool,
+    n_theta: int,
+    n_zeta: int,
+    max_l: int,
+    xblock_tz_limit: int,
+) -> bool:
+    """Return whether GPU tokamak PAS+Er should opt into ``xblock_tz``.
+
+    Very small one-GPU tokamak PAS+Er cases are fastest with the tightened
+    unpreconditioned route because setup dominates. Medium cases need the
+    structured xblock_tz preconditioner to avoid expensive sparse-LU fallbacks.
+    """
+    if not rhs1_pas_tokamak_gpu_theta_allowed(
+        has_pas=has_pas,
+        has_fp=has_fp,
+        backend=backend,
+        tokamak_like=tokamak_like,
+        active_size=active_size,
+        er_abs=er_abs,
+        schur_er_min=schur_er_min,
+        has_magdrift=has_magdrift,
+        has_collisionless=has_collisionless,
+    ):
+        return False
+    if int(n_theta) <= 1 or int(xblock_tz_limit) <= 0:
+        return False
+    prefer_min = _env_int("SFINCS_JAX_RHSMODE1_PAS_TOKAMAK_GPU_XBLOCK_ACTIVE_MIN", 1000)
+    prefer_max = _env_int("SFINCS_JAX_RHSMODE1_PAS_TOKAMAK_GPU_XBLOCK_ACTIVE_MAX", 8000)
+    if int(active_size) < max(1, int(prefer_min)):
+        return False
+    if int(prefer_max) <= 0:
+        return False
+    if int(active_size) > int(prefer_max):
+        return False
+    return int(max_l) * int(n_theta) * int(n_zeta) <= int(xblock_tz_limit)
+
+
+def rhs1_pas_tokamak_gpu_tight_tol(
+    *,
+    enabled: bool,
+    has_pas: bool,
+    has_fp: bool,
+    backend: str,
+    tokamak_like: bool,
+    active_size: int,
+    er_abs: float,
+    schur_er_min: float,
+    has_magdrift: bool,
+    has_collisionless: bool,
+) -> float | None:
+    """Return the auto-tightened GPU tokamak PAS tolerance, if applicable."""
+    if not enabled:
+        return None
+    if not rhs1_pas_tokamak_gpu_theta_allowed(
+        has_pas=has_pas,
+        has_fp=has_fp,
+        backend=backend,
+        tokamak_like=tokamak_like,
+        active_size=active_size,
+        er_abs=er_abs,
+        schur_er_min=schur_er_min,
+        has_magdrift=has_magdrift,
+        has_collisionless=has_collisionless,
+    ):
+        return None
+    raw = _env_token("SFINCS_JAX_RHSMODE1_PAS_TOKAMAK_GPU_TOL")
+    if not raw:
+        raw = _env_token("SFINCS_JAX_RHSMODE1_PAS_TOKAMAK_GPU_THETA_TOL")
+    if raw in _FALSE_VALUES:
+        return None
+    try:
+        tol = float(raw) if raw else 1.0e-8
+    except ValueError:
+        tol = 1.0e-8
+    return tol if tol > 0.0 else None
+
+
+def rhs1_pas_tokamak_cpu_xblock_preferred(
+    *,
+    has_pas: bool,
+    has_fp: bool,
+    backend: str,
+    tokamak_like: bool,
+    active_size: int,
+    er_abs: float,
+    schur_er_min: float,
+    has_magdrift: bool,
+    has_collisionless: bool,
+    n_theta: int,
+    n_zeta: int,
+    max_l: int,
+    xblock_tz_limit: int,
+) -> bool:
+    """Prefer xblock_tz for bounded CPU tokamak PAS+Er branches before pas_schur."""
+    if not has_pas or has_fp:
+        return False
+    if str(backend).strip().lower() != "cpu":
+        return False
+    if not tokamak_like or not has_collisionless:
+        return False
+    if float(er_abs) <= float(schur_er_min) and (not has_magdrift):
+        return False
+    if int(n_theta) <= 1 or int(xblock_tz_limit) <= 0:
+        return False
+    prefer_max = _env_int("SFINCS_JAX_RHSMODE1_PAS_TOKAMAK_CPU_XBLOCK_ACTIVE_MAX", 4000)
+    if int(active_size) > max(1, int(prefer_max)):
+        return False
+    return int(max_l) * int(n_theta) * int(n_zeta) <= int(xblock_tz_limit)
+
+
+def rhs1_gpu_sparse_fallback_skip_allowed(
+    *,
+    backend: str,
+    rhs_mode: int,
+    include_phi1: bool,
+    has_pas: bool,
+    rhs1_precond_kind: str | None,
+    use_active_dof_mode: bool,
+    residual_norm: float,
+    target: float,
+) -> bool:
+    """Return whether a GPU PAS sparse fallback can be skipped after Schur acceptance."""
+    if str(backend).strip().lower() == "cpu":
+        return False
+    if not bool(use_active_dof_mode):
+        return False
+    if int(rhs_mode) != 1 or bool(include_phi1):
+        return False
+    if not has_pas:
+        return False
+    if str(rhs1_precond_kind or "").strip().lower() not in {"schur", "pas_schur"}:
+        return False
+    skip_ratio = _env_float("SFINCS_JAX_RHSMODE1_GPU_SPARSE_SKIP_RATIO", 10.0)
+    if skip_ratio <= 0.0:
+        return False
+    return float(residual_norm) <= float(skip_ratio) * max(float(target), 1.0e-300)
+
+
+def rhs1_sharded_line_override_allowed(rhs1_precond_kind: str | None) -> bool:
+    """Return whether sharded auto-selection may demote the current preconditioner to line DD."""
+    return rhs1_precond_kind in {
+        None,
+        "point",
+        "point_xdiag",
+        "theta_line",
+        "theta_line_xdiag",
+        "zeta_line",
+        "xmg",
+        "collision",
+        "pas_lite",
+        "pas_hybrid",
+    }
+
 __all__ = (
+    "host_sparse_direct_refine_steps",
+    "host_sparse_factor_dtype",
+    "rhs1_dense_backend_allowed",
+    "rhs1_dense_auto_fp_cutoff",
+    "rhs1_dense_auto_fp_allowed",
+    "rhs1_dense_auto_fp_accelerator_min",
+    "rhs1_dense_fallback_max",
+    "rhs1_dense_krylov_allowed",
+    "rhs1_explicit_sparse_host_direct_allowed",
+    "rhs1_host_dense_fallback_allowed",
+    "rhs1_host_dense_shortcut_allowed",
+    "rhs1_host_sparse_direct_allowed",
+    "rhs1_host_sparse_skip_dense_ratio",
+    "rhs1_constrained_pas_sparse_pc_auto_allowed",
+    "rhs1_fp_3d_sparse_pc_auto_allowed",
+    "rhs1_fp_3d_xblock_sparse_pc_auto_allowed",
+    "rhs1_tokamak_er_dense_auto_allowed",
+    "rhs1_tokamak_fp_er_sparse_pc_auto_allowed",
+    "rhs1_tokamak_fp_noer_sparse_pc_auto_allowed",
+    "rhs1_tokamak_pas_er_sparse_pc_auto_allowed",
+    "rhs1_tokamak_pas_noer_sparse_pc_auto_allowed",
+    "rhs1_sparse_operator_preconditioned_rescue_allowed",
+    "rhs1_fp_xblock_assembled_host_allowed",
+    "rhs1_large_cpu_sparse_exact_lu_allowed",
+    "rhs1_large_cpu_sparse_exact_lu_xblock_allowed",
+    "rhs1_large_cpu_sparse_rescue_allowed",
+    "rhs1_large_cpu_sparse_rescue_first",
+    "rhs1_large_cpu_sparse_skip_primary_allowed",
+    "rhs1_large_cpu_xblock_skip_primary_allowed",
+    "rhs1_sparse_sxblock_rescue_allowed",
+    "rhs1_sparse_xblock_rescue_allowed",
+    "PAS_AUTO_STRONG_BASE_KINDS",
+    "FP_FORCE_XMG_WEAK_KINDS",
+    "PAS_WEAK_AUTO_OVERRIDE_KINDS",
+    "canonical_rhs1_preconditioner_kind",
+    "pas_auto_skip_strong_retry",
+    "rhs1_measured_auto_promotion_allowed",
+    "rhs1_measured_auto_promotion_gate",
+    "rhs1_fp_dkes_default_kind",
+    "rhs1_fp_dkes_env_preconditioner_kind",
+    "rhs1_geometry4_pas_memory_pas_tz_preferred",
+    "rhs1_large_fp_near_zero_er_override_kind",
+    "rhs1_pas_family_refinement_kind",
+    "rhs1_gpu_sparse_fallback_skip_allowed",
+    "rhs1_pas_auto_large_base_kind",
+    "rhs1_pas_dkes_cpu_pas_tz_preferred",
+    "rhs1_pas_dkes_pas_tz_preferred",
+    "rhs1_pas_dkes_xblock_allowed",
+    "rhs1_pas_full_pas_tz_preferred",
+    "rhs1_pas_full_cpu_pas_tz_preferred",
+    "rhs1_pas_weak_auto_override_kind",
+    "rhs1_pas_tokamak_cpu_xblock_preferred",
+    "rhs1_pas_tokamak_gpu_theta_allowed",
+    "rhs1_pas_tokamak_gpu_tight_tol",
+    "rhs1_pas_tokamak_gpu_xblock_preferred",
+    "rhs1_sharded_line_override_allowed",
+    "ActiveProjectedPreconditionerAutoPolicy",
     "RHS1Constraint0PETScCompatConfig",
     "RHS1BiCGStabFallbackControls",
     "RHS1BiCGStabFallbackDecision",
@@ -3677,6 +6275,9 @@ __all__ = (
     "RHS1FPLowLPolishControls",
     "RHS1FPResidualPolishControls",
     "RHS1KrylovRoutingControls",
+    "RHS1PostMinresPolicy",
+    "RHS1PostSolveCorrectionPolicy",
+    "RHS1SubspaceCorrectionPolicy",
     "RHS1QIDeviceRankBudget",
     "RHS1QIDeviceSetupSummary",
     "RHS1ScipyRescueControls",
@@ -3691,7 +6292,25 @@ __all__ = (
     "RHS1Stage2RetryAdmissionDecision",
     "RHS1Stage2RetryControls",
     "RHS1Stage2TriggerDecision",
+    "_DIRECT_REDUCED_PMAT_PC_KINDS",
+    "_DIRECT_TAIL_STRUCTURED_PC_CACHE",
+    "_StructuredHostSparsePreconditionerBundle",
+    "_direct_tail_structured_pc_cache_key",
+    "_direct_tail_structured_pc_with_cache_metadata",
+    "_hash_numpy_array_for_cache",
+    "_is_direct_reduced_pmat_pc_kind",
+    "_rhsmode1_fortran_reduced_direct_tail_pc_default_max_mb",
     "parse_rhs1_pas_tz_guarded_structured_levels",
+    "read_bool_env",
+    "read_float_env",
+    "read_int_env",
+    "read_post_coarse_policy",
+    "read_post_minres_policy",
+    "read_post_residual_equation_policy",
+    "read_post_solve_correction_policy",
+    "read_probe_coarse_policy",
+    "read_subspace_correction_policy",
+    "resolve_active_projected_preconditioner_auto_policy",
     "rhs1_bicgstab_fallback_controls_from_env",
     "rhs1_bicgstab_fallback_decision",
     "rhs1_bicgstab_fallback_target_from_env",

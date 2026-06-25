@@ -16,7 +16,6 @@ from sfincs_jax.problems.profile_response.sparse import (
 from sfincs_jax.problems.profile_response.sparse import (
     fortran_reduced as sparse_fortran_reduced_module,
 )
-from sfincs_jax.problems.profile_response.sparse import krylov as sparse_krylov_module
 from sfincs_jax.problems.profile_response.sparse import policy as sparse_policy_module
 from sfincs_jax.problems.profile_response.sparse import qi as sparse_qi_module
 from sfincs_jax.problems.profile_response.sparse import xblock as sparse_xblock_module
@@ -624,8 +623,8 @@ def test_sparse_finalization_module_reexports_match_compat_layer() -> None:
         )
 
 
-def test_sparse_krylov_module_reexports_match_compat_layer() -> None:
-    """The split sparse Krylov module keeps legacy sparse_pc imports stable."""
+def test_sparse_krylov_helpers_live_on_sparse_pc_owner() -> None:
+    """Sparse-PC Krylov helpers now live directly on the sparse_pc owner."""
 
     moved_names = (
         "SparsePCGMRESContext",
@@ -633,7 +632,7 @@ def test_sparse_krylov_module_reexports_match_compat_layer() -> None:
         "run_sparse_pc_gmres_once_for_retry",
     )
     for name in moved_names:
-        assert getattr(sparse_pc_module, name) is getattr(sparse_krylov_module, name)
+        assert hasattr(sparse_pc_module, name)
 
 
 def test_sparse_policy_module_reexports_match_compat_layer() -> None:

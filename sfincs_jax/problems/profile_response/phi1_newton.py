@@ -40,11 +40,11 @@ from ...preconditioner_context import (
     use_solver_jit,
 )
 from sfincs_jax.operators.profile_response.compressed_layout import build_rhs1_compressed_pitch_layout
-from sfincs_jax.problems.profile_response.host_policy import (
+from sfincs_jax.problems.profile_response.policies import (
     host_sparse_direct_refine_steps,
     host_sparse_factor_dtype,
 )
-from sfincs_jax.problems.profile_response.ksp_diagnostics import (
+from sfincs_jax.problems.profile_response.solver_diagnostics import (
     rhs1_fortran_stdout_from_env,
     rhs1_ksp_history_limits_from_env,
 )

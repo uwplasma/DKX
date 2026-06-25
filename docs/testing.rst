@@ -433,11 +433,11 @@ residual-weighted angular correction bases, plus the residual-correction
 preconditioner composition, safe preconditioner wrapping, and scalar
 preconditioned-minres polish tests.
 ``tests/test_profile_response_finalization.py`` covers
-``sfincs_jax.problems.profile_response.finalization``, the final RHSMode=1
-linear-solve handoff extracted from ``v3_driver.py``. It checks RHSMode gating
-for post-xblock acceptance floors, final progress-line formatting, metadata
-merging, accepted-residual-floor branch certificates, and empty-metadata
-handling without running a full solve.
+``sfincs_jax.problems.profile_response.solver_diagnostics``, including the
+final RHSMode=1 linear-solve handoff extracted from ``v3_driver.py``. It checks
+RHSMode gating for post-xblock acceptance floors, final progress-line
+formatting, metadata merging, accepted-residual-floor branch certificates, and
+empty-metadata handling without running a full solve.
 
 The docstring gate now discovers every ``sfincs_jax/*policy*.py`` module and also
 checks public policy classes/functions, so new extraction seams must remain

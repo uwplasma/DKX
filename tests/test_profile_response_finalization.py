@@ -4,7 +4,7 @@ from types import SimpleNamespace
 
 import jax.numpy as jnp
 
-from sfincs_jax.problems.profile_response.finalization import (
+from sfincs_jax.problems.profile_response.solver_diagnostics import (
     ProfileResponseLinearFinalizationContext,
     finalize_profile_response_linear_solve,
     profile_response_post_xblock_accept_floor,

@@ -4,7 +4,7 @@ from types import SimpleNamespace
 
 import numpy as np
 
-from sfincs_jax.problems.profile_response.host_policy import (
+from sfincs_jax.problems.profile_response.policies import (
     host_sparse_direct_refine_steps,
     host_sparse_factor_dtype,
     rhs1_dense_auto_fp_allowed,

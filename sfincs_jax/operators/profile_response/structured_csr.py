@@ -17,7 +17,7 @@ import numpy as np
 
 from sfincs_jax.explicit_sparse import SparseDecision, SparseOperatorBundle, estimate_csr_nbytes, estimate_dense_nbytes
 from sfincs_jax.operators.profile_response.full_system import select_structured_rhs1_full_csr_operator
-from sfincs_jax.problems.profile_response.solver_policy import read_bool_env, read_int_env
+from sfincs_jax.problems.profile_response.policies import read_bool_env, read_int_env
 from sfincs_jax.verbose import Timer
 
 if TYPE_CHECKING:
@@ -164,5 +164,4 @@ def _try_build_structured_rhs1_full_csr_operator_bundle(
             f"fblock_mb={float(meta.get('fblock_csr_nbytes_actual', 0) or 0) / 1.0e6:.3f}",
         )
     return SparseOperatorBundle(matrix=matrix, operator=operator, metadata=decision)
-
 

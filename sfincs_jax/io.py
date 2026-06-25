@@ -27,7 +27,7 @@ from .input_compat import (
 )
 from .namelist import Namelist, read_sfincs_input
 from .paths import resolve_existing_path
-from sfincs_jax.problems.profile_response.host_policy import (
+from sfincs_jax.problems.profile_response.policies import (
     rhs1_constrained_pas_sparse_pc_auto_allowed,
     rhs1_dense_auto_fp_accelerator_min,
     rhs1_dense_auto_fp_cutoff,

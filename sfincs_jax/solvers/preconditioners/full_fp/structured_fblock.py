@@ -21,8 +21,8 @@ from sfincs_jax.solvers.preconditioners.xblock.coarse import (
     _build_rhs1_moment_angular_matrix_free_correction,
     _build_rhs1_tail_matrix_free_correction,
 )
-from sfincs_jax.problems.profile_response.solver_policy import read_float_env as _rhs1_float_env
-from sfincs_jax.problems.profile_response.solver_policy import read_int_env as _rhs1_int_env
+from sfincs_jax.problems.profile_response.policies import read_float_env as _rhs1_float_env
+from sfincs_jax.problems.profile_response.policies import read_int_env as _rhs1_int_env
 from ....solvers.preconditioners.symbolic_sparse import RHS1FullSystemMatrixFreeOperatorAdapter
 from ....v3_system import V3FullSystemOperator, apply_v3_full_system_operator_cached
 
