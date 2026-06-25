@@ -16,7 +16,7 @@ import time
 import numpy as np
 import scipy.sparse as sp
 
-from ....rhs1_block_operator import RHS1ActiveBlockLayout, RHS1BlockLayout
+from sfincs_jax.operators.profile_response.layout import RHS1ActiveBlockLayout, RHS1BlockLayout
 from ..schur.rhs1_full_csr import (
     RHS1StructuredFullCSRPreconditioner,
     build_jacobi_preconditioner,

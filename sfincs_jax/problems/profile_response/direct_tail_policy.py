@@ -9,8 +9,8 @@ from typing import Any
 
 import numpy as np
 
-from .explicit_sparse import SparseOperatorBundle
-from .rhs1_solver_policy import read_float_env, read_int_env
+from sfincs_jax.explicit_sparse import SparseOperatorBundle
+from sfincs_jax.problems.profile_response.solver_policy import read_float_env, read_int_env
 
 
 @dataclass(frozen=True)

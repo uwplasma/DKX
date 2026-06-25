@@ -8,8 +8,8 @@ import os
 
 import jax.numpy as jnp
 
-from .krylov_dispatch import ksp_iteration_solver_label
-from .solver import (
+from sfincs_jax.krylov_dispatch import ksp_iteration_solver_label
+from sfincs_jax.solver import (
     bicgstab_solve_with_history_scipy,
     gmres_solve_with_history_scipy,
     lgmres_solve_with_history_scipy,

@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import os
 
-from .solver_selection_policy import (
+from sfincs_jax.solver_selection_policy import (
     SolverAcceptanceCriteria,
     SolverCandidateGate,
     SolverCandidateMetrics,

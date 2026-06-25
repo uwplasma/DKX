@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from sfincs_jax.rhs1_solver_policy import (
+from sfincs_jax.problems.profile_response.solver_policy import (
     RHS1PostSolveCorrectionPolicy,
     read_bool_env,
     read_float_env,

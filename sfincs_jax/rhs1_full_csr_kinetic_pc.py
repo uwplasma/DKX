@@ -9,7 +9,7 @@ import time
 import numpy as np
 import scipy.sparse as sp
 
-from .rhs1_block_operator import RHS1BlockLayout
+from sfincs_jax.operators.profile_response.layout import RHS1BlockLayout
 
 _FLOAT64_NBYTES = int(np.dtype(np.float64).itemsize)
 _INT64_NBYTES = int(np.dtype(np.int64).itemsize)

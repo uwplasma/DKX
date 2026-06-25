@@ -72,7 +72,7 @@ from .explicit_sparse_factor_builder import (
 from .explicit_sparse_factor_policy import (
     explicit_sparse_monolithic_max_size as _explicit_sparse_monolithic_max_size,
 )
-from .rhs1_device_operator import device_csr_from_matrix, validate_device_csr_matvec
+from sfincs_jax.operators.profile_response.device_sparse import device_csr_from_matrix, validate_device_csr_matvec
 from .rhs1_domain_decomposition import (  # compatibility exports for legacy tests/debug scripts
     _dd_core_patch_ranges,
     _rhs1_dd_auto_block_size,
@@ -104,15 +104,15 @@ from .rhs1_preconditioner_dispatch import (
     RHS1PreconditionerDispatchBuilders,
     build_rhs1_preconditioner_from_kind as _dispatch_rhs1_preconditioner_from_kind,
 )
-from .rhs1_fblock_assembly import select_structured_rhs1_fblock_csr_operator, select_structured_rhs1_fblock_operator
-from .rhs1_full_assembly import (
+from sfincs_jax.operators.profile_response.kinetic import select_structured_rhs1_fblock_csr_operator, select_structured_rhs1_fblock_operator
+from sfincs_jax.operators.profile_response.full_system import (
     build_active_projected_rhs1_full_csr_preconditioner,
     build_direct_active_fortran_v3_reduced_pmat_preconditioner,
     select_active_fortran_v3_reduced_support_mode_preconditioner,
     solve_structured_rhs1_full_csr,
 )
-from .rhs1_structured_full_csr import _try_build_structured_rhs1_full_csr_operator_bundle
-from .rhs1_preconditioner_auto_policy import (
+from sfincs_jax.operators.profile_response.structured_csr import _try_build_structured_rhs1_full_csr_operator_bundle
+from sfincs_jax.problems.profile_response.preconditioner_auto_policy import (
     canonical_rhs1_preconditioner_kind as _canonical_rhs1_preconditioner_kind,
     pas_auto_skip_strong_retry as _pas_auto_skip_strong_retry,
     rhs1_fp_dkes_default_kind as _rhs1_fp_dkes_default_kind,
@@ -131,7 +131,7 @@ from .rhs1_preconditioner_auto_policy import (
     rhs1_pas_weak_auto_override_kind as _rhs1_pas_weak_auto_override_kind,
     rhs1_sharded_line_override_allowed as _rhs1_sharded_line_override_allowed,
 )
-from .rhs1_preconditioner_auto_policy import (
+from sfincs_jax.problems.profile_response.preconditioner_auto_policy import (
     rhs1_gpu_sparse_fallback_skip_allowed as _rhs1_gpu_sparse_fallback_skip_allowed_impl,
 )
 from .rhs1_schur_policy import resolve_rhs1_schur_base_kind
@@ -468,14 +468,14 @@ from .problems.profile_response.policies import (
     rhs1_parse_polish_gmres_config,
     rhs1_polish_enabled,
 )
-from .rhs1_solver_policy import (
+from sfincs_jax.problems.profile_response.solver_policy import (
     read_bool_env as _rhs1_bool_env,
     read_float_env as _rhs1_float_env,
     read_int_env as _rhs1_int_env,
     read_post_solve_correction_policy as _read_rhs1_post_solve_correction_policy,
     read_probe_coarse_policy as _read_rhs1_probe_coarse_policy,
 )
-from .rhs1_direct_tail_policy import (
+from sfincs_jax.problems.profile_response.direct_tail_policy import (
     _DIRECT_TAIL_STRUCTURED_PC_CACHE,
     _StructuredHostSparsePreconditionerBundle,
     _direct_tail_structured_pc_cache_key,
@@ -484,8 +484,8 @@ from .rhs1_direct_tail_policy import (
     _is_direct_reduced_pmat_pc_kind,
     _rhsmode1_fortran_reduced_direct_tail_pc_default_max_mb,
 )
-from .rhs1_fortran_reduced_direct_tail import _try_build_fortran_reduced_constraint1_direct_tail_bundle
-from .rhs1_true_operator_rescue import (
+from sfincs_jax.operators.profile_response.reduced_tail import _try_build_fortran_reduced_constraint1_direct_tail_bundle
+from sfincs_jax.operators.profile_response.true_operator_rescue import (
     _ResidualCoarseHostSparsePreconditionerBundle,
     _ResidualWindowHostSparsePreconditionerBundle,
     _ReusableTrueActionColumnCache,
@@ -506,7 +506,7 @@ from .rhs1_true_operator_rescue import (
     _try_build_residual_coarse_host_sparse_preconditioner,
     _try_build_residual_window_host_sparse_preconditioner,
 )
-from .rhs1_ksp_diagnostics import (
+from sfincs_jax.problems.profile_response.ksp_diagnostics import (
     rhs1_fortran_stdout_from_env,
     rhs1_ksp_diagnostics_controls_from_env,
     rhs1_ksp_history_limits_from_env,
@@ -527,7 +527,7 @@ from .problems.profile_response.active_projection import (
     project_pas_constraint_f,
     reduce_full_with_indices,
 )
-from .rhs1_block_operator import (
+from sfincs_jax.operators.profile_response.layout import (
     RHS1ActiveBlockLayout,
     RHS1ActiveFieldSplitOrdering,
     RHS1BlockLayout,
@@ -565,7 +565,7 @@ from .problems.profile_response.policies import (
     rhs1_constraint0_petsc_compat_regularization,
     rhs1_constraint0_sparse_first as _rhs1_constraint0_sparse_first_impl,
 )
-from .rhs1_constraint_sources import (
+from sfincs_jax.operators.profile_response.sources import (
     build_rhs1_xblock_constraint1_moment_schur_preconditioner as _build_rhs1_xblock_constraint1_moment_schur_preconditioner,
     constraint_scheme1_inject_source as _constraint_scheme1_inject_source,
     constraint_scheme1_moments_from_f as _constraint_scheme1_moments_from_f,
@@ -577,7 +577,7 @@ from .problems.profile_response.policies import (
     rhs1_sparse_exact_lu_requested as _rhs1_sparse_exact_lu_requested_impl,
     rhs1_sparse_prefer_skips_stage2 as _rhs1_sparse_prefer_skips_stage2_impl,
 )
-from .rhs1_large_cpu_policy import (
+from sfincs_jax.problems.profile_response.large_cpu_policy import (
     rhs1_large_cpu_sparse_exact_lu_allowed as _rhs1_large_cpu_sparse_exact_lu_allowed_impl,
     rhs1_large_cpu_sparse_exact_lu_xblock_allowed as _rhs1_large_cpu_sparse_exact_lu_xblock_allowed_impl,
     rhs1_large_cpu_sparse_rescue_allowed as _rhs1_large_cpu_sparse_rescue_allowed_impl,
@@ -618,7 +618,7 @@ from .problems.profile_response.policies import (
     rhs1_stage2_trigger_decision,
 )
 from . import solver_path_policy as _solver_path_policy
-from .rhs1_host_policy import (
+from sfincs_jax.problems.profile_response.host_policy import (
     host_sparse_direct_refine_steps as _host_sparse_direct_refine_steps_impl,
     host_sparse_factor_dtype as _host_sparse_factor_dtype_impl,
     rhs1_dense_auto_fp_allowed as _rhs1_dense_auto_fp_allowed_impl,

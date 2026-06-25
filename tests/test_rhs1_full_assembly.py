@@ -7,11 +7,11 @@ import jax.numpy as jnp
 import numpy as np
 import scipy.sparse as sp
 
-import sfincs_jax.rhs1_full_assembly as rfa
+import sfincs_jax.operators.profile_response.full_system as rfa
 import sfincs_jax.v3_driver as vd
 from sfincs_jax.solvers.preconditioners.symbolic_sparse import rhs1_fortran_reduced as rfr
 from sfincs_jax.namelist import read_sfincs_input
-from sfincs_jax.rhs1_active_preconditioner_policy import (
+from sfincs_jax.problems.profile_response.active_preconditioner_policy import (
     resolve_active_projected_preconditioner_auto_policy,
 )
 from sfincs_jax.rhs1_fortran_reduced_factor_policy import (
@@ -23,7 +23,7 @@ from sfincs_jax.rhs1_symbolic_sparse_policy import (
     resolve_active_symbolic_block_schur_policy,
     resolve_active_symbolic_superblock_policy,
 )
-from sfincs_jax.rhs1_full_assembly import (
+from sfincs_jax.operators.profile_response.full_system import (
     build_direct_active_fortran_v3_reduced_pmat_preconditioner,
     build_active_projected_rhs1_full_csr_preconditioner,
     build_structured_rhs1_full_csr_preconditioner,
@@ -32,7 +32,7 @@ from sfincs_jax.rhs1_full_assembly import (
     select_structured_rhs1_full_csr_operator,
     solve_structured_rhs1_full_csr,
 )
-from sfincs_jax.rhs1_block_operator import (
+from sfincs_jax.operators.profile_response.layout import (
     RHS1ActiveFieldSplitOrdering,
     RHS1BlockLayout,
     clear_rhs1_active_field_split_ordering_cache,

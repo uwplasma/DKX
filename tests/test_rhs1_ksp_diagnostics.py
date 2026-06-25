@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import jax.numpy as jnp
 
-import sfincs_jax.rhs1_ksp_diagnostics as diagnostics
+import sfincs_jax.problems.profile_response.ksp_diagnostics as diagnostics
 
 
 def _identity_matvec(v):

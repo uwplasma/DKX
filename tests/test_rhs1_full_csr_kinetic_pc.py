@@ -6,7 +6,7 @@ import scipy.sparse as sp
 from jax import jit
 
 from sfincs_jax.native_block_factor import apply_native_x_ell_kinetic_factor
-from sfincs_jax.rhs1_block_operator import RHS1BlockLayout
+from sfincs_jax.operators.profile_response.layout import RHS1BlockLayout
 from sfincs_jax.rhs1_full_csr_kinetic_pc import (
     build_rhs1_full_csr_kinetic_preconditioner,
     estimate_rhs1_full_csr_kinetic_preconditioner_nbytes,

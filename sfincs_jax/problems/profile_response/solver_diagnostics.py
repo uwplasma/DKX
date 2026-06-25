@@ -9,7 +9,7 @@ from typing import Any
 
 import jax.numpy as jnp
 
-from ...rhs1_ksp_diagnostics import emit_rhs1_ksp_history, emit_rhs1_ksp_iter_stats
+from sfincs_jax.problems.profile_response.ksp_diagnostics import emit_rhs1_ksp_history, emit_rhs1_ksp_iter_stats
 from .residual import l2_norm_float, residual_converged, residual_target
 
 

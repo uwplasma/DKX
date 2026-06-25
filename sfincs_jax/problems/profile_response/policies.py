@@ -10,7 +10,7 @@ import jax.numpy as jnp
 import numpy as np
 
 from ...pas_smoother import pas_fast_accept as _pas_fast_accept_metric
-from ...rhs1_solver_policy import (
+from sfincs_jax.problems.profile_response.solver_policy import (
     read_bool_env as _read_bool_env,
     read_float_env as _read_float_env,
     read_int_env as _read_int_env,

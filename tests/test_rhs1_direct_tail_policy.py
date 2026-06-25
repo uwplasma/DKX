@@ -6,8 +6,8 @@ import numpy as np
 import pytest
 from scipy import sparse
 
-from sfincs_jax.rhs1_block_operator import RHS1BlockLayout
-from sfincs_jax.rhs1_direct_tail_policy import (
+from sfincs_jax.operators.profile_response.layout import RHS1BlockLayout
+from sfincs_jax.problems.profile_response.direct_tail_policy import (
     _StructuredHostSparsePreconditionerBundle,
     _direct_tail_structured_pc_cache_key,
     _direct_tail_structured_pc_with_cache_metadata,

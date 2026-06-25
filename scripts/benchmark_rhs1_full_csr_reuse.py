@@ -15,7 +15,7 @@ import jax.numpy as jnp
 import numpy as np
 
 from sfincs_jax.namelist import read_sfincs_input
-from sfincs_jax.rhs1_full_assembly import (
+from sfincs_jax.operators.profile_response.full_system import (
     clear_structured_rhs1_full_csr_cache,
     select_structured_rhs1_full_csr_operator,
     solve_structured_rhs1_full_csr,

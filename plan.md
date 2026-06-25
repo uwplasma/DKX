@@ -2270,3 +2270,65 @@ Next best steps:
    tests, docs build, and whitespace checks.
 3. Commit and push the Iteration 2 checkpoint before starting the QI/PAS/x-block
    solver-family consolidation in Iteration 3.
+
+## 2026-06-25 Lane 1 Iteration 2 RHSMode-1 Domain Move
+
+Steps taken:
+
+1. Moved RHSMode-1 operator/layout/source modules from top-level `rhs1_*`
+   names into `sfincs_jax.operators.profile_response`.
+2. Moved full-system CSR assembly, structured CSR bundle construction,
+   true-operator rescue, Fortran-reduced direct-tail materialization, and
+   device-CSR runtime helpers into the same operator domain package.
+3. Moved KSP diagnostics, host/large-CPU/direct-tail policy, solver-policy
+   parsing, active-preconditioner auto policy, and general RHSMode-1
+   preconditioner auto policy into `sfincs_jax.problems.profile_response`.
+4. Deleted the obsolete `rhs1_strong_fallback.py` facade after imports were
+   pointed at `problems.profile_response.preconditioner_build`.
+5. Rewrote source, tests, scripts, and API docs to import the new canonical
+   module owners.
+6. Added explicit owner comments to intentionally large moved files:
+   `operators.profile_response.layout`,
+   `operators.profile_response.full_system`, and
+   `operators.profile_response.true_operator_rescue`.
+
+Results:
+
+- Top-level `rhs1_*` files decreased from `47` to `28`.
+- The remaining `28` top-level `rhs1_*` files are solver-family modules queued
+  for Lane 1 Iteration 3: QI, PAS, x-block, symbolic sparse, Schur, dispatch,
+  and related production preconditioner policies.
+- Python source file count remains `247` because this batch moved real
+  implementation files and replaced the deleted facade with the new
+  `operators.profile_response` package initializer.
+- `v3_driver.py` remains `11,992` lines; its large solve entry points are still
+  the Lane 1 Iteration 4 target.
+
+Validation:
+
+- `python -m py_compile sfincs_jax/operators/profile_response/*.py
+  sfincs_jax/problems/profile_response/*.py sfincs_jax/v3_driver.py
+  sfincs_jax/io.py` passed.
+- Focused moved RHSMode-1 module tests passed with
+  `302 passed in 77.53 s`.
+- Broad RHSMode-1/profile-response sweep passed with
+  `1140 passed in 234.43 s`.
+- Import-contract/docstring/helper tests passed with `20 passed in 1.94 s`.
+- `python -m sphinx -b html docs docs/_build/html -q`, scoped `ruff`,
+  `git diff --check`, and moved-top-level import scans passed.
+
+Current lane status:
+
+- Lane 1 Iteration 1: 100%.
+- Lane 1 Iteration 2: 100%.
+- Lane 1 overall: about 45%.
+- Overall consolidation goal: not complete.
+
+Next best steps:
+
+1. Commit and push Iteration 2.
+2. Execute Iteration 3 as one bounded solver-family consolidation: move the
+   remaining 28 top-level `rhs1_*` files under `solvers.preconditioners`, merge
+   tiny policy-only fragments, and delete stale private aliases.
+3. Re-run focused RHSMode-1 solver/preconditioner tests and import-contract
+   checks before moving to the `v3_driver.py` solve-entry extraction.

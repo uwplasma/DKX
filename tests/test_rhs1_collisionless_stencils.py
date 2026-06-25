@@ -13,8 +13,8 @@ from sfincs_jax.collisionless_exb import ExBThetaV3Operator, ExBZetaV3Operator, 
 from sfincs_jax.collisions import apply_pitch_angle_scattering_v3, make_pitch_angle_scattering_v3_operator
 from sfincs_jax.magnetic_drifts import apply_magnetic_drift_theta_v3, apply_magnetic_drift_xidot_v3, apply_magnetic_drift_zeta_v3
 from sfincs_jax.namelist import read_sfincs_input
-from sfincs_jax.rhs1_block_operator import RHS1BlockLayout
-from sfincs_jax.rhs1_collisionless_stencils import (
+from sfincs_jax.operators.profile_response.layout import RHS1BlockLayout
+from sfincs_jax.operators.profile_response.drifts import (
     build_collisionless_f_block_operator,
     build_er_xdot_f_block_operator,
     build_er_xidot_f_block_operator,
@@ -24,7 +24,7 @@ from sfincs_jax.rhs1_collisionless_stencils import (
     build_magnetic_drift_xidot_f_block_operator,
     build_magnetic_drift_zeta_f_block_operator,
 )
-from sfincs_jax.rhs1_collision_stencils import build_pas_collision_f_block_operator
+from sfincs_jax.operators.profile_response.collisions import build_pas_collision_f_block_operator
 from sfincs_jax.v3_fblock import fblock_operator_from_namelist
 
 

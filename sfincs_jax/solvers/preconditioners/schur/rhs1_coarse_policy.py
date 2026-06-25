@@ -1,6 +1,6 @@
 """Policy controls for RHSMode=1 active coarse preconditioners.
 
-The numerical builders in :mod:`sfincs_jax.rhs1_full_assembly` own sparse
+The numerical builders in :mod:`sfincs_jax.operators.profile_response.full_system` own sparse
 matrix assembly, factorization, and true-residual admission. This module owns
 only the side-effect-free environment parsing and branch naming used by the
 native-line plus coarse-residual preconditioner family.

@@ -21,7 +21,7 @@ from sfincs_jax.problems.profile_response.residual import (
     apply_device_subspace_residual_equation_correction,
     build_rhs1_xblock_post_coarse_directions,
 )
-from sfincs_jax.rhs1_block_operator import RHS1BlockLayout
+from sfincs_jax.operators.profile_response.layout import RHS1BlockLayout
 from sfincs_jax.rhs1_xblock_policy import resolve_rhs1_xblock_sparse_pc_policy
 from sfincs_jax.solver import FlexibleGMRESSolveResult
 from sfincs_jax.v3_sparse_pattern import (

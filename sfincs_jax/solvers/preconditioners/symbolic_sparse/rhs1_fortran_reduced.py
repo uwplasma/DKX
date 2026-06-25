@@ -17,8 +17,8 @@ import time
 import numpy as np
 import scipy.sparse as sp
 
-from ....rhs1_block_operator import RHS1ActiveBlockLayout, RHS1BlockLayout
-from ....rhs1_compressed_layout import infer_rhs1_compressed_pitch_layout_from_active_indices
+from sfincs_jax.operators.profile_response.layout import RHS1ActiveBlockLayout, RHS1BlockLayout
+from sfincs_jax.operators.profile_response.compressed_layout import infer_rhs1_compressed_pitch_layout_from_active_indices
 from ....rhs1_fortran_reduced_factor_policy import resolve_active_fortran_v3_reduced_factor_policy
 from ....rhs1_reduced_pmat_plan import build_rhs1_reduced_pmat_elimination_plan
 from ..schur.rhs1_full_csr import RHS1StructuredFullCSRPreconditioner

@@ -31,14 +31,14 @@ from ....preconditioner_setup import (
     rhs_mode1_precond_cache_key,
 )
 from ....problems.profile_response.residual import safe_preconditioner
-from ....rhs1_large_cpu_policy import (
+from sfincs_jax.problems.profile_response.large_cpu_policy import (
     rhs1_fp_xblock_assembled_host_allowed as _rhs1_fp_xblock_assembled_host_allowed,
 )
 from ....problems.profile_response.policies import (
     rhs1_host_factor_probe_ok as _rhs1_host_factor_probe_ok,
 )
-from ....rhs1_solver_policy import read_bool_env as _rhs1_bool_env
-from ....rhs1_solver_policy import read_float_env as _rhs1_float_env
+from sfincs_jax.problems.profile_response.solver_policy import read_bool_env as _rhs1_bool_env
+from sfincs_jax.problems.profile_response.solver_policy import read_float_env as _rhs1_float_env
 from ....sparse_triangular import (
     triangular_solve_lower_csr_rows as _triangular_solve_lower_csr_rows,
     triangular_solve_lower_padded as _triangular_solve_lower_padded,

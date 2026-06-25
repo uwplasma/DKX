@@ -15,7 +15,7 @@ from ....preconditioner_caches import (
 )
 from ....preconditioner_context import precond_dtype as _precond_dtype
 from ....preconditioner_setup import rhs_mode1_precond_cache_key
-from ....rhs1_constraint_sources import (
+from sfincs_jax.operators.profile_response.sources import (
     constraint_scheme2_inject_source,
     constraint_scheme2_source_from_f,
 )

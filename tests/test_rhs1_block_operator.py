@@ -7,7 +7,7 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-from sfincs_jax.rhs1_block_operator import (
+from sfincs_jax.operators.profile_response.layout import (
     RHS1ActiveBlockLayout,
     RHS1ActiveFieldSplitOrdering,
     RHS1BlockCOOBuilder,

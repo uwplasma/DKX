@@ -1,10 +1,16 @@
 """Structured host-CSR assembly for RHSMode=1 full-system operators.
 
-The f-block stencil assembly lives in :mod:`sfincs_jax.rhs1_fblock_assembly`.
+The f-block stencil assembly lives in :mod:`sfincs_jax.operators.profile_response.kinetic`.
 This module adds the small global couplings around that block: Phi1/QN rows
 when they are linear, and the source/constraint rows used by SFINCS v3.  The
 result is an exact sparse matrix for supported RHSMode=1 cases without dense
 column probing.
+
+This file is intentionally large during the v3-driver consolidation because it
+keeps the term-level full-system CSR formulas, admission gates, and current
+preconditioner aliases in one behavior-preserving owner. The safe future split
+is by responsibility: sparse assembly, preconditioner construction, cache
+metadata, and solve wrappers.
 """
 
 from __future__ import annotations
@@ -18,27 +24,27 @@ import time
 import numpy as np
 import scipy.sparse as sp
 
-from .rhs1_block_operator import RHS1ActiveFieldSplitOrdering, RHS1BlockLayout
-from .rhs1_compressed_layout import infer_rhs1_compressed_pitch_layout_from_active_indices
-from .rhs1_fblock_assembly import (
+from sfincs_jax.operators.profile_response.layout import RHS1ActiveFieldSplitOrdering, RHS1BlockLayout
+from sfincs_jax.operators.profile_response.compressed_layout import infer_rhs1_compressed_pitch_layout_from_active_indices
+from sfincs_jax.operators.profile_response.kinetic import (
     RHS1StructuredFBlockCSRSelection,
     clear_structured_rhs1_fblock_csr_cache,
     select_structured_rhs1_fblock_csr_operator,
 )
-from .rhs1_active_preconditioner_policy import resolve_active_projected_preconditioner_auto_policy
-from .rhs1_fortran_reduced_factor_policy import (
+from sfincs_jax.problems.profile_response.active_preconditioner_policy import resolve_active_projected_preconditioner_auto_policy
+from sfincs_jax.rhs1_fortran_reduced_factor_policy import (
     active_fortran_v3_reduced_permc_candidates,
 )
-from .rhs1_symbolic_frontal_policy import resolve_active_symbolic_frontal_policy
-from .rhs1_symbolic_sparse_policy import (
+from sfincs_jax.rhs1_symbolic_frontal_policy import resolve_active_symbolic_frontal_policy
+from sfincs_jax.rhs1_symbolic_sparse_policy import (
     resolve_active_symbolic_block_schur_policy,
     resolve_active_symbolic_superblock_policy,
 )
-from .solvers.preconditioners.schur.rhs1_coarse_policy import (
+from sfincs_jax.solvers.preconditioners.schur.rhs1_coarse_policy import (
     resolve_active_native_field_split_sparse_coarse_policy,
     resolve_active_sparse_coarse_residual_policy,
 )
-from .solvers.preconditioners.schur.rhs1_coarse_basis import (
+from sfincs_jax.solvers.preconditioners.schur.rhs1_coarse_basis import (
     append_adaptive_residual_basis_csc as _append_adaptive_residual_basis_csc,
     build_active_native_xell_coarse_window_basis_csc as _build_active_native_xell_coarse_window_basis_csc,
     build_coarse_residual_basis_csc as _build_coarse_residual_basis_csc,
@@ -47,7 +53,7 @@ from .solvers.preconditioners.schur.rhs1_coarse_basis import (
     estimate_xblock_tz_low_l_factor_nbytes as _estimate_xblock_tz_low_l_factor_nbytes,
     xblock_tz_low_l_config as _xblock_tz_low_l_config,
 )
-from .solvers.preconditioners.schur.rhs1_full_csr import (
+from sfincs_jax.solvers.preconditioners.schur.rhs1_full_csr import (
     RHS1StructuredFullCSRPreconditioner,
     build_block_schur_preconditioner as _build_block_schur_preconditioner,
     build_diagonal_schur_preconditioner as _build_diagonal_schur_preconditioner,
@@ -58,13 +64,13 @@ from .solvers.preconditioners.schur.rhs1_full_csr import (
     estimate_xi_block_inverse_nbytes as _estimate_xi_block_inverse_nbytes,
     estimate_zeta_block_inverse_nbytes as _estimate_zeta_block_inverse_nbytes,
 )
-from .solvers.preconditioners.symbolic_sparse import rhs1_fortran_reduced as _rhs1_fortran_reduced_pc
-from .solvers.preconditioners.symbolic_sparse.active_factors import (
+from sfincs_jax.solvers.preconditioners.symbolic_sparse import rhs1_fortran_reduced as _rhs1_fortran_reduced_pc
+from sfincs_jax.solvers.preconditioners.symbolic_sparse.active_factors import (
     build_active_filtered_sparse_factor_preconditioner as _build_active_projected_filtered_sparse_factor_preconditioner,
     build_active_global_sparse_factor_preconditioner as _build_active_global_sparse_factor_preconditioner,
     build_active_scaled_sparse_factor_preconditioner as _build_active_scaled_sparse_factor_preconditioner,
 )
-from .solvers.preconditioners.xblock.active_projected import (
+from sfincs_jax.solvers.preconditioners.xblock.active_projected import (
     active_positions_for_full_indices as _active_positions_for_full_indices,
     build_active_fortran_v3_reduced_native_stack_preconditioner as _build_active_fortran_v3_reduced_native_stack_preconditioner,
     build_active_projected_bounded_native_stack_preconditioner as _build_active_projected_bounded_native_stack_preconditioner,
@@ -76,14 +82,14 @@ from .solvers.preconditioners.xblock.active_projected import (
     build_active_projected_overlap_schwarz_preconditioner as _build_active_projected_overlap_schwarz_preconditioner,
     build_active_projected_xblock_preconditioner as _build_active_projected_xblock_preconditioner,
 )
-from .solvers.preconditioners.xblock.low_l_schur import (
+from sfincs_jax.solvers.preconditioners.xblock.low_l_schur import (
     build_native_xell_kinetic_preconditioner as _build_native_xell_kinetic_preconditioner,
     build_native_xell_tail_schur_preconditioner as _build_native_xell_tail_schur_preconditioner,
     build_xblock_tz_low_l_coarse_residual_preconditioner as _build_xblock_tz_low_l_coarse_residual_preconditioner,
     build_xblock_tz_low_l_schur_preconditioner as _build_xblock_tz_low_l_schur_preconditioner,
     xblock_tz_low_l_indices as _xblock_tz_low_l_indices,
 )
-from .v3_sparse_pattern import estimate_v3_full_system_conservative_sparsity_summary
+from sfincs_jax.v3_sparse_pattern import estimate_v3_full_system_conservative_sparsity_summary
 
 _STRUCTURED_FULL_CSR_OBJECT_CACHE: dict[tuple[object, ...], tuple[Any, dict[str, object]]] = {}
 _active_fortran_v3_reduced_permc_candidates = active_fortran_v3_reduced_permc_candidates
@@ -2551,7 +2557,7 @@ def _admit_linear_operator_against_matrix(
 ) -> tuple[bool, dict[str, object]]:
     """Gate a preconditioner with deterministic true residual probes."""
 
-    from .explicit_sparse import deterministic_sparse_probe_matrix  # noqa: PLC0415
+    from sfincs_jax.explicit_sparse import deterministic_sparse_probe_matrix  # noqa: PLC0415
 
     matrix_csr = matrix.tocsr()
     n_rows, n_cols = int(matrix_csr.shape[0]), int(matrix_csr.shape[1])
@@ -2639,7 +2645,7 @@ def _build_active_projected_symbolic_frontal_schur_lu_preconditioner(
 
     from scipy.sparse.linalg import LinearOperator  # noqa: PLC0415
 
-    from .explicit_sparse import (  # noqa: PLC0415
+    from sfincs_jax.explicit_sparse import (  # noqa: PLC0415
         admit_sparse_factor_against_operator,
         analyze_sparse_symbolic_structure,
         factorize_host_sparse_operator,
@@ -2966,7 +2972,7 @@ def _build_active_projected_symbolic_superblock_lu_preconditioner(
 
     from scipy.sparse.linalg import LinearOperator  # noqa: PLC0415
 
-    from .explicit_sparse import (  # noqa: PLC0415
+    from sfincs_jax.explicit_sparse import (  # noqa: PLC0415
         admit_sparse_factor_against_operator,
         analyze_sparse_symbolic_structure,
         factorize_host_sparse_operator,
@@ -3219,7 +3225,7 @@ def _build_active_projected_symbolic_block_schur_lu_preconditioner(
 
     from scipy.sparse.linalg import LinearOperator  # noqa: PLC0415
 
-    from .explicit_sparse import (  # noqa: PLC0415
+    from sfincs_jax.explicit_sparse import (  # noqa: PLC0415
         admit_sparse_factor_against_operator,
         analyze_sparse_symbolic_structure,
         factorize_host_sparse_operator,
@@ -5562,7 +5568,7 @@ def _append_probe_residual_basis_csc(
 ) -> tuple[Any, dict[str, object]]:
     """Append bounded residual modes from deterministic setup probes."""
 
-    from .explicit_sparse import deterministic_sparse_probe_matrix  # noqa: PLC0415
+    from sfincs_jax.explicit_sparse import deterministic_sparse_probe_matrix  # noqa: PLC0415
 
     enabled = _env_bool("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_PROBE_RESIDUAL_BASIS", bool(enabled_default))
     max_columns = max(0, int(_env_int("SFINCS_JAX_RHS1_FULL_CSR_ACTIVE_PROBE_RESIDUAL_MAX_COLUMNS", 32)))

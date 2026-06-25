@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from sfincs_jax.rhs1_preconditioner_auto_policy import (
+from sfincs_jax.problems.profile_response.preconditioner_auto_policy import (
     canonical_rhs1_preconditioner_kind,
     pas_auto_skip_strong_retry,
     rhs1_gpu_sparse_fallback_skip_allowed,

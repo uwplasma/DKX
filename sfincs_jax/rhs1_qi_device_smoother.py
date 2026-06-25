@@ -16,7 +16,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
-from .rhs1_device_operator import DeviceCSR
+from sfincs_jax.operators.profile_response.device_sparse import DeviceCSR
 
 ArrayLike = Any
 

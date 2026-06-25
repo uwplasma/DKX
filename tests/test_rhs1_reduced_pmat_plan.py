@@ -4,7 +4,7 @@ from types import SimpleNamespace
 
 import numpy as np
 
-from sfincs_jax.rhs1_compressed_layout import build_rhs1_compressed_pitch_layout
+from sfincs_jax.operators.profile_response.compressed_layout import build_rhs1_compressed_pitch_layout
 from sfincs_jax.rhs1_reduced_pmat_plan import build_rhs1_reduced_pmat_elimination_plan
 
 

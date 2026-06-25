@@ -4,8 +4,8 @@ import numpy as np
 import pytest
 import scipy.sparse as sp
 
-import sfincs_jax.rhs1_full_assembly as rfa
-from sfincs_jax.rhs1_block_operator import RHS1BlockLayout
+import sfincs_jax.operators.profile_response.full_system as rfa
+from sfincs_jax.operators.profile_response.layout import RHS1BlockLayout
 from sfincs_jax.solvers.preconditioners import symbolic_sparse
 from sfincs_jax.solvers.preconditioners.symbolic_sparse import rhs1_fortran_reduced as rfr
 

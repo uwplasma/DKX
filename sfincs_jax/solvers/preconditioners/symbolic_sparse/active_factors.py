@@ -15,7 +15,7 @@ import time
 import numpy as np
 import scipy.sparse as sp
 
-from ....rhs1_block_operator import RHS1BlockLayout
+from sfincs_jax.operators.profile_response.layout import RHS1BlockLayout
 from ..schur.rhs1_full_csr import RHS1StructuredFullCSRPreconditioner
 from .rhs1_fortran_reduced import (
     estimate_spilu_factor_nbytes,

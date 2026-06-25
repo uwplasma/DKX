@@ -22,7 +22,7 @@ from sfincs_jax.preconditioner_caches import (
     _TransportFpFortranReducedLuPrecondCache,
 )
 from sfincs_jax.preconditioner_operators import _build_transport_preconditioner_operator_fortran_reduced
-from sfincs_jax.rhs1_direct_tail_policy import _hash_numpy_array_for_cache
+from sfincs_jax.problems.profile_response.direct_tail_policy import _hash_numpy_array_for_cache
 from sfincs_jax.problems.transport_matrix.direct_pmat import (
     _build_rhsmode23_direct_pmat_physics_coarse_basis,
     _try_build_rhsmode23_fp_fortran_reduced_direct_pmat_bundle,

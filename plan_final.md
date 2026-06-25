@@ -304,13 +304,15 @@ Observed facts to feed directly into implementation:
 Current source size snapshot:
 
 - `sfincs_jax/v3_driver.py`: 11,992 lines.
-- `sfincs_jax/rhs1_full_assembly.py`: about 6.0k lines.
+- `sfincs_jax/operators/profile_response/full_system.py`: about 6.0k
+  lines, moved from `rhs1_full_assembly.py` in Lane 1 Iteration 2.
 - Top-level `transport_*` modules: 0 after Lane 1 Iteration 1.
-- Top-level `rhs1_*` modules: 47 real implementation files after Lane 1
-  Iteration 1. These should move into domain packages in Lane 1 Iterations 2-3.
+- Top-level `rhs1_*` modules: 28 solver-family implementation files after
+  Lane 1 Iteration 2. These are assigned to `solvers.preconditioners` in Lane
+  1 Iteration 3.
 - Several RHSMode 1 QI, x-block, sparse policy, output, and transport modules
   still exceed 2k to 4k lines.
-- Package total is 247 Python files after Lane 1 Iteration 1. The Lane 1
+- Package total is 247 Python files after Lane 1 Iteration 2. The Lane 1
   target is below 240
   Python files after deleting shims and consolidating real implementation into
   domain packages.
@@ -487,10 +489,12 @@ pass, not an algorithmic rewrite.
 Current inventory from 2026-06-25:
 
 - `sfincs_jax/v3_driver.py`: 11,992 lines.
-- Python source files: 247 after Iteration 1.
+- Python source files: 247 after Iteration 2.
 - Top-level `transport_*` files: 0 after Iteration 1.
-- Top-level `rhs1_*` files: 47 real implementation files after Iteration 1.
-- Largest remaining files: `v3_driver.py`, `rhs1_full_assembly.py`,
+- Top-level `rhs1_*` files: 28 solver-family implementation files after
+  Iteration 2.
+- Largest remaining files: `v3_driver.py`,
+  `operators/profile_response/full_system.py`,
   `problems/profile_response/sparse/xblock.py`,
   `rhs1_qi_device_preconditioner.py`, `io.py`,
   `problems/profile_response/sparse/qi.py`, `explicit_sparse.py`,
@@ -563,7 +567,14 @@ operator/problem split can be validated independently.
 
 Exit gates for Iteration 2:
 
-- No real top-level `rhs1_*` implementation files remain.
+- Status: completed on 2026-06-25 for the operator/profile-response ownership
+  batch.
+- No top-level RHSMode-1 operator, layout, source, CSR-runtime, KSP, host,
+  large-CPU, direct-tail, or automatic profile-policy implementation files
+  remain.
+- The 28 remaining top-level `rhs1_*` files are solver-family modules assigned
+  to Iteration 3: QI, PAS, x-block, symbolic sparse, Schur, dispatch, and
+  related production preconditioner policies.
 - Public RHSMode-1 API and CLI examples run unchanged.
 - Existing RHSMode-1 parity, ambipolar, and sensitivity gates still pass.
 - Any intentionally large file has a top-level owner comment explaining why it
@@ -1245,21 +1256,24 @@ Completed on 2026-06-25:
 - Moved RHSMode 2/3 constraint-nullspace projection ownership into the
   transport finalization module through a tested projector object, removing
   another local solve-loop policy closure from `v3_driver.py`.
+- Completed Lane 1 Iteration 2 by moving RHSMode-1 operator/layout/source,
+  full-system CSR, true-operator rescue, device sparse runtime, KSP diagnostics,
+  host/large-CPU/direct-tail, and automatic profile-response policy modules
+  from top-level `rhs1_*` names into `operators.profile_response` and
+  `problems.profile_response`. The remaining 28 top-level `rhs1_*` files are
+  solver-family modules queued for Iteration 3.
 
 Next ordered implementation steps:
 
-1. Execute Lane 1 Iteration 2 as a single batch: move real RHSMode-1
-   orchestration/operator/output modules out of top-level `rhs1_*` names into
-   `problems.profile_response`, `operators`, and `outputs`.
-2. Execute Lane 1 Iteration 3 as a single batch: consolidate QI, x-block, PAS,
+1. Execute Lane 1 Iteration 3 as a single batch: consolidate QI, x-block, PAS,
    sparse, and Schur solver/preconditioner families under
    `solvers.preconditioners`, removing stale policy-only fragments.
-3. Execute Lane 1 Iteration 4 as a single batch: move the two large solve entry
+2. Execute Lane 1 Iteration 4 as a single batch: move the two large solve entry
    points out of `v3_driver.py`, leaving a shim under 300 lines or deleting the
    file.
-4. Execute Lane 1 Iteration 5: dead-code pruning, docs/API cleanup, final
+3. Execute Lane 1 Iteration 5: dead-code pruning, docs/API cleanup, final
    counts, focused tests, docs build, and CI-equivalent validation.
-5. Keep production option-1/3 ambipolar reruns and production-grid RHSMode 4/5
+4. Keep production option-1/3 ambipolar reruns and production-grid RHSMode 4/5
    parity as release-refresh benchmarks outside normal CI during this
    consolidation pass.
 

@@ -14,8 +14,8 @@ from sfincs_jax.collisions import (
     make_pitch_angle_scattering_v3_operator,
 )
 from sfincs_jax.namelist import read_sfincs_input
-from sfincs_jax.rhs1_block_operator import RHS1BlockLayout
-from sfincs_jax.rhs1_collision_stencils import (
+from sfincs_jax.operators.profile_response.layout import RHS1BlockLayout
+from sfincs_jax.operators.profile_response.collisions import (
     build_fokker_planck_collision_f_block_operator,
     build_fokker_planck_phi1_collision_f_block_operator,
     build_pas_collision_f_block_operator,

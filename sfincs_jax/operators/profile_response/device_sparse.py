@@ -9,7 +9,7 @@ import numpy as np
 import scipy.sparse as sp
 from jax.experimental import sparse as jsparse
 
-from .explicit_sparse import estimate_csr_nbytes
+from sfincs_jax.explicit_sparse import estimate_csr_nbytes
 
 ReferenceInputKind = Literal["jax", "numpy"]
 

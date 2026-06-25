@@ -13,7 +13,7 @@ from typing import Any
 import jax.numpy as jnp
 import numpy as np
 
-from .rhs1_block_operator import (
+from sfincs_jax.operators.profile_response.layout import (
     RHS1MatrixFreeGalerkinResidualCorrection,
     RHS1MatrixFreeLeastSquaresResidualCorrection,
 )

@@ -6,7 +6,7 @@ import time
 import numpy as np
 import scipy.sparse as sp
 
-from sfincs_jax import rhs1_full_assembly
+from sfincs_jax.operators.profile_response import full_system as rhs1_full_assembly
 from sfincs_jax.solvers.preconditioners.schur.rhs1_full_csr import (
     RHS1StructuredFullCSRPreconditioner,
     build_block_schur_preconditioner,

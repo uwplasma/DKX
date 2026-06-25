@@ -6,7 +6,7 @@ import numpy as np
 import pytest
 import scipy.sparse as sp
 
-from sfincs_jax.rhs1_device_operator import device_csr_from_scipy_csr
+from sfincs_jax.operators.profile_response.device_sparse import device_csr_from_scipy_csr
 from sfincs_jax.rhs1_qi_coarse import RHS1QICoarseBasis, RHS1QICoarseBasisMetadata, RHS1QICoarseBlockLayout
 from sfincs_jax.rhs1_qi_device_preconditioner import (
     RHS1QIDevicePreconditionerConfig,

@@ -14,15 +14,15 @@ from ....preconditioner_caches import (
 from ....preconditioner_context import precond_dtype
 from ....preconditioner_setup import rhs_mode1_structured_fblock_cache_key
 from ....problems.profile_response.residual import safe_preconditioner
-from ....rhs1_fblock_assembly import select_structured_rhs1_fblock_operator
+from sfincs_jax.operators.profile_response.kinetic import select_structured_rhs1_fblock_operator
 from ....rhs1_lowmode_coarse import (
     _build_rhs1_coupled_moment_matrix_free_correction,
     _build_rhs1_lowmode_angular_matrix_free_correction,
     _build_rhs1_moment_angular_matrix_free_correction,
     _build_rhs1_tail_matrix_free_correction,
 )
-from ....rhs1_solver_policy import read_float_env as _rhs1_float_env
-from ....rhs1_solver_policy import read_int_env as _rhs1_int_env
+from sfincs_jax.problems.profile_response.solver_policy import read_float_env as _rhs1_float_env
+from sfincs_jax.problems.profile_response.solver_policy import read_int_env as _rhs1_int_env
 from ....solvers.preconditioners.symbolic_sparse import RHS1FullSystemMatrixFreeOperatorAdapter
 from ....v3_system import V3FullSystemOperator, apply_v3_full_system_operator_cached
 

@@ -13,7 +13,7 @@ from sfincs_jax.preconditioner_caches import (
     _TRANSPORT_FP_DIRECT_ACTIVE_BLOCK_SCHUR_PRECOND_CACHE,
     _TransportFpDirectActiveBlockSchurPrecondCache,
 )
-from sfincs_jax.rhs1_direct_tail_policy import _hash_numpy_array_for_cache
+from sfincs_jax.problems.profile_response.direct_tail_policy import _hash_numpy_array_for_cache
 from sfincs_jax.problems.transport_matrix.active_factor import (
     admit_active_block_schur_factor,
     build_active_block_ordering,

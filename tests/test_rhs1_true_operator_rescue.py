@@ -7,8 +7,8 @@ import scipy.sparse as sp
 from scipy.sparse.linalg import aslinearoperator
 
 from sfincs_jax.explicit_sparse import SparseDecision, SparseOperatorBundle
-from sfincs_jax.rhs1_block_operator import RHS1BlockLayout
-from sfincs_jax.rhs1_true_operator_rescue import (
+from sfincs_jax.operators.profile_response.layout import RHS1BlockLayout
+from sfincs_jax.operators.profile_response.true_operator_rescue import (
     _ResidualCoarseHostSparsePreconditionerBundle,
     _ReusableTrueActionColumnCache,
     _expand_sparse_graph_positions,

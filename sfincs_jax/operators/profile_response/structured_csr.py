@@ -15,13 +15,13 @@ from typing import TYPE_CHECKING
 import jax
 import numpy as np
 
-from .explicit_sparse import SparseDecision, SparseOperatorBundle, estimate_csr_nbytes, estimate_dense_nbytes
-from .rhs1_full_assembly import select_structured_rhs1_full_csr_operator
-from .rhs1_solver_policy import read_bool_env, read_int_env
-from .verbose import Timer
+from sfincs_jax.explicit_sparse import SparseDecision, SparseOperatorBundle, estimate_csr_nbytes, estimate_dense_nbytes
+from sfincs_jax.operators.profile_response.full_system import select_structured_rhs1_full_csr_operator
+from sfincs_jax.problems.profile_response.solver_policy import read_bool_env, read_int_env
+from sfincs_jax.verbose import Timer
 
 if TYPE_CHECKING:
-    from .v3_system import V3FullSystemOperator
+    from sfincs_jax.v3_system import V3FullSystemOperator
 
 __all__ = ["_try_build_structured_rhs1_full_csr_operator_bundle"]
 

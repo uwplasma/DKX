@@ -10,7 +10,7 @@ import numpy as np
 import sfincs_jax.v3_driver as v3_driver_module
 from sfincs_jax.explicit_sparse import build_operator_from_pattern
 from sfincs_jax.namelist import read_sfincs_input
-from sfincs_jax.rhs1_device_operator import device_csr_from_matrix, validate_device_csr_matvec
+from sfincs_jax.operators.profile_response.device_sparse import device_csr_from_matrix, validate_device_csr_matvec
 from sfincs_jax.v3_sparse_pattern import v3_full_system_conservative_sparsity_pattern_for_indices
 from sfincs_jax.v3_system import apply_v3_full_system_operator, full_system_operator_from_namelist
 

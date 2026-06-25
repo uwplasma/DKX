@@ -1,3 +1,11 @@
+"""True-operator RHSMode-1 residual rescue preconditioners.
+
+This file is intentionally large during consolidation because each rescue
+candidate shares the same true-action column cache, residual diagnostics, and
+admission gates. The safe future split is by candidate family once Iteration 3
+has moved all solver/preconditioner ownership under ``solvers.preconditioners``.
+"""
+
 from __future__ import annotations
 
 from collections.abc import Callable
@@ -9,16 +17,16 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
-from .explicit_sparse import SparseOperatorBundle
-from .rhs1_constraint_sources import (
+from sfincs_jax.explicit_sparse import SparseOperatorBundle
+from sfincs_jax.operators.profile_response.sources import (
     constraint_scheme2_inject_source as _constraint_scheme2_inject_source,
     constraint_scheme2_source_from_f as _constraint_scheme2_source_from_f,
 )
-from .v3_system import _fs_average_factor, _ix_min, _source_basis_constraint_scheme_1
-from .rhs1_block_operator import RHS1ActiveFieldSplitOrdering, RHS1BlockLayout
+from sfincs_jax.v3_system import _fs_average_factor, _ix_min, _source_basis_constraint_scheme_1
+from sfincs_jax.operators.profile_response.layout import RHS1ActiveFieldSplitOrdering, RHS1BlockLayout
 
 if TYPE_CHECKING:
-    from .v3_system import V3FullSystemOperator
+    from sfincs_jax.v3_system import V3FullSystemOperator
 
 __all__ = [
     "_ResidualCoarseHostSparsePreconditionerBundle",

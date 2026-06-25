@@ -8,7 +8,7 @@ import numpy as np
 
 jax_config.update("jax_enable_x64", True)
 
-from sfincs_jax.rhs1_constraint_sources import (  # noqa: E402
+from sfincs_jax.operators.profile_response.sources import (  # noqa: E402
     build_rhs1_xblock_constraint1_moment_schur_preconditioner,
     constraint_scheme1_inject_source,
     constraint_scheme1_moments_from_f,

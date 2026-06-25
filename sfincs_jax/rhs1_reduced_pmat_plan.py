@@ -14,7 +14,7 @@ from typing import Iterable
 
 import numpy as np
 
-from .rhs1_compressed_layout import RHS1CompressedPitchLayout, build_rhs1_compressed_pitch_layout
+from sfincs_jax.operators.profile_response.compressed_layout import RHS1CompressedPitchLayout, build_rhs1_compressed_pitch_layout
 
 
 @dataclass(frozen=True)
