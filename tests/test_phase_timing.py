@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from sfincs_jax.phase_timing import PhaseTimer, maxrss_mb
+from sfincs_jax.validation_artifacts import PhaseTimer, maxrss_mb
 
 
 def test_maxrss_mb_normalizes_linux_and_macos_units() -> None:
