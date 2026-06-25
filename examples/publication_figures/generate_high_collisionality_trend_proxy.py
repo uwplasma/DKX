@@ -21,7 +21,7 @@ try:
 except Exception as exc:  # pragma: no cover
     raise SystemExit("This example requires matplotlib. Install with: pip install matplotlib") from exc
 
-from sfincs_jax.validation_artifacts import (
+from sfincs_jax.validation.artifacts import (
     DEFAULT_PUBLICATION_ARTIFACTS,
     TRANSPORT_ELEMENTS,
     build_high_collisionality_trend_proxy_summary,

@@ -12,7 +12,7 @@ from typing import Any, Iterator
 
 import numpy as np
 
-from sfincs_jax.validation_math import (
+from sfincs_jax.validation.math import (
     TRANSPORT_ELEMENTS as TRANSPORT_ELEMENTS,
     collisionality_grid as collisionality_grid,
     collisionality_labels as collisionality_labels,

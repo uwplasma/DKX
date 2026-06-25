@@ -63,7 +63,7 @@ Transport-matrix helpers are documented through their maintained domain module.
 .. automodule:: sfincs_jax.residual
    :members:
 
-.. automodule:: sfincs_jax.validation_artifacts
+.. automodule:: sfincs_jax.validation.artifacts
    :members:
 
 .. automodule:: sfincs_jax.memory_model

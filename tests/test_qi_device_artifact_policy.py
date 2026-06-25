@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from sfincs_jax.qi_device_artifact_policy import (
+from sfincs_jax.validation.qi_device import (
     check_qi_device_artifact_file,
     qi_device_artifact_errors,
 )

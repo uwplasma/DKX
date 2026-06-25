@@ -5,8 +5,8 @@ from pathlib import Path
 
 import pytest
 
-import sfincs_jax.validation_figures as validation_figures
-from sfincs_jax.validation_figures import (
+import sfincs_jax.validation.figures as validation_figures
+from sfincs_jax.validation.figures import (
     build_simakov_helander_high_nu_panel,
     build_w7x_ambipolar_root_provenance_panel,
 )

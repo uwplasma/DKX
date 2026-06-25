@@ -115,7 +115,7 @@
         },
         {
           "claim": "Reusable JAX-compatible Galerkin QI coarse preconditioner infrastructure eliminates synthetic residuals to roundoff with DeviceCSR/JIT coverage, but remains to be wired into the production GPU hard-seed loop.",
-          "path": "sfincs_jax/rhs1_qi_coarse.py"
+          "path": "sfincs_jax/solvers/preconditioners/qi/coarse.py"
         },
         {
           "claim": "Focused QI coarse tests cover regularized JAX normal-equation solves, Galerkin correction reuse, and JIT/device CSR application without requiring a large solve.",
@@ -123,7 +123,7 @@
         },
         {
           "claim": "The opt-in production Galerkin QI preconditioner is now fail-closed: additive/multiplicative/damping probe candidates are selected only when they reduce the true residual, otherwise the base preconditioner remains active.",
-          "path": "sfincs_jax/rhs1_qi_galerkin_policy.py"
+          "path": "sfincs_jax/solvers/preconditioners/qi/residual_galerkin.py"
         },
         {
           "claim": "Focused policy tests cover Galerkin mode parsing, damping parsing, residual-reduction selection, nonfinite rejection, and required-drop gates.",
@@ -131,7 +131,7 @@
         },
         {
           "claim": "Standalone device-local QI smoother infrastructure now provides a pure-JAX CSR damped-Jacobi/stationary smoother with fail-closed diagonal validation and JIT-safe DeviceCSR matvec reuse.",
-          "path": "sfincs_jax/rhs1_qi_device_smoother.py"
+          "path": "sfincs_jax/solvers/preconditioners/qi/device_smoother.py"
         },
         {
           "claim": "Focused QI smoother tests cover CSR diagonal extraction, missing-diagonal rejection, permissive partial diagnostics, JIT stationary sweeps, and compatibility with the existing two-level true-residual probe.",
@@ -139,7 +139,7 @@
         },
         {
           "claim": "Device-local QI smoother now has an opt-in residual-minimizing step policy and fail-closed true-residual seed probe; the bounded synthetic gate reduces residual norm from 1.0 to 0.8944 and rejects stricter non-material improvements.",
-          "path": "sfincs_jax/rhs1_qi_device_smoother.py"
+          "path": "sfincs_jax/solvers/preconditioners/qi/device_smoother.py"
         },
         {
           "claim": "Focused QI smoother tests cover the residual-minimizing accepted seed, fail-closed strict-improvement rejection, and JSON-safe probe metadata.",
@@ -192,7 +192,7 @@
         },
         {
           "claim": "No-op PAS matrix-free corrections now avoid the extra candidate matvec while preserving residual history and reject reason.",
-          "path": "sfincs_jax/rhs1_pas_matrixfree.py"
+          "path": "sfincs_jax/solvers/preconditioners/pas/matrix_free.py"
         },
         {
           "claim": "Benchmark harness now rejects default-promotion candidates that regress elapsed time or peak RSS against baseline.",
@@ -204,7 +204,7 @@
         },
         {
           "claim": "Structured PAS-TZ guard metadata records production-grid memory rejection estimates without allocating dense guards.",
-          "path": "sfincs_jax/rhs1_pas_policy.py"
+          "path": "sfincs_jax/solvers/preconditioners/pas/policy.py"
         },
         {
           "claim": "Matrix-free PAS tests cover tiny-update and candidate-size fail-fast gates that avoid wasted candidate matvecs.",
@@ -228,7 +228,7 @@
         },
         {
           "claim": "Matrix-free PAS correction now has a fail-fast live-byte preflight that rejects oversized candidates before update allocation or candidate residual matvecs.",
-          "path": "sfincs_jax/rhs1_pas_matrixfree.py"
+          "path": "sfincs_jax/solvers/preconditioners/pas/matrix_free.py"
         },
         {
           "claim": "PAS matrix-free benchmark dry-runs can record a maximum candidate byte budget so unsafe production-floor probes fail before allocating the candidate path.",
@@ -252,7 +252,7 @@
         },
         {
           "claim": "PAS matrix-free correction now has an opt-in streamed update path that builds candidates from bounded residual chunks without materializing a full dense update vector.",
-          "path": "sfincs_jax/rhs1_pas_matrixfree.py"
+          "path": "sfincs_jax/solvers/preconditioners/pas/matrix_free.py"
         },
         {
           "claim": "PAS benchmark gates now reject guarded-correction variants unless metadata proves streamed/no-full-update behavior, and focused tests cover chunk equivalence, byte-budget rejection, and residual-gate semantics.",
@@ -326,11 +326,11 @@
         },
         {
           "claim": "Runtime policy module owns worker-count and backend decisions.",
-          "path": "sfincs_jax/transport_parallel_runtime.py"
+          "path": "sfincs_jax/problems/transport_matrix/parallel/runtime.py"
         },
         {
           "claim": "Pure multi-GPU case-throughput audit rejects cold/mixed timing, non-GPU payloads, release overclaims, and sub-unity speedups.",
-          "path": "sfincs_jax/transport_parallel_policy.py"
+          "path": "sfincs_jax/problems/transport_matrix/parallel/policy.py"
         },
         {
           "claim": "Fresh office two-GPU case-throughput artifact completed under timeout guards but failed the speedup gate at 0.337x, so it is blocker evidence rather than a release claim.",
@@ -342,7 +342,7 @@
         },
         {
           "claim": "Pure scaling audit fails explicit release claims that omit compile-amortization evidence and preserves explicit non-release status.",
-          "path": "sfincs_jax/transport_parallel_policy.py"
+          "path": "sfincs_jax/problems/transport_matrix/parallel/policy.py"
         },
         {
           "claim": "Release-facing GPU transport-worker artifact records a measured two-worker speedup above one worker for independent transport tasks.",
@@ -354,7 +354,7 @@
         },
         {
           "claim": "Pure parallel claim-scope audit now separates independent whichRHS throughput, independent case throughput, and experimental single-case sharded solves before speedup claims are inspected.",
-          "path": "sfincs_jax/transport_parallel_policy.py"
+          "path": "sfincs_jax/problems/transport_matrix/parallel/policy.py"
         },
         {
           "claim": "Transport and sharded benchmark plans now write parallel_claim_scope metadata so single-case sharding cannot be mistaken for release-grade strong scaling.",
@@ -362,11 +362,11 @@
         },
         {
           "claim": "Single-case sharded solve and matvec plans now record compiled operator-reuse gates, persistent compile-cache metadata, warm-run amortization semantics, and fail-closed deterministic residual/output gates before scaling claims can pass.",
-          "path": "sfincs_jax/transport_parallel_sharding.py"
+          "path": "sfincs_jax/problems/transport_matrix/parallel/sharding.py"
         },
         {
           "claim": "Parallel scaling audits now fail CI-gate when single-case sharded solve artifacts omit compiled operator-reuse metadata or deterministic residual/output gate schema.",
-          "path": "sfincs_jax/transport_parallel_policy.py"
+          "path": "sfincs_jax/problems/transport_matrix/parallel/policy.py"
         },
         {
           "claim": "Single-case sharded solve benchmark can now run a deterministic 1-vs-N output probe that writes solution-vector digests, relative L2 difference, evidence source, and vector paths before any scaling promotion.",
@@ -444,7 +444,7 @@
         },
         {
           "claim": "Bounded 3D full-FP x-block sparse-PC auto policy is now isolated in a pure helper with direct tests instead of hidden driver branching.",
-          "path": "sfincs_jax/rhs1_host_policy.py"
+          "path": "sfincs_jax/problems/profile_response/policies.py"
         },
         {
           "claim": "Focused policy tests cover the QI x-block sparse-PC auto window and its backend, size, species, Phi1/PAS, and differentiability guards.",
@@ -468,11 +468,11 @@
         },
         {
           "claim": "QI Galerkin residual-selection policy is split out of the driver with direct fast tests, reducing the remaining untested hard-seed branch surface without adding slow solves.",
-          "path": "sfincs_jax/rhs1_qi_galerkin_policy.py"
+          "path": "sfincs_jax/solvers/preconditioners/qi/residual_galerkin.py"
         },
         {
           "claim": "RHSMode=1 handoff residual-improvement logic is split into a source-mapped helper with direct finite/nonfinite boundary tests, reducing driver acceptance-branch surface without launching solves.",
-          "path": "sfincs_jax/rhs1_handoff.py"
+          "path": "sfincs_jax/problems/profile_response/handoff.py"
         },
         {
           "claim": "CI coverage collection now runs in three parallel shards and combines artifacts in a report job, preserving the fail-under gate without a single long-running coverage runner.",

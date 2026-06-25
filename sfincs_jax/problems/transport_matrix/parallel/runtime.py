@@ -498,7 +498,7 @@ def merge_transport_parallel_results(
         validate_complete_transport_worker_rhs_coverage(seen_rhs=seen_rhs, n_rhs=int(n_rhs))
     return state_vectors, residual_norms, rhs_norms, elapsed_s
 
-# Consolidated from parallel/validation.py.
+# Worker-result validation helpers.
 def format_transport_rhs_list(values: Sequence[int]) -> str:
     """Format ``whichRHS`` values for validation errors."""
 
@@ -613,7 +613,7 @@ def validate_gpu_transport_worker_arrays(
         )
 
 
-# Consolidated from parallel/payload.py.
+# Worker payload execution helpers.
 def solve_transport_parallel_payload(
     payload: dict[str, object],
     *,
@@ -739,7 +739,7 @@ def transport_parallel_result_to_npz_arrays(result: dict[str, object]) -> dict[s
     }
 
 
-# Consolidated from parallel/execution.py.
+# Parent-side execution policy helpers.
 def should_run_transport_parallel(
     *,
     parallel_child: bool,
@@ -878,7 +878,7 @@ def run_transport_parallel_payloads(
             return [worker(payload) for payload in payloads]
 
 
-# Consolidated from parallel/pool.py.
+# Persistent process-pool cache.
 class TransportParallelPoolCache:
     """Persistent process-pool cache keyed by transport worker configuration."""
 
@@ -978,7 +978,7 @@ def transport_parallel_process_pool_executor(**kwargs: object) -> concurrent.fut
 atexit.register(shutdown_transport_parallel_pool)
 
 
-# Consolidated from parallel/solve.py.
+# Parent-side parallel solve orchestration.
 @dataclass(frozen=True)
 class TransportParallelSolveRuntime:
     """Injected runtime hooks needed to launch and merge transport workers."""

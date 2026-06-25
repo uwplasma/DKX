@@ -12,7 +12,7 @@ import json
 from pathlib import Path
 import sys
 
-from sfincs_jax.qi_device_artifact_policy import check_qi_device_artifact_files
+from sfincs_jax.validation.qi_device import check_qi_device_artifact_files
 
 
 def _build_parser() -> argparse.ArgumentParser:

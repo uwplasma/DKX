@@ -8,7 +8,7 @@ import json
 from pathlib import Path
 import sys
 
-from sfincs_jax.benchmark_artifact_policy import (
+from sfincs_jax.validation.benchmark_artifacts import (
     ARTIFACT_CLASSES,
     BenchmarkArtifactIndex,
     BenchmarkArtifactIndexEntry,

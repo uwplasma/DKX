@@ -10,7 +10,7 @@ from pathlib import Path
 import sys
 from typing import Iterable
 
-from sfincs_jax.qi_device_artifact_policy import check_qi_device_artifact_files
+from sfincs_jax.validation.qi_device import check_qi_device_artifact_files
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]

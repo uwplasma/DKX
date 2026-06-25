@@ -7,7 +7,7 @@ import argparse
 from pathlib import Path
 import sys
 
-from sfincs_jax.benchmark_artifact_policy import check_benchmark_artifact_files
+from sfincs_jax.validation.benchmark_artifacts import check_benchmark_artifact_files
 
 
 def _build_parser() -> argparse.ArgumentParser:

@@ -180,7 +180,7 @@
     "source_code": [
       "examples/publication_figures/generate_sfincs_paper_figs.py",
       "examples/publication_figures/generate_simakov_helander_high_nu_run_plan.py",
-      "sfincs_jax/validation_artifacts.py"
+      "sfincs_jax/validation/artifacts.py"
     ],
     "tests": [
       "tests/test_generate_sfincs_paper_figs.py",
@@ -222,7 +222,7 @@
     ],
     "source_code": [
       "examples/publication_figures/generate_high_collisionality_trend_proxy.py",
-      "sfincs_jax/validation_artifacts.py"
+      "sfincs_jax/validation/artifacts.py"
     ],
     "tests": [
       "tests/test_generate_high_collisionality_trend_proxy.py",
@@ -264,7 +264,7 @@
     ],
     "source_code": [
       "examples/publication_figures/generate_simakov_helander_limit_audit.py",
-      "sfincs_jax/validation_artifacts.py"
+      "sfincs_jax/validation/artifacts.py"
     ],
     "tests": [
       "tests/test_generate_simakov_helander_limit_audit.py",
@@ -381,7 +381,7 @@
     ],
     "source_code": [
       "examples/publication_figures/generate_validation_dashboard.py",
-      "sfincs_jax/validation_artifacts.py"
+      "sfincs_jax/validation/artifacts.py"
     ],
     "tests": [
       "tests/test_generate_validation_dashboard.py",
@@ -424,7 +424,7 @@
     ],
     "source_code": [
       "examples/publication_figures/generate_fortran_suite_benchmark_summary.py",
-      "sfincs_jax/validation_artifacts.py"
+      "sfincs_jax/validation/artifacts.py"
     ],
     "tests": [
       "tests/test_generate_fortran_suite_benchmark_summary.py",
@@ -502,7 +502,7 @@
       "This lane is closed for the current release as a post-release cross-code target because shared-model normalizations must be pinned before claiming overlap"
     ],
     "source_code": [
-      "sfincs_jax/transport_matrix.py",
+      "sfincs_jax/problems/transport_matrix/solve.py",
       "sfincs_jax/v3_driver.py"
     ],
     "tests": [
@@ -547,7 +547,7 @@
     "source_code": [
       "sfincs_jax/implicit_solve.py",
       "sfincs_jax/geometry.py",
-      "sfincs_jax/validation_artifacts.py",
+      "sfincs_jax/validation/artifacts.py",
       "examples/publication_figures/generate_autodiff_sensitivity_validation.py"
     ],
     "tests": [

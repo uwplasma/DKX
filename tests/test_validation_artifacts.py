@@ -7,7 +7,7 @@ import h5py
 import numpy as np
 import pytest
 
-from sfincs_jax.validation_artifacts import (
+from sfincs_jax.validation.artifacts import (
     appendix_b_geometry_audit_from_h5,
     autodiff_gradient_error_summary,
     build_fortran_suite_benchmark_summary,

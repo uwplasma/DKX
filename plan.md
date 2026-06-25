@@ -3303,3 +3303,67 @@ Next best steps:
    micro-file reductions are stable.
 3. Keep the no-shim rule: update imports to canonical owners and delete
    obsolete files rather than keeping compatibility files alive.
+
+## 2026-06-25 Lane 1 Tranche A Validation-Domain Root Disposition
+
+Steps taken:
+
+1. Moved six root validation/artifact policy modules into the canonical
+   `sfincs_jax.validation` package:
+   `validation/artifacts.py`, `validation/figures.py`, `validation/math.py`,
+   `validation/benchmark_artifacts.py`, `validation/research_lanes.py`, and
+   `validation/qi_device.py`.
+2. Updated imports in source, tests, examples, scripts, and docs so the deleted
+   root modules are not kept as compatibility shims.
+3. Refreshed `docs/api.rst`, `docs/source_map.rst`, `docs/testing.rst`,
+   `examples/publication_figures/validation_manifest.json`, and
+   `docs/_static/research_lane_completion_2026_05_12.json` so checked
+   documentation and release/research manifests point at existing canonical
+   owners.
+4. Removed stale deleted-parallel-file section comments from
+   `problems/transport_matrix/parallel/runtime.py`.
+
+Current inventory:
+
+- Package Python files: `212` (unchanged because files moved, not deleted).
+- Package-root Python files: `79` (down from `85`).
+- `sfincs_jax.validation`: `7` Python files including `__init__.py`.
+
+Validation:
+
+- Scoped `ruff` passed for moved validation modules, touched scripts, touched
+  tests, and `transport_matrix/parallel/runtime.py`.
+- `python -m py_compile` passed for `sfincs_jax/validation/*.py` and
+  `transport_matrix/parallel/runtime.py`.
+- Focused validation/release tests passed:
+  `python -m pytest tests/test_research_lane_policy.py
+  tests/test_release_gate_metadata.py tests/test_validation_artifacts.py
+  tests/test_validation_figures.py tests/test_validation_math.py
+  tests/test_benchmark_artifact_policy.py
+  tests/test_qi_device_artifact_policy.py
+  tests/test_validation_policy_coverage.py tests/test_phase_timing.py
+  tests/test_cli_validation_io_fast_coverage.py -q --tb=short`
+  with `93 passed in 1.41 s`.
+- `python scripts/check_qi_device_artifacts.py docs/_static --min-relevant 1`
+  passed with `failed=0`.
+- `python scripts/check_release_gates.py` passed.
+- `python -m sphinx -W -b html docs docs/_build/html` passed.
+- Stale import audit found no remaining imports of the deleted root validation
+  modules.
+
+Current lane status:
+
+- Lane 1 Tranche A: partially complete. The validation/artifact-policy
+  disposition checkpoint is done. Remaining Tranche A work is the full
+  root-disposition table and moving or deleting the next root module family.
+- Lane 1 overall: about `65%`.
+
+Next best steps:
+
+1. Continue Tranche A with either root workflow/evidence modules
+   (`optimization_*`, `mapped_xgrid_*`, campaign policies) or root solver
+   utility modules (`solver_*`, `explicit_sparse*`, `preconditioner_*`) as one
+   coherent family move.
+2. After Tranche A root disposition is complete, execute Tranche B to cut
+   `profile_response/solve.py` below the target instead of doing more helper
+   churn.

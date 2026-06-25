@@ -8,7 +8,7 @@ import pytest
 
 from scripts.check_benchmark_artifacts import main as check_benchmark_artifacts_main
 from scripts.benchmark_artifact_index import main as benchmark_artifact_index_main
-from sfincs_jax.benchmark_artifact_policy import (
+from sfincs_jax.validation.benchmark_artifacts import (
     ARTIFACT_CLASS_FORTRAN_SUITE_SUMMARY,
     ARTIFACT_CLASS_LEGACY,
     ARTIFACT_CLASS_NON_PAS,

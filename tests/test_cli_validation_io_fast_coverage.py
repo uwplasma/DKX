@@ -11,12 +11,12 @@ import pytest
 
 from sfincs_jax import cli
 from sfincs_jax import plotting
-from sfincs_jax.benchmark_artifact_policy import (
+from sfincs_jax.validation.benchmark_artifacts import (
     check_benchmark_artifact_file,
     check_benchmark_artifact_files,
     fortran_suite_benchmark_summary_errors,
 )
-from sfincs_jax.validation_figures import (
+from sfincs_jax.validation.figures import (
     build_simakov_helander_high_nu_panel,
     build_w7x_ambipolar_root_provenance_panel,
 )
