@@ -8,6 +8,7 @@ from sfincs_jax.transport_preconditioner_dispatch import (
     TransportPreconditionerContext,
     TransportPreconditionerDispatchBuilders,
     TransportSparseJaxConfig,
+    TransportStrongPreconditionerCache,
     auto_transport_preconditioner_choice,
     build_transport_preconditioner_from_kind,
     build_transport_strong_preconditioner_from_kind,
@@ -603,4 +604,64 @@ def test_build_transport_strong_preconditioner_from_kind_reuses_primary_when_sam
         sparse_jax_config=TransportSparseJaxConfig(0.0, 1.0e-6, 1.0e-10, 0.8, 2, 128.0),
     )
     assert reused is primary
+    assert calls == []
+
+
+def test_transport_strong_preconditioner_cache_builds_each_variant_once() -> None:
+    calls: list[tuple[str, dict]] = []
+    builders = _builders(calls)
+    context = TransportPreconditionerContext(
+        op=_op(),
+        active_size=128,
+        use_active_dof_mode=True,
+        reduce_full=lambda x: x,
+        expand_reduced=lambda x: x,
+    )
+    cache = TransportStrongPreconditionerCache(
+        kind="theta_schwarz",
+        precond_kind_used="collision",
+        preconditioner_full=lambda x: x,
+        preconditioner_reduced=lambda x: x,
+        context=context,
+        builders=builders,
+        dd_config=transport_dd_config_from_env(op=context.op),
+        sparse_jax_config=TransportSparseJaxConfig(0.0, 1.0e-6, 1.0e-10, 0.8, 2, 128.0),
+    )
+
+    full_first = cache.get(use_reduced=False)
+    full_second = cache.get(use_reduced=False)
+    reduced_first = cache.get(use_reduced=True)
+    reduced_second = cache.get(use_reduced=True)
+
+    assert full_first is full_second
+    assert reduced_first is reduced_second
+    assert [name for name, _ in calls] == ["theta_schwarz", "theta_schwarz"]
+    assert calls[0][1]["reduce_full"] is None
+    assert calls[1][1]["reduce_full"] is not None
+
+
+def test_transport_strong_preconditioner_cache_reuses_primary_without_building() -> None:
+    calls: list[tuple[str, dict]] = []
+    builders = _builders(calls)
+    context = TransportPreconditionerContext(op=_op(), active_size=128, use_active_dof_mode=False)
+
+    def primary_full(v):
+        return ("full", v)
+
+    def primary_reduced(v):
+        return ("reduced", v)
+
+    cache = TransportStrongPreconditionerCache(
+        kind="block",
+        precond_kind_used="block",
+        preconditioner_full=primary_full,
+        preconditioner_reduced=primary_reduced,
+        context=context,
+        builders=builders,
+        dd_config=transport_dd_config_from_env(op=context.op),
+        sparse_jax_config=TransportSparseJaxConfig(0.0, 1.0e-6, 1.0e-10, 0.8, 2, 128.0),
+    )
+
+    assert cache.get(use_reduced=False) is primary_full
+    assert cache.get(use_reduced=True) is primary_reduced
     assert calls == []

@@ -653,8 +653,8 @@ from .transport_policy import (
 from .problems.transport_matrix.preconditioner_dispatch import (
     TransportPreconditionerContext,
     TransportPreconditionerDispatchBuilders,
+    TransportStrongPreconditionerCache,
     build_transport_preconditioner_from_kind,
-    build_transport_strong_preconditioner_from_kind,
     normalize_transport_preconditioner_kind,
     resolve_transport_precondition_side_for_kind,
     resolve_transport_preconditioner_choice,
@@ -10899,8 +10899,16 @@ def solve_v3_transport_matrix_linear_gmres(
                 f"{precond_kind_used} strong={strong_precond_kind}",
             )
 
-    strong_preconditioner_full = None
-    strong_preconditioner_reduced = None
+    strong_preconditioner_cache = TransportStrongPreconditionerCache(
+        kind=strong_precond_kind,
+        precond_kind_used=precond_kind_used,
+        preconditioner_full=preconditioner_full,
+        preconditioner_reduced=preconditioner_reduced,
+        context=transport_precond_context,
+        builders=transport_precond_builders,
+        dd_config=dd_config,
+        sparse_jax_config=sparse_jax_config,
+    )
 
     transport_sparse_drop_tol_env = os.environ.get("SFINCS_JAX_TRANSPORT_SPARSE_DROP_TOL", "").strip()
     transport_sparse_drop_rel_env = os.environ.get("SFINCS_JAX_TRANSPORT_SPARSE_DROP_REL", "").strip()
@@ -10914,36 +10922,7 @@ def solve_v3_transport_matrix_linear_gmres(
         transport_sparse_drop_rel = 0.0
 
     def _get_strong_preconditioner(use_reduced: bool) -> Callable[[jnp.ndarray], jnp.ndarray] | None:
-        nonlocal strong_preconditioner_full, strong_preconditioner_reduced
-        if strong_precond_kind is None:
-            return None
-        if use_reduced:
-            if strong_preconditioner_reduced is None:
-                strong_preconditioner_reduced = build_transport_strong_preconditioner_from_kind(
-                    kind=strong_precond_kind,
-                    use_reduced=True,
-                    precond_kind_used=precond_kind_used,
-                    preconditioner_full=preconditioner_full,
-                    preconditioner_reduced=preconditioner_reduced,
-                    context=transport_precond_context,
-                    builders=transport_precond_builders,
-                    dd_config=dd_config,
-                    sparse_jax_config=sparse_jax_config,
-                )
-            return strong_preconditioner_reduced
-        if strong_preconditioner_full is None:
-            strong_preconditioner_full = build_transport_strong_preconditioner_from_kind(
-                kind=strong_precond_kind,
-                use_reduced=False,
-                precond_kind_used=precond_kind_used,
-                preconditioner_full=preconditioner_full,
-                preconditioner_reduced=preconditioner_reduced,
-                context=transport_precond_context,
-                builders=transport_precond_builders,
-                dd_config=dd_config,
-                sparse_jax_config=sparse_jax_config,
-            )
-        return strong_preconditioner_full
+        return strong_preconditioner_cache.get(use_reduced=bool(use_reduced))
 
     # RHSMode=2/3 transport reuses the same active operator for multiple drives,
     # so keep sparse-helper factors scoped to this solve and reuse them across RHS.

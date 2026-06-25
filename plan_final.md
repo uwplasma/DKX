@@ -1067,6 +1067,9 @@ Completed on 2026-06-25:
   It builds fixed-shape `Er` operators from an input namelist, supplies the
   analytic/JVP `Er` tangent to the matrix-free implicit certificate, and has a
   real small-deck centered-finite-difference gate.
+- Moved the RHSMode 2/3 transport strong-preconditioner lazy cache out of
+  `v3_driver.py` into the transport preconditioner-dispatch domain module,
+  with focused cache-reuse tests.
 
 Next ordered implementation steps:
 

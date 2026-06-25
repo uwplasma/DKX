@@ -762,10 +762,58 @@ def build_transport_strong_preconditioner_from_kind(
     )
 
 
+@dataclass
+class TransportStrongPreconditionerCache:
+    """Lazily build full/reduced strong transport preconditioners once per solve."""
+
+    kind: str | None
+    precond_kind_used: str | None
+    preconditioner_full: Preconditioner | None
+    preconditioner_reduced: Preconditioner | None
+    context: TransportPreconditionerContext
+    builders: TransportPreconditionerDispatchBuilders
+    dd_config: TransportDDConfig
+    sparse_jax_config: TransportSparseJaxConfig
+    strong_full: Preconditioner | None = None
+    strong_reduced: Preconditioner | None = None
+
+    def get(self, *, use_reduced: bool) -> Preconditioner | None:
+        if self.kind is None:
+            return None
+        if use_reduced:
+            if self.strong_reduced is None:
+                self.strong_reduced = build_transport_strong_preconditioner_from_kind(
+                    kind=self.kind,
+                    use_reduced=True,
+                    precond_kind_used=self.precond_kind_used,
+                    preconditioner_full=self.preconditioner_full,
+                    preconditioner_reduced=self.preconditioner_reduced,
+                    context=self.context,
+                    builders=self.builders,
+                    dd_config=self.dd_config,
+                    sparse_jax_config=self.sparse_jax_config,
+                )
+            return self.strong_reduced
+        if self.strong_full is None:
+            self.strong_full = build_transport_strong_preconditioner_from_kind(
+                kind=self.kind,
+                use_reduced=False,
+                precond_kind_used=self.precond_kind_used,
+                preconditioner_full=self.preconditioner_full,
+                preconditioner_reduced=self.preconditioner_reduced,
+                context=self.context,
+                builders=self.builders,
+                dd_config=self.dd_config,
+                sparse_jax_config=self.sparse_jax_config,
+            )
+        return self.strong_full
+
+
 __all__ = [
     "TransportDDConfig",
     "TransportPreconditionerContext",
     "TransportPreconditionerDispatchBuilders",
+    "TransportStrongPreconditionerCache",
     "TransportSparseJaxConfig",
     "auto_transport_preconditioner_choice",
     "build_transport_preconditioner_from_kind",

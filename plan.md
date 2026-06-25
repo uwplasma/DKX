@@ -1798,3 +1798,57 @@ Next best steps:
    solve-loop seam into existing domain modules.
 3. Add intermediate RHSMode=4/5 parity gates only after the API surface for
    writing those outputs is stable.
+
+## 2026-06-25 Transport Strong-Preconditioner Cache Refactor
+
+Steps taken:
+
+1. Reviewed the RHSMode=2/3 transport solve-loop seam in `v3_driver.py` and
+   selected the strong-preconditioner lazy-cache closure because it belongs to
+   transport preconditioner dispatch rather than driver orchestration.
+2. Added `TransportStrongPreconditionerCache` to
+   `sfincs_jax/problems/transport_matrix/preconditioner_dispatch.py`.
+3. Replaced the nested full/reduced cache closure in
+   `solve_v3_transport_matrix_linear_gmres` with the new domain helper while
+   preserving lazy construction, reduced/full separation, and primary
+   preconditioner reuse.
+4. Added focused tests that verify each full/reduced strong preconditioner is
+   built once and that same-kind strong preconditioners reuse the already-built
+   primary preconditioner without dispatching another builder.
+
+Results:
+
+- `v3_driver.py` dropped from `12,133` to `12,112` lines in this tranche.
+- `python -m pytest tests/test_transport_preconditioner_dispatch.py -q --tb=short`
+  passed with `30 passed in 0.07 s`.
+- `python -m pytest tests/test_transport_preconditioner_dispatch.py
+  tests/test_v3_driver_rhs1_dispatch_coverage.py
+  tests/test_v3_driver_pas_precond_policy_coverage.py -q --tb=short` passed
+  with `82 passed in 24.58 s`.
+- `JAX_ENABLE_X64=True python -m pytest
+  tests/test_transport_parallel.py::test_transport_theta_dd_preconditioner_matches_default
+  tests/test_transport_parallel.py::test_transport_theta_schwarz_preconditioner_matches_default
+  -q --tb=short` passed with `2 passed in 12.55 s`.
+- `python -m ruff check
+  sfincs_jax/problems/transport_matrix/preconditioner_dispatch.py
+  sfincs_jax/v3_driver.py tests/test_transport_preconditioner_dispatch.py`
+  and `git diff --check` passed.
+
+Current lane status:
+
+- Ambipolar solver lane: 99% bounded; no change in this tranche.
+- RHSMode 4/5 sensitivity lane: 95%; no change in this tranche.
+- Refactor/review-ready PR lane: 90%; the transport strong-preconditioner
+  cache is now in a tested domain module, but the main solve loops still need
+  larger protocol-level extractions before the PR is review-ready.
+- Overall completion: about 94%.
+
+Next best steps:
+
+1. Commit and push this refactor tranche to both the active branch and the
+   draft PR branch.
+2. Extract the next RHSMode=2/3 seam with real ownership, preferably sparse
+   direct setup or per-RHS linear-solve orchestration, into existing transport
+   modules.
+3. Keep reducing driver-level policy and cache code without adding new narrow
+   files unless a domain boundary requires it.
