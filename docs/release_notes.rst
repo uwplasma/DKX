@@ -106,6 +106,10 @@ Unreleased
   runs the small Fortran v3 Brent ambipolar solve, then pins the heat-flux
   adjoint outputs and the extra ``dPhidPsidLambda`` field emitted at ambipolar
   ``E_r``.
+- Added a compact RHSMode=4 debug-adjoint finite-difference reference. The
+  regression validates every debug output field name/rank, finite selected
+  percent errors, and the Fortran NaN mask for lambda/mode entries that the
+  finite-difference diagnostic does not fill.
 - Moved the first RHSMode=2/3 transport implementation cluster into
   ``sfincs_jax.problems.transport_matrix``: setup, active/dense setup, loop
   support, finalization, streaming outputs, and postsolve diagnostics. The old

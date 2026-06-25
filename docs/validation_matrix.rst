@@ -268,6 +268,11 @@ Fortran-v3 RHSMode 4/5 source-contract gates:
   ``dRadialCurrentdLambda = sum_s Z_s dParticleFlux_s/dLambda`` and
   ``dTotalHeatFluxdLambda = sum_s dHeatFluxdLambda_s`` and
   ``dBootstrapdLambda = sum_s Z_s dParallelFlowdLambda_s``.
+- ``small_rhsmode4_debug_summary_2026-06-25.json`` records a bounded
+  debug-adjoint finite-difference run. The regression validates every debug
+  field name/rank, selected analytic/finite-difference values, finite percent
+  errors below the checked tolerance, and the Fortran NaN mask for unfilled
+  lambda/mode entries.
 
 .. figure:: _static/figures/paper/sfincs_jax_autodiff_gradient_check.png
    :alt: Autodiff gradient validation for sfincs_jax
