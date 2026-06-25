@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 import jax.numpy as jnp
 import numpy as np
 import pytest
@@ -9,12 +11,20 @@ from sfincs_jax.problems.ambipolar import (
     implicit_linear_radial_current_derivative,
     implicit_linear_radial_current_derivative_from_builder,
 )
+from sfincs_jax.problems.transport_matrix.diagnostics import (
+    radial_current_vm_from_state,
+    radial_current_vm_observable_vector,
+    radial_current_vm_psi_hat_from_state,
+    radial_current_vm_psi_hat_observable_vector,
+)
 from sfincs_jax.sensitivity import (
     LinearObservableSystem,
     implicit_linear_observable_derivative,
     implicit_linear_observable_derivative_from_builder,
     probe_linear_observable_vector,
 )
+from sfincs_jax.namelist import read_sfincs_input
+from sfincs_jax.v3_system import full_system_operator_from_namelist
 
 
 def _linear_system_components():
@@ -210,6 +220,38 @@ def test_probe_linear_observable_vector_recovers_chunked_weights_and_offset() ->
 
     np.testing.assert_allclose(vector, weights, rtol=0.0, atol=1.0e-12)
     np.testing.assert_allclose(probed_offset, offset, rtol=0.0, atol=1.0e-12)
+
+
+def test_rhs1_radial_current_observable_vector_matches_existing_diagnostic() -> None:
+    input_path = Path(__file__).parent / "ref" / "pas_1species_PAS_noEr_tiny.input.namelist"
+    op = full_system_operator_from_namelist(nml=read_sfincs_input(input_path))
+    rng = np.random.default_rng(7)
+    state = jnp.asarray(rng.normal(size=(int(op.total_size),)), dtype=jnp.float64)
+
+    vector, offset = radial_current_vm_psi_hat_observable_vector(op, chunk_size=11)
+    probed = jnp.vdot(vector, state) + offset
+    direct = radial_current_vm_psi_hat_from_state(op, x_full=state)
+
+    np.testing.assert_allclose(probed, direct, rtol=0.0, atol=1.0e-10)
+
+    vector_rhat, offset_rhat = radial_current_vm_observable_vector(
+        op,
+        radial_coordinate="rHat",
+        psi_a_hat=-0.384935,
+        a_hat=0.5109,
+        r_n=0.5,
+        chunk_size=11,
+    )
+    probed_rhat = jnp.vdot(vector_rhat, state) + offset_rhat
+    direct_rhat = radial_current_vm_from_state(
+        op,
+        x_full=state,
+        radial_coordinate="rHat",
+        psi_a_hat=-0.384935,
+        a_hat=0.5109,
+        r_n=0.5,
+    )
+    np.testing.assert_allclose(probed_rhat, direct_rhat, rtol=0.0, atol=1.0e-10)
 
 
 def test_implicit_linear_observable_derivative_rejects_incompatible_shapes() -> None:
