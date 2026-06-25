@@ -47,6 +47,7 @@ from sfincs_jax.v3_system import apply_v3_full_system_operator_cached, full_syst
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SENSITIVITY_REFERENCE_SUMMARY = "small_rhsmode45_summary_2026-06-25.json"
+SENSITIVITY_DEBUG_REFERENCE_SUMMARY = "small_rhsmode4_debug_summary_2026-06-25.json"
 
 
 def _linear_system_components():
@@ -300,6 +301,43 @@ def test_fortran_v3_rhs5_reference_summary_pins_constant_current_heat_sensitivit
     np.testing.assert_allclose(total, heat.sum(axis=2), rtol=0.0, atol=5.0e-18)
     assert np.isfinite(dphi).all()
     assert float(np.max(np.abs(dphi))) > 1.0
+
+
+def test_fortran_v3_rhs4_debug_reference_summary_pins_finite_difference_outputs() -> None:
+    reference_root = REPO_ROOT / "benchmarks" / "fortran_v3_sensitivity_reference"
+    input_path = reference_root / "namelists" / "geometry4_w7x_like_small_rhs4_debug_radial_current.namelist"
+    summary = json.loads((reference_root / SENSITIVITY_DEBUG_REFERENCE_SUMMARY).read_text())
+    nml = read_sfincs_input(input_path)
+    fields = summary["hdf5_fields"]
+
+    assert validate_fortran_v3_adjoint_sensitivity_constraints(nml) == ()
+    expected_fields = fortran_v3_adjoint_sensitivity_output_fields(nml)
+    assert "dParticleFluxdLambda_finitediff" in expected_fields
+    assert "radialCurrentPercentError" in expected_fields
+    assert validate_fortran_v3_adjoint_sensitivity_output_surface(nml, fields) == ()
+    assert summary["wall_time_s"] < 1.0
+    assert summary["max_rss_bytes"] < 160_000_000
+    assert summary["finite_difference_times_s"][0] < 0.2
+
+    particle = np.asarray(fields["dParticleFluxdLambda"]["values"], dtype=np.float64)
+    particle_fd = np.asarray(fields["dParticleFluxdLambda_finitediff"]["values"], dtype=np.float64)
+    radial = np.asarray(fields["dRadialCurrentdLambda"]["values"], dtype=np.float64)
+    radial_fd = np.asarray(fields["dRadialCurrentdLambda_finitediff"]["values"], dtype=np.float64)
+    particle_error = np.asarray(fields["particleFluxPercentError"]["values"], dtype=np.float64)
+    radial_error = np.asarray(fields["radialCurrentPercentError"]["values"], dtype=np.float64)
+
+    assert np.isnan(particle_fd[:, 1, :, :]).all()
+    assert np.isnan(radial_fd[:, 1, :]).all()
+    assert np.isfinite(np.delete(particle_fd, 1, axis=1)).all()
+    assert np.isfinite(np.delete(radial_fd, 1, axis=1)).all()
+    assert float(np.max(particle_error)) < 0.03
+    assert float(np.max(radial_error)) < 0.02
+    np.testing.assert_allclose(
+        radial,
+        particle[:, :, 0, :] - particle[:, :, 1, :],
+        rtol=0.0,
+        atol=5.0e-18,
+    )
 
 
 def test_fortran_v3_adjoint_sensitivity_output_surface_reports_missing_or_misranked_fields() -> None:
