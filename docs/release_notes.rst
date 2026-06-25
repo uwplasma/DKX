@@ -99,6 +99,9 @@ Unreleased
   Fortran-v3 sensitivity field names and tensor ranks. Tests pin
   ``dTotalHeatFluxdLambda = sum_s dHeatFluxdLambda_s`` without committing the
   generated HDF5 file.
+- Added a compact RHSMode=4 parallel-flow/bootstrap sensitivity reference.
+  Tests pin the Fortran writer-gated ``dParallelFlowdLambda`` field and the
+  identity ``dBootstrapdLambda = sum_s Z_s dParallelFlowdLambda_s``.
 - Added the first compact RHSMode=5 constant-current sensitivity reference. It
   runs the small Fortran v3 Brent ambipolar solve, then pins the heat-flux
   adjoint outputs and the extra ``dPhidPsidLambda`` field emitted at ambipolar

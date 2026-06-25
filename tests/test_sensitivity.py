@@ -238,6 +238,37 @@ def test_fortran_v3_rhs4_reference_summary_pins_heat_flux_sensitivity() -> None:
     np.testing.assert_allclose(total, heat.sum(axis=2), rtol=0.0, atol=5.0e-18)
 
 
+def test_fortran_v3_rhs4_reference_summary_pins_parallel_flow_and_bootstrap_sensitivity() -> None:
+    reference_root = REPO_ROOT / "benchmarks" / "fortran_v3_sensitivity_reference"
+    input_path = reference_root / "namelists" / "geometry4_w7x_like_small_rhs4_parallel_bootstrap.namelist"
+    summary = json.loads((reference_root / SENSITIVITY_REFERENCE_SUMMARY).read_text())
+    case = next(item for item in summary["cases"] if item["case"] == "geometry4_w7x_like_small_rhs4_parallel_bootstrap")
+    nml = read_sfincs_input(input_path)
+
+    assert validate_fortran_v3_adjoint_sensitivity_constraints(nml) == ()
+    assert fortran_v3_adjoint_sensitivity_output_fields(nml) == (
+        "dParticleFluxdLambda",
+        "dParallelFlowdLambda",
+        "dBootstrapdLambda",
+    )
+    assert dict(fortran_v3_adjoint_sensitivity_output_ranks(nml)) == {
+        "dParticleFluxdLambda": 4,
+        "dParallelFlowdLambda": 4,
+        "dBootstrapdLambda": 3,
+    }
+    assert validate_fortran_v3_adjoint_sensitivity_output_surface(nml, case["hdf5_fields"]) == ()
+    assert case["wall_time_s"] < 1.0
+    assert case["max_rss_bytes"] < 150_000_000
+    assert case["hdf5_fields"]["dParticleFluxdLambda"]["shape"] == [1, 4, 2, 1]
+    assert case["hdf5_fields"]["dParallelFlowdLambda"]["shape"] == [1, 4, 2, 1]
+    assert case["hdf5_fields"]["dBootstrapdLambda"]["shape"] == [1, 4, 1]
+
+    flow = np.asarray(case["hdf5_fields"]["dParallelFlowdLambda"]["values"], dtype=np.float64)
+    bootstrap = np.asarray(case["hdf5_fields"]["dBootstrapdLambda"]["values"], dtype=np.float64)
+    expected_bootstrap = flow[:, :, 0, :] - flow[:, :, 1, :]
+    np.testing.assert_allclose(bootstrap, expected_bootstrap, rtol=0.0, atol=5.0e-17)
+
+
 def test_fortran_v3_rhs5_reference_summary_pins_constant_current_heat_sensitivity() -> None:
     reference_root = REPO_ROOT / "benchmarks" / "fortran_v3_sensitivity_reference"
     input_path = reference_root / "namelists" / "geometry4_w7x_like_small_rhs5_heat_flux.namelist"
