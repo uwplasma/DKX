@@ -84,6 +84,11 @@ Unreleased
   The checked helical option-1 and option-3 roots now run through the real
   active ``particleFlux_vm_rN`` response and replay the Fortran v3 roots within
   the documented current and electric-field tolerances.
+- Added Fortran-v3 RHSMode=4/5 adjoint-sensitivity source contracts to
+  ``sfincs_jax.sensitivity``. The new helpers validate the Fortran-compatible
+  adjoint namelist restrictions and return the sensitivity HDF5 fields written
+  by ``writeHDF5Output.F90``, including the documented source-code gate for
+  ``dParallelFlowdLambda``.
 - Moved the first RHSMode=2/3 transport implementation cluster into
   ``sfincs_jax.problems.transport_matrix``: setup, active/dense setup, loop
   support, finalization, streaming outputs, and postsolve diagnostics. The old
