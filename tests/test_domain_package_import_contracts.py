@@ -42,6 +42,7 @@ ACTIVE_PACKAGE_EXPORTS = {
         "SfincsJaxRadialCurrentEvaluator",
         "brent_ambipolar_root",
         "finite_difference_radial_current_derivative",
+        "implicit_linear_radial_current_derivative",
         "newton_ambipolar_root",
         "safeguarded_newton_ambipolar_root",
         "solve_ambipolar_brent",
@@ -181,6 +182,13 @@ ACTIVE_PACKAGE_EXPORTS = {
         "write_sfincs_netcdf",
         "write_sfincs_npz",
         "write_sfincs_output_file",
+    ),
+}
+
+ACTIVE_MODULE_EXPORTS = {
+    "sfincs_jax.sensitivity": (
+        "LinearObservableDerivativeResult",
+        "implicit_linear_observable_derivative",
     ),
 }
 
@@ -512,6 +520,19 @@ def test_domain_packages_are_importable_with_expected_facades() -> None:
         assert module.__doc__.strip(), module_name
         assert hasattr(module, "__path__"), module_name
         expected_exports = ACTIVE_PACKAGE_EXPORTS.get(module_name, ())
+        assert module.__all__ == expected_exports, module_name
+        for export_name in expected_exports:
+            assert hasattr(module, export_name), f"{module_name}.{export_name}"
+
+
+def test_active_modules_are_importable_with_expected_exports() -> None:
+    """Domain-level modules can expose small public facades without becoming packages."""
+
+    for module_name, expected_exports in ACTIVE_MODULE_EXPORTS.items():
+        module = _import_module(module_name)
+        assert module.__doc__ is not None, module_name
+        assert module.__doc__.strip(), module_name
+        assert not hasattr(module, "__path__"), module_name
         assert module.__all__ == expected_exports, module_name
         for export_name in expected_exports:
             assert hasattr(module, export_name), f"{module_name}.{export_name}"
