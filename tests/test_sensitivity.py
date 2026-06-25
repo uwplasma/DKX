@@ -34,11 +34,13 @@ from sfincs_jax.sensitivity import (
     adjoint_dot_product_check,
     evaluate_matrix_free_linear_observable,
     fortran_v3_adjoint_sensitivity_output_fields,
+    fortran_v3_adjoint_sensitivity_output_ranks,
     implicit_linear_observable_derivative,
     implicit_linear_observable_derivative_from_builder,
     implicit_matrix_free_linear_observable_derivative_from_builder,
     probe_linear_observable_vector,
     validate_fortran_v3_adjoint_sensitivity_constraints,
+    validate_fortran_v3_adjoint_sensitivity_output_surface,
 )
 from sfincs_jax.namelist import read_sfincs_input
 from sfincs_jax.v3_system import apply_v3_full_system_operator_cached, full_system_operator_from_namelist
@@ -182,7 +184,7 @@ def test_fortran_v3_rhs4_reference_summary_pins_radial_current_sensitivity() -> 
     reference_root = REPO_ROOT / "benchmarks" / "fortran_v3_sensitivity_reference"
     input_path = reference_root / "namelists" / "geometry4_w7x_like_small_rhs4_radial_current.namelist"
     summary = json.loads((reference_root / "small_rhsmode4_summary_2026-06-25.json").read_text())
-    case = summary["cases"][0]
+    case = next(item for item in summary["cases"] if item["case"] == "geometry4_w7x_like_small_rhs4_radial_current")
     nml = read_sfincs_input(input_path)
 
     assert validate_fortran_v3_adjoint_sensitivity_constraints(nml) == ()
@@ -191,6 +193,12 @@ def test_fortran_v3_rhs4_reference_summary_pins_radial_current_sensitivity() -> 
         "dParallelFlowdLambda",
         "dRadialCurrentdLambda",
     )
+    assert dict(fortran_v3_adjoint_sensitivity_output_ranks(nml)) == {
+        "dParticleFluxdLambda": 4,
+        "dParallelFlowdLambda": 4,
+        "dRadialCurrentdLambda": 3,
+    }
+    assert validate_fortran_v3_adjoint_sensitivity_output_surface(nml, case["hdf5_fields"]) == ()
     assert case["wall_time_s"] < 1.0
     assert case["max_rss_bytes"] < 150_000_000
     assert case["hdf5_fields"]["dParticleFluxdLambda"]["shape"] == [1, 4, 2, 1]
@@ -200,6 +208,49 @@ def test_fortran_v3_rhs4_reference_summary_pins_radial_current_sensitivity() -> 
     radial = np.asarray(case["hdf5_fields"]["dRadialCurrentdLambda"]["values"], dtype=np.float64)
     expected_radial = particle[:, :, 0, :] - particle[:, :, 1, :]
     np.testing.assert_allclose(radial, expected_radial, rtol=0.0, atol=5.0e-18)
+
+
+def test_fortran_v3_rhs4_reference_summary_pins_heat_flux_sensitivity() -> None:
+    reference_root = REPO_ROOT / "benchmarks" / "fortran_v3_sensitivity_reference"
+    input_path = reference_root / "namelists" / "geometry4_w7x_like_small_rhs4_heat_flux.namelist"
+    summary = json.loads((reference_root / "small_rhsmode4_summary_2026-06-25.json").read_text())
+    case = next(item for item in summary["cases"] if item["case"] == "geometry4_w7x_like_small_rhs4_heat_flux")
+    nml = read_sfincs_input(input_path)
+
+    assert validate_fortran_v3_adjoint_sensitivity_constraints(nml) == ()
+    assert fortran_v3_adjoint_sensitivity_output_fields(nml) == (
+        "dHeatFluxdLambda",
+        "dTotalHeatFluxdLambda",
+    )
+    assert dict(fortran_v3_adjoint_sensitivity_output_ranks(nml)) == {
+        "dHeatFluxdLambda": 4,
+        "dTotalHeatFluxdLambda": 3,
+    }
+    assert validate_fortran_v3_adjoint_sensitivity_output_surface(nml, case["hdf5_fields"]) == ()
+    assert case["wall_time_s"] < 1.0
+    assert case["max_rss_bytes"] < 150_000_000
+    assert case["hdf5_fields"]["dHeatFluxdLambda"]["shape"] == [1, 4, 2, 1]
+    assert case["hdf5_fields"]["dTotalHeatFluxdLambda"]["shape"] == [1, 4, 1]
+
+    heat = np.asarray(case["hdf5_fields"]["dHeatFluxdLambda"]["values"], dtype=np.float64)
+    total = np.asarray(case["hdf5_fields"]["dTotalHeatFluxdLambda"]["values"], dtype=np.float64)
+    np.testing.assert_allclose(total, heat.sum(axis=2), rtol=0.0, atol=5.0e-18)
+
+
+def test_fortran_v3_adjoint_sensitivity_output_surface_reports_missing_or_misranked_fields() -> None:
+    config = _adjoint_config(adjointOptions={"adjointTotalHeatFluxOption": True})
+
+    errors = validate_fortran_v3_adjoint_sensitivity_output_surface(
+        config,
+        {
+            "dHeatFluxdLambda": {"shape": [1, 4, 2, 1]},
+            "dTotalHeatFluxdLambda": {"shape": [1, 4, 2, 1]},
+        },
+    )
+
+    assert errors == (
+        "Sensitivity output field dTotalHeatFluxdLambda has rank 4; expected 3.",
+    )
 
 
 def test_implicit_linear_observable_derivative_matches_tangent_adjoint_and_finite_difference() -> None:

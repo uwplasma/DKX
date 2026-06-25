@@ -253,13 +253,19 @@ Fortran-v3 RHSMode 4/5 source-contract gates:
 - ``sfincs_jax.sensitivity.fortran_v3_adjoint_sensitivity_output_fields`` pins
   the sensitivity HDF5 field names emitted by ``writeHDF5Output.F90`` before
   the numerical Fortran replay fixtures are promoted.
+- ``sfincs_jax.sensitivity.fortran_v3_adjoint_sensitivity_output_ranks`` and
+  ``validate_fortran_v3_adjoint_sensitivity_output_surface`` validate the
+  required RHSMode=4/5 field names and tensor ranks against either HDF5-like
+  arrays or lightweight JSON summaries.
 - ``tests/test_sensitivity.py`` checks valid and invalid RHSMode 4/5 decks,
   including the Fortran source-code gate that writes ``dParallelFlowdLambda``
   from ``adjointParticleFluxOption`` or ``debugAdjoint``.
 - ``benchmarks/fortran_v3_sensitivity_reference`` contains the first compact
-  RHSMode=4 reference summary.  The checked W7-X-like analytic deck pins
-  ``dParticleFluxdLambda`` and ``dRadialCurrentdLambda`` from SFINCS Fortran v3
-  without committing the generated HDF5 file.
+  RHSMode=4 reference summaries. The checked W7-X-like analytic decks pin
+  radial-current and heat-flux sensitivity outputs from SFINCS Fortran v3
+  without committing generated HDF5 files, including
+  ``dRadialCurrentdLambda = sum_s Z_s dParticleFlux_s/dLambda`` and
+  ``dTotalHeatFluxdLambda = sum_s dHeatFluxdLambda_s``.
 
 .. figure:: _static/figures/paper/sfincs_jax_autodiff_gradient_check.png
    :alt: Autodiff gradient validation for sfincs_jax
