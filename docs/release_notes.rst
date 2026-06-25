@@ -40,6 +40,12 @@ Unreleased
   solve closures, finite-difference derivative actions, and the existing
   radial-current observable weights without dense matrix assembly inside the
   builder.
+- Extended the RHSMode=1 matrix-free derivative builder with optional
+  caller-supplied derivative actions and JAX ``jvp`` operator tangents. The new
+  ``operator_tangent_from_centered_difference`` helper builds valid pytrees
+  with ``float0`` tangents for static integer/bool leaves, and tests verify the
+  JVP action against centered differences on a real electric-field ``xDot``
+  operator block.
 - Moved the first RHSMode=2/3 transport implementation cluster into
   ``sfincs_jax.problems.transport_matrix``: setup, active/dense setup, loop
   support, finalization, streaming outputs, and postsolve diagnostics. The old

@@ -1228,6 +1228,29 @@ def dense_rhs1_vm_radial_current_linear_observable_system(
     )
 
 
+def operator_tangent_from_centered_difference(
+    op_plus: Any,
+    op_minus: Any,
+    derivative_step: float,
+) -> Any:
+    """Return a JAX-compatible pytree tangent from two same-shape operators."""
+
+    h = float(derivative_step)
+    if h <= 0.0:
+        raise ValueError("derivative_step must be positive.")
+
+    import jax  # noqa: PLC0415
+    import jax.numpy as jnp  # noqa: PLC0415
+
+    def tangent_leaf(plus: Any, minus: Any) -> Any:
+        plus_array = jnp.asarray(plus)
+        if jnp.issubdtype(plus_array.dtype, jnp.inexact):
+            return (plus_array - jnp.asarray(minus)) / (2.0 * h)
+        return jnp.zeros(plus_array.shape, dtype=jax.dtypes.float0)
+
+    return jax.tree_util.tree_map(tangent_leaf, op_plus, op_minus)
+
+
 def matrix_free_rhs1_vm_radial_current_linear_observable_system(
     *,
     op: Any,
@@ -1238,6 +1261,11 @@ def matrix_free_rhs1_vm_radial_current_linear_observable_system(
     solve: Callable[[Any], Any],
     transpose_solve: Callable[[Any], Any],
     transpose_apply: Callable[[Any], Any],
+    operator_tangent: Any | None = None,
+    operator_derivative_apply: Callable[[Any], Any] | None = None,
+    rhs_derivative: Any | None = None,
+    observable_vector_derivative: Any | None = None,
+    observable_offset_derivative: float | None = None,
     radial_coordinate: str = "psiHat",
     psi_a_hat: float | None = None,
     a_hat: float | None = None,
@@ -1250,10 +1278,11 @@ def matrix_free_rhs1_vm_radial_current_linear_observable_system(
 
     The dense validation builder above assembles full matrices and is therefore
     intentionally capped. This builder keeps the same physical contract but
-    exposes only operator actions, a caller-provided transpose action,
-    finite-difference derivative actions, and caller-provided solve closures.
-    It is the production-facing seam for later analytic/JVP-backed ``Er``
-    derivatives and RHSMode=4/5 adjoint diagnostics.
+    exposes only operator actions, a caller-provided transpose action, optional
+    analytic/JVP derivative actions, and caller-provided solve closures. If no
+    derivative action is supplied, it falls back to centered finite differences.
+    It is the production-facing seam for ``Er`` derivatives and RHSMode=4/5
+    adjoint diagnostics.
     """
 
     h = float(derivative_step)
@@ -1266,6 +1295,7 @@ def matrix_free_rhs1_vm_radial_current_linear_observable_system(
         if int(getattr(candidate, "total_size")) != total_size:
             raise ValueError(f"{name}.total_size must match op.total_size.")
 
+    import jax  # noqa: PLC0415
     import jax.numpy as jnp  # noqa: PLC0415
 
     from ..sensitivity import MatrixFreeLinearObservableSystem  # noqa: PLC0415
@@ -1287,6 +1317,15 @@ def matrix_free_rhs1_vm_radial_current_linear_observable_system(
 
     def derivative_apply(state: Any) -> Any:
         vector = jnp.asarray(state, dtype=jnp.float64)
+        if operator_derivative_apply is not None:
+            return jnp.asarray(operator_derivative_apply(vector), dtype=jnp.float64)
+        if operator_tangent is not None:
+            _, tangent_action = jax.jvp(
+                lambda operator: apply_operator(operator, vector),
+                (op,),
+                (operator_tangent,),
+            )
+            return jnp.asarray(tangent_action, dtype=jnp.float64)
         return (apply_operator(op_plus, vector) - apply_operator(op_minus, vector)) / (2.0 * h)
 
     def apply_transpose(state: Any) -> Any:
@@ -1298,6 +1337,19 @@ def matrix_free_rhs1_vm_radial_current_linear_observable_system(
     rhs = rhs_v3_full_system_jit(op)
     rhs_plus = rhs_v3_full_system_jit(op_plus)
     rhs_minus = rhs_v3_full_system_jit(op_minus)
+    if rhs_derivative is not None:
+        rhs_derivative_value = jnp.asarray(rhs_derivative, dtype=jnp.float64)
+        rhs_derivative_kind = "caller_supplied"
+    elif operator_tangent is not None:
+        _, rhs_derivative_value = jax.jvp(
+            rhs_v3_full_system_jit,
+            (op,),
+            (operator_tangent,),
+        )
+        rhs_derivative_kind = "jax_jvp_operator_tangent"
+    else:
+        rhs_derivative_value = (rhs_plus - rhs_minus) / (2.0 * h)
+        rhs_derivative_kind = "centered_finite_difference"
     observable_vector, observable_offset = radial_current_vm_observable_vector(
         op,
         radial_coordinate=radial_coordinate,
@@ -1322,6 +1374,22 @@ def matrix_free_rhs1_vm_radial_current_linear_observable_system(
         r_n=r_n,
         chunk_size=int(observable_chunk_size),
     )
+    if observable_vector_derivative is None:
+        observable_vector_derivative_value = (observable_vector_plus - observable_vector_minus) / (2.0 * h)
+        observable_derivative_kind = "centered_finite_difference_vector"
+    else:
+        observable_vector_derivative_value = jnp.asarray(observable_vector_derivative, dtype=jnp.float64)
+        observable_derivative_kind = "caller_supplied"
+    if observable_offset_derivative is None:
+        observable_offset_derivative_value = (float(observable_offset_plus) - float(observable_offset_minus)) / (2.0 * h)
+    else:
+        observable_offset_derivative_value = float(observable_offset_derivative)
+    if operator_derivative_apply is not None:
+        operator_derivative_kind = "caller_supplied"
+    elif operator_tangent is not None:
+        operator_derivative_kind = "jax_jvp_operator_tangent"
+    else:
+        operator_derivative_kind = "centered_finite_difference"
     merged_metadata = {
         "builder": "matrix_free_rhs1_vm_radial_current",
         "total_size": total_size,
@@ -1329,9 +1397,9 @@ def matrix_free_rhs1_vm_radial_current_linear_observable_system(
         "derivative_step": h,
         "operator_action": "v3_full_system_matrix_free",
         "transpose_action": "caller_supplied",
-        "operator_derivative_action": "centered_finite_difference",
-        "rhs_derivative": "centered_finite_difference",
-        "observable_derivative": "centered_finite_difference_vector",
+        "operator_derivative_action": operator_derivative_kind,
+        "rhs_derivative": rhs_derivative_kind,
+        "observable_derivative": observable_derivative_kind,
         "dense_matrix_assembled": False,
         **dict(metadata or {}),
     }
@@ -1339,16 +1407,16 @@ def matrix_free_rhs1_vm_radial_current_linear_observable_system(
         parameter=float(parameter),
         size=total_size,
         rhs=rhs,
-        rhs_derivative=(rhs_plus - rhs_minus) / (2.0 * h),
+        rhs_derivative=rhs_derivative_value,
         apply=apply,
         transpose_apply=apply_transpose,
         derivative_apply=derivative_apply,
         solve=solve,
         transpose_solve=transpose_solve,
         observable_vector=observable_vector,
-        observable_vector_derivative=(observable_vector_plus - observable_vector_minus) / (2.0 * h),
+        observable_vector_derivative=observable_vector_derivative_value,
         observable_offset=float(observable_offset),
-        observable_offset_derivative=(float(observable_offset_plus) - float(observable_offset_minus)) / (2.0 * h),
+        observable_offset_derivative=observable_offset_derivative_value,
         metadata=merged_metadata,
     )
 
@@ -1511,6 +1579,7 @@ __all__ = [
     "implicit_matrix_free_radial_current_derivative_from_builder",
     "matrix_free_rhs1_vm_radial_current_linear_observable_system",
     "newton_ambipolar_root",
+    "operator_tangent_from_centered_difference",
     "safeguarded_newton_ambipolar_root",
     "solve_ambipolar_brent",
     "solve_ambipolar_newton",

@@ -92,6 +92,8 @@ Differentiation contracts for optimization and validation workflows:
 - matrix-free implicit linear-observable certificates for production-size
   owners that can provide operator, transpose, derivative-action, solve, and
   transpose-solve closures,
+- operator-tangent helpers that let production owners use JAX ``jvp`` actions
+  instead of materialized derivative matrices,
 - finite-difference comparison hooks used as promotion gates before derivative
   paths are used in ambipolar Newton solves or RHSMode=4/5-style adjoint
   diagnostics.

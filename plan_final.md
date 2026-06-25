@@ -99,6 +99,11 @@ Implementation progress on 2026-06-23:
   difference operator/RHS derivative actions, and existing radial-current
   observable weights; this removes dense matrix assembly from the builder
   itself while keeping a finite-difference promotion gate.
+- The same builder now accepts caller-supplied derivative actions or JAX
+  operator tangents. `operator_tangent_from_centered_difference` constructs
+  valid pytrees with `float0` tangents for integer/bool leaves, and a real
+  electric-field `xDot` operator test verifies the JVP action against centered
+  differences.
 - `sfincs_jax.sensitivity` now exposes `jvp_flux`, `vjp_flux`, and
   `adjoint_dot_product_check`. The focused tests apply the dot-product identity
   to real RHSMode-1 particle-flux, heat-flux, flow, radial-current, and
@@ -983,16 +988,17 @@ Completed on 2026-06-25:
   real-deck comparison against the dense certificate. The builder no longer
   assembles dense matrices internally, but its operator/RHS derivative actions
   are still finite-difference based.
+- Added JAX operator-tangent support to that builder and verified the JVP
+  derivative action on a real electric-field `xDot` block against centered
+  differences.
 
 Next ordered implementation steps:
 
-1. Replace the matrix-free RHSMode-1 builder's finite-difference `Er`
-   operator/RHS derivative actions with analytic terms or checked JVP-backed
-   actions, first for the no-Phi1 magnetic-drift radial-current path and then
-   for Phi1 drift-current branches. The generic dense and matrix-free
-   certificates, builder bridges, magnetic-drift radial-current observable,
-   coordinate conversion, finite-difference derivative contract, and Newton
-   root solvers are already in place.
+1. Replace centered-difference operator-tangent construction with analytic `Er`
+   tangents from namelist radial-coordinate conversion where possible, then use
+   the matrix-free/JVP derivative provider in derivative-assisted ambipolar
+   option-1/3 physical gates. Phi1 drift-current branches remain the next
+   derivative target after the no-Phi1 gate.
 2. Extend the JVP/VJP dot-product gate from the current tiny no-Phi1 diagnostic
    set to Phi1 drift-current, total heat-flux, and intermediate-grid cases.
 3. Wire the exact derivative into safeguarded Newton/bisection and pure Newton

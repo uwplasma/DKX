@@ -57,6 +57,11 @@ deferred research lanes.
   operator actions and caller-supplied transpose/solve closures, while the
   current derivative actions remain finite-difference gates until analytic/JVP
   `Er` derivatives are wired.
+- That matrix-free builder now accepts caller-supplied derivative actions and
+  JAX operator tangents through `operator_tangent_from_centered_difference`.
+  The helper constructs valid pytrees with `float0` tangents for integer/bool
+  leaves, and a real electric-field `xDot` operator test verifies the JVP
+  derivative action against centered differences.
 - Major RHSMode=1 preconditioner families now have domain owners:
   - full-CSR Schur preconditioners,
   - Fortran-reduced symbolic sparse factors,
@@ -1063,3 +1068,30 @@ Next best steps:
    closures.
 3. Add Phi1 drift-current support after the no-Phi1 action passes residual and
    finite-difference gates.
+
+## 2026-06-25 RHSMode 1 JVP Operator-Tangent Derivative Actions
+
+Steps taken:
+
+1. Added `operator_tangent_from_centered_difference` to build valid JAX pytrees
+   for operator tangents, including `float0` tangents for integer/bool leaves.
+2. Extended the matrix-free RHSMode-1 radial-current builder so callers can
+   supply explicit derivative actions, explicit RHS/observable derivatives, or
+   an operator tangent used through `jax.jvp`.
+3. Added a real electric-field `xDot` operator test that checks the JVP action
+   against centered differences on the matrix-free full-system operator.
+
+Results:
+
+- Focused sensitivity/import gates passed:
+  `python -m pytest tests/test_sensitivity.py
+  tests/test_domain_package_import_contracts.py -q --tb=short` with
+  `22 passed`.
+
+Next best steps:
+
+1. Replace the centered-difference operator-tangent construction with analytic
+   `Er` tangents from namelist radial-coordinate conversion where possible.
+2. Add a real derivative-assisted ambipolar option-1/3 gate using the
+   matrix-free/JVP derivative provider.
+3. Add Phi1 drift-current derivative actions and dot-product gates.

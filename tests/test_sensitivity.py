@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import replace
 from pathlib import Path
 
+import jax
 import jax.numpy as jnp
 import numpy as np
 import pytest
@@ -14,6 +15,7 @@ from sfincs_jax.problems.ambipolar import (
     implicit_linear_radial_current_derivative_from_builder,
     implicit_matrix_free_radial_current_derivative_from_builder,
     matrix_free_rhs1_vm_radial_current_linear_observable_system,
+    operator_tangent_from_centered_difference,
 )
 from sfincs_jax.problems.transport_matrix.diagnostics import (
     radial_current_vm_from_state,
@@ -32,7 +34,7 @@ from sfincs_jax.sensitivity import (
     probe_linear_observable_vector,
 )
 from sfincs_jax.namelist import read_sfincs_input
-from sfincs_jax.v3_system import full_system_operator_from_namelist
+from sfincs_jax.v3_system import apply_v3_full_system_operator_cached, full_system_operator_from_namelist
 
 
 def _linear_system_components():
@@ -442,15 +444,18 @@ def test_matrix_free_rhs1_radial_current_system_matches_dense_certificate() -> N
         # tolerances.
         dense_for_closures = dense_system(float(value))
         matrix = dense_for_closures.matrix
+        op_plus = op_at(float(value) + step)
+        op_minus = op_at(float(value) - step)
         return matrix_free_rhs1_vm_radial_current_linear_observable_system(
             op=op_at(value),
-            op_plus=op_at(float(value) + step),
-            op_minus=op_at(float(value) - step),
+            op_plus=op_plus,
+            op_minus=op_minus,
             parameter=float(value),
             derivative_step=step,
             solve=lambda rhs: jnp.linalg.solve(matrix, rhs),
             transpose_solve=lambda rhs: jnp.linalg.solve(matrix.T, rhs),
             transpose_apply=lambda vector: matrix.T @ vector,
+            operator_tangent=operator_tangent_from_centered_difference(op_plus, op_minus, step),
             radial_coordinate="rHat",
             psi_a_hat=-0.384935,
             a_hat=0.5109,
@@ -473,7 +478,8 @@ def test_matrix_free_rhs1_radial_current_system_matches_dense_certificate() -> N
     assert matrix_free_result.metadata["builder"] == "matrix_free_rhs1_vm_radial_current"
     assert matrix_free_result.metadata["gate"] == "rhs1_matrix_free_production_contract"
     assert matrix_free_result.metadata["dense_matrix_assembled"] is False
-    assert matrix_free_result.metadata["operator_derivative_action"] == "centered_finite_difference"
+    assert matrix_free_result.metadata["operator_derivative_action"] == "jax_jvp_operator_tangent"
+    assert matrix_free_result.metadata["rhs_derivative"] == "jax_jvp_operator_tangent"
     assert matrix_free_result.primal_residual_norm < 1.0e-8
     assert matrix_free_result.tangent_residual_norm < 1.0e-7
     assert matrix_free_result.adjoint_residual_norm < 1.0e-8
@@ -489,6 +495,42 @@ def test_matrix_free_rhs1_radial_current_system_matches_dense_certificate() -> N
         dense_result.derivative,
         rtol=0.0,
         atol=1.0e-6,
+    )
+
+
+def test_rhs1_operator_tangent_jvp_matches_centered_difference_for_er_xdot() -> None:
+    input_path = Path(__file__).parent / "ref" / "er_xdot_1species_tiny.input.namelist"
+    op0 = full_system_operator_from_namelist(nml=read_sfincs_input(input_path))
+    assert op0.fblock.er_xdot is not None
+    step = 1.0e-5
+
+    def op_at(value: float):
+        er_xdot = replace(
+            op0.fblock.er_xdot,
+            dphi_hat_dpsi_hat=op0.fblock.er_xdot.dphi_hat_dpsi_hat + float(value),
+        )
+        return replace(op0, fblock=replace(op0.fblock, er_xdot=er_xdot))
+
+    op_plus = op_at(step)
+    op_minus = op_at(-step)
+    op_tangent = operator_tangent_from_centered_difference(op_plus, op_minus, step)
+    state = jnp.linspace(0.1, 1.0, int(op0.total_size), dtype=jnp.float64)
+    _, jvp_action = jax.jvp(
+        lambda operator: apply_v3_full_system_operator_cached(operator, state),
+        (op0,),
+        (op_tangent,),
+    )
+    finite_difference_action = (
+        apply_v3_full_system_operator_cached(op_plus, state)
+        - apply_v3_full_system_operator_cached(op_minus, state)
+    ) / (2.0 * step)
+
+    assert float(jnp.linalg.norm(finite_difference_action)) > 0.0
+    np.testing.assert_allclose(
+        jvp_action,
+        finite_difference_action,
+        rtol=0.0,
+        atol=1.0e-9,
     )
 
 
