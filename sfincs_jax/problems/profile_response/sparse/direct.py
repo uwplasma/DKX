@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from collections.abc import Callable, Mapping, MutableMapping, Sequence
 from dataclasses import dataclass
+import os
+import subprocess
 from time import perf_counter
 from typing import Any
 
@@ -11,6 +13,33 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
+from sfincs_jax.explicit_sparse import (
+    build_operator_from_matvec,
+    build_operator_from_pattern,
+    factorize_host_sparse_operator,
+)
+from sfincs_jax.explicit_sparse_factor_builder import (
+    build_host_sparse_direct_factor_from_matvec as _build_host_sparse_direct_factor_from_matvec_impl,
+)
+from sfincs_jax.explicit_sparse_factor_policy import (
+    explicit_sparse_monolithic_max_size as _explicit_sparse_monolithic_max_size,
+)
+from sfincs_jax.host_refinement import (
+    host_sparse_direct_polish as _host_sparse_direct_polish_impl,
+)
+from sfincs_jax.preconditioner_caches import (
+    _RHSMODE1_SPARSE_JAX_CACHE,
+    _SparseJaxPrecondCache,
+)
+from sfincs_jax.preconditioner_setup import matvec_submatrix as _matvec_submatrix_impl
+from sfincs_jax.solvers.preconditioners.xblock import (
+    rhsmode1_precond_cache_key as _rhsmode1_precond_cache_key,
+)
+from sfincs_jax.v3_sparse_pattern import (
+    summarize_v3_sparse_pattern,
+    v3_full_system_conservative_sparsity_pattern,
+)
+from sfincs_jax.v3_system import apply_v3_full_system_operator
 from ..diagnostics import (
     SparsePCDirectTailMetadataContext,
     sparse_pc_direct_tail_result_metadata_from_context,
@@ -20,7 +49,11 @@ from ..residual import (
     residual_target as profile_residual_target,
 )
 from ..setup import SPARSE_HOST_PETSC_COMPAT_SOLVE_METHODS
-from ....solver import GMRESSolveResult
+from ....solver import (
+    GMRESSolveResult,
+    assemble_dense_matrix_from_matvec,
+    gmres_solve_with_history_scipy,
+)
 from ....sparse_triangular import (
     triangular_solve_lower_padded,
     triangular_solve_upper_padded,
@@ -3270,6 +3303,243 @@ def resolve_direct_tail_coupled_coarse_rescue_policy(
         ),
     )
 
+
+def sparse_factor_cache_key(
+    cache_key: tuple[object, ...],
+    factor_dtype: np.dtype,
+) -> tuple[object, ...]:
+    """Extend a sparse-factor cache key with the concrete host factor dtype."""
+
+    return (*cache_key, np.dtype(factor_dtype).str)
+
+
+def host_sparse_direct_polish(
+    *,
+    matvec_fn: ArrayFn,
+    rhs_vec: jnp.ndarray,
+    x0_np: np.ndarray,
+    ilu: object,
+    factor_dtype: np.dtype,
+    tol: float,
+    atol: float,
+    restart: int,
+    maxiter: int | None,
+    precondition_side: str,
+) -> tuple[np.ndarray, float]:
+    """Run the shared host sparse direct polish using the SciPy GMRES backend."""
+
+    return _host_sparse_direct_polish_impl(
+        matvec_fn=matvec_fn,
+        rhs_vec=rhs_vec,
+        x0_np=x0_np,
+        ilu=ilu,
+        factor_dtype=factor_dtype,
+        tol=tol,
+        atol=atol,
+        restart=restart,
+        maxiter=maxiter,
+        precondition_side=precondition_side,
+        gmres_solver=gmres_solve_with_history_scipy,
+    )
+
+
+def host_physical_memory_mb() -> float | None:
+    """Return physical host memory in MB when the platform exposes it cheaply."""
+
+    try:
+        pages = os.sysconf("SC_PHYS_PAGES")
+        page_size = os.sysconf("SC_PAGE_SIZE")
+        value = float(pages) * float(page_size) / 1.0e6
+        if np.isfinite(value) and value > 0.0:
+            return value
+    except (AttributeError, OSError, ValueError):
+        pass
+    try:
+        result = subprocess.run(
+            ["sysctl", "-n", "hw.memsize"],
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=2.0,
+        )
+        if result.returncode == 0:
+            value = float(result.stdout.strip()) / 1.0e6
+            if np.isfinite(value) and value > 0.0:
+                return value
+    except Exception:
+        pass
+    return None
+
+
+def build_host_sparse_direct_factor_from_matvec(**kwargs: Any) -> tuple[object, object]:
+    """Build a host sparse direct factor with canonical sparse-direct defaults.
+
+    The full keyword schema lives in :mod:`sfincs_jax.explicit_sparse_factor_builder`.
+    This wrapper centralizes the callback injection that used to live in the
+    monolithic profile-response solve owner.
+    """
+
+    kwargs.setdefault("build_operator_from_matvec_callback", build_operator_from_matvec)
+    kwargs.setdefault("build_operator_from_pattern_callback", build_operator_from_pattern)
+    kwargs.setdefault(
+        "factorize_host_sparse_operator_callback",
+        factorize_host_sparse_operator,
+    )
+    kwargs.setdefault("default_backend_callback", jax.default_backend)
+    kwargs.setdefault(
+        "monolithic_max_size_callback",
+        _explicit_sparse_monolithic_max_size,
+    )
+    return _build_host_sparse_direct_factor_from_matvec_impl(**kwargs)
+
+
+def rhsmode1_explicit_sparse_pattern_probe_enabled(
+    env: Mapping[str, str] | None = None,
+) -> bool:
+    """Return whether RHSMode-1 should probe the conservative sparse pattern."""
+
+    raw = _env_value(env if env is not None else os.environ, "SFINCS_JAX_RHSMODE1_EXPLICIT_SPARSE_PATTERN")
+    return raw.lower() in {"1", "true", "yes", "on", "pattern"}
+
+
+def maybe_rhsmode1_full_sparse_pattern(
+    op: object,
+    emit: EmitFn | None = None,
+    *,
+    env: Mapping[str, str] | None = None,
+) -> object | None:
+    """Optionally build and report the conservative full-system sparse pattern."""
+
+    if not rhsmode1_explicit_sparse_pattern_probe_enabled(env=env):
+        return None
+    pattern = v3_full_system_conservative_sparsity_pattern(op)
+    if emit is not None:
+        summary = summarize_v3_sparse_pattern(op, pattern)
+        emit(
+            1,
+            "explicit_sparse_pattern: "
+            f"shape={summary.shape} nnz={summary.nnz} "
+            f"avg_row_nnz={summary.avg_row_nnz:.3g} max_row_nnz={summary.max_row_nnz}",
+        )
+    return pattern
+
+
+def rhsmode1_sparse_cache_key(
+    op: object,
+    *,
+    kind: str,
+    active_size: int,
+    use_active_dof_mode: bool,
+    use_pas_projection: bool,
+    drop_tol: float,
+    drop_rel: float,
+    ilu_drop_tol: float,
+    fill_factor: float,
+) -> tuple[object, ...]:
+    """Return the semantic cache key for RHSMode-1 sparse-JAX factors."""
+
+    return (
+        *_rhsmode1_precond_cache_key(op, kind),
+        int(active_size),
+        int(bool(use_active_dof_mode)),
+        int(bool(use_pas_projection)),
+        float(drop_tol),
+        float(drop_rel),
+        float(ilu_drop_tol),
+        float(fill_factor),
+    )
+
+
+def build_sparse_jax_preconditioner_from_matvec(
+    *,
+    matvec: ArrayFn,
+    n: int,
+    dtype: jnp.dtype,
+    cache_key: tuple[object, ...],
+    drop_tol: float,
+    drop_rel: float,
+    reg: float,
+    omega: float,
+    sweeps: int,
+    emit: EmitFn | None = None,
+) -> ArrayFn:
+    """Assemble a sparse-JAX Jacobi smoother from a matrix-vector callback."""
+
+    cached = _RHSMODE1_SPARSE_JAX_CACHE.get(cache_key)
+    if cached is not None:
+        a_sp = cached.a_sp
+        d_inv = cached.d_inv
+        omega = cached.omega
+        sweeps = cached.sweeps
+    else:
+        if emit is not None:
+            emit(1, f"sparse_jax: assembling dense operator (n={n})")
+        a_dense = assemble_dense_matrix_from_matvec(matvec=matvec, n=int(n), dtype=dtype)
+        a_dense = jnp.asarray(a_dense, dtype=dtype)
+        max_abs = jnp.max(jnp.abs(a_dense)) if int(n) > 0 else jnp.asarray(0.0, dtype=dtype)
+        thresh = jnp.maximum(
+            jnp.asarray(drop_tol, dtype=dtype),
+            jnp.asarray(drop_rel, dtype=dtype) * max_abs,
+        )
+        if drop_tol > 0.0 or drop_rel > 0.0:
+            a_drop = jnp.where(jnp.abs(a_dense) >= thresh, a_dense, jnp.zeros_like(a_dense))
+        else:
+            a_drop = a_dense
+        diag_idx = jnp.arange(int(n), dtype=jnp.int32)
+        diag = a_dense[diag_idx, diag_idx]
+        diag_safe = diag + jnp.asarray(reg, dtype=dtype)
+        a_drop = a_drop.at[diag_idx, diag_idx].set(diag_safe)
+        d_inv = jnp.where(diag_safe != 0, 1.0 / diag_safe, jnp.asarray(0.0, dtype=dtype))
+        try:
+            from jax.experimental import sparse as jsparse  # noqa: PLC0415
+
+            a_sp = jsparse.BCOO.fromdense(a_drop)
+        except Exception as exc:  # noqa: BLE001
+            if emit is not None:
+                emit(1, f"sparse_jax: failed to build BCOO ({type(exc).__name__}: {exc})")
+            a_sp = None
+        if a_sp is None:
+            raise RuntimeError("sparse_jax: failed to build sparse operator")
+        _RHSMODE1_SPARSE_JAX_CACHE[cache_key] = _SparseJaxPrecondCache(
+            a_sp=a_sp,
+            d_inv=jnp.asarray(d_inv, dtype=dtype),
+            omega=float(omega),
+            sweeps=int(sweeps),
+        )
+
+    def _apply(v: jnp.ndarray) -> jnp.ndarray:
+        v = jnp.asarray(v, dtype=d_inv.dtype)
+        x0 = jnp.zeros_like(v)
+
+        def _body(_i: int, x: jnp.ndarray) -> jnp.ndarray:
+            r = v - a_sp @ x
+            return x + omega * d_inv * r
+
+        x = jax.lax.fori_loop(0, int(sweeps), _body, x0)
+        return jnp.asarray(x, dtype=jnp.float64)
+
+    return _apply
+
+
+def matvec_submatrix(
+    op_pc: object,
+    *,
+    col_idx: np.ndarray,
+    row_idx: np.ndarray,
+    total_size: int,
+    chunk_cols: int,
+) -> np.ndarray:
+    """Probe an operator submatrix with the unsharded full-system matvec."""
+
+    return _matvec_submatrix_impl(
+        op_pc,
+        col_idx=col_idx,
+        row_idx=row_idx,
+        total_size=total_size,
+        chunk_cols=chunk_cols,
+        apply_operator_fn=apply_v3_full_system_operator,
+    )
+
 __all__ = (
     "DirectTailCoupledCoarseRescuePolicy",
     "DirectTailMaterializationContext",
@@ -3305,14 +3575,20 @@ __all__ = (
     "SparseMinimumNormPayload",
     "SparseMinimumNormPolicy",
     "apply_sparse_host_direct_polish_if_needed",
+    "build_host_sparse_direct_factor_from_matvec",
     "build_direct_tail_materialization_setup",
     "build_direct_tail_structured_preconditioner_setup",
     "build_explicit_sparse_operator_from_pattern",
     "build_sparse_host_or_ilu_factor",
     "build_sparse_host_scipy_preconditioner",
     "build_sparse_ilu_preconditioner_from_cache",
+    "build_sparse_jax_preconditioner_from_matvec",
     "build_sparse_jax_retry_preconditioner",
     "explicit_sparse_pattern_progress_messages",
+    "host_physical_memory_mb",
+    "host_sparse_direct_polish",
+    "matvec_submatrix",
+    "maybe_rhsmode1_full_sparse_pattern",
     "resolve_direct_tail_coupled_coarse_rescue_policy",
     "resolve_direct_tail_residual_rescue_policy",
     "resolve_direct_tail_structured_admission",
@@ -3323,12 +3599,15 @@ __all__ = (
     "run_direct_tail_support_mode_preflight",
     "run_sparse_host_retry_candidate",
     "run_sparse_host_scipy_gmres",
+    "rhsmode1_explicit_sparse_pattern_probe_enabled",
+    "rhsmode1_sparse_cache_key",
     "solve_explicit_sparse_minimum_norm_branch",
     "solve_explicit_sparse_host_direct_branch",
     "solve_sparse_host_direct_from_available_factor",
     "sparse_host_direct_fallback_payload",
     "sparse_host_direct_solve_from_pattern",
     "sparse_host_direct_solve_payload",
+    "sparse_factor_cache_key",
     "sparse_pc_direct_tail_final_metadata",
     "sparse_minimum_norm_solve_from_pattern",
     "sparse_minimum_norm_solve_payload",

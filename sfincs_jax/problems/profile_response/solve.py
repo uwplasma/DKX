@@ -3,7 +3,6 @@ from __future__ import annotations
 from dataclasses import replace
 import hashlib
 import json
-import subprocess
 import sys
 import tempfile
 import time
@@ -25,7 +24,6 @@ from sfincs_jax.namelist import Namelist, read_sfincs_input
 from sfincs_jax.newton_krylov_diagnostics import emit_newton_krylov_ksp_history as _emit_newton_krylov_ksp_history
 from sfincs_jax.solver import (
     GMRESSolveResult,
-    assemble_dense_matrix_from_matvec,
     bicgstab_solve_with_residual,
     bicgstab_solve_with_history_scipy,
     dense_krylov_solve_from_matrix_with_residual,
@@ -58,19 +56,11 @@ from sfincs_jax.explicit_sparse import (
     SparseOperatorBundle,
     admit_sparse_factor_against_operator,
     analyze_sparse_symbolic_structure,
-    build_operator_from_matvec,
     build_operator_from_pattern,
     estimate_csr_nbytes,
     estimate_dense_nbytes,
     estimate_multifrontal_direct_lu_nbytes,
-    factorize_host_sparse_operator,
     wrap_sparse_factor_with_coarse_correction,
-)
-from sfincs_jax.explicit_sparse_factor_builder import (
-    build_host_sparse_direct_factor_from_matvec as _build_host_sparse_direct_factor_from_matvec_impl,
-)
-from sfincs_jax.explicit_sparse_factor_policy import (
-    explicit_sparse_monolithic_max_size as _explicit_sparse_monolithic_max_size,
 )
 from sfincs_jax.operators.profile_response.device_sparse import device_csr_from_matrix, validate_device_csr_matvec
 from sfincs_jax.solvers.preconditioners.domain_decomposition.line_blocks import (  # compatibility exports for legacy tests/debug scripts
@@ -220,6 +210,17 @@ from sfincs_jax.problems.profile_response.preconditioner_build import (
 from sfincs_jax.problems.profile_response.sparse.qi import (
     attempt_matrixfree_qi_device_seed_if_requested,
     build_matrixfree_qi_device_seed_setup,
+)
+from sfincs_jax.problems.profile_response.sparse.direct import (
+    build_host_sparse_direct_factor_from_matvec as _build_host_sparse_direct_factor_from_matvec,
+    build_sparse_jax_preconditioner_from_matvec as _build_sparse_jax_preconditioner_from_matvec,
+    host_physical_memory_mb as _host_physical_memory_mb,
+    host_sparse_direct_polish as _host_sparse_direct_polish,
+    matvec_submatrix as _matvec_submatrix,
+    maybe_rhsmode1_full_sparse_pattern as _maybe_rhsmode1_full_sparse_pattern,
+    rhsmode1_explicit_sparse_pattern_probe_enabled as _rhsmode1_explicit_sparse_pattern_probe_enabled,
+    rhsmode1_sparse_cache_key as _rhsmode1_sparse_cache_key,
+    sparse_factor_cache_key as _sparse_factor_cache_key,
 )
 from sfincs_jax.problems.profile_response.diagnostics import (
     SparseRescueTailMetadataContext,
@@ -635,7 +636,6 @@ from sfincs_jax.problems.profile_response.policies import (
 )
 from sfincs_jax.host_refinement import (
     host_direct_solve_with_refinement as _host_direct_solve_with_refinement_impl,
-    host_sparse_direct_polish as _host_sparse_direct_polish_impl,
     host_sparse_direct_solve_with_refinement as _host_sparse_direct_solve_with_refinement_impl,
 )
 from sfincs_jax.problems.transport_matrix.policies import (
@@ -771,7 +771,6 @@ from sfincs_jax.sparse_triangular import (
 )
 from sfincs_jax.preconditioner_setup import (
     hash_array as _hash_array,
-    matvec_submatrix as _matvec_submatrix_impl,
     precond_chunk_cols as _precond_chunk_cols,
     rhs_mode1_precond_cache_key as _rhs_mode1_precond_cache_key_impl,
     rhs_mode1_structured_fblock_cache_key as _rhs_mode1_structured_fblock_cache_key_impl,
@@ -798,7 +797,6 @@ from sfincs_jax.preconditioner_caches import (
     _RHSMODE1_PRECOND_LIST_CACHE,
     _RHSMODE1_SCHUR_CACHE,
     _RHSMODE1_SPARSE_ILU_CACHE,
-    _RHSMODE1_SPARSE_JAX_CACHE,
     _RHSMODE1_STRUCTURED_FBLOCK_PRECOND_CACHE,
     _RHSMODE1_SPARSE_SXBLOCK_HOST_PRECOND_CACHE,
     _RHSMODE1_SPARSE_XBLOCK_CSR_PRECOND_CACHE,
@@ -836,7 +834,6 @@ from sfincs_jax.preconditioner_caches import (
     _RHSMode1SparseXBlockHostPrecondCache,
     _RHSMode1SparseXBlockPrecondCache,
     _RHSMode1ThetaLineDiagXCache,
-    _SparseJaxPrecondCache,
     _TransportFpDirectActiveBlockSchurPrecondCache,
     _TransportFpFortranReducedLuPrecondCache,
     _TransportFpLocalGeomLinePrecondCache,
@@ -1040,10 +1037,6 @@ _transport_host_gmres_progress_every = (
 )
 
 
-def _sparse_factor_cache_key(cache_key: tuple[object, ...], factor_dtype: np.dtype) -> tuple[object, ...]:
-    return (*cache_key, np.dtype(factor_dtype).str)
-
-
 _host_sparse_direct_refine_steps = _host_sparse_direct_refine_steps_impl
 
 
@@ -1055,98 +1048,12 @@ _host_sparse_direct_solve_with_refinement = (
 _host_direct_solve_with_refinement = _host_direct_solve_with_refinement_impl
 
 
-def _host_sparse_direct_polish(
-    *,
-    matvec_fn,
-    rhs_vec: jnp.ndarray,
-    x0_np: np.ndarray,
-    ilu,
-    factor_dtype: np.dtype,
-    tol: float,
-    atol: float,
-    restart: int,
-    maxiter: int | None,
-    precondition_side: str,
-) -> tuple[np.ndarray, float]:
-    return _host_sparse_direct_polish_impl(
-        matvec_fn=matvec_fn,
-        rhs_vec=rhs_vec,
-        x0_np=x0_np,
-        ilu=ilu,
-        factor_dtype=factor_dtype,
-        tol=tol,
-        atol=atol,
-        restart=restart,
-        maxiter=maxiter,
-        precondition_side=precondition_side,
-        gmres_solver=gmres_solve_with_history_scipy,
-    )
-
-
-def _host_physical_memory_mb() -> float | None:
-    """Return physical host memory in MB when the platform exposes it cheaply."""
-    try:
-        pages = os.sysconf("SC_PHYS_PAGES")
-        page_size = os.sysconf("SC_PAGE_SIZE")
-        value = float(pages) * float(page_size) / 1.0e6
-        if np.isfinite(value) and value > 0.0:
-            return value
-    except (AttributeError, OSError, ValueError):
-        pass
-    try:
-        result = subprocess.run(
-            ["sysctl", "-n", "hw.memsize"],
-            check=False,
-            capture_output=True,
-            text=True,
-            timeout=2.0,
-        )
-        if result.returncode == 0:
-            value = float(result.stdout.strip()) / 1.0e6
-            if np.isfinite(value) and value > 0.0:
-                return value
-    except Exception:
-        pass
-    return None
-
-
 _rhsmode1_host_sparse_skip_dense_ratio = _rhs1_host_sparse_skip_dense_ratio_impl
 
 
 _rhsmode1_explicit_sparse_host_direct_allowed = (
     _rhs1_explicit_sparse_host_direct_allowed_impl
 )
-
-
-def _build_host_sparse_direct_factor_from_matvec(
-    **kwargs,
-):
-    """Compatibility wrapper around the explicit-sparse factor builder.
-
-    The implementation and its full keyword schema live in
-    `explicit_sparse_factor_builder.py`. This thin wrapper exists so older
-    driver tests can still monkeypatch the builder dependencies through
-    `v3_driver`, without duplicating the entire builder signature here.
-    """
-    kwargs.setdefault("build_operator_from_matvec_callback", build_operator_from_matvec)
-    kwargs.setdefault("build_operator_from_pattern_callback", build_operator_from_pattern)
-    kwargs.setdefault(
-        "factorize_host_sparse_operator_callback",
-        factorize_host_sparse_operator,
-    )
-    kwargs.setdefault("default_backend_callback", jax.default_backend)
-    kwargs.setdefault(
-        "monolithic_max_size_callback",
-        _explicit_sparse_monolithic_max_size,
-    )
-    return _build_host_sparse_direct_factor_from_matvec_impl(
-        **kwargs,
-    )
-
-
-def _rhsmode1_explicit_sparse_pattern_probe_enabled() -> bool:
-    env = os.environ.get("SFINCS_JAX_RHSMODE1_EXPLICIT_SPARSE_PATTERN", "").strip().lower()
-    return env in {"1", "true", "yes", "on", "pattern"}
 
 
 def _rhsmode1_sparse_pc_default_permc_spec(
@@ -1190,21 +1097,6 @@ def _rhsmode1_sparse_pc_default_restart(
         tokamak_pas_er_pc=tokamak_pas_er_pc,
         n_species=n_species,
     )
-
-
-def _maybe_rhsmode1_full_sparse_pattern(op: V3FullSystemOperator, emit: Callable[[int, str], None] | None = None):
-    if not _rhsmode1_explicit_sparse_pattern_probe_enabled():
-        return None
-    pattern = v3_full_system_conservative_sparsity_pattern(op)
-    if emit is not None:
-        summary = summarize_v3_sparse_pattern(op, pattern)
-        emit(
-            1,
-            "explicit_sparse_pattern: "
-            f"shape={summary.shape} nnz={summary.nnz} "
-            f"avg_row_nnz={summary.avg_row_nnz:.3g} max_row_nnz={summary.max_row_nnz}",
-        )
-    return pattern
 
 
 def _rhsmode1_pas_fast_accept(
@@ -1610,123 +1502,6 @@ def _resolve_distributed_gmres_axis(
         emit=emit,
         matvec_shard_axis_fn=_matvec_shard_axis,
     )
-
-
-
-def _rhsmode1_sparse_cache_key(
-    op: V3FullSystemOperator,
-    *,
-    kind: str,
-    active_size: int,
-    use_active_dof_mode: bool,
-    use_pas_projection: bool,
-    drop_tol: float,
-    drop_rel: float,
-    ilu_drop_tol: float,
-    fill_factor: float,
-) -> tuple[object, ...]:
-    return (
-        *_rhsmode1_precond_cache_key(op, kind),
-        int(active_size),
-        int(bool(use_active_dof_mode)),
-        int(bool(use_pas_projection)),
-        float(drop_tol),
-        float(drop_rel),
-        float(ilu_drop_tol),
-        float(fill_factor),
-    )
-
-def _build_sparse_jax_preconditioner_from_matvec(
-    *,
-    matvec: Callable[[jnp.ndarray], jnp.ndarray],
-    n: int,
-    dtype: jnp.dtype,
-    cache_key: tuple[object, ...],
-    drop_tol: float,
-    drop_rel: float,
-    reg: float,
-    omega: float,
-    sweeps: int,
-    emit: Callable[[int, str], None] | None = None,
-) -> Callable[[jnp.ndarray], jnp.ndarray]:
-    cached = _RHSMODE1_SPARSE_JAX_CACHE.get(cache_key)
-    if cached is not None:
-        a_sp = cached.a_sp
-        d_inv = cached.d_inv
-        omega = cached.omega
-        sweeps = cached.sweeps
-    else:
-        if emit is not None:
-            emit(1, f"sparse_jax: assembling dense operator (n={n})")
-        a_dense = assemble_dense_matrix_from_matvec(matvec=matvec, n=int(n), dtype=dtype)
-        a_dense = jnp.asarray(a_dense, dtype=dtype)
-        max_abs = jnp.max(jnp.abs(a_dense)) if int(n) > 0 else jnp.asarray(0.0, dtype=dtype)
-        thresh = jnp.maximum(jnp.asarray(drop_tol, dtype=dtype), jnp.asarray(drop_rel, dtype=dtype) * max_abs)
-        if drop_tol > 0.0 or drop_rel > 0.0:
-            a_drop = jnp.where(jnp.abs(a_dense) >= thresh, a_dense, jnp.zeros_like(a_dense))
-        else:
-            a_drop = a_dense
-        diag_idx = jnp.arange(int(n), dtype=jnp.int32)
-        diag = a_dense[diag_idx, diag_idx]
-        diag_safe = diag + jnp.asarray(reg, dtype=dtype)
-        a_drop = a_drop.at[diag_idx, diag_idx].set(diag_safe)
-        d_inv = jnp.where(diag_safe != 0, 1.0 / diag_safe, jnp.asarray(0.0, dtype=dtype))
-        try:
-            from jax.experimental import sparse as jsparse  # noqa: PLC0415
-
-            a_sp = jsparse.BCOO.fromdense(a_drop)
-        except Exception as exc:  # noqa: BLE001
-            if emit is not None:
-                emit(1, f"sparse_jax: failed to build BCOO ({type(exc).__name__}: {exc})")
-            a_sp = None
-        if a_sp is None:
-            raise RuntimeError("sparse_jax: failed to build sparse operator")
-        _RHSMODE1_SPARSE_JAX_CACHE[cache_key] = _SparseJaxPrecondCache(
-            a_sp=a_sp,
-            d_inv=jnp.asarray(d_inv, dtype=dtype),
-            omega=float(omega),
-            sweeps=int(sweeps),
-        )
-
-    def _apply(v: jnp.ndarray) -> jnp.ndarray:
-        v = jnp.asarray(v, dtype=d_inv.dtype)
-        x0 = jnp.zeros_like(v)
-
-        def _body(i, x):
-            r = v - a_sp @ x
-            return x + omega * d_inv * r
-
-        x = jax.lax.fori_loop(0, int(sweeps), _body, x0)
-        return jnp.asarray(x, dtype=jnp.float64)
-
-    return _apply
-
-
-def _matvec_submatrix(
-    op_pc: object,
-    *,
-    col_idx: np.ndarray,
-    row_idx: np.ndarray,
-    total_size: int,
-    chunk_cols: int,
-) -> np.ndarray:
-    """Driver compatibility wrapper for unsharded operator-column probes.
-
-    The production implementation lives in :mod:`sfincs_jax.preconditioner_setup`.
-    Keeping this late-bound wrapper lets driver-level tests monkeypatch the
-    unsharded operator apply without accidentally entering the cached/sharded
-    path inside ``jax.vmap``.
-    """
-
-    return _matvec_submatrix_impl(
-        op_pc,
-        col_idx=col_idx,
-        row_idx=row_idx,
-        total_size=total_size,
-        chunk_cols=chunk_cols,
-        apply_operator_fn=apply_v3_full_system_operator,
-    )
-
 
 def _rhsmode1_dense_fallback_max(op: V3FullSystemOperator) -> int:
     return _rhs1_dense_fallback_max_impl(op)

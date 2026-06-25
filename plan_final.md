@@ -308,7 +308,7 @@ the 2026-06-25 final consolidation-plan review:
 
 - `sfincs_jax/v3_driver.py`: 47 lines in the current consolidation worktree,
   acting as a compatibility shim for the domain-owned solve modules.
-- `sfincs_jax/problems/profile_response/solve.py`: 10,400 lines after the
+- `sfincs_jax/problems/profile_response/solve.py`: 10,175 lines after the
   first profile-response ownership moves. This remains the largest
   structural debt and must be reduced by moving coherent sections into existing
   domain owners, not by adding many new helper files.
@@ -320,6 +320,10 @@ the 2026-06-25 final consolidation-plan review:
   sparse-PC finalization remains in
   `problems/profile_response/sparse/finalization.py` because x-block and
   Fortran-reduced sparse owners both use the same result payloads.
+- `sfincs_jax/problems/profile_response/sparse/direct.py`: 3,616 lines after
+  taking ownership of sparse-factor cache keys, host memory probing, explicit
+  sparse-pattern probes, sparse-JAX preconditioner materialization, and host
+  sparse direct builder/polish wrappers.
 - `sfincs_jax/problems/profile_response/dense.py`: 2,487 lines after taking
   ownership of profile linear-solve routing, dense-KSP, constraintScheme=0
   PETSc-compatible sparse-ILU, and SciPy rescue contracts.
@@ -518,7 +522,7 @@ Current inventory from the 2026-06-25 final plan review:
 | --- | --- | --- |
 | `sfincs_jax/v3_driver.py` | 47-line compatibility shim | Keep under 80 lines or delete after legacy imports migrate. |
 | Package source files | 227 Python files, about 163k package lines | Below 205 files without deleting tested functionality. |
-| `problems/profile_response` | 21 files, about 50k lines; `solve.py` is 10.4k lines | At most 18 files; `solve.py` below 3.5k lines; no recreated policy shards. |
+| `problems/profile_response` | 21 files, about 50k lines; `solve.py` is 10.2k lines | At most 18 files; `solve.py` below 3.5k lines; no recreated policy shards. |
 | `problems/transport_matrix` | 33 files, about 15k lines; solve-loop and parallel micro-files dominate file count | At most 18 files; one solve owner, one policy owner, one diagnostics/finalization owner, compact parallel ownership. |
 | `solvers/preconditioners` | 51 files, about 37k lines; QI and RHSMode-1 names remain over-fragmented | At most 36 files; QI organized by role, no implementation file starts with `rhs1_`. |
 | `io.py` / `outputs` | `io.py` is 4.3k lines; output schema helpers already live in `outputs` | `io.py` below 800 lines as a compatibility shim, with real writers/readers in `outputs`. |
@@ -527,10 +531,10 @@ Current inventory from the 2026-06-25 final plan review:
 
 Source-tree findings from the final review:
 
-- `profile_response/solve.py` is still the central bottleneck. The next move is
-  not another one-helper extraction; it is a single sparse-policy/materializer
-  relocation into existing sparse owners, followed by a single solve-flow
-  relocation into existing handoff/diagnostic owners.
+- `profile_response/solve.py` is still the central bottleneck. Sparse-direct
+  cache/materializer helpers have moved to `sparse/direct.py`; the next move is
+  a larger solve-flow relocation into existing handoff/diagnostic owners, plus
+  sparse-policy wrapper migration into `policies.py` and `sparse/policy.py`.
 - `problems/transport_matrix` has a clear micro-file cluster:
   dense/direct helpers, host GMRES, iteration statistics, residual quality,
   solve policy, handoff policy, and parallel runtime shards. These can be

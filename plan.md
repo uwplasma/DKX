@@ -2796,3 +2796,65 @@ Next best steps:
 3. Re-evaluate whether `sparse/finalization.py` can be merged after sparse
    handoff cycles are reduced; it is currently shared by `handoff.py`,
    `xblock.py`, and `fortran_reduced.py`, so it was not merged in this batch.
+
+## 2026-06-25 Lane 1 Tranche 1 Sparse-Direct Ownership Move
+
+Steps taken:
+
+1. Moved sparse-factor cache-key construction, host memory probing,
+   RHSMode-1 explicit sparse-pattern probing, sparse-JAX preconditioner
+   materialization, host sparse direct factor-builder callback injection, host
+   sparse direct polish, and unsharded submatrix probing from
+   `sfincs_jax/problems/profile_response/solve.py` into
+   `sfincs_jax/problems/profile_response/sparse/direct.py`.
+2. Kept the historical private names visible through `solve.py` imports so
+   existing solve-path calls and `sfincs_jax.v3_driver` compatibility imports
+   still resolve.
+3. Updated helper-internal tests to patch the canonical sparse-direct owner
+   instead of patching old `v3_driver` globals for moved implementation
+   details.
+4. Updated `docs/source_map.rst` and `plan_final.md` with the new
+   sparse-direct ownership boundary.
+
+Current inventory:
+
+- Package Python files: `227`.
+- `problems/profile_response`: `21` Python files.
+- `sfincs_jax/problems/profile_response/solve.py`: `10,175` lines.
+- `sfincs_jax/problems/profile_response/sparse/direct.py`: `3,616` lines.
+- `sfincs_jax/v3_driver.py`: `47` lines.
+
+Validation:
+
+- `python -m py_compile sfincs_jax/problems/profile_response/solve.py
+  sfincs_jax/problems/profile_response/sparse/direct.py
+  sfincs_jax/problems/transport_matrix/solve.py` passed.
+- Scoped ruff passed for touched source and tests.
+- Sparse-helper canonical-owner coverage passed:
+  `15 passed in 0.74s`.
+- Broader sparse/preconditioner coverage passed:
+  `124 passed in 49.31s`.
+
+Current lane status:
+
+- Lane 1 Tranche 0: `100%`.
+- Lane 1 Tranche 1: about `40%`; sparse-direct materialization ownership is
+  moved, but the hard gates remain `profile_response/solve.py < 3.5k` and
+  `problems/profile_response <= 18` files.
+- Lane 1 Tranche 2: `0%`.
+- Lane 1 Tranche 3: `0%`.
+- Lane 1 Tranche 4: `0%`.
+- Lane 1 Tranche 5: `0%`.
+- Lane 1 overall: about `48%` of the authoritative consolidation plan.
+- Overall refactor/review-ready PR goal: not complete.
+
+Next best steps:
+
+1. Move sparse-PC branch orchestration and final sparse-PC payload assembly
+   from `solve.py` into the existing sparse handoff/x-block/QI/fortran-reduced
+   owners.
+2. Move remaining backend-policy wrappers from `solve.py` into `policies.py`
+   and `sparse/policy.py`, then delete duplicated env parsers where imports no
+   longer create cycles.
+3. Run the full focused RHSMode-1 sparse/QI/ambipolar/sensitivity/docs gate
+   before starting Tranche 2.

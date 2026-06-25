@@ -11,6 +11,7 @@ import scipy.sparse as sp
 from sfincs_jax.explicit_sparse import factorize_host_sparse_operator
 from sfincs_jax.namelist import read_sfincs_input
 from sfincs_jax import preconditioner_operators as po
+import sfincs_jax.problems.profile_response.sparse.direct as sparse_direct
 from sfincs_jax.v3_system import full_system_operator_from_namelist
 import sfincs_jax.v3_driver as vd
 
@@ -567,7 +568,7 @@ def test_transport_fortran_reduced_symbolic_prefill_guard_skips_factorization(mo
     def fail_factorize(*_args, **_kwargs):
         raise AssertionError("symbolic prefill guard should reject before factorization")
 
-    monkeypatch.setattr(vd, "factorize_host_sparse_operator", fail_factorize)
+    monkeypatch.setattr(sparse_direct, "factorize_host_sparse_operator", fail_factorize)
 
     nml = read_sfincs_input("tests/reduced_inputs/transportMatrix_geometryScheme11.input.namelist")
     op = full_system_operator_from_namelist(nml=nml, identity_shift=0.0)
@@ -614,8 +615,8 @@ def test_transport_fortran_reduced_nd_setup_guard_skips_pattern_probe(monkeypatc
     def fail_pattern(*_args, **_kwargs):
         raise AssertionError("ND setup-budget rejection should skip the pattern-probe fallback")
 
-    monkeypatch.setattr(vd, "factorize_host_sparse_operator", fail_factorize)
-    monkeypatch.setattr(vd, "build_operator_from_pattern", fail_pattern)
+    monkeypatch.setattr(sparse_direct, "factorize_host_sparse_operator", fail_factorize)
+    monkeypatch.setattr(sparse_direct, "build_operator_from_pattern", fail_pattern)
 
     nml = read_sfincs_input("tests/reduced_inputs/transportMatrix_geometryScheme11.input.namelist")
     op = full_system_operator_from_namelist(nml=nml, identity_shift=0.0)

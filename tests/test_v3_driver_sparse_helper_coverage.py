@@ -7,6 +7,7 @@ import jax.numpy as jnp
 import pytest
 from scipy import sparse
 
+import sfincs_jax.problems.profile_response.sparse.direct as sparse_direct
 import sfincs_jax.v3_driver as v3_driver
 
 
@@ -161,8 +162,8 @@ def test_host_sparse_direct_polish_uses_preconditioner_and_reports_residual(monk
         seen["probe"] = np.asarray(probe)
         return np.asarray([1.0, -2.0]), 0.0, [0.0]
 
-    monkeypatch.setattr(v3_driver, "gmres_solve_with_history_scipy", fake_gmres)
-    x, rn = v3_driver._host_sparse_direct_polish(
+    monkeypatch.setattr(sparse_direct, "gmres_solve_with_history_scipy", fake_gmres)
+    x, rn = sparse_direct.host_sparse_direct_polish(
         matvec_fn=lambda x: x,
         rhs_vec=jnp.asarray([1.0, -2.0], dtype=jnp.float64),
         x0_np=np.zeros(2, dtype=np.float64),
@@ -228,12 +229,12 @@ def test_build_host_sparse_direct_factor_from_matvec_falls_back_on_invalid_env(m
     monkeypatch.setenv("SFINCS_JAX_EXPLICIT_SPARSE_DENSE_MAX_MB", "bad")
     monkeypatch.setenv("SFINCS_JAX_EXPLICIT_SPARSE_CSR_MAX_MB", "bad")
     monkeypatch.setenv("SFINCS_JAX_EXPLICIT_SPARSE_DROP_TOL", "bad")
-    monkeypatch.setattr(v3_driver, "build_operator_from_matvec", fake_build_operator_from_matvec)
-    monkeypatch.setattr(v3_driver, "factorize_host_sparse_operator", fake_factorize_host_sparse_operator)
-    monkeypatch.setattr("sfincs_jax.v3_driver.jax.default_backend", lambda: "cpu")
+    monkeypatch.setattr(sparse_direct, "build_operator_from_matvec", fake_build_operator_from_matvec)
+    monkeypatch.setattr(sparse_direct, "factorize_host_sparse_operator", fake_factorize_host_sparse_operator)
+    monkeypatch.setattr("sfincs_jax.problems.profile_response.sparse.direct.jax.default_backend", lambda: "cpu")
 
     messages: list[tuple[int, str]] = []
-    op, fac = v3_driver._build_host_sparse_direct_factor_from_matvec(
+    op, fac = sparse_direct.build_host_sparse_direct_factor_from_matvec(
         matvec=lambda x: 2.0 * x,
         n=2,
         dtype=jnp.float32,
@@ -287,15 +288,15 @@ def test_build_host_sparse_direct_factor_from_matvec_respects_env_overrides(monk
     monkeypatch.setenv("SFINCS_JAX_EXPLICIT_SPARSE_DENSE_MAX_MB", "3.5")
     monkeypatch.setenv("SFINCS_JAX_EXPLICIT_SPARSE_CSR_MAX_MB", "9.5")
     monkeypatch.setenv("SFINCS_JAX_EXPLICIT_SPARSE_DROP_TOL", "1e-3")
-    monkeypatch.setattr(v3_driver, "build_operator_from_matvec", fake_build_operator_from_matvec)
+    monkeypatch.setattr(sparse_direct, "build_operator_from_matvec", fake_build_operator_from_matvec)
     monkeypatch.setattr(
-        v3_driver,
+        sparse_direct,
         "factorize_host_sparse_operator",
         lambda bundle, *, kind, **kwargs: SimpleNamespace(bundle=bundle, kind=kind, kwargs=kwargs),
     )
-    monkeypatch.setattr("sfincs_jax.v3_driver.jax.default_backend", lambda: "gpu")
+    monkeypatch.setattr("sfincs_jax.problems.profile_response.sparse.direct.jax.default_backend", lambda: "gpu")
 
-    v3_driver._build_host_sparse_direct_factor_from_matvec(
+    sparse_direct.build_host_sparse_direct_factor_from_matvec(
         matvec=lambda x: 3.0 * x,
         n=2,
         dtype=jnp.float64,
@@ -320,15 +321,15 @@ def test_build_host_sparse_direct_factor_from_matvec_can_use_pattern_probe(monke
         np.testing.assert_allclose(matvec(np.asarray([4.0, -2.0])), np.asarray([8.0, -4.0]))
         return SimpleNamespace(metadata=SimpleNamespace(storage_kind="csr", reason="pattern"))
 
-    monkeypatch.setattr(v3_driver, "build_operator_from_pattern", fake_build_operator_from_pattern)
+    monkeypatch.setattr(sparse_direct, "build_operator_from_pattern", fake_build_operator_from_pattern)
     def fake_factorize_host_sparse_operator(bundle, *, kind, **kwargs):
         seen["factor_kwargs"] = kwargs
         return SimpleNamespace(bundle=bundle, kind=kind, kwargs=kwargs)
 
-    monkeypatch.setattr(v3_driver, "factorize_host_sparse_operator", fake_factorize_host_sparse_operator)
-    monkeypatch.setattr("sfincs_jax.v3_driver.jax.default_backend", lambda: "cpu")
+    monkeypatch.setattr(sparse_direct, "factorize_host_sparse_operator", fake_factorize_host_sparse_operator)
+    monkeypatch.setattr("sfincs_jax.problems.profile_response.sparse.direct.jax.default_backend", lambda: "cpu")
 
-    v3_driver._build_host_sparse_direct_factor_from_matvec(
+    sparse_direct.build_host_sparse_direct_factor_from_matvec(
         matvec=lambda x: 2.0 * x,
         n=2,
         dtype=jnp.float64,
@@ -351,7 +352,7 @@ def test_build_host_sparse_direct_factor_from_matvec_default_ilu_and_env_overrid
     seen_kinds: list[str] = []
 
     monkeypatch.setattr(
-        v3_driver,
+        sparse_direct,
         "build_operator_from_matvec",
         lambda _matvec, **_kwargs: SimpleNamespace(metadata=SimpleNamespace(storage_kind="csr", reason="fake")),
     )
@@ -360,11 +361,11 @@ def test_build_host_sparse_direct_factor_from_matvec_default_ilu_and_env_overrid
         seen_kinds.append(kind)
         return SimpleNamespace(bundle=bundle, kind=kind, kwargs=kwargs)
 
-    monkeypatch.setattr(v3_driver, "factorize_host_sparse_operator", fake_factorize_host_sparse_operator)
-    monkeypatch.setattr("sfincs_jax.v3_driver.jax.default_backend", lambda: "cpu")
+    monkeypatch.setattr(sparse_direct, "factorize_host_sparse_operator", fake_factorize_host_sparse_operator)
+    monkeypatch.setattr("sfincs_jax.problems.profile_response.sparse.direct.jax.default_backend", lambda: "cpu")
     monkeypatch.delenv("SFINCS_JAX_EXPLICIT_SPARSE_FACTOR_KIND", raising=False)
 
-    v3_driver._build_host_sparse_direct_factor_from_matvec(
+    sparse_direct.build_host_sparse_direct_factor_from_matvec(
         matvec=lambda x: x,
         n=2,
         dtype=jnp.float64,
@@ -373,7 +374,7 @@ def test_build_host_sparse_direct_factor_from_matvec_default_ilu_and_env_overrid
     )
 
     monkeypatch.setenv("SFINCS_JAX_EXPLICIT_SPARSE_FACTOR_KIND", "lu")
-    v3_driver._build_host_sparse_direct_factor_from_matvec(
+    sparse_direct.build_host_sparse_direct_factor_from_matvec(
         matvec=lambda x: x,
         n=2,
         dtype=jnp.float64,
@@ -382,7 +383,7 @@ def test_build_host_sparse_direct_factor_from_matvec_default_ilu_and_env_overrid
     )
 
     monkeypatch.setenv("SFINCS_JAX_EXPLICIT_SPARSE_FACTOR_KIND", "jacobi")
-    v3_driver._build_host_sparse_direct_factor_from_matvec(
+    sparse_direct.build_host_sparse_direct_factor_from_matvec(
         matvec=lambda x: x,
         n=2,
         dtype=jnp.float64,
@@ -405,20 +406,20 @@ def test_build_host_sparse_direct_factor_from_matvec_rejects_large_monolithic_fa
     )
     factorize_called = False
 
-    monkeypatch.setattr(v3_driver, "build_operator_from_matvec", lambda _matvec, **_kwargs: operator_bundle)
+    monkeypatch.setattr(sparse_direct, "build_operator_from_matvec", lambda _matvec, **_kwargs: operator_bundle)
 
     def fake_factorize_host_sparse_operator(*_args, **_kwargs):
         nonlocal factorize_called
         factorize_called = True
         return SimpleNamespace()
 
-    monkeypatch.setattr(v3_driver, "factorize_host_sparse_operator", fake_factorize_host_sparse_operator)
+    monkeypatch.setattr(sparse_direct, "factorize_host_sparse_operator", fake_factorize_host_sparse_operator)
     monkeypatch.setenv("SFINCS_JAX_EXPLICIT_SPARSE_MONOLITHIC_MAX_SIZE", "3")
-    monkeypatch.setattr("sfincs_jax.v3_driver.jax.default_backend", lambda: "cpu")
+    monkeypatch.setattr("sfincs_jax.problems.profile_response.sparse.direct.jax.default_backend", lambda: "cpu")
     messages: list[tuple[int, str]] = []
 
     with pytest.raises(MemoryError, match="monolithic factor preflight rejected"):
-        v3_driver._build_host_sparse_direct_factor_from_matvec(
+        sparse_direct.build_host_sparse_direct_factor_from_matvec(
             matvec=lambda x: x,
             n=4,
             dtype=jnp.float64,

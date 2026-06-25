@@ -7,6 +7,7 @@ import numpy as np
 import pytest
 
 import sfincs_jax.v3_driver as vd
+import sfincs_jax.problems.profile_response.sparse.direct as sparse_direct
 from sfincs_jax.namelist import read_sfincs_input
 from sfincs_jax.preconditioner_caches import _RHSMODE1_STRUCTURED_FBLOCK_PRECOND_CACHE
 from sfincs_jax.v3_system import apply_v3_full_system_operator, full_system_operator_from_namelist
@@ -635,9 +636,9 @@ def test_matvec_submatrix_uses_unsharded_operator_inside_vmap(monkeypatch) -> No
         return 2.0 * vector + jnp.arange(vector.shape[0], dtype=vector.dtype)
 
     monkeypatch.setattr(vd, "apply_v3_full_system_operator_cached", _cached_matvec)
-    monkeypatch.setattr(vd, "apply_v3_full_system_operator", _unsharded_matvec)
+    monkeypatch.setattr(sparse_direct, "apply_v3_full_system_operator", _unsharded_matvec)
 
-    submatrix = vd._matvec_submatrix(
+    submatrix = sparse_direct.matvec_submatrix(
         SimpleNamespace(),
         col_idx=np.asarray([0, 2], dtype=np.int32),
         row_idx=np.asarray([0, 2], dtype=np.int32),
