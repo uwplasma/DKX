@@ -1829,6 +1829,7 @@ def full_system_operator_from_namelist(
     phi1_hat_base: jnp.ndarray | None = None,
     grids: V3Grids | None = None,
     geom: BoozerGeometry | None = None,
+    keep_zero_er_terms: bool = False,
 ) -> V3FullSystemOperator:
     """Build the full-system operator (subset) from an input namelist."""
     general = nml.group("general")
@@ -1858,6 +1859,7 @@ def full_system_operator_from_namelist(
         identity_shift=identity_shift,
         grids=grids,
         geom=geom,
+        keep_zero_er_terms=keep_zero_er_terms,
     )
 
     x_grid_scheme = _get_int(other, "xGridScheme", 5)

@@ -71,8 +71,8 @@ Fortran v3 feature ownership
      - ``sfincs_jax.problems.ambipolar`` and ``sfincs_jax.sensitivity``:
        partial. Root-policy logic, dense certificates, matrix-free/JVP
        derivative-provider gates, analytic existing-branch ``E_r`` tangents,
-       and fast option-1-style root tests exist; fixed-shape zero-field branch
-       activation and production physical replay gates remain.
+       opt-in fixed-shape zero-field branch retention, and fast option-1-style
+       root tests exist; production physical replay gates remain.
    * - Ambipolar root solve option 2
      - ``ambipolarSolver.F90``
      - Brent method evaluates the radial current at bracket endpoints and an

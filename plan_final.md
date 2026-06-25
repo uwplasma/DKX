@@ -113,6 +113,11 @@ Implementation progress on 2026-06-23:
   conversion analytically. The helper updates stored `dphi_hat_dpsi_hat` leaves
   in the full operator and f-block suboperators, and a real electric-field
   `xDot` fixture verifies the JVP action against centered operator differences.
+- `keep_zero_er_terms` now lets derivative gates retain zero-valued ExB and
+  `Er` suboperators at `Er=0` without changing normal solve defaults. A real
+  `xDot` fixture verifies that the opt-in zero-`Er` operator is numerically
+  identical to the default operator, while its analytic JVP tangent matches
+  nearby nonzero centered differences.
 - `sfincs_jax.sensitivity` now exposes `jvp_flux`, `vjp_flux`, and
   `adjoint_dot_product_check`. The focused tests apply the dot-product identity
   to real RHSMode-1 particle-flux, heat-flux, flow, radial-current, and
@@ -1005,13 +1010,14 @@ Completed on 2026-06-25:
   public ambipolar root-solver API.
 - Added analytic no-Phi1 existing-branch `Er` operator tangents and verified
   the JVP action against centered operator differences on a real `xDot` deck.
+- Added opt-in fixed-shape zero-`Er` branch retention for f-block and
+  full-system operators, with a real-deck JVP gate.
 
 Next ordered implementation steps:
 
-1. Promote a fixed-shape zero-`Er` branch policy so no-Phi1 derivative-assisted
-   ambipolar gates can evaluate at or near `Er=0` without dropping
-   electric-field suboperators. Then use the matrix-free/JVP derivative
-   provider in one real RHSMode-1 option-1/3 physical parity gate.
+1. Use `keep_zero_er_terms=True` plus the analytic/JVP provider in one real
+   RHSMode-1 derivative-assisted ambipolar option-1/3 physical parity gate, and
+   add an API-level helper that builds that provider from a namelist.
 2. Extend the JVP/VJP dot-product gate from the current tiny no-Phi1 diagnostic
    set to Phi1 drift-current, total heat-flux, and intermediate-grid cases.
 3. Add small Fortran RHSMode 4/5 output fixtures and compare exported

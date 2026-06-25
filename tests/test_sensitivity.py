@@ -593,6 +593,51 @@ def test_analytic_er_operator_tangent_matches_centered_er_difference() -> None:
     np.testing.assert_allclose(analytic_action, centered_action, rtol=0.0, atol=1.0e-9)
 
 
+def test_zero_er_fixed_shape_branch_tangent_matches_centered_er_difference() -> None:
+    input_path = Path(__file__).parent / "ref" / "er_xdot_1species_tiny.input.namelist"
+    step = 1.0e-5
+
+    def op_from_er(er: float, *, keep_zero_er_terms: bool = False):
+        nml = read_sfincs_input(input_path)
+        nml.group("physicsParameters")["ER"] = float(er)
+        return full_system_operator_from_namelist(
+            nml=nml,
+            keep_zero_er_terms=keep_zero_er_terms,
+        )
+
+    nml_zero = read_sfincs_input(input_path)
+    nml_zero.group("physicsParameters")["ER"] = 0.0
+    dphi_d_er = dphi_hat_dpsi_hat_er_derivative_from_namelist(nml_zero)
+    op_default_zero = op_from_er(0.0)
+    op_fixed_zero = op_from_er(0.0, keep_zero_er_terms=True)
+    assert op_default_zero.fblock.er_xdot is None
+    assert op_fixed_zero.fblock.er_xdot is not None
+
+    state = jnp.linspace(0.1, 1.0, int(op_fixed_zero.total_size), dtype=jnp.float64)
+    np.testing.assert_allclose(
+        apply_v3_full_system_operator_cached(op_fixed_zero, state),
+        apply_v3_full_system_operator_cached(op_default_zero, state),
+        rtol=0.0,
+        atol=1.0e-12,
+    )
+
+    op_plus = op_from_er(step, keep_zero_er_terms=True)
+    op_minus = op_from_er(-step, keep_zero_er_terms=True)
+    analytic_tangent = er_operator_tangent_from_dphi_hat_dpsi_hat_derivative(op_fixed_zero, dphi_d_er)
+    _, analytic_action = jax.jvp(
+        lambda operator: apply_v3_full_system_operator_cached(operator, state),
+        (op_fixed_zero,),
+        (analytic_tangent,),
+    )
+    centered_action = (
+        apply_v3_full_system_operator_cached(op_plus, state)
+        - apply_v3_full_system_operator_cached(op_minus, state)
+    ) / (2.0 * step)
+
+    assert float(jnp.linalg.norm(centered_action)) > 0.0
+    np.testing.assert_allclose(analytic_action, centered_action, rtol=0.0, atol=1.0e-9)
+
+
 def test_rhs1_radial_current_jvp_vjp_dot_product_gate() -> None:
     input_path = Path(__file__).parent / "ref" / "pas_1species_PAS_noEr_tiny.input.namelist"
     op = full_system_operator_from_namelist(nml=read_sfincs_input(input_path))

@@ -550,6 +550,7 @@ def fblock_operator_from_namelist(
     identity_shift: float = 0.0,
     grids: V3Grids | None = None,
     geom: BoozerGeometry | None = None,
+    keep_zero_er_terms: bool = False,
 ) -> V3FBlockOperator:
     grids = grids_from_namelist(nml) if grids is None else grids
     geom = geometry_from_namelist(nml=nml, grids=grids) if geom is None else geom
@@ -762,9 +763,10 @@ def fblock_operator_from_namelist(
         dphi = _dphi_hat_dpsi_hat_from_er(nml=nml, er=er)
 
     dphi_is_zero = float(dphi) == 0.0
+    build_zero_er_terms = bool(keep_zero_er_terms)
     exb_theta = None
     exb_zeta = None
-    if not dphi_is_zero:
+    if (not dphi_is_zero) or build_zero_er_terms:
         exb_theta_shifts, exb_theta_coeffs = _stencil_from_matrix(grids.ddtheta)
         exb_zeta_shifts, exb_zeta_coeffs = _stencil_from_matrix(grids.ddzeta)
         exb_theta_sparse_cols, exb_theta_sparse_vals = extract_sparse_row_stencil(np.asarray(grids.ddtheta, dtype=np.float64))
@@ -803,7 +805,7 @@ def fblock_operator_from_namelist(
         )
 
     er_xidot = None
-    if include_er_xidot and (not dphi_is_zero):
+    if include_er_xidot and ((not dphi_is_zero) or build_zero_er_terms):
         er_xidot = ErXiDotV3Operator(
             alpha=jnp.asarray(alpha, dtype=jnp.float64),
             delta=jnp.asarray(delta, dtype=jnp.float64),
@@ -819,7 +821,7 @@ def fblock_operator_from_namelist(
         )
 
     er_xdot = None
-    if include_xdot and (not dphi_is_zero):
+    if include_xdot and ((not dphi_is_zero) or build_zero_er_terms):
         er_xdot = ErXDotV3Operator(
             alpha=jnp.asarray(alpha, dtype=jnp.float64),
             delta=jnp.asarray(delta, dtype=jnp.float64),

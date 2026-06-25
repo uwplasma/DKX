@@ -58,6 +58,11 @@ Unreleased
   ``dphi_hat_dpsi_hat`` leaves in the full operator and f-block suboperators.
   Tests verify the analytic JVP action against centered operator differences
   on a real electric-field ``xDot`` fixture.
+- Added an explicit ``keep_zero_er_terms`` option to the f-block and full-system
+  operator builders. Normal solves keep the previous default branch behavior,
+  while derivative/ambipolar gates can retain zero-valued ExB and ``E_r``
+  suboperators at ``E_r=0`` so JVP tangents see the same fixed-shape operator
+  family used at nearby nonzero fields.
 - Moved the first RHSMode=2/3 transport implementation cluster into
   ``sfincs_jax.problems.transport_matrix``: setup, active/dense setup, loop
   support, finalization, streaming outputs, and postsolve diagnostics. The old

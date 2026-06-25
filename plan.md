@@ -70,6 +70,10 @@ deferred research lanes.
   conversion analytically. The helper updates stored `dphi_hat_dpsi_hat` leaves
   in the full operator and f-block suboperators, and a real `xDot` fixture
   verifies the JVP action against centered operator differences.
+- `keep_zero_er_terms` is now an explicit opt-in on the f-block and full-system
+  operator builders. Normal solves keep previous branch behavior, while
+  derivative gates can retain zero-valued ExB and `Er` suboperators at `Er=0`
+  and compare analytic JVP tangents against nearby nonzero centered differences.
 - Major RHSMode=1 preconditioner families now have domain owners:
   - full-CSR Schur preconditioners,
   - Fortran-reduced symbolic sparse factors,
@@ -1159,3 +1163,30 @@ Next best steps:
 2. Use the analytic/JVP provider in one real RHSMode-1 option-1/3 physical
    parity gate against checked Fortran v3 summaries.
 3. Add Phi1 drift-current tangents after the no-Phi1 physical gate is stable.
+
+## 2026-06-25 Opt-In Fixed-Shape Zero-Er Branch Retention
+
+Steps taken:
+
+1. Added `keep_zero_er_terms` to `fblock_operator_from_namelist` and
+   `full_system_operator_from_namelist`.
+2. Preserved default solve behavior while allowing derivative gates to retain
+   zero-valued ExB and `Er` suboperators at `Er=0`.
+3. Added a real `xDot` fixture gate showing the opt-in zero-`Er` operator is
+   numerically identical to the default zero-`Er` operator, while its analytic
+   JVP tangent matches centered nonzero-`Er` operator differences.
+
+Results:
+
+- Focused sensitivity/import gates passed:
+  `python -m pytest tests/test_sensitivity.py
+  tests/test_domain_package_import_contracts.py -q --tb=short` with
+  `24 passed`.
+
+Next best steps:
+
+1. Use `keep_zero_er_terms=True` plus the analytic/JVP provider in one real
+   RHSMode-1 option-1/3 physical parity gate against checked Fortran summaries.
+2. Add an API-level helper that builds the derivative provider from a namelist
+   without requiring users to manually assemble plus/minus operators.
+3. Extend the same fixed-shape approach to Phi1 drift-current derivatives.
