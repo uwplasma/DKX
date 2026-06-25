@@ -93,6 +93,12 @@ Implementation progress on 2026-06-23:
   solve/transpose-solve closures without dense assembly. Ambipolar adapters
   route this certificate to the same `dJr/dEr` contract used by option-1/3
   Newton solvers.
+- `sfincs_jax.problems.ambipolar` now exposes the first concrete RHSMode-1
+  matrix-free radial-current builder. It uses the real full-system matrix-free
+  operator action, caller-supplied transpose and solve closures, finite-
+  difference operator/RHS derivative actions, and existing radial-current
+  observable weights; this removes dense matrix assembly from the builder
+  itself while keeping a finite-difference promotion gate.
 - `sfincs_jax.sensitivity` now exposes `jvp_flux`, `vjp_flux`, and
   `adjoint_dot_product_check`. The focused tests apply the dot-product identity
   to real RHSMode-1 particle-flux, heat-flux, flow, radial-current, and
@@ -973,15 +979,20 @@ Completed on 2026-06-25:
   ambipolar radial-current adapters. Focused tests compare matrix-free
   tangent/adjoint derivatives against the dense certificate and centered finite
   differences without assembling dense production matrices.
+- Added the concrete RHSMode-1 matrix-free radial-current builder and a tiny
+  real-deck comparison against the dense certificate. The builder no longer
+  assembles dense matrices internally, but its operator/RHS derivative actions
+  are still finite-difference based.
 
 Next ordered implementation steps:
 
-1. Wire concrete RHSMode-1 `Er` operator/RHS derivative actions into the
-   matrix-free derivative builder, first for the no-Phi1 magnetic-drift
-   radial-current path and then for Phi1 drift-current branches. The generic
-   dense and matrix-free certificates, builder bridges, magnetic-drift
-   radial-current observable, coordinate conversion, finite-difference
-   derivative contract, and Newton root solvers are already in place.
+1. Replace the matrix-free RHSMode-1 builder's finite-difference `Er`
+   operator/RHS derivative actions with analytic terms or checked JVP-backed
+   actions, first for the no-Phi1 magnetic-drift radial-current path and then
+   for Phi1 drift-current branches. The generic dense and matrix-free
+   certificates, builder bridges, magnetic-drift radial-current observable,
+   coordinate conversion, finite-difference derivative contract, and Newton
+   root solvers are already in place.
 2. Extend the JVP/VJP dot-product gate from the current tiny no-Phi1 diagnostic
    set to Phi1 drift-current, total heat-flux, and intermediate-grid cases.
 3. Wire the exact derivative into safeguarded Newton/bisection and pure Newton

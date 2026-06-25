@@ -51,6 +51,12 @@ deferred research lanes.
   parameter-derivative actions, and solve/transpose-solve closures without
   dense assembly; focused tests compare the certificate against the dense path
   and centered finite differences.
+- `sfincs_jax.problems.ambipolar` now has a concrete
+  `matrix_free_rhs1_vm_radial_current_linear_observable_system` builder for the
+  RHSMode-1 radial-current path. The builder uses real matrix-free full-system
+  operator actions and caller-supplied transpose/solve closures, while the
+  current derivative actions remain finite-difference gates until analytic/JVP
+  `Er` derivatives are wired.
 - Major RHSMode=1 preconditioner families now have domain owners:
   - full-CSR Schur preconditioners,
   - Fortran-reduced symbolic sparse factors,
@@ -1027,3 +1033,33 @@ Next best steps:
    finite-difference and tangent/adjoint residual gates.
 3. Feed the exact derivative provider into safeguarded Newton/bisection and
    pure Newton ambipolar option-1/3 parity gates.
+
+## 2026-06-25 RHSMode 1 Matrix-Free Radial-Current Builder
+
+Steps taken:
+
+1. Added `matrix_free_rhs1_vm_radial_current_linear_observable_system` to the
+   ambipolar problem owner.
+2. The builder uses the real RHSMode-1 full-system matrix-free operator action,
+   caller-supplied transpose and solve closures, finite-difference operator/RHS
+   derivative actions, and existing radial-current observable weights.
+3. Added a tiny real RHSMode-1 gate comparing the new matrix-free builder
+   against the dense certificate without assembling the matrix inside the
+   builder.
+
+Results:
+
+- Focused sensitivity/import gates passed:
+  `python -m pytest tests/test_sensitivity.py
+  tests/test_domain_package_import_contracts.py -q --tb=short` with
+  `21 passed`.
+
+Next best steps:
+
+1. Replace finite-difference `Er` operator/RHS derivative actions with analytic
+   terms or checked JVP actions for the no-Phi1 radial-current path.
+2. Add a production-size matrix-free gate that uses the actual selected
+   RHSMode-1 solve and transpose-solve routes instead of dense small-deck
+   closures.
+3. Add Phi1 drift-current support after the no-Phi1 action passes residual and
+   finite-difference gates.

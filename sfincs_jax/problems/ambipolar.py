@@ -1228,6 +1228,131 @@ def dense_rhs1_vm_radial_current_linear_observable_system(
     )
 
 
+def matrix_free_rhs1_vm_radial_current_linear_observable_system(
+    *,
+    op: Any,
+    op_plus: Any,
+    op_minus: Any,
+    parameter: float,
+    derivative_step: float,
+    solve: Callable[[Any], Any],
+    transpose_solve: Callable[[Any], Any],
+    transpose_apply: Callable[[Any], Any],
+    radial_coordinate: str = "psiHat",
+    psi_a_hat: float | None = None,
+    a_hat: float | None = None,
+    r_n: float | None = None,
+    observable_chunk_size: int = 128,
+    include_jacobian_terms: bool = True,
+    metadata: Mapping[str, Any] | None = None,
+) -> Any:
+    """Build a matrix-free RHSMode-1 radial-current derivative system.
+
+    The dense validation builder above assembles full matrices and is therefore
+    intentionally capped. This builder keeps the same physical contract but
+    exposes only operator actions, a caller-provided transpose action,
+    finite-difference derivative actions, and caller-provided solve closures.
+    It is the production-facing seam for later analytic/JVP-backed ``Er``
+    derivatives and RHSMode=4/5 adjoint diagnostics.
+    """
+
+    h = float(derivative_step)
+    if h <= 0.0:
+        raise ValueError("derivative_step must be positive.")
+    total_size = int(getattr(op, "total_size"))
+    if total_size <= 0:
+        raise ValueError("op.total_size must be positive.")
+    for name, candidate in (("op_plus", op_plus), ("op_minus", op_minus)):
+        if int(getattr(candidate, "total_size")) != total_size:
+            raise ValueError(f"{name}.total_size must match op.total_size.")
+
+    import jax.numpy as jnp  # noqa: PLC0415
+
+    from ..sensitivity import MatrixFreeLinearObservableSystem  # noqa: PLC0415
+    from ..v3_system import apply_v3_full_system_operator_cached, rhs_v3_full_system_jit  # noqa: PLC0415
+    from .transport_matrix.diagnostics import radial_current_vm_observable_vector  # noqa: PLC0415
+
+    def apply_operator(operator: Any, state: Any) -> Any:
+        vector = jnp.asarray(state, dtype=jnp.float64)
+        if int(vector.shape[0]) != total_size:
+            raise ValueError(f"operator input length must match op.total_size={total_size}.")
+        return apply_v3_full_system_operator_cached(
+            operator,
+            vector,
+            include_jacobian_terms=bool(include_jacobian_terms),
+        )
+
+    def apply(state: Any) -> Any:
+        return apply_operator(op, state)
+
+    def derivative_apply(state: Any) -> Any:
+        vector = jnp.asarray(state, dtype=jnp.float64)
+        return (apply_operator(op_plus, vector) - apply_operator(op_minus, vector)) / (2.0 * h)
+
+    def apply_transpose(state: Any) -> Any:
+        vector = jnp.asarray(state, dtype=jnp.float64)
+        if int(vector.shape[0]) != total_size:
+            raise ValueError(f"transpose input length must match op.total_size={total_size}.")
+        return jnp.asarray(transpose_apply(vector), dtype=jnp.float64)
+
+    rhs = rhs_v3_full_system_jit(op)
+    rhs_plus = rhs_v3_full_system_jit(op_plus)
+    rhs_minus = rhs_v3_full_system_jit(op_minus)
+    observable_vector, observable_offset = radial_current_vm_observable_vector(
+        op,
+        radial_coordinate=radial_coordinate,
+        psi_a_hat=psi_a_hat,
+        a_hat=a_hat,
+        r_n=r_n,
+        chunk_size=int(observable_chunk_size),
+    )
+    observable_vector_plus, observable_offset_plus = radial_current_vm_observable_vector(
+        op_plus,
+        radial_coordinate=radial_coordinate,
+        psi_a_hat=psi_a_hat,
+        a_hat=a_hat,
+        r_n=r_n,
+        chunk_size=int(observable_chunk_size),
+    )
+    observable_vector_minus, observable_offset_minus = radial_current_vm_observable_vector(
+        op_minus,
+        radial_coordinate=radial_coordinate,
+        psi_a_hat=psi_a_hat,
+        a_hat=a_hat,
+        r_n=r_n,
+        chunk_size=int(observable_chunk_size),
+    )
+    merged_metadata = {
+        "builder": "matrix_free_rhs1_vm_radial_current",
+        "total_size": total_size,
+        "radial_coordinate": str(radial_coordinate),
+        "derivative_step": h,
+        "operator_action": "v3_full_system_matrix_free",
+        "transpose_action": "caller_supplied",
+        "operator_derivative_action": "centered_finite_difference",
+        "rhs_derivative": "centered_finite_difference",
+        "observable_derivative": "centered_finite_difference_vector",
+        "dense_matrix_assembled": False,
+        **dict(metadata or {}),
+    }
+    return MatrixFreeLinearObservableSystem(
+        parameter=float(parameter),
+        size=total_size,
+        rhs=rhs,
+        rhs_derivative=(rhs_plus - rhs_minus) / (2.0 * h),
+        apply=apply,
+        transpose_apply=apply_transpose,
+        derivative_apply=derivative_apply,
+        solve=solve,
+        transpose_solve=transpose_solve,
+        observable_vector=observable_vector,
+        observable_vector_derivative=(observable_vector_plus - observable_vector_minus) / (2.0 * h),
+        observable_offset=float(observable_offset),
+        observable_offset_derivative=(float(observable_offset_plus) - float(observable_offset_minus)) / (2.0 * h),
+        metadata=merged_metadata,
+    )
+
+
 def _radial_current_derivative_from_linear_certificate(
     *,
     er: float,
@@ -1384,6 +1509,7 @@ __all__ = [
     "implicit_linear_radial_current_derivative_from_builder",
     "implicit_matrix_free_radial_current_derivative",
     "implicit_matrix_free_radial_current_derivative_from_builder",
+    "matrix_free_rhs1_vm_radial_current_linear_observable_system",
     "newton_ambipolar_root",
     "safeguarded_newton_ambipolar_root",
     "solve_ambipolar_brent",
