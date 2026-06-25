@@ -3367,3 +3367,63 @@ Next best steps:
 2. After Tranche A root disposition is complete, execute Tranche B to cut
    `profile_response/solve.py` below the target instead of doing more helper
    churn.
+
+## 2026-06-25 Lane 1 Tranche A Workflow-Domain Root Disposition
+
+Steps taken:
+
+1. Moved nine workflow/evidence root modules into `sfincs_jax.workflows`
+   without compatibility shims:
+   `optimization_comparison.py`, `optimization_evidence.py`,
+   `optimization_ladder.py`, `optimization_objectives.py`,
+   `optimization_promotion.py`, `optimization_workflow.py`,
+   `mapped_xgrid_objectives.py`, `mapped_xgrid_transport_evidence.py`, and
+   `qi_res15_gpu_campaign.py`.
+2. Updated imports in tests, examples, scripts, and docs to canonical
+   `sfincs_jax.workflows.*` module paths.
+3. Updated workflow module relative imports after moving them below the
+   package root.
+4. Updated `docs/validation_matrix.rst` so the mapped-xgrid source anchors
+   point at the new workflow package paths.
+
+Current inventory:
+
+- Package Python files: `212` (unchanged because files moved, not merged).
+- Package-root Python files: `70` (down from `79`).
+- `sfincs_jax.workflows`: `10` Python files including `__init__.py`.
+
+Validation:
+
+- `python -m py_compile sfincs_jax/workflows/*.py` passed.
+- Scoped `ruff` passed for moved workflow modules, touched tests, touched
+  scripts, and touched optimization examples.
+- Focused workflow tests passed:
+  `python -m pytest tests/test_optimization_comparison.py
+  tests/test_optimization_evidence.py tests/test_optimization_ladder.py
+  tests/test_optimization_neoclassical_objectives.py
+  tests/test_optimization_promotion.py tests/test_optimization_real_artifacts.py
+  tests/test_optimization_workflow.py tests/test_mapped_xgrid_objectives.py
+  tests/test_mapped_xgrid_transport_evidence.py
+  tests/test_run_mapped_xgrid_transport_evidence.py
+  tests/test_qi_res15_gpu_campaign.py tests/test_optimization_public_scripts_cli.py
+  -q --tb=short`
+  with `81 passed in 42.07 s`.
+- Stale import audit found no remaining imports of the deleted root workflow
+  modules.
+
+Current lane status:
+
+- Lane 1 Tranche A: materially advanced. Root files are now `70`, down from
+  `85` at the start of this tranche. Remaining root disposition should target
+  solver/preconditioner utilities or output ownership rather than more
+  workflow movement.
+- Lane 1 overall: about `67%`.
+
+Next best steps:
+
+1. Continue Tranche A with a root solver utility family move into `solvers`
+   (`solver_*`, `explicit_sparse*`, `preconditioner_*`,
+   `native_block_factor.py`, `sparse_triangular.py`) or the output ownership
+   move from `io.py` into `outputs`.
+2. After root count is near the `<=55` target, execute Tranche B as the large
+   `profile_response/solve.py` cut.

@@ -31,7 +31,7 @@ if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
 from sfincs_jax.io import write_sfincs_h5  # noqa: E402
-from sfincs_jax.optimization_promotion import evaluate_sfincs_scan_promotion  # noqa: E402
+from sfincs_jax.workflows.optimization_promotion import evaluate_sfincs_scan_promotion  # noqa: E402
 
 
 def _build_parser() -> argparse.ArgumentParser:

@@ -342,10 +342,10 @@ and the first transport-parallel consolidation:
 - Top-level `transport_*` modules: 0 after Lane 1 Iteration 1.
 - Top-level `rhs1_*` modules: 0 after the Lane 1 Iteration 3 ownership move.
   Solver-family implementation now lives under `solvers.preconditioners`.
-- Package total is 212 Python files, 79 package-root files, and 163,301
+- Package total is 212 Python files, 70 package-root files, and 163,301
   package lines after the first two root cleanup passes and the first
   transport-parallel consolidation, plus the first Tranche A validation-domain
-  root-disposition move. The root cleanups
+  and workflow-domain root-disposition moves. The root cleanups
   deleted the obsolete root modules `solver_runtime.py`,
   `matrix_reductions.py`, `solve_mode_policy.py`,
   `solver_progress_policy.py`, `phase_timing.py`, `linear_algebra.py`,
@@ -358,6 +358,8 @@ and the first transport-parallel consolidation:
   `validation_figures.py`, `validation_math.py`,
   `benchmark_artifact_policy.py`, `research_lane_policy.py`, and
   `qi_device_artifact_policy.py` under `sfincs_jax.validation`.
+  The workflow-domain move placed `optimization_*`, `mapped_xgrid_*`, and
+  `qi_res15_gpu_campaign.py` under `sfincs_jax.workflows`.
 - Current concentration of complexity:
   `problems/profile_response` has 21 files and about 50k lines,
   `problems/transport_matrix` has 28 files and about 15k lines,
@@ -544,7 +546,7 @@ Current inventory from the 2026-06-25 final consolidation review:
 | --- | --- | --- |
 | `sfincs_jax/v3_driver.py` | 47-line compatibility shim | Keep below 80 lines or delete after legacy imports migrate. |
 | Package source files | 212 Python files, 163,301 package lines | At most 200 files and fewer total source lines. |
-| Package-root modules | 79 Python files at package root | At most 55 root files; implementation belongs in domain packages. |
+| Package-root modules | 70 Python files at package root | At most 55 root files; implementation belongs in domain packages. |
 | `problems/profile_response` | 21 files, about 50k lines; `solve.py` is 9,411 lines | At most 16 files; `solve.py` below 3,500 lines. |
 | `problems/transport_matrix` | 28 files, about 15k lines | At most 16 files; no policy or postsolve micro-files. |
 | `problems/transport_matrix/parallel` | `runtime.py`, `policy.py`, `sharding.py`, `worker.py` plus `__init__.py` | At most 3 implementation files; merge or justify `policy.py`. |
@@ -699,11 +701,11 @@ Output and root actions:
    `solver_progress.py`, `krylov_dispatch.py`, `implicit_solve.py`,
    `memory_model.py`, `explicit_sparse*`, `preconditioner_*`,
    `native_block_factor.py`, and `sparse_triangular.py`.
-5. Move remaining root workflow/evidence modules into `workflows` or
+5. Move any remaining root workflow/evidence modules into `workflows` or
    `validation`, or
    delete them if current docs artifacts and tests no longer import them:
-   `optimization_*`, `mapped_xgrid_*`, `qi_*_campaign.py`, and any remaining
-   root validation/workflow policy modules.
+   campaign-policy modules and any remaining root validation/workflow policy
+   modules.
 
 Exit gates:
 
@@ -1351,10 +1353,12 @@ Current completion status:
   transport-parallel consolidation deleted five transport micro-files. The
   first Tranche A root-disposition checkpoint moved six validation and
   artifact-policy modules into `sfincs_jax.validation`, reducing package-root
-  files from 85 to 79. The remaining large blockers are
-  `profile_response/solve.py`, the rest of transport/output consolidation,
-  solver/preconditioner naming, and `io.py` ownership. The next work follows
-  Lane 1 Tranches A-E only.
+  files from 85 to 79. The second Tranche A root-disposition checkpoint moved
+  nine optimization, mapped-xgrid, and QI campaign modules into
+  `sfincs_jax.workflows`, reducing package-root files to 70. The remaining
+  large blockers are `profile_response/solve.py`, the rest of transport/output
+  consolidation, solver/preconditioner naming, and `io.py` ownership. The next
+  work follows Lane 1 Tranches A-E only.
 - Ambipolar bounded/reference functionality: about 85 percent. Small and
   bounded Fortran-compatible roots and derivatives are implemented; production
   refresh benchmarks remain outside normal CI.

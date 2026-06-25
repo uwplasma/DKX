@@ -1,6 +1,6 @@
 """High-fidelity promotion gates for optimization candidates.
 
-The proxy objectives in :mod:`sfincs_jax.optimization_objectives` are meant for
+The proxy objectives in :mod:`sfincs_jax.workflows.optimization_objectives` are meant for
 fast optimizer steering.  This module evaluates completed ``sfincs_jax`` scan
 outputs before a candidate is promoted to a physics claim.
 """
@@ -13,8 +13,8 @@ from typing import Any
 
 import numpy as np
 
-from .ambipolar import radial_current_from_output
-from .io import read_sfincs_h5
+from ..ambipolar import radial_current_from_output
+from ..io import read_sfincs_h5
 from .optimization_objectives import (
     AmbipolarRoot,
     bootstrap_current_objective,

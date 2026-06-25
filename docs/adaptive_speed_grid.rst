@@ -88,7 +88,7 @@ Two derivative constructions are provided:
 Transport moment objectives
 ---------------------------
 
-``sfincs_jax.mapped_xgrid_objectives`` adds the first transport-facing objective
+``sfincs_jax.workflows.mapped_xgrid_objectives`` adds the first transport-facing objective
 layer. It does not solve the drift-kinetic equation. Instead, it scores mapped
 speed grids by how accurately they integrate Maxwellian speed moments,
 
@@ -111,7 +111,7 @@ demonstrates that directly.
 PAS transport-matrix evidence
 -----------------------------
 
-``sfincs_jax.mapped_xgrid_transport_evidence`` adds the first solve-facing
+``sfincs_jax.workflows.mapped_xgrid_transport_evidence`` adds the first solve-facing
 comparison layer for the opt-in mapped grid. It copies a namelist, sets
 ``xGridScheme = 50`` with rational-tail map parameters, runs a transport-matrix
 solve for each candidate, and compares each result against a reference solve.

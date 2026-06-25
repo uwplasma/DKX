@@ -8,7 +8,7 @@ from types import SimpleNamespace
 import numpy as np
 import pytest
 
-from sfincs_jax.mapped_xgrid_transport_evidence import (
+from sfincs_jax.workflows.mapped_xgrid_transport_evidence import (
     copy_namelist_with_mapped_xgrid,
     copy_namelist_with_resolution,
     run_rational_tail_transport_comparison,

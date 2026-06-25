@@ -14,7 +14,7 @@ import jax  # noqa: E402
 import jax.numpy as jnp  # noqa: E402
 from jax.scipy.special import gammaln  # noqa: E402
 
-from .adaptive_maps import MappedXGrid, RationalTailXMap, make_reference_eta_grid  # noqa: E402
+from ..adaptive_maps import MappedXGrid, RationalTailXMap, make_reference_eta_grid  # noqa: E402
 
 
 Array = jax.Array

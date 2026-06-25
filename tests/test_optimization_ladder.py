@@ -5,7 +5,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from sfincs_jax.optimization_ladder import (
+from sfincs_jax.workflows.optimization_ladder import (
     dense_matrix_gib,
     estimate_rhs1_active_size,
     evaluate_promotion_ladder,

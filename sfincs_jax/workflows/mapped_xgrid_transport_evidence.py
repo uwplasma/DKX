@@ -1,7 +1,7 @@
 """Solve-facing evidence helpers for opt-in mapped SFINCS speed grids.
 
 The routines here deliberately sit one level above the differentiable moment
-objective in :mod:`sfincs_jax.mapped_xgrid_objectives`. Moment matching is a
+objective in :mod:`sfincs_jax.workflows.mapped_xgrid_objectives`. Moment matching is a
 cheap screening proxy; this module compares mapped-grid candidates against an
 actual SFINCS-v3 transport-matrix solve result. The current scope is the PAS
 transport path, because the full-FP collision precompute still has additional
@@ -18,10 +18,10 @@ from typing import Any, Callable, Mapping, Sequence
 
 import numpy as np
 
-from .adaptive_maps import MappedXGrid
+from ..adaptive_maps import MappedXGrid
 from .mapped_xgrid_objectives import rational_tail_transport_grid, transport_moment_report
-from .namelist import Namelist
-from .v3_driver import V3TransportMatrixSolveResult, solve_v3_transport_matrix_linear_gmres
+from ..namelist import Namelist
+from ..v3_driver import V3TransportMatrixSolveResult, solve_v3_transport_matrix_linear_gmres
 
 
 SolveFn = Callable[..., V3TransportMatrixSolveResult]
