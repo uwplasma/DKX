@@ -11,6 +11,8 @@ import pytest
 from sfincs_jax.problems.ambipolar import (
     RadialCurrentDerivativeResult,
     dense_rhs1_vm_radial_current_linear_observable_system,
+    dphi_hat_dpsi_hat_er_derivative_from_namelist,
+    er_operator_tangent_from_dphi_hat_dpsi_hat_derivative,
     implicit_linear_radial_current_derivative,
     implicit_linear_radial_current_derivative_from_builder,
     implicit_matrix_free_radial_current_derivative_from_builder,
@@ -532,6 +534,63 @@ def test_rhs1_operator_tangent_jvp_matches_centered_difference_for_er_xdot() -> 
         rtol=0.0,
         atol=1.0e-9,
     )
+
+
+def test_analytic_er_operator_tangent_matches_centered_er_difference() -> None:
+    input_path = Path(__file__).parent / "ref" / "er_xdot_1species_tiny.input.namelist"
+    nml = read_sfincs_input(input_path)
+    op0 = full_system_operator_from_namelist(nml=nml)
+    assert op0.fblock.er_xdot is not None
+    step = 1.0e-5
+    dphi_d_er = dphi_hat_dpsi_hat_er_derivative_from_namelist(nml)
+
+    def replace_dphi(candidate, delta: float):
+        if candidate is None or not hasattr(candidate, "dphi_hat_dpsi_hat"):
+            return candidate
+        return replace(
+            candidate,
+            dphi_hat_dpsi_hat=candidate.dphi_hat_dpsi_hat + float(delta),
+        )
+
+    def op_at_er_delta(delta_er: float):
+        dphi_delta = float(delta_er) * float(dphi_d_er)
+        fblock = replace(
+            op0.fblock,
+            exb_theta=replace_dphi(op0.fblock.exb_theta, dphi_delta),
+            exb_zeta=replace_dphi(op0.fblock.exb_zeta, dphi_delta),
+            er_xidot=replace_dphi(op0.fblock.er_xidot, dphi_delta),
+            er_xdot=replace_dphi(op0.fblock.er_xdot, dphi_delta),
+        )
+        return replace(
+            op0,
+            fblock=fblock,
+            dphi_hat_dpsi_hat=op0.dphi_hat_dpsi_hat + dphi_delta,
+        )
+
+    op_plus = op_at_er_delta(step)
+    op_minus = op_at_er_delta(-step)
+    analytic_tangent = er_operator_tangent_from_dphi_hat_dpsi_hat_derivative(op0, dphi_d_er)
+    centered_tangent = operator_tangent_from_centered_difference(op_plus, op_minus, step)
+    state = jnp.linspace(0.1, 1.0, int(op0.total_size), dtype=jnp.float64)
+    _, analytic_action = jax.jvp(
+        lambda operator: apply_v3_full_system_operator_cached(operator, state),
+        (op0,),
+        (analytic_tangent,),
+    )
+    _, centered_tangent_action = jax.jvp(
+        lambda operator: apply_v3_full_system_operator_cached(operator, state),
+        (op0,),
+        (centered_tangent,),
+    )
+    centered_action = (
+        apply_v3_full_system_operator_cached(op_plus, state)
+        - apply_v3_full_system_operator_cached(op_minus, state)
+    ) / (2.0 * step)
+
+    assert float(abs(dphi_d_er)) > 0.0
+    assert float(jnp.linalg.norm(centered_action)) > 0.0
+    np.testing.assert_allclose(analytic_action, centered_tangent_action, rtol=0.0, atol=1.0e-9)
+    np.testing.assert_allclose(analytic_action, centered_action, rtol=0.0, atol=1.0e-9)
 
 
 def test_rhs1_radial_current_jvp_vjp_dot_product_gate() -> None:
