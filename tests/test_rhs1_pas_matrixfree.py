@@ -6,7 +6,7 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-from sfincs_jax.rhs1_pas_matrixfree import (
+from sfincs_jax.solvers.preconditioners.pas.matrix_free import (
     Rhs1PasMatrixFreeConfig,
     plan_pas_runtime_chunks,
     rhs1_pas_matrixfree_acceptance_gate,

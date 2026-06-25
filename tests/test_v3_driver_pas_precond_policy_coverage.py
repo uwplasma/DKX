@@ -4,7 +4,7 @@ from types import SimpleNamespace
 
 import numpy as np
 
-import sfincs_jax.rhs1_pas_policy as pas_policy
+import sfincs_jax.solvers.preconditioners.pas.policy as pas_policy
 import sfincs_jax.v3_driver as vd
 
 

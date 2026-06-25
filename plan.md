@@ -2332,3 +2332,64 @@ Next best steps:
    tiny policy-only fragments, and delete stale private aliases.
 3. Re-run focused RHSMode-1 solver/preconditioner tests and import-contract
    checks before moving to the `v3_driver.py` solve-entry extraction.
+
+## 2026-06-25 Lane 1 Iteration 3 Solver-Family Ownership Move
+
+Steps taken:
+
+1. Moved all remaining top-level RHSMode-1 solver/preconditioner files into
+   `sfincs_jax.solvers.preconditioners`.
+2. Routed PAS policy/runtime files into `solvers.preconditioners.pas`.
+3. Routed x-block, low-mode coarse, and x-block sparse-host policy files into
+   `solvers.preconditioners.xblock`.
+4. Routed QI coarse/device/deflation/Galerkin/multilevel/residual-region
+   modules into `solvers.preconditioners.qi`.
+5. Routed symbolic reduced-Pmat/frontal/sparse-factor policies into
+   `solvers.preconditioners.symbolic_sparse`.
+6. Routed Schur policy, full-FP kinetic CSR preconditioner, domain-decomposition
+   policy, and the preconditioner dispatch module into their solver-family
+   packages.
+7. Rewrote source, tests, scripts, and API docs to use the canonical solver
+   package paths.
+
+Results:
+
+- Top-level `rhs1_*` files decreased from `28` to `0`.
+- Top-level `transport_*` remains `0`.
+- Python source file count remains `247`; this means the top-level ownership
+  target is met, but the below-240 source-count target still requires at least
+  eight merges/deletions in the next consolidation subtask.
+- `v3_driver.py` remains `11,992` lines; its solve-entry extraction remains
+  Lane 1 Iteration 4.
+
+Validation:
+
+- `python -m py_compile sfincs_jax/solvers/preconditioners/**/*.py
+  sfincs_jax/v3_driver.py` passed.
+- Focused solver-family tests passed with `619 passed in 46.01 s`.
+- Broad RHSMode-1/profile-response/v3 sparse sweep passed with
+  `1472 passed in 334.53 s`.
+- Import-contract/docstring/helper tests passed with `20 passed in 1.91 s`.
+- `python -m sphinx -b html docs docs/_build/html -q`, scoped `ruff`, and
+  `git diff --check` passed.
+
+Current lane status:
+
+- Lane 1 Iteration 1: 100%.
+- Lane 1 Iteration 2: 100%.
+- Lane 1 Iteration 3 ownership move: 100%.
+- Lane 1 Iteration 3 count consolidation: incomplete; source files must drop
+  from `247` to below `240`.
+- Lane 1 overall: about 60%.
+- Overall consolidation goal: not complete.
+
+Next best steps:
+
+1. Commit and push the solver-family ownership move.
+2. Merge or delete at least eight package files without changing solver
+   behavior. Preferred low-risk targets are tiny policy/helper files inside
+   `domain_decomposition`, `xblock`, `schur`, `qi`, and
+   `symbolic_sparse`.
+3. Re-run focused solver-family tests and count checks; then proceed to
+   Iteration 4, extracting the two large solve entry points from
+   `v3_driver.py`.

@@ -7,28 +7,28 @@ import pytest
 import scipy.sparse as sp
 
 from sfincs_jax.operators.profile_response.device_sparse import device_csr_from_scipy_csr
-from sfincs_jax.rhs1_qi_coarse import RHS1QICoarseBasis, RHS1QICoarseBasisMetadata, RHS1QICoarseBlockLayout
-from sfincs_jax.rhs1_qi_device_preconditioner import (
+from sfincs_jax.solvers.preconditioners.qi.coarse import RHS1QICoarseBasis, RHS1QICoarseBasisMetadata, RHS1QICoarseBlockLayout
+from sfincs_jax.solvers.preconditioners.qi.device import (
     RHS1QIDevicePreconditionerConfig,
     probe_rhs1_qi_device_augmented_seed,
     probe_rhs1_qi_device_preconditioner,
     setup_rhs1_qi_device_preconditioner,
 )
-from sfincs_jax.rhs1_qi_device_smoother import build_rhs1_qi_device_jacobi_smoother
-from sfincs_jax.rhs1_qi_active_pattern_coarse import (
+from sfincs_jax.solvers.preconditioners.qi.device_smoother import build_rhs1_qi_device_jacobi_smoother
+from sfincs_jax.solvers.preconditioners.qi.active_pattern import (
     RHS1QIActivePatternCoarseConfig,
     build_rhs1_qi_active_pattern_coarse_basis,
 )
-from sfincs_jax.rhs1_qi_multilevel_coarse import (
+from sfincs_jax.solvers.preconditioners.qi.multilevel import (
     RHS1QIMultilevelCoarseConfig,
     build_rhs1_qi_multilevel_coarse_basis,
     build_rhs1_qi_multilevel_coarse_candidates,
 )
-from sfincs_jax.rhs1_qi_phase_space_coarse import (
+from sfincs_jax.solvers.preconditioners.qi.phase_space import (
     RHS1QIPhaseSpaceCoarseConfig,
     build_rhs1_qi_phase_space_coarse_basis,
 )
-from sfincs_jax.rhs1_qi_residual_region_coarse import (
+from sfincs_jax.solvers.preconditioners.qi.residual_regions import (
     RHS1QIResidualRegionCoarseConfig,
     build_rhs1_qi_residual_region_coarse_basis,
 )

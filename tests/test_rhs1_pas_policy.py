@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
-from sfincs_jax.rhs1_pas_policy import (
+from sfincs_jax.solvers.preconditioners.pas.policy import (
     RHS1PASAdaptiveSmootherControls,
     RHS1PASForceFullDecision,
     RHS1PASPreconditionerProbeConfig,

@@ -18,11 +18,11 @@ from sfincs_jax.problems.profile_response.policies import (
     rhs1_qi_device_status_fields as _rhs1_qi_device_status_fields,
     rhs1_qi_device_tail_block_required as _rhs1_qi_device_tail_block_required,
 )
-from sfincs_jax.rhs1_qi_coarse import (
+from sfincs_jax.solvers.preconditioners.qi.coarse import (
     build_rhs1_xblock_qi_coarse_basis as _rhs1_xblock_qi_coarse_basis,
     rhs1_xblock_qi_block_geometry_metadata as _rhs1_xblock_qi_block_geometry_metadata,
 )
-from sfincs_jax.rhs1_qi_device_preconditioner import (
+from sfincs_jax.solvers.preconditioners.qi.device import (
     RHS1QIDevicePreconditionerConfig,
     probe_rhs1_qi_device_preconditioner,
     setup_rhs1_qi_device_preconditioner,

@@ -16,7 +16,7 @@ import os
 
 import numpy as np
 
-from .pas_smoother import adaptive_pas_smoother_allowed
+from sfincs_jax.pas_smoother import adaptive_pas_smoother_allowed
 
 _FALSE_VALUES = {"0", "false", "no", "off"}
 _RHS1_PAS_PROBE_HEAVY_PRECONDITIONERS = frozenset(

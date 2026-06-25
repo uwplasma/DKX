@@ -15,7 +15,7 @@ from ....preconditioner_context import precond_dtype
 from ....preconditioner_setup import rhs_mode1_structured_fblock_cache_key
 from ....problems.profile_response.residual import safe_preconditioner
 from sfincs_jax.operators.profile_response.kinetic import select_structured_rhs1_fblock_operator
-from ....rhs1_lowmode_coarse import (
+from sfincs_jax.solvers.preconditioners.xblock.coarse import (
     _build_rhs1_coupled_moment_matrix_free_correction,
     _build_rhs1_lowmode_angular_matrix_free_correction,
     _build_rhs1_moment_angular_matrix_free_correction,

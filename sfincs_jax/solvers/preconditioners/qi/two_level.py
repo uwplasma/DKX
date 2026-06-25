@@ -27,7 +27,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
-from .rhs1_qi_coarse import (
+from sfincs_jax.solvers.preconditioners.qi.coarse import (
     RHS1QICoarseBasis,
     build_rhs1_xblock_global_coarse_basis,
     build_rhs1_xblock_global_coupling_load_basis,

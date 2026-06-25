@@ -5,7 +5,7 @@ from types import SimpleNamespace
 import numpy as np
 
 from sfincs_jax.operators.profile_response.compressed_layout import build_rhs1_compressed_pitch_layout
-from sfincs_jax.rhs1_reduced_pmat_plan import build_rhs1_reduced_pmat_elimination_plan
+from sfincs_jax.solvers.preconditioners.symbolic_sparse.reduced_pmat import build_rhs1_reduced_pmat_elimination_plan
 
 
 def _op(*, nxi_for_x: list[int] | None = None, total_tail: int = 5) -> SimpleNamespace:

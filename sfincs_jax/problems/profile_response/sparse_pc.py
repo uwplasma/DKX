@@ -2851,7 +2851,7 @@ def apply_xblock_two_level_stage(
     start_s = float(context.elapsed_s())
     try:
         if context.builder is None:
-            from ...rhs1_qi_two_level import (
+            from sfincs_jax.solvers.preconditioners.qi.two_level import (
                 build_rhs1_xblock_two_level_preconditioner,
             )
 
@@ -2922,7 +2922,7 @@ def apply_xblock_global_coupling_stage(
     start_s = float(context.elapsed_s())
     try:
         if context.host_builder is None or context.device_builder is None:
-            from ...rhs1_qi_two_level import (
+            from sfincs_jax.solvers.preconditioners.qi.two_level import (
                 build_rhs1_xblock_device_global_coupling_preconditioner,
                 build_rhs1_xblock_smoothed_global_coupling_preconditioner,
             )

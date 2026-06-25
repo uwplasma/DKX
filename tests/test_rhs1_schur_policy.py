@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from sfincs_jax.rhs1_schur_policy import canonical_schur_base_kind, resolve_rhs1_schur_base_kind
+from sfincs_jax.solvers.preconditioners.schur.policy import canonical_schur_base_kind, resolve_rhs1_schur_base_kind
 
 
 def test_canonical_schur_base_kind_aliases() -> None:

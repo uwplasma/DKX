@@ -17,7 +17,7 @@ from ....preconditioner_caches import (
 )
 from ....preconditioner_context import precond_dtype as _precond_dtype
 from ....preconditioner_setup import rhs_mode1_precond_cache_key
-from ....rhs1_pas_policy import build_pas_tz_memory_fallback
+from sfincs_jax.solvers.preconditioners.pas.policy import build_pas_tz_memory_fallback
 from ....structured_velocity import factor_block_tridiagonal
 from ....v3_system import V3FullSystemOperator
 

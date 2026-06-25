@@ -307,12 +307,12 @@ Current source size snapshot:
 - `sfincs_jax/operators/profile_response/full_system.py`: about 6.0k
   lines, moved from `rhs1_full_assembly.py` in Lane 1 Iteration 2.
 - Top-level `transport_*` modules: 0 after Lane 1 Iteration 1.
-- Top-level `rhs1_*` modules: 28 solver-family implementation files after
-  Lane 1 Iteration 2. These are assigned to `solvers.preconditioners` in Lane
-  1 Iteration 3.
+- Top-level `rhs1_*` modules: 0 after the Lane 1 Iteration 3 ownership move.
+  Solver-family implementation now lives under `solvers.preconditioners`.
 - Several RHSMode 1 QI, x-block, sparse policy, output, and transport modules
   still exceed 2k to 4k lines.
-- Package total is 247 Python files after Lane 1 Iteration 2. The Lane 1
+- Package total is 247 Python files after the Lane 1 Iteration 3 ownership
+  move. The Lane 1
   target is below 240
   Python files after deleting shims and consolidating real implementation into
   domain packages.
@@ -489,14 +489,13 @@ pass, not an algorithmic rewrite.
 Current inventory from 2026-06-25:
 
 - `sfincs_jax/v3_driver.py`: 11,992 lines.
-- Python source files: 247 after Iteration 2.
+- Python source files: 247 after the Iteration 3 ownership move.
 - Top-level `transport_*` files: 0 after Iteration 1.
-- Top-level `rhs1_*` files: 28 solver-family implementation files after
-  Iteration 2.
+- Top-level `rhs1_*` files: 0 after the Iteration 3 ownership move.
 - Largest remaining files: `v3_driver.py`,
   `operators/profile_response/full_system.py`,
   `problems/profile_response/sparse/xblock.py`,
-  `rhs1_qi_device_preconditioner.py`, `io.py`,
+  `solvers/preconditioners/qi/device.py`, `io.py`,
   `problems/profile_response/sparse/qi.py`, `explicit_sparse.py`,
   `problems/profile_response/policies.py`, and
   `problems/profile_response/sparse_pc.py`.
@@ -613,11 +612,15 @@ Delete candidates during Iteration 3:
 
 Exit gates for Iteration 3:
 
+- Status: ownership move completed on 2026-06-25; count consolidation remains
+  open.
 - No package has more than three files with overlapping solver-policy
   responsibility.
 - QI, x-block, PAS, sparse, and Schur imports are canonical and tested.
 - Solver behavior is unchanged on representative RHSMode 1/2/3 tests.
-- Top-level file count is lower than after Iteration 2, not higher.
+- Top-level `rhs1_*` file count is lower than after Iteration 2: `28 -> 0`.
+- Package Python file count is still `247`; the next mandatory subtask is to
+  merge/delete at least eight files so the final target below `240` is met.
 
 Iteration 4 - Extract the two large driver solve entry points:
 
@@ -1262,12 +1265,16 @@ Completed on 2026-06-25:
   from top-level `rhs1_*` names into `operators.profile_response` and
   `problems.profile_response`. The remaining 28 top-level `rhs1_*` files are
   solver-family modules queued for Iteration 3.
+- Completed the Lane 1 Iteration 3 ownership move by routing all remaining
+  top-level RHSMode-1 solver/preconditioner files into
+  `solvers.preconditioners`. Top-level `rhs1_*` is now zero; package source
+  count remains `247`, so the below-240 count gate is still open.
 
 Next ordered implementation steps:
 
-1. Execute Lane 1 Iteration 3 as a single batch: consolidate QI, x-block, PAS,
-   sparse, and Schur solver/preconditioner families under
-   `solvers.preconditioners`, removing stale policy-only fragments.
+1. Finish Lane 1 Iteration 3 count consolidation by merging/deleting at least
+   eight package files inside the solver-family packages without changing
+   solver behavior.
 2. Execute Lane 1 Iteration 4 as a single batch: move the two large solve entry
    points out of `v3_driver.py`, leaving a shim under 300 lines or deleting the
    file.

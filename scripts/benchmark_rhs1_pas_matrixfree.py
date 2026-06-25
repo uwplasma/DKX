@@ -1481,7 +1481,7 @@ def _build_probe_system(
 
 
 def _child_payload(case: dict[str, Any]) -> dict[str, Any]:
-    from sfincs_jax.rhs1_pas_matrixfree import Rhs1PasMatrixFreeConfig, rhs1_pas_matrixfree_correction
+    from sfincs_jax.solvers.preconditioners.pas.matrix_free import Rhs1PasMatrixFreeConfig, rhs1_pas_matrixfree_correction
 
     config = dict(case["config"])
     rhs, x0, matvec, correction, chunked_correction, counters = _build_probe_system(case)

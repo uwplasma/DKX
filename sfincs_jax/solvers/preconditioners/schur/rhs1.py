@@ -19,7 +19,7 @@ from sfincs_jax.operators.profile_response.sources import (
     constraint_scheme2_inject_source,
     constraint_scheme2_source_from_f,
 )
-from ....rhs1_schur_policy import resolve_rhs1_schur_base_kind
+from sfincs_jax.solvers.preconditioners.schur.policy import resolve_rhs1_schur_base_kind
 from ....v3_system import V3FullSystemOperator, _ix_min
 
 Preconditioner = Callable[[jnp.ndarray], jnp.ndarray]

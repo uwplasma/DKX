@@ -28,39 +28,39 @@ import jax
 import numpy as np
 
 from sfincs_jax.operators.profile_response.device_sparse import DeviceCSR
-from .rhs1_qi_coarse import (
+from sfincs_jax.solvers.preconditioners.qi.coarse import (
     RHS1QICoarseBasis,
     RHS1QICoarseBasisMetadata,
     RHS1QICoarseBlockLayout,
     orthonormalize_rhs1_qi_coarse_basis,
 )
-from .rhs1_qi_coupled_residual import (
+from sfincs_jax.solvers.preconditioners.qi.coupled_residual import (
     RHS1QICoupledResidualEquationConfig,
     setup_rhs1_qi_coupled_residual_equation,
 )
-from .rhs1_qi_device_smoother import (
+from sfincs_jax.solvers.preconditioners.qi.device_smoother import (
     RHS1QIDeviceJacobiSmoother,
     build_rhs1_qi_device_jacobi_smoother,
 )
-from .rhs1_qi_multilevel_coarse import (
+from sfincs_jax.solvers.preconditioners.qi.multilevel import (
     RHS1QIMultilevelCoarseConfig,
     build_rhs1_qi_multilevel_coarse_basis,
     build_rhs1_qi_multilevel_coarse_candidates,
     build_rhs1_qi_multilevel_residual_level_bases,
 )
-from .rhs1_qi_active_pattern_coarse import (
+from sfincs_jax.solvers.preconditioners.qi.active_pattern import (
     RHS1QIActivePatternCoarseConfig,
     build_rhs1_qi_active_pattern_coarse_basis,
 )
-from .rhs1_qi_phase_space_coarse import (
+from sfincs_jax.solvers.preconditioners.qi.phase_space import (
     RHS1QIPhaseSpaceCoarseConfig,
     build_rhs1_qi_phase_space_coarse_basis,
 )
-from .rhs1_qi_residual_galerkin import (
+from sfincs_jax.solvers.preconditioners.qi.residual_galerkin import (
     RHS1QIResidualGalerkinConfig,
     setup_rhs1_qi_residual_galerkin,
 )
-from .rhs1_qi_residual_region_coarse import (
+from sfincs_jax.solvers.preconditioners.qi.residual_regions import (
     RHS1QIResidualRegionCoarseConfig,
     build_rhs1_qi_residual_region_coarse_basis,
 )

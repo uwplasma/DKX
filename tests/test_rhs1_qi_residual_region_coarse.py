@@ -5,8 +5,8 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-from sfincs_jax.rhs1_qi_coarse import RHS1QICoarseBlockLayout
-from sfincs_jax.rhs1_qi_residual_region_coarse import (
+from sfincs_jax.solvers.preconditioners.qi.coarse import RHS1QICoarseBlockLayout
+from sfincs_jax.solvers.preconditioners.qi.residual_regions import (
     RHS1QIResidualRegionCoarseConfig,
     build_rhs1_qi_residual_region_coarse_basis,
     build_rhs1_qi_residual_region_coarse_candidates,

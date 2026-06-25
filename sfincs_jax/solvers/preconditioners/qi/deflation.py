@@ -28,7 +28,7 @@ from typing import Any
 import jax.numpy as jnp
 import numpy as np
 
-from .rhs1_qi_coarse import RHS1QICoarseBasis, orthonormalize_rhs1_qi_coarse_basis
+from sfincs_jax.solvers.preconditioners.qi.coarse import RHS1QICoarseBasis, orthonormalize_rhs1_qi_coarse_basis
 
 ArrayLike = Any
 LinearOperator = Callable[[ArrayLike], ArrayLike]

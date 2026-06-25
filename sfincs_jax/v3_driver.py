@@ -73,7 +73,7 @@ from .explicit_sparse_factor_policy import (
     explicit_sparse_monolithic_max_size as _explicit_sparse_monolithic_max_size,
 )
 from sfincs_jax.operators.profile_response.device_sparse import device_csr_from_matrix, validate_device_csr_matvec
-from .rhs1_domain_decomposition import (  # compatibility exports for legacy tests/debug scripts
+from sfincs_jax.solvers.preconditioners.domain_decomposition.policy import (  # compatibility exports for legacy tests/debug scripts
     _dd_core_patch_ranges,
     _rhs1_dd_auto_block_size,
     _rhs1_dd_coarse_block_size,
@@ -81,7 +81,7 @@ from .rhs1_domain_decomposition import (  # compatibility exports for legacy tes
     _rhs1_dd_coarse_level_count,
 )
 from .memory_model import estimate_sparse_pc_memory
-from .rhs1_pas_policy import (
+from sfincs_jax.solvers.preconditioners.pas.policy import (
     build_pas_tz_memory_fallback,
     estimate_rhs1_pas_tz_build_bytes as _estimate_rhs1_pas_tz_build_bytes,
     pas_tokamak_theta_preconditioner_applicable as _pas_tokamak_theta_preconditioner_applicable,
@@ -100,7 +100,7 @@ from .rhs1_pas_policy import (
     rhs1_pas_tz_guarded_strong_retry_from_env,
     rhs1_pas_tz_max_bytes as _rhs1_pas_tz_max_bytes,
 )
-from .rhs1_preconditioner_dispatch import (
+from sfincs_jax.solvers.preconditioners.dispatch import (
     RHS1PreconditionerDispatchBuilders,
     build_rhs1_preconditioner_from_kind as _dispatch_rhs1_preconditioner_from_kind,
 )
@@ -134,7 +134,7 @@ from sfincs_jax.problems.profile_response.preconditioner_auto_policy import (
 from sfincs_jax.problems.profile_response.preconditioner_auto_policy import (
     rhs1_gpu_sparse_fallback_skip_allowed as _rhs1_gpu_sparse_fallback_skip_allowed_impl,
 )
-from .rhs1_schur_policy import resolve_rhs1_schur_base_kind
+from sfincs_jax.solvers.preconditioners.schur.policy import resolve_rhs1_schur_base_kind
 from .problems.profile_response.handoff import (
     RHS1KSPReplayState,
     RHS1SkipPrimaryKrylovSeedContext,
@@ -390,9 +390,9 @@ from .problems.profile_response.setup import (
     resolve_rhs1_recycle_basis_setup,
     resolve_rhs1_reduced_mode_shape_setup,
 )
-from . import rhs1_xblock_policy as _rhs1_xblock_policy
-from . import rhs1_xblock_sparse_host_policy as _rhs1_xblock_sparse_host_policy
-from .rhs1_xblock_policy import (
+from sfincs_jax.solvers.preconditioners.xblock import policy as _rhs1_xblock_policy
+from sfincs_jax.solvers.preconditioners.xblock import sparse_host_policy as _rhs1_xblock_sparse_host_policy
+from sfincs_jax.solvers.preconditioners.xblock.policy import (
     resolve_rhs1_xblock_sparse_pc_policy,
 )
 from .solvers.preconditioners.pas import (
@@ -532,7 +532,7 @@ from sfincs_jax.operators.profile_response.layout import (
     RHS1ActiveFieldSplitOrdering,
     RHS1BlockLayout,
 )
-from .rhs1_lowmode_coarse import (
+from sfincs_jax.solvers.preconditioners.xblock.coarse import (
     _rhs1_cap_lowmode_features,
     _rhs1_low_legendre_index_features,
     _rhs1_lowmode_angular_features,

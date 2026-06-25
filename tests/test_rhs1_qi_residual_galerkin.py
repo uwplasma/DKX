@@ -5,7 +5,7 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-from sfincs_jax.rhs1_qi_residual_galerkin import (
+from sfincs_jax.solvers.preconditioners.qi.residual_galerkin import (
     RHS1QIResidualGalerkinConfig,
     setup_rhs1_qi_residual_galerkin,
 )

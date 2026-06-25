@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 
 from scripts.run_qi_seed_robustness import build_evidence_manifest
-from sfincs_jax.rhs1_xblock_policy import (
+from sfincs_jax.solvers.preconditioners.xblock.policy import (
     DEFAULT_FULL_FP_3D_DEVICE_HOST_FALLBACK_MIN_ACTIVE_SIZE,
     DEFAULT_FULL_FP_3D_LGMRES_RESCUE_MAXITER,
     DEFAULT_FULL_FP_3D_LGMRES_RESCUE_OUTER_K,

@@ -7,13 +7,13 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-from sfincs_jax.rhs1_qi_coarse import RHS1QICoarseBlockLayout
-from sfincs_jax.rhs1_qi_device_preconditioner import (
+from sfincs_jax.solvers.preconditioners.qi.coarse import RHS1QICoarseBlockLayout
+from sfincs_jax.solvers.preconditioners.qi.device import (
     RHS1QIDevicePreconditionerConfig,
     probe_rhs1_qi_device_preconditioner,
     setup_rhs1_qi_device_preconditioner,
 )
-from sfincs_jax.rhs1_qi_multilevel_coarse import (
+from sfincs_jax.solvers.preconditioners.qi.multilevel import (
     RHS1QIMultilevelCoarseConfig,
     build_rhs1_qi_multilevel_coarse_basis,
     build_rhs1_qi_multilevel_coarse_candidates,

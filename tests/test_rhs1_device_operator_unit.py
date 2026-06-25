@@ -17,7 +17,7 @@ from sfincs_jax.operators.profile_response.device_sparse import (
     materialized_operator_to_csr,
     validate_device_matvec,
 )
-from sfincs_jax.rhs1_qi_coarse import (
+from sfincs_jax.solvers.preconditioners.qi.coarse import (
     RHS1QICoarseBlockLayout,
     build_rhs1_qi_galerkin_preconditioner,
     build_rhs1_qi_coarse_basis,

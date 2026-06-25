@@ -14,12 +14,12 @@ from sfincs_jax.namelist import read_sfincs_input
 from sfincs_jax.problems.profile_response.active_preconditioner_policy import (
     resolve_active_projected_preconditioner_auto_policy,
 )
-from sfincs_jax.rhs1_fortran_reduced_factor_policy import (
+from sfincs_jax.solvers.preconditioners.symbolic_sparse.reduced_policy import (
     active_fortran_v3_reduced_permc_candidates,
     resolve_active_fortran_v3_reduced_factor_policy,
 )
-from sfincs_jax.rhs1_symbolic_frontal_policy import resolve_active_symbolic_frontal_policy
-from sfincs_jax.rhs1_symbolic_sparse_policy import (
+from sfincs_jax.solvers.preconditioners.symbolic_sparse.frontal_policy import resolve_active_symbolic_frontal_policy
+from sfincs_jax.solvers.preconditioners.symbolic_sparse.policy import (
     resolve_active_symbolic_block_schur_policy,
     resolve_active_symbolic_superblock_policy,
 )
@@ -37,7 +37,7 @@ from sfincs_jax.operators.profile_response.layout import (
     RHS1BlockLayout,
     clear_rhs1_active_field_split_ordering_cache,
 )
-from sfincs_jax.rhs1_full_csr_kinetic_pc import rhs1_full_csr_x_ell_block_indices
+from sfincs_jax.solvers.preconditioners.full_fp.full_csr_kinetic import rhs1_full_csr_x_ell_block_indices
 from sfincs_jax.v3_system import apply_v3_full_system_operator, full_system_operator_from_namelist, rhs_v3_full_system
 
 

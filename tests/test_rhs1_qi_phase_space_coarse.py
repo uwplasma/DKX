@@ -4,8 +4,8 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
-from sfincs_jax.rhs1_qi_coarse import RHS1QICoarseBlockLayout
-from sfincs_jax.rhs1_qi_phase_space_coarse import (
+from sfincs_jax.solvers.preconditioners.qi.coarse import RHS1QICoarseBlockLayout
+from sfincs_jax.solvers.preconditioners.qi.phase_space import (
     RHS1QIPhaseSpaceCoarseConfig,
     build_rhs1_qi_phase_space_coarse_basis,
     build_rhs1_qi_phase_space_coarse_candidates,

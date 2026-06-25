@@ -21,7 +21,7 @@ from typing import Any
 import jax.numpy as jnp
 import numpy as np
 
-from .v3_system import _ix_min, _source_basis_constraint_scheme_1
+from sfincs_jax.v3_system import _ix_min, _source_basis_constraint_scheme_1
 
 
 ArrayLike = Any

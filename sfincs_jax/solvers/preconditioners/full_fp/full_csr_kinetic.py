@@ -41,7 +41,7 @@ class RHS1FullCSRKineticPreconditioner:
 
         if self.native_factor is None:
             raise RuntimeError(f"RHS1 full CSR native kinetic factor is unavailable: {self.reason}")
-        from .native_block_factor import apply_native_x_ell_kinetic_factor  # noqa: PLC0415
+        from sfincs_jax.native_block_factor import apply_native_x_ell_kinetic_factor  # noqa: PLC0415
 
         return np.array(
             apply_native_x_ell_kinetic_factor(self.native_factor, np.asarray(rhs, dtype=np.float64)),
@@ -210,7 +210,7 @@ def build_rhs1_full_csr_kinetic_preconditioner(
     native_factor = None
     native_metadata: dict[str, object] = {"native_factor_available": False}
     if bool(build_native_factor):
-        from .native_block_factor import build_native_x_ell_kinetic_factor  # noqa: PLC0415
+        from sfincs_jax.native_block_factor import build_native_x_ell_kinetic_factor  # noqa: PLC0415
 
         native_factor = build_native_x_ell_kinetic_factor(
             block_inverses=inverse_blocks,

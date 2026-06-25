@@ -7,8 +7,8 @@ import jax.numpy as jnp
 import numpy as np
 
 import sfincs_jax.v3_driver as v3_driver
-from sfincs_jax.rhs1_qi_coarse import RHS1QICoarseBasis, RHS1QICoarseBasisMetadata
-from sfincs_jax.rhs1_qi_two_level import (
+from sfincs_jax.solvers.preconditioners.qi.coarse import RHS1QICoarseBasis, RHS1QICoarseBasisMetadata
+from sfincs_jax.solvers.preconditioners.qi.two_level import (
     build_rhs1_xblock_device_global_coupling_preconditioner,
     build_rhs1_xblock_smoothed_global_coupling_preconditioner,
     build_rhs1_xblock_two_level_preconditioner,

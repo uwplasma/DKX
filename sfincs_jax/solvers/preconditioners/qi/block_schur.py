@@ -19,7 +19,7 @@ from typing import Any
 
 import jax.numpy as jnp
 
-from .rhs1_qi_coarse import (
+from sfincs_jax.solvers.preconditioners.qi.coarse import (
     RHS1QICoarseBasis,
     RHS1QICoarseBlockLayout,
     orthonormalize_rhs1_qi_coarse_basis,

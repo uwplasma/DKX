@@ -25,12 +25,12 @@ from ..policies import (
     rhs1_qi_device_status_fields,
     rhs1_qi_device_tail_block_required,
 )
-from ....rhs1_qi_coarse import (
+from sfincs_jax.solvers.preconditioners.qi.coarse import (
     RHS1QICoarseBasis,
     rhs1_xblock_qi_block_geometry_metadata,
 )
-from ....rhs1_qi_device_preconditioner import RHS1QIDevicePreconditionerConfig
-from ....rhs1_qi_galerkin_policy import (
+from sfincs_jax.solvers.preconditioners.qi.device import RHS1QIDevicePreconditionerConfig
+from sfincs_jax.solvers.preconditioners.qi.galerkin_policy import (
     RHS1QIGalerkinProbeCandidate,
     select_rhs1_qi_galerkin_probe_candidate,
 )
@@ -3618,7 +3618,7 @@ def build_xblock_qi_stage_pipeline_context(
     orchestration layer to import every QI helper individually.
     """
 
-    from ....rhs1_qi_coarse import (
+    from sfincs_jax.solvers.preconditioners.qi.coarse import (
         apply_rhs1_qi_coarse_correction,
         build_rhs1_xblock_global_coupling_load_basis,
         build_rhs1_xblock_qi_coarse_basis,
@@ -3626,21 +3626,21 @@ def build_xblock_qi_stage_pipeline_context(
         build_rhs1_qi_galerkin_preconditioner,
         orthonormalize_rhs1_qi_coarse_basis,
     )
-    from ....rhs1_qi_deflation import (
+    from sfincs_jax.solvers.preconditioners.qi.deflation import (
         build_rhs1_qi_residual_deflated_preconditioner,
         probe_rhs1_qi_deflated_correction,
         probe_rhs1_qi_deflated_minres_seed,
     )
-    from ....rhs1_qi_device_preconditioner import (
+    from sfincs_jax.solvers.preconditioners.qi.device import (
         probe_rhs1_qi_device_augmented_seed,
         probe_rhs1_qi_device_preconditioner,
         setup_rhs1_qi_device_preconditioner,
     )
-    from ....rhs1_qi_galerkin_policy import (
+    from sfincs_jax.solvers.preconditioners.qi.galerkin_policy import (
         parse_rhs1_qi_galerkin_dampings,
         parse_rhs1_qi_galerkin_modes,
     )
-    from ....rhs1_qi_two_level import build_rhs1_qi_two_level_preconditioner
+    from sfincs_jax.solvers.preconditioners.qi.two_level import build_rhs1_qi_two_level_preconditioner
 
     return XBlockQIStagePipelineContext(
         **context_kwargs,

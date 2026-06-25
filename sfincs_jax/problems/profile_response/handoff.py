@@ -20,7 +20,7 @@ from ...solver_selection_policy import (
     SolverCandidateMetrics,
     solver_candidate_gate,
 )
-from ...rhs1_pas_policy import rhs1_pas_schur_rescue_controls_from_env
+from sfincs_jax.solvers.preconditioners.pas.policy import rhs1_pas_schur_rescue_controls_from_env
 
 
 @dataclass(frozen=True)

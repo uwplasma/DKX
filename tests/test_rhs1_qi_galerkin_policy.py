@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from sfincs_jax.rhs1_qi_galerkin_policy import (
+from sfincs_jax.solvers.preconditioners.qi.galerkin_policy import (
     RHS1QIGalerkinProbeCandidate,
     parse_rhs1_qi_galerkin_dampings,
     parse_rhs1_qi_galerkin_modes,
