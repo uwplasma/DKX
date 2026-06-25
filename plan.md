@@ -1,6 +1,6 @@
 # SFINCS_JAX Refactor And Release-Readiness Plan
 
-Last updated: 2026-06-22 (America/Chicago)
+Last updated: 2026-06-25 (America/Chicago)
 
 Active implementation branch: `refactor/rhs1-full-assembly-preconditioners`
 
@@ -24,6 +24,12 @@ deferred research lanes.
 
 ### Done
 
+- A source-audited Fortran v3 versus `sfincs_jax` feature matrix now lives in
+  `docs/feature_matrix.rst` and is linked from the Sphinx index. It records the
+  implementation owner and promotion gate for ambipolar options 1/2/3, RHSMode
+  4/5 sensitivities, solver backends, geometry/Phi1 compatibility, outputs, and
+  parallelism so the refactor PR has a single review anchor for parity and
+  deferred functionality.
 - Major RHSMode=1 preconditioner families now have domain owners:
   - full-CSR Schur preconditioners,
   - Fortran-reduced symbolic sparse factors,

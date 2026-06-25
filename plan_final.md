@@ -1,6 +1,6 @@
 # SFINCS_JAX Final Research-Grade Implementation Plan
 
-Last updated: 2026-06-23 (America/Chicago)
+Last updated: 2026-06-25 (America/Chicago)
 
 Active branch: `refactor/rhs1-full-assembly-preconditioners`
 
@@ -97,6 +97,10 @@ Implementation progress on 2026-06-23:
   derivative provider, so finite-difference gates, direct implicit
   certificates, and builder-backed implicit certificates can be wired in
   without changing the root-solve contract.
+- `docs/feature_matrix.rst` now records the audited Fortran-v3 feature owners,
+  the matching `sfincs_jax` implementation owners, and the promotion gates for
+  ambipolar option 1/3, RHSMode 4/5 sensitivities, solver backends, geometry,
+  Phi1, outputs, and parallelism.
 - Remaining Lane 3 work is deeper fixed-shape numerical operator/factor and
   preconditioner setup reuse behind that evaluator, concrete RHSMode-1
   radial-current operator derivative wiring, and Fortran option 1/3 physical
@@ -939,35 +943,42 @@ Deliverables:
 
 ## Immediate Next Steps
 
-1. Generate the Fortran-v3 feature matrix from source/docs into docs.
-2. Add a matching sfincs_jax feature matrix and mark implemented/deferred items.
-3. Use `small_profile_summary_2026-06-23.json` and
+Completed on 2026-06-25:
+
+- Generated the source-audited Fortran-v3 feature matrix in
+  `docs/feature_matrix.rst`.
+- Added the matching `sfincs_jax` status matrix and linked it from the Sphinx
+  index.
+
+Next ordered implementation steps:
+
+1. Use `small_profile_summary_2026-06-23.json` and
    `production_profile_summary_2026-06-23.json` as the first implementation
    gates for the sfincs_jax ambipolar driver. The older 2026-06-22 summaries
    remain historical hand-normalized probes.
-4. Add sfincs_jax replay tests for the new small helical option-1 and option-3
+2. Add sfincs_jax replay tests for the new small helical option-1 and option-3
    sequences, and add a production metadata test that checks solver counts,
    RSS bounds, and marker/residual separation without running Fortran in CI.
-5. Extract the public `api` contracts before moving more internals.
-6. Add fixed-shape numerical operator/preconditioner setup reuse behind the real
+3. Extract the public `api` contracts before moving more internals.
+4. Add fixed-shape numerical operator/preconditioner setup reuse behind the real
    in-process RHSMode 1 ambipolar evaluator. Geometry/output caching, Krylov
    state reuse, symbolic field-split ordering reuse, and trace provenance are
    already in place.
-7. Promote the small-deck dense RHSMode-1 derivative gate to a sparse/matrix-free
+5. Promote the small-deck dense RHSMode-1 derivative gate to a sparse/matrix-free
    production builder with analytic or JVP-backed `Er` operator/RHS derivatives.
    The generic certificate, builder bridge, magnetic-drift radial-current
    observable, coordinate conversion, finite-difference derivative contract, and
    Newton root solvers are already in place. Remaining work is production
    operator derivatives plus Phi1 drift-current branches.
-8. Extend the JVP/VJP dot-product gate from the current tiny no-Phi1 diagnostic
+6. Extend the JVP/VJP dot-product gate from the current tiny no-Phi1 diagnostic
    set to Phi1 drift-current, total heat-flux, and intermediate-grid cases.
-9. Wire the exact derivative into safeguarded Newton/bisection and pure Newton
+7. Wire the exact derivative into safeguarded Newton/bisection and pure Newton
    for Fortran option 1/3 physical parity gates.
-10. Define residual/operator/transpose operator protocol and migrate one
+8. Define residual/operator/transpose operator protocol and migrate one
    RHSMode 2/3 path to it.
-11. Add one T3D/NEOPAX-style closure example with fixed geometry and radial
+9. Add one T3D/NEOPAX-style closure example with fixed geometry and radial
    profile inputs.
-12. Run focused tests, docs build, commit, and push after each coherent owner
+10. Run focused tests, docs build, commit, and push after each coherent owner
     boundary or feature milestone.
 
 ## Known Risks And Explicit Deferred Items
