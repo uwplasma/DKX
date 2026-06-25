@@ -1739,3 +1739,62 @@ Next best steps:
    bounded; otherwise document it as a nightly/prolonged gate.
 3. Continue the review-ready refactor lane by extracting one larger solve-loop
    seam into existing domain modules.
+
+## 2026-06-25 RHSMode-4 Debug Finite-Difference Fixture
+
+Steps taken:
+
+1. Probed a smaller debug-adjoint deck and rejected it because SFINCS Fortran
+   v3 requires `Ntheta >= 5`.
+2. Reran the checked small W7-X-like RHSMode=4 radial-current fixture with
+   `debugAdjoint=.true.`.
+3. Checked in a compact debug namelist and a separate lightweight JSON summary
+   with all debug output field shapes plus selected analytic, finite-
+   difference, and percent-error values.
+4. Extended `fortran_v3_adjoint_sensitivity_output_ranks` so debug percent-
+   error fields have checked tensor ranks.
+5. Added a regression that validates the full debug output surface, selected
+   finite-difference values, finite percent-error bounds, and the Fortran NaN
+   mask for unfilled lambda/mode entries.
+6. Updated release notes, validation docs, feature matrix, benchmark README,
+   and `plan_final.md`.
+
+Results:
+
+- Fortran v3 W7-X-like RHSMode=4 debug fixture completed with wall time
+  `0.25 s`, finite-difference time `0.110304 s`, five main solve times around
+  `0.026-0.036 s`, and peak RSS `144,588,800` bytes.
+- The debug HDF5 output included all analytic sensitivity fields, all
+  `_finitediff` fields, and all percent-error fields.
+- Fortran leaves some finite-difference lambda/mode entries as NaN; the JSON
+  summary records those as `null`, and the regression pins that mask.
+- Full sensitivity module passed:
+  `JAX_ENABLE_X64=True python -m pytest
+  tests/test_sensitivity.py::test_fortran_v3_rhs4_debug_reference_summary_pins_finite_difference_outputs
+  tests/test_sensitivity.py -q --tb=short` with `29 passed in 44.36 s`.
+- Broader focused validation passed:
+  `JAX_ENABLE_X64=True python -m pytest tests/test_input_compat.py
+  tests/test_sensitivity.py tests/test_ambipolar_problem.py
+  tests/test_domain_package_import_contracts.py -q --tb=short` with
+  `77 passed in 66.48 s`.
+- `python -m ruff check sfincs_jax/sensitivity.py tests/test_sensitivity.py`,
+  JSON validation for both RHSMode 4/5 summaries, `git diff --check`, and
+  `python -m sphinx -b html docs docs/_build/html -q` passed.
+
+Current lane status:
+
+- Ambipolar solver lane: 99% bounded; no change in this tranche.
+- RHSMode 4/5 sensitivity lane: 95%; compact output families and debug
+  finite-difference gates are pinned. Remaining work is intermediate and
+  production-grid parity plus first-class public RHSMode 4/5 solve output
+  generation.
+- Refactor/review-ready PR lane: 89%; no change in this fixture tranche.
+- Overall completion: about 94%.
+
+Next best steps:
+
+1. Commit and push this debug fixture tranche.
+2. Return to the refactor/review-ready PR lane and extract one larger
+   solve-loop seam into existing domain modules.
+3. Add intermediate RHSMode=4/5 parity gates only after the API surface for
+   writing those outputs is stable.

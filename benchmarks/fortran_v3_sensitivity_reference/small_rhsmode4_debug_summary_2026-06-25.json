@@ -1,0 +1,333 @@
+{
+  "case": "geometry4_w7x_like_small_rhs4_debug_radial_current",
+  "finite_difference_times_s": [
+    0.11030400000004192
+  ],
+  "fortran_executable": "/Users/rogeriojorge/local/sfincs/fortran/version3/sfincs",
+  "hdf5_fields": {
+    "RHSMode": {
+      "shape": [],
+      "values": 4
+    },
+    "bootstrapPercentError": {
+      "shape": [
+        1,
+        4,
+        1
+      ]
+    },
+    "dBootstrapdLambda": {
+      "shape": [
+        1,
+        4,
+        1
+      ]
+    },
+    "dBootstrapdLambda_finitediff": {
+      "shape": [
+        1,
+        4,
+        1
+      ]
+    },
+    "dHeatFluxdLambda": {
+      "shape": [
+        1,
+        4,
+        2,
+        1
+      ]
+    },
+    "dHeatFluxdLambda_finitediff": {
+      "shape": [
+        1,
+        4,
+        2,
+        1
+      ]
+    },
+    "dParallelFlowdLambda": {
+      "shape": [
+        1,
+        4,
+        2,
+        1
+      ]
+    },
+    "dParallelFlowdLambda_finitediff": {
+      "shape": [
+        1,
+        4,
+        2,
+        1
+      ]
+    },
+    "dParticleFluxdLambda": {
+      "shape": [
+        1,
+        4,
+        2,
+        1
+      ],
+      "values": [
+        [
+          [
+            [
+              -2.5419940523818905e-08
+            ],
+            [
+              -1.6688440185986772e-09
+            ]
+          ],
+          [
+            [
+              -2.1452517447485144e-09
+            ],
+            [
+              -1.718232244348001e-10
+            ]
+          ],
+          [
+            [
+              -3.136924069231282e-09
+            ],
+            [
+              -1.854722892664832e-10
+            ]
+          ],
+          [
+            [
+              -4.507267303752549e-08
+            ],
+            [
+              -2.59255992797443e-09
+            ]
+          ]
+        ]
+      ]
+    },
+    "dParticleFluxdLambda_finitediff": {
+      "shape": [
+        1,
+        4,
+        2,
+        1
+      ],
+      "values": [
+        [
+          [
+            [
+              -2.541524989581337e-08
+            ],
+            [
+              -1.6685330196914764e-09
+            ]
+          ],
+          [
+            [
+              null
+            ],
+            [
+              null
+            ]
+          ],
+          [
+            [
+              -3.1370940147600628e-09
+            ],
+            [
+              -1.854799281090257e-10
+            ]
+          ],
+          [
+            [
+              -4.5065027089298004e-08
+            ],
+            [
+              -2.5917881658491387e-09
+            ]
+          ]
+        ]
+      ]
+    },
+    "dRadialCurrentdLambda": {
+      "shape": [
+        1,
+        4,
+        1
+      ],
+      "values": [
+        [
+          [
+            -2.3751096505220246e-08
+          ],
+          [
+            -1.9734285203137135e-09
+          ],
+          [
+            -2.951451779964798e-09
+          ],
+          [
+            -4.248011310955108e-08
+          ]
+        ]
+      ]
+    },
+    "dRadialCurrentdLambda_finitediff": {
+      "shape": [
+        1,
+        4,
+        1
+      ],
+      "values": [
+        [
+          [
+            -2.3746716876116538e-08
+          ],
+          [
+            null
+          ],
+          [
+            -2.951614086651037e-09
+          ],
+          [
+            -4.247323892342985e-08
+          ]
+        ]
+      ]
+    },
+    "dTotalHeatFluxdLambda": {
+      "shape": [
+        1,
+        4,
+        1
+      ]
+    },
+    "dTotalHeatFluxdLambda_finitediff": {
+      "shape": [
+        1,
+        4,
+        1
+      ]
+    },
+    "debugAdjoint": {
+      "shape": [],
+      "values": 1
+    },
+    "heatFluxPercentError": {
+      "shape": [
+        1,
+        4,
+        2,
+        1
+      ]
+    },
+    "parallelFlowPercentError": {
+      "shape": [
+        1,
+        4,
+        2,
+        1
+      ]
+    },
+    "particleFluxPercentError": {
+      "shape": [
+        1,
+        4,
+        2,
+        1
+      ],
+      "values": [
+        [
+          [
+            [
+              0.018455958626276307
+            ],
+            [
+              0.018639062189990195
+            ]
+          ],
+          [
+            [
+              0.0
+            ],
+            [
+              0.0
+            ]
+          ],
+          [
+            [
+              0.005417291543736451
+            ],
+            [
+              0.004118420047063769
+            ]
+          ],
+          [
+            [
+              0.016966478711614087
+            ],
+            [
+              0.02977720692842985
+            ]
+          ]
+        ]
+      ]
+    },
+    "radialCurrentPercentError": {
+      "shape": [
+        1,
+        4,
+        1
+      ],
+      "values": [
+        [
+          [
+            0.018443093108641975
+          ],
+          [
+            0.0
+          ],
+          [
+            0.005498912848163859
+          ],
+          [
+            0.016184746667479516
+          ]
+        ]
+      ]
+    },
+    "totalHeatFluxPercentError": {
+      "shape": [
+        1,
+        4,
+        1
+      ]
+    }
+  },
+  "jacobian_nnz": [
+    19566,
+    19566,
+    19566,
+    19566,
+    19566
+  ],
+  "kind": "sfincs_fortran_v3_rhsmode4_debug_sensitivity_reference",
+  "main_solve_times_s": [
+    0.03562000000010812,
+    0.02771700000016608,
+    0.026217999999971653,
+    0.02627800000004754,
+    0.02585799999997107
+  ],
+  "max_rss_bytes": 144588800,
+  "preconditioner_nnz": [
+    15436,
+    15436,
+    15436,
+    15436,
+    15436
+  ],
+  "tier": "small",
+  "wall_time_s": 0.25
+}

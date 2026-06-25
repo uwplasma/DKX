@@ -103,8 +103,8 @@ Fortran v3 feature ownership
        active Fortran-style option-1 ``dJ_r/dE_r`` replay, Fortran-v3
        RHSMode-4/5 input validators, HDF5 sensitivity field-name/rank gates,
        and compact Fortran RHSMode-4 radial-current, heat-flux,
-       parallel-flow, and bootstrap numerical replay fixtures exist;
-       production grids remain.
+       parallel-flow, bootstrap, and debug finite-difference numerical replay
+       fixtures exist; production grids remain.
    * - RHSMode 5 ambipolar sensitivities
      - ``ambipolarSolver.F90``, ``solver.F90``, ``adjointDiagnostics.F90``
      - Fortran first finds ambipolar ``E_r``, then evaluates derivatives at

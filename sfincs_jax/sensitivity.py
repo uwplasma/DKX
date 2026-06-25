@@ -68,6 +68,9 @@ _ADJOINT_SPECIES_FIELD_RANKS = {
     "dHeatFluxdLambda_finitediff": 4,
     "dParticleFluxdLambda_finitediff": 4,
     "dParallelFlowdLambda_finitediff": 4,
+    "heatFluxPercentError": 4,
+    "parallelFlowPercentError": 4,
+    "particleFluxPercentError": 4,
 }
 
 _ADJOINT_SURFACE_FIELD_RANKS = {
@@ -79,6 +82,10 @@ _ADJOINT_SURFACE_FIELD_RANKS = {
     "dRadialCurrentdLambda_finitediff": 3,
     "dBootstrapdLambda_finitediff": 3,
     "dPhidPsidLambda_finitediff": 3,
+    "bootstrapPercentError": 3,
+    "dPhidPsiPercentError": 3,
+    "radialCurrentPercentError": 3,
+    "totalHeatFluxPercentError": 3,
 }
 
 

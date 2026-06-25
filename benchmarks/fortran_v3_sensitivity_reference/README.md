@@ -25,3 +25,7 @@ the small ambipolar reference deck:
 - `geometry4_w7x_like_small_rhs5_heat_flux` pins the corresponding RHSMode=5
   constant-current heat-flux fields plus `dPhidPsidLambda` after the Fortran
   Brent ambipolar solve.
+- `geometry4_w7x_like_small_rhs4_debug_radial_current` pins the debug-adjoint
+  finite-difference output surface and selected radial-current finite-
+  difference values. Some finite-difference lambda/mode entries are null in the
+  JSON because Fortran v3 leaves the corresponding HDF5 entries as NaN.
