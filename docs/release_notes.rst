@@ -22,6 +22,11 @@ Unreleased
   re-exported from ``sfincs_jax`` and are covered by fast monkeypatched routing
   tests so refactoring can move internal modules without changing public user
   code.
+- Added explicit fixed-shape setup-reuse admission metadata to the in-process
+  ambipolar evaluator and CLI summary JSON. Ambipolar runs now report whether a
+  prior Krylov/setup state existed, whether it was actually admitted for the
+  current same-shape solve, the fixed-shape signature used for the decision, and
+  a cumulative reuse count.
 - Moved the first RHSMode=2/3 transport implementation cluster into
   ``sfincs_jax.problems.transport_matrix``: setup, active/dense setup, loop
   support, finalization, streaming outputs, and postsolve diagnostics. The old

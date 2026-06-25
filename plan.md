@@ -39,6 +39,11 @@ deferred research lanes.
   `sfincs_jax.write_output`, `sfincs_jax.read_output`, and
   `sfincs_jax.run_ambipolar_brent`, with fast routing tests. This gives users a
   stable Python entry point before more internals move out of legacy modules.
+- The real in-process ambipolar evaluator now has an explicit fixed-shape setup
+  reuse admission contract. Each evaluation records whether a prior state
+  existed, whether it was used, the input/output shape signatures, the admission
+  reason, and a cumulative same-shape reuse count; the CLI summary serializes
+  the same fields.
 - Major RHSMode=1 preconditioner families now have domain owners:
   - full-CSR Schur preconditioners,
   - Fortran-reduced symbolic sparse factors,

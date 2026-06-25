@@ -138,8 +138,14 @@ class SfincsJaxEvaluationRecord:
     solver_state_reuse_enabled: bool = False
     solver_state_path: Path | None = None
     solver_state_input_exists: bool = False
+    solver_state_input_used: bool = False
     solver_state_output_exists: bool = False
+    fixed_shape_input_signature: tuple[int, ...] | None = None
     fixed_shape_signature: tuple[int, ...] | None = None
+    fixed_shape_reuse_enabled: bool = False
+    fixed_shape_reuse_admitted: bool = False
+    fixed_shape_reuse_reason: str = "disabled"
+    fixed_shape_reuse_count: int = 0
     metadata: Mapping[str, Any] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
@@ -153,6 +159,12 @@ class SfincsJaxEvaluationRecord:
             object.__setattr__(self, "cache_dir", Path(self.cache_dir))
         if self.solver_state_path is not None:
             object.__setattr__(self, "solver_state_path", Path(self.solver_state_path))
+        if self.fixed_shape_input_signature is not None:
+            object.__setattr__(
+                self,
+                "fixed_shape_input_signature",
+                tuple(int(v) for v in self.fixed_shape_input_signature),
+            )
         if self.fixed_shape_signature is not None:
             object.__setattr__(
                 self,
@@ -222,6 +234,7 @@ class SfincsJaxRadialCurrentEvaluator:
         cache_dir: str | Path | None = None,
         reuse_solver_state: bool = True,
         solver_state_path: str | Path | None = None,
+        reuse_fixed_shape_setup: bool = True,
         emit: Callable[[int, str], None] | None = None,
     ) -> None:
         self.input_namelist = Path(input_namelist).resolve()
@@ -238,6 +251,7 @@ class SfincsJaxRadialCurrentEvaluator:
             else self.work_dir / ".sfincs_jax_output_cache"
         )
         self.reuse_solver_state = bool(reuse_solver_state)
+        self.reuse_fixed_shape_setup = bool(reuse_fixed_shape_setup)
         self.solver_state_path = (
             Path(solver_state_path).resolve()
             if solver_state_path is not None
@@ -252,6 +266,8 @@ class SfincsJaxRadialCurrentEvaluator:
             variable = _er_scan_var_name(nml=read_sfincs_input(self.input_namelist))
         self.variable = str(variable)
         self.records: list[SfincsJaxEvaluationRecord] = []
+        self._last_fixed_shape_signature: tuple[int, ...] | None = None
+        self._fixed_shape_reuse_count = 0
 
     def __call__(self, er: float) -> float:
         from ..ambipolar import radial_current_from_output  # noqa: PLC0415
@@ -286,10 +302,33 @@ class SfincsJaxRadialCurrentEvaluator:
                 }
             )
         solver_state_input_exists = bool(self.reuse_solver_state and self.solver_state_path.exists())
+        fixed_shape_input_signature = (
+            read_krylov_state_signature(self.solver_state_path)
+            if self.reuse_solver_state and solver_state_input_exists
+            else None
+        )
+        fixed_shape_reuse_enabled = bool(self.reuse_solver_state and self.reuse_fixed_shape_setup)
+        solver_state_input_used = False
+        fixed_shape_reuse_admitted = False
+        if not fixed_shape_reuse_enabled:
+            fixed_shape_reuse_reason = "disabled"
+        elif not solver_state_input_exists:
+            fixed_shape_reuse_reason = "no_prior_state"
+        elif fixed_shape_input_signature is None:
+            fixed_shape_reuse_reason = "missing_or_invalid_signature"
+        elif self._last_fixed_shape_signature is None:
+            fixed_shape_reuse_admitted = True
+            fixed_shape_reuse_reason = "external_state_unverified"
+        elif tuple(fixed_shape_input_signature) == tuple(self._last_fixed_shape_signature):
+            fixed_shape_reuse_admitted = True
+            fixed_shape_reuse_reason = "fixed_shape_signature_match"
+        else:
+            fixed_shape_reuse_reason = "fixed_shape_signature_mismatch"
+        solver_state_input_used = bool(solver_state_input_exists and fixed_shape_reuse_admitted)
         if self.reuse_solver_state:
             self.solver_state_path.parent.mkdir(parents=True, exist_ok=True)
             env_overrides["SFINCS_JAX_STATE_OUT"] = str(self.solver_state_path)
-            if solver_state_input_exists:
+            if solver_state_input_used:
                 env_overrides["SFINCS_JAX_STATE_IN"] = str(self.solver_state_path)
         with _temporary_env(env_overrides):
             write_sfincs_jax_output_h5(
@@ -311,6 +350,10 @@ class SfincsJaxRadialCurrentEvaluator:
             if self.reuse_solver_state and solver_state_output_exists
             else None
         )
+        if fixed_shape_reuse_admitted:
+            self._fixed_shape_reuse_count += 1
+        if fixed_shape_signature is not None:
+            self._last_fixed_shape_signature = tuple(fixed_shape_signature)
         self.records.append(
             SfincsJaxEvaluationRecord(
                 er=float(er),
@@ -334,14 +377,26 @@ class SfincsJaxRadialCurrentEvaluator:
                 solver_state_reuse_enabled=bool(self.reuse_solver_state),
                 solver_state_path=self.solver_state_path if self.reuse_solver_state else None,
                 solver_state_input_exists=solver_state_input_exists,
+                solver_state_input_used=solver_state_input_used,
                 solver_state_output_exists=solver_state_output_exists,
+                fixed_shape_input_signature=fixed_shape_input_signature,
                 fixed_shape_signature=fixed_shape_signature,
+                fixed_shape_reuse_enabled=fixed_shape_reuse_enabled,
+                fixed_shape_reuse_admitted=fixed_shape_reuse_admitted,
+                fixed_shape_reuse_reason=fixed_shape_reuse_reason,
+                fixed_shape_reuse_count=self._fixed_shape_reuse_count,
                 metadata={
                     "requested_solve_method": self.solve_method,
                     "solver_state_reuse_enabled": bool(self.reuse_solver_state),
                     "solver_state_input_exists": solver_state_input_exists,
+                    "solver_state_input_used": solver_state_input_used,
                     "solver_state_output_exists": solver_state_output_exists,
+                    "fixed_shape_input_signature": fixed_shape_input_signature,
                     "fixed_shape_signature": fixed_shape_signature,
+                    "fixed_shape_reuse_enabled": fixed_shape_reuse_enabled,
+                    "fixed_shape_reuse_admitted": fixed_shape_reuse_admitted,
+                    "fixed_shape_reuse_reason": fixed_shape_reuse_reason,
+                    "fixed_shape_reuse_count": self._fixed_shape_reuse_count,
                     **({} if trace is None else {"solver_trace_metadata": dict(trace.metadata)}),
                 },
             )

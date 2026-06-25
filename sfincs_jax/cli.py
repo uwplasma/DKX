@@ -593,10 +593,20 @@ def _cmd_ambipolar(args: argparse.Namespace) -> int:
                 "solver_state_reuse_enabled": item.solver_state_reuse_enabled,
                 "solver_state_path": None if item.solver_state_path is None else str(item.solver_state_path),
                 "solver_state_input_exists": item.solver_state_input_exists,
+                "solver_state_input_used": item.solver_state_input_used,
                 "solver_state_output_exists": item.solver_state_output_exists,
+                "fixed_shape_input_signature": (
+                    None
+                    if item.fixed_shape_input_signature is None
+                    else list(item.fixed_shape_input_signature)
+                ),
                 "fixed_shape_signature": (
                     None if item.fixed_shape_signature is None else list(item.fixed_shape_signature)
                 ),
+                "fixed_shape_reuse_enabled": item.fixed_shape_reuse_enabled,
+                "fixed_shape_reuse_admitted": item.fixed_shape_reuse_admitted,
+                "fixed_shape_reuse_reason": item.fixed_shape_reuse_reason,
+                "fixed_shape_reuse_count": item.fixed_shape_reuse_count,
             }
             for item in evaluator.records
         ],

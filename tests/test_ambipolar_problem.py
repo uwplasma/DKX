@@ -342,9 +342,15 @@ def test_sfincs_jax_radial_current_evaluator_runs_real_tiny_rhs1_output(tmp_path
     assert record.solver_state_reuse_enabled is True
     assert record.solver_state_path is not None
     assert record.solver_state_input_exists is False
+    assert record.solver_state_input_used is False
     assert record.solver_state_output_exists is True
     assert record.solver_state_path.exists()
+    assert record.fixed_shape_input_signature is None
     assert record.fixed_shape_signature is not None
+    assert record.fixed_shape_reuse_enabled is True
+    assert record.fixed_shape_reuse_admitted is False
+    assert record.fixed_shape_reuse_reason == "no_prior_state"
+    assert record.fixed_shape_reuse_count == 0
     data = read_sfincs_h5(record.output_path)
     np.testing.assert_allclose(float(np.asarray(data["Er"]).reshape(())), 0.0, rtol=0.0, atol=0.0)
     np.testing.assert_allclose(radial_current, radial_current_from_output(data), rtol=0.0, atol=5.0e-12)
@@ -354,9 +360,15 @@ def test_sfincs_jax_radial_current_evaluator_runs_real_tiny_rhs1_output(tmp_path
     repeated = evaluator.records[1]
     assert repeated.solver_state_reuse_enabled is True
     assert repeated.solver_state_input_exists is True
+    assert repeated.solver_state_input_used is True
     assert repeated.solver_state_output_exists is True
     assert repeated.solver_state_path == record.solver_state_path
+    assert repeated.fixed_shape_input_signature == record.fixed_shape_signature
     assert repeated.fixed_shape_signature == record.fixed_shape_signature
+    assert repeated.fixed_shape_reuse_enabled is True
+    assert repeated.fixed_shape_reuse_admitted is True
+    assert repeated.fixed_shape_reuse_reason == "fixed_shape_signature_match"
+    assert repeated.fixed_shape_reuse_count == 1
     np.testing.assert_allclose(repeated_radial_current, radial_current, rtol=0.0, atol=5.0e-12)
 
 

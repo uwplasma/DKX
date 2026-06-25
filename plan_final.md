@@ -958,28 +958,29 @@ Completed on 2026-06-25:
   `sfincs_jax.run_ambipolar_brent`. They are lazy wrappers over the current
   internals and are covered by fast routing tests, so future internal moves do
   not force user-facing import changes.
+- Added explicit fixed-shape setup-reuse admission metadata to the real
+  in-process RHSMode-1 ambipolar evaluator. Each solve records prior-state
+  existence, actual state use, input/output shape signatures, admission reason,
+  and cumulative same-shape reuse count; the CLI summary serializes these
+  fields and tests verify cold then same-shape-warm behavior.
 
 Next ordered implementation steps:
 
-1. Add fixed-shape numerical operator/preconditioner setup reuse behind the real
-   in-process RHSMode 1 ambipolar evaluator. Geometry/output caching, Krylov
-   state reuse, symbolic field-split ordering reuse, and trace provenance are
-   already in place.
-2. Promote the small-deck dense RHSMode-1 derivative gate to a sparse/matrix-free
+1. Promote the small-deck dense RHSMode-1 derivative gate to a sparse/matrix-free
    production builder with analytic or JVP-backed `Er` operator/RHS derivatives.
    The generic certificate, builder bridge, magnetic-drift radial-current
    observable, coordinate conversion, finite-difference derivative contract, and
    Newton root solvers are already in place. Remaining work is production
    operator derivatives plus Phi1 drift-current branches.
-3. Extend the JVP/VJP dot-product gate from the current tiny no-Phi1 diagnostic
+2. Extend the JVP/VJP dot-product gate from the current tiny no-Phi1 diagnostic
    set to Phi1 drift-current, total heat-flux, and intermediate-grid cases.
-4. Wire the exact derivative into safeguarded Newton/bisection and pure Newton
+3. Wire the exact derivative into safeguarded Newton/bisection and pure Newton
    for Fortran option 1/3 physical parity gates.
-5. Define residual/operator/transpose operator protocol and migrate one
+4. Define residual/operator/transpose operator protocol and migrate one
    RHSMode 2/3 path to it.
-6. Add one T3D/NEOPAX-style closure example with fixed geometry and radial
+5. Add one T3D/NEOPAX-style closure example with fixed geometry and radial
    profile inputs.
-7. Run focused tests, docs build, commit, and push after each coherent owner
+6. Run focused tests, docs build, commit, and push after each coherent owner
     boundary or feature milestone.
 
 ## Known Risks And Explicit Deferred Items
