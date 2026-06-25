@@ -26,7 +26,7 @@ from sfincs_jax.paths import _strip_quotes, resolve_existing_path
 from sfincs_jax.profiling import SimpleProfiler, _device_mem_mb, _rss_mb, maybe_profiler
 from sfincs_jax.scans import _er_scan_var_name, _patch_scalar_in_group, linspace_including_endpoints, run_er_scan
 from sfincs_jax.problems.transport_matrix.parallel.worker import main as transport_worker_main
-from sfincs_jax.verbose import Timer, make_emit
+from sfincs_jax.profiling import Timer, make_emit
 
 
 def test_fortran_bool_and_radial_current_helpers() -> None:
@@ -219,7 +219,7 @@ def test_profiling_and_verbose_helpers(monkeypatch: pytest.MonkeyPatch) -> None:
     assert any("hello" in line for line in lines)
     assert not any("skip" in line for line in lines)
 
-    import sfincs_jax.verbose as verbose
+    import sfincs_jax.profiling as verbose
 
     t = iter([2.0, 2.4])
     monkeypatch.setattr(verbose.time, "perf_counter", lambda: next(t))
