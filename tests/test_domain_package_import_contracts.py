@@ -474,8 +474,8 @@ PROFILE_RESPONSE_COMPATIBILITY_IMPORTS = (
         "resolve_rhs1_active_dof_mode",
     ),
     (
-        "sfincs_jax.problems.profile_response.active_projection",
-        "sfincs_jax.problems.profile_response.active_projection",
+        "sfincs_jax.problems.profile_response.active_dof",
+        "sfincs_jax.problems.profile_response.active_dof",
         "reduce_full_with_indices",
     ),
     (
@@ -524,18 +524,18 @@ PROFILE_RESPONSE_COMPATIBILITY_IMPORTS = (
         "build_rhs1_xblock_correction_metadata",
     ),
     (
-        "sfincs_jax.problems.profile_response.strong_preconditioning",
-        "sfincs_jax.problems.profile_response.strong_preconditioning",
+        "sfincs_jax.problems.profile_response.preconditioner_build",
+        "sfincs_jax.problems.profile_response.preconditioner_build",
         "auto_rhs1_full_strong_kind",
     ),
     (
-        "sfincs_jax.problems.profile_response.strong_preconditioning",
-        "sfincs_jax.problems.profile_response.strong_preconditioning",
+        "sfincs_jax.problems.profile_response.preconditioner_build",
+        "sfincs_jax.problems.profile_response.preconditioner_build",
         "rhs1_resolved_strong_preconditioner_control",
     ),
     (
-        "sfincs_jax.problems.profile_response.strong_preconditioning",
-        "sfincs_jax.problems.profile_response.strong_preconditioning",
+        "sfincs_jax.problems.profile_response.preconditioner_build",
+        "sfincs_jax.problems.profile_response.preconditioner_build",
         "requested_rhs1_strong_preconditioner_kind",
     ),
 )
@@ -577,6 +577,9 @@ def test_existing_legacy_modules_keep_their_import_paths() -> None:
 
     for module_name in LEGACY_MODULES_THAT_KEEP_THEIR_IMPORT_PATHS:
         module = _import_module(module_name)
+        if module_name == "sfincs_jax.v3_driver":
+            assert module.__name__ == "sfincs_jax.problems.profile_response.solve"
+            continue
         assert module.__name__ == module_name
 
 
