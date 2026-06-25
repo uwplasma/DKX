@@ -599,32 +599,36 @@ is still the largest non-reviewable file. This tranche must move whole
 responsibility blocks into existing owners; it must not create new
 profile-response helper files.
 
-Move/delete targets:
+Completed inside Tranche 1 as of 2026-06-25:
 
-1. Move the remaining private backend-policy wrappers from `solve.py` into
-   `policies.py`. Keep one env-token parser, one bool/int/float parser family,
-   and dataclass policy contracts; delete duplicated parsers in
-   `sparse/xblock.py` and `sparse/qi.py` when they can import the shared
-   parser without circular dependencies.
-2. Move host sparse direct setup, sparse cache-key construction, active sparse
-   pattern probing, and sparse-JAX preconditioner materialization from
-   `solve.py` into `sparse/direct.py` or `sparse/policy.py`. These are sparse
-   setup responsibilities, not solve-entry responsibilities.
-3. Move sparse-PC branch orchestration from `solve.py` into the existing
+1. Host sparse direct setup, sparse cache-key construction, active sparse
+   pattern probing, sparse-JAX preconditioner materialization, and host sparse
+   direct polish now live in `profile_response/sparse/direct.py`.
+2. Current-backend RHSMode-1 dense/sparse/PAS/x-block admission wrappers now
+   live in `profile_response/policies.py`; `solve.py` only imports the legacy
+   private aliases needed by older call paths and compatibility tests.
+
+Remaining move/delete targets:
+
+1. Collapse duplicated env-token parsing. Keep one bool/int/float parser family
+   and dataclass policy contracts in `policies.py`; delete duplicated parsers
+   in `sparse/xblock.py`, `sparse/qi.py`, and sparse policy helpers when they
+   can import the shared parser without circular dependencies.
+2. Move sparse-PC branch orchestration from `solve.py` into the existing
    sparse owners:
    `sparse/handoff.py` for sparse-PC GMRES handoff,
    `sparse/xblock.py` for x-block stages,
    `sparse/qi.py` for QI/device stages,
    `sparse/fortran_reduced.py` for Fortran-reduced paths, and
    `sparse/finalization.py` only if it is still shared by more than one owner.
-4. Move result payload assembly, progress-line replay, and final diagnostic
+3. Move result payload assembly, progress-line replay, and final diagnostic
    normalization from `solve.py` into `handoff.py` and
    `solver_diagnostics.py`.
-5. Delete compatibility aliases inside `solve.py` after tests and callers
+4. Delete compatibility aliases inside `solve.py` after tests and callers
    import the canonical owners. If `sfincs_jax.v3_driver` still needs a name,
    import it into the shim from the canonical owner rather than keeping its
    implementation in `solve.py`.
-6. Leave `solve.py` with only public solve entry points, phase sequencing, and
+5. Leave `solve.py` with only public solve entry points, phase sequencing, and
    dependency injection. It should not own policy parsing, sparse pattern
    builders, QI stages, dense KSP/SciPy rescue internals, output schema, or
    final payload normalization.
@@ -635,7 +639,7 @@ Expected result:
   candidates after call-graph checks are `sparse/finalization.py` if it becomes
   single-owner, `handoff.py` if it becomes only payload assembly, and any
   re-export-only sparse policy file left after sparse policy migration.
-- `profile_response/solve.py` drops from 10.4k lines below 3.5k lines.
+- `profile_response/solve.py` drops from 9.7k lines below 3.5k lines.
 - `policies.py` may remain large, but it must no longer duplicate parser
   helpers or recreate the deleted policy-shard structure.
 
