@@ -763,3 +763,44 @@ Next best steps:
    ambipolar solvers.
 3. Add sfincs_jax-vs-Fortran replay gates for the new production profiles
    without running Fortran in CI.
+
+## 2026-06-25 Implicit Linear Sensitivity Certificate
+
+Steps taken:
+
+1. Added `sfincs_jax.sensitivity` as the domain owner for reusable
+   implicit/adjoint derivative certificates.
+2. Implemented `implicit_linear_observable_derivative` for
+   `A(p) x(p) = b(p)` and `J(p) = c(p)^T x(p) + J0(p)`.
+3. The helper solves both the tangent equation
+   `A x_p = b_p - A_p x` and the adjoint equation `A^T lambda = c`, reports
+   primal/tangent/adjoint residuals, and optionally compares to centered finite
+   differences.
+4. Added `implicit_linear_radial_current_derivative` in
+   `sfincs_jax.problems.ambipolar`, returning the existing
+   `RadialCurrentDerivativeResult` contract expected by the safeguarded Newton
+   and pure Newton ambipolar solvers.
+5. Added API/docs entries and import-contract coverage for the new public
+   module and ambipolar adapter.
+
+Results:
+
+- Focused tests passed:
+  `python -m pytest tests/test_sensitivity.py tests/test_ambipolar_problem.py
+  tests/test_domain_package_import_contracts.py -q --tb=short` with
+  `24 passed`.
+- Sphinx docs build passed:
+  `python -m sphinx -b html docs docs/_build/html -q`.
+- Static checks passed:
+  `python -m py_compile sfincs_jax/sensitivity.py
+  sfincs_jax/problems/ambipolar.py sfincs_jax/problems/__init__.py` and
+  `git diff --check`.
+
+Next best steps:
+
+1. Wire the certificate to the concrete RHSMode 1 radial-current residual graph
+   so `dJr/dEr` uses the actual SFINCS_JAX operator/RHS derivatives.
+2. Compare the concrete derivative against centered finite differences on a
+   tiny RHSMode 1 case.
+3. Use that derivative provider in safeguarded Newton and pure Newton
+   ambipolar solves for Fortran option-1/3 parity gates.

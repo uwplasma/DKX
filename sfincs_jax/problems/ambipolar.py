@@ -961,6 +961,66 @@ def finite_difference_radial_current_derivative(
     )
 
 
+def implicit_linear_radial_current_derivative(
+    *,
+    er: float,
+    matrix: Any,
+    rhs: Any,
+    matrix_derivative: Any,
+    rhs_derivative: Any,
+    radial_current_vector: Any,
+    radial_current_vector_derivative: Any | None = None,
+    radial_current_offset: float = 0.0,
+    radial_current_offset_derivative: float = 0.0,
+    finite_difference_radial_current: Callable[[float], float] | None = None,
+    finite_difference_step: float | None = None,
+    metadata: Mapping[str, Any] | None = None,
+) -> RadialCurrentDerivativeResult:
+    """Return an implicit/adjoint derivative certificate for ``dJr/dEr``.
+
+    This is the ambipolar-specific adapter around
+    :func:`sfincs_jax.sensitivity.implicit_linear_observable_derivative`. The
+    full RHSMode-1 wiring supplies the true linearized operator and
+    ``Er``-derivative terms; this adapter keeps the root-solver contract stable.
+    """
+
+    from ..sensitivity import implicit_linear_observable_derivative  # noqa: PLC0415
+
+    result = implicit_linear_observable_derivative(
+        matrix=matrix,
+        rhs=rhs,
+        matrix_derivative=matrix_derivative,
+        rhs_derivative=rhs_derivative,
+        observable_vector=radial_current_vector,
+        observable_vector_derivative=radial_current_vector_derivative,
+        observable_offset=radial_current_offset,
+        observable_offset_derivative=radial_current_offset_derivative,
+        parameter=float(er),
+        finite_difference_observable=finite_difference_radial_current,
+        finite_difference_step=finite_difference_step,
+        metadata=metadata,
+    )
+    return RadialCurrentDerivativeResult(
+        er=float(er),
+        derivative=float(result.derivative),
+        step=0.0 if result.finite_difference_step is None else float(result.finite_difference_step),
+        scheme="implicit_linear_adjoint",
+        evaluations=(),
+        metadata={
+            **dict(result.metadata),
+            "observable": result.observable,
+            "tangent_derivative": result.tangent_derivative,
+            "adjoint_derivative": result.adjoint_derivative,
+            "tangent_adjoint_abs_error": result.tangent_adjoint_abs_error,
+            "primal_residual_norm": result.primal_residual_norm,
+            "tangent_residual_norm": result.tangent_residual_norm,
+            "adjoint_residual_norm": result.adjoint_residual_norm,
+            "finite_difference_derivative": result.finite_difference_derivative,
+            "finite_difference_abs_error": result.finite_difference_abs_error,
+        },
+    )
+
+
 def solve_sfincs_jax_ambipolar_brent(
     *,
     input_namelist: str | Path,
@@ -1084,6 +1144,7 @@ __all__ = [
     "SfincsJaxRadialCurrentEvaluator",
     "brent_ambipolar_root",
     "finite_difference_radial_current_derivative",
+    "implicit_linear_radial_current_derivative",
     "newton_ambipolar_root",
     "safeguarded_newton_ambipolar_root",
     "solve_ambipolar_brent",

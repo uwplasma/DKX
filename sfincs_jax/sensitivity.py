@@ -1,0 +1,206 @@
+"""Implicit and adjoint sensitivity helpers.
+
+The functions here are intentionally small and model-agnostic. They implement
+the derivative identity used by SFINCS Fortran v3 adjoint diagnostics and by
+JAX implicit differentiation:
+
+``A(p) x(p) = b(p)``, ``J(p) = c(p)^T x(p) + J_0(p)``.
+
+The tangent equation is ``A x_p = b_p - A_p x``. The scalar adjoint equation is
+``A^T lambda = c``. Both routes must agree before a derivative is used in an
+optimization or ambipolar Newton step.
+"""
+
+from __future__ import annotations
+
+from collections.abc import Callable, Mapping
+from dataclasses import dataclass, field
+from types import MappingProxyType
+from typing import Any
+
+import jax.numpy as jnp
+
+
+Array = Any
+LinearSolver = Callable[[jnp.ndarray, jnp.ndarray], jnp.ndarray]
+ObservableFn = Callable[[float], float]
+
+
+def _immutable_mapping(value: Mapping[str, Any] | None) -> Mapping[str, Any]:
+    return MappingProxyType(dict(value or {}))
+
+
+@dataclass(frozen=True, slots=True)
+class LinearObservableDerivativeResult:
+    """Derivative certificate for a scalar observable of a linear solve."""
+
+    parameter: float
+    observable: float
+    derivative: float
+    tangent_derivative: float
+    adjoint_derivative: float
+    primal_residual_norm: float
+    tangent_residual_norm: float
+    adjoint_residual_norm: float
+    tangent_adjoint_abs_error: float
+    finite_difference_derivative: float | None = None
+    finite_difference_abs_error: float | None = None
+    finite_difference_step: float | None = None
+    metadata: Mapping[str, Any] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        for name in (
+            "parameter",
+            "observable",
+            "derivative",
+            "tangent_derivative",
+            "adjoint_derivative",
+            "primal_residual_norm",
+            "tangent_residual_norm",
+            "adjoint_residual_norm",
+            "tangent_adjoint_abs_error",
+        ):
+            object.__setattr__(self, name, float(getattr(self, name)))
+        if self.finite_difference_derivative is not None:
+            object.__setattr__(
+                self,
+                "finite_difference_derivative",
+                float(self.finite_difference_derivative),
+            )
+        if self.finite_difference_abs_error is not None:
+            object.__setattr__(
+                self,
+                "finite_difference_abs_error",
+                float(self.finite_difference_abs_error),
+            )
+        if self.finite_difference_step is not None:
+            object.__setattr__(self, "finite_difference_step", float(self.finite_difference_step))
+        object.__setattr__(self, "metadata", _immutable_mapping(self.metadata))
+
+
+def _as_vector(name: str, value: Array) -> jnp.ndarray:
+    array = jnp.asarray(value, dtype=jnp.float64)
+    if array.ndim != 1:
+        raise ValueError(f"{name} must be a 1D vector.")
+    return array
+
+
+def _as_matrix(name: str, value: Array) -> jnp.ndarray:
+    array = jnp.asarray(value, dtype=jnp.float64)
+    if array.ndim != 2 or int(array.shape[0]) != int(array.shape[1]):
+        raise ValueError(f"{name} must be a square 2D matrix.")
+    return array
+
+
+def _default_solve(matrix: jnp.ndarray, rhs: jnp.ndarray) -> jnp.ndarray:
+    return jnp.linalg.solve(matrix, rhs)
+
+
+def _centered_finite_difference(
+    observable: ObservableFn,
+    *,
+    parameter: float,
+    step: float,
+) -> float:
+    if step <= 0.0:
+        raise ValueError("finite_difference_step must be positive.")
+    plus = float(observable(float(parameter) + step))
+    minus = float(observable(float(parameter) - step))
+    return (plus - minus) / (2.0 * step)
+
+
+def implicit_linear_observable_derivative(
+    *,
+    matrix: Array,
+    rhs: Array,
+    matrix_derivative: Array,
+    rhs_derivative: Array,
+    observable_vector: Array,
+    observable_vector_derivative: Array | None = None,
+    observable_offset: float = 0.0,
+    observable_offset_derivative: float = 0.0,
+    parameter: float = 0.0,
+    solve: LinearSolver | None = None,
+    transpose_solve: LinearSolver | None = None,
+    finite_difference_observable: ObservableFn | None = None,
+    finite_difference_step: float | None = None,
+    metadata: Mapping[str, Any] | None = None,
+) -> LinearObservableDerivativeResult:
+    """Differentiate a scalar observable of ``A(p) x(p) = b(p)``.
+
+    The helper returns both tangent and adjoint derivatives and their residuals.
+    Larger matrix-free SFINCS operators can supply custom ``solve`` and
+    ``transpose_solve`` callbacks; small validation gates use the dense default.
+    """
+
+    a = _as_matrix("matrix", matrix)
+    ap = _as_matrix("matrix_derivative", matrix_derivative)
+    b = _as_vector("rhs", rhs)
+    bp = _as_vector("rhs_derivative", rhs_derivative)
+    c = _as_vector("observable_vector", observable_vector)
+    if a.shape != ap.shape:
+        raise ValueError("matrix and matrix_derivative must have the same shape.")
+    if int(b.shape[0]) != int(a.shape[0]):
+        raise ValueError("rhs length must match matrix size.")
+    if int(bp.shape[0]) != int(a.shape[0]):
+        raise ValueError("rhs_derivative length must match matrix size.")
+    if int(c.shape[0]) != int(a.shape[0]):
+        raise ValueError("observable_vector length must match matrix size.")
+    if observable_vector_derivative is None:
+        cp = jnp.zeros_like(c)
+    else:
+        cp = _as_vector("observable_vector_derivative", observable_vector_derivative)
+        if int(cp.shape[0]) != int(a.shape[0]):
+            raise ValueError("observable_vector_derivative length must match matrix size.")
+
+    solve_fn = solve or _default_solve
+    transpose_solve_fn = transpose_solve or solve_fn
+
+    x = solve_fn(a, b)
+    primal_residual = a @ x - b
+    tangent_rhs = bp - ap @ x
+    x_tangent = solve_fn(a, tangent_rhs)
+    tangent_residual = a @ x_tangent - tangent_rhs
+    lam = transpose_solve_fn(a.T, c)
+    adjoint_residual = a.T @ lam - c
+
+    direct_derivative = jnp.vdot(cp, x) + float(observable_offset_derivative)
+    observable = jnp.vdot(c, x) + float(observable_offset)
+    tangent_derivative = direct_derivative + jnp.vdot(c, x_tangent)
+    adjoint_derivative = direct_derivative + jnp.vdot(lam, tangent_rhs)
+    derivative = 0.5 * (tangent_derivative + adjoint_derivative)
+
+    fd_derivative: float | None = None
+    fd_abs_error: float | None = None
+    if finite_difference_observable is not None:
+        step = 1.0e-6 if finite_difference_step is None else float(finite_difference_step)
+        fd_derivative = _centered_finite_difference(
+            finite_difference_observable,
+            parameter=float(parameter),
+            step=step,
+        )
+        fd_abs_error = abs(float(derivative) - float(fd_derivative))
+    else:
+        step = None if finite_difference_step is None else float(finite_difference_step)
+
+    return LinearObservableDerivativeResult(
+        parameter=float(parameter),
+        observable=float(observable),
+        derivative=float(derivative),
+        tangent_derivative=float(tangent_derivative),
+        adjoint_derivative=float(adjoint_derivative),
+        primal_residual_norm=float(jnp.linalg.norm(primal_residual)),
+        tangent_residual_norm=float(jnp.linalg.norm(tangent_residual)),
+        adjoint_residual_norm=float(jnp.linalg.norm(adjoint_residual)),
+        tangent_adjoint_abs_error=abs(float(tangent_derivative) - float(adjoint_derivative)),
+        finite_difference_derivative=fd_derivative,
+        finite_difference_abs_error=fd_abs_error,
+        finite_difference_step=step,
+        metadata=metadata,
+    )
+
+
+__all__ = (
+    "LinearObservableDerivativeResult",
+    "implicit_linear_observable_derivative",
+)

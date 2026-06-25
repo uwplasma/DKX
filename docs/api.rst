@@ -399,5 +399,8 @@ research workflows.
 .. automodule:: sfincs_jax.implicit_solve
    :members:
 
+.. automodule:: sfincs_jax.sensitivity
+   :members:
+
 .. automodule:: sfincs_jax.paths
    :members:
