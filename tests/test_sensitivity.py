@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import replace
 from pathlib import Path
 
 import jax.numpy as jnp
@@ -8,6 +9,7 @@ import pytest
 
 from sfincs_jax.problems.ambipolar import (
     RadialCurrentDerivativeResult,
+    dense_rhs1_vm_radial_current_linear_observable_system,
     implicit_linear_radial_current_derivative,
     implicit_linear_radial_current_derivative_from_builder,
 )
@@ -252,6 +254,48 @@ def test_rhs1_radial_current_observable_vector_matches_existing_diagnostic() -> 
         r_n=0.5,
     )
     np.testing.assert_allclose(probed_rhat, direct_rhat, rtol=0.0, atol=1.0e-10)
+
+
+def test_dense_rhs1_radial_current_linear_observable_system_matches_finite_difference() -> None:
+    input_path = Path(__file__).parent / "ref" / "pas_1species_PAS_noEr_tiny.input.namelist"
+    op0 = full_system_operator_from_namelist(nml=read_sfincs_input(input_path))
+    step = 1.0e-5
+    parameter = 0.2
+
+    def op_at(value: float):
+        return replace(
+            op0,
+            dn_hat_dpsi_hat=op0.dn_hat_dpsi_hat + float(value) * jnp.ones_like(op0.dn_hat_dpsi_hat),
+        )
+
+    def build_system(value: float) -> LinearObservableSystem:
+        return dense_rhs1_vm_radial_current_linear_observable_system(
+            op=op_at(value),
+            op_plus=op_at(float(value) + step),
+            op_minus=op_at(float(value) - step),
+            parameter=float(value),
+            derivative_step=step,
+            radial_coordinate="rHat",
+            psi_a_hat=-0.384935,
+            a_hat=0.5109,
+            r_n=0.5,
+            max_size=400,
+            observable_chunk_size=17,
+        )
+
+    result = implicit_linear_observable_derivative_from_builder(
+        build_system,
+        parameter=parameter,
+        finite_difference_step=step,
+    )
+
+    assert result.metadata["builder"] == "dense_rhs1_vm_radial_current"
+    assert result.primal_residual_norm < 1.0e-8
+    assert result.tangent_residual_norm < 1.0e-7
+    assert result.adjoint_residual_norm < 1.0e-8
+    assert result.tangent_adjoint_abs_error < 1.0e-6
+    assert result.finite_difference_abs_error is not None
+    assert result.finite_difference_abs_error < 1.0e-4
 
 
 def test_implicit_linear_observable_derivative_rejects_incompatible_shapes() -> None:
