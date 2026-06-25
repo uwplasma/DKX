@@ -8,9 +8,11 @@ import hashlib
 import os
 from typing import Any
 
+import jax
 import jax.numpy as jnp
 import numpy as np
 
+from sfincs_jax import solver_path_policy as _solver_path_policy
 from ...pas_smoother import pas_fast_accept as _pas_fast_accept_metric
 from sfincs_jax.explicit_sparse import SparseOperatorBundle
 from sfincs_jax.solver_selection_policy import (
@@ -6192,6 +6194,477 @@ def rhs1_gpu_sparse_fallback_skip_allowed(
     return float(residual_norm) <= float(skip_ratio) * max(float(target), 1.0e-300)
 
 
+def rhs1_gpu_sparse_fallback_skip_allowed_current_backend(
+    *,
+    op: object,
+    rhs1_precond_kind: str | None,
+    use_active_dof_mode: bool,
+    residual_norm: float,
+    target: float,
+) -> bool:
+    """Evaluate the GPU sparse-fallback skip policy on the active JAX backend."""
+
+    return rhs1_gpu_sparse_fallback_skip_allowed(
+        backend=jax.default_backend(),
+        rhs_mode=int(getattr(op, "rhs_mode", 0) or 0),
+        include_phi1=bool(getattr(op, "include_phi1", False)),
+        has_pas=getattr(getattr(op, "fblock", None), "pas", None) is not None,
+        rhs1_precond_kind=rhs1_precond_kind,
+        use_active_dof_mode=bool(use_active_dof_mode),
+        residual_norm=float(residual_norm),
+        target=float(target),
+    )
+
+
+def rhsmode1_dense_backend_allowed_current_backend() -> bool:
+    """Return whether dense RHSMode-1 fallback is allowed on the current backend."""
+
+    return rhs1_dense_backend_allowed(backend=jax.default_backend())
+
+
+def rhsmode1_host_dense_fallback_allowed_current_backend() -> bool:
+    """Return whether host dense fallback is allowed on the current backend."""
+
+    return rhs1_host_dense_fallback_allowed(backend=jax.default_backend())
+
+
+def rhsmode1_host_dense_shortcut_allowed_current_backend(
+    *,
+    op: object,
+    active_size: int,
+    use_implicit: bool,
+    solve_method_kind: str,
+) -> bool:
+    """Evaluate the host-dense shortcut policy using current backend defaults."""
+
+    return rhs1_host_dense_shortcut_allowed(
+        op=op,
+        active_size=active_size,
+        use_implicit=use_implicit,
+        solve_method_kind=solve_method_kind,
+        backend=jax.default_backend(),
+        dense_fallback_max=rhs1_dense_fallback_max(op),
+    )
+
+
+def rhsmode1_sparse_operator_preconditioned_rescue_allowed_current_backend(
+    *,
+    op: object,
+    sparse_exact_lu: bool,
+    host_sparse_direct_wanted: bool,
+) -> bool:
+    """Evaluate the Fortran-like sparse-preconditioned rescue policy."""
+
+    return rhs1_sparse_operator_preconditioned_rescue_allowed(
+        op=op,
+        sparse_exact_lu=sparse_exact_lu,
+        host_sparse_direct_wanted=host_sparse_direct_wanted,
+        backend=jax.default_backend(),
+    )
+
+
+def host_sparse_factor_dtype_current_backend(
+    *,
+    size: int,
+    factorization: str,
+    use_implicit: bool,
+) -> np.dtype:
+    """Return the host sparse factor dtype for the current backend."""
+
+    return host_sparse_factor_dtype(
+        size=size,
+        factorization=factorization,
+        use_implicit=use_implicit,
+        backend=jax.default_backend(),
+    )
+
+
+def rhsmode1_sparse_pc_default_permc_spec(
+    *,
+    constrained_pas_pc: bool,
+    tokamak_pas_er_pc: bool,
+    n_species: int,
+) -> str:
+    """Return the measured SuperLU column-ordering default for sparse-PC RHSMode=1."""
+
+    return _solver_path_policy.rhsmode1_sparse_pc_default_permc_spec(
+        constrained_pas_pc=constrained_pas_pc,
+        tokamak_pas_er_pc=tokamak_pas_er_pc,
+        n_species=n_species,
+    )
+
+
+def rhsmode1_sparse_pc_default_restart(
+    *,
+    requested_restart: int,
+    restart_env_value: str,
+    tokamak_pas_er_pc: bool,
+    n_species: int,
+) -> int:
+    """Return the sparse-PC GMRES restart after scoped production caps."""
+
+    return _solver_path_policy.rhsmode1_sparse_pc_default_restart(
+        requested_restart=requested_restart,
+        restart_env_value=restart_env_value,
+        tokamak_pas_er_pc=tokamak_pas_er_pc,
+        n_species=n_species,
+    )
+
+
+def rhsmode1_pas_fast_accept_current_backend(
+    *,
+    op: object,
+    active_size: int,
+    residual_norm: float,
+    target: float,
+    use_implicit: bool,
+) -> bool:
+    """Evaluate the PAS fast-accept policy on the current backend."""
+
+    return rhs1_pas_fast_accept(
+        op=op,
+        active_size=int(active_size),
+        residual_norm=float(residual_norm),
+        target=float(target),
+        use_implicit=bool(use_implicit),
+        backend=jax.default_backend(),
+    )
+
+
+def rhsmode1_constraint0_sparse_first_current_backend(
+    *,
+    op: object,
+    solve_method_kind: str,
+    sparse_precond_mode: str,
+    active_size: int,
+    sparse_max_size: int,
+) -> bool:
+    """Evaluate the constraintScheme=0 sparse-first policy on the current backend."""
+
+    return rhs1_constraint0_sparse_first(
+        op=op,
+        solve_method_kind=solve_method_kind,
+        sparse_precond_mode=sparse_precond_mode,
+        active_size=int(active_size),
+        sparse_max_size=int(sparse_max_size),
+        backend=jax.default_backend(),
+    )
+
+
+def rhsmode1_sparse_exact_lu_requested_current_backend(
+    *,
+    op: object,
+    solve_method_kind: str,
+    active_size: int,
+    sparse_max_size: int,
+    full_precond_requested: bool = False,
+    preconditioner_x: int,
+    use_dkes: bool,
+) -> bool:
+    """Evaluate whether RHSMode-1 should request exact sparse LU."""
+
+    return rhs1_sparse_exact_lu_requested(
+        op=op,
+        solve_method_kind=solve_method_kind,
+        active_size=int(active_size),
+        sparse_max_size=int(sparse_max_size),
+        full_precond_requested=bool(full_precond_requested),
+        preconditioner_x=int(preconditioner_x),
+        use_dkes=bool(use_dkes),
+        backend=jax.default_backend(),
+    )
+
+
+def rhsmode1_large_cpu_sparse_rescue_allowed_current_backend(
+    *,
+    op: object,
+    solve_method_kind: str,
+    active_size: int,
+    sparse_max_size: int,
+    preconditioner_x: int,
+    residual_norm: float,
+    target: float,
+) -> bool:
+    """Evaluate large-CPU sparse rescue admission on the current backend."""
+
+    return rhs1_large_cpu_sparse_rescue_allowed(
+        op=op,
+        solve_method_kind=solve_method_kind,
+        active_size=int(active_size),
+        sparse_max_size=int(sparse_max_size),
+        preconditioner_x=int(preconditioner_x),
+        residual_norm=float(residual_norm),
+        target=float(target),
+        backend=jax.default_backend(),
+    )
+
+
+def rhsmode1_large_cpu_sparse_skip_primary_allowed_current_backend(
+    *,
+    op: object,
+    solve_method_kind: str,
+    active_size: int,
+    sparse_max_size: int,
+    use_implicit: bool,
+) -> bool:
+    """Evaluate large-CPU sparse skip-primary admission on the current backend."""
+
+    return rhs1_large_cpu_sparse_skip_primary_allowed(
+        op=op,
+        solve_method_kind=solve_method_kind,
+        active_size=int(active_size),
+        sparse_max_size=int(sparse_max_size),
+        use_implicit=bool(use_implicit),
+        backend=jax.default_backend(),
+    )
+
+
+def rhsmode1_large_cpu_sparse_exact_lu_xblock_allowed_current_backend(
+    *,
+    op: object,
+    active_size: int,
+    preconditioner_x: int,
+    used_large_cpu_xblock_shortcut: bool,
+    used_explicit_fp_xblock_seed: bool,
+    xblock_seed_residual: float,
+    xblock_seed_improvement_ratio: float,
+    use_implicit: bool,
+) -> bool:
+    """Evaluate whether the sparse exact-LU x-block stage is allowed."""
+
+    return rhs1_large_cpu_sparse_exact_lu_xblock_allowed(
+        op=op,
+        active_size=int(active_size),
+        preconditioner_x=int(preconditioner_x),
+        used_large_cpu_xblock_shortcut=bool(used_large_cpu_xblock_shortcut),
+        used_explicit_fp_xblock_seed=bool(used_explicit_fp_xblock_seed),
+        xblock_seed_residual=float(xblock_seed_residual),
+        xblock_seed_improvement_ratio=float(xblock_seed_improvement_ratio),
+        use_implicit=bool(use_implicit),
+        backend=jax.default_backend(),
+    )
+
+
+def rhsmode1_sparse_xblock_rescue_allowed_current_backend(
+    *,
+    op: object,
+    solve_method_kind: str,
+    active_size: int,
+    sparse_max_size: int,
+    preconditioner_x: int,
+    pre_theta: int,
+    pre_zeta: int,
+    residual_norm: float,
+    target: float,
+) -> bool:
+    """Evaluate sparse x-block rescue admission on the current backend."""
+
+    return rhs1_sparse_xblock_rescue_allowed(
+        op=op,
+        solve_method_kind=solve_method_kind,
+        active_size=int(active_size),
+        sparse_max_size=int(sparse_max_size),
+        preconditioner_x=int(preconditioner_x),
+        pre_theta=int(pre_theta),
+        pre_zeta=int(pre_zeta),
+        residual_norm=float(residual_norm),
+        target=float(target),
+        backend=jax.default_backend(),
+    )
+
+
+def rhsmode1_large_cpu_xblock_skip_primary_allowed_current_backend(
+    *,
+    op: object,
+    solve_method_kind: str,
+    active_size: int,
+    sparse_max_size: int,
+    preconditioner_species: int,
+    preconditioner_x: int,
+    preconditioner_xi: int,
+    pre_theta: int,
+    pre_zeta: int,
+    use_implicit: bool,
+    rhs1_precond_env: str,
+) -> bool:
+    """Evaluate large-CPU x-block skip-primary admission on the current backend."""
+
+    return rhs1_large_cpu_xblock_skip_primary_allowed(
+        op=op,
+        solve_method_kind=solve_method_kind,
+        active_size=int(active_size),
+        sparse_max_size=int(sparse_max_size),
+        preconditioner_species=int(preconditioner_species),
+        preconditioner_x=int(preconditioner_x),
+        preconditioner_xi=int(preconditioner_xi),
+        pre_theta=int(pre_theta),
+        pre_zeta=int(pre_zeta),
+        use_implicit=bool(use_implicit),
+        rhs1_precond_env=rhs1_precond_env,
+        backend=jax.default_backend(),
+    )
+
+
+def rhsmode1_fast_post_xblock_polish_allowed_current_backend(
+    *,
+    op: object,
+    active_size: int,
+    residual_norm: float,
+    target: float,
+    used_large_cpu_xblock_shortcut: bool,
+    use_implicit: bool,
+) -> bool:
+    """Evaluate the fast post-x-block polish policy on the current backend."""
+
+    return rhs1_fast_post_xblock_polish_allowed(
+        op=op,
+        active_size=int(active_size),
+        residual_norm=float(residual_norm),
+        target=float(target),
+        used_large_cpu_xblock_shortcut=bool(used_large_cpu_xblock_shortcut),
+        use_implicit=bool(use_implicit),
+        backend=jax.default_backend(),
+    )
+
+
+def rhsmode1_fp_targeted_polish_allowed_current_backend(
+    *,
+    op: object,
+    active_size: int,
+    residual_norm: float,
+    target: float,
+    rhs1_precond_kind: str,
+    use_implicit: bool,
+) -> bool:
+    """Evaluate the FP targeted-polish policy on the current backend."""
+
+    return rhs1_fp_targeted_polish_allowed(
+        op=op,
+        active_size=int(active_size),
+        residual_norm=float(residual_norm),
+        target=float(target),
+        rhs1_precond_kind=rhs1_precond_kind,
+        use_implicit=bool(use_implicit),
+        backend=jax.default_backend(),
+    )
+
+
+def rhsmode1_skip_global_sparse_after_xblock_allowed_current_backend(
+    *,
+    op: object,
+    active_size: int,
+    residual_norm: float,
+    target: float,
+    used_large_cpu_xblock_shortcut: bool,
+    used_explicit_fp_xblock_seed: bool,
+    use_implicit: bool,
+) -> bool:
+    """Evaluate whether global sparse rescue should be skipped after x-block."""
+
+    return rhs1_skip_global_sparse_after_xblock_allowed(
+        op=op,
+        active_size=int(active_size),
+        residual_norm=float(residual_norm),
+        target=float(target),
+        used_large_cpu_xblock_shortcut=bool(used_large_cpu_xblock_shortcut),
+        used_explicit_fp_xblock_seed=bool(used_explicit_fp_xblock_seed),
+        use_implicit=bool(use_implicit),
+        backend=jax.default_backend(),
+    )
+
+
+def rhsmode1_fp_xblock_global_correction_allowed_current_backend(
+    *,
+    op: object,
+    active_size: int,
+    residual_norm: float,
+    target: float,
+    used_large_cpu_xblock_shortcut: bool,
+    used_explicit_fp_xblock_seed: bool,
+    sparse_xblock_candidate_accepted: bool,
+    use_implicit: bool,
+) -> bool:
+    """Evaluate the FP x-block global-correction admission policy."""
+
+    return rhs1_fp_xblock_global_correction_allowed(
+        op=op,
+        active_size=int(active_size),
+        residual_norm=float(residual_norm),
+        target=float(target),
+        used_large_cpu_xblock_shortcut=bool(used_large_cpu_xblock_shortcut),
+        used_explicit_fp_xblock_seed=bool(used_explicit_fp_xblock_seed),
+        sparse_xblock_candidate_accepted=bool(sparse_xblock_candidate_accepted),
+        use_implicit=bool(use_implicit),
+        backend=jax.default_backend(),
+    )
+
+
+def rhsmode1_scipy_rescue_abs_floor_after_xblock_current_backend(
+    *,
+    op: object,
+    active_size: int,
+    used_large_cpu_xblock_shortcut: bool,
+    used_explicit_fp_xblock_seed: bool,
+    use_implicit: bool,
+) -> float:
+    """Evaluate the SciPy rescue absolute residual floor after x-block."""
+
+    return rhs1_scipy_rescue_abs_floor_after_xblock(
+        op=op,
+        active_size=int(active_size),
+        used_large_cpu_xblock_shortcut=bool(used_large_cpu_xblock_shortcut),
+        used_explicit_fp_xblock_seed=bool(used_explicit_fp_xblock_seed),
+        use_implicit=bool(use_implicit),
+        backend=jax.default_backend(),
+    )
+
+
+def rhsmode1_scipy_rescue_active_size_allowed_current_backend(
+    *,
+    op: object,
+    active_size: int,
+    used_large_cpu_xblock_shortcut: bool,
+    used_explicit_fp_xblock_seed: bool,
+    use_implicit: bool,
+) -> bool:
+    """Evaluate SciPy rescue size admission after x-block on the current backend."""
+
+    return rhs1_scipy_rescue_active_size_allowed(
+        op=op,
+        active_size=int(active_size),
+        used_large_cpu_xblock_shortcut=bool(used_large_cpu_xblock_shortcut),
+        used_explicit_fp_xblock_seed=bool(used_explicit_fp_xblock_seed),
+        use_implicit=bool(use_implicit),
+        backend=jax.default_backend(),
+    )
+
+
+def rhsmode1_sparse_sxblock_rescue_allowed_current_backend(
+    *,
+    op: object,
+    solve_method_kind: str,
+    active_size: int,
+    sparse_max_size: int,
+    preconditioner_x: int,
+    pre_theta: int,
+    pre_zeta: int,
+    use_implicit: bool,
+) -> bool:
+    """Evaluate sparse sxblock rescue admission on the current backend."""
+
+    return rhs1_sparse_sxblock_rescue_allowed(
+        op=op,
+        solve_method_kind=solve_method_kind,
+        active_size=int(active_size),
+        sparse_max_size=int(sparse_max_size),
+        preconditioner_x=int(preconditioner_x),
+        pre_theta=int(pre_theta),
+        pre_zeta=int(pre_zeta),
+        use_implicit=bool(use_implicit),
+        backend=jax.default_backend(),
+    )
+
+
 def rhs1_sharded_line_override_allowed(rhs1_precond_kind: str | None) -> bool:
     """Return whether sharded auto-selection may demote the current preconditioner to line DD."""
     return rhs1_precond_kind in {
@@ -6208,8 +6681,30 @@ def rhs1_sharded_line_override_allowed(rhs1_precond_kind: str | None) -> bool:
     }
 
 __all__ = (
+    "host_sparse_factor_dtype_current_backend",
     "host_sparse_direct_refine_steps",
     "host_sparse_factor_dtype",
+    "rhsmode1_constraint0_sparse_first_current_backend",
+    "rhsmode1_dense_backend_allowed_current_backend",
+    "rhsmode1_fast_post_xblock_polish_allowed_current_backend",
+    "rhsmode1_fp_targeted_polish_allowed_current_backend",
+    "rhsmode1_fp_xblock_global_correction_allowed_current_backend",
+    "rhsmode1_host_dense_fallback_allowed_current_backend",
+    "rhsmode1_host_dense_shortcut_allowed_current_backend",
+    "rhsmode1_large_cpu_sparse_exact_lu_xblock_allowed_current_backend",
+    "rhsmode1_large_cpu_sparse_rescue_allowed_current_backend",
+    "rhsmode1_large_cpu_sparse_skip_primary_allowed_current_backend",
+    "rhsmode1_large_cpu_xblock_skip_primary_allowed_current_backend",
+    "rhsmode1_pas_fast_accept_current_backend",
+    "rhsmode1_scipy_rescue_abs_floor_after_xblock_current_backend",
+    "rhsmode1_scipy_rescue_active_size_allowed_current_backend",
+    "rhsmode1_skip_global_sparse_after_xblock_allowed_current_backend",
+    "rhsmode1_sparse_exact_lu_requested_current_backend",
+    "rhsmode1_sparse_operator_preconditioned_rescue_allowed_current_backend",
+    "rhsmode1_sparse_pc_default_permc_spec",
+    "rhsmode1_sparse_pc_default_restart",
+    "rhsmode1_sparse_sxblock_rescue_allowed_current_backend",
+    "rhsmode1_sparse_xblock_rescue_allowed_current_backend",
     "rhs1_dense_backend_allowed",
     "rhs1_dense_auto_fp_cutoff",
     "rhs1_dense_auto_fp_allowed",
@@ -6330,6 +6825,7 @@ __all__ = (
     "rhs1_fp_targeted_polish_allowed",
     "rhs1_fp_xblock_global_correction_allowed",
     "rhs1_distributed_auto_solver_from_env",
+    "rhs1_gpu_sparse_fallback_skip_allowed_current_backend",
     "rhs1_gmres_precondition_side_from_env",
     "rhs1_host_factor_probe_ok",
     "rhs1_krylov_routing_controls_from_env",

@@ -621,17 +621,13 @@ the historical private driver name and test the focused module directly. This ke
   byte-budget preflights, and ``PasRuntimeChunkPlan`` metadata for keeping
   PAS-heavy residual/correction reductions inside configured memory budgets
   before a matvec is launched.
-- ``sfincs_jax/rhs1_solver_policy.py``:
-  typed RHSMode=1 solver-policy parsing for x-block probe-coarse, post-minres,
-  post-coarse, and post-residual-equation controls. This keeps environment
-  parsing and correction-policy defaults out of ``v3_driver.py`` while
-  preserving the existing opt-in behavior and fail-closed defaults.
-- ``sfincs_jax/problems/profile_response/policies.py`` and
-  ``sfincs_jax/rhs1_xblock_sparse_host_policy.py``:
-  bounded sparse-polish and host x-block factorization policy helpers. These
-  modules keep large RHSMode=1 FP rescue limits, override semantics, and
-  fail-closed high-resolution behavior independently testable while the legacy
-  ``sfincs_jax/rhs1_sparse_polish_policy.py`` import remains available.
+- ``sfincs_jax/problems/profile_response/policies.py``:
+  typed RHSMode=1 solve-routing policy parsing for x-block probe-coarse,
+  post-minres, post-coarse, post-residual-equation, bounded sparse-polish,
+  host x-block factorization, current-backend dense/sparse admission wrappers,
+  override semantics, and fail-closed high-resolution behavior. This keeps
+  environment parsing and correction-policy defaults out of ``v3_driver.py``
+  and out of the solve entry point.
 - ``sfincs_jax/problems/profile_response/setup.py``:
   pure setup helpers for RHSMode=1/profile-response solves: GMRES restart and
   max-iteration environment overrides, geometry/equilibrium progress hints,
@@ -1139,7 +1135,8 @@ the historical private driver name and test the focused module directly. This ke
   RHSMode=1 profile-response solve-routing gates, including stage-2 triggers,
   sparse exact-LU admission, sparse-rescue ordering, sparse-polish budgets,
   post-x-block polish, large-PAS fast acceptance, host factor probes, and
-  constraint-scheme-0 sparse/dense routing. It also owns small x-block/QI
+  constraint-scheme-0 sparse/dense routing. It also owns current-backend
+  wrappers used by the solve owner and small x-block/QI
   control helpers that used to live in ``v3_driver.py``: guarded PAS-TZ
   structured-level parsing, QI device extra-coarse environment controls,
   QI probe minres-step selection, and safe x-block fallback initial-guess

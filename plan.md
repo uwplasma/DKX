@@ -2858,3 +2858,60 @@ Next best steps:
    longer create cycles.
 3. Run the full focused RHSMode-1 sparse/QI/ambipolar/sensitivity/docs gate
    before starting Tranche 2.
+
+## 2026-06-25 Lane 1 Tranche 1 Current-Backend Policy Wrapper Move
+
+Steps taken:
+
+1. Moved the remaining current-backend RHSMode-1 dense/sparse/PAS/x-block
+   admission wrappers from `sfincs_jax/problems/profile_response/solve.py` into
+   `sfincs_jax/problems/profile_response/policies.py`.
+2. Kept the historical private names visible through `solve.py` imports so
+   existing solve-path calls and `sfincs_jax.v3_driver` compatibility imports
+   still resolve.
+3. Updated `docs/source_map.rst` to remove stale top-level RHSMode-1 policy
+   shard references and document `policies.py` as the owner of current-backend
+   wrapper glue.
+4. Updated `plan_final.md` with the new counts and next Tranche 1 target.
+
+Current inventory:
+
+- Package Python files: `227`.
+- `problems/profile_response`: `21` Python files.
+- `sfincs_jax/problems/profile_response/solve.py`: `9,730` lines.
+- `sfincs_jax/problems/profile_response/policies.py`: `6,876` lines.
+- `sfincs_jax/v3_driver.py`: `47` lines.
+
+Validation:
+
+- `python -m py_compile sfincs_jax/problems/profile_response/solve.py
+  sfincs_jax/problems/profile_response/policies.py` passed.
+- Scoped ruff passed for touched source.
+- Policy and heuristic coverage passed:
+  `147 passed in 25.46s`.
+- Sparse-PC owner coverage passed:
+  `327 passed in 3.17s`.
+
+Current lane status:
+
+- Lane 1 Tranche 0: `100%`.
+- Lane 1 Tranche 1: about `45%`; sparse-direct materialization and
+  current-backend policy ownership have moved, but hard gates remain
+  `profile_response/solve.py < 3.5k` and `problems/profile_response <= 18`
+  files.
+- Lane 1 Tranche 2: `0%`.
+- Lane 1 Tranche 3: `0%`.
+- Lane 1 Tranche 4: `0%`.
+- Lane 1 Tranche 5: `0%`.
+- Lane 1 overall: about `50%` of the authoritative consolidation plan.
+- Overall refactor/review-ready PR goal: not complete.
+
+Next best steps:
+
+1. Move sparse-PC branch orchestration and final sparse-PC payload assembly
+   from `solve.py` into `sparse/handoff.py`, `sparse/xblock.py`,
+   `sparse/qi.py`, and `sparse/fortran_reduced.py`.
+2. Move final solve result normalization and progress replay from `solve.py`
+   into `handoff.py` and `solver_diagnostics.py`.
+3. Re-check whether `sparse/finalization.py` can be merged or whether it
+   remains a true shared owner after the sparse-PC handoff code moves.

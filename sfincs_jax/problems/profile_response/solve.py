@@ -122,7 +122,7 @@ from sfincs_jax.problems.profile_response.policies import (
     rhs1_sharded_line_override_allowed as _rhs1_sharded_line_override_allowed,
 )
 from sfincs_jax.problems.profile_response.policies import (
-    rhs1_gpu_sparse_fallback_skip_allowed as _rhs1_gpu_sparse_fallback_skip_allowed_impl,
+    rhs1_gpu_sparse_fallback_skip_allowed_current_backend as _rhs1_gpu_sparse_fallback_skip_allowed,
 )
 from sfincs_jax.solvers.preconditioners.schur.rhs1 import resolve_rhs1_schur_base_kind
 from sfincs_jax.problems.profile_response.handoff import (
@@ -371,6 +371,8 @@ from sfincs_jax.problems.profile_response.policies import (
     rhs1_sparse_rescue_policy_setup,
     rhs1_sparse_rescue_tail_skip_messages,
     rhs1_xblock_fallback_initial_guess as _rhs1_xblock_fallback_initial_guess,
+    rhsmode1_sparse_pc_default_permc_spec as _rhsmode1_sparse_pc_default_permc_spec,
+    rhsmode1_sparse_pc_default_restart as _rhsmode1_sparse_pc_default_restart,
 )
 
 from sfincs_jax.problems.profile_response.setup import (
@@ -563,7 +565,7 @@ from sfincs_jax.problems.profile_response.policies import (
     rhs1_constraint0_petsc_compat as _rhs1_constraint0_petsc_compat_impl,
     rhs1_constraint0_petsc_compat_config_from_env,
     rhs1_constraint0_petsc_compat_regularization,
-    rhs1_constraint0_sparse_first as _rhs1_constraint0_sparse_first_impl,
+    rhsmode1_constraint0_sparse_first_current_backend as _rhsmode1_constraint0_sparse_first,
 )
 from sfincs_jax.operators.profile_response.sources import (
     build_rhs1_xblock_constraint1_moment_schur_preconditioner as _build_rhs1_xblock_constraint1_moment_schur_preconditioner,
@@ -574,41 +576,43 @@ from sfincs_jax.operators.profile_response.sources import (
 )
 from sfincs_jax.problems.profile_response.policies import (
     rhs1_prefer_sparse_over_dense_shortcut as _rhs1_prefer_sparse_over_dense_shortcut_impl,
-    rhs1_sparse_exact_lu_requested as _rhs1_sparse_exact_lu_requested_impl,
     rhs1_sparse_prefer_skips_stage2 as _rhs1_sparse_prefer_skips_stage2_impl,
+    rhsmode1_sparse_exact_lu_requested_current_backend as _rhsmode1_sparse_exact_lu_requested,
 )
 from sfincs_jax.problems.profile_response.policies import (
     rhs1_large_cpu_sparse_exact_lu_allowed as _rhs1_large_cpu_sparse_exact_lu_allowed_impl,
-    rhs1_large_cpu_sparse_exact_lu_xblock_allowed as _rhs1_large_cpu_sparse_exact_lu_xblock_allowed_impl,
-    rhs1_large_cpu_sparse_rescue_allowed as _rhs1_large_cpu_sparse_rescue_allowed_impl,
     rhs1_large_cpu_sparse_rescue_first as _rhs1_large_cpu_sparse_rescue_first_impl,
-    rhs1_large_cpu_sparse_skip_primary_allowed as _rhs1_large_cpu_sparse_skip_primary_allowed_impl,
-    rhs1_large_cpu_xblock_skip_primary_allowed as _rhs1_large_cpu_xblock_skip_primary_allowed_impl,
-    rhs1_sparse_sxblock_rescue_allowed as _rhs1_sparse_sxblock_rescue_allowed_impl,
-    rhs1_sparse_xblock_rescue_allowed as _rhs1_sparse_xblock_rescue_allowed_impl,
+    rhsmode1_large_cpu_sparse_exact_lu_xblock_allowed_current_backend as _rhsmode1_large_cpu_sparse_exact_lu_xblock_allowed,
+    rhsmode1_large_cpu_sparse_rescue_allowed_current_backend as _rhsmode1_large_cpu_sparse_rescue_allowed,
+    rhsmode1_large_cpu_sparse_skip_primary_allowed_current_backend as _rhsmode1_large_cpu_sparse_skip_primary_allowed,
+    rhsmode1_large_cpu_xblock_skip_primary_allowed_current_backend as _rhsmode1_large_cpu_xblock_skip_primary_allowed,
+    rhsmode1_sparse_sxblock_rescue_allowed_current_backend as _rhsmode1_sparse_sxblock_rescue_allowed,
+    rhsmode1_sparse_xblock_rescue_allowed_current_backend as _rhsmode1_sparse_xblock_rescue_allowed,
 )
 from sfincs_jax.problems.profile_response.policies import (
     rhs1_bicgstab_fallback_controls_from_env,
     rhs1_bicgstab_fallback_decision,
     rhs1_bicgstab_fallback_target_from_env,
-    rhs1_fast_post_xblock_polish_allowed as _rhs1_fast_post_xblock_polish_allowed_impl,
     rhs1_fast_post_xblock_polish_controls_from_env,
     rhs1_fp_bicgstab_polish_controls_from_env,
     rhs1_fp_global_low_l_polish_controls_from_env,
     rhs1_fp_l1_polish_controls_from_env,
     rhs1_fp_low_l_polish_controls_from_env,
     rhs1_fp_residual_polish_controls_from_env,
-    rhs1_fp_xblock_global_correction_allowed as _rhs1_fp_xblock_global_correction_allowed_impl,
-    rhs1_fp_targeted_polish_allowed as _rhs1_fp_targeted_polish_allowed_impl,
     rhs1_gmres_precondition_side_from_env,
     rhs1_krylov_routing_controls_from_env,
     rhs1_pas_source_zero_tolerance_from_env,
-    rhs1_scipy_rescue_abs_floor_after_xblock as _rhs1_scipy_rescue_abs_floor_after_xblock_impl,
-    rhs1_scipy_rescue_active_size_allowed as _rhs1_scipy_rescue_active_size_allowed_impl,
     rhs1_scipy_rescue_controls_from_env,
-    rhs1_skip_global_sparse_after_xblock_allowed as _rhs1_skip_global_sparse_after_xblock_allowed_impl,
+    rhsmode1_fast_post_xblock_polish_allowed_current_backend as _rhsmode1_fast_post_xblock_polish_allowed,
+    rhsmode1_fp_targeted_polish_allowed_current_backend as _rhsmode1_fp_targeted_polish_allowed,
+    rhsmode1_fp_xblock_global_correction_allowed_current_backend as _rhsmode1_fp_xblock_global_correction_allowed,
+    rhsmode1_scipy_rescue_abs_floor_after_xblock_current_backend as _rhsmode1_scipy_rescue_abs_floor_after_xblock,
+    rhsmode1_scipy_rescue_active_size_allowed_current_backend as _rhsmode1_scipy_rescue_active_size_allowed,
+    rhsmode1_skip_global_sparse_after_xblock_allowed_current_backend as _rhsmode1_skip_global_sparse_after_xblock_allowed,
 )
-from sfincs_jax.problems.profile_response.policies import rhs1_pas_fast_accept as _rhs1_pas_fast_accept_impl
+from sfincs_jax.problems.profile_response.policies import (
+    rhsmode1_pas_fast_accept_current_backend as _rhsmode1_pas_fast_accept,
+)
 from sfincs_jax.problems.profile_response.policies import (
     rhs1_pas_tz_guarded_stage2_retry,
     rhs1_stage2_admission_controls_from_env,
@@ -619,20 +623,20 @@ from sfincs_jax.problems.profile_response.policies import (
 )
 from sfincs_jax import solver_path_policy as _solver_path_policy
 from sfincs_jax.problems.profile_response.policies import (
+    host_sparse_factor_dtype_current_backend as _host_sparse_factor_dtype,
     host_sparse_direct_refine_steps as _host_sparse_direct_refine_steps_impl,
-    host_sparse_factor_dtype as _host_sparse_factor_dtype_impl,
     rhs1_dense_auto_fp_allowed as _rhs1_dense_auto_fp_allowed_impl,
     rhs1_dense_auto_fp_cutoff as _rhs1_dense_auto_fp_cutoff_impl,
-    rhs1_dense_backend_allowed as _rhs1_dense_backend_allowed_impl,
     rhs1_dense_fallback_max as _rhs1_dense_fallback_max_impl,
     rhs1_dense_krylov_allowed as _rhs1_dense_krylov_allowed_impl,
     rhs1_explicit_sparse_host_direct_allowed as _rhs1_explicit_sparse_host_direct_allowed_impl,
-    rhs1_host_dense_fallback_allowed as _rhs1_host_dense_fallback_allowed_impl,
-    rhs1_host_dense_shortcut_allowed as _rhs1_host_dense_shortcut_allowed_impl,
     rhs1_host_sparse_direct_allowed as _rhs1_host_sparse_direct_allowed_impl,
     rhs1_host_sparse_skip_dense_ratio as _rhs1_host_sparse_skip_dense_ratio_impl,
-    rhs1_sparse_operator_preconditioned_rescue_allowed as _rhs1_sparse_operator_preconditioned_rescue_allowed_impl,
     rhs1_structured_full_csr_auto_allowed as _rhs1_structured_full_csr_auto_allowed_impl,
+    rhsmode1_dense_backend_allowed_current_backend as _rhsmode1_dense_backend_allowed,
+    rhsmode1_host_dense_fallback_allowed_current_backend as _rhsmode1_host_dense_fallback_allowed,
+    rhsmode1_host_dense_shortcut_allowed_current_backend as _rhsmode1_host_dense_shortcut_allowed,
+    rhsmode1_sparse_operator_preconditioned_rescue_allowed_current_backend as _rhsmode1_sparse_operator_preconditioned_rescue_allowed,
 )
 from sfincs_jax.host_refinement import (
     host_direct_solve_with_refinement as _host_direct_solve_with_refinement_impl,
@@ -908,99 +912,17 @@ _rhs1_dkes_gmres_budget = _solver_path_policy.rhs1_dkes_gmres_budget
 _rhs1_residual_needs_rescue = _solver_path_policy.rhs1_residual_needs_rescue
 
 
-def _rhs1_gpu_sparse_fallback_skip_allowed(
-    *,
-    op: V3FullSystemOperator,
-    rhs1_precond_kind: str | None,
-    use_active_dof_mode: bool,
-    residual_norm: float,
-    target: float,
-) -> bool:
-    return _rhs1_gpu_sparse_fallback_skip_allowed_impl(
-        backend=jax.default_backend(),
-        rhs_mode=int(getattr(op, "rhs_mode", 0) or 0),
-        include_phi1=bool(getattr(op, "include_phi1", False)),
-        has_pas=getattr(getattr(op, "fblock", None), "pas", None) is not None,
-        rhs1_precond_kind=rhs1_precond_kind,
-        use_active_dof_mode=bool(use_active_dof_mode),
-        residual_norm=float(residual_norm),
-        target=float(target),
-    )
-
-
 _is_resource_exhausted_error = _solver_path_policy.is_resource_exhausted_error
 _resolve_use_implicit = _resolve_use_implicit_impl
 
 
-def _rhsmode1_dense_backend_allowed() -> bool:
-    return _rhs1_dense_backend_allowed_impl(backend=jax.default_backend())
-
-
 _transport_tzfft_first_attempt_budget = _transport_tzfft_first_attempt_budget_impl
-
-
-def _rhsmode1_host_dense_fallback_allowed() -> bool:
-    return _rhs1_host_dense_fallback_allowed_impl(backend=jax.default_backend())
-
-
-def _rhsmode1_host_dense_shortcut_allowed(
-    *,
-    op: V3FullSystemOperator,
-    active_size: int,
-    use_implicit: bool,
-    solve_method_kind: str,
-) -> bool:
-    return _rhs1_host_dense_shortcut_allowed_impl(
-        op=op,
-        active_size=active_size,
-        use_implicit=use_implicit,
-        solve_method_kind=solve_method_kind,
-        backend=jax.default_backend(),
-        dense_fallback_max=_rhsmode1_dense_fallback_max(op),
-    )
 
 
 _rhsmode1_dense_krylov_allowed = _rhs1_dense_krylov_allowed_impl
 
 
 _rhsmode1_host_sparse_direct_allowed = _rhs1_host_sparse_direct_allowed_impl
-
-
-def _rhsmode1_sparse_operator_preconditioned_rescue_allowed(
-    *,
-    op: V3FullSystemOperator,
-    sparse_exact_lu: bool,
-    host_sparse_direct_wanted: bool,
-) -> bool:
-    """Allow a Fortran-like sparse-preconditioned GMRES rescue before direct LU.
-
-    For RHSMode=1 full-FP constraintScheme=1 runs on CPU, exact sparse LU of the
-    true Jacobian can converge to a slightly different low-order moment branch than
-    PETSc's iterative solve, even when the linear residual is tiny. In this regime,
-    first using an exact sparse LU of the simplified preconditioner operator as the
-    preconditioner for GMRES on the true Jacobian more closely matches the Fortran
-    KSP path while keeping the strong CPU rescue.
-    """
-    return _rhs1_sparse_operator_preconditioned_rescue_allowed_impl(
-        op=op,
-        sparse_exact_lu=sparse_exact_lu,
-        host_sparse_direct_wanted=host_sparse_direct_wanted,
-        backend=jax.default_backend(),
-    )
-
-
-def _host_sparse_factor_dtype(
-    *,
-    size: int,
-    factorization: str,
-    use_implicit: bool,
-) -> np.dtype:
-    return _host_sparse_factor_dtype_impl(
-        size=size,
-        factorization=factorization,
-        use_implicit=use_implicit,
-        backend=jax.default_backend(),
-    )
 
 
 _transport_runtime_policy = TransportRuntimePolicy(
@@ -1056,88 +978,9 @@ _rhsmode1_explicit_sparse_host_direct_allowed = (
 )
 
 
-def _rhsmode1_sparse_pc_default_permc_spec(
-    *,
-    constrained_pas_pc: bool,
-    tokamak_pas_er_pc: bool,
-    n_species: int,
-) -> str:
-    """Return the measured SuperLU column-ordering default for sparse-PC RHSMode=1.
-
-    Constrained PAS systems usually benefit from ``MMD_ATA``. The measured
-    exception kept as a default is the tokamak PAS+Er full-trajectory window,
-    where ``MMD_AT_PLUS_A`` lowers fill and runtime on both CPU and one-GPU
-    validation runs.
-    """
-    return _solver_path_policy.rhsmode1_sparse_pc_default_permc_spec(
-        constrained_pas_pc=constrained_pas_pc,
-        tokamak_pas_er_pc=tokamak_pas_er_pc,
-        n_species=n_species,
-    )
-
-
-def _rhsmode1_sparse_pc_default_restart(
-    *,
-    requested_restart: int,
-    restart_env_value: str,
-    tokamak_pas_er_pc: bool,
-    n_species: int,
-) -> int:
-    """Return the sparse-PC GMRES restart after scoped production caps.
-
-    The one-species tokamak PAS+Er production row is memory dominated on GPUs.
-    A restart cap of 40 preserved output parity in CPU/GPU sweeps while lowering
-    GPU resident memory and slightly reducing time-to-solution. Keep all other
-    sparse-PC rows on their requested restart, and always respect an explicit
-    user environment override.
-    """
-    return _solver_path_policy.rhsmode1_sparse_pc_default_restart(
-        requested_restart=requested_restart,
-        restart_env_value=restart_env_value,
-        tokamak_pas_er_pc=tokamak_pas_er_pc,
-        n_species=n_species,
-    )
-
-
-def _rhsmode1_pas_fast_accept(
-    *,
-    op: V3FullSystemOperator,
-    active_size: int,
-    residual_norm: float,
-    target: float,
-    use_implicit: bool,
-) -> bool:
-    return _rhs1_pas_fast_accept_impl(
-        op=op,
-        active_size=int(active_size),
-        residual_norm=float(residual_norm),
-        target=float(target),
-        use_implicit=bool(use_implicit),
-        backend=jax.default_backend(),
-    )
-
-
 _rhsmode1_pas_adaptive_smoother_allowed = (
     _rhs1_pas_adaptive_smoother_allowed_impl
 )
-
-
-def _rhsmode1_constraint0_sparse_first(
-    *,
-    op: V3FullSystemOperator,
-    solve_method_kind: str,
-    sparse_precond_mode: str,
-    active_size: int,
-    sparse_max_size: int,
-) -> bool:
-    return _rhs1_constraint0_sparse_first_impl(
-        op=op,
-        solve_method_kind=solve_method_kind,
-        sparse_precond_mode=sparse_precond_mode,
-        active_size=int(active_size),
-        sparse_max_size=int(sparse_max_size),
-        backend=jax.default_backend(),
-    )
 
 
 _rhsmode1_constraint0_petsc_compat = _rhs1_constraint0_petsc_compat_impl
@@ -1148,28 +991,6 @@ _rhsmode1_constraint0_dense_fallback_allowed = (
 )
 
 
-def _rhsmode1_sparse_exact_lu_requested(
-    *,
-    op: V3FullSystemOperator,
-    solve_method_kind: str,
-    active_size: int,
-    sparse_max_size: int,
-    full_precond_requested: bool = False,
-    preconditioner_x: int,
-    use_dkes: bool,
-) -> bool:
-    return _rhs1_sparse_exact_lu_requested_impl(
-        op=op,
-        solve_method_kind=solve_method_kind,
-        active_size=int(active_size),
-        sparse_max_size=int(sparse_max_size),
-        full_precond_requested=bool(full_precond_requested),
-        preconditioner_x=int(preconditioner_x),
-        use_dkes=bool(use_dkes),
-        backend=jax.default_backend(),
-    )
-
-
 _rhsmode1_prefer_sparse_over_dense_shortcut = (
     _rhs1_prefer_sparse_over_dense_shortcut_impl
 )
@@ -1178,278 +999,12 @@ _rhsmode1_prefer_sparse_over_dense_shortcut = (
 _rhsmode1_sparse_prefer_skips_stage2 = _rhs1_sparse_prefer_skips_stage2_impl
 
 
-def _rhsmode1_large_cpu_sparse_rescue_allowed(
-    *,
-    op: V3FullSystemOperator,
-    solve_method_kind: str,
-    active_size: int,
-    sparse_max_size: int,
-    preconditioner_x: int,
-    residual_norm: float,
-    target: float,
-) -> bool:
-    return _rhs1_large_cpu_sparse_rescue_allowed_impl(
-        op=op,
-        solve_method_kind=solve_method_kind,
-        active_size=int(active_size),
-        sparse_max_size=int(sparse_max_size),
-        preconditioner_x=int(preconditioner_x),
-        residual_norm=float(residual_norm),
-        target=float(target),
-        backend=jax.default_backend(),
-    )
-
-
 _rhsmode1_large_cpu_sparse_rescue_first = _rhs1_large_cpu_sparse_rescue_first_impl
-
-
-def _rhsmode1_large_cpu_sparse_skip_primary_allowed(
-    *,
-    op: V3FullSystemOperator,
-    solve_method_kind: str,
-    active_size: int,
-    sparse_max_size: int,
-    use_implicit: bool,
-) -> bool:
-    return _rhs1_large_cpu_sparse_skip_primary_allowed_impl(
-        op=op,
-        solve_method_kind=solve_method_kind,
-        active_size=int(active_size),
-        sparse_max_size=int(sparse_max_size),
-        use_implicit=bool(use_implicit),
-        backend=jax.default_backend(),
-    )
 
 
 _rhsmode1_large_cpu_sparse_exact_lu_allowed = (
     _rhs1_large_cpu_sparse_exact_lu_allowed_impl
 )
-
-
-def _rhsmode1_large_cpu_sparse_exact_lu_xblock_allowed(
-    *,
-    op: V3FullSystemOperator,
-    active_size: int,
-    preconditioner_x: int,
-    used_large_cpu_xblock_shortcut: bool,
-    used_explicit_fp_xblock_seed: bool,
-    xblock_seed_residual: float,
-    xblock_seed_improvement_ratio: float,
-    use_implicit: bool,
-) -> bool:
-    return _rhs1_large_cpu_sparse_exact_lu_xblock_allowed_impl(
-        op=op,
-        active_size=int(active_size),
-        preconditioner_x=int(preconditioner_x),
-        used_large_cpu_xblock_shortcut=bool(used_large_cpu_xblock_shortcut),
-        used_explicit_fp_xblock_seed=bool(used_explicit_fp_xblock_seed),
-        xblock_seed_residual=float(xblock_seed_residual),
-        xblock_seed_improvement_ratio=float(xblock_seed_improvement_ratio),
-        use_implicit=bool(use_implicit),
-        backend=jax.default_backend(),
-    )
-
-
-def _rhsmode1_sparse_xblock_rescue_allowed(
-    *,
-    op: V3FullSystemOperator,
-    solve_method_kind: str,
-    active_size: int,
-    sparse_max_size: int,
-    preconditioner_x: int,
-    pre_theta: int,
-    pre_zeta: int,
-    residual_norm: float,
-    target: float,
-) -> bool:
-    return _rhs1_sparse_xblock_rescue_allowed_impl(
-        op=op,
-        solve_method_kind=solve_method_kind,
-        active_size=int(active_size),
-        sparse_max_size=int(sparse_max_size),
-        preconditioner_x=int(preconditioner_x),
-        pre_theta=int(pre_theta),
-        pre_zeta=int(pre_zeta),
-        residual_norm=float(residual_norm),
-        target=float(target),
-        backend=jax.default_backend(),
-    )
-
-
-def _rhsmode1_large_cpu_xblock_skip_primary_allowed(
-    *,
-    op: V3FullSystemOperator,
-    solve_method_kind: str,
-    active_size: int,
-    sparse_max_size: int,
-    preconditioner_species: int,
-    preconditioner_x: int,
-    preconditioner_xi: int,
-    pre_theta: int,
-    pre_zeta: int,
-    use_implicit: bool,
-    rhs1_precond_env: str,
-) -> bool:
-    return _rhs1_large_cpu_xblock_skip_primary_allowed_impl(
-        op=op,
-        solve_method_kind=solve_method_kind,
-        active_size=int(active_size),
-        sparse_max_size=int(sparse_max_size),
-        preconditioner_species=int(preconditioner_species),
-        preconditioner_x=int(preconditioner_x),
-        preconditioner_xi=int(preconditioner_xi),
-        pre_theta=int(pre_theta),
-        pre_zeta=int(pre_zeta),
-        use_implicit=bool(use_implicit),
-        rhs1_precond_env=rhs1_precond_env,
-        backend=jax.default_backend(),
-    )
-
-
-def _rhsmode1_fast_post_xblock_polish_allowed(
-    *,
-    op: V3FullSystemOperator,
-    active_size: int,
-    residual_norm: float,
-    target: float,
-    used_large_cpu_xblock_shortcut: bool,
-    use_implicit: bool,
-) -> bool:
-    return _rhs1_fast_post_xblock_polish_allowed_impl(
-        op=op,
-        active_size=int(active_size),
-        residual_norm=float(residual_norm),
-        target=float(target),
-        used_large_cpu_xblock_shortcut=bool(used_large_cpu_xblock_shortcut),
-        use_implicit=bool(use_implicit),
-        backend=jax.default_backend(),
-    )
-
-
-def _rhsmode1_fp_targeted_polish_allowed(
-    *,
-    op: V3FullSystemOperator,
-    active_size: int,
-    residual_norm: float,
-    target: float,
-    rhs1_precond_kind: str,
-    use_implicit: bool,
-) -> bool:
-    return _rhs1_fp_targeted_polish_allowed_impl(
-        op=op,
-        active_size=int(active_size),
-        residual_norm=float(residual_norm),
-        target=float(target),
-        rhs1_precond_kind=rhs1_precond_kind,
-        use_implicit=bool(use_implicit),
-        backend=jax.default_backend(),
-    )
-
-
-def _rhsmode1_skip_global_sparse_after_xblock_allowed(
-    *,
-    op: V3FullSystemOperator,
-    active_size: int,
-    residual_norm: float,
-    target: float,
-    used_large_cpu_xblock_shortcut: bool,
-    used_explicit_fp_xblock_seed: bool,
-    use_implicit: bool,
-) -> bool:
-    return _rhs1_skip_global_sparse_after_xblock_allowed_impl(
-        op=op,
-        active_size=int(active_size),
-        residual_norm=float(residual_norm),
-        target=float(target),
-        used_large_cpu_xblock_shortcut=bool(used_large_cpu_xblock_shortcut),
-        used_explicit_fp_xblock_seed=bool(used_explicit_fp_xblock_seed),
-        use_implicit=bool(use_implicit),
-        backend=jax.default_backend(),
-    )
-
-
-def _rhsmode1_fp_xblock_global_correction_allowed(
-    *,
-    op: V3FullSystemOperator,
-    active_size: int,
-    residual_norm: float,
-    target: float,
-    used_large_cpu_xblock_shortcut: bool,
-    used_explicit_fp_xblock_seed: bool,
-    sparse_xblock_candidate_accepted: bool,
-    use_implicit: bool,
-) -> bool:
-    return _rhs1_fp_xblock_global_correction_allowed_impl(
-        op=op,
-        active_size=int(active_size),
-        residual_norm=float(residual_norm),
-        target=float(target),
-        used_large_cpu_xblock_shortcut=bool(used_large_cpu_xblock_shortcut),
-        used_explicit_fp_xblock_seed=bool(used_explicit_fp_xblock_seed),
-        sparse_xblock_candidate_accepted=bool(sparse_xblock_candidate_accepted),
-        use_implicit=bool(use_implicit),
-        backend=jax.default_backend(),
-    )
-
-
-def _rhsmode1_scipy_rescue_abs_floor_after_xblock(
-    *,
-    op: V3FullSystemOperator,
-    active_size: int,
-    used_large_cpu_xblock_shortcut: bool,
-    used_explicit_fp_xblock_seed: bool,
-    use_implicit: bool,
-) -> float:
-    return _rhs1_scipy_rescue_abs_floor_after_xblock_impl(
-        op=op,
-        active_size=int(active_size),
-        used_large_cpu_xblock_shortcut=bool(used_large_cpu_xblock_shortcut),
-        used_explicit_fp_xblock_seed=bool(used_explicit_fp_xblock_seed),
-        use_implicit=bool(use_implicit),
-        backend=jax.default_backend(),
-    )
-
-
-def _rhsmode1_scipy_rescue_active_size_allowed(
-    *,
-    op: V3FullSystemOperator,
-    active_size: int,
-    used_large_cpu_xblock_shortcut: bool,
-    used_explicit_fp_xblock_seed: bool,
-    use_implicit: bool,
-) -> bool:
-    return _rhs1_scipy_rescue_active_size_allowed_impl(
-        op=op,
-        active_size=int(active_size),
-        used_large_cpu_xblock_shortcut=bool(used_large_cpu_xblock_shortcut),
-        used_explicit_fp_xblock_seed=bool(used_explicit_fp_xblock_seed),
-        use_implicit=bool(use_implicit),
-        backend=jax.default_backend(),
-    )
-
-
-def _rhsmode1_sparse_sxblock_rescue_allowed(
-    *,
-    op: V3FullSystemOperator,
-    solve_method_kind: str,
-    active_size: int,
-    sparse_max_size: int,
-    preconditioner_x: int,
-    pre_theta: int,
-    pre_zeta: int,
-    use_implicit: bool,
-) -> bool:
-    return _rhs1_sparse_sxblock_rescue_allowed_impl(
-        op=op,
-        solve_method_kind=solve_method_kind,
-        active_size=int(active_size),
-        sparse_max_size=int(sparse_max_size),
-        preconditioner_x=int(preconditioner_x),
-        pre_theta=int(pre_theta),
-        pre_zeta=int(pre_zeta),
-        use_implicit=bool(use_implicit),
-        backend=jax.default_backend(),
-    )
 
 
 _transport_sparse_direct_rescue_first = _transport_sparse_direct_rescue_first_impl
