@@ -1682,6 +1682,156 @@ def rhsmode1_radial_current_response_from_namelist(
     )
 
 
+def _first_scalar(value: Any, default: Any) -> Any:
+    if value is None:
+        return default
+    if isinstance(value, (list, tuple)):
+        return value[0] if value else default
+    return value
+
+
+def solve_rhsmode1_ambipolar_from_namelist(
+    *,
+    nml: Any,
+    derivative_step: float = 1.0e-5,
+    finite_difference_step: float | None = None,
+    radial_coordinate: str = "rN",
+    psi_a_hat: float | None = None,
+    a_hat: float | None = None,
+    r_n: float | None = None,
+    identity_shift: float = 0.0,
+    keep_zero_er_terms: bool = True,
+    max_dense_size: int = 512,
+    observable_chunk_size: int = 128,
+    include_jacobian_terms: bool = True,
+    use_analytic_er_tangent: bool = True,
+    linear_algebra_factory: Callable[
+        [Any],
+        tuple[Callable[[Any], Any], Callable[[Any], Any], Callable[[Any], Any]],
+    ]
+    | None = None,
+    er_min: float | None = None,
+    er_max: float | None = None,
+    er_initial: float | None = None,
+    max_evaluations: int | None = None,
+    current_tolerance: float | None = None,
+    step_tolerance: float | None = None,
+    ambipolar_solve_option: int | None = None,
+    validate_fortran_compatibility: bool = True,
+    metadata: Mapping[str, Any] | None = None,
+) -> AmbipolarResult:
+    """Solve a Fortran-compatible RHSMode-1 ambipolar namelist in-process.
+
+    This helper is the small-deck promotion gate for ``ambipolarSolveOption``
+    1--3.  It wires the namelist-backed radial-current response into the same
+    Brent, safeguarded Newton, and pure Newton policies used by the public
+    ambipolar API.  Production callers should provide ``linear_algebra_factory``
+    so the response can reuse sparse or matrix-free factors instead of the
+    bounded dense validation backend.
+    """
+
+    from ..namelist import read_sfincs_input  # noqa: PLC0415
+
+    nml_base = read_sfincs_input(nml) if isinstance(nml, (str, Path)) else nml
+    general = nml_base.group("general")
+    physics = nml_base.group("physicsParameters")
+    option = int(
+        _first_scalar(
+            ambipolar_solve_option
+            if ambipolar_solve_option is not None
+            else general.get("AMBIPOLARSOLVEOPTION"),
+            2,
+        )
+    )
+    if validate_fortran_compatibility:
+        errors = validate_fortran_v3_ambipolar_constraints(nml_base, option=option)
+        if errors:
+            joined = "; ".join(errors)
+            raise ValueError(f"RHSMode-1 ambipolar namelist is not Fortran-v3 compatible: {joined}")
+
+    response = rhsmode1_radial_current_response_from_namelist(
+        nml=nml_base,
+        derivative_step=derivative_step,
+        finite_difference_step=finite_difference_step,
+        radial_coordinate=radial_coordinate,
+        psi_a_hat=psi_a_hat,
+        a_hat=a_hat,
+        r_n=r_n,
+        identity_shift=identity_shift,
+        keep_zero_er_terms=keep_zero_er_terms,
+        max_dense_size=max_dense_size,
+        observable_chunk_size=observable_chunk_size,
+        include_jacobian_terms=include_jacobian_terms,
+        use_analytic_er_tangent=use_analytic_er_tangent,
+        linear_algebra_factory=linear_algebra_factory,
+        metadata=metadata,
+    )
+
+    current_cache: dict[float, float] = {}
+
+    def evaluate_current(er: float) -> float:
+        key = float(er)
+        if key not in current_cache:
+            current_cache[key] = float(response.radial_current(key))
+        return current_cache[key]
+
+    problem_metadata = {
+        "builder": "solve_rhsmode1_ambipolar_from_namelist",
+        "source_path": None if getattr(nml_base, "source_path", None) is None else str(nml_base.source_path),
+        "ambipolar_solve_option": option,
+        "radial_current_response": dict(response.metadata),
+        **dict(metadata or {}),
+    }
+    problem = AmbipolarProblem(
+        evaluate_radial_current=evaluate_current,
+        er_min=float(_first_scalar(er_min if er_min is not None else general.get("ER_MIN"), -1.0)),
+        er_max=float(_first_scalar(er_max if er_max is not None else general.get("ER_MAX"), 1.0)),
+        er_initial=float(_first_scalar(er_initial if er_initial is not None else physics.get("ER"), 0.0)),
+        max_evaluations=int(
+            _first_scalar(max_evaluations if max_evaluations is not None else general.get("NER_AMBIPOLARSOLVE"), 20)
+        ),
+        current_tolerance=float(
+            _first_scalar(
+                current_tolerance if current_tolerance is not None else general.get("ER_SEARCH_TOLERANCE_F"),
+                1.0e-10,
+            )
+        ),
+        step_tolerance=float(
+            _first_scalar(
+                step_tolerance if step_tolerance is not None else general.get("ER_SEARCH_TOLERANCE_DX"),
+                1.0e-8,
+            )
+        ),
+        metadata=problem_metadata,
+    )
+
+    if option == 1:
+        result = solve_ambipolar_safeguarded_newton(
+            problem,
+            response.derivative,
+            derivative_source="rhsmode1_implicit_active",
+        )
+    elif option == 2:
+        result = solve_ambipolar_brent(problem)
+    elif option == 3:
+        result = solve_ambipolar_newton(
+            problem,
+            response.derivative,
+            derivative_source="rhsmode1_implicit_active",
+        )
+    else:
+        raise ValueError(f"Unsupported ambipolarSolveOption={option}; expected 1, 2, or 3.")
+
+    return replace(
+        result,
+        metadata={
+            **problem_metadata,
+            **dict(result.metadata),
+            "current_cache_size": len(current_cache),
+        },
+    )
+
+
 def matrix_free_rhs1_vm_radial_current_linear_observable_system(
     *,
     op: Any,
@@ -2020,6 +2170,7 @@ __all__ = [
     "solve_ambipolar_brent",
     "solve_ambipolar_newton",
     "solve_ambipolar_safeguarded_newton",
+    "solve_rhsmode1_ambipolar_from_namelist",
     "solve_sfincs_jax_ambipolar_brent",
     "validate_fortran_v3_ambipolar_constraints",
 ]

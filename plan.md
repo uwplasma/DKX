@@ -1293,3 +1293,50 @@ Next best steps:
    residual, runtime, and RSS.
 3. Start RHSMode 4 fixed-Er fixture design using the active operator/transpose
    contract now validated by option-1/3.
+
+## 2026-06-25 Bounded Option-1/3 Ambipolar Root Replay
+
+Steps taken:
+
+1. Added `solve_rhsmode1_ambipolar_from_namelist` as the bounded
+   namelist-backed RHSMode-1 ambipolar driver for options 1, 2, and 3.
+2. Wired the active `particleFlux_vm_rN` response into the real safeguarded
+   Newton and pure-Newton root solvers, including current-evaluation caching
+   and Fortran-compatibility validation.
+3. Exposed the helper through `sfincs_jax.problems` and added import-contract
+   coverage.
+4. Added physical small-deck replay tests for the checked helical option-1 and
+   option-3 Fortran roots.
+
+Results:
+
+- Option 1 converges through the real safeguarded Newton path with one
+  derivative evaluation and no bisection fallback.
+- Option 3 converges through the real pure-Newton path using the same active
+  namelist-backed derivative provider.
+- Root electric fields replay the checked Fortran value
+  `Er=-2.01579684708909` within the `2e-5` absolute gate, and final currents
+  agree below `1e-12` absolute residual.
+- Focused validation passed:
+  `JAX_ENABLE_X64=True python -m pytest tests/test_ambipolar_problem.py
+  tests/test_sensitivity.py tests/test_domain_package_import_contracts.py -q
+  --tb=short` with `45 passed in 81.34 s`.
+
+Current lane status:
+
+- Ambipolar solver lane: 99% for bounded small decks; production option-1/3
+  replay with setup reuse remains outside normal CI.
+- RHSMode 4/5 sensitivity lane: 72%; the active operator/transpose contract is
+  now stable enough to start fixed-Er fixture output work.
+- Refactor/review-ready PR lane: 85%; the problem-domain API surface is cleaner
+  and the helper no longer requires direct `v3_driver.py` coupling.
+- Overall completion: about 87%.
+
+Next best steps:
+
+1. Start the RHSMode 4 fixed-Er fixture lane with small Fortran outputs and
+   compare exported sensitivity diagnostics.
+2. Run production option-1/3 replay outside CI with setup-reuse timing/RSS
+   summaries.
+3. Continue the refactor/review tranche by moving sensitivity fixture support
+   behind the domain API rather than adding new `v3_driver.py` entry points.

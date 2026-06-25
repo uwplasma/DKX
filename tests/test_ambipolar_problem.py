@@ -22,6 +22,7 @@ from sfincs_jax.problems.ambipolar import (
     solve_ambipolar_brent,
     solve_ambipolar_newton,
     solve_ambipolar_safeguarded_newton,
+    solve_rhsmode1_ambipolar_from_namelist,
     validate_fortran_v3_ambipolar_constraints,
 )
 from sfincs_jax.sensitivity import MatrixFreeLinearObservableSystem, evaluate_matrix_free_linear_observable
@@ -310,6 +311,53 @@ def test_fortran_v3_ambipolar_validator_accepts_reference_decks_and_rejects_adjo
     assert any("tangential magnetic drifts" in item for item in errors)
     assert any("constraintScheme" in item for item in errors)
     assert any("collisionOperator" in item for item in errors)
+
+
+def test_rhsmode1_namelist_ambipolar_option1_replays_fortran_active_root() -> None:
+    """The real active response drives the safeguarded Newton option-1 root."""
+
+    input_path = REFERENCE_ROOT / "namelists" / "geometry1_helical_small_option1.namelist"
+
+    result = solve_rhsmode1_ambipolar_from_namelist(
+        nml=input_path,
+        derivative_step=1.0e-5,
+        max_dense_size=1000,
+        observable_chunk_size=128,
+        metadata={"gate": "fortran_option1_active_root"},
+    )
+
+    assert result.converged
+    assert result.method == "safeguarded_newton"
+    assert result.metadata["builder"] == "solve_rhsmode1_ambipolar_from_namelist"
+    assert result.metadata["ambipolar_solve_option"] == 1
+    assert result.metadata["radial_current_response"]["response_builder"] == (
+        "rhsmode1_radial_current_response_from_namelist"
+    )
+    assert result.metadata["derivative_count"] == 1
+    assert result.metadata["fallback_count"] == 0
+    np.testing.assert_allclose(result.root_er, -2.01579684708909, rtol=0.0, atol=2.0e-5)
+    np.testing.assert_allclose(result.root_radial_current, -1.0650279455435228e-9, rtol=0.0, atol=1.0e-12)
+
+
+def test_rhsmode1_namelist_ambipolar_option3_replays_fortran_active_root() -> None:
+    """The same active response drives the pure Newton option-3 root."""
+
+    input_path = REFERENCE_ROOT / "namelists" / "geometry1_helical_small_option3.namelist"
+
+    result = solve_rhsmode1_ambipolar_from_namelist(
+        nml=input_path,
+        derivative_step=1.0e-5,
+        max_dense_size=1000,
+        observable_chunk_size=128,
+        metadata={"gate": "fortran_option3_active_root"},
+    )
+
+    assert result.converged
+    assert result.method == "newton"
+    assert result.metadata["ambipolar_solve_option"] == 3
+    assert result.metadata["derivative_count"] == 1
+    np.testing.assert_allclose(result.er_values, (0.0, -2.01579684708909), rtol=0.0, atol=2.0e-5)
+    np.testing.assert_allclose(result.root_radial_current, -1.0650279455435228e-9, rtol=0.0, atol=1.0e-12)
 
 
 def test_sfincs_jax_radial_current_evaluator_runs_real_tiny_rhs1_output(tmp_path: Path) -> None:

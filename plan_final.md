@@ -133,6 +133,10 @@ Implementation progress on 2026-06-23:
 - The same active provider also replays the checked small option-3 physical
   currents for `geometry1_helical_small_option3` and
   `geometry4_w7x_like_small_option3` within `2e-5` relative tolerance.
+- `solve_rhsmode1_ambipolar_from_namelist` now wires that active provider into
+  the real option-1/2/3 ambipolar root policies. Bounded small-deck helical
+  option-1 and option-3 roots replay the checked Fortran v3 roots using the
+  active `particleFlux_vm_rN` response rather than a synthetic table.
 - `sfincs_jax.sensitivity` now exposes `jvp_flux`, `vjp_flux`, and
   `adjoint_dot_product_check`. The focused tests apply the dot-product identity
   to real RHSMode-1 particle-flux, heat-flux, flow, radial-current, and
@@ -584,10 +588,13 @@ Acceptance gates:
 - The checked `geometry1_helical_small_option1` derivative-assisted Newton
   point is now covered by `tests/test_sensitivity.py` using the active
   Fortran-style operator, `particleFlux_vm_rN`, and the implicit
-  tangent/adjoint derivative certificate.
+  tangent/adjoint derivative certificate. The same checked small deck is also
+  covered by `tests/test_ambipolar_problem.py` through the real option-1
+  safeguarded Newton root solve.
 - The checked small option-3 current points for helical and W7-X-like analytic
   decks are now covered by `tests/test_sensitivity.py` using the same active
-  namelist-backed provider.
+  namelist-backed provider, and the helical small deck is covered by the real
+  pure-Newton option-3 root solve.
 - Production reference target is the checked-in production decks under
   `benchmarks/fortran_v3_ambipolar_reference/namelists`, which must be run
   before public benchmark claims are regenerated. The checked-in production
@@ -1042,9 +1049,8 @@ Completed on 2026-06-25:
 
 Next ordered implementation steps:
 
-1. Use the active namelist-backed fixed-shape analytic/JVP provider in the
-   production option-1/3 decks and promote it into the in-process ambipolar
-   root driver when setup reuse is bounded.
+1. Run the production option-1/3 decks with bounded setup reuse outside normal
+   CI and add replay artifacts for residuals, setup reuse, runtime, and RSS.
 2. Extend the JVP/VJP dot-product gate from the current tiny no-Phi1 diagnostic
    set to Phi1 drift-current, total heat-flux, and intermediate-grid cases.
 3. Add small Fortran RHSMode 4/5 output fixtures and compare exported

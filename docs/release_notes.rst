@@ -79,6 +79,11 @@ Unreleased
   namelist-backed RHSMode=1 response. The helical and W7-X-like checked
   Fortran v3 option-3 radial-current points now match within ``2e-5`` relative
   tolerance.
+- Added ``solve_rhsmode1_ambipolar_from_namelist`` as a bounded small-deck
+  option-1/2/3 root driver over the active namelist-backed RHSMode=1 response.
+  The checked helical option-1 and option-3 roots now run through the real
+  active ``particleFlux_vm_rN`` response and replay the Fortran v3 roots within
+  the documented current and electric-field tolerances.
 - Moved the first RHSMode=2/3 transport implementation cluster into
   ``sfincs_jax.problems.transport_matrix``: setup, active/dense setup, loop
   support, finalization, streaming outputs, and postsolve diagnostics. The old

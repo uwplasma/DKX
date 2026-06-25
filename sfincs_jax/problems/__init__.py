@@ -29,6 +29,7 @@ from .ambipolar import (
     solve_ambipolar_brent,
     solve_ambipolar_newton,
     solve_ambipolar_safeguarded_newton,
+    solve_rhsmode1_ambipolar_from_namelist,
     solve_sfincs_jax_ambipolar_brent,
     validate_fortran_v3_ambipolar_constraints,
 )
@@ -60,6 +61,7 @@ __all__ = (
     "solve_ambipolar_brent",
     "solve_ambipolar_newton",
     "solve_ambipolar_safeguarded_newton",
+    "solve_rhsmode1_ambipolar_from_namelist",
     "solve_sfincs_jax_ambipolar_brent",
     "validate_fortran_v3_ambipolar_constraints",
 )

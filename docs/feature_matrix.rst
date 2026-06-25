@@ -71,10 +71,10 @@ Fortran v3 feature ownership
      - ``sfincs_jax.problems.ambipolar`` and ``sfincs_jax.sensitivity``:
        implemented with gates. Root-policy logic, dense certificates, matrix-free/JVP
        derivative-provider gates, analytic existing-branch ``E_r`` tangents,
-       opt-in fixed-shape zero-field branch retention, a namelist-backed
-       RHSMode-1 derivative-response helper, fast option-1-style root tests,
-       and a small Fortran active-operator ``particleFlux_vm_rN`` Newton-slope
-       replay exist; production physical replay gates remain.
+       opt-in fixed-shape zero-field branch retention, and a namelist-backed
+       RHSMode-1 derivative-response helper now run a bounded small-deck
+       Fortran active-operator ``particleFlux_vm_rN`` option-1 root replay.
+       Production physical replay gates remain outside normal CI.
    * - Ambipolar root solve option 2
      - ``ambipolarSolver.F90``
      - Brent method evaluates the radial current at bracket endpoints and an
@@ -86,10 +86,11 @@ Fortran v3 feature ownership
      - Pure Newton uses the adjoint-computed ``dRadialCurrentdEr`` and exits if
        a step leaves the allowed ``E_r`` bounds.
      - ``sfincs_jax.problems.ambipolar`` and ``sfincs_jax.sensitivity``:
-       partial for the same reason as option 1; fast option-3-style matrix-free
-       derivative-provider root tests are covered, and checked small helical
-       plus W7-X-like option-3 currents replay with the active namelist-backed
-       provider.
+       implemented with bounded gates. Fast option-3-style matrix-free
+       derivative-provider root tests are covered, checked small helical plus
+       W7-X-like option-3 currents replay with the active namelist-backed
+       provider, and the helical small-deck pure-Newton root replay now runs
+       through the same namelist-backed provider. Production gates remain.
    * - RHSMode 4 fixed-``E_r`` sensitivities
      - ``solver.F90``, ``populateAdjointRHS.F90``,
        ``populatedMatrixdLambda.F90``, ``populatedRHSdLambda.F90``,
@@ -190,15 +191,14 @@ Fortran v3 feature ownership
      - Add production metadata replay for solver counts, residual separation,
        and RSS bounds.
    * - Ambipolar Newton/bisection and pure Newton options
-     - partial
+     - bounded small-deck implemented; production pending
      - Small-deck derivative certificates, the namelist-backed fixed-shape
        RHSMode-1 radial-current response helper, active Fortran-style
-       option-1 current/slope replay, and radial-current observable gates in
-       ``tests/test_sensitivity.py`` and
+       option-1 current/slope replay, option-1/3 root replay, and
+       radial-current observable gates in ``tests/test_sensitivity.py`` and
        ``tests/test_ambipolar_problem.py``.
      - Production sparse/matrix-free ``E_r`` derivatives, in-process RHSMode-1
-       evaluator reuse, and production Fortran option-1/3 physical replay
-       gates.
+       evaluator reuse, and production Fortran option-1/3 replay gates.
    * - RHSMode 4 fixed-``E_r`` sensitivities
      - partial
      - ``sfincs_jax.sensitivity`` supports implicit linear observable
