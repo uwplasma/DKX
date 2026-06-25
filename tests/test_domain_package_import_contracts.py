@@ -213,6 +213,7 @@ ACTIVE_MODULE_EXPORTS = {
         "evaluate_linear_observable",
         "evaluate_matrix_free_linear_observable",
         "fortran_v3_adjoint_sensitivity_output_fields",
+        "fortran_v3_adjoint_sensitivity_output_ranks",
         "implicit_linear_observable_derivative",
         "implicit_linear_observable_derivative_from_builder",
         "implicit_matrix_free_linear_observable_derivative",
@@ -220,6 +221,7 @@ ACTIVE_MODULE_EXPORTS = {
         "jvp_flux",
         "probe_linear_observable_vector",
         "validate_fortran_v3_adjoint_sensitivity_constraints",
+        "validate_fortran_v3_adjoint_sensitivity_output_surface",
         "vjp_flux",
     ),
 }
