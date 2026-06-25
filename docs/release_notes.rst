@@ -273,10 +273,11 @@ Unreleased
   ``_precond_dtype()`` behavior, while direct tests now cover key stability,
   Phi1 participation, PAS/FP signatures, and dtype partitioning. The
   post-extraction local full suite passed with ``2556 passed in 543.16 s``.
-- Extracted the backend-safe tiny regularized least-squares kernel into
-  ``linear_algebra.py``. The driver keeps the historical private alias, while
-  direct tests now cover dense-reference agreement, near-rank-deficient systems,
-  empty coarse bases, and finite autodiff through the helper. The
+- Extracted the backend-safe tiny regularized least-squares kernel; it now
+  lives in ``solver.py`` with the recycled Krylov initial-guess helper. The
+  driver keeps the historical private alias, while direct tests now cover
+  dense-reference agreement, near-rank-deficient systems, empty coarse bases,
+  and finite autodiff through the helper. The
   post-extraction local full suite passed with ``2558 passed in 542.63 s``.
 - Moved host sparse-direct GMRES polish into ``host_refinement.py`` next to the
   existing host direct-refinement kernels. ``v3_driver.py`` keeps a wrapper that
@@ -339,10 +340,10 @@ Unreleased
   wrappers that inject the active matvec, preconditioner, emit callback, and
   size/iteration guards, while the SciPy replay and non-fatal diagnostic
   failure paths have direct unit tests.
-- Extracted optional Newton-Krylov/Phi1 GMRES history replay into
-  ``newton_krylov_diagnostics.py`` with direct tests for disabled diagnostics,
-  size/iteration skip gates, successful residual-history emission, and
-  non-fatal replay failures.
+- Extracted optional Newton-Krylov/Phi1 GMRES history replay into the
+  profile-response solver diagnostics owner with direct tests for disabled
+  diagnostics, size/iteration skip gates, successful residual-history emission,
+  and non-fatal replay failures.
 - Extracted explicit sparse host-factor policy parsing into
   ``explicit_sparse_factor_policy.py``. Factor-kind aliases, numeric/boolean
   environment parsing, and monolithic LU/ILU guard sizing now have direct tests
