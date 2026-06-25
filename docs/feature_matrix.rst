@@ -104,15 +104,16 @@ Fortran v3 feature ownership
        RHSMode-4/5 input validators, HDF5 sensitivity field-name/rank gates,
        and compact Fortran RHSMode-4 radial-current, heat-flux,
        parallel-flow, bootstrap, and debug finite-difference numerical replay
-       fixtures exist; production grids remain.
+       fixtures are implemented and covered by tests. Production-grid refreshes
+       are release benchmarks rather than normal CI gates.
    * - RHSMode 5 ambipolar sensitivities
      - ``ambipolarSolver.F90``, ``solver.F90``, ``adjointDiagnostics.F90``
      - Fortran first finds ambipolar ``E_r``, then evaluates derivatives at
        constant radial current with the extra ``dPhi/dPsi`` term.
-     - Partial/deferred. The implicit sensitivity spine is present, and a
-       compact Fortran RHSMode=5 heat-flux/``dPhidPsidLambda`` constant-current
-       fixture now pins the output surface. Full RHSMode-5 parity still
-       requires production option-1/3 derivatives and larger diagnostic gates.
+     - Bounded/reference implemented. The implicit sensitivity spine is present,
+       and a compact Fortran RHSMode=5 heat-flux/``dPhidPsidLambda``
+       constant-current fixture pins the output surface. Full production-grid
+       RHSMode-5 parity is tracked as an external release-refresh benchmark.
    * - Collision models
      - ``populateMatrix.F90`` and collision-specific helpers
      - Manual and validation checks distinguish PAS and full Fokker-Planck
