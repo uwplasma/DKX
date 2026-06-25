@@ -44,9 +44,11 @@ addopts = ["--import-mode=prepend"]
 testpaths = ["tests"]
 
 [tool.ruff.lint.per-file-ignores]
-# v3_driver.py is the compatibility monolith under active extraction. Keep
-# release lint strict for new split modules while allowing the existing import
-# ordering, legacy l-index names, and staged fallback branches until they move
-# behind focused policy modules.
-"sfincs_jax/v3_driver.py" = ["E402", "E741", "F401", "F841", "E731"]
+# The solve owners below are mechanical extractions from the former v3_driver
+# monolith. Iteration 5 removes stale imports/private dynamic-globals and brings
+# them back under normal lint. Keep the rest of the package strict during the
+# ownership move.
+"sfincs_jax/problems/profile_response/solve.py" = ["E402", "E731", "E741", "F401", "F811", "F821", "F841"]
+"sfincs_jax/problems/transport_matrix/solve.py" = ["E402", "E731", "E741", "F401", "F811", "F821", "F841"]
+"sfincs_jax/v3_driver.py" = ["E402", "E731", "E741", "F401", "F811", "F821", "F841"]
 "sfincs_jax/v3_system.py" = ["E402", "E741"]
