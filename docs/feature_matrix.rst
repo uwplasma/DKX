@@ -71,8 +71,9 @@ Fortran v3 feature ownership
      - ``sfincs_jax.problems.ambipolar`` and ``sfincs_jax.sensitivity``:
        partial. Root-policy logic, dense certificates, matrix-free/JVP
        derivative-provider gates, analytic existing-branch ``E_r`` tangents,
-       opt-in fixed-shape zero-field branch retention, and fast option-1-style
-       root tests exist; production physical replay gates remain.
+       opt-in fixed-shape zero-field branch retention, a namelist-backed
+       RHSMode-1 derivative-response helper, and fast option-1-style root
+       tests exist; production physical replay gates remain.
    * - Ambipolar root solve option 2
      - ``ambipolarSolver.F90``
      - Brent method evaluates the radial current at bracket endpoints and an
@@ -186,10 +187,12 @@ Fortran v3 feature ownership
        and RSS bounds.
    * - Ambipolar Newton/bisection and pure Newton options
      - partial
-     - Small-deck derivative certificates and radial-current observable gates in
-       ``tests/test_sensitivity.py`` and ``tests/test_ambipolar_problem.py``.
-     - Sparse/matrix-free production ``E_r`` derivatives and in-process
-       RHSMode-1 evaluator reuse.
+     - Small-deck derivative certificates, the namelist-backed fixed-shape
+       RHSMode-1 radial-current response helper, and radial-current observable
+       gates in ``tests/test_sensitivity.py`` and
+       ``tests/test_ambipolar_problem.py``.
+     - Production sparse/matrix-free ``E_r`` derivatives, in-process RHSMode-1
+       evaluator reuse, and Fortran option-1/3 physical replay gates.
    * - RHSMode 4 fixed-``E_r`` sensitivities
      - partial
      - ``sfincs_jax.sensitivity`` supports implicit linear observable
