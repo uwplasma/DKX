@@ -109,6 +109,10 @@ Implementation progress on 2026-06-23:
   ambipolar root solvers. Fast option-1/3-style tests verify root convergence,
   derivative metadata, tangent/adjoint consistency, and finite-difference
   agreement through the public solver API.
+- No-Phi1 existing-branch `Er` operator tangents now use the v3 radial
+  conversion analytically. The helper updates stored `dphi_hat_dpsi_hat` leaves
+  in the full operator and f-block suboperators, and a real electric-field
+  `xDot` fixture verifies the JVP action against centered operator differences.
 - `sfincs_jax.sensitivity` now exposes `jvp_flux`, `vjp_flux`, and
   `adjoint_dot_product_check`. The focused tests apply the dot-product identity
   to real RHSMode-1 particle-flux, heat-flux, flow, radial-current, and
@@ -999,14 +1003,15 @@ Completed on 2026-06-25:
 - Added the matrix-free derivative-provider bridge and verified that
   safeguarded Newton/bisection and pure Newton can consume it through the
   public ambipolar root-solver API.
+- Added analytic no-Phi1 existing-branch `Er` operator tangents and verified
+  the JVP action against centered operator differences on a real `xDot` deck.
 
 Next ordered implementation steps:
 
-1. Replace centered-difference operator-tangent construction with analytic `Er`
-   tangents from namelist radial-coordinate conversion where possible, then use
-   the matrix-free/JVP derivative provider in a real RHSMode-1
-   derivative-assisted ambipolar option-1/3 physical gate. Phi1 drift-current
-   branches remain the next derivative target after the no-Phi1 gate.
+1. Promote a fixed-shape zero-`Er` branch policy so no-Phi1 derivative-assisted
+   ambipolar gates can evaluate at or near `Er=0` without dropping
+   electric-field suboperators. Then use the matrix-free/JVP derivative
+   provider in one real RHSMode-1 option-1/3 physical parity gate.
 2. Extend the JVP/VJP dot-product gate from the current tiny no-Phi1 diagnostic
    set to Phi1 drift-current, total heat-flux, and intermediate-grid cases.
 3. Add small Fortran RHSMode 4/5 output fixtures and compare exported

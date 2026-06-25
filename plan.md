@@ -66,6 +66,10 @@ deferred research lanes.
   into safeguarded Newton/bisection and pure Newton ambipolar root solvers.
   Fast option-1/3-style tests verify root convergence and derivative
   certificate metadata through the public root-solver API.
+- No-Phi1 existing-branch `Er` operator tangents now use the v3 radial
+  conversion analytically. The helper updates stored `dphi_hat_dpsi_hat` leaves
+  in the full operator and f-block suboperators, and a real `xDot` fixture
+  verifies the JVP action against centered operator differences.
 - Major RHSMode=1 preconditioner families now have domain owners:
   - full-CSR Schur preconditioners,
   - Fortran-reduced symbolic sparse factors,
@@ -1128,3 +1132,30 @@ Next best steps:
 2. Use the analytic/JVP provider in one real RHSMode-1 option-1/3 physical
    parity gate against checked Fortran v3 helical summaries.
 3. Extend the same provider path to Phi1 drift-current branches.
+
+## 2026-06-25 Analytic Existing-Branch Er Operator Tangents
+
+Steps taken:
+
+1. Added `dphi_hat_dpsi_hat_er_derivative_from_namelist`, which reuses the v3
+   radial-coordinate conversion to compute `d(dPhiHat/dpsiHat)/dEr`.
+2. Added `er_operator_tangent_from_dphi_hat_dpsi_hat_derivative`, which builds
+   a fixed-shape operator tangent by updating existing `dphi_hat_dpsi_hat`
+   leaves in the full-system operator and f-block suboperators.
+3. Added a real no-Phi1 electric-field `xDot` fixture gate comparing the
+   analytic tangent JVP action against centered operator differences.
+
+Results:
+
+- Focused sensitivity/import gates passed:
+  `python -m pytest tests/test_sensitivity.py
+  tests/test_domain_package_import_contracts.py -q --tb=short` with
+  `23 passed`.
+
+Next best steps:
+
+1. Promote a fixed-shape zero-`Er` branch policy so differentiating at
+   `Er=0` does not drop electric-field suboperators.
+2. Use the analytic/JVP provider in one real RHSMode-1 option-1/3 physical
+   parity gate against checked Fortran v3 summaries.
+3. Add Phi1 drift-current tangents after the no-Phi1 physical gate is stable.

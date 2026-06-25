@@ -51,6 +51,13 @@ Unreleased
   implicit derivative certificates directly. Fast option-1/3-style tests now
   verify root convergence, derivative metadata, tangent/adjoint consistency,
   and finite-difference agreement through the root-solver API.
+- Added analytic no-Phi1 ``E_r`` operator-tangent helpers for fixed-shape
+  RHSMode=1 operators. ``dphi_hat_dpsi_hat_er_derivative_from_namelist`` reuses
+  the v3 radial-coordinate conversion, and
+  ``er_operator_tangent_from_dphi_hat_dpsi_hat_derivative`` updates existing
+  ``dphi_hat_dpsi_hat`` leaves in the full operator and f-block suboperators.
+  Tests verify the analytic JVP action against centered operator differences
+  on a real electric-field ``xDot`` fixture.
 - Moved the first RHSMode=2/3 transport implementation cluster into
   ``sfincs_jax.problems.transport_matrix``: setup, active/dense setup, loop
   support, finalization, streaming outputs, and postsolve diagnostics. The old

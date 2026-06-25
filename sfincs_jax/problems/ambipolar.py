@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from collections.abc import Callable, Mapping
 from contextlib import contextmanager
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 import math
 import os
 from pathlib import Path
@@ -1270,6 +1270,52 @@ def operator_tangent_from_centered_difference(
     return jax.tree_util.tree_map(tangent_leaf, op_plus, op_minus)
 
 
+def dphi_hat_dpsi_hat_er_derivative_from_namelist(nml: Any) -> float:
+    """Return ``d(dPhiHat/dpsiHat)/dEr`` using the v3 radial conversion."""
+
+    from ..v3_fblock import _dphi_hat_dpsi_hat_from_er  # noqa: PLC0415
+
+    return float(
+        _dphi_hat_dpsi_hat_from_er(nml=nml, er=1.0)
+        - _dphi_hat_dpsi_hat_from_er(nml=nml, er=0.0)
+    )
+
+
+def er_operator_tangent_from_dphi_hat_dpsi_hat_derivative(
+    op: Any,
+    dphi_hat_dpsi_hat_derivative: float,
+) -> Any:
+    """Build a fixed-shape operator tangent for an ``Er`` perturbation.
+
+    The helper updates existing ``dphi_hat_dpsi_hat`` leaves in the full-system
+    operator and f-block suboperators. It intentionally does not activate
+    branches that were absent at the base state, so callers should build base
+    operators away from branch-changing ``Er=0`` points until the fixed-shape
+    zero-Er operator policy is promoted.
+    """
+
+    import jax.numpy as jnp  # noqa: PLC0415
+
+    tangent = operator_tangent_from_centered_difference(op, op, 1.0)
+    derivative = jnp.asarray(float(dphi_hat_dpsi_hat_derivative), dtype=jnp.float64)
+
+    def replace_dphi_leaf(candidate: Any) -> Any:
+        if candidate is None or not hasattr(candidate, "dphi_hat_dpsi_hat"):
+            return candidate
+        return replace(candidate, dphi_hat_dpsi_hat=derivative)
+
+    fblock = getattr(tangent, "fblock", None)
+    if fblock is not None:
+        fblock = replace(
+            fblock,
+            exb_theta=replace_dphi_leaf(getattr(fblock, "exb_theta", None)),
+            exb_zeta=replace_dphi_leaf(getattr(fblock, "exb_zeta", None)),
+            er_xidot=replace_dphi_leaf(getattr(fblock, "er_xidot", None)),
+            er_xdot=replace_dphi_leaf(getattr(fblock, "er_xdot", None)),
+        )
+    return replace(tangent, fblock=fblock, dphi_hat_dpsi_hat=derivative)
+
+
 def matrix_free_rhs1_vm_radial_current_linear_observable_system(
     *,
     op: Any,
@@ -1591,6 +1637,8 @@ __all__ = [
     "SfincsJaxRadialCurrentEvaluator",
     "brent_ambipolar_root",
     "dense_rhs1_vm_radial_current_linear_observable_system",
+    "dphi_hat_dpsi_hat_er_derivative_from_namelist",
+    "er_operator_tangent_from_dphi_hat_dpsi_hat_derivative",
     "finite_difference_radial_current_derivative",
     "implicit_linear_radial_current_derivative",
     "implicit_linear_radial_current_derivative_from_builder",
