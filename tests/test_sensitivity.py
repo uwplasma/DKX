@@ -13,6 +13,7 @@ from sfincs_jax.sensitivity import (
     LinearObservableSystem,
     implicit_linear_observable_derivative,
     implicit_linear_observable_derivative_from_builder,
+    probe_linear_observable_vector,
 )
 
 
@@ -192,6 +193,23 @@ def test_implicit_linear_radial_current_builder_adapts_to_ambipolar_contract() -
     assert result.metadata["operator_owner"] == "rhsmode1"
     assert result.metadata["observable"] != "caller_metadata_should_not_override"
     assert result.metadata["finite_difference_abs_error"] < 1.0e-8
+
+
+def test_probe_linear_observable_vector_recovers_chunked_weights_and_offset() -> None:
+    weights = jnp.asarray([0.3, -0.4, 1.7, 0.0, -2.0], dtype=jnp.float64)
+    offset = 0.125
+
+    def observable(state: jnp.ndarray) -> jnp.ndarray:
+        return jnp.vdot(weights, state) + offset
+
+    vector, probed_offset = probe_linear_observable_vector(
+        observable,
+        size=int(weights.size),
+        chunk_size=2,
+    )
+
+    np.testing.assert_allclose(vector, weights, rtol=0.0, atol=1.0e-12)
+    np.testing.assert_allclose(probed_offset, offset, rtol=0.0, atol=1.0e-12)
 
 
 def test_implicit_linear_observable_derivative_rejects_incompatible_shapes() -> None:

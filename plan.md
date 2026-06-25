@@ -839,3 +839,29 @@ Next best steps:
    RHSMode 1 deck before using it in Newton ambipolar solves.
 3. Generalize the builder shape to RHSMode 4/5 adjoint outputs once the RHSMode
    1 radial-current gate is stable.
+
+## 2026-06-25 Chunked Observable-Vector Probe
+
+Steps taken:
+
+1. Added `probe_linear_observable_vector` to `sfincs_jax.sensitivity`.
+2. The helper recovers `J(x) = c^T x + J0` from an existing scalar diagnostic
+   by probing basis vectors in bounded chunks.
+3. Added tests for nonzero-offset observables and chunk sizes that do not
+   divide the vector length.
+
+Results:
+
+- Focused tests passed:
+  `python -m pytest tests/test_sensitivity.py
+  tests/test_domain_package_import_contracts.py -q --tb=short` with
+  `14 passed`.
+- Static checks passed:
+  `python -m py_compile sfincs_jax/sensitivity.py` and `git diff --check`.
+
+Next best steps:
+
+1. Use the probe on a tiny real RHSMode 1 deck to pin the radial-current
+   observable vector against the existing output diagnostics.
+2. Replace the probe with analytic radial-current weights after the diagnostic
+   formula and coordinate conversion are pinned.

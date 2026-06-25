@@ -18,6 +18,7 @@ from dataclasses import dataclass, field
 from types import MappingProxyType
 from typing import Any
 
+import jax
 import jax.numpy as jnp
 
 
@@ -25,6 +26,7 @@ Array = Any
 LinearSolver = Callable[[jnp.ndarray, jnp.ndarray], jnp.ndarray]
 ObservableFn = Callable[[float], float]
 LinearObservableBuilder = Callable[[float], "LinearObservableSystem"]
+StateObservableFn = Callable[[jnp.ndarray], Any]
 
 
 def _immutable_mapping(value: Mapping[str, Any] | None) -> Mapping[str, Any]:
@@ -146,6 +148,41 @@ def evaluate_linear_observable(
     solve_fn = solve or _default_solve
     x = solve_fn(a, b)
     return float(jnp.vdot(c, x) + float(system.observable_offset))
+
+
+def probe_linear_observable_vector(
+    observable: StateObservableFn,
+    *,
+    size: int,
+    chunk_size: int = 128,
+    dtype: Any = jnp.float64,
+) -> tuple[jnp.ndarray, float]:
+    """Return ``(c, J0)`` for a scalar diagnostic ``J(x) = c^T x + J0``.
+
+    Existing SFINCS diagnostics are often easier to trust than a manually
+    duplicated formula. This utility probes those diagnostics with basis
+    vectors in bounded chunks, which is suitable for small validation decks and
+    for deriving checked observable weights during development. Production
+    owners should replace it with analytic weights once the formula is pinned.
+    """
+
+    n = int(size)
+    chunk = int(chunk_size)
+    if n <= 0:
+        raise ValueError("size must be positive.")
+    if chunk <= 0:
+        raise ValueError("chunk_size must be positive.")
+    zero = jnp.zeros((n,), dtype=dtype)
+    offset = float(jnp.asarray(observable(zero), dtype=dtype).reshape(()))
+    parts: list[jnp.ndarray] = []
+    for start in range(0, n, chunk):
+        stop = min(start + chunk, n)
+        width = stop - start
+        basis = jnp.zeros((width, n), dtype=dtype)
+        basis = basis.at[jnp.arange(width), jnp.arange(start, stop)].set(1.0)
+        values = jax.vmap(lambda vec: jnp.asarray(observable(vec), dtype=dtype).reshape(()))(basis)
+        parts.append(values - offset)
+    return jnp.concatenate(parts, axis=0), offset
 
 
 def _centered_finite_difference(
@@ -302,4 +339,5 @@ __all__ = (
     "evaluate_linear_observable",
     "implicit_linear_observable_derivative",
     "implicit_linear_observable_derivative_from_builder",
+    "probe_linear_observable_vector",
 )

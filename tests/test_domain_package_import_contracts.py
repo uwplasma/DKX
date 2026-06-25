@@ -194,6 +194,7 @@ ACTIVE_MODULE_EXPORTS = {
         "evaluate_linear_observable",
         "implicit_linear_observable_derivative",
         "implicit_linear_observable_derivative_from_builder",
+        "probe_linear_observable_vector",
     ),
 }
 
