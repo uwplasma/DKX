@@ -21,7 +21,7 @@ import jax
 import jax.numpy as jnp
 
 from sfincs_jax.namelist import Namelist, read_sfincs_input
-from sfincs_jax.newton_krylov_diagnostics import emit_newton_krylov_ksp_history as _emit_newton_krylov_ksp_history
+from sfincs_jax.problems.profile_response.solver_diagnostics import emit_newton_krylov_ksp_history as _emit_newton_krylov_ksp_history
 from sfincs_jax.solver import (
     GMRESSolveResult,
     bicgstab_solve_with_residual,
@@ -45,7 +45,7 @@ from sfincs_jax.solver import (
     lgmres_solve_with_history_scipy,
     tfqmr_solve_with_residual,
 )
-from sfincs_jax.linear_algebra import (
+from sfincs_jax.solver import (
     recycled_initial_guess as _recycled_initial_guess,
     small_regularized_lstsq as _small_regularized_lstsq,
 )
@@ -746,7 +746,7 @@ from sfincs_jax.phi1_newton_linear import (
     build_phi1_newton_preconditioner,
     solve_phi1_newton_linear_step,
 )
-from sfincs_jax.phi1_line_search import advance_phi1_newton_iterate
+from sfincs_jax.problems.profile_response.phi1_newton import advance_phi1_newton_iterate
 from sfincs_jax.solver_progress import (
     RHS1ProgressNotes,
     rhs1_large_progress_enabled,
@@ -881,7 +881,7 @@ from sfincs_jax.problems.transport_matrix.direct_pmat import (
     _try_build_rhsmode23_fp_fortran_reduced_direct_pmat_bundle,
 )
 from sfincs_jax.v3_system import _fs_average_factor, _ix_min, _source_basis_constraint_scheme_1, _matvec_shard_axis, sharding_constraints
-from sfincs_jax.verbose import Timer
+from sfincs_jax.profiling import Timer
 from sfincs_jax.v3 import geometry_from_namelist, grids_from_namelist
 from sfincs_jax.v3_system import (
     V3FullSystemOperator,

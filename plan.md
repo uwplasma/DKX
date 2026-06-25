@@ -3159,3 +3159,74 @@ Next best steps:
    assembly from `profile_response/solve.py` into the existing sparse owners.
 3. Avoid any new helper-only files; the next implementation batch should either
    delete more files or reduce `profile_response/solve.py` materially.
+
+## 2026-06-25 Lane 1 Batch 0 Small Root Owner Cleanup
+
+Steps taken:
+
+1. Deleted five more obsolete package-root implementation modules:
+   `sfincs_jax/linear_algebra.py`,
+   `sfincs_jax/newton_krylov_diagnostics.py`,
+   `sfincs_jax/phi1_line_search.py`, `sfincs_jax/sparse.py`, and
+   `sfincs_jax/verbose.py`.
+2. Moved the differentiable tiny least-squares kernel and recycled Krylov
+   initial-guess builder into `sfincs_jax/solver.py`.
+3. Moved the JAX-native CSR matvec into `sfincs_jax/explicit_sparse.py`, where
+   sparse operator/factor infrastructure already lives.
+4. Moved deterministic `make_emit` and `Timer` utilities into
+   `sfincs_jax/profiling.py`.
+5. Moved Phi1 accepted-iterate line-search/update logic into
+   `sfincs_jax/problems/profile_response/phi1_newton.py`.
+6. Moved optional Newton-Krylov PETSc-style KSP history replay into
+   `sfincs_jax/problems/profile_response/solver_diagnostics.py`.
+7. Rewrote source, example, test, and API docs imports to use the canonical
+   owners; no compatibility shims were kept for the deleted modules.
+
+Current inventory:
+
+- Package Python files: `217` (down from `222`).
+- Package-root Python files: `85` (down from `90`).
+- Package source lines: `163,358` (down from `163,423`).
+- `sfincs_jax/v3_driver.py`: `47` lines.
+- `sfincs_jax/problems/profile_response/solve.py`: `9,412` lines.
+
+Validation:
+
+- `python -m ruff check` passed for all touched source/test modules.
+- `python -m py_compile` passed for all touched source modules.
+- Focused moved-helper tests passed:
+  `python -m pytest
+  tests/test_small_regularized_lstsq.py
+  tests/test_sparse_csr.py
+  tests/test_phi1_line_search.py
+  tests/test_newton_krylov_diagnostics.py
+  tests/test_helper_module_coverage.py -q --tb=short`
+  with `25 passed in 3.46 s`.
+- Focused RHSMode-1 dispatch and fallback coverage passed:
+  `84 passed in 44.67 s`.
+- Transport solve/parallel regression coverage passed:
+  `34 passed in 44.15 s`.
+- `python -m sphinx -W -b html docs docs/_build/html` passed.
+- Deleted-module import audit found no remaining source imports. Remaining
+  broad `sparse.py` text hits are unrelated filenames such as `tz_sparse.py`
+  and test names.
+
+Current lane status:
+
+- Lane 1 Batch 0: second helper cleanup checkpoint complete; package-root
+  count is moving in the right direction but broader `v3_*`, `io.py`, solver,
+  preconditioner, and transport compatibility audits remain.
+- Lane 1 overall: about `60%` of the authoritative consolidation plan.
+- Overall refactor/review-ready PR goal: not complete.
+
+Next best steps:
+
+1. Start the transport-parallel consolidation: merge `execution.py`,
+   `payload.py`, `pool.py`, `solve.py`, and `validation.py` into
+   `problems/transport_matrix/parallel/runtime.py`, leaving only
+   `runtime.py`, `policy.py`, `sharding.py`, and `worker.py` in the subpackage
+   before the final policy merge.
+2. Continue Batch 1 with a real profile-response solve cut, targeting sparse
+   branch orchestration/finalization rather than moving one-off helpers.
+3. Keep avoiding deleted-module shims; update tests/docs to canonical owners
+   instead.

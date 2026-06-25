@@ -18,7 +18,7 @@ from .explicit_sparse_factor_policy import (
     explicit_sparse_factor_settings_from_env,
     explicit_sparse_monolithic_max_size,
 )
-from .verbose import Timer
+from .profiling import Timer
 
 
 def build_host_sparse_direct_factor_from_matvec(

@@ -26,7 +26,7 @@ import sys
 from pathlib import Path
 
 from sfincs_jax.io import write_sfincs_jax_output_h5
-from sfincs_jax.verbose import make_emit
+from sfincs_jax.profiling import make_emit
 
 
 def main() -> None:

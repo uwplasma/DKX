@@ -15,7 +15,7 @@ from typing import Any
 import jax.numpy as jnp
 import numpy as np
 
-from .linear_algebra import small_regularized_lstsq
+from .solver import small_regularized_lstsq
 from .v3_system import _source_basis_constraint_scheme_1, apply_v3_full_system_operator_cached
 
 

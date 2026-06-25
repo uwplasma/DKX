@@ -313,17 +313,13 @@ the historical private driver name and test the focused module directly. This ke
   user-facing result contract explicit and easier to document.
 - ``sfincs_jax/solver.py``:
   Krylov solve results, result finite-state checks, and XLA synchronization
-  helpers around solver timing/profiling.
+  helpers around solver timing/profiling, plus small differentiable JAX-native
+  linear algebra kernels such as the regularized tiny least-squares solve and
+  recycled Krylov initial-guess builder used by RHSMode=1 and transport solves.
 - ``sfincs_jax/preconditioner_operators.py``:
   diagonal and block-diagonal matrix reductions plus simplified
   preconditioner-operator builders. These are numerical building blocks with
   direct local-coupling tests.
-- ``sfincs_jax/linear_algebra.py``:
-  small differentiable JAX-native linear algebra kernels used by solver
-  infrastructure. The current exported kernels are the regularized tiny
-  least-squares solve and the shared recycled Krylov initial-guess builder used
-  by RHSMode=1 and transport solves when backend LAPACK/SVD calls are
-  unavailable.
 - ``sfincs_jax/constraint_projection.py``:
   constraintScheme=1 nullspace/source-row projection used by RHSMode=1 and
   RHSMode=2/3 solves after iterative branches. It builds the small
@@ -742,11 +738,9 @@ the historical private driver name and test the focused module directly. This ke
   metadata, bounded PETSc-style KSP residual-history replay, and iteration-count
   diagnostics. It applies cleanup projection, emits optional replay diagnostics,
   writes final residual and elapsed-time progress lines, applies post-xblock
-  acceptance-floor metadata, and wraps the result in ``V3LinearSolveResult``.
-- ``sfincs_jax/newton_krylov_diagnostics.py``:
-  bounded PETSc-style GMRES history replay for the optional Phi1/Newton-Krylov
-  full-system path. This keeps nonlinear-solve logging policy out of the driver
-  while preserving the existing size and estimated-iteration guards.
+  acceptance-floor metadata, wraps the result in ``V3LinearSolveResult``, and
+  owns the bounded PETSc-style GMRES history replay for the optional
+  Phi1/Newton-Krylov full-system path.
 - ``sfincs_jax/rhs1_lowmode_coarse.py``:
   low-mode angular, moment, coupled f/tail, and tail-only feature construction
   plus matrix-free Galerkin/least-squares residual-correction builders for
@@ -1377,9 +1371,10 @@ the historical private driver name and test the focused module directly. This ke
 - ``sfincs_jax/phi1_newton_linear.py``:
   bounded nonlinear linear-step orchestration for Phi1 solves, including reduced/full
   routing, sparse-direct entry, KSP-history emission, and retry-without-preconditioner.
-- ``sfincs_jax/phi1_line_search.py``:
-  accepted-iterate update logic for the Newton path, including PETSc-like backtracking,
-  fixed-candidate ``best`` search, and finite-state fallback handling.
+- ``sfincs_jax/problems/profile_response/phi1_newton.py``:
+  accepted-iterate update logic and solve orchestration for the Newton path,
+  including PETSc-like backtracking, fixed-candidate ``best`` search, and
+  finite-state fallback handling.
 - ``sfincs_jax/solver_progress.py``:
   user-facing duration formatting, coarse runtime hints, one-shot large RHSMode=1
   progress messages, and transport whichRHS ETA text. This module is intentionally

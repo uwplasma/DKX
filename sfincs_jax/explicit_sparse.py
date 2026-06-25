@@ -13,6 +13,7 @@ import scipy.sparse as sp
 from scipy.sparse.linalg import LinearOperator, spilu, splu
 
 import jax
+import jax.numpy as jnp
 
 StorageKind = Literal["dense", "csr", "linear_operator"]
 FactorKind = Literal[
@@ -41,6 +42,46 @@ def _backend_name(backend: str | None = None) -> str:
 def _host_array(value, *, dtype=None) -> np.ndarray:
     arr = np.asarray(jax.device_get(value), dtype=dtype)
     return np.array(arr, copy=True)
+
+
+def csr_matvec(
+    *,
+    data: jnp.ndarray,
+    indices: jnp.ndarray,
+    indptr: jnp.ndarray,
+    x: jnp.ndarray,
+    n_rows: int | None = None,
+) -> jnp.ndarray:
+    """Return the sparse CSR matrix-vector product ``A @ x``.
+
+    The implementation is JAX-native and keeps ``nnz`` static under JIT by
+    passing ``total_repeat_length`` to ``jnp.repeat``.
+    """
+
+    data = jnp.asarray(data)
+    indices = jnp.asarray(indices)
+    indptr = jnp.asarray(indptr)
+    x = jnp.asarray(x)
+
+    if indptr.ndim != 1:
+        raise ValueError("indptr must be 1D")
+    if indices.ndim != 1 or data.ndim != 1:
+        raise ValueError("data and indices must be 1D")
+
+    if n_rows is None:
+        n_rows = int(indptr.shape[0] - 1)
+    if int(indptr.shape[0]) != int(n_rows) + 1:
+        raise ValueError("indptr has incompatible length")
+
+    counts = indptr[1:] - indptr[:-1]
+    nnz = int(data.shape[0])
+    row_ids = jnp.repeat(
+        jnp.arange(int(n_rows), dtype=indices.dtype),
+        counts,
+        total_repeat_length=nnz,
+    )
+    y_vals = data * x[indices]
+    return jax.ops.segment_sum(y_vals, row_ids, int(n_rows))
 
 
 def estimate_dense_nbytes(shape: tuple[int, int], dtype=np.float64) -> int:

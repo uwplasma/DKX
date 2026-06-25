@@ -17,7 +17,7 @@ import numpy as np
 from sfincs_jax.explicit_sparse import SparseDecision, SparseOperatorBundle, estimate_csr_nbytes, estimate_dense_nbytes
 from sfincs_jax.operators.profile_response.kinetic import select_structured_rhs1_fblock_operator
 from sfincs_jax.v3_system import V3FullSystemOperator, _fs_average_factor, _ix_min, _source_basis_constraint_scheme_1
-from sfincs_jax.verbose import Timer
+from sfincs_jax.profiling import Timer
 
 __all__ = [
     "_build_rhsmode23_direct_pmat_physics_coarse_basis",

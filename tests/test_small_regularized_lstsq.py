@@ -7,7 +7,7 @@ import jax.numpy as jnp
 
 jax_config.update("jax_enable_x64", True)
 
-from sfincs_jax.linear_algebra import recycled_initial_guess, small_regularized_lstsq  # noqa: E402
+from sfincs_jax.solver import recycled_initial_guess, small_regularized_lstsq  # noqa: E402
 
 
 def test_small_regularized_lstsq_matches_numpy_tall_system() -> None:

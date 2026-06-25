@@ -21,7 +21,7 @@ import numpy as np
 
 from sfincs_jax.postprocess_upstream import run_upstream_util
 from sfincs_jax.scans import run_er_scan
-from sfincs_jax.verbose import make_emit
+from sfincs_jax.profiling import make_emit
 
 
 def main() -> None:

@@ -72,7 +72,7 @@ Transport-matrix helpers are documented through their maintained domain module.
 .. automodule:: sfincs_jax.v3_results
    :members:
 
-.. automodule:: sfincs_jax.linear_algebra
+.. automodule:: sfincs_jax.solver
    :members:
 
 .. automodule:: sfincs_jax.sparse_triangular
@@ -277,9 +277,6 @@ research workflows.
 .. automodule:: sfincs_jax.problems.profile_response.solver_diagnostics
    :members:
 
-.. automodule:: sfincs_jax.newton_krylov_diagnostics
-   :members:
-
 .. automodule:: sfincs_jax.solvers.preconditioners.xblock.policy
    :members:
 
@@ -352,10 +349,7 @@ research workflows.
 .. automodule:: sfincs_jax.petsc_binary
    :members:
 
-.. automodule:: sfincs_jax.sparse
-   :members:
-
-.. automodule:: sfincs_jax.solver
+.. automodule:: sfincs_jax.explicit_sparse
    :members:
 
 .. automodule:: sfincs_jax.implicit_solve

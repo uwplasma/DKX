@@ -3,7 +3,7 @@ from __future__ import annotations
 import numpy as np
 import jax.numpy as jnp
 
-from sfincs_jax.phi1_line_search import advance_phi1_newton_iterate
+from sfincs_jax.problems.profile_response.phi1_newton import advance_phi1_newton_iterate
 
 
 def test_phi1_line_search_basic_takes_scaled_full_step() -> None:
