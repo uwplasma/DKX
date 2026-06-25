@@ -804,3 +804,38 @@ Next best steps:
    tiny RHSMode 1 case.
 3. Use that derivative provider in safeguarded Newton and pure Newton
    ambipolar solves for Fortran option-1/3 parity gates.
+
+## 2026-06-25 Linear Observable Builder Bridge
+
+Steps taken:
+
+1. Added `LinearObservableSystem` and
+   `implicit_linear_observable_derivative_from_builder` to
+   `sfincs_jax.sensitivity`.
+2. The builder API gives concrete RHSMode 1/4/5 owners one fixed-shape handoff:
+   emit `A(p)`, `b(p)`, the scalar observable vector, and their parameter
+   derivatives from the true operator graph.
+3. Added `evaluate_linear_observable` so centered finite-difference gates can
+   be generated from the same builder used by the implicit derivative.
+4. Added `implicit_linear_radial_current_derivative_from_builder` to the
+   ambipolar problem owner, preserving the existing Newton derivative-provider
+   contract while allowing custom forward and transpose solvers.
+
+Results:
+
+- Focused tests passed:
+  `python -m pytest tests/test_sensitivity.py tests/test_ambipolar_problem.py
+  tests/test_domain_package_import_contracts.py -q --tb=short` with
+  `26 passed`.
+- Static compile passed:
+  `python -m py_compile sfincs_jax/sensitivity.py
+  sfincs_jax/problems/ambipolar.py sfincs_jax/problems/__init__.py`.
+
+Next best steps:
+
+1. Implement the concrete RHSMode 1 radial-current builder from the active
+   operator/RHS/observable path.
+2. Compare the builder derivative against finite differences on a tiny real
+   RHSMode 1 deck before using it in Newton ambipolar solves.
+3. Generalize the builder shape to RHSMode 4/5 adjoint outputs once the RHSMode
+   1 radial-current gate is stable.

@@ -515,7 +515,10 @@ JAX-native performance patterns used in `sfincs_jax`
   both the tangent equation ``A x_p = b_p - A_p x`` and the adjoint equation
   ``A^T lambda = c`` for ``J = c^T x``. The two derivatives and an optional
   centered finite-difference check must agree before the derivative is used by
-  ambipolar Newton steps or optimization workflows.
+  ambipolar Newton steps or optimization workflows. Concrete problem owners can
+  pass a fixed-shape ``LinearObservableSystem`` builder so the finite-difference
+  gate is generated from the same operator/RHS/observable graph as the
+  implicit derivative.
 - **Default to short-recurrence Krylov for transport**: BiCGStab avoids storing a full GMRES basis and
   is therefore far more memory efficient for large RHSMode=2/3 systems. GMRES remains available and is
   used as a fallback when BiCGStab stagnates; transport-matrix solves default to BiCGStab with the

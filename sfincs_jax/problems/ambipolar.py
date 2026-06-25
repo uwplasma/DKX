@@ -1000,6 +1000,46 @@ def implicit_linear_radial_current_derivative(
         finite_difference_step=finite_difference_step,
         metadata=metadata,
     )
+    return _radial_current_derivative_from_linear_certificate(er=er, result=result)
+
+
+def implicit_linear_radial_current_derivative_from_builder(
+    build_system: Callable[[float], Any],
+    *,
+    er: float,
+    solve: Callable[[Any, Any], Any] | None = None,
+    transpose_solve: Callable[[Any, Any], Any] | None = None,
+    finite_difference_step: float | None = None,
+    metadata: Mapping[str, Any] | None = None,
+) -> RadialCurrentDerivativeResult:
+    """Return ``dJr/dEr`` from a concrete linear-observable system builder.
+
+    The builder should emit the true RHSMode-1 operator, RHS, radial-current
+    observable, and their ``Er`` derivatives at the requested electric field.
+    This keeps the ambipolar solver independent from the monolithic driver while
+    preserving a finite-difference certificate against the same builder.
+    """
+
+    from ..sensitivity import implicit_linear_observable_derivative_from_builder  # noqa: PLC0415
+
+    result = implicit_linear_observable_derivative_from_builder(
+        build_system,
+        parameter=float(er),
+        solve=solve,
+        transpose_solve=transpose_solve,
+        finite_difference_step=finite_difference_step,
+        metadata=metadata,
+    )
+    return _radial_current_derivative_from_linear_certificate(er=er, result=result)
+
+
+def _radial_current_derivative_from_linear_certificate(
+    *,
+    er: float,
+    result: Any,
+) -> RadialCurrentDerivativeResult:
+    """Adapt a scalar linear-observable certificate to the ambipolar contract."""
+
     return RadialCurrentDerivativeResult(
         er=float(er),
         derivative=float(result.derivative),
@@ -1145,6 +1185,7 @@ __all__ = [
     "brent_ambipolar_root",
     "finite_difference_radial_current_derivative",
     "implicit_linear_radial_current_derivative",
+    "implicit_linear_radial_current_derivative_from_builder",
     "newton_ambipolar_root",
     "safeguarded_newton_ambipolar_root",
     "solve_ambipolar_brent",

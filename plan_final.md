@@ -69,11 +69,15 @@ Implementation progress on 2026-06-23:
   derivative certificate. It solves both the tangent equation and the adjoint
   equation, reports primal/tangent/adjoint residuals, and can compare the
   derivative against centered finite differences.
+- The same module now exposes a fixed-shape `LinearObservableSystem` builder
+  bridge. Concrete RHSMode 1/4/5 owners can provide the true operator, RHS,
+  observable, and their scalar-parameter derivatives without coupling the
+  ambipolar root solvers back to `v3_driver.py`.
 - Derivative-assisted safeguarded Newton/bisection and strict pure-Newton root
   solvers are implemented behind the same ambipolar owner. They accept a
-  derivative provider, so finite-difference gates and the new implicit linear
-  derivative certificate can be wired in without changing the root-solve
-  contract.
+  derivative provider, so finite-difference gates, direct implicit
+  certificates, and builder-backed implicit certificates can be wired in
+  without changing the root-solve contract.
 - Remaining Lane 3 work is deeper fixed-shape numerical operator/factor and
   preconditioner setup reuse behind that evaluator, concrete RHSMode-1
   radial-current operator derivative wiring, and Fortran option 1/3 physical
@@ -930,10 +934,11 @@ Deliverables:
    in-process RHSMode 1 ambipolar evaluator. Geometry/output caching, Krylov
    state reuse, symbolic field-split ordering reuse, and trace provenance are
    already in place.
-7. Wire the implicit linear-observable derivative certificate to the concrete
-   RHSMode 1 radial-current residual graph and compare against centered finite
-   differences. The generic certificate, finite-difference derivative contract,
-   and Newton root solvers are already in place.
+7. Fill a `LinearObservableSystem` from the concrete RHSMode 1 radial-current
+   residual graph and compare its builder-backed implicit derivative against
+   centered finite differences. The generic certificate, builder bridge,
+   finite-difference derivative contract, and Newton root solvers are already in
+   place.
 8. Wire the exact derivative into safeguarded Newton/bisection and pure Newton
    for Fortran option 1/3 physical parity gates.
 9. Define residual/operator/transpose operator protocol and migrate one

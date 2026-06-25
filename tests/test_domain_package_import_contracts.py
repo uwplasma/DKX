@@ -43,6 +43,7 @@ ACTIVE_PACKAGE_EXPORTS = {
         "brent_ambipolar_root",
         "finite_difference_radial_current_derivative",
         "implicit_linear_radial_current_derivative",
+        "implicit_linear_radial_current_derivative_from_builder",
         "newton_ambipolar_root",
         "safeguarded_newton_ambipolar_root",
         "solve_ambipolar_brent",
@@ -187,8 +188,12 @@ ACTIVE_PACKAGE_EXPORTS = {
 
 ACTIVE_MODULE_EXPORTS = {
     "sfincs_jax.sensitivity": (
+        "LinearObservableBuilder",
         "LinearObservableDerivativeResult",
+        "LinearObservableSystem",
+        "evaluate_linear_observable",
         "implicit_linear_observable_derivative",
+        "implicit_linear_observable_derivative_from_builder",
     ),
 }
 
