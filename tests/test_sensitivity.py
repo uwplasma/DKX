@@ -13,6 +13,7 @@ from sfincs_jax.problems.ambipolar import (
     implicit_linear_radial_current_derivative,
     implicit_linear_radial_current_derivative_from_builder,
     implicit_matrix_free_radial_current_derivative_from_builder,
+    matrix_free_rhs1_vm_radial_current_linear_observable_system,
 )
 from sfincs_jax.problems.transport_matrix.diagnostics import (
     radial_current_vm_from_state,
@@ -406,6 +407,89 @@ def test_dense_rhs1_radial_current_linear_observable_system_matches_finite_diffe
     assert result.tangent_adjoint_abs_error < 1.0e-6
     assert result.finite_difference_abs_error is not None
     assert result.finite_difference_abs_error < 1.0e-4
+
+
+def test_matrix_free_rhs1_radial_current_system_matches_dense_certificate() -> None:
+    input_path = Path(__file__).parent / "ref" / "pas_1species_PAS_noEr_tiny.input.namelist"
+    op0 = full_system_operator_from_namelist(nml=read_sfincs_input(input_path))
+    step = 1.0e-5
+    parameter = 0.2
+
+    def op_at(value: float):
+        return replace(
+            op0,
+            dn_hat_dpsi_hat=op0.dn_hat_dpsi_hat + float(value) * jnp.ones_like(op0.dn_hat_dpsi_hat),
+        )
+
+    def dense_system(value: float) -> LinearObservableSystem:
+        return dense_rhs1_vm_radial_current_linear_observable_system(
+            op=op_at(value),
+            op_plus=op_at(float(value) + step),
+            op_minus=op_at(float(value) - step),
+            parameter=float(value),
+            derivative_step=step,
+            radial_coordinate="rHat",
+            psi_a_hat=-0.384935,
+            a_hat=0.5109,
+            r_n=0.5,
+            max_size=400,
+            observable_chunk_size=17,
+        )
+
+    def matrix_free_system(value: float) -> MatrixFreeLinearObservableSystem:
+        # The small-deck test uses dense closures only to validate the
+        # matrix-free production contract without relying on iterative solver
+        # tolerances.
+        dense_for_closures = dense_system(float(value))
+        matrix = dense_for_closures.matrix
+        return matrix_free_rhs1_vm_radial_current_linear_observable_system(
+            op=op_at(value),
+            op_plus=op_at(float(value) + step),
+            op_minus=op_at(float(value) - step),
+            parameter=float(value),
+            derivative_step=step,
+            solve=lambda rhs: jnp.linalg.solve(matrix, rhs),
+            transpose_solve=lambda rhs: jnp.linalg.solve(matrix.T, rhs),
+            transpose_apply=lambda vector: matrix.T @ vector,
+            radial_coordinate="rHat",
+            psi_a_hat=-0.384935,
+            a_hat=0.5109,
+            r_n=0.5,
+            observable_chunk_size=17,
+            metadata={"gate": "rhs1_matrix_free_production_contract"},
+        )
+
+    matrix_free_result = implicit_matrix_free_linear_observable_derivative_from_builder(
+        matrix_free_system,
+        parameter=parameter,
+        finite_difference_step=step,
+    )
+    dense_result = implicit_linear_observable_derivative_from_builder(
+        dense_system,
+        parameter=parameter,
+        finite_difference_step=step,
+    )
+
+    assert matrix_free_result.metadata["builder"] == "matrix_free_rhs1_vm_radial_current"
+    assert matrix_free_result.metadata["gate"] == "rhs1_matrix_free_production_contract"
+    assert matrix_free_result.metadata["dense_matrix_assembled"] is False
+    assert matrix_free_result.metadata["operator_derivative_action"] == "centered_finite_difference"
+    assert matrix_free_result.primal_residual_norm < 1.0e-8
+    assert matrix_free_result.tangent_residual_norm < 1.0e-7
+    assert matrix_free_result.adjoint_residual_norm < 1.0e-8
+    assert matrix_free_result.tangent_adjoint_abs_error < 1.0e-6
+    np.testing.assert_allclose(
+        matrix_free_result.observable,
+        dense_result.observable,
+        rtol=0.0,
+        atol=1.0e-8,
+    )
+    np.testing.assert_allclose(
+        matrix_free_result.derivative,
+        dense_result.derivative,
+        rtol=0.0,
+        atol=1.0e-6,
+    )
 
 
 def test_rhs1_radial_current_jvp_vjp_dot_product_gate() -> None:
