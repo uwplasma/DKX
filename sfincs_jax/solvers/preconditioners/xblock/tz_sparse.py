@@ -10,7 +10,7 @@ import jax.numpy as jnp
 import numpy as np
 
 from sfincs_jax.solvers.preconditioners.xblock import policy as _rhs1_xblock_policy
-from sfincs_jax.solvers.preconditioners.xblock import sparse_host_policy as _rhs1_xblock_sparse_host_policy
+from sfincs_jax.solvers.preconditioners.xblock import policy as _rhs1_xblock_sparse_host_policy
 from ....preconditioner_context import precond_dtype, sparse_structural_tol
 from ....preconditioner_caches import (
     _RHSMODE1_FP_XBLOCK_ASSEMBLED_HOST_CACHE,

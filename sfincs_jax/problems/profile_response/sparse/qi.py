@@ -30,7 +30,7 @@ from sfincs_jax.solvers.preconditioners.qi.coarse import (
     rhs1_xblock_qi_block_geometry_metadata,
 )
 from sfincs_jax.solvers.preconditioners.qi.device import RHS1QIDevicePreconditionerConfig
-from sfincs_jax.solvers.preconditioners.qi.galerkin_policy import (
+from sfincs_jax.solvers.preconditioners.qi.residual_galerkin import (
     RHS1QIGalerkinProbeCandidate,
     select_rhs1_qi_galerkin_probe_candidate,
 )
@@ -3636,7 +3636,7 @@ def build_xblock_qi_stage_pipeline_context(
         probe_rhs1_qi_device_preconditioner,
         setup_rhs1_qi_device_preconditioner,
     )
-    from sfincs_jax.solvers.preconditioners.qi.galerkin_policy import (
+    from sfincs_jax.solvers.preconditioners.qi.residual_galerkin import (
         parse_rhs1_qi_galerkin_dampings,
         parse_rhs1_qi_galerkin_modes,
     )

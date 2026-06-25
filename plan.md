@@ -2393,3 +2393,67 @@ Next best steps:
 3. Re-run focused solver-family tests and count checks; then proceed to
    Iteration 4, extracting the two large solve entry points from
    `v3_driver.py`.
+
+## 2026-06-25 Lane 1 Iteration 3 Count Consolidation
+
+Steps taken:
+
+1. Merged x-block sparse-host policy helpers into
+   `sfincs_jax.solvers.preconditioners.xblock.policy`.
+2. Merged QI Galerkin probe-selection policy helpers into
+   `sfincs_jax.solvers.preconditioners.qi.residual_galerkin`.
+3. Merged domain-decomposition patch/block-size policy helpers into
+   `sfincs_jax.solvers.preconditioners.domain_decomposition.line_blocks`.
+4. Merged RHSMode-1 Schur policy resolution into
+   `sfincs_jax.solvers.preconditioners.schur.rhs1`.
+5. Merged symbolic-sparse frontal/reduced-factor policy helpers into
+   `sfincs_jax.solvers.preconditioners.symbolic_sparse.policy`.
+6. Merged reduced-Pmat elimination-plan helpers into
+   `sfincs_jax.solvers.preconditioners.symbolic_sparse.rhs1_fortran_reduced`.
+7. Deleted the empty profile-response operator namespace initializer and
+   removed duplicate API-doc entries created by the redirected modules.
+
+Results:
+
+- Python source files decreased from `247` to `239`, meeting the Lane 1
+  below-240 file-count gate.
+- Top-level `rhs1_*` remains `0`.
+- Top-level `transport_*` remains `0`.
+- `v3_driver.py` remains `11,992` lines; this is now the dominant Lane 1 gap.
+- `plan_final.md` now treats Lane 1 Iteration 3 as complete and makes
+  Iteration 4, the solve-entry extraction, the next mandatory coarse tranche.
+
+Validation:
+
+- `python -m py_compile sfincs_jax/solvers/preconditioners/**/*.py
+  sfincs_jax/v3_driver.py sfincs_jax/operators/profile_response/*.py
+  sfincs_jax/problems/profile_response/*.py
+  sfincs_jax/problems/profile_response/sparse/*.py` passed.
+- Focused merged-policy/profile-response tests passed with
+  `669 passed in 152.15 s`.
+- Import-contract/docstring/helper tests passed with `20 passed in 1.26 s`.
+- `python -m sphinx -b html docs docs/_build/html -q`, scoped `ruff`, and
+  `git diff --check` passed.
+
+Current lane status:
+
+- Lane 1 Iteration 1: 100%.
+- Lane 1 Iteration 2: 100%.
+- Lane 1 Iteration 3 ownership and count consolidation: 100%.
+- Lane 1 Iteration 4 solve-entry extraction: 0%.
+- Lane 1 Iteration 5 dead-code/docs/API hardening: 0%.
+- Lane 1 overall: about 70%.
+- Overall consolidation goal: not complete.
+
+Next best steps:
+
+1. Commit and push the Iteration 3 count-consolidation batch.
+2. Execute Lane 1 Iteration 4 in one coarse move: relocate
+   `solve_v3_full_system_linear_gmres` to
+   `sfincs_jax.problems.profile_response.solve` and
+   `solve_v3_transport_matrix_linear_gmres` to
+   `sfincs_jax.problems.transport_matrix.solve`, leaving `v3_driver.py` as a
+   thin compatibility shim.
+3. After Iteration 4, execute Lane 1 Iteration 5 once: dead-code pruning,
+   docs/API cleanup, final count checks, focused physics/refactor tests, docs
+   build, and one CI-equivalent local validation pass.

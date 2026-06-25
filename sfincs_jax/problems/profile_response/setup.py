@@ -1110,7 +1110,7 @@ def resolve_rhs1_domain_decomposition_setup(
 ) -> RHS1DomainDecompositionSetup:
     """Resolve RHSMode=1 domain-decomposition block and overlap settings."""
 
-    from sfincs_jax.solvers.preconditioners.domain_decomposition.policy import _rhs1_dd_auto_block_size
+    from sfincs_jax.solvers.preconditioners.domain_decomposition.line_blocks import _rhs1_dd_auto_block_size
 
     dist = str(distributed_env or "").strip().lower()
     if dist in {"0", "false", "no", "off"} or int(device_count) <= 1:

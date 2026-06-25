@@ -508,7 +508,7 @@ def test_xblock_qi_pipeline_context_factory_owns_default_builders() -> None:
         "sfincs_jax.solvers.preconditioners.qi.deflation"
     )
     assert context.parse_galerkin_modes.__module__ == (
-        "sfincs_jax.solvers.preconditioners.qi.galerkin_policy"
+        "sfincs_jax.solvers.preconditioners.qi.residual_galerkin"
     )
 
 

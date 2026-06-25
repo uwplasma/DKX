@@ -73,7 +73,7 @@ from .explicit_sparse_factor_policy import (
     explicit_sparse_monolithic_max_size as _explicit_sparse_monolithic_max_size,
 )
 from sfincs_jax.operators.profile_response.device_sparse import device_csr_from_matrix, validate_device_csr_matvec
-from sfincs_jax.solvers.preconditioners.domain_decomposition.policy import (  # compatibility exports for legacy tests/debug scripts
+from sfincs_jax.solvers.preconditioners.domain_decomposition.line_blocks import (  # compatibility exports for legacy tests/debug scripts
     _dd_core_patch_ranges,
     _rhs1_dd_auto_block_size,
     _rhs1_dd_coarse_block_size,
@@ -134,7 +134,7 @@ from sfincs_jax.problems.profile_response.preconditioner_auto_policy import (
 from sfincs_jax.problems.profile_response.preconditioner_auto_policy import (
     rhs1_gpu_sparse_fallback_skip_allowed as _rhs1_gpu_sparse_fallback_skip_allowed_impl,
 )
-from sfincs_jax.solvers.preconditioners.schur.policy import resolve_rhs1_schur_base_kind
+from sfincs_jax.solvers.preconditioners.schur.rhs1 import resolve_rhs1_schur_base_kind
 from .problems.profile_response.handoff import (
     RHS1KSPReplayState,
     RHS1SkipPrimaryKrylovSeedContext,
@@ -391,7 +391,7 @@ from .problems.profile_response.setup import (
     resolve_rhs1_reduced_mode_shape_setup,
 )
 from sfincs_jax.solvers.preconditioners.xblock import policy as _rhs1_xblock_policy
-from sfincs_jax.solvers.preconditioners.xblock import sparse_host_policy as _rhs1_xblock_sparse_host_policy
+from sfincs_jax.solvers.preconditioners.xblock import policy as _rhs1_xblock_sparse_host_policy
 from sfincs_jax.solvers.preconditioners.xblock.policy import (
     resolve_rhs1_xblock_sparse_pc_policy,
 )

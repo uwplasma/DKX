@@ -4,7 +4,8 @@ Last updated: 2026-06-25 (America/Chicago)
 
 Active branch: `refactor/rhs1-full-assembly-preconditioners`
 
-Review surface: PR #8, `refactor/v3-driver-architecture`, ready for review
+Review surface: PR #8, `refactor/v3-driver-architecture`, draft until Lane 1
+Iterations 4-5 are complete
 
 Status: this file is the controlling completion plan. `plan.md` remains the
 execution log and historical record; future work should update this file only
@@ -311,11 +312,10 @@ Current source size snapshot:
   Solver-family implementation now lives under `solvers.preconditioners`.
 - Several RHSMode 1 QI, x-block, sparse policy, output, and transport modules
   still exceed 2k to 4k lines.
-- Package total is 247 Python files after the Lane 1 Iteration 3 ownership
-  move. The Lane 1
-  target is below 240
-  Python files after deleting shims and consolidating real implementation into
-  domain packages.
+- Package total is 239 Python files after the Lane 1 Iteration 3 ownership and
+  count-consolidation pass. This meets the Lane 1 below-240 file-count target;
+  the remaining structural target is reducing `v3_driver.py` to a shim or
+  deleting it.
 
 Useful existing assets:
 
@@ -489,9 +489,9 @@ pass, not an algorithmic rewrite.
 Current inventory from 2026-06-25:
 
 - `sfincs_jax/v3_driver.py`: 11,992 lines.
-- Python source files: 247 after the Iteration 3 ownership move.
+- Python source files: 239 after the Iteration 3 count-consolidation pass.
 - Top-level `transport_*` files: 0 after Iteration 1.
-- Top-level `rhs1_*` files: 0 after the Iteration 3 ownership move.
+- Top-level `rhs1_*` files: 0 after the Iteration 3 count-consolidation pass.
 - Largest remaining files: `v3_driver.py`,
   `operators/profile_response/full_system.py`,
   `problems/profile_response/sparse/xblock.py`,
@@ -598,7 +598,7 @@ Concrete Iteration 3 move map:
 | `rhs1_pas_policy.py`, `rhs1_pas_matrixfree.py` | `sfincs_jax.solvers.preconditioners.pas.policy` and `pas.matrix_free` | Keep PAS runtime chunking and PAS solver admission together; delete duplicate policy parsing. |
 | `rhs1_xblock_policy.py`, `rhs1_xblock_sparse_host_policy.py`, `rhs1_lowmode_coarse.py`, `rhs1_domain_decomposition.py`, `rhs1_full_csr_kinetic_pc.py` | `sfincs_jax.solvers.preconditioners.xblock.policy`, `xblock.coarse`, `domain_decomposition`, and `full_fp.kinetic_blocks` | Use existing solver-family packages; avoid new top-level names. |
 | `rhs1_fortran_reduced_factor_policy.py`, `rhs1_reduced_pmat_plan.py`, `rhs1_symbolic_frontal_policy.py`, `rhs1_symbolic_sparse_policy.py` | `sfincs_jax.solvers.preconditioners.symbolic_sparse` | Keep reduced-Pmat symbolic ordering, frontal/Schur policy, and factor metadata in one solver-family package. |
-| `rhs1_schur_policy.py` | `sfincs_jax.solvers.preconditioners.schur.policy` | Merge with existing RHSMode-1 Schur coarse-basis policy files if the combined file stays reviewable. |
+| `rhs1_schur_policy.py` | `sfincs_jax.solvers.preconditioners.schur.rhs1` | Merge with existing RHSMode-1 Schur coarse-basis policy files if the combined file stays reviewable. |
 | `rhs1_preconditioner_dispatch.py` | `sfincs_jax.solvers.preconditioners.dispatch` | One dispatch entry point for automatic solver selection. |
 | `rhs1_qi_*.py` | `sfincs_jax.solvers.preconditioners.qi` | Rename by algorithm role: `coarse`, `device`, `deflation`, `galerkin`, `global_moments`, `multilevel`, `phase_space`, `promotion`, and `two_level`. Merge tiny policy files into the nearest algorithm owner. |
 
@@ -612,15 +612,14 @@ Delete candidates during Iteration 3:
 
 Exit gates for Iteration 3:
 
-- Status: ownership move completed on 2026-06-25; count consolidation remains
-  open.
+- Status: completed on 2026-06-25.
 - No package has more than three files with overlapping solver-policy
-  responsibility.
+  responsibility after merging low-risk policy fragments into their canonical
+  solver-family owners.
 - QI, x-block, PAS, sparse, and Schur imports are canonical and tested.
 - Solver behavior is unchanged on representative RHSMode 1/2/3 tests.
 - Top-level `rhs1_*` file count is lower than after Iteration 2: `28 -> 0`.
-- Package Python file count is still `247`; the next mandatory subtask is to
-  merge/delete at least eight files so the final target below `240` is met.
+- Package Python file count is below target: `247 -> 239`.
 
 Iteration 4 - Extract the two large driver solve entry points:
 
@@ -1272,15 +1271,12 @@ Completed on 2026-06-25:
 
 Next ordered implementation steps:
 
-1. Finish Lane 1 Iteration 3 count consolidation by merging/deleting at least
-   eight package files inside the solver-family packages without changing
-   solver behavior.
-2. Execute Lane 1 Iteration 4 as a single batch: move the two large solve entry
+1. Execute Lane 1 Iteration 4 as a single batch: move the two large solve entry
    points out of `v3_driver.py`, leaving a shim under 300 lines or deleting the
    file.
-3. Execute Lane 1 Iteration 5: dead-code pruning, docs/API cleanup, final
+2. Execute Lane 1 Iteration 5: dead-code pruning, docs/API cleanup, final
    counts, focused tests, docs build, and CI-equivalent validation.
-4. Keep production option-1/3 ambipolar reruns and production-grid RHSMode 4/5
+3. Keep production option-1/3 ambipolar reruns and production-grid RHSMode 4/5
    parity as release-refresh benchmarks outside normal CI during this
    consolidation pass.
 

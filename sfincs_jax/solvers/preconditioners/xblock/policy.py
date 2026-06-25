@@ -1161,6 +1161,55 @@ def resolve_rhs1_xblock_sparse_pc_policy(
     )
 
 
+def _parse_nonnegative_int(value: str, default: int) -> int:
+    try:
+        return max(0, int(str(value).strip())) if str(value).strip() else max(0, int(default))
+    except ValueError:
+        return max(0, int(default))
+
+
+def rhs1_fp_xblock_species_decoupled_for_host_assembly(
+    *,
+    n_species: int,
+    preconditioner_species: int,
+) -> bool:
+    """Return whether host assembly preserves the requested species coupling.
+
+    ``preconditioner_species=0`` means the full species coupling is requested.
+    That is equivalent to species-decoupled assembly only for one-species
+    systems; any explicit species-block preconditioner is already decoupled.
+    """
+
+    if int(preconditioner_species) != 0:
+        return True
+    return int(n_species) == 1
+
+
+def rhs1_xblock_sparse_lu_default_max(
+    *,
+    has_fp: bool,
+    has_pas: bool,
+    build_jax_factors: bool,
+) -> int:
+    """Return the default exact-LU cap for x-block sparse preconditioners."""
+
+    if (not bool(build_jax_factors)) and bool(has_fp) and not bool(has_pas):
+        return 30000
+    return 2000
+
+
+def rhs1_xblock_sparse_host_block_factor_allowed(
+    *,
+    block_size: int,
+    max_block_size_env_value: str,
+    default_max_block_size: int = 30000,
+) -> bool:
+    """Return whether a host x-block local sparse factor should be attempted."""
+
+    max_block = _parse_nonnegative_int(max_block_size_env_value, default_max_block_size)
+    return bool(max_block == 0 or int(block_size) <= int(max_block))
+
+
 __all__ = [
     "DEFAULT_FULL_FP_3D_DEVICE_HOST_FALLBACK_MIN_ACTIVE_SIZE",
     "DEFAULT_FULL_FP_3D_RIGHT_PC_MAX_ACTIVE_SIZE",
@@ -1207,6 +1256,9 @@ __all__ = [
     "rhs1_xblock_lgmres_rescue_maxiter",
     "rhs1_xblock_lgmres_rescue_outer_k",
     "rhs1_xblock_precondition_side",
+    "rhs1_fp_xblock_species_decoupled_for_host_assembly",
+    "rhs1_xblock_sparse_host_block_factor_allowed",
+    "rhs1_xblock_sparse_lu_default_max",
     "rhs1_xblock_side_probe_controls_from_env",
     "rhs1_xblock_side_probe_enabled",
     "rhs1_xblock_side_probe_min_active_size",

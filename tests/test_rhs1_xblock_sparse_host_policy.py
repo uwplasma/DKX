@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from sfincs_jax.solvers.preconditioners.xblock.sparse_host_policy import (
+from sfincs_jax.solvers.preconditioners.xblock.policy import (
     rhs1_fp_xblock_species_decoupled_for_host_assembly,
     rhs1_xblock_sparse_host_block_factor_allowed,
     rhs1_xblock_sparse_lu_default_max,
