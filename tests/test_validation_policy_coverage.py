@@ -6,7 +6,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from sfincs_jax.validation_artifacts import (
+from sfincs_jax.validation.artifacts import (
     CollisionalityRecord,
     build_autodiff_sensitivity_validation_summary,
     collisionality_power_law_slope,

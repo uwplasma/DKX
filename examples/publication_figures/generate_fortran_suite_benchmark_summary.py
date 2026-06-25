@@ -25,7 +25,7 @@ except Exception as exc:  # pragma: no cover
 
 import numpy as np
 
-from sfincs_jax.validation_artifacts import (
+from sfincs_jax.validation.artifacts import (
     SuiteCaseMetric,
     build_fortran_suite_benchmark_summary,
     filter_suite_metrics_by_fortran_runtime,
