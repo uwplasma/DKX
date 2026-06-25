@@ -654,6 +654,96 @@ def v3_transport_diagnostics_vm_only(op: V3FullSystemOperator, *, x_full: jnp.nd
     return _v3_transport_diagnostics_vm_only_from_f0_l0(op, x_full=x_full, f0_l0=f0_l0)
 
 
+def radial_current_vm_psi_hat_from_state(
+    op: V3FullSystemOperator,
+    *,
+    x_full: jnp.ndarray,
+) -> jnp.ndarray:
+    """Return ``sum_s Z_s * particleFlux_vm_psiHat_s`` for one solved state."""
+
+    diag = v3_transport_diagnostics_vm_only(op, x_full=x_full)
+    return jnp.vdot(jnp.asarray(op.z_s, dtype=jnp.float64), diag.particle_flux_vm_psi_hat)
+
+
+def radial_current_vm_psi_hat_observable_vector(
+    op: V3FullSystemOperator,
+    *,
+    chunk_size: int = 128,
+) -> tuple[jnp.ndarray, float]:
+    """Return ``(c, J0)`` for ``J_vm_psiHat(x) = c^T x + J0``.
+
+    The implementation probes the existing diagnostic in bounded chunks. It is
+    intended for small RHSMode-1 validation decks while the analytic weights are
+    pinned against Fortran-compatible coordinate conversions.
+    """
+
+    from ...sensitivity import probe_linear_observable_vector  # noqa: PLC0415
+
+    return probe_linear_observable_vector(
+        lambda state: radial_current_vm_psi_hat_from_state(op, x_full=state),
+        size=int(op.total_size),
+        chunk_size=int(chunk_size),
+    )
+
+
+def radial_current_vm_from_state(
+    op: V3FullSystemOperator,
+    *,
+    x_full: jnp.ndarray,
+    radial_coordinate: str = "psiHat",
+    psi_a_hat: float | None = None,
+    a_hat: float | None = None,
+    r_n: float | None = None,
+) -> jnp.ndarray:
+    """Return magnetic-drift radial current in the requested radial coordinate."""
+
+    value = radial_current_vm_psi_hat_from_state(op, x_full=x_full)
+    coordinate = str(radial_coordinate).strip().lower()
+    if coordinate in {"psihat", "psi_hat"}:
+        return value
+    if psi_a_hat is None or a_hat is None or r_n is None:
+        raise ValueError("psi_a_hat, a_hat, and r_n are required for rHat/rN radial-current conversion.")
+    from ...outputs.transport import conversion_factors_to_from_dpsi_hat  # noqa: PLC0415
+
+    conv = conversion_factors_to_from_dpsi_hat(
+        psi_a_hat=float(psi_a_hat),
+        a_hat=float(a_hat),
+        r_n=float(r_n),
+    )
+    if coordinate in {"rhat", "r_hat"}:
+        return value * float(conv["ddrHat2ddpsiHat"])
+    if coordinate in {"rn", "r_n"}:
+        return value * float(conv["ddrN2ddpsiHat"])
+    raise ValueError("radial_coordinate must be one of 'psiHat', 'rHat', or 'rN'.")
+
+
+def radial_current_vm_observable_vector(
+    op: V3FullSystemOperator,
+    *,
+    radial_coordinate: str = "psiHat",
+    psi_a_hat: float | None = None,
+    a_hat: float | None = None,
+    r_n: float | None = None,
+    chunk_size: int = 128,
+) -> tuple[jnp.ndarray, float]:
+    """Return ``(c, J0)`` for magnetic-drift radial current diagnostics."""
+
+    from ...sensitivity import probe_linear_observable_vector  # noqa: PLC0415
+
+    return probe_linear_observable_vector(
+        lambda state: radial_current_vm_from_state(
+            op,
+            x_full=state,
+            radial_coordinate=radial_coordinate,
+            psi_a_hat=psi_a_hat,
+            a_hat=a_hat,
+            r_n=r_n,
+        ),
+        size=int(op.total_size),
+        chunk_size=int(chunk_size),
+    )
+
+
 def v3_transport_diagnostics_vm_only_batch(
     *,
     op_stack: V3FullSystemOperator,

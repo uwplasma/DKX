@@ -865,3 +865,30 @@ Next best steps:
    observable vector against the existing output diagnostics.
 2. Replace the probe with analytic radial-current weights after the diagnostic
    formula and coordinate conversion are pinned.
+
+## 2026-06-25 RHSMode 1 Radial-Current Observable Hook
+
+Steps taken:
+
+1. Added `radial_current_vm_psi_hat_from_state` to
+   `sfincs_jax.problems.transport_matrix.diagnostics`.
+2. Added `radial_current_vm_psi_hat_observable_vector`, which recovers the
+   scalar radial-current observable vector from the existing diagnostic in
+   bounded chunks.
+3. Added coordinate-aware `radial_current_vm_from_state` and
+   `radial_current_vm_observable_vector` helpers for `psiHat`, `rHat`, and
+   `rN`.
+4. Added a tiny RHSMode 1 fixture test showing that `c^T x + J0` matches the
+   existing diagnostic for a random state.
+
+Results:
+
+- Tiny real-observable tests passed:
+  `python -m pytest tests/test_sensitivity.py -q --tb=short` with
+  `7 passed`.
+
+Next best steps:
+
+1. Build the corresponding RHSMode 1 `LinearObservableSystem` by pairing this
+   observable with the active operator/RHS and their `Er` derivatives.
+2. Add Phi1 drift-current support after the no-Phi1 magnetic-drift gate passes.

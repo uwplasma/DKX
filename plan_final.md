@@ -77,6 +77,11 @@ Implementation progress on 2026-06-23:
   from an existing linear diagnostic `J(x) = c^T x + J0` on small validation
   decks. This is a validation bridge for pinning radial-current weights before
   replacing it with analytic production weights.
+- `sfincs_jax.problems.transport_matrix.diagnostics` now exposes
+  `radial_current_vm_psi_hat_from_state` and a chunked observable-vector helper
+  for the magnetic-drift radial-current contribution, plus explicit
+  `psiHat`/`rHat`/`rN` coordinate wrappers. A tiny RHSMode-1 deck checks the
+  recovered vector against the existing diagnostic.
 - Derivative-assisted safeguarded Newton/bisection and strict pure-Newton root
   solvers are implemented behind the same ambipolar owner. They accept a
   derivative provider, so finite-difference gates, direct implicit
@@ -941,8 +946,9 @@ Deliverables:
 7. Fill a `LinearObservableSystem` from the concrete RHSMode 1 radial-current
    residual graph and compare its builder-backed implicit derivative against
    centered finite differences. The generic certificate, builder bridge,
-   diagnostic-to-observable-vector probe, finite-difference derivative
-   contract, and Newton root solvers are already in place.
+   magnetic-drift radial-current observable probe, finite-difference derivative
+   contract, and Newton root solvers are already in place. Remaining work is
+   the `Er` derivative of the operator/RHS plus Phi1 drift-current branches.
 8. Wire the exact derivative into safeguarded Newton/bisection and pure Newton
    for Fortran option 1/3 physical parity gates.
 9. Define residual/operator/transpose operator protocol and migrate one
