@@ -44,6 +44,13 @@ deferred research lanes.
   existed, whether it was used, the input/output shape signatures, the admission
   reason, and a cumulative same-shape reuse count; the CLI summary serializes
   the same fields.
+- `sfincs_jax.sensitivity` now has a matrix-free implicit
+  linear-observable derivative contract, and
+  `sfincs_jax.problems.ambipolar` exposes matching radial-current adapters.
+  Production owners can provide operator actions, transpose actions,
+  parameter-derivative actions, and solve/transpose-solve closures without
+  dense assembly; focused tests compare the certificate against the dense path
+  and centered finite differences.
 - Major RHSMode=1 preconditioner families now have domain owners:
   - full-CSR Schur preconditioners,
   - Fortran-reduced symbolic sparse factors,
@@ -989,3 +996,34 @@ Next best steps:
 1. Add Phi1 drift-current and total heat-flux diagnostic adjoint gates.
 2. Add small Fortran RHSMode 4/5 fixture parity once the no-Phi1 diagnostic
    adjoint suite is stable.
+
+## 2026-06-25 Matrix-Free Implicit Derivative Contract
+
+Steps taken:
+
+1. Added `MatrixFreeLinearObservableSystem` to `sfincs_jax.sensitivity`.
+2. Added matrix-free tangent/adjoint derivative certificates that use supplied
+   operator actions, transpose actions, parameter-derivative actions, and
+   solve/transpose-solve closures instead of dense matrices.
+3. Added ambipolar radial-current adapters so this production-facing
+   certificate returns the same `RadialCurrentDerivativeResult` contract used
+   by finite-difference and dense implicit derivative providers.
+4. Added import-contract and numerical tests comparing the matrix-free path
+   against the dense certificate and centered finite differences.
+
+Results:
+
+- Focused sensitivity/import gates passed:
+  `python -m pytest tests/test_sensitivity.py
+  tests/test_domain_package_import_contracts.py -q --tb=short` with
+  `20 passed`.
+
+Next best steps:
+
+1. Wire concrete RHSMode 1 `Er` operator/RHS derivative actions into the
+   matrix-free builder, starting with the no-Phi1 magnetic-drift radial-current
+   path.
+2. Add Phi1 drift-current branches after the no-Phi1 derivative action passes
+   finite-difference and tangent/adjoint residual gates.
+3. Feed the exact derivative provider into safeguarded Newton/bisection and
+   pure Newton ambipolar option-1/3 parity gates.

@@ -1088,6 +1088,41 @@ def implicit_linear_radial_current_derivative_from_builder(
     return _radial_current_derivative_from_linear_certificate(er=er, result=result)
 
 
+def implicit_matrix_free_radial_current_derivative(
+    system: Any,
+    *,
+    er: float | None = None,
+    metadata: Mapping[str, Any] | None = None,
+) -> RadialCurrentDerivativeResult:
+    """Return ``dJr/dEr`` from a matrix-free linear-observable system."""
+
+    from ..sensitivity import implicit_matrix_free_linear_observable_derivative  # noqa: PLC0415
+
+    result = implicit_matrix_free_linear_observable_derivative(system, metadata=metadata)
+    er_value = float(result.parameter if er is None else er)
+    return _radial_current_derivative_from_linear_certificate(er=er_value, result=result)
+
+
+def implicit_matrix_free_radial_current_derivative_from_builder(
+    build_system: Callable[[float], Any],
+    *,
+    er: float,
+    finite_difference_step: float | None = None,
+    metadata: Mapping[str, Any] | None = None,
+) -> RadialCurrentDerivativeResult:
+    """Return ``dJr/dEr`` from a production-style matrix-free system builder."""
+
+    from ..sensitivity import implicit_matrix_free_linear_observable_derivative_from_builder  # noqa: PLC0415
+
+    result = implicit_matrix_free_linear_observable_derivative_from_builder(
+        build_system,
+        parameter=float(er),
+        finite_difference_step=finite_difference_step,
+        metadata=metadata,
+    )
+    return _radial_current_derivative_from_linear_certificate(er=er, result=result)
+
+
 def dense_rhs1_vm_radial_current_linear_observable_system(
     *,
     op: Any,
@@ -1347,6 +1382,8 @@ __all__ = [
     "finite_difference_radial_current_derivative",
     "implicit_linear_radial_current_derivative",
     "implicit_linear_radial_current_derivative_from_builder",
+    "implicit_matrix_free_radial_current_derivative",
+    "implicit_matrix_free_radial_current_derivative_from_builder",
     "newton_ambipolar_root",
     "safeguarded_newton_ambipolar_root",
     "solve_ambipolar_brent",

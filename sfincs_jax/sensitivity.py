@@ -24,8 +24,11 @@ import jax.numpy as jnp
 
 Array = Any
 LinearSolver = Callable[[jnp.ndarray, jnp.ndarray], jnp.ndarray]
+VectorSolver = Callable[[jnp.ndarray], jnp.ndarray]
+LinearOperatorApply = Callable[[jnp.ndarray], jnp.ndarray]
 ObservableFn = Callable[[float], float]
 LinearObservableBuilder = Callable[[float], "LinearObservableSystem"]
+MatrixFreeLinearObservableBuilder = Callable[[float], "MatrixFreeLinearObservableSystem"]
 StateObservableFn = Callable[[jnp.ndarray], Any]
 FluxFn = Callable[[Any], Any]
 
@@ -64,6 +67,45 @@ class LinearObservableSystem:
             float(self.observable_offset_derivative),
         )
         object.__setattr__(self, "metadata", _immutable_mapping(self.metadata))
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class MatrixFreeLinearObservableSystem:
+    """Matrix-free observable derivative system for production-size solves.
+
+    Concrete problem owners provide the selected production solver, transpose
+    solver, operator action, transpose action, and parameter-derivative action.
+    This is the promotion path from dense small-deck certificates to RHSMode-1
+    and RHSMode-4/5 derivative gates that should not assemble a dense matrix.
+    """
+
+    parameter: float
+    size: int
+    rhs: Array
+    rhs_derivative: Array
+    apply: LinearOperatorApply
+    transpose_apply: LinearOperatorApply
+    derivative_apply: LinearOperatorApply
+    solve: VectorSolver
+    transpose_solve: VectorSolver
+    observable_vector: Array
+    observable_vector_derivative: Array | None = None
+    observable_offset: float = 0.0
+    observable_offset_derivative: float = 0.0
+    metadata: Mapping[str, Any] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "parameter", float(self.parameter))
+        object.__setattr__(self, "size", int(self.size))
+        object.__setattr__(self, "observable_offset", float(self.observable_offset))
+        object.__setattr__(
+            self,
+            "observable_offset_derivative",
+            float(self.observable_offset_derivative),
+        )
+        object.__setattr__(self, "metadata", _immutable_mapping(self.metadata))
+        if self.size <= 0:
+            raise ValueError("size must be positive.")
 
 
 @dataclass(frozen=True, slots=True)
@@ -214,6 +256,21 @@ def evaluate_linear_observable(
     return float(jnp.vdot(c, x) + float(system.observable_offset))
 
 
+def evaluate_matrix_free_linear_observable(system: MatrixFreeLinearObservableSystem) -> float:
+    """Solve one matrix-free linear-observable system and return ``c^T x + J0``."""
+
+    b = _as_vector("rhs", system.rhs)
+    c = _as_vector("observable_vector", system.observable_vector)
+    if int(b.shape[0]) != int(system.size):
+        raise ValueError("rhs length must match system.size.")
+    if int(c.shape[0]) != int(system.size):
+        raise ValueError("observable_vector length must match system.size.")
+    x = _as_vector("solution", system.solve(b))
+    if int(x.shape[0]) != int(system.size):
+        raise ValueError("solve(rhs) length must match system.size.")
+    return float(jnp.vdot(c, x) + float(system.observable_offset))
+
+
 def probe_linear_observable_vector(
     observable: StateObservableFn,
     *,
@@ -302,6 +359,126 @@ def implicit_linear_observable_derivative_from_builder(
         finite_difference_observable=fd_observable,
         finite_difference_step=finite_difference_step,
         metadata=merged_metadata,
+    )
+
+
+def implicit_matrix_free_linear_observable_derivative(
+    system: MatrixFreeLinearObservableSystem,
+    *,
+    metadata: Mapping[str, Any] | None = None,
+) -> LinearObservableDerivativeResult:
+    """Return tangent/adjoint derivative certificate without dense assembly."""
+
+    n = int(system.size)
+    b = _as_vector("rhs", system.rhs)
+    bp = _as_vector("rhs_derivative", system.rhs_derivative)
+    c = _as_vector("observable_vector", system.observable_vector)
+    if int(b.shape[0]) != n:
+        raise ValueError("rhs length must match system.size.")
+    if int(bp.shape[0]) != n:
+        raise ValueError("rhs_derivative length must match system.size.")
+    if int(c.shape[0]) != n:
+        raise ValueError("observable_vector length must match system.size.")
+    cp = (
+        jnp.zeros_like(c)
+        if system.observable_vector_derivative is None
+        else _as_vector("observable_vector_derivative", system.observable_vector_derivative)
+    )
+    if int(cp.shape[0]) != n:
+        raise ValueError("observable_vector_derivative length must match system.size.")
+
+    x = _as_vector("solution", system.solve(b))
+    if int(x.shape[0]) != n:
+        raise ValueError("solve(rhs) length must match system.size.")
+    ax = _as_vector("apply(solution)", system.apply(x))
+    if int(ax.shape[0]) != n:
+        raise ValueError("apply(solution) length must match system.size.")
+    primal_residual = ax - b
+
+    apx = _as_vector("derivative_apply(solution)", system.derivative_apply(x))
+    if int(apx.shape[0]) != n:
+        raise ValueError("derivative_apply(solution) length must match system.size.")
+    tangent_rhs = bp - apx
+    x_tangent = _as_vector("tangent_solution", system.solve(tangent_rhs))
+    if int(x_tangent.shape[0]) != n:
+        raise ValueError("solve(tangent_rhs) length must match system.size.")
+    tangent_residual = _as_vector("apply(tangent_solution)", system.apply(x_tangent)) - tangent_rhs
+
+    lam = _as_vector("adjoint_solution", system.transpose_solve(c))
+    if int(lam.shape[0]) != n:
+        raise ValueError("transpose_solve(observable_vector) length must match system.size.")
+    adjoint_residual = _as_vector("transpose_apply(adjoint_solution)", system.transpose_apply(lam)) - c
+
+    observable = jnp.vdot(c, x) + float(system.observable_offset)
+    tangent_derivative = (
+        jnp.vdot(cp, x)
+        + jnp.vdot(c, x_tangent)
+        + float(system.observable_offset_derivative)
+    )
+    adjoint_derivative = (
+        jnp.vdot(cp, x)
+        + jnp.vdot(lam, tangent_rhs)
+        + float(system.observable_offset_derivative)
+    )
+    derivative = 0.5 * (tangent_derivative + adjoint_derivative)
+    combined_metadata = {
+        **dict(system.metadata),
+        **dict(metadata or {}),
+        "system_kind": "matrix_free_linear_observable",
+    }
+    return LinearObservableDerivativeResult(
+        parameter=float(system.parameter),
+        observable=float(observable),
+        derivative=float(derivative),
+        tangent_derivative=float(tangent_derivative),
+        adjoint_derivative=float(adjoint_derivative),
+        primal_residual_norm=float(jnp.linalg.norm(primal_residual)),
+        tangent_residual_norm=float(jnp.linalg.norm(tangent_residual)),
+        adjoint_residual_norm=float(jnp.linalg.norm(adjoint_residual)),
+        tangent_adjoint_abs_error=abs(float(tangent_derivative) - float(adjoint_derivative)),
+        metadata=combined_metadata,
+    )
+
+
+def implicit_matrix_free_linear_observable_derivative_from_builder(
+    build_system: MatrixFreeLinearObservableBuilder,
+    *,
+    parameter: float,
+    finite_difference_step: float | None = None,
+    metadata: Mapping[str, Any] | None = None,
+) -> LinearObservableDerivativeResult:
+    """Build a matrix-free system and optionally compare to centered finite differences."""
+
+    fd_derivative = None
+    fd_abs_error = None
+    fd_step = None
+    if finite_difference_step is not None:
+        fd_step = float(finite_difference_step)
+        fd_derivative = _centered_finite_difference(
+            lambda value: evaluate_matrix_free_linear_observable(build_system(float(value))),
+            parameter=float(parameter),
+            step=fd_step,
+        )
+    result = implicit_matrix_free_linear_observable_derivative(
+        build_system(float(parameter)),
+        metadata=metadata,
+    )
+    if fd_derivative is not None:
+        fd_abs_error = abs(float(result.derivative) - float(fd_derivative))
+    return LinearObservableDerivativeResult(
+        parameter=result.parameter,
+        observable=result.observable,
+        derivative=result.derivative,
+        tangent_derivative=result.tangent_derivative,
+        adjoint_derivative=result.adjoint_derivative,
+        primal_residual_norm=result.primal_residual_norm,
+        tangent_residual_norm=result.tangent_residual_norm,
+        adjoint_residual_norm=result.adjoint_residual_norm,
+        tangent_adjoint_abs_error=result.tangent_adjoint_abs_error,
+        finite_difference_derivative=fd_derivative,
+        finite_difference_abs_error=fd_abs_error,
+        finite_difference_step=fd_step,
+        metadata=result.metadata,
     )
 
 
@@ -401,12 +578,19 @@ __all__ = (
     "JvpVjpDotProductResult",
     "LinearObservableBuilder",
     "LinearObservableDerivativeResult",
+    "LinearOperatorApply",
     "LinearObservableSystem",
+    "MatrixFreeLinearObservableBuilder",
+    "MatrixFreeLinearObservableSystem",
     "StateObservableFn",
+    "VectorSolver",
     "adjoint_dot_product_check",
     "evaluate_linear_observable",
+    "evaluate_matrix_free_linear_observable",
     "implicit_linear_observable_derivative",
     "implicit_linear_observable_derivative_from_builder",
+    "implicit_matrix_free_linear_observable_derivative",
+    "implicit_matrix_free_linear_observable_derivative_from_builder",
     "jvp_flux",
     "probe_linear_observable_vector",
     "vjp_flux",
