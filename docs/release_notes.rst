@@ -110,6 +110,10 @@ Unreleased
   regression validates every debug output field name/rank, finite selected
   percent errors, and the Fortran NaN mask for lambda/mode entries that the
   finite-difference diagnostic does not fill.
+- Added an aggregate RHSMode=4/5 fixture coverage gate so the checked
+  references must collectively cover particle flux, heat flux, parallel flow,
+  bootstrap current, total heat flux, radial current, constant-current
+  ``dPhidPsidLambda``, and debug finite-difference percent-error outputs.
 - Moved the first RHSMode=2/3 transport implementation cluster into
   ``sfincs_jax.problems.transport_matrix``: setup, active/dense setup, loop
   support, finalization, streaming outputs, and postsolve diagnostics. The old

@@ -1995,3 +1995,46 @@ Next best steps:
    an external release-refresh benchmark.
 3. Resume refactor with another high-value owner-boundary extraction after the
    RHSMode 4/5 lane is updated.
+
+## 2026-06-25 RHSMode 4/5 Bounded Fixture Coverage Closure
+
+Steps taken:
+
+1. Re-reviewed the checked RHSMode 4/5 Fortran-v3 sensitivity fixtures and
+   confirmed they cover radial current, heat flux, total heat flux, particle
+   flux, parallel flow, bootstrap current, constant-current `dPhidPsidLambda`,
+   and debug finite-difference percent-error outputs.
+2. Added an aggregate fixture coverage gate so future changes cannot drop a
+   release-facing sensitivity output family while still passing individual
+   per-case tests.
+3. Updated the feature matrix and release notes to state the current status
+   precisely: bounded/reference RHSMode 4/5 coverage is implemented and tested;
+   production-grid parity is an external release-refresh benchmark, not a
+   normal CI gate.
+
+Results:
+
+- `JAX_ENABLE_X64=True python -m pytest tests/test_sensitivity.py -q
+  --tb=short` passed with `30 passed in 45.51 s`.
+- `JAX_ENABLE_X64=True python -m pytest tests/test_sensitivity.py
+  tests/test_ambipolar_problem.py tests/test_domain_package_import_contracts.py
+  -q --tb=short` passed with `56 passed in 64.75 s`.
+- `python -m sphinx -b html docs docs/_build/html -q`,
+  `python -m ruff check tests/test_sensitivity.py sfincs_jax/sensitivity.py`,
+  and `git diff --check` passed.
+
+Current lane status:
+
+- Ambipolar solver lane: 100% closed for the bounded/reference PR scope.
+- RHSMode 4/5 sensitivity lane: 100% closed for the bounded/reference PR scope.
+  Heavy production-grid parity remains a release-refresh benchmark.
+- Refactor/review-ready PR lane: 92%; next active lane.
+- Overall completion: about 97%.
+
+Next best steps:
+
+1. Commit and push this RHSMode 4/5 closure tranche.
+2. Return to the refactor/review-ready PR lane and continue reducing
+   `v3_driver.py` through high-value owner-boundary extractions only.
+3. Run a broader fast test slice after the next refactor tranche and then
+   prepare the draft PR for final review-readiness checks.

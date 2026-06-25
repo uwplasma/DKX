@@ -1080,6 +1080,9 @@ Completed on 2026-06-25:
   metadata gate covering derivative-solve counts, Newton success markers,
   MUMPS/PETSc provenance, nonzero matrix sizes, timing/RSS provenance, and
   final radial-current bounds.
+- Closed the bounded/reference RHSMode 4/5 sensitivity lane with an aggregate
+  fixture coverage gate for every release-facing adjoint output family, while
+  keeping full production-grid parity as an external release-refresh benchmark.
 
 Next ordered implementation steps:
 
