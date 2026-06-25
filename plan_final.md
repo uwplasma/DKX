@@ -4,11 +4,12 @@ Last updated: 2026-06-25 (America/Chicago)
 
 Active branch: `refactor/rhs1-full-assembly-preconditioners`
 
-Review surface: draft PR #8, `refactor/v3-driver-architecture`
+Review surface: PR #8, `refactor/v3-driver-architecture`, ready for review
 
 Status: this file is the controlling completion plan. `plan.md` remains the
 execution log and historical record; future work should update this file only
-when the target plan itself changes.
+when the target plan itself changes. The next implementation pass is the
+bounded consolidation plan in Lane 1; avoid new one-helper refactor tranches.
 
 ## One-Sentence Goal
 
@@ -302,11 +303,17 @@ Observed facts to feed directly into implementation:
 
 Current source size snapshot:
 
-- `sfincs_jax/v3_driver.py`: about 12.0k lines.
+- `sfincs_jax/v3_driver.py`: 11,992 lines.
 - `sfincs_jax/rhs1_full_assembly.py`: about 6.0k lines.
+- Top-level `transport_*` modules are compatibility aliases and should be
+  deleted in Lane 1 Iteration 1 after import rewrites.
+- Top-level `rhs1_*` modules are mixed: 17 aliases and 47 real files. Real
+  implementation should move into domain packages in Lane 1 Iterations 2-3.
 - Several RHSMode 1 QI, x-block, sparse policy, output, and transport modules
   still exceed 2k to 4k lines.
-- Package total is about 160k Python lines across about 293 Python files.
+- Package total is about 295 Python files. The Lane 1 target is below 240
+  Python files after deleting shims and consolidating real implementation into
+  domain packages.
 
 Useful existing assets:
 
@@ -333,6 +340,9 @@ Important current gaps:
   external release-refresh benchmark.
 - Ambipolar option 1/2/3 bounded/reference solvers are implemented and tested;
   production-grid replay artifacts remain outside normal CI.
+- The largest active gap is now structural complexity: `v3_driver.py` remains
+  too large, and historical `rhs1_*`/`transport_*` file names remain scattered
+  across the top-level package.
 - No complete derivative API for `dGamma/dEr`, `dQ/dEr`, `d<J.B>/dEr`,
   `dJr/dEr`, profile sensitivities, and geometry harmonic sensitivities across
   all supported solve lanes.
@@ -467,38 +477,140 @@ Structural rules:
 - Every moved owner boundary gets at least one test that imports the canonical
   owner and one test that exercises behavior through the public API.
 
-## Lane 1 - Refactor To Stable Domain Ownership
+## Lane 1 - Bounded Consolidation To Stable Domain Ownership
 
-Goal: remove `v3_driver.py` as a monolith without scattering equivalent
-complexity across many small files.
+Goal: remove `v3_driver.py` as a monolith and eliminate scattered historical
+`rhs1_*`, `transport_*`, and `v3_*` implementation names without spreading the
+same complexity across more files. This lane is intentionally a consolidation
+pass, not an algorithmic rewrite.
 
-Milestones:
+Current inventory from 2026-06-25:
 
-1. Freeze the current public behavior with focused API, CLI, and parity tests.
-2. Move namelist validation and Fortran compatibility rules into
-   `sfincs_jax.config`.
-3. Move all remaining grid, index, and radial-coordinate conversion logic into
-   `sfincs_jax.discretization`.
-4. Move matrix/residual/RHS builders into `sfincs_jax.operators`, grouped by
-   physical block rather than by historical RHSMode filename.
-5. Move problem orchestration into `sfincs_jax.problems`, with each problem
-   exposing a small `setup -> solve -> diagnose -> output` pipeline.
-6. Collapse redundant QI, x-block, sparse-PC, and policy files into coherent
-   solver families under `sfincs_jax.solvers`.
-7. Delete compatibility facades once all tests and docs import canonical names.
-8. Reduce `v3_driver.py` to either zero lines or a deprecated shim under 300
-   lines that only calls public APIs.
+- `sfincs_jax/v3_driver.py`: 11,992 lines.
+- Python source files: 295.
+- Top-level `transport_*` files: 31, all compatibility aliases.
+- Top-level `rhs1_*` files: 64 total, of which 17 are compatibility aliases
+  and 47 contain real implementation.
+- Largest remaining files: `v3_driver.py`, `rhs1_full_assembly.py`,
+  `problems/profile_response/sparse/xblock.py`,
+  `rhs1_qi_device_preconditioner.py`, `io.py`,
+  `problems/profile_response/sparse/qi.py`, `explicit_sparse.py`,
+  `problems/profile_response/policies.py`, and
+  `problems/profile_response/sparse_pc.py`.
 
-Acceptance gates:
+Batch discipline:
 
-- `v3_driver.py` no longer owns physics equations, solver policy, output
-  schema, or QI/preconditioner internals.
-- No new package has more than three files with overlapping solver-policy
+- No one-helper commits unless they fix a failing test, broken import, or
+  review comment.
+- Each consolidation iteration must delete compatibility files, move a whole
+  owner boundary, or reduce `v3_driver.py` by at least about 2,000 lines.
+- Do not change solver algorithms, tolerances, preconditioner defaults,
+  physics formulas, output schemas, or benchmark claims during this pass.
+- Keep compatibility only when a public API would otherwise break. Internal
+  compatibility shims should be deleted in the same iteration that moves their
+  callers.
+- Use `git mv`/mechanical import rewrites first, then small internal cleanup.
+  If a move requires algorithmic edits, split it out of the consolidation pass.
+
+Iteration 1 - Delete compatibility aliases and normalize imports:
+
+1. Update source, tests, docs, and examples to import canonical package paths.
+2. Delete all 31 top-level `transport_*` compatibility aliases. Canonical
+   owners are already under `sfincs_jax.problems.transport_matrix` and
+   `sfincs_jax.problems.transport_matrix.parallel`.
+3. Delete the 17 top-level `rhs1_*` compatibility aliases after their callers
+   import canonical profile-response or solver-preconditioner modules.
+4. Keep only public API compatibility promised in `sfincs_jax.api`,
+   `sfincs_jax.cli`, and documented user imports.
+
+Exit gates for Iteration 1:
+
+- Top-level `transport_*` files are gone.
+- Top-level `rhs1_*` alias files are gone.
+- Python file count decreases by about 48 files.
+- Import-contract tests prove the canonical paths and public API paths.
+- Fast focused tests plus docs build pass.
+
+Iteration 2 - Move real RHSMode-1 implementation into domain packages:
+
+1. Move RHSMode-1 problem orchestration from top-level `rhs1_*` files into
+   `sfincs_jax.problems.profile_response`.
+2. Move RHSMode-1 residual/operator/source/layout builders into
+   `sfincs_jax.operators`, grouped by physical block rather than by historical
+   RHSMode filenames.
+3. Move RHSMode-1 output/diagnostic/write helpers into `sfincs_jax.outputs`
+   when they are not already owned by `problems.profile_response`.
+4. Rename files for domain ownership, for example `layout`, `sources`,
+   `kinetic_operator`, `field_equations`, `diagnostics`, and `solve`, not
+   `rhs1_*`.
+
+Exit gates for Iteration 2:
+
+- No real top-level `rhs1_*` implementation files remain.
+- Public RHSMode-1 API and CLI examples run unchanged.
+- Existing RHSMode-1 parity, ambipolar, and sensitivity gates still pass.
+- Any intentionally large file has a top-level owner comment explaining why it
+  is large and what future split would be safe.
+
+Iteration 3 - Consolidate solver/preconditioner families:
+
+1. Collapse QI-related files into a small number of solver-family owners under
+   `sfincs_jax.solvers.preconditioners`, such as `qi`, `xblock`, `sparse`,
+   `schur`, and `pas`.
+2. Merge policy-only files that are currently split by historical experiment
+   name when they make the same solver decision.
+3. Delete stale private aliases and environment-variable-only code paths that
+   no longer have tests, docs, or production use.
+4. Keep advanced solver selection behind automatic policy objects with optional
+   expert overrides, not scattered module-level branches.
+
+Exit gates for Iteration 3:
+
+- No package has more than three files with overlapping solver-policy
   responsibility.
-- Source file count decreases or stays roughly flat after compatibility shims
-  are deleted.
-- Public API examples and CLI examples run unchanged.
+- QI, x-block, PAS, sparse, and Schur imports are canonical and tested.
+- Solver behavior is unchanged on representative RHSMode 1/2/3 tests.
+- Top-level file count is lower than after Iteration 2, not higher.
+
+Iteration 4 - Extract the two large driver solve entry points:
+
+1. Move `solve_v3_full_system_linear_gmres` wholesale into
+   `sfincs_jax.problems.profile_response.solve`.
+2. Move `solve_v3_transport_matrix_linear_gmres` wholesale into
+   `sfincs_jax.problems.transport_matrix.solve`.
+3. Move only dependency wiring needed by those functions; avoid rewriting
+   numerical internals during the move.
+4. Leave `v3_driver.py` as a deprecated compatibility shim that delegates to
+   public/domain APIs, or delete it if all internal callers have migrated.
+
+Exit gates for Iteration 4:
+
+- `v3_driver.py` is below 300 lines or removed.
+- `v3_driver.py` owns no physics equations, solver policy, output schema,
+  QI code, or preconditioner internals.
+- The CLI, public Python API, and examples run unchanged.
 - Focused refactor tests run in under 2 minutes locally.
+
+Iteration 5 - Final cleanup and review hardening:
+
+1. Remove dead internal functions exposed by the moves, using import graph
+   checks and tests rather than manual guesswork.
+2. Update docs to describe canonical packages and remove references to
+   historical `rhs1_*`, `transport_*`, and `v3_driver.py` internals except in a
+   migration note.
+3. Refresh `plan.md` with the executed consolidation batches and final counts.
+4. Run CI-equivalent checks once after the batch sequence, not after every
+   small import rewrite.
+
+Final acceptance gates for Lane 1:
+
+- `v3_driver.py` is removed or is a compatibility shim under 300 lines.
+- No top-level `rhs1_*` or `transport_*` modules remain.
+- Python source file count is materially lower than 295; target is below 240
+  without adding new compatibility layers.
+- Public API examples, CLI examples, docs, and focused refactor tests pass.
+- Representative physics gates for RHSMode 1/2/3, ambipolar, and RHSMode 4/5
+  still pass.
 
 ## Lane 2 - Full Fortran v3 Functionality Matrix
 
@@ -1019,6 +1131,11 @@ Exit gate:
 
 - The branch is merge-ready.
 
+Status:
+
+- Completed for PR #8 on 2026-06-25. PR #8 is no longer draft, merge state is
+  clean, and CI/docs/coverage/example checks are green.
+
 ### M8 - Release
 
 Deliverables:
@@ -1095,15 +1212,23 @@ Completed on 2026-06-25:
 
 Next ordered implementation steps:
 
-1. Finish the M7 review-readiness audit for PR #8: CI status, docs status,
-   large-file cleanliness, and current plan/docs alignment.
-2. Record any coverage shortfall as a scoped follow-up unless CI coverage fails.
-3. Keep production option-1/3 ambipolar reruns and production-grid RHSMode 4/5
-   parity as release-refresh benchmarks outside normal CI.
-4. If another refactor tranche is needed before review, choose only a
-   high-value owner-boundary extraction that reduces `v3_driver.py` or removes
-   stale private aliases without increasing file-count churn.
-5. After PR #8 is green and the worktree is clean, mark it ready for review.
+1. Execute Lane 1 Iteration 1 as a single batch: rewrite internal imports to
+   canonical package paths, delete all top-level `transport_*` aliases, delete
+   top-level `rhs1_*` aliases, and add/adjust import-contract tests.
+2. Execute Lane 1 Iteration 2 as a single batch: move real RHSMode-1
+   orchestration/operator/output modules out of top-level `rhs1_*` names into
+   `problems.profile_response`, `operators`, and `outputs`.
+3. Execute Lane 1 Iteration 3 as a single batch: consolidate QI, x-block, PAS,
+   sparse, and Schur solver/preconditioner families under
+   `solvers.preconditioners`, removing stale policy-only fragments.
+4. Execute Lane 1 Iteration 4 as a single batch: move the two large solve entry
+   points out of `v3_driver.py`, leaving a shim under 300 lines or deleting the
+   file.
+5. Execute Lane 1 Iteration 5: dead-code pruning, docs/API cleanup, final
+   counts, focused tests, docs build, and CI-equivalent validation.
+6. Keep production option-1/3 ambipolar reruns and production-grid RHSMode 4/5
+   parity as release-refresh benchmarks outside normal CI during this
+   consolidation pass.
 
 ## Known Risks And Explicit Deferred Items
 
