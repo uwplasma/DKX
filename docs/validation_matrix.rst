@@ -256,6 +256,10 @@ Fortran-v3 RHSMode 4/5 source-contract gates:
 - ``tests/test_sensitivity.py`` checks valid and invalid RHSMode 4/5 decks,
   including the Fortran source-code gate that writes ``dParallelFlowdLambda``
   from ``adjointParticleFluxOption`` or ``debugAdjoint``.
+- ``benchmarks/fortran_v3_sensitivity_reference`` contains the first compact
+  RHSMode=4 reference summary.  The checked W7-X-like analytic deck pins
+  ``dParticleFluxdLambda`` and ``dRadialCurrentdLambda`` from SFINCS Fortran v3
+  without committing the generated HDF5 file.
 
 .. figure:: _static/figures/paper/sfincs_jax_autodiff_gradient_check.png
    :alt: Autodiff gradient validation for sfincs_jax
