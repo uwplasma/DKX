@@ -37,6 +37,171 @@ def _immutable_mapping(value: Mapping[str, Any] | None) -> Mapping[str, Any]:
     return MappingProxyType(dict(value or {}))
 
 
+_BASE_ADJOINT_DEBUG_FIELDS = (
+    "dHeatFluxdLambda_finitediff",
+    "dParticleFluxdLambda_finitediff",
+    "dParallelFlowdLambda_finitediff",
+    "dTotalHeatFluxdLambda_finitediff",
+    "dRadialCurrentdLambda_finitediff",
+    "dBootstrapdLambda_finitediff",
+    "particleFluxPercentError",
+    "heatFluxPercentError",
+    "parallelFlowPercentError",
+    "bootstrapPercentError",
+    "totalHeatFluxPercentError",
+    "radialCurrentPercentError",
+)
+
+
+def _lookup_config_value(config: Any, groups: tuple[str, ...], key: str, default: Any = None) -> Any:
+    key_upper = key.upper()
+    for group in groups:
+        group_data: Any
+        if hasattr(config, "group"):
+            group_data = config.group(group)
+        elif isinstance(config, Mapping):
+            group_data = config.get(group, config.get(group.lower(), config.get(group.upper(), {})))
+        else:
+            group_data = {}
+        if isinstance(group_data, Mapping):
+            if key_upper in group_data:
+                return group_data[key_upper]
+            if key in group_data:
+                return group_data[key]
+            lower_map = {str(k).lower(): v for k, v in group_data.items()}
+            if key.lower() in lower_map:
+                return lower_map[key.lower()]
+    if isinstance(config, Mapping):
+        if key_upper in config:
+            return config[key_upper]
+        if key in config:
+            return config[key]
+        lower_map = {str(k).lower(): v for k, v in config.items()}
+        if key.lower() in lower_map:
+            return lower_map[key.lower()]
+    return default
+
+
+def _first_value(value: Any, default: Any = None) -> Any:
+    if value is None:
+        return default
+    if isinstance(value, (list, tuple)):
+        return value[0] if value else default
+    return value
+
+
+def _bool_values(value: Any) -> tuple[bool, ...]:
+    if value is None:
+        return ()
+    if isinstance(value, (list, tuple)):
+        return tuple(bool(item) for item in value)
+    return (bool(value),)
+
+
+def _config_bool(config: Any, groups: tuple[str, ...], key: str, default: bool = False) -> bool:
+    return bool(_first_value(_lookup_config_value(config, groups, key, default), default))
+
+
+def _config_int(config: Any, groups: tuple[str, ...], key: str, default: int = 0) -> int:
+    return int(_first_value(_lookup_config_value(config, groups, key, default), default))
+
+
+def _config_float(config: Any, groups: tuple[str, ...], key: str, default: float = 0.0) -> float:
+    return float(_first_value(_lookup_config_value(config, groups, key, default), default))
+
+
+def fortran_v3_adjoint_sensitivity_output_fields(config: Any) -> tuple[str, ...]:
+    """Return RHSMode-4/5 sensitivity fields written by SFINCS Fortran v3.
+
+    The field list follows ``writeHDF5Output.F90``.  One source-code quirk is
+    preserved intentionally: ``dParallelFlowdLambda`` is gated by
+    ``adjointParticleFluxOption`` or ``debugAdjoint``, not by
+    ``adjointParallelFlowOption``.
+    """
+
+    general = ("general", "generalparameters")
+    adjoint = ("adjointOptions", "adjointoptions")
+    rhs_mode = _config_int(config, general, "RHSMode", 1)
+    if rhs_mode not in (4, 5):
+        return ()
+
+    debug = _config_bool(config, adjoint, "debugAdjoint", False)
+    heat = any(_bool_values(_lookup_config_value(config, adjoint, "adjointHeatFluxOption", ())))
+    particle = any(_bool_values(_lookup_config_value(config, adjoint, "adjointParticleFluxOption", ())))
+    total_heat = _config_bool(config, adjoint, "adjointTotalHeatFluxOption", False)
+    radial_current = _config_bool(config, adjoint, "adjointRadialCurrentOption", False)
+    bootstrap = _config_bool(config, adjoint, "adjointBootstrapOption", False)
+
+    fields: list[str] = []
+    if heat or debug:
+        fields.append("dHeatFluxdLambda")
+    if particle or debug:
+        fields.append("dParticleFluxdLambda")
+    if particle or debug:
+        fields.append("dParallelFlowdLambda")
+    if total_heat or debug:
+        fields.append("dTotalHeatFluxdLambda")
+    if radial_current or debug:
+        fields.append("dRadialCurrentdLambda")
+    if bootstrap or debug:
+        fields.append("dBootstrapdLambda")
+    if rhs_mode == 5:
+        fields.append("dPhidPsidLambda")
+    if debug:
+        fields.extend(_BASE_ADJOINT_DEBUG_FIELDS)
+        if rhs_mode == 5:
+            fields.extend(("dPhidPsiPercentError", "dPhidPsidLambda_finitediff"))
+    return tuple(dict.fromkeys(fields))
+
+
+def validate_fortran_v3_adjoint_sensitivity_constraints(config: Any) -> tuple[str, ...]:
+    """Return Fortran-v3 compatibility errors for RHSMode 4/5 adjoint runs."""
+
+    general = ("general", "generalparameters")
+    physics = ("physicsParameters", "physicsparameters")
+    resolution = ("resolutionParameters", "resolutionparameters")
+    geometry = ("geometryParameters", "geometryparameters")
+    adjoint = ("adjointOptions", "adjointoptions")
+
+    rhs_mode = _config_int(config, general, "RHSMode", 1)
+    geometry_scheme = _config_int(config, geometry, "geometryScheme", 1)
+    include_phi1 = _config_bool(config, physics, "includePhi1", False)
+    e_parallel = _config_float(config, physics, "EParallelHat", 0.0)
+    magnetic_drift_scheme = _config_int(config, physics, "magneticDriftScheme", 0)
+    constraint_scheme = _config_int(config, resolution, "constraintScheme", -1)
+    collision_operator = _config_int(config, physics, "collisionOperator", 0)
+    discrete_adjoint = _config_bool(config, adjoint, "discreteAdjointOption", True)
+    radial_current = _config_bool(config, adjoint, "adjointRadialCurrentOption", False)
+    include_xdot = _config_bool(config, physics, "includeXDotTerm", True)
+    use_dkes_exb = _config_bool(config, physics, "useDKESExBDrift", False)
+    include_er_xidot = _config_bool(config, physics, "includeElectricFieldTermInXiDot", True)
+
+    errors: list[str] = []
+    if rhs_mode not in (4, 5):
+        errors.append("RHSMode 4 or 5 is required for Fortran-v3 adjoint sensitivities.")
+    if rhs_mode == 5 and radial_current:
+        errors.append("RHSMode=5 cannot be used with adjointRadialCurrentOption in SFINCS Fortran v3.")
+    if 4 < geometry_scheme < 8:
+        errors.append("RHSMode>3 must use a Boozer-coordinate geometry scheme in SFINCS Fortran v3.")
+    if include_phi1:
+        errors.append("RHSMode>3 cannot be used with includePhi1 in SFINCS Fortran v3.")
+    if e_parallel != 0.0:
+        errors.append("RHSMode>3 cannot be used with EParallelHat != 0 in SFINCS Fortran v3.")
+    if magnetic_drift_scheme > 0:
+        errors.append("RHSMode>3 cannot use tangential magnetic drifts in SFINCS Fortran v3.")
+    if constraint_scheme not in (-1, 1):
+        errors.append("RHSMode>3 requires constraintScheme=-1 or 1 in SFINCS Fortran v3.")
+    if collision_operator != 0:
+        errors.append("RHSMode>3 requires collisionOperator=0 in SFINCS Fortran v3.")
+    full_trajectories = include_xdot and (not use_dkes_exb) and include_er_xidot
+    dkes_trajectories = (not include_xdot) and use_dkes_exb and (not include_er_xidot)
+    if (not discrete_adjoint) and not (full_trajectories or dkes_trajectories):
+        errors.append(
+            "discreteAdjointOption=false must use either full trajectories or DKES trajectories in SFINCS Fortran v3."
+        )
+    return tuple(errors)
+
+
 @dataclass(frozen=True, slots=True, kw_only=True)
 class LinearObservableSystem:
     """Linearized observable system at one scalar parameter value.
@@ -340,10 +505,12 @@ def implicit_linear_observable_derivative_from_builder(
     merged_metadata = {**dict(system.metadata), **dict(metadata or {})}
     fd_observable = None
     if finite_difference_step is not None:
-        fd_observable = lambda value: evaluate_linear_observable(
-            build_system(float(value)),
-            solve=solve,
-        )
+        def fd_observable(value: float) -> float:
+            return evaluate_linear_observable(
+                build_system(float(value)),
+                solve=solve,
+            )
+
     return implicit_linear_observable_derivative(
         matrix=system.matrix,
         rhs=system.rhs,
@@ -587,11 +754,13 @@ __all__ = (
     "adjoint_dot_product_check",
     "evaluate_linear_observable",
     "evaluate_matrix_free_linear_observable",
+    "fortran_v3_adjoint_sensitivity_output_fields",
     "implicit_linear_observable_derivative",
     "implicit_linear_observable_derivative_from_builder",
     "implicit_matrix_free_linear_observable_derivative",
     "implicit_matrix_free_linear_observable_derivative_from_builder",
     "jvp_flux",
     "probe_linear_observable_vector",
+    "validate_fortran_v3_adjoint_sensitivity_constraints",
     "vjp_flux",
 )

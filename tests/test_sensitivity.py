@@ -32,10 +32,12 @@ from sfincs_jax.sensitivity import (
     MatrixFreeLinearObservableSystem,
     adjoint_dot_product_check,
     evaluate_matrix_free_linear_observable,
+    fortran_v3_adjoint_sensitivity_output_fields,
     implicit_linear_observable_derivative,
     implicit_linear_observable_derivative_from_builder,
     implicit_matrix_free_linear_observable_derivative_from_builder,
     probe_linear_observable_vector,
+    validate_fortran_v3_adjoint_sensitivity_constraints,
 )
 from sfincs_jax.namelist import read_sfincs_input
 from sfincs_jax.v3_system import apply_v3_full_system_operator_cached, full_system_operator_from_namelist
@@ -66,6 +68,111 @@ def _linear_system_components():
     offsetp = -0.4
     p0 = 0.35
     return a0, ap, b0, bp, c0, cp, offset0, offsetp, p0
+
+
+def _adjoint_config(**overrides):
+    config = {
+        "general": {"RHSMode": 4},
+        "geometryParameters": {"geometryScheme": 4},
+        "physicsParameters": {
+            "includePhi1": False,
+            "EParallelHat": 0.0,
+            "magneticDriftScheme": 0,
+            "collisionOperator": 0,
+            "includeXDotTerm": True,
+            "useDKESExBDrift": False,
+            "includeElectricFieldTermInXiDot": True,
+        },
+        "resolutionParameters": {"constraintScheme": -1},
+        "adjointOptions": {
+            "discreteAdjointOption": True,
+            "adjointBootstrapOption": False,
+            "adjointRadialCurrentOption": False,
+            "adjointTotalHeatFluxOption": False,
+            "adjointHeatFluxOption": [False, False],
+            "adjointParticleFluxOption": [False, False],
+            "adjointParallelFlowOption": [False, False],
+            "debugAdjoint": False,
+        },
+    }
+    for group, values in overrides.items():
+        config[group].update(values)
+    return config
+
+
+def test_fortran_v3_adjoint_sensitivity_constraints_and_output_fields() -> None:
+    config = _adjoint_config(
+        adjointOptions={
+            "adjointBootstrapOption": True,
+            "adjointRadialCurrentOption": True,
+            "adjointTotalHeatFluxOption": True,
+            "adjointHeatFluxOption": [False, True],
+            "adjointParticleFluxOption": [True, False],
+            "adjointParallelFlowOption": [False, True],
+        }
+    )
+
+    assert validate_fortran_v3_adjoint_sensitivity_constraints(config) == ()
+    assert fortran_v3_adjoint_sensitivity_output_fields(config) == (
+        "dHeatFluxdLambda",
+        "dParticleFluxdLambda",
+        "dParallelFlowdLambda",
+        "dTotalHeatFluxdLambda",
+        "dRadialCurrentdLambda",
+        "dBootstrapdLambda",
+    )
+
+
+def test_fortran_v3_adjoint_sensitivity_constraints_reject_invalid_source_combinations() -> None:
+    config = _adjoint_config(
+        general={"RHSMode": 5},
+        geometryParameters={"geometryScheme": 5},
+        physicsParameters={
+            "includePhi1": True,
+            "EParallelHat": 0.1,
+            "magneticDriftScheme": 1,
+            "collisionOperator": 1,
+            "includeXDotTerm": False,
+            "useDKESExBDrift": False,
+            "includeElectricFieldTermInXiDot": True,
+        },
+        resolutionParameters={"constraintScheme": 2},
+        adjointOptions={"adjointRadialCurrentOption": True, "discreteAdjointOption": False},
+    )
+
+    errors = validate_fortran_v3_adjoint_sensitivity_constraints(config)
+
+    assert len(errors) == 8
+    assert any("adjointRadialCurrentOption" in item for item in errors)
+    assert any("Boozer-coordinate" in item for item in errors)
+    assert any("includePhi1" in item for item in errors)
+    assert any("EParallelHat" in item for item in errors)
+    assert any("tangential magnetic drifts" in item for item in errors)
+    assert any("constraintScheme" in item for item in errors)
+    assert any("collisionOperator" in item for item in errors)
+    assert any("discreteAdjointOption=false" in item for item in errors)
+
+
+def test_fortran_v3_adjoint_output_fields_preserve_parallel_flow_source_gate() -> None:
+    """Pin the writeHDF5Output.F90 gate before sfincs_jax adds its own fields."""
+
+    parallel_only = _adjoint_config(
+        adjointOptions={
+            "adjointParallelFlowOption": [True, False],
+            "adjointParticleFluxOption": [False, False],
+        }
+    )
+    debug_rhs5 = _adjoint_config(
+        general={"RHSMode": 5},
+        adjointOptions={"debugAdjoint": True},
+    )
+
+    assert "dParallelFlowdLambda" not in fortran_v3_adjoint_sensitivity_output_fields(parallel_only)
+    fields = fortran_v3_adjoint_sensitivity_output_fields(debug_rhs5)
+    assert "dParallelFlowdLambda" in fields
+    assert "dPhidPsidLambda" in fields
+    assert "dPhidPsiPercentError" in fields
+    assert "dPhidPsidLambda_finitediff" in fields
 
 
 def test_implicit_linear_observable_derivative_matches_tangent_adjoint_and_finite_difference() -> None:

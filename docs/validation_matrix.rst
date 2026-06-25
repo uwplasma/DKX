@@ -245,6 +245,18 @@ Current artifacts:
 - ``docs/_static/figures/paper/sfincs_jax_autodiff_sensitivity_map.png``
 - ``docs/_static/figures/paper/sfincs_jax_autodiff_sensitivity_map.pdf``
 
+Fortran-v3 RHSMode 4/5 source-contract gates:
+
+- ``sfincs_jax.sensitivity.validate_fortran_v3_adjoint_sensitivity_constraints``
+  mirrors the source-code restrictions from ``validateInput.F90`` for adjoint
+  sensitivity decks.
+- ``sfincs_jax.sensitivity.fortran_v3_adjoint_sensitivity_output_fields`` pins
+  the sensitivity HDF5 field names emitted by ``writeHDF5Output.F90`` before
+  the numerical Fortran replay fixtures are promoted.
+- ``tests/test_sensitivity.py`` checks valid and invalid RHSMode 4/5 decks,
+  including the Fortran source-code gate that writes ``dParallelFlowdLambda``
+  from ``adjointParticleFluxOption`` or ``debugAdjoint``.
+
 .. figure:: _static/figures/paper/sfincs_jax_autodiff_gradient_check.png
    :alt: Autodiff gradient validation for sfincs_jax
    :width: 92%

@@ -98,17 +98,20 @@ Fortran v3 feature ownership
      - Fortran solves adjoint systems for particle flux, heat flux, bootstrap,
        parallel flow, total heat flux, and radial current sensitivities.
      - ``sfincs_jax.sensitivity`` plus diagnostic observable builders:
-       partial. Linear implicit derivative, JVP/VJP, dot-product, and small
-       RHSMode-1 radial-current gates exist, including active Fortran-style
-       option-1 ``dJ_r/dE_r`` replay; Fortran-compatible RHSMode-4 HDF5 output
-       fields and production grids remain.
+       source contract plus derivative spine present. Linear implicit
+       derivative, JVP/VJP, dot-product, small RHSMode-1 radial-current gates,
+       active Fortran-style option-1 ``dJ_r/dE_r`` replay, Fortran-v3
+       RHSMode-4/5 input validators, and HDF5 sensitivity field-name gates
+       exist; numerical Fortran RHSMode-4 output replay and production grids
+       remain.
    * - RHSMode 5 ambipolar sensitivities
      - ``ambipolarSolver.F90``, ``solver.F90``, ``adjointDiagnostics.F90``
      - Fortran first finds ambipolar ``E_r``, then evaluates derivatives at
        constant radial current with the extra ``dPhi/dPsi`` term.
      - Partial/deferred. The implicit sensitivity spine is present, but full
        RHSMode-5 parity requires option-1/3 production derivatives and
-       constant-current diagnostic output gates.
+       constant-current diagnostic output gates. Source-compatible validation
+       and HDF5 field-name gates are present.
    * - Collision models
      - ``populateMatrix.F90`` and collision-specific helpers
      - Manual and validation checks distinguish PAS and full Fokker-Planck
@@ -200,15 +203,17 @@ Fortran v3 feature ownership
      - Production sparse/matrix-free ``E_r`` derivatives, in-process RHSMode-1
        evaluator reuse, and production Fortran option-1/3 replay gates.
    * - RHSMode 4 fixed-``E_r`` sensitivities
-     - partial
+     - source contract implemented; numerical replay pending
      - ``sfincs_jax.sensitivity`` supports implicit linear observable
-       derivatives, builder probes, JVP/VJP, and adjoint dot-product checks.
-     - Build Fortran-compatible diagnostic/output surfaces and intermediate-grid
+       derivatives, builder probes, JVP/VJP, adjoint dot-product checks,
+       Fortran-compatible input validation, and HDF5 sensitivity field-name
        gates.
+     - Build numerical Fortran-compatible diagnostic/output surfaces and
+       intermediate-grid gates.
    * - RHSMode 5 ambipolar sensitivities
-     - deferred
+     - source contract implemented; numerical replay deferred
      - Shared sensitivity spine exists; constant-current formulas are documented
-       in this matrix.
+       in this matrix and source-compatible input/output field gates are tested.
      - Close option-1/3 ambipolar derivative gates first, then add
        constant-current HDF5 diagnostics.
    * - QA/QH bootstrap-current validation

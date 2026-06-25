@@ -1340,3 +1340,60 @@ Next best steps:
    summaries.
 3. Continue the refactor/review tranche by moving sensitivity fixture support
    behind the domain API rather than adding new `v3_driver.py` entry points.
+
+## 2026-06-25 RHSMode 4/5 Source-Contract Gate
+
+Steps taken:
+
+1. Audited Fortran v3 `validateInput.F90`, `solver.F90`,
+   `adjointDiagnostics.F90`, `testingAdjointDiagnostics.F90`, and
+   `writeHDF5Output.F90` for RHSMode 4/5 adjoint restrictions and output
+   fields.
+2. Added `validate_fortran_v3_adjoint_sensitivity_constraints` to
+   `sfincs_jax.sensitivity`, mirroring the Fortran source restrictions for
+   no Phi1, no inductive field, no tangential magnetic drifts,
+   `constraintScheme=-1/1`, `collisionOperator=0`, Boozer-coordinate geometry
+   restrictions, and RHSMode-5 radial-current sensitivity rejection.
+3. Added `fortran_v3_adjoint_sensitivity_output_fields` to pin the HDF5
+   sensitivity field names written by `writeHDF5Output.F90`, including the
+   source-code quirk that `dParallelFlowdLambda` is gated by
+   `adjointParticleFluxOption` or `debugAdjoint`.
+4. Added focused tests for valid RHSMode-4 contracts, invalid source-level
+   combinations, RHSMode-5 debug output fields, and import-contract coverage.
+5. Updated release notes, validation docs, performance docs, feature matrix,
+   and `plan_final.md`.
+
+Results:
+
+- Focused contract/import tests passed:
+  `JAX_ENABLE_X64=True python -m pytest
+  tests/test_sensitivity.py::test_fortran_v3_adjoint_sensitivity_constraints_and_output_fields
+  tests/test_sensitivity.py::test_fortran_v3_adjoint_sensitivity_constraints_reject_invalid_source_combinations
+  tests/test_sensitivity.py::test_fortran_v3_adjoint_output_fields_preserve_parallel_flow_source_gate
+  tests/test_domain_package_import_contracts.py -q --tb=short` with
+  `11 passed in 0.60 s`.
+- Broader focused validation passed:
+  `JAX_ENABLE_X64=True python -m pytest tests/test_sensitivity.py
+  tests/test_ambipolar_problem.py tests/test_domain_package_import_contracts.py
+  -q --tb=short` with `48 passed in 63.27 s`.
+- `python -m ruff check sfincs_jax/sensitivity.py tests/test_sensitivity.py
+  tests/test_domain_package_import_contracts.py`, `git diff --check`, and
+  `python -m sphinx -b html docs docs/_build/html -q` passed.
+
+Current lane status:
+
+- Ambipolar solver lane: 99% bounded; production replay remains outside CI.
+- RHSMode 4/5 sensitivity lane: 78%; source-contract and generic derivative
+  spine are now tested, numerical Fortran output replay remains.
+- Refactor/review-ready PR lane: 86%; the sensitivity contract lives in the
+  domain-neutral sensitivity module without adding another file.
+- Overall completion: about 88%.
+
+Next best steps:
+
+1. Create small RHSMode-4 Fortran fixture namelists and output summaries for
+   one or two sensitivity targets.
+2. Add sfincs_jax numerical output-field scaffolding only after those fixture
+   values are pinned.
+3. Continue the review-ready refactor tranche by moving fixture generation and
+   comparison helpers behind compact domain APIs.

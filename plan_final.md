@@ -142,6 +142,12 @@ Implementation progress on 2026-06-23:
   to real RHSMode-1 particle-flux, heat-flux, flow, radial-current, and
   bootstrap-current diagnostics, which is the same consistency gate required
   before promoting RHSMode 4/5 adjoint outputs.
+- `sfincs_jax.sensitivity` also owns the first RHSMode-4/5 Fortran source
+  contract helpers. `validate_fortran_v3_adjoint_sensitivity_constraints`
+  mirrors the `validateInput.F90` adjoint restrictions, and
+  `fortran_v3_adjoint_sensitivity_output_fields` pins the HDF5 sensitivity
+  fields written by `writeHDF5Output.F90`, including the source-code
+  `dParallelFlowdLambda` gate.
 - Derivative-assisted safeguarded Newton/bisection and strict pure-Newton root
   solvers are implemented behind the same ambipolar owner. They accept a
   derivative provider, so finite-difference gates, direct implicit
@@ -653,6 +659,8 @@ Implementation steps:
 
 Acceptance gates:
 
+- Fortran-v3 RHSMode 4/5 input restrictions and sensitivity HDF5 field names
+  are pinned against the source-code behavior.
 - `A^T lambda - J_u^T` adjoint residual passes for every derivative gate.
 - JVP and VJP agree through dot-product tests:
   `<JVP(dp), y> = <dp, VJP(y)>`.
