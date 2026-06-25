@@ -3,7 +3,7 @@ from __future__ import annotations
 import jax.numpy as jnp
 
 from sfincs_jax.solver import GMRESSolveResult
-from sfincs_jax.solver_runtime import block_gmres_result_ready, gmres_result_is_finite
+from sfincs_jax.solver import block_gmres_result_ready, gmres_result_is_finite
 
 
 def test_gmres_result_is_finite_detects_nonfinite_state() -> None:

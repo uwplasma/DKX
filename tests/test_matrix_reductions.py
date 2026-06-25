@@ -3,7 +3,7 @@ from __future__ import annotations
 import jax.numpy as jnp
 import numpy as np
 
-from sfincs_jax.matrix_reductions import block_diagonal_only, diagonal_only
+from sfincs_jax.preconditioner_operators import block_diagonal_only, diagonal_only
 
 
 def test_diagonal_only_preserves_only_point_coupling() -> None:

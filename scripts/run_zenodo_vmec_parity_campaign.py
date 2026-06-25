@@ -19,7 +19,7 @@ import numpy as np
 from sfincs_jax.h5_parity import compare_h5_outputs
 from sfincs_jax.input_compat import effective_equilibrium_file
 from sfincs_jax.namelist import read_sfincs_input
-from sfincs_jax.phase_timing import PhaseTimer
+from sfincs_jax.validation_artifacts import PhaseTimer
 
 DEFAULT_ZENODO_ROOT = Path(
     os.environ.get(

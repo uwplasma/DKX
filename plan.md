@@ -3053,3 +3053,109 @@ Next best steps:
    clear return boundary.
 3. Move final progress replay/result normalization from `solve.py` into
    `solver_diagnostics.py` and sparse finalization owners.
+
+## 2026-06-25 Lane 1 Batch 0 Root Helper Cleanup
+
+Steps taken:
+
+1. Deleted five obsolete top-level helper modules instead of keeping
+   compatibility shims:
+   `sfincs_jax/solver_runtime.py`, `sfincs_jax/matrix_reductions.py`,
+   `sfincs_jax/solve_mode_policy.py`,
+   `sfincs_jax/solver_progress_policy.py`, and
+   `sfincs_jax/phase_timing.py`.
+2. Moved GMRES result finite-state and XLA readiness helpers into the canonical
+   Krylov owner, `sfincs_jax/solver.py`.
+3. Moved diagonal and block-diagonal matrix-reduction helpers into
+   `sfincs_jax/preconditioner_operators.py`, where simplified
+   preconditioner-operator shaping already lives.
+4. Moved implicit/differentiable solve-mode selection into
+   `sfincs_jax/problems/profile_response/policies.py`.
+5. Merged pure duration/runtime/progress-threshold helpers into
+   `sfincs_jax/solver_progress.py`.
+6. Moved benchmark/audit phase timing into
+   `sfincs_jax/validation_artifacts.py`.
+7. Rewrote source, script, docs, and focused-test imports to use canonical
+   owners and removed stale API/source-map entries for the deleted modules.
+
+Current inventory:
+
+- Package Python files: `222` (down from `227`).
+- Package-root Python files: `90` (down from `95`).
+- Package source lines: `163,423` (down from `163,474`).
+- `sfincs_jax/v3_driver.py`: `47` lines.
+- `sfincs_jax/problems/profile_response/solve.py`: `9,412` lines.
+
+Validation:
+
+- `python -m ruff check
+  sfincs_jax/solver.py
+  sfincs_jax/preconditioner_operators.py
+  sfincs_jax/problems/profile_response/policies.py
+  sfincs_jax/problems/profile_response/solve.py
+  sfincs_jax/problems/profile_response/phi1_newton.py
+  sfincs_jax/problems/transport_matrix/solve.py
+  sfincs_jax/solver_progress.py
+  sfincs_jax/validation_artifacts.py
+  tests/test_solver_runtime.py
+  tests/test_matrix_reductions.py
+  tests/test_phase_timing.py
+  tests/test_solve_mode_policy.py
+  tests/test_solver_progress_policy.py
+  scripts/run_zenodo_vmec_parity_campaign.py` passed.
+- `python -m py_compile
+  sfincs_jax/solver.py
+  sfincs_jax/preconditioner_operators.py
+  sfincs_jax/problems/profile_response/policies.py
+  sfincs_jax/problems/profile_response/solve.py
+  sfincs_jax/problems/profile_response/phi1_newton.py
+  sfincs_jax/problems/transport_matrix/solve.py
+  sfincs_jax/solver_progress.py
+  sfincs_jax/validation_artifacts.py` passed.
+- Focused helper tests passed:
+  `python -m pytest
+  tests/test_solver_runtime.py
+  tests/test_matrix_reductions.py
+  tests/test_phase_timing.py
+  tests/test_solve_mode_policy.py
+  tests/test_solver_progress_policy.py -q --tb=short`
+  with `20 passed in 0.66 s`.
+- Focused RHSMode-1 dispatch and fallback coverage passed:
+  `python -m pytest
+  tests/test_v3_driver_rhs1_dispatch_coverage.py
+  tests/test_v3_driver_strong_fallback_coverage.py
+  tests/test_v3_driver_pas_precond_policy_coverage.py
+  tests/test_rhs1_schwarz_heuristic.py
+  tests/test_v3_driver_dd_reduction_coverage.py -q --tb=short`
+  with `84 passed in 37.80 s`.
+- Transport linear-solve and parallel regression coverage passed:
+  `python -m pytest
+  tests/test_small_regularized_lstsq.py
+  tests/test_transport_solve_policy.py
+  tests/test_transport_parallel.py -q --tb=short`
+  with `34 passed in 40.46 s`. This caught one missed transport
+  domain-decomposition builder import, which was fixed by importing the
+  canonical RHSMode-2/3 aliases from `profile_response/preconditioner_build.py`.
+- `python -m sphinx -W -b html docs docs/_build/html` passed.
+- Stale deleted-module import audit found no source imports; the only hit is a
+  retained test filename mention in `docs/testing.rst`.
+- `git diff --check` passed.
+
+Current lane status:
+
+- Lane 1 Batch 0: helper cleanup checkpoint complete; broader compatibility
+  import audits for `v3_*`, `io.py`, and root-level solver/preconditioner
+  modules remain.
+- Lane 1 Batch 1: not complete; `profile_response/solve.py` remains the main
+  structural blocker at `9,412` lines.
+- Lane 1 overall: about `58%` of the authoritative consolidation plan.
+- Overall refactor/review-ready PR goal: not complete.
+
+Next best steps:
+
+1. Run Sphinx `-W` and focused RHSMode-1 import/dispatch tests for the root
+   helper cleanup.
+2. Continue Batch 1 by moving sparse-PC branch orchestration and final payload
+   assembly from `profile_response/solve.py` into the existing sparse owners.
+3. Avoid any new helper-only files; the next implementation batch should either
+   delete more files or reduce `profile_response/solve.py` materially.

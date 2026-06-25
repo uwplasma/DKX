@@ -28,6 +28,15 @@ TRUE_ENV_VALUES = {"1", "true", "t", "yes", "on", ".true.", ".t."}
 FALSE_ENV_VALUES = {"0", "false", "f", "no", "off", ".false.", ".f."}
 
 
+def resolve_use_implicit(*, differentiable: bool | None = None) -> bool:
+    """Resolve whether to use the implicit/differentiable linear-solve path."""
+
+    if differentiable is not None:
+        return bool(differentiable)
+    implicit_env = os.environ.get("SFINCS_JAX_IMPLICIT_SOLVE", "").strip().lower()
+    return implicit_env not in _FALSE_VALUES
+
+
 def _env_token(name: str) -> str:
     return str(os.environ.get(name, "")).strip().lower()
 

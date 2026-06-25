@@ -7,7 +7,7 @@ from sfincs_jax.solver_progress import (
     rhs1_large_progress_enabled as legacy_rhs1_large_progress_enabled,
     runtime_scale_hint as legacy_runtime_scale_hint,
 )
-from sfincs_jax.solver_progress_policy import (
+from sfincs_jax.solver_progress import (
     PROGRESS_SIZE_MIN_ENV,
     format_duration,
     rhs1_large_progress_enabled,

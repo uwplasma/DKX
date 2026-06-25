@@ -12,12 +12,13 @@ from __future__ import annotations
 from dataclasses import replace
 
 import jax.numpy as jnp
+import numpy as np
 
-from .matrix_reductions import block_diagonal_only as _block_diag_only
-from .matrix_reductions import diagonal_only as _diag_only
 from .v3_system import V3FullSystemOperator
 
 __all__ = [
+    "block_diagonal_only",
+    "diagonal_only",
     "_build_rhsmode1_preconditioner_operator_fortran_reduced",
     "_build_rhsmode1_preconditioner_operator_point",
     "_build_rhsmode1_preconditioner_operator_theta_dd",
@@ -27,6 +28,31 @@ __all__ = [
     "_build_transport_preconditioner_operator_fortran_reduced",
     "_build_transport_preconditioner_operator_point",
 ]
+
+
+def diagonal_only(matrix: jnp.ndarray) -> jnp.ndarray:
+    """Return a diagonal-only copy of a square matrix."""
+
+    return jnp.diag(jnp.diag(matrix))
+
+
+def block_diagonal_only(matrix: jnp.ndarray, block: int) -> jnp.ndarray:
+    """Return a block-diagonal copy of a square matrix."""
+
+    if int(block) <= 1:
+        return diagonal_only(matrix)
+    matrix_np = np.asarray(matrix, dtype=np.float64)
+    n = int(matrix_np.shape[0])
+    mask = np.zeros((n, n), dtype=bool)
+    for start in range(0, n, int(block)):
+        end = min(n, start + int(block))
+        mask[start:end, start:end] = True
+    matrix_np = np.where(mask, matrix_np, 0.0)
+    return jnp.asarray(matrix_np, dtype=matrix.dtype)
+
+
+_diag_only = diagonal_only
+_block_diag_only = block_diagonal_only
 
 
 def _build_rhsmode1_preconditioner_operator_point(op: V3FullSystemOperator) -> V3FullSystemOperator:
@@ -410,5 +436,4 @@ def _build_rhsmode1_preconditioner_operator_zeta_dd(
         magdrift_zeta=mag_zeta,
     )
     return replace(op, fblock=fblock_pc)
-
 

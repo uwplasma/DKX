@@ -735,7 +735,7 @@ from sfincs_jax.problems.transport_matrix.parallel.pool import (
     transport_parallel_process_pool_executor as _transport_parallel_process_pool_executor,
     transport_parallel_worker_env as _transport_parallel_worker_env,
 )
-from sfincs_jax.solve_mode_policy import resolve_use_implicit as _resolve_use_implicit_impl
+from sfincs_jax.problems.profile_response.policies import resolve_use_implicit as _resolve_use_implicit_impl
 from sfincs_jax.phi1_newton_policy import (
     phi1_frozen_jacobian_policy,
     phi1_gmres_restart,
@@ -757,11 +757,11 @@ from sfincs_jax.problems.transport_matrix.diagnostics import (
 )
 from sfincs_jax.problems.transport_matrix.postsolve_diagnostics import compute_transport_postsolve_diagnostics
 from sfincs_jax.problems.transport_matrix.streaming_outputs import TransportStreamingOutputAccumulator
-from sfincs_jax.solver_runtime import (
+from sfincs_jax.solver import (
     block_gmres_result_ready as _block_gmres_result_ready,
     gmres_result_is_finite as _gmres_result_is_finite,
 )
-from sfincs_jax.matrix_reductions import (  # noqa: F401
+from sfincs_jax.preconditioner_operators import (  # noqa: F401
     block_diagonal_only as _block_diag_only,
     diagonal_only as _diag_only,
 )

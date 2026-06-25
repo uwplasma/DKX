@@ -276,6 +276,12 @@ _PROFILE_SOLVE = _import_module("sfincs_jax.problems.profile_response.solve")
 for _name, _value in vars(_PROFILE_SOLVE).items():
     if not _name.startswith("__"):
         globals()[_name] = _value
+from sfincs_jax.problems.profile_response.preconditioner_build import (
+    _build_rhsmode23_theta_dd_preconditioner,
+    _build_rhsmode23_theta_schwarz_preconditioner,
+    _build_rhsmode23_zeta_dd_preconditioner,
+    _build_rhsmode23_zeta_schwarz_preconditioner,
+)
 
 def _transport_parallel_worker(payload: dict[str, object]) -> dict[str, object]:
     """Worker entry point for parallel whichRHS transport solves."""

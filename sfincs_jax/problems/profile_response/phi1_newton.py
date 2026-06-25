@@ -55,7 +55,7 @@ from ...solver import (
     gmres_solve_distributed,
     gmres_solve_jit,
 )
-from ...solver_runtime import gmres_result_is_finite
+from ...solver import gmres_result_is_finite
 from ...solvers.preconditioners.full_fp.kinetic_blocks import (
     build_rhs1_block_preconditioner,
     build_rhs1_collision_preconditioner,

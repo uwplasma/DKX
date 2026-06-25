@@ -311,13 +311,13 @@ the historical private driver name and test the focused module directly. This ke
   typed solve-result dataclasses for linear, Newton-Krylov, and transport-matrix
   v3-compatible workflows. Moving these data models out of the driver makes the
   user-facing result contract explicit and easier to document.
-- ``sfincs_jax/solver_runtime.py``:
-  small runtime helpers for finite GMRES-result checks and XLA synchronization
-  around solver timing/profiling.
-- ``sfincs_jax/matrix_reductions.py``:
-  diagonal and block-diagonal matrix reductions used by simplified
-  preconditioner operators. These are numerical building blocks with direct
-  local-coupling tests.
+- ``sfincs_jax/solver.py``:
+  Krylov solve results, result finite-state checks, and XLA synchronization
+  helpers around solver timing/profiling.
+- ``sfincs_jax/preconditioner_operators.py``:
+  diagonal and block-diagonal matrix reductions plus simplified
+  preconditioner-operator builders. These are numerical building blocks with
+  direct local-coupling tests.
 - ``sfincs_jax/linear_algebra.py``:
   small differentiable JAX-native linear algebra kernels used by solver
   infrastructure. The current exported kernels are the regularized tiny
@@ -1191,8 +1191,9 @@ the historical private driver name and test the focused module directly. This ke
 - ``sfincs_jax/rhs1_xblock_sparse_host_policy.py``:
   host sparse x-block rescue policy and metadata normalization for the
   non-autodiff large-system fallback path.
-- ``sfincs_jax/solve_mode_policy.py``:
-  shared implicit/differentiable solve-mode environment resolution.
+- ``sfincs_jax/problems/profile_response/policies.py``:
+  RHSMode=1 profile-response admission, post-solve correction, solver-path,
+  and implicit/differentiable solve-mode policy.
 - ``sfincs_jax/solver_path_policy.py``:
   pure solver/preconditioner path policy for JIT admission, RHSMode=1 rescue
   slack, DKES GMRES budget defaults, sparse-PC defaults, preconditioner dtype,
@@ -1389,9 +1390,6 @@ the historical private driver name and test the focused module directly. This ke
   opt-in coarse solver/output profiling behind ``SFINCS_JAX_PROFILE``. It owns
   phase-level timing, RSS high-water sampling, optional JAX device-memory polling,
   and the ``profile_entries`` payload written into solver traces and output metadata.
-- ``sfincs_jax/solver_progress_policy.py``:
-  the pure formatting and RHSMode=1 progress-threshold policy re-exported by
-  ``solver_progress.py`` so CLI observability decisions remain unit-testable.
 - ``sfincs_jax/benchmark_artifact_policy.py``:
   fast schema, provenance, and release-blocking classification policy for checked-in
   benchmark JSON artifacts.
