@@ -16,6 +16,9 @@ from sfincs_jax.api import (
     SolveInputs,
     SolverResult,
     TransportResult,
+    read_output,
+    run_ambipolar_brent,
+    write_output,
 )
 
 
@@ -98,5 +101,96 @@ def test_result_schema_and_benchmark_contracts_are_immutable_summaries() -> None
 def test_contracts_are_reexported_from_top_level_package() -> None:
     assert sfincs_jax.SolveInputs is SolveInputs
     assert sfincs_jax.TransportResult is TransportResult
+    assert sfincs_jax.write_output is write_output
+    assert sfincs_jax.read_output is read_output
+    assert sfincs_jax.run_ambipolar_brent is run_ambipolar_brent
     assert "SolveInputs" in sfincs_jax.__all__
     assert "TransportResult" in sfincs_jax.__all__
+    assert "write_output" in sfincs_jax.__all__
+    assert "read_output" in sfincs_jax.__all__
+    assert "run_ambipolar_brent" in sfincs_jax.__all__
+
+
+def test_public_write_output_facade_routes_solve_inputs(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[dict] = []
+
+    def fake_write_sfincs_jax_output_h5(**kwargs):
+        calls.append(kwargs)
+        return Path(kwargs["output_path"])
+
+    monkeypatch.setattr("sfincs_jax.io.write_sfincs_jax_output_h5", fake_write_sfincs_jax_output_h5)
+
+    request = SolveInputs(
+        input_path="input.namelist",
+        wout_path="wout.nc",
+        output_path="sfincsOutput.h5",
+        requires_autodiff=True,
+        options={"compute_solution": True, "solve_method": "auto"},
+    )
+
+    result = write_output(request)
+
+    assert result == Path("sfincsOutput.h5")
+    assert calls == [
+        {
+            "input_namelist": Path("input.namelist"),
+            "output_path": Path("sfincsOutput.h5"),
+            "wout_path": Path("wout.nc"),
+            "differentiable": True,
+            "compute_solution": True,
+            "solve_method": "auto",
+        }
+    ]
+
+
+def test_public_read_output_facade_routes_output_reader(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[Path] = []
+
+    def fake_read_sfincs_output_file(path: Path) -> dict:
+        calls.append(path)
+        return {"ok": True}
+
+    monkeypatch.setattr("sfincs_jax.outputs.read_sfincs_output_file", fake_read_sfincs_output_file)
+
+    assert read_output("sfincsOutput.npz") == {"ok": True}
+    assert calls == [Path("sfincsOutput.npz")]
+
+
+def test_public_ambipolar_facade_routes_brent_solver(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[dict] = []
+
+    def fake_solve_sfincs_jax_ambipolar_brent(**kwargs):
+        calls.append(kwargs)
+        return "ambipolar-result"
+
+    monkeypatch.setattr(
+        "sfincs_jax.problems.ambipolar.solve_sfincs_jax_ambipolar_brent",
+        fake_solve_sfincs_jax_ambipolar_brent,
+    )
+
+    request = SolveInputs(input_path="input.namelist", requires_autodiff=True, options={"emit": None})
+
+    assert run_ambipolar_brent(
+        request,
+        work_dir="ambipolar-work",
+        er_min=-5.0,
+        er_max=5.0,
+        max_evaluations=7,
+    ) == "ambipolar-result"
+    assert calls == [
+        {
+            "input_namelist": Path("input.namelist"),
+            "work_dir": "ambipolar-work",
+            "er_min": -5.0,
+            "er_max": 5.0,
+            "er_initial": 0.0,
+            "max_evaluations": 7,
+            "current_tolerance": 1.0e-10,
+            "step_tolerance": 1.0e-8,
+            "solve_method": "auto",
+            "differentiable": True,
+            "reuse_output_geometry_cache": True,
+            "reuse_solver_state": True,
+            "emit": None,
+        }
+    ]

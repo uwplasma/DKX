@@ -173,6 +173,9 @@ from .api import (  # noqa: E402
     SolveInputs,
     SolverResult,
     TransportResult,
+    read_output,
+    run_ambipolar_brent,
+    write_output,
 )
 
 __all__ = [
@@ -187,6 +190,9 @@ __all__ = [
     "TransportResult",
     "__version__",
     "initialize_distributed_runtime_from_env",
+    "read_output",
+    "run_ambipolar_brent",
+    "write_output",
 ]
 
 __version__ = "1.1.7"

@@ -72,10 +72,14 @@ Stable public data contracts for high-level workflows:
 - ``PreconditionerState`` and ``SolverResult`` for solver metadata,
 - ``TransportResult`` for file-format-independent transport summaries,
 - ``OutputSchema`` and ``BenchmarkReport`` for output and performance artifacts.
+- ``write_output``, ``read_output``, and ``run_ambipolar_brent`` as lazy public
+  facades for common Python workflows that should not import legacy internals
+  directly.
 
 These contracts are plain frozen dataclasses and intentionally avoid importing
-JAX. Solver-specific JAX pytrees remain in the numerical modules that need JAX
-transformations.
+JAX at module import. Facade functions import the heavy solve/output modules
+inside the function body, so solver-specific JAX pytrees remain in the numerical
+modules that need JAX transformations.
 
 ``sfincs_jax/cli.py``
 ^^^^^^^^^^^^^^^^^^^^^

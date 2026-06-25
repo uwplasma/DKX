@@ -17,6 +17,11 @@ Unreleased
   These contracts are JAX-free orchestration boundaries; solver-specific pytrees
   remain in numerical modules. The post-contract local full suite passed with
   ``2667 passed in 565.10 s``.
+- Extended ``sfincs_jax.api`` with lazy public facades for Python workflows:
+  ``write_output``, ``read_output``, and ``run_ambipolar_brent``. These names are
+  re-exported from ``sfincs_jax`` and are covered by fast monkeypatched routing
+  tests so refactoring can move internal modules without changing public user
+  code.
 - Moved the first RHSMode=2/3 transport implementation cluster into
   ``sfincs_jax.problems.transport_matrix``: setup, active/dense setup, loop
   support, finalization, streaming outputs, and postsolve diagnostics. The old

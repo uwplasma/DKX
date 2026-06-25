@@ -159,6 +159,111 @@ class BenchmarkReport:
         object.__setattr__(self, "metadata", _immutable_mapping(self.metadata))
 
 
+def _solve_request_paths(
+    request: SolveInputs | str | Path,
+    output_path: str | Path | None = None,
+) -> tuple[Path, Path | None, Path | None, str | None, bool, Mapping[str, Any]]:
+    if isinstance(request, SolveInputs):
+        if request.input_path is None:
+            raise ValueError("SolveInputs.input_path is required for this API call.")
+        resolved_output = _path_or_none(output_path) if output_path is not None else request.output_path
+        return (
+            request.input_path,
+            request.wout_path,
+            resolved_output,
+            request.backend,
+            bool(request.requires_autodiff),
+            request.options,
+        )
+    return Path(request), None, _path_or_none(output_path), None, False, MappingProxyType({})
+
+
+def write_output(
+    request: SolveInputs | str | Path,
+    output_path: str | Path | None = None,
+    **kwargs: Any,
+) -> Path | tuple[Path, dict[str, Any]]:
+    """Run ``sfincs_jax`` from Python and write an output file.
+
+    ``request`` may be a :class:`SolveInputs` object or an input namelist path.
+    The implementation imports the heavy output stack lazily so importing
+    ``sfincs_jax.api`` stays cheap for docs, CLI validation, and downstream
+    workflow planning.
+    """
+
+    input_path, wout_path, resolved_output, _backend, requires_autodiff, options = _solve_request_paths(
+        request,
+        output_path,
+    )
+    if resolved_output is None:
+        raise ValueError("output_path is required when SolveInputs.output_path is not set.")
+    if wout_path is not None:
+        kwargs.setdefault("wout_path", wout_path)
+    if requires_autodiff:
+        kwargs.setdefault("differentiable", True)
+    for key, value in options.items():
+        kwargs.setdefault(str(key), value)
+
+    from .io import write_sfincs_jax_output_h5  # noqa: PLC0415
+
+    return write_sfincs_jax_output_h5(
+        input_namelist=input_path,
+        output_path=resolved_output,
+        **kwargs,
+    )
+
+
+def read_output(path: str | Path) -> dict[str, Any]:
+    """Read an HDF5, NetCDF, or NPZ ``sfincs_jax`` output file."""
+
+    from .outputs import read_sfincs_output_file  # noqa: PLC0415
+
+    return read_sfincs_output_file(Path(path))
+
+
+def run_ambipolar_brent(
+    request: SolveInputs | str | Path,
+    *,
+    work_dir: str | Path,
+    er_min: float,
+    er_max: float,
+    er_initial: float = 0.0,
+    max_evaluations: int = 20,
+    current_tolerance: float = 1.0e-10,
+    step_tolerance: float = 1.0e-8,
+    solve_method: str = "auto",
+    differentiable: bool | None = None,
+    reuse_output_geometry_cache: bool = True,
+    reuse_solver_state: bool = True,
+    **kwargs: Any,
+) -> Any:
+    """Run the real-solve Brent ambipolar workflow from a stable public facade."""
+
+    input_path, _wout_path, _output_path, _backend, requires_autodiff, options = _solve_request_paths(request)
+    if differentiable is None:
+        differentiable = bool(requires_autodiff)
+    for key, value in options.items():
+        kwargs.setdefault(str(key), value)
+
+    from .problems.ambipolar import solve_sfincs_jax_ambipolar_brent  # noqa: PLC0415
+
+    return solve_sfincs_jax_ambipolar_brent(
+        input_namelist=input_path,
+        work_dir=work_dir,
+        er_min=er_min,
+        er_max=er_max,
+        er_initial=er_initial,
+        max_evaluations=max_evaluations,
+        current_tolerance=current_tolerance,
+        step_tolerance=step_tolerance,
+        solve_method=solve_method,
+        differentiable=bool(differentiable),
+        reuse_output_geometry_cache=reuse_output_geometry_cache,
+        reuse_solver_state=reuse_solver_state,
+        **kwargs,
+    )
+
+
 __all__ = [
     "BenchmarkReport",
     "GeometryState",
@@ -169,4 +274,7 @@ __all__ = [
     "SolveInputs",
     "SolverResult",
     "TransportResult",
+    "read_output",
+    "run_ambipolar_brent",
+    "write_output",
 ]

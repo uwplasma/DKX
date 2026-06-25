@@ -35,6 +35,10 @@ deferred research lanes.
   sequence, and the production metadata gate checks solver-count proxies,
   adjoint-solve counts, RSS bounds, PETSc marker provenance, and physical
   residual/success-marker separation without running Fortran in CI.
+- The public API contract now includes lazy workflow facades
+  `sfincs_jax.write_output`, `sfincs_jax.read_output`, and
+  `sfincs_jax.run_ambipolar_brent`, with fast routing tests. This gives users a
+  stable Python entry point before more internals move out of legacy modules.
 - Major RHSMode=1 preconditioner families now have domain owners:
   - full-CSR Schur preconditioners,
   - Fortran-reduced symbolic sparse factors,

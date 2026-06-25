@@ -1,6 +1,9 @@
 API reference
 =============
 
+.. automodule:: sfincs_jax.api
+   :members:
+
 .. automodule:: sfincs_jax.namelist
    :members:
 
