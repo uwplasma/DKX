@@ -35,7 +35,7 @@ This manual is organized around the actual user and developer workflows:
 - :doc:`method`, :doc:`numerics`, :doc:`source_map`
 - :doc:`inputs`, :doc:`outputs`, :doc:`applications`
 - :doc:`parallelism`, :doc:`performance`, :doc:`testing`
-- :doc:`fortran_comparison` and :doc:`references`
+- :doc:`feature_matrix`, :doc:`fortran_comparison`, and :doc:`references`
 
 .. figure:: _static/figures/paper/sfincs_jax_fortran_suite_benchmark_summary.png
    :alt: Runtime and active-memory comparison for SFINCS Fortran v3 and sfincs_jax cold/warm CPU/GPU.
@@ -86,6 +86,7 @@ This manual is organized around the actual user and developer workflows:
    method
    numerics
    source_map
+   feature_matrix
    theory_from_upstream
    physics_models
    physics_reference
