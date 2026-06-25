@@ -2986,3 +2986,70 @@ Next best steps:
 3. Collapse duplicated env-token parsing into one parser family in
    `policies.py`, then delete local parser duplicates after circular-import
    checks.
+
+## 2026-06-25 Lane 1 Tranche 1 Sparse Parser And X-Block Payload Consolidation
+
+Steps taken:
+
+1. Moved x-block sparse-PC final metadata/payload builders from
+   `sfincs_jax/problems/profile_response/sparse/handoff.py` into the canonical
+   x-block owner, `sfincs_jax/problems/profile_response/sparse/xblock.py`.
+   `handoff.py` now re-exports those names only for compatibility.
+2. Updated `solve.py` to import the moved x-block final payload helpers from
+   `sparse.xblock` rather than from the handoff compatibility surface.
+3. Collapsed duplicate sparse env-token parser families from
+   `sparse/direct.py`, `sparse/xblock.py`, `sparse/qi.py`, and
+   `sparse/fortran_reduced.py` into the shared parser implementation in
+   `sparse/policy.py`.
+4. Updated the sparse-PC import-contract tests so x-block payload internals are
+   monkeypatched on the canonical `sparse.xblock` module.
+5. Updated `docs/source_map.rst` and `plan_final.md` with the new ownership
+   boundaries and current counts.
+
+Current inventory:
+
+- Package Python files: `227`.
+- Package source lines: `163,474`.
+- `sfincs_jax/problems/profile_response/solve.py`: `9,412` lines.
+- `sfincs_jax/problems/profile_response/sparse/direct.py`: `3,569` lines.
+- `sfincs_jax/problems/profile_response/sparse/handoff.py`: `3,649` lines.
+- `sfincs_jax/problems/profile_response/sparse/xblock.py`: `4,572` lines.
+- `sfincs_jax/problems/profile_response/sparse/qi.py`: `4,885` lines.
+- `sfincs_jax/problems/profile_response/sparse/fortran_reduced.py`: `1,335`
+  lines.
+- `sfincs_jax/problems/profile_response/sparse/policy.py`: `1,133` lines.
+
+Validation:
+
+- `python -m ruff check sfincs_jax/problems/profile_response/sparse` passed.
+- `python -m py_compile
+  sfincs_jax/problems/profile_response/sparse/*.py
+  sfincs_jax/problems/profile_response/solve.py` passed.
+- Sparse parser audit shows only `sparse/policy.py` owns the bool/int/float
+  parser family under `problems/profile_response/sparse`; the remaining
+  `fortran_reduced._env_float_first` is a different multi-key helper.
+- Sparse-PC owner tests passed: `327 passed in 3.62s`.
+- RHSMode-1 dispatch/policy tests passed: `75 passed in 38.13s`.
+- `python -m sphinx -W -b html docs docs/_build/html` passed.
+- `git diff --check` passed.
+
+Current lane status:
+
+- Lane 1 Tranche 0: `100%`.
+- Lane 1 Tranche 1: about `55%`; sparse parser duplication is closed and
+  x-block final payload ownership is moved, but hard gates remain
+  `profile_response/solve.py < 3.5k` and `problems/profile_response <= 18`
+  files.
+- Lane 1 overall: about `55%` of the authoritative consolidation plan.
+- Overall refactor/review-ready PR goal: not complete.
+
+Next best steps:
+
+1. Move generic sparse-PC GMRES finalization bundle/state builders from
+   `sparse/handoff.py` into `sparse/finalization.py`, then keep handoff as a
+   compatibility re-export only.
+2. Move sparse-PC branch orchestration from `solve.py` into the existing sparse
+   owners, starting with the generic sparse-PC GMRES branch because it has a
+   clear return boundary.
+3. Move final progress replay/result normalization from `solve.py` into
+   `solver_diagnostics.py` and sparse finalization owners.

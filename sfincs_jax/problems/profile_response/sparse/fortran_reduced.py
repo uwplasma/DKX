@@ -21,53 +21,11 @@ from .xblock import (
     XBlockMomentSchurPolicySetup,
     build_xblock_krylov_matvec_setup,
 )
+from .policy import _env_bool, _env_float, _env_int, _env_value
 
 
 ArrayFn = Callable[[jnp.ndarray], jnp.ndarray]
 EmitFn = Callable[[int, str], None]
-
-
-def _env_value(env: Mapping[str, str] | None, key: str) -> str:
-    if env is None:
-        return ""
-    return str(env.get(key, "")).strip()
-
-
-def _env_bool(env: Mapping[str, str] | None, key: str, default: bool = False) -> bool:
-    raw = _env_value(env, key).lower()
-    if raw in {"1", "true", "t", "yes", "on", ".true.", ".t."}:
-        return True
-    if raw in {"0", "false", "f", "no", "off", ".false.", ".f."}:
-        return False
-    return bool(default)
-
-
-def _env_int(
-    env: Mapping[str, str] | None,
-    key: str,
-    default: int,
-    minimum: int | None = None,
-) -> int:
-    raw = _env_value(env, key)
-    try:
-        value = int(raw) if raw else int(default)
-    except ValueError:
-        value = int(default)
-    if minimum is not None:
-        value = max(int(minimum), int(value))
-    return int(value)
-
-
-def _env_float(
-    env: Mapping[str, str] | None,
-    key: str,
-    default: float,
-) -> float:
-    raw = _env_value(env, key)
-    try:
-        return float(raw) if raw else float(default)
-    except ValueError:
-        return float(default)
 
 
 @dataclass(frozen=True)

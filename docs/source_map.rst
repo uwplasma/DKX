@@ -664,18 +664,22 @@ the historical private driver name and test the focused module directly. This ke
   RHSMode=1/profile-response sparse-PC handoff layer. It owns the
   driver-facing sparse-PC attempt orchestration that depends on solve-local
   cache/replay/residual routing, generic sparse-PC Krylov execution, final
-  sparse-PC bundle assembly, and the compatibility import surface used by the
-  monolithic solve owner while Tranche B continues. Optional two-level and
-  global-coupling stage contexts accept injected builders for tests, but resolve
-  the canonical QI builders themselves in production so ``v3_driver.py`` no
-  longer re-exports private QI builder aliases.
+  generic sparse-PC bundle assembly, and the compatibility import surface used
+  by the monolithic solve owner while Tranche B continues. X-block final
+  payload builders now live in ``sparse/xblock.py``; ``handoff.py`` only
+  re-exports them for compatibility. Optional two-level and global-coupling
+  stage contexts accept injected builders for tests, but resolve the canonical
+  QI builders themselves in production so ``v3_driver.py`` no longer
+  re-exports private QI builder aliases.
 - ``sfincs_jax/problems/profile_response/sparse/policy.py``:
   generic sparse-PC policy and admission helpers: active-DOF map construction,
   entry classification, sparse factor policy, conservative-pattern setup,
   memory-budget preflight, factor residual-preflight gates, rescue-candidate
-  acceptance, auto-retry selection, and GMRES stagnation/post-MinRes controls.
-  This module is intentionally independent of x-block assembled-operator and
-  QI-device setup so it can stay reusable and easy to test.
+  acceptance, auto-retry selection, GMRES stagnation/post-MinRes controls, and
+  the shared sparse env-token parser family used by direct, x-block, QI, and
+  Fortran-reduced sparse owners. This module is intentionally independent of
+  x-block assembled-operator and QI-device setup so it can stay reusable and
+  easy to test.
 - ``sfincs_jax/problems/profile_response/sparse/finalization.py``:
   sparse-PC GMRES result contracts, post-MinRes polish metadata, dtype-retry
   result assembly, completion messages, and final payload construction.
@@ -683,8 +687,8 @@ the historical private driver name and test the focused module directly. This ke
   explicit sparse operator admission, minimum-norm/direct host shortcuts,
   sparse-factor cache keys, host-memory probing, sparse-JAX preconditioner
   materialization, conservative full-pattern probing, ILU/direct-tail policy
-  parsing, structured direct-tail materialization, and final direct-tail
-  metadata assembly.
+  parsing through the shared sparse policy parser, structured direct-tail
+  materialization, and final direct-tail metadata assembly.
 - ``sfincs_jax/problems/profile_response/sparse/xblock.py``:
   x-block and sxblock rescue/correction helpers, shared x-block Krylov matvec
   and initial-guess policy dataclasses, precondition-side/probe-coarse gates,

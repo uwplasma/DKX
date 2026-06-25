@@ -46,6 +46,10 @@ __all__ = (
     "select_sparse_pc_auto_preflight_retry_candidates",
     "evaluate_sparse_pc_auto_preflight_retry",
     "resolve_sparse_pc_gmres_control_policy",
+    "_env_value",
+    "_env_float",
+    "_env_int",
+    "_env_bool",
 )
 
 @dataclass(frozen=True)
@@ -428,12 +432,16 @@ def build_sparse_pc_pattern_setup(
     )
 
 
-def _env_value(env: Mapping[str, str] | None, key: str) -> str:
-    source = env if env is not None else {}
-    return str(source.get(key, "")).strip()
+def _env_value(env: object, key: str) -> str:
+    if env is None:
+        return ""
+    try:
+        return str(env.get(key, "")).strip()  # type: ignore[union-attr]
+    except AttributeError:
+        return ""
 
 
-def _env_float(env: Mapping[str, str] | None, key: str, default: float) -> float:
+def _env_float(env: object, key: str, default: float) -> float:
     raw = _env_value(env, key)
     try:
         return float(raw) if raw else float(default)
@@ -441,7 +449,7 @@ def _env_float(env: Mapping[str, str] | None, key: str, default: float) -> float
         return float(default)
 
 
-def _env_int(env: Mapping[str, str] | None, key: str, default: int, minimum: int | None = None) -> int:
+def _env_int(env: object, key: str, default: int, minimum: int | None = None) -> int:
     raw = _env_value(env, key)
     try:
         value = int(raw) if raw else int(default)
@@ -452,7 +460,7 @@ def _env_int(env: Mapping[str, str] | None, key: str, default: int, minimum: int
     return int(value)
 
 
-def _env_bool(env: Mapping[str, str] | None, key: str, default: bool = False) -> bool:
+def _env_bool(env: object, key: str, default: bool = False) -> bool:
     raw = _env_value(env, key).lower()
     if raw in {"1", "true", "t", "yes", "on", ".true.", ".t."}:
         return True

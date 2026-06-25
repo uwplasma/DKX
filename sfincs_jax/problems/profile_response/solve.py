@@ -293,8 +293,6 @@ from sfincs_jax.problems.profile_response.sparse.handoff import (
     build_xblock_krylov_progress_callbacks,
     build_xblock_qi_stage_pipeline_context,
     fortran_reduced_xblock_final_payload,
-    xblock_sparse_pc_final_metadata_state_from_driver_scope,
-    xblock_sparse_pc_final_payload_from_driver_state,
     evaluate_sparse_pc_factor_preflight,
     evaluate_sparse_pc_residual_candidate_acceptance,
     evaluate_xblock_preflight_gate,
@@ -351,6 +349,10 @@ from sfincs_jax.problems.profile_response.sparse.handoff import (
     solve_explicit_sparse_minimum_norm_branch,
     solve_explicit_sparse_host_direct_branch,
     finalize_xblock_assembled_operator_metadata,
+)
+from sfincs_jax.problems.profile_response.sparse.xblock import (
+    xblock_sparse_pc_final_metadata_state_from_driver_scope,
+    xblock_sparse_pc_final_payload_from_driver_state,
 )
 from sfincs_jax.problems.profile_response.preconditioner_build import (
     RHS1PostPrimaryMinresCorrectionContext,

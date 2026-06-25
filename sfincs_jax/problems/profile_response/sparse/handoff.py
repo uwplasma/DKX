@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable, Mapping, MutableMapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from time import perf_counter
 from typing import Any
@@ -38,12 +38,6 @@ from ..diagnostics import (
     xblock_sparse_pc_core_diagnostics,
     xblock_sparse_pc_result_diagnostics_from_driver_state,
     xblock_side_probe_diagnostics,
-)
-from ..residual import (
-    residual_converged as profile_residual_converged,
-)
-from ..solver_diagnostics import (
-    build_rhs1_xblock_correction_metadata_from_driver_state,
 )
 from .direct import (
     DirectTailCoupledCoarseRescuePolicy,
@@ -272,6 +266,9 @@ from .xblock import (
     XBlockKrylovReport,
     XBlockSparsePCCompletionContext,
     XBlockSparsePCFinalPayloadContext,
+    xblock_sparse_pc_final_metadata_from_driver_state,
+    xblock_sparse_pc_final_payload_from_driver_state,
+    xblock_sparse_pc_final_payload,
     XBlockGMRESFallbackDecision,
     XBlockGMRESFallbackContext,
     XBlockGMRESFallbackResult,
@@ -3266,115 +3263,6 @@ def finalize_sparse_pc_gmres_bundle(
 
 
 
-
-
-
-
-
-
-def xblock_sparse_pc_final_metadata_from_driver_state(
-    state: Mapping[str, object],
-    *,
-    full_size: object,
-) -> dict[str, object]:
-    """Build final x-block sparse-PC metadata from one driver-state handoff."""
-    return {
-        **xblock_sparse_pc_result_diagnostics_from_driver_state(
-            state,
-            full_size=full_size,
-        ),
-        **build_rhs1_xblock_correction_metadata_from_driver_state(state),
-    }
-
-
-def xblock_sparse_pc_final_payload_from_driver_state(
-    state: Mapping[str, object],
-    *,
-    expand_reduced: ArrayFn,
-    post_corrections: object | None = None,
-) -> SparsePCGMRESFinalPayload:
-    """Build the final payload for the x-block sparse-PC branch from driver state."""
-
-    return xblock_sparse_pc_final_payload(
-        XBlockSparsePCFinalPayloadContext(
-            op=state["op"],
-            x=np.asarray(state["x_np"], dtype=np.float64),
-            residual_norm=float(state["residual_norm_xblock_pc"]),
-            target=float(state["target_xblock"]),
-            krylov_method=str(state["xblock_krylov_method"]),
-            linear_size=(
-                int(state["xblock_linear_size"])
-                if "xblock_linear_size" in state
-                else None
-            ),
-            restart=int(state["pc_restart"]) if "pc_restart" in state else None,
-            diagnostic_state=state,
-            post_corrections=post_corrections,
-        ),
-        expand_reduced=expand_reduced,
-    )
-
-
-def xblock_sparse_pc_final_payload(
-    context: XBlockSparsePCFinalPayloadContext,
-    *,
-    expand_reduced: ArrayFn,
-) -> SparsePCGMRESFinalPayload:
-    """Build the final payload for the x-block sparse-PC branch."""
-
-    residual_norm = float(context.residual_norm)
-    metadata_state = (
-        context.diagnostic_state.__class__(context.diagnostic_state)
-        if isinstance(context.diagnostic_state, MutableMapping)
-        else dict(context.diagnostic_state)
-    )
-    metadata_state.update(
-        {
-            "op": context.op,
-            "x_np": np.asarray(context.x, dtype=np.float64),
-            "residual_norm_xblock_pc": residual_norm,
-            "target_xblock": float(context.target),
-            "xblock_krylov_method": str(context.krylov_method),
-        }
-    )
-    if context.linear_size is not None:
-        metadata_state["xblock_linear_size"] = int(context.linear_size)
-    if context.restart is not None:
-        metadata_state["pc_restart"] = int(context.restart)
-    if context.post_corrections is not None:
-        metadata_state.update(context.post_corrections.driver_state())
-    if (
-        "xblock_solver_kind" not in metadata_state
-        and context.linear_size is not None
-        and context.restart is not None
-    ):
-        work_estimates = xblock_sparse_pc_work_estimates(
-            krylov_method=str(context.krylov_method),
-            linear_size=int(context.linear_size),
-            restart=int(context.restart),
-            dtype=np.float64,
-        )
-        metadata_state.update(
-            {
-                "xblock_solver_kind": work_estimates.solver_kind,
-                "xblock_device_krylov_methods": set(work_estimates.device_krylov_methods),
-                "xblock_estimated_gmres_basis_nbytes": work_estimates.gmres_basis_nbytes,
-                "xblock_estimated_bicgstab_work_nbytes": work_estimates.bicgstab_work_nbytes,
-                "xblock_estimated_tfqmr_work_nbytes": work_estimates.tfqmr_work_nbytes,
-            }
-        )
-    metadata_state["accepted_converged_xblock"] = profile_residual_converged(
-        residual_norm,
-        float(context.target),
-    )
-    return SparsePCGMRESFinalPayload(
-        x=expand_reduced(jnp.asarray(context.x, dtype=jnp.float64)),
-        residual_norm=jnp.asarray(residual_norm, dtype=jnp.float64),
-        metadata=xblock_sparse_pc_final_metadata_from_driver_state(
-            metadata_state,
-            full_size=getattr(context.op, "total_size"),
-        ),
-    )
 
 
 

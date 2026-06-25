@@ -308,7 +308,7 @@ the 2026-06-25 final consolidation-plan review:
 
 - `sfincs_jax/v3_driver.py`: 47 lines in the current consolidation worktree,
   acting as a compatibility shim for the domain-owned solve modules.
-- `sfincs_jax/problems/profile_response/solve.py`: 9,410 lines after the
+- `sfincs_jax/problems/profile_response/solve.py`: 9,412 lines after the
   first profile-response ownership moves. This remains the largest
   structural debt and must be reduced by moving coherent sections into existing
   domain owners, not by adding many new helper files.
@@ -320,12 +320,12 @@ the 2026-06-25 final consolidation-plan review:
   after taking ownership of the current RHSMode-1 preconditioner builder
   registry, PAS-family compatibility bindings, Schur binding, x-block builder
   aliases, transport `tzfft` reuse, and strong fallback binding.
-- `sfincs_jax/problems/profile_response/sparse/handoff.py`: 3,761 lines after
-  moving the former top-level sparse-PC handoff into the sparse package. Shared
+- `sfincs_jax/problems/profile_response/sparse/handoff.py`: 3,649 lines after
+  moving the former top-level sparse-PC handoff into the sparse package and
+  handing x-block final payload builders to `sparse/xblock.py`. Shared generic
   sparse-PC finalization remains in
-  `problems/profile_response/sparse/finalization.py` because x-block and
-  Fortran-reduced sparse owners both use the same result payloads.
-- `sfincs_jax/problems/profile_response/sparse/direct.py`: 3,616 lines after
+  `problems/profile_response/sparse/finalization.py`.
+- `sfincs_jax/problems/profile_response/sparse/direct.py`: 3,569 lines after
   taking ownership of sparse-factor cache keys, host memory probing, explicit
   sparse-pattern probes, sparse-JAX preconditioner materialization, and host
   sparse direct builder/polish wrappers.
@@ -341,7 +341,7 @@ the 2026-06-25 final consolidation-plan review:
 - Top-level `transport_*` modules: 0 after Lane 1 Iteration 1.
 - Top-level `rhs1_*` modules: 0 after the Lane 1 Iteration 3 ownership move.
   Solver-family implementation now lives under `solvers.preconditioners`.
-- Package total is 227 Python files and about 163k package lines after the
+- Package total is 227 Python files and 163,474 package lines after the
   first consolidation checkpoints.
 - Current concentration of complexity:
   `problems/profile_response` has 21 files and about 50k lines,
@@ -526,7 +526,7 @@ Current inventory from the 2026-06-25 final plan review:
 | Area | Current state | Final target for this PR |
 | --- | --- | --- |
 | `sfincs_jax/v3_driver.py` | 47-line compatibility shim | Keep under 80 lines or delete after legacy imports migrate. |
-| Package source files | 227 Python files, about 163k package lines | Below 205 files without deleting tested functionality. |
+| Package source files | 227 Python files, 163,474 package lines | Below 205 files without deleting tested functionality. |
 | `problems/profile_response` | 21 files, about 50k lines; `solve.py` is 9.4k lines | At most 18 files; `solve.py` below 3.5k lines; no recreated policy shards. |
 | `problems/transport_matrix` | 33 files, about 15k lines; solve-loop and parallel micro-files dominate file count | At most 18 files; one solve owner, one policy owner, one diagnostics/finalization owner, compact parallel ownership. |
 | `solvers/preconditioners` | 50 files, about 37k lines; QI and RHSMode-1 names remain over-fragmented | At most 36 files; QI organized by role, no implementation file starts with `rhs1_`. |
@@ -618,28 +618,31 @@ Completed inside Tranche 1 as of 2026-06-25:
    and strong fallback binding now live in
    `profile_response/preconditioner_build.py`; tests patch this canonical
    owner instead of `v3_driver.py`.
+4. Sparse env-token parsing now has one bool/int/float parser family in
+   `profile_response/sparse/policy.py`; direct, x-block, QI, and
+   Fortran-reduced sparse owners import that shared parser instead of carrying
+   local copies.
+5. X-block sparse-PC final payload builders now live in
+   `profile_response/sparse/xblock.py`; `sparse/handoff.py` re-exports them
+   only as a compatibility surface.
 
 Remaining move/delete targets:
 
-1. Collapse duplicated env-token parsing. Keep one bool/int/float parser family
-   and dataclass policy contracts in `policies.py`; delete duplicated parsers
-   in `sparse/xblock.py`, `sparse/qi.py`, and sparse policy helpers when they
-   can import the shared parser without circular dependencies.
-2. Move sparse-PC branch orchestration from `solve.py` into the existing
+1. Move sparse-PC branch orchestration from `solve.py` into the existing
    sparse owners:
    `sparse/handoff.py` for sparse-PC GMRES handoff,
    `sparse/xblock.py` for x-block stages,
    `sparse/qi.py` for QI/device stages,
    `sparse/fortran_reduced.py` for Fortran-reduced paths, and
    `sparse/finalization.py` only if it is still shared by more than one owner.
-3. Move result payload assembly, progress-line replay, and final diagnostic
+2. Move result payload assembly, progress-line replay, and final diagnostic
    normalization from `solve.py` into `handoff.py` and
    `solver_diagnostics.py`.
-4. Delete compatibility aliases inside `solve.py` after tests and callers
+3. Delete compatibility aliases inside `solve.py` after tests and callers
    import the canonical owners. If `sfincs_jax.v3_driver` still needs a name,
    import it into the shim from the canonical owner rather than keeping its
    implementation in `solve.py`.
-5. Leave `solve.py` with only public solve entry points, phase sequencing, and
+4. Leave `solve.py` with only public solve entry points, phase sequencing, and
    dependency injection. It should not own policy parsing, sparse pattern
    builders, QI stages, dense KSP/SciPy rescue internals, output schema, or
    final payload normalization.
@@ -1376,12 +1379,15 @@ Deliverables:
 
 Current completion status:
 
-- Lane 1 structural consolidation: about 52 percent. The compatibility-driver
+- Lane 1 structural consolidation: about 55 percent. The compatibility-driver
   boundary is done, the first Tranche 1 ownership batch deleted three
   profile-response files, and the current RHSMode-1 preconditioner registry is
-  now owned by `profile_response/preconditioner_build.py`; the remaining large
-  blockers are `profile_response/solve.py`, transport/output consolidation,
-  solver/preconditioner naming, and `io.py` ownership.
+  now owned by `profile_response/preconditioner_build.py`. Sparse env parsing
+  is shared through `profile_response/sparse/policy.py`, and x-block final
+  payload builders now live in `profile_response/sparse/xblock.py`; the
+  remaining large blockers are `profile_response/solve.py`,
+  transport/output consolidation, solver/preconditioner naming, and `io.py`
+  ownership.
 - Ambipolar bounded/reference functionality: about 85 percent. Small and
   bounded Fortran-compatible roots and derivatives are implemented; production
   refresh benchmarks remain outside normal CI.

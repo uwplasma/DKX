@@ -405,6 +405,9 @@ def test_sparse_xblock_module_reexports_match_compat_layer() -> None:
         "xblock_sparse_pc_final_metadata_driver_scope_keys",
         "xblock_sparse_pc_final_metadata_state_from_context",
         "xblock_sparse_pc_final_metadata_state_from_driver_scope",
+        "xblock_sparse_pc_final_metadata_from_driver_state",
+        "xblock_sparse_pc_final_payload_from_driver_state",
+        "xblock_sparse_pc_final_payload",
         "XBlockSubspaceCorrectionContext",
         "XBlockSubspaceCorrectionResult",
         "XBlockPostSolveCorrectionContext",
@@ -12373,12 +12376,12 @@ def test_xblock_sparse_pc_final_metadata_from_driver_state_merges_components(
         return {"correction": 2, "shared": "correction"}
 
     monkeypatch.setattr(
-        sparse_pc_module,
+        sparse_xblock_module,
         "xblock_sparse_pc_result_diagnostics_from_driver_state",
         fake_result_metadata,
     )
     monkeypatch.setattr(
-        sparse_pc_module,
+        sparse_xblock_module,
         "build_rhs1_xblock_correction_metadata_from_driver_state",
         fake_correction_metadata,
     )
@@ -12485,12 +12488,12 @@ def test_xblock_sparse_pc_final_payload_uses_explicit_context(
         return {"correction": 2}
 
     monkeypatch.setattr(
-        sparse_pc_module,
+        sparse_xblock_module,
         "xblock_sparse_pc_result_diagnostics_from_driver_state",
         fake_result_metadata,
     )
     monkeypatch.setattr(
-        sparse_pc_module,
+        sparse_xblock_module,
         "build_rhs1_xblock_correction_metadata_from_driver_state",
         fake_correction_metadata,
     )
@@ -12545,12 +12548,12 @@ def test_xblock_sparse_pc_final_payload_from_driver_state_sets_gate_and_expands(
         return {"correction": 2}
 
     monkeypatch.setattr(
-        sparse_pc_module,
+        sparse_xblock_module,
         "xblock_sparse_pc_result_diagnostics_from_driver_state",
         fake_result_metadata,
     )
     monkeypatch.setattr(
-        sparse_pc_module,
+        sparse_xblock_module,
         "build_rhs1_xblock_correction_metadata_from_driver_state",
         fake_correction_metadata,
     )

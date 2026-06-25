@@ -49,6 +49,7 @@ from ..residual import (
     residual_target as profile_residual_target,
 )
 from ..setup import SPARSE_HOST_PETSC_COMPAT_SOLVE_METHODS
+from .policy import _env_bool, _env_float, _env_int, _env_value
 from ....solver import (
     GMRESSolveResult,
     assemble_dense_matrix_from_matvec,
@@ -62,54 +63,6 @@ from ....sparse_triangular import (
 
 ArrayFn = Callable[[jnp.ndarray], jnp.ndarray]
 EmitFn = Callable[[int, str], None]
-
-
-def _env_value(env: Mapping[str, str] | None, key: str) -> str:
-    if env is None:
-        return ""
-    return str(env.get(key, "")).strip()
-
-
-def _env_float(env: Mapping[str, str] | None, key: str, default: float) -> float:
-    if env is None:
-        return float(default)
-    value = str(env.get(key, "")).strip()
-    if not value:
-        return float(default)
-    try:
-        return float(value)
-    except ValueError:
-        return float(default)
-
-
-def _env_int(
-    env: Mapping[str, str] | None,
-    key: str,
-    default: int,
-    minimum: int | None = None,
-) -> int:
-    if env is None:
-        value = int(default)
-    else:
-        raw = str(env.get(key, "")).strip()
-        try:
-            value = int(raw) if raw else int(default)
-        except ValueError:
-            value = int(default)
-    if minimum is not None:
-        value = max(int(minimum), int(value))
-    return int(value)
-
-
-def _env_bool(env: Mapping[str, str] | None, key: str, default: bool = False) -> bool:
-    if env is None:
-        return bool(default)
-    value = str(env.get(key, "")).strip().lower()
-    if value in {"1", "true", "t", "yes", "on", ".true.", ".t."}:
-        return True
-    if value in {"0", "false", "f", "no", "off", ".false.", ".f."}:
-        return False
-    return bool(default)
 
 
 @dataclass(frozen=True)
