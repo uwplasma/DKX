@@ -130,6 +130,9 @@ Implementation progress on 2026-06-23:
   radial conversion from the namelist, and replays the checked
   `geometry1_helical_small_option1` Fortran option-1 current and Newton slope
   within `2e-5` relative tolerance.
+- The same active provider also replays the checked small option-3 physical
+  currents for `geometry1_helical_small_option3` and
+  `geometry4_w7x_like_small_option3` within `2e-5` relative tolerance.
 - `sfincs_jax.sensitivity` now exposes `jvp_flux`, `vjp_flux`, and
   `adjoint_dot_product_check`. The focused tests apply the dot-product identity
   to real RHSMode-1 particle-flux, heat-flux, flow, radial-current, and
@@ -145,9 +148,9 @@ Implementation progress on 2026-06-23:
   ambipolar option 1/3, RHSMode 4/5 sensitivities, solver backends, geometry,
   Phi1, outputs, and parallelism.
 - Remaining Lane 3 work is deeper fixed-shape numerical operator/factor and
-  preconditioner setup reuse behind that evaluator, plus the option-3 and
-  larger-deck physical replay gates that run the namelist-backed derivative
-  provider through real ambipolar root solves.
+  preconditioner setup reuse behind that evaluator, plus larger-deck physical
+  replay gates that run the namelist-backed derivative provider through real
+  ambipolar root solves.
 
 Important Fortran v3 implementation modules:
 
@@ -582,6 +585,9 @@ Acceptance gates:
   point is now covered by `tests/test_sensitivity.py` using the active
   Fortran-style operator, `particleFlux_vm_rN`, and the implicit
   tangent/adjoint derivative certificate.
+- The checked small option-3 current points for helical and W7-X-like analytic
+  decks are now covered by `tests/test_sensitivity.py` using the same active
+  namelist-backed provider.
 - Production reference target is the checked-in production decks under
   `benchmarks/fortran_v3_ambipolar_reference/namelists`, which must be run
   before public benchmark claims are regenerated. The checked-in production
@@ -1037,8 +1043,8 @@ Completed on 2026-06-25:
 Next ordered implementation steps:
 
 1. Use the active namelist-backed fixed-shape analytic/JVP provider in the
-   option-3 small Fortran physical replay and then in the production option-1/3
-   decks.
+   production option-1/3 decks and promote it into the in-process ambipolar
+   root driver when setup reuse is bounded.
 2. Extend the JVP/VJP dot-product gate from the current tiny no-Phi1 diagnostic
    set to Phi1 drift-current, total heat-flux, and intermediate-grid cases.
 3. Add small Fortran RHSMode 4/5 output fixtures and compare exported

@@ -1258,9 +1258,38 @@ Results:
 
 Next best steps:
 
-1. Run the same active namelist-backed provider through the checked option-3
-   small decks and add the physical replay gate if it matches Fortran.
-2. Promote the provider into the in-process ambipolar option-1/3 root driver
+1. Promote the provider into the in-process ambipolar option-1/3 root driver
    for bounded small decks, keeping Brent as the robust CLI fallback.
+2. Run the production option-1/3 decks with bounded setup reuse and add replay
+   artifacts outside normal CI.
 3. Start the RHSMode 4 fixed-Er output fixture lane using the now-validated
    active operator/transpose contract.
+
+## 2026-06-25 Active Fortran-Style Option-3 Ambipolar Current Replay
+
+Steps taken:
+
+1. Replayed the checked `geometry1_helical_small_option3` and
+   `geometry4_w7x_like_small_option3` Fortran v3 current points with the active
+   namelist-backed RHSMode-1 response.
+2. Added a lightweight regression that checks those option-3 physical currents
+   without adding another expensive derivative solve.
+
+Results:
+
+- Helical option-3 current replay matches Fortran at `Er=0` and the Newton
+  update point with relative errors `6.1e-7` and `1.9e-6`.
+- W7-X-like option-3 `Er=0` current replay matches Fortran with relative error
+  `5.7e-8`.
+- Focused sensitivity gate passed:
+  `JAX_ENABLE_X64=True python -m pytest tests/test_sensitivity.py -q
+  --tb=short` with `20 passed in 60.98 s`.
+
+Next best steps:
+
+1. Promote the active provider into the in-process ambipolar option-1/3 root
+   driver for bounded small decks.
+2. Run production option-1/3 replay outside normal CI and record setup reuse,
+   residual, runtime, and RSS.
+3. Start RHSMode 4 fixed-Er fixture design using the active operator/transpose
+   contract now validated by option-1/3.

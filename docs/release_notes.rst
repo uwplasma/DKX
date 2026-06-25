@@ -75,6 +75,10 @@ Unreleased
   ``geometry1_helical_small_option1`` regression now reproduces the Fortran v3
   option-1 current and Newton ``dJ_r/dE_r`` slope within ``2e-5`` relative
   tolerance.
+- Added small option-3 physical replay coverage for the same active
+  namelist-backed RHSMode=1 response. The helical and W7-X-like checked
+  Fortran v3 option-3 radial-current points now match within ``2e-5`` relative
+  tolerance.
 - Moved the first RHSMode=2/3 transport implementation cluster into
   ``sfincs_jax.problems.transport_matrix``: setup, active/dense setup, loop
   support, finalization, streaming outputs, and postsolve diagnostics. The old

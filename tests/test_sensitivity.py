@@ -709,6 +709,46 @@ def test_rhsmode1_namelist_response_replays_fortran_active_rn_current() -> None:
     )
 
 
+@pytest.mark.parametrize(
+    ("case_name", "points"),
+    [
+        (
+            "geometry1_helical_small_option3",
+            (
+                (0.0, 1.078787197904619e-6),
+                (-2.01579684708909, -1.0650279455435228e-9),
+            ),
+        ),
+        (
+            "geometry4_w7x_like_small_option3",
+            ((0.0, 2.513476802851773e-8),),
+        ),
+    ],
+)
+def test_rhsmode1_namelist_response_replays_fortran_option3_currents(
+    case_name: str,
+    points: tuple[tuple[float, float], ...],
+) -> None:
+    input_path = (
+        Path(__file__).parents[1]
+        / "benchmarks"
+        / "fortran_v3_ambipolar_reference"
+        / "namelists"
+        / f"{case_name}.namelist"
+    )
+    response = rhsmode1_radial_current_response_from_namelist(
+        nml=input_path,
+        derivative_step=1.0e-5,
+        max_dense_size=1000,
+        observable_chunk_size=128,
+        metadata={"gate": "fortran_option3_active_rn_current"},
+    )
+
+    for er, expected in points:
+        current = response.radial_current(er)
+        np.testing.assert_allclose(current, expected, rtol=2.0e-5, atol=0.0)
+
+
 def test_rhs1_radial_current_jvp_vjp_dot_product_gate() -> None:
     input_path = Path(__file__).parent / "ref" / "pas_1species_PAS_noEr_tiny.input.namelist"
     op = full_system_operator_from_namelist(nml=read_sfincs_input(input_path))

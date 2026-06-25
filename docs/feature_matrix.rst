@@ -87,7 +87,9 @@ Fortran v3 feature ownership
        a step leaves the allowed ``E_r`` bounds.
      - ``sfincs_jax.problems.ambipolar`` and ``sfincs_jax.sensitivity``:
        partial for the same reason as option 1; fast option-3-style matrix-free
-       derivative-provider root tests are covered.
+       derivative-provider root tests are covered, and checked small helical
+       plus W7-X-like option-3 currents replay with the active namelist-backed
+       provider.
    * - RHSMode 4 fixed-``E_r`` sensitivities
      - ``solver.F90``, ``populateAdjointRHS.F90``,
        ``populatedMatrixdLambda.F90``, ``populatedRHSdLambda.F90``,
@@ -194,9 +196,9 @@ Fortran v3 feature ownership
        option-1 current/slope replay, and radial-current observable gates in
        ``tests/test_sensitivity.py`` and
        ``tests/test_ambipolar_problem.py``.
-     - Option-3 physical replay, production sparse/matrix-free ``E_r``
-       derivatives, in-process RHSMode-1 evaluator reuse, and production
-       Fortran option-1/3 physical replay gates.
+     - Production sparse/matrix-free ``E_r`` derivatives, in-process RHSMode-1
+       evaluator reuse, and production Fortran option-1/3 physical replay
+       gates.
    * - RHSMode 4 fixed-``E_r`` sensitivities
      - partial
      - ``sfincs_jax.sensitivity`` supports implicit linear observable
