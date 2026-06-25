@@ -1070,6 +1070,9 @@ Completed on 2026-06-25:
 - Moved the RHSMode 2/3 transport strong-preconditioner lazy cache out of
   `v3_driver.py` into the transport preconditioner-dispatch domain module,
   with focused cache-reuse tests.
+- Moved RHSMode 2/3 transport sparse-direct context setup and sparse-drop env
+  parsing out of `v3_driver.py` into the sparse-direct transport module, with
+  a focused fresh-cache/env-policy test.
 
 Next ordered implementation steps:
 

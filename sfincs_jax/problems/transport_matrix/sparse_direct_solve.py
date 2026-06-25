@@ -46,6 +46,44 @@ class TransportSparseDirectContext:
     sparse_direct_needs_float64_retry: Callable[..., bool]
 
 
+def transport_sparse_direct_context_from_env(
+    *,
+    op: Any,
+    emit: EmitFn | None,
+    sparse_factor_cache_key: Callable[[tuple[object, ...], np.dtype], tuple[object, ...]],
+    hash_numpy_array_for_cache: Callable[[np.ndarray], object],
+    build_host_sparse_direct_factor_from_matvec: Callable[..., tuple[Any, Any]],
+    build_sparse_ilu_from_matvec: Callable[..., tuple[Any, Any, Any, Any, Any, Any, Any]],
+    try_build_direct_active_operator_bundle: Callable[..., tuple[Any, Any] | None],
+    host_sparse_direct_solve_with_refinement: Callable[..., tuple[np.ndarray, float]],
+    host_sparse_direct_refine_steps: Callable[..., int],
+    host_sparse_direct_polish: Callable[..., tuple[np.ndarray, float]],
+    sparse_factor_dtype: Callable[..., np.dtype],
+    sparse_direct_use_explicit_helper: Callable[..., bool],
+    sparse_direct_needs_float64_retry: Callable[..., bool],
+) -> TransportSparseDirectContext:
+    """Create the per-solve sparse-direct context and caches from env policy."""
+    return TransportSparseDirectContext(
+        op=op,
+        factor_cache={},
+        pattern_cache={},
+        sparse_drop_tol=_read_float_env("SFINCS_JAX_TRANSPORT_SPARSE_DROP_TOL", default=0.0),
+        sparse_drop_rel=_read_float_env("SFINCS_JAX_TRANSPORT_SPARSE_DROP_REL", default=0.0),
+        emit=emit,
+        sparse_factor_cache_key=sparse_factor_cache_key,
+        hash_numpy_array_for_cache=hash_numpy_array_for_cache,
+        build_host_sparse_direct_factor_from_matvec=build_host_sparse_direct_factor_from_matvec,
+        build_sparse_ilu_from_matvec=build_sparse_ilu_from_matvec,
+        try_build_direct_active_operator_bundle=try_build_direct_active_operator_bundle,
+        host_sparse_direct_solve_with_refinement=host_sparse_direct_solve_with_refinement,
+        host_sparse_direct_refine_steps=host_sparse_direct_refine_steps,
+        host_sparse_direct_polish=host_sparse_direct_polish,
+        sparse_factor_dtype=sparse_factor_dtype,
+        sparse_direct_use_explicit_helper=sparse_direct_use_explicit_helper,
+        sparse_direct_needs_float64_retry=sparse_direct_needs_float64_retry,
+    )
+
+
 def transport_sparse_direct_pattern_for_solve(
     *,
     context: TransportSparseDirectContext,
@@ -583,6 +621,7 @@ def _read_float_env(name: str, *, default: float) -> float:
 
 __all__ = [
     "TransportSparseDirectContext",
+    "transport_sparse_direct_context_from_env",
     "transport_sparse_direct_pattern_for_solve",
     "transport_sparse_direct_solve",
 ]

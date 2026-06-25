@@ -709,7 +709,7 @@ from .transport_loop_support import (
     resolve_transport_recycle_k,
 )
 from .transport_sparse_direct_solve import (
-    TransportSparseDirectContext,
+    transport_sparse_direct_context_from_env as _transport_sparse_direct_context_from_env,
     transport_sparse_direct_pattern_for_solve as _transport_sparse_direct_pattern_for_context,
     transport_sparse_direct_solve as _transport_sparse_direct_solve_with_context,
 )
@@ -10910,28 +10910,13 @@ def solve_v3_transport_matrix_linear_gmres(
         sparse_jax_config=sparse_jax_config,
     )
 
-    transport_sparse_drop_tol_env = os.environ.get("SFINCS_JAX_TRANSPORT_SPARSE_DROP_TOL", "").strip()
-    transport_sparse_drop_rel_env = os.environ.get("SFINCS_JAX_TRANSPORT_SPARSE_DROP_REL", "").strip()
-    try:
-        transport_sparse_drop_tol = float(transport_sparse_drop_tol_env) if transport_sparse_drop_tol_env else 0.0
-    except ValueError:
-        transport_sparse_drop_tol = 0.0
-    try:
-        transport_sparse_drop_rel = float(transport_sparse_drop_rel_env) if transport_sparse_drop_rel_env else 0.0
-    except ValueError:
-        transport_sparse_drop_rel = 0.0
-
     def _get_strong_preconditioner(use_reduced: bool) -> Callable[[jnp.ndarray], jnp.ndarray] | None:
         return strong_preconditioner_cache.get(use_reduced=bool(use_reduced))
 
     # RHSMode=2/3 transport reuses the same active operator for multiple drives,
     # so keep sparse-helper factors scoped to this solve and reuse them across RHS.
-    transport_sparse_direct_context = TransportSparseDirectContext(
+    transport_sparse_direct_context = _transport_sparse_direct_context_from_env(
         op=op0,
-        factor_cache={},
-        pattern_cache={},
-        sparse_drop_tol=float(transport_sparse_drop_tol),
-        sparse_drop_rel=float(transport_sparse_drop_rel),
         emit=emit,
         sparse_factor_cache_key=_sparse_factor_cache_key,
         hash_numpy_array_for_cache=_hash_numpy_array_for_cache,

@@ -8,6 +8,7 @@ import numpy as np
 import sfincs_jax.transport_sparse_direct_solve as sparse_direct
 from sfincs_jax.transport_sparse_direct_solve import (
     TransportSparseDirectContext,
+    transport_sparse_direct_context_from_env,
     transport_sparse_direct_pattern_for_solve,
     transport_sparse_direct_solve,
 )
@@ -47,6 +48,26 @@ def _context(**overrides) -> TransportSparseDirectContext:
     return TransportSparseDirectContext(**values)
 
 
+def _context_from_env(**overrides) -> TransportSparseDirectContext:
+    values = dict(
+        op=_op(),
+        emit=None,
+        sparse_factor_cache_key=lambda cache_key, factor_dtype: (*cache_key, np.dtype(factor_dtype).str),
+        hash_numpy_array_for_cache=lambda array: ("hash", tuple(np.asarray(array).reshape((-1,)).tolist())),
+        build_host_sparse_direct_factor_from_matvec=lambda **_kwargs: (_fake_operator_bundle(), _fake_factor_bundle()),
+        build_sparse_ilu_from_matvec=_fake_build_sparse_ilu,
+        try_build_direct_active_operator_bundle=lambda **_kwargs: None,
+        host_sparse_direct_solve_with_refinement=_fake_refined_solve,
+        host_sparse_direct_refine_steps=lambda *_args, **_kwargs: 2,
+        host_sparse_direct_polish=lambda **_kwargs: (np.zeros((2,)), 0.0),
+        sparse_factor_dtype=lambda **_kwargs: np.dtype(np.float64),
+        sparse_direct_use_explicit_helper=lambda **_kwargs: False,
+        sparse_direct_needs_float64_retry=lambda **_kwargs: False,
+    )
+    values.update(overrides)
+    return transport_sparse_direct_context_from_env(**values)
+
+
 def _fake_operator_bundle():
     return SimpleNamespace(
         metadata=SimpleNamespace(storage_kind="csr", reason="unit"),
@@ -71,6 +92,21 @@ def _fake_build_sparse_ilu(**_kwargs):
 def _fake_refined_solve(*, rhs_vec, **_kwargs):
     rhs = np.asarray(rhs_vec, dtype=np.float64)
     return rhs.copy(), 0.0
+
+
+def test_transport_sparse_direct_context_from_env_parses_policy_and_uses_fresh_caches(monkeypatch) -> None:
+    monkeypatch.setenv("SFINCS_JAX_TRANSPORT_SPARSE_DROP_TOL", "bad")
+    monkeypatch.setenv("SFINCS_JAX_TRANSPORT_SPARSE_DROP_REL", "2.5e-4")
+
+    first = _context_from_env()
+    second = _context_from_env()
+
+    assert first.sparse_drop_tol == 0.0
+    assert first.sparse_drop_rel == 2.5e-4
+    assert first.factor_cache == {}
+    assert first.pattern_cache == {}
+    assert first.factor_cache is not second.factor_cache
+    assert first.pattern_cache is not second.pattern_cache
 
 
 def test_transport_sparse_direct_pattern_for_solve_uses_cache_and_emits(monkeypatch) -> None:
